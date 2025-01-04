@@ -18,7 +18,7 @@
 import http from "http";
 import finalhandler from "finalhandler";
 import serveStatic from "serve-static";
-import * as ws from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 import { exec, execFile, execSync, spawn, spawnSync } from "child_process";
 
 import fs from "fs";
@@ -176,7 +176,7 @@ const server = http.createServer(function (req, res) {
 	staticHttp(req, res, done);
 });
 
-const wss = new ws.Server({ server });
+const wss = new WebSocketServer({ server });
 wss.on("connection", function connection(conn) {
 	conn.lastActive = getms();
 
@@ -3117,7 +3117,7 @@ async function remoteConnect() {
 		console.log(`remote: trying to connect`);
 
 		remoteStatusHandled = false;
-		remoteWs = new ws(`wss://${host}${remoteEndpointPath}`, {
+		remoteWs = new WebSocket(`wss://${host}${remoteEndpointPath}`, {
 			servername: remoteEndpointHost,
 			headers: { Host: remoteEndpointHost },
 		});
