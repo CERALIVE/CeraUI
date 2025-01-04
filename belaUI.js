@@ -15,19 +15,20 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-const http = require('http');
-const finalhandler = require('finalhandler');
-const serveStatic = require('serve-static');
-const ws = require('ws');
-const { exec, execSync, spawn, spawnSync, execFileSync, execFile } = require("child_process");
-const fs = require('fs')
-const crypto = require('crypto');
-const path = require('path');
-const { Resolver} = require('dns');
-const bcrypt = require('bcrypt');
-const process = require('process');
-const util = require('util');
-const assert = require('assert');
+import http from "http";
+import finalhandler from "finalhandler";
+import serveStatic from "serve-static";
+import ws from "ws";
+import {exec, execFile, execSync, spawn, spawnSync} from "child_process";
+
+import fs from "fs";
+import crypto from "crypto";
+import path from "path";
+import {Resolver} from "dns";
+
+import bcrypt from "bcrypt";
+import util from "util";
+import assert from "assert";
 
 const SETUP_FILE = 'setup.json';
 const CONFIG_FILE = 'config.json';
