@@ -7,9 +7,17 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "1.9.4"
+    "@biomejs/biome": "1.9.4",
+    "@types/finalhandler": "^1.2.3",
+    "@types/serve-static": "^1.15.7",
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.2"
   },
   "scripts": {
-    "format": "npx @biomejs/biome format --write ./src"
+    "start": "node --experimental-strip-types src/belaUI.ts",
+    "format": "npx @biomejs/biome format --write ./src",
+    "check": "tsc"
   }
 }
