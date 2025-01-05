@@ -1,0 +1,387 @@
+/*
+    belaUI - web UI for the BELABOX project
+    Copyright (C) 2020-2022 BELABOX project
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+/* Software updates */
+import { exec, type ExecException, spawn, spawnSync } from "node:child_process";
+
+import { execPNR } from "../helpers/exec.ts";
+import { getms, oneHour, oneMinute } from "../helpers/time.ts";
+
+import { setup } from "./setup.ts";
+import { notificationBroadcast } from "./notifications.ts";
+import { broadcastMsg } from "./websocket-server.ts";
+import { getIsStreaming } from "./streaming.ts";
+import { queueUpdateGw } from "./gateways.ts";
+
+let availableUpdates:
+	| {
+			package_count: number;
+			download_size?: string;
+	  }
+	| null
+	| false = setup.apt_update_enabled ? null : false;
+let softUpdateStatus: {
+	total: number;
+	downloading: number;
+	unpacking: number;
+	setting_up: number;
+	result?: string | 0;
+} | null = null;
+let aptGetUpdating = false;
+let aptGetUpdateFailures = 0;
+let aptHeldBackPackages: string | undefined;
+
+export function getAvailableUpdates() {
+	return availableUpdates;
+}
+
+export function getSoftUpdateStatus() {
+	return softUpdateStatus;
+}
+
+export function isUpdating() {
+	return softUpdateStatus != null;
+}
+
+function parseUpgradePackageCount(text: string) {
+	const upgradedMatch = text.match(/(\d+) upgraded/);
+	const newlyInstalledMatch = text.match(/, (\d+) newly installed/);
+	if (!upgradedMatch || !newlyInstalledMatch) {
+		console.log("parseUpgradePackageCount(): failed to parse the package info");
+		return undefined;
+	}
+
+	const upgradedCount = parseInt(upgradedMatch[1]!, 10);
+	const newlyInstalledCount = parseInt(newlyInstalledMatch[1]!, 10);
+	return upgradedCount + newlyInstalledCount;
+}
+
+function parseUpgradeDownloadSize(text: string) {
+	try {
+		let downloadSize = text.split("Need to get ")[1]!;
+		downloadSize = downloadSize.split(/\/|( of archives)/)[0]!;
+		return downloadSize;
+	} catch (err) {
+		return undefined;
+	}
+}
+
+// Show an update notification if there are pending updates to packages matching this list
+const belaboxPackageList = [
+	"belabox",
+	"belacoder",
+	"belaui",
+	"srtla",
+	"usb-modeswitch-data",
+	"l4t",
+];
+// Reboot instead of just restarting belaUI if we've updated packages matching this list
+const rebootPackageList = ["l4t", "belabox-linux-", "belabox-network-config"];
+
+function packageListIncludes(list: string, includes: Array<string>) {
+	for (const p of includes) {
+		if (list.includes(p)) return true;
+	}
+	return false;
+}
+
+// Parses a list of packets shown by apt-get under a certain heading
+function parseAptPackageList(stdout: string, heading: string) {
+	try {
+		let packageList = stdout.split(heading)[1]!;
+		packageList = packageList.split(/\n[\d\w]+/)[0]!;
+		packageList = packageList.replace(/[\n ]+/g, " ");
+		packageList = packageList.trim();
+		return packageList;
+	} catch (err) {}
+
+	return undefined;
+}
+
+function parseAptUpgradedPackages(stdout: string) {
+	return parseAptPackageList(
+		stdout,
+		"The following packages will be upgraded:\n",
+	);
+}
+
+function parseAptUpgradeSummary(stdout: string) {
+	const upgradeCount = parseUpgradePackageCount(stdout) ?? 0;
+	let downloadSize;
+	let belaboxPackages = false;
+	if (upgradeCount > 0) {
+		downloadSize = parseUpgradeDownloadSize(stdout);
+
+		const packageList = parseAptUpgradedPackages(stdout);
+		if (packageList && packageListIncludes(packageList, belaboxPackageList)) {
+			belaboxPackages = true;
+		}
+	}
+
+	return { upgradeCount, downloadSize, belaboxPackages };
+}
+
+async function getSoftwareUpdateSize() {
+	if (getIsStreaming() || isUpdating() || aptGetUpdating) return "busy";
+
+	// First see if any packages can be upgraded by dist-upgrade
+	let upgrade = await execPNR("apt-get dist-upgrade --assume-no");
+	let res = parseAptUpgradeSummary(upgrade.stdout);
+
+	// Otherwise, check if any packages have been held back (e.g. by dependencies changing)
+	if (res.upgradeCount === 0) {
+		aptHeldBackPackages = parseAptPackageList(
+			upgrade.stdout,
+			"The following packages have been kept back:\n",
+		);
+		if (aptHeldBackPackages) {
+			if (setup.hw === "jetson" && aptHeldBackPackages === "belabox") {
+				// This is a special case for upgrading from an old installation using the stock jetson kernel
+				aptHeldBackPackages = "belabox belabox-linux-tegra";
+			}
+			upgrade = await execPNR(
+				"apt-get install --assume-no " + aptHeldBackPackages,
+			);
+			res = parseAptUpgradeSummary(upgrade.stdout);
+		}
+	} else {
+		// Reset aptHeldBackPackages if some upgrades became available via dist-upgrade
+		aptHeldBackPackages = undefined;
+	}
+
+	if (res.belaboxPackages) {
+		notificationBroadcast(
+			"belabox_update",
+			"warning",
+			"A BELABOX update is available. Scroll down to the System menu to install it.",
+			0,
+			true,
+			false,
+		);
+	}
+
+	availableUpdates = {
+		package_count: res.upgradeCount,
+		download_size: res.downloadSize,
+	};
+	broadcastMsg("status", { available_updates: availableUpdates });
+
+	return null;
+}
+
+type SoftwareUpdateError = ExecException | "busy" | true | null;
+
+function checkForSoftwareUpdates(
+	callback: (err: SoftwareUpdateError, aptGetUpdateFailures: number) => unknown,
+) {
+	if (getIsStreaming() || isUpdating() || aptGetUpdating) return;
+
+	aptGetUpdating = true;
+	exec(
+		"apt-get update --allow-releaseinfo-change",
+		function (err, stdout, stderr) {
+			let errOrStderr: SoftwareUpdateError = err;
+
+			aptGetUpdating = false;
+
+			if (stderr.length) {
+				errOrStderr = true;
+				aptGetUpdateFailures++;
+				queueUpdateGw();
+			} else {
+				aptGetUpdateFailures = 0;
+			}
+
+			console.log(
+				`apt-get update: ${errOrStderr === null ? "success" : "error"}`,
+			);
+			console.log(stdout);
+			console.log(stderr);
+
+			if (callback) callback(errOrStderr, aptGetUpdateFailures);
+		},
+	);
+}
+
+let nextCheckForSoftwareUpdates = getms();
+let nextCheckForSoftwareUpdatesTimer: NodeJS.Timeout | undefined;
+
+export function periodicCheckForSoftwareUpdates() {
+	if (nextCheckForSoftwareUpdatesTimer) {
+		clearTimeout(nextCheckForSoftwareUpdatesTimer);
+		nextCheckForSoftwareUpdatesTimer = undefined;
+	}
+
+	const ms = getms();
+	if (ms < nextCheckForSoftwareUpdates) {
+		nextCheckForSoftwareUpdatesTimer = setTimeout(
+			periodicCheckForSoftwareUpdates,
+			nextCheckForSoftwareUpdates - ms,
+		);
+		return;
+	}
+
+	checkForSoftwareUpdates(async function (err, failures) {
+		if (err === null) {
+			err = await getSoftwareUpdateSize();
+		}
+		// one hour delay after a succesful check
+		let delay = oneHour;
+		// otherwise, increasing delay depending on the number of failures
+		if (err !== null) {
+			// try after 10s for the first ~2 minutes
+			if (failures < 12) {
+				delay = 10;
+				// back off to a minute delay
+			} else {
+				delay = oneMinute;
+			}
+		}
+		nextCheckForSoftwareUpdates = getms() + delay;
+		nextCheckForSoftwareUpdatesTimer = setTimeout(
+			periodicCheckForSoftwareUpdates,
+			delay,
+		);
+	});
+}
+
+if (setup.apt_update_enabled) {
+	periodicCheckForSoftwareUpdates();
+}
+
+export function startSoftwareUpdate() {
+	if (!setup.apt_update_enabled || getIsStreaming() || isUpdating()) return;
+
+	// if an apt-get update is already in progress, retry later
+	if (aptGetUpdating) {
+		setTimeout(startSoftwareUpdate, 3 * 1000);
+		return;
+	}
+
+	checkForSoftwareUpdates(function (err) {
+		if (err === null) {
+			doSoftwareUpdate();
+		} else {
+			softUpdateStatus!.result =
+				"Failed to fetch the updated package list; aborting the update.";
+			broadcastMsg("status", { updating: softUpdateStatus });
+			softUpdateStatus = null;
+		}
+	});
+
+	softUpdateStatus = { downloading: 0, unpacking: 0, setting_up: 0, total: 0 };
+	broadcastMsg("status", { updating: softUpdateStatus });
+}
+
+function doSoftwareUpdate() {
+	if (!setup.apt_update_enabled || getIsStreaming()) return;
+
+	let rebootAfterUpgrade = false;
+	let aptLog = "";
+	let aptErr = "";
+
+	let args =
+		"-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold ";
+	if (aptHeldBackPackages) {
+		args += "install " + aptHeldBackPackages;
+	} else {
+		args += "dist-upgrade";
+	}
+	const aptUpgrade = spawn("apt-get", args.split(" "));
+
+	aptUpgrade.stdout.on("data", function (data) {
+		let sendUpdate = false;
+
+		data = data.toString("utf8");
+		aptLog += data;
+
+		if (!softUpdateStatus) return;
+
+		if (softUpdateStatus.total === 0) {
+			let count = parseUpgradePackageCount(data);
+			if (count !== undefined) {
+				softUpdateStatus.total = count;
+				sendUpdate = true;
+
+				let packageList = parseAptUpgradedPackages(aptLog);
+				if (
+					packageList &&
+					packageListIncludes(packageList, rebootPackageList)
+				) {
+					rebootAfterUpgrade = true;
+				}
+			}
+		}
+
+		if (softUpdateStatus.downloading !== softUpdateStatus.total) {
+			const getMatch = data.match(/Get:(\d+)/);
+			if (getMatch) {
+				const i = parseInt(getMatch[1]);
+				if (i > softUpdateStatus.downloading) {
+					softUpdateStatus.downloading = Math.min(i, softUpdateStatus.total);
+					sendUpdate = true;
+				}
+			}
+		}
+
+		const unpacking = data.match(/Unpacking /g);
+		if (unpacking) {
+			softUpdateStatus.downloading = softUpdateStatus.total;
+			softUpdateStatus.unpacking += unpacking.length;
+			softUpdateStatus.unpacking = Math.min(
+				softUpdateStatus.unpacking,
+				softUpdateStatus.total,
+			);
+			sendUpdate = true;
+		}
+
+		const setting_up = data.match(/Setting up /g);
+		if (setting_up) {
+			softUpdateStatus.setting_up += setting_up.length;
+			softUpdateStatus.setting_up = Math.min(
+				softUpdateStatus.setting_up,
+				softUpdateStatus.total,
+			);
+			sendUpdate = true;
+		}
+
+		if (sendUpdate) {
+			broadcastMsg("status", { updating: softUpdateStatus });
+		}
+	});
+
+	aptUpgrade.stderr.on("data", function (data) {
+		aptErr += data;
+	});
+
+	aptUpgrade.on("close", function (code) {
+		softUpdateStatus!.result = code === 0 ? code : aptErr;
+		broadcastMsg("status", { updating: softUpdateStatus });
+
+		softUpdateStatus = null;
+		console.log(aptLog);
+		console.log(aptErr);
+
+		if (code === 0) {
+			if (rebootAfterUpgrade) {
+				spawnSync("reboot");
+			} else {
+				process.exit(0);
+			}
+		}
+	});
+}
