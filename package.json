@@ -17,7 +17,7 @@
   },
   "scripts": {
     "start": "node --experimental-strip-types src/belaUI.ts",
-    "format": "npx @biomejs/biome format --write ./src",
+    "format": "npx @biomejs/biome format --write ./src ./public/script.js ./public/style.css",
     "check": "tsc"
   }
 }
