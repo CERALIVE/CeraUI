@@ -10,6 +10,6 @@
     "@biomejs/biome": "1.9.4"
   },
   "scripts": {
-    "format": "npx @biomejs/biome format --write belaUI.js"
+    "format": "npx @biomejs/biome format --write ./src"
   }
 }

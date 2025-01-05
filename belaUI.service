@@ -7,7 +7,7 @@ User=root
 Group=root
 # install_service.sh automatically sets WorkingDirectory to point to the current directory
 WorkingDirectory=/opt/belaUI
-ExecStart=/usr/bin/nodejs ./belaUI.js
+ExecStart=/usr/bin/nodejs ./src/belaUI.js
 KillMode=mixed
 Restart=always
 SyslogIdentifier=belaUI
