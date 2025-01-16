@@ -18,14 +18,14 @@
 /* Initialize the server */
 import http from "node:http";
 
-import serveStatic from "serve-static";
 import finalhandler from "finalhandler";
+import serveStatic from "serve-static";
 
 import { getSystemdSocket } from "./systemd.ts";
 
 const staticHttp = serveStatic("public");
 
-export const httpServer = http.createServer(function (req, res) {
+export const httpServer = http.createServer((req, res) => {
 	const done = finalhandler(req, res);
 	staticHttp(req, res, done);
 });
@@ -34,7 +34,7 @@ export function startHttpServer() {
 	const httpListenPorts: Array<number | { fd: number }> = [80, 8080, 81];
 
 	if (process.env.PORT) {
-		const port = parseInt(process.env.PORT, 10);
+		const port = Number.parseInt(process.env.PORT, 10);
 		httpListenPorts.unshift(port);
 	}
 
@@ -49,7 +49,7 @@ export function startHttpServer() {
 	}
 
 	const port = httpListenPorts.shift();
-	const desc = typeof port == "number" ? `port ${port}` : "the systemd socket";
+	const desc = typeof port === "number" ? `port ${port}` : "the systemd socket";
 	console.log(`HTTP server: trying to start on ${desc}...`);
 	httpServer.listen(port);
 }

@@ -15,15 +15,13 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import util from "node:util";
 import fs from "node:fs";
 import { writeFile } from "node:fs/promises";
+import util from "node:util";
 
 export async function readTextFile(file: string) {
 	const readFile = util.promisify(fs.readFile);
-	const contents = await readFile(file).catch(function (err) {
-		return undefined;
-	});
+	const contents = await readFile(file).catch(() => undefined);
 	if (contents === undefined) return;
 	return contents.toString("utf8");
 }

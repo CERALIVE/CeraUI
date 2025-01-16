@@ -63,33 +63,25 @@
   }
 */
 
-import { execFile, type ExecFileException } from "node:child_process";
+import { type ExecFileException, execFile } from "node:child_process";
 import crypto from "node:crypto";
 
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
-import { extractMessage } from "../helpers/types.ts";
 import { getms } from "../helpers/time.ts";
+import { extractMessage } from "../helpers/types.ts";
 
 import {
-	broadcastMsg,
-	buildMsg,
-	getSocketSenderId,
-} from "./websocket-server.ts";
-import { getIsStreaming } from "./streaming.ts";
-import { updateSrtlaIps } from "./srtla.ts";
-import {
-	getNetworkInterfaces,
 	NETIF_ERR_HOTSPOT,
+	getNetworkInterfaces,
 	setNetifHotspot,
 } from "./network-interfaces.ts";
 import {
-	nmcliParseSep,
 	nmConnDelete,
-	nmConnect,
 	nmConnGetFields,
 	nmConnSetFields,
 	nmConnSetWifiMac,
+	nmConnect,
 	nmConnsGet,
 	nmDeviceProp,
 	nmDevices,
@@ -97,7 +89,15 @@ import {
 	nmHotspot,
 	nmRescan,
 	nmScanResults,
+	nmcliParseSep,
 } from "./network-manager.ts";
+import { updateSrtlaIps } from "./srtla.ts";
+import { getIsStreaming } from "./streaming.ts";
+import {
+	broadcastMsg,
+	buildMsg,
+	getSocketSenderId,
+} from "./websocket-server.ts";
 import {
 	wifiDeviceListGetHwAddr,
 	wifiDeviceListGetInetAddr,
@@ -179,7 +179,7 @@ type WifiInterfaceWithHotspot = BaseWifiInterface & {
 type WifiInterface = BaseWifiInterface | WifiInterfaceWithHotspot;
 
 let wifiIfId = 0;
-let wifiIfs: Record<string, WifiInterface> = {};
+const wifiIfs: Record<string, WifiInterface> = {};
 let wifiIdToHwAddr: Record<string, string> = {};
 
 /* Builds the WiFi status structure sent over the network from the <wd> structures */
@@ -198,7 +198,9 @@ type WifiInterfaceResponseMessage = Pick<
 export function wifiBuildMsg() {
 	const ifs: Record<number, WifiInterfaceResponseMessage> = {};
 	for (const i in wifiIfs) {
-		const wifiInterface = wifiIfs[i]!;
+		const wifiInterface = wifiIfs[i];
+		if (!wifiInterface) continue;
+
 		const id = wifiInterface.id;
 
 		ifs[id] = {
@@ -279,39 +281,45 @@ function channelFromNM(band: string, channel: string | number) {
 	return "auto";
 }
 
-async function handleHotspotConn(macAddr: string | undefined, uuid: string) {
-	if (!macAddr) {
-		// Check if the connection is in use for any wifi interface
-		const connIfName = (
-			await nmConnGetFields(uuid, "connection.interface-name")
-		)?.[0];
+async function findMacAddressForConnection(uuid: string) {
+	// Check if the connection is in use for any wifi interface
+	const connIfName = (
+		await nmConnGetFields(uuid, "connection.interface-name")
+	)?.[0];
 
-		for (const m in wifiIfs) {
-			const w = wifiIfs[m]!;
+	for (const m in wifiIfs) {
+		const w = wifiIfs[m];
 
-			if (
-				!wifiIfIsHotspot(w) ||
-				!(w.hotspot.conn === uuid || w.ifname === connIfName)
-			) {
-				continue;
-			}
-			// If we can match the connection against a certain interface
-			if (!w.hotspot.conn) {
-				// And if this interface doesn't already have a hotspot connection
-				// Try to update the connection to match the MAC address
-				if (await nmConnSetWifiMac(uuid, m)) {
-					w.hotspot.conn = uuid;
-					macAddr = m;
-				}
-			} else {
-				// If the interface already has a hotspot connection, then disable autoconnect
-				await nmConnSetFields(uuid, { "connection.autoconnect": "no" });
-			}
-			break;
+		if (
+			!w ||
+			!wifiIfIsHotspot(w) ||
+			!(w.hotspot.conn === uuid || w.ifname === connIfName)
+		) {
+			continue;
 		}
 
-		if (!macAddr) return;
+		// If we can match the connection against a certain interface
+		if (!w.hotspot.conn) {
+			// And if this interface doesn't already have a hotspot connection
+			// Try to update the connection to match the MAC address
+			if (await nmConnSetWifiMac(uuid, m)) {
+				w.hotspot.conn = uuid;
+				return m;
+			}
+		} else {
+			// If the interface already has a hotspot connection, then disable autoconnect
+			await nmConnSetFields(uuid, { "connection.autoconnect": "no" });
+		}
+
+		break;
 	}
+
+	return undefined;
+}
+
+async function handleHotspotConn(macAddr_: string | undefined, uuid: string) {
+	const macAddr = macAddr_ ?? (await findMacAddressForConnection(uuid));
+	if (!macAddr) return;
 
 	const wifiInterface = wifiIfs[macAddr];
 	if (
@@ -376,7 +384,7 @@ async function handleHotspotConn(macAddr: string | undefined, uuid: string) {
 	wifiInterface.hotspot.conn = uuid;
 	wifiInterface.hotspot.name = fields[1];
 	wifiInterface.hotspot.password = fields[2];
-	wifiInterface.hotspot.channel = channelFromNM(fields[3], fields[4]!);
+	wifiInterface.hotspot.channel = channelFromNM(fields[3], fields[4]);
 
 	if (
 		fields[5] !== "no" ||
@@ -391,11 +399,10 @@ async function handleHotspotConn(macAddr: string | undefined, uuid: string) {
 }
 
 async function wifiUpdateSavedConns() {
-	let connections = await nmConnsGet("uuid,type");
+	const connections = await nmConnsGet("uuid,type");
 	if (connections === undefined) return;
 
-	for (const i in wifiIfs) {
-		const wifiInterface = wifiIfs[i]!;
+	for (const wifiInterface of Object.values(wifiIfs)) {
 		wifiInterface.saved = {};
 	}
 
@@ -437,8 +444,7 @@ async function wifiUpdateScanResult() {
 	);
 	if (!wifiNetworks) return;
 
-	for (const i in wifiIfs) {
-		const wifiInterface = wifiIfs[i]!;
+	for (const wifiInterface of Object.values(wifiIfs)) {
 		wifiInterface.available = new Map();
 	}
 
@@ -462,9 +468,9 @@ async function wifiUpdateScanResult() {
 		wifiInterface.available.set(ssid, {
 			active: active === "yes",
 			ssid,
-			signal: parseInt(signal, 10),
+			signal: Number.parseInt(signal, 10),
 			security,
-			freq: parseInt(freq, 10),
+			freq: Number.parseInt(freq, 10),
 		});
 	}
 
@@ -493,15 +499,14 @@ export async function wifiUpdateDevices() {
 	let statusChange = false;
 	let unavailableDevices = false;
 
-	let networkDevices = await nmDevices("device,type,state,con-uuid");
+	const networkDevices = await nmDevices("device,type,state,con-uuid");
 	if (!networkDevices) return;
 
 	// sorts the results alphabetically by interface name
 	networkDevices.sort();
 
 	// mark all WiFi adapters as removed
-	for (const i in wifiIfs) {
-		const wifiInterface = wifiIfs[i]!;
+	for (const wifiInterface of Object.values(wifiIfs)) {
 		wifiInterface.removed = true;
 	}
 
@@ -532,7 +537,7 @@ export async function wifiUpdateDevices() {
 
 			if (wifiInterface) {
 				// the interface is still available
-				delete wifiInterface.removed;
+				wifiInterface.removed = undefined;
 
 				if (ifname !== wifiInterface.ifname) {
 					wifiInterface.ifname = ifname;
@@ -550,17 +555,18 @@ export async function wifiUpdateDevices() {
 					"GENERAL.VENDOR,GENERAL.PRODUCT,WIFI-PROPERTIES.AP,WIFI-PROPERTIES.5GHZ,WIFI-PROPERTIES.2GHZ",
 				)) as [string, string, string, string, string];
 				const vendor = prop[0].replace("Corporation", "").trim();
-				const pb = prop[1].match(/[\[\(](.+)[\]\)]/);
+				const pb = prop[1].match(/[\[(](.+)[\])]/);
 				const product = pb ? pb[1] : prop[1];
 
-				wifiIfs[hwAddr] = {
+				const newInterface = {
 					id,
 					ifname,
-					hw: vendor + " " + product,
+					hw: `${vendor} ${product}`,
 					conn,
 					available: new Map(),
 					saved: {},
 				};
+
 				if (prop[2] === "yes") {
 					const hotspot: WifiHotspot = {
 						forceHotspotStatus: 0,
@@ -573,12 +579,17 @@ export async function wifiUpdateDevices() {
 					if (prop[4] === "yes") {
 						hotspot.availableChannels.push("auto_24");
 					}
-					(wifiIfs[hwAddr] as WifiInterfaceWithHotspot).hotspot = hotspot;
+					(newInterface as WifiInterfaceWithHotspot).hotspot = hotspot;
 				}
 				newDevices = true;
 				statusChange = true;
+				wifiIfs[hwAddr] = newInterface;
 			}
-			wifiIdToHwAddr[wifiIfs[hwAddr]!.id] = hwAddr;
+
+			const updatedInterface = wifiIfs[hwAddr];
+			if (updatedInterface) {
+				wifiIdToHwAddr[updatedInterface.id] = hwAddr;
+			}
 		} catch (err) {
 			if (err instanceof Error) {
 				console.log(
@@ -590,8 +601,8 @@ export async function wifiUpdateDevices() {
 
 	// delete removed adapters
 	for (const i in wifiIfs) {
-		const wifiInterface = wifiIfs[i]!;
-		if (wifiInterface.removed) {
+		const wifiInterface = wifiIfs[i];
+		if (wifiInterface?.removed) {
 			delete wifiIfs[i];
 			statusChange = true;
 		}
@@ -613,8 +624,8 @@ export async function wifiUpdateDevices() {
 		let hotspotCount = 0;
 		const netif = getNetworkInterfaces();
 		for (const i in wifiIfs) {
-			const wifiInterface = wifiIfs[i]!;
-			if (wifiIfIsHotspot(wifiInterface)) {
+			const wifiInterface = wifiIfs[i];
+			if (wifiInterface && wifiIfIsHotspot(wifiInterface)) {
 				const n = netif[wifiInterface.ifname];
 				if (!n) continue;
 				if (n.error & NETIF_ERR_HOTSPOT) continue;
@@ -664,10 +675,14 @@ async function wifiRescan() {
 
 /* Searches saved connections in wifiIfs by UUID */
 function wifiSearchConnection(uuid: string) {
-	let connFound;
+	let connFound: string | undefined;
 	for (const i in wifiIdToHwAddr) {
-		const macAddr = wifiIdToHwAddr[i]!;
-		const wifiInterface = wifiIfs[macAddr]!;
+		const macAddr = wifiIdToHwAddr[i];
+		if (!macAddr) continue;
+
+		const wifiInterface = wifiIfs[macAddr];
+		if (!wifiInterface) continue;
+
 		for (const s in wifiInterface.saved) {
 			if (wifiInterface.saved[s] === uuid) {
 				connFound = i;
@@ -702,8 +717,7 @@ async function wifiDeleteFailedConns() {
 	const connections = (await nmConnsGet(
 		"uuid,type,timestamp",
 	)) as Array<string>;
-	for (const c in connections) {
-		const connection = connections[c]!;
+	for (const connection of connections) {
 		const [uuid, type, ts] = nmcliParseSep(connection) as [
 			string,
 			string,
@@ -748,11 +762,7 @@ function wifiNew(conn: WebSocket, msg: WifiNewMessage["new"]) {
 	execFile(
 		"nmcli",
 		args,
-		async function (
-			error: ExecFileException | null,
-			stdout: string,
-			stderr: string,
-		) {
+		async (error: ExecFileException | null, stdout: string, stderr: string) => {
 			if (error || stdout.match("^Error:")) {
 				await wifiDeleteFailedConns();
 
@@ -865,7 +875,7 @@ async function wifiHotspotStart(
 		}
 	} else {
 		const ms = mac.split(":");
-		const name = "BELABOX_" + ms[4] + ms[5];
+		const name = `BELABOX_${ms[4]}${ms[5]}`;
 		const password = crypto.randomBytes(9).toString("base64");
 
 		// Temporary hotspot config to send to the client
@@ -960,6 +970,19 @@ function nmConnSetHotspotFields(
 	return nmConnSetFields(uuid, settingsToChange);
 }
 
+function isHotspotConfigComplete(
+	i: WifiInterfaceWithHotspot,
+): i is WifiInterfaceWithHotspot & {
+	hotspot: { conn: string; name: string; password: string; channel: string };
+} {
+	return (
+		i.hotspot.conn !== undefined &&
+		i.hotspot.name !== undefined &&
+		i.hotspot.password !== undefined &&
+		i.hotspot.channel !== undefined
+	);
+}
+
 /*
   Expects:
   {
@@ -1035,8 +1058,9 @@ async function wifiHotspotConfig(
 
 	// Update the NM connection
 	if (
+		i.hotspot.conn &&
 		!(await nmConnSetHotspotFields(
-			i.hotspot.conn!,
+			i.hotspot.conn,
 			msg.name,
 			msg.password,
 			msg.channel,
@@ -1054,7 +1078,11 @@ async function wifiHotspotConfig(
 
 	// Restart the connection with the updated config
 	wifiForceHotspot(i, HOTSPOT_UP_FORCE_TO);
-	if (!(await nmConnect(i.hotspot.conn!, HOTSPOT_UP_TO))) {
+
+	if (
+		isHotspotConfigComplete(i) &&
+		!(await nmConnect(i.hotspot.conn, HOTSPOT_UP_TO))
+	) {
 		conn.send(
 			buildMsg(
 				"wifi",
@@ -1062,19 +1090,23 @@ async function wifiHotspotConfig(
 				senderId,
 			),
 		);
+
 		// Failed to bring up the hotspot with the new settings; restore it
 		wifiForceHotspot(i, HOTSPOT_UP_FORCE_TO);
+
 		await nmConnSetHotspotFields(
-			i.hotspot.conn!,
-			i.hotspot.name!,
-			i.hotspot.password!,
-			i.hotspot.channel!,
+			i.hotspot.conn,
+			i.hotspot.name,
+			i.hotspot.password,
+			i.hotspot.channel,
 		);
-		await nmConnect(i.hotspot.conn!, HOTSPOT_UP_TO);
+
+		await nmConnect(i.hotspot.conn, HOTSPOT_UP_TO);
+
 		return;
 	}
 
-	// Succesfully brought up the hotspot with the new settings, reload the NM connection
+	// Successfully brought up the hotspot with the new settings, reload the NM connection
 	await wifiUpdateSavedConns();
 
 	conn.send(
@@ -1114,7 +1146,7 @@ export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
 				wifiForget(extractMessage<WifiForgetMessage, typeof type>(msg, type));
 				break;
 
-			case "hotspot":
+			case "hotspot": {
 				const hotspotMessage = extractMessage<WifiHotspotMessage, typeof type>(
 					msg,
 					type,
@@ -1127,6 +1159,7 @@ export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
 					wifiHotspotConfig(conn, hotspotMessage.config);
 				}
 				break;
+			}
 		}
 	}
 }

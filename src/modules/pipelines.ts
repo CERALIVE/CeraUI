@@ -15,13 +15,13 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 
+import { pipelineGetAudioProps } from "./audio.ts";
 import { setup } from "./setup.ts";
 import { readTextFile, writeTextFile } from "./text-files.ts";
-import { pipelineGetAudioProps } from "./audio.ts";
 
 type Pipeline = {
 	name: string;
@@ -32,7 +32,7 @@ type Pipeline = {
 
 let belacoderPipelinesDir: string;
 if (setup.belacoder_path) {
-	belacoderPipelinesDir = setup.belacoder_path + "/pipeline";
+	belacoderPipelinesDir = `${setup.belacoder_path}/pipeline`;
 } else {
 	belacoderPipelinesDir = "/usr/share/belacoder/pipelines";
 }
@@ -46,7 +46,7 @@ function readDirAbsPath(dir: string, excludePattern?: string) {
 		const basename = path.basename(dir);
 
 		for (const f in files) {
-			const name = basename + "/" + files[f];
+			const name = `${basename}/${files[f]}`;
 			if (excludePattern && name.match(excludePattern)) continue;
 
 			const id = crypto.createHash("sha1").update(name).digest("hex");
@@ -63,22 +63,24 @@ function readDirAbsPath(dir: string, excludePattern?: string) {
 
 function getPipelines() {
 	const ps: Record<string, Pipeline> = {};
-	Object.assign(ps, readDirAbsPath(belacoderPipelinesDir + "/custom/"));
+	Object.assign(ps, readDirAbsPath(`${belacoderPipelinesDir}/custom/`));
 
 	// Get the hardware-specific pipelines
-	let excludePipelines;
+	let excludePipelines: string | undefined;
 	if (setup.hw === "rk3588" && !fs.existsSync("/dev/hdmirx")) {
 		excludePipelines = "h265_hdmi";
 	}
 	Object.assign(
 		ps,
-		readDirAbsPath(belacoderPipelinesDir + `/${setup.hw}/`, excludePipelines),
+		readDirAbsPath(`${belacoderPipelinesDir}/${setup.hw}/`, excludePipelines),
 	);
 
-	Object.assign(ps, readDirAbsPath(belacoderPipelinesDir + "/generic/"));
+	Object.assign(ps, readDirAbsPath(`${belacoderPipelinesDir}/generic/`));
 
 	for (const p in ps) {
-		const pipeline = ps[p]!;
+		const pipeline = ps[p];
+		if (!pipeline) continue;
+
 		const props = pipelineGetAudioProps(pipeline.path);
 		Object.assign(pipeline, props);
 	}
@@ -99,7 +101,9 @@ type PipelineResponseEntry = Pick<Pipeline, "name" | "asrc" | "acodec">;
 export function getPipelineList() {
 	const list: Record<string, PipelineResponseEntry> = {};
 	for (const id in pipelines) {
-		const pipeline = pipelines[id]!;
+		const pipeline = pipelines[id];
+		if (!pipeline) continue;
+
 		list[id] = {
 			name: pipeline.name,
 			asrc: pipeline.asrc,

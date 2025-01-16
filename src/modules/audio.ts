@@ -18,17 +18,17 @@
 /* Audio input selection and codec */
 import fs from "node:fs";
 
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
 import { readdirP } from "../helpers/files.ts";
 
-import { setup } from "./setup.ts";
 import { getConfig } from "./config.ts";
-import { broadcastMsg } from "./websocket-server.ts";
 import { notificationBroadcast } from "./notifications.ts";
+import { setup } from "./setup.ts";
 import { resolveSrtla } from "./srtla.ts";
 import { startError } from "./streaming.ts";
 import { readTextFile, writeTextFile } from "./text-files.ts";
+import { broadcastMsg } from "./websocket-server.ts";
 
 const deviceDir = setup.sound_device_dir ?? "/sys/class/sound";
 
@@ -201,7 +201,7 @@ export async function pipelineSetAsrc(
 	return pipelineFile;
 }
 
-let asrcRetryTimer: NodeJS.Timeout | undefined;
+let asrcRetryTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function isAsrcRetryScheduled() {
 	return asrcRetryTimer !== undefined;
@@ -219,7 +219,7 @@ export function asrcScheduleRetry(
 	callback: (pipelineFile: string, srtlaAddr: string) => void,
 	conn: WebSocket,
 ) {
-	asrcRetryTimer = setTimeout(function () {
+	asrcRetryTimer = setTimeout(() => {
 		asrcRetry(pipelineFile, callback, conn);
 	}, 1000);
 }

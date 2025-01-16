@@ -19,13 +19,12 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 
-import WebSocket from "ws";
-import bcrypt from "bcrypt";
+import type WebSocket from "ws";
 
-import { notificationSend } from "./notifications.ts";
-import { buildMsg } from "./websocket-server.ts";
-import { sendInitialStatus } from "./status.ts";
 import { getConfig, saveConfig } from "./config.ts";
+import { notificationSend } from "./notifications.ts";
+import { sendInitialStatus } from "./status.ts";
+import { buildMsg } from "./websocket-server.ts";
 
 export type AuthMessage = {
 	auth: {
@@ -54,9 +53,9 @@ try {
 	persistentTokens = {};
 }
 
-let passwordHash: string;
+let passwordHash: string | undefined;
 
-export function setPasswordHash(newHash: string) {
+export function setPasswordHash(newHash: string | undefined) {
 	passwordHash = newHash;
 }
 
@@ -101,9 +100,12 @@ export function setPassword(
 			);
 			return;
 		}
-		passwordHash = bcrypt.hashSync(password, BCRYPT_ROUNDS);
+		passwordHash = Bun.password.hashSync(password, {
+			algorithm: "bcrypt",
+			cost: BCRYPT_ROUNDS,
+		});
 		const config = getConfig();
-		delete config.password;
+		config.password = undefined;
 		saveConfig();
 	}
 }
@@ -129,22 +131,28 @@ function connAuth(conn: WebSocket, sendToken?: string) {
 	sendInitialStatus(conn);
 }
 
-export function tryAuth(conn: WebSocket, msg: AuthMessage["auth"]) {
+export async function tryAuth(conn: WebSocket, msg: AuthMessage["auth"]) {
 	if (!passwordHash) {
 		conn.send(buildMsg("auth", { success: false }));
 		return;
 	}
 
 	if (typeof msg.password === "string") {
-		bcrypt.compare(msg.password, passwordHash, function (err, match) {
-			if (match && !err) {
+		try {
+			const match = await Bun.password.verify(
+				msg.password,
+				passwordHash,
+				"bcrypt",
+			);
+			if (match) {
 				const token = genAuthToken(msg.persistent_token);
 				authTokens.set(conn, token);
 				connAuth(conn, token);
-			} else {
-				notificationSend(conn, "auth", "error", "Invalid password");
+				return;
 			}
-		});
+		} catch (_) {}
+
+		notificationSend(conn, "auth", "error", "Invalid password");
 	} else if (typeof msg.token === "string") {
 		if (tempTokens[msg.token] || persistentTokens[msg.token]) {
 			connAuth(conn);

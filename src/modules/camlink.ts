@@ -18,8 +18,8 @@
 /* Check if there are any Cam Links plugged into a USB2 port */
 import { readdirP } from "../helpers/files.ts";
 
-import { readTextFile } from "./text-files.ts";
 import { notificationBroadcast, notificationRemove } from "./notifications.ts";
+import { readTextFile } from "./text-files.ts";
 
 export async function checkCamlinkUsb2() {
 	const deviceDir = "/sys/bus/usb/devices";

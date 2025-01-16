@@ -17,8 +17,8 @@
 
 import fs from "node:fs";
 
-import { setup } from "./setup.ts";
 import { getPasswordHash, setPasswordHash } from "./auth.ts";
+import { setup } from "./setup.ts";
 import { getSshPasswordHash, setSshPasswordHash } from "./ssh.ts";
 
 const CONFIG_FILE = "config.json";
@@ -47,10 +47,10 @@ export function loadConfig() {
 	try {
 		config = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
 		console.log(config);
-		setPasswordHash(config.password_hash!);
-		setSshPasswordHash(config.ssh_pass_hash!);
-		delete config.password_hash;
-		delete config.ssh_pass_hash;
+		setPasswordHash(config.password_hash);
+		setSshPasswordHash(config.ssh_pass_hash);
+		config.password_hash = undefined;
+		config.ssh_pass_hash = undefined;
 	} catch (err: unknown) {
 		if (err instanceof Error) {
 			console.error(

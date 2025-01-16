@@ -15,31 +15,37 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import fs from "node:fs";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
-import { setup } from "./setup.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { queueUpdateGw } from "./gateways.ts";
-import { getSocketSenderId } from "./websocket-server.ts";
 import { getNetworkInterfaces } from "./network-interfaces.ts";
+import { setup } from "./setup.ts";
 import { startError } from "./streaming.ts";
+import { getSocketSenderId } from "./websocket-server.ts";
 
 export async function resolveSrtla(addr: string, conn: WebSocket) {
 	let srtlaAddr = addr;
+
+	let addrs: string[] | undefined;
+	let fromCache: boolean | undefined;
 	try {
-		var { addrs, fromCache } = await dnsCacheResolve(addr, "a");
+		const res = await dnsCacheResolve(addr, "a");
+		addrs = res.addrs;
+		fromCache = res.fromCache;
 	} catch (err) {
 		const senderId = getSocketSenderId(conn) ?? "unknown sender";
-		startError(conn, "failed to resolve SRTLA addr " + addr, senderId);
+		startError(conn, `failed to resolve SRTLA addr ${addr}`, senderId);
 		queueUpdateGw();
 		return;
 	}
 
 	if (fromCache) {
-		srtlaAddr = addrs[Math.floor(Math.random() * addrs.length)]!;
+		const cachedAddr = addrs[Math.floor(Math.random() * addrs.length)];
+		if (cachedAddr) srtlaAddr = cachedAddr;
 		queueUpdateGw();
 	} else {
 		/* At the moment we don't check that the SRTLA connection was established before
@@ -56,10 +62,10 @@ export function genSrtlaIpList() {
 	let count = 0;
 
 	const netif = getNetworkInterfaces();
-	for (let i in netif) {
-		const networkInterface = netif[i]!;
-		if (networkInterface.enabled) {
-			list += networkInterface.ip + "\n";
+	for (const i in netif) {
+		const networkInterface = netif[i];
+		if (networkInterface?.enabled) {
+			list += `${networkInterface.ip}\n`;
 			count++;
 		}
 	}

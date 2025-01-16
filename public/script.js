@@ -56,7 +56,7 @@ function loadThemeSetting() {
 loadThemeSetting();
 
 // Update the theme if the selector is changed
-$("#themeSelector>select").change(function () {
+$("#themeSelector>select").change(() => {
 	const s = getThemeSetting();
 	localStorage.setItem("theme", s);
 	updateTheme(s);
@@ -66,18 +66,18 @@ $("#themeSelector>select").change(function () {
 if (window.matchMedia) {
 	window
 		.matchMedia("(prefers-color-scheme: dark)")
-		.addEventListener("change", function () {
+		.addEventListener("change", () => {
 			updateTheme();
 		});
 }
 
 function tryConnect() {
-	let c = new WebSocket("ws://" + window.location.host);
-	c.addEventListener("message", function (event) {
+	const c = new WebSocket("ws://" + window.location.host);
+	c.addEventListener("message", (event) => {
 		handleMessage(JSON.parse(event.data));
 	});
 
-	c.addEventListener("close", function (event) {
+	c.addEventListener("close", (event) => {
 		ws = null;
 
 		showError("Disconnected from BELABOX. Trying to reconnect...");
@@ -86,7 +86,7 @@ function tryConnect() {
 		updateNetact(false);
 	});
 
-	c.addEventListener("open", function (event) {
+	c.addEventListener("open", (event) => {
 		ws = c;
 
 		hideError();
@@ -107,7 +107,7 @@ tryConnect();
    The periodic keep-alive packets let the server know that this client is still
    active and should receive updates.
 */
-setInterval(function () {
+setInterval(() => {
 	if (ws) {
 		ws.send(JSON.stringify({ keepalive: null }));
 	}
@@ -115,7 +115,7 @@ setInterval(function () {
 
 /* Authentication */
 function tryTokenAuth() {
-	let authToken = localStorage.getItem("authToken");
+	const authToken = localStorage.getItem("authToken");
 	if (authToken) {
 		ws.send(JSON.stringify({ auth: { token: authToken } }));
 	} else {
@@ -194,7 +194,7 @@ function genNetifEntry(error, enabled, name, ip, throughput, isBold = false) {
 }
 
 function updateNetif(netifs) {
-	let modemList = [];
+	const modemList = [];
 	let totalKbps = 0;
 
 	for (const i in netifs) {
@@ -248,7 +248,7 @@ function showRemoteStatus(status) {
 		$("#remoteStatus").removeClass("alert-danger");
 		$("#remoteStatus").addClass("alert-success");
 		$("#remoteStatus").text("BELABOX cloud remote: connected");
-		remoteConnectedHideTimer = setTimeout(function () {
+		remoteConnectedHideTimer = setTimeout(() => {
 			$("#remoteStatus").addClass("d-none");
 			remoteConnectedHideTimer = undefined;
 		}, 5000);
@@ -339,7 +339,7 @@ function showSoftwareUpdateStatus(status) {
 	$("#softwareUpdateStatus").removeClass("d-none");
 }
 
-$("#softwareUpdate").click(function () {
+$("#softwareUpdate").click(() => {
 	const msg =
 		"Are you sure you want to start a software update? " +
 		"This may take several minutes. " +
@@ -381,7 +381,7 @@ function showSshStatus(s) {
 	$("#sshSettings").removeClass("d-none");
 }
 
-$("#resetSshPass").click(function () {
+$("#resetSshPass").click(() => {
 	const msg = "Are you sure you want to reset the SSH password?";
 
 	if (confirm(msg)) {
@@ -574,7 +574,7 @@ function pipelineSelectHandler(s) {
 	}
 }
 
-$("#pipelines").change(function (ev) {
+$("#pipelines").change((ev) => {
 	pipelineSelectHandler(ev.target.value);
 });
 
@@ -609,7 +609,7 @@ function updateRelaySettings() {
 	}
 	updateButtonEnabledDisabled();
 }
-$("#relayServer, #relayAccount").change(function () {
+$("#relayServer, #relayAccount").change(() => {
 	updateRelaySettings();
 });
 
@@ -675,7 +675,7 @@ function wifiScan(button, deviceId) {
 	// Duration
 	const searchDuration = 10000;
 
-	setTimeout(function () {
+	setTimeout(() => {
 		wifiManager.find(".wifi-scan-button").attr("disabled", false);
 		wifiManager.find(".scanning").addClass("d-none");
 	}, searchDuration);
@@ -791,7 +791,7 @@ function wifiForget(e) {
 }
 
 function wifiFindCardId(deviceId) {
-	return `wifi-manager-${parseInt(deviceId)}`;
+	return `wifi-manager-${Number.parseInt(deviceId)}`;
 }
 
 function wifiSignalSymbol(signal) {
@@ -945,7 +945,7 @@ function updateWifiState(msg) {
 		wifiIfs[i].removed = true;
 	}
 
-	for (let deviceId in msg) {
+	for (const deviceId in msg) {
 		// Mark the interface as not removed
 		if (wifiIfs[deviceId]) {
 			delete wifiIfs[deviceId].removed;
@@ -1042,7 +1042,7 @@ function updateWifiState(msg) {
 
 			deviceCard.find("button.showHidePassword").click(showHidePassword);
 
-			deviceCard.find("button.hotspot-mode").click(function () {
+			deviceCard.find("button.hotspot-mode").click(() => {
 				if (
 					confirm(
 						"This will immediately disconnect the WiFi adapter from any connected networks and turn on the hotspot. Proceed?",
@@ -1056,7 +1056,7 @@ function updateWifiState(msg) {
 				}
 			});
 
-			deviceCard.find("button.client-mode").click(function () {
+			deviceCard.find("button.client-mode").click(() => {
 				if (
 					confirm(
 						"This will immediately disconnect any connected clients and disable the hotspot. Proceed?",
@@ -1072,12 +1072,12 @@ function updateWifiState(msg) {
 
 			deviceCard
 				.find(".hotspot-name, .hotspot-password, .hotspot-channel")
-				.on("input", function () {
+				.on("input", () => {
 					wifiCheckHotspotSettings(deviceId);
 				});
 
 			deviceCard.find("button.hotspot-config-save").click(function () {
-				let config = {
+				const config = {
 					device: deviceId,
 					name: deviceCard.find("input.hotspot-name").val(),
 					password: deviceCard.find("input.hotspot-password").val(),
@@ -1246,7 +1246,7 @@ function handleWifiResult(msg) {
 
 /* Modem manager */
 function modemFindCardId(deviceId) {
-	return `modemManager${parseInt(deviceId)}`;
+	return `modemManager${Number.parseInt(deviceId)}`;
 }
 
 let modems = {};
@@ -1255,7 +1255,7 @@ function updateModemsState(msg) {
 		modems[i].removed = true;
 	}
 
-	for (let deviceId in msg) {
+	for (const deviceId in msg) {
 		if (modems[deviceId]) {
 			delete modems[deviceId].removed;
 		}
@@ -1375,7 +1375,7 @@ function updateModemsState(msg) {
 			}
 
 			const scanButton = deviceCard.find(".network-scan-button");
-			scanButton.click(function () {
+			scanButton.click(() => {
 				if (
 					confirm(
 						"Scanning for networks will temporarily disable the data connection of this modem. Proceed?",
@@ -1387,7 +1387,7 @@ function updateModemsState(msg) {
 				}
 			});
 
-			const getUserConfig = function (deviceCard) {
+			const getUserConfig = (deviceCard) => {
 				const network_type = deviceCard.find(".network-type-input").val();
 				const roaming = deviceCard.find(".roaming-input").prop("checked");
 				const network = deviceCard.find(".network-selection-input").val();
@@ -1418,7 +1418,7 @@ function updateModemsState(msg) {
 
 			// Disable or enable the save button depending on whether any values have changed
 			const inputs = deviceCard.find("input, select");
-			inputs.on("change, input", function () {
+			inputs.on("change, input", () => {
 				if (!modems[deviceId] || !modems[deviceId].config) return false;
 
 				const userConfig = getUserConfig(deviceCard);
@@ -1594,7 +1594,7 @@ function showNotification(n) {
 		}
 	}
 
-	let colorClass = "alert-secondary";
+	const colorClass = "alert-secondary";
 	switch (n.type) {
 		case "error":
 			alert.addClass(`alert-danger`);
@@ -1611,7 +1611,7 @@ function showNotification(n) {
 	if (n.duration) {
 		alert.data(
 			"timerHide",
-			setTimeout(function () {
+			setTimeout(() => {
 				alert.slideUp(300, function () {
 					$(this).remove();
 				});
@@ -1713,7 +1713,7 @@ function handleMessage(msg) {
 function getConfig() {
 	const maxBr = $("#bitrateSlider").slider("value");
 
-	let config = {};
+	const config = {};
 	config.pipeline = document.getElementById("pipelines").value;
 	if (pipelines[config.pipeline].asrc) {
 		config.asrc = document.getElementById("audioSource").value;
@@ -1891,11 +1891,11 @@ function showLoginForm() {
 }
 
 function sendAuthMsg(password, isPersistent) {
-	let auth_req = { auth: { password, persistent_token: isPersistent } };
+	const auth_req = { auth: { password, persistent_token: isPersistent } };
 	ws.send(JSON.stringify(auth_req));
 }
 
-$("#login>form").submit(function () {
+$("#login>form").submit(() => {
 	const password = $("#password").val();
 	const rememberMe = $("#login .rememberMe").prop("checked");
 	sendAuthMsg(password, rememberMe);
@@ -1964,13 +1964,13 @@ function checkRemoteKey() {
 }
 $("#remoteDeviceKey").on("input", checkRemoteKey);
 
-$("#remoteKeyForm").submit(function () {
+$("#remoteKeyForm").submit(() => {
 	const remote_key = $("#remoteDeviceKey").val();
 	ws.send(JSON.stringify({ config: { remote_key } }));
 	return false;
 });
 
-$("#logout").click(function () {
+$("#logout").click(() => {
 	localStorage.removeItem("authToken");
 	ws.send(JSON.stringify({ logout: true }));
 	showLoginForm();
@@ -2022,7 +2022,7 @@ function copyInputValToClipboard(obj) {
 		return false;
 	}
 
-	let input = $(obj);
+	const input = $(obj);
 	let valField = input;
 
 	valField = $("<input>");
@@ -2046,16 +2046,16 @@ function copyInputValToClipboard(obj) {
 }
 
 $("input.click-copy").tooltip({ title: "Copied", trigger: "manual" });
-$("input.click-copy").click(function (ev) {
+$("input.click-copy").click((ev) => {
 	const target = ev.target;
-	let input = $(ev.target);
+	const input = $(ev.target);
 
 	if (copyInputValToClipboard(target)) {
 		input.tooltip("show");
 		if (target.copiedTooltipTimer) {
 			clearTimeout(target.copiedTooltipTimer);
 		}
-		target.copiedTooltipTimer = setTimeout(function () {
+		target.copiedTooltipTimer = setTimeout(() => {
 			input.tooltip("hide");
 			delete target.copiedTooltipTimer;
 		}, 3000);

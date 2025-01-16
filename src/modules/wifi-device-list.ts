@@ -39,8 +39,8 @@ export function wiFiDeviceListStartUpdate() {
 		throw "Called while an update was already in progress";
 	}
 
-	for (const i in wifiDeviceHwAddr) {
-		wifiDeviceHwAddr[i]!.removed = true;
+	for (const addr of Object.values(wifiDeviceHwAddr)) {
+		addr.removed = true;
 	}
 	wiFiDeviceListIsUpdating = true;
 	wiFiDeviceListIsModified = false;

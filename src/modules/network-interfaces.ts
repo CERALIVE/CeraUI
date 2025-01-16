@@ -18,25 +18,25 @@
 /* Network interface list */
 import { exec } from "node:child_process";
 
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
 import { getms } from "../helpers/time.ts";
 
-import {
-	wiFiDeviceListAdd,
-	wiFiDeviceListEndUpdate,
-	wiFiDeviceListStartUpdate,
-} from "./wifi-device-list.ts";
 import {
 	notificationBroadcast,
 	notificationRemove,
 	notificationSend,
 } from "./notifications.ts";
-import { wifiUpdateDevices } from "./wifi.ts";
-import { broadcastMsg, buildMsg } from "./websocket-server.ts";
+import { ACTIVE_TO } from "./shared.ts";
 import { updateSrtlaIps } from "./srtla.ts";
 import { getIsStreaming } from "./streaming.ts";
-import { ACTIVE_TO } from "./shared.ts";
+import { broadcastMsg, buildMsg } from "./websocket-server.ts";
+import {
+	wiFiDeviceListAdd,
+	wiFiDeviceListEndUpdate,
+	wiFiDeviceListStartUpdate,
+} from "./wifi-device-list.ts";
+import { wifiUpdateDevices } from "./wifi.ts";
 
 type NetworkInterface = {
 	ip: string;
@@ -54,10 +54,18 @@ export type NetworkInterfaceMessage = {
 	};
 };
 
+export const NETIF_ERR_DUPIPV4 = 0x01;
+export const NETIF_ERR_HOTSPOT = 0x02;
+
 let netif: Record<string, NetworkInterface> = {};
 
 export function getNetworkInterfaces() {
 	return netif;
+}
+
+export function initNetworkInterfaceMonitoring() {
+	updateNetif();
+	setInterval(updateNetif, 1000);
 }
 
 function updateNetif() {
@@ -68,14 +76,17 @@ function updateNetif() {
 		}
 
 		let intsChanged = false;
-		const newints: Record<string, NetworkInterface> = {};
+		const newInterfaces: Record<string, NetworkInterface> = {};
 
 		wiFiDeviceListStartUpdate();
 
 		const interfaces = stdout.split("\n\n");
 		for (const int of interfaces) {
 			try {
-				const name = int.split(":")[0]!;
+				const name = int.split(":")[0] ?? "";
+
+				if (name === "lo" || name.match("^docker") || name.match("^l4tbr"))
+					continue;
 
 				const inetAddrMatch = int.match(/inet (\d+\.\d+\.\d+\.\d+)/);
 				const inetAddr = inetAddrMatch?.[1];
@@ -84,21 +95,18 @@ function updateNetif() {
 				const isRunning = flags.includes("RUNNING");
 
 				// update the list of WiFi devices
-				if (name && name.match("^wlan")) {
-					let hwAddr = int.match(/ether ([0-9a-f:]+)/);
+				if (name?.match("^wlan")) {
+					const hwAddr = int.match(/ether ([0-9a-f:]+)/);
 					if (hwAddr?.[1]) {
 						wiFiDeviceListAdd(name, hwAddr[1], isRunning ? inetAddr : null);
 					}
 				}
 
-				if (name === "lo" || name.match("^docker") || name.match("^l4tbr"))
-					continue;
-
 				if (!inetAddr) continue;
 				if (!isRunning) continue;
 
-				const txBytesMatch = int.match(/TX packets \d+  bytes \d+/);
-				const txBytes = parseInt(
+				const txBytesMatch = int.match(/TX packets \d+ {2}bytes \d+/);
+				const txBytes = Number.parseInt(
 					(txBytesMatch?.[0] ?? "").split(" ").pop() ?? "0",
 					10,
 				);
@@ -110,7 +118,13 @@ function updateNetif() {
 
 				const enabled = !netif[name] || netif[name].enabled;
 				const error = netif[name] ? netif[name].error : 0;
-				newints[name] = { ip: inetAddr, txb: txBytes, tp, enabled, error };
+				newInterfaces[name] = {
+					ip: inetAddr,
+					txb: txBytes,
+					tp,
+					enabled,
+					error,
+				};
 
 				// Detect interfaces that are new or with a different address
 				if (!netif[name] || netif[name].ip !== inetAddr) {
@@ -121,7 +135,7 @@ function updateNetif() {
 
 		// Detect removed interfaces
 		for (const i in netif) {
-			if (!newints[i]) {
+			if (!newInterfaces[i]) {
 				intsChanged = true;
 			}
 		}
@@ -130,21 +144,23 @@ function updateNetif() {
 			const intAddrs: Record<string, string | Array<string>> = {};
 
 			// Detect duplicate IP adddresses and set error status
-			for (const i in newints) {
-				const int = newints[i]!;
-				clearNetifDup(int);
-				const currentValue = intAddrs[int.ip];
+			for (const i in newInterfaces) {
+				const newInterface = newInterfaces[i];
+				if (!newInterface) continue;
+
+				clearNetifDup(newInterface);
+				const currentValue = intAddrs[newInterface.ip];
 
 				if (currentValue === undefined) {
-					intAddrs[int.ip] = i;
+					intAddrs[newInterface.ip] = i;
 				} else {
 					if (Array.isArray(currentValue)) {
 						currentValue.push(i);
 					} else {
-						setNetifDup(newints[currentValue]);
-						intAddrs[int.ip] = [currentValue, i];
+						setNetifDup(newInterfaces[currentValue]);
+						intAddrs[newInterface.ip] = [currentValue, i];
 					}
-					setNetifDup(int);
+					setNetifDup(newInterface);
 				}
 			}
 
@@ -172,7 +188,7 @@ function updateNetif() {
 			setTimeout(wifiUpdateDevices, 1000);
 		}
 
-		netif = newints;
+		netif = newInterfaces;
 
 		if (intsChanged && getIsStreaming()) {
 			updateSrtlaIps();
@@ -181,12 +197,6 @@ function updateNetif() {
 		broadcastMsg("netif", netIfBuildMsg(), getms() - ACTIVE_TO);
 	});
 }
-
-updateNetif();
-setInterval(updateNetif, 1000);
-
-export const NETIF_ERR_DUPIPV4 = 0x01;
-export const NETIF_ERR_HOTSPOT = 0x02;
 
 // The order is deliberate, we want *hotspot* to have higher priority
 const netIfErrors = {
@@ -226,7 +236,7 @@ export function netIfGetErrorMsg(i: NetworkInterface) {
 	if (i.error === 0) return;
 
 	for (const e in netIfErrors) {
-		const errorCode = parseInt(e, 10);
+		const errorCode = Number.parseInt(e, 10);
 		if (i.error & errorCode && isValidNetworkInterfaceErrorCode(errorCode))
 			return netIfErrors[errorCode];
 	}
@@ -241,7 +251,8 @@ type NetworkInterfaceResponseMessage = {
 export function netIfBuildMsg() {
 	const m: NetworkInterfaceResponseMessage = {};
 	for (const i in netif) {
-		const networkInterface = netif[i]!;
+		const networkInterface = netif[i];
+		if (!networkInterface) continue;
 
 		m[i] = {
 			ip: networkInterface.ip,

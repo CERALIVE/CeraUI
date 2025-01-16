@@ -1,6 +1,6 @@
-import util from "node:util";
 import { exec, execFile } from "node:child_process";
 import fs from "node:fs";
+import util from "node:util";
 
 export const execP = util.promisify(exec);
 export const execFileP = util.promisify(execFile);

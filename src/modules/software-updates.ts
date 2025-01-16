@@ -16,16 +16,16 @@
 */
 
 /* Software updates */
-import { exec, type ExecException, spawn, spawnSync } from "node:child_process";
+import { type ExecException, exec, spawn, spawnSync } from "node:child_process";
 
 import { execPNR } from "../helpers/exec.ts";
 import { getms, oneHour, oneMinute } from "../helpers/time.ts";
 
-import { setup } from "./setup.ts";
-import { notificationBroadcast } from "./notifications.ts";
-import { broadcastMsg } from "./websocket-server.ts";
-import { getIsStreaming } from "./streaming.ts";
 import { queueUpdateGw } from "./gateways.ts";
+import { notificationBroadcast } from "./notifications.ts";
+import { setup } from "./setup.ts";
+import { getIsStreaming } from "./streaming.ts";
+import { broadcastMsg } from "./websocket-server.ts";
 
 let availableUpdates:
 	| {
@@ -58,26 +58,22 @@ export function isUpdating() {
 }
 
 function parseUpgradePackageCount(text: string) {
-	const upgradedMatch = text.match(/(\d+) upgraded/);
-	const newlyInstalledMatch = text.match(/, (\d+) newly installed/);
+	const upgradedMatch = text.match(/(\d+) upgraded/) as [string, string] | null;
+	const newlyInstalledMatch = text.match(/, (\d+) newly installed/) as
+		| [string, string]
+		| null;
 	if (!upgradedMatch || !newlyInstalledMatch) {
 		console.log("parseUpgradePackageCount(): failed to parse the package info");
 		return undefined;
 	}
 
-	const upgradedCount = parseInt(upgradedMatch[1]!, 10);
-	const newlyInstalledCount = parseInt(newlyInstalledMatch[1]!, 10);
+	const upgradedCount = Number.parseInt(upgradedMatch[1], 10);
+	const newlyInstalledCount = Number.parseInt(newlyInstalledMatch[1], 10);
 	return upgradedCount + newlyInstalledCount;
 }
 
 function parseUpgradeDownloadSize(text: string) {
-	try {
-		let downloadSize = text.split("Need to get ")[1]!;
-		downloadSize = downloadSize.split(/\/|( of archives)/)[0]!;
-		return downloadSize;
-	} catch (err) {
-		return undefined;
-	}
+	return text.split("Need to get ")[1]?.split(/\/|( of archives)/)[0];
 }
 
 // Show an update notification if there are pending updates to packages matching this list
@@ -101,15 +97,11 @@ function packageListIncludes(list: string, includes: Array<string>) {
 
 // Parses a list of packets shown by apt-get under a certain heading
 function parseAptPackageList(stdout: string, heading: string) {
-	try {
-		let packageList = stdout.split(heading)[1]!;
-		packageList = packageList.split(/\n[\d\w]+/)[0]!;
-		packageList = packageList.replace(/[\n ]+/g, " ");
-		packageList = packageList.trim();
-		return packageList;
-	} catch (err) {}
-
-	return undefined;
+	return stdout
+		.split(heading)[1]
+		?.split(/\n\w+/)[0]
+		?.replace(/[\n ]+/g, " ")
+		?.trim();
 }
 
 function parseAptUpgradedPackages(stdout: string) {
@@ -121,7 +113,7 @@ function parseAptUpgradedPackages(stdout: string) {
 
 function parseAptUpgradeSummary(stdout: string) {
 	const upgradeCount = parseUpgradePackageCount(stdout) ?? 0;
-	let downloadSize;
+	let downloadSize: string | undefined;
 	let belaboxPackages = false;
 	if (upgradeCount > 0) {
 		downloadSize = parseUpgradeDownloadSize(stdout);
@@ -154,7 +146,7 @@ async function getSoftwareUpdateSize() {
 				aptHeldBackPackages = "belabox belabox-linux-tegra";
 			}
 			upgrade = await execPNR(
-				"apt-get install --assume-no " + aptHeldBackPackages,
+				`apt-get install --assume-no ${aptHeldBackPackages}`,
 			);
 			res = parseAptUpgradeSummary(upgrade.stdout);
 		}
@@ -191,34 +183,31 @@ function checkForSoftwareUpdates(
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return;
 
 	aptGetUpdating = true;
-	exec(
-		"apt-get update --allow-releaseinfo-change",
-		function (err, stdout, stderr) {
-			let errOrStderr: SoftwareUpdateError = err;
+	exec("apt-get update --allow-releaseinfo-change", (err, stdout, stderr) => {
+		let errOrStderr: SoftwareUpdateError = err;
 
-			aptGetUpdating = false;
+		aptGetUpdating = false;
 
-			if (stderr.length) {
-				errOrStderr = true;
-				aptGetUpdateFailures++;
-				queueUpdateGw();
-			} else {
-				aptGetUpdateFailures = 0;
-			}
+		if (stderr.length) {
+			errOrStderr = true;
+			aptGetUpdateFailures++;
+			queueUpdateGw();
+		} else {
+			aptGetUpdateFailures = 0;
+		}
 
-			console.log(
-				`apt-get update: ${errOrStderr === null ? "success" : "error"}`,
-			);
-			console.log(stdout);
-			console.log(stderr);
+		console.log(
+			`apt-get update: ${errOrStderr === null ? "success" : "error"}`,
+		);
+		console.log(stdout);
+		console.log(stderr);
 
-			if (callback) callback(errOrStderr, aptGetUpdateFailures);
-		},
-	);
+		if (callback) callback(errOrStderr, aptGetUpdateFailures);
+	});
 }
 
 let nextCheckForSoftwareUpdates = getms();
-let nextCheckForSoftwareUpdatesTimer: NodeJS.Timeout | undefined;
+let nextCheckForSoftwareUpdatesTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function periodicCheckForSoftwareUpdates() {
 	if (nextCheckForSoftwareUpdatesTimer) {
@@ -235,10 +224,9 @@ export function periodicCheckForSoftwareUpdates() {
 		return;
 	}
 
-	checkForSoftwareUpdates(async function (err, failures) {
-		if (err === null) {
-			err = await getSoftwareUpdateSize();
-		}
+	checkForSoftwareUpdates(async (err_, failures) => {
+		const err = err_ === null ? await getSoftwareUpdateSize() : err_;
+
 		// one hour delay after a succesful check
 		let delay = oneHour;
 		// otherwise, increasing delay depending on the number of failures
@@ -272,11 +260,11 @@ export function startSoftwareUpdate() {
 		return;
 	}
 
-	checkForSoftwareUpdates(function (err) {
+	checkForSoftwareUpdates((err) => {
 		if (err === null) {
 			doSoftwareUpdate();
-		} else {
-			softUpdateStatus!.result =
+		} else if (softUpdateStatus) {
+			softUpdateStatus.result =
 				"Failed to fetch the updated package list; aborting the update.";
 			broadcastMsg("status", { updating: softUpdateStatus });
 			softUpdateStatus = null;
@@ -297,27 +285,27 @@ function doSoftwareUpdate() {
 	let args =
 		"-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold ";
 	if (aptHeldBackPackages) {
-		args += "install " + aptHeldBackPackages;
+		args += `install ${aptHeldBackPackages}`;
 	} else {
 		args += "dist-upgrade";
 	}
 	const aptUpgrade = spawn("apt-get", args.split(" "));
 
-	aptUpgrade.stdout.on("data", function (data) {
+	aptUpgrade.stdout.on("data", (buf) => {
 		let sendUpdate = false;
 
-		data = data.toString("utf8");
+		const data = buf.toString("utf8");
 		aptLog += data;
 
 		if (!softUpdateStatus) return;
 
 		if (softUpdateStatus.total === 0) {
-			let count = parseUpgradePackageCount(data);
+			const count = parseUpgradePackageCount(data);
 			if (count !== undefined) {
 				softUpdateStatus.total = count;
 				sendUpdate = true;
 
-				let packageList = parseAptUpgradedPackages(aptLog);
+				const packageList = parseAptUpgradedPackages(aptLog);
 				if (
 					packageList &&
 					packageListIncludes(packageList, rebootPackageList)
@@ -330,7 +318,7 @@ function doSoftwareUpdate() {
 		if (softUpdateStatus.downloading !== softUpdateStatus.total) {
 			const getMatch = data.match(/Get:(\d+)/);
 			if (getMatch) {
-				const i = parseInt(getMatch[1]);
+				const i = Number.parseInt(getMatch[1]);
 				if (i > softUpdateStatus.downloading) {
 					softUpdateStatus.downloading = Math.min(i, softUpdateStatus.total);
 					sendUpdate = true;
@@ -364,15 +352,17 @@ function doSoftwareUpdate() {
 		}
 	});
 
-	aptUpgrade.stderr.on("data", function (data) {
+	aptUpgrade.stderr.on("data", (data) => {
 		aptErr += data;
 	});
 
-	aptUpgrade.on("close", function (code) {
-		softUpdateStatus!.result = code === 0 ? code : aptErr;
-		broadcastMsg("status", { updating: softUpdateStatus });
+	aptUpgrade.on("close", (code) => {
+		if (softUpdateStatus) {
+			softUpdateStatus.result = code === 0 ? code : aptErr;
+			broadcastMsg("status", { updating: softUpdateStatus });
+			softUpdateStatus = null;
+		}
 
-		softUpdateStatus = null;
 		console.log(aptLog);
 		console.log(aptErr);
 

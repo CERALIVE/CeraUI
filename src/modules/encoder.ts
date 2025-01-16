@@ -15,11 +15,11 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import fs from "node:fs";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 
-import { setup } from "./setup.ts";
 import { getConfig, saveConfig } from "./config.ts";
+import { setup } from "./setup.ts";
 
 export type BitrateParams = { max_br?: number };
 
@@ -35,7 +35,7 @@ export function setBitrate(params: BitrateParams) {
 
 	fs.writeFileSync(
 		setup.bitrate_file,
-		minBr * 1000 + "\n" + config.max_br * 1000 + "\n",
+		`${minBr * 1000}\n${config.max_br * 1000}\n`,
 	);
 
 	spawnSync("killall", ["-HUP", "belacoder"]);

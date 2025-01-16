@@ -19,12 +19,12 @@
 import { exec, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
-import { setup } from "./setup.ts";
 import { getConfig, saveConfig } from "./config.ts";
-import { broadcastMsg } from "./websocket-server.ts";
 import { notificationSend } from "./notifications.ts";
+import { setup } from "./setup.ts";
+import { broadcastMsg } from "./websocket-server.ts";
 
 type SshStatus = {
 	user?: string;
@@ -33,9 +33,9 @@ type SshStatus = {
 };
 
 let sshStatus: SshStatus | null = null;
-let sshPasswordHash: string;
+let sshPasswordHash: string | undefined;
 
-export function setSshPasswordHash(hash: string) {
+export function setSshPasswordHash(hash: string | undefined) {
 	sshPasswordHash = hash;
 }
 
@@ -65,7 +65,7 @@ function getSshUserHash(callback: (hash: string) => void) {
 	if (!setup.ssh_user) return;
 
 	const cmd = `grep "^${setup.ssh_user}:" /etc/shadow`;
-	exec(cmd, function (err, stdout) {
+	exec(cmd, (err, stdout) => {
 		if (err === null && stdout.length) {
 			callback(stdout);
 		} else {
@@ -85,14 +85,14 @@ export function getSshStatus() {
 	};
 
 	// Check is the SSH server is running
-	exec("systemctl is-active ssh", function (err, stdout) {
+	exec("systemctl is-active ssh", (err, stdout) => {
 		if (err === null) {
 			s.active = true;
 		} else {
 			if (stdout === "inactive\n") {
 				s.active = false;
 			} else {
-				console.log("Error running systemctl is-active ssh: " + err.message);
+				console.log(`Error running systemctl is-active ssh: ${err.message}`);
 				return;
 			}
 		}
@@ -101,7 +101,7 @@ export function getSshStatus() {
 	});
 
 	// Check if the user's password has been changed
-	getSshUserHash(function (hash: string) {
+	getSshUserHash((hash: string) => {
 		s.user_pass = hash !== sshPasswordHash;
 		handleSshStatus(s);
 	});
@@ -121,11 +121,13 @@ export function startStopSsh(conn: WebSocket, cmd: string) {
 				resetSshPassword(conn);
 			}
 			break;
-		case "stop_ssh":
-			const action = cmd.split("_")[0]!;
+		case "stop_ssh": {
+			const action = cmd.split("_")[0];
+			if (action !== "start" && action !== "stop") return;
 			spawnSync("systemctl", [action, "ssh"]);
 			getSshStatus();
 			break;
+		}
 	}
 }
 
@@ -135,10 +137,10 @@ export function resetSshPassword(conn: WebSocket) {
 	const password = crypto
 		.randomBytes(24)
 		.toString("base64")
-		.replace(/\+|\/|=/g, "")
+		.replace(/[+\/=]/g, "")
 		.substring(0, 20);
 	const cmd = `printf "${password}\n${password}" | passwd ${setup.ssh_user}`;
-	exec(cmd, function (err) {
+	exec(cmd, (err) => {
 		if (err) {
 			notificationSend(
 				conn,
@@ -149,7 +151,7 @@ export function resetSshPassword(conn: WebSocket) {
 			);
 			return;
 		}
-		getSshUserHash(function (hash: string) {
+		getSshUserHash((hash: string) => {
 			const config = getConfig();
 			config.ssh_pass = password;
 			sshPasswordHash = hash;

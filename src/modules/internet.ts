@@ -36,22 +36,22 @@ type HttpGetResponse = {
 };
 
 function httpGet(options: HttpGetOptions) {
-	return new Promise<HttpGetResponse>(function (resolve, reject) {
-		let to: NodeJS.Timeout | undefined;
+	return new Promise<HttpGetResponse>((resolve, reject) => {
+		let to: ReturnType<typeof setTimeout> | undefined;
 
 		if (options.timeout) {
-			to = setTimeout(function () {
+			to = setTimeout(() => {
 				req.destroy();
 				reject("timeout");
 			}, options.timeout);
 		}
 
-		const req = http.get(options, function (res) {
+		const req = http.get(options, (res) => {
 			let response = "";
-			res.on("data", function (d) {
+			res.on("data", (d) => {
 				response += d;
 			});
-			res.on("end", function () {
+			res.on("end", () => {
 				if (to) {
 					clearTimeout(to);
 				}
@@ -59,7 +59,7 @@ function httpGet(options: HttpGetOptions) {
 			});
 		});
 
-		req.on("error", function (e) {
+		req.on("error", (e) => {
 			if (to) {
 				clearTimeout(to);
 			}
@@ -73,7 +73,7 @@ export async function checkConnectivity(
 	localAddress?: string,
 ) {
 	try {
-		let url: HttpGetOptions = {};
+		const url: HttpGetOptions = {};
 		url.headers = { Host: CONNECTIVITY_CHECK_DOMAIN };
 		url.path = CONNECTIVITY_CHECK_PATH;
 		url.host = remoteAddr;
@@ -93,8 +93,7 @@ export async function checkConnectivity(
 	} catch (err) {
 		if (err instanceof Error) {
 			console.log(
-				"Internet connectivity HTTP check error " +
-					("code" in err ? err.code : err),
+				`Internet connectivity HTTP check error ${"code" in err ? err.code : err}`,
 			);
 		}
 	}

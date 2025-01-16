@@ -16,22 +16,26 @@
 */
 
 /* Stream starting, stopping, management and monitoring */
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
 import { validateInteger, validatePortNo } from "../helpers/number.ts";
 
-import { getConfig, saveConfig } from "./config.ts";
 import {
+	DEFAULT_AUDIO_ID,
 	abortAsrcRetry,
 	asrcProbe,
 	asrcScheduleRetry,
 	audioCodecs,
-	DEFAULT_AUDIO_ID,
 	getAudioDevices,
 	isAsrcRetryScheduled,
 	pipelineSetAsrc,
 } from "./audio.ts";
+import { getConfig, saveConfig } from "./config.ts";
+import { setBitrate } from "./encoder.ts";
 import { notificationSend } from "./notifications.ts";
+import { removeBitrateOverlay, searchPipelines } from "./pipelines.ts";
+import { convertManualToRemoteRelay, getRelays } from "./remote.ts";
+import { resolveSrtla } from "./srtla.ts";
 import {
 	broadcastMsg,
 	buildMsg,
@@ -39,10 +43,6 @@ import {
 	getSocketSenderId,
 	setSocketSenderId,
 } from "./websocket-server.ts";
-import { removeBitrateOverlay, searchPipelines } from "./pipelines.ts";
-import { setBitrate } from "./encoder.ts";
-import { convertManualToRemoteRelay, getRelays } from "./remote.ts";
-import { resolveSrtla } from "./srtla.ts";
 
 export type StartMessage = { start: ConfigParameters };
 
@@ -124,12 +124,12 @@ export async function updateConfig(
 	// pipeline
 	if (params.pipeline === undefined)
 		return startError(conn, "pipeline not specified");
-	let pipeline = searchPipelines(params.pipeline);
+	const pipeline = searchPipelines(params.pipeline);
 	if (pipeline == null) return startError(conn, "pipeline not found");
 	let pipelineFilePath: string | undefined = pipeline.path;
 
 	// audio codec, if needed for the pipeline
-	let audioCodec;
+	let audioCodec: string | undefined;
 	if (pipeline.acodec) {
 		if (params.acodec === undefined) {
 			return startError(conn, "audio codec not specified");
@@ -151,7 +151,9 @@ export async function updateConfig(
 	}
 
 	// bitrate
-	const maxBitrate = params.max_br ? parseInt(params.max_br, 10) : undefined;
+	const maxBitrate = params.max_br
+		? Number.parseInt(params.max_br, 10)
+		: undefined;
 	const bitrate = setBitrate({ max_br: maxBitrate });
 	if (bitrate == null) return startError(conn, "invalid bitrate range: ");
 
@@ -163,7 +165,8 @@ export async function updateConfig(
 		return startError(conn, `invalid SRT latency '${params.srt_latency}' ms`);
 
 	// srtla addr & port
-	let srtlaAddr, srtlaPort;
+	let srtlaAddr: string | undefined;
+	let srtlaPort: number | undefined;
 	const relays = getRelays();
 	if (relays && params.relay_server) {
 		const relayServer = relays.servers[params.relay_server];
@@ -185,7 +188,7 @@ export async function updateConfig(
 	}
 
 	// srt streamid
-	let streamid;
+	let streamid: string | undefined;
 	if (relays && params.relay_server && params.relay_account) {
 		const relayAccount = relays.accounts[params.relay_account];
 		if (!relayAccount) {
@@ -234,19 +237,19 @@ export async function updateConfig(
 	config.bitrate_overlay = Boolean(params.bitrate_overlay);
 	if (params.relay_server) {
 		config.relay_server = params.relay_server;
-		delete config.srtla_addr;
-		delete config.srtla_port;
+		config.srtla_addr = undefined;
+		config.srtla_port = undefined;
 	} else {
 		config.srtla_addr = srtlaAddr;
 		config.srtla_port = srtlaPort;
-		delete config.relay_server;
+		config.relay_server = undefined;
 	}
 	if (params.relay_account) {
 		config.relay_account = params.relay_account;
-		delete config.srt_streamid;
+		config.srt_streamid = undefined;
 	} else {
 		config.srt_streamid = params.srt_streamid;
-		delete config.relay_account;
+		config.relay_account = undefined;
 	}
 
 	if (!params.relay_server || !params.relay_account) {

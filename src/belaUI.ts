@@ -19,28 +19,32 @@ import { spawnSync } from "node:child_process";
 
 import { checkExecPath } from "./helpers/exec.ts";
 
-import { updateModems } from "./modules/modems.ts";
-import { checkCamlinkUsb2 } from "./modules/camlink.ts";
 import { updateAudioDevices } from "./modules/audio.ts";
-import { UPDATE_GW_INT, updateGwWrapper } from "./modules/gateways.ts";
-import { belacoderExec, srtlaSendExec } from "./modules/streamloop.ts";
-import { startHttpServer } from "./modules/http-server.ts";
-import { initRevisions } from "./modules/revisions.ts";
-import { initWebSocketServer } from "./modules/websocket-server.ts";
+import { checkCamlinkUsb2 } from "./modules/camlink.ts";
 import { loadConfig } from "./modules/config.ts";
+import { UPDATE_GW_INT, updateGwWrapper } from "./modules/gateways.ts";
 import { initHardwareMonitoring } from "./modules/hardware-monitoring.ts";
+import { startHttpServer } from "./modules/http-server.ts";
+import { updateModems } from "./modules/modems.ts";
+import { initNetworkInterfaceMonitoring } from "./modules/network-interfaces.ts";
+import { initRemote } from "./modules/remote.ts";
+import { initRevisions } from "./modules/revisions.ts";
+import { belacoderExec, srtlaSendExec } from "./modules/streamloop.ts";
+import { initWebSocketServer } from "./modules/websocket-server.ts";
 
 /* Disable localization for any CLI commands we run */
-process.env["LANG"] = "C.UTF-8";
-process.env["LANGUAGE"] = "C";
+process.env.LANG = "C.UTF-8";
+process.env.LANGUAGE = "C";
 
 /* Make sure apt-get doesn't expect any interactive user input */
-process.env["DEBIAN_FRONTEND"] = "noninteractive";
+process.env.DEBIAN_FRONTEND = "noninteractive";
 
 checkExecPath(belacoderExec);
 checkExecPath(srtlaSendExec);
 
 loadConfig();
+
+initRemote();
 
 initRevisions();
 initWebSocketServer();
@@ -50,6 +54,8 @@ updateGwWrapper();
 setInterval(updateGwWrapper, UPDATE_GW_INT);
 
 updateModems();
+
+initNetworkInterfaceMonitoring();
 
 // check for Cam Links on USB2 at startup
 checkCamlinkUsb2();

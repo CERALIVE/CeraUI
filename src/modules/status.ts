@@ -15,25 +15,25 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
-import { getConfig } from "./config.ts";
-import { buildMsg } from "./websocket-server.ts";
-import { notificationSendPersistent } from "./notifications.ts";
-import { getIsStreaming } from "./streaming.ts";
 import { audioCodecs, getAudioDevices } from "./audio.ts";
+import { getConfig } from "./config.ts";
+import { getSensors } from "./hardware-monitoring.ts";
+import { modemsBuildMsg } from "./modems.ts";
+import { netIfBuildMsg } from "./network-interfaces.ts";
+import { notificationSendPersistent } from "./notifications.ts";
 import { getPipelineList } from "./pipelines.ts";
 import { buildRelaysMsg, getRelays } from "./remote.ts";
-import { getSshStatus } from "./ssh.ts";
+import { getRevisions } from "./revisions.ts";
 import {
 	getAvailableUpdates,
 	getSoftUpdateStatus,
 } from "./software-updates.ts";
+import { getSshStatus } from "./ssh.ts";
+import { getIsStreaming } from "./streaming.ts";
+import { buildMsg } from "./websocket-server.ts";
 import { wifiBuildMsg } from "./wifi.ts";
-import { modemsBuildMsg } from "./modems.ts";
-import { netIfBuildMsg } from "./network-interfaces.ts";
-import { getRevisions } from "./revisions.ts";
-import { getSensors } from "./hardware-monitoring.ts";
 
 export function sendStatus(conn: WebSocket) {
 	conn.send(

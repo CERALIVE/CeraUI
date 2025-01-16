@@ -61,11 +61,12 @@
 */
 import fs from "node:fs";
 
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
 import { extractMessage } from "../helpers/types.ts";
 
 import {
+	type NetworkScanResult,
 	mmConvertAccessTech,
 	mmConvertNetworkType,
 	mmConvertNetworkTypes,
@@ -74,22 +75,21 @@ import {
 	mmList,
 	mmNetworkScan,
 	mmSetNetworkTypes,
-	type NetworkScanResult,
 } from "./mmcli.ts";
-import { broadcastMsg } from "./websocket-server.ts";
-import { writeTextFile } from "./text-files.ts";
 import {
-	nmcliParseSep,
-	nmConnAdd,
-	nmConnect,
-	nmConnGetFields,
-	nmConnSetFields,
-	nmConnsGet,
-	nmDisconnect,
 	type NetworkManagerConnection,
 	type NetworkManagerConnectionModemConfig,
+	nmConnAdd,
+	nmConnGetFields,
+	nmConnSetFields,
+	nmConnect,
+	nmConnsGet,
+	nmDisconnect,
+	nmcliParseSep,
 } from "./network-manager.ts";
 import { setup } from "./setup.ts";
+import { writeTextFile } from "./text-files.ts";
+import { broadcastMsg } from "./websocket-server.ts";
 
 type ModemConfigMessage = {
 	config: {
@@ -195,7 +195,7 @@ type ModemConfig = {
 
 const GSM_OPERATORS_CACHE_FILE = "gsm_operator_cache.json";
 
-export let modems: Record<number, Modem> = {};
+export const modems: Record<number, Modem> = {};
 
 let gsmOperatorsCache: Record<string, string> = {};
 try {
@@ -269,6 +269,7 @@ async function getGsmConns() {
 			if (!byDevice[conn.deviceId]) {
 				byDevice[conn.deviceId] = {};
 			}
+			// biome-ignore lint/style/noNonNullAssertion: ensured to be defined above
 			byDevice[conn.deviceId]![conn.simId] = conn;
 		}
 
@@ -296,7 +297,7 @@ function modemConfigSantizeToNM(config: ModemConfig) {
 		config.username = "";
 		config.password = "";
 	} else {
-		delete config.autoconfig;
+		config.autoconfig = undefined;
 	}
 
 	return fields;
@@ -314,7 +315,7 @@ async function modemGetConfig(
 	const operatorId = simInfo["sim.properties.operator-code"];
 
 	let config: ModemConfig;
-	if (gsmConns.byDevice[modemId] && gsmConns.byDevice[modemId][simId]) {
+	if (gsmConns.byDevice[modemId]?.[simId]) {
 		const ci = gsmConns.byDevice[modemId][simId];
 		config = {
 			conn: ci.uuid,
@@ -385,7 +386,7 @@ function modemUpdateStatus(modemInfo: ModemInfo, modem: Modem) {
 	}
 	const network_type = mmConvertAccessTech(
 		modemInfo["modem.generic.access-technologies"],
-	)!;
+	);
 	const signal = modemInfo["modem.generic.signal-quality.value"];
 	const roaming = modemInfo["modem.3gpp.registration-state"] === "roaming";
 	const connection = modem.is_scanning
@@ -402,12 +403,12 @@ async function modemNetworkScan(id: number) {
 
 	modem.is_scanning = true;
 
-	if (modem.config && modem.config.conn) {
+	if (modem.config?.conn) {
 		await nmDisconnect(modem.config.conn);
 	}
 	const results = await mmNetworkScan(id);
 
-	delete modem.is_scanning;
+	modem.is_scanning = undefined;
 
 	/* Even if no new results are returned, resend the old ones
      to inform the clients that the scan was completed */
@@ -429,9 +430,10 @@ async function modemNetworkScan(id: number) {
 				r.availability = "available";
 				break;
 			case "unknown":
-				delete r.availability;
+				r.availability = undefined;
 				break;
 		}
+
 		if (availableNetworks[code]) {
 			if (
 				r.availability === "available" &&
@@ -442,7 +444,7 @@ async function modemNetworkScan(id: number) {
 		} else {
 			availableNetworks[code] = {
 				name: r["operator-name"],
-				availability: r["availability"],
+				availability: r.availability,
 			};
 		}
 	}
@@ -465,9 +467,11 @@ async function registerModem(id: number) {
 	if (modemInfo["modem.generic.sim"]) {
 		const simId = modemInfo["modem.generic.sim"].match(
 			/\/org\/freedesktop\/ModemManager1\/SIM\/(\d+)/,
-		);
+		) as [string, string] | null;
+
 		if (simId) {
-			simInfo = await mmGetSim(parseInt(simId[1]!, 10));
+			simInfo = await mmGetSim(Number.parseInt(simId[1], 10));
+
 			// If a SIM is present, try to find a matching NM connection or create one
 			if (simInfo) {
 				if (!gsmConns) {
@@ -490,7 +494,7 @@ async function registerModem(id: number) {
 	if (!ifname) return;
 
 	// Find the current network type
-	let networkType = mmConvertNetworkType(
+	const networkType = mmConvertNetworkType(
 		modemInfo["modem.generic.current-modes"],
 	);
 
@@ -535,7 +539,7 @@ function modemGetAvailableNetworks(modem: Modem) {
 	if (!modem.config || modem.config.network === "")
 		return modem.available_networks || {};
 
-	let networks = Object.assign({}, modem.available_networks);
+	const networks = Object.assign({}, modem.available_networks);
 	if (!modem.available_networks) {
 		const name =
 			gsmOperatorsCache[modem.config.network] ||
@@ -591,10 +595,10 @@ type ModemsResponseMessage = Record<string, ModemsResponseMessageEntry>;
 export function modemsBuildMsg(
 	modemsFullState: Record<number, true> | undefined = undefined,
 ) {
-	let msg: ModemsResponseMessage = {};
+	const msg: ModemsResponseMessage = {};
 	for (const i in modems) {
-		const modem = modems[i]!;
-		if (!modem.status) continue;
+		const modem = modems[i];
+		if (!modem?.status) continue;
 
 		const status: ModemsResponseMessageEntry["status"] = {
 			connection: modem.status.connection,
@@ -655,7 +659,9 @@ function modemBuildAvailableNetworksMessage(id: number) {
 	> = {};
 
 	for (const i in modems) {
-		const modem = modems[i]!;
+		const modem = modems[i];
+		if (!modem) continue;
+
 		msg[i] = {};
 		if (String(id) === String(i)) {
 			msg[i].available_networks = modemGetAvailableNetworks(modem);
@@ -673,14 +679,14 @@ function broadcastModemAvailableNetworks(id: number) {
 let gsmConns: GsmConnections | undefined;
 
 export async function updateModems() {
-	for (const m in modems) {
-		modems[m]!.removed = true;
+	for (const m of Object.values(modems)) {
+		m.removed = true;
 	}
 	const modemList = (await mmList()) || [];
 
 	// NM gsm connections to match with new modems - filled on demand if any new modems have been found
 	gsmConns = undefined;
-	let newModems: Record<number, true> = {};
+	const newModems: Record<number, true> = {};
 
 	for (const m of modemList) {
 		const modem = modems[m];
@@ -696,7 +702,7 @@ export async function updateModems() {
 		}
 
 		// The modem is already registered, unmark it for deletion
-		delete modem.removed;
+		modem.removed = undefined;
 
 		const modemInfo = await mmGetModem(m);
 		if (!modemInfo) continue;
@@ -729,7 +735,7 @@ export async function updateModems() {
 
 	// If any modems were removed, delete them
 	for (const m in modems) {
-		if (modems[m]!.removed) {
+		if (modems[m]?.removed) {
 			console.log(`Modem ${m} removed`);
 			delete modems[m];
 		}
@@ -749,7 +755,9 @@ async function handleModemConfig(
 		return;
 	}
 
-	const modem = modems[msg.device]!;
+	const modem = modems[msg.device];
+	if (!modem) return;
+
 	if (!modem.config || !modem.config.conn) {
 		console.log(`Ignoring modem config for unconfigured modem ${msg.device}`);
 		console.log(modem.config);
@@ -811,7 +819,7 @@ async function handleModemConfig(
 	}
 
 	// Temporary config that we'll attempt to write
-	let updatedConfig: ModemConfig = {
+	const updatedConfig: ModemConfig = {
 		autoconfig: msg.autoconfig,
 		apn: msg.apn,
 		username: msg.username,
@@ -847,7 +855,7 @@ async function handleModemConfig(
 			modem.network_type.active = msg.network_type;
 		}
 	}
-	delete modem.inhibit;
+	modem.inhibit = undefined;
 
 	// Send the updated settings to the clients
 	const updatedModem: Record<string, true> = {};
@@ -856,7 +864,7 @@ async function handleModemConfig(
 }
 
 async function handleModemScan(conn: WebSocket, msg: ModemScanMessage["scan"]) {
-	const deviceId = parseInt(msg.device, 10);
+	const deviceId = Number.parseInt(msg.device, 10);
 	if (!msg || !modems[deviceId]) return;
 
 	await modemNetworkScan(deviceId);

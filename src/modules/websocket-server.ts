@@ -17,12 +17,12 @@
 
 import { spawnSync } from "node:child_process";
 
-import WebSocket, { WebSocketServer } from "ws";
+import type WebSocket from "ws";
+import { WebSocketServer } from "ws";
 
 import { getms } from "../helpers/time.ts";
 import { extractMessage } from "../helpers/types.ts";
 
-import { httpServer, startHttpServer } from "./http-server.ts";
 import {
 	type AuthMessage,
 	getPasswordHash,
@@ -32,21 +32,22 @@ import {
 	stripPasswords,
 	tryAuth,
 } from "./auth.ts";
-import { notificationSendPersistent } from "./notifications.ts";
 import { type BitrateParams, setBitrate } from "./encoder.ts";
-import { handleWifi, type WifiMessage } from "./wifi.ts";
-import { handleModems, type ModemsMessage } from "./modems.ts";
-import {
-	handleNetif,
-	type NetworkInterfaceMessage,
-} from "./network-interfaces.ts";
-import { start, stop } from "./streamloop.ts";
-import { getIsStreaming, type StartMessage } from "./streaming.ts";
+import { httpServer, startHttpServer } from "./http-server.ts";
 import { getLog } from "./logs.ts";
-import { isUpdating, startSoftwareUpdate } from "./software-updates.ts";
-import { sendStatus } from "./status.ts";
-import { resetSshPassword, startStopSsh } from "./ssh.ts";
+import { type ModemsMessage, handleModems } from "./modems.ts";
+import {
+	type NetworkInterfaceMessage,
+	handleNetif,
+} from "./network-interfaces.ts";
+import { notificationSendPersistent } from "./notifications.ts";
 import { getRemoteWebSocket, setRemoteKey } from "./remote.ts";
+import { isUpdating, startSoftwareUpdate } from "./software-updates.ts";
+import { resetSshPassword, startStopSsh } from "./ssh.ts";
+import { sendStatus } from "./status.ts";
+import { type StartMessage, getIsStreaming } from "./streaming.ts";
+import { start, stop } from "./streamloop.ts";
+import { type WifiMessage, handleWifi } from "./wifi.ts";
 
 type KeepAliveMessage = { keepalive: unknown };
 type StopMessage = { stop: unknown };
@@ -107,7 +108,7 @@ export function initWebSocketServer() {
 		});
 	});
 
-	wss.on("error", function (e) {
+	wss.on("error", (e) => {
 		if ("code" in e && e.code === "EADDRINUSE") {
 			console.log("HTTP server: port already in use, trying the next one...");
 			startHttpServer();
@@ -306,9 +307,9 @@ export function buildMsg(type: string, data?: unknown, id?: string | null) {
 export function broadcastMsgLocal(
 	type: string,
 	data: unknown,
-	activeMin: number = 0,
+	activeMin = 0,
 	except?: WebSocket,
-	authedOnly: boolean = true,
+	authedOnly = true,
 ) {
 	const msg = buildMsg(type, data);
 	for (const c of wss.clients) {

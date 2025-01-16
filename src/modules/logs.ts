@@ -17,10 +17,10 @@
 
 import { exec } from "node:child_process";
 
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
-import { buildMsg, getSocketSenderId } from "./websocket-server.ts";
 import { notificationSend } from "./notifications.ts";
+import { buildMsg, getSocketSenderId } from "./websocket-server.ts";
 
 export function getLog(conn: WebSocket, service?: string) {
 	const senderId = getSocketSenderId(conn);
@@ -29,10 +29,10 @@ export function getLog(conn: WebSocket, service?: string) {
 
 	if (service) {
 		cmd += ` -u ${service}`;
-		name = service.replace("belaUI", "belabox") + "_log.txt";
+		name = `${service.replace("belaUI", "belabox")}_log.txt`;
 	}
 
-	exec(cmd, { maxBuffer: 10 * 1024 * 1024 }, function (err, stdout) {
+	exec(cmd, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
 		if (err) {
 			const msg = `Failed to fetch the log: ${err}`;
 			notificationSend(conn, "log_error", "error", msg, 10);

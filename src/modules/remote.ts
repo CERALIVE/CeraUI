@@ -15,6 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import assert from "node:assert";
 /* Remote */
 /*
   A brief remote protocol version history:
@@ -34,7 +35,6 @@
   14 - support for the modem manager
 */
 import fs from "node:fs";
-import assert from "node:assert";
 
 import WebSocket, { type RawData } from "ws";
 
@@ -42,7 +42,13 @@ import { validatePortNo } from "../helpers/number.ts";
 import { getms } from "../helpers/time.ts";
 import { extractMessage } from "../helpers/types.ts";
 
+import { addAuthedSocket, deleteAuthedSocket } from "./auth.ts";
 import { getConfig, saveConfig } from "./config.ts";
+import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
+import { queueUpdateGw } from "./gateways.ts";
+import { ACTIVE_TO } from "./shared.ts";
+import { sendInitialStatus } from "./status.ts";
+import { writeTextFile } from "./text-files.ts";
 import {
 	broadcastMsg,
 	broadcastMsgLocal,
@@ -51,13 +57,7 @@ import {
 	markConnectionActive,
 	setSocketSenderId,
 } from "./websocket-server.ts";
-import { writeTextFile } from "./text-files.ts";
-import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
-import { addAuthedSocket, deleteAuthedSocket } from "./auth.ts";
-import { sendInitialStatus } from "./status.ts";
-import { queueUpdateGw } from "./gateways.ts";
-import { handleMessage, type Message } from "./websocket-server.ts";
-import { ACTIVE_TO } from "./shared.ts";
+import { type Message, handleMessage } from "./websocket-server.ts";
 
 type RemoteAuthEncoderMessage = {
 	"auth/encoder": unknown;
@@ -83,7 +83,7 @@ export function getRemoteWebSocket() {
 function handleRemote(conn: WebSocket, msg: RemoteMessage) {
 	for (const type in msg) {
 		switch (type) {
-			case "auth/encoder":
+			case "auth/encoder": {
 				const value = extractMessage<RemoteAuthEncoderMessage, typeof type>(
 					msg,
 					type,
@@ -104,6 +104,7 @@ function handleRemote(conn: WebSocket, msg: RemoteMessage) {
 					console.log("remote: invalid key");
 				}
 				break;
+			}
 			case "relays":
 				handleRemoteRelays(
 					extractMessage<ValidateRemoteRelaysMessage, typeof type>(msg, type),
@@ -170,18 +171,26 @@ export function buildRelaysMsg() {
 		accounts: {},
 	};
 
-	if (relaysCache) {
-		for (const s in relaysCache.servers) {
-			msg.servers[s] = { name: relaysCache.servers[s]!.name };
-			if (relaysCache.servers[s]!.default) msg.servers[s].default = true;
-		}
-		for (const a in relaysCache.accounts) {
-			msg.accounts[a] = { name: relaysCache.accounts[a]!.name };
-			if (relaysCache.accounts[a]!.disabled) {
-				msg.accounts[a].name += " [disabled]";
-				msg.accounts[a].disabled = true;
-			}
-		}
+	if (!relaysCache) return msg;
+
+	for (const s in relaysCache.servers) {
+		const relayServer = relaysCache.servers[s];
+		if (!relayServer) continue;
+
+		msg.servers[s] = {
+			name: relayServer.name,
+			default: relayServer.default,
+		};
+	}
+
+	for (const a in relaysCache.accounts) {
+		const relayAccount = relaysCache.accounts[a];
+		if (!relayAccount) continue;
+
+		msg.accounts[a] = {
+			name: relayAccount.name + (relayAccount.disabled ? " [disabled]" : ""),
+			disabled: relayAccount.disabled,
+		};
 	}
 
 	return msg;
@@ -226,7 +235,9 @@ function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 	try {
 		const out: RelayCache = { servers: {}, accounts: {} };
 		for (const r_id in msg.servers) {
-			const r = msg.servers[r_id]!;
+			const r = msg.servers[r_id];
+			if (!r) continue;
+
 			if (
 				r.type !== "srtla" ||
 				typeof r.name !== "string" ||
@@ -248,8 +259,8 @@ function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 		}
 
 		for (const a_id in msg.accounts) {
-			const a = msg.accounts[a_id]!;
-			if (typeof a.name !== "string" || typeof a.ingest_key !== "string")
+			const a = msg.accounts[a_id];
+			if (!a || typeof a.name !== "string" || typeof a.ingest_key !== "string")
 				continue;
 
 			out.accounts[a_id] = { name: a.name, ingest_key: a.ingest_key };
@@ -271,7 +282,9 @@ export function convertManualToRemoteRelay() {
 	const config = getConfig();
 	if (!config.relay_server && config.srtla_addr && config.srtla_port) {
 		for (const s in relaysCache.servers) {
-			const server = relaysCache.servers[s]!;
+			const server = relaysCache.servers[s];
+			if (!server) continue;
+
 			if (
 				server.addr.toLowerCase() === config.srtla_addr.toLowerCase() &&
 				server.port === config.srtla_port
@@ -289,14 +302,16 @@ export function convertManualToRemoteRelay() {
 	}
 
 	if (config.srtla_addr || config.srtla_port) {
-		delete config.srtla_addr;
-		delete config.srtla_port;
+		config.srtla_addr = undefined;
+		config.srtla_port = undefined;
 		modified = true;
 	}
 
 	if (!config.relay_account && config.srt_streamid) {
 		for (const a in relaysCache.accounts) {
-			const account = relaysCache.accounts[a]!;
+			const account = relaysCache.accounts[a];
+			if (!account) continue;
+
 			if (account.ingest_key === config.srt_streamid) {
 				config.relay_account = a;
 				modified = true;
@@ -306,7 +321,7 @@ export function convertManualToRemoteRelay() {
 	}
 
 	if (config.relay_account && config.srt_streamid) {
-		delete config.srt_streamid;
+		config.srt_streamid = undefined;
 		modified = true;
 	}
 
@@ -334,7 +349,7 @@ function remoteHandleMsg(conn: WebSocket, msg: RawData) {
 		} & ({ remote?: RemoteMessage } | Message);
 		if ("remote" in parsedMessage && parsedMessage.remote) {
 			handleRemote(conn, parsedMessage.remote);
-			delete parsedMessage.remote;
+			parsedMessage.remote = undefined;
 		}
 
 		if (Object.keys(msg).length >= 1) {
@@ -351,7 +366,7 @@ function remoteHandleMsg(conn: WebSocket, msg: RawData) {
 	}
 }
 
-let remoteConnectTimer: NodeJS.Timeout | undefined;
+let remoteConnectTimer: ReturnType<typeof setTimeout> | undefined;
 
 function remoteRetry() {
 	queueUpdateGw();
@@ -389,14 +404,18 @@ async function remoteConnect() {
 			fromCache = dnsRes.fromCache;
 
 			if (fromCache) {
-				host = dnsRes.addrs[Math.floor(Math.random() * dnsRes.addrs.length)]!;
+				const cachedHost =
+					dnsRes.addrs[Math.floor(Math.random() * dnsRes.addrs.length)];
+				if (!cachedHost) throw "No cached address";
+
+				host = cachedHost;
 				queueUpdateGw();
 				console.log(`remote: DNS lookup failed, using cached address ${host}`);
 			}
 		} catch (err) {
 			return remoteRetry();
 		}
-		console.log(`remote: trying to connect`);
+		console.log("remote: trying to connect");
 
 		remoteStatusHandled = false;
 		remoteWs = new WebSocket(`wss://${host}${remoteEndpointPath}`, {
@@ -409,8 +428,8 @@ async function remoteConnect() {
 			remoteWs,
 			getms() + remoteConnectTimeout - remoteTimeout,
 		);
-		remoteWs.on("error", function (err) {
-			console.log("remote error: " + err.message);
+		remoteWs.on("error", (err) => {
+			console.log(`remote error: ${err.message}`);
 		});
 		remoteWs.on("open", function () {
 			if (!fromCache) {
@@ -428,8 +447,12 @@ async function remoteConnect() {
 			};
 			this.send(JSON.stringify(auth_msg));
 		});
-		remoteWs.on("close", () => remoteClose(remoteWs!));
-		remoteWs.on("message", (msg) => remoteHandleMsg(remoteWs!, msg));
+		remoteWs.on("close", () => {
+			if (remoteWs) remoteClose(remoteWs);
+		});
+		remoteWs.on("message", (msg) => {
+			if (remoteWs) remoteHandleMsg(remoteWs, msg);
+		});
 	}
 }
 
@@ -442,14 +465,16 @@ function remoteKeepalive() {
 	}
 }
 
-remoteConnect();
-setInterval(remoteKeepalive, 1000);
+export async function initRemote() {
+	await remoteConnect();
+	setInterval(remoteKeepalive, 1000);
+}
 
 export async function setRemoteKey(key: string) {
 	const config = getConfig();
 	config.remote_key = key;
-	delete config.relay_server;
-	delete config.relay_account;
+	config.relay_server = undefined;
+	config.relay_account = undefined;
 	saveConfig();
 
 	if (remoteWs) {

@@ -28,7 +28,7 @@
   isDismissable - is the user allowed to hide it?
 */
 
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
 import { getms } from "../helpers/time.ts";
 
@@ -54,7 +54,7 @@ type PersistentNotification = Notification & {
 	updated: number;
 };
 
-let persistentNotifications = new Map<string, PersistentNotification>();
+const persistentNotifications = new Map<string, PersistentNotification>();
 
 function buildNotificationMsg(n: Notification, duration: number) {
 	return {
@@ -175,7 +175,7 @@ function _notificationIsLive(n: PersistentNotification) {
 }
 
 export function notificationExists(name: string) {
-	let pn = persistentNotifications.get(name);
+	const pn = persistentNotifications.get(name);
 	if (!pn) return;
 
 	if (_notificationIsLive(pn) !== false) return pn;

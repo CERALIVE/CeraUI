@@ -19,12 +19,12 @@ import { execP } from "../helpers/exec.ts";
 import { getms } from "../helpers/time.ts";
 
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
-import { checkConnectivity, CONNECTIVITY_CHECK_DOMAIN } from "./internet.ts";
-import { notificationBroadcast, notificationRemove } from "./notifications.ts";
+import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
 import {
 	getNetworkInterfaces,
 	netIfGetErrorMsg,
 } from "./network-interfaces.ts";
+import { notificationBroadcast, notificationRemove } from "./notifications.ts";
 
 export const UPDATE_GW_INT = 2000;
 
@@ -34,7 +34,7 @@ let updateGwQueue = true;
 
 async function clear_default_gws() {
 	try {
-		while (1) {
+		while (true) {
 			await execP("ip route del default");
 		}
 	} catch (err) {
@@ -80,10 +80,12 @@ async function updateGw() {
 	);
 
 	const netif = getNetworkInterfaces();
-	let goodIf;
+	let goodIf: string | undefined;
 	for (const addr of addrs) {
 		for (const i in netif) {
-			const networkInterface = netif[i]!;
+			const networkInterface = netif[i];
+			if (!networkInterface) continue;
+
 			const error = netIfGetErrorMsg(networkInterface);
 			if (error) {
 				console.log(

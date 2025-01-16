@@ -23,7 +23,7 @@ import { execFileP } from "../helpers/exec.ts";
 import type { ModemInfo, NetworkType, SimInfo } from "./modems.ts";
 
 const mmcliKeyPattern = /\.length$/;
-const mmcliValuePattern = /\.value\[\d+\]$/;
+const mmcliValuePattern = /\.value\[\d+]$/;
 
 function mmcliParseSep(input: string) {
 	const output: Record<string, Array<string>> = {};
@@ -36,8 +36,9 @@ function mmcliParseSep(input: string) {
 			console.log(`mmcliParseSep: error parsing line ${line}`);
 			continue;
 		}
-		let key = kv[0]!.trim();
-		let value = kv[1]!.trim();
+		let key = kv[0]?.trim();
+		const value = kv[1]?.trim();
+		if (key === undefined || value === undefined) continue;
 
 		// skip empty values
 		if (value === "--") continue;
@@ -50,7 +51,7 @@ function mmcliParseSep(input: string) {
 
 		if (key.match(mmcliValuePattern)) {
 			key = key.replace(mmcliValuePattern, "");
-			output[key]!.push(value);
+			output[key]?.push(value);
 		}
 	}
 
@@ -58,10 +59,15 @@ function mmcliParseSep(input: string) {
 }
 
 export function mmConvertNetworkType(mmType: string) {
-	const typeMatch = mmType.match(/^allowed: (.+); preferred: (.+)$/)!;
-	const label = typeMatch[1]!.split(/,? /).sort().reverse().join("");
-	const allowed = typeMatch[1]!.replace(/,? /g, "|");
-	const preferred = typeMatch[2]!;
+	const typeMatch = mmType.match(/^allowed: (.+); preferred: (.+)$/) as
+		| [string, string, string]
+		| null;
+	if (typeMatch === null)
+		throw new Error(`mmConvertNetworkType: invalid type ${mmType}`);
+
+	const label = typeMatch[1].split(/,? /).sort().reverse().join("");
+	const allowed = typeMatch[1].replace(/,? /g, "|");
+	const preferred = typeMatch[2];
 	return { label, allowed, preferred };
 }
 
@@ -89,9 +95,9 @@ const accessTechToGen = {
 const isAccessTech = (tech: string): tech is keyof typeof accessTechToGen =>
 	tech in accessTechToGen;
 
-export function mmConvertAccessTech(accessTechs?: Array<string>) {
+export function mmConvertAccessTech(accessTechs?: Array<string>): string {
 	if (!accessTechs || accessTechs.length === 0) {
-		return;
+		return "";
 	}
 
 	// Return the highest gen for situations such as 5G NSA, which will report "lte, 5gnr"
@@ -109,7 +115,7 @@ export function mmConvertAccessTech(accessTechs?: Array<string>) {
 	}
 
 	// If we only encountered unknown access techs, simply return the first one
-	if (!gen) return accessTechs[0];
+	if (!gen) return accessTechs[0] ?? "";
 	return gen;
 }
 
@@ -118,11 +124,13 @@ export async function mmList() {
 		const result = await execFileP("mmcli", ["-K", "-L"]);
 		const modems = mmcliParseSep(result.stdout.toString())["modem-list"] ?? [];
 
-		let list = [];
+		const list = [];
 		for (const m of modems) {
-			const id = m.match(/\/org\/freedesktop\/ModemManager1\/Modem\/(\d+)/);
+			const id = m.match(/\/org\/freedesktop\/ModemManager1\/Modem\/(\d+)/) as
+				| [string, string]
+				| null;
 			if (id) {
-				list.push(parseInt(id[1]!, 10));
+				list.push(Number.parseInt(id[1], 10));
 			}
 		}
 		return list;
@@ -161,7 +169,7 @@ export async function mmSetNetworkTypes(
 	preferred: string,
 ) {
 	try {
-		let args = ["-m", String(id), `--set-allowed-modes=${allowed}`];
+		const args = ["-m", String(id), `--set-allowed-modes=${allowed}`];
 		if (preferred !== "none") {
 			args.push(`--set-preferred-mode=${preferred}`);
 		}
@@ -191,7 +199,7 @@ export async function mmNetworkScan(id: number, timeout = 240) {
 		]);
 		const networks =
 			mmcliParseSep(result.stdout.toString())["modem.3gpp.scan-networks"] ?? [];
-		return networks.map(function (n) {
+		return networks.map((n) => {
 			const info = n.split(/, */);
 			const output: Record<string, string> = {};
 			for (const entry of info) {

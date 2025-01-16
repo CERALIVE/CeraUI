@@ -43,7 +43,7 @@ export type NetworkManagerConnection = {
 export async function nmConnAdd(connection: NetworkManagerConnection) {
 	const fields = connection as Record<string, string | number>;
 	try {
-		let args = ["connection", "add"];
+		const args = ["connection", "add"];
 		for (const field in fields) {
 			const value = fields[field];
 			if (value === undefined) continue;
@@ -107,10 +107,13 @@ export async function nmConnSetFields(
 	fields: Record<string, string>,
 ) {
 	try {
-		let args = ["con", "modify", uuid];
+		const args = ["con", "modify", uuid];
 		for (const field in fields) {
+			const value = fields[field];
+			if (value === undefined) continue;
+
 			args.push(field);
-			args.push(fields[field]!);
+			args.push(value);
 		}
 		const result = await execFileP("nmcli", args);
 		return result.stdout === "";

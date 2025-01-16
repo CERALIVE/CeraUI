@@ -35,6 +35,8 @@ const DNS_WELLKNOWN_ADDR = "127.1.33.7";
 
 type ResolveResult = Array<string> | null;
 
+type ResolveType = "a" | "aaaa";
+
 /*
   dns.Resolver uses c-ares, with each instance (and the global
   dns.resolve*() functions) mapped one-to-one to a c-ares channel
@@ -49,20 +51,18 @@ type ResolveResult = Array<string> | null;
   instances for unrelated queries as we call resolver.cancel() on
   timeout, which will make all pending queries time out.
 */
-function resolveP(hostname: string, rrtype?: string, resolver?: Resolver) {
-	if (rrtype !== undefined && rrtype !== "a" && rrtype !== "aaaa") {
-		throw `invalid rrtype ${rrtype}`;
-	}
+function resolveP(
+	hostname: string,
+	rrtype: ResolveType | undefined,
+	existingResolver?: Resolver,
+) {
+	const resolver = existingResolver ?? new Resolver();
 
-	if (!resolver) {
-		resolver = new Resolver();
-	}
-
-	return new Promise<ResolveResult>(function (resolve, reject) {
-		let to: NodeJS.Timeout | undefined;
+	return new Promise<ResolveResult>((resolve, reject) => {
+		let to: ReturnType<typeof setTimeout> | undefined;
 
 		if (DNS_TIMEOUT) {
-			to = setTimeout(function () {
+			to = setTimeout(() => {
 				resolver.cancel();
 				reject(`DNS timeout for ${hostname}`);
 			}, DNS_TIMEOUT);
@@ -70,7 +70,7 @@ function resolveP(hostname: string, rrtype?: string, resolver?: Resolver) {
 
 		let ipv4Res: ResolveResult = null;
 		if (rrtype === undefined || rrtype === "a") {
-			resolver.resolve4(hostname, function (err, address) {
+			resolver.resolve4(hostname, (err, address) => {
 				ipv4Res = err ? null : address;
 				returnResults();
 			});
@@ -78,13 +78,13 @@ function resolveP(hostname: string, rrtype?: string, resolver?: Resolver) {
 
 		let ipv6Res: ResolveResult = null;
 		if (rrtype === undefined || rrtype === "aaaa") {
-			resolver.resolve6(hostname, function (err, address) {
+			resolver.resolve6(hostname, (err, address) => {
 				ipv6Res = err ? null : address;
 				returnResults();
 			});
 		}
 
-		const returnResults = function () {
+		const returnResults = () => {
 			// If querying both for A and AAAA records, wait for the IPv4 result
 			if (rrtype === undefined && ipv4Res === undefined) return;
 
@@ -113,7 +113,7 @@ type DnsCacheEntry = {
 };
 
 let dnsCache: Record<string, DnsCacheEntry> = {};
-let dnsResults: Record<string, ResolveResult> = {};
+const dnsResults: Record<string, ResolveResult> = {};
 try {
 	dnsCache = JSON.parse(fs.readFileSync(DNS_CACHE_FILE, "utf8"));
 } catch (err) {
@@ -126,14 +126,22 @@ function isIpv4Addr(val: string) {
 	return val.match(/^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$/) != null;
 }
 
-export async function dnsCacheResolve(name: string, rrtype?: string) {
-	if (rrtype) {
-		rrtype = rrtype.toLowerCase();
-		if (rrtype !== "a" && rrtype !== "aaaa") {
-			throw "Invalid rrtype";
-		}
-	}
+function isValidResolveType(rrtype: string): rrtype is ResolveType {
+	return rrtype === "a" || rrtype === "aaaa";
+}
 
+function normalizeResolveType(
+	rrtype: string | undefined,
+): ResolveType | undefined {
+	if (rrtype === undefined) return undefined;
+	const normalized = rrtype.toLowerCase();
+	if (isValidResolveType(normalized)) return normalized;
+
+	throw "Invalid rrtype";
+}
+
+export async function dnsCacheResolve(name: string, rrtype_?: string) {
+	const rrtype = normalizeResolveType(rrtype_);
 	if (isIpv4Addr(name) && rrtype !== "aaaa") {
 		return { addrs: [name], fromCache: false };
 	}
@@ -167,7 +175,7 @@ export async function dnsCacheResolve(name: string, rrtype?: string) {
 
 			return { addrs: res, fromCache: false };
 		} catch (err) {
-			console.log("dns error " + err);
+			console.log(`dns error ${err}`);
 		}
 	}
 
@@ -177,18 +185,19 @@ export async function dnsCacheResolve(name: string, rrtype?: string) {
 	throw "DNS query failed and no cached value is available";
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: typescript workaround
 type SomeValue = keyof any;
 
 function compareArrayElements(a1: Array<SomeValue>, a2: Array<SomeValue>) {
 	if (!Array.isArray(a1) || !Array.isArray(a2)) return false;
 
 	const cmp: Record<SomeValue, boolean> = {};
-	for (let e of a1) {
+	for (const e of a1) {
 		cmp[e] = false;
 	}
 
 	// check that all elements of a2 are in a1
-	for (let e of a2) {
+	for (const e of a2) {
 		if (cmp[e] === undefined) {
 			return false;
 		}
@@ -196,7 +205,7 @@ function compareArrayElements(a1: Array<SomeValue>, a2: Array<SomeValue>) {
 	}
 
 	// check that all elements of a1 are in a2
-	for (let e in cmp) {
+	for (const e in cmp) {
 		if (!cmp[e]) return false;
 	}
 
