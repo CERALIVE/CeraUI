@@ -19,10 +19,12 @@
 import { readdirP } from "../helpers/files.ts";
 
 import { notificationBroadcast, notificationRemove } from "./notifications.ts";
+import { setup } from "./setup.ts";
 import { readTextFile } from "./text-files.ts";
 
+const deviceDir = setup.usb_device_dir ?? "/sys/bus/usb/devices";
+
 export async function checkCamlinkUsb2() {
-	const deviceDir = "/sys/bus/usb/devices";
 	const devices = await readdirP(deviceDir);
 	let foundUsb2 = false;
 

@@ -21,6 +21,9 @@
 import { execFileP } from "../helpers/exec.ts";
 
 import type { ModemInfo, NetworkType, SimInfo } from "./modems.ts";
+import { setup } from "./setup.ts";
+
+const mmcliBinary = setup.mmcli_binary ?? "mmcli";
 
 const mmcliKeyPattern = /\.length$/;
 const mmcliValuePattern = /\.value\[\d+]$/;
@@ -121,7 +124,7 @@ export function mmConvertAccessTech(accessTechs?: Array<string>): string {
 
 export async function mmList() {
 	try {
-		const result = await execFileP("mmcli", ["-K", "-L"]);
+		const result = await execFileP(mmcliBinary, ["-K", "-L"]);
 		const modems = mmcliParseSep(result.stdout.toString())["modem-list"] ?? [];
 
 		const list = [];
@@ -143,7 +146,7 @@ export async function mmList() {
 
 export async function mmGetModem(id: number) {
 	try {
-		const result = await execFileP("mmcli", ["-K", "-m", String(id)]);
+		const result = await execFileP(mmcliBinary, ["-K", "-m", String(id)]);
 		return mmcliParseSep(result.stdout.toString()) as unknown as ModemInfo;
 	} catch (err) {
 		if (err instanceof Error) {
@@ -154,7 +157,7 @@ export async function mmGetModem(id: number) {
 
 export async function mmGetSim(id: number) {
 	try {
-		const result = await execFileP("mmcli", ["-K", "-i", String(id)]);
+		const result = await execFileP(mmcliBinary, ["-K", "-i", String(id)]);
 		return mmcliParseSep(result.stdout.toString()) as unknown as SimInfo;
 	} catch (err) {
 		if (err instanceof Error) {
@@ -173,7 +176,7 @@ export async function mmSetNetworkTypes(
 		if (preferred !== "none") {
 			args.push(`--set-preferred-mode=${preferred}`);
 		}
-		const result = await execFileP("mmcli", args);
+		const result = await execFileP(mmcliBinary, args);
 		return result.stdout.match(/successfully set current modes in the modem/);
 	} catch (err) {
 		if (err instanceof Error) {
@@ -190,7 +193,7 @@ export type NetworkScanResult = {
 
 export async function mmNetworkScan(id: number, timeout = 240) {
 	try {
-		const result = await execFileP("mmcli", [
+		const result = await execFileP(mmcliBinary, [
 			`--timeout=${timeout}`,
 			"-K",
 			"-m",

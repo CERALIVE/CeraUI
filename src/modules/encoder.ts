@@ -18,6 +18,7 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 
+import killall from "../helpers/killall.ts";
 import { getConfig, saveConfig } from "./config.ts";
 import { setup } from "./setup.ts";
 
@@ -38,7 +39,7 @@ export function setBitrate(params: BitrateParams) {
 		`${minBr * 1000}\n${config.max_br * 1000}\n`,
 	);
 
-	spawnSync("killall", ["-HUP", "belacoder"]);
+	killall(["-HUP", "belacoder"]);
 
 	return config.max_br;
 }

@@ -19,6 +19,7 @@ import { spawnSync } from "node:child_process";
 
 import { checkExecPath } from "./helpers/exec.ts";
 
+import killall from "./helpers/killall.ts";
 import { updateAudioDevices } from "./modules/audio.ts";
 import { checkCamlinkUsb2 } from "./modules/camlink.ts";
 import { loadConfig } from "./modules/config.ts";
@@ -76,7 +77,7 @@ process.on("SIGUSR2", function udevDeviceUpdate() {
 });
 
 // make sure we didn't inherit orphan processes
-spawnSync("killall", ["belacoder"]);
-spawnSync("killall", ["srtla_send"]);
+killall(["belacoder"]);
+killall(["srtla_send"]);
 
 startHttpServer();

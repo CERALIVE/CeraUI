@@ -15,11 +15,11 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 
 import type WebSocket from "ws";
 
+import killall from "../helpers/killall.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { queueUpdateGw } from "./gateways.ts";
 import { getNetworkInterfaces } from "./network-interfaces.ts";
@@ -76,5 +76,5 @@ export function genSrtlaIpList() {
 
 export function updateSrtlaIps() {
 	genSrtlaIpList();
-	spawnSync("killall", ["-HUP", "srtla_send"]);
+	killall(["-HUP", "srtla_send"]);
 }
