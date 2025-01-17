@@ -30,6 +30,8 @@ type Pipeline = {
 	asrc?: unknown;
 };
 
+let pipelines: Record<string, Pipeline> = {};
+
 let belacoderPipelinesDir: string;
 if (setup.belacoder_path) {
 	belacoderPipelinesDir = `${setup.belacoder_path}/pipeline`;
@@ -88,7 +90,9 @@ function getPipelines() {
 	return ps;
 }
 
-const pipelines = getPipelines();
+export function initPipelines() {
+	pipelines = getPipelines();
+}
 
 export function searchPipelines(id: string) {
 	if (pipelines[id]) return pipelines[id];

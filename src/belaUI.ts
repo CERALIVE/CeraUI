@@ -27,6 +27,7 @@ import { initHardwareMonitoring } from "./modules/hardware-monitoring.ts";
 import { startHttpServer } from "./modules/http-server.ts";
 import { updateModems } from "./modules/modems.ts";
 import { initNetworkInterfaceMonitoring } from "./modules/network-interfaces.ts";
+import { initPipelines } from "./modules/pipelines.ts";
 import { initRemote } from "./modules/remote.ts";
 import { initRevisions } from "./modules/revisions.ts";
 import { belacoderExec, srtlaSendExec } from "./modules/streamloop.ts";
@@ -45,6 +46,7 @@ checkExecPath(srtlaSendExec);
 loadConfig();
 
 initRemote();
+initPipelines();
 
 initRevisions();
 initWebSocketServer();

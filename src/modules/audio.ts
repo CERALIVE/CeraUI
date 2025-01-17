@@ -33,7 +33,7 @@ import { broadcastMsg } from "./websocket-server.ts";
 const deviceDir = setup.sound_device_dir ?? "/sys/class/sound";
 
 const alsaSrcPattern = /alsasrc device=[A-Za-z0-9:=]+/;
-const alsaPipelinePattern = /alsasrc device=[A-Za-z0-9:]+(.|[\s])*?mux\. *\s?/;
+const alsaPipelinePattern = /alsasrc device=[A-Za-z0-9:]+(.|\s)*?mux\. *\s?/;
 
 const audioCodecPattern = /voaacenc\s+bitrate=(\d+)\s+!\s+aacparse\s+!/;
 export const audioCodecs: Record<string, string> = {

@@ -1,7 +1,11 @@
 {
-  "hw": "jetson",
-  "belacoder_path": "/home/nvidia/belacoder/",
-  "srtla_path": "/home/nvidia/srtla/",
-  "bitrate_file": "/tmp/belacoder_br",
-  "ips_file": "/tmp/srtla_ips"
+	"hw": "jetson",
+	"belacoder_path": "./mocks/belacoder/",
+	"srtla_path": "./mocks/srtla/",
+	"sound_device_dir": "./mocks/sound/",
+	"usb_device_dir": "./mocks/usb/",
+	"mmcli_binary": "./mocks/mmcli",
+	"killall_binary": "./mocks/killall",
+	"bitrate_file": "/tmp/belacoder_br",
+	"ips_file": "/tmp/srtla_ips"
 }
