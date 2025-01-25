@@ -284,7 +284,7 @@ function channelFromNM(band: string, channel: string | number) {
 async function findMacAddressForConnection(uuid: string) {
 	// Check if the connection is in use for any wifi interface
 	const connIfName = (
-		await nmConnGetFields(uuid, "connection.interface-name")
+		await nmConnGetFields(uuid, ["connection.interface-name"] as const)
 	)?.[0];
 
 	for (const m in wifiIfs) {
@@ -342,36 +342,28 @@ async function handleHotspotConn(macAddr_: string | undefined, uuid: string) {
     802-11-wireless-security.proto=rsn
     802-11-wireless-security.pmf=1 (disable) - disables requiring WPA3 Protected Management Frames for compatibility
   */
-	const settingsFields =
-		"connection.autoconnect-priority," +
-		"802-11-wireless.ssid," +
-		"802-11-wireless-security.psk," +
-		"802-11-wireless.band," +
-		"802-11-wireless.channel";
-	const checkFields =
-		"802-11-wireless.hidden," +
-		"802-11-wireless-security.key-mgmt," +
-		"802-11-wireless-security.pairwise," +
-		"802-11-wireless-security.group," +
-		"802-11-wireless-security.proto," +
-		"802-11-wireless-security.pmf";
+	const settingsFields = [
+		"connection.autoconnect-priority",
+		"802-11-wireless.ssid",
+		"802-11-wireless-security.psk",
+		"802-11-wireless.band",
+		"802-11-wireless.channel",
+	] as const;
+	const checkFields = [
+		"802-11-wireless.hidden",
+		"802-11-wireless-security.key-mgmt",
+		"802-11-wireless-security.pairwise",
+		"802-11-wireless-security.group",
+		"802-11-wireless-security.proto",
+		"802-11-wireless-security.pmf",
+	] as const;
 
-	const fields = (await nmConnGetFields(
-		uuid,
-		`${settingsFields},${checkFields}`,
-	)) as [
-		string,
-		string,
-		string,
-		string,
-		string,
-		string,
-		string,
-		string,
-		string,
-		string,
-		string,
-	];
+	const fields = await nmConnGetFields(uuid, [
+		...settingsFields,
+		...checkFields,
+	] as const);
+
+	if (fields === undefined) return;
 
 	/* If the connection doesn't have maximum priority, update it
      This is required to ensure the hotspot is started even if the Wifi
@@ -413,11 +405,14 @@ async function wifiUpdateSavedConns() {
 			if (type !== "802-11-wireless") continue;
 
 			// Get the device the connection is bound to and the ssid
-			const [mode, ssid, macTmp] = (await nmConnGetFields(
-				uuid,
-				"802-11-wireless.mode,802-11-wireless.ssid,802-11-wireless.mac-address",
-			)) as [string, string, string];
+			const fields = await nmConnGetFields(uuid, [
+				"802-11-wireless.mode",
+				"802-11-wireless.ssid",
+				"802-11-wireless.mac-address",
+			] as const);
+			if (fields === undefined) continue;
 
+			const [mode, ssid, macTmp] = fields;
 			if (!ssid) continue;
 
 			const macAddr = macTmp.toLowerCase();

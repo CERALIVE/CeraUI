@@ -222,6 +222,17 @@ async function gsmOperatorsAdd(id: string, name: string) {
 
 type GsmConnections = Awaited<ReturnType<typeof getGsmConns>>;
 
+const gsmConnectionFields = [
+	"gsm.device-id",
+	"gsm.sim-id",
+	"gsm.sim-operator-id",
+	"gsm.apn",
+	"gsm.username",
+	"gsm.password",
+	"gsm.home-only",
+	"gsm.network-id",
+] as const;
+
 async function getGsmConns() {
 	const byDevice: Record<string, Record<string, GsmConnection>> = {};
 	const byOperator: Record<string, GsmConnection> = {};
@@ -233,22 +244,14 @@ async function getGsmConns() {
 
 		if (type !== "gsm") continue;
 
-		let fields =
-			"gsm.device-id,gsm.sim-id,gsm.sim-operator-id,gsm.apn,gsm.username,gsm.password,gsm.home-only,gsm.network-id";
-		if (setup.has_gsm_autoconfig) {
-			fields += ",gsm.auto-config";
-		}
-		const connInfo = (await nmConnGetFields(uuid, fields)) as [
-			string,
-			string,
-			string,
-			string,
-			string,
-			string,
-			string,
-			string,
-			string,
-		];
+		const connInfo = await nmConnGetFields(
+			uuid,
+			setup.has_gsm_autoconfig
+				? ([...gsmConnectionFields, "gsm.auto-config"] as const)
+				: gsmConnectionFields,
+		);
+		if (connInfo === undefined) continue;
+
 		const conn: GsmConnection = {
 			state,
 			uuid,
@@ -720,10 +723,9 @@ export async function updateModems() {
 			modem.config.conn
 		) {
 			// Don't try to activate NM connections that are already active
-			const nmConnection = await nmConnGetFields(
-				modem.config.conn,
+			const nmConnection = await nmConnGetFields(modem.config.conn, [
 				"GENERAL.STATE",
-			);
+			] as const);
 			if (nmConnection?.length === 1) {
 				console.log(
 					`Trying to bring up connection ${modem.config.conn} for modem ${m}...`,

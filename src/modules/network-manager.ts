@@ -81,7 +81,10 @@ export async function nmConnsGet(fields: string) {
 	}
 }
 
-export async function nmConnGetFields(uuid: string, fields: string) {
+export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
+	uuid: string,
+	fields: Tupel,
+) {
 	try {
 		const result = await execFileP("nmcli", [
 			"--terse",
@@ -89,12 +92,14 @@ export async function nmConnGetFields(uuid: string, fields: string) {
 			"no",
 			"--show-secrets",
 			"--get-values",
-			fields,
+			fields.join(","),
 			"connection",
 			"show",
 			uuid,
 		]);
-		return result.stdout.toString().split("\n");
+		return result.stdout.toString().split("\n") as {
+			[K in keyof Tupel]: string;
+		};
 	} catch (err) {
 		if (err instanceof Error) {
 			console.log(`nmConnGetFields err: ${err.message}`);
