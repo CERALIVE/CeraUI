@@ -81,7 +81,7 @@ export function getSshStatus() {
 
 	const s: SshStatus = {
 		user: setup.ssh_user,
-		active: false,
+		active: undefined,
 	};
 
 	// Check is the SSH server is running
@@ -109,8 +109,6 @@ export function getSshStatus() {
 	// If an immediate result is expected, send the cached status
 	return sshStatus;
 }
-
-getSshStatus();
 
 export function startStopSsh(conn: WebSocket, cmd: string) {
 	if (!setup.ssh_user) return;
