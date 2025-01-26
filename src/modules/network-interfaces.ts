@@ -22,6 +22,7 @@ import type WebSocket from "ws";
 
 import { getms } from "../helpers/time.ts";
 
+import { updateMoblinkRelayInterfaces } from "./moblink-relay.ts";
 import {
 	notificationBroadcast,
 	notificationRemove,
@@ -38,8 +39,9 @@ import {
 } from "./wifi-device-list.ts";
 import { wifiUpdateDevices } from "./wifi.ts";
 
-type NetworkInterface = {
+export type NetworkInterface = {
 	ip: string;
+	netmask: string;
 	tp: number;
 	txb: number;
 	enabled: boolean;
@@ -90,6 +92,11 @@ function updateNetif() {
 
 				const inetAddrMatch = int.match(/inet (\d+\.\d+\.\d+\.\d+)/);
 				const inetAddr = inetAddrMatch?.[1];
+				if (!inetAddr) continue;
+
+				const netmaskMatch = int.match(/netmask (\d+\.\d+\.\d+\.\d+)/);
+				const netmask = netmaskMatch?.[1];
+				if (!netmask) continue;
 
 				const flags = (int.match(/flags=\d+<([A-Z,]+)>/)?.[1] ?? "").split(",");
 				const isRunning = flags.includes("RUNNING");
@@ -102,7 +109,6 @@ function updateNetif() {
 					}
 				}
 
-				if (!inetAddr) continue;
 				if (!isRunning) continue;
 
 				const txBytesMatch = int.match(/TX packets \d+ {2}bytes \d+/);
@@ -120,6 +126,7 @@ function updateNetif() {
 				const error = netif[name] ? netif[name].error : 0;
 				newInterfaces[name] = {
 					ip: inetAddr,
+					netmask,
 					txb: txBytes,
 					tp,
 					enabled,
@@ -190,8 +197,12 @@ function updateNetif() {
 
 		netif = newInterfaces;
 
-		if (intsChanged && getIsStreaming()) {
-			updateSrtlaIps();
+		if (intsChanged) {
+			updateMoblinkRelayInterfaces();
+
+			if (getIsStreaming()) {
+				updateSrtlaIps();
+			}
 		}
 
 		broadcastMsg("netif", netIfBuildMsg(), getms() - ACTIVE_TO);
