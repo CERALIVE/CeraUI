@@ -122,7 +122,7 @@ export function initWebSocketServer() {
 
 export function handleMessage(conn: WebSocket, msg: Message, isRemote = false) {
 	// log all received messages except for keepalives
-	if (Object.keys(msg).length > 1 || "keepalive" in msg) {
+	if (Object.keys(msg).length > 1 || !("keepalive" in msg)) {
 		console.log(stripPasswords(msg));
 	}
 
