@@ -15,7 +15,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import assert from "node:assert";
 /* Remote */
 /*
   A brief remote protocol version history:
@@ -34,6 +33,8 @@ import assert from "node:assert";
   13 - wifi hotspot mode
   14 - support for the modem manager
 */
+
+import assert from "node:assert";
 import fs from "node:fs";
 
 import WebSocket, { type RawData } from "ws";
@@ -395,65 +396,60 @@ async function remoteConnect() {
 		remoteConnectTimer = undefined;
 	}
 
-	let fromCache = false;
 	const config = getConfig();
-	if (config.remote_key) {
-		let host = remoteEndpointHost;
-		try {
-			const dnsRes = await dnsCacheResolve(remoteEndpointHost);
-			fromCache = dnsRes.fromCache;
+	if (!config.remote_key) return;
 
-			if (fromCache) {
-				const cachedHost =
-					dnsRes.addrs[Math.floor(Math.random() * dnsRes.addrs.length)];
-				if (!cachedHost) throw "No cached address";
+	let fromCache = false;
+	let host = remoteEndpointHost;
+	try {
+		const dnsRes = await dnsCacheResolve(remoteEndpointHost);
+		fromCache = dnsRes.fromCache;
 
-				host = cachedHost;
-				queueUpdateGw();
-				console.log(`remote: DNS lookup failed, using cached address ${host}`);
-			}
-		} catch (err) {
-			return remoteRetry();
+		if (fromCache) {
+			const cachedHost =
+				dnsRes.addrs[Math.floor(Math.random() * dnsRes.addrs.length)];
+			if (!cachedHost) throw "No cached address";
+
+			host = cachedHost;
+			queueUpdateGw();
+			console.log(`remote: DNS lookup failed, using cached address ${host}`);
 		}
-		console.log("remote: trying to connect");
-
-		remoteStatusHandled = false;
-		remoteWs = new WebSocket(`wss://${host}${remoteEndpointPath}`, {
-			host: remoteEndpointHost,
-			headers: { Host: remoteEndpointHost },
-		});
-		deleteAuthedSocket(remoteWs);
-		// Set a longer initial connection timeout - mostly to deal with slow DNS
-		markConnectionActive(
-			remoteWs,
-			getms() + remoteConnectTimeout - remoteTimeout,
-		);
-		remoteWs.on("error", (err) => {
-			console.log(`remote error: ${err.message}`);
-		});
-		remoteWs.on("open", function () {
-			if (!fromCache) {
-				dnsCacheValidate(remoteEndpointHost);
-			}
-
-			const config = getConfig();
-			const auth_msg = {
-				remote: {
-					"auth/encoder": {
-						key: config.remote_key,
-						version: remoteProtocolVersion,
-					},
-				},
-			};
-			this.send(JSON.stringify(auth_msg));
-		});
-		remoteWs.on("close", () => {
-			if (remoteWs) remoteClose(remoteWs);
-		});
-		remoteWs.on("message", (msg) => {
-			if (remoteWs) remoteHandleMsg(remoteWs, msg);
-		});
+	} catch (err) {
+		return remoteRetry();
 	}
+	console.log("remote: trying to connect");
+
+	remoteStatusHandled = false;
+	remoteWs = new WebSocket(`wss://${host}${remoteEndpointPath}`);
+	markConnectionActive(
+		remoteWs,
+		getms() + remoteConnectTimeout - remoteTimeout,
+	);
+	remoteWs.on("error", (err) => {
+		console.log(`remote error: ${err.message}`);
+	});
+	remoteWs.on("open", function () {
+		if (!fromCache) {
+			dnsCacheValidate(remoteEndpointHost);
+		}
+
+		const config = getConfig();
+		const auth_msg = {
+			remote: {
+				"auth/encoder": {
+					key: config.remote_key,
+					version: remoteProtocolVersion,
+				},
+			},
+		};
+		this.send(JSON.stringify(auth_msg));
+	});
+	remoteWs.on("close", () => {
+		if (remoteWs) remoteClose(remoteWs);
+	});
+	remoteWs.on("message", (msg) => {
+		if (remoteWs) remoteHandleMsg(remoteWs, msg);
+	});
 }
 
 function remoteKeepalive() {
