@@ -8,10 +8,10 @@
 	"devDependencies": {
 		"@biomejs/biome": "1.9.4",
 		"@types/bcrypt": "^5.0.2",
-		"@types/bun": "^1.1.16",
+		"@types/bun": "^1.2.0",
 		"@types/finalhandler": "^1.2.3",
 		"@types/serve-static": "^1.15.7",
-		"@types/ws": "^8.5.13",
+		"@types/ws": "^8.5.14",
 		"npm-run-all2": "^7.0.2",
 		"typescript": "^5.7.3"
 	},
