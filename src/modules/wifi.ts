@@ -210,7 +210,7 @@ export function wifiBuildMsg() {
 			saved: {},
 		};
 
-		if (wifiIfIsHotspot(wifiInterface)) {
+		if (isHotspot(wifiInterface)) {
 			ifs[id].hotspot = {
 				name: wifiInterface.hotspot.name,
 				password: wifiInterface.hotspot.password,
@@ -227,7 +227,7 @@ export function wifiBuildMsg() {
 		} else {
 			ifs[id].available = Array.from(wifiInterface.available.values());
 			ifs[id].saved = wifiInterface.saved;
-			if (wifiIfIsHotspot(wifiInterface)) {
+			if (canHotspot(wifiInterface)) {
 				ifs[id].supports_hotspot = true;
 			}
 		}
@@ -290,10 +290,16 @@ async function findMacAddressForConnection(uuid: string) {
 	for (const m in wifiIfs) {
 		const w = wifiIfs[m];
 
+		console.log("findMacAddressForConnection", w, connIfName, {
+			canHotspot: w && canHotspot(w),
+			hotspotConn: w && canHotspot(w) && w.hotspot.conn,
+			ifname: w?.ifname,
+		});
+
 		if (
 			!w ||
-			!wifiIfIsHotspot(w) ||
-			!(w.hotspot.conn === uuid || w.ifname === connIfName)
+			!canHotspot(w) ||
+			(w.hotspot.conn !== uuid && w.ifname !== connIfName)
 		) {
 			continue;
 		}
@@ -324,8 +330,9 @@ async function handleHotspotConn(macAddr_: string | undefined, uuid: string) {
 	const wifiInterface = wifiIfs[macAddr];
 	if (
 		!wifiInterface ||
-		!wifiIfIsHotspot(wifiInterface) ||
-		wifiInterface.hotspot.conn !== uuid
+		!canHotspot(wifiInterface) ||
+		// Interface already has a different hotspot connection
+		(wifiInterface.hotspot.conn && wifiInterface.hotspot.conn !== uuid)
 	) {
 		return;
 	}
@@ -620,7 +627,7 @@ export async function wifiUpdateDevices() {
 		const netif = getNetworkInterfaces();
 		for (const i in wifiIfs) {
 			const wifiInterface = wifiIfs[i];
-			if (wifiInterface && wifiIfIsHotspot(wifiInterface)) {
+			if (wifiInterface && isHotspot(wifiInterface)) {
 				const n = netif[wifiInterface.ifname];
 				if (!n) continue;
 				if (n.error & NETIF_ERR_HOTSPOT) continue;
@@ -819,7 +826,7 @@ async function wifiConnect(conn: WebSocket, uuid: string) {
 }
 
 function wifiForceHotspot(wifiInterface: WifiInterface, ms: number) {
-	if (!wifiIfIsHotspot(wifiInterface)) return;
+	if (!canHotspot(wifiInterface)) return;
 
 	if (ms <= 0) {
 		wifiInterface.hotspot.forceHotspotStatus = 0;
@@ -845,7 +852,7 @@ async function wifiHotspotStart(
 
 	const wifiInterface = wifiIfs[mac];
 	if (!wifiInterface) return;
-	if (!wifiIfIsHotspot(wifiInterface)) return; // hotspot not supported, nothing to do
+	if (!canHotspot(wifiInterface)) return; // hotspot not supported, nothing to do
 
 	if (wifiInterface.hotspot.conn) {
 		if (wifiInterface.hotspot.conn !== wifiInterface.conn) {
@@ -919,7 +926,7 @@ async function wifiHotspotStop(
 
 	const i = wifiIfs[mac];
 	if (!i) return;
-	if (!wifiIfIsHotspot(i)) return; // not in hotspot mode, nothing to do
+	if (!isHotspot(i)) return; // not in hotspot mode, nothing to do
 
 	if (!i.hotspot.conn) return;
 
@@ -934,14 +941,20 @@ async function wifiHotspotStop(
 	}
 }
 
-function wifiIfIsHotspot(
+function canHotspot(
 	wifiInterface: WifiInterface,
 ): wifiInterface is WifiInterfaceWithHotspot {
-	if (!wifiInterface || !("hotspot" in wifiInterface)) return false;
+	return wifiInterface && "hotspot" in wifiInterface;
+}
+
+function isHotspot(
+	wifiInterface: WifiInterface,
+): wifiInterface is WifiInterfaceWithHotspot {
 	return (
-		(wifiInterface.hotspot.conn &&
+		canHotspot(wifiInterface) &&
+		((wifiInterface.hotspot.conn &&
 			wifiInterface.conn === wifiInterface.hotspot.conn) ||
-		wifiInterface.hotspot.forceHotspotStatus > getms()
+			wifiInterface.hotspot.forceHotspotStatus > getms())
 	);
 }
 
@@ -999,7 +1012,7 @@ async function wifiHotspotConfig(
 
 	const i = wifiIfs[mac];
 	if (!i) return;
-	if (!wifiIfIsHotspot(i)) return; // Make sure the interface is already in hotspot mode
+	if (!isHotspot(i)) return; // Make sure the interface is already in hotspot mode
 
 	const senderId = getSocketSenderId(conn);
 
