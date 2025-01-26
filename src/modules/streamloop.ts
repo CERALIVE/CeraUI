@@ -84,8 +84,6 @@ export function start(conn: WebSocket, params: ConfigParameters) {
 	}
 
 	const senderId = getSocketSenderId(conn);
-	if (!senderId) return;
-
 	updateConfig(conn, params, (pipeline, srtlaAddr, srtlaPort, streamid) => {
 		if (genSrtlaIpList() < 1) {
 			startError(
