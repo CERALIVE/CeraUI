@@ -247,10 +247,6 @@ export function periodicCheckForSoftwareUpdates() {
 	});
 }
 
-if (setup.apt_update_enabled) {
-	periodicCheckForSoftwareUpdates();
-}
-
 export function startSoftwareUpdate() {
 	if (!setup.apt_update_enabled || getIsStreaming() || isUpdating()) return;
 

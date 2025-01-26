@@ -31,6 +31,8 @@ import { initNetworkInterfaceMonitoring } from "./modules/network-interfaces.ts"
 import { initPipelines } from "./modules/pipelines.ts";
 import { initRemote } from "./modules/remote.ts";
 import { initRevisions } from "./modules/revisions.ts";
+import { setup } from "./modules/setup.ts";
+import { periodicCheckForSoftwareUpdates } from "./modules/software-updates.ts";
 import { getSshStatus } from "./modules/ssh.ts";
 import { belacoderExec, srtlaSendExec } from "./modules/streamloop.ts";
 import { initWebSocketServer } from "./modules/websocket-server.ts";
@@ -59,6 +61,10 @@ updateGwWrapper();
 setInterval(updateGwWrapper, UPDATE_GW_INT);
 
 updateModems();
+
+if (setup.apt_update_enabled) {
+	periodicCheckForSoftwareUpdates();
+}
 
 initNetworkInterfaceMonitoring();
 
