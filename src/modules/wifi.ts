@@ -418,10 +418,21 @@ async function wifiUpdateSavedConns() {
 				"802-11-wireless.ssid",
 				"802-11-wireless.mac-address",
 			] as const);
-			if (fields === undefined) continue;
+
+			if (fields === undefined)
+				throw new Error("Failed to get connection fields");
 
 			const [mode, ssid, macTmp] = fields;
 			if (!ssid) continue;
+
+			if (macTmp === "") {
+				console.error(
+					"Wifi connection does not have a mac address!",
+					mode,
+					uuid,
+				);
+				continue;
+			}
 
 			const macAddr = macTmp.toLowerCase();
 			if (mode === "ap") {
