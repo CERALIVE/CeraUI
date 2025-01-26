@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+# Deploy dist to local belabox via ssh (rsync) and register service and restart service
+
+SSH_TARGET=root@belabox.local
+DIST_PATH=dist
+BELAUI_PATH=/opt/belaUI
+RSYNC_TARGET="${SSH_TARGET}:${BELAUI_PATH}"
+
+# stop on error
+set -e
+
+echo "Removing old service and socket"
+ssh "$SSH_TARGET" "systemctl disable belaUI.socket || true"
+ssh "$SSH_TARGET" "systemctl disable belaUI.service || true"
+ssh "$SSH_TARGET" "rm /etc/systemd/system/belaUI.socket || true"
+ssh "$SSH_TARGET" "rm /etc/systemd/system/belaUI.service || true"
+
+echo "Killing belaUI"
+ssh "$SSH_TARGET" "pkill belaUI || true"
+
+echo "Reinstall BelaUI"
+ssh "$SSH_TARGET" "apt-get install --reinstall belaui"
+
+echo "Start service"
+ssh "$SSH_TARGET" "systemctl start belaUI"
+
