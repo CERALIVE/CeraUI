@@ -1,6 +1,11 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 
+import makeMdns, {
+	type MulticastDNS,
+	type ResponsePacket,
+} from "multicast-dns";
+
 import { isSameNetwork } from "../helpers/ip-adresses.ts";
 
 import { getNetworkInterfaces } from "./network-interfaces.ts";
@@ -35,10 +40,11 @@ type RelayInterface = {
 };
 
 function getRelayId(
-	bindIpAddressStreamer: string,
+	ip: string,
+	port: number,
 	bindIpAddressDestination: string,
 ) {
-	return `${bindIpAddressStreamer}-${bindIpAddressDestination}`;
+	return `${ip}:${port}-${bindIpAddressDestination}`;
 }
 
 function spawnRelay(relayOptions: RelayOptions) {
@@ -64,13 +70,19 @@ function spawnRelay(relayOptions: RelayOptions) {
 			bindIpAddressStreamer,
 			"--bind-address",
 			bindIpAddressDestination,
+			"--log-level",
+			"error",
 		],
 		{
 			stdio: ["inherit", "inherit", "pipe"],
 		},
 	) as RelayProcess;
 
-	const id = getRelayId(bindIpAddressStreamer, bindIpAddressDestination);
+	const id = getRelayId(
+		streamerIpAddress,
+		streamerPort,
+		bindIpAddressDestination,
+	);
 	relayProcesses.set(id, process);
 
 	process.stderr.on("data", (data) => {
@@ -113,15 +125,10 @@ function stopRelay(relayId: string) {
 export function initMoblinkRelays() {
 	if (!enabled) return;
 
-	if (!setup.moblink_relay_streamer_ip) {
-		console.error("Moblink relay streamer IP not set");
-		return;
-	}
-
-	if (!setup.moblink_relay_streamer_port) {
-		console.error("Moblink relay streamer port not set");
-		return;
-	}
+	initMdns();
+	discoverStreamers();
+	setInterval(discoverStreamers, 10_000);
+	setInterval(updateMoblinkRelayInterfaces, 60_000);
 
 	if (!setup.moblink_relay_streamer_password) {
 		console.error("Moblink relay streamer password not set");
@@ -129,32 +136,89 @@ export function initMoblinkRelays() {
 	}
 }
 
-export function updateMoblinkRelayInterfaces() {
-	if (!enabled) return;
+const streamerAddresses = new Set<string>();
 
-	const oldIds = new Set(relayProcesses.keys());
+// Function to parse and display service details
+async function handleMdnsResponse(response: ResponsePacket) {
+	let isMoblink = false;
+	let serviceName = "";
+	let port = 0;
+	let host = "";
+	let ipv4 = "";
+	let ipv6 = "";
 
+	for (const answer of response.answers) {
+		if (
+			answer.type === "PTR" &&
+			answer.name.startsWith("_moblink._tcp") &&
+			answer.data
+		) {
+			isMoblink = true;
+			serviceName = answer.data;
+		}
+	}
+
+	if (!isMoblink) return;
+
+	for (const answer of response.additionals) {
+		if (answer.type === "SRV" && answer.data) {
+			port = answer.data.port;
+			host = answer.data.target;
+		}
+	}
+
+	if (!host || !port) return;
+
+	for (const answer of response.additionals) {
+		if (answer.type === "A" && answer.name === host) {
+			ipv4 = answer.data;
+		}
+		if (answer.type === "AAAA" && answer.name === host) {
+			ipv6 = answer.data;
+		}
+	}
+
+	const ip = ipv4 || ipv6;
+	if (ip) {
+		console.log(`!!! Found Moblink streamer: ${serviceName} - ${ip}:${port}`);
+		streamerAddresses.add(`${ip}:${port}`);
+		updateMoblinkRelayInterfaces();
+	}
+}
+
+let mdns: MulticastDNS | null = null;
+
+function initMdns() {
+	if (mdns) {
+		mdns.destroy();
+	}
+
+	mdns = makeMdns();
+	mdns.on("response", handleMdnsResponse);
+}
+
+process.on("SIGINT", () => {
+	mdns?.destroy();
+});
+
+function discoverStreamers() {
+	mdns?.query([
+		{
+			name: "_moblink._tcp.local",
+			type: "PTR",
+			class: "IN",
+		},
+	]);
+}
+
+function findDestinationInterfaces() {
 	const networkInterfaces = getNetworkInterfaces();
 
-	const streamerInterfaces = new Set<RelayInterface>();
 	const destinationInterfaces = new Set<RelayInterface>();
 
 	for (const interfaceName in networkInterfaces) {
 		const networkInterface = networkInterfaces[interfaceName];
 		if (!networkInterface) continue;
-
-		if (
-			isSameNetwork(
-				setup.moblink_relay_streamer_ip,
-				networkInterface.ip,
-				networkInterface.netmask,
-			)
-		) {
-			streamerInterfaces.add({
-				name: interfaceName,
-				ip: networkInterface.ip,
-			});
-		}
 
 		if (networkInterface.enabled && networkInterface.error === 0) {
 			destinationInterfaces.add({
@@ -163,20 +227,64 @@ export function updateMoblinkRelayInterfaces() {
 			});
 		}
 	}
+	return destinationInterfaces;
+}
 
+function findStreamerInterface(streamerIpAddress: string) {
+	const networkInterfaces = getNetworkInterfaces();
+	for (const interfaceName in networkInterfaces) {
+		const networkInterface = networkInterfaces[interfaceName];
+		if (!networkInterface) continue;
+
+		if (
+			isSameNetwork(
+				streamerIpAddress,
+				networkInterface.ip,
+				networkInterface.netmask,
+			)
+		) {
+			return {
+				name: interfaceName,
+				ip: networkInterface.ip,
+			};
+		}
+	}
+	return null;
+}
+
+export function updateMoblinkRelayInterfaces() {
+	if (!enabled) return;
+
+	const oldIds = new Set(relayProcesses.keys());
 	const newIds = new Set<string>();
 
-	for (const streamerInterface of streamerInterfaces) {
+	const destinationInterfaces = findDestinationInterfaces();
+
+	for (const streamer of streamerAddresses) {
+		const [streamerIpAddress, portStr] = streamer.split(":") as [
+			string,
+			string,
+		];
+		const streamerPort = Number.parseInt(portStr, 10);
+		const streamerInterface = findStreamerInterface(streamerIpAddress);
 		for (const destinationInterface of destinationInterfaces) {
-			const id = getRelayId(streamerInterface.ip, destinationInterface.ip);
-			if (!oldIds.has(id)) {
+			const relayId = getRelayId(
+				streamerIpAddress,
+				streamerPort,
+				destinationInterface.ip,
+			);
+
+			newIds.add(relayId);
+
+			if (!oldIds.has(relayId)) {
 				spawnRelay({
 					name: destinationInterface.name,
-					bindIpAddressStreamer: streamerInterface.ip,
+					streamerIpAddress,
+					streamerPort,
+					bindIpAddressStreamer: streamerInterface?.ip ?? "0.0.0.0",
 					bindIpAddressDestination: destinationInterface.ip,
 				});
 			}
-			newIds.add(id);
 		}
 	}
 
