@@ -6,8 +6,8 @@ After=network.target
 User=root
 Group=root
 # install_service.sh automatically sets WorkingDirectory to point to the current directory
-WorkingDirectory=/opt/belaUI
-ExecStart=belaUI
+WorkingDirectory=/opt/belaUI/
+ExecStart=/opt/belaUI/belaUI
 KillMode=mixed
 Restart=always
 SyslogIdentifier=belaUI
