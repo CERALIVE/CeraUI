@@ -20,15 +20,33 @@ echo "Copying assets"
 bun run copy
 
 echo "Deploying to $RSYNC_TARGET"
-rsync -avz --delete --exclude auth_tokens.json --exclude config.json --exclude dns_cache.json --exclude gsm_operator_cache.json --exclude setup.json "${DIST_PATH}/" $RSYNC_TARGET
+rsync -rltvz --delete --chown=root:root --exclude auth_tokens.json --exclude config.json --exclude dns_cache.json --exclude gsm_operator_cache.json --exclude setup.json "${DIST_PATH}/" $RSYNC_TARGET
 
-#echo "Installing and restarting service"
-## shellcheck disable=SC2029
-#ssh "$SSH_TARGET" "cd $BELAUI_PATH; ./install_service.sh"
+echo "Installing and restarting service"
+# shellcheck disable=SC2029
+ssh "$SSH_TARGET" "cd $BELAUI_PATH; ./install_service.sh"
 
 # Kill any running belaUI
 echo "Killing belaUI"
 ssh "$SSH_TARGET" "pkill belaUI || true"
 
+echo "Stop and disable service/socket"
+ssh "$SSH_TARGET" "systemctl stop belaUI.socket || true"
+ssh "$SSH_TARGET" "systemctl stop belaUI.service || true"
+ssh "$SSH_TARGET" "systemctl disable belaUI.socket || true"
+ssh "$SSH_TARGET" "systemctl disable belaUI.service || true"
+
+echo "Update service/socket"
+ssh "$SSH_TARGET" "systemctl daemon-reload"
+ssh "$SSH_TARGET" "systemctl enable belaUI.socket"
+ssh "$SSH_TARGET" "systemctl enable belaUI.service"
+
 echo "Starting belaUI"
-ssh "$SSH_TARGET" "cd $BELAUI_PATH; ./belaUI"
+ssh "$SSH_TARGET" "systemctl start belaUI.socket"
+ssh "$SSH_TARGET" "systemctl start belaUI.service"
+
+echo "Watch belaUI"
+ssh "$SSH_TARGET" "journalctl -u belaUI.service -f"
+
+#echo "Starting belaUI"
+#ssh "$SSH_TARGET" "cd $BELAUI_PATH; ./belaUI"
