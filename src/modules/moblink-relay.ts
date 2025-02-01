@@ -156,6 +156,11 @@ async function handleMdnsResponse(response: ResponsePacket) {
 			isMoblink = true;
 			serviceName = answer.data;
 		}
+
+		if (answer.type === "SRV" && answer.data) {
+			port = answer.data.port;
+			host = answer.data.target;
+		}
 	}
 
 	if (!isMoblink) return;
