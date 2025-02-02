@@ -24,8 +24,8 @@
 
 - Install the private ssh key
 - Install bun.sh (https://bun.sh/)
-- 
-
+- It might be necessary or recommended to install a newer version of rsync from brew or similar (not tested if necessary)
+- Run the deploy script (`./deploy-to-local.sh`), if necessary change the host or user (`SSH_TARGET`), e.g. `SSH_TARGET=user@belabox.local`.
 
 ## TODO
 
