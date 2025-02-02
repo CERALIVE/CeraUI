@@ -152,7 +152,7 @@ type Modem = {
 	sim_network: string;
 	network_type: {
 		supported: Record<string, NetworkType>;
-		active: string;
+		active: string | null;
 	};
 	is_scanning?: boolean;
 	inhibit?: boolean;
@@ -497,9 +497,9 @@ async function registerModem(id: number) {
 	if (!ifname) return;
 
 	// Find the current network type
-	const networkType = mmConvertNetworkType(
-		modemInfo["modem.generic.current-modes"],
-	);
+	const networkType = modemInfo["modem.generic.current-modes"]
+		? mmConvertNetworkType(modemInfo["modem.generic.current-modes"])
+		: null;
 
 	// Find the supported network types
 	const networkTypes = mmConvertNetworkTypes(
@@ -515,7 +515,9 @@ async function registerModem(id: number) {
 	}
 
 	let partialImei = modemInfo["modem.generic.equipment-identifier"];
-	partialImei = partialImei.substr(partialImei.length - 5, 5);
+	if (partialImei) {
+		partialImei = partialImei.substring(partialImei.length - 5);
+	}
 	const hwName = `${modemInfo["modem.generic.model"]} - ${partialImei}`;
 
 	let simNetwork = "<NO SIM>";
@@ -529,7 +531,7 @@ async function registerModem(id: number) {
 		sim_network: simNetwork,
 		network_type: {
 			supported: networkTypes,
-			active: networkType.label,
+			active: networkType?.label ?? null,
 		},
 		config: config,
 	};
@@ -575,7 +577,7 @@ type ModemsResponseModemFull = {
 	name: string;
 	network_type: {
 		supported: Array<string>;
-		active: string;
+		active: string | null;
 	};
 	config?: {
 		autoconfig?: boolean;
@@ -700,6 +702,7 @@ export async function updateModems() {
 				console.log(JSON.stringify(modems[m], undefined, 2));
 			} catch (e) {
 				console.log(`Failed to register modem ${m}`);
+				throw e;
 			}
 			continue;
 		}

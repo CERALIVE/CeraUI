@@ -23,6 +23,10 @@ import { execFileP } from "../helpers/exec.ts";
 import type { ModemInfo, NetworkType, SimInfo } from "./modems.ts";
 import { setup } from "./setup.ts";
 
+type NetworkTypeWithLabel = NetworkType & {
+	label: string;
+};
+
 const mmcliBinary = setup.mmcli_binary ?? "mmcli";
 
 const mmcliKeyPattern = /\.length$/;
@@ -61,7 +65,7 @@ function mmcliParseSep(input: string) {
 	return output;
 }
 
-export function mmConvertNetworkType(mmType: string) {
+export function mmConvertNetworkType(mmType: string): NetworkTypeWithLabel {
 	const typeMatch = mmType.match(/^allowed: (.+); preferred: (.+)$/) as
 		| [string, string, string]
 		| null;
