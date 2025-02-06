@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
 WORKING_DIR=/opt/
-# Checkout the version that expects two bind addresses
-VERSION=86779d444bf94afac8d97acc4af0bd2a99b8d59a
+VERSION=f014964ea8d2aae53369ccfd21e4ff844f613516
 
 # Make sure git and curl are installed
 apt-get update
