@@ -15,10 +15,11 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+const firstSystemdSocketFd = 3;
+
 export function getSystemdSocket() {
 	if (!process.env.LISTEN_FDS) return;
 	if (process.env.LISTEN_FDS !== "1") return;
 
-	const firstSystemdSocketFd = 3;
 	return { fd: firstSystemdSocketFd };
 }

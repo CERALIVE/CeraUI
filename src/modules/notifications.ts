@@ -32,6 +32,7 @@ import type WebSocket from "ws";
 
 import { getms } from "../helpers/time.ts";
 
+import { logger } from "../helpers/logger.ts";
 import {
 	broadcastMsg,
 	buildMsg,
@@ -78,7 +79,7 @@ export function notificationSend(
 	authedOnly = true,
 ) {
 	if (isPersistent && conn !== undefined) {
-		console.log("error: attempted to send persistent unicast notification");
+		logger.error("error: attempted to send persistent unicast notification");
 		return false;
 	}
 

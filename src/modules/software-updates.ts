@@ -21,6 +21,7 @@ import { type ExecException, exec, spawn, spawnSync } from "node:child_process";
 import { execPNR } from "../helpers/exec.ts";
 import { getms, oneHour, oneMinute } from "../helpers/time.ts";
 
+import { logger } from "../helpers/logger.ts";
 import { queueUpdateGw } from "./gateways.ts";
 import { notificationBroadcast } from "./notifications.ts";
 import { setup } from "./setup.ts";
@@ -63,7 +64,9 @@ function parseUpgradePackageCount(text: string) {
 		| [string, string]
 		| null;
 	if (!upgradedMatch || !newlyInstalledMatch) {
-		console.log("parseUpgradePackageCount(): failed to parse the package info");
+		logger.error(
+			"parseUpgradePackageCount(): failed to parse the package info",
+		);
 		return undefined;
 	}
 
@@ -196,11 +199,11 @@ function checkForSoftwareUpdates(
 			aptGetUpdateFailures = 0;
 		}
 
-		console.log(
+		logger.info(
 			`apt-get update: ${errOrStderr === null ? "success" : "error"}`,
 		);
-		console.log(stdout);
-		console.log(stderr);
+		if (stdout) logger.info(stdout);
+		if (stderr) logger.error(stderr);
 
 		if (callback) callback(errOrStderr, aptGetUpdateFailures);
 	});
@@ -359,8 +362,8 @@ function doSoftwareUpdate() {
 			softUpdateStatus = null;
 		}
 
-		console.log(aptLog);
-		console.log(aptErr);
+		if (aptLog) logger.info(aptLog);
+		if (aptErr) logger.error(aptErr);
 
 		if (code === 0) {
 			if (rebootAfterUpgrade) {

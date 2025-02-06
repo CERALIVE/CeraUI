@@ -71,6 +71,7 @@ import type WebSocket from "ws";
 import { getms } from "../helpers/time.ts";
 import { extractMessage } from "../helpers/types.ts";
 
+import { logger } from "../helpers/logger.ts";
 import { updateMoblinkRelayInterfaces } from "./moblink-relay.ts";
 import {
 	NETIF_ERR_HOTSPOT,
@@ -257,7 +258,7 @@ function getWifiChannelMap(list: Array<string>) {
 		if (isWifiChannelName(e)) {
 			map[e] = { name: wifiChannels[e].name };
 		} else {
-			console.log(`Unknown WiFi channel ${e}`);
+			logger.info(`Unknown WiFi channel ${e}`);
 		}
 	}
 
@@ -276,7 +277,7 @@ function channelFromNM(band: string, channel: string | number) {
 		}
 	}
 
-	console.log(
+	logger.warn(
 		`channelFromNM(): WARNING unknown NM channel (band: ${band}, channel: ${channel}`,
 	);
 	return "auto";
@@ -291,7 +292,7 @@ async function findMacAddressForConnection(uuid: string) {
 	for (const m in wifiIfs) {
 		const w = wifiIfs[m];
 
-		console.log("findMacAddressForConnection", w, connIfName, {
+		logger.debug("findMacAddressForConnection", w, connIfName, {
 			canHotspot: w && canHotspot(w),
 			hotspotConn: w && canHotspot(w) && w.hotspot.conn,
 			ifname: w?.ifname,
@@ -426,7 +427,7 @@ async function wifiUpdateSavedConns() {
 			if (!ssid) continue;
 
 			if (macTmp === "") {
-				console.error(
+				logger.error(
 					"Wifi connection does not have a mac address!",
 					mode,
 					uuid,
@@ -444,7 +445,7 @@ async function wifiUpdateSavedConns() {
 			}
 		} catch (err) {
 			if (err instanceof Error) {
-				console.log(
+				logger.error(
 					`Error getting the nmcli connection information: ${err.message}`,
 				);
 			}
@@ -606,7 +607,7 @@ export async function wifiUpdateDevices() {
 			}
 		} catch (err) {
 			if (err instanceof Error) {
-				console.log(
+				logger.error(
 					`Error getting the nmcli WiFi device information: ${err.message}`,
 				);
 			}
@@ -652,7 +653,7 @@ export async function wifiUpdateDevices() {
 			updateSrtlaIps();
 		}
 	}
-	console.log(wifiIfs);
+	logger.debug(wifiIfs);
 
 	updateMoblinkRelayInterfaces();
 
@@ -664,12 +665,12 @@ export async function wifiUpdateDevices() {
 		if (unavailableDeviceRetryExpiry === 0) {
 			unavailableDeviceRetryExpiry = getms() + 5 * 60 * 1_000; // 5 minute timeout
 			setTimeout(wifiUpdateDevices, 3_000);
-			console.log(
+			logger.warn(
 				"One or more Wifi interfaces are unavailable. Will retry periodically for the next 5 minutes",
 			);
 		} else if (getms() < unavailableDeviceRetryExpiry) {
 			setTimeout(wifiUpdateDevices, 3_000);
-			console.log(
+			logger.warn(
 				"One or more Wifi interfaces are still unavailable. Retrying in 3 seconds...",
 			);
 		}
@@ -804,7 +805,7 @@ function wifiNew(conn: WebSocket, msg: WifiNewMessage["new"]) {
 				if (success?.[1]) {
 					const uuid = success[1];
 					if (!(await nmConnSetWifiMac(uuid, mac))) {
-						console.log(
+						logger.warn(
 							"Failed to set the MAC address for the newly created connection",
 						);
 					}
@@ -820,7 +821,7 @@ function wifiNew(conn: WebSocket, msg: WifiNewMessage["new"]) {
 						),
 					);
 				} else {
-					console.log(
+					logger.warn(
 						`wifiNew: no error but not matching a successful connection msg in:\n${stdout}\n${stderr}`,
 					);
 				}

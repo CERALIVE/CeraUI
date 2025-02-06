@@ -65,6 +65,7 @@ import type WebSocket from "ws";
 
 import { extractMessage } from "../helpers/types.ts";
 
+import { logger } from "../helpers/logger.ts";
 import {
 	type NetworkScanResult,
 	mmConvertAccessTech,
@@ -203,7 +204,7 @@ try {
 		fs.readFileSync(GSM_OPERATORS_CACHE_FILE, "utf8"),
 	);
 } catch (err) {
-	console.log(
+	logger.warn(
 		"Failed to load the persistent GSM operators cache, starting with an empty cache",
 	);
 }
@@ -329,7 +330,7 @@ async function modemGetConfig(
 			roaming: ci.roaming,
 			network: ci.network,
 		};
-		console.log(`Found NM connection ${config.conn} for modem ${modemId}`);
+		logger.debug(`Found NM connection ${config.conn} for modem ${modemId}`);
 		return config;
 	}
 
@@ -374,8 +375,8 @@ async function modemGetConfig(
 	const uuid = await nmConnAdd(nmConfig);
 	if (uuid) {
 		config.conn = uuid;
-		console.log(`Created NM connection ${uuid} for ${modemId}`);
-		console.log(config);
+		logger.debug(`Created NM connection ${uuid} for ${modemId}`);
+		logger.debug(config);
 	}
 
 	return config;
@@ -463,11 +464,15 @@ async function registerModem(id: number) {
 
 	// Get all the required info for the modem
 	const modemInfo = await mmGetModem(id);
+	logger.debug("Modem info for modem", id, modemInfo);
+
 	if (!modemInfo) return;
 
 	let simInfo: SimInfo | undefined;
 	let config: ModemConfig | undefined;
 	if (modemInfo["modem.generic.sim"]) {
+		logger.debug("Modem has SIM", modemInfo["modem.generic.sim"]);
+
 		const simId = modemInfo["modem.generic.sim"].match(
 			/\/org\/freedesktop\/ModemManager1\/SIM\/(\d+)/,
 		) as [string, string] | null;
@@ -494,6 +499,7 @@ async function registerModem(id: number) {
 			break;
 		}
 	}
+	logger.debug("Modem ifname", ifname);
 	if (!ifname) return;
 
 	// Find the current network type
@@ -535,6 +541,7 @@ async function registerModem(id: number) {
 		},
 		config: config,
 	};
+
 	modemUpdateStatus(modemInfo, modem);
 
 	modems[id] = modem;
@@ -697,11 +704,12 @@ export async function updateModems() {
 		const modem = modems[m];
 		if (!modem) {
 			try {
+				logger.debug("Trying to register modem", m);
 				await registerModem(m);
 				newModems[m] = true;
-				console.log(JSON.stringify(modems[m], undefined, 2));
+				logger.debug(JSON.stringify(modems[m], undefined, 2));
 			} catch (e) {
-				console.log(`Failed to register modem ${m}`);
+				logger.error(`Failed to register modem ${m}`);
 				throw e;
 			}
 			continue;
@@ -730,7 +738,7 @@ export async function updateModems() {
 				"GENERAL.STATE",
 			] as const);
 			if (nmConnection?.length === 1) {
-				console.log(
+				logger.info(
 					`Trying to bring up connection ${modem.config.conn} for modem ${m}...`,
 				);
 				nmConnect(modem.config.conn);
@@ -741,7 +749,7 @@ export async function updateModems() {
 	// If any modems were removed, delete them
 	for (const m in modems) {
 		if (modems[m]?.removed) {
-			console.log(`Modem ${m} removed`);
+			logger.warn(`Modem ${m} removed`);
 			delete modems[m];
 		}
 	}
@@ -756,7 +764,7 @@ async function handleModemConfig(
 	msg: ModemConfigMessage["config"],
 ) {
 	if (!msg.device || !modems[msg.device]) {
-		console.log(`Ignoring modem config for unknown modem ${msg.device}`);
+		logger.info(`Ignoring modem config for unknown modem ${msg.device}`);
 		return;
 	}
 
@@ -764,13 +772,13 @@ async function handleModemConfig(
 	if (!modem) return;
 
 	if (!modem.config || !modem.config.conn) {
-		console.log(`Ignoring modem config for unconfigured modem ${msg.device}`);
-		console.log(modem.config);
+		logger.info(`Ignoring modem config for unconfigured modem ${msg.device}`);
+		logger.debug(modem.config);
 		return;
 	}
 	const connUuid = modem.config.conn;
 	if (!connUuid) {
-		console.log(
+		logger.info(
 			`Ignoring modem config for modem ${msg.device} with no connection UUID`,
 		);
 		return;
@@ -786,15 +794,15 @@ async function handleModemConfig(
 		typeof msg.network !== "string" ||
 		typeof msg.network_type !== "string"
 	) {
-		console.log(`Received invalid configuration for modem ${msg.device}`);
-		console.log(msg);
+		logger.error(`Received invalid configuration for modem ${msg.device}`);
+		logger.debug(msg);
 		return;
 	}
 
 	// Ensure the selected network type is supported
 	const networkType = modem.network_type.supported[msg.network_type];
 	if (!networkType) {
-		console.log(
+		logger.error(
 			`Received invalid network type ${msg.network_type} for modem ${msg.device}`,
 		);
 		return;
@@ -807,7 +815,7 @@ async function handleModemConfig(
 		msg.network !== modem.config.network &&
 		(!modem.available_networks || !modem.available_networks[msg.network])
 	) {
-		console.log(
+		logger.warn(
 			`Received unavailable network ${msg.network} for modem ${msg.device}`,
 		);
 		return;
@@ -841,10 +849,10 @@ async function handleModemConfig(
 		// This preserves the 'conn' UUID value
 		Object.assign(modem.config, updatedConfig);
 	} else {
-		console.log(
+		logger.error(
 			`Failed to update NM connection ${modem.config.conn} for modem ${msg.device} to:`,
 		);
-		console.log(updatedConfig);
+		logger.debug(updatedConfig);
 	}
 
 	// Bring the connection down to reload the settings, and set the network types, if needed

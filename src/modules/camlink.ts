@@ -18,6 +18,7 @@
 /* Check if there are any Cam Links plugged into a USB2 port */
 import { readdirP } from "../helpers/files.ts";
 
+import { logger } from "../helpers/logger.ts";
 import { notificationBroadcast, notificationRemove } from "./notifications.ts";
 import { setup } from "./setup.ts";
 import { readTextFile } from "./text-files.ts";
@@ -58,9 +59,9 @@ export async function checkCamlinkUsb2() {
 		const msg =
 			"Detected a Cam Link 4K connected via USB2. This will result in low framerate operation. Ensure that it's connected to a USB3.0 port and that you're using a USB3.0 extension cable.";
 		notificationBroadcast("camlink_usb2", "error", msg, 0, true, false);
-		console.log("Detected a Cam Link 4K connected via USB2.0");
+		logger.info("Detected a Cam Link 4K connected via USB2.0");
 	} else {
 		notificationRemove("camlink_usb2");
-		console.log("No Cam Link 4K connected via USB2.0");
+		logger.info("No Cam Link 4K connected via USB2.0");
 	}
 }

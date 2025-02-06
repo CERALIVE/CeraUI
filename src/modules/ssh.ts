@@ -21,6 +21,7 @@ import crypto from "node:crypto";
 
 import type WebSocket from "ws";
 
+import { logger } from "../helpers/logger.ts";
 import { getConfig, saveConfig } from "./config.ts";
 import { notificationSend } from "./notifications.ts";
 import { setup } from "./setup.ts";
@@ -69,7 +70,7 @@ function getSshUserHash(callback: (hash: string) => void) {
 		if (err === null && stdout.length) {
 			callback(stdout);
 		} else {
-			console.log(
+			logger.error(
 				`Error getting the password hash for ${setup.ssh_user}: ${err}`,
 			);
 		}
@@ -92,7 +93,7 @@ export function getSshStatus() {
 			if (stdout === "inactive\n") {
 				s.active = false;
 			} else {
-				console.log(`Error running systemctl is-active ssh: ${err.message}`);
+				logger.error(`Error running systemctl is-active ssh: ${err.message}`);
 				return;
 			}
 		}

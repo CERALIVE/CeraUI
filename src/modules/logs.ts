@@ -19,6 +19,7 @@ import { exec } from "node:child_process";
 
 import type WebSocket from "ws";
 
+import { logger } from "../helpers/logger.ts";
 import { notificationSend } from "./notifications.ts";
 import { buildMsg, getSocketSenderId } from "./websocket-server.ts";
 
@@ -36,7 +37,7 @@ export function getLog(conn: WebSocket, service?: string) {
 		if (err) {
 			const msg = `Failed to fetch the log: ${err}`;
 			notificationSend(conn, "log_error", "error", msg, 10);
-			console.log(msg);
+			logger.error(msg);
 			return;
 		}
 

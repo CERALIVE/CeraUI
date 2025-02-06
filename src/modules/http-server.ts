@@ -21,6 +21,7 @@ import http from "node:http";
 import finalhandler from "finalhandler";
 import serveStatic from "serve-static";
 
+import { logger } from "../helpers/logger.ts";
 import { getSystemdSocket } from "./systemd.ts";
 
 const staticHttp = serveStatic("public");
@@ -30,8 +31,7 @@ export const httpServer = http.createServer((req, res) => {
 	staticHttp(req, res, done);
 });
 
-export function startHttpServer() {
-	const httpListenPorts: Array<number | { fd: number }> = [80, 8080, 81];
+const httpListenPorts: Array<number | { fd: number }> = [80, 8080, 81];
 
 	if (process.env.PORT) {
 		const port = Number.parseInt(process.env.PORT, 10);
@@ -44,7 +44,7 @@ export function startHttpServer() {
 	}
 
 	if (httpListenPorts.length === 0) {
-		console.log("HTTP server: no more ports left to try. Exiting...");
+		logger.crit("HTTP server: no more ports left to try. Exiting...");
 		process.exit(1);
 	}
 

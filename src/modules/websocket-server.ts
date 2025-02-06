@@ -23,6 +23,7 @@ import { WebSocketServer } from "ws";
 import { getms } from "../helpers/time.ts";
 import { extractMessage } from "../helpers/types.ts";
 
+import { logger } from "../helpers/logger.ts";
 import {
 	type AuthMessage,
 	getPasswordHash,
@@ -102,7 +103,7 @@ export function initWebSocketServer() {
 				handleMessage(conn, parsedMessage);
 			} catch (err) {
 				if (err instanceof Error) {
-					console.log(`Error parsing client message: ${err.message}`);
+					logger.error(`Error parsing client message: ${err.message}`);
 				}
 			}
 		});
@@ -123,7 +124,7 @@ export function initWebSocketServer() {
 export function handleMessage(conn: WebSocket, msg: Message, isRemote = false) {
 	// log all received messages except for keepalives
 	if (Object.keys(msg).length > 1 || !("keepalive" in msg)) {
-		console.log(stripPasswords(msg));
+		logger.debug(stripPasswords(msg));
 	}
 
 	if (!isRemote) {

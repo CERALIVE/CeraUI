@@ -22,6 +22,7 @@ import type WebSocket from "ws";
 
 import { getms } from "../helpers/time.ts";
 
+import { logger } from "../helpers/logger.ts";
 import { updateMoblinkRelayInterfaces } from "./moblink-relay.ts";
 import {
 	notificationBroadcast,
@@ -73,7 +74,7 @@ export function initNetworkInterfaceMonitoring() {
 function updateNetif() {
 	exec("ifconfig", (error, stdout) => {
 		if (error) {
-			console.log(error.message);
+			logger.error(`Error getting ifconfig: ${error.message}`);
 			return;
 		}
 
@@ -190,7 +191,7 @@ function updateNetif() {
 		}
 
 		if (wiFiDeviceListEndUpdate()) {
-			console.log("updated wifi devices");
+			logger.info("updated wifi devices");
 			// a delay seems to be needed before NM registers new devices
 			setTimeout(wifiUpdateDevices, 1000);
 		}

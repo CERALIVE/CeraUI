@@ -19,6 +19,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
+import { logger } from "../helpers/logger.ts";
+
 import { pipelineGetAudioProps } from "./audio.ts";
 import { setup } from "./setup.ts";
 import { readTextFile, writeTextFile } from "./text-files.ts";
@@ -56,8 +58,8 @@ function readDirAbsPath(dir: string, excludePattern?: string) {
 			pipelines[id] = { name: name, path: path };
 		}
 	} catch (err) {
-		console.log(`Failed to read the pipeline files in ${dir}:`);
-		console.log(err);
+		logger.error(`Failed to read the pipeline files in ${dir}:`);
+		logger.error(err);
 	}
 
 	return pipelines;

@@ -19,6 +19,7 @@
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 
+import { logger } from "../helpers/logger.ts";
 import { belacoderExec, srtlaSendExec } from "./streamloop.ts";
 
 function getRevision(cmd: string) {
@@ -46,7 +47,7 @@ export function initRevisions() {
 			.readFileSync("/etc/belabox_img_version", "utf8")
 			.trim();
 	} catch (err) {}
-	console.log(revisions);
+	logger.debug(revisions);
 }
 
 export function getRevisions() {

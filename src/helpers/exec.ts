@@ -2,6 +2,8 @@ import { exec, execFile } from "node:child_process";
 import fs from "node:fs";
 import util from "node:util";
 
+import { logger } from "./logger.ts";
+
 export const execP = util.promisify(exec);
 export const execFileP = util.promisify(execFile);
 
@@ -15,13 +17,18 @@ export async function execPNR(cmd: string) {
 	}
 }
 
-export function checkExecPath(path: string) {
+export function checkExecPathSafe(path: string) {
 	try {
 		fs.accessSync(path, fs.constants.R_OK);
+		return true;
 	} catch (err) {
-		console.log(
+		logger.error(
 			`\n\n${path} not found, double check the settings in setup.json`,
 		);
-		process.exit(1);
+		return false;
 	}
+}
+
+export function checkExecPath(path: string) {
+	if (!checkExecPathSafe(path)) process.exit(1);
 }

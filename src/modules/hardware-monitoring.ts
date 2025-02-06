@@ -22,6 +22,7 @@ import fs from "node:fs";
 import { execPNR } from "../helpers/exec.ts";
 import { getms } from "../helpers/time.ts";
 
+import { logger } from "../helpers/logger.ts";
 import {
 	notificationBroadcast,
 	notificationExists,
@@ -118,7 +119,7 @@ export function initHardwareMonitoring() {
 			sensorsFunc = updateSensorsRk3588;
 			break;
 		default:
-			console.log(`Unknown sensors for ${setup.hw}`);
+			logger.warn(`Unknown sensors for ${setup.hw}`);
 	}
 
 	if (sensorsFunc) {

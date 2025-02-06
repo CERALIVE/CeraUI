@@ -16,9 +16,10 @@
 */
 
 import fs from "node:fs";
+import { logger } from "../helpers/logger.ts";
 
 const SETUP_FILE = "setup.json";
 
 /* Read the config and setup files */
 export const setup = JSON.parse(fs.readFileSync(SETUP_FILE, "utf8"));
-console.log(setup);
+logger.debug("Setup", setup);

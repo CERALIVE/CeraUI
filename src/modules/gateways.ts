@@ -18,6 +18,7 @@
 import { execP } from "../helpers/exec.ts";
 import { getms } from "../helpers/time.ts";
 
+import { logger } from "../helpers/logger.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
 import {
@@ -55,7 +56,7 @@ async function updateGw() {
 		addrs = resolveResult.addrs;
 		fromCache = resolveResult.fromCache;
 	} catch (err) {
-		console.log(`Failed to resolve ${CONNECTIVITY_CHECK_DOMAIN}: ${err}`);
+		logger.warn(`Failed to resolve ${CONNECTIVITY_CHECK_DOMAIN}: ${err}`);
 		return false;
 	}
 
@@ -63,7 +64,7 @@ async function updateGw() {
 		if (await checkConnectivity(addr)) {
 			if (!fromCache) dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
 
-			console.log("Internet reachable via the default route");
+			logger.info("Internet reachable via the default route");
 			notificationRemove("no_internet");
 
 			return true;
@@ -88,17 +89,17 @@ async function updateGw() {
 
 			const error = netIfGetErrorMsg(networkInterface);
 			if (error) {
-				console.log(
+				logger.warn(
 					`Not probing internet connectivity via ${i} (${networkInterface.ip}): ${error}`,
 				);
 				continue;
 			}
 
-			console.log(
+			logger.info(
 				`Probing internet connectivity via ${i} (${networkInterface.ip})`,
 			);
 			if (await checkConnectivity(addr, networkInterface.ip)) {
-				console.log(`Internet reachable via ${i} (${networkInterface.ip})`);
+				logger.info(`Internet reachable via ${i} (${networkInterface.ip})`);
 				if (!fromCache) dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
 
 				goodIf = i;
@@ -115,12 +116,12 @@ async function updateGw() {
 			const route = `ip route add ${gw}`;
 			await execP(route);
 
-			console.log(`Set default route: ${route}`);
+			logger.info(`Set default route: ${route}`);
 			notificationRemove("no_internet");
 
 			return true;
 		} catch (err) {
-			console.log(`Error updating the default route: ${err}`);
+			logger.warn(`Error updating the default route: ${err}`);
 		}
 	}
 

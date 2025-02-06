@@ -18,8 +18,9 @@
 import { spawnSync } from "node:child_process";
 
 import { checkExecPath } from "./helpers/exec.ts";
-
 import killall from "./helpers/killall.ts";
+import { logger } from "./helpers/logger.ts";
+
 import { updateAudioDevices } from "./modules/audio.ts";
 import { checkCamlinkUsb2 } from "./modules/camlink.ts";
 import { loadConfig } from "./modules/config.ts";
@@ -82,7 +83,7 @@ updateAudioDevices();
    * a USB audio card is plugged in or out
 */
 process.on("SIGUSR2", function udevDeviceUpdate() {
-	console.log("SIGUSR2");
+	logger.error("SIGUSR2");
 	checkCamlinkUsb2();
 	updateAudioDevices();
 });

@@ -22,6 +22,7 @@
 import { Resolver } from "node:dns";
 import fs from "node:fs";
 
+import { logger } from "../helpers/logger.ts";
 import { writeTextFile } from "./text-files.ts";
 
 const DNS_CACHE_FILE = "dns_cache.json";
@@ -117,7 +118,7 @@ const dnsResults: Record<string, ResolveResult> = {};
 try {
 	dnsCache = JSON.parse(fs.readFileSync(DNS_CACHE_FILE, "utf8"));
 } catch (err) {
-	console.log(
+	logger.warn(
 		"Failed to load the persistent DNS cache, starting with an empty cache",
 	);
 }
@@ -158,12 +159,12 @@ export async function dnsCacheResolve(name: string, rrtype_?: string) {
 		if (lookup && lookup.length === 1 && lookup[0] === DNS_WELLKNOWN_ADDR) {
 			badDns = false;
 		} else {
-			console.log(
+			logger.error(
 				`DNS validation failure: got result ${lookup} instead of the expected ${DNS_WELLKNOWN_ADDR}`,
 			);
 		}
 	} catch (e) {
-		console.log(`DNS validation failure: ${e}`);
+		logger.error(`DNS validation failure: ${e}`);
 	}
 
 	if (badDns) {
@@ -175,7 +176,7 @@ export async function dnsCacheResolve(name: string, rrtype_?: string) {
 
 			return { addrs: res, fromCache: false };
 		} catch (err) {
-			console.log(`dns error ${err}`);
+			logger.error(`dns error ${err}`);
 		}
 	}
 
@@ -214,7 +215,7 @@ function compareArrayElements(a1: Array<SomeValue>, a2: Array<SomeValue>) {
 
 export async function dnsCacheValidate(name: string) {
 	if (!dnsResults[name]) {
-		console.log(`DNS: error validating results for ${name}: not found`);
+		logger.warn(`DNS: error validating results for ${name}: not found`);
 		return;
 	}
 

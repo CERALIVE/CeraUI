@@ -20,6 +20,7 @@ import type { Readable } from "node:stream";
 
 import type WebSocket from "ws";
 
+import { logger } from "../helpers/logger.ts";
 import { abortAsrcRetry, isAsrcRetryScheduled } from "./audio.ts";
 import { getConfig } from "./config.ts";
 import { notificationBroadcast, notificationExists } from "./notifications.ts";
@@ -185,13 +186,13 @@ const stopCheckInterval = 50;
 
 function waitForAllProcessesToTerminate() {
 	if (streamingProcesses.length === 0) {
-		console.log("stop: all processes terminated");
+		logger.info("stop: all processes terminated");
 		updateStatus(false);
 
 		periodicCheckForSoftwareUpdates();
 	} else {
 		for (const p of streamingProcesses) {
-			console.log(`stop: still waiting for ${p.spawnfile} to terminate...`);
+			logger.info(`stop: still waiting for ${p.spawnfile} to terminate...`);
 		}
 		setTimeout(waitForAllProcessesToTerminate, stopCheckInterval);
 	}
@@ -213,7 +214,7 @@ export function stop() {
 			return;
 		}
 
-		console.log("stop: BUG?: found both a timer and running processes");
+		logger.crit("stop: BUG?: found both a timer and running processes");
 	}
 
 	let foundBelacoder = false;
@@ -222,24 +223,24 @@ export function stop() {
 		p.removeAllListeners("exit");
 		if (p.spawnfile.match(/belacoder$/)) {
 			foundBelacoder = true;
-			console.log("stop: found the belacoder process");
+			logger.debug("stop: found the belacoder process");
 
 			if (!stopProcess(p)) {
 				// if the process is active, wait for it to exit
 				p.on("exit", () => {
-					console.log("stop: belacoder terminated");
+					logger.info("stop: belacoder terminated");
 					stopAll();
 				});
 			} else {
 				// if belacoder has terminated already, skip to the next step
-				console.log("stop: belacoder already terminated");
+				logger.info("stop: belacoder already terminated");
 				stopAll();
 			}
 		}
 	}
 
 	if (!foundBelacoder) {
-		console.log("stop: BUG?: belacoder not found, terminating all processes");
+		logger.crit("stop: BUG?: belacoder not found, terminating all processes");
 		stopAll();
 	}
 }

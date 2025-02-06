@@ -18,6 +18,7 @@
 /* NetworkManager / nmcli helpers */
 
 import { execFileP } from "../helpers/exec.ts";
+import { logger } from "../helpers/logger.ts";
 
 export type NetworkManagerConnectionModemConfig = {
 	"gsm.apn": string;
@@ -59,7 +60,7 @@ export async function nmConnAdd(connection: NetworkManagerConnection) {
 		if (success) return success[1];
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`nmConnNew err: ${err.message}`);
+			logger.error(`nmConnNew err: ${err.message}`);
 		}
 	}
 }
@@ -76,7 +77,7 @@ export async function nmConnsGet(fields: string) {
 		return result.stdout.toString().split("\n");
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`nmConnsGet err: ${err.message}`);
+			logger.error(`nmConnsGet err: ${err.message}`);
 		}
 	}
 }
@@ -102,7 +103,7 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 		};
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`nmConnGetFields err: ${err.message}`);
+			logger.error(`nmConnGetFields err: ${err.message}`);
 		}
 	}
 }
@@ -124,7 +125,7 @@ export async function nmConnSetFields(
 		return result.stdout === "";
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`nmConnSetFields err: ${err.message}`);
+			logger.error(`nmConnSetFields err: ${err.message}`);
 		}
 	}
 	return false;
@@ -143,7 +144,7 @@ export async function nmConnDelete(uuid: string) {
 		return result.stdout.match("successfully deleted");
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`nmConnDelete err: ${err.message}`);
+			logger.error(`nmConnDelete err: ${err.message}`);
 		}
 	}
 	return false;
@@ -159,7 +160,7 @@ export async function nmConnect(uuid: string, timeout?: number) {
 		return result.stdout.match("^Connection successfully activated");
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`nmConnect err: ${err.message}`);
+			logger.error(`nmConnect err: ${err.message}`);
 		}
 	}
 	return false;
@@ -171,7 +172,7 @@ export async function nmDisconnect(uuid: string) {
 		return result.stdout.match("successfully deactivated");
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`nmDisconnect err: ${err.message}`);
+			logger.error(`nmDisconnect err: ${err.message}`);
 		}
 	}
 	return false;
@@ -189,7 +190,7 @@ export async function nmDevices(fields: string) {
 		return result.stdout.toString().split("\n");
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`nmDevices err: ${err.message}`);
+			logger.error(`nmDevices err: ${err.message}`);
 		}
 	}
 }
@@ -209,7 +210,7 @@ export async function nmDeviceProp(device: string, fields: string) {
 		return result.stdout.toString().split("\n");
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`nmDeviceProp err: ${err.message}`);
+			logger.error(`nmDeviceProp err: ${err.message}`);
 		}
 	}
 }
@@ -225,7 +226,7 @@ export async function nmRescan(device?: string) {
 		return result.stdout === "";
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`nmDevices err: ${err.message}`);
+			logger.error(`nmDevices err: ${err.message}`);
 		}
 	}
 	return false;
@@ -246,7 +247,7 @@ export async function nmScanResults(fields: string) {
 		return result.stdout.toString().split("\n");
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`nmScanResults err: ${err.message}`);
+			logger.error(`nmScanResults err: ${err.message}`);
 		}
 	}
 }
@@ -278,7 +279,7 @@ export async function nmHotspot(
 		return uuid?.[1] ?? null;
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`nmHotspot err: ${err.message}`);
+			logger.error(`nmHotspot err: ${err.message}`);
 		}
 	}
 }

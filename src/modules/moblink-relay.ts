@@ -8,6 +8,8 @@ import makeMdns, {
 
 import { isSameNetwork } from "../helpers/ip-adresses.ts";
 
+import { checkExecPath, checkExecPathSafe } from "../helpers/exec.ts";
+import { logger } from "../helpers/logger.ts";
 import { getNetworkInterfaces } from "./network-interfaces.ts";
 import { setup } from "./setup.ts";
 
@@ -15,7 +17,7 @@ const enabled = setup.moblink_relay_enabled;
 
 const RELAY_COOLDOWN = 5_000;
 
-export const relayExec =
+export const moblinkRelayExec =
 	setup.moblink_relay_bin ??
 	"/opt/moblink-rust-relay/target/release/moblink-rust-relay";
 
@@ -57,8 +59,10 @@ function spawnRelay(relayOptions: RelayOptions) {
 		streamerPassword = setup.moblink_relay_streamer_password,
 	} = relayOptions;
 
+	checkExecPath(moblinkRelayExec);
+
 	const process = spawn(
-		relayExec,
+		moblinkRelayExec,
 		[
 			"--name",
 			name,
@@ -87,11 +91,11 @@ function spawnRelay(relayOptions: RelayOptions) {
 
 	process.stderr.on("data", (data) => {
 		const dataStr = data.toString("utf8");
-		console.log(`Moblink relay ${name}:`, dataStr);
+		logger.info(`Moblink relay ${name}:`, dataStr);
 	});
 
 	process.on("exit", (code) => {
-		console.error(`Moblink relay ${name} exited with code ${code}`);
+		logger.warn(`Moblink relay ${name} exited with code ${code}`);
 
 		process.restartTimer = setTimeout(() => {
 			relayProcesses.delete(id);
@@ -125,13 +129,18 @@ function stopRelay(relayId: string) {
 export function initMoblinkRelays() {
 	if (!enabled) return;
 
+	if (!checkExecPathSafe(moblinkRelayExec)) {
+		logger.error("Moblink relay binary not found, disabling Moblink relay");
+		return;
+	}
+
 	initMdns();
 	discoverStreamers();
 	setInterval(discoverStreamers, 10_000);
 	setInterval(updateMoblinkRelayInterfaces, 60_000);
 
 	if (!setup.moblink_relay_streamer_password) {
-		console.error("Moblink relay streamer password not set");
+		logger.error("Moblink relay streamer password not set");
 		return;
 	}
 }
@@ -185,7 +194,7 @@ async function handleMdnsResponse(response: ResponsePacket) {
 
 	const ip = ipv4 || ipv6;
 	if (ip) {
-		console.log(`!!! Found Moblink streamer: ${serviceName} - ${ip}:${port}`);
+		logger.info(`!!! Found Moblink streamer: ${serviceName} - ${ip}:${port}`);
 		streamerAddresses.add(`${ip}:${port}`);
 		updateMoblinkRelayInterfaces();
 	}

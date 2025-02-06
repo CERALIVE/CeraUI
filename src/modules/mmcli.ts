@@ -20,6 +20,7 @@
 */
 import { execFileP } from "../helpers/exec.ts";
 
+import { logger } from "../helpers/logger.ts";
 import type { ModemInfo, NetworkType, SimInfo } from "./modems.ts";
 import { setup } from "./setup.ts";
 
@@ -40,7 +41,7 @@ function mmcliParseSep(input: string) {
 
 		const kv = line.split(/:(.*)/); // splits on the first ':' only
 		if (kv.length !== 3) {
-			console.log(`mmcliParseSep: error parsing line ${line}`);
+			logger.error(`mmcliParseSep: error parsing line ${line}`);
 			continue;
 		}
 		let key = kv[0]?.trim();
@@ -111,7 +112,7 @@ export function mmConvertAccessTech(accessTechs?: Array<string>): string {
 	let gen = "";
 	for (const t of accessTechs) {
 		if (!isAccessTech(t)) {
-			console.log(`mmConvertAccessTech: unknown access tech ${t}`);
+			logger.warn(`mmConvertAccessTech: unknown access tech ${t}`);
 			continue;
 		}
 
@@ -143,7 +144,7 @@ export async function mmList() {
 		return list;
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`mmList err: ${err.message}`);
+			logger.error(`mmList err: ${err.message}`);
 		}
 	}
 }
@@ -154,7 +155,7 @@ export async function mmGetModem(id: number) {
 		return mmcliParseSep(result.stdout.toString()) as unknown as ModemInfo;
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`mmGetModem err: ${err.message}`);
+			logger.error(`mmGetModem err: ${err.message}`);
 		}
 	}
 }
@@ -165,7 +166,7 @@ export async function mmGetSim(id: number) {
 		return mmcliParseSep(result.stdout.toString()) as unknown as SimInfo;
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`mmGetSim err: ${err.message}`);
+			logger.error(`mmGetSim err: ${err.message}`);
 		}
 	}
 }
@@ -184,7 +185,7 @@ export async function mmSetNetworkTypes(
 		return result.stdout.match(/successfully set current modes in the modem/);
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`mmSetNetworkTypes err: ${err.message}`);
+			logger.error(`mmSetNetworkTypes err: ${err.message}`);
 		}
 	}
 }
@@ -217,7 +218,7 @@ export async function mmNetworkScan(id: number, timeout = 240) {
 		});
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`mmNetworkScan err: ${err.message}`);
+			logger.error(`mmNetworkScan err: ${err.message}`);
 		}
 	}
 }

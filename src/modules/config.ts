@@ -17,6 +17,8 @@
 
 import fs from "node:fs";
 
+import { logger } from "../helpers/logger.ts";
+
 import { getPasswordHash, setPasswordHash } from "./auth.ts";
 import { setup } from "./setup.ts";
 import { getSshPasswordHash, setSshPasswordHash } from "./ssh.ts";
@@ -46,14 +48,14 @@ let config: {
 export function loadConfig() {
 	try {
 		config = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
-		console.log(config);
+		logger.debug("config loaded", config);
 		setPasswordHash(config.password_hash);
 		setSshPasswordHash(config.ssh_pass_hash);
 		config.password_hash = undefined;
 		config.ssh_pass_hash = undefined;
 	} catch (err: unknown) {
 		if (err instanceof Error) {
-			console.error(
+			logger.warn(
 				`Failed to open the config file: ${err.message}. Creating an empty config`,
 			);
 		}

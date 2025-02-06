@@ -20,6 +20,7 @@
 */
 
 import http, { type RequestOptions } from "node:http";
+import { logger } from "../helpers/logger.ts";
 
 export const CONNECTIVITY_CHECK_DOMAIN = "www.gstatic.com";
 const CONNECTIVITY_CHECK_PATH = "/generate_204";
@@ -73,17 +74,17 @@ export async function checkConnectivity(
 	localAddress?: string,
 ) {
 	try {
-		const url: HttpGetOptions = {};
-		url.headers = { Host: CONNECTIVITY_CHECK_DOMAIN };
-		url.path = CONNECTIVITY_CHECK_PATH;
-		url.host = remoteAddr;
-		url.timeout = 4000;
+		const options: HttpGetOptions = {};
+		options.headers = { Host: CONNECTIVITY_CHECK_DOMAIN };
+		options.path = CONNECTIVITY_CHECK_PATH;
+		options.host = remoteAddr;
+		options.timeout = 4000;
 
 		if (localAddress) {
-			url.localAddress = localAddress;
+			options.localAddress = localAddress;
 		}
 
-		const res = await httpGet(url);
+		const res = await httpGet(options);
 		if (
 			res.code === CONNECTIVITY_CHECK_CODE &&
 			res.body === CONNECTIVITY_CHECK_BODY
@@ -92,7 +93,7 @@ export async function checkConnectivity(
 		}
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(
+			logger.error(
 				`Internet connectivity HTTP check error ${"code" in err ? err.code : err}`,
 			);
 		}

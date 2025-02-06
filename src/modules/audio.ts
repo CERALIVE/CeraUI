@@ -21,6 +21,7 @@ import fs from "node:fs";
 import type WebSocket from "ws";
 
 import { readdirP } from "../helpers/files.ts";
+import { logger } from "../helpers/logger.ts";
 
 import { getConfig } from "./config.ts";
 import { notificationBroadcast } from "./notifications.ts";
@@ -165,8 +166,7 @@ export async function updateAudioDevices() {
 	addAudioCardById(sortedList, DEFAULT_AUDIO_ID);
 
 	audioDevices = sortedList;
-	console.log("audio devices:");
-	console.log(audioDevices);
+	logger.debug("audio devices:", audioDevices);
 
 	broadcastMsg("status", { asrcs: Object.keys(audioDevices) });
 }

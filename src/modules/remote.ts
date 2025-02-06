@@ -43,6 +43,7 @@ import { validatePortNo } from "../helpers/number.ts";
 import { getms } from "../helpers/time.ts";
 import { extractMessage } from "../helpers/types.ts";
 
+import { logger } from "../helpers/logger.ts";
 import { addAuthedSocket, deleteAuthedSocket } from "./auth.ts";
 import { getConfig, saveConfig } from "./config.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
@@ -93,7 +94,7 @@ function handleRemote(conn: WebSocket, msg: RemoteMessage) {
 					addAuthedSocket(conn);
 					sendInitialStatus(conn);
 					broadcastMsgLocal("status", { remote: true }, getms() - ACTIVE_TO);
-					console.log("remote: authenticated");
+					logger.info("remote: authenticated");
 				} else {
 					broadcastMsgLocal(
 						"status",
@@ -102,7 +103,7 @@ function handleRemote(conn: WebSocket, msg: RemoteMessage) {
 					);
 					remoteStatusHandled = true;
 					conn.terminate();
-					console.log("remote: invalid key");
+					logger.warn("remote: invalid key");
 				}
 				break;
 			}
@@ -142,7 +143,7 @@ try {
 		fs.readFileSync(RELAYS_CACHE_FILE, "utf8"),
 	) as RelayCache;
 } catch (err) {
-	console.log("Failed to load the relays cache, starting with an empty cache");
+	logger.warn("Failed to load the relays cache, starting with an empty cache");
 }
 
 export function getRelays() {
@@ -201,8 +202,8 @@ async function updateCachedRelays(relays: RelayCache | undefined) {
 	try {
 		assert.deepStrictEqual(relays, relaysCache);
 	} catch (err) {
-		console.log("updated the relays cache:");
-		console.log(relays);
+		logger.debug("updated the relays cache:");
+		logger.debug(relays);
 		relaysCache = relays;
 		await writeTextFile(RELAYS_CACHE_FILE, JSON.stringify(relays));
 		return true;
@@ -362,7 +363,7 @@ function remoteHandleMsg(conn: WebSocket, msg: RawData) {
 		markConnectionActive(conn);
 	} catch (err) {
 		if (err instanceof Error) {
-			console.log(`Error handling remote message: ${err.message}`);
+			logger.error(`Error handling remote message: ${err.message}`);
 		}
 	}
 }
@@ -412,12 +413,13 @@ async function remoteConnect() {
 
 			host = cachedHost;
 			queueUpdateGw();
-			console.log(`remote: DNS lookup failed, using cached address ${host}`);
+			logger.warn(`remote: DNS lookup failed, using cached address ${host}`);
 		}
 	} catch (err) {
 		return remoteRetry();
 	}
-	console.log("remote: trying to connect");
+
+	logger.info("remote: trying to connect");
 
 	remoteStatusHandled = false;
 	remoteWs = new WebSocket(`wss://${host}${remoteEndpointPath}`);
@@ -426,7 +428,7 @@ async function remoteConnect() {
 		getms() + remoteConnectTimeout - remoteTimeout,
 	);
 	remoteWs.on("error", (err) => {
-		console.log(`remote error: ${err.message}`);
+		logger.error(`remote error: ${err.message}`);
 	});
 	remoteWs.on("open", function () {
 		if (!fromCache) {
