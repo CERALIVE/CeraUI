@@ -26,7 +26,7 @@ import { checkCamlinkUsb2 } from "./modules/camlink.ts";
 import { loadConfig } from "./modules/config.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/gateways.ts";
 import { initHardwareMonitoring } from "./modules/hardware-monitoring.ts";
-import { startHttpServer } from "./modules/http-server.ts";
+import { initHttpServer } from "./modules/http-server.ts";
 import { initMoblinkRelays } from "./modules/moblink-relay.ts";
 import { updateModems } from "./modules/modems.ts";
 import { initNetworkInterfaceMonitoring } from "./modules/network-interfaces.ts";
@@ -93,4 +93,4 @@ killall(["belacoder"]);
 killall(["srtla_send"]);
 killall(["moblink-rust-relay"]);
 
-startHttpServer();
+initHttpServer();

@@ -33,6 +33,7 @@ export const httpServer = http.createServer((req, res) => {
 
 const httpListenPorts: Array<number | { fd: number }> = [80, 8080, 81];
 
+export function initHttpServer() {
 	if (process.env.PORT) {
 		const port = Number.parseInt(process.env.PORT, 10);
 		httpListenPorts.unshift(port);
@@ -43,13 +44,31 @@ const httpListenPorts: Array<number | { fd: number }> = [80, 8080, 81];
 		httpListenPorts.unshift(systemdSock);
 	}
 
+	httpServer.on("error", (e) => {
+		if ("code" in e && e.code === "EADDRINUSE") {
+			logger.warn("HTTP server: port already in use, trying the next one...");
+			startHttpServer();
+		} else {
+			logger.error("HTTP server: error");
+			logger.error(e);
+			process.exit(1);
+		}
+	});
+
+	startHttpServer();
+}
+
+export function startHttpServer() {
 	if (httpListenPorts.length === 0) {
 		logger.crit("HTTP server: no more ports left to try. Exiting...");
 		process.exit(1);
 	}
 
-	const port = httpListenPorts.shift();
-	const desc = typeof port === "number" ? `port ${port}` : "the systemd socket";
-	console.log(`HTTP server: trying to start on ${desc}...`);
-	httpServer.listen(port);
+	const portOrHandle = httpListenPorts.shift();
+
+	const isPort = typeof portOrHandle === "number";
+	const desc = isPort ? `port ${portOrHandle}` : "the systemd socket";
+	logger.info(`HTTP server: trying to start on ${desc}...`);
+
+	httpServer.listen(portOrHandle);
 }

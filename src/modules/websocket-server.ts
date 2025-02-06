@@ -34,7 +34,7 @@ import {
 	tryAuth,
 } from "./auth.ts";
 import { type BitrateParams, setBitrate } from "./encoder.ts";
-import { httpServer, startHttpServer } from "./http-server.ts";
+import { httpServer } from "./http-server.ts";
 import { getLog } from "./logs.ts";
 import { type ModemsMessage, handleModems } from "./modems.ts";
 import {
@@ -107,17 +107,6 @@ export function initWebSocketServer() {
 				}
 			}
 		});
-	});
-
-	wss.on("error", (e) => {
-		if ("code" in e && e.code === "EADDRINUSE") {
-			console.log("HTTP server: port already in use, trying the next one...");
-			startHttpServer();
-		} else {
-			console.log("HTTP server: error");
-			console.log(e);
-			process.exit(1);
-		}
 	});
 }
 
