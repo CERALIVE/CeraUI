@@ -8,8 +8,8 @@ VERSION=86779d444bf94afac8d97acc4af0bd2a99b8d59a
 apt-get update
 apt-get install -y git curl
 
-# Install Rust via rustup
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# Install Rust nightly via rustup
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | TMPDIR=$XDG_RUNTIME_DIR sh -s -- --profile minimal --default-toolchain nightly -y
 
 # Add cargo to PATH
 source "$HOME"/.cargo/env
@@ -28,9 +28,6 @@ cd moblink-rust-relay || exit
 
 # Checkout the version that expects two bind addresses
 git checkout $VERSION
-
-# Set nightly (optional)
-rustup override set nightly
 
 # Build moblink-rust-relay
 cargo build --release
