@@ -47,7 +47,7 @@ export function initRevisions() {
 			.readFileSync("/etc/belabox_img_version", "utf8")
 			.trim();
 	} catch (err) {}
-	logger.debug(revisions);
+	logger.debug("Revisions", revisions);
 }
 
 export function getRevisions() {

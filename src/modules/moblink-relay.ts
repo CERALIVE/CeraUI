@@ -61,7 +61,7 @@ function spawnRelay(relayOptions: RelayOptions) {
 
 	process.stderr.on("data", (data) => {
 		const dataStr = data.toString("utf8");
-		logger.info(`Moblink relay ${name}:`, dataStr);
+		logger.info(`Moblink relay ${name}: ${dataStr}`);
 	});
 
 	process.on("exit", (code) => {

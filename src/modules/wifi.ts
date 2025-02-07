@@ -653,7 +653,7 @@ export async function wifiUpdateDevices() {
 			updateSrtlaIps();
 		}
 	}
-	logger.debug(wifiIfs);
+	logger.debug("Wifi interfaces", wifiIfs);
 
 	updateMoblinkRelayInterfaces();
 

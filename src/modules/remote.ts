@@ -202,8 +202,7 @@ async function updateCachedRelays(relays: RelayCache | undefined) {
 	try {
 		assert.deepStrictEqual(relays, relaysCache);
 	} catch (err) {
-		logger.debug("updated the relays cache:");
-		logger.debug(relays);
+		logger.debug("updated the relays cache", relays);
 		relaysCache = relays;
 		await writeTextFile(RELAYS_CACHE_FILE, JSON.stringify(relays));
 		return true;

@@ -375,8 +375,7 @@ async function modemGetConfig(
 	const uuid = await nmConnAdd(nmConfig);
 	if (uuid) {
 		config.conn = uuid;
-		logger.debug(`Created NM connection ${uuid} for ${modemId}`);
-		logger.debug(config);
+		logger.debug(`Created NM connection ${uuid} for ${modemId}`, config);
 	}
 
 	return config;
@@ -707,7 +706,10 @@ export async function updateModems() {
 				logger.debug("Trying to register modem", m);
 				await registerModem(m);
 				newModems[m] = true;
-				logger.debug(JSON.stringify(modems[m], undefined, 2));
+				logger.debug(
+					"Registered modems",
+					JSON.stringify(modems[m], undefined, 2),
+				);
 			} catch (e) {
 				logger.error(`Failed to register modem ${m}`);
 				throw e;
@@ -773,7 +775,7 @@ async function handleModemConfig(
 
 	if (!modem.config || !modem.config.conn) {
 		logger.info(`Ignoring modem config for unconfigured modem ${msg.device}`);
-		logger.debug(modem.config);
+		logger.debug("Modem config", modem.config);
 		return;
 	}
 	const connUuid = modem.config.conn;
@@ -795,7 +797,7 @@ async function handleModemConfig(
 		typeof msg.network_type !== "string"
 	) {
 		logger.error(`Received invalid configuration for modem ${msg.device}`);
-		logger.debug(msg);
+		logger.debug("Invalid configuration message", msg);
 		return;
 	}
 
@@ -852,7 +854,7 @@ async function handleModemConfig(
 		logger.error(
 			`Failed to update NM connection ${modem.config.conn} for modem ${msg.device} to:`,
 		);
-		logger.debug(updatedConfig);
+		logger.debug("Failed modem config update", updatedConfig);
 	}
 
 	// Bring the connection down to reload the settings, and set the network types, if needed
