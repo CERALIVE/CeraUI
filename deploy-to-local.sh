@@ -34,6 +34,10 @@ echo "Installing and restarting service"
 # shellcheck disable=SC2029
 ssh "$SSH_TARGET" "cd $BELAUI_PATH; ./install_service.sh"
 
+echo "Installing Moblink Relay"
+# shellcheck disable=SC2029
+ssh "$SSH_TARGET" "cd $BELAUI_PATH; ./install-moblink-rust-relay.sh"
+
 # Kill any running belaUI
 echo "Killing belaUI"
 ssh "$SSH_TARGET" "pkill belaUI || true"
