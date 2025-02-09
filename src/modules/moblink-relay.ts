@@ -3,6 +3,7 @@ import type { Readable } from "node:stream";
 
 import { checkExecPath, checkExecPathSafe } from "../helpers/exec.ts";
 import { logger } from "../helpers/logger.ts";
+import { stableUuidFromString } from "../helpers/uuid.ts";
 import { getNetworkInterfaces } from "./network-interfaces.ts";
 import { setup } from "./setup.ts";
 
@@ -31,7 +32,7 @@ type RelayInterface = {
 	ip: string;
 };
 
-function spawnRelay(relayOptions: RelayOptions) {
+async function spawnRelay(relayOptions: RelayOptions) {
 	const {
 		name,
 		bindIpAddressDestination,
@@ -40,11 +41,18 @@ function spawnRelay(relayOptions: RelayOptions) {
 
 	checkExecPath(moblinkRelayExec);
 
+	const id = await stableUuidFromString(`belabox-${name}`);
+	logger.info(
+		`Starting Moblink relay ${name} [${id}] on ${bindIpAddressDestination}`,
+	);
+
 	const process = spawn(
 		moblinkRelayExec,
 		[
 			"--name",
 			name,
+			"--id",
+			id,
 			"--password",
 			streamerPassword,
 			"--bind-address",

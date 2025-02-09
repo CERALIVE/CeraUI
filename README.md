@@ -33,4 +33,3 @@
 - Add a way to configure the moblink relay password
 - Visualize the moblink relay status in the UI
 - Enabling/disabling Interfaces in the UI takes too long to take effect for the relays
-- Use stable UUIDs for the moblinks
