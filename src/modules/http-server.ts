@@ -60,7 +60,7 @@ export function initHttpServer() {
 
 export function startHttpServer() {
 	if (httpListenPorts.length === 0) {
-		logger.crit("HTTP server: no more ports left to try. Exiting...");
+		logger.error("HTTP server: no more ports left to try. Exiting...");
 		process.exit(1);
 	}
 

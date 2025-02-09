@@ -214,7 +214,7 @@ export function stop() {
 			return;
 		}
 
-		logger.crit("stop: BUG?: found both a timer and running processes");
+		logger.error("stop: BUG?: found both a timer and running processes");
 	}
 
 	let foundBelacoder = false;
@@ -240,7 +240,7 @@ export function stop() {
 	}
 
 	if (!foundBelacoder) {
-		logger.crit("stop: BUG?: belacoder not found, terminating all processes");
+		logger.error("stop: BUG?: belacoder not found, terminating all processes");
 		stopAll();
 	}
 }
