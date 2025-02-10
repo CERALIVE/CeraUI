@@ -7,8 +7,12 @@
 
 ## Set up on the belabox
 
+- Enable SSH for the default user (`user`) and connect via SSH
 - Enable SSH on boot to make things easier (`sudo systemctl enable ssh`)
-- Create a SSH key pair and install public key on the belabox, since the deploy script uses many separate ssh calls that would require you to type the password too many times (https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on-ubuntu-22-04). I added them for the root user (add to/create `/root/.ssh/authorized_keys`), but it might be possible to use the belabox user "user" instead.
+- Create an SSH key pair and install public key on the belabox, since the deploy script uses many separate ssh calls that would require you to type the password too many times (https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on-ubuntu-22-04)
+- Use `sudo su` to get root privileges and add to the authorized keys for the root user (add to/create `/root/.ssh/authorized_keys`: `mkdir -p /root/.ssh`, `echo "ssh-..." >> /root/.ssh/authorized_keys`).
+- Install rsync (`sudo apt install rsync`)
+- Install an editor (e.g. `sudo apt install nano`)
 - Edit the `/opt/belaUI/setup.json` and add the following lines to your existing setup to enable the moblink relay:
 ```json
   "moblink_relay_enabled": true,
