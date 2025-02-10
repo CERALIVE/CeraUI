@@ -129,7 +129,11 @@ function findDestinationInterfaces() {
 		const networkInterface = networkInterfaces[interfaceName];
 		if (!networkInterface) continue;
 
-		if (networkInterface.enabled && networkInterface.error === 0) {
+		if (
+			networkInterface.enabled &&
+			networkInterface.error === 0 &&
+			networkInterface.ip
+		) {
 			destinationInterfaces.add({
 				name: interfaceName,
 				ip: networkInterface.ip,

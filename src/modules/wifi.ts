@@ -424,14 +424,8 @@ async function wifiUpdateSavedConns() {
 				throw new Error("Failed to get connection fields");
 
 			const [mode, ssid, macTmp] = fields;
-			if (!ssid) continue;
-
-			if (macTmp === "") {
-				logger.error(
-					"Wifi connection does not have a mac address!",
-					mode,
-					uuid,
-				);
+			if (!ssid) {
+				logger.warn("Wifi connection does not have an SSID!", { mode, uuid });
 				continue;
 			}
 
