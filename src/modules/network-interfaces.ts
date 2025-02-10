@@ -41,8 +41,8 @@ import {
 import { wifiUpdateDevices } from "./wifi.ts";
 
 export type NetworkInterface = {
-	ip: string;
-	netmask: string;
+	ip?: string;
+	netmask?: string;
 	tp: number;
 	txb: number;
 	enabled: boolean;
@@ -84,6 +84,7 @@ function updateNetif() {
 		wiFiDeviceListStartUpdate();
 
 		const interfaces = stdout.split("\n\n");
+
 		for (const int of interfaces) {
 			try {
 				const name = int.split(":")[0] ?? "";
@@ -93,11 +94,9 @@ function updateNetif() {
 
 				const inetAddrMatch = int.match(/inet (\d+\.\d+\.\d+\.\d+)/);
 				const inetAddr = inetAddrMatch?.[1];
-				if (!inetAddr) continue;
 
 				const netmaskMatch = int.match(/netmask (\d+\.\d+\.\d+\.\d+)/);
 				const netmask = netmaskMatch?.[1];
-				if (!netmask) continue;
 
 				const flags = (int.match(/flags=\d+<([A-Z,]+)>/)?.[1] ?? "").split(",");
 				const isRunning = flags.includes("RUNNING");
@@ -138,7 +137,9 @@ function updateNetif() {
 				if (!netif[name] || netif[name].ip !== inetAddr) {
 					intsChanged = true;
 				}
-			} catch (err) {}
+			} catch (err) {
+				logger.error(`Error parsing ifconfig: ${err}`);
+			}
 		}
 
 		// Detect removed interfaces
@@ -154,7 +155,7 @@ function updateNetif() {
 			// Detect duplicate IP adddresses and set error status
 			for (const i in newInterfaces) {
 				const newInterface = newInterfaces[i];
-				if (!newInterface) continue;
+				if (!newInterface?.ip) continue;
 
 				clearNetifDup(newInterface);
 				const currentValue = intAddrs[newInterface.ip];
