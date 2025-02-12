@@ -277,9 +277,6 @@ function channelFromNM(band: string, channel: string | number) {
 		}
 	}
 
-	logger.warn(
-		`channelFromNM(): WARNING unknown NM channel (band: ${band}, channel: ${channel}`,
-	);
 	return "auto";
 }
 
@@ -330,12 +327,26 @@ async function handleHotspotConn(macAddr_: string | undefined, uuid: string) {
 	if (!macAddr) return;
 
 	const wifiInterface = wifiIfs[macAddr];
+	if (!wifiInterface) {
+		logger.warn("Can not update hotspot connection, interface not found");
+		return;
+	}
+
+	if (!canHotspot(wifiInterface)) {
+		logger.warn(
+			"Can not update hotspot connection, interface does not support hotspot",
+		);
+		return;
+	}
+
 	if (
-		!wifiInterface ||
-		!canHotspot(wifiInterface) ||
 		// Interface already has a different hotspot connection
-		(wifiInterface.hotspot.conn && wifiInterface.hotspot.conn !== uuid)
+		wifiInterface.hotspot.conn &&
+		wifiInterface.hotspot.conn !== uuid
 	) {
+		logger.warn(
+			"Can not update hotspot connection, interface already has an active connection",
+		);
 		return;
 	}
 
