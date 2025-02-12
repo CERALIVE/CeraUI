@@ -318,8 +318,10 @@ async function findMacAddressForConnection(uuid: string) {
 }
 
 async function handleHotspotConn(macAddr_: string | undefined, uuid: string) {
-	const macAddr = macAddr_ ?? (await findMacAddressForConnection(uuid));
-	if (!macAddr) return;
+	const macAddr = macAddr_ || (await findMacAddressForConnection(uuid));
+	if (!macAddr) {
+		return;
+	}
 
 	const wifiInterface = wifiIfs[macAddr];
 	if (!wifiInterface) {
