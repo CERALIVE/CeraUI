@@ -25,7 +25,7 @@
 		"check:tsc": "tsc",
 		"check:biome": "bun x --bun @biomejs/biome check ./src",
 		"build": "bun build --compile ./src/belaUI.ts --outfile ./dist/belaUI",
-		"build:linux-arm64": "bun build --compile --target=bun-linux-arm64 ./src/belaUI.ts --outfile ./dist/belaUI",
+		"build:linux-arm64": "bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 ./src/belaUI.ts --outfile ./dist/belaUI",
 		"copy": "cp -r ./public ./dist/"
 	},
 	"trustedDependencies": ["@biomejs/biome"]
