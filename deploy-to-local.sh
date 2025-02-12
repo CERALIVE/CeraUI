@@ -43,7 +43,8 @@ echo "Killing belaUI"
 ssh "$SSH_TARGET" "pkill belaUI || true"
 
 echo "Stop belaUI"
-ssh "$SSH_TARGET" "systemctl stop belaUI || true"
+ssh "$SSH_TARGET" "systemctl stop belaUI.socket || true"
+ssh "$SSH_TARGET" "systemctl stop belaUI.service || true"
 
 echo "Disable service/socket"
 ssh "$SSH_TARGET" "systemctl disable belaUI.socket || true"
