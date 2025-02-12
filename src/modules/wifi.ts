@@ -286,30 +286,25 @@ async function findMacAddressForConnection(uuid: string) {
 		await nmConnGetFields(uuid, ["connection.interface-name"] as const)
 	)?.[0];
 
-	for (const m in wifiIfs) {
-		const w = wifiIfs[m];
-
-		logger.debug("findMacAddressForConnection", w, connIfName, {
-			canHotspot: w && canHotspot(w),
-			hotspotConn: w && canHotspot(w) && w.hotspot.conn,
-			ifname: w?.ifname,
-		});
+	for (const macAddress in wifiIfs) {
+		const wifiInterface = wifiIfs[macAddress];
 
 		if (
-			!w ||
-			!canHotspot(w) ||
-			(w.hotspot.conn !== uuid && w.ifname !== connIfName)
+			!wifiInterface ||
+			!canHotspot(wifiInterface) ||
+			(wifiInterface.hotspot.conn !== uuid &&
+				wifiInterface.ifname !== connIfName)
 		) {
 			continue;
 		}
 
 		// If we can match the connection against a certain interface
-		if (!w.hotspot.conn) {
+		if (!wifiInterface.hotspot.conn) {
 			// And if this interface doesn't already have a hotspot connection
 			// Try to update the connection to match the MAC address
-			if (await nmConnSetWifiMac(uuid, m)) {
-				w.hotspot.conn = uuid;
-				return m;
+			if (await nmConnSetWifiMac(uuid, macAddress)) {
+				wifiInterface.hotspot.conn = uuid;
+				return macAddress;
 			}
 		} else {
 			// If the interface already has a hotspot connection, then disable autoconnect
