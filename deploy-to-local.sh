@@ -62,6 +62,3 @@ ssh "$SSH_TARGET" "systemctl start belaUI.service"
 
 echo "Watch belaUI"
 ssh "$SSH_TARGET" "journalctl -u belaUI -n 200 -f"
-
-#echo "Starting belaUI"
-#ssh "$SSH_TARGET" "cd $BELAUI_PATH; ./belaUI"
