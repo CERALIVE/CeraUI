@@ -25,3 +25,7 @@ ssh "$SSH_TARGET" "apt-get install --reinstall belaui"
 echo "Start service"
 ssh "$SSH_TARGET" "systemctl start belaUI"
 
+echo "Enable service and socket"
+ssh "$SSH_TARGET" "systemctl enable belaUI.service"
+ssh "$SSH_TARGET" "systemctl enable belaUI.socket"
+
