@@ -463,9 +463,10 @@ async function registerModem(id: number) {
 
 	// Get all the required info for the modem
 	const modemInfo = await mmGetModem(id);
-	logger.debug("Modem info for modem", id, modemInfo);
-
-	if (!modemInfo) return;
+	if (!modemInfo) {
+		logger.error(`Failed to get modem info for modem ${id}`);
+		return;
+	}
 
 	let simInfo: SimInfo | undefined;
 	let config: ModemConfig | undefined;
@@ -498,8 +499,10 @@ async function registerModem(id: number) {
 			break;
 		}
 	}
-	logger.debug("Modem ifname", ifname);
-	if (!ifname) return;
+	if (!ifname) {
+		logger.error(`Failed to find the network interface for modem ${id}`);
+		return;
+	}
 
 	// Find the current network type
 	const networkType = modemInfo["modem.generic.current-modes"]
@@ -623,8 +626,8 @@ export function modemsBuildMsg(
 			status,
 		};
 
-		const full = modemsFullState === undefined || modemsFullState[i];
-		if (full) {
+		const sendFullStatus = modemsFullState === undefined || modemsFullState[i];
+		if (sendFullStatus) {
 			const fullState: ModemsResponseModemFull = {
 				ifname: modem.ifname,
 				name: modem.name,
@@ -652,6 +655,8 @@ export function modemsBuildMsg(
 
 			Object.assign(entry, fullState);
 		}
+
+		msg[i] = entry;
 	}
 
 	return msg;
@@ -721,7 +726,10 @@ export async function updateModems() {
 		modem.removed = undefined;
 
 		const modemInfo = await mmGetModem(m);
-		if (!modemInfo) continue;
+		if (!modemInfo) {
+			logger.error(`Failed to get modem info for modem ${m}`);
+			continue;
+		}
 
 		modemUpdateStatus(modemInfo, modem);
 
@@ -729,11 +737,9 @@ export async function updateModems() {
 		if (
 			!modem.inhibit &&
 			!modem.is_scanning &&
-			modem.status &&
-			(modem.status.connection === "registered" ||
-				modem.status.connection === "enabled") &&
-			modem.config &&
-			modem.config.conn
+			(modem.status?.connection === "registered" ||
+				modem.status?.connection === "enabled") &&
+			modem.config?.conn
 		) {
 			// Don't try to activate NM connections that are already active
 			const nmConnection = await nmConnGetFields(modem.config.conn, [
