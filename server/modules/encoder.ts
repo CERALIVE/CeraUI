@@ -15,7 +15,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 
 import killall from "../helpers/killall.ts";

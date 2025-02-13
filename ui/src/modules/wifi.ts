@@ -604,7 +604,7 @@ export function handleWifiResult(msg: {
 	if (msg.connect !== undefined) {
 		const wifiManagerId = `#${wifiFindCardId(msg.device)}`;
 		$(wifiManagerId).find(".connecting").addClass("d-none");
-		if (msg.connect === false) {
+		if (!msg.connect) {
 			$(wifiManagerId).find(".connect-error").removeClass("d-none");
 		}
 	} else if (msg.new) {

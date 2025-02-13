@@ -185,7 +185,7 @@ export function notificationExists(name: string) {
 export function notificationSendPersistent(conn: WebSocket, isAuthed = false) {
 	const notifications = [];
 	for (const n of persistentNotifications) {
-		if (!isAuthed && n[1].authedOnly !== false) continue;
+		if (!isAuthed && n[1].authedOnly) continue;
 
 		const remainingDuration = _notificationIsLive(n[1]);
 		if (remainingDuration !== false) {

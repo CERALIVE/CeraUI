@@ -39,12 +39,12 @@ import fs from "node:fs";
 
 import WebSocket, { type RawData } from "ws";
 
+import { logger } from "../helpers/logger.ts";
 import { validatePortNo } from "../helpers/number.ts";
 import { getms } from "../helpers/time.ts";
 import { extractMessage } from "../helpers/types.ts";
 
-import { logger } from "../helpers/logger.ts";
-import { addAuthedSocket, deleteAuthedSocket } from "./auth.ts";
+import { addAuthedSocket } from "./auth.ts";
 import { getConfig, saveConfig } from "./config.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { queueUpdateGw } from "./gateways.ts";

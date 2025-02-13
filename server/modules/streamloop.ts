@@ -68,7 +68,7 @@ function spawnStreamingLoop(
 		});
 	}
 
-	childProcess.on("exit", (code) => {
+	childProcess.on("exit", () => {
 		childProcess.restartTimer = setTimeout(() => {
 			// remove the old process from the list
 			removeProc(childProcess);
