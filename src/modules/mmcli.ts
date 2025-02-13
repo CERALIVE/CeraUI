@@ -33,11 +33,14 @@ const mmcliBinary = setup.mmcli_binary ?? "mmcli";
 const mmcliKeyPattern = /\.length$/;
 const mmcliValuePattern = /\.value\[\d+]$/;
 
-function mmcliParseSep(input: string) {
-	const output: Record<string, Array<string>> = {};
+export function mmcliParseSep(input: string) {
+	const output: Record<string, string | Array<string>> = {};
 	for (let line of input.split("\n")) {
 		line = line.replace(/\\\d+/g, ""); // strips special escaped characters
-		if (!line) continue;
+		if (!line) {
+			logger.error("mmcliParseSep: empty line");
+			continue;
+		}
 
 		const kv = line.split(/:(.*)/); // splits on the first ':' only
 		if (kv.length !== 3) {
@@ -46,20 +49,33 @@ function mmcliParseSep(input: string) {
 		}
 		let key = kv[0]?.trim();
 		const value = kv[1]?.trim();
-		if (key === undefined || value === undefined) continue;
+		if (key === undefined || value === undefined) {
+			logger.error(`mmcliParseSep: error parsing line ${line}`);
+			continue;
+		}
 
 		// skip empty values
-		if (value === "--") continue;
+		if (value === "--") {
+			logger.error(`mmcliParseSep: empty value for key ${key} (skipped)`);
+			continue;
+		}
 
 		// Parse mmcli arrays
 		if (key.match(mmcliKeyPattern)) {
 			key = key.replace(mmcliKeyPattern, "");
 			output[key] = [];
-		}
-
-		if (key.match(mmcliValuePattern)) {
+		} else if (key.match(mmcliValuePattern)) {
 			key = key.replace(mmcliValuePattern, "");
-			output[key]?.push(value);
+			output[key] ??= [];
+
+			const target = output[key];
+			if (Array.isArray(target)) {
+				target.push(value);
+			} else {
+				logger.error(`mmcliParseSep: mixed array and non-array for key ${key}`);
+			}
+		} else {
+			output[key] = value;
 		}
 	}
 
@@ -205,8 +221,9 @@ export async function mmNetworkScan(id: number, timeout = 240) {
 			String(id),
 			"--3gpp-scan",
 		]);
-		const networks =
-			mmcliParseSep(result.stdout.toString())["modem.3gpp.scan-networks"] ?? [];
+		const networks = (mmcliParseSep(result.stdout.toString())[
+			"modem.3gpp.scan-networks"
+		] ?? []) as Array<string>;
 		return networks.map((n) => {
 			const info = n.split(/, */);
 			const output: Record<string, string> = {};
