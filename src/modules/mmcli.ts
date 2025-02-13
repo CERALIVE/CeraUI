@@ -38,25 +38,23 @@ export function mmcliParseSep(input: string) {
 	for (let line of input.split("\n")) {
 		line = line.replace(/\\\d+/g, ""); // strips special escaped characters
 		if (!line) {
-			logger.error("mmcliParseSep: empty line");
 			continue;
 		}
 
 		const kv = line.split(/:(.*)/); // splits on the first ':' only
 		if (kv.length !== 3) {
-			logger.error(`mmcliParseSep: error parsing line ${line}`);
+			logger.warn(`mmcliParseSep: error parsing line ${line}`);
 			continue;
 		}
 		let key = kv[0]?.trim();
 		const value = kv[1]?.trim();
 		if (key === undefined || value === undefined) {
-			logger.error(`mmcliParseSep: error parsing line ${line}`);
+			logger.warn(`mmcliParseSep: error parsing line ${line}`);
 			continue;
 		}
 
 		// skip empty values
 		if (value === "--") {
-			logger.error(`mmcliParseSep: empty value for key ${key} (skipped)`);
 			continue;
 		}
 
@@ -72,7 +70,7 @@ export function mmcliParseSep(input: string) {
 			if (Array.isArray(target)) {
 				target.push(value);
 			} else {
-				logger.error(`mmcliParseSep: mixed array and non-array for key ${key}`);
+				logger.warn(`mmcliParseSep: mixed array and non-array for key ${key}`);
 			}
 		} else {
 			output[key] = value;
