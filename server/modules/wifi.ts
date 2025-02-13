@@ -146,7 +146,7 @@ export type WifiMessage = {
 		| WifiHotspotMessage;
 };
 
-type WifiNetwork = {
+export type WifiNetwork = {
 	active: boolean;
 	ssid: string;
 	signal: number;
@@ -185,7 +185,7 @@ const wifiIfs: Record<string, WifiInterface> = {};
 let wifiIdToHwAddr: Record<string, string> = {};
 
 /* Builds the WiFi status structure sent over the network from the <wd> structures */
-type WifiInterfaceResponseMessage = Pick<
+export type WifiInterfaceResponseMessage = Pick<
 	BaseWifiInterface,
 	"ifname" | "conn" | "hw" | "saved"
 > & {

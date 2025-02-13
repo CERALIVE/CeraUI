@@ -1,7 +1,22 @@
-auth_tokens.json
-dns_cache.json
 node_modules
-package-lock.json
-/dist/belaUI
-/dist/public
+/ui/dist/
+/ui/dist-ssr/
+/dist/belaUI/
+/dist/public/
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# BelaUI specific runtime files
+/auth_tokens.json
+/dns_cache.json
 /debug.log

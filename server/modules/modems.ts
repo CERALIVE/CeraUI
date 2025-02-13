@@ -575,11 +575,11 @@ type ModemsResponseModemStatus = {
 	roaming: boolean;
 };
 
-type ModemResponseModemBase = {
+export type ModemsResponseModemBase = {
 	status?: ModemsResponseModemStatus;
 };
 
-type ModemsResponseModemFull = {
+export type ModemsResponseModemFull = ModemsResponseModemBase & {
 	ifname: string;
 	name: string;
 	network_type: {
@@ -598,9 +598,9 @@ type ModemsResponseModemFull = {
 	available_networks?: Record<string, AvailableNetwork>;
 };
 
-type ModemsResponseMessageEntry =
-	| ModemResponseModemBase
-	| (ModemResponseModemBase & ModemsResponseModemFull);
+export type ModemsResponseMessageEntry =
+	| ModemsResponseModemBase
+	| ModemsResponseModemFull;
 
 type ModemsResponseMessage = Record<string, ModemsResponseMessageEntry>;
 

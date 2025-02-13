@@ -9,24 +9,36 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "1.9.4",
+		"@eslint/js": "^9.20.0",
 		"@types/bcrypt": "^5.0.2",
 		"@types/bun": "^1.2.2",
 		"@types/finalhandler": "^1.2.3",
 		"@types/serve-static": "^1.15.7",
 		"@types/ws": "^8.5.14",
+		"eslint": "^9.20.1",
+		"globals": "^15.15.0",
 		"npm-run-all2": "^7.0.2",
-		"typescript": "^5.7.3"
+		"typescript": "^5.7.3",
+		"typescript-eslint": "^8.24.0"
 	},
 	"scripts": {
-		"dev": "bun run ./src/belaUI.ts",
-		"format": "bun x --bun @biomejs/biome format --write ./src ./public/script.js ./public/style.css",
-		"fix": "bun x --bun @biomejs/biome check --write ./src",
+		"build": "bun x --bun run-p build:ui build:server",
+		"build:linux-arm64": "bun x --bun run-p build:ui build:server:linux-arm64",
+		"build:server": "bun build --compile server/belaUI.ts --outfile ./dist/belaUI",
+		"build:server:linux-arm64": "bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 server/belaUI.ts --outfile ./dist/belaUI",
+		"build:ui": "cd ui && bun x --bun vite build && cd .. && bun run copy",
 		"check": "run-p check:*",
+		"check:biome": "bun x --bun @biomejs/biome check server ui/src",
 		"check:tsc": "tsc",
-		"check:biome": "bun x --bun @biomejs/biome check ./src",
-		"build": "bun build --compile ./src/belaUI.ts --outfile ./dist/belaUI",
-		"build:linux-arm64": "bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 ./src/belaUI.ts --outfile ./dist/belaUI",
-		"copy": "cp -r ./public ./dist/"
+		"copy": "run-p copy:*",
+		"copy:ui": "mkdir -p ./dist/public && cp -r ./ui/dist/* ./dist/public/",
+		"dev": "run-p dev:*",
+		"dev:server": "bun run server/belaUI.ts",
+		"dev:ui": "cd ui; bun x --bun vite",
+		"fix": "bun x --bun @biomejs/biome check --write server",
+		"format": "bun x --bun @biomejs/biome format --write server ./public/script.js ./public/style.css",
+		"lint": "bun x --bun eslint .",
+		"preview": "cd ui; bun x --bun vite preview"
 	},
 	"trustedDependencies": ["@biomejs/biome"]
 }

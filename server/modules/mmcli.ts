@@ -207,7 +207,12 @@ export async function mmSetNetworkTypes(
 export type NetworkScanResult = {
 	"operator-code": string;
 	"operator-name": string;
-	availability?: "unavailable" | "available" | "current" | "unknown";
+	availability?:
+		| "unavailable"
+		| "available"
+		| "current"
+		| "unknown"
+		| "forbidden";
 };
 
 export async function mmNetworkScan(id: number, timeout = 240) {
