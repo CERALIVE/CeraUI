@@ -471,8 +471,6 @@ async function registerModem(id: number) {
 	let simInfo: SimInfo | undefined;
 	let config: ModemConfig | undefined;
 	if (modemInfo["modem.generic.sim"]) {
-		logger.debug("Modem has SIM", modemInfo["modem.generic.sim"]);
-
 		const simId = modemInfo["modem.generic.sim"].match(
 			/\/org\/freedesktop\/ModemManager1\/SIM\/(\d+)/,
 		) as [string, string] | null;
