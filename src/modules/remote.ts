@@ -49,7 +49,7 @@ import { getConfig, saveConfig } from "./config.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { queueUpdateGw } from "./gateways.ts";
 import { ACTIVE_TO } from "./shared.ts";
-import { sendInitialStatus } from "./status.ts";
+import { type StatusResponseMessage, sendInitialStatus } from "./status.ts";
 import { writeTextFile } from "./text-files.ts";
 import {
 	broadcastMsg,
@@ -93,12 +93,16 @@ function handleRemote(conn: WebSocket, msg: RemoteMessage) {
 				if (value === true) {
 					addAuthedSocket(conn);
 					sendInitialStatus(conn);
-					broadcastMsgLocal("status", { remote: true }, getms() - ACTIVE_TO);
+					broadcastMsgLocal(
+						"status",
+						{ remote: true } satisfies StatusResponseMessage,
+						getms() - ACTIVE_TO,
+					);
 					logger.info("remote: authenticated");
 				} else {
 					broadcastMsgLocal(
 						"status",
-						{ remote: { error: "key" } },
+						{ remote: { error: "key" } } satisfies StatusResponseMessage,
 						getms() - ACTIVE_TO,
 					);
 					remoteStatusHandled = true;

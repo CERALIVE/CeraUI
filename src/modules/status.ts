@@ -35,6 +35,18 @@ import { getIsStreaming } from "./streaming.ts";
 import { buildMsg } from "./websocket-server.ts";
 import { wifiBuildMsg } from "./wifi.ts";
 
+export type StatusResponseMessage = {
+	is_streaming?: ReturnType<typeof getIsStreaming>;
+	available_updates?: ReturnType<typeof getAvailableUpdates>;
+	updating?: ReturnType<typeof getSoftUpdateStatus>;
+	ssh?: ReturnType<typeof getSshStatus>;
+	wifi?: ReturnType<typeof wifiBuildMsg>;
+	modems?: ReturnType<typeof modemsBuildMsg>;
+	asrcs?: Array<keyof ReturnType<typeof getAudioDevices>>;
+	set_password?: boolean;
+	remote?: true | { error: string };
+};
+
 export function sendStatus(conn: WebSocket) {
 	conn.send(
 		buildMsg("status", {
@@ -45,7 +57,7 @@ export function sendStatus(conn: WebSocket) {
 			wifi: wifiBuildMsg(),
 			modems: modemsBuildMsg(),
 			asrcs: Object.keys(getAudioDevices()),
-		}),
+		} satisfies StatusResponseMessage),
 	);
 }
 

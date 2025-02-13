@@ -45,7 +45,7 @@ import { notificationSendPersistent } from "./notifications.ts";
 import { getRemoteWebSocket, setRemoteKey } from "./remote.ts";
 import { isUpdating, startSoftwareUpdate } from "./software-updates.ts";
 import { resetSshPassword, startStopSsh } from "./ssh.ts";
-import { sendStatus } from "./status.ts";
+import { type StatusResponseMessage, sendStatus } from "./status.ts";
 import { type StartMessage, getIsStreaming } from "./streaming.ts";
 import { start, stop } from "./streamloop.ts";
 import { type WifiMessage, handleWifi } from "./wifi.ts";
@@ -93,7 +93,11 @@ export function initWebSocketServer() {
 		markConnectionActive(conn);
 
 		if (!getPasswordHash()) {
-			conn.send(buildMsg("status", { set_password: true }));
+			conn.send(
+				buildMsg("status", {
+					set_password: true,
+				} satisfies StatusResponseMessage),
+			);
 		}
 		notificationSendPersistent(conn, false);
 

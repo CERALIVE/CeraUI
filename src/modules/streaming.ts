@@ -36,6 +36,7 @@ import { notificationSend } from "./notifications.ts";
 import { removeBitrateOverlay, searchPipelines } from "./pipelines.ts";
 import { convertManualToRemoteRelay, getRelays } from "./remote.ts";
 import { resolveSrtla } from "./srtla.ts";
+import type { StatusResponseMessage } from "./status.ts";
 import {
 	broadcastMsg,
 	buildMsg,
@@ -94,7 +95,11 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 	}
 
 	if (!updateStatus(false)) {
-		conn.send(buildMsg("status", { is_streaming: false }));
+		conn.send(
+			buildMsg("status", {
+				is_streaming: false,
+			} satisfies StatusResponseMessage),
+		);
 	}
 
 	return false;
