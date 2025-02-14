@@ -24,7 +24,7 @@ import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { queueUpdateGw } from "./gateways.ts";
 import { getNetworkInterfaces } from "./network-interfaces.ts";
 import { setup } from "./setup.ts";
-import { startError } from "./streaming.ts";
+import { getIsStreaming, startError } from "./streaming.ts";
 import { getSocketSenderId } from "./websocket-server.ts";
 
 export async function resolveSrtla(addr: string, conn: WebSocket) {
@@ -76,5 +76,8 @@ export function genSrtlaIpList() {
 
 export function updateSrtlaIps() {
 	genSrtlaIpList();
-	killall(["-HUP", "srtla_send"]);
+
+	if (getIsStreaming()) {
+		killall(["-HUP", "srtla_send"]);
+	}
 }

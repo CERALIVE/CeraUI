@@ -131,14 +131,17 @@ export async function nmConnSetFields(
 	return false;
 }
 
-export async function nmConnSetWifiMac(uuid: string, mac: string) {
-	if (!mac) return false;
+export async function nmConnSetWifiMacAddress(
+	uuid: string,
+	macAddress: string,
+) {
+	if (!macAddress) return false;
 
 	return nmConnSetFields(uuid, {
 		// FIXME: This should be an empty string for auto but bun currently drops empty arguments
 		//      see https://github.com/oven-sh/bun/pull/17269
 		//"connection.interface-name": "",
-		"802-11-wireless.mac-address": mac,
+		"802-11-wireless.mac-address": macAddress,
 	});
 }
 

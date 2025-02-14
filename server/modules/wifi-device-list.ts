@@ -24,80 +24,78 @@
   to the periodic ifconfig polling that belaUI is already doing
 */
 
-type WifiDeviceHardwareAddress = {
-	hwAddr: string;
-	inetAddr: string | null;
+import type { MacAddress } from "./wifi-interfaces.ts";
+
+type WifiDeviceInfo = {
+	macAddress: MacAddress;
+	inetAddress: string | null;
 	removed?: boolean;
 };
 
-const wifiDeviceHwAddr: Record<string, WifiDeviceHardwareAddress> = {};
-let wiFiDeviceListIsModified = false;
-let wiFiDeviceListIsUpdating = false;
+const wifiDevices: Record<string, WifiDeviceInfo> = {};
+let wifiDeviceListIsModified = false;
+let wifiDeviceListIsUpdating = false;
 
-export function wiFiDeviceListStartUpdate() {
-	if (wiFiDeviceListIsUpdating) {
+export function wifiDeviceListStartUpdate() {
+	if (wifiDeviceListIsUpdating) {
 		throw "Called while an update was already in progress";
 	}
 
-	for (const addr of Object.values(wifiDeviceHwAddr)) {
-		addr.removed = true;
+	for (const macAddress of Object.values(wifiDevices)) {
+		macAddress.removed = true;
 	}
-	wiFiDeviceListIsUpdating = true;
-	wiFiDeviceListIsModified = false;
+	wifiDeviceListIsUpdating = true;
+	wifiDeviceListIsModified = false;
 }
 
-export function wiFiDeviceListAdd(
+export function wifiDeviceListAdd(
 	ifname: string,
-	hwAddr: string,
-	inetAddr: string | null = null,
+	macAddress: string,
+	inetAddress: string | null = null,
 ) {
-	if (!wiFiDeviceListIsUpdating) {
+	if (!wifiDeviceListIsUpdating) {
 		throw "Called without starting an update";
 	}
 
-	if (wifiDeviceHwAddr[ifname]) {
-		if (wifiDeviceHwAddr[ifname].hwAddr !== hwAddr) {
-			wifiDeviceHwAddr[ifname].hwAddr = hwAddr;
-			wiFiDeviceListIsModified = true;
+	if (wifiDevices[ifname]) {
+		if (wifiDevices[ifname].macAddress !== macAddress) {
+			wifiDevices[ifname].macAddress = macAddress;
+			wifiDeviceListIsModified = true;
 		}
-		if (wifiDeviceHwAddr[ifname].inetAddr !== inetAddr) {
-			wifiDeviceHwAddr[ifname].inetAddr = inetAddr;
-			wiFiDeviceListIsModified = true;
+		if (wifiDevices[ifname].inetAddress !== inetAddress) {
+			wifiDevices[ifname].inetAddress = inetAddress;
+			wifiDeviceListIsModified = true;
 		}
-		wifiDeviceHwAddr[ifname].removed = false;
+		wifiDevices[ifname].removed = false;
 	} else {
-		wifiDeviceHwAddr[ifname] = {
-			hwAddr,
-			inetAddr,
+		wifiDevices[ifname] = {
+			macAddress: macAddress,
+			inetAddress: inetAddress,
 		};
-		wiFiDeviceListIsModified = true;
+		wifiDeviceListIsModified = true;
 	}
 }
 
-export function wiFiDeviceListEndUpdate() {
-	if (!wiFiDeviceListIsUpdating) {
+export function wifiDeviceListEndUpdate() {
+	if (!wifiDeviceListIsUpdating) {
 		throw "Called without starting an update";
 	}
 
-	for (const i in wifiDeviceHwAddr) {
-		if (wifiDeviceHwAddr[i]?.removed) {
-			delete wifiDeviceHwAddr[i];
-			wiFiDeviceListIsModified = true;
+	for (const i in wifiDevices) {
+		if (wifiDevices[i]?.removed) {
+			delete wifiDevices[i];
+			wifiDeviceListIsModified = true;
 		}
 	}
 
-	wiFiDeviceListIsUpdating = false;
-	return wiFiDeviceListIsModified;
+	wifiDeviceListIsUpdating = false;
+	return wifiDeviceListIsModified;
 }
 
-export function wifiDeviceListGetHwAddr(ifname: string) {
-	if (wifiDeviceHwAddr[ifname]) {
-		return wifiDeviceHwAddr[ifname].hwAddr;
-	}
+export function wifiDeviceListGetMacAddress(ifname: string) {
+	return wifiDevices[ifname]?.macAddress;
 }
 
-export function wifiDeviceListGetInetAddr(ifname: string) {
-	if (wifiDeviceHwAddr[ifname]) {
-		return wifiDeviceHwAddr[ifname].inetAddr;
-	}
+export function wifiDeviceListGetInetAddress(ifname: string) {
+	return wifiDevices[ifname]?.inetAddress;
 }

@@ -31,14 +31,13 @@ import {
 } from "./notifications.ts";
 import { ACTIVE_TO } from "./shared.ts";
 import { updateSrtlaIps } from "./srtla.ts";
-import { getIsStreaming } from "./streaming.ts";
 import { broadcastMsg, buildMsg } from "./websocket-server.ts";
 import {
-	wiFiDeviceListAdd,
-	wiFiDeviceListEndUpdate,
-	wiFiDeviceListStartUpdate,
+	wifiDeviceListAdd,
+	wifiDeviceListEndUpdate,
+	wifiDeviceListStartUpdate,
 } from "./wifi-device-list.ts";
-import { wifiUpdateDevices } from "./wifi.ts";
+import { wifiUpdateDevices } from "./wifi-interfaces.ts";
 
 export type NetworkInterface = {
 	ip?: string;
@@ -81,7 +80,7 @@ function updateNetif() {
 		let intsChanged = false;
 		const newInterfaces: Record<string, NetworkInterface> = {};
 
-		wiFiDeviceListStartUpdate();
+		wifiDeviceListStartUpdate();
 
 		const interfaces = stdout.split("\n\n");
 
@@ -105,7 +104,7 @@ function updateNetif() {
 				if (name?.match("^wlan")) {
 					const hwAddr = int.match(/ether ([0-9a-f:]+)/);
 					if (hwAddr?.[1]) {
-						wiFiDeviceListAdd(name, hwAddr[1], isRunning ? inetAddr : null);
+						wifiDeviceListAdd(name, hwAddr[1], isRunning ? inetAddr : null);
 					}
 				}
 
@@ -191,7 +190,7 @@ function updateNetif() {
 			}
 		}
 
-		if (wiFiDeviceListEndUpdate()) {
+		if (wifiDeviceListEndUpdate()) {
 			logger.info("updated wifi devices");
 			// a delay seems to be needed before NM registers new devices
 			setTimeout(wifiUpdateDevices, 1000);
@@ -201,10 +200,7 @@ function updateNetif() {
 
 		if (intsChanged) {
 			updateMoblinkRelayInterfaces();
-
-			if (getIsStreaming()) {
-				updateSrtlaIps();
-			}
+			updateSrtlaIps();
 		}
 
 		broadcastMsg("netif", netIfBuildMsg(), getms() - ACTIVE_TO);
@@ -324,9 +320,7 @@ export function handleNetif(
 		}
 
 		int.enabled = msg.enabled;
-		if (getIsStreaming()) {
-			updateSrtlaIps();
-		}
+		updateSrtlaIps();
 	}
 
 	conn.send(buildMsg("netif", netIfBuildMsg()));
