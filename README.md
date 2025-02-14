@@ -40,7 +40,7 @@ pair: https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on
 
 ## Development
 
-## Install dependencies
+### Install dependencies
 
 To install the dependencies, you can use the following command:
 
@@ -49,7 +49,7 @@ bun install
 cd ui; bun install; cd ..
 ```
 
-## Run locally
+### Run locally
 
 Local development is not really supported. Ideally you have a BELABOX to test changes.
 
@@ -65,7 +65,7 @@ To run the server locally, you can use the following command:
 bun run dev:server
 ```
 
-## Build for production
+### Build for production
 
 To build the UI for production, you can use the following command:
 
@@ -73,7 +73,7 @@ To build the UI for production, you can use the following command:
 bun run build
 ```
 
-## To update the moblink-rust-relay you can run the following command:
+### To update the moblink-rust-relay you can run the following command:
 
 ```bash
 bun run fetch-moblink-relay
