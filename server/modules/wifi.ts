@@ -40,7 +40,7 @@ import {
 	getSocketSenderId,
 } from "./websocket-server.ts";
 import {
-	getWifiInterfaceForMacAddress,
+	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
 	wifiRescan,
 	wifiScheduleScanUpdates,
@@ -282,7 +282,7 @@ function wifiNew(conn: WebSocket, msg: WifiNewMessage["new"]) {
 	const macAddress = getMacAddressForWifiInterface(msg.device);
 	if (!macAddress) return;
 
-	const wifiInterface = getWifiInterfaceForMacAddress(macAddress);
+	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) return;
 
 	const args = [

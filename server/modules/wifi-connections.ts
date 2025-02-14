@@ -22,12 +22,25 @@ import { wifiBroadcastState } from "./wifi.ts";
 
 const wifiInterfacesByMacAddress: Record<MacAddress, WifiInterface> = {};
 
-export function getWifiInterfaceForMacAddress(macAddress: MacAddress) {
+export function getWifiInterfaceByMacAddress(macAddress: MacAddress) {
 	return wifiInterfacesByMacAddress[macAddress];
 }
 
-export function getWifiInterfacesByMacAddress() {
+export function getWifiInterfacesByMacAddress(): Readonly<
+	Record<MacAddress, WifiInterface>
+> {
 	return wifiInterfacesByMacAddress;
+}
+
+export function removeWifiInterface(macAddress: MacAddress) {
+	delete wifiInterfacesByMacAddress[macAddress];
+}
+
+export function addWifiInterface(
+	macAddress: MacAddress,
+	wifiInterface: WifiInterface,
+) {
+	wifiInterfacesByMacAddress[macAddress] = wifiInterface;
 }
 
 export async function wifiUpdateScanResult() {

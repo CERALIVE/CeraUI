@@ -37,7 +37,7 @@ import {
 } from "./network-manager.ts";
 import { buildMsg, getSocketSenderId } from "./websocket-server.ts";
 import {
-	getWifiInterfaceForMacAddress,
+	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
 	wifiRescan,
 } from "./wifi-connections.ts";
@@ -87,7 +87,7 @@ export async function wifiHotspotStart(
 	const macAddress = getMacAddressForWifiInterface(msg.device);
 	if (!macAddress) return;
 
-	const wifiInterface = getWifiInterfaceForMacAddress(macAddress);
+	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) return;
 	if (!canHotspot(wifiInterface)) return; // hotspot not supported, nothing to do
 
@@ -161,7 +161,7 @@ export async function wifiHotspotStop(
 	const macAddress = getMacAddressForWifiInterface(msg.device);
 	if (!macAddress) return;
 
-	const wifiInterface = getWifiInterfaceForMacAddress(macAddress);
+	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) return;
 	if (!isHotspot(wifiInterface)) return; // not in hotspot mode, nothing to do
 
@@ -256,7 +256,7 @@ export async function wifiHotspotConfig(
 	const macAddress = getMacAddressForWifiInterface(msg.device);
 	if (!macAddress) return;
 
-	const wifiInterface = getWifiInterfaceForMacAddress(macAddress);
+	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) return;
 	if (!isHotspot(wifiInterface)) return; // Make sure the interface is already in hotspot mode
 
@@ -395,7 +395,7 @@ export async function handleHotspotConn(
 		return;
 	}
 
-	const wifiInterface = getWifiInterfaceForMacAddress(macAddress);
+	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) {
 		logger.warn("Can not update hotspot connection, interface not found");
 		return;

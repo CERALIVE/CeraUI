@@ -27,7 +27,10 @@ import {
 import { nmDeviceProp, nmDevices, nmcliParseSep } from "./network-manager.ts";
 import { updateSrtlaIps } from "./srtla.ts";
 import {
+	addWifiInterface,
+	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
+	removeWifiInterface,
 	wifiScheduleScanUpdates,
 	wifiUpdateScanResult,
 } from "./wifi-connections.ts";
@@ -88,8 +91,7 @@ export async function wifiUpdateDevices() {
 	networkDevices.sort();
 
 	// mark all WiFi adapters as removed
-	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
-	for (const wifiInterface of Object.values(wifiInterfacesByMacAddress)) {
+	for (const wifiInterface of Object.values(getWifiInterfacesByMacAddress())) {
 		wifiInterface.removed = true;
 	}
 
@@ -118,7 +120,7 @@ export async function wifiUpdateDevices() {
 			const macAddress = wifiDeviceListGetMacAddress(ifname);
 			if (!macAddress) continue;
 
-			const wifiInterface = wifiInterfacesByMacAddress[macAddress];
+			const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 
 			if (wifiInterface) {
 				// the interface is still available
@@ -168,10 +170,10 @@ export async function wifiUpdateDevices() {
 				}
 				newDevices = true;
 				statusChange = true;
-				wifiInterfacesByMacAddress[macAddress] = newInterface;
+				addWifiInterface(macAddress, newInterface);
 			}
 
-			const updatedInterface = wifiInterfacesByMacAddress[macAddress];
+			const updatedInterface = getWifiInterfaceByMacAddress(macAddress);
 			if (updatedInterface) {
 				wifiIdToMacAddress[updatedInterface.id] = macAddress;
 			}
@@ -185,10 +187,11 @@ export async function wifiUpdateDevices() {
 	}
 
 	// delete removed adapters
+	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
 	for (const i in wifiInterfacesByMacAddress) {
 		const wifiInterface = wifiInterfacesByMacAddress[i];
 		if (wifiInterface?.removed) {
-			delete wifiInterfacesByMacAddress[i];
+			removeWifiInterface(i);
 			statusChange = true;
 		}
 	}
@@ -208,11 +211,12 @@ export async function wifiUpdateDevices() {
 
 		// Mark any WiFi hotspot interfaces as unavailable for bonding
 		let hotspotCount = 0;
-		const netif = getNetworkInterfaces();
+		const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
+		const networkInterfaces = getNetworkInterfaces();
 		for (const i in wifiInterfacesByMacAddress) {
 			const wifiInterface = wifiInterfacesByMacAddress[i];
 			if (wifiInterface && isHotspot(wifiInterface)) {
-				const n = netif[wifiInterface.ifname];
+				const n = networkInterfaces[wifiInterface.ifname];
 				if (!n) continue;
 				if (n.error & NETIF_ERR_HOTSPOT) continue;
 
