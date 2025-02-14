@@ -37,7 +37,7 @@ export let ws: WebSocket | null = null;
 const websocketHost =
 	import.meta.env.VITE_WEBSOCKET_HOST ?? window.location.host;
 
-console.log("!!! Connecting to ws://" + websocketHost);
+console.log(`!!! Connecting to ws://${websocketHost}`);
 
 function tryConnect() {
 	const c = new WebSocket(`ws://${websocketHost}`);
