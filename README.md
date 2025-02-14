@@ -38,6 +38,10 @@ pair: https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on
 - Run the deployment script (`./deploy-to-local.sh`), if necessary change the host or user (`SSH_TARGET`), e.g.
   `SSH_TARGET=root@192.168.100.100`.
 
+## Reset to default belaUI
+
+To reset the BELABOX to the default belaUI, you can run the reset script (`./reset-local.sh`).
+
 ## Development
 
 ### Install dependencies
