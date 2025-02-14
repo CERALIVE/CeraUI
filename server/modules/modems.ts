@@ -287,15 +287,24 @@ async function getGsmConns() {
 
 function modemConfigSantizeToNM(config: ModemConfig) {
 	const fields: NetworkManagerConnectionModemConfig = {
-		"gsm.apn": config.apn,
-		"gsm.username": config.username,
-		"gsm.password": config.password,
+		"gsm.apn": config.apn || "internet", // FIXME: This should be the empty but bun currently drops empty arguments
+		"gsm.username": config.username || "internet", // FIXME: This should be the empty but bun currently drops empty arguments
+		"gsm.password": config.password || "internet", // FIXME: This should be the empty but bun currently drops empty arguments
 		"gsm.password-flags": !config.password ? "4" : "0",
 		"gsm.home-only": config.roaming ? "no" : "yes",
 		"gsm.network-id": config.roaming ? config.network : "",
 		"gsm.auto-config":
 			setup.has_gsm_autoconfig && config.autoconfig ? "yes" : "no",
 	};
+
+	// FIXME: This should be an empty string for auto but bun currently drops empty arguments
+	//      see https://github.com/oven-sh/bun/pull/17269
+	if (fields["gsm.network-id"] === "") {
+		// @ts-ignore
+		// biome-ignore lint/performance/noDelete: see comment above
+		delete fields["gsm.network-id"];
+	}
+
 	if (fields["gsm.auto-config"]) {
 		config.apn = "";
 		config.username = "";
@@ -361,7 +370,7 @@ async function modemGetConfig(
 	//const autoconnect = (modemInfo['modem.3gpp.registration-state'] != 'idle') ? 'yes' : 'no';
 	const nmConfig: NetworkManagerConnection = {
 		type: "gsm",
-		ifname: "", // can be empty for gsm connections, matching by device-id and sim-id
+		ifname: "test", // can be empty for gsm connections, matching by device-id and sim-id // FIXME: This should be the empty but bun currently drops empty arguments
 		autoconnect: "yes",
 		"connection.autoconnect-retries": 10,
 		"ipv6.method": "ignore",
