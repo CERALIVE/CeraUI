@@ -29,11 +29,14 @@
 
 ## TODO
 
-- Fix the typescript conversion issues
-- Fix the wifi disconnect issue
 - Make deployment easier
-- Ship a binary for the moblink relay
+- Ship a binary for the moblink relay (https://github.com/moo-the-cow/moblink-rust-relay)
 - Do not expose the default route as a moblink relay, if the streamer is connected to a hotspot. We should still run a relay if the streamer is connected through a shared network!
 - Add a way to configure the moblink relay password
 - Visualize the moblink relay status in the UI
 - Enabling/disabling Interfaces in the UI takes too long to take effect for the relays
+
+## Ideas
+
+- SRT Ingest: https://github.com/dimadesu/srt-ingest-for-belabox
+- SRT(LA) to a local target (aka target IP is in a local network) should only use local network interfaces
