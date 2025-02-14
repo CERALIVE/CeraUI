@@ -23,10 +23,8 @@
 	},
 	"scripts": {
 		"build": "bun x --bun run-p build:ui build:server",
-		"build:linux-arm64": "bun x --bun run-p build:ui build:server:linux-arm64",
-		"build:server": "bun build --compile server/belaUI.ts --outfile ./dist/belaUI",
-		"build:server:linux-arm64": "bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 server/belaUI.ts --outfile ./dist/belaUI",
-		"build:ui": "cd ui && bun x --bun vite build --mode production && cd .. && bun run copy",
+		"build:ui": "cd ui && bun x --bun vite build --mode production && cd .. && bun run copy:ui",
+		"build:server": "bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 server/belaUI.ts --outfile ./dist/belaUI",
 		"check": "run-p check:*",
 		"check:biome": "bun x --bun @biomejs/biome check server ui/src",
 		"check:tsc": "tsc",
