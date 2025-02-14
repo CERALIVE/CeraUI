@@ -22,6 +22,6 @@ ATTR{id}=="OsmoAction5*", ATTR{id}="OsmoAction5", GOTO="signal_belaui"
 ATTR{id}="usbaudio"
 
 LABEL="signal_belaui"
-RUN+="/usr/bin/pkill -o -SIGUSR2 -f belaUI.js"
+RUN+="/usr/bin/pkill -o -SIGUSR2 -f belaUI"
 
 LABEL="end"
