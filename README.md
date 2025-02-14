@@ -40,6 +40,45 @@ pair: https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on
 
 ## Development
 
+## Install dependencies
+
+To install the dependencies, you can use the following command:
+
+```bash
+bun install
+cd ui; bun install; cd ..
+```
+
+## Run locally
+
+Local development is not really supported. Ideally you have a BELABOX to test changes.
+
+You can run the UI locally with the following commands:
+
+```bash
+bun run dev:ui
+```
+
+To run the server locally, you can use the following command:
+
+```bash
+bun run dev:server
+```
+
+## Build for production
+
+To build the UI for production, you can use the following command:
+
+```bash
+bun run build
+```
+
+## To update the moblink-rust-relay you can run the following command:
+
+```bash
+bun run fetch-moblink-relay
+```
+
 ### TODOs
 
 - Make deployment easier (debian package?)
@@ -51,5 +90,6 @@ pair: https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on
 
 ### Ideas
 
+- Add a button to reset a modem from the UI
 - SRT Ingest: https://github.com/dimadesu/srt-ingest-for-belabox
 - SRT(LA) to a local target (aka target IP is in a local network) should only use local network interfaces
