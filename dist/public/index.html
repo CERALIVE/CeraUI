@@ -1,0 +1,407 @@
+<!--
+    belaUI - web UI for the BELABOX project
+    Copyright (C) 2020-2022 BELABOX project
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>BELABOX</title>
+
+    <meta charset="utf-8"/>
+    <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, shrink-to-fit=no"
+    />
+
+  <script type="module" crossorigin src="/assets/index-CVJjrbEU.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CUIuWrs1.css">
+</head>
+<body>
+<div class="container mt-2" id="page">
+    <div id="notifications">
+    </div>
+
+    <div class="alert alert-danger alert-dismissible mb-2 d-none" role="alert" id="errorMsg">
+        <span></span>
+    </div> <!-- .alert -->
+
+    <div class="alert d-none mb-2" role="alert" id="remoteStatus">
+    </div>
+
+    <div class="alert alert-warning alert-dismissible fade show mb-2 d-none" role="alert" id="softwareUpdateStatus">
+        <p class="m-0"><b>Software update in progress</b></p>
+        <p class="m-0">The encoder will briefly disconnect after a successful update</p>
+        <p class="m-0">Never remove power or reset the encoder while updating</p>
+        <p class="m-0">Preparing update...</p>
+        <p class="downloading m-0 d-none">Downloading: <span class="value"></span></p>
+        <p class="unpacking m-0 d-none">Unpacking: <span class="value"></span></p>
+        <p class="setting-up m-0 d-none">Setting up: <span class="value"></span></p>
+        <p class="result font-weight-bold m-0"></p>
+        <button type="button" class="close result d-none" data-dismiss="alert" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+        </button>
+    </div>
+
+    <div id="login" class="container card mt-4 mb-2 p-2 d-none">
+        <form>
+            <input type="password" id="password" class="form-control input_user" placeholder="password">
+            <label class="mt-2"><input type="checkbox" class="rememberMe"> remember me</label>
+            <button type="submit" class="btn btn-block mt-0 btn-success netact">Login</button>
+        </form>
+    </div>
+
+    <div id="initialPasswordForm" class="container p-0 card mt-4 mb-2 d-none">
+        <div class="card-header bg-success text-center text-white">Initial BELABOX setup</div>
+        <div class="card-body">
+
+            <form>
+                <div class="form-group">
+                    <label for="initialPassword">Set a password for the LAN web interface (belaUI)</label>
+                    <p class="hint text-danger"></p>
+                    <div class="input-group">
+                        <input type="password" class="form-control set-password recheck-netact" placeholder="password"
+                               id="initialPassword"/>
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary showHidePassword" type="button">Show</button>
+                        </div> <!-- .input-group-append -->
+                    </div> <!-- .input-group -->
+                    <label class="mt-2"><input type="checkbox" class="rememberMe"> remember me</label>
+                    <button type="submit" class="btn btn-block mt-0 btn-success netact">Set password</button>
+                </div> <!-- .form-group -->
+            </form>
+
+        </div>
+    </div>
+
+    <div id="main" class="d-none mb-2">
+        <div class="mb-4">
+            <button type="button" id="startStop" class="btn btn-lg btn-block mb-2 netact">
+                Start
+            </button>
+
+            <div class="form-group">
+                <input type="text" id="bitrateValues" class="slider-values form-control" readonly/>
+                <div id="bitrateSlider" class="slider mt-2"></div>
+            </div>
+        </div> <!-- .mb-4 -->
+
+        <table class="table mb-4">
+            <thead>
+            <tr>
+                <th scope="col"></th>
+                <th scope="col">Port</th>
+                <th scope="col">IP</th>
+                <th scope="col" class="col-6">Bitrate</th>
+            </tr>
+            </thead>
+            <tbody id="modems"></tbody>
+        </table>
+
+        <table class="table mb-4">
+            <thead>
+            <tr>
+                <th scope="col" style="width: 160px">Sensor</th>
+                <th scope="col">Measurement</th>
+            </tr>
+            </thead>
+            <tbody id="sensors"></tbody>
+        </table>
+
+        <div class="modal fade" id="wifiModal" tabindex="-1" role="dialog" aria-labelledby="wifiModalLabel"
+             aria-hidden="true">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">Connect to a new network</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div> <!-- .modal-header -->
+
+                    <form onsubmit="return wifiSendNewConnection();">
+                        <input type="hidden" id="connection-device">
+
+                        <div class="modal-body">
+                            <div class="form-group">
+                                <label for="connection-ssid" class="col-form-label">SSID</label>
+                                <input type="text" class="form-control" id="connection-ssid" readonly>
+                            </div> <!-- .form-group -->
+
+                            <div class="form-group">
+                                <label for="connection-password" class="col-form-label">Password</label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="connection-password">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary showHidePassword" type="button">Show
+                                        </button>
+                                    </div> <!-- .input-group-append -->
+                                </div> <!-- .input-group -->
+                            </div> <!-- .form-group -->
+
+                            <div id="wifiNewConnecting" class="wifi-new-status d-none text-info">
+                                <div class="spinner-border spinner-border-sm" role="status">
+                                    <span class="sr-only">Loading...</span>
+                                </div>
+                                Connecting...
+                            </div>
+                            <div id="wifiNewErrAuth" class="wifi-new-status d-none text-danger">
+                                Authentication error. Check the password and try again
+                            </div>
+                            <div id="wifiNewErrGeneric" class="wifi-new-status d-none text-danger">
+                                Error connecting to the network. Move closer and try again
+                            </div>
+                        </div> <!-- .modal-body -->
+
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                            <button id="wifiConnectButton" type="submit" class="btn btn-success">Connect</button>
+                        </div> <!-- .modal-footer -->
+                    </form>
+
+                </div> <!-- .modal-content -->
+            </div> <!-- .modal-dialog -->
+        </div> <!-- .modal -->
+
+        <div id="wifi"></div>
+
+        <div id="modemManager"></div>
+
+        <div id="settings">
+            <div class="card mb-2">
+                <div class="card-header bg-success text-center" type="button"
+                     data-toggle="collapse" data-target="#collapseOne">
+                    <button class="btn btn-link text-white" type="button" data-toggle="collapse"
+                            data-target="#collapseOne" aria-expanded="false" aria-controls="collapseOne">
+                        Encoder settings
+                    </button>
+                </div> <!-- card-header -->
+
+                <div class="collapse" id="collapseOne">
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label for="pipelines">Pipeline</label>
+                            <select class="custom-select" name="pipelines" id="pipelines"></select>
+                        </div>
+                        <div class="form-group d-none" id="selectAudioSource">
+                            <label for="audioSource">Audio source</label>
+                            <select class="custom-select" id="audioSource"></select>
+                        </div>
+                        <div class="form-group d-none" id="selectAudioCodec">
+                            <label for="audioCodec">Audio codec</label>
+                            <select class="custom-select" id="audioCodec"></select>
+                        </div>
+                        <div id="delay" class="form-group">
+                            <label class="sr-only" for="delayValue">Delay</label>
+                            <input id="delayValue" class="slider-values form-control" readonly/>
+                            <div id="delaySlider" class="slider mt-2"></div>
+                        </div>
+                        <div class="form-check form-group" id="bitrateOverlaySetting">
+                            <input class="form-check-input" type="checkbox" value="enabled" id="bitrateOverlay">
+                            <label class="form-check-label" for="bitrateOverlay">
+                                Enable the dynamic bitrate overlay
+                            </label>
+                        </div>
+                    </div> <!-- .card-body -->
+                </div> <!-- .collapse -->
+            </div> <!-- .card -->
+
+            <div class="card mb-2">
+                <div class="card-header bg-success text-center" type="button"
+                     data-toggle="collapse" data-target="#collapseTwo">
+                    <button class="btn btn-link text-white" type="button" data-toggle="collapse"
+                            data-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
+                        Relay server settings
+                    </button>
+                </div> <!-- .card-header -->
+
+                <div class="collapse" id="collapseTwo">
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label for="relayServer">Relay server</label>
+                            <select id="relayServer" class="form-control"></select>
+                        </div>
+                        <div class="form-group remote-relay-account d-none">
+                            <label for="relayAccount">Relay server account</label>
+                            <select id="relayAccount" class="form-control"></select>
+                        </div>
+                        <div class="form-group manual-relay-addr">
+                            <label for="srtlaAddr">SRTLA receiver address</label>
+                            <input type="text" class="form-control" id="srtlaAddr"/>
+                            <p id="cloudRelay" class="text-danger d-none">Did you know? You could use a <a
+                                    href="https://belabox.net/cloud">BELABOX Cloud relay</a> for improved stream
+                                reliability and bitrate</p>
+                        </div>
+                        <div class="form-group manual-relay-addr">
+                            <label for="srtlaPort">SRTLA receiver port</label>
+                            <input type="text" class="form-control" id="srtlaPort"/>
+                        </div>
+                        <div class="form-group manual-streamid">
+                            <label for="srtStreamid">SRT streamid</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="srtStreamid"/>
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary showHidePassword" type="button">Show
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="sr-only" for="srtLatencyValue">SRT latency</label>
+                            <input id="srtLatencyValue" class="slider-values form-control" readonly/>
+                            <div id="srtLatencySlider" class="slider mt-2"></div>
+                        </div>
+                        <div id="latencyWarning" class="d-none alert alert-danger m-0">
+                            <p class="m-0">Recommended latency: 1500-2500ms</p>
+                            <p class="m-0">Setting the latency too low will increase glitching and reduce the bitrate
+                                that can be sustained</p>
+                        </div>
+                    </div> <!-- .card-body -->
+                </div> <!-- .collapse -->
+            </div> <!-- .card -->
+
+            <div class="card mb-2" id="advancedSettings">
+                <div class="card-header bg-success text-center" type="button"
+                     data-toggle="collapse" data-target="#collapseFour">
+                    <button class="btn btn-link text-white" type="button" data-toggle="collapse"
+                            data-target="#collapseFour" aria-expanded="false" aria-controls="collapseFour">
+                        Advanced / developer
+                    </button>
+                </div> <!-- card-header -->
+
+                <div class="collapse" id="collapseFour">
+                    <div class="card-body">
+
+                        <div class="form-group d-none mb-2" id="sshSettings">
+                            <label for="sshPassword">SSH login</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control click-copy" id="sshPassword" readonly/>
+                                <div class="input-group-append">
+                                    <button class="btn btn-outline-secondary showHidePassword" type="button">Show
+                                    </button>
+                                    <button class="btn btn-outline-danger netact" id="resetSshPass" type="button">
+                                        Reset
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button type="button" id="startSsh"
+                                    class="btn btn-block btn-success command-btn netact mt-2 d-none">
+                                Start SSH server
+                            </button>
+                            <button type="button" id="stopSsh"
+                                    class="btn btn-block btn-danger command-btn netact mt-2 d-none">
+                                Stop SSH server
+                            </button>
+                        </div>
+
+                        <button type="button" id="getLog" class="btn btn-block btn-primary command-btn netact"
+                                data-confirmation="The log contains sensitive information such as passwords. Only share it with trusted individuals">
+                            Download BELABOX log
+                        </button>
+
+                        <button type="button" id="getSyslog" class="btn btn-block btn-primary command-btn netact"
+                                data-confirmation="The log contains sensitive information such as passwords. Only share it with trusted individuals">
+                            Download full system log
+                        </button>
+
+                    </div> <!-- .card-body -->
+                </div> <!-- .collapse -->
+            </div> <!-- .card -->
+
+            <div class="card mb-2">
+                <div class="card-header bg-success text-center" type="button"
+                     data-toggle="collapse" data-target="#collapseThree">
+                    <button class="btn btn-link text-white" type="button" data-toggle="collapse"
+                            data-target="#collapseThree" aria-expanded="false" aria-controls="collapseThree">
+                        System
+                    </button>
+                </div> <!-- card-header -->
+
+                <div class="collapse" id="collapseThree">
+                    <div class="card-body">
+
+                        <form id="updatePasswordForm">
+                            <div class="form-group">
+                                <label for="newPassword">
+                                    LAN web interface (belaUI) password
+                                </label>
+                                <p class="hint text-danger"></p>
+                                <div class="input-group">
+                                    <input type="password" class="form-control set-password recheck-netact"
+                                           placeholder="new password" id="newPassword"/>
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary showHidePassword" type="button">Show
+                                        </button>
+                                        <button class="btn btn-outline-success netact" type="submit" disabled>Save
+                                        </button>
+                                    </div> <!-- .input-group-append -->
+                                </div> <!-- .input-group -->
+                            </div> <!-- .form-group -->
+                        </form>
+
+                        <form id="remoteKeyForm">
+                            <div class="form-group">
+                                <label for="remoteDeviceKey">
+                                    <a href="https://cloud.belabox.net" target="_blank">BELABOX cloud</a> remote key
+                                </label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control netact" id="remoteDeviceKey"/>
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary showHidePassword" type="button">Show
+                                        </button>
+                                        <button class="btn btn-outline-success netact" type="submit" disabled>Save
+                                        </button>
+                                    </div> <!-- .input-group-append -->
+                                </div> <!-- .input-group -->
+                            </div> <!-- .form-group -->
+                        </form>
+
+                        <button type="button" id="softwareUpdate" class="btn btn-block btn-primary netact d-none"
+                                disabled>
+                            Software update <span class="desc"></span>
+                        </button>
+
+                        <button type="button" id="logout" class="btn btn-block btn-warning netact">
+                            Logout
+                        </button>
+                        <button type="button" id="poweroff" class="btn btn-block btn-danger command-btn netact">
+                            Power off
+                        </button>
+                        <button type="button" id="reboot" class="btn btn-block btn-danger command-btn netact">
+                            Restart
+                        </button>
+                        <div class="mt-3 text-secondary text-center small" id="revisions"></div>
+
+                    </div> <!-- .card-body -->
+                </div> <!-- .collapse -->
+            </div> <!-- .card -->
+
+        </div> <!-- #settings -->
+    </div> <!-- #main -->
+
+    <div class="text-center small d-none" id="themeSelector">
+        <label for="theme">Theme:</label>
+        <select id="theme">
+            <option value="auto">Auto</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+        </select>
+    </div>
+</div> <!-- .container -->
+
+</body>
+</html>

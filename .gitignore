@@ -1,9 +1,7 @@
 node_modules
 /ui/dist/
 /ui/dist-ssr/
-/dist/public/
 /dist/revision
-/dist/belaUI
 *.local
 
 # Editor directories and files
