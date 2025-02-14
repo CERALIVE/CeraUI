@@ -12,8 +12,7 @@ const enabled = setup.moblink_relay_enabled;
 const RELAY_COOLDOWN = 5_000;
 
 export const moblinkRelayExec =
-	setup.moblink_relay_bin ??
-	"/opt/moblink-rust-relay/target/release/moblink-rust-relay";
+	setup.moblink_relay_bin ?? "/opt/belaUI/moblink-rust-relay";
 
 type RelayProcess = ChildProcessByStdio<null, null, Readable> & {
 	restartTimer?: ReturnType<typeof setTimeout>;
@@ -32,11 +31,13 @@ type RelayInterface = {
 	ip: string;
 };
 
+const defaultStreamerPassword = setup.moblink_relay_streamer_password ?? "1234";
+
 async function spawnRelay(relayOptions: RelayOptions) {
 	const {
 		name,
 		bindIpAddressDestination,
-		streamerPassword = setup.moblink_relay_streamer_password,
+		streamerPassword = defaultStreamerPassword,
 	} = relayOptions;
 
 	checkExecPath(moblinkRelayExec);

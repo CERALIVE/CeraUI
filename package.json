@@ -38,7 +38,8 @@
 		"fix": "bun x --bun @biomejs/biome check --write server",
 		"format": "bun x --bun @biomejs/biome format --write server ./public/script.js ./public/style.css",
 		"lint": "bun x --bun eslint .",
-		"preview": "cd ui; bun x --bun vite preview"
+		"preview": "cd ui; bun x --bun vite preview",
+		"fetch-moblink-relay": "bun run scripts/fetch-moblink-relay.ts"
 	},
 	"trustedDependencies": ["@biomejs/biome"]
 }
