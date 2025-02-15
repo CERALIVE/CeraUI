@@ -31,7 +31,7 @@ mkdir -p $TARGET_DIR
 sudo apt-get update
 sudo apt-get install -y rsync jq
 
-# Copy files from dist to target directory while excluding specified files (we dont have rsync)
+# Copy files from dist to target directory while excluding specified files
 sudo rsync -rltvz --delete --chown=root:root \
   --exclude auth_tokens.json \
   --exclude config.json \
@@ -50,7 +50,9 @@ sudo chown -R root:root $TARGET_DIR
 
 # Add moblink_relay_enabled: true to setup.json
 echo "Enabling Moblink Relay. You can disable it in $TARGET_DIR/setup.json"
-sudo jq '.moblink_relay_enabled = true' $TARGET_DIR/setup.json | sudo tee $TARGET_DIR/setup.json
+sudo cp $TARGET_DIR/setup.json $TARGET_DIR/setup.json.tmp
+sudo jq '.moblink_relay_enabled = true' $TARGET_DIR/setup.json.tmp | sudo tee $TARGET_DIR/setup.json > /dev/null
+sudo rm $TARGET_DIR/setup.json.tmp
 
 # Run the override script
 cd $TARGET_DIR || exit

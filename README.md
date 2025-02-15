@@ -55,7 +55,7 @@ To reset the BELABOX to the default belaUI, you can run the reset script (`./res
 
 ### Install dependencies
 
-To install the dependencies, you can use the following command:
+To install the dependencies, you can use the following commands:
 
 ```bash
 bun install
@@ -66,7 +66,7 @@ cd ui; bun install; cd ..
 
 Local development is not really supported. Ideally you have a BELABOX to test changes.
 
-You can run the UI locally with the following commands:
+You can run the UI locally with the following command:
 
 ```bash
 bun run dev:ui
@@ -86,7 +86,9 @@ To build the UI for production, you can use the following command:
 bun run build
 ```
 
-### To update the moblink-rust-relay you can run the following command:
+### Update moblink-rust-relay
+
+To update the moblink-rust-relay you can run the following command:
 
 ```bash
 bun run fetch-moblink-relay
