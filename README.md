@@ -3,7 +3,16 @@
 This is a fork of the default BELABOX UI (belaUI), that ported the code to Typescript and ESM (ECMAScript Modules) and
 added a moblink relay feature.
 
-## Getting started
+## Getting started (one-liner)
+
+
+- Enable SSH for the default user (`user`) and connect via SSH
+- The run:
+  ```bash
+  wget -qO- https://raw.githubusercontent.com/pjeweb/belaui/override/install.sh | bash
+  ```
+
+## Getting started (long version)
 
 ### Preparation
 
