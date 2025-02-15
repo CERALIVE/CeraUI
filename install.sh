@@ -48,14 +48,17 @@ rm -rf "$TEMP_DIR"
 # Set ownership to root:root and preserve permissions
 sudo chown -R root:root $TARGET_DIR
 
-# Install moblink-rust-relay
-sudo bash $TARGET_DIR/install-moblink-rust-relay.sh
-
 # Add moblink_relay_enabled: true to setup.json
 echo "Enabling Moblink Relay. You can disable it in $TARGET_DIR/setup.json"
 sudo cp $TARGET_DIR/setup.json $TARGET_DIR/setup.json.tmp
 sudo jq '.moblink_relay_enabled = true' $TARGET_DIR/setup.json.tmp | sudo tee $TARGET_DIR/setup.json > /dev/null
 sudo rm $TARGET_DIR/setup.json.tmp
+
+# Install moblink-rust-relay
+cd $TARGET_DIR || exit
+sudo bash ./install-moblink-rust-relay.sh
+
+echo "Moblink relay installed successfully."
 
 # Run the override script
 cd $TARGET_DIR || exit
