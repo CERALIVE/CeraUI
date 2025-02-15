@@ -5,12 +5,12 @@ added a moblink relay feature.
 
 ## Getting started (one-liner)
 
-
 - Enable SSH for the default user (`user`) and connect via SSH
-- The run:
+- Then run:
   ```bash
   wget -qO- https://raw.githubusercontent.com/pjeweb/belaui/override/install.sh | bash
   ```
+- To get back to the default belaUI, you can then run `sudo bash /opt/belaUI/reset-to-default.sh`.
 
 ## Getting started (long version)
 
@@ -93,18 +93,3 @@ To update the moblink-rust-relay you can run the following command:
 ```bash
 bun run fetch-moblink-relay
 ```
-
-### TODOs
-
-- Make deployment easier (debian package?)
-- Do not expose the default route as a moblink relay, if the streamer is connected to a hotspot. We should still run a
-  relay if the streamer is connected through a shared network!
-- Add a way to configure the moblink relay password (It is possible to change it in the `setup.json` for now)
-- Visualize the moblink relay status in the UI
-- Enabling/disabling Interfaces in the UI takes too long to take effect for the relays
-
-### Ideas
-
-- Add a button to reset a modem from the UI
-- SRT Ingest: https://github.com/dimadesu/srt-ingest-for-belabox
-- SRT(LA) to a local target (aka target IP is in a local network) should only use local network interfaces
