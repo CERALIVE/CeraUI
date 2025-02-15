@@ -9,6 +9,6 @@
 	"bitrate_file": "/tmp/belacoder_br",
 	"ips_file": "/tmp/srtla_ips",
 	"moblink_relay_enabled": true,
-	"moblink_relay_bin": "/opt/belaUI/moblink-rust-relay",
+	"moblink_relay_bin": "/opt/moblink-rust-relay/target/release/moblink-rust-relay",
 	"moblink_relay_streamer_password": "1234"
 }
