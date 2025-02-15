@@ -19,7 +19,7 @@ udevadm control --reload-rules
 udevadm trigger
 
 echo "Copy new service"
-cp belaUI.socket /etc/systemd/system/
+cp belaUI.service /etc/systemd/system/
 
 echo "Update service"
 systemctl daemon-reload
