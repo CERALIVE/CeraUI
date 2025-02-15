@@ -27,7 +27,7 @@ git checkout $BRANCH
 # Ensure target directory exists
 mkdir -p $TARGET_DIR
 
-# Install rsync
+# Install rsync and jq
 sudo apt-get update
 sudo apt-get install -y rsync jq
 
@@ -47,6 +47,9 @@ rm -rf "$TEMP_DIR"
 
 # Set ownership to root:root and preserve permissions
 sudo chown -R root:root $TARGET_DIR
+
+# Install moblink-rust-relay
+sudo bash $TARGET_DIR/install-moblink-rust-relay.sh
 
 # Add moblink_relay_enabled: true to setup.json
 echo "Enabling Moblink Relay. You can disable it in $TARGET_DIR/setup.json"
