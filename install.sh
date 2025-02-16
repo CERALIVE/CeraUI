@@ -51,7 +51,9 @@ sudo chown -R root:root $TARGET_DIR
 # Add moblink_relay_enabled: true to setup.json
 echo "Enabling Moblink Relay. You can disable it in $TARGET_DIR/setup.json"
 sudo cp $TARGET_DIR/setup.json $TARGET_DIR/setup.json.tmp
-sudo jq '.moblink_relay_enabled = true' $TARGET_DIR/setup.json.tmp | sudo tee $TARGET_DIR/setup.json > /dev/null
+
+# Enable moblink relay and set path to moblink-rust-relay
+sudo jq '.moblink_relay_enabled = true | .moblink_relay_bin = "/opt/moblink-rust-relay/target/release/moblink-rust-relay"' $TARGET_DIR/setup.json.tmp | sudo tee $TARGET_DIR/setup.json > /dev/null
 sudo rm $TARGET_DIR/setup.json.tmp
 
 # Install moblink-rust-relay
