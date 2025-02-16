@@ -7,22 +7,35 @@ VERSION=809e09e0a489158f107387caf0f29d68be78e0fe
 GIT_INSTALLED=$(git --version) || false
 CURL_INSTALLED=$(curl --version) || false
 
+# Stop on error
+set -e
+
 # Make sure git and curl are installed
 if [ -z "$GIT_INSTALLED" ] || [ -z "$CURL_INSTALLED" ]; then
+  echo "Installing git and curl"
+
   apt-get update
   apt-get install -y git curl
 fi
 
+# Check if rust is installed
+set +e
 # Add cargo to PATH
-source "$HOME"/.cargo/env
+. "$HOME/.cargo/env" > /dev/null 2>&1 || true
+RUST_INSTALLED=$(rustc --version > /dev/null 2>&1 || false)
+set -e
 
-# Install Rust nightly via rustup
-RUST_INSTALLED=$(rustc --version) || false
 if [ -z "$RUST_INSTALLED" ]; then
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | TMPDIR=$XDG_RUNTIME_DIR sh -s -- --profile minimal --default-toolchain nightly -y
+  echo "Installing Rust nightly via rustup"
 
-  # Reload PATH‚
-  source "$HOME"/.cargo/env
+  mkdir -p "$HOME"/.tmp/moblink-rust-relay || true
+
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | TMPDIR="$HOME"/.tmp/moblink-rust-relay sh -s -- --quiet --profile minimal --default-toolchain nightly -y
+
+  # Reload PATH
+  . "$HOME/.cargo/env"
+else
+  echo "Rust is already installed"
 fi
 
 # Make sure working directory exists
@@ -50,10 +63,10 @@ else
 fi
 
 # Checkout the version that expects two bind addresses
-git checkout $VERSION
+git checkout $VERSION --force --quiet
 
 # Pull latest changes
-git pull
+git pull --force --quiet > /dev/null 2>&1 || true
 
 # Build moblink-rust-relay
 cargo build --release
