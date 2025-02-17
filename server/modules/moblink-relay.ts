@@ -32,11 +32,13 @@ type RelayInterface = {
 	ip: string;
 };
 
+const defaultStreamerPassword = setup.moblink_relay_streamer_password || "1234";
+
 async function spawnRelay(relayOptions: RelayOptions) {
 	const {
 		name,
 		bindIpAddressDestination,
-		streamerPassword = setup.moblink_relay_streamer_password,
+		streamerPassword = defaultStreamerPassword,
 	} = relayOptions;
 
 	checkExecPath(moblinkRelayExec);
@@ -113,11 +115,6 @@ export function initMoblinkRelays() {
 	}
 
 	setInterval(updateMoblinkRelayInterfaces, 60_000);
-
-	if (!setup.moblink_relay_streamer_password) {
-		logger.error("Moblink relay streamer password not set");
-		return;
-	}
 }
 
 function findDestinationInterfaces() {
