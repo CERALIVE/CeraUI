@@ -83,7 +83,7 @@ bun run dev:server
 To build the UI for production, you can use the following command:
 
 ```bash
-bun run build
+./build.sh
 ```
 
 ### Update moblink-rust-relay
