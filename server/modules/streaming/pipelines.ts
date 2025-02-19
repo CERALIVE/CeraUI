@@ -34,12 +34,9 @@ type Pipeline = {
 
 let pipelines: Record<string, Pipeline> = {};
 
-let belacoderPipelinesDir: string;
-if (setup.belacoder_path) {
-	belacoderPipelinesDir = `${setup.belacoder_path}/pipeline`;
-} else {
-	belacoderPipelinesDir = "/usr/share/belacoder/pipelines";
-}
+const belacoderPipelinesDir: string = setup.belacoder_path
+	? `${setup.belacoder_path}/pipeline`
+	: "/usr/share/belacoder/pipelines";
 
 /* Read the list of pipeline files */
 function readDirAbsPath(dir: string, excludePattern?: string) {

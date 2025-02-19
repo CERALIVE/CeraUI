@@ -224,7 +224,7 @@ export function stop() {
 
 	for (const p of streamingProcesses) {
 		p.removeAllListeners("exit");
-		if (p.spawnfile.match(/belacoder$/)) {
+		if (p.spawnfile.endsWith("belacoder")) {
 			foundBelacoder = true;
 			logger.debug("stop: found the belacoder process");
 

@@ -29,8 +29,8 @@ const DNS_CACHE_FILE = "dns_cache.json";
 /* Minimum age of an updated record to trigger a persistent DNS cache update (in ms)
    Some records change with almost every query if using CDNs, etc
    This limits the frequency of file writes */
-const DNS_MIN_AGE = 60000; // in ms
-const DNS_TIMEOUT = 2000; // in ms
+const DNS_MIN_AGE = 60_000; // in ms
+const DNS_TIMEOUT = 2_000; // in ms
 const DNS_WELLKNOWN_NAME = "wellknown.belabox.net";
 const DNS_WELLKNOWN_ADDR = "127.1.33.7";
 
