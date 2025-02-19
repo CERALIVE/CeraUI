@@ -21,5 +21,18 @@ rsync -rltvz --delete --chown=root:root \
   --exclude setup.json \
   "${DIST_PATH}/" $RSYNC_TARGET
 
+# Add moblink_relay_enabled: true to setup.json
+echo "Enabling Moblink Relay. You can disable it in $BELAUI_PATH/setup.json"
+ssh "$SSH_TARGET" "cp $BELAUI_PATH/setup.json $BELAUI_PATH/setup.json.tmp"
+
+# Enable moblink relay and set path to moblink-rust-relay
+ssh "$SSH_TARGET" "cd $BELAUI_PATH; jq '.moblink_relay_enabled = true | .moblink_relay_bin = \"/opt/moblink-rust-relay/target/release/moblink-rust-relay\"' setup.json.tmp | sudo tee setup.json > /dev/null"
+ssh "$SSH_TARGET" "rm $BELAUI_PATH/setup.json.tmp"
+
+# Install moblink-rust-relay
+ssh "$SSH_TARGET" "cd $BELAUI_PATH; bash ./install-moblink-rust-relay.sh"
+
+echo "Moblink relay installed successfully."
+
 # shellcheck disable=SC2029
-ssh "$SSH_TARGET" "cd $BELAUI_PATH; sudo ./override-belaui.sh"
+ssh "$SSH_TARGET" "cd $BELAUI_PATH; bash ./override-belaui.sh"
