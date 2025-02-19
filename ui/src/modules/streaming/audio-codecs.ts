@@ -15,12 +15,28 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import fs from "node:fs";
+import { config } from "../config.ts";
 
-import { logger } from "../helpers/logger.ts";
+let audioCodecList: Record<string, string> = {};
 
-const SETUP_FILE = "setup.json";
+export function audioCodecs(list: Record<string, string> | null = null) {
+	if (list !== null) {
+		audioCodecList = list;
+	}
 
-/* Read the config and setup files */
-export const setup = JSON.parse(fs.readFileSync(SETUP_FILE, "utf8"));
-logger.debug("Setup", setup);
+	const audioCodec = document.getElementById("audioCodec");
+	if (!audioCodec) return;
+
+	audioCodec.innerText = "";
+
+	for (const codec in audioCodecList) {
+		const option = document.createElement("option");
+		option.value = codec;
+		option.innerText = audioCodecList[codec];
+
+		if (config.acodec && codec === config.acodec) {
+			option.selected = true;
+		}
+		audioCodec.append(option);
+	}
+}

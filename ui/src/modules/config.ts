@@ -15,14 +15,14 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { initDelaySlider } from "./audio-delay.ts";
-import { updateAudioSrcs } from "./audio-sources.ts";
-import { initBitrateSlider } from "./bitrate.ts";
-import { updatePipelines } from "./pipelines.ts";
-import { updateRelays } from "./remote-relays.ts";
-import { initSrtLatencySlider } from "./srt-latency.ts";
-import { showHideRelayHint } from "./srtla-address.ts";
-import { getSshStatus, showSshStatus } from "./ssh.ts";
+import { updateRelays } from "./remote/remote-relays.ts";
+import { initDelaySlider } from "./streaming/audio-delay.ts";
+import { updateAudioSrcs } from "./streaming/audio-sources.ts";
+import { initBitrateSlider } from "./streaming/bitrate.ts";
+import { updatePipelines } from "./streaming/pipelines.ts";
+import { initSrtLatencySlider } from "./streaming/srt-latency.ts";
+import { showHideRelayHint } from "./streaming/srtla-address.ts";
+import { getSshStatus, showSshStatus } from "./system/ssh.ts";
 
 export type Config = {
 	max_br?: number;

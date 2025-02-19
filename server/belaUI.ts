@@ -19,23 +19,26 @@ import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
 
-import { updateAudioDevices } from "./modules/audio.ts";
-import { checkCamlinkUsb2 } from "./modules/camlink.ts";
 import { loadConfig } from "./modules/config.ts";
-import { UPDATE_GW_INT, updateGwWrapper } from "./modules/gateways.ts";
-import { initHardwareMonitoring } from "./modules/hardware-monitoring.ts";
-import { initHttpServer } from "./modules/http-server.ts";
-import { initMoblinkRelays } from "./modules/moblink-relay.ts";
-import { updateModems } from "./modules/modems.ts";
-import { initNetworkInterfaceMonitoring } from "./modules/network-interfaces.ts";
-import { initPipelines } from "./modules/pipelines.ts";
-import { initRemote } from "./modules/remote.ts";
-import { initRevisions } from "./modules/revisions.ts";
+import { updateModems } from "./modules/modems/modem-update-loop.ts";
+import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
+import { initMoblinkRelays } from "./modules/network/moblink-relay.ts";
+import { initNetworkInterfaceMonitoring } from "./modules/network/network-interfaces.ts";
+import { initRemote } from "./modules/remote/remote.ts";
 import { setup } from "./modules/setup.ts";
-import { periodicCheckForSoftwareUpdates } from "./modules/software-updates.ts";
-import { getSshStatus } from "./modules/ssh.ts";
-import { belacoderExec, srtlaSendExec } from "./modules/streamloop.ts";
-import { initWebSocketServer } from "./modules/websocket-server.ts";
+import { updateAudioDevices } from "./modules/streaming/audio.ts";
+import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
+import { initPipelines } from "./modules/streaming/pipelines.ts";
+import {
+	belacoderExec,
+	srtlaSendExec,
+} from "./modules/streaming/streamloop.ts";
+import { initHardwareMonitoring } from "./modules/system/hardware-monitoring.ts";
+import { initRevisions } from "./modules/system/revisions.ts";
+import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updates.ts";
+import { getSshStatus } from "./modules/system/ssh.ts";
+import { initHttpServer } from "./modules/ui/http-server.ts";
+import { initWebSocketServer } from "./modules/ui/websocket-server.ts";
 
 /* Disable localization for any CLI commands we run */
 process.env.LANG = "C.UTF-8";

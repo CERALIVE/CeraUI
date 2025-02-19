@@ -17,10 +17,31 @@
 
 import fs from "node:fs";
 
-import { logger } from "../helpers/logger.ts";
+import killall from "../../helpers/killall.ts";
+import { getConfig, saveConfig } from "../config.ts";
+import { setup } from "../setup.ts";
 
-const SETUP_FILE = "setup.json";
+const MIN_BITRATE = 300; // Kbps
+const MAX_BITRATE = 12_000; // Kbps
 
-/* Read the config and setup files */
-export const setup = JSON.parse(fs.readFileSync(SETUP_FILE, "utf8"));
-logger.debug("Setup", setup);
+export type BitrateParams = { max_br?: number };
+
+export function setBitrate(params: BitrateParams) {
+	const minBr = MIN_BITRATE; // Kbps
+
+	if (params.max_br === undefined) return null;
+	if (params.max_br < minBr || params.max_br > MAX_BITRATE) return null;
+
+	const config = getConfig();
+	config.max_br = params.max_br;
+	saveConfig();
+
+	fs.writeFileSync(
+		setup.bitrate_file,
+		`${minBr * 1000}\n${config.max_br * 1000}\n`,
+	);
+
+	killall(["-HUP", "belacoder"]);
+
+	return config.max_br;
+}
