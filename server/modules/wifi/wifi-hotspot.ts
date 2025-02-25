@@ -82,8 +82,6 @@ const HOTSPOT_UP_FORCE_TO = (HOTSPOT_UP_TO + 2) * 1000;
 export async function wifiHotspotStart(
 	msg: NonNullable<WifiHotspotMessage["hotspot"]["start"]>,
 ) {
-	if (!msg.device) return;
-
 	const macAddress = getMacAddressForWifiInterface(msg.device);
 	if (!macAddress) return;
 
