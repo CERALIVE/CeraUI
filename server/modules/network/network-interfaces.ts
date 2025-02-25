@@ -321,6 +321,7 @@ export function handleNetif(
 
 		int.enabled = msg.enabled;
 		updateSrtlaIps();
+		updateMoblinkRelayInterfaces();
 	}
 
 	conn.send(buildMsg("netif", netIfBuildMsg()));
