@@ -154,8 +154,6 @@ export async function wifiHotspotStart(
 export async function wifiHotspotStop(
 	msg: NonNullable<WifiHotspotMessage["hotspot"]["stop"]>,
 ) {
-	if (!msg.device) return;
-
 	const macAddress = getMacAddressForWifiInterface(msg.device);
 	if (!macAddress) return;
 
@@ -249,8 +247,6 @@ export async function wifiHotspotConfig(
 	msg: NonNullable<WifiHotspotMessage["hotspot"]["config"]>,
 ) {
 	// Find the Wifi interface
-	if (!msg.device) return;
-
 	const macAddress = getMacAddressForWifiInterface(msg.device);
 	if (!macAddress) return;
 
