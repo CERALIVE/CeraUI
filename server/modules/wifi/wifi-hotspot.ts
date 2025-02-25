@@ -210,22 +210,6 @@ function nmConnSetHotspotFields(
 		"802-11-wireless.channel": newChannel.nmChannel,
 	};
 
-	// FIXME: This should be an empty string for auto but bun currently drops empty arguments
-	//      see https://github.com/oven-sh/bun/pull/17269
-	//if (newChannel.nmBand === "") {
-	//	// @ts-ignore
-	//	// biome-ignore lint/performance/noDelete: see comment above
-	//	delete settingsToChange["802-11-wireless.band"];
-	//}
-
-	// FIXME: This should be an empty string for auto but bun currently drops empty arguments
-	//      see https://github.com/oven-sh/bun/pull/17269
-	//if (newChannel.nmChannel === "") {
-	//	// @ts-ignore
-	//	// biome-ignore lint/performance/noDelete: see comment above
-	//	delete settingsToChange["802-11-wireless.channel"];
-	//}
-
 	return nmConnSetFields(uuid, settingsToChange);
 }
 

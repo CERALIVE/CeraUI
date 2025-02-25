@@ -53,6 +53,10 @@ To reset the BELABOX to the default belaUI, you can run the reset script (`./res
 
 ## Development
 
+### Prerequisites
+
+You will need to have [bun.sh](https://bun.sh/docs/installation) in version v1.2.3 or newer installed to run the scripts.
+
 ### Install dependencies
 
 To install the dependencies, you can use the following commands:
@@ -83,7 +87,7 @@ bun run dev:server
 To build the UI for production, you can use the following command:
 
 ```bash
-./build.sh
+bun run build
 ```
 
 ### Update moblink-rust-relay

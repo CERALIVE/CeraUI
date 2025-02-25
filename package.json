@@ -23,9 +23,9 @@
 		"typescript-eslint": "^8.24.1"
 	},
 	"scripts": {
-		"build": "bun-17269 x --bun run-p build:ui build:server",
+		"build": "bun x --bun run-p build:ui build:server",
 		"build:ui": "cd ui && bun x --bun vite build --mode production && cd .. && bun run copy:ui",
-		"build:server": "bun-17269 build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 server/belaUI.ts --outfile ./dist/belaUI",
+		"build:server": "bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 server/belaUI.ts --outfile ./dist/belaUI",
 		"check": "run-p check:*",
 		"check:biome": "bun x --bun @biomejs/biome check server ui/src",
 		"check:tsc": "tsc",

@@ -179,14 +179,6 @@ export function sanitizeModemConfigForNetworkManager(config: ModemConfig) {
 		"gsm.auto-config": autoConfig ? "yes" : "no",
 	};
 
-	// FIXME: This should be an empty string for auto but bun currently drops empty arguments
-	//      see https://github.com/oven-sh/bun/pull/17269
-	//if (fields["gsm.network-id"] === "") {
-	//	// @ts-ignore
-	//	// biome-ignore lint/performance/noDelete: see comment above
-	//	delete fields["gsm.network-id"];
-	//}
-
 	applyAutoconfigToModemConfig(config, autoConfig);
 
 	return fields;
