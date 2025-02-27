@@ -20,7 +20,7 @@ import { ws } from "../ui/websocket.ts";
 type NetworkInterface = {
 	error: string;
 	enabled: boolean;
-	ip: string;
+	ip?: string;
 	tp: number;
 };
 
@@ -41,7 +41,7 @@ function genNetifEntry(
 	error: string | undefined,
 	enabled: boolean | undefined,
 	name: string,
-	ip: string,
+	ip = '',
 	throughput: string,
 	isBold = false,
 ) {
