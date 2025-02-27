@@ -20,7 +20,7 @@ import type WebSocket from "ws";
 import { getConfig } from "../config.ts";
 import { buildModemsMessage } from "../modems/modem-status.ts";
 import { netIfBuildMsg } from "../network/network-interfaces.ts";
-import { buildRelaysMsg, getRelays } from "../remote/remote.ts";
+import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
 import { audioCodecs, getAudioDevices } from "../streaming/audio.ts";
 import { getPipelineList } from "../streaming/pipelines.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";

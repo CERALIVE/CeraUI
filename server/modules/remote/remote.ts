@@ -34,21 +34,17 @@
   14 - support for the modem manager
 */
 
-import assert from "node:assert";
-import fs from "node:fs";
-
 import WebSocket, { type RawData } from "ws";
 
 import { logger } from "../../helpers/logger.ts";
-import { validatePortNo } from "../../helpers/number.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
-import { writeTextFile } from "../../helpers/text-files.ts";
 import { getms } from "../../helpers/time.ts";
 import { extractMessage } from "../../helpers/types.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "../network/dns.ts";
 import { queueUpdateGw } from "../network/gateways.ts";
+import { setup } from "../setup.ts";
 import { addAuthedSocket } from "../ui/auth.ts";
 import { type StatusResponseMessage, sendInitialStatus } from "../ui/status.ts";
 import {
@@ -61,78 +57,22 @@ import {
 } from "../ui/websocket-server.ts";
 import { type Message, handleMessage } from "../ui/websocket-server.ts";
 
-type RelayCache = {
-	servers: Record<
-		string,
-		{
-			type: string;
-			name: string;
-			default?: true;
-			addr: string;
-			port: number;
-		}
-	>;
-	accounts: Record<
-		string,
-		{
-			name: string;
-			ingest_key: string;
-			disabled?: true;
-		}
-	>;
-};
+import {
+	type ValidateRemoteRelaysMessage,
+	buildRelaysMsg,
+	handleRemoteRelays,
+	updateCachedRelays,
+} from "./remote-relays.ts";
 
 type RemoteAuthEncoderMessage = {
 	"auth/encoder": unknown;
 };
 
-type RelaysResponseMessage = {
-	servers: Record<
-		string,
-		{
-			name: string;
-			default?: true;
-		}
-	>;
-	accounts: Record<
-		string,
-		{
-			name: string;
-			disabled?: true;
-		}
-	>;
-};
-
-type ValidateRemoteRelaysMessage = {
-	relays: {
-		servers: Record<
-			string,
-			{
-				type?: unknown;
-				name?: unknown;
-				addr?: unknown;
-				port?: unknown;
-				default?: unknown;
-			}
-		>;
-		accounts: Record<
-			string,
-			{
-				name?: unknown;
-				ingest_key?: unknown;
-				disabled?: unknown;
-			}
-		>;
-	};
-};
-
 type RemoteMessage = ValidateRemoteRelaysMessage | RemoteAuthEncoderMessage;
 
-const RELAYS_CACHE_FILE = "relays_cache.json";
-
-const remoteProtocolVersion = 14;
-const remoteEndpointHost = "remote.belabox.net";
-const remoteEndpointPath = "/ws/remote";
+const remoteProtocolVersion = setup.remote_protocol_version ?? 14;
+const remoteEndpointHost = setup.remote_endpoint_host ?? "remote.belabox.net";
+const remoteEndpointPath = setup.remote_endpoint_path ?? "/ws/remote";
 const remoteTimeout = 5000;
 const remoteConnectTimeout = 10000;
 
@@ -177,172 +117,6 @@ function handleRemote(conn: WebSocket, msg: RemoteMessage) {
 					extractMessage<ValidateRemoteRelaysMessage, typeof type>(msg, type),
 				);
 				break;
-		}
-	}
-}
-
-let relaysCache: RelayCache | undefined;
-try {
-	relaysCache = JSON.parse(
-		fs.readFileSync(RELAYS_CACHE_FILE, "utf8"),
-	) as RelayCache;
-} catch (err) {
-	logger.warn("Failed to load the relays cache, starting with an empty cache");
-}
-
-export function getRelays() {
-	return relaysCache;
-}
-
-export function buildRelaysMsg() {
-	const msg: RelaysResponseMessage = {
-		servers: {},
-		accounts: {},
-	};
-
-	if (!relaysCache) return msg;
-
-	for (const s in relaysCache.servers) {
-		const relayServer = relaysCache.servers[s];
-		if (!relayServer) continue;
-
-		msg.servers[s] = {
-			name: relayServer.name,
-			default: relayServer.default,
-		};
-	}
-
-	for (const a in relaysCache.accounts) {
-		const relayAccount = relaysCache.accounts[a];
-		if (!relayAccount) continue;
-
-		msg.accounts[a] = {
-			name: relayAccount.name + (relayAccount.disabled ? " [disabled]" : ""),
-			disabled: relayAccount.disabled,
-		};
-	}
-
-	return msg;
-}
-
-async function updateCachedRelays(relays: RelayCache | undefined) {
-	try {
-		assert.deepStrictEqual(relays, relaysCache);
-	} catch (err) {
-		logger.debug("updated the relays cache", relays);
-		relaysCache = relays;
-		await writeTextFile(RELAYS_CACHE_FILE, JSON.stringify(relays));
-		return true;
-	}
-}
-
-function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
-	try {
-		const out: RelayCache = { servers: {}, accounts: {} };
-		for (const r_id in msg.servers) {
-			const r = msg.servers[r_id];
-			if (!r) continue;
-
-			if (
-				r.type !== "srtla" ||
-				typeof r.name !== "string" ||
-				typeof r.addr !== "string"
-			)
-				continue;
-			if (r.default && r.default !== true) continue;
-
-			const port = validatePortNo(r.port as string);
-			if (!port) continue;
-
-			out.servers[r_id] = {
-				type: r.type,
-				name: r.name,
-				addr: r.addr,
-				port: port,
-			};
-			if (r.default) out.servers[r_id].default = true;
-		}
-
-		for (const a_id in msg.accounts) {
-			const a = msg.accounts[a_id];
-			if (!a || typeof a.name !== "string" || typeof a.ingest_key !== "string")
-				continue;
-
-			out.accounts[a_id] = { name: a.name, ingest_key: a.ingest_key };
-			if (a.disabled) out.accounts[a_id].disabled = true;
-		}
-
-		if (Object.keys(out.servers).length < 1) return;
-
-		return out;
-	} catch (err) {
-		return undefined;
-	}
-}
-
-export function convertManualToRemoteRelay() {
-	if (!relaysCache) return false;
-
-	let modified = false;
-	const config = getConfig();
-	if (!config.relay_server && config.srtla_addr && config.srtla_port) {
-		for (const s in relaysCache.servers) {
-			const server = relaysCache.servers[s];
-			if (!server) continue;
-
-			if (
-				server.addr.toLowerCase() === config.srtla_addr.toLowerCase() &&
-				server.port === config.srtla_port
-			) {
-				config.relay_server = s;
-				modified = true;
-				break;
-			}
-		}
-	}
-
-	// If not using a relay server, don't try to convert the streamid to a relay account
-	if (!config.relay_server) {
-		return false;
-	}
-
-	if (config.srtla_addr || config.srtla_port) {
-		config.srtla_addr = undefined;
-		config.srtla_port = undefined;
-		modified = true;
-	}
-
-	if (!config.relay_account && config.srt_streamid) {
-		for (const a in relaysCache.accounts) {
-			const account = relaysCache.accounts[a];
-			if (!account) continue;
-
-			if (account.ingest_key === config.srt_streamid) {
-				config.relay_account = a;
-				modified = true;
-				break;
-			}
-		}
-	}
-
-	if (config.relay_account && config.srt_streamid) {
-		config.srt_streamid = undefined;
-		modified = true;
-	}
-
-	return modified;
-}
-
-async function handleRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
-	const validatedUpdate = validateRemoteRelays(msg);
-	if (!validatedUpdate) return;
-
-	const hasUpdated = await updateCachedRelays(validatedUpdate);
-	if (hasUpdated) {
-		broadcastMsg("relays", buildRelaysMsg());
-		if (convertManualToRemoteRelay()) {
-			saveConfig();
-			broadcastMsg("config", getConfig());
 		}
 	}
 }

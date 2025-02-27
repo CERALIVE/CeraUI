@@ -21,7 +21,6 @@ import type WebSocket from "ws";
 import { validateInteger, validatePortNo } from "../../helpers/number.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
-import { convertManualToRemoteRelay, getRelays } from "../remote/remote.ts";
 import { notificationSend } from "../ui/notifications.ts";
 import type { StatusResponseMessage } from "../ui/status.ts";
 import {
@@ -32,6 +31,10 @@ import {
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
 
+import {
+	convertManualToRemoteRelay,
+	getRelays,
+} from "../remote/remote-relays.ts";
 import {
 	DEFAULT_AUDIO_ID,
 	abortAsrcRetry,
