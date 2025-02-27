@@ -47,9 +47,9 @@ pair: https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on
 - Run the deployment script (`./deploy-to-local.sh`), if necessary change the host or user (`SSH_TARGET`), e.g.
   `SSH_TARGET=root@192.168.100.100`.
 
-## Reset to default belaUI
+### Reset to default belaUI
 
-To reset the BELABOX to the default belaUI, you can run the reset script (`./reset-local.sh`).
+To reset the BELABOX to the default belaUI, you can run the reset script from the host (`./reset-local.sh`).
 
 ## Development
 
@@ -68,7 +68,7 @@ cd ui; bun install; cd ..
 
 ### Run locally
 
-Local development is not really supported. Ideally you have a BELABOX to test changes.
+Local development is not really supported. Ideally you have a BELABOX to test changes. Build for production (see below) and deploy with the deploy script (see above).
 
 You can run the UI locally with the following command:
 
@@ -90,10 +90,3 @@ To build the UI for production, you can use the following command:
 bun run build
 ```
 
-### Update moblink-rust-relay
-
-To update the moblink-rust-relay you can run the following command:
-
-```bash
-bun run fetch-moblink-relay
-```
