@@ -40,8 +40,11 @@ export function initRevisions() {
 		revisions.belaUI = readRevision("git rev-parse --short HEAD");
 	}
 
+	revisions.belaUI += " (pjeweb fork)";
+
 	revisions.belacoder = readRevision(`${belacoderExec} -v`);
 	revisions.srtla = readRevision(`${srtlaSendExec} -v`);
+	revisions.bun = `${Bun.version} (${Bun.revision})`;
 
 	// Only show a BELABOX image version if it exists
 	try {
