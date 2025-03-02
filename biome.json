@@ -1,0 +1,12 @@
+{
+	"files": {
+		"ignore": [
+			"ui/node_modules/**/*",
+			"ui/vendor/**/*",
+			"ui/dist/**/*",
+			"config.json"
+		],
+		"include": ["server/**/*", "ui/**/*", "*.json"],
+		"ignoreUnknown": true
+	}
+}
