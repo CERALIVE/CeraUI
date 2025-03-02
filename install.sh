@@ -7,6 +7,8 @@ RELEASE_URL="https://github.com/pjeweb/belaUI/releases/latest/download/belaUI.zi
 TEMP_DIR="$HOME/.tmp/belaui"
 TARGET_DIR="/opt/belaUI"
 
+set -e
+
 # Clone the repository branch into a temporary directory
 if [ -d "$TEMP_DIR" ]; then
   rm -rf "$TEMP_DIR"
@@ -32,9 +34,9 @@ unzip -q belaUI.zip
 # Ensure target directory exists
 mkdir -p $TARGET_DIR
 
-# Install rsync and jq
+# Install some dependencies
 sudo apt-get update
-sudo apt-get install -y rsync jq
+sudo apt-get install -y rsync jq unzip
 
 # Copy files from dist to target directory while excluding specified files
 sudo rsync -rltvz --delete --chown=root:root \
