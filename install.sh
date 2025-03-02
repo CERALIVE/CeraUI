@@ -37,7 +37,7 @@ tar xf $RELEASE_TARBALL
 mkdir -p $TARGET_DIR
 
 # Copy files from dist to target directory while excluding specified files
-sudo rsync -rltvz --delete --chown=root:root \
+sudo rsync -rltz --delete --chown=root:root \
   --exclude auth_tokens.json \
   --exclude config.json \
   --exclude dns_cache.json \
