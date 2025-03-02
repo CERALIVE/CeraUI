@@ -28,6 +28,7 @@ if [ -d "$TEMP_DIR" ]; then
 fi
 
 # Install latest release from tarball to temporary directory
+echo "Downloading and extracting latest release"
 mkdir -p "$TEMP_DIR"
 cd "$TEMP_DIR" || exit
 wget -q --show-progress $RELEASE_URL
@@ -37,6 +38,7 @@ tar xf $RELEASE_TARBALL
 mkdir -p $TARGET_DIR
 
 # Copy files from dist to target directory while excluding specified files
+echo "Installing belaUI"
 sudo rsync -rltz --delete --chown=root:root \
   --exclude auth_tokens.json \
   --exclude config.json \
