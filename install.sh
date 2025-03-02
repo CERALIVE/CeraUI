@@ -35,7 +35,7 @@ fi
 mkdir -p "$TEMP_DIR"
 cd "$TEMP_DIR" || exit
 wget -q --show-progress $RELEASE_URL
-tar xf -q $RELEASE_TARBALL
+tar xf $RELEASE_TARBALL
 
 # Ensure target directory exists
 mkdir -p $TARGET_DIR
