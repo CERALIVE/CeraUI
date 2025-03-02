@@ -1,5 +1,6 @@
 {
 	"type": "module",
+	"workspaces": ["ui"],
 	"dependencies": {
 		"@rollup/rollup-linux-arm64-gnu": "^4.34.9",
 		"@types/multicast-dns": "^7.2.4",

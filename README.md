@@ -59,11 +59,10 @@ You will need to have [bun.sh](https://bun.sh/docs/installation) in version v1.2
 
 ### Install dependencies
 
-To install the dependencies, you can use the following commands:
+To install the dependencies, you can use the following command:
 
 ```bash
 bun install
-cd ui; bun install; cd ..
 ```
 
 ### Run locally
