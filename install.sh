@@ -7,6 +7,7 @@ RELEASE_URL="https://github.com/pjeweb/belaUI/releases/latest/download/belaUI.zi
 TEMP_DIR="$HOME/.tmp/belaui"
 TARGET_DIR="/opt/belaUI"
 
+# stop on error
 set -e
 
 # Install some dependencies

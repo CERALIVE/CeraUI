@@ -3,9 +3,6 @@
 # Deploy dist to local belabox via ssh (rsync) and register service and restart service
 
 SSH_TARGET=root@belabox.local
-DIST_PATH=dist
-BELAUI_PATH=/opt/belaUI
-RSYNC_TARGET="${SSH_TARGET}:${BELAUI_PATH}"
 
 # stop on error
 set -e
