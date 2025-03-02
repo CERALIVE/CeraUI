@@ -11,9 +11,9 @@ TARGET_DIR="/opt/belaUI"
 # stop on error
 set -e
 
-# Install some dependencies
+# Install dependencies
 sudo apt-get update
-sudo apt-get install -y rsync jq unzip
+sudo apt-get install -y rsync jq
 
 # Clone the repository branch into a temporary directory
 if [ -d "$TEMP_DIR" ]; then
