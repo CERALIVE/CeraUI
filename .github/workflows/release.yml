@@ -23,12 +23,12 @@ jobs:
       - name: Run build
         run: bun run build
 
-      - name: Package dist as zip
-        run: zip -r belaUI.zip dist/
+      - name: Package dist as .tar.xz
+        run: tar -cJf belaUI.tar.xz -C dist .
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            belaUI.zip
+            belaUI.tar.xz
             LICENSE

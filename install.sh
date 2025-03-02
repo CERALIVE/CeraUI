@@ -3,7 +3,8 @@
 # Install script to install the belaUI fork on a BELABOX
 
 # Variables
-RELEASE_URL="https://github.com/pjeweb/belaUI/releases/latest/download/belaUI.zip"
+RELEASE_TARBALL="belaUI.tar.xz"
+RELEASE_URL="https://github.com/pjeweb/belaUI/releases/latest/download/$RELEASE_TARBALL"
 TEMP_DIR="$HOME/.tmp/belaui"
 TARGET_DIR="/opt/belaUI"
 
@@ -30,11 +31,11 @@ fi
 #git remote add origin -f $REPO_URL
 #git checkout $BRANCH
 
-# Install latest release from ZIP to temporary directory
+# Install latest release from tarball to temporary directory
 mkdir -p "$TEMP_DIR"
 cd "$TEMP_DIR" || exit
 wget -q $RELEASE_URL
-unzip -q belaUI.zip
+unzip -q $RELEASE_TARBALL
 
 # Ensure target directory exists
 mkdir -p $TARGET_DIR
