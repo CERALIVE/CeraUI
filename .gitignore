@@ -19,3 +19,4 @@ node_modules
 /auth_tokens.json
 /dns_cache.json
 /debug.log
+/gsm_operator_cache.json

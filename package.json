@@ -25,7 +25,7 @@
 		"build:ui": "cd ui && bun x --bun vite build --mode production && cd .. && bun run copy:ui",
 		"build:server": "bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 server/belaUI.ts --outfile ./dist/belaUI",
 		"check": "run-p check:*",
-		"check:biome": "bun x --bun @biomejs/biome check server ui/src",
+		"check:biome": "bun x --bun @biomejs/biome check",
 		"check:tsc": "tsc",
 		"copy": "run-p copy:*",
 		"copy:ui": "mkdir -p ./dist/public && rm -rf ./dist/public/* && cp -r ./ui/dist/* ./dist/public/",

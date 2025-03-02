@@ -4,7 +4,8 @@
 			"ui/node_modules/**/*",
 			"ui/vendor/**/*",
 			"ui/dist/**/*",
-			"config.json"
+			"config.json",
+			"gsm_operator_cache.json"
 		],
 		"include": ["server/**/*", "ui/**/*", "*.json"],
 		"ignoreUnknown": true
