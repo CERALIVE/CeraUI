@@ -34,8 +34,8 @@ fi
 # Install latest release from tarball to temporary directory
 mkdir -p "$TEMP_DIR"
 cd "$TEMP_DIR" || exit
-wget -q $RELEASE_URL
-unzip -q $RELEASE_TARBALL
+wget -q --show-progress $RELEASE_URL
+tar xf -q $RELEASE_TARBALL
 
 # Ensure target directory exists
 mkdir -p $TARGET_DIR
