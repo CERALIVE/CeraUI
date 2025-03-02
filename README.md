@@ -3,16 +3,55 @@
 This is a fork of the default BELABOX UI (belaUI), that ported the code to Typescript and ESM (ECMAScript Modules) and
 added a moblink relay feature.
 
-## Getting started (one-liner)
+## Install the fork on your BELABOX
 
-- Enable SSH for the default user (`user`) and connect via SSH
+- Enable SSH for the default user (`user`) on your existing belaUI
+- Connect to the BELABOX via SSH (use Putty on Windows, JuiceSSH on Android)
 - Then run:
   ```bash
   wget -qO- https://raw.githubusercontent.com/pjeweb/belaui/override/install.sh | bash
   ```
-- To get back to the default belaUI, you can then run `sudo bash /opt/belaUI/reset-to-default.sh`.
+- To get back to the default belaUI, you can then run `sudo bash /opt/belaUI/reset-to-default.sh` through SSH.
 
-## Getting started (long version)
+## Development
+
+### Prerequisites
+
+You will need to have [bun.sh](https://bun.sh/docs/installation) in version v1.2.3 or newer installed to run the scripts.
+
+### Install dependencies
+
+To install the dependencies, you can use the following command:
+
+```bash
+bun install
+```
+
+### Run locally on dev machine
+
+Local development is not really supported. Ideally you have a BELABOX to test changes. Build for production (see below) and deploy with the deploy script (see above).
+
+You can run the UI locally with the following command:
+
+```bash
+bun run dev:ui
+```
+
+To run the server locally, you can use the following command:
+
+```bash
+bun run dev:server
+```
+
+### Build for production
+
+To build the UI for production, you can use the following command:
+
+```bash
+bun run build
+```
+
+## Install built version to BELABOX
 
 ### Preparation
 
@@ -50,42 +89,3 @@ pair: https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on
 ### Reset to default belaUI
 
 To reset the BELABOX to the default belaUI, you can run the reset script from the host (`./reset-local.sh`).
-
-## Development
-
-### Prerequisites
-
-You will need to have [bun.sh](https://bun.sh/docs/installation) in version v1.2.3 or newer installed to run the scripts.
-
-### Install dependencies
-
-To install the dependencies, you can use the following command:
-
-```bash
-bun install
-```
-
-### Run locally
-
-Local development is not really supported. Ideally you have a BELABOX to test changes. Build for production (see below) and deploy with the deploy script (see above).
-
-You can run the UI locally with the following command:
-
-```bash
-bun run dev:ui
-```
-
-To run the server locally, you can use the following command:
-
-```bash
-bun run dev:server
-```
-
-### Build for production
-
-To build the UI for production, you can use the following command:
-
-```bash
-bun run build
-```
-
