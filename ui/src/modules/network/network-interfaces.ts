@@ -41,7 +41,7 @@ function genNetifEntry(
 	error: string | undefined,
 	enabled: boolean | undefined,
 	name: string,
-	ip = '',
+	ip: string,
 	throughput: string,
 	isBold = false,
 ) {
@@ -85,7 +85,13 @@ export function updateNetif(netifs: Record<string, NetworkInterface>) {
 		totalKbps += tpKbps;
 
 		modemList.push(
-			genNetifEntry(data.error, data.enabled, i, data.ip, `${tpKbps} Kbps`),
+			genNetifEntry(
+				data.error,
+				data.enabled,
+				i,
+				data.ip || "",
+				`${tpKbps} Kbps`,
+			),
 		);
 	}
 

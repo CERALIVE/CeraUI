@@ -93,6 +93,7 @@ function updateNetact(isActive: boolean) {
 }
 
 /* Handle server-to-client messages */
+// biome-ignore lint/suspicious/noExplicitAny: TODO this should be typed
 function handleMessage(msg: any) {
 	console.log(msg);
 	for (const type in msg) {
