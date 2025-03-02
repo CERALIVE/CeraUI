@@ -9,6 +9,10 @@ TARGET_DIR="/opt/belaUI"
 
 set -e
 
+# Install some dependencies
+sudo apt-get update
+sudo apt-get install -y rsync jq unzip
+
 # Clone the repository branch into a temporary directory
 if [ -d "$TEMP_DIR" ]; then
   rm -rf "$TEMP_DIR"
@@ -33,10 +37,6 @@ unzip -q belaUI.zip
 
 # Ensure target directory exists
 mkdir -p $TARGET_DIR
-
-# Install some dependencies
-sudo apt-get update
-sudo apt-get install -y rsync jq unzip
 
 # Copy files from dist to target directory while excluding specified files
 sudo rsync -rltvz --delete --chown=root:root \
