@@ -11,25 +11,21 @@ TARGET_DIR="/opt/belaUI"
 # stop on error
 set -e
 
-# Install dependencies
-sudo apt-get update
-sudo apt-get install -y rsync jq
+# Check if dependencies are installed
+JQ_INSTALLED=$(jq --version) || false
+RSYNC_INSTALLED=$(rsync --version) || false
+
+if [ -z "$JQ_INSTALLED" ] || [ -z "$RSYNC_INSTALLED" ]; then
+  echo "Installing missing dependencies"
+
+  sudo apt-get update
+  sudo apt-get install -y rsync jq
+fi
 
 # Clone the repository branch into a temporary directory
 if [ -d "$TEMP_DIR" ]; then
   rm -rf "$TEMP_DIR"
 fi
-
-# Full checkout
-#git clone --branch $BRANCH $REPO_URL "$TEMP_DIR"
-
-# Sparse checkout (only dist folder, silences warnings)
-#git init --quiet "$TEMP_DIR"
-#cd "$TEMP_DIR" || exit
-#git config core.sparseCheckout true
-#echo "dist/*" >> .git/info/sparse-checkout
-#git remote add origin -f $REPO_URL
-#git checkout $BRANCH
 
 # Install latest release from tarball to temporary directory
 mkdir -p "$TEMP_DIR"
