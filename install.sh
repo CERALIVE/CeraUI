@@ -3,8 +3,7 @@
 # Install script to install the belaUI fork on a BELABOX
 
 # Variables
-REPO_URL="https://github.com/pjeweb/belaUI.git"
-BRANCH="override"
+RELEASE_URL="https://github.com/pjeweb/belaUI/releases/latest/download/belaUI.zip"
 TEMP_DIR="$HOME/.tmp/belaui"
 TARGET_DIR="/opt/belaUI"
 
@@ -17,12 +16,18 @@ fi
 #git clone --branch $BRANCH $REPO_URL "$TEMP_DIR"
 
 # Sparse checkout (only dist folder, silences warnings)
-git init --quiet "$TEMP_DIR"
+#git init --quiet "$TEMP_DIR"
+#cd "$TEMP_DIR" || exit
+#git config core.sparseCheckout true
+#echo "dist/*" >> .git/info/sparse-checkout
+#git remote add origin -f $REPO_URL
+#git checkout $BRANCH
+
+# Install latest release from ZIP to temporary directory
+mkdir -p "$TEMP_DIR"
 cd "$TEMP_DIR" || exit
-git config core.sparseCheckout true
-echo "dist/*" >> .git/info/sparse-checkout
-git remote add origin -f $REPO_URL
-git checkout $BRANCH
+wget -q $RELEASE_URL
+unzip -q belaUI.zip
 
 # Ensure target directory exists
 mkdir -p $TARGET_DIR
@@ -40,7 +45,7 @@ sudo rsync -rltvz --delete --chown=root:root \
   --exclude relays_cache.json \
   --exclude revision \
   --exclude setup.json \
-  "$TEMP_DIR/dist/" $TARGET_DIR
+  "$TEMP_DIR/" $TARGET_DIR
 
 # Cleanup
 rm -rf "$TEMP_DIR"
