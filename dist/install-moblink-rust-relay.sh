@@ -4,8 +4,9 @@ WORKING_DIR=/opt/
 REPOSITORY=https://github.com/datagutt/moblink-rust-relay.git
 VERSION=809e09e0a489158f107387caf0f29d68be78e0fe
 
-GIT_INSTALLED=$(git --version) || false
-CURL_INSTALLED=$(curl --version) || false
+# Check if dependencies are installed
+GIT_INSTALLED=$(git --version 2>/dev/null) || false
+CURL_INSTALLED=$(curl --version 2>/dev/null) || false
 
 # Stop on error
 set -e

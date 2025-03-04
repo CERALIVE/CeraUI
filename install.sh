@@ -9,8 +9,8 @@ TEMP_DIR="$HOME/.tmp/belaui"
 TARGET_DIR="/opt/belaUI"
 
 # Check if dependencies are installed
-JQ_INSTALLED=$(jq --version) || false
-RSYNC_INSTALLED=$(rsync --version) || false
+JQ_INSTALLED=$(jq --version 2>/dev/null) || false
+RSYNC_INSTALLED=$(rsync --version 2>/dev/null) || false
 
 # stop on error
 set -e
