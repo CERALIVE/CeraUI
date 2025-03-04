@@ -176,7 +176,7 @@ export function asrcProbe(asrc: string) {
 	const audioSrcId = audioDevices[asrc];
 	if (!audioSrcId) {
 		const msg = `Selected audio input '${asrc}' is unavailable. Waiting for it before starting the stream...`;
-		notificationBroadcast("asrc_not_found", "warning", msg, 2, true, false);
+		notificationBroadcast("asrc_not_found", "error", msg, 2, true, false);
 	}
 
 	return audioSrcId;
