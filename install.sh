@@ -8,12 +8,12 @@ RELEASE_URL="https://github.com/pjeweb/belaUI/releases/latest/download/$RELEASE_
 TEMP_DIR="$HOME/.tmp/belaui"
 TARGET_DIR="/opt/belaUI"
 
-# stop on error
-set -e
-
 # Check if dependencies are installed
 JQ_INSTALLED=$(jq --version) || false
 RSYNC_INSTALLED=$(rsync --version) || false
+
+# stop on error
+set -e
 
 if [ -z "$JQ_INSTALLED" ] || [ -z "$RSYNC_INSTALLED" ]; then
   echo "Installing missing dependencies"
