@@ -3434,13 +3434,13 @@ async function pipelineSetAsrc(pipelineFile, audioSrcId, audioCodec) {
 }
 
 let asrcRetryTimer;
-function asrcScheduleRetry(pipelineFile, callback, conn) {
+function asrcScheduleRetry(callback, pipelineFile, srtlaAddr, srtlaPort, streamid) {
   asrcRetryTimer = setTimeout(function() {
-    asrcRetry(pipelineFile, callback, conn);
+    asrcRetry(callback, pipelineFile, srtlaAddr, srtlaPort, streamid);
   }, 1000);
 }
 
-async function asrcRetry(pipelineFile, callback, conn) {
+async function asrcRetry(callback, pipelineFile, srtlaAddr, srtlaPort, streamid) {
   asrcRetryTimer = undefined;
 
   audioSrcId = asrcProbe(config.asrc);
@@ -3448,12 +3448,9 @@ async function asrcRetry(pipelineFile, callback, conn) {
     pipelineFile = await pipelineSetAsrc(pipelineFile, audioSrcId, config.acodec);
     if (!pipelineFile) return;
 
-    let srtlaAddr = await resolveSrtla(config.srtla_addr, conn);
-    if (!srtlaAddr) return;
-
-    callback(pipelineFile, srtlaAddr);
+    callback(pipelineFile, srtlaAddr, srtlaPort, streamid);
   } else {
-    asrcScheduleRetry(pipelineFile, callback, conn);
+    asrcScheduleRetry(callback, pipelineFile, srtlaAddr, srtlaPort, streamid);
   }
 }
 
@@ -3613,7 +3610,7 @@ async function updateConfig(conn, params, callback) {
 
     callback(pipelineFile, srtlaAddr, srtlaPort, streamid);
   } else {
-    asrcScheduleRetry(pipelineFile, callback, conn);
+    asrcScheduleRetry(callback, pipelineFile, srtlaAddr, srtlaPort, streamid);
     updateStatus(true);
   }
 }
