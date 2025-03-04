@@ -215,20 +215,31 @@ export function abortAsrcRetry() {
 	}
 }
 
+type AsrcRetryCallback = (
+	pipelineFilePath: string,
+	srtlaAddr: string,
+	srtlaPort?: number,
+	streamid?: string,
+) => void;
+
 export function asrcScheduleRetry(
+	callback: AsrcRetryCallback,
 	pipelineFile: string,
-	callback: (pipelineFile: string, srtlaAddr: string) => void,
-	conn: WebSocket,
+	srtlaAddr: string,
+	srtlaPort?: number,
+	streamid?: string,
 ) {
 	asrcRetryTimer = setTimeout(() => {
-		asrcRetry(pipelineFile, callback, conn);
+		asrcRetry(callback, pipelineFile, srtlaAddr, srtlaPort, streamid);
 	}, 1000);
 }
 
 async function asrcRetry(
+	callback: AsrcRetryCallback,
 	pipelineFilePath: string,
-	callback: (pipelineFile: string, srtlaAddr: string) => void,
-	conn: WebSocket,
+	srtlaAddr: string,
+	srtlaPort?: number,
+	streamid?: string,
 ) {
 	asrcRetryTimer = undefined;
 
@@ -243,12 +254,14 @@ async function asrcRetry(
 		);
 		if (!pipelineFile) return;
 
-		if (!config.srtla_addr) return;
-		const srtlaAddr = await resolveSrtla(config.srtla_addr, conn);
-		if (!srtlaAddr) return;
-
-		callback(pipelineFile, srtlaAddr);
+		callback(pipelineFile, srtlaAddr, srtlaPort, streamid);
 	} else {
-		asrcScheduleRetry(pipelineFilePath, callback, conn);
+		asrcScheduleRetry(
+			callback,
+			pipelineFilePath,
+			srtlaAddr,
+			srtlaPort,
+			streamid,
+		);
 	}
 }

@@ -279,7 +279,13 @@ export async function updateConfig(
 
 		callback(pipelineFilePath, srtlaAddr, srtlaPort, streamid);
 	} else {
-		asrcScheduleRetry(pipelineFilePath, callback, conn);
+		asrcScheduleRetry(
+			callback,
+			pipelineFilePath,
+			srtlaAddr,
+			srtlaPort,
+			streamid,
+		);
 		updateStatus(true);
 	}
 }
