@@ -1,8 +1,11 @@
 node_modules
-/ui/dist/
-/ui/dist-ssr/
-/dist/revision
 *.local
+
+# Built files
+/dist/public/
+/dist/belaUI
+/ui/dist/
+/server/belaUI
 
 # Editor directories and files
 .vscode/*

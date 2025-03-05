@@ -15,7 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import type { StatusResponseMessage } from "../../../../server/modules/ui/status.ts";
+import type { StatusResponseMessage } from "@belaui/server/modules/ui/status.ts";
 
 /* Software updates */
 import { sendCommand } from "../ui/websocket.ts";

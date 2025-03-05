@@ -1,41 +1,24 @@
 {
+	"name": "@belaui/root",
 	"type": "module",
-	"workspaces": ["ui"],
-	"dependencies": {
-		"@rollup/rollup-linux-arm64-gnu": "^4.34.9",
-		"@types/multicast-dns": "^7.2.4",
-		"finalhandler": "^1.3.1",
-		"serve-static": "^1.16.2",
-		"winston": "^3.17.0",
-		"ws": "^8.18.1"
-	},
+	"workspaces": ["server", "ui"],
+	"dependencies": {},
 	"devDependencies": {
-		"@biomejs/biome": "1.9.4",
-		"@types/bcrypt": "^5.0.2",
 		"@types/bun": "^1.2.4",
-		"@types/finalhandler": "^1.2.3",
-		"@types/serve-static": "^1.15.7",
-		"@types/ws": "^8.5.14",
 		"globals": "^15.15.0",
 		"npm-run-all2": "^7.0.2",
 		"typescript": "^5.8.2"
 	},
 	"scripts": {
-		"build": "bun x --bun run-p build:ui build:server",
-		"build:ui": "cd ui && bun x --bun vite build --mode production && cd .. && bun run copy:ui",
-		"build:server": "bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 server/belaUI.ts --outfile ./dist/belaUI",
-		"check": "run-p check:*",
+		"check": "bun run --bun --filter '*' check && run-p check:*",
 		"check:biome": "bun x --bun @biomejs/biome check",
-		"check:tsc": "tsc",
-		"copy": "run-p copy:*",
-		"copy:ui": "mkdir -p ./dist/public && rm -rf ./dist/public/* && cp -r ./ui/dist/* ./dist/public/",
-		"dev": "run-p dev:*",
-		"dev:server": "bun run server/belaUI.ts",
-		"dev:ui": "cd ui; bun x --bun vite --mode development",
-		"fix": "bun x --bun @biomejs/biome check --write server",
-		"format": "bun x --bun @biomejs/biome format --write",
-		"lint": "bun x --bun @biomejs/biome lint --write",
-		"preview": "cd ui; bun x --bun vite preview"
+		"dev": "bun run --bun --filter '*' dev",
+		"fix": "bun run --bun --filter '*' fix",
+		"lint": "bun run --bun --filter '*' lint",
+		"format": "bun run --bun --filter '*' format",
+		"build": "bun run --bun --filter '*' build && run-p build:*",
+		"build:copy-ui": "mkdir -p ./dist/public && rm -rf ./dist/public/* && cp -r ./ui/dist/* ./dist/public/",
+		"build:copy-server": "mkdir -p ./dist && cp ./server/belaUI ./dist/"
 	},
-	"trustedDependencies": ["@biomejs/biome"]
+	"trustedDependencies": ["@biomejs/biome", "esbuild"]
 }

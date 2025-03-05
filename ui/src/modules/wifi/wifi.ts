@@ -18,7 +18,7 @@
 import type {
 	WifiInterfaceResponseMessage,
 	WifiNetwork,
-} from "../../../../server/modules/wifi/wifi.ts";
+} from "@belaui/server/modules/wifi/wifi.ts";
 
 import { genOptionList } from "../ui/options-list.ts";
 import { showHidePassword } from "../ui/password-box.ts";

@@ -18,8 +18,8 @@
 import type {
 	ModemsResponseMessageEntry,
 	ModemsResponseModemFull,
-} from "../../../../server/modules/modems/modem-status.ts";
-import type { StatusResponseMessage } from "../../../../server/modules/ui/status.ts";
+} from "@belaui/server/modules/modems/modem-status.ts";
+import type { StatusResponseMessage } from "@belaui/server/modules/ui/status.ts";
 
 import { genOptionList } from "../ui/options-list.ts";
 import { ws } from "../ui/websocket.ts";
