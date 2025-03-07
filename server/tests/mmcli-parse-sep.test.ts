@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mmcliParseSep } from "../server/modules/modems/mmcli.ts";
+import { mmcliParseSep } from "../modules/modems/mmcli.ts";
 
 test("mmcli-parse-sep", () => {
 	const testData = `modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/0
