@@ -19,6 +19,7 @@ import fs from "node:fs";
 
 import type WebSocket from "ws";
 
+import { isSameSubnet } from "../../helpers/ip-addresses.ts";
 import killall from "../../helpers/killall.ts";
 
 import { dnsCacheResolve, dnsCacheValidate } from "../network/dns.ts";
@@ -27,7 +28,7 @@ import { getNetworkInterfaces } from "../network/network-interfaces.ts";
 import { setup } from "../setup.ts";
 import { getSocketSenderId } from "../ui/websocket-server.ts";
 
-import { getIsStreaming, startError } from "./streaming.ts";
+import { startError } from "./streaming.ts";
 
 export async function resolveSrtla(addr: string, conn: WebSocket) {
 	let srtlaAddr = addr;
@@ -59,27 +60,43 @@ export async function resolveSrtla(addr: string, conn: WebSocket) {
 	return srtlaAddr;
 }
 
-export function genSrtlaIpList() {
-	let list = "";
-	let count = 0;
-
-	const netif = getNetworkInterfaces();
-	for (const i in netif) {
-		const networkInterface = netif[i];
-		if (networkInterface?.enabled) {
-			list += `${networkInterface.ip}\n`;
-			count++;
-		}
-	}
+export function setSrtlaIpList(addresses: string[]) {
+	const list = addresses.join("\n");
 	fs.writeFileSync(setup.ips_file, list);
-
-	return count;
 }
 
-export function updateSrtlaIps() {
-	genSrtlaIpList();
+export function restartSrtla() {
+	killall(["-HUP", "srtla_send"]);
+}
 
-	if (getIsStreaming()) {
-		killall(["-HUP", "srtla_send"]);
+export function genSrtlaIpList() {
+	const list: Array<string> = [];
+
+	const networkInterfaces = getNetworkInterfaces();
+	for (const i in networkInterfaces) {
+		const networkInterface = networkInterfaces[i];
+		if (networkInterface?.enabled && networkInterface.ip) {
+			list.push(networkInterface.ip);
+		}
 	}
+
+	return list;
+}
+
+export function genSrtalIpListForLocalIpAddress(ipAddress: string) {
+	const list: Array<string> = [];
+
+	const networkInterfaces = getNetworkInterfaces();
+	for (const i in networkInterfaces) {
+		const networkInterface = networkInterfaces[i];
+		if (
+			networkInterface?.ip &&
+			networkInterface.netmask &&
+			isSameSubnet(ipAddress, networkInterface.ip, networkInterface.netmask)
+		) {
+			list.push(networkInterface.ip);
+		}
+	}
+
+	return list;
 }
