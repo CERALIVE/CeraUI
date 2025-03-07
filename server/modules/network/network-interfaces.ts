@@ -24,7 +24,8 @@ import { getms } from "../../helpers/time.ts";
 
 import { logger } from "../../helpers/logger.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
-import { updateSrtlaIps } from "../streaming/srtla.ts";
+
+import { EventEmitter } from "node:events";
 import {
 	notificationBroadcast,
 	notificationRemove,
@@ -37,7 +38,6 @@ import {
 	wifiDeviceListStartUpdate,
 } from "../wifi/wifi-device-list.ts";
 import { wifiUpdateDevices } from "../wifi/wifi-interfaces.ts";
-import { updateMoblinkRelayInterfaces } from "./moblink-relay.ts";
 
 export type NetworkInterface = {
 	ip?: string;
@@ -60,6 +60,20 @@ export const NETIF_ERR_DUPIPV4 = 0x01;
 export const NETIF_ERR_HOTSPOT = 0x02;
 
 let netif: Record<string, NetworkInterface> = {};
+
+const networkInterfacesEventEmitter = new EventEmitter();
+
+export function triggerNetworkInterfacesChange() {
+	networkInterfacesEventEmitter.emit("change");
+}
+
+export function onNetworkInterfacesChange(callback: () => void) {
+	networkInterfacesEventEmitter.on("change", callback);
+
+	return () => {
+		networkInterfacesEventEmitter.off("change", callback);
+	};
+}
 
 export function getNetworkInterfaces() {
 	return netif;
@@ -199,8 +213,7 @@ function updateNetif() {
 		netif = newInterfaces;
 
 		if (intsChanged) {
-			updateMoblinkRelayInterfaces();
-			updateSrtlaIps();
+			triggerNetworkInterfacesChange();
 		}
 
 		broadcastMsg("netif", netIfBuildMsg(), getms() - ACTIVE_TO);
@@ -320,8 +333,7 @@ export function handleNetif(
 		}
 
 		int.enabled = msg.enabled;
-		updateSrtlaIps();
-		updateMoblinkRelayInterfaces();
+		triggerNetworkInterfacesChange();
 	}
 
 	conn.send(buildMsg("netif", netIfBuildMsg()));

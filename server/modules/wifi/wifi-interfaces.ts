@@ -23,6 +23,7 @@ import {
 	NETIF_ERR_HOTSPOT,
 	getNetworkInterfaces,
 	setNetifHotspot,
+	triggerNetworkInterfacesChange,
 } from "../network/network-interfaces.ts";
 import {
 	type ConnectionUUID,
@@ -31,7 +32,7 @@ import {
 	nmDevices,
 	nmcliParseSep,
 } from "../network/network-manager.ts";
-import { updateSrtlaIps } from "../streaming/srtla.ts";
+
 import {
 	addWifiInterface,
 	getWifiInterfaceByMacAddress,
@@ -230,7 +231,7 @@ export async function wifiUpdateDevices() {
 		}
 
 		if (hotspotCount) {
-			updateSrtlaIps();
+			triggerNetworkInterfacesChange();
 		}
 	}
 	logger.debug("Wifi interfaces", wifiInterfacesByMacAddress);

@@ -5,11 +5,15 @@ import { checkExecPath, checkExecPathSafe } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
 import { stableUuidFromString } from "../../helpers/uuid.ts";
 import { setup } from "../setup.ts";
-import { getNetworkInterfaces } from "./network-interfaces.ts";
+import {
+	getNetworkInterfaces,
+	onNetworkInterfacesChange,
+} from "./network-interfaces.ts";
 
 const enabled = setup.moblink_relay_enabled;
 
-const RELAY_COOLDOWN = 5_000;
+const RELAY_COOLDOWN = 3_000;
+const INTERFACES_UPDATE_RATE = 10_000;
 
 export const moblinkRelayExec =
 	setup.moblink_relay_bin ??
@@ -114,7 +118,8 @@ export function initMoblinkRelays() {
 		return;
 	}
 
-	setInterval(updateMoblinkRelayInterfaces, 60_000);
+	setInterval(updateMoblinkRelayInterfaces, INTERFACES_UPDATE_RATE);
+	onNetworkInterfacesChange(updateMoblinkRelayInterfaces);
 }
 
 function findDestinationInterfaces() {

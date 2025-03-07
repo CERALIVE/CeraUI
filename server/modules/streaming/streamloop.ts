@@ -20,8 +20,11 @@ import type { Readable } from "node:stream";
 
 import type WebSocket from "ws";
 
+import { isLocalIp } from "../../helpers/ip-addresses.ts";
 import { logger } from "../../helpers/logger.ts";
+
 import { getConfig } from "../config.ts";
+import { onNetworkInterfacesChange } from "../network/network-interfaces.ts";
 import { setup } from "../setup.ts";
 import {
 	isUpdating,
@@ -33,8 +36,14 @@ import {
 } from "../ui/notifications.ts";
 import { sendStatus } from "../ui/status.ts";
 import { getSocketSenderId } from "../ui/websocket-server.ts";
+
 import { abortAsrcRetry, isAsrcRetryScheduled } from "./audio.ts";
-import { genSrtlaIpList } from "./srtla.ts";
+import {
+	genSrtalIpListForLocalIpAddress,
+	genSrtlaIpList,
+	restartSrtla,
+	setSrtlaIpList,
+} from "./srtla.ts";
 import {
 	type ConfigParameters,
 	getIsStreaming,
@@ -81,6 +90,8 @@ function spawnStreamingLoop(
 	});
 }
 
+let removeNetworkInterfacesChangeListener: (() => void) | undefined;
+
 export function start(conn: WebSocket, params: ConfigParameters) {
 	if (getIsStreaming() || isUpdating()) {
 		sendStatus(conn);
@@ -89,14 +100,35 @@ export function start(conn: WebSocket, params: ConfigParameters) {
 
 	const senderId = getSocketSenderId(conn);
 	updateConfig(conn, params, (pipeline, srtlaAddr, srtlaPort, streamid) => {
-		if (genSrtlaIpList() < 1) {
-			startError(
-				conn,
-				"Failed to start, no available network connections",
-				senderId,
-			);
-			return;
+		if (removeNetworkInterfacesChangeListener) {
+			removeNetworkInterfacesChangeListener();
 		}
+
+		const handleSrtlaIpAddresses = () => {
+			const srtlaIpList = isLocalIp(srtlaAddr)
+				? genSrtalIpListForLocalIpAddress(srtlaAddr)
+				: genSrtlaIpList();
+			if (!srtlaIpList.length) {
+				startError(
+					conn,
+					"Failed to start, no available network connections",
+					senderId,
+				);
+				return;
+			}
+
+			setSrtlaIpList(srtlaIpList);
+
+			if (getIsStreaming()) {
+				restartSrtla();
+			}
+		};
+
+		handleSrtlaIpAddresses();
+		removeNetworkInterfacesChangeListener = onNetworkInterfacesChange(
+			handleSrtlaIpAddresses,
+		);
+
 		updateStatus(true);
 
 		spawnStreamingLoop(
