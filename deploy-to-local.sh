@@ -21,8 +21,8 @@ rsync -rltvz --delete --chown=root:root \
   --exclude setup.json \
   "${DIST_PATH}/" $RSYNC_TARGET
 
-# Install jq
-ssh "$SSH_TARGET" "apt-get update && apt-get install -y jq"
+# Install jq if its not installed
+ssh "$SSH_TARGET" "jq --version 2>/dev/null || apt-get update && apt-get install -y jq"
 
 # Add moblink_relay_enabled: true to setup.json
 echo "Enabling Moblink Relay. You can disable it in $BELAUI_PATH/setup.json"
