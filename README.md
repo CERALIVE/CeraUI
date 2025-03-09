@@ -83,8 +83,11 @@ pair: https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on
 - Install the generated private ssh key on the host (e.g. `~/.ssh/id_rsa` and `~/.ssh/id_rsa.pub`)
 - It might be necessary or recommended to install a newer version of rsync from brew or similar (not tested if
   necessary)
-- Run the deployment script (`./deploy-to-local.sh`), if necessary change the host or user (`SSH_TARGET`), e.g.
-  `SSH_TARGET=root@192.168.100.100`.
+- Run the deployment script by specifying the SSH target as an argument. For example, to deploy as root to a host at 192.168.100.100, run:
+
+```bash
+./deploy-to-local.sh root@192.168.100.100
+```
 
 ### Reset to default belaUI
 
