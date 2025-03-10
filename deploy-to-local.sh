@@ -10,9 +10,13 @@
 set -euo pipefail
 
 SSH_TARGET=${1:-root@belabox.local}
+USE_CERAUI=${USE_CERAUI:-false}
+
 DIST_PATH=dist
 BELAUI_PATH=/opt/belaUI
 RSYNC_TARGET="${SSH_TARGET}:${BELAUI_PATH}"
+CERAUI_RELEASE_TARBALL="ceraui-extended.tar.xz"
+CERAUI_RELEASE_URL="https://github.com/CERALIVE/CeraUI/releases/latest/download/$CERAUI_RELEASE_TARBALL"
 
 # Detect OS and package manager
 detect_package_manager() {
@@ -84,5 +88,33 @@ echo "Moblink relay installed successfully."
 
 # shellcheck disable=SC2029
 ssh "$SSH_TARGET" "cd $BELAUI_PATH; bash ./override-belaui.sh"
+
+# Check if CeraUI should be installed
+if [ "$USE_CERAUI" = "true" ]; then
+  echo "Downloading and installing CeraUI content"
+
+  # Create a temporary script to download and extract CeraUI on the remote machine
+  TMP_SCRIPT=$(cat <<'EOF'
+#!/bin/bash
+set -e
+CERAUI_TEMP_DIR="$(mktemp -d)"
+cd "$CERAUI_TEMP_DIR"
+wget -q --show-progress CERAUI_RELEASE_URL
+tar xf CERAUI_RELEASE_TARBALL
+rsync -rltz --delete --chown=root:root "$CERAUI_TEMP_DIR/" BELAUI_PATH/public/
+rm -rf "$CERAUI_TEMP_DIR"
+EOF
+)
+
+  # Replace placeholders with actual values
+  TMP_SCRIPT=${TMP_SCRIPT//CERAUI_RELEASE_URL/$CERAUI_RELEASE_URL}
+  TMP_SCRIPT=${TMP_SCRIPT//CERAUI_RELEASE_TARBALL/$CERAUI_RELEASE_TARBALL}
+  TMP_SCRIPT=${TMP_SCRIPT//BELAUI_PATH/$BELAUI_PATH}
+
+  # Execute the script on the remote machine
+  ssh "$SSH_TARGET" "bash -s" <<< "$TMP_SCRIPT"
+
+  echo "CeraUI content installed successfully."
+fi
 
 echo "Deployment complete."

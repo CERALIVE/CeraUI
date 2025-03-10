@@ -3,13 +3,21 @@
 This is a fork of the default BELABOX UI (belaUI), that ported the code to Typescript and ESM (ECMAScript Modules) and
 added a moblink relay feature.
 
+## CeraUI Integration
+
+This fork includes an option to use the [CeraUI](https://github.com/CERALIVE/CeraUI) interface, which is an alternative user interface designed for enhanced usability and additional features. When the `USE_CERAUI` option is enabled during installation or deployment, the system will download the latest CeraUI [release](https://github.com/CERALIVE/CeraUI/releases/latest) and use it instead of the standard BelaUI interface.
+
 ## Install the fork on your BELABOX
 
 - Enable SSH for the default user (`user`) on your existing belaUI
 - Connect to the BELABOX via SSH (use Putty on Windows, JuiceSSH on Android)
 - Then run:
   ```bash
+  # Standard installation with BelaUI
   wget -qO- https://raw.githubusercontent.com/pjeweb/belaui/override/install.sh | bash
+  
+  # Installation with CeraUI interface
+  wget -qO- https://raw.githubusercontent.com/pjeweb/belaui/override/install.sh | USE_CERAUI=true bash
   ```
 - To get back to the default belaUI, you can then run `sudo bash /opt/belaUI/reset-to-default.sh` through SSH.
 
@@ -86,7 +94,11 @@ pair: https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on
 - Run the deployment script by specifying the SSH target as an argument. For example, to deploy as root to a host at 192.168.100.100, run:
 
 ```bash
+# Standard deployment with BelaUI
 ./deploy-to-local.sh root@192.168.100.100
+
+# Deployment with CeraUI interface
+USE_CERAUI=true ./deploy-to-local.sh root@192.168.100.100
 ```
 
 ### Reset to default belaUI
