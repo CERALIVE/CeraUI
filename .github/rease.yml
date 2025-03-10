@@ -1,0 +1,55 @@
+name: Manual Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: 'Comma-separated list of branches to build (e.g., main,extended)'
+        required: true
+        default: 'main,extended'
+
+jobs:
+  build_and_release:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        branch: ${{ split(github.event.inputs.branches, ',') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Cache Node modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ matrix.branch }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ matrix.branch }}-
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      - name: Generate release files
+        run: npm run generate-release
+
+      - name: Get version from package.json
+        id: get_version
+        run: echo "VERSION=$(node -p \"require('./package.json').version\")" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: "v${{ env.VERSION }}-${{ matrix.branch }}"
+          name: "Release v${{ env.VERSION }} on branch ${{ matrix.branch }}"
+          draft: false
+          prerelease: false
