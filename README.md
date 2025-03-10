@@ -9,6 +9,8 @@ This fork includes an option to use the [CeraUI](https://github.com/CERALIVE/Cer
 
 ## Install the fork on your BELABOX
 
+> **Note:** Replacing the original UI directly may cause issues. When your BELABOX is updated, it can revert the UI. Ensure you monitor updates and reapply the override after updates.
+
 - Enable SSH for the default user (`user`) on your existing belaUI
 - Connect to the BELABOX via SSH (use Putty on Windows, JuiceSSH on Android)
 - Then run:
@@ -104,3 +106,7 @@ USE_CERAUI=true ./deploy-to-local.sh root@192.168.100.100
 ### Reset to default belaUI
 
 To reset the BELABOX to the default belaUI, you can run the reset script from the host (`./reset-local.sh`).
+
+## License
+
+This project is licensed under the **GPL-3.0 License**. See the [LICENSE](LICENSE) file for more details.
