@@ -46,6 +46,7 @@
   "settings": {
     "encoderSettings": "编码器设置",
     "inputMode": "输入模式",
+    "djiCameraMessage": "DJI 相机在使用 USB-LIBUVCH264 输入模式时可能表现更好",
     "selectInputMode": "选择输入模式",
     "selectEncodingOutputFormat": "选择输出编解码器",
     "selectEncodingFormat": "选择编码输出格式",
@@ -108,6 +109,7 @@
         "enabled": "已启用",
         "connected": "已连接",
         "disconnected": "已断开",
+        "disconnecting": "正在断开",
         "connecting": "连接中",
         "scanning": "扫描中"
 

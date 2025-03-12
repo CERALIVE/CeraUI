@@ -46,6 +46,7 @@
   "settings": {
     "encoderSettings": "إعدادات المرمز",
     "inputMode": "وضع الإدخال",
+    "djiCameraMessage": "قد تعمل كاميرات DJI بشكل أفضل باستخدام وضع الإدخال USB-LIBUVCH264",
     "selectInputMode": "اختر وضع الإدخال",
     "selectEncodingOutputFormat": "اختر ترميز الإخراج",
     "selectEncodingFormat": "حدد تنسيق إخراج الترميز",
@@ -108,6 +109,7 @@
         "enabled": "مفعّل",
         "connected": "متصل",
         "disconnected": "غير متصل",
+        "disconnecting":  "جارِ الانفصال",
         "connecting": "جاري الاتصال",
         "scanning": "جارٍ المسح"
       }

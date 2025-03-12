@@ -46,6 +46,7 @@
   "settings": {
     "encoderSettings": "인코더 설정",
     "inputMode": "입력 모드",
+    "djiCameraMessage": "DJI 카메라는 USB-LIBUVCH264 입력 모드를 사용하면 더 잘 작동할 수 있습니다",
     "selectInputMode": "입력 모드를 선택",
     "selectEncodingOutputFormat": "출력 코덱을 선택",
     "selectEncodingFormat": "인코딩 출력 형식 선택",
@@ -108,6 +109,7 @@
         "enabled": "활성화됨",
         "connected": "연결됨",
         "disconnected": "연결 해제됨",
+        "disconnecting": "연결 해제 중",
         "connecting": "연결 중",
         "scanning": "스캔 중"
       }

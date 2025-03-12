@@ -47,6 +47,7 @@
     "encoderSettings": "एनकोडर सेटिंग्स",
     "inputMode": "इनपुट मोड",
     "selectInputMode": "इनपुट मोड चुनें",
+    "djiCameraMessage": "DJI कैमरे USB-LIBUVCH264 इनपुट मोड का उपयोग करके बेहतर काम कर सकते हैं",
     "selectEncodingOutputFormat": "आउटपुट कोडेक चुनें",
     "selectEncodingFormat": "एनकोडिंग आउटपुट फॉर्मेट चुनें",
     "encodingResolution": "एनकोडिंग रिज़ॉल्यूशन",
@@ -108,6 +109,7 @@
         "enabled": "सक्षम",
         "connected": "जुड़ा हुआ",
         "disconnected": "डिस्कनेक्ट किया गया",
+        "disconnecting": "डिसकनेक्ट हो रहा है",
         "connecting": "कनेक्ट हो रहा है",
         "scanning": "स्कैनिंग"
       }

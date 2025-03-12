@@ -1,5 +1,6 @@
 <script lang="ts">
 import { Check, X } from 'lucide-svelte';
+import { onDestroy } from 'svelte';
 import { _ } from 'svelte-i18n';
 import type { Modem, ModemNetworkType } from '$lib/types/socket-messages';
 import { Button } from '$lib/components/ui/button';
@@ -20,7 +21,8 @@ const getSelectedNetwork: () => { value: ModemNetworkType; label: string } = () 
   return { value: modem.network_type.active, label: renameSupportedModemNetwork(modem.network_type.active) };
 };
 
-const defaultRoamingNetwork = { value: '', label: 'network.modem.automaticRoamingNetwork' };
+// Create a consistent format for the automatic roaming option
+const defaultRoamingNetwork = { value: -1, label: 'Automatic Selection' };
 
 // Function to get current modem config - this returns a fresh object each time
 const getModemConfig = () => ({
@@ -31,7 +33,7 @@ const getModemConfig = () => ({
   password: modem.config?.password || '',
   roaming: Boolean(modem.config?.roaming),
   network:
-    modem.config?.network === ''
+    !modem.config?.network || modem.config?.network === ''
       ? defaultRoamingNetwork
       : { value: modem.config?.network, label: modem.available_networks[modem.config.network]?.name || '' },
 });
@@ -40,27 +42,55 @@ const getModemConfig = () => ({
 let formData = $state(getModemConfig()); // Current form state
 let savedValues = $state(getModemConfig()); // Last saved values for comparison
 let errors = $state<Record<string, string>>({});
+
+// Immediately fix the value type of the network selection after initialization
+$effect.pre(() => {
+  // Force the default value to be numeric -1 instead of string
+  if (formData.network.value === '' || formData.network.value === 'auto') {
+    formData.network = { ...defaultRoamingNetwork };
+  }
+});
 let localScanningState = $state(false); // Track local scanning state
 let justSubmitted = $state(false); // Flag to prevent updates right after form submission
 
-// Watch for modem changes and update formData if it hasn't been modified
-// This ensures the form stays in sync with modem data from parent component
-$effect(() => {
-  // This will execute whenever modem changes (modem is used in getModemConfig)
-  // Skip the update if we just submitted the form to prevent values from flickering
-  if (justSubmitted) {
-    // Reset the flag after a short delay to allow for future updates
-    setTimeout(() => {
-      justSubmitted = false;
-    }, 1000);
-    return;
-  }
+// Watch for modem changes using a manually managed reactive state
+// instead of $effect to break the circular dependency
+let lastModemState: string = JSON.stringify(modem);
+
+// Use a non-reactive function for modem updates
+function updateFormFromModem() {
+  const currentModemState = JSON.stringify(modem);
+
+  // Only run if modem has actually changed
+  if (lastModemState === currentModemState) return;
+
+  // Update our tracked state
+  lastModemState = currentModemState;
+
+  // Skip the update if we just submitted the form
+  if (justSubmitted) return;
 
   // Only update form if user hasn't made changes
   if (!isFormChanged()) {
-    formData = getModemConfig();
+    const newConfig = getModemConfig();
+    formData = newConfig;
     savedValues = getModemConfig();
   }
+}
+
+// Arrays to track all timeouts and intervals for cleanup
+let scanTimeouts: number[] = [];
+let modemWatchInterval = setInterval(updateFormFromModem, 500);
+
+// Clean up all intervals and timeouts when component is destroyed
+onDestroy(() => {
+  // Clear the main interval
+  clearInterval(modemWatchInterval);
+
+  // Clear all scan timeouts
+  scanTimeouts.forEach(timeoutId => {
+    clearTimeout(timeoutId);
+  });
 });
 
 // Validate form data
@@ -112,94 +142,112 @@ function onSubmit(event: Event) {
   // Set flag to prevent form from resetting due to parent component updates
   justSubmitted = true;
 
-  // Create copies of current form data to preserve it after submission
-  const currentNetwork = { ...formData.network };
-  const currentSelectedNetwork = { ...formData.selectedNetwork };
+  // Create a snapshot of the current form state to use for the submission
+  // This breaks reactive connections
+  const snapshot = {
+    selectedNetwork: { ...formData.selectedNetwork },
+    autoconfig: formData.autoconfig,
+    apn: formData.apn,
+    username: formData.username,
+    password: formData.password,
+    roaming: formData.roaming,
+    network: { ...formData.network },
+  };
 
   // First, make sure the form data is consistent with roaming setting
-  if (!formData.roaming) {
+  if (!snapshot.roaming) {
     // If roaming is off, use the default network for submission
     const networkForSubmission = defaultRoamingNetwork;
 
-    // Submit with consistent values
+    // Submit with consistent values using the snapshot
     changeModemSettings({
       device: deviceId,
-      apn: formData.apn,
-      username: formData.username,
-      network_type: formData.selectedNetwork.value,
-      password: formData.password,
-      autoconfig: formData.autoconfig,
+      apn: snapshot.apn,
+      username: snapshot.username,
+      network_type: snapshot.selectedNetwork.value,
+      password: snapshot.password,
+      autoconfig: snapshot.autoconfig,
       roaming: false, // explicitly set false to be clear
-      network: networkForSubmission.value,
+      network: Number(networkForSubmission.value) === -1 ? '' : networkForSubmission.value,
     });
 
-    // Update saved values without modifying current form state
-    savedValues = {
-      selectedNetwork: {
-        value: currentSelectedNetwork.value,
-        label: currentSelectedNetwork.label,
-      },
-      autoconfig: formData.autoconfig,
-      apn: formData.apn,
-      username: formData.username,
-      password: formData.password,
-      roaming: false,
-      network: {
-        value: networkForSubmission.value,
-        label: networkForSubmission.label,
-      },
-    };
-    
-    // Note: We're NOT updating formData here to prevent UI reset
+    // Use window.setTimeout to update the saved values outside of the reactive context
+    window.setTimeout(() => {
+      // Update saved values without modifying current form state
+      savedValues = {
+        selectedNetwork: {
+          value: snapshot.selectedNetwork.value,
+          label: snapshot.selectedNetwork.label,
+        },
+        autoconfig: snapshot.autoconfig,
+        apn: snapshot.apn,
+        username: snapshot.username,
+        password: snapshot.password,
+        roaming: false,
+        network: {
+          value: networkForSubmission.value,
+          label: networkForSubmission.label,
+        },
+      };
+    }, 0);
   } else {
-    // If roaming is on, use selected network
+    // If roaming is on, use selected network from snapshot
 
-    // Submit with current values
+    // Submit with snapshot values
     changeModemSettings({
       device: deviceId,
-      apn: formData.apn,
-      username: formData.username,
-      network_type: formData.selectedNetwork.value,
-      password: formData.password,
-      autoconfig: formData.autoconfig,
+      apn: snapshot.apn,
+      username: snapshot.username,
+      network_type: snapshot.selectedNetwork.value,
+      password: snapshot.password,
+      autoconfig: snapshot.autoconfig,
       roaming: true, // explicitly set true to be clear
-      network: formData.network.value,
+      network: Number(snapshot.network.value) === -1 ? '' : snapshot.network.value,
     });
 
-    // Update saved values with deep copies to avoid reference issues
-    // But maintain the original objects to prevent UI reset
-    savedValues = {
-      selectedNetwork: {
-        value: currentSelectedNetwork.value,
-        label: currentSelectedNetwork.label,
-      },
-      autoconfig: formData.autoconfig,
-      apn: formData.apn,
-      username: formData.username,
-      password: formData.password,
-      roaming: true,
-      network: {
-        value: currentNetwork.value,
-        label: currentNetwork.label,
-      },
-    };
+    // Use window.setTimeout to update the saved values outside of the reactive context
+    window.setTimeout(() => {
+      // Update saved values with deep copies to avoid reference issues
+      savedValues = {
+        selectedNetwork: {
+          value: snapshot.selectedNetwork.value,
+          label: snapshot.selectedNetwork.label,
+        },
+        autoconfig: snapshot.autoconfig,
+        apn: snapshot.apn,
+        username: snapshot.username,
+        password: snapshot.password,
+        roaming: true,
+        network: {
+          value: snapshot.network.value,
+          label: snapshot.network.label,
+        },
+      };
+    }, 0);
   }
+
+  // Reset the justSubmitted flag after a delay
+  const timeoutId = window.setTimeout(() => {
+    justSubmitted = false;
+  }, 1000);
+
+  // Track the timeout for cleanup
+  scanTimeouts.push(timeoutId);
 }
 
 // Handle scanning networks with proper state management
 function handleScanNetworks() {
   // Set local scanning state immediately for responsive UI
   localScanningState = true;
-  
+
   // Set flag to prevent form reset while scanning
   justSubmitted = true;
 
   // Call the scan function
   scanModemNetworks(deviceId);
 
-  // Update the UI to show scanning state before the server responds
-  // This improves the perceived responsiveness of the UI
-  setTimeout(() => {
+  // Use window.setTimeout to break out of reactivity chain
+  window.setTimeout(() => {
     if (!modemIsScanning) {
       // If after a short delay, the modemIsScanning prop hasn't updated
       // we can assume the request is in progress and keep showing scanning state locally
@@ -207,11 +255,15 @@ function handleScanNetworks() {
   }, 200);
 
   // Reset local scanning after a reasonable timeout if server doesn't respond
-  setTimeout(() => {
+  // Use window.setTimeout to avoid reactive updates
+  const timeoutId = window.setTimeout(() => {
     localScanningState = false;
     // Allow form updates again after scan completes
     justSubmitted = false;
   }, 10000);
+
+  // Store timeout ID for cleanup
+  scanTimeouts.push(timeoutId);
 }
 
 // Reset form handler
@@ -239,7 +291,7 @@ function resetForm() {
 <div class="grid gap-2">
   <form onsubmit={onSubmit} class="grid gap-4">
     <div class="mt-1 grid gap-1">
-      <Label for="networkType" class="mb-2 ml-1">{$_('network.modem.networkType')}</Label>
+      <Label for="networkType" class="mb-1 ml-1">{$_('network.modem.networkType')}</Label>
       <Select.Root
         selected={formData.selectedNetwork}
         onSelectedChange={val => {
@@ -248,12 +300,10 @@ function resetForm() {
             errors.selectedNetwork = undefined;
           }
         }}>
-        <Select.Trigger id="networkType" class={errors.selectedNetwork ? 'border-red-500 h-10' : 'h-10'}>
+        <Select.Trigger id="networkType">
           <Select.Value placeholder={renameSupportedModemNetwork(formData.selectedNetwork.value)}></Select.Value>
         </Select.Trigger>
-        <Select.Content
-          class="min-w-[--radix-select-trigger-width] max-h-[var(--radix-select-content-available-height)] w-[var(--radix-select-trigger-width)]"
-          position="popper">
+        <Select.Content>
           <Select.Group>
             {#each modem.network_type.supported as networkType}
               <Select.Item value={networkType}>{renameSupportedModemNetwork(networkType)}</Select.Item>
@@ -287,34 +337,26 @@ function resetForm() {
     </div>
 
     {#if formData.roaming}
-      <div class="mt-1 grid gap-1">
+      <div class="mt-1">
         <Label for="roamingNetwork" class="mb-2 ml-1">{$_('network.modem.roamingNetwork')}</Label>
-
-        <!-- Select with fixed height to prevent layout shifts -->
-        <div class="grid gap-2">
-          <!-- Select with fixed height wrapper -->
-          <div class="min-w-0">
+        <div class="flex items-start gap-2">
+          <div class="flex-1">
             <Select.Root
-              selected={formData.network.value === ''
-                ? { value: formData.network.value, label: $_(formData.network.label) }
-                : formData.network}
+              selected={formData.network}
               onSelectedChange={val => {
                 if (val) formData.network = { ...val }; // Create a new object to ensure reactivity
               }}>
-              <Select.Trigger id="roamingNetwork" class="w-full h-10">
-                <Select.Value 
-                  placeholder={formData.network.value === '' 
-                    ? $_(formData.network.label)
-                    : formData.network.label}>
+              <Select.Trigger id="roamingNetwork" class="w-full">
+                <Select.Value>
+                  {Number(formData.network.value) === -1
+                    ? $_('network.modem.automaticRoamingNetwork')
+                    : formData.network.label}
                 </Select.Value>
               </Select.Trigger>
-              <Select.Content
-                class="min-w-[--radix-select-trigger-width] max-h-[var(--radix-select-content-available-height)] w-[var(--radix-select-trigger-width)]"
-                position="popper">
+              <Select.Content>
                 <Select.Group>
-                  <Select.Item value={defaultRoamingNetwork.value} label={$_(defaultRoamingNetwork.label)}
+                  <Select.Item value={defaultRoamingNetwork.value} label={$_('network.modem.automaticRoamingNetwork')}
                   ></Select.Item>
-
                   {#if modem.available_networks}
                     {#each Object.entries(modem.available_networks) as [key, availableNetwork]}
                       {#if availableNetwork.availability === 'available'}
@@ -326,18 +368,14 @@ function resetForm() {
               </Select.Content>
             </Select.Root>
           </div>
-
-          <!-- Button below the select -->
-          <div>
-            <Button
-              type="button"
-              variant="outline"
-              class="bg-blue-600 hover:bg-blue-700 w-full"
-              on:click={handleScanNetworks}
-              disabled={modemIsScanning || localScanningState}>
-              {modemIsScanning || localScanningState ? $_('network.modem.scanning') : $_('network.modem.scan')}
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            class="shrink-0 bg-blue-600 hover:bg-blue-700"
+            on:click={handleScanNetworks}
+            disabled={modemIsScanning || localScanningState}>
+            {modemIsScanning || localScanningState ? $_('network.modem.scanning') : $_('network.modem.scan')}
+          </Button>
         </div>
       </div>
     {/if}

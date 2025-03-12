@@ -48,6 +48,7 @@
   "settings": {
     "encoderSettings": "Paramètres de l'encodeur",
     "inputMode": "Mode d'entrée",
+    "djiCameraMessage": "Les caméras DJI peuvent mieux fonctionner en utilisant le mode d’entrée USB-LIBUVCH264",
     "selectInputMode": "Sélectionnez le mode d'entrée",
     "selectEncodingOutputFormat": "Sélectionnez le codec de sortie",
     "encodingFormat": "Format de codage",
@@ -108,6 +109,7 @@
         "registered": "Enregistré",
         "connected": "Connecté",
         "disconnected": "Déconnecté",
+        "disconnecting": "Déconnexion en cours",
         "connecting": "Connexion en cours",
         "scanning": "Scan en cours"
       }
