@@ -69,6 +69,7 @@
   "dependencies": {
     "@macfja/svelte-persistent-store": "^2.4.2",
     "@sveltejs/enhanced-img": "^0.4.1",
+    "@sveltejs/kit": "^2.19.0",
     "lodash-es": "^4.17.21",
     "lodash.template": "^4.5.0",
     "lucide-svelte": "^0.456.0",
