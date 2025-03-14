@@ -39,9 +39,8 @@ export function parsePipelineName(name: string): PipelineInfo {
   // Extract resolution - typically NNNp format (like 720p, 1080p)
   const resolutionMatch = name.match(/(\d{3,4}p)/);
   
-  // Extract framerate - typically pNN format (like p30, p60)
-  // Handle both underscore separated and inline formats
-  const fpsMatch = name.match(/p(\d+(?:\.\d+)?)/);
+  // Extract framerate - typically pNN format (like p30, p60) or _NNfps (like _30fps, _60fps)
+  const fpsMatch = name.match(/p(\d+(?:\.\d+)?)|_(\d+(?:\.\d+)?)fps/);
   
   // Special case for libuvch264
   const isLibUVC = name.includes('libuvch264');
