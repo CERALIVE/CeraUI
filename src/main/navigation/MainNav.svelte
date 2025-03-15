@@ -1,20 +1,35 @@
 <script lang="ts">
+import { onMount } from 'svelte';
 import { cubicInOut } from 'svelte/easing';
 import { crossfade } from 'svelte/transition';
 import { _ } from 'svelte-i18n';
 import { Icons } from '$lib/components/icons';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
 import { type NavElements, defaultNavElement, navElements, siteName } from '$lib/config';
+import { setupHashNavigation } from '$lib/helpers/NavigationHelper';
 import { navigationStore } from '$lib/stores/navigation';
 import { cn } from '$lib/utils';
+
 const [send, receive] = crossfade({
   duration: 250,
   easing: cubicInOut,
 });
 
 let currentNav: NavElements | undefined = $state(defaultNavElement);
-navigationStore.subscribe(navigation => {
-  currentNav = navigation;
+
+onMount(() => {
+  // Setup hash-based navigation
+  const cleanup = setupHashNavigation(navigationStore);
+
+  // Local subscription to update currentNav
+  const unsubscribe = navigationStore.subscribe(navigation => {
+    currentNav = navigation;
+  });
+
+  return () => {
+    cleanup();
+    unsubscribe();
+  };
 });
 </script>
 
@@ -32,7 +47,6 @@ navigationStore.subscribe(navigation => {
         <button
           onclick={() => navigationStore.set({ [identifier]: navigation })}
           id={identifier}
-          data-sveltekit-noscroll
           class={cn(
             'relative flex h-9 min-w-36 items-center justify-center rounded-b-2xl px-4 text-center text-sm transition-colors hover:text-primary',
             isActive ? 'font-medium text-primary' : 'text-muted-foreground',

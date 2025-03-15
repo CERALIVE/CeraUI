@@ -1,7 +1,7 @@
-import Advanced from '../../main/Tabs/Advanced.svelte';
-import General from '../../main/Tabs/General.svelte';
-import Network from '../../main/Tabs/Network.svelte';
-import Settings from '../../main/Tabs/Settings.svelte';
+import Advanced from '../../main/tabs/Advanced.svelte';
+import General from '../../main/tabs/General.svelte';
+import Network from '../../main/tabs/Network.svelte';
+import Settings from '../../main/tabs/Settings.svelte';
 import type { ComponentProps } from 'svelte';
 
 //eslint-disable-next-line @typescript-eslint/no-explicit-any
