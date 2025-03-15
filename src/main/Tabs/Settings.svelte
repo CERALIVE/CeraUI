@@ -538,7 +538,7 @@ const startStreamingWithCurrentConfig = () => {
                 <Label for="bitrate">{$_('settings.bitrate')}</Label>
                 <Slider
                   id="bitrate"
-                  class="mb-2 mt-2"
+                  class="my-6"
                   value={[selectedBitrate]}
                   max={12000}
                   min={500}
@@ -620,7 +620,7 @@ const startStreamingWithCurrentConfig = () => {
                   <Label for="audioDelay">{$_('settings.audioDelay')}</Label>
                   <Slider
                     id="audioDelay"
-                    class="mb-2 mt-2"
+                    class="my-6"
                     value={[selectedAudioDelay]}
                     onValueChange={value => (selectedAudioDelay = value[0])}
                     disabled={isStreaming}
@@ -733,7 +733,7 @@ const startStreamingWithCurrentConfig = () => {
                 <Label for="srtLatency">{$_('settings.srtLatency')}</Label>
                 <Slider
                   id="srtLatency"
-                  class="mb-2 mt-2"
+                  class="my-6"
                   value={[srtLatency]}
                   max={12000}
                   min={2000}
