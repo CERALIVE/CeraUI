@@ -369,8 +369,8 @@ const startStreamingWithCurrentConfig = () => {
       {/if}
     </form>
 
-    <div class="grid grid-rows-2 gap-4 md:grid-cols-3 lg:grid-cols-2">
-      <Card.Root class="row-span-2">
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <Card.Root class="md:row-span-2">
         <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
           <Card.Title class="text-sm font-medium">{$_('settings.encoderSettings')}</Card.Title>
           <Binary class="h-4 w-4 text-muted-foreground" />
