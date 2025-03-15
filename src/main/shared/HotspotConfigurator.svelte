@@ -54,7 +54,7 @@ const resetHotSpotProperties = () => {
     {$_('hotspotConfigurator.dialog.configureHotspot')}
   {/snippet}
   {#snippet description()}
-    <div class="grid gap-2">
+    <div class="grid gap-4 py-2 text-foreground">
       <div class="grid gap-1">
         <Label for="name">{$_('hotspotConfigurator.hotspot.name')}</Label>
         <Input
