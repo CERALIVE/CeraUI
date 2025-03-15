@@ -1,24 +1,37 @@
 <script lang="ts">
+import { onMount } from 'svelte';
 import { Icons } from '$lib/components/icons';
 import { Button } from '$lib/components/ui/button';
 import MobileLink from '$lib/components/ui/mobile-link.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
 import * as Sheet from '$lib/components/ui/sheet';
 import { type NavElements, defaultNavElement, navElements, siteName } from '$lib/config';
+import { setupHashNavigation } from '$lib/helpers/NavigationHelper';
 import { navigationStore } from '$lib/stores/navigation';
 import { capitalizeFirstLetter } from '$lib/utils.js';
 
 let currentNav: NavElements = $state(defaultNavElement);
-navigationStore.subscribe(navigation => {
-  currentNav = navigation;
-});
-
 let open = $state(false);
 
 const handleClick = (nav: NavElements) => {
   navigationStore.set(nav);
   open = false;
 };
+
+onMount(() => {
+  // Setup hash-based navigation
+  const cleanup = setupHashNavigation(navigationStore);
+
+  // Local subscription to update currentNav
+  const unsubscribe = navigationStore.subscribe(navigation => {
+    currentNav = navigation;
+  });
+
+  return () => {
+    cleanup();
+    unsubscribe();
+  };
+});
 </script>
 
 <Sheet.Root bind:open>
@@ -32,7 +45,7 @@ const handleClick = (nav: NavElements) => {
     </Button>
   </Sheet.Trigger>
   <Sheet.Content side="left" class="pr-0">
-    <MobileLink identifier="general" class="flex items-center" onclick="()=>handleClick(defaultNavElement)">
+    <MobileLink identifier="general" class="flex items-center" onclick={() => handleClick(defaultNavElement)}>
       <Icons.logo class="mr-2 h-4 w-4" />
       <span class="font-bold">{siteName}</span>
     </MobileLink>
