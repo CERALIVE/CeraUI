@@ -29,30 +29,27 @@ export type GroupedPipelines = {
 export function parsePipelineName(name: string): PipelineInfo {
   // Basic device extraction
   const deviceMatch = name.match(/^([^/]+)/);
-  
+
   // Extract encoder (h264 or h265)
   const encoderMatch = name.match(/(h264|h265)/);
-  
+
   // Format extraction - comes after h264/h265_ prefix
   const formatMatch = name.match(/(?:h264|h265)_([^_]+)/);
-  
+
   // Extract resolution - typically NNNp format (like 720p, 1080p)
   const resolutionMatch = name.match(/(\d{3,4}p)/);
-  
+
   // Extract framerate - typically pNN format (like p30, p60) or _NNfps (like _30fps, _60fps)
   const fpsMatch = name.match(/p(\d+(?:\.\d+)?)|_(\d+(?:\.\d+)?)fps/);
-  
   // Special case for libuvch264
   const isLibUVC = name.includes('libuvch264');
-  
+
   return {
     device: deviceMatch ? deviceMatch[0] : null,
     encoder: encoderMatch ? encoderMatch[0] : null,
-    format: formatMatch 
-      ? (isLibUVC ? 'usb-libuvch264' : formatMatch[1].replace(/_/g, ' ')) 
-      : null,
+    format: formatMatch ? (isLibUVC ? 'usb-libuvch264' : formatMatch[1].replace(/_/g, ' ')) : null,
     resolution: resolutionMatch ? resolutionMatch[0] : '[Match device resolution]',
-    fps: fpsMatch ? parseFloat(fpsMatch[1]) : '[Match device output]',
+    fps: fpsMatch ? parseFloat(fpsMatch[1] || fpsMatch[2]) : '[Match device output]',
   };
 }
 
