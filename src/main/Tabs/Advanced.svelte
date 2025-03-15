@@ -75,12 +75,13 @@ StatusMessages.subscribe(statusMessage => {
         <Card.Content>
           <div>
             <div>
-              <Label class="block text-sm font-medium">{$_('advanced.lanPassword')}</Label>
+              <Label for="lanPassword">{$_('advanced.lanPassword')}</Label>
               {#if password.length < 8}
-                <p class="text-xs text-red-500">{$_('advanced.minLength')}</p>
+                <p class="text-xs text-red-500 my-1">{$_('advanced.minLength')}</p>
               {/if}
               <div class="relative">
                 <Input
+                  id="lanPassword"
                   bind:value={password}
                   type={showPassword ? 'text' : 'password'}
                   placeholder={$_('advanced.newPassword')} />
@@ -110,12 +111,18 @@ StatusMessages.subscribe(statusMessage => {
             </div>
 
             <div class="mt-2">
-              <a
-                class="block cursor-pointer text-sm font-medium text-blue-400 hover:underline"
-                href="https://cloud.belabox.net"
-                target="_blank">{$_('advanced.cloudRemoteKey')}</a>
+              <Label for="remoteKey">{$_('advanced.cloudRemoteKey')}</Label>
+              <p>
+                <a
+                  class="block cursor-pointer text-sm font-medium text-blue-400 hover:underline"
+                  href="https://cloud.belabox.net"
+                  target="_blank"
+                >
+                  https://cloud.belabox.net
+                </a>
+              </p>
               <div class="relative">
-                <Input name="remote-key" type={showRemoteKey ? 'text' : 'password'} bind:value={remoteKey} />
+                <Input id="remoteKey" name="remote-key" type={showRemoteKey ? 'text' : 'password'} bind:value={remoteKey} />
                 <div class="absolute inset-y-0 right-0 flex">
                   <Button
                     variant="outline"
@@ -199,11 +206,12 @@ StatusMessages.subscribe(statusMessage => {
           <div>
             <div>
               <!-- SSH Password Section -->
-              <Label class="block text-sm font-medium">
+              <Label for="sshPassword">
                 {$_('advanced.sshPassword', { values: { sshUser } })}
               </Label>
               <div class="relative">
                 <Input
+                  id="sshPassword"
                   on:focus={event => {
                     event.preventDefault();
                     navigator.clipboard.writeText(sshPassword).then(() => {

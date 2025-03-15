@@ -291,7 +291,7 @@ function resetForm() {
 <div class="grid gap-2">
   <form onsubmit={onSubmit} class="grid gap-4">
     <div class="mt-1 grid gap-1">
-      <Label for="networkType" class="mb-1 ml-1">{$_('network.modem.networkType')}</Label>
+      <Label for="networkType">{$_('network.modem.networkType')}</Label>
       <Select.Root
         selected={formData.selectedNetwork}
         onSelectedChange={val => {
@@ -338,7 +338,7 @@ function resetForm() {
 
     {#if formData.roaming}
       <div class="mt-1">
-        <Label for="roamingNetwork" class="mb-2 ml-1">{$_('network.modem.roamingNetwork')}</Label>
+        <Label for="roamingNetwork">{$_('network.modem.roamingNetwork')}</Label>
         <div class="flex items-start gap-2">
           <div class="flex-1">
             <Select.Root
@@ -402,7 +402,7 @@ function resetForm() {
 
     {#if !formData.autoconfig}
       <div class="grid gap-1">
-        <Label for="apn" class="mb-1">{$_('network.modem.apn')}</Label>
+        <Label for="apn">{$_('network.modem.apn')}</Label>
         <Input
           id="apn"
           autocapitalize="none"
@@ -417,7 +417,7 @@ function resetForm() {
       </div>
 
       <div class="grid gap-1">
-        <Label for="username" class="mb-1">{$_('network.modem.username')}</Label>
+        <Label for="username">{$_('network.modem.username')}</Label>
         <Input
           id="username"
           type="text"
@@ -428,9 +428,9 @@ function resetForm() {
       </div>
 
       <div class="grid gap-1">
-        <Label for="password" class="mb-1">{$_('network.modem.password')}</Label>
+        <Label for="modemPassword">{$_('network.modem.password')}</Label>
         <Input
-          id="password"
+          id="modemPassword"
           type="text"
           autocapitalize="none"
           autocomplete="off"

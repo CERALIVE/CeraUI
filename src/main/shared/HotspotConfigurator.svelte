@@ -56,7 +56,7 @@ const resetHotSpotProperties = () => {
   {#snippet description()}
     <div class="grid gap-2">
       <div class="grid gap-1">
-        <Label for="name" class="mb-1">{$_('hotspotConfigurator.hotspot.name')}</Label>
+        <Label for="name">{$_('hotspotConfigurator.hotspot.name')}</Label>
         <Input
           bind:value={hotspotProperties.name}
           id="name"
@@ -66,10 +66,10 @@ const resetHotSpotProperties = () => {
           autocorrect="off" />
       </div>
       <div class="grid gap-1">
-        <Label for="password" class="mb-1">{$_('hotspotConfigurator.hotspot.password')}</Label>
+        <Label for="hotspotPassword">{$_('hotspotConfigurator.hotspot.password')}</Label>
         <Input
           bind:value={hotspotProperties.password}
-          id="password"
+          id="hotspotPassword"
           type="password"
           placeholder={$_('hotspotConfigurator.hotspot.placeholderPassword')}
           autocapitalize="none"
@@ -77,7 +77,7 @@ const resetHotSpotProperties = () => {
           autocorrect="off" />
       </div>
       <div class="grid gap-1">
-        <Label for="channel" class="mb-2 ml-1">{$_('hotspotConfigurator.hotspot.channel')}</Label>
+        <Label for="channel">{$_('hotspotConfigurator.hotspot.channel')}</Label>
         <Select.Root
           onSelectedChange={selected => {
             if (hotspotProperties && selected !== undefined) hotspotProperties.selectedChannel = selected;

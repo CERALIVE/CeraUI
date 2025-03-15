@@ -379,7 +379,7 @@ const startStreamingWithCurrentConfig = () => {
           <div class="grid gap-4">
             <!-- Input Mode Selection -->
             <div class="grid gap-1">
-              <Label for="inputMode" class="mb-2">{$_('settings.inputMode')}</Label>
+              <Label for="inputMode">{$_('settings.inputMode')}</Label>
               <Select.Root
                 disabled={isStreaming}
                 selected={selectedInputMode}
@@ -417,7 +417,7 @@ const startStreamingWithCurrentConfig = () => {
 
             <!-- Encoding Format Selection -->
             <div class="grid gap-1">
-              <Label for="encodingFormat" class="mb-2">{$_('settings.encodingFormat')}</Label>
+              <Label for="encodingFormat">{$_('settings.encodingFormat')}</Label>
               <Select.Root
                 disabled={isStreaming || !selectedInputMode?.value}
                 selected={selectedEncoder}
@@ -448,7 +448,7 @@ const startStreamingWithCurrentConfig = () => {
 
             <!-- Encoding Resolution Selection -->
             <div class="grid gap-1">
-              <Label for="encodingResolution" class="mb-2">{$_('settings.encodingResolution')}</Label>
+              <Label for="encodingResolution">{$_('settings.encodingResolution')}</Label>
               <Select.Root
                 disabled={isStreaming || !selectedEncoder?.value}
                 selected={selectedResolution}
@@ -493,7 +493,7 @@ const startStreamingWithCurrentConfig = () => {
 
             <!-- Framerate Selection -->
             <div class="grid gap-1">
-              <Label for="framerate" class="mb-2">{$_('settings.framerate')}</Label>
+              <Label for="framerate">{$_('settings.framerate')}</Label>
               <Select.Root
                 disabled={isStreaming || !selectedResolution?.value}
                 selected={selectedFramerate}
@@ -577,7 +577,7 @@ const startStreamingWithCurrentConfig = () => {
           <div class="grid gap-4">
             {#if audioCodecs && unparsedPipelines && selectedPipeline && unparsedPipelines[selectedPipeline].asrc}
               <div class="grid gap-1">
-                <Label for="audioSource" class="mb-2">{$_('settings.audioSource')}</Label>
+                <Label for="audioSource">{$_('settings.audioSource')}</Label>
                 <Select.Root
                   disabled={isStreaming}
                   selected={selectedAudioSource}
@@ -600,7 +600,7 @@ const startStreamingWithCurrentConfig = () => {
 
             {#if audioCodecs && unparsedPipelines && selectedPipeline && unparsedPipelines[selectedPipeline].acodec}
               <div class="grid gap-1">
-                <Label for="audioCodec" class="mb-2">{$_('settings.audioCodec')}</Label>
+                <Label for="audioCodec">{$_('settings.audioCodec')}</Label>
                 <Select.Root
                   disabled={isStreaming}
                   selected={selectedAudioCodec}
