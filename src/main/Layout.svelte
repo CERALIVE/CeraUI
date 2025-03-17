@@ -27,26 +27,6 @@ let activeToasts = $state<Record<string, ToastInfo>>({});
 // Simple flag to prevent recursive updates
 let isUpdatingToasts = false;
 
-// Function to dismiss all non-persistent toasts
-const dismissAllNonPersistentToasts = () => {
-  // Guard against recursion
-  if (isUpdatingToasts) return;
-
-  try {
-    isUpdatingToasts = true;
-
-    // Use Sonner's built-in dismissAll method first which is more reliable
-    toast.dismiss();
-
-    // Reset tracking state safely
-    setTimeout(() => {
-      activeToasts = {};
-    }, 0);
-  } finally {
-    isUpdatingToasts = false;
-  }
-};
-
 // Override original SystemHelper functions to add toast clearing
 const startStreaming = (config: { [key: string]: string | number }) => {
   // Guard against infinite updates
@@ -113,6 +93,7 @@ const stopStreaming = () => {
 };
 
 // Show a toast, extending duration if a duplicate exists
+// eslint-disabled-next-line @typescript-eslint/no-explicit-any
 const showToast = (type: NotificationType, name: string, options: any) => {
   // Prevent recursive calls that could cause infinite loops
   if (isUpdatingToasts) return;

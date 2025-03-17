@@ -9,7 +9,10 @@ export { className as class };
 </script>
 
 <LabelPrimitive.Root
-  class={cn('block mb-1.5 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70', className)}
+  class={cn(
+    'mb-1.5 block text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70',
+    className,
+  )}
   {...$$restProps}>
   <slot />
 </LabelPrimitive.Root>
