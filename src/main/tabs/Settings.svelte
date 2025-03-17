@@ -70,7 +70,6 @@ const normalizeValue = (value: number, min: number, max: number, step = 1) =>
 
 // Form state
 let formErrors = $state<Record<string, string>>({});
-let justSubmitted = $state(false);
 
 AudioCodecsMessages.subscribe(audioCodecsMessage => {
   if (audioCodecsMessage && !audioCodecs) {
