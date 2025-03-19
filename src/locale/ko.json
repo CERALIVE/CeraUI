@@ -220,6 +220,8 @@
     "belaboxLogTooltip": "문제 해결을 위해 로그를 다운로드합니다.",
     "systemLogTooltip": "디버깅을 위해 시스템 로그를 다운로드합니다.",
     "confirmBelaboxLog": "BELABOX 로그를 다운로드하시겠습니까? 비밀번호와 같은 민감한 정보가 포함될 수 있습니다.",
-    "confirmSystemLog": "시스템 로그를 다운로드하시겠습니까? 비밀번호와 같은 민감한 정보가 포함될 수 있습니다."
+    "confirmSystemLog": "시스템 로그를 다운로드하시겠습니까? 비밀번호와 같은 민감한 정보가 포함될 수 있습니다.",
+    "downloadBelaboxLog": "BELABOX 로그 다운로드",
+    "downloadSystemLog": "시스템 로그 다운로드"
   }
 }

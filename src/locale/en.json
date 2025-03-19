@@ -221,6 +221,8 @@
     "belaboxLogTooltip": "Download logs for troubleshooting.",
     "systemLogTooltip": "Download system logs for debugging.",
     "confirmBelaboxLog": "Are you sure you want to download the BELABOX log? It may contain sensitive information such as passwords.",
-    "confirmSystemLog": "Are you sure you want to download the system log? It may contain sensitive information such as passwords."
+    "confirmSystemLog": "Are you sure you want to download the system log? It may contain sensitive information such as passwords.",
+    "downloadBelaboxLog": "Download BELABOX Log",
+    "downloadSystemLog": "Download System Log"
   }
 }

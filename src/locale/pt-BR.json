@@ -219,6 +219,8 @@
     "belaboxLogTooltip": "Baixe os logs para solução de problemas.",
     "systemLogTooltip": "Baixe os logs do sistema para depuração.",
     "confirmBelaboxLog": "Tem certeza de que deseja baixar o log do BELABOX? Ele pode conter informações sensíveis, como senhas.",
-    "confirmSystemLog": "Tem certeza de que deseja baixar o log do sistema? Ele pode conter informações sensíveis, como senhas."
+    "confirmSystemLog": "Tem certeza de que deseja baixar o log do sistema? Ele pode conter informações sensíveis, como senhas.",
+    "downloadBelaboxLog": "Baixar log do BELABOX",
+    "downloadSystemLog": "Baixar log do sistema"
   }
 }
