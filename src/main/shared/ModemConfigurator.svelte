@@ -216,7 +216,7 @@ function resetForm() {
         {/if}
       </Toggle>
       <div class="ml-4 space-y-1">
-        <p class="text-sm text-muted-foreground">
+        <p class="text-muted-foreground text-sm">
           {$_('network.modem.enableRoaming')}
         </p>
       </div>
@@ -274,7 +274,7 @@ function resetForm() {
         {/if}
       </Toggle>
       <div class="ml-4 space-y-1">
-        <p class="text-sm text-muted-foreground">
+        <p class="text-muted-foreground text-sm">
           {$_('network.modem.autoapn')}
         </p>
       </div>

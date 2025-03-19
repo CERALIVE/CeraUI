@@ -77,7 +77,7 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 <SimpleAlertDialog
   confirmButtonText={$_('wifiSelector.dialog.close')}
   hiddeCancelButton={true}
-  class="max-w-screen-sm"
+  class="max-w-(--breakpoint-sm)"
   bind:open
   title={$_('wifiSelector.dialog.searchWifi')}
   extraButtonClasses="bg-green-500 hover:bg-green-500/90">
@@ -88,7 +88,7 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
     {$_('wifiSelector.dialog.availableNetworks', { values: { network: networkRename(wifi.ifname) } })}
   {/snippet}
   <Card.Root class="col-span-3 pr-0">
-    <ScrollArea class="w-100 h-96" type="auto">
+    <ScrollArea class="h-96 w-100" type="auto">
       <Card.Content class="pt-0">
         <div class="space-y-0">
           {#each wifi.available as availableNetwork, index}
@@ -98,8 +98,8 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
             <div class={cn('flex items-center p-2 pr-4', index ? 'border-t-2' : 'mt-2', uuid ? '' : 'cursor-pointer')}>
               <WifiQuality signal={availableNetwork.signal} class="size-8" />
               <div class="ml-2 space-y-2 text-left">
-                <p class="pb-0 pt-0 text-sm font-medium leading-none">{availableNetwork.ssid}</p>
-                <p class="mb-0 mt-0 pb-0 pt-0 text-sm text-muted-foreground">
+                <p class="pt-0 pb-0 text-sm leading-none font-medium">{availableNetwork.ssid}</p>
+                <p class="text-muted-foreground mt-0 mb-0 pt-0 pb-0 text-sm">
                   {availableNetwork.security.replaceAll(' ', ', ')}
                 </p>
               </div>

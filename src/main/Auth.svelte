@@ -68,12 +68,12 @@ async function onSubmit(event: SubmitEvent) {
 }
 </script>
 
-<div class="container relative grid h-dvh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0">
-  <span class="absolute right-4 top-4 flex md:right-8 md:top-8">
+<div class="relative container grid h-dvh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0">
+  <span class="absolute top-4 right-4 flex md:top-8 md:right-8">
     <span class="mr-3"> <LocaleSelector /></span>
     <ModeToggle></ModeToggle>
   </span>
-  <div class="relative hidden h-full flex-col bg-muted p-10 text-white dark:border-r lg:flex">
+  <div class="bg-muted relative hidden h-full flex-col p-10 text-white lg:flex dark:border-r">
     <div
       class="absolute inset-0 bg-cover"
       style="
@@ -97,7 +97,7 @@ async function onSubmit(event: SubmitEvent) {
         <h1 class="text-2xl font-semibold tracking-tight">
           {setPassword ? $_('auth.createPasswordAndLogin') : $_('auth.loginWithPassword')}
         </h1>
-        <p class="text-sm text-muted-foreground">{$_('auth.usePassword')}</p>
+        <p class="text-muted-foreground text-sm">{$_('auth.usePassword')}</p>
       </div>
       <div class={cn('grid gap-6', className)}>
         <form onsubmit={onSubmit}>
@@ -124,7 +124,7 @@ async function onSubmit(event: SubmitEvent) {
             <Checkbox id="remember" bind:checked={remember} />
             <Label
               for="remember"
-              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+              class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
               {$_('auth.rememberMe')}
             </Label>
           </div>
@@ -135,11 +135,11 @@ async function onSubmit(event: SubmitEvent) {
             <span class="w-full border-t"></span>
           </div>
           <div class="relative flex justify-center text-xs uppercase">
-            <span class="bg-background px-2 text-muted-foreground"> {siteName}</span>
+            <span class="bg-background text-muted-foreground px-2"> {siteName}</span>
           </div>
         </div>
       </div>
-      <p class="px-8 text-center text-sm text-muted-foreground">{$_('auth.footerText')}</p>
+      <p class="text-muted-foreground px-8 text-center text-sm">{$_('auth.footerText')}</p>
     </div>
   </div>
 </div>

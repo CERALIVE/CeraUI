@@ -32,7 +32,7 @@ $effect(() => {
           </Drawer.Title>
           <Drawer.Description>
             <div>{$_('updatingOverlay.description')}</div>
-            <div class="text-area ml-auto mr-auto mt-5 w-[100%] resize-none text-lg disabled:cursor-default md:w-[50%]">
+            <div class="text-area mt-5 mr-auto ml-auto w-[100%] resize-none text-lg disabled:cursor-default md:w-[50%]">
               <b class="loading">{$_('updatingOverlay.loading')}</b>
               {#if total}
                 {#if details.downloading}
@@ -55,7 +55,7 @@ $effect(() => {
           <img alt="" src="src/assets/images/1672353.svg" width="40%" />
         </div>
         <div class="flex justify-center">
-          <Progress class="w-[60%] bg-accent" max={total} value={progress}></Progress>
+          <Progress class="bg-accent w-[60%]" max={total} value={progress}></Progress>
         </div>
       </div>
       <Drawer.Footer></Drawer.Footer>

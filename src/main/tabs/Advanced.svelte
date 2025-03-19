@@ -71,7 +71,7 @@ StatusMessages.subscribe(statusMessage => {
           <Card.Title class="text-sm font-medium">
             {$_('advanced.systemSettings')}
           </Card.Title>
-          <Settings class="h-4 w-4 text-muted-foreground" />
+          <Settings class="text-muted-foreground h-4 w-4" />
         </Card.Header>
         <Card.Content>
           <div>
@@ -204,7 +204,7 @@ StatusMessages.subscribe(statusMessage => {
           <Card.Title class="text-sm font-medium">
             {$_('advanced.developerOptions')}
           </Card.Title>
-          <Hammer class="h-4 w-4 text-muted-foreground" />
+          <Hammer class="text-muted-foreground h-4 w-4" />
         </Card.Header>
         <Card.Content>
           <div>
