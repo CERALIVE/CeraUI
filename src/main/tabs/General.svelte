@@ -1,15 +1,17 @@
 <script lang="ts">
-import Networking from '../shared/Networking.svelte';
 import { RadioTower, Server, ServerOff, SquareChartGantt, Thermometer } from 'lucide-svelte';
 import { _ } from 'svelte-i18n';
 import { Update } from 'svelte-radix';
-import type { ConfigMessage, NetifMessage, StatusMessage } from '$lib/types/socket-messages';
+
 import * as Card from '$lib/components/ui/card';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
 import { getUsedNetworks } from '$lib/helpers/NetworkHelper';
 import { installSoftwareUpdates } from '$lib/helpers/SystemHelper';
 import { ConfigMessages, NetifMessages, SensorsStatusMessages, StatusMessages } from '$lib/stores/websocket-store';
+import type { ConfigMessage, NetifMessage, StatusMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
+
+import Networking from '../shared/Networking.svelte';
 
 let temperature: Array<[string, string]> = $state([]);
 let currentStatus: StatusMessage | undefined = $state(undefined);

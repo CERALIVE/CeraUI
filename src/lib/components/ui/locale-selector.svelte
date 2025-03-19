@@ -1,9 +1,12 @@
 <script lang="ts">
-import { existingLocales } from '../../../i18n';
 import { get } from 'svelte/store';
 import { locale } from 'svelte-i18n';
+
 import * as Select from '$lib/components/ui/select';
 import { localeStore } from '$lib/stores/locale';
+
+import { existingLocales } from '../../../i18n';
+
 const initialLocale = get(localeStore);
 
 let selectedLocale = $state(initialLocale.code);

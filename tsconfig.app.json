@@ -18,30 +18,16 @@
     "esModuleInterop": true,
     "baseUrl": ".",
     "paths": {
-      "$lib": [
-        "./src/lib"
-      ],
-      "$lib/*": [
-        "./src/lib/*"
-      ]
+      "$lib": ["./src/lib"],
+      "$lib/*": ["./src/lib/*"]
     },
-    "include": [
-      "*.ts",
-      "*.svelte"
-    ]
+    "include": ["*.ts", "*.svelte"]
   },
-  "include": [
-    "src/**/*.d.ts",
-    "src/**/*.ts",
-    "src/**/*.js",
-    "src/**/*.svelte"
-  ],
+  "include": ["src/**/*.d.ts", "src/**/*.ts", "src/**/*.js", "src/**/*.svelte"],
   "references": [
     {
       "path": "./tsconfig.node.json"
     }
   ],
-  "exclude": [
-    "./.env"
-  ]
+  "exclude": ["./.env"]
 }

@@ -1,9 +1,10 @@
 <script lang="ts">
 import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
-import type { StatusMessage } from '$lib/types/socket-messages';
+
 import * as Drawer from '$lib/components/ui/drawer/index.js';
 import { Progress } from '$lib/components/ui/progress';
+import type { StatusMessage } from '$lib/types/socket-messages';
 
 let { details }: { details: Exclude<StatusMessage['updating'], boolean | null> } = $props();
 

@@ -2,14 +2,13 @@
 import { Binary, ServerIcon, Volume } from 'lucide-svelte';
 import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
-import type { AudioCodecsMessage, ConfigMessage, PipelinesMessage, RelayMessage } from '$lib/types/socket-messages';
+
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { Slider } from '$lib/components/ui/slider';
-
 import {
   type GroupedPipelines,
   groupPipelinesByDeviceAndFormat,
@@ -24,6 +23,7 @@ import {
   RelaysMessages,
   StatusMessages,
 } from '$lib/stores/websocket-store';
+import type { AudioCodecsMessage, ConfigMessage, PipelinesMessage, RelayMessage } from '$lib/types/socket-messages';
 
 type Properties = {
   inputMode: string | undefined;

@@ -1,14 +1,16 @@
 <script lang="ts">
-import Auth from './Auth.svelte';
-import Main from './MainView.svelte';
-import { setupLocale } from '../i18n';
 import { toast } from 'svelte-sonner';
-import type { NotificationType, StatusMessage } from '$lib/types/socket-messages';
+
 import { Toaster } from '$lib/components/ui/sonner';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { startStreaming as startStreamingFn, stopStreaming as stopStreamingFn } from '$lib/helpers/SystemHelper';
 import { authStatusStore } from '$lib/stores/auth-status';
-import { AuthMessages, NotificationsMessages, StatusMessages, sendAuthMessage } from '$lib/stores/websocket-store';
+import { AuthMessages, NotificationsMessages, sendAuthMessage, StatusMessages } from '$lib/stores/websocket-store';
+import type { NotificationType, StatusMessage } from '$lib/types/socket-messages';
+
+import { setupLocale } from '../i18n';
+import Auth from './Auth.svelte';
+import Main from './MainView.svelte';
 
 let authStatus = $state(false);
 let isCheckingAuthStatus = $state(true);
@@ -120,7 +122,7 @@ const showToast = (type: NotificationType, name: string, options: any) => {
     }
 
     // Create a unique ID for this toast
-    const id = `toast-${now}-${Math.random().toString(36).substr(2, 9)}`;
+    const id = `toast-${now}-${Math.random().toString(36).slice(2, 11)}`;
     options.id = id;
 
     // Simplified onDismiss handler

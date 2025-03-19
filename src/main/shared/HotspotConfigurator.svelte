@@ -1,13 +1,14 @@
 <script lang="ts">
 import { Bolt } from 'lucide-svelte';
 import { _ } from 'svelte-i18n';
-import type { ValueOf } from '$lib/types';
-import type { StatusMessage } from '$lib/types/socket-messages';
+
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
 import { changeHotspotSettings } from '$lib/helpers/NetworkHelper';
+import type { ValueOf } from '$lib/types';
+import type { StatusMessage } from '$lib/types/socket-messages';
 
 let { deviceId, wifi }: { deviceId: number; wifi: ValueOf<StatusMessage['wifi']> } = $props();
 let hotspotProperties = $state({

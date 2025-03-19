@@ -1,8 +1,9 @@
 import { get } from 'svelte/store';
 import { toast } from 'svelte-sonner';
+
+import { sendMessage, socket, StatusMessages } from '$lib/stores/websocket-store';
 import type { ValueOf } from '$lib/types';
 import type { NetifMessage, StatusMessage } from '$lib/types/socket-messages';
-import { StatusMessages, sendMessage, socket } from '$lib/stores/websocket-store';
 
 export type WifiBandNames = 'auto' | 'auto_50' | 'auto_24';
 

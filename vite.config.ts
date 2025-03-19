@@ -1,10 +1,11 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte';
-import { defineConfig } from 'vite';
 import * as path from 'path';
+import { defineConfig } from 'vite';
 
 const fullReloadAlways = {
   name: 'full-reload',
-  handleHotUpdate({ server }) {
+  //eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handleHotUpdate({ server }: { server: any }) {
     server.ws.send({ type: 'full-reload' });
     return [];
   },

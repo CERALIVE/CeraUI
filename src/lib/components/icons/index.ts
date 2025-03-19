@@ -1,5 +1,3 @@
-import Hamburger from './hamburger.svelte';
-import Logo from './logo.svelte';
 import ArrowRight from 'lucide-svelte/icons/arrow-right';
 import Check from 'lucide-svelte/icons/check';
 import ChevronLeft from 'lucide-svelte/icons/chevron-left';
@@ -23,8 +21,10 @@ import Trash from 'lucide-svelte/icons/trash';
 import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 import User from 'lucide-svelte/icons/user';
 import X from 'lucide-svelte/icons/x';
-
 import type { SvelteComponent } from 'svelte';
+
+import Hamburger from './hamburger.svelte';
+import Logo from './logo.svelte';
 
 export type Icon = SvelteComponent;
 

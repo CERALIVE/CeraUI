@@ -1,11 +1,12 @@
 <script lang="ts">
 import { onMount } from 'svelte';
+
 import { Icons } from '$lib/components/icons';
 import { Button } from '$lib/components/ui/button';
 import MobileLink from '$lib/components/ui/mobile-link.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
 import * as Sheet from '$lib/components/ui/sheet';
-import { type NavElements, defaultNavElement, navElements, siteName } from '$lib/config';
+import { defaultNavElement, type NavElements, navElements, siteName } from '$lib/config';
 import { setupHashNavigation } from '$lib/helpers/NavigationHelper';
 import { navigationStore } from '$lib/stores/navigation';
 import { capitalizeFirstLetter } from '$lib/utils.js';

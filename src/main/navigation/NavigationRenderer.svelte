@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { Component } from 'svelte';
+
 import { navigationStore } from '$lib/stores/navigation';
 
 let CurrentComponent: Component | undefined = $state(undefined);
