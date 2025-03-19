@@ -1,7 +1,9 @@
 <script lang="ts">
-import DrawerOverlay from './drawer-overlay.svelte';
 import { Drawer as DrawerPrimitive } from 'vaul-svelte';
+
 import { cn } from '$lib/utils.js';
+
+import DrawerOverlay from './drawer-overlay.svelte';
 
 let {
   ref = $bindable(null),

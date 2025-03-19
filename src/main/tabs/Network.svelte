@@ -1,15 +1,10 @@
 <script lang="ts">
-import HotspotConfigurator from '../shared/HotspotConfigurator.svelte';
-import ModemConfigurator from '../shared/ModemConfigurator.svelte';
-import Networking from '../shared/Networking.svelte';
-import WifiSelector from '../shared/WifiSelector.svelte';
 import { Antenna, EyeIcon, Router, Wifi, WifiOff } from 'lucide-svelte';
 import { _ } from 'svelte-i18n';
-import type { StatusMessage } from '$lib/types/socket-messages';
+
 import WifiQuality from '$lib/components/icons/WifiQuality.svelte';
 import * as Card from '$lib/components/ui/card';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
-
 import {
   getConnection,
   getWifiBand,
@@ -19,7 +14,13 @@ import {
   turnHotspotModeOn,
 } from '$lib/helpers/NetworkHelper';
 import { StatusMessages } from '$lib/stores/websocket-store';
+import type { StatusMessage } from '$lib/types/socket-messages';
 import { capitalizeFirstLetter } from '$lib/utils.js';
+
+import HotspotConfigurator from '../shared/HotspotConfigurator.svelte';
+import ModemConfigurator from '../shared/ModemConfigurator.svelte';
+import Networking from '../shared/Networking.svelte';
+import WifiSelector from '../shared/WifiSelector.svelte';
 
 let currentStatus: StatusMessage | undefined = $state();
 StatusMessages.subscribe(status => {

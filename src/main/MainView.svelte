@@ -1,9 +1,10 @@
 <script lang="ts">
+import LocaleSelector from '$lib/components/ui/locale-selector.svelte';
+import ModeToggle from '$lib/components/ui/mode-toggle.svelte';
+
 import MainNav from './navigation/MainNav.svelte';
 import MobileNav from './navigation/MobileNav.svelte';
 import NavigationRenderer from './navigation/NavigationRenderer.svelte';
-import LocaleSelector from '$lib/components/ui/locale-selector.svelte';
-import ModeToggle from '$lib/components/ui/mode-toggle.svelte';
 </script>
 
 <header

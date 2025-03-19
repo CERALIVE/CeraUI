@@ -1,3 +1,5 @@
+import { addMessages, getLocaleFromNavigator, init } from 'svelte-i18n';
+
 import ar from './locale/ar.json';
 import de from './locale/de.json';
 import en from './locale/en.json';
@@ -8,8 +10,6 @@ import ja from './locale/ja.json';
 import ko from './locale/ko.json';
 import ptBr from './locale/pt-BR.json';
 import zh from './locale/zh.json';
-
-import { addMessages, getLocaleFromNavigator, init } from 'svelte-i18n';
 
 export type DefinedLocales = Array<{ name: string; file: string; code: string }>;
 

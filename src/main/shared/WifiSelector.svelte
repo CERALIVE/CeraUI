@@ -2,8 +2,7 @@
 import { Link, ScanSearch, Trash2, Unlink } from 'lucide-svelte';
 import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
-import type { ValueOf } from '$lib/types';
-import type { StatusMessage } from '$lib/types/socket-messages';
+
 import WifiQuality from '$lib/components/icons/WifiQuality.svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
@@ -20,6 +19,8 @@ import {
   scanWifi,
 } from '$lib/helpers/NetworkHelper.js';
 import { WifiMessages } from '$lib/stores/websocket-store';
+import type { ValueOf } from '$lib/types';
+import type { StatusMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
 let { wifi, wifiId }: { wifi: ValueOf<StatusMessage['wifi']>; wifiId: number } = $props();

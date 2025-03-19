@@ -110,7 +110,7 @@
         "enabled": "مفعّل",
         "connected": "متصل",
         "disconnected": "غير متصل",
-        "disconnecting":  "جارِ الانفصال",
+        "disconnecting": "جارِ الانفصال",
         "connecting": "جاري الاتصال",
         "scanning": "جارٍ المسح"
       }

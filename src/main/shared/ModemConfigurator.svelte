@@ -2,13 +2,14 @@
 import { Check, X } from 'lucide-svelte';
 import { onDestroy } from 'svelte';
 import { _ } from 'svelte-i18n';
-import type { Modem } from '$lib/types/socket-messages';
+
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { Toggle } from '$lib/components/ui/toggle';
 import { changeModemSettings, renameSupportedModemNetwork, scanModemNetworks } from '$lib/helpers/NetworkHelper';
+import type { Modem } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
 let { deviceId, modem, modemIsScanning } = $props<{

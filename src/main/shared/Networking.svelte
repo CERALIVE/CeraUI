@@ -1,7 +1,7 @@
 <script lang="ts">
 import { ArrowUpDown, Check, X } from 'lucide-svelte';
 import { _ } from 'svelte-i18n';
-import type { NetifMessage } from '$lib/types/socket-messages';
+
 import * as Card from '$lib/components/ui/card';
 import { Toggle } from '$lib/components/ui/toggle';
 import {
@@ -14,6 +14,7 @@ import {
   setNetif,
 } from '$lib/helpers/NetworkHelper.js';
 import { NetifMessages } from '$lib/stores/websocket-store';
+import type { NetifMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
 let totalBandwith: number = $state(0);

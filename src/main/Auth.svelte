@@ -1,5 +1,6 @@
 <script lang="ts">
 import { _ } from 'svelte-i18n';
+
 import { Icons } from '$lib/components/icons';
 import { Button } from '$lib/components/ui/button';
 import { Checkbox } from '$lib/components/ui/checkbox';
@@ -11,11 +12,12 @@ import { siteName } from '$lib/config';
 import {
   AuthMessages,
   NotificationsMessages,
-  StatusMessages,
   sendAuthMessage,
   sendCreatePasswordMessage,
+  StatusMessages,
 } from '$lib/stores/websocket-store';
 import { cn } from '$lib/utils.js';
+
 let className: string | undefined | null = $state(undefined);
 export { className as class };
 

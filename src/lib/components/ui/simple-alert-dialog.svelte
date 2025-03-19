@@ -1,6 +1,7 @@
 <script lang="ts">
 import { AlertDialog as AlertDialogDefault, type WithoutChild } from 'bits-ui';
 import type { Snippet } from 'svelte';
+
 import * as AlertDialog from '$lib/components/ui/alert-dialog/index';
 import { buttonVariants } from '$lib/components/ui/button';
 import { cn } from '$lib/utils';

@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Wifi, WifiHigh, WifiLow, WifiZero } from 'lucide-svelte';
 import type { HTMLAttributes } from 'svelte/elements';
+
 import { cn } from '$lib/utils';
 
 type $$Props = HTMLAttributes<HTMLDivElement> & { signal: number };

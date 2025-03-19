@@ -1,10 +1,10 @@
-import { type NavElements, defaultNavElement, navElements } from '$lib/config';
+import { defaultNavElement, type NavElements, navElements } from '$lib/config';
 
 /**
  * Get the navigation element that matches the current URL hash
  */
 export function getNavFromHash(): NavElements {
-  const hash = window.location.hash.substring(1); // Remove the # character
+  const hash = window.location.hash.slice(1); // Remove the # character
 
   if (!hash) return defaultNavElement;
 

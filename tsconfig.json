@@ -4,24 +4,10 @@
     "esModuleInterop": true,
     "baseUrl": ".",
     "paths": {
-      "$lib": [
-        "./src/lib"
-      ],
-      "$lib/*": [
-        "./src/lib/*"
-      ]
-    },
-    "include": [
-      "*.ts",
-      "*.svelte"
-    ]
-  },
-  "references": [
-    {
-      "path": "./tsconfig.app.json"
-    },
-    {
-      "path": "./tsconfig.node.json"
+      "$lib": ["./src/lib"],
+      "$lib/*": ["./src/lib/*"]
     }
-  ]
+  },
+  "include": ["**/*.ts", "**/*.svelte"],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
 }
