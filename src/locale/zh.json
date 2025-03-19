@@ -58,6 +58,7 @@
     "audioSettings": "音频设置",
     "audioSource": "音频源",
     "selectAudioSource": "选择音频源",
+    "notAvailableAudioSource": "不可用",
     "audioCodec": "音频编解码器",
     "selectAudioCodec": "选择音频编解码器",
     "audioDelay": "音频延迟 (毫秒)",

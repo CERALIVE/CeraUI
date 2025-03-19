@@ -7,25 +7,18 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
-import { type WifiBandNames, changeHotspotSettings } from '$lib/helpers/NetworkHelper';
-
-const getSelectedChannel: () => { value: WifiBandNames; label: string } = () => {
-  return {
-    value: wifi.hotspot?.channel ?? 'auto',
-    label: wifi.hotspot?.available_channels[wifi.hotspot?.channel].name ?? 'Auto',
-  };
-};
+import { changeHotspotSettings } from '$lib/helpers/NetworkHelper';
 
 let { deviceId, wifi }: { deviceId: number; wifi: ValueOf<StatusMessage['wifi']> } = $props();
 let hotspotProperties = $state({
-  selectedChannel: getSelectedChannel(),
+  selectedChannel: wifi.hotspot?.channel ?? 'auto',
   password: wifi.hotspot?.password,
   deviceId,
   name: wifi.hotspot?.name,
 });
 const resetHotSpotProperties = () => {
   hotspotProperties = {
-    selectedChannel: getSelectedChannel(),
+    selectedChannel: wifi.hotspot?.channel ?? 'auto',
     password: wifi.hotspot?.password,
     deviceId,
     name: wifi.hotspot?.name,
@@ -41,7 +34,7 @@ const resetHotSpotProperties = () => {
   disabledConfirmButton={!hotspotProperties?.password?.length || !hotspotProperties?.name?.length}
   onconfirm={() => {
     changeHotspotSettings({
-      channel: hotspotProperties.selectedChannel.value ?? 'auto',
+      channel: hotspotProperties.selectedChannel ?? 'auto',
       deviceId: hotspotProperties.deviceId,
       name: hotspotProperties.name ?? '',
       password: hotspotProperties.password ?? '',
@@ -79,20 +72,21 @@ const resetHotSpotProperties = () => {
       <div class="grid gap-1">
         <Label for="channel">{$_('hotspotConfigurator.hotspot.channel')}</Label>
         <Select.Root
-          onSelectedChange={selected => {
-            if (hotspotProperties && selected !== undefined) hotspotProperties.selectedChannel = selected;
+          type="single"
+          onValueChange={selected => {
+            hotspotProperties.selectedChannel = selected;
           }}
-          selected={hotspotProperties.selectedChannel}>
+          value={hotspotProperties.selectedChannel}>
           <Select.Trigger class="w-[180px]">
-            <Select.Value placeholder={$_('hotspotConfigurator.hotspot.selectChannel')}></Select.Value>
+            {hotspotProperties.selectedChannel
+              ? wifi.hotspot?.available_channels[hotspotProperties.selectedChannel].name
+              : $_('hotspotConfigurator.hotspot.selectChannel')}
           </Select.Trigger>
           <Select.Content>
             <Select.Group>
               {#if wifi.hotspot?.available_channels}
-                {#each Object.entries(wifi.hotspot?.available_channels) as [channelId, channel]}
-                  <Select.Item value={channelId}>
-                    {channel.name}
-                  </Select.Item>
+                {#each Object.entries(wifi.hotspot.available_channels) as [channelId, channel]}
+                  <Select.Item value={channelId} label={channel.name}></Select.Item>
                 {/each}
               {/if}
             </Select.Group>

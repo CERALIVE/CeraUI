@@ -57,6 +57,7 @@
     "bitrate": "معدل البت (Kbps)",
     "audioSettings": "إعدادات الصوت",
     "audioSource": "مصدر الصوت",
+    "notAvailableAudioSource": "غير متوفر",
     "selectAudioSource": "حدد مصدر الصوت",
     "audioCodec": "ترميز الصوت",
     "selectAudioCodec": "حدد ترميز الصوت",

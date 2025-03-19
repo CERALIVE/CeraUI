@@ -89,7 +89,7 @@ StatusMessages.subscribe(statusMessage => {
                   <Button
                     variant="outline"
                     class="rounded-r-none border-r-0"
-                    on:click={() => (showPassword = !showPassword)}>
+                    onclick={() => (showPassword = !showPassword)}>
                     {#if showPassword}
                       <EyeOff></EyeOff>
                     {:else}
@@ -130,7 +130,7 @@ StatusMessages.subscribe(statusMessage => {
                   <Button
                     variant="outline"
                     class="rounded-r-none border-r-0"
-                    on:click={() => (showRemoteKey = !showRemoteKey)}>
+                    onclick={() => (showRemoteKey = !showRemoteKey)}>
                     {#if showRemoteKey}
                       <EyeOff></EyeOff>
                     {:else}
@@ -215,7 +215,7 @@ StatusMessages.subscribe(statusMessage => {
               <div class="relative">
                 <Input
                   id="sshPassword"
-                  on:focus={event => {
+                  focus={event => {
                     event.preventDefault();
                     navigator.clipboard.writeText(sshPassword).then(() => {
                       toast.info($_('advanced.passwordCopied'), {
@@ -231,7 +231,7 @@ StatusMessages.subscribe(statusMessage => {
                   <Button
                     variant="outline"
                     class="rounded-r-none border-r-0"
-                    on:click={() => (showSSHPassword = !showSSHPassword)}>
+                    onclick={() => (showSSHPassword = !showSSHPassword)}>
                     {#if showSSHPassword}
                       <EyeOff></EyeOff>
                     {:else}

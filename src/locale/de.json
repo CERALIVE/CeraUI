@@ -57,6 +57,7 @@
     "bitrate": "Bitrate (Kbps)",
     "audioSettings": "Audio-Einstellungen",
     "audioSource": "Audioquelle",
+    "notAvailableAudioSource": "Nicht verfügbar",
     "selectAudioSource": "Audioquelle auswählen",
     "audioCodec": "Audio-Codec",
     "selectAudioCodec": "Audio-Codec auswählen",

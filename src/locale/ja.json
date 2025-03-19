@@ -57,6 +57,7 @@
     "bitrate": "ビットレート (Kbps)",
     "audioSettings": "オーディオ設定",
     "audioSource": "オーディオソース",
+    "notAvailableAudioSource": "利用できません",
     "selectAudioSource": "オーディオソースを選択",
     "audioCodec": "オーディオコーデック",
     "selectAudioCodec": "オーディオコーデックを選択",

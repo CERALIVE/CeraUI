@@ -3,7 +3,6 @@ import { Binary, ServerIcon, Volume } from 'lucide-svelte';
 import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 import type { AudioCodecsMessage, ConfigMessage, PipelinesMessage, RelayMessage } from '$lib/types/socket-messages';
-import type { Selected } from 'bits-ui';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
@@ -11,8 +10,13 @@ import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { Slider } from '$lib/components/ui/slider';
 
-import { type GroupedPipelines, groupPipelinesByDeviceAndFormat, parsePipelineName } from '$lib/helpers/PipelineHelper';
-import { type AudioCodecs, updateBitrate } from '$lib/helpers/SystemHelper';
+import {
+  type GroupedPipelines,
+  groupPipelinesByDeviceAndFormat,
+  type HumanReadablePipeline,
+  parsePipelineName,
+} from '$lib/helpers/PipelineHelper';
+import { type AudioCodecs } from '$lib/helpers/SystemHelper';
 import {
   AudioCodecsMessages,
   ConfigMessages,
@@ -21,48 +25,69 @@ import {
   StatusMessages,
 } from '$lib/stores/websocket-store';
 
-type SelectInputString = Selected<string | null | undefined> | undefined;
-type SelectInputNumberOrString = Selected<number | string | null | undefined> | undefined;
+type Properties = {
+  inputMode: string | undefined;
+  encoder: string | undefined;
+  resolution: string | undefined;
+  framerate: string | undefined;
+  pipeline: keyof PipelinesMessage | undefined;
+  bitrate: number | undefined;
+  audioSource: string | undefined;
+  audioCodec: string | undefined;
+  audioDelay: number | undefined;
+  relayServer: string | undefined;
+  relayAccount: string | undefined;
+  srtlaServerAddress: string | undefined;
+  srtlaServerPort: number | undefined;
+  srtStreamId: string | undefined;
+  srtLatency: number | undefined;
+};
 
+// for selected preload
+type InitialSelectedProperties = {
+  audioSource: string | undefined;
+  pipeline: keyof PipelinesMessage | undefined;
+  audioCodec: AudioCodecs | undefined;
+  audioDelay: number | undefined;
+  bitrate: number | undefined;
+};
 // State variables
 let groupedPipelines: GroupedPipelines[keyof GroupedPipelines] | undefined = $state(undefined);
-let selectedInputMode: SelectInputString = $state();
-
-// Encoder Section
-let selectedEncoder: SelectInputString = $state();
-let selectedResolution: SelectInputString = $state();
-let selectedFramerate: SelectInputNumberOrString = $state();
 let unparsedPipelines: PipelinesMessage | undefined = $state();
-let selectedPipeline: keyof PipelinesMessage | undefined = $state();
-let initialSelectedPipeline: keyof PipelinesMessage | undefined = $state();
 
-let selectedBitrate: number = $state(0);
-// eslint-disable-next-line unused-imports/no-unused-vars
-let areThereChanges: boolean = $state(false);
-let initialSelectedBitrate: number | undefined = $state();
 let isStreaming: boolean | undefined = $state();
-
 // Audio Section
 let audioSources: Array<string> = $state([]);
-let initialSelectedAudioSource: string | undefined = $state();
-let selectedAudioSource: SelectInputString = $state();
+
+let properties: Properties = $state({
+  bitrate: undefined,
+  audioCodec: undefined,
+  audioDelay: 0,
+  audioSource: undefined,
+  encoder: undefined,
+  framerate: undefined,
+  inputMode: undefined,
+  pipeline: undefined,
+  relayAccount: undefined,
+  relayServer: undefined,
+  resolution: undefined,
+  srtlaServerAddress: undefined,
+  srtlaServerPort: undefined,
+  srtLatency: undefined,
+  srtStreamId: undefined,
+});
+let notAvailableAudioSource: string | undefined = $state(undefined);
+let initialSelectedProperties: InitialSelectedProperties = $state({
+  audioDelay: undefined,
+  audioSource: undefined,
+  pipeline: undefined,
+  audioCodec: undefined,
+  bitrate: undefined,
+});
+
 let audioCodecs: AudioCodecsMessage | undefined = $state();
 
-let initialSelectedAudioCodec: AudioCodecs | undefined = $state();
-let selectedAudioCodec: SelectInputString = $state();
-let initialSelectedAudioDelay: number | undefined = $state();
-let selectedAudioDelay: number = $state(0);
-
-// SRTLA Config
-let srtlaServerAddress: string | undefined = $state();
-let srtlaServerPort: number | undefined = $state();
-let srtStreamId: string | undefined = $state();
-let srtLatency: number | undefined = $state();
 let relayMessage: RelayMessage | undefined = $state();
-
-const defaultRelaySelection = { value: '-1', label: $_('settings.manualConfiguration') };
-let selectedRelayServer: typeof defaultRelaySelection | undefined = $state(undefined);
-let selectedRelayAccount: typeof defaultRelaySelection | undefined = $state(undefined);
 
 let savedConfig: ConfigMessage | undefined = $state(undefined);
 const normalizeValue = (value: number, min: number, max: number, step = 1) =>
@@ -80,22 +105,8 @@ AudioCodecsMessages.subscribe(audioCodecsMessage => {
 StatusMessages.subscribe(status => {
   if (status) {
     isStreaming = status.is_streaming;
-    if (audioCodecs && initialSelectedAudioCodec && !selectedAudioCodec) {
-      selectedAudioCodec = {
-        value: initialSelectedAudioCodec,
-        label: audioCodecs[initialSelectedAudioCodec],
-      };
-    }
-
     if (status.asrcs.length !== audioSources?.length) {
       audioSources = status.asrcs;
-      if (selectedAudioSource && audioSources) {
-        if (!audioSources.includes(`${selectedAudioSource.value}`)) {
-          selectedAudioSource.label = `${selectedAudioSource.value} (Not Available)`;
-        } else {
-          selectedAudioSource.label = selectedAudioSource?.value ?? undefined;
-        }
-      }
     }
   }
 });
@@ -103,40 +114,41 @@ StatusMessages.subscribe(status => {
 ConfigMessages.subscribe(config => {
   if (config) {
     savedConfig = config;
-    if (srtLatency === undefined) {
-      srtLatency = config.srt_latency ?? 2000;
+    if (properties.srtLatency === undefined) {
+      properties.srtLatency = config.srt_latency ?? 2000;
     }
 
-    if (!srtlaServerPort && config.srtla_port) {
-      srtlaServerPort = config.srtla_port;
+    if (!properties.srtlaServerPort && config.srtla_port) {
+      properties.srtlaServerPort = config.srtla_port;
     }
 
-    if (!srtStreamId && config.srt_streamid) {
-      srtStreamId = config.srt_streamid;
+    if (!properties.srtStreamId && config.srt_streamid) {
+      properties.srtStreamId = config.srt_streamid;
     }
 
-    if (!srtlaServerAddress && config.srtla_addr) {
-      srtlaServerAddress = config.srtla_addr;
+    if (!properties.srtlaServerAddress && config.srtla_addr) {
+      properties.srtlaServerAddress = config.srtla_addr;
     }
 
-    if (initialSelectedAudioDelay === undefined) {
-      initialSelectedAudioDelay = config.delay ?? 0;
-      selectedAudioDelay = config.delay ?? 0;
+    if (initialSelectedProperties.audioDelay === undefined) {
+      properties.audioDelay = initialSelectedProperties.audioDelay = config.delay ?? 0;
     }
-    if (!initialSelectedPipeline) {
-      initialSelectedPipeline = config.pipeline;
-      selectedPipeline = config.pipeline;
+    if (!initialSelectedProperties.pipeline) {
+      properties.pipeline = initialSelectedProperties.pipeline = config.pipeline;
     }
-    if (!initialSelectedBitrate) {
-      initialSelectedBitrate = config?.max_br ?? 5000;
-      selectedBitrate = config?.max_br ?? 5000;
+    if (!initialSelectedProperties.bitrate) {
+      properties.bitrate = initialSelectedProperties.bitrate = config?.max_br ?? 5000;
     }
-    if (!initialSelectedAudioSource) {
-      initialSelectedAudioSource = config?.asrc ?? '';
-      selectedAudioSource = { value: config?.asrc, label: config?.asrc };
+    if (!initialSelectedProperties.audioSource) {
+      if (config.asrc && !audioSources.includes(config.asrc)) {
+        notAvailableAudioSource = config.asrc;
+      } else {
+        notAvailableAudioSource = undefined;
+      }
+      properties.audioSource = initialSelectedProperties.audioSource = config?.asrc ?? '';
     }
-    if (!initialSelectedAudioCodec) {
-      initialSelectedAudioCodec = config.acodec;
+    if (!initialSelectedProperties.audioCodec) {
+      properties.audioCodec = initialSelectedProperties.audioCodec = config.acodec;
     }
   }
 });
@@ -144,18 +156,13 @@ ConfigMessages.subscribe(config => {
 RelaysMessages.subscribe(message => {
   relayMessage = message;
   if (relayMessage && savedConfig !== undefined && savedConfig.relay_server) {
-    selectedRelayServer = savedConfig.relay_server
-      ? { value: savedConfig.relay_server, label: message.servers[savedConfig.relay_server].name }
-      : defaultRelaySelection;
+    properties.relayServer = savedConfig.relay_server ? savedConfig.relay_server : '-1';
     if (savedConfig?.relay_account !== undefined) {
-      selectedRelayAccount = {
-        value: savedConfig.relay_account,
-        label: message.accounts[savedConfig.relay_account].name,
-      };
+      properties.relayAccount = savedConfig.relay_account;
     }
   } else {
-    selectedRelayServer = defaultRelaySelection;
-    selectedRelayAccount = defaultRelaySelection;
+    properties.relayServer = '-1';
+    properties.relayAccount = '-1';
   }
 });
 // Subscribe to pipeline messages
@@ -169,49 +176,26 @@ PipelinesMessages.subscribe(message => {
 });
 
 $effect.pre(() => {
-  if (selectedPipeline && unparsedPipelines !== undefined) {
-    const parsedPipeline = parsePipelineName(unparsedPipelines[selectedPipeline].name);
-    selectedInputMode = {
-      value: parsedPipeline.format,
-      label: parsedPipeline.format?.split(' ')[0].toUpperCase(),
-    };
+  if (properties.pipeline && unparsedPipelines !== undefined) {
+    const parsedPipeline = parsePipelineName(unparsedPipelines[properties.pipeline].name);
+    properties.inputMode = parsedPipeline.format ?? undefined;
 
-    selectedEncoder = {
-      value: parsedPipeline.encoder,
-      label: parsedPipeline.encoder?.toUpperCase(),
-    };
+    properties.encoder = parsedPipeline.encoder ?? undefined;
+    properties.resolution = parsedPipeline.resolution ?? undefined;
 
-    selectedResolution = {
-      value: parsedPipeline.resolution,
-      label: parsedPipeline.resolution ?? undefined,
-    };
-
-    selectedFramerate = {
-      value: parsedPipeline.fps,
-      label: parsedPipeline.fps?.toString() ?? undefined,
-    };
+    properties.framerate = parsedPipeline.fps?.toString() ?? undefined;
   }
 });
 
 $effect(() => {
-  if (
-    groupedPipelines &&
-    selectedInputMode?.value &&
-    selectedEncoder?.value &&
-    selectedResolution?.value &&
-    selectedFramerate?.value
-  ) {
-    selectedPipeline = groupedPipelines[selectedInputMode.value][selectedEncoder.value][selectedResolution.value]?.find(
+  if (groupedPipelines && properties.inputMode && properties.encoder && properties.resolution && properties.framerate) {
+    properties.pipeline = groupedPipelines[properties.inputMode][properties.encoder][properties.resolution]?.find(
       pipeline => {
-        return pipeline.extraction.fps === selectedFramerate?.value;
+        return pipeline.extraction.fps === properties.framerate;
       },
     )?.identifier;
-    areThereChanges =
-      selectedPipeline !== undefined &&
-      (initialSelectedPipeline !== selectedPipeline || initialSelectedBitrate !== selectedBitrate);
   } else {
-    areThereChanges = false;
-    selectedPipeline = undefined;
+    properties.pipeline = undefined;
   }
 });
 
@@ -221,14 +205,11 @@ function autoSelectNextOption(currentLevel: string) {
 
   switch (currentLevel) {
     case 'inputMode':
-      if (selectedInputMode?.value) {
+      if (properties.inputMode) {
         // If there's only one encoding format option, auto-select it
-        const encoders = Object.keys(groupedPipelines[selectedInputMode.value]);
+        const encoders = Object.keys(groupedPipelines[properties.inputMode]);
         if (encoders.length === 1) {
-          selectedEncoder = {
-            value: encoders[0],
-            label: encoders[0].toUpperCase(),
-          };
+          properties.encoder = encoders[0];
           // Continue chain to next level
           autoSelectNextOption('encoder');
         }
@@ -236,14 +217,11 @@ function autoSelectNextOption(currentLevel: string) {
       break;
 
     case 'encoder':
-      if (selectedInputMode?.value && selectedEncoder?.value) {
+      if (properties.inputMode && properties.encoder) {
         // If there's only one resolution option, auto-select it
-        const resolutions = Object.keys(groupedPipelines[selectedInputMode.value][selectedEncoder.value]);
+        const resolutions = Object.keys(groupedPipelines[properties.inputMode][properties.encoder]);
         if (resolutions.length === 1) {
-          selectedResolution = {
-            value: resolutions[0],
-            label: resolutions[0],
-          };
+          properties.resolution = resolutions[0];
           // Continue chain to next level
           autoSelectNextOption('resolution');
         }
@@ -251,29 +229,21 @@ function autoSelectNextOption(currentLevel: string) {
       break;
 
     case 'resolution':
-      if (selectedInputMode?.value && selectedEncoder?.value && selectedResolution?.value) {
+      if (properties.inputMode && properties.encoder && properties.resolution) {
         // If there's only one framerate option, auto-select it
-        const framerates = groupedPipelines[selectedInputMode.value][selectedEncoder.value][selectedResolution.value];
+        const framerates = groupedPipelines[properties.inputMode][properties.encoder][properties.resolution];
         if (framerates.length === 1) {
-          selectedFramerate = {
-            value: framerates[0].extraction.fps,
-            label: framerates[0].extraction.fps?.toString(),
-          };
+          properties.framerate = framerates[0].extraction.fps ?? undefined;
         }
       }
       break;
   }
 }
 
-// Update functions
-const updateMaxBitrate = () => {
-  updateBitrate(selectedBitrate);
-};
-
 function validateForm() {
   formErrors = {};
 
-  if (!selectedPipeline) {
+  if (!properties.pipeline) {
     formErrors.pipeline = $_('settings.errors.pipelineRequired');
     return false;
   }
@@ -297,35 +267,36 @@ function onSubmitStreamingForm(event: Event) {
 
 const startStreamingWithCurrentConfig = () => {
   let config: { [key: string]: string | number } = {};
-  if (selectedPipeline) {
-    config.pipeline = selectedPipeline;
+  if (properties.pipeline) {
+    config.pipeline = properties.pipeline;
   }
-  const pipelineData = unparsedPipelines![selectedPipeline!]!;
+  const pipelineData = unparsedPipelines![properties.pipeline!]!;
+
   if (pipelineData.asrc) {
-    config.asrc = selectedAudioSource!.value!;
+    config.asrc = properties.audioSource!;
   }
   if (pipelineData.acodec) {
-    config.acodec = selectedAudioCodec!.value!;
+    config.acodec = properties.audioCodec!;
   }
-  if ((selectedRelayServer?.value == '-1' || selectedRelayServer?.value === undefined) && srtlaServerAddress) {
-    config.srtla_addr = srtlaServerAddress;
+  if ((properties.relayServer == '-1' || properties.relayServer === undefined) && properties.srtlaServerAddress) {
+    config.srtla_addr = properties.srtlaServerAddress;
+    if (properties.srtlaServerPort !== undefined) {
+      config.srtla_port = properties.srtlaServerPort;
+    }
   } else {
-    config.relay_server = selectedRelayServer!.value;
+    config.relay_server = properties.relayServer!;
   }
-  if (srtLatency !== undefined) {
-    config.srt_latency = srtLatency;
+  if (properties.srtLatency !== undefined) {
+    config.srt_latency = properties.srtLatency;
   }
 
-  if (selectedRelayAccount?.value == '-1' || selectedRelayAccount?.value === undefined) {
-    if (srtlaServerPort !== undefined) {
-      config.srtla_port = srtlaServerPort;
-    }
-    config.srt_streamid = srtStreamId ?? '';
+  if (properties.relayAccount == '-1' || properties.relayAccount === undefined) {
+    config.srt_streamid = properties.srtStreamId ?? '';
   } else {
-    config.relay_account = selectedRelayAccount!.value;
+    config.relay_account = properties.relayAccount;
   }
-  config.delay = selectedAudioDelay;
-  config.max_br = selectedBitrate!;
+  config.delay = properties.audioDelay!;
+  config.max_br = properties.bitrate!;
 
   // Directly dismiss all toasts first for immediate visual feedback
   toast.dismiss();
@@ -340,6 +311,37 @@ const startStreamingWithCurrentConfig = () => {
     });
   }
 };
+
+const getSortedFramerates = (framerates: HumanReadablePipeline[]) =>
+  [...framerates].sort((a, b) => {
+    // Put "match device output" or similar special options first
+    const fpsA = a.extraction.fps;
+    const fpsB = b.extraction.fps;
+
+    if (typeof fpsA === 'string' && fpsA.toLowerCase().includes('match')) return -1;
+    if (typeof fpsB === 'string' && fpsB.toLowerCase().includes('match')) return 1;
+
+    // Convert to numbers for numeric comparison
+    const numA = parseFloat(String(fpsA)) || 0;
+    const numB = parseFloat(String(fpsB)) || 0;
+
+    // Sort by numeric value
+    return numA - numB;
+  });
+
+const getSortedResolutions = (resolutions: string[]) =>
+  [...resolutions].sort((a, b) => {
+    // Put "match device resolution" or similar special options first
+    if (a.toLowerCase().includes('match') || a.toLowerCase().includes('device')) return -1;
+    if (b.toLowerCase().includes('match') || b.toLowerCase().includes('device')) return 1;
+
+    // Extract numeric values (like "720" from "720p")
+    const numA = parseInt(a.match(/\d+/)?.[0] || '0', 10);
+    const numB = parseInt(b.match(/\d+/)?.[0] || '0', 10);
+
+    // Sort by numeric value
+    return numA - numB;
+  });
 </script>
 
 <div class="flex-col md:flex">
@@ -380,21 +382,19 @@ const startStreamingWithCurrentConfig = () => {
             <div class="grid gap-1">
               <Label for="inputMode">{$_('settings.inputMode')}</Label>
               <Select.Root
+                type="single"
                 disabled={isStreaming}
-                selected={selectedInputMode}
-                onSelectedChange={value => {
-                  selectedEncoder = { value: undefined, label: undefined };
-                  selectedResolution = { value: undefined, label: undefined };
-                  selectedFramerate = { value: undefined, label: undefined };
-                  selectedInputMode = value;
-
+                value={properties.inputMode}
+                onValueChange={value => {
+                  properties.encoder = undefined;
+                  properties.resolution = undefined;
+                  properties.framerate = undefined;
+                  properties.inputMode = value;
                   // Auto-select the next level if there's only one option
-                  if (value) {
-                    autoSelectNextOption('inputMode');
-                  }
+                  if (value) autoSelectNextOption('inputMode');
                 }}>
                 <Select.Trigger id="inputMode">
-                  <Select.Value placeholder={$_('settings.selectInputMode')}></Select.Value>
+                  {properties.inputMode ? properties.inputMode.toUpperCase() : $_('settings.selectInputMode')}
                 </Select.Trigger>
                 <Select.Content>
                   <Select.Group>
@@ -407,7 +407,7 @@ const startStreamingWithCurrentConfig = () => {
                   </Select.Group>
                 </Select.Content>
               </Select.Root>
-              {#if selectedInputMode?.value && selectedInputMode.value.toLowerCase().includes('usb')}
+              {#if properties.inputMode && properties.inputMode.includes('usb')}
                 <p class="mt-1 text-xs text-muted-foreground">
                   {$_('settings.djiCameraMessage')}
                 </p>
@@ -418,12 +418,13 @@ const startStreamingWithCurrentConfig = () => {
             <div class="grid gap-1">
               <Label for="encodingFormat">{$_('settings.encodingFormat')}</Label>
               <Select.Root
-                disabled={isStreaming || !selectedInputMode?.value}
-                selected={selectedEncoder}
-                onSelectedChange={value => {
-                  selectedEncoder = value;
-                  selectedResolution = { value: undefined, label: undefined };
-                  selectedFramerate = { value: undefined, label: undefined };
+                type="single"
+                disabled={isStreaming || !properties.inputMode}
+                value={properties.encoder}
+                onValueChange={value => {
+                  properties.encoder = value;
+                  properties.resolution = undefined;
+                  properties.framerate = undefined;
 
                   // Auto-select the next level if there's only one option
                   if (value) {
@@ -431,12 +432,12 @@ const startStreamingWithCurrentConfig = () => {
                   }
                 }}>
                 <Select.Trigger id="encodingFormat">
-                  <Select.Value placeholder={$_('settings.selectEncodingOutputFormat')}></Select.Value>
+                  {properties.encoder ? properties.encoder.toUpperCase() : $_('settings.selectEncodingOutputFormat')}
                 </Select.Trigger>
                 <Select.Content>
                   <Select.Group>
-                    {#if selectedInputMode?.value && groupedPipelines?.[selectedInputMode.value]}
-                      {#each Object.keys(groupedPipelines[selectedInputMode.value]) as encoder}
+                    {#if properties.inputMode && groupedPipelines?.[properties.inputMode]}
+                      {#each Object.keys(groupedPipelines[properties.inputMode]) as encoder}
                         <Select.Item value={encoder} label={encoder.toUpperCase()}></Select.Item>
                       {/each}
                     {/if}
@@ -449,11 +450,12 @@ const startStreamingWithCurrentConfig = () => {
             <div class="grid gap-1">
               <Label for="encodingResolution">{$_('settings.encodingResolution')}</Label>
               <Select.Root
-                disabled={isStreaming || !selectedEncoder?.value}
-                selected={selectedResolution}
-                onSelectedChange={value => {
-                  selectedResolution = value;
-                  selectedFramerate = { value: undefined, label: undefined };
+                type="single"
+                disabled={isStreaming || !properties.encoder}
+                value={properties.resolution}
+                onValueChange={value => {
+                  properties.resolution = value;
+                  properties.framerate = undefined;
 
                   // Auto-select the next level if there's only one option
                   if (value) {
@@ -461,27 +463,15 @@ const startStreamingWithCurrentConfig = () => {
                   }
                 }}>
                 <Select.Trigger id="encodingResolution">
-                  <Select.Value placeholder={$_('settings.selectEncodingResolution')}></Select.Value>
+                  {properties.resolution ?? $_('settings.selectEncodingResolution')}
                 </Select.Trigger>
                 <Select.Content>
                   <Select.Group>
-                    {#if selectedEncoder?.value && selectedInputMode?.value && groupedPipelines?.[selectedInputMode.value]?.[selectedEncoder.value]}
-                      {@const resolutions = Object.keys(
-                        groupedPipelines[selectedInputMode.value][selectedEncoder.value],
+                    {#if properties.encoder && properties.inputMode && groupedPipelines?.[properties.inputMode]?.[properties.encoder]}
+                      {@const resolutions = getSortedResolutions(
+                        Object.keys(groupedPipelines[properties.inputMode][properties.encoder]),
                       )}
-                      {@const sortedResolutions = [...resolutions].sort((a, b) => {
-                        // Put "match device resolution" or similar special options first
-                        if (a.toLowerCase().includes('match') || a.toLowerCase().includes('device')) return -1;
-                        if (b.toLowerCase().includes('match') || b.toLowerCase().includes('device')) return 1;
-
-                        // Extract numeric values (like "720" from "720p")
-                        const numA = parseInt(a.match(/\d+/)?.[0] || '0', 10);
-                        const numB = parseInt(b.match(/\d+/)?.[0] || '0', 10);
-
-                        // Sort by numeric value
-                        return numA - numB;
-                      })}
-                      {#each sortedResolutions as resolution}
+                      {#each resolutions as resolution}
                         <Select.Item value={resolution} label={resolution}></Select.Item>
                       {/each}
                     {/if}
@@ -494,35 +484,21 @@ const startStreamingWithCurrentConfig = () => {
             <div class="grid gap-1">
               <Label for="framerate">{$_('settings.framerate')}</Label>
               <Select.Root
-                disabled={isStreaming || !selectedResolution?.value}
-                selected={selectedFramerate}
-                onSelectedChange={value => (selectedFramerate = value)}>
+                type="single"
+                disabled={isStreaming || !properties.resolution}
+                value={properties.framerate!}
+                onValueChange={value => (properties.framerate = value)}>
                 <Select.Trigger id="framerate">
-                  <Select.Value placeholder={$_('settings.selectFramerate')}></Select.Value>
+                  {properties.framerate ?? $_('settings.selectFramerate')}
                 </Select.Trigger>
                 <Select.Content>
                   <Select.Group>
-                    {#if selectedEncoder?.value && selectedInputMode?.value && selectedResolution?.value && groupedPipelines?.[selectedInputMode.value]?.[selectedEncoder.value][selectedResolution.value]}
-                      {@const framerates =
-                        groupedPipelines[selectedInputMode.value][selectedEncoder.value][selectedResolution.value]}
-                      {@const sortedFramerates = [...framerates].sort((a, b) => {
-                        // Put "match device output" or similar special options first
-                        const fpsA = a.extraction.fps;
-                        const fpsB = b.extraction.fps;
-
-                        if (typeof fpsA === 'string' && fpsA.toLowerCase().includes('match')) return -1;
-                        if (typeof fpsB === 'string' && fpsB.toLowerCase().includes('match')) return 1;
-
-                        // Convert to numbers for numeric comparison
-                        const numA = typeof fpsA === 'number' ? fpsA : parseFloat(String(fpsA)) || 0;
-                        const numB = typeof fpsB === 'number' ? fpsB : parseFloat(String(fpsB)) || 0;
-
-                        // Sort by numeric value
-                        return numA - numB;
-                      })}
-                      {#each sortedFramerates as framerate}
-                        <Select.Item value={framerate.extraction.fps} label={framerate.extraction.fps?.toString()}
-                        ></Select.Item>
+                    {#if properties.encoder && properties.inputMode && properties.resolution && groupedPipelines?.[properties.inputMode]?.[properties.encoder][properties.resolution]}
+                      {@const framerates = getSortedFramerates(
+                        groupedPipelines[properties.inputMode][properties.encoder][properties.resolution],
+                      )}
+                      {#each framerates as framerate}
+                        <Select.Item value={framerate.extraction.fps!} label={framerate.extraction.fps!}></Select.Item>
                       {/each}
                     {/if}
                   </Select.Group>
@@ -536,27 +512,24 @@ const startStreamingWithCurrentConfig = () => {
               <div class="mt-4">
                 <Label for="bitrate">{$_('settings.bitrate')}</Label>
                 <Slider
+                  type="single"
                   id="bitrate"
                   class="my-6"
-                  value={[selectedBitrate]}
+                  value={properties.bitrate}
                   max={12000}
                   min={500}
                   step={50}
                   onValueChange={value => {
-                    setTimeout(() => {
-                      selectedBitrate = value[0];
-                      updateMaxBitrate();
-                    });
+                    properties.bitrate = value;
                   }} />
                 <Input
                   type="number"
                   step="50"
                   max={12000}
                   min={500}
-                  bind:value={selectedBitrate}
+                  bind:value={properties.bitrate}
                   onblur={() => {
-                    selectedBitrate = normalizeValue(selectedBitrate, 2000, 12000, 50);
-                    updateMaxBitrate();
+                    properties.bitrate = normalizeValue(properties.bitrate!, 2000, 12000, 50);
                   }}></Input>
                 {#if isStreaming}
                   <p class="text-xs">{$_('settings.changeBitrateNotice')}</p>
@@ -574,15 +547,20 @@ const startStreamingWithCurrentConfig = () => {
         </Card.Header>
         <Card.Content>
           <div class="grid gap-4">
-            {#if audioCodecs && unparsedPipelines && selectedPipeline && unparsedPipelines[selectedPipeline].asrc}
+            {#if audioCodecs && unparsedPipelines && properties.pipeline && unparsedPipelines[properties.pipeline!].asrc}
               <div class="grid gap-1">
                 <Label for="audioSource">{$_('settings.audioSource')}</Label>
                 <Select.Root
+                  type="single"
                   disabled={isStreaming}
-                  selected={selectedAudioSource}
-                  onSelectedChange={value => (selectedAudioSource = value)}>
+                  value={properties.audioSource}
+                  onValueChange={value => (properties.audioSource = value)}>
                   <Select.Trigger id="audioSource">
-                    <Select.Value placeholder={$_('settings.selectAudioSource')}></Select.Value>
+                    {!properties.audioSource
+                      ? $_('settings.selectAudioSource')
+                      : properties.audioSource !== notAvailableAudioSource
+                        ? properties.audioSource
+                        : `${notAvailableAudioSource} (${$_('settings.notAvailableAudioSource')})`}
                   </Select.Trigger>
                   <Select.Content>
                     <Select.Group>
@@ -591,21 +569,32 @@ const startStreamingWithCurrentConfig = () => {
                           <Select.Item value={audioSource} label={audioSource}></Select.Item>
                         {/each}
                       {/if}
+                      {#if notAvailableAudioSource}
+                        <Select.Item
+                          value={notAvailableAudioSource}
+                          label={`${notAvailableAudioSource} (${$_('settings.notAvailableAudioSource')})`}
+                        ></Select.Item>
+                      {/if}
                     </Select.Group>
                   </Select.Content>
                 </Select.Root>
               </div>
             {/if}
 
-            {#if audioCodecs && unparsedPipelines && selectedPipeline && unparsedPipelines[selectedPipeline].acodec}
+            {#if audioCodecs && unparsedPipelines && properties.pipeline && unparsedPipelines[properties.pipeline].acodec}
               <div class="grid gap-1">
                 <Label for="audioCodec">{$_('settings.audioCodec')}</Label>
                 <Select.Root
+                  type="single"
                   disabled={isStreaming}
-                  selected={selectedAudioCodec}
-                  onSelectedChange={value => (selectedAudioCodec = value)}>
+                  value={properties.audioCodec}
+                  onValueChange={value => (properties.audioCodec = value)}>
                   <Select.Trigger id="audioCodec">
-                    <Select.Value placeholder={$_('settings.selectAudioCodec')}></Select.Value>
+                    {$_(
+                      properties.audioCodec
+                        ? Object.entries(audioCodecs).find(acodec => acodec[0] === properties.audioCodec)![1]
+                        : 'settings.selectAudioCodec',
+                    )}
                   </Select.Trigger>
                   <Select.Content>
                     <Select.Group>
@@ -618,36 +607,37 @@ const startStreamingWithCurrentConfig = () => {
                 <div class="mt-4">
                   <Label for="audioDelay">{$_('settings.audioDelay')}</Label>
                   <Slider
+                    type="single"
                     id="audioDelay"
                     class="my-6"
-                    value={[selectedAudioDelay]}
-                    onValueChange={value => (selectedAudioDelay = value[0])}
+                    value={properties.audioDelay}
+                    onValueChange={value => (properties.audioDelay = value)}
                     disabled={isStreaming}
                     max={2000}
                     min={-2000}
                     step={5}></Slider>
                   <Input
                     id="audioDelayInput"
-                    bind:value={selectedAudioDelay}
+                    bind:value={properties.audioDelay}
                     type="number"
                     step="5"
                     min="-2000"
                     max="2000"
                     disabled={isStreaming}
                     onblur={() => {
-                      selectedAudioDelay = normalizeValue(selectedAudioDelay, 2000, 12000, 50);
+                      properties.audioDelay = normalizeValue(properties.audioDelay!, 2000, 12000, 50);
                     }}></Input>
                 </div>
               </div>
             {/if}
 
-            {#if audioCodecs && unparsedPipelines && selectedPipeline && !unparsedPipelines[selectedPipeline].acodec && !unparsedPipelines[selectedPipeline].asrc}
+            {#if audioCodecs && unparsedPipelines && properties.pipeline && !unparsedPipelines[properties.pipeline].acodec && !unparsedPipelines[properties.pipeline].asrc}
               <div class="mt-2">
                 <h3>{$_('settings.noAudioSettingSupport')}</h3>
               </div>
             {/if}
 
-            {#if audioCodecs && unparsedPipelines && !selectedPipeline}
+            {#if audioCodecs && unparsedPipelines && !properties.pipeline}
               <div class="mt-2">
                 <h3>{$_('settings.audioSettingsMessage')}</h3>
               </div>
@@ -666,11 +656,19 @@ const startStreamingWithCurrentConfig = () => {
             <div class="grid gap-1">
               <Label for="relayServer">{$_('settings.relayServer')}</Label>
               <Select.Root
-                selected={selectedRelayServer}
+                type="single"
+                value={properties.relayServer}
                 disabled={relayMessage === undefined || isStreaming}
-                onSelectedChange={value => value && (selectedRelayServer = value)}>
+                onValueChange={value => {
+                  properties.relayServer = value;
+                  if (value === '-1') {
+                    properties.relayAccount = undefined;
+                  }
+                }}>
                 <Select.Trigger id="relayServer">
-                  <Select.Value></Select.Value>
+                  {properties.relayServer !== undefined && properties.relayServer !== '-1' && relayMessage?.servers
+                    ? Object.entries(relayMessage.servers).find(server => server[0] === properties.relayServer)![1].name
+                    : $_('settings.manualConfiguration')}
                 </Select.Trigger>
                 <Select.Content>
                   <Select.Group>
@@ -685,22 +683,26 @@ const startStreamingWithCurrentConfig = () => {
               </Select.Root>
             </div>
 
-            {#if selectedRelayServer?.value === '-1' || selectedRelayServer?.value === undefined}
+            {#if properties.relayServer === '-1' || properties.relayServer === undefined}
               <div class="grid gap-1">
                 <Label for="srtlaServerAddress">{$_('settings.srtlaServerAddress')}</Label>
-                <Input id="srtlaServerAddress" bind:value={srtlaServerAddress} disabled={isStreaming}></Input>
+                <Input id="srtlaServerAddress" bind:value={properties.srtlaServerAddress} disabled={isStreaming}
+                ></Input>
               </div>
-            {/if}
-
-            {#if selectedRelayServer?.value !== '-1' && selectedRelayServer?.value !== undefined}
+            {:else}
               <div class="grid gap-1">
                 <Label for="relayServerAccount">{$_('settings.relayServerAccount')}</Label>
                 <Select.Root
-                  selected={selectedRelayAccount}
+                  type="single"
                   disabled={relayMessage === undefined || isStreaming}
-                  onSelectedChange={value => value && (selectedRelayAccount = value)}>
+                  onValueChange={value => (properties.relayAccount = value)}
+                  value={properties.relayAccount}>
                   <Select.Trigger id="relayServerAccount">
-                    <Select.Value></Select.Value>
+                    {properties.relayAccount === undefined ||
+                    properties.relayAccount === '-1' ||
+                    relayMessage?.accounts === undefined
+                      ? $_('settings.manualConfiguration')
+                      : relayMessage.accounts[properties.relayAccount].name}
                   </Select.Trigger>
                   <Select.Content>
                     <Select.Group>
@@ -716,37 +718,41 @@ const startStreamingWithCurrentConfig = () => {
               </div>
             {/if}
 
-            {#if selectedRelayAccount?.value === '-1' || selectedRelayAccount?.value === undefined}
+            {#if properties.relayServer === '-1' || properties.relayServer === undefined}
               <div class="grid gap-1">
                 <Label for="srtlaServerPort">{$_('settings.srtlaServerPort')}</Label>
-                <Input id="srtlaServerPort" type="number" bind:value={srtlaServerPort} disabled={isStreaming}></Input>
+                <Input id="srtlaServerPort" type="number" bind:value={properties.srtlaServerPort} disabled={isStreaming}
+                ></Input>
               </div>
+            {/if}
+            {#if properties.relayAccount === '-1' || properties.relayAccount === undefined}
               <div class="grid gap-1">
                 <Label for="srtStreamId">{$_('settings.srtStreamId')}</Label>
-                <Input id="srtStreamId" bind:value={srtStreamId} disabled={isStreaming}></Input>
+                <Input id="srtStreamId" bind:value={properties.srtStreamId} disabled={isStreaming}></Input>
               </div>
             {/if}
 
-            {#if srtLatency !== undefined}
+            {#if properties.srtLatency !== undefined}
               <div class="grid gap-1">
                 <Label for="srtLatency">{$_('settings.srtLatency')}</Label>
                 <Slider
                   id="srtLatency"
+                  type="single"
                   class="my-6"
-                  value={[srtLatency]}
+                  value={properties.srtLatency}
                   max={12000}
                   min={2000}
                   step={50}
-                  onValueChange={value => (srtLatency = value[0])}
+                  onValueChange={value => (properties.srtLatency = value)}
                   disabled={isStreaming}></Slider>
                 <Input
                   id="srtLatencyInput"
                   type="number"
                   step="1"
-                  bind:value={srtLatency}
+                  bind:value={properties.srtLatency}
                   disabled={isStreaming}
                   onblur={() => {
-                    srtLatency = normalizeValue(srtLatency, 2000, 12000, 50);
+                    properties.srtLatency = normalizeValue(properties.srtLatency!, 2000, 12000, 50);
                   }}></Input>
               </div>
             {/if}

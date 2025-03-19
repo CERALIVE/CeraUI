@@ -15,7 +15,7 @@ import ModeToggle from '$lib/components/ui/mode-toggle.svelte';
       <div class="w-full flex-1 md:w-auto md:flex-none"></div>
       <nav class="flex items-center">
         <span class="mr-3"> <LocaleSelector /></span>
-        <ModeToggle />
+        <span><ModeToggle /></span>
       </nav>
     </div>
   </div>

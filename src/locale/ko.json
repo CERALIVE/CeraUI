@@ -58,6 +58,7 @@
     "audioSettings": "오디오 설정",
     "audioSource": "오디오 소스",
     "selectAudioSource": "오디오 소스 선택",
+    "notAvailableAudioSource": "사용할 수 없음",
     "audioCodec": "오디오 코덱",
     "selectAudioCodec": "오디오 코덱 선택",
     "audioDelay": "오디오 지연(ms)",

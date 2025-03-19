@@ -6,19 +6,19 @@ import * as Select from '$lib/components/ui/select';
 import { localeStore } from '$lib/stores/locale';
 const initialLocale = get(localeStore);
 
-let selectedLocale = $state({ value: initialLocale.code, label: initialLocale.name });
-
+let selectedLocale = $state(initialLocale.code);
+let localeName = $derived.by(() => existingLocales.find(l => l.code === selectedLocale)!.name);
 locale.set(initialLocale.code);
-const handleLocaleChange = (select: { value: string; label: string }) => {
-  locale.set(select.value);
-  localeStore.set(existingLocales.find(l => l.code === select.value)!);
-  selectedLocale = select;
+const handleLocaleChange = (value: string) => {
+  locale.set(value);
+  localeStore.set(existingLocales.find(l => l.code === value)!);
+  selectedLocale = value;
 };
 </script>
 
-<Select.Root selected={selectedLocale} onSelectedChange={handleLocaleChange}>
+<Select.Root type="single" value={selectedLocale} onValueChange={handleLocaleChange}>
   <Select.Trigger>
-    <Select.Value></Select.Value>
+    {localeName}
   </Select.Trigger>
   <Select.Content>
     <Select.Group>

@@ -54,7 +54,7 @@ NetifMessages.subscribe((networks: NetifMessage) => {
           title={network.enabled ? $_('networking.toggle.disableNetwork') : $_('networking.toggle.enableNetwork')}
           disabled={!!network.error}
           bind:pressed={network.enabled}
-          onPressedChange={() => setNetif(name, network.ip, !network.enabled)}>
+          onPressedChange={value => setNetif(name, network.ip, value)}>
           {#if network.enabled}
             <Check></Check>
           {:else}

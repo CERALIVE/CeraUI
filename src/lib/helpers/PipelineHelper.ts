@@ -5,10 +5,10 @@ export type PipelineInfo = {
   encoder: string | null;
   format: string | null;
   resolution: string | null;
-  fps: number | string;
+  fps: string | null;
 };
 
-type HumanReadablePipeline = {
+export type HumanReadablePipeline = {
   name: string;
   asrc: boolean;
   acodec: boolean;
@@ -49,7 +49,7 @@ export function parsePipelineName(name: string): PipelineInfo {
     encoder: encoderMatch ? encoderMatch[0] : null,
     format: formatMatch ? (isLibUVC ? 'usb-libuvch264' : formatMatch[1].replace(/_/g, ' ')) : null,
     resolution: resolutionMatch ? resolutionMatch[0] : '[Match device resolution]',
-    fps: fpsMatch ? parseFloat(fpsMatch[1] || fpsMatch[2]) : '[Match device output]',
+    fps: fpsMatch ? fpsMatch[1] || fpsMatch[2] : '[Match device output]',
   };
 }
 

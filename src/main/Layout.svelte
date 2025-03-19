@@ -93,7 +93,7 @@ const stopStreaming = () => {
 };
 
 // Show a toast, extending duration if a duplicate exists
-// eslint-disabled-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const showToast = (type: NotificationType, name: string, options: any) => {
   // Prevent recursive calls that could cause infinite loops
   if (isUpdatingToasts) return;
@@ -228,10 +228,10 @@ NotificationsMessages.subscribe(notifications => {
       // Set a new timer to auto-clear this notification if no new updates arrive
       const timerId = window.setTimeout(() => {
         // Find any toasts with this key
-        Object.entries(activeToasts).forEach(([id, toast]) => {
-          if (toast.notificationKey === notification.msg && toast.duration === Infinity) {
+        Object.entries(activeToasts).forEach(([id, toastElement]) => {
+          if (toastElement.notificationKey === notification.msg && toastElement.duration === Infinity) {
             // Auto-clear this toast since no new updates have arrived
-            toast.dismiss(toast.id);
+            toast.dismiss(toastElement.id);
 
             // Update our tracking
             setTimeout(() => {
@@ -265,14 +265,6 @@ NotificationsMessages.subscribe(notifications => {
     });
   });
 });
-
-// TypeScript interface for global window object
-declare global {
-  interface Window {
-    startStreamingWithNotificationClear: typeof startStreaming;
-    stopStreamingWithNotificationClear: typeof stopStreaming;
-  }
-}
 
 // Export our functions to the global scope to make them available to other components
 window.startStreamingWithNotificationClear = startStreaming;

@@ -4,12 +4,15 @@ import js from '@eslint/js';
 import typescriptEslint from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import _import from 'eslint-plugin-import';
-import svelte from 'eslint-plugin-svelte';
 import unusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
-import parser from 'svelte-eslint-parser';
+import svelteParser from 'svelte-eslint-parser';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// Dynamic import for the Svelte plugin
+const svelteModule = await import('eslint-plugin-svelte');
+const svelte = fixupPluginRules(svelteModule.default || svelteModule);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,24 +22,34 @@ const compat = new FlatCompat({
   allConfig: js.configs.all,
 });
 
+// Define plugins just once
+const plugins = {
+  import: fixupPluginRules(_import),
+  svelte,
+  '@typescript-eslint': fixupPluginRules(typescriptEslint),
+  'unused-imports': fixupPluginRules(unusedImports),
+};
+
+// Get recommended configs from prettier - properly flattened
+const prettierConfig = compat.extends('plugin:prettier/recommended');
+
 export default [
+  // Ignore patterns
   {
     ignores: ['**/dist', '**/node_modules', '**/public', '**/*.d.ts'],
   },
-  ...compat.extends(
-    'eslint:recommended',
-    'plugin:@typescript-eslint/recommended',
-    'plugin:svelte/recommended',
-    'plugin:prettier/recommended',
-  ),
+  // Base JS config
+  js.configs.recommended,
+  // TypeScript config - make sure it's properly formatted
   {
-    plugins: {
-      import: fixupPluginRules(_import),
-      svelte,
-      '@typescript-eslint': typescriptEslint,
-      'unused-imports': unusedImports,
-    },
-
+    files: ['**/*.ts', '**/*.svelte'],
+    rules: { ...typescriptEslint.configs.recommended.rules },
+  },
+  // Prettier config - spread each item separately to avoid nested arrays
+  ...(Array.isArray(prettierConfig) ? prettierConfig : [prettierConfig]),
+  // Global settings
+  {
+    plugins,
     languageOptions: {
       globals: {
         ...globals.browser,
@@ -44,14 +57,12 @@ export default [
         ...globals.node,
         NodeJS: 'readonly',
       },
-      parser: tsParser,
       ecmaVersion: 2022,
       sourceType: 'module',
     },
-
     rules: {
       '@typescript-eslint/no-unused-vars': 'off',
-      'no-unused-vars': 'off', // or "@typescript-eslint/no-unused-vars": "off",
+      'no-unused-vars': 'off',
       'unused-imports/no-unused-imports': 'error',
       'unused-imports/no-unused-vars': [
         'warn',
@@ -65,23 +76,36 @@ export default [
       'import/order': [
         'error',
         {
-          named: true,
           alphabetize: { order: 'asc' },
           groups: ['index', 'sibling', 'parent', 'internal', 'external', 'builtin', 'object', 'type'],
         },
       ],
     },
   },
+  // TypeScript files
   {
-    files: ['**/*.svelte', '**/*.ts'],
-
+    files: ['**/*.ts'],
     languageOptions: {
-      parser: parser,
-      ecmaVersion: 5,
-      sourceType: 'script',
-
+      parser: tsParser,
+    },
+  },
+  // Svelte files
+  {
+    files: ['**/*.svelte'],
+    rules: {
+      ...svelte.configs.recommended.rules,
+      'svelte/valid-compile': 'warn',
+      'no-undef': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+    },
+    languageOptions: {
+      parser: svelteParser,
       parserOptions: {
-        parser: '@typescript-eslint/parser',
+        parser: {
+          ts: tsParser,
+        },
+        extraFileExtensions: ['.svelte'],
+        jsx: true,
       },
     },
   },

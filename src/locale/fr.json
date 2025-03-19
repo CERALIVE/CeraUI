@@ -60,6 +60,7 @@
     "bitrate": "Débit binaire (Kbps)",
     "audioSettings": "Paramètres audio",
     "audioSource": "Source audio",
+    "notAvailableAudioSource": "Non disponible",
     "selectAudioSource": "Sélectionnez une source audio",
     "audioCodec": "Codec audio",
     "selectAudioCodec": "Sélectionnez un codec audio",

@@ -8,11 +8,12 @@ import { cn } from '$lib/utils';
 type Props = AlertDialogDefault.RootProps & {
   className?: string;
   extraButtonClasses?: string;
-  buttonText: string;
+  buttonText?: string;
   icon?: Snippet;
   iconPosition?: 'right' | 'left';
   hiddeCancelButton?: boolean;
   dialogTitle: Snippet;
+  title?: string;
   disabledConfirmButton?: boolean;
   description: Snippet;
   cancelButtonText?: string;
@@ -71,7 +72,12 @@ let {
         {#if !hiddeCancelButton}
           <AlertDialog.Cancel onclick={() => oncancel?.()}>{cancelButtonText ?? 'Cancel'}</AlertDialog.Cancel>
         {/if}
-        <AlertDialog.Action disabled={disabledConfirmButton} onclick={() => onconfirm?.()}
+        <AlertDialog.Action
+          disabled={disabledConfirmButton}
+          onclick={() => {
+            onconfirm?.();
+            setTimeout(() => (open = false), 20);
+          }}
           >{confirmButtonText ?? 'Continue'}
         </AlertDialog.Action>
       </AlertDialog.Footer>
