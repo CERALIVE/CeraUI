@@ -8,26 +8,26 @@ import Label from './form-label.svelte';
 import Legend from './form-legend.svelte';
 import * as FormPrimitive from 'formsnap';
 
-const Control = FormPrimitive.Control;
+const Control = FormPrimitive.Control as typeof FormPrimitive.Control;
 
 export {
-  Button,
-  Button as FormButton,
-  Control,
-  Control as FormControl,
-  Description,
-  Description as FormDescription,
-  ElementField,
-  ElementField as FormElementField,
   Field,
+  Control,
+  Label,
+  FieldErrors,
+  Description,
+  Fieldset,
+  Legend,
+  ElementField,
+  Button,
   //
   Field as FormField,
-  FieldErrors,
-  FieldErrors as FormFieldErrors,
-  Fieldset,
-  Fieldset as FormFieldset,
-  Label,
+  Control as FormControl,
+  Description as FormDescription,
   Label as FormLabel,
-  Legend,
+  FieldErrors as FormFieldErrors,
+  Fieldset as FormFieldset,
   Legend as FormLegend,
+  ElementField as FormElementField,
+  Button as FormButton,
 };

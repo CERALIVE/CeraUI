@@ -6,19 +6,17 @@ import Title from './card-title.svelte';
 import Root from './card.svelte';
 
 export {
-  Content,
-  Content as CardContent,
-  Description,
-  Description as CardDescription,
-  Footer,
-  Footer as CardFooter,
-  Header,
-  Header as CardHeader,
   Root,
+  Content,
+  Description,
+  Footer,
+  Header,
+  Title,
   //
   Root as Card,
-  Title,
+  Content as CardContent,
+  Description as CardDescription,
+  Footer as CardFooter,
+  Header as CardHeader,
   Title as CardTitle,
 };
-
-export type HeadingLevel = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';

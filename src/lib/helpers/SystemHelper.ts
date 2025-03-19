@@ -65,6 +65,7 @@ export const stopStreaming = () => {
 };
 
 export const startStreaming = (config: { [key: string]: string | number }) => {
+  console.log(JSON.stringify({ start: config }));
   socket.send(JSON.stringify({ start: config }));
 };
 

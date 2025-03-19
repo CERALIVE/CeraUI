@@ -1,6 +1,7 @@
 {
   "files": [],
   "compilerOptions": {
+    "esModuleInterop": true,
     "baseUrl": ".",
     "paths": {
       "$lib": [

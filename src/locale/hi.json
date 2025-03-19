@@ -57,6 +57,7 @@
     "bitrate": "बिटरेट (Kbps)",
     "audioSettings": "ऑडियो सेटिंग्स",
     "audioSource": "ऑडियो स्रोत",
+    "notAvailableAudioSource": "उपलब्ध नहीं",
     "selectAudioSource": "ऑडियो स्रोत चुनें",
     "audioCodec": "ऑडियो कोडेक",
     "selectAudioCodec": "ऑडियो कोडेक चुनें",

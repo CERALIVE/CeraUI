@@ -6,13 +6,13 @@ import { Tabs as TabsPrimitive } from 'bits-ui';
 const Root = TabsPrimitive.Root;
 
 export {
-  Content,
-  Content as TabsContent,
-  List,
-  List as TabsList,
   Root,
+  Content,
+  List,
+  Trigger,
   //
   Root as Tabs,
-  Trigger,
+  Content as TabsContent,
+  List as TabsList,
   Trigger as TabsTrigger,
 };

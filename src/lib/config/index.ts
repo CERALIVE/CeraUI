@@ -2,10 +2,14 @@ import Advanced from '../../main/tabs/Advanced.svelte';
 import General from '../../main/tabs/General.svelte';
 import Network from '../../main/tabs/Network.svelte';
 import Settings from '../../main/tabs/Settings.svelte';
-import type { ComponentProps } from 'svelte';
+import type { Component } from 'svelte';
 
-//eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type NavElements = { [key: string]: { label: string; component: ComponentProps<any> } };
+export type NavElements = {
+  [key: string]: {
+    label: string;
+    component: Component;
+  };
+};
 export const navElements: NavElements = {
   general: { label: 'general', component: General },
   wifi: { label: 'network', component: Network },
