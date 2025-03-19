@@ -220,6 +220,8 @@
     "belaboxLogTooltip": "Téléchargez les journaux pour le dépannage.",
     "systemLogTooltip": "Téléchargez les journaux système pour le débogage.",
     "confirmBelaboxLog": "Êtes-vous sûr de vouloir télécharger le journal BELABOX ? Il peut contenir des informations sensibles, telles que des mots de passe.",
-    "confirmSystemLog": "Êtes-vous sûr de vouloir télécharger le journal système ? Il peut contenir des informations sensibles, telles que des mots de passe."
+    "confirmSystemLog": "Êtes-vous sûr de vouloir télécharger le journal système ? Il peut contenir des informations sensibles, telles que des mots de passe.",
+    "downloadBelaboxLog": "Télécharger le journal BELABOX",
+    "downloadSystemLog": "Télécharger le journal système"
   }
 }

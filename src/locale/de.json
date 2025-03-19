@@ -217,9 +217,11 @@
     "belaboxLog": "BELABOX-Protokoll",
     "systemLog": "Systemprotokoll",
     "download": "Herunterladen",
-    "belaboxLogTooltip": "Laden Sie Protokolle zur Fehlerbehebung herunter.",
-    "systemLogTooltip": "Laden Sie Systemprotokolle zum Debuggen herunter.",
-    "confirmBelaboxLog": "Sind Sie sicher, dass Sie das BELABOX-Protokoll herunterladen möchten? Es kann sensible Informationen wie Passwörter enthalten.",
-    "confirmSystemLog": "Sind Sie sicher, dass Sie das Systemprotokoll herunterladen möchten? Es kann sensible Informationen wie Passwörter enthalten."
+    "belaboxLogTooltip": "Laden Sie Logdatei zur Fehlerbehebung herunter.",
+    "systemLogTooltip": "Laden Sie System-Logdatei zum Debuggen herunter.",
+    "confirmBelaboxLog": "Sind Sie sicher, dass Sie das BELABOX-Logdatei herunterladen möchten? Es kann sensible Informationen wie Passwörter enthalten.",
+    "confirmSystemLog": "Sind Sie sicher, dass Sie das System-Logdatei herunterladen möchten? Es kann sensible Informationen wie Passwörter enthalten.",
+    "downloadBelaboxLog": "BELABOX-Logdatei herunterladen",
+    "downloadSystemLog": "System-Logdatei herunterladen"
   }
 }

@@ -219,6 +219,8 @@
     "belaboxLogTooltip": "Descargue registros para solucionar problemas.",
     "systemLogTooltip": "Descargue registros del sistema para depuración.",
     "confirmBelaboxLog": "¿Está seguro de que desea descargar el registro de BELABOX? Puede contener información sensible, como contraseñas.",
-    "confirmSystemLog": "¿Está seguro de que desea descargar el registro del sistema? Puede contener información sensible, como contraseñas."
+    "confirmSystemLog": "¿Está seguro de que desea descargar el registro del sistema? Puede contener información sensible, como contraseñas.",
+    "downloadBelaboxLog": "Descargar registro de BELABOX",
+    "downloadSystemLog": "Descargar registro del sistema"
   }
 }

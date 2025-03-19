@@ -220,6 +220,8 @@
     "belaboxLogTooltip": "トラブルシューティング用にログをダウンロードします。",
     "systemLogTooltip": "デバッグ用にシステムログをダウンロードします。",
     "confirmBelaboxLog": "BELABOXログをダウンロードしますか？パスワードなどの機密情報が含まれている可能性があります。",
-    "confirmSystemLog": "システムログをダウンロードしますか？パスワードなどの機密情報が含まれている可能性があります。"
+    "confirmSystemLog": "システムログをダウンロードしますか？パスワードなどの機密情報が含まれている可能性があります。",
+    "downloadBelaboxLog": "BELABOXログをダウンロード",
+    "downloadSystemLog": "システムログをダウンロード"
   }
 }
