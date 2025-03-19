@@ -42,14 +42,14 @@ StatusMessages.subscribe(status => {
       <Card.Root>
         <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
           <Card.Title class="text-sm font-medium">{$_('general.status')}</Card.Title>
-          <RadioTower class="h-4 w-4 text-muted-foreground" />
+          <RadioTower class="text-muted-foreground h-4 w-4" />
         </Card.Header>
         <Card.Content>
           <div class={cn((currentStatus?.is_streaming ? 'text-green-500 ' : 'text-amber-500 ') + 'text-2xl font-bold')}>
             {currentStatus?.is_streaming ? $_('general.streaming') : $_('general.offline')}
           </div>
           {#if currentNetworks && currentStatus?.is_streaming}
-            <p class="text-xs text-muted-foreground">
+            <p class="text-muted-foreground text-xs">
               {$_('general.streamingMessage', {
                 values: {
                   usingNetworksCount: getUsedNetworks(currentNetworks).length,
@@ -63,25 +63,25 @@ StatusMessages.subscribe(status => {
       <Card.Root>
         <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
           <Card.Title class="text-sm font-medium">{$_('general.temperature')}</Card.Title>
-          <Thermometer class="h-4 w-4 text-muted-foreground" />
+          <Thermometer class="text-muted-foreground h-4 w-4" />
         </Card.Header>
         <Card.Content>
           <div class="text-2xl font-bold">{temperature?.[0]?.[1]}</div>
-          <p class="text-xs text-muted-foreground">{temperature?.[0]?.[0]}</p>
+          <p class="text-muted-foreground text-xs">{temperature?.[0]?.[0]}</p>
         </Card.Content>
       </Card.Root>
       <Card.Root>
         <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
           <Card.Title class="text-sm font-medium">{$_('general.relayServer')}</Card.Title>
           {#if currentConfig?.srtla_addr}
-            <Server class="h-4 w-4 text-muted-foreground" />
+            <Server class="text-muted-foreground h-4 w-4" />
           {:else}
-            <ServerOff class="h-4 w-4 text-muted-foreground" />
+            <ServerOff class="text-muted-foreground h-4 w-4" />
           {/if}
         </Card.Header>
         <Card.Content>
           <div class="text-2xl font-bold">{currentConfig?.srtla_addr ?? 'None'}</div>
-          <p class="text-xs text-muted-foreground">
+          <p class="text-muted-foreground text-xs">
             {currentConfig?.srtla_addr ? `Port: ${currentConfig?.srtla_port}` : $_('general.youHaventConfigured')}
           </p>
         </Card.Content>
@@ -89,7 +89,7 @@ StatusMessages.subscribe(status => {
       <Card.Root>
         <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
           <Card.Title class="text-sm font-medium">{$_('general.updates')}</Card.Title>
-          <Update class="h-4 w-4 text-muted-foreground" />
+          <Update class="text-muted-foreground h-4 w-4" />
         </Card.Header>
         <Card.Content class="flex items-center">
           <div>
@@ -97,7 +97,7 @@ StatusMessages.subscribe(status => {
               {currentStatus?.available_updates.package_count}
               {currentStatus?.available_updates.package_count === 1 ? $_('general.package') : $_('general.packages')}
             </div>
-            <p class="text-xs text-muted-foreground">{currentStatus?.available_updates?.download_size ?? '0 MB'}</p>
+            <p class="text-muted-foreground text-xs">{currentStatus?.available_updates?.download_size ?? '0 MB'}</p>
           </div>
           {#if currentStatus?.available_updates.package_count}
             <SimpleAlertDialog
@@ -121,47 +121,47 @@ StatusMessages.subscribe(status => {
         <Card.Root class="col-span-5 sm:col-span-4">
           <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
             <Card.Title class="text-primary">{$_('general.overview')}</Card.Title>
-            <SquareChartGantt class="h-4 w-4 text-muted-foreground" />
+            <SquareChartGantt class="text-muted-foreground h-4 w-4" />
           </Card.Header>
           <Card.Content class="grid gap-3">
             <div class="flex items-center gap-4">
               <div class="grid gap-1">
-                <p class="text-sm font-medium leading-none">{$_('general.relayServer')}</p>
+                <p class="text-sm leading-none font-medium">{$_('general.relayServer')}</p>
               </div>
               <div class="ml-auto font-medium">{currentConfig.srtla_addr}</div>
             </div>
 
             <div class="flex items-center gap-4">
               <div class="grid gap-1">
-                <p class="text-sm font-medium leading-none">{$_('general.port')}</p>
+                <p class="text-sm leading-none font-medium">{$_('general.port')}</p>
               </div>
               <div class="ml-auto font-medium">{currentConfig.srtla_port}</div>
             </div>
 
             <div class="flex items-center gap-4">
               <div class="grid gap-1">
-                <p class="text-sm font-medium leading-none">{$_('general.latency')}</p>
+                <p class="text-sm leading-none font-medium">{$_('general.latency')}</p>
               </div>
               <div class="ml-auto font-medium">{currentConfig.srt_latency} ms</div>
             </div>
 
             <div class="flex items-center gap-4">
               <div class="grid gap-1">
-                <p class="text-sm font-medium leading-none">{$_('general.maxBitrate')}</p>
+                <p class="text-sm leading-none font-medium">{$_('general.maxBitrate')}</p>
               </div>
               <div class="ml-auto font-medium">{currentConfig.max_br} Kbps</div>
             </div>
 
             <div class="flex items-center gap-4">
               <div class="grid gap-1">
-                <p class="text-sm font-medium leading-none">{$_('general.audioDevice')}</p>
+                <p class="text-sm leading-none font-medium">{$_('general.audioDevice')}</p>
               </div>
               <div class="ml-auto font-medium">{currentConfig.asrc}</div>
             </div>
 
             <div class="flex items-center gap-4">
               <div class="grid gap-1">
-                <p class="text-sm font-medium leading-none">{$_('general.audioCodec')}</p>
+                <p class="text-sm leading-none font-medium">{$_('general.audioCodec')}</p>
               </div>
               <div class="ml-auto font-medium">{currentConfig?.acodec?.toUpperCase()}</div>
             </div>

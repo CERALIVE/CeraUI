@@ -44,7 +44,7 @@ StatusMessages.subscribe(status => {
                 <Card.Title class="text-sm font-medium">
                   {networkRename(wifi.ifname)}
                 </Card.Title>
-                <Wifi class="h-4 w-4 text-muted-foreground" />
+                <Wifi class="text-muted-foreground h-4 w-4" />
               </Card.Header>
               <Card.Content>
                 <div class="text-2xl font-bold">
@@ -52,24 +52,24 @@ StatusMessages.subscribe(status => {
                 </div>
 
                 {#if wifi.hotspot}
-                  <p class="text-xs text-muted-foreground">
+                  <p class="text-muted-foreground text-xs">
                     <b>{$_('network.hotspot.name')}</b>: {wifi.hotspot.name}
                   </p>
-                  <p class="text-xs text-muted-foreground">
+                  <p class="text-muted-foreground text-xs">
                     <b>{$_('network.hotspot.channel')}</b>: {wifi.hotspot.channel}
                   </p>
                 {:else if connection}
-                  <div class="flex grid-cols-12 content-center font-bold text-muted-foreground">
+                  <div class="text-muted-foreground flex grid-cols-12 content-center font-bold">
                     <p>{$_('network.wifi.strength')}:</p>
                     <WifiQuality class="ml-1" signal={connection?.signal} />
                   </div>
-                  <p class="text-xs text-muted-foreground">
+                  <p class="text-muted-foreground text-xs">
                     <b>{$_('network.wifi.ssid')}</b>: {connection?.ssid}
                   </p>
-                  <p class="text-xs text-muted-foreground">
+                  <p class="text-muted-foreground text-xs">
                     <b>{$_('network.wifi.security')}</b>: {connection.security}
                   </p>
-                  <p class="text-xs text-muted-foreground">
+                  <p class="text-muted-foreground text-xs">
                     <b>{$_('network.wifi.band')}</b>: {getWifiBand(connection.freq)}
                   </p>
                 {/if}
@@ -141,7 +141,7 @@ StatusMessages.subscribe(status => {
               <div>
                 <Card.Title class="text-sm font-medium">Modem: {modem.name.replace('| Unknown', '')}</Card.Title>
                 <Card.Description>
-                  <div class="grid grid-cols-12 content-center text-muted-foreground">
+                  <div class="text-muted-foreground grid grid-cols-12 content-center">
                     <span class="col-span-12 flex">
                       <p class="font-bold">{$_('network.modem.status')}</p>
                       <span>
@@ -165,7 +165,7 @@ StatusMessages.subscribe(status => {
                   </div>
                 </Card.Description>
               </div>
-              <Antenna class="h-4 w-4 text-muted-foreground" />
+              <Antenna class="text-muted-foreground h-4 w-4" />
             </Card.Header>
             <Card.Content>
               <ModemConfigurator modemIsScanning={modem.status.connection === 'scanning'} {modem} {deviceId}

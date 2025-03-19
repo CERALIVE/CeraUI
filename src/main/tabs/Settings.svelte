@@ -374,7 +374,7 @@ const getSortedResolutions = (resolutions: string[]) =>
       <Card.Root class="md:row-span-2">
         <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
           <Card.Title class="text-sm font-medium">{$_('settings.encoderSettings')}</Card.Title>
-          <Binary class="h-4 w-4 text-muted-foreground" />
+          <Binary class="text-muted-foreground h-4 w-4" />
         </Card.Header>
         <Card.Content>
           <div class="grid gap-4">
@@ -408,7 +408,7 @@ const getSortedResolutions = (resolutions: string[]) =>
                 </Select.Content>
               </Select.Root>
               {#if properties.inputMode && properties.inputMode.includes('usb')}
-                <p class="mt-1 text-xs text-muted-foreground">
+                <p class="text-muted-foreground mt-1 text-xs">
                   {$_('settings.djiCameraMessage')}
                 </p>
               {/if}
@@ -543,7 +543,7 @@ const getSortedResolutions = (resolutions: string[]) =>
       <Card.Root class="row-span-1">
         <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
           <Card.Title class="text-sm font-medium">{$_('settings.audioSettings')}</Card.Title>
-          <Volume class="h-4 w-4 text-muted-foreground" />
+          <Volume class="text-muted-foreground h-4 w-4" />
         </Card.Header>
         <Card.Content>
           <div class="grid gap-4">
@@ -649,7 +649,7 @@ const getSortedResolutions = (resolutions: string[]) =>
       <Card.Root>
         <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
           <Card.Title class="text-sm font-medium">{$_('settings.receiverServer')}</Card.Title>
-          <ServerIcon class="h-4 w-4 text-muted-foreground" />
+          <ServerIcon class="text-muted-foreground h-4 w-4" />
         </Card.Header>
         <Card.Content>
           <div class="grid gap-4">

@@ -64,11 +64,11 @@ NetifMessages.subscribe((networks: NetifMessage) => {
         </Toggle>
 
         <div class="ml-4 space-y-1">
-          <p class="text-sm font-medium leading-none">{networkRenameWithError(name, network.error)}</p>
-          <p class="text-sm text-muted-foreground">IP: {network.ip}</p>
-          <p class="text-sm text-muted-foreground">{$_('networking.card.identifier')}: {name}</p>
+          <p class="text-sm leading-none font-medium">{networkRenameWithError(name, network.error)}</p>
+          <p class="text-muted-foreground text-sm">IP: {network.ip}</p>
+          <p class="text-muted-foreground text-sm">{$_('networking.card.identifier')}: {name}</p>
           {#if name.startsWith('ww')}
-            <p class="text-sm text-muted-foreground">
+            <p class="text-muted-foreground text-sm">
               {$_('networking.modem.networkName')}: {getModemNetworkName(name)}
             </p>
           {/if}
@@ -78,7 +78,7 @@ NetifMessages.subscribe((networks: NetifMessage) => {
     {/each}
 
     <div class="flex">
-      <div class="ml-auto text-2xl font-bold text-primary">{totalBandwith} Kbps</div>
+      <div class="text-primary ml-auto text-2xl font-bold">{totalBandwith} Kbps</div>
     </div>
   </div>
 </Card.Content>

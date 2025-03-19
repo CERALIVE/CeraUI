@@ -10,4 +10,4 @@ let { ref = $bindable(null), class: className, ...restProps }: WithoutChild<Form
 <FormPrimitive.Legend
   bind:ref
   {...restProps}
-  class={cn('text-sm font-medium leading-none data-[fs-error]:text-destructive', className)} />
+  class={cn('data-fs-error:text-destructive text-sm leading-none font-medium', className)} />
