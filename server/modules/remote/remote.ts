@@ -71,6 +71,8 @@ type RemoteAuthEncoderMessage = {
 type RemoteMessage = ValidateRemoteRelaysMessage | RemoteAuthEncoderMessage;
 
 const remoteProtocolVersion = setup.remote_protocol_version ?? 14;
+const remoteEndpointProtocol =
+	setup.remote_endpoint_secure === false ? "ws" : "wss";
 const remoteEndpointHost = setup.remote_endpoint_host ?? "remote.belabox.net";
 const remoteEndpointPath = setup.remote_endpoint_path ?? "/ws/remote";
 const remoteTimeout = 5000;
@@ -198,8 +200,11 @@ async function remoteConnect() {
 
 	logger.info("remote: trying to connect");
 
+	const remoteWsUrl = new URL(`${remoteEndpointProtocol}://${host}`);
+	remoteWsUrl.pathname = remoteEndpointPath;
+
 	remoteStatusHandled = false;
-	remoteWs = new WebSocket(`wss://${host}${remoteEndpointPath}`);
+	remoteWs = new WebSocket(remoteWsUrl);
 	markConnectionActive(
 		remoteWs,
 		getms() + remoteConnectTimeout - remoteTimeout,
