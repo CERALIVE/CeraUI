@@ -88,7 +88,7 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
     {$_('wifiSelector.dialog.availableNetworks', { values: { network: networkRename(wifi.ifname) } })}
   {/snippet}
   <Card.Root class="col-span-3 pr-0">
-    <ScrollArea class="h-96 w-100" type="auto">
+    <ScrollArea class="h-96 w-full" type="auto">
       <Card.Content class="pt-0">
         <div class="space-y-0">
           {#each wifi.available as availableNetwork, index}
@@ -110,12 +110,12 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
                   {#if availableNetwork.active}
                     <Button variant="secondary" onclick={() => disconnectWifi(uuid, availableNetwork)}>
                       <span class="hidden md:block">{$_('wifiSelector.button.disconnect')}</span>
-                      <span class="sm:hidden"><Unlink class="w-4"></Unlink></span>
+                      <span class="block md:hidden"><Unlink class="w-4"></Unlink></span>
                     </Button>
                   {:else}
                     <Button variant="secondary" onclick={() => handleWifiConnect(uuid, availableNetwork)}>
                       <span class="hidden md:block">{$_('wifiSelector.button.connect')}</span>
-                      <span class="sm:hidden"><Link class="w-4"></Link></span>
+                      <span class="block md:hidden"><Link class="w-4"></Link></span>
                     </Button>
                   {/if}
                   <SimpleAlertDialog
@@ -126,8 +126,8 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
                       {$_('wifiSelector.dialog.disconnectFrom', { values: { ssid: availableNetwork.ssid } })}
                     {/snippet}
                     {#snippet icon()}
-                      <span class="hidden sm:block">{$_('wifiSelector.button.forget')}</span>
-                      <Trash2 class="w-4 sm:block md:hidden"></Trash2>
+                      <span class="hidden md:block">{$_('wifiSelector.button.forget')}</span>
+                      <Trash2 class="block w-4 md:hidden"></Trash2>
                     {/snippet}
                     {#snippet description()}
                       {$_('wifiSelector.dialog.confirmForget', {
@@ -147,8 +147,8 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
                       {$_('wifiSelector.dialog.connectTo', { values: { ssid: availableNetwork.ssid } })}
                     {/snippet}
                     {#snippet icon()}
-                      <span class="hidden sm:block">{$_('wifiSelector.button.connect')}</span>
-                      <Link class="w-4 sm:block md:hidden"></Link>
+                      <span class="hidden md:block">{$_('wifiSelector.button.connect')}</span>
+                      <Link class="block w-4 md:hidden"></Link>
                     {/snippet}
                     {#snippet description()}
                       {$_('wifiSelector.dialog.introducePassword')}
