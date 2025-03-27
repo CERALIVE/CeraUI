@@ -3,7 +3,7 @@ import type { Component } from 'svelte';
 import Advanced from '../../main/tabs/Advanced.svelte';
 import General from '../../main/tabs/General.svelte';
 import Network from '../../main/tabs/Network.svelte';
-import Settings from '../../main/tabs/Settings.svelte';
+import Streaming from '../../main/tabs/Streaming.svelte';
 
 export type NavElements = {
   [key: string]: {
@@ -14,7 +14,7 @@ export type NavElements = {
 export const navElements: NavElements = {
   general: { label: 'general', component: General },
   wifi: { label: 'network', component: Network },
-  settings: { label: 'streaming', component: Settings },
+  settings: { label: 'streaming', component: Streaming },
   advanced: { label: 'advanced', component: Advanced },
 };
 

@@ -371,7 +371,7 @@ const getSortedResolutions = (resolutions: string[]) =>
     </form>
 
     <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      <Card.Root class="md:row-span-2">
+      <Card.Root class="md:row-span-2 lg:row-span-1">
         <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
           <Card.Title class="text-sm font-medium">{$_('settings.encoderSettings')}</Card.Title>
           <Binary class="text-muted-foreground h-4 w-4" />
@@ -646,7 +646,7 @@ const getSortedResolutions = (resolutions: string[]) =>
         </Card.Content>
       </Card.Root>
 
-      <Card.Root>
+      <Card.Root class="row-span-1">
         <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
           <Card.Title class="text-sm font-medium">{$_('settings.receiverServer')}</Card.Title>
           <ServerIcon class="text-muted-foreground h-4 w-4" />
