@@ -2,7 +2,7 @@
 
 WORKING_DIR=/opt/
 REPOSITORY=https://github.com/datagutt/moblink-rust-relay.git
-VERSION=809e09e0a489158f107387caf0f29d68be78e0fe
+VERSION=797985109606ce630131c8cc51aa024868dca0b2
 
 # Check if dependencies are installed
 GIT_INSTALLED=$(git --version 2>/dev/null) || false
