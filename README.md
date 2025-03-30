@@ -7,6 +7,15 @@ added a moblink relay feature.
 
 This fork includes an option to use the [CeraUI](https://github.com/CERALIVE/CeraUI) interface, which is an alternative user interface designed for enhanced usability and additional features. When the `USE_CERAUI` option is enabled during installation or deployment, the system will download the latest CeraUI [release](https://github.com/CERALIVE/CeraUI/releases/latest) and use it instead of the standard BelaUI interface.
 
+
+## Moblink support
+
+This fork integrates [datagutt/moblink-rust-relay](https://github.com/datagutt/moblink-rust-relay) in the relay mode, meaning it allows Moblin apps in the network of the encoder (BELABOX) to use the network interfaces of the BELABOX including modems as Moblink relays for SRTLA from Moblin. It does not yet support using Moblinks or Moblin apps to be used as SRTLA relays for the BELABOX!
+
+The implementation defaults to the password `1234` and uses auto-discovery to connect to "Moblin Streamers" in the network. You can change the password in the `setup.json` via SSH. As of now (2025-03-30) there is no UI for Moblink in this belaUI fork, nor CeraUI.
+
+There is interest and progress in the community to make the other way work too! Keep an eye on the main [https://github.com/BELABOX/belaUI/](belaUI) and on [datagutt/moblink-rust-relay](https://github.com/datagutt/moblink-rust-relay) for any news.
+
 ## Install the fork on your BELABOX
 
 > **Note:** Replacing the original UI directly may cause issues. When your BELABOX is updated, it can revert the UI. Ensure you monitor updates and reapply the override after updates.
@@ -17,7 +26,10 @@ This fork includes an option to use the [CeraUI](https://github.com/CERALIVE/Cer
   ```bash
   # Standard installation with BelaUI
   wget -qO- https://raw.githubusercontent.com/pjeweb/belaui/override/install.sh | bash
+  ```
+  or
   
+  ```bash
   # Installation with CeraUI interface
   wget -qO- https://raw.githubusercontent.com/pjeweb/belaui/override/install.sh | USE_CERAUI=true bash
   ```
