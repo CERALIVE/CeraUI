@@ -1,4 +1,4 @@
-# BelaUI Fork
+# BelaUI Fork (pjeweb)
 
 This is a fork of the default BELABOX UI (belaUI), that ported the code to Typescript and ESM (ECMAScript Modules) and
 added a moblink relay feature.
@@ -14,7 +14,7 @@ This fork integrates [datagutt/moblink-rust-relay](https://github.com/datagutt/m
 
 The implementation defaults to the password `1234` and uses auto-discovery to connect to "Moblin Streamers" in the network. You can change the password in the `setup.json` via SSH. As of now (2025-03-30) there is no UI for Moblink in this belaUI fork, nor CeraUI.
 
-There is interest and progress in the community to make the other way work too! Keep an eye on the main [https://github.com/BELABOX/belaUI/](belaUI) and on [datagutt/moblink-rust-relay](https://github.com/datagutt/moblink-rust-relay) for any news.
+There is interest and progress in the community to make the other way work too! Keep an eye on the main [belaUI](https://github.com/BELABOX/belaUI/) and on [datagutt/moblink-rust-relay](https://github.com/datagutt/moblink-rust-relay) for any news.
 
 ## Install the fork on your BELABOX
 
