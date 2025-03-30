@@ -111,23 +111,16 @@ export function getSshStatus() {
 	return sshStatus;
 }
 
-export function startStopSsh(conn: WebSocket, cmd: string) {
+export function startStopSsh(conn: WebSocket, cmd: "start_ssh" | "stop_ssh") {
 	if (!setup.ssh_user) return;
 
-	switch (cmd) {
-		case "start_ssh":
-			if (getConfig().ssh_pass === undefined) {
-				resetSshPassword(conn);
-			}
-			break;
-		case "stop_ssh": {
-			const action = cmd.split("_")[0];
-			if (action !== "start" && action !== "stop") return;
-			spawnSync("systemctl", [action, "ssh"]);
-			getSshStatus();
-			break;
-		}
+	const action = cmd === "start_ssh" ? "start" : "stop";
+	if (action === "start" && getConfig().ssh_pass === undefined) {
+		resetSshPassword(conn);
 	}
+
+	spawnSync("systemctl", [action, "ssh"]);
+	getSshStatus();
 }
 
 export function resetSshPassword(conn: WebSocket) {
