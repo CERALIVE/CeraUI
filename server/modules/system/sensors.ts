@@ -24,6 +24,8 @@ import { logger } from "../../helpers/logger.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
 
+import { getRTMPIngestStats } from "../ingest/rtmp.ts";
+import { getSRTIngestStats } from "../ingest/srt.ts";
 import { setup } from "../setup.ts";
 import {
 	notificationBroadcast,
@@ -125,7 +127,16 @@ export function initHardwareMonitoring() {
 	if (sensorsFunc) {
 		const updateSensors = () => {
 			sensorsFunc();
-			broadcastMsg("sensors", sensors, getms() - ACTIVE_TO);
+
+			const data = { ...sensors };
+			const srtIngestStats = getSRTIngestStats();
+			if (srtIngestStats) {
+				data["SRT ingest"] = srtIngestStats;
+			}
+			const rtmpIngestStats = getRTMPIngestStats();
+			Object.assign(data, rtmpIngestStats);
+
+			broadcastMsg("sensors", data, getms() - ACTIVE_TO);
 		};
 
 		updateSensors();

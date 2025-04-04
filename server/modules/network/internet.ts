@@ -37,7 +37,7 @@ type HttpGetResponse = {
 	body: string;
 };
 
-function httpGet(options: HttpGetOptions) {
+export function httpGet(options: HttpGetOptions) {
 	return new Promise<HttpGetResponse>((resolve, reject) => {
 		let to: ReturnType<typeof setTimeout> | undefined;
 

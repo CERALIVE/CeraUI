@@ -20,6 +20,8 @@ import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
 
 import { loadConfig } from "./modules/config.ts";
+import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
+import { initSRTIngest } from "./modules/ingest/srt.ts";
 import { updateModems } from "./modules/modems/modem-update-loop.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
 import { initMoblinkRelays } from "./modules/network/moblink-relay.ts";
@@ -33,8 +35,8 @@ import {
 	belacoderExec,
 	srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
-import { initHardwareMonitoring } from "./modules/system/hardware-monitoring.ts";
 import { initRevisions } from "./modules/system/revisions.ts";
+import { initHardwareMonitoring } from "./modules/system/sensors.ts";
 import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updates.ts";
 import { getSshStatus } from "./modules/system/ssh.ts";
 import { initHttpServer } from "./modules/ui/http-server.ts";
@@ -58,6 +60,8 @@ initPipelines();
 initRevisions();
 initWebSocketServer();
 initHardwareMonitoring();
+initRTMPIngestStats();
+initSRTIngest();
 getSshStatus();
 
 updateGwWrapper();
