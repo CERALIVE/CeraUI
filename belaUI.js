@@ -28,6 +28,7 @@ const bcrypt = require('bcrypt');
 const process = require('process');
 const util = require('util');
 const assert = require('assert');
+const parseXmlString = require('xml2js').parseStringPromise;
 
 const SETUP_FILE = 'setup.json';
 const CONFIG_FILE = 'config.json';
@@ -2988,6 +2989,70 @@ function notificationSendPersistent(conn, isAuthed = false) {
 }
 
 
+/* Ingest services*/
+
+/* Monitor the RTMP server */
+let rtmpIngestStats = {};
+let prevRtmpBytesIn = {};
+async function updateRtmpStats() {
+  const statsReq = await httpGet('http://127.0.0.1:1936/');
+  if (statsReq.code != 200) return;
+
+  let newStats = {};
+  let bytesIn = {};
+
+  let stats = await parseXmlString(statsReq.body);
+  stats = stats.rtmp.server[0].application[0].live[0];
+
+  if (stats.stream) {
+    for (const s of stats.stream) {
+      const name = `RTMP ingest - ${s.name[0]}`;
+      bytesIn[name] = parseInt(s.bytes_in[0]);
+      const bw = Math.round((bytesIn[name] - (prevRtmpBytesIn[name] || 0)) * 8 / 1024);
+      newStats[name] = `${bw} Kbps`;
+    } // for
+  } // if (stats.stream)
+  rtmpIngestStats = newStats;
+  prevRtmpBytesIn = bytesIn;
+}
+setInterval(async function() {
+  try {
+    await updateRtmpStats()
+  } catch (err) {
+    console.log(err);
+  }
+}, 1000);
+
+/* Use srt-live-transmit to convert from SRT to UDP (usable by udpsrc in gstreamer), with stats */
+let srtIngestStats;
+function runSLT() {
+  const cmd = 'srt-live-transmit';
+  const args = "-st:yes -stats-report-frequency:500 -statspf:json srt://:4000 udp://127.0.0.1:4001".split(' ');
+
+  let hasInConn = false;
+
+  const proc = spawn(cmd, args);
+  proc.stdout.on('data', function(data) {
+    if (!hasInConn) return;
+    try {
+      stats = JSON.parse(data.toString('utf8'));
+      srtIngestStats = `${Math.round(stats.recv.mbitRate * 1024)} Kbps, ${Math.round(stats.link.rtt)} ms RTT`;
+    } catch (err) {}
+  });
+
+  proc.stderr.on('data', function(data) {
+    data = data.toString('utf8');
+    if (data.match("SRT source disconnected")) {
+      srtIngestStats = '';
+      hasInConn = false;
+    } else if (data.match("Accepted SRT source connection")) {
+      hasInConn = true;
+    }
+  });
+}
+runSLT();
+
+
 /* Hardware monitoring */
 let sensors = {};
 
@@ -3024,7 +3089,15 @@ function updateSensorsRk3588() {
 
 function updateSensors() {
   sensorsFunc();
-  broadcastMsg('sensors', sensors, getms() - ACTIVE_TO);
+
+  let sensorsAndIngests = sensors;
+  if (Object.keys(rtmpIngestStats).length) {
+    sensorsAndIngests = Object.assign({}, rtmpIngestStats, sensors);
+  }
+  if (srtIngestStats) {
+    sensorsAndIngests = Object.assign({'SRT ingest': srtIngestStats}, sensors);
+  }
+  broadcastMsg('sensors', sensorsAndIngests, getms() - ACTIVE_TO);
 }
 
 let sensorsFunc;
