@@ -1462,6 +1462,12 @@ function showNotification(n) {
     }
 
     alert.appendTo('#notifications');
+
+    // If we've shown a new notification, scroll to the top
+    $('html, body').animate({
+      scrollTop: 0,
+      scrollLeft: 0
+    }, 200);
   } else {
     alert.removeClass(['alert-secondary', 'alert-danger', 'alert-warning', 'alert-success']);
     const t = alert.data('timerHide');
@@ -1491,11 +1497,6 @@ function showNotification(n) {
       });
     }, n.duration * 1000));
   }
-
-  $('html, body').animate({
-    scrollTop: 0,
-    scrollLeft: 0
-  }, 200);
 }
 
 function removeNotification(name) {
