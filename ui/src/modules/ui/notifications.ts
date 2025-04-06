@@ -48,6 +48,15 @@ export function showNotification(n: {
 		}
 
 		alert.appendTo("#notifications");
+
+		// If we've shown a new notification, scroll to the top
+		$("html, body").animate(
+			{
+				scrollTop: 0,
+				scrollLeft: 0,
+			},
+			200,
+		);
 	} else {
 		alert.removeClass([
 			"alert-secondary",
@@ -85,14 +94,6 @@ export function showNotification(n: {
 			}, n.duration * 1000),
 		);
 	}
-
-	$("html, body").animate(
-		{
-			scrollTop: 0,
-			scrollLeft: 0,
-		},
-		200,
-	);
 }
 
 export function removeNotification(name: string) {
