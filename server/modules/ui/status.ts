@@ -24,8 +24,8 @@ import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
 import { audioCodecs, getAudioDevices } from "../streaming/audio.ts";
 import { getPipelineList } from "../streaming/pipelines.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
-import { getSensors } from "../system/sensors.ts";
 import { getRevisions } from "../system/revisions.ts";
+import { getSensors } from "../system/sensors.ts";
 import {
 	getAvailableUpdates,
 	getSoftUpdateStatus,
