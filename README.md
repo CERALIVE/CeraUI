@@ -1,7 +1,6 @@
 # BelaUI Fork (pjeweb)
 
-This is a fork of the default BELABOX UI (belaUI), that ported the code to Typescript and ESM (ECMAScript Modules) and
-added a moblink relay feature.
+This is a fork of the default BELABOX UI (belaUI), that ported the code to Typescript and ESM (ECMAScript Modules).
 
 ## CeraUI Integration
 
@@ -10,11 +9,12 @@ This fork includes an option to use the [CeraUI](https://github.com/CERALIVE/Cer
 
 ## Moblink support
 
-This fork integrates [datagutt/moblink-rust-relay](https://github.com/datagutt/moblink-rust-relay) in the relay mode, meaning it allows Moblin apps in the network of the encoder (BELABOX) to use the network interfaces of the BELABOX including modems as Moblink relays for SRTLA from Moblin. It does not yet support using Moblinks or Moblin apps to be used as SRTLA relays for the BELABOX!
+> [!WARNING]  
+> I will likely remove the integration of moblink in one of the next releases, since [datagutt/moblink-rust](https://github.com/datagutt/moblink-rust) implemented a service that makes the integration mostly obsolete. I would recommend disabling the moblink relay in this fork (setup.json) and installing the service instead: [Install moblink serivce](https://github.com/datagutt/moblink-rust#use-on-belabox).
+
+This fork integrates [datagutt/moblink-rust](https://github.com/datagutt/moblink-rust) in the relay mode, meaning it allows Moblin apps in the network of the encoder (BELABOX) to use the network interfaces of the BELABOX including modems as Moblink relays for SRTLA from Moblin. It does not yet support using Moblinks or Moblin apps to be used as SRTLA relays for the BELABOX!
 
 The implementation defaults to the password `1234` and uses auto-discovery to connect to "Moblin Streamers" in the network. You can change the password in the `setup.json` via SSH. As of now (2025-03-30) there is no UI for Moblink in this belaUI fork, nor CeraUI.
-
-There is interest and progress in the community to make the other way work too! Keep an eye on the main [belaUI](https://github.com/BELABOX/belaUI/) and on [datagutt/moblink-rust-relay](https://github.com/datagutt/moblink-rust-relay) for any news.
 
 ## Install the fork on your BELABOX
 
