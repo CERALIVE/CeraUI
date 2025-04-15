@@ -120,6 +120,8 @@ export type SensorsStatusMessage = {
   [key: string]: string;
 };
 
+export type WifiSecurity = 'WEP' | 'WPA' | 'WPA2' | 'WPA3';
+
 export type StatusMessage = {
   set_password?: boolean;
   is_streaming: boolean;
@@ -152,7 +154,7 @@ export type StatusMessage = {
         active: boolean;
         ssid: string;
         signal: number;
-        security: 'WEP' | 'WPA' | 'WPA2' | 'WPA3';
+        security: WifiSecurity;
         freq: number;
       }>;
       saved: {

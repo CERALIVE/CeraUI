@@ -5,7 +5,9 @@ import { _ } from 'svelte-i18n';
 import WifiQuality from '$lib/components/icons/WifiQuality.svelte';
 import * as Card from '$lib/components/ui/card';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
+import { Skeleton } from '$lib/components/ui/skeleton';
 import {
+  generateWifiQr,
   getConnection,
   getWifiBand,
   getWifiStatus,
@@ -87,8 +89,31 @@ StatusMessages.subscribe(status => {
                         {$_('network.dialog.hotspotDetails')}
                       {/snippet}
                       {#snippet description()}
-                        <p>{$_('network.hotspot.name')}: <b>{wifi.hotspot?.name}</b></p>
-                        <p>{$_('network.hotspot.password')}: <b>{wifi.hotspot?.password}</b></p>
+                        <div class="text-muted-foreground space-y-4 text-sm">
+                          {#await generateWifiQr(wifi.hotspot.name, wifi.hotspot.password)}
+                            <div class="flex justify-center">
+                              <Skeleton class="h-40 w-40 rounded-md" />
+                            </div>
+                          {:then wifiQrCode}
+                            <div class="flex justify-center">
+                              <img
+                                src={wifiQrCode}
+                                alt="WiFi QR code"
+                                class="dark:bg-background rounded-md border bg-white p-2 shadow-sm" />
+                            </div>
+                          {/await}
+
+                          <div class="space-y-1 text-center">
+                            <p>
+                              <span class="font-medium">{$_('network.hotspot.name')}:</span>
+                              <span class="ml-1">{wifi.hotspot.name}</span>
+                            </p>
+                            <p>
+                              <span class="font-medium">{$_('network.hotspot.password')}:</span>
+                              <span class="ml-1">{wifi.hotspot.password}</span>
+                            </p>
+                          </div>
+                        </div>
                       {/snippet}
                     </SimpleAlertDialog>
                     <SimpleAlertDialog
