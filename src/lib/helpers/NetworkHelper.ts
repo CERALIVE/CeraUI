@@ -1,9 +1,10 @@
+import QRCode from 'qrcode';
 import { get } from 'svelte/store';
 import { toast } from 'svelte-sonner';
 
 import { sendMessage, socket, StatusMessages } from '$lib/stores/websocket-store';
 import type { ValueOf } from '$lib/types';
-import type { NetifMessage, StatusMessage } from '$lib/types/socket-messages';
+import type { NetifMessage, StatusMessage, WifiSecurity } from '$lib/types/socket-messages';
 
 export type WifiBandNames = 'auto' | 'auto_50' | 'auto_24';
 
@@ -246,3 +247,18 @@ export const getWifiUUID = (
   }
   return undefined;
 };
+
+export async function generateWifiQr(
+  ssid: string,
+  password: string,
+  encryption: WifiSecurity = 'WPA',
+): Promise<string> {
+  if (!ssid) throw new Error('SSID is required');
+
+  const qrData = `WIFI:T:${encryption};S:${ssid};P:${password};;`;
+
+  return QRCode.toDataURL(qrData, {
+    errorCorrectionLevel: 'H',
+    width: 256,
+  });
+}
