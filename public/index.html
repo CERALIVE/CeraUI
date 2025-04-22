@@ -92,9 +92,14 @@
             Start
           </button>
 
-          <div class="form-group">
-            <input type="text" id="bitrateValues" class="slider-values form-control" readonly/>
-            <div id="bitrateSlider" class="slider mt-2"></div>
+          <div class="form-group row">
+            <div class="col">
+              <input type="text" id="bitrateValues" class="slider-values form-control" readonly/>
+              <div id="bitrateSlider" class="slider mt-2"></div>
+            </div>
+            <div class="col-auto pl-0 d-none">
+              <button type="button" class="button-slider-lock-unlock btn py-0 px-2"></button>
+            </div>
           </div>
         </div> <!-- .mb-4 -->
 
@@ -201,9 +206,14 @@
                   <label for="audioCodec">Audio codec</label>
                   <select class="custom-select" id="audioCodec"></select>
                 </div>
-                <div id="delay" class="form-group">
-                  <input type="text" id="delayValue" class="slider-values form-control" readonly/>
-                  <div id="delaySlider" class="slider mt-2"></div>
+                <div id="delay" class="form-group row">
+                  <div class="col">
+                    <input type="text" id="delayValue" class="slider-values form-control" readonly/>
+                    <div id="delaySlider" class="slider mt-2"></div>
+                  </div>
+                  <div class="col-auto pl-0 d-none">
+                    <button type="button" class="button-slider-lock-unlock btn py-0 px-2"></button>
+                  </div>
                 </div>
                 <div class="form-check form-group" id="bitrateOverlaySetting">
                   <input class="form-check-input" type="checkbox" value="enabled" id="bitrateOverlay">
@@ -252,9 +262,14 @@
                     </div>
                   </div>
                 </div>
-                <div class="form-group">
-                  <input type="text" id="srtLatencyValue" class="slider-values form-control" readonly/>
-                  <div id="srtLatencySlider" class="slider mt-2"></div>
+                <div class="form-group row">
+                  <div class="col">
+                    <input type="text" id="srtLatencyValue" class="slider-values form-control" readonly/>
+                    <div id="srtLatencySlider" class="slider mt-2"></div>
+                  </div>
+                  <div class="col-auto pl-0 d-none">
+                    <button type="button" class="button-slider-lock-unlock btn py-0 px-2"></button>
+                  </div>
                 </div>
                 <div id="latencyWarning" class="d-none alert alert-danger m-0">
                   <p class="m-0">Recommended latency: 1500-2500ms</p>
@@ -373,13 +388,24 @@
         </div> <!-- #settings -->
       </div> <!-- #main -->
 
-      <div class="text-center small d-none" id="themeSelector">
-        Theme:
-        <select>
-          <option value="auto">Auto</option>
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-        </select>
+      <div class="text-center small d-none mb-2" id="localSettings">
+        <span class="mx-2" id="themeSelector">
+          Theme:
+          <select>
+            <option value="auto">Auto</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </span>
+
+        <span class="mx-2" id="sliderLockSetting">
+          Slider locks:
+          <select>
+            <option value="autolock">On + auto-lock</option>
+            <option value="on">On</option>
+            <option value="off">Off</option>
+          </select>
+        </span>
       </div>
     </div> <!-- .container -->
 

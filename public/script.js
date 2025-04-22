@@ -137,7 +137,7 @@ function handleAuthResult(msg) {
     $('#wifi').empty();
     $('#modemManager').empty();
     $('#main').removeClass('d-none');
-    $('#themeSelector').removeClass('d-none');
+    $('#localSettings').removeClass('d-none');
   } else if (!isShowingInitialPasswordForm) {
     showLoginForm();
   }
@@ -1679,7 +1679,8 @@ function showBitrate(value) {
 }
 
 function initBitrateSlider(bitrateDefault) {
-  $("#bitrateSlider").slider({
+  const s = $("#bitrateSlider");
+  s.slider({
     range: false,
     min: 500,
     max: 12000,
@@ -1688,8 +1689,10 @@ function initBitrateSlider(bitrateDefault) {
     slide: (event, ui) => {
       showBitrate(ui.value);
       setBitrate(ui.value);
+      setSliderAutolockTimer(s);
     },
   });
+  initSliderLock(s);
   showBitrate(bitrateDefault);
 }
 
@@ -1698,15 +1701,18 @@ function showDelay(value) {
 }
 
 function initDelaySlider(defaultDelay) {
-  $("#delaySlider").slider({
+  const s = $("#delaySlider");
+  s.slider({
     min: -2000,
     max: 2000,
     step: 20,
     value: defaultDelay,
     slide: (event, ui) => {
       showDelay(ui.value);
+      setSliderAutolockTimer(s);
     },
   });
+  initSliderLock(s);
   showDelay(defaultDelay);
 }
 
@@ -1721,15 +1727,18 @@ function showSrtLatency(value) {
 }
 
 function initSrtLatencySlider(defaultLatency) {
-  $("#srtLatencySlider").slider({
+  const s = $("#srtLatencySlider");
+  s.slider({
     min: 100,
     max: 4000,
     step: 100,
     value: defaultLatency,
     slide: (event, ui) => {
       showSrtLatency(ui.value);
+      setSliderAutolockTimer(s);
     },
   });
+  initSliderLock(s);
   showSrtLatency(defaultLatency);
 }
 
@@ -1761,7 +1770,7 @@ function showLoginForm() {
   $('#main').addClass('d-none');
   $('#initialPasswordForm').addClass('d-none');
   $('#login').removeClass('d-none');
-  $('#themeSelector').removeClass('d-none');
+  $('#localSettings').removeClass('d-none');
 }
 
 function sendAuthMsg(password, isPersistent) {
@@ -1784,7 +1793,7 @@ function showInitialPasswordForm() {
   $('#main').addClass('d-none');
   $('#login').addClass('d-none');
   $('#initialPasswordForm').removeClass('d-none');
-  $('#themeSelector').removeClass('d-none');
+  $('#localSettings').removeClass('d-none');
   isShowingInitialPasswordForm = true;
 }
 
@@ -1928,4 +1937,109 @@ $('input.click-copy').click(function(ev) {
       delete target.copiedTooltipTimer;
     }, 3000);
   }
+});
+
+
+/* Slider locking */
+function getSliderLockBtn(slider) {
+  return slider.parents('.form-group').find('.button-slider-lock-unlock');
+}
+
+function updateSliderLockState(slider, btn, isLocked) {
+  if (!btn) {
+    btn = getSliderLockBtn(slider);
+  }
+
+  slider.slider('option', 'disabled', isLocked);
+  btn.text(isLocked ? "\u{1F512}" : "\u{1F513}");
+
+  if (!isLocked && sliderLockSetting == 'autolock') {
+    setSliderAutolockTimer(slider);
+  }
+}
+
+function setSliderAutolockTimer(slider) {
+  let lockTimer = slider.data('lockTimer');
+  if (lockTimer) {
+    clearTimeout(lockTimer);
+  }
+
+  // If auto-locking is disabled, don't set another timer
+  if (sliderLockSetting != 'autolock') {
+    slider.data('lockTimer', null);
+    return;
+  }
+
+  lockTimer = setTimeout(function() {
+    /* We have to check here too, in case autolocking was disabled
+       between the event being set up and firing */
+    if (sliderLockSetting == 'autolock') {
+      updateSliderLockState(slider, undefined, true);
+    }
+    slider.data('lockTimer', null);
+  }, 5000);
+  slider.data('lockTimer', lockTimer);
+}
+
+function initSliderLock(slider) {
+  const btn = getSliderLockBtn(slider);
+
+  // If the slider locks are disabled, remove the event handler and hide the lock button
+  if (!sliderLockSetting) {
+    btn.parent().addClass('d-none');
+    btn.off('click');
+    return;
+  }
+
+  const lockWasHidden = btn.parent().hasClass('d-none');
+  const isLocked = lockWasHidden ? true : slider.slider('option', 'disabled');
+
+  updateSliderLockState(slider, btn, isLocked);
+
+  if (lockWasHidden) {
+    btn.click(function () {
+      const slider = $(btn).parents('.form-group').find('.slider');
+      const isLocked = slider.slider('option', 'disabled');
+      updateSliderLockState(slider, btn, !isLocked);
+    });
+    btn.parent().removeClass('d-none');
+  }
+}
+
+/* Slider lock setting: load and update */
+function isTouchDevice() {
+  return (('ontouchstart' in window) ||
+     (navigator.maxTouchPoints > 0) ||
+     (navigator.msMaxTouchPoints > 0));
+}
+function loadSliderLockSetting() {
+  let s = localStorage.getItem('sliderLocks');
+  switch (s) {
+    case 'autolock':
+    case 'on':
+      break;
+    case 'off':
+      break;
+    default:
+      s = 'off';
+      // if (isTouchDevice()) s = 'autolock';
+  }
+
+  $('#sliderLockSetting>select').val(s);
+
+  if (s != 'off') return s;
+}
+let sliderLockSetting = loadSliderLockSetting();
+
+$('#sliderLockSetting>select').change(function () {
+  let s = $(this).val();
+  localStorage.setItem('sliderLocks', s);
+  if (s != 'on' && s != 'autolock') {
+    s = undefined;
+  }
+  sliderLockSetting = s;
+
+  $('.slider').each(function () {
+    initSliderLock($(this));
+  });
 });

@@ -62,6 +62,16 @@ td.security {
   background: #eee;
 }
 
+.button-slider-lock-unlock {
+  background-color: #e9ecef;
+  border: 1px solid #ced4da;
+  height: 100%; font-size: 30px;
+}
+
+.button-slider-lock-unlock:hover{
+  background-color: #6c757d;
+}
+
 /* Dark mode theme */
 
 body.dark {
