@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte';
+import { _ } from 'svelte-i18n';
 
 import { Icons } from '$lib/components/icons';
 import { Button } from '$lib/components/ui/button';
@@ -9,7 +10,6 @@ import * as Sheet from '$lib/components/ui/sheet';
 import { defaultNavElement, type NavElements, navElements, siteName } from '$lib/config';
 import { setupHashNavigation } from '$lib/helpers/NavigationHelper';
 import { navigationStore } from '$lib/stores/navigation';
-import { capitalizeFirstLetter } from '$lib/utils.js';
 
 let currentNav: NavElements = $state(defaultNavElement);
 let open = $state(false);
@@ -55,7 +55,7 @@ onMount(() => {
           {@const isActive = currentNav && Object.keys(currentNav)[0] === identifier}
           {#if identifier}
             <MobileLink {identifier} {isActive} onclick={() => handleClick({ [identifier]: navigation })}>
-              {capitalizeFirstLetter(navigation.label)}
+              {$_(`navigation.${navigation.label}`)}
             </MobileLink>
           {/if}
         {/each}
