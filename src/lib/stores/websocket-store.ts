@@ -65,7 +65,7 @@ function sendAuthMessage(password: string, isPersistent: boolean, onError: (() =
   sendMessage(JSON.stringify(auth_req), () => {
     toast.error('Authentication failed', {
       duration: 5000,
-      description: 'The connection with the server could not be stablished',
+      description: 'The connection with the server could not be established',
     });
     onError?.();
   });
