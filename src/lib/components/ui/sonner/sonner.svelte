@@ -6,7 +6,7 @@ let restProps: SonnerProps = $props();
 </script>
 
 <Sonner
-  theme={$mode}
+  theme={mode.current}
   class="toaster group"
   toastOptions={{
     classes: {
