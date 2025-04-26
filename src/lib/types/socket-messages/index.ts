@@ -115,9 +115,15 @@ export type RevisionsMessage = {
   srtla: string;
   'BELABOX image': string;
 };
+type StreamBandwidth = `${number} Kbps`;
+type StreamName = `RTMP ingest - ${string}`;
 
 export type SensorsStatusMessage = {
-  [key: string]: string;
+  'SoC temperature': `${number} °C`;
+  'SoC current'?: `${number} A`;
+  'SoC voltage'?: `${number} V`;
+  'SRT ingest'?: `${number} Kbps, ${number} ms RTT` | '' | null;
+  rtmpIngestStats?: Record<StreamName, StreamBandwidth>;
 };
 
 export type WifiSecurity = 'WEP' | 'WPA' | 'WPA2' | 'WPA3';
