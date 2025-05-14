@@ -3820,6 +3820,9 @@ function start(conn, params) {
       belacoderArgs.push('-s');
       belacoderArgs.push(streamid);
     }
+    if (bcrptLowMtuDetected) {
+      belacoderArgs.push('-r');
+    }
     spawnStreamingLoop(belacoderExec, belacoderArgs, 2000, function(err) {
       let msg;
       if (err.match('gstreamer error from alsasrc0')) {
@@ -4410,6 +4413,8 @@ function resetSshPassword(conn) {
 
 /* BCRPT */
 let bcrpt;
+let bcrptLowMtuDetected = false;
+
 const bcrptDir = '/var/run/bcrpt';
 const bcrptSourceIpsFile = `${bcrptDir}/source_ips`;
 const bcrptServerIpsFile = `${bcrptDir}/server_ips`;
@@ -4510,6 +4515,13 @@ async function startBcrpt() {
         }
       }
       bcrptRelaysRtt = rtts;
+
+      for (const conn in stats.mtu) {
+        if (!bcrptLowMtuDetected && stats.mtu[conn] < 1336) {
+          bcrptLowMtuDetected = true;
+          console.log("Detected low MTU network. Using reduced SRT packet size");
+        }
+      }
 
       broadcastMsg('relays', buildRelaysMsg());
     } catch (err) {
