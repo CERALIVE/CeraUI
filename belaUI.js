@@ -79,6 +79,13 @@ if (setup.srtla_path) {
   srtlaSendExec = "/usr/bin/srtla_send";
 }
 
+let bcrptExec;
+if (setup.bcrpt_path) {
+  bcrptExec = setup.bcrpt_path + "/bcrpt";
+} else {
+  bcrptExec = "/usr/bin/bcrpt";
+}
+
 function checkExecPath(path) {
   try {
     fs.accessSync(path, fs.constants.R_OK);
@@ -377,6 +384,10 @@ function updateNetif() {
 
     if (intsChanged && isStreaming) {
       updateSrtlaIps();
+    }
+
+    if (intsChanged) {
+      updateBcrptSourceIps();
     }
 
     broadcastMsg('netif', netIfBuildMsg(), getms() - ACTIVE_TO);
@@ -1501,8 +1512,12 @@ async function wifiUpdateDevices() {
         hotspotCount++;
       }
     }
-    if (hotspotCount && isStreaming) {
-      updateSrtlaIps();
+    if (hotspotCount) {
+      if (isStreaming) {
+        updateSrtlaIps();
+      }
+      // Remove hotspot IPs from the source IP address list for BCRPT
+      updateBcrptSourceIps();
     }
   }
   console.log(wifiIfs);
@@ -2593,8 +2608,9 @@ function handleModems(conn, msg) {
   12 - support for receiving relay accounts and relay servers
   13 - wifi hotspot mode
   14 - support for the modem manager
+  15 - support for BCRPT
 */
-const remoteProtocolVersion = 14;
+const remoteProtocolVersion = 15;
 const remoteEndpointHost = 'remote.belabox.net';
 const remoteEndpointPath = '/ws/remote';
 const remoteTimeout = 5000;
@@ -2639,7 +2655,13 @@ function buildRelaysMsg() {
 
   if (relaysCache) {
     for (const s in relaysCache.servers) {
-      msg.servers[s] = {name: relaysCache.servers[s].name};
+      let name = relaysCache.servers[s].name;
+      if (bcrptRelaysRtt[s]) {
+        const rtt = bcrptRelaysRtt[s];
+        const status = (rtt <= 80) ? '🟢' : ((rtt <= 150) ? '🟡' : '🔴');
+        name = `${status} ${name} (${rtt} ms)`;
+      }
+      msg.servers[s] = {name};
       if (relaysCache.servers[s].default) msg.servers[s].default = true;
     }
     for (const a in relaysCache.accounts) {
@@ -2674,8 +2696,12 @@ function validateRemoteRelays(msg) {
       if (r.type !== "srtla" || typeof r.name != 'string' || typeof r.addr != 'string') continue;
       if (r.default && r.default !== true) continue;
       if (!validatePortNo(r.port)) continue;
+      if (r.bcrp_port && !validatePortNo(r.bcrp_port)) continue;
 
       out.servers[r_id] = {type: r.type, name: r.name, addr: r.addr, port: r.port};
+      if (r.bcrp_port) {
+        out.servers[r_id].bcrp_port = r.bcrp_port;
+      }
       if (r.default) out.servers[r_id].default = true;
     }
 
@@ -2685,6 +2711,11 @@ function validateRemoteRelays(msg) {
 
       out.accounts[a_id] = {name: a.name, ingest_key: a.ingest_key};
       if (a.disabled) out.accounts[a_id].disabled = true;
+    }
+
+    if (msg.bcrp_key !== undefined) {
+      if (typeof msg.bcrp_key != 'string') return;
+      out.bcrp_key = msg.bcrp_key;
     }
 
     if (Object.keys(out.servers).length < 1) return;
@@ -2750,6 +2781,7 @@ function handleRemoteRelays(msg) {
       saveConfig();
       broadcastMsg('config', config);
     }
+    updateBcrptServerConfig();
   }
 }
 
@@ -3693,6 +3725,10 @@ function updateStatus(status) {
   if (status != isStreaming) {
     isStreaming = status;
     broadcastMsg('status', {is_streaming: isStreaming});
+
+    // Clear out the BCRP server list on start, and re-populate it on stop
+    updateBcrptServerIps();
+
     return true;
   }
   return false;
@@ -4370,6 +4406,137 @@ function resetSshPassword(conn) {
     });
   });
 }
+
+
+/* BCRPT */
+let bcrpt;
+const bcrptDir = '/var/run/bcrpt';
+const bcrptSourceIpsFile = `${bcrptDir}/source_ips`;
+const bcrptServerIpsFile = `${bcrptDir}/server_ips`;
+const bcrptKeyFile = `${bcrptDir}/key`;
+
+let bcrptIpsToRelays = {};
+let bcrptRelaysRtt = {};
+
+async function updateBcrptSourceIps() {
+  await generateBcrptSourceIps();
+  reloadBcrpt();
+}
+
+async function generateBcrptSourceIps() {
+  let contents = "";
+  for (const i in netif) {
+    // Skip hotspots and unusable interfaces with duplicate IPs
+    if (netif[i].error) continue;
+    contents += `${netif[i].ip}\n`;
+  }
+  await writeTextFile(bcrptSourceIpsFile, contents);
+}
+
+async function updateBcrptServerConfig() {
+  await generateBcrptServerIpsFile();
+  await generateBcrptKeyFile();
+  reloadBcrpt();
+}
+
+async function updateBcrptServerIps() {
+  await generateBcrptServerIpsFile();
+  reloadBcrpt();
+}
+
+async function generateBcrptServerIpsFile() {
+  let contents = "";
+
+  if (!isStreaming && relaysCache) {
+    for (const s in relaysCache.servers) {
+      const port = relaysCache.servers[s].bcrp_port;
+      if (!port) continue;
+
+      var {addrs, fromCache} = await dnsCacheResolve(relaysCache.servers[s].addr);
+      for (const ip of addrs) {
+        const addr = `${ip}:${port}`;
+        bcrptIpsToRelays[addr] = s;
+        contents += `${addr}\n`;
+      }
+    }
+  }
+
+  await writeTextFile(bcrptServerIpsFile, contents);
+}
+
+async function generateBcrptKeyFile() {
+  let key = '';
+  if (relaysCache && relaysCache.bcrp_key) {
+    key = relaysCache.bcrp_key;
+  }
+  await writeTextFile(bcrptKeyFile, key);
+}
+
+function reloadBcrpt() {
+  if (bcrpt) {
+    bcrpt.kill('SIGHUP');
+  }
+}
+
+async function startBcrpt() {
+  if (!fs.existsSync(bcrptDir)) {
+    fs.mkdirSync(bcrptDir);
+  }
+
+  await generateBcrptSourceIps();
+  await generateBcrptServerIpsFile();
+  await generateBcrptKeyFile();
+
+  const args = [bcrptSourceIpsFile, bcrptServerIpsFile, bcrptKeyFile];
+  bcrpt = spawn(bcrptExec, args);
+
+  bcrpt.stdout.on('data', function(data) {
+    try {
+      stats = JSON.parse(data.toString('utf8'));
+
+      const rtts = {};
+      for (const addr in stats.rtt) {
+        const relayId = bcrptIpsToRelays[addr];
+        /* For now the use max_min as the reference RTT for each server
+           That is, for each connection we record the shortest RTT to
+           the server over a number of samples
+           And from all connections we take the highest of those
+           If we have multiple IPs for a server, we take the highest RTT */
+        const rtt = stats.rtt[addr].max_min;
+        if (rtts[relayId] === undefined) {
+          rtts[relayId] = rtt;
+        } else {
+          rtts[relayId] = Math.max(rtt, rtts[relayId]);
+        }
+      }
+      bcrptRelaysRtt = rtts;
+
+      broadcastMsg('relays', buildRelaysMsg());
+    } catch (err) {
+      console.log(err);
+      console.log(data.toString('utf8'));
+    }
+  });
+
+  bcrpt.stderr.on('data', function(data) {
+    console.log(`bcrpt: ${data}`);
+  });
+
+  bcrpt.on('error', function() {});
+
+  bcrpt.on('close', function(code, signal) {
+    let reason;
+    if (code != null) {
+      reason = `with code ${code}`;
+    } else {
+      reason = `because of signal ${signal}`;
+    }
+    console.log(`bcrpt exited unexpectedly ${reason}. Restarting it.`);
+    setTimeout(startBcrpt, 1000);
+  });
+}
+startBcrpt();
+
 
 /* Authentication */
 function setPassword(conn, password, isRemote) {

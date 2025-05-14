@@ -510,24 +510,72 @@ function loadConfig(c) {
 
 
 /* Pipelines */
-function genOptionList(options, selected) {
-  const list = [];
-  for (const o of options) {
-    for (const value in o) {
-      const html = '<option></option>'
-      const entry = $($.parseHTML(html));
-      entry.attr('value', value);
-      entry.text(o[value].name);
-      if (selected && value == selected) {
-        entry.attr('selected', true);
+function updateOptionList(select, options, selected) {
+  const validIds = {};
+
+  let entriesToDeselect = [];
+  let entryToSelect;
+  let prevOption;
+
+  for (const o in options) {
+    for (const value in options[o]) {
+      const id = `o_${o}_${value}`;
+      validIds[id] = true;
+
+      let entry = select.find(`.${id}`);
+      if (entry.length == 0) {
+        const html = '<option></option>'
+        entry = $($.parseHTML(html));
+        entry.addClass(id);
+        entry.data('option_id', id);
+        entry.attr('value', value);
+
+        if (prevOption) {
+          entry.insertAfter(prevOption);
+        } else {
+          select.prepend(entry);
+        }
       }
-      if (o[value].disabled) {
-        entry.attr('disabled', true);
+
+      const contents = options[o][value].name;
+      if (contents != entry.text()) {
+        entry.text(contents);
       }
-      list.push(entry);
+      const isDisabled = options[o][value].disabled;
+      if (entry.attr('disabled') != isDisabled) {
+        entry.attr('disabled', isDisabled);
+      }
+      const isSelected = (selected && value == selected);
+      const wasSelected = entry.attr('selected') == 'selected';
+      if (isSelected && !wasSelected) {
+        entryToSelect = entry;
+      }
+      if (!isSelected && wasSelected) {
+        entriesToDeselect.push(entry);
+      }
+
+      prevOption = entry;
     }
+  } // for o in options
+
+  // Delete removed options
+  select.find('option').each(function() {
+    const option = $(this)
+    const optionId = option.data('option_id');
+    if (optionId && !validIds[optionId]) {
+      option.remove();
+    }
+  });
+
+  // Update the selected entry if it's changed
+  // First, we have to deselect any other entries
+  for (const e of entriesToDeselect) {
+    e.attr('selected', false);
   }
-  return list;
+
+  if (entryToSelect) {
+    entryToSelect.attr('selected', true);
+  }
 }
 
 let pipelines = {};
@@ -536,8 +584,7 @@ function updatePipelines(ps) {
     pipelines = ps;
   }
 
-  const list = genOptionList([pipelines], config.pipeline);
-  $('#pipelines').html(list);
+  updateOptionList($('#pipelines'), [pipelines], config.pipeline);
 
   pipelineSelectHandler($('#pipelines').val())
 }
@@ -612,8 +659,7 @@ function updateRelays(r) {
       }
     }
   }
-  const serverList = genOptionList([relays ? relays.servers : {}, preset], selectedServer);
-  $('#relayServer').html(serverList);
+  updateOptionList($('#relayServer'), [relays ? relays.servers : {}, preset], selectedServer);
 
   let selectedAccount = config.relay_account;
   if (!relays || config.srt_streamid !== undefined) {
@@ -624,8 +670,7 @@ function updateRelays(r) {
       selectedAccount = 'unavailable';
     }
   }
-  const accountList = genOptionList([relays ? relays.accounts : {}, preset], selectedAccount);
-  $('#relayAccount').html(accountList);
+  updateOptionList($('#relayAccount'), [relays ? relays.accounts : {}, preset], selectedAccount);
 
   updateRelaySettings();
 }
@@ -1042,8 +1087,8 @@ function updateWifiState(msg) {
         deviceCard.find('.hotspot-password').val(device.hotspot.password);
       }
       if (!wifiIfs[deviceId] || !wifiIfs[deviceId].hotspot || wifiIfs[deviceId].hotspot.channel != device.hotspot.channel) {
-        const channels = genOptionList([device.hotspot.available_channels], device.hotspot.channel);
-        deviceCard.find('select.hotspot-channel').html(channels);
+        updateOptionList(deviceCard.find('select.hotspot-channel'),
+                         [device.hotspot.available_channels], device.hotspot.channel);
       }
 
       if (device.hotspot.warnings && device.hotspot.warnings.includes('modified')) {
@@ -1345,7 +1390,8 @@ function updateModemsState(msg) {
         const name = value.replace(/g/g, 'G / ').replace(/ \/ $/, '');
         options[value] = {name};
       }
-      deviceCard.find('.network-type-input').html(genOptionList([options], device.network_type.active));
+      updateOptionList(deviceCard.find('.network-type-input'),
+                       [options], device.network_type.active);
     }
 
     if (device.config) {
@@ -1395,7 +1441,7 @@ function updateModemsState(msg) {
             disabled: (availableNetworks[i].availability == 'forbidden')
           };
         }
-        networkSelect.html(genOptionList([auto, options], selectedNetwork));
+        updateOptionList(networkSelect, [auto, options], selectedNetwork);
 
         // Re-enable the scan button after receiving the results
         if (device.available_networks) {
