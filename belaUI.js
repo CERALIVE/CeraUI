@@ -3320,6 +3320,13 @@ function getAudioSrcName(id) {
   return id;
 }
 
+function getAudioSrcId(name) {
+  for (const id in audioSrcAliases) {
+    if (audioSrcAliases[id] == name) return id;
+  }
+  return name;
+}
+
 function addAudioCardById(list, id) {
   const name = getAudioSrcName(id);
   list[name] = id;
@@ -3469,16 +3476,27 @@ function startError(conn, msg, id = undefined) {
   return false;
 }
 
-function setBitrate(params) {
-  const minBr = 300; // Kbps
+const minSrtBr = 300;
+const maxSrtBr = 12000;
+function validateBitrate(params) {
+  if (typeof params.max_br != 'number') return;
 
-  if (params.max_br == undefined) return null;
-  if (params.max_br < minBr || params.max_br > 12000) return null;
+  const tmp = parseInt(params.max_br);
+  if (tmp != params.max_br) return;
+  if (params.max_br < minSrtBr || params.max_br > maxSrtBr) return;
+
+  params.max_br = tmp;
+
+  return tmp;
+}
+
+function setBitrate(params) {
+  if (!validateBitrate(params)) return;
 
   config.max_br = params.max_br;
   saveConfig();
 
-  fs.writeFileSync(setup.bitrate_file, minBr*1000 + "\n"
+  fs.writeFileSync(setup.bitrate_file, minSrtBr*1000 + "\n"
                    + config.max_br*1000 + "\n");
 
   spawnSync("killall", ['-HUP', "belacoder"], { detached: true});
@@ -3497,14 +3515,13 @@ async function removeBitrateOverlay(pipelineFile) {
   return pipelineTmp;
 }
 
-async function resolveSrtla(addr, conn) {
+async function resolveSrtla(addr) {
   let srtlaAddr = addr;
   try {
     var {addrs, fromCache} = await dnsCacheResolve(addr, 'a');
   } catch (err) {
-    startError(conn, "failed to resolve SRTLA addr " + addr, conn.senderId);
     queueUpdateGw();
-    return;
+    throw("Failed to resolve SRTLA addr " + addr);
   }
 
   if (fromCache) {
@@ -3520,43 +3537,39 @@ async function resolveSrtla(addr, conn) {
   return srtlaAddr;
 }
 
-function asrcProbe(asrc) {
-  audioSrcId = audioDevices[asrc];
-  if (!audioSrcId) {
-    const msg = `Selected audio input '${config.asrc}' is unavailable. Waiting for it before starting the stream...`;
-    notificationBroadcast('asrc_not_found', 'error', msg, 2, true, false);
-  }
+let asrcProbeReject;
+async function asrcProbe(asrc) {
+  let audioSrcId = audioDevices[asrc];
+  if (audioSrcId) return audioSrcId;
 
-  return audioSrcId;
-}
+  return new Promise(function(res, rej) {
+    if (asrcProbeReject) {
+      console.log('asrcProbe(): BUG? asrcProbeReject should have been undefined');
+      asrcProbeReject();
+    }
 
-async function pipelineSetAsrc(pipelineFile, audioSrcId, audioCodec) {
-  pipelineFile = await replaceAudioSettings(pipelineFile, audioSrcId, audioCodec);
-  if (!pipelineFile) {
-    startError(conn, 'failed to generate the pipeline file - audio settings');
-  }
-  return pipelineFile;
-}
+    asrcProbeReject = rej;
 
-let asrcRetryTimer;
-function asrcScheduleRetry(callback, pipelineFile, srtlaAddr, srtlaPort, streamid) {
-  asrcRetryTimer = setTimeout(function() {
-    asrcRetry(callback, pipelineFile, srtlaAddr, srtlaPort, streamid);
-  }, 1000);
-}
+    const poll = async function () {
+      while (asrcProbeReject === rej) {
+        let audioSrcId = audioDevices[asrc];
+        if (audioSrcId) {
+          asrcProbeReject = undefined;
+          res(audioSrcId);
+          return;
+        } else {
+          const msg = `Selected audio input '${config.asrc}' is unavailable. Waiting for it before starting the stream...`;
+          notificationBroadcast('asrc_not_found', 'error', msg, 2, true, false);
+        }
 
-async function asrcRetry(callback, pipelineFile, srtlaAddr, srtlaPort, streamid) {
-  asrcRetryTimer = undefined;
+        // sleep for one second
+        await new Promise(function (r) { setTimeout(r, 1000); });
+      }
+      // If the loop exited, then rej() was already called externally. Nothing left to do
+    }
 
-  audioSrcId = asrcProbe(config.asrc);
-  if (audioSrcId) {
-    pipelineFile = await pipelineSetAsrc(pipelineFile, audioSrcId, config.acodec);
-    if (!pipelineFile) return;
-
-    callback(pipelineFile, srtlaAddr, srtlaPort, streamid);
-  } else {
-    asrcScheduleRetry(callback, pipelineFile, srtlaAddr, srtlaPort, streamid);
-  }
+    poll();
+  });
 }
 
 function validatePortNo(port) {
@@ -3565,125 +3578,129 @@ function validatePortNo(port) {
   return portTmp;
 }
 
-async function updateConfig(conn, params, callback) {
-  asrcRetryTimer = undefined;
+async function validateConfig(params) {
+  if (typeof params != 'object') throw "Invalid config";
 
-  // delay
-  if (params.delay == undefined)
-    return startError(conn, "audio delay not specified");
+  // A-V delay
+  if (typeof params.delay != 'number')
+    throw("Invalid audio delay");
+
   const delayTmp = parseInt(params.delay);
   if (delayTmp != params.delay || delayTmp < -2000 || delayTmp > 2000)
-    return startError(conn, `invalid delay '${params.delay}'`);
+    throw(`Invalid audio delay '${params.delay}'`);
+
   params.delay = delayTmp;
 
   // pipeline
-  if (params.pipeline == undefined)
-    return startError(conn, "pipeline not specified");
+  if (typeof params.pipeline != 'string')
+    throw("Invalid pipeline");
+
   let pipeline = await searchPipelines(params.pipeline);
-  if (pipeline == null)
-    return startError(conn, "pipeline not found");
-  let pipelineFile = pipeline.path
+  if (!pipeline)
+    throw("Pipeline not found");
 
   // audio codec, if needed for the pipeline
-  let audioCodec;
   if (pipeline.acodec) {
-    if (params.acodec == undefined) {
-      return startError(conn, "audio codec not specified");
+    if (typeof params.acodec != 'string') {
+      throw("Invalid audio codec");
     }
     if (!audioCodecs[params.acodec]) {
-      return startError(conn, "audio codec not found");
+      throw("Audio codec not found");
     }
-    audioCodec = params.acodec;
   }
 
-  // remove the bitrate overlay unless enabled in the config
-  if (!params.bitrate_overlay) {
-    pipelineFile = await removeBitrateOverlay(pipelineFile);
-    if (!pipelineFile) return startError(conn, "failed to generate the pipeline file - bitrate overlay");
+  // audio capture device, if needed for the pipeline
+  if (pipeline.asrc) {
+    if (typeof params.asrc != 'string') {
+      throw("Invalid audio source");
+    }
+
+    if (params.asrc != config.asrc && !audioDevices[params.asrc]) {
+      throw("Selected audio source not found");
+    }
   }
 
   // bitrate
-  let bitrate = setBitrate(params);
-  if (bitrate == null)
-    return startError(conn, "invalid bitrate range: ");
+  if (!validateBitrate(params))
+    throw(`Invalid max bitrate: '${params.max_br}'`);
 
   // srt latency
-  if (params.srt_latency == undefined)
-    return startError(conn, "SRT latency not specified");
+  if (typeof params.srt_latency != 'number')
+    throw("Invalid SRT latency");
+
   const latencyTmp = parseInt(params.srt_latency);
   if (latencyTmp != params.srt_latency || latencyTmp < 100 || latencyTmp > 10000)
-    return startError(conn, `invalid SRT latency '${params.srt_latency}' ms`);
+    throw(`Invalid SRT latency '${params.srt_latency}' ms`);
+
   params.srt_latency = latencyTmp;
 
   // srtla addr & port
   let srtlaAddr, srtlaPort;
   if (relaysCache && params.relay_server) {
     const relayServer = relaysCache.servers[params.relay_server];
-    if (!relayServer) {
-      return startError(conn, "Invalid relay server specified");
-    }
+    if (!relayServer)
+      throw("Invalid relay server");
+
     srtlaAddr = relayServer.addr;
     srtlaPort = relayServer.port;
   } else {
-    if (params.srtla_addr == undefined)
-      return startError(conn, "SRTLA address not specified");
+    if (typeof params.srtla_addr != 'string')
+      throw("Invalid SRTLA address");
+
     params.srtla_addr = params.srtla_addr.trim();
     srtlaAddr = params.srtla_addr;
 
-    if (params.srtla_port == undefined)
-      return startError(conn, "SRTLA port not specified");
-    params.srtla_port = validatePortNo(params.srtla_port);
     if (!params.srtla_port)
-      return startError(conn, `invalid SRTLA port '${params.srtla_port}'`);
-    srtlaPort = params.srtla_port;
+      throw("Invalid SRTLA port");
+
+    const portTmp = validatePortNo(params.srtla_port);
+    if (!portTmp)
+      throw(`Invalid SRTLA port '${params.srtla_port}'`);
+
+    srtlaPort = params.srtla_port = portTmp;
   }
 
   // srt streamid
   let streamid;
   if (relaysCache && params.relay_server && params.relay_account) {
     const relayAccount = relaysCache.accounts[params.relay_account];
-    if (!relayAccount) {
-      return startError(conn, "Invalid relay account specified!");
-    }
+    if (!relayAccount)
+      throw("Invalid relay account specified!");
+
     streamid = relayAccount.ingest_key;
   } else {
-    if (params.srt_streamid == undefined)
-      return startError(conn, "SRT streamid not specified");
+    if (typeof params.srt_streamid != 'string')
+      throw("SRT streamid not specified");
+
     streamid = params.srt_streamid;
   }
 
-  // resolve the srtla hostname
-  srtlaAddr = await resolveSrtla(srtlaAddr, conn);
-  if (!srtlaAddr) return;
+  return {pipeline, srtlaAddr, srtlaPort, streamid};
+}
 
-  // audio capture device, if needed for the pipeline
-  let audioSrcId = defaultAudioId;
-  if (pipeline.asrc) {
-    if (params.asrc == undefined) {
-      return startError(conn, "audio source not specified");
-    }
+async function updateConfig(conn, params) {
+  let pipeline;
+  let srtlaAddr;
+  let srtlaPort;
+  let streamid;
+  ({pipeline, srtlaAddr, srtlaPort, streamid} = await validateConfig(params));
 
-    audioSrcId = audioDevices[params.asrc];
-    if (!audioSrcId && params.asrc != config.asrc) {
-      return startError(conn, "selected audio source not found");
-    }
+  srtlaAddr = await resolveSrtla(srtlaAddr);
 
-    audioSrcId = asrcProbe(params.asrc);
-  }
-
-  if (pipeline.asrc) {
-    config.asrc = params.asrc;
-  }
-
-  if (pipeline.acodec) {
-    config.acodec = params.acodec;
-  }
-
+  // Save the updated config
   config.delay = params.delay;
   config.pipeline = params.pipeline;
   config.max_br = params.max_br;
   config.srt_latency = params.srt_latency;
   config.bitrate_overlay = params.bitrate_overlay;
+
+  if (pipeline.acodec) {
+    config.acodec = params.acodec;
+  }
+  if (pipeline.asrc) {
+    config.asrc = params.asrc;
+  }
+
   if (params.relay_server) {
     config.relay_server = params.relay_server;
     delete config.srtla_addr;
@@ -3693,6 +3710,7 @@ async function updateConfig(conn, params, callback) {
     config.srtla_port = params.srtla_port;
     delete config.relay_server;
   }
+
   if (params.relay_account) {
     config.relay_account = params.relay_account;
     delete config.srt_streamid;
@@ -3706,18 +3724,9 @@ async function updateConfig(conn, params, callback) {
   }
 
   saveConfig();
-
   broadcastMsg('config', config);
 
-  if (audioSrcId) {
-    pipelineFile = await pipelineSetAsrc(pipelineFile, audioSrcId, audioCodec);
-    if (!pipelineFile) return;
-
-    callback(pipelineFile, srtlaAddr, srtlaPort, streamid);
-  } else {
-    asrcScheduleRetry(callback, pipelineFile, srtlaAddr, srtlaPort, streamid);
-    updateStatus(true);
-  }
+  return {pipeline, srtlaAddr, srtlaPort, streamid};
 }
 
 let isStreaming = false;
@@ -3777,76 +3786,130 @@ function spawnStreamingLoop(command, args, cooldown = 100, errCallback) {
   })
 }
 
-function start(conn, params) {
+async function startStream(pipeline, srtlaAddr, srtlaPort, streamid) {
+  setBitrate(config);
+
+  // remove the bitrate overlay unless enabled in the config
+  let pipelineFile = pipeline.path;
+  if (!config.bitrate_overlay) {
+    pipelineFile = await removeBitrateOverlay(pipelineFile);
+    if (!pipelineFile) throw("failed to generate the pipeline file - bitrate overlay");
+  }
+
+  // replace the audio source and codec
+  let audioCodec = pipeline.acodec ? config.acodec : undefined;
+  let audioSrcId = pipeline.asrc ? getAudioSrcId(config.asrc) : defaultAudioId;
+  pipelineFile = await replaceAudioSettings(pipelineFile, audioSrcId, audioCodec);
+  if (!pipelineFile) {
+    throw("failed to generate the pipeline file - audio settings");
+  }
+
+  if (pipeline.asrc) {
+    try {
+      await asrcProbe(config.asrc);
+    } catch (err) {
+      /* asrcProbe will reject if the user presses Stop before the audio interface is found
+         at this point, the stream is already stopped, so we don't need to do anything here */
+      return;
+    }
+  }
+
+  spawnStreamingLoop(srtlaSendExec, [
+                       9000,
+                       srtlaAddr,
+                       srtlaPort,
+                       setup.ips_file
+                     ], 100, function(err) {
+    let msg;
+    if (err.match('Failed to establish any initial connections')) {
+      msg = 'Failed to connect to the SRTLA server. Retrying...';
+    } else if (err.match('no available connections')) {
+      msg = 'All SRTLA connections failed. Trying to reconnect...';
+    }
+    if (msg) {
+      notificationBroadcast('srtla', 'error', msg, duration = 5, isPersistent = true, isDismissable = false);
+    }
+  });
+
+  const belacoderArgs = [
+                          pipelineFile,
+                          '127.0.0.1',
+                          '9000',
+                          '-d', config.delay,
+                          '-b', setup.bitrate_file,
+                          '-l', config.srt_latency,
+                        ];
+  if (streamid != '') {
+    belacoderArgs.push('-s');
+    belacoderArgs.push(streamid);
+  }
+  if (bcrptLowMtuDetected) {
+    belacoderArgs.push('-r');
+  }
+  spawnStreamingLoop(belacoderExec, belacoderArgs, 2000, function(err) {
+    let msg;
+    if (err.match('gstreamer error from alsasrc0')) {
+      msg = 'Capture card error (audio). Trying to restart...';
+    } else if (err.match('gstreamer error from v4l2src0')) {
+      msg = 'Capture card error (video). Trying to restart...';
+    } else if (err.match('Pipeline stall detected')) {
+      msg = 'The input source has stalled. Trying to restart...';
+    } else if (err.match('Failed to establish an SRT connection')) {
+      if (!notificationExists('srtla')) {
+        let reason = err.match(/Failed to establish an SRT connection: ([\w ]+)\./);
+        reason = (reason && reason[1]) ? ` (${reason[1]})` : '';
+        msg = `Failed to connect to the SRT server${reason}. Retrying...`;
+      }
+    } else if (err.match(/The SRT connection.+, exiting/)) {
+      if (!notificationExists('srtla')) {
+        msg = 'The SRT connection failed. Trying to reconnect...';
+      }
+    }
+    if (msg) {
+      notificationBroadcast('belacoder', 'error', msg, duration = 5, isPersistent = true, isDismissable = false);
+    }
+  });
+}
+
+async function start(conn, params) {
   if (isStreaming || isUpdating()) {
     sendStatus(conn);
     return;
   }
+  updateStatus(true);
 
   const senderId = conn.senderId;
-  updateConfig(conn, params, function(pipeline, srtlaAddr, srtlaPort, streamid) {
-    if (genSrtlaIpList() < 1) {
-      startError(conn, "Failed to start, no available network connections", senderId);
-      return;
+  let c;
+  try {
+    c = await updateConfig(conn, params);
+  } catch (err) {
+    if (typeof err == 'string') {
+      startError(conn, err, senderId);
+    } else {
+      startError(conn, "Failed to save the config, unknown error", senderId);
+      console.log(err);
     }
-    updateStatus(true);
+    return;
+  }
 
-    spawnStreamingLoop(srtlaSendExec, [
-                         9000,
-                         srtlaAddr,
-                         srtlaPort,
-                         setup.ips_file
-                       ], 100, function(err) {
-      let msg;
-      if (err.match('Failed to establish any initial connections')) {
-        msg = 'Failed to connect to the SRTLA server. Retrying...';
-      } else if (err.match('no available connections')) {
-        msg = 'All SRTLA connections failed. Trying to reconnect...';
-      }
-      if (msg) {
-        notificationBroadcast('srtla', 'error', msg, duration = 5, isPersistent = true, isDismissable = false);
-      }
-    });
+  // Populate the connections list file for srtla_send
+  // We only do this check when the stream is started manually
+  if (genSrtlaIpList() < 1) {
+    startError(conn, "Failed to start, no available network connections", senderId);
+    return;
+  }
 
-    const belacoderArgs = [
-                            pipeline,
-                            '127.0.0.1',
-                            '9000',
-                            '-d', config.delay,
-                            '-b', setup.bitrate_file,
-                            '-l', config.srt_latency,
-                          ];
-    if (streamid != '') {
-      belacoderArgs.push('-s');
-      belacoderArgs.push(streamid);
+  try {
+    await startStream(c.pipeline, c.srtlaAddr, c.srtlaPort, c.streamid);
+  } catch (err) {
+    if (typeof err == 'string') {
+      startError(conn, err, senderId);
+    } else {
+      startError(conn, "Failed to start, unknown error", senderId);
+      console.log(err);
     }
-    if (bcrptLowMtuDetected) {
-      belacoderArgs.push('-r');
-    }
-    spawnStreamingLoop(belacoderExec, belacoderArgs, 2000, function(err) {
-      let msg;
-      if (err.match('gstreamer error from alsasrc0')) {
-        msg = 'Capture card error (audio). Trying to restart...';
-      } else if (err.match('gstreamer error from v4l2src0')) {
-        msg = 'Capture card error (video). Trying to restart...';
-      } else if (err.match('Pipeline stall detected')) {
-        msg = 'The input source has stalled. Trying to restart...';
-      } else if (err.match('Failed to establish an SRT connection')) {
-        if (!notificationExists('srtla')) {
-          let reason = err.match(/Failed to establish an SRT connection: ([\w ]+)\./);
-          reason = (reason && reason[1]) ? ` (${reason[1]})` : '';
-          msg = `Failed to connect to the SRT server${reason}. Retrying...`;
-        }
-      } else if (err.match(/The SRT connection.+, exiting/)) {
-        if (!notificationExists('srtla')) {
-          msg = 'The SRT connection failed. Trying to reconnect...';
-        }
-      }
-      if (msg) {
-        notificationBroadcast('belacoder', 'error', msg, duration = 5, isPersistent = true, isDismissable = false);
-      }
-    });
-  });
+    return;
+  }
 }
 
 function removeProc(process) {
@@ -3893,16 +3956,16 @@ function stopAll() {
 }
 
 function stop() {
-  if (asrcRetryTimer) {
-    clearTimeout(asrcRetryTimer);
-    asrcRetryTimer = undefined;
+  if (asrcProbeReject) {
+    asrcProbeReject();
+    asrcProbeReject = undefined;
 
     if (streamingProcesses.length == 0) {
       updateStatus(false);
       return;
     }
 
-    console.log('stop: BUG?: found both a timer and running processes');
+    console.log('stop: BUG?: found both an asrcProbe and running processes');
   }
 
   let foundBelacoder = false;
@@ -4688,7 +4751,7 @@ function handleMessage(conn, msg, isRemote = false) {
       case 'bitrate':
         if (isStreaming) {
           const br = setBitrate(msg[type]);
-          if (br != null) {
+          if (br) {
             broadcastMsgExcept(conn, 'bitrate', {max_br: br});
           }
         }
