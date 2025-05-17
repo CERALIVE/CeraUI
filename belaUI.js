@@ -2609,8 +2609,9 @@ function handleModems(conn, msg) {
   13 - wifi hotspot mode
   14 - support for the modem manager
   15 - support for BCRPT
+  16 - support for autostart
 */
-const remoteProtocolVersion = 15;
+const remoteProtocolVersion = 16;
 const remoteEndpointHost = 'remote.belabox.net';
 const remoteEndpointPath = '/ws/remote';
 const remoteTimeout = 5000;
@@ -4000,6 +4001,59 @@ spawnSync("killall", ["belacoder"], {detached: true});
 spawnSync("killall", ["srtla_send"], {detached: true});
 
 
+/* Autostart functionality */
+function setAutostart(value) {
+  if (value !== true && value !== false) return;
+
+  config.autostart = value;
+  saveConfig();
+
+  broadcastMsg('config', config);
+}
+
+async function autoStartStream() {
+  if (isStreaming || isUpdating()) {
+    console.log('autostart aborted');
+    return;
+  }
+
+  /* Populate the connections list file for srtla_send
+     If no interfaces are available, retry later as we won't be able to stream yet */
+  if (genSrtlaIpList() < 1) {
+    setTimeout(autoStartStream, 1000);
+    return;
+  }
+
+  // The first await is used below, so we have to lock the status
+  updateStatus(true);
+
+  // If the config is invalid, then we won't ever be able to start, so don't retry
+  let c;
+  try {
+    c = await validateConfig(config);
+  } catch(err) {
+    console.log('autostart failed: ');
+    console.log(err);
+    updateStatus(false);
+    return;
+  }
+
+  try {
+    // This will returned a cached address if the resolver is temporarily unavailable
+    const srtlaAddr = await resolveSrtla(c.srtlaAddr);
+    await startStream(c.pipeline, srtlaAddr, c.srtlaPort, c.streamid);
+  } catch (err) {
+    console.log('autostart failed, but will retry: ');
+    console.log(err);
+    setTimeout(autoStartStream, 1000);
+    updateStatus(false);
+    return;
+  }
+
+  console.log('autostart complete');
+}
+
+
 /* Misc commands */
 function command(conn, cmd) {
   switch(cmd) {
@@ -4074,6 +4128,9 @@ function handleConfig(conn, msg, isRemote) {
     switch(type) {
       case 'remote_key':
         setRemoteKey(msg[type]);
+        break;
+      case 'autostart':
+        setAutostart(msg[type]);
         break;
     }
   }
@@ -4826,3 +4883,7 @@ if (systemdSock){
   httpListenPorts.unshift(systemdSock);
 }
 startHttpServer();
+
+if (config.autostart) {
+  autoStartStream();
+}

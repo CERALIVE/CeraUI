@@ -499,9 +499,12 @@ function loadConfig(c) {
   $('#srtlaPort').val(config.srtla_port ?? "");
   $('#srtStreamid').val(config.srt_streamid ?? "");
 
+  $("#bitrateOverlay").prop('checked', config.bitrate_overlay)
+
+  $('#autoStart').prop('checked', config.autostart ?? false);
+  $('#autoStartForm button[type=submit]').prop('disabled', true);
   $('#remoteDeviceKey').val(config.remote_key);
   $('#remoteKeyForm button[type=submit]').prop('disabled', true);
-  $("#bitrateOverlay").prop('checked', config.bitrate_overlay)
 
   if (config.ssh_pass && sshStatus) {
     showSshStatus();
@@ -1937,6 +1940,25 @@ function showHideRelayHint(addr) {
 
 $('input#srtlaAddr').change(function() {
   showHideRelayHint($(this).val());
+});
+
+$('#autoStart').change(function() {
+  if(this.checked) {
+    if (!confirm('Warning: Enabling this option will cause the encoder to start streaming automatically upon power-up or reset, potentially at unintended times. Do not enable this setting if automatic streaming poses any privacy or safety risks.')) {
+      this.checked = false;
+    }
+  }
+
+  const settingChanged = (this.checked != (config.autostart ?? false));
+  const form = $(this).parents('form');
+  $(form).find('button[type=submit]').prop('disabled', !settingChanged);
+});
+
+$('#autoStartForm').submit(function() {
+  const autostart = $('#autoStart').prop('checked');
+  ws.send(JSON.stringify({config: {autostart}}));
+
+  return false;
 });
 
 /* Input fields automatically copied to clipboard when clicked */
