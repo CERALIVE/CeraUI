@@ -4608,9 +4608,14 @@ async function startBcrpt() {
     fs.mkdirSync(bcrptDir);
   }
 
-  await generateBcrptSourceIps();
-  await generateBcrptServerIpsFile();
-  await generateBcrptKeyFile();
+  try {
+    await generateBcrptSourceIps();
+    await generateBcrptServerIpsFile();
+    await generateBcrptKeyFile();
+  } catch(err) {
+    setTimeout(startBcrpt, 1000);
+    return;
+  }
 
   const args = [bcrptSourceIpsFile, bcrptServerIpsFile, bcrptKeyFile];
   bcrpt = spawn(bcrptExec, args);
