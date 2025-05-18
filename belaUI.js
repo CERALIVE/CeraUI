@@ -4583,6 +4583,9 @@ async function generateBcrptServerIpsFile() {
         bcrptIpsToRelays[addr] = s;
         contents += `${addr}\n`;
       }
+      if (!fromCache) {
+        dnsCacheValidate(relaysCache.servers[s].addr);
+      }
     }
   }
 
