@@ -1003,7 +1003,7 @@ function updateWifiState(msg) {
               </div> <!-- .hotspot -->
 
               <div class="client d-none">
-                <button type="button" class="btn btn-block btn-secondary btn-netact mb-2 wifi-scan-button" onClick="wifiScan(this, ${deviceId})">
+                <button type="button" class="btn btn-block btn-secondary netact mb-2 wifi-scan-button" onClick="wifiScan(this, ${deviceId})">
                   Scan for WiFi networks
                 </button>
 
