@@ -35,6 +35,7 @@ const CONFIG_FILE = 'config.json';
 const AUTH_TOKENS_FILE = 'auth_tokens.json';
 const RELAYS_CACHE_FILE = 'relays_cache.json';
 const GSM_OPERATORS_CACHE_FILE = 'gsm_operator_cache.json';
+const AUTOSTART_CHECK_FILE = '/tmp/belaui_restarted';
 
 const DNS_CACHE_FILE = 'dns_cache.json';
 /* Minimum age of an updated record to trigger a persistent DNS cache update (in ms)
@@ -4892,6 +4893,8 @@ if (systemdSock){
 }
 startHttpServer();
 
-if (config.autostart) {
+// Don't autostart when restarting belaUI after a software update or after a crash
+if (config.autostart && !fs.existsSync(AUTOSTART_CHECK_FILE)) {
   autoStartStream();
 }
+fs.writeFileSync(AUTOSTART_CHECK_FILE, '');
