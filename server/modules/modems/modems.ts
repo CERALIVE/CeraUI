@@ -35,7 +35,7 @@ import { mmSetNetworkTypes } from "./mmcli.ts";
 import { modemNetworkScan } from "./modem-network-scan.ts";
 import { broadcastModems } from "./modem-status.ts";
 import { sanitizeModemConfigForNetworkManager } from "./modem-update-loop.ts";
-import { type ModemConfig, getModem } from "./modems-state.ts";
+import { getModem, type ModemConfig } from "./modems-state.ts";
 
 type ModemConfigMessage = {
 	config: {
@@ -71,7 +71,7 @@ async function updateModemConnection(
 }
 
 async function handleModemConfig(
-	conn: WebSocket,
+	_conn: WebSocket,
 	msg: ModemConfigMessage["config"],
 ) {
 	if (!msg.device) {
@@ -186,7 +186,10 @@ async function handleModemConfig(
 	broadcastModems({ [msg.device]: true });
 }
 
-async function handleModemScan(conn: WebSocket, msg: ModemScanMessage["scan"]) {
+async function handleModemScan(
+	_conn: WebSocket,
+	msg: ModemScanMessage["scan"],
+) {
 	const modemId = Number.parseInt(msg.device, 10);
 	if (!msg || !getModem(modemId)) return;
 

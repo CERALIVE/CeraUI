@@ -19,24 +19,22 @@ import { spawnSync } from "node:child_process";
 
 import type WebSocket from "ws";
 import { WebSocketServer } from "ws";
-
+import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
 import { extractMessage } from "../../helpers/types.ts";
-
-import { logger } from "../../helpers/logger.ts";
-import { type ModemsMessage, handleModems } from "../modems/modems.ts";
+import { handleModems, type ModemsMessage } from "../modems/modems.ts";
 import {
-	type NetworkInterfaceMessage,
 	handleNetif,
+	type NetworkInterfaceMessage,
 } from "../network/network-interfaces.ts";
 import { getRemoteWebSocket, setRemoteKey } from "../remote/remote.ts";
 import { type BitrateParams, setBitrate } from "../streaming/encoder.ts";
-import { type StartMessage, getIsStreaming } from "../streaming/streaming.ts";
+import { getIsStreaming, type StartMessage } from "../streaming/streaming.ts";
 import { start, stop } from "../streaming/streamloop.ts";
 import { getLog } from "../system/logs.ts";
 import { isUpdating, startSoftwareUpdate } from "../system/software-updates.ts";
 import { resetSshPassword, startStopSsh } from "../system/ssh.ts";
-import { type WifiMessage, handleWifi } from "../wifi/wifi.ts";
+import { handleWifi, type WifiMessage } from "../wifi/wifi.ts";
 import {
 	type AuthMessage,
 	getPasswordHash,

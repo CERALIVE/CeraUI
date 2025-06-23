@@ -12,7 +12,7 @@ export async function execPNR(cmd: string) {
 	try {
 		const res = await execP(cmd);
 		return { stdout: res.stdout, stderr: res.stderr, code: 0 };
-	} catch (err) {
+	} catch (_err) {
 		return { stdout: "", stderr: "", code: 1 };
 	}
 }
@@ -21,7 +21,7 @@ export function checkExecPathSafe(path: string) {
 	try {
 		fs.accessSync(path, fs.constants.R_OK);
 		return true;
-	} catch (err) {
+	} catch (_err) {
 		logger.error(
 			`\n\n${path} not found, double check the settings in setup.json`,
 		);

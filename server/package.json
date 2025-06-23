@@ -28,5 +28,7 @@
 		"format": "bun x --bun @biomejs/biome format --write .",
 		"lint": "bun x --bun @biomejs/biome lint --write ."
 	},
-	"trustedDependencies": ["@biomejs/biome"]
+	"trustedDependencies": [
+		"@biomejs/biome"
+	]
 }

@@ -129,7 +129,7 @@ export function resetSshPassword(conn: WebSocket) {
 	const password = crypto
 		.randomBytes(24)
 		.toString("base64")
-		.replace(/[+\/=]/g, "")
+		.replace(/[+/=]/g, "")
 		.substring(0, 20);
 	const cmd = `printf "${password}\n${password}" | passwd ${setup.ssh_user}`;
 	exec(cmd, (err) => {

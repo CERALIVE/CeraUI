@@ -22,8 +22,8 @@ import {
 	type NetworkManagerConnection,
 	type NetworkManagerConnectionModemConfig,
 	nmConnAdd,
-	nmConnGetFields,
 	nmConnect,
+	nmConnGetFields,
 } from "../network/network-manager.ts";
 
 import { setup } from "../setup.ts";
@@ -32,20 +32,20 @@ import { getGsmConnections, resetGsmConnections } from "./gsm-connections.ts";
 import {
 	type ModemId,
 	type ModemInfo,
-	type SimInfo,
 	mmConvertAccessTech,
 	mmConvertNetworkType,
 	mmConvertNetworkTypes,
 	mmGetModem,
 	mmGetSim,
 	mmList,
+	type SimInfo,
 } from "./mmcli.ts";
 import { broadcastModems } from "./modem-status.ts";
 import {
-	type Modem,
-	type ModemConfig,
 	getModem,
 	getModems,
+	type Modem,
+	type ModemConfig,
 	removeModem,
 	setModem,
 } from "./modems-state.ts";

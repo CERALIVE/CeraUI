@@ -17,15 +17,12 @@
 
 /* Network interface list */
 import { exec } from "node:child_process";
-
+import { EventEmitter } from "node:events";
 import type WebSocket from "ws";
-
-import { getms } from "../../helpers/time.ts";
 
 import { logger } from "../../helpers/logger.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
-
-import { EventEmitter } from "node:events";
+import { getms } from "../../helpers/time.ts";
 import {
 	notificationBroadcast,
 	notificationRemove,

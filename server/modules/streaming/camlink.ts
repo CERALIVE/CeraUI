@@ -55,7 +55,7 @@ export async function checkCamlinkUsb2() {
 			if (!version.match("3.00")) {
 				foundUsb2 = true;
 			}
-		} catch (err) {}
+		} catch (_err) {}
 	}
 
 	if (foundUsb2) {

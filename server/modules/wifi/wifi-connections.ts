@@ -17,13 +17,13 @@
 
 import {
 	type MacAddress,
+	nmcliParseSep,
 	nmRescan,
 	nmScanResults,
-	nmcliParseSep,
 } from "../network/network-manager.ts";
+import { wifiBroadcastState } from "./wifi.ts";
 import { wifiDeviceListGetMacAddress } from "./wifi-device-list.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
-import { wifiBroadcastState } from "./wifi.ts";
 
 const wifiInterfacesByMacAddress: Record<MacAddress, WifiInterface> = {};
 

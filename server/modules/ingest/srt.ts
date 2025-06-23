@@ -24,7 +24,7 @@ function runSLT() {
 		try {
 			const stats = JSON.parse(data.toString("utf8"));
 			ingestStats = `${Math.round(stats.recv.mbitRate * 1024)} Kbps, ${Math.round(stats.link.rtt)} ms RTT`;
-		} catch (err) {}
+		} catch (_err) {}
 	});
 
 	proc.stderr.on("data", (data) => {

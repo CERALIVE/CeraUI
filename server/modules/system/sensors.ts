@@ -50,7 +50,7 @@ function updateSensorThermal(id: number, name: string) {
 		);
 		const socTemp = Number.parseInt(socTempStr, 10) / 1000.0;
 		sensors[name] = `${socTemp.toFixed(1)} °C`;
-	} catch (err) {}
+	} catch (_err) {}
 }
 
 function updateSensorsJetson() {
@@ -61,7 +61,7 @@ function updateSensorsJetson() {
 		);
 		const socVoltage = Number.parseInt(socVoltageStr, 10) / 1000.0;
 		sensors["SoC voltage"] = `${socVoltage.toFixed(3)} V`;
-	} catch (err) {}
+	} catch (_err) {}
 
 	try {
 		const socCurrentStr = fs.readFileSync(
@@ -70,7 +70,7 @@ function updateSensorsJetson() {
 		);
 		const socCurrent = Number.parseInt(socCurrentStr, 10) / 1000.0;
 		sensors["SoC current"] = `${socCurrent.toFixed(3)} A`;
-	} catch (err) {}
+	} catch (_err) {}
 
 	updateSensorThermal(0, "SoC temperature");
 }

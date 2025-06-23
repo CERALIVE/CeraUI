@@ -29,7 +29,6 @@ import { setup } from "../setup.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
-import { resolveSrtla } from "./srtla.ts";
 import { startError } from "./streaming.ts";
 
 const deviceDir = setup.sound_device_dir ?? "/sys/class/sound";

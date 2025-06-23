@@ -23,11 +23,11 @@ import { broadcastMsg } from "../ui/websocket-server.ts";
 import type { ModemId } from "./mmcli.ts";
 import {
 	type AvailableNetwork,
-	type Modem,
-	type ModemConfig,
 	getAvailableNetworksForModem,
 	getModem,
 	getModemIds,
+	type Modem,
+	type ModemConfig,
 } from "./modems-state.ts";
 
 type ModemsResponseModemStatus = {

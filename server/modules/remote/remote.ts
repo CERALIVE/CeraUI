@@ -52,16 +52,17 @@ import {
 	broadcastMsgLocal,
 	deleteSocketSenderId,
 	getLastActive,
+	handleMessage,
+	type Message,
 	markConnectionActive,
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
-import { type Message, handleMessage } from "../ui/websocket-server.ts";
 
 import {
-	type ValidateRemoteRelaysMessage,
 	buildRelaysMsg,
 	handleRemoteRelays,
 	updateCachedRelays,
+	type ValidateRemoteRelaysMessage,
 } from "./remote-relays.ts";
 
 type RemoteAuthEncoderMessage = {
@@ -78,7 +79,7 @@ const remoteEndpointPath = setup.remote_endpoint_path ?? "/ws/remote";
 const remoteTimeout = 5000;
 const remoteConnectTimeout = 10000;
 
-let remoteWs: WebSocket | undefined = undefined;
+let remoteWs: WebSocket | undefined;
 let remoteStatusHandled = false;
 
 export function getRemoteWebSocket() {
@@ -194,7 +195,7 @@ async function remoteConnect() {
 			queueUpdateGw();
 			logger.warn(`remote: DNS lookup failed, using cached address ${host}`);
 		}
-	} catch (err) {
+	} catch (_err) {
 		return remoteRetry();
 	}
 

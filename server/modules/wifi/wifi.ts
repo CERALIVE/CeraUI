@@ -23,23 +23,22 @@ import type WebSocket from "ws";
 
 import { logger } from "../../helpers/logger.ts";
 import { extractMessage } from "../../helpers/types.ts";
-import { getWifiChannelMap } from "./wifi-channels.ts";
-
 import {
 	type ConnectionUUID,
 	nmConnDelete,
+	nmConnect,
 	nmConnGetFields,
 	nmConnSetWifiMacAddress,
-	nmConnect,
 	nmConnsGet,
-	nmDisconnect,
 	nmcliParseSep,
+	nmDisconnect,
 } from "../network/network-manager.ts";
 import {
 	broadcastMsg,
 	buildMsg,
 	getSocketSenderId,
 } from "../ui/websocket-server.ts";
+import { getWifiChannelMap } from "./wifi-channels.ts";
 import {
 	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
@@ -48,21 +47,21 @@ import {
 	wifiUpdateScanResult,
 } from "./wifi-connections.ts";
 import {
-	type WifiHotspot,
-	type WifiHotspotMessage,
 	canHotspot,
 	handleHotspotConn,
 	isHotspot,
+	type WifiHotspot,
+	type WifiHotspotMessage,
 	wifiHotspotConfig,
 	wifiHotspotStart,
 	wifiHotspotStop,
 } from "./wifi-hotspot.ts";
 import {
 	type BaseWifiInterface,
-	type SSID,
-	type WifiInterfaceId,
 	getMacAddressForWifiInterface,
 	getWifiIdToMacAddress,
+	type SSID,
+	type WifiInterfaceId,
 } from "./wifi-interfaces.ts";
 
 type WifiConnectMessage = {

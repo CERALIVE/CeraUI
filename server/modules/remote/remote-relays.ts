@@ -93,7 +93,7 @@ try {
 	relaysCache = JSON.parse(
 		fs.readFileSync(RELAYS_CACHE_FILE, "utf8"),
 	) as RelayCache;
-} catch (err) {
+} catch (_err) {
 	logger.warn("Failed to load the relays cache, starting with an empty cache");
 }
 
@@ -135,7 +135,7 @@ export function buildRelaysMsg() {
 export async function updateCachedRelays(relays: RelayCache | undefined) {
 	try {
 		assert.deepStrictEqual(relays, relaysCache);
-	} catch (err) {
+	} catch (_err) {
 		logger.debug("updated the relays cache", relays);
 		relaysCache = relays;
 		await writeTextFile(RELAYS_CACHE_FILE, JSON.stringify(relays));
@@ -182,7 +182,7 @@ function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 		if (Object.keys(out.servers).length < 1) return;
 
 		return out;
-	} catch (err) {
+	} catch (_err) {
 		return undefined;
 	}
 }

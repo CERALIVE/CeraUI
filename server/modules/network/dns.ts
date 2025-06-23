@@ -117,7 +117,7 @@ let dnsCache: Record<string, DnsCacheEntry> = {};
 const dnsResults: Record<string, ResolveResult> = {};
 try {
 	dnsCache = JSON.parse(fs.readFileSync(DNS_CACHE_FILE, "utf8"));
-} catch (err) {
+} catch (_err) {
 	logger.warn(
 		"Failed to load the persistent DNS cache, starting with an empty cache",
 	);

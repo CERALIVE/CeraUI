@@ -16,9 +16,8 @@
 */
 
 import { execP } from "../../helpers/exec.ts";
-import { getms } from "../../helpers/time.ts";
-
 import { logger } from "../../helpers/logger.ts";
+import { getms } from "../../helpers/time.ts";
 import {
 	notificationBroadcast,
 	notificationRemove,
@@ -41,7 +40,7 @@ async function clear_default_gws() {
 		while (true) {
 			await execP("ip route del default");
 		}
-	} catch (err) {
+	} catch (_err) {
 		return;
 	}
 }

@@ -28,7 +28,7 @@ const revisions: Record<string, string> = {};
 function readRevision(cmd: string) {
 	try {
 		return execSync(cmd).toString().trim();
-	} catch (err) {
+	} catch (_err) {
 		return "unknown revision";
 	}
 }
@@ -36,7 +36,7 @@ function readRevision(cmd: string) {
 export function initRevisions() {
 	try {
 		revisions.belaUI = fs.readFileSync("revision", "utf8");
-	} catch (err) {
+	} catch (_err) {
 		revisions.belaUI = readRevision("git rev-parse --short HEAD");
 	}
 
@@ -51,7 +51,7 @@ export function initRevisions() {
 		revisions["BELABOX image"] = fs
 			.readFileSync("/etc/belabox_img_version", "utf8")
 			.trim();
-	} catch (err) {}
+	} catch (_err) {}
 	logger.debug("Revisions", revisions);
 }
 

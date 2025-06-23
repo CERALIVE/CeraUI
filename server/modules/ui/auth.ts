@@ -49,7 +49,7 @@ const tempTokens: Record<string, true> = {};
 let persistentTokens: Record<string, true>;
 try {
 	persistentTokens = JSON.parse(fs.readFileSync(AUTH_TOKENS_FILE, "utf8"));
-} catch (err) {
+} catch (_err) {
 	persistentTokens = {};
 }
 

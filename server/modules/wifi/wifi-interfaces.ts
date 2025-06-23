@@ -20,19 +20,23 @@ import { getms } from "../../helpers/time.ts";
 
 import { updateMoblinkRelayInterfaces } from "../network/moblink-relay.ts";
 import {
-	NETIF_ERR_HOTSPOT,
 	getNetworkInterfaces,
+	NETIF_ERR_HOTSPOT,
 	setNetifHotspot,
 	triggerNetworkInterfacesChange,
 } from "../network/network-interfaces.ts";
 import {
 	type ConnectionUUID,
 	type MacAddress,
+	nmcliParseSep,
 	nmDeviceProp,
 	nmDevices,
-	nmcliParseSep,
 } from "../network/network-manager.ts";
-
+import {
+	type WifiNetwork,
+	wifiBroadcastState,
+	wifiUpdateSavedConns,
+} from "./wifi.ts";
 import {
 	addWifiInterface,
 	getWifiInterfaceByMacAddress,
@@ -46,15 +50,10 @@ import {
 	wifiDeviceListGetMacAddress,
 } from "./wifi-device-list.ts";
 import {
+	isHotspot,
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
-	isHotspot,
 } from "./wifi-hotspot.ts";
-import {
-	type WifiNetwork,
-	wifiBroadcastState,
-	wifiUpdateSavedConns,
-} from "./wifi.ts";
 
 export type SSID = string;
 export type WifiInterfaceId = number;
@@ -147,7 +146,7 @@ export async function wifiUpdateDevices() {
 					"GENERAL.VENDOR,GENERAL.PRODUCT,WIFI-PROPERTIES.AP,WIFI-PROPERTIES.5GHZ,WIFI-PROPERTIES.2GHZ",
 				)) as [string, string, string, string, string];
 				const vendor = prop[0].replace("Corporation", "").trim();
-				const pb = prop[1].match(/[\[(](.+)[\])]/);
+				const pb = prop[1].match(/[[(](.+)[\])]/);
 				const product = pb ? pb[1] : prop[1];
 
 				const newInterface = {

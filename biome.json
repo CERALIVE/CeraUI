@@ -1,13 +1,32 @@
 {
 	"files": {
-		"ignore": [
-			"ui/node_modules/**/*",
-			"ui/vendor/**/*",
-			"ui/dist/**/*",
-			"config.json",
-			"gsm_operator_cache.json"
+		"includes": [
+			"./package.json",
+			"**/server/**/*",
+			"**/ui/**/*",
+			"**/*.json",
+			"!**/ui/node_modules/**/*",
+			"!**/ui/vendor/**/*",
+			"!**/ui/dist/**/*",
+			"!**/config.json",
+			"!**/gsm_operator_cache.json"
 		],
-		"include": ["server/**/*", "ui/**/*", "*.json"],
 		"ignoreUnknown": true
+	},
+	"linter": {
+		"rules": {
+			"style": {
+				"noParameterAssign": "error",
+				"useAsConstAssertion": "error",
+				"useDefaultParameterLast": "error",
+				"useEnumInitializers": "error",
+				"useSelfClosingElements": "error",
+				"useSingleVarDeclarator": "error",
+				"noUnusedTemplateLiteral": "error",
+				"useNumberNamespace": "error",
+				"noInferrableTypes": "error",
+				"noUselessElse": "error"
+			}
+		}
 	}
 }

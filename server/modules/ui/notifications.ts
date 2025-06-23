@@ -29,10 +29,8 @@
 */
 
 import type WebSocket from "ws";
-
-import { getms } from "../../helpers/time.ts";
-
 import { logger } from "../../helpers/logger.ts";
+import { getms } from "../../helpers/time.ts";
 import {
 	broadcastMsg,
 	buildMsg,

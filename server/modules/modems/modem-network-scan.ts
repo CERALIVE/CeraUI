@@ -22,10 +22,10 @@ import { broadcastMsg } from "../ui/websocket-server.ts";
 import { mmNetworkScan } from "./mmcli.ts";
 import {
 	type AvailableNetwork,
-	type Modem,
 	getAvailableNetworksForModem,
 	getModem,
 	getModemIds,
+	type Modem,
 } from "./modems-state.ts";
 
 function modemBuildAvailableNetworksMessage(id: number) {

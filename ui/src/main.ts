@@ -30,8 +30,8 @@ import "bootstrap/js/dist/modal.js";
 import "bootstrap/js/dist/collapse.js";
 import "bootstrap/js/dist/tooltip.js";
 
-import { initRemoteRelays } from "./modules/remote/remote-relays.ts";
 import { initRemote } from "./modules/remote/remote.ts";
+import { initRemoteRelays } from "./modules/remote/remote-relays.ts";
 import { initPipelines } from "./modules/streaming/pipelines.ts";
 import { initStreamingUi } from "./modules/streaming/streaming.ts";
 import { initSoftwareUpdate } from "./modules/system/software-update.ts";

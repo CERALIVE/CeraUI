@@ -39,7 +39,7 @@ export async function resolveSrtla(addr: string, conn: WebSocket) {
 		const res = await dnsCacheResolve(addr, "a");
 		addrs = res.addrs;
 		fromCache = res.fromCache;
-	} catch (err) {
+	} catch (_err) {
 		const senderId = getSocketSenderId(conn) ?? "unknown sender";
 		startError(conn, `failed to resolve SRTLA addr ${addr}`, senderId);
 		queueUpdateGw();
