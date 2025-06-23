@@ -1,16 +1,36 @@
 import { spawn } from "node:child_process";
 
-/* Use srt-live-transmit to convert from SRT to UDP (usable by udpsrc in gstreamer), with stats */
-let ingestStats: string | null = null;
-function runSLT() {
-	const proc = spawn(
+// Define types for better clarity
+type ConnectionStats = `${number} Kbps, ${number} ms RTT` | "" | null;
+interface SrtStatsData {
+	recv: {
+		mbitRate: number;
+	};
+	link: {
+		rtt: number;
+	};
+}
+
+/**
+ * Manages SRT to UDP conversion using srt-live-transmit
+ * Collects and formats connection statistics
+ */
+let currentConnectionStats: ConnectionStats = null;
+
+/**
+ * Starts the SRT Live Transmit process to convert SRT stream to UDP
+ * Collects and processes statistics about the connection
+ */
+function startSrtTransmitter(): void {
+	// Launch the srt-live-transmit process with appropriate parameters
+	const transmitProcess = spawn(
 		"srt-live-transmit",
 		[
 			"-st:yes",
 			"-stats-report-frequency:500",
 			"-statspf:json",
-			"srt://:4000",
-			"udp://127.0.0.1:4001",
+			"srt://:4000", // SRT input on port 4000
+			"udp://127.0.0.1:4001", // UDP output on localhost:4001
 		],
 		{
 			detached: true,
@@ -18,30 +38,50 @@ function runSLT() {
 		},
 	);
 
-	let hasInConn = false;
-	proc.stdout.on("data", (data) => {
-		if (!hasInConn) return;
+	let hasActiveConnection = false;
+
+	// Process statistics output from stdout
+	transmitProcess.stdout.on("data", (data) => {
+		if (!hasActiveConnection) return;
+
 		try {
-			const stats = JSON.parse(data.toString("utf8"));
-			ingestStats = `${Math.round(stats.recv.mbitRate * 1024)} Kbps, ${Math.round(stats.link.rtt)} ms RTT`;
-		} catch (_err) {}
+			// Parse JSON stats and format connection information
+			const statsData: SrtStatsData = JSON.parse(data.toString("utf8"));
+			const bitrate = Math.round(statsData.recv.mbitRate * 1024);
+			const roundTripTime = Math.round(statsData.link.rtt);
+
+			currentConnectionStats = `${bitrate} Kbps, ${roundTripTime} ms RTT`;
+		} catch (_err) {
+			// Silently handle parsing errors
+		}
 	});
 
-	proc.stderr.on("data", (data) => {
-		const datStr = data.toString("utf8");
-		if (datStr.match("SRT source disconnected")) {
-			ingestStats = "";
-			hasInConn = false;
-		} else if (datStr.match("Accepted SRT source connection")) {
-			hasInConn = true;
+	// Monitor connection status from stderr
+	transmitProcess.stderr.on("data", (data) => {
+		const logMessage = data.toString("utf8");
+
+		if (logMessage.match("SRT source disconnected")) {
+			// Handle disconnection
+			currentConnectionStats = "";
+			hasActiveConnection = false;
+		} else if (logMessage.match("Accepted SRT source connection")) {
+			// Handle the new connection
+			hasActiveConnection = true;
 		}
 	});
 }
 
-export function initSRTIngest() {
-	runSLT();
+/**
+ * Initialize the SRT ingest system
+ */
+export function initSRTIngest(): void {
+	startSrtTransmitter();
 }
 
-export function getSRTIngestStats() {
-	return ingestStats;
+/**
+ * Get the current SRT connection statistics
+ * @returns Current connection stats: bitrate and round-trip time, or empty if disconnected
+ */
+export function getSRTIngestStats(): ConnectionStats {
+	return currentConnectionStats;
 }
