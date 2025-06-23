@@ -1,5 +1,5 @@
 <script lang="ts">
-import ChevronRight from '@lucide/svelte/icons/chevron-right';
+import { ChevronRight } from '@lucide/svelte';
 import { DropdownMenu as DropdownMenuPrimitive, type WithoutChild } from 'bits-ui';
 
 import { cn } from '$lib/utils.js';

@@ -1,6 +1,5 @@
 <script lang="ts">
-import { Eye, EyeOff, Hammer, Logs, PowerOff, RotateCcw } from 'lucide-svelte';
-import Settings from 'lucide-svelte/icons/settings';
+import { Eye, EyeOff, Hammer, Logs, PowerOff, RotateCcw, Settings } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 

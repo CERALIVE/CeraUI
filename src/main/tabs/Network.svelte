@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Antenna, EyeIcon, Router, Wifi, WifiOff } from 'lucide-svelte';
+import { Antenna, EyeIcon, Router, Wifi, WifiOff } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 
 import WifiQuality from '$lib/components/icons/WifiQuality.svelte';

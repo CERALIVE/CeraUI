@@ -1,7 +1,7 @@
 <script lang="ts">
+import { LoaderCircle } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 
-import { Icons } from '$lib/components/icons';
 import { Button } from '$lib/components/ui/button';
 import { Checkbox } from '$lib/components/ui/checkbox';
 import { Input } from '$lib/components/ui/input';
@@ -115,7 +115,7 @@ async function onSubmit(event: SubmitEvent) {
             </div>
             <Button type="submit" disabled={isLoading}>
               {#if isLoading}
-                <Icons.spinner class="mr-2 h-4 w-4 animate-spin" />
+                <LoaderCircle class="mr-2 h-4 w-4 animate-spin" />
               {/if}
               Sign In
             </Button>

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Check, X } from 'lucide-svelte';
+import { Check, X } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { _ } from 'svelte-i18n';
 

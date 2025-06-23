@@ -22,7 +22,7 @@ export type Side = VariantProps<typeof sheetVariants>['side'];
 </script>
 
 <script lang="ts">
-import X from '@lucide/svelte/icons/x';
+import { X } from '@lucide/svelte';
 import { Dialog as SheetPrimitive, type WithoutChildrenOrChild } from 'bits-ui';
 import type { Snippet } from 'svelte';
 

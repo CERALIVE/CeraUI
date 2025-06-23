@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Binary, ServerIcon, Volume } from 'lucide-svelte';
+import { Binary, ServerIcon, Volume } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 

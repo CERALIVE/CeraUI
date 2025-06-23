@@ -1,7 +1,7 @@
 <script lang="ts">
-import { RadioTower, Server, ServerOff, SquareChartGantt, Thermometer } from 'lucide-svelte';
+import { RadioTower, Server, ServerOff, SquareChartGantt, Thermometer } from '@lucide/svelte';
+import { RefreshCw } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
-import { Update } from 'svelte-radix';
 
 import * as Card from '$lib/components/ui/card';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
@@ -89,7 +89,7 @@ StatusMessages.subscribe(status => {
       <Card.Root>
         <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
           <Card.Title class="text-sm font-medium">{$_('general.updates')}</Card.Title>
-          <Update class="text-muted-foreground h-4 w-4" />
+          <RefreshCw class="text-muted-foreground h-4 w-4" />
         </Card.Header>
         <Card.Content class="flex items-center">
           <div>
