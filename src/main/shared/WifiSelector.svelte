@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Link, ScanSearch, Trash2, Unlink } from 'lucide-svelte';
+import { Link, ScanSearch, Trash2, Unlink } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 

@@ -4,7 +4,7 @@ import { cubicInOut } from 'svelte/easing';
 import { crossfade } from 'svelte/transition';
 import { _ } from 'svelte-i18n';
 
-import { Icons } from '$lib/components/icons';
+import Logo from '$lib/components/icons/Logo.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
 import { defaultNavElement, type NavElements, navElements, siteName } from '$lib/config';
 import { setupHashNavigation } from '$lib/helpers/NavigationHelper';
@@ -36,7 +36,7 @@ onMount(() => {
 
 <div class="mr-4 hidden md:flex">
   <button class="mr-6 flex items-center space-x-2" onclick={() => navigationStore.set(defaultNavElement)}>
-    <Icons.logo class="h-6 w-6" />
+    <Logo class="h-6 w-6" />
     <span class="hidden font-bold xl:inline-block">
       {siteName}
     </span>

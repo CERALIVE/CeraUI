@@ -1,5 +1,5 @@
 <script lang="ts">
-import { ArrowUpDown, Check, X } from 'lucide-svelte';
+import { ArrowUpDown, Check, X } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 
 import * as Card from '$lib/components/ui/card';

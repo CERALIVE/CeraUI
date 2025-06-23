@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Bolt } from 'lucide-svelte';
+import { Bolt } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 
 import { Input } from '$lib/components/ui/input';
