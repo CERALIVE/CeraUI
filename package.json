@@ -7,10 +7,10 @@
 	],
 	"dependencies": {},
 	"devDependencies": {
-		"@types/bun": "^1.2.4",
-		"globals": "^15.15.0",
-		"npm-run-all2": "^7.0.2",
-		"typescript": "^5.8.2"
+		"@types/bun": "^1.2.17",
+		"globals": "^16.2.0",
+		"npm-run-all2": "^8.0.4",
+		"typescript": "^5.8.3"
 	},
 	"scripts": {
 		"check": "bun run --bun --filter '*' check && run-p check:*",
