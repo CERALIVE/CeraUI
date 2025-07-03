@@ -36,6 +36,14 @@ export const existingLocales: DefinedLocales = [
   { name: '한국어', file: './locale/ko.json', code: 'ko' },
   { name: 'हिन्दी', file: './locale/hi.json', code: 'hi' },
 ];
+
+export const rtlLanguages = [
+  'ar', // Arabic - most common RTL
+  'he', // Hebrew
+  'fa', // Persian/Farsi
+  'ur', // Urdu
+];
+
 export async function setupLocale() {
   return await Promise.allSettled([
     init({
