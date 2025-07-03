@@ -55,6 +55,7 @@
     "framerate": "معدل الإطارات (FPS)",
     "selectFramerate": "حدد معدل الإطارات",
     "bitrate": "معدل البت (Kbps)",
+    "enableBitrateOverlay": "تفعيل تراكب معدل البت",
     "audioSettings": "إعدادات الصوت",
     "audioSource": "مصدر الصوت",
     "notAvailableAudioSource": "غير متوفر",

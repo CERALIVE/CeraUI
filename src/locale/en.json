@@ -55,6 +55,7 @@
     "framerate": "Framerate (FPS)",
     "selectFramerate": "Select the framerate",
     "bitrate": "Bitrate (Kbps)",
+    "enableBitrateOverlay": "Enable Bitrate Overlay",
     "audioSettings": "Audio Settings",
     "audioSource": "Audio source",
     "notAvailableAudioSource": "Not Available",

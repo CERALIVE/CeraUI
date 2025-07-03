@@ -1,4 +1,5 @@
 import { socket } from '$lib/stores/websocket-store';
+import type { ConfigMessage } from '$lib/types/socket-messages';
 
 export type AudioCodecs = 'acc' | 'opus';
 
@@ -64,7 +65,7 @@ export const stopStreaming = () => {
   socket.send(JSON.stringify({ stop: '0' }));
 };
 
-export const startStreaming = (config: { [key: string]: string | number }) => {
+export const startStreaming = (config: ConfigMessage) => {
   console.log(JSON.stringify({ start: config }));
   socket.send(JSON.stringify({ start: config }));
 };

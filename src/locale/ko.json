@@ -55,6 +55,7 @@
     "framerate": "프레임 레이트(FPS)",
     "selectFramerate": "프레임 레이트 선택",
     "bitrate": "비트레이트(Kbps)",
+    "enableBitrateOverlay": "비트레이트 오버레이 활성화",
     "audioSettings": "오디오 설정",
     "audioSource": "오디오 소스",
     "selectAudioSource": "오디오 소스 선택",
