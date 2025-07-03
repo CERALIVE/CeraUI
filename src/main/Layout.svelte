@@ -1,4 +1,5 @@
 <script lang="ts">
+import { locale } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
 import { Toaster } from '$lib/components/ui/sonner';
@@ -8,7 +9,7 @@ import { authStatusStore } from '$lib/stores/auth-status';
 import { AuthMessages, NotificationsMessages, sendAuthMessage, StatusMessages } from '$lib/stores/websocket-store';
 import type { NotificationType, StatusMessage } from '$lib/types/socket-messages';
 
-import { setupLocale } from '../i18n';
+import { rtlLanguages, setupLocale } from '../i18n';
 import Auth from './Auth.svelte';
 import Main from './MainView.svelte';
 
@@ -274,6 +275,11 @@ NotificationsMessages.subscribe(notifications => {
   });
 });
 
+// Apply <html lang> and dir using runes-style effect
+$effect(() => {
+  document.documentElement.lang = $locale;
+  document.documentElement.dir = rtlLanguages.includes($locale) ? 'rtl' : 'ltr';
+});
 // Export our functions to the global scope to make them available to other components
 window.startStreamingWithNotificationClear = startStreaming;
 window.stopStreamingWithNotificationClear = stopStreaming;
