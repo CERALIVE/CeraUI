@@ -55,6 +55,7 @@
     "framerate": "フレームレート (FPS)",
     "selectFramerate": "フレームレートを選択",
     "bitrate": "ビットレート (Kbps)",
+    "enableBitrateOverlay": "ビットレートオーバーレイを有効にする",
     "audioSettings": "オーディオ設定",
     "audioSource": "オーディオソース",
     "notAvailableAudioSource": "利用できません",

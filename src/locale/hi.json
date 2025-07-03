@@ -55,6 +55,7 @@
     "framerate": "फ्रेमरेट (FPS)",
     "selectFramerate": "फ्रेमरेट चुनें",
     "bitrate": "बिटरेट (Kbps)",
+    "enableBitrateOverlay": "बिटरेट ओवरले सक्षम करें",
     "audioSettings": "ऑडियो सेटिंग्स",
     "audioSource": "ऑडियो स्रोत",
     "notAvailableAudioSource": "उपलब्ध नहीं",

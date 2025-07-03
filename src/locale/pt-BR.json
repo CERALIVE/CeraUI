@@ -57,6 +57,7 @@
     "framerate": "Taxa de Quadros (FPS)",
     "selectFramerate": "Selecione a taxa de quadros",
     "bitrate": "Taxa de Bits (Kbps)",
+    "enableBitrateOverlay": "Ativar sobreposição de taxa de bits",
     "audioSettings": "Configurações de Áudio",
     "audioSource": "Fonte de Áudio",
     "notAvailableAudioSource": "Não disponível",

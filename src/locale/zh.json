@@ -55,6 +55,7 @@
     "framerate": "帧率 (FPS)",
     "selectFramerate": "选择帧率",
     "bitrate": "比特率 (Kbps)",
+    "enableBitrateOverlay": "启用码率叠加",
     "audioSettings": "音频设置",
     "audioSource": "音频源",
     "selectAudioSource": "选择音频源",

@@ -5,6 +5,7 @@ import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
+import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
@@ -32,8 +33,9 @@ type Properties = {
   framerate: string | undefined;
   pipeline: keyof PipelinesMessage | undefined;
   bitrate: number | undefined;
+  bitrateOverlay: boolean | undefined;
   audioSource: string | undefined;
-  audioCodec: string | undefined;
+  audioCodec: AudioCodecs | undefined;
   audioDelay: number | undefined;
   relayServer: string | undefined;
   relayAccount: string | undefined;
@@ -44,13 +46,10 @@ type Properties = {
 };
 
 // for selected preload
-type InitialSelectedProperties = {
-  audioSource: string | undefined;
-  pipeline: keyof PipelinesMessage | undefined;
-  audioCodec: AudioCodecs | undefined;
-  audioDelay: number | undefined;
-  bitrate: number | undefined;
-};
+type InitialSelectedProperties = Pick<
+  Properties,
+  'audioSource' | 'pipeline' | 'audioCodec' | 'audioDelay' | 'bitrate' | 'bitrateOverlay'
+>;
 // State variables
 let groupedPipelines: GroupedPipelines[keyof GroupedPipelines] | undefined = $state(undefined);
 let unparsedPipelines: PipelinesMessage | undefined = $state();
@@ -61,6 +60,7 @@ let audioSources: Array<string> = $state([]);
 
 let properties: Properties = $state({
   bitrate: undefined,
+  bitrateOverlay: false,
   audioCodec: undefined,
   audioDelay: 0,
   audioSource: undefined,
@@ -83,6 +83,7 @@ let initialSelectedProperties: InitialSelectedProperties = $state({
   pipeline: undefined,
   audioCodec: undefined,
   bitrate: undefined,
+  bitrateOverlay: false,
 });
 
 let audioCodecs: AudioCodecsMessage | undefined = $state();
@@ -138,6 +139,10 @@ ConfigMessages.subscribe(config => {
     }
     if (!initialSelectedProperties.bitrate) {
       properties.bitrate = initialSelectedProperties.bitrate = config?.max_br ?? 5000;
+    }
+
+    if (!initialSelectedProperties.bitrateOverlay) {
+      properties.bitrateOverlay = initialSelectedProperties.bitrateOverlay = config?.bitrate_overlay ?? false;
     }
     if (!initialSelectedProperties.audioSource) {
       if (config.asrc && !audioSources.includes(config.asrc)) {
@@ -266,7 +271,7 @@ function onSubmitStreamingForm(event: Event) {
 }
 
 const startStreamingWithCurrentConfig = () => {
-  let config: { [key: string]: string | number } = {};
+  let config: ConfigMessage = {};
   if (properties.pipeline) {
     config.pipeline = properties.pipeline;
   }
@@ -297,6 +302,7 @@ const startStreamingWithCurrentConfig = () => {
   }
   config.delay = properties.audioDelay!;
   config.max_br = properties.bitrate!;
+  config.bitrate_overlay = properties.bitrateOverlay!;
 
   // Directly dismiss all toasts first for immediate visual feedback
   toast.dismiss();
@@ -536,6 +542,10 @@ const getSortedResolutions = (resolutions: string[]) =>
                 {/if}
               </div>
             </div>
+            <div class="flex items-center gap-3">
+              <Checkbox id="bitrate-overlay" bind:checked={properties.bitrateOverlay} />
+              <Label for="bitrate-overlay">{$_('settings.enableBitrateOverlay')}</Label>
+            </div>
           </div>
         </Card.Content>
       </Card.Root>
@@ -610,8 +620,7 @@ const getSortedResolutions = (resolutions: string[]) =>
                     type="single"
                     id="audioDelay"
                     class="my-6"
-                    value={properties.audioDelay}
-                    onValueChange={value => (properties.audioDelay = value)}
+                    bind:value={properties.audioDelay}
                     disabled={isStreaming}
                     max={2000}
                     min={-2000}
