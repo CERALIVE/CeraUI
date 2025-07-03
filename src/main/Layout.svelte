@@ -125,6 +125,9 @@ const showToast = (type: NotificationType, name: string, options: any) => {
     const id = `toast-${now}-${Math.random().toString(36).slice(2, 11)}`;
     options.id = id;
 
+    // Ensure duration is a valid number
+    options.duration = typeof options.duration === 'number' ? options.duration : 5000;
+
     // Simplified onDismiss handler
     const originalOnDismiss = options.onDismiss;
     options.onDismiss = () => {
@@ -159,22 +162,25 @@ const showToast = (type: NotificationType, name: string, options: any) => {
 
     // Clean up the toast tracking after it expires (except for persistent toasts)
     if (options.duration !== Infinity) {
-      setTimeout(() => {
-        try {
-          // Safely dismiss and remove tracking
-          toast.dismiss(id);
+      setTimeout(
+        () => {
+          try {
+            // Safely dismiss and remove tracking
+            toast.dismiss(id);
 
-          setTimeout(() => {
-            if (activeToasts[id]) {
-              const newActiveToasts = { ...activeToasts };
-              delete newActiveToasts[id];
-              activeToasts = newActiveToasts;
-            }
-          }, 0);
-        } catch (e) {
-          console.error('Error cleaning up toast:', e);
-        }
-      }, options.duration + 1000); // Add 1 second buffer
+            setTimeout(() => {
+              if (activeToasts[id]) {
+                const newActiveToasts = { ...activeToasts };
+                delete newActiveToasts[id];
+                activeToasts = newActiveToasts;
+              }
+            }, 0);
+          } catch (e) {
+            console.error('Error cleaning up toast:', e);
+          }
+        },
+        (typeof options.duration === 'number' ? options.duration : 5000) + 1000,
+      ); // Add 1 second buffer
     }
   } finally {
     // Always make sure we reset the flag
