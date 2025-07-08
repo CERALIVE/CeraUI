@@ -17,6 +17,7 @@
 
 import { ws } from "../ui/websocket.ts";
 import { getIsStreaming } from "./streaming.ts";
+import {initSliderLock, setSliderAutolockTimer} from "../ui/sliders-lock.ts";
 
 /* Bitrate setting updates */
 type Bitrate = {
@@ -44,7 +45,8 @@ function showBitrate(value: number) {
 }
 
 export function initBitrateSlider(bitrateDefault: number) {
-	$("#bitrateSlider").slider({
+	const s = $("#bitrateSlider");
+	s.slider({
 		range: false,
 		min: 500,
 		max: 12000,
@@ -54,7 +56,10 @@ export function initBitrateSlider(bitrateDefault: number) {
 			const value = ui.value ?? bitrateDefault;
 			showBitrate(value);
 			setBitrate(value);
+			setSliderAutolockTimer(s);
 		},
 	});
+	initSliderLock(s);
 	showBitrate(bitrateDefault);
 }
+

@@ -54,6 +54,7 @@ import {
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot.ts";
+import {updateBcrptSourceIps} from "../streaming/bcrpt.ts";
 
 export type SSID = string;
 export type WifiInterfaceId = number;
@@ -231,6 +232,8 @@ export async function wifiUpdateDevices() {
 
 		if (hotspotCount) {
 			triggerNetworkInterfacesChange();
+			// Remove hotspot IPs from the source IP address list for BCRPT
+			updateBcrptSourceIps()
 		}
 	}
 	logger.debug("Wifi interfaces", wifiInterfacesByMacAddress);

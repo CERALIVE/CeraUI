@@ -17,25 +17,74 @@
 
 type Option = { name: string; disabled?: boolean };
 
-export function genOptionList(
-	options: Array<Record<string, Option>>,
-	selected: string | null = null,
-) {
-	const list = [];
-	for (const o of options) {
-		for (const value in o) {
-			const html = "<option></option>";
-			const entry = $($.parseHTML(html));
-			entry.attr("value", value);
-			entry.text(o[value].name);
-			if (selected && value === selected) {
-				entry.prop("selected", true);
-			}
-			if (o[value].disabled) {
-				entry.prop("disabled", true);
-			}
-			list.push(entry);
-		}
-	}
-	return list;
+export function updateOptionList(
+    select: JQuery<HTMLOptionElement>,
+    options: Array<Record<string, Option>>,
+    selected: string | null = null
+): void {
+    const validIds: { [key: string]: boolean } = {};
+
+    let entriesToDeselect = [];
+    let entryToSelect;
+    let prevOption;
+
+    for (const o in options) {
+        for (const value in options[o]) {
+            const id = `o_${o}_${value}`;
+            validIds[id] = true;
+
+            let entry = select.find(`.${id}`);
+            if (entry.length == 0) {
+                const html = '<option></option>'
+                entry = $(html) as JQuery<HTMLOptionElement> ;
+                entry.addClass(id);
+                entry.data('option_id', id);
+                entry.attr('value', value);
+
+                if (prevOption) {
+                    entry.insertAfter(prevOption);
+                } else {
+                    select.prepend(entry);
+                }
+            }
+
+            const contents = options[o][value].name;
+            if (contents != entry.text()) {
+                entry.text(contents);
+            }
+            const isDisabled = options[o][value].disabled;
+            if (entry.attr('disabled') != isDisabled) {
+                entry.prop('disabled', isDisabled);
+            }
+            const isSelected = (selected && value == selected);
+            const wasSelected = entry.attr('selected') == 'selected';
+            if (isSelected && !wasSelected) {
+                entryToSelect = entry;
+            }
+            if (!isSelected && wasSelected) {
+                entriesToDeselect.push(entry);
+            }
+
+            prevOption = entry;
+        }
+    } // for o in options
+
+    // Delete removed options
+    select.find('option').each(function () {
+        const option = $(this)
+        const optionId = option.data('option_id');
+        if (optionId && !validIds[optionId]) {
+            option.remove();
+        }
+    });
+
+    // Update the selected entry if it's changed
+    // First, we have to deselect any other entries
+    for (const e of entriesToDeselect) {
+        e.prop('selected', false);
+    }
+
+    if (entryToSelect) {
+        entryToSelect.prop('selected', true);
+    }
 }

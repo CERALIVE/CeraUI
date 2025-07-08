@@ -18,7 +18,7 @@
 /* Stream starting, stopping, management and monitoring */
 import type WebSocket from "ws";
 
-import { validateInteger, validatePortNo } from "../../helpers/number.ts";
+import { validatePortNo } from "../../helpers/number.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
 import {
@@ -35,34 +35,31 @@ import {
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
 import {
-	abortAsrcRetry,
-	asrcProbe,
-	asrcScheduleRetry,
 	audioCodecs,
-	DEFAULT_AUDIO_ID,
 	getAudioDevices,
-	isAsrcRetryScheduled,
-	pipelineSetAsrc,
 } from "./audio.ts";
-import { setBitrate } from "./encoder.ts";
-import { removeBitrateOverlay, searchPipelines } from "./pipelines.ts";
-import { resolveSrtla } from "./srtla.ts";
+import { validateBitrate} from "./encoder.ts";
+import { searchPipelines } from "./pipelines.ts";
+import {updateBcrptServerIps} from "./bcrpt.ts";
+import {resolveSrtla} from "./srtla.ts";
+
 
 export type StartMessage = { start: ConfigParameters };
 
 export type ConfigParameters = {
-	delay?: string;
-	srt_latency?: string;
+	delay?: number;
+	srt_latency?: number;
 	pipeline?: string;
 	acodec?: string;
 	relay_server?: string;
 	relay_account?: string;
 	srtla_addr?: string;
-	srtla_port?: string;
+	srtla_port?: number;
 	srt_streamid?: string;
 	asrc?: string;
-	bitrate_overlay?: unknown;
-	max_br?: string;
+	bitrate_overlay?: boolean;
+	max_br?: number;
+	autostart?: boolean;
 };
 
 let isStreaming = false;
@@ -75,6 +72,11 @@ export function updateStatus(status: boolean) {
 	if (status !== isStreaming) {
 		isStreaming = status;
 		broadcastMsg("status", { is_streaming: isStreaming });
+
+		// Clear out the BCRP server list on start, and re-populate it on stop
+		updateBcrptServerIps();
+
+
 		return true;
 	}
 
@@ -108,156 +110,118 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 	return false;
 }
 
-export async function updateConfig(
-	conn: WebSocket,
-	params: ConfigParameters,
-	callback: (
-		pipelineFilePath: string,
-		srtlaAddr: string,
-		srtlaPort?: number,
-		streamid?: string,
-	) => void,
-) {
-	if (isAsrcRetryScheduled()) {
-		abortAsrcRetry();
-	}
 
-	// delay
-	if (params.delay === undefined)
-		return startError(conn, "audio delay not specified");
-	const delay = validateInteger(params.delay, -2_000, 2_000);
-	if (validateInteger === undefined)
-		return startError(conn, `invalid delay '${params.delay}'`);
+export async function validateConfig(params: Partial<ConfigParameters>){
+	if (typeof params !== "object") throw new Error("Invalid config");
+
+	// A-V delay
+	if (typeof params.delay !== "number") throw new Error("Invalid audio delay");
+	const delay = parseInt(params.delay.toString(), 10);
+	if (delay !== params.delay || delay < -2000 || delay > 2000)
+		throw new Error(`Invalid audio delay '${params.delay}'`);
+	params.delay = delay;
 
 	// pipeline
-	if (params.pipeline === undefined)
-		return startError(conn, "pipeline not specified");
+	if (typeof params.pipeline !== "string") throw new Error("Invalid pipeline");
 	const pipeline = searchPipelines(params.pipeline);
-	if (pipeline == null) return startError(conn, "pipeline not found");
-	let pipelineFilePath: string | undefined = pipeline.path;
+	if (!pipeline) throw new Error("Pipeline not found");
 
-	// audio codec, if needed for the pipeline
-	let audioCodec: string | undefined;
+	// audio codec
 	if (pipeline.acodec) {
-		if (params.acodec === undefined) {
-			return startError(conn, "audio codec not specified");
-		}
-		if (!audioCodecs[params.acodec]) {
-			return startError(conn, "audio codec not found");
-		}
-		audioCodec = params.acodec;
+		if (typeof params.acodec !== "string") throw new Error("Invalid audio codec");
+		if (!audioCodecs[params.acodec]) throw new Error("Audio codec not found");
 	}
 
-	// remove the bitrate overlay unless enabled in the config
-	if (!params.bitrate_overlay) {
-		pipelineFilePath = await removeBitrateOverlay(pipelineFilePath);
-		if (!pipelineFilePath)
-			return startError(
-				conn,
-				"failed to generate the pipeline file - bitrate overlay",
-			);
+	// audio source
+	const config = getConfig();
+	const audioDevicesMap = getAudioDevices();
+	if (pipeline.asrc) {
+		if (typeof params.asrc !== "string") throw new Error("Invalid audio source");
+		if (params.asrc !== config.asrc && !audioDevicesMap[params.asrc])
+			throw new Error("Selected audio source not found");
 	}
 
 	// bitrate
-	const maxBitrate = params.max_br
-		? Number.parseInt(params.max_br, 10)
-		: undefined;
-	const bitrate = setBitrate({ max_br: maxBitrate });
-	if (bitrate == null) return startError(conn, "invalid bitrate range: ");
+	if (!validateBitrate(params)) throw new Error(`Invalid max bitrate: '${params.max_br}'`);
 
-	// srt latency
-	if (params.srt_latency === undefined)
-		return startError(conn, "SRT latency not specified");
-	const srtLatency = validateInteger(params.srt_latency, 100, 10_000);
-	if (srtLatency === undefined)
-		return startError(conn, `invalid SRT latency '${params.srt_latency}' ms`);
+	// SRT latency
+	if (typeof params.srt_latency !== "number") throw new Error("Invalid SRT latency");
+	const srtLatency = parseInt(params.srt_latency.toString(), 10);
+	if (srtLatency !== params.srt_latency || srtLatency < 100 || srtLatency > 10_000)
+		throw new Error(`Invalid SRT latency '${params.srt_latency}' ms`);
+	params.srt_latency = srtLatency;
 
-	// srtla addr & port
-	let srtlaAddr: string | undefined;
-	let srtlaPort: number | undefined;
+	// SRTLA addr and port
+	let srtlaAddr: string;
+	let srtlaPort: number;
 	const relays = getRelays();
 	if (relays && params.relay_server) {
 		const relayServer = relays.servers[params.relay_server];
-		if (!relayServer) {
-			return startError(conn, "Invalid relay server specified");
-		}
+		if (!relayServer) throw new Error("Invalid relay server");
 		srtlaAddr = relayServer.addr;
 		srtlaPort = relayServer.port;
 	} else {
-		if (params.srtla_addr === undefined)
-			return startError(conn, "SRTLA address not specified");
+		if (typeof params.srtla_addr !== "string") throw new Error("Invalid SRTLA address");
 		srtlaAddr = params.srtla_addr.trim();
 
-		if (params.srtla_port === undefined)
-			return startError(conn, "SRTLA port not specified");
-		srtlaPort = validatePortNo(params.srtla_port);
-		if (!srtlaPort)
-			return startError(conn, `invalid SRTLA port '${params.srtla_port}'`);
+		const port = validatePortNo(params.srtla_port);
+		if (!port) throw new Error(`Invalid SRTLA port '${params.srtla_port}'`);
+		srtlaPort = params.srtla_port = port;
 	}
 
-	// srt streamid
-	let streamid: string | undefined;
+	// stream ID
+	let streamid: string;
 	if (relays && params.relay_server && params.relay_account) {
 		const relayAccount = relays.accounts[params.relay_account];
-		if (!relayAccount) {
-			return startError(conn, "Invalid relay account specified!");
-		}
+		if (!relayAccount) throw new Error("Invalid relay account specified!");
 		streamid = relayAccount.ingest_key;
 	} else {
-		if (params.srt_streamid === undefined)
-			return startError(conn, "SRT streamid not specified");
+		if (typeof params.srt_streamid !== "string")
+			throw new Error("SRT streamid not specified");
 		streamid = params.srt_streamid;
 	}
 
-	// resolve the srtla hostname
-	srtlaAddr = await resolveSrtla(srtlaAddr, conn);
-	if (!srtlaAddr) return;
+	return { pipeline, srtlaAddr, srtlaPort, streamid };
+}
 
+export async function updateConfig(
+	conn: WebSocket,
+	params: ConfigParameters
+) {
+	const { pipeline, srtlaAddr: initialAddr, srtlaPort, streamid } = await validateConfig(params);
+
+	const srtlaAddr = await resolveSrtla(initialAddr);
 	const config = getConfig();
-
-	// audio capture device, if needed for the pipeline
-	let audioSrcId: string | undefined = DEFAULT_AUDIO_ID;
-	if (pipeline.asrc) {
-		if (params.asrc === undefined) {
-			return startError(conn, "audio source not specified");
-		}
-
-		audioSrcId = getAudioDevices()[params.asrc];
-		if (!audioSrcId && params.asrc !== config.asrc) {
-			return startError(conn, "selected audio source not found");
-		}
-
-		audioSrcId = asrcProbe(params.asrc);
-	}
-
-	if (pipeline.asrc) {
-		config.asrc = params.asrc;
-	}
+	// Save the updated config
+	config.delay = params.delay;
+	config.pipeline = params.pipeline;
+	config.max_br = params.max_br;
+	config.srt_latency = params.srt_latency;
+	config.bitrate_overlay = params.bitrate_overlay;
 
 	if (pipeline.acodec) {
-		config.acodec = params.acodec;
+		config.acodec = params.acodec!;
+	}
+	if (pipeline.asrc) {
+		config.asrc = params.asrc!;
 	}
 
-	config.delay = delay;
-	config.pipeline = params.pipeline;
-	config.max_br = maxBitrate;
-	config.srt_latency = srtLatency;
-	config.bitrate_overlay = Boolean(params.bitrate_overlay);
 	if (params.relay_server) {
 		config.relay_server = params.relay_server;
-		config.srtla_addr = undefined;
-		config.srtla_port = undefined;
+		delete config.srtla_addr;
+		delete config.srtla_port;
 	} else {
-		config.srtla_addr = srtlaAddr;
-		config.srtla_port = srtlaPort;
-		config.relay_server = undefined;
+		config.srtla_addr = params.srtla_addr!;
+		config.srtla_port = params.srtla_port!;
+		delete config.relay_server;
 	}
+
 	if (params.relay_account) {
 		config.relay_account = params.relay_account;
-		config.srt_streamid = undefined;
+		delete config.srt_streamid;
 	} else {
-		config.srt_streamid = params.srt_streamid;
-		config.relay_account = undefined;
+		config.srt_streamid = params.srt_streamid!;
+		delete config.relay_account;
 	}
 
 	if (!params.relay_server || !params.relay_account) {
@@ -265,26 +229,7 @@ export async function updateConfig(
 	}
 
 	saveConfig();
+	broadcastMsg('config', config);
 
-	broadcastMsg("config", config);
-
-	if (audioSrcId) {
-		pipelineFilePath = await pipelineSetAsrc(
-			pipelineFilePath,
-			audioSrcId,
-			audioCodec,
-		);
-		if (!pipelineFilePath) return;
-
-		callback(pipelineFilePath, srtlaAddr, srtlaPort, streamid);
-	} else {
-		asrcScheduleRetry(
-			callback,
-			pipelineFilePath,
-			srtlaAddr,
-			srtlaPort,
-			streamid,
-		);
-		updateStatus(true);
-	}
+	return { pipeline, srtlaAddr, srtlaPort, streamid };
 }

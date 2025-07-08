@@ -30,7 +30,7 @@ import { getSocketSenderId } from "../ui/websocket-server.ts";
 
 import { startError } from "./streaming.ts";
 
-export async function resolveSrtla(addr: string, conn: WebSocket) {
+export async function resolveSrtla(addr: string) {
 	let srtlaAddr = addr;
 
 	let addrs: string[] | undefined;
@@ -40,10 +40,8 @@ export async function resolveSrtla(addr: string, conn: WebSocket) {
 		addrs = res.addrs;
 		fromCache = res.fromCache;
 	} catch (_err) {
-		const senderId = getSocketSenderId(conn) ?? "unknown sender";
-		startError(conn, `failed to resolve SRTLA addr ${addr}`, senderId);
 		queueUpdateGw();
-		return;
+		throw("Failed to resolve SRTLA addr " + addr);
 	}
 
 	if (fromCache) {
@@ -83,7 +81,7 @@ export function genSrtlaIpList() {
 	return list;
 }
 
-export function genSrtalIpListForLocalIpAddress(ipAddress: string) {
+export function genSrtlaIpListForLocalIpAddress(ipAddress: string) {
 	const list: Array<string> = [];
 
 	const networkInterfaces = getNetworkInterfaces();

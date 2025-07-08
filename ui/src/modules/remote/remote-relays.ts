@@ -18,7 +18,7 @@
 import { config } from "../config.ts";
 import { updateButtonEnabledDisabled } from "../streaming/streaming.ts";
 import { removeNotification, showNotification } from "../ui/notifications.ts";
-import { genOptionList } from "../ui/options-list.ts";
+import { updateOptionList} from "../ui/options-list.ts";
 
 type Preset = { name: string; disabled?: boolean };
 
@@ -86,11 +86,7 @@ export function updateRelays(r: Partial<Relays> | null) {
 			}
 		}
 	}
-	const serverList = genOptionList(
-		[relays ? relays.servers : {}, preset],
-		selectedServer,
-	);
-	$("#relayServer").html(serverList as unknown as string);
+	updateOptionList($('#relayServer'), [relays ? relays.servers : {}, preset], selectedServer);
 
 	let selectedAccount = config.relay_account;
 	if (!relays || config.srt_streamid !== undefined) {
@@ -101,11 +97,7 @@ export function updateRelays(r: Partial<Relays> | null) {
 			selectedAccount = "unavailable";
 		}
 	}
-	const accountList = genOptionList(
-		[relays ? relays.accounts : {}, preset],
-		selectedAccount,
-	);
-	$("#relayAccount").html(accountList as unknown as string);
+	updateOptionList($('#relayAccount'), [relays ? relays.accounts : {}, preset], selectedAccount);
 
 	updateRelaySettings();
 }

@@ -43,6 +43,7 @@ let config: {
 	max_br?: number;
 	delay?: number;
 	pipeline?: string;
+	autostart?: boolean;
 } = {};
 
 export function loadConfig() {

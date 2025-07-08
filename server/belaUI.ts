@@ -15,32 +15,36 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { checkExecPath } from "./helpers/exec.ts";
+import {checkExecPath} from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
-import { logger } from "./helpers/logger.ts";
+import {logger} from "./helpers/logger.ts";
 
-import { loadConfig } from "./modules/config.ts";
-import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
-import { initSRTIngest } from "./modules/ingest/srt.ts";
-import { updateModems } from "./modules/modems/modem-update-loop.ts";
-import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
-import { initMoblinkRelays } from "./modules/network/moblink-relay.ts";
-import { initNetworkInterfaceMonitoring } from "./modules/network/network-interfaces.ts";
-import { initRemote } from "./modules/remote/remote.ts";
-import { setup } from "./modules/setup.ts";
-import { updateAudioDevices } from "./modules/streaming/audio.ts";
-import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
-import { initPipelines } from "./modules/streaming/pipelines.ts";
+import {getConfig, loadConfig} from "./modules/config.ts";
+import {initRTMPIngestStats} from "./modules/ingest/rtmp.ts";
+import {initSRTIngest} from "./modules/ingest/srt.ts";
+import {updateModems} from "./modules/modems/modem-update-loop.ts";
+import {UPDATE_GW_INT, updateGwWrapper} from "./modules/network/gateways.ts";
+import {initMoblinkRelays} from "./modules/network/moblink-relay.ts";
+import {initNetworkInterfaceMonitoring} from "./modules/network/network-interfaces.ts";
+import {initRemote} from "./modules/remote/remote.ts";
+import {setup} from "./modules/setup.ts";
+import {updateAudioDevices} from "./modules/streaming/audio.ts";
+import {checkCamlinkUsb2} from "./modules/streaming/camlink.ts";
+import {initPipelines} from "./modules/streaming/pipelines.ts";
 import {
-	belacoderExec,
-	srtlaSendExec,
+    bcrptExec,
+    belacoderExec,
+    checkAutoStartStream,
+    srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
-import { initRevisions } from "./modules/system/revisions.ts";
-import { initHardwareMonitoring } from "./modules/system/sensors.ts";
-import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updates.ts";
-import { getSshStatus } from "./modules/system/ssh.ts";
-import { initHttpServer } from "./modules/ui/http-server.ts";
-import { initWebSocketServer } from "./modules/ui/websocket-server.ts";
+import {initRevisions} from "./modules/system/revisions.ts";
+import {initHardwareMonitoring} from "./modules/system/sensors.ts";
+import {periodicCheckForSoftwareUpdates} from "./modules/system/software-updates.ts";
+import {getSshStatus} from "./modules/system/ssh.ts";
+import {initHttpServer} from "./modules/ui/http-server.ts";
+import {initWebSocketServer} from "./modules/ui/websocket-server.ts";
+import {startBcrpt} from "./modules/streaming/bcrpt.ts";
+import fs from "fs";
 
 /* Disable localization for any CLI commands we run */
 process.env.LANG = "C.UTF-8";
@@ -51,6 +55,8 @@ process.env.DEBIAN_FRONTEND = "noninteractive";
 
 checkExecPath(belacoderExec);
 checkExecPath(srtlaSendExec);
+checkExecPath(bcrptExec);
+
 
 loadConfig();
 
@@ -70,7 +76,7 @@ setInterval(updateGwWrapper, UPDATE_GW_INT);
 updateModems();
 
 if (setup.apt_update_enabled) {
-	periodicCheckForSoftwareUpdates();
+    periodicCheckForSoftwareUpdates();
 }
 
 initNetworkInterfaceMonitoring();
@@ -81,6 +87,9 @@ initMoblinkRelays();
 checkCamlinkUsb2();
 
 updateAudioDevices();
+startBcrpt();
+
+// Don't autostart when restarting belaUI after a software update or after a crash
 
 /*
   We use an UDEV rule to send a SIGUSR2 when:
@@ -88,9 +97,9 @@ updateAudioDevices();
    * a USB audio card is plugged in or out
 */
 process.on("SIGUSR2", function udevDeviceUpdate() {
-	logger.error("SIGUSR2");
-	checkCamlinkUsb2();
-	updateAudioDevices();
+    logger.error("SIGUSR2");
+    checkCamlinkUsb2();
+    updateAudioDevices();
 });
 
 // make sure we didn't inherit orphan processes
@@ -99,3 +108,5 @@ killall(["srtla_send"]);
 killall(["moblink-rust-relay"]);
 
 initHttpServer();
+checkAutoStartStream();
+

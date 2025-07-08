@@ -32,6 +32,8 @@
   12 - support for receiving relay accounts and relay servers
   13 - wifi hotspot mode
   14 - support for the modem manager
+  15 - support for BCRPT
+  16 - support for autostart
 */
 
 import WebSocket, { type RawData } from "ws";
