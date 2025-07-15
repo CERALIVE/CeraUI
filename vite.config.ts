@@ -4,11 +4,13 @@ import * as path from 'path';
 import { defineConfig } from 'vite';
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     tailwindcss(),
     svelte({
-      compilerOptions: { hmr: true },
+      compilerOptions: {
+        hmr: mode !== 'production',
+      },
       inspector: { showToggleButton: 'always', toggleButtonPos: 'bottom-right' },
     }),
   ],
@@ -18,4 +20,4 @@ export default defineConfig({
       $lib: path.resolve('./src/lib'),
     },
   },
-});
+}));
