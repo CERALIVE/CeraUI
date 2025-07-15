@@ -1,9 +1,9 @@
 import type { Component } from 'svelte';
 
-import Advanced from '../../main/tabs/Advanced.svelte';
-import General from '../../main/tabs/General.svelte';
-import Network from '../../main/tabs/Network.svelte';
-import Streaming from '../../main/tabs/Streaming.svelte';
+import Advanced from '$main/tabs/Advanced.svelte';
+import General from '$main/tabs/General.svelte';
+import Network from '$main/tabs/Network.svelte';
+import Streaming from '$main/tabs/Streaming.svelte';
 
 export type NavElements = {
   [key: string]: {
