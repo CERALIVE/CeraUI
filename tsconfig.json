@@ -5,7 +5,9 @@
     "baseUrl": ".",
     "paths": {
       "$lib": ["./src/lib"],
-      "$lib/*": ["./src/lib/*"]
+      "$lib/*": ["./src/lib/*"],
+      "$main": ["./src/main"],
+      "$main/*": ["./src/main/*"]
     }
   },
   "include": ["**/*.ts", "**/*.svelte"],
