@@ -90,19 +90,20 @@ StatusMessages.subscribe(status => {
                       {/snippet}
                       {#snippet description()}
                         <div class="text-muted-foreground space-y-4 text-sm">
-                          {#await generateWifiQr(wifi.hotspot.name, wifi.hotspot.password)}
-                            <div class="flex justify-center">
-                              <Skeleton class="h-40 w-40 rounded-md" />
-                            </div>
-                          {:then wifiQrCode}
-                            <div class="flex justify-center">
-                              <img
-                                src={wifiQrCode}
-                                alt="WiFi QR code"
-                                class="dark:bg-background rounded-md border bg-white p-2 shadow-sm" />
-                            </div>
-                          {/await}
-
+                          {#if wifi.hotspot.name && wifi.hotspot.password}
+                            {#await generateWifiQr(wifi.hotspot.name, wifi.hotspot.password)}
+                              <div class="flex justify-center">
+                                <Skeleton class="h-40 w-40 rounded-md" />
+                              </div>
+                            {:then wifiQrCode}
+                              <div class="flex justify-center">
+                                <img
+                                  src={wifiQrCode}
+                                  alt="WiFi QR code"
+                                  class="dark:bg-background rounded-md border bg-white p-2 shadow-sm" />
+                              </div>
+                            {/await}
+                          {/if}
                           <div class="space-y-1 text-center">
                             <p>
                               <span class="font-medium">{$_('network.hotspot.name')}:</span>
