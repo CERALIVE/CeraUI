@@ -149,7 +149,7 @@ const svelteConfig = {
   languageOptions: {
     parser: svelteParser,
     parserOptions: {
-      parser: { ts: tsParser },
+      parser: tsParser,
       extraFileExtensions: ['.svelte'],
       jsx: true,
     },
