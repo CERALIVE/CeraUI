@@ -16,7 +16,7 @@ import {
   type HumanReadablePipeline,
   parsePipelineName,
 } from '$lib/helpers/PipelineHelper';
-import { type AudioCodecs } from '$lib/helpers/SystemHelper';
+import { type AudioCodecs, updateBitrate } from '$lib/helpers/SystemHelper';
 import {
   AudioCodecsMessages,
   ConfigMessages,
@@ -91,9 +91,16 @@ let audioCodecs: AudioCodecsMessage | undefined = $state();
 let relayMessage: RelayMessage | undefined = $state();
 
 let savedConfig: ConfigMessage | undefined = $state(undefined);
-const normalizeValue = (value: number, min: number, max: number, step = 1) =>
-  Math.max(min, Math.min(max, Math.round(value / step) * step));
+const normalizeValue = (value: number, min: number, max: number, step = 1) => {
+  const stepped = Math.round((value - min) / step) * step + min;
+  return Math.max(min, Math.min(max, stepped));
+};
 
+const updateMaxBitrate = () => {
+  if (isStreaming) {
+    updateBitrate(properties.bitrate);
+  }
+};
 // Form state
 let formErrors = $state<Record<string, string>>({});
 
@@ -521,21 +528,20 @@ const getSortedResolutions = (resolutions: string[]) =>
                   type="single"
                   id="bitrate"
                   class="my-6"
-                  value={properties.bitrate}
+                  bind:value={properties.bitrate}
                   max={12000}
-                  min={500}
+                  min={2000}
                   step={50}
-                  onValueChange={value => {
-                    properties.bitrate = value;
-                  }} />
+                  onValueChange={() => updateMaxBitrate()} />
                 <Input
                   type="number"
                   step="50"
                   max={12000}
-                  min={500}
+                  min={2000}
                   bind:value={properties.bitrate}
                   onblur={() => {
-                    properties.bitrate = normalizeValue(properties.bitrate!, 2000, 12000, 50);
+                    properties = { ...properties, bitrate: normalizeValue(properties.bitrate!, 2000, 12000, 50) };
+                    updateMaxBitrate();
                   }}></Input>
                 {#if isStreaming}
                   <p class="text-xs">{$_('settings.changeBitrateNotice')}</p>
@@ -634,7 +640,10 @@ const getSortedResolutions = (resolutions: string[]) =>
                     max="2000"
                     disabled={isStreaming}
                     onblur={() => {
-                      properties.audioDelay = normalizeValue(properties.audioDelay!, 2000, 12000, 50);
+                      properties = {
+                        ...properties,
+                        audioDelay: normalizeValue(properties.audioDelay!, -2000, 2000, 5),
+                      };
                     }}></Input>
                 </div>
               </div>
@@ -748,11 +757,10 @@ const getSortedResolutions = (resolutions: string[]) =>
                   id="srtLatency"
                   type="single"
                   class="my-6"
-                  value={properties.srtLatency}
+                  bind:value={properties.srtLatency}
                   max={12000}
                   min={2000}
                   step={50}
-                  onValueChange={value => (properties.srtLatency = value)}
                   disabled={isStreaming}></Slider>
                 <Input
                   id="srtLatencyInput"
