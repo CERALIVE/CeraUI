@@ -10,40 +10,59 @@ export class WebSocketManager {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000; // Start with 1 second
   private keepAliveInterval: number | null = null;
+  private pingTimeout: number | null = null;
+  private lastPongTime = Date.now();
   private isReconnecting = false;
   private messageHandlers: ((data: string) => void)[] = [];
+
+  // Event handler references for proper cleanup
+  private visibilityHandler: () => void;
+  private focusHandler: () => void;
+  private onlineHandler: () => void;
 
   // Connection state store
   private connectionState = writable<'connected' | 'connecting' | 'disconnected' | 'error'>('disconnected');
   public readonly connectionState$ = readonly(this.connectionState);
 
   constructor(private url: string) {
+    // Initialize event handlers
+    this.visibilityHandler = () => {
+      if (!document.hidden && this.socket?.readyState !== WebSocket.OPEN) {
+        console.log('Page became visible, attempting WebSocket reconnection...');
+        this.reconnect();
+      }
+    };
+
+    this.focusHandler = () => {
+      if (this.socket?.readyState !== WebSocket.OPEN) {
+        console.log('Window focused, attempting WebSocket reconnection...');
+        this.reconnect();
+      }
+    };
+
+    this.onlineHandler = () => {
+      console.log('Network came online, attempting WebSocket reconnection...');
+      this.reconnect();
+    };
+
     this.setupVisibilityHandlers();
     this.connect();
   }
 
   private setupVisibilityHandlers() {
-    // Handle page visibility changes
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && this.socket?.readyState !== WebSocket.OPEN) {
-        console.log('Page became visible, attempting WebSocket reconnection...');
-        this.reconnect();
-      }
-    });
+    // Register using the named handlers for proper cleanup
+    document.addEventListener('visibilitychange', this.visibilityHandler);
+    window.addEventListener('focus', this.focusHandler);
+    window.addEventListener('online', this.onlineHandler);
+  }
 
-    // Handle window focus
-    window.addEventListener('focus', () => {
-      if (this.socket?.readyState !== WebSocket.OPEN) {
-        console.log('Window focused, attempting WebSocket reconnection...');
-        this.reconnect();
-      }
-    });
-
-    // Handle online/offline events
-    window.addEventListener('online', () => {
-      console.log('Network came online, attempting WebSocket reconnection...');
-      this.reconnect();
-    });
+  // Cleanup method to avoid leaks
+  public destroy() {
+    document.removeEventListener('visibilitychange', this.visibilityHandler);
+    window.removeEventListener('focus', this.focusHandler);
+    window.removeEventListener('online', this.onlineHandler);
+    this.stopKeepAlive();
+    this.close();
   }
 
   public connect() {
@@ -104,6 +123,21 @@ export class WebSocketManager {
     });
 
     this.socket.addEventListener('message', event => {
+      // Handle keep-alive pong responses
+      try {
+        const data = JSON.parse(event.data);
+        if (data.pong !== undefined) {
+          this.lastPongTime = Date.now();
+          if (this.pingTimeout) {
+            clearTimeout(this.pingTimeout);
+            this.pingTimeout = null;
+          }
+          return; // Don't forward pong messages to handlers
+        }
+      } catch {
+        // Not JSON or not a pong, continue processing normally
+      }
+
       this.messageHandlers.forEach(handler => handler(event.data));
     });
   }
@@ -152,6 +186,12 @@ export class WebSocketManager {
     this.keepAliveInterval = window.setInterval(() => {
       if (this.socket?.readyState === WebSocket.OPEN) {
         this.send(JSON.stringify({ keepalive: null }));
+
+        // Set timeout for pong response
+        this.pingTimeout = window.setTimeout(() => {
+          console.warn('No pong received, connection may be dead');
+          this.handleReconnect();
+        }, 5000); // 5 second timeout for pong response
       }
     }, 10000);
   }
@@ -160,6 +200,10 @@ export class WebSocketManager {
     if (this.keepAliveInterval) {
       clearInterval(this.keepAliveInterval);
       this.keepAliveInterval = null;
+    }
+    if (this.pingTimeout) {
+      clearTimeout(this.pingTimeout);
+      this.pingTimeout = null;
     }
   }
 
