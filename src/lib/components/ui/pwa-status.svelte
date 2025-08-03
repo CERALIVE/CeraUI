@@ -34,7 +34,7 @@
 
 <script lang="ts">
 import { Download, Share, Wifi, WifiOff } from '@lucide/svelte';
-import { locale } from 'svelte-i18n';
+import { _, locale } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
@@ -106,8 +106,8 @@ function dismissIOSBanner() {
     class="bg-destructive text-destructive-foreground animate-in slide-in-from-top fixed top-0 right-0 left-0 z-50 p-3 text-center">
     <div class="flex items-center justify-center gap-2">
       <WifiOff class="h-4 w-4" />
-      <span class="text-sm font-medium">You're offline</span>
-      <span class="text-xs opacity-80">• Some features may be limited</span>
+      <span class="text-sm font-medium">{$_('pwa.offline')}</span>
+      <span class="text-xs opacity-80">• {$_('pwa.offlineDescription')}</span>
     </div>
   </div>
 {/if}
@@ -117,17 +117,17 @@ function dismissIOSBanner() {
   {#if $connectionState === 'connecting'}
     <div class="flex items-center gap-1 rounded-full bg-yellow-500 px-2 py-1 text-xs text-white">
       <div class="h-2 w-2 animate-pulse rounded-full bg-white"></div>
-      Connecting...
+      {$_('pwa.connecting')}
     </div>
   {:else if $connectionState === 'disconnected' || $connectionState === 'error'}
     <div class="bg-destructive text-destructive-foreground flex items-center gap-1 rounded-full px-2 py-1 text-xs">
       <WifiOff class="h-3 w-3" />
-      Disconnected
+      {$_('pwa.disconnected')}
     </div>
   {:else if $connectionState === 'connected'}
     <div class="flex items-center gap-1 rounded-full bg-green-500 px-2 py-1 text-xs text-white">
       <Wifi class="h-3 w-3" />
-      Connected
+      {$_('pwa.connected')}
     </div>
   {/if}
 </div>
@@ -140,8 +140,8 @@ function dismissIOSBanner() {
       <div class="flex items-center gap-3">
         <Download class="h-5 w-5" />
         <div>
-          <p class="text-sm font-medium">Install CeraUI</p>
-          <p class="text-xs opacity-80">Add to home screen for better experience</p>
+          <p class="text-sm font-medium">{$_('pwa.installTitle')}</p>
+          <p class="text-xs opacity-80">{$_('pwa.installDescription')}</p>
         </div>
       </div>
       <div class="flex gap-2">
@@ -150,9 +150,9 @@ function dismissIOSBanner() {
           size="sm"
           onclick={dismissInstallBanner}
           class="text-primary-foreground hover:bg-primary-foreground/20">
-          Later
+          {$_('pwa.installLater')}
         </Button>
-        <Button variant="secondary" size="sm" onclick={handleInstall}>Install</Button>
+        <Button variant="secondary" size="sm" onclick={handleInstall}>{$_('pwa.installButton')}</Button>
       </div>
     </div>
   </div>
@@ -165,15 +165,16 @@ function dismissIOSBanner() {
       <div class="flex items-center gap-3">
         <Share class="h-5 w-5" />
         <div>
-          <p class="text-sm font-medium">Install CeraUI</p>
+          <p class="text-sm font-medium">{$_('pwa.installTitle')}</p>
           <p class="text-xs opacity-80">
-            Tap <Share class="mx-1 inline h-3 w-3" /> then "Add to Home Screen"
+            Tap <Share class="mx-1 inline h-3 w-3" />
+            {$_('pwa.installIosDescription')}
           </p>
         </div>
       </div>
       <div class="flex gap-2">
         <Button variant="ghost" size="sm" onclick={dismissIOSBanner} class="text-white hover:bg-white/20">
-          Got it
+          {$_('pwa.installIosGotIt')}
         </Button>
       </div>
     </div>

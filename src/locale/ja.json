@@ -237,5 +237,21 @@
     "confirmSystemLog": "システムログをダウンロードしますか？パスワードなどの機密情報が含まれている可能性があります。",
     "downloadBelaboxLog": "BELABOXログをダウンロード",
     "downloadSystemLog": "システムログをダウンロード"
+  },
+  "pwa": {
+    "offline": "オフラインです",
+    "offlineDescription": "一部の機能が制限される場合があります",
+    "connecting": "接続中...",
+    "disconnected": "切断されました",
+    "connected": "接続済み",
+    "installTitle": "CeraUIをインストール",
+    "installDescription": "より良いエクスペリエンスのためにホーム画面に追加",
+    "installLater": "後で",
+    "installButton": "インストール",
+    "installIosDescription": "その後「ホーム画面に追加」",
+    "installIosGotIt": "了解",
+    "refreshing": "更新中...",
+    "releaseToRefresh": "離して更新",
+    "pullToRefresh": "プルして更新"
   }
 }

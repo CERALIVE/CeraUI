@@ -237,5 +237,21 @@
     "confirmSystemLog": "Sind Sie sicher, dass Sie das System-Logdatei herunterladen möchten? Es kann sensible Informationen wie Passwörter enthalten.",
     "downloadBelaboxLog": "BELABOX-Logdatei herunterladen",
     "downloadSystemLog": "System-Logdatei herunterladen"
+  },
+  "pwa": {
+    "offline": "Sie sind offline",
+    "offlineDescription": "Einige Funktionen können eingeschränkt sein",
+    "connecting": "Verbindung wird hergestellt...",
+    "disconnected": "Getrennt",
+    "connected": "Verbunden",
+    "installTitle": "CeraUI installieren",
+    "installDescription": "Zum Startbildschirm hinzufügen für eine bessere Erfahrung",
+    "installLater": "Später",
+    "installButton": "Installieren",
+    "installIosDescription": "dann \"Zum Home-Bildschirm hinzufügen\"",
+    "installIosGotIt": "Verstanden",
+    "refreshing": "Aktualisierung...",
+    "releaseToRefresh": "Loslassen zum Aktualisieren",
+    "pullToRefresh": "Ziehen zum Aktualisieren"
   }
 }

@@ -238,5 +238,21 @@
     "confirmSystemLog": "您确定要下载系统日志吗？它可能包含敏感信息，如密码。",
     "downloadBelaboxLog": "下载 BELABOX 日志",
     "downloadSystemLog": "下载系统日志"
+  },
+  "pwa": {
+    "offline": "您已离线",
+    "offlineDescription": "某些功能可能受限",
+    "connecting": "正在连接...",
+    "disconnected": "已断开连接",
+    "connected": "已连接",
+    "installTitle": "安装 CeraUI",
+    "installDescription": "添加到主屏幕以获得更好的体验",
+    "installLater": "稍后",
+    "installButton": "安装",
+    "installIosDescription": "然后\"添加到主屏幕\"",
+    "installIosGotIt": "知道了",
+    "refreshing": "正在刷新...",
+    "releaseToRefresh": "松开以刷新",
+    "pullToRefresh": "下拉刷新"
   }
 }

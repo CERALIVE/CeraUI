@@ -236,5 +236,21 @@
     "confirmSystemLog": "Tem certeza de que deseja baixar o log do sistema? Ele pode conter informações sensíveis, como senhas.",
     "downloadBelaboxLog": "Baixar log do BELABOX",
     "downloadSystemLog": "Baixar log do sistema"
+  },
+  "pwa": {
+    "offline": "Você está offline",
+    "offlineDescription": "Alguns recursos podem estar limitados",
+    "connecting": "Conectando...",
+    "disconnected": "Desconectado",
+    "connected": "Conectado",
+    "installTitle": "Instalar CeraUI",
+    "installDescription": "Adicionar à tela inicial para uma melhor experiência",
+    "installLater": "Mais tarde",
+    "installButton": "Instalar",
+    "installIosDescription": "depois \"Adicionar à Tela de Início\"",
+    "installIosGotIt": "Entendi",
+    "refreshing": "Atualizando...",
+    "releaseToRefresh": "Solte para atualizar",
+    "pullToRefresh": "Puxe para atualizar"
   }
 }

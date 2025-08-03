@@ -1,7 +1,7 @@
 <script lang="ts">
 import { RefreshCw } from '@lucide/svelte';
 import { onMount } from 'svelte';
-import { locale } from 'svelte-i18n';
+import { _, locale } from 'svelte-i18n';
 
 import { rtlLanguages } from '../../../i18n';
 
@@ -111,17 +111,17 @@ onMount(() => {
 <!-- Pull to Refresh Indicator -->
 <div
   bind:this={refreshElement}
-  class="bg-background/90 fixed top-0 right-0 left-0 z-50 flex h-16 transform items-center justify-center border-b opacity-0 backdrop-blur-sm transition-transform duration-300"
+  class="bg-background/95 supports-backdrop-filter:bg-background/80 fixed top-14 right-0 left-0 z-40 flex h-12 transform items-center justify-center border-b opacity-0 shadow-sm backdrop-blur-sm transition-all duration-300"
   style="transform: translateY(-100%);">
   <div class="text-muted-foreground flex items-center gap-2">
-    <RefreshCw class="h-5 w-5 {isRefreshing ? 'animate-spin' : ''} {canRefresh ? 'text-primary' : ''}" />
+    <RefreshCw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''} {canRefresh ? 'text-primary' : ''}" />
     <span class="text-sm font-medium">
       {#if isRefreshing}
-        Refreshing...
+        {$_('pwa.refreshing')}
       {:else if canRefresh}
-        Release to refresh
+        {$_('pwa.releaseToRefresh')}
       {:else}
-        Pull to refresh
+        {$_('pwa.pullToRefresh')}
       {/if}
     </span>
   </div>

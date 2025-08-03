@@ -237,5 +237,21 @@
     "confirmSystemLog": "Êtes-vous sûr de vouloir télécharger le journal système ? Il peut contenir des informations sensibles, telles que des mots de passe.",
     "downloadBelaboxLog": "Télécharger le journal BELABOX",
     "downloadSystemLog": "Télécharger le journal système"
+  },
+  "pwa": {
+    "offline": "Vous êtes hors ligne",
+    "offlineDescription": "Certaines fonctionnalités peuvent être limitées",
+    "connecting": "Connexion...",
+    "disconnected": "Déconnecté",
+    "connected": "Connecté",
+    "installTitle": "Installer CeraUI",
+    "installDescription": "Ajouter à l'écran d'accueil pour une meilleure expérience",
+    "installLater": "Plus tard",
+    "installButton": "Installer",
+    "installIosDescription": "puis \"Ajouter à l'écran d'accueil\"",
+    "installIosGotIt": "Compris",
+    "refreshing": "Actualisation...",
+    "releaseToRefresh": "Relâcher pour actualiser",
+    "pullToRefresh": "Tirer pour actualiser"
   }
 }
