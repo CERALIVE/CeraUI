@@ -161,6 +161,17 @@ ConfigMessages.subscribe(config => {
     }
     if (!initialSelectedProperties.audioCodec) {
       properties.audioCodec = initialSelectedProperties.audioCodec = config.acodec;
+
+      // If no audio codec in config but pipeline supports audio, default to aac
+      if (!config.acodec && config.pipeline && unparsedPipelines && audioCodecs) {
+        const pipelineData = unparsedPipelines[config.pipeline];
+        if (pipelineData?.acodec) {
+          const aacCodec = Object.keys(audioCodecs).find(codec => codec.toLowerCase() === 'aac');
+          if (aacCodec) {
+            properties.audioCodec = initialSelectedProperties.audioCodec = aacCodec;
+          }
+        }
+      }
     }
   }
 });
@@ -196,6 +207,16 @@ $effect.pre(() => {
     properties.resolution = parsedPipeline.resolution ?? undefined;
 
     properties.framerate = parsedPipeline.fps?.toString() ?? undefined;
+
+    // Auto-select aac as default audio codec if pipeline supports audio and no codec is selected
+    const pipelineData = unparsedPipelines[properties.pipeline];
+    if (pipelineData.acodec && !properties.audioCodec && audioCodecs) {
+      // Check if "aac" is available in the audio codecs
+      const aacCodec = Object.keys(audioCodecs).find(codec => codec.toLowerCase() === 'aac');
+      if (aacCodec) {
+        properties.audioCodec = aacCodec;
+      }
+    }
   }
 });
 
@@ -254,15 +275,74 @@ function autoSelectNextOption(currentLevel: string) {
 
 function validateForm() {
   formErrors = {};
+  let hasErrors = false;
 
-  if (!properties.pipeline) {
-    formErrors.pipeline = $_('settings.errors.pipelineRequired');
-    return false;
+  // Validate Input Mode
+  if (!properties.inputMode) {
+    formErrors.inputMode = $_('settings.errors.inputModeRequired');
+    toast.error($_('settings.errors.inputModeRequired'));
+    hasErrors = true;
   }
 
-  // Add more validation as needed
+  // Validate Encoding Format
+  if (!properties.encoder) {
+    formErrors.encoder = $_('settings.errors.encoderRequired');
+    toast.error($_('settings.errors.encoderRequired'));
+    hasErrors = true;
+  }
 
-  return Object.keys(formErrors).length === 0;
+  // Validate Encoding Resolution
+  if (!properties.resolution) {
+    formErrors.resolution = $_('settings.errors.resolutionRequired');
+    toast.error($_('settings.errors.resolutionRequired'));
+    hasErrors = true;
+  }
+
+  // Validate Framerate
+  if (!properties.framerate) {
+    formErrors.framerate = $_('settings.errors.framerateRequired');
+    toast.error($_('settings.errors.framerateRequired'));
+    hasErrors = true;
+  }
+
+  // Validate Bitrate
+  if (!properties.bitrate || properties.bitrate < 2000 || properties.bitrate > 12000) {
+    formErrors.bitrate = $_('settings.errors.bitrateInvalid');
+    toast.error($_('settings.errors.bitrateInvalid'));
+    hasErrors = true;
+  }
+
+  // Validate Receiver Server Configuration
+  if (properties.relayServer === '-1' || properties.relayServer === undefined) {
+    // Manual Configuration - validate SRTLA server settings
+    if (!properties.srtlaServerAddress || properties.srtlaServerAddress.trim() === '') {
+      formErrors.srtlaServerAddress = $_('settings.errors.srtlaServerAddressRequired');
+      toast.error($_('settings.errors.srtlaServerAddressRequired'));
+      hasErrors = true;
+    }
+
+    if (!properties.srtlaServerPort || properties.srtlaServerPort <= 0) {
+      formErrors.srtlaServerPort = $_('settings.errors.srtlaServerPortRequired');
+      toast.error($_('settings.errors.srtlaServerPortRequired'));
+      hasErrors = true;
+    }
+  } else {
+    // Automatic Configuration - validate relay server selection
+    if (!properties.relayServer || properties.relayServer === '') {
+      formErrors.relayServer = $_('settings.errors.relayServerRequired');
+      toast.error($_('settings.errors.relayServerRequired'));
+      hasErrors = true;
+    }
+  }
+
+  // Note: SRT Stream ID is optional in manual configuration, so no validation needed
+
+  // If no errors, show success message
+  if (!hasErrors) {
+    toast.success($_('settings.validation.allFieldsValid'));
+  }
+
+  return !hasErrors;
 }
 
 // Automatic bitrate updates are handled by the slider and input's change events
@@ -420,6 +500,9 @@ const getSortedResolutions = (resolutions: string[]) =>
                   </Select.Group>
                 </Select.Content>
               </Select.Root>
+              {#if formErrors.inputMode}
+                <p class="text-sm text-red-500">{formErrors.inputMode}</p>
+              {/if}
               {#if properties.inputMode && properties.inputMode.includes('usb')}
                 <p class="text-muted-foreground mt-1 text-xs">
                   {$_('settings.djiCameraMessage')}
@@ -457,6 +540,9 @@ const getSortedResolutions = (resolutions: string[]) =>
                   </Select.Group>
                 </Select.Content>
               </Select.Root>
+              {#if formErrors.encoder}
+                <p class="text-sm text-red-500">{formErrors.encoder}</p>
+              {/if}
             </div>
 
             <!-- Encoding Resolution Selection -->
@@ -491,6 +577,9 @@ const getSortedResolutions = (resolutions: string[]) =>
                   </Select.Group>
                 </Select.Content>
               </Select.Root>
+              {#if formErrors.resolution}
+                <p class="text-sm text-red-500">{formErrors.resolution}</p>
+              {/if}
             </div>
 
             <!-- Framerate Selection -->
@@ -518,8 +607,8 @@ const getSortedResolutions = (resolutions: string[]) =>
                 </Select.Content>
               </Select.Root>
 
-              {#if formErrors.pipeline}
-                <p class="text-sm text-red-500">{formErrors.pipeline}</p>
+              {#if formErrors.framerate}
+                <p class="text-sm text-red-500">{formErrors.framerate}</p>
               {/if}
 
               <div class="mt-4">
@@ -543,6 +632,9 @@ const getSortedResolutions = (resolutions: string[]) =>
                     properties = { ...properties, bitrate: normalizeValue(properties.bitrate!, 2000, 12000, 50) };
                     updateMaxBitrate();
                   }}></Input>
+                {#if formErrors.bitrate}
+                  <p class="text-sm text-red-500">{formErrors.bitrate}</p>
+                {/if}
                 {#if isStreaming}
                   <p class="text-xs">{$_('settings.changeBitrateNotice')}</p>
                 {/if}
@@ -699,6 +791,9 @@ const getSortedResolutions = (resolutions: string[]) =>
                   </Select.Group>
                 </Select.Content>
               </Select.Root>
+              {#if formErrors.relayServer}
+                <p class="text-sm text-red-500">{formErrors.relayServer}</p>
+              {/if}
             </div>
 
             {#if properties.relayServer === '-1' || properties.relayServer === undefined}
@@ -706,6 +801,9 @@ const getSortedResolutions = (resolutions: string[]) =>
                 <Label for="srtlaServerAddress">{$_('settings.srtlaServerAddress')}</Label>
                 <Input id="srtlaServerAddress" bind:value={properties.srtlaServerAddress} disabled={isStreaming}
                 ></Input>
+                {#if formErrors.srtlaServerAddress}
+                  <p class="text-sm text-red-500">{formErrors.srtlaServerAddress}</p>
+                {/if}
               </div>
             {:else}
               <div class="grid gap-1">
@@ -741,6 +839,9 @@ const getSortedResolutions = (resolutions: string[]) =>
                 <Label for="srtlaServerPort">{$_('settings.srtlaServerPort')}</Label>
                 <Input id="srtlaServerPort" type="number" bind:value={properties.srtlaServerPort} disabled={isStreaming}
                 ></Input>
+                {#if formErrors.srtlaServerPort}
+                  <p class="text-sm text-red-500">{formErrors.srtlaServerPort}</p>
+                {/if}
               </div>
             {/if}
             {#if properties.relayAccount === '-1' || properties.relayAccount === undefined}
