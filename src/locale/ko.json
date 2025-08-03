@@ -76,7 +76,20 @@
     "startStreaming": "스트리밍 시작",
     "stopStreaming": "스트리밍 중지",
     "changeBitrateNotice": "스트리밍 중에도 비트레이트를 변경할 수 있습니다.",
-    "audioSettingsMessage": "인코더 섹션에서 유효한 옵션을 선택하면 오디오 설정이 표시됩니다"
+    "audioSettingsMessage": "인코더 섹션에서 유효한 옵션을 선택하면 오디오 설정이 표시됩니다",
+    "errors": {
+      "inputModeRequired": "입력 모드를 선택해주세요",
+      "encoderRequired": "인코딩 형식을 선택해주세요",
+      "resolutionRequired": "인코딩 해상도를 선택해주세요",
+      "framerateRequired": "프레임레이트를 선택해주세요",
+      "bitrateInvalid": "비트레이트는 2000에서 12000 Kbps 사이여야 합니다",
+      "srtlaServerAddressRequired": "SRTLA 서버 주소를 입력해주세요",
+      "srtlaServerPortRequired": "유효한 SRTLA 서버 포트를 입력해주세요",
+      "relayServerRequired": "릴레이 서버를 선택해주세요"
+    },
+    "validation": {
+      "allFieldsValid": "모든 인코더 설정이 유효합니다"
+    }
   },
   "network": {
     "hotspot": {
