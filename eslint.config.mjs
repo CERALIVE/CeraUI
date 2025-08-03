@@ -188,7 +188,16 @@ const prettierConfig = compat.extends('plugin:prettier/recommended');
 
 export default [
   {
-    ignores: ['**/dist', '**/node_modules', '**/public', '**/*.d.ts', '**/build', '**/coverage', '**/.svelte-kit'],
+    ignores: [
+      '**/dist',
+      '**/dev-dist',
+      '**/node_modules',
+      '**/public',
+      '**/*.d.ts',
+      '**/build',
+      '**/coverage',
+      '**/.svelte-kit',
+    ],
   },
 
   // JS base config
