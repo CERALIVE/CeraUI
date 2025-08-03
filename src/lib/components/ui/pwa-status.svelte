@@ -86,16 +86,38 @@ $effect(() => {
 // Track banner state more carefully
 let bannerDismissed = $state(false);
 
+// Detect device type for better install experience
+const isAndroid = $derived(() => {
+  if (typeof window === 'undefined') return false;
+  return /android/i.test(navigator.userAgent);
+});
+
+const isIOS = $derived(() => {
+  if (typeof window === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
+});
+
 $effect(() => {
-  // Show blue banner on all mobile devices (not just iOS Safari)
+  // Smart banner logic for mobile devices
   if (isMobile() && !bannerDismissed) {
     // Don't show if app is already installed
     const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as unknown as { standalone?: boolean }).standalone;
 
-    // Only show if not installed and not dismissed
-    showIOSBanner = !isStandalone;
+    if (isStandalone) {
+      // App already installed, don't show any banner
+      showIOSBanner = false;
+    } else if (isAndroid()) {
+      // Android: Always show blue banner (with install button if native prompt available)
+      showIOSBanner = true;
+    } else if (isIOS()) {
+      // iOS: Show blue banner with instructions (no native prompt available)
+      showIOSBanner = true;
+    } else {
+      // Other mobile devices: Show generic banner
+      showIOSBanner = true;
+    }
   } else {
     showIOSBanner = false;
   }
@@ -129,6 +151,18 @@ function dismissIOSBanner() {
   showIOSBanner = false;
   bannerDismissed = true;
   showIOSInstallPrompt.set(false);
+}
+
+// Handle install for mobile banner (Android can use native prompt)
+async function handleMobileInstall() {
+  // For Android with native prompt available, use it
+  if (isAndroid() && $canInstall) {
+    await handleInstall();
+    dismissIOSBanner();
+  } else {
+    // For iOS or Android without native prompt, just dismiss
+    dismissIOSBanner();
+  }
 }
 </script>
 
@@ -211,18 +245,31 @@ function dismissIOSBanner() {
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-medium">{$_('pwa.installTitle')}</p>
           <p class="truncate text-xs opacity-80">
-            {#if /iPad|iPhone|iPod/.test(navigator.userAgent)}
+            {#if isIOS()}
               Tap <Share class="mx-1 inline h-3 w-3" />
               {$_('pwa.installIosDescription')}
+            {:else if isAndroid() && $canInstall}
+              Tap "Install" to add to home screen
+            {:else if isAndroid()}
+              Use browser menu to "Add to Home Screen"
             {:else}
               {$_('pwa.installDescription')}
             {/if}
           </p>
         </div>
       </div>
-      <div class="flex flex-shrink-0">
+      <div class="flex flex-shrink-0 gap-2">
+        {#if isAndroid() && $canInstall}
+          <Button
+            variant="secondary"
+            size="sm"
+            onclick={handleMobileInstall}
+            class="bg-white text-blue-500 hover:bg-white/90">
+            Install
+          </Button>
+        {/if}
         <Button variant="ghost" size="sm" onclick={dismissIOSBanner} class="text-white hover:bg-white/20">
-          {$_('pwa.installIosGotIt')}
+          {isAndroid() && $canInstall ? 'Later' : $_('pwa.installIosGotIt')}
         </Button>
       </div>
     </div>
