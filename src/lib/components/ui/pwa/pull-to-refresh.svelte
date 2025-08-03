@@ -3,7 +3,7 @@ import { RefreshCw } from '@lucide/svelte';
 import { onMount } from 'svelte';
 import { _, locale } from 'svelte-i18n';
 
-import { rtlLanguages } from '../../../i18n';
+import { rtlLanguages } from '../../../../i18n';
 
 interface Props {
   onRefresh: () => Promise<void> | void;

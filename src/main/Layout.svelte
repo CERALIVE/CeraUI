@@ -2,8 +2,7 @@
 import { locale } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
-import OfflinePage from '$lib/components/ui/offline-page.svelte';
-import PWAStatus from '$lib/components/ui/pwa-status.svelte';
+import { OfflinePage, PWAStatus } from '$lib/components/ui/pwa';
 import { Toaster } from '$lib/components/ui/sonner';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { startStreaming as startStreamingFn, stopStreaming as stopStreamingFn } from '$lib/helpers/SystemHelper';
