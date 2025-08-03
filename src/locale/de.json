@@ -64,7 +64,7 @@
     "selectAudioCodec": "Audio-Codec auswählen",
     "audioDelay": "Audioverzögerung (ms)",
     "noAudioSupport": "Die aktuell ausgewählte Konfiguration unterstützt keine Audioeinstellungen",
-    "selectValidOption": "Die Audioeinstellungen werden angezeigt, sobald Sie eine gültige Option im Encoder-Abschnitt auswählen",
+
     "manualConfiguration": "Manuelle Konfiguration",
     "receiverServer": "Empfänger-Server",
     "relayServer": "Relay-Server",

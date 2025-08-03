@@ -63,7 +63,7 @@
     "selectAudioCodec": "Seleccione un códec de audio",
     "audioDelay": "Retraso de audio (ms)",
     "noAudioSupport": "La configuración seleccionada actualmente no admite ningún tipo de configuración de audio",
-    "selectValidOption": "La configuración de audio se mostrará una vez que seleccione una opción válida en la sección de codificación",
+
     "manualConfiguration": "Configuración Manual",
     "receiverServer": "Servidor receptor",
     "relayServer": "Servidor de Retransmisión",

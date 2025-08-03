@@ -64,7 +64,7 @@
     "selectAudioCodec": "حدد ترميز الصوت",
     "audioDelay": "تأخير الصوت (مللي ثانية)",
     "noAudioSupport": "التكوين المحدد حاليا لا يدعم أي نوع من إعدادات الصوت",
-    "selectValidOption": "ستظهر إعدادات الصوت بمجرد تحديد خيار صالح في قسم الترميز",
+
     "manualConfiguration": "الإعداد اليدوي",
     "receiverServer": "خادم الاستقبال",
     "relayServer": "خادم الترحيل",
