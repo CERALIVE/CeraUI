@@ -77,7 +77,20 @@
     "startStreaming": "Démarrer le Streaming",
     "stopStreaming": "Arrêter le Streaming",
     "changeBitrateNotice": "Vous pouvez changer le débit binaire même si vous diffusez.",
-    "audioSettingsMessage": "Les paramètres audio s'afficheront une fois que vous aurez sélectionné une option valide dans la section encodeur"
+    "audioSettingsMessage": "Les paramètres audio s'afficheront une fois que vous aurez sélectionné une option valide dans la section encodeur",
+    "errors": {
+      "inputModeRequired": "Veuillez sélectionner un mode d'entrée",
+      "encoderRequired": "Veuillez sélectionner un format d'encodage",
+      "resolutionRequired": "Veuillez sélectionner une résolution d'encodage",
+      "framerateRequired": "Veuillez sélectionner une fréquence d'images",
+      "bitrateInvalid": "Le débit binaire doit être entre 2000 et 12000 Kbps",
+      "srtlaServerAddressRequired": "Veuillez entrer l'adresse du serveur SRTLA",
+      "srtlaServerPortRequired": "Veuillez entrer un port SRTLA valide",
+      "relayServerRequired": "Veuillez sélectionner un serveur de relais"
+    },
+    "validation": {
+      "allFieldsValid": "Tous les paramètres d'encodeur sont valides"
+    }
   },
   "network": {
     "hotspot": {
