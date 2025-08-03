@@ -238,5 +238,21 @@
     "confirmSystemLog": "Are you sure you want to download the system log? It may contain sensitive information such as passwords.",
     "downloadBelaboxLog": "Download BELABOX Log",
     "downloadSystemLog": "Download System Log"
+  },
+  "pwa": {
+    "offline": "You're offline",
+    "offlineDescription": "Some features may be limited",
+    "connecting": "Connecting...",
+    "disconnected": "Disconnected",
+    "connected": "Connected",
+    "installTitle": "Install CeraUI",
+    "installDescription": "Add to home screen for better experience",
+    "installLater": "Later",
+    "installButton": "Install",
+    "installIosDescription": "then \"Add to Home Screen\"",
+    "installIosGotIt": "Got it",
+    "refreshing": "Refreshing...",
+    "releaseToRefresh": "Release to refresh",
+    "pullToRefresh": "Pull to refresh"
   }
 }

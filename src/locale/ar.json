@@ -237,5 +237,21 @@
     "confirmSystemLog": "هل أنت متأكد من أنك تريد تنزيل سجل النظام؟ قد يحتوي على معلومات حساسة مثل كلمات المرور.",
     "downloadBelaboxLog": "تنزيل سجل BELABOX",
     "downloadSystemLog": "تنزيل سجل النظام"
+  },
+  "pwa": {
+    "offline": "أنت غير متصل",
+    "offlineDescription": "قد تكون بعض الميزات محدودة",
+    "connecting": "جاري الاتصال...",
+    "disconnected": "منقطع",
+    "connected": "متصل",
+    "installTitle": "تثبيت CeraUI",
+    "installDescription": "إضافة إلى الشاشة الرئيسية لتجربة أفضل",
+    "installLater": "لاحقاً",
+    "installButton": "تثبيت",
+    "installIosDescription": "ثم \"إضافة إلى الشاشة الرئيسية\"",
+    "installIosGotIt": "فهمت",
+    "refreshing": "جاري التحديث...",
+    "releaseToRefresh": "اترك للتحديث",
+    "pullToRefresh": "اسحب للتحديث"
   }
 }

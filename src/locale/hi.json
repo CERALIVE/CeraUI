@@ -237,5 +237,21 @@
     "confirmSystemLog": "क्या आप सुनिश्चित हैं कि आप सिस्टम लॉग डाउनलोड करना चाहते हैं? इसमें पासवर्ड जैसी संवेदनशील जानकारी हो सकती है।",
     "downloadBelaboxLog": "BELABOX लॉग डाउनलोड करें",
     "downloadSystemLog": "सिस्टम लॉग डाउनलोड करें"
+  },
+  "pwa": {
+    "offline": "आप ऑफ़लाइन हैं",
+    "offlineDescription": "कुछ सुविधाएं सीमित हो सकती हैं",
+    "connecting": "कनेक्ट हो रहा है...",
+    "disconnected": "डिस्कनेक्ट",
+    "connected": "कनेक्ट",
+    "installTitle": "CeraUI इंस्टॉल करें",
+    "installDescription": "बेहतर अनुभव के लिए होम स्क्रीन पर जोड़ें",
+    "installLater": "बाद में",
+    "installButton": "इंस्टॉल",
+    "installIosDescription": "फिर \"होम स्क्रीन पर जोड़ें\"",
+    "installIosGotIt": "समझ गया",
+    "refreshing": "रिफ्रेश हो रहा है...",
+    "releaseToRefresh": "रिफ्रेश करने के लिए छोड़ें",
+    "pullToRefresh": "रिफ्रेश करने के लिए खींचें"
   }
 }
