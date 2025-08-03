@@ -64,7 +64,7 @@
     "selectAudioCodec": "오디오 코덱 선택",
     "audioDelay": "오디오 지연(ms)",
     "noAudioSupport": "현재 선택한 구성은's 모든 종류의 오디오 설정을 지원하지 않습니다",
-    "selectValidOption": "인코더 섹션에서 유효한 옵션을 선택하면 오디오 설정이 표시됩니다",
+
     "manualConfiguration": "수동 구성",
     "receiverServer": "수신기 서버",
     "relayServer": "릴레이 서버",

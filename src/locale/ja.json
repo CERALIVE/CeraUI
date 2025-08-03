@@ -64,7 +64,7 @@
     "selectAudioCodec": "オーディオコーデックを選択",
     "audioDelay": "オーディオ遅延 (ms)",
     "noAudioSupport": "現在選択されている設定はオーディオ設定をサポートしていません",
-    "selectValidOption": "エンコーダーセクションで有効なオプションを選択すると、オーディオ設定が表示されます",
+
     "manualConfiguration": "手動設定",
     "receiverServer": "レシーバーサーバー",
     "relayServer": "リレーサーバー",
