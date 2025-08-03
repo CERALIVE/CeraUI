@@ -76,7 +76,20 @@
     "startStreaming": "بدء البث",
     "stopStreaming": "إيقاف البث",
     "changeBitrateNotice": "يمكنك تغيير معدل البت حتى أثناء البث.",
-    "audioSettingsMessage": "ستظهر إعدادات الصوت بمجرد تحديد خيار صالح في قسم الترميز"
+    "audioSettingsMessage": "ستظهر إعدادات الصوت بمجرد تحديد خيار صالح في قسم الترميز",
+    "errors": {
+      "inputModeRequired": "يرجى تحديد وضع الإدخال",
+      "encoderRequired": "يرجى تحديد تنسيق الترميز",
+      "resolutionRequired": "يرجى تحديد دقة الترميز",
+      "framerateRequired": "يرجى تحديد معدل الإطارات",
+      "bitrateInvalid": "يجب أن يكون معدل البت بين 2000 و 12000 كيلوبت في الثانية",
+      "srtlaServerAddressRequired": "يرجى إدخال عنوان خادم SRTLA",
+      "srtlaServerPortRequired": "يرجى إدخال منفذ SRTLA صالح",
+      "relayServerRequired": "يرجى تحديد خادم الإرسال"
+    },
+    "validation": {
+      "allFieldsValid": "جميع إعدادات المشفر صالحة"
+    }
   },
   "network": {
     "hotspot": {
