@@ -51,10 +51,11 @@ const handleTouchMove = (e: TouchEvent) => {
     e.preventDefault();
   }
 
-  // Apply transform with resistance
+  // Apply transform with resistance (from -48px hidden to 0px visible)
   const resistance = Math.min(pullDistance / 2, distance);
+  const transformY = -48 + Math.min((resistance * 48) / threshold, 48);
   if (refreshElement) {
-    refreshElement.style.transform = `translateY(${resistance}px)`;
+    refreshElement.style.transform = `translateY(${transformY}px)`;
     refreshElement.style.opacity = Math.min(pullDistance / threshold, 1).toString();
   }
 };
@@ -76,9 +77,9 @@ const handleTouchEnd = async () => {
       canRefresh = false;
       pullDistance = 0;
 
-      // Reset transform
+      // Reset transform (hide above header)
       if (refreshElement) {
-        refreshElement.style.transform = 'translateY(0)';
+        refreshElement.style.transform = 'translateY(-48px)';
         refreshElement.style.opacity = '0';
       }
     }
@@ -88,7 +89,7 @@ const handleTouchEnd = async () => {
     pullDistance = 0;
 
     if (refreshElement) {
-      refreshElement.style.transform = 'translateY(0)';
+      refreshElement.style.transform = 'translateY(-48px)';
       refreshElement.style.opacity = '0';
     }
   }
@@ -111,8 +112,8 @@ onMount(() => {
 <!-- Pull to Refresh Indicator -->
 <div
   bind:this={refreshElement}
-  class="bg-background/95 supports-backdrop-filter:bg-background/80 fixed top-14 right-0 left-0 z-40 flex h-12 transform items-center justify-center border-b opacity-0 shadow-sm backdrop-blur-sm transition-all duration-300"
-  style="transform: translateY(-100%);">
+  class="bg-background/95 supports-backdrop-filter:bg-background/80 fixed top-0 right-0 left-0 z-[60] flex h-12 transform items-center justify-center border-b opacity-0 shadow-sm backdrop-blur-sm transition-all duration-300"
+  style="transform: translateY(-48px); margin-top: 56px;">
   <div class="text-muted-foreground flex items-center gap-2">
     <RefreshCw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''} {canRefresh ? 'text-primary' : ''}" />
     <span class="text-sm font-medium">
