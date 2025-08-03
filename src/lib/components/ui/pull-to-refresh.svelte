@@ -57,6 +57,7 @@ const handleTouchMove = (e: TouchEvent) => {
   if (refreshElement) {
     refreshElement.style.transform = `translateY(${transformY}px)`;
     refreshElement.style.opacity = Math.min(pullDistance / threshold, 1).toString();
+    refreshElement.style.pointerEvents = pullDistance > 0 ? 'auto' : 'none';
   }
 };
 
@@ -81,6 +82,7 @@ const handleTouchEnd = async () => {
       if (refreshElement) {
         refreshElement.style.transform = 'translateY(-48px)';
         refreshElement.style.opacity = '0';
+        refreshElement.style.pointerEvents = 'none';
       }
     }
   } else {
@@ -91,6 +93,7 @@ const handleTouchEnd = async () => {
     if (refreshElement) {
       refreshElement.style.transform = 'translateY(-48px)';
       refreshElement.style.opacity = '0';
+      refreshElement.style.pointerEvents = 'none';
     }
   }
 };
@@ -112,7 +115,7 @@ onMount(() => {
 <!-- Pull to Refresh Indicator -->
 <div
   bind:this={refreshElement}
-  class="bg-background/95 supports-backdrop-filter:bg-background/80 fixed top-0 right-0 left-0 z-[60] flex h-12 transform items-center justify-center border-b opacity-0 shadow-sm backdrop-blur-sm transition-all duration-300"
+  class="bg-background/95 supports-backdrop-filter:bg-background/80 pointer-events-none fixed top-0 right-0 left-0 z-[60] flex h-12 transform items-center justify-center border-b opacity-0 shadow-sm backdrop-blur-sm transition-all duration-300"
   style="transform: translateY(-48px); margin-top: 56px;">
   <div class="text-muted-foreground flex items-center gap-2">
     <RefreshCw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''} {canRefresh ? 'text-primary' : ''}" />
