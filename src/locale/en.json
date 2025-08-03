@@ -76,7 +76,20 @@
     "startStreaming": "Start Streaming",
     "stopStreaming": "Stop Streaming",
     "changeBitrateNotice": "You can change the bitrate even if you are streaming.",
-    "audioSettingsMessage": "The audio settings will be shown once you select a valid option on the encoder section"
+    "audioSettingsMessage": "The audio settings will be shown once you select a valid option on the encoder section",
+    "errors": {
+      "inputModeRequired": "Please select an input mode",
+      "encoderRequired": "Please select an encoding format",
+      "resolutionRequired": "Please select an encoding resolution",
+      "framerateRequired": "Please select a framerate",
+      "bitrateInvalid": "Bitrate must be between 2000 and 12000 Kbps",
+      "srtlaServerAddressRequired": "Please enter the SRTLA server address",
+      "srtlaServerPortRequired": "Please enter a valid SRTLA server port",
+      "relayServerRequired": "Please select a relay server"
+    },
+    "validation": {
+      "allFieldsValid": "All encoder settings are valid"
+    }
   },
   "network": {
     "hotspot": {
