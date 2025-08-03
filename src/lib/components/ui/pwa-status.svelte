@@ -33,18 +33,19 @@
 </style>
 
 <script lang="ts">
-import { Download, Wifi, WifiOff } from '@lucide/svelte';
+import { Download, Share, Wifi, WifiOff } from '@lucide/svelte';
 import { locale } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
-import { canInstall, installApp, isOnline } from '$lib/stores/pwa';
+import { canInstall, installApp, isOnline, showIOSInstallPrompt } from '$lib/stores/pwa';
 import { connectionState } from '$lib/stores/websocket-enhanced';
 
 import { rtlLanguages } from '../../../i18n';
 
 let showOfflineBanner = $state(false);
 let showInstallBanner = $state(false);
+let showIOSBanner = $state(false);
 
 // RTL support
 const isRTL = $derived(rtlLanguages.includes($locale));
@@ -63,6 +64,10 @@ $effect(() => {
 
 $effect(() => {
   showInstallBanner = $canInstall;
+});
+
+$effect(() => {
+  showIOSBanner = $showIOSInstallPrompt;
 });
 
 async function handleInstall() {
@@ -88,6 +93,11 @@ async function handleInstall() {
 function dismissInstallBanner() {
   showInstallBanner = false;
 }
+
+function dismissIOSBanner() {
+  showIOSBanner = false;
+  showIOSInstallPrompt.set(false);
+}
 </script>
 
 <!-- Offline Status Banner -->
@@ -103,7 +113,7 @@ function dismissInstallBanner() {
 {/if}
 
 <!-- Connection Status Indicator -->
-<div class="fixed top-4 z-40 {isRTL ? 'left-4' : 'right-4'}">
+<div class="fixed bottom-4 z-40 {isRTL ? 'right-4' : 'left-4'}">
   {#if $connectionState === 'connecting'}
     <div class="flex items-center gap-1 rounded-full bg-yellow-500 px-2 py-1 text-xs text-white">
       <div class="h-2 w-2 animate-pulse rounded-full bg-white"></div>
@@ -143,6 +153,28 @@ function dismissInstallBanner() {
           Later
         </Button>
         <Button variant="secondary" size="sm" onclick={handleInstall}>Install</Button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- iOS Install App Banner -->
+{#if showIOSBanner}
+  <div class="animate-in slide-in-from-bottom fixed right-0 bottom-0 left-0 z-50 bg-blue-500 p-4 text-white">
+    <div class="mx-auto flex max-w-md items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <Share class="h-5 w-5" />
+        <div>
+          <p class="text-sm font-medium">Install CeraUI</p>
+          <p class="text-xs opacity-80">
+            Tap <Share class="mx-1 inline h-3 w-3" /> then "Add to Home Screen"
+          </p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <Button variant="ghost" size="sm" onclick={dismissIOSBanner} class="text-white hover:bg-white/20">
+          Got it
+        </Button>
       </div>
     </div>
   </div>

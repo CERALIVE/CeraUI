@@ -5,10 +5,16 @@ import { writable } from 'svelte/store';
 // Install prompt event
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 
+// iOS Detection
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as unknown as { MSStream?: unknown }).MSStream;
+const isIOSSafari =
+  isIOS && /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|OPiOS|mercury/.test(navigator.userAgent);
+
 // Stores
 export const isOnline = writable(navigator.onLine);
 export const canInstall = writable(false);
 export const isInstalled = writable(false);
+export const showIOSInstallPrompt = writable(false);
 
 // PWA Installation Interface
 interface BeforeInstallPromptEvent extends Event {
@@ -51,6 +57,22 @@ window.addEventListener('appinstalled', () => {
 if (window.matchMedia('(display-mode: standalone)').matches) {
   isInstalled.set(true);
 }
+
+// iOS PWA Installation Detection
+function checkIOSInstallability() {
+  if (isIOSSafari) {
+    // Check if not in standalone mode and not already installed
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone;
+    if (!isStandalone) {
+      showIOSInstallPrompt.set(true);
+    }
+  }
+}
+
+// Initialize iOS check
+checkIOSInstallability();
 
 // Install App Function
 export async function installApp(): Promise<boolean> {
