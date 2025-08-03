@@ -2,6 +2,7 @@
 import { locale } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
+import PWAStatus from '$lib/components/ui/pwa-status.svelte';
 import { Toaster } from '$lib/components/ui/sonner';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { startStreaming as startStreamingFn, stopStreaming as stopStreamingFn } from '$lib/helpers/SystemHelper';
@@ -297,5 +298,8 @@ window.stopStreamingWithNotificationClear = stopStreaming;
     <Auth></Auth>
   {/if}
 {/await}
+
+<!-- PWA Status and Notifications -->
+<PWAStatus />
 
 <Toaster richColors></Toaster>
