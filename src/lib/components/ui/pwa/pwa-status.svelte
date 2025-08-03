@@ -41,7 +41,7 @@ import { Button } from '$lib/components/ui/button';
 import { canInstall, installApp, isOnline, showIOSInstallPrompt } from '$lib/stores/pwa';
 import { connectionState } from '$lib/stores/websocket-enhanced';
 
-import { rtlLanguages } from '../../../i18n';
+import { rtlLanguages } from '../../../../i18n';
 
 let showOfflineBanner = $state(false);
 let showInstallBanner = $state(false);

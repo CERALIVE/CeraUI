@@ -1,7 +1,7 @@
 <script lang="ts">
 import LocaleSelector from '$lib/components/ui/locale-selector.svelte';
 import ModeToggle from '$lib/components/ui/mode-toggle.svelte';
-import PullToRefresh from '$lib/components/ui/pull-to-refresh.svelte';
+import { PullToRefresh } from '$lib/components/ui/pwa';
 import { wsManager } from '$lib/stores/websocket-enhanced';
 
 import MainNav from './navigation/MainNav.svelte';

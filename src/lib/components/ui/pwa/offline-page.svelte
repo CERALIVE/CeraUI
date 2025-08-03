@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/
 import { resetOfflineDetection } from '$lib/stores/offline-navigation';
 import { wsManager } from '$lib/stores/websocket-enhanced';
 
-import { rtlLanguages } from '../../../i18n';
+import { rtlLanguages } from '../../../../i18n';
 
 // RTL support (for future enhancements)
 const _isRTL = $derived(rtlLanguages.includes($locale));
