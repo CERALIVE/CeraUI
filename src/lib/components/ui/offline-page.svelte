@@ -4,6 +4,7 @@ import { locale } from 'svelte-i18n';
 
 import { Button } from '$lib/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
+import { resetOfflineDetection } from '$lib/stores/offline-navigation';
 import { wsManager } from '$lib/stores/websocket-enhanced';
 
 import { rtlLanguages } from '../../../i18n';
@@ -12,13 +13,13 @@ import { rtlLanguages } from '../../../i18n';
 const _isRTL = $derived(rtlLanguages.includes($locale));
 
 function handleRetry() {
+  // Reset offline detection to give reconnection a chance
+  resetOfflineDetection();
+
   // Try to reconnect WebSocket
   wsManager.reconnect();
 
-  // Reload the page as fallback
-  setTimeout(() => {
-    window.location.reload();
-  }, 2000);
+  // If still offline after 5 seconds, page will automatically show offline again
 }
 
 function goBack() {

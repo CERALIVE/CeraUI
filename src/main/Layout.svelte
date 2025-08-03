@@ -2,11 +2,13 @@
 import { locale } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
+import OfflinePage from '$lib/components/ui/offline-page.svelte';
 import PWAStatus from '$lib/components/ui/pwa-status.svelte';
 import { Toaster } from '$lib/components/ui/sonner';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { startStreaming as startStreamingFn, stopStreaming as stopStreamingFn } from '$lib/helpers/SystemHelper';
 import { authStatusStore } from '$lib/stores/auth-status';
+import { shouldShowOfflinePage } from '$lib/stores/offline-navigation';
 import { AuthMessages, NotificationsMessages, sendAuthMessage, StatusMessages } from '$lib/stores/websocket-store';
 import type { NotificationType, StatusMessage } from '$lib/types/socket-messages';
 
@@ -289,7 +291,9 @@ window.stopStreamingWithNotificationClear = stopStreaming;
 {#await setupLocaleResult}
   <div></div>
 {:then _locateResult}
-  {#if authStatus}
+  {#if $shouldShowOfflinePage}
+    <OfflinePage />
+  {:else if authStatus}
     {#if updatingStatus && typeof updatingStatus !== 'boolean'}
       <UpdatingOverlay details={updatingStatus}></UpdatingOverlay>
     {/if}

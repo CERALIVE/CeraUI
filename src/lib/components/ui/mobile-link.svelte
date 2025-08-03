@@ -7,7 +7,8 @@ export { className as class };
 
 <button
   id={$$props.identifier}
-  class={'py-2 ' + cn($$props.isActive ? 'bg-muted text-primary font-medium' : 'text-foreground/60', className)}
+  class={'cursor-pointer py-2 ' +
+    cn($$props.isActive ? 'bg-muted text-primary font-medium' : 'text-foreground/60', className)}
   {...$$restProps}>
   <slot />
 </button>
