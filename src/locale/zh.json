@@ -64,7 +64,7 @@
     "selectAudioCodec": "选择音频编解码器",
     "audioDelay": "音频延迟 (毫秒)",
     "noAudioSupport": "当前选择的配置不支持任何类型的音频设置",
-    "selectValidOption": "在编码器部分选择有效选项后，将显示音频设置",
+
     "manualConfiguration": "手动配置",
     "receiverServer": "接收服务器",
     "relayServer": "中继服务器",

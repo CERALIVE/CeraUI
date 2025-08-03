@@ -67,7 +67,7 @@
     "selectAudioCodec": "Sélectionnez un codec audio",
     "audioDelay": "Retard audio (ms)",
     "noAudioSupport": "La configuration sélectionnée actuellement ne prend en charge aucun type de réglage audio",
-    "selectValidOption": "Les paramètres audio s'afficheront une fois que vous aurez sélectionné une option valide dans la section encodeur",
+
     "manualConfiguration": "Configuration manuelle",
     "receiverServer": "Serveur récepteur",
     "srtlaServerAddress": "Adresse du serveur récepteur SRTLA",
