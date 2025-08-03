@@ -76,7 +76,20 @@
     "startStreaming": "ストリーミング開始",
     "stopStreaming": "ストリーミング停止",
     "changeBitrateNotice": "ストリーミング中でもビットレートを変更できます。",
-    "audioSettingsMessage": "エンコーダーセクションで有効なオプションを選択すると、オーディオ設定が表示されます"
+    "audioSettingsMessage": "エンコーダーセクションで有効なオプションを選択すると、オーディオ設定が表示されます",
+    "errors": {
+      "inputModeRequired": "入力モードを選択してください",
+      "encoderRequired": "エンコーディング形式を選択してください",
+      "resolutionRequired": "エンコーディング解像度を選択してください",
+      "framerateRequired": "フレームレートを選択してください",
+      "bitrateInvalid": "ビットレートは2000から12000 Kbpsの間である必要があります",
+      "srtlaServerAddressRequired": "SRTLAサーバーアドレスを入力してください",
+      "srtlaServerPortRequired": "有効なSRTLAサーバーポートを入力してください",
+      "relayServerRequired": "リレーサーバーを選択してください"
+    },
+    "validation": {
+      "allFieldsValid": "すべてのエンコーダー設定が有効です"
+    }
   },
   "network": {
     "hotspot": {

@@ -76,7 +76,20 @@
     "startStreaming": "Iniciar Transmissão",
     "stopStreaming": "Parar Transmissão",
     "changeBitrateNotice": "Você pode mudar a taxa de bits mesmo enquanto está transmitindo.",
-    "audioSettingsMessage": "As configurações de áudio serão exibidas assim que você selecionar uma opção válida na seção do codificador"
+    "audioSettingsMessage": "As configurações de áudio serão exibidas assim que você selecionar uma opção válida na seção do codificador",
+    "errors": {
+      "inputModeRequired": "Por favor, selecione um modo de entrada",
+      "encoderRequired": "Por favor, selecione um formato de codificação",
+      "resolutionRequired": "Por favor, selecione uma resolução de codificação",
+      "framerateRequired": "Por favor, selecione uma taxa de quadros",
+      "bitrateInvalid": "A taxa de bits deve estar entre 2000 e 12000 Kbps",
+      "srtlaServerAddressRequired": "Por favor, insira o endereço do servidor SRTLA",
+      "srtlaServerPortRequired": "Por favor, insira uma porta SRTLA válida",
+      "relayServerRequired": "Por favor, selecione um servidor de retransmissão"
+    },
+    "validation": {
+      "allFieldsValid": "Todas as configurações do codificador são válidas"
+    }
   },
   "network": {
     "hotspot": {

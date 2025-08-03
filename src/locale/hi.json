@@ -76,7 +76,20 @@
     "startStreaming": "स्ट्रीमिंग शुरू करें",
     "stopStreaming": "स्ट्रीमिंग बंद करें",
     "changeBitrateNotice": "आप स्ट्रीमिंग करते समय भी बिटरेट बदल सकते हैं।",
-    "audioSettingsMessage": "एनकोडर सेक्शन में वैध विकल्प चुनने के बाद ऑडियो सेटिंग्स दिखाई जाएंगी"
+    "audioSettingsMessage": "एनकोडर सेक्शन में वैध विकल्प चुनने के बाद ऑडियो सेटिंग्स दिखाई जाएंगी",
+    "errors": {
+      "inputModeRequired": "कृपया एक इनपुट मोड चुनें",
+      "encoderRequired": "कृपया एक एन्कोडिंग फॉर्मेट चुनें",
+      "resolutionRequired": "कृपया एक एन्कोडिंग रिज़ॉल्यूशन चुनें",
+      "framerateRequired": "कृपया एक फ्रेमरेट चुनें",
+      "bitrateInvalid": "बिटरेट 2000 से 12000 Kbps के बीच होना चाहिए",
+      "srtlaServerAddressRequired": "कृपया SRTLA सर्वर पता दर्ज करें",
+      "srtlaServerPortRequired": "कृपया एक वैध SRTLA सर्वर पोर्ट दर्ज करें",
+      "relayServerRequired": "कृपया एक रिले सर्वर चुनें"
+    },
+    "validation": {
+      "allFieldsValid": "सभी एनकोडर सेटिंग्स वैध हैं"
+    }
   },
   "network": {
     "hotspot": {

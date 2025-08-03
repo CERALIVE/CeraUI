@@ -76,7 +76,20 @@
     "startStreaming": "开始直播",
     "stopStreaming": "停止直播",
     "changeBitrateNotice": "即使在直播过程中，您也可以更改比特率。",
-    "audioSettingsMessage": "在编码器部分选择有效选项后，将显示音频设置"
+    "audioSettingsMessage": "在编码器部分选择有效选项后，将显示音频设置",
+    "errors": {
+      "inputModeRequired": "请选择输入模式",
+      "encoderRequired": "请选择编码格式",
+      "resolutionRequired": "请选择编码分辨率",
+      "framerateRequired": "请选择帧率",
+      "bitrateInvalid": "比特率必须在 2000 到 12000 Kbps 之间",
+      "srtlaServerAddressRequired": "请输入 SRTLA 服务器地址",
+      "srtlaServerPortRequired": "请输入有效的 SRTLA 服务器端口",
+      "relayServerRequired": "请选择中继服务器"
+    },
+    "validation": {
+      "allFieldsValid": "所有编码器设置都有效"
+    }
   },
   "network": {
     "hotspot": {
