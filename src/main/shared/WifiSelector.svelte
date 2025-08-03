@@ -77,7 +77,7 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 <SimpleAlertDialog
   confirmButtonText={$_('wifiSelector.dialog.close')}
   hiddeCancelButton={true}
-  class="max-w-(--breakpoint-sm)"
+  class="max-w-sm"
   bind:open
   title={$_('wifiSelector.dialog.searchWifi')}
   extraButtonClasses="bg-green-500 hover:bg-green-500/90">
