@@ -105,7 +105,10 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
               </div>
               <div class="ml-auto font-medium">
                 {#if isConnecting}
-                  <span class="loading w-[25%] text-left">{$_('wifiSelector.dialog.connecting')}</span>
+                  <div class="text-muted-foreground flex items-center text-sm">
+                    <span>{$_('wifiSelector.dialog.connecting')}</span>
+                    <span class="loading ml-1"></span>
+                  </div>
                 {:else if uuid}
                   {#if availableNetwork.active}
                     <Button variant="secondary" onclick={() => disconnectWifi(uuid, availableNetwork)}>
@@ -167,8 +170,14 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
       </Card.Content>
     </ScrollArea>
     <Button disabled={scanning} class="w-[100%] bg-green-600 hover:bg-green-500/90" onclick={handleWifiScan}>
-      <span class={scanning ? 'loading' : ''}
-        >{scanning ? $_('wifiSelector.button.scanning') : $_('wifiSelector.button.scan')}</span
-      ></Button>
+      {#if scanning}
+        <ScanSearch class="mr-2 h-4 w-4 animate-spin" />
+        <span>{$_('wifiSelector.button.scanning')}</span>
+        <span class="loading ml-1"></span>
+      {:else}
+        <ScanSearch class="mr-2 h-4 w-4" />
+        {$_('wifiSelector.button.scan')}
+      {/if}
+    </Button>
   </Card.Root>
 </SimpleAlertDialog>

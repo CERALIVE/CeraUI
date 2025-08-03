@@ -24,8 +24,8 @@
   counter-increment: step;
 
   &:before {
-    @apply absolute inline-flex h-9 w-9 items-center justify-center rounded-full border-4 border-background bg-muted text-center -indent-px font-mono text-base font-medium;
-    @apply ml-[-50px] mt-[-4px];
+    @apply border-background bg-muted absolute inline-flex h-9 w-9 items-center justify-center rounded-full border-4 text-center -indent-px font-mono text-base font-medium;
+    @apply mt-[-4px] ml-[-50px];
     content: counter(step);
   }
 }
@@ -85,7 +85,6 @@
   }
 }
 
-
 @layer base {
   * {
     @apply border-border;
@@ -121,7 +120,7 @@
     @apply bg-muted!;
   }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-sm bg-muted-foreground/30!;
+    @apply bg-muted-foreground/30! rounded-sm;
   }
 
   /* Firefox */
@@ -155,7 +154,7 @@
 }
 
 .markdown code {
-  @apply relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm;
+  @apply bg-muted relative rounded px-[0.3rem] py-[0.2rem] font-mono text-sm;
 }
 
 [data-theme='default'] {
@@ -185,7 +184,7 @@
 }
 
 [data-rehype-pretty-code-fragment] code {
-  @apply grid min-w-full break-words rounded-none border-0 bg-transparent p-0;
+  @apply grid min-w-full rounded-none border-0 bg-transparent p-0 break-words;
   counter-reset: line;
   box-decoration-break: clone;
 }
@@ -277,8 +276,13 @@
 
 .loading::after {
   display: inline-block;
-  animation: dotty steps(1, end) 1.8s infinite;
+  animation: dotty steps(1, end) 1.5s infinite;
   content: '';
+  width: 1.5em;
+  text-align: left;
+  font-weight: normal;
+  color: hsl(var(--muted-foreground));
+  opacity: 0.8;
 }
 
 @keyframes dotty {
@@ -297,4 +301,70 @@
   100% {
     content: '';
   }
+}
+
+/* Enhanced loading variants for better visual control */
+.loading-sm::after {
+  animation-duration: 1.2s;
+  font-size: 0.875rem;
+}
+
+.loading-lg::after {
+  animation-duration: 2.4s;
+  font-size: 1.125rem;
+}
+
+.loading-fast::after {
+  animation-duration: 1s;
+}
+
+.loading-slow::after {
+  animation-duration: 3s;
+}
+
+/* Enhanced loading states with subtle animations */
+.loading-pulse {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+.loading-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes pulse-subtle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Loading status colors for different contexts */
+.loading-success::after {
+  color: rgb(34, 197, 94); /* green-500 */
+}
+
+.loading-warning::after {
+  color: rgb(245, 158, 11); /* amber-500 */
+}
+
+.loading-error::after {
+  color: rgb(239, 68, 68); /* red-500 */
+}
+
+.loading-info::after {
+  color: rgb(59, 130, 246); /* blue-500 */
 }
