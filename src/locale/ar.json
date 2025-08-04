@@ -270,5 +270,14 @@
   "dialog": {
     "cancel": "إلغاء",
     "continue": "متابعة"
+  },
+  "version": {
+    "newVersionAvailable": "إصدار جديد متاح",
+    "newCodeVersion": "إصدار كود جديد متاح",
+    "newBuildVersion": "إصدار بناء جديد متاح",
+    "newCodeAndBuild": "كود وبناء جديد متاح",
+    "serverUpdated": "تم تحديث الخادم",
+    "refreshToUpdate": "قم بالتحديث للحصول على أحدث إصدار",
+    "refreshNow": "تحديث الآن"
   }
 }

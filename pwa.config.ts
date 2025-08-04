@@ -1,0 +1,58 @@
+import { execSync } from 'child_process';
+import { randomUUID } from 'crypto';
+import type { VitePWAOptions } from 'vite-plugin-pwa';
+
+// Generate version from git commit hash + random UUID
+export function generateUniqueVersion(): string {
+  try {
+    const commitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+    const buildId = randomUUID().slice(0, 8); // Use first 8 chars of UUID
+    return `${commitHash}-${buildId}`;
+  } catch {
+    console.warn('Could not get git commit hash, using fallback');
+    const buildId = randomUUID().slice(0, 8);
+    return `dev-build-${buildId}`;
+  }
+}
+
+export const pwaConfig: VitePWAOptions = {
+  registerType: 'autoUpdate',
+  workbox: {
+    globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+    navigateFallback: '/index.html',
+    navigateFallbackDenylist: [/^\/_/, /\/[^/?]+\.[^/]+$/],
+  },
+  includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'favicon-96x96.png'],
+  manifest: {
+    name: 'CeraUI for BELABOX©',
+    short_name: 'CeraUI',
+    description: 'A modern UI for BELABOX streaming encoder management and configuration',
+    start_url: '/',
+    scope: '/',
+    display: 'standalone',
+    theme_color: '#ffffff',
+    background_color: '#ffffff',
+    orientation: 'portrait-primary',
+    icons: [
+      {
+        src: 'web-app-manifest-192x192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any maskable',
+      },
+      {
+        src: 'web-app-manifest-512x512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any maskable',
+      },
+    ],
+    categories: ['multimedia', 'utilities'],
+  },
+  // Enable PWA features in both dev and production
+  devOptions: {
+    enabled: true,
+  },
+  // Ensure service worker is generated for production
+  disable: false,
+};

@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 
 // PWA Installation and Offline Status Store
 
@@ -59,12 +59,28 @@ window.addEventListener('appinstalled', () => {
   deferredPrompt = null;
   canInstall.set(false);
   isInstalled.set(true);
-  console.log('PWA was installed');
 });
 
 // Check if running in standalone mode (already installed)
 if (window.matchMedia('(display-mode: standalone)').matches) {
   isInstalled.set(true);
+} else {
+  // Fallback for desktop browsers: if not installed and on desktop, allow manual install
+  // This helps when beforeinstallprompt doesn't fire due to strict PWA criteria
+  const isDesktop = !/android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.userAgent);
+  if (isDesktop) {
+    const isLocalDomain = window.location.hostname === 'localhost' || window.location.hostname.endsWith('.local');
+    const isHTTP = window.location.protocol === 'http:';
+
+    // Shorter timeout for .local HTTP domains since beforeinstallprompt won't fire
+    const timeoutDuration = isLocalDomain && isHTTP ? 3000 : 10000;
+
+    setTimeout(() => {
+      if (!get(canInstall) && !get(isInstalled)) {
+        canInstall.set(true);
+      }
+    }, timeoutDuration);
+  }
 }
 
 // iOS PWA Installation Detection
@@ -86,6 +102,14 @@ checkIOSInstallability();
 // Install App Function
 export async function installApp(): Promise<boolean> {
   if (!deferredPrompt) {
+    // Import toast dynamically to avoid circular dependencies
+    void import('svelte-sonner').then(({ toast }) => {
+      toast.info('Install App', {
+        description: 'Use your browser\'s "Install" or "Add to Home Screen" option in the menu.',
+        duration: 5000,
+      });
+    });
+
     return false;
   }
 

@@ -18,6 +18,12 @@ import type {
   StatusMessage,
   WifiMessage,
 } from '../types/socket-messages';
+import {
+  forceVersionChangeNotification,
+  getFrontendVersionInfo,
+  resetFrontendVersionTracking,
+} from './frontend-version';
+import { CLIENT_VERSION } from './version-manager';
 
 const AuthStore = writable<AuthMessage>();
 const AudioCodecsStore = writable<AudioCodecsMessage>();
@@ -131,6 +137,14 @@ const assignMessage = (message: string) => {
       break;
     case 'revisions':
       RevisionsStore.set(parsedMessage.revisions);
+
+      // Store server version for display only - no update checking
+      if (parsedMessage.revisions.belaUI) {
+        console.log('📡 Server version stored (frontend updates only):', {
+          belaUI: parsedMessage.revisions.belaUI,
+          frontendVersion: CLIENT_VERSION,
+        });
+      }
       break;
     case 'sensors':
       SensorsStatusStore.set(parsedMessage.sensors);
@@ -227,3 +241,24 @@ export {
   StatusMessages,
   WifiMessages,
 };
+
+// Debug functions for version tracking
+if (typeof window !== 'undefined' && !import.meta.env.PROD) {
+  console.log('📱 Frontend build version:', CLIENT_VERSION);
+
+  interface WindowWithVersionDebug extends Window {
+    versionDebug?: {
+      clientVersion: () => string;
+      frontendVersionInfo: typeof getFrontendVersionInfo;
+      resetFrontendTracking: typeof resetFrontendVersionTracking;
+      forceVersionNotification: typeof forceVersionChangeNotification;
+    };
+  }
+
+  (window as WindowWithVersionDebug).versionDebug = {
+    clientVersion: () => CLIENT_VERSION,
+    frontendVersionInfo: getFrontendVersionInfo,
+    resetFrontendTracking: resetFrontendVersionTracking,
+    forceVersionNotification: forceVersionChangeNotification,
+  };
+}

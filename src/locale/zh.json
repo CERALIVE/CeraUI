@@ -271,5 +271,14 @@
   "dialog": {
     "cancel": "取消",
     "continue": "继续"
+  },
+  "version": {
+    "newVersionAvailable": "新版本可用",
+    "newCodeVersion": "新代码版本可用",
+    "newBuildVersion": "新构建版本可用",
+    "newCodeAndBuild": "新代码和构建版本可用",
+    "serverUpdated": "服务器已更新",
+    "refreshToUpdate": "刷新以获取最新版本",
+    "refreshNow": "立即刷新"
   }
 }

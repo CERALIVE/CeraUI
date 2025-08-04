@@ -34,15 +34,15 @@
 
 <script lang="ts">
 import { Download, Share, Wifi, WifiOff } from '@lucide/svelte';
-import { _, locale } from 'svelte-i18n';
 import { onDestroy } from 'svelte';
+import { writable } from 'svelte/store';
+import { _, locale } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
 import { canInstall, installApp, isOnline, showIOSInstallPrompt } from '$lib/stores/pwa';
 // Create a simple connection state based on socket readiness
 import { socket } from '$lib/stores/websocket-store';
-import { writable } from 'svelte/store';
 
 const connectionState = writable<'connected' | 'connecting' | 'disconnected' | 'error'>('connecting');
 
@@ -52,10 +52,8 @@ const updateConnectionState = () => {
     connectionState.set('connected');
   } else if (socket.readyState === WebSocket.CONNECTING) {
     connectionState.set('connecting');
-  } else if (socket.readyState === WebSocket.CLOSING) {
-    connectionState.set('disconnected'); // Treat closing as disconnected for UI purposes
   } else {
-    connectionState.set('disconnected');
+    connectionState.set('disconnected'); // CLOSING, CLOSED, or any other state
   }
 };
 

@@ -269,5 +269,14 @@
   "dialog": {
     "cancel": "Cancelar",
     "continue": "Continuar"
+  },
+  "version": {
+    "newVersionAvailable": "Nueva versión disponible",
+    "newCodeVersion": "Nueva versión de código disponible",
+    "newBuildVersion": "Nueva compilación disponible",
+    "newCodeAndBuild": "Nuevo código y compilación disponible",
+    "serverUpdated": "El servidor ha sido actualizado",
+    "refreshToUpdate": "Actualiza para obtener la última versión",
+    "refreshNow": "Actualizar ahora"
   }
 }

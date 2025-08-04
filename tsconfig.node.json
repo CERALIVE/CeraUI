@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "composite": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "target": "ES2022",
     "lib": ["ES2023"],
@@ -9,8 +10,8 @@
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
+    "emitDeclarationOnly": true,
     "moduleDetection": "force",
-    "noEmit": true,
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
@@ -18,5 +19,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "pwa.config.ts"]
 }
