@@ -10,8 +10,6 @@ import { checkFrontendVersionChange } from './lib/stores/frontend-version';
 const updateSW = registerSW({
   onNeedRefresh() {
     // Show update available notification for frontend builds
-    console.log('🚀 New frontend build available - PWA update needed');
-
     // Import toast dynamically to avoid circular dependencies
     void import('svelte-sonner').then(({ toast }) => {
       toast.info('Update Available', {
@@ -20,7 +18,6 @@ const updateSW = registerSW({
         action: {
           label: 'Refresh',
           onClick: () => {
-            console.log('🔄 User refreshing to new frontend build');
             updateSW(true);
           },
         },
@@ -28,8 +25,6 @@ const updateSW = registerSW({
     });
   },
   onOfflineReady() {
-    console.log('App ready to work offline');
-
     // Import toast dynamically
     void import('svelte-sonner').then(({ toast }) => {
       toast.success('Offline Ready', {

@@ -94,6 +94,7 @@ const sharedLanguageOptions = {
     ...globals.node,
     ...globals.jest,
     NodeJS: 'readonly',
+    __APP_VERSION__: 'readonly',
   },
   ecmaVersion: 2022,
   sourceType: 'module',

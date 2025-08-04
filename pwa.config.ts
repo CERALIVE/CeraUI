@@ -1,18 +1,27 @@
 import { execSync } from 'child_process';
-import { randomUUID } from 'crypto';
+import { readFileSync } from 'fs';
 import type { VitePWAOptions } from 'vite-plugin-pwa';
 
-// Generate version from git commit hash + random UUID
+// Generate version from git commit hash + deterministic build ID
 export function generateUniqueVersion(): string {
+  let commitHash: string;
+
   try {
-    const commitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
-    const buildId = randomUUID().slice(0, 8); // Use first 8 chars of UUID
-    return `${commitHash}-${buildId}`;
-  } catch {
-    console.warn('Could not get git commit hash, using fallback');
-    const buildId = randomUUID().slice(0, 8);
-    return `dev-build-${buildId}`;
+    commitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+  } catch (error) {
+    console.warn('Could not get git commit hash:', error);
+    // Use package.json version as fallback
+    try {
+      const pkg = JSON.parse(readFileSync('./package.json', 'utf8'));
+      commitHash = `v${pkg.version}`;
+    } catch {
+      commitHash = 'dev';
+    }
   }
+
+  // Use timestamp for build ID to ensure uniqueness while being deterministic
+  const buildTime = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '');
+  return `${commitHash}-${buildTime}`;
 }
 
 export const pwaConfig: VitePWAOptions = {

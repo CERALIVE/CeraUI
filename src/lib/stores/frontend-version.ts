@@ -1,5 +1,6 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { toast } from 'svelte-sonner';
+import { _ } from 'svelte-i18n';
 
 import { CLIENT_VERSION } from './version-manager';
 
@@ -8,6 +9,8 @@ export const frontendVersion = writable<string>(CLIENT_VERSION);
 export const hasVersionChanged = writable<boolean>(false);
 
 const FRONTEND_VERSION_KEY = 'ceraui_frontend_version';
+const LAST_CHECK_KEY = 'ceraui_last_version_check';
+const MIN_CHECK_INTERVAL = 5000; // 5 seconds
 
 /**
  * Check if frontend version has changed since last visit
@@ -17,17 +20,17 @@ export function checkFrontendVersionChange(): boolean {
   const currentVersion = CLIENT_VERSION;
   const storedVersion = localStorage.getItem(FRONTEND_VERSION_KEY);
 
-  console.log('🔍 Frontend version check:', {
-    current: currentVersion,
-    stored: storedVersion,
-    isFirstVisit: !storedVersion,
-    hasChanged: storedVersion && storedVersion !== currentVersion,
-  });
+  // Check if another tab recently handled the version change
+  const lastCheck = localStorage.getItem(LAST_CHECK_KEY);
+  const now = Date.now();
+  if (lastCheck && now - parseInt(lastCheck) < MIN_CHECK_INTERVAL) {
+    return false;
+  }
 
   // First visit - just store the version
   if (!storedVersion) {
     localStorage.setItem(FRONTEND_VERSION_KEY, currentVersion);
-    console.log('📝 First visit - storing frontend version:', currentVersion);
+    localStorage.setItem(LAST_CHECK_KEY, now.toString());
     return false;
   }
 
@@ -36,20 +39,15 @@ export function checkFrontendVersionChange(): boolean {
   hasVersionChanged.set(versionChanged);
 
   if (versionChanged) {
-    console.log('🔄 Frontend version changed:', {
-      from: storedVersion,
-      to: currentVersion,
-    });
-
     // Update stored version immediately to prevent repeated notifications
     localStorage.setItem(FRONTEND_VERSION_KEY, currentVersion);
+    localStorage.setItem(LAST_CHECK_KEY, now.toString());
 
     // Show secondary update notification
     showVersionChangeNotification(storedVersion, currentVersion);
     return true;
   }
 
-  console.log('✅ Frontend version unchanged');
   return false;
 }
 
@@ -57,8 +55,6 @@ export function checkFrontendVersionChange(): boolean {
  * Show version change notification (secondary to PWA updates)
  */
 function showVersionChangeNotification(oldVersion: string, newVersion: string) {
-  console.log('🔔 Showing secondary version change notification');
-
   // Parse versions to understand what changed
   const oldParts = oldVersion.split('-');
   const newParts = newVersion.split('-');
@@ -66,22 +62,22 @@ function showVersionChangeNotification(oldVersion: string, newVersion: string) {
   const commitChanged = oldParts[0] !== newParts[0];
   const buildChanged = oldParts[1] !== newParts[1];
 
-  let changeType = 'Updated';
+  let changeTypeKey = 'version.newVersionAvailable';
   if (commitChanged && buildChanged) {
-    changeType = 'New code and build';
+    changeTypeKey = 'version.newCodeAndBuild';
   } else if (commitChanged) {
-    changeType = 'New code version';
+    changeTypeKey = 'version.newCodeVersion';
   } else if (buildChanged) {
-    changeType = 'New build';
+    changeTypeKey = 'version.newBuildVersion';
   }
 
-  toast.info('Frontend Updated', {
-    description: `${changeType} detected. Consider refreshing for the latest features.`,
+  const $_ = get(_);
+  toast.info($_('version.newVersionAvailable'), {
+    description: `${$_(changeTypeKey)}. ${$_('version.refreshToUpdate')}.`,
     duration: 8000,
     action: {
-      label: 'Refresh',
+      label: $_('version.refreshNow'),
       onClick: () => {
-        console.log('🔄 User refreshing from secondary version notification');
         window.location.reload();
       },
     },
@@ -94,7 +90,6 @@ function showVersionChangeNotification(oldVersion: string, newVersion: string) {
 export function resetFrontendVersionTracking() {
   localStorage.removeItem(FRONTEND_VERSION_KEY);
   hasVersionChanged.set(false);
-  console.log('🗑️ Frontend version tracking reset');
 }
 
 /**
