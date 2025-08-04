@@ -270,5 +270,14 @@
   "dialog": {
     "cancel": "रद्द करें",
     "continue": "जारी रखें"
+  },
+  "version": {
+    "newVersionAvailable": "नया संस्करण उपलब्ध",
+    "newCodeVersion": "नया कोड संस्करण उपलब्ध",
+    "newBuildVersion": "नया बिल्ड उपलब्ध",
+    "newCodeAndBuild": "नया कोड और बिल्ड उपलब्ध",
+    "serverUpdated": "सर्वर अपडेट कर दिया गया",
+    "refreshToUpdate": "नवीनतम संस्करण पाने के लिए रीफ्रेश करें",
+    "refreshNow": "अभी रीफ्रेश करें"
   }
 }

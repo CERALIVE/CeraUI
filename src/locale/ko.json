@@ -270,5 +270,14 @@
   "dialog": {
     "cancel": "취소",
     "continue": "계속"
+  },
+  "version": {
+    "newVersionAvailable": "새 버전 사용 가능",
+    "newCodeVersion": "새 코드 버전 사용 가능",
+    "newBuildVersion": "새 빌드 사용 가능",
+    "newCodeAndBuild": "새 코드 및 빌드 사용 가능",
+    "serverUpdated": "서버가 업데이트되었습니다",
+    "refreshToUpdate": "최신 버전을 얻으려면 새로고침하세요",
+    "refreshNow": "지금 새로고침"
   }
 }

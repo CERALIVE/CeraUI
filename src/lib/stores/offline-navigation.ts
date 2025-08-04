@@ -12,10 +12,8 @@ const updateConnectionState = () => {
     connectionState.set('connected');
   } else if (socket.readyState === WebSocket.CONNECTING) {
     connectionState.set('connecting');
-  } else if (socket.readyState === WebSocket.CLOSING) {
-    connectionState.set('disconnected'); // Treat closing as disconnected for UI purposes
   } else {
-    connectionState.set('disconnected');
+    connectionState.set('disconnected'); // CLOSING, CLOSED, or any other state
   }
 };
 

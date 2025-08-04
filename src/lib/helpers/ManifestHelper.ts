@@ -1,8 +1,8 @@
 import { get } from 'svelte/store';
 import { locale } from 'svelte-i18n';
 
-import { localeStore } from '../stores/locale';
 import { existingLocales, rtlLanguages } from '../../i18n';
+import { localeStore } from '../stores/locale';
 
 export interface PWAManifest {
   name: string;
@@ -29,8 +29,8 @@ export function generateDynamicManifest(): PWAManifest {
   const currentLocale = get(locale) || get(localeStore).code || 'en';
   const isRTL = rtlLanguages.includes(currentLocale);
 
-  // Get locale info
-  const localeInfo = existingLocales.find(l => l.code === currentLocale) || existingLocales[0];
+  // Get locale info (for future use)
+  const _localeInfo = existingLocales.find(l => l.code === currentLocale) || existingLocales[0];
 
   // Get the current origin for absolute URLs
   const origin = window.location.origin;
@@ -67,7 +67,6 @@ export function generateDynamicManifest(): PWAManifest {
 
 export function updateManifestLink() {
   // Generate dynamic manifest content and create a blob URL
-  const currentLocale = get(locale) || get(localeStore).code || 'en';
   const manifestData = generateDynamicManifest();
 
   // Create a blob with the manifest content

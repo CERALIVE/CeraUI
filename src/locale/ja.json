@@ -270,5 +270,14 @@
   "dialog": {
     "cancel": "キャンセル",
     "continue": "続行"
+  },
+  "version": {
+    "newVersionAvailable": "新しいバージョンが利用可能",
+    "newCodeVersion": "新しいコードバージョンが利用可能",
+    "newBuildVersion": "新しいビルドが利用可能",
+    "newCodeAndBuild": "新しいコードとビルドが利用可能",
+    "serverUpdated": "サーバーが更新されました",
+    "refreshToUpdate": "最新バージョンを取得するには更新してください",
+    "refreshNow": "今すぐ更新"
   }
 }

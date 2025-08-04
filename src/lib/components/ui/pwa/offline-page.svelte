@@ -1,6 +1,6 @@
 <script lang="ts">
 import { RefreshCw, Smartphone, WifiOff } from '@lucide/svelte';
-import { locale, _ } from 'svelte-i18n';
+import { _, locale } from 'svelte-i18n';
 
 import { Button } from '$lib/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
