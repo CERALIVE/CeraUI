@@ -248,10 +248,27 @@
     "installDescription": "Zum Startbildschirm hinzufügen für eine bessere Erfahrung",
     "installLater": "Später",
     "installButton": "Installieren",
+    "installAndroidDescription": "Tippen Sie auf \"Installieren\", um zum Startbildschirm hinzuzufügen",
+    "installAndroidMenuDescription": "Verwenden Sie das Browser-Menü für \"Zum Startbildschirm hinzufügen\"",
     "installIosDescription": "dann \"Zum Home-Bildschirm hinzufügen\"",
     "installIosGotIt": "Verstanden",
     "refreshing": "Aktualisierung...",
     "releaseToRefresh": "Loslassen zum Aktualisieren",
     "pullToRefresh": "Ziehen zum Aktualisieren"
+  },
+  "offline": {
+    "title": "Sie sind offline",
+    "description": "CeraUI benötigt eine Internetverbindung, um Ihr BELABOX-Gerät zu verwalten.",
+    "checkTitle": "Bitte überprüfen Sie:",
+    "checkWifi": "Ihre Wi-Fi-Verbindung",
+    "checkNetwork": "Ihr Gerät ist im selben Netzwerk",
+    "checkDevice": "BELABOX-Gerät ist eingeschaltet",
+    "tryAgain": "Erneut versuchen",
+    "goBack": "Zurück",
+    "installNote": "Diese App funktioniert am besten, wenn sie auf Ihrem Gerät installiert ist"
+  },
+  "dialog": {
+    "cancel": "Abbrechen",
+    "continue": "Fortfahren"
   }
 }

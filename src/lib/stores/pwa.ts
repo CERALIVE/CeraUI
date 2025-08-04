@@ -4,6 +4,7 @@ import { writable } from 'svelte/store';
 
 // Install prompt event
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
+let installEventSetup = false;
 
 // iOS Detection
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as unknown as { MSStream?: unknown }).MSStream;
@@ -35,14 +36,22 @@ window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 
 // PWA Install Prompt Handling
-window.addEventListener('beforeinstallprompt', (e: Event) => {
-  // Prevent the mini-infobar from appearing on mobile
-  e.preventDefault();
-  // Stash the event so it can be triggered later
-  deferredPrompt = e as BeforeInstallPromptEvent;
-  // Update UI to notify the user they can install the PWA
-  canInstall.set(true);
-});
+function setupInstallPrompt() {
+  if (installEventSetup) return;
+  installEventSetup = true;
+
+  window.addEventListener('beforeinstallprompt', (e: Event) => {
+    // Prevent the mini-infobar from appearing on mobile
+    e.preventDefault();
+    // Stash the event so it can be triggered later
+    deferredPrompt = e as BeforeInstallPromptEvent;
+    // Update UI to notify the user they can install the PWA
+    canInstall.set(true);
+  });
+}
+
+// Initialize the install prompt handling
+setupInstallPrompt();
 
 // Check if app is already installed
 window.addEventListener('appinstalled', () => {
@@ -80,26 +89,33 @@ export async function installApp(): Promise<boolean> {
     return false;
   }
 
-  // Show the install prompt
-  void deferredPrompt.prompt();
+  try {
+    // Show the install prompt
+    await deferredPrompt.prompt();
 
-  // Wait for the user to respond to the prompt
-  const { outcome } = await deferredPrompt.userChoice;
+    // Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
 
-  // Clear the saved prompt since it can't be used again
-  deferredPrompt = null;
-  canInstall.set(false);
+    // Clear the saved prompt since it can't be used again
+    deferredPrompt = null;
+    canInstall.set(false);
 
-  if (outcome === 'accepted') {
-    console.log('User accepted the install prompt');
-    return true;
-  } else {
-    console.log('User dismissed the install prompt');
+    return outcome === 'accepted';
+  } catch (error) {
+    console.error('Error during app installation:', error);
+    // Clear the prompt on error
+    deferredPrompt = null;
+    canInstall.set(false);
     return false;
   }
 }
 
 // Network Status Helper
+// Test function to manually check install availability
+export function testInstallPrompt() {
+  return { canInstall: !!deferredPrompt, hasEvent: !!deferredPrompt };
+}
+
 export function getNetworkInfo() {
   // @ts-ignore - navigator.connection is not in all TypeScript definitions
   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;

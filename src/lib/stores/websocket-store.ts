@@ -34,20 +34,42 @@ const WifiStore = writable<WifiMessage>();
 const connectionUrl = `${ENV_VARIABLES.SOCKET_ENDPOINT}:${ENV_VARIABLES.SOCKET_PORT}`;
 const socket = new WebSocket(connectionUrl);
 
+// Enhanced connection monitoring
+let lastActivityTime = Date.now();
+let activityTimeout: number | null = null;
+let keepAliveInterval: number | null = null;
+
 // Connection opened
 socket.addEventListener('open', function () {
-  toast.info('Connection', { duration: 5000, description: 'The connection with the device has been stablished.' });
-  setInterval(function () {
-    if (socket) {
+  toast.success('Connection', { duration: 3000, description: 'Connection established successfully' });
+
+  // Start enhanced keep-alive with activity monitoring
+  if (keepAliveInterval) clearInterval(keepAliveInterval);
+
+  keepAliveInterval = window.setInterval(() => {
+    if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ keepalive: null }));
+
+      // Check if we've received ANY messages recently
+      if (activityTimeout) clearTimeout(activityTimeout);
+      activityTimeout = window.setTimeout(() => {
+        const timeSinceLastActivity = Date.now() - lastActivityTime;
+        if (timeSinceLastActivity > 20000) {
+          // 20 seconds without ANY message
+          console.warn('No message activity received, connection may be dead');
+          // Force reconnection by closing and reopening
+          socket.close();
+          window.location.reload();
+        }
+      }, 15000); // Check after 15 seconds
     }
   }, 10000);
 });
 
 socket.addEventListener('error', function () {
-  toast.error('Connection', {
+  toast.error('Connection Error', {
     duration: 5000,
-    description: 'It has not been able to communicate with the devices, trying to reconnect as soon as possible',
+    description: 'Connection lost, attempting to reconnect...',
   });
 });
 
@@ -73,6 +95,13 @@ function sendAuthMessage(password: string, isPersistent: boolean, onError: (() =
 
 //   Listen for messages
 socket.addEventListener('message', function (event: MessageEvent<string>) {
+  // Update activity time for connection monitoring
+  lastActivityTime = Date.now();
+  if (activityTimeout) {
+    clearTimeout(activityTimeout);
+    activityTimeout = null;
+  }
+
   assignMessage(event.data);
 });
 

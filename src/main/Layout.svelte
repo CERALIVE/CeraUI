@@ -5,6 +5,7 @@ import { toast } from 'svelte-sonner';
 import { OfflinePage, PWAStatus } from '$lib/components/ui/pwa';
 import { Toaster } from '$lib/components/ui/sonner';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
+import { updateManifestLink } from '$lib/helpers/ManifestHelper';
 import { startStreaming as startStreamingFn, stopStreaming as stopStreamingFn } from '$lib/helpers/SystemHelper';
 import { authStatusStore } from '$lib/stores/auth-status';
 import { shouldShowOfflinePage } from '$lib/stores/offline-navigation';
@@ -281,6 +282,9 @@ NotificationsMessages.subscribe(notifications => {
 $effect(() => {
   document.documentElement.lang = $locale;
   document.documentElement.dir = rtlLanguages.includes($locale) ? 'rtl' : 'ltr';
+
+  // Update PWA manifest to match current locale and direction
+  updateManifestLink();
 });
 // Export our functions to the global scope to make them available to other components
 window.startStreamingWithNotificationClear = startStreaming;

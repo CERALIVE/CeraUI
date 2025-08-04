@@ -2,21 +2,14 @@
 import LocaleSelector from '$lib/components/ui/locale-selector.svelte';
 import ModeToggle from '$lib/components/ui/mode-toggle.svelte';
 import { PullToRefresh } from '$lib/components/ui/pwa';
-import { wsManager } from '$lib/stores/websocket-enhanced';
 
 import MainNav from './navigation/MainNav.svelte';
 import MobileNav from './navigation/MobileNav.svelte';
 import NavigationRenderer from './navigation/NavigationRenderer.svelte';
 
 async function handleRefresh() {
-  // Reconnect WebSocket
-  wsManager.reconnect();
-
-  // You can add other refresh logic here
-  // For example, refetch data, update stores, etc.
-
-  // Simulate some async work
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  // Refresh the page to reconnect WebSocket and reload data
+  window.location.reload();
 }
 </script>
 

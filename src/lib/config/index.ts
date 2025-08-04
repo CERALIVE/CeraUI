@@ -27,4 +27,6 @@ export const defaultNavElement = {
   },
 };
 
+// Device branding configuration
+export const deviceName = 'BELABOX';
 export const siteName = 'CeraUI for BELABOX©';
