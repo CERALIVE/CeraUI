@@ -6,20 +6,29 @@ import { socket } from './websocket-store';
 // Create a connection state store based on actual socket
 const connectionState = writable<'connected' | 'connecting' | 'disconnected' | 'error'>('connecting');
 
-// Monitor socket state
+// Monitor socket state with event listeners (more efficient than polling)
 const updateConnectionState = () => {
   if (socket.readyState === WebSocket.OPEN) {
     connectionState.set('connected');
   } else if (socket.readyState === WebSocket.CONNECTING) {
     connectionState.set('connecting');
+  } else if (socket.readyState === WebSocket.CLOSING) {
+    connectionState.set('disconnected'); // Treat closing as disconnected for UI purposes
   } else {
     connectionState.set('disconnected');
   }
 };
 
-// Check initial state and monitor changes
+// Handle specific error events to set proper error state
+const handleSocketError = () => {
+  connectionState.set('error');
+};
+
+// Set initial state and add event listeners for efficient monitoring
 updateConnectionState();
-setInterval(updateConnectionState, 1000);
+socket.addEventListener('open', updateConnectionState);
+socket.addEventListener('close', updateConnectionState);
+socket.addEventListener('error', handleSocketError);
 
 // Store to track if we should show the offline page
 export const shouldShowOfflinePage = writable(false);
@@ -76,4 +85,17 @@ export function resetOfflineDetection() {
   }
   offlineStartTime = null;
   shouldShowOfflinePage.set(false);
+}
+
+// Cleanup function to prevent memory leaks (call in onDestroy lifecycle)
+export function cleanup() {
+  socket.removeEventListener('open', updateConnectionState);
+  socket.removeEventListener('close', updateConnectionState);
+  socket.removeEventListener('error', handleSocketError);
+
+  // Also cleanup any pending timeouts
+  if (offlineTimeout) {
+    clearTimeout(offlineTimeout);
+    offlineTimeout = null;
+  }
 }
