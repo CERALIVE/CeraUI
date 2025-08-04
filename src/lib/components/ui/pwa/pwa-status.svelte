@@ -35,6 +35,7 @@
 <script lang="ts">
 import { Download, Share, Wifi, WifiOff } from '@lucide/svelte';
 import { _, locale } from 'svelte-i18n';
+import { onDestroy } from 'svelte';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
@@ -45,20 +46,39 @@ import { writable } from 'svelte/store';
 
 const connectionState = writable<'connected' | 'connecting' | 'disconnected' | 'error'>('connecting');
 
-// Monitor socket state
-const checkConnectionState = () => {
+// Monitor socket state with event listeners (more efficient than polling)
+const updateConnectionState = () => {
   if (socket.readyState === WebSocket.OPEN) {
     connectionState.set('connected');
   } else if (socket.readyState === WebSocket.CONNECTING) {
     connectionState.set('connecting');
+  } else if (socket.readyState === WebSocket.CLOSING) {
+    connectionState.set('disconnected'); // Treat closing as disconnected for UI purposes
   } else {
     connectionState.set('disconnected');
   }
 };
 
-// Check initial state and monitor changes
-checkConnectionState();
-setInterval(checkConnectionState, 1000);
+// Handle specific error events to set proper error state
+const handleSocketError = () => {
+  connectionState.set('error');
+};
+
+// Set initial state and add event listeners for efficient monitoring
+updateConnectionState();
+socket.addEventListener('open', updateConnectionState);
+socket.addEventListener('close', updateConnectionState);
+socket.addEventListener('error', handleSocketError);
+
+// Cleanup function to prevent memory leaks
+const cleanup = () => {
+  socket.removeEventListener('open', updateConnectionState);
+  socket.removeEventListener('close', updateConnectionState);
+  socket.removeEventListener('error', handleSocketError);
+};
+
+// Call cleanup when component is destroyed
+onDestroy(cleanup);
 
 import { rtlLanguages } from '../../../../i18n';
 
