@@ -248,10 +248,27 @@
     "installDescription": "बेहतर अनुभव के लिए होम स्क्रीन पर जोड़ें",
     "installLater": "बाद में",
     "installButton": "इंस्टॉल",
+    "installAndroidDescription": "होम स्क्रीन पर जोड़ने के लिए \"इंस्टॉल\" पर टैप करें",
+    "installAndroidMenuDescription": "\"होम स्क्रीन पर जोड़ें\" के लिए ब्राउज़र मेनू का उपयोग करें",
     "installIosDescription": "फिर \"होम स्क्रीन पर जोड़ें\"",
     "installIosGotIt": "समझ गया",
     "refreshing": "रिफ्रेश हो रहा है...",
     "releaseToRefresh": "रिफ्रेश करने के लिए छोड़ें",
     "pullToRefresh": "रिफ्रेश करने के लिए खींचें"
+  },
+  "offline": {
+    "title": "आप ऑफ़लाइन हैं",
+    "description": "CeraUI को आपके BELABOX डिवाइस को प्रबंधित करने के लिए इंटरनेट कनेक्शन की आवश्यकता है।",
+    "checkTitle": "कृपया जांचें:",
+    "checkWifi": "आपका Wi-Fi कनेक्शन",
+    "checkNetwork": "आपका डिवाइस उसी नेटवर्क पर है",
+    "checkDevice": "BELABOX डिवाइस चालू है",
+    "tryAgain": "फिर से कोशिश करें",
+    "goBack": "वापस जाएं",
+    "installNote": "यह ऐप आपके डिवाइस पर इंस्टॉल करने पर सबसे अच्छा काम करता है"
+  },
+  "dialog": {
+    "cancel": "रद्द करें",
+    "continue": "जारी रखें"
   }
 }

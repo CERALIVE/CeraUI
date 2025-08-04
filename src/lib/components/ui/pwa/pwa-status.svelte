@@ -39,7 +39,26 @@ import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
 import { canInstall, installApp, isOnline, showIOSInstallPrompt } from '$lib/stores/pwa';
-import { connectionState } from '$lib/stores/websocket-enhanced';
+// Create a simple connection state based on socket readiness
+import { socket } from '$lib/stores/websocket-store';
+import { writable } from 'svelte/store';
+
+const connectionState = writable<'connected' | 'connecting' | 'disconnected' | 'error'>('connecting');
+
+// Monitor socket state
+const checkConnectionState = () => {
+  if (socket.readyState === WebSocket.OPEN) {
+    connectionState.set('connected');
+  } else if (socket.readyState === WebSocket.CONNECTING) {
+    connectionState.set('connecting');
+  } else {
+    connectionState.set('disconnected');
+  }
+};
+
+// Check initial state and monitor changes
+checkConnectionState();
+setInterval(checkConnectionState, 1000);
 
 import { rtlLanguages } from '../../../../i18n';
 
@@ -103,7 +122,8 @@ $effect(() => {
     // Don't show if app is already installed
     const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as unknown as { standalone?: boolean }).standalone;
+      (window.navigator as unknown as { standalone?: boolean }).standalone ||
+      false; // Default to false if undefined
 
     if (isStandalone) {
       // App already installed, don't show any banner
@@ -249,9 +269,9 @@ async function handleMobileInstall() {
               Tap <Share class="mx-1 inline h-3 w-3" />
               {$_('pwa.installIosDescription')}
             {:else if isAndroid() && $canInstall}
-              Tap "Install" to add to home screen
+              {$_('pwa.installAndroidDescription')}
             {:else if isAndroid()}
-              Use browser menu to "Add to Home Screen"
+              {$_('pwa.installAndroidMenuDescription')}
             {:else}
               {$_('pwa.installDescription')}
             {/if}
@@ -265,11 +285,11 @@ async function handleMobileInstall() {
             size="sm"
             onclick={handleMobileInstall}
             class="bg-white text-blue-500 hover:bg-white/90">
-            Install
+            {$_('pwa.installButton')}
           </Button>
         {/if}
         <Button variant="ghost" size="sm" onclick={dismissIOSBanner} class="text-white hover:bg-white/20">
-          {isAndroid() && $canInstall ? 'Later' : $_('pwa.installIosGotIt')}
+          {isAndroid() && $canInstall ? $_('pwa.installLater') : $_('pwa.installIosGotIt')}
         </Button>
       </div>
     </div>

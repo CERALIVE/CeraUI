@@ -249,10 +249,27 @@
     "installDescription": "Add to home screen for better experience",
     "installLater": "Later",
     "installButton": "Install",
+    "installAndroidDescription": "Tap \"Install\" to add to home screen",
+    "installAndroidMenuDescription": "Use browser menu to \"Add to Home Screen\"",
     "installIosDescription": "then \"Add to Home Screen\"",
     "installIosGotIt": "Got it",
     "refreshing": "Refreshing...",
     "releaseToRefresh": "Release to refresh",
     "pullToRefresh": "Pull to refresh"
+  },
+  "offline": {
+    "title": "You're Offline",
+    "description": "CeraUI needs an internet connection to manage your BELABOX device.",
+    "checkTitle": "Please check:",
+    "checkWifi": "Your Wi-Fi connection",
+    "checkNetwork": "Your device is on the same network",
+    "checkDevice": "BELABOX device is powered on",
+    "tryAgain": "Try Again",
+    "goBack": "Go Back",
+    "installNote": "This app works best when installed on your device"
+  },
+  "dialog": {
+    "cancel": "Cancel",
+    "continue": "Continue"
   }
 }

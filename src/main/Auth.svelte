@@ -87,7 +87,7 @@ async function onSubmit(event: SubmitEvent) {
     <div class="relative z-20 mt-auto">
       <blockquote class="space-y-2">
         <p class="text-lg">&ldquo;The revolution of IRL...&rdquo;</p>
-        <footer class="text-sm">rationalsa</footer>
+        <footer class="text-sm"></footer>
       </blockquote>
     </div>
   </div>

@@ -1,7 +1,25 @@
 import { derived, writable } from 'svelte/store';
 
 import { isOnline } from './pwa';
-import { connectionState } from './websocket-enhanced';
+import { socket } from './websocket-store';
+
+// Create a connection state store based on actual socket
+const connectionState = writable<'connected' | 'connecting' | 'disconnected' | 'error'>('connecting');
+
+// Monitor socket state
+const updateConnectionState = () => {
+  if (socket.readyState === WebSocket.OPEN) {
+    connectionState.set('connected');
+  } else if (socket.readyState === WebSocket.CONNECTING) {
+    connectionState.set('connecting');
+  } else {
+    connectionState.set('disconnected');
+  }
+};
+
+// Check initial state and monitor changes
+updateConnectionState();
+setInterval(updateConnectionState, 1000);
 
 // Store to track if we should show the offline page
 export const shouldShowOfflinePage = writable(false);

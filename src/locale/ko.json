@@ -248,10 +248,27 @@
     "installDescription": "더 나은 경험을 위해 홈 화면에 추가",
     "installLater": "나중에",
     "installButton": "설치",
+    "installAndroidDescription": "홈 화면에 추가하려면 \"설치\"를 탭하세요",
+    "installAndroidMenuDescription": "브라우저 메뉴에서 \"홈 화면에 추가\" 사용",
     "installIosDescription": "그런 다음 \"홈 화면에 추가\"",
     "installIosGotIt": "알겠습니다",
     "refreshing": "새로고침 중...",
     "releaseToRefresh": "놓아서 새로고침",
     "pullToRefresh": "당겨서 새로고침"
+  },
+  "offline": {
+    "title": "오프라인입니다",
+    "description": "CeraUI는 BELABOX 장치를 관리하기 위해 인터넷 연결이 필요합니다.",
+    "checkTitle": "다음을 확인하세요:",
+    "checkWifi": "Wi-Fi 연결",
+    "checkNetwork": "장치가 같은 네트워크에 있는지",
+    "checkDevice": "BELABOX 장치의 전원이 켜져 있는지",
+    "tryAgain": "다시 시도",
+    "goBack": "뒤로 가기",
+    "installNote": "이 앱은 장치에 설치했을 때 가장 잘 작동합니다"
+  },
+  "dialog": {
+    "cancel": "취소",
+    "continue": "계속"
   }
 }

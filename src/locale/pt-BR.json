@@ -247,10 +247,27 @@
     "installDescription": "Adicionar à tela inicial para uma melhor experiência",
     "installLater": "Mais tarde",
     "installButton": "Instalar",
+    "installAndroidDescription": "Toque em \"Instalar\" para adicionar à tela inicial",
+    "installAndroidMenuDescription": "Use o menu do navegador para \"Adicionar à tela inicial\"",
     "installIosDescription": "depois \"Adicionar à Tela de Início\"",
     "installIosGotIt": "Entendi",
     "refreshing": "Atualizando...",
     "releaseToRefresh": "Solte para atualizar",
     "pullToRefresh": "Puxe para atualizar"
+  },
+  "offline": {
+    "title": "Você está offline",
+    "description": "CeraUI precisa de uma conexão com a internet para gerenciar seu dispositivo BELABOX.",
+    "checkTitle": "Por favor, verifique:",
+    "checkWifi": "Sua conexão Wi-Fi",
+    "checkNetwork": "Seu dispositivo está na mesma rede",
+    "checkDevice": "Dispositivo BELABOX está ligado",
+    "tryAgain": "Tentar novamente",
+    "goBack": "Voltar",
+    "installNote": "Este aplicativo funciona melhor quando instalado em seu dispositivo"
+  },
+  "dialog": {
+    "cancel": "Cancelar",
+    "continue": "Continuar"
   }
 }

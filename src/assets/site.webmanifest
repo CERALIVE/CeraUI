@@ -9,8 +9,8 @@
   "theme_color": "#ffffff",
   "background_color": "#ffffff",
   "categories": ["multimedia", "utilities"],
-  "lang": "en-US",
-  "dir": "ltr",
+  "lang": "en",
+  "dir": "auto",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",

@@ -249,10 +249,27 @@
     "installDescription": "添加到主屏幕以获得更好的体验",
     "installLater": "稍后",
     "installButton": "安装",
+    "installAndroidDescription": "点击\"安装\"以添加到主屏幕",
+    "installAndroidMenuDescription": "使用浏览器菜单\"添加到主屏幕\"",
     "installIosDescription": "然后\"添加到主屏幕\"",
     "installIosGotIt": "知道了",
     "refreshing": "正在刷新...",
     "releaseToRefresh": "松开以刷新",
     "pullToRefresh": "下拉刷新"
+  },
+  "offline": {
+    "title": "您已离线",
+    "description": "CeraUI 需要互联网连接来管理您的 BELABOX 设备。",
+    "checkTitle": "请检查：",
+    "checkWifi": "您的 Wi-Fi 连接",
+    "checkNetwork": "您的设备在同一网络上",
+    "checkDevice": "BELABOX 设备已开启",
+    "tryAgain": "重试",
+    "goBack": "返回",
+    "installNote": "此应用在安装到您的设备上时效果最佳"
+  },
+  "dialog": {
+    "cancel": "取消",
+    "continue": "继续"
   }
 }

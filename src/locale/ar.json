@@ -248,10 +248,27 @@
     "installDescription": "إضافة إلى الشاشة الرئيسية لتجربة أفضل",
     "installLater": "لاحقاً",
     "installButton": "تثبيت",
+    "installAndroidDescription": "اضغط على \"تثبيت\" للإضافة إلى الشاشة الرئيسية",
+    "installAndroidMenuDescription": "استخدم قائمة المتصفح لـ \"إضافة إلى الشاشة الرئيسية\"",
     "installIosDescription": "ثم \"إضافة إلى الشاشة الرئيسية\"",
     "installIosGotIt": "فهمت",
     "refreshing": "جاري التحديث...",
     "releaseToRefresh": "اترك للتحديث",
     "pullToRefresh": "اسحب للتحديث"
+  },
+  "offline": {
+    "title": "أنت غير متصل",
+    "description": "يحتاج CeraUI إلى اتصال بالإنترنت لإدارة جهاز BELABOX الخاص بك.",
+    "checkTitle": "يرجى التحقق من:",
+    "checkWifi": "اتصال Wi-Fi الخاص بك",
+    "checkNetwork": "جهازك على نفس الشبكة",
+    "checkDevice": "جهاز BELABOX مشغل",
+    "tryAgain": "حاول مرة أخرى",
+    "goBack": "العودة",
+    "installNote": "يعمل هذا التطبيق بشكل أفضل عند تثبيته على جهازك"
+  },
+  "dialog": {
+    "cancel": "إلغاء",
+    "continue": "متابعة"
   }
 }

@@ -1,11 +1,10 @@
 <script lang="ts">
 import { RefreshCw, Smartphone, WifiOff } from '@lucide/svelte';
-import { locale } from 'svelte-i18n';
+import { locale, _ } from 'svelte-i18n';
 
 import { Button } from '$lib/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 import { resetOfflineDetection } from '$lib/stores/offline-navigation';
-import { wsManager } from '$lib/stores/websocket-enhanced';
 
 import { rtlLanguages } from '../../../../i18n';
 
@@ -16,10 +15,8 @@ function handleRetry() {
   // Reset offline detection to give reconnection a chance
   resetOfflineDetection();
 
-  // Try to reconnect WebSocket
-  wsManager.reconnect();
-
-  // If still offline after 5 seconds, page will automatically show offline again
+  // Reload the page to re-establish connection
+  window.location.reload();
 }
 
 function goBack() {
@@ -37,31 +34,31 @@ function goBack() {
       <div class="bg-muted mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full">
         <WifiOff class="text-muted-foreground h-8 w-8" />
       </div>
-      <CardTitle class="text-xl">You're Offline</CardTitle>
-      <CardDescription>CeraUI needs an internet connection to manage your BELABOX device.</CardDescription>
+      <CardTitle class="text-xl">{$_('offline.title')}</CardTitle>
+      <CardDescription>{$_('offline.description')}</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
       <div class="text-muted-foreground space-y-2 text-sm">
-        <p>Please check:</p>
+        <p>{$_('offline.checkTitle')}</p>
         <ul class="ml-2 list-inside list-disc space-y-1">
-          <li>Your Wi-Fi connection</li>
-          <li>Your device is on the same network</li>
-          <li>BELABOX device is powered on</li>
+          <li>{$_('offline.checkWifi')}</li>
+          <li>{$_('offline.checkNetwork')}</li>
+          <li>{$_('offline.checkDevice')}</li>
         </ul>
       </div>
 
       <div class="flex flex-col gap-2">
         <Button onclick={handleRetry} class="w-full">
           <RefreshCw class="mr-2 h-4 w-4" />
-          Try Again
+          {$_('offline.tryAgain')}
         </Button>
-        <Button variant="outline" onclick={goBack} class="w-full">Go Back</Button>
+        <Button variant="outline" onclick={goBack} class="w-full">{$_('offline.goBack')}</Button>
       </div>
 
       <div class="border-t pt-4">
         <div class="text-muted-foreground flex items-center gap-2 text-xs">
           <Smartphone class="h-4 w-4" />
-          <span>This app works best when installed on your device</span>
+          <span>{$_('offline.installNote')}</span>
         </div>
       </div>
     </CardContent>
