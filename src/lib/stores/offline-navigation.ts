@@ -8,6 +8,11 @@ const connectionState = writable<'connected' | 'connecting' | 'disconnected' | '
 
 // Monitor socket state with event listeners (more efficient than polling)
 const updateConnectionState = () => {
+  if (!socket) {
+    connectionState.set('disconnected');
+    return;
+  }
+  
   if (socket.readyState === WebSocket.OPEN) {
     connectionState.set('connected');
   } else if (socket.readyState === WebSocket.CONNECTING) {
@@ -121,13 +126,13 @@ function startPeriodicConnectionCheck() {
       if (isPWA) {
         // For PWA, reload immediately to ensure proper reconnection
         window.location.reload();
-      } else {
-        // For browser, check WebSocket state first
-        if (socket.readyState !== WebSocket.OPEN) {
-          // Trigger page reload to re-establish full connection
-          window.location.reload();
+              } else {
+          // For browser, check WebSocket state first
+          if (!socket || socket.readyState !== WebSocket.OPEN) {
+            // Trigger page reload to re-establish full connection
+            window.location.reload();
+          }
         }
-      }
     }
   }, PERIODIC_CHECK_INTERVAL);
 }

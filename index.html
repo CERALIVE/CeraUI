@@ -104,19 +104,9 @@
           color: #9ca3af;
         }
       }
-    </style>
-  </head>
-  <body>
-    <!-- PWA Preloader (shown immediately for PWA launches) -->
-    <div id="pwa-preloader">
-      <div class="pwa-spinner"></div>
-      <div class="pwa-text">Loading CeraUI...</div>
-    </div>
 
-    <!-- Immediate fallback for PWA offline launches -->
-    <div
-      id="offline-fallback"
-      style="
+      /* Offline fallback styles with dark mode support */
+      #offline-fallback {
         display: none;
         position: fixed;
         top: 0;
@@ -129,36 +119,90 @@
         align-items: center;
         flex-direction: column;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      "
-    >
-      <div style="text-align: center; padding: 20px">
-        <div
-          style="
-            width: 48px;
-            height: 48px;
-            border: 4px solid #e5e7eb;
-            border-top: 4px solid #3b82f6;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-          "
-        ></div>
-        <h1 style="font-size: 24px; margin: 0 0 10px; color: #111827">You're Offline</h1>
-        <p style="color: #6b7280; margin: 0 0 20px">
+      }
+
+      @media (prefers-color-scheme: dark) {
+        #offline-fallback {
+          background: #000000;
+        }
+      }
+
+      .offline-content {
+        text-align: center;
+        padding: 20px;
+      }
+
+      .offline-spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid #e5e7eb;
+        border-top: 4px solid #3b82f6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .offline-spinner {
+          border-color: #374151;
+          border-top-color: #60a5fa;
+        }
+      }
+
+      .offline-title {
+        font-size: 24px;
+        margin: 0 0 10px;
+        color: #111827;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .offline-title {
+          color: #ffffff;
+        }
+      }
+
+      .offline-text {
+        color: #6b7280;
+        margin: 0 0 20px;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .offline-text {
+          color: #9ca3af;
+        }
+      }
+
+      .offline-button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        font-size: 16px;
+        cursor: pointer;
+      }
+
+      .offline-button:hover {
+        background: #2563eb;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- PWA Preloader (shown immediately for PWA launches) -->
+    <div id="pwa-preloader">
+      <div class="pwa-spinner"></div>
+      <div class="pwa-text">Loading CeraUI...</div>
+    </div>
+
+    <!-- Immediate fallback for PWA offline launches -->
+    <div id="offline-fallback">
+      <div class="offline-content">
+        <div class="offline-spinner"></div>
+        <h1 class="offline-title">You're Offline</h1>
+        <p class="offline-text">
           CeraUI needs an internet connection to manage your BELABOX device.
         </p>
-        <button
-          onclick="window.location.reload()"
-          style="
-            background: #3b82f6;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 6px;
-            font-size: 16px;
-            cursor: pointer;
-          "
-        >
+        <button onclick="window.location.reload()" class="offline-button">
           Try Again
         </button>
       </div>
@@ -269,6 +313,8 @@
             // App has loaded successfully - hide preloader and stop checking
             if (app && app.children.length > 0) {
               if (preloader) preloader.style.display = 'none';
+              const fallback = document.getElementById('offline-fallback');
+              if (fallback) fallback.style.display = 'none';
               return;
             }
 
