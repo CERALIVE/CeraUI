@@ -1,6 +1,6 @@
 import { get, writable } from 'svelte/store';
-import { toast } from 'svelte-sonner';
 import { _ } from 'svelte-i18n';
+import { toast } from 'svelte-sonner';
 
 import { CLIENT_VERSION } from './version-manager';
 

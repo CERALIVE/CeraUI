@@ -202,7 +202,7 @@ if (auth) {
   });
 
   // Add timeout for auth check in case we're offline (shorter for mobile/iOS)
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
   const isPWA =
     window.matchMedia('(display-mode: standalone)').matches ||
     window.navigator.standalone ||
@@ -238,7 +238,7 @@ AuthMessages.subscribe(message => {
 });
 
 // Aggressive fallback for mobile/PWA: if we're stuck in any loading state, assume offline
-const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const isMobileDevice = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
 const isPWAApp =
   window.matchMedia('(display-mode: standalone)').matches ||
   window.navigator.standalone ||
