@@ -52,7 +52,7 @@ try {
     close: () => {},
     addEventListener: () => {},
     removeEventListener: () => {},
-  } as any;
+  } as Partial<WebSocket> as WebSocket;
 }
 
 // Enhanced connection monitoring

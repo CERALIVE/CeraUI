@@ -4,7 +4,7 @@ import { _, locale } from 'svelte-i18n';
 
 import { Button } from '$lib/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
-import { manualConnectionCheck, resetOfflineDetection } from '$lib/stores/offline-navigation';
+import { manualConnectionCheck } from '$lib/stores/offline-navigation';
 
 import { rtlLanguages } from '../../../../i18n';
 

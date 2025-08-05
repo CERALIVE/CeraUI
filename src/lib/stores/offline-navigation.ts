@@ -12,7 +12,7 @@ const updateConnectionState = () => {
     connectionState.set('disconnected');
     return;
   }
-  
+
   if (socket.readyState === WebSocket.OPEN) {
     connectionState.set('connected');
   } else if (socket.readyState === WebSocket.CONNECTING) {
@@ -62,7 +62,7 @@ async function checkConnection(isInitialCheck = false): Promise<boolean> {
 
       try {
         // Try a simple fetch without no-cors first (works better on iOS)
-        const response = await fetch(window.location.origin + '/favicon.ico', {
+        await fetch(window.location.origin + '/favicon.ico', {
           method: 'HEAD',
           signal: controller.signal,
           cache: 'no-cache',
@@ -73,7 +73,7 @@ async function checkConnection(isInitialCheck = false): Promise<boolean> {
         // If that fails, try the original approach
         clearTimeout(timeoutId);
         const timeoutId2 = setTimeout(() => controller.abort(), 300);
-        const response2 = await fetch(window.location.origin + '/', {
+        await fetch(window.location.origin + '/', {
           method: 'HEAD',
           mode: 'no-cors',
           signal: controller.signal,
@@ -87,7 +87,7 @@ async function checkConnection(isInitialCheck = false): Promise<boolean> {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-      const response = await fetch(window.location.origin + '/', {
+      await fetch(window.location.origin + '/', {
         method: 'HEAD',
         mode: 'no-cors',
         signal: controller.signal,
@@ -126,13 +126,13 @@ function startPeriodicConnectionCheck() {
       if (isPWA) {
         // For PWA, reload immediately to ensure proper reconnection
         window.location.reload();
-              } else {
-          // For browser, check WebSocket state first
-          if (!socket || socket.readyState !== WebSocket.OPEN) {
-            // Trigger page reload to re-establish full connection
-            window.location.reload();
-          }
+      } else {
+        // For browser, check WebSocket state first
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          // Trigger page reload to re-establish full connection
+          window.location.reload();
         }
+      }
     }
   }, PERIODIC_CHECK_INTERVAL);
 }
@@ -168,7 +168,7 @@ function checkInitialConnectivity() {
         startPeriodicConnectionCheck();
         offlineStartTime = Date.now();
       }
-    } catch (error) {
+    } catch {
       shouldShowOfflinePage.set(true);
       startPeriodicConnectionCheck();
       offlineStartTime = Date.now();
