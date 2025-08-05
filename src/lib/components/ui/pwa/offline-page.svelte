@@ -4,19 +4,42 @@ import { _, locale } from 'svelte-i18n';
 
 import { Button } from '$lib/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
-import { resetOfflineDetection } from '$lib/stores/offline-navigation';
+import { manualConnectionCheck, resetOfflineDetection } from '$lib/stores/offline-navigation';
 
 import { rtlLanguages } from '../../../../i18n';
 
 // RTL support (for future enhancements)
 const _isRTL = $derived(rtlLanguages.includes($locale));
 
-function handleRetry() {
-  // Reset offline detection to give reconnection a chance
-  resetOfflineDetection();
+let isCheckingConnection = $state(false);
+let connectionCheckFailed = $state(false);
 
-  // Reload the page to re-establish connection
-  window.location.reload();
+async function handleRetry() {
+  isCheckingConnection = true;
+  connectionCheckFailed = false;
+
+  try {
+    // Try to manually check connection
+    const success = await manualConnectionCheck();
+
+    if (!success) {
+      // Connection still failed
+      connectionCheckFailed = true;
+      // Reset the failed state after 3 seconds
+      setTimeout(() => {
+        connectionCheckFailed = false;
+      }, 3000);
+    }
+    // If success, manualConnectionCheck will handle the reload
+  } catch (error) {
+    console.error('Connection check failed:', error);
+    connectionCheckFailed = true;
+    setTimeout(() => {
+      connectionCheckFailed = false;
+    }, 3000);
+  } finally {
+    isCheckingConnection = false;
+  }
 }
 
 function goBack() {
@@ -48,9 +71,19 @@ function goBack() {
       </div>
 
       <div class="flex flex-col gap-2">
-        <Button onclick={handleRetry} class="w-full">
-          <RefreshCw class="mr-2 h-4 w-4" />
-          {$_('offline.tryAgain')}
+        <Button
+          onclick={handleRetry}
+          class="w-full"
+          disabled={isCheckingConnection}
+          variant={connectionCheckFailed ? 'destructive' : 'default'}>
+          <RefreshCw class="mr-2 h-4 w-4 {isCheckingConnection ? 'animate-spin' : ''}" />
+          {#if isCheckingConnection}
+            {$_('offline.checking')}
+          {:else if connectionCheckFailed}
+            {$_('offline.checkFailed')}
+          {:else}
+            {$_('offline.tryAgain')}
+          {/if}
         </Button>
         <Button variant="outline" onclick={goBack} class="w-full">{$_('offline.goBack')}</Button>
       </div>

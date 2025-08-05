@@ -8,6 +8,7 @@ import { checkFrontendVersionChange } from './lib/stores/frontend-version';
 
 // Register Service Worker (only frontend update mechanism)
 const updateSW = registerSW({
+  immediate: true, // Register immediately
   onNeedRefresh() {
     // Show update available notification for frontend builds
     // Import toast dynamically to avoid circular dependencies
@@ -25,6 +26,7 @@ const updateSW = registerSW({
     });
   },
   onOfflineReady() {
+    console.log('PWA: Service worker is ready for offline use');
     // Import toast dynamically
     void import('svelte-sonner').then(({ toast }) => {
       toast.success('Offline Ready', {
@@ -33,8 +35,11 @@ const updateSW = registerSW({
       });
     });
   },
+  onRegistered(registration) {
+    console.log('PWA: Service worker registered', registration);
+  },
   onRegisterError(error) {
-    console.error('SW registration error', error);
+    console.error('PWA: Service worker registration failed', error);
   },
 });
 

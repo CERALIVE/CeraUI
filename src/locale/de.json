@@ -264,6 +264,8 @@
     "checkNetwork": "Ihr Gerät ist im selben Netzwerk",
     "checkDevice": "BELABOX-Gerät ist eingeschaltet",
     "tryAgain": "Erneut versuchen",
+    "checking": "Überprüfung...",
+    "checkFailed": "Immer noch offline",
     "goBack": "Zurück",
     "installNote": "Diese App funktioniert am besten, wenn sie auf Ihrem Gerät installiert ist"
   },

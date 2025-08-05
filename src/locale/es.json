@@ -263,6 +263,8 @@
     "checkNetwork": "Tu dispositivo está en la misma red",
     "checkDevice": "El dispositivo BELABOX está encendido",
     "tryAgain": "Intentar de nuevo",
+    "checking": "Verificando...",
+    "checkFailed": "Aún sin conexión",
     "goBack": "Volver",
     "installNote": "Esta aplicación funciona mejor cuando está instalada en tu dispositivo"
   },

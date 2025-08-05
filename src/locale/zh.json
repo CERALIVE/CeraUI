@@ -265,6 +265,8 @@
     "checkNetwork": "您的设备在同一网络上",
     "checkDevice": "BELABOX 设备已开启",
     "tryAgain": "重试",
+    "checking": "检查中...",
+    "checkFailed": "仍然离线",
     "goBack": "返回",
     "installNote": "此应用在安装到您的设备上时效果最佳"
   },

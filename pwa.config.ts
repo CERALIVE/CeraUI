@@ -20,16 +20,44 @@ export function generateUniqueVersion(): string {
   }
 
   // Use timestamp for build ID to ensure uniqueness while being deterministic
-  const buildTime = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '');
+  const buildTime = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
   return `${commitHash}-${buildTime}`;
 }
 
 export const pwaConfig: VitePWAOptions = {
   registerType: 'autoUpdate',
+  // Disable PWA in development to avoid HMR conflicts
+  devOptions: {
+    enabled: false,
+  },
   workbox: {
+    // Explicit static site configuration
     globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+    // CRITICAL: Force navigation fallback for ALL requests
     navigateFallback: '/index.html',
-    navigateFallbackDenylist: [/^\/_/, /\/[^/?]+\.[^/]+$/],
+    navigateFallbackDenylist: [], // Don't deny any navigation requests
+    // Force immediate control
+    skipWaiting: true,
+    clientsClaim: true,
+    // Simple runtime caching for static assets
+    runtimeCaching: [
+      // Catch all navigation requests and serve index.html
+      {
+        urlPattern: ({ request }) => request.mode === 'navigate',
+        handler: 'CacheFirst',
+        options: {
+          cacheName: 'navigation-cache',
+        },
+      },
+      // Catch any missed static assets
+      {
+        urlPattern: ({ url }) => url.origin === self.location.origin,
+        handler: 'CacheFirst',
+        options: {
+          cacheName: 'static-assets',
+        },
+      },
+    ],
   },
   includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'favicon-96x96.png'],
   manifest: {
@@ -57,10 +85,6 @@ export const pwaConfig: VitePWAOptions = {
       },
     ],
     categories: ['multimedia', 'utilities'],
-  },
-  // Enable PWA features in both dev and production
-  devOptions: {
-    enabled: true,
   },
   // Ensure service worker is generated for production
   disable: false,
