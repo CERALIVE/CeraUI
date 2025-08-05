@@ -265,6 +265,8 @@
     "checkNetwork": "Your device is on the same network",
     "checkDevice": "BELABOX device is powered on",
     "tryAgain": "Try Again",
+    "checking": "Checking...",
+    "checkFailed": "Still Offline",
     "goBack": "Go Back",
     "installNote": "This app works best when installed on your device"
   },

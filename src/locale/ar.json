@@ -264,6 +264,8 @@
     "checkNetwork": "جهازك على نفس الشبكة",
     "checkDevice": "جهاز BELABOX مشغل",
     "tryAgain": "حاول مرة أخرى",
+    "checking": "جاري التحقق...",
+    "checkFailed": "لا يزال غير متصل",
     "goBack": "العودة",
     "installNote": "يعمل هذا التطبيق بشكل أفضل عند تثبيته على جهازك"
   },

@@ -38,7 +38,22 @@ const StatusStore = writable<StatusMessage>();
 const WifiStore = writable<WifiMessage>();
 
 const connectionUrl = `${ENV_VARIABLES.SOCKET_ENDPOINT}:${ENV_VARIABLES.SOCKET_PORT}`;
-const socket = new WebSocket(connectionUrl);
+
+// Simple offline-safe WebSocket initialization
+let socket: WebSocket;
+try {
+  socket = new WebSocket(connectionUrl);
+} catch (error) {
+  console.warn('WebSocket initialization failed (likely offline):', error);
+  // Create a dummy socket object to prevent errors
+  socket = {
+    readyState: WebSocket.CLOSED,
+    send: () => {},
+    close: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as any;
+}
 
 // Enhanced connection monitoring
 let lastActivityTime = Date.now();
@@ -79,6 +94,18 @@ socket.addEventListener('error', function () {
   });
 });
 
+// Listen for messages
+socket.addEventListener('message', function (event: MessageEvent<string>) {
+  // Update activity time for connection monitoring
+  lastActivityTime = Date.now();
+  if (activityTimeout) {
+    clearTimeout(activityTimeout);
+    activityTimeout = null;
+  }
+
+  assignMessage(event.data);
+});
+
 function sendCreatePasswordMessage(password: string) {
   sendMessage(JSON.stringify({ config: { password } }));
   StatusStore.set({ ...get(StatusStore), set_password: false });
@@ -98,18 +125,6 @@ function sendAuthMessage(password: string, isPersistent: boolean, onError: (() =
     onError?.();
   });
 }
-
-//   Listen for messages
-socket.addEventListener('message', function (event: MessageEvent<string>) {
-  // Update activity time for connection monitoring
-  lastActivityTime = Date.now();
-  if (activityTimeout) {
-    clearTimeout(activityTimeout);
-    activityTimeout = null;
-  }
-
-  assignMessage(event.data);
-});
 
 const assignMessage = (message: string) => {
   const parsedMessage = JSON.parse(message);

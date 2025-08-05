@@ -264,6 +264,8 @@
     "checkNetwork": "장치가 같은 네트워크에 있는지",
     "checkDevice": "BELABOX 장치의 전원이 켜져 있는지",
     "tryAgain": "다시 시도",
+    "checking": "확인 중...",
+    "checkFailed": "여전히 오프라인",
     "goBack": "뒤로 가기",
     "installNote": "이 앱은 장치에 설치했을 때 가장 잘 작동합니다"
   },

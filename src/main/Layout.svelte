@@ -200,6 +200,23 @@ if (auth) {
   sendAuthMessage(auth, true, () => {
     isCheckingAuthStatus = false;
   });
+
+  // Add timeout for auth check in case we're offline (shorter for mobile/iOS)
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isPWA =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone ||
+    document.referrer.includes('android-app://');
+
+  // Very aggressive timeout for PWA launches to prevent blank screens
+  const authTimeout = isPWA ? 500 : isMobile ? 1500 : 3000;
+
+  setTimeout(() => {
+    if (isCheckingAuthStatus) {
+      // If still checking after timeout, assume we're offline and stop checking
+      isCheckingAuthStatus = false;
+    }
+  }, authTimeout);
 } else {
   isCheckingAuthStatus = false;
 }
@@ -219,6 +236,25 @@ AuthMessages.subscribe(message => {
     authStatus = status;
   });
 });
+
+// Aggressive fallback for mobile/PWA: if we're stuck in any loading state, assume offline
+const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const isPWAApp =
+  window.matchMedia('(display-mode: standalone)').matches ||
+  window.navigator.standalone ||
+  document.referrer.includes('android-app://');
+
+if (isMobileDevice || isPWAApp) {
+  const fallbackTimeout = isPWAApp ? 300 : 1000; // Even more aggressive for PWA
+
+  setTimeout(() => {
+    // If we're still in a loading state and no offline page is shown, force offline
+    if (isCheckingAuthStatus && !authStatus && !$shouldShowOfflinePage) {
+      isCheckingAuthStatus = false;
+      // This will trigger the auth screen, but offline detection should kick in soon
+    }
+  }, fallbackTimeout);
+}
 
 // Time after which we'll automatically clear a persistent notification if no new updates arrive
 const PERSISTENT_AUTO_CLEAR_TIMEOUT = 5000; // 5 seconds
@@ -303,6 +339,14 @@ window.stopStreamingWithNotificationClear = stopStreaming;
     <Main></Main>
   {:else if !isCheckingAuthStatus}
     <Auth></Auth>
+  {:else}
+    <!-- Loading state while checking auth - show a basic loading indicator -->
+    <div class="flex min-h-screen items-center justify-center">
+      <div class="text-center">
+        <div class="border-primary mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"></div>
+        <p class="text-muted-foreground">Loading...</p>
+      </div>
+    </div>
   {/if}
 {/await}
 

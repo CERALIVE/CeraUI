@@ -34,9 +34,270 @@
     <!-- Microsoft Tiles -->
     <meta name="msapplication-TileColor" content="#ffffff" />
     <meta name="msapplication-config" content="/browserconfig.xml" />
+    <!-- PWA Preloader Styles -->
+    <style>
+      #pwa-preloader {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #ffffff;
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        #pwa-preloader {
+          background: #000000;
+          color: #ffffff;
+        }
+      }
+
+      .pwa-spinner {
+        width: 32px;
+        height: 32px;
+        border: 4px solid #e5e7eb;
+        border-top: 4px solid #3b82f6;
+        border-radius: 50%;
+        animation: pwa-spin 1s linear infinite;
+        margin-bottom: 16px;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .pwa-spinner {
+          border-color: #374151;
+          border-top-color: #60a5fa;
+        }
+      }
+
+      @keyframes pwa-spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .pwa-text {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        color: #6b7280;
+        text-align: center;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .pwa-text {
+          color: #9ca3af;
+        }
+      }
+    </style>
   </head>
   <body>
+    <!-- PWA Preloader (shown immediately for PWA launches) -->
+    <div id="pwa-preloader">
+      <div class="pwa-spinner"></div>
+      <div class="pwa-text">Loading CeraUI...</div>
+    </div>
+
+    <!-- Immediate fallback for PWA offline launches -->
+    <div
+      id="offline-fallback"
+      style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: white;
+        z-index: 10000;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      "
+    >
+      <div style="text-align: center; padding: 20px">
+        <div
+          style="
+            width: 48px;
+            height: 48px;
+            border: 4px solid #e5e7eb;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+          "
+        ></div>
+        <h1 style="font-size: 24px; margin: 0 0 10px; color: #111827">You're Offline</h1>
+        <p style="color: #6b7280; margin: 0 0 20px">
+          CeraUI needs an internet connection to manage your BELABOX device.
+        </p>
+        <button
+          onclick="window.location.reload()"
+          style="
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+          "
+        >
+          Try Again
+        </button>
+      </div>
+    </div>
+
     <div id="app"></div>
+
+    <!-- Debug: Show if JavaScript fails to load -->
+    <div
+      id="js-failed"
+      style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #f3f4f6;
+        z-index: 20000;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        font-family: system-ui;
+      "
+    >
+      <h1 style="color: #dc2626; margin-bottom: 16px">Debug: JavaScript Failed</h1>
+      <p style="color: #374151; margin-bottom: 24px">This appears when JavaScript doesn't load within 5 seconds</p>
+      <button
+        onclick="window.location.reload()"
+        style="background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer"
+      >
+        Reload
+      </button>
+    </div>
+
+    <!-- Debug script to detect JS loading failure -->
+    <script>
+      // Show debug message if main JavaScript doesn't load
+      setTimeout(function () {
+        const app = document.getElementById('app');
+        if (!app || app.children.length === 0) {
+          document.getElementById('js-failed').style.display = 'flex';
+        }
+      }, 5000);
+    </script>
+
+    <!-- Immediate PWA Offline Detection Script -->
+    <script>
+      (function () {
+        const isPWA =
+          window.matchMedia('(display-mode: standalone)').matches ||
+          window.navigator.standalone ||
+          document.referrer.includes('android-app://');
+
+        if (isPWA) {
+          // Show preloader IMMEDIATELY for PWA launches
+          const preloader = document.getElementById('pwa-preloader');
+          if (preloader) {
+            preloader.style.display = 'flex';
+          }
+
+          let hasShownOffline = false;
+          let jsLoadFailed = false;
+          let appCheckCount = 0;
+          const maxAppChecks = 20; // 2 seconds (100ms * 20)
+
+          // Listen for script load errors
+          window.addEventListener(
+            'error',
+            e => {
+              if (e.filename && e.filename.includes('/assets/index-')) {
+                jsLoadFailed = true;
+                showOfflineFallback();
+              }
+            },
+            true,
+          );
+
+          // Check browser offline state immediately
+          if (!navigator.onLine) {
+            setTimeout(showOfflineFallback, 500); // Quick offline detection
+          }
+
+          const showOfflineFallback = () => {
+            if (hasShownOffline) return; // Prevent multiple calls
+            hasShownOffline = true;
+
+            const fallback = document.getElementById('offline-fallback');
+            if (fallback && preloader) {
+              preloader.style.display = 'none';
+              fallback.style.display = 'flex';
+            }
+          };
+
+          const checkAppLoad = () => {
+            appCheckCount++;
+            const app = document.getElementById('app');
+
+            // Already shown offline - stop checking
+            if (hasShownOffline) return;
+
+            // JavaScript bundle failed to load - show offline fallback
+            if (jsLoadFailed) {
+              showOfflineFallback();
+              return;
+            }
+
+            // App has loaded successfully - hide preloader and stop checking
+            if (app && app.children.length > 0) {
+              if (preloader) preloader.style.display = 'none';
+              return;
+            }
+
+            // App hasn't loaded after 2 seconds - assume offline
+            if (appCheckCount >= maxAppChecks) {
+              showOfflineFallback();
+              return;
+            }
+
+            // Continue checking
+            setTimeout(checkAppLoad, 100);
+          };
+
+          // Start checking after a very short delay
+          setTimeout(checkAppLoad, 50);
+
+          // Fallback: if still nothing after 3 seconds, force offline
+          setTimeout(() => {
+            if (!hasShownOffline) {
+              const app = document.getElementById('app');
+              if (!app || app.children.length === 0) {
+                showOfflineFallback();
+              }
+            }
+          }, 3000);
+        }
+      })();
+    </script>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -264,6 +264,8 @@
     "checkNetwork": "デバイスが同じネットワーク上にある",
     "checkDevice": "BELABOXデバイスの電源が入っている",
     "tryAgain": "もう一度試す",
+    "checking": "チェック中...",
+    "checkFailed": "まだオフライン",
     "goBack": "戻る",
     "installNote": "このアプリはデバイスにインストールすると最適に動作します"
   },

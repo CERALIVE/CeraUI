@@ -264,6 +264,8 @@
     "checkNetwork": "Votre appareil est sur le même réseau",
     "checkDevice": "L'appareil BELABOX est allumé",
     "tryAgain": "Réessayer",
+    "checking": "Vérification...",
+    "checkFailed": "Toujours hors ligne",
     "goBack": "Retour",
     "installNote": "Cette application fonctionne mieux lorsqu'elle est installée sur votre appareil"
   },
