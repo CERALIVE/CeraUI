@@ -323,7 +323,7 @@ function resetForm() {
       <Button type="submit" class="flex-1" disabled={!isFormChanged()}>
         {$_('network.modem.save')}
       </Button>
-      <Button type="button" variant="outline" onclick={resetForm}>Reset</Button>
+      <Button type="button" variant="outline" onclick={resetForm}>{$_('network.modem.reset')}</Button>
     </div>
   </form>
 </div>
