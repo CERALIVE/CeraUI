@@ -1,7 +1,6 @@
 <script lang="ts">
-import { onMount } from 'svelte';
 import { cubicInOut } from 'svelte/easing';
-import { crossfade } from 'svelte/transition';
+import { crossfade, scale } from 'svelte/transition';
 import { _ } from 'svelte-i18n';
 
 import Logo from '$lib/components/icons/Logo.svelte';
@@ -12,13 +11,14 @@ import { navigationStore } from '$lib/stores/navigation';
 import { cn } from '$lib/utils';
 
 const [send, receive] = crossfade({
-  duration: 250,
+  duration: 300,
   easing: cubicInOut,
 });
 
 let currentNav: NavElements | undefined = $state(defaultNavElement);
 
-onMount(() => {
+// Setup navigation using reactive effect instead of onMount [[memory:5293956]]
+$effect(() => {
   // Setup hash-based navigation
   const cleanup = setupHashNavigation(navigationStore);
 
@@ -34,36 +34,61 @@ onMount(() => {
 });
 </script>
 
-<div class="mr-4 hidden md:flex">
+<!-- Brand/Logo Section with Enhanced Design -->
+<div class="mr-6 hidden md:flex">
   <button
-    class="mr-6 flex cursor-pointer items-center space-x-2"
+    class="group hover:bg-accent/50 relative flex cursor-pointer items-center space-x-3 rounded-xl px-3 py-2 transition-all duration-200"
     onclick={() => navigationStore.set(defaultNavElement)}>
-    <Logo class="h-6 w-6" />
-    <span class="hidden font-bold xl:inline-block">
+    <!-- Logo with glow effect -->
+    <div class="relative">
+      <Logo class="h-7 w-7 transition-transform duration-200 group-hover:scale-110" />
+      <div
+        class="bg-primary/20 absolute -inset-1 rounded-full opacity-0 blur-sm transition-opacity duration-200 group-hover:opacity-100">
+      </div>
+    </div>
+
+    <!-- Brand name with clean typography -->
+    <span class="text-foreground hidden font-bold tracking-tight xl:inline-block">
       {siteName}
     </span>
   </button>
+</div>
+
+<!-- Navigation Tabs with Modern Design -->
+<div class="hidden flex-1 md:flex">
   <ScrollArea orientation="both" scrollbarXClasses="invisible">
-    <div class="m-4 flex items-center overflow-y-auto pb-3 md:pb-0">
+    <div class="flex items-center space-x-1 px-4 py-2">
       {#each Object.entries(navElements) as [identifier, navigation]}
         {@const isActive = currentNav && Object.keys(currentNav)[0] === identifier}
         <button
           onclick={() => navigationStore.set({ [identifier]: navigation })}
           id={identifier}
           class={cn(
-            'hover:text-primary relative flex h-9 min-w-36 cursor-pointer items-center justify-center rounded-b-2xl px-4 text-center text-sm transition-colors',
-            isActive ? 'text-primary font-medium' : 'text-muted-foreground',
+            'group relative flex h-10 min-w-28 cursor-pointer items-center justify-center rounded-xl px-4 text-center text-sm font-medium transition-all duration-200',
+            isActive ? 'text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
           )}>
           {#if isActive}
+            <!-- Enhanced active indicator with gradient and shadow -->
             <div
-              class="bg-muted absolute inset-0 rounded-2xl"
+              class="from-background to-accent border-border/50 absolute inset-0 rounded-xl border bg-gradient-to-b shadow-lg"
               in:send={{ key: 'activetab' }}
               out:receive={{ key: 'activetab' }}>
             </div>
+            <!-- Subtle glow effect for active tab -->
+            <div class="bg-primary/5 absolute inset-0 rounded-xl opacity-50"></div>
           {/if}
-          <span class="relative">
+
+          <!-- Tab content with enhanced typography -->
+          <span class="relative z-10 transition-all duration-200 group-hover:scale-105">
             {$_(`navigation.${navigation.label}`)}
           </span>
+
+          <!-- Subtle hover indicator -->
+          {#if !isActive}
+            <div
+              class="bg-primary/60 absolute bottom-0 left-1/2 h-0.5 w-0 transition-all duration-200 group-hover:w-8 group-hover:-translate-x-1/2">
+            </div>
+          {/if}
         </button>
       {/each}
     </div>
