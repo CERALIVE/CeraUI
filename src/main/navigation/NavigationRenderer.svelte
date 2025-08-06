@@ -12,7 +12,7 @@ navigationStore.subscribe(tab => {
 });
 </script>
 
-<div class="relative container pt-10 pb-10">
+<div class="relative container pt-10 pb-24">
   {#if CurrentComponent}
     <CurrentComponent></CurrentComponent>
   {/if}
