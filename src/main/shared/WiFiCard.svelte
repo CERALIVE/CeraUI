@@ -39,11 +39,6 @@ function getStatusColor(status: string, isHotspot: boolean) {
   return 'text-muted-foreground';
 }
 
-function getStatusIcon(status: string, isHotspot: boolean) {
-  if (isHotspot) return Router;
-  return Wifi;
-}
-
 function getCardBorderClass(status: string, isHotspot: boolean) {
   if (isHotspot) return 'border-blue-500/20 bg-gradient-to-br from-blue-50/50 to-card dark:from-blue-950/20';
   if (status === 'connected')

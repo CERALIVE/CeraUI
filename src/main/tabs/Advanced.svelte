@@ -356,7 +356,7 @@ StatusMessages.subscribe(statusMessage => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  class="h-8 w-8 rounded-md p-0 hover:bg-muted/50"
+                  class="hover:bg-muted/50 h-8 w-8 rounded-md p-0"
                   onclick={() => {
                     navigator.clipboard.writeText(sshPassword).then(() => {
                       toast.info($_('advanced.passwordCopied'), {

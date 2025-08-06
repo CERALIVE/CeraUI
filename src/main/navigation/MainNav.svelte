@@ -1,12 +1,11 @@
 <script lang="ts">
 import { cubicInOut } from 'svelte/easing';
-import { crossfade, scale } from 'svelte/transition';
+import { crossfade } from 'svelte/transition';
 import { _ } from 'svelte-i18n';
 
 import Logo from '$lib/components/icons/Logo.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
 import { defaultNavElement, type NavElements, navElements, siteName } from '$lib/config';
-
 import { navigationStore } from '$lib/stores/navigation';
 import { cn } from '$lib/utils';
 

@@ -5,7 +5,6 @@ import { toast } from 'svelte-sonner';
 
 import WifiQuality from '$lib/components/icons/WifiQuality.svelte';
 import { Button } from '$lib/components/ui/button';
-import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
@@ -117,7 +116,7 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
       class="min-h-0 w-full flex-1 rounded-xl border-2 border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900/50"
       type="auto">
       <div class="space-y-1 p-2">
-        {#each wifi.available as availableNetwork, index}
+        {#each wifi.available as availableNetwork, _index}
           {@const uuid = getWifiUUID(availableNetwork, wifi.saved)}
           {@const isConnecting =
             connecting !== undefined && (connecting === uuid || connecting === availableNetwork.ssid)}

@@ -1,8 +1,8 @@
 <script lang="ts">
 import type { Component } from 'svelte';
 
-import { navigationStore } from '$lib/stores/navigation';
 import { setupHashNavigation } from '$lib/helpers/NavigationHelper';
+import { navigationStore } from '$lib/stores/navigation';
 
 let CurrentComponent: Component | undefined = $state(undefined);
 

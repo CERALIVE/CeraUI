@@ -1,7 +1,7 @@
 <script lang="ts">
 import { Globe } from '@lucide/svelte';
 import { get } from 'svelte/store';
-import { locale, _ } from 'svelte-i18n';
+import { _, locale } from 'svelte-i18n';
 
 import * as Select from '$lib/components/ui/select';
 import { localeStore } from '$lib/stores/locale';

@@ -36,8 +36,6 @@ const themes = [
     icon: Monitor,
   },
 ];
-
-const currentTheme = $derived(themes.find(t => t.value === theme) || themes[2]);
 </script>
 
 <DropdownMenu.Root>
