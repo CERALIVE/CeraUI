@@ -1,15 +1,7 @@
 <script lang="ts">
-import { Binary, ServerIcon, Volume } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
-import { Button } from '$lib/components/ui/button';
-import * as Card from '$lib/components/ui/card';
-import { Checkbox } from '$lib/components/ui/checkbox/index.js';
-import { Input } from '$lib/components/ui/input';
-import { Label } from '$lib/components/ui/label';
-import * as Select from '$lib/components/ui/select';
-import { Slider } from '$lib/components/ui/slider';
 import {
   type GroupedPipelines,
   groupPipelinesByDeviceAndFormat,
@@ -25,6 +17,11 @@ import {
   StatusMessages,
 } from '$lib/stores/websocket-store';
 import type { AudioCodecsMessage, ConfigMessage, PipelinesMessage, RelayMessage } from '$lib/types/socket-messages';
+
+import AudioCard from '$main/shared/AudioCard.svelte';
+import EncoderCard from '$main/shared/EncoderCard.svelte';
+import ServerCard from '$main/shared/ServerCard.svelte';
+import StreamingControls from '$main/shared/StreamingControls.svelte';
 
 type Properties = {
   inputMode: string | undefined;
@@ -437,446 +434,104 @@ const getSortedResolutions = (resolutions: string[]) =>
   });
 </script>
 
-<div class="flex-col md:flex">
-  <div class="flex-1 space-y-4 p-8 pt-6">
-    <form onsubmit={onSubmitStreamingForm}>
-      {#if isStreaming}
-        <Button
-          type="button"
-          class="w-[100%] bg-yellow-600 hover:bg-yellow-600/80"
-          onclick={() => {
-          // Directly dismiss all toasts first for immediate visual feedback
-          toast.dismiss();
+<div class="from-background via-background to-accent/5 bg-gradient-to-br">
+  <form onsubmit={onSubmitStreamingForm} class="relative">
+    <!-- Streaming Controls - Sticky Header -->
+    <StreamingControls {isStreaming} onStart={startStreamingWithCurrentConfig} onStop={() => {}} disabled={false} />
 
-          if (window.stopStreamingWithNotificationClear) {
-            window.stopStreamingWithNotificationClear();
-          } else {
-            // Fallback
-            import('$lib/helpers/SystemHelper').then(module => {
-              module.stopStreaming();
-            });
-          }
-        }}
-          >{$_('settings.stopStreaming')}</Button>
-      {:else}
-        <Button type="submit" class="w-[100%]">{$_('settings.startStreaming')}</Button>
-      {/if}
-    </form>
+    <!-- Main Content Area -->
+    <div class="container mx-auto max-w-6xl px-4 py-6">
+      <!-- Enhanced Grid Layout with equal heights -->
+      <div class="grid gap-6 lg:grid-cols-3">
+        <!-- Encoder Settings Card -->
+        <div class="h-full">
+          <EncoderCard
+            {groupedPipelines}
+            properties={{
+              inputMode: properties.inputMode,
+              encoder: properties.encoder,
+              resolution: properties.resolution,
+              framerate: properties.framerate,
+              bitrate: properties.bitrate,
+              bitrateOverlay: properties.bitrateOverlay,
+            }}
+            {formErrors}
+            {isStreaming}
+            onInputModeChange={value => {
+              properties.encoder = undefined;
+              properties.resolution = undefined;
+              properties.framerate = undefined;
+              properties.inputMode = value;
+              if (value) autoSelectNextOption('inputMode');
+            }}
+            onEncoderChange={value => {
+              properties.encoder = value;
+              properties.resolution = undefined;
+              properties.framerate = undefined;
+              if (value) autoSelectNextOption('encoder');
+            }}
+            onResolutionChange={value => {
+              properties.resolution = value;
+              properties.framerate = undefined;
+              if (value) autoSelectNextOption('resolution');
+            }}
+            onFramerateChange={value => (properties.framerate = value)}
+            onBitrateChange={value => (properties.bitrate = value)}
+            onBitrateOverlayChange={checked => (properties.bitrateOverlay = checked)}
+            {updateMaxBitrate}
+            {normalizeValue}
+            {getSortedResolutions}
+            {getSortedFramerates} />
+        </div>
 
-    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      <Card.Root class="md:row-span-2 lg:row-span-1">
-        <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-          <Card.Title class="text-sm font-medium">{$_('settings.encoderSettings')}</Card.Title>
-          <Binary class="text-muted-foreground h-4 w-4" />
-        </Card.Header>
-        <Card.Content>
-          <div class="grid gap-4">
-            <!-- Input Mode Selection -->
-            <div class="grid gap-1">
-              <Label for="inputMode">{$_('settings.inputMode')}</Label>
-              <Select.Root
-                type="single"
-                disabled={isStreaming}
-                value={properties.inputMode}
-                onValueChange={value => {
-                  properties.encoder = undefined;
-                  properties.resolution = undefined;
-                  properties.framerate = undefined;
-                  properties.inputMode = value;
-                  // Auto-select the next level if there's only one option
-                  if (value) autoSelectNextOption('inputMode');
-                }}>
-                <Select.Trigger id="inputMode">
-                  {properties.inputMode ? properties.inputMode.toUpperCase() : $_('settings.selectInputMode')}
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Group>
-                    {#if groupedPipelines}
-                      {#each Object.entries(groupedPipelines) as [pipelineKey, _]}
-                        {@const label = pipelineKey.toUpperCase().split(' ')[0]}
-                        <Select.Item value={pipelineKey} {label}></Select.Item>
-                      {/each}
-                    {/if}
-                  </Select.Group>
-                </Select.Content>
-              </Select.Root>
-              {#if formErrors.inputMode}
-                <p class="text-sm text-red-500">{formErrors.inputMode}</p>
-              {/if}
-              {#if properties.inputMode && properties.inputMode.includes('usb')}
-                <p class="text-muted-foreground mt-1 text-xs">
-                  {$_('settings.djiCameraMessage')}
-                </p>
-              {/if}
-            </div>
+        <!-- Audio Settings Card -->
+        <div class="h-full">
+          <AudioCard
+            {audioCodecs}
+            {unparsedPipelines}
+            {audioSources}
+            {notAvailableAudioSource}
+            properties={{
+              pipeline: properties.pipeline,
+              audioSource: properties.audioSource,
+              audioCodec: properties.audioCodec,
+              audioDelay: properties.audioDelay,
+            }}
+            {isStreaming}
+            onAudioSourceChange={value => (properties.audioSource = value)}
+            onAudioCodecChange={value => (properties.audioCodec = value)}
+            onAudioDelayChange={value => (properties.audioDelay = value)}
+            {normalizeValue} />
+        </div>
 
-            <!-- Encoding Format Selection -->
-            <div class="grid gap-1">
-              <Label for="encodingFormat">{$_('settings.encodingFormat')}</Label>
-              <Select.Root
-                type="single"
-                disabled={isStreaming || !properties.inputMode}
-                value={properties.encoder}
-                onValueChange={value => {
-                  properties.encoder = value;
-                  properties.resolution = undefined;
-                  properties.framerate = undefined;
-
-                  // Auto-select the next level if there's only one option
-                  if (value) {
-                    autoSelectNextOption('encoder');
-                  }
-                }}>
-                <Select.Trigger id="encodingFormat">
-                  {properties.encoder ? properties.encoder.toUpperCase() : $_('settings.selectEncodingOutputFormat')}
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Group>
-                    {#if properties.inputMode && groupedPipelines?.[properties.inputMode]}
-                      {#each Object.keys(groupedPipelines[properties.inputMode]) as encoder}
-                        <Select.Item value={encoder} label={encoder.toUpperCase()}></Select.Item>
-                      {/each}
-                    {/if}
-                  </Select.Group>
-                </Select.Content>
-              </Select.Root>
-              {#if formErrors.encoder}
-                <p class="text-sm text-red-500">{formErrors.encoder}</p>
-              {/if}
-            </div>
-
-            <!-- Encoding Resolution Selection -->
-            <div class="grid gap-1">
-              <Label for="encodingResolution">{$_('settings.encodingResolution')}</Label>
-              <Select.Root
-                type="single"
-                disabled={isStreaming || !properties.encoder}
-                value={properties.resolution}
-                onValueChange={value => {
-                  properties.resolution = value;
-                  properties.framerate = undefined;
-
-                  // Auto-select the next level if there's only one option
-                  if (value) {
-                    autoSelectNextOption('resolution');
-                  }
-                }}>
-                <Select.Trigger id="encodingResolution">
-                  {properties.resolution ?? $_('settings.selectEncodingResolution')}
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Group>
-                    {#if properties.encoder && properties.inputMode && groupedPipelines?.[properties.inputMode]?.[properties.encoder]}
-                      {@const resolutions = getSortedResolutions(
-                        Object.keys(groupedPipelines[properties.inputMode][properties.encoder]),
-                      )}
-                      {#each resolutions as resolution}
-                        <Select.Item value={resolution} label={resolution}></Select.Item>
-                      {/each}
-                    {/if}
-                  </Select.Group>
-                </Select.Content>
-              </Select.Root>
-              {#if formErrors.resolution}
-                <p class="text-sm text-red-500">{formErrors.resolution}</p>
-              {/if}
-            </div>
-
-            <!-- Framerate Selection -->
-            <div class="grid gap-1">
-              <Label for="framerate">{$_('settings.framerate')}</Label>
-              <Select.Root
-                type="single"
-                disabled={isStreaming || !properties.resolution}
-                value={properties.framerate!}
-                onValueChange={value => (properties.framerate = value)}>
-                <Select.Trigger id="framerate">
-                  {properties.framerate ?? $_('settings.selectFramerate')}
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Group>
-                    {#if properties.encoder && properties.inputMode && properties.resolution && groupedPipelines?.[properties.inputMode]?.[properties.encoder][properties.resolution]}
-                      {@const framerates = getSortedFramerates(
-                        groupedPipelines[properties.inputMode][properties.encoder][properties.resolution],
-                      )}
-                      {#each framerates as framerate}
-                        <Select.Item value={framerate.extraction.fps!} label={framerate.extraction.fps!}></Select.Item>
-                      {/each}
-                    {/if}
-                  </Select.Group>
-                </Select.Content>
-              </Select.Root>
-
-              {#if formErrors.framerate}
-                <p class="text-sm text-red-500">{formErrors.framerate}</p>
-              {/if}
-
-              <div class="mt-4">
-                <Label for="bitrate">{$_('settings.bitrate')}</Label>
-                <Slider
-                  type="single"
-                  id="bitrate"
-                  class="my-6"
-                  bind:value={properties.bitrate}
-                  max={12000}
-                  min={2000}
-                  step={50}
-                  onValueChange={() => updateMaxBitrate()} />
-                <Input
-                  type="number"
-                  step="50"
-                  max={12000}
-                  min={2000}
-                  bind:value={properties.bitrate}
-                  onblur={() => {
-                    properties = { ...properties, bitrate: normalizeValue(properties.bitrate!, 2000, 12000, 50) };
-                    updateMaxBitrate();
-                  }}></Input>
-                {#if formErrors.bitrate}
-                  <p class="text-sm text-red-500">{formErrors.bitrate}</p>
-                {/if}
-                {#if isStreaming}
-                  <p class="text-xs">{$_('settings.changeBitrateNotice')}</p>
-                {/if}
-              </div>
-            </div>
-            <div class="flex items-center gap-3">
-              <Checkbox id="bitrate-overlay" bind:checked={properties.bitrateOverlay} />
-              <Label for="bitrate-overlay">{$_('settings.enableBitrateOverlay')}</Label>
-            </div>
-          </div>
-        </Card.Content>
-      </Card.Root>
-
-      <Card.Root class="row-span-1">
-        <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-          <Card.Title class="text-sm font-medium">{$_('settings.audioSettings')}</Card.Title>
-          <Volume class="text-muted-foreground h-4 w-4" />
-        </Card.Header>
-        <Card.Content>
-          <div class="grid gap-4">
-            {#if audioCodecs && unparsedPipelines && properties.pipeline && unparsedPipelines[properties.pipeline!].asrc}
-              <div class="grid gap-1">
-                <Label for="audioSource">{$_('settings.audioSource')}</Label>
-                <Select.Root
-                  type="single"
-                  disabled={isStreaming}
-                  value={properties.audioSource}
-                  onValueChange={value => (properties.audioSource = value)}>
-                  <Select.Trigger id="audioSource">
-                    {!properties.audioSource
-                      ? $_('settings.selectAudioSource')
-                      : properties.audioSource !== notAvailableAudioSource
-                        ? properties.audioSource
-                        : `${notAvailableAudioSource} (${$_('settings.notAvailableAudioSource')})`}
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Group>
-                      {#if audioSources}
-                        {#each audioSources as audioSource}
-                          <Select.Item value={audioSource} label={audioSource}></Select.Item>
-                        {/each}
-                      {/if}
-                      {#if notAvailableAudioSource}
-                        <Select.Item
-                          value={notAvailableAudioSource}
-                          label={`${notAvailableAudioSource} (${$_('settings.notAvailableAudioSource')})`}
-                        ></Select.Item>
-                      {/if}
-                    </Select.Group>
-                  </Select.Content>
-                </Select.Root>
-              </div>
-            {/if}
-
-            {#if audioCodecs && unparsedPipelines && properties.pipeline && unparsedPipelines[properties.pipeline].acodec}
-              <div class="grid gap-1">
-                <Label for="audioCodec">{$_('settings.audioCodec')}</Label>
-                <Select.Root
-                  type="single"
-                  disabled={isStreaming}
-                  value={properties.audioCodec}
-                  onValueChange={value => (properties.audioCodec = value)}>
-                  <Select.Trigger id="audioCodec">
-                    {$_(
-                      properties.audioCodec
-                        ? Object.entries(audioCodecs).find(acodec => acodec[0] === properties.audioCodec)![1]
-                        : 'settings.selectAudioCodec',
-                    )}
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Group>
-                      {#each Object.entries(audioCodecs) as [codec, label]}
-                        <Select.Item value={codec} {label}></Select.Item>
-                      {/each}
-                    </Select.Group>
-                  </Select.Content>
-                </Select.Root>
-                <div class="mt-4">
-                  <Label for="audioDelay">{$_('settings.audioDelay')}</Label>
-                  <Slider
-                    type="single"
-                    id="audioDelay"
-                    class="my-6"
-                    bind:value={properties.audioDelay}
-                    disabled={isStreaming}
-                    max={2000}
-                    min={-2000}
-                    step={5}></Slider>
-                  <Input
-                    id="audioDelayInput"
-                    bind:value={properties.audioDelay}
-                    type="number"
-                    step="5"
-                    min="-2000"
-                    max="2000"
-                    disabled={isStreaming}
-                    onblur={() => {
-                      properties = {
-                        ...properties,
-                        audioDelay: normalizeValue(properties.audioDelay!, -2000, 2000, 5),
-                      };
-                    }}></Input>
-                </div>
-              </div>
-            {/if}
-
-            {#if audioCodecs && unparsedPipelines && properties.pipeline && !unparsedPipelines[properties.pipeline].acodec && !unparsedPipelines[properties.pipeline].asrc}
-              <div class="mt-2">
-                <h3>{$_('settings.noAudioSettingSupport')}</h3>
-              </div>
-            {/if}
-
-            {#if audioCodecs && unparsedPipelines && !properties.pipeline}
-              <div class="mt-2">
-                <h3>{$_('settings.audioSettingsMessage')}</h3>
-              </div>
-            {/if}
-          </div>
-        </Card.Content>
-      </Card.Root>
-
-      <Card.Root class="row-span-1">
-        <Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-          <Card.Title class="text-sm font-medium">{$_('settings.receiverServer')}</Card.Title>
-          <ServerIcon class="text-muted-foreground h-4 w-4" />
-        </Card.Header>
-        <Card.Content>
-          <div class="grid gap-4">
-            <div class="grid gap-1">
-              <Label for="relayServer">{$_('settings.relayServer')}</Label>
-              <Select.Root
-                type="single"
-                value={properties.relayServer}
-                disabled={relayMessage === undefined || isStreaming}
-                onValueChange={value => {
-                  properties.relayServer = value;
-                  if (value === '-1') {
-                    properties.relayAccount = undefined;
-                  }
-                }}>
-                <Select.Trigger id="relayServer">
-                  {properties.relayServer !== undefined && properties.relayServer !== '-1' && relayMessage?.servers
-                    ? Object.entries(relayMessage.servers).find(server => server[0] === properties.relayServer)![1].name
-                    : $_('settings.manualConfiguration')}
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Group>
-                    <Select.Item value="-1">{$_('settings.manualConfiguration')}</Select.Item>
-                    {#if relayMessage?.servers}
-                      {#each Object.entries(relayMessage?.servers) as [server, serverInfo]}
-                        <Select.Item value={server} label={serverInfo.name}></Select.Item>
-                      {/each}
-                    {/if}
-                  </Select.Group>
-                </Select.Content>
-              </Select.Root>
-              {#if formErrors.relayServer}
-                <p class="text-sm text-red-500">{formErrors.relayServer}</p>
-              {/if}
-            </div>
-
-            {#if properties.relayServer === '-1' || properties.relayServer === undefined}
-              <div class="grid gap-1">
-                <Label for="srtlaServerAddress">{$_('settings.srtlaServerAddress')}</Label>
-                <Input id="srtlaServerAddress" bind:value={properties.srtlaServerAddress} disabled={isStreaming}
-                ></Input>
-                {#if formErrors.srtlaServerAddress}
-                  <p class="text-sm text-red-500">{formErrors.srtlaServerAddress}</p>
-                {/if}
-              </div>
-            {:else}
-              <div class="grid gap-1">
-                <Label for="relayServerAccount">{$_('settings.relayServerAccount')}</Label>
-                <Select.Root
-                  type="single"
-                  disabled={relayMessage === undefined || isStreaming}
-                  onValueChange={value => (properties.relayAccount = value)}
-                  value={properties.relayAccount}>
-                  <Select.Trigger id="relayServerAccount">
-                    {properties.relayAccount === undefined ||
-                    properties.relayAccount === '-1' ||
-                    relayMessage?.accounts === undefined
-                      ? $_('settings.manualConfiguration')
-                      : relayMessage.accounts[properties.relayAccount].name}
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Group>
-                      <Select.Item value="-1">{$_('settings.manualConfiguration')}</Select.Item>
-                      {#if relayMessage?.servers}
-                        {#each Object.entries(relayMessage?.accounts) as [account, accountInfo]}
-                          <Select.Item value={account} label={accountInfo.name}></Select.Item>
-                        {/each}
-                      {/if}
-                    </Select.Group>
-                  </Select.Content>
-                </Select.Root>
-              </div>
-            {/if}
-
-            {#if properties.relayServer === '-1' || properties.relayServer === undefined}
-              <div class="grid gap-1">
-                <Label for="srtlaServerPort">{$_('settings.srtlaServerPort')}</Label>
-                <Input id="srtlaServerPort" type="number" bind:value={properties.srtlaServerPort} disabled={isStreaming}
-                ></Input>
-                {#if formErrors.srtlaServerPort}
-                  <p class="text-sm text-red-500">{formErrors.srtlaServerPort}</p>
-                {/if}
-              </div>
-            {/if}
-            {#if properties.relayAccount === '-1' || properties.relayAccount === undefined}
-              <div class="grid gap-1">
-                <Label for="srtStreamId">{$_('settings.srtStreamId')}</Label>
-                <Input id="srtStreamId" bind:value={properties.srtStreamId} disabled={isStreaming}></Input>
-              </div>
-            {/if}
-
-            {#if properties.srtLatency !== undefined}
-              <div class="grid gap-1">
-                <Label for="srtLatency">{$_('settings.srtLatency')}</Label>
-                <Slider
-                  id="srtLatency"
-                  type="single"
-                  class="my-6"
-                  bind:value={properties.srtLatency}
-                  max={12000}
-                  min={2000}
-                  step={50}
-                  disabled={isStreaming}></Slider>
-                <Input
-                  id="srtLatencyInput"
-                  type="number"
-                  step="1"
-                  bind:value={properties.srtLatency}
-                  disabled={isStreaming}
-                  onblur={() => {
-                    properties.srtLatency = normalizeValue(properties.srtLatency!, 2000, 12000, 50);
-                  }}></Input>
-              </div>
-            {/if}
-          </div>
-        </Card.Content>
-      </Card.Root>
+        <!-- Server Settings Card -->
+        <div class="h-full">
+          <ServerCard
+            {relayMessage}
+            properties={{
+              relayServer: properties.relayServer,
+              relayAccount: properties.relayAccount,
+              srtlaServerAddress: properties.srtlaServerAddress,
+              srtlaServerPort: properties.srtlaServerPort,
+              srtStreamId: properties.srtStreamId,
+              srtLatency: properties.srtLatency,
+            }}
+            {formErrors}
+            {isStreaming}
+            onRelayServerChange={value => {
+              properties.relayServer = value;
+              if (value === '-1') {
+                properties.relayAccount = undefined;
+              }
+            }}
+            onRelayAccountChange={value => (properties.relayAccount = value)}
+            onSrtlaAddressChange={value => (properties.srtlaServerAddress = value)}
+            onSrtlaPortChange={value => (properties.srtlaServerPort = value)}
+            onSrtStreamIdChange={value => (properties.srtStreamId = value)}
+            onSrtLatencyChange={value => (properties.srtLatency = value)}
+            {normalizeValue} />
+        </div>
+      </div>
     </div>
-  </div>
+  </form>
 </div>
