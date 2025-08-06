@@ -30,4 +30,7 @@ export default defineConfig(({ mode }) => ({
       $main: path.resolve('./src/main'),
     },
   },
+  server: {
+    port: 6173,
+  },
 }));
