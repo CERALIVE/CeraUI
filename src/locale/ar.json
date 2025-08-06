@@ -63,6 +63,9 @@
     "audioCodec": "ترميز الصوت",
     "selectAudioCodec": "حدد ترميز الصوت",
     "audioDelay": "تأخير الصوت (مللي ثانية)",
+    "audioDelayEarly": "مبكر (-)",
+    "audioDelayLate": "متأخر (+)",
+    "perfectSync": "مزامنة",
     "noAudioSupport": "التكوين المحدد حاليا لا يدعم أي نوع من إعدادات الصوت",
 
     "manualConfiguration": "الإعداد اليدوي",
@@ -71,12 +74,18 @@
     "relayServerAccount": "حساب خادم الترحيل",
     "srtlaServerAddress": "عنوان خادم استقبال SRTLA",
     "srtlaServerPort": "منفذ استقبال SRTLA",
-    "srtStreamId": "معرف بث SRT (اختياري)",
+    "srtStreamId": "معرف بث SRT",
     "srtLatency": "زمن استجابة SRT (مللي ثانية)",
     "startStreaming": "بدء البث",
     "stopStreaming": "إيقاف البث",
     "changeBitrateNotice": "يمكنك تغيير معدل البت حتى أثناء البث.",
     "audioSettingsMessage": "ستظهر إعدادات الصوت بمجرد تحديد خيار صالح في قسم الترميز",
+    "optional": "اختياري",
+    "placeholders": {
+      "srtlaServerAddress": "مثل: 192.168.1.100 أو server.example.com",
+      "srtlaServerPort": "مثل: 8890",
+      "srtStreamId": "مثل: stream123"
+    },
     "errors": {
       "inputModeRequired": "يرجى تحديد وضع الإدخال",
       "encoderRequired": "يرجى تحديد تنسيق الترميز",
@@ -92,6 +101,38 @@
     }
   },
   "network": {
+    "pageTitle": "إعدادات الشبكة",
+    "pageDescription": "إدارة اتصالات WiFi والنقاط الساخنة ومودمات الخلوية وواجهات الشبكة",
+    "sections": {
+      "networkInterfaces": "واجهات الشبكة",
+      "wifiDevices": "أجهزة WiFi",
+      "cellularModems": "مودمات خلوية"
+    },
+    "status": {
+      "details": "التفاصيل",
+      "turnOff": "إيقاف التشغيل",
+      "enableHotspot": "تفعيل النقطة الساخنة",
+      "noActiveConnection": "لا يوجد اتصال نشط",
+      "notConnected": "غير متصل",
+      "scanningNetworks": "فحص الشبكات...",
+      "connecting": "جاري الاتصال...",
+      "ready": "جاهز"
+    },
+    "accessibility": {
+      "wifiQrCode": "رمز QR للوايفاي"
+    },
+    "deviceCount": {
+      "device": "جهاز",
+      "devices": "أجهزة",
+      "modem": "مودم",
+      "modems": "مودمات"
+    },
+    "emptyStates": {
+      "loadingStatus": "جاري تحميل حالة الشبكة...",
+      "pleaseWait": "يرجى الانتظار أثناء جمع معلومات الشبكة",
+      "noDevicesFound": "لم يتم العثور على أجهزة شبكة",
+      "noDevicesDescription": "لم يتم اكتشاف محولات WiFi أو مودمات خلوية"
+    },
     "hotspot": {
       "name": "الاسم",
       "channel": "القناة",
@@ -190,6 +231,18 @@
     "toggle": {
       "disableNetwork": "تعطيل الشبكة",
       "enableNetwork": "تمكين الشبكة"
+    },
+    "types": {
+      "hotspot": "نقطة اتصال",
+      "cellular": "الشبكة الخلوية",
+      "wifi": "WiFi",
+      "ethernet": "إيثرنت"
+    },
+    "labels": {
+      "interface": "الواجهة:",
+      "ipAddress": "عنوان IP:",
+      "bandwidth": "عرض النطاق:",
+      "network": "الشبكة:"
     }
   },
   "wifiStatus": {
@@ -236,7 +289,23 @@
     "confirmBelaboxLog": "هل أنت متأكد من أنك تريد تنزيل سجل BELABOX؟ قد يحتوي على معلومات حساسة مثل كلمات المرور.",
     "confirmSystemLog": "هل أنت متأكد من أنك تريد تنزيل سجل النظام؟ قد يحتوي على معلومات حساسة مثل كلمات المرور.",
     "downloadBelaboxLog": "تنزيل سجل BELABOX",
-    "downloadSystemLog": "تنزيل سجل النظام"
+    "downloadSystemLog": "تنزيل سجل النظام",
+    "systemDescription": "إعدادات النظام المتقدمة وخيارات المطور",
+    "systemActions": "إجراءات النظام",
+    "systemActionsDescription": "عناصر التحكم في الطاقة وإعادة تشغيل النظام",
+    "versionInformation": "معلومات الإصدار",
+    "sshServer": "خادم SSH",
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "logManagement": "إدارة السجلات",
+    "logManagementDescription": "تنزيل سجلات النظام لاستكشاف الأخطاء وإصلاحها والتصحيح",
+    "coreSystemConfiguration": "تكوين النظام الأساسي والأمان",
+    "developmentToolsAccess": "أدوات التطوير والوصول إلى النظام",
+    "systemComponentsVersions": "إصدارات مكونات النظام",
+    "applicationLogsDescription": "سجلات التطبيق والتشخيص",
+    "systemLogsDescription": "معلومات التصحيح على مستوى النظام",
+    "rebootDescription": "إعادة تشغيل النظام بأمان",
+    "powerOffDescription": "إيقاف تشغيل النظام بالكامل"
   },
   "pwa": {
     "offline": "أنت غير متصل",

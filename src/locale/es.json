@@ -30,7 +30,51 @@
     "areYouSure": "¿Estás absolutamente seguro?",
     "updateButton": "Actualizar",
     "updateConfirmation": "¿Estás seguro de que deseas iniciar una actualización de software? Esto puede tomar varios minutos. No podrás iniciar un stream hasta que se haya completado la actualización. El codificador se desconectará brevemente después de una actualización exitosa. Nunca elimines la potencia o resetees el encoder mientras se realiza la actualización. Si el codificador es alimentado por batería, asegúrate de que esté completamente cargado.",
-    "streamingMessage": "Su transmisión está utilizando {usingNetworksCount} redes con una latencia de {srtLatency} ms"
+    "streamingMessage": "Su transmisión está utilizando {usingNetworksCount} redes con una latencia de {srtLatency} ms",
+    "serverAndAudio": "Configuración del servidor y transmisión de audio",
+    "liveMetrics": "Métricas en vivo",
+    "sensorsUnavailable": "Sensores no disponibles",
+    "configurationNotComplete": "Configuración pendiente",
+    "pleaseConfigureServer": "Por favor configure un servidor de retransmisión para comenzar la transmisión",
+    "status": "Estado",
+    "streaming": "Transmitiendo",
+    "offline": "Desconectado",
+    "temperature": "Temperatura",
+    "sensors": "Sensores",
+    "relayServer": "Servidor de Retransmisión",
+    "updates": "Actualizaciones",
+    "none": "Ninguno",
+    "notConfigured": "No configurado",
+    "notAvailable": "No disponible",
+    "youHaventConfigured": "No has configurado ningún servidor",
+    "noSensorData": "No hay datos de sensores disponibles",
+    "port": "Puerto",
+    "overview": "Resumen",
+    "configuration": "Configuración",
+    "latency": "Latencia / Retraso",
+    "packages": "Paquetes",
+    "package": "Paquete",
+    "maxBitrate": "Tasa de Bits Máxima",
+    "audioDevice": "Dispositivo de Audio",
+    "audioCodec": "Códec de Audio",
+    "systemHealth": "Salud del Sistema",
+    "networkInfo": "Información de Red",
+    "areYouSure": "¿Estás absolutamente seguro?",
+    "updateButton": "Actualizar",
+    "updateConfirmation": "¿Estás seguro de que quieres iniciar una actualización de software? Esto puede tomar varios minutos. No podrás iniciar una transmisión hasta que se complete. El codificador se desconectará brevemente después de una actualización exitosa. Nunca quites la alimentación o reinicies el codificador mientras se actualiza. Si el codificador funciona con batería, asegúrate de que esté completamente cargada.",
+    "streamingMessage": "Su transmisión está usando {usingNetworksCount} redes con una latencia de {srtLatency} ms",
+    "noUpdatesAvailable": "El sistema está actualizado",
+    "serverSettings": "Configuración del Servidor",
+    "audioSettings": "Configuración de Audio",
+    "hardwareSensors": "Sensores de Hardware",
+    "streamPerformance": "Rendimiento de Transmisión"
+  },
+  "navigation": {
+    "toggleMenu": "Alternar Menú",
+    "general": "General",
+    "network": "Red",
+    "streaming": "Streaming",
+    "advanced": "Avanzado"
   },
   "auth": {
     "createPassword": "Crear Contraseña",
@@ -38,9 +82,24 @@
     "createPasswordAndLogin": "Crear contraseña e iniciar sesión",
     "loginWithPassword": "Iniciar sesión con contraseña",
     "usePassword": "Usa la contraseña del dispositivo para acceder a las funcionalidades",
+    "password": "Contraseña",
+    "newPassword": "Nueva Contraseña",
+    "placeholderPassword": "Introduce tu contraseña",
+    "placeholderNewPassword": "Crea una contraseña segura (mín 8 caracteres)",
     "signIn": "Ingresar",
+    "signingIn": "Ingresando...",
+    "creatingPassword": "Creando contraseña...",
     "rememberMe": "Recuérdame",
-    "footerText": "Solo ingresa y disfruta trayendo la alegría"
+    "secureAccess": "Acceso Seguro",
+    "footerText": "Solo ingresa y disfruta trayendo la alegría",
+    "validation": {
+      "passwordMinLength": "La contraseña debe tener al menos 8 caracteres",
+      "passwordValid": "¡La contraseña se ve bien!"
+    },
+    "help": {
+      "createPasswordTitle": "Configuración Inicial",
+      "createPasswordDescription": "Necesitarás crear una contraseña segura para proteger tu cuenta. Esta contraseña se usará para todos los futuros inicios de sesión."
+    }
   },
   "settings": {
     "encoderSettings": "Configuración del codificador",
@@ -62,6 +121,9 @@
     "audioCodec": "Códec de audio",
     "selectAudioCodec": "Seleccione un códec de audio",
     "audioDelay": "Retraso de audio (ms)",
+    "audioDelayEarly": "Adelantado (-)",
+    "audioDelayLate": "Retrasado (+)",
+    "perfectSync": "Sincronizado",
     "noAudioSupport": "La configuración seleccionada actualmente no admite ningún tipo de configuración de audio",
 
     "manualConfiguration": "Configuración Manual",
@@ -70,12 +132,18 @@
     "relayServerAccount": "Cuenta de Retransmisión",
     "srtlaServerAddress": "Dirección del servidor receptor SRTLA",
     "srtlaServerPort": "Puerto del servidor SRTLA",
-    "srtStreamId": "ID de transmisión SRT (opcional)",
+    "srtStreamId": "ID de transmisión SRT",
     "srtLatency": "Latencia SRT (ms)",
     "startStreaming": "Iniciar Transmisión",
     "stopStreaming": "Detener Transmisión",
     "changeBitrateNotice": "Puedes cambiar el bitrate incluso si estás transmitiendo.",
     "audioSettingsMessage": "Los ajustes de audio se mostrarán una vez seleccione una opción válida en la sección de codificador",
+    "optional": "opcional",
+    "placeholders": {
+      "srtlaServerAddress": "ej., 192.168.1.100 o server.example.com",
+      "srtlaServerPort": "ej., 8890",
+      "srtStreamId": "ej., stream123"
+    },
     "errors": {
       "inputModeRequired": "Por favor seleccione un modo de entrada",
       "encoderRequired": "Por favor seleccione un formato de codificación",
@@ -91,6 +159,57 @@
     }
   },
   "network": {
+    "pageTitle": "Configuración de Red",
+    "pageDescription": "Administra tus conexiones WiFi, hotspots, módems celulares e interfaces de red",
+    "sections": {
+      "networkInterfaces": "Interfaces de Red",
+      "wifiDevices": "Dispositivos WiFi",
+      "cellularModems": "Módems Celulares"
+    },
+    "summary": {
+      "networkInfo": "Información de la Red",
+      "networksActive": "{count} redes, {active} activas • Total: {total} Kbps",
+      "activeNetworks": "{active} de {total} redes activas",
+      "totalBandwidth": "{total} Kbps",
+      "availableBandwidth": "Ancho de Banda Total:",
+      "available": "disponibles"
+    },
+    "status": {
+      "details": "Detalles",
+      "turnOff": "Apagar",
+      "enableHotspot": "Habilitar Hotspot",
+      "noActiveConnection": "Sin conexión activa",
+      "notConnected": "No conectado",
+      "scanningNetworks": "Buscando redes...",
+      "connecting": "Conectando...",
+      "ready": "Listo",
+      "active": "Activo",
+      "inactive": "Inactivo"
+    },
+    "accessibility": {
+      "wifiQrCode": "Código QR WiFi"
+    },
+    "deviceCount": {
+      "device": "dispositivo",
+      "devices": "dispositivos",
+      "modem": "módem",
+      "modems": "módems"
+    },
+    "emptyStates": {
+      "loadingStatus": "Cargando estado de red...",
+      "pleaseWait": "Por favor espere mientras recopilamos información de red",
+      "noDevicesFound": "No se encontraron dispositivos de red",
+      "noDevicesDescription": "No se detectaron adaptadores WiFi o módems celulares",
+      "noNetworksDetected": "No se detectaron redes",
+      "noNetworkInterfaces": "No hay interfaces de red disponibles"
+    },
+    "toggle": {
+      "enableNetwork": "Habilitar interfaz de red",
+      "disableNetwork": "Deshabilitar interfaz de red"
+    },
+    "errors": {
+      "networkConnectionError": "Error de conexión de red"
+    },
     "hotspot": {
       "name": "Nombre",
       "channel": "Canal",
@@ -107,6 +226,7 @@
       "status": "Estado",
       "network": "Red",
       "save": "Guardar",
+      "reset": "Restablecer",
       "autoapn": "APN Automático",
       "apn": "APN",
       "username": "Nombre de usuario",
@@ -142,7 +262,8 @@
   "hotspotConfigurator": {
     "dialog": {
       "save": "Guardar",
-      "configHotspot": "Configurar punto de acceso",
+      "saving": "Guardando...",
+      "configHotspot": "Configurar Hotspot",
       "configureHotspot": "Configura tu punto de acceso"
     },
     "hotspot": {
@@ -150,31 +271,68 @@
       "password": "Contraseña",
       "channel": "Canal",
       "placeholderName": "BELABOX",
-      "placeholderPassword": "********",
+      "placeholderPassword": "Ingrese una contraseña segura",
       "selectChannel": "Seleccione un canal"
+    },
+    "validation": {
+      "nameMinLength": "El nombre debe tener al menos 3 caracteres",
+      "nameMaxLength": "El nombre debe tener menos de 32 caracteres",
+      "nameValid": "El nombre se ve bien",
+      "passwordMinLength": "La contraseña debe tener al menos 8 caracteres",
+      "passwordMaxLength": "La contraseña debe tener menos de 63 caracteres",
+      "passwordValid": "La seguridad de la contraseña es buena",
+      "formIncomplete": "Por favor corrija los problemas resaltados para continuar"
+    },
+    "help": {
+      "nameHelp": "Elija un nombre memorable para su punto de acceso (3-32 caracteres)",
+      "passwordHelp": "Cree una contraseña segura (8-63 caracteres)",
+      "channelHelp": "Se recomienda la selección automática para un rendimiento óptimo"
+    },
+    "success": {
+      "title": "Punto de acceso configurado exitosamente",
+      "description": "Sus configuraciones de punto de acceso han sido actualizadas"
+    },
+    "error": {
+      "title": "Configuración fallida",
+      "description": "No se pudieron actualizar las configuraciones del punto de acceso. Inténtelo de nuevo."
     }
   },
   "wifiSelector": {
     "dialog": {
       "close": "Cerrar",
-      "searchWifi": "Buscar redes WiFi",
-      "availableNetworks": "Redes disponibles para {network}",
+      "searchWifi": "Ver redes disponibles",
+      "availableNetworks": "Redes Disponibles",
       "connecting": "Conectando",
       "forgetNetwork": "Olvidar red WiFi",
-      "disconnectFrom": "Desconectar de {ssid}",
+      "disconnectFrom": "Olvidar Red",
       "confirmForget": "¿Seguro que deseas olvidar {ssid} en la red {network}?",
-      "connectTo": "Conectar a {ssid}",
-      "introducePassword": "Por favor, introduce la contraseña de la red"
+      "connectTo": "Conectar a la Red",
+      "introducePassword": "Por favor, introduce la contraseña de la red",
+      "placeholderPassword": "Contraseña de la red"
     },
     "button": {
       "disconnect": "Desconectar",
       "connect": "Conectar",
       "forget": "Olvidar",
-      "scanning": "Escaneando",
-      "scan": "Escanear"
+      "scanning": "Buscando redes...",
+      "scan": "Buscar redes"
     },
     "hotspot": {
       "placeholderPassword": "********"
+    },
+    "networks": {
+      "found": "redes encontradas"
+    },
+    "status": {
+      "connected": "Conectado"
+    },
+    "success": {
+      "connected": "WiFi Conectado",
+      "connectedDescription": "Conectado exitosamente a la red WiFi"
+    },
+    "error": {
+      "connectionFailed": "Conexión WiFi Fallida",
+      "connectionFailedDescription": "No se pudo conectar a la red WiFi. Verifique la contraseña e inténtelo de nuevo."
     }
   },
   "networking": {
@@ -189,6 +347,18 @@
     "toggle": {
       "disableNetwork": "Desactivar red",
       "enableNetwork": "Activar red"
+    },
+    "types": {
+      "hotspot": "Punto de Acceso",
+      "cellular": "Celular",
+      "wifi": "WiFi",
+      "ethernet": "Ethernet"
+    },
+    "labels": {
+      "interface": "Interfaz:",
+      "ipAddress": "Dirección IP:",
+      "bandwidth": "Ancho de banda:",
+      "network": "Red:"
     }
   },
   "wifiStatus": {
@@ -196,12 +366,7 @@
     "connected": "Conectado",
     "hotspot": "Punto de Acceso"
   },
-  "navigation": {
-    "general": "General",
-    "network": "Red",
-    "streaming": "Streaming",
-    "advanced": "Avanzado"
-  },
+
   "advanced": {
     "systemSettings": "Configuración del sistema",
     "developerOptions": "Opciones de desarrollador",
@@ -235,7 +400,23 @@
     "confirmBelaboxLog": "¿Está seguro de que desea descargar el registro de BELABOX? Puede contener información sensible, como contraseñas.",
     "confirmSystemLog": "¿Está seguro de que desea descargar el registro del sistema? Puede contener información sensible, como contraseñas.",
     "downloadBelaboxLog": "Descargar registro de BELABOX",
-    "downloadSystemLog": "Descargar registro del sistema"
+    "downloadSystemLog": "Descargar registro del sistema",
+    "systemDescription": "Configuración avanzada del sistema y opciones de desarrollador",
+    "systemActions": "Acciones del Sistema",
+    "systemActionsDescription": "Controles de energía y reinicio del sistema",
+    "versionInformation": "Información de Versión",
+    "sshServer": "Servidor SSH",
+    "active": "Activo",
+    "inactive": "Inactivo",
+    "logManagement": "Gestión de Registros",
+    "logManagementDescription": "Descargar registros del sistema para solución de problemas y depuración",
+    "coreSystemConfiguration": "Configuración central del sistema y seguridad",
+    "developmentToolsAccess": "Herramientas de desarrollo y acceso al sistema",
+    "systemComponentsVersions": "Versiones de componentes del sistema",
+    "applicationLogsDescription": "Registros de aplicación y diagnósticos",
+    "systemLogsDescription": "Información de depuración a nivel del sistema",
+    "rebootDescription": "Reiniciar el sistema de forma segura",
+    "powerOffDescription": "Apagar el sistema completamente"
   },
   "pwa": {
     "offline": "Estás desconectado",

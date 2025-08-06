@@ -32,7 +32,51 @@
     "areYouSure": "Êtes-vous absolument sûr?",
     "updateButton": "mise à jour",
     "updateConfirmation": "Êtes-vous sûr de vouloir démarrer une mise à jour logicielle ? Cela peut prendre plusieurs minutes. Vous ne pourrez pas démarrer un flux jusqu'à ce qu'il n'ait pas été terminé. Le encodeur se déconnectera brièvement après une mise à jour réussie. N'éliminez jamais la puissance ou réinitialisez l'encodeur pendant la mise à jour. Si l'encodeur est alimenté par une batterie, assurez-vous qu'il est complètement chargé.",
-    "streamingMessage": "Votre transmission utilise {usingNetworksCount} réseaux avec une latence de {srtLatency} ms"
+    "streamingMessage": "Votre transmission utilise {usingNetworksCount} réseaux avec une latence de {srtLatency} ms",
+    "serverAndAudio": "Configuration du serveur et diffusion audio",
+    "liveMetrics": "Métriques en direct",
+    "sensorsUnavailable": "Capteurs indisponibles",
+    "configurationNotComplete": "Configuration en attente",
+    "pleaseConfigureServer": "Veuillez configurer un serveur de relais pour commencer la diffusion",
+    "status": "Statut",
+    "streaming": "Diffusion",
+    "offline": "Hors ligne",
+    "temperature": "Température",
+    "sensors": "Capteurs",
+    "relayServer": "Serveur de Relais",
+    "updates": "Mises à jour",
+    "none": "Aucun",
+    "notConfigured": "Non configuré",
+    "notAvailable": "Non disponible",
+    "youHaventConfigured": "Vous n'avez configuré aucun serveur",
+    "noSensorData": "Aucune donnée de capteur disponible",
+    "port": "Port",
+    "overview": "Aperçu",
+    "configuration": "Configuration",
+    "latency": "Latence / Délai",
+    "packages": "Paquets",
+    "package": "Paquet",
+    "maxBitrate": "Débit Maximum",
+    "audioDevice": "Dispositif Audio",
+    "audioCodec": "Codec Audio",
+    "systemHealth": "Santé du Système",
+    "networkInfo": "Informations Réseau",
+    "areYouSure": "Êtes-vous absolument sûr?",
+    "updateButton": "Mettre à jour",
+    "updateConfirmation": "Êtes-vous sûr de vouloir démarrer une mise à jour logicielle? Cela peut prendre plusieurs minutes. Vous ne pourrez pas démarrer un flux tant qu'il ne sera pas terminé. L'encodeur se déconnectera brièvement après une mise à jour réussie. Ne retirez jamais l'alimentation ou ne réinitialisez jamais l'encodeur pendant la mise à jour. Si l'encodeur fonctionne sur batterie, assurez-vous qu'elle soit complètement chargée.",
+    "streamingMessage": "Votre transmission utilise {usingNetworksCount} réseaux avec une latence de {srtLatency} ms",
+    "noUpdatesAvailable": "Le système est à jour",
+    "serverSettings": "Paramètres du Serveur",
+    "audioSettings": "Paramètres Audio",
+    "hardwareSensors": "Capteurs Matériels",
+    "streamPerformance": "Performance de Diffusion"
+  },
+  "navigation": {
+    "toggleMenu": "Basculer le menu",
+    "general": "Général",
+    "network": "Réseau",
+    "streaming": "Streaming",
+    "advanced": "Avancé"
   },
   "auth": {
     "createPassword": "Créer un mot de passe",
@@ -66,18 +110,27 @@
     "audioCodec": "Codec audio",
     "selectAudioCodec": "Sélectionnez un codec audio",
     "audioDelay": "Retard audio (ms)",
+    "audioDelayEarly": "Précoce (-)",
+    "audioDelayLate": "Tardif (+)",
+    "perfectSync": "Sync",
     "noAudioSupport": "La configuration sélectionnée actuellement ne prend en charge aucun type de réglage audio",
 
     "manualConfiguration": "Configuration manuelle",
     "receiverServer": "Serveur récepteur",
     "srtlaServerAddress": "Adresse du serveur récepteur SRTLA",
     "srtlaServerPort": "Port du serveur SRTLA",
-    "srtStreamId": "ID du flux SRT (optionnel)",
+    "srtStreamId": "ID du flux SRT",
     "srtLatency": "Latence SRT (ms)",
     "startStreaming": "Démarrer le Streaming",
     "stopStreaming": "Arrêter le Streaming",
     "changeBitrateNotice": "Vous pouvez changer le débit binaire même si vous diffusez.",
     "audioSettingsMessage": "Les paramètres audio s'afficheront une fois que vous aurez sélectionné une option valide dans la section encodeur",
+    "optional": "optionnel",
+    "placeholders": {
+      "srtlaServerAddress": "ex., 192.168.1.100 ou server.example.com",
+      "srtlaServerPort": "ex., 8890",
+      "srtStreamId": "ex., stream123"
+    },
     "errors": {
       "inputModeRequired": "Veuillez sélectionner un mode d'entrée",
       "encoderRequired": "Veuillez sélectionner un format d'encodage",
@@ -93,6 +146,57 @@
     }
   },
   "network": {
+    "pageTitle": "Configuration Réseau",
+    "pageDescription": "Gérez vos connexions WiFi, hotspots, modems cellulaires et interfaces réseau",
+    "sections": {
+      "networkInterfaces": "Interfaces Réseau",
+      "wifiDevices": "Appareils WiFi",
+      "cellularModems": "Modems Cellulaires"
+    },
+    "summary": {
+      "networkInfo": "Informations Réseau",
+      "networksActive": "{count} réseaux, {active} actifs • Total: {total} Kbps",
+      "activeNetworks": "{active} sur {total} réseaux actifs",
+      "totalBandwidth": "{total} Kbps",
+      "availableBandwidth": "Bande passante totale:",
+      "available": "disponibles"
+    },
+    "status": {
+      "details": "Détails",
+      "turnOff": "Éteindre",
+      "enableHotspot": "Activer Hotspot",
+      "noActiveConnection": "Aucune connexion active",
+      "notConnected": "Non connecté",
+      "scanningNetworks": "Recherche de réseaux...",
+      "connecting": "Connexion...",
+      "ready": "Prêt",
+      "active": "Actif",
+      "inactive": "Inactif"
+    },
+    "accessibility": {
+      "wifiQrCode": "Code QR WiFi"
+    },
+    "deviceCount": {
+      "device": "appareil",
+      "devices": "appareils",
+      "modem": "modem",
+      "modems": "modems"
+    },
+    "emptyStates": {
+      "loadingStatus": "Chargement de l'état du réseau...",
+      "pleaseWait": "Veuillez patienter pendant que nous collectons les informations réseau",
+      "noDevicesFound": "Aucun périphérique réseau trouvé",
+      "noDevicesDescription": "Aucun adaptateur WiFi ou modem cellulaire détecté",
+      "noNetworksDetected": "Aucun réseau détecté",
+      "noNetworkInterfaces": "Aucune interface réseau disponible"
+    },
+    "toggle": {
+      "enableNetwork": "Activer l'interface réseau",
+      "disableNetwork": "Désactiver l'interface réseau"
+    },
+    "errors": {
+      "networkConnectionError": "Erreur de connexion réseau"
+    },
     "hotspot": {
       "name": "Nom",
       "channel": "Canal",
@@ -109,6 +213,7 @@
       "status": "État",
       "network": "Réseau",
       "save": "Enregistrer",
+      "reset": "Réinitialiser",
       "autoapn": "APN Automatique",
       "apn": "APN",
       "username": "Nom d'utilisateur",
@@ -143,6 +248,7 @@
   "hotspotConfigurator": {
     "dialog": {
       "save": "Enregistrer",
+      "saving": "Enregistrement...",
       "configHotspot": "Configurer le point d'accès",
       "configureHotspot": "Configurez votre point d'accès"
     },
@@ -151,8 +257,30 @@
       "password": "Mot de passe",
       "channel": "Canal",
       "placeholderName": "BELABOX",
-      "placeholderPassword": "********",
+      "placeholderPassword": "Entrez un mot de passe sécurisé",
       "selectChannel": "Sélectionnez un canal"
+    },
+    "validation": {
+      "nameMinLength": "Le nom doit contenir au moins 3 caractères",
+      "nameMaxLength": "Le nom doit contenir moins de 32 caractères",
+      "nameValid": "Le nom semble correct",
+      "passwordMinLength": "Le mot de passe doit contenir au moins 8 caractères",
+      "passwordMaxLength": "Le mot de passe doit contenir moins de 63 caractères",
+      "passwordValid": "La force du mot de passe est bonne",
+      "formIncomplete": "Veuillez corriger les problèmes mis en évidence pour continuer"
+    },
+    "help": {
+      "nameHelp": "Choisissez un nom mémorable pour votre point d'accès (3-32 caractères)",
+      "passwordHelp": "Créez un mot de passe fort (8-63 caractères)",
+      "channelHelp": "La sélection automatique est recommandée pour des performances optimales"
+    },
+    "success": {
+      "title": "Point d'accès configuré avec succès",
+      "description": "Vos paramètres de point d'accès ont été mis à jour"
+    },
+    "error": {
+      "title": "Échec de la configuration",
+      "description": "Impossible de mettre à jour les paramètres du point d'accès. Veuillez réessayer."
     }
   },
   "wifiSelector": {
@@ -176,6 +304,14 @@
     },
     "hotspot": {
       "placeholderPassword": "********"
+    },
+    "success": {
+      "connected": "WiFi Connecté",
+      "connectedDescription": "Connecté avec succès au réseau WiFi"
+    },
+    "error": {
+      "connectionFailed": "Échec de la Connexion WiFi",
+      "connectionFailedDescription": "Impossible de se connecter au réseau WiFi. Vérifiez le mot de passe et réessayez."
     }
   },
   "networking": {
@@ -190,6 +326,18 @@
     "toggle": {
       "disableNetwork": "Désactiver le réseau",
       "enableNetwork": "Activer le réseau"
+    },
+    "types": {
+      "hotspot": "Point d'accès",
+      "cellular": "Cellulaire",
+      "wifi": "WiFi",
+      "ethernet": "Ethernet"
+    },
+    "labels": {
+      "interface": "Interface:",
+      "ipAddress": "Adresse IP:",
+      "bandwidth": "Bande passante:",
+      "network": "Réseau:"
     }
   },
   "wifiStatus": {
@@ -236,7 +384,23 @@
     "confirmBelaboxLog": "Êtes-vous sûr de vouloir télécharger le journal BELABOX ? Il peut contenir des informations sensibles, telles que des mots de passe.",
     "confirmSystemLog": "Êtes-vous sûr de vouloir télécharger le journal système ? Il peut contenir des informations sensibles, telles que des mots de passe.",
     "downloadBelaboxLog": "Télécharger le journal BELABOX",
-    "downloadSystemLog": "Télécharger le journal système"
+    "downloadSystemLog": "Télécharger le journal système",
+    "systemDescription": "Configuration système avancée et options de développeur",
+    "systemActions": "Actions Système",
+    "systemActionsDescription": "Contrôles d'alimentation et de redémarrage du système",
+    "versionInformation": "Informations de Version",
+    "sshServer": "Serveur SSH",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "logManagement": "Gestion des Journaux",
+    "logManagementDescription": "Télécharger les journaux système pour dépannage et débogage",
+    "coreSystemConfiguration": "Configuration système centrale et sécurité",
+    "developmentToolsAccess": "Outils de développement et accès système",
+    "systemComponentsVersions": "Versions des composants système",
+    "applicationLogsDescription": "Journaux d'application et diagnostics",
+    "systemLogsDescription": "Informations de débogage au niveau système",
+    "rebootDescription": "Redémarrer le système en toute sécurité",
+    "powerOffDescription": "Éteindre le système complètement"
   },
   "pwa": {
     "offline": "Vous êtes hors ligne",

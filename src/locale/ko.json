@@ -63,6 +63,9 @@
     "audioCodec": "오디오 코덱",
     "selectAudioCodec": "오디오 코덱 선택",
     "audioDelay": "오디오 지연(ms)",
+    "audioDelayEarly": "빠름 (-)",
+    "audioDelayLate": "늦음 (+)",
+    "perfectSync": "동기화",
     "noAudioSupport": "현재 선택한 구성은's 모든 종류의 오디오 설정을 지원하지 않습니다",
 
     "manualConfiguration": "수동 구성",
@@ -71,12 +74,18 @@
     "relayServerAccount": "릴레이 서버 계정",
     "srtlaServerAddress": "SRTLA 수신기 서버 주소",
     "srtlaServerPort": "SRTLA 수신기 포트",
-    "srtStreamId": "SRT 스트림 ID(선택사항)",
+    "srtStreamId": "SRT 스트림 ID",
     "srtLatency": "SRT 지연 시간(ms)",
     "startStreaming": "스트리밍 시작",
     "stopStreaming": "스트리밍 중지",
     "changeBitrateNotice": "스트리밍 중에도 비트레이트를 변경할 수 있습니다.",
     "audioSettingsMessage": "인코더 섹션에서 유효한 옵션을 선택하면 오디오 설정이 표시됩니다",
+    "optional": "선택사항",
+    "placeholders": {
+      "srtlaServerAddress": "예: 192.168.1.100 또는 server.example.com",
+      "srtlaServerPort": "예: 8890",
+      "srtStreamId": "예: stream123"
+    },
     "errors": {
       "inputModeRequired": "입력 모드를 선택해주세요",
       "encoderRequired": "인코딩 형식을 선택해주세요",
@@ -92,6 +101,38 @@
     }
   },
   "network": {
+    "pageTitle": "네트워크 설정",
+    "pageDescription": "WiFi 연결, 핫스팟, 셀룰러 모뎀 및 네트워크 인터페이스를 관리하세요",
+    "sections": {
+      "networkInterfaces": "네트워크 인터페이스",
+      "wifiDevices": "WiFi 장치",
+      "cellularModems": "셀룰러 모뎀"
+    },
+    "status": {
+      "details": "세부정보",
+      "turnOff": "끄기",
+      "enableHotspot": "핫스팟 활성화",
+      "noActiveConnection": "활성 연결 없음",
+      "notConnected": "연결되지 않음",
+      "scanningNetworks": "네트워크 스캔 중...",
+      "connecting": "연결 중...",
+      "ready": "준비 완료"
+    },
+    "accessibility": {
+      "wifiQrCode": "WiFi QR코드"
+    },
+    "deviceCount": {
+      "device": "장치",
+      "devices": "장치",
+      "modem": "모뎀",
+      "modems": "모뎀"
+    },
+    "emptyStates": {
+      "loadingStatus": "네트워크 상태 로딩 중...",
+      "pleaseWait": "네트워크 정보를 수집하는 동안 잠시 기다려 주세요",
+      "noDevicesFound": "네트워크 장치를 찾을 수 없음",
+      "noDevicesDescription": "WiFi 어댑터 또는 셀룰러 모뎀이 감지되지 않았습니다"
+    },
     "hotspot": {
       "name": "이름",
       "channel": "채널",
@@ -190,6 +231,18 @@
     "toggle": {
       "disableNetwork": "네트워크 비활성화",
       "enableNetwork": "네트워크 활성화"
+    },
+    "types": {
+      "hotspot": "핫스팟",
+      "cellular": "셀룰러",
+      "wifi": "WiFi",
+      "ethernet": "이더넷"
+    },
+    "labels": {
+      "interface": "인터페이스:",
+      "ipAddress": "IP 주소:",
+      "bandwidth": "대역폭:",
+      "network": "네트워크:"
     }
   },
   "wifiStatus": {
@@ -236,7 +289,23 @@
     "confirmBelaboxLog": "BELABOX 로그를 다운로드하시겠습니까? 비밀번호와 같은 민감한 정보가 포함될 수 있습니다.",
     "confirmSystemLog": "시스템 로그를 다운로드하시겠습니까? 비밀번호와 같은 민감한 정보가 포함될 수 있습니다.",
     "downloadBelaboxLog": "BELABOX 로그 다운로드",
-    "downloadSystemLog": "시스템 로그 다운로드"
+    "downloadSystemLog": "시스템 로그 다운로드",
+    "systemDescription": "고급 시스템 구성 및 개발자 옵션",
+    "systemActions": "시스템 작업",
+    "systemActionsDescription": "전원 및 시스템 재시작 제어",
+    "versionInformation": "버전 정보",
+    "sshServer": "SSH 서버",
+    "active": "활성",
+    "inactive": "비활성",
+    "logManagement": "로그 관리",
+    "logManagementDescription": "문제 해결 및 디버깅을 위한 시스템 로그 다운로드",
+    "coreSystemConfiguration": "핵심 시스템 구성 및 보안",
+    "developmentToolsAccess": "개발 도구 및 시스템 액세스",
+    "systemComponentsVersions": "시스템 구성 요소 버전",
+    "applicationLogsDescription": "애플리케이션 로그 및 진단",
+    "systemLogsDescription": "시스템 수준 디버깅 정보",
+    "rebootDescription": "시스템을 안전하게 재시작",
+    "powerOffDescription": "시스템을 완전히 종료"
   },
   "pwa": {
     "offline": "오프라인입니다",

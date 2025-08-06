@@ -63,6 +63,9 @@
     "audioCodec": "オーディオコーデック",
     "selectAudioCodec": "オーディオコーデックを選択",
     "audioDelay": "オーディオ遅延 (ms)",
+    "audioDelayEarly": "早い (-)",
+    "audioDelayLate": "遅い (+)",
+    "perfectSync": "同期",
     "noAudioSupport": "現在選択されている設定はオーディオ設定をサポートしていません",
 
     "manualConfiguration": "手動設定",
@@ -71,12 +74,18 @@
     "relayServerAccount": "リレーサーバーアカウント",
     "srtlaServerAddress": "SRTLAレシーバーサーバーアドレス",
     "srtlaServerPort": "SRTLAレシーバーポート",
-    "srtStreamId": "SRTストリームID（オプション）",
+    "srtStreamId": "SRTストリームID",
     "srtLatency": "SRTレイテンシ (ms)",
     "startStreaming": "ストリーミング開始",
     "stopStreaming": "ストリーミング停止",
     "changeBitrateNotice": "ストリーミング中でもビットレートを変更できます。",
     "audioSettingsMessage": "エンコーダーセクションで有効なオプションを選択すると、オーディオ設定が表示されます",
+    "optional": "オプション",
+    "placeholders": {
+      "srtlaServerAddress": "例: 192.168.1.100 または server.example.com",
+      "srtlaServerPort": "例: 8890",
+      "srtStreamId": "例: stream123"
+    },
     "errors": {
       "inputModeRequired": "入力モードを選択してください",
       "encoderRequired": "エンコーディング形式を選択してください",
@@ -92,6 +101,38 @@
     }
   },
   "network": {
+    "pageTitle": "ネットワーク設定",
+    "pageDescription": "WiFi接続、ホットスポット、セルラーモデム、ネットワークインターフェースを管理",
+    "sections": {
+      "networkInterfaces": "ネットワークインターフェース",
+      "wifiDevices": "WiFiデバイス",
+      "cellularModems": "セルラーモデム"
+    },
+    "status": {
+      "details": "詳細",
+      "turnOff": "オフにする",
+      "enableHotspot": "ホットスポットを有効化",
+      "noActiveConnection": "アクティブな接続がありません",
+      "notConnected": "接続されていません",
+      "scanningNetworks": "ネットワークをスキャン中...",
+      "connecting": "接続中...",
+      "ready": "準備完了"
+    },
+    "accessibility": {
+      "wifiQrCode": "WiFi QRコード"
+    },
+    "deviceCount": {
+      "device": "デバイス",
+      "devices": "デバイス",
+      "modem": "モデム",
+      "modems": "モデム"
+    },
+    "emptyStates": {
+      "loadingStatus": "ネットワーク状態を読み込み中...",
+      "pleaseWait": "ネットワーク情報を収集していますのでお待ちください",
+      "noDevicesFound": "ネットワークデバイスが見つかりません",
+      "noDevicesDescription": "WiFiアダプターまたはセルラーモデムが検出されませんでした"
+    },
     "hotspot": {
       "name": "名前",
       "channel": "チャンネル",
@@ -143,6 +184,7 @@
   "hotspotConfigurator": {
     "dialog": {
       "save": "保存",
+      "saving": "保存中...",
       "configHotspot": "ホットスポット設定",
       "configureHotspot": "ホットスポットを設定する"
     },
@@ -190,6 +232,18 @@
     "toggle": {
       "disableNetwork": "ネットワークを無効化",
       "enableNetwork": "ネットワークを有効化"
+    },
+    "types": {
+      "hotspot": "ホットスポット",
+      "cellular": "セルラー",
+      "wifi": "WiFi",
+      "ethernet": "イーサネット"
+    },
+    "labels": {
+      "interface": "インターフェース：",
+      "ipAddress": "IPアドレス：",
+      "bandwidth": "帯域幅：",
+      "network": "ネットワーク："
     }
   },
   "wifiStatus": {
@@ -236,7 +290,23 @@
     "confirmBelaboxLog": "BELABOXログをダウンロードしますか？パスワードなどの機密情報が含まれている可能性があります。",
     "confirmSystemLog": "システムログをダウンロードしますか？パスワードなどの機密情報が含まれている可能性があります。",
     "downloadBelaboxLog": "BELABOXログをダウンロード",
-    "downloadSystemLog": "システムログをダウンロード"
+    "downloadSystemLog": "システムログをダウンロード",
+    "systemDescription": "高度なシステム構成と開発者オプション",
+    "systemActions": "システムアクション",
+    "systemActionsDescription": "電源およびシステム再起動コントロール",
+    "versionInformation": "バージョン情報",
+    "sshServer": "SSHサーバー",
+    "active": "アクティブ",
+    "inactive": "非アクティブ",
+    "logManagement": "ログ管理",
+    "logManagementDescription": "トラブルシューティングとデバッグのためのシステムログをダウンロード",
+    "coreSystemConfiguration": "コアシステム構成とセキュリティ",
+    "developmentToolsAccess": "開発ツールとシステムアクセス",
+    "systemComponentsVersions": "システムコンポーネントのバージョン",
+    "applicationLogsDescription": "アプリケーションログと診断",
+    "systemLogsDescription": "システムレベルのデバッグ情報",
+    "rebootDescription": "システムを安全に再起動",
+    "powerOffDescription": "システムを完全にシャットダウン"
   },
   "pwa": {
     "offline": "オフラインです",
