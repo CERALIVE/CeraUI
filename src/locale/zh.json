@@ -63,6 +63,9 @@
     "audioCodec": "音频编解码器",
     "selectAudioCodec": "选择音频编解码器",
     "audioDelay": "音频延迟 (毫秒)",
+    "audioDelayEarly": "提前 (-)",
+    "audioDelayLate": "延迟 (+)",
+    "perfectSync": "同步",
     "noAudioSupport": "当前选择的配置不支持任何类型的音频设置",
 
     "manualConfiguration": "手动配置",
@@ -71,12 +74,18 @@
     "relayServerAccount": "中继服务器账户",
     "srtlaServerAddress": "SRTLA 接收服务器地址",
     "srtlaServerPort": "SRTLA 接收端口",
-    "srtStreamId": "SRT 流 ID（可选）",
+    "srtStreamId": "SRT 流 ID",
     "srtLatency": "SRT 延迟（毫秒）",
     "startStreaming": "开始直播",
     "stopStreaming": "停止直播",
     "changeBitrateNotice": "即使在直播过程中，您也可以更改比特率。",
     "audioSettingsMessage": "在编码器部分选择有效选项后，将显示音频设置",
+    "optional": "可选",
+    "placeholders": {
+      "srtlaServerAddress": "例如：192.168.1.100 或 server.example.com",
+      "srtlaServerPort": "例如：8890",
+      "srtStreamId": "例如：stream123"
+    },
     "errors": {
       "inputModeRequired": "请选择输入模式",
       "encoderRequired": "请选择编码格式",
@@ -92,6 +101,38 @@
     }
   },
   "network": {
+    "pageTitle": "网络配置",
+    "pageDescription": "管理您的WiFi连接、热点、蜂窝调制解调器和网络接口",
+    "sections": {
+      "networkInterfaces": "网络接口",
+      "wifiDevices": "WiFi设备",
+      "cellularModems": "蜂窝调制解调器"
+    },
+    "status": {
+      "details": "详情",
+      "turnOff": "关闭",
+      "enableHotspot": "启用热点",
+      "noActiveConnection": "无活动连接",
+      "notConnected": "未连接",
+      "scanningNetworks": "正在扫描网络...",
+      "connecting": "正在连接...",
+      "ready": "就绪"
+    },
+    "accessibility": {
+      "wifiQrCode": "WiFi二维码"
+    },
+    "deviceCount": {
+      "device": "设备",
+      "devices": "设备",
+      "modem": "调制解调器",
+      "modems": "调制解调器"
+    },
+    "emptyStates": {
+      "loadingStatus": "正在加载网络状态...",
+      "pleaseWait": "请稍候，我们正在收集网络信息",
+      "noDevicesFound": "未找到网络设备",
+      "noDevicesDescription": "未检测到WiFi适配器或蜂窝调制解调器"
+    },
     "hotspot": {
       "name": "名称",
       "channel": "频道",
@@ -143,6 +184,7 @@
   "hotspotConfigurator": {
     "dialog": {
       "save": "保存",
+      "saving": "保存中...",
       "configHotspot": "配置热点",
       "configureHotspot": "配置您的热点"
     },
@@ -151,8 +193,30 @@
       "password": "密码",
       "channel": "频道",
       "placeholderName": "BELABOX",
-      "placeholderPassword": "********",
+      "placeholderPassword": "输入安全密码",
       "selectChannel": "选择频道"
+    },
+    "validation": {
+      "nameMinLength": "名称至少需要3个字符",
+      "nameMaxLength": "名称不能超过32个字符",
+      "nameValid": "名称看起来不错",
+      "passwordMinLength": "密码至少需要8个字符",
+      "passwordMaxLength": "密码不能超过63个字符",
+      "passwordValid": "密码强度良好",
+      "formIncomplete": "请修复突出显示的问题以继续"
+    },
+    "help": {
+      "nameHelp": "为您的热点选择一个易记的名称（3-32个字符）",
+      "passwordHelp": "创建一个强密码（8-63个字符）",
+      "channelHelp": "建议使用自动选择以获得最佳性能"
+    },
+    "success": {
+      "title": "热点配置成功",
+      "description": "您的热点设置已更新"
+    },
+    "error": {
+      "title": "配置失败",
+      "description": "无法更新热点设置。请重试。"
     }
   },
   "wifiSelector": {
@@ -176,6 +240,14 @@
     },
     "hotspot": {
       "placeholderPassword": "********"
+    },
+    "success": {
+      "connected": "WiFi已连接",
+      "connectedDescription": "成功连接到WiFi网络"
+    },
+    "error": {
+      "connectionFailed": "WiFi连接失败",
+      "connectionFailedDescription": "无法连接到WiFi网络。请检查密码并重试。"
     }
   },
 
@@ -191,6 +263,18 @@
     "toggle": {
       "disableNetwork": "禁用网络",
       "enableNetwork": "启用网络"
+    },
+    "types": {
+      "hotspot": "热点",
+      "cellular": "蜂窝网络",
+      "wifi": "WiFi",
+      "ethernet": "以太网"
+    },
+    "labels": {
+      "interface": "接口：",
+      "ipAddress": "IP地址：",
+      "bandwidth": "带宽：",
+      "network": "网络："
     }
   },
   "wifiStatus": {
@@ -237,7 +321,23 @@
     "confirmBelaboxLog": "您确定要下载 BELABOX 日志吗？它可能包含敏感信息，如密码。",
     "confirmSystemLog": "您确定要下载系统日志吗？它可能包含敏感信息，如密码。",
     "downloadBelaboxLog": "下载 BELABOX 日志",
-    "downloadSystemLog": "下载系统日志"
+    "downloadSystemLog": "下载系统日志",
+    "systemDescription": "高级系统配置和开发者选项",
+    "systemActions": "系统操作",
+    "systemActionsDescription": "电源和系统重启控制",
+    "versionInformation": "版本信息",
+    "sshServer": "SSH服务器",
+    "active": "活跃",
+    "inactive": "非活跃",
+    "logManagement": "日志管理",
+    "logManagementDescription": "下载系统日志以进行故障排除和调试",
+    "coreSystemConfiguration": "核心系统配置和安全",
+    "developmentToolsAccess": "开发工具和系统访问",
+    "systemComponentsVersions": "系统组件版本",
+    "applicationLogsDescription": "应用程序日志和诊断",
+    "systemLogsDescription": "系统级调试信息",
+    "rebootDescription": "安全重启系统",
+    "powerOffDescription": "完全关闭系统"
   },
   "pwa": {
     "offline": "您已离线",

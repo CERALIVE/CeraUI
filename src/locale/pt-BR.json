@@ -32,7 +32,51 @@
     "updateButton": "Actualizar",
     "areYouSure": "Você tem certeza?",
     "updateConfirmation": "Tem certeza de que deseja iniciar uma atualização de software? Isso pode levar vários minutos. Você não poderá iniciar um fluxo até que a atualização seja concluída. O codificador se desconectará brevemente após uma atualização bem-sucedida. Nunca remova a potência ou reinicialize o codificador enquanto estiver realizando a atualização. Se o codificador for alimentado por bateria, certifique-se de que esteja completamente carregado",
-    "streamingMessage": "Sua transmissão está usando {usingNetworksCount} redes com uma latência de {srtLatency} ms"
+    "streamingMessage": "Sua transmissão está usando {usingNetworksCount} redes com uma latência de {srtLatency} ms",
+    "serverAndAudio": "Configuração de servidor e streaming de áudio",
+    "liveMetrics": "Métricas ao vivo",
+    "sensorsUnavailable": "Sensores indisponíveis",
+    "configurationNotComplete": "Configuração pendente",
+    "pleaseConfigureServer": "Por favor configure um servidor de retransmissão para começar a transmissão",
+    "status": "Status",
+    "streaming": "Transmitindo",
+    "offline": "Offline",
+    "temperature": "Temperatura",
+    "sensors": "Sensores",
+    "relayServer": "Servidor de Retransmissão",
+    "updates": "Atualizações",
+    "none": "Nenhum",
+    "notConfigured": "Não configurado",
+    "notAvailable": "Não disponível",
+    "youHaventConfigured": "Você não configurou nenhum servidor",
+    "noSensorData": "Nenhum dado de sensor disponível",
+    "port": "Porta",
+    "overview": "Visão Geral",
+    "configuration": "Configuração",
+    "latency": "Latência / Atraso",
+    "packages": "Pacotes",
+    "package": "Pacote",
+    "maxBitrate": "Taxa de Bits Máxima",
+    "audioDevice": "Dispositivo de Áudio",
+    "audioCodec": "Codec de Áudio",
+    "systemHealth": "Saúde do Sistema",
+    "networkInfo": "Informações da Rede",
+    "areYouSure": "Você tem certeza absoluta?",
+    "updateButton": "Atualizar",
+    "updateConfirmation": "Tem certeza de que deseja iniciar uma atualização de software? Isso pode levar vários minutos. Você não poderá iniciar uma transmissão até que seja concluída. O codificador se desconectará brevemente após uma atualização bem-sucedida. Nunca remova a energia ou reinicie o codificador durante a atualização. Se o codificador funcionar com bateria, certifique-se de que esteja totalmente carregado.",
+    "streamingMessage": "Sua transmissão está usando {usingNetworksCount} redes com uma latência de {srtLatency} ms",
+    "noUpdatesAvailable": "Sistema atualizado",
+    "serverSettings": "Configurações do Servidor",
+    "audioSettings": "Configurações de Áudio",
+    "hardwareSensors": "Sensores de Hardware",
+    "streamPerformance": "Desempenho da Transmissão"
+  },
+  "navigation": {
+    "toggleMenu": "Alternar Menu",
+    "general": "Geral",
+    "network": "Rede",
+    "streaming": "Streaming",
+    "advanced": "Avançado"
   },
   "auth": {
     "createPassword": "Criar Senha",
@@ -65,18 +109,27 @@
     "audioCodec": "Codec de Áudio",
     "selectAudioCodec": "Selecione um codec de áudio",
     "audioDelay": "Atraso de Áudio (ms)",
+    "audioDelayEarly": "Precoce (-)",
+    "audioDelayLate": "Tardio (+)",
+    "perfectSync": "Sync",
     "noAudioSupport": "A configuração selecionada atualmente não suporta nenhum tipo de configuração de áudio",
 
     "manualConfiguration": "Configuração manual",
     "receiverServer": "Servidor Receptor",
     "srtlaServerAddress": "Endereço do servidor receptor SRTLA",
     "srtlaServerPort": "Porto do servidor SRTLA",
-    "srtStreamId": "ID do fluxo SRT (opcional)",
+    "srtStreamId": "ID do fluxo SRT",
     "srtLatency": "Latência SRT (ms)",
     "startStreaming": "Iniciar Transmissão",
     "stopStreaming": "Parar Transmissão",
     "changeBitrateNotice": "Você pode mudar a taxa de bits mesmo enquanto está transmitindo.",
     "audioSettingsMessage": "As configurações de áudio serão exibidas assim que você selecionar uma opção válida na seção do codificador",
+    "optional": "opcional",
+    "placeholders": {
+      "srtlaServerAddress": "ex., 192.168.1.100 ou server.example.com",
+      "srtlaServerPort": "ex., 8890",
+      "srtStreamId": "ex., stream123"
+    },
     "errors": {
       "inputModeRequired": "Por favor, selecione um modo de entrada",
       "encoderRequired": "Por favor, selecione um formato de codificação",
@@ -92,6 +145,48 @@
     }
   },
   "network": {
+    "pageTitle": "Configuração de Rede",
+    "pageDescription": "Gerencie suas conexões WiFi, hotspots, modems celulares e interfaces de rede",
+    "sections": {
+      "networkInterfaces": "Interfaces de Rede",
+      "wifiDevices": "Dispositivos WiFi",
+      "cellularModems": "Modems Celulares"
+    },
+    "summary": {
+      "networkInfo": "Informações da Rede",
+      "networksActive": "{count} redes, {active} ativas • Total: {total} Kbps",
+      "activeNetworks": "{active} de {total} redes ativas",
+      "totalBandwidth": "{total} Kbps",
+      "availableBandwidth": "Largura de banda total:",
+      "available": "disponíveis"
+    },
+    "status": {
+      "details": "Detalhes",
+      "turnOff": "Desligar",
+      "enableHotspot": "Habilitar Hotspot",
+      "noActiveConnection": "Nenhuma conexão ativa",
+      "notConnected": "Não conectado",
+      "scanningNetworks": "Procurando redes...",
+      "connecting": "Conectando...",
+      "ready": "Pronto",
+      "active": "Ativo",
+      "inactive": "Inativo"
+    },
+    "accessibility": {
+      "wifiQrCode": "Código QR WiFi"
+    },
+    "deviceCount": {
+      "device": "dispositivo",
+      "devices": "dispositivos",
+      "modem": "modem",
+      "modems": "modems"
+    },
+    "emptyStates": {
+      "loadingStatus": "Carregando status da rede...",
+      "pleaseWait": "Aguarde enquanto coletamos informações da rede",
+      "noDevicesFound": "Nenhum dispositivo de rede encontrado",
+      "noDevicesDescription": "Nenhum adaptador WiFi ou modem celular detectado"
+    },
     "hotspot": {
       "name": "Nome",
       "channel": "Canal",
@@ -142,6 +237,7 @@
   "hotspotConfigurator": {
     "dialog": {
       "save": "Salvar",
+      "saving": "Salvando...",
       "configHotspot": "Configurar ponto de acesso",
       "configureHotspot": "Configure seu ponto de acesso"
     },
@@ -150,8 +246,30 @@
       "password": "Senha",
       "channel": "Canal",
       "placeholderName": "BELABOX",
-      "placeholderPassword": "********",
+      "placeholderPassword": "Digite uma senha segura",
       "selectChannel": "Selecione um canal"
+    },
+    "validation": {
+      "nameMinLength": "O nome deve ter pelo menos 3 caracteres",
+      "nameMaxLength": "O nome deve ter menos de 32 caracteres",
+      "nameValid": "O nome parece bom",
+      "passwordMinLength": "A senha deve ter pelo menos 8 caracteres",
+      "passwordMaxLength": "A senha deve ter menos de 63 caracteres",
+      "passwordValid": "A força da senha está boa",
+      "formIncomplete": "Por favor, corrija os problemas destacados para continuar"
+    },
+    "help": {
+      "nameHelp": "Escolha um nome memorável para seu ponto de acesso (3-32 caracteres)",
+      "passwordHelp": "Crie uma senha forte (8-63 caracteres)",
+      "channelHelp": "A seleção automática é recomendada para desempenho ideal"
+    },
+    "success": {
+      "title": "Ponto de acesso configurado com sucesso",
+      "description": "Suas configurações de ponto de acesso foram atualizadas"
+    },
+    "error": {
+      "title": "Configuração falhada",
+      "description": "Não foi possível atualizar as configurações do ponto de acesso. Tente novamente."
     }
   },
   "wifiSelector": {
@@ -175,6 +293,14 @@
     },
     "hotspot": {
       "placeholderPassword": "********"
+    },
+    "success": {
+      "connected": "WiFi Conectado",
+      "connectedDescription": "Conectado com sucesso à rede WiFi"
+    },
+    "error": {
+      "connectionFailed": "Falha na Conexão WiFi",
+      "connectionFailedDescription": "Não foi possível conectar à rede WiFi. Verifique a senha e tente novamente."
     }
   },
   "networking": {
@@ -189,6 +315,18 @@
     "toggle": {
       "disableNetwork": "Desativar rede",
       "enableNetwork": "Ativar rede"
+    },
+    "types": {
+      "hotspot": "Ponto de Acesso",
+      "cellular": "Celular",
+      "wifi": "WiFi",
+      "ethernet": "Ethernet"
+    },
+    "labels": {
+      "interface": "Interface:",
+      "ipAddress": "Endereço IP:",
+      "bandwidth": "Largura de banda:",
+      "network": "Rede:"
     }
   },
   "wifiStatus": {
@@ -235,7 +373,23 @@
     "confirmBelaboxLog": "Tem certeza de que deseja baixar o log do BELABOX? Ele pode conter informações sensíveis, como senhas.",
     "confirmSystemLog": "Tem certeza de que deseja baixar o log do sistema? Ele pode conter informações sensíveis, como senhas.",
     "downloadBelaboxLog": "Baixar log do BELABOX",
-    "downloadSystemLog": "Baixar log do sistema"
+    "downloadSystemLog": "Baixar log do sistema",
+    "systemDescription": "Configuração avançada do sistema e opções de desenvolvedor",
+    "systemActions": "Ações do Sistema",
+    "systemActionsDescription": "Controles de energia e reinicialização do sistema",
+    "versionInformation": "Informações de Versão",
+    "sshServer": "Servidor SSH",
+    "active": "Ativo",
+    "inactive": "Inativo",
+    "logManagement": "Gerenciamento de Logs",
+    "logManagementDescription": "Baixar logs do sistema para solução de problemas e depuração",
+    "coreSystemConfiguration": "Configuração central do sistema e segurança",
+    "developmentToolsAccess": "Ferramentas de desenvolvimento e acesso ao sistema",
+    "systemComponentsVersions": "Versões dos componentes do sistema",
+    "applicationLogsDescription": "Logs de aplicação e diagnósticos",
+    "systemLogsDescription": "Informações de depuração em nível do sistema",
+    "rebootDescription": "Reiniciar o sistema com segurança",
+    "powerOffDescription": "Desligar o sistema completamente"
   },
   "pwa": {
     "offline": "Você está offline",

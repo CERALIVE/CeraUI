@@ -30,7 +30,51 @@
     "areYouSure": "Sind Sie absolut sicher?",
     "updateButton": "Aktualisieren",
     "updateConfirmation": "Sind Sie sicher, dass Sie ein Software-Update starten möchten? Dies kann mehrere Minuten dauern. Sie können keinen Stream starten, bis das Update abgeschlossen ist. Der Encoder wird nach einem erfolgreichen Upgrade kurzzeitig getrennt. Entfernen Sie während der Aktualisierung niemals die Stromversorgung und setzen Sie den Encoder nicht zurück. Wenn der Encoder mit einer Batterie betrieben wird, stellen Sie sicher, dass diese vollständig geladen ist.",
-    "streamingMessage": "Ihre Übertragung nutzt {usingNetworksCount} Netzwerke mit einer Verzögerung von {srtLatency} ms"
+    "streamingMessage": "Ihre Übertragung nutzt {usingNetworksCount} Netzwerke mit einer Verzögerung von {srtLatency} ms",
+    "serverAndAudio": "Server- und Audio-Streaming-Konfiguration",
+    "liveMetrics": "Live-Metriken",
+    "sensorsUnavailable": "Sensoren nicht verfügbar",
+    "configurationNotComplete": "Konfiguration ausstehend",
+    "pleaseConfigureServer": "Bitte konfigurieren Sie einen Relay-Server, um mit dem Streaming zu beginnen",
+    "status": "Status",
+    "streaming": "Streaming",
+    "offline": "Offline",
+    "temperature": "Temperatur",
+    "sensors": "Sensoren",
+    "relayServer": "Relay-Server",
+    "updates": "Updates",
+    "none": "Keine",
+    "notConfigured": "Nicht konfiguriert",
+    "notAvailable": "Nicht verfügbar",
+    "youHaventConfigured": "Sie haben keinen Server konfiguriert",
+    "noSensorData": "Keine Sensordaten verfügbar",
+    "port": "Port",
+    "overview": "Übersicht",
+    "configuration": "Konfiguration",
+    "latency": "Latenz / Verzögerung",
+    "packages": "Pakete",
+    "package": "Paket",
+    "maxBitrate": "Maximale Bitrate",
+    "audioDevice": "Audio-Gerät",
+    "audioCodec": "Audio-Codec",
+    "systemHealth": "Systemzustand",
+    "networkInfo": "Netzwerkinformationen",
+    "areYouSure": "Sind Sie absolut sicher?",
+    "updateButton": "Aktualisieren",
+    "updateConfirmation": "Sind Sie sicher, dass Sie ein Software-Update starten möchten? Dies kann mehrere Minuten dauern. Sie können keinen Stream starten, bis es abgeschlossen ist. Der Encoder wird nach einem erfolgreichen Upgrade kurzzeitig getrennt. Entfernen Sie niemals die Stromversorgung oder setzen Sie den Encoder während der Aktualisierung zurück. Wenn der Encoder batteriebetrieben ist, stellen Sie sicher, dass er vollständig geladen ist.",
+    "streamingMessage": "Ihre Übertragung nutzt {usingNetworksCount} Netzwerke mit einer Verzögerung von {srtLatency} ms",
+    "noUpdatesAvailable": "System ist aktuell",
+    "serverSettings": "Server-Einstellungen",
+    "audioSettings": "Audio-Einstellungen",
+    "hardwareSensors": "Hardware-Sensoren",
+    "streamPerformance": "Stream-Performance"
+  },
+  "navigation": {
+    "toggleMenu": "Menü umschalten",
+    "general": "Allgemein",
+    "network": "Netzwerk",
+    "streaming": "Streaming",
+    "advanced": "Erweitert"
   },
   "auth": {
     "createPassword": "Passwort erstellen",
@@ -63,6 +107,9 @@
     "audioCodec": "Audio-Codec",
     "selectAudioCodec": "Audio-Codec auswählen",
     "audioDelay": "Audioverzögerung (ms)",
+    "audioDelayEarly": "Früh (-)",
+    "audioDelayLate": "Spät (+)",
+    "perfectSync": "Sync",
     "noAudioSupport": "Die aktuell ausgewählte Konfiguration unterstützt keine Audioeinstellungen",
 
     "manualConfiguration": "Manuelle Konfiguration",
@@ -71,12 +118,18 @@
     "relayServerAccount": "Relay-Server-Konto",
     "srtlaServerAddress": "SRTLA-Empfängerserveradresse",
     "srtlaServerPort": "SRTLA-Empfängerport",
-    "srtStreamId": "SRT-Stream-ID (optional)",
+    "srtStreamId": "SRT-Stream-ID",
     "srtLatency": "SRT-Latenz (ms)",
     "startStreaming": "Streaming starten",
     "stopStreaming": "Streaming stoppen",
     "changeBitrateNotice": "Sie können die Bitrate auch während des Streamings ändern.",
     "audioSettingsMessage": "Die Audioeinstellungen werden angezeigt, sobald Sie eine gültige Option im Encoder-Abschnitt auswählen",
+    "optional": "optional",
+    "placeholders": {
+      "srtlaServerAddress": "z.B., 192.168.1.100 oder server.example.com",
+      "srtlaServerPort": "z.B., 8890",
+      "srtStreamId": "z.B., stream123"
+    },
     "errors": {
       "inputModeRequired": "Bitte wählen Sie einen Eingangsmodus",
       "encoderRequired": "Bitte wählen Sie ein Kodierungsformat",
@@ -92,6 +145,57 @@
     }
   },
   "network": {
+    "pageTitle": "Netzwerkkonfiguration",
+    "pageDescription": "Verwalten Sie Ihre WiFi-Verbindungen, Hotspots, Mobilfunkmodems und Netzwerkschnittstellen",
+    "sections": {
+      "networkInterfaces": "Netzwerkschnittstellen",
+      "wifiDevices": "WiFi-Geräte",
+      "cellularModems": "Mobilfunkmodems"
+    },
+    "summary": {
+      "networkInfo": "Netzwerkinformationen",
+      "networksActive": "{count} Netzwerke, {active} aktiv • Gesamt: {total} Kbps",
+      "activeNetworks": "{active} von {total} Netzwerken aktiv",
+      "totalBandwidth": "{total} Kbps",
+      "availableBandwidth": "Gesamtbandbreite:",
+      "available": "verfügbar"
+    },
+    "status": {
+      "details": "Details",
+      "turnOff": "Ausschalten",
+      "enableHotspot": "Hotspot aktivieren",
+      "noActiveConnection": "Keine aktive Verbindung",
+      "notConnected": "Nicht verbunden",
+      "scanningNetworks": "Netzwerke suchen...",
+      "connecting": "Verbinden...",
+      "ready": "Bereit",
+      "active": "Aktiv",
+      "inactive": "Inaktiv"
+    },
+    "accessibility": {
+      "wifiQrCode": "WiFi-QR-Code"
+    },
+    "deviceCount": {
+      "device": "Gerät",
+      "devices": "Geräte",
+      "modem": "Modem",
+      "modems": "Modems"
+    },
+    "emptyStates": {
+      "loadingStatus": "Netzwerkstatus wird geladen...",
+      "pleaseWait": "Bitte warten Sie, während wir Netzwerkinformationen sammeln",
+      "noDevicesFound": "Keine Netzwerkgeräte gefunden",
+      "noDevicesDescription": "Keine WiFi-Adapter oder Mobilfunkmodems erkannt",
+      "noNetworksDetected": "Keine Netzwerke erkannt",
+      "noNetworkInterfaces": "Keine Netzwerkschnittstellen verfügbar"
+    },
+    "toggle": {
+      "enableNetwork": "Netzwerkschnittstelle aktivieren",
+      "disableNetwork": "Netzwerkschnittstelle deaktivieren"
+    },
+    "errors": {
+      "networkConnectionError": "Netzwerkverbindungsfehler"
+    },
     "hotspot": {
       "name": "Name",
       "channel": "Kanal",
@@ -108,6 +212,7 @@
       "status": "Status",
       "network": "Netzwerk",
       "save": "Speichern",
+      "reset": "Zurücksetzen",
       "autoapn": "Automatischer APN",
       "apn": "APN",
       "username": "Benutzername",
@@ -143,6 +248,7 @@
   "hotspotConfigurator": {
     "dialog": {
       "save": "Speichern",
+      "saving": "Speichern...",
       "configHotspot": "Hotspot konfigurieren",
       "configureHotspot": "Konfigurieren Sie Ihren Hotspot"
     },
@@ -151,8 +257,30 @@
       "password": "Passwort",
       "channel": "Kanal",
       "placeholderName": "BELABOX",
-      "placeholderPassword": "********",
+      "placeholderPassword": "Sicheres Passwort eingeben",
       "selectChannel": "Kanal auswählen"
+    },
+    "validation": {
+      "nameMinLength": "Der Name muss mindestens 3 Zeichen lang sein",
+      "nameMaxLength": "Der Name muss weniger als 32 Zeichen lang sein",
+      "nameValid": "Der Name sieht gut aus",
+      "passwordMinLength": "Das Passwort muss mindestens 8 Zeichen lang sein",
+      "passwordMaxLength": "Das Passwort muss weniger als 63 Zeichen lang sein",
+      "passwordValid": "Die Passwortstärke ist gut",
+      "formIncomplete": "Bitte beheben Sie die hervorgehobenen Probleme, um fortzufahren"
+    },
+    "help": {
+      "nameHelp": "Wählen Sie einen einprägsamen Namen für Ihren Hotspot (3-32 Zeichen)",
+      "passwordHelp": "Erstellen Sie ein starkes Passwort (8-63 Zeichen)",
+      "channelHelp": "Automatische Auswahl wird für optimale Leistung empfohlen"
+    },
+    "success": {
+      "title": "Hotspot erfolgreich konfiguriert",
+      "description": "Ihre Hotspot-Einstellungen wurden aktualisiert"
+    },
+    "error": {
+      "title": "Konfiguration fehlgeschlagen",
+      "description": "Hotspot-Einstellungen konnten nicht aktualisiert werden. Bitte versuchen Sie es erneut."
     }
   },
   "wifiSelector": {
@@ -176,6 +304,14 @@
     },
     "hotspot": {
       "placeholderPassword": "********"
+    },
+    "success": {
+      "connected": "WLAN Verbunden",
+      "connectedDescription": "Erfolgreich mit dem WLAN-Netzwerk verbunden"
+    },
+    "error": {
+      "connectionFailed": "WLAN-Verbindung Fehlgeschlagen",
+      "connectionFailedDescription": "Verbindung zum WLAN-Netzwerk nicht möglich. Überprüfen Sie das Passwort und versuchen Sie es erneut."
     }
   },
   "networking": {
@@ -190,6 +326,18 @@
     "toggle": {
       "disableNetwork": "Netzwerk deaktivieren",
       "enableNetwork": "Netzwerk aktivieren"
+    },
+    "types": {
+      "hotspot": "Hotspot",
+      "cellular": "Mobilfunk",
+      "wifi": "WLAN",
+      "ethernet": "Ethernet"
+    },
+    "labels": {
+      "interface": "Schnittstelle:",
+      "ipAddress": "IP-Adresse:",
+      "bandwidth": "Bandbreite:",
+      "network": "Netzwerk:"
     }
   },
   "wifiStatus": {
@@ -236,7 +384,23 @@
     "confirmBelaboxLog": "Sind Sie sicher, dass Sie das BELABOX-Logdatei herunterladen möchten? Es kann sensible Informationen wie Passwörter enthalten.",
     "confirmSystemLog": "Sind Sie sicher, dass Sie das System-Logdatei herunterladen möchten? Es kann sensible Informationen wie Passwörter enthalten.",
     "downloadBelaboxLog": "BELABOX-Logdatei herunterladen",
-    "downloadSystemLog": "System-Logdatei herunterladen"
+    "downloadSystemLog": "System-Logdatei herunterladen",
+    "systemDescription": "Erweiterte Systemkonfiguration und Entwickleroptionen",
+    "systemActions": "Systemaktionen",
+    "systemActionsDescription": "Energieverwaltung und Systemneustart-Kontrollen",
+    "versionInformation": "Versionsinformationen",
+    "sshServer": "SSH-Server",
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "logManagement": "Log-Verwaltung",
+    "logManagementDescription": "System-Logs für Fehlerbehebung und Debugging herunterladen",
+    "coreSystemConfiguration": "Kernkomponenten-Systemkonfiguration und Sicherheit",
+    "developmentToolsAccess": "Entwicklungstools und Systemzugriff",
+    "systemComponentsVersions": "Systemkomponenten-Versionen",
+    "applicationLogsDescription": "Anwendungsprotokolle und Diagnosen",
+    "systemLogsDescription": "Debugging-Informationen auf Systemebene",
+    "rebootDescription": "System sicher neu starten",
+    "powerOffDescription": "System vollständig herunterfahren"
   },
   "pwa": {
     "offline": "Sie sind offline",

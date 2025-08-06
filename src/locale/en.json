@@ -15,22 +15,46 @@
     "streaming": "Streaming",
     "offline": "Offline",
     "temperature": "Temperature",
+    "sensors": "Sensors",
     "relayServer": "Relay Server",
     "updates": "Updates",
     "none": "None",
+    "notConfigured": "Not configured",
+    "notAvailable": "Not available",
     "youHaventConfigured": "You haven't configured any server",
+    "noSensorData": "No sensor data available",
     "port": "Port",
     "overview": "Overview",
+    "configuration": "Configuration",
     "latency": "Latency / Delay",
     "packages": "Packages",
     "package": "Package",
     "maxBitrate": "Max Bitrate",
     "audioDevice": "Audio Device",
     "audioCodec": "Audio Codec",
+    "systemHealth": "System Health",
+    "networkInfo": "Network Information",
     "areYouSure": "Are you absolutely sure?",
     "updateButton": "Update",
     "updateConfirmation": "Are you sure you want to start a software update? This may take several minutes. You won't be able to start a stream until it's completed. The encoder will briefly disconnect after a successful upgrade. Never remove power or reset the encoder while updating. If the encoder is powered from a battery, ensure it's fully charged.",
-    "streamingMessage": "Your transmission is using {usingNetworksCount} Networks with a delay of {srtLatency} ms"
+    "streamingMessage": "Your transmission is using {usingNetworksCount} Networks with a delay of {srtLatency} ms",
+    "configurationNotComplete": "Configuration pending",
+    "pleaseConfigureServer": "Please configure a relay server to begin streaming",
+    "noUpdatesAvailable": "System is up to date",
+    "serverSettings": "Server Settings",
+    "audioSettings": "Audio Settings",
+    "hardwareSensors": "Hardware Sensors",
+    "streamPerformance": "Stream Performance",
+    "serverAndAudio": "Server and audio streaming configuration",
+    "liveMetrics": "Live metrics",
+    "sensorsUnavailable": "Sensors unavailable"
+  },
+  "navigation": {
+    "toggleMenu": "Toggle Menu",
+    "general": "General",
+    "network": "Network",
+    "streaming": "Streaming",
+    "advanced": "Advanced"
   },
   "auth": {
     "createPassword": "Create Password",
@@ -38,10 +62,25 @@
     "createPasswordAndLogin": "Create password and login",
     "loginWithPassword": "Login with password",
     "usePassword": "Use the device password to access the functionalities",
+    "password": "Password",
+    "newPassword": "New Password",
+    "placeholderPassword": "Enter your password",
+    "placeholderNewPassword": "Create a secure password (min 8 characters)",
     "signIn": "Sign In",
+    "signingIn": "Signing in...",
+    "creatingPassword": "Creating password...",
     "rememberMe": "Remember me",
+    "secureAccess": "Secure Access",
     "separatorText": "Site Name",
-    "footerText": "Just sign in and enjoy bringing the joy"
+    "footerText": "Just sign in and enjoy bringing the joy",
+    "validation": {
+      "passwordMinLength": "Password must be at least 8 characters",
+      "passwordValid": "Password looks good!"
+    },
+    "help": {
+      "createPasswordTitle": "First Time Setup",
+      "createPasswordDescription": "You'll need to create a secure password to protect your account. This password will be used for all future sign-ins."
+    }
   },
   "settings": {
     "encoderSettings": "Encoder Settings",
@@ -64,6 +103,17 @@
     "selectAudioCodec": "Select an audio codec",
     "audioDelay": "Audio delay (ms)",
     "noAudioSupport": "The current selected config doesn't support any kind of audio setting",
+    "noAudioSettingSupport": "No audio settings supported",
+    "selectedPipelineNoAudio": "The selected pipeline doesn't support audio configuration",
+    "selectPipelineFirst": "Please select an encoder pipeline first to configure audio settings",
+    "audioDelayEarly": "Early (-)",
+    "audioDelayLate": "Late (+)",
+    "perfectSync": "Sync",
+    "completeRequiredFields": "Please complete all required fields to enable streaming",
+    "optional": "optional",
+    "manualServerConfiguration": "Manual Server Configuration",
+    "lowerLatency": "Lower",
+    "higherLatency": "Higher",
 
     "manualConfiguration": "Manual Configuration",
     "receiverServer": "Receiver Server",
@@ -71,12 +121,17 @@
     "relayServerAccount": "Relay Server Account",
     "srtlaServerAddress": "SRTLA receiver server address",
     "srtlaServerPort": "SRTLA receiver port",
-    "srtStreamId": "SRT stream id (optional)",
+    "srtStreamId": "SRT stream id",
     "srtLatency": "SRT latency (ms)",
     "startStreaming": "Start Streaming",
     "stopStreaming": "Stop Streaming",
     "changeBitrateNotice": "You can change the bitrate even if you are streaming.",
     "audioSettingsMessage": "The audio settings will be shown once you select a valid option on the encoder section",
+    "placeholders": {
+      "srtlaServerAddress": "e.g., 192.168.1.100 or server.example.com",
+      "srtlaServerPort": "e.g., 8890",
+      "srtStreamId": "e.g., stream123"
+    },
     "errors": {
       "inputModeRequired": "Please select an input mode",
       "encoderRequired": "Please select an encoding format",
@@ -92,6 +147,57 @@
     }
   },
   "network": {
+    "pageTitle": "Network Configuration",
+    "pageDescription": "Manage your WiFi connections, hotspots, cellular modems, and network interfaces",
+    "sections": {
+      "networkInterfaces": "Network Interfaces",
+      "wifiDevices": "WiFi Devices",
+      "cellularModems": "Cellular Modems"
+    },
+    "summary": {
+      "networkInfo": "Network Information",
+      "networksActive": "{count} networks, {active} active • Total: {total} Kbps",
+      "activeNetworks": "{active} of {total} networks active",
+      "totalBandwidth": "{total} Kbps",
+      "availableBandwidth": "Total Bandwidth:",
+      "available": "available"
+    },
+    "status": {
+      "details": "Details",
+      "turnOff": "Turn Off",
+      "enableHotspot": "Enable Hotspot",
+      "noActiveConnection": "No active connection",
+      "notConnected": "Not connected",
+      "scanningNetworks": "Scanning networks...",
+      "connecting": "Connecting...",
+      "ready": "Ready",
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "accessibility": {
+      "wifiQrCode": "WiFi QR code"
+    },
+    "deviceCount": {
+      "device": "device",
+      "devices": "devices",
+      "modem": "modem",
+      "modems": "modems"
+    },
+    "emptyStates": {
+      "loadingStatus": "Loading network status...",
+      "pleaseWait": "Please wait while we gather network information",
+      "noDevicesFound": "No network devices found",
+      "noDevicesDescription": "No WiFi adapters or cellular modems detected",
+      "noNetworksDetected": "No networks detected",
+      "noNetworkInterfaces": "No network interfaces are available"
+    },
+    "toggle": {
+      "enableNetwork": "Enable network interface",
+      "disableNetwork": "Disable network interface"
+    },
+    "errors": {
+      "networkConnectionError": "Network connection error"
+    },
     "hotspot": {
       "name": "Name",
       "channel": "Channel",
@@ -108,6 +214,7 @@
       "status": "Status",
       "network": "Network",
       "save": "Save",
+      "reset": "Reset",
       "autoapn": "Automatic APN",
       "apn": "APN",
       "username": "Username",
@@ -143,7 +250,8 @@
   "hotspotConfigurator": {
     "dialog": {
       "save": "Save",
-      "configHotspot": "Config hotspot",
+      "saving": "Saving...",
+      "configHotspot": "Configure Hotspot",
       "configureHotspot": "Configure your hotspot"
     },
     "hotspot": {
@@ -151,31 +259,71 @@
       "password": "Password",
       "channel": "Channel",
       "placeholderName": "BELABOX",
-      "placeholderPassword": "********",
+      "placeholderPassword": "Enter a secure password",
       "selectChannel": "Select a channel"
+    },
+    "validation": {
+      "nameMinLength": "Name must be at least 3 characters",
+      "nameMaxLength": "Name must be less than 32 characters",
+      "nameValid": "Name looks good",
+      "passwordMinLength": "Password must be at least 8 characters",
+      "passwordMaxLength": "Password must be less than 63 characters",
+      "passwordValid": "Password strength is good",
+      "formIncomplete": "Please fix the highlighted issues to continue",
+      "almostThere": "Almost there!",
+      "readyToSave": "Perfect! Ready to save your hotspot configuration."
+    },
+    "help": {
+      "nameHelp": "Choose a memorable name for your hotspot (3-32 characters)",
+      "passwordHelp": "Create a strong password (8-63 characters)",
+      "channelHelp": "Auto selection is recommended for optimal performance",
+      "description": "Configure your personal WiFi hotspot to share internet with other devices."
+    },
+    "success": {
+      "title": "Hotspot configured successfully",
+      "description": "Your hotspot settings have been updated"
+    },
+    "error": {
+      "title": "Configuration failed",
+      "description": "Unable to update hotspot settings. Please try again."
     }
   },
   "wifiSelector": {
     "dialog": {
       "close": "Close",
-      "searchWifi": "Search WiFi Networks",
-      "availableNetworks": "Available networks for {network}",
+      "searchWifi": "View Available Networks",
+      "availableNetworks": "Available Networks",
       "connecting": "Connecting",
       "forgetNetwork": "Forget WiFi network",
-      "disconnectFrom": "Disconnect from {ssid}",
+      "disconnectFrom": "Forget Network",
       "confirmForget": "Are you sure to forget {ssid} on the {network} network?",
-      "connectTo": "Connect to {ssid}",
-      "introducePassword": "Please introduce the network password"
+      "connectTo": "Connect to Network",
+      "introducePassword": "Please introduce the network password",
+      "placeholderPassword": "Network password"
     },
     "button": {
       "disconnect": "Disconnect",
       "connect": "Connect",
       "forget": "Forget",
-      "scanning": "Scanning",
-      "scan": "Scan"
+      "scanning": "Searching networks...",
+      "scan": "Search Networks"
     },
     "hotspot": {
       "placeholderPassword": "********"
+    },
+    "networks": {
+      "found": "networks found"
+    },
+    "status": {
+      "connected": "Connected"
+    },
+    "success": {
+      "connected": "WiFi Connected",
+      "connectedDescription": "Successfully connected to the WiFi network"
+    },
+    "error": {
+      "connectionFailed": "WiFi Connection Failed",
+      "connectionFailedDescription": "Unable to connect to the WiFi network. Please check the password and try again."
     }
   },
 
@@ -191,6 +339,18 @@
     "toggle": {
       "disableNetwork": "Disable network",
       "enableNetwork": "Enable Network"
+    },
+    "types": {
+      "hotspot": "Hotspot",
+      "cellular": "Cellular",
+      "wifi": "WiFi",
+      "ethernet": "Ethernet"
+    },
+    "labels": {
+      "interface": "Interface:",
+      "ipAddress": "IP Address:",
+      "bandwidth": "Bandwidth:",
+      "network": "Network:"
     }
   },
   "wifiStatus": {
@@ -198,12 +358,7 @@
     "connected": "Connected",
     "hotspot": "Hotspot"
   },
-  "navigation": {
-    "general": "General",
-    "network": "Network",
-    "streaming": "Streaming",
-    "advanced": "Advanced"
-  },
+
   "advanced": {
     "systemSettings": "System Settings",
     "developerOptions": "Developer Options",
@@ -237,7 +392,23 @@
     "confirmBelaboxLog": "Are you sure you want to download the BELABOX log? It may contain sensitive information such as passwords.",
     "confirmSystemLog": "Are you sure you want to download the system log? It may contain sensitive information such as passwords.",
     "downloadBelaboxLog": "Download BELABOX Log",
-    "downloadSystemLog": "Download System Log"
+    "downloadSystemLog": "Download System Log",
+    "systemDescription": "Manage system configuration, developer tools, and device settings.",
+    "systemActions": "System Actions",
+    "systemActionsDescription": "Device power management and restart options.",
+    "versionInformation": "Version Information",
+    "sshServer": "SSH Server",
+    "active": "Active",
+    "inactive": "Inactive",
+    "logManagement": "Log Management",
+    "logManagementDescription": "Download system logs for troubleshooting and debugging.",
+    "coreSystemConfiguration": "Core system configuration and security",
+    "developmentToolsAccess": "Development tools and system access",
+    "systemComponentsVersions": "System components and build versions",
+    "applicationLogsDescription": "Application logs and diagnostics",
+    "systemLogsDescription": "System-level debugging information",
+    "rebootDescription": "Restart the system safely",
+    "powerOffDescription": "Shut down the system completely"
   },
   "pwa": {
     "offline": "You're offline",
