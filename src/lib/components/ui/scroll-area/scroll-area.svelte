@@ -6,7 +6,7 @@ import { cn } from '$lib/utils.js';
 import { Scrollbar } from './index.js';
 
 let {
-  ref = $bindable(null),
+  ref = $bindable(),
   class: className,
   orientation = 'vertical',
   scrollbarXClasses = '',
@@ -18,9 +18,17 @@ let {
   scrollbarXClasses?: string | undefined;
   scrollbarYClasses?: string | undefined;
 } = $props();
+
+// Use a local ref variable to avoid direct binding conflicts
+let scrollAreaRef = $state(null);
+
+// Sync the local ref with the bindable prop
+$effect(() => {
+  ref = scrollAreaRef;
+});
 </script>
 
-<ScrollAreaPrimitive.Root bind:ref {...restProps} class={cn('relative overflow-hidden', className)}>
+<ScrollAreaPrimitive.Root bind:ref={scrollAreaRef} {...restProps} class={cn('relative overflow-hidden', className)}>
   <ScrollAreaPrimitive.Viewport class="h-full w-full rounded-[inherit]">
     {@render children?.()}
   </ScrollAreaPrimitive.Viewport>

@@ -64,9 +64,13 @@ function getBandwidthColor(bandwidth: number) {
 }
 
 function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) {
-  // Sort order: enabled networks first, then by type priority
-  if (enabled) return isHotspot ? 1 : name.startsWith('ww') ? 2 : name.startsWith('wl') ? 3 : 4;
-  return isHotspot ? 5 : name.startsWith('ww') ? 6 : name.startsWith('wl') ? 7 : 8;
+  // Sort order: modem networks first, then by enabled status and type priority
+  if (name.startsWith('ww')) {
+    // Modem networks: enabled first, then disabled
+    return enabled ? 1 : 5;
+  }
+  if (enabled) return isHotspot ? 2 : name.startsWith('wl') ? 3 : 4;
+  return isHotspot ? 6 : name.startsWith('wl') ? 7 : 8;
 }
 </script>
 
@@ -98,8 +102,8 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
       </div>
     </div>
   {:else}
-    <!-- Network List -->
-    <div class="space-y-3">
+    <!-- Network List - Responsive Grid -->
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-2">
       {#each Object.entries(currentNetwoks).sort(([nameA, networkA], [nameB, networkB]) => {
         const isHotspotA = isHotspotNetwork(nameA);
         const isHotspotB = isHotspotNetwork(nameB);
@@ -110,10 +114,10 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
         {@const bandwidth = convertBytesToKbids(network.tp)}
         {@const hasRealError = !!network.error && !isHotspot}
 
-        <!-- Mobile-First Simple Network Card -->
+        <!-- Responsive Network Card -->
         <div
           class={cn(
-            'bg-card rounded-lg border transition-colors duration-200',
+            'bg-card flex h-full flex-col rounded-lg border transition-colors duration-200',
             network.enabled ? 'border-green-200 dark:border-green-800' : 'border-border',
             isHotspot && !network.enabled ? 'border-blue-200 dark:border-blue-800' : '',
             hasRealError ? 'border-red-200 dark:border-red-800' : '',
@@ -132,7 +136,7 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
             )}>
           </div>
 
-          <div class="p-4">
+          <div class="flex flex-1 flex-col p-4">
             <!-- Header: Icon + Name + Status -->
             <div class="mb-3 flex items-start justify-between">
               <div class="flex min-w-0 flex-1 items-center gap-3">
@@ -181,7 +185,13 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
             </div>
 
             <!-- Details Grid -->
-            <div class="mb-4 space-y-2">
+            <div class="mb-4 flex-1 space-y-2">
+              {#if name.startsWith('ww')}
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-muted-foreground">{$_('networking.labels.network')}</span>
+                  <span class="text-xs font-medium">{getModemNetworkName(name)}</span>
+                </div>
+              {/if}
               <div class="flex items-center justify-between text-sm">
                 <span class="text-muted-foreground">{$_('networking.labels.interface')}</span>
                 <code class="bg-muted rounded px-2 py-1 font-mono text-xs">{name}</code>
@@ -196,49 +206,54 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
                   {$_('network.summary.totalBandwidth', { values: { total: bandwidth } })}
                 </span>
               </div>
-              {#if name.startsWith('ww')}
-                <div class="flex items-center justify-between text-sm">
-                  <span class="text-muted-foreground">{$_('networking.labels.network')}</span>
-                  <span class="text-xs">{getModemNetworkName(name)}</span>
+            </div>
+
+            <!-- Bottom Controls and Error Messages -->
+            <div class="space-y-3">
+              <!-- Toggle Control (only for non-hotspot networks) -->
+              {#if !isHotspot}
+                <div class="flex justify-end">
+                  <Toggle
+                    variant="outline"
+                    size="sm"
+                    class={cn(
+                      'h-auto px-3 py-1.5 transition-colors',
+                      network.enabled
+                        ? 'data-[state=on]:border-green-600 data-[state=on]:bg-green-600 data-[state=on]:text-white'
+                        : '',
+                      hasRealError ? 'cursor-not-allowed opacity-50' : '',
+                    )}
+                    disabled={hasRealError}
+                    bind:pressed={network.enabled}
+                    onPressedChange={async value => {
+                      try {
+                        await setNetif(name, network.ip, value);
+                      } catch (error) {
+                        console.error(`Failed to toggle network ${name}:`, error);
+                        // Revert the toggle state on error
+                        network.enabled = !value;
+                      }
+                    }}>
+                    {#if network.enabled}
+                      <Check class="mr-1 h-3 w-3" />
+                      {$_('network.status.active')}
+                    {:else}
+                      <X class="mr-1 h-3 w-3" />
+                      {$_('network.status.inactive')}
+                    {/if}
+                  </Toggle>
+                </div>
+              {/if}
+
+              <!-- Error Message -->
+              {#if hasRealError}
+                <div
+                  class="flex items-center gap-2 rounded-md bg-red-100 p-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                  <AlertCircle class="h-4 w-4 flex-shrink-0" />
+                  <span>{$_('network.errors.networkConnectionError')}</span>
                 </div>
               {/if}
             </div>
-
-            <!-- Toggle Control (only for non-hotspot networks) -->
-            {#if !isHotspot}
-              <div class="flex justify-end">
-                <Toggle
-                  variant="outline"
-                  size="sm"
-                  class={cn(
-                    'h-auto px-3 py-1.5 transition-colors',
-                    network.enabled
-                      ? 'data-[state=on]:border-green-600 data-[state=on]:bg-green-600 data-[state=on]:text-white'
-                      : '',
-                    hasRealError ? 'cursor-not-allowed opacity-50' : '',
-                  )}
-                  disabled={hasRealError}
-                  bind:pressed={network.enabled}
-                  onPressedChange={value => setNetif(name, network.ip, value)}>
-                  {#if network.enabled}
-                    <Check class="mr-1 h-3 w-3" />
-                    {$_('network.status.active')}
-                  {:else}
-                    <X class="mr-1 h-3 w-3" />
-                    {$_('network.status.inactive')}
-                  {/if}
-                </Toggle>
-              </div>
-            {/if}
-
-            <!-- Error Message -->
-            {#if hasRealError}
-              <div
-                class="mt-3 flex items-center gap-2 rounded-md bg-red-100 p-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
-                <AlertCircle class="h-4 w-4 flex-shrink-0" />
-                <span>{$_('network.errors.networkConnectionError')}</span>
-              </div>
-            {/if}
           </div>
         </div>
       {/each}

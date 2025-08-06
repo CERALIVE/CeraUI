@@ -32,7 +32,6 @@
     "areYouSure": "Êtes-vous absolument sûr?",
     "updateButton": "mise à jour",
     "updateConfirmation": "Êtes-vous sûr de vouloir démarrer une mise à jour logicielle ? Cela peut prendre plusieurs minutes. Vous ne pourrez pas démarrer un flux jusqu'à ce qu'il n'ait pas été terminé. Le encodeur se déconnectera brièvement après une mise à jour réussie. N'éliminez jamais la puissance ou réinitialisez l'encodeur pendant la mise à jour. Si l'encodeur est alimenté par une batterie, assurez-vous qu'il est complètement chargé.",
-    "streamingMessage": "Votre transmission utilise {usingNetworksCount} réseaux avec une latence de {srtLatency} ms",
     "serverAndAudio": "Configuration du serveur et diffusion audio",
     "liveMetrics": "Métriques en direct",
     "sensorsUnavailable": "Capteurs indisponibles",
@@ -70,13 +69,6 @@
     "audioSettings": "Paramètres Audio",
     "hardwareSensors": "Capteurs Matériels",
     "streamPerformance": "Performance de Diffusion"
-  },
-  "navigation": {
-    "toggleMenu": "Basculer le menu",
-    "general": "Général",
-    "network": "Réseau",
-    "streaming": "Streaming",
-    "advanced": "Avancé"
   },
   "auth": {
     "createPassword": "Créer un mot de passe",
@@ -436,6 +428,20 @@
   "dialog": {
     "cancel": "Annuler",
     "continue": "Continuer"
+  },
+  "theme": {
+    "changeTheme": "Changer de thème",
+    "toggleTheme": "Basculer le thème",
+    "selectTheme": "Sélectionner le thème",
+    "light": "Clair",
+    "dark": "Sombre",
+    "system": "Système",
+    "lightDescription": "Interface claire et lumineuse",
+    "darkDescription": "Doux pour les yeux",
+    "systemDescription": "Suivre l'appareil"
+  },
+  "locale": {
+    "selectLanguage": "Sélectionner la langue"
   },
   "version": {
     "newVersionAvailable": "Nouvelle version disponible",

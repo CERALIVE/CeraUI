@@ -217,6 +217,17 @@
     },
     "hotspot": {
       "placeholderPassword": "********"
+    },
+    "networks": {
+      "found": "شبكات موجودة"
+    },
+    "success": {
+      "connected": "تم الاتصال بـ WiFi",
+      "connectedDescription": "تم الاتصال بنجاح بشبكة WiFi"
+    },
+    "error": {
+      "connectionFailed": "فشل الاتصال بـ WiFi",
+      "connectionFailedDescription": "غير قادر على الاتصال بشبكة WiFi. الرجاء التحقق من كلمة المرور والمحاولة مرة أخرى."
     }
   },
   "networking": {
@@ -341,6 +352,20 @@
   "dialog": {
     "cancel": "إلغاء",
     "continue": "متابعة"
+  },
+  "theme": {
+    "changeTheme": "تغيير السمة",
+    "toggleTheme": "تبديل السمة",
+    "selectTheme": "اختيار السمة",
+    "light": "فاتح",
+    "dark": "داكن",
+    "system": "النظام",
+    "lightDescription": "واجهة نظيفة ومشرقة",
+    "darkDescription": "مريح للعينين",
+    "systemDescription": "اتباع إعدادات الجهاز"
+  },
+  "locale": {
+    "selectLanguage": "اختيار اللغة"
   },
   "version": {
     "newVersionAvailable": "إصدار جديد متاح",

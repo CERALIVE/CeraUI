@@ -49,7 +49,7 @@ StatusMessages.subscribe(status => {
       </div>
 
       <div class="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {#each Object.values(currentStatus.wifi) as wifi, deviceId (deviceId)}
+        {#each Object.entries(currentStatus.wifi) as [deviceId, wifi] (deviceId)}
           <WiFiCard {wifi} {deviceId} />
         {/each}
       </div>

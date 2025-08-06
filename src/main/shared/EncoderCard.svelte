@@ -7,7 +7,6 @@ import { Checkbox } from '$lib/components/ui/checkbox';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import { Slider } from '$lib/components/ui/slider';
 import type { GroupedPipelines } from '$lib/helpers/PipelineHelper';
 
 interface Props {
@@ -31,7 +30,7 @@ interface Props {
   updateMaxBitrate: () => void;
   normalizeValue: (value: number, min: number, max: number, step?: number) => number;
   getSortedResolutions: (resolutions: string[]) => string[];
-  getSortedFramerates: (framerates: any[]) => any[];
+  getSortedFramerates: (framerates: Array<{ extraction: { fps?: string } }>) => Array<{ extraction: { fps?: string } }>;
 }
 
 let {
@@ -161,7 +160,7 @@ $effect(() => {
       <Select.Root
         type="single"
         disabled={isStreaming || !properties.resolution}
-        value={properties.framerate!}
+        value={properties.framerate || ''}
         onValueChange={onFramerateChange}>
         <Select.Trigger id="framerate" class="w-full">
           {properties.framerate ?? $_('settings.selectFramerate')}

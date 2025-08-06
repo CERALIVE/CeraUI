@@ -32,7 +32,6 @@
     "updateButton": "Actualizar",
     "areYouSure": "Você tem certeza?",
     "updateConfirmation": "Tem certeza de que deseja iniciar uma atualização de software? Isso pode levar vários minutos. Você não poderá iniciar um fluxo até que a atualização seja concluída. O codificador se desconectará brevemente após uma atualização bem-sucedida. Nunca remova a potência ou reinicialize o codificador enquanto estiver realizando a atualização. Se o codificador for alimentado por bateria, certifique-se de que esteja completamente carregado",
-    "streamingMessage": "Sua transmissão está usando {usingNetworksCount} redes com uma latência de {srtLatency} ms",
     "serverAndAudio": "Configuração de servidor e streaming de áudio",
     "liveMetrics": "Métricas ao vivo",
     "sensorsUnavailable": "Sensores indisponíveis",
@@ -70,13 +69,6 @@
     "audioSettings": "Configurações de Áudio",
     "hardwareSensors": "Sensores de Hardware",
     "streamPerformance": "Desempenho da Transmissão"
-  },
-  "navigation": {
-    "toggleMenu": "Alternar Menu",
-    "general": "Geral",
-    "network": "Rede",
-    "streaming": "Streaming",
-    "advanced": "Avançado"
   },
   "auth": {
     "createPassword": "Criar Senha",
@@ -425,6 +417,20 @@
   "dialog": {
     "cancel": "Cancelar",
     "continue": "Continuar"
+  },
+  "theme": {
+    "changeTheme": "Alterar tema",
+    "toggleTheme": "Alternar tema",
+    "selectTheme": "Selecionar tema",
+    "light": "Claro",
+    "dark": "Escuro",
+    "system": "Sistema",
+    "lightDescription": "Interface limpa e brilhante",
+    "darkDescription": "Suave para os olhos",
+    "systemDescription": "Seguir as configurações do dispositivo"
+  },
+  "locale": {
+    "selectLanguage": "Selecionar idioma"
   },
   "version": {
     "newVersionAvailable": "Nova versão disponível",

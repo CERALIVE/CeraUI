@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Eye, EyeOff, Hammer, Logs, PowerOff, RotateCcw, Settings } from '@lucide/svelte';
+import { Copy, Eye, EyeOff, Hammer, Logs, PowerOff, RotateCcw, Settings } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
@@ -347,20 +347,25 @@ StatusMessages.subscribe(statusMessage => {
             <div class="relative">
               <Input
                 id="sshPassword"
-                focus={event => {
-                  event.preventDefault();
-                  navigator.clipboard.writeText(sshPassword).then(() => {
-                    toast.info($_('advanced.passwordCopied'), {
-                      description: $_('advanced.passwordCopiedDesc'),
-                    });
-                  });
-                  event.currentTarget?.blur();
-                }}
                 bind:value={sshPassword}
                 type={showSSHPassword ? 'text' : 'password'}
+                readonly
                 placeholder={$_('advanced.sshPasswordPlaceholder')}
-                class="bg-background/50 border-muted-foreground/20 focus:border-primary h-11 pr-28 transition-colors" />
+                class="bg-background/50 border-muted-foreground/20 focus:border-primary h-11 pr-40 transition-colors" />
               <div class="absolute inset-y-0 right-2 flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="h-8 w-8 rounded-md p-0 hover:bg-muted/50"
+                  onclick={() => {
+                    navigator.clipboard.writeText(sshPassword).then(() => {
+                      toast.info($_('advanced.passwordCopied'), {
+                        description: $_('advanced.passwordCopiedDesc'),
+                      });
+                    });
+                  }}>
+                  <Copy class="h-4 w-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
