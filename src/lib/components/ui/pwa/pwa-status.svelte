@@ -33,10 +33,10 @@
 </style>
 
 <script lang="ts">
-import { Download, Share, Wifi, WifiOff } from '@lucide/svelte';
+import { Download, Share, WifiOff } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { writable } from 'svelte/store';
-import { _, locale } from 'svelte-i18n';
+import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
@@ -78,14 +78,9 @@ const cleanup = () => {
 // Call cleanup when component is destroyed
 onDestroy(cleanup);
 
-import { rtlLanguages } from '../../../../i18n';
-
 let showOfflineBanner = $state(false);
 let showInstallBanner = $state(false);
 let showIOSBanner = $state(false);
-
-// RTL support
-const isRTL = $derived(rtlLanguages.includes($locale));
 
 // Device detection - includes tablets like iPad
 const isMobile = $derived(() => {
@@ -181,10 +176,6 @@ async function handleInstall() {
   }
 }
 
-function dismissInstallBanner() {
-  showInstallBanner = false;
-}
-
 function dismissIOSBanner() {
   showIOSBanner = false;
   bannerDismissed = true;
@@ -216,32 +207,6 @@ async function handleMobileInstall() {
   </div>
 {/if}
 
-<!-- Install App Banner - Hidden on desktop (functionality preserved) -->
-{#if false}
-  <div
-    class="bg-primary text-primary-foreground animate-in slide-in-from-bottom fixed right-0 bottom-0 left-0 z-50 p-4">
-    <div class="mx-auto flex max-w-md items-center justify-between gap-4">
-      <div class="flex items-center gap-3">
-        <Download class="h-5 w-5" />
-        <div>
-          <p class="text-sm font-medium">{$_('pwa.installTitle')}</p>
-          <p class="text-xs opacity-80">{$_('pwa.installDescription')}</p>
-        </div>
-      </div>
-      <div class="flex gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onclick={dismissInstallBanner}
-          class="text-primary-foreground hover:bg-primary-foreground/20">
-          {$_('pwa.installLater')}
-        </Button>
-        <Button variant="secondary" size="sm" onclick={handleInstall}>{$_('pwa.installButton')}</Button>
-      </div>
-    </div>
-  </div>
-{/if}
-
 <!-- Mobile Install App Banner - All mobile devices, fixed to bottom -->
 {#if showIOSBanner && isMobile()}
   <div
@@ -264,7 +229,8 @@ async function handleMobileInstall() {
           <p class="truncate text-sm font-medium">{$_('pwa.installTitle')}</p>
           <p class="truncate text-xs opacity-80">
             {#if isIOS()}
-              Tap <Share class="mx-1 inline h-3 w-3" />
+              Tap
+              <Share class="mx-1 inline h-3 w-3" />
               {$_('pwa.installIosDescription')}
             {:else if isAndroid() && $canInstall}
               {$_('pwa.installAndroidDescription')}

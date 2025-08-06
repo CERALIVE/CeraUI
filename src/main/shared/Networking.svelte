@@ -48,14 +48,6 @@ function isHotspotNetwork(name: string) {
   return name.includes('hotspot') || name.toLowerCase().includes('wlan1');
 }
 
-function getStatusColor(enabled: boolean, hasError: boolean, isHotspot: boolean = false) {
-  // Hotspots are not treated as errors even if they have error states
-  if (hasError && !isHotspot) return 'text-red-500';
-  if (enabled) return 'text-green-500';
-  if (isHotspot && !enabled) return 'text-blue-500'; // Hotspot ready but not active
-  return 'text-muted-foreground';
-}
-
 function getBandwidthColor(bandwidth: number) {
   if (bandwidth === 0) return 'text-muted-foreground';
   if (bandwidth < 1000) return 'text-yellow-500';

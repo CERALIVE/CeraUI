@@ -172,7 +172,9 @@ $effect(() => {
                 groupedPipelines[properties.inputMode][properties.encoder][properties.resolution],
               )}
               {#each framerates as framerate}
-                <Select.Item value={framerate.extraction.fps!} label={framerate.extraction.fps!}></Select.Item>
+                {#if framerate.extraction.fps}
+                  <Select.Item value={framerate.extraction.fps} label={framerate.extraction.fps}></Select.Item>
+                {/if}
               {/each}
             {/if}
           </Select.Group>

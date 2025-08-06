@@ -74,7 +74,7 @@ const handleSubmit = async () => {
     toast.success($_('hotspotConfigurator.success.title'), {
       description: $_('hotspotConfigurator.success.description'),
     });
-  } catch (error) {
+  } catch (_error) {
     toast.error($_('hotspotConfigurator.error.title'), {
       description: $_('hotspotConfigurator.error.description'),
     });

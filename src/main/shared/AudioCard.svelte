@@ -6,7 +6,6 @@ import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import { Slider } from '$lib/components/ui/slider';
 import type { AudioCodecsMessage, PipelinesMessage } from '$lib/types/socket-messages';
 
 interface Props {

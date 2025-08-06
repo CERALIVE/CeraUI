@@ -17,7 +17,6 @@ import {
   StatusMessages,
 } from '$lib/stores/websocket-store';
 import type { AudioCodecsMessage, ConfigMessage, PipelinesMessage, RelayMessage } from '$lib/types/socket-messages';
-
 import AudioCard from '$main/shared/AudioCard.svelte';
 import EncoderCard from '$main/shared/EncoderCard.svelte';
 import ServerCard from '$main/shared/ServerCard.svelte';

@@ -11,8 +11,8 @@
 import { Antenna } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 
-import * as Card from '$lib/components/ui/card';
 import SignalQuality from '$lib/components/icons/SignalQuality.svelte';
+import * as Card from '$lib/components/ui/card';
 import type { StatusMessage } from '$lib/types/socket-messages';
 import { capitalizeFirstLetter, cn } from '$lib/utils.js';
 

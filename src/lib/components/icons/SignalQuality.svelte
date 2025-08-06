@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { Signal, SignalHigh, SignalLow, SignalMedium } from '@lucide/svelte';
-  import type { HTMLAttributes } from 'svelte/elements';
+import { Signal, SignalHigh, SignalLow, SignalMedium } from '@lucide/svelte';
+import type { HTMLAttributes } from 'svelte/elements';
 
-  import { cn } from '$lib/utils';
+import { cn } from '$lib/utils';
 
-  type $$Props = HTMLAttributes<HTMLDivElement> & { signal: number; class?: string };
+type $$Props = HTMLAttributes<HTMLDivElement> & { signal: number; class?: string };
 
-  export let signal: $$Props['signal'] = 0;
-  let className: $$Props['class'] = undefined;
-  export { className as class };
+export let signal: $$Props['signal'] = 0;
+let className: $$Props['class'] = undefined;
+export { className as class };
 </script>
 
 {#if signal >= 75}
