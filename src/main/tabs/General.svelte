@@ -47,7 +47,7 @@ StatusMessages.subscribe(status => {
 
 // Helper functions for better data presentation
 function getTemperatureSensor() {
-  return sensors.find(([name]) => name.toLowerCase().includes('temp')) || sensors[0];
+  return sensors.find(([name]) => name.toLowerCase().includes('temp')) || sensors[0] || [undefined, undefined];
 }
 
 function formatConfigValue(value: string | number | undefined, fallback: string = $_('general.notConfigured')) {

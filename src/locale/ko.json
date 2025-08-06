@@ -217,6 +217,17 @@
     },
     "hotspot": {
       "placeholderPassword": "********"
+    },
+    "networks": {
+      "found": "네트워크 발견됨"
+    },
+    "success": {
+      "connected": "WiFi 연결됨",
+      "connectedDescription": "WiFi 네트워크에 성공적으로 연결되었습니다"
+    },
+    "error": {
+      "connectionFailed": "WiFi 연결 실패",
+      "connectionFailedDescription": "WiFi 네트워크에 연결할 수 없습니다. 비밀번호를 확인하고 다시 시도하세요."
     }
   },
   "networking": {
@@ -341,6 +352,20 @@
   "dialog": {
     "cancel": "취소",
     "continue": "계속"
+  },
+  "theme": {
+    "changeTheme": "테마 변경",
+    "toggleTheme": "테마 토글",
+    "selectTheme": "테마 선택",
+    "light": "라이트",
+    "dark": "다크",
+    "system": "시스템",
+    "lightDescription": "깔끔하고 밝은 인터페이스",
+    "darkDescription": "눈에 편안한",
+    "systemDescription": "기기 설정을 따름"
+  },
+  "locale": {
+    "selectLanguage": "언어 선택"
   },
   "version": {
     "newVersionAvailable": "새 버전 사용 가능",

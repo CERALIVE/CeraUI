@@ -287,7 +287,7 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
                           bind:value={networkPassword}
                           id="password"
                           type="password"
-                          placeholder={$_('wifiSelector.dialog.placeholderPassword')}
+                          placeholder={$_('wifiSelector.hotspot.placeholderPassword')}
                           class="focus:ring-opacity-20 h-10 w-full rounded-lg border-2 border-gray-200 bg-gray-50 px-3 text-sm transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50" />
                       </div>
                     </div>

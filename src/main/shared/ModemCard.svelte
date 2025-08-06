@@ -8,10 +8,11 @@
 </style>
 
 <script lang="ts">
-import { Antenna, Signal, SignalHigh, SignalLow, SignalMedium } from '@lucide/svelte';
+import { Antenna } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 
 import * as Card from '$lib/components/ui/card';
+import SignalQuality from '$lib/components/icons/SignalQuality.svelte';
 import type { StatusMessage } from '$lib/types/socket-messages';
 import { capitalizeFirstLetter, cn } from '$lib/utils.js';
 
@@ -24,17 +25,10 @@ interface Props {
 
 let { modem, deviceId }: Props = $props();
 
-function getSignalIcon(signal: number) {
-  if (signal >= 75) return SignalHigh;
-  if (signal >= 50) return SignalMedium;
-  if (signal >= 25) return SignalLow;
-  return Signal;
-}
-
 function getSignalColor(signal: number) {
   if (signal >= 75) return 'text-green-600 dark:text-green-400';
-  if (signal >= 50) return 'text-yellow-600 dark:text-yellow-400';
-  if (signal >= 25) return 'text-orange-600 dark:text-orange-400';
+  if (signal >= 50) return 'text-green-600 dark:text-green-400';
+  if (signal >= 25) return 'text-yellow-600 dark:text-yellow-400';
   return 'text-red-600 dark:text-red-400';
 }
 
@@ -81,7 +75,6 @@ function getStatusGradient(status: string) {
 
 const signalValue = $derived(modem.status?.signal ?? 0);
 const connectionStatus = $derived(modem.status.connection);
-const SignalIcon = $derived(getSignalIcon(signalValue));
 </script>
 
 <Card.Root
@@ -112,18 +105,6 @@ const SignalIcon = $derived(getSignalIcon(signalValue));
             <Antenna class={cn('h-5 w-5', getConnectionStatusColor(connectionStatus))} />
           </div>
           <!-- Signal strength dot -->
-          <div
-            class={cn(
-              'ring-background absolute -top-1 -right-1 h-3 w-3 rounded-full ring-2',
-              signalValue >= 75
-                ? 'bg-green-500'
-                : signalValue >= 50
-                  ? 'bg-yellow-500'
-                  : signalValue >= 25
-                    ? 'bg-orange-500'
-                    : 'bg-red-500',
-            )}>
-          </div>
         </div>
 
         <div>
@@ -148,28 +129,16 @@ const SignalIcon = $derived(getSignalIcon(signalValue));
     </div>
   </Card.Header>
 
-  <Card.Content class="flex h-full flex-col">
+  <Card.Content class="flex flex-col">
     <!-- Signal and Network Info - Flexible Content -->
-    <div class="flex-1 space-y-3">
+    <div class="space-y-3">
       <div class="flex items-center justify-between">
+        <span class="text-muted-foreground text-sm font-medium">{$_('network.modem.signal')}</span>
         <div class="flex items-center gap-2">
-          <SignalIcon class={cn('h-4 w-4', getSignalColor(signalValue))} />
-          <span class="text-muted-foreground text-sm font-medium">{$_('network.modem.signal')}</span>
-        </div>
-        <div class="flex items-center gap-2">
+          <SignalQuality signal={signalValue} class="h-4 w-4" />
           <span class={cn('font-mono text-sm font-bold', getSignalColor(signalValue))}>
             {signalValue}%
           </span>
-          <div class="flex gap-1">
-            {#each Array(4) as _, i}
-              <div
-                class={cn(
-                  'h-3 w-1 rounded-full transition-colors',
-                  signalValue > i * 25 ? getSignalColor(signalValue).replace('text-', 'bg-') : 'bg-muted',
-                )}>
-              </div>
-            {/each}
-          </div>
         </div>
       </div>
 
@@ -208,7 +177,7 @@ const SignalIcon = $derived(getSignalIcon(signalValue));
     </div>
 
     <!-- Modem Configuration - Always at Bottom -->
-    <div class="mt-1 border-t pt-2">
+    <div class="mt-4 border-t pt-4">
       <ModemConfigurator modemIsScanning={connectionStatus === 'scanning'} {modem} {deviceId} />
     </div>
   </Card.Content>

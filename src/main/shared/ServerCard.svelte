@@ -78,7 +78,8 @@ const isManualAccount = $derived(properties.relayAccount === '-1' || properties.
         onValueChange={onRelayServerChange}>
         <Select.Trigger id="relayServer" class="w-full">
           {properties.relayServer !== undefined && properties.relayServer !== '-1' && relayMessage?.servers
-            ? Object.entries(relayMessage.servers).find(server => server[0] === properties.relayServer)![1].name
+            ? (Object.entries(relayMessage.servers).find(server => server[0] === properties.relayServer)?.[1]?.name ??
+              $_('settings.manualConfiguration'))
             : $_('settings.manualConfiguration')}
         </Select.Trigger>
         <Select.Content>

@@ -82,6 +82,20 @@
       "createPasswordDescription": "You'll need to create a secure password to protect your account. This password will be used for all future sign-ins."
     }
   },
+  "theme": {
+    "changeTheme": "Change theme",
+    "toggleTheme": "Toggle theme",
+    "selectTheme": "Select Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "lightDescription": "Clean and bright interface",
+    "darkDescription": "Easy on the eyes",
+    "systemDescription": "Match your device"
+  },
+  "locale": {
+    "selectLanguage": "Select Language"
+  },
   "settings": {
     "encoderSettings": "Encoder Settings",
     "inputMode": "Input Mode",

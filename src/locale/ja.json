@@ -218,6 +218,17 @@
     },
     "hotspot": {
       "placeholderPassword": "********"
+    },
+    "networks": {
+      "found": "ネットワークが見つかりました"
+    },
+    "success": {
+      "connected": "WiFi接続完了",
+      "connectedDescription": "WiFiネットワークに正常に接続されました"
+    },
+    "error": {
+      "connectionFailed": "WiFi接続に失敗",
+      "connectionFailedDescription": "WiFiネットワークに接続できません。パスワードを確認して再試行してください。"
     }
   },
   "networking": {
@@ -342,6 +353,20 @@
   "dialog": {
     "cancel": "キャンセル",
     "continue": "続行"
+  },
+  "theme": {
+    "changeTheme": "テーマを変更",
+    "toggleTheme": "テーマを切り替え",
+    "selectTheme": "テーマを選択",
+    "light": "ライト",
+    "dark": "ダーク",
+    "system": "システム",
+    "lightDescription": "明るくクリーンなインターフェース",
+    "darkDescription": "目に優しい",
+    "systemDescription": "デバイス設定に従う"
+  },
+  "locale": {
+    "selectLanguage": "言語を選択"
   },
   "version": {
     "newVersionAvailable": "新しいバージョンが利用可能",

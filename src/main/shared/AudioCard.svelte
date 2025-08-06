@@ -139,15 +139,14 @@ const hasAudioCodec = $derived(
             value={properties.audioCodec}
             onValueChange={onAudioCodecChange}>
             <Select.Trigger id="audioCodec" class="w-full">
-              {$_(
-                properties.audioCodec
-                  ? Object.entries(audioCodecs!).find(acodec => acodec[0] === properties.audioCodec)![1]
-                  : 'settings.selectAudioCodec',
-              )}
+              {properties.audioCodec && audioCodecs
+                ? (Object.entries(audioCodecs).find(acodec => acodec[0] === properties.audioCodec)?.[1] ??
+                  $_('settings.selectAudioCodec'))
+                : $_('settings.selectAudioCodec')}
             </Select.Trigger>
             <Select.Content>
               <Select.Group>
-                {#each Object.entries(audioCodecs!) as [codec, label]}
+                {#each Object.entries(audioCodecs || {}) as [codec, label]}
                   <Select.Item value={codec} {label}></Select.Item>
                 {/each}
               </Select.Group>

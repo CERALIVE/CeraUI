@@ -374,6 +374,20 @@
     "cancel": "取消",
     "continue": "继续"
   },
+  "theme": {
+    "changeTheme": "更改主题",
+    "toggleTheme": "切换主题",
+    "selectTheme": "选择主题",
+    "light": "浅色",
+    "dark": "深色",
+    "system": "系统",
+    "lightDescription": "清洁明亮的界面",
+    "darkDescription": "护眼模式",
+    "systemDescription": "跟随设备设置"
+  },
+  "locale": {
+    "selectLanguage": "选择语言"
+  },
   "version": {
     "newVersionAvailable": "新版本可用",
     "newCodeVersion": "新代码版本可用",

@@ -36,33 +36,6 @@
     "sensorsUnavailable": "Sensoren nicht verfügbar",
     "configurationNotComplete": "Konfiguration ausstehend",
     "pleaseConfigureServer": "Bitte konfigurieren Sie einen Relay-Server, um mit dem Streaming zu beginnen",
-    "status": "Status",
-    "streaming": "Streaming",
-    "offline": "Offline",
-    "temperature": "Temperatur",
-    "sensors": "Sensoren",
-    "relayServer": "Relay-Server",
-    "updates": "Updates",
-    "none": "Keine",
-    "notConfigured": "Nicht konfiguriert",
-    "notAvailable": "Nicht verfügbar",
-    "youHaventConfigured": "Sie haben keinen Server konfiguriert",
-    "noSensorData": "Keine Sensordaten verfügbar",
-    "port": "Port",
-    "overview": "Übersicht",
-    "configuration": "Konfiguration",
-    "latency": "Latenz / Verzögerung",
-    "packages": "Pakete",
-    "package": "Paket",
-    "maxBitrate": "Maximale Bitrate",
-    "audioDevice": "Audio-Gerät",
-    "audioCodec": "Audio-Codec",
-    "systemHealth": "Systemzustand",
-    "networkInfo": "Netzwerkinformationen",
-    "areYouSure": "Sind Sie absolut sicher?",
-    "updateButton": "Aktualisieren",
-    "updateConfirmation": "Sind Sie sicher, dass Sie ein Software-Update starten möchten? Dies kann mehrere Minuten dauern. Sie können keinen Stream starten, bis es abgeschlossen ist. Der Encoder wird nach einem erfolgreichen Upgrade kurzzeitig getrennt. Entfernen Sie niemals die Stromversorgung oder setzen Sie den Encoder während der Aktualisierung zurück. Wenn der Encoder batteriebetrieben ist, stellen Sie sicher, dass er vollständig geladen ist.",
-    "streamingMessage": "Ihre Übertragung nutzt {usingNetworksCount} Netzwerke mit einer Verzögerung von {srtLatency} ms",
     "noUpdatesAvailable": "System ist aktuell",
     "serverSettings": "Server-Einstellungen",
     "audioSettings": "Audio-Einstellungen",
@@ -345,12 +318,6 @@
     "connected": "Verbunden",
     "hotspot": "Hotspot"
   },
-  "navigation": {
-    "general": "Allgemein",
-    "network": "Netzwerk",
-    "streaming": "Streaming",
-    "advanced": "Erweitert"
-  },
   "advanced": {
     "systemSettings": "Systemeinstellungen",
     "developerOptions": "Entwickleroptionen",
@@ -436,6 +403,20 @@
   "dialog": {
     "cancel": "Abbrechen",
     "continue": "Fortfahren"
+  },
+  "theme": {
+    "changeTheme": "Design ändern",
+    "toggleTheme": "Design umschalten",
+    "selectTheme": "Design auswählen",
+    "light": "Hell",
+    "dark": "Dunkel",
+    "system": "System",
+    "lightDescription": "Saubere und helle Oberfläche",
+    "darkDescription": "Schonend für die Augen",
+    "systemDescription": "Geräteinstellungen folgen"
+  },
+  "locale": {
+    "selectLanguage": "Sprache auswählen"
   },
   "version": {
     "newVersionAvailable": "Neue Version verfügbar",

@@ -217,6 +217,17 @@
     },
     "hotspot": {
       "placeholderPassword": "********"
+    },
+    "networks": {
+      "found": "नेटवर्क मिले"
+    },
+    "success": {
+      "connected": "वाई-फाई कनेक्ट हुआ",
+      "connectedDescription": "वाई-फाई नेटवर्क से सफलतापूर्वक कनेक्ट हुआ"
+    },
+    "error": {
+      "connectionFailed": "वाई-फाई कनेक्शन विफल",
+      "connectionFailedDescription": "वाई-फाई नेटवर्क से कनेक्ट नहीं हो सका। कृपया पासवर्ड जांचें और पुनः प्रयास करें।"
     }
   },
   "networking": {
@@ -341,6 +352,20 @@
   "dialog": {
     "cancel": "रद्द करें",
     "continue": "जारी रखें"
+  },
+  "theme": {
+    "changeTheme": "थीम बदलें",
+    "toggleTheme": "थीम टॉगल करें",
+    "selectTheme": "थीम चुनें",
+    "light": "लाइट",
+    "dark": "डार्क",
+    "system": "सिस्टम",
+    "lightDescription": "साफ और चमकदार इंटरफेस",
+    "darkDescription": "आंखों पर आसान",
+    "systemDescription": "डिवाइस सेटिंग का अनुसरण करें"
+  },
+  "locale": {
+    "selectLanguage": "भाषा चुनें"
   },
   "version": {
     "newVersionAvailable": "नया संस्करण उपलब्ध",

@@ -9,7 +9,7 @@ import MobileLink from '$lib/components/ui/mobile-link.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
 import * as Sheet from '$lib/components/ui/sheet';
 import { defaultNavElement, type NavElements, navElements, siteName } from '$lib/config';
-import { setupHashNavigation } from '$lib/helpers/NavigationHelper';
+
 import { navigationStore } from '$lib/stores/navigation';
 
 let currentNav: NavElements = $state(defaultNavElement);
@@ -20,20 +20,13 @@ const handleClick = (nav: NavElements) => {
   open = false;
 };
 
-// Setup navigation using reactive effect instead of onMount [[memory:5293956]]
+// Subscribe to navigation changes (hash navigation is handled centrally in NavigationRenderer)
 $effect(() => {
-  // Setup hash-based navigation
-  const cleanup = setupHashNavigation(navigationStore);
-
-  // Local subscription to update currentNav
   const unsubscribe = navigationStore.subscribe(navigation => {
     currentNav = navigation;
   });
 
-  return () => {
-    cleanup();
-    unsubscribe();
-  };
+  return unsubscribe;
 });
 </script>
 
