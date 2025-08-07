@@ -138,18 +138,18 @@ function getStatusIcon(isStreaming: boolean) {
         <Card.Content class="flex items-center">
           <div class="flex-1">
             <div class="text-2xl font-bold">
-              {#if currentStatus?.available_updates.package_count === 0}
+              {#if currentStatus?.available_updates?.package_count === 0}
                 {$_('general.noUpdatesAvailable')}
               {:else}
-                {currentStatus?.available_updates.package_count}
-                {currentStatus?.available_updates.package_count === 1 ? $_('general.package') : $_('general.packages')}
+                {currentStatus?.available_updates?.package_count}
+                {currentStatus?.available_updates?.package_count === 1 ? $_('general.package') : $_('general.packages')}
               {/if}
             </div>
             <p class="text-muted-foreground mt-1 text-xs">
               {currentStatus?.available_updates?.download_size ?? '0 MB'}
             </p>
           </div>
-          {#if currentStatus?.available_updates.package_count && currentStatus.available_updates.package_count > 0}
+          {#if currentStatus?.available_updates?.package_count && currentStatus?.available_updates?.package_count > 0}
             <SimpleAlertDialog
               buttonText={$_('general.updateButton')}
               confirmButtonText={$_('general.updateButton')}
@@ -167,7 +167,7 @@ function getStatusIcon(isStreaming: boolean) {
         <div
           class={cn(
             'absolute bottom-0 left-0 h-1 w-full',
-            (currentStatus?.available_updates.package_count ?? 0) > 0 ? 'bg-amber-500' : 'bg-green-500',
+            (currentStatus?.available_updates?.package_count ?? 0) > 0 ? 'bg-amber-500' : 'bg-green-500',
           )}>
         </div>
       </Card.Root>
