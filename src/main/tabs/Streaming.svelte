@@ -196,7 +196,12 @@ PipelinesMessages.subscribe(message => {
 
 $effect.pre(() => {
   if (properties.pipeline && unparsedPipelines !== undefined) {
-    const parsedPipeline = parsePipelineName(unparsedPipelines[properties.pipeline].name);
+    const pipelineData = unparsedPipelines[properties.pipeline];
+    if (!pipelineData) {
+      return; // Early return if pipeline data is not available
+    }
+
+    const parsedPipeline = parsePipelineName(pipelineData.name);
     properties.inputMode = parsedPipeline.format ?? undefined;
 
     properties.encoder = parsedPipeline.encoder ?? undefined;
@@ -205,7 +210,6 @@ $effect.pre(() => {
     properties.framerate = parsedPipeline.fps?.toString() ?? undefined;
 
     // Auto-select aac as default audio codec if pipeline supports audio and no codec is selected
-    const pipelineData = unparsedPipelines[properties.pipeline];
     if (pipelineData.acodec && !properties.audioCodec && audioCodecs) {
       // Check if "aac" is available in the audio codecs
       const aacCodec = Object.keys(audioCodecs).find(codec => codec.toLowerCase() === 'aac');
@@ -358,21 +362,32 @@ const startStreamingWithCurrentConfig = () => {
   if (properties.pipeline) {
     config.pipeline = properties.pipeline;
   }
-  const pipelineData = unparsedPipelines![properties.pipeline!]!;
 
-  if (pipelineData.asrc) {
-    config.asrc = properties.audioSource!;
+  // Safely access pipeline data with proper null checks
+  if (!unparsedPipelines || !properties.pipeline) {
+    console.warn('Cannot start streaming: missing pipeline data or pipeline selection');
+    return;
   }
-  if (pipelineData.acodec) {
-    config.acodec = properties.audioCodec!;
+
+  const pipelineData = unparsedPipelines[properties.pipeline];
+  if (!pipelineData) {
+    console.warn('Cannot start streaming: pipeline data not found for', properties.pipeline);
+    return;
+  }
+
+  if (pipelineData.asrc && properties.audioSource) {
+    config.asrc = properties.audioSource;
+  }
+  if (pipelineData.acodec && properties.audioCodec) {
+    config.acodec = properties.audioCodec;
   }
   if ((properties.relayServer == '-1' || properties.relayServer === undefined) && properties.srtlaServerAddress) {
     config.srtla_addr = properties.srtlaServerAddress;
     if (properties.srtlaServerPort !== undefined) {
       config.srtla_port = properties.srtlaServerPort;
     }
-  } else {
-    config.relay_server = properties.relayServer!;
+  } else if (properties.relayServer) {
+    config.relay_server = properties.relayServer;
   }
   if (properties.srtLatency !== undefined) {
     config.srt_latency = properties.srtLatency;
@@ -383,9 +398,17 @@ const startStreamingWithCurrentConfig = () => {
   } else {
     config.relay_account = properties.relayAccount;
   }
-  config.delay = properties.audioDelay!;
-  config.max_br = properties.bitrate!;
-  config.bitrate_overlay = properties.bitrateOverlay!;
+
+  // Add safety checks for required numeric properties
+  if (properties.audioDelay !== undefined) {
+    config.delay = properties.audioDelay;
+  }
+  if (properties.bitrate !== undefined) {
+    config.max_br = properties.bitrate;
+  }
+  if (properties.bitrateOverlay !== undefined) {
+    config.bitrate_overlay = properties.bitrateOverlay;
+  }
 
   // Directly dismiss all toasts first for immediate visual feedback
   toast.dismiss();

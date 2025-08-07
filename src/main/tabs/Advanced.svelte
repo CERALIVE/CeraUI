@@ -441,7 +441,7 @@ StatusMessages.subscribe(statusMessage => {
                       </svg>
                     </div>
                     <div>
-                      <h4 class="font-semibold text-purple-900 dark:text-purple-100">BELABOX Log</h4>
+                      <h4 class="font-semibold text-purple-900 dark:text-purple-100">CERALIVE Log</h4>
                       <p class="text-xs text-purple-600/70 dark:text-purple-300/70">
                         {$_('advanced.applicationLogsDescription')}
                       </p>
@@ -578,8 +578,8 @@ StatusMessages.subscribe(statusMessage => {
               </div>
               <div
                 class="rounded-lg border border-gray-200/50 bg-white/60 p-3 dark:border-gray-700/50 dark:bg-gray-800/60">
-                <p class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">BELABOX Image</p>
-                <p class="font-mono font-semibold text-gray-900 dark:text-gray-100">{revisions['BELABOX image']}</p>
+                <p class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">CERALIVE Image</p>
+                <p class="font-mono font-semibold text-gray-900 dark:text-gray-100">{revisions['CERALIVE image']}</p>
               </div>
             </div>
           </div>
