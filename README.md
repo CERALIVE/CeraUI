@@ -1,20 +1,10 @@
-# BelaUI Fork (pjeweb)
+# BelaUI Fork (CERALIVE)
 
-This is a fork of the default BELABOX UI (belaUI), that ported the code to Typescript and ESM (ECMAScript Modules).
+This is a fork of the default BELABOX UI (belaUI), that ported the code to Typescript and ESM (ECMAScript Modules). This fork is maintained by CERALIVE and includes additional features and improvements.
 
 ## CeraUI Integration
 
-This fork includes an option to use the [CeraUI](https://github.com/CERALIVE/CeraUI) interface, which is an alternative user interface designed for enhanced usability and additional features. When the `USE_CERAUI` option is enabled during installation or deployment, the system will download the latest CeraUI [release](https://github.com/CERALIVE/CeraUI/releases/latest) and use it instead of the standard BelaUI interface.
-
-
-## Moblink support
-
-> [!WARNING]  
-> I will likely remove the integration of moblink in one of the next releases, since [datagutt/moblink-rust](https://github.com/datagutt/moblink-rust) implemented a service that makes the integration mostly obsolete. I would recommend disabling the moblink relay in this fork (setup.json) and installing the service instead: [Install moblink serivce](https://github.com/datagutt/moblink-rust#use-on-belabox).
-
-This fork integrates [datagutt/moblink-rust](https://github.com/datagutt/moblink-rust) in the relay mode, meaning it allows Moblin apps in the network of the encoder (BELABOX) to use the network interfaces of the BELABOX including modems as Moblink relays for SRTLA from Moblin. It does not yet support using Moblinks or Moblin apps to be used as SRTLA relays for the BELABOX!
-
-The implementation defaults to the password `1234` and uses auto-discovery to connect to "Moblin Streamers" in the network. You can change the password in the `setup.json` via SSH. As of now (2025-03-30) there is no UI for Moblink in this belaUI fork, nor CeraUI.
+This fork includes an option to use the [CeraUI](https://github.com/CERALIVE/CeraUI) interface, which is an alternative user interface designed for enhanced usability and additional features. When the `USE_CERAUI` option is enabled during installation or deployment, the system will download the latest CeraUI main package from the [release](https://github.com/CERALIVE/CeraUI/releases/latest) and use it instead of the standard BelaUI interface.
 
 ## Install the fork on your BELABOX
 
@@ -25,15 +15,45 @@ The implementation defaults to the password `1234` and uses auto-discovery to co
 - Then run:
   ```bash
   # Standard installation with BelaUI
-  wget -qO- https://raw.githubusercontent.com/pjeweb/belaui/override/install.sh | bash
+  wget -qO- https://raw.githubusercontent.com/CERALIVE/belaUI-ts/main/install.sh | bash
   ```
   or
   
   ```bash
   # Installation with CeraUI interface
-  wget -qO- https://raw.githubusercontent.com/pjeweb/belaui/override/install.sh | USE_CERAUI=true bash
+  wget -qO- https://raw.githubusercontent.com/CERALIVE/belaUI-ts/main/install.sh | USE_CERAUI=true bash
   ```
 - To get back to the default belaUI, you can then run `sudo bash /opt/belaUI/reset-to-default.sh` through SSH.
+
+## Installation Script
+
+This repository includes a unified installation script (`install.sh`) that handles both local installation and remote deployment:
+
+### Local Installation (from GitHub releases)
+```bash
+# Standard installation
+./install.sh
+
+# With CeraUI interface
+USE_CERAUI=true ./install.sh
+```
+
+### Remote Deployment (from local dist folder)
+```bash
+# Standard deployment
+./install.sh --remote [SSH_TARGET]
+
+# With CeraUI interface  
+USE_CERAUI=true ./install.sh --remote [SSH_TARGET]
+
+# Examples
+./install.sh --remote root@belabox.local
+./install.sh --remote root@192.168.1.100
+```
+
+Use `./install.sh --help` to see all available options.
+
+> **Note:** The previous separate `install.sh` and `deploy-to-local.sh` scripts have been unified into a single `install.sh` script. The old scripts are available as `.bak` files for reference and will be removed in a future release.
 
 ## Development
 
@@ -94,11 +114,6 @@ pair: https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on
        `echo "ssh-..." >> /root/.ssh/authorized_keys`).
 - Install rsync (`sudo apt install rsync`)
 - Install an editor (e.g. `sudo apt install nano`)
-- Edit the `/opt/belaUI/setup.json` and add the following line to your existing setup to enable the moblink relay:
-    ```json
-      "moblink_relay_enabled": true
-    ```
-  Make sure to add commas to the end of the lines before and after the new line, if necessary.
 
 ### Set up on host (currently tested on macOS)
 
@@ -109,10 +124,10 @@ pair: https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on
 
 ```bash
 # Standard deployment with BelaUI
-./deploy-to-local.sh root@192.168.100.100
+./install.sh --remote root@192.168.100.100
 
 # Deployment with CeraUI interface
-USE_CERAUI=true ./deploy-to-local.sh root@192.168.100.100
+USE_CERAUI=true ./install.sh --remote root@192.168.100.100
 ```
 
 ### Reset to default belaUI
