@@ -31,7 +31,7 @@ CERAUI_RELEASE_URL="https://github.com/CERALIVE/CeraUI/releases/latest/download/
 # Local deployment configuration
 DIST_PATH="dist"
 
-# Show help function
+# show_help displays usage instructions, available options, arguments, environment variables, and example commands for the unified BelaUI installation script.
 show_help() {
   cat << EOF
 Unified BelaUI Installation Script
@@ -97,7 +97,7 @@ if [[ "$DEPLOY_MODE" == "remote" && -z "$SSH_TARGET" ]]; then
   SSH_TARGET="root@belabox.local"
 fi
 
-# Detect OS and package manager
+# detect_package_manager determines the system's package manager by checking the OS type and available commands, returning 'brew', 'apt', 'pacman', or 'unknown'.
 detect_package_manager() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "brew"
@@ -110,7 +110,7 @@ detect_package_manager() {
   fi
 }
 
-# Function to check for a command and install it if missing (local mode only)
+# install_if_missing_local installs the specified command using apt-get if it is not already present on the local system.
 install_if_missing_local() {
   local cmd=$1
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -120,7 +120,7 @@ install_if_missing_local() {
   fi
 }
 
-# Function to check for a command and install it if missing (for dev machine in remote mode)
+# install_if_missing_dev checks if a command exists on the development machine and installs it using the detected package manager if missing.
 install_if_missing_dev() {
   local cmd=$1
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -144,7 +144,7 @@ install_if_missing_dev() {
   fi
 }
 
-# Function to check available disk space (Linux only)
+# check_disk_space checks if at least 100MB of disk space is available in /tmp and warns if space is low.
 check_disk_space() {
   local required_space_mb=100
   if command -v df >/dev/null 2>&1; then
@@ -157,7 +157,7 @@ check_disk_space() {
   fi
 }
 
-# Function to execute commands locally or remotely
+# execute_cmd runs a shell command either locally or on a remote host via SSH, depending on the deployment mode.
 execute_cmd() {
   local cmd="$1"
   if [[ "$DEPLOY_MODE" == "remote" ]]; then
@@ -167,7 +167,7 @@ execute_cmd() {
   fi
 }
 
-# Function to execute commands with sudo locally or remotely
+# execute_sudo_cmd executes a command with elevated privileges, either locally using sudo or remotely via SSH, depending on the deployment mode.
 execute_sudo_cmd() {
   local cmd="$1"
   if [[ "$DEPLOY_MODE" == "remote" ]]; then
@@ -177,7 +177,7 @@ execute_sudo_cmd() {
   fi
 }
 
-# Function to copy files locally or remotely
+# copy_files copies files from a source directory to a destination, using rsync locally or over SSH for remote deployment, and sets ownership to root.
 copy_files() {
   local source="$1"
   local dest="$2"
@@ -195,7 +195,7 @@ copy_files() {
   fi
 }
 
-# Function to install CeraUI
+# install_ceraui installs the CeraUI interface content in place of BelaUI if the USE_CERAUI environment variable is set to true, handling both local and remote deployment scenarios.
 install_ceraui() {
   if [[ "$USE_CERAUI" != "true" ]]; then
     return 0
@@ -251,7 +251,7 @@ EOF
   echo "CeraUI installed successfully."
 }
 
-# Main execution
+# main orchestrates the installation or deployment of BelaUI, handling both local and remote modes, dependency checks, file transfers, post-install configuration, and optional CeraUI installation.
 main() {
   echo "BelaUI Installation Script"
   echo "Mode: $DEPLOY_MODE"
