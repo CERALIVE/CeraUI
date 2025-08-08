@@ -56,6 +56,8 @@
     "selectFramerate": "फ्रेमरेट चुनें",
     "bitrate": "बिटरेट (Kbps)",
     "enableBitrateOverlay": "बिटरेट ओवरले सक्षम करें",
+    "matchDeviceResolution": "डिवाइस रिज़ॉल्यूशन मिलाएं",
+    "matchDeviceOutput": "डिवाइस आउटपुट मिलाएं",
     "audioSettings": "ऑडियो सेटिंग्स",
     "audioSource": "ऑडियो स्रोत",
     "notAvailableAudioSource": "उपलब्ध नहीं",

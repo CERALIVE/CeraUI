@@ -56,6 +56,8 @@
     "selectFramerate": "حدد معدل الإطارات",
     "bitrate": "معدل البت (Kbps)",
     "enableBitrateOverlay": "تفعيل تراكب معدل البت",
+    "matchDeviceResolution": "مطابقة دقة الجهاز",
+    "matchDeviceOutput": "مطابقة مخرجات الجهاز",
     "audioSettings": "إعدادات الصوت",
     "audioSource": "مصدر الصوت",
     "notAvailableAudioSource": "غير متوفر",

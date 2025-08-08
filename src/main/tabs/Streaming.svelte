@@ -1,5 +1,5 @@
 <script lang="ts">
-import { _ } from 'svelte-i18n';
+import { _, locale } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
 import {
@@ -111,6 +111,17 @@ StatusMessages.subscribe(status => {
     isStreaming = status.is_streaming;
     if (status.asrcs.length !== audioSources?.length) {
       audioSources = status.asrcs;
+
+      // Re-evaluate audio source availability when the list is updated
+      if (savedConfig?.asrc) {
+        if (audioSources.includes(savedConfig.asrc)) {
+          // The previously "unavailable" source is now available
+          notAvailableAudioSource = undefined;
+        } else {
+          // Still not available
+          notAvailableAudioSource = savedConfig.asrc;
+        }
+      }
     }
   }
 });
@@ -148,8 +159,17 @@ ConfigMessages.subscribe(config => {
       properties.bitrateOverlay = initialSelectedProperties.bitrateOverlay = config?.bitrate_overlay ?? false;
     }
     if (!initialSelectedProperties.audioSource) {
-      if (config.asrc && !audioSources.includes(config.asrc)) {
-        notAvailableAudioSource = config.asrc;
+      // Only mark as unavailable if we actually have the audio sources list
+      // If audioSources is empty, we'll re-evaluate when it gets populated
+      if (config.asrc) {
+        if (audioSources.length > 0 && !audioSources.includes(config.asrc)) {
+          notAvailableAudioSource = config.asrc;
+        } else if (audioSources.length === 0) {
+          // Don't make a decision yet - wait for audioSources to be populated
+          notAvailableAudioSource = undefined;
+        } else {
+          notAvailableAudioSource = undefined;
+        }
       } else {
         notAvailableAudioSource = undefined;
       }
@@ -187,21 +207,53 @@ RelaysMessages.subscribe(message => {
 // Subscribe to pipeline messages
 PipelinesMessages.subscribe(message => {
   if (message) {
-    if (!unparsedPipelines) {
-      groupedPipelines = groupPipelinesByDeviceAndFormat(message)['rk3588'];
-      unparsedPipelines = message;
+    unparsedPipelines = message;
+
+    // Debug: Log pipeline structure to understand device types
+    console.debug('Pipeline message received:', Object.keys(message).length, 'pipelines');
+    const samplePipelines = Object.entries(message).slice(0, 3);
+    console.debug(
+      'Sample pipeline names:',
+      samplePipelines.map(([key, value]) => value.name),
+    );
+  }
+});
+
+// Reactive pipeline processing that updates when locale changes
+$effect(() => {
+  if (unparsedPipelines && $locale) {
+    const allGroupedPipelines = groupPipelinesByDeviceAndFormat(unparsedPipelines, {
+      matchDeviceResolution: $_('settings.matchDeviceResolution'),
+      matchDeviceOutput: $_('settings.matchDeviceOutput'),
+    });
+
+    // Get the first available device dynamically
+    const availableDevices = Object.keys(allGroupedPipelines);
+    if (availableDevices.length > 0) {
+      groupedPipelines = allGroupedPipelines[availableDevices[0]];
+
+      // Log for debugging what devices are available
+      if (availableDevices.length > 1) {
+        console.info('Multiple devices available:', availableDevices, 'Using:', availableDevices[0]);
+      }
+    } else {
+      console.warn('No devices found in pipeline data');
+      groupedPipelines = undefined;
     }
   }
 });
 
 $effect.pre(() => {
-  if (properties.pipeline && unparsedPipelines !== undefined) {
+  if (properties.pipeline && unparsedPipelines !== undefined && $locale) {
     const pipelineData = unparsedPipelines[properties.pipeline];
     if (!pipelineData) {
       return; // Early return if pipeline data is not available
     }
 
-    const parsedPipeline = parsePipelineName(pipelineData.name);
+    const parsedPipeline = parsePipelineName(pipelineData.name, {
+      matchDeviceResolution: $_('settings.matchDeviceResolution'),
+      matchDeviceOutput: $_('settings.matchDeviceOutput'),
+    });
     properties.inputMode = parsedPipeline.format ?? undefined;
 
     properties.encoder = parsedPipeline.encoder ?? undefined;
