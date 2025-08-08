@@ -56,6 +56,8 @@
     "selectFramerate": "选择帧率",
     "bitrate": "比特率 (Kbps)",
     "enableBitrateOverlay": "启用码率叠加",
+    "matchDeviceResolution": "匹配设备分辨率",
+    "matchDeviceOutput": "匹配设备输出",
     "audioSettings": "音频设置",
     "audioSource": "音频源",
     "selectAudioSource": "选择音频源",

@@ -94,6 +94,8 @@
     "selectFramerate": "Selecione a taxa de quadros",
     "bitrate": "Taxa de Bits (Kbps)",
     "enableBitrateOverlay": "Ativar sobreposição de taxa de bits",
+    "matchDeviceResolution": "Coincidir com resolução do dispositivo",
+    "matchDeviceOutput": "Coincidir com saída do dispositivo",
     "audioSettings": "Configurações de Áudio",
     "audioSource": "Fonte de Áudio",
     "notAvailableAudioSource": "Não disponível",

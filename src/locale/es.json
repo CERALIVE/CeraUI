@@ -101,6 +101,8 @@
     "selectFramerate": "Seleccione la velocidad de fotogramas",
     "bitrate": "Tasa de bits (Kbps)",
     "enableBitrateOverlay": "Activar Superposición de Bitrate",
+    "matchDeviceResolution": "Coincidir con resolución del dispositivo",
+    "matchDeviceOutput": "Coincidir con salida del dispositivo",
     "audioSettings": "Configuración de audio",
     "audioSource": "Fuente de audio",
     "notAvailableAudioSource": "No disponible",

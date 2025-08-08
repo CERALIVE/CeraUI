@@ -73,6 +73,8 @@
     "selectFramerate": "Bildrate auswählen",
     "bitrate": "Bitrate (Kbps)",
     "enableBitrateOverlay": "Bitratenanzeige Aktivieren",
+    "matchDeviceResolution": "Geräteauflösung anpassen",
+    "matchDeviceOutput": "Geräteausgang anpassen",
     "audioSettings": "Audio-Einstellungen",
     "audioSource": "Audioquelle",
     "notAvailableAudioSource": "Nicht verfügbar",

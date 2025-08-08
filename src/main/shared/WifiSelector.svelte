@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Link, ScanSearch, Trash2, Unlink } from '@lucide/svelte';
+import { Eye, EyeOff, Link, ScanSearch, Trash2, Unlink } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
@@ -24,6 +24,7 @@ import { cn } from '$lib/utils';
 
 let { wifi, wifiId }: { wifi: ValueOf<StatusMessage['wifi']>; wifiId: number } = $props();
 let networkPassword = $state('');
+let showPassword = $state(false);
 let open = $state(false);
 
 let connecting: string | undefined = $state();
@@ -77,6 +78,9 @@ const handleWifiConnect = (uuid: string, wifi: ValueOf<StatusMessage['wifi']>['a
 const handleNewWifiConnect = (ssid: string, password: string) => {
   connecting = ssid;
   connectToNewWifi(wifiId, ssid, password);
+  // Reset form state after initiating connection
+  networkPassword = '';
+  showPassword = false;
 };
 </script>
 
@@ -261,7 +265,10 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
                   onconfirm={() => {
                     handleNewWifiConnect(availableNetwork.ssid, networkPassword);
                   }}
-                  oncancel={() => (networkPassword = '')}>
+                  oncancel={() => {
+                    networkPassword = '';
+                    showPassword = false;
+                  }}>
                   {#snippet dialogTitle()}
                     <div class="space-y-2">
                       <h3 class="font-semibold">{$_('wifiSelector.dialog.connectTo', { values: { ssid: '' } })}</h3>
@@ -285,9 +292,20 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
                         <Input
                           bind:value={networkPassword}
                           id="password"
-                          type="password"
+                          type={showPassword ? 'text' : 'password'}
                           placeholder={$_('wifiSelector.hotspot.placeholderPassword')}
-                          class="focus:ring-opacity-20 h-10 w-full rounded-lg border-2 border-gray-200 bg-gray-50 px-3 text-sm transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50" />
+                          class="focus:ring-opacity-20 h-10 w-full rounded-lg border-2 border-gray-200 bg-gray-50 px-3 pr-10 text-sm transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50" />
+                        <button
+                          type="button"
+                          onclick={() => (showPassword = !showPassword)}
+                          class="absolute top-1/2 right-3 -translate-y-1/2 text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                          {#if showPassword}
+                            <EyeOff class="h-4 w-4" />
+                          {:else}
+                            <Eye class="h-4 w-4" />
+                          {/if}
+                        </button>
                       </div>
                     </div>
                   {/snippet}

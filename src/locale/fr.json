@@ -69,6 +69,8 @@
     "selectFramerate": "Sélectionnez la fréquence d'images",
     "bitrate": "Débit binaire (Kbps)",
     "enableBitrateOverlay": "Activer la superposition du débit binaire",
+    "matchDeviceResolution": "Correspondre à la résolution de l'appareil",
+    "matchDeviceOutput": "Correspondre à la sortie de l'appareil",
     "audioSettings": "Paramètres audio",
     "audioSource": "Source audio",
     "notAvailableAudioSource": "Non disponible",

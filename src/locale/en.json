@@ -109,6 +109,8 @@
     "selectFramerate": "Select the framerate",
     "bitrate": "Bitrate (Kbps)",
     "enableBitrateOverlay": "Enable Bitrate Overlay",
+    "matchDeviceResolution": "Match device resolution",
+    "matchDeviceOutput": "Match device output",
     "audioSettings": "Audio Settings",
     "audioSource": "Audio source",
     "notAvailableAudioSource": "Not Available",
