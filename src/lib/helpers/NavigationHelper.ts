@@ -36,15 +36,21 @@ export function updateHash(navigation: NavElements): void {
 /**
  * Setup hash-based navigation
  * @param navigationStore The store to sync with the URL hash
+ * @param setInitialState Whether to set the initial navigation state from the current hash (defaults to true)
  * @returns A cleanup function
  */
-export function setupHashNavigation(navigationStore: {
-  set: (value: NavElements) => void;
-  subscribe: (callback: (value: NavElements) => void) => () => void;
-}): () => void {
-  // Set initial navigation based on hash
-  const initialNav = getNavFromHash();
-  navigationStore.set(initialNav);
+export function setupHashNavigation(
+  navigationStore: {
+    set: (value: NavElements) => void;
+    subscribe: (callback: (value: NavElements) => void) => () => void;
+  },
+  setInitialState: boolean = true,
+): () => void {
+  // Set initial navigation based on hash only if explicitly requested
+  if (setInitialState) {
+    const initialNav = getNavFromHash();
+    navigationStore.set(initialNav);
+  }
 
   // Handler for hash changes
   const handleHashChange = () => {

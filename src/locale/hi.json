@@ -56,6 +56,8 @@
     "selectFramerate": "फ्रेमरेट चुनें",
     "bitrate": "बिटरेट (Kbps)",
     "enableBitrateOverlay": "बिटरेट ओवरले सक्षम करें",
+    "matchDeviceResolution": "डिवाइस रिज़ॉल्यूशन मिलाएं",
+    "matchDeviceOutput": "डिवाइस आउटपुट मिलाएं",
     "audioSettings": "ऑडियो सेटिंग्स",
     "audioSource": "ऑडियो स्रोत",
     "notAvailableAudioSource": "उपलब्ध नहीं",
@@ -63,6 +65,9 @@
     "audioCodec": "ऑडियो कोडेक",
     "selectAudioCodec": "ऑडियो कोडेक चुनें",
     "audioDelay": "ऑडियो देरी (ms)",
+    "audioDelayEarly": "जल्दी (-)",
+    "audioDelayLate": "देर से (+)",
+    "perfectSync": "सिंक",
     "noAudioSupport": "वर्तमान में चयनित कॉन्फ़िगरेशन किसी भी प्रकार की ऑडियो सेटिंग का समर्थन नहीं करता है",
 
     "manualConfiguration": "मैनुअल कॉन्फ़िगरेशन",
@@ -71,12 +76,18 @@
     "relayServerAccount": "रिले सर्वर खाता",
     "srtlaServerAddress": "SRTLA रिसीवर सर्वर पता",
     "srtlaServerPort": "SRTLA रिसीवर पोर्ट",
-    "srtStreamId": "SRT स्ट्रीम आईडी (वैकल्पिक)",
+    "srtStreamId": "SRT स्ट्रीम आईडी",
     "srtLatency": "SRT लेटेंसी (ms)",
     "startStreaming": "स्ट्रीमिंग शुरू करें",
     "stopStreaming": "स्ट्रीमिंग बंद करें",
     "changeBitrateNotice": "आप स्ट्रीमिंग करते समय भी बिटरेट बदल सकते हैं।",
     "audioSettingsMessage": "एनकोडर सेक्शन में वैध विकल्प चुनने के बाद ऑडियो सेटिंग्स दिखाई जाएंगी",
+    "optional": "वैकल्पिक",
+    "placeholders": {
+      "srtlaServerAddress": "उदा., 192.168.1.100 या server.example.com",
+      "srtlaServerPort": "उदा., 8890",
+      "srtStreamId": "उदा., stream123"
+    },
     "errors": {
       "inputModeRequired": "कृपया एक इनपुट मोड चुनें",
       "encoderRequired": "कृपया एक एन्कोडिंग फॉर्मेट चुनें",
@@ -92,6 +103,38 @@
     }
   },
   "network": {
+    "pageTitle": "नेटवर्क कॉन्फ़िगरेशन",
+    "pageDescription": "अपने WiFi कनेक्शन, हॉटस्पॉट, सेल्युलर मॉडेम और नेटवर्क इंटरफेस का प्रबंधन करें",
+    "sections": {
+      "networkInterfaces": "नेटवर्क इंटरफेस",
+      "wifiDevices": "WiFi डिवाइस",
+      "cellularModems": "सेल्युलर मॉडेम"
+    },
+    "status": {
+      "details": "विवरण",
+      "turnOff": "बंद करें",
+      "enableHotspot": "हॉटस्पॉट सक्षम करें",
+      "noActiveConnection": "कोई सक्रिय कनेक्शन नहीं",
+      "notConnected": "कनेक्ट नहीं है",
+      "scanningNetworks": "नेटवर्क स्कैन कर रहे हैं...",
+      "connecting": "कनेक्ट हो रहे हैं...",
+      "ready": "तैयार"
+    },
+    "accessibility": {
+      "wifiQrCode": "WiFi QR कोड"
+    },
+    "deviceCount": {
+      "device": "डिवाइस",
+      "devices": "डिवाइस",
+      "modem": "मॉडेम",
+      "modems": "मॉडेम"
+    },
+    "emptyStates": {
+      "loadingStatus": "नेटवर्क स्थिति लोड हो रही है...",
+      "pleaseWait": "कृपया प्रतीक्षा करें जबकि हम नेटवर्क जानकारी एकत्र करते हैं",
+      "noDevicesFound": "कोई नेटवर्क डिवाइस नहीं मिला",
+      "noDevicesDescription": "कोई WiFi एडाप्टर या सेल्युलर मॉडेम का पता नहीं चला"
+    },
     "hotspot": {
       "name": "नाम",
       "channel": "चैनल",
@@ -176,6 +219,17 @@
     },
     "hotspot": {
       "placeholderPassword": "********"
+    },
+    "networks": {
+      "found": "नेटवर्क मिले"
+    },
+    "success": {
+      "connected": "वाई-फाई कनेक्ट हुआ",
+      "connectedDescription": "वाई-फाई नेटवर्क से सफलतापूर्वक कनेक्ट हुआ"
+    },
+    "error": {
+      "connectionFailed": "वाई-फाई कनेक्शन विफल",
+      "connectionFailedDescription": "वाई-फाई नेटवर्क से कनेक्ट नहीं हो सका। कृपया पासवर्ड जांचें और पुनः प्रयास करें।"
     }
   },
   "networking": {
@@ -190,6 +244,18 @@
     "toggle": {
       "disableNetwork": "नेटवर्क अक्षम करें",
       "enableNetwork": "नेटवर्क सक्षम करें"
+    },
+    "types": {
+      "hotspot": "हॉटस्पॉट",
+      "cellular": "सेल्युलर",
+      "wifi": "वाईफाई",
+      "ethernet": "ईथरनेट"
+    },
+    "labels": {
+      "interface": "इंटरफेस:",
+      "ipAddress": "IP पता:",
+      "bandwidth": "बैंडविड्थ:",
+      "network": "नेटवर्क:"
     }
   },
   "wifiStatus": {
@@ -236,7 +302,23 @@
     "confirmBelaboxLog": "क्या आप सुनिश्चित हैं कि आप BELABOX लॉग डाउनलोड करना चाहते हैं? इसमें पासवर्ड जैसी संवेदनशील जानकारी हो सकती है।",
     "confirmSystemLog": "क्या आप सुनिश्चित हैं कि आप सिस्टम लॉग डाउनलोड करना चाहते हैं? इसमें पासवर्ड जैसी संवेदनशील जानकारी हो सकती है।",
     "downloadBelaboxLog": "BELABOX लॉग डाउनलोड करें",
-    "downloadSystemLog": "सिस्टम लॉग डाउनलोड करें"
+    "downloadSystemLog": "सिस्टम लॉग डाउनलोड करें",
+    "systemDescription": "उन्नत सिस्टम कॉन्फ़िगरेशन और डेवलपर विकल्प",
+    "systemActions": "सिस्टम कार्य",
+    "systemActionsDescription": "पावर और सिस्टम रीस्टार्ट नियंत्रण",
+    "versionInformation": "संस्करण जानकारी",
+    "sshServer": "SSH सर्वर",
+    "active": "सक्रिय",
+    "inactive": "निष्क्रिय",
+    "logManagement": "लॉग प्रबंधन",
+    "logManagementDescription": "समस्या निवारण और डिबगिंग के लिए सिस्टम लॉग डाउनलोड करें",
+    "coreSystemConfiguration": "मुख्य सिस्टम कॉन्फ़िगरेशन और सुरक्षा",
+    "developmentToolsAccess": "विकास उपकरण और सिस्टम पहुंच",
+    "systemComponentsVersions": "सिस्टम घटक संस्करण",
+    "applicationLogsDescription": "एप्लिकेशन लॉग और निदान",
+    "systemLogsDescription": "सिस्टम-स्तरीय डिबगिंग जानकारी",
+    "rebootDescription": "सिस्टम को सुरक्षित रूप से पुनः आरंभ करें",
+    "powerOffDescription": "सिस्टम को पूरी तरह से बंद करें"
   },
   "pwa": {
     "offline": "आप ऑफ़लाइन हैं",
@@ -272,6 +354,20 @@
   "dialog": {
     "cancel": "रद्द करें",
     "continue": "जारी रखें"
+  },
+  "theme": {
+    "changeTheme": "थीम बदलें",
+    "toggleTheme": "थीम टॉगल करें",
+    "selectTheme": "थीम चुनें",
+    "light": "लाइट",
+    "dark": "डार्क",
+    "system": "सिस्टम",
+    "lightDescription": "साफ और चमकदार इंटरफेस",
+    "darkDescription": "आंखों पर आसान",
+    "systemDescription": "डिवाइस सेटिंग का अनुसरण करें"
+  },
+  "locale": {
+    "selectLanguage": "भाषा चुनें"
   },
   "version": {
     "newVersionAvailable": "नया संस्करण उपलब्ध",

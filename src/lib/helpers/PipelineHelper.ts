@@ -26,7 +26,13 @@ export type GroupedPipelines = {
   };
 };
 
-export function parsePipelineName(name: string): PipelineInfo {
+export function parsePipelineName(
+  name: string,
+  translations?: {
+    matchDeviceResolution: string;
+    matchDeviceOutput: string;
+  },
+): PipelineInfo {
   // Basic device extraction
   const deviceMatch = name.match(/^([^/]+)/);
 
@@ -44,20 +50,30 @@ export function parsePipelineName(name: string): PipelineInfo {
   // Special case for libuvch264
   const isLibUVC = name.includes('libuvch264');
 
+  // Use translations if provided, fallback to English defaults
+  const defaultResolution = translations?.matchDeviceResolution || '[Match device resolution]';
+  const defaultOutput = translations?.matchDeviceOutput || '[Match device output]';
+
   return {
     device: deviceMatch ? deviceMatch[0] : null,
     encoder: encoderMatch ? encoderMatch[0] : null,
     format: formatMatch ? (isLibUVC ? 'usb-libuvch264' : formatMatch[1].replace(/_/g, ' ')) : null,
-    resolution: resolutionMatch ? resolutionMatch[0] : '[Match device resolution]',
-    fps: fpsMatch ? fpsMatch[1] || fpsMatch[2] : '[Match device output]',
+    resolution: resolutionMatch ? resolutionMatch[0] : defaultResolution,
+    fps: fpsMatch ? fpsMatch[1] || fpsMatch[2] : defaultOutput,
   };
 }
 
-export const groupPipelinesByDeviceAndFormat = (pipelines: PipelinesMessage): GroupedPipelines => {
+export const groupPipelinesByDeviceAndFormat = (
+  pipelines: PipelinesMessage,
+  translations?: {
+    matchDeviceResolution: string;
+    matchDeviceOutput: string;
+  },
+): GroupedPipelines => {
   const groupedPipelines: GroupedPipelines = {};
 
   Object.entries(pipelines).forEach(([key, value]) => {
-    const extraction = parsePipelineName(value.name);
+    const extraction = parsePipelineName(value.name, translations);
     const device = extraction.device || 'unknown';
     const format = extraction.format || 'unknown';
     const encoder = extraction.encoder || 'unknown';
