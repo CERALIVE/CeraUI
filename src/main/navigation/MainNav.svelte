@@ -1,22 +1,58 @@
+<style>
+/* Enhanced animations for better performance */
+@media (prefers-reduced-motion: no-preference) {
+  button {
+    will-change: transform, opacity;
+  }
+
+  .group:hover {
+    transform: translateZ(0); /* Force hardware acceleration */
+  }
+}
+
+/* Ensure smooth transitions during loading states */
+button:disabled {
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* Enhanced focus styles for accessibility */
+button:focus-visible {
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.5);
+}
+</style>
+
 <script lang="ts">
 import { cubicInOut } from 'svelte/easing';
-import { crossfade } from 'svelte/transition';
+import { crossfade, fly, scale } from 'svelte/transition';
 import { _ } from 'svelte-i18n';
 
 import Logo from '$lib/components/icons/Logo.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
 import { defaultNavElement, type NavElements, navElements, siteName } from '$lib/config';
-import { navigationStore } from '$lib/stores/navigation';
+import { canGoBack, enhancedNavigationStore, isNavigationTransitioning, navigationStore } from '$lib/stores/navigation';
 import { cn } from '$lib/utils';
 
 const [send, receive] = crossfade({
-  duration: 300,
+  duration: 400,
   easing: cubicInOut,
+  fallback(node) {
+    return scale(node, {
+      duration: 200,
+      start: 0.95,
+      easing: cubicInOut,
+    });
+  },
 });
 
 let currentNav: NavElements | undefined = $state(defaultNavElement);
+let isLogoHovered = $state(false);
+let hoveredTab: string | null = $state(null);
+let lastNavigationTime = 0;
 
-// Subscribe to navigation changes (hash navigation is handled centrally in NavigationRenderer)
+// Navigation throttling to prevent race conditions
+const NAVIGATION_THROTTLE_MS = 50;
+
+// Enhanced reactive subscription with loading state awareness
 $effect(() => {
   const unsubscribe = navigationStore.subscribe(navigation => {
     currentNav = navigation;
@@ -24,62 +60,190 @@ $effect(() => {
 
   return unsubscribe;
 });
+
+// Enhanced tab navigation with throttling to prevent race conditions
+const handleTabNavigation = (identifier: string, navigation: any) => {
+  if ($isNavigationTransitioning) return; // Prevent navigation during transitions
+
+  const now = Date.now();
+  if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) {
+    console.log(`[MainNav] Navigation throttled - too soon after last navigation`);
+    return;
+  }
+
+  lastNavigationTime = now;
+  console.log(`[MainNav] Navigation to ${identifier}:`, {
+    timestamp: new Date().toISOString(),
+    throttleMs: NAVIGATION_THROTTLE_MS,
+  });
+
+  navigationStore.set({ [identifier]: navigation });
+
+  // Reset hover state on navigation
+  hoveredTab = null;
+};
+
+// Logo click handler with enhanced feedback and throttling
+const handleLogoClick = () => {
+  if ($isNavigationTransitioning) return;
+
+  const now = Date.now();
+  if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) {
+    console.log(`[MainNav] Logo navigation throttled`);
+    return;
+  }
+
+  lastNavigationTime = now;
+  console.log(`[MainNav] Logo navigation:`, {
+    timestamp: new Date().toISOString(),
+    canGoBack: $canGoBack,
+  });
+
+  const currentKey = currentNav ? Object.keys(currentNav)[0] : '';
+  const defaultKey = Object.keys(defaultNavElement)[0];
+
+  // If already on default, and can go back, go back instead
+  if (currentKey === defaultKey && $canGoBack) {
+    enhancedNavigationStore.goBack();
+  } else {
+    navigationStore.set(defaultNavElement);
+  }
+};
 </script>
 
-<!-- Brand/Logo Section with Enhanced Design -->
+<!-- Brand/Logo Section with Enhanced Reactive Design -->
 <div class="mr-6 hidden md:flex">
   <button
-    class="group hover:bg-accent/50 relative flex cursor-pointer items-center space-x-3 rounded-xl px-3 py-2 transition-all duration-200"
-    onclick={() => navigationStore.set(defaultNavElement)}>
-    <!-- Logo with glow effect -->
+    class={cn(
+      'group relative flex cursor-pointer items-center space-x-3 rounded-xl px-3 py-2 transition-all duration-300',
+      'hover:bg-accent/50 focus-visible:bg-accent/50',
+      $isNavigationTransitioning && 'pointer-events-none opacity-60',
+    )}
+    onmouseenter={() => (isLogoHovered = true)}
+    onmouseleave={() => (isLogoHovered = false)}
+    onclick={handleLogoClick}
+    disabled={$isNavigationTransitioning}
+    aria-label={$canGoBack ? 'Go back or home' : 'Go to home'}>
+    <!-- Enhanced Logo with reactive effects -->
     <div class="relative">
-      <Logo class="h-7 w-7 transition-transform duration-200 group-hover:scale-110" />
+      <Logo
+        class={cn(
+          'h-7 w-7 transition-all duration-300',
+          isLogoHovered && 'scale-110 rotate-12',
+          $isNavigationTransitioning && 'animate-pulse',
+        )} />
+
+      <!-- Enhanced glow effect with reactive states -->
       <div
-        class="bg-primary/20 absolute -inset-1 rounded-full opacity-0 blur-sm transition-opacity duration-200 group-hover:opacity-100">
+        class={cn(
+          'absolute -inset-1 rounded-full blur-sm transition-all duration-300',
+          isLogoHovered ? 'bg-primary/30 opacity-100' : 'bg-primary/10 opacity-0',
+          $canGoBack && 'bg-blue-500/20', // Subtle indicator when back is available
+        )}>
       </div>
+
+      <!-- Back indicator -->
+      {#if $canGoBack && isLogoHovered}
+        <div
+          class="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-blue-500"
+          in:scale={{ duration: 200 }}
+          out:scale={{ duration: 150 }}>
+          <div class="h-full w-full animate-ping rounded-full bg-blue-400"></div>
+        </div>
+      {/if}
     </div>
 
-    <!-- Brand name with clean typography -->
-    <span class="text-foreground hidden font-bold tracking-tight xl:inline-block">
+    <!-- Brand name with enhanced typography and states -->
+    <span
+      class={cn(
+        'hidden font-bold tracking-tight transition-all duration-200 xl:inline-block',
+        'text-foreground',
+        isLogoHovered && 'text-primary',
+        $isNavigationTransitioning && 'opacity-60',
+      )}>
       {siteName}
     </span>
+
+    <!-- Subtle loading indicator -->
+    {#if $isNavigationTransitioning}
+      <div class="bg-primary h-2 w-2 animate-pulse rounded-full"></div>
+    {/if}
   </button>
 </div>
 
-<!-- Navigation Tabs with Modern Design -->
+<!-- Enhanced Navigation Tabs with Reactive Design -->
 <div class="hidden flex-1 md:flex">
   <ScrollArea orientation="both" scrollbarXClasses="invisible">
     <div class="flex items-center space-x-1 px-4 py-2">
-      {#each Object.entries(navElements) as [identifier, navigation]}
+      {#each Object.entries(navElements) as [identifier, navigation], index}
         {@const isActive = currentNav && Object.keys(currentNav)[0] === identifier}
+        {@const isHovered = hoveredTab === identifier}
+
         <button
-          onclick={() => navigationStore.set({ [identifier]: navigation })}
+          onclick={() => handleTabNavigation(identifier, navigation)}
+          onmouseenter={() => (hoveredTab = identifier)}
+          onmouseleave={() => (hoveredTab = null)}
           id={identifier}
+          disabled={$isNavigationTransitioning}
           class={cn(
-            'group relative flex h-10 min-w-28 cursor-pointer items-center justify-center rounded-xl px-4 text-center text-sm font-medium transition-all duration-200',
-            isActive ? 'text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-          )}>
+            'group relative flex h-10 min-w-28 cursor-pointer items-center justify-center rounded-xl px-4 text-center text-sm font-medium transition-all duration-300',
+            isActive
+              ? 'text-primary shadow-sm'
+              : cn('text-muted-foreground hover:text-foreground', isHovered && 'bg-accent/50 scale-105'),
+            $isNavigationTransitioning && 'pointer-events-none opacity-60',
+            // Enhanced focus states
+            'focus-visible:ring-primary/50 focus-visible:ring-2 focus-visible:outline-none',
+          )}
+          aria-current={isActive ? 'page' : undefined}
+          in:fly={{
+            y: 20,
+            duration: 300,
+            delay: index * 50,
+            easing: cubicInOut,
+          }}>
           {#if isActive}
-            <!-- Enhanced active indicator with gradient and shadow -->
+            <!-- Enhanced active indicator with improved animations -->
             <div
-              class="from-background to-accent border-border/50 absolute inset-0 rounded-xl border bg-gradient-to-b shadow-lg"
+              class={cn(
+                'absolute inset-0 rounded-xl border shadow-lg transition-all duration-300',
+                'from-background to-accent border-border/50 bg-gradient-to-b',
+                'shadow-primary/10',
+              )}
               in:send={{ key: 'activetab' }}
               out:receive={{ key: 'activetab' }}>
             </div>
-            <!-- Subtle glow effect for active tab -->
-            <div class="bg-primary/5 absolute inset-0 rounded-xl opacity-50"></div>
+
+            <!-- Enhanced glow effect for active tab -->
+            <div class="bg-primary/5 absolute inset-0 rounded-xl opacity-60"></div>
+
+            <!-- Active state pulse effect -->
+            <div class="bg-primary/10 absolute inset-0 animate-pulse rounded-xl opacity-30"></div>
           {/if}
 
-          <!-- Tab content with enhanced typography -->
-          <span class="relative z-10 transition-all duration-200 group-hover:scale-105">
+          <!-- Tab content with enhanced interactive effects -->
+          <span
+            class={cn(
+              'relative z-10 transition-all duration-200',
+              isActive && 'font-semibold',
+              (isHovered || isActive) && 'scale-105',
+            )}>
             {$_(`navigation.${navigation.label}`)}
           </span>
 
-          <!-- Subtle hover indicator -->
+          <!-- Enhanced hover indicator with smooth animations -->
           {#if !isActive}
             <div
-              class="bg-primary/60 absolute bottom-0 left-1/2 h-0.5 w-0 transition-all duration-200 group-hover:w-8 group-hover:-translate-x-1/2">
+              class={cn(
+                'absolute bottom-0 left-1/2 h-0.5 transition-all duration-300',
+                'from-primary/60 via-primary to-primary/60 bg-gradient-to-r',
+                isHovered ? 'w-8 -translate-x-1/2 opacity-100' : 'w-0 -translate-x-1/2 opacity-0',
+              )}>
             </div>
+          {/if}
+
+          <!-- Loading indicator for individual tabs -->
+          {#if $isNavigationTransitioning && isActive}
+            <div class="bg-primary absolute top-1 right-1 h-2 w-2 animate-ping rounded-full"></div>
           {/if}
         </button>
       {/each}

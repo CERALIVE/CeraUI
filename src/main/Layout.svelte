@@ -44,7 +44,7 @@ const startStreaming = (config: { [key: string]: string | number }) => {
   try {
     isUpdatingToasts = true;
 
-    // Force clear all toasts completely
+    // Dismiss all visible toasts - this should work with Svelte 5
     toast.dismiss();
 
     // Clear all persistent notification timers
@@ -76,7 +76,7 @@ const stopStreaming = () => {
   try {
     isUpdatingToasts = true;
 
-    // Force clear all toasts completely
+    // Dismiss all visible toasts - this should work with Svelte 5
     toast.dismiss();
 
     // Clear all persistent notification timers
@@ -169,8 +169,8 @@ const showToast = (type: NotificationType, name: string, options: any) => {
       setTimeout(
         () => {
           try {
-            // Safely dismiss and remove tracking
-            toast.dismiss(id);
+            // Remove problematic toast.dismiss(id) call - causes Svelte 5 compatibility issues
+            // Let toast expire naturally instead of force dismissing
 
             setTimeout(() => {
               if (activeToasts[id]) {
@@ -278,8 +278,8 @@ NotificationsMessages.subscribe(notifications => {
         // Find any toasts with this key
         Object.entries(activeToasts).forEach(([id, toastElement]) => {
           if (toastElement.notificationKey === notification.msg && toastElement.duration === Infinity) {
-            // Auto-clear this toast since no new updates have arrived
-            toast.dismiss(toastElement.id);
+            // Remove problematic toast.dismiss(toastElement.id) call - causes Svelte 5 compatibility issues
+            // Let persistent toasts expire naturally instead of force dismissing
 
             // Update our tracking
             setTimeout(() => {

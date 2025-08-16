@@ -299,7 +299,9 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
                           type="button"
                           onclick={() => (showPassword = !showPassword)}
                           class="absolute top-1/2 right-3 -translate-y-1/2 text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                          aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                          aria-label={showPassword
+                            ? $_('wifiSelector.accessibility.hidePassword')
+                            : $_('wifiSelector.accessibility.showPassword')}>
                           {#if showPassword}
                             <EyeOff class="h-4 w-4" />
                           {:else}
