@@ -1,6 +1,7 @@
 import type { Component } from 'svelte';
 
 import Advanced from '$main/tabs/Advanced.svelte';
+import DevTools from '$main/tabs/DevTools.svelte';
 import General from '$main/tabs/General.svelte';
 import Network from '$main/tabs/Network.svelte';
 import Streaming from '$main/tabs/Streaming.svelte';
@@ -11,11 +12,22 @@ export type NavElements = {
     component: Component;
   };
 };
-export const navElements: NavElements = {
+// Base navigation elements (always available)
+const baseNavElements: NavElements = {
   general: { label: 'general', component: General },
   wifi: { label: 'network', component: Network },
   settings: { label: 'streaming', component: Streaming },
   advanced: { label: 'advanced', component: Advanced },
+};
+
+// Add dev tools only in development mode
+export const navElements: NavElements = {
+  ...baseNavElements,
+  ...(import.meta.env.MODE === 'development'
+    ? {
+        devtools: { label: 'devtools', component: DevTools },
+      }
+    : {}),
 };
 
 const navElementsEntries = Object.entries(navElements);

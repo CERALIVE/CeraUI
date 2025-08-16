@@ -1,4 +1,18 @@
+<style>
+/* Custom animations for this component */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+</style>
+
 <script lang="ts">
+import { CheckCircle2, Cog, Download, Package, RotateCw } from '@lucide/svelte';
+import { onMount } from 'svelte';
 import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
@@ -8,57 +22,227 @@ import type { StatusMessage } from '$lib/types/socket-messages';
 
 let { details }: { details: Exclude<StatusMessage['updating'], boolean | null> } = $props();
 
+// Enhanced state management
+let isVisible = $state(false);
+let hasShownSuccess = $state(false);
+let animationPhase = $state<'downloading' | 'unpacking' | 'installing' | 'complete'>('downloading');
+
+// Safe progress calculation with null checks
 let progress: number = $derived.by(() => {
-  let { downloading: downloading = 0, unpacking: unpacking = 0, setting_up: setting_up = 0 } = details;
+  if (!details) return 0;
+  const downloading = Number(details.downloading) || 0;
+  const unpacking = Number(details.unpacking) || 0;
+  const setting_up = Number(details.setting_up) || 0;
   return downloading + unpacking + setting_up;
 });
-let total: number = $derived(3 * (details.total ?? 0));
+
+// Safe total calculation with minimum value
+let total: number = $derived(Math.max(3 * (Number(details?.total) || 0), 1));
+
+// Progress percentage with safe division
+let progressPercentage = $derived(total > 0 ? Math.min((progress / total) * 100, 100) : 0);
+
+// Determine current animation phase
+$effect(() => {
+  if (!details) return;
+
+  if (details.downloading && details.downloading > 0) {
+    animationPhase = 'downloading';
+  } else if (details.unpacking && details.unpacking > 0) {
+    animationPhase = 'unpacking';
+  } else if (details.setting_up && details.setting_up > 0) {
+    animationPhase = 'installing';
+  } else if (progress >= total && total > 0) {
+    animationPhase = 'complete';
+  }
+});
+
+// Enhanced completion detection
+let isComplete = $derived(details?.result !== undefined || (total > 1 && progress >= total));
 
 $effect(() => {
-  if (progress === total)
-    toast.success($_('updatingOverlay.successMessage'), {
-      description: $_('updatingOverlay.successDescription'),
-    });
+  if (isComplete && !hasShownSuccess) {
+    hasShownSuccess = true;
+    setTimeout(() => {
+      toast.success($_('updatingOverlay.successMessage'), {
+        description: $_('updatingOverlay.successDescription'),
+      });
+    }, 500);
+  }
+});
+
+// Entrance animation
+onMount(() => {
+  setTimeout(() => (isVisible = true), 100);
 });
 </script>
 
+<!-- Enhanced Modern Glassmorphism Overlay -->
 <Drawer.Root open={true} closeOnOutsideClick={false} closeOnEscape={false}>
-  <Drawer.Content class="h-[100%] w-[100%] bg-transparent/50 " disableDrag={true} data-vaul-no-drag>
-    <div class="h-[100%] w-[100%]">
-      <Drawer.Header>
-        <div>
-          <Drawer.Title>
-            <div class="loading">{$_('updatingOverlay.title')}</div>
-          </Drawer.Title>
-          <Drawer.Description>
-            <div>{$_('updatingOverlay.description')}</div>
-            <div class="text-area mt-5 mr-auto ml-auto w-[100%] resize-none text-lg disabled:cursor-default md:w-[50%]">
-              <b class="loading">{$_('updatingOverlay.loading')}</b>
-              {#if total}
-                {#if details.downloading}
-                  <p><b>{$_('updatingOverlay.downloading')}:</b> {`${details.downloading ?? 0}/${details.total}`}</p>
-                {/if}
-                {#if details.unpacking}
-                  <p><b>{$_('updatingOverlay.unpacking')}:</b> {`${details.unpacking ?? 0}/${details.total}`}</p>
-                {/if}
-                {#if details.setting_up}
-                  <p><b>{$_('updatingOverlay.installing')}:</b> {`${details.setting_up ?? 0}/${details.total}`}</p>
-                {/if}
-                <p><b>{$_('updatingOverlay.progress')}:</b> {`${((100 * progress) / total).toFixed(2)}%`}</p>
-              {/if}
-            </div>
-          </Drawer.Description>
-        </div>
-      </Drawer.Header>
-      <div class="absolute bottom-[20%] grid w-[100%] justify-center p-4 pb-0 text-center">
-        <div class="flex justify-center">
-          <img alt="" src="src/assets/images/1672353.svg" width="40%" />
-        </div>
-        <div class="flex justify-center">
-          <Progress class="bg-accent w-[60%]" max={total} value={progress}></Progress>
+  <Drawer.Content
+    class="from-background/95 via-background/90 to-background/95 h-full w-full border-0 bg-gradient-to-br backdrop-blur-xl"
+    disableDrag={true}
+    data-vaul-no-drag>
+    <!-- Animated Background Pattern -->
+    <div class="pointer-events-none absolute inset-0 overflow-hidden">
+      <div class="bg-primary/5 absolute -top-1/2 -left-1/2 h-96 w-96 animate-pulse rounded-full blur-3xl"></div>
+      <div
+        class="bg-secondary/5 absolute -right-1/2 -bottom-1/2 h-96 w-96 animate-pulse rounded-full blur-3xl"
+        style="animation-delay: 1s">
+      </div>
+    </div>
+
+    <!-- Main Content Container -->
+    <div class="relative flex h-full w-full flex-col items-center justify-center p-4 sm:p-8">
+      <!-- Header Section with Enhanced Typography -->
+      <div class="mx-auto mb-4 sm:mb-8 max-w-2xl space-y-2 sm:space-y-4 text-center" class:nav-entrance={isVisible}>
+        <!-- Main Title with Gradient -->
+        <h1
+          class="from-foreground via-primary to-foreground bg-gradient-to-r bg-clip-text text-xl sm:text-3xl md:text-4xl font-bold text-transparent">
+          <span class="loading-pulse">{$_('updatingOverlay.title')}</span>
+        </h1>
+
+        <!-- Subtitle with Better Typography -->
+        <p class="text-muted-foreground text-sm sm:text-lg leading-relaxed">
+          {$_('updatingOverlay.description')}
+        </p>
+
+        <!-- Enhanced Status Badge -->
+        <div
+          class="bg-primary/10 border-primary/20 inline-flex items-center gap-2 rounded-full border px-3 sm:px-5 py-1.5 sm:py-2.5 backdrop-blur-sm">
+          <div class="flex items-center gap-1 sm:gap-2">
+            {#if animationPhase === 'downloading'}
+              <Download class="text-primary h-4 w-4 sm:h-5 sm:w-5 animate-bounce" />
+              <span class="text-primary font-medium text-sm sm:text-base">{$_('updatingOverlay.downloading')}</span>
+            {:else if animationPhase === 'unpacking'}
+              <Package class="h-4 w-4 sm:h-5 sm:w-5 animate-pulse text-amber-500" />
+              <span class="font-medium text-amber-500 text-sm sm:text-base">{$_('updatingOverlay.unpacking')}</span>
+            {:else if animationPhase === 'installing'}
+              <Cog class="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-blue-500" />
+              <span class="font-medium text-blue-500 text-sm sm:text-base">{$_('updatingOverlay.installing')}</span>
+            {:else if animationPhase === 'complete'}
+              <CheckCircle2 class="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />
+              <span class="font-medium text-green-500 text-sm sm:text-base">{$_('updatingOverlay.successMessage')}</span>
+            {/if}
+          </div>
         </div>
       </div>
-      <Drawer.Footer></Drawer.Footer>
+
+      <!-- Enhanced Progress Section -->
+      <div class="mx-auto w-full max-w-lg space-y-3 sm:space-y-6">
+        <!-- Spinning Update Icon -->
+        <div class="flex flex-col items-center justify-center">
+          <div class="relative mb-4 sm:mb-6">
+            {#if animationPhase === 'complete'}
+              <CheckCircle2 class="h-32 w-32 sm:h-40 sm:w-40 text-green-500" />
+            {:else}
+              <RotateCw class="h-32 w-32 sm:h-40 sm:w-40 text-primary animate-spin" />
+            {/if}
+            
+            <!-- Percentage Overlay -->
+            <div class="absolute inset-0 flex items-center justify-center">
+              <span class="text-foreground text-xl sm:text-2xl font-bold bg-background/80 rounded-full px-3 py-1.5">
+                {progressPercentage.toFixed(0)}%
+              </span>
+            </div>
+          </div>
+          
+          <!-- Progress Label -->
+          <div class="text-muted-foreground text-sm sm:text-base">
+            {$_('updatingOverlay.progress')}
+          </div>
+        </div>
+
+        <!-- Linear Progress Bar -->
+        <div class="space-y-2 px-4 sm:px-0">
+          <div class="bg-muted/30 border-border/50 h-2.5 overflow-hidden rounded-full border backdrop-blur-sm">
+            <Progress value={progress} max={total} class="h-full rounded-full" />
+          </div>
+
+          <!-- Progress Details -->
+          <div class="text-muted-foreground flex justify-between text-xs sm:text-sm">
+            <span>{progress} {$_('updatingOverlay.of')} {total} {$_('updatingOverlay.steps')}</span>
+            <span>{progressPercentage.toFixed(1)}%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Enhanced Step Indicators -->
+      <div class="mx-auto mt-4 sm:mt-8 flex max-w-md items-center justify-center gap-2 sm:gap-6">
+        <!-- Download Step -->
+        <div
+          class="flex flex-col items-center gap-1 sm:gap-2 transition-all duration-300"
+          class:opacity-100={details?.downloading > 0 || animationPhase === 'downloading'}
+          class:opacity-40={!(details?.downloading > 0 || animationPhase === 'downloading')}>
+          <div
+            class="flex h-8 w-8 sm:h-12 sm:w-12 items-center justify-center rounded-full border-2 transition-all duration-300"
+            class:bg-primary={details?.downloading > 0}
+            class:border-primary={details?.downloading > 0}
+            class:text-primary-foreground={details?.downloading > 0}
+            class:border-muted={!(details?.downloading > 0)}
+            class:text-muted-foreground={!(details?.downloading > 0)}>
+            <Download class={`h-3 w-3 sm:h-5 sm:w-5 ${details?.downloading > 0 ? 'animate-bounce' : ''}`} />
+          </div>
+          <span class="text-[10px] sm:text-xs font-medium text-center" class:text-primary={details?.downloading > 0}>
+            {$_('updatingOverlay.downloading')}
+          </span>
+          {#if details?.downloading > 0}
+            <span class="text-muted-foreground text-[9px] sm:text-xs">{details.downloading}/{details.total}</span>
+          {/if}
+        </div>
+
+        <!-- Arrow -->
+        <div class="border-muted-foreground/30 w-3 sm:w-6 border-t-2 border-dashed"></div>
+
+        <!-- Unpack Step -->
+        <div
+          class="flex flex-col items-center gap-1 sm:gap-2 transition-all duration-300"
+          class:opacity-100={details?.unpacking > 0 || animationPhase === 'unpacking'}
+          class:opacity-40={!(details?.unpacking > 0 || animationPhase === 'unpacking')}>
+          <div
+            class="flex h-8 w-8 sm:h-12 sm:w-12 items-center justify-center rounded-full border-2 transition-all duration-300"
+            class:bg-amber-500={details?.unpacking > 0}
+            class:border-amber-500={details?.unpacking > 0}
+            class:text-white={details?.unpacking > 0}
+            class:border-muted={!(details?.unpacking > 0)}
+            class:text-muted-foreground={!(details?.unpacking > 0)}>
+            <Package class={`h-3 w-3 sm:h-5 sm:w-5 ${details?.unpacking > 0 ? 'animate-pulse' : ''}`} />
+          </div>
+          <span class="text-[10px] sm:text-xs font-medium text-center" class:text-amber-500={details?.unpacking > 0}>
+            {$_('updatingOverlay.unpacking')}
+          </span>
+          {#if details?.unpacking > 0}
+            <span class="text-muted-foreground text-[9px] sm:text-xs">{details.unpacking}/{details.total}</span>
+          {/if}
+        </div>
+
+        <!-- Arrow -->
+        <div class="border-muted-foreground/30 w-3 sm:w-6 border-t-2 border-dashed"></div>
+
+        <!-- Install Step -->
+        <div
+          class="flex flex-col items-center gap-1 sm:gap-2 transition-all duration-300"
+          class:opacity-100={details?.setting_up > 0 || animationPhase === 'installing'}
+          class:opacity-40={!(details?.setting_up > 0 || animationPhase === 'installing')}>
+          <div
+            class="flex h-8 w-8 sm:h-12 sm:w-12 items-center justify-center rounded-full border-2 transition-all duration-300"
+            class:bg-blue-500={details?.setting_up > 0}
+            class:border-blue-500={details?.setting_up > 0}
+            class:text-white={details?.setting_up > 0}
+            class:border-muted={!(details?.setting_up > 0)}
+            class:text-muted-foreground={!(details?.setting_up > 0)}>
+            <Cog class={`h-3 w-3 sm:h-5 sm:w-5 ${details?.setting_up > 0 ? 'animate-spin' : ''}`} />
+          </div>
+          <span class="text-[10px] sm:text-xs font-medium text-center" class:text-blue-500={details?.setting_up > 0}>
+            {$_('updatingOverlay.installing')}
+          </span>
+          {#if details?.setting_up > 0}
+            <span class="text-muted-foreground text-[9px] sm:text-xs">{details.setting_up}/{details.total}</span>
+          {/if}
+        </div>
+      </div>
+
+
     </div>
   </Drawer.Content>
 </Drawer.Root>
