@@ -1,0 +1,554 @@
+<style>
+/* Real-time data highlighting */
+:global(.live-data) {
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+</style>
+
+<script lang="ts">
+import { Activity, Clock, Code, Globe, Monitor, Wifi } from '@lucide/svelte';
+import { locale, _ } from 'svelte-i18n';
+
+import * as Card from '$lib/components/ui/card';
+import { ENV_VARIABLES } from '$lib/env';
+import { localeStore } from '$lib/stores/locale';
+import { CLIENT_VERSION } from '$lib/stores/version-manager';
+import { existingLocales } from '../../../i18n';
+
+// Real environment data using runes
+let performanceData = $state({
+  loadTime: 0,
+  memory: 0,
+  timing: null as PerformanceNavigationTiming | null,
+  loadTimeCalculated: false, // Track if load time has been properly calculated
+});
+
+let systemInfo = $state({
+  browser: '',
+  version: '',
+  platform: '',
+  cookieEnabled: false,
+  onLine: true,
+  connection: null as any,
+});
+
+let localeInfo = $state({
+  currentLocale: '',
+  currentLanguageName: '',
+  currentLanguageFlag: '',
+  browserLanguage: '',
+  supportedLocales: [] as Array<{ code: string; name: string; flag?: string }>,
+});
+
+let windowInfo = $state({
+  width: 0,
+  height: 0,
+  devicePixelRatio: 1,
+  colorScheme: 'light',
+  reducedMotion: false,
+  screenWidth: 0,
+  screenHeight: 0,
+});
+
+let buildInfo = $state({
+  mode: '',
+  nodeEnv: '',
+  dev: false,
+  socketEndpoint: '',
+  socketPort: '',
+  clientVersion: '',
+  timestamp: '',
+});
+
+// Update system information
+function updateSystemInfo() {
+  // Browser detection
+  const userAgent = navigator.userAgent;
+  let browser = $_('devtools.unknown');
+  let version = '';
+
+  if (userAgent.includes('Chrome')) {
+    browser = 'Chrome';
+    version = userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '';
+  } else if (userAgent.includes('Firefox')) {
+    browser = 'Firefox';
+    version = userAgent.match(/Firefox\/([\d.]+)/)?.[1] || '';
+  } else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) {
+    browser = 'Safari';
+    version = userAgent.match(/Version\/([\d.]+)/)?.[1] || '';
+  } else if (userAgent.includes('Edge')) {
+    browser = 'Edge';
+    version = userAgent.match(/Edge\/([\d.]+)/)?.[1] || '';
+  }
+
+  systemInfo = {
+    browser,
+    version,
+    platform: navigator.platform,
+    cookieEnabled: navigator.cookieEnabled,
+    onLine: navigator.onLine,
+    connection: (navigator as any).connection || null,
+  };
+}
+
+// Update window information
+function updateWindowInfo() {
+  windowInfo = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio,
+    colorScheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+    reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    screenWidth: screen.width,
+    screenHeight: screen.height,
+  };
+}
+
+// Language flag mapping (since they're not in the type definition)
+const languageFlags: Record<string, string> = {
+  'en': '🇺🇸',
+  'es': '🇪🇸', 
+  'pt-BR': '🇧🇷',
+  'fr': '🇫🇷',
+  'de': '🇩🇪',
+  'zh': '🇨🇳',
+  'ar': '🇸🇦',
+  'ja': '🇯🇵',
+  'ko': '🇰🇷',
+  'hi': '🇮🇳',
+};
+
+// Update locale information using app's i18n system
+function updateLocaleInfo() {
+  // Get current locale value first
+  const unsubscribe = locale.subscribe((currentLocale) => {
+    const currentLocaleData = existingLocales.find(l => l.code === currentLocale);
+    
+    localeInfo = {
+      currentLocale: currentLocale || 'en',
+      currentLanguageName: currentLocaleData?.name || 'English',
+      currentLanguageFlag: languageFlags[currentLocale || 'en'] || '🌐',
+      browserLanguage: navigator.language,
+      supportedLocales: existingLocales.map(l => ({
+        code: l.code,
+        name: l.name,
+        flag: languageFlags[l.code] || '🌐'
+      })),
+    };
+  });
+  
+  // Return unsubscribe function for cleanup
+  return unsubscribe;
+}
+
+// Update performance data
+function updatePerformanceData() {
+  // Memory usage (always update - this should change over time)
+  if (performance.memory) {
+    const memoryData = (performance.memory as any);
+    const usedHeapSize = memoryData.usedJSHeapSize || 0;
+    performanceData.memory = Math.round(usedHeapSize / 1024 / 1024);
+  }
+  
+  // Navigation timing (only calculate load time once)
+  if (!performanceData.loadTimeCalculated && performance.getEntriesByType) {
+    const navTiming = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
+    if (navTiming && navTiming.loadEventEnd && navTiming.navigationStart) {
+      performanceData.timing = navTiming;
+      const loadTime = navTiming.loadEventEnd - navTiming.navigationStart;
+      // Only set if we have a valid positive number
+      if (loadTime > 0 && isFinite(loadTime)) {
+        performanceData.loadTime = Math.round(loadTime);
+        performanceData.loadTimeCalculated = true; // Mark as calculated
+      }
+    } else if (document.readyState === 'complete') {
+      // Only use performance.now() fallback when page is fully loaded
+      // This represents time since page start, not ideal but better than increasing value
+      const loadTime = performance.now();
+      if (loadTime > 0 && isFinite(loadTime)) {
+        performanceData.loadTime = Math.round(loadTime);
+        performanceData.loadTimeCalculated = true; // Mark as calculated to prevent further updates
+      }
+    }
+    // If page isn't complete yet, keep load time at 0 until we can calculate it properly
+  }
+}
+
+// Update build information
+function updateBuildInfo() {
+  buildInfo = {
+    mode: import.meta.env.MODE,
+    nodeEnv: import.meta.env.NODE_ENV || 'undefined',
+    dev: import.meta.env.DEV,
+    socketEndpoint: ENV_VARIABLES.SOCKET_ENDPOINT,
+    socketPort: ENV_VARIABLES.SOCKET_PORT,
+    clientVersion: CLIENT_VERSION,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+// Real-time updates using runes
+let updateInterval: number;
+
+// Initialize data and set up reactive updates
+$effect(() => {
+  // Initial updates
+  updateSystemInfo();
+  updateWindowInfo();
+  updatePerformanceData();
+  updateBuildInfo();
+  const unsubscribeLocale = updateLocaleInfo();
+  
+  // Set up event listeners for dynamic updates
+  const handleResize = () => updateWindowInfo();
+  const handleOnlineStatus = () => updateSystemInfo();
+  
+  window.addEventListener('resize', handleResize);
+  window.addEventListener('online', handleOnlineStatus);
+  window.addEventListener('offline', handleOnlineStatus);
+  
+  // Update performance data every 5 seconds
+  updateInterval = setInterval(() => {
+    updatePerformanceData();
+  }, 5000);
+  
+  // Cleanup function
+  return () => {
+    window.removeEventListener('resize', handleResize);
+    window.removeEventListener('online', handleOnlineStatus);
+    window.removeEventListener('offline', handleOnlineStatus);
+    if (updateInterval) {
+      clearInterval(updateInterval);
+    }
+    // Clean up locale subscription
+    if (unsubscribeLocale) {
+      unsubscribeLocale();
+    }
+  };
+});
+
+// Format bytes
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// Format milliseconds
+function formatMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+// Handle language switching from Dev Tools
+function handleLanguageClick(languageCode: string) {
+  locale.set(languageCode);
+  localeStore.set(existingLocales.find(l => l.code === languageCode)!);
+}
+</script>
+
+<!-- Environment Information Card -->
+<Card.Root class="border-dashed border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-950/20">
+  <Card.Header>
+    <Card.Title class="flex items-center gap-2 text-purple-700 dark:text-purple-300">
+      <Code class="h-5 w-5" />
+      🔍 {$_('devtools.systemInfo')}
+    </Card.Title>
+    <Card.Description class="text-purple-600 dark:text-purple-400">
+      {$_('devtools.systemInfoDescription')}
+    </Card.Description>
+  </Card.Header>
+
+  <Card.Content class="space-y-6">
+    <!-- Build Information -->
+    <div class="space-y-3">
+      <div class="flex items-center gap-2 text-sm font-medium">
+        <Code class="h-4 w-4" />
+        {$_('devtools.buildInformation')}
+      </div>
+      <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.mode')}</div>
+          <div class="font-mono text-sm font-medium">{buildInfo.mode}</div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.nodeEnv')}</div>
+          <div class="font-mono text-sm font-medium">{buildInfo.nodeEnv}</div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.devMode')}</div>
+          <div class="font-mono text-sm font-medium {buildInfo.dev ? 'text-green-600' : 'text-red-600'}">
+            {buildInfo.dev ? $_('devtools.yes') : $_('devtools.no')}
+          </div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.clientVersion')}</div>
+          <div class="font-mono text-sm font-medium">{buildInfo.clientVersion}</div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.socketEndpoint')}</div>
+          <div class="truncate font-mono text-xs font-medium">{buildInfo.socketEndpoint}</div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.socketPort')}</div>
+          <div class="font-mono text-sm font-medium">{buildInfo.socketPort}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Browser Information -->
+    <div class="space-y-3">
+      <div class="flex items-center gap-2 text-sm font-medium">
+        <Monitor class="h-4 w-4" />
+{$_('devtools.browserInformation')}
+      </div>
+      <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.browser')}</div>
+          <div class="font-mono text-sm font-medium">{systemInfo.browser} {systemInfo.version}</div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.platform')}</div>
+          <div class="font-mono text-sm font-medium">{systemInfo.platform}</div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.userAgent')}</div>
+          <div class="font-mono text-xs truncate" title={navigator.userAgent}>
+            {navigator.userAgent.slice(0, 25)}...
+          </div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.onlineStatus')}</div>
+          <div class="font-mono text-sm font-medium {systemInfo.onLine ? 'text-green-600' : 'text-red-600'}">
+            {systemInfo.onLine ? $_('devtools.online') : $_('devtools.offline')}
+          </div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.cookies')}</div>
+          <div class="font-mono text-sm font-medium {systemInfo.cookieEnabled ? 'text-green-600' : 'text-red-600'}">
+            {systemInfo.cookieEnabled ? $_('devtools.enabled') : $_('devtools.disabled')}
+          </div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.pixelRatio')}</div>
+          <div class="font-mono text-sm font-medium">{windowInfo.devicePixelRatio}x</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Locale & Language Information -->
+    <div class="space-y-3">
+      <div class="flex items-center gap-2 text-sm font-medium">
+        <Globe class="h-4 w-4" />
+        App Locale & Language
+      </div>
+      <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.currentLanguage')}</div>
+          <div class="font-medium text-sm flex items-center gap-2">
+            <span class="text-lg">{localeInfo.currentLanguageFlag}</span>
+            {localeInfo.currentLanguageName}
+            <span class="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">{$_('devtools.active')}</span>
+          </div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.localeCode')}</div>
+          <div class="font-mono text-sm font-medium text-blue-600">{localeInfo.currentLocale}</div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.browserLanguage')}</div>
+          <div class="font-mono text-sm font-medium text-gray-600">{localeInfo.browserLanguage}</div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3 md:col-span-3">
+          <div class="text-muted-foreground mb-2 text-xs">{$_('devtools.supportedLanguagesClick', { values: { count: localeInfo.supportedLocales.length } })}</div>
+          <div class="flex flex-wrap gap-1">
+            {#each localeInfo.supportedLocales as supportedLocale}
+              <button 
+                class="flex items-center gap-1 px-2 py-1 bg-background border rounded text-xs transition-all duration-200 hover:scale-105 hover:shadow-md cursor-pointer {supportedLocale.code === localeInfo.currentLocale ? 'bg-primary/10 border-primary/30 text-primary ring-1 ring-primary/20' : 'hover:bg-primary/5 hover:border-primary/20'}"
+                onclick={() => handleLanguageClick(supportedLocale.code)}
+                title="Switch to {supportedLocale.name}"
+                type="button">
+                <span class="text-base">{supportedLocale.flag || '🌐'}</span>
+                <span class="font-medium">{supportedLocale.code.toUpperCase()}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Performance Metrics -->
+    <div class="space-y-3">
+      <div class="flex items-center gap-2 text-sm font-medium">
+        <Activity class="h-4 w-4" />
+{$_('devtools.livePerformanceMetrics')}
+      </div>
+      <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.pageLoad')}</div>
+          <div
+            class="text-lg font-bold {performanceData.loadTime < 1000
+              ? 'text-green-600'
+              : performanceData.loadTime < 3000
+                ? 'text-amber-600'
+                : 'text-red-600'}">
+            {formatMs(performanceData.loadTime)}
+          </div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.jsMemory')}</div>
+          <div
+            class="text-lg font-bold {performanceData.memory < 50
+              ? 'text-green-600'
+              : performanceData.memory < 100
+                ? 'text-amber-600'
+                : 'text-red-600'}">
+            {performanceData.memory}MB
+          </div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.viewport')}</div>
+          <div class="text-lg font-bold text-blue-600">
+            {windowInfo.width}×{windowInfo.height}
+          </div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.screen')}</div>
+          <div class="text-lg font-bold text-purple-600">
+            {windowInfo.screenWidth}×{windowInfo.screenHeight}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- User Preferences -->
+    <div class="space-y-3">
+      <div class="flex items-center gap-2 text-sm font-medium">
+        <Wifi class="h-4 w-4" />
+{$_('devtools.userPreferencesAccessibility')}
+      </div>
+      <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.colorScheme')}</div>
+          <div class="font-mono text-sm font-medium">{windowInfo.colorScheme}</div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.reducedMotion')}</div>
+          <div class="font-mono text-sm font-medium {windowInfo.reducedMotion ? 'text-amber-600' : 'text-green-600'}">
+            {windowInfo.reducedMotion ? $_('devtools.enabled') : $_('devtools.disabled')}
+          </div>
+        </div>
+        <div class="bg-background/50 rounded-lg border p-3">
+          <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.browserLanguages')}</div>
+          <div class="truncate font-mono text-xs font-medium" title={navigator.languages ? navigator.languages.join(', ') : navigator.language}>
+            {navigator.languages ? navigator.languages.slice(0, 2).join(', ') : navigator.language}
+            {navigator.languages && navigator.languages.length > 2 ? `... (+${navigator.languages.length - 2})` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Network Information -->
+    {#if systemInfo.connection}
+      <div class="space-y-3">
+        <div class="flex items-center gap-2 text-sm font-medium">
+          <Wifi class="h-4 w-4" />
+          Network Connection
+        </div>
+        <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
+          <div class="bg-background/50 rounded-lg border p-3">
+            <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.type')}</div>
+            <div class="font-mono text-sm font-medium">{systemInfo.connection.effectiveType || $_('devtools.unknown')}</div>
+          </div>
+          <div class="bg-background/50 rounded-lg border p-3">
+            <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.downlink')}</div>
+            <div class="font-mono text-sm font-medium">{systemInfo.connection.downlink || $_('devtools.unknown')} {$_('devtools.mbps')}</div>
+          </div>
+          <div class="bg-background/50 rounded-lg border p-3">
+            <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.rtt')}</div>
+            <div class="font-mono text-sm font-medium">{systemInfo.connection.rtt || $_('devtools.unknown')}{$_('devtools.ms')}</div>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Performance Timing Details -->
+    {#if performanceData.timing}
+      <div class="space-y-3">
+        <div class="flex items-center gap-2 text-sm font-medium">
+          <Clock class="h-4 w-4" />
+          Detailed Timing (Navigation API)
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+          <div class="bg-background/50 rounded border p-2">
+            <div class="text-muted-foreground mb-1">{$_('devtools.dnsLookup')}</div>
+            <div class="font-mono">
+              {Math.round(performanceData.timing.domainLookupEnd - performanceData.timing.domainLookupStart)}ms
+            </div>
+          </div>
+          <div class="bg-background/50 rounded border p-2">
+            <div class="text-muted-foreground mb-1">{$_('devtools.connect')}</div>
+            <div class="font-mono">
+              {Math.round(performanceData.timing.connectEnd - performanceData.timing.connectStart)}ms
+            </div>
+          </div>
+          <div class="bg-background/50 rounded border p-2">
+            <div class="text-muted-foreground mb-1">{$_('devtools.request')}</div>
+            <div class="font-mono">
+              {Math.round(performanceData.timing.responseStart - performanceData.timing.requestStart)}ms
+            </div>
+          </div>
+          <div class="bg-background/50 rounded border p-2">
+            <div class="text-muted-foreground mb-1">{$_('devtools.response')}</div>
+            <div class="font-mono">
+              {Math.round(performanceData.timing.responseEnd - performanceData.timing.responseStart)}ms
+            </div>
+          </div>
+          <div class="bg-background/50 rounded border p-2">
+            <div class="text-muted-foreground mb-1">{$_('devtools.domContent')}</div>
+            <div class="font-mono">
+              {Math.round(
+                performanceData.timing.domContentLoadedEventEnd - performanceData.timing.domContentLoadedEventStart,
+              )}ms
+            </div>
+          </div>
+          <div class="bg-background/50 rounded border p-2">
+            <div class="text-muted-foreground mb-1">{$_('devtools.domComplete')}</div>
+            <div class="font-mono">
+              {Math.round(performanceData.timing.domComplete - performanceData.timing.domContentLoadedEventEnd)}ms
+            </div>
+          </div>
+          <div class="bg-background/50 rounded border p-2">
+            <div class="text-muted-foreground mb-1">{$_('devtools.loadEvent')}</div>
+            <div class="font-mono">
+              {Math.round(performanceData.timing.loadEventEnd - performanceData.timing.loadEventStart)}ms
+            </div>
+          </div>
+          <div class="bg-background/50 rounded border p-2">
+            <div class="text-muted-foreground mb-1">{$_('devtools.total')}</div>
+            <div class="font-mono font-bold">{formatMs(performanceData.loadTime)}</div>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Live Timestamp -->
+    <div class="text-muted-foreground bg-muted/30 rounded-md p-2 text-xs">
+      <span class="font-medium">{$_('devtools.lastUpdated')}:</span>
+      {new Date().toLocaleString()}
+      <span class="ml-2">• {$_('devtools.autoRefresh')}</span>
+    </div>
+  </Card.Content>
+</Card.Root>
