@@ -1,7 +1,6 @@
 <script lang="ts">
 import { Play, Square } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
-import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
 
@@ -21,8 +20,8 @@ const handleStart = () => {
 };
 
 const handleStop = () => {
-  // Directly dismiss all toasts first for immediate visual feedback
-  toast.dismiss();
+  // Remove problematic toast.dismiss() call that causes Svelte 5 compatibility issues
+  // The toast will be handled by the proper streaming stop notifications
 
   if (window.stopStreamingWithNotificationClear) {
     window.stopStreamingWithNotificationClear();

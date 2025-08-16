@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import { get } from 'svelte/store';
+import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
 import { sendMessage, socket, StatusMessages } from '$lib/stores/websocket-store';
@@ -33,13 +34,13 @@ export const networkRename = (name: string) => {
   }
 
   if (name.startsWith('wl')) {
-    name = 'WiFi';
+    name = get(_)('networking.types.wifi');
   } else if (name.startsWith('eth') || name.startsWith('en')) {
-    name = 'Ethernet';
+    name = get(_)('networking.types.ethernet');
   } else if (name.startsWith('ww')) {
-    name = 'Modem';
+    name = get(_)('networking.types.modem');
   } else if (name.startsWith('usb')) {
-    name = 'USB';
+    name = get(_)('networking.types.usb');
   }
 
   return name + numberSuffix;
@@ -106,11 +107,11 @@ export const getConnection = (wifiNetwork: StatusMessage['wifi'][keyof StatusMes
 
 export const getWifiBand = (freq: number) => {
   if (freq > 6000) {
-    return '6 Ghz';
+    return get(_)('wifiBands.band_6ghz');
   } else if (freq > 5000) {
-    return '5 GHz';
+    return get(_)('wifiBands.band_5ghz');
   }
-  return '2.4 GHz';
+  return get(_)('wifiBands.band_2_4ghz');
 };
 
 export const turnHotspotModeOn = (deviceId: number) => {
@@ -178,8 +179,8 @@ export const scanModemNetworks = (deviceId: number) => {
 
 export const scanWifi = (deviceId: number | string, notification = true) => {
   if (notification) {
-    toast.info('Scanning for WiFi networks', {
-      description: 'Looking for new wifi networks this may take some seconds',
+    toast.info(get(_)('networkHelper.toast.scanningWifi'), {
+      description: get(_)('networkHelper.toast.scanningWifiDescription'),
       duration: 5000,
     });
   }
@@ -187,7 +188,9 @@ export const scanWifi = (deviceId: number | string, notification = true) => {
 };
 
 export const disconnectWifi = (uuid: string, wifi: ValueOf<StatusMessage['wifi']>['available'][number]) => {
-  toast.warning('Disconnecting from WiFi', { description: `Disconnecting from the ${wifi.ssid} network` });
+  toast.warning(get(_)('networkHelper.toast.disconnectingWifi'), {
+    description: get(_)('networkHelper.toast.disconnectingWifiDescription', { values: { ssid: wifi.ssid } }),
+  });
   socket.send(
     JSON.stringify({
       wifi: {
@@ -198,7 +201,10 @@ export const disconnectWifi = (uuid: string, wifi: ValueOf<StatusMessage['wifi']
 };
 
 export const connectWifi = (uuid: string, wifi: ValueOf<StatusMessage['wifi']>['available'][number]) => {
-  toast.info('Connecting to WiFi', { description: `Connecting to the ${wifi.ssid} network`, duration: 12000 });
+  toast.info(get(_)('networkHelper.toast.connectingWifi'), {
+    description: get(_)('networkHelper.toast.connectingWifiDescription', { values: { ssid: wifi.ssid } }),
+    duration: 12000,
+  });
   socket.send(
     JSON.stringify({
       wifi: {
@@ -209,7 +215,10 @@ export const connectWifi = (uuid: string, wifi: ValueOf<StatusMessage['wifi']>['
 };
 
 export const connectToNewWifi = (deviceId: string | number, ssid: string, password: string) => {
-  toast.info('Connecting to new Wifi', { description: `Connecting to the ${ssid} network`, duration: 15000 });
+  toast.info(get(_)('networkHelper.toast.connectingNewWifi'), {
+    description: get(_)('networkHelper.toast.connectingNewWifiDescription', { values: { ssid } }),
+    duration: 15000,
+  });
   socket.send(
     JSON.stringify({
       wifi: {
@@ -224,7 +233,9 @@ export const connectToNewWifi = (deviceId: string | number, ssid: string, passwo
 };
 
 export const forgetWifi = (uuid: string, wifi: ValueOf<StatusMessage['wifi']>['available'][number]) => {
-  toast.info('Wifi network forgotten', { description: `You have forgotten the ${wifi.ssid} network` });
+  toast.info(get(_)('networkHelper.toast.wifiNetworkForgotten'), {
+    description: get(_)('networkHelper.toast.wifiNetworkForgottenDescription', { values: { ssid: wifi.ssid } }),
+  });
 
   socket.send(
     JSON.stringify({

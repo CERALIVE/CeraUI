@@ -58,6 +58,13 @@ $effect(() => {
   const newValue = properties.bitrate ?? 5000;
   localBitrate = newValue;
 });
+
+// Helper to call the onChange handlers
+const handleSelectChange = (field: string, newValue: any, callback: Function) => {
+  if (typeof callback === 'function') {
+    callback(newValue);
+  }
+};
 </script>
 
 <Card.Root class="group flex h-full flex-col transition-all duration-200 hover:shadow-md">
@@ -74,7 +81,11 @@ $effect(() => {
     <!-- Input Mode Selection -->
     <div class="space-y-2">
       <Label for="inputMode" class="text-sm font-medium">{$_('settings.inputMode')}</Label>
-      <Select.Root type="single" disabled={isStreaming} value={properties.inputMode} onValueChange={onInputModeChange}>
+      <Select.Root
+        type="single"
+        disabled={isStreaming}
+        value={properties.inputMode}
+        onValueChange={value => handleSelectChange('inputMode', value, onInputModeChange)}>
         <Select.Trigger id="inputMode" class="w-full">
           {properties.inputMode ? properties.inputMode.toUpperCase() : $_('settings.selectInputMode')}
         </Select.Trigger>
