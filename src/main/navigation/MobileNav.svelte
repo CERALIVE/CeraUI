@@ -55,19 +55,29 @@ const handleClick = (nav: NavElements) => {
   }
 
   lastNavigationTime = now;
-  console.log(`[MobileNav] Navigation to ${Object.keys(nav)[0]}:`, {
+  const navKey = nav && typeof nav === 'object' && Object.keys(nav).length > 0 ? Object.keys(nav)[0] : 'unknown';
+  console.log(`[MobileNav] Navigation to ${navKey}:`, {
     timestamp: new Date().toISOString(),
     throttleMs: NAVIGATION_THROTTLE_MS,
   });
 
-  // Set selected item for visual feedback
-  selectedItem = Object.keys(nav)[0];
+  // Set selected item for visual feedback with safety checks
+  const navKeys = nav && typeof nav === 'object' ? Object.keys(nav) : [];
+  selectedItem = navKeys.length > 0 ? navKeys[0] : null;
 
   // Small delay for visual feedback
   setTimeout(() => {
-    navigationStore.set(nav);
+    // Validate nav object before setting to prevent NaN scale animations
+    if (nav && typeof nav === 'object' && Object.keys(nav).length > 0) {
+      navigationStore.set(nav);
+    } else {
+      console.warn('[MobileNav] Invalid nav object, skipping navigation:', nav);
+    }
     open = false;
-    selectedItem = null;
+    // Reset selectedItem safely to prevent animation conflicts
+    setTimeout(() => {
+      selectedItem = null;
+    }, 50); // Small additional delay to let scale animations complete
   }, 150);
 };
 
@@ -88,7 +98,7 @@ const handleLogoClick = () => {
   });
 
   const currentKey = currentNav ? Object.keys(currentNav)[0] : '';
-  const defaultKey = Object.keys(defaultNavElement)[0];
+  const defaultKey = defaultNavElement && typeof defaultNavElement === 'object' && Object.keys(defaultNavElement).length > 0 ? Object.keys(defaultNavElement)[0] : '';
 
   // If already on default, and can go back, go back instead
   if (currentKey === defaultKey && $canGoBack) {
@@ -266,11 +276,18 @@ $effect(() => {
                     isSelected && 'bg-primary/10 scale-[0.98]',
                     $isNavigationTransitioning && identifier === Object.keys(currentNav || {})[0] && 'opacity-60',
                   )}
-                  onclick={() => handleClick({ [identifier]: navigation })}
+                  onclick={() => {
+                    // Validate identifier and navigation before handling click
+                    if (identifier && navigation && typeof navigation === 'object') {
+                      handleClick({ [identifier]: navigation });
+                    } else {
+                      console.warn('[MobileNav] Invalid navigation data:', { identifier, navigation });
+                    }
+                  }}
                   disabled={$isNavigationTransitioning}>
                   {#snippet children()}
                     <div class="flex w-full items-center justify-between">
-                      <span>{$_(`navigation.${navigation.label}`)}</span>
+                      <span>{$_(`navigation.${navigation?.label || 'unknown'}`)}</span>
 
                       <!-- Visual feedback indicators -->
                       <div class="flex items-center space-x-2">

@@ -222,8 +222,8 @@ const handleLogoClick = () => {
                 'from-background to-accent border-border/50 bg-gradient-to-b',
                 'shadow-primary/10',
               )}
-              in:send={{ key: 'activetab' }}
-              out:receive={{ key: 'activetab' }}>
+              in:receive={{ key: 'activetab' }}
+              out:send={{ key: 'activetab' }}>
             </div>
 
             <!-- Enhanced glow effect for active tab -->

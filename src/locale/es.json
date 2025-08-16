@@ -207,7 +207,8 @@
     "network": "Red",
     "streaming": "Streaming",
     "advanced": "Avanzado",
-    "devtools": "Herramientas Dev"
+    "devtools": "Herramientas Dev",
+    "back": "Atrás"
   },
   "auth": {
     "createPassword": "Crear Contraseña",

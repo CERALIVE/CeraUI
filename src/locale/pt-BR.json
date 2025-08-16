@@ -474,7 +474,8 @@
     "network": "Rede",
     "streaming": "Transmissão",
     "advanced": "Avançado",
-    "devtools": "Dev Tools"
+    "devtools": "Dev Tools",
+    "back": "Voltar"
   },
   "advanced": {
     "systemSettings": "Configurações do sistema",

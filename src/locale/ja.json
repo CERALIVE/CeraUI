@@ -293,7 +293,9 @@
     "general": "一般",
     "network": "ネットワーク",
     "streaming": "ストリーミング",
-    "advanced": "詳細設定"
+    "advanced": "詳細設定",
+    "devtools": "開発ツール",
+    "back": "戻る"
   },
   "advanced": {
     "systemSettings": "システム設定",

@@ -292,7 +292,9 @@
     "general": "일반",
     "network": "네트워크",
     "streaming": "스트리밍",
-    "advanced": "고급"
+    "advanced": "고급",
+    "devtools": "개발 도구",
+    "back": "뒤로"
   },
   "advanced": {
     "systemSettings": "시스템 설정",
