@@ -292,7 +292,9 @@
     "general": "सामान्य",
     "network": "नेटवर्क",
     "streaming": "स्ट्रीमिंग",
-    "advanced": "उन्नत"
+    "advanced": "उन्नत",
+    "devtools": "डेव टूल्स",
+    "back": "वापस"
   },
   "advanced": {
     "systemSettings": "सिस्टम सेटिंग्स",

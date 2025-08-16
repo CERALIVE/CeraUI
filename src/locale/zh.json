@@ -289,7 +289,9 @@
     "general": "常规",
     "network": "网络",
     "streaming": "直播",
-    "advanced": "高级"
+    "advanced": "高级",
+    "devtools": "开发工具",
+    "back": "返回"
   },
   "advanced": {
     "systemSettings": "系统设置",

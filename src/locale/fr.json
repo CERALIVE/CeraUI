@@ -501,7 +501,8 @@
     "network": "Réseau",
     "streaming": "Diffusion",
     "advanced": "Avancé",
-    "devtools": "Outils Dev"
+    "devtools": "Outils Dev",
+    "back": "Retour"
   },
   "advanced": {
     "systemSettings": "Paramètres du système",

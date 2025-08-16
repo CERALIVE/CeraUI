@@ -205,7 +205,8 @@
     "network": "Netzwerk",
     "streaming": "Streaming",
     "advanced": "Erweitert",
-    "devtools": "Dev Tools"
+    "devtools": "Dev Tools",
+    "back": "Zurück"
   },
   "auth": {
     "createPassword": "Passwort erstellen",

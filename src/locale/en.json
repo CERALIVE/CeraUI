@@ -255,7 +255,8 @@
     "network": "Network",
     "streaming": "Streaming",
     "advanced": "Advanced",
-    "devtools": "Dev Tools"
+    "devtools": "Dev Tools",
+    "back": "Back"
   },
   "auth": {
     "createPassword": "Create Password",
