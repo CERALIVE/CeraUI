@@ -177,16 +177,18 @@ const hasAudioCodec = $derived(
 
               <!-- Progress Fill -->
               {#if localAudioDelay !== 0}
-                {@const isNegative = localAudioDelay < 0}
-                {@const clampedValue = Math.max(-2000, Math.min(2000, localAudioDelay))}
-                {@const percentage = (Math.abs(clampedValue) / 2000) * 50}
+                {@const safeDelay = isFinite(localAudioDelay) ? localAudioDelay : 0}
+                {@const isNegative = safeDelay < 0}
+                {@const clampedValue = Math.max(-2000, Math.min(2000, safeDelay))}
+                {@const percentage = isFinite(clampedValue) ? (Math.abs(clampedValue) / 2000) * 50 : 0}
+                {@const safePercentage = isFinite(percentage) ? Math.max(0, Math.min(50, percentage)) : 0}
                 <div
                   class={`absolute top-1/2 h-2 -translate-y-1/2 rounded-full transition-all duration-200 ${
                     isNegative
                       ? 'bg-gradient-to-r from-orange-400 to-orange-500 dark:from-orange-500 dark:to-orange-600'
                       : 'bg-gradient-to-r from-emerald-400 to-emerald-500 dark:from-emerald-500 dark:to-emerald-600'
                   }`}
-                  style={`${isNegative ? 'right' : 'left'}: 50%; width: ${percentage}%;`}>
+                  style={`${isNegative ? 'right' : 'left'}: 50%; width: ${safePercentage}%;`}>
                 </div>
               {/if}
 
@@ -199,7 +201,12 @@ const hasAudioCodec = $derived(
                       ? 'bg-orange-500 dark:bg-orange-400'
                       : 'bg-emerald-500 dark:bg-emerald-400'
                 }`}
-                style={`left: ${((Math.max(-2000, Math.min(2000, localAudioDelay)) + 2000) / 4000) * 100}%; transition: left 200ms ease-out, background-color 200ms ease-out;`}>
+                style={`left: ${(() => {
+                  const safeDelay = isFinite(localAudioDelay) ? localAudioDelay : 0;
+                  const clampedDelay = Math.max(-2000, Math.min(2000, safeDelay));
+                  const percentage = ((clampedDelay + 2000) / 4000) * 100;
+                  return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 50;
+                })()}%; transition: left 200ms ease-out, background-color 200ms ease-out;`}>
               </div>
 
               <!-- Invisible Input for Interaction -->

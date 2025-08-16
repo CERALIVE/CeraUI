@@ -237,12 +237,13 @@ AuthMessages.subscribe(message => {
   });
 });
 
-// Aggressive fallback for mobile/PWA: if we're stuck in any loading state, assume offline
-const isMobileDevice = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
+// Aggressive fallback for mobile/PWA: if we're stuck in any loading state, assume offline with NaN safety
+const userAgent = navigator.userAgent || '';
+const isMobileDevice = /iphone|ipad|ipod|android/i.test(userAgent);
 const isPWAApp =
-  window.matchMedia('(display-mode: standalone)').matches ||
-  window.navigator.standalone ||
-  document.referrer.includes('android-app://');
+  (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+  !!(window.navigator && window.navigator.standalone) ||
+  (document.referrer && document.referrer.includes('android-app://'));
 
 if (isMobileDevice || isPWAApp) {
   const fallbackTimeout = isPWAApp ? 300 : 1000; // Even more aggressive for PWA

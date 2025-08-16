@@ -557,5 +557,8 @@
     "toastNotificationTester": "提示通知测试器",
     "livePerformanceMetrics": "实时性能指标",
     "userPreferencesAccessibility": "用户偏好和辅助功能"
+  },
+  "units": {
+    "fps": "帧率"
   }
 }

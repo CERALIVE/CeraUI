@@ -86,11 +86,12 @@ let showIOSBanner = $state(false);
 const isMobile = $derived(() => {
   if (typeof window === 'undefined') return false;
 
-  // Check for touch capability
-  const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  // Check for touch capability with NaN safety
+  const maxTouchPoints = navigator.maxTouchPoints;
+  const hasTouchScreen = 'ontouchstart' in window || (isFinite(maxTouchPoints) && maxTouchPoints > 0);
 
   // Check user agent for mobile/tablet devices
-  const userAgent = navigator.userAgent;
+  const userAgent = navigator.userAgent || '';
   const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
 
   // Combine touch capability with user agent detection

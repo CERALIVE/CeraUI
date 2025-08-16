@@ -101,16 +101,22 @@ function updateSystemInfo() {
   };
 }
 
-// Update window information
+// Update window information with NaN safety
 function updateWindowInfo() {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const dpr = window.devicePixelRatio;
+  const screenW = screen.width;
+  const screenH = screen.height;
+  
   windowInfo = {
-    width: window.innerWidth,
-    height: window.innerHeight,
-    devicePixelRatio: window.devicePixelRatio,
+    width: isFinite(width) ? width : 0,
+    height: isFinite(height) ? height : 0,
+    devicePixelRatio: isFinite(dpr) ? dpr : 1,
     colorScheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
     reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-    screenWidth: screen.width,
-    screenHeight: screen.height,
+    screenWidth: isFinite(screenW) ? screenW : 0,
+    screenHeight: isFinite(screenH) ? screenH : 0,
   };
 }
 
