@@ -74,7 +74,7 @@ function getStatusGradient(status: string) {
 }
 
 const signalValue = $derived(modem.status?.signal ?? 0);
-const connectionStatus = $derived(modem.status.connection);
+const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
 </script>
 
 <Card.Root

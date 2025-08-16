@@ -236,7 +236,7 @@ const hasAudioCodec = $derived(
           </div>
           <Input
             id="audioDelayInput"
-            value={localAudioDelay}
+            bind:value={localAudioDelay}
             type="number"
             step="5"
             disabled={isStreaming}
@@ -244,7 +244,6 @@ const hasAudioCodec = $derived(
             oninput={e => {
               const inputValue = parseInt(e.currentTarget.value);
               if (!isNaN(inputValue)) {
-                localAudioDelay = inputValue;
                 onAudioDelayChange(inputValue);
               }
             }}

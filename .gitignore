@@ -14,9 +14,7 @@ dev-dist
 *.local
 
 # Editor directories and files
-.vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
+.vscode/
 .idea
 .DS_Store
 *.suo
@@ -24,5 +22,7 @@ dev-dist
 *.njsproj
 *.sln
 *.sw?
+# Cursor IDE - personal settings and configs
+.cursor/
 
 .env

@@ -121,6 +121,8 @@
     "criticalError": "Error Crítico",
     "criticalErrorDesc": "Este toast persistirá hasta ser descartado manualmente.",
     "dismiss": "Descartar",
+    "loadingComplete": "¡Carga completada!",
+    "loadingCompleteDesc": "La operación de carga terminó exitosamente.",
     "testingTips": "Consejos de Prueba",
     "testingTipsList": "• Pruebe diferentes duraciones para probar el tiempo de despido automático • Pruebe toasts de acción para verificar interacciones de botón • Use toasts persistentes para probar despido manual • Verifique el comportamiento de apilamiento con múltiples toasts • Verifique accesibilidad con navegación por teclado",
     "dnsLookup": "Consulta DNS",

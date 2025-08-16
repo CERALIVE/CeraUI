@@ -95,103 +95,6 @@ class I18nValidator {
 
     this.printReport(result);
     return result;
-  }#!/usr/bin/env tsx
-
-/**
- * CeraUI i18n Validation System
- * 
- * Comprehensive validation tool for internationalization files that ensures:
- * - Structure consistency across all language files
- * - Detection of unused translation keys
- * - Missing translations identification
- * - Usage validation in codebase
- * 
- * Built with MCP architecture principles for maximum efficiency and maintainability.
- */
-
-import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join, extname } from 'path';
-import { glob } from 'glob';
-
-interface ValidationResult {
-  success: boolean;
-  errors: ValidationError[];
-  warnings: ValidationWarning[];
-  stats: ValidationStats;
-  recommendations: Recommendation[];
-}
-
-interface ValidationError {
-  type: 'structure' | 'missing' | 'usage' | 'format';
-  language: string;
-  key?: string;
-  message: string;
-  severity: 'critical' | 'high' | 'medium' | 'low';
-}
-
-interface ValidationWarning {
-  type: 'unused' | 'inconsistent' | 'potential';
-  language: string;
-  key?: string;
-  message: string;
-  confidence: number; // 0-100
-}
-
-interface ValidationStats {
-  totalLanguages: number;
-  totalKeys: number;
-  keysUsedInCode: number;
-  potentiallyUnusedKeys: number;
-  missingTranslations: number;
-  structuralInconsistencies: number;
-}
-
-interface Recommendation {
-  type: 'cleanup' | 'translation' | 'structure';
-  priority: 'high' | 'medium' | 'low';
-  description: string;
-  action: string;
-}
-
-class I18nValidator {
-  private localeDir: string;
-  private srcDir: string;
-  private languages: Map<string, any> = new Map();
-  private usedKeys: Set<string> = new Set();
-  private allKeys: Set<string> = new Set();
-
-  constructor(localeDir: string, srcDir: string) {
-    this.localeDir = localeDir;
-    this.srcDir = srcDir;
-  }
-
-  async validate(): Promise<ValidationResult> {
-    console.log('🔍 Starting comprehensive i18n validation...\n');
-
-    // Load all language files
-    await this.loadLanguages();
-
-    // Scan codebase for usage
-    await this.scanCodebaseUsage();
-
-    // Perform validations
-    const structureValidation = this.validateStructure();
-    const usageValidation = this.validateUsage();
-    const consistencyValidation = this.validateConsistency();
-
-    // Generate recommendations
-    const recommendations = this.generateRecommendations();
-
-    const result: ValidationResult = {
-      success: structureValidation.length === 0 && usageValidation.length === 0,
-      errors: [...structureValidation, ...usageValidation],
-      warnings: consistencyValidation,
-      stats: this.generateStats(),
-      recommendations
-    };
-
-    this.printReport(result);
-    return result;
   }
 
   private async loadLanguages(): Promise<void> {
@@ -219,7 +122,9 @@ class I18nValidator {
     }
     
     console.log(`📊 Loaded ${this.languages.size} languages with ${this.allKeys.size} unique keys\n`);
-  }  private collectKeys(obj: any, prefix: string, langCode: string): void {
+  }
+
+  private collectKeys(obj: any, prefix: string, langCode: string): void {
     for (const [key, value] of Object.entries(obj)) {
       const fullKey = prefix ? `${prefix}.${key}` : key;
       this.allKeys.add(fullKey);
@@ -350,7 +255,9 @@ class I18nValidator {
           });
         }
       }
-    }    console.log(`   ${errors.length === 0 ? '✓' : '⚠️'}  Found ${errors.length} structural issues\n`);
+    }
+
+    console.log(`   ${errors.length === 0 ? '✓' : '⚠️'}  Found ${errors.length} structural issues\n`);
     return errors;
   }
 
@@ -387,7 +294,9 @@ class I18nValidator {
     const referenceLang = this.languages.get('en');
     if (!referenceLang) return warnings;
 
-    const availableKeys = new Set(Object.keys(this.flattenObject(referenceLang)));    // Find potentially unused keys
+    const availableKeys = new Set(Object.keys(this.flattenObject(referenceLang)));
+
+    // Find potentially unused keys
     for (const key of availableKeys) {
       if (!this.usedKeys.has(key)) {
         // Calculate confidence based on key patterns
@@ -423,7 +332,9 @@ class I18nValidator {
     // Check for severely incomplete translations
     const referenceLang = this.languages.get('en');
     if (referenceLang) {
-      const referenceCount = Object.keys(this.flattenObject(referenceLang)).length;      for (const [langCode, langData] of this.languages) {
+      const referenceCount = Object.keys(this.flattenObject(referenceLang)).length;
+
+      for (const [langCode, langData] of this.languages) {
         if (langCode === 'en') continue;
         
         const langCount = Object.keys(this.flattenObject(langData)).length;
@@ -466,7 +377,9 @@ class I18nValidator {
       missingTranslations: 0, // This would be calculated from structure validation
       structuralInconsistencies: 0 // This would be calculated from structure validation
     };
-  }  private flattenObject(obj: any, prefix = ''): Record<string, any> {
+  }
+
+  private flattenObject(obj: any, prefix = ''): Record<string, any> {
     const flattened: Record<string, any> = {};
     
     for (const [key, value] of Object.entries(obj)) {
@@ -506,7 +419,9 @@ class I18nValidator {
         if (error.key) console.log(`   Key: ${error.key}`);
       }
       console.log();
-    }    // Warnings
+    }
+
+    // Warnings
     if (result.warnings.length > 0) {
       console.log('⚠️  WARNINGS');
       const highConfidenceWarnings = result.warnings.filter(w => w.confidence > 60);
@@ -543,7 +458,9 @@ class I18nValidator {
       case 'low': return '🔵';
       default: return '⚪';
     }
-  }  private getConfidenceIcon(confidence: number): string {
+  }
+
+  private getConfidenceIcon(confidence: number): string {
     if (confidence >= 80) return '🔴';
     if (confidence >= 60) return '🟠';
     if (confidence >= 40) return '🟡';

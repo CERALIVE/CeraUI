@@ -49,8 +49,10 @@ StatusMessages.subscribe(status => {
       </div>
 
       <div class="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {#each Object.entries(currentStatus.wifi) as [deviceId, wifi] (deviceId)}
-          <WiFiCard {wifi} {deviceId} />
+        {#each Object.entries(currentStatus.wifi) as [deviceId, wifi] (Number(deviceId))}
+          {#if !isNaN(Number(deviceId))}
+            <WiFiCard {wifi} deviceId={Number(deviceId)} />
+          {/if}
         {/each}
       </div>
     </section>
@@ -71,8 +73,10 @@ StatusMessages.subscribe(status => {
       </div>
 
       <div class="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {#each Object.entries(currentStatus.modems) as [deviceId, modem]}
-          <ModemCard {modem} {deviceId} />
+        {#each Object.entries(currentStatus.modems) as [deviceId, modem] (Number(deviceId))}
+          {#if !isNaN(Number(deviceId))}
+            <ModemCard {modem} deviceId={Number(deviceId)} />
+          {/if}
         {/each}
       </div>
     </section>

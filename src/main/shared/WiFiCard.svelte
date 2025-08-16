@@ -161,7 +161,7 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
         <div class="flex flex-col gap-2 sm:flex-row">
           <SimpleAlertDialog
             confirmButtonText={$_('network.dialog.close')}
-            hiddeCancelButton={true}
+            hideCancelButton={true}
             buttonText={$_('network.status.details')}
             extraButtonClasses="w-full sm:flex-1 bg-blue-600 hover:bg-blue-700 text-white"
             title={$_('network.dialog.hotspotDetails')}>

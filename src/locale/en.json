@@ -121,6 +121,8 @@
     "criticalError": "Critical Error",
     "criticalErrorDesc": "This toast will persist until manually dismissed.",
     "dismiss": "Dismiss",
+    "loadingComplete": "Loading Complete!",
+    "loadingCompleteDesc": "The loading operation finished successfully.",
     "customToastConfig": "Custom Toast Configuration",
     "title": "Title",
     "description": "Description",

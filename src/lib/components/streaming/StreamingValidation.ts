@@ -65,7 +65,8 @@ export function validateStreamingForm(properties: Properties, t: (key: string) =
       hasErrors = true;
     }
 
-    if (!properties.srtlaServerPort || properties.srtlaServerPort <= 0) {
+    if (!properties.srtlaServerPort || !Number.isInteger(properties.srtlaServerPort) || 
+        properties.srtlaServerPort < 1 || properties.srtlaServerPort > 65535) {
       formErrors.srtlaServerPort = t('settings.errors.srtlaServerPortRequired');
       errorMessages.push(t('settings.errors.srtlaServerPortRequired'));
       hasErrors = true;

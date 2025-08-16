@@ -59,6 +59,7 @@ const toastPositions = [
 const toastTypes = [
   {
     name: $_('devtools.success'),
+    type: 'success',
     icon: CheckCircle2,
     color: 'text-green-600',
     bgColor: 'bg-green-50 dark:bg-green-950/20',
@@ -67,6 +68,7 @@ const toastTypes = [
   },
   {
     name: $_('devtools.error'),
+    type: 'error',
     icon: AlertCircle,
     color: 'text-red-600',
     bgColor: 'bg-red-50 dark:bg-red-950/20',
@@ -75,6 +77,7 @@ const toastTypes = [
   },
   {
     name: $_('devtools.warning'),
+    type: 'warning',
     icon: AlertTriangle,
     color: 'text-amber-600',
     bgColor: 'bg-amber-50 dark:bg-amber-950/20',
@@ -83,6 +86,7 @@ const toastTypes = [
   },
   {
     name: $_('devtools.info'),
+    type: 'info',
     icon: Info,
     color: 'text-blue-600',
     bgColor: 'bg-blue-50 dark:bg-blue-950/20',
@@ -91,6 +95,7 @@ const toastTypes = [
   },
   {
     name: $_('devtools.default'),
+    type: 'default',
     icon: MessageCircle,
     color: 'text-gray-600',
     bgColor: 'bg-gray-50 dark:bg-gray-950/20',
@@ -99,6 +104,7 @@ const toastTypes = [
   },
   {
     name: $_('devtools.loading'),
+    type: 'loading',
     icon: Loader2,
     color: 'text-blue-600',
     bgColor: 'bg-blue-50 dark:bg-blue-950/20',
@@ -108,7 +114,7 @@ const toastTypes = [
       // Auto-dismiss loading toast after duration
       setTimeout(() => {
         toast.dismiss(loadingToast);
-        toast.success('Loading Complete!', { description: 'The loading operation finished successfully.' });
+        toast.success($_('devtools.loadingComplete'), { description: $_('devtools.loadingCompleteDesc') });
       }, toastDuration);
     },
   },
@@ -252,7 +258,7 @@ function dismissAllToasts() {
             class={`${toastType.bgColor} ${toastType.borderColor} hover:bg-opacity-80 transition-all duration-200`}>
             {@const IconComponent = toastType.icon}
             <IconComponent
-              class={`mr-2 h-4 w-4 ${toastType.color} ${toastType.name === 'Loading' ? 'animate-spin' : ''}`} />
+              class={`mr-2 h-4 w-4 ${toastType.color} ${toastType.type === 'loading' ? 'animate-spin' : ''}`} />
             <span class={toastType.color}>{toastType.name}</span>
           </Button>
         {/each}

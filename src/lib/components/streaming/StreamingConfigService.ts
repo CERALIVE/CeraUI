@@ -88,7 +88,7 @@ export function startStreamingWithConfig(config: ConfigMessage): void {
   }
 
   // Use the global function which handles toast cleanup safely
-  if (window.startStreamingWithNotificationClear) {
+  if (typeof window !== 'undefined' && window.startStreamingWithNotificationClear) {
     window.startStreamingWithNotificationClear(config);
   } else {
     // Fallback to direct function call if global function is not available
@@ -116,3 +116,6 @@ export function stopStreaming(): void {
     });
   }
 }
+
+// Export type alias for global use
+export type StreamingConfig = ConfigMessage;

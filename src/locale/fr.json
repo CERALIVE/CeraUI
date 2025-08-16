@@ -121,6 +121,8 @@
     "criticalError": "Erreur Critique",
     "criticalErrorDesc": "Ce toast persistera jusqu'à être rejeté manuellement.",
     "dismiss": "Rejeter",
+    "loadingComplete": "Chargement terminé !",
+    "loadingCompleteDesc": "L'opération de chargement s'est terminée avec succès.",
     "testingTips": "Conseils de Test",
     "testingTipsList": "• Essayez différentes durées pour tester le délai de rejet automatique • Testez les toasts d'action pour vérifier les interactions de bouton • Utilisez des toasts persistants pour tester le rejet manuel • Vérifiez le comportement d'empilement avec plusieurs toasts • Vérifiez l'accessibilité avec la navigation au clavier",
     "dnsLookup": "Recherche DNS",
