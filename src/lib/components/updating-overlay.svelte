@@ -27,20 +27,32 @@ let isVisible = $state(false);
 let hasShownSuccess = $state(false);
 let animationPhase = $state<'downloading' | 'unpacking' | 'installing' | 'complete'>('downloading');
 
-// Safe progress calculation with null checks
+// Safe progress calculation with null checks and NaN prevention
 let progress: number = $derived.by(() => {
   if (!details) return 0;
   const downloading = Number(details.downloading) || 0;
   const unpacking = Number(details.unpacking) || 0;
   const setting_up = Number(details.setting_up) || 0;
-  return downloading + unpacking + setting_up;
+  const total = downloading + unpacking + setting_up;
+  return isFinite(total) ? total : 0;
 });
 
-// Safe total calculation with minimum value
-let total: number = $derived(Math.max(3 * (Number(details?.total) || 0), 1));
+// Safe total calculation with minimum value and NaN prevention
+let total: number = $derived.by(() => {
+  if (!details?.total) return 1;
+  const calculatedTotal = 3 * (Number(details.total) || 0);
+  const safeTotal = Math.max(calculatedTotal, 1);
+  return isFinite(safeTotal) ? safeTotal : 1;
+});
 
-// Progress percentage with safe division
-let progressPercentage = $derived(total > 0 ? Math.min((progress / total) * 100, 100) : 0);
+// Progress percentage with enhanced NaN prevention
+let progressPercentage = $derived.by(() => {
+  if (!details || total <= 0 || !isFinite(progress) || !isFinite(total)) {
+    return 0;
+  }
+  const percentage = (progress / total) * 100;
+  return isFinite(percentage) ? Math.min(percentage, 100) : 0;
+});
 
 // Determine current animation phase
 $effect(() => {
@@ -78,6 +90,7 @@ onMount(() => {
 </script>
 
 <!-- Enhanced Modern Glassmorphism Overlay -->
+{#if isFinite(progress) && isFinite(total) && isFinite(progressPercentage)}
 <Drawer.Root open={true} closeOnOutsideClick={false} closeOnEscape={false}>
   <Drawer.Content
     class="from-background/95 via-background/90 to-background/95 h-full w-full border-0 bg-gradient-to-br backdrop-blur-xl"
@@ -142,7 +155,7 @@ onMount(() => {
             <!-- Percentage Overlay -->
             <div class="absolute inset-0 flex items-center justify-center">
               <span class="text-foreground text-xl sm:text-2xl font-bold bg-background/80 rounded-full px-3 py-1.5">
-                {progressPercentage.toFixed(0)}%
+                {isFinite(progressPercentage) ? progressPercentage.toFixed(0) : '0'}%
               </span>
             </div>
           </div>
@@ -156,13 +169,13 @@ onMount(() => {
         <!-- Linear Progress Bar -->
         <div class="space-y-2 px-4 sm:px-0">
           <div class="bg-muted/30 border-border/50 h-2.5 overflow-hidden rounded-full border backdrop-blur-sm">
-            <Progress value={progress} max={total} class="h-full rounded-full" />
+            <Progress value={isFinite(progress) ? progress : 0} max={isFinite(total) ? total : 1} class="h-full rounded-full" />
           </div>
 
           <!-- Progress Details -->
           <div class="text-muted-foreground flex justify-between text-xs sm:text-sm">
-            <span>{progress} {$_('updatingOverlay.of')} {total} {$_('updatingOverlay.steps')}</span>
-            <span>{progressPercentage.toFixed(1)}%</span>
+            <span>{isFinite(progress) ? progress : 0} {$_('updatingOverlay.of')} {isFinite(total) ? total : 1} {$_('updatingOverlay.steps')}</span>
+            <span>{isFinite(progressPercentage) ? progressPercentage.toFixed(1) : '0.0'}%</span>
           </div>
         </div>
       </div>
@@ -246,3 +259,14 @@ onMount(() => {
     </div>
   </Drawer.Content>
 </Drawer.Root>
+{:else}
+<!-- Fallback overlay without animations if values are invalid -->
+<div class="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl">
+  <div class="relative flex h-full w-full flex-col items-center justify-center p-4 sm:p-8">
+    <div class="text-center">
+      <RotateCw class="h-32 w-32 mx-auto mb-4 text-primary animate-spin" />
+      <div class="text-muted-foreground text-sm">Loading...</div>
+    </div>
+  </div>
+</div>
+{/if}

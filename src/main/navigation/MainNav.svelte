@@ -36,9 +36,18 @@ const [send, receive] = crossfade({
   duration: 400,
   easing: cubicInOut,
   fallback(node) {
+    // Validate node exists and has dimensions to prevent NaN values
+    if (!node || !node.getBoundingClientRect) {
+      return { duration: 0, css: () => '' };
+    }
+    
+    const startValue = 0.95;
+    // Ensure start value is a valid number to prevent scale(NaN, NaN)
+    const safeStart = isFinite(startValue) ? startValue : 1;
+    
     return scale(node, {
       duration: 200,
-      start: 0.95,
+      start: safeStart,
       easing: cubicInOut,
     });
   },
@@ -63,7 +72,11 @@ $effect(() => {
 
 // Enhanced tab navigation with throttling to prevent race conditions
 const handleTabNavigation = (identifier: string, navigation: any) => {
-  if ($isNavigationTransitioning) return; // Prevent navigation during transitions
+  // Add additional safety checks to prevent NaN issues
+  if ($isNavigationTransitioning || !navigation || !identifier) {
+    console.warn('[MainNav] Navigation blocked - invalid state or transitioning');
+    return;
+  }
 
   const now = Date.now();
   if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) {
@@ -146,8 +159,8 @@ const handleLogoClick = () => {
       {#if $canGoBack && isLogoHovered}
         <div
           class="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-blue-500"
-          in:scale={{ duration: 200 }}
-          out:scale={{ duration: 150 }}>
+          in:scale={{ duration: 200, start: 0.8 }}
+          out:scale={{ duration: 150, start: 1 }}>
           <div class="h-full w-full animate-ping rounded-full bg-blue-400"></div>
         </div>
       {/if}

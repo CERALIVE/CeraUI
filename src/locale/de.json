@@ -610,5 +610,8 @@
     "serverUpdated": "Server wurde aktualisiert",
     "refreshToUpdate": "Aktualisieren Sie, um die neueste Version zu erhalten",
     "refreshNow": "Jetzt aktualisieren"
+  },
+  "units": {
+    "fps": "FPS"
   }
 }

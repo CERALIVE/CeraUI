@@ -560,5 +560,8 @@
     "toastNotificationTester": "토스트 알림 테스터",
     "livePerformanceMetrics": "실시간 성능 메트릭",
     "userPreferencesAccessibility": "사용자 기본 설정 및 접근성"
+  },
+  "units": {
+    "fps": "FPS"
   }
 }

@@ -60,14 +60,17 @@ $effect(() => {
   return cleanup;
 });
 
-// Get transition parameters based on direction
+// Get transition parameters based on direction with NaN safety
 const transitionParams = $derived.by(() => {
   const direction = $transitionDirection;
   const isForward = direction === 'forward';
-
+  
+  // Ensure we always have valid numeric values to prevent NaN in animations
+  const xValue = isForward ? 300 : -300;
+  
   return {
-    x: isForward ? 300 : -300,
-    duration: TRANSITION_DURATION,
+    x: isFinite(xValue) ? xValue : 0,
+    duration: isFinite(TRANSITION_DURATION) ? TRANSITION_DURATION : 300,
     easing: cubicInOut,
   };
 });

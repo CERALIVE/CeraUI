@@ -43,13 +43,11 @@ let {
   normalizeValue,
 }: Props = $props();
 
-// Local state for input fields - can be cleared independently but sync when parent has new data
+// Local state for all fields to prevent binding undefined values (like EncoderCard pattern)
 let localSrtlaServerAddress = $state(properties.srtlaServerAddress ?? '');
 let localSrtlaServerPort = $state(properties.srtlaServerPort?.toString() ?? '');
 let localSrtStreamId = $state(properties.srtStreamId ?? '');
 let localSrtLatency = $state(properties.srtLatency ?? 2000);
-
-// Local state for select fields to prevent undefined binding
 let localRelayServer = $state(properties.relayServer ?? '');
 let localRelayAccount = $state(properties.relayAccount ?? '');
 
@@ -60,15 +58,7 @@ let streamIdTouched = $state(false);
 let relayServerTouched = $state(false);
 let relayAccountTouched = $state(false);
 
-// Track last known values to detect genuine external changes
-let lastKnownAddress = $state(properties.srtlaServerAddress ?? '');
-let lastKnownPort = $state(properties.srtlaServerPort?.toString() ?? '');
-let lastKnownStreamId = $state(properties.srtStreamId ?? '');
-let lastKnownRelayServer = $state(properties.relayServer ?? '');
-let lastKnownRelayAccount = $state(properties.relayAccount ?? '');
-
-// Only sync from properties to local state when user hasn't touched the field
-// This prevents feedback loops where user changes -> parent updates -> overwrites user changes
+// Sync FROM properties TO local state when parent provides new data (like EncoderCard pattern)
 $effect(() => {
   if (!addressTouched) {
     localSrtlaServerAddress = properties.srtlaServerAddress ?? '';
@@ -104,28 +94,8 @@ $effect(() => {
   localSrtLatency = properties.srtLatency ?? 2000;
 });
 
-// Watch local state changes and notify parent (one-way communication)
-$effect(() => {
-  onSrtlaAddressChange(localSrtlaServerAddress);
-});
-
-$effect(() => {
-  const value = (localSrtlaServerPort || '').toString().trim();
-  if (value === '') {
-    onSrtlaPortChange(undefined);
-  } else {
-    const parsedValue = parseInt(value, 10);
-    if (Number.isInteger(parsedValue) && parsedValue > 0 && parsedValue <= 65535) {
-      onSrtlaPortChange(parsedValue);
-    } else {
-      onSrtlaPortChange(undefined);
-    }
-  }
-});
-
-$effect(() => {
-  onSrtStreamIdChange(localSrtStreamId);
-});
+// No effects watching local state to prevent timing issues and loops
+// Parent functions are called directly in input handlers (like EncoderCard pattern)
 
 const isManualConfig = $derived(localRelayServer === '-1' || localRelayServer === undefined || localRelayServer === '');
 const isManualAccount = $derived(localRelayAccount === '-1' || localRelayAccount === undefined || localRelayAccount === '');
@@ -145,20 +115,20 @@ const isManualAccount = $derived(localRelayAccount === '-1' || localRelayAccount
     <!-- Relay Server Selection -->
     <div class="space-y-2">
       <Label for="relayServer" class="text-sm font-medium">{$_('settings.relayServer')}</Label>
-      <Select.Root
-        type="single"
-        value={localRelayServer}
-        disabled={relayMessage === undefined || isStreaming}
-        onValueChange={value => {
-          localRelayServer = value;
-          relayServerTouched = true;
-          onRelayServerChange(value);
-        }}>
-        <Select.Trigger id="relayServer" class="w-full">
-          {localRelayServer !== undefined && localRelayServer !== '-1' && relayMessage?.servers
-            ? (Object.entries(relayMessage.servers).find(server => server[0] === localRelayServer)?.[1]?.name ??
-              $_('settings.manualConfiguration'))
-            : $_('settings.manualConfiguration')}
+              <Select.Root
+          type="single"
+          value={localRelayServer}
+          disabled={relayMessage === undefined || isStreaming}
+          onValueChange={value => {
+            localRelayServer = value;
+            relayServerTouched = true;
+            onRelayServerChange(value);
+          }}>
+          <Select.Trigger id="relayServer" class="w-full">
+            {localRelayServer !== undefined && localRelayServer !== '-1' && relayMessage?.servers
+              ? (Object.entries(relayMessage.servers).find(server => server[0] === localRelayServer)?.[1]?.name ??
+                $_('settings.manualConfiguration'))
+              : $_('settings.manualConfiguration')}
         </Select.Trigger>
         <Select.Content>
           <Select.Group>
@@ -207,7 +177,10 @@ const isManualAccount = $derived(localRelayAccount === '-1' || localRelayAccount
             disabled={isStreaming}
             placeholder={$_('settings.placeholders.srtlaServerAddress')}
             class="font-mono"
-            oninput={() => { addressTouched = true; }} />
+            oninput={() => { 
+              addressTouched = true; 
+              onSrtlaAddressChange(localSrtlaServerAddress);
+            }} />
           {#if formErrors.srtlaServerAddress}
             <p class="text-destructive text-sm">{formErrors.srtlaServerAddress}</p>
           {/if}
@@ -224,7 +197,20 @@ const isManualAccount = $derived(localRelayAccount === '-1' || localRelayAccount
             disabled={isStreaming}
             placeholder={$_('settings.placeholders.srtlaServerPort')}
             class="font-mono"
-            oninput={() => { portTouched = true; }} />
+            oninput={() => { 
+              portTouched = true;
+              const value = (localSrtlaServerPort || '').toString().trim();
+              if (value === '') {
+                onSrtlaPortChange(undefined);
+              } else {
+                const parsedValue = parseInt(value, 10);
+                if (Number.isInteger(parsedValue) && parsedValue > 0 && parsedValue <= 65535) {
+                  onSrtlaPortChange(parsedValue);
+                } else {
+                  onSrtlaPortChange(undefined);
+                }
+              }
+            }} />
           {#if formErrors.srtlaServerPort}
             <p class="text-destructive text-sm">{formErrors.srtlaServerPort}</p>
           {/if}
@@ -289,7 +275,10 @@ const isManualAccount = $derived(localRelayAccount === '-1' || localRelayAccount
           disabled={isStreaming}
           placeholder={$_('settings.placeholders.srtStreamId')}
           class="font-mono"
-          oninput={() => { streamIdTouched = true; }} />
+          oninput={() => { 
+            streamIdTouched = true; 
+            onSrtStreamIdChange(localSrtStreamId);
+          }} />
       </div>
     {/if}
 
@@ -310,12 +299,20 @@ const isManualAccount = $derived(localRelayAccount === '-1' || localRelayAccount
         <!-- Progress Fill -->
         <div
           class="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-full bg-gradient-to-r from-blue-400 to-blue-500 transition-all duration-200 dark:from-blue-500 dark:to-blue-600"
-          style={`width: ${Math.max(0, Math.min(100, ((localSrtLatency - 2000) / (12000 - 2000)) * 100))}%;`}>
+          style={`width: ${(() => {
+            const safeLatency = isFinite(localSrtLatency) ? localSrtLatency : 2000;
+            const percentage = ((safeLatency - 2000) / (12000 - 2000)) * 100;
+            return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
+          })()}%;`}>
         </div>
         <!-- Thumb -->
         <div
           class="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 border-white bg-blue-500 shadow-md transition-all duration-200 hover:scale-110 dark:border-gray-800 dark:bg-blue-400"
-          style={`left: ${Math.max(0, Math.min(100, ((localSrtLatency - 2000) / (12000 - 2000)) * 100))}%;`}>
+          style={`left: ${(() => {
+            const safeLatency = isFinite(localSrtLatency) ? localSrtLatency : 2000;
+            const percentage = ((safeLatency - 2000) / (12000 - 2000)) * 100;
+            return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
+          })()}%;`}>
         </div>
         <!-- Invisible Input for Interaction -->
         <input

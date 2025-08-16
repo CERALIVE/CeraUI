@@ -30,15 +30,22 @@ let currentY = 0;
 const handleTouchStart = (e: TouchEvent) => {
   if (window.scrollY > 0) return; // Only allow at top of page
 
-  startY = e.touches[0].clientY;
+  const clientY = e.touches[0]?.clientY;
+  if (!isFinite(clientY)) return; // Prevent NaN coordinates
+  
+  startY = clientY;
   isPulling = true;
 };
 
 const handleTouchMove = (e: TouchEvent) => {
   if (!isPulling || window.scrollY > 0) return;
 
-  currentY = e.touches[0].clientY;
-  pullDistance = Math.max(0, currentY - startY);
+  const clientY = e.touches[0]?.clientY;
+  if (!isFinite(clientY) || !isFinite(startY)) return; // Prevent NaN coordinates
+  
+  currentY = clientY;
+  const rawPullDistance = currentY - startY;
+  pullDistance = isFinite(rawPullDistance) ? Math.max(0, rawPullDistance) : 0;
 
   if (pullDistance > threshold) {
     canRefresh = true;
@@ -51,12 +58,23 @@ const handleTouchMove = (e: TouchEvent) => {
     e.preventDefault();
   }
 
-  // Apply transform with resistance (from -48px hidden to 0px visible)
-  const resistance = Math.min(pullDistance / 2, distance);
-  const transformY = -48 + Math.min((resistance * 48) / threshold, 48);
+  // Apply transform with resistance (from -48px hidden to 0px visible) - NaN safe
+  const safePullDistance = isFinite(pullDistance) ? pullDistance : 0;
+  const safeThreshold = isFinite(threshold) && threshold > 0 ? threshold : 80;
+  const safeDistance = isFinite(distance) ? distance : 150;
+  
+  const resistance = Math.min(safePullDistance / 2, safeDistance);
+  const safeResistance = isFinite(resistance) ? resistance : 0;
+  
+  const transformCalculation = -48 + Math.min((safeResistance * 48) / safeThreshold, 48);
+  const transformY = isFinite(transformCalculation) ? transformCalculation : -48;
+  
+  const opacityCalculation = Math.min(safePullDistance / safeThreshold, 1);
+  const opacity = isFinite(opacityCalculation) ? opacityCalculation : 0;
+  
   if (refreshElement) {
     refreshElement.style.transform = `translateY(${transformY}px)`;
-    refreshElement.style.opacity = Math.min(pullDistance / threshold, 1).toString();
+    refreshElement.style.opacity = opacity.toString();
     // Enable pointer events when visible and allow clicking to cancel refresh
     refreshElement.style.pointerEvents = pullDistance > threshold ? 'auto' : 'none';
     refreshElement.style.cursor = pullDistance > threshold ? 'pointer' : 'default';
@@ -109,9 +127,10 @@ const handleTouchEnd = async () => {
 };
 
 onMount(() => {
-  // Only add touch listeners on mobile/tablet devices (including iPad)
-  const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  const userAgent = navigator.userAgent;
+  // Only add touch listeners on mobile/tablet devices (including iPad) with NaN safety
+  const maxTouchPoints = navigator.maxTouchPoints;
+  const hasTouchScreen = 'ontouchstart' in window || (isFinite(maxTouchPoints) && maxTouchPoints > 0);
+  const userAgent = navigator.userAgent || '';
   const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
   const isMobile = hasTouchScreen || isMobileUA;
 

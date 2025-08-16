@@ -288,7 +288,7 @@ $effect(() => {
                 {#if isSelected}
                   <div
                     class="bg-primary/5 pointer-events-none absolute inset-0 rounded-lg"
-                    in:scale={{ duration: 200, start: 0.95 }}
+                    in:scale={{ duration: 200, start: isFinite(0.95) ? 0.95 : 1 }}
                     out:fade={{ duration: 150 }}>
                   </div>
                 {/if}

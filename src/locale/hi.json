@@ -560,5 +560,8 @@
     "toastNotificationTester": "टोस्ट नोटिफिकेशन टेस्टर",
     "livePerformanceMetrics": "लाइव प्रदर्शन मेट्रिक्स",
     "userPreferencesAccessibility": "उपयोगकर्ता प्राथमिकताएं और पहुंच"
+  },
+  "units": {
+    "fps": "एफ़पीएस"
   }
 }

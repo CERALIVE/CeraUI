@@ -584,5 +584,8 @@
     "serverUpdated": "Servidor foi atualizado",
     "refreshToUpdate": "Atualize para obter a versão mais recente",
     "refreshNow": "Atualizar agora"
+  },
+  "units": {
+    "fps": "FPS"
   }
 }

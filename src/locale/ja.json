@@ -561,5 +561,8 @@
     "toastNotificationTester": "Toast Notification Tester",
     "livePerformanceMetrics": "Live Performance Metrics",
     "userPreferencesAccessibility": "User Preferences & Accessibility"
+  },
+  "units": {
+    "fps": "FPS"
   }
 }

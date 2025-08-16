@@ -687,6 +687,9 @@
     "cancel": "Cancel",
     "continue": "Continue"
   },
+  "units": {
+    "fps": "FPS"
+  },
   "version": {
     "newVersionAvailable": "New Version Available",
     "newCodeVersion": "New code version available",
