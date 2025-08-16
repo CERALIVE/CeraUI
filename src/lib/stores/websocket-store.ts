@@ -4,7 +4,7 @@ import { toast } from 'svelte-sonner';
 import { mergeModems } from '$lib/helpers/ObjectsHelper';
 import { downloadLog } from '$lib/helpers/SystemHelper';
 
-import { ENV_VARIABLES } from '../env';
+import { ENV_VARIABLES, BUILD_INFO } from '../env';
 import type {
   AudioCodecsMessage,
   AuthMessage,
@@ -258,7 +258,7 @@ export {
 };
 
 // Debug functions for version tracking
-if (typeof window !== 'undefined' && !import.meta.env.PROD) {
+if (typeof window !== 'undefined' && !BUILD_INFO.IS_PROD) {
   console.log('📱 Frontend build version:', CLIENT_VERSION);
 
   interface WindowWithVersionDebug extends Window {

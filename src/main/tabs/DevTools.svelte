@@ -37,9 +37,10 @@ import DemoOverlayTrigger from '$lib/components/demo-overlay-trigger.svelte';
 import SystemInfo from '$lib/components/dev-tools/system-info.svelte';
 import ToastTester from '$lib/components/dev-tools/toast-tester.svelte';
 import * as Card from '$lib/components/ui/card';
+import { BUILD_INFO } from '$lib/env';
 
 // Development environment info
-const isDev = import.meta.env.MODE === 'development';
+const isDev = BUILD_INFO.IS_DEV;
 </script>
 
 <!-- Dev Tools Page -->
@@ -63,7 +64,7 @@ const isDev = import.meta.env.MODE === 'development';
         class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-sm dark:border-amber-800 dark:bg-amber-900/20">
         <div class="h-2 w-2 animate-pulse rounded-full bg-amber-500"></div>
         <span class="font-medium text-amber-700 dark:text-amber-300">
-          {$_('devtools.developmentMode')}: {import.meta.env.MODE} | {$_('devtools.status')}: {$_('devtools.active')}
+          {$_('devtools.developmentMode')}: {BUILD_INFO.MODE} | {$_('devtools.status')}: {$_('devtools.active')}
         </span>
       </div>
     </div>

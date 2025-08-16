@@ -50,21 +50,53 @@ let {
   getSortedFramerates,
 }: Props = $props();
 
-// Local state for slider binding (copy audio slider pattern)
+// Local state for all select fields to prevent binding undefined values
+let localInputMode = $state(properties.inputMode ?? '');
+let localEncoder = $state(properties.encoder ?? '');
+let localResolution = $state(properties.resolution ?? '');
+let localFramerate = $state(properties.framerate ?? '');
 let localBitrate = $state(properties.bitrate ?? 5000);
 
-// Simple prop sync (copy audio slider pattern)
+// Track if user has touched each field to prevent auto-syncing user-edited fields
+let inputModeTouched = $state(false);
+let encoderTouched = $state(false);
+let resolutionTouched = $state(false);
+let framerateTouched = $state(false);
+
+// Sync FROM properties TO local state when parent provides new data
+$effect(() => {
+  if (!inputModeTouched) {
+    localInputMode = properties.inputMode ?? '';
+  }
+});
+
+$effect(() => {
+  if (!encoderTouched) {
+    localEncoder = properties.encoder ?? '';
+  }
+});
+
+$effect(() => {
+  if (!resolutionTouched) {
+    localResolution = properties.resolution ?? '';
+  }
+});
+
+$effect(() => {
+  if (!framerateTouched) {
+    localFramerate = properties.framerate ?? '';
+  }
+});
+
 $effect(() => {
   const newValue = properties.bitrate ?? 5000;
   localBitrate = newValue;
 });
 
-// Helper to call the onChange handlers
-const handleSelectChange = (field: string, newValue: any, callback: Function) => {
-  if (typeof callback === 'function') {
-    callback(newValue);
-  }
-};
+// No effects watching local state to prevent race conditions
+// Parent functions are called directly in onValueChange handlers
+
+
 </script>
 
 <Card.Root class="group flex h-full flex-col transition-all duration-200 hover:shadow-md">
@@ -84,10 +116,14 @@ const handleSelectChange = (field: string, newValue: any, callback: Function) =>
       <Select.Root
         type="single"
         disabled={isStreaming}
-        value={properties.inputMode}
-        onValueChange={value => handleSelectChange('inputMode', value, onInputModeChange)}>
+        value={localInputMode}
+        onValueChange={value => {
+          localInputMode = value;
+          inputModeTouched = true;
+          onInputModeChange(value);
+        }}>
         <Select.Trigger id="inputMode" class="w-full">
-          {properties.inputMode ? properties.inputMode.toUpperCase() : $_('settings.selectInputMode')}
+          {localInputMode ? localInputMode.toUpperCase() : $_('settings.selectInputMode')}
         </Select.Trigger>
         <Select.Content>
           <Select.Group>
@@ -116,10 +152,14 @@ const handleSelectChange = (field: string, newValue: any, callback: Function) =>
       <Select.Root
         type="single"
         disabled={isStreaming || !properties.inputMode}
-        value={properties.encoder}
-        onValueChange={onEncoderChange}>
+        value={localEncoder}
+        onValueChange={value => {
+          localEncoder = value;
+          encoderTouched = true;
+          onEncoderChange(value);
+        }}>
         <Select.Trigger id="encodingFormat" class="w-full">
-          {properties.encoder ? properties.encoder.toUpperCase() : $_('settings.selectEncodingOutputFormat')}
+          {localEncoder ? localEncoder.toUpperCase() : $_('settings.selectEncodingOutputFormat')}
         </Select.Trigger>
         <Select.Content>
           <Select.Group>
@@ -142,10 +182,14 @@ const handleSelectChange = (field: string, newValue: any, callback: Function) =>
       <Select.Root
         type="single"
         disabled={isStreaming || !properties.encoder}
-        value={properties.resolution}
-        onValueChange={onResolutionChange}>
+        value={localResolution}
+        onValueChange={value => {
+          localResolution = value;
+          resolutionTouched = true;
+          onResolutionChange(value);
+        }}>
         <Select.Trigger id="encodingResolution" class="w-full">
-          {properties.resolution ?? $_('settings.selectEncodingResolution')}
+          {localResolution ? localResolution : $_('settings.selectEncodingResolution')}
         </Select.Trigger>
         <Select.Content>
           <Select.Group>
@@ -171,10 +215,14 @@ const handleSelectChange = (field: string, newValue: any, callback: Function) =>
       <Select.Root
         type="single"
         disabled={isStreaming || !properties.resolution}
-        value={properties.framerate || ''}
-        onValueChange={onFramerateChange}>
+        value={localFramerate}
+        onValueChange={value => {
+          localFramerate = value;
+          framerateTouched = true;
+          onFramerateChange(value);
+        }}>
         <Select.Trigger id="framerate" class="w-full">
-          {properties.framerate ?? $_('settings.selectFramerate')}
+          {localFramerate ? `${localFramerate} ${$_('units.fps')}` : $_('settings.selectFramerate')}
         </Select.Trigger>
         <Select.Content>
           <Select.Group>
@@ -213,12 +261,20 @@ const handleSelectChange = (field: string, newValue: any, callback: Function) =>
         <!-- Progress Fill -->
         <div
           class="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-200 dark:from-green-500 dark:to-green-600"
-          style={`width: ${Math.max(0, Math.min(100, ((localBitrate - 2000) / (12000 - 2000)) * 100))}%;`}>
+          style={`width: ${(() => {
+            const safeBitrate = isFinite(localBitrate) ? localBitrate : 2000;
+            const percentage = ((safeBitrate - 2000) / (12000 - 2000)) * 100;
+            return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
+          })()}%;`}>
         </div>
         <!-- Thumb -->
         <div
           class="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 border-white bg-green-500 shadow-md transition-all duration-200 hover:scale-110 dark:border-gray-800 dark:bg-green-400"
-          style={`left: ${Math.max(0, Math.min(100, ((localBitrate - 2000) / (12000 - 2000)) * 100))}%;`}>
+          style={`left: ${(() => {
+            const safeBitrate = isFinite(localBitrate) ? localBitrate : 2000;
+            const percentage = ((safeBitrate - 2000) / (12000 - 2000)) * 100;
+            return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
+          })()}%;`}>
         </div>
         <!-- Invisible Input for Interaction -->
         <input
@@ -249,6 +305,7 @@ const handleSelectChange = (field: string, newValue: any, callback: Function) =>
           const inputValue = parseInt(e.currentTarget.value);
           if (!isNaN(inputValue)) {
             localBitrate = inputValue;
+            updateMaxBitrate(inputValue);
             onBitrateChange(inputValue); // Call parent to keep everything in sync
           }
         }}

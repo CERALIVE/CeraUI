@@ -32,10 +32,11 @@ let demoDetails = $state({
   unpacking: 0,
   setting_up: 0,
   total: 10,
+  result: null as number | null,
 });
 
 // Demo simulation control
-let demoInterval: number | null = null;
+let demoInterval: ReturnType<typeof setInterval> | null = null;
 
 function startDemo() {
   isDemo = true;
@@ -47,6 +48,7 @@ function startDemo() {
     unpacking: 0,
     setting_up: 0,
     total: 10,
+    result: null,
   };
 
   // Start the simulation
@@ -92,6 +94,7 @@ function stopDemo() {
     unpacking: 0,
     setting_up: 0,
     total: 10,
+    result: null,
   };
 }
 

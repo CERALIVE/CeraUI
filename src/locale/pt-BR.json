@@ -121,6 +121,8 @@
     "criticalError": "Erro Crítico",
     "criticalErrorDesc": "Este toast persistirá até ser dispensado manualmente.",
     "dismiss": "Dispensar",
+    "loadingComplete": "Carregamento Concluído!",
+    "loadingCompleteDesc": "A operação de carregamento foi concluída com sucesso.",
     "testingTips": "Dicas de Teste",
     "testingTipsList": "• Teste diferentes durações para testar o tempo de dispensa automática • Teste toasts de ação para verificar interações de botão • Use toasts persistentes para testar dispensa manual • Verifique o comportamento de empilhamento com múltiplos toasts • Verifique acessibilidade com navegação por teclado",
     "dnsLookup": "Consulta DNS",
@@ -451,7 +453,9 @@
       "hotspot": "Ponto de Acesso",
       "cellular": "Celular",
       "wifi": "WiFi",
-      "ethernet": "Ethernet"
+      "ethernet": "Ethernet",
+      "modem": "Modem",
+      "usb": "USB"
     },
     "labels": {
       "interface": "Interface:",

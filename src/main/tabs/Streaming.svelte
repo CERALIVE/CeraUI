@@ -15,6 +15,7 @@ import {
 import { validateStreamingForm } from '$lib/components/streaming/StreamingValidation';
 import { parsePipelineName } from '$lib/helpers/PipelineHelper';
 import type { AudioCodecs } from '$lib/helpers/SystemHelper';
+import { stopStreaming } from '$lib/helpers/SystemHelper';
 import type { PipelinesMessage } from '$lib/types/socket-messages';
 import AudioCard from '$main/shared/AudioCard.svelte';
 import EncoderCard from '$main/shared/EncoderCard.svelte';
@@ -92,6 +93,14 @@ let formErrors = $state<Record<string, string>>({});
 
 // Flags to prevent effects from overriding user selections
 let isProgrammaticChange = $state(false);
+
+// Track which specific fields user has touched (per-field interaction tracking)  
+let srtlaAddressTouched = $state(false);
+let srtlaPortTouched = $state(false);
+let srtStreamIdTouched = $state(false);
+let srtLatencyTouched = $state(false);
+
+// Track encoder-related user interactions (separate from ServerCard)
 let userHasInteracted = $state(false);
 
 // React to saved config changes and initialize properties
@@ -103,15 +112,16 @@ $effect(() => {
       properties.srtLatency = config.srt_latency ?? 2000;
     }
 
-    if (!properties.srtlaServerPort && config.srtla_port) {
+    // Only restore fields that user hasn't specifically touched
+    if (!srtlaPortTouched && properties.srtlaServerPort === undefined && config.srtla_port) {
       properties.srtlaServerPort = config.srtla_port;
     }
 
-    if (!properties.srtStreamId && config.srt_streamid) {
+    if (!srtStreamIdTouched && !properties.srtStreamId && config.srt_streamid) {
       properties.srtStreamId = config.srt_streamid;
     }
 
-    if (!properties.srtlaServerAddress && config.srtla_addr) {
+    if (!srtlaAddressTouched && !properties.srtlaServerAddress && config.srtla_addr) {
       properties.srtlaServerAddress = config.srtla_addr;
     }
 
@@ -329,9 +339,7 @@ const handleFramerateChange = (value: string) => {
           window.stopStreamingWithNotificationClear();
         } else {
           // Fallback
-          import('$lib/helpers/SystemHelper').then(module => {
-            module.stopStreaming();
-          });
+          stopStreaming();
         }
       }}
       disabled={false} />
@@ -407,10 +415,22 @@ const handleFramerateChange = (value: string) => {
               }
             }}
             onRelayAccountChange={value => (properties.relayAccount = value)}
-            onSrtlaAddressChange={value => (properties.srtlaServerAddress = value)}
-            onSrtlaPortChange={value => (properties.srtlaServerPort = value)}
-            onSrtStreamIdChange={value => (properties.srtStreamId = value)}
-            onSrtLatencyChange={value => (properties.srtLatency = value)}
+            onSrtlaAddressChange={value => {
+              properties.srtlaServerAddress = value;
+              srtlaAddressTouched = true;
+            }}
+            onSrtlaPortChange={value => {
+              properties.srtlaServerPort = value;
+              srtlaPortTouched = true;
+            }}
+            onSrtStreamIdChange={value => {
+              properties.srtStreamId = value;
+              srtStreamIdTouched = true;
+            }}
+            onSrtLatencyChange={value => {
+              properties.srtLatency = value;
+              srtLatencyTouched = true;
+            }}
             {normalizeValue} />
         </div>
       </div>

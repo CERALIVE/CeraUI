@@ -20,7 +20,7 @@ import { Activity, Clock, Code, Globe, Monitor, Wifi } from '@lucide/svelte';
 import { locale, _ } from 'svelte-i18n';
 
 import * as Card from '$lib/components/ui/card';
-import { ENV_VARIABLES } from '$lib/env';
+import { ENV_VARIABLES, BUILD_INFO } from '$lib/env';
 import { localeStore } from '$lib/stores/locale';
 import { CLIENT_VERSION } from '$lib/stores/version-manager';
 import { existingLocales } from '../../../i18n';
@@ -187,9 +187,9 @@ function updatePerformanceData() {
 // Update build information
 function updateBuildInfo() {
   buildInfo = {
-    mode: import.meta.env.MODE,
-    nodeEnv: import.meta.env.NODE_ENV || 'undefined',
-    dev: import.meta.env.DEV,
+    mode: BUILD_INFO.MODE,
+    nodeEnv: BUILD_INFO.NODE_ENV,
+    dev: BUILD_INFO.IS_DEV,
     socketEndpoint: ENV_VARIABLES.SOCKET_ENDPOINT,
     socketPort: ENV_VARIABLES.SOCKET_PORT,
     clientVersion: CLIENT_VERSION,

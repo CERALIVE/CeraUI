@@ -68,7 +68,7 @@
     "audioDelayEarly": "빠름 (-)",
     "audioDelayLate": "늦음 (+)",
     "perfectSync": "동기화",
-    "noAudioSupport": "현재 선택한 구성은's 모든 종류의 오디오 설정을 지원하지 않습니다",
+    "noAudioSupport": "현재 선택한 구성은 모든 종류의 오디오 설정을 지원하지 않습니다",
 
     "manualConfiguration": "수동 구성",
     "receiverServer": "수신기 서버",

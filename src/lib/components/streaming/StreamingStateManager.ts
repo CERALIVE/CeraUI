@@ -96,9 +96,16 @@ class StreamingStateManager {
     return this._notAvailableAudioSourceStore;
   }
 
+  private _disposers: (() => void)[] = [];
+
   constructor() {
     this.setupSubscriptions();
     this.setupReactiveEffects();
+  }
+
+  public cleanup(): void {
+    this._disposers.forEach(dispose => dispose());
+    this._disposers = [];
   }
 
   private updateStores() {
@@ -138,7 +145,12 @@ class StreamingStateManager {
           hasChanged = true;
         }
 
-        if (status.asrcs.length !== this._audioSources?.length) {
+        // Compare audio sources array content, not just length
+        const audioSourcesChanged = !this._audioSources || 
+          status.asrcs.length !== this._audioSources.length ||
+          !status.asrcs.every((src, index) => src === this._audioSources?.[index]);
+        
+        if (audioSourcesChanged) {
           this._audioSources = status.asrcs;
           hasChanged = true;
 

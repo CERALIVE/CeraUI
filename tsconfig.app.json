@@ -11,6 +11,16 @@
     "checkJs": true,
     "isolatedModules": true,
     "esModuleInterop": true,
+    // Enhanced source map configuration for better debugging
+    "sourceMap": true,
+    "inlineSourceMap": false,
+    "inlineSources": false,
+    "sourceRoot": "",
+    "mapRoot": "",
+    // Enhanced debugging configuration
+    "declaration": true,
+    "declarationMap": true,
+    "preserveSymlinks": true,
     "baseUrl": ".",
     "paths": {
       "$lib": ["./src/lib"],

@@ -449,6 +449,8 @@
     "delete": "Delete",
     "cancel": "Cancel",
     "dismiss": "Dismiss",
+    "loadingComplete": "読み込み完了！",
+    "loadingCompleteDesc": "読み込み操作が正常に完了しました。",
     "testingTips": "Testing Tips",
     "testingTipsList": "• Try different durations to test auto-dismissal timing • Test action toasts to verify button interactions • Use persistent toasts to test manual dismissal • Check toast stacking behavior with multiple toasts • Verify accessibility with keyboard navigation",
     "pixelRatio": "Pixel Ratio",

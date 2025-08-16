@@ -15,8 +15,15 @@ export default defineConfig(({ mode }) => ({
     svelte({
       compilerOptions: {
         hmr: mode !== 'production',
+        // Enhanced debugging options for Svelte 5
+        dev: mode !== 'production',
       },
-      inspector: { showToggleButton: 'always', toggleButtonPos: 'bottom-right' },
+      inspector: { 
+        showToggleButton: 'always', 
+        toggleButtonPos: 'bottom-right',
+        // Enhanced inspector settings for better debugging
+        holdMode: true,
+      },
     }),
     VitePWA(pwaConfig),
   ],
@@ -30,7 +37,34 @@ export default defineConfig(({ mode }) => ({
       $main: path.resolve('./src/main'),
     },
   },
+  // Enhanced development server configuration
   server: {
     port: 6173,
+    // Configure source map ignore list for better debugging
+    sourcemapIgnoreList(sourcePath) {
+      return sourcePath.includes('node_modules') && !sourcePath.includes('@sveltejs');
+    },
   },
+  // Enhanced CSS development source maps (experimental feature)
+  css: {
+    devSourcemap: true,
+  },
+  // Development-specific optimizations
+  ...(mode !== 'production' && {
+    // Enable inline source maps for better debugging in development
+    build: {
+      sourcemap: 'inline',
+    },
+    // Enhanced dependency optimization for debugging
+    optimizeDeps: {
+      include: [
+        // Pre-bundle these for consistent debugging experience
+        // Add any frequently used dependencies here
+      ],
+      exclude: [
+        // Keep these as separate modules for better debugging
+        '@sveltejs/vite-plugin-svelte',
+      ],
+    },
+  }),
 }));

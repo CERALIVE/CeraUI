@@ -5,6 +5,7 @@ import DevTools from '$main/tabs/DevTools.svelte';
 import General from '$main/tabs/General.svelte';
 import Network from '$main/tabs/Network.svelte';
 import Streaming from '$main/tabs/Streaming.svelte';
+import { BUILD_INFO } from '$lib/env';
 
 export type NavElements = {
   [key: string]: {
@@ -23,7 +24,7 @@ const baseNavElements: NavElements = {
 // Add dev tools only in development mode
 export const navElements: NavElements = {
   ...baseNavElements,
-  ...(import.meta.env.MODE === 'development'
+  ...(BUILD_INFO.IS_DEV
     ? {
         devtools: { label: 'devtools', component: DevTools },
       }
