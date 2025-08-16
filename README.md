@@ -128,6 +128,12 @@ sudo cp -r dist/* /opt/belaUI/public/
 
 > **Note:** Replacing the original UI directly may cause issues. When belaUI is updated, it can overwrite these files, removing your custom UI. Ensure you monitor updates and reapply your changes if necessary.
 
+## Documentation
+
+### Development Tools
+
+- **[DevTools Tab](docs/DEVTOOLS.md)**: Comprehensive guide to the development utilities and debugging tools available in the DevTools tab. Includes component testing, console debugging, system information, and troubleshooting guides.
+
 ## License
 
 This project is licensed under the **GPL-3.0 License**. See the [LICENSE](LICENSE) file for more details.
