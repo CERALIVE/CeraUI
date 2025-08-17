@@ -94,7 +94,7 @@ let formErrors = $state<Record<string, string>>({});
 // Flags to prevent effects from overriding user selections
 let isProgrammaticChange = $state(false);
 
-// Track which specific fields user has touched (per-field interaction tracking)  
+// Track which specific fields user has touched (per-field interaction tracking)
 let srtlaAddressTouched = $state(false);
 let srtlaPortTouched = $state(false);
 let srtStreamIdTouched = $state(false);
@@ -173,7 +173,12 @@ $effect(() => {
 
 // Parse pipeline to populate encoder fields (during init or programmatic changes, not user interaction)
 $effect.pre(() => {
-  if (properties.pipeline && $unparsedPipelinesStore !== undefined && $_ && (!userHasInteracted || isProgrammaticChange)) {
+  if (
+    properties.pipeline &&
+    $unparsedPipelinesStore !== undefined &&
+    $_ &&
+    (!userHasInteracted || isProgrammaticChange)
+  ) {
     const pipelineData = $unparsedPipelinesStore[properties.pipeline];
     if (!pipelineData) {
       return;

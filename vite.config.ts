@@ -18,8 +18,8 @@ export default defineConfig(({ mode }) => ({
         // Enhanced debugging options for Svelte 5
         dev: mode !== 'production',
       },
-      inspector: { 
-        showToggleButton: 'always', 
+      inspector: {
+        showToggleButton: 'always',
         toggleButtonPos: 'bottom-right',
         // Enhanced inspector settings for better debugging
         holdMode: true,

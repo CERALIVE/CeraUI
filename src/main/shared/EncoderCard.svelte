@@ -95,8 +95,6 @@ $effect(() => {
 
 // No effects watching local state to prevent race conditions
 // Parent functions are called directly in onValueChange handlers
-
-
 </script>
 
 <Card.Root class="group flex h-full flex-col transition-all duration-200 hover:shadow-md">

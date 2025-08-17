@@ -1,4 +1,5 @@
-import { defaultNavElement, type NavElements, navElements } from '$lib/config';
+import { type NavElements, navElements } from '$lib/config';
+import General from '$main/tabs/General.svelte';
 
 /**
  * Options for customizing hash navigation behavior
@@ -40,7 +41,8 @@ export interface SetupHashNavigationOptions {
  * @returns The matching navigation element or fallback
  */
 export function getNavFromHash(options?: HashNavigationOptions): NavElements {
-  const { fallbackElement = defaultNavElement, caseSensitive = true, customHash } = options ?? {};
+  const defaultNav = { general: { label: 'general', component: General } };
+  const { fallbackElement = defaultNav, caseSensitive = true, customHash } = options ?? {};
 
   const hash = (customHash ?? window.location.hash).slice(1); // Remove the # character
 

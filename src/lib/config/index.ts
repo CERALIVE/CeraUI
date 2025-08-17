@@ -1,11 +1,11 @@
 import type { Component } from 'svelte';
 
+import { BUILD_INFO } from '$lib/env';
 import Advanced from '$main/tabs/Advanced.svelte';
 import DevTools from '$main/tabs/DevTools.svelte';
 import General from '$main/tabs/General.svelte';
 import Network from '$main/tabs/Network.svelte';
 import Streaming from '$main/tabs/Streaming.svelte';
-import { BUILD_INFO } from '$lib/env';
 
 export type NavElements = {
   [key: string]: {
@@ -16,7 +16,7 @@ export type NavElements = {
 // Base navigation elements (always available)
 const baseNavElements: NavElements = {
   general: { label: 'general', component: General },
-  wifi: { label: 'network', component: Network },
+  network: { label: 'network', component: Network },
   settings: { label: 'streaming', component: Streaming },
   advanced: { label: 'advanced', component: Advanced },
 };
@@ -31,14 +31,8 @@ export const navElements: NavElements = {
     : {}),
 };
 
-const navElementsEntries = Object.entries(navElements);
-
-export const defaultNavElement = {
-  [navElementsEntries[0][0]]: {
-    label: navElementsEntries[0][1].label,
-    component: navElementsEntries[0][1].component,
-  },
-};
+// Note: defaultNavElement removed to avoid circular dependencies
+// Navigation store now initializes with direct General component import
 
 // Device branding configuration
 export const deviceName = 'BELABOX';

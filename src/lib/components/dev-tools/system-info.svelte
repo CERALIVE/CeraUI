@@ -17,12 +17,13 @@
 
 <script lang="ts">
 import { Activity, Clock, Code, Globe, Monitor, Wifi } from '@lucide/svelte';
-import { locale, _ } from 'svelte-i18n';
+import { _, locale } from 'svelte-i18n';
 
 import * as Card from '$lib/components/ui/card';
-import { ENV_VARIABLES, BUILD_INFO } from '$lib/env';
+import { BUILD_INFO, ENV_VARIABLES } from '$lib/env';
 import { localeStore } from '$lib/stores/locale';
 import { CLIENT_VERSION } from '$lib/stores/version-manager';
+
 import { existingLocales } from '../../../i18n';
 
 // Real environment data using runes
@@ -108,7 +109,7 @@ function updateWindowInfo() {
   const dpr = window.devicePixelRatio;
   const screenW = screen.width;
   const screenH = screen.height;
-  
+
   windowInfo = {
     width: isFinite(width) ? width : 0,
     height: isFinite(height) ? height : 0,
@@ -122,24 +123,24 @@ function updateWindowInfo() {
 
 // Language flag mapping (since they're not in the type definition)
 const languageFlags: Record<string, string> = {
-  'en': '🇺🇸',
-  'es': '🇪🇸', 
+  en: '🇺🇸',
+  es: '🇪🇸',
   'pt-BR': '🇧🇷',
-  'fr': '🇫🇷',
-  'de': '🇩🇪',
-  'zh': '🇨🇳',
-  'ar': '🇸🇦',
-  'ja': '🇯🇵',
-  'ko': '🇰🇷',
-  'hi': '🇮🇳',
+  fr: '🇫🇷',
+  de: '🇩🇪',
+  zh: '🇨🇳',
+  ar: '🇸🇦',
+  ja: '🇯🇵',
+  ko: '🇰🇷',
+  hi: '🇮🇳',
 };
 
 // Update locale information using app's i18n system
 function updateLocaleInfo() {
   // Get current locale value first
-  const unsubscribe = locale.subscribe((currentLocale) => {
+  const unsubscribe = locale.subscribe(currentLocale => {
     const currentLocaleData = existingLocales.find(l => l.code === currentLocale);
-    
+
     localeInfo = {
       currentLocale: currentLocale || 'en',
       currentLanguageName: currentLocaleData?.name || 'English',
@@ -148,11 +149,11 @@ function updateLocaleInfo() {
       supportedLocales: existingLocales.map(l => ({
         code: l.code,
         name: l.name,
-        flag: languageFlags[l.code] || '🌐'
+        flag: languageFlags[l.code] || '🌐',
       })),
     };
   });
-  
+
   // Return unsubscribe function for cleanup
   return unsubscribe;
 }
@@ -161,11 +162,11 @@ function updateLocaleInfo() {
 function updatePerformanceData() {
   // Memory usage (always update - this should change over time)
   if (performance.memory) {
-    const memoryData = (performance.memory as any);
+    const memoryData = performance.memory as any;
     const usedHeapSize = memoryData.usedJSHeapSize || 0;
     performanceData.memory = Math.round(usedHeapSize / 1024 / 1024);
   }
-  
+
   // Navigation timing (only calculate load time once)
   if (!performanceData.loadTimeCalculated && performance.getEntriesByType) {
     const navTiming = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
@@ -214,20 +215,20 @@ $effect(() => {
   updatePerformanceData();
   updateBuildInfo();
   const unsubscribeLocale = updateLocaleInfo();
-  
+
   // Set up event listeners for dynamic updates
   const handleResize = () => updateWindowInfo();
   const handleOnlineStatus = () => updateSystemInfo();
-  
+
   window.addEventListener('resize', handleResize);
   window.addEventListener('online', handleOnlineStatus);
   window.addEventListener('offline', handleOnlineStatus);
-  
+
   // Update performance data every 5 seconds
   updateInterval = setInterval(() => {
     updatePerformanceData();
   }, 5000);
-  
+
   // Cleanup function
   return () => {
     window.removeEventListener('resize', handleResize);
@@ -318,7 +319,7 @@ function handleLanguageClick(languageCode: string) {
     <div class="space-y-3">
       <div class="flex items-center gap-2 text-sm font-medium">
         <Monitor class="h-4 w-4" />
-{$_('devtools.browserInformation')}
+        {$_('devtools.browserInformation')}
       </div>
       <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
         <div class="bg-background/50 rounded-lg border p-3">
@@ -331,7 +332,7 @@ function handleLanguageClick(languageCode: string) {
         </div>
         <div class="bg-background/50 rounded-lg border p-3">
           <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.userAgent')}</div>
-          <div class="font-mono text-xs truncate" title={navigator.userAgent}>
+          <div class="truncate font-mono text-xs" title={navigator.userAgent}>
             {navigator.userAgent.slice(0, 25)}...
           </div>
         </div>
@@ -363,10 +364,10 @@ function handleLanguageClick(languageCode: string) {
       <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
         <div class="bg-background/50 rounded-lg border p-3">
           <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.currentLanguage')}</div>
-          <div class="font-medium text-sm flex items-center gap-2">
+          <div class="flex items-center gap-2 text-sm font-medium">
             <span class="text-lg">{localeInfo.currentLanguageFlag}</span>
             {localeInfo.currentLanguageName}
-            <span class="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">{$_('devtools.active')}</span>
+            <span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-xs">{$_('devtools.active')}</span>
           </div>
         </div>
         <div class="bg-background/50 rounded-lg border p-3">
@@ -378,11 +379,16 @@ function handleLanguageClick(languageCode: string) {
           <div class="font-mono text-sm font-medium text-gray-600">{localeInfo.browserLanguage}</div>
         </div>
         <div class="bg-background/50 rounded-lg border p-3 md:col-span-3">
-          <div class="text-muted-foreground mb-2 text-xs">{$_('devtools.supportedLanguagesClick', { values: { count: localeInfo.supportedLocales.length } })}</div>
+          <div class="text-muted-foreground mb-2 text-xs">
+            {$_('devtools.supportedLanguagesClick', { values: { count: localeInfo.supportedLocales.length } })}
+          </div>
           <div class="flex flex-wrap gap-1">
             {#each localeInfo.supportedLocales as supportedLocale}
-              <button 
-                class="flex items-center gap-1 px-2 py-1 bg-background border rounded text-xs transition-all duration-200 hover:scale-105 hover:shadow-md cursor-pointer {supportedLocale.code === localeInfo.currentLocale ? 'bg-primary/10 border-primary/30 text-primary ring-1 ring-primary/20' : 'hover:bg-primary/5 hover:border-primary/20'}"
+              <button
+                class="bg-background flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-all duration-200 hover:scale-105 hover:shadow-md {supportedLocale.code ===
+                localeInfo.currentLocale
+                  ? 'bg-primary/10 border-primary/30 text-primary ring-primary/20 ring-1'
+                  : 'hover:bg-primary/5 hover:border-primary/20'}"
                 onclick={() => handleLanguageClick(supportedLocale.code)}
                 title="Switch to {supportedLocale.name}"
                 type="button">
@@ -399,7 +405,7 @@ function handleLanguageClick(languageCode: string) {
     <div class="space-y-3">
       <div class="flex items-center gap-2 text-sm font-medium">
         <Activity class="h-4 w-4" />
-{$_('devtools.livePerformanceMetrics')}
+        {$_('devtools.livePerformanceMetrics')}
       </div>
       <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div class="bg-background/50 rounded-lg border p-3">
@@ -443,7 +449,7 @@ function handleLanguageClick(languageCode: string) {
     <div class="space-y-3">
       <div class="flex items-center gap-2 text-sm font-medium">
         <Wifi class="h-4 w-4" />
-{$_('devtools.userPreferencesAccessibility')}
+        {$_('devtools.userPreferencesAccessibility')}
       </div>
       <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
         <div class="bg-background/50 rounded-lg border p-3">
@@ -458,7 +464,9 @@ function handleLanguageClick(languageCode: string) {
         </div>
         <div class="bg-background/50 rounded-lg border p-3">
           <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.browserLanguages')}</div>
-          <div class="truncate font-mono text-xs font-medium" title={navigator.languages ? navigator.languages.join(', ') : navigator.language}>
+          <div
+            class="truncate font-mono text-xs font-medium"
+            title={navigator.languages ? navigator.languages.join(', ') : navigator.language}>
             {navigator.languages ? navigator.languages.slice(0, 2).join(', ') : navigator.language}
             {navigator.languages && navigator.languages.length > 2 ? `... (+${navigator.languages.length - 2})` : ''}
           </div>
@@ -476,15 +484,22 @@ function handleLanguageClick(languageCode: string) {
         <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
           <div class="bg-background/50 rounded-lg border p-3">
             <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.type')}</div>
-            <div class="font-mono text-sm font-medium">{systemInfo.connection.effectiveType || $_('devtools.unknown')}</div>
+            <div class="font-mono text-sm font-medium">
+              {systemInfo.connection.effectiveType || $_('devtools.unknown')}
+            </div>
           </div>
           <div class="bg-background/50 rounded-lg border p-3">
             <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.downlink')}</div>
-            <div class="font-mono text-sm font-medium">{systemInfo.connection.downlink || $_('devtools.unknown')} {$_('devtools.mbps')}</div>
+            <div class="font-mono text-sm font-medium">
+              {systemInfo.connection.downlink || $_('devtools.unknown')}
+              {$_('devtools.mbps')}
+            </div>
           </div>
           <div class="bg-background/50 rounded-lg border p-3">
             <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.rtt')}</div>
-            <div class="font-mono text-sm font-medium">{systemInfo.connection.rtt || $_('devtools.unknown')}{$_('devtools.ms')}</div>
+            <div class="font-mono text-sm font-medium">
+              {systemInfo.connection.rtt || $_('devtools.unknown')}{$_('devtools.ms')}
+            </div>
           </div>
         </div>
       </div>

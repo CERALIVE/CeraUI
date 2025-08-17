@@ -4,7 +4,7 @@ import { toast } from 'svelte-sonner';
 import { mergeModems } from '$lib/helpers/ObjectsHelper';
 import { downloadLog } from '$lib/helpers/SystemHelper';
 
-import { ENV_VARIABLES, BUILD_INFO } from '../env';
+import { BUILD_INFO, ENV_VARIABLES } from '../env';
 import type {
   AudioCodecsMessage,
   AuthMessage,

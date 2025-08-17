@@ -28,7 +28,7 @@ import { _ } from 'svelte-i18n';
 
 import Logo from '$lib/components/icons/Logo.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
-import { defaultNavElement, type NavElements, navElements, siteName } from '$lib/config';
+import { type NavElements, navElements, siteName } from '$lib/config';
 import { canGoBack, enhancedNavigationStore, isNavigationTransitioning, navigationStore } from '$lib/stores/navigation';
 import { cn } from '$lib/utils';
 
@@ -40,11 +40,11 @@ const [send, receive] = crossfade({
     if (!node || !node.getBoundingClientRect) {
       return { duration: 0, css: () => '' };
     }
-    
+
     const startValue = 0.95;
     // Ensure start value is a valid number to prevent scale(NaN, NaN)
     const safeStart = isFinite(startValue) ? startValue : 1;
-    
+
     return scale(node, {
       duration: 200,
       start: safeStart,
@@ -53,7 +53,7 @@ const [send, receive] = crossfade({
   },
 });
 
-let currentNav: NavElements | undefined = $state(defaultNavElement);
+let currentNav: NavElements | undefined = $state({ general: navElements.general });
 let isLogoHovered = $state(false);
 let hoveredTab: string | null = $state(null);
 let lastNavigationTime = 0;
@@ -113,13 +113,13 @@ const handleLogoClick = () => {
   });
 
   const currentKey = currentNav ? Object.keys(currentNav)[0] : '';
-  const defaultKey = Object.keys(defaultNavElement)[0];
+  const defaultKey = 'general'; // Always general as the default
 
   // If already on default, and can go back, go back instead
   if (currentKey === defaultKey && $canGoBack) {
     enhancedNavigationStore.goBack();
   } else {
-    navigationStore.set(defaultNavElement);
+    navigationStore.set({ general: navElements.general });
   }
 };
 </script>

@@ -6,14 +6,14 @@ export function normalizeValue(value: number, min: number, max: number, step = 1
   if (!isFinite(value) || !isFinite(min) || !isFinite(max) || !isFinite(step)) {
     return isFinite(min) ? min : 0;
   }
-  
+
   if (step === 0) {
     return Math.max(min, Math.min(max, value));
   }
-  
+
   const stepped = Math.round((value - min) / step) * step + min;
   const result = Math.max(min, Math.min(max, stepped));
-  
+
   return isFinite(result) ? result : min;
 }
 

@@ -156,9 +156,9 @@ async function onSubmit(event: SubmitEvent) {
                   variant="ghost"
                   size="sm"
                   class="absolute top-1/2 right-1 h-10 w-10 -translate-y-1/2 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
+                  aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
                   aria-pressed={showPassword}
-                  title={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
+                  title={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
                   onclick={() => (showPassword = !showPassword)}>
                   {#if showPassword}
                     <EyeOff class="h-4 w-4 text-gray-500" aria-hidden="true" />

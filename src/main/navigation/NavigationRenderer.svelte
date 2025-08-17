@@ -64,10 +64,10 @@ $effect(() => {
 const transitionParams = $derived.by(() => {
   const direction = $transitionDirection;
   const isForward = direction === 'forward';
-  
+
   // Ensure we always have valid numeric values to prevent NaN in animations
   const xValue = isForward ? 300 : -300;
-  
+
   return {
     x: isFinite(xValue) ? xValue : 0,
     duration: isFinite(TRANSITION_DURATION) ? TRANSITION_DURATION : 300,

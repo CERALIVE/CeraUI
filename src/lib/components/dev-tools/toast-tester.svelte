@@ -35,7 +35,7 @@ let selectedPosition = $state('bottom-right');
 $effect(() => {
   // Subscribe to locale changes to update default input values
   $locale; // This creates a dependency on locale changes
-  
+
   // Reset input values to new locale defaults if they haven't been modified by user
   if (customTitle === $_('devtools.customTitle')) {
     customTitle = $_('devtools.customTitle');

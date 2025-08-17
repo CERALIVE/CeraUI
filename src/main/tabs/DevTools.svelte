@@ -34,6 +34,7 @@ import { Bug, Wrench } from '@lucide/svelte';
 import { _ } from 'svelte-i18n';
 
 import DemoOverlayTrigger from '$lib/components/demo-overlay-trigger.svelte';
+import ScreenshotUtility from '$lib/components/dev-tools/screenshot-utility.svelte';
 import SystemInfo from '$lib/components/dev-tools/system-info.svelte';
 import ToastTester from '$lib/components/dev-tools/toast-tester.svelte';
 import * as Card from '$lib/components/ui/card';
@@ -43,36 +44,43 @@ import { BUILD_INFO } from '$lib/env';
 const isDev = BUILD_INFO.IS_DEV;
 </script>
 
-<!-- Dev Tools Page -->
+<!-- Dev Tools Page - Mobile First Design -->
 <div class="from-background via-background to-accent/5 min-h-screen bg-gradient-to-br">
-  <div class="container mx-auto max-w-7xl px-4 py-6">
-    <!-- Header Section -->
-    <div class="mb-8">
-      <div class="mb-4 flex items-center gap-3">
+  <div class="container mx-auto max-w-7xl px-3 py-4 sm:px-4 sm:py-6">
+    <!-- Mobile-First Header Section -->
+    <div class="mb-6 sm:mb-8">
+      <div class="mb-3 flex items-start gap-3 sm:mb-4 sm:items-center">
         <div
-          class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500">
-          <Wrench class="h-6 w-6 text-white" />
+          class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 sm:h-10 sm:w-10">
+          <Wrench class="h-4 w-4 text-white sm:h-6 sm:w-6" />
         </div>
-        <div>
-          <h1 class="text-3xl font-bold tracking-tight">🛠️ {$_('devtools.title')}</h1>
-          <p class="text-muted-foreground mt-1">{$_('devtools.description')}</p>
+        <div class="min-w-0 flex-1">
+          <h1 class="text-xl font-bold tracking-tight break-words sm:text-3xl">🛠️ {$_('devtools.title')}</h1>
+          <p class="text-muted-foreground mt-1 text-sm sm:text-base">{$_('devtools.description')}</p>
         </div>
       </div>
 
-      <!-- Dev Mode Badge -->
+      <!-- Mobile-Optimized Dev Mode Badge -->
       <div
-        class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-sm dark:border-amber-800 dark:bg-amber-900/20">
-        <div class="h-2 w-2 animate-pulse rounded-full bg-amber-500"></div>
-        <span class="font-medium text-amber-700 dark:text-amber-300">
-          {$_('devtools.developmentMode')}: {BUILD_INFO.MODE} | {$_('devtools.status')}: {$_('devtools.active')}
+        class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-100 px-2 py-1 text-xs sm:px-3 sm:text-sm dark:border-amber-800 dark:bg-amber-900/20">
+        <div class="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-amber-500 sm:h-2 sm:w-2"></div>
+        <span class="truncate font-medium text-amber-700 dark:text-amber-300">
+          <span class="hidden sm:inline"
+            >{$_('devtools.developmentMode')}: {BUILD_INFO.MODE} | {$_('devtools.status')}: {$_(
+              'devtools.active',
+            )}</span>
+          <span class="sm:hidden">{$_('devtools.status')}: {$_('devtools.active')}</span>
         </span>
       </div>
     </div>
 
-    <!-- Grid Layout -->
-    <div class="grid gap-6 lg:grid-cols-2">
+    <!-- Mobile-First Grid Layout -->
+    <div class="grid gap-4 sm:gap-6 md:grid-cols-2">
       <!-- Component Testing Section -->
-      <div class="space-y-6">
+      <div class="space-y-4 sm:space-y-6">
+        <!-- Screenshot Capture Utility -->
+        <ScreenshotUtility />
+
         <!-- Overlay Demo Card -->
         <DemoOverlayTrigger />
 
@@ -81,7 +89,7 @@ const isDev = BUILD_INFO.IS_DEV;
       </div>
 
       <!-- Debug Information Section -->
-      <div class="space-y-6">
+      <div class="space-y-4 sm:space-y-6">
         <!-- Real System Information -->
         <SystemInfo />
 
@@ -133,13 +141,16 @@ const isDev = BUILD_INFO.IS_DEV;
       </div>
     </div>
 
-    <!-- Warning Footer -->
-    <div class="mt-12 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20">
-      <div class="flex items-start gap-3">
-        <div class="mt-0.5 h-5 w-5 text-amber-600 dark:text-amber-400">⚠️</div>
-        <div class="flex-1">
-          <div class="text-sm font-medium text-amber-800 dark:text-amber-200">{$_('devtools.developmentOnly')}</div>
-          <div class="mt-1 text-xs text-amber-700 dark:text-amber-300">
+    <!-- Mobile-Friendly Warning Footer -->
+    <div
+      class="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:mt-12 sm:p-4 dark:border-amber-800 dark:bg-amber-950/20">
+      <div class="flex items-start gap-2 sm:gap-3">
+        <div class="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 sm:h-5 sm:w-5 dark:text-amber-400">⚠️</div>
+        <div class="min-w-0 flex-1">
+          <div class="text-xs font-medium text-amber-800 sm:text-sm dark:text-amber-200">
+            {$_('devtools.developmentOnly')}
+          </div>
+          <div class="mt-1 text-xs break-words text-amber-700 dark:text-amber-300">
             {$_('devtools.developmentOnlyDesc')}
           </div>
         </div>
