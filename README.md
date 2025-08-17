@@ -128,11 +128,39 @@ sudo cp -r dist/* /opt/belaUI/public/
 
 > **Note:** Replacing the original UI directly may cause issues. When belaUI is updated, it can overwrite these files, removing your custom UI. Ensure you monitor updates and reapply your changes if necessary.
 
+## 📸 Screenshots & Visual Documentation
+
+CeraUI offers a comprehensive and intuitive interface with both light and dark theme support across desktop and mobile platforms. Experience the complete visual journey through our **[📸 Visual Gallery](docs/SCREENSHOTS.md)**.
+
+### 🎯 Quick Preview
+
+| **Desktop Interface** | **Mobile Experience** |
+|:---------------------:|:---------------------:|
+| ![Desktop Preview](docs/screenshots/desktop/dark-theme/general.png) | ![Mobile Preview](docs/screenshots/mobile/dark-theme/general.png) |
+| *Full HD (1920×1080) optimized interface* | *iPhone 14 Pro Max (430×932) responsive design* |
+
+### 🌟 Featured Highlights
+
+- **🎨 Dual Theme Support**: Professional dark mode and clean light theme
+- **📱 Responsive Design**: Seamless desktop and mobile experiences  
+- **🔧 Interactive Features**: WiFi modals, hotspot configuration, system overlays
+- **🌐 Internationalization**: Complete multi-language support (10+ languages)
+- **⚡ Progressive Web App**: Offline capabilities and native app-like performance
+- **🎛️ Comprehensive Management**: Network, streaming, system, and developer tools
+
+### 📖 Complete Documentation
+
+Explore the full visual documentation with detailed interface breakdowns, feature demonstrations, and technical specifications in our comprehensive **[Screenshots Gallery](docs/SCREENSHOTS.md)**.
+
 ## Documentation
+
+### Visual Documentation
+
+- **[📸 Screenshots Gallery](docs/SCREENSHOTS.md)**: Complete visual documentation showcasing CeraUI's interface across desktop and mobile platforms. Features comprehensive screenshots of all tabs, themes, interactive modals, and system demonstrations.
 
 ### Development Tools
 
-- **[DevTools Tab](docs/DEVTOOLS.md)**: Comprehensive guide to the development utilities and debugging tools available in the DevTools tab. Includes component testing, console debugging, system information, and troubleshooting guides.
+- **[🔧 DevTools Tab](docs/DEVTOOLS.md)**: Comprehensive guide to the development utilities and debugging tools available in the DevTools tab. Includes component testing, console debugging, system information, and troubleshooting guides.
 
 ## License
 

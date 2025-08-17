@@ -146,10 +146,11 @@ class StreamingStateManager {
         }
 
         // Compare audio sources array content, not just length
-        const audioSourcesChanged = !this._audioSources || 
+        const audioSourcesChanged =
+          !this._audioSources ||
           status.asrcs.length !== this._audioSources.length ||
           !status.asrcs.every((src, index) => src === this._audioSources?.[index]);
-        
+
         if (audioSourcesChanged) {
           this._audioSources = status.asrcs;
           hasChanged = true;

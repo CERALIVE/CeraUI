@@ -31,11 +31,11 @@ import { Button } from '$lib/components/ui/button';
 import MobileLink from '$lib/components/ui/mobile-link.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
 import * as Sheet from '$lib/components/ui/sheet';
-import { defaultNavElement, type NavElements, navElements, siteName } from '$lib/config';
+import { type NavElements, navElements, siteName } from '$lib/config';
 import { canGoBack, enhancedNavigationStore, isNavigationTransitioning, navigationStore } from '$lib/stores/navigation';
 import { cn } from '$lib/utils';
 
-let currentNav: NavElements = $state(defaultNavElement);
+let currentNav: NavElements = $state({ general: navElements.general });
 let open = $state(false);
 let isMenuHovered = $state(false);
 let selectedItem: string | null = $state(null);
@@ -98,13 +98,13 @@ const handleLogoClick = () => {
   });
 
   const currentKey = currentNav ? Object.keys(currentNav)[0] : '';
-  const defaultKey = defaultNavElement && typeof defaultNavElement === 'object' && Object.keys(defaultNavElement).length > 0 ? Object.keys(defaultNavElement)[0] : '';
+  const defaultKey = 'general'; // Always general as the default
 
   // If already on default, and can go back, go back instead
   if (currentKey === defaultKey && $canGoBack) {
     enhancedNavigationStore.goBack();
   } else {
-    handleClick(defaultNavElement);
+    handleClick({ general: navElements.general });
   }
 };
 

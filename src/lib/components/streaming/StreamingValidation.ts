@@ -65,8 +65,12 @@ export function validateStreamingForm(properties: Properties, t: (key: string) =
       hasErrors = true;
     }
 
-    if (!properties.srtlaServerPort || !Number.isInteger(properties.srtlaServerPort) || 
-        properties.srtlaServerPort < 1 || properties.srtlaServerPort > 65535) {
+    if (
+      !properties.srtlaServerPort ||
+      !Number.isInteger(properties.srtlaServerPort) ||
+      properties.srtlaServerPort < 1 ||
+      properties.srtlaServerPort > 65535
+    ) {
       formErrors.srtlaServerPort = t('settings.errors.srtlaServerPortRequired');
       errorMessages.push(t('settings.errors.srtlaServerPortRequired'));
       hasErrors = true;
@@ -84,7 +88,7 @@ export function validateStreamingForm(properties: Properties, t: (key: string) =
   if (hasErrors) {
     // Show a single toast with the first error (to avoid spam)
     toast.error(errorMessages[0], {
-      description: errorMessages.length > 1 ? `${errorMessages.length} validation errors found` : undefined
+      description: errorMessages.length > 1 ? `${errorMessages.length} validation errors found` : undefined,
     });
   } else {
     toast.success(t('settings.validation.allFieldsValid'));

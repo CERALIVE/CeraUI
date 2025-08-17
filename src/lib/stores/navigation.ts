@@ -1,6 +1,7 @@
 import { derived, writable } from 'svelte/store';
 
-import { defaultNavElement, type NavElements, navElements } from '$lib/config';
+import { type NavElements, navElements } from '$lib/config';
+import General from '$main/tabs/General.svelte';
 
 // Navigation state with additional reactive properties
 interface NavigationState {
@@ -14,12 +15,13 @@ interface NavigationState {
 
 // Create enhanced navigation state
 function createNavigationStore() {
+  // Initialize with empty state to avoid circular dependency
   const initialState: NavigationState = {
-    current: defaultNavElement,
+    current: { general: { label: 'general', component: General } }, // Direct import to avoid circular deps
     previous: null,
     isTransitioning: false,
     transitionDirection: null,
-    history: [defaultNavElement],
+    history: [{ general: { label: 'general', component: General } }],
     error: null,
   };
 
@@ -131,7 +133,7 @@ const navigationStore = {
   subscribe: currentNavigation.subscribe,
   set: (navigation: NavElements) => enhancedNavigationStore.navigateTo(navigation),
   update: (fn: (current: NavElements) => NavElements) => {
-    let current: NavElements = defaultNavElement;
+    let current: NavElements = { general: { label: 'general', component: General } };
     const unsubscribe = currentNavigation.subscribe(nav => (current = nav));
     unsubscribe();
     const updated = fn(current);

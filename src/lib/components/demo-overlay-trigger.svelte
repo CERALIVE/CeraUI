@@ -149,7 +149,9 @@ $effect(() => {
         class="text-muted-foreground rounded-md border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950/20">
         <div class="mb-1 font-medium">🔄 {$_('devtools.demoRunning')}</div>
         <div>
-          {$_('devtools.phase')}: {demoPhase}/10 | {$_('devtools.downloading')}: {demoDetails.downloading} | {$_('devtools.unpacking')}: {demoDetails.unpacking} | {$_('devtools.installing')}: {demoDetails.setting_up}
+          {$_('devtools.phase')}: {demoPhase}/10 | {$_('devtools.downloading')}: {demoDetails.downloading} | {$_(
+            'devtools.unpacking',
+          )}: {demoDetails.unpacking} | {$_('devtools.installing')}: {demoDetails.setting_up}
         </div>
       </div>
     {/if}

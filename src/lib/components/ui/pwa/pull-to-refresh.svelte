@@ -32,7 +32,7 @@ const handleTouchStart = (e: TouchEvent) => {
 
   const clientY = e.touches[0]?.clientY;
   if (!isFinite(clientY)) return; // Prevent NaN coordinates
-  
+
   startY = clientY;
   isPulling = true;
 };
@@ -42,7 +42,7 @@ const handleTouchMove = (e: TouchEvent) => {
 
   const clientY = e.touches[0]?.clientY;
   if (!isFinite(clientY) || !isFinite(startY)) return; // Prevent NaN coordinates
-  
+
   currentY = clientY;
   const rawPullDistance = currentY - startY;
   pullDistance = isFinite(rawPullDistance) ? Math.max(0, rawPullDistance) : 0;
@@ -62,16 +62,16 @@ const handleTouchMove = (e: TouchEvent) => {
   const safePullDistance = isFinite(pullDistance) ? pullDistance : 0;
   const safeThreshold = isFinite(threshold) && threshold > 0 ? threshold : 80;
   const safeDistance = isFinite(distance) ? distance : 150;
-  
+
   const resistance = Math.min(safePullDistance / 2, safeDistance);
   const safeResistance = isFinite(resistance) ? resistance : 0;
-  
+
   const transformCalculation = -48 + Math.min((safeResistance * 48) / safeThreshold, 48);
   const transformY = isFinite(transformCalculation) ? transformCalculation : -48;
-  
+
   const opacityCalculation = Math.min(safePullDistance / safeThreshold, 1);
   const opacity = isFinite(opacityCalculation) ? opacityCalculation : 0;
-  
+
   if (refreshElement) {
     refreshElement.style.transform = `translateY(${transformY}px)`;
     refreshElement.style.opacity = opacity.toString();

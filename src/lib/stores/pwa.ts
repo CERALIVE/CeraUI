@@ -17,6 +17,9 @@ export const canInstall = writable(false);
 export const isInstalled = writable(false);
 export const showIOSInstallPrompt = writable(false);
 
+// Screenshot mode flag to suppress PWA install prompts during capture
+export const isScreenshotMode = writable(false);
+
 // PWA Installation Interface
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
@@ -43,6 +46,12 @@ function setupInstallPrompt() {
   window.addEventListener('beforeinstallprompt', (e: Event) => {
     // Prevent the mini-infobar from appearing on mobile
     e.preventDefault();
+
+    // Suppress install prompts during screenshot mode
+    if (get(isScreenshotMode)) {
+      return;
+    }
+
     // Stash the event so it can be triggered later
     deferredPrompt = e as BeforeInstallPromptEvent;
     // Update UI to notify the user they can install the PWA
@@ -86,6 +95,11 @@ if (window.matchMedia('(display-mode: standalone)').matches) {
 // iOS PWA Installation Detection
 function checkIOSInstallability() {
   if (isIOSSafari) {
+    // Suppress iOS install prompts during screenshot mode
+    if (get(isScreenshotMode)) {
+      return;
+    }
+
     // Check if not in standalone mode and not already installed
     const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||

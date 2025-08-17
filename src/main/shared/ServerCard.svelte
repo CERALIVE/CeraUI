@@ -98,7 +98,9 @@ $effect(() => {
 // Parent functions are called directly in input handlers (like EncoderCard pattern)
 
 const isManualConfig = $derived(localRelayServer === '-1' || localRelayServer === undefined || localRelayServer === '');
-const isManualAccount = $derived(localRelayAccount === '-1' || localRelayAccount === undefined || localRelayAccount === '');
+const isManualAccount = $derived(
+  localRelayAccount === '-1' || localRelayAccount === undefined || localRelayAccount === '',
+);
 </script>
 
 <Card.Root class="group flex h-full flex-col transition-all duration-200 hover:shadow-md">
@@ -115,20 +117,20 @@ const isManualAccount = $derived(localRelayAccount === '-1' || localRelayAccount
     <!-- Relay Server Selection -->
     <div class="space-y-2">
       <Label for="relayServer" class="text-sm font-medium">{$_('settings.relayServer')}</Label>
-              <Select.Root
-          type="single"
-          value={localRelayServer}
-          disabled={relayMessage === undefined || isStreaming}
-          onValueChange={value => {
-            localRelayServer = value;
-            relayServerTouched = true;
-            onRelayServerChange(value);
-          }}>
-          <Select.Trigger id="relayServer" class="w-full">
-            {localRelayServer !== undefined && localRelayServer !== '-1' && relayMessage?.servers
-              ? (Object.entries(relayMessage.servers).find(server => server[0] === localRelayServer)?.[1]?.name ??
-                $_('settings.manualConfiguration'))
-              : $_('settings.manualConfiguration')}
+      <Select.Root
+        type="single"
+        value={localRelayServer}
+        disabled={relayMessage === undefined || isStreaming}
+        onValueChange={value => {
+          localRelayServer = value;
+          relayServerTouched = true;
+          onRelayServerChange(value);
+        }}>
+        <Select.Trigger id="relayServer" class="w-full">
+          {localRelayServer !== undefined && localRelayServer !== '-1' && relayMessage?.servers
+            ? (Object.entries(relayMessage.servers).find(server => server[0] === localRelayServer)?.[1]?.name ??
+              $_('settings.manualConfiguration'))
+            : $_('settings.manualConfiguration')}
         </Select.Trigger>
         <Select.Content>
           <Select.Group>
@@ -177,8 +179,8 @@ const isManualAccount = $derived(localRelayAccount === '-1' || localRelayAccount
             disabled={isStreaming}
             placeholder={$_('settings.placeholders.srtlaServerAddress')}
             class="font-mono"
-            oninput={() => { 
-              addressTouched = true; 
+            oninput={() => {
+              addressTouched = true;
               onSrtlaAddressChange(localSrtlaServerAddress);
             }} />
           {#if formErrors.srtlaServerAddress}
@@ -197,7 +199,7 @@ const isManualAccount = $derived(localRelayAccount === '-1' || localRelayAccount
             disabled={isStreaming}
             placeholder={$_('settings.placeholders.srtlaServerPort')}
             class="font-mono"
-            oninput={() => { 
+            oninput={() => {
               portTouched = true;
               const value = (localSrtlaServerPort || '').toString().trim();
               if (value === '') {
@@ -232,9 +234,7 @@ const isManualAccount = $derived(localRelayAccount === '-1' || localRelayAccount
           }}
           value={localRelayAccount}>
           <Select.Trigger id="relayServerAccount" class="w-full">
-            {localRelayAccount === undefined ||
-            localRelayAccount === '-1' ||
-            relayMessage?.accounts === undefined
+            {localRelayAccount === undefined || localRelayAccount === '-1' || relayMessage?.accounts === undefined
               ? $_('settings.manualConfiguration')
               : relayMessage.accounts[localRelayAccount].name}
           </Select.Trigger>
@@ -275,8 +275,8 @@ const isManualAccount = $derived(localRelayAccount === '-1' || localRelayAccount
           disabled={isStreaming}
           placeholder={$_('settings.placeholders.srtStreamId')}
           class="font-mono"
-          oninput={() => { 
-            streamIdTouched = true; 
+          oninput={() => {
+            streamIdTouched = true;
             onSrtStreamIdChange(localSrtStreamId);
           }} />
       </div>
