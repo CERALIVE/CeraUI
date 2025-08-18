@@ -43,7 +43,7 @@ import {getSshStatus} from "./modules/system/ssh.ts";
 import {initHttpServer} from "./modules/ui/http-server.ts";
 import {initWebSocketServer} from "./modules/ui/websocket-server.ts";
 import {startBcrpt} from "./modules/streaming/bcrpt.ts";
-import fs from "fs";
+import fs from "node:fs";
 
 /* Disable localization for any CLI commands we run */
 process.env.LANG = "C.UTF-8";

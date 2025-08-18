@@ -18,7 +18,6 @@
 import fs from "node:fs";
 
 import { logger } from "../helpers/logger.ts";
-
 import { setup } from "./setup.ts";
 import { getSshPasswordHash, setSshPasswordHash } from "./system/ssh.ts";
 import { getPasswordHash, setPasswordHash } from "./ui/auth.ts";

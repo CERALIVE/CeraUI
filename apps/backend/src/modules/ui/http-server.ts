@@ -19,17 +19,63 @@
 import http from "node:http";
 
 import finalhandler from "finalhandler";
+import httpProxy from "http-proxy";
 import serveStatic from "serve-static";
 
 import { logger } from "../../helpers/logger.ts";
 import { getSystemdSocket } from "../system/systemd.ts";
 
-const staticHttp = serveStatic("public");
+const isDevelopment = process.env.NODE_ENV === "development";
 
-export const httpServer = http.createServer((req, res) => {
-	const done = finalhandler(req, res);
-	staticHttp(req, res, done);
-});
+// In development: proxy to frontend dev server
+// In production: serve static files from public folder
+let requestHandler: (req: http.IncomingMessage, res: http.ServerResponse) => void;
+
+if (isDevelopment) {
+	// Create proxy to frontend dev server
+	const proxy = httpProxy.createProxyServer({
+		target: "http://localhost:6173",
+		changeOrigin: true,
+		ws: true, // Enable WebSocket proxying for HMR
+	});
+
+	// Handle proxy errors
+	proxy.on("error", (err, req, res) => {
+		logger.error("Proxy error:", err);
+		if (!res.headersSent) {
+			res.writeHead(502, { "Content-Type": "text/plain" });
+			res.end("Bad Gateway - Frontend dev server not running");
+		}
+	});
+
+	requestHandler = (req, res) => {
+		proxy.web(req, res);
+	};
+
+	logger.info("Development mode: Proxying frontend requests to http://localhost:6173");
+} else {
+	// Production: serve static files from ./public (same directory as binary)
+	const staticHttp = serveStatic("public");
+	requestHandler = (req, res) => {
+		const done = finalhandler(req, res);
+		staticHttp(req, res, done);
+	};
+
+	logger.info("Production mode: Serving static files from ./public");
+}
+
+export const httpServer = http.createServer(requestHandler);
+
+// Handle WebSocket upgrades in development mode for HMR
+if (isDevelopment) {
+	httpServer.on("upgrade", (req, socket, head) => {
+		const proxy = httpProxy.createProxyServer({
+			target: "http://localhost:6173",
+			ws: true,
+		});
+		proxy.ws(req, socket, head);
+	});
+}
 
 const httpListenPorts: Array<number | { fd: number }> = [80, 8080, 81];
 

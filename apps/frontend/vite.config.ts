@@ -1,10 +1,14 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 import { generateUniqueVersion, pwaConfig } from './pwa.config';
+
+// Get __dirname equivalent for ES modules
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const VERSION = generateUniqueVersion();
 
@@ -31,6 +35,11 @@ export default defineConfig(({ mode }) => ({
     __APP_VERSION__: JSON.stringify(VERSION),
   },
   publicDir: './src/assets',
+  build: {
+    // Build frontend to root dist/public/ folder using absolute path
+    outDir: path.resolve(__dirname, '../../dist/public'),
+    emptyOutDir: true,
+  },
   resolve: {
     alias: {
       $lib: path.resolve('./src/lib'),

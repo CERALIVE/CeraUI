@@ -8,6 +8,7 @@
 	"dependencies": {
 		"@rollup/rollup-linux-arm64-gnu": "^4.46.3",
 		"finalhandler": "^2.1.0",
+		"http-proxy": "^1.18.1",
 		"serve-static": "^2.2.0",
 		"winston": "^3.17.0",
 		"ws": "^8.18.3",
@@ -16,6 +17,7 @@
 	"devDependencies": {
 		"@types/bun": "^1.2.20",
 		"@types/finalhandler": "^1.2.4",
+		"@types/http-proxy": "^1.17.14",
 		"@types/serve-static": "^1.15.8",
 		"@types/ws": "^8.18.1",
 		"@types/xml2js": "^0.4.14",
@@ -23,7 +25,9 @@
 		"typescript": "^5.9.2"
 	},
 	"scripts": {
-		"build": "rm -rf dist/ && bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 src/belaUI.ts --outfile dist/belaUI && pnpm build:copy-deployment",
+		"build": "rm -rf ../../dist/ && bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 src/belaUI.ts --outfile ../../dist/belaUI && pnpm build:copy-deployment && pnpm build:frontend",
+		"build:backend-only": "rm -rf ../../dist/belaUI ../../dist/deployment && bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 src/belaUI.ts --outfile ../../dist/belaUI && pnpm build:copy-deployment",
+		"build:frontend": "cd ../frontend && pnpm build",
 		"check": "run-p check:*",
 		"check:biome": "bun x --bun @biomejs/biome check .",
 		"check:tsc": "bun tsc --noEmit",
@@ -31,8 +35,8 @@
 		"fix": "bun x --bun @biomejs/biome check --write .",
 		"format": "bun x --bun @biomejs/biome format --write .",
 		"lint": "bun x --bun @biomejs/biome lint --write .",
-		"build:copy-deployment": "cp -r ./deployment/* ./dist/",
-		"clean": "rm -rf dist/ && rm -rf node_modules"
+		"build:copy-deployment": "cp -r ./deployment/* ../../dist/",
+		"clean": "rm -rf ../../dist/ && rm -rf node_modules"
 	},
 	"trustedDependencies": [
 		"@biomejs/biome"

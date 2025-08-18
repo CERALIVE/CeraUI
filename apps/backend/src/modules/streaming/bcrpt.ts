@@ -16,8 +16,8 @@
 */
 
 
-import fs from 'fs';
-import { spawn, type ChildProcess } from 'child_process';
+import fs from 'node:fs';
+import { spawn, type ChildProcess } from 'node:child_process';
 import {writeTextFile} from "../../helpers/text-files.ts";
 import {dnsCacheResolve, dnsCacheValidate} from "../network/dns.ts";
 import {bcrptExec} from "./streamloop.ts";
@@ -190,7 +190,7 @@ export async function startBcrpt() {
     });
 
     bcrpt.on('close', (code, signal) => {
-        let reason;
+        let reason: string;
         if (code != null) {
             reason = `with code ${code}`;
         } else {
