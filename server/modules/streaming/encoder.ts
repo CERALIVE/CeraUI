@@ -26,28 +26,36 @@ const MAX_BITRATE = 12_000; // Kbps
 
 export type BitrateParams = { max_br?: number };
 
-export function validateBitrate(params: BitrateParams) {
-    if (typeof params.max_br !== 'number') return;
-    if (Number.isNaN(params.max_br)) return;
-    if (params.max_br < MIN_BITRATE || params.max_br > MAX_BITRATE) return;
-
-    return params.max_br;
+export function validateBitrate(params: BitrateParams): number | undefined {
+    const maxBr = params.max_br;
+    if (typeof maxBr !== 'number' || Number.isNaN(maxBr)) return;
+    if (maxBr < MIN_BITRATE || maxBr > MAX_BITRATE) return;
+    return maxBr;
 }
 
 
-export function setBitrate(params: BitrateParams) {
-    if (!validateBitrate(params)) return;
+export function setBitrate(params: BitrateParams): number | undefined {
+    const maxBr = validateBitrate(params);
+    if (maxBr === undefined) return;
 
     const config = getConfig();
-    config.max_br = params.max_br!;
-    saveConfig();
+    const previousBitrate = config.max_br;
+    
+    try {
+        config.max_br = maxBr;
+        saveConfig();
 
-    fs.writeFileSync(
-        setup.bitrate_file,
-        `${MIN_BITRATE * 1000}\n${config.max_br * 1000}\n`,
-    );
+        fs.writeFileSync(
+            setup.bitrate_file,
+            `${MIN_BITRATE * 1000}\n${maxBr * 1000}\n`,
+        );
 
-    killall(["-HUP", "belacoder"]);
-
-    return config.max_br;
+        killall(["-HUP", "belacoder"]);
+        return maxBr;
+    } catch (error) {
+        // Restore previous bitrate if operation failed
+        config.max_br = previousBitrate;
+        console.error('Failed to set bitrate:', error);
+        throw error;
+    }
 }

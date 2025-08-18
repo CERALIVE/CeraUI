@@ -50,6 +50,12 @@ if (setup.hw == 'rk3588') {
 	Object.assign(audioSrcAliases, {"rockchiphdmiin": "HDMI", "rockchipes8388": "Analog in"});
 }
 
+// Create reverse lookup for performance
+const audioSrcReverseAliases: Record<string, string> = {};
+for (const id in audioSrcAliases) {
+	audioSrcReverseAliases[audioSrcAliases[id]] = id;
+}
+
 let audioDevices: Record<string, string> = {};
 addAudioCardById(audioDevices, NO_AUDIO_ID);
 addAudioCardById(audioDevices, DEFAULT_AUDIO_ID);
@@ -108,10 +114,7 @@ function getAudioSrcName(id: string) {
 }
 
 export function getAudioSrcId(name: string) {
-	for (const id in audioSrcAliases) {
-		if (audioSrcAliases[id] == name) return id;
-	}
-	return name;
+	return audioSrcReverseAliases[name] ?? name;
 }
 
 function addAudioCardById(list: Record<string, string>, id: string) {

@@ -24,9 +24,9 @@ export function updateOptionList(
 ): void {
     const validIds: { [key: string]: boolean } = {};
 
-    let entriesToDeselect = [];
-    let entryToSelect;
-    let prevOption;
+    let entriesToDeselect: JQuery<HTMLOptionElement>[] = [];
+    let entryToSelect: JQuery<HTMLOptionElement> | undefined;
+    let prevOption: JQuery<HTMLOptionElement> | undefined;
 
     for (const o in options) {
         for (const value in options[o]) {
@@ -36,7 +36,7 @@ export function updateOptionList(
             let entry = select.find(`.${id}`);
             if (entry.length == 0) {
                 const html = '<option></option>'
-                entry = $(html) as JQuery<HTMLOptionElement> ;
+                entry = $(html);
                 entry.addClass(id);
                 entry.data('option_id', id);
                 entry.attr('value', value);
@@ -57,7 +57,7 @@ export function updateOptionList(
                 entry.prop('disabled', isDisabled);
             }
             const isSelected = (selected && value == selected);
-            const wasSelected = entry.attr('selected') == 'selected';
+            const wasSelected = entry.prop('selected');
             if (isSelected && !wasSelected) {
                 entryToSelect = entry;
             }

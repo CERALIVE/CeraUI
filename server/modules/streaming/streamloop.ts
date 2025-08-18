@@ -381,7 +381,7 @@ export async function autoStartStream(): Promise<void> {
 
     // If the config is invalid, then we won't ever be able to start, so don't retry
     const config = getConfig();
-    let c: any;
+    let c: { pipeline: Pipeline; srtlaAddr: string; srtlaPort: number; streamid: string };
     try {
         c = await validateConfig(config);
     } catch (err) {
