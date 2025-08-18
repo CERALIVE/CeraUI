@@ -32,6 +32,8 @@
   12 - support for receiving relay accounts and relay servers
   13 - wifi hotspot mode
   14 - support for the modem manager
+  15 - support for BCRPT
+  16 - support for autostart
 */
 
 import WebSocket, { type RawData } from "ws";
@@ -71,7 +73,7 @@ type RemoteAuthEncoderMessage = {
 
 type RemoteMessage = ValidateRemoteRelaysMessage | RemoteAuthEncoderMessage;
 
-const remoteProtocolVersion = setup.remote_protocol_version ?? 14;
+const remoteProtocolVersion = setup.remote_protocol_version ?? 16;
 const remoteEndpointProtocol =
 	setup.remote_endpoint_secure === false ? "ws" : "wss";
 const remoteEndpointHost = setup.remote_endpoint_host ?? "remote.belabox.net";

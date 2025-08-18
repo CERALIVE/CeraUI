@@ -17,7 +17,7 @@
 
 /* Pipelines */
 import { config } from "../config.ts";
-import { genOptionList } from "../ui/options-list.ts";
+import {updateOptionList} from "../ui/options-list.ts";
 
 type Pipeline = {
 	name: string;
@@ -37,8 +37,7 @@ export function updatePipelines(ps: Record<string, Pipeline> | null) {
 		pipelines = ps;
 	}
 
-	const list = genOptionList([pipelines], config.pipeline);
-	$("#pipelines").html(list as unknown as string);
+	updateOptionList($('#pipelines'), [pipelines], config.pipeline);
 
 	const value = String($("#pipelines").val());
 

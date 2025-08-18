@@ -21,7 +21,7 @@ export function showLoginForm() {
 	$("#main").addClass("d-none");
 	$("#initialPasswordForm").addClass("d-none");
 	$("#login").removeClass("d-none");
-	$("#themeSelector").removeClass("d-none");
+	$("#localSettings").removeClass("d-none");
 }
 
 function sendAuthMsg(password: string, isPersistent: boolean) {
@@ -38,7 +38,7 @@ export function showInitialPasswordForm() {
 	$("#main").addClass("d-none");
 	$("#login").addClass("d-none");
 	$("#initialPasswordForm").removeClass("d-none");
-	$("#themeSelector").removeClass("d-none");
+	$("#localSettings").removeClass("d-none");
 	isShowingInitialPasswordForm = true;
 }
 

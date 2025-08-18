@@ -18,8 +18,6 @@
 /* Audio input selection and codec */
 import fs from "node:fs";
 
-import type WebSocket from "ws";
-
 import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile, writeTextFile } from "../../helpers/text-files.ts";
@@ -47,9 +45,16 @@ export const DEFAULT_AUDIO_ID = "Pipeline default";
 const audioSrcAliases: Record<string, string> = {
 	C4K: "Cam Link 4K",
 	usbaudio: "USB audio",
-	rockchiphdmiin: "HDMI",
-	rockchipes8388: "Analog in",
 };
+if (setup.hw == 'rk3588') {
+	Object.assign(audioSrcAliases, {"rockchiphdmiin": "HDMI", "rockchipes8388": "Analog in"});
+}
+
+// Create reverse lookup for performance
+const audioSrcReverseAliases: Record<string, string> = {};
+for (const id in audioSrcAliases) {
+	audioSrcReverseAliases[audioSrcAliases[id]] = id;
+}
 
 let audioDevices: Record<string, string> = {};
 addAudioCardById(audioDevices, NO_AUDIO_ID);
@@ -67,7 +72,7 @@ export function pipelineGetAudioProps(path: string) {
 	};
 }
 
-async function replaceAudioSettings(
+export async function replaceAudioSettings(
 	pipelineFile: string,
 	cardId: string,
 	codec?: string,
@@ -106,6 +111,10 @@ function getAudioSrcName(id: string) {
 	const name = audioSrcAliases[id];
 	if (name) return name;
 	return id;
+}
+
+export function getAudioSrcId(name: string) {
+	return audioSrcReverseAliases[name] ?? name;
 }
 
 function addAudioCardById(list: Record<string, string>, id: string) {
@@ -171,96 +180,52 @@ export async function updateAudioDevices() {
 	broadcastMsg("status", { asrcs: Object.keys(audioDevices) });
 }
 
-export function asrcProbe(asrc: string) {
-	const audioSrcId = audioDevices[asrc];
-	if (!audioSrcId) {
-		const msg = `Selected audio input '${asrc}' is unavailable. Waiting for it before starting the stream...`;
-		notificationBroadcast("asrc_not_found", "error", msg, 2, true, false);
-	}
 
-	return audioSrcId;
+
+let asrcProbeReject: (() => void) | undefined;
+
+export function isAsrcProbeRejectResolved(){
+	return asrcProbeReject !== undefined
 }
 
-export async function pipelineSetAsrc(
-	pipelineFilePath: string,
-	audioSrcId: string,
-	audioCodec?: string,
-) {
-	const pipelineFile = await replaceAudioSettings(
-		pipelineFilePath,
-		audioSrcId,
-		audioCodec,
-	);
-	if (!pipelineFile) {
-		// FIXME: conn is not defined here!
-		startError(
-			undefined as unknown as WebSocket,
-			"failed to generate the pipeline file - audio settings",
-		);
-	}
-	return pipelineFile;
+export function clearAsrcProbeReject(){
+	asrcProbeReject?.();
+	asrcProbeReject = undefined;
 }
 
-let asrcRetryTimer: ReturnType<typeof setTimeout> | undefined;
+export async function asrcProbe(asrc: string): Promise<string> {
+	let audioSrcId: string | undefined = audioDevices[asrc];
+	if (audioSrcId) return audioSrcId;
 
-export function isAsrcRetryScheduled() {
-	return asrcRetryTimer !== undefined;
+	return new Promise(function (res: (id: string) => void, rej: () => void) {
+		// Cancel any prior pending probe before starting a new one
+		clearAsrcProbeReject();
+		asrcProbeReject = rej;
+
+		const poll = async function () {
+			while (asrcProbeReject === rej) {
+				let audioSrcId: string | undefined = audioDevices[asrc];
+				if (audioSrcId) {
+					asrcProbeReject = undefined;
+					res(audioSrcId);
+					return;
+				} else {
+					const config = getConfig()
+					const msg = `Selected audio input '${config.asrc}' is unavailable. Waiting for it before starting the stream...`;
+					notificationBroadcast('asrc_not_found', 'error', msg, 2, true, false);
+				}
+
+				// sleep for one second
+				await new Promise<void>((r) => {
+					setTimeout(r, 1000);
+				});
+			}
+			// If the loop exited, then rej() was already called externally. Nothing left to do
+		};
+
+		poll();
+	});
 }
 
-export function abortAsrcRetry() {
-	if (asrcRetryTimer) {
-		clearTimeout(asrcRetryTimer);
-		asrcRetryTimer = undefined;
-	}
-}
 
-type AsrcRetryCallback = (
-	pipelineFilePath: string,
-	srtlaAddr: string,
-	srtlaPort?: number,
-	streamid?: string,
-) => void;
 
-export function asrcScheduleRetry(
-	callback: AsrcRetryCallback,
-	pipelineFile: string,
-	srtlaAddr: string,
-	srtlaPort?: number,
-	streamid?: string,
-) {
-	asrcRetryTimer = setTimeout(() => {
-		asrcRetry(callback, pipelineFile, srtlaAddr, srtlaPort, streamid);
-	}, 1000);
-}
-
-async function asrcRetry(
-	callback: AsrcRetryCallback,
-	pipelineFilePath: string,
-	srtlaAddr: string,
-	srtlaPort?: number,
-	streamid?: string,
-) {
-	asrcRetryTimer = undefined;
-
-	const config = getConfig();
-
-	const audioSrcId = asrcProbe(config.asrc ?? "");
-	if (audioSrcId) {
-		const pipelineFile = await pipelineSetAsrc(
-			pipelineFilePath,
-			audioSrcId,
-			config.acodec,
-		);
-		if (!pipelineFile) return;
-
-		callback(pipelineFile, srtlaAddr, srtlaPort, streamid);
-	} else {
-		asrcScheduleRetry(
-			callback,
-			pipelineFilePath,
-			srtlaAddr,
-			srtlaPort,
-			streamid,
-		);
-	}
-}

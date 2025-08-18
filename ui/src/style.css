@@ -63,6 +63,16 @@ td.security {
 	background: #eee;
 }
 
+.button-slider-lock-unlock {
+  background-color: #e9ecef;
+  border: 1px solid #ced4da;
+  height: 100%; font-size: 30px;
+}
+
+.button-slider-lock-unlock:hover {
+  background-color: #6c757d;
+}
+
 /* Dark mode theme */
 
 body.dark {
@@ -107,4 +117,13 @@ body.dark .table-hover tbody tr:hover {
 
 body.dark .modem-status {
 	background: #5a6268;
+}
+
+body.dark .button-slider-lock-unlock {
+  background-color: #676a6c;
+  border: 1px solid #676a6c;
+}
+
+body.dark .button-slider-lock-unlock:hover {
+  background-color: #9a9fa2;
 }

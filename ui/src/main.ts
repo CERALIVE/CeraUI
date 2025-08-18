@@ -42,6 +42,8 @@ import { initLogin } from "./modules/ui/login.ts";
 import { initPasswordBoxes } from "./modules/ui/password-box.ts";
 import { initTheme } from "./modules/ui/theme.ts";
 import { initWebsocket } from "./modules/ui/websocket.ts";
+import {initSliderLocks} from "./modules/ui/sliders-lock.ts";
+import {initAutoStart} from "./modules/ui/auto-start.ts";
 
 initTheme();
 initWebsocket();
@@ -55,3 +57,5 @@ initLogin();
 initCommandButtons();
 initPasswordBoxes();
 initCopyToClipboard();
+initSliderLocks();
+initAutoStart();

@@ -51,7 +51,7 @@ export function handleAuthResult(msg: {
 		$("#wifi").empty();
 		$("#modemManager").empty();
 		$("#main").removeClass("d-none");
-		$("#themeSelector").removeClass("d-none");
+		$("#localSettings").removeClass("d-none");
 	} else if (!getIsShowingInitialPasswordForm()) {
 		showLoginForm();
 	}

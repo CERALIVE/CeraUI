@@ -25,7 +25,7 @@ import { readTextFile, writeTextFile } from "../../helpers/text-files.ts";
 import { setup } from "../setup.ts";
 import { pipelineGetAudioProps } from "./audio.ts";
 
-type Pipeline = {
+export type Pipeline = {
 	name: string;
 	path: string;
 	acodec?: unknown;
@@ -93,7 +93,7 @@ export function initPipelines() {
 	pipelines = getPipelines();
 }
 
-export function searchPipelines(id: string) {
+export function searchPipelines(id: string): Pipeline|null {
 	if (pipelines[id]) return pipelines[id];
 	return null;
 }

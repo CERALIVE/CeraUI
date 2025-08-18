@@ -24,11 +24,14 @@ import { writeTextFile } from "../../helpers/text-files.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import {getAllRelaysRtt, updateBcrptServerConfig} from "../streaming/bcrpt.ts";
 
 type RelayCache = {
+	bcrp_key?: string;
 	servers: Record<
 		string,
 		{
+			bcrp_port?: string;
 			type: string;
 			name: string;
 			default?: true;
@@ -65,14 +68,16 @@ type RelaysResponseMessage = {
 
 export type ValidateRemoteRelaysMessage = {
 	relays: {
+		bcrp_key?: string;
 		servers: Record<
 			string,
 			{
 				type?: unknown;
 				name?: unknown;
 				addr?: unknown;
-				port?: unknown;
+				port?: number;
 				default?: unknown;
+				bcrp_port?: string;
 			}
 		>;
 		accounts: Record<
@@ -101,36 +106,33 @@ export function getRelays() {
 	return relaysCache;
 }
 
-export function buildRelaysMsg() {
-	const msg: RelaysResponseMessage = {
-		servers: {},
-		accounts: {},
-	};
-
+export function buildRelaysMsg(): RelaysResponseMessage {
+	const msg: RelaysResponseMessage = { servers: {}, accounts: {} };
 	if (!relaysCache) return msg;
 
-	for (const s in relaysCache.servers) {
-		const relayServer = relaysCache.servers[s];
-		if (!relayServer) continue;
+	// Simplify servers mapping using Object.entries
+	const bcrptRelaysRtt= getAllRelaysRtt()
+	Object.entries(relaysCache.servers).forEach(([id, srv]) => {
+		if (!srv) return;
+		const rtt = bcrptRelaysRtt?.[id];
+		const status = rtt !== undefined
+			? (rtt <= 80 ? '🟢' : rtt <= 150 ? '🟡' : '🔴')
+			: '';
+		const prefix = status ? `${status} ` : '';
+		const suffix = rtt !== undefined ? ` (${rtt} ms)` : '';
+		msg.servers[id] = { name: `${prefix}${srv.name}${suffix}`, default: srv.default };
+	});
 
-		msg.servers[s] = {
-			name: relayServer.name,
-			default: relayServer.default,
-		};
-	}
-
-	for (const a in relaysCache.accounts) {
-		const relayAccount = relaysCache.accounts[a];
-		if (!relayAccount) continue;
-
-		msg.accounts[a] = {
-			name: relayAccount.name + (relayAccount.disabled ? " [disabled]" : ""),
-			disabled: relayAccount.disabled,
-		};
-	}
+	// Simplify accounts mapping with clearer variable names
+	Object.entries(relaysCache.accounts).forEach(([id, relayAccount]) => {
+		if (!relayAccount) return;
+		const displayName = `${relayAccount.name}${relayAccount.disabled ? ' [disabled]' : ''}`;
+		msg.accounts[id] = { name: displayName, disabled: relayAccount.disabled };
+	});
 
 	return msg;
 }
+
 
 export async function updateCachedRelays(relays: RelayCache | undefined) {
 	try {
@@ -158,8 +160,9 @@ function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 				continue;
 			if (r.default && r.default !== true) continue;
 
-			const port = validatePortNo(r.port as string);
+			const port = validatePortNo(r.port);
 			if (!port) continue;
+
 
 			out.servers[r_id] = {
 				type: r.type,
@@ -167,6 +170,9 @@ function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 				addr: r.addr,
 				port: port,
 			};
+			if (r.bcrp_port) {
+				out.servers[r_id]!.bcrp_port = r.bcrp_port;
+			}
 			if (r.default) out.servers[r_id].default = true;
 		}
 
@@ -177,6 +183,11 @@ function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 
 			out.accounts[a_id] = { name: a.name, ingest_key: a.ingest_key };
 			if (a.disabled) out.accounts[a_id].disabled = true;
+		}
+
+		if (msg.bcrp_key !== undefined) {
+			if (typeof msg.bcrp_key !== 'string') return;
+			out.bcrp_key = msg.bcrp_key;
 		}
 
 		if (Object.keys(out.servers).length < 1) return;
@@ -253,5 +264,6 @@ export async function handleRemoteRelays(
 			saveConfig();
 			broadcastMsg("config", getConfig());
 		}
+		updateBcrptServerConfig();
 	}
 }

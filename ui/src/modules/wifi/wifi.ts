@@ -20,7 +20,7 @@ import type {
 	WifiNetwork,
 } from "@belaui/server/modules/wifi/wifi.ts";
 
-import { genOptionList } from "../ui/options-list.ts";
+import { updateOptionList } from "../ui/options-list.ts";
 import { showHidePassword } from "../ui/password-box.ts";
 import { ws } from "../ui/websocket.ts";
 
@@ -398,7 +398,7 @@ export function updateWifiState(
               </div> <!-- .hotspot -->
 
               <div class="client d-none">
-                <button type="button" class="btn btn-block btn-secondary btn-netact mb-2 wifi-scan-button" onClick="wifiScan(this, ${deviceId})">
+                <button type="button" class="btn btn-block btn-secondary netact mb-2 wifi-scan-button" onClick="wifiScan(this, ${deviceId})">
                   Scan for WiFi networks
                 </button>
 
@@ -519,13 +519,8 @@ export function updateWifiState(
 				!wifiIfs[deviceId].hotspot ||
 				wifiIfs[deviceId].hotspot.channel !== device.hotspot.channel
 			) {
-				const channels = genOptionList(
-					[device.hotspot.available_channels],
-					device.hotspot.channel,
-				);
-				deviceCard
-					.find("select.hotspot-channel")
-					.html(channels as unknown as string);
+				updateOptionList(deviceCard.find('select.hotspot-channel'),
+					[device.hotspot.available_channels], device.hotspot.channel);
 			}
 
 			if (device.hotspot.warnings?.includes("modified")) {

@@ -18,30 +18,44 @@
 import fs from "node:fs";
 
 import killall from "../../helpers/killall.ts";
-import { getConfig, saveConfig } from "../config.ts";
-import { setup } from "../setup.ts";
+import {getConfig, saveConfig} from "../config.ts";
+import {setup} from "../setup.ts";
 
 const MIN_BITRATE = 300; // Kbps
 const MAX_BITRATE = 12_000; // Kbps
 
 export type BitrateParams = { max_br?: number };
 
-export function setBitrate(params: BitrateParams) {
-	const minBr = MIN_BITRATE; // Kbps
+export function validateBitrate(params: BitrateParams): number | undefined {
+    const maxBr = params.max_br;
+    if (typeof maxBr !== 'number' || Number.isNaN(maxBr)) return;
+    if (maxBr < MIN_BITRATE || maxBr > MAX_BITRATE) return;
+    return maxBr;
+}
 
-	if (params.max_br === undefined) return null;
-	if (params.max_br < minBr || params.max_br > MAX_BITRATE) return null;
 
-	const config = getConfig();
-	config.max_br = params.max_br;
-	saveConfig();
+export function setBitrate(params: BitrateParams): number | undefined {
+    const maxBr = validateBitrate(params);
+    if (maxBr === undefined) return;
 
-	fs.writeFileSync(
-		setup.bitrate_file,
-		`${minBr * 1000}\n${config.max_br * 1000}\n`,
-	);
+    const config = getConfig();
+    const previousBitrate = config.max_br;
+    
+    try {
+        config.max_br = maxBr;
+        saveConfig();
 
-	killall(["-HUP", "belacoder"]);
+        fs.writeFileSync(
+            setup.bitrate_file,
+            `${MIN_BITRATE * 1000}\n${maxBr * 1000}\n`,
+        );
 
-	return config.max_br;
+        killall(["-HUP", "belacoder"]);
+        return maxBr;
+    } catch (error) {
+        // Restore previous bitrate if operation failed
+        config.max_br = previousBitrate;
+        console.error('Failed to set bitrate:', error);
+        throw error;
+    }
 }

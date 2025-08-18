@@ -39,6 +39,7 @@ export type Config = {
 	relay_server?: string;
 	relay_account?: string;
 	pipeline?: string;
+	autostart?: boolean;
 };
 
 export let config: Config = {};
@@ -60,9 +61,12 @@ export function loadConfig(c: Config) {
 	$("#srtlaPort").val(config.srtla_port ?? "");
 	$("#srtStreamid").val(config.srt_streamid ?? "");
 
+	$("#bitrateOverlay").prop('checked', config.bitrate_overlay)
+
+	$('#autoStart').prop('checked', config.autostart ?? false);
+	$('#autoStartForm button[type=submit]').prop('disabled', true);
 	$("#remoteDeviceKey").val(config.remote_key ?? "");
 	$("#remoteKeyForm button[type=submit]").prop("disabled", true);
-	$("#bitrateOverlay").prop("checked", config.bitrate_overlay);
 
 	if (config.ssh_pass && getSshStatus()) {
 		showSshStatus();
