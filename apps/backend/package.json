@@ -1,0 +1,30 @@
+{
+	"name": "@belaui/root",
+	"type": "module",
+	"workspaces": [
+		"server",
+		"ui"
+	],
+	"dependencies": {},
+	"devDependencies": {
+		"@types/bun": "^1.2.17",
+		"globals": "^16.2.0",
+		"npm-run-all2": "^8.0.4",
+		"typescript": "^5.8.3"
+	},
+	"scripts": {
+		"check": "bun run --bun --filter '*' check && run-p check:*",
+		"check:biome": "bun x --bun @biomejs/biome check .",
+		"dev": "bun run --bun --filter '*' dev",
+		"fix": "bun run --bun --filter '*' fix",
+		"lint": "bun run --bun --filter '*' lint",
+		"format": "bun run --bun --filter '*' format",
+		"build": "bun run --bun --filter '*' build && run-p build:*",
+		"build:copy-ui": "mkdir -p ./dist/public && rm -rf ./dist/public/* && cp -r ./ui/dist/* ./dist/public/",
+		"build:copy-server": "mkdir -p ./dist && cp ./server/belaUI ./dist/"
+	},
+	"trustedDependencies": [
+		"@biomejs/biome",
+		"esbuild"
+	]
+}

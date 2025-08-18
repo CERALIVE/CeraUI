@@ -1,0 +1,34 @@
+{
+	"name": "@belaui/server",
+	"type": "module",
+	"dependencies": {
+		"@rollup/rollup-linux-arm64-gnu": "^4.34.9",
+		"@types/xml2js": "^0.4.14",
+		"finalhandler": "^1.3.1",
+		"serve-static": "^1.16.2",
+		"winston": "^3.17.0",
+		"ws": "^8.18.1",
+		"xml2js": "^0.6.2"
+	},
+	"devDependencies": {
+		"@types/bcrypt": "^5.0.2",
+		"@types/bun": "^1.2.4",
+		"@types/finalhandler": "^1.2.3",
+		"@types/serve-static": "^1.15.7",
+		"@types/ws": "^8.18.0",
+		"globals": "^15.15.0",
+		"npm-run-all2": "^7.0.2"
+	},
+	"scripts": {
+		"build": "bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 belaUI.ts --outfile belaUI",
+		"check": "run-p check:*",
+		"check:tsc": "tsc",
+		"dev": "bun run belaUI.ts",
+		"fix": "bun x --bun @biomejs/biome check --write .",
+		"format": "bun x --bun @biomejs/biome format --write .",
+		"lint": "bun x --bun @biomejs/biome lint --write ."
+	},
+	"trustedDependencies": [
+		"@biomejs/biome"
+	]
+}

@@ -1,0 +1,14 @@
+{
+	"hw": "jetson",
+	"belacoder_path": "./mocks/belacoder/",
+	"srtla_path": "./mocks/srtla/",
+	"sound_device_dir": "./mocks/sound/",
+	"usb_device_dir": "./mocks/usb/",
+	"mmcli_binary": "./mocks/mmcli",
+	"killall_binary": "./mocks/killall",
+	"bitrate_file": "/tmp/belacoder_br",
+	"ips_file": "/tmp/srtla_ips",
+	"moblink_relay_enabled": true,
+	"moblink_relay_bin": "/opt/moblink-rust-relay/target/release/moblink-rust-relay",
+	"moblink_relay_streamer_password": "1234"
+}

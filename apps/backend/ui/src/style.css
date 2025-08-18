@@ -1,0 +1,129 @@
+/*!
+    belaUI - web UI for the BELABOX project
+    Copyright (C) 2020-2022 BELABOX project
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+#page {
+	max-width: 700px;
+}
+
+#login,
+#initialPasswordForm {
+	max-width: 400px;
+}
+
+td.signal {
+	width: 20px;
+}
+
+td.band {
+	width: 40px;
+	font-family: monospace;
+	font-size: 12px;
+}
+
+td.security {
+	text-align: right;
+	width: 20px;
+}
+
+.can-connect {
+	cursor: pointer;
+}
+
+.networks td {
+	vertical-align: bottom;
+}
+
+@media screen and (max-width: 500px) {
+	.button-text {
+		display: none;
+	}
+}
+
+@media screen and (min-width: 500px) {
+	.button-icon {
+		display: none;
+	}
+}
+
+.modem-status {
+	background: #eee;
+}
+
+.button-slider-lock-unlock {
+  background-color: #e9ecef;
+  border: 1px solid #ced4da;
+  height: 100%; font-size: 30px;
+}
+
+.button-slider-lock-unlock:hover {
+  background-color: #6c757d;
+}
+
+/* Dark mode theme */
+
+body.dark {
+	background: #1e2326;
+	color: #fff;
+}
+
+body.dark .card {
+	background: #1e2326;
+	border-color: rgba(255, 255, 255, 0.5);
+}
+
+body.dark .table {
+	color: #fff;
+}
+
+body.dark .form-control,
+body.dark .ui-widget-content,
+body.dark .custom-select {
+	background-color: #eee;
+}
+
+body.dark .btn-outline-secondary {
+	color: #eee;
+}
+
+body.dark .text-secondary {
+	color: #9ca5ad !important;
+}
+
+body.dark .modal-content {
+	background-color: #1e2326;
+}
+
+body.dark .close {
+	color: #fff;
+}
+
+body.dark .table-hover tbody tr:hover {
+	color: #aaa;
+}
+
+body.dark .modem-status {
+	background: #5a6268;
+}
+
+body.dark .button-slider-lock-unlock {
+  background-color: #676a6c;
+  border: 1px solid #676a6c;
+}
+
+body.dark .button-slider-lock-unlock:hover {
+  background-color: #9a9fa2;
+}

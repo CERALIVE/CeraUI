@@ -1,0 +1,25 @@
+node_modules
+*.local
+
+# Built files
+/dist/public/
+/dist/belaUI
+/ui/dist/
+/server/belaUI
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# BelaUI specific runtime files
+/auth_tokens.json
+/dns_cache.json
+/debug.log
+/gsm_operator_cache.json
