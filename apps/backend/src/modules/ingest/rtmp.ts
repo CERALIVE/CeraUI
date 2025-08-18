@@ -55,6 +55,12 @@ async function updateRtmpStats(): Promise<void> {
 }
 
 export function initRTMPIngestStats(): void {
+	// Skip RTMP stats polling in development mode (no RTMP server running)
+	if (process.env.NODE_ENV === 'development') {
+		console.log('Development mode: Skipping RTMP statistics polling');
+		return;
+	}
+
 	setInterval(async () => {
 		try {
 			await updateRtmpStats();

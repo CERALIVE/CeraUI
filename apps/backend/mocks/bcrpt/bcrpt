@@ -1,3 +1,26 @@
 #!/usr/bin/bash
 
-exit 0
+# Mock bcrpt process that stays running and outputs realistic JSON stats
+echo "Mock bcrpt relay monitoring started" >&2
+
+# Handle signals gracefully
+trap 'echo "Mock bcrpt shutting down" >&2; exit 0' SIGTERM SIGINT SIGHUP
+
+while true; do
+    # Output realistic JSON stats that match what the backend expects
+    cat << 'EOF'
+{
+  "rtt": {
+    "192.168.1.1:1234": {"max_min": 45},
+    "10.0.0.1:1234": {"max_min": 23}
+  },
+  "mtu": {
+    "conn1": 1500,
+    "conn2": 1400
+  }
+}
+EOF
+    
+    # Wait 5 seconds before next update (like real bcrpt)
+    sleep 5
+done

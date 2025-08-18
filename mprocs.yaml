@@ -9,6 +9,7 @@ procs:
     cmd: ["pnpm", "dev"]
     env:
       NODE_ENV: development
+      PORT: "3001"
   
   # database:
   #   cwd: "./apps/backend"
