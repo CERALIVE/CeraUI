@@ -4,13 +4,11 @@ procs:
     cmd: ["pnpm", "dev"]
     env:
       NODE_ENV: development
-    
-  # When you add your second app, uncomment and configure:
-  # backend:
-  #   cwd: "./apps/backend" 
-  #   cmd: ["pnpm", "dev"]
-  #   env:
-  #     NODE_ENV: development
+  backend:
+    cwd: "./apps/backend"
+    cmd: ["pnpm", "dev"]
+    env:
+      NODE_ENV: development
   
   # database:
   #   cwd: "./apps/backend"

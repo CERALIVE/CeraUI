@@ -22,7 +22,10 @@
     "clean": "pnpm --recursive run clean && rm -rf node_modules",
     "frontend:dev": "pnpm --filter frontend run dev",
     "frontend:build": "pnpm --filter frontend run build",
-    "frontend:preview": "pnpm --filter frontend run preview"
+    "frontend:preview": "pnpm --filter frontend run preview",
+    "backend:dev": "pnpm --filter backend run dev",
+    "backend:build": "pnpm --filter backend run build",
+    "backend:check": "pnpm --filter backend run check"
   },
   "devDependencies": {
     "mprocs": "^0.7.3",
