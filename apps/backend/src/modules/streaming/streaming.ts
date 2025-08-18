@@ -116,7 +116,7 @@ export async function validateConfig(params: Partial<ConfigParameters>){
 
 	// A-V delay
 	if (typeof params.delay !== "number") throw new Error("Invalid audio delay");
-	const delay = parseInt(params.delay.toString(), 10);
+	const delay = Number.parseInt(params.delay.toString(), 10);
 	if (delay !== params.delay || delay < -2000 || delay > 2000)
 		throw new Error(`Invalid audio delay '${params.delay}'`);
 	params.delay = delay;
@@ -146,7 +146,7 @@ export async function validateConfig(params: Partial<ConfigParameters>){
 
 	// SRT latency
 	if (typeof params.srt_latency !== "number") throw new Error("Invalid SRT latency");
-	const srtLatency = parseInt(params.srt_latency.toString(), 10);
+	const srtLatency = Number.parseInt(params.srt_latency.toString(), 10);
 	if (srtLatency !== params.srt_latency || srtLatency < 100 || srtLatency > 10_000)
 		throw new Error(`Invalid SRT latency '${params.srt_latency}' ms`);
 	params.srt_latency = srtLatency;

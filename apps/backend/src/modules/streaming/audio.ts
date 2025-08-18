@@ -197,14 +197,14 @@ export async function asrcProbe(asrc: string): Promise<string> {
 	let audioSrcId: string | undefined = audioDevices[asrc];
 	if (audioSrcId) return audioSrcId;
 
-	return new Promise(function (res: (id: string) => void, rej: () => void) {
+	return new Promise((res: (id: string) => void, rej: () => void) => {
 		// Cancel any prior pending probe before starting a new one
 		clearAsrcProbeReject();
 		asrcProbeReject = rej;
 
-		const poll = async function () {
+		const poll = async () => {
 			while (asrcProbeReject === rej) {
-				let audioSrcId: string | undefined = audioDevices[asrc];
+				 audioSrcId = audioDevices[asrc];
 				if (audioSrcId) {
 					asrcProbeReject = undefined;
 					res(audioSrcId);

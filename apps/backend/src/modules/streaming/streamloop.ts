@@ -117,8 +117,8 @@ export async function startStream(pipeline: Pipeline, srtlaAddr: string, srtlaPo
         if (!pipelineFile) throw ("failed to generate the pipeline file - bitrate overlay");
     }
     // replace the audio source and codec
-    let audioCodec = pipeline.acodec ? config.acodec : undefined;
-    let audioSrcId = pipeline.asrc ? getAudioSrcId(config.asrc!) : DEFAULT_AUDIO_ID;
+    const audioCodec = pipeline.acodec ? config.acodec : undefined;
+    const audioSrcId = pipeline.asrc ? getAudioSrcId(config.asrc!) : DEFAULT_AUDIO_ID;
     pipelineFile = await replaceAudioSettings(pipelineFile, audioSrcId, audioCodec);
     if (!pipelineFile) {
         throw("failed to generate the pipeline file - audio settings");

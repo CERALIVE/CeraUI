@@ -17,7 +17,7 @@
 
 
 import fs from 'fs';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 import {writeTextFile} from "../../helpers/text-files.ts";
 import {dnsCacheResolve, dnsCacheValidate} from "../network/dns.ts";
 import {bcrptExec} from "./streamloop.ts";
@@ -36,7 +36,7 @@ const bcrptSourceIpsFile = `${bcrptDir}/source_ips`;
 const bcrptServerIpsFile = `${bcrptDir}/server_ips`;
 const bcrptKeyFile = `${bcrptDir}/key`;
 
-let bcrptIpsToRelays: Record<string, string> = {};
+const bcrptIpsToRelays: Record<string, string> = {};
 let bcrptRelaysRtt: Record<string, number> = {};
 let bcrptRetryCount = 0;
 const MAX_BCRPT_RETRIES = 5;
@@ -150,7 +150,7 @@ export async function startBcrpt() {
     const args = [bcrptSourceIpsFile, bcrptServerIpsFile, bcrptKeyFile];
     bcrpt = spawn(bcrptExec, args);
 
-    bcrpt.stdout!.on('data', function (data) {
+    bcrpt.stdout!.on('data', (data) => {
         try {
             const stats = JSON.parse(data.toString('utf8'));
 
@@ -181,15 +181,15 @@ export async function startBcrpt() {
         }
     });
 
-    bcrpt.stderr!.on('data', function (data) {
+    bcrpt.stderr!.on('data', (data) => {
         console.log(`bcrpt: ${data}`);
     });
 
-    bcrpt.on('error', function (err) {
+    bcrpt.on('error', (err) => {
         console.error('bcrpt process error:', err);
     });
 
-    bcrpt.on('close', function (code, signal) {
+    bcrpt.on('close', (code, signal) => {
         let reason;
         if (code != null) {
             reason = `with code ${code}`;
