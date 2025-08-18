@@ -28,14 +28,10 @@ export type BitrateParams = { max_br?: number };
 
 export function validateBitrate(params: BitrateParams) {
     if (typeof params.max_br !== 'number') return;
-
-    const tmp = params.max_br;
-    if (tmp != params.max_br) return;
+    if (Number.isNaN(params.max_br)) return;
     if (params.max_br < MIN_BITRATE || params.max_br > MAX_BITRATE) return;
 
-    params.max_br = tmp;
-
-    return tmp;
+    return params.max_br;
 }
 
 

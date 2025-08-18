@@ -53,7 +53,7 @@ export function updateOptionList(
                 entry.text(contents);
             }
             const isDisabled = options[o][value].disabled;
-            if (entry.attr('disabled') != isDisabled) {
+            if (entry.prop('disabled') !== isDisabled) {
                 entry.prop('disabled', isDisabled);
             }
             const isSelected = (selected && value == selected);

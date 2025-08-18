@@ -37,6 +37,9 @@ const bcrptKeyFile = `${bcrptDir}/key`;
 
 let bcrptIpsToRelays: Record<string, string> = {};
 let bcrptRelaysRtt: Record<string, number> = {};
+let bcrptRetryCount = 0;
+const MAX_BCRPT_RETRIES = 5;
+const INITIAL_RETRY_DELAY = 1000;
 
 // Getter functions for safe external access
 export function hasLowMtu(): boolean {
@@ -62,7 +65,7 @@ async function generateBcrptSourceIps() {
     const netif = getNetworkInterfaces()
     for (const i in netif) {
         // Skip hotspots and unusable interfaces with duplicate IPs
-        if (netif[i]=== undefined || netif[i].error) continue;
+        if (netif[i]=== undefined || netif[i].error || !netif[i].ip) continue;
         contents += `${netif[i].ip}\n`;
     }
     await writeTextFile(bcrptSourceIpsFile, contents);
@@ -84,17 +87,19 @@ async function generateBcrptServerIpsFile() {
     const relaysCache = getRelays()
     if (!getIsStreaming() && relaysCache) {
         for (const s in relaysCache.servers) {
-            const port = relaysCache.servers[s]?.bcrp_port;
+            const server = relaysCache.servers[s];
+            if (!server) continue;
+            const port = server.bcrp_port;
             if (!port) continue;
 
-            const { addrs, fromCache } = await dnsCacheResolve(relaysCache.servers[s]!.addr);
+            const { addrs, fromCache } = await dnsCacheResolve(server.addr);
             for (const ip of addrs) {
                 const addr = `${ip}:${port}`;
                 bcrptIpsToRelays[addr] = s;
                 contents += `${addr}\n`;
             }
             if (!fromCache) {
-                dnsCacheValidate(relaysCache.servers[s]!.addr);
+                dnsCacheValidate(server.addr);
             }
         }
     }
@@ -126,8 +131,18 @@ export async function startBcrpt() {
         await generateBcrptSourceIps();
         await generateBcrptServerIpsFile();
         await generateBcrptKeyFile();
+        // Reset retry counter on successful config generation
+        bcrptRetryCount = 0;
     } catch(err) {
-        setTimeout(startBcrpt, 1000);
+        if (bcrptRetryCount >= MAX_BCRPT_RETRIES) {
+            console.error(`Failed to generate BCRPT config after ${MAX_BCRPT_RETRIES} attempts. Giving up.`);
+            return;
+        }
+        
+        bcrptRetryCount++;
+        const delay = INITIAL_RETRY_DELAY * Math.pow(2, bcrptRetryCount - 1); // Exponential backoff
+        console.warn(`BCRPT config generation failed (attempt ${bcrptRetryCount}/${MAX_BCRPT_RETRIES}). Retrying in ${delay}ms...`);
+        setTimeout(startBcrpt, delay);
         return;
     }
 
@@ -140,7 +155,8 @@ export async function startBcrpt() {
 
             const rtts: Record<string, number> = {};
             for (const addr in stats.rtt) {
-                const relayId = bcrptIpsToRelays[addr]!;
+                const relayId = bcrptIpsToRelays[addr];
+                if (!relayId) continue;
                 const rtt = stats.rtt[addr].max_min;
                 if (rtts[relayId] === undefined) {
                     rtts[relayId] = rtt;
@@ -168,7 +184,9 @@ export async function startBcrpt() {
         console.log(`bcrpt: ${data}`);
     });
 
-    bcrpt.on('error', function () {});
+    bcrpt.on('error', function (err) {
+        console.error('bcrpt process error:', err);
+    });
 
     bcrpt.on('close', function (code, signal) {
         let reason;
@@ -177,7 +195,14 @@ export async function startBcrpt() {
         } else {
             reason = `because of signal ${signal}`;
         }
-        console.log(`bcrpt exited unexpectedly ${reason}. Restarting it.`);
-        setTimeout(startBcrpt, 1000);
+        if (bcrptRetryCount >= MAX_BCRPT_RETRIES) {
+            console.error(`BCRPT process failed ${MAX_BCRPT_RETRIES} times. Stopping restart attempts.`);
+            return;
+        }
+        
+        bcrptRetryCount++;
+        const delay = INITIAL_RETRY_DELAY * Math.pow(2, bcrptRetryCount - 1);
+        console.log(`bcrpt exited unexpectedly ${reason}. Restarting in ${delay}ms (attempt ${bcrptRetryCount}/${MAX_BCRPT_RETRIES})...`);
+        setTimeout(startBcrpt, delay);
     });
 }

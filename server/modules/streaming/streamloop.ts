@@ -347,7 +347,7 @@ export function stop() {
 }
 
 export function setAutostart(value: boolean): void {
-    if (!value && value) return;
+    if (typeof value !== 'boolean') return;
     const config = getConfig()
     config.autostart = value;
     saveConfig();

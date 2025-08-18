@@ -37,7 +37,7 @@ export function updatePipelines(ps: Record<string, Pipeline> | null) {
 		pipelines = ps;
 	}
 
-	updateOptionList($('#pipelines'), [pipelines], config.pipeline);;
+	updateOptionList($('#pipelines'), [pipelines], config.pipeline);
 
 	const value = String($("#pipelines").val());
 

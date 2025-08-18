@@ -186,7 +186,7 @@ function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 		}
 
 		if (msg.bcrp_key !== undefined) {
-			// if (typeof msg.bcrp_key !== 'string') return;
+			if (typeof msg.bcrp_key !== 'string') return;
 			out.bcrp_key = msg.bcrp_key;
 		}
 

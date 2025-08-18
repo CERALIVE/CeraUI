@@ -195,11 +195,8 @@ export async function asrcProbe(asrc: string): Promise<string> {
 	if (audioSrcId) return audioSrcId;
 
 	return new Promise(function (res: (id: string) => void, rej: () => void) {
-		if (asrcProbeReject) {
-			console.log('asrcProbe(): BUG? asrcProbeReject should have been undefined');
-			asrcProbeReject();
-		}
-
+		// Cancel any prior pending probe before starting a new one
+		clearAsrcProbeReject();
 		asrcProbeReject = rej;
 
 		const poll = async function () {

@@ -73,7 +73,7 @@ type RemoteAuthEncoderMessage = {
 
 type RemoteMessage = ValidateRemoteRelaysMessage | RemoteAuthEncoderMessage;
 
-const remoteProtocolVersion = setup.remote_protocol_version ?? 14;
+const remoteProtocolVersion = setup.remote_protocol_version ?? 16;
 const remoteEndpointProtocol =
 	setup.remote_endpoint_secure === false ? "ws" : "wss";
 const remoteEndpointHost = setup.remote_endpoint_host ?? "remote.belabox.net";
