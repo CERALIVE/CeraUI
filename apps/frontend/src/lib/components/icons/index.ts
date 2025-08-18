@@ -24,7 +24,7 @@ import X from 'lucide-svelte/icons/x';
 import type { SvelteComponent } from 'svelte';
 
 import Hamburger from './hamburger.svelte';
-import Logo from './logo.svelte';
+import Logo from './Logo.svelte';
 
 export type Icon = SvelteComponent;
 
