@@ -1,15 +1,13 @@
 {
 	"files": {
-		"includes": [
+		"include": [
 			"./package.json",
-			"**/server/**/*",
-			"**/ui/**/*",
-			"**/*.json",
-			"!**/ui/node_modules/**/*",
-			"!**/ui/vendor/**/*",
-			"!**/ui/dist/**/*",
-			"!**/config.json",
-			"!**/gsm_operator_cache.json"
+			"src/**/*"
+		],
+		"ignore": [
+			"config.json",
+			"setup.json",
+			"**/gsm_operator_cache.json"
 		],
 		"ignoreUnknown": true
 	},

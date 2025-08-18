@@ -23,7 +23,7 @@ import { setup } from "./setup.ts";
 import { getSshPasswordHash, setSshPasswordHash } from "./system/ssh.ts";
 import { getPasswordHash, setPasswordHash } from "./ui/auth.ts";
 
-const CONFIG_FILE = "config.json";
+const CONFIG_FILE = "../config.json";
 
 let config: {
 	password?: string;
