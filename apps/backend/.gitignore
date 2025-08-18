@@ -18,7 +18,7 @@ dist/
 *.sw?
 
 # BelaUI specific runtime files
-src/auth_tokens.json
-src/dns_cache.json
-src/debug.log
-src/gsm_operator_cache.json
+auth_tokens.json
+dns_cache.json
+debug.log
+gsm_operator_cache.json
