@@ -34,13 +34,19 @@ let performanceData = $state({
   loadTimeCalculated: false, // Track if load time has been properly calculated
 });
 
+type NetworkConnection = {
+  effectiveType?: string;
+  downlink?: number;
+  rtt?: number;
+} | null;
+
 let systemInfo = $state({
   browser: '',
   version: '',
   platform: '',
   cookieEnabled: false,
   onLine: true,
-  connection: null as any,
+  connection: null as NetworkConnection,
 });
 
 let localeInfo = $state({
@@ -98,7 +104,7 @@ function updateSystemInfo() {
     platform: navigator.platform,
     cookieEnabled: navigator.cookieEnabled,
     onLine: navigator.onLine,
-    connection: (navigator as any).connection || null,
+    connection: (navigator as Navigator & { connection?: NetworkConnection }).connection || null,
   };
 }
 
@@ -158,11 +164,17 @@ function updateLocaleInfo() {
   return unsubscribe;
 }
 
+type PerformanceMemory = {
+  usedJSHeapSize?: number;
+  totalJSHeapSize?: number;
+  jsHeapSizeLimit?: number;
+};
+
 // Update performance data
 function updatePerformanceData() {
   // Memory usage (always update - this should change over time)
   if (performance.memory) {
-    const memoryData = performance.memory as any;
+    const memoryData = performance.memory as PerformanceMemory;
     const usedHeapSize = memoryData.usedJSHeapSize || 0;
     performanceData.memory = Math.round(usedHeapSize / 1024 / 1024);
   }
@@ -245,7 +257,7 @@ $effect(() => {
 });
 
 // Format bytes
-function formatBytes(bytes: number): string {
+function _formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];

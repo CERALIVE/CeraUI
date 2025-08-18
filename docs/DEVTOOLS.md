@@ -38,6 +38,18 @@ The DevTools tab displays real-time information about the current development en
 
 ### 🔧 Component Testing Tools
 
+#### 📸 Screenshot Utility
+- **Purpose**: Automated capture for documentation and visual testing
+- **Features**:
+  - **Complete Coverage**: Captures all 5 tabs (General, Network, Streaming, Advanced, DevTools)
+  - **Dual Themes**: Automatically captures both dark and light themes
+  - **Multi-Platform**: Desktop (1920×1080) and Mobile (430×932) viewports
+  - **PWA States**: Offline mode capture in both themes
+  - **Enhanced Timing**: Content fully rendered before capture
+- **Usage**: Click "Capture All Screenshots" to generate 22 high-quality screenshots
+- **Output**: Auto-downloads ZIP file with organized folder structure
+- **Quality**: 2x pixel ratio, theme-aware backgrounds, viewport optimization
+
 #### Demo Overlay Trigger
 - **Purpose**: Test overlay components and their behavior
 - **Usage**: Click to trigger demo overlays and test their functionality

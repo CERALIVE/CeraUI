@@ -198,7 +198,7 @@ class StreamingStateManager {
         const samplePipelines = Object.entries(message).slice(0, 3);
         console.debug(
           'Sample pipeline names:',
-          samplePipelines.map(([key, value]) => value.name),
+          samplePipelines.map(([_key, value]) => value.name),
         );
 
         // Process pipelines immediately when they arrive (don't wait for locale changes)

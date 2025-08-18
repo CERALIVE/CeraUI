@@ -41,7 +41,7 @@ import * as Card from '$lib/components/ui/card';
 import { BUILD_INFO } from '$lib/env';
 
 // Development environment info
-const isDev = BUILD_INFO.IS_DEV;
+const _isDev = BUILD_INFO.IS_DEV;
 </script>
 
 <!-- Dev Tools Page - Mobile First Design -->

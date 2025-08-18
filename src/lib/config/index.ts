@@ -17,7 +17,7 @@ export type NavElements = {
 const baseNavElements: NavElements = {
   general: { label: 'general', component: General },
   network: { label: 'network', component: Network },
-  settings: { label: 'streaming', component: Streaming },
+  streaming: { label: 'streaming', component: Streaming },
   advanced: { label: 'advanced', component: Advanced },
 };
 

@@ -31,20 +31,18 @@ import {
 } from '$lib/stores/navigation';
 
 let CurrentComponent: Component | undefined = $state(undefined);
-let previousComponent: Component | undefined = $state(undefined);
+let _previousComponent: Component | undefined = $state(undefined);
 let showContent = $state(true);
 
 // Navigation transition configuration
 const TRANSITION_DURATION = 300;
-const LOADING_DELAY = 150;
+const _LOADING_DELAY = 150;
 
 // Simple navigation subscription without race condition complexity
 $effect(() => {
   const unsubscribe = navigationStore.subscribe(tab => {
     if (tab) {
       const newComponent = Object.values(tab)[0].component;
-      console.log(`[NavigationRenderer] Navigation to:`, newComponent?.name || 'Unknown');
-
       // Simple component update without complex race condition handling
       CurrentComponent = newComponent;
       showContent = true;

@@ -98,7 +98,7 @@ let isProgrammaticChange = $state(false);
 let srtlaAddressTouched = $state(false);
 let srtlaPortTouched = $state(false);
 let srtStreamIdTouched = $state(false);
-let srtLatencyTouched = $state(false);
+let _srtLatencyTouched = $state(false);
 
 // Track encoder-related user interactions (separate from ServerCard)
 let userHasInteracted = $state(false);

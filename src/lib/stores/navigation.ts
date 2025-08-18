@@ -36,22 +36,13 @@ function createNavigationStore() {
         const currentKey = Object.keys(state.current)[0];
         const newKey = Object.keys(navigation)[0];
 
-        console.log(`[NavigationStore] navigateTo:`, {
-          from: currentKey,
-          to: newKey,
-          isTransitioning: state.isTransitioning,
-          timestamp: new Date().toISOString(),
-        });
-
         // Prevent navigation to the same component to avoid race conditions
         if (currentKey === newKey) {
-          console.log(`[NavigationStore] Ignoring duplicate navigation to ${newKey}`);
           return state; // Return unchanged state
         }
 
         // Prevent navigation while transitioning to avoid overlapping transitions
         if (state.isTransitioning) {
-          console.log(`[NavigationStore] Ignoring navigation during transition`);
           return state; // Return unchanged state
         }
 
@@ -80,10 +71,6 @@ function createNavigationStore() {
 
     // Set transition state
     setTransitioning: (isTransitioning: boolean) => {
-      console.log(`[NavigationStore] setTransitioning:`, {
-        isTransitioning,
-        timestamp: new Date().toISOString(),
-      });
       update(state => ({ ...state, isTransitioning }));
     },
 

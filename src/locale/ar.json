@@ -168,28 +168,14 @@
     "toastNotificationTester": "Toast Notification Tester",
     "livePerformanceMetrics": "Live Performance Metrics",
     "userPreferencesAccessibility": "User Preferences & Accessibility",
-    "screenshotUtility": "أداة التقاط الشاشة",
-    "screenshotUtilityDescription": "التقاط تلقائي للشاشة للوثائق والاختبارات البصرية",
-    "screenshotCurrentTab": "علامة التبويب الحالية",
-    "screenshotAllTabs": "جميع علامات التبويب",
-    "screenshotMobileView": "عرض الهاتف المحمول",
-    "screenshotHighQuality": "JPEG عالي الجودة",
-    "screenshotProgress": "جاري التقاط...",
-    "screenshotSaveLocation": "إظهار موقع الحفظ",
-    "screenshotTips": "نصائح:",
-    "screenshotTip1": "لقطات الشاشة تنزل تلقائياً بأسماء مناسبة",
-    "screenshotTip2": "مسارات الملفات تطابق هيكل docs/screenshots/",
-    "screenshotTip3": "عرض الهاتف المحمول يحاكي عرض 375px",
-    "screenshotTip4": "استخدم \"جميع علامات التبويب\" للوثائق الشاملة",
-    "screenshotComprehensive": "التقاط كل شيء",
-    "screenshotComprehensiveDesc": "جميع المواضيع وعروض الهاتف والنوافذ في عملية واحدة",
-    "screenshotZipDownload": "تحميل ZIP",
-    "screenshotZipReady": "اللقطات جاهزة",
-    "screenshotClear": "مسح",
-    "screenshotWifiModal": "نافذة WiFi",
-    "screenshotHotspotModal": "نافذة النقطة الساخنة",
-    "screenshotComplete": "اكتمل التقاط الشامل!",
-    "screenshotZipSuccess": "تم تحميل ZIP بنجاح!"
+    "screenshotUtility": "📸 أداة لقطات الشاشة",
+    "screenshotUtilityDescription": "التقاط بسيط لجميع علامات التبويب والمظاهر والوضع غير المتصل",
+    "captureAllScreenshots": "التقاط جميع لقطات الشاشة",
+    "capturing": "جاري التقاط...",
+    "downloadZip": "تحميل ZIP ({count} ملفات)",
+    "clear": "مسح",
+    "enhancedTiming": "توقيت محسن: المحتوى مُصيَّر بالكامل قبل التقاط",
+    "screenshotCount": "سطح المكتب + الهاتف (5 علامات تبويب، موضوعان لكل منها) + غير متصل (موضوعان) = 22 إجمالي"
   },
   "general": {
     "status": "الحالة",

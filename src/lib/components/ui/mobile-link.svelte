@@ -37,7 +37,7 @@ interface Props {
   loading?: boolean;
   onclick?: () => void;
   children?: import('svelte').Snippet;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 let {

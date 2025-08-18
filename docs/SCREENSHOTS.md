@@ -1,6 +1,6 @@
 # 📸 CeraUI Visual Gallery
 
-Welcome to the complete visual documentation of CeraUI - a modern, responsive interface built with Svelte 5 and Vite. This gallery showcases the application's comprehensive functionality across both desktop and mobile platforms, featuring full dark/light theme support.
+Welcome to the complete visual documentation of CeraUI - a modern, responsive interface built with Svelte 5 and Vite. This gallery showcases the application's core functionality across both desktop and mobile platforms, featuring full dark/light theme support.
 
 ## 🎯 Overview
 
@@ -9,7 +9,6 @@ CeraUI provides a complete management interface for BELABOX systems with:
 - **Responsive Design**: Optimized for desktop (1920×1080) and mobile (430×932) viewports
 - **Feature-Rich Interface**: Network management, streaming controls, system settings, and developer tools
 - **Progressive Web App**: Native app-like experience with offline capabilities
-- **Interactive Modals**: Dynamic WiFi networks, hotspot configuration, and system overlays
 
 ---
 
@@ -20,17 +19,17 @@ CeraUI provides a complete management interface for BELABOX systems with:
 
 | **General Dashboard** | **Network Management** |
 |:---------------------:|:----------------------:|
-| ![General Dark](screenshots/desktop/dark-theme/general.png) | ![Network Dark](screenshots/desktop/dark-theme/network.png) |
+| ![General Dark](screenshots/desktop/dark/general.png) | ![Network Dark](screenshots/desktop/dark/network.png) |
 | System status, relay configuration, updates overview | WiFi interfaces, network monitoring, bandwidth tracking |
 
 | **Streaming Controls** | **Advanced Settings** |
 |:----------------------:|:---------------------:|
-| ![Streaming Dark](screenshots/desktop/dark-theme/streaming.png) | ![Advanced Dark](screenshots/desktop/dark-theme/advanced.png) |
+| ![Streaming Dark](screenshots/desktop/dark/streaming.png) | ![Advanced Dark](screenshots/desktop/dark/advanced.png) |
 | Encoder settings, audio config, server management | Security, cloud integration, system actions |
 
 | **Developer Tools** |
 |:------------------:|
-| ![DevTools Dark](screenshots/desktop/dark-theme/devtools.png) |
+| ![DevTools Dark](screenshots/desktop/dark/devtools.png) |
 | Development utilities, testing tools, system information |
 
 ### Light Theme - Desktop
@@ -38,17 +37,17 @@ CeraUI provides a complete management interface for BELABOX systems with:
 
 | **General Dashboard** | **Network Management** |
 |:---------------------:|:----------------------:|
-| ![General Light](screenshots/desktop/light-theme/general.png) | ![Network Light](screenshots/desktop/light-theme/network.png) |
+| ![General Light](screenshots/desktop/light/general.png) | ![Network Light](screenshots/desktop/light/network.png) |
 | System status, relay configuration, updates overview | WiFi interfaces, network monitoring, bandwidth tracking |
 
 | **Streaming Controls** | **Advanced Settings** |
 |:----------------------:|:---------------------:|
-| ![Streaming Light](screenshots/desktop/light-theme/streaming.png) | ![Advanced Light](screenshots/desktop/light-theme/advanced.png) |
+| ![Streaming Light](screenshots/desktop/light/streaming.png) | ![Advanced Light](screenshots/desktop/light/advanced.png) |
 | Encoder settings, audio config, server management | Security, cloud integration, system actions |
 
 | **Developer Tools** |
 |:------------------:|
-| ![DevTools Light](screenshots/desktop/light-theme/devtools.png) |
+| ![DevTools Light](screenshots/desktop/light/devtools.png) |
 | Development utilities, testing tools, system information |
 
 ---
@@ -58,46 +57,28 @@ CeraUI provides a complete management interface for BELABOX systems with:
 ### Dark Theme - Mobile
 *Touch-optimized dark interface for mobile management*
 
-| **General** | **Network** | **Streaming** | **Advanced** |
-|:-----------:|:-----------:|:-------------:|:------------:|
-| ![Mobile General Dark](screenshots/mobile/dark-theme/general.png) | ![Mobile Network Dark](screenshots/mobile/dark-theme/network.png) | ![Mobile Streaming Dark](screenshots/mobile/dark-theme/streaming.png) | ![Mobile Advanced Dark](screenshots/mobile/dark-theme/advanced.png) |
-| Mobile dashboard | Network controls | Stream settings | System config |
+| **General** | **Network** | **Streaming** | **Advanced** | **DevTools** |
+|:-----------:|:-----------:|:-------------:|:------------:|:------------:|
+| ![Mobile General Dark](screenshots/mobile/dark/general.png) | ![Mobile Network Dark](screenshots/mobile/dark/network.png) | ![Mobile Streaming Dark](screenshots/mobile/dark/streaming.png) | ![Mobile Advanced Dark](screenshots/mobile/dark/advanced.png) | ![Mobile DevTools Dark](screenshots/mobile/dark/devtools.png) |
+| Mobile dashboard | Network controls | Stream settings | System config | Dev utilities |
 
 ### Light Theme - Mobile
 *Bright, accessible mobile interface*
 
-| **General** | **Network** | **Streaming** | **Advanced** |
-|:-----------:|:-----------:|:-------------:|:------------:|
-| ![Mobile General Light](screenshots/mobile/light-theme/general.png) | ![Mobile Network Light](screenshots/mobile/light-theme/network.png) | ![Mobile Streaming Light](screenshots/mobile/light-theme/streaming.png) | ![Mobile Advanced Light](screenshots/mobile/light-theme/advanced.png) |
-| Mobile dashboard | Network controls | Stream settings | System config |
+| **General** | **Network** | **Streaming** | **Advanced** | **DevTools** |
+|:-----------:|:-----------:|:-------------:|:------------:|:------------:|
+| ![Mobile General Light](screenshots/mobile/light/general.png) | ![Mobile Network Light](screenshots/mobile/light/network.png) | ![Mobile Streaming Light](screenshots/mobile/light/streaming.png) | ![Mobile Advanced Light](screenshots/mobile/light/advanced.png) | ![Mobile DevTools Light](screenshots/mobile/light/devtools.png) |
+| Mobile dashboard | Network controls | Stream settings | System config | Dev utilities |
 
 ---
 
-## 🎛️ Interactive Features & Modals
-
-### Network Configuration Modals
-*Dynamic network management interfaces*
-
-| **WiFi Networks Selector** | **Hotspot Configurator** |
-|:---------------------------:|:------------------------:|
-| ![WiFi Modal](screenshots/features/modals/dark-theme/wifi-networks-modal.png) | ![Hotspot Modal](screenshots/features/modals/dark-theme/hotspot-configurator-modal.png) |
-| Browse and connect to available WiFi networks | Configure BELABOX hotspot settings |
-
-### System Demonstrations
-*Live system state demonstrations*
-
-| **Update Process Overlay** |
-|:---------------------------:|
-| ![Updating Overlay](screenshots/features/demos/dark-theme/updating-overlay-demo.png) |
-| Real-time update progress with system feedback |
-
-### Progressive Web App States
+## 🌐 Progressive Web App Features
 *PWA functionality demonstrations*
 
-| **Offline Mode** |
-|:----------------:|
-| ![Offline Mode](screenshots/features/pwa-states/dark-theme/offline-mode.png) |
-| Graceful offline state handling with user feedback |
+| **Offline Mode - Dark** | **Offline Mode - Light** |
+|:------------------------:|:-------------------------:|
+| ![Offline Dark](screenshots/features/offline-dark.png) | ![Offline Light](screenshots/features/offline-light.png) |
+| Graceful offline state handling with dark theme | Clean offline state with light theme |
 
 ---
 
@@ -174,12 +155,13 @@ CeraUI provides a complete management interface for BELABOX systems with:
 - **Developer Access**: SSH server with secure password controls
 - **Maintenance**: Log downloads and system diagnostics
 
-### **5. Developer Tools**
-- **Component Testing**: UI element validation and testing
-- **System Information**: Browser metrics and performance data
+### **5. Developer Tools** *(Development Only)*
+- **Screenshot Utility**: Automated capture for all tabs, themes, and offline mode
+- **Component Testing**: UI element validation and testing tools
+- **System Information**: Real-time browser metrics and performance data
 - **Internationalization**: Multi-language support (10+ languages)
-- **Debug Console**: Real-time logging and error tracking
-- **Performance Monitoring**: Memory usage and viewport analysis
+- **Debug Console**: Console testing with different log levels
+- **Performance Monitoring**: Live memory usage and viewport analysis
 
 ---
 
@@ -198,7 +180,7 @@ CeraUI supports comprehensive internationalization with complete translations av
 - **Chinese** (zh) - 中文
 - **Hindi** (hi) - हिन्दी
 
-All interface elements, including modals, notifications, and system messages, are fully localized for each supported language.
+All interface elements, including notifications and system messages, are fully localized for each supported language.
 
 ---
 
@@ -207,7 +189,6 @@ All interface elements, including modals, notifications, and system messages, ar
 ### **Loading Performance**
 - **Initial Load**: < 2s on modern browsers
 - **Theme Switching**: < 100ms transition time
-- **Modal Animations**: 300ms smooth transitions
 - **Image Optimization**: WebP format with fallbacks
 
 ### **Responsive Performance**
@@ -218,4 +199,49 @@ All interface elements, including modals, notifications, and system messages, ar
 
 ---
 
-*Screenshots captured using automated testing tools ensuring consistent quality and accurate representation of the live application interface.*
+## 📊 Screenshot Coverage Summary
+
+**Total Screenshots: 22**
+- **Desktop Interface**: 10 screenshots (5 tabs × 2 themes)
+- **Mobile Interface**: 10 screenshots (5 tabs × 2 themes)  
+- **PWA Offline Mode**: 2 screenshots (2 themes)
+
+**Tabs Covered**: General, Network, Streaming, Advanced, DevTools  
+**Themes**: Dark and Light modes for all interfaces  
+**Platforms**: Desktop (1920×1080) and Mobile (430×932) viewports
+
+---
+
+## 🔧 Screenshot Technology
+
+**Enhanced Timing System**
+- Content fully rendered before capture
+- Font loading completion detection
+- Image loading verification
+- Animation stability checks
+- Theme transition completion
+
+**Quality Optimization**
+- 2x pixel ratio for retina-quality images
+- Theme-aware background colors
+- Viewport-optimized dimensions
+- Cross-origin resource handling
+
+**Folder Structure**
+```
+ceraui-screenshots-YYYY-MM-DD.zip
+├── screenshots/
+│   ├── desktop/
+│   │   ├── dark/          # Dark theme desktop screenshots
+│   │   └── light/         # Light theme desktop screenshots
+│   ├── mobile/
+│   │   ├── dark/          # Dark theme mobile screenshots
+│   │   └── light/         # Light theme mobile screenshots
+│   └── features/
+│       ├── offline-dark.png   # PWA offline mode (dark)
+│       └── offline-light.png  # PWA offline mode (light)
+```
+
+---
+
+*Screenshots captured using automated html-to-image tools with enhanced timing detection, ensuring consistent quality and accurate representation of the live application interface.*
