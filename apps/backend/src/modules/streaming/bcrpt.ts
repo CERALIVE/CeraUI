@@ -25,12 +25,13 @@ import {buildRelaysMsg, getRelays} from "../remote/remote-relays.ts";
 import {broadcastMsg} from "../ui/websocket-server.ts";
 import {getIsStreaming} from "./streaming.ts";
 import {getNetworkInterfaces} from "../network/network-interfaces.ts";
+import { setup } from '../setup.ts';
 
 
 let bcrpt: ChildProcess | undefined;
 let bcrptLowMtuDetected = false;
 
-const bcrptDir = '/var/run/bcrpt';
+const bcrptDir = setup.bcrpt_path ?? '/var/run/bcrpt';
 const bcrptSourceIpsFile = `${bcrptDir}/source_ips`;
 const bcrptServerIpsFile = `${bcrptDir}/server_ips`;
 const bcrptKeyFile = `${bcrptDir}/key`;

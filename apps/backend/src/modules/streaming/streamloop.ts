@@ -71,7 +71,7 @@ export const AUTOSTART_CHECK_FILE = '/tmp/belaui_restarted';
 
 export const belacoderExec = `${setup.belacoder_path ?? "/usr/bin"}/belacoder`;
 export const srtlaSendExec = `${setup.srtla_path ?? "/usr/bin"}/srtla_send`;
-export const bcrptExec = `${setup.bcrpt_exec ?? "/usr/bin"}/bcrpt`;
+export const bcrptExec = `${setup.bcrpt_path ?? "/usr/bin"}/bcrpt`;
 
 let streamingProcesses: Array<ChildProcess> = [];
 
