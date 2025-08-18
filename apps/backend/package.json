@@ -21,7 +21,7 @@
 		"typescript": "^5.8.3"
 	},
 	"scripts": {
-		"build": "cd src && bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 belaUI.ts --outfile belaUI && cd .. && run-p build:*",
+		"build": "mkdir -p ./dist && bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 src/belaUI.ts --outfile dist/belaUI && pnpm build:copy-deployment",
 		"check": "run-p check:*",
 		"check:biome": "bun x --bun @biomejs/biome check .",
 		"check:tsc": "cd src && tsc",
@@ -29,9 +29,8 @@
 		"fix": "bun x --bun @biomejs/biome check --write .",
 		"format": "bun x --bun @biomejs/biome format --write .",
 		"lint": "bun x --bun @biomejs/biome lint --write .",
-		"build:copy-server": "mkdir -p ./dist && cp ./src/belaUI ./dist/",
 		"build:copy-deployment": "mkdir -p ./dist && cp -r ./deployment/* ./dist/",
-		"clean": "rm -rf dist/ && rm -f src/belaUI && rm -rf node_modules"
+		"clean": "rm -rf dist/ && rm -rf node_modules"
 	},
 	"trustedDependencies": [
 		"@biomejs/biome"
