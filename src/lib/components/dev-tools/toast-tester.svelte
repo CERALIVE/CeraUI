@@ -29,12 +29,12 @@ import { Textarea } from '$lib/components/ui/textarea';
 let customTitle = $state($_('devtools.customTitle'));
 let customDescription = $state($_('devtools.customDescription'));
 let toastDuration = $state(4000);
-let selectedPosition = $state('bottom-right');
+let _selectedPosition = $state('bottom-right');
 
 // Update input values when locale changes
 $effect(() => {
   // Subscribe to locale changes to update default input values
-  $locale; // This creates a dependency on locale changes
+  const _currentLocale = $locale; // This creates a dependency on locale changes
 
   // Reset input values to new locale defaults if they haven't been modified by user
   if (customTitle === $_('devtools.customTitle')) {
@@ -46,7 +46,7 @@ $effect(() => {
 });
 
 // Toast positions available in Sonner
-const toastPositions = [
+const _toastPositions = [
   { value: 'top-left', label: $_('devtools.topLeft') },
   { value: 'top-center', label: $_('devtools.topCenter') },
   { value: 'top-right', label: $_('devtools.topRight') },

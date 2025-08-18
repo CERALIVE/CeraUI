@@ -136,17 +136,17 @@ CeraUI offers a comprehensive and intuitive interface with both light and dark t
 
 | **Desktop Interface** | **Mobile Experience** |
 |:---------------------:|:---------------------:|
-| ![Desktop Preview](docs/screenshots/desktop/dark-theme/general.png) | ![Mobile Preview](docs/screenshots/mobile/dark-theme/general.png) |
+| ![Desktop Preview](screenshots/desktop/dark/general.png) | ![Mobile Preview](screenshots/mobile/dark/general.png) |
 | *Full HD (1920×1080) optimized interface* | *iPhone 14 Pro Max (430×932) responsive design* |
 
 ### 🌟 Featured Highlights
 
 - **🎨 Dual Theme Support**: Professional dark mode and clean light theme
 - **📱 Responsive Design**: Seamless desktop and mobile experiences  
-- **🔧 Interactive Features**: WiFi modals, hotspot configuration, system overlays
+- **🔧 5 Core Tabs**: General, Network, Streaming, Advanced, and DevTools interfaces
 - **🌐 Internationalization**: Complete multi-language support (10+ languages)
 - **⚡ Progressive Web App**: Offline capabilities and native app-like performance
-- **🎛️ Comprehensive Management**: Network, streaming, system, and developer tools
+- **📸 22 Screenshots**: Complete visual documentation with enhanced capture timing
 
 ### 📖 Complete Documentation
 
@@ -156,7 +156,7 @@ Explore the full visual documentation with detailed interface breakdowns, featur
 
 ### Visual Documentation
 
-- **[📸 Screenshots Gallery](docs/SCREENSHOTS.md)**: Complete visual documentation showcasing CeraUI's interface across desktop and mobile platforms. Features comprehensive screenshots of all tabs, themes, interactive modals, and system demonstrations.
+- **[📸 Screenshots Gallery](docs/SCREENSHOTS.md)**: Complete visual documentation showcasing CeraUI's interface across desktop and mobile platforms. Features 22 high-quality screenshots covering all 5 tabs in both dark and light themes, plus PWA offline mode demonstrations.
 
 ### Development Tools
 

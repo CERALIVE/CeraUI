@@ -111,14 +111,7 @@ export function setupHashNavigation(
   // Debounced handler for hash changes
   let debounceTimeout: number | undefined;
   const handleHashChange = () => {
-    const currentHash = window.location.hash;
-    console.log(`[NavigationHelper] Hash change detected:`, {
-      newHash: currentHash,
-      debounceMs,
-      hasDebounceTimeout: !!debounceTimeout,
-      isUpdatingFromHash,
-      timestamp: new Date().toISOString(),
-    });
+    const _currentHash = window.location.hash;
 
     // Set flag to prevent circular updates
     isUpdatingFromHash = true;
@@ -127,12 +120,6 @@ export function setupHashNavigation(
       clearTimeout(debounceTimeout);
       debounceTimeout = window.setTimeout(() => {
         const navFromHash = getNavFromHash();
-        const navKey = Object.keys(navFromHash)[0];
-        console.log(`[NavigationHelper] Debounced hash navigation:`, {
-          hash: currentHash,
-          navigationKey: navKey,
-          timestamp: new Date().toISOString(),
-        });
         navigationStore.set(navFromHash);
         // Reset flag after store update
         setTimeout(() => {
@@ -141,12 +128,6 @@ export function setupHashNavigation(
       }, debounceMs);
     } else {
       const navFromHash = getNavFromHash();
-      const navKey = Object.keys(navFromHash)[0];
-      console.log(`[NavigationHelper] Immediate hash navigation:`, {
-        hash: currentHash,
-        navigationKey: navKey,
-        timestamp: new Date().toISOString(),
-      });
       navigationStore.set(navFromHash);
       // Reset flag after store update
       setTimeout(() => {
@@ -170,22 +151,9 @@ export function setupHashNavigation(
       const newHash = `#${navLabel}`;
       const currentHash = window.location.hash;
 
-      console.log(`[NavigationHelper] Store navigation change:`, {
-        navigationKey: navKey,
-        newHash,
-        currentHash,
-        isInitialSubscription,
-        preventInitialUpdate,
-        isUpdatingFromHash,
-        hashMatches: currentHash === newHash,
-        timestamp: new Date().toISOString(),
-      });
-
       // CRITICAL FIX: Only update hash if it's actually different
       if (currentHash !== newHash) {
         updateHash(navigation);
-      } else {
-        console.log(`[NavigationHelper] Skipping hash update - hash already matches: ${newHash}`);
       }
     }
     isInitialSubscription = false;

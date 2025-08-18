@@ -92,9 +92,13 @@ export function startStreamingWithConfig(config: ConfigMessage): void {
     window.startStreamingWithNotificationClear(config);
   } else {
     // Fallback to direct function call if global function is not available
-    import('$lib/helpers/SystemHelper').then(module => {
-      module.startStreaming(config);
-    });
+    import('$lib/helpers/SystemHelper')
+      .then(module => {
+        module.startStreaming(config);
+      })
+      .catch(error => {
+        console.error('Failed to load SystemHelper for streaming:', error);
+      });
   }
 }
 
@@ -111,9 +115,13 @@ export function stopStreaming(): void {
     window.stopStreamingWithNotificationClear();
   } else {
     // Fallback
-    import('$lib/helpers/SystemHelper').then(module => {
-      module.stopStreaming();
-    });
+    import('$lib/helpers/SystemHelper')
+      .then(module => {
+        module.stopStreaming();
+      })
+      .catch(error => {
+        console.error('Failed to load SystemHelper for stopping streaming:', error);
+      });
   }
 }
 

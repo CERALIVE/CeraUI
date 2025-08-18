@@ -71,7 +71,7 @@ $effect(() => {
 });
 
 // Enhanced tab navigation with throttling to prevent race conditions
-const handleTabNavigation = (identifier: string, navigation: any) => {
+const handleTabNavigation = (identifier: string, navigation: Record<string, unknown>) => {
   // Add additional safety checks to prevent NaN issues
   if ($isNavigationTransitioning || !navigation || !identifier) {
     console.warn('[MainNav] Navigation blocked - invalid state or transitioning');

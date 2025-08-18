@@ -62,6 +62,8 @@ const baseRules = {
       varsIgnorePattern: '^_|^\\$\\$(Props|Events|Slots)$',
       args: 'after-used',
       argsIgnorePattern: '^_',
+      caughtErrors: 'all',
+      caughtErrorsIgnorePattern: '^_',
     },
   ],
 
