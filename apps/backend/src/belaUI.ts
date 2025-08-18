@@ -24,7 +24,6 @@ import {initRTMPIngestStats} from "./modules/ingest/rtmp.ts";
 import {initSRTIngest} from "./modules/ingest/srt.ts";
 import {updateModems} from "./modules/modems/modem-update-loop.ts";
 import {UPDATE_GW_INT, updateGwWrapper} from "./modules/network/gateways.ts";
-import {initMoblinkRelays} from "./modules/network/moblink-relay.ts";
 import {initNetworkInterfaceMonitoring} from "./modules/network/network-interfaces.ts";
 import {initRemote} from "./modules/remote/remote.ts";
 import {setup} from "./modules/setup.ts";
@@ -81,8 +80,6 @@ if (setup.apt_update_enabled) {
 
 initNetworkInterfaceMonitoring();
 
-initMoblinkRelays();
-
 // check for Cam Links on USB2 at startup
 checkCamlinkUsb2();
 
@@ -105,7 +102,6 @@ process.on("SIGUSR2", function udevDeviceUpdate() {
 // make sure we didn't inherit orphan processes
 killall(["belacoder"]);
 killall(["srtla_send"]);
-killall(["moblink-rust-relay"]);
 
 initHttpServer();
 checkAutoStartStream();
