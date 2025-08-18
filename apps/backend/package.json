@@ -2,8 +2,7 @@
 	"name": "backend",
 	"type": "module",
 	"workspaces": [
-		"server",
-		"ui"
+		"server"
 	],
 	"dependencies": {},
 	"devDependencies": {
@@ -20,9 +19,8 @@
 		"lint": "bun run --bun --filter '*' lint",
 		"format": "bun run --bun --filter '*' format",
 		"build": "bun run --bun --filter '*' build && run-p build:*",
-		"build:copy-ui": "mkdir -p ./dist/public && rm -rf ./dist/public/* && cp -r ./ui/dist/* ./dist/public/",
 		"build:copy-server": "mkdir -p ./dist && cp ./server/belaUI ./dist/",
-		"clean": "rm -rf dist server/belaUI ui/dist node_modules server/node_modules ui/node_modules"
+		"clean": "rm -rf dist server/belaUI node_modules server/node_modules"
 	},
 	"trustedDependencies": [
 		"@biomejs/biome",
