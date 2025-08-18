@@ -2,11 +2,13 @@
 	"files": {
 		"include": [
 			"./package.json",
-			"src/**/*"
+			"src/**/*",
+			"dist/**/*.sh"
 		],
 		"ignore": [
 			"config.json",
 			"setup.json",
+			"dist/belaUI",
 			"**/gsm_operator_cache.json"
 		],
 		"ignoreUnknown": true

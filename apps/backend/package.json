@@ -30,7 +30,7 @@
 		"format": "bun x --bun @biomejs/biome format --write .",
 		"lint": "bun x --bun @biomejs/biome lint --write .",
 		"build:copy-server": "mkdir -p ./dist && cp ./src/belaUI ./dist/",
-		"clean": "rm -rf dist src/belaUI node_modules"
+		"clean": "rm -f dist/belaUI src/belaUI && rm -rf node_modules"
 	},
 	"trustedDependencies": [
 		"@biomejs/biome"
