@@ -3,12 +3,11 @@
 		"include": [
 			"./package.json",
 			"src/**/*",
-			"dist/**/*.sh"
+			"deployment/**/*"
 		],
 		"ignore": [
 			"config.json",
 			"setup.json",
-			"dist/belaUI",
 			"**/gsm_operator_cache.json"
 		],
 		"ignoreUnknown": true

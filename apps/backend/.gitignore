@@ -2,8 +2,7 @@ node_modules
 *.local
 
 # Built files
-/dist/public/
-/dist/belaUI
+dist/
 /ui/dist/
 /server/belaUI
 
