@@ -25,8 +25,8 @@
 		"typescript": "^5.9.2"
 	},
 	"scripts": {
-		"build": "rm -rf ../../dist/ && bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 src/belaUI.ts --outfile ../../dist/belaUI && pnpm build:copy-deployment && pnpm build:frontend",
-		"build:backend-only": "rm -rf ../../dist/belaUI ../../dist/deployment && bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 src/belaUI.ts --outfile ../../dist/belaUI && pnpm build:copy-deployment",
+		"build": "rm -rf ../../dist/ && bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 src/belaUI.ts --outfile ../../dist/belaUI && pnpm build:frontend",
+		"build:backend-only": "rm -rf ../../dist/belaUI ../../dist/deployment && bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 src/belaUI.ts --outfile ../../dist/belaUI",
 		"build:frontend": "cd ../frontend && pnpm build",
 		"check": "run-p check:*",
 		"check:biome": "bun x --bun @biomejs/biome check .",
@@ -35,7 +35,7 @@
 		"fix": "bun x --bun @biomejs/biome check --write .",
 		"format": "bun x --bun @biomejs/biome format --write .",
 		"lint": "bun x --bun @biomejs/biome lint --write .",
-		"build:copy-deployment": "cp -r ./deployment/* ../../dist/",
+
 		"clean": "rm -rf ../../dist/ && rm -rf node_modules"
 	},
 	"trustedDependencies": [

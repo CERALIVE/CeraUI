@@ -2,8 +2,7 @@
 	"files": {
 		"include": [
 			"./package.json",
-			"src/**/*",
-			"deployment/**/*"
+			"src/**/*"
 		],
 		"ignore": [
 			"config.json",
