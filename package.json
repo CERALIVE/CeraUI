@@ -1,44 +1,39 @@
 {
-  "name": "cera-workspace",
-  "private": true,
-  "version": "1.0.0",
-  "description": "Monorepo workspace containing CeraUI frontend and belaUI backend",
-  "type": "module",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/CERALIVE/CeraUI.git"
-  },
-  "author": "Andrés Cera",
-  "license": "GPL-3.0",
-  "scripts": {
-    "dev": "mprocs",
-    "dev:parallel": "pnpm --parallel --filter \"./apps/*\" run dev",
-    "build": "pnpm --filter backend run build",
-    "postbuild": "cp -r ./deployment/* ./dist/",
-    "build:frontend": "pnpm --filter frontend run build",
-    "build:backend": "pnpm --filter backend run build:backend-only",
-    "preview": "pnpm --filter frontend run preview",
-    "check": "pnpm --recursive --filter \"./apps/*\" run check",
-    "typecheck": "pnpm --recursive --filter \"./apps/*\" run check",
-    "format": "pnpm --recursive --filter \"./apps/*\" run format",
-    "format:check": "pnpm --recursive --filter \"./apps/*\" run format:check",
-    "lint": "pnpm --recursive --filter \"./apps/*\" run lint",
-    "lint:fix": "pnpm --recursive --filter \"./apps/*\" run lint:fix",
-    "lint:backend": "pnpm --filter backend run lint",
-    "lint:frontend": "pnpm --filter frontend run lint",
-    "fix": "pnpm --recursive --filter \"./apps/*\" run fix",
-    "quality": "run-p typecheck format:check lint",
-    "quality:fix": "run-p fix lint:fix",
-    "clean": "rm -rf dist/ && pnpm --recursive --filter \"./apps/*\" run clean && rm -rf node_modules",
-    "clean:all": "pnpm clean && rm -rf node_modules/.pnpm-store"
-  },
-  "devDependencies": {
-    "mprocs": "^0.7.3",
-    "npm-run-all2": "^8.0.4",
-    "prettier": "^3.6.2",
-    "typescript": "^5.9.2"
-  },
-  "volta": {
-    "node": "22.11.0"
-  }
+	"name": "cera-workspace",
+	"private": true,
+	"version": "1.0.0",
+	"description": "Monorepo workspace containing CeraUI frontend and belaUI backend",
+	"type": "module",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/CERALIVE/CeraUI.git"
+	},
+	"author": "Andrés Cera",
+	"license": "GPL-3.0",
+	"scripts": {
+		"dev": "mprocs",
+		"build": "pnpm --filter backend run build",
+		"postbuild": "cp -r ./deployment/* ./dist/",
+		"build:frontend": "pnpm --filter frontend run build",
+		"build:backend": "pnpm --filter backend run build:backend-only",
+		"preview": "pnpm --filter frontend run preview",
+		"typecheck": "pnpm --recursive --filter \"./apps/*\" run check",
+		"format:check": "biome check . && pnpm --filter backend run format:check && pnpm --filter frontend run format:check",
+		"lint": "run-p typecheck format:check lint:only",
+		"lint:fix": "run-p fix lint:only:fix",
+		"lint:only": "biome lint . && pnpm --recursive --filter \"./apps/*\" run lint",
+		"lint:only:fix": "biome lint --write . && pnpm --recursive --filter \"./apps/*\" run lint:fix",
+		"fix": "biome check --write . && pnpm --recursive --filter \"./apps/*\" run fix",
+		"clean": "rm -rf dist/ && pnpm --recursive --filter \"./apps/*\" run clean && rm -rf node_modules",
+		"clean:all": "pnpm clean && rm -rf node_modules/.pnpm-store"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.1.4",
+		"mprocs": "^0.7.3",
+		"npm-run-all2": "^8.0.4",
+		"typescript": "^5.9.2"
+	},
+	"volta": {
+		"node": "22.11.0"
+	}
 }

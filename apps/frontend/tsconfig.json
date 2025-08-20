@@ -1,20 +1,21 @@
 {
-  "compilerOptions": {
-    "esModuleInterop": true,
-    "baseUrl": ".",
-    "paths": {
-      "$lib": ["./src/lib"],
-      "$lib/*": ["./src/lib/*"],
-      "$main": ["./src/main"],
-      "$main/*": ["./src/main/*"]
-    }
-  },
-  "references": [
-    {
-      "path": "./tsconfig.app.json"
-    },
-    {
-      "path": "./tsconfig.node.json"
-    }
-  ]
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"composite": true,
+		"baseUrl": ".",
+		"paths": {
+			"$lib": ["./src/lib"],
+			"$lib/*": ["./src/lib/*"],
+			"$main": ["./src/main"],
+			"$main/*": ["./src/main/*"]
+		}
+	},
+	"references": [
+		{
+			"path": "./tsconfig.app.json"
+		},
+		{
+			"path": "./tsconfig.node.json"
+		}
+	]
 }

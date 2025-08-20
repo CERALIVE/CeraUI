@@ -3,17 +3,11 @@ import { fileURLToPath } from 'node:url';
 
 import { fixupPluginRules } from '@eslint/compat';
 import { FlatCompat } from '@eslint/eslintrc';
-import js from '@eslint/js';
 import tsEslint from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
-import eslintImport from 'eslint-plugin-import';
-import jsonc from 'eslint-plugin-jsonc';
-import promise from 'eslint-plugin-promise';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
-import unicorn from 'eslint-plugin-unicorn';
 import unusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
-import jsoncParser from 'jsonc-eslint-parser';
 import svelteParser from 'svelte-eslint-parser';
 
 // ----------------------------------------------------------------------------
@@ -24,66 +18,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const compat = new FlatCompat({
-  baseDirectory: __dirname,
-  recommendedConfig: js.configs.recommended,
-  allConfig: js.configs.all,
+	baseDirectory: __dirname,
 });
 
 const svelteModule = await import('eslint-plugin-svelte');
 const svelte = fixupPluginRules(svelteModule.default || svelteModule);
 
 // ----------------------------------------------------------------------------
-// PLUGINS
+// PLUGINS (Svelte-focused)
 // ----------------------------------------------------------------------------
 
 const plugins = {
-  import: fixupPluginRules(eslintImport),
-  '@typescript-eslint': fixupPluginRules(tsEslint),
-  'unused-imports': fixupPluginRules(unusedImports),
-  '@jsonc': fixupPluginRules(jsonc),
-  'simple-import-sort': fixupPluginRules(simpleImportSort),
-  unicorn: fixupPluginRules(unicorn),
-  promise: fixupPluginRules(promise),
-  svelte,
-};
-
-// ----------------------------------------------------------------------------
-// SHARED RULESET
-// ----------------------------------------------------------------------------
-
-const baseRules = {
-  '@typescript-eslint/no-unused-vars': 'off',
-  'no-unused-vars': 'off',
-  'unused-imports/no-unused-imports': 'error',
-  'unused-imports/no-unused-vars': [
-    'warn',
-    {
-      vars: 'all',
-      varsIgnorePattern: '^_|^\\$\\$(Props|Events|Slots)$',
-      args: 'after-used',
-      argsIgnorePattern: '^_',
-      caughtErrors: 'all',
-      caughtErrorsIgnorePattern: '^_',
-    },
-  ],
-
-  // Import organization
-  'import/first': 'error',
-  'import/newline-after-import': 'error',
-  'simple-import-sort/imports': 'error',
-  'simple-import-sort/exports': 'error',
-
-  // Promise hygiene
-  'promise/param-names': 'error',
-  'promise/no-return-wrap': 'error',
-  'promise/no-new-statics': 'error',
-  'promise/no-return-in-finally': 'warn',
-
-  // Unicorn improvements
-  'unicorn/better-regex': 'error',
-  'unicorn/error-message': 'error',
-  'unicorn/prefer-includes': 'error',
-  'unicorn/prefer-string-slice': 'error',
+	svelte,
+	'simple-import-sort': fixupPluginRules(simpleImportSort),
+	'unused-imports': fixupPluginRules(unusedImports),
+	'@typescript-eslint': fixupPluginRules(tsEslint),
 };
 
 // ----------------------------------------------------------------------------
@@ -91,131 +40,148 @@ const baseRules = {
 // ----------------------------------------------------------------------------
 
 const sharedLanguageOptions = {
-  globals: {
-    ...globals.browser,
-    ...globals.node,
-    ...globals.jest,
-    NodeJS: 'readonly',
-    __APP_VERSION__: 'readonly',
-  },
-  ecmaVersion: 2022,
-  sourceType: 'module',
+	globals: {
+		...globals.browser,
+		...globals.node,
+		NodeJS: 'readonly',
+		__APP_VERSION__: 'readonly',
+		// Svelte 5 runes (complete set)
+		$state: 'readonly',
+		$derived: 'readonly',
+		$effect: 'readonly',
+		$props: 'readonly',
+		$bindable: 'readonly',
+		$inspect: 'readonly',
+		$host: 'readonly',
+	},
+	ecmaVersion: 2024,
+	sourceType: 'module',
 };
 
 // ----------------------------------------------------------------------------
-// CONFIG SECTIONS
+// SVELTE CONFIGURATION
 // ----------------------------------------------------------------------------
-
-const globalSettings = {
-  files: ['**/*.ts', '**/*.svelte', '**/*.json'],
-  plugins,
-  languageOptions: sharedLanguageOptions,
-  settings: {
-    'import/parsers': {
-      '@typescript-eslint/parser': ['.ts', '.tsx'],
-    },
-    'import/resolver': {
-      typescript: { alwaysTryTypes: true },
-    },
-    'import/cache': true,
-    'import/ignore': ['node_modules', '\\.(css|md|svg|json)$'],
-  },
-  rules: baseRules,
-};
-
-const typescriptConfig = {
-  files: ['**/*.ts'],
-  languageOptions: {
-    parser: tsParser,
-    parserOptions: {
-      project: './tsconfig.json',
-      projectService: true,
-    },
-  },
-  rules: {
-    '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
-    '@typescript-eslint/no-explicit-any': 'warn',
-    '@typescript-eslint/explicit-module-boundary-types': 'off',
-    '@typescript-eslint/ban-ts-comment': [
-      'warn',
-      {
-        'ts-ignore': 'allow-with-description',
-        minimumDescriptionLength: 10,
-      },
-    ],
-    '@typescript-eslint/no-floating-promises': 'warn',
-  },
-};
 
 const svelteConfig = {
-  files: ['**/*.svelte'],
-  languageOptions: {
-    parser: svelteParser,
-    parserOptions: {
-      parser: tsParser,
-      extraFileExtensions: ['.svelte'],
-      jsx: true,
-    },
-  },
-  rules: {
-    ...svelte.configs.recommended.rules,
-    'svelte/valid-compile': 'warn',
-    'no-undef': 'off',
-    '@typescript-eslint/no-unsafe-member-access': 'off',
+	files: ['**/*.svelte'],
+	plugins,
+	languageOptions: {
+		...sharedLanguageOptions,
+		parser: svelteParser,
+		parserOptions: {
+			parser: tsParser,
+			extraFileExtensions: ['.svelte'],
+			jsx: true,
+			svelteFeatures: {
+				experimentalGenerics: true, // Svelte 5 feature
+			},
+		},
+	},
+	rules: {
+		// ──────────────────────────────────────────────────────────────────────
+		// Svelte Core Rules (from recommended config)
+		// ──────────────────────────────────────────────────────────────────────
+		...svelte.configs.recommended.rules,
 
-    // Svelte 5 specific adjustments
-    'svelte/no-reactive-reassign': 'off',
-    'svelte/valid-each-key': 'warn',
-    'svelte/no-at-html-tags': 'warn',
-    'svelte/no-dom-manipulating': 'warn',
-  },
-};
+		// ──────────────────────────────────────────────────────────────────────
+		// Svelte 5 Runes Mode Adjustments
+		// ──────────────────────────────────────────────────────────────────────
+		'svelte/valid-compile': 'warn',
+		'svelte/no-reactive-reassign': 'off', // Not applicable in runes mode
+		'svelte/valid-each-key': 'warn',
+		'svelte/no-at-html-tags': 'warn',
+		'svelte/no-dom-manipulating': 'warn',
 
-const jsonConfig = {
-  files: ['**/*.json'],
-  languageOptions: {
-    parser: jsoncParser,
-  },
-  rules: {
-    '@jsonc/array-bracket-spacing': ['error', 'never'],
-    '@jsonc/object-curly-spacing': ['error', 'always'],
-    '@jsonc/key-spacing': ['error', { beforeColon: false, afterColon: true }],
-  },
+		// ──────────────────────────────────────────────────────────────────────
+		// Svelte Best Practices
+		// ──────────────────────────────────────────────────────────────────────
+		'svelte/button-has-type': 'off', // Disabled - can be overly strict for component buttons
+		'svelte/no-target-blank': 'error',
+		'svelte/no-useless-mustaches': 'error',
+		'svelte/prefer-class-directive': 'error',
+		'svelte/prefer-style-directive': 'error',
+		'svelte/require-each-key': 'off', // Disabled - not always necessary for static lists
+		'svelte/shorthand-attribute': 'error',
+		'svelte/shorthand-directive': 'error',
+		'svelte/sort-attributes': 'warn',
+
+		// ──────────────────────────────────────────────────────────────────────
+		// Svelte Formatting
+		// ──────────────────────────────────────────────────────────────────────
+		'svelte/html-quotes': ['error', { prefer: 'double' }],
+		'svelte/mustache-spacing': 'error',
+		'svelte/no-spaces-around-equal-signs-in-attribute': 'error',
+
+		// ──────────────────────────────────────────────────────────────────────
+		// JavaScript/TypeScript Code Style (consistent with Biome)
+		// ──────────────────────────────────────────────────────────────────────
+
+		// Variables & Constants (enhanced for Svelte)
+		'no-unused-vars': 'off', // Disabled in favor of unused-imports plugin
+		'unused-imports/no-unused-imports': 'error',
+		'unused-imports/no-unused-vars': 'off', // Disabled - too aggressive with TypeScript type definitions
+		'@typescript-eslint/no-unused-vars': [
+			'warn',
+			{
+				vars: 'all',
+				varsIgnorePattern: '^_|^\\$\\$(Props|Events|Slots)$',
+				args: 'after-used',
+				argsIgnorePattern: '^_',
+				caughtErrors: 'all',
+				caughtErrorsIgnorePattern: '^_',
+				ignoreRestSiblings: true,
+			},
+		],
+		'no-var': 'error',
+		'prefer-const': 'off', // Disabled for Svelte - conflicts with $props() destructuring and reactivity
+		'prefer-template': 'warn',
+
+		// Code Quality
+		'no-debugger': 'error',
+		'no-console': 'warn',
+		'no-unreachable': 'error',
+		'no-duplicate-imports': 'off', // Disabled in favor of unused-imports plugin which handles this better
+		'no-useless-catch': 'error',
+
+		// Import Organization (consistent with Biome)
+		'simple-import-sort/imports': 'error',
+		'simple-import-sort/exports': 'error',
+
+		// Modern JavaScript
+		'prefer-arrow-callback': 'warn',
+		'prefer-destructuring': 'warn',
+		'object-shorthand': 'warn',
+
+		// Disable conflicts with Svelte/TypeScript
+		'no-undef': 'off', // TypeScript handles this
+	},
 };
 
 const prettierConfig = compat.extends('plugin:prettier/recommended');
 
 // ----------------------------------------------------------------------------
-// EXPORT
+// ENHANCED EXPORT (Svelte-only)
 // ----------------------------------------------------------------------------
 
 export default [
-  {
-    ignores: [
-      '**/dist',
-      '**/dev-dist',
-      '**/node_modules',
-      '**/public',
-      '**/*.d.ts',
-      '**/build',
-      '**/coverage',
-      '**/.svelte-kit',
-    ],
-  },
+	{
+		ignores: [
+			'**/dist',
+			'**/dev-dist',
+			'**/node_modules',
+			'**/public',
+			'**/*.d.ts',
+			'**/build',
+			'**/coverage',
+			'**/.svelte-kit',
+			'**/playwright-report',
+			'**/.vite',
+		],
+	},
 
-  // JS base config
-  js.configs.recommended,
+	// Prettier integration
+	...(Array.isArray(prettierConfig) ? prettierConfig : [prettierConfig]),
 
-  // TS & Svelte base rules (recommended)
-  {
-    files: ['**/*.ts', '**/*.svelte'],
-    rules: { ...tsEslint.configs.recommended.rules },
-  },
-
-  ...(Array.isArray(prettierConfig) ? prettierConfig : [prettierConfig]),
-
-  globalSettings,
-  typescriptConfig,
-  svelteConfig,
-  jsonConfig,
+	// Svelte-only configuration
+	svelteConfig,
 ];

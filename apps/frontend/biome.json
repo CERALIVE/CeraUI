@@ -7,18 +7,20 @@
 			"src/**/*.ts",
 			"src/**/*.js",
 			"src/**/*.json",
-			"!**/config.json",
-			"!**/setup.json",
-			"!**/gsm_operator_cache.json"
+			"vite.config.ts",
+			"tailwind.config.ts",
+			"pwa.config.ts",
+			"svelte.config.js",
+			"!**/*.svelte"
 		]
 	},
 	"javascript": {
-		"globals": ["Bun"]
+		"globals": ["NodeJS", "__APP_VERSION__"]
 	},
 	"linter": {
 		"rules": {
-			"correctness": {
-				"noUndeclaredVariables": "off"
+			"suspicious": {
+				"noDebugger": "warn"
 			}
 		}
 	}

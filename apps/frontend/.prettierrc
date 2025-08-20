@@ -1,10 +1,11 @@
 {
   "semi": true,
-  "trailingComma": "es5",
+  "trailingComma": "all",
   "singleQuote": true,
   "printWidth": 100,
   "tabWidth": 2,
-  "useTabs": false,
+  "useTabs": true,
+  "endOfLine": "lf",
   "plugins": ["prettier-plugin-svelte", "prettier-plugin-tailwindcss"],
   "svelteSortOrder": "options-styles-scripts-markup",
   "svelteAllowShorthand": true,

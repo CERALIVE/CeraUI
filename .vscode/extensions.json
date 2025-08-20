@@ -1,3 +1,25 @@
 {
-  "recommendations": ["svelte.svelte-vscode"]
+	"recommendations": [
+		// Primary linter and formatter for TS/JS/JSON
+		"biomejs.biome",
+
+		// Svelte development
+		"svelte.svelte-vscode",
+
+		// Required for Svelte ESLint integration (configured to only validate .svelte files)
+		"dbaeumer.vscode-eslint",
+
+		// Required for Svelte Prettier formatting (used via Svelte extension)
+		"esbenp.prettier-vscode",
+
+		// Tailwind CSS IntelliSense
+		"bradlc.vscode-tailwindcss",
+
+		// Enhanced TypeScript support
+		"ms-vscode.vscode-typescript-next"
+	],
+	"unwantedRecommendations": [
+		// We use Biome's JSON formatter instead
+		"ms-vscode.vscode-json"
+	]
 }
