@@ -57,8 +57,8 @@ const triggerClasses = $derived(
     iconPosition === 'left' ? 'flex-row-reverse' : '',
     buttonVariants({ variant: 'default' }),
     extraButtonClasses,
-    buttonClasses,
-  ),
+    buttonClasses
+  )
 );
 
 const overlayClasses =
@@ -76,8 +76,8 @@ const contentClasses = $derived(
     'data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]',
     'data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
     'duration-200',
-    className,
-  ),
+    className
+  )
 );
 
 const headerClasses = 'flex-1 overflow-y-auto space-y-3 p-6 pb-4';
@@ -92,7 +92,7 @@ const cancelButtonClasses = cn(
   'hover:bg-accent hover:text-accent-foreground',
   'transition-all duration-200',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-  'disabled:pointer-events-none disabled:opacity-50',
+  'disabled:pointer-events-none disabled:opacity-50'
 );
 
 const confirmButtonClasses = $derived(
@@ -103,8 +103,8 @@ const confirmButtonClasses = $derived(
     'transition-all duration-200',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
     'disabled:pointer-events-none disabled:opacity-50',
-    disabledConfirmButton ? 'cursor-not-allowed' : 'cursor-pointer',
-  ),
+    disabledConfirmButton ? 'cursor-not-allowed' : 'cursor-pointer'
+  )
 );
 </script>
 
@@ -153,7 +153,8 @@ const confirmButtonClasses = $derived(
           onclick={() => {
             onconfirm?.();
             setTimeout(() => (open = false), 20);
-          }}>
+          }}
+        >
           {confirmButtonText ?? $_('dialog.continue')}
         </AlertDialog.Action>
       </AlertDialog.Footer>

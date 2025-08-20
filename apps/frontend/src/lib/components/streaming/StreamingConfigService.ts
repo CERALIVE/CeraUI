@@ -21,7 +21,10 @@ export interface ConfigServiceOptions {
   unparsedPipelines: PipelinesMessage | undefined;
 }
 
-export function buildStreamingConfig(properties: Properties, options: ConfigServiceOptions): ConfigMessage | null {
+export function buildStreamingConfig(
+  properties: Properties,
+  options: ConfigServiceOptions
+): ConfigMessage | null {
   const { unparsedPipelines } = options;
   let config: ConfigMessage = {};
 
@@ -47,7 +50,10 @@ export function buildStreamingConfig(properties: Properties, options: ConfigServ
   if (pipelineData.acodec && properties.audioCodec) {
     config.acodec = properties.audioCodec;
   }
-  if ((properties.relayServer == '-1' || properties.relayServer === undefined) && properties.srtlaServerAddress) {
+  if (
+    (properties.relayServer == '-1' || properties.relayServer === undefined) &&
+    properties.srtlaServerAddress
+  ) {
     config.srtla_addr = properties.srtlaServerAddress;
     if (properties.srtlaServerPort !== undefined) {
       config.srtla_port = properties.srtlaServerPort;
@@ -93,10 +99,10 @@ export function startStreamingWithConfig(config: ConfigMessage): void {
   } else {
     // Fallback to direct function call if global function is not available
     import('$lib/helpers/SystemHelper')
-      .then(module => {
+      .then((module) => {
         module.startStreaming(config);
       })
-      .catch(error => {
+      .catch((error) => {
         console.error('Failed to load SystemHelper for streaming:', error);
       });
   }
@@ -116,10 +122,10 @@ export function stopStreaming(): void {
   } else {
     // Fallback
     import('$lib/helpers/SystemHelper')
-      .then(module => {
+      .then((module) => {
         module.stopStreaming();
       })
-      .catch(error => {
+      .catch((error) => {
         console.error('Failed to load SystemHelper for stopping streaming:', error);
       });
   }

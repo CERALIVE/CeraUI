@@ -34,11 +34,11 @@
 		"dev": "bun run src/belaUI.ts",
 		"fix": "bun x --bun @biomejs/biome check --write .",
 		"format": "bun x --bun @biomejs/biome format --write .",
-		"lint": "bun x --bun @biomejs/biome lint --write .",
+		"format:check": "bun x --bun @biomejs/biome format .",
+		"lint": "bun x --bun @biomejs/biome lint .",
+		"lint:fix": "bun x --bun @biomejs/biome lint --write .",
 
 		"clean": "rm -rf ../../dist/ && rm -rf node_modules"
 	},
-	"trustedDependencies": [
-		"@biomejs/biome"
-	]
+	"trustedDependencies": ["@biomejs/biome"]
 }

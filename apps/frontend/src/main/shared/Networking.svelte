@@ -29,7 +29,12 @@ NetifMessages.subscribe((networks: NetifMessage) => {
 });
 
 // Helper functions for better network categorization and display
-function getNetworkIcon(name: string, enabled: boolean, hasError: boolean, isHotspot: boolean = false) {
+function getNetworkIcon(
+  name: string,
+  enabled: boolean,
+  hasError: boolean,
+  isHotspot: boolean = false
+) {
   if (hasError && !isHotspot) return AlertCircle;
   if (name.startsWith('ww')) return Signal; // Modem/cellular
   if (name.startsWith('wl')) return Wifi; // WiFi
@@ -112,8 +117,9 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
             'bg-card flex h-full flex-col rounded-lg border transition-colors duration-200',
             network.enabled ? 'border-green-200 dark:border-green-800' : 'border-border',
             isHotspot && !network.enabled ? 'border-blue-200 dark:border-blue-800' : '',
-            hasRealError ? 'border-red-200 dark:border-red-800' : '',
-          )}>
+            hasRealError ? 'border-red-200 dark:border-red-800' : ''
+          )}
+        >
           <!-- Status Bar at Top -->
           <div
             class={cn(
@@ -124,9 +130,9 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
                   ? 'bg-blue-500'
                   : hasRealError
                     ? 'bg-red-500'
-                    : 'bg-gray-300 dark:bg-gray-700',
-            )}>
-          </div>
+                    : 'bg-gray-300 dark:bg-gray-700'
+            )}
+          ></div>
 
           <div class="flex flex-1 flex-col p-4">
             <!-- Header: Icon + Name + Status -->
@@ -142,8 +148,9 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
                         ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
                         : hasRealError
                           ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-                          : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-                  )}>
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                  )}
+                >
                   <Icon class="h-4 w-4" />
                 </div>
 
@@ -166,8 +173,9 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
                       ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                       : hasRealError
                         ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                        : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-                )}>
+                        : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                )}
+              >
                 {network.enabled
                   ? $_('network.status.active')
                   : isHotspot
@@ -206,18 +214,15 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
               {#if !isHotspot}
                 <div class="flex justify-end">
                   <Toggle
-                    variant="outline"
-                    size="sm"
                     class={cn(
                       'h-auto px-3 py-1.5 transition-colors',
                       network.enabled
                         ? 'data-[state=on]:border-green-600 data-[state=on]:bg-green-600 data-[state=on]:text-white'
                         : '',
-                      hasRealError ? 'cursor-not-allowed opacity-50' : '',
+                      hasRealError ? 'cursor-not-allowed opacity-50' : ''
                     )}
                     disabled={hasRealError}
-                    bind:pressed={network.enabled}
-                    onPressedChange={async value => {
+                    onPressedChange={async (value) => {
                       try {
                         await setNetif(name, network.ip, value);
                       } catch (error) {
@@ -225,7 +230,11 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
                         // Revert the toggle state on error
                         network.enabled = !value;
                       }
-                    }}>
+                    }}
+                    size="sm"
+                    variant="outline"
+                    bind:pressed={network.enabled}
+                  >
                     {#if network.enabled}
                       <Check class="mr-1 h-3 w-3" />
                       {$_('network.status.active')}
@@ -240,7 +249,8 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
               <!-- Error Message -->
               {#if hasRealError}
                 <div
-                  class="flex items-center gap-2 rounded-md bg-red-100 p-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                  class="flex items-center gap-2 rounded-md bg-red-100 p-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                >
                   <AlertCircle class="h-4 w-4 flex-shrink-0" />
                   <span>{$_('network.errors.networkConnectionError')}</span>
                 </div>
@@ -253,16 +263,23 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 
     <!-- Summary Footer -->
     <div class="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-      <div class="text-muted-foreground flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:gap-4">
+      <div
+        class="text-muted-foreground flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:gap-4"
+      >
         <span
           >{$_('network.summary.activeNetworks', {
-            values: { active: getUsedNetworks(currentNetwoks).length, total: Object.keys(currentNetwoks).length },
-          })}</span>
+            values: {
+              active: getUsedNetworks(currentNetwoks).length,
+              total: Object.keys(currentNetwoks).length,
+            },
+          })}</span
+        >
         <span class="hidden sm:inline">•</span>
         <span>{getAvailableNetworks(currentNetwoks).length} {$_('network.summary.available')}</span>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-muted-foreground text-sm">{$_('network.summary.availableBandwidth')}</span>
+        <span class="text-muted-foreground text-sm">{$_('network.summary.availableBandwidth')}</span
+        >
         <span class={cn('font-mono text-lg font-bold', getBandwidthColor(totalBandwith))}>
           {$_('network.summary.totalBandwidth', { values: { total: totalBandwith } })}
         </span>

@@ -6,4 +6,8 @@ import { cn } from '$lib/utils.js';
 let { ref = $bindable(null), class: className, ...restProps }: SheetPrimitive.TitleProps = $props();
 </script>
 
-<SheetPrimitive.Title bind:ref class={cn('text-foreground text-lg font-semibold', className)} {...restProps} />
+<SheetPrimitive.Title
+  class={cn('text-foreground text-lg font-semibold', className)}
+  bind:ref
+  {...restProps}
+/>

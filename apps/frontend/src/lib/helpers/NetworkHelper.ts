@@ -48,14 +48,14 @@ export const networkRename = (name: string) => {
 
 export const getModemNetworkName = (name: string) => {
   const { modems } = get(StatusMessages);
-  const modem = Object.values(modems).find(modem => modem.ifname === name);
+  const modem = Object.values(modems).find((modem) => modem.ifname === name);
   return modem?.status.network + ' (' + modem?.status.network_type + ')';
 };
 
 export const renameSupportedModemNetwork = (item: string): string => {
   // Extract individual components like "3g2g" -> ["3G", "2G"]
   return item
-    .replace(/(\d+g)/gi, match => match.toUpperCase())
+    .replace(/(\d+g)/gi, (match) => match.toUpperCase())
     .split(/(?<=G)(?=\d)/)
     .join(' / ');
 };
@@ -63,7 +63,7 @@ export const renameSupportedModemNetwork = (item: string): string => {
 export const getAvailableNetworks = (message?: NetifMessage) => {
   if (message) {
     {
-      return Object.values(message).filter(network => !network.error);
+      return Object.values(message).filter((network) => !network.error);
     }
   }
   return [];
@@ -72,7 +72,7 @@ export const getAvailableNetworks = (message?: NetifMessage) => {
 export const getUsedNetworks = (message?: NetifMessage) => {
   if (message) {
     {
-      return Object.values(message).filter(network => !network.error && network.enabled);
+      return Object.values(message).filter((network) => !network.error && network.enabled);
     }
   }
   return [];
@@ -81,7 +81,7 @@ export const getUsedNetworks = (message?: NetifMessage) => {
 export const getTotalBandwidth = (message?: NetifMessage) => {
   if (message) {
     let bandwith = 0;
-    Object.values(message).forEach(network => {
+    Object.values(message).forEach((network) => {
       bandwith += convertBytesToKbids(network?.tp ?? 0);
     });
 
@@ -101,7 +101,7 @@ export const getWifiStatus = (wifiNetWork: StatusMessage['wifi'][keyof StatusMes
 
 export const getConnection = (wifiNetwork: StatusMessage['wifi'][keyof StatusMessage['wifi']]) => {
   if (wifiNetwork.conn && wifiNetwork.available) {
-    return wifiNetwork.available.filter(available => available.active)[0];
+    return wifiNetwork.available.filter((available) => available.active)[0];
   } else return undefined;
 };
 
@@ -134,7 +134,11 @@ export const changeHotspotSettings = ({
   channel: string;
 }) => {
   console.log(channel);
-  socket.send(JSON.stringify({ wifi: { hotspot: { config: { device: `${deviceId}`, name, password, channel } } } }));
+  socket.send(
+    JSON.stringify({
+      wifi: { hotspot: { config: { device: `${deviceId}`, name, password, channel } } },
+    })
+  );
 };
 export const changeModemSettings = ({
   network_type,
@@ -169,7 +173,7 @@ export const changeModemSettings = ({
           device: `${device}`,
         },
       },
-    }),
+    })
   );
 };
 
@@ -187,22 +191,32 @@ export const scanWifi = (deviceId: number | string, notification = true) => {
   socket.send(JSON.stringify({ wifi: { scan: `${deviceId}` } }));
 };
 
-export const disconnectWifi = (uuid: string, wifi: ValueOf<StatusMessage['wifi']>['available'][number]) => {
+export const disconnectWifi = (
+  uuid: string,
+  wifi: ValueOf<StatusMessage['wifi']>['available'][number]
+) => {
   toast.warning(get(_)('networkHelper.toast.disconnectingWifi'), {
-    description: get(_)('networkHelper.toast.disconnectingWifiDescription', { values: { ssid: wifi.ssid } }),
+    description: get(_)('networkHelper.toast.disconnectingWifiDescription', {
+      values: { ssid: wifi.ssid },
+    }),
   });
   socket.send(
     JSON.stringify({
       wifi: {
         disconnect: uuid,
       },
-    }),
+    })
   );
 };
 
-export const connectWifi = (uuid: string, wifi: ValueOf<StatusMessage['wifi']>['available'][number]) => {
+export const connectWifi = (
+  uuid: string,
+  wifi: ValueOf<StatusMessage['wifi']>['available'][number]
+) => {
   toast.info(get(_)('networkHelper.toast.connectingWifi'), {
-    description: get(_)('networkHelper.toast.connectingWifiDescription', { values: { ssid: wifi.ssid } }),
+    description: get(_)('networkHelper.toast.connectingWifiDescription', {
+      values: { ssid: wifi.ssid },
+    }),
     duration: 12000,
   });
   socket.send(
@@ -210,7 +224,7 @@ export const connectWifi = (uuid: string, wifi: ValueOf<StatusMessage['wifi']>['
       wifi: {
         connect: uuid,
       },
-    }),
+    })
   );
 };
 
@@ -228,13 +242,18 @@ export const connectToNewWifi = (deviceId: string | number, ssid: string, passwo
           password: `${password}`,
         },
       },
-    }),
+    })
   );
 };
 
-export const forgetWifi = (uuid: string, wifi: ValueOf<StatusMessage['wifi']>['available'][number]) => {
+export const forgetWifi = (
+  uuid: string,
+  wifi: ValueOf<StatusMessage['wifi']>['available'][number]
+) => {
   toast.info(get(_)('networkHelper.toast.wifiNetworkForgotten'), {
-    description: get(_)('networkHelper.toast.wifiNetworkForgottenDescription', { values: { ssid: wifi.ssid } }),
+    description: get(_)('networkHelper.toast.wifiNetworkForgottenDescription', {
+      values: { ssid: wifi.ssid },
+    }),
   });
 
   socket.send(
@@ -242,15 +261,15 @@ export const forgetWifi = (uuid: string, wifi: ValueOf<StatusMessage['wifi']>['a
       wifi: {
         forget: uuid,
       },
-    }),
+    })
   );
 };
 
 export const getWifiUUID = (
   wifiNetwork: ValueOf<StatusMessage['wifi']>['available'][number],
-  saved: ValueOf<StatusMessage['wifi']>['saved'],
+  saved: ValueOf<StatusMessage['wifi']>['saved']
 ) => {
-  const found = Object.keys(saved).find(value => {
+  const found = Object.keys(saved).find((value) => {
     return wifiNetwork.ssid === value;
   });
   if (found) {
@@ -262,7 +281,7 @@ export const getWifiUUID = (
 export async function generateWifiQr(
   ssid: string,
   password: string,
-  encryption: WifiSecurity = 'WPA',
+  encryption: WifiSecurity = 'WPA'
 ): Promise<string> {
   if (!ssid) throw new Error('SSID is required');
 

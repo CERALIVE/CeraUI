@@ -16,7 +16,12 @@ import * as Card from '$lib/components/ui/card';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
 import { getUsedNetworks } from '$lib/helpers/NetworkHelper';
 import { installSoftwareUpdates } from '$lib/helpers/SystemHelper';
-import { ConfigMessages, NetifMessages, SensorsStatusMessages, StatusMessages } from '$lib/stores/websocket-store';
+import {
+  ConfigMessages,
+  NetifMessages,
+  SensorsStatusMessages,
+  StatusMessages,
+} from '$lib/stores/websocket-store';
 import type { ConfigMessage, NetifMessage, StatusMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
@@ -31,21 +36,24 @@ NetifMessages.subscribe((networks: NetifMessage) => {
   currentNetworks = networks;
 });
 
-ConfigMessages.subscribe(config => {
+ConfigMessages.subscribe((config) => {
   currentConfig = config;
 });
 
-SensorsStatusMessages.subscribe(sensorData => {
+SensorsStatusMessages.subscribe((sensorData) => {
   if (sensorData) {
     sensors = Object.entries(sensorData);
   }
 });
 
-StatusMessages.subscribe(status => {
+StatusMessages.subscribe((status) => {
   currentStatus = status;
 });
 
-function formatConfigValue(value: string | number | undefined, fallback: string = $_('general.notConfigured')) {
+function formatConfigValue(
+  value: string | number | undefined,
+  fallback: string = $_('general.notConfigured')
+) {
   if (value === undefined || value === null || value === '') {
     return fallback;
   }
@@ -77,7 +85,9 @@ function getStatusIcon(isStreaming: boolean) {
           {/if}
         </Card.Header>
         <Card.Content>
-          <div class={cn(getStatusColor(currentStatus?.is_streaming ?? false) + ' text-2xl font-bold')}>
+          <div
+            class={cn(`${getStatusColor(currentStatus?.is_streaming ?? false)} text-2xl font-bold`)}
+          >
             {currentStatus?.is_streaming ? $_('general.streaming') : $_('general.offline')}
           </div>
           {#if currentNetworks && currentStatus?.is_streaming}
@@ -99,9 +109,9 @@ function getStatusIcon(isStreaming: boolean) {
         <div
           class={cn(
             'absolute bottom-0 left-0 h-1 w-full',
-            currentStatus?.is_streaming ? 'bg-green-500' : 'bg-amber-500',
-          )}>
-        </div>
+            currentStatus?.is_streaming ? 'bg-green-500' : 'bg-amber-500'
+          )}
+        ></div>
       </Card.Root>
 
       <!-- Server Configuration Status -->
@@ -125,8 +135,11 @@ function getStatusIcon(isStreaming: boolean) {
           </p>
         </Card.Content>
         <div
-          class={cn('absolute bottom-0 left-0 h-1 w-full', currentConfig?.srtla_addr ? 'bg-green-500' : 'bg-gray-300')}>
-        </div>
+          class={cn(
+            'absolute bottom-0 left-0 h-1 w-full',
+            currentConfig?.srtla_addr ? 'bg-green-500' : 'bg-gray-300'
+          )}
+        ></div>
       </Card.Root>
 
       <!-- System Updates -->
@@ -142,7 +155,9 @@ function getStatusIcon(isStreaming: boolean) {
                 {$_('general.noUpdatesAvailable')}
               {:else}
                 {currentStatus?.available_updates?.package_count}
-                {currentStatus?.available_updates?.package_count === 1 ? $_('general.package') : $_('general.packages')}
+                {currentStatus?.available_updates?.package_count === 1
+                  ? $_('general.package')
+                  : $_('general.packages')}
               {/if}
             </div>
             <p class="text-muted-foreground mt-1 text-xs">
@@ -153,8 +168,9 @@ function getStatusIcon(isStreaming: boolean) {
             <SimpleAlertDialog
               buttonText={$_('general.updateButton')}
               confirmButtonText={$_('general.updateButton')}
+              extraButtonClasses="ml-4 shrink-0"
               onconfirm={installSoftwareUpdates}
-              extraButtonClasses="ml-4 shrink-0">
+            >
               {#snippet dialogTitle()}
                 {$_('general.areYouSure')}
               {/snippet}
@@ -167,9 +183,11 @@ function getStatusIcon(isStreaming: boolean) {
         <div
           class={cn(
             'absolute bottom-0 left-0 h-1 w-full',
-            (currentStatus?.available_updates?.package_count ?? 0) > 0 ? 'bg-amber-500' : 'bg-green-500',
-          )}>
-        </div>
+            (currentStatus?.available_updates?.package_count ?? 0) > 0
+              ? 'bg-amber-500'
+              : 'bg-green-500'
+          )}
+        ></div>
       </Card.Root>
     </div>
     <!-- Main Dashboard Content -->
@@ -196,18 +214,22 @@ function getStatusIcon(isStreaming: boolean) {
                   <div class="space-y-3 pl-6">
                     <div class="flex items-center justify-between">
                       <span class="text-muted-foreground text-sm">{$_('general.relayServer')}</span>
-                      <span class="font-mono text-sm">{formatConfigValue(currentConfig.srtla_addr, '—')}</span>
+                      <span class="font-mono text-sm"
+                        >{formatConfigValue(currentConfig.srtla_addr, '—')}</span
+                      >
                     </div>
                     <div class="flex items-center justify-between">
                       <span class="text-muted-foreground text-sm">{$_('general.port')}</span>
-                      <span class="font-mono text-sm">{formatConfigValue(currentConfig.srtla_port, '—')}</span>
+                      <span class="font-mono text-sm"
+                        >{formatConfigValue(currentConfig.srtla_port, '—')}</span
+                      >
                     </div>
                     <div class="flex items-center justify-between">
                       <span class="text-muted-foreground text-sm">{$_('general.latency')}</span>
                       <span class="font-mono text-sm">
                         {formatConfigValue(
                           currentConfig.srt_latency ? `${currentConfig.srt_latency}ms` : undefined,
-                          '—',
+                          '—'
                         )}
                       </span>
                     </div>
@@ -223,16 +245,23 @@ function getStatusIcon(isStreaming: boolean) {
                     <div class="flex items-center justify-between">
                       <span class="text-muted-foreground text-sm">{$_('general.maxBitrate')}</span>
                       <span class="font-mono text-sm">
-                        {formatConfigValue(currentConfig.max_br ? `${currentConfig.max_br} Kbps` : undefined, '—')}
+                        {formatConfigValue(
+                          currentConfig.max_br ? `${currentConfig.max_br} Kbps` : undefined,
+                          '—'
+                        )}
                       </span>
                     </div>
                     <div class="flex items-center justify-between">
                       <span class="text-muted-foreground text-sm">{$_('general.audioDevice')}</span>
-                      <span class="font-mono text-sm">{formatConfigValue(currentConfig.asrc, '—')}</span>
+                      <span class="font-mono text-sm"
+                        >{formatConfigValue(currentConfig.asrc, '—')}</span
+                      >
                     </div>
                     <div class="flex items-center justify-between">
                       <span class="text-muted-foreground text-sm">{$_('general.audioCodec')}</span>
-                      <span class="font-mono text-sm uppercase">{formatConfigValue(currentConfig.acodec, '—')}</span>
+                      <span class="font-mono text-sm uppercase"
+                        >{formatConfigValue(currentConfig.acodec, '—')}</span
+                      >
                     </div>
                   </div>
                 </div>
@@ -257,9 +286,11 @@ function getStatusIcon(isStreaming: boolean) {
       <!-- System Health Sidebar -->
       <div class="space-y-6 xl:col-span-2">
         <!-- Hardware Sensors -->
-        {#if sensors.some(([name]) => name.toLowerCase().includes('soc') || name.toLowerCase().includes('temp') || name
+        {#if sensors.some(([name]) => name.toLowerCase().includes('soc') || name
               .toLowerCase()
-              .includes('current') || name.toLowerCase().includes('voltage'))}
+              .includes('temp') || name.toLowerCase().includes('current') || name
+              .toLowerCase()
+              .includes('voltage'))}
           <Card.Root>
             <Card.Header>
               <Card.Title class="flex items-center gap-2">
@@ -276,7 +307,9 @@ function getStatusIcon(isStreaming: boolean) {
                       .includes('voltage')) as [sensorName, sensorValue]}
                   <div class="bg-card space-y-2 rounded-lg border p-3">
                     <div class="flex items-center justify-between">
-                      <span class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                      <span
+                        class="text-muted-foreground text-xs font-medium tracking-wide uppercase"
+                      >
                         {sensorName}
                       </span>
                       <Activity class="text-muted-foreground h-3 w-3" />
@@ -290,7 +323,9 @@ function getStatusIcon(isStreaming: boolean) {
         {/if}
 
         <!-- Stream Performance -->
-        {#if sensors.some(([name]) => name.toLowerCase().includes('srt') || name.toLowerCase().includes('rtmp'))}
+        {#if sensors.some(([name]) => name.toLowerCase().includes('srt') || name
+              .toLowerCase()
+              .includes('rtmp'))}
           <Card.Root>
             <Card.Header>
               <Card.Title class="flex items-center gap-2">
@@ -303,7 +338,9 @@ function getStatusIcon(isStreaming: boolean) {
                 {#each sensors.filter(([name]) => name.toLowerCase().includes('srt') || name
                       .toLowerCase()
                       .includes('rtmp')) as [sensorName, sensorValue]}
-                  <div class="border-border/50 flex items-center justify-between border-b py-2 last:border-0">
+                  <div
+                    class="border-border/50 flex items-center justify-between border-b py-2 last:border-0"
+                  >
                     <div class="space-y-1">
                       <span class="text-sm font-medium">{sensorName}</span>
                       <div class="text-muted-foreground text-xs">{$_('general.liveMetrics')}</div>

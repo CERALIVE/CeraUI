@@ -27,7 +27,7 @@ import { CLIENT_VERSION } from '$lib/stores/version-manager';
 import { existingLocales } from '../../../i18n';
 
 // Real environment data using runes
-let performanceData = $state({
+const performanceData = $state({
   loadTime: 0,
   memory: 0,
   timing: null as PerformanceNavigationTiming | null,
@@ -80,7 +80,7 @@ let buildInfo = $state({
 // Update system information
 function updateSystemInfo() {
   // Browser detection
-  const userAgent = navigator.userAgent;
+  const { userAgent } = navigator;
   let browser = $_('devtools.unknown');
   let version = '';
 
@@ -144,15 +144,15 @@ const languageFlags: Record<string, string> = {
 // Update locale information using app's i18n system
 function updateLocaleInfo() {
   // Get current locale value first
-  const unsubscribe = locale.subscribe(currentLocale => {
-    const currentLocaleData = existingLocales.find(l => l.code === currentLocale);
+  const unsubscribe = locale.subscribe((currentLocale) => {
+    const currentLocaleData = existingLocales.find((l) => l.code === currentLocale);
 
     localeInfo = {
       currentLocale: currentLocale || 'en',
       currentLanguageName: currentLocaleData?.name || 'English',
       currentLanguageFlag: languageFlags[currentLocale || 'en'] || '🌐',
       browserLanguage: navigator.language,
-      supportedLocales: existingLocales.map(l => ({
+      supportedLocales: existingLocales.map((l) => ({
         code: l.code,
         name: l.name,
         flag: languageFlags[l.code] || '🌐',
@@ -262,7 +262,7 @@ function _formatBytes(bytes: number): string {
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 // Format milliseconds
@@ -274,12 +274,14 @@ function formatMs(ms: number): string {
 // Handle language switching from Dev Tools
 function handleLanguageClick(languageCode: string) {
   locale.set(languageCode);
-  localeStore.set(existingLocales.find(l => l.code === languageCode)!);
+  localeStore.set(existingLocales.find((l) => l.code === languageCode)!);
 }
 </script>
 
 <!-- Environment Information Card -->
-<Card.Root class="border-dashed border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-950/20">
+<Card.Root
+  class="border-dashed border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-950/20"
+>
   <Card.Header>
     <Card.Title class="flex items-center gap-2 text-purple-700 dark:text-purple-300">
       <Code class="h-5 w-5" />
@@ -308,7 +310,11 @@ function handleLanguageClick(languageCode: string) {
         </div>
         <div class="bg-background/50 rounded-lg border p-3">
           <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.devMode')}</div>
-          <div class="font-mono text-sm font-medium {buildInfo.dev ? 'text-green-600' : 'text-red-600'}">
+          <div
+            class="font-mono text-sm font-medium {buildInfo.dev
+              ? 'text-green-600'
+              : 'text-red-600'}"
+          >
             {buildInfo.dev ? $_('devtools.yes') : $_('devtools.no')}
           </div>
         </div>
@@ -350,13 +356,21 @@ function handleLanguageClick(languageCode: string) {
         </div>
         <div class="bg-background/50 rounded-lg border p-3">
           <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.onlineStatus')}</div>
-          <div class="font-mono text-sm font-medium {systemInfo.onLine ? 'text-green-600' : 'text-red-600'}">
+          <div
+            class="font-mono text-sm font-medium {systemInfo.onLine
+              ? 'text-green-600'
+              : 'text-red-600'}"
+          >
             {systemInfo.onLine ? $_('devtools.online') : $_('devtools.offline')}
           </div>
         </div>
         <div class="bg-background/50 rounded-lg border p-3">
           <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.cookies')}</div>
-          <div class="font-mono text-sm font-medium {systemInfo.cookieEnabled ? 'text-green-600' : 'text-red-600'}">
+          <div
+            class="font-mono text-sm font-medium {systemInfo.cookieEnabled
+              ? 'text-green-600'
+              : 'text-red-600'}"
+          >
             {systemInfo.cookieEnabled ? $_('devtools.enabled') : $_('devtools.disabled')}
           </div>
         </div>
@@ -379,7 +393,9 @@ function handleLanguageClick(languageCode: string) {
           <div class="flex items-center gap-2 text-sm font-medium">
             <span class="text-lg">{localeInfo.currentLanguageFlag}</span>
             {localeInfo.currentLanguageName}
-            <span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-xs">{$_('devtools.active')}</span>
+            <span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-xs"
+              >{$_('devtools.active')}</span
+            >
           </div>
         </div>
         <div class="bg-background/50 rounded-lg border p-3">
@@ -388,11 +404,15 @@ function handleLanguageClick(languageCode: string) {
         </div>
         <div class="bg-background/50 rounded-lg border p-3">
           <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.browserLanguage')}</div>
-          <div class="font-mono text-sm font-medium text-gray-600">{localeInfo.browserLanguage}</div>
+          <div class="font-mono text-sm font-medium text-gray-600">
+            {localeInfo.browserLanguage}
+          </div>
         </div>
         <div class="bg-background/50 rounded-lg border p-3 md:col-span-3">
           <div class="text-muted-foreground mb-2 text-xs">
-            {$_('devtools.supportedLanguagesClick', { values: { count: localeInfo.supportedLocales.length } })}
+            {$_('devtools.supportedLanguagesClick', {
+              values: { count: localeInfo.supportedLocales.length },
+            })}
           </div>
           <div class="flex flex-wrap gap-1">
             {#each localeInfo.supportedLocales as supportedLocale}
@@ -403,7 +423,8 @@ function handleLanguageClick(languageCode: string) {
                   : 'hover:bg-primary/5 hover:border-primary/20'}"
                 onclick={() => handleLanguageClick(supportedLocale.code)}
                 title="Switch to {supportedLocale.name}"
-                type="button">
+                type="button"
+              >
                 <span class="text-base">{supportedLocale.flag || '🌐'}</span>
                 <span class="font-medium">{supportedLocale.code.toUpperCase()}</span>
               </button>
@@ -427,7 +448,8 @@ function handleLanguageClick(languageCode: string) {
               ? 'text-green-600'
               : performanceData.loadTime < 3000
                 ? 'text-amber-600'
-                : 'text-red-600'}">
+                : 'text-red-600'}"
+          >
             {formatMs(performanceData.loadTime)}
           </div>
         </div>
@@ -438,7 +460,8 @@ function handleLanguageClick(languageCode: string) {
               ? 'text-green-600'
               : performanceData.memory < 100
                 ? 'text-amber-600'
-                : 'text-red-600'}">
+                : 'text-red-600'}"
+          >
             {performanceData.memory}MB
           </div>
         </div>
@@ -470,7 +493,11 @@ function handleLanguageClick(languageCode: string) {
         </div>
         <div class="bg-background/50 rounded-lg border p-3">
           <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.reducedMotion')}</div>
-          <div class="font-mono text-sm font-medium {windowInfo.reducedMotion ? 'text-amber-600' : 'text-green-600'}">
+          <div
+            class="font-mono text-sm font-medium {windowInfo.reducedMotion
+              ? 'text-amber-600'
+              : 'text-green-600'}"
+          >
             {windowInfo.reducedMotion ? $_('devtools.enabled') : $_('devtools.disabled')}
           </div>
         </div>
@@ -478,9 +505,12 @@ function handleLanguageClick(languageCode: string) {
           <div class="text-muted-foreground mb-1 text-xs">{$_('devtools.browserLanguages')}</div>
           <div
             class="truncate font-mono text-xs font-medium"
-            title={navigator.languages ? navigator.languages.join(', ') : navigator.language}>
+            title={navigator.languages ? navigator.languages.join(', ') : navigator.language}
+          >
             {navigator.languages ? navigator.languages.slice(0, 2).join(', ') : navigator.language}
-            {navigator.languages && navigator.languages.length > 2 ? `... (+${navigator.languages.length - 2})` : ''}
+            {navigator.languages && navigator.languages.length > 2
+              ? `... (+${navigator.languages.length - 2})`
+              : ''}
           </div>
         </div>
       </div>
@@ -528,45 +558,58 @@ function handleLanguageClick(languageCode: string) {
           <div class="bg-background/50 rounded border p-2">
             <div class="text-muted-foreground mb-1">{$_('devtools.dnsLookup')}</div>
             <div class="font-mono">
-              {Math.round(performanceData.timing.domainLookupEnd - performanceData.timing.domainLookupStart)}ms
+              {Math.round(
+                performanceData.timing.domainLookupEnd - performanceData.timing.domainLookupStart
+              )}ms
             </div>
           </div>
           <div class="bg-background/50 rounded border p-2">
             <div class="text-muted-foreground mb-1">{$_('devtools.connect')}</div>
             <div class="font-mono">
-              {Math.round(performanceData.timing.connectEnd - performanceData.timing.connectStart)}ms
+              {Math.round(
+                performanceData.timing.connectEnd - performanceData.timing.connectStart
+              )}ms
             </div>
           </div>
           <div class="bg-background/50 rounded border p-2">
             <div class="text-muted-foreground mb-1">{$_('devtools.request')}</div>
             <div class="font-mono">
-              {Math.round(performanceData.timing.responseStart - performanceData.timing.requestStart)}ms
+              {Math.round(
+                performanceData.timing.responseStart - performanceData.timing.requestStart
+              )}ms
             </div>
           </div>
           <div class="bg-background/50 rounded border p-2">
             <div class="text-muted-foreground mb-1">{$_('devtools.response')}</div>
             <div class="font-mono">
-              {Math.round(performanceData.timing.responseEnd - performanceData.timing.responseStart)}ms
+              {Math.round(
+                performanceData.timing.responseEnd - performanceData.timing.responseStart
+              )}ms
             </div>
           </div>
           <div class="bg-background/50 rounded border p-2">
             <div class="text-muted-foreground mb-1">{$_('devtools.domContent')}</div>
             <div class="font-mono">
               {Math.round(
-                performanceData.timing.domContentLoadedEventEnd - performanceData.timing.domContentLoadedEventStart,
+                performanceData.timing.domContentLoadedEventEnd -
+                  performanceData.timing.domContentLoadedEventStart
               )}ms
             </div>
           </div>
           <div class="bg-background/50 rounded border p-2">
             <div class="text-muted-foreground mb-1">{$_('devtools.domComplete')}</div>
             <div class="font-mono">
-              {Math.round(performanceData.timing.domComplete - performanceData.timing.domContentLoadedEventEnd)}ms
+              {Math.round(
+                performanceData.timing.domComplete - performanceData.timing.domContentLoadedEventEnd
+              )}ms
             </div>
           </div>
           <div class="bg-background/50 rounded border p-2">
             <div class="text-muted-foreground mb-1">{$_('devtools.loadEvent')}</div>
             <div class="font-mono">
-              {Math.round(performanceData.timing.loadEventEnd - performanceData.timing.loadEventStart)}ms
+              {Math.round(
+                performanceData.timing.loadEventEnd - performanceData.timing.loadEventStart
+              )}ms
             </div>
           </div>
           <div class="bg-background/50 rounded border p-2">

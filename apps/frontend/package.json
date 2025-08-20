@@ -13,8 +13,10 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "format": "prettier --write 'src/**/*.{css,html,js,ts,svelte}'",
+    "format:check": "prettier --check 'src/**/*.{css,html,js,ts,svelte}'",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
+    "fix": "prettier --write 'src/**/*.{css,html,js,ts,svelte}' && eslint --fix",
     "clean": "rm -rf dist node_modules/.vite"
   },
   "dependencies": {

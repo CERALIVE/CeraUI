@@ -41,7 +41,7 @@ export async function resolveSrtla(addr: string) {
 		fromCache = res.fromCache;
 	} catch (_err) {
 		queueUpdateGw();
-		throw("Failed to resolve SRTLA addr " + addr);
+		throw `Failed to resolve SRTLA addr ${addr}`;
 	}
 
 	if (fromCache) {

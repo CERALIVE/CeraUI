@@ -17,13 +17,13 @@
 
 import {
 	type MacAddress,
-	nmcliParseSep,
 	nmRescan,
 	nmScanResults,
+	nmcliParseSep,
 } from "../network/network-manager.ts";
-import { wifiBroadcastState } from "./wifi.ts";
 import { wifiDeviceListGetMacAddress } from "./wifi-device-list.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
+import { wifiBroadcastState } from "./wifi.ts";
 
 const wifiInterfacesByMacAddress: Record<MacAddress, WifiInterface> = {};
 
@@ -31,9 +31,7 @@ export function getWifiInterfaceByMacAddress(macAddress: MacAddress) {
 	return wifiInterfacesByMacAddress[macAddress];
 }
 
-export function getWifiInterfacesByMacAddress(): Readonly<
-	Record<MacAddress, WifiInterface>
-> {
+export function getWifiInterfacesByMacAddress(): Readonly<Record<MacAddress, WifiInterface>> {
 	return wifiInterfacesByMacAddress;
 }
 
@@ -41,17 +39,12 @@ export function removeWifiInterface(macAddress: MacAddress) {
 	delete wifiInterfacesByMacAddress[macAddress];
 }
 
-export function addWifiInterface(
-	macAddress: MacAddress,
-	wifiInterface: WifiInterface,
-) {
+export function addWifiInterface(macAddress: MacAddress, wifiInterface: WifiInterface) {
 	wifiInterfacesByMacAddress[macAddress] = wifiInterface;
 }
 
 export async function wifiUpdateScanResult() {
-	const wifiNetworks = await nmScanResults(
-		"active,ssid,signal,security,freq,device",
-	);
+	const wifiNetworks = await nmScanResults("active,ssid,signal,security,freq,device");
 	if (!wifiNetworks) return;
 
 	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
@@ -60,9 +53,14 @@ export async function wifiUpdateScanResult() {
 	}
 
 	for (const wifiNetwork of wifiNetworks) {
-		const [active, ssid, signal, security, freq, device] = nmcliParseSep(
-			wifiNetwork,
-		) as [string, string, string, string, string, string];
+		const [active, ssid, signal, security, freq, device] = nmcliParseSep(wifiNetwork) as [
+			string,
+			string,
+			string,
+			string,
+			string,
+			string,
+		];
 
 		if (ssid == null || ssid === "") continue;
 
@@ -70,11 +68,7 @@ export async function wifiUpdateScanResult() {
 		if (!macAddress) continue;
 
 		const wifiInterface = wifiInterfacesByMacAddress[macAddress];
-		if (
-			!wifiInterface ||
-			(active !== "yes" && wifiInterface.available.has(ssid))
-		)
-			continue;
+		if (!wifiInterface || (active !== "yes" && wifiInterface.available.has(ssid))) continue;
 
 		wifiInterface.available.set(ssid, {
 			active: active === "yes",

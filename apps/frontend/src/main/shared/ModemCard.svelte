@@ -23,7 +23,7 @@ interface Props {
   deviceId: string;
 }
 
-let { modem, deviceId }: Props = $props();
+const { modem, deviceId }: Props = $props();
 
 function getSignalColor(signal: number) {
   if (signal >= 75) return 'text-green-600 dark:text-green-400';
@@ -80,11 +80,16 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
 <Card.Root
   class={cn(
     'group relative overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-md',
-    getCardBorderClass(connectionStatus),
-  )}>
+    getCardBorderClass(connectionStatus)
+  )}
+>
   <!-- Status Indicator -->
-  <div class={cn('absolute top-0 left-0 h-1 w-full transition-all duration-300', getStatusGradient(connectionStatus))}>
-  </div>
+  <div
+    class={cn(
+      'absolute top-0 left-0 h-1 w-full transition-all duration-300',
+      getStatusGradient(connectionStatus)
+    )}
+  ></div>
 
   <Card.Header class="pb-3">
     <div class="flex items-center justify-between">
@@ -100,8 +105,9 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
                   ? 'bg-blue-500/10'
                   : connectionStatus === 'scanning'
                     ? 'bg-amber-500/10'
-                    : 'bg-red-500/10',
-            )}>
+                    : 'bg-red-500/10'
+            )}
+          >
             <Antenna class={cn('h-5 w-5', getConnectionStatusColor(connectionStatus))} />
           </div>
           <!-- Signal strength dot -->
@@ -120,9 +126,10 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
                   ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
                   : connectionStatus === 'scanning'
                     ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                    : 'bg-red-500/10 text-red-700 dark:text-red-300',
-            )}>
-            {capitalizeFirstLetter($_('network.modem.connectionStatus.' + connectionStatus))}
+                    : 'bg-red-500/10 text-red-700 dark:text-red-300'
+            )}
+          >
+            {capitalizeFirstLetter($_(`network.modem.connectionStatus.${connectionStatus}`))}
           </span>
         </div>
       </div>
@@ -135,7 +142,7 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
       <div class="flex items-center justify-between">
         <span class="text-muted-foreground text-sm font-medium">{$_('network.modem.signal')}</span>
         <div class="flex items-center gap-2">
-          <SignalQuality signal={signalValue} class="h-4 w-4" />
+          <SignalQuality class="h-4 w-4" signal={signalValue} />
           <span class={cn('font-mono text-sm font-bold', getSignalColor(signalValue))}>
             {signalValue}%
           </span>
@@ -153,7 +160,9 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
       {#if connectionStatus === 'scanning'}
         <div class="flex items-center justify-center py-4">
           <div class="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-            <div class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+            <div
+              class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+            ></div>
             <span class="text-sm">{$_('network.status.scanningNetworks')}</span>
           </div>
         </div>
@@ -178,7 +187,7 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
 
     <!-- Modem Configuration - Always at Bottom -->
     <div class="mt-4 border-t pt-4">
-      <ModemConfigurator modemIsScanning={connectionStatus === 'scanning'} {modem} {deviceId} />
+      <ModemConfigurator {deviceId} {modem} modemIsScanning={connectionStatus === 'scanning'} />
     </div>
   </Card.Content>
 </Card.Root>

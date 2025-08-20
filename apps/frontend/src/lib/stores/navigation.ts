@@ -32,7 +32,7 @@ function createNavigationStore() {
 
     // Navigate to a new element with transition tracking
     navigateTo: (navigation: NavElements) => {
-      update(state => {
+      update((state) => {
         const currentKey = Object.keys(state.current)[0];
         const newKey = Object.keys(navigation)[0];
 
@@ -71,17 +71,17 @@ function createNavigationStore() {
 
     // Set transition state
     setTransitioning: (isTransitioning: boolean) => {
-      update(state => ({ ...state, isTransitioning }));
+      update((state) => ({ ...state, isTransitioning }));
     },
 
     // Set error state
     setError: (error: string | null) => {
-      update(state => ({ ...state, error }));
+      update((state) => ({ ...state, error }));
     },
 
     // Go back in history
     goBack: () => {
-      update(state => {
+      update((state) => {
         if (state.history.length > 1) {
           const newHistory = state.history.slice(0, -1);
           const previous = newHistory[newHistory.length - 1];
@@ -107,13 +107,19 @@ function createNavigationStore() {
 const enhancedNavigationStore = createNavigationStore();
 
 // Derived stores for convenient access to specific properties
-export const currentNavigation = derived(enhancedNavigationStore, $nav => $nav.current);
-export const isNavigationTransitioning = derived(enhancedNavigationStore, $nav => $nav.isTransitioning);
-export const navigationError = derived(enhancedNavigationStore, $nav => $nav.error);
-export const navigationHistory = derived(enhancedNavigationStore, $nav => $nav.history);
-export const canGoBack = derived(enhancedNavigationStore, $nav => $nav.history.length > 1);
-export const transitionDirection = derived(enhancedNavigationStore, $nav => $nav.transitionDirection);
-export const previousNavigation = derived(enhancedNavigationStore, $nav => $nav.previous);
+export const currentNavigation = derived(enhancedNavigationStore, ($nav) => $nav.current);
+export const isNavigationTransitioning = derived(
+  enhancedNavigationStore,
+  ($nav) => $nav.isTransitioning
+);
+export const navigationError = derived(enhancedNavigationStore, ($nav) => $nav.error);
+export const navigationHistory = derived(enhancedNavigationStore, ($nav) => $nav.history);
+export const canGoBack = derived(enhancedNavigationStore, ($nav) => $nav.history.length > 1);
+export const transitionDirection = derived(
+  enhancedNavigationStore,
+  ($nav) => $nav.transitionDirection
+);
+export const previousNavigation = derived(enhancedNavigationStore, ($nav) => $nav.previous);
 
 // Backward compatible navigation store that maintains the original interface
 const navigationStore = {
@@ -121,7 +127,7 @@ const navigationStore = {
   set: (navigation: NavElements) => enhancedNavigationStore.navigateTo(navigation),
   update: (fn: (current: NavElements) => NavElements) => {
     let current: NavElements = { general: { label: 'general', component: General } };
-    const unsubscribe = currentNavigation.subscribe(nav => (current = nav));
+    const unsubscribe = currentNavigation.subscribe((nav) => (current = nav));
     unsubscribe();
     const updated = fn(current);
     enhancedNavigationStore.navigateTo(updated);

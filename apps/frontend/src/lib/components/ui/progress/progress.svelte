@@ -13,12 +13,13 @@ let {
 </script>
 
 <ProgressPrimitive.Root
-  bind:ref
-  {value}
   class={cn('bg-primary/20 relative h-2 w-full overflow-hidden rounded-full', className)}
-  {...restProps}>
+  {value}
+  bind:ref
+  {...restProps}
+>
   <div
+    style={`transform: translateX(-${100 - (100 * (value ?? 0)) / (max ?? 1)}%)`}
     class="bg-primary h-full w-full flex-1 transition-all"
-    style={`transform: translateX(-${100 - (100 * (value ?? 0)) / (max ?? 1)}%)`}>
-  </div>
+  ></div>
 </ProgressPrimitive.Root>

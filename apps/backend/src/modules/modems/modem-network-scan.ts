@@ -22,17 +22,14 @@ import { broadcastMsg } from "../ui/websocket-server.ts";
 import { mmNetworkScan } from "./mmcli.ts";
 import {
 	type AvailableNetwork,
+	type Modem,
 	getAvailableNetworksForModem,
 	getModem,
 	getModemIds,
-	type Modem,
 } from "./modems-state.ts";
 
 function modemBuildAvailableNetworksMessage(id: number) {
-	const msg: Record<
-		string,
-		{ available_networks?: Record<string, AvailableNetwork> }
-	> = {};
+	const msg: Record<string, { available_networks?: Record<string, AvailableNetwork> }> = {};
 
 	const modemIds = getModemIds();
 	for (const modemId of modemIds) {
@@ -91,10 +88,7 @@ export async function modemNetworkScan(id: number) {
 		}
 
 		if (availableNetworks[code]) {
-			if (
-				r.availability === "available" &&
-				availableNetworks[code].availability !== "available"
-			) {
+			if (r.availability === "available" && availableNetworks[code].availability !== "available") {
 				availableNetworks[code].availability = "available";
 			}
 		} else {

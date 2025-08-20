@@ -17,9 +17,11 @@ export const captureProgress = writable<string>('');
 
 // Helper functions
 export function addScreenshot(image: ScreenshotImage) {
-  screenshotImages.update(images => {
+  screenshotImages.update((images) => {
     const updated = [...images, image];
-    console.log(`📸 Added ${image.type} ${image.theme} ${image.filename}, total: ${updated.length}`);
+    console.log(
+      `📸 Added ${image.type} ${image.theme} ${image.filename}, total: ${updated.length}`
+    );
     return updated;
   });
 }

@@ -21,19 +21,18 @@ import type WebSocket from "ws";
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
 import {
-	nmConnect,
 	nmConnGetFields,
 	nmConnSetFields,
 	nmConnSetWifiMacAddress,
+	nmConnect,
 	nmDisconnect,
 	nmHotspot,
 } from "../network/network-manager.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
-import { wifiBroadcastState, wifiUpdateSavedConns } from "./wifi.ts";
 import {
+	type WifiChannel,
 	channelFromNM,
 	isWifiChannelName,
-	type WifiChannel,
 	wifiChannels,
 } from "./wifi-channels.ts";
 import {
@@ -43,10 +42,11 @@ import {
 } from "./wifi-connections.ts";
 import {
 	type BaseWifiInterface,
-	getMacAddressForWifiInterface,
 	type WifiInterface,
+	getMacAddressForWifiInterface,
 	wifiUpdateDevices,
 } from "./wifi-interfaces.ts";
+import { wifiBroadcastState, wifiUpdateSavedConns } from "./wifi.ts";
 
 export type WifiHotspotMessage = {
 	hotspot: {
@@ -78,9 +78,7 @@ export type WifiInterfaceWithHotspot = BaseWifiInterface & {
 const HOTSPOT_UP_TO = 10;
 const HOTSPOT_UP_FORCE_TO = (HOTSPOT_UP_TO + 2) * 1000;
 
-export async function wifiHotspotStart(
-	msg: NonNullable<WifiHotspotMessage["hotspot"]["start"]>,
-) {
+export async function wifiHotspotStart(msg: NonNullable<WifiHotspotMessage["hotspot"]["start"]>) {
 	const macAddress = getMacAddressForWifiInterface(msg.device);
 	if (!macAddress) return;
 
@@ -122,12 +120,7 @@ export async function wifiHotspotStart(
 		wifiBroadcastState();
 
 		// Create the NM connection for the hotspot
-		const uuid = await nmHotspot(
-			wifiInterface.ifname,
-			name,
-			password,
-			HOTSPOT_UP_TO,
-		);
+		const uuid = await nmHotspot(wifiInterface.ifname, name, password, HOTSPOT_UP_TO);
 		if (uuid) {
 			// Update any settings that we need different from the default
 			await nmConnSetFields(uuid, {
@@ -150,9 +143,7 @@ export async function wifiHotspotStart(
 	}
 }
 
-export async function wifiHotspotStop(
-	msg: NonNullable<WifiHotspotMessage["hotspot"]["stop"]>,
-) {
+export async function wifiHotspotStop(msg: NonNullable<WifiHotspotMessage["hotspot"]["stop"]>) {
 	const macAddress = getMacAddressForWifiInterface(msg.device);
 	if (!macAddress) return;
 
@@ -181,23 +172,15 @@ export function canHotspot(
 	return wifiInterface && "hotspot" in wifiInterface;
 }
 
-export function isHotspot(
-	wifiInterface: WifiInterface,
-): wifiInterface is WifiInterfaceWithHotspot {
+export function isHotspot(wifiInterface: WifiInterface): wifiInterface is WifiInterfaceWithHotspot {
 	return (
 		canHotspot(wifiInterface) &&
-		((wifiInterface.hotspot.conn &&
-			wifiInterface.conn === wifiInterface.hotspot.conn) ||
+		((wifiInterface.hotspot.conn && wifiInterface.conn === wifiInterface.hotspot.conn) ||
 			wifiInterface.hotspot.forceHotspotStatus > getms())
 	);
 }
 
-function nmConnSetHotspotFields(
-	uuid: string,
-	name: string,
-	password: string,
-	channel: string,
-) {
+function nmConnSetHotspotFields(uuid: string, name: string, password: string, channel: string) {
 	// Validate the requested channel
 	if (!isWifiChannelName(channel)) return;
 
@@ -212,9 +195,7 @@ function nmConnSetHotspotFields(
 	return nmConnSetFields(uuid, settingsToChange);
 }
 
-function isHotspotConfigComplete(
-	i: WifiInterfaceWithHotspot,
-): i is WifiInterfaceWithHotspot & {
+function isHotspotConfigComplete(i: WifiInterfaceWithHotspot): i is WifiInterfaceWithHotspot & {
 	hotspot: { conn: string; name: string; password: string; channel: string };
 } {
 	return (
@@ -247,11 +228,7 @@ export async function wifiHotspotConfig(
 		msg.name.length > 32
 	) {
 		conn.send(
-			buildMsg(
-				"wifi",
-				{ hotspot: { config: { device: msg.device, error: "name" } } },
-				senderId,
-			),
+			buildMsg("wifi", { hotspot: { config: { device: msg.device, error: "name" } } }, senderId),
 		);
 		return;
 	}
@@ -278,11 +255,7 @@ export async function wifiHotspotConfig(
 		!isWifiChannelName(msg.channel)
 	) {
 		conn.send(
-			buildMsg(
-				"wifi",
-				{ hotspot: { config: { device: msg.device, error: "channel" } } },
-				senderId,
-			),
+			buildMsg("wifi", { hotspot: { config: { device: msg.device, error: "channel" } } }, senderId),
 		);
 		return;
 	}
@@ -290,19 +263,10 @@ export async function wifiHotspotConfig(
 	// Update the NM connection
 	if (
 		wifiInterface.hotspot.conn &&
-		!(await nmConnSetHotspotFields(
-			wifiInterface.hotspot.conn,
-			msg.name,
-			msg.password,
-			msg.channel,
-		))
+		!(await nmConnSetHotspotFields(wifiInterface.hotspot.conn, msg.name, msg.password, msg.channel))
 	) {
 		conn.send(
-			buildMsg(
-				"wifi",
-				{ hotspot: { config: { device: msg.device, error: "saving" } } },
-				senderId,
-			),
+			buildMsg("wifi", { hotspot: { config: { device: msg.device, error: "saving" } } }, senderId),
 		);
 		return;
 	}
@@ -341,11 +305,7 @@ export async function wifiHotspotConfig(
 	await wifiUpdateSavedConns();
 
 	conn.send(
-		buildMsg(
-			"wifi",
-			{ hotspot: { config: { device: msg.device, success: true } } },
-			senderId,
-		),
+		buildMsg("wifi", { hotspot: { config: { device: msg.device, success: true } } }, senderId),
 	);
 }
 
@@ -363,10 +323,7 @@ function wifiForceHotspot(wifiInterface: WifiInterface, ms: number) {
 	}
 }
 
-export async function handleHotspotConn(
-	macAddress_: string | undefined,
-	uuid: string,
-) {
+export async function handleHotspotConn(macAddress_: string | undefined, uuid: string) {
 	const macAddress = macAddress_ || (await findMacAddressForConnection(uuid));
 	if (!macAddress) {
 		return;
@@ -379,9 +336,7 @@ export async function handleHotspotConn(
 	}
 
 	if (!canHotspot(wifiInterface)) {
-		logger.warn(
-			"Can not update hotspot connection, interface does not support hotspot",
-		);
+		logger.warn("Can not update hotspot connection, interface does not support hotspot");
 		return;
 	}
 
@@ -390,9 +345,7 @@ export async function handleHotspotConn(
 		wifiInterface.hotspot.conn &&
 		wifiInterface.hotspot.conn !== uuid
 	) {
-		logger.warn(
-			"Can not update hotspot connection, interface already has an active connection",
-		);
+		logger.warn("Can not update hotspot connection, interface already has an active connection");
 		return;
 	}
 
@@ -424,10 +377,7 @@ export async function handleHotspotConn(
 		"802-11-wireless-security.pmf",
 	] as const;
 
-	const fields = await nmConnGetFields(uuid, [
-		...settingsFields,
-		...checkFields,
-	] as const);
+	const fields = await nmConnGetFields(uuid, [...settingsFields, ...checkFields] as const);
 
 	if (fields === undefined) return;
 
@@ -458,9 +408,7 @@ export async function handleHotspotConn(
 
 async function findMacAddressForConnection(uuid: string) {
 	// Check if the connection is in use for any wifi interface
-	const connIfName = (
-		await nmConnGetFields(uuid, ["connection.interface-name"] as const)
-	)?.[0];
+	const connIfName = (await nmConnGetFields(uuid, ["connection.interface-name"] as const))?.[0];
 
 	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
 	for (const macAddress in wifiInterfacesByMacAddress) {
@@ -469,8 +417,7 @@ async function findMacAddressForConnection(uuid: string) {
 		if (
 			!wifiInterface ||
 			!canHotspot(wifiInterface) ||
-			(wifiInterface.hotspot.conn !== uuid &&
-				wifiInterface.ifname !== connIfName)
+			(wifiInterface.hotspot.conn !== uuid && wifiInterface.ifname !== connIfName)
 		) {
 			continue;
 		}

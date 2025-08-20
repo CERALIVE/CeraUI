@@ -2,8 +2,14 @@
 import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
-import { autoSelectNextOption, resetDependentSelections } from '$lib/components/streaming/StreamingAutoSelection';
-import { buildStreamingConfig, startStreamingWithConfig } from '$lib/components/streaming/StreamingConfigService';
+import {
+  autoSelectNextOption,
+  resetDependentSelections,
+} from '$lib/components/streaming/StreamingAutoSelection';
+import {
+  buildStreamingConfig,
+  startStreamingWithConfig,
+} from '$lib/components/streaming/StreamingConfigService';
 // Import new modular components
 import { createStreamingStateManager } from '$lib/components/streaming/StreamingStateManager';
 import {
@@ -51,14 +57,14 @@ type InitialSelectedProperties = Pick<
 const stateManager = createStreamingStateManager();
 
 // Extract stores for reactive access
-const savedConfigStore = stateManager.savedConfigStore;
-const relayMessageStore = stateManager.relayMessageStore;
-const unparsedPipelinesStore = stateManager.unparsedPipelinesStore;
-const audioCodecsStore = stateManager.audioCodecsStore;
-const groupedPipelinesStore = stateManager.groupedPipelinesStore;
-const isStreamingStore = stateManager.isStreamingStore;
-const audioSourcesStore = stateManager.audioSourcesStore;
-const notAvailableAudioSourceStore = stateManager.notAvailableAudioSourceStore;
+const { savedConfigStore } = stateManager;
+const { relayMessageStore } = stateManager;
+const { unparsedPipelinesStore } = stateManager;
+const { audioCodecsStore } = stateManager;
+const { groupedPipelinesStore } = stateManager;
+const { isStreamingStore } = stateManager;
+const { audioSourcesStore } = stateManager;
+const { notAvailableAudioSourceStore } = stateManager;
 
 let properties: Properties = $state({
   bitrate: undefined,
@@ -79,7 +85,7 @@ let properties: Properties = $state({
   srtStreamId: undefined,
 });
 
-let initialSelectedProperties: InitialSelectedProperties = $state({
+const initialSelectedProperties: InitialSelectedProperties = $state({
   audioDelay: undefined,
   audioSource: undefined,
   pipeline: undefined,
@@ -98,7 +104,7 @@ let isProgrammaticChange = $state(false);
 let srtlaAddressTouched = $state(false);
 let srtlaPortTouched = $state(false);
 let srtStreamIdTouched = $state(false);
-let _srtLatencyTouched = $state(false);
+const _srtLatencyTouched = $state(false);
 
 // Track encoder-related user interactions (separate from ServerCard)
 let userHasInteracted = $state(false);
@@ -136,7 +142,8 @@ $effect(() => {
     }
 
     if (!initialSelectedProperties.bitrateOverlay) {
-      properties.bitrateOverlay = initialSelectedProperties.bitrateOverlay = config?.bitrate_overlay ?? false;
+      properties.bitrateOverlay = initialSelectedProperties.bitrateOverlay =
+        config?.bitrate_overlay ?? false;
     }
     if (!initialSelectedProperties.audioSource) {
       properties.audioSource = initialSelectedProperties.audioSource = config?.asrc ?? '';
@@ -148,7 +155,9 @@ $effect(() => {
       if (!config.acodec && config.pipeline && $unparsedPipelinesStore && $audioCodecsStore) {
         const pipelineData = $unparsedPipelinesStore[config.pipeline];
         if (pipelineData?.acodec) {
-          const aacCodec = Object.keys($audioCodecsStore).find(codec => codec.toLowerCase() === 'aac');
+          const aacCodec = Object.keys($audioCodecsStore).find(
+            (codec) => codec.toLowerCase() === 'aac'
+          );
           if (aacCodec) {
             properties.audioCodec = initialSelectedProperties.audioCodec = aacCodec;
           }
@@ -196,7 +205,9 @@ $effect.pre(() => {
 
     // Auto-select aac as default audio codec if pipeline supports audio and no codec is selected
     if (pipelineData.acodec && !properties.audioCodec && $audioCodecsStore) {
-      const aacCodec = Object.keys($audioCodecsStore).find(codec => codec.toLowerCase() === 'aac');
+      const aacCodec = Object.keys($audioCodecsStore).find(
+        (codec) => codec.toLowerCase() === 'aac'
+      );
       if (aacCodec) {
         properties.audioCodec = aacCodec;
       }
@@ -205,21 +216,18 @@ $effect.pre(() => {
 });
 
 $effect(() => {
-  if (
+  properties.pipeline =
     $groupedPipelinesStore &&
     properties.inputMode &&
     properties.encoder &&
     properties.resolution &&
     properties.framerate
-  ) {
-    properties.pipeline = $groupedPipelinesStore[properties.inputMode][properties.encoder][properties.resolution]?.find(
-      pipeline => {
-        return pipeline.extraction.fps === properties.framerate;
-      },
-    )?.identifier;
-  } else {
-    properties.pipeline = undefined;
-  }
+      ? $groupedPipelinesStore[properties.inputMode][properties.encoder][
+          properties.resolution
+        ]?.find((pipeline) => {
+          return pipeline.extraction.fps === properties.framerate;
+        })?.identifier
+      : undefined;
 });
 
 // Updated helper to use modular validation
@@ -235,7 +243,7 @@ function validateForm() {
       srtlaServerAddress: properties.srtlaServerAddress,
       srtlaServerPort: properties.srtlaServerPort,
     },
-    $_, // Pass the translation function
+    $_ // Pass the translation function
   );
 
   formErrors = result.errors;
@@ -326,9 +334,10 @@ const handleFramerateChange = (value: string) => {
 </script>
 
 <div class="from-background via-background to-accent/5 bg-gradient-to-br">
-  <form onsubmit={onSubmitStreamingForm} class="relative">
+  <form class="relative" onsubmit={onSubmitStreamingForm}>
     <!-- Streaming Controls - Sticky Header -->
     <StreamingControls
+      disabled={false}
       isStreaming={$isStreamingStore}
       onStart={startStreamingWithCurrentConfig}
       onStop={() => {
@@ -347,7 +356,7 @@ const handleFramerateChange = (value: string) => {
           stopStreaming();
         }
       }}
-      disabled={false} />
+    />
 
     <!-- Main Content Area -->
     <div class="container mx-auto max-w-6xl px-4 py-6">
@@ -356,7 +365,17 @@ const handleFramerateChange = (value: string) => {
         <!-- Encoder Settings Card -->
         <div class="h-full">
           <EncoderCard
+            {formErrors}
+            {getSortedFramerates}
+            {getSortedResolutions}
             groupedPipelines={$groupedPipelinesStore}
+            isStreaming={$isStreamingStore}
+            {normalizeValue}
+            onBitrateChange={(value) => (properties.bitrate = value)}
+            onBitrateOverlayChange={(checked) => (properties.bitrateOverlay = checked)}
+            onEncoderChange={handleEncoderChange}
+            onFramerateChange={handleFramerateChange}
+            onInputModeChange={handleInputModeChange}
             properties={{
               inputMode: properties.inputMode,
               encoder: properties.encoder,
@@ -365,44 +384,61 @@ const handleFramerateChange = (value: string) => {
               bitrate: properties.bitrate,
               bitrateOverlay: properties.bitrateOverlay,
             }}
-            {formErrors}
-            isStreaming={$isStreamingStore}
-            onInputModeChange={handleInputModeChange}
-            onEncoderChange={handleEncoderChange}
             onResolutionChange={handleResolutionChange}
-            onFramerateChange={handleFramerateChange}
-            onBitrateChange={value => (properties.bitrate = value)}
-            onBitrateOverlayChange={checked => (properties.bitrateOverlay = checked)}
             updateMaxBitrate={handleMaxBitrateUpdate}
-            {normalizeValue}
-            {getSortedResolutions}
-            {getSortedFramerates} />
+          />
         </div>
 
         <!-- Audio Settings Card -->
         <div class="h-full">
           <AudioCard
             audioCodecs={$audioCodecsStore}
-            unparsedPipelines={$unparsedPipelinesStore}
             audioSources={$audioSourcesStore}
+            isStreaming={$isStreamingStore}
+            {normalizeValue}
             notAvailableAudioSource={$notAvailableAudioSourceStore}
+            onAudioCodecChange={(value) => (properties.audioCodec = value)}
+            onAudioDelayChange={(value) => (properties.audioDelay = value)}
+            onAudioSourceChange={(value) => (properties.audioSource = value)}
             properties={{
               pipeline: properties.pipeline,
               audioSource: properties.audioSource,
               audioCodec: properties.audioCodec,
               audioDelay: properties.audioDelay,
             }}
-            isStreaming={$isStreamingStore}
-            onAudioSourceChange={value => (properties.audioSource = value)}
-            onAudioCodecChange={value => (properties.audioCodec = value)}
-            onAudioDelayChange={value => (properties.audioDelay = value)}
-            {normalizeValue} />
+            unparsedPipelines={$unparsedPipelinesStore}
+          />
         </div>
 
         <!-- Server Settings Card -->
         <div class="h-full">
           <ServerCard
-            relayMessage={$relayMessageStore}
+            {formErrors}
+            isStreaming={$isStreamingStore}
+            {normalizeValue}
+            onRelayAccountChange={(value) => (properties.relayAccount = value)}
+            onRelayServerChange={(value) => {
+              properties.relayServer = value;
+              if (value === '-1') {
+                properties.relayAccount = undefined;
+              }
+            }}
+            onSrtLatencyChange={(value) => {
+              properties.srtLatency = value;
+              srtLatencyTouched = true;
+            }}
+            onSrtStreamIdChange={(value) => {
+              properties.srtStreamId = value;
+              srtStreamIdTouched = true;
+            }}
+            onSrtlaAddressChange={(value) => {
+              properties.srtlaServerAddress = value;
+              srtlaAddressTouched = true;
+            }}
+            onSrtlaPortChange={(value) => {
+              properties.srtlaServerPort = value;
+              srtlaPortTouched = true;
+            }}
             properties={{
               relayServer: properties.relayServer,
               relayAccount: properties.relayAccount,
@@ -411,32 +447,8 @@ const handleFramerateChange = (value: string) => {
               srtStreamId: properties.srtStreamId,
               srtLatency: properties.srtLatency,
             }}
-            {formErrors}
-            isStreaming={$isStreamingStore}
-            onRelayServerChange={value => {
-              properties.relayServer = value;
-              if (value === '-1') {
-                properties.relayAccount = undefined;
-              }
-            }}
-            onRelayAccountChange={value => (properties.relayAccount = value)}
-            onSrtlaAddressChange={value => {
-              properties.srtlaServerAddress = value;
-              srtlaAddressTouched = true;
-            }}
-            onSrtlaPortChange={value => {
-              properties.srtlaServerPort = value;
-              srtlaPortTouched = true;
-            }}
-            onSrtStreamIdChange={value => {
-              properties.srtStreamId = value;
-              srtStreamIdTouched = true;
-            }}
-            onSrtLatencyChange={value => {
-              properties.srtLatency = value;
-              srtLatencyTouched = true;
-            }}
-            {normalizeValue} />
+            relayMessage={$relayMessageStore}
+          />
         </div>
       </div>
     </div>

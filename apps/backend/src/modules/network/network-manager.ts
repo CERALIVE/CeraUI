@@ -56,9 +56,7 @@ export async function nmConnAdd(connection: NetworkManagerConnection) {
 			args.push(String(value));
 		}
 		const result = await execFileP("nmcli", args);
-		const success = result.stdout.match(
-			/Connection '.+' \((.+)\) successfully added./,
-		);
+		const success = result.stdout.match(/Connection '.+' \((.+)\) successfully added./);
 
 		if (success) return success[1];
 	} catch (err) {
@@ -70,13 +68,7 @@ export async function nmConnAdd(connection: NetworkManagerConnection) {
 
 export async function nmConnsGet(fields: string) {
 	try {
-		const result = await execFileP("nmcli", [
-			"--terse",
-			"--fields",
-			fields,
-			"connection",
-			"show",
-		]);
+		const result = await execFileP("nmcli", ["--terse", "--fields", fields, "connection", "show"]);
 		return result.stdout.toString().split("\n");
 	} catch (err) {
 		if (err instanceof Error) {
@@ -111,10 +103,7 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 	}
 }
 
-export async function nmConnSetFields(
-	uuid: ConnectionUUID,
-	fields: Record<string, string>,
-) {
+export async function nmConnSetFields(uuid: ConnectionUUID, fields: Record<string, string>) {
 	try {
 		const args = ["con", "modify", uuid];
 		for (const field in fields) {
@@ -134,10 +123,7 @@ export async function nmConnSetFields(
 	return false;
 }
 
-export async function nmConnSetWifiMacAddress(
-	uuid: ConnectionUUID,
-	macAddress: MacAddress,
-) {
+export async function nmConnSetWifiMacAddress(uuid: ConnectionUUID, macAddress: MacAddress) {
 	if (!macAddress) return false;
 
 	return nmConnSetFields(uuid, {
@@ -161,10 +147,7 @@ export async function nmConnDelete(uuid: ConnectionUUID) {
 export async function nmConnect(uuid: ConnectionUUID, timeout?: number) {
 	try {
 		const timeoutArgs = timeout ? ["-w", String(timeout)] : [];
-		const result = await execFileP(
-			"nmcli",
-			timeoutArgs.concat(["conn", "up", uuid]),
-		);
+		const result = await execFileP("nmcli", timeoutArgs.concat(["conn", "up", uuid]));
 		return result.stdout.match("^Connection successfully activated");
 	} catch (err) {
 		if (err instanceof Error) {
@@ -188,13 +171,7 @@ export async function nmDisconnect(uuid: ConnectionUUID) {
 
 export async function nmDevices(fields: string) {
 	try {
-		const result = await execFileP("nmcli", [
-			"--terse",
-			"--fields",
-			fields,
-			"device",
-			"status",
-		]);
+		const result = await execFileP("nmcli", ["--terse", "--fields", fields, "device", "status"]);
 		return result.stdout.toString().split("\n");
 	} catch (err) {
 		if (err instanceof Error) {
@@ -260,12 +237,7 @@ export async function nmScanResults(fields: string) {
 	}
 }
 
-export async function nmHotspot(
-	device: string,
-	ssid: string,
-	password: string,
-	timeout?: number,
-) {
+export async function nmHotspot(device: string, ssid: string, password: string, timeout?: number) {
 	try {
 		const timeoutArgs = timeout ? ["-w", String(timeout)] : [];
 		const result = await execFileP(

@@ -46,8 +46,7 @@ export function channelFromNM(band: string, channel: string | number) {
 		if (
 			isWifiChannelName(i) &&
 			band === wifiChannels[i].nmBand &&
-			(channel === wifiChannels[i].nmChannel ||
-				(channel === 0 && wifiChannels[i].nmChannel === ""))
+			(channel === wifiChannels[i].nmChannel || (channel === 0 && wifiChannels[i].nmChannel === ""))
 		) {
 			return i;
 		}

@@ -7,6 +7,10 @@ let { ref = $bindable(null), class: className, ...restProps }: TabsPrimitive.Lis
 </script>
 
 <TabsPrimitive.List
+  class={cn(
+    'bg-muted text-muted-foreground inline-flex h-9 items-center justify-center rounded-lg p-1',
+    className
+  )}
   bind:ref
-  class={cn('bg-muted text-muted-foreground inline-flex h-9 items-center justify-center rounded-lg p-1', className)}
-  {...restProps} />
+  {...restProps}
+/>

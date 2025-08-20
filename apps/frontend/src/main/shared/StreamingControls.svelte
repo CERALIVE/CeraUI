@@ -11,7 +11,7 @@ interface Props {
   disabled?: boolean;
 }
 
-let { isStreaming, onStart, onStop, disabled = false }: Props = $props();
+const { isStreaming, onStart, onStop, disabled = false }: Props = $props();
 
 const handleStart = () => {
   if (!disabled) {
@@ -27,7 +27,7 @@ const handleStop = () => {
     window.stopStreamingWithNotificationClear();
   } else {
     // Fallback
-    import('$lib/helpers/SystemHelper').then(module => {
+    import('$lib/helpers/SystemHelper').then((module) => {
       module.stopStreaming();
     });
   }
@@ -39,20 +39,22 @@ const handleStop = () => {
   <div class="mx-auto max-w-4xl">
     {#if isStreaming}
       <Button
-        type="button"
-        size="lg"
         class="group w-full bg-orange-600 shadow-lg transition-all duration-200 hover:bg-orange-700"
-        onclick={handleStop}>
+        onclick={handleStop}
+        size="lg"
+        type="button"
+      >
         <Square class="mr-2 h-5 w-5 transition-transform group-hover:scale-110" />
         {$_('settings.stopStreaming')}
       </Button>
     {:else}
       <Button
-        type="submit"
-        size="lg"
         class="group w-full bg-gradient-to-r from-green-600 to-green-700 shadow-lg transition-all duration-200 hover:from-green-700 hover:to-green-800"
         {disabled}
-        onclick={handleStart}>
+        onclick={handleStart}
+        size="lg"
+        type="submit"
+      >
         <Play class="mr-2 h-5 w-5 transition-transform group-hover:scale-110" />
         {$_('settings.startStreaming')}
       </Button>

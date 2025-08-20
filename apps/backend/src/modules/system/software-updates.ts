@@ -60,13 +60,9 @@ export function isUpdating() {
 
 function parseUpgradePackageCount(text: string) {
 	const upgradedMatch = text.match(/(\d+) upgraded/) as [string, string] | null;
-	const newlyInstalledMatch = text.match(/, (\d+) newly installed/) as
-		| [string, string]
-		| null;
+	const newlyInstalledMatch = text.match(/, (\d+) newly installed/) as [string, string] | null;
 	if (!upgradedMatch || !newlyInstalledMatch) {
-		logger.error(
-			"parseUpgradePackageCount(): failed to parse the package info",
-		);
+		logger.error("parseUpgradePackageCount(): failed to parse the package info");
 		return undefined;
 	}
 
@@ -108,10 +104,7 @@ function parseAptPackageList(stdout: string, heading: string) {
 }
 
 function parseAptUpgradedPackages(stdout: string) {
-	return parseAptPackageList(
-		stdout,
-		"The following packages will be upgraded:\n",
-	);
+	return parseAptPackageList(stdout, "The following packages will be upgraded:\n");
 }
 
 function parseAptUpgradeSummary(stdout: string) {
@@ -148,9 +141,7 @@ async function getSoftwareUpdateSize() {
 				// This is a special case for upgrading from an old installation using the stock jetson kernel
 				aptHeldBackPackages = "belabox belabox-linux-tegra";
 			}
-			upgrade = await execPNR(
-				`apt-get install --assume-no ${aptHeldBackPackages}`,
-			);
+			upgrade = await execPNR(`apt-get install --assume-no ${aptHeldBackPackages}`);
 			res = parseAptUpgradeSummary(upgrade.stdout);
 		}
 	} else {
@@ -199,9 +190,7 @@ function checkForSoftwareUpdates(
 			aptGetUpdateFailures = 0;
 		}
 
-		logger.info(
-			`apt-get update: ${errOrStderr === null ? "success" : "error"}`,
-		);
+		logger.info(`apt-get update: ${errOrStderr === null ? "success" : "error"}`);
 		if (stdout) logger.info(stdout);
 		if (stderr) logger.error(stderr);
 
@@ -243,10 +232,7 @@ export function periodicCheckForSoftwareUpdates() {
 			}
 		}
 		nextCheckForSoftwareUpdates = getms() + delay;
-		nextCheckForSoftwareUpdatesTimer = setTimeout(
-			periodicCheckForSoftwareUpdates,
-			delay,
-		);
+		nextCheckForSoftwareUpdatesTimer = setTimeout(periodicCheckForSoftwareUpdates, delay);
 	});
 }
 
@@ -263,8 +249,7 @@ export function startSoftwareUpdate() {
 		if (err === null) {
 			doSoftwareUpdate();
 		} else if (softUpdateStatus) {
-			softUpdateStatus.result =
-				"Failed to fetch the updated package list; aborting the update.";
+			softUpdateStatus.result = "Failed to fetch the updated package list; aborting the update.";
 			broadcastMsg("status", { updating: softUpdateStatus });
 			softUpdateStatus = null;
 		}
@@ -281,8 +266,7 @@ function doSoftwareUpdate() {
 	let aptLog = "";
 	let aptErr = "";
 
-	let args =
-		"-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold ";
+	let args = "-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold ";
 	if (aptHeldBackPackages) {
 		args += `install ${aptHeldBackPackages}`;
 	} else {
@@ -305,10 +289,7 @@ function doSoftwareUpdate() {
 				sendUpdate = true;
 
 				const packageList = parseAptUpgradedPackages(aptLog);
-				if (
-					packageList &&
-					packageListIncludes(packageList, rebootPackageList)
-				) {
+				if (packageList && packageListIncludes(packageList, rebootPackageList)) {
 					rebootAfterUpgrade = true;
 				}
 			}
@@ -329,20 +310,14 @@ function doSoftwareUpdate() {
 		if (unpacking) {
 			softUpdateStatus.downloading = softUpdateStatus.total;
 			softUpdateStatus.unpacking += unpacking.length;
-			softUpdateStatus.unpacking = Math.min(
-				softUpdateStatus.unpacking,
-				softUpdateStatus.total,
-			);
+			softUpdateStatus.unpacking = Math.min(softUpdateStatus.unpacking, softUpdateStatus.total);
 			sendUpdate = true;
 		}
 
 		const setting_up = data.match(/Setting up /g);
 		if (setting_up) {
 			softUpdateStatus.setting_up += setting_up.length;
-			softUpdateStatus.setting_up = Math.min(
-				softUpdateStatus.setting_up,
-				softUpdateStatus.total,
-			);
+			softUpdateStatus.setting_up = Math.min(softUpdateStatus.setting_up, softUpdateStatus.total);
 			sendUpdate = true;
 		}
 

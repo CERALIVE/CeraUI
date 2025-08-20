@@ -12,7 +12,7 @@ import type { ValueOf } from '$lib/types';
 import type { StatusMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
-let { deviceId, wifi }: { deviceId: number; wifi: ValueOf<StatusMessage['wifi']> } = $props();
+const { deviceId, wifi }: { deviceId: number; wifi: ValueOf<StatusMessage['wifi']> } = $props();
 
 // Enhanced state management with validation
 let hotspotProperties = $state({
@@ -85,14 +85,17 @@ const handleSubmit = async () => {
 </script>
 
 <SimpleAlertDialog
-  buttonText={$_('hotspotConfigurator.dialog.configHotspot')}
-  confirmButtonText={isSubmitting ? $_('hotspotConfigurator.dialog.saving') : $_('hotspotConfigurator.dialog.save')}
-  oncancel={() => resetHotSpotProperties()}
-  title={$_('hotspotConfigurator.dialog.configHotspot')}
-  extraButtonClasses="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
   class="max-h-[90vh] max-w-[95vw] overflow-hidden sm:max-w-md lg:max-w-lg"
+  buttonText={$_('hotspotConfigurator.dialog.configHotspot')}
+  confirmButtonText={isSubmitting
+    ? $_('hotspotConfigurator.dialog.saving')
+    : $_('hotspotConfigurator.dialog.save')}
   disabledConfirmButton={!isFormValid || isSubmitting}
-  onconfirm={handleSubmit}>
+  extraButtonClasses="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
+  oncancel={() => resetHotSpotProperties()}
+  onconfirm={handleSubmit}
+  title={$_('hotspotConfigurator.dialog.configHotspot')}
+>
   {#snippet icon()}
     <Bolt></Bolt>
   {/snippet}
@@ -104,7 +107,8 @@ const handleSubmit = async () => {
       <!-- Header Section -->
       <div class="space-y-2 text-center">
         <div
-          class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg">
+          class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg"
+        >
           <Wifi class="h-8 w-8 text-white" />
         </div>
         <p class="text-muted-foreground text-sm leading-relaxed">
@@ -114,8 +118,10 @@ const handleSubmit = async () => {
 
       <!-- Network Name Field -->
       <div class="space-y-3">
-        <Label for="name" class="text-foreground flex items-center gap-3 text-base font-semibold">
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
+        <Label class="text-foreground flex items-center gap-3 text-base font-semibold" for="name">
+          <div
+            class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30"
+          >
             <Wifi class="h-4 w-4 text-blue-600 dark:text-blue-400" />
           </div>
           {$_('hotspotConfigurator.hotspot.name')}
@@ -123,20 +129,21 @@ const handleSubmit = async () => {
         <div class="space-y-2">
           <div class="relative">
             <Input
-              bind:value={hotspotProperties.name}
               id="name"
-              placeholder={$_('hotspotConfigurator.hotspot.placeholderName')}
               class={cn(
                 'focus:ring-opacity-20 h-12 w-full rounded-xl border-2 px-4 text-base transition-all duration-300 focus:ring-4',
                 !validation.name.isValid && hotspotProperties.name.length > 0
                   ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
                   : validation.name.isValid && hotspotProperties.name.length > 0
                     ? 'border-green-400 bg-green-50 focus:border-green-500 focus:ring-green-500 dark:bg-green-950/20'
-                    : 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50',
+                    : 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50'
               )}
               autocapitalize="none"
               autocomplete="off"
-              autocorrect="off" />
+              autocorrect="off"
+              placeholder={$_('hotspotConfigurator.hotspot.placeholderName')}
+              bind:value={hotspotProperties.name}
+            />
 
             {#if hotspotProperties.name.length > 0}
               <div class="absolute top-1/2 right-3 -translate-y-1/2">
@@ -155,8 +162,9 @@ const handleSubmit = async () => {
                 'flex items-center gap-2 rounded-lg p-3 text-sm font-medium',
                 validation.name.isValid
                   ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-              )}>
+                  : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+              )}
+            >
               {#if validation.name.isValid}
                 <CheckCircle class="h-4 w-4" />
                 <span>{$_('hotspotConfigurator.validation.nameValid')}</span>
@@ -167,7 +175,9 @@ const handleSubmit = async () => {
             </div>
           {:else}
             <div class="flex items-start gap-2 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
-              <div class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-blue-200 dark:bg-blue-800">
+              <div
+                class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-blue-200 dark:bg-blue-800"
+              >
                 <span class="text-xs font-bold text-blue-600 dark:text-blue-400">i</span>
               </div>
               <p class="text-sm leading-relaxed text-blue-700 dark:text-blue-300">
@@ -180,8 +190,13 @@ const handleSubmit = async () => {
 
       <!-- Password Field -->
       <div class="space-y-3">
-        <Label for="hotspotPassword" class="text-foreground flex items-center gap-3 text-base font-semibold">
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900/30">
+        <Label
+          class="text-foreground flex items-center gap-3 text-base font-semibold"
+          for="hotspotPassword"
+        >
+          <div
+            class="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900/30"
+          >
             <Smartphone class="h-4 w-4 text-purple-600 dark:text-purple-400" />
           </div>
           {$_('hotspotConfigurator.hotspot.password')}
@@ -189,21 +204,22 @@ const handleSubmit = async () => {
         <div class="space-y-2">
           <div class="relative">
             <Input
-              bind:value={hotspotProperties.password}
               id="hotspotPassword"
-              type={showPassword ? 'text' : 'password'}
-              placeholder={$_('hotspotConfigurator.hotspot.placeholderPassword')}
               class={cn(
                 'focus:ring-opacity-20 h-12 w-full rounded-xl border-2 px-4 pr-12 text-base transition-all duration-300 focus:ring-4',
                 !validation.password.isValid && hotspotProperties.password.length > 0
                   ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
                   : validation.password.isValid && hotspotProperties.password.length > 0
                     ? 'border-green-400 bg-green-50 focus:border-green-500 focus:ring-green-500 dark:bg-green-950/20'
-                    : 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50',
+                    : 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50'
               )}
               autocapitalize="none"
               autocomplete="off"
-              autocorrect="off" />
+              autocorrect="off"
+              placeholder={$_('hotspotConfigurator.hotspot.placeholderPassword')}
+              type={showPassword ? 'text' : 'password'}
+              bind:value={hotspotProperties.password}
+            />
 
             <div class="absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2">
               {#if hotspotProperties.password.length > 0}
@@ -214,9 +230,10 @@ const handleSubmit = async () => {
                 {/if}
               {/if}
               <button
-                type="button"
                 class="text-muted-foreground hover:text-foreground rounded-lg p-1 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                onclick={() => (showPassword = !showPassword)}>
+                onclick={() => (showPassword = !showPassword)}
+                type="button"
+              >
                 {#if showPassword}
                   <EyeOff class="h-4 w-4" />
                 {:else}
@@ -232,8 +249,9 @@ const handleSubmit = async () => {
                 'flex items-center gap-2 rounded-lg p-3 text-sm font-medium',
                 validation.password.isValid
                   ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-              )}>
+                  : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+              )}
+            >
               {#if validation.password.isValid}
                 <CheckCircle class="h-4 w-4" />
                 <span>{$_('hotspotConfigurator.validation.passwordValid')}</span>
@@ -245,7 +263,8 @@ const handleSubmit = async () => {
           {:else}
             <div class="flex items-start gap-2 rounded-lg bg-purple-50 p-3 dark:bg-purple-950/30">
               <div
-                class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 dark:bg-purple-800">
+                class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 dark:bg-purple-800"
+              >
                 <span class="text-xs font-bold text-purple-600 dark:text-purple-400">!</span>
               </div>
               <p class="text-sm leading-relaxed text-purple-700 dark:text-purple-300">
@@ -258,18 +277,24 @@ const handleSubmit = async () => {
 
       <!-- Channel Selection -->
       <div class="space-y-3">
-        <Label for="channel" class="text-foreground flex items-center gap-3 text-base font-semibold">
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30">
+        <Label
+          class="text-foreground flex items-center gap-3 text-base font-semibold"
+          for="channel"
+        >
+          <div
+            class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30"
+          >
             <svg
               class="h-4 w-4 text-orange-600 dark:text-orange-400"
               fill="none"
               stroke="currentColor"
-              viewBox="0 0 24 24">
+              viewBox="0 0 24 24"
+            >
               <path
+                d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 stroke-width="2"
-                d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"
               ></path>
             </svg>
           </div>
@@ -277,29 +302,36 @@ const handleSubmit = async () => {
         </Label>
         <div class="space-y-2">
           <Select.Root
-            type="single"
-            onValueChange={selected => {
+            onValueChange={(selected) => {
               hotspotProperties.selectedChannel = selected;
             }}
-            value={hotspotProperties.selectedChannel}>
+            type="single"
+            value={hotspotProperties.selectedChannel}
+          >
             <Select.Trigger
-              class="focus:ring-opacity-20 h-12 w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 text-base transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50">
+              class="focus:ring-opacity-20 h-12 w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 text-base transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50"
+            >
               {hotspotProperties.selectedChannel
                 ? wifi.hotspot?.available_channels[hotspotProperties.selectedChannel].name
                 : $_('hotspotConfigurator.hotspot.selectChannel')}
             </Select.Trigger>
-            <Select.Content class="rounded-xl border-2 border-gray-200 shadow-xl dark:border-gray-700">
+            <Select.Content
+              class="rounded-xl border-2 border-gray-200 shadow-xl dark:border-gray-700"
+            >
               <Select.Group>
                 {#if wifi.hotspot?.available_channels}
                   {#each Object.entries(wifi.hotspot.available_channels) as [channelId, channel]}
-                    <Select.Item value={channelId} label={channel.name} class="rounded-lg"></Select.Item>
+                    <Select.Item class="rounded-lg" label={channel.name} value={channelId}
+                    ></Select.Item>
                   {/each}
                 {/if}
               </Select.Group>
             </Select.Content>
           </Select.Root>
           <div class="flex items-start gap-2 rounded-lg bg-orange-50 p-3 dark:bg-orange-950/30">
-            <div class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-orange-200 dark:bg-orange-800">
+            <div
+              class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-orange-200 dark:bg-orange-800"
+            >
               <span class="text-xs font-bold text-orange-600 dark:text-orange-400">✓</span>
             </div>
             <p class="text-sm leading-relaxed text-orange-700 dark:text-orange-300">
@@ -312,9 +344,12 @@ const handleSubmit = async () => {
       <!-- Form Summary -->
       {#if !isFormValid && (hotspotProperties.name.length > 0 || hotspotProperties.password.length > 0)}
         <div
-          class="rounded-xl border-2 border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 dark:border-amber-700 dark:from-amber-950/30 dark:to-orange-950/30">
+          class="rounded-xl border-2 border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 dark:border-amber-700 dark:from-amber-950/30 dark:to-orange-950/30"
+        >
           <div class="flex items-start gap-3">
-            <div class="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-amber-500">
+            <div
+              class="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-amber-500"
+            >
               <AlertCircle class="h-4 w-4 text-white" />
             </div>
             <div>
@@ -329,7 +364,8 @@ const handleSubmit = async () => {
         </div>
       {:else if isFormValid}
         <div
-          class="rounded-xl border-2 border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 p-4 dark:border-green-700 dark:from-green-950/30 dark:to-emerald-950/30">
+          class="rounded-xl border-2 border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 p-4 dark:border-green-700 dark:from-green-950/30 dark:to-emerald-950/30"
+        >
           <div class="flex items-center gap-3">
             <div class="flex h-6 w-6 items-center justify-center rounded-full bg-green-500">
               <CheckCircle class="h-4 w-4 text-white" />

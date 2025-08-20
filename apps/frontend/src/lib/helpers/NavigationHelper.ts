@@ -98,9 +98,13 @@ export function setupHashNavigation(
     subscribe: (callback: (value: NavElements) => void) => () => void;
   },
   setInitialState: boolean = true,
-  options?: SetupHashNavigationOptions,
+  options?: SetupHashNavigationOptions
 ): () => void {
-  const { debounceMs = 0, customEventTarget = window, preventInitialUpdate = false } = options ?? {};
+  const {
+    debounceMs = 0,
+    customEventTarget = window,
+    preventInitialUpdate = false,
+  } = options ?? {};
 
   // Set initial navigation based on hash only if explicitly requested
   if (setInitialState) {
@@ -144,7 +148,7 @@ export function setupHashNavigation(
   let isUpdatingFromHash = false; // Flag to prevent circular updates
 
   // Subscribe to navigation changes
-  const unsubscribe = navigationStore.subscribe(navigation => {
+  const unsubscribe = navigationStore.subscribe((navigation) => {
     if (navigation && !(preventInitialUpdate && isInitialSubscription) && !isUpdatingFromHash) {
       const navKey = Object.keys(navigation)[0];
       const navLabel = navigation[navKey].label;

@@ -137,7 +137,13 @@ export type StatusMessage = {
   };
   updating:
     | Nullable<boolean>
-    | { downloading: number; unpacking: number; setting_up: number; total: number; result?: number };
+    | {
+        downloading: number;
+        unpacking: number;
+        setting_up: number;
+        total: number;
+        result?: number;
+      };
   ssh: {
     user: string;
     user_pass: boolean;

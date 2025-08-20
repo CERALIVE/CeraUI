@@ -3,14 +3,20 @@ import { Tabs as TabsPrimitive } from 'bits-ui';
 
 import { cn } from '$lib/utils.js';
 
-let { ref = $bindable(null), class: className, value, ...restProps }: TabsPrimitive.ContentProps = $props();
+let {
+  ref = $bindable(null),
+  class: className,
+  value,
+  ...restProps
+}: TabsPrimitive.ContentProps = $props();
 </script>
 
 <TabsPrimitive.Content
-  bind:ref
   class={cn(
     'ring-offset-background focus-visible:ring-ring mt-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden',
-    className,
+    className
   )}
   {value}
-  {...restProps} />
+  bind:ref
+  {...restProps}
+/>

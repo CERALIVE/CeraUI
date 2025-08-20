@@ -21,10 +21,7 @@ import type WebSocket from "ws";
 import { validatePortNo } from "../../helpers/number.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
-import {
-	convertManualToRemoteRelay,
-	getRelays,
-} from "../remote/remote-relays.ts";
+import { convertManualToRemoteRelay, getRelays } from "../remote/remote-relays.ts";
 import { notificationSend } from "../ui/notifications.ts";
 import type { StatusResponseMessage } from "../ui/status.ts";
 import {
@@ -34,15 +31,11 @@ import {
 	getSocketSenderId,
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
-import {
-	audioCodecs,
-	getAudioDevices,
-} from "./audio.ts";
-import { validateBitrate} from "./encoder.ts";
+import { audioCodecs, getAudioDevices } from "./audio.ts";
+import { updateBcrptServerIps } from "./bcrpt.ts";
+import { validateBitrate } from "./encoder.ts";
 import { searchPipelines } from "./pipelines.ts";
-import {updateBcrptServerIps} from "./bcrpt.ts";
-import {resolveSrtla} from "./srtla.ts";
-
+import { resolveSrtla } from "./srtla.ts";
 
 export type StartMessage = { start: ConfigParameters };
 
@@ -75,7 +68,6 @@ export function updateStatus(status: boolean) {
 
 		// Clear out the BCRP server list on start, and re-populate it on stop
 		updateBcrptServerIps();
-
 
 		return true;
 	}
@@ -110,8 +102,7 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 	return false;
 }
 
-
-export async function validateConfig(params: Partial<ConfigParameters>){
+export async function validateConfig(params: Partial<ConfigParameters>) {
 	if (typeof params !== "object") throw new Error("Invalid config");
 
 	// A-V delay
@@ -176,18 +167,14 @@ export async function validateConfig(params: Partial<ConfigParameters>){
 		if (!relayAccount) throw new Error("Invalid relay account specified!");
 		streamid = relayAccount.ingest_key;
 	} else {
-		if (typeof params.srt_streamid !== "string")
-			throw new Error("SRT streamid not specified");
+		if (typeof params.srt_streamid !== "string") throw new Error("SRT streamid not specified");
 		streamid = params.srt_streamid;
 	}
 
 	return { pipeline, srtlaAddr, srtlaPort, streamid };
 }
 
-export async function updateConfig(
-	conn: WebSocket,
-	params: ConfigParameters
-) {
+export async function updateConfig(_conn: WebSocket, params: ConfigParameters) {
 	const { pipeline, srtlaAddr: initialAddr, srtlaPort, streamid } = await validateConfig(params);
 
 	const srtlaAddr = await resolveSrtla(initialAddr);
@@ -208,20 +195,20 @@ export async function updateConfig(
 
 	if (params.relay_server) {
 		config.relay_server = params.relay_server;
-		delete config.srtla_addr;
-		delete config.srtla_port;
+		config.srtla_addr = undefined;
+		config.srtla_port = undefined;
 	} else {
 		config.srtla_addr = params.srtla_addr!;
 		config.srtla_port = params.srtla_port!;
-		delete config.relay_server;
+		config.relay_server = undefined;
 	}
 
 	if (params.relay_account) {
 		config.relay_account = params.relay_account;
-		delete config.srt_streamid;
+		config.srt_streamid = undefined;
 	} else {
 		config.srt_streamid = params.srt_streamid!;
-		delete config.relay_account;
+		config.relay_account = undefined;
 	}
 
 	if (!params.relay_server || !params.relay_account) {
@@ -229,7 +216,7 @@ export async function updateConfig(
 	}
 
 	saveConfig();
-	broadcastMsg('config', config);
+	broadcastMsg("config", config);
 
 	return { pipeline, srtlaAddr, srtlaPort, streamid };
 }

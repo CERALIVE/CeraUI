@@ -31,7 +31,7 @@ export function parsePipelineName(
   translations?: {
     matchDeviceResolution: string;
     matchDeviceOutput: string;
-  },
+  }
 ): PipelineInfo {
   // Basic device extraction
   const deviceMatch = name.match(/^([^/]+)/);
@@ -68,7 +68,7 @@ export const groupPipelinesByDeviceAndFormat = (
   translations?: {
     matchDeviceResolution: string;
     matchDeviceOutput: string;
-  },
+  }
 ): GroupedPipelines => {
   const groupedPipelines: GroupedPipelines = {};
 

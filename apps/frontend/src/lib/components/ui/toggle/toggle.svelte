@@ -6,7 +6,8 @@ export const toggleVariants = tv({
   variants: {
     variant: {
       default: 'bg-transparent',
-      outline: 'border-input hover:bg-accent hover:text-accent-foreground border bg-transparent shadow-xs',
+      outline:
+        'border-input hover:bg-accent hover:text-accent-foreground border bg-transparent shadow-xs',
     },
     size: {
       default: 'h-9 min-w-9 px-3',
@@ -44,6 +45,11 @@ let {
 } = $props();
 </script>
 
-<TogglePrimitive.Root bind:ref bind:pressed class={cn(toggleVariants({ variant, size }), className)} {...restProps}>
+<TogglePrimitive.Root
+  class={cn(toggleVariants({ variant, size }), className)}
+  bind:ref
+  bind:pressed
+  {...restProps}
+>
   {@render children?.()}
 </TogglePrimitive.Root>

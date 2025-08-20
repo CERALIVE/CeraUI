@@ -29,7 +29,12 @@ import { _ } from 'svelte-i18n';
 import Logo from '$lib/components/icons/Logo.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
 import { type NavElements, navElements, siteName } from '$lib/config';
-import { canGoBack, enhancedNavigationStore, isNavigationTransitioning, navigationStore } from '$lib/stores/navigation';
+import {
+  canGoBack,
+  enhancedNavigationStore,
+  isNavigationTransitioning,
+  navigationStore,
+} from '$lib/stores/navigation';
 import { cn } from '$lib/utils';
 
 const [send, receive] = crossfade({
@@ -63,7 +68,7 @@ const NAVIGATION_THROTTLE_MS = 50;
 
 // Enhanced reactive subscription with loading state awareness
 $effect(() => {
-  const unsubscribe = navigationStore.subscribe(navigation => {
+  const unsubscribe = navigationStore.subscribe((navigation) => {
     currentNav = navigation;
   });
 
@@ -130,37 +135,40 @@ const handleLogoClick = () => {
     class={cn(
       'group relative flex cursor-pointer items-center space-x-3 rounded-xl px-3 py-2 transition-all duration-300',
       'hover:bg-accent/50 focus-visible:bg-accent/50',
-      $isNavigationTransitioning && 'pointer-events-none opacity-60',
+      $isNavigationTransitioning && 'pointer-events-none opacity-60'
     )}
+    aria-label={$canGoBack ? 'Go back or home' : 'Go to home'}
+    disabled={$isNavigationTransitioning}
+    onclick={handleLogoClick}
     onmouseenter={() => (isLogoHovered = true)}
     onmouseleave={() => (isLogoHovered = false)}
-    onclick={handleLogoClick}
-    disabled={$isNavigationTransitioning}
-    aria-label={$canGoBack ? 'Go back or home' : 'Go to home'}>
+  >
     <!-- Enhanced Logo with reactive effects -->
     <div class="relative">
       <Logo
         class={cn(
           'h-7 w-7 transition-all duration-300',
           isLogoHovered && 'scale-110 rotate-12',
-          $isNavigationTransitioning && 'animate-pulse',
-        )} />
+          $isNavigationTransitioning && 'animate-pulse'
+        )}
+      />
 
       <!-- Enhanced glow effect with reactive states -->
       <div
         class={cn(
           'absolute -inset-1 rounded-full blur-sm transition-all duration-300',
           isLogoHovered ? 'bg-primary/30 opacity-100' : 'bg-primary/10 opacity-0',
-          $canGoBack && 'bg-blue-500/20', // Subtle indicator when back is available
-        )}>
-      </div>
+          $canGoBack && 'bg-blue-500/20' // Subtle indicator when back is available
+        )}
+      ></div>
 
       <!-- Back indicator -->
       {#if $canGoBack && isLogoHovered}
         <div
           class="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-blue-500"
           in:scale={{ duration: 200, start: 0.8 }}
-          out:scale={{ duration: 150, start: 1 }}>
+          out:scale={{ duration: 150, start: 1 }}
+        >
           <div class="h-full w-full animate-ping rounded-full bg-blue-400"></div>
         </div>
       {/if}
@@ -172,8 +180,9 @@ const handleLogoClick = () => {
         'hidden font-bold tracking-tight transition-all duration-200 xl:inline-block',
         'text-foreground',
         isLogoHovered && 'text-primary',
-        $isNavigationTransitioning && 'opacity-60',
-      )}>
+        $isNavigationTransitioning && 'opacity-60'
+      )}
+    >
       {siteName}
     </span>
 
@@ -193,38 +202,42 @@ const handleLogoClick = () => {
         {@const isHovered = hoveredTab === identifier}
 
         <button
-          onclick={() => handleTabNavigation(identifier, navigation)}
-          onmouseenter={() => (hoveredTab = identifier)}
-          onmouseleave={() => (hoveredTab = null)}
           id={identifier}
-          disabled={$isNavigationTransitioning}
           class={cn(
             'group relative flex h-10 min-w-28 cursor-pointer items-center justify-center rounded-xl px-4 text-center text-sm font-medium transition-all duration-300',
             isActive
               ? 'text-primary shadow-sm'
-              : cn('text-muted-foreground hover:text-foreground', isHovered && 'bg-accent/50 scale-105'),
+              : cn(
+                  'text-muted-foreground hover:text-foreground',
+                  isHovered && 'bg-accent/50 scale-105'
+                ),
             $isNavigationTransitioning && 'pointer-events-none opacity-60',
             // Enhanced focus states
-            'focus-visible:ring-primary/50 focus-visible:ring-2 focus-visible:outline-none',
+            'focus-visible:ring-primary/50 focus-visible:ring-2 focus-visible:outline-none'
           )}
           aria-current={isActive ? 'page' : undefined}
+          disabled={$isNavigationTransitioning}
+          onclick={() => handleTabNavigation(identifier, navigation)}
+          onmouseenter={() => (hoveredTab = identifier)}
+          onmouseleave={() => (hoveredTab = null)}
           in:fly={{
             y: 20,
             duration: 300,
             delay: index * 50,
             easing: cubicInOut,
-          }}>
+          }}
+        >
           {#if isActive}
             <!-- Enhanced active indicator with improved animations -->
             <div
               class={cn(
                 'absolute inset-0 rounded-xl border shadow-lg transition-all duration-300',
                 'from-background to-accent border-border/50 bg-gradient-to-b',
-                'shadow-primary/10',
+                'shadow-primary/10'
               )}
               in:receive={{ key: 'activetab' }}
-              out:send={{ key: 'activetab' }}>
-            </div>
+              out:send={{ key: 'activetab' }}
+            ></div>
 
             <!-- Enhanced glow effect for active tab -->
             <div class="bg-primary/5 absolute inset-0 rounded-xl opacity-60"></div>
@@ -238,8 +251,9 @@ const handleLogoClick = () => {
             class={cn(
               'relative z-10 transition-all duration-200',
               isActive && 'font-semibold',
-              (isHovered || isActive) && 'scale-105',
-            )}>
+              (isHovered || isActive) && 'scale-105'
+            )}
+          >
             {$_(`navigation.${navigation.label}`)}
           </span>
 
@@ -249,9 +263,9 @@ const handleLogoClick = () => {
               class={cn(
                 'absolute bottom-0 left-1/2 h-0.5 transition-all duration-300',
                 'from-primary/60 via-primary to-primary/60 bg-gradient-to-r',
-                isHovered ? 'w-8 -translate-x-1/2 opacity-100' : 'w-0 -translate-x-1/2 opacity-0',
-              )}>
-            </div>
+                isHovered ? 'w-8 -translate-x-1/2 opacity-100' : 'w-0 -translate-x-1/2 opacity-0'
+              )}
+            ></div>
           {/if}
 
           <!-- Loading indicator for individual tabs -->

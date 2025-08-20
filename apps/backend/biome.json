@@ -1,18 +1,33 @@
 {
+	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
 	"files": {
-		"include": [
-			"./package.json",
-			"src/**/*"
-		],
+		"include": ["./package.json", "src/**/*"],
 		"ignore": [
 			"config.json",
 			"setup.json",
-			"**/gsm_operator_cache.json"
+			"**/gsm_operator_cache.json",
+			"dist/**/*",
+			"node_modules/**/*"
 		],
 		"ignoreUnknown": true
 	},
+	"organizeImports": {
+		"enabled": true
+	},
+	"formatter": {
+		"enabled": true,
+		"indentStyle": "tab",
+		"indentWidth": 2,
+		"lineWidth": 100
+	},
+	"javascript": {
+		"globals": ["Bun"]
+	},
 	"linter": {
+		"enabled": true,
 		"rules": {
+			"recommended": true,
+
 			"style": {
 				"noParameterAssign": "error",
 				"useAsConstAssertion": "error",
@@ -23,7 +38,74 @@
 				"noUnusedTemplateLiteral": "error",
 				"useNumberNamespace": "error",
 				"noInferrableTypes": "error",
-				"noUselessElse": "error"
+				"noUselessElse": "warn",
+				"useTemplate": "warn",
+				"useConst": "error",
+				"noVar": "error",
+				"useImportType": "error",
+				"noNonNullAssertion": "warn"
+			},
+
+			"complexity": {
+				"noExtraBooleanCast": "error",
+				"noMultipleSpacesInRegularExpressionLiterals": "error",
+				"noUselessCatch": "error",
+				"noWith": "error",
+				"useLiteralKeys": "error",
+				"useOptionalChain": "warn",
+				"noForEach": "warn"
+			},
+
+			"correctness": {
+				"noConstAssign": "error",
+				"noConstantCondition": "error",
+				"noEmptyCharacterClassInRegex": "error",
+				"noEmptyPattern": "error",
+				"noGlobalObjectCalls": "error",
+				"noInvalidConstructorSuper": "error",
+				"noNewSymbol": "error",
+				"noSetterReturn": "error",
+				"noUndeclaredVariables": "error",
+				"noUnreachable": "error",
+				"noUnusedLabels": "error",
+				"noUnusedVariables": "error",
+				"useIsNan": "error",
+				"useValidForDirection": "error"
+			},
+
+			"performance": {
+				"noAccumulatingSpread": "warn",
+				"noDelete": "warn"
+			},
+
+			"suspicious": {
+				"noArrayIndexKey": "warn",
+				"noAssignInExpressions": "error",
+				"noAsyncPromiseExecutor": "error",
+				"noCatchAssign": "error",
+				"noClassAssign": "error",
+				"noCommentText": "error",
+				"noCompareNegZero": "error",
+				"noControlCharactersInRegex": "error",
+				"noDebugger": "error",
+				"noDuplicateCase": "error",
+				"noDuplicateClassMembers": "error",
+				"noDuplicateObjectKeys": "error",
+				"noDuplicateParameters": "error",
+				"noEmptyBlockStatements": "warn",
+				"noExplicitAny": "warn",
+				"noExtraNonNullAssertion": "error",
+				"noFallthroughSwitchClause": "error",
+				"noFunctionAssign": "error",
+				"noGlobalAssign": "error",
+				"noImportAssign": "error",
+				"noMisleadingCharacterClass": "error",
+				"noPrototypeBuiltins": "error",
+				"noRedeclare": "error",
+				"noShadowRestrictedNames": "error",
+				"noUnsafeNegation": "error",
+				"useGetterReturn": "error",
+				"useValidTypeof": "error"
 			}
 		}
 	}

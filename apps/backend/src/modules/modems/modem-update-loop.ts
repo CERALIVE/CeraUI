@@ -22,8 +22,8 @@ import {
 	type NetworkManagerConnection,
 	type NetworkManagerConnectionModemConfig,
 	nmConnAdd,
-	nmConnect,
 	nmConnGetFields,
+	nmConnect,
 } from "../network/network-manager.ts";
 
 import { setup } from "../setup.ts";
@@ -32,20 +32,20 @@ import { getGsmConnections, resetGsmConnections } from "./gsm-connections.ts";
 import {
 	type ModemId,
 	type ModemInfo,
+	type SimInfo,
 	mmConvertAccessTech,
 	mmConvertNetworkType,
 	mmConvertNetworkTypes,
 	mmGetModem,
 	mmGetSim,
 	mmList,
-	type SimInfo,
 } from "./mmcli.ts";
 import { broadcastModems } from "./modem-status.ts";
 import {
-	getModem,
-	getModems,
 	type Modem,
 	type ModemConfig,
+	getModem,
+	getModems,
 	removeModem,
 	setModem,
 } from "./modems-state.ts";
@@ -115,48 +115,33 @@ async function connectModemIfNeededAndPossible(modem: Modem, modemId: number) {
 	if (
 		!modem.inhibit &&
 		!modem.is_scanning &&
-		(modem.status?.connection === "registered" ||
-			modem.status?.connection === "enabled") &&
+		(modem.status?.connection === "registered" || modem.status?.connection === "enabled") &&
 		modem.config?.conn
 	) {
 		// Don't try to activate NM connections that are already active
-		const nmConnection = await nmConnGetFields(modem.config.conn, [
-			"GENERAL.STATE",
-		] as const);
+		const nmConnection = await nmConnGetFields(modem.config.conn, ["GENERAL.STATE"] as const);
 		if (nmConnection?.length === 1) {
-			logger.info(
-				`Trying to bring up connection ${modem.config.conn} for modem ${modemId}...`,
-			);
+			logger.info(`Trying to bring up connection ${modem.config.conn} for modem ${modemId}...`);
 			nmConnect(modem.config.conn);
 		}
 	}
 }
 
-function buildModemStatus(
-	modemInfo: Readonly<ModemInfo>,
-	modem: Readonly<Modem>,
-): ModemStatus {
+function buildModemStatus(modemInfo: Readonly<ModemInfo>, modem: Readonly<Modem>): ModemStatus {
 	// Some modems don't seem to always report the operator's name
 	let network = modemInfo["modem.3gpp.operator-name"];
 	if (!network && modemInfo["modem.3gpp.registration-state"] === "home") {
 		network = modem.sim_network;
 	}
-	const network_type = mmConvertAccessTech(
-		modemInfo["modem.generic.access-technologies"],
-	);
+	const network_type = mmConvertAccessTech(modemInfo["modem.generic.access-technologies"]);
 	const signal = modemInfo["modem.generic.signal-quality.value"];
 	const roaming = modemInfo["modem.3gpp.registration-state"] === "roaming";
-	const connection = modem.is_scanning
-		? "scanning"
-		: modemInfo["modem.generic.state"];
+	const connection = modem.is_scanning ? "scanning" : modemInfo["modem.generic.state"];
 
 	return { connection, network, network_type, signal, roaming };
 }
 
-function applyAutoconfigToModemConfig(
-	config: ModemConfig,
-	autoConfig: boolean,
-) {
+function applyAutoconfigToModemConfig(config: ModemConfig, autoConfig: boolean) {
 	if (autoConfig) {
 		config.apn = "";
 		config.username = "";
@@ -184,11 +169,7 @@ export function sanitizeModemConfigForNetworkManager(config: ModemConfig) {
 	return fields;
 }
 
-async function addConnectionForModem(
-	modemInfo: ModemInfo,
-	simInfo: SimInfo,
-	config: ModemConfig,
-) {
+async function addConnectionForModem(modemInfo: ModemInfo, simInfo: SimInfo, config: ModemConfig) {
 	const modemId = modemInfo["modem.generic.device-identifier"];
 	const simId = simInfo["sim.properties.iccid"];
 	const operatorId = simInfo["sim.properties.operator-code"];
@@ -269,9 +250,7 @@ async function registerModem(id: number) {
 		: null;
 
 	// Find the supported network types
-	const networkTypes = mmConvertNetworkTypes(
-		modemInfo["modem.generic.supported-modes"],
-	);
+	const networkTypes = mmConvertNetworkTypes(modemInfo["modem.generic.supported-modes"]);
 
 	// Make sure the current mode is on the list
 	if (networkType && !networkTypes[networkType.label]) {
@@ -314,10 +293,7 @@ async function updateModem(modemId: ModemId) {
 		try {
 			logger.debug("Trying to register modem", modemId);
 			await registerModem(modemId);
-			logger.debug(
-				"Registered modems",
-				JSON.stringify(getModem(modemId), undefined, 2),
-			);
+			logger.debug("Registered modems", JSON.stringify(getModem(modemId), undefined, 2));
 			return MODEM_IS_NEW;
 		} catch (e) {
 			logger.error(`Failed to register modem ${modemId}`);

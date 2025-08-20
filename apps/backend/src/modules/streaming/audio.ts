@@ -46,8 +46,8 @@ const audioSrcAliases: Record<string, string> = {
 	C4K: "Cam Link 4K",
 	usbaudio: "USB audio",
 };
-if (setup.hw == 'rk3588') {
-	Object.assign(audioSrcAliases, {"rockchiphdmiin": "HDMI", "rockchipes8388": "Analog in"});
+if (setup.hw === "rk3588") {
+	Object.assign(audioSrcAliases, { rockchiphdmiin: "HDMI", rockchipes8388: "Analog in" });
 }
 
 // Create reverse lookup for performance
@@ -72,11 +72,7 @@ export function pipelineGetAudioProps(path: string) {
 	};
 }
 
-export async function replaceAudioSettings(
-	pipelineFile: string,
-	cardId: string,
-	codec?: string,
-) {
+export async function replaceAudioSettings(pipelineFile: string, cardId: string, codec?: string) {
 	let pipeline = await readTextFile(pipelineFile);
 	if (pipeline === undefined) return;
 
@@ -84,10 +80,7 @@ export async function replaceAudioSettings(
 		if (cardId === NO_AUDIO_ID) {
 			pipeline = pipeline.replace(alsaPipelinePattern, "");
 		} else {
-			pipeline = pipeline.replace(
-				alsaSrcPattern,
-				`alsasrc device="hw:${cardId}"`,
-			);
+			pipeline = pipeline.replace(alsaSrcPattern, `alsasrc device="hw:${cardId}"`);
 		}
 	}
 
@@ -135,13 +128,7 @@ export async function updateAudioDevices() {
 		"rockchipes8316",
 	];
 	// Devices to show at the top of the list
-	const priority = [
-		"HDMI",
-		"rockchiphdmiin",
-		"rockchipes8388",
-		"C4K",
-		"usbaudio",
-	];
+	const priority = ["HDMI", "rockchiphdmiin", "rockchipes8388", "C4K", "usbaudio"];
 
 	const devices = await readdirP(deviceDir);
 	const list: Record<string, true> = {};
@@ -180,15 +167,13 @@ export async function updateAudioDevices() {
 	broadcastMsg("status", { asrcs: Object.keys(audioDevices) });
 }
 
-
-
 let asrcProbeReject: (() => void) | undefined;
 
-export function isAsrcProbeRejectResolved(){
-	return asrcProbeReject !== undefined
+export function isAsrcProbeRejectResolved() {
+	return asrcProbeReject !== undefined;
 }
 
-export function clearAsrcProbeReject(){
+export function clearAsrcProbeReject() {
 	asrcProbeReject?.();
 	asrcProbeReject = undefined;
 }
@@ -204,16 +189,15 @@ export async function asrcProbe(asrc: string): Promise<string> {
 
 		const poll = async () => {
 			while (asrcProbeReject === rej) {
-				 audioSrcId = audioDevices[asrc];
+				audioSrcId = audioDevices[asrc];
 				if (audioSrcId) {
 					asrcProbeReject = undefined;
 					res(audioSrcId);
 					return;
-				} else {
-					const config = getConfig()
-					const msg = `Selected audio input '${config.asrc}' is unavailable. Waiting for it before starting the stream...`;
-					notificationBroadcast('asrc_not_found', 'error', msg, 2, true, false);
 				}
+				const config = getConfig();
+				const msg = `Selected audio input '${config.asrc}' is unavailable. Waiting for it before starting the stream...`;
+				notificationBroadcast("asrc_not_found", "error", msg, 2, true, false);
 
 				// sleep for one second
 				await new Promise<void>((r) => {
@@ -226,6 +210,3 @@ export async function asrcProbe(asrc: string): Promise<string> {
 		poll();
 	});
 }
-
-
-

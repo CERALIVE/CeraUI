@@ -18,8 +18,8 @@
 import fs from "node:fs";
 
 import killall from "../../helpers/killall.ts";
-import {getConfig, saveConfig} from "../config.ts";
-import {setup} from "../setup.ts";
+import { getConfig, saveConfig } from "../config.ts";
+import { setup } from "../setup.ts";
 
 const MIN_BITRATE = 300; // Kbps
 const MAX_BITRATE = 12_000; // Kbps
@@ -27,35 +27,31 @@ const MAX_BITRATE = 12_000; // Kbps
 export type BitrateParams = { max_br?: number };
 
 export function validateBitrate(params: BitrateParams): number | undefined {
-    const maxBr = params.max_br;
-    if (typeof maxBr !== 'number' || Number.isNaN(maxBr)) return;
-    if (maxBr < MIN_BITRATE || maxBr > MAX_BITRATE) return;
-    return maxBr;
+	const maxBr = params.max_br;
+	if (typeof maxBr !== "number" || Number.isNaN(maxBr)) return;
+	if (maxBr < MIN_BITRATE || maxBr > MAX_BITRATE) return;
+	return maxBr;
 }
 
-
 export function setBitrate(params: BitrateParams): number | undefined {
-    const maxBr = validateBitrate(params);
-    if (maxBr === undefined) return;
+	const maxBr = validateBitrate(params);
+	if (maxBr === undefined) return;
 
-    const config = getConfig();
-    const previousBitrate = config.max_br;
-    
-    try {
-        config.max_br = maxBr;
-        saveConfig();
+	const config = getConfig();
+	const previousBitrate = config.max_br;
 
-        fs.writeFileSync(
-            setup.bitrate_file,
-            `${MIN_BITRATE * 1000}\n${maxBr * 1000}\n`,
-        );
+	try {
+		config.max_br = maxBr;
+		saveConfig();
 
-        killall(["-HUP", "belacoder"]);
-        return maxBr;
-    } catch (error) {
-        // Restore previous bitrate if operation failed
-        config.max_br = previousBitrate;
-        console.error('Failed to set bitrate:', error);
-        throw error;
-    }
+		fs.writeFileSync(setup.bitrate_file, `${MIN_BITRATE * 1000}\n${maxBr * 1000}\n`);
+
+		killall(["-HUP", "belacoder"]);
+		return maxBr;
+	} catch (error) {
+		// Restore previous bitrate if operation failed
+		config.max_br = previousBitrate;
+		console.error("Failed to set bitrate:", error);
+		throw error;
+	}
 }

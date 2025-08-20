@@ -23,7 +23,7 @@ import {
 
 // Reactive count from store
 let imagesCount = $state(0);
-screenshotImages.subscribe(images => {
+screenshotImages.subscribe((images) => {
   imagesCount = images.length;
   console.log('🔄 Global store updated, count:', imagesCount);
 });
@@ -39,7 +39,7 @@ const tabs = [
 // Wait for content to be fully rendered
 async function waitForContentReady(): Promise<void> {
   // Wait for animations and transitions to complete
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   // Wait for any pending DOM updates
   await tick();
@@ -47,9 +47,9 @@ async function waitForContentReady(): Promise<void> {
 
   // Wait for images to load
   const images = document.querySelectorAll('img');
-  const imagePromises = Array.from(images).map(img => {
+  const imagePromises = Array.from(images).map((img) => {
     if (img.complete) return Promise.resolve();
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       img.onload = () => resolve(null);
       img.onerror = () => resolve(null);
       // Timeout after 2 seconds
@@ -68,7 +68,7 @@ async function waitForContentReady(): Promise<void> {
   }
 
   // Final render wait
-  await new Promise(resolve => setTimeout(resolve, 200));
+  await new Promise((resolve) => setTimeout(resolve, 200));
 }
 
 async function navigateToTab(tabKey: string): Promise<void> {
@@ -76,7 +76,7 @@ async function navigateToTab(tabKey: string): Promise<void> {
   if (navElement) {
     enhancedNavigationStore.navigateTo({ [tabKey]: navElement });
     await tick();
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Increased for navigation
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // Increased for navigation
     await waitForContentReady();
   }
 }
@@ -84,7 +84,7 @@ async function navigateToTab(tabKey: string): Promise<void> {
 async function switchTheme(theme: 'light' | 'dark'): Promise<void> {
   setMode(theme);
   await tick();
-  await new Promise(resolve => setTimeout(resolve, 600)); // Increased for theme switching
+  await new Promise((resolve) => setTimeout(resolve, 600)); // Increased for theme switching
   await waitForContentReady();
 }
 
@@ -94,7 +94,7 @@ async function enableMobileView(): Promise<void> {
   iframe.style.cssText = `position: fixed; top: 0; left: 0; width: 430px; height: 932px; border: none; z-index: 9999;`;
   document.body.appendChild(iframe);
 
-  await new Promise(resolve => {
+  await new Promise((resolve) => {
     iframe.onload = resolve;
     iframe.srcdoc = 'about:blank';
   });
@@ -103,7 +103,7 @@ async function enableMobileView(): Promise<void> {
     const mainElement = document.querySelector('main');
     if (mainElement) {
       const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-        .map(el => el.outerHTML)
+        .map((el) => el.outerHTML)
         .join('\n');
       const htmlClasses = document.documentElement.className || '';
       const bodyClasses = document.body.className || '';
@@ -115,15 +115,15 @@ async function enableMobileView(): Promise<void> {
         </html>`;
 
       // Wait for iframe content to load and render
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Increased wait time
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Increased wait time
 
       // Wait for iframe content to be ready
       if (iframe.contentDocument) {
         // Wait for iframe fonts and images
         const iframeImages = iframe.contentDocument.querySelectorAll('img');
-        const iframeImagePromises = Array.from(iframeImages).map(img => {
+        const iframeImagePromises = Array.from(iframeImages).map((img) => {
           if (img.complete) return Promise.resolve();
-          return new Promise(resolve => {
+          return new Promise((resolve) => {
             img.onload = () => resolve(null);
             img.onerror = () => resolve(null);
             setTimeout(() => resolve(null), 1500);
@@ -142,7 +142,7 @@ async function enableMobileView(): Promise<void> {
       }
 
       // Final wait for mobile rendering
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
 }
@@ -153,7 +153,11 @@ function disableMobileView(): void {
 }
 
 // Theme-aware screenshot capture
-async function captureScreenshotWithTheme(filename: string, theme: 'dark' | 'light', useIframe = false): Promise<Blob> {
+async function captureScreenshotWithTheme(
+  filename: string,
+  theme: 'dark' | 'light',
+  useIframe = false
+): Promise<Blob> {
   let element = document.body;
 
   if (useIframe) {
@@ -188,10 +192,13 @@ async function captureScreenshotWithTheme(filename: string, theme: 'dark' | 'lig
         }),
   };
 
-  console.log(`📸 Capturing ${filename} (${theme}) with options:`, { ...options, element: element.tagName });
+  console.log(`📸 Capturing ${filename} (${theme}) with options:`, {
+    ...options,
+    element: element.tagName,
+  });
 
   // Final pre-capture wait to ensure everything is settled
-  await new Promise(resolve => setTimeout(resolve, 300));
+  await new Promise((resolve) => setTimeout(resolve, 300));
 
   const dataUrl = await toPng(element, options);
   const response = await fetch(dataUrl);
@@ -205,7 +212,7 @@ async function captureTabScreenshots(
   tabs: Array<{ key: string; name: string }>,
   themes: Array<'dark' | 'light'>,
   type: 'desktop' | 'mobile',
-  useMobile = false,
+  useMobile = false
 ): Promise<void> {
   for (const theme of themes) {
     await switchTheme(theme);
@@ -226,9 +233,9 @@ async function captureTabScreenshots(
       // Additional wait for content stability - especially important for complex tabs
       console.log(`⏱️ Waiting for content stability before capture...`);
       if (tab.key === 'streaming' || tab.key === 'advanced' || tab.key === 'devtools') {
-        await new Promise(resolve => setTimeout(resolve, 800)); // Extra time for complex tabs
+        await new Promise((resolve) => setTimeout(resolve, 800)); // Extra time for complex tabs
       } else {
-        await new Promise(resolve => setTimeout(resolve, 400)); // Standard wait
+        await new Promise((resolve) => setTimeout(resolve, 400)); // Standard wait
       }
 
       // Final content readiness check
@@ -277,7 +284,7 @@ async function captureAll(): Promise<void> {
     await navigateToTab('general');
 
     // Extra wait for offline state to fully apply
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     console.log('🌐 Offline mode activated');
 
     for (const theme of themes) {
@@ -285,7 +292,7 @@ async function captureAll(): Promise<void> {
       await switchTheme(theme);
 
       // Extended wait for offline rendering - this is complex state
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       await waitForContentReady();
 
       console.log(`📸 Capturing offline-${theme}.png...`);
@@ -321,7 +328,7 @@ async function captureAll(): Promise<void> {
     isOnline.set(true);
 
     // Final cleanup wait to ensure everything is reset
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
     console.log('✅ Cleanup complete');
   }
 }
@@ -337,7 +344,9 @@ function clearImages(): void {
 }
 </script>
 
-<Card.Root class="border-dashed border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20">
+<Card.Root
+  class="border-dashed border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20"
+>
   <Card.Header>
     <Card.Title class="flex items-center gap-2 text-blue-700 dark:text-blue-300">
       <Camera class="h-5 w-5" />
@@ -350,7 +359,9 @@ function clearImages(): void {
 
   <Card.Content class="space-y-4">
     {#if $isCapturing}
-      <div class="rounded border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/20">
+      <div
+        class="rounded border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/20"
+      >
         <div class="text-sm font-medium text-blue-800 dark:text-blue-200">
           🚀 {$captureProgress}
         </div>
@@ -362,9 +373,10 @@ function clearImages(): void {
 
     <div class="space-y-3">
       <Button.Root
-        onclick={captureAll}
+        class="w-full bg-gradient-to-r from-blue-600 to-purple-600"
         disabled={$isCapturing}
-        class="w-full bg-gradient-to-r from-blue-600 to-purple-600">
+        onclick={captureAll}
+      >
         <Camera class="mr-2 h-4 w-4" />
         {$isCapturing ? $_('devtools.capturing') : $_('devtools.captureAllScreenshots')}
       </Button.Root>
@@ -377,12 +389,12 @@ function clearImages(): void {
     </div>
 
     <div class="flex gap-2 border-t pt-3">
-      <Button.Root onclick={downloadZip} disabled={imagesCount === 0} class="flex-1">
+      <Button.Root class="flex-1" disabled={imagesCount === 0} onclick={downloadZip}>
         <Download class="mr-2 h-4 w-4" />
         {$_('devtools.downloadZip', { values: { count: imagesCount } })}
       </Button.Root>
 
-      <Button.Root onclick={clearImages} disabled={imagesCount === 0} variant="outline" size="sm">
+      <Button.Root disabled={imagesCount === 0} onclick={clearImages} size="sm" variant="outline">
         {$_('devtools.clear')}
       </Button.Root>
     </div>

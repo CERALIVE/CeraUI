@@ -8,11 +8,15 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { Toggle } from '$lib/components/ui/toggle';
-import { changeModemSettings, renameSupportedModemNetwork, scanModemNetworks } from '$lib/helpers/NetworkHelper';
+import {
+  changeModemSettings,
+  renameSupportedModemNetwork,
+  scanModemNetworks,
+} from '$lib/helpers/NetworkHelper';
 import type { Modem } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
-let { deviceId, modem, modemIsScanning } = $props<{
+const { deviceId, modem, modemIsScanning } = $props<{
   deviceId: number | string;
   modem: Modem;
   modemIsScanning: boolean;
@@ -26,12 +30,15 @@ const getModemConfig = () => ({
   username: modem.config?.username || '',
   password: modem.config?.password || '',
   roaming: Boolean(modem.config?.roaming),
-  network: !modem.config?.network || modem.config?.network === '' ? '-1' : (modem.config.network as string),
+  network:
+    !modem.config?.network || modem.config?.network === ''
+      ? '-1'
+      : (modem.config.network as string),
 });
 
 // Form state
 let formData = $state(getModemConfig()); // Current form state
-let savedValues = $state(getModemConfig()); // Last saved values for comparison
+const savedValues = $state(getModemConfig()); // Last saved values for comparison
 let errors = $state<Record<string, string | undefined>>({});
 
 // Immediately fix the value type of the network selection after initialization
@@ -63,13 +70,13 @@ function updateFormFromModem() {
 }
 
 // Arrays to track all timeouts and intervals for cleanup
-let scanTimeouts: number[] = [];
-let modemWatchInterval = setInterval(updateFormFromModem, 500);
+const scanTimeouts: number[] = [];
+const modemWatchInterval = setInterval(updateFormFromModem, 500);
 
 // Clean up intervals and timeouts when the component is destroyed
 onDestroy(() => {
   clearInterval(modemWatchInterval);
-  scanTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+  scanTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
 });
 
 // Validate form data
@@ -87,7 +94,7 @@ function validateForm() {
   console.log(errors);
 
   // Filter out undefined values before checking the length
-  return Object.values(errors).filter(value => value !== undefined).length === 0;
+  return Object.values(errors).filter((value) => value !== undefined).length === 0;
 }
 
 // Check if form data has changed compared to saved values
@@ -176,25 +183,28 @@ function resetForm() {
 </script>
 
 <div class="space-y-4">
-  <form onsubmit={onSubmit} class="space-y-4">
+  <form class="space-y-4" onsubmit={onSubmit}>
     <div class="space-y-2">
-      <Label for="networkType" class="text-sm font-medium">{$_('network.modem.networkType')}</Label>
+      <Label class="text-sm font-medium" for="networkType">{$_('network.modem.networkType')}</Label>
       <Select.Root
-        type="single"
-        value={formData.selectedNetwork}
-        onValueChange={val => {
+        onValueChange={(val) => {
           if (val) {
             formData.selectedNetwork = val;
             errors.selectedNetwork = undefined;
           }
-        }}>
+        }}
+        type="single"
+        value={formData.selectedNetwork}
+      >
         <Select.Trigger id="networkType" class="w-full">
           {renameSupportedModemNetwork(formData.selectedNetwork)}
         </Select.Trigger>
         <Select.Content>
           <Select.Group>
             {#each modem.network_type.supported as networkType}
-              <Select.Item value={networkType}>{renameSupportedModemNetwork(networkType)}</Select.Item>
+              <Select.Item value={networkType}
+                >{renameSupportedModemNetwork(networkType)}</Select.Item
+              >
             {/each}
           </Select.Group>
         </Select.Content>
@@ -206,16 +216,17 @@ function resetForm() {
 
     <div class="flex items-center gap-4">
       <Toggle
-        variant="outline"
         class={cn(
           'h-10 w-10 rounded-lg',
           formData.roaming
             ? 'bg-green-600 hover:bg-green-700 data-[state=on]:bg-green-600'
-            : 'bg-red-600 hover:bg-red-700',
+            : 'bg-red-600 hover:bg-red-700'
         )}
-        title={$_('network.modem.enableRoaming')}
+        onPressedChange={(value) => (formData.roaming = value)}
         pressed={formData.roaming}
-        onPressedChange={value => (formData.roaming = value)}>
+        title={$_('network.modem.enableRoaming')}
+        variant="outline"
+      >
         {#if formData.roaming}
           <Check class="h-4 w-4 text-white" />
         {:else}
@@ -231,10 +242,16 @@ function resetForm() {
 
     {#if formData.roaming}
       <div class="space-y-2">
-        <Label for="roamingNetwork" class="text-sm font-medium">{$_('network.modem.roamingNetwork')}</Label>
+        <Label class="text-sm font-medium" for="roamingNetwork"
+          >{$_('network.modem.roamingNetwork')}</Label
+        >
         <div class="flex gap-2">
           <div class="flex-1">
-            <Select.Root type="single" value={formData.network} onValueChange={val => (formData.network = val)}>
+            <Select.Root
+              onValueChange={(val) => (formData.network = val)}
+              type="single"
+              value={formData.network}
+            >
               <Select.Trigger id="roamingNetwork" class="w-full">
                 {formData.network === '-1'
                   ? $_('network.modem.automaticRoamingNetwork')
@@ -243,11 +260,15 @@ function resetForm() {
               <Select.Content>
                 <Select.Group>
                   {#if modem.available_networks}
-                    <Select.Item datatype="number" value="-1" label={$_('network.modem.automaticRoamingNetwork')}
+                    <Select.Item
+                      datatype="number"
+                      label={$_('network.modem.automaticRoamingNetwork')}
+                      value="-1"
                     ></Select.Item>
                     {#each Object.entries(modem.available_networks) as [key, availableNetwork]}
                       {#if availableNetwork.availability === 'available'}
-                        <Select.Item datatype="number" value={key} label={availableNetwork.name}></Select.Item>
+                        <Select.Item datatype="number" label={availableNetwork.name} value={key}
+                        ></Select.Item>
                       {/if}
                     {/each}
                   {/if}
@@ -256,12 +277,15 @@ function resetForm() {
             </Select.Root>
           </div>
           <Button
+            class="border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
+            disabled={modemIsScanning || localScanningState}
+            onclick={handleScanNetworks}
             type="button"
             variant="outline"
-            class="border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
-            onclick={handleScanNetworks}
-            disabled={modemIsScanning || localScanningState}>
-            {modemIsScanning || localScanningState ? $_('network.modem.scanning') : $_('network.modem.scan')}
+          >
+            {modemIsScanning || localScanningState
+              ? $_('network.modem.scanning')
+              : $_('network.modem.scan')}
           </Button>
         </div>
       </div>
@@ -269,16 +293,17 @@ function resetForm() {
 
     <div class="flex items-center gap-4">
       <Toggle
-        variant="outline"
         class={cn(
           'h-10 w-10 rounded-lg',
           formData.autoconfig
             ? 'bg-green-600 hover:bg-green-700 data-[state=on]:bg-green-600'
-            : 'bg-red-600 hover:bg-red-700',
+            : 'bg-red-600 hover:bg-red-700'
         )}
-        title={$_('network.modem.autoapn')}
+        onPressedChange={(value) => (formData.autoconfig = value)}
         pressed={formData.autoconfig}
-        onPressedChange={value => (formData.autoconfig = value)}>
+        title={$_('network.modem.autoapn')}
+        variant="outline"
+      >
         {#if formData.autoconfig}
           <Check class="h-4 w-4 text-white" />
         {:else}
@@ -295,57 +320,64 @@ function resetForm() {
     {#if !formData.autoconfig}
       <div class="space-y-4">
         <div class="space-y-2">
-          <Label for="apn" class="text-sm font-medium">{$_('network.modem.apn')}</Label>
+          <Label class="text-sm font-medium" for="apn">{$_('network.modem.apn')}</Label>
           <Input
             id="apn"
+            class={errors.apn ? 'border-red-500' : ''}
             autocapitalize="none"
             autocomplete="off"
             autocorrect="off"
+            oninput={() => (errors.apn = undefined)}
             bind:value={formData.apn}
-            class={errors.apn ? 'border-red-500' : ''}
-            oninput={() => (errors.apn = undefined)} />
+          />
           {#if errors.apn}
             <p class="text-sm text-red-500">{errors.apn}</p>
           {/if}
         </div>
 
         <div class="space-y-2">
-          <Label for="username" class="text-sm font-medium">{$_('network.modem.username')}</Label>
+          <Label class="text-sm font-medium" for="username">{$_('network.modem.username')}</Label>
           <Input
             id="username"
-            type="text"
             autocapitalize="none"
             autocomplete="off"
             autocorrect="off"
-            bind:value={formData.username} />
+            type="text"
+            bind:value={formData.username}
+          />
         </div>
 
         <div class="space-y-2">
-          <Label for="modemPassword" class="text-sm font-medium">{$_('network.modem.password')}</Label>
+          <Label class="text-sm font-medium" for="modemPassword"
+            >{$_('network.modem.password')}</Label
+          >
           <Input
             id="modemPassword"
-            type="text"
             autocapitalize="none"
             autocomplete="off"
             autocorrect="off"
-            bind:value={formData.password} />
+            type="text"
+            bind:value={formData.password}
+          />
         </div>
       </div>
     {/if}
 
     <div class="flex gap-2 pt-2">
       <Button
-        type="submit"
         class="flex-1 border-green-600 bg-green-600 text-white hover:bg-green-700"
-        disabled={!isFormChanged()}>
+        disabled={!isFormChanged()}
+        type="submit"
+      >
         {$_('network.modem.save')}
       </Button>
       <Button
+        class="text-muted-foreground border-muted-foreground/20 hover:bg-muted/50"
+        disabled={!isFormChanged()}
+        onclick={resetForm}
         type="button"
         variant="outline"
-        class="text-muted-foreground border-muted-foreground/20 hover:bg-muted/50"
-        onclick={resetForm}
-        disabled={!isFormChanged()}>
+      >
         {$_('network.modem.reset')}
       </Button>
     </div>

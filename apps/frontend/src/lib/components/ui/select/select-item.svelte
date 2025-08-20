@@ -15,13 +15,14 @@ let {
 </script>
 
 <SelectPrimitive.Item
-  bind:ref
-  {value}
   class={cn(
     'data-highlighted:bg-accent data-highlighted:text-accent-foreground relative flex w-full cursor-pointer items-center rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50',
-    className,
+    className
   )}
-  {...restProps}>
+  {value}
+  bind:ref
+  {...restProps}
+>
   {#snippet children({ selected, highlighted })}
     <span class="absolute right-2 flex size-3.5 items-center justify-center">
       {#if selected}

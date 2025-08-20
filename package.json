@@ -20,15 +20,21 @@
     "preview": "pnpm --filter frontend run preview",
     "check": "pnpm --recursive --filter \"./apps/*\" run check",
     "typecheck": "pnpm --recursive --filter \"./apps/*\" run check",
-    "format": "pnpm --recursive run format",
-    "format:check": "prettier --check .",
+    "format": "pnpm --recursive --filter \"./apps/*\" run format",
+    "format:check": "pnpm --recursive --filter \"./apps/*\" run format:check",
     "lint": "pnpm --recursive --filter \"./apps/*\" run lint",
     "lint:fix": "pnpm --recursive --filter \"./apps/*\" run lint:fix",
+    "lint:backend": "pnpm --filter backend run lint",
+    "lint:frontend": "pnpm --filter frontend run lint",
+    "fix": "pnpm --recursive --filter \"./apps/*\" run fix",
+    "quality": "run-p typecheck format:check lint",
+    "quality:fix": "run-p fix lint:fix",
     "clean": "rm -rf dist/ && pnpm --recursive --filter \"./apps/*\" run clean && rm -rf node_modules",
     "clean:all": "pnpm clean && rm -rf node_modules/.pnpm-store"
   },
   "devDependencies": {
     "mprocs": "^0.7.3",
+    "npm-run-all2": "^8.0.4",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2"
   },

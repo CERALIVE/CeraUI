@@ -12,7 +12,7 @@ interface Props {
   children: import('svelte').Snippet;
 }
 
-let { onRefresh, threshold = 80, distance = 150, children }: Props = $props();
+const { onRefresh, threshold = 80, distance = 150, children }: Props = $props();
 
 // RTL support (for future enhancements)
 const _isRTL = $derived(rtlLanguages.includes($locale));
@@ -47,11 +47,7 @@ const handleTouchMove = (e: TouchEvent) => {
   const rawPullDistance = currentY - startY;
   pullDistance = isFinite(rawPullDistance) ? Math.max(0, rawPullDistance) : 0;
 
-  if (pullDistance > threshold) {
-    canRefresh = true;
-  } else {
-    canRefresh = false;
-  }
+  canRefresh = pullDistance > threshold ? true : false;
 
   // Prevent default scrolling when pulling
   if (pullDistance > 0) {
@@ -128,10 +124,13 @@ const handleTouchEnd = async () => {
 
 onMount(() => {
   // Only add touch listeners on mobile/tablet devices (including iPad) with NaN safety
-  const maxTouchPoints = navigator.maxTouchPoints;
-  const hasTouchScreen = 'ontouchstart' in window || (isFinite(maxTouchPoints) && maxTouchPoints > 0);
+  const { maxTouchPoints } = navigator;
+  const hasTouchScreen =
+    'ontouchstart' in window || (isFinite(maxTouchPoints) && maxTouchPoints > 0);
   const userAgent = navigator.userAgent || '';
-  const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+  const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+    userAgent
+  );
   const isMobile = hasTouchScreen || isMobileUA;
 
   if (isMobile) {
@@ -152,10 +151,9 @@ onMount(() => {
 <!-- Pull to Refresh Indicator -->
 <div
   bind:this={refreshElement}
+  style:transform="translateY(-48px)"
+  style:margin-top="56px"
   class="bg-background/95 supports-backdrop-filter:bg-background/80 pointer-events-none fixed top-0 right-0 left-0 z-[60] flex h-12 transform items-center justify-center border-b opacity-0 shadow-sm backdrop-blur-sm transition-all duration-300"
-  style="transform: translateY(-48px); margin-top: 56px;"
-  role="button"
-  tabindex="-1"
   onclick={() => {
     if (isRefreshing) {
       // Allow canceling refresh by clicking
@@ -170,7 +168,7 @@ onMount(() => {
       }
     }
   }}
-  onkeydown={e => {
+  onkeydown={(e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       if (isRefreshing) {
@@ -186,9 +184,14 @@ onMount(() => {
         }
       }
     }
-  }}>
+  }}
+  role="button"
+  tabindex="-1"
+>
   <div class="text-muted-foreground flex items-center gap-2">
-    <RefreshCw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''} {canRefresh ? 'text-primary' : ''}" />
+    <RefreshCw
+      class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''} {canRefresh ? 'text-primary' : ''}"
+    />
     <span class="text-sm font-medium">
       {#if isRefreshing}
         {$_('pwa.refreshing')}

@@ -32,7 +32,12 @@ import MobileLink from '$lib/components/ui/mobile-link.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
 import * as Sheet from '$lib/components/ui/sheet';
 import { type NavElements, navElements, siteName } from '$lib/config';
-import { canGoBack, enhancedNavigationStore, isNavigationTransitioning, navigationStore } from '$lib/stores/navigation';
+import {
+  canGoBack,
+  enhancedNavigationStore,
+  isNavigationTransitioning,
+  navigationStore,
+} from '$lib/stores/navigation';
 import { cn } from '$lib/utils';
 
 let currentNav: NavElements = $state({ general: navElements.general });
@@ -55,7 +60,8 @@ const handleClick = (nav: NavElements) => {
   }
 
   lastNavigationTime = now;
-  const navKey = nav && typeof nav === 'object' && Object.keys(nav).length > 0 ? Object.keys(nav)[0] : 'unknown';
+  const navKey =
+    nav && typeof nav === 'object' && Object.keys(nav).length > 0 ? Object.keys(nav)[0] : 'unknown';
   console.log(`[MobileNav] Navigation to ${navKey}:`, {
     timestamp: new Date().toISOString(),
     throttleMs: NAVIGATION_THROTTLE_MS,
@@ -129,7 +135,7 @@ const handleBack = () => {
 
 // Subscribe to navigation changes with enhanced reactivity
 $effect(() => {
-  const unsubscribe = navigationStore.subscribe(navigation => {
+  const unsubscribe = navigationStore.subscribe((navigation) => {
     currentNav = navigation;
   });
 
@@ -149,21 +155,25 @@ $effect(() => {
 <Sheet.Root bind:open>
   <Sheet.Trigger>
     <Button
-      variant="ghost"
+      class="hover:bg-accent/50 focus-visible:bg-accent/50 group relative mr-2 rounded-xl px-3 py-2 text-base transition-all duration-300 focus-visible:ring-0 focus-visible:ring-offset-0 md:hidden"
+      disabled={$isNavigationTransitioning}
       onmouseenter={() => (isMenuHovered = true)}
       onmouseleave={() => (isMenuHovered = false)}
-      disabled={$isNavigationTransitioning}
-      class="group hover:bg-accent/50 focus-visible:bg-accent/50 relative mr-2 rounded-xl px-3 py-2 text-base transition-all duration-300 focus-visible:ring-0 focus-visible:ring-offset-0 md:hidden">
+      variant="ghost"
+    >
       <!-- Enhanced menu icon with reactive states -->
       <div class="relative">
         {#if open}
-          <X class="h-5 w-5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-90" />
+          <X
+            class="h-5 w-5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-90"
+          />
         {:else}
           <Menu
             class={cn(
               'h-5 w-5 transition-all duration-300 group-hover:scale-110',
-              $isNavigationTransitioning && 'animate-pulse',
-            )} />
+              $isNavigationTransitioning && 'animate-pulse'
+            )}
+          />
         {/if}
       </div>
 
@@ -176,9 +186,9 @@ $effect(() => {
         class={cn(
           'absolute -inset-1 rounded-xl blur-sm transition-all duration-300',
           isMenuHovered || open ? 'bg-primary/20 opacity-100' : 'bg-primary/10 opacity-0',
-          $isNavigationTransitioning && 'animate-pulse',
-        )}>
-      </div>
+          $isNavigationTransitioning && 'animate-pulse'
+        )}
+      ></div>
 
       <!-- Loading indicator -->
       {#if $isNavigationTransitioning}
@@ -187,17 +197,20 @@ $effect(() => {
     </Button>
   </Sheet.Trigger>
 
-  <Sheet.Content side="left" class="w-80 pt-4 pr-0">
+  <Sheet.Content class="w-80 pt-4 pr-0" side="left">
     <!-- Enhanced Header Section with Navigation Controls -->
     <div class="border-border/50 border-b px-4 pb-4">
       <!-- Back button (if history available) -->
       {#if $canGoBack}
         <div class="mb-4" in:fly={{ x: -20, duration: 200 }}>
           <button
-            onclick={handleBack}
+            class="text-muted-foreground hover:text-foreground group flex items-center space-x-2 text-sm transition-all duration-200 disabled:opacity-50"
             disabled={$isNavigationTransitioning}
-            class="group text-muted-foreground hover:text-foreground flex items-center space-x-2 text-sm transition-all duration-200 disabled:opacity-50">
-            <ChevronLeft class="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-1" />
+            onclick={handleBack}
+          >
+            <ChevronLeft
+              class="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-1"
+            />
             <span>{$_('navigation.back')}</span>
           </button>
         </div>
@@ -205,27 +218,33 @@ $effect(() => {
 
       <!-- Enhanced Logo Section -->
       <button
-        class="group hover:bg-accent/50 flex w-full items-center space-x-3 rounded-xl px-4 py-3 transition-all duration-300"
+        class="hover:bg-accent/50 group flex w-full items-center space-x-3 rounded-xl px-4 py-3 transition-all duration-300"
         disabled={$isNavigationTransitioning}
-        onclick={handleLogoClick}>
+        onclick={handleLogoClick}
+      >
         <!-- Logo with enhanced effects -->
         <div class="relative">
           <Logo
             class={cn(
               'h-6 w-6 transition-all duration-300 group-hover:scale-105',
-              $isNavigationTransitioning && 'animate-pulse',
-            )} />
+              $isNavigationTransitioning && 'animate-pulse'
+            )}
+          />
 
           <!-- Logo glow effect -->
           <div
-            class="bg-primary/10 absolute -inset-1 rounded-full opacity-0 blur-sm transition-opacity duration-300 group-hover:opacity-100">
-          </div>
+            class="bg-primary/10 absolute -inset-1 rounded-full opacity-0 blur-sm transition-opacity duration-300 group-hover:opacity-100"
+          ></div>
         </div>
 
         <!-- Enhanced brand name -->
         <div class="flex-1">
           <span
-            class={cn('text-lg font-semibold transition-all duration-200', 'text-foreground group-hover:text-primary')}>
+            class={cn(
+              'text-lg font-semibold transition-all duration-200',
+              'text-foreground group-hover:text-primary'
+            )}
+          >
             {siteName}
           </span>
 
@@ -251,7 +270,7 @@ $effect(() => {
     </div>
 
     <!-- Enhanced Navigation Links Section -->
-    <ScrollArea orientation="both" class="flex-1 px-4 pt-4">
+    <ScrollArea class="flex-1 px-4 pt-4" orientation="both">
       <div class="flex flex-col space-y-2 pb-10">
         {#each Object.entries(navElements) as [identifier, navigation], index}
           {@const isActive = currentNav && Object.keys(currentNav)[0] === identifier}
@@ -265,26 +284,33 @@ $effect(() => {
                 duration: 300,
                 delay: index * 75,
                 easing: cubicInOut,
-              }}>
+              }}
+            >
               <!-- Enhanced mobile link with reactive states -->
               <div class="relative">
                 <MobileLink
-                  {identifier}
-                  isActive={isActive || isSelected}
                   class={cn(
                     'transition-all duration-300',
                     isSelected && 'bg-primary/10 scale-[0.98]',
-                    $isNavigationTransitioning && identifier === Object.keys(currentNav || {})[0] && 'opacity-60',
+                    $isNavigationTransitioning &&
+                      identifier === Object.keys(currentNav || {})[0] &&
+                      'opacity-60'
                   )}
+                  disabled={$isNavigationTransitioning}
+                  {identifier}
+                  isActive={isActive || isSelected}
                   onclick={() => {
                     // Validate identifier and navigation before handling click
                     if (identifier && navigation && typeof navigation === 'object') {
                       handleClick({ [identifier]: navigation });
                     } else {
-                      console.warn('[MobileNav] Invalid navigation data:', { identifier, navigation });
+                      console.warn('[MobileNav] Invalid navigation data:', {
+                        identifier,
+                        navigation,
+                      });
                     }
                   }}
-                  disabled={$isNavigationTransitioning}>
+                >
                   {#snippet children()}
                     <div class="flex w-full items-center justify-between">
                       <span>{$_(`navigation.${navigation?.label || 'unknown'}`)}</span>
@@ -306,8 +332,8 @@ $effect(() => {
                   <div
                     class="bg-primary/5 pointer-events-none absolute inset-0 rounded-lg"
                     in:scale={{ duration: 200, start: isFinite(0.95) ? 0.95 : 1 }}
-                    out:fade={{ duration: 150 }}>
-                  </div>
+                    out:fade={{ duration: 150 }}
+                  ></div>
                 {/if}
               </div>
             </div>
@@ -316,9 +342,14 @@ $effect(() => {
 
         <!-- Navigation status indicator -->
         {#if $isNavigationTransitioning}
-          <div class="text-muted-foreground flex items-center justify-center py-4 text-sm" in:fade={{ duration: 200 }}>
+          <div
+            class="text-muted-foreground flex items-center justify-center py-4 text-sm"
+            in:fade={{ duration: 200 }}
+          >
             <div class="flex items-center space-x-2">
-              <div class="border-primary h-3 w-3 animate-spin rounded-full border-2 border-t-transparent"></div>
+              <div
+                class="border-primary h-3 w-3 animate-spin rounded-full border-2 border-t-transparent"
+              ></div>
               <span>Switching sections...</span>
             </div>
           </div>

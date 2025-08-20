@@ -72,10 +72,11 @@ function goBack() {
 
       <div class="flex flex-col gap-2">
         <Button
-          onclick={handleRetry}
           class="w-full"
           disabled={isCheckingConnection}
-          variant={connectionCheckFailed ? 'destructive' : 'default'}>
+          onclick={handleRetry}
+          variant={connectionCheckFailed ? 'destructive' : 'default'}
+        >
           <RefreshCw class="mr-2 h-4 w-4 {isCheckingConnection ? 'animate-spin' : ''}" />
           {#if isCheckingConnection}
             {$_('offline.checking')}
@@ -85,7 +86,7 @@ function goBack() {
             {$_('offline.tryAgain')}
           {/if}
         </Button>
-        <Button variant="outline" onclick={goBack} class="w-full">{$_('offline.goBack')}</Button>
+        <Button class="w-full" onclick={goBack} variant="outline">{$_('offline.goBack')}</Button>
       </div>
 
       <div class="border-t pt-4">

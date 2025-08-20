@@ -40,7 +40,7 @@ interface Props {
   [key: string]: unknown;
 }
 
-let {
+const {
   class: className = undefined,
   identifier,
   disabled = false,
@@ -66,14 +66,6 @@ const handleMouseLeave = () => {
 
 <button
   id={identifier}
-  {disabled}
-  onmouseenter={() => (isHovered = true)}
-  onmouseleave={handleMouseLeave}
-  onmousedown={handleMouseDown}
-  onmouseup={handleMouseUp}
-  ontouchstart={handleMouseDown}
-  ontouchend={handleMouseUp}
-  {onclick}
   class={cn(
     'group relative w-full cursor-pointer rounded-lg px-4 py-3 text-left transition-all duration-300',
     'hover:bg-accent/50 focus-visible:bg-accent/60',
@@ -85,32 +77,50 @@ const handleMouseLeave = () => {
     isHovered && !isActive && 'bg-accent/40 scale-[1.02]',
     isPressed && 'scale-[0.98]',
     disabled && 'pointer-events-none opacity-60',
-    className,
+    className
   )}
-  {...restProps}>
+  {disabled}
+  {onclick}
+  onmousedown={handleMouseDown}
+  onmouseenter={() => (isHovered = true)}
+  onmouseleave={handleMouseLeave}
+  onmouseup={handleMouseUp}
+  ontouchend={handleMouseUp}
+  ontouchstart={handleMouseDown}
+  {...restProps}
+>
   {#if isActive}
     <!-- Enhanced active indicator with smooth animation -->
     <div
       class="bg-primary absolute top-1/2 left-0 w-1 -translate-y-1/2 rounded-r-full transition-all duration-300"
-      class:h-8={!isHovered}
       class:h-10={isHovered}
+      class:h-8={!isHovered}
       in:scale={{ duration: 300, start: isFinite(0.5) ? 0.5 : 1, easing: cubicInOut }}
-      out:scale={{ duration: 200, start: isFinite(1) ? 1 : 1, easing: cubicInOut }}>
-    </div>
+      out:scale={{ duration: 200, start: isFinite(1) ? 1 : 1, easing: cubicInOut }}
+    ></div>
 
     <!-- Subtle pulse effect for active items -->
-    <div class="bg-primary/30 absolute top-1/2 left-0 h-8 w-1 -translate-y-1/2 animate-pulse rounded-r-full"></div>
+    <div
+      class="bg-primary/30 absolute top-1/2 left-0 h-8 w-1 -translate-y-1/2 animate-pulse rounded-r-full"
+    ></div>
   {/if}
 
   <!-- Enhanced content with reactive animations -->
-  <div class={cn('relative block pl-3 transition-all duration-200', isActive && 'pl-4', isHovered && 'translate-x-1')}>
+  <div
+    class={cn(
+      'relative block pl-3 transition-all duration-200',
+      isActive && 'pl-4',
+      isHovered && 'translate-x-1'
+    )}
+  >
     <!-- Content slot with enhanced typography -->
     <span
       class={cn(
         'transition-all duration-200',
         isActive && 'font-semibold tracking-wide',
-        isHovered && isActive && 'text-primary/90',
-      )}>
+        isHovered && isActive && 'text-primary/90'
+      )}
+    >
       {#if children}
         {@render children()}
       {/if}
@@ -122,15 +132,19 @@ const handleMouseLeave = () => {
         class="bg-primary/60 absolute bottom-0 left-0 h-0.5 rounded-full transition-all duration-300"
         class:w-6={isHovered}
         in:fly={{ x: -10, duration: 200 }}
-        out:fly={{ x: -10, duration: 150 }}>
-      </div>
+        out:fly={{ x: -10, duration: 150 }}
+      ></div>
     {/if}
   </div>
 
   <!-- Loading state overlay -->
   {#if loading}
-    <div class="bg-background/80 absolute inset-0 flex items-center justify-center rounded-lg backdrop-blur-[2px]">
-      <div class="border-primary h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></div>
+    <div
+      class="bg-background/80 absolute inset-0 flex items-center justify-center rounded-lg backdrop-blur-[2px]"
+    >
+      <div
+        class="border-primary h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"
+      ></div>
     </div>
   {/if}
 </button>

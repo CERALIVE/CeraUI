@@ -1,3 +1,44 @@
-dist
-node_modules
-public
+# Build outputs
+dist/
+build/
+.svelte-kit/
+coverage/
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Generated files
+*.min.js
+*.min.css
+**/*.d.ts
+pnpm-lock.yaml
+
+# Assets
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.webp
+
+# Deployment configs (often have specific formatting requirements)
+deployment/
+*.service
+*.socket
+*.rules
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo

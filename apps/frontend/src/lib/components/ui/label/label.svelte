@@ -7,6 +7,10 @@ let { ref = $bindable(null), class: className, ...restProps }: LabelPrimitive.Ro
 </script>
 
 <LabelPrimitive.Root
+  class={cn(
+    'text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70',
+    className
+  )}
   bind:ref
-  class={cn('text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70', className)}
-  {...restProps} />
+  {...restProps}
+/>

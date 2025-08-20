@@ -11,7 +11,7 @@ import Networking from '../shared/Networking.svelte';
 import WiFiCard from '../shared/WiFiCard.svelte';
 
 let currentStatus: StatusMessage | undefined = $state();
-StatusMessages.subscribe(status => {
+StatusMessages.subscribe((status) => {
   currentStatus = status;
 });
 </script>
@@ -51,7 +51,7 @@ StatusMessages.subscribe(status => {
       <div class="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {#each Object.entries(currentStatus.wifi) as [deviceId, wifi] (Number(deviceId))}
           {#if !isNaN(Number(deviceId))}
-            <WiFiCard {wifi} deviceId={Number(deviceId)} />
+            <WiFiCard deviceId={Number(deviceId)} {wifi} />
           {/if}
         {/each}
       </div>
@@ -75,7 +75,7 @@ StatusMessages.subscribe(status => {
       <div class="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {#each Object.entries(currentStatus.modems) as [deviceId, modem] (Number(deviceId))}
           {#if !isNaN(Number(deviceId))}
-            <ModemCard {modem} deviceId={Number(deviceId)} />
+            <ModemCard deviceId={Number(deviceId)} {modem} />
           {/if}
         {/each}
       </div>
@@ -100,7 +100,9 @@ StatusMessages.subscribe(status => {
       </div>
       <div class="space-y-2">
         <h3 class="font-medium">{$_('network.emptyStates.noDevicesFound')}</h3>
-        <p class="text-muted-foreground text-sm">{$_('network.emptyStates.noDevicesDescription')}</p>
+        <p class="text-muted-foreground text-sm">
+          {$_('network.emptyStates.noDevicesDescription')}
+        </p>
       </div>
     </div>
   {/if}

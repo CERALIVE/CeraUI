@@ -12,7 +12,8 @@ let {
 </script>
 
 <AvatarPrimitive.Root
+  class={cn('relative flex size-10 shrink-0 overflow-hidden rounded-full', className)}
   bind:loadingStatus
   bind:ref
-  class={cn('relative flex size-10 shrink-0 overflow-hidden rounded-full', className)}
-  {...restProps} />
+  {...restProps}
+/>

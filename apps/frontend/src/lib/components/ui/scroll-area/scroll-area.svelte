@@ -28,15 +28,19 @@ $effect(() => {
 });
 </script>
 
-<ScrollAreaPrimitive.Root bind:ref={scrollAreaRef} {...restProps} class={cn('relative overflow-hidden', className)}>
+<ScrollAreaPrimitive.Root
+  bind:ref={scrollAreaRef}
+  {...restProps}
+  class={cn('relative overflow-hidden', className)}
+>
   <ScrollAreaPrimitive.Viewport class="h-full w-full rounded-[inherit]">
     {@render children?.()}
   </ScrollAreaPrimitive.Viewport>
   {#if orientation === 'vertical' || orientation === 'both'}
-    <Scrollbar orientation="vertical" class={scrollbarYClasses} />
+    <Scrollbar class={scrollbarYClasses} orientation="vertical" />
   {/if}
   {#if orientation === 'horizontal' || orientation === 'both'}
-    <Scrollbar orientation="horizontal" class={scrollbarXClasses} />
+    <Scrollbar class={scrollbarXClasses} orientation="horizontal" />
   {/if}
   <ScrollAreaPrimitive.Corner />
 </ScrollAreaPrimitive.Root>

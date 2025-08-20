@@ -26,7 +26,7 @@ interface Props {
   deviceId: number;
 }
 
-let { wifi, deviceId }: Props = $props();
+const { wifi, deviceId }: Props = $props();
 
 const wifiStatus = $derived(getWifiStatus(wifi));
 const connection = $derived(getConnection(wifi));
@@ -40,7 +40,8 @@ function getStatusColor(status: string, isHotspot: boolean) {
 }
 
 function getCardBorderClass(status: string, isHotspot: boolean) {
-  if (isHotspot) return 'border-blue-500/20 bg-gradient-to-br from-blue-50/50 to-card dark:from-blue-950/20';
+  if (isHotspot)
+    return 'border-blue-500/20 bg-gradient-to-br from-blue-50/50 to-card dark:from-blue-950/20';
   if (status === 'connected')
     return 'border-green-500/20 bg-gradient-to-br from-green-50/50 to-card dark:from-green-950/20';
   return 'border-border bg-gradient-to-br from-card to-card/50';
@@ -50,8 +51,9 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
 <Card.Root
   class={cn(
     'group relative flex h-full flex-col transition-all duration-300 hover:scale-[1.02] hover:shadow-md',
-    getCardBorderClass(wifiStatus, isHotspot),
-  )}>
+    getCardBorderClass(wifiStatus, isHotspot)
+  )}
+>
   <!-- Status Indicator -->
   <div
     class={cn(
@@ -60,9 +62,9 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
         ? 'bg-gradient-to-r from-blue-500 to-cyan-500'
         : wifiStatus === 'connected'
           ? 'bg-gradient-to-r from-green-500 to-emerald-500'
-          : 'bg-gradient-to-r from-amber-500 to-orange-500',
-    )}>
-  </div>
+          : 'bg-gradient-to-r from-amber-500 to-orange-500'
+    )}
+  ></div>
 
   <Card.Header class="pb-3">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -72,8 +74,13 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
           <div
             class={cn(
               'rounded-full p-2 transition-colors',
-              isHotspot ? 'bg-blue-500/10' : wifiStatus === 'connected' ? 'bg-green-500/10' : 'bg-amber-500/10',
-            )}>
+              isHotspot
+                ? 'bg-blue-500/10'
+                : wifiStatus === 'connected'
+                  ? 'bg-green-500/10'
+                  : 'bg-amber-500/10'
+            )}
+          >
             {#if isHotspot}
               <Router class={cn('h-5 w-5', getStatusColor(wifiStatus, isHotspot))} />
             {:else}
@@ -94,8 +101,9 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
                 ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
                 : wifiStatus === 'connected'
                   ? 'bg-green-500/10 text-green-700 dark:text-green-300'
-                  : 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
-            )}>
+                  : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+            )}
+          >
             {capitalizeFirstLetter($_(`wifiStatus.${wifiStatus}`))}
           </span>
         </div>
@@ -156,15 +164,16 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
     <div class="mt-auto flex flex-col gap-2 border-t pt-3">
       {#if wifi.hotspot}
         <!-- Hotspot Actions -->
-        <HotspotConfigurator {wifi} {deviceId} />
+        <HotspotConfigurator {deviceId} {wifi} />
 
         <div class="flex flex-col gap-2 sm:flex-row">
           <SimpleAlertDialog
-            confirmButtonText={$_('network.dialog.close')}
-            hideCancelButton={true}
             buttonText={$_('network.status.details')}
+            confirmButtonText={$_('network.dialog.close')}
             extraButtonClasses="w-full sm:flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-            title={$_('network.dialog.hotspotDetails')}>
+            hideCancelButton={true}
+            title={$_('network.dialog.hotspotDetails')}
+          >
             {#snippet icon()}
               <EyeIcon class="h-4 w-4" />
             {/snippet}
@@ -181,9 +190,10 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
                   {:then wifiQrCode}
                     <div class="flex justify-center">
                       <img
-                        src={wifiQrCode}
+                        class="dark:bg-background rounded-md border bg-white p-2 shadow-sm"
                         alt={$_('network.accessibility.wifiQrCode')}
-                        class="dark:bg-background rounded-md border bg-white p-2 shadow-sm" />
+                        src={wifiQrCode}
+                      />
                     </div>
                   {/await}
                 {/if}
@@ -202,11 +212,12 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
           </SimpleAlertDialog>
 
           <SimpleAlertDialog
-            confirmButtonText={$_('network.dialog.turnOff')}
             buttonText={$_('network.status.turnOff')}
+            confirmButtonText={$_('network.dialog.turnOff')}
             extraButtonClasses="w-full sm:flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+            onconfirm={() => turnHotspotModeOff(deviceId)}
             title={$_('network.dialog.turnHotspotOff')}
-            onconfirm={() => turnHotspotModeOff(deviceId)}>
+          >
             {#snippet icon()}
               <WifiOff class="h-4 w-4" />
             {/snippet}
@@ -223,11 +234,12 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
         <WifiSelector {wifi} wifiId={deviceId} />
 
         <SimpleAlertDialog
-          confirmButtonText={$_('network.dialog.turnOn')}
           buttonText={$_('network.status.enableHotspot')}
+          confirmButtonText={$_('network.dialog.turnOn')}
           extraButtonClasses="w-full bg-blue-600 hover:bg-blue-700 text-white"
+          onconfirm={() => turnHotspotModeOn(deviceId)}
           title={$_('network.dialog.turnHotspotOn')}
-          onconfirm={() => turnHotspotModeOn(deviceId)}>
+        >
           {#snippet icon()}
             <Router class="h-4 w-4" />
           {/snippet}

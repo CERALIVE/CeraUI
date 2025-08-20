@@ -31,11 +31,7 @@
 import type WebSocket from "ws";
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
-import {
-	broadcastMsg,
-	buildMsg,
-	getSocketSenderId,
-} from "./websocket-server.ts";
+import { broadcastMsg, buildMsg, getSocketSenderId } from "./websocket-server.ts";
 
 type Notification = {
 	name: string;
@@ -140,16 +136,7 @@ export function notificationBroadcast(
 	isDismissable = true,
 	authedOnly = true,
 ) {
-	notificationSend(
-		undefined,
-		name,
-		type,
-		msg,
-		duration,
-		isPersistent,
-		isDismissable,
-		authedOnly,
-	);
+	notificationSend(undefined, name, type, msg, duration, isPersistent, isDismissable, authedOnly);
 }
 
 export function notificationRemove(name: string) {
@@ -163,9 +150,7 @@ export function notificationRemove(name: string) {
 function _notificationIsLive(n: PersistentNotification) {
 	if (n.duration === 0) return 0;
 
-	const remainingDuration = Math.ceil(
-		n.duration - (getms() - n.updated) / 1000,
-	);
+	const remainingDuration = Math.ceil(n.duration - (getms() - n.updated) / 1000);
 	if (remainingDuration <= 0) {
 		persistentNotifications.delete(n.name);
 		return false;

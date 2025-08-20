@@ -7,9 +7,13 @@ let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let installEventSetup = false;
 
 // iOS Detection
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as unknown as { MSStream?: unknown }).MSStream;
+const isIOS =
+  /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+  !(window as unknown as { MSStream?: unknown }).MSStream;
 const isIOSSafari =
-  isIOS && /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|OPiOS|mercury/.test(navigator.userAgent);
+  isIOS &&
+  /Safari/.test(navigator.userAgent) &&
+  !/CriOS|FxiOS|OPiOS|mercury/.test(navigator.userAgent);
 
 // Stores
 export const isOnline = writable(navigator.onLine);
@@ -76,9 +80,12 @@ if (window.matchMedia('(display-mode: standalone)').matches) {
 } else {
   // Fallback for desktop browsers: if not installed and on desktop, allow manual install
   // This helps when beforeinstallprompt doesn't fire due to strict PWA criteria
-  const isDesktop = !/android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.userAgent);
+  const isDesktop = !/android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+    navigator.userAgent
+  );
   if (isDesktop) {
-    const isLocalDomain = window.location.hostname === 'localhost' || window.location.hostname.endsWith('.local');
+    const isLocalDomain =
+      window.location.hostname === 'localhost' || window.location.hostname.endsWith('.local');
     const isHTTP = window.location.protocol === 'http:';
 
     // Shorter timeout for .local HTTP domains since beforeinstallprompt won't fire

@@ -29,7 +29,7 @@ interface Props {
   normalizeValue: (value: number, min: number, max: number, step?: number) => number;
 }
 
-let {
+const {
   relayMessage,
   properties,
   formErrors,
@@ -97,9 +97,11 @@ $effect(() => {
 // No effects watching local state to prevent timing issues and loops
 // Parent functions are called directly in input handlers (like EncoderCard pattern)
 
-const isManualConfig = $derived(localRelayServer === '-1' || localRelayServer === undefined || localRelayServer === '');
+const isManualConfig = $derived(
+  localRelayServer === '-1' || localRelayServer === undefined || localRelayServer === ''
+);
 const isManualAccount = $derived(
-  localRelayAccount === '-1' || localRelayAccount === undefined || localRelayAccount === '',
+  localRelayAccount === '-1' || localRelayAccount === undefined || localRelayAccount === ''
 );
 </script>
 
@@ -116,20 +118,22 @@ const isManualAccount = $derived(
   <Card.Content class="flex-1 space-y-4">
     <!-- Relay Server Selection -->
     <div class="space-y-2">
-      <Label for="relayServer" class="text-sm font-medium">{$_('settings.relayServer')}</Label>
+      <Label class="text-sm font-medium" for="relayServer">{$_('settings.relayServer')}</Label>
       <Select.Root
-        type="single"
-        value={localRelayServer}
         disabled={relayMessage === undefined || isStreaming}
-        onValueChange={value => {
+        onValueChange={(value) => {
           localRelayServer = value;
           relayServerTouched = true;
           onRelayServerChange(value);
-        }}>
+        }}
+        type="single"
+        value={localRelayServer}
+      >
         <Select.Trigger id="relayServer" class="w-full">
           {localRelayServer !== undefined && localRelayServer !== '-1' && relayMessage?.servers
-            ? (Object.entries(relayMessage.servers).find(server => server[0] === localRelayServer)?.[1]?.name ??
-              $_('settings.manualConfiguration'))
+            ? (Object.entries(relayMessage.servers).find(
+                (server) => server[0] === localRelayServer
+              )?.[1]?.name ?? $_('settings.manualConfiguration'))
             : $_('settings.manualConfiguration')}
         </Select.Trigger>
         <Select.Content>
@@ -161,7 +165,8 @@ const isManualAccount = $derived(
     {#if isManualConfig}
       <!-- Manual Server Configuration -->
       <div
-        class="space-y-4 rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-800 dark:bg-orange-950/20">
+        class="space-y-4 rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-800 dark:bg-orange-950/20"
+      >
         <div class="mb-3 flex items-center space-x-2">
           <div class="h-2 w-2 rounded-full bg-orange-500"></div>
           <h4 class="text-sm font-medium text-orange-800 dark:text-orange-200">
@@ -170,35 +175,33 @@ const isManualAccount = $derived(
         </div>
 
         <div class="space-y-2">
-          <Label for="srtlaServerAddress" class="text-sm font-medium">
+          <Label class="text-sm font-medium" for="srtlaServerAddress">
             {$_('settings.srtlaServerAddress')}
           </Label>
           <Input
             id="srtlaServerAddress"
-            bind:value={localSrtlaServerAddress}
-            disabled={isStreaming}
-            placeholder={$_('settings.placeholders.srtlaServerAddress')}
             class="font-mono"
+            disabled={isStreaming}
             oninput={() => {
               addressTouched = true;
               onSrtlaAddressChange(localSrtlaServerAddress);
-            }} />
+            }}
+            placeholder={$_('settings.placeholders.srtlaServerAddress')}
+            bind:value={localSrtlaServerAddress}
+          />
           {#if formErrors.srtlaServerAddress}
             <p class="text-destructive text-sm">{formErrors.srtlaServerAddress}</p>
           {/if}
         </div>
 
         <div class="space-y-2">
-          <Label for="srtlaServerPort" class="text-sm font-medium">
+          <Label class="text-sm font-medium" for="srtlaServerPort">
             {$_('settings.srtlaServerPort')}
           </Label>
           <Input
             id="srtlaServerPort"
-            type="number"
-            bind:value={localSrtlaServerPort}
-            disabled={isStreaming}
-            placeholder={$_('settings.placeholders.srtlaServerPort')}
             class="font-mono"
+            disabled={isStreaming}
             oninput={() => {
               portTouched = true;
               const value = (localSrtlaServerPort || '').toString().trim();
@@ -212,7 +215,11 @@ const isManualAccount = $derived(
                   onSrtlaPortChange(undefined);
                 }
               }
-            }} />
+            }}
+            placeholder={$_('settings.placeholders.srtlaServerPort')}
+            type="number"
+            bind:value={localSrtlaServerPort}
+          />
           {#if formErrors.srtlaServerPort}
             <p class="text-destructive text-sm">{formErrors.srtlaServerPort}</p>
           {/if}
@@ -221,20 +228,23 @@ const isManualAccount = $derived(
     {:else}
       <!-- Relay Account Selection -->
       <div class="space-y-2">
-        <Label for="relayServerAccount" class="text-sm font-medium">
+        <Label class="text-sm font-medium" for="relayServerAccount">
           {$_('settings.relayServerAccount')}
         </Label>
         <Select.Root
-          type="single"
           disabled={relayMessage === undefined || isStreaming}
-          onValueChange={value => {
+          onValueChange={(value) => {
             localRelayAccount = value;
             relayAccountTouched = true;
             onRelayAccountChange(value);
           }}
-          value={localRelayAccount}>
+          type="single"
+          value={localRelayAccount}
+        >
           <Select.Trigger id="relayServerAccount" class="w-full">
-            {localRelayAccount === undefined || localRelayAccount === '-1' || relayMessage?.accounts === undefined
+            {localRelayAccount === undefined ||
+            localRelayAccount === '-1' ||
+            relayMessage?.accounts === undefined
               ? $_('settings.manualConfiguration')
               : relayMessage.accounts[localRelayAccount].name}
           </Select.Trigger>
@@ -265,28 +275,31 @@ const isManualAccount = $derived(
     <!-- SRT Stream ID (for manual account configuration) -->
     {#if isManualAccount}
       <div class="space-y-2">
-        <Label for="srtStreamId" class="text-sm font-medium">
+        <Label class="text-sm font-medium" for="srtStreamId">
           {$_('settings.srtStreamId')}
           <span class="text-muted-foreground ml-1 text-xs">({$_('settings.optional')})</span>
         </Label>
         <Input
           id="srtStreamId"
-          bind:value={localSrtStreamId}
-          disabled={isStreaming}
-          placeholder={$_('settings.placeholders.srtStreamId')}
           class="font-mono"
+          disabled={isStreaming}
           oninput={() => {
             streamIdTouched = true;
             onSrtStreamIdChange(localSrtStreamId);
-          }} />
+          }}
+          placeholder={$_('settings.placeholders.srtStreamId')}
+          bind:value={localSrtStreamId}
+        />
       </div>
     {/if}
 
     <!-- SRT Latency Control -->
     <div class="bg-accent/30 space-y-3 rounded-lg p-4">
-      <Label for="srtLatency" class="flex items-center gap-2 text-sm font-medium">
+      <Label class="flex items-center gap-2 text-sm font-medium" for="srtLatency">
         {$_('settings.srtLatency')}
-        <span class="rounded-md bg-blue-100 px-2 py-1 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+        <span
+          class="rounded-md bg-blue-100 px-2 py-1 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
+        >
           {localSrtLatency || 2000}ms
         </span>
       </Label>
@@ -294,65 +307,67 @@ const isManualAccount = $derived(
       <div class="relative h-6 w-full">
         <!-- Track Background -->
         <div
-          class="absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full bg-gray-200 dark:bg-gray-700">
-        </div>
+          class="absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full bg-gray-200 dark:bg-gray-700"
+        ></div>
         <!-- Progress Fill -->
         <div
-          class="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-full bg-gradient-to-r from-blue-400 to-blue-500 transition-all duration-200 dark:from-blue-500 dark:to-blue-600"
           style={`width: ${(() => {
             const safeLatency = isFinite(localSrtLatency) ? localSrtLatency : 2000;
             const percentage = ((safeLatency - 2000) / (12000 - 2000)) * 100;
             return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
-          })()}%;`}>
-        </div>
+          })()}%;`}
+          class="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-full bg-gradient-to-r from-blue-400 to-blue-500 transition-all duration-200 dark:from-blue-500 dark:to-blue-600"
+        ></div>
         <!-- Thumb -->
         <div
-          class="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 border-white bg-blue-500 shadow-md transition-all duration-200 hover:scale-110 dark:border-gray-800 dark:bg-blue-400"
           style={`left: ${(() => {
             const safeLatency = isFinite(localSrtLatency) ? localSrtLatency : 2000;
             const percentage = ((safeLatency - 2000) / (12000 - 2000)) * 100;
             return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
-          })()}%;`}>
-        </div>
+          })()}%;`}
+          class="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 border-white bg-blue-500 shadow-md transition-all duration-200 hover:scale-110 dark:border-gray-800 dark:bg-blue-400"
+        ></div>
         <!-- Invisible Input for Interaction -->
         <input
-          type="range"
           id="srtLatency"
-          bind:value={localSrtLatency}
-          disabled={isStreaming}
-          min={2000}
-          max={12000}
-          step={50}
           class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-          oninput={e => {
+          disabled={isStreaming}
+          max={12000}
+          min={2000}
+          oninput={(e) => {
             const inputValue = parseInt(e.currentTarget.value);
             if (!isNaN(inputValue)) {
               localSrtLatency = inputValue;
               onSrtLatencyChange(inputValue);
             }
-          }} />
+          }}
+          step={50}
+          type="range"
+          bind:value={localSrtLatency}
+        />
       </div>
       <Input
         id="srtLatencyInput"
-        type="number"
-        step="1"
-        value={localSrtLatency || 2000}
-        disabled={isStreaming}
         class="text-center font-mono"
-        oninput={e => {
-          const inputValue = parseInt(e.currentTarget.value);
-          if (!isNaN(inputValue)) {
-            localSrtLatency = inputValue;
-            onSrtLatencyChange(inputValue); // Call parent to keep everything in sync
-          }
-        }}
+        disabled={isStreaming}
         onblur={() => {
           const value = normalizeValue(localSrtLatency, 2000, 12000, 50);
           if (value !== localSrtLatency) {
             localSrtLatency = value;
             onSrtLatencyChange(value); // Only call parent if value actually changed
           }
-        }} />
+        }}
+        oninput={(e) => {
+          const inputValue = parseInt(e.currentTarget.value);
+          if (!isNaN(inputValue)) {
+            localSrtLatency = inputValue;
+            onSrtLatencyChange(inputValue); // Call parent to keep everything in sync
+          }
+        }}
+        step="1"
+        type="number"
+        value={localSrtLatency || 2000}
+      />
       <div class="text-muted-foreground flex justify-between text-xs">
         <span>{$_('settings.lowerLatency')}</span>
         <span>{$_('settings.higherLatency')}</span>

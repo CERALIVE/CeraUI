@@ -122,8 +122,7 @@ modem.generic.bearers.value[2]                  : /org/freedesktop/ModemManager1
 		"modem.3gpp.registration-state": "home",
 		"modem.3gpp.packet-service-state": "attached",
 		"modem.3gpp.eps.ue-mode-operation": "csps-2",
-		"modem.3gpp.eps.initial-bearer.dbus-path":
-			"/org/freedesktop/ModemManager1/Bearer/0",
+		"modem.3gpp.eps.initial-bearer.dbus-path": "/org/freedesktop/ModemManager1/Bearer/0",
 		"modem.generic.sim": "/org/freedesktop/ModemManager1/SIM/0",
 		"modem.generic.bearers": [
 			"/org/freedesktop/ModemManager1/Bearer/2",

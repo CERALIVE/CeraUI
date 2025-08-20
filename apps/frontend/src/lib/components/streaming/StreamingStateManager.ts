@@ -2,7 +2,10 @@ import { get } from 'svelte/store';
 import { writable } from 'svelte/store';
 import { _, locale } from 'svelte-i18n';
 
-import { type GroupedPipelines, groupPipelinesByDeviceAndFormat } from '$lib/helpers/PipelineHelper';
+import {
+  type GroupedPipelines,
+  groupPipelinesByDeviceAndFormat,
+} from '$lib/helpers/PipelineHelper';
 import {
   AudioCodecsMessages,
   ConfigMessages,
@@ -10,7 +13,12 @@ import {
   RelaysMessages,
   StatusMessages,
 } from '$lib/stores/websocket-store';
-import type { AudioCodecsMessage, ConfigMessage, PipelinesMessage, RelayMessage } from '$lib/types/socket-messages';
+import type {
+  AudioCodecsMessage,
+  ConfigMessage,
+  PipelinesMessage,
+  RelayMessage,
+} from '$lib/types/socket-messages';
 
 export interface StreamingState {
   groupedPipelines: GroupedPipelines[keyof GroupedPipelines] | undefined;
@@ -25,7 +33,9 @@ export interface StreamingState {
 
 class StreamingStateManager {
   // Create reactive stores for each property
-  private _groupedPipelinesStore = writable<GroupedPipelines[keyof GroupedPipelines] | undefined>(undefined);
+  private _groupedPipelinesStore = writable<GroupedPipelines[keyof GroupedPipelines] | undefined>(
+    undefined
+  );
   private _unparsedPipelinesStore = writable<PipelinesMessage | undefined>(undefined);
   private _isStreamingStore = writable<boolean | undefined>(undefined);
   private _audioSourcesStore = writable<Array<string>>([]);
@@ -104,14 +114,16 @@ class StreamingStateManager {
   }
 
   public cleanup(): void {
-    this._disposers.forEach(dispose => dispose());
+    this._disposers.forEach((dispose) => dispose());
     this._disposers = [];
   }
 
   private updateStores() {
     console.log(`[StreamingStateManager] Updating stores:`, {
       hasGroupedPipelines: !!this._groupedPipelines,
-      groupedPipelinesKeys: this._groupedPipelines ? Object.keys(this._groupedPipelines) : 'undefined',
+      groupedPipelinesKeys: this._groupedPipelines
+        ? Object.keys(this._groupedPipelines)
+        : 'undefined',
       hasUnparsedPipelines: !!this._unparsedPipelines,
       timestamp: new Date().toISOString(),
     });
@@ -129,14 +141,14 @@ class StreamingStateManager {
 
   private setupSubscriptions() {
     // WebSocket subscriptions
-    AudioCodecsMessages.subscribe(audioCodecsMessage => {
+    AudioCodecsMessages.subscribe((audioCodecsMessage) => {
       if (audioCodecsMessage && !this._audioCodecs) {
         this._audioCodecs = audioCodecsMessage;
         this.updateStores();
       }
     });
 
-    StatusMessages.subscribe(status => {
+    StatusMessages.subscribe((status) => {
       if (status) {
         let hasChanged = false;
 
@@ -173,14 +185,14 @@ class StreamingStateManager {
     });
 
     // Subscribe to configuration messages
-    ConfigMessages.subscribe(config => {
+    ConfigMessages.subscribe((config) => {
       if (config && this._savedConfig !== config) {
         this._savedConfig = config;
         this.updateStores();
       }
     });
 
-    RelaysMessages.subscribe(message => {
+    RelaysMessages.subscribe((message) => {
       if (this._relayMessage !== message) {
         this._relayMessage = message;
         this.updateStores();
@@ -188,7 +200,7 @@ class StreamingStateManager {
     });
 
     // Subscribe to pipeline messages
-    PipelinesMessages.subscribe(message => {
+    PipelinesMessages.subscribe((message) => {
       if (message) {
         this._unparsedPipelines = message;
         this.updateStores();
@@ -198,7 +210,7 @@ class StreamingStateManager {
         const samplePipelines = Object.entries(message).slice(0, 3);
         console.debug(
           'Sample pipeline names:',
-          samplePipelines.map(([_key, value]) => value.name),
+          samplePipelines.map(([_key, value]) => value.name)
         );
 
         // Process pipelines immediately when they arrive (don't wait for locale changes)
@@ -209,7 +221,7 @@ class StreamingStateManager {
 
   private setupReactiveEffects() {
     // Set up reactive pipeline processing using locale store subscription
-    locale.subscribe(currentLocale => {
+    locale.subscribe((currentLocale) => {
       console.log(`[StreamingStateManager] Locale changed, processing pipelines:`, {
         hasUnparsedPipelines: !!this._unparsedPipelines,
         locale: currentLocale,
@@ -245,7 +257,12 @@ class StreamingStateManager {
 
         // Log for debugging what devices are available
         if (availableDevices.length > 1) {
-          console.info('Multiple devices available:', availableDevices, 'Using:', availableDevices[0]);
+          console.info(
+            'Multiple devices available:',
+            availableDevices,
+            'Using:',
+            availableDevices[0]
+          );
         }
       } else {
         console.warn('No devices found in pipeline data');

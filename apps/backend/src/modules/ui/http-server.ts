@@ -40,7 +40,7 @@ if (isDevelopment) {
 	});
 
 	// Handle proxy errors
-	proxy.on("error", (err, req, res) => {
+	proxy.on("error", (err, _req, res) => {
 		logger.error("Proxy error:", err);
 		if (!res.headersSent) {
 			res.writeHead(502, { "Content-Type": "text/plain" });

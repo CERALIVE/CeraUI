@@ -17,7 +17,10 @@ export function normalizeValue(value: number, min: number, max: number, step = 1
   return isFinite(result) ? result : min;
 }
 
-export function updateMaxBitrate(bitrate: number | undefined, isStreaming: boolean | undefined): void {
+export function updateMaxBitrate(
+  bitrate: number | undefined,
+  isStreaming: boolean | undefined
+): void {
   if (isStreaming && bitrate) {
     updateBitrate(bitrate);
   }

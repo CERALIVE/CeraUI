@@ -4,7 +4,9 @@ import { isOnline } from './pwa';
 import { socket } from './websocket-store';
 
 // Create a connection state store based on actual socket
-const connectionState = writable<'connected' | 'connecting' | 'disconnected' | 'error'>('connecting');
+const connectionState = writable<'connected' | 'connecting' | 'disconnected' | 'error'>(
+  'connecting'
+);
 
 // Monitor socket state with event listeners (more efficient than polling)
 const updateConnectionState = () => {
@@ -37,12 +39,15 @@ socket.addEventListener('error', handleSocketError);
 export const shouldShowOfflinePage = writable(false);
 
 // Store to track offline state combining browser + WebSocket states
-export const isFullyOffline = derived([isOnline, connectionState], ([$isOnline, $connectionState]) => {
-  // Consider offline if:
-  // 1. Browser is offline, OR
-  // 2. WebSocket is disconnected/error for extended period
-  return !$isOnline || $connectionState === 'disconnected' || $connectionState === 'error';
-});
+export const isFullyOffline = derived(
+  [isOnline, connectionState],
+  ([$isOnline, $connectionState]) => {
+    // Consider offline if:
+    // 1. Browser is offline, OR
+    // 2. WebSocket is disconnected/error for extended period
+    return !$isOnline || $connectionState === 'disconnected' || $connectionState === 'error';
+  }
+);
 
 // Enhanced offline detection with persistence
 let offlineStartTime: number | null = null;
@@ -205,7 +210,7 @@ window.addEventListener('online', handleOnline);
 checkInitialConnectivity();
 
 // Subscribe to offline state changes
-isFullyOffline.subscribe(async offline => {
+isFullyOffline.subscribe(async (offline) => {
   if (offline) {
     if (offlineStartTime === null) {
       offlineStartTime = Date.now();

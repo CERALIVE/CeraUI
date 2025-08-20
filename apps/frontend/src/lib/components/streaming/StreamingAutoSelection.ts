@@ -16,7 +16,7 @@ export interface AutoSelectionResult {
 export function autoSelectNextOption(
   currentLevel: string,
   properties: Properties,
-  groupedPipelines: GroupedPipelines[keyof GroupedPipelines] | undefined,
+  groupedPipelines: GroupedPipelines[keyof GroupedPipelines] | undefined
 ): AutoSelectionResult {
   if (!groupedPipelines) return {};
 
@@ -30,7 +30,11 @@ export function autoSelectNextOption(
         if (encoders.length === 1) {
           result.encoder = encoders[0];
           // Continue chain to next level
-          const nextResult = autoSelectNextOption('encoder', { ...properties, encoder: encoders[0] }, groupedPipelines);
+          const nextResult = autoSelectNextOption(
+            'encoder',
+            { ...properties, encoder: encoders[0] },
+            groupedPipelines
+          );
           return { ...result, ...nextResult };
         }
       }
@@ -46,7 +50,7 @@ export function autoSelectNextOption(
           const nextResult = autoSelectNextOption(
             'resolution',
             { ...properties, resolution: resolutions[0] },
-            groupedPipelines,
+            groupedPipelines
           );
           return { ...result, ...nextResult };
         }
@@ -56,7 +60,8 @@ export function autoSelectNextOption(
     case 'resolution':
       if (properties.inputMode && properties.encoder && properties.resolution) {
         // If there's only one framerate option, auto-select it
-        const framerates = groupedPipelines[properties.inputMode][properties.encoder][properties.resolution];
+        const framerates =
+          groupedPipelines[properties.inputMode][properties.encoder][properties.resolution];
         if (framerates.length === 1) {
           result.framerate = framerates[0].extraction.fps ?? undefined;
         }

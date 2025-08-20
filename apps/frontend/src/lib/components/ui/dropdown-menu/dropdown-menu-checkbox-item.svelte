@@ -18,14 +18,15 @@ let {
 </script>
 
 <DropdownMenuPrimitive.CheckboxItem
+  class={cn(
+    'data-highlighted:bg-accent data-highlighted:text-accent-foreground relative flex cursor-default items-center rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50',
+    className
+  )}
   bind:ref
   bind:checked
   bind:indeterminate
-  class={cn(
-    'data-highlighted:bg-accent data-highlighted:text-accent-foreground relative flex cursor-default items-center rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50',
-    className,
-  )}
-  {...restProps}>
+  {...restProps}
+>
   {#snippet children({ checked, indeterminate })}
     <span class="absolute left-2 flex size-3.5 items-center justify-center">
       {#if indeterminate}

@@ -15,11 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import {
-	nmConnGetFields,
-	nmConnsGet,
-	nmcliParseSep,
-} from "../network/network-manager.ts";
+import { nmConnGetFields, nmConnsGet, nmcliParseSep } from "../network/network-manager.ts";
 import { setup } from "../setup.ts";
 
 type GsmConnection = {

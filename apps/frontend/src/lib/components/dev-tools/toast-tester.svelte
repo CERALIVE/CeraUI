@@ -15,7 +15,15 @@
 </style>
 
 <script lang="ts">
-import { AlertCircle, AlertTriangle, CheckCircle2, Info, Loader2, MessageCircle, X } from '@lucide/svelte';
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  Loader2,
+  MessageCircle,
+  X,
+} from '@lucide/svelte';
 import { _, locale } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
@@ -29,7 +37,7 @@ import { Textarea } from '$lib/components/ui/textarea';
 let customTitle = $state($_('devtools.customTitle'));
 let customDescription = $state($_('devtools.customDescription'));
 let toastDuration = $state(4000);
-let _selectedPosition = $state('bottom-right');
+const _selectedPosition = $state('bottom-right');
 
 // Update input values when locale changes
 $effect(() => {
@@ -64,7 +72,8 @@ const toastTypes = [
     color: 'text-green-600',
     bgColor: 'bg-green-50 dark:bg-green-950/20',
     borderColor: 'border-green-200 dark:border-green-800',
-    action: () => toast.success(customTitle, { description: customDescription, duration: toastDuration }),
+    action: () =>
+      toast.success(customTitle, { description: customDescription, duration: toastDuration }),
   },
   {
     name: $_('devtools.error'),
@@ -73,7 +82,8 @@ const toastTypes = [
     color: 'text-red-600',
     bgColor: 'bg-red-50 dark:bg-red-950/20',
     borderColor: 'border-red-200 dark:border-red-800',
-    action: () => toast.error(customTitle, { description: customDescription, duration: toastDuration }),
+    action: () =>
+      toast.error(customTitle, { description: customDescription, duration: toastDuration }),
   },
   {
     name: $_('devtools.warning'),
@@ -82,7 +92,8 @@ const toastTypes = [
     color: 'text-amber-600',
     bgColor: 'bg-amber-50 dark:bg-amber-950/20',
     borderColor: 'border-amber-200 dark:border-amber-800',
-    action: () => toast.warning(customTitle, { description: customDescription, duration: toastDuration }),
+    action: () =>
+      toast.warning(customTitle, { description: customDescription, duration: toastDuration }),
   },
   {
     name: $_('devtools.info'),
@@ -91,7 +102,8 @@ const toastTypes = [
     color: 'text-blue-600',
     bgColor: 'bg-blue-50 dark:bg-blue-950/20',
     borderColor: 'border-blue-200 dark:border-blue-800',
-    action: () => toast.info(customTitle, { description: customDescription, duration: toastDuration }),
+    action: () =>
+      toast.info(customTitle, { description: customDescription, duration: toastDuration }),
   },
   {
     name: $_('devtools.default'),
@@ -114,7 +126,9 @@ const toastTypes = [
       // Auto-dismiss loading toast after duration
       setTimeout(() => {
         toast.dismiss(loadingToast);
-        toast.success($_('devtools.loadingComplete'), { description: $_('devtools.loadingCompleteDesc') });
+        toast.success($_('devtools.loadingComplete'), {
+          description: $_('devtools.loadingCompleteDesc'),
+        });
       }, toastDuration);
     },
   },
@@ -200,7 +214,9 @@ function dismissAllToasts() {
 }
 </script>
 
-<Card.Root class="border-dashed border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-950/20">
+<Card.Root
+  class="border-dashed border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-950/20"
+>
   <Card.Header>
     <Card.Title class="flex items-center gap-2 text-purple-700 dark:text-purple-300">
       <MessageCircle class="h-5 w-5" />
@@ -218,31 +234,38 @@ function dismissAllToasts() {
 
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div class="space-y-2">
-          <Label for="toast-title" class="text-xs">{$_('devtools.title')}</Label>
-          <Input id="toast-title" bind:value={customTitle} placeholder="Toast title..." class="text-sm" />
+          <Label class="text-xs" for="toast-title">{$_('devtools.title')}</Label>
+          <Input
+            id="toast-title"
+            class="text-sm"
+            placeholder="Toast title..."
+            bind:value={customTitle}
+          />
         </div>
 
         <div class="space-y-2">
-          <Label for="toast-duration" class="text-xs">{$_('devtools.toastDuration')}</Label>
+          <Label class="text-xs" for="toast-duration">{$_('devtools.toastDuration')}</Label>
           <Input
             id="toast-duration"
+            class="text-sm"
+            max="10000"
+            min="1000"
+            step="500"
             type="number"
             bind:value={toastDuration}
-            min="1000"
-            max="10000"
-            step="500"
-            class="text-sm" />
+          />
         </div>
       </div>
 
       <div class="space-y-2">
-        <Label for="toast-description" class="text-xs">{$_('devtools.description')}</Label>
+        <Label class="text-xs" for="toast-description">{$_('devtools.description')}</Label>
         <Textarea
           id="toast-description"
-          bind:value={customDescription}
+          class="resize-none text-sm"
           placeholder="Toast description..."
           rows="2"
-          class="resize-none text-sm" />
+          bind:value={customDescription}
+        />
       </div>
     </div>
 
@@ -252,13 +275,15 @@ function dismissAllToasts() {
       <div class="grid grid-cols-2 gap-2 md:grid-cols-3">
         {#each toastTypes as toastType}
           <Button
+            class={`${toastType.bgColor} ${toastType.borderColor} hover:bg-opacity-80 transition-all duration-200`}
             onclick={toastType.action}
-            variant="outline"
             size="sm"
-            class={`${toastType.bgColor} ${toastType.borderColor} hover:bg-opacity-80 transition-all duration-200`}>
+            variant="outline"
+          >
             {@const IconComponent = toastType.icon}
             <IconComponent
-              class={`mr-2 h-4 w-4 ${toastType.color} ${toastType.type === 'loading' ? 'animate-spin' : ''}`} />
+              class={`mr-2 h-4 w-4 ${toastType.color} ${toastType.type === 'loading' ? 'animate-spin' : ''}`}
+            />
             <span class={toastType.color}>{toastType.name}</span>
           </Button>
         {/each}
@@ -270,7 +295,12 @@ function dismissAllToasts() {
       <div class="text-sm font-medium">{$_('devtools.presetExamples')}</div>
       <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
         {#each presetToasts as preset}
-          <Button onclick={preset.action} variant="outline" size="sm" class="h-auto justify-start p-3 text-left">
+          <Button
+            class="h-auto justify-start p-3 text-left"
+            onclick={preset.action}
+            size="sm"
+            variant="outline"
+          >
             <div class="flex-1">
               <div class="text-xs font-medium">{preset.name}</div>
               <div class="text-muted-foreground truncate text-xs">{preset.title}</div>
@@ -285,28 +315,31 @@ function dismissAllToasts() {
       <div class="text-sm font-medium">{$_('devtools.specialToastActions')}</div>
       <div class="flex flex-wrap gap-2">
         <Button
+          class="border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/20"
           onclick={showActionToast}
-          variant="outline"
           size="sm"
-          class="border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/20">
+          variant="outline"
+        >
           <CheckCircle2 class="mr-2 h-4 w-4 text-indigo-600" />
           <span class="text-indigo-600">{$_('devtools.actionToast')}</span>
         </Button>
 
         <Button
+          class="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/20"
           onclick={showPersistentToast}
-          variant="outline"
           size="sm"
-          class="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/20">
+          variant="outline"
+        >
           <AlertTriangle class="mr-2 h-4 w-4 text-orange-600" />
           <span class="text-orange-600">{$_('devtools.persistent')}</span>
         </Button>
 
         <Button
+          class="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20"
           onclick={dismissAllToasts}
-          variant="outline"
           size="sm"
-          class="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20">
+          variant="outline"
+        >
           <X class="mr-2 h-4 w-4 text-red-600" />
           <span class="text-red-600">{$_('devtools.dismissAll')}</span>
         </Button>

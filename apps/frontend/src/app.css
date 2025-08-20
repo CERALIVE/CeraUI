@@ -471,7 +471,6 @@
   }
 }
 
-
 /* Smooth state change indicators */
 .state-indicator {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -483,7 +482,8 @@
 }
 
 @keyframes stateIndicatorPulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
@@ -499,13 +499,21 @@
 }
 
 @keyframes navErrorShake {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateX(0);
   }
-  10%, 30%, 50%, 70%, 90% {
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
     transform: translateX(-2px);
   }
-  20%, 40%, 60%, 80% {
+  20%,
+  40%,
+  60%,
+  80% {
     transform: translateX(2px);
   }
 }
@@ -552,7 +560,7 @@
   .nav-transition-smooth {
     transition-duration: 0.2s;
   }
-  
+
   .nav-button:hover {
     transform: none; /* Disable hover effects on mobile for better performance */
   }
@@ -569,11 +577,11 @@
     transition: none;
     animation: none;
   }
-  
+
   .nav-loading::before {
     display: none;
   }
-  
+
   .state-indicator-pulse {
     animation: none;
   }
@@ -585,7 +593,7 @@
     outline-width: 3px;
     outline-color: hsl(var(--foreground));
   }
-  
+
   .nav-loading::before {
     background: hsl(var(--foreground));
   }

@@ -6,10 +6,18 @@ import { OfflinePage, PWAStatus } from '$lib/components/ui/pwa';
 import { Toaster } from '$lib/components/ui/sonner';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { updateManifestLink } from '$lib/helpers/ManifestHelper';
-import { startStreaming as startStreamingFn, stopStreaming as stopStreamingFn } from '$lib/helpers/SystemHelper';
+import {
+  startStreaming as startStreamingFn,
+  stopStreaming as stopStreamingFn,
+} from '$lib/helpers/SystemHelper';
 import { authStatusStore } from '$lib/stores/auth-status';
 import { shouldShowOfflinePage } from '$lib/stores/offline-navigation';
-import { AuthMessages, NotificationsMessages, sendAuthMessage, StatusMessages } from '$lib/stores/websocket-store';
+import {
+  AuthMessages,
+  NotificationsMessages,
+  sendAuthMessage,
+  StatusMessages,
+} from '$lib/stores/websocket-store';
 import type { NotificationType, StatusMessage } from '$lib/types/socket-messages';
 
 import { rtlLanguages, setupLocale } from '../i18n';
@@ -48,7 +56,7 @@ const startStreaming = (config: { [key: string]: string | number }) => {
     toast.dismiss();
 
     // Clear all persistent notification timers
-    Object.values(persistentNotificationTimers).forEach(timer => {
+    Object.values(persistentNotificationTimers).forEach((timer) => {
       clearTimeout(timer);
     });
 
@@ -80,7 +88,7 @@ const stopStreaming = () => {
     toast.dismiss();
 
     // Clear all persistent notification timers
-    Object.values(persistentNotificationTimers).forEach(timer => {
+    Object.values(persistentNotificationTimers).forEach((timer) => {
       clearTimeout(timer);
     });
 
@@ -115,7 +123,7 @@ const showToast = (type: NotificationType, name: string, options: any) => {
     if (options.isPersistent) {
       // Check if we already have this persistent notification
       const existingPersistentToastEntries = Object.entries(activeToasts).filter(
-        ([_, toast]) => toast.notificationKey === messageKey && toast.duration === Infinity,
+        ([_, toast]) => toast.notificationKey === messageKey && toast.duration === Infinity
       );
 
       if (existingPersistentToastEntries.length > 0) {
@@ -183,7 +191,7 @@ const showToast = (type: NotificationType, name: string, options: any) => {
             console.error('Error cleaning up toast:', e);
           }
         },
-        (typeof options.duration === 'number' ? options.duration : 5000) + 1000,
+        (typeof options.duration === 'number' ? options.duration : 5000) + 1000
       ); // Add 1 second buffer
     }
   } finally {
@@ -192,8 +200,9 @@ const showToast = (type: NotificationType, name: string, options: any) => {
   }
 };
 
-StatusMessages.subscribe(status => {
-  updatingStatus = status?.updating && typeof status.updating !== 'boolean' && status.updating.result !== 0;
+StatusMessages.subscribe((status) => {
+  updatingStatus =
+    status?.updating && typeof status.updating !== 'boolean' && status.updating.result !== 0;
 });
 const auth = localStorage.getItem('auth');
 if (auth) {
@@ -221,7 +230,7 @@ if (auth) {
   isCheckingAuthStatus = false;
 }
 
-AuthMessages.subscribe(message => {
+AuthMessages.subscribe((message) => {
   if (message?.success) {
     isCheckingAuthStatus = false;
     showToast('success', 'AUTH', {
@@ -232,7 +241,7 @@ AuthMessages.subscribe(message => {
     authStatusStore.set(true);
   }
 
-  authStatusStore.subscribe(status => {
+  authStatusStore.subscribe((status) => {
     authStatus = status;
   });
 });
@@ -263,8 +272,8 @@ const PERSISTENT_AUTO_CLEAR_TIMEOUT = 5000; // 5 seconds
 // Track timers for auto-clearing persistent notifications
 let persistentNotificationTimers = $state<Record<string, number>>({});
 
-NotificationsMessages.subscribe(notifications => {
-  notifications?.show?.forEach(notification => {
+NotificationsMessages.subscribe((notifications) => {
+  notifications?.show?.forEach((notification) => {
     const toastKey = `${notification.type}-${notification.msg}`;
 
     // If this is a persistent notification, reset/create its auto-clear timer
@@ -278,7 +287,10 @@ NotificationsMessages.subscribe(notifications => {
       const timerId = window.setTimeout(() => {
         // Find any toasts with this key
         Object.entries(activeToasts).forEach(([id, toastElement]) => {
-          if (toastElement.notificationKey === notification.msg && toastElement.duration === Infinity) {
+          if (
+            toastElement.notificationKey === notification.msg &&
+            toastElement.duration === Infinity
+          ) {
             // Remove problematic toast.dismiss(toastElement.id) call - causes Svelte 5 compatibility issues
             // Let persistent toasts expire naturally instead of force dismissing
 
@@ -344,7 +356,9 @@ window.stopStreamingWithNotificationClear = stopStreaming;
     <!-- Loading state while checking auth - show a basic loading indicator -->
     <div class="flex min-h-screen items-center justify-center">
       <div class="text-center">
-        <div class="border-primary mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"></div>
+        <div
+          class="border-primary mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
+        ></div>
         <p class="text-muted-foreground">Loading...</p>
       </div>
     </div>

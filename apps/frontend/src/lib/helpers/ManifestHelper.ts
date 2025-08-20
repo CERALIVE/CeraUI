@@ -30,7 +30,7 @@ export function generateDynamicManifest(): PWAManifest {
   const isRTL = rtlLanguages.includes(currentLocale);
 
   // Get locale info (for future use)
-  const _localeInfo = existingLocales.find(l => l.code === currentLocale) || existingLocales[0];
+  const _localeInfo = existingLocales.find((l) => l.code === currentLocale) || existingLocales[0];
 
   // Get the current origin for absolute URLs
   const origin = window.location.origin;

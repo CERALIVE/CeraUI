@@ -52,11 +52,7 @@ type ResolveType = "a" | "aaaa";
   instances for unrelated queries as we call resolver.cancel() on
   timeout, which will make all pending queries time out.
 */
-function resolveP(
-	hostname: string,
-	rrtype: ResolveType | undefined,
-	existingResolver?: Resolver,
-) {
+function resolveP(hostname: string, rrtype: ResolveType | undefined, existingResolver?: Resolver) {
 	const resolver = existingResolver ?? new Resolver();
 
 	return new Promise<ResolveResult>((resolve, reject) => {
@@ -118,9 +114,7 @@ const dnsResults: Record<string, ResolveResult> = {};
 try {
 	dnsCache = JSON.parse(fs.readFileSync(DNS_CACHE_FILE, "utf8"));
 } catch (_err) {
-	logger.warn(
-		"Failed to load the persistent DNS cache, starting with an empty cache",
-	);
+	logger.warn("Failed to load the persistent DNS cache, starting with an empty cache");
 }
 
 function isIpv4Addr(val: string) {
@@ -131,9 +125,7 @@ function isValidResolveType(rrtype: string): rrtype is ResolveType {
 	return rrtype === "a" || rrtype === "aaaa";
 }
 
-function normalizeResolveType(
-	rrtype: string | undefined,
-): ResolveType | undefined {
+function normalizeResolveType(rrtype: string | undefined): ResolveType | undefined {
 	if (rrtype === undefined) return undefined;
 	const normalized = rrtype.toLowerCase();
 	if (isValidResolveType(normalized)) return normalized;
@@ -221,13 +213,8 @@ export async function dnsCacheValidate(name: string) {
 
 	const cachedEntry = dnsCache[name];
 
-	if (
-		!cachedEntry ||
-		!compareArrayElements(dnsResults[name], cachedEntry.results)
-	) {
-		const writeFile = !(
-			cachedEntry?.ts && Date.now() - cachedEntry.ts < DNS_MIN_AGE
-		);
+	if (!cachedEntry || !compareArrayElements(dnsResults[name], cachedEntry.results)) {
+		const writeFile = !(cachedEntry?.ts && Date.now() - cachedEntry.ts < DNS_MIN_AGE);
 
 		dnsCache[name] = cachedEntry ?? {
 			ts: Date.now(),

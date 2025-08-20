@@ -71,10 +71,7 @@ function getPipelines() {
 	if (setup.hw === "rk3588" && !fs.existsSync("/dev/hdmirx")) {
 		excludePipelines = "h265_hdmi";
 	}
-	Object.assign(
-		ps,
-		readDirAbsPath(`${belacoderPipelinesDir}/${setup.hw}/`, excludePipelines),
-	);
+	Object.assign(ps, readDirAbsPath(`${belacoderPipelinesDir}/${setup.hw}/`, excludePipelines));
 
 	Object.assign(ps, readDirAbsPath(`${belacoderPipelinesDir}/generic/`));
 
@@ -93,7 +90,7 @@ export function initPipelines() {
 	pipelines = getPipelines();
 }
 
-export function searchPipelines(id: string): Pipeline|null {
+export function searchPipelines(id: string): Pipeline | null {
 	if (pipelines[id]) return pipelines[id];
 	return null;
 }

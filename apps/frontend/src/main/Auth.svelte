@@ -33,13 +33,16 @@ const validation = $derived({
   password: {
     isValid: password.length >= (setPassword ? 8 : 1),
     isEmpty: password.length === 0,
-    message: setPassword && password.length < 8 && password.length > 0 ? $_('auth.validation.passwordMinLength') : '',
+    message:
+      setPassword && password.length < 8 && password.length > 0
+        ? $_('auth.validation.passwordMinLength')
+        : '',
   },
 });
 
 const isFormValid = $derived(validation.password.isValid);
 
-StatusMessages.subscribe(status => {
+StatusMessages.subscribe((status) => {
   if (status) {
     setPassword = status.set_password ?? false;
     if (setPassword) {
@@ -48,15 +51,15 @@ StatusMessages.subscribe(status => {
   }
 });
 
-AuthMessages.subscribe(message => {
+AuthMessages.subscribe((message) => {
   if (message?.success && remember && password) {
     localStorage.setItem('auth', password);
   }
 });
 
-NotificationsMessages.subscribe(messages => {
+NotificationsMessages.subscribe((messages) => {
   if (
-    messages?.show?.find(message => {
+    messages?.show?.find((message) => {
       return message.name === 'auth';
     })
   ) {
@@ -80,18 +83,18 @@ async function onSubmit(event: SubmitEvent) {
 }
 </script>
 
-<div class="relative container grid h-dvh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0">
+<div
+  class="relative container grid h-dvh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0"
+>
   <span class="absolute top-4 right-4 flex md:top-8 md:right-8">
     <span class="mr-3"> <LocaleSelector /></span>
     <ModeToggle></ModeToggle>
   </span>
   <div class="bg-muted relative hidden h-full flex-col p-10 text-white lg:flex dark:border-r">
     <div
+      style:background-image="url(https://images.unsplash.com/photo-1590069261209-f8e9b8642343?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1376&q=80)"
       class="absolute inset-0 bg-cover"
-      style="
-				background-image:
-					url(https://images.unsplash.com/photo-1590069261209-f8e9b8642343?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1376&q=80);">
-    </div>
+    ></div>
     <div class="relative z-20 flex items-center text-lg font-medium">
       <!-- <Command class="mr-2 h-6 w-6" /> -->
       {siteName} Beta UI
@@ -108,7 +111,8 @@ async function onSubmit(event: SubmitEvent) {
       <div class="flex flex-col space-y-4 text-center">
         <!-- Enhanced Header with Icon -->
         <div
-          class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg">
+          class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg"
+        >
           <Shield class="h-8 w-8 text-white" />
         </div>
 
@@ -124,8 +128,13 @@ async function onSubmit(event: SubmitEvent) {
           <div class="grid gap-4">
             <!-- Enhanced Password Field -->
             <div class="space-y-3">
-              <Label for="password" class="text-foreground flex items-center gap-3 text-base font-semibold">
-                <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
+              <Label
+                class="text-foreground flex items-center gap-3 text-base font-semibold"
+                for="password"
+              >
+                <div
+                  class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30"
+                >
                   <Shield class="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </div>
                 {setPassword ? $_('auth.newPassword') : $_('auth.password')}
@@ -133,33 +142,37 @@ async function onSubmit(event: SubmitEvent) {
 
               <div class="relative">
                 <Input
-                  bind:value={password}
                   id="password"
-                  placeholder={setPassword ? $_('auth.placeholderNewPassword') : $_('auth.placeholderPassword')}
-                  type={showPassword ? 'text' : 'password'}
                   class={cn(
                     'focus:ring-opacity-20 h-12 w-full rounded-xl border-2 px-4 pr-12 text-base transition-all duration-300 focus:ring-4',
                     !validation.password.isValid && !validation.password.isEmpty
                       ? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
                       : validation.password.isValid && !validation.password.isEmpty
                         ? 'border-green-400 bg-green-50 focus:border-green-500 focus:ring-green-500 dark:bg-green-950/20'
-                        : 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50',
+                        : 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50'
                   )}
                   autocapitalize="none"
                   autocomplete={setPassword ? 'new-password' : 'current-password'}
                   autocorrect="off"
-                  disabled={isLoading} />
+                  disabled={isLoading}
+                  placeholder={setPassword
+                    ? $_('auth.placeholderNewPassword')
+                    : $_('auth.placeholderPassword')}
+                  type={showPassword ? 'text' : 'password'}
+                  bind:value={password}
+                />
 
                 <!-- Password Visibility Toggle -->
                 <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
                   class="absolute top-1/2 right-1 h-10 w-10 -translate-y-1/2 hover:bg-gray-100 dark:hover:bg-gray-800"
                   aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
                   aria-pressed={showPassword}
+                  onclick={() => (showPassword = !showPassword)}
+                  size="sm"
                   title={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
-                  onclick={() => (showPassword = !showPassword)}>
+                  type="button"
+                  variant="ghost"
+                >
                   {#if showPassword}
                     <EyeOff class="h-4 w-4 text-gray-500" aria-hidden="true" />
                   {:else}
@@ -195,9 +208,10 @@ async function onSubmit(event: SubmitEvent) {
 
             <!-- Enhanced Submit Button -->
             <Button
-              type="submit"
+              class="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-base font-semibold text-white shadow-lg transition-all duration-300 hover:from-blue-700 hover:to-purple-700 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isLoading || !isFormValid}
-              class="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-base font-semibold text-white shadow-lg transition-all duration-300 hover:from-blue-700 hover:to-purple-700 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50">
+              type="submit"
+            >
               {#if isLoading}
                 <LoaderCircle class="mr-2 h-5 w-5 animate-spin" />
                 <span>{setPassword ? $_('auth.creatingPassword') : $_('auth.signingIn')}</span>
@@ -208,11 +222,14 @@ async function onSubmit(event: SubmitEvent) {
             </Button>
           </div>
           <!-- Enhanced Remember Me -->
-          <div class="mt-4 flex items-center space-x-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
-            <Checkbox id="remember" bind:checked={remember} class="h-5 w-5" />
+          <div
+            class="mt-4 flex items-center space-x-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50"
+          >
+            <Checkbox id="remember" class="h-5 w-5" bind:checked={remember} />
             <Label
+              class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
               for="remember"
-              class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+            >
               {$_('auth.rememberMe')}
             </Label>
           </div>
@@ -249,7 +266,9 @@ async function onSubmit(event: SubmitEvent) {
       <!-- Enhanced Footer -->
       <div class="space-y-2 text-center">
         <p class="text-muted-foreground text-sm">{$_('auth.footerText')}</p>
-        <p class="text-muted-foreground/70 text-xs">{siteName} Beta UI - {$_('auth.secureAccess')}</p>
+        <p class="text-muted-foreground/70 text-xs">
+          {siteName} Beta UI - {$_('auth.secureAccess')}
+        </p>
       </div>
     </div>
   </div>

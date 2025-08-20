@@ -62,7 +62,10 @@ let keepAliveInterval: number | null = null;
 
 // Connection opened
 socket.addEventListener('open', function () {
-  toast.success('Connection', { duration: 3000, description: 'Connection established successfully' });
+  toast.success('Connection', {
+    duration: 3000,
+    description: 'Connection established successfully',
+  });
 
   // Start enhanced keep-alive with activity monitoring
   if (keepAliveInterval) clearInterval(keepAliveInterval);
@@ -115,7 +118,11 @@ function sendCreatePasswordMessage(password: string) {
   });
 }
 
-function sendAuthMessage(password: string, isPersistent: boolean, onError: (() => unknown) | undefined = undefined) {
+function sendAuthMessage(
+  password: string,
+  isPersistent: boolean,
+  onError: (() => unknown) | undefined = undefined
+) {
   const auth_req = { auth: { password, persistent_token: isPersistent } };
   sendMessage(JSON.stringify(auth_req), () => {
     toast.error('Authentication failed', {
@@ -171,7 +178,10 @@ const assignMessage = (message: string) => {
           StatusStore.set({
             ...currentStatus,
             ...parsedMessage.status,
-            modems: mergeModems(currentStatus?.modems ? currentStatus.modems : {}, parsedMessage.status?.modems),
+            modems: mergeModems(
+              currentStatus?.modems ? currentStatus.modems : {},
+              parsedMessage.status?.modems
+            ),
           });
         } else {
           StatusStore.set({ ...currentStatus, ...parsedMessage.status });
@@ -196,7 +206,7 @@ const sendMessage = (message: string, onTimeout: (() => unknown) | undefined = u
       socket.send(message);
     },
     10000,
-    onTimeout,
+    onTimeout
   );
 };
 
@@ -207,7 +217,7 @@ function waitForSocketConnection(
   callback: () => unknown,
   maxWaitingTime: number = 10000,
   onTimeout: undefined | (() => unknown) = undefined,
-  executionTime = 0,
+  executionTime = 0
 ) {
   setTimeout(() => {
     if (socket.readyState === 1) {
@@ -221,7 +231,14 @@ function waitForSocketConnection(
         onTimeout?.();
       } else {
         console.log('wait for connection...');
-        waitForSocketConnection(socket, checkTime, callback, maxWaitingTime, onTimeout, executionTime);
+        waitForSocketConnection(
+          socket,
+          checkTime,
+          callback,
+          maxWaitingTime,
+          onTimeout,
+          executionTime
+        );
       }
     }
   }, checkTime);

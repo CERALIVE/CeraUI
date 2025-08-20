@@ -16,7 +16,10 @@ export interface ValidationResult {
   errors: Record<string, string>;
 }
 
-export function validateStreamingForm(properties: Properties, t: (key: string) => string): ValidationResult {
+export function validateStreamingForm(
+  properties: Properties,
+  t: (key: string) => string
+): ValidationResult {
   const formErrors: Record<string, string> = {};
   let hasErrors = false;
   const errorMessages: string[] = [];
@@ -88,7 +91,8 @@ export function validateStreamingForm(properties: Properties, t: (key: string) =
   if (hasErrors) {
     // Show a single toast with the first error (to avoid spam)
     toast.error(errorMessages[0], {
-      description: errorMessages.length > 1 ? `${errorMessages.length} validation errors found` : undefined,
+      description:
+        errorMessages.length > 1 ? `${errorMessages.length} validation errors found` : undefined,
     });
   } else {
     toast.success(t('settings.validation.allFieldsValid'));

@@ -44,8 +44,7 @@ async function updateRtmpStats(): Promise<void> {
 			const bandwidthKbps = Math.round((bytesDifference * 8) / 1024);
 
 			// Store formatted bandwidth value
-			newStreamBandwidths[streamName] =
-				`${bandwidthKbps} Kbps` as StreamBandwidth;
+			newStreamBandwidths[streamName] = `${bandwidthKbps} Kbps` as StreamBandwidth;
 		}
 	}
 
@@ -56,8 +55,8 @@ async function updateRtmpStats(): Promise<void> {
 
 export function initRTMPIngestStats(): void {
 	// Skip RTMP stats polling in development mode (no RTMP server running)
-	if (process.env.NODE_ENV === 'development') {
-		console.log('Development mode: Skipping RTMP statistics polling');
+	if (process.env.NODE_ENV === "development") {
+		console.log("Development mode: Skipping RTMP statistics polling");
 		return;
 	}
 

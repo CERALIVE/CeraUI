@@ -23,11 +23,11 @@ import { broadcastMsg } from "../ui/websocket-server.ts";
 import type { ModemId } from "./mmcli.ts";
 import {
 	type AvailableNetwork,
+	type Modem,
+	type ModemConfig,
 	getAvailableNetworksForModem,
 	getModem,
 	getModemIds,
-	type Modem,
-	type ModemConfig,
 } from "./modems-state.ts";
 
 type ModemsResponseModemStatus = {
@@ -57,9 +57,7 @@ export type ModemsResponseModemFull = ModemsResponseModemBase & {
 	available_networks?: Record<string, AvailableNetwork>;
 };
 
-export type ModemsResponseMessageEntry =
-	| ModemsResponseModemBase
-	| ModemsResponseModemFull;
+export type ModemsResponseMessageEntry = ModemsResponseModemBase | ModemsResponseModemFull;
 
 type ModemsResponseMessage = Record<string, ModemsResponseMessageEntry>;
 
@@ -82,8 +80,7 @@ function buildModemMessage(
 		status,
 	};
 
-	const sendFullStatus =
-		modemsFullState === undefined || modemsFullState[modemId];
+	const sendFullStatus = modemsFullState === undefined || modemsFullState[modemId];
 	if (sendFullStatus) {
 		const fullState: ModemsResponseModemFull = {
 			ifname: modem.ifname,
@@ -113,9 +110,7 @@ function buildModemMessage(
 	return entry;
 }
 
-export function buildModemsMessage(
-	modemsFullState: Record<number, true> | undefined = undefined,
-) {
+export function buildModemsMessage(modemsFullState: Record<number, true> | undefined = undefined) {
 	const msg: ModemsResponseMessage = {};
 	const modemIds = getModemIds();
 	for (const modemId of modemIds) {
@@ -127,8 +122,6 @@ export function buildModemsMessage(
 	return msg;
 }
 
-export function broadcastModems(
-	modemsFullState: Record<number, true> | undefined = undefined,
-) {
+export function broadcastModems(modemsFullState: Record<number, true> | undefined = undefined) {
 	broadcastMsg("status", { modems: buildModemsMessage(modemsFullState) });
 }
