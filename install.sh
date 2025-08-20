@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 
-# Unified BelaUI Installation Script
+# CeraUI Monorepo Installation Script
+# 
+# This script installs the CeraUI monorepo (frontend + belaUI backend) to a BELABOX device.
 # 
 # Usage:
 #   ./install.sh                             # Local installation from GitHub releases
 #   ./install.sh --remote [SSH_TARGET]       # Remote deployment from local dist folder
 #   ./install.sh --help                      # Show help
-#
-# Environment Variables:
-#   USE_CERAUI=true                          # Install CeraUI interface instead of standard BelaUI
 
 # This script uses strict error handling:
 #   - set -e: Exit immediately if any command returns a non-zero status.
@@ -19,22 +18,19 @@ set -euo pipefail
 # Default values
 DEPLOY_MODE="local"
 SSH_TARGET=""
-USE_CERAUI=${USE_CERAUI:-false}
 BELAUI_PATH="/opt/belaUI"
 
 # GitHub release configuration
-RELEASE_TARBALL="belaUI.tar.xz"
-RELEASE_URL="https://github.com/CERALIVE/belaUI-ts/releases/latest/download/$RELEASE_TARBALL"
-CERAUI_RELEASE_TARBALL="ceraui-main.tar.xz"
-CERAUI_RELEASE_URL="https://github.com/CERALIVE/CeraUI/releases/latest/download/$CERAUI_RELEASE_TARBALL"
+RELEASE_TARBALL="ceraui-monorepo.tar.xz"
+RELEASE_URL="https://github.com/CERALIVE/CeraUI/releases/latest/download/$RELEASE_TARBALL"
 
 # Local deployment configuration
 DIST_PATH="dist"
 
-# show_help displays usage instructions, available options, arguments, environment variables, and example commands for the unified BelaUI installation script.
+# show_help displays usage instructions, available options, arguments, environment variables, and example commands for the CeraUI monorepo installation script.
 show_help() {
   cat << EOF
-Unified BelaUI Installation Script
+CeraUI Monorepo Installation Script
 
 USAGE:
   $0 [OPTIONS] [SSH_TARGET]
@@ -47,18 +43,14 @@ ARGUMENTS:
   SSH_TARGET          SSH target for remote deployment (default: root@belabox.local)
                       Only used with --remote option
 
-ENVIRONMENT VARIABLES:
-  USE_CERAUI=true     Install CeraUI interface instead of standard BelaUI
-
 EXAMPLES:
   # Local installation from GitHub releases
   $0
-  USE_CERAUI=true $0
 
   # Remote deployment from local dist folder
   $0 --remote
   $0 --remote root@192.168.1.100
-  USE_CERAUI=true $0 --remote user@belabox.local
+  $0 --remote user@belabox.local
 
 EOF
 }
@@ -195,70 +187,16 @@ copy_files() {
   fi
 }
 
-# install_ceraui installs the CeraUI interface content in place of BelaUI if the USE_CERAUI environment variable is set to true, handling both local and remote deployment scenarios.
-install_ceraui() {
-  if [[ "$USE_CERAUI" != "true" ]]; then
-    return 0
-  fi
 
-  echo "Downloading and installing CeraUI content"
 
-  if [[ "$DEPLOY_MODE" == "remote" ]]; then
-    # Create a temporary script to download and extract CeraUI on the remote machine
-    local tmp_script=$(cat <<'EOF'
-#!/bin/bash
-set -e
-CERAUI_TEMP_DIR="$(mktemp -d)"
-cd "$CERAUI_TEMP_DIR"
-wget -q --show-progress CERAUI_RELEASE_URL
-tar xf CERAUI_RELEASE_TARBALL
-rsync -rltz --delete --chown=root:root "$CERAUI_TEMP_DIR/" BELAUI_PATH/public/
-rm -rf "$CERAUI_TEMP_DIR"
-EOF
-)
-
-    # Replace placeholders with actual values
-    tmp_script=${tmp_script//CERAUI_RELEASE_URL/$CERAUI_RELEASE_URL}
-    tmp_script=${tmp_script//CERAUI_RELEASE_TARBALL/$CERAUI_RELEASE_TARBALL}
-    tmp_script=${tmp_script//BELAUI_PATH/$BELAUI_PATH}
-
-    # Execute the script on the remote machine
-    ssh "$SSH_TARGET" "bash -s" <<< "$tmp_script"
-  else
-    # Local installation
-    local ceraui_temp_dir=$(mktemp -d)
-    cd "$ceraui_temp_dir" || exit
-
-    # Download and extract CeraUI
-    if ! wget -q --show-progress "$CERAUI_RELEASE_URL"; then
-      echo "Error: Failed to download CeraUI from $CERAUI_RELEASE_URL"
-      rm -rf "$ceraui_temp_dir"
-      exit 1
-    fi
-    if ! tar xf "$CERAUI_RELEASE_TARBALL"; then
-      echo "Error: Failed to extract $CERAUI_RELEASE_TARBALL"
-      rm -rf "$ceraui_temp_dir"
-      exit 1
-    fi
-
-    # Replace the content of the public folder
-    sudo rsync -rltz --delete --chown=root:root "$ceraui_temp_dir/" "$BELAUI_PATH/public/"
-
-    # Cleanup
-    rm -rf "$ceraui_temp_dir"
-  fi
-
-  echo "CeraUI installed successfully."
-}
-
-# main orchestrates the installation or deployment of BelaUI, handling both local and remote modes, dependency checks, file transfers, post-install configuration, and optional CeraUI installation.
+# main orchestrates the installation or deployment of the CeraUI monorepo (frontend + belaUI backend), handling both local and remote modes, dependency checks, file transfers, and post-install configuration.
 main() {
-  echo "BelaUI Installation Script"
+  echo "CeraUI Monorepo Installation Script"
   echo "Mode: $DEPLOY_MODE"
   if [[ "$DEPLOY_MODE" == "remote" ]]; then
     echo "Target: $SSH_TARGET"
   fi
-  echo "CeraUI: $USE_CERAUI"
+
   echo
   echo "NOTE: This script is designed for Debian/Ubuntu based distributions."
   echo "      All current BELABOX images are based on these distributions."
@@ -291,7 +229,7 @@ main() {
     
     # Check if dist folder exists
     if [[ ! -d "$DIST_PATH" ]]; then
-      echo "Error: $DIST_PATH folder not found. Please build the project first with 'bun run build'"
+      echo "Error: $DIST_PATH folder not found. Please build the project first with 'pnpm build'"
       exit 1
     fi
 
@@ -354,14 +292,13 @@ main() {
     fi
   fi
 
-  # Install CeraUI if requested
-  install_ceraui
+
 
   echo
   if [[ "$DEPLOY_MODE" == "remote" ]]; then
-    echo "Deployment complete."
+    echo "CeraUI monorepo deployment complete."
   else
-    echo "BelaUI installed and override script executed successfully."
+    echo "CeraUI monorepo (frontend + belaUI backend) installed and override script executed successfully."
     echo "You can reset to default by running: sudo $BELAUI_PATH/reset-to-default.sh"
   fi
 }

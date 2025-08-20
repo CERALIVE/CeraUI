@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# Deploy dist to local belabox via ssh (rsync) and register service and restart service
+# Reset BELABOX to default BelaUI package (removes CeraUI monorepo installation)
+# This script removes the custom CeraUI installation and reinstalls the default BelaUI from apt
 
 SSH_TARGET=root@belabox.local
 
