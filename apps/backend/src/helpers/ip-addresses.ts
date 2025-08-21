@@ -1,5 +1,9 @@
 export function ipToInt(ip: string) {
-	return ip.split(".").reduce((acc, octet) => (acc << 8) + Number.parseInt(octet, 10), 0) >>> 0;
+	return (
+		ip
+			.split(".")
+			.reduce((acc, octet) => (acc << 8) + Number.parseInt(octet, 10), 0) >>> 0
+	);
 }
 
 export function isSameSubnet(ip1: string, ip2: string, netmask: string) {

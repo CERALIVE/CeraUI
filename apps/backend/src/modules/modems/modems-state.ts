@@ -80,7 +80,9 @@ export function getAvailableNetworksForModem(modem: Modem) {
 	const networks = Object.assign({}, modem.available_networks);
 	if (!modem.available_networks) {
 		networks[modem.config.network] = {
-			name: getGsmOperatorName(modem.config.network) || `Operator ID ${modem.config.network}`,
+			name:
+				getGsmOperatorName(modem.config.network) ||
+				`Operator ID ${modem.config.network}`,
 		};
 	} else if (!modem.available_networks[modem.config.network]) {
 		networks[modem.config.network] = {

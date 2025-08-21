@@ -70,7 +70,10 @@ export function httpGet(options: HttpGetOptions) {
 	});
 }
 
-export async function checkConnectivity(remoteAddr: string, localAddress?: string) {
+export async function checkConnectivity(
+	remoteAddr: string,
+	localAddress?: string,
+) {
 	try {
 		const options: HttpGetOptions = {};
 		options.headers = { Host: CONNECTIVITY_CHECK_DOMAIN };
@@ -83,12 +86,17 @@ export async function checkConnectivity(remoteAddr: string, localAddress?: strin
 		}
 
 		const res = await httpGet(options);
-		if (res.code === CONNECTIVITY_CHECK_CODE && res.body === CONNECTIVITY_CHECK_BODY) {
+		if (
+			res.code === CONNECTIVITY_CHECK_CODE &&
+			res.body === CONNECTIVITY_CHECK_BODY
+		) {
 			return true;
 		}
 	} catch (err) {
 		if (err instanceof Error) {
-			logger.error(`Internet connectivity HTTP check error ${"code" in err ? err.code : err}`);
+			logger.error(
+				`Internet connectivity HTTP check error ${"code" in err ? err.code : err}`,
+			);
 		}
 	}
 

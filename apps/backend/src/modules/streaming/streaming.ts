@@ -21,7 +21,10 @@ import type WebSocket from "ws";
 import { validatePortNo } from "../../helpers/number.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
-import { convertManualToRemoteRelay, getRelays } from "../remote/remote-relays.ts";
+import {
+	convertManualToRemoteRelay,
+	getRelays,
+} from "../remote/remote-relays.ts";
 import { notificationSend } from "../ui/notifications.ts";
 import type { StatusResponseMessage } from "../ui/status.ts";
 import {
@@ -119,7 +122,8 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 
 	// audio codec
 	if (pipeline.acodec) {
-		if (typeof params.acodec !== "string") throw new Error("Invalid audio codec");
+		if (typeof params.acodec !== "string")
+			throw new Error("Invalid audio codec");
 		if (!audioCodecs[params.acodec]) throw new Error("Audio codec not found");
 	}
 
@@ -127,18 +131,25 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 	const config = getConfig();
 	const audioDevicesMap = getAudioDevices();
 	if (pipeline.asrc) {
-		if (typeof params.asrc !== "string") throw new Error("Invalid audio source");
+		if (typeof params.asrc !== "string")
+			throw new Error("Invalid audio source");
 		if (params.asrc !== config.asrc && !audioDevicesMap[params.asrc])
 			throw new Error("Selected audio source not found");
 	}
 
 	// bitrate
-	if (!validateBitrate(params)) throw new Error(`Invalid max bitrate: '${params.max_br}'`);
+	if (!validateBitrate(params))
+		throw new Error(`Invalid max bitrate: '${params.max_br}'`);
 
 	// SRT latency
-	if (typeof params.srt_latency !== "number") throw new Error("Invalid SRT latency");
+	if (typeof params.srt_latency !== "number")
+		throw new Error("Invalid SRT latency");
 	const srtLatency = Number.parseInt(params.srt_latency.toString(), 10);
-	if (srtLatency !== params.srt_latency || srtLatency < 100 || srtLatency > 10_000)
+	if (
+		srtLatency !== params.srt_latency ||
+		srtLatency < 100 ||
+		srtLatency > 10_000
+	)
 		throw new Error(`Invalid SRT latency '${params.srt_latency}' ms`);
 	params.srt_latency = srtLatency;
 
@@ -152,7 +163,8 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 		srtlaAddr = relayServer.addr;
 		srtlaPort = relayServer.port;
 	} else {
-		if (typeof params.srtla_addr !== "string") throw new Error("Invalid SRTLA address");
+		if (typeof params.srtla_addr !== "string")
+			throw new Error("Invalid SRTLA address");
 		srtlaAddr = params.srtla_addr.trim();
 
 		const port = validatePortNo(params.srtla_port);
@@ -167,7 +179,8 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 		if (!relayAccount) throw new Error("Invalid relay account specified!");
 		streamid = relayAccount.ingest_key;
 	} else {
-		if (typeof params.srt_streamid !== "string") throw new Error("SRT streamid not specified");
+		if (typeof params.srt_streamid !== "string")
+			throw new Error("SRT streamid not specified");
 		streamid = params.srt_streamid;
 	}
 
@@ -175,7 +188,12 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 }
 
 export async function updateConfig(_conn: WebSocket, params: ConfigParameters) {
-	const { pipeline, srtlaAddr: initialAddr, srtlaPort, streamid } = await validateConfig(params);
+	const {
+		pipeline,
+		srtlaAddr: initialAddr,
+		srtlaPort,
+		streamid,
+	} = await validateConfig(params);
 
 	const srtlaAddr = await resolveSrtla(initialAddr);
 	const config = getConfig();

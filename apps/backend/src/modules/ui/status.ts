@@ -26,7 +26,10 @@ import { getPipelineList } from "../streaming/pipelines.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import { getRevisions } from "../system/revisions.ts";
 import { getSensors } from "../system/sensors.ts";
-import { getAvailableUpdates, getSoftUpdateStatus } from "../system/software-updates.ts";
+import {
+	getAvailableUpdates,
+	getSoftUpdateStatus,
+} from "../system/software-updates.ts";
 import { getSshStatus } from "../system/ssh.ts";
 import { wifiBuildMsg } from "../wifi/wifi.ts";
 import { notificationSendPersistent } from "./notifications.ts";

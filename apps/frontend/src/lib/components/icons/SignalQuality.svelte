@@ -12,22 +12,22 @@ export { className as class };
 </script>
 
 {#if signal >= 75}
-  <span title="Excellent">
-    <SignalHigh class={cn('text-green-600 dark:text-green-400', className)} {...$$restProps}
-    ></SignalHigh>
-  </span>
+	<span title="Excellent">
+		<SignalHigh class={cn('text-green-600 dark:text-green-400', className)} {...$$restProps}
+		></SignalHigh>
+	</span>
 {:else if signal >= 50}
-  <span title="Good">
-    <SignalMedium class={cn('text-green-600 dark:text-green-400', className)} {...$$restProps}
-    ></SignalMedium>
-  </span>
+	<span title="Good">
+		<SignalMedium class={cn('text-green-600 dark:text-green-400', className)} {...$$restProps}
+		></SignalMedium>
+	</span>
 {:else if signal >= 25}
-  <span title="Fair">
-    <SignalLow class={cn('text-yellow-600 dark:text-yellow-400', className)} {...$$restProps}
-    ></SignalLow>
-  </span>
+	<span title="Fair">
+		<SignalLow class={cn('text-yellow-600 dark:text-yellow-400', className)} {...$$restProps}
+		></SignalLow>
+	</span>
 {:else}
-  <span title="Poor">
-    <Signal class={cn('text-red-600 dark:text-red-400', className)} {...$$restProps}></Signal>
-  </span>
+	<span title="Poor">
+		<Signal class={cn('text-red-600 dark:text-red-400', className)} {...$$restProps}></Signal>
+	</span>
 {/if}

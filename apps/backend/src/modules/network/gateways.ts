@@ -18,10 +18,16 @@
 import { execP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
-import { notificationBroadcast, notificationRemove } from "../ui/notifications.ts";
+import {
+	notificationBroadcast,
+	notificationRemove,
+} from "../ui/notifications.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
-import { getNetworkInterfaces, netIfGetErrorMsg } from "./network-interfaces.ts";
+import {
+	getNetworkInterfaces,
+	netIfGetErrorMsg,
+} from "./network-interfaces.ts";
 
 export const UPDATE_GW_INT = 2000;
 
@@ -91,7 +97,9 @@ async function updateGw() {
 				continue;
 			}
 
-			logger.info(`Probing internet connectivity via ${i} (${networkInterface.ip})`);
+			logger.info(
+				`Probing internet connectivity via ${i} (${networkInterface.ip})`,
+			);
 			if (await checkConnectivity(addr, networkInterface.ip)) {
 				logger.info(`Internet reachable via ${i} (${networkInterface.ip})`);
 				if (!fromCache) dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);

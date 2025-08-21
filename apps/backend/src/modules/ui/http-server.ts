@@ -29,7 +29,10 @@ const isDevelopment = process.env.NODE_ENV === "development";
 
 // In development: proxy to frontend dev server
 // In production: serve static files from public folder
-let requestHandler: (req: http.IncomingMessage, res: http.ServerResponse) => void;
+let requestHandler: (
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+) => void;
 
 if (isDevelopment) {
 	// Create proxy to frontend dev server
@@ -52,7 +55,9 @@ if (isDevelopment) {
 		proxy.web(req, res);
 	};
 
-	logger.info("Development mode: Proxying frontend requests to http://localhost:6173");
+	logger.info(
+		"Development mode: Proxying frontend requests to http://localhost:6173",
+	);
 } else {
 	// Production: serve static files from ./public (same directory as binary)
 	const staticHttp = serveStatic("public");

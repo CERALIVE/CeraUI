@@ -22,7 +22,9 @@ export function checkExecPathSafe(path: string) {
 		fs.accessSync(path, fs.constants.R_OK);
 		return true;
 	} catch (_err) {
-		logger.error(`\n\n${path} not found, double check the settings in setup.json`);
+		logger.error(
+			`\n\n${path} not found, double check the settings in setup.json`,
+		);
 		return false;
 	}
 }

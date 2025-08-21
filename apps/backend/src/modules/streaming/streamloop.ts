@@ -16,26 +16,28 @@
 */
 
 import { type ChildProcessByStdio, spawn } from "node:child_process";
+import fs from "node:fs";
 import type { Readable } from "node:stream";
-
 import type WebSocket from "ws";
-
 import { isLocalIp } from "../../helpers/ip-addresses.ts";
 import { logger } from "../../helpers/logger.ts";
-
 import { getConfig, saveConfig } from "../config.ts";
 import { onNetworkInterfacesChange } from "../network/network-interfaces.ts";
 import { setup } from "../setup.ts";
-import { isUpdating, periodicCheckForSoftwareUpdates } from "../system/software-updates.ts";
-import { notificationBroadcast, notificationExists } from "../ui/notifications.ts";
+import {
+	isUpdating,
+	periodicCheckForSoftwareUpdates,
+} from "../system/software-updates.ts";
+import {
+	notificationBroadcast,
+	notificationExists,
+} from "../ui/notifications.ts";
 import { sendStatus } from "../ui/status.ts";
 import { broadcastMsg, getSocketSenderId } from "../ui/websocket-server.ts";
-
-import fs from "node:fs";
 import {
-	DEFAULT_AUDIO_ID,
 	asrcProbe,
 	clearAsrcProbeReject,
+	DEFAULT_AUDIO_ID,
 	getAudioSrcId,
 	isAsrcProbeRejectResolved,
 	replaceAudioSettings,
@@ -115,12 +117,19 @@ export async function startStream(
 	let pipelineFile: string | undefined = pipeline.path;
 	if (!config.bitrate_overlay) {
 		pipelineFile = await removeBitrateOverlay(pipelineFile);
-		if (!pipelineFile) throw "failed to generate the pipeline file - bitrate overlay";
+		if (!pipelineFile)
+			throw "failed to generate the pipeline file - bitrate overlay";
 	}
 	// replace the audio source and codec
 	const audioCodec = pipeline.acodec ? config.acodec : undefined;
-	const audioSrcId = pipeline.asrc ? getAudioSrcId(config.asrc!) : DEFAULT_AUDIO_ID;
-	pipelineFile = await replaceAudioSettings(pipelineFile, audioSrcId, audioCodec);
+	const audioSrcId = pipeline.asrc
+		? getAudioSrcId(config.asrc!)
+		: DEFAULT_AUDIO_ID;
+	pipelineFile = await replaceAudioSettings(
+		pipelineFile,
+		audioSrcId,
+		audioCodec,
+	);
 	if (!pipelineFile) {
 		throw "failed to generate the pipeline file - audio settings";
 	}
@@ -134,17 +143,22 @@ export async function startStream(
 			return;
 		}
 	}
-	spawnStreamingLoop(srtlaSendExec, [9000, srtlaAddr, srtlaPort, setup.ips_file], 100, (err) => {
-		let msg: string | undefined;
-		if (err.match("Failed to establish any initial connections")) {
-			msg = "Failed to connect to the SRTLA server. Retrying...";
-		} else if (err.match("no available connections")) {
-			msg = "All SRTLA connections failed. Trying to reconnect...";
-		}
-		if (msg) {
-			notificationBroadcast("srtla", "error", msg, 5, true, false);
-		}
-	});
+	spawnStreamingLoop(
+		srtlaSendExec,
+		[9000, srtlaAddr, srtlaPort, setup.ips_file],
+		100,
+		(err) => {
+			let msg: string | undefined;
+			if (err.match("Failed to establish any initial connections")) {
+				msg = "Failed to connect to the SRTLA server. Retrying...";
+			} else if (err.match("no available connections")) {
+				msg = "All SRTLA connections failed. Trying to reconnect...";
+			}
+			if (msg) {
+				notificationBroadcast("srtla", "error", msg, 5, true, false);
+			}
+		},
+	);
 
 	const belacoderArgs = [
 		pipelineFile,
@@ -173,7 +187,9 @@ export async function startStream(
 			msg = "The input source has stalled. Trying to restart...";
 		} else if (err.match("Failed to establish an SRT connection")) {
 			if (!notificationExists("srtla")) {
-				const reasonMatch = err.match(/Failed to establish an SRT connection: ([\w ]+)\./);
+				const reasonMatch = err.match(
+					/Failed to establish an SRT connection: ([\w ]+)\./,
+				);
 				const reason = reasonMatch?.[1] ? ` (${reasonMatch[1]})` : "";
 				msg = `Failed to connect to the SRT server${reason}. Retrying...`;
 			}
@@ -188,7 +204,10 @@ export async function startStream(
 	});
 }
 
-export async function start(conn: WebSocket, params: ConfigParameters): Promise<void> {
+export async function start(
+	conn: WebSocket,
+	params: ConfigParameters,
+): Promise<void> {
 	if (getIsStreaming() || isUpdating()) {
 		sendStatus(conn);
 		return;
@@ -197,7 +216,12 @@ export async function start(conn: WebSocket, params: ConfigParameters): Promise<
 	updateStatus(true);
 	const senderId = getSocketSenderId(conn);
 
-	let c: { pipeline: Pipeline; srtlaAddr: string; srtlaPort: number; streamid: string };
+	let c: {
+		pipeline: Pipeline;
+		srtlaAddr: string;
+		srtlaPort: number;
+		streamid: string;
+	};
 	try {
 		c = await updateConfig(conn, params);
 	} catch (err) {
@@ -219,7 +243,11 @@ export async function start(conn: WebSocket, params: ConfigParameters): Promise<
 			? genSrtlaIpListForLocalIpAddress(c.srtlaAddr)
 			: genSrtlaIpList();
 		if (!srtlaIpList.length) {
-			startError(conn, "Failed to start, no available network connections", senderId);
+			startError(
+				conn,
+				"Failed to start, no available network connections",
+				senderId,
+			);
 			return;
 		}
 
@@ -231,7 +259,9 @@ export async function start(conn: WebSocket, params: ConfigParameters): Promise<
 	};
 
 	handleSrtlaIpAddresses();
-	removeNetworkInterfacesChangeListener = onNetworkInterfacesChange(handleSrtlaIpAddresses);
+	removeNetworkInterfacesChangeListener = onNetworkInterfacesChange(
+		handleSrtlaIpAddresses,
+	);
 
 	try {
 		await startStream(c.pipeline, c.srtlaAddr, c.srtlaPort, c.streamid);
@@ -367,7 +397,12 @@ export async function autoStartStream(): Promise<void> {
 
 	// If the config is invalid, then we won't ever be able to start, so don't retry
 	const config = getConfig();
-	let c: { pipeline: Pipeline; srtlaAddr: string; srtlaPort: number; streamid: string };
+	let c: {
+		pipeline: Pipeline;
+		srtlaAddr: string;
+		srtlaPort: number;
+		streamid: string;
+	};
 	try {
 		c = await validateConfig(config);
 	} catch (err) {

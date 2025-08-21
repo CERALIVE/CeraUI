@@ -10,5 +10,5 @@ export { className as class };
 </script>
 
 <SelectPrimitive.Label class={cn('px-2 py-1.5 text-sm font-semibold', className)} {...$$restProps}>
-  <slot />
+	<slot />
 </SelectPrimitive.Label>

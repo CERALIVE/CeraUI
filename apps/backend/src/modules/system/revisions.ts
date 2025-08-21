@@ -48,7 +48,9 @@ export function initRevisions() {
 
 	// Only show a BELABOX image version if it exists
 	try {
-		revisions["BELABOX image"] = fs.readFileSync("/etc/belabox_img_version", "utf8").trim();
+		revisions["BELABOX image"] = fs
+			.readFileSync("/etc/belabox_img_version", "utf8")
+			.trim();
 	} catch (_err) {
 		// Silently ignore if BELABOX image version file doesn't exist
 	}

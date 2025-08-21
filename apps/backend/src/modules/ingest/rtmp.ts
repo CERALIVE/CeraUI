@@ -44,7 +44,8 @@ async function updateRtmpStats(): Promise<void> {
 			const bandwidthKbps = Math.round((bytesDifference * 8) / 1024);
 
 			// Store formatted bandwidth value
-			newStreamBandwidths[streamName] = `${bandwidthKbps} Kbps` as StreamBandwidth;
+			newStreamBandwidths[streamName] =
+				`${bandwidthKbps} Kbps` as StreamBandwidth;
 		}
 	}
 

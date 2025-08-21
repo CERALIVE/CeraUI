@@ -8,5 +8,5 @@ import Layout from '$main/Layout.svelte';
 
 <ModeWatcher />
 <main>
-  <Layout />
+	<Layout />
 </main>

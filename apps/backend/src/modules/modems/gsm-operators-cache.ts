@@ -27,18 +27,27 @@ type OperatorName = string;
 
 let gsmOperatorsCache: Record<OperatorId, OperatorName> = {};
 try {
-	gsmOperatorsCache = JSON.parse(fs.readFileSync(GSM_OPERATORS_CACHE_FILE, "utf8"));
+	gsmOperatorsCache = JSON.parse(
+		fs.readFileSync(GSM_OPERATORS_CACHE_FILE, "utf8"),
+	);
 } catch (err) {
-	logger.warn("Failed to load the persistent GSM operators cache, starting with an empty cache");
+	logger.warn(
+		"Failed to load the persistent GSM operators cache, starting with an empty cache",
+	);
 
 	writeGsmOperatorsCache().catch(() => {
-		logger.warn("Failed to write the persistent GSM operators cache, the cache will not be saved");
+		logger.warn(
+			"Failed to write the persistent GSM operators cache, the cache will not be saved",
+		);
 		logger.debug(err);
 	});
 }
 
 async function writeGsmOperatorsCache() {
-	await writeTextFile(GSM_OPERATORS_CACHE_FILE, JSON.stringify(gsmOperatorsCache));
+	await writeTextFile(
+		GSM_OPERATORS_CACHE_FILE,
+		JSON.stringify(gsmOperatorsCache),
+	);
 }
 
 export async function setGsmOperatorName(id: OperatorId, name: OperatorName) {

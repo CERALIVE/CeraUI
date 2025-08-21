@@ -10,5 +10,5 @@ export { className as class };
 </script>
 
 <SheetPrimitive.Portal class={cn(className)} {...$$restProps}>
-  <slot />
+	<slot />
 </SheetPrimitive.Portal>

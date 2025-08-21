@@ -44,7 +44,10 @@ export function setBitrate(params: BitrateParams): number | undefined {
 		config.max_br = maxBr;
 		saveConfig();
 
-		fs.writeFileSync(setup.bitrate_file, `${MIN_BITRATE * 1000}\n${maxBr * 1000}\n`);
+		fs.writeFileSync(
+			setup.bitrate_file,
+			`${MIN_BITRATE * 1000}\n${maxBr * 1000}\n`,
+		);
 
 		killall(["-HUP", "belacoder"]);
 		return maxBr;

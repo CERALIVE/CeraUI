@@ -5,20 +5,20 @@ import type { HTMLAttributes } from 'svelte/elements';
 import { cn } from '$lib/utils.js';
 
 let {
-  ref = $bindable(null),
-  class: className,
-  inset,
-  children,
-  ...restProps
+	ref = $bindable(null),
+	class: className,
+	inset,
+	children,
+	...restProps
 }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
-  inset?: boolean;
+	inset?: boolean;
 } = $props();
 </script>
 
 <div
-  bind:this={ref}
-  class={cn('px-2 py-1.5 text-sm font-semibold', inset && 'pl-8', className)}
-  {...restProps}
+	bind:this={ref}
+	class={cn('px-2 py-1.5 text-sm font-semibold', inset && 'pl-8', className)}
+	{...restProps}
 >
-  {@render children?.()}
+	{@render children?.()}
 </div>

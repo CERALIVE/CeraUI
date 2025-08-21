@@ -172,7 +172,9 @@ export async function startBcrpt() {
 			for (const conn in stats.mtu) {
 				if (!bcrptLowMtuDetected && stats.mtu[conn] < 1336) {
 					bcrptLowMtuDetected = true;
-					console.log("Detected low MTU network. Using reduced SRT packet size");
+					console.log(
+						"Detected low MTU network. Using reduced SRT packet size",
+					);
 				}
 			}
 
@@ -199,7 +201,9 @@ export async function startBcrpt() {
 			reason = `because of signal ${signal}`;
 		}
 		if (bcrptRetryCount >= MAX_BCRPT_RETRIES) {
-			console.error(`BCRPT process failed ${MAX_BCRPT_RETRIES} times. Stopping restart attempts.`);
+			console.error(
+				`BCRPT process failed ${MAX_BCRPT_RETRIES} times. Stopping restart attempts.`,
+			);
 			return;
 		}
 

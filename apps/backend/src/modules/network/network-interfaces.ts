@@ -101,7 +101,8 @@ function updateNetif() {
 			try {
 				const name = int.split(":")[0] ?? "";
 
-				if (name === "lo" || name.match("^docker") || name.match("^l4tbr")) continue;
+				if (name === "lo" || name.match("^docker") || name.match("^l4tbr"))
+					continue;
 
 				const inetAddrMatch = int.match(/inet (\d+\.\d+\.\d+\.\d+)/);
 				const inetAddr = inetAddrMatch?.[1];
@@ -123,7 +124,10 @@ function updateNetif() {
 				if (!isRunning) continue;
 
 				const txBytesMatch = int.match(/TX packets \d+ {2}bytes \d+/);
-				const txBytes = Number.parseInt((txBytesMatch?.[0] ?? "").split(" ").pop() ?? "0", 10);
+				const txBytes = Number.parseInt(
+					(txBytesMatch?.[0] ?? "").split(" ").pop() ?? "0",
+					10,
+				);
 
 				let tp = 0;
 				if (netif[name]) {
@@ -246,8 +250,9 @@ export function setNetifHotspot(int: NetworkInterface | undefined) {
 	setNetifError(int, NETIF_ERR_HOTSPOT);
 }
 
-const isValidNetworkInterfaceErrorCode = (e: number): e is keyof typeof netIfErrors =>
-	e in netIfErrors;
+const isValidNetworkInterfaceErrorCode = (
+	e: number,
+): e is keyof typeof netIfErrors => e in netIfErrors;
 
 export function netIfGetErrorMsg(i: NetworkInterface) {
 	if (i.error === 0) return;
@@ -292,7 +297,10 @@ function countActiveNetif() {
 	return count;
 }
 
-export function handleNetif(conn: WebSocket, msg: NetworkInterfaceMessage["netif"]) {
+export function handleNetif(
+	conn: WebSocket,
+	msg: NetworkInterfaceMessage["netif"],
+) {
 	const int = netif[msg.name];
 	if (!int) return;
 
@@ -313,7 +321,13 @@ export function handleNetif(conn: WebSocket, msg: NetworkInterfaceMessage["netif
 			}
 		} else {
 			if (int.enabled && countActiveNetif() === 1) {
-				notificationSend(conn, "netif_disable_all", "error", "Can't disable all networks", 10);
+				notificationSend(
+					conn,
+					"netif_disable_all",
+					"error",
+					"Can't disable all networks",
+					10,
+				);
 				return;
 			}
 		}

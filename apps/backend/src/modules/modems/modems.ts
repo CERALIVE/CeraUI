@@ -24,14 +24,18 @@ import type WebSocket from "ws";
 import { logger } from "../../helpers/logger.ts";
 import { extractMessage } from "../../helpers/types.ts";
 
-import { type ConnectionUUID, nmConnSetFields, nmDisconnect } from "../network/network-manager.ts";
+import {
+	type ConnectionUUID,
+	nmConnSetFields,
+	nmDisconnect,
+} from "../network/network-manager.ts";
 
 import { setGsmOperatorName } from "./gsm-operators-cache.ts";
 import { mmSetNetworkTypes } from "./mmcli.ts";
 import { modemNetworkScan } from "./modem-network-scan.ts";
 import { broadcastModems } from "./modem-status.ts";
 import { sanitizeModemConfigForNetworkManager } from "./modem-update-loop.ts";
-import { type ModemConfig, getModem } from "./modems-state.ts";
+import { getModem, type ModemConfig } from "./modems-state.ts";
 
 type ModemConfigMessage = {
 	config: {
@@ -56,14 +60,20 @@ export type ModemsMessage = {
 	modems: ModemConfigMessage | ModemScanMessage;
 };
 
-async function updateModemConnection(connectionUuid: ConnectionUUID, config: ModemConfig) {
+async function updateModemConnection(
+	connectionUuid: ConnectionUUID,
+	config: ModemConfig,
+) {
 	// This also modifies config in place to clear apn/username/password if autoconfig is set
 	const nmConfig = sanitizeModemConfigForNetworkManager(config);
 
 	return await nmConnSetFields(connectionUuid, nmConfig);
 }
 
-async function handleModemConfig(_conn: WebSocket, msg: ModemConfigMessage["config"]) {
+async function handleModemConfig(
+	_conn: WebSocket,
+	msg: ModemConfigMessage["config"],
+) {
 	if (!msg.device) {
 		logger.info("Ignoring modem config for unknown modem (no id)");
 		return;
@@ -83,7 +93,9 @@ async function handleModemConfig(_conn: WebSocket, msg: ModemConfigMessage["conf
 
 	const connUuid = modem.config.conn;
 	if (!connUuid) {
-		logger.info(`Ignoring modem config for modem ${msg.device} with no connection UUID`);
+		logger.info(
+			`Ignoring modem config for modem ${msg.device} with no connection UUID`,
+		);
 		return;
 	}
 
@@ -105,7 +117,9 @@ async function handleModemConfig(_conn: WebSocket, msg: ModemConfigMessage["conf
 	// Ensure the selected network type is supported
 	const networkType = modem.network_type.supported[msg.network_type];
 	if (!networkType) {
-		logger.error(`Received invalid network type ${msg.network_type} for modem ${msg.device}`);
+		logger.error(
+			`Received invalid network type ${msg.network_type} for modem ${msg.device}`,
+		);
 		return;
 	}
 
@@ -116,7 +130,9 @@ async function handleModemConfig(_conn: WebSocket, msg: ModemConfigMessage["conf
 		msg.network !== modem.config.network &&
 		(!modem.available_networks || !modem.available_networks[msg.network])
 	) {
-		logger.warn(`Received unavailable network ${msg.network} for modem ${msg.device}`);
+		logger.warn(
+			`Received unavailable network ${msg.network} for modem ${msg.device}`,
+		);
 		return;
 	}
 
@@ -144,7 +160,9 @@ async function handleModemConfig(_conn: WebSocket, msg: ModemConfigMessage["conf
 		// This preserves the 'conn' UUID value
 		Object.assign(modem.config, updatedConfig);
 	} else {
-		logger.error(`Failed to update NM connection ${modem.config.conn} for modem ${msg.device} to:`);
+		logger.error(
+			`Failed to update NM connection ${modem.config.conn} for modem ${msg.device} to:`,
+		);
 		logger.debug("Failed modem config update", updatedConfig);
 	}
 
@@ -153,7 +171,11 @@ async function handleModemConfig(_conn: WebSocket, msg: ModemConfigMessage["conf
 	await nmDisconnect(connUuid);
 
 	if (msg.network_type !== modem.network_type.active) {
-		const result = await mmSetNetworkTypes(msg.device, networkType.allowed, networkType.preferred);
+		const result = await mmSetNetworkTypes(
+			msg.device,
+			networkType.allowed,
+			networkType.preferred,
+		);
 		if (result) {
 			modem.network_type.active = msg.network_type;
 		}
@@ -164,7 +186,10 @@ async function handleModemConfig(_conn: WebSocket, msg: ModemConfigMessage["conf
 	broadcastModems({ [msg.device]: true });
 }
 
-async function handleModemScan(_conn: WebSocket, msg: ModemScanMessage["scan"]) {
+async function handleModemScan(
+	_conn: WebSocket,
+	msg: ModemScanMessage["scan"],
+) {
 	const modemId = Number.parseInt(msg.device, 10);
 	if (!msg || !getModem(modemId)) return;
 
@@ -175,10 +200,16 @@ export function handleModems(conn: WebSocket, msg: ModemsMessage["modems"]) {
 	for (const type in msg) {
 		switch (type) {
 			case "config":
-				handleModemConfig(conn, extractMessage<ModemConfigMessage, typeof type>(msg, type));
+				handleModemConfig(
+					conn,
+					extractMessage<ModemConfigMessage, typeof type>(msg, type),
+				);
 				break;
 			case "scan":
-				handleModemScan(conn, extractMessage<ModemScanMessage, typeof type>(msg, type));
+				handleModemScan(
+					conn,
+					extractMessage<ModemScanMessage, typeof type>(msg, type),
+				);
 				break;
 		}
 	}

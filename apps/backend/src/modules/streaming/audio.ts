@@ -47,7 +47,10 @@ const audioSrcAliases: Record<string, string> = {
 	usbaudio: "USB audio",
 };
 if (setup.hw === "rk3588") {
-	Object.assign(audioSrcAliases, { rockchiphdmiin: "HDMI", rockchipes8388: "Analog in" });
+	Object.assign(audioSrcAliases, {
+		rockchiphdmiin: "HDMI",
+		rockchipes8388: "Analog in",
+	});
 }
 
 // Create reverse lookup for performance
@@ -72,7 +75,11 @@ export function pipelineGetAudioProps(path: string) {
 	};
 }
 
-export async function replaceAudioSettings(pipelineFile: string, cardId: string, codec?: string) {
+export async function replaceAudioSettings(
+	pipelineFile: string,
+	cardId: string,
+	codec?: string,
+) {
 	let pipeline = await readTextFile(pipelineFile);
 	if (pipeline === undefined) return;
 
@@ -80,7 +87,10 @@ export async function replaceAudioSettings(pipelineFile: string, cardId: string,
 		if (cardId === NO_AUDIO_ID) {
 			pipeline = pipeline.replace(alsaPipelinePattern, "");
 		} else {
-			pipeline = pipeline.replace(alsaSrcPattern, `alsasrc device="hw:${cardId}"`);
+			pipeline = pipeline.replace(
+				alsaSrcPattern,
+				`alsasrc device="hw:${cardId}"`,
+			);
 		}
 	}
 
@@ -128,7 +138,13 @@ export async function updateAudioDevices() {
 		"rockchipes8316",
 	];
 	// Devices to show at the top of the list
-	const priority = ["HDMI", "rockchiphdmiin", "rockchipes8388", "C4K", "usbaudio"];
+	const priority = [
+		"HDMI",
+		"rockchiphdmiin",
+		"rockchipes8388",
+		"C4K",
+		"usbaudio",
+	];
 
 	const devices = await readdirP(deviceDir);
 	const list: Record<string, true> = {};

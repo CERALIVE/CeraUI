@@ -111,7 +111,8 @@ export function mmConvertNetworkType(mmType: string): NetworkTypeWithLabel {
 	const typeMatch = mmType.match(/^allowed: (.+); preferred: (.+)$/) as
 		| [string, string, string]
 		| null;
-	if (typeMatch === null) throw new Error(`mmConvertNetworkType: invalid type ${mmType}`);
+	if (typeMatch === null)
+		throw new Error(`mmConvertNetworkType: invalid type ${mmType}`);
 
 	const label = typeMatch[1].split(/,? /).sort().reverse().join("");
 	const allowed = typeMatch[1].replace(/,? /g, "|");
@@ -211,7 +212,11 @@ export async function mmGetSim(id: number) {
 	}
 }
 
-export async function mmSetNetworkTypes(id: ModemId, allowed: string, preferred: string) {
+export async function mmSetNetworkTypes(
+	id: ModemId,
+	allowed: string,
+	preferred: string,
+) {
 	try {
 		const args = ["-m", String(id), `--set-allowed-modes=${allowed}`];
 		if (preferred !== "none") {
@@ -229,7 +234,12 @@ export async function mmSetNetworkTypes(id: ModemId, allowed: string, preferred:
 export type NetworkScanResult = {
 	"operator-code": string;
 	"operator-name": string;
-	availability?: "unavailable" | "available" | "current" | "unknown" | "forbidden";
+	availability?:
+		| "unavailable"
+		| "available"
+		| "current"
+		| "unknown"
+		| "forbidden";
 };
 
 export async function mmNetworkScan(id: ModemId, timeout = 240) {
@@ -241,8 +251,9 @@ export async function mmNetworkScan(id: ModemId, timeout = 240) {
 			String(id),
 			"--3gpp-scan",
 		]);
-		const networks = (mmcliParseSep(result.stdout.toString())["modem.3gpp.scan-networks"] ??
-			[]) as Array<string>;
+		const networks = (mmcliParseSep(result.stdout.toString())[
+			"modem.3gpp.scan-networks"
+		] ?? []) as Array<string>;
 		return networks.map((n) => {
 			const info = n.split(/, */);
 			const output: Record<string, string> = {};

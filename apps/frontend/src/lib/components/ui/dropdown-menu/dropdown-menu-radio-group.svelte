@@ -7,5 +7,5 @@ export let value: $$Props['value'] = undefined;
 </script>
 
 <DropdownMenuPrimitive.RadioGroup {...$$restProps} bind:value>
-  <slot />
+	<slot />
 </DropdownMenuPrimitive.RadioGroup>

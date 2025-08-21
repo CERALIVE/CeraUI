@@ -1,6 +1,7 @@
 export function validateInteger(num: number, min: number, max: number) {
 	const numTmp = num;
-	if (String(numTmp) !== String(num) || numTmp < min || numTmp > max) return undefined;
+	if (String(numTmp) !== String(num) || numTmp < min || numTmp > max)
+		return undefined;
 	return numTmp;
 }
 

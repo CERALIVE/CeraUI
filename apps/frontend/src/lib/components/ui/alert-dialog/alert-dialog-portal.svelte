@@ -5,5 +5,5 @@ type $$Props = AlertDialogPrimitive.PortalProps;
 </script>
 
 <AlertDialogPrimitive.Portal {...$$restProps}>
-  <slot />
+	<slot />
 </AlertDialogPrimitive.Portal>

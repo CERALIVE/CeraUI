@@ -6,17 +6,17 @@ import { cn } from '$lib/utils.js';
 import { Scrollbar } from './index.js';
 
 let {
-  ref = $bindable(),
-  class: className,
-  orientation = 'vertical',
-  scrollbarXClasses = '',
-  scrollbarYClasses = '',
-  children,
-  ...restProps
+	ref = $bindable(),
+	class: className,
+	orientation = 'vertical',
+	scrollbarXClasses = '',
+	scrollbarYClasses = '',
+	children,
+	...restProps
 }: WithoutChild<ScrollAreaPrimitive.RootProps> & {
-  orientation?: 'vertical' | 'horizontal' | 'both' | undefined;
-  scrollbarXClasses?: string | undefined;
-  scrollbarYClasses?: string | undefined;
+	orientation?: 'vertical' | 'horizontal' | 'both' | undefined;
+	scrollbarXClasses?: string | undefined;
+	scrollbarYClasses?: string | undefined;
 } = $props();
 
 // Use a local ref variable to avoid direct binding conflicts
@@ -24,23 +24,23 @@ let scrollAreaRef = $state(null);
 
 // Sync the local ref with the bindable prop
 $effect(() => {
-  ref = scrollAreaRef;
+	ref = scrollAreaRef;
 });
 </script>
 
 <ScrollAreaPrimitive.Root
-  bind:ref={scrollAreaRef}
-  {...restProps}
-  class={cn('relative overflow-hidden', className)}
+	bind:ref={scrollAreaRef}
+	{...restProps}
+	class={cn('relative overflow-hidden', className)}
 >
-  <ScrollAreaPrimitive.Viewport class="h-full w-full rounded-[inherit]">
-    {@render children?.()}
-  </ScrollAreaPrimitive.Viewport>
-  {#if orientation === 'vertical' || orientation === 'both'}
-    <Scrollbar class={scrollbarYClasses} orientation="vertical" />
-  {/if}
-  {#if orientation === 'horizontal' || orientation === 'both'}
-    <Scrollbar class={scrollbarXClasses} orientation="horizontal" />
-  {/if}
-  <ScrollAreaPrimitive.Corner />
+	<ScrollAreaPrimitive.Viewport class="h-full w-full rounded-[inherit]">
+		{@render children?.()}
+	</ScrollAreaPrimitive.Viewport>
+	{#if orientation === 'vertical' || orientation === 'both'}
+		<Scrollbar class={scrollbarYClasses} orientation="vertical" />
+	{/if}
+	{#if orientation === 'horizontal' || orientation === 'both'}
+		<Scrollbar class={scrollbarXClasses} orientation="horizontal" />
+	{/if}
+	<ScrollAreaPrimitive.Corner />
 </ScrollAreaPrimitive.Root>

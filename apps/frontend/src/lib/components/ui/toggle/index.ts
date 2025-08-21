@@ -1,14 +1,14 @@
-import Root from './toggle.svelte';
+import Root from "./toggle.svelte";
 
 export {
-  type ToggleSize,
-  type ToggleVariant,
-  type ToggleVariants,
-  toggleVariants,
-} from './toggle.svelte';
+	type ToggleSize,
+	type ToggleVariant,
+	type ToggleVariants,
+	toggleVariants,
+} from "./toggle.svelte";
 
 export {
-  Root,
-  //
-  Root as Toggle,
+	Root,
+	//
+	Root as Toggle,
 };

@@ -21,7 +21,10 @@ import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";
 
 import { setup } from "../setup.ts";
-import { notificationBroadcast, notificationRemove } from "../ui/notifications.ts";
+import {
+	notificationBroadcast,
+	notificationRemove,
+} from "../ui/notifications.ts";
 
 const deviceDir = setup.usb_device_dir ?? "/sys/bus/usb/devices";
 
@@ -42,7 +45,9 @@ export async function checkCamlinkUsb2() {
 				Additional product IDs for 20GAM9902 thanks to chubbybunny627: 0x7b for
 				USB 3.0 and 0x85 for USB 2.0
 			  */
-			const product = ((await readTextFile(`${deviceDir}/${d}/idProduct`)) ?? "").trim();
+			const product = (
+				(await readTextFile(`${deviceDir}/${d}/idProduct`)) ?? ""
+			).trim();
 			const knownCamLinkPids = ["0066", "0067", "007b", "0085"];
 			if (!knownCamLinkPids.includes(product)) continue;
 

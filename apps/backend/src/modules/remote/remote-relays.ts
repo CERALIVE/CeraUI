@@ -23,7 +23,10 @@ import { validatePortNo } from "../../helpers/number.ts";
 import { writeTextFile } from "../../helpers/text-files.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
-import { getAllRelaysRtt, updateBcrptServerConfig } from "../streaming/bcrpt.ts";
+import {
+	getAllRelaysRtt,
+	updateBcrptServerConfig,
+} from "../streaming/bcrpt.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
 type RelayCache = {
@@ -95,7 +98,9 @@ const RELAYS_CACHE_FILE = "relays_cache.json";
 
 let relaysCache: RelayCache | undefined;
 try {
-	relaysCache = JSON.parse(fs.readFileSync(RELAYS_CACHE_FILE, "utf8")) as RelayCache;
+	relaysCache = JSON.parse(
+		fs.readFileSync(RELAYS_CACHE_FILE, "utf8"),
+	) as RelayCache;
 } catch (_err) {
 	logger.warn("Failed to load the relays cache, starting with an empty cache");
 }
@@ -113,10 +118,14 @@ export function buildRelaysMsg(): RelaysResponseMessage {
 	Object.entries(relaysCache.servers).forEach(([id, srv]) => {
 		if (!srv) return;
 		const rtt = bcrptRelaysRtt?.[id];
-		const status = rtt !== undefined ? (rtt <= 80 ? "🟢" : rtt <= 150 ? "🟡" : "🔴") : "";
+		const status =
+			rtt !== undefined ? (rtt <= 80 ? "🟢" : rtt <= 150 ? "🟡" : "🔴") : "";
 		const prefix = status ? `${status} ` : "";
 		const suffix = rtt !== undefined ? ` (${rtt} ms)` : "";
-		msg.servers[id] = { name: `${prefix}${srv.name}${suffix}`, default: srv.default };
+		msg.servers[id] = {
+			name: `${prefix}${srv.name}${suffix}`,
+			default: srv.default,
+		};
 	});
 
 	// Simplify accounts mapping with clearer variable names
@@ -147,7 +156,12 @@ function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 			const r = msg.servers[r_id];
 			if (!r) continue;
 
-			if (r.type !== "srtla" || typeof r.name !== "string" || typeof r.addr !== "string") continue;
+			if (
+				r.type !== "srtla" ||
+				typeof r.name !== "string" ||
+				typeof r.addr !== "string"
+			)
+				continue;
 			if (r.default && r.default !== true) continue;
 
 			const port = validatePortNo(r.port);
@@ -167,7 +181,8 @@ function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 
 		for (const a_id in msg.accounts) {
 			const a = msg.accounts[a_id];
-			if (!a || typeof a.name !== "string" || typeof a.ingest_key !== "string") continue;
+			if (!a || typeof a.name !== "string" || typeof a.ingest_key !== "string")
+				continue;
 
 			out.accounts[a_id] = { name: a.name, ingest_key: a.ingest_key };
 			if (a.disabled) out.accounts[a_id].disabled = true;
@@ -239,7 +254,9 @@ export function convertManualToRemoteRelay() {
 	return modified;
 }
 
-export async function handleRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
+export async function handleRemoteRelays(
+	msg: ValidateRemoteRelaysMessage["relays"],
+) {
 	const validatedUpdate = validateRemoteRelays(msg);
 	if (!validatedUpdate) return;
 

@@ -22,16 +22,19 @@ import { WebSocketServer } from "ws";
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
 import { extractMessage } from "../../helpers/types.ts";
-import { type ModemsMessage, handleModems } from "../modems/modems.ts";
-import { type NetworkInterfaceMessage, handleNetif } from "../network/network-interfaces.ts";
+import { handleModems, type ModemsMessage } from "../modems/modems.ts";
+import {
+	handleNetif,
+	type NetworkInterfaceMessage,
+} from "../network/network-interfaces.ts";
 import { getRemoteWebSocket, setRemoteKey } from "../remote/remote.ts";
 import { type BitrateParams, setBitrate } from "../streaming/encoder.ts";
-import { type StartMessage, getIsStreaming } from "../streaming/streaming.ts";
+import { getIsStreaming, type StartMessage } from "../streaming/streaming.ts";
 import { setAutostart, start, stop } from "../streaming/streamloop.ts";
 import { getLog } from "../system/logs.ts";
 import { isUpdating, startSoftwareUpdate } from "../system/software-updates.ts";
 import { resetSshPassword, startStopSsh } from "../system/ssh.ts";
-import { type WifiMessage, handleWifi } from "../wifi/wifi.ts";
+import { handleWifi, type WifiMessage } from "../wifi/wifi.ts";
 import {
 	type AuthMessage,
 	getPasswordHash,
@@ -132,7 +135,11 @@ export function handleMessage(conn: WebSocket, msg: Message, isRemote = false) {
 	for (const type in msg) {
 		switch (type) {
 			case "config":
-				handleConfig(conn, extractMessage<ConfigMessage, typeof type>(msg, type), isRemote);
+				handleConfig(
+					conn,
+					extractMessage<ConfigMessage, typeof type>(msg, type),
+					isRemote,
+				);
 				break;
 		}
 	}
@@ -155,7 +162,9 @@ export function handleMessage(conn: WebSocket, msg: Message, isRemote = false) {
 
 			case "bitrate":
 				if (getIsStreaming()) {
-					const br = setBitrate(extractMessage<BitrateMessage, typeof type>(msg, type));
+					const br = setBitrate(
+						extractMessage<BitrateMessage, typeof type>(msg, type),
+					);
 					if (br) {
 						broadcastMsgExcept(conn, "bitrate", { max_br: br });
 					}
@@ -167,7 +176,10 @@ export function handleMessage(conn: WebSocket, msg: Message, isRemote = false) {
 				break;
 
 			case "netif":
-				handleNetif(conn, extractMessage<NetworkInterfaceMessage, typeof type>(msg, type));
+				handleNetif(
+					conn,
+					extractMessage<NetworkInterfaceMessage, typeof type>(msg, type),
+				);
 				break;
 
 			case "wifi":
@@ -175,7 +187,10 @@ export function handleMessage(conn: WebSocket, msg: Message, isRemote = false) {
 				break;
 
 			case "modems":
-				handleModems(conn, extractMessage<ModemsMessage, typeof type>(msg, type));
+				handleModems(
+					conn,
+					extractMessage<ModemsMessage, typeof type>(msg, type),
+				);
 				break;
 
 			case "logout":
@@ -224,12 +239,20 @@ function command(conn: WebSocket, cmd: string) {
 	}
 }
 
-function handleConfig(conn: WebSocket, msg: ConfigMessage["config"], isRemote: boolean) {
+function handleConfig(
+	conn: WebSocket,
+	msg: ConfigMessage["config"],
+	isRemote: boolean,
+) {
 	// setPassword does its own authentication
 	for (const type in msg) {
 		switch (type) {
 			case "password":
-				setPassword(conn, extractMessage<ConfigPasswordMessage, typeof type>(msg, type), isRemote);
+				setPassword(
+					conn,
+					extractMessage<ConfigPasswordMessage, typeof type>(msg, type),
+					isRemote,
+				);
 				break;
 		}
 	}
@@ -239,10 +262,14 @@ function handleConfig(conn: WebSocket, msg: ConfigMessage["config"], isRemote: b
 	for (const type in msg) {
 		switch (type) {
 			case "remote_key":
-				setRemoteKey(extractMessage<ConfigRemoteKeyMessage, typeof type>(msg, type));
+				setRemoteKey(
+					extractMessage<ConfigRemoteKeyMessage, typeof type>(msg, type),
+				);
 				break;
 			case "autostart":
-				setAutostart(extractMessage<ConfigAutoStartMessage, typeof type>(msg, type));
+				setAutostart(
+					extractMessage<ConfigAutoStartMessage, typeof type>(msg, type),
+				);
 				break;
 		}
 	}
@@ -260,7 +287,10 @@ export function deleteSocketSenderId(conn: WebSocket) {
 	socketSenderIds.delete(conn);
 }
 
-export function markConnectionActive(conn: WebSocket, timestamp: number = getms()) {
+export function markConnectionActive(
+	conn: WebSocket,
+	timestamp: number = getms(),
+) {
 	lastActiveSocket.set(conn, timestamp);
 }
 
@@ -285,14 +315,23 @@ export function broadcastMsgLocal(
 	const msg = buildMsg(type, data);
 	for (const c of wss.clients) {
 		const lastActive = getLastActive(c);
-		if (c !== except && lastActive >= activeMin && (!authedOnly || isAuthedSocket(c))) {
+		if (
+			c !== except &&
+			lastActive >= activeMin &&
+			(!authedOnly || isAuthedSocket(c))
+		) {
 			c.send(msg);
 		}
 	}
 	return msg;
 }
 
-export function broadcastMsg(type: string, data: unknown, activeMin = 0, authedOnly = true) {
+export function broadcastMsg(
+	type: string,
+	data: unknown,
+	activeMin = 0,
+	authedOnly = true,
+) {
 	const msg = broadcastMsgLocal(type, data, activeMin, undefined, authedOnly);
 	const remoteWs = getRemoteWebSocket();
 	if (remoteWs && isAuthedSocket(remoteWs)) {
@@ -300,7 +339,11 @@ export function broadcastMsg(type: string, data: unknown, activeMin = 0, authedO
 	}
 }
 
-export function broadcastMsgExcept(conn: WebSocket, type: string, data: unknown) {
+export function broadcastMsgExcept(
+	conn: WebSocket,
+	type: string,
+	data: unknown,
+) {
 	broadcastMsgLocal(type, data, 0, conn);
 
 	const remoteWs = getRemoteWebSocket();

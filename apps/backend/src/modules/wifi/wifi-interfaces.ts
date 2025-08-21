@@ -19,19 +19,24 @@ import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
 
 import {
-	NETIF_ERR_HOTSPOT,
 	getNetworkInterfaces,
+	NETIF_ERR_HOTSPOT,
 	setNetifHotspot,
 	triggerNetworkInterfacesChange,
 } from "../network/network-interfaces.ts";
 import {
 	type ConnectionUUID,
 	type MacAddress,
+	nmcliParseSep,
 	nmDeviceProp,
 	nmDevices,
-	nmcliParseSep,
 } from "../network/network-manager.ts";
 import { updateBcrptSourceIps } from "../streaming/bcrpt.ts";
+import {
+	type WifiNetwork,
+	wifiBroadcastState,
+	wifiUpdateSavedConns,
+} from "./wifi.ts";
 import {
 	addWifiInterface,
 	getWifiInterfaceByMacAddress,
@@ -40,9 +45,15 @@ import {
 	wifiScheduleScanUpdates,
 	wifiUpdateScanResult,
 } from "./wifi-connections.ts";
-import { wifiDeviceListGetInetAddress, wifiDeviceListGetMacAddress } from "./wifi-device-list.ts";
-import { type WifiHotspot, type WifiInterfaceWithHotspot, isHotspot } from "./wifi-hotspot.ts";
-import { type WifiNetwork, wifiBroadcastState, wifiUpdateSavedConns } from "./wifi.ts";
+import {
+	wifiDeviceListGetInetAddress,
+	wifiDeviceListGetMacAddress,
+} from "./wifi-device-list.ts";
+import {
+	isHotspot,
+	type WifiHotspot,
+	type WifiInterfaceWithHotspot,
+} from "./wifi-hotspot.ts";
 
 export type SSID = string;
 export type WifiInterfaceId = number;
@@ -106,7 +117,10 @@ export async function wifiUpdateDevices() {
 				continue;
 			}
 
-			const conn = connUuid !== "" && wifiDeviceListGetInetAddress(ifname) ? connUuid : null;
+			const conn =
+				connUuid !== "" && wifiDeviceListGetInetAddress(ifname)
+					? connUuid
+					: null;
 			const macAddress = wifiDeviceListGetMacAddress(ifname);
 			if (!macAddress) continue;
 
@@ -169,7 +183,9 @@ export async function wifiUpdateDevices() {
 			}
 		} catch (err) {
 			if (err instanceof Error) {
-				logger.error(`Error getting the nmcli WiFi device information: ${err.message}`);
+				logger.error(
+					`Error getting the nmcli WiFi device information: ${err.message}`,
+				);
 			}
 		}
 	}
@@ -234,7 +250,9 @@ export async function wifiUpdateDevices() {
 			);
 		} else if (getms() < unavailableDeviceRetryExpiry) {
 			setTimeout(wifiUpdateDevices, 3_000);
-			logger.warn("One or more Wifi interfaces are still unavailable. Retrying in 3 seconds...");
+			logger.warn(
+				"One or more Wifi interfaces are still unavailable. Retrying in 3 seconds...",
+			);
 		}
 	} else {
 		unavailableDeviceRetryExpiry = 0;

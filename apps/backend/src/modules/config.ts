@@ -55,7 +55,9 @@ export function loadConfig() {
 		config.ssh_pass_hash = undefined;
 	} catch (err: unknown) {
 		if (err instanceof Error) {
-			logger.warn(`Failed to open the config file: ${err.message}. Creating an empty config`);
+			logger.warn(
+				`Failed to open the config file: ${err.message}. Creating an empty config`,
+			);
 		}
 		config = {};
 

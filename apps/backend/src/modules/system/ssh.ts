@@ -45,7 +45,11 @@ export function getSshPasswordHash() {
 }
 
 function handleSshStatus(s: SshStatus) {
-	if (s.user !== undefined && s.active !== undefined && s.user_pass !== undefined) {
+	if (
+		s.user !== undefined &&
+		s.active !== undefined &&
+		s.user_pass !== undefined
+	) {
 		if (
 			!sshStatus ||
 			s.user !== sshStatus.user ||
@@ -66,7 +70,9 @@ function getSshUserHash(callback: (hash: string) => void) {
 		if (err === null && stdout.length) {
 			callback(stdout);
 		} else {
-			logger.error(`Error getting the password hash for ${setup.ssh_user}: ${err}`);
+			logger.error(
+				`Error getting the password hash for ${setup.ssh_user}: ${err}`,
+			);
 		}
 	});
 }
@@ -120,7 +126,11 @@ export function startStopSsh(conn: WebSocket, cmd: "start_ssh" | "stop_ssh") {
 export function resetSshPassword(conn: WebSocket) {
 	if (!setup.ssh_user) return;
 
-	const password = crypto.randomBytes(24).toString("base64").replace(/[+/=]/g, "").substring(0, 20);
+	const password = crypto
+		.randomBytes(24)
+		.toString("base64")
+		.replace(/[+/=]/g, "")
+		.substring(0, 20);
 	const cmd = `printf "${password}\n${password}" | passwd ${setup.ssh_user}`;
 	exec(cmd, (err) => {
 		if (err) {

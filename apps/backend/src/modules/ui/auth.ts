@@ -82,7 +82,11 @@ export function deleteAuthedSocket(conn: WebSocket) {
 	authedSockets.delete(conn);
 }
 
-export function setPassword(conn: WebSocket, password: string, isRemote: boolean) {
+export function setPassword(
+	conn: WebSocket,
+	password: string,
+	isRemote: boolean,
+) {
 	const isAuthed = isAuthedSocket(conn);
 	if (isAuthed || (!isRemote && !passwordHash)) {
 		const minLen = 8;
@@ -135,7 +139,11 @@ export async function tryAuth(conn: WebSocket, msg: AuthMessage["auth"]) {
 
 	if (typeof msg.password === "string") {
 		try {
-			const match = await Bun.password.verify(msg.password, passwordHash, "bcrypt");
+			const match = await Bun.password.verify(
+				msg.password,
+				passwordHash,
+				"bcrypt",
+			);
 			if (match) {
 				const token = genAuthToken(msg.persistent_token);
 				authTokens.set(conn, token);

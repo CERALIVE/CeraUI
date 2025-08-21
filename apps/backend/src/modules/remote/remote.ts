@@ -50,21 +50,21 @@ import { setup } from "../setup.ts";
 import { addAuthedSocket } from "../ui/auth.ts";
 import { type StatusResponseMessage, sendInitialStatus } from "../ui/status.ts";
 import {
-	type Message,
 	broadcastMsg,
 	broadcastMsgLocal,
 	deleteSocketSenderId,
 	getLastActive,
 	handleMessage,
+	type Message,
 	markConnectionActive,
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
 
 import {
-	type ValidateRemoteRelaysMessage,
 	buildRelaysMsg,
 	handleRemoteRelays,
 	updateCachedRelays,
+	type ValidateRemoteRelaysMessage,
 } from "./remote-relays.ts";
 
 type RemoteAuthEncoderMessage = {
@@ -74,7 +74,8 @@ type RemoteAuthEncoderMessage = {
 type RemoteMessage = ValidateRemoteRelaysMessage | RemoteAuthEncoderMessage;
 
 const remoteProtocolVersion = setup.remote_protocol_version ?? 16;
-const remoteEndpointProtocol = setup.remote_endpoint_secure === false ? "ws" : "wss";
+const remoteEndpointProtocol =
+	setup.remote_endpoint_secure === false ? "ws" : "wss";
 const remoteEndpointHost = setup.remote_endpoint_host ?? "remote.belabox.net";
 const remoteEndpointPath = setup.remote_endpoint_path ?? "/ws/remote";
 const remoteTimeout = 5000;
@@ -91,7 +92,10 @@ function handleRemote(conn: WebSocket, msg: RemoteMessage) {
 	for (const type in msg) {
 		switch (type) {
 			case "auth/encoder": {
-				const value = extractMessage<RemoteAuthEncoderMessage, typeof type>(msg, type);
+				const value = extractMessage<RemoteAuthEncoderMessage, typeof type>(
+					msg,
+					type,
+				);
 				if (value === true) {
 					addAuthedSocket(conn);
 					sendInitialStatus(conn);
@@ -114,7 +118,9 @@ function handleRemote(conn: WebSocket, msg: RemoteMessage) {
 				break;
 			}
 			case "relays":
-				handleRemoteRelays(extractMessage<ValidateRemoteRelaysMessage, typeof type>(msg, type));
+				handleRemoteRelays(
+					extractMessage<ValidateRemoteRelaysMessage, typeof type>(msg, type),
+				);
 				break;
 		}
 	}
@@ -159,7 +165,11 @@ function remoteClose(conn: WebSocket) {
 	remoteWs = undefined;
 
 	if (!remoteStatusHandled) {
-		broadcastMsgLocal("status", { remote: { error: "network" } }, getms() - ACTIVE_TO);
+		broadcastMsgLocal(
+			"status",
+			{ remote: { error: "network" } },
+			getms() - ACTIVE_TO,
+		);
 	}
 }
 
@@ -179,7 +189,8 @@ async function remoteConnect() {
 		fromCache = dnsRes.fromCache;
 
 		if (fromCache) {
-			const cachedHost = dnsRes.addrs[Math.floor(Math.random() * dnsRes.addrs.length)];
+			const cachedHost =
+				dnsRes.addrs[Math.floor(Math.random() * dnsRes.addrs.length)];
 			if (!cachedHost) throw "No cached address";
 
 			host = cachedHost;
@@ -197,7 +208,10 @@ async function remoteConnect() {
 
 	remoteStatusHandled = false;
 	remoteWs = new WebSocket(remoteWsUrl);
-	markConnectionActive(remoteWs, getms() + remoteConnectTimeout - remoteTimeout);
+	markConnectionActive(
+		remoteWs,
+		getms() + remoteConnectTimeout - remoteTimeout,
+	);
 	remoteWs.on("error", (err) => {
 		logger.error(`remote error: ${err.message}`);
 	});

@@ -26,14 +26,18 @@ import { extractMessage } from "../../helpers/types.ts";
 import {
 	type ConnectionUUID,
 	nmConnDelete,
+	nmConnect,
 	nmConnGetFields,
 	nmConnSetWifiMacAddress,
-	nmConnect,
 	nmConnsGet,
-	nmDisconnect,
 	nmcliParseSep,
+	nmDisconnect,
 } from "../network/network-manager.ts";
-import { broadcastMsg, buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
+import {
+	broadcastMsg,
+	buildMsg,
+	getSocketSenderId,
+} from "../ui/websocket-server.ts";
 import { getWifiChannelMap } from "./wifi-channels.ts";
 import {
 	getWifiInterfaceByMacAddress,
@@ -43,21 +47,21 @@ import {
 	wifiUpdateScanResult,
 } from "./wifi-connections.ts";
 import {
-	type WifiHotspot,
-	type WifiHotspotMessage,
 	canHotspot,
 	handleHotspotConn,
 	isHotspot,
+	type WifiHotspot,
+	type WifiHotspotMessage,
 	wifiHotspotConfig,
 	wifiHotspotStart,
 	wifiHotspotStop,
 } from "./wifi-hotspot.ts";
 import {
 	type BaseWifiInterface,
-	type SSID,
-	type WifiInterfaceId,
 	getMacAddressForWifiInterface,
 	getWifiIdToMacAddress,
+	type SSID,
+	type WifiInterfaceId,
 } from "./wifi-interfaces.ts";
 
 type WifiConnectMessage = {
@@ -81,7 +85,11 @@ type WifiForgetMessage = {
 };
 
 export type WifiMessage = {
-	wifi: WifiConnectMessage | WifiDisconnectMessage | WifiNewMessage | WifiHotspotMessage;
+	wifi:
+		| WifiConnectMessage
+		| WifiDisconnectMessage
+		| WifiNewMessage
+		| WifiHotspotMessage;
 };
 
 // 1 - 100
@@ -128,7 +136,9 @@ export function wifiBuildMsg() {
 			ifs[id].hotspot = {
 				name: wifiInterface.hotspot.name,
 				password: wifiInterface.hotspot.password,
-				available_channels: getWifiChannelMap(wifiInterface.hotspot.availableChannels),
+				available_channels: getWifiChannelMap(
+					wifiInterface.hotspot.availableChannels,
+				),
 				channel: wifiInterface.hotspot.channel,
 			};
 
@@ -163,7 +173,10 @@ export async function wifiUpdateSavedConns() {
 
 	for (const connection of connections) {
 		try {
-			const [uuid, type] = nmcliParseSep(connection) as [ConnectionUUID, string];
+			const [uuid, type] = nmcliParseSep(connection) as [
+				ConnectionUUID,
+				string,
+			];
 
 			if (type !== "802-11-wireless") continue;
 
@@ -194,7 +207,9 @@ export async function wifiUpdateSavedConns() {
 			}
 		} catch (err) {
 			if (err instanceof Error) {
-				logger.error(`Error getting the nmcli connection information: ${err.message}`);
+				logger.error(
+					`Error getting the nmcli connection information: ${err.message}`,
+				);
 			}
 		}
 	}
@@ -244,9 +259,15 @@ async function wifiForget(uuid: ConnectionUUID) {
 }
 
 async function wifiDeleteFailedConns() {
-	const connections = (await nmConnsGet("uuid,type,timestamp")) as Array<string>;
+	const connections = (await nmConnsGet(
+		"uuid,type,timestamp",
+	)) as Array<string>;
 	for (const connection of connections) {
-		const [uuid, type, ts] = nmcliParseSep(connection) as [string, string, string];
+		const [uuid, type, ts] = nmcliParseSep(connection) as [
+			string,
+			string,
+			string,
+		];
 		if (type !== "802-11-wireless") continue;
 		if (ts === "0") {
 			await nmConnDelete(uuid);
@@ -263,7 +284,16 @@ function wifiNew(conn: WebSocket, msg: WifiNewMessage["new"]) {
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) return;
 
-	const args = ["-w", "15", "device", "wifi", "connect", msg.ssid, "ifname", wifiInterface.ifname];
+	const args = [
+		"-w",
+		"15",
+		"device",
+		"wifi",
+		"connect",
+		msg.ssid,
+		"ifname",
+		wifiInterface.ifname,
+	];
 
 	if (msg.password) {
 		args.push("password");
@@ -280,22 +310,42 @@ function wifiNew(conn: WebSocket, msg: WifiNewMessage["new"]) {
 				await wifiDeleteFailedConns();
 
 				if (stdout.match("Secrets were required, but not provided")) {
-					conn.send(buildMsg("wifi", { new: { error: "auth", device: msg.device } }, senderId));
+					conn.send(
+						buildMsg(
+							"wifi",
+							{ new: { error: "auth", device: msg.device } },
+							senderId,
+						),
+					);
 				} else {
-					conn.send(buildMsg("wifi", { new: { error: "generic", device: msg.device } }, senderId));
+					conn.send(
+						buildMsg(
+							"wifi",
+							{ new: { error: "generic", device: msg.device } },
+							senderId,
+						),
+					);
 				}
 			} else {
 				const success = stdout.match(/successfully activated with '(.+)'/);
 				if (success?.[1]) {
 					const uuid = success[1];
 					if (!(await nmConnSetWifiMacAddress(uuid, macAddress))) {
-						logger.warn("Failed to set the MAC address for the newly created connection");
+						logger.warn(
+							"Failed to set the MAC address for the newly created connection",
+						);
 					}
 
 					await wifiUpdateSavedConns();
 					await wifiUpdateScanResult();
 
-					conn.send(buildMsg("wifi", { new: { success: true, device: msg.device } }, senderId));
+					conn.send(
+						buildMsg(
+							"wifi",
+							{ new: { success: true, device: msg.device } },
+							senderId,
+						),
+					);
 				} else {
 					logger.warn(
 						`wifiNew: no error but not matching a successful connection msg in:\n${stdout}\n${stderr}`,
@@ -320,11 +370,16 @@ export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
 	for (const type in msg) {
 		switch (type) {
 			case "connect":
-				wifiConnect(conn, extractMessage<WifiConnectMessage, typeof type>(msg, type));
+				wifiConnect(
+					conn,
+					extractMessage<WifiConnectMessage, typeof type>(msg, type),
+				);
 				break;
 
 			case "disconnect":
-				wifiDisconnect(extractMessage<WifiDisconnectMessage, typeof type>(msg, type));
+				wifiDisconnect(
+					extractMessage<WifiDisconnectMessage, typeof type>(msg, type),
+				);
 				break;
 
 			case "scan":
@@ -340,7 +395,10 @@ export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
 				break;
 
 			case "hotspot": {
-				const hotspotMessage = extractMessage<WifiHotspotMessage, typeof type>(msg, type);
+				const hotspotMessage = extractMessage<WifiHotspotMessage, typeof type>(
+					msg,
+					type,
+				);
 				if ("start" in hotspotMessage && hotspotMessage.start) {
 					wifiHotspotStart(hotspotMessage.start);
 				} else if ("stop" in hotspotMessage && hotspotMessage.stop) {
