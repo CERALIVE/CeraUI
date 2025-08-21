@@ -1,4 +1,5 @@
 {
+	"$schema": "./locale.schema.json",
 	"updatingOverlay": {
 		"title": "Mise à jour du Logiciel de l'Appareil",
 		"description": "Vous pourrez l'utiliser une fois que le processus de mise à jour sera terminé",

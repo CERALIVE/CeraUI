@@ -1,0 +1,63 @@
+{
+  "name": "@ceraui/i18n-typebox",
+  "version": "0.1.0",
+  "description": "TypeScript-first i18n system with TypeBox schema definition and framework adapters",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "i18n-typebox": "./dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./svelte": {
+      "types": "./dist/adapters/svelte.d.ts",
+      "import": "./dist/adapters/svelte.js"
+    },
+    "./generators": {
+      "types": "./dist/generators/index.d.ts", 
+      "import": "./dist/generators/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "test": "bun test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "cli": "bun dist/cli/index.js",
+    "cli:generate": "bun dist/cli/index.js generate",
+    "cli:validate": "bun dist/cli/index.js validate",
+    "cli:analyze": "bun dist/cli/index.js analyze"
+  },
+  "keywords": [
+    "i18n", 
+    "internationalization",
+    "typescript",
+    "typebox",
+    "type-safe",
+    "svelte",
+    "framework-agnostic"
+  ],
+  "author": "CeraUI Team",
+  "license": "MIT",
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.40"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.1.4",
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  }
+}

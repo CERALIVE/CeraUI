@@ -1,4 +1,5 @@
 {
+	"$schema": "./locale.schema.json",
 	"updatingOverlay": {
 		"title": "आपके डिवाइस का सॉफ्टवेयर अपडेट हो रहा है",
 		"description": "अपडेट प्रक्रिया पूरी होने के बाद आप इसका उपयोग कर सकेंगे",

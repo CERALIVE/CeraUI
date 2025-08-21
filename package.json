@@ -19,11 +19,21 @@
 		"preview": "pnpm --filter frontend run preview",
 		"lint": "biome check . ; pnpm --filter backend run check ; pnpm --filter frontend run check ; pnpm --filter backend run lint ; pnpm --filter frontend run lint",
 		"lint:fix": "biome check --write . ; pnpm --filter backend run lint:fix ; pnpm --filter frontend run lint:fix",
+		"i18n:generate": "bun packages/i18n-typebox/dist/cli/index.js generate",
+		"i18n:validate": "bun packages/i18n-typebox/dist/cli/index.js validate",
+		"i18n:fix": "bun packages/i18n-typebox/dist/cli/index.js fix",
+		"i18n:analyze": "bun packages/i18n-typebox/dist/cli/index.js analyze",
 		"clean": "rm -rf dist/ && pnpm --recursive --filter \"./apps/*\" run clean && rm -rf node_modules",
 		"clean:all": "pnpm clean && rm -rf node_modules/.pnpm-store"
 	},
+	"dependencies": {
+		"@ceraui/i18n-typebox": "workspace:*"
+	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.1.4",
+		"@sinclair/typebox": "^0.34.40",
+		"@types/node": "^24.3.0",
+		"glob": "^11.0.3",
 		"mprocs": "^0.7.3",
 		"typescript": "^5.9.2"
 	},

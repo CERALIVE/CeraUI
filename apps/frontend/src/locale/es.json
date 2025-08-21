@@ -1,4 +1,5 @@
 {
+	"$schema": "./locale.schema.json",
 	"updatingOverlay": {
 		"title": "Actualizando el Software del Dispositivo",
 		"description": "Podrá utilizarlo una vez que se complete el proceso de actualización",

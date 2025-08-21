@@ -145,7 +145,9 @@ const navigationStore = {
 		let current: NavElements = {
 			general: { label: "general", component: General },
 		};
-		const unsubscribe = currentNavigation.subscribe((nav) => (current = nav));
+		const unsubscribe = currentNavigation.subscribe((nav) => {
+			current = nav;
+		});
 		unsubscribe();
 		const updated = fn(current);
 		enhancedNavigationStore.navigateTo(updated);

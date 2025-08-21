@@ -1,5 +1,5 @@
 import { toast } from "svelte-sonner";
-
+import type { AudioCodecs } from "$lib/helpers/SystemHelper";
 import type {
 	ConfigMessage,
 	PipelinesMessage,
@@ -8,7 +8,7 @@ import type {
 type Properties = {
 	pipeline: keyof PipelinesMessage | undefined;
 	audioSource: string | undefined;
-	audioCodec: string | undefined;
+	audioCodec: AudioCodecs | undefined;
 	audioDelay: number | undefined;
 	bitrate: number | undefined;
 	bitrateOverlay: boolean | undefined;
@@ -59,7 +59,7 @@ export function buildStreamingConfig(
 		config.acodec = properties.audioCodec;
 	}
 	if (
-		(properties.relayServer == "-1" || properties.relayServer === undefined) &&
+		(properties.relayServer === "-1" || properties.relayServer === undefined) &&
 		properties.srtlaServerAddress
 	) {
 		config.srtla_addr = properties.srtlaServerAddress;
@@ -74,7 +74,7 @@ export function buildStreamingConfig(
 	}
 
 	if (
-		properties.relayAccount == "-1" ||
+		properties.relayAccount === "-1" ||
 		properties.relayAccount === undefined
 	) {
 		config.srt_streamid = properties.srtStreamId ?? "";

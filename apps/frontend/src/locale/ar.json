@@ -1,4 +1,5 @@
 {
+	"$schema": "./locale.schema.json",
 	"updatingOverlay": {
 		"title": "تحديث برامج الجهاز",
 		"description": "ستتمكن من استخدامه بمجرد اكتمال عملية التحديث",

@@ -8,8 +8,13 @@ export function normalizeValue(
 	step = 1,
 ): number {
 	// Validate inputs to prevent NaN propagation
-	if (!isFinite(value) || !isFinite(min) || !isFinite(max) || !isFinite(step)) {
-		return isFinite(min) ? min : 0;
+	if (
+		!Number.isFinite(value) ||
+		!Number.isFinite(min) ||
+		!Number.isFinite(max) ||
+		!Number.isFinite(step)
+	) {
+		return Number.isFinite(min) ? min : 0;
 	}
 
 	if (step === 0) {
@@ -19,7 +24,7 @@ export function normalizeValue(
 	const stepped = Math.round((value - min) / step) * step + min;
 	const result = Math.max(min, Math.min(max, stepped));
 
-	return isFinite(result) ? result : min;
+	return Number.isFinite(result) ? result : min;
 }
 
 export function updateMaxBitrate(
@@ -47,8 +52,8 @@ export function getSortedFramerates(
 		// Convert to numbers for numeric comparison with NaN safety
 		const numA = parseFloat(String(fpsA));
 		const numB = parseFloat(String(fpsB));
-		const safeNumA = isFinite(numA) ? numA : 0;
-		const safeNumB = isFinite(numB) ? numB : 0;
+		const safeNumA = Number.isFinite(numA) ? numA : 0;
+		const safeNumB = Number.isFinite(numB) ? numB : 0;
 
 		// Sort by numeric value
 		return safeNumA - safeNumB;
@@ -66,8 +71,8 @@ export function getSortedResolutions(resolutions: string[]): string[] {
 		// Extract numeric values (like "720" from "720p") with NaN safety
 		const numA = parseInt(a.match(/\d+/)?.[0] || "0", 10);
 		const numB = parseInt(b.match(/\d+/)?.[0] || "0", 10);
-		const safeNumA = isFinite(numA) ? numA : 0;
-		const safeNumB = isFinite(numB) ? numB : 0;
+		const safeNumA = Number.isFinite(numA) ? numA : 0;
+		const safeNumB = Number.isFinite(numB) ? numB : 0;
 
 		// Sort by numeric value
 		return safeNumA - safeNumB;

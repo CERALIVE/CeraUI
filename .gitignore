@@ -24,4 +24,17 @@ dev-dist
 # Cursor IDE - personal settings and configs
 .cursor/
 
+# Environment files
 .env
+
+# Auto-generated i18n files
+apps/frontend/src/lib/stores/i18n.svelte.ts
+apps/frontend/src/locale/locale.schema.json
+i18n-usage-analysis.json
+
+# Cache files
+**/dns_cache.json
+**/gsm_operator_cache.json
+
+# Process manager logs
+mprocs.log
