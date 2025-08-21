@@ -176,11 +176,20 @@ export default [
 			'**/.svelte-kit',
 			'**/playwright-report',
 			'**/.vite',
+			// Ignore JS/TS files - handled by Biome at root level
+			'**/*.js',
+			'**/*.mjs',
+			'**/*.ts',
+			'**/*.jsx',
+			'**/*.tsx',
 		],
 	},
 
-	// Prettier integration
-	...(Array.isArray(prettierConfig) ? prettierConfig : [prettierConfig]),
+	// Prettier integration (restricted to Svelte files only)
+	...(Array.isArray(prettierConfig) ? prettierConfig : [prettierConfig]).map(config => ({
+		...config,
+		files: ['**/*.svelte'], // Restrict Prettier to Svelte files only
+	})),
 
 	// Svelte-only configuration
 	svelteConfig,
