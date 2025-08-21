@@ -88,7 +88,6 @@ const ja = {
 			'DJIカメラはUSB-LIBUVCH264入力モードを使用するとより良く動作する可能性があります',
 		selectInputMode: '入力モードを選択',
 		selectEncodingOutputFormat: '出力コーデックを選択',
-		selectEncodingOutputFormat: 'エンコーディング出力フォーマットを選択',
 		encodingResolution: 'エンコーディング解像度',
 		selectEncodingResolution: 'エンコーディング解像度を選択',
 		framerate: 'フレームレート (FPS)',

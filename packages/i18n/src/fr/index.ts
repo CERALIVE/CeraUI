@@ -263,7 +263,6 @@ const fr = {
 		selectInputMode: "Sélectionnez le mode d'entrée",
 		selectEncodingOutputFormat: 'Sélectionnez le codec de sortie',
 		encodingFormat: 'Format de codage',
-		selectEncodingOutputFormat: 'Sélectionnez le format de sortie du codage',
 		encodingResolution: 'Résolution de codage',
 		selectEncodingResolution: 'Sélectionnez la résolution de codage',
 		framerate: "Fréquence d'images (FPS)",

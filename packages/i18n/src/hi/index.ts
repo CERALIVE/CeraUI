@@ -88,7 +88,6 @@ const hi = {
 		selectInputMode: 'इनपुट मोड चुनें',
 		djiCameraMessage: 'DJI कैमरे USB-LIBUVCH264 इनपुट मोड का उपयोग करके बेहतर काम कर सकते हैं',
 		selectEncodingOutputFormat: 'आउटपुट कोडेक चुनें',
-		selectEncodingOutputFormat: 'एनकोडिंग आउटपुट फॉर्मेट चुनें',
 		encodingResolution: 'एनकोडिंग रिज़ॉल्यूशन',
 		selectEncodingResolution: 'एनकोडिंग रिज़ॉल्यूशन चुनें',
 		framerate: 'फ्रेमरेट (FPS)',

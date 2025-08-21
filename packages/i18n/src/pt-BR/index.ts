@@ -262,7 +262,6 @@ const ptBR = {
 			'As câmeras DJI podem funcionar melhor usando o modo de entrada USB-LIBUVCH264',
 		selectInputMode: 'Selecione o modo de entrada',
 		selectEncodingOutputFormat: 'Selecione o codec de saída',
-		selectEncodingOutputFormat: 'Selecione o formato de saída de codificação',
 		encodingResolution: 'Resolução de Codificação',
 		selectEncodingResolution: 'Selecione a resolução de codificação',
 		framerate: 'Taxa de Quadros (FPS)',

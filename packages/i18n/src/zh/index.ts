@@ -86,7 +86,6 @@ const zh = {
 		djiCameraMessage: 'DJI 相机在使用 USB-LIBUVCH264 输入模式时可能表现更好',
 		selectInputMode: '选择输入模式',
 		selectEncodingOutputFormat: '选择输出编解码器',
-		selectEncodingOutputFormat: '选择编码输出格式',
 		encodingResolution: '编码分辨率',
 		selectEncodingResolution: '选择编码分辨率',
 		framerate: '帧率 (FPS)',

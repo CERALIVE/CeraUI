@@ -273,7 +273,6 @@ const de = {
 			'DJI-Kameras funktionieren möglicherweise besser im USB-LIBUVCH264-Eingabemodus',
 		selectInputMode: 'Wähle den Eingabemodus',
 		selectEncodingOutputFormat: 'Wähle den Ausgabe-Codec',
-		selectEncodingOutputFormat: 'Kodierungsausgabeformat auswählen',
 		encodingResolution: 'Kodierungsauflösung',
 		selectEncodingResolution: 'Kodierungsauflösung auswählen',
 		framerate: 'Bildrate (FPS)',

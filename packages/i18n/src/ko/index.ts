@@ -87,7 +87,6 @@ const ko = {
 		djiCameraMessage: 'DJI 카메라는 USB-LIBUVCH264 입력 모드를 사용하면 더 잘 작동할 수 있습니다',
 		selectInputMode: '입력 모드를 선택',
 		selectEncodingOutputFormat: '출력 코덱을 선택',
-		selectEncodingOutputFormat: '인코딩 출력 형식 선택',
 		encodingResolution: '인코딩 해상도',
 		selectEncodingResolution: '인코딩 해상도 선택',
 		framerate: '프레임 레이트(FPS)',
