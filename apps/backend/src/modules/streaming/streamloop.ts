@@ -176,6 +176,9 @@ export async function startStream(
 		belacoderArgs.push("-s");
 		belacoderArgs.push(streamid);
 	}
+	if (hasLowMtu()) {
+		belacoderArgs.push("-r");
+	}
 
 	spawnStreamingLoop(belacoderExec, belacoderArgs, 2000, (err) => {
 		let msg: string | undefined;
