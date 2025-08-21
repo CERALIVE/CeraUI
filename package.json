@@ -17,20 +17,14 @@
 		"build:frontend": "pnpm --filter frontend run build",
 		"build:backend": "pnpm --filter backend run build:backend-only",
 		"preview": "pnpm --filter frontend run preview",
-		"typecheck": "pnpm --recursive --filter \"./apps/*\" run check",
-		"format:check": "biome check . && pnpm --filter backend run format:check && pnpm --filter frontend run format:check",
-		"lint": "run-p typecheck format:check lint:only",
-		"lint:fix": "run-p fix lint:only:fix",
-		"lint:only": "biome lint . && pnpm --recursive --filter \"./apps/*\" run lint",
-		"lint:only:fix": "biome lint --write . && pnpm --recursive --filter \"./apps/*\" run lint:fix",
-		"fix": "biome check --write . && pnpm --recursive --filter \"./apps/*\" run fix",
+		"lint": "biome check . ; pnpm --filter backend run check ; pnpm --filter frontend run check ; pnpm --filter backend run lint ; pnpm --filter frontend run lint",
+		"lint:fix": "biome check --write . ; pnpm --filter backend run lint:fix ; pnpm --filter frontend run lint:fix",
 		"clean": "rm -rf dist/ && pnpm --recursive --filter \"./apps/*\" run clean && rm -rf node_modules",
 		"clean:all": "pnpm clean && rm -rf node_modules/.pnpm-store"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.1.4",
 		"mprocs": "^0.7.3",
-		"npm-run-all2": "^8.0.4",
 		"typescript": "^5.9.2"
 	},
 	"volta": {
