@@ -4,7 +4,6 @@ import { toast } from 'svelte-sonner';
 
 import {
 	autoSelectNextOption,
-	resetDependentSelections,
 } from '$lib/components/streaming/StreamingAutoSelection';
 import {
 	buildStreamingConfig,
@@ -126,6 +125,7 @@ $effect(() => {
 	if ($savedConfigStore) {
 		const config = $savedConfigStore;
 
+
 		if (properties.srtLatency === undefined) {
 			properties.srtLatency = config.srt_latency ?? 2000;
 		}
@@ -147,7 +147,8 @@ $effect(() => {
 			properties.audioDelay = initialSelectedProperties.audioDelay = config.delay ?? 0;
 		}
 		if (!initialSelectedProperties.pipeline) {
-			properties.pipeline = initialSelectedProperties.pipeline = config.pipeline;
+			initialSelectedProperties.pipeline = config.pipeline;
+			properties.pipeline = config.pipeline;
 		}
 		if (!initialSelectedProperties.bitrate) {
 			properties.bitrate = initialSelectedProperties.bitrate = config?.max_br ?? 5000;
@@ -194,6 +195,8 @@ $effect(() => {
 
 // Parse pipeline to populate encoder fields (during init or programmatic changes, not user interaction)
 $effect.pre(() => {
+	const canRun = properties.pipeline && $unparsedPipelinesStore !== undefined && $LL && (!userHasInteracted || isProgrammaticChange);
+
 	if (
 		properties.pipeline &&
 		$unparsedPipelinesStore !== undefined &&
@@ -228,18 +231,28 @@ $effect.pre(() => {
 });
 
 $effect(() => {
-	properties.pipeline =
-		$groupedPipelinesStore &&
-		properties.inputMode &&
-		properties.encoder &&
-		properties.resolution &&
-		properties.framerate
-			? $groupedPipelinesStore[properties.inputMode][properties.encoder][
-					properties.resolution
-				]?.find((pipeline) => {
-					return pipeline.extraction.fps === properties.framerate;
-				})?.identifier
-			: undefined;
+	// During initial mount, don't interfere with pipeline restoration
+	if (isInitialMount) {
+		console.log('🔵 Pipeline validation: Skipping during initial mount');
+		return;
+	}
+
+	console.log('🔍 Pipeline validation triggered:', {
+		inputMode: properties.inputMode,
+		encoder: properties.encoder,
+		resolution: properties.resolution,
+		framerate: properties.framerate,
+		pipeline: properties.pipeline
+	});
+
+	// Minimal validation effect - just clear pipeline when incomplete
+	// All validation, auto-selection, and pipeline building is now handled in autoSelectNextOption
+	if (!properties.inputMode || !properties.encoder || !properties.resolution || !properties.framerate) {
+		if (properties.pipeline) {
+			console.log('⚠️ Incomplete combination - clearing pipeline');
+			properties.pipeline = undefined;
+		}
+	}
 });
 
 // Updated helper to use modular validation
@@ -315,52 +328,93 @@ const handleInputModeChange = (value: string) => {
 		userHasInteracted = true; // Mark that user has made a selection
 	}
 	isProgrammaticChange = true;
-	const resetProps = resetDependentSelections('inputMode');
-	properties = { ...properties, inputMode: value, ...resetProps };
 
+	console.log('🔄 InputMode changed - starting unified validation/auto-selection/pipeline building');
+
+	// Unified flow: validate → clean → auto-select → build pipeline
 	if (value && $groupedPipelinesStore) {
-		const autoSelected = autoSelectNextOption('inputMode', properties, $groupedPipelinesStore);
-		if (Object.keys(autoSelected).length > 0) {
-			properties = { ...properties, ...autoSelected };
-		}
+		// Create properties with new value for investigation
+		const updatedProperties = { ...properties, inputMode: value };
+		const result = autoSelectNextOption('inputMode', updatedProperties, $groupedPipelinesStore);
+
+		// GUARANTEED REACTIVITY - Create completely new object
+		properties = Object.assign({}, properties, { inputMode: value }, result);
+		console.log('🎯 Unified flow complete - object replacement:', result);
+	} else {
+		// Just update the inputMode if no grouped pipelines
+		properties = { ...properties, inputMode: value };
 	}
 	isProgrammaticChange = false;
 };
 
 const handleEncoderChange = (value: string) => {
-	userHasInteracted = true; // Mark that user has made a selection
+	// Only mark user interaction if not during initial restoration
+	if (!isInitialMount) {
+		userHasInteracted = true; // Mark that user has made a selection
+	}
 	isProgrammaticChange = true;
-	const resetProps = resetDependentSelections('encoder');
-	properties = { ...properties, encoder: value, ...resetProps };
 
+	console.log('🔄 Encoder changed - starting unified validation/auto-selection/pipeline building');
+
+	// Unified flow: validate → clean → auto-select → build pipeline
 	if (value && $groupedPipelinesStore) {
-		const autoSelected = autoSelectNextOption('encoder', properties, $groupedPipelinesStore);
-		if (Object.keys(autoSelected).length > 0) {
-			properties = { ...properties, ...autoSelected };
-		}
+		const updatedProperties = { ...properties, encoder: value };
+		const result = autoSelectNextOption('encoder', updatedProperties, $groupedPipelinesStore);
+
+		// GUARANTEED REACTIVITY - Create completely new object
+		properties = Object.assign({}, properties, { encoder: value }, result);
+		console.log('🎯 Unified flow complete - object replacement:', result);
+	} else {
+		properties = { ...properties, encoder: value };
 	}
 	isProgrammaticChange = false;
 };
 
 const handleResolutionChange = (value: string) => {
-	userHasInteracted = true; // Mark that user has made a selection
+	// Only mark user interaction if not during initial restoration
+	if (!isInitialMount) {
+		userHasInteracted = true; // Mark that user has made a selection
+	}
 	isProgrammaticChange = true;
-	const resetProps = resetDependentSelections('resolution');
-	properties = { ...properties, resolution: value, ...resetProps };
 
+	console.log('🔄 Resolution changed - starting unified validation/auto-selection/pipeline building');
+
+	// Unified flow: validate → clean → auto-select → build pipeline
 	if (value && $groupedPipelinesStore) {
-		const autoSelected = autoSelectNextOption('resolution', properties, $groupedPipelinesStore);
-		if (Object.keys(autoSelected).length > 0) {
-			properties = { ...properties, ...autoSelected };
-		}
+		const updatedProperties = { ...properties, resolution: value };
+		const result = autoSelectNextOption('resolution', updatedProperties, $groupedPipelinesStore);
+
+		// GUARANTEED REACTIVITY - Create completely new object
+		properties = Object.assign({}, properties, { resolution: value }, result);
+		console.log('🎯 Unified flow complete - object replacement:', result);
+	} else {
+		properties = { ...properties, resolution: value };
 	}
 	isProgrammaticChange = false;
 };
 
 // Also mark user interaction for framerate changes
 const handleFramerateChange = (value: string) => {
-	userHasInteracted = true;
-	properties.framerate = value;
+	// Only mark user interaction if not during initial restoration
+	if (!isInitialMount) {
+		userHasInteracted = true; // Mark that user has made a selection
+	}
+	isProgrammaticChange = true;
+
+	console.log('🔄 Framerate changed - starting unified validation/pipeline building');
+
+	// Unified flow: validate → build pipeline
+	if (value && $groupedPipelinesStore) {
+		const updatedProperties = { ...properties, framerate: value };
+		const result = autoSelectNextOption('framerate', updatedProperties, $groupedPipelinesStore);
+
+		// GUARANTEED REACTIVITY - Create completely new object
+		properties = Object.assign({}, properties, { framerate: value }, result);
+		console.log('🎯 Unified flow complete - object replacement:', result);
+	} else {
+		properties = { ...properties, framerate: value };
+	}
+	isProgrammaticChange = false;
 };
 </script>
 

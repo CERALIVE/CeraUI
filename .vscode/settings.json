@@ -26,8 +26,9 @@
 	// TypeScript global settings
 	"typescript.preferences.includePackageJsonAutoImports": "on",
 	"typescript.suggest.autoImports": true,
-	"typescript.updateImportsOnFileMove.enabled": "always",
 	"typescript.preferences.importModuleSpecifier": "relative",
+	"typescript.preferences.importModuleSpecifierEnding": "minimal",
+	"javascript.preferences.importModuleSpecifierEnding": "minimal",
 	"typescript.workspaceSymbols.scope": "allOpenProjects",
 
 	  // ============================================================================
@@ -59,18 +60,16 @@
   "eslint.enable": true,
   "eslint.workingDirectories": [
     {
-      "directory": "./apps/frontend",
-      "changeProcessCWD": false
+      "directory": "/mnt/Development/Developments-box/CeraUI-Dev/CeraUI/apps/frontend",
+      "changeProcessCWD": true
     }
   ],
-  "eslint.validate": ["svelte"],
-  "eslint.options": {
-    "configFile": "./apps/frontend/eslint.config.mjs"
-  },
+  "eslint.validate": ["svelte", "javascript", "typescript"],
+  "eslint.options": {},
+  "eslint.alwaysShowStatus": true,
   "eslint.codeActionsOnSave.timeout": 2000,
   "eslint.format.enable": false,
-  "eslint.experimental.useFlatConfig": true,
-  "eslint.probe": ["svelte"],
+  "eslint.probe": ["svelte", "javascript", "typescript"],
   "eslint.run": "onSave",
 
   // ============================================================================

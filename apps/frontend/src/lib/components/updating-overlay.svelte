@@ -11,10 +11,10 @@
 </style>
 
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { CheckCircle2, Cog, Download, Package, RotateCw } from '@lucide/svelte';
 import { onMount } from 'svelte';
 import { toast } from 'svelte-sonner';
-import { LL } from '@ceraui/i18n/svelte';
 
 import * as Drawer from '$lib/components/ui/drawer/index.js';
 import { Progress } from '$lib/components/ui/progress';

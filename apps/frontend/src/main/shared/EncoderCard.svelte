@@ -66,28 +66,109 @@ let encoderTouched = $state(false);
 let resolutionTouched = $state(false);
 let framerateTouched = $state(false);
 
+// Track if this is the initial mount to allow forced sync during restoration
+let isComponentInitialMount = $state(true);
+
+// Allow initial sync for a brief period after mount
+$effect(() => {
+	if (isComponentInitialMount) {
+		setTimeout(() => {
+			isComponentInitialMount = false;
+		}, 200);
+	}
+});
+
+// DEBUG: Track when properties change
+$effect(() => {
+	console.log('🎭 EncoderCard properties changed:', {
+		inputMode: properties.inputMode,
+		encoder: properties.encoder,
+		resolution: properties.resolution,
+		framerate: properties.framerate
+	});
+});
+
 // Sync FROM properties TO local state when parent provides new data
 $effect(() => {
-	if (!inputModeTouched) {
-		localInputMode = properties.inputMode ?? '';
+	const newValue = properties.inputMode ?? '';
+	const valueChanged = newValue !== localInputMode;
+
+	// ENHANCED SYNC CONDITIONS: Always sync when parent provides different value (auto-selection override)
+	const shouldSync = !inputModeTouched || isComponentInitialMount || properties.inputMode === undefined || valueChanged;
+
+	console.log(`🔍 InputMode sync check: shouldSync=${shouldSync} (touched=${inputModeTouched}, initial=${isComponentInitialMount}, undefined=${properties.inputMode === undefined}, valueChanged=${valueChanged})`);
+
+	if (shouldSync && valueChanged) {
+		console.log(`🔄 Syncing inputMode: ${localInputMode} → ${newValue} (touched: ${inputModeTouched}) - AUTO-SELECTION OVERRIDE`);
+		localInputMode = newValue;
+	} else if (shouldSync && !valueChanged) {
+		console.log(`⏸️ InputMode already synced: ${localInputMode} = ${newValue}`);
+	} else {
+		console.log(`❌ InputMode sync blocked by touched state`);
 	}
 });
 
 $effect(() => {
-	if (!encoderTouched) {
-		localEncoder = properties.encoder ?? '';
+	const newValue = properties.encoder ?? '';
+	const valueChanged = newValue !== localEncoder;
+
+	// ENHANCED SYNC CONDITIONS: Always sync when parent provides different value (auto-selection override)
+	const shouldSync = !encoderTouched || isComponentInitialMount || properties.encoder === undefined || valueChanged;
+
+	console.log(`🔍 Encoder sync check: shouldSync=${shouldSync} (touched=${encoderTouched}, initial=${isComponentInitialMount}, undefined=${properties.encoder === undefined}, valueChanged=${valueChanged})`);
+
+	if (shouldSync && valueChanged) {
+		console.log(`🔄 Syncing encoder: ${localEncoder} → ${newValue} (touched: ${encoderTouched}) - AUTO-SELECTION OVERRIDE`);
+		localEncoder = newValue;
+	} else if (shouldSync && !valueChanged) {
+		console.log(`⏸️ Encoder already synced: ${localEncoder} = ${newValue}`);
+	} else {
+		console.log(`❌ Encoder sync blocked by touched state`);
 	}
 });
 
 $effect(() => {
-	if (!resolutionTouched) {
-		localResolution = properties.resolution ?? '';
+	const newValue = properties.resolution ?? '';
+	const valueChanged = newValue !== localResolution;
+
+	// ENHANCED SYNC CONDITIONS: Always sync when parent provides different value (auto-selection override)
+	const shouldSync = !resolutionTouched || isComponentInitialMount || properties.resolution === undefined || valueChanged;
+
+	console.log(`🔍 Resolution sync check: shouldSync=${shouldSync} (touched=${resolutionTouched}, initial=${isComponentInitialMount}, undefined=${properties.resolution === undefined}, valueChanged=${valueChanged})`);
+
+	if (shouldSync && valueChanged) {
+		console.log(`🔄 Syncing resolution: ${localResolution} → ${newValue} (touched: ${resolutionTouched}) - AUTO-SELECTION OVERRIDE`);
+		localResolution = newValue;
+	} else if (shouldSync && !valueChanged) {
+		console.log(`⏸️ Resolution already synced: ${localResolution} = ${newValue}`);
+	} else {
+		console.log(`❌ Resolution sync blocked by touched state`);
 	}
 });
 
 $effect(() => {
-	if (!framerateTouched) {
-		localFramerate = properties.framerate ?? '';
+	const newValue = properties.framerate ?? '';
+	const valueChanged = newValue !== localFramerate;
+
+	// ENHANCED SYNC CONDITIONS:
+	// 1. Not touched by user
+	// 2. Initial mount period
+	// 3. Clearing (undefined values)
+	// 4. AUTO-SELECTION OVERRIDE: When parent provides different value (auto-selection should win)
+	const shouldSync = !framerateTouched ||
+	                   isComponentInitialMount ||
+	                   properties.framerate === undefined ||
+	                   valueChanged; // Always sync when parent provides different value
+
+	console.log(`🔍 Framerate sync check: shouldSync=${shouldSync} (touched=${framerateTouched}, initial=${isComponentInitialMount}, undefined=${properties.framerate === undefined}, valueChanged=${valueChanged})`);
+
+	if (shouldSync && valueChanged) {
+		console.log(`🔄 Syncing framerate: ${localFramerate} → ${newValue} (touched: ${framerateTouched}) - AUTO-SELECTION OVERRIDE`);
+		localFramerate = newValue;
+	} else if (shouldSync && !valueChanged) {
+		console.log(`⏸️ Framerate already synced: ${localFramerate} = ${newValue}`);
+	} else {
+		console.log(`❌ Framerate sync blocked by touched state`);
 	}
 });
 
@@ -95,6 +176,13 @@ $effect(() => {
 	const newValue = properties.bitrate ?? 5000;
 	localBitrate = newValue;
 });
+
+// Derived value to check if encoding format should be disabled when only one option is available
+const hasOnlyOneEncoder = $derived(
+	properties.inputMode && groupedPipelines?.[properties.inputMode]
+		? Object.keys(groupedPipelines[properties.inputMode]).length === 1
+		: false
+);
 
 // No effects watching local state to prevent race conditions
 // Parent functions are called directly in onValueChange handlers
@@ -153,7 +241,7 @@ $effect(() => {
 			<Label class="text-sm font-medium" for="encodingFormat">{$LL.settings.encodingFormat()}</Label
 			>
 			<Select.Root
-				disabled={isStreaming || !properties.inputMode}
+				disabled={isStreaming || !properties.inputMode || hasOnlyOneEncoder}
 				onValueChange={(value) => {
 					localEncoder = value;
 					encoderTouched = true;
