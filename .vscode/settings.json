@@ -71,7 +71,7 @@
   "eslint.format.enable": false,
   "eslint.experimental.useFlatConfig": true,
   "eslint.probe": ["svelte"],
-  "eslint.run": "onType",
+  "eslint.run": "onSave",
 
   // ============================================================================
   // DEFAULT FORMATTERS (Simple file-type based)
@@ -115,12 +115,14 @@
     "biome.lsp.bin": "",
     "biome.rename": false,
     "editor.defaultFormatter": "svelte.svelte-vscode",
+    "editor.formatOnSave": false,
     "editor.codeActionsOnSave": {
-      "source.fixAll.eslint": "explicit",
-      "source.organizeImports.eslint": "explicit",
+      "source.fixAll": "never",
+      "source.fixAll.eslint": "never",
+      "source.organizeImports": "never",
+      "source.organizeImports.eslint": "never",
       "source.fixAll.biome": "never",
-      "source.organizeImports.biome": "never",
-      "source.fixAll": "never"
+      "source.organizeImports.biome": "never"
     }
   },
 
