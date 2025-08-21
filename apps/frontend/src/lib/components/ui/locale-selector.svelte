@@ -1,13 +1,13 @@
 <script lang="ts">
 import { Globe } from '@lucide/svelte';
 import { get } from 'svelte/store';
-import { _, locale } from 'svelte-i18n';
 
 import * as Select from '$lib/components/ui/select';
 import { localeStore } from '$lib/stores/locale';
 import { cn } from '$lib/utils';
 
-import { existingLocales } from '../../../i18n';
+import { LL, setLocale } from "@ceraui/i18n/svelte";
+import { existingLocales, loadLocaleAsync } from "@ceraui/i18n";
 
 const initialLocale = get(localeStore);
 
@@ -17,13 +17,27 @@ const localeFlag = $derived.by(() => existingLocales.find((l) => l.code === sele
 
 // Initialize locale in an effect to avoid top-level state updates
 $effect(() => {
-	locale.set(initialLocale.code);
+	// Only set locale if it's already loaded, don't load here to avoid conflicts with App.svelte
+	if (initialLocale.code) {
+		setLocale(initialLocale.code as any);
+	}
 });
 
-const handleLocaleChange = (value: string) => {
-	locale.set(value);
-	localeStore.set(existingLocales.find((l) => l.code === value)!);
-	selectedLocale = value;
+const handleLocaleChange = async (value: string) => {
+	try {
+		console.log(`🌍 Loading locale: ${value}`);
+		// First load the new locale
+		await loadLocaleAsync(value as any);
+		// Then set it as active
+		setLocale(value as any);
+		// Update the stores
+		localeStore.set(existingLocales.find((l) => l.code === value)!);
+		selectedLocale = value;
+		console.log(`✅ Successfully switched to locale: ${value}`);
+	} catch (error) {
+		console.error(`❌ Failed to load locale ${value}:`, error);
+		// Keep the previous selection on error
+	}
 };
 </script>
 
@@ -48,7 +62,7 @@ const handleLocaleChange = (value: string) => {
 		<!-- Language Header -->
 		<div class="mb-2 px-2 py-1">
 			<h4 class="text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
-				{$_('locale.selectLanguage')}
+				{$LL.locale.selectLanguage()}
 			</h4>
 		</div>
 

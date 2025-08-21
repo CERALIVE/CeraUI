@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Network, Radio, Wifi } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import { LL } from '@ceraui/i18n/svelte';
 
 import * as Card from '$lib/components/ui/card';
 import { StatusMessages } from '$lib/stores/websocket-store';
@@ -19,15 +19,15 @@ StatusMessages.subscribe((status) => {
 <div class="flex flex-col space-y-8 p-6">
 	<!-- Page Header -->
 	<div class="space-y-2">
-		<h1 class="text-3xl font-bold tracking-tight">{$_('network.pageTitle')}</h1>
-		<p class="text-muted-foreground">{$_('network.pageDescription')}</p>
+		<h1 class="text-3xl font-bold tracking-tight">{$LL.network.pageTitle()}</h1>
+		<p class="text-muted-foreground">{$LL.network.pageDescription()}</p>
 	</div>
 
 	<!-- Network Interfaces Section -->
 	<section class="space-y-4">
 		<div class="flex items-center gap-2">
 			<Network class="text-primary h-5 w-5" />
-			<h2 class="text-xl font-semibold">{$_('network.sections.networkInterfaces')}</h2>
+			<h2 class="text-xl font-semibold">{$LL.network.sections.networkInterfaces()}</h2>
 		</div>
 		<Card.Root>
 			<Networking />
@@ -39,12 +39,12 @@ StatusMessages.subscribe((status) => {
 		<section class="space-y-4">
 			<div class="flex items-center gap-2">
 				<Wifi class="text-primary h-5 w-5" />
-				<h2 class="text-xl font-semibold">{$_('network.sections.wifiDevices')}</h2>
+				<h2 class="text-xl font-semibold">{$LL.network.sections.wifiDevices()}</h2>
 				<span class="bg-muted text-muted-foreground rounded-full px-2 py-1 text-xs font-medium">
 					{Object.keys(currentStatus.wifi).length}
 					{Object.keys(currentStatus.wifi).length === 1
-						? $_('network.deviceCount.device')
-						: $_('network.deviceCount.devices')}
+						? $LL.network.deviceCount.device()
+						: $LL.network.deviceCount.devices()}
 				</span>
 			</div>
 
@@ -63,12 +63,12 @@ StatusMessages.subscribe((status) => {
 		<section class="space-y-4">
 			<div class="flex items-center gap-2">
 				<Radio class="text-primary h-5 w-5" />
-				<h2 class="text-xl font-semibold">{$_('network.sections.cellularModems')}</h2>
+				<h2 class="text-xl font-semibold">{$LL.network.sections.cellularModems()}</h2>
 				<span class="bg-muted text-muted-foreground rounded-full px-2 py-1 text-xs font-medium">
 					{Object.keys(currentStatus.modems).length}
 					{Object.keys(currentStatus.modems).length === 1
-						? $_('network.deviceCount.modem')
-						: $_('network.deviceCount.modems')}
+						? $LL.network.deviceCount.modem()
+						: $LL.network.deviceCount.modems()}
 				</span>
 			</div>
 
@@ -89,8 +89,8 @@ StatusMessages.subscribe((status) => {
 				<Network class="text-muted-foreground h-8 w-8" />
 			</div>
 			<div class="space-y-2">
-				<h3 class="font-medium">{$_('network.emptyStates.loadingStatus')}</h3>
-				<p class="text-muted-foreground text-sm">{$_('network.emptyStates.pleaseWait')}</p>
+				<h3 class="font-medium">{$LL.network.emptyStates.loadingStatus()}</h3>
+				<p class="text-muted-foreground text-sm">{$LL.network.emptyStates.pleaseWait()}</p>
 			</div>
 		</div>
 	{:else if (!currentStatus.wifi || Object.keys(currentStatus.wifi).length === 0) && (!currentStatus.modems || Object.keys(currentStatus.modems).length === 0)}
@@ -99,9 +99,9 @@ StatusMessages.subscribe((status) => {
 				<Wifi class="text-muted-foreground h-8 w-8" />
 			</div>
 			<div class="space-y-2">
-				<h3 class="font-medium">{$_('network.emptyStates.noDevicesFound')}</h3>
+				<h3 class="font-medium">{$LL.network.emptyStates.noDevicesFound()}</h3>
 				<p class="text-muted-foreground text-sm">
-					{$_('network.emptyStates.noDevicesDescription')}
+					{$LL.network.emptyStates.noDevicesDescription()}
 				</p>
 			</div>
 		</div>

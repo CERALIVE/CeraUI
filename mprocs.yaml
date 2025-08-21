@@ -10,7 +10,12 @@ procs:
     env:
       NODE_ENV: development
       PORT: "3001"
-  
+  i18n:
+    cwd: "./packages/i18n"
+    cmd: ["pnpm", "dev"]
+    env:
+      NODE_ENV: development
+
   # database:
   #   cwd: "./apps/backend"
   #   cmd: ["pnpm", "db:dev"]

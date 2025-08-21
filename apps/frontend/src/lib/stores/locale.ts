@@ -1,8 +1,8 @@
 import { writable } from "@macfja/svelte-persistent-store";
 
-import { type DefinedLocales, existingLocales } from "../../i18n";
+import { existingLocales } from "@ceraui/i18n";
 
-const localeStore = writable<DefinedLocales[number]>(
+const localeStore = writable<typeof existingLocales[number]>(
 	"locale",
 	existingLocales[0],
 );

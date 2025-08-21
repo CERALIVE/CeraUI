@@ -1,5 +1,5 @@
 import { get, writable } from "svelte/store";
-import { _ } from "svelte-i18n";
+import { LL } from "@ceraui/i18n/svelte";
 import { toast } from "svelte-sonner";
 
 import { CLIENT_VERSION } from "./version-manager";
@@ -71,12 +71,12 @@ function showVersionChangeNotification(oldVersion: string, newVersion: string) {
 		changeTypeKey = "version.newBuildVersion";
 	}
 
-	const $_ = get(_);
-	toast.info($_("version.newVersionAvailable"), {
-		description: `${$_(changeTypeKey)}. ${$_("version.refreshToUpdate")}.`,
+	const $LL = get(LL);
+	toast.info($LL.version.newVersionAvailable(), {
+		description: `${$LL.version[changeTypeKey.split('.')[1] as keyof typeof $LL.version]()}. ${$LL.version.refreshToUpdate()}.`,
 		duration: 8000,
 		action: {
-			label: $_("version.refreshNow"),
+			label: $LL.version.refreshNow(),
 			onClick: () => {
 				window.location.reload();
 			},

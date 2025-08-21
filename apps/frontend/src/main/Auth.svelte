@@ -1,6 +1,6 @@
 <script lang="ts">
 import { AlertCircle, CheckCircle, Eye, EyeOff, LoaderCircle, Shield } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import { LL } from '@ceraui/i18n/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { Checkbox } from '$lib/components/ui/checkbox';
@@ -35,7 +35,7 @@ const validation = $derived({
 		isEmpty: password.length === 0,
 		message:
 			setPassword && password.length < 8 && password.length > 0
-				? $_('auth.validation.passwordMinLength')
+				? $LL.auth.validation.passwordMinLength()
 				: '',
 	},
 });
@@ -84,9 +84,9 @@ async function onSubmit(event: SubmitEvent) {
 </script>
 
 <div
-	class="relative container grid h-dvh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0"
+	class="container relative grid h-dvh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0"
 >
-	<span class="absolute top-4 right-4 flex md:top-8 md:right-8">
+	<span class="absolute right-4 top-4 flex md:right-8 md:top-8">
 		<span class="mr-3"> <LocaleSelector /></span>
 		<ModeToggle></ModeToggle>
 	</span>
@@ -118,9 +118,9 @@ async function onSubmit(event: SubmitEvent) {
 
 				<div class="space-y-2">
 					<h1 class="text-2xl font-bold tracking-tight">
-						{setPassword ? $_('auth.createPasswordAndLogin') : $_('auth.loginWithPassword')}
+						{setPassword ? $LL.auth.createPasswordAndLogin() : $LL.auth.loginWithPassword()}
 					</h1>
-					<p class="text-muted-foreground text-sm leading-relaxed">{$_('auth.usePassword')}</p>
+					<p class="text-muted-foreground text-sm leading-relaxed">{$LL.auth.usePassword()}</p>
 				</div>
 			</div>
 			<div class={cn('grid gap-6', className)}>
@@ -137,14 +137,14 @@ async function onSubmit(event: SubmitEvent) {
 								>
 									<Shield class="h-4 w-4 text-blue-600 dark:text-blue-400" />
 								</div>
-								{setPassword ? $_('auth.newPassword') : $_('auth.password')}
+								{setPassword ? $LL.auth.newPassword() : $LL.auth.password()}
 							</Label>
 
 							<div class="relative">
 								<Input
 									id="password"
 									class={cn(
-										'focus:ring-opacity-20 h-12 w-full rounded-xl border-2 px-4 pr-12 text-base transition-all duration-300 focus:ring-4',
+										'h-12 w-full rounded-xl border-2 px-4 pr-12 text-base transition-all duration-300 focus:ring-4 focus:ring-opacity-20',
 										!validation.password.isValid && !validation.password.isEmpty
 											? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
 											: validation.password.isValid && !validation.password.isEmpty
@@ -156,15 +156,15 @@ async function onSubmit(event: SubmitEvent) {
 									autocorrect="off"
 									disabled={isLoading}
 									placeholder={setPassword
-										? $_('auth.placeholderNewPassword')
-										: $_('auth.placeholderPassword')}
+										? $LL.auth.placeholderNewPassword()
+										: $LL.auth.placeholderPassword()}
 									type={showPassword ? 'text' : 'password'}
 									bind:value={password}
 								/>
 
 								<!-- Password Visibility Toggle -->
 								<Button
-									class="absolute top-1/2 right-1 h-10 w-10 -translate-y-1/2 hover:bg-gray-100 dark:hover:bg-gray-800"
+									class="absolute right-1 top-1/2 h-10 w-10 -translate-y-1/2 hover:bg-gray-100 dark:hover:bg-gray-800"
 									aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
 									aria-pressed={showPassword}
 									onclick={() => (showPassword = !showPassword)}
@@ -182,7 +182,7 @@ async function onSubmit(event: SubmitEvent) {
 
 								<!-- Validation Icon -->
 								{#if !validation.password.isEmpty}
-									<div class="absolute top-1/2 right-12 -translate-y-1/2">
+									<div class="absolute right-12 top-1/2 -translate-y-1/2">
 										{#if validation.password.isValid}
 											<CheckCircle class="h-5 w-5 text-green-500" />
 										{:else}
@@ -201,7 +201,7 @@ async function onSubmit(event: SubmitEvent) {
 							{:else if setPassword && validation.password.isValid}
 								<div class="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
 									<CheckCircle class="h-4 w-4" />
-									<span>{$_('auth.validation.passwordValid')}</span>
+									<span>{$LL.auth.validation.passwordValid()}</span>
 								</div>
 							{/if}
 						</div>
@@ -214,10 +214,10 @@ async function onSubmit(event: SubmitEvent) {
 						>
 							{#if isLoading}
 								<LoaderCircle class="mr-2 h-5 w-5 animate-spin" />
-								<span>{setPassword ? $_('auth.creatingPassword') : $_('auth.signingIn')}</span>
+								<span>{setPassword ? $LL.auth.creatingPassword() : $LL.auth.signingIn()}</span>
 							{:else}
 								<Shield class="mr-2 h-5 w-5" />
-								<span>{setPassword ? $_('auth.createPassword') : $_('auth.signIn')}</span>
+								<span>{setPassword ? $LL.auth.createPassword() : $LL.auth.signIn()}</span>
 							{/if}
 						</Button>
 					</div>
@@ -227,10 +227,10 @@ async function onSubmit(event: SubmitEvent) {
 					>
 						<Checkbox id="remember" class="h-5 w-5" bind:checked={remember} />
 						<Label
-							class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+							class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
 							for="remember"
 						>
-							{$_('auth.rememberMe')}
+							{$LL.auth.rememberMe()}
 						</Label>
 					</div>
 				</form>
@@ -252,10 +252,10 @@ async function onSubmit(event: SubmitEvent) {
 							<Shield class="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
 							<div class="space-y-1">
 								<h3 class="text-sm font-semibold text-blue-800 dark:text-blue-200">
-									{$_('auth.help.createPasswordTitle')}
+									{$LL.auth.help.createPasswordTitle()}
 								</h3>
 								<p class="text-xs leading-relaxed text-blue-700 dark:text-blue-300">
-									{$_('auth.help.createPasswordDescription')}
+									{$LL.auth.help.createPasswordDescription()}
 								</p>
 							</div>
 						</div>
@@ -265,9 +265,9 @@ async function onSubmit(event: SubmitEvent) {
 
 			<!-- Enhanced Footer -->
 			<div class="space-y-2 text-center">
-				<p class="text-muted-foreground text-sm">{$_('auth.footerText')}</p>
+				<p class="text-muted-foreground text-sm">{$LL.auth.footerText()}</p>
 				<p class="text-muted-foreground/70 text-xs">
-					{siteName} Beta UI - {$_('auth.secureAccess')}
+					{siteName} Beta UI - {$LL.auth.secureAccess()}
 				</p>
 			</div>
 		</div>

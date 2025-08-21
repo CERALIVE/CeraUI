@@ -13,8 +13,8 @@
 <script lang="ts">
 import { CheckCircle2, Cog, Download, Package, RotateCw } from '@lucide/svelte';
 import { onMount } from 'svelte';
-import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
+import { LL } from '@ceraui/i18n/svelte';
 
 import * as Drawer from '$lib/components/ui/drawer/index.js';
 import { Progress } from '$lib/components/ui/progress';
@@ -76,8 +76,8 @@ $effect(() => {
 	if (isComplete && !hasShownSuccess) {
 		hasShownSuccess = true;
 		setTimeout(() => {
-			toast.success($_('updatingOverlay.successMessage'), {
-				description: $_('updatingOverlay.successDescription'),
+			toast.success($LL.updatingOverlay.successMessage(), {
+				description: $LL.updatingOverlay.successDescription(),
 			});
 		}, 500);
 	}
@@ -119,12 +119,12 @@ onMount(() => {
 					<h1
 						class="from-foreground via-primary to-foreground bg-gradient-to-r bg-clip-text text-xl font-bold text-transparent sm:text-3xl md:text-4xl"
 					>
-						<span class="loading-pulse">{$_('updatingOverlay.title')}</span>
+						<span class="loading-pulse">{$LL.updatingOverlay.title()}</span>
 					</h1>
 
 					<!-- Subtitle with Better Typography -->
 					<p class="text-muted-foreground text-sm leading-relaxed sm:text-lg">
-						{$_('updatingOverlay.description')}
+						{$LL.updatingOverlay.description()}
 					</p>
 
 					<!-- Enhanced Status Badge -->
@@ -135,22 +135,22 @@ onMount(() => {
 							{#if animationPhase === 'downloading'}
 								<Download class="text-primary h-4 w-4 animate-bounce sm:h-5 sm:w-5" />
 								<span class="text-primary text-sm font-medium sm:text-base"
-									>{$_('updatingOverlay.downloading')}</span
+									>{$LL.updatingOverlay.downloading()}</span
 								>
 							{:else if animationPhase === 'unpacking'}
 								<Package class="h-4 w-4 animate-pulse text-amber-500 sm:h-5 sm:w-5" />
 								<span class="text-sm font-medium text-amber-500 sm:text-base"
-									>{$_('updatingOverlay.unpacking')}</span
+									>{$LL.updatingOverlay.unpacking()}</span
 								>
 							{:else if animationPhase === 'installing'}
 								<Cog class="h-4 w-4 animate-spin text-blue-500 sm:h-5 sm:w-5" />
 								<span class="text-sm font-medium text-blue-500 sm:text-base"
-									>{$_('updatingOverlay.installing')}</span
+									>{$LL.updatingOverlay.installing()}</span
 								>
 							{:else if animationPhase === 'complete'}
 								<CheckCircle2 class="h-4 w-4 text-green-500 sm:h-5 sm:w-5" />
 								<span class="text-sm font-medium text-green-500 sm:text-base"
-									>{$_('updatingOverlay.successMessage')}</span
+									>{$LL.updatingOverlay.successMessage()}</span
 								>
 							{/if}
 						</div>
@@ -180,7 +180,7 @@ onMount(() => {
 
 						<!-- Progress Label -->
 						<div class="text-muted-foreground text-sm sm:text-base">
-							{$_('updatingOverlay.progress')}
+							{$LL.updatingOverlay.progress()}
 						</div>
 					</div>
 
@@ -200,9 +200,9 @@ onMount(() => {
 						<div class="text-muted-foreground flex justify-between text-xs sm:text-sm">
 							<span
 								>{isFinite(progress) ? progress : 0}
-								{$_('updatingOverlay.of')}
+								{$LL.updatingOverlay.of()}
 								{isFinite(total) ? total : 1}
-								{$_('updatingOverlay.steps')}</span
+								{$LL.updatingOverlay.steps()}</span
 							>
 							<span>{isFinite(progressPercentage) ? progressPercentage.toFixed(1) : '0.0'}%</span>
 						</div>
@@ -233,7 +233,7 @@ onMount(() => {
 							class="text-center text-[10px] font-medium sm:text-xs"
 							class:text-primary={details?.downloading > 0}
 						>
-							{$_('updatingOverlay.downloading')}
+							{$LL.updatingOverlay.downloading()}
 						</span>
 						{#if details?.downloading > 0}
 							<span class="text-muted-foreground text-[9px] sm:text-xs"
@@ -267,7 +267,7 @@ onMount(() => {
 							class="text-center text-[10px] font-medium sm:text-xs"
 							class:text-amber-500={details?.unpacking > 0}
 						>
-							{$_('updatingOverlay.unpacking')}
+							{$LL.updatingOverlay.unpacking()}
 						</span>
 						{#if details?.unpacking > 0}
 							<span class="text-muted-foreground text-[9px] sm:text-xs"
@@ -301,7 +301,7 @@ onMount(() => {
 							class="text-center text-[10px] font-medium sm:text-xs"
 							class:text-blue-500={details?.setting_up > 0}
 						>
-							{$_('updatingOverlay.installing')}
+							{$LL.updatingOverlay.installing()}
 						</span>
 						{#if details?.setting_up > 0}
 							<span class="text-muted-foreground text-[9px] sm:text-xs"

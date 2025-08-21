@@ -1,12 +1,11 @@
 <script lang="ts">
+import { LL, locale } from "@ceraui/i18n/svelte";
+import { rtlLanguages } from "@ceraui/i18n";
 import { RefreshCw, Smartphone, WifiOff } from '@lucide/svelte';
-import { _, locale } from 'svelte-i18n';
 
 import { Button } from '$lib/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 import { manualConnectionCheck } from '$lib/stores/offline-navigation';
-
-import { rtlLanguages } from '../../../../i18n';
 
 // RTL support (for future enhancements)
 const _isRTL = $derived(rtlLanguages.includes($locale));
@@ -57,16 +56,16 @@ function goBack() {
 			<div class="bg-muted mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full">
 				<WifiOff class="text-muted-foreground h-8 w-8" />
 			</div>
-			<CardTitle class="text-xl">{$_('offline.title')}</CardTitle>
-			<CardDescription>{$_('offline.description')}</CardDescription>
+			<CardTitle class="text-xl">{$LL.offline.title()}</CardTitle>
+			<CardDescription>{$LL.offline.description()}</CardDescription>
 		</CardHeader>
 		<CardContent class="space-y-4">
 			<div class="text-muted-foreground space-y-2 text-sm">
-				<p>{$_('offline.checkTitle')}</p>
+				<p>{$LL.offline.checkTitle()}</p>
 				<ul class="ml-2 list-inside list-disc space-y-1">
-					<li>{$_('offline.checkWifi')}</li>
-					<li>{$_('offline.checkNetwork')}</li>
-					<li>{$_('offline.checkDevice')}</li>
+					<li>{$LL.offline.checkWifi()}</li>
+					<li>{$LL.offline.checkNetwork()}</li>
+					<li>{$LL.offline.checkDevice()}</li>
 				</ul>
 			</div>
 
@@ -79,20 +78,20 @@ function goBack() {
 				>
 					<RefreshCw class="mr-2 h-4 w-4 {isCheckingConnection ? 'animate-spin' : ''}" />
 					{#if isCheckingConnection}
-						{$_('offline.checking')}
+						{$LL.offline.checking()}
 					{:else if connectionCheckFailed}
-						{$_('offline.checkFailed')}
+						{$LL.offline.checkFailed()}
 					{:else}
-						{$_('offline.tryAgain')}
+						{$LL.offline.tryAgain()}
 					{/if}
 				</Button>
-				<Button class="w-full" onclick={goBack} variant="outline">{$_('offline.goBack')}</Button>
+				<Button class="w-full" onclick={goBack} variant="outline">{$LL.offline.goBack()}</Button>
 			</div>
 
 			<div class="border-t pt-4">
 				<div class="text-muted-foreground flex items-center gap-2 text-xs">
 					<Smartphone class="h-4 w-4" />
-					<span>{$_('offline.installNote')}</span>
+					<span>{$LL.offline.installNote()}</span>
 				</div>
 			</div>
 		</CardContent>

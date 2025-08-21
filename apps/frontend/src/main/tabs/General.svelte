@@ -10,7 +10,7 @@ import {
 	Thermometer,
 } from '@lucide/svelte';
 import { RefreshCw } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import { LL } from "@ceraui/i18n/svelte";
 
 import * as Card from '$lib/components/ui/card';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
@@ -52,7 +52,7 @@ StatusMessages.subscribe((status) => {
 
 function formatConfigValue(
 	value: string | number | undefined,
-	fallback: string = $_('general.notConfigured'),
+	fallback: string = $LL.general.notConfigured(),
 ) {
 	if (value === undefined || value === null || value === '') {
 		return fallback;
@@ -76,7 +76,7 @@ function getStatusIcon(isStreaming: boolean) {
 			<!-- System Status -->
 			<Card.Root class="relative overflow-hidden">
 				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<Card.Title class="text-sm font-medium">{$_('general.status')}</Card.Title>
+					<Card.Title class="text-sm font-medium">{$LL.general.status()}</Card.Title>
 					{#if currentStatus?.is_streaming}
 						{@const StatusIcon = getStatusIcon(currentStatus.is_streaming)}
 						<StatusIcon class="h-4 w-4 text-green-500" />
@@ -88,20 +88,18 @@ function getStatusIcon(isStreaming: boolean) {
 					<div
 						class={cn(`${getStatusColor(currentStatus?.is_streaming ?? false)} text-2xl font-bold`)}
 					>
-						{currentStatus?.is_streaming ? $_('general.streaming') : $_('general.offline')}
+						{currentStatus?.is_streaming ? $LL.general.streaming() : $LL.general.offline()}
 					</div>
 					{#if currentNetworks && currentStatus?.is_streaming}
 						<p class="text-muted-foreground mt-1 text-xs">
-							{$_('general.streamingMessage', {
-								values: {
-									usingNetworksCount: getUsedNetworks(currentNetworks).length,
-									srtLatency: currentConfig?.srt_latency,
-								},
+							{$LL.general.streamingMessage({
+								usingNetworksCount: getUsedNetworks(currentNetworks).length,
+								srtLatency: currentConfig?.srt_latency,
 							})}
 						</p>
 					{:else if !currentStatus?.is_streaming && !currentConfig?.srtla_addr}
 						<p class="text-muted-foreground mt-1 text-xs">
-							{$_('general.pleaseConfigureServer')}
+							{$LL.general.pleaseConfigureServer()}
 						</p>
 					{/if}
 				</Card.Content>
@@ -117,7 +115,7 @@ function getStatusIcon(isStreaming: boolean) {
 			<!-- Server Configuration Status -->
 			<Card.Root class="relative overflow-hidden">
 				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<Card.Title class="text-sm font-medium">{$_('general.relayServer')}</Card.Title>
+					<Card.Title class="text-sm font-medium">{$LL.general.relayServer()}</Card.Title>
 					{#if currentConfig?.srtla_addr}
 						<Server class="h-4 w-4 text-green-500" />
 					{:else}
@@ -126,12 +124,12 @@ function getStatusIcon(isStreaming: boolean) {
 				</Card.Header>
 				<Card.Content>
 					<div class="truncate text-2xl font-bold">
-						{currentConfig?.srtla_addr ?? $_('general.notConfigured')}
+						{currentConfig?.srtla_addr ?? $LL.general.notConfigured()}
 					</div>
 					<p class="text-muted-foreground mt-1 text-xs">
 						{currentConfig?.srtla_addr
-							? `${$_('general.port')}: ${currentConfig?.srtla_port}`
-							: $_('general.youHaventConfigured')}
+							? `${$LL.general.port()}: ${currentConfig?.srtla_port}`
+							: $LL.general.youHaventConfigured()}
 					</p>
 				</Card.Content>
 				<div
@@ -145,19 +143,19 @@ function getStatusIcon(isStreaming: boolean) {
 			<!-- System Updates -->
 			<Card.Root class="relative overflow-hidden">
 				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<Card.Title class="text-sm font-medium">{$_('general.updates')}</Card.Title>
+					<Card.Title class="text-sm font-medium">{$LL.general.updates()}</Card.Title>
 					<RefreshCw class="text-muted-foreground h-4 w-4" />
 				</Card.Header>
 				<Card.Content class="flex items-center">
 					<div class="flex-1">
 						<div class="text-2xl font-bold">
 							{#if currentStatus?.available_updates?.package_count === 0}
-								{$_('general.noUpdatesAvailable')}
+								{$LL.general.noUpdatesAvailable()}
 							{:else}
 								{currentStatus?.available_updates?.package_count}
 								{currentStatus?.available_updates?.package_count === 1
-									? $_('general.package')
-									: $_('general.packages')}
+									? $LL.general.package()
+									: $LL.general.packages()}
 							{/if}
 						</div>
 						<p class="text-muted-foreground mt-1 text-xs">
@@ -166,16 +164,16 @@ function getStatusIcon(isStreaming: boolean) {
 					</div>
 					{#if currentStatus?.available_updates?.package_count && currentStatus?.available_updates?.package_count > 0}
 						<SimpleAlertDialog
-							buttonText={$_('general.updateButton')}
-							confirmButtonText={$_('general.updateButton')}
+							buttonText={$LL.general.updateButton()}
+							confirmButtonText={$LL.general.updateButton()}
 							extraButtonClasses="ml-4 shrink-0"
 							onconfirm={installSoftwareUpdates}
 						>
 							{#snippet dialogTitle()}
-								{$_('general.areYouSure')}
+								{$LL.general.areYouSure()}
 							{/snippet}
 							{#snippet description()}
-								{$_('general.updateConfirmation')}
+								{$LL.general.updateConfirmation()}
 							{/snippet}
 						</SimpleAlertDialog>
 					{/if}
@@ -198,9 +196,9 @@ function getStatusIcon(isStreaming: boolean) {
 					<Card.Header>
 						<Card.Title class="flex items-center gap-2">
 							<SquareChartGantt class="h-5 w-5" />
-							{$_('general.configuration')}
+							{$LL.general.configuration()}
 						</Card.Title>
-						<Card.Description>{$_('general.serverAndAudio')}</Card.Description>
+						<Card.Description>{$LL.general.serverAndAudio()}</Card.Description>
 					</Card.Header>
 					<Card.Content class="space-y-8">
 						{#if currentConfig}
@@ -209,23 +207,23 @@ function getStatusIcon(isStreaming: boolean) {
 								<div class="space-y-4">
 									<div class="flex items-center gap-2">
 										<Server class="text-muted-foreground h-4 w-4" />
-										<span class="text-sm font-medium">{$_('general.serverSettings')}</span>
+										<span class="text-sm font-medium">{$LL.general.serverSettings()}</span>
 									</div>
 									<div class="space-y-3 pl-6">
 										<div class="flex items-center justify-between">
-											<span class="text-muted-foreground text-sm">{$_('general.relayServer')}</span>
+											<span class="text-muted-foreground text-sm">{$LL.general.relayServer()}</span>
 											<span class="font-mono text-sm"
 												>{formatConfigValue(currentConfig.srtla_addr, '—')}</span
 											>
 										</div>
 										<div class="flex items-center justify-between">
-											<span class="text-muted-foreground text-sm">{$_('general.port')}</span>
+											<span class="text-muted-foreground text-sm">{$LL.general.port()}</span>
 											<span class="font-mono text-sm"
 												>{formatConfigValue(currentConfig.srtla_port, '—')}</span
 											>
 										</div>
 										<div class="flex items-center justify-between">
-											<span class="text-muted-foreground text-sm">{$_('general.latency')}</span>
+											<span class="text-muted-foreground text-sm">{$LL.general.latency()}</span>
 											<span class="font-mono text-sm">
 												{formatConfigValue(
 													currentConfig.srt_latency ? `${currentConfig.srt_latency}ms` : undefined,
@@ -239,11 +237,11 @@ function getStatusIcon(isStreaming: boolean) {
 								<div class="space-y-4">
 									<div class="flex items-center gap-2">
 										<Activity class="text-muted-foreground h-4 w-4" />
-										<span class="text-sm font-medium">{$_('general.audioSettings')}</span>
+										<span class="text-sm font-medium">{$LL.general.audioSettings()}</span>
 									</div>
 									<div class="space-y-3 pl-6">
 										<div class="flex items-center justify-between">
-											<span class="text-muted-foreground text-sm">{$_('general.maxBitrate')}</span>
+											<span class="text-muted-foreground text-sm">{$LL.general.maxBitrate()}</span>
 											<span class="font-mono text-sm">
 												{formatConfigValue(
 													currentConfig.max_br ? `${currentConfig.max_br} Kbps` : undefined,
@@ -252,13 +250,13 @@ function getStatusIcon(isStreaming: boolean) {
 											</span>
 										</div>
 										<div class="flex items-center justify-between">
-											<span class="text-muted-foreground text-sm">{$_('general.audioDevice')}</span>
+											<span class="text-muted-foreground text-sm">{$LL.general.audioDevice()}</span>
 											<span class="font-mono text-sm"
 												>{formatConfigValue(currentConfig.asrc, '—')}</span
 											>
 										</div>
 										<div class="flex items-center justify-between">
-											<span class="text-muted-foreground text-sm">{$_('general.audioCodec')}</span>
+											<span class="text-muted-foreground text-sm">{$LL.general.audioCodec()}</span>
 											<span class="font-mono text-sm uppercase"
 												>{formatConfigValue(currentConfig.acodec, '—')}</span
 											>
@@ -272,9 +270,9 @@ function getStatusIcon(isStreaming: boolean) {
 									<AlertTriangle class="text-muted-foreground h-8 w-8" />
 								</div>
 								<div class="space-y-2">
-									<h3 class="font-medium">{$_('general.configurationNotComplete')}</h3>
+									<h3 class="font-medium">{$LL.general.configurationNotComplete()}</h3>
 									<p class="text-muted-foreground max-w-sm text-sm">
-										{$_('general.pleaseConfigureServer')}
+										{$LL.general.pleaseConfigureServer()}
 									</p>
 								</div>
 							</div>
@@ -295,7 +293,7 @@ function getStatusIcon(isStreaming: boolean) {
 						<Card.Header>
 							<Card.Title class="flex items-center gap-2">
 								<Thermometer class="h-5 w-5" />
-								{$_('general.hardwareSensors')}
+								{$LL.general.hardwareSensors()}
 							</Card.Title>
 						</Card.Header>
 						<Card.Content>
@@ -330,7 +328,7 @@ function getStatusIcon(isStreaming: boolean) {
 						<Card.Header>
 							<Card.Title class="flex items-center gap-2">
 								<RadioTower class="h-5 w-5" />
-								{$_('general.streamPerformance')}
+								{$LL.general.streamPerformance()}
 							</Card.Title>
 						</Card.Header>
 						<Card.Content>
@@ -343,11 +341,11 @@ function getStatusIcon(isStreaming: boolean) {
 									>
 										<div class="space-y-1">
 											<span class="text-sm font-medium">{sensorName}</span>
-											<div class="text-muted-foreground text-xs">{$_('general.liveMetrics')}</div>
+											<div class="text-muted-foreground text-xs">{$LL.general.liveMetrics()}</div>
 										</div>
 										<div class="text-right">
 											<div class="font-mono text-sm font-medium">
-												{sensorValue || $_('general.notAvailable')}
+												{sensorValue || $LL.general.notAvailable()}
 											</div>
 										</div>
 									</div>
@@ -363,7 +361,7 @@ function getStatusIcon(isStreaming: boolean) {
 						<Card.Header>
 							<Card.Title class="flex items-center gap-2">
 								<Activity class="h-5 w-5" />
-								{$_('general.systemHealth')}
+								{$LL.general.systemHealth()}
 							</Card.Title>
 						</Card.Header>
 						<Card.Content>
@@ -372,8 +370,8 @@ function getStatusIcon(isStreaming: boolean) {
 									<Activity class="text-muted-foreground h-8 w-8" />
 								</div>
 								<div class="space-y-2">
-									<h3 class="font-medium">{$_('general.noSensorData')}</h3>
-									<p class="text-muted-foreground text-sm">{$_('general.sensorsUnavailable')}</p>
+									<h3 class="font-medium">{$LL.general.noSensorData()}</h3>
+									<p class="text-muted-foreground text-sm">{$LL.general.sensorsUnavailable()}</p>
 								</div>
 							</div>
 						</Card.Content>

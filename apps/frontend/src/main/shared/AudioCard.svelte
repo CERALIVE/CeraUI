@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Volume } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import {LL} from '@ceraui/i18n/svelte'
+
 
 import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
@@ -77,7 +78,7 @@ const hasAudioCodec = $derived(
 			<div class="rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/20">
 				<Volume class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
 			</div>
-			<Card.Title class="text-base font-semibold">{$_('settings.audioSettings')}</Card.Title>
+			<Card.Title class="text-base font-semibold">{$LL.settings.audioSettings()}</Card.Title>
 		</div>
 	</Card.Header>
 
@@ -85,8 +86,8 @@ const hasAudioCodec = $derived(
 		{#if !properties.pipeline}
 			<div class="bg-accent/50 rounded-lg border border-dashed p-6 text-center">
 				<Volume class="text-muted-foreground mx-auto mb-2 h-8 w-8" />
-				<h3 class="mb-1 text-sm font-medium">{$_('settings.audioSettingsMessage')}</h3>
-				<p class="text-muted-foreground text-xs">{$_('settings.selectPipelineFirst')}</p>
+				<h3 class="mb-1 text-sm font-medium">{$LL.settings.audioSettingsMessage()}</h3>
+				<p class="text-muted-foreground text-xs">{$LL.settings.selectPipelineFirst()}</p>
 			</div>
 		{:else if !hasAudioSupport}
 			<div
@@ -95,18 +96,18 @@ const hasAudioCodec = $derived(
 				<div class="flex items-center space-x-2">
 					<div class="h-2 w-2 rounded-full bg-orange-500"></div>
 					<h3 class="text-sm font-medium text-orange-800 dark:text-orange-200">
-						{$_('settings.noAudioSettingSupport')}
+						{$LL.settings.noAudioSettingSupport()}
 					</h3>
 				</div>
 				<p class="mt-1 text-xs text-orange-600 dark:text-orange-300">
-					{$_('settings.selectedPipelineNoAudio')}
+					{$LL.settings.selectedPipelineNoAudio()}
 				</p>
 			</div>
 		{:else}
 			<!-- Audio Source Selection -->
 			{#if hasAudioSource}
 				<div class="space-y-2">
-					<Label class="text-sm font-medium" for="audioSource">{$_('settings.audioSource')}</Label>
+					<Label class="text-sm font-medium" for="audioSource">{$LL.settings.audioSource()}</Label>
 					<Select.Root
 						disabled={isStreaming}
 						onValueChange={onAudioSourceChange}
@@ -115,10 +116,10 @@ const hasAudioCodec = $derived(
 					>
 						<Select.Trigger id="audioSource" class="w-full">
 							{!properties.audioSource
-								? $_('settings.selectAudioSource')
+								? $LL.settings.selectAudioSource()
 								: properties.audioSource !== notAvailableAudioSource
 									? properties.audioSource
-									: `${notAvailableAudioSource} (${$_('settings.notAvailableAudioSource')})`}
+									: `${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Group>
@@ -129,7 +130,7 @@ const hasAudioCodec = $derived(
 								{/if}
 								{#if notAvailableAudioSource}
 									<Select.Item
-										label={`${notAvailableAudioSource} (${$_('settings.notAvailableAudioSource')})`}
+										label={`${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
 										value={notAvailableAudioSource}
 									></Select.Item>
 								{/if}
@@ -142,7 +143,7 @@ const hasAudioCodec = $derived(
 			<!-- Audio Codec Selection -->
 			{#if hasAudioCodec}
 				<div class="space-y-2">
-					<Label class="text-sm font-medium" for="audioCodec">{$_('settings.audioCodec')}</Label>
+					<Label class="text-sm font-medium" for="audioCodec">{$LL.settings.audioCodec()}</Label>
 					<Select.Root
 						disabled={isStreaming}
 						onValueChange={onAudioCodecChange}
@@ -153,8 +154,8 @@ const hasAudioCodec = $derived(
 							{properties.audioCodec && audioCodecs
 								? (Object.entries(audioCodecs).find(
 										(acodec) => acodec[0] === properties.audioCodec,
-									)?.[1] ?? $_('settings.selectAudioCodec'))
-								: $_('settings.selectAudioCodec')}
+									)?.[1] ?? $LL.settings.selectAudioCodec())
+								: $LL.settings.selectAudioCodec()}
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Group>
@@ -169,7 +170,7 @@ const hasAudioCodec = $derived(
 				<!-- Audio Delay Control -->
 				<div class="bg-accent/30 space-y-3 rounded-lg p-4">
 					<Label class="flex items-center gap-2 text-sm font-medium" for="audioDelay">
-						{$_('settings.audioDelay')}
+						{$LL.settings.audioDelay()}
 						<span
 							class="rounded-md bg-emerald-100 px-2 py-1 text-xs text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
 						>
@@ -254,7 +255,7 @@ const hasAudioCodec = $derived(
 								-2000
 							</span>
 							<span class="font-medium text-gray-700 dark:text-gray-300"
-								>{$_('settings.perfectSync')}</span
+								>{$LL.settings.perfectSync()}</span
 							>
 							<span class="flex items-center gap-1">
 								+2000
@@ -284,7 +285,7 @@ const hasAudioCodec = $derived(
 					<!-- Additional Help Text -->
 					<div class="text-center text-xs text-gray-500 dark:text-gray-400">
 						<span
-							>{$_('settings.audioDelayEarly')} ← 0ms (sync) → {$_('settings.audioDelayLate')}</span
+							>{$LL.settings.audioDelayEarly()} ← 0ms (sync) → {$LL.settings.audioDelayLate()}</span
 						>
 					</div>
 				</div>

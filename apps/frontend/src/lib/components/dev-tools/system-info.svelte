@@ -17,14 +17,14 @@
 
 <script lang="ts">
 import { Activity, Clock, Code, Globe, Monitor, Wifi } from '@lucide/svelte';
-import { _, locale } from 'svelte-i18n';
 
 import * as Card from '$lib/components/ui/card';
 import { BUILD_INFO, ENV_VARIABLES } from '$lib/env';
 import { localeStore } from '$lib/stores/locale';
 import { CLIENT_VERSION } from '$lib/stores/version-manager';
 
-import { existingLocales } from '../../../i18n';
+import { LL, locale, setLocale } from '@ceraui/i18n/svelte';
+import { existingLocales, loadLocaleAsync, type Locales } from '@ceraui/i18n';
 
 // Real environment data using runes
 const performanceData = $state({
@@ -81,7 +81,7 @@ let buildInfo = $state({
 function updateSystemInfo() {
 	// Browser detection
 	const { userAgent } = navigator;
-	let browser = $_('devtools.unknown');
+	let browser = $LL.devtools.unknown();
 	let version = '';
 
 	if (userAgent.includes('Chrome')) {
@@ -272,9 +272,19 @@ function formatMs(ms: number): string {
 }
 
 // Handle language switching from Dev Tools
-function handleLanguageClick(languageCode: string) {
-	locale.set(languageCode);
-	localeStore.set(existingLocales.find((l) => l.code === languageCode)!);
+async function handleLanguageClick(languageCode: Locales) {
+	try {
+		console.log(`🔧 Dev Tools: Loading locale ${languageCode}`);
+		// Load the locale first
+		await loadLocaleAsync(languageCode);
+		// Then set it as active
+		setLocale(languageCode);
+		// Update the locale store
+		localeStore.set(existingLocales.find((l) => l.code === languageCode)!);
+		console.log(`✅ Dev Tools: Successfully switched to ${languageCode}`);
+	} catch (error) {
+		console.error(`❌ Dev Tools: Failed to load locale ${languageCode}:`, error);
+	}
 }
 </script>
 
@@ -285,10 +295,10 @@ function handleLanguageClick(languageCode: string) {
 	<Card.Header>
 		<Card.Title class="flex items-center gap-2 text-purple-700 dark:text-purple-300">
 			<Code class="h-5 w-5" />
-			🔍 {$_('devtools.systemInfo')}
+			🔍 {$LL.devtools.systemInfo()}
 		</Card.Title>
 		<Card.Description class="text-purple-600 dark:text-purple-400">
-			{$_('devtools.systemInfoDescription')}
+			{$LL.devtools.systemInfoDescription()}
 		</Card.Description>
 	</Card.Header>
 
@@ -297,37 +307,37 @@ function handleLanguageClick(languageCode: string) {
 		<div class="space-y-3">
 			<div class="flex items-center gap-2 text-sm font-medium">
 				<Code class="h-4 w-4" />
-				{$_('devtools.buildInformation')}
+				{$LL.devtools.buildInformation()}
 			</div>
 			<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.mode')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.mode()}</div>
 					<div class="font-mono text-sm font-medium">{buildInfo.mode}</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.nodeEnv')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.nodeEnv()}</div>
 					<div class="font-mono text-sm font-medium">{buildInfo.nodeEnv}</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.devMode')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.devMode()}</div>
 					<div
 						class="font-mono text-sm font-medium {buildInfo.dev
 							? 'text-green-600'
 							: 'text-red-600'}"
 					>
-						{buildInfo.dev ? $_('devtools.yes') : $_('devtools.no')}
+						{buildInfo.dev ? $LL.devtools.yes() : $LL.devtools.no()}
 					</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.clientVersion')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.clientVersion()}</div>
 					<div class="font-mono text-sm font-medium">{buildInfo.clientVersion}</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.socketEndpoint')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.socketEndpoint()}</div>
 					<div class="truncate font-mono text-xs font-medium">{buildInfo.socketEndpoint}</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.socketPort')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.socketPort()}</div>
 					<div class="font-mono text-sm font-medium">{buildInfo.socketPort}</div>
 				</div>
 			</div>
@@ -337,45 +347,45 @@ function handleLanguageClick(languageCode: string) {
 		<div class="space-y-3">
 			<div class="flex items-center gap-2 text-sm font-medium">
 				<Monitor class="h-4 w-4" />
-				{$_('devtools.browserInformation')}
+				{$LL.devtools.browserInformation()}
 			</div>
 			<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.browser')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browser()}</div>
 					<div class="font-mono text-sm font-medium">{systemInfo.browser} {systemInfo.version}</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.platform')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.platform()}</div>
 					<div class="font-mono text-sm font-medium">{systemInfo.platform}</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.userAgent')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.userAgent()}</div>
 					<div class="truncate font-mono text-xs" title={navigator.userAgent}>
 						{navigator.userAgent.slice(0, 25)}...
 					</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.onlineStatus')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.onlineStatus()}</div>
 					<div
 						class="font-mono text-sm font-medium {systemInfo.onLine
 							? 'text-green-600'
 							: 'text-red-600'}"
 					>
-						{systemInfo.onLine ? $_('devtools.online') : $_('devtools.offline')}
+						{systemInfo.onLine ? $LL.devtools.online() : $LL.devtools.offline()}
 					</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.cookies')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.cookies()}</div>
 					<div
 						class="font-mono text-sm font-medium {systemInfo.cookieEnabled
 							? 'text-green-600'
 							: 'text-red-600'}"
 					>
-						{systemInfo.cookieEnabled ? $_('devtools.enabled') : $_('devtools.disabled')}
+						{systemInfo.cookieEnabled ? $LL.devtools.enabled() : $LL.devtools.disabled()}
 					</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.pixelRatio')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.pixelRatio()}</div>
 					<div class="font-mono text-sm font-medium">{windowInfo.devicePixelRatio}x</div>
 				</div>
 			</div>
@@ -389,29 +399,29 @@ function handleLanguageClick(languageCode: string) {
 			</div>
 			<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.currentLanguage')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.currentLanguage()}</div>
 					<div class="flex items-center gap-2 text-sm font-medium">
 						<span class="text-lg">{localeInfo.currentLanguageFlag}</span>
 						{localeInfo.currentLanguageName}
 						<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-xs"
-							>{$_('devtools.active')}</span
+							>{$LL.devtools.active()}</span
 						>
 					</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.localeCode')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.localeCode()}</div>
 					<div class="font-mono text-sm font-medium text-blue-600">{localeInfo.currentLocale}</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.browserLanguage')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browserLanguage()}</div>
 					<div class="font-mono text-sm font-medium text-gray-600">
 						{localeInfo.browserLanguage}
 					</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3 md:col-span-3">
 					<div class="text-muted-foreground mb-2 text-xs">
-						{$_('devtools.supportedLanguagesClick', {
-							values: { count: localeInfo.supportedLocales.length },
+						{$LL.devtools.supportedLanguagesClick({
+							count: localeInfo.supportedLocales.length,
 						})}
 					</div>
 					<div class="flex flex-wrap gap-1">
@@ -438,11 +448,11 @@ function handleLanguageClick(languageCode: string) {
 		<div class="space-y-3">
 			<div class="flex items-center gap-2 text-sm font-medium">
 				<Activity class="h-4 w-4" />
-				{$_('devtools.livePerformanceMetrics')}
+				{$LL.devtools.livePerformanceMetrics()}
 			</div>
 			<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.pageLoad')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.pageLoad()}</div>
 					<div
 						class="text-lg font-bold {performanceData.loadTime < 1000
 							? 'text-green-600'
@@ -454,7 +464,7 @@ function handleLanguageClick(languageCode: string) {
 					</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.jsMemory')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.jsMemory()}</div>
 					<div
 						class="text-lg font-bold {performanceData.memory < 50
 							? 'text-green-600'
@@ -466,13 +476,13 @@ function handleLanguageClick(languageCode: string) {
 					</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.viewport')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.viewport()}</div>
 					<div class="text-lg font-bold text-blue-600">
 						{windowInfo.width}×{windowInfo.height}
 					</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.screen')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.screen()}</div>
 					<div class="text-lg font-bold text-purple-600">
 						{windowInfo.screenWidth}×{windowInfo.screenHeight}
 					</div>
@@ -484,25 +494,25 @@ function handleLanguageClick(languageCode: string) {
 		<div class="space-y-3">
 			<div class="flex items-center gap-2 text-sm font-medium">
 				<Wifi class="h-4 w-4" />
-				{$_('devtools.userPreferencesAccessibility')}
+				{$LL.devtools.userPreferencesAccessibility()}
 			</div>
 			<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.colorScheme')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.colorScheme()}</div>
 					<div class="font-mono text-sm font-medium">{windowInfo.colorScheme}</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.reducedMotion')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.reducedMotion()}</div>
 					<div
 						class="font-mono text-sm font-medium {windowInfo.reducedMotion
 							? 'text-amber-600'
 							: 'text-green-600'}"
 					>
-						{windowInfo.reducedMotion ? $_('devtools.enabled') : $_('devtools.disabled')}
+						{windowInfo.reducedMotion ? $LL.devtools.enabled() : $LL.devtools.disabled()}
 					</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.browserLanguages')}</div>
+					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browserLanguages()}</div>
 					<div
 						class="truncate font-mono text-xs font-medium"
 						title={navigator.languages ? navigator.languages.join(', ') : navigator.language}
@@ -525,22 +535,22 @@ function handleLanguageClick(languageCode: string) {
 				</div>
 				<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
 					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.type')}</div>
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.type()}</div>
 						<div class="font-mono text-sm font-medium">
-							{systemInfo.connection.effectiveType || $_('devtools.unknown')}
+							{systemInfo.connection.effectiveType || $LL.devtools.unknown()}
 						</div>
 					</div>
 					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.downlink')}</div>
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.downlink()}</div>
 						<div class="font-mono text-sm font-medium">
-							{systemInfo.connection.downlink || $_('devtools.unknown')}
-							{$_('devtools.mbps')}
+							{systemInfo.connection.downlink || $LL.devtools.unknown()}
+							{$LL.devtools.mbps()}
 						</div>
 					</div>
 					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$_('devtools.rtt')}</div>
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.rtt()}</div>
 						<div class="font-mono text-sm font-medium">
-							{systemInfo.connection.rtt || $_('devtools.unknown')}{$_('devtools.ms')}
+							{systemInfo.connection.rtt || $LL.devtools.unknown()}{$LL.devtools.ms()}
 						</div>
 					</div>
 				</div>
@@ -556,7 +566,7 @@ function handleLanguageClick(languageCode: string) {
 				</div>
 				<div class="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
 					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$_('devtools.dnsLookup')}</div>
+						<div class="text-muted-foreground mb-1">{$LL.devtools.dnsLookup()}</div>
 						<div class="font-mono">
 							{Math.round(
 								performanceData.timing.domainLookupEnd - performanceData.timing.domainLookupStart,
@@ -564,7 +574,7 @@ function handleLanguageClick(languageCode: string) {
 						</div>
 					</div>
 					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$_('devtools.connect')}</div>
+						<div class="text-muted-foreground mb-1">{$LL.devtools.connect()}</div>
 						<div class="font-mono">
 							{Math.round(
 								performanceData.timing.connectEnd - performanceData.timing.connectStart,
@@ -572,7 +582,7 @@ function handleLanguageClick(languageCode: string) {
 						</div>
 					</div>
 					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$_('devtools.request')}</div>
+						<div class="text-muted-foreground mb-1">{$LL.devtools.request()}</div>
 						<div class="font-mono">
 							{Math.round(
 								performanceData.timing.responseStart - performanceData.timing.requestStart,
@@ -580,7 +590,7 @@ function handleLanguageClick(languageCode: string) {
 						</div>
 					</div>
 					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$_('devtools.response')}</div>
+						<div class="text-muted-foreground mb-1">{$LL.devtools.response()}</div>
 						<div class="font-mono">
 							{Math.round(
 								performanceData.timing.responseEnd - performanceData.timing.responseStart,
@@ -588,7 +598,7 @@ function handleLanguageClick(languageCode: string) {
 						</div>
 					</div>
 					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$_('devtools.domContent')}</div>
+						<div class="text-muted-foreground mb-1">{$LL.devtools.domContent()}</div>
 						<div class="font-mono">
 							{Math.round(
 								performanceData.timing.domContentLoadedEventEnd -
@@ -597,7 +607,7 @@ function handleLanguageClick(languageCode: string) {
 						</div>
 					</div>
 					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$_('devtools.domComplete')}</div>
+						<div class="text-muted-foreground mb-1">{$LL.devtools.domComplete()}</div>
 						<div class="font-mono">
 							{Math.round(
 								performanceData.timing.domComplete -
@@ -606,7 +616,7 @@ function handleLanguageClick(languageCode: string) {
 						</div>
 					</div>
 					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$_('devtools.loadEvent')}</div>
+						<div class="text-muted-foreground mb-1">{$LL.devtools.loadEvent()}</div>
 						<div class="font-mono">
 							{Math.round(
 								performanceData.timing.loadEventEnd - performanceData.timing.loadEventStart,
@@ -614,7 +624,7 @@ function handleLanguageClick(languageCode: string) {
 						</div>
 					</div>
 					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$_('devtools.total')}</div>
+						<div class="text-muted-foreground mb-1">{$LL.devtools.total()}</div>
 						<div class="font-mono font-bold">{formatMs(performanceData.loadTime)}</div>
 					</div>
 				</div>
@@ -623,9 +633,9 @@ function handleLanguageClick(languageCode: string) {
 
 		<!-- Live Timestamp -->
 		<div class="text-muted-foreground bg-muted/30 rounded-md p-2 text-xs">
-			<span class="font-medium">{$_('devtools.lastUpdated')}:</span>
+			<span class="font-medium">{$LL.devtools.lastUpdated()}:</span>
 			{new Date().toLocaleString()}
-			<span class="ml-2">• {$_('devtools.autoRefresh')}</span>
+			<span class="ml-2">• {$LL.devtools.autoRefresh()}</span>
 		</div>
 	</Card.Content>
 </Card.Root>

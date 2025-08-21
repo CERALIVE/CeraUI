@@ -16,7 +16,7 @@
 
 <script lang="ts">
 import { Play, Square } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import { LL } from '@ceraui/i18n/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
@@ -32,7 +32,7 @@ let demoDetails = $state({
 	unpacking: 0,
 	setting_up: 0,
 	total: 10,
-	result: null as number | null,
+	result: undefined as number | undefined,
 });
 
 // Demo simulation control
@@ -48,7 +48,7 @@ function startDemo() {
 		unpacking: 0,
 		setting_up: 0,
 		total: 10,
-		result: null,
+		result: undefined,
 	};
 
 	// Start the simulation
@@ -94,7 +94,7 @@ function stopDemo() {
 		unpacking: 0,
 		setting_up: 0,
 		total: 10,
-		result: null,
+		result: undefined,
 	};
 }
 
@@ -116,10 +116,10 @@ $effect(() => {
 	<Card.Header>
 		<Card.Title class="flex items-center gap-2 text-amber-700 dark:text-amber-300">
 			<Play class="h-5 w-5" />
-			🎨 {$_('devtools.overlayDemo')}
+			🎨 {$LL.devtools.overlayDemo()}
 		</Card.Title>
 		<Card.Description class="text-amber-600 dark:text-amber-400">
-			{$_('devtools.overlayDemoDescription')}
+			{$LL.devtools.overlayDemoDescription()}
 		</Card.Description>
 	</Card.Header>
 
@@ -133,7 +133,7 @@ $effect(() => {
 				variant="secondary"
 			>
 				<Play class="mr-2 h-4 w-4" />
-				{$_('devtools.startDemo')}
+				{$LL.devtools.startDemo()}
 			</Button>
 
 			<Button
@@ -143,7 +143,7 @@ $effect(() => {
 				variant="outline"
 			>
 				<Square class="mr-2 h-4 w-4" />
-				{$_('devtools.stopDemo')}
+				{$LL.devtools.stopDemo()}
 			</Button>
 		</div>
 
@@ -152,20 +152,20 @@ $effect(() => {
 			<div
 				class="text-muted-foreground rounded-md border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950/20"
 			>
-				<div class="mb-1 font-medium">🔄 {$_('devtools.demoRunning')}</div>
+				<div class="mb-1 font-medium">🔄 {$LL.devtools.demoRunning()}</div>
 				<div>
-					{$_('devtools.phase')}: {demoPhase}/10 | {$_('devtools.downloading')}: {demoDetails.downloading}
-					| {$_('devtools.unpacking')}: {demoDetails.unpacking} | {$_('devtools.installing')}: {demoDetails.setting_up}
+					{$LL.devtools.phase()}: {demoPhase}/10 | {$LL.devtools.downloading()}: {demoDetails.downloading}
+					| {$LL.devtools.unpacking()}: {demoDetails.unpacking} | {$LL.devtools.installing()}: {demoDetails.setting_up}
 				</div>
 			</div>
 		{/if}
 
 		<!-- Demo Info -->
 		<div class="text-muted-foreground space-y-1 text-xs">
-			<p>• {$_('devtools.demoInfo1')}</p>
-			<p>• {$_('devtools.demoInfo2')}</p>
-			<p>• {$_('devtools.demoInfo3')}</p>
-			<p>• {$_('devtools.demoInfo4')}</p>
+			<p>• {$LL.devtools.demoInfo1()}</p>
+			<p>• {$LL.devtools.demoInfo2()}</p>
+			<p>• {$LL.devtools.demoInfo3()}</p>
+			<p>• {$LL.devtools.demoInfo4()}</p>
 		</div>
 	</Card.Content>
 </Card.Root>

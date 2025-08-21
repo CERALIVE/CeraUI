@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Play, Square } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import {LL} from '@ceraui/i18n/svelte'
 
 import { Button } from '$lib/components/ui/button';
 
@@ -45,7 +45,7 @@ const handleStop = () => {
 				type="button"
 			>
 				<Square class="mr-2 h-5 w-5 transition-transform group-hover:scale-110" />
-				{$_('settings.stopStreaming')}
+				{$LL.settings.stopStreaming()}
 			</Button>
 		{:else}
 			<Button
@@ -56,13 +56,13 @@ const handleStop = () => {
 				type="submit"
 			>
 				<Play class="mr-2 h-5 w-5 transition-transform group-hover:scale-110" />
-				{$_('settings.startStreaming')}
+				{$LL.settings.startStreaming()}
 			</Button>
 		{/if}
 
 		{#if disabled}
 			<p class="text-muted-foreground mt-2 text-center text-sm">
-				{$_('settings.completeRequiredFields')}
+				{$LL.settings.completeRequiredFields()}
 			</p>
 		{/if}
 	</div>

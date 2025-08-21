@@ -1,5 +1,4 @@
 <script lang="ts">
-import { locale } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
 import { OfflinePage, PWAStatus } from '$lib/components/ui/pwa';
@@ -20,14 +19,15 @@ import {
 } from '$lib/stores/websocket-store';
 import type { NotificationType, StatusMessage } from '$lib/types/socket-messages';
 
-import { rtlLanguages, setupLocale } from '../i18n';
+import { locale } from "@ceraui/i18n/svelte";
+import { rtlLanguages } from "@ceraui/i18n";
 import Auth from './Auth.svelte';
 import Main from './MainView.svelte';
 
 let authStatus = $state(false);
 let isCheckingAuthStatus = $state(true);
 let updatingStatus: StatusMessage['updating'] = $state(false);
-const setupLocaleResult = setupLocale();
+
 
 // Toast tracking system for duplicates
 interface ToastInfo {
@@ -340,10 +340,7 @@ window.startStreamingWithNotificationClear = startStreaming;
 window.stopStreamingWithNotificationClear = stopStreaming;
 </script>
 
-{#await setupLocaleResult}
-	<div></div>
-{:then _locateResult}
-	{#if $shouldShowOfflinePage}
+{#if $shouldShowOfflinePage}
 		<OfflinePage />
 	{:else if authStatus}
 		{#if updatingStatus && typeof updatingStatus !== 'boolean'}
@@ -363,7 +360,6 @@ window.stopStreamingWithNotificationClear = stopStreaming;
 			</div>
 		</div>
 	{/if}
-{/await}
 
 <!-- PWA Status and Notifications -->
 <PWAStatus />

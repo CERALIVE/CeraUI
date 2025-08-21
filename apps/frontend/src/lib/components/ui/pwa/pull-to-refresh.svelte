@@ -1,9 +1,9 @@
 <script lang="ts">
 import { RefreshCw } from '@lucide/svelte';
 import { onMount } from 'svelte';
-import { _, locale } from 'svelte-i18n';
 
-import { rtlLanguages } from '../../../../i18n';
+import { LL, locale } from "@ceraui/i18n/svelte";
+import { rtlLanguages } from "@ceraui/i18n";
 
 interface Props {
 	onRefresh: () => Promise<void> | void;
@@ -194,11 +194,11 @@ onMount(() => {
 		/>
 		<span class="text-sm font-medium">
 			{#if isRefreshing}
-				{$_('pwa.refreshing')}
+				{$LL.pwa.refreshing()}
 			{:else if canRefresh}
-				{$_('pwa.releaseToRefresh')}
+				{$LL.pwa.releaseToRefresh()}
 			{:else}
-				{$_('pwa.pullToRefresh')}
+				{$LL.pwa.pullToRefresh()}
 			{/if}
 		</span>
 	</div>

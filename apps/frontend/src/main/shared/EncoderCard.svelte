@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Binary } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import {LL} from '@ceraui/i18n/svelte'
+
 
 import * as Card from '$lib/components/ui/card';
 import { Checkbox } from '$lib/components/ui/checkbox';
@@ -105,14 +106,14 @@ $effect(() => {
 			<div class="bg-primary/10 rounded-lg p-2">
 				<Binary class="text-primary h-4 w-4" />
 			</div>
-			<Card.Title class="text-base font-semibold">{$_('settings.encoderSettings')}</Card.Title>
+			<Card.Title class="text-base font-semibold">{$LL.settings.encoderSettings()}</Card.Title>
 		</div>
 	</Card.Header>
 
 	<Card.Content class="flex-1 space-y-4">
 		<!-- Input Mode Selection -->
 		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="inputMode">{$_('settings.inputMode')}</Label>
+			<Label class="text-sm font-medium" for="inputMode">{$LL.settings.inputMode()}</Label>
 			<Select.Root
 				disabled={isStreaming}
 				onValueChange={(value) => {
@@ -124,7 +125,7 @@ $effect(() => {
 				value={localInputMode}
 			>
 				<Select.Trigger id="inputMode" class="w-full">
-					{localInputMode ? localInputMode.toUpperCase() : $_('settings.selectInputMode')}
+					{localInputMode ? localInputMode.toUpperCase() : $LL.settings.selectInputMode()}
 				</Select.Trigger>
 				<Select.Content>
 					<Select.Group>
@@ -142,14 +143,14 @@ $effect(() => {
 			{/if}
 			{#if properties.inputMode && properties.inputMode.includes('usb')}
 				<p class="text-muted-foreground bg-accent/50 rounded-md p-2 text-xs">
-					ℹ️ {$_('settings.djiCameraMessage')}
+					ℹ️ {$LL.settings.djiCameraMessage()}
 				</p>
 			{/if}
 		</div>
 
 		<!-- Encoding Format Selection -->
 		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="encodingFormat">{$_('settings.encodingFormat')}</Label
+			<Label class="text-sm font-medium" for="encodingFormat">{$LL.settings.encodingFormat()}</Label
 			>
 			<Select.Root
 				disabled={isStreaming || !properties.inputMode}
@@ -162,7 +163,7 @@ $effect(() => {
 				value={localEncoder}
 			>
 				<Select.Trigger id="encodingFormat" class="w-full">
-					{localEncoder ? localEncoder.toUpperCase() : $_('settings.selectEncodingOutputFormat')}
+					{localEncoder ? localEncoder.toUpperCase() : $LL.settings.selectEncodingOutputFormat()}
 				</Select.Trigger>
 				<Select.Content>
 					<Select.Group>
@@ -182,7 +183,7 @@ $effect(() => {
 		<!-- Encoding Resolution Selection -->
 		<div class="space-y-2">
 			<Label class="text-sm font-medium" for="encodingResolution"
-				>{$_('settings.encodingResolution')}</Label
+				>{$LL.settings.encodingResolution()}</Label
 			>
 			<Select.Root
 				disabled={isStreaming || !properties.encoder}
@@ -195,7 +196,7 @@ $effect(() => {
 				value={localResolution}
 			>
 				<Select.Trigger id="encodingResolution" class="w-full">
-					{localResolution ? localResolution : $_('settings.selectEncodingResolution')}
+					{localResolution ? localResolution : $LL.settings.selectEncodingResolution()}
 				</Select.Trigger>
 				<Select.Content>
 					<Select.Group>
@@ -217,7 +218,7 @@ $effect(() => {
 
 		<!-- Framerate Selection -->
 		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="framerate">{$_('settings.framerate')}</Label>
+			<Label class="text-sm font-medium" for="framerate">{$LL.settings.framerate()}</Label>
 			<Select.Root
 				disabled={isStreaming || !properties.resolution}
 				onValueChange={(value) => {
@@ -229,7 +230,7 @@ $effect(() => {
 				value={localFramerate}
 			>
 				<Select.Trigger id="framerate" class="w-full">
-					{localFramerate ? `${localFramerate} ${$_('units.fps')}` : $_('settings.selectFramerate')}
+					{localFramerate ? `${localFramerate} ${$LL.units.fps()}` : $LL.settings.selectFramerate()}
 				</Select.Trigger>
 				<Select.Content>
 					<Select.Group>
@@ -255,7 +256,7 @@ $effect(() => {
 		<!-- Bitrate Control -->
 		<div class="bg-accent/30 space-y-3 rounded-lg p-4">
 			<Label class="flex items-center gap-2 text-sm font-medium" for="bitrate">
-				{$_('settings.bitrate')}
+				{$LL.settings.bitrate()}
 				<span class="bg-primary/10 text-primary rounded-md px-2 py-1 text-xs">
 					{localBitrate || 5000} kbps
 				</span>
@@ -332,7 +333,7 @@ $effect(() => {
 			{/if}
 			{#if isStreaming}
 				<p class="rounded-md bg-amber-50 p-2 text-xs text-amber-600 dark:bg-amber-950/20">
-					⚡ {$_('settings.changeBitrateNotice')}
+					⚡ {$LL.settings.changeBitrateNotice()}
 				</p>
 			{/if}
 		</div>
@@ -345,7 +346,7 @@ $effect(() => {
 				onCheckedChange={onBitrateOverlayChange}
 			/>
 			<Label class="flex-1 cursor-pointer text-sm" for="bitrate-overlay">
-				{$_('settings.enableBitrateOverlay')}
+				{$LL.settings.enableBitrateOverlay()}
 			</Label>
 		</div>
 	</Card.Content>

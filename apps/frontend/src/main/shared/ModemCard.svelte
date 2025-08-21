@@ -9,7 +9,7 @@
 
 <script lang="ts">
 import { Antenna } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import { LL } from "@ceraui/i18n/svelte";
 
 import SignalQuality from '$lib/components/icons/SignalQuality.svelte';
 import * as Card from '$lib/components/ui/card';
@@ -129,7 +129,7 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
 										: 'bg-red-500/10 text-red-700 dark:text-red-300',
 						)}
 					>
-						{capitalizeFirstLetter($_(`network.modem.connectionStatus.${connectionStatus}`))}
+						{capitalizeFirstLetter($LL.network.modem.connectionStatus[connectionStatus as keyof typeof $LL.network.modem.connectionStatus]())}
 					</span>
 				</div>
 			</div>
@@ -140,7 +140,7 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
 		<!-- Signal and Network Info - Flexible Content -->
 		<div class="space-y-3">
 			<div class="flex items-center justify-between">
-				<span class="text-muted-foreground text-sm font-medium">{$_('network.modem.signal')}</span>
+				<span class="text-muted-foreground text-sm font-medium">{$LL.network.modem.signal()}</span>
 				<div class="flex items-center gap-2">
 					<SignalQuality class="h-4 w-4" signal={signalValue} />
 					<span class={cn('font-mono text-sm font-bold', getSignalColor(signalValue))}>
@@ -151,7 +151,7 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
 
 			{#if modem.status.network_type}
 				<div class="flex items-center justify-between text-sm">
-					<span class="text-muted-foreground font-medium">{$_('network.modem.network')}</span>
+					<span class="text-muted-foreground font-medium">{$LL.network.modem.network()}</span>
 					<span class="font-mono font-semibold">{modem.status.network_type}</span>
 				</div>
 			{/if}
@@ -163,7 +163,7 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
 						<div
 							class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
 						></div>
-						<span class="text-sm">{$_('network.status.scanningNetworks')}</span>
+						<span class="text-sm">{$LL.network.status.scanningNetworks()}</span>
 					</div>
 				</div>
 			{:else if connectionStatus === 'connecting'}
@@ -172,7 +172,7 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
 						<div class="h-2 w-2 animate-pulse rounded-full bg-current"></div>
 						<div class="animation-delay-75 h-2 w-2 animate-pulse rounded-full bg-current"></div>
 						<div class="animation-delay-150 h-2 w-2 animate-pulse rounded-full bg-current"></div>
-						<span class="ml-2 text-sm">{$_('network.status.connecting')}</span>
+						<span class="ml-2 text-sm">{$LL.network.status.connecting()}</span>
 					</div>
 				</div>
 			{:else if connectionStatus === 'disconnected'}
@@ -180,7 +180,7 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
 					<div class="bg-muted rounded-full p-3">
 						<Antenna class="text-muted-foreground h-6 w-6" />
 					</div>
-					<p class="text-muted-foreground text-sm">{$_('network.status.notConnected')}</p>
+					<p class="text-muted-foreground text-sm">{$LL.network.status.notConnected()}</p>
 				</div>
 			{/if}
 		</div>

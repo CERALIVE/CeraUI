@@ -24,7 +24,6 @@ button:focus-visible {
 <script lang="ts">
 import { cubicInOut } from 'svelte/easing';
 import { crossfade, fly, scale } from 'svelte/transition';
-import { _ } from 'svelte-i18n';
 
 import Logo from '$lib/components/icons/Logo.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
@@ -36,6 +35,8 @@ import {
 	navigationStore,
 } from '$lib/stores/navigation';
 import { cn } from '$lib/utils';
+
+import { LL } from '@ceraui/i18n/svelte';
 
 const [send, receive] = crossfade({
 	duration: 400,
@@ -117,7 +118,10 @@ const handleLogoClick = () => {
 		canGoBack: $canGoBack,
 	});
 
-	const currentKey = currentNav ? Object.keys(currentNav)[0] : '';
+	const currentKey =
+		currentNav && typeof currentNav === 'object' && Object.keys(currentNav).length > 0
+			? Object.keys(currentNav)[0]
+			: '';
 	const defaultKey = 'general'; // Always general as the default
 
 	// If already on default, and can go back, go back instead
@@ -148,7 +152,7 @@ const handleLogoClick = () => {
 			<Logo
 				class={cn(
 					'h-7 w-7 transition-all duration-300',
-					isLogoHovered && 'scale-110 rotate-12',
+					isLogoHovered && 'rotate-12 scale-110',
 					$isNavigationTransitioning && 'animate-pulse',
 				)}
 			/>
@@ -165,7 +169,7 @@ const handleLogoClick = () => {
 			<!-- Back indicator -->
 			{#if $canGoBack && isLogoHovered}
 				<div
-					class="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-blue-500"
+					class="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-blue-500"
 					in:scale={{ duration: 200, start: 0.8 }}
 					out:scale={{ duration: 150, start: 1 }}
 				>
@@ -198,7 +202,11 @@ const handleLogoClick = () => {
 	<ScrollArea orientation="both" scrollbarXClasses="invisible">
 		<div class="flex items-center space-x-1 px-4 py-2">
 			{#each Object.entries(navElements) as [identifier, navigation], index}
-				{@const isActive = currentNav && Object.keys(currentNav)[0] === identifier}
+				{@const isActive =
+					currentNav &&
+					typeof currentNav === 'object' &&
+					Object.keys(currentNav).length > 0 &&
+					Object.keys(currentNav)[0] === identifier}
 				{@const isHovered = hoveredTab === identifier}
 
 				<button
@@ -213,7 +221,7 @@ const handleLogoClick = () => {
 								),
 						$isNavigationTransitioning && 'pointer-events-none opacity-60',
 						// Enhanced focus states
-						'focus-visible:ring-primary/50 focus-visible:ring-2 focus-visible:outline-none',
+						'focus-visible:ring-primary/50 focus-visible:outline-none focus-visible:ring-2',
 					)}
 					aria-current={isActive ? 'page' : undefined}
 					disabled={$isNavigationTransitioning}
@@ -254,7 +262,7 @@ const handleLogoClick = () => {
 							(isHovered || isActive) && 'scale-105',
 						)}
 					>
-						{$_(`navigation.${navigation.label}`)}
+						{$LL.navigation[navigation.label]()}
 					</span>
 
 					<!-- Enhanced hover indicator with smooth animations -->
@@ -270,7 +278,7 @@ const handleLogoClick = () => {
 
 					<!-- Loading indicator for individual tabs -->
 					{#if $isNavigationTransitioning && isActive}
-						<div class="bg-primary absolute top-1 right-1 h-2 w-2 animate-ping rounded-full"></div>
+						<div class="bg-primary absolute right-1 top-1 h-2 w-2 animate-ping rounded-full"></div>
 					{/if}
 				</button>
 			{/each}

@@ -1,5 +1,5 @@
 import { get, writable } from "svelte/store";
-import { _, locale } from "svelte-i18n";
+import { LL, locale } from "@ceraui/i18n/svelte";
 
 import {
 	type GroupedPipelines,
@@ -251,14 +251,14 @@ class StreamingStateManager {
 
 	// Extract pipeline processing logic into a separate method
 	private processPipelines() {
-		if (this._unparsedPipelines && get(_)) {
+		if (this._unparsedPipelines && get(LL)) {
 			console.log(`[StreamingStateManager] Processing pipelines`);
 
 			const allGroupedPipelines = groupPipelinesByDeviceAndFormat(
 				this._unparsedPipelines,
 				{
-					matchDeviceResolution: get(_)("settings.matchDeviceResolution"),
-					matchDeviceOutput: get(_)("settings.matchDeviceOutput"),
+					matchDeviceResolution: get(LL).settings.matchDeviceResolution(),
+					matchDeviceOutput: get(LL).settings.matchDeviceOutput(),
 				},
 			);
 
@@ -293,7 +293,7 @@ class StreamingStateManager {
 				`[StreamingStateManager] Cannot process pipelines - missing data:`,
 				{
 					hasUnparsedPipelines: !!this._unparsedPipelines,
-					hasTranslations: !!get(_),
+					hasTranslations: !!get(LL),
 					timestamp: new Date().toISOString(),
 				},
 			);

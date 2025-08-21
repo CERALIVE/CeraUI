@@ -1,7 +1,7 @@
 <script lang="ts">
 import { Check, X } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
-import { _ } from 'svelte-i18n';
+import { LL } from '@ceraui/i18n/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
@@ -185,7 +185,7 @@ function resetForm() {
 <div class="space-y-4">
 	<form class="space-y-4" onsubmit={onSubmit}>
 		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="networkType">{$_('network.modem.networkType')}</Label>
+			<Label class="text-sm font-medium" for="networkType">{$LL.network.modem.networkType()}</Label>
 			<Select.Root
 				onValueChange={(val) => {
 					if (val) {
@@ -224,7 +224,7 @@ function resetForm() {
 				)}
 				onPressedChange={(value) => (formData.roaming = value)}
 				pressed={formData.roaming}
-				title={$_('network.modem.enableRoaming')}
+				title={$LL.network.modem.enableRoaming()}
 				variant="outline"
 			>
 				{#if formData.roaming}
@@ -235,7 +235,7 @@ function resetForm() {
 			</Toggle>
 			<div class="flex-1">
 				<p class="text-sm font-medium">
-					{$_('network.modem.enableRoaming')}
+					{$LL.network.modem.enableRoaming()}
 				</p>
 			</div>
 		</div>
@@ -243,7 +243,7 @@ function resetForm() {
 		{#if formData.roaming}
 			<div class="space-y-2">
 				<Label class="text-sm font-medium" for="roamingNetwork"
-					>{$_('network.modem.roamingNetwork')}</Label
+					>{$LL.network.modem.roamingNetwork()}</Label
 				>
 				<div class="flex gap-2">
 					<div class="flex-1">
@@ -254,7 +254,7 @@ function resetForm() {
 						>
 							<Select.Trigger id="roamingNetwork" class="w-full">
 								{formData.network === '-1'
-									? $_('network.modem.automaticRoamingNetwork')
+									? $LL.network.modem.automaticRoamingNetwork()
 									: modem.available_networks[formData.network].name}
 							</Select.Trigger>
 							<Select.Content>
@@ -262,7 +262,7 @@ function resetForm() {
 									{#if modem.available_networks}
 										<Select.Item
 											datatype="number"
-											label={$_('network.modem.automaticRoamingNetwork')}
+											label={$LL.network.modem.automaticRoamingNetwork()}
 											value="-1"
 										></Select.Item>
 										{#each Object.entries(modem.available_networks) as [key, availableNetwork]}
@@ -284,8 +284,8 @@ function resetForm() {
 						variant="outline"
 					>
 						{modemIsScanning || localScanningState
-							? $_('network.modem.scanning')
-							: $_('network.modem.scan')}
+							? $LL.network.modem.scanning()
+							: $LL.network.modem.scan()}
 					</Button>
 				</div>
 			</div>
@@ -301,7 +301,7 @@ function resetForm() {
 				)}
 				onPressedChange={(value) => (formData.autoconfig = value)}
 				pressed={formData.autoconfig}
-				title={$_('network.modem.autoapn')}
+				title={$LL.network.modem.autoapn()}
 				variant="outline"
 			>
 				{#if formData.autoconfig}
@@ -312,7 +312,7 @@ function resetForm() {
 			</Toggle>
 			<div class="flex-1">
 				<p class="text-sm font-medium">
-					{$_('network.modem.autoapn')}
+					{$LL.network.modem.autoapn()}
 				</p>
 			</div>
 		</div>
@@ -320,7 +320,7 @@ function resetForm() {
 		{#if !formData.autoconfig}
 			<div class="space-y-4">
 				<div class="space-y-2">
-					<Label class="text-sm font-medium" for="apn">{$_('network.modem.apn')}</Label>
+					<Label class="text-sm font-medium" for="apn">{$LL.network.modem.apn()}</Label>
 					<Input
 						id="apn"
 						class={errors.apn ? 'border-red-500' : ''}
@@ -336,7 +336,7 @@ function resetForm() {
 				</div>
 
 				<div class="space-y-2">
-					<Label class="text-sm font-medium" for="username">{$_('network.modem.username')}</Label>
+					<Label class="text-sm font-medium" for="username">{$LL.network.modem.username()}</Label>
 					<Input
 						id="username"
 						autocapitalize="none"
@@ -349,7 +349,7 @@ function resetForm() {
 
 				<div class="space-y-2">
 					<Label class="text-sm font-medium" for="modemPassword"
-						>{$_('network.modem.password')}</Label
+						>{$LL.network.modem.password()}</Label
 					>
 					<Input
 						id="modemPassword"
@@ -369,7 +369,7 @@ function resetForm() {
 				disabled={!isFormChanged()}
 				type="submit"
 			>
-				{$_('network.modem.save')}
+				{$LL.network.modem.save()}
 			</Button>
 			<Button
 				class="text-muted-foreground border-muted-foreground/20 hover:bg-muted/50"
@@ -378,7 +378,7 @@ function resetForm() {
 				type="button"
 				variant="outline"
 			>
-				{$_('network.modem.reset')}
+				{$LL.network.modem.reset()}
 			</Button>
 		</div>
 	</form>

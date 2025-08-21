@@ -1,6 +1,6 @@
 <script lang="ts">
 import { EyeIcon, Router, Wifi, WifiOff } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import { LL } from "@ceraui/i18n/svelte";
 
 import WifiQuality from '$lib/components/icons/WifiQuality.svelte';
 import * as Card from '$lib/components/ui/card';
@@ -104,7 +104,7 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
 									: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
 						)}
 					>
-						{capitalizeFirstLetter($_(`wifiStatus.${wifiStatus}`))}
+						{capitalizeFirstLetter($LL.wifiStatus[wifiStatus as keyof typeof $LL.wifiStatus]())}
 					</span>
 				</div>
 			</div>
@@ -118,11 +118,11 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
 				<!-- Hotspot Details -->
 				<div class="space-y-2">
 					<div class="flex items-center justify-between text-sm">
-						<span class="text-muted-foreground font-medium">{$_('network.hotspot.name')}</span>
+						<span class="text-muted-foreground font-medium">{$LL.network.hotspot.name()}</span>
 						<span class="font-mono">{wifi.hotspot.name}</span>
 					</div>
 					<div class="flex items-center justify-between text-sm">
-						<span class="text-muted-foreground font-medium">{$_('network.hotspot.channel')}</span>
+						<span class="text-muted-foreground font-medium">{$LL.network.hotspot.channel()}</span>
 						<span class="font-mono">{wifi.hotspot.channel}</span>
 					</div>
 				</div>
@@ -130,22 +130,22 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
 				<!-- WiFi Connection Details -->
 				<div class="space-y-2">
 					<div class="flex items-center justify-between text-sm">
-						<span class="text-muted-foreground font-medium">{$_('network.wifi.ssid')}</span>
+						<span class="text-muted-foreground font-medium">{$LL.network.wifi.ssid()}</span>
 						<span class="max-w-[120px] truncate font-mono">{connection.ssid}</span>
 					</div>
 					<div class="flex items-center justify-between text-sm">
-						<span class="text-muted-foreground font-medium">{$_('network.wifi.strength')}</span>
+						<span class="text-muted-foreground font-medium">{$LL.network.wifi.strength()}</span>
 						<div class="flex items-center gap-2">
 							<WifiQuality signal={connection?.signal} />
 							<span class="text-xs">{connection.signal}%</span>
 						</div>
 					</div>
 					<div class="flex items-center justify-between text-sm">
-						<span class="text-muted-foreground font-medium">{$_('network.wifi.security')}</span>
+						<span class="text-muted-foreground font-medium">{$LL.network.wifi.security()}</span>
 						<span class="font-mono text-xs">{connection.security}</span>
 					</div>
 					<div class="flex items-center justify-between text-sm">
-						<span class="text-muted-foreground font-medium">{$_('network.wifi.band')}</span>
+						<span class="text-muted-foreground font-medium">{$LL.network.wifi.band()}</span>
 						<span class="font-mono text-xs">{getWifiBand(connection.freq)}</span>
 					</div>
 				</div>
@@ -155,7 +155,7 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
 					<div class="bg-muted rounded-full p-3">
 						<WifiOff class="text-muted-foreground h-6 w-6" />
 					</div>
-					<p class="text-muted-foreground text-sm">{$_('network.status.noActiveConnection')}</p>
+					<p class="text-muted-foreground text-sm">{$LL.network.status.noActiveConnection()}</p>
 				</div>
 			{/if}
 		</div>
@@ -168,17 +168,17 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
 
 				<div class="flex flex-col gap-2 sm:flex-row">
 					<SimpleAlertDialog
-						buttonText={$_('network.status.details')}
-						confirmButtonText={$_('network.dialog.close')}
+						buttonText={$LL.network.status.details()}
+						confirmButtonText={$LL.network.dialog.close()}
 						extraButtonClasses="w-full sm:flex-1 bg-blue-600 hover:bg-blue-700 text-white"
 						hideCancelButton={true}
-						title={$_('network.dialog.hotspotDetails')}
+						title={$LL.network.dialog.hotspotDetails()}
 					>
 						{#snippet icon()}
 							<EyeIcon class="h-4 w-4" />
 						{/snippet}
 						{#snippet dialogTitle()}
-							{$_('network.dialog.hotspotDetails')}
+							{$LL.network.dialog.hotspotDetails()}
 						{/snippet}
 						{#snippet description()}
 							<div class="space-y-4 text-sm">
@@ -191,7 +191,7 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
 										<div class="flex justify-center">
 											<img
 												class="dark:bg-background rounded-md border bg-white p-2 shadow-sm"
-												alt={$_('network.accessibility.wifiQrCode')}
+												alt={$LL.network.accessibility.wifiQrCode()}
 												src={wifiQrCode}
 											/>
 										</div>
@@ -199,11 +199,11 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
 								{/if}
 								<div class="space-y-1 text-center">
 									<p>
-										<span class="font-medium">{$_('network.hotspot.name')}:</span>
+										<span class="font-medium">{$LL.network.hotspot.name()}:</span>
 										<span class="ml-1">{wifi.hotspot.name}</span>
 									</p>
 									<p>
-										<span class="font-medium">{$_('network.hotspot.password')}:</span>
+										<span class="font-medium">{$LL.network.hotspot.password()}:</span>
 										<span class="ml-1">{wifi.hotspot.password}</span>
 									</p>
 								</div>
@@ -212,20 +212,20 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
 					</SimpleAlertDialog>
 
 					<SimpleAlertDialog
-						buttonText={$_('network.status.turnOff')}
-						confirmButtonText={$_('network.dialog.turnOff')}
+						buttonText={$LL.network.status.turnOff()}
+						confirmButtonText={$LL.network.dialog.turnOff()}
 						extraButtonClasses="w-full sm:flex-1 bg-amber-600 hover:bg-amber-700 text-white"
 						onconfirm={() => turnHotspotModeOff(deviceId)}
-						title={$_('network.dialog.turnHotspotOff')}
+						title={$LL.network.dialog.turnHotspotOff()}
 					>
 						{#snippet icon()}
 							<WifiOff class="h-4 w-4" />
 						{/snippet}
 						{#snippet dialogTitle()}
-							{$_('network.dialog.turnHotspotOff')}
+							{$LL.network.dialog.turnHotspotOff()}
 						{/snippet}
 						{#snippet description()}
-							{$_('network.dialog.turnHotspotOffDescription')}
+							{$LL.network.dialog.turnHotspotOffDescription()}
 						{/snippet}
 					</SimpleAlertDialog>
 				</div>
@@ -234,20 +234,20 @@ function getCardBorderClass(status: string, isHotspot: boolean) {
 				<WifiSelector {wifi} wifiId={deviceId} />
 
 				<SimpleAlertDialog
-					buttonText={$_('network.status.enableHotspot')}
-					confirmButtonText={$_('network.dialog.turnOn')}
+					buttonText={$LL.network.status.enableHotspot()}
+					confirmButtonText={$LL.network.dialog.turnOn()}
 					extraButtonClasses="w-full bg-blue-600 hover:bg-blue-700 text-white"
 					onconfirm={() => turnHotspotModeOn(deviceId)}
-					title={$_('network.dialog.turnHotspotOn')}
+					title={$LL.network.dialog.turnHotspotOn()}
 				>
 					{#snippet icon()}
 						<Router class="h-4 w-4" />
 					{/snippet}
 					{#snippet dialogTitle()}
-						{$_('network.dialog.turnHotspotOn')}
+						{$LL.network.dialog.turnHotspotOn()}
 					{/snippet}
 					{#snippet description()}
-						{$_('network.dialog.turnHotspotOnDescription')}
+						{$LL.network.dialog.turnHotspotOnDescription()}
 					{/snippet}
 				</SimpleAlertDialog>
 			{/if}

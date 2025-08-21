@@ -2,7 +2,7 @@
 import { Monitor, Moon, Sun } from '@lucide/svelte';
 import { resetMode, setMode } from 'mode-watcher';
 import { get } from 'svelte/store';
-import { _ } from 'svelte-i18n';
+import { LL } from "@ceraui/i18n/svelte";
 
 import { Button } from '$lib/components/ui/button/index.js';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
@@ -42,7 +42,7 @@ const themes = [
 	<DropdownMenu.Trigger>
 		<Button
 			class="h-10 w-10 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 p-0 shadow-sm transition-all duration-200 hover:from-gray-200 hover:to-gray-300 hover:shadow-md dark:from-gray-800 dark:to-gray-900 dark:hover:from-gray-700 dark:hover:to-gray-800"
-			title={$_('theme.changeTheme')}
+			title={$LL.theme.changeTheme()}
 			variant="ghost"
 		>
 			<!-- Enhanced Icon Animation -->
@@ -54,7 +54,7 @@ const themes = [
 					class="absolute h-5 w-5 scale-0 -rotate-90 text-blue-400 transition-all duration-300 dark:scale-100 dark:rotate-0"
 				/>
 			</div>
-			<span class="sr-only">{$_('theme.toggleTheme')}</span>
+			<span class="sr-only">{$LL.theme.toggleTheme()}</span>
 		</Button>
 	</DropdownMenu.Trigger>
 
@@ -66,7 +66,7 @@ const themes = [
 		<!-- Theme Header -->
 		<div class="mb-2 px-2 py-1">
 			<h4 class="text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
-				{$_('theme.selectTheme')}
+				{$LL.theme.selectTheme()}
 			</h4>
 		</div>
 
@@ -101,12 +101,12 @@ const themes = [
 					<div
 						class={cn('font-medium', isActive ? 'text-white' : 'text-gray-900 dark:text-gray-100')}
 					>
-						{$_(`theme.${themeOption.value}`)}
+						{$LL.theme[themeOption.value as keyof typeof $LL.theme]()}
 					</div>
 					<div
 						class={cn('text-xs', isActive ? 'text-white/80' : 'text-gray-500 dark:text-gray-400')}
 					>
-						{$_(`theme.${themeOption.value}Description`)}
+						{$LL.theme[`${themeOption.value}Description` as keyof typeof $LL.theme]()}
 					</div>
 				</div>
 

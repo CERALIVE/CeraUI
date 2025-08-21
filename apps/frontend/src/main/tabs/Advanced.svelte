@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Copy, Eye, EyeOff, Hammer, Logs, PowerOff, RotateCcw, Settings } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import { LL } from "@ceraui/i18n/svelte";
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
@@ -48,8 +48,8 @@ RevisionsMessages.subscribe((revisionMessage) => {
 
 ConfigMessages.subscribe((configMessage) => {
 	if (sshPasswordChanged && configMessage.ssh_pass && sshPassword !== configMessage.ssh_pass) {
-		toast.success($_('advanced.passwordCopied'), {
-			description: $_('advanced.passwordCopiedDesc'),
+		toast.success($LL.advanced.passwordCopied(), {
+			description: $LL.advanced.passwordCopiedDesc(),
 		});
 		sshPasswordChanged = false;
 	}
@@ -65,9 +65,9 @@ StatusMessages.subscribe((statusMessage) => {
 	<div class="container mx-auto max-w-7xl px-4 py-6">
 		<!-- Header Section -->
 		<div class="mb-8">
-			<h1 class="text-3xl font-bold tracking-tight">{$_('advanced.systemSettings')}</h1>
+			<h1 class="text-3xl font-bold tracking-tight">{$LL.advanced.systemSettings()}</h1>
 			<p class="text-muted-foreground mt-2">
-				{$_('advanced.systemDescription')}
+				{$LL.advanced.systemDescription()}
 			</p>
 		</div>
 
@@ -84,10 +84,10 @@ StatusMessages.subscribe((statusMessage) => {
 						</div>
 						<div class="flex-1">
 							<Card.Title class="text-xl font-bold text-blue-900 dark:text-blue-100">
-								{$_('advanced.systemSettings')}
+								{$LL.advanced.systemSettings()}
 							</Card.Title>
 							<p class="mt-1 text-sm font-medium text-blue-600/70 dark:text-blue-300/70">
-								{$_('advanced.coreSystemConfiguration')}
+								{$LL.advanced.coreSystemConfiguration()}
 							</p>
 						</div>
 					</div>
@@ -97,15 +97,15 @@ StatusMessages.subscribe((statusMessage) => {
 					<div class="space-y-3">
 						<div class="space-y-2">
 							<Label class="text-sm font-medium" for="lanPassword">
-								{$_('advanced.lanPassword')}
+								{$LL.advanced.lanPassword()}
 							</Label>
 							<p class="text-muted-foreground text-sm">
-								{$_('advanced.lanPasswordTooltip')}
+								{$LL.advanced.lanPasswordTooltip()}
 							</p>
 							{#if password.length > 0 && password.length < 8}
 								<p class="text-destructive flex items-center gap-2 text-sm">
 									<span class="bg-destructive h-2 w-2 rounded-full"></span>
-									{$_('advanced.minLength')}
+									{$LL.advanced.minLength()}
 								</p>
 							{/if}
 						</div>
@@ -113,7 +113,7 @@ StatusMessages.subscribe((statusMessage) => {
 							<Input
 								id="lanPassword"
 								class="bg-background/50 border-muted-foreground/20 focus:border-primary h-11 pr-24 transition-colors"
-								placeholder={$_('advanced.newPassword')}
+								placeholder={$LL.advanced.newPassword()}
 								type={showPassword ? 'text' : 'password'}
 								bind:value={password}
 							/>
@@ -139,7 +139,7 @@ StatusMessages.subscribe((statusMessage) => {
 									}}
 									size="sm"
 								>
-									{$_('advanced.save')}
+									{$LL.advanced.save()}
 								</Button>
 							</div>
 						</div>
@@ -149,10 +149,10 @@ StatusMessages.subscribe((statusMessage) => {
 					<div class="space-y-3">
 						<div class="space-y-2">
 							<Label class="text-sm font-medium" for="remoteKey">
-								{$_('advanced.cloudRemoteKey')}
+								{$LL.advanced.cloudRemoteKey()}
 							</Label>
 							<p class="text-muted-foreground text-sm">
-								{$_('advanced.cloudRemoteKeyTooltip')}
+								{$LL.advanced.cloudRemoteKeyTooltip()}
 							</p>
 							<a
 								class="text-primary hover:text-primary/80 inline-flex items-center text-sm font-medium transition-colors hover:underline"
@@ -200,7 +200,7 @@ StatusMessages.subscribe((statusMessage) => {
 									}}
 									size="sm"
 								>
-									{$_('advanced.save')}
+									{$LL.advanced.save()}
 								</Button>
 							</div>
 						</div>
@@ -228,10 +228,10 @@ StatusMessages.subscribe((statusMessage) => {
 							</div>
 							<div>
 								<h3 class="text-sm font-semibold text-blue-900 dark:text-blue-100">
-									{$_('advanced.systemActions')}
+									{$LL.advanced.systemActions()}
 								</h3>
 								<p class="text-xs text-blue-600/70 dark:text-blue-300/70">
-									{$_('advanced.systemActionsDescription')}
+									{$LL.advanced.systemActionsDescription()}
 								</p>
 							</div>
 						</div>
@@ -247,18 +247,18 @@ StatusMessages.subscribe((statusMessage) => {
 										</div>
 										<div>
 											<h4 class="font-semibold text-yellow-900 dark:text-yellow-100">
-												{$_('advanced.reboot')}
+												{$LL.advanced.reboot()}
 											</h4>
 											<p class="text-xs text-yellow-600/70 dark:text-yellow-300/70">
-												{$_('advanced.rebootDescription')}
+												{$LL.advanced.rebootDescription()}
 											</p>
 										</div>
 									</div>
 								</div>
 								<div class="mt-4">
 									<SimpleAlertDialog
-										buttonText={$_('advanced.reboot')}
-										confirmButtonText={$_('advanced.reboot')}
+										buttonText={$LL.advanced.reboot()}
+										confirmButtonText={$LL.advanced.reboot()}
 										extraButtonClasses="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 border-0 shadow-sm text-white font-medium h-9 text-sm justify-center"
 										iconPosition="left"
 										onconfirm={reboot}
@@ -267,10 +267,10 @@ StatusMessages.subscribe((statusMessage) => {
 											<RotateCcw class="h-4 w-4" />
 										{/snippet}
 										{#snippet dialogTitle()}
-											{$_('advanced.reboot')}
+											{$LL.advanced.reboot()}
 										{/snippet}
 										{#snippet description()}
-											{$_('advanced.confirmReboot')}
+											{$LL.advanced.confirmReboot()}
 										{/snippet}
 									</SimpleAlertDialog>
 								</div>
@@ -287,18 +287,18 @@ StatusMessages.subscribe((statusMessage) => {
 										</div>
 										<div>
 											<h4 class="font-semibold text-red-900 dark:text-red-100">
-												{$_('advanced.powerOff')}
+												{$LL.advanced.powerOff()}
 											</h4>
 											<p class="text-xs text-red-600/70 dark:text-red-300/70">
-												{$_('advanced.powerOffDescription')}
+												{$LL.advanced.powerOffDescription()}
 											</p>
 										</div>
 									</div>
 								</div>
 								<div class="mt-4">
 									<SimpleAlertDialog
-										buttonText={$_('advanced.powerOff')}
-										confirmButtonText={$_('advanced.powerOff')}
+										buttonText={$LL.advanced.powerOff()}
+										confirmButtonText={$LL.advanced.powerOff()}
 										extraButtonClasses="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 border-0 shadow-sm text-white font-medium h-9 text-sm justify-center"
 										iconPosition="left"
 										onconfirm={powerOff}
@@ -307,10 +307,10 @@ StatusMessages.subscribe((statusMessage) => {
 											<PowerOff class="h-4 w-4" />
 										{/snippet}
 										{#snippet dialogTitle()}
-											{$_('advanced.powerOff')}
+											{$LL.advanced.powerOff()}
 										{/snippet}
 										{#snippet description()}
-											{$_('advanced.confirmPowerOff')}
+											{$LL.advanced.confirmPowerOff()}
 										{/snippet}
 									</SimpleAlertDialog>
 								</div>
@@ -331,10 +331,10 @@ StatusMessages.subscribe((statusMessage) => {
 						</div>
 						<div class="flex-1">
 							<Card.Title class="text-xl font-bold text-purple-900 dark:text-purple-100">
-								{$_('advanced.developerOptions')}
+								{$LL.advanced.developerOptions()}
 							</Card.Title>
 							<p class="mt-1 text-sm font-medium text-purple-600/70 dark:text-purple-300/70">
-								{$_('advanced.developmentToolsAccess')}
+								{$LL.advanced.developmentToolsAccess()}
 							</p>
 						</div>
 					</div>
@@ -344,10 +344,10 @@ StatusMessages.subscribe((statusMessage) => {
 					<div class="space-y-3">
 						<div class="space-y-2">
 							<Label class="text-sm font-medium" for="sshPassword">
-								{$_('advanced.sshPassword', { values: { sshUser } })}
+								{$LL.advanced.sshPassword({ sshUser })}
 							</Label>
 							<p class="text-muted-foreground text-sm">
-								{$_('advanced.sshPasswordTooltip')}
+								{$LL.advanced.sshPasswordTooltip()}
 							</p>
 							<div
 								class="rounded-xl border border-purple-200/50 bg-gradient-to-r from-purple-50/30 to-purple-100/30 p-4 shadow-sm dark:border-purple-800/50 dark:from-purple-950/20 dark:to-purple-900/20"
@@ -363,7 +363,7 @@ StatusMessages.subscribe((statusMessage) => {
 											)}
 										></div>
 										<span class="font-semibold text-purple-900 dark:text-purple-100"
-											>{$_('advanced.sshServer')}:</span
+											>{$LL.advanced.sshServer()}:</span
 										>
 									</div>
 									<span
@@ -374,7 +374,7 @@ StatusMessages.subscribe((statusMessage) => {
 												: 'bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400',
 										)}
 									>
-										{sshStatus ? $_('advanced.active') : $_('advanced.inactive')}
+										{sshStatus ? $LL.advanced.active() : $LL.advanced.inactive()}
 									</span>
 								</div>
 							</div>
@@ -383,7 +383,7 @@ StatusMessages.subscribe((statusMessage) => {
 							<Input
 								id="sshPassword"
 								class="bg-background/50 border-muted-foreground/20 focus:border-primary h-11 pr-40 transition-colors"
-								placeholder={$_('advanced.sshPasswordPlaceholder')}
+								placeholder={$LL.advanced.sshPasswordPlaceholder()}
 								readonly
 								type={showSSHPassword ? 'text' : 'password'}
 								bind:value={sshPassword}
@@ -393,8 +393,8 @@ StatusMessages.subscribe((statusMessage) => {
 									class="hover:bg-muted/50 h-8 w-8 rounded-md p-0"
 									onclick={() => {
 										navigator.clipboard.writeText(sshPassword).then(() => {
-											toast.info($_('advanced.passwordCopied'), {
-												description: $_('advanced.passwordCopiedDesc'),
+											toast.info($LL.advanced.passwordCopied(), {
+												description: $LL.advanced.passwordCopiedDesc(),
 											});
 										});
 									}}
@@ -424,7 +424,7 @@ StatusMessages.subscribe((statusMessage) => {
 									size="sm"
 									variant="destructive"
 								>
-									{$_('advanced.reset')}
+									{$LL.advanced.reset()}
 								</Button>
 							</div>
 						</div>
@@ -443,7 +443,7 @@ StatusMessages.subscribe((statusMessage) => {
 								<div
 									class={cn('h-3 w-3 rounded-full shadow-sm', 'bg-white/90 shadow-white/30')}
 								></div>
-								{sshStatus ? $_('advanced.stopSSH') : $_('advanced.startSSH')}
+								{sshStatus ? $LL.advanced.stopSSH() : $LL.advanced.startSSH()}
 							</div>
 						</Button>
 					</div>
@@ -458,10 +458,10 @@ StatusMessages.subscribe((statusMessage) => {
 							</div>
 							<div>
 								<h3 class="text-sm font-semibold text-purple-900 dark:text-purple-100">
-									{$_('advanced.logManagement')}
+									{$LL.advanced.logManagement()}
 								</h3>
 								<p class="text-xs text-purple-600/70 dark:text-purple-300/70">
-									{$_('advanced.logManagementDescription')}
+									{$LL.advanced.logManagementDescription()}
 								</p>
 							</div>
 						</div>
@@ -492,15 +492,15 @@ StatusMessages.subscribe((statusMessage) => {
 												CERALIVE Log
 											</h4>
 											<p class="text-xs text-purple-600/70 dark:text-purple-300/70">
-												{$_('advanced.applicationLogsDescription')}
+												{$LL.advanced.applicationLogsDescription()}
 											</p>
 										</div>
 									</div>
 								</div>
 								<div class="mt-4">
 									<SimpleAlertDialog
-										buttonText={$_('advanced.download')}
-										confirmButtonText={$_('advanced.download')}
+										buttonText={$LL.advanced.download()}
+										confirmButtonText={$LL.advanced.download()}
 										extraButtonClasses="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 border-0 shadow-sm text-white font-medium h-9 text-sm justify-center"
 										iconPosition="left"
 										onconfirm={getBelaboxLog}
@@ -516,10 +516,10 @@ StatusMessages.subscribe((statusMessage) => {
 											</svg>
 										{/snippet}
 										{#snippet dialogTitle()}
-											{$_('advanced.downloadBelaboxLog')}
+											{$LL.advanced.downloadBelaboxLog()}
 										{/snippet}
 										{#snippet description()}
-											{$_('advanced.confirmBelaboxLog')}
+											{$LL.advanced.confirmBelaboxLog()}
 										{/snippet}
 									</SimpleAlertDialog>
 								</div>
@@ -549,15 +549,15 @@ StatusMessages.subscribe((statusMessage) => {
 										<div>
 											<h4 class="font-semibold text-purple-900 dark:text-purple-100">System Log</h4>
 											<p class="text-xs text-purple-600/70 dark:text-purple-300/70">
-												{$_('advanced.systemLogsDescription')}
+												{$LL.advanced.systemLogsDescription()}
 											</p>
 										</div>
 									</div>
 								</div>
 								<div class="mt-4">
 									<SimpleAlertDialog
-										buttonText={$_('advanced.download')}
-										confirmButtonText={$_('advanced.download')}
+										buttonText={$LL.advanced.download()}
+										confirmButtonText={$LL.advanced.download()}
 										extraButtonClasses="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 border-0 shadow-sm text-white font-medium h-9 text-sm justify-center"
 										iconPosition="left"
 										onconfirm={getSystemLog}
@@ -573,10 +573,10 @@ StatusMessages.subscribe((statusMessage) => {
 											</svg>
 										{/snippet}
 										{#snippet dialogTitle()}
-											{$_('advanced.downloadSystemLog')}
+											{$LL.advanced.downloadSystemLog()}
 										{/snippet}
 										{#snippet description()}
-											{$_('advanced.confirmSystemLog')}
+											{$LL.advanced.confirmSystemLog()}
 										{/snippet}
 									</SimpleAlertDialog>
 								</div>
@@ -612,10 +612,10 @@ StatusMessages.subscribe((statusMessage) => {
 							</div>
 							<div>
 								<p class="text-base font-semibold text-emerald-900 dark:text-emerald-100">
-									{$_('advanced.versionInformation')}
+									{$LL.advanced.versionInformation()}
 								</p>
 								<p class="text-sm font-medium text-emerald-600/70 dark:text-emerald-300/70">
-									{$_('advanced.systemComponentsVersions')}
+									{$LL.advanced.systemComponentsVersions()}
 								</p>
 							</div>
 						</div>

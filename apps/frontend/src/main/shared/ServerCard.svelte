@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Server } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import {LL} from '@ceraui/i18n/svelte'
 
 import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
@@ -111,14 +111,14 @@ const isManualAccount = $derived(
 			<div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/20">
 				<Server class="h-4 w-4 text-blue-600 dark:text-blue-400" />
 			</div>
-			<Card.Title class="text-base font-semibold">{$_('settings.receiverServer')}</Card.Title>
+			<Card.Title class="text-base font-semibold">{$LL.settings.receiverServer()}</Card.Title>
 		</div>
 	</Card.Header>
 
 	<Card.Content class="flex-1 space-y-4">
 		<!-- Relay Server Selection -->
 		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="relayServer">{$_('settings.relayServer')}</Label>
+			<Label class="text-sm font-medium" for="relayServer">{$LL.settings.relayServer()}</Label>
 			<Select.Root
 				disabled={relayMessage === undefined || isStreaming}
 				onValueChange={(value) => {
@@ -133,15 +133,15 @@ const isManualAccount = $derived(
 					{localRelayServer !== undefined && localRelayServer !== '-1' && relayMessage?.servers
 						? (Object.entries(relayMessage.servers).find(
 								(server) => server[0] === localRelayServer,
-							)?.[1]?.name ?? $_('settings.manualConfiguration'))
-						: $_('settings.manualConfiguration')}
+							)?.[1]?.name ?? $LL.settings.manualConfiguration())
+						: $LL.settings.manualConfiguration()}
 				</Select.Trigger>
 				<Select.Content>
 					<Select.Group>
 						<Select.Item value="-1">
 							<div class="flex items-center gap-2">
 								<div class="h-2 w-2 rounded-full bg-orange-500"></div>
-								{$_('settings.manualConfiguration')}
+								{$LL.settings.manualConfiguration()}
 							</div>
 						</Select.Item>
 						{#if relayMessage?.servers}
@@ -170,13 +170,13 @@ const isManualAccount = $derived(
 				<div class="mb-3 flex items-center space-x-2">
 					<div class="h-2 w-2 rounded-full bg-orange-500"></div>
 					<h4 class="text-sm font-medium text-orange-800 dark:text-orange-200">
-						{$_('settings.manualServerConfiguration')}
+						{$LL.settings.manualServerConfiguration()}
 					</h4>
 				</div>
 
 				<div class="space-y-2">
 					<Label class="text-sm font-medium" for="srtlaServerAddress">
-						{$_('settings.srtlaServerAddress')}
+						{$LL.settings.srtlaServerAddress()}
 					</Label>
 					<Input
 						id="srtlaServerAddress"
@@ -186,7 +186,7 @@ const isManualAccount = $derived(
 							addressTouched = true;
 							onSrtlaAddressChange(localSrtlaServerAddress);
 						}}
-						placeholder={$_('settings.placeholders.srtlaServerAddress')}
+						placeholder={$LL.settings.placeholders.srtlaServerAddress()}
 						bind:value={localSrtlaServerAddress}
 					/>
 					{#if formErrors.srtlaServerAddress}
@@ -196,7 +196,7 @@ const isManualAccount = $derived(
 
 				<div class="space-y-2">
 					<Label class="text-sm font-medium" for="srtlaServerPort">
-						{$_('settings.srtlaServerPort')}
+						{$LL.settings.srtlaServerPort()}
 					</Label>
 					<Input
 						id="srtlaServerPort"
@@ -216,7 +216,7 @@ const isManualAccount = $derived(
 								}
 							}
 						}}
-						placeholder={$_('settings.placeholders.srtlaServerPort')}
+						placeholder={$LL.settings.placeholders.srtlaServerPort()}
 						type="number"
 						bind:value={localSrtlaServerPort}
 					/>
@@ -229,7 +229,7 @@ const isManualAccount = $derived(
 			<!-- Relay Account Selection -->
 			<div class="space-y-2">
 				<Label class="text-sm font-medium" for="relayServerAccount">
-					{$_('settings.relayServerAccount')}
+					{$LL.settings.relayServerAccount()}
 				</Label>
 				<Select.Root
 					disabled={relayMessage === undefined || isStreaming}
@@ -245,7 +245,7 @@ const isManualAccount = $derived(
 						{localRelayAccount === undefined ||
 						localRelayAccount === '-1' ||
 						relayMessage?.accounts === undefined
-							? $_('settings.manualConfiguration')
+							? $LL.settings.manualConfiguration()
 							: relayMessage.accounts[localRelayAccount].name}
 					</Select.Trigger>
 					<Select.Content>
@@ -253,7 +253,7 @@ const isManualAccount = $derived(
 							<Select.Item value="-1">
 								<div class="flex items-center gap-2">
 									<div class="h-2 w-2 rounded-full bg-orange-500"></div>
-									{$_('settings.manualConfiguration')}
+									{$LL.settings.manualConfiguration()}
 								</div>
 							</Select.Item>
 							{#if relayMessage?.accounts}
@@ -276,8 +276,8 @@ const isManualAccount = $derived(
 		{#if isManualAccount}
 			<div class="space-y-2">
 				<Label class="text-sm font-medium" for="srtStreamId">
-					{$_('settings.srtStreamId')}
-					<span class="text-muted-foreground ml-1 text-xs">({$_('settings.optional')})</span>
+					{$LL.settings.srtStreamId()}
+					<span class="text-muted-foreground ml-1 text-xs">({$LL.settings.optional()})</span>
 				</Label>
 				<Input
 					id="srtStreamId"
@@ -287,7 +287,7 @@ const isManualAccount = $derived(
 						streamIdTouched = true;
 						onSrtStreamIdChange(localSrtStreamId);
 					}}
-					placeholder={$_('settings.placeholders.srtStreamId')}
+					placeholder={$LL.settings.placeholders.srtStreamId()}
 					bind:value={localSrtStreamId}
 				/>
 			</div>
@@ -296,7 +296,7 @@ const isManualAccount = $derived(
 		<!-- SRT Latency Control -->
 		<div class="bg-accent/30 space-y-3 rounded-lg p-4">
 			<Label class="flex items-center gap-2 text-sm font-medium" for="srtLatency">
-				{$_('settings.srtLatency')}
+				{$LL.settings.srtLatency()}
 				<span
 					class="rounded-md bg-blue-100 px-2 py-1 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
 				>
@@ -369,8 +369,8 @@ const isManualAccount = $derived(
 				value={localSrtLatency || 2000}
 			/>
 			<div class="text-muted-foreground flex justify-between text-xs">
-				<span>{$_('settings.lowerLatency')}</span>
-				<span>{$_('settings.higherLatency')}</span>
+				<span>{$LL.settings.lowerLatency()}</span>
+				<span>{$LL.settings.higherLatency()}</span>
 			</div>
 		</div>
 	</Card.Content>

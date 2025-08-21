@@ -1,7 +1,6 @@
 <script lang="ts">
 import { AlertDialog as AlertDialogDefault, type WithoutChild } from 'bits-ui';
 import type { Snippet } from 'svelte';
-import { _ } from 'svelte-i18n';
 
 import * as AlertDialog from '$lib/components/ui/alert-dialog/index';
 import { buttonVariants } from '$lib/components/ui/button';
@@ -143,7 +142,7 @@ const confirmButtonClasses = $derived(
 			<AlertDialog.Footer class={footerClasses}>
 				{#if !hiddeCancelButton}
 					<AlertDialog.Cancel class={cancelButtonClasses} onclick={() => oncancel?.()}>
-						{cancelButtonText ?? $_('dialog.cancel')}
+						{cancelButtonText ?? $LL.dialog.cancel()}
 					</AlertDialog.Cancel>
 				{/if}
 
@@ -155,7 +154,7 @@ const confirmButtonClasses = $derived(
 						setTimeout(() => (open = false), 20);
 					}}
 				>
-					{confirmButtonText ?? $_('dialog.continue')}
+					{confirmButtonText ?? $LL.dialog.continue()}
 				</AlertDialog.Action>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>

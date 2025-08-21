@@ -31,7 +31,7 @@
 
 <script lang="ts">
 import { Bug, Wrench } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import { LL } from "@ceraui/i18n/svelte";
 
 import DemoOverlayTrigger from '$lib/components/demo-overlay-trigger.svelte';
 import ScreenshotUtility from '$lib/components/dev-tools/screenshot-utility.svelte';
@@ -57,10 +57,10 @@ const _isDev = BUILD_INFO.IS_DEV;
 				</div>
 				<div class="min-w-0 flex-1">
 					<h1 class="text-xl font-bold tracking-tight break-words sm:text-3xl">
-						🛠️ {$_('devtools.title')}
+						🛠️ {$LL.devtools.title()}
 					</h1>
 					<p class="text-muted-foreground mt-1 text-sm sm:text-base">
-						{$_('devtools.description')}
+						{$LL.devtools.description()}
 					</p>
 				</div>
 			</div>
@@ -74,11 +74,9 @@ const _isDev = BUILD_INFO.IS_DEV;
 				></div>
 				<span class="truncate font-medium text-amber-700 dark:text-amber-300">
 					<span class="hidden sm:inline"
-						>{$_('devtools.developmentMode')}: {BUILD_INFO.MODE} | {$_('devtools.status')}: {$_(
-							'devtools.active',
-						)}</span
+						>{$LL.devtools.developmentMode()}: {BUILD_INFO.MODE} | {$LL.devtools.status()}: {$LL.devtools.active()}</span
 					>
-					<span class="sm:hidden">{$_('devtools.status')}: {$_('devtools.active')}</span>
+					<span class="sm:hidden">{$LL.devtools.status()}: {$LL.devtools.active()}</span>
 				</span>
 			</div>
 		</div>
@@ -109,23 +107,23 @@ const _isDev = BUILD_INFO.IS_DEV;
 					<Card.Header>
 						<Card.Title class="flex items-center gap-2 text-red-700 dark:text-red-300">
 							<Bug class="h-5 w-5" />
-							🐛 {$_('devtools.consoleTesting')}
+							🐛 {$LL.devtools.consoleTesting()}
 						</Card.Title>
 						<Card.Description class="text-red-600 dark:text-red-400">
-							{$_('devtools.consoleTestingDesc')}
+							{$LL.devtools.consoleTestingDesc()}
 						</Card.Description>
 					</Card.Header>
 
 					<Card.Content class="space-y-3">
 						<div class="bg-muted/30 rounded-md p-3">
-							<div class="mb-2 text-xs font-medium">{$_('devtools.consoleOutputTests')}</div>
+							<div class="mb-2 text-xs font-medium">{$LL.devtools.consoleOutputTests()}</div>
 							<div class="flex flex-wrap gap-2">
 								<button
 									class="bg-background hover:bg-accent rounded border px-2 py-1 text-xs transition-colors"
 									onclick={() =>
 										console.log('✅ Console log test:', { timestamp: new Date(), level: 'info' })}
 								>
-									{$_('devtools.log')}
+									{$LL.devtools.log()}
 								</button>
 								<button
 									class="bg-background hover:bg-accent rounded border px-2 py-1 text-xs transition-colors"
@@ -135,7 +133,7 @@ const _isDev = BUILD_INFO.IS_DEV;
 											level: 'warn',
 										})}
 								>
-									{$_('devtools.warn')}
+									{$LL.devtools.warn()}
 								</button>
 								<button
 									class="bg-background hover:bg-accent rounded border px-2 py-1 text-xs transition-colors"
@@ -145,7 +143,7 @@ const _isDev = BUILD_INFO.IS_DEV;
 											level: 'error',
 										})}
 								>
-									{$_('devtools.error')}
+									{$LL.devtools.error()}
 								</button>
 								<button
 									class="bg-background hover:bg-accent rounded border px-2 py-1 text-xs transition-colors"
@@ -156,7 +154,7 @@ const _isDev = BUILD_INFO.IS_DEV;
 											online: navigator.onLine,
 										})}
 								>
-									{$_('devtools.table')}
+									{$LL.devtools.table()}
 								</button>
 							</div>
 						</div>
@@ -175,10 +173,10 @@ const _isDev = BUILD_INFO.IS_DEV;
 				</div>
 				<div class="min-w-0 flex-1">
 					<div class="text-xs font-medium text-amber-800 sm:text-sm dark:text-amber-200">
-						{$_('devtools.developmentOnly')}
+						{$LL.devtools.developmentOnly()}
 					</div>
 					<div class="mt-1 text-xs break-words text-amber-700 dark:text-amber-300">
-						{$_('devtools.developmentOnlyDesc')}
+						{$LL.devtools.developmentOnlyDesc()}
 					</div>
 				</div>
 			</div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { _ } from 'svelte-i18n';
+import { LL, getTranslationByKey } from '@ceraui/i18n/svelte';
 import { toast } from 'svelte-sonner';
 
 import {
@@ -13,7 +13,6 @@ import {
 // Import new modular components
 import { createStreamingStateManager } from '$lib/components/streaming/StreamingStateManager';
 import {
-	getSortedFramerates,
 	getSortedResolutions,
 	normalizeValue,
 	updateMaxBitrate,
@@ -104,10 +103,23 @@ let isProgrammaticChange = $state(false);
 let srtlaAddressTouched = $state(false);
 let srtlaPortTouched = $state(false);
 let srtStreamIdTouched = $state(false);
-const _srtLatencyTouched = $state(false);
+let srtLatencyTouched = $state(false);
 
 // Track encoder-related user interactions (separate from ServerCard)
 let userHasInteracted = $state(false);
+
+// Track initial restoration phase to prevent premature userHasInteracted setting
+let isInitialMount = $state(true);
+
+// Allow initial restoration to complete before tracking user interactions
+$effect(() => {
+	if (isInitialMount && $savedConfigStore && properties.pipeline) {
+		// Wait for initial state restoration to complete
+		setTimeout(() => {
+			isInitialMount = false;
+		}, 100);
+	}
+});
 
 // React to saved config changes and initialize properties
 $effect(() => {
@@ -149,7 +161,7 @@ $effect(() => {
 			properties.audioSource = initialSelectedProperties.audioSource = config?.asrc ?? '';
 		}
 		if (!initialSelectedProperties.audioCodec) {
-			properties.audioCodec = initialSelectedProperties.audioCodec = config.acodec;
+			properties.audioCodec = initialSelectedProperties.audioCodec = config.acodec as AudioCodecs;
 
 			// If no audio codec in config but pipeline supports audio, default to aac
 			if (!config.acodec && config.pipeline && $unparsedPipelinesStore && $audioCodecsStore) {
@@ -159,7 +171,7 @@ $effect(() => {
 						(codec) => codec.toLowerCase() === 'aac',
 					);
 					if (aacCodec) {
-						properties.audioCodec = initialSelectedProperties.audioCodec = aacCodec;
+						properties.audioCodec = initialSelectedProperties.audioCodec = aacCodec as AudioCodecs;
 					}
 				}
 			}
@@ -185,7 +197,7 @@ $effect.pre(() => {
 	if (
 		properties.pipeline &&
 		$unparsedPipelinesStore !== undefined &&
-		$_ &&
+		$LL &&
 		(!userHasInteracted || isProgrammaticChange)
 	) {
 		const pipelineData = $unparsedPipelinesStore[properties.pipeline];
@@ -194,8 +206,8 @@ $effect.pre(() => {
 		}
 
 		const parsedPipeline = parsePipelineName(pipelineData.name, {
-			matchDeviceResolution: $_('settings.matchDeviceResolution'),
-			matchDeviceOutput: $_('settings.matchDeviceOutput'),
+			matchDeviceResolution: $LL.settings.matchDeviceResolution(),
+			matchDeviceOutput: $LL.settings.matchDeviceOutput(),
 		});
 
 		properties.inputMode = parsedPipeline.format ?? undefined;
@@ -209,7 +221,7 @@ $effect.pre(() => {
 				(codec) => codec.toLowerCase() === 'aac',
 			);
 			if (aacCodec) {
-				properties.audioCodec = aacCodec;
+				properties.audioCodec = aacCodec as AudioCodecs;
 			}
 		}
 	}
@@ -243,7 +255,7 @@ function validateForm() {
 			srtlaServerAddress: properties.srtlaServerAddress,
 			srtlaServerPort: properties.srtlaServerPort,
 		},
-		$_, // Pass the translation function
+		(key) => getTranslationByKey($LL, key),
 	);
 
 	formErrors = result.errors;
@@ -253,6 +265,22 @@ function validateForm() {
 // Updated helper to use modular update function
 const handleMaxBitrateUpdate = () => {
 	updateMaxBitrate(properties.bitrate, $isStreamingStore);
+};
+
+// Local framerate sorter to match EncoderCard's expected signature
+type MinimalPipeline = { extraction: { fps?: string } };
+const getSortedFramerates = (framerates: MinimalPipeline[]): MinimalPipeline[] => {
+	return [...framerates].sort((a, b) => {
+		const fpsA = a.extraction.fps;
+		const fpsB = b.extraction.fps;
+		if (typeof fpsA === 'string' && fpsA.toLowerCase().includes('match')) return -1;
+		if (typeof fpsB === 'string' && fpsB.toLowerCase().includes('match')) return 1;
+		const numA = parseFloat(String(fpsA));
+		const numB = parseFloat(String(fpsB));
+		const safeA = Number.isFinite(numA) ? numA : 0;
+		const safeB = Number.isFinite(numB) ? numB : 0;
+		return safeA - safeB;
+	});
 };
 
 function onSubmitStreamingForm(event: Event) {
@@ -282,7 +310,10 @@ const startStreamingWithCurrentConfig = () => {
 
 // Auto-selection handlers using modular functions
 const handleInputModeChange = (value: string) => {
-	userHasInteracted = true; // Mark that user has made a selection
+	// Only mark user interaction if not during initial restoration
+	if (!isInitialMount) {
+		userHasInteracted = true; // Mark that user has made a selection
+	}
 	isProgrammaticChange = true;
 	const resetProps = resetDependentSelections('inputMode');
 	properties = { ...properties, inputMode: value, ...resetProps };
@@ -338,7 +369,7 @@ const handleFramerateChange = (value: string) => {
 		<!-- Streaming Controls - Sticky Header -->
 		<StreamingControls
 			disabled={false}
-			isStreaming={$isStreamingStore}
+			isStreaming={!!$isStreamingStore}
 			onStart={startStreamingWithCurrentConfig}
 			onStop={() => {
 				// Try to dismiss all toasts first
@@ -369,7 +400,7 @@ const handleFramerateChange = (value: string) => {
 						{getSortedFramerates}
 						{getSortedResolutions}
 						groupedPipelines={$groupedPipelinesStore}
-						isStreaming={$isStreamingStore}
+						isStreaming={!!$isStreamingStore}
 						{normalizeValue}
 						onBitrateChange={(value) => (properties.bitrate = value)}
 						onBitrateOverlayChange={(checked) => (properties.bitrateOverlay = checked)}
@@ -394,10 +425,10 @@ const handleFramerateChange = (value: string) => {
 					<AudioCard
 						audioCodecs={$audioCodecsStore}
 						audioSources={$audioSourcesStore}
-						isStreaming={$isStreamingStore}
+						isStreaming={!!$isStreamingStore}
 						{normalizeValue}
 						notAvailableAudioSource={$notAvailableAudioSourceStore}
-						onAudioCodecChange={(value) => (properties.audioCodec = value)}
+						onAudioCodecChange={(value) => (properties.audioCodec = value as AudioCodecs)}
 						onAudioDelayChange={(value) => (properties.audioDelay = value)}
 						onAudioSourceChange={(value) => (properties.audioSource = value)}
 						properties={{
@@ -414,7 +445,7 @@ const handleFramerateChange = (value: string) => {
 				<div class="h-full">
 					<ServerCard
 						{formErrors}
-						isStreaming={$isStreamingStore}
+						isStreaming={!!$isStreamingStore}
 						{normalizeValue}
 						onRelayAccountChange={(value) => (properties.relayAccount = value)}
 						onRelayServerChange={(value) => {

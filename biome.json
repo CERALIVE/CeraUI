@@ -5,14 +5,22 @@
 		"includes": [
 			"**/*.ts",
 			"**/*.js",
+			"**/*.mjs",
 			"**/*.json",
-			"!**/*.svelte",
-			"!**/.vscode/**",
-			"!**/.cursor/**",
-			"!**/tsconfig*.json",
-			"!**/dist/**",
-			"!**/build/**",
-			"!**/node_modules/**"
+			"**/*.jsonc"
+		],
+		"excludes": [
+			"**/*.svelte",
+			"**/*.svelte.ts",
+			"**/*.svelte.js",
+			"**/apps/frontend/**/*.svelte",
+			"**/.vscode/**",
+			"**/.cursor/**",
+			"**/tsconfig*.json",
+			"**/dist/**",
+			"**/build/**",
+			"**/node_modules/**",
+			"**/.svelte-kit/**"
 		]
 	},
 	"assist": { "actions": { "source": { "organizeImports": "on" } } },

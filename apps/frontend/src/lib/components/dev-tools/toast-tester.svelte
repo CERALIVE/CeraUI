@@ -24,7 +24,6 @@ import {
 	MessageCircle,
 	X,
 } from '@lucide/svelte';
-import { _, locale } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
@@ -33,9 +32,11 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import { Textarea } from '$lib/components/ui/textarea';
 
+import { LL, locale } from "@ceraui/i18n/svelte";
+
 // Toast testing state
-let customTitle = $state($_('devtools.customTitle'));
-let customDescription = $state($_('devtools.customDescription'));
+let customTitle = $state($LL.devtools.customTitle());
+let customDescription = $state($LL.devtools.customDescription());
 let toastDuration = $state(4000);
 const _selectedPosition = $state('bottom-right');
 
@@ -45,28 +46,28 @@ $effect(() => {
 	const _currentLocale = $locale; // This creates a dependency on locale changes
 
 	// Reset input values to new locale defaults if they haven't been modified by user
-	if (customTitle === $_('devtools.customTitle')) {
-		customTitle = $_('devtools.customTitle');
+	if (customTitle === $LL.devtools.customTitle()) {
+		customTitle = $LL.devtools.customTitle();
 	}
-	if (customDescription === $_('devtools.customDescription')) {
-		customDescription = $_('devtools.customDescription');
+	if (customDescription === $LL.devtools.customDescription()) {
+		customDescription = $LL.devtools.customDescription();
 	}
 });
 
 // Toast positions available in Sonner
 const _toastPositions = [
-	{ value: 'top-left', label: $_('devtools.topLeft') },
-	{ value: 'top-center', label: $_('devtools.topCenter') },
-	{ value: 'top-right', label: $_('devtools.topRight') },
-	{ value: 'bottom-left', label: $_('devtools.bottomLeft') },
-	{ value: 'bottom-center', label: $_('devtools.bottomCenter') },
-	{ value: 'bottom-right', label: $_('devtools.bottomRight') },
+	{ value: 'top-left', label: $LL.devtools.topLeft() },
+	{ value: 'top-center', label: $LL.devtools.topCenter() },
+	{ value: 'top-right', label: $LL.devtools.topRight() },
+	{ value: 'bottom-left', label: $LL.devtools.bottomLeft() },
+	{ value: 'bottom-center', label: $LL.devtools.bottomCenter() },
+	{ value: 'bottom-right', label: $LL.devtools.bottomRight() },
 ];
 
 // Toast type definitions with their configurations
 const toastTypes = [
 	{
-		name: $_('devtools.success'),
+		name: $LL.devtools.success(),
 		type: 'success',
 		icon: CheckCircle2,
 		color: 'text-green-600',
@@ -76,7 +77,7 @@ const toastTypes = [
 			toast.success(customTitle, { description: customDescription, duration: toastDuration }),
 	},
 	{
-		name: $_('devtools.error'),
+		name: $LL.devtools.error(),
 		type: 'error',
 		icon: AlertCircle,
 		color: 'text-red-600',
@@ -86,7 +87,7 @@ const toastTypes = [
 			toast.error(customTitle, { description: customDescription, duration: toastDuration }),
 	},
 	{
-		name: $_('devtools.warning'),
+		name: $LL.devtools.warning(),
 		type: 'warning',
 		icon: AlertTriangle,
 		color: 'text-amber-600',
@@ -96,7 +97,7 @@ const toastTypes = [
 			toast.warning(customTitle, { description: customDescription, duration: toastDuration }),
 	},
 	{
-		name: $_('devtools.info'),
+		name: $LL.devtools.info(),
 		type: 'info',
 		icon: Info,
 		color: 'text-blue-600',
@@ -106,7 +107,7 @@ const toastTypes = [
 			toast.info(customTitle, { description: customDescription, duration: toastDuration }),
 	},
 	{
-		name: $_('devtools.default'),
+		name: $LL.devtools.default(),
 		type: 'default',
 		icon: MessageCircle,
 		color: 'text-gray-600',
@@ -115,7 +116,7 @@ const toastTypes = [
 		action: () => toast(customTitle, { description: customDescription, duration: toastDuration }),
 	},
 	{
-		name: $_('devtools.loading'),
+		name: $LL.devtools.loading(),
 		type: 'loading',
 		icon: Loader2,
 		color: 'text-blue-600',
@@ -126,8 +127,8 @@ const toastTypes = [
 			// Auto-dismiss loading toast after duration
 			setTimeout(() => {
 				toast.dismiss(loadingToast);
-				toast.success($_('devtools.loadingComplete'), {
-					description: $_('devtools.loadingCompleteDesc'),
+				toast.success($LL.devtools.loadingComplete(), {
+					description: $LL.devtools.loadingCompleteDesc(),
 				});
 			}, toastDuration);
 		},
@@ -137,46 +138,46 @@ const toastTypes = [
 // Preset toast examples
 const presetToasts = [
 	{
-		name: $_('devtools.networkError'),
+		name: $LL.devtools.networkError(),
 		type: 'error',
-		title: $_('devtools.connectionFailed'),
-		description: $_('devtools.connectionFailedDesc'),
+		title: $LL.devtools.connectionFailed(),
+		description: $LL.devtools.connectionFailedDesc(),
 		action: () =>
-			toast.error($_('devtools.connectionFailed'), {
-				description: $_('devtools.connectionFailedDesc'),
+			toast.error($LL.devtools.connectionFailed(), {
+				description: $LL.devtools.connectionFailedDesc(),
 				duration: 5000,
 			}),
 	},
 	{
-		name: $_('devtools.settingsSaved'),
+		name: $LL.devtools.settingsSaved(),
 		type: 'success',
-		title: $_('devtools.settingsUpdated'),
-		description: $_('devtools.settingsUpdatedDesc'),
+		title: $LL.devtools.settingsUpdated(),
+		description: $LL.devtools.settingsUpdatedDesc(),
 		action: () =>
-			toast.success($_('devtools.settingsUpdated'), {
-				description: $_('devtools.settingsUpdatedDesc'),
+			toast.success($LL.devtools.settingsUpdated(), {
+				description: $LL.devtools.settingsUpdatedDesc(),
 				duration: 3000,
 			}),
 	},
 	{
-		name: $_('devtools.updateAvailable'),
+		name: $LL.devtools.updateAvailable(),
 		type: 'info',
-		title: $_('devtools.newVersionAvailable'),
-		description: $_('devtools.newVersionDesc'),
+		title: $LL.devtools.newVersionAvailable(),
+		description: $LL.devtools.newVersionDesc(),
 		action: () =>
-			toast.info($_('devtools.newVersionAvailable'), {
-				description: $_('devtools.newVersionDesc'),
+			toast.info($LL.devtools.newVersionAvailable(), {
+				description: $LL.devtools.newVersionDesc(),
 				duration: 8000,
 			}),
 	},
 	{
-		name: $_('devtools.lowBattery'),
+		name: $LL.devtools.lowBattery(),
 		type: 'warning',
-		title: $_('devtools.batteryLow'),
-		description: $_('devtools.batteryLowDesc'),
+		title: $LL.devtools.batteryLow(),
+		description: $LL.devtools.batteryLowDesc(),
 		action: () =>
-			toast.warning($_('devtools.batteryLow'), {
-				description: $_('devtools.batteryLowDesc'),
+			toast.warning($LL.devtools.batteryLow(), {
+				description: $LL.devtools.batteryLowDesc(),
 				duration: 6000,
 			}),
 	},
@@ -184,26 +185,26 @@ const presetToasts = [
 
 // Action toasts with buttons
 function showActionToast() {
-	toast($_('devtools.confirmAction'), {
-		description: $_('devtools.confirmActionDesc'),
+	toast($LL.devtools.confirmAction(), {
+		description: $LL.devtools.confirmActionDesc(),
 		action: {
-			label: $_('devtools.delete'),
-			onClick: () => toast.success($_('devtools.itemDeletedSuccess')),
+			label: $LL.devtools.delete(),
+			onClick: () => toast.success($LL.devtools.itemDeletedSuccess()),
 		},
 		cancel: {
-			label: $_('devtools.cancel'),
-			onClick: () => toast.info($_('devtools.actionCancelled')),
+			label: $LL.devtools.cancel(),
+			onClick: () => toast.info($LL.devtools.actionCancelled()),
 		},
 		duration: 10000,
 	});
 }
 
 function showPersistentToast() {
-	toast.error($_('devtools.criticalError'), {
-		description: $_('devtools.criticalErrorDesc'),
+	toast.error($LL.devtools.criticalError(), {
+		description: $LL.devtools.criticalErrorDesc(),
 		duration: Infinity,
 		action: {
-			label: $_('devtools.dismiss'),
+			label: $LL.devtools.dismiss(),
 			onClick: () => toast.dismiss(),
 		},
 	});
@@ -220,21 +221,21 @@ function dismissAllToasts() {
 	<Card.Header>
 		<Card.Title class="flex items-center gap-2 text-purple-700 dark:text-purple-300">
 			<MessageCircle class="h-5 w-5" />
-			🍞 {$_('devtools.toastNotificationTester')}
+			🍞 {$LL.devtools.toastNotificationTester()}
 		</Card.Title>
 		<Card.Description class="text-purple-600 dark:text-purple-400">
-			{$_('devtools.testDifferentTypes')}
+			{$LL.devtools.testDifferentTypes()}
 		</Card.Description>
 	</Card.Header>
 
 	<Card.Content class="space-y-6">
 		<!-- Custom Toast Configuration -->
 		<div class="bg-background/50 space-y-4 rounded-lg border p-4">
-			<div class="text-sm font-medium">{$_('devtools.customToastConfig')}</div>
+			<div class="text-sm font-medium">{$LL.devtools.customToastConfig()}</div>
 
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div class="space-y-2">
-					<Label class="text-xs" for="toast-title">{$_('devtools.title')}</Label>
+					<Label class="text-xs" for="toast-title">{$LL.devtools.title()}</Label>
 					<Input
 						id="toast-title"
 						class="text-sm"
@@ -244,7 +245,7 @@ function dismissAllToasts() {
 				</div>
 
 				<div class="space-y-2">
-					<Label class="text-xs" for="toast-duration">{$_('devtools.toastDuration')}</Label>
+					<Label class="text-xs" for="toast-duration">{$LL.devtools.toastDuration()}</Label>
 					<Input
 						id="toast-duration"
 						class="text-sm"
@@ -258,7 +259,7 @@ function dismissAllToasts() {
 			</div>
 
 			<div class="space-y-2">
-				<Label class="text-xs" for="toast-description">{$_('devtools.description')}</Label>
+				<Label class="text-xs" for="toast-description">{$LL.devtools.description()}</Label>
 				<Textarea
 					id="toast-description"
 					class="resize-none text-sm"
@@ -271,7 +272,7 @@ function dismissAllToasts() {
 
 		<!-- Toast Type Buttons -->
 		<div class="space-y-3">
-			<div class="text-sm font-medium">{$_('devtools.toastTypes')}</div>
+			<div class="text-sm font-medium">{$LL.devtools.toastTypes()}</div>
 			<div class="grid grid-cols-2 gap-2 md:grid-cols-3">
 				{#each toastTypes as toastType}
 					<Button
@@ -292,7 +293,7 @@ function dismissAllToasts() {
 
 		<!-- Preset Examples -->
 		<div class="space-y-3">
-			<div class="text-sm font-medium">{$_('devtools.presetExamples')}</div>
+			<div class="text-sm font-medium">{$LL.devtools.presetExamples()}</div>
 			<div class="grid grid-cols-1 gap-2 md:grid-cols-2">
 				{#each presetToasts as preset}
 					<Button
@@ -312,7 +313,7 @@ function dismissAllToasts() {
 
 		<!-- Special Actions -->
 		<div class="space-y-3">
-			<div class="text-sm font-medium">{$_('devtools.specialToastActions')}</div>
+			<div class="text-sm font-medium">{$LL.devtools.specialToastActions()}</div>
 			<div class="flex flex-wrap gap-2">
 				<Button
 					class="border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/20"
@@ -321,7 +322,7 @@ function dismissAllToasts() {
 					variant="outline"
 				>
 					<CheckCircle2 class="mr-2 h-4 w-4 text-indigo-600" />
-					<span class="text-indigo-600">{$_('devtools.actionToast')}</span>
+					<span class="text-indigo-600">{$LL.devtools.actionToast()}</span>
 				</Button>
 
 				<Button
@@ -331,7 +332,7 @@ function dismissAllToasts() {
 					variant="outline"
 				>
 					<AlertTriangle class="mr-2 h-4 w-4 text-orange-600" />
-					<span class="text-orange-600">{$_('devtools.persistent')}</span>
+					<span class="text-orange-600">{$LL.devtools.persistent()}</span>
 				</Button>
 
 				<Button
@@ -341,19 +342,19 @@ function dismissAllToasts() {
 					variant="outline"
 				>
 					<X class="mr-2 h-4 w-4 text-red-600" />
-					<span class="text-red-600">{$_('devtools.dismissAll')}</span>
+					<span class="text-red-600">{$LL.devtools.dismissAll()}</span>
 				</Button>
 			</div>
 		</div>
 
 		<!-- Testing Tips -->
 		<div class="text-muted-foreground bg-muted/30 space-y-1 rounded-md p-3 text-xs">
-			<div class="font-medium">💡 {$_('devtools.testingTips')}:</div>
-			<div>• {$_('devtools.testingTip1')}</div>
-			<div>• {$_('devtools.testingTip2')}</div>
-			<div>• {$_('devtools.testingTip3')}</div>
-			<div>• {$_('devtools.testingTip4')}</div>
-			<div>• {$_('devtools.testingTip5')}</div>
+			<div class="font-medium">💡 {$LL.devtools.testingTips()}:</div>
+			<div>• {$LL.devtools.testingTip1()}</div>
+			<div>• {$LL.devtools.testingTip2()}</div>
+			<div>• {$LL.devtools.testingTip3()}</div>
+			<div>• {$LL.devtools.testingTip4()}</div>
+			<div>• {$LL.devtools.testingTip5()}</div>
 		</div>
 	</Card.Content>
 </Card.Root>

@@ -1,7 +1,7 @@
 import { socket } from "$lib/stores/websocket-store";
 import type { ConfigMessage } from "$lib/types/socket-messages";
 
-export type AudioCodecs = "acc" | "opus";
+export type AudioCodecs = "aac" | "opus";
 
 export type Config = {
 	pipeline: string;

@@ -3,7 +3,7 @@ import { Camera, Download } from '@lucide/svelte';
 import { toPng } from 'html-to-image';
 import { setMode } from 'mode-watcher';
 import { tick } from 'svelte';
-import { _ } from 'svelte-i18n';
+import { LL } from "@ceraui/i18n/svelte";
 import { toast } from 'svelte-sonner';
 
 import * as Button from '$lib/components/ui/button';
@@ -350,10 +350,10 @@ function clearImages(): void {
 	<Card.Header>
 		<Card.Title class="flex items-center gap-2 text-blue-700 dark:text-blue-300">
 			<Camera class="h-5 w-5" />
-			{$_('devtools.screenshotUtility')}
+			{$LL.devtools.screenshotUtility()}
 		</Card.Title>
 		<Card.Description class="text-blue-600 dark:text-blue-400">
-			{$_('devtools.screenshotUtilityDescription')}
+			{$LL.devtools.screenshotUtilityDescription()}
 		</Card.Description>
 	</Card.Header>
 
@@ -378,24 +378,24 @@ function clearImages(): void {
 				onclick={captureAll}
 			>
 				<Camera class="mr-2 h-4 w-4" />
-				{$isCapturing ? $_('devtools.capturing') : $_('devtools.captureAllScreenshots')}
+				{$isCapturing ? $LL.devtools.capturing() : $LL.devtools.captureAllScreenshots()}
 			</Button.Root>
 
 			<div class="text-muted-foreground text-center text-xs">
-				{$_('devtools.screenshotCount')}
+				{$LL.devtools.screenshotCount()}
 				<br />
-				<span class="text-green-600 dark:text-green-400">{$_('devtools.enhancedTiming')}</span>
+				<span class="text-green-600 dark:text-green-400">{$LL.devtools.enhancedTiming()}</span>
 			</div>
 		</div>
 
 		<div class="flex gap-2 border-t pt-3">
 			<Button.Root class="flex-1" disabled={imagesCount === 0} onclick={downloadZip}>
 				<Download class="mr-2 h-4 w-4" />
-				{$_('devtools.downloadZip', { values: { count: imagesCount } })}
+				{$LL.devtools.downloadZip({ count: imagesCount })}
 			</Button.Root>
 
 			<Button.Root disabled={imagesCount === 0} onclick={clearImages} size="sm" variant="outline">
-				{$_('devtools.clear')}
+				{$LL.devtools.clear()}
 			</Button.Root>
 		</div>
 	</Card.Content>

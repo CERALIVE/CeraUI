@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Eye, EyeOff, Link, ScanSearch, Trash2, Unlink } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
+import { LL } from "@ceraui/i18n/svelte";
 import { toast } from 'svelte-sonner';
 
 import WifiQuality from '$lib/components/icons/WifiQuality.svelte';
@@ -33,13 +33,13 @@ let scanning = $state(false);
 WifiMessages.subscribe((wifiMessage) => {
 	if (wifiMessage) {
 		if (wifiMessage.new?.error) {
-			toast.error($_('wifiSelector.error.connectionFailed'), {
-				description: $_('wifiSelector.error.connectionFailedDescription'),
+			toast.error($LL.wifiSelector.error.connectionFailed(), {
+				description: $LL.wifiSelector.error.connectionFailedDescription(),
 			});
 			connecting = undefined;
 		} else if (wifiMessage.new?.success) {
-			toast.success($_('wifiSelector.success.connected'), {
-				description: $_('wifiSelector.success.connectedDescription'),
+			toast.success($LL.wifiSelector.success.connected(), {
+				description: $LL.wifiSelector.success.connectedDescription(),
 			});
 			connecting = undefined;
 			// Close dialog on successful connection
@@ -89,19 +89,19 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 
 <SimpleAlertDialog
 	class="max-h-[90vh] max-w-[95vw] overflow-hidden sm:max-w-md lg:max-w-2xl"
-	buttonText={$_('wifiSelector.dialog.searchWifi')}
-	confirmButtonText={$_('wifiSelector.dialog.close')}
+	buttonText={$LL.wifiSelector.dialog.searchWifi()}
+	confirmButtonText={$LL.wifiSelector.dialog.close()}
 	extraButtonClasses="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
 	hiddeCancelButton={true}
-	title={$_('wifiSelector.dialog.searchWifi')}
+	title={$LL.wifiSelector.dialog.searchWifi()}
 	bind:open
 >
 	{#snippet icon()}
 		<ScanSearch></ScanSearch>
 	{/snippet}
 	{#snippet dialogTitle()}
-		{$_('wifiSelector.dialog.availableNetworks', {
-			values: { network: networkRename(wifi.ifname) },
+		{$LL.wifiSelector.dialog.availableNetworks({
+			network: networkRename(wifi.ifname),
 		})}
 	{/snippet}
 	<div class="flex max-h-[75vh] flex-col space-y-3 overflow-hidden">
@@ -115,14 +115,14 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 				<ScanSearch class="h-5 w-5 text-white" />
 			</div>
 			<h3 class="text-foreground text-sm font-semibold">
-				{$_('wifiSelector.dialog.availableNetworks', { values: { network: '' } })}
+				{$LL.wifiSelector.dialog.availableNetworks({ network: '' })}
 			</h3>
 			<div class="rounded bg-white/50 px-2 py-1 dark:bg-black/20">
 				<p class="font-mono text-xs break-all">{networkRename(wifi.ifname)}</p>
 			</div>
 			<p class="text-muted-foreground text-xs">
 				{wifi.available.length}
-				{$_('wifiSelector.networks.found')}
+				{$LL.wifiSelector.networks.found()}
 			</p>
 		</div>
 
@@ -224,7 +224,7 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 										class="h-3 w-3 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"
 									></div>
 									<span class="text-xs font-medium text-blue-700 dark:text-blue-300"
-										>{$_('wifiSelector.dialog.connecting')}</span
+										>{$LL.wifiSelector.dialog.connecting()}</span
 									>
 								</div>
 							{:else if uuid}
@@ -237,7 +237,7 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 										>
 											<Unlink class="h-3 w-3" />
 											<span class="ml-1.5 hidden text-xs font-medium sm:inline"
-												>{$_('wifiSelector.button.disconnect')}</span
+												>{$LL.wifiSelector.button.disconnect()}</span
 											>
 										</Button>
 									{:else}
@@ -248,17 +248,17 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 										>
 											<Link class="h-3 w-3" />
 											<span class="ml-1.5 hidden text-xs font-medium sm:inline"
-												>{$_('wifiSelector.button.connect')}</span
+												>{$LL.wifiSelector.button.connect()}</span
 											>
 										</Button>
 									{/if}
 									<SimpleAlertDialog
 										class="max-w-[95vw] sm:max-w-md"
 										buttonClasses="h-9 w-9 p-0 bg-gradient-to-r from-gray-100 to-gray-200 hover:from-red-100 hover:to-red-200 text-gray-600 hover:text-red-600 transition-all duration-200 shadow-sm dark:from-gray-700 dark:to-gray-800 dark:hover:from-red-900/30 dark:hover:to-red-800/30 dark:text-gray-400 dark:hover:text-red-400"
-										confirmButtonText={$_('wifiSelector.button.forget')}
+										confirmButtonText={$LL.wifiSelector.button.forget()}
 										extraButtonClasses="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium"
 										onconfirm={() => forgetWifi(uuid, availableNetwork)}
-										title={$_('wifiSelector.dialog.forgetNetwork')}
+										title={$LL.wifiSelector.dialog.forgetNetwork()}
 									>
 										{#snippet icon()}
 											<Trash2 class="h-3 w-3" />
@@ -266,7 +266,7 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 										{#snippet dialogTitle()}
 											<div class="space-y-2">
 												<h3 class="font-semibold">
-													{$_('wifiSelector.dialog.disconnectFrom', { values: { ssid: '' } })}
+													{$LL.wifiSelector.dialog.disconnectFrom({ ssid: '' })}
 												</h3>
 												<div class="rounded-lg bg-gray-100 p-2 dark:bg-gray-800">
 													<p class="font-mono text-sm break-all">{availableNetwork.ssid}</p>
@@ -276,8 +276,8 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 										{#snippet description()}
 											<div class="space-y-3">
 												<p class="text-muted-foreground text-sm">
-													{$_('wifiSelector.dialog.confirmForget', {
-														values: { ssid: '', network: networkRename(wifi.ifname) },
+													{$LL.wifiSelector.dialog.confirmForget({
+														ssid: '', network: networkRename(wifi.ifname),
 													})}
 												</p>
 											</div>
@@ -288,7 +288,7 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 								<SimpleAlertDialog
 									class="max-w-[95vw] sm:max-w-md"
 									buttonClasses="h-9 bg-gradient-to-r from-blue-500 to-blue-600 px-3 text-white transition-all duration-200 hover:from-blue-600 hover:to-blue-700 shadow-sm text-xs font-medium"
-									confirmButtonText={$_('wifiSelector.button.connect')}
+									confirmButtonText={$LL.wifiSelector.button.connect()}
 									extraButtonClasses="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium transition-all duration-200"
 									oncancel={() => {
 										networkPassword = '';
@@ -301,7 +301,7 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 									{#snippet dialogTitle()}
 										<div class="space-y-2">
 											<h3 class="font-semibold">
-												{$_('wifiSelector.dialog.connectTo', { values: { ssid: '' } })}
+												{$LL.wifiSelector.dialog.connectTo({ ssid: '' })}
 											</h3>
 											<div
 												class="rounded-lg border border-blue-200 bg-blue-50 p-2 dark:border-blue-800 dark:bg-blue-950/30"
@@ -318,21 +318,21 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 									{#snippet description()}
 										<div class="space-y-4">
 											<p class="text-muted-foreground text-sm">
-												{$_('wifiSelector.dialog.introducePassword')}
+												{$LL.wifiSelector.dialog.introducePassword()}
 											</p>
 											<div class="relative">
 												<Input
 													id="password"
 													class="focus:ring-opacity-20 h-10 w-full rounded-lg border-2 border-gray-200 bg-gray-50 px-3 pr-10 text-sm transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50"
-													placeholder={$_('wifiSelector.hotspot.placeholderPassword')}
+													placeholder={$LL.wifiSelector.hotspot.placeholderPassword()}
 													type={showPassword ? 'text' : 'password'}
 													bind:value={networkPassword}
 												/>
 												<button
 													class="absolute top-1/2 right-3 -translate-y-1/2 text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
 													aria-label={showPassword
-														? $_('wifiSelector.accessibility.hidePassword')
-														: $_('wifiSelector.accessibility.showPassword')}
+														? $LL.wifiSelector.accessibility.hidePassword()
+														: $LL.wifiSelector.accessibility.showPassword()}
 													onclick={() => (showPassword = !showPassword)}
 													type="button"
 												>
@@ -363,10 +363,10 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 				<div
 					class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
 				></div>
-				<span>{$_('wifiSelector.button.scanning')}</span>
+				<span>{$LL.wifiSelector.button.scanning()}</span>
 			{:else}
 				<ScanSearch class="mr-2 h-4 w-4" />
-				{$_('wifiSelector.button.scan')}
+				{$LL.wifiSelector.button.scan()}
 			{/if}
 		</Button>
 	</div>

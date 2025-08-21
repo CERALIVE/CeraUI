@@ -24,7 +24,7 @@ button:focus-visible {
 import { ChevronLeft, Menu, X } from '@lucide/svelte';
 import { cubicInOut } from 'svelte/easing';
 import { fade, fly, scale } from 'svelte/transition';
-import { _ } from 'svelte-i18n';
+import { LL } from "@ceraui/i18n/svelte";
 
 import Logo from '$lib/components/icons/Logo.svelte';
 import { Button } from '$lib/components/ui/button';
@@ -103,7 +103,10 @@ const handleLogoClick = () => {
 		canGoBack: $canGoBack,
 	});
 
-	const currentKey = currentNav ? Object.keys(currentNav)[0] : '';
+	const currentKey =
+		currentNav && typeof currentNav === 'object' && Object.keys(currentNav).length > 0
+			? Object.keys(currentNav)[0]
+			: '';
 	const defaultKey = 'general'; // Always general as the default
 
 	// If already on default, and can go back, go back instead
@@ -165,7 +168,7 @@ $effect(() => {
 			<div class="relative">
 				{#if open}
 					<X
-						class="h-5 w-5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-90"
+						class="h-5 w-5 transition-all duration-300 group-hover:rotate-90 group-hover:scale-110"
 					/>
 				{:else}
 					<Menu
@@ -178,7 +181,7 @@ $effect(() => {
 			</div>
 
 			<span class="sr-only">
-				{open ? $_('navigation.closeMenu') : $_('navigation.toggleMenu')}
+				{open ? $LL.navigation.closeMenu() : $LL.navigation.toggleMenu()}
 			</span>
 
 			<!-- Enhanced glow effect with reactive states -->
@@ -192,12 +195,12 @@ $effect(() => {
 
 			<!-- Loading indicator -->
 			{#if $isNavigationTransitioning}
-				<div class="bg-primary absolute top-1 right-1 h-2 w-2 animate-ping rounded-full"></div>
+				<div class="bg-primary absolute right-1 top-1 h-2 w-2 animate-ping rounded-full"></div>
 			{/if}
 		</Button>
 	</Sheet.Trigger>
 
-	<Sheet.Content class="w-80 pt-4 pr-0" side="left">
+	<Sheet.Content class="w-80 pr-0 pt-4" side="left">
 		<!-- Enhanced Header Section with Navigation Controls -->
 		<div class="border-border/50 border-b px-4 pb-4">
 			<!-- Back button (if history available) -->
@@ -211,7 +214,7 @@ $effect(() => {
 						<ChevronLeft
 							class="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-1"
 						/>
-						<span>{$_('navigation.back')}</span>
+						<span>{$LL.navigation.back()}</span>
 					</button>
 				</div>
 			{/if}
@@ -273,7 +276,11 @@ $effect(() => {
 		<ScrollArea class="flex-1 px-4 pt-4" orientation="both">
 			<div class="flex flex-col space-y-2 pb-10">
 				{#each Object.entries(navElements) as [identifier, navigation], index}
-					{@const isActive = currentNav && Object.keys(currentNav)[0] === identifier}
+					{@const isActive =
+						currentNav &&
+						typeof currentNav === 'object' &&
+						Object.keys(currentNav).length > 0 &&
+						Object.keys(currentNav)[0] === identifier}
 					{@const isSelected = selectedItem === identifier}
 
 					{#if identifier}
@@ -313,7 +320,9 @@ $effect(() => {
 								>
 									{#snippet children()}
 										<div class="flex w-full items-center justify-between">
-											<span>{$_(`navigation.${navigation?.label || 'unknown'}`)}</span>
+											<span
+												>{$LL.navigation[navigation?.label as keyof typeof $LL.navigation]()}</span
+											>
 
 											<!-- Visual feedback indicators -->
 											<div class="flex items-center space-x-2">

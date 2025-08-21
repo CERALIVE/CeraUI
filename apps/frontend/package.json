@@ -10,14 +10,14 @@
 		"dev": "vite",
 		"build": "vite build",
 		"preview": "vite preview",
-		"check": "svelte-check --tsconfig ./tsconfig.json",
-
+		"check": "svelte-check --tsconfig ./tsconfig.app.json",
 		"lint": "eslint",
 		"lint:fix": "eslint --fix",
 		"fix": "eslint --fix",
 		"clean": "rm -rf dist node_modules/.vite"
 	},
 	"dependencies": {
+		"@ceraui/i18n": "workspace:*",
 		"@internationalized/date": "^3.8.2",
 		"@macfja/svelte-persistent-store": "^2.4.2",
 		"@zip.js/zip.js": "^2.7.72",
@@ -27,10 +27,11 @@
 		"mode-watcher": "^1.1.0",
 		"qrcode": "^1.5.4",
 		"svelte": "^5.38.2",
-		"svelte-i18n": "^4.0.1",
+
 		"svelte-sonner": "^1.0.5",
 		"tailwind-merge": "^3.3.1",
 		"tailwind-variants": "^2.1.0",
+		"typesafe-i18n": "^5.26.2",
 		"vaul-svelte": "1.0.0-next.7"
 	},
 	"devDependencies": {

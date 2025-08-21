@@ -36,8 +36,8 @@
 import { Download, Share, WifiOff } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { writable } from 'svelte/store';
-import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
+import { LL } from '@ceraui/i18n/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { canInstall, installApp, isOnline, showIOSInstallPrompt } from '$lib/stores/pwa';
@@ -210,8 +210,8 @@ async function handleMobileInstall() {
 	>
 		<div class="flex items-center justify-center gap-2">
 			<WifiOff class="h-4 w-4" />
-			<span class="text-sm font-medium">{$_('pwa.offline')}</span>
-			<span class="text-xs opacity-80">• {$_('pwa.offlineDescription')}</span>
+			<span class="text-sm font-medium">{$LL.pwa.offline()}</span>
+			<span class="text-xs opacity-80">• {$LL.pwa.offlineDescription()}</span>
 		</div>
 	</div>
 {/if}
@@ -236,18 +236,18 @@ async function handleMobileInstall() {
 			<div class="flex min-w-0 flex-1 items-center gap-3">
 				<Download class="h-5 w-5 flex-shrink-0" />
 				<div class="min-w-0 flex-1">
-					<p class="truncate text-sm font-medium">{$_('pwa.installTitle')}</p>
+					<p class="truncate text-sm font-medium">{$LL.pwa.installTitle()}</p>
 					<p class="truncate text-xs opacity-80">
 						{#if isIOS()}
 							Tap
 							<Share class="mx-1 inline h-3 w-3" />
-							{$_('pwa.installIosDescription')}
+							{$LL.pwa.installIosDescription()}
 						{:else if isAndroid() && $canInstall}
-							{$_('pwa.installAndroidDescription')}
+							{$LL.pwa.installAndroidDescription()}
 						{:else if isAndroid()}
-							{$_('pwa.installAndroidMenuDescription')}
+							{$LL.pwa.installAndroidMenuDescription()}
 						{:else}
-							{$_('pwa.installDescription')}
+							{$LL.pwa.installDescription()}
 						{/if}
 					</p>
 				</div>
@@ -260,7 +260,7 @@ async function handleMobileInstall() {
 						size="sm"
 						variant="secondary"
 					>
-						{$_('pwa.installButton')}
+						{$LL.pwa.installButton()}
 					</Button>
 				{/if}
 				<Button
@@ -269,7 +269,7 @@ async function handleMobileInstall() {
 					size="sm"
 					variant="ghost"
 				>
-					{isAndroid() && $canInstall ? $_('pwa.installLater') : $_('pwa.installIosGotIt')}
+					{isAndroid() && $canInstall ? $LL.pwa.installLater() : $LL.pwa.installIosGotIt()}
 				</Button>
 			</div>
 		</div>

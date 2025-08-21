@@ -1,7 +1,7 @@
 <script lang="ts">
 import { AlertCircle, Bolt, CheckCircle, Eye, EyeOff, Smartphone, Wifi } from '@lucide/svelte';
-import { _ } from 'svelte-i18n';
 import { toast } from 'svelte-sonner';
+import { LL } from '@ceraui/i18n/svelte';
 
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
@@ -31,18 +31,18 @@ const validation = $derived({
 		isValid: hotspotProperties.name.length >= 3 && hotspotProperties.name.length <= 32,
 		message:
 			hotspotProperties.name.length < 3
-				? $_('hotspotConfigurator.validation.nameMinLength')
+				? $LL.hotspotConfigurator.validation.nameMinLength()
 				: hotspotProperties.name.length > 32
-					? $_('hotspotConfigurator.validation.nameMaxLength')
+					? $LL.hotspotConfigurator.validation.nameMaxLength()
 					: '',
 	},
 	password: {
 		isValid: hotspotProperties.password.length >= 8 && hotspotProperties.password.length <= 63,
 		message:
 			hotspotProperties.password.length < 8
-				? $_('hotspotConfigurator.validation.passwordMinLength')
+				? $LL.hotspotConfigurator.validation.passwordMinLength()
 				: hotspotProperties.password.length > 63
-					? $_('hotspotConfigurator.validation.passwordMaxLength')
+					? $LL.hotspotConfigurator.validation.passwordMaxLength()
 					: '',
 	},
 });
@@ -71,12 +71,12 @@ const handleSubmit = async () => {
 			name: hotspotProperties.name,
 			password: hotspotProperties.password,
 		});
-		toast.success($_('hotspotConfigurator.success.title'), {
-			description: $_('hotspotConfigurator.success.description'),
+		toast.success($LL.hotspotConfigurator.success.title(), {
+			description: $LL.hotspotConfigurator.success.description(),
 		});
 	} catch (_error) {
-		toast.error($_('hotspotConfigurator.error.title'), {
-			description: $_('hotspotConfigurator.error.description'),
+		toast.error($LL.hotspotConfigurator.error.title(), {
+			description: $LL.hotspotConfigurator.error.description(),
 		});
 	} finally {
 		isSubmitting = false;
@@ -86,21 +86,21 @@ const handleSubmit = async () => {
 
 <SimpleAlertDialog
 	class="max-h-[90vh] max-w-[95vw] overflow-hidden sm:max-w-md lg:max-w-lg"
-	buttonText={$_('hotspotConfigurator.dialog.configHotspot')}
+	buttonText={$LL.hotspotConfigurator.dialog.configHotspot()}
 	confirmButtonText={isSubmitting
-		? $_('hotspotConfigurator.dialog.saving')
-		: $_('hotspotConfigurator.dialog.save')}
+		? $LL.hotspotConfigurator.dialog.saving()
+		: $LL.hotspotConfigurator.dialog.save()}
 	disabledConfirmButton={!isFormValid || isSubmitting}
 	extraButtonClasses="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
 	oncancel={() => resetHotSpotProperties()}
 	onconfirm={handleSubmit}
-	title={$_('hotspotConfigurator.dialog.configHotspot')}
+	title={$LL.hotspotConfigurator.dialog.configHotspot()}
 >
 	{#snippet icon()}
 		<Bolt></Bolt>
 	{/snippet}
 	{#snippet dialogTitle()}
-		{$_('hotspotConfigurator.dialog.configureHotspot')}
+		{$LL.hotspotConfigurator.dialog.configureHotspot()}
 	{/snippet}
 	{#snippet description()}
 		<div class="max-h-[60vh] space-y-6 overflow-y-auto p-1">
@@ -112,7 +112,7 @@ const handleSubmit = async () => {
 					<Wifi class="h-8 w-8 text-white" />
 				</div>
 				<p class="text-muted-foreground text-sm leading-relaxed">
-					{$_('hotspotConfigurator.help.description')}
+					{$LL.hotspotConfigurator.help.description()}
 				</p>
 			</div>
 
@@ -124,14 +124,14 @@ const handleSubmit = async () => {
 					>
 						<Wifi class="h-4 w-4 text-blue-600 dark:text-blue-400" />
 					</div>
-					{$_('hotspotConfigurator.hotspot.name')}
+					{$LL.hotspotConfigurator.hotspot.name()}
 				</Label>
 				<div class="space-y-2">
 					<div class="relative">
 						<Input
 							id="name"
 							class={cn(
-								'focus:ring-opacity-20 h-12 w-full rounded-xl border-2 px-4 text-base transition-all duration-300 focus:ring-4',
+								'h-12 w-full rounded-xl border-2 px-4 text-base transition-all duration-300 focus:ring-4 focus:ring-opacity-20',
 								!validation.name.isValid && hotspotProperties.name.length > 0
 									? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
 									: validation.name.isValid && hotspotProperties.name.length > 0
@@ -141,12 +141,12 @@ const handleSubmit = async () => {
 							autocapitalize="none"
 							autocomplete="off"
 							autocorrect="off"
-							placeholder={$_('hotspotConfigurator.hotspot.placeholderName')}
+							placeholder={$LL.hotspotConfigurator.hotspot.placeholderName()}
 							bind:value={hotspotProperties.name}
 						/>
 
 						{#if hotspotProperties.name.length > 0}
-							<div class="absolute top-1/2 right-3 -translate-y-1/2">
+							<div class="absolute right-3 top-1/2 -translate-y-1/2">
 								{#if validation.name.isValid}
 									<CheckCircle class="h-5 w-5 text-green-500" />
 								{:else}
@@ -167,7 +167,7 @@ const handleSubmit = async () => {
 						>
 							{#if validation.name.isValid}
 								<CheckCircle class="h-4 w-4" />
-								<span>{$_('hotspotConfigurator.validation.nameValid')}</span>
+								<span>{$LL.hotspotConfigurator.validation.nameValid()}</span>
 							{:else}
 								<AlertCircle class="h-4 w-4" />
 								<span>{validation.name.message}</span>
@@ -181,7 +181,7 @@ const handleSubmit = async () => {
 								<span class="text-xs font-bold text-blue-600 dark:text-blue-400">i</span>
 							</div>
 							<p class="text-sm leading-relaxed text-blue-700 dark:text-blue-300">
-								{$_('hotspotConfigurator.help.nameHelp')}
+								{$LL.hotspotConfigurator.help.nameHelp()}
 							</p>
 						</div>
 					{/if}
@@ -199,14 +199,14 @@ const handleSubmit = async () => {
 					>
 						<Smartphone class="h-4 w-4 text-purple-600 dark:text-purple-400" />
 					</div>
-					{$_('hotspotConfigurator.hotspot.password')}
+					{$LL.hotspotConfigurator.hotspot.password()}
 				</Label>
 				<div class="space-y-2">
 					<div class="relative">
 						<Input
 							id="hotspotPassword"
 							class={cn(
-								'focus:ring-opacity-20 h-12 w-full rounded-xl border-2 px-4 pr-12 text-base transition-all duration-300 focus:ring-4',
+								'h-12 w-full rounded-xl border-2 px-4 pr-12 text-base transition-all duration-300 focus:ring-4 focus:ring-opacity-20',
 								!validation.password.isValid && hotspotProperties.password.length > 0
 									? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
 									: validation.password.isValid && hotspotProperties.password.length > 0
@@ -216,12 +216,12 @@ const handleSubmit = async () => {
 							autocapitalize="none"
 							autocomplete="off"
 							autocorrect="off"
-							placeholder={$_('hotspotConfigurator.hotspot.placeholderPassword')}
+							placeholder={$LL.hotspotConfigurator.hotspot.placeholderPassword()}
 							type={showPassword ? 'text' : 'password'}
 							bind:value={hotspotProperties.password}
 						/>
 
-						<div class="absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2">
+						<div class="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2">
 							{#if hotspotProperties.password.length > 0}
 								{#if validation.password.isValid}
 									<CheckCircle class="h-5 w-5 text-green-500" />
@@ -254,7 +254,7 @@ const handleSubmit = async () => {
 						>
 							{#if validation.password.isValid}
 								<CheckCircle class="h-4 w-4" />
-								<span>{$_('hotspotConfigurator.validation.passwordValid')}</span>
+								<span>{$LL.hotspotConfigurator.validation.passwordValid()}</span>
 							{:else}
 								<AlertCircle class="h-4 w-4" />
 								<span>{validation.password.message}</span>
@@ -268,7 +268,7 @@ const handleSubmit = async () => {
 								<span class="text-xs font-bold text-purple-600 dark:text-purple-400">!</span>
 							</div>
 							<p class="text-sm leading-relaxed text-purple-700 dark:text-purple-300">
-								{$_('hotspotConfigurator.help.passwordHelp')}
+								{$LL.hotspotConfigurator.help.passwordHelp()}
 							</p>
 						</div>
 					{/if}
@@ -298,7 +298,7 @@ const handleSubmit = async () => {
 							></path>
 						</svg>
 					</div>
-					{$_('hotspotConfigurator.hotspot.channel')}
+					{$LL.hotspotConfigurator.hotspot.channel()}
 				</Label>
 				<div class="space-y-2">
 					<Select.Root
@@ -309,11 +309,11 @@ const handleSubmit = async () => {
 						value={hotspotProperties.selectedChannel}
 					>
 						<Select.Trigger
-							class="focus:ring-opacity-20 h-12 w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 text-base transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50"
+							class="h-12 w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 text-base transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 focus:ring-opacity-20 dark:border-gray-700 dark:bg-gray-800/50"
 						>
 							{hotspotProperties.selectedChannel
 								? wifi.hotspot?.available_channels[hotspotProperties.selectedChannel].name
-								: $_('hotspotConfigurator.hotspot.selectChannel')}
+								: $LL.hotspotConfigurator.hotspot.selectChannel()}
 						</Select.Trigger>
 						<Select.Content
 							class="rounded-xl border-2 border-gray-200 shadow-xl dark:border-gray-700"
@@ -335,7 +335,7 @@ const handleSubmit = async () => {
 							<span class="text-xs font-bold text-orange-600 dark:text-orange-400">✓</span>
 						</div>
 						<p class="text-sm leading-relaxed text-orange-700 dark:text-orange-300">
-							{$_('hotspotConfigurator.help.channelHelp')}
+							{$LL.hotspotConfigurator.help.channelHelp()}
 						</p>
 					</div>
 				</div>
@@ -354,10 +354,10 @@ const handleSubmit = async () => {
 						</div>
 						<div>
 							<h4 class="mb-1 font-semibold text-amber-800 dark:text-amber-200">
-								{$_('hotspotConfigurator.validation.almostThere')}
+								{$LL.hotspotConfigurator.validation.almostThere()}
 							</h4>
 							<p class="text-sm leading-relaxed text-amber-700 dark:text-amber-300">
-								{$_('hotspotConfigurator.validation.formIncomplete')}
+								{$LL.hotspotConfigurator.validation.formIncomplete()}
 							</p>
 						</div>
 					</div>
@@ -371,7 +371,7 @@ const handleSubmit = async () => {
 							<CheckCircle class="h-4 w-4 text-white" />
 						</div>
 						<p class="font-semibold text-green-800 dark:text-green-200">
-							{$_('hotspotConfigurator.validation.readyToSave')}
+							{$LL.hotspotConfigurator.validation.readyToSave()}
 						</p>
 					</div>
 				</div>
