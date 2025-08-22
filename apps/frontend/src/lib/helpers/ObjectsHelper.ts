@@ -13,9 +13,11 @@ export function mergeModems(
 
 	if (isObject(target) && isObject(source)) {
 		// Remove keys from target that don't exist in source
-		for (const key in target) {
-			if (!(key in source)) {
-				delete target[key];
+		if (source) {
+			for (const key in target) {
+				if (!(key in source)) {
+					delete target[key];
+				}
 			}
 		}
 
@@ -32,8 +34,11 @@ export function mergeModems(
 
 	return deepMerge(target, ...sources);
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function deepMerge(target: any, ...sources: any[]): any {
+
+export function deepMerge(
+	target: Record<string, unknown>,
+	...sources: Record<string, unknown>[]
+): Record<string, unknown> {
 	if (!sources.length) return target;
 	const source = sources.shift();
 

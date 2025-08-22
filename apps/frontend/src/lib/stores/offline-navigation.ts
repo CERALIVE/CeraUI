@@ -71,7 +71,7 @@ async function checkConnection(isInitialCheck = false): Promise<boolean> {
 
 			try {
 				// Try a simple fetch without no-cors first (works better on iOS)
-				await fetch(window.location.origin + "/favicon.ico", {
+				await fetch(`${window.location.origin}/favicon.ico`, {
 					method: "HEAD",
 					signal: controller.signal,
 					cache: "no-cache",
@@ -82,7 +82,7 @@ async function checkConnection(isInitialCheck = false): Promise<boolean> {
 				// If that fails, try the original approach
 				clearTimeout(timeoutId);
 				const timeoutId2 = setTimeout(() => controller.abort(), 300);
-				await fetch(window.location.origin + "/", {
+				await fetch(`${window.location.origin}/`, {
 					method: "HEAD",
 					mode: "no-cors",
 					signal: controller.signal,
@@ -96,7 +96,7 @@ async function checkConnection(isInitialCheck = false): Promise<boolean> {
 			const controller = new AbortController();
 			const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-			await fetch(window.location.origin + "/", {
+			await fetch(`${window.location.origin}/`, {
 				method: "HEAD",
 				mode: "no-cors",
 				signal: controller.signal,
@@ -129,7 +129,8 @@ function startPeriodicConnectionCheck() {
 			// Check if we're in PWA mode for appropriate reconnection
 			const isPWA =
 				window.matchMedia("(display-mode: standalone)").matches ||
-				window.navigator.standalone ||
+				(window.navigator as typeof navigator & { standalone?: boolean })
+					.standalone ||
 				document.referrer.includes("android-app://");
 
 			if (isPWA) {
@@ -278,7 +279,8 @@ export async function manualConnectionCheck(): Promise<boolean> {
 		// Check if we're in PWA mode
 		const isPWA =
 			window.matchMedia("(display-mode: standalone)").matches ||
-			window.navigator.standalone ||
+			(window.navigator as typeof navigator & { standalone?: boolean })
+				.standalone ||
 			document.referrer.includes("android-app://");
 
 		if (isPWA) {

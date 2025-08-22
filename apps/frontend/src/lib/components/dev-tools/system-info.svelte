@@ -16,15 +16,14 @@
 </style>
 
 <script lang="ts">
+import { existingLocales, loadLocaleAsync, type Locales } from '@ceraui/i18n';
+import { LL, locale, setLocale } from '@ceraui/i18n/svelte';
 import { Activity, Clock, Code, Globe, Monitor, Wifi } from '@lucide/svelte';
 
 import * as Card from '$lib/components/ui/card';
 import { BUILD_INFO, ENV_VARIABLES } from '$lib/env';
 import { localeStore } from '$lib/stores/locale';
 import { CLIENT_VERSION } from '$lib/stores/version-manager';
-
-import { LL, locale, setLocale } from '@ceraui/i18n/svelte';
-import { existingLocales, loadLocaleAsync, type Locales } from '@ceraui/i18n';
 
 // Real environment data using runes
 const performanceData = $state({

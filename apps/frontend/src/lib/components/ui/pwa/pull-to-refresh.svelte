@@ -1,9 +1,8 @@
 <script lang="ts">
+import { rtlLanguages } from '@ceraui/i18n';
+import { LL, locale } from '@ceraui/i18n/svelte';
 import { RefreshCw } from '@lucide/svelte';
 import { onMount } from 'svelte';
-
-import { LL, locale } from "@ceraui/i18n/svelte";
-import { rtlLanguages } from "@ceraui/i18n";
 
 interface Props {
 	onRefresh: () => Promise<void> | void;

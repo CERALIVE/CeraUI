@@ -17,8 +17,6 @@
 
 import fs from "node:fs";
 
-import type WebSocket from "ws";
-
 import { isSameSubnet } from "../../helpers/ip-addresses.ts";
 import killall from "../../helpers/killall.ts";
 
@@ -26,9 +24,6 @@ import { dnsCacheResolve, dnsCacheValidate } from "../network/dns.ts";
 import { queueUpdateGw } from "../network/gateways.ts";
 import { getNetworkInterfaces } from "../network/network-interfaces.ts";
 import { setup } from "../setup.ts";
-import { getSocketSenderId } from "../ui/websocket-server.ts";
-
-import { startError } from "./streaming.ts";
 
 export async function resolveSrtla(addr: string) {
 	let srtlaAddr = addr;

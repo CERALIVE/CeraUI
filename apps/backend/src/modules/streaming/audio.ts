@@ -27,8 +27,6 @@ import { setup } from "../setup.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
-import { startError } from "./streaming.ts";
-
 const deviceDir = setup.sound_device_dir ?? "/sys/class/sound";
 
 const alsaSrcPattern = /alsasrc device=[A-Za-z0-9:=]+/;

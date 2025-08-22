@@ -1,6 +1,6 @@
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { Eye, EyeOff, Link, ScanSearch, Trash2, Unlink } from '@lucide/svelte';
-import { LL } from "@ceraui/i18n/svelte";
 import { toast } from 'svelte-sonner';
 
 import WifiQuality from '$lib/components/icons/WifiQuality.svelte';
@@ -277,7 +277,8 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 											<div class="space-y-3">
 												<p class="text-muted-foreground text-sm">
 													{$LL.wifiSelector.dialog.confirmForget({
-														ssid: '', network: networkRename(wifi.ifname),
+														ssid: '',
+														network: networkRename(wifi.ifname),
 													})}
 												</p>
 											</div>

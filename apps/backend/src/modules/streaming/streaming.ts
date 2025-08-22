@@ -204,11 +204,11 @@ export async function updateConfig(_conn: WebSocket, params: ConfigParameters) {
 	config.srt_latency = params.srt_latency;
 	config.bitrate_overlay = params.bitrate_overlay;
 
-	if (pipeline.acodec) {
-		config.acodec = params.acodec!;
+	if (pipeline.acodec && params.acodec) {
+		config.acodec = params.acodec;
 	}
-	if (pipeline.asrc) {
-		config.asrc = params.asrc!;
+	if (pipeline.asrc && params.asrc) {
+		config.asrc = params.asrc;
 	}
 
 	if (params.relay_server) {
@@ -216,8 +216,10 @@ export async function updateConfig(_conn: WebSocket, params: ConfigParameters) {
 		config.srtla_addr = undefined;
 		config.srtla_port = undefined;
 	} else {
-		config.srtla_addr = params.srtla_addr!;
-		config.srtla_port = params.srtla_port!;
+		if (params.srtla_addr && params.srtla_port) {
+			config.srtla_addr = params.srtla_addr;
+			config.srtla_port = params.srtla_port;
+		}
 		config.relay_server = undefined;
 	}
 
@@ -225,7 +227,9 @@ export async function updateConfig(_conn: WebSocket, params: ConfigParameters) {
 		config.relay_account = params.relay_account;
 		config.srt_streamid = undefined;
 	} else {
-		config.srt_streamid = params.srt_streamid!;
+		if (params.srt_streamid) {
+			config.srt_streamid = params.srt_streamid;
+		}
 		config.relay_account = undefined;
 	}
 

@@ -1,6 +1,6 @@
+import { LL } from "@ceraui/i18n/svelte";
 import QRCode from "qrcode";
 import { get } from "svelte/store";
-import { LL } from "@ceraui/i18n/svelte";
 import { toast } from "svelte-sonner";
 
 import {
@@ -61,7 +61,7 @@ export const networkRename = (name: string) => {
 export const getModemNetworkName = (name: string) => {
 	const { modems } = get(StatusMessages);
 	const modem = Object.values(modems).find((modem) => modem.ifname === name);
-	return modem?.status.network + " (" + modem?.status.network_type + ")";
+	return `${modem?.status.network} (${modem?.status.network_type})`;
 };
 
 export const renameSupportedModemNetwork = (item: string): string => {

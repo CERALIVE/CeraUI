@@ -1,4 +1,6 @@
 <script lang="ts">
+import { rtlLanguages } from '@ceraui/i18n';
+import { locale } from '@ceraui/i18n/svelte';
 import { toast } from 'svelte-sonner';
 
 import { OfflinePage, PWAStatus } from '$lib/components/ui/pwa';
@@ -19,15 +21,12 @@ import {
 } from '$lib/stores/websocket-store';
 import type { NotificationType, StatusMessage } from '$lib/types/socket-messages';
 
-import { locale } from "@ceraui/i18n/svelte";
-import { rtlLanguages } from "@ceraui/i18n";
 import Auth from './Auth.svelte';
 import Main from './MainView.svelte';
 
 let authStatus = $state(false);
 let isCheckingAuthStatus = $state(true);
 let updatingStatus: StatusMessage['updating'] = $state(false);
-
 
 // Toast tracking system for duplicates
 interface ToastInfo {
@@ -214,7 +213,7 @@ if (auth) {
 	const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
 	const isPWA =
 		window.matchMedia('(display-mode: standalone)').matches ||
-		window.navigator.standalone ||
+		(window.navigator as any).standalone ||
 		document.referrer.includes('android-app://');
 
 	// Very aggressive timeout for PWA launches to prevent blank screens
@@ -251,7 +250,7 @@ const userAgent = navigator.userAgent || '';
 const isMobileDevice = /iphone|ipad|ipod|android/i.test(userAgent);
 const isPWAApp =
 	(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-	!!(window.navigator && window.navigator.standalone) ||
+	!!(window.navigator && (window.navigator as any).standalone) ||
 	(document.referrer && document.referrer.includes('android-app://'));
 
 if (isMobileDevice || isPWAApp) {
@@ -341,25 +340,25 @@ window.stopStreamingWithNotificationClear = stopStreaming;
 </script>
 
 {#if $shouldShowOfflinePage}
-		<OfflinePage />
-	{:else if authStatus}
-		{#if updatingStatus && typeof updatingStatus !== 'boolean'}
-			<UpdatingOverlay details={updatingStatus}></UpdatingOverlay>
-		{/if}
-		<Main></Main>
-	{:else if !isCheckingAuthStatus}
-		<Auth></Auth>
-	{:else}
-		<!-- Loading state while checking auth - show a basic loading indicator -->
-		<div class="flex min-h-screen items-center justify-center">
-			<div class="text-center">
-				<div
-					class="border-primary mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
-				></div>
-				<p class="text-muted-foreground">Loading...</p>
-			</div>
-		</div>
+	<OfflinePage />
+{:else if authStatus}
+	{#if updatingStatus && typeof updatingStatus !== 'boolean'}
+		<UpdatingOverlay details={updatingStatus}></UpdatingOverlay>
 	{/if}
+	<Main></Main>
+{:else if !isCheckingAuthStatus}
+	<Auth></Auth>
+{:else}
+	<!-- Loading state while checking auth - show a basic loading indicator -->
+	<div class="flex min-h-screen items-center justify-center">
+		<div class="text-center">
+			<div
+				class="border-primary mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
+			></div>
+			<p class="text-muted-foreground">Loading...</p>
+		</div>
+	</div>
+{/if}
 
 <!-- PWA Status and Notifications -->
 <PWAStatus />

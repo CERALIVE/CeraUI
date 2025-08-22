@@ -1,6 +1,6 @@
-import { get } from "svelte/store";
-import { locale } from "@ceraui/i18n/svelte";
 import { existingLocales, rtlLanguages } from "@ceraui/i18n";
+import { locale } from "@ceraui/i18n/svelte";
+import { get } from "svelte/store";
 import { localeStore } from "../stores/locale";
 
 export interface PWAManifest {

@@ -15,6 +15,7 @@
 </style>
 
 <script lang="ts">
+import { LL, locale } from '@ceraui/i18n/svelte';
 import {
 	AlertCircle,
 	AlertTriangle,
@@ -31,8 +32,6 @@ import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import { Textarea } from '$lib/components/ui/textarea';
-
-import { LL, locale } from "@ceraui/i18n/svelte";
 
 // Toast testing state
 let customTitle = $state($LL.devtools.customTitle());

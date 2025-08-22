@@ -24,7 +24,7 @@ import { logger } from "../../helpers/logger.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
 import { updateBcrptSourceIps } from "../streaming/bcrpt.ts";
-import { getIsStreaming } from "../streaming/streaming.ts";
+
 import {
 	notificationBroadcast,
 	notificationRemove,

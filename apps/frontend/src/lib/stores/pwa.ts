@@ -165,18 +165,41 @@ export function testInstallPrompt() {
 }
 
 export function getNetworkInfo() {
-	// @ts-ignore - navigator.connection is not in all TypeScript definitions
 	const connection =
-		navigator.connection ||
-		navigator.mozConnection ||
-		navigator.webkitConnection;
+		(
+			navigator as typeof navigator & {
+				connection?: unknown;
+				mozConnection?: unknown;
+				webkitConnection?: unknown;
+			}
+		).connection ||
+		(
+			navigator as typeof navigator & {
+				connection?: unknown;
+				mozConnection?: unknown;
+				webkitConnection?: unknown;
+			}
+		).mozConnection ||
+		(
+			navigator as typeof navigator & {
+				connection?: unknown;
+				mozConnection?: unknown;
+				webkitConnection?: unknown;
+			}
+		).webkitConnection;
 
 	if (connection) {
+		const networkConnection = connection as {
+			effectiveType?: string;
+			downlink?: number;
+			rtt?: number;
+			saveData?: boolean;
+		};
 		return {
-			effectiveType: connection.effectiveType,
-			downlink: connection.downlink,
-			rtt: connection.rtt,
-			saveData: connection.saveData,
+			effectiveType: networkConnection.effectiveType,
+			downlink: networkConnection.downlink,
+			rtt: networkConnection.rtt,
+			saveData: networkConnection.saveData,
 		};
 	}
 

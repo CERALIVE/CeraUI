@@ -1,4 +1,5 @@
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import {
 	Activity,
 	AlertTriangle,
@@ -10,7 +11,6 @@ import {
 	Thermometer,
 } from '@lucide/svelte';
 import { RefreshCw } from '@lucide/svelte';
-import { LL } from "@ceraui/i18n/svelte";
 
 import * as Card from '$lib/components/ui/card';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';

@@ -1,6 +1,6 @@
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { Copy, Eye, EyeOff, Hammer, Logs, PowerOff, RotateCcw, Settings } from '@lucide/svelte';
-import { LL } from "@ceraui/i18n/svelte";
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';

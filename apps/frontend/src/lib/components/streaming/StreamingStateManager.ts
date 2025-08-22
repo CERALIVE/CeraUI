@@ -1,5 +1,5 @@
-import { get, writable } from "svelte/store";
 import { LL, locale } from "@ceraui/i18n/svelte";
+import { get, writable } from "svelte/store";
 
 import {
 	type GroupedPipelines,

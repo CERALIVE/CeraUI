@@ -1,10 +1,8 @@
 <script lang="ts">
-import { LL, getTranslationByKey } from '@ceraui/i18n/svelte';
+import { getTranslationByKey, LL } from '@ceraui/i18n/svelte';
 import { toast } from 'svelte-sonner';
 
-import {
-	autoSelectNextOption,
-} from '$lib/components/streaming/StreamingAutoSelection';
+import { autoSelectNextOption } from '$lib/components/streaming/StreamingAutoSelection';
 import {
 	buildStreamingConfig,
 	startStreamingWithConfig,
@@ -102,7 +100,6 @@ let isProgrammaticChange = $state(false);
 let srtlaAddressTouched = $state(false);
 let srtlaPortTouched = $state(false);
 let srtStreamIdTouched = $state(false);
-let srtLatencyTouched = $state(false);
 
 // Track encoder-related user interactions (separate from ServerCard)
 let userHasInteracted = $state(false);
@@ -124,7 +121,6 @@ $effect(() => {
 $effect(() => {
 	if ($savedConfigStore) {
 		const config = $savedConfigStore;
-
 
 		if (properties.srtLatency === undefined) {
 			properties.srtLatency = config.srt_latency ?? 2000;
@@ -195,7 +191,11 @@ $effect(() => {
 
 // Parse pipeline to populate encoder fields (during init or programmatic changes, not user interaction)
 $effect.pre(() => {
-	const canRun = properties.pipeline && $unparsedPipelinesStore !== undefined && $LL && (!userHasInteracted || isProgrammaticChange);
+	const canRun =
+		properties.pipeline &&
+		$unparsedPipelinesStore !== undefined &&
+		$LL &&
+		(!userHasInteracted || isProgrammaticChange);
 
 	if (
 		properties.pipeline &&
@@ -242,12 +242,17 @@ $effect(() => {
 		encoder: properties.encoder,
 		resolution: properties.resolution,
 		framerate: properties.framerate,
-		pipeline: properties.pipeline
+		pipeline: properties.pipeline,
 	});
 
 	// Minimal validation effect - just clear pipeline when incomplete
 	// All validation, auto-selection, and pipeline building is now handled in autoSelectNextOption
-	if (!properties.inputMode || !properties.encoder || !properties.resolution || !properties.framerate) {
+	if (
+		!properties.inputMode ||
+		!properties.encoder ||
+		!properties.resolution ||
+		!properties.framerate
+	) {
 		if (properties.pipeline) {
 			console.log('⚠️ Incomplete combination - clearing pipeline');
 			properties.pipeline = undefined;
@@ -329,7 +334,9 @@ const handleInputModeChange = (value: string) => {
 	}
 	isProgrammaticChange = true;
 
-	console.log('🔄 InputMode changed - starting unified validation/auto-selection/pipeline building');
+	console.log(
+		'🔄 InputMode changed - starting unified validation/auto-selection/pipeline building',
+	);
 
 	// Unified flow: validate → clean → auto-select → build pipeline
 	if (value && $groupedPipelinesStore) {
@@ -377,7 +384,9 @@ const handleResolutionChange = (value: string) => {
 	}
 	isProgrammaticChange = true;
 
-	console.log('🔄 Resolution changed - starting unified validation/auto-selection/pipeline building');
+	console.log(
+		'🔄 Resolution changed - starting unified validation/auto-selection/pipeline building',
+	);
 
 	// Unified flow: validate → clean → auto-select → build pipeline
 	if (value && $groupedPipelinesStore) {
@@ -510,7 +519,6 @@ const handleFramerateChange = (value: string) => {
 						}}
 						onSrtLatencyChange={(value) => {
 							properties.srtLatency = value;
-							srtLatencyTouched = true;
 						}}
 						onSrtStreamIdChange={(value) => {
 							properties.srtStreamId = value;

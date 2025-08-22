@@ -35,10 +35,10 @@ const updateSW = registerSW({
 			});
 		});
 	},
-	onRegistered(registration) {
+	onRegistered(registration: ServiceWorkerRegistration) {
 		console.log("PWA: Service worker registered", registration);
 	},
-	onRegisterError(error) {
+	onRegisterError(error: Error) {
 		console.error("PWA: Service worker registration failed", error);
 	},
 });

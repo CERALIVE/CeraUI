@@ -1,7 +1,7 @@
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { AlertCircle, Bolt, CheckCircle, Eye, EyeOff, Smartphone, Wifi } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
-import { LL } from '@ceraui/i18n/svelte';
 
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
@@ -131,7 +131,7 @@ const handleSubmit = async () => {
 						<Input
 							id="name"
 							class={cn(
-								'h-12 w-full rounded-xl border-2 px-4 text-base transition-all duration-300 focus:ring-4 focus:ring-opacity-20',
+								'focus:ring-opacity-20 h-12 w-full rounded-xl border-2 px-4 text-base transition-all duration-300 focus:ring-4',
 								!validation.name.isValid && hotspotProperties.name.length > 0
 									? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
 									: validation.name.isValid && hotspotProperties.name.length > 0
@@ -146,7 +146,7 @@ const handleSubmit = async () => {
 						/>
 
 						{#if hotspotProperties.name.length > 0}
-							<div class="absolute right-3 top-1/2 -translate-y-1/2">
+							<div class="absolute top-1/2 right-3 -translate-y-1/2">
 								{#if validation.name.isValid}
 									<CheckCircle class="h-5 w-5 text-green-500" />
 								{:else}
@@ -206,7 +206,7 @@ const handleSubmit = async () => {
 						<Input
 							id="hotspotPassword"
 							class={cn(
-								'h-12 w-full rounded-xl border-2 px-4 pr-12 text-base transition-all duration-300 focus:ring-4 focus:ring-opacity-20',
+								'focus:ring-opacity-20 h-12 w-full rounded-xl border-2 px-4 pr-12 text-base transition-all duration-300 focus:ring-4',
 								!validation.password.isValid && hotspotProperties.password.length > 0
 									? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
 									: validation.password.isValid && hotspotProperties.password.length > 0
@@ -221,7 +221,7 @@ const handleSubmit = async () => {
 							bind:value={hotspotProperties.password}
 						/>
 
-						<div class="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2">
+						<div class="absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2">
 							{#if hotspotProperties.password.length > 0}
 								{#if validation.password.isValid}
 									<CheckCircle class="h-5 w-5 text-green-500" />
@@ -309,7 +309,7 @@ const handleSubmit = async () => {
 						value={hotspotProperties.selectedChannel}
 					>
 						<Select.Trigger
-							class="h-12 w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 text-base transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 focus:ring-opacity-20 dark:border-gray-700 dark:bg-gray-800/50"
+							class="focus:ring-opacity-20 h-12 w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 text-base transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50"
 						>
 							{hotspotProperties.selectedChannel
 								? wifi.hotspot?.available_channels[hotspotProperties.selectedChannel].name

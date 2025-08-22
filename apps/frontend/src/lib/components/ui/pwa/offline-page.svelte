@@ -1,6 +1,6 @@
 <script lang="ts">
-import { LL, locale } from "@ceraui/i18n/svelte";
-import { rtlLanguages } from "@ceraui/i18n";
+import { rtlLanguages } from '@ceraui/i18n';
+import { LL, locale } from '@ceraui/i18n/svelte';
 import { RefreshCw, Smartphone, WifiOff } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';

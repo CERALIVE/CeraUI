@@ -24,7 +24,7 @@ export async function createI18nFunctions(locale: Locales = 'en') {
 
 // Create a proxy that handles nested objects and parameter interpolation
 function createTranslationFunctions(translations: BaseTranslation): Record<string, unknown> {
-	return createProxy(translations, []);
+	return createProxy(translations as Record<string, unknown>, []);
 }
 
 function createProxy(obj: Record<string, unknown>, path: string[] = []): Record<string, unknown> {
@@ -81,7 +81,7 @@ export function getTranslationKeys(obj: Record<string, unknown>, prefix = ''): s
 		const fullKey = prefix ? `${prefix}.${key}` : key;
 
 		if (typeof value === 'object' && value !== null) {
-			keys.push(...getTranslationKeys(value, fullKey));
+			keys.push(...getTranslationKeys(value as Record<string, unknown>, fullKey));
 		} else if (typeof value === 'string') {
 			keys.push(fullKey);
 		}
@@ -101,7 +101,7 @@ export async function hasTranslationKey(locale: Locales, key: string): Promise<b
 			if (typeof current !== 'object' || current === null || !(k in current)) {
 				return false;
 			}
-			current = current[k];
+			current = (current as Record<string, unknown>)[k];
 		}
 
 		return typeof current === 'string';

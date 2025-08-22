@@ -1,7 +1,7 @@
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { Check, X } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
-import { LL } from '@ceraui/i18n/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';

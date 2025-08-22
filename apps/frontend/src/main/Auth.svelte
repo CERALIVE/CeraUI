@@ -1,6 +1,6 @@
 <script lang="ts">
-import { AlertCircle, CheckCircle, Eye, EyeOff, LoaderCircle, Shield } from '@lucide/svelte';
 import { LL } from '@ceraui/i18n/svelte';
+import { AlertCircle, CheckCircle, Eye, EyeOff, LoaderCircle, Shield } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { Checkbox } from '$lib/components/ui/checkbox';
@@ -84,9 +84,9 @@ async function onSubmit(event: SubmitEvent) {
 </script>
 
 <div
-	class="container relative grid h-dvh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0"
+	class="relative container grid h-dvh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0"
 >
-	<span class="absolute right-4 top-4 flex md:right-8 md:top-8">
+	<span class="absolute top-4 right-4 flex md:top-8 md:right-8">
 		<span class="mr-3"> <LocaleSelector /></span>
 		<ModeToggle></ModeToggle>
 	</span>
@@ -144,7 +144,7 @@ async function onSubmit(event: SubmitEvent) {
 								<Input
 									id="password"
 									class={cn(
-										'h-12 w-full rounded-xl border-2 px-4 pr-12 text-base transition-all duration-300 focus:ring-4 focus:ring-opacity-20',
+										'focus:ring-opacity-20 h-12 w-full rounded-xl border-2 px-4 pr-12 text-base transition-all duration-300 focus:ring-4',
 										!validation.password.isValid && !validation.password.isEmpty
 											? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
 											: validation.password.isValid && !validation.password.isEmpty
@@ -164,7 +164,7 @@ async function onSubmit(event: SubmitEvent) {
 
 								<!-- Password Visibility Toggle -->
 								<Button
-									class="absolute right-1 top-1/2 h-10 w-10 -translate-y-1/2 hover:bg-gray-100 dark:hover:bg-gray-800"
+									class="absolute top-1/2 right-1 h-10 w-10 -translate-y-1/2 hover:bg-gray-100 dark:hover:bg-gray-800"
 									aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
 									aria-pressed={showPassword}
 									onclick={() => (showPassword = !showPassword)}
@@ -182,7 +182,7 @@ async function onSubmit(event: SubmitEvent) {
 
 								<!-- Validation Icon -->
 								{#if !validation.password.isEmpty}
-									<div class="absolute right-12 top-1/2 -translate-y-1/2">
+									<div class="absolute top-1/2 right-12 -translate-y-1/2">
 										{#if validation.password.isValid}
 											<CheckCircle class="h-5 w-5 text-green-500" />
 										{:else}
@@ -227,7 +227,7 @@ async function onSubmit(event: SubmitEvent) {
 					>
 						<Checkbox id="remember" class="h-5 w-5" bind:checked={remember} />
 						<Label
-							class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+							class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
 							for="remember"
 						>
 							{$LL.auth.rememberMe()}

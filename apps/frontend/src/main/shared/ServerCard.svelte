@@ -1,6 +1,6 @@
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { Server } from '@lucide/svelte';
-import {LL} from '@ceraui/i18n/svelte'
 
 import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';

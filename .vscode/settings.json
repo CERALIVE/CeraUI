@@ -31,99 +31,88 @@
 	"javascript.preferences.importModuleSpecifierEnding": "minimal",
 	"typescript.workspaceSymbols.scope": "allOpenProjects",
 
-	  // ============================================================================
-  // BIOME CONFIGURATION (Global default for all files except .svelte)
-  // ============================================================================
-  "biome.enabled": true,
-  "biome.lsp.bin": "pnpm exec biome",
-  "biome.rename": true,
-  "biome.requireConfigFile": false,
+	// ============================================================================
+	// BIOME CONFIGURATION (Global default for all files except .svelte)
+	// ============================================================================
+	"biome.enabled": true,
+	"biome.lsp.bin": "pnpm exec biome",
+	"biome.rename": true,
+	"biome.requireConfigFile": false,
 
-  // CRITICAL: Completely exclude Svelte files from Biome
-  "biome.files.include": [
-    "**/*.ts",
-    "**/*.js",
-    "**/*.mjs",
-    "**/*.json",
-    "**/*.jsonc"
-  ],
-  "biome.files.exclude": [
-    "**/*.svelte",
-    "**/node_modules/**",
-    "**/dist/**",
-    "**/.svelte-kit/**"
-  ],
+	// CRITICAL: Completely exclude Svelte files from Biome
+	"biome.files.include": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.json", "**/*.jsonc"],
+	"biome.files.exclude": ["**/*.svelte", "**/node_modules/**", "**/dist/**", "**/.svelte-kit/**"],
 
-  // ============================================================================
-  // ESLINT CONFIGURATION (Only for Svelte files)
-  // ============================================================================
-  "eslint.enable": true,
-  "eslint.workingDirectories": [
-    {
-      "directory": "/mnt/Development/Developments-box/CeraUI-Dev/CeraUI/apps/frontend",
-      "changeProcessCWD": true
-    }
-  ],
-  "eslint.validate": ["svelte", "javascript", "typescript"],
-  "eslint.options": {},
-  "eslint.alwaysShowStatus": true,
-  "eslint.codeActionsOnSave.timeout": 2000,
-  "eslint.format.enable": false,
-  "eslint.probe": ["svelte", "javascript", "typescript"],
-  "eslint.run": "onSave",
+	// ============================================================================
+	// ESLINT CONFIGURATION (Only for Svelte files)
+	// ============================================================================
+	"eslint.enable": true,
+	"eslint.workingDirectories": [
+		{
+			"directory": "/mnt/Development/Developments-box/CeraUI-Dev/CeraUI/apps/frontend",
+			"changeProcessCWD": true
+		}
+	],
+	"eslint.validate": ["svelte", "javascript", "typescript"],
+	"eslint.options": {},
+	"eslint.alwaysShowStatus": true,
+	"eslint.codeActionsOnSave.timeout": 2000,
+	"eslint.format.enable": false,
+	"eslint.probe": ["svelte", "javascript", "typescript"],
+	"eslint.run": "onSave",
 
-  // ============================================================================
-  // DEFAULT FORMATTERS (Simple file-type based)
-  // ============================================================================
+	// ============================================================================
+	// DEFAULT FORMATTERS (Simple file-type based)
+	// ============================================================================
 
-  // Biome handles all these file types globally
-  "[typescript]": {
-    "editor.defaultFormatter": "biomejs.biome",
-    "editor.codeActionsOnSave": {
-      "source.organizeImports.biome": "explicit",
-      "source.fixAll.biome": "explicit",
-      "source.fixAll.eslint": "never"
-    }
-  },
-  "[javascript]": {
-    "editor.defaultFormatter": "biomejs.biome",
-    "editor.codeActionsOnSave": {
-      "source.organizeImports.biome": "explicit",
-      "source.fixAll.biome": "explicit",
-      "source.fixAll.eslint": "never"
-    }
-  },
-  "[json]": {
-    "editor.defaultFormatter": "biomejs.biome",
-    "editor.codeActionsOnSave": {
-      "source.fixAll.biome": "explicit",
-      "source.fixAll.eslint": "never"
-    }
-  },
-  "[jsonc]": {
-    "editor.defaultFormatter": "biomejs.biome",
-    "editor.codeActionsOnSave": {
-      "source.fixAll.biome": "explicit",
-      "source.fixAll.eslint": "never"
-    }
-  },
+	// Biome handles all these file types globally
+	"[typescript]": {
+		"editor.defaultFormatter": "biomejs.biome",
+		"editor.codeActionsOnSave": {
+			"source.organizeImports.biome": "explicit",
+			"source.fixAll.biome": "explicit",
+			"source.fixAll.eslint": "never"
+		}
+	},
+	"[javascript]": {
+		"editor.defaultFormatter": "biomejs.biome",
+		"editor.codeActionsOnSave": {
+			"source.organizeImports.biome": "explicit",
+			"source.fixAll.biome": "explicit",
+			"source.fixAll.eslint": "never"
+		}
+	},
+	"[json]": {
+		"editor.defaultFormatter": "biomejs.biome",
+		"editor.codeActionsOnSave": {
+			"source.fixAll.biome": "explicit",
+			"source.fixAll.eslint": "never"
+		}
+	},
+	"[jsonc]": {
+		"editor.defaultFormatter": "biomejs.biome",
+		"editor.codeActionsOnSave": {
+			"source.fixAll.biome": "explicit",
+			"source.fixAll.eslint": "never"
+		}
+	},
 
-  // Svelte files: ESLint + Prettier only (Biome COMPLETELY disabled)
-  "[svelte]": {
-    "biome.enabled": false,
-    "biome.lsp.bin": "",
-    "biome.rename": false,
-    "editor.defaultFormatter": "svelte.svelte-vscode",
-    "editor.formatOnSave": false,
-    "editor.codeActionsOnSave": {
-      "source.fixAll": "never",
-      "source.fixAll.eslint": "never",
-      "source.organizeImports": "never",
-      "source.organizeImports.eslint": "never",
-      "source.fixAll.biome": "never",
-      "source.organizeImports.biome": "never"
-    }
-  },
+	// Svelte files: ESLint + Prettier only (Biome COMPLETELY disabled)
+	"[svelte]": {
+		"biome.enabled": false,
+		"biome.lsp.bin": "",
+		"biome.rename": false,
+		"editor.defaultFormatter": "svelte.svelte-vscode",
+		"editor.formatOnSave": false,
+		"editor.codeActionsOnSave": {
+			"source.fixAll": "never",
+			"source.fixAll.eslint": "never",
+			"source.organizeImports": "never",
+			"source.organizeImports.eslint": "never",
+			"source.fixAll.biome": "never",
+			"source.organizeImports.biome": "never"
+		}
+	},
 
 	// ============================================================================
 	// SVELTE FRAMEWORK SETTINGS

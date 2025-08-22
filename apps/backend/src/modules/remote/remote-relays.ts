@@ -173,8 +173,8 @@ function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 				addr: r.addr,
 				port: port,
 			};
-			if (r.bcrp_port) {
-				out.servers[r_id]!.bcrp_port = r.bcrp_port;
+			if (r.bcrp_port && out.servers[r_id]) {
+				out.servers[r_id].bcrp_port = r.bcrp_port;
 			}
 			if (r.default) out.servers[r_id].default = true;
 		}

@@ -1,6 +1,8 @@
 declare global {
 	interface Window {
-		startStreamingWithNotificationClear: (config: any) => void;
+		startStreamingWithNotificationClear: (
+			config: Record<string, string | number | boolean>,
+		) => void;
 		stopStreamingWithNotificationClear: () => void;
 	}
 

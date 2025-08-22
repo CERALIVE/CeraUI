@@ -1,6 +1,6 @@
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { AlertCircle, ArrowUpDown, Check, Network, Signal, Wifi, X } from '@lucide/svelte';
-import { LL } from "@ceraui/i18n/svelte";
 
 import * as Card from '$lib/components/ui/card';
 import { Toggle } from '$lib/components/ui/toggle';

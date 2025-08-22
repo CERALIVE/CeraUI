@@ -44,7 +44,7 @@ export const flyAndScale = (
 	): string => {
 		return Object.keys(style).reduce((str, key) => {
 			if (style[key] === undefined) return str;
-			return str + `${key}:${style[key]};`;
+			return `${str}${key}:${style[key]};`;
 		}, "");
 	};
 
@@ -65,10 +65,10 @@ export const flyAndScale = (
 	};
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type WithoutChild<T> = T extends { child?: any } ? Omit<T, "child"> : T;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type WithoutChildren<T> = T extends { children?: any }
+export type WithoutChild<T> = T extends { child?: unknown }
+	? Omit<T, "child">
+	: T;
+export type WithoutChildren<T> = T extends { children?: unknown }
 	? Omit<T, "children">
 	: T;
 export type WithoutChildrenOrChild<T> = WithoutChildren<WithoutChild<T>>;

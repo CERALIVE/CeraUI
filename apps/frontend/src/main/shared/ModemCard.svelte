@@ -8,8 +8,8 @@
 </style>
 
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { Antenna } from '@lucide/svelte';
-import { LL } from "@ceraui/i18n/svelte";
 
 import SignalQuality from '$lib/components/icons/SignalQuality.svelte';
 import * as Card from '$lib/components/ui/card';
@@ -129,7 +129,11 @@ const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
 										: 'bg-red-500/10 text-red-700 dark:text-red-300',
 						)}
 					>
-						{capitalizeFirstLetter($LL.network.modem.connectionStatus[connectionStatus as keyof typeof $LL.network.modem.connectionStatus]())}
+						{capitalizeFirstLetter(
+							$LL.network.modem.connectionStatus[
+								connectionStatus as keyof typeof $LL.network.modem.connectionStatus
+							](),
+						)}
 					</span>
 				</div>
 			</div>

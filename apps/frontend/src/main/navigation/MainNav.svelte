@@ -22,6 +22,7 @@ button:focus-visible {
 </style>
 
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { cubicInOut } from 'svelte/easing';
 import { crossfade, fly, scale } from 'svelte/transition';
 
@@ -35,8 +36,6 @@ import {
 	navigationStore,
 } from '$lib/stores/navigation';
 import { cn } from '$lib/utils';
-
-import { LL } from '@ceraui/i18n/svelte';
 
 const [send, receive] = crossfade({
 	duration: 400,
@@ -152,7 +151,7 @@ const handleLogoClick = () => {
 			<Logo
 				class={cn(
 					'h-7 w-7 transition-all duration-300',
-					isLogoHovered && 'rotate-12 scale-110',
+					isLogoHovered && 'scale-110 rotate-12',
 					$isNavigationTransitioning && 'animate-pulse',
 				)}
 			/>
@@ -169,7 +168,7 @@ const handleLogoClick = () => {
 			<!-- Back indicator -->
 			{#if $canGoBack && isLogoHovered}
 				<div
-					class="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-blue-500"
+					class="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-blue-500"
 					in:scale={{ duration: 200, start: 0.8 }}
 					out:scale={{ duration: 150, start: 1 }}
 				>
@@ -221,7 +220,7 @@ const handleLogoClick = () => {
 								),
 						$isNavigationTransitioning && 'pointer-events-none opacity-60',
 						// Enhanced focus states
-						'focus-visible:ring-primary/50 focus-visible:outline-none focus-visible:ring-2',
+						'focus-visible:ring-primary/50 focus-visible:ring-2 focus-visible:outline-none',
 					)}
 					aria-current={isActive ? 'page' : undefined}
 					disabled={$isNavigationTransitioning}
@@ -278,7 +277,7 @@ const handleLogoClick = () => {
 
 					<!-- Loading indicator for individual tabs -->
 					{#if $isNavigationTransitioning && isActive}
-						<div class="bg-primary absolute right-1 top-1 h-2 w-2 animate-ping rounded-full"></div>
+						<div class="bg-primary absolute top-1 right-1 h-2 w-2 animate-ping rounded-full"></div>
 					{/if}
 				</button>
 			{/each}

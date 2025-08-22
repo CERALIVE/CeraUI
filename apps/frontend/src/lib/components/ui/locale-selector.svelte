@@ -1,13 +1,12 @@
 <script lang="ts">
+import { existingLocales, loadLocaleAsync } from '@ceraui/i18n';
+import { LL, setLocale } from '@ceraui/i18n/svelte';
 import { Globe } from '@lucide/svelte';
 import { get } from 'svelte/store';
 
 import * as Select from '$lib/components/ui/select';
 import { localeStore } from '$lib/stores/locale';
 import { cn } from '$lib/utils';
-
-import { LL, setLocale } from "@ceraui/i18n/svelte";
-import { existingLocales, loadLocaleAsync } from "@ceraui/i18n";
 
 const initialLocale = get(localeStore);
 

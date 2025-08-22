@@ -122,9 +122,10 @@ export async function startStream(
 	}
 	// replace the audio source and codec
 	const audioCodec = pipeline.acodec ? config.acodec : undefined;
-	const audioSrcId = pipeline.asrc
-		? getAudioSrcId(config.asrc!)
-		: DEFAULT_AUDIO_ID;
+	const audioSrcId =
+		pipeline.asrc && config.asrc
+			? getAudioSrcId(config.asrc)
+			: DEFAULT_AUDIO_ID;
 	pipelineFile = await replaceAudioSettings(
 		pipelineFile,
 		audioSrcId,
@@ -134,9 +135,9 @@ export async function startStream(
 		throw "failed to generate the pipeline file - audio settings";
 	}
 
-	if (pipeline.asrc) {
+	if (pipeline.asrc && config.asrc) {
 		try {
-			await asrcProbe(config.asrc!);
+			await asrcProbe(config.asrc);
 		} catch (_err) {
 			/* asrcProbe will reject if the user presses Stop before the audio interface is found
                at this point, the stream is already stopped, so we don't need to do anything here */

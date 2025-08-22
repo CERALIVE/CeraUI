@@ -1,6 +1,6 @@
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { Play, Square } from '@lucide/svelte';
-import {LL} from '@ceraui/i18n/svelte'
 
 import { Button } from '$lib/components/ui/button';
 

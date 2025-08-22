@@ -1,12 +1,12 @@
 <script lang="ts">
 import './app.css';
 
+import { isLocale, loadLocaleAsync } from '@ceraui/i18n';
+import { LL, setLocale } from '@ceraui/i18n/svelte';
 import { ModeWatcher } from 'mode-watcher';
 import { onMount } from 'svelte';
-import { LL, locale, setLocale } from '@ceraui/i18n/svelte';
-import { loadLocaleAsync, isLocale } from '@ceraui/i18n';
-import { localeStore } from '$lib/stores/locale';
 
+import { localeStore } from '$lib/stores/locale';
 import Layout from '$main/Layout.svelte';
 
 onMount(async () => {

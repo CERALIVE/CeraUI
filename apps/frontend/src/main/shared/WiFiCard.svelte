@@ -1,6 +1,6 @@
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { EyeIcon, Router, Wifi, WifiOff } from '@lucide/svelte';
-import { LL } from "@ceraui/i18n/svelte";
 
 import WifiQuality from '$lib/components/icons/WifiQuality.svelte';
 import * as Card from '$lib/components/ui/card';

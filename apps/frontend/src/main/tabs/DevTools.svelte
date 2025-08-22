@@ -30,8 +30,8 @@
 </style>
 
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { Bug, Wrench } from '@lucide/svelte';
-import { LL } from "@ceraui/i18n/svelte";
 
 import DemoOverlayTrigger from '$lib/components/demo-overlay-trigger.svelte';
 import ScreenshotUtility from '$lib/components/dev-tools/screenshot-utility.svelte';

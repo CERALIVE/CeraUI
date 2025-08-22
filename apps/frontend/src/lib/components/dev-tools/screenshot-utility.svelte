@@ -1,9 +1,9 @@
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { Camera, Download } from '@lucide/svelte';
 import { toPng } from 'html-to-image';
 import { setMode } from 'mode-watcher';
 import { tick } from 'svelte';
-import { LL } from "@ceraui/i18n/svelte";
 import { toast } from 'svelte-sonner';
 
 import * as Button from '$lib/components/ui/button';

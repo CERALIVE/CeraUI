@@ -1,6 +1,6 @@
 <script lang="ts">
-import { Network, Radio, Wifi } from '@lucide/svelte';
 import { LL } from '@ceraui/i18n/svelte';
+import { Network, Radio, Wifi } from '@lucide/svelte';
 
 import * as Card from '$lib/components/ui/card';
 import { StatusMessages } from '$lib/stores/websocket-store';

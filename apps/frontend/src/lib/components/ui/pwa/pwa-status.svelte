@@ -33,11 +33,11 @@
 </style>
 
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { Download, Share, WifiOff } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { writable } from 'svelte/store';
 import { toast } from 'svelte-sonner';
-import { LL } from '@ceraui/i18n/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { canInstall, installApp, isOnline, showIOSInstallPrompt } from '$lib/stores/pwa';
