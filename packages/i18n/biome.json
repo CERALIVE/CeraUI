@@ -1,0 +1,27 @@
+{
+	"root": false,
+	"$schema": "https://biomejs.dev/schemas/2.1.4/schema.json",
+	"files": {
+		"includes": [
+			"src/**/*.ts",
+			"src/**/*.js",
+			"src/**/*.mjs",
+			"src/**/*.json",
+			"src/**/*.jsonc",
+			"!src/i18n-types.ts",
+			"!src/i18n-util.ts",
+			"!src/i18n-util.*.ts"
+		]
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"complexity": {
+				"noBannedTypes": "off"
+			},
+			"suspicious": {
+				"noExplicitAny": "off"
+			}
+		}
+	}
+}

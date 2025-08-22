@@ -8,27 +8,13 @@
 			"**/*.mjs",
 			"**/*.json",
 			"**/*.jsonc",
-			"!.cursor/**",
+			"!**/.vscode/**",
 			"!**/.cursor/**",
-			"!**/packages/i18n/src/i18n-util.*.ts",
-			"!**/i18n-types.ts"
-		],
-		"experimentalScannerIgnores": [
-			"**/*.svelte",
-			"**/*.svelte.ts",
-			"**/*.svelte.js",
-			"**/apps/frontend/**/*.svelte",
-			"**/.vscode/**",
-			"**/.cursor/**",
-			".cursor/**",
-			"**/tsconfig*.json",
-			"**/dist/**",
-			"**/build/**",
-			"**/node_modules/**",
-			"**/.svelte-kit/**",
-			"**/packages/i18n/src/i18n-util.*.ts",
-			"**/i18n-util.async.ts",
-			"**/i18n-util.sync.ts"
+			"!.cursor/**",
+			"!**/tsconfig*.json",
+			"!**/dist/**",
+			"!**/build/**",
+			"!**/node_modules/**"
 		]
 	},
 	"assist": { "actions": { "source": { "organizeImports": "on" } } },

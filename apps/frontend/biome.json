@@ -11,7 +11,10 @@
 			"tailwind.config.ts",
 			"pwa.config.ts",
 			"svelte.config.js",
-			"!**/*.svelte"
+			"!**/*.svelte",
+			"!**/*.svelte.ts",
+			"!**/*.svelte.js",
+			"!**/.svelte-kit/**"
 		]
 	},
 	"javascript": {
