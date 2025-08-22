@@ -67,7 +67,7 @@ const ja = {
 		creatingPassword: 'パスワード作成中...',
 		help: {
 			createPasswordDescription:
-				"アカウントを保護するため、安全なパスワードを作成する必要があります。このパスワードは今後のすべてのサインインで使用されます。",
+				'アカウントを保護するため、安全なパスワードを作成する必要があります。このパスワードは今後のすべてのサインインで使用されます。',
 			createPasswordTitle: '初回セットアップ',
 		},
 		newPassword: '新しいパスワード',
@@ -148,8 +148,7 @@ const ja = {
 		noAudioSettingSupport: 'オーディオ設定はサポートされていません',
 		selectPipelineFirst:
 			'オーディオ設定を構成するには、まずエンコーダーパイプラインを選択してください',
-		selectedPipelineNoAudio:
-			"選択されたパイプラインはオーディオ設定をサポートしていません",
+		selectedPipelineNoAudio: '選択されたパイプラインはオーディオ設定をサポートしていません',
 	},
 	network: {
 		pageTitle: 'ネットワーク設定',

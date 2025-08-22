@@ -67,7 +67,7 @@ const ko = {
 		creatingPassword: '비밀번호 생성 중...',
 		help: {
 			createPasswordDescription:
-				"계정을 보호하기 위해 안전한 비밀번호를 생성해야 합니다. 이 비밀번호는 향후 모든 로그인에 사용됩니다.",
+				'계정을 보호하기 위해 안전한 비밀번호를 생성해야 합니다. 이 비밀번호는 향후 모든 로그인에 사용됩니다.',
 			createPasswordTitle: '초기 설정',
 		},
 		newPassword: '새 비밀번호',
@@ -137,17 +137,14 @@ const ko = {
 		validation: {
 			allFieldsValid: '모든 인코더 설정이 유효합니다',
 		},
-		completeRequiredFields:
-			'스트리밍을 활성화하려면 모든 필수 필드를 완성하세요',
+		completeRequiredFields: '스트리밍을 활성화하려면 모든 필수 필드를 완성하세요',
 		encodingFormat: '인코딩 형식',
 		higherLatency: '높음',
 		lowerLatency: '낮음',
 		manualServerConfiguration: '수동 서버 구성',
 		noAudioSettingSupport: '오디오 설정이 지원되지 않음',
-		selectPipelineFirst:
-			'오디오 설정을 구성하려면 먼저 인코더 파이프라인을 선택하세요',
-		selectedPipelineNoAudio:
-			"선택한 파이프라인은 오디오 구성을 지원하지 않습니다",
+		selectPipelineFirst: '오디오 설정을 구성하려면 먼저 인코더 파이프라인을 선택하세요',
+		selectedPipelineNoAudio: '선택한 파이프라인은 오디오 구성을 지원하지 않습니다',
 	},
 	network: {
 		pageTitle: '네트워크 설정',
@@ -273,8 +270,7 @@ const ko = {
 		},
 		help: {
 			channelHelp: '최적의 성능을 위해 자동 선택을 권장합니다',
-			description:
-				'다른 기기와 인터넷을 공유하기 위해 개인 WiFi 핫스팟을 구성하세요.',
+			description: '다른 기기와 인터넷을 공유하기 위해 개인 WiFi 핫스팟을 구성하세요.',
 			nameHelp: '핫스팟의 기억하기 쉬운 이름을 선택하세요 (3-32자)',
 			passwordHelp: '강력한 비밀번호를 생성하세요 (8-63자)',
 		},

@@ -3,17 +3,15 @@
 // Export Node.js-specific integration
 export * from './i18n-node.js';
 export { getTranslationKeys, hasTranslationKey } from './i18n-node.js';
-
+export type { Svelte5Translation, Svelte5TranslationFunction } from './i18n-svelte5.js';
 // Export our Svelte 5 integration (now the default)
 export * from './i18n-svelte5.js';
-export type { Svelte5TranslationFunction, Svelte5Translation } from './i18n-svelte5.js';
 // Export types
 export type { BaseTranslation, Locales } from './i18n-types.js';
-// Export the core typesafe-i18n functions
-export { detectLocale, i18n, isLocale, locales, loadedLocales } from './i18n-util.js';
-
 // Export async loading utilities
 export { loadLocaleAsync } from './i18n-util.async.js';
+// Export the core typesafe-i18n functions
+export { detectLocale, i18n, isLocale, loadedLocales, locales } from './i18n-util.js';
 
 // Available locales configuration
 export const existingLocales = [

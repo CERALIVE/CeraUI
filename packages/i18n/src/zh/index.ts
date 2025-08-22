@@ -66,7 +66,7 @@ const zh = {
 		creatingPassword: '正在创建密码...',
 		help: {
 			createPasswordDescription:
-				"您需要创建一个安全密码来保护您的账户。此密码将用于所有未来的登录。",
+				'您需要创建一个安全密码来保护您的账户。此密码将用于所有未来的登录。',
 			createPasswordTitle: '首次设置',
 		},
 		newPassword: '新密码',
@@ -136,17 +136,14 @@ const zh = {
 		validation: {
 			allFieldsValid: '所有编码器设置都有效',
 		},
-		completeRequiredFields:
-			'请完成所有必填字段以启用流媒体',
+		completeRequiredFields: '请完成所有必填字段以启用流媒体',
 		encodingFormat: '编码格式',
 		higherLatency: '更高',
 		lowerLatency: '更低',
 		manualServerConfiguration: '手动服务器配置',
 		noAudioSettingSupport: '不支持音频设置',
-		selectPipelineFirst:
-			'请先选择编码器管道以配置音频设置',
-		selectedPipelineNoAudio:
-			"所选管道不支持音频配置",
+		selectPipelineFirst: '请先选择编码器管道以配置音频设置',
+		selectedPipelineNoAudio: '所选管道不支持音频配置',
 	},
 	network: {
 		pageTitle: '网络配置',
@@ -280,8 +277,7 @@ const zh = {
 			nameHelp: '为您的热点选择一个易记的名称（3-32个字符）',
 			passwordHelp: '创建一个强密码（8-63个字符）',
 			channelHelp: '建议使用自动选择以获得最佳性能',
-			description:
-				'配置您的个人WiFi热点以与其他设备共享互联网。',
+			description: '配置您的个人WiFi热点以与其他设备共享互联网。',
 		},
 		success: {
 			title: '热点配置成功',
@@ -666,8 +662,7 @@ const zh = {
 			disconnectingWifi: '断开WiFi连接',
 			disconnectingWifiDescription: '正在断开 {ssid} 网络连接',
 			scanningWifi: '扫描WiFi网络',
-			scanningWifiDescription:
-				'正在寻找新的WiFi网络，这可能需要几秒钟',
+			scanningWifiDescription: '正在寻找新的WiFi网络，这可能需要几秒钟',
 			wifiNetworkForgotten: 'WiFi网络已忘记',
 			wifiNetworkForgottenDescription: '您已忘记 {ssid} 网络',
 		},

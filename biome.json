@@ -9,7 +9,7 @@
 			"**/*.json",
 			"**/*.jsonc"
 		],
-		"excludes": [
+		"experimentalScannerIgnores": [
 			"**/*.svelte",
 			"**/*.svelte.ts",
 			"**/*.svelte.js",

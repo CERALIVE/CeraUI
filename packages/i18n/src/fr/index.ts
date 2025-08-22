@@ -241,7 +241,7 @@ const fr = {
 		creatingPassword: 'Création du mot de passe...',
 		help: {
 			createPasswordDescription:
-				"Vous devez créer un mot de passe sécurisé pour protéger votre compte. Ce mot de passe sera utilisé pour toutes les connexions futures.",
+				'Vous devez créer un mot de passe sécurisé pour protéger votre compte. Ce mot de passe sera utilisé pour toutes les connexions futures.',
 			createPasswordTitle: 'Configuration initiale',
 		},
 		newPassword: 'Nouveau mot de passe',
@@ -313,8 +313,7 @@ const fr = {
 		validation: {
 			allFieldsValid: "Tous les paramètres d'encodeur sont valides",
 		},
-		completeRequiredFields:
-			'Veuillez compléter tous les champs requis pour activer le streaming',
+		completeRequiredFields: 'Veuillez compléter tous les champs requis pour activer le streaming',
 		higherLatency: 'Plus élevé',
 		lowerLatency: 'Plus faible',
 		manualServerConfiguration: 'Configuration manuelle du serveur',
@@ -322,9 +321,9 @@ const fr = {
 		relayServer: 'Serveur relais',
 		relayServerAccount: 'Compte serveur relais',
 		selectPipelineFirst:
-			'Veuillez d\'abord sélectionner un pipeline d\'encodeur pour configurer les paramètres audio',
+			"Veuillez d'abord sélectionner un pipeline d'encodeur pour configurer les paramètres audio",
 		selectedPipelineNoAudio:
-			"Le pipeline sélectionné ne prend pas en charge la configuration audio",
+			'Le pipeline sélectionné ne prend pas en charge la configuration audio',
 	},
 	network: {
 		pageTitle: 'Configuration Réseau',
@@ -460,7 +459,7 @@ const fr = {
 			passwordHelp: 'Créez un mot de passe fort (8-63 caractères)',
 			channelHelp: 'La sélection automatique est recommandée pour des performances optimales',
 			description:
-				'Configurez votre hotspot WiFi personnel pour partager internet avec d\'autres appareils.',
+				"Configurez votre hotspot WiFi personnel pour partager internet avec d'autres appareils.",
 		},
 		success: {
 			title: "Point d'accès configuré avec succès",

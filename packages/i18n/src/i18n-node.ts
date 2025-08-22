@@ -23,22 +23,22 @@ export async function createI18nFunctions(locale: Locales = 'en') {
 }
 
 // Create a proxy that handles nested objects and parameter interpolation
-function createTranslationFunctions(translations: BaseTranslation): any {
+function createTranslationFunctions(translations: BaseTranslation): Record<string, unknown> {
 	return createProxy(translations, []);
 }
 
-function createProxy(obj: any, path: string[] = []): any {
+function createProxy(obj: Record<string, unknown>, path: string[] = []): Record<string, unknown> {
 	return new Proxy(obj, {
 		get(target, prop: string) {
 			const value = target[prop];
 			const currentPath = [...path, prop];
 
 			if (typeof value === 'object' && value !== null) {
-				return createProxy(value, currentPath);
+				return createProxy(value as Record<string, unknown>, currentPath);
 			}
 
 			if (typeof value === 'string') {
-				const translationFunction = (params: Record<string, any> = {}) => {
+				const translationFunction = (params: Record<string, string | number | boolean> = {}) => {
 					return interpolateString(value, params);
 				};
 
@@ -46,13 +46,13 @@ function createProxy(obj: any, path: string[] = []): any {
 				Object.defineProperty(translationFunction, '$key', {
 					value: currentPath.join('.'),
 					enumerable: false,
-					writable: false
+					writable: false,
 				});
 
 				Object.defineProperty(translationFunction, '$path', {
 					value: currentPath,
 					enumerable: false,
-					writable: false
+					writable: false,
 				});
 
 				return translationFunction;
@@ -64,14 +64,17 @@ function createProxy(obj: any, path: string[] = []): any {
 }
 
 // Simple string interpolation for parameters like {name:string} or {count:number}
-function interpolateString(template: string, params: Record<string, any>): string {
+function interpolateString(
+	template: string,
+	params: Record<string, string | number | boolean>,
+): string {
 	return template.replace(/\{(\w+)(?::\w+)?\}/g, (match, key) => {
 		return params[key] !== undefined ? String(params[key]) : match;
 	});
 }
 
 // Utility function to get all available keys from a translation object
-export function getTranslationKeys(obj: any, prefix: string = ''): string[] {
+export function getTranslationKeys(obj: Record<string, unknown>, prefix = ''): string[] {
 	const keys: string[] = [];
 
 	for (const [key, value] of Object.entries(obj)) {

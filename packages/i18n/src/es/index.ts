@@ -346,8 +346,7 @@ const es = {
 		noAudioSettingSupport: 'No hay configuraciones de audio soportadas',
 		selectPipelineFirst:
 			'Por favor seleccione primero un pipeline de codificador para configurar ajustes de audio',
-		selectedPipelineNoAudio:
-			"El pipeline seleccionado no soporta configuración de audio",
+		selectedPipelineNoAudio: 'El pipeline seleccionado no soporta configuración de audio',
 	},
 	network: {
 		pageTitle: 'Configuración de Red',

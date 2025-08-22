@@ -241,7 +241,7 @@ const ptBR = {
 		creatingPassword: 'Criando senha...',
 		help: {
 			createPasswordDescription:
-				"Você precisa criar uma senha segura para proteger sua conta. Esta senha será usada para todos os logins futuros.",
+				'Você precisa criar uma senha segura para proteger sua conta. Esta senha será usada para todos os logins futuros.',
 			createPasswordTitle: 'Configuração inicial',
 		},
 		newPassword: 'Nova senha',
@@ -323,8 +323,7 @@ const ptBR = {
 		relayServerAccount: 'Conta do servidor de retransmissão',
 		selectPipelineFirst:
 			'Por favor, selecione primeiro um pipeline de codificador para configurar as configurações de áudio',
-		selectedPipelineNoAudio:
-			"O pipeline selecionado não suporta configuração de áudio",
+		selectedPipelineNoAudio: 'O pipeline selecionado não suporta configuração de áudio',
 	},
 	network: {
 		pageTitle: 'Configuração de Rede',
@@ -682,8 +681,7 @@ const ptBR = {
 			disconnectingWifi: 'Desconectando do WiFi',
 			disconnectingWifiDescription: 'Desconectando da rede {ssid}',
 			scanningWifi: 'Procurando redes WiFi',
-			scanningWifiDescription:
-				'Procurando por novas redes WiFi, isso pode levar alguns segundos',
+			scanningWifiDescription: 'Procurando por novas redes WiFi, isso pode levar alguns segundos',
 			wifiNetworkForgotten: 'Rede WiFi esquecida',
 			wifiNetworkForgottenDescription: 'Você esqueceu a rede {ssid}',
 		},

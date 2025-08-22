@@ -235,7 +235,7 @@ const ar = {
 		creatingPassword: 'إنشاء كلمة المرور...',
 		help: {
 			createPasswordDescription:
-				"ستحتاج إلى إنشاء كلمة مرور آمنة لحماية حسابك. ستُستخدم كلمة المرور هذه في جميع عمليات تسجيل الدخول المستقبلية.",
+				'ستحتاج إلى إنشاء كلمة مرور آمنة لحماية حسابك. ستُستخدم كلمة المرور هذه في جميع عمليات تسجيل الدخول المستقبلية.',
 			createPasswordTitle: 'الإعداد الأولي',
 		},
 		newPassword: 'كلمة مرور جديدة',
@@ -305,17 +305,14 @@ const ar = {
 		validation: {
 			allFieldsValid: 'جميع إعدادات المشفر صالحة',
 		},
-		completeRequiredFields:
-			'يرجى إكمال جميع الحقول المطلوبة لتمكين البث',
+		completeRequiredFields: 'يرجى إكمال جميع الحقول المطلوبة لتمكين البث',
 		encodingFormat: 'تنسيق التشفير',
 		higherLatency: 'أعلى',
 		lowerLatency: 'أقل',
 		manualServerConfiguration: 'تكوين الخادم اليدوي',
 		noAudioSettingSupport: 'لا توجد إعدادات صوتية مدعومة',
-		selectPipelineFirst:
-			'يرجى تحديد خط أنابيب المرمز أولاً لتكوين إعدادات الصوت',
-		selectedPipelineNoAudio:
-			"خط الأنابيب المحدد لا يدعم تكوين الصوت",
+		selectPipelineFirst: 'يرجى تحديد خط أنابيب المرمز أولاً لتكوين إعدادات الصوت',
+		selectedPipelineNoAudio: 'خط الأنابيب المحدد لا يدعم تكوين الصوت',
 	},
 	network: {
 		pageTitle: 'إعدادات الشبكة',

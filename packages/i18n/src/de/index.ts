@@ -252,7 +252,7 @@ const de = {
 		creatingPassword: 'Passwort erstellen...',
 		help: {
 			createPasswordDescription:
-				"Sie müssen ein sicheres Passwort erstellen, um Ihr Konto zu schützen. Dieses Passwort wird für alle zukünftigen Anmeldungen verwendet.",
+				'Sie müssen ein sicheres Passwort erstellen, um Ihr Konto zu schützen. Dieses Passwort wird für alle zukünftigen Anmeldungen verwendet.',
 			createPasswordTitle: 'Ersteinrichtung',
 		},
 		newPassword: 'Neues Passwort',
@@ -333,8 +333,7 @@ const de = {
 		noAudioSettingSupport: 'Keine Audio-Einstellungen unterstützt',
 		selectPipelineFirst:
 			'Bitte wählen Sie zuerst eine Encoder-Pipeline aus, um Audio-Einstellungen zu konfigurieren',
-		selectedPipelineNoAudio:
-			"Die ausgewählte Pipeline unterstützt keine Audio-Konfiguration",
+		selectedPipelineNoAudio: 'Die ausgewählte Pipeline unterstützt keine Audio-Konfiguration',
 	},
 	network: {
 		pageTitle: 'Netzwerkkonfiguration',
