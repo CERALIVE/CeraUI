@@ -1,0 +1,22 @@
+[
+	{
+		"key": "ctrl+alt+r",
+		"command": "workbench.action.reloadWindow",
+		"when": "editorTextFocus"
+	},
+	{
+		"key": "ctrl+alt+e",
+		"command": "eslint.restart",
+		"when": "editorTextFocus"
+	},
+	{
+		"key": "ctrl+alt+b",
+		"command": "biome.restart",
+		"when": "editorTextFocus"
+	},
+	{
+		"key": "ctrl+alt+s",
+		"command": "svelte.restartLanguageServer",
+		"when": "editorTextFocus"
+	}
+]

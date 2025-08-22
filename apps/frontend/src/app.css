@@ -1,0 +1,600 @@
+@import 'tailwindcss';
+
+@config '../tailwind.config.ts';
+
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
+
+@utility step {
+  counter-increment: step;
+
+  &:before {
+    @apply border-background bg-muted absolute inline-flex h-9 w-9 items-center justify-center rounded-full border-4 text-center -indent-px font-mono text-base font-medium;
+    @apply mt-[-4px] ml-[-50px];
+    content: counter(step);
+  }
+}
+
+@utility chunk-container {
+  @apply shadow-none;
+
+  &::after {
+    content: '';
+    @apply absolute -inset-4 rounded-xl border shadow-xl;
+  }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 72.2% 50.6%;
+    --primary-foreground: 0 85.7% 97.3%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 72.22% 50.59%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 72.2% 50.6%;
+    --radius: 0.5rem;
+  }
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 72.2% 50.6%;
+    --primary-foreground: 0 85.7% 97.3%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 72.2% 50.6%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    /* font-feature-settings: "rlig" 1, "calt" 1; */
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Mobile tap highlight */
+  /* https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-tap-highlight-color */
+  html {
+    -webkit-tap-highlight-color: rgba(128, 128, 128, 0.5);
+  }
+
+  /* Font face Geist font */
+
+  /* === Scrollbars === */
+
+  ::-webkit-scrollbar {
+    @apply w-2;
+    @apply h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-muted!;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30! rounded-sm;
+  }
+
+  /* Firefox */
+  /* https://developer.mozilla.org/en-US/docs/Web/CSS/scrollbar-color#browser_compatibility */
+  html {
+    scrollbar-color: hsl(215.4 16.3% 46.9% / 0.3);
+  }
+
+  html.dark {
+    scrollbar-color: hsl(215.4 16.3% 56.9% / 0.3);
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .antialised {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@media (max-width: 640px) {
+  .container {
+    @apply px-2;
+  }
+}
+
+.markdown code {
+  @apply bg-muted relative rounded px-[0.3rem] py-[0.2rem] font-mono text-sm;
+}
+
+[data-theme='default'] {
+  display: flex;
+}
+
+[data-style='new-york'] [data-style='default'] {
+  display: none;
+}
+
+[data-style='default'] [data-style='default'] {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-style='new-york'] [data-style='new-york'] {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-style='default'] [data-style='new-york'] {
+  display: none;
+}
+
+[data-rehype-pretty-code-fragment] {
+  @apply relative;
+}
+
+[data-rehype-pretty-code-fragment] code {
+  @apply grid min-w-full rounded-none border-0 bg-transparent p-0 break-words;
+  counter-reset: line;
+  box-decoration-break: clone;
+}
+
+[data-rehype-pretty-code-fragment] .line {
+  @apply inline-block min-h-[1rem] w-full px-4 py-0.5;
+}
+
+[data-rehype-pretty-code-fragment] [data-line-numbers] .line {
+  @apply px-2;
+}
+
+[data-rehype-pretty-code-fragment] [data-line-numbers] > .line::before {
+  @apply text-xs text-zinc-50/40;
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 1.8rem;
+  margin-right: 1.4rem;
+  text-align: right;
+}
+
+[data-metadata] .pre-copy-btn {
+  @apply top-16!;
+}
+
+[data-rehype-pretty-code-fragment] .line--highlighted {
+  @apply bg-zinc-700/50;
+}
+
+[data-rehype-pretty-code-fragment] .with--meta {
+  @apply top-16!;
+}
+
+[data-rehype-pretty-code-fragment] .line-highlighted span {
+  @apply relative;
+}
+
+[data-rehype-pretty-code-fragment] .word--highlighted {
+  @apply rounded-md border-zinc-700/70 bg-zinc-700/50 p-1;
+}
+
+.dark [data-rehype-pretty-code-fragment] .word--highlighted {
+  @apply bg-zinc-900;
+}
+
+[data-rehype-pretty-code-title] {
+  @apply mt-2 px-4 pt-6 text-sm font-medium;
+}
+
+[data-rehype-pretty-code-title] + pre {
+  @apply mt-2;
+}
+
+.super-debug {
+  @apply bg-zinc-950! text-[#FFF8]! dark:bg-zinc-900!;
+}
+
+.super-debug--pre {
+  @apply bg-transparent! text-[#FFF8]!;
+}
+
+.super-debug--code {
+  @apply bg-transparent!;
+}
+
+.super-debug--code .key {
+  @apply text-white!;
+}
+
+.super-debug--code .undefined {
+  @apply text-[#FFF8]!;
+}
+.super-debug--code .string {
+  @apply text-[#FFF8]!;
+}
+.super-debug--code .number {
+  @apply text-[#FFF8]!;
+}
+.super-debug--code .boolean {
+  @apply text-[#FFF8]!;
+}
+
+.vis-xy-container {
+  --vis-tooltip-padding: '0px';
+  --vis-tooltip-background-color: 'transparent';
+  --vis-tooltip-border-color: 'transparent';
+}
+
+.loading::after {
+  display: inline-block;
+  animation: dotty steps(1, end) 1.5s infinite;
+  content: '';
+  width: 1.5em;
+  text-align: left;
+  font-weight: normal;
+  color: hsl(var(--muted-foreground));
+  opacity: 0.8;
+}
+
+@keyframes dotty {
+  0% {
+    content: '';
+  }
+  25% {
+    content: '.';
+  }
+  50% {
+    content: '..';
+  }
+  75% {
+    content: '...';
+  }
+  100% {
+    content: '';
+  }
+}
+
+/* Enhanced loading variants for better visual control */
+.loading-sm::after {
+  animation-duration: 1.2s;
+  font-size: 0.875rem;
+}
+
+.loading-lg::after {
+  animation-duration: 2.4s;
+  font-size: 1.125rem;
+}
+
+.loading-fast::after {
+  animation-duration: 1s;
+}
+
+.loading-slow::after {
+  animation-duration: 3s;
+}
+
+/* Enhanced loading states with subtle animations */
+.loading-pulse {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+.loading-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes pulse-subtle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Loading status colors for different contexts */
+.loading-success::after {
+  color: rgb(34, 197, 94); /* green-500 */
+}
+
+.loading-warning::after {
+  color: rgb(245, 158, 11); /* amber-500 */
+}
+
+.loading-error::after {
+  color: rgb(239, 68, 68); /* red-500 */
+}
+
+.loading-info::after {
+  color: rgb(59, 130, 246); /* blue-500 */
+}
+
+/* ===== ENHANCED NAVIGATION ANIMATIONS ===== */
+
+/* Navigation transition enhancements for smooth menu toggles */
+.nav-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity, background-color;
+}
+
+.nav-transition-fast {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity;
+}
+
+.nav-transition-smooth {
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  will-change: transform, opacity, background-color, border-color;
+}
+
+/* Enhanced button interactions with spring-like animations */
+.nav-button {
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: center;
+}
+
+.nav-button:hover {
+  transform: scale(1.05);
+}
+
+.nav-button:active {
+  transform: scale(0.95);
+  transition-duration: 0.1s;
+}
+
+.nav-button:focus-visible {
+  transform: scale(1.02);
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.5);
+}
+
+/* Smooth tab indicator animations */
+.nav-tab-indicator {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+}
+
+/* Enhanced mobile menu animations */
+.mobile-menu-enter {
+  animation: mobileMenuSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.mobile-menu-exit {
+  animation: mobileMenuSlideOut 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes mobileMenuSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes mobileMenuSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+}
+
+/* Navigation loading states with enhanced feedback */
+.nav-loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-loading::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, hsl(var(--primary)), transparent);
+  animation: navLoadingSlide 1.5s infinite;
+  z-index: 10;
+}
+
+@keyframes navLoadingSlide {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* Smooth state change indicators */
+.state-indicator {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+}
+
+.state-indicator-pulse {
+  animation: stateIndicatorPulse 2s ease-in-out infinite;
+}
+
+@keyframes stateIndicatorPulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+}
+
+/* Navigation error state animations */
+.nav-error {
+  animation: navErrorShake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@keyframes navErrorShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-2px);
+  }
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+/* Enhanced focus management for keyboard navigation */
+.nav-focus-visible {
+  outline: 2px solid hsl(var(--primary) / 0.5);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+  transition: outline 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth backdrop transitions */
+.nav-backdrop {
+  backdrop-filter: blur(8px);
+  transition: backdrop-filter 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.nav-backdrop-enhanced {
+  backdrop-filter: blur(12px) saturate(1.2);
+  background: hsl(var(--background) / 0.8);
+}
+
+/* Navigation component entrance animations */
+.nav-entrance {
+  animation: navEntranceSlide 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes navEntranceSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive animation adjustments */
+@media (max-width: 768px) {
+  .nav-transition,
+  .nav-transition-fast,
+  .nav-transition-smooth {
+    transition-duration: 0.2s;
+  }
+
+  .nav-button:hover {
+    transform: none; /* Disable hover effects on mobile for better performance */
+  }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .nav-transition,
+  .nav-transition-fast,
+  .nav-transition-smooth,
+  .nav-button,
+  .nav-tab-indicator,
+  .state-indicator {
+    transition: none;
+    animation: none;
+  }
+
+  .nav-loading::before {
+    display: none;
+  }
+
+  .state-indicator-pulse {
+    animation: none;
+  }
+}
+
+/* High contrast mode adjustments */
+@media (prefers-contrast: high) {
+  .nav-focus-visible {
+    outline-width: 3px;
+    outline-color: hsl(var(--foreground));
+  }
+
+  .nav-loading::before {
+    background: hsl(var(--foreground));
+  }
+}

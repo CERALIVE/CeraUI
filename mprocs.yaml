@@ -1,0 +1,25 @@
+procs:
+  frontend:
+    cwd: "./apps/frontend"
+    cmd: ["pnpm", "dev"]
+    env:
+      NODE_ENV: development
+  backend:
+    cwd: "./apps/backend"
+    cmd: ["pnpm", "dev"]
+    env:
+      NODE_ENV: development
+      PORT: "3001"
+  i18n:
+    cwd: "./packages/i18n"
+    cmd: ["pnpm", "dev"]
+    env:
+      NODE_ENV: development
+
+  # database:
+  #   cwd: "./apps/backend"
+  #   cmd: ["pnpm", "db:dev"]
+
+# Global settings
+shell: false
+hide_keymap_window: false

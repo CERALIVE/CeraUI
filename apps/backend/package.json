@@ -1,0 +1,39 @@
+{
+	"name": "backend",
+	"version": "1.0.0",
+	"description": "belaUI backend - Node.js/Bun server for BELABOX live streaming hardware",
+	"type": "module",
+	"author": "Andrés Cera",
+	"license": "GPL-3.0",
+	"dependencies": {
+		"@rollup/rollup-linux-arm64-gnu": "^4.47.1",
+		"finalhandler": "^2.1.0",
+		"http-proxy": "^1.18.1",
+		"serve-static": "^2.2.0",
+		"winston": "^3.17.0",
+		"ws": "^8.18.3",
+		"xml2js": "^0.6.2"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.2.20",
+		"@types/finalhandler": "^1.2.4",
+		"@types/http-proxy": "^1.17.16",
+		"@types/serve-static": "^1.15.8",
+		"@types/ws": "^8.18.1",
+		"@types/xml2js": "^0.4.14",
+		"npm-run-all2": "^8.0.4",
+		"typescript": "^5.9.2"
+	},
+	"scripts": {
+		"dev": "bun run src/belaUI.ts",
+		"build": "rm -rf ../../dist/ && bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 src/belaUI.ts --outfile ../../dist/belaUI && cd ../.. && pnpm run build:frontend",
+		"build:backend-only": "rm -rf ../../dist/belaUI ../../dist/deployment && bun build --compile --minify --sourcemap --bytecode --target=bun-linux-arm64 src/belaUI.ts --outfile ../../dist/belaUI",
+		"check": "bun tsc --noEmit",
+		"lint": "echo 'Backend linting handled by root Biome'",
+		"lint:fix": "echo 'Backend fixing handled by root Biome'",
+		"clean": "rm -rf ../../dist/ && rm -rf node_modules"
+	},
+	"trustedDependencies": [
+		"@biomejs/biome"
+	]
+}

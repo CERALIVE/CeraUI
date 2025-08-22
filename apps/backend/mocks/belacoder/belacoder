@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Return a dummy version if -v is set:
+if [ "$1" == "-v" ]; then
+    echo "v1.0.0"
+    exit 0
+fi
+
+# Otherwise sleep for a long time:
+sleep 1000

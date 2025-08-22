@@ -1,0 +1,17 @@
+# Generated typesafe-i18n files
+# These files are auto-generated and should not be committed
+formatters.ts
+i18n-svelte.ts
+i18n-types.ts
+i18n-util.ts
+i18n-util.async.ts
+i18n-util.sync.ts
+
+# Build outputs
+dist/
+*.d.ts
+*.js
+*.js.map
+
+# TypeScript build info
+*.tsbuildinfo

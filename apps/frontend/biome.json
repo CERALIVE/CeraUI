@@ -1,0 +1,30 @@
+{
+	"root": false,
+	"$schema": "https://biomejs.dev/schemas/2.2.0/schema.json",
+	"files": {
+		"includes": [
+			"package.json",
+			"src/**/*.ts",
+			"src/**/*.js",
+			"src/**/*.json",
+			"vite.config.ts",
+			"tailwind.config.ts",
+			"pwa.config.ts",
+			"svelte.config.js",
+			"!**/*.svelte",
+			"!**/*.svelte.ts",
+			"!**/*.svelte.js",
+			"!**/.svelte-kit/**"
+		]
+	},
+	"javascript": {
+		"globals": ["NodeJS", "__APP_VERSION__"]
+	},
+	"linter": {
+		"rules": {
+			"suspicious": {
+				"noDebugger": "warn"
+			}
+		}
+	}
+}

@@ -1,3 +1,14 @@
 {
-  "recommendations": ["svelte.svelte-vscode"]
+	"recommendations": [
+		"svelte.svelte-vscode",
+		"dbaeumer.vscode-eslint",
+		"bradlc.vscode-tailwindcss",
+		"ms-vscode.vscode-typescript-next"
+	],
+	"unwantedRecommendations": ["esbenp.prettier-vscode"],
+	"extensionKind": {
+		"svelte.svelte-vscode": ["workspace"],
+		"dbaeumer.vscode-eslint": ["workspace"],
+		"biomejs.biome": ["workspace"]
+	}
 }
