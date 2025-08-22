@@ -24,7 +24,7 @@
 	},
 	"dependencies": {},
 	"devDependencies": {
-		"@biomejs/biome": "^2.1.4",
+		"@biomejs/biome": "^2.2.0",
 		"@types/node": "^24.3.0",
 		"glob": "^11.0.3",
 		"mprocs": "^0.7.3",

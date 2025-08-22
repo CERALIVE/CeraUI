@@ -6,7 +6,7 @@
 	"author": "Andrés Cera",
 	"license": "GPL-3.0",
 	"dependencies": {
-		"@rollup/rollup-linux-arm64-gnu": "^4.46.4",
+		"@rollup/rollup-linux-arm64-gnu": "^4.47.1",
 		"finalhandler": "^2.1.0",
 		"http-proxy": "^1.18.1",
 		"serve-static": "^2.2.0",

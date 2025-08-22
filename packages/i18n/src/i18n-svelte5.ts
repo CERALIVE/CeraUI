@@ -11,10 +11,10 @@
  */
 
 // @ts-nocheck
-import { derived, type Readable, writable } from 'svelte/store';
-import type { Locales, Translation } from './i18n-types.js';
-import { loadLocaleAsync } from './i18n-util.async.js';
-import { isLocale, loadedLocales } from './i18n-util.js';
+import { derived, type Readable, writable } from "svelte/store";
+import type { Locales, Translation } from "./i18n-types.js";
+import { loadLocaleAsync } from "./i18n-util.async.js";
+import { isLocale, loadedLocales } from "./i18n-util.js";
 
 // 🎯 Enhanced translation function with key access
 export interface Svelte5TranslationFunction {
@@ -40,7 +40,7 @@ export type Svelte5Translation = TranslationProxy<Translation>;
 const translationCache = new Map<string, Svelte5Translation>();
 
 // 📊 Core reactive stores
-export const locale = writable<Locales>('en');
+export const locale = writable<Locales>("en");
 export const isLoading = writable(false);
 export const loadingError = writable<string | null>(null);
 
@@ -63,7 +63,7 @@ function createSvelte5Proxy(
 	currentLocale: Locales,
 	path: readonly string[] = [],
 ): Svelte5Translation {
-	const cacheKey = `${currentLocale}:${path.join('.')}`;
+	const cacheKey = `${currentLocale}:${path.join(".")}`;
 
 	// 📦 Return cached proxy for performance
 	if (translationCache.has(cacheKey)) {
@@ -76,7 +76,7 @@ function createSvelte5Proxy(
 	const proxy = new Proxy(obj, {
 		get(target, prop: string | symbol) {
 			// Handle symbol properties (like Symbol.iterator)
-			if (typeof prop === 'symbol') {
+			if (typeof prop === "symbol") {
 				return target[prop];
 			}
 
@@ -84,20 +84,22 @@ function createSvelte5Proxy(
 			const currentPath = [...path, prop] as const;
 
 			// 🔗 Nested objects: create child proxy
-			if (typeof value === 'object' && value !== null) {
+			if (typeof value === "object" && value !== null) {
 				return createSvelte5Proxy(value, currentLocale, currentPath);
 			}
 
 			// 🎯 Translation strings: create enhanced function
-			if (typeof value === 'string') {
-				const translationFunction = ((params: Record<string, string | number | boolean> = {}) => {
+			if (typeof value === "string") {
+				const translationFunction = ((
+					params: Record<string, string | number | boolean> = {},
+				) => {
 					return interpolateString(value, params);
 				}) as Svelte5TranslationFunction;
 
 				// 🔑 Add readonly key access properties
 				Object.defineProperties(translationFunction, {
 					$key: {
-						value: currentPath.join('.'),
+						value: currentPath.join("."),
 						enumerable: false,
 						writable: false,
 						configurable: false,
@@ -121,8 +123,10 @@ function createSvelte5Proxy(
 
 			// 🚨 Fallback: Create a function that returns the key path for missing translations
 			if (value === undefined) {
-				const fallbackKey = currentPath.join('.');
-				const fallbackFunction = ((_params: Record<string, string | number | boolean> = {}) => {
+				const fallbackKey = currentPath.join(".");
+				const fallbackFunction = ((
+					_params: Record<string, string | number | boolean> = {},
+				) => {
 					console.warn(`⚠️ Missing translation: ${fallbackKey}`);
 					return fallbackKey; // Return the key as fallback
 				}) as Svelte5TranslationFunction;
@@ -158,7 +162,7 @@ function createSvelte5Proxy(
 
 		// 🔍 Enable enumeration for Object.keys() and bracket notation
 		has(target, prop: string | symbol) {
-			return typeof prop === 'string' ? prop in target : false;
+			return typeof prop === "string" ? prop in target : false;
 		},
 
 		// 🗂️ Support for Object.keys() and iteration
@@ -168,7 +172,7 @@ function createSvelte5Proxy(
 
 		// 📄 Property descriptor support
 		getOwnPropertyDescriptor(target, prop: string | symbol) {
-			if (typeof prop === 'string' && prop in target) {
+			if (typeof prop === "string" && prop in target) {
 				return {
 					enumerable: true,
 					configurable: true,
@@ -190,7 +194,9 @@ function clearTranslationCache(): void {
 }
 
 // 🎨 Create a writable store for translations that handles async loading
-const translationsStore = writable<Svelte5Translation>({} as Svelte5Translation);
+const translationsStore = writable<Svelte5Translation>(
+	{} as Svelte5Translation,
+);
 
 // 🔄 Function to update translations for a locale
 async function updateTranslations(newLocale: Locales): Promise<void> {
@@ -208,32 +214,41 @@ async function updateTranslations(newLocale: Locales): Promise<void> {
 
 		const translations = loadedLocales[newLocale];
 		if (translations) {
-			const svelte5Translations = createSvelte5Proxy(translations, newLocale, []);
+			const svelte5Translations = createSvelte5Proxy(
+				translations,
+				newLocale,
+				[],
+			);
 			translationsStore.set(svelte5Translations);
 		} else {
 			throw new Error(`Failed to load translations for locale: ${newLocale}`);
 		}
 	} catch (error) {
-		const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-		console.error('❌ Translation loading failed:', errorMessage);
+		const errorMessage =
+			error instanceof Error ? error.message : "Unknown error";
+		console.error("❌ Translation loading failed:", errorMessage);
 		loadingError.set(errorMessage);
 
 		// 🔄 Fallback to English
 		try {
-			if (newLocale !== 'en') {
+			if (newLocale !== "en") {
 				if (!loadedLocales.en) {
-					await loadLocaleAsync('en');
+					await loadLocaleAsync("en");
 				}
 				const fallbackTranslations = loadedLocales.en;
 				if (fallbackTranslations) {
-					const svelte5Translations = createSvelte5Proxy(fallbackTranslations, 'en', []);
+					const svelte5Translations = createSvelte5Proxy(
+						fallbackTranslations,
+						"en",
+						[],
+					);
 					translationsStore.set(svelte5Translations);
-					console.log('✅ Fallback to English successful');
+					console.log("✅ Fallback to English successful");
 				}
 			}
 		} catch (fallbackError) {
-			console.error('❌ Even English fallback failed:', fallbackError);
-			loadingError.set('Critical: Cannot load any translations');
+			console.error("❌ Even English fallback failed:", fallbackError);
+			loadingError.set("Critical: Cannot load any translations");
 		}
 	} finally {
 		isLoading.set(false);
@@ -259,7 +274,8 @@ export async function setLocale(newLocale: Locales): Promise<boolean> {
 		console.log(`✅ Locale changed to: ${newLocale}`);
 		return true;
 	} catch (error) {
-		const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+		const errorMessage =
+			error instanceof Error ? error.message : "Unknown error";
 		console.error(`❌ Failed to set locale to ${newLocale}:`, errorMessage);
 		return false;
 	}
@@ -276,11 +292,11 @@ export function getTranslationByKey(
 	key: string,
 	params?: Record<string, string | number | boolean>,
 ): string {
-	const keys = key.split('.');
+	const keys = key.split(".");
 	let current = LL;
 
 	for (const k of keys) {
-		if (current && typeof current === 'object' && k in current) {
+		if (current && typeof current === "object" && k in current) {
 			current = current[k];
 		} else {
 			console.warn(`⚠️ Translation key not found: ${key}`);
@@ -288,7 +304,7 @@ export function getTranslationByKey(
 		}
 	}
 
-	if (typeof current === 'function') {
+	if (typeof current === "function") {
 		return current(params);
 	}
 
@@ -296,17 +312,20 @@ export function getTranslationByKey(
 }
 
 // 🗂️ Utility: Get all available translation keys
-export function getAllTranslationKeys(LL: Svelte5Translation, prefix = ''): string[] {
+export function getAllTranslationKeys(
+	LL: Svelte5Translation,
+	prefix = "",
+): string[] {
 	const keys: string[] = [];
 
-	if (!LL || typeof LL !== 'object') return keys;
+	if (!LL || typeof LL !== "object") return keys;
 
 	for (const [key, value] of Object.entries(LL)) {
 		const fullKey = prefix ? `${prefix}.${key}` : key;
 
-		if (typeof value === 'object' && value !== null) {
+		if (typeof value === "object" && value !== null) {
 			keys.push(...getAllTranslationKeys(value, fullKey));
-		} else if (typeof value === 'function') {
+		} else if (typeof value === "function") {
 			keys.push(fullKey);
 		}
 	}
@@ -315,19 +334,22 @@ export function getAllTranslationKeys(LL: Svelte5Translation, prefix = ''): stri
 }
 
 // 🔍 Utility: Check if translation key exists
-export function hasTranslationKey(LL: Svelte5Translation, key: string): boolean {
-	const keys = key.split('.');
+export function hasTranslationKey(
+	LL: Svelte5Translation,
+	key: string,
+): boolean {
+	const keys = key.split(".");
 	let current = LL;
 
 	for (const k of keys) {
-		if (current && typeof current === 'object' && k in current) {
+		if (current && typeof current === "object" && k in current) {
 			current = current[k];
 		} else {
 			return false;
 		}
 	}
 
-	return typeof current === 'function';
+	return typeof current === "function";
 }
 
 // 🎯 Utility: Create reactive translation function for component props
@@ -351,13 +373,16 @@ export const debug = {
 
 	// 🔍 Get current locale info
 	getLocaleInfo: () =>
-		derived([locale, isLoading, loadingError], ([$locale, $isLoading, $error]) => ({
-			currentLocale: $locale,
-			isLoading: $isLoading,
-			error: $error,
-			availableLocales: Object.keys(loadedLocales),
-			cacheSize: translationCache.size,
-		})),
+		derived(
+			[locale, isLoading, loadingError],
+			([$locale, $isLoading, $error]) => ({
+				currentLocale: $locale,
+				isLoading: $isLoading,
+				error: $error,
+				availableLocales: Object.keys(loadedLocales),
+				cacheSize: translationCache.size,
+			}),
+		),
 };
 
 // 🚀 Export default for convenience

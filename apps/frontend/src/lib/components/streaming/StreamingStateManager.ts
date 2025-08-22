@@ -121,7 +121,9 @@ class StreamingStateManager {
 	}
 
 	public cleanup(): void {
-		this._disposers.forEach((dispose) => dispose());
+		this._disposers.forEach((dispose) => {
+			dispose();
+		});
 		this._disposers = [];
 	}
 

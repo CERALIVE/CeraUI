@@ -1,5 +1,5 @@
 import type { GroupedPipelines } from "$lib/helpers/PipelineHelper";
-import type { PipelinesMessage } from '../../types/socket-messages';
+import type { PipelinesMessage } from "../../types/socket-messages";
 
 type Properties = {
 	inputMode: string | undefined;
