@@ -82,6 +82,7 @@ onDestroy(cleanup);
 
 let showOfflineBanner = $state(false);
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let showInstallBanner = $state(false);
 let showIOSBanner = $state(false);
 

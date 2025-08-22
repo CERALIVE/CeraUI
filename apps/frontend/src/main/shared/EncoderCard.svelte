@@ -31,8 +31,8 @@ interface Props {
 	normalizeValue: (value: number, min: number, max: number, step?: number) => number;
 	getSortedResolutions: (resolutions: string[]) => string[];
 	getSortedFramerates: (
-		framerates: Array<{ extraction: { fps?: string } }>,
-	) => Array<{ extraction: { fps?: string } }>;
+		framerates: Array<{ extraction: { fps?: string | null } }>,
+	) => Array<{ extraction: { fps?: string | null } }>;
 }
 
 const {
@@ -433,7 +433,7 @@ const hasOnlyOneEncoder = $derived(
 					const inputValue = parseInt(e.currentTarget.value);
 					if (!isNaN(inputValue)) {
 						localBitrate = inputValue;
-						updateMaxBitrate(inputValue);
+						updateMaxBitrate();
 						onBitrateChange(inputValue); // Call parent to keep everything in sync
 					}
 				}}

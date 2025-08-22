@@ -286,7 +286,7 @@ const handleMaxBitrateUpdate = () => {
 };
 
 // Local framerate sorter to match EncoderCard's expected signature
-type MinimalPipeline = { extraction: { fps?: string } };
+type MinimalPipeline = { extraction: { fps?: string | null } };
 const getSortedFramerates = (framerates: MinimalPipeline[]): MinimalPipeline[] => {
 	return [...framerates].sort((a, b) => {
 		const fpsA = a.extraction.fps;

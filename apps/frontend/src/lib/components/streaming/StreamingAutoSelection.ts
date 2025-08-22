@@ -1,18 +1,19 @@
 import type { GroupedPipelines } from "$lib/helpers/PipelineHelper";
+import type { PipelinesMessage } from '../../types/socket-messages';
 
 type Properties = {
 	inputMode: string | undefined;
 	encoder: string | undefined;
 	resolution: string | undefined;
 	framerate: string | undefined;
-	pipeline?: string | undefined;
+	pipeline: keyof PipelinesMessage | undefined;
 };
 
 export interface AutoSelectionResult {
 	encoder?: string;
 	resolution?: string;
 	framerate?: string;
-	pipeline?: string;
+	pipeline?: keyof PipelinesMessage | undefined;
 }
 
 export function autoSelectNextOption(
