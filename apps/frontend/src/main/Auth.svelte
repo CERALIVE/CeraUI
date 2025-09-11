@@ -137,7 +137,7 @@ async function onSubmit(event: SubmitEvent) {
 								>
 									<Shield class="h-4 w-4 text-blue-600 dark:text-blue-400" />
 								</div>
-								{setPassword ? $LL.auth.newPassword() : $LL.auth.password()}
+								{setPassword ? ($LL?.auth?.newPassword?.() || 'New Password') : ($LL?.auth?.password?.() || 'Password')}
 							</Label>
 
 							<div class="relative">
@@ -156,8 +156,8 @@ async function onSubmit(event: SubmitEvent) {
 									autocorrect="off"
 									disabled={isLoading}
 									placeholder={setPassword
-										? $LL.auth.placeholderNewPassword()
-										: $LL.auth.placeholderPassword()}
+										? ($LL?.auth?.placeholderNewPassword?.() || 'Enter new password')
+										: ($LL?.auth?.placeholderPassword?.() || 'Enter password')}
 									type={showPassword ? 'text' : 'password'}
 									bind:value={password}
 								/>
@@ -214,10 +214,10 @@ async function onSubmit(event: SubmitEvent) {
 						>
 							{#if isLoading}
 								<LoaderCircle class="mr-2 h-5 w-5 animate-spin" />
-								<span>{setPassword ? $LL.auth.creatingPassword() : $LL.auth.signingIn()}</span>
+								<span>{setPassword ? ($LL?.auth?.creatingPassword?.() || 'Creating Password') : ($LL?.auth?.signingIn?.() || 'Signing In')}</span>
 							{:else}
 								<Shield class="mr-2 h-5 w-5" />
-								<span>{setPassword ? $LL.auth.createPassword() : $LL.auth.signIn()}</span>
+								<span>{setPassword ? ($LL?.auth?.createPassword?.() || 'Create Password') : ($LL?.auth?.signIn?.() || 'Sign In')}</span>
 							{/if}
 						</Button>
 					</div>
@@ -230,7 +230,7 @@ async function onSubmit(event: SubmitEvent) {
 							class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
 							for="remember"
 						>
-							{$LL.auth.rememberMe()}
+							{$LL?.auth?.rememberMe?.() || 'Remember me'}
 						</Label>
 					</div>
 				</form>
@@ -252,10 +252,10 @@ async function onSubmit(event: SubmitEvent) {
 							<Shield class="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
 							<div class="space-y-1">
 								<h3 class="text-sm font-semibold text-blue-800 dark:text-blue-200">
-									{$LL.auth.help.createPasswordTitle()}
+									{$LL?.auth?.help?.createPasswordTitle?.() || 'Create your password'}
 								</h3>
 								<p class="text-xs leading-relaxed text-blue-700 dark:text-blue-300">
-									{$LL.auth.help.createPasswordDescription()}
+									{$LL?.auth?.help?.createPasswordDescription?.() || 'Create a secure password to protect your device access'}
 								</p>
 							</div>
 						</div>
@@ -265,9 +265,9 @@ async function onSubmit(event: SubmitEvent) {
 
 			<!-- Enhanced Footer -->
 			<div class="space-y-2 text-center">
-				<p class="text-muted-foreground text-sm">{$LL.auth.footerText()}</p>
+				<p class="text-muted-foreground text-sm">{$LL?.auth?.footerText?.() || 'Secure device access'}</p>
 				<p class="text-muted-foreground/70 text-xs">
-					{siteName} Beta UI - {$LL.auth.secureAccess()}
+					{siteName} Beta UI - {$LL?.auth?.secureAccess?.() || 'Secure access'}
 				</p>
 			</div>
 		</div>
