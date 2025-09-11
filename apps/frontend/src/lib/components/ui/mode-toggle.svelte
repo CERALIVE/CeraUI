@@ -24,25 +24,52 @@ const handleModeChange = (mode: 'light' | 'dark' | 'system') => {
 // Enhanced theme information
 const themes = [
 	{
-		value: 'light',
+		value: 'light' as const,
 		icon: Sun,
 	},
 	{
-		value: 'dark',
+		value: 'dark' as const,
 		icon: Moon,
 	},
 	{
-		value: 'system',
+		value: 'system' as const,
 		icon: Monitor,
 	},
-];
+] as const;
+
+// Theme fallbacks for when i18n isn't loaded yet
+const getThemeFallback = (value: string) => {
+	switch (value) {
+		case 'light':
+			return 'Light';
+		case 'dark':
+			return 'Dark';
+		case 'system':
+			return 'System';
+		default:
+			return value;
+	}
+};
+
+const getThemeDescriptionFallback = (value: string) => {
+	switch (value) {
+		case 'light':
+			return 'Clean and bright interface';
+		case 'dark':
+			return 'Easy on the eyes';
+		case 'system':
+			return 'Match your device';
+		default:
+			return `${value} theme`;
+	}
+};
 </script>
 
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger>
 		<Button
 			class="h-10 w-10 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 p-0 shadow-sm transition-all duration-200 hover:from-gray-200 hover:to-gray-300 hover:shadow-md dark:from-gray-800 dark:to-gray-900 dark:hover:from-gray-700 dark:hover:to-gray-800"
-			title={$LL.theme.changeTheme()}
+			title={$LL?.theme?.changeTheme?.() || 'Change theme'}
 			variant="ghost"
 		>
 			<!-- Enhanced Icon Animation -->
@@ -54,7 +81,7 @@ const themes = [
 					class="absolute h-5 w-5 scale-0 -rotate-90 text-blue-400 transition-all duration-300 dark:scale-100 dark:rotate-0"
 				/>
 			</div>
-			<span class="sr-only">{$LL.theme.toggleTheme()}</span>
+			<span class="sr-only">{$LL?.theme?.toggleTheme?.() || 'Toggle theme'}</span>
 		</Button>
 	</DropdownMenu.Trigger>
 
@@ -66,7 +93,7 @@ const themes = [
 		<!-- Theme Header -->
 		<div class="mb-2 px-2 py-1">
 			<h4 class="text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
-				{$LL.theme.selectTheme()}
+				{$LL?.theme?.selectTheme?.() || 'Select Theme'}
 			</h4>
 		</div>
 
@@ -101,12 +128,14 @@ const themes = [
 					<div
 						class={cn('font-medium', isActive ? 'text-white' : 'text-gray-900 dark:text-gray-100')}
 					>
-						{$LL.theme[themeOption.value as keyof typeof $LL.theme]()}
+						{$LL?.theme?.[themeOption.value as keyof typeof $LL.theme]?.() ||
+							getThemeFallback(themeOption.value)}
 					</div>
 					<div
 						class={cn('text-xs', isActive ? 'text-white/80' : 'text-gray-500 dark:text-gray-400')}
 					>
-						{$LL.theme[`${themeOption.value}Description` as keyof typeof $LL.theme]()}
+						{$LL?.theme?.[`${themeOption.value}Description` as keyof typeof $LL.theme]?.() ||
+							getThemeDescriptionFallback(themeOption.value)}
 					</div>
 				</div>
 
