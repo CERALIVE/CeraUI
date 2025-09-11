@@ -136,7 +136,7 @@ CeraUI offers a comprehensive and intuitive interface with both light and dark t
 
 | **Desktop Interface** | **Mobile Experience** |
 |:---------------------:|:---------------------:|
-| ![Desktop Preview](screenshots/desktop/dark/general.png) | ![Mobile Preview](screenshots/mobile/dark/general.png) |
+| ![Desktop Preview](docs/screenshots/desktop/dark/general.png) | ![Mobile Preview](docs/screenshots/mobile/dark/general.png) |
 | *Full HD (1920×1080) optimized interface* | *iPhone 14 Pro Max (430×932) responsive design* |
 
 ### 🌟 Featured Highlights
