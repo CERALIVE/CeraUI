@@ -1,4 +1,5 @@
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { AlertDialog as AlertDialogDefault, type WithoutChild } from 'bits-ui';
 import type { Snippet } from 'svelte';
 

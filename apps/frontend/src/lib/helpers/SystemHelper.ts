@@ -43,10 +43,12 @@ export const resetSSHPasword = () => {
 };
 
 export const getSystemLog = () => {
+	console.log("🔽 Requesting system log download...");
 	sendCommand("get_syslog");
 };
 
 export const getDeviceLog = () => {
+	console.log("🔽 Requesting device log download...");
 	sendCommand("get_log");
 };
 
@@ -88,6 +90,8 @@ export const downloadLog = ({
 	name: string;
 	contents: string;
 }) => {
+	console.log("💾 Downloading log:", { name, contentLength: contents.length });
+	
 	const parsedContent = contents
 		.split("\n")
 		.map((line) => line.trim()) // Trim whitespace
@@ -103,4 +107,6 @@ export const downloadLog = ({
 	a.click();
 	document.body.removeChild(a);
 	URL.revokeObjectURL(url);
+	
+	console.log("✅ Log download triggered successfully");
 };

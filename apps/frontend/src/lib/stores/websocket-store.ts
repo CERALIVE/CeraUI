@@ -135,7 +135,14 @@ function sendAuthMessage(
 
 const assignMessage = (message: string) => {
 	const parsedMessage = JSON.parse(message);
-	switch (Object.keys(parsedMessage)[0]) {
+	const messageType = Object.keys(parsedMessage)[0];
+	
+	// Debug log for log-related messages
+	if (messageType === "log") {
+		console.log("📥 Received log message:", parsedMessage);
+	}
+	
+	switch (messageType) {
 		case "auth":
 			AuthStore.set(parsedMessage.auth);
 			break;
