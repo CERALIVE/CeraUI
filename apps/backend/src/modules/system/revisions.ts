@@ -1,6 +1,7 @@
 /*
-    belaUI - web UI for the BELABOX project
+    CeraUI - web UI for the CERALIVE project
     Copyright (C) 2020-2022 BELABOX project
+    Copyright (C) 2023-2025 CERALIVE project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -46,13 +47,13 @@ export function initRevisions() {
 	revisions.srtla = readRevision(`${srtlaSendExec} -v`);
 	revisions.bun = `${Bun.version} (${Bun.revision})`;
 
-	// Only show a BELABOX image version if it exists
+	// Only show a CERALIVE image version if it exists
 	try {
-		revisions["BELABOX image"] = fs
-			.readFileSync("/etc/belabox_img_version", "utf8")
+		revisions["CERALIVE image"] = fs
+			.readFileSync("/etc/ceralive_img_version", "utf8")
 			.trim();
 	} catch (_err) {
-		// Silently ignore if BELABOX image version file doesn't exist
+		// Silently ignore if CERALIVE image version file doesn't exist
 	}
 	logger.debug("Revisions", revisions);
 }

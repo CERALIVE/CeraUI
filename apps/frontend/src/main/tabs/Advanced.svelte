@@ -8,6 +8,7 @@ import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
+import { BRAND_CONFIG } from '$lib/config/branding';
 import {
 	getBelaboxLog,
 	getSystemLog,
@@ -391,12 +392,40 @@ StatusMessages.subscribe((statusMessage) => {
 							<div class="absolute inset-y-0 right-2 flex items-center gap-1">
 								<Button
 									class="hover:bg-muted/50 h-8 w-8 rounded-md p-0"
-									onclick={() => {
-										navigator.clipboard.writeText(sshPassword).then(() => {
-											toast.info($LL.advanced.passwordCopied(), {
+									onclick={async () => {
+										console.log('🔐 Attempting to copy SSH password:', sshPassword ? 'Password available' : 'No password');
+										try {
+											if (!sshPassword) {
+												throw new Error('No SSH password available to copy');
+											}
+											await navigator.clipboard.writeText(sshPassword);
+											console.log('✅ SSH password copied to clipboard successfully');
+											toast.success($LL.advanced.passwordCopied(), {
 												description: $LL.advanced.passwordCopiedDesc(),
 											});
-										});
+										} catch (error) {
+											console.error('Failed to copy password to clipboard:', error);
+											// Fallback: Select the input text for manual copying
+											const input = document.getElementById('sshPassword') as HTMLInputElement;
+											if (input) {
+												input.select();
+												input.setSelectionRange(0, 99999); // For mobile devices
+												try {
+													document.execCommand('copy');
+													toast.success($LL.advanced.passwordCopied(), {
+														description: 'Password selected for copying (manual)',
+													});
+												} catch (fallbackError) {
+													toast.error('Copy Failed', {
+														description: 'Unable to copy password. Please select and copy manually.',
+													});
+												}
+											} else {
+												toast.error('Copy Failed', {
+													description: 'Clipboard access denied. Please copy manually.',
+												});
+											}
+										}
 									}}
 									size="sm"
 									variant="ghost"

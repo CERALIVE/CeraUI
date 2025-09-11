@@ -126,7 +126,7 @@ export type RevisionsMessage = {
 	belaUI: string;
 	belacoder: string;
 	srtla: string;
-	"BELABOX image": string;
+	"CERALIVE image": string;
 };
 type StreamBandwidth = `${number} Kbps`;
 type StreamName = `RTMP ingest - ${string}`;

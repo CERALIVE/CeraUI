@@ -638,6 +638,7 @@ const es = {
 		sshPassword: "Contraseña SSH (Nombre de usuario: {sshUser})",
 		sshPasswordTooltip:
 			"Use esta contraseña para iniciar sesión a través de SSH.",
+		sshPasswordPlaceholder: "Contraseña SSH generada",
 		passwordCopied: "Contraseña copiada",
 		passwordCopiedDesc: "La contraseña SSH se ha copiado al portapapeles.",
 		reset: "Restablecer",

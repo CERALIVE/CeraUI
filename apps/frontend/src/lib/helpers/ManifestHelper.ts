@@ -1,6 +1,7 @@
 import { existingLocales, rtlLanguages } from "@ceraui/i18n";
 import { locale } from "@ceraui/i18n/svelte";
 import { get } from "svelte/store";
+import { BRAND_CONFIG } from "$lib/config/branding";
 import { localeStore } from "../stores/locale";
 
 export interface PWAManifest {
@@ -36,10 +37,9 @@ export function generateDynamicManifest(): PWAManifest {
 	const origin = window.location.origin;
 
 	return {
-		name: "CeraUI for BELABOX©",
-		short_name: "CeraUI",
-		description:
-			"A modern PWA for BELABOX streaming encoder management and configuration",
+		name: BRAND_CONFIG.siteName,
+		short_name: BRAND_CONFIG.appName,
+		description: BRAND_CONFIG.description,
 		start_url: `${origin}/`,
 		scope: `${origin}/`,
 		display: "standalone",
