@@ -1,7 +1,7 @@
 {
-  "name": "CeraUI for BELABOX©",
+  "name": "CeraUI for CERALIVE©",
   "short_name": "CeraUI",
-  "description": "A modern PWA for BELABOX streaming encoder management and configuration",
+  "description": "A modern PWA for CERALIVE streaming encoder management and configuration",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

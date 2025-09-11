@@ -1,6 +1,7 @@
 /*
-    belaUI - web UI for the BELABOX project
+    CeraUI - web UI for the CERALIVE project
     Copyright (C) 2020-2022 BELABOX project
+    Copyright (C) 2023-2025 CERALIVE project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -34,7 +35,7 @@ import {
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
-const bootconfigService = "belabox-firstboot-bootconfig";
+const bootconfigService = "ceralive-firstboot-bootconfig";
 
 const sensors: Record<string, string> = {};
 
@@ -165,7 +166,7 @@ export function initHardwareMonitoring() {
 				}
 			}); // dmesg
 
-			/* Show an alert while belabox-firstboot-bootconfig is active */
+			/* Show an alert while ceralive-firstboot-bootconfig is active */
 			monitorBootconfig();
 			break;
 		}

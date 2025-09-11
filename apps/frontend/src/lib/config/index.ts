@@ -1,5 +1,5 @@
 import type { Component } from "svelte";
-
+import { deviceName, siteName } from "$lib/config/branding";
 import { BUILD_INFO } from "$lib/env";
 import Advanced from "$main/tabs/Advanced.svelte";
 import DevTools from "$main/tabs/DevTools.svelte";
@@ -34,6 +34,5 @@ export const navElements: NavElements = {
 // Note: defaultNavElement removed to avoid circular dependencies
 // Navigation store now initializes with direct General component import
 
-// Device branding configuration
-export const deviceName = "BELABOX";
-export const siteName = "CeraUI for BELABOX©";
+// Re-export branding configuration for backward compatibility
+export { deviceName, siteName };

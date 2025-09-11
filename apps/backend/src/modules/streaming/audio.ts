@@ -1,6 +1,7 @@
 /*
-    belaUI - web UI for the BELABOX project
+    CeraUI - web UI for the CERALIVE project
     Copyright (C) 2020-2022 BELABOX project
+    Copyright (C) 2023-2025 CERALIVE project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by

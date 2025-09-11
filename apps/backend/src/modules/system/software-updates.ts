@@ -1,6 +1,7 @@
 /*
-    belaUI - web UI for the BELABOX project
+    CeraUI - web UI for the CERALIVE project
     Copyright (C) 2020-2022 BELABOX project
+    Copyright (C) 2023-2025 CERALIVE project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -80,16 +81,16 @@ function parseUpgradeDownloadSize(text: string) {
 }
 
 // Show an update notification if there are pending updates to packages matching this list
-const belaboxPackageList = [
-	"belabox",
+const ceralivePackageList = [
+	"ceralive",
 	"belacoder",
-	"belaui",
+	"ceraui",
 	"srtla",
 	"usb-modeswitch-data",
 	"l4t",
 ];
-// Reboot instead of just restarting belaUI if we've updated packages matching this list
-const rebootPackageList = ["l4t", "belabox-linux-", "belabox-network-config"];
+// Reboot instead of just restarting CeraUI if we've updated packages matching this list
+const rebootPackageList = ["l4t", "ceralive-linux-", "ceralive-network-config"];
 
 function packageListIncludes(list: string, includes: Array<string>) {
 	for (const p of includes) {
@@ -117,17 +118,17 @@ function parseAptUpgradedPackages(stdout: string) {
 function parseAptUpgradeSummary(stdout: string) {
 	const upgradeCount = parseUpgradePackageCount(stdout) ?? 0;
 	let downloadSize: string | undefined;
-	let belaboxPackages = false;
+	let ceralivePackages = false;
 	if (upgradeCount > 0) {
 		downloadSize = parseUpgradeDownloadSize(stdout);
 
 		const packageList = parseAptUpgradedPackages(stdout);
-		if (packageList && packageListIncludes(packageList, belaboxPackageList)) {
-			belaboxPackages = true;
+		if (packageList && packageListIncludes(packageList, ceralivePackageList)) {
+			ceralivePackages = true;
 		}
 	}
 
-	return { upgradeCount, downloadSize, belaboxPackages };
+	return { upgradeCount, downloadSize, ceralivePackages };
 }
 
 async function getSoftwareUpdateSize() {
@@ -158,11 +159,11 @@ async function getSoftwareUpdateSize() {
 		aptHeldBackPackages = undefined;
 	}
 
-	if (res.belaboxPackages) {
+	if (res.ceralivePackages) {
 		notificationBroadcast(
-			"belabox_update",
+			"ceralive_update",
 			"warning",
-			"A BELABOX update is available. Scroll down to the System menu to install it.",
+			"A CERALIVE update is available. Scroll down to the System menu to install it.",
 			0,
 			true,
 			false,

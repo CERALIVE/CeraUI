@@ -1,3 +1,4 @@
+import { brandTranslation } from "../branding.js";
 import type { BaseTranslation } from "../i18n-types.js";
 
 const en = {
@@ -472,7 +473,7 @@ const en = {
 			name: "Name",
 			password: "Password",
 			channel: "Channel",
-			placeholderName: "BELABOX",
+			placeholderName: brandTranslation("{{deviceName}}"),
 			placeholderPassword: "Enter a secure password",
 			selectChannel: "Select a channel",
 		},
@@ -612,8 +613,10 @@ const en = {
 		minLength: "Minimum length: 8 characters",
 		newPassword: "New Password",
 		save: "Save",
-		cloudRemoteKey: "BELABOX Cloud Remote Key",
-		cloudRemoteKeyTooltip: "Enter the remote key for BELABOX cloud access.",
+		cloudRemoteKey: brandTranslation("{{cloudService}} Remote Key"),
+		cloudRemoteKeyTooltip: brandTranslation(
+			"Enter the remote key for {{cloudService}} access.",
+		),
 		reboot: "Reboot",
 		rebootTooltip: "Restart the device to apply changes.",
 		powerOff: "Power Off",
@@ -629,16 +632,17 @@ const en = {
 		startSSH: "Start SSH Server",
 		stopSSH: "Stop SSH Server",
 		sshToggleTooltip: "Start or stop the SSH server.",
-		belaboxLog: "BELABOX Log",
+		belaboxLog: brandTranslation("{{logName}}"),
 		systemLog: "System Log",
 		download: "Download",
 		belaboxLogTooltip: "Download logs for troubleshooting.",
 		systemLogTooltip: "Download system logs for debugging.",
-		confirmBelaboxLog:
-			"Are you sure you want to download the BELABOX log? It may contain sensitive information such as passwords.",
+		confirmBelaboxLog: brandTranslation(
+			"Are you sure you want to download the {{logName}}? It may contain sensitive information such as passwords.",
+		),
 		confirmSystemLog:
 			"Are you sure you want to download the system log? It may contain sensitive information such as passwords.",
-		downloadBelaboxLog: "Download BELABOX Log",
+		downloadBelaboxLog: brandTranslation("Download {{logName}}"),
 		downloadSystemLog: "Download System Log",
 		systemDescription:
 			"Manage system configuration, developer tools, and device settings.",
@@ -679,12 +683,13 @@ const en = {
 	},
 	offline: {
 		title: "You're Offline",
-		description:
-			"CeraUI needs an internet connection to manage your BELABOX device.",
+		description: brandTranslation(
+			"CeraUI needs an internet connection to manage your {{deviceName}} device.",
+		),
 		checkTitle: "Please check:",
 		checkWifi: "Your Wi-Fi connection",
 		checkNetwork: "Your device is on the same network",
-		checkDevice: "BELABOX device is powered on",
+		checkDevice: brandTranslation("{{deviceName}} device is powered on"),
 		tryAgain: "Try Again",
 		checking: "Checking...",
 		checkFailed: "Still Offline",

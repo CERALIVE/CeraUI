@@ -1,6 +1,7 @@
 /*
-    belaUI - web UI for the BELABOX project
+    CeraUI - web UI for the CERALIVE project
     Copyright (C) 2020-2022 BELABOX project
+    Copyright (C) 2023-2025 CERALIVE project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -27,11 +28,11 @@ import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
 export function getLog(conn: WebSocket, service?: string) {
 	const senderId = getSocketSenderId(conn);
 	let cmd = "journalctl -b";
-	let name = "belabox_system_log.txt";
+	let name = "ceralive_system_log.txt";
 
 	if (service) {
 		cmd += ` -u ${service}`;
-		name = `${service.replace("belaUI", "belabox")}_log.txt`;
+		name = `${service.replace("belaUI", "ceralive")}_log.txt`;
 	}
 
 	exec(cmd, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {

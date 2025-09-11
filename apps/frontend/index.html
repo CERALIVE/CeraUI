@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <!-- Primary Meta Tags -->
-    <title>CeraUI for BELABOX©</title>
-    <meta name="title" content="CeraUI for BELABOX©" />
-    <meta name="description" content="A modern PWA for BELABOX streaming encoder management and configuration" />
+    <title id="page-title">CeraUI for CERALIVE©</title>
+    <meta name="title" content="CeraUI for CERALIVE©" id="meta-title" />
+    <meta name="description" content="A modern PWA for CERALIVE streaming encoder management and configuration" id="meta-description" />
 
     <!-- Favicon and Icons -->
     <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96" />
@@ -199,7 +199,7 @@
       <div class="offline-content">
         <div class="offline-spinner"></div>
         <h1 class="offline-title">You're Offline</h1>
-        <p class="offline-text">CeraUI needs an internet connection to manage your BELABOX device.</p>
+        <p class="offline-text" id="offline-description">CeraUI needs an internet connection to manage your CERALIVE device.</p>
         <button onclick="window.location.reload()" class="offline-button">Try Again</button>
       </div>
     </div>
@@ -336,6 +336,37 @@
               }
             }
           }, 3000);
+        }
+      })();
+    </script>
+
+    <!-- Brand Configuration Script -->
+    <script>
+      // Dynamic branding based on build configuration
+      (function() {
+        // Get brand configuration from Vite build-time variables
+        const brandConfig = typeof __BRAND_CONFIG__ !== 'undefined' ? __BRAND_CONFIG__ : {
+          siteName: "CeraUI for CERALIVE©",
+          description: "A modern PWA for CERALIVE streaming encoder management and configuration",
+          deviceName: "CERALIVE"
+        };
+
+        // Update page title
+        const pageTitle = document.getElementById('page-title');
+        if (pageTitle) pageTitle.textContent = brandConfig.siteName;
+
+        // Update meta title
+        const metaTitle = document.getElementById('meta-title');
+        if (metaTitle) metaTitle.setAttribute('content', brandConfig.siteName);
+
+        // Update meta description
+        const metaDescription = document.getElementById('meta-description');
+        if (metaDescription) metaDescription.setAttribute('content', brandConfig.description);
+
+        // Update offline description
+        const offlineDescription = document.getElementById('offline-description');
+        if (offlineDescription) {
+          offlineDescription.textContent = `CeraUI needs an internet connection to manage your ${brandConfig.deviceName} device.`;
         }
       })();
     </script>
