@@ -35,7 +35,7 @@ const validation = $derived({
 		isEmpty: password.length === 0,
 		message:
 			setPassword && password.length < 8 && password.length > 0
-				? $LL.auth.validation.passwordMinLength()
+				? $LL?.auth?.validation?.passwordMinLength?.() || 'Password must be at least 8 characters'
 				: '',
 	},
 });
@@ -201,7 +201,7 @@ async function onSubmit(event: SubmitEvent) {
 							{:else if setPassword && validation.password.isValid}
 								<div class="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
 									<CheckCircle class="h-4 w-4" />
-									<span>{$LL.auth.validation.passwordValid()}</span>
+									<span>{$LL?.auth?.validation?.passwordValid?.() || 'Password is valid'}</span>
 								</div>
 							{/if}
 						</div>
