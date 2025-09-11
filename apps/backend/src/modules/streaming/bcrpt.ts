@@ -126,10 +126,25 @@ export async function startBcrpt() {
 		fs.mkdirSync(bcrptDir);
 	}
 
+	// Check if we're using the mock BCRPT (development) or real binary (production)
+	const isMockBcrpt = bcrptExec.includes("mocks/bcrpt");
+
 	try {
 		await generateBcrptSourceIps();
 		await generateBcrptServerIpsFile();
 		await generateBcrptKeyFile();
+
+		// For production BCRPT binary, check if we have a valid key
+		if (!isMockBcrpt) {
+			const relaysCache = getRelays();
+			if (!relaysCache?.bcrp_key || relaysCache.bcrp_key.trim() === "") {
+				console.warn(
+					"BCRPT: No valid key available. Skipping BCRPT startup until relay configuration is available.",
+				);
+				return;
+			}
+		}
+
 		// Reset retry counter on successful config generation
 		bcrptRetryCount = 0;
 	} catch (_err) {
@@ -150,6 +165,15 @@ export async function startBcrpt() {
 	}
 
 	const args = [bcrptSourceIpsFile, bcrptServerIpsFile, bcrptKeyFile];
+
+	if (isMockBcrpt) {
+		console.log("Starting BCRPT in development mode (using mock)");
+	} else {
+		console.log(
+			"Starting BCRPT in production mode (using apt-installed binary)",
+		);
+	}
+
 	bcrpt = spawn(bcrptExec, args);
 
 	bcrpt.stdout?.on("data", (data) => {

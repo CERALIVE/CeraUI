@@ -16,6 +16,7 @@
 */
 
 /* Initialize the server */
+import fs from "node:fs";
 import http from "node:http";
 
 import finalhandler from "finalhandler";
@@ -25,7 +26,8 @@ import serveStatic from "serve-static";
 import { logger } from "../../helpers/logger.ts";
 import { getSystemdSocket } from "../system/systemd.ts";
 
-const isDevelopment = process.env.NODE_ENV === "development";
+const isDevelopment =
+	process.env.NODE_ENV === "development" && !fs.existsSync("public");
 
 // In development: proxy to frontend dev server
 // In production: serve static files from public folder
