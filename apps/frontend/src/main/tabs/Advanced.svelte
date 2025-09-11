@@ -8,6 +8,7 @@ import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
+import { BRAND_CONFIG } from '$lib/config/branding';
 import {
 	getBelaboxLog,
 	getSystemLog,

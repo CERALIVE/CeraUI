@@ -50,8 +50,9 @@ export const getDeviceLog = () => {
 	sendCommand("get_log");
 };
 
-// Legacy function name for backward compatibility
+// Legacy alias for backward compatibility
 export const getBelaboxLog = getDeviceLog;
+
 export const saveRemoteKey = (key: string) => {
 	socket.send(JSON.stringify({ config: { remote_key: key } }));
 };

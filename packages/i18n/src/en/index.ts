@@ -625,6 +625,7 @@ const en = {
 		confirmPowerOff: "Do you want to power off this device?",
 		sshPassword: "SSH Password (User Name: {sshUser:string})",
 		sshPasswordTooltip: "Use this password to log in via SSH.",
+		sshPasswordPlaceholder: "Generated SSH password",
 		passwordCopied: "Password Copied",
 		passwordCopiedDesc: "The SSH Password has been copied to the clipboard.",
 		reset: "Reset",
