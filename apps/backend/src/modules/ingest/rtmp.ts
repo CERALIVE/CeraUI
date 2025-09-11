@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { parseStringPromise as parseXmlStringPromise } from "xml2js";
 import { httpGet } from "../network/internet";
 
@@ -56,7 +57,10 @@ async function updateRtmpStats(): Promise<void> {
 
 export function initRTMPIngestStats(): void {
 	// Skip RTMP stats polling in development mode (no RTMP server running)
-	if (process.env.NODE_ENV === "development") {
+	const isDevelopment =
+		process.env.NODE_ENV === "development" && !fs.existsSync("public");
+
+	if (isDevelopment) {
 		console.log("Development mode: Skipping RTMP statistics polling");
 		return;
 	}
