@@ -207,7 +207,7 @@ export function handleMessage(conn: WebSocket, msg: Message, isRemote = false) {
 function command(conn: WebSocket, cmd: string) {
 	switch (cmd) {
 		case "get_log":
-			getLog(conn, "belaUI");
+			getLog(conn, "ceraUI");
 			return;
 		case "get_syslog":
 			getLog(conn);
