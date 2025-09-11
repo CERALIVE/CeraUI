@@ -118,9 +118,9 @@ async function onSubmit(event: SubmitEvent) {
 
 				<div class="space-y-2">
 					<h1 class="text-2xl font-bold tracking-tight">
-						{setPassword ? $LL.auth.createPasswordAndLogin() : $LL.auth.loginWithPassword()}
+						{setPassword ? ($LL?.auth?.createPasswordAndLogin?.() || 'Create Password & Login') : ($LL?.auth?.loginWithPassword?.() || 'Login with Password')}
 					</h1>
-					<p class="text-muted-foreground text-sm leading-relaxed">{$LL.auth.usePassword()}</p>
+					<p class="text-muted-foreground text-sm leading-relaxed">{$LL?.auth?.usePassword?.() || 'Use your password to access the device'}</p>
 				</div>
 			</div>
 			<div class={cn('grid gap-6', className)}>
