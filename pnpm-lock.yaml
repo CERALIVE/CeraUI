@@ -26,9 +26,6 @@ importers:
 
   apps/backend:
     dependencies:
-      '@rollup/rollup-linux-arm64-gnu':
-        specifier: ^4.52.0
-        version: 4.52.0
       finalhandler:
         specifier: ^2.1.0
         version: 2.1.0
@@ -1197,11 +1194,6 @@ packages:
 
   '@rollup/rollup-linux-arm64-gnu@4.47.1':
     resolution: {integrity: sha512-3hBFoqPyU89Dyf1mQRXCdpc6qC6At3LV6jbbIOZd72jcx7xNk3aAp+EjzAtN6sDlmHFzsDJN5yeUySvorWeRXA==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@rollup/rollup-linux-arm64-gnu@4.52.0':
-    resolution: {integrity: sha512-uj672IVOU9m08DBGvoPKPi/J8jlVgjh12C9GmjjBxCTQc3XtVmRkRKyeHSmIKQpvJ7fIm1EJieBUcnGSzDVFyw==}
     cpu: [arm64]
     os: [linux]
 
@@ -4995,8 +4987,6 @@ snapshots:
 
   '@rollup/rollup-linux-arm64-gnu@4.47.1':
     optional: true
-
-  '@rollup/rollup-linux-arm64-gnu@4.52.0': {}
 
   '@rollup/rollup-linux-arm64-musl@4.47.1':
     optional: true
