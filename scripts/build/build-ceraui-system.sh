@@ -35,8 +35,8 @@ ARCHIVE_NAME="${PRODUCT_NAME}-v${VERSION}-${COMMIT}-${ARCHITECTURE}-${BUILD_DATE
 rm -rf dist/compressed
 mkdir -p dist/compressed
 
-echo "📦 Building full CeraUI system for $ARCHITECTURE architecture..."
-echo "🏛️  Architecture: $ARCHITECTURE"
+echo "📦 Building full CeraUI system for $(get_architecture_info)..."
+echo "🏛️  Target devices: $(get_architecture_info | cut -d'(' -f2 | cut -d')' -f1)"
 echo "📦 Archive name: $ARCHIVE_NAME"
 
 # Show cache status for transparency
