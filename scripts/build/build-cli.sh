@@ -70,24 +70,24 @@ show_info() {
 run_build() {
     local arch="$1"
     local clean_first="$2"
-    
+
     if [ "$clean_first" = "true" ]; then
         log_step "Cleaning cache before build"
         clean_cache
     fi
-    
+
     log_info "Starting monitored smart build for $arch architecture"
     BUILD_ARCH="$arch" smart_build_monitored
 }
 
 run_build_all() {
     local clean_first="$1"
-    
+
     log_info "Building for all architectures (ARM64 + AMD64)"
-    
+
     run_build "arm64" "$clean_first"
     run_build "amd64" "false"  # Don't clean cache between builds
-    
+
     log_success "All architectures built successfully!"
     echo
     cache_status
@@ -95,35 +95,29 @@ run_build_all() {
 
 run_system_build() {
     local arch="$1"
-    
+
     log_info "Creating system distribution for $arch"
-    
-    if [ ! -f "$SCRIPT_DIR/build-ceraui-system-optimized.sh" ]; then
-        log_error "Optimized system build script not found"
+
+    if [ ! -f "$SCRIPT_DIR/build-ceraui-system.sh" ]; then
+        log_error "System build script not found"
         exit 1
     fi
-    
-    BUILD_ARCH="$arch" "$SCRIPT_DIR/build-ceraui-system-optimized.sh"
+
+    BUILD_ARCH="$arch" "$SCRIPT_DIR/build-ceraui-system.sh"
 }
 
 run_debian_build() {
     local arch="$1"
-    
+
     log_info "Creating Debian package for $arch"
-    
+
     if ! command -v fpm &> /dev/null; then
         log_error "FPM not installed. Cannot create Debian packages."
         log_info "Install with: gem install fpm"
         exit 1
     fi
-    
-    if [ ! -f "$SCRIPT_DIR/build-debian-package-modernized.sh" ]; then
-        log_warning "Using original Debian build script"
-        BUILD_ARCH="$arch" "$SCRIPT_DIR/build-debian-package.sh"
-    else
-        log_info "Using modernized Debian build script"
-        BUILD_ARCH="$arch" "$SCRIPT_DIR/build-debian-package-modernized.sh"
-    fi
+
+    BUILD_ARCH="$arch" "$SCRIPT_DIR/build-debian-package.sh"
 }
 
 # Parse command line arguments

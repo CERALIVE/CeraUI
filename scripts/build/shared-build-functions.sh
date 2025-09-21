@@ -222,13 +222,13 @@ log_step() {
 validate_tools() {
     local tools=("$@")
     local missing=()
-    
+
     for tool in "${tools[@]}"; do
         if ! command -v "$tool" &> /dev/null; then
             missing+=("$tool")
         fi
     done
-    
+
     if [ ${#missing[@]} -ne 0 ]; then
         log_error "Missing required tools: ${missing[*]}"
         return 1
@@ -251,7 +251,7 @@ PERF_LOG="$PERF_DIR/build-history.json"
 # Initialize performance monitoring
 init_performance_monitoring() {
     ensure_dir "$PERF_DIR"
-    
+
     if [ ! -f "$PERF_LOG" ]; then
         echo '{"builds": [], "baselines": {}}' > "$PERF_LOG"
     fi
@@ -268,16 +268,16 @@ start_timer() {
 end_timer() {
     local operation="$1"
     local start_file="$PERF_DIR/${operation}_start.tmp"
-    
+
     if [ ! -f "$start_file" ]; then
         log_warning "No start time found for operation: $operation"
         return 1
     fi
-    
+
     local start_time=$(cat "$start_file")
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
-    
+
     rm -f "$start_file"
     echo "$duration"
 }
@@ -288,20 +288,20 @@ record_build_metrics() {
     local duration="$2"
     local architecture="$3"
     local extra_data="$4"
-    
+
     init_performance_monitoring
-    
+
     # Get bundle sizes if available
     local bundle_sizes=""
     if [ -d "dist/public/assets" ]; then
         bundle_sizes=$(find dist/public/assets -name "*.js" -exec du -b {} \; | awk '{sum+=$1} END {print sum}')
     fi
-    
+
     # Create performance record
     local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     local commit=$(get_commit)
     local version=$(get_version)
-    
+
     # Add record to performance log (simplified approach)
     local temp_log="$PERF_DIR/temp.json"
     cat "$PERF_LOG" | jq --arg op "$operation" --arg dur "$duration" --arg arch "$architecture" \
@@ -324,24 +324,24 @@ record_build_metrics() {
 # Show performance statistics
 show_performance_stats() {
     init_performance_monitoring
-    
+
     if [ ! -s "$PERF_LOG" ]; then
         log_info "No performance data available yet"
         return
     fi
-    
+
     log_info "📊 Build Performance Statistics"
     echo
-    
+
     # Try to use jq for nice formatting, fallback to basic info
     if command -v jq &> /dev/null; then
         local total_builds=$(cat "$PERF_LOG" | jq '.builds | length')
         log_info "Total builds recorded: $total_builds"
-        
+
         if [ "$total_builds" -gt 0 ]; then
             local avg_duration=$(cat "$PERF_LOG" | jq '.builds | map(.duration) | add / length')
             log_info "Average build time: ${avg_duration}s"
-            
+
             local last_build=$(cat "$PERF_LOG" | jq -r '.builds[-1] | "Last: \(.operation) (\(.architecture)) - \(.duration)s on \(.timestamp)"')
             log_info "$last_build"
         fi
@@ -356,14 +356,14 @@ check_regression() {
     local current_duration="$1"
     local operation="$2"
     local threshold="20"  # 20% regression threshold
-    
+
     init_performance_monitoring
-    
+
     if command -v jq &> /dev/null && [ -s "$PERF_LOG" ]; then
         # Get average of last 5 builds for this operation
         local avg_recent=$(cat "$PERF_LOG" | jq --arg op "$operation" \
             '[.builds[] | select(.operation == $op)][-5:] | map(.duration) | add / length' 2>/dev/null)
-        
+
         if [ "$avg_recent" != "null" ] && [ -n "$avg_recent" ]; then
             local regression_check=$(echo "$current_duration $avg_recent $threshold" | awk '{
                 if ($1 > $2 * (1 + $3/100)) {
@@ -372,7 +372,7 @@ check_regression() {
                     print "false"
                 }
             }')
-            
+
             if [ "$regression_check" = "true" ]; then
                 log_warning "⚠️  PERFORMANCE REGRESSION DETECTED!"
                 log_warning "Current: ${current_duration}s, Recent average: ${avg_recent}s"
@@ -381,7 +381,7 @@ check_regression() {
             fi
         fi
     fi
-    
+
     return 0
 }
 
@@ -389,30 +389,30 @@ check_regression() {
 smart_build_monitored() {
     local arch=${BUILD_ARCH:-arm64}
     log_info "🚀 Smart build for $arch architecture with performance monitoring"
-    
+
     start_timer "smart_build"
-    
+
     # Call original smart build
     smart_build
-    
+
     local duration=$(end_timer "smart_build")
     log_success "Smart build completed in ${duration}s"
-    
+
     # Record metrics
     record_build_metrics "smart_build" "$duration" "$arch"
-    
+
     # Check for regressions
     if ! check_regression "$duration" "smart_build"; then
         log_info "Consider investigating what might have caused the slowdown"
     fi
-    
+
     return 0
 }
 
 # Export all functions for use in other scripts
 export -f get_version get_commit get_build_date get_architecture
 export -f get_git_hash get_frontend_hash get_backend_hash
-export -f is_frontend_cache_valid is_backend_cache_valid  
+export -f is_frontend_cache_valid is_backend_cache_valid
 export -f build_frontend_only build_backend_only smart_build smart_build_monitored
 export -f clean_cache cache_status
 export -f log_info log_success log_warning log_error log_step
