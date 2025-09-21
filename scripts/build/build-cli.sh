@@ -26,17 +26,14 @@ COMMANDS:
     help            Show this help message
 
 BUILD OPTIONS:
-    --arch <arch>   Specify target architecture (default: arm64)
-                    arm64: Orange Pi 5+, Radxa Rock 5B+, Raspberry Pi 4/5, Jetson
-                    amd64: Intel N100/N200 mini PCs, AMD Ryzen, desktop/laptop
+    --arch <arch>   Specify architecture: arm64, amd64 (default: arm64)
     --version <ver> Specify build version (default: auto-detect from git)
     --clean-first   Clean cache before building
 
 EXAMPLES:
     $SCRIPT_NAME cache                    # Show cache status
-    $SCRIPT_NAME build --arch arm64       # Build for Orange Pi 5+, Rock 5B+
-    $SCRIPT_NAME build --arch amd64       # Build for N100/N200 mini PCs
-    $SCRIPT_NAME build-all               # Build for both device types
+    $SCRIPT_NAME build --arch amd64       # Build for AMD64
+    $SCRIPT_NAME build-all               # Build for both architectures
     $SCRIPT_NAME system --arch arm64     # Create ARM64 system archive
     $SCRIPT_NAME clean                   # Clean all caches
 
