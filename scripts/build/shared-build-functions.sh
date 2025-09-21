@@ -35,29 +35,11 @@ get_architecture() {
             aarch64) echo "arm64" ;;
             *)
                 echo "⚠️  Unsupported architecture: $(uname -m)" >&2
-                echo "Supported architectures:" >&2
-                echo "  • amd64 (x86_64): Intel N100/N200 mini PCs, AMD Ryzen, desktop/laptop" >&2
-                echo "  • arm64 (aarch64): Orange Pi 5+, Radxa Rock 5B+, Raspberry Pi 4/5, Jetson" >&2
+                echo "Supported architectures: amd64 (x86_64), arm64 (aarch64)" >&2
                 return 1
                 ;;
         esac
     fi
-}
-
-# Get architecture with device information for display
-get_architecture_info() {
-    local arch=$(get_architecture)
-    case "$arch" in
-        "arm64")
-            echo "$arch (Orange Pi 5+, Radxa Rock 5B+, Raspberry Pi 4/5, Jetson devices)"
-            ;;
-        "amd64") 
-            echo "$arch (Intel N100/N200 mini PCs, AMD Ryzen, desktop/laptop computers)"
-            ;;
-        *)
-            echo "$arch"
-            ;;
-    esac
 }
 
 # Get current git state for cache validation
@@ -428,9 +410,9 @@ smart_build_monitored() {
 }
 
 # Export all functions for use in other scripts
-export -f get_version get_commit get_build_date get_architecture get_architecture_info
+export -f get_version get_commit get_build_date get_architecture
 export -f get_git_hash get_frontend_hash get_backend_hash
-export -f is_frontend_cache_valid is_backend_cache_valid  
+export -f is_frontend_cache_valid is_backend_cache_valid
 export -f build_frontend_only build_backend_only smart_build smart_build_monitored
 export -f clean_cache cache_status
 export -f log_info log_success log_warning log_error log_step

@@ -33,10 +33,10 @@ log_step "Cleaning previous builds"
 rm -rf dist/debian
 ensure_dir dist/debian
 
-log_info "Building Debian package for $(get_architecture_info)"
+log_info "Building Debian package for $ARCHITECTURE architecture"
 log_info "Package: $PACKAGE_NAME"
 log_info "Full Version: $VERSION-$ITERATION"
-log_info "Target devices: $(get_architecture_info | cut -d'(' -f2 | cut -d')' -f1)"
+log_info "Architecture: $ARCHITECTURE"
 
 log_step "Building full CeraUI product for Debian packaging"
 
@@ -184,7 +184,6 @@ cat > dist/debian/package-info-${ARCHITECTURE}.json << EOF
   "iteration": "$ITERATION",
   "fullVersion": "$VERSION-$ITERATION",
   "architecture": "$ARCHITECTURE",
-  "targetDevices": "$(get_architecture_info | cut -d'(' -f2 | cut -d')' -f1)",
   "filename": "$PACKAGE_FILENAME",
   "size": "$(stat -c%s "$PACKAGE_FILE")",
   "maintainer": "$MAINTAINER",
@@ -216,7 +215,7 @@ EOF
 
 # Create installation instructions
 cat > dist/debian/INSTALL-${ARCHITECTURE}.md << EOF
-# CERALIVE Debian Package Installation ($ARCHITECTURE)
+# CERALIVE Debian Package Installation ($ARCHITECTURE) - MODERNIZED
 
 ## Package Information
 - Package: $PACKAGE_FILENAME
@@ -224,31 +223,11 @@ cat > dist/debian/INSTALL-${ARCHITECTURE}.md << EOF
 - Base Version: $VERSION
 - Build Iteration: $ITERATION
 - Architecture: $ARCHITECTURE
-- Target Devices: $(get_architecture_info | cut -d'(' -f2 | cut -d')' -f1)
 - Size: $(du -h "$PACKAGE_FILE" | cut -f1)
 - Commit: $COMMIT
 
-## Device Compatibility
-This $ARCHITECTURE package is compatible with:
-$(case "$ARCHITECTURE" in
-  "arm64")
-    echo "- Orange Pi 5, 5+ (Rockchip RK3588S)"
-    echo "- Radxa Rock 5B, 5B+ (Rockchip RK3588)"
-    echo "- Raspberry Pi 4, 5 (Broadcom BCM2711/BCM2712)"
-    echo "- NVIDIA Jetson Nano, Orin devices"
-    echo "- Other ARM64 single-board computers"
-    ;;
-  "amd64")
-    echo "- Intel N100/N200 based mini PCs"
-    echo "- AMD Ryzen mini PCs"
-    echo "- Standard desktop/laptop computers"
-    echo "- Intel NUC devices"
-    echo "- Server hardware"
-    ;;
-esac)
-
 ## Build System Features
-✅ **Enterprise-Grade Build System**:
+✅ **Modernized Build System**:
 - Smart artifact caching (73% faster builds)
 - Bundle optimization (7 chunks, 50-434KB each)
 - Shared build functions for consistency
