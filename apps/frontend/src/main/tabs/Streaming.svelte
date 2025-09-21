@@ -104,6 +104,7 @@ let srtStreamIdTouched = $state(false);
 // Track encoder-related user interactions (separate from ServerCard)
 let userHasInteracted = $state(false);
 
+
 // Track initial restoration phase to prevent premature userHasInteracted setting
 let isInitialMount = $state(true);
 
@@ -159,19 +160,6 @@ $effect(() => {
 		}
 		if (!initialSelectedProperties.audioCodec) {
 			properties.audioCodec = initialSelectedProperties.audioCodec = config.acodec as AudioCodecs;
-
-			// If no audio codec in config but pipeline supports audio, default to aac
-			if (!config.acodec && config.pipeline && $unparsedPipelinesStore && $audioCodecsStore) {
-				const pipelineData = $unparsedPipelinesStore[config.pipeline];
-				if (pipelineData?.acodec) {
-					const aacCodec = Object.keys($audioCodecsStore).find(
-						(codec) => codec.toLowerCase() === 'aac',
-					);
-					if (aacCodec) {
-						properties.audioCodec = initialSelectedProperties.audioCodec = aacCodec as AudioCodecs;
-					}
-				}
-			}
 		}
 	}
 });
@@ -229,6 +217,7 @@ $effect.pre(() => {
 		}
 	}
 });
+
 
 $effect(() => {
 	// During initial mount, don't interfere with pipeline restoration
@@ -319,10 +308,28 @@ const startStreamingWithCurrentConfig = () => {
 		console.warn('Could not dismiss toasts:', error);
 	}
 
+	// Ensure a pipeline is built before attempting to start
+	if (
+		!properties.pipeline &&
+		properties.inputMode &&
+		properties.encoder &&
+		properties.resolution &&
+		properties.framerate &&
+		$groupedPipelinesStore
+	) {
+		const result = autoSelectNextOption('framerate', properties, $groupedPipelinesStore);
+		properties = Object.assign({}, properties, result);
+	}
+
 	const config = buildStreamingConfig(properties, { unparsedPipelines: $unparsedPipelinesStore });
+
 
 	if (config) {
 		startStreamingWithConfig(config);
+	} else {
+		toast.error('Unable to start streaming: incomplete or invalid selection.', {
+			description: 'Please ensure input mode, encoder, resolution, and framerate form a valid pipeline.',
+		});
 	}
 };
 

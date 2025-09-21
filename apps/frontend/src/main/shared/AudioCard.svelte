@@ -49,23 +49,20 @@ $effect(() => {
 });
 
 const hasAudioSupport = $derived(
-	audioCodecs &&
-		unparsedPipelines &&
+	unparsedPipelines &&
 		properties.pipeline &&
 		(unparsedPipelines[properties.pipeline]?.asrc ||
 			unparsedPipelines[properties.pipeline]?.acodec),
 );
 
 const hasAudioSource = $derived(
-	audioCodecs &&
-		unparsedPipelines &&
+	unparsedPipelines &&
 		properties.pipeline &&
 		unparsedPipelines[properties.pipeline]?.asrc,
 );
 
 const hasAudioCodec = $derived(
-	audioCodecs &&
-		unparsedPipelines &&
+	unparsedPipelines &&
 		properties.pipeline &&
 		unparsedPipelines[properties.pipeline]?.acodec,
 );
@@ -145,15 +142,15 @@ const hasAudioCodec = $derived(
 					<Label class="text-sm font-medium" for="audioCodec">{$LL.settings.audioCodec()}</Label>
 					<Select.Root
 						disabled={isStreaming}
-						onValueChange={onAudioCodecChange}
+						onValueChange={(value) => {
+							onAudioCodecChange(value);
+						}}
 						type="single"
 						value={properties.audioCodec}
 					>
 						<Select.Trigger id="audioCodec" class="w-full">
 							{properties.audioCodec && audioCodecs
-								? (Object.entries(audioCodecs).find(
-										(acodec) => acodec[0] === properties.audioCodec,
-									)?.[1] ?? $LL.settings.selectAudioCodec())
+								? (Object.entries(audioCodecs).find((acodec) => acodec[0] === properties.audioCodec)?.[1] ?? $LL.settings.selectAudioCodec())
 								: $LL.settings.selectAudioCodec()}
 						</Select.Trigger>
 						<Select.Content>

@@ -55,8 +55,9 @@ export function buildStreamingConfig(
 	if (pipelineData.asrc && properties.audioSource) {
 		config.asrc = properties.audioSource;
 	}
-	if (pipelineData.acodec && properties.audioCodec) {
-		config.acodec = properties.audioCodec;
+	// Always send acodec when pipeline requires it, default to 'aac' if not selected
+	if (pipelineData.acodec) {
+		config.acodec = properties.audioCodec || "aac";
 	}
 	if (
 		(properties.relayServer === "-1" || properties.relayServer === undefined) &&
