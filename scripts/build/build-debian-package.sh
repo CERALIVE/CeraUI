@@ -15,7 +15,34 @@ fi
 PACKAGE_NAME="ceralive-device"
 VERSION=${BUILD_VERSION:-$(git describe --tags --abbrev=0 2>/dev/null | sed 's/v//' || echo "1.0.0")}
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-ARCHITECTURE="arm64"
+
+# Generate dynamic iteration for APT version detection
+# This ensures each build has a unique, incrementing version
+BUILD_DATE=$(date -u +"%Y%m%d%H%M%S")
+ITERATION="${BUILD_DATE}.${COMMIT}"
+
+echo "🔄 APT Version Control:"
+echo "   Base Version: $VERSION"
+echo "   Iteration: $ITERATION"
+echo "   Full Package Version: $VERSION-$ITERATION"
+
+# Architecture detection/configuration
+# Can be overridden with BUILD_ARCH environment variable
+if [ -n "$BUILD_ARCH" ]; then
+    ARCHITECTURE="$BUILD_ARCH"
+else
+    # Auto-detect architecture
+    case "$(uname -m)" in
+        x86_64) ARCHITECTURE="amd64" ;;
+        aarch64) ARCHITECTURE="arm64" ;;
+        *)
+            echo "⚠️  Unsupported architecture: $(uname -m)"
+            echo "Supported architectures: amd64 (x86_64), arm64 (aarch64)"
+            exit 1
+            ;;
+    esac
+fi
+
 MAINTAINER="Andrés Cera <andres@ceralive.com>"
 DESCRIPTION="CERALIVE device software - live streaming hardware controller"
 URL="https://github.com/CERALIVE/CeraUI"
@@ -23,6 +50,11 @@ URL="https://github.com/CERALIVE/CeraUI"
 # Clean previous builds
 rm -rf dist/debian
 mkdir -p dist/debian
+
+echo "📦 Building Debian package for $ARCHITECTURE architecture..."
+echo "🔧 Package: $PACKAGE_NAME"
+echo "🏷️  Version: $VERSION-$ITERATION"
+echo "🏛️  Architecture: $ARCHITECTURE"
 
 echo "📦 Building full CeraUI product for Debian packaging..."
 
@@ -133,8 +165,7 @@ fpm -s dir -t deb \
     -n "$PACKAGE_NAME" \
     -v "$VERSION" \
     -a "$ARCHITECTURE" \
-    --iteration "1" \
-    --epoch "1" \
+    --iteration "$ITERATION" \
     --maintainer "$MAINTAINER" \
     --description "$DESCRIPTION" \
     --url "$URL" \
@@ -160,10 +191,13 @@ cd ../..
 PACKAGE_FILE=$(ls dist/debian/*.deb)
 PACKAGE_FILENAME=$(basename "$PACKAGE_FILE")
 
-cat > dist/debian/package-info.json << EOF
+# Create architecture-specific package info
+cat > dist/debian/package-info-${ARCHITECTURE}.json << EOF
 {
   "package": "$PACKAGE_NAME",
   "version": "$VERSION",
+  "iteration": "$ITERATION",
+  "fullVersion": "$VERSION-$ITERATION",
   "architecture": "$ARCHITECTURE",
   "filename": "$PACKAGE_FILENAME",
   "size": "$(stat -c%s "$PACKAGE_FILE")",
@@ -176,6 +210,45 @@ cat > dist/debian/package-info.json << EOF
     "udev",
     "adduser"
   ],
+  "apt": {
+    "versionProgression": "Each build has unique timestamp-based iteration",
+    "comparisonMethod": "APT compares: $VERSION-$ITERATION",
+    "exampleProgression": [
+      "1.0.0-20240101120000.abc1234",
+      "1.0.0-20240101130000.def5678",
+      "1.0.1-20240102140000.ghi9abc"
+    ]
+  },
+  "installation": {
+    "command": "sudo dpkg -i $PACKAGE_FILENAME",
+    "postInstall": "sudo systemctl enable --now ceralive.service"
+  }
+}
+EOF
+
+# Also create/update a general package info (for backwards compatibility)
+cat > dist/debian/package-info.json << EOF
+{
+  "package": "$PACKAGE_NAME",
+  "version": "$VERSION",
+  "iteration": "$ITERATION",
+  "fullVersion": "$VERSION-$ITERATION",
+  "architecture": "$ARCHITECTURE",
+  "filename": "$PACKAGE_FILENAME",
+  "size": "$(stat -c%s "$PACKAGE_FILE")",
+  "maintainer": "$MAINTAINER",
+  "description": "$DESCRIPTION",
+  "buildDate": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "commit": "$COMMIT",
+  "dependencies": [
+    "systemd",
+    "udev",
+    "adduser"
+  ],
+  "apt": {
+    "versionProgression": "Each build has unique timestamp-based iteration",
+    "note": "APT will properly detect newer versions using timestamp comparison"
+  },
   "installation": {
     "command": "sudo dpkg -i $PACKAGE_FILENAME",
     "postInstall": "sudo systemctl enable --now ceralive.service"
@@ -184,14 +257,17 @@ cat > dist/debian/package-info.json << EOF
 EOF
 
 # Create installation instructions
-cat > dist/debian/INSTALL.md << EOF
-# CERALIVE Debian Package Installation
+cat > dist/debian/INSTALL-${ARCHITECTURE}.md << EOF
+# CERALIVE Debian Package Installation ($ARCHITECTURE)
 
 ## Package Information
 - Package: $PACKAGE_FILENAME
-- Version: $VERSION
+- Version: $VERSION-$ITERATION
+- Base Version: $VERSION
+- Build Iteration: $ITERATION
 - Architecture: $ARCHITECTURE
 - Size: $(du -h "$PACKAGE_FILE" | cut -f1)
+- Commit: $COMMIT
 
 ## Installation
 
@@ -253,6 +329,12 @@ EOF
 rm -rf dist/debian/temp dist/debian/{postinst,prerm,postrm}
 
 echo "✅ Debian package created successfully!"
+echo "🏛️  Architecture: $ARCHITECTURE"
+echo "🏷️  Full Version: $VERSION-$ITERATION"
 echo "📍 Location: $PACKAGE_FILE"
 echo "📊 Size: $(du -h "$PACKAGE_FILE" | cut -f1)"
-echo "🔍 Package info: dist/debian/package-info.json"
+echo "🔍 Package info: dist/debian/package-info-${ARCHITECTURE}.json"
+echo "📋 Install guide: dist/debian/INSTALL-${ARCHITECTURE}.md"
+echo ""
+echo "🔄 APT Version Control: Each build will have a unique, incrementing version!"
+echo "   Previous builds will be detected as older by APT's version comparison."

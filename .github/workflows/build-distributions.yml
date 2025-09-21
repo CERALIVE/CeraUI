@@ -48,6 +48,9 @@ jobs:
   build-ceraui-system:
     name: Build CeraUI Full System
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        architecture: [arm64, amd64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -71,20 +74,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build CeraUI system distribution
+      - name: Build CeraUI system distribution for ${{ matrix.architecture }}
         run: ./scripts/build/build-ceraui-system.sh
         env:
           BUILD_VERSION: ${{ github.event.inputs.version }}
+          BUILD_ARCH: ${{ matrix.architecture }}
 
-      - name: Upload compressed distribution
+      - name: Upload compressed distribution (${{ matrix.architecture }})
         uses: actions/upload-artifact@v4
         with:
-          name: ceraui-system-compressed
+          name: ceraui-system-compressed-${{ matrix.architecture }}
           path: dist/compressed/
 
   build-debian-package:
     name: Build Debian Package
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        architecture: [arm64, amd64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -114,15 +121,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Debian package
+      - name: Build Debian package for ${{ matrix.architecture }}
         run: ./scripts/build/build-debian-package.sh
         env:
           BUILD_VERSION: ${{ github.event.inputs.version }}
+          BUILD_ARCH: ${{ matrix.architecture }}
 
-      - name: Upload Debian package
+      - name: Upload Debian package (${{ matrix.architecture }})
         uses: actions/upload-artifact@v4
         with:
-          name: ceraui-debian-package
+          name: ceraui-debian-package-${{ matrix.architecture }}
           path: dist/debian/
 
   build-summary:
@@ -144,12 +152,12 @@ jobs:
           echo "### Build Results:" >> $GITHUB_STEP_SUMMARY
           echo "- **CeraUI Frontend for BELABOX**: ${{ needs.build-ceraui-frontend-for-belabox.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- **CeraUI Full System**: ${{ needs.build-ceraui-system.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Debian Package**: ${{ needs.build-debian-package.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Debian Packages**: ${{ needs.build-debian-package.result }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Distributions Built:" >> $GITHUB_STEP_SUMMARY
           echo "1. **CeraUI Frontend for BELABOX** - For existing BELABOX devices with belaUI backend" >> $GITHUB_STEP_SUMMARY
-          echo "2. **CeraUI System Archives** - Full system to replace belaUI or deploy on custom devices" >> $GITHUB_STEP_SUMMARY
-          echo "3. **Debian Package** - Easy installation package for CeraUI system" >> $GITHUB_STEP_SUMMARY
+          echo "2. **CeraUI System Archives** - Full system to replace belaUI or deploy on custom devices (arm64 and amd64)" >> $GITHUB_STEP_SUMMARY
+          echo "3. **Debian Packages** - Easy installation packages for CeraUI system (arm64 and amd64)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Release Notes:" >> $GITHUB_STEP_SUMMARY
           echo "${{ github.event.inputs.release_notes || 'No release notes provided' }}" >> $GITHUB_STEP_SUMMARY
