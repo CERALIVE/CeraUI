@@ -38,3 +38,7 @@ i18n-usage-analysis.json
 
 # Process manager logs
 mprocs.log
+# Build optimization cache
+.build-cache/
+build-test-outputs*/
+*.log

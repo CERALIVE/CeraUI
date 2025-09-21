@@ -62,6 +62,64 @@ export default defineConfig(({ mode }) => ({
 		// Build frontend to root dist/public/ folder using absolute path
 		outDir: path.resolve(__dirname, "../../dist/public"),
 		emptyOutDir: true,
+		// Bundle splitting optimization to reduce main chunk size
+		rollupOptions: {
+			output: {
+				manualChunks: (id) => {
+					// Vendor chunks for external dependencies
+					if (id.includes('node_modules')) {
+						// Core Svelte framework (largest)
+						if (id.includes('svelte') || id.includes('@internationalized/date')) {
+							return 'vendor-core';
+						}
+
+						// UI component libraries
+						if (id.includes('bits-ui') || id.includes('svelte-sonner') ||
+						    id.includes('vaul-svelte') || id.includes('mode-watcher')) {
+							return 'vendor-ui';
+						}
+
+						// Utility libraries
+						if (id.includes('clsx') || id.includes('tailwind-merge') ||
+						    id.includes('tailwind-variants') || id.includes('qrcode') ||
+						    id.includes('@macfja/svelte-persistent-store')) {
+							return 'vendor-utils';
+						}
+
+						// Image and file processing
+						if (id.includes('html-to-image') || id.includes('@zip.js/zip.js')) {
+							return 'vendor-media';
+						}
+
+						// i18n system
+						if (id.includes('typesafe-i18n') || id.includes('@ceraui/i18n')) {
+							return 'vendor-i18n';
+						}
+
+						// Other vendor dependencies
+						return 'vendor-misc';
+					}
+
+					// Feature-based chunks for our code
+					if (id.includes('/components/streaming/')) {
+						return 'streaming';
+					}
+
+					if (id.includes('/components/dev-tools/')) {
+						return 'devtools';
+					}
+
+					if (id.includes('/components/ui/')) {
+						return 'ui-components';
+					}
+
+					// Default: let Vite decide
+					return null;
+				}
+			}
+		},
+		// Set stricter chunk size warning limit
+		chunkSizeWarningLimit: 300
 	},
 	resolve: {
 		alias: {
