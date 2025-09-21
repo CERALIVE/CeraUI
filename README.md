@@ -65,6 +65,29 @@ pnpm frontend:build
 
 CeraUI offers multiple distribution options for different deployment scenarios:
 
+### 🏗️ Multi-Architecture Support
+
+CeraUI supports two target architectures with specific device compatibility:
+
+#### ARM64 (aarch64) - Single Board Computers
+
+- **Orange Pi 5, 5+** (Rockchip RK3588S) - ✅ **RECOMMENDED** for CeraUI deployment
+- **Radxa Rock 5B, 5B+** (Rockchip RK3588) - ✅ **RECOMMENDED** ARM development platform
+- **NVIDIA Jetson Orin** - ✅ **RECOMMENDED** for high-performance ARM compute
+- **Raspberry Pi 4, 5** (Broadcom BCM2711/BCM2712) - ⚠️ **NOT RECOMMENDED** - Insufficient power
+- **NVIDIA Jetson Nano** - ⚠️ **LIMITED** performance for full CeraUI features
+- Other ARM64 SBCs - Performance varies significantly
+
+> ⚠️ **Performance Warning**: Architecture compatibility ≠ adequate performance! CeraUI requires significant processing power for video streaming and transcoding. Raspberry Pi and similar low-power devices may be ARM64 compatible but lack sufficient performance.
+
+#### AMD64 (x86-64) - Mini PCs & Standard Computers
+
+- **Intel N100/N200 Mini PCs** - Ideal for compact, low-power x86 deployments
+- **AMD Ryzen Mini PCs** - Higher performance compact systems
+- **Desktop/Laptop Computers** - Standard development and testing environments
+- **Intel NUC Devices** - Professional compact computer systems
+- **Server Hardware** - Traditional x86 server deployments
+
 ### Build Distributions
 
 #### 1. CeraUI Frontend for BELABOX
@@ -80,6 +103,13 @@ Deploy CeraUI frontend on existing BELABOX devices (keeps existing belaUI backen
 Complete system replacement for development devices:
 
 ```bash
+# Build for ARM64 devices (Orange Pi, Rock 5B, RPi)
+BUILD_ARCH=arm64 ./scripts/build/build-ceraui-system.sh
+
+# Build for AMD64 devices (N100 mini PCs, desktop)
+BUILD_ARCH=amd64 ./scripts/build/build-ceraui-system.sh
+
+# Auto-detect architecture (default)
 ./scripts/build/build-ceraui-system.sh
 ```
 
@@ -88,6 +118,13 @@ Complete system replacement for development devices:
 Professional deployment with package management:
 
 ```bash
+# Build ARM64 Debian package (for Orange Pi, Rock 5B, RPi)
+BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh
+
+# Build AMD64 Debian package (for N100 mini PCs, desktop)
+BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
+
+# Auto-detect architecture (default)
 ./scripts/build/build-debian-package.sh
 ```
 
@@ -115,7 +152,6 @@ GitHub Actions builds distributions manually via workflow dispatch:
 2. Copy your second repository files into the new directory
 
 3. Update your second project's `package.json`:
-
    - Change the name to match the directory name
    - Add a "clean" script if desired
 

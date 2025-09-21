@@ -50,6 +50,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        # Multi-architecture build matrix:
+        # arm64: Orange Pi 5+, Radxa Rock 5B+, Raspberry Pi 4/5, Jetson devices
+        # amd64: Intel N100/N200 mini PCs, AMD Ryzen, desktop/laptop computers
         architecture: [arm64, amd64]
     steps:
       - name: Checkout code
@@ -91,6 +94,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        # Multi-architecture Debian packages:
+        # arm64: Orange Pi 5+, Radxa Rock 5B+, Raspberry Pi 4/5, Jetson devices
+        # amd64: Intel N100/N200 mini PCs, AMD Ryzen, desktop/laptop computers
         architecture: [arm64, amd64]
     steps:
       - name: Checkout code

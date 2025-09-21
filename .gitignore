@@ -42,3 +42,5 @@ mprocs.log
 .build-cache/
 build-test-outputs*/
 *.log
+# Development analysis files
+BUILD_SYSTEM_IMPROVEMENTS.md
