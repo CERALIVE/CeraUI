@@ -8,13 +8,33 @@ PRODUCT_NAME="ceraui"
 VERSION=${BUILD_VERSION:-$(git describe --tags --abbrev=0 2>/dev/null | sed 's/v//' || echo "1.0.0")}
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE=$(date -u +"%Y%m%d_%H%M%S")
-ARCHIVE_NAME="${PRODUCT_NAME}-v${VERSION}-${COMMIT}-${BUILD_DATE}"
+
+# Architecture detection/configuration
+# Can be overridden with BUILD_ARCH environment variable
+if [ -n "$BUILD_ARCH" ]; then
+    ARCHITECTURE="$BUILD_ARCH"
+else
+    # Auto-detect architecture
+    case "$(uname -m)" in
+        x86_64) ARCHITECTURE="amd64" ;;
+        aarch64) ARCHITECTURE="arm64" ;;
+        *)
+            echo "⚠️  Unsupported architecture: $(uname -m)"
+            echo "Supported architectures: amd64 (x86_64), arm64 (aarch64)"
+            exit 1
+            ;;
+    esac
+fi
+
+ARCHIVE_NAME="${PRODUCT_NAME}-v${VERSION}-${COMMIT}-${ARCHITECTURE}-${BUILD_DATE}"
 
 # Clean previous builds
 rm -rf dist/compressed
 mkdir -p dist/compressed
 
-echo "📦 Building full CeraUI system..."
+echo "📦 Building full CeraUI system for $ARCHITECTURE architecture..."
+echo "🏛️  Architecture: $ARCHITECTURE"
+echo "📦 Archive name: $ARCHIVE_NAME"
 
 # Build the full product using existing package.json script
 echo "Using existing build script: pnpm run build"
@@ -155,7 +175,7 @@ cat > "$TEMP_DIR/build-info.json" << EOF
   "buildDate": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "nodeVersion": "$(node --version)",
   "pnpmVersion": "$(pnpm --version)",
-  "architecture": "linux-arm64",
+  "architecture": "linux-${ARCHITECTURE}",
   "compatibility": "belaUI replacement compatible",
   "includes": [
     "CeraUI backend binary (as belaUI)",
@@ -198,7 +218,7 @@ See the installation scripts for reference or follow the deployment documentatio
 
 ## System Requirements
 
-- Linux ARM64 (Raspberry Pi 4, etc.)
+- Linux ${ARCHITECTURE^^} compatible system
 - systemd
 - udev
 - Web browser (for interface access)
@@ -208,25 +228,17 @@ See the installation scripts for reference or follow the deployment documentatio
 For support and documentation, visit: https://github.com/CERALIVE/CeraUI
 EOF
 
-echo "📦 Creating system distribution archives..."
+echo "📦 Creating system distribution archive..."
 
 # Create tar.gz
 cd "dist/compressed"
 tar -czf "${ARCHIVE_NAME}.tar.gz" -C "temp_${ARCHIVE_NAME}" .
-
-# Create zip
-cd "temp_${ARCHIVE_NAME}"
-zip -r "../${ARCHIVE_NAME}.zip" . -q
 
 cd ../..
 
 # Cleanup temporary directory
 rm -rf "dist/compressed/temp_${ARCHIVE_NAME}"
 
-# Calculate checksums
-cd dist/compressed
-sha256sum *.tar.gz > "${ARCHIVE_NAME}.tar.gz.sha256"
-sha256sum *.zip > "${ARCHIVE_NAME}.zip.sha256"
 
 echo "✅ CeraUI system distribution created successfully!"
 echo "📍 Location: dist/compressed/"
