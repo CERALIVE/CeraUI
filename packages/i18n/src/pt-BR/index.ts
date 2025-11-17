@@ -422,6 +422,7 @@ const ptBR = {
 				disconnecting: "Desconectando",
 				connecting: "Conectando",
 				scanning: "Escaneando",
+				searching: "Procurando",
 				enabled: "Habilitado",
 			},
 			reset: "Redefinir",

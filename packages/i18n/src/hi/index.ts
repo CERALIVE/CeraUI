@@ -224,6 +224,7 @@ const hi = {
 				disconnecting: "डिसकनेक्ट हो रहा है",
 				connecting: "कनेक्ट हो रहा है",
 				scanning: "स्कैनिंग",
+				searching: "खोज रहे हैं",
 			},
 			reset: "रीसेट",
 		},

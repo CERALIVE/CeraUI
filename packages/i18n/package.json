@@ -30,7 +30,7 @@
 		"typesafe-i18n": "^5.26.2"
 	},
 	"devDependencies": {
-		"typescript": "^5.9.2"
+		"typescript": "^5.9.3"
 	},
 	"keywords": [
 		"i18n",

@@ -218,6 +218,7 @@ const zh = {
 				disconnecting: "正在断开",
 				connecting: "连接中",
 				scanning: "扫描中",
+				searching: "搜索中",
 			},
 			reset: "重置",
 		},

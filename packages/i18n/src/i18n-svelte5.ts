@@ -15,6 +15,8 @@ import { derived, type Readable, writable } from "svelte/store";
 import type { Locales, Translation } from "./i18n-types.js";
 import { loadLocaleAsync } from "./i18n-util.async.js";
 import { isLocale, loadedLocales } from "./i18n-util.js";
+// Import English translations synchronously as fallback
+import en from "./en/index.js";
 
 // 🎯 Enhanced translation function with key access
 export interface Svelte5TranslationFunction {
@@ -40,6 +42,7 @@ export type Svelte5Translation = TranslationProxy<Translation>;
 const translationCache = new Map<string, Svelte5Translation>();
 
 // 📊 Core reactive stores
+// Initialize with English as the default locale (synchronous)
 export const locale = writable<Locales>("en");
 export const isLoading = writable(false);
 export const loadingError = writable<string | null>(null);
@@ -193,10 +196,11 @@ function clearTranslationCache(): void {
 	translationCache.clear();
 }
 
-// 🎨 Create a writable store for translations that handles async loading
-const translationsStore = writable<Svelte5Translation>(
-	{} as Svelte5Translation,
-);
+// 🎨 Initialize translations store with English as default (synchronous)
+// This prevents undefined errors when components render before async loading completes
+loadedLocales.en = en; // Ensure English is in loadedLocales
+const initialTranslations = createSvelte5Proxy(en, "en", []);
+const translationsStore = writable<Svelte5Translation>(initialTranslations);
 
 // 🔄 Function to update translations for a locale
 async function updateTranslations(newLocale: Locales): Promise<void> {

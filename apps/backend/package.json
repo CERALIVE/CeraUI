@@ -9,19 +9,19 @@
 		"finalhandler": "^2.1.0",
 		"http-proxy": "^1.18.1",
 		"serve-static": "^2.2.0",
-		"winston": "^3.17.0",
+		"winston": "^3.18.3",
 		"ws": "^8.18.3",
 		"xml2js": "^0.6.2"
 	},
 	"devDependencies": {
-		"@types/bun": "^1.2.22",
+		"@types/bun": "^1.2.23",
 		"@types/finalhandler": "^1.2.4",
 		"@types/http-proxy": "^1.17.16",
-		"@types/serve-static": "^1.15.8",
+		"@types/serve-static": "^1.15.9",
 		"@types/ws": "^8.18.1",
 		"@types/xml2js": "^0.4.14",
 		"npm-run-all2": "^8.0.4",
-		"typescript": "^5.9.2"
+		"typescript": "^5.9.3"
 	},
 	"scripts": {
 		"dev": "bun run src/belaUI.ts",

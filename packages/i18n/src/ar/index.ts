@@ -398,6 +398,7 @@ const ar = {
 				disconnecting: "جارِ الانفصال",
 				connecting: "جاري الاتصال",
 				scanning: "جارٍ المسح",
+				searching: "البحث",
 			},
 			reset: "إعادة تعيين",
 		},

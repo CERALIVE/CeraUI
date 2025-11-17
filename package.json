@@ -26,14 +26,14 @@
 	},
 	"dependencies": {},
 	"devDependencies": {
-		"@biomejs/biome": "^2.2.4",
-		"@types/node": "^24.5.2",
+		"@biomejs/biome": "^2.3.5",
+		"@types/node": "^24.10.1",
 		"glob": "^11.0.3",
 		"mprocs": "^0.7.3",
-		"typescript": "^5.9.2"
+		"typescript": "^5.9.3"
 	},
 	"volta": {
 		"node": "22.11.0"
 	},
-	"packageManager": "pnpm@10.17.0"
+	"packageManager": "pnpm@10.22.0"
 }

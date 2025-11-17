@@ -229,6 +229,7 @@ const ja = {
 				disconnecting: "切断中",
 				connecting: "接続中",
 				scanning: "スキャン中",
+				searching: "検索中",
 			},
 			reset: "リセット",
 		},

@@ -447,6 +447,7 @@ const en = {
 				disconnecting: "Disconnecting",
 				connecting: "Connecting",
 				scanning: "Scanning",
+				searching: "Searching",
 			},
 		},
 		dialog: {

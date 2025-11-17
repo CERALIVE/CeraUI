@@ -445,6 +445,7 @@ const de = {
 				disconnecting: "Trennen",
 				connecting: "Verbinde",
 				scanning: "Wird gescannt",
+				searching: "Suchen",
 			},
 		},
 		dialog: {

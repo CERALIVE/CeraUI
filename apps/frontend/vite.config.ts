@@ -109,11 +109,12 @@ export default defineConfig(({ mode }) => ({
 						return 'devtools';
 					}
 
-					if (id.includes('/components/ui/')) {
-						return 'ui-components';
-					}
+					// TEMPORARILY DISABLED: Testing if this causes the "Cannot access 'ye' before initialization" error
+					// if (id.includes('/components/ui/')) {
+					// 	return 'ui-components';
+					// }
 
-					// Default: let Vite decide
+					// Default: let Vite decide natural chunk boundaries
 					return null;
 				}
 			}

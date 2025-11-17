@@ -458,6 +458,7 @@ const es = {
 				disconnecting: "Desconectándose",
 				connecting: "Conectando",
 				scanning: "Buscando",
+				searching: "Buscando",
 			},
 		},
 		dialog: {

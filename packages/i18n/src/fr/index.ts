@@ -431,6 +431,7 @@ const fr = {
 				disconnecting: "Déconnexion en cours",
 				connecting: "Connexion en cours",
 				scanning: "Scan en cours",
+				searching: "Recherche",
 				enabled: "Activé",
 			},
 		},
