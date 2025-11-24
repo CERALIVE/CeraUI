@@ -21,6 +21,29 @@ cera-workspace/
 pnpm install
 ```
 
+### Environment Configuration
+
+The `.env` file is **optional in development mode** - sensible defaults are used automatically:
+
+```bash
+# Optional: customize settings
+cp .env.example .env
+```
+
+**Configuration options:**
+
+| Variable | Description | Dev Default | Prod Default |
+|----------|-------------|-------------|--------------|
+| `VITE_SOCKET_ENDPOINT` | WebSocket URL | `ws://localhost` | `ws://<hostname>` |
+| `VITE_SOCKET_PORT` | WebSocket port | `3001` | `80` |
+| `PORT` | Backend server port | `3001` | `3001` |
+| `NODE_ENV` | Environment mode | `development` | - |
+| `MOCK_SCENARIO` | Mock hardware scenario | `multi-modem-wifi` | - |
+
+> 💡 **Quick Start:** Just run `pnpm dev` - no `.env` needed! The frontend will automatically connect to the backend on port 3001.
+>
+> ⚠️ **Note:** The `.env` file is gitignored and should never be committed.
+
 ### Development commands:
 
 #### Run all projects in development:
@@ -31,15 +54,34 @@ pnpm install
 pnpm dev
 ```
 
-_Provides a beautiful TUI with separate panes for each process_
+_Provides a beautiful TUI with separate panes for each process. Environment is loaded from `.env`._
 
-**Option 2: Parallel execution**
+**Mock Scenarios (Development Only)**
+
+The backend includes a mock system for development without hardware. Choose a scenario:
 
 ```bash
-pnpm dev:parallel
+# Default: 3 modems + WiFi (set in .env)
+pnpm dev
+
+# Single modem, no WiFi
+pnpm dev:single-modem
+
+# 3 modems with WiFi and hotspot
+pnpm dev:multi-modem
+
+# Active streaming with 2 modems bonding
+pnpm dev:streaming
+
+# Or override inline:
+MOCK_SCENARIO=streaming-active pnpm dev
 ```
 
-_Traditional parallel execution with mixed output_
+| Scenario | Modems | WiFi | Streaming | Use Case |
+|----------|--------|------|-----------|----------|
+| `single-modem` | 1 | ❌ | ❌ | Basic connectivity testing |
+| `multi-modem-wifi` | 3 | ✅ | ❌ | Full feature testing |
+| `streaming-active` | 2 | ✅ | ✅ | Live stream simulation |
 
 #### Run specific project:
 
@@ -235,7 +277,9 @@ pnpm clean
 
 ## mprocs Configuration
 
-The workspace uses mprocs for an enhanced development experience. Configuration is in `mprocs.yaml`:
+The workspace uses mprocs for an enhanced development experience. Configuration is in `mprocs.yaml`.
+
+Environment variables are loaded from the root `.env` file via `dotenv-cli` before mprocs starts.
 
 ### mprocs Keyboard Shortcuts:
 
@@ -258,9 +302,9 @@ procs:
   your-new-app:
     cwd: "./apps/your-new-app"
     cmd: ["pnpm", "dev"]
-    env:
-      NODE_ENV: development
 ```
+
+> **Note:** Environment variables are inherited from `.env` via `dotenv-cli`. No need to specify `env:` blocks in `mprocs.yaml`.
 
 ## Notes
 

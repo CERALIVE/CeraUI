@@ -11,12 +11,21 @@ interface BuildInfo {
 	IS_SSR: boolean;
 }
 
+// Development defaults (backend runs on port 3001)
+const DEV_DEFAULTS = {
+	SOCKET_ENDPOINT: `ws://${typeof window !== "undefined" ? window.location.hostname : "localhost"}`,
+	SOCKET_PORT: "3001",
+};
+
+// Production defaults (backend runs on port 80)
+const PROD_DEFAULTS = {
+	SOCKET_ENDPOINT: `ws://${typeof window !== "undefined" ? window.location.hostname : "localhost"}`,
+	SOCKET_PORT: "80",
+};
+
 export const ENV_VARIABLES: EnvVariables = {
-	SOCKET_ENDPOINT: getEnvVariable(
-		"SOCKET_ENDPOINT",
-		`ws://${window.location.hostname}`,
-	),
-	SOCKET_PORT: getEnvVariable("SOCKET_PORT", "80"),
+	SOCKET_ENDPOINT: getEnvVariable("SOCKET_ENDPOINT"),
+	SOCKET_PORT: getEnvVariable("SOCKET_PORT"),
 };
 
 export const BUILD_INFO: BuildInfo = {
@@ -27,18 +36,18 @@ export const BUILD_INFO: BuildInfo = {
 	IS_SSR: import.meta.env.SSR,
 };
 
-function getEnvVariable(
-	variable: "SOCKET_ENDPOINT" | "SOCKET_PORT",
-	defaultValue: string,
-): string {
+function getEnvVariable(variable: "SOCKET_ENDPOINT" | "SOCKET_PORT"): string {
 	// Retrieve the value from the environment variables (prefixed with 'VITE_' in Vite)
 	const envValue = import.meta.env[`VITE_${variable}`];
 
-	// If in development mode and the environment variable is available, use it
-	if (import.meta.env.DEV && envValue) {
+	// If environment variable is set, use it
+	if (envValue) {
 		return envValue;
 	}
 
-	// In production or when no env value is found, fallback to the provided default value
-	return defaultValue;
+	// Use appropriate defaults based on environment
+	// Development: port 3001 (backend dev server)
+	// Production: port 80 (standard HTTP)
+	const defaults = import.meta.env.DEV ? DEV_DEFAULTS : PROD_DEFAULTS;
+	return defaults[variable];
 }
