@@ -57,8 +57,8 @@ ConfigMessages.subscribe((configMessage) => {
 	sshPassword = configMessage?.ssh_pass ?? '';
 });
 StatusMessages.subscribe((statusMessage) => {
-	sshStatus = statusMessage?.ssh.active ?? false;
-	sshUser = statusMessage?.ssh.user ?? '';
+	sshStatus = statusMessage?.ssh?.active ?? false;
+	sshUser = statusMessage?.ssh?.user ?? '';
 });
 </script>
 
