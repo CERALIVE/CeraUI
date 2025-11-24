@@ -22,6 +22,7 @@
 import http, { type RequestOptions } from "node:http";
 
 import { logger } from "../../helpers/logger.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
 
 export const CONNECTIVITY_CHECK_DOMAIN = "www.gstatic.com";
 const CONNECTIVITY_CHECK_PATH = "/generate_204";
@@ -74,6 +75,11 @@ export async function checkConnectivity(
 	remoteAddr: string,
 	localAddress?: string,
 ) {
+	// In mock mode, always return true (simulated connectivity)
+	if (shouldUseMocks()) {
+		return true;
+	}
+
 	try {
 		const options: HttpGetOptions = {};
 		options.headers = { Host: CONNECTIVITY_CHECK_DOMAIN };

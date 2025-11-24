@@ -1,5 +1,10 @@
 import { spawn } from "node:child_process";
 
+import {
+	getMockSrtStats,
+	shouldMockStreaming,
+} from "../../mocks/providers/streaming.ts";
+
 // Define types for better clarity
 type ConnectionStats = `${number} Kbps, ${number} ms RTT` | "" | null;
 interface SrtStatsData {
@@ -75,6 +80,11 @@ function startSrtTransmitter(): void {
  * Initialize the SRT ingest system
  */
 export function initSRTIngest(): void {
+	// Skip starting real transmitter in development mode
+	if (shouldMockStreaming()) {
+		console.log("🎭 SRT ingest: Using mock streaming stats");
+		return;
+	}
 	startSrtTransmitter();
 }
 
@@ -83,5 +93,16 @@ export function initSRTIngest(): void {
  * @returns Current connection stats: bitrate and round-trip time, or empty if disconnected
  */
 export function getSRTIngestStats(): ConnectionStats {
+	// Use mock data in development mode
+	if (shouldMockStreaming()) {
+		const mockStats = getMockSrtStats();
+		if (mockStats) {
+			const bitrate = Math.round(mockStats.bitrate);
+			const roundTripTime = Math.round(mockStats.latency);
+			return `${bitrate} Kbps, ${roundTripTime} ms RTT`;
+		}
+		return "";
+	}
+
 	return currentConnectionStats;
 }

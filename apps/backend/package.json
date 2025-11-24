@@ -14,7 +14,7 @@
 		"xml2js": "^0.6.2"
 	},
 	"devDependencies": {
-		"@types/bun": "^1.3.2",
+		"@types/bun": "^1.3.3",
 		"@types/finalhandler": "^1.2.4",
 		"@types/http-proxy": "^1.17.17",
 		"@types/serve-static": "^2.2.0",
@@ -24,7 +24,9 @@
 		"typescript": "^5.9.3"
 	},
 	"scripts": {
-		"dev": "bun run src/belaUI.ts",
+		"dev": "NODE_ENV=development bun run src/belaUI.ts",
+		"dev:single-modem": "NODE_ENV=development MOCK_SCENARIO=single-modem bun run src/belaUI.ts",
+		"dev:streaming": "NODE_ENV=development MOCK_SCENARIO=streaming-active bun run src/belaUI.ts",
 		"build": "rm -rf ../../dist/ && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; bun build --compile --minify --sourcemap --bytecode --target=$BUN_TARGET src/belaUI.ts --outfile ../../dist/belaUI' && cd ../.. && pnpm run build:frontend",
 		"build:backend-only": "rm -rf ../../dist/belaUI ../../dist/deployment && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; bun build --compile --minify --sourcemap --bytecode --target=$BUN_TARGET src/belaUI.ts --outfile ../../dist/belaUI'",
 		"check": "bun tsc --noEmit",

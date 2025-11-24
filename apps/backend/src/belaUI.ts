@@ -19,6 +19,8 @@
 import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
+import { isDevelopment } from "./mocks/mock-config.ts";
+import { initMockService } from "./mocks/mock-service.ts";
 import { loadConfig } from "./modules/config.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
 import { initSRTIngest } from "./modules/ingest/srt.ts";
@@ -50,6 +52,15 @@ process.env.LANGUAGE = "C";
 
 /* Make sure apt-get doesn't expect any interactive user input */
 process.env.DEBIAN_FRONTEND = "noninteractive";
+
+/* Initialize mock service in development mode */
+if (isDevelopment()) {
+	const scenario = process.env.MOCK_SCENARIO || "multi-modem-wifi";
+	initMockService(scenario);
+	logger.info(`🎭 Development mode active with scenario: ${scenario}`);
+	logger.info("   Available scenarios: single-modem, multi-modem-wifi, streaming-active");
+	logger.info("   Set MOCK_SCENARIO env var to change scenario");
+}
 
 checkExecPath(belacoderExec);
 checkExecPath(srtlaSendExec);

@@ -20,6 +20,10 @@
 */
 import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import {
+	handleMmcliCommand,
+	shouldMockModems,
+} from "../../mocks/providers/modems.ts";
 
 import { setup } from "../setup.ts";
 
@@ -170,6 +174,24 @@ export function mmConvertAccessTech(accessTechs?: Array<string>): string {
 
 export async function mmList() {
 	try {
+		// Check for mock mode
+		if (shouldMockModems()) {
+			const mockOutput = handleMmcliCommand(["-K", "-L"]);
+			if (mockOutput) {
+				const modems = mmcliParseSep(mockOutput)["modem-list"] ?? [];
+				const list = [];
+				for (const m of modems) {
+					const id = m.match(/\/org\/freedesktop\/ModemManager1\/Modem\/(\d+)/) as
+						| [string, string]
+						| null;
+					if (id) {
+						list.push(Number.parseInt(id[1], 10));
+					}
+				}
+				return list;
+			}
+		}
+
 		const result = await execFileP(mmcliBinary, ["-K", "-L"]);
 		const modems = mmcliParseSep(result.stdout.toString())["modem-list"] ?? [];
 
@@ -192,6 +214,14 @@ export async function mmList() {
 
 export async function mmGetModem(id: ModemId) {
 	try {
+		// Check for mock mode
+		if (shouldMockModems()) {
+			const mockOutput = handleMmcliCommand(["-K", "-m", String(id)]);
+			if (mockOutput) {
+				return mmcliParseSep(mockOutput) as unknown as ModemInfo;
+			}
+		}
+
 		const result = await execFileP(mmcliBinary, ["-K", "-m", String(id)]);
 		return mmcliParseSep(result.stdout.toString()) as unknown as ModemInfo;
 	} catch (err) {
@@ -203,6 +233,14 @@ export async function mmGetModem(id: ModemId) {
 
 export async function mmGetSim(id: number) {
 	try {
+		// Check for mock mode
+		if (shouldMockModems()) {
+			const mockOutput = handleMmcliCommand(["-K", "-i", String(id)]);
+			if (mockOutput) {
+				return mmcliParseSep(mockOutput) as unknown as SimInfo;
+			}
+		}
+
 		const result = await execFileP(mmcliBinary, ["-K", "-i", String(id)]);
 		return mmcliParseSep(result.stdout.toString()) as unknown as SimInfo;
 	} catch (err) {
@@ -244,6 +282,25 @@ export type NetworkScanResult = {
 
 export async function mmNetworkScan(id: ModemId, timeout = 240) {
 	try {
+		// Check for mock mode
+		if (shouldMockModems()) {
+			const mockOutput = handleMmcliCommand(["-K", "-m", String(id), "--3gpp-scan"]);
+			if (mockOutput) {
+				const networks = (mmcliParseSep(mockOutput)[
+					"modem.3gpp.scan-networks"
+				] ?? []) as Array<string>;
+				return networks.map((n) => {
+					const info = n.split(/, */);
+					const output: Record<string, string> = {};
+					for (const entry of info) {
+						const kv = entry.split(/: */) as [string, string];
+						output[kv[0]] = kv[1];
+					}
+					return output as NetworkScanResult;
+				});
+			}
+		}
+
 		const result = await execFileP(mmcliBinary, [
 			`--timeout=${timeout}`,
 			"-K",

@@ -24,6 +24,10 @@ import type WebSocket from "ws";
 import { logger } from "../../helpers/logger.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
+import {
+	getMockIfconfigOutput,
+	shouldMockNetwork,
+} from "../../mocks/providers/network.ts";
 import { updateBcrptSourceIps } from "../streaming/bcrpt.ts";
 
 import {
@@ -85,13 +89,24 @@ export function initNetworkInterfaceMonitoring() {
 }
 
 function updateNetif() {
+	// Use mock data in development mode
+	if (shouldMockNetwork()) {
+		const mockOutput = getMockIfconfigOutput();
+		processIfconfigOutput(mockOutput);
+		return;
+	}
+
 	exec("ifconfig", (error, stdout) => {
 		if (error) {
 			logger.error(`Error getting ifconfig: ${error.message}`);
 			return;
 		}
+		processIfconfigOutput(stdout);
+	});
+}
 
-		let intsChanged = false;
+function processIfconfigOutput(stdout: string) {
+	let intsChanged = false;
 		const newInterfaces: Record<string, NetworkInterface> = {};
 
 		wifiDeviceListStartUpdate();
@@ -217,8 +232,7 @@ function updateNetif() {
 			updateBcrptSourceIps();
 		}
 
-		broadcastMsg("netif", netIfBuildMsg(), getms() - ACTIVE_TO);
-	});
+	broadcastMsg("netif", netIfBuildMsg(), getms() - ACTIVE_TO);
 }
 
 // The order is deliberate, we want *hotspot* to have higher priority

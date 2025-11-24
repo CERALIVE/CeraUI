@@ -20,6 +20,7 @@
 
 import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import { handleNmcliCommand, shouldMockWifi } from "../../mocks/providers/wifi.ts";
 
 export type ConnectionUUID = string;
 export type MacAddress = string;
@@ -48,6 +49,13 @@ export type NetworkManagerConnection = {
 export async function nmConnAdd(connection: NetworkManagerConnection) {
 	const fields = connection as Record<string, string | number>;
 	try {
+		// In mock mode, return a fake UUID for new connections
+		if (shouldMockWifi()) {
+			const fakeUuid = `mock-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+			logger.info(`🎭 Mock: Created fake connection ${fakeUuid}`);
+			return fakeUuid;
+		}
+
 		const args = ["connection", "add"];
 		for (const field in fields) {
 			const value = fields[field];
@@ -71,6 +79,20 @@ export async function nmConnAdd(connection: NetworkManagerConnection) {
 
 export async function nmConnsGet(fields: string) {
 	try {
+		// Check for mock mode
+		if (shouldMockWifi()) {
+			const mockOutput = handleNmcliCommand([
+				"--terse",
+				"--fields",
+				fields,
+				"connection",
+				"show",
+			]);
+			if (mockOutput !== null) {
+				return mockOutput.split("\n");
+			}
+		}
+
 		const result = await execFileP("nmcli", [
 			"--terse",
 			"--fields",
@@ -91,6 +113,26 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 	fields: Tupel,
 ) {
 	try {
+		// Check for mock mode
+		if (shouldMockWifi()) {
+			const mockOutput = handleNmcliCommand([
+				"--terse",
+				"--escape",
+				"no",
+				"--show-secrets",
+				"--get-values",
+				fields.join(","),
+				"connection",
+				"show",
+				uuid,
+			]);
+			if (mockOutput !== null) {
+				return mockOutput.split("\n") as {
+					[K in keyof Tupel]: string;
+				};
+			}
+		}
+
 		const result = await execFileP("nmcli", [
 			"--terse",
 			"--escape",
@@ -117,6 +159,12 @@ export async function nmConnSetFields(
 	fields: Record<string, string>,
 ) {
 	try {
+		// In mock mode, simulate successful modification
+		if (shouldMockWifi()) {
+			logger.info(`🎭 Mock: Modified connection ${uuid}`);
+			return true;
+		}
+
 		const args = ["con", "modify", uuid];
 		for (const field in fields) {
 			const value = fields[field];
@@ -141,6 +189,12 @@ export async function nmConnSetWifiMacAddress(
 ) {
 	if (!macAddress) return false;
 
+	// In mock mode, simulate successful MAC address update
+	if (shouldMockWifi()) {
+		logger.info(`🎭 Mock: Set MAC address ${macAddress} for ${uuid}`);
+		return true;
+	}
+
 	return nmConnSetFields(uuid, {
 		"connection.interface-name": "",
 		"802-11-wireless.mac-address": macAddress,
@@ -149,6 +203,12 @@ export async function nmConnSetWifiMacAddress(
 
 export async function nmConnDelete(uuid: ConnectionUUID) {
 	try {
+		// In mock mode, simulate successful deletion
+		if (shouldMockWifi()) {
+			logger.info(`🎭 Mock: Deleted connection ${uuid}`);
+			return true;
+		}
+
 		const result = await execFileP("nmcli", ["conn", "del", uuid]);
 		return result.stdout.match("successfully deleted");
 	} catch (err) {
@@ -161,6 +221,12 @@ export async function nmConnDelete(uuid: ConnectionUUID) {
 
 export async function nmConnect(uuid: ConnectionUUID, timeout?: number) {
 	try {
+		// In mock mode, simulate successful connection
+		if (shouldMockWifi()) {
+			logger.info(`🎭 Mock: Activated connection ${uuid}`);
+			return true;
+		}
+
 		const timeoutArgs = timeout ? ["-w", String(timeout)] : [];
 		const result = await execFileP(
 			"nmcli",
@@ -177,6 +243,12 @@ export async function nmConnect(uuid: ConnectionUUID, timeout?: number) {
 
 export async function nmDisconnect(uuid: ConnectionUUID) {
 	try {
+		// In mock mode, simulate successful disconnection
+		if (shouldMockWifi()) {
+			logger.info(`🎭 Mock: Disconnected ${uuid}`);
+			return true;
+		}
+
 		const result = await execFileP("nmcli", ["conn", "down", uuid]);
 		return result.stdout.match("successfully deactivated");
 	} catch (err) {
@@ -189,6 +261,20 @@ export async function nmDisconnect(uuid: ConnectionUUID) {
 
 export async function nmDevices(fields: string) {
 	try {
+		// Check for mock mode
+		if (shouldMockWifi()) {
+			const mockOutput = handleNmcliCommand([
+				"--terse",
+				"--fields",
+				fields,
+				"device",
+				"status",
+			]);
+			if (mockOutput !== null) {
+				return mockOutput.split("\n");
+			}
+		}
+
 		const result = await execFileP("nmcli", [
 			"--terse",
 			"--fields",
@@ -206,6 +292,19 @@ export async function nmDevices(fields: string) {
 
 export async function nmDeviceProp(device: string, fields: string) {
 	try {
+		// In mock mode, return mock device properties
+		if (shouldMockWifi()) {
+			const fieldList = fields.split(",");
+			return fieldList.map(f => {
+				switch (f.trim()) {
+					case "GENERAL.HWADDR": return "dc:a6:32:12:34:57";
+					case "GENERAL.STATE": return "100 (connected)";
+					case "GENERAL.CONNECTION": return "HomeNetwork";
+					default: return "";
+				}
+			});
+		}
+
 		const result = await execFileP("nmcli", [
 			"--terse",
 			"--escape",
@@ -231,6 +330,15 @@ export async function nmRescan(device?: string) {
 			args.push("ifname");
 			args.push(device);
 		}
+
+		// Check for mock mode
+		if (shouldMockWifi()) {
+			const mockOutput = handleNmcliCommand(args);
+			if (mockOutput !== null) {
+				return true;
+			}
+		}
+
 		const result = await execFileP("nmcli", args);
 		return result.stdout === "";
 	} catch (err) {
@@ -243,6 +351,23 @@ export async function nmRescan(device?: string) {
 
 export async function nmScanResults(fields: string) {
 	try {
+		// Check for mock mode
+		if (shouldMockWifi()) {
+			const mockOutput = handleNmcliCommand([
+				"--terse",
+				"--fields",
+				fields,
+				"device",
+				"wifi",
+				"list",
+				"--rescan",
+				"no",
+			]);
+			if (mockOutput !== null) {
+				return mockOutput.split("\n");
+			}
+		}
+
 		const result = await execFileP("nmcli", [
 			"--terse",
 			"--fields",
@@ -268,6 +393,13 @@ export async function nmHotspot(
 	timeout?: number,
 ) {
 	try {
+		// In mock mode, return a fake hotspot UUID
+		if (shouldMockWifi()) {
+			const fakeUuid = `hotspot-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+			logger.info(`🎭 Mock: Started hotspot ${ssid} on ${device} with UUID ${fakeUuid}`);
+			return fakeUuid;
+		}
+
 		const timeoutArgs = timeout ? ["-w", String(timeout)] : [];
 		const result = await execFileP(
 			"nmcli",

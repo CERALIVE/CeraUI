@@ -24,6 +24,10 @@ import { execPNR } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
+import {
+	getMockSensorData,
+	shouldMockSensors,
+} from "../../mocks/providers/sensors.ts";
 
 import { getRTMPIngestStats } from "../ingest/rtmp.ts";
 import { getSRTIngestStats } from "../ingest/srt.ts";
@@ -113,6 +117,26 @@ async function monitorBootconfig() {
 }
 
 export function initHardwareMonitoring() {
+	// Use mock sensors in development mode
+	if (shouldMockSensors()) {
+		const updateMockSensors = () => {
+			const data = getMockSensorData();
+			const srtIngestStats = getSRTIngestStats();
+			if (srtIngestStats) {
+				data["SRT ingest"] = srtIngestStats;
+			}
+			const rtmpIngestStats = getRTMPIngestStats();
+			Object.assign(data, rtmpIngestStats);
+
+			broadcastMsg("sensors", data, getms() - ACTIVE_TO);
+		};
+
+		updateMockSensors();
+		setInterval(updateMockSensors, 1000);
+		logger.info("🎭 Using mock hardware sensors");
+		return;
+	}
+
 	let sensorsFunc: (() => void) | undefined;
 	switch (setup.hw) {
 		case "jetson":
