@@ -1,3 +1,6 @@
+// Import $persist rune type declaration
+import "@macfja/svelte-persistent-runes";
+
 declare global {
 	interface Window {
 		startStreamingWithNotificationClear: (
@@ -9,3 +12,5 @@ declare global {
 	// Build-time version injected by Vite
 	const __APP_VERSION__: string;
 }
+
+export {};

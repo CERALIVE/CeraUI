@@ -22,7 +22,7 @@ import {
 	forceVersionChangeNotification,
 	getFrontendVersionInfo,
 	resetFrontendVersionTracking,
-} from "./frontend-version";
+} from "./frontend-version.svelte";
 import { CLIENT_VERSION } from "./version-manager";
 
 const AuthStore = writable<AuthMessage>();
@@ -136,12 +136,12 @@ function sendAuthMessage(
 const assignMessage = (message: string) => {
 	const parsedMessage = JSON.parse(message);
 	const messageType = Object.keys(parsedMessage)[0];
-	
+
 	// Debug log for log-related messages
 	if (messageType === "log") {
 		console.log("📥 Received log message:", parsedMessage);
 	}
-	
+
 	switch (messageType) {
 		case "auth":
 			AuthStore.set(parsedMessage.auth);

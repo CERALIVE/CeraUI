@@ -22,7 +22,7 @@ import { Activity, Clock, Code, Globe, Monitor, Wifi } from '@lucide/svelte';
 
 import * as Card from '$lib/components/ui/card';
 import { BUILD_INFO, ENV_VARIABLES } from '$lib/env';
-import { localeStore } from '$lib/stores/locale';
+import { setLocale as setLocaleStore } from '$lib/stores/locale.svelte';
 import { CLIENT_VERSION } from '$lib/stores/version-manager';
 
 // Real environment data using runes
@@ -279,7 +279,7 @@ async function handleLanguageClick(languageCode: Locales) {
 		// Then set it as active
 		setLocale(languageCode);
 		// Update the locale store
-		localeStore.set(existingLocales.find((l) => l.code === languageCode)!);
+		setLocaleStore(existingLocales.find((l) => l.code === languageCode)!);
 		console.log(`✅ Dev Tools: Successfully switched to ${languageCode}`);
 	} catch (error) {
 		console.error(`❌ Dev Tools: Failed to load locale ${languageCode}:`, error);

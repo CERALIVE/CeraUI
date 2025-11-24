@@ -6,13 +6,13 @@ import { LL, setLocale } from '@ceraui/i18n/svelte';
 import { ModeWatcher } from 'mode-watcher';
 import { onMount } from 'svelte';
 
-import { localeStore } from '$lib/stores/locale';
+import { getLocale } from '$lib/stores/locale.svelte';
 import Layout from '$main/Layout.svelte';
 
 onMount(async () => {
 	try {
 		// Priority: 1. Saved preference, 2. Browser locale, 3. English fallback
-		const savedLocale = $localeStore?.code;
+		const savedLocale = getLocale()?.code;
 		const browserLocale = typeof window !== 'undefined' ? navigator.language.split('-')[0] : 'en';
 
 		let targetLocale: string;

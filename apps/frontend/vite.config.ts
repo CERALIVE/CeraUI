@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { persistPlugin } from "@macfja/svelte-persistent-runes/plugins";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
@@ -36,7 +37,10 @@ const BRAND_CONFIG = brandConfigs[CURRENT_BRAND];
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+	// Load .env from monorepo root for unified configuration
+	envDir: path.resolve(__dirname, "../.."),
 	plugins: [
+		persistPlugin(),
 		tailwindcss(),
 		svelte({
 			compilerOptions: {

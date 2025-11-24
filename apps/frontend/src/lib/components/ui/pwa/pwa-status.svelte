@@ -40,7 +40,12 @@ import { writable } from 'svelte/store';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
-import { canInstall, installApp, isOnline, showIOSInstallPrompt } from '$lib/stores/pwa';
+import {
+	getCanInstall,
+	getIsOnline,
+	installApp,
+	setShowIOSInstallPrompt,
+} from '$lib/stores/pwa.svelte';
 // Create a simple connection state based on socket readiness
 import { socket } from '$lib/stores/websocket-store';
 
@@ -86,6 +91,9 @@ let showOfflineBanner = $state(false);
 let showInstallBanner = $state(false);
 let showIOSBanner = $state(false);
 
+// Reactive derived values for PWA state
+const canInstallApp = $derived(getCanInstall());
+
 // Device detection - includes tablets like iPad
 const isMobile = $derived(() => {
 	if (typeof window === 'undefined') return false;
@@ -107,12 +115,13 @@ const isMobile = $derived(() => {
 
 // Reactive statements - consider both browser online state AND WebSocket connection
 $effect(() => {
+	const online = getIsOnline();
 	const isFullyOffline =
-		!$isOnline || $connectionState === 'disconnected' || $connectionState === 'error';
+		!online || $connectionState === 'disconnected' || $connectionState === 'error';
 
 	if (isFullyOffline) {
 		showOfflineBanner = true;
-	} else if ($connectionState === 'connected' && $isOnline) {
+	} else if ($connectionState === 'connected' && online) {
 		// Hide offline banner after a short delay when both are back online
 		setTimeout(() => {
 			showOfflineBanner = false;
@@ -121,7 +130,7 @@ $effect(() => {
 });
 
 $effect(() => {
-	showInstallBanner = $canInstall;
+	showInstallBanner = getCanInstall();
 });
 
 // Track banner state more carefully
@@ -188,13 +197,13 @@ async function handleInstall() {
 function dismissIOSBanner() {
 	showIOSBanner = false;
 	bannerDismissed = true;
-	showIOSInstallPrompt.set(false);
+	setShowIOSInstallPrompt(false);
 }
 
 // Handle install for mobile banner (Android can use native prompt)
 async function handleMobileInstall() {
 	// For Android with native prompt available, use it
-	if (isAndroid() && $canInstall) {
+	if (isAndroid() && getCanInstall()) {
 		await handleInstall();
 		dismissIOSBanner();
 	} else {
@@ -243,7 +252,7 @@ async function handleMobileInstall() {
 							Tap
 							<Share class="mx-1 inline h-3 w-3" />
 							{$LL.pwa.installIosDescription()}
-						{:else if isAndroid() && $canInstall}
+						{:else if isAndroid() && canInstallApp}
 							{$LL.pwa.installAndroidDescription()}
 						{:else if isAndroid()}
 							{$LL.pwa.installAndroidMenuDescription()}
@@ -254,7 +263,7 @@ async function handleMobileInstall() {
 				</div>
 			</div>
 			<div class="flex flex-shrink-0 gap-2">
-				{#if isAndroid() && $canInstall}
+				{#if isAndroid() && canInstallApp}
 					<Button
 						class="bg-white text-blue-500 hover:bg-white/90"
 						onclick={handleMobileInstall}
@@ -270,7 +279,7 @@ async function handleMobileInstall() {
 					size="sm"
 					variant="ghost"
 				>
-					{isAndroid() && $canInstall ? $LL.pwa.installLater() : $LL.pwa.installIosGotIt()}
+					{isAndroid() && canInstallApp ? $LL.pwa.installLater() : $LL.pwa.installIosGotIt()}
 				</Button>
 			</div>
 		</div>

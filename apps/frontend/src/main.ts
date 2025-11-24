@@ -4,7 +4,7 @@ import { registerSW } from "virtual:pwa-register";
 import { mount } from "svelte";
 
 import App from "./App.svelte";
-import { checkFrontendVersionChange } from "./lib/stores/frontend-version";
+import { checkFrontendVersionChange } from "./lib/stores/frontend-version.svelte";
 
 // Register Service Worker (only frontend update mechanism)
 const updateSW = registerSW({

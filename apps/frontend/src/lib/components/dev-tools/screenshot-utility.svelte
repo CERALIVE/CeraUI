@@ -10,23 +10,24 @@ import * as Button from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import { navElements } from '$lib/config';
 import { enhancedNavigationStore } from '$lib/stores/navigation';
-import { isOnline } from '$lib/stores/pwa';
+import { setIsOnline } from '$lib/stores/pwa.svelte';
 import {
 	addScreenshot,
-	captureProgress,
 	clearScreenshots,
 	downloadScreenshotsZip,
-	isCapturing,
+	getCaptureProgress,
+	getIsCapturing,
+	getScreenshotImages,
 	type ScreenshotImage,
 	screenshotImages,
-} from '$lib/stores/screenshot';
+	setCaptureProgress,
+	setIsCapturing,
+} from '$lib/stores/screenshot.svelte';
 
-// Reactive count from store
-let imagesCount = $state(0);
-screenshotImages.subscribe((images) => {
-	imagesCount = images.length;
-	console.log('🔄 Global store updated, count:', imagesCount);
-});
+// Reactive state derived from store
+const imagesCount = $derived(getScreenshotImages().length);
+const currentlyCapturing = $derived(getIsCapturing());
+const progressText = $derived(getCaptureProgress());
 
 const tabs = [
 	{ key: 'general', name: 'general' },
@@ -219,7 +220,7 @@ async function captureTabScreenshots(
 		console.log(`🎨 Theme switched to ${theme}, waiting for full render...`);
 
 		for (const tab of tabs) {
-			captureProgress.set(`${type} ${theme} ${tab.name}`);
+			setCaptureProgress(`${type} ${theme} ${tab.name}`);
 			console.log(`🧭 Navigating to ${tab.name}...`);
 			await navigateToTab(tab.key);
 
@@ -259,28 +260,28 @@ async function captureTabScreenshots(
 
 // Main capture function - SIMPLIFIED & CLEAN
 async function captureAll(): Promise<void> {
-	if ($isCapturing) return;
+	if (currentlyCapturing) return;
 
 	try {
-		isCapturing.set(true);
+		setIsCapturing(true);
 		clearScreenshots();
 		console.log('🚀 Starting capture process...');
 
 		const themes: Array<'dark' | 'light'> = ['dark', 'light'];
 
 		// Desktop captures (10 images)
-		captureProgress.set('Desktop screenshots...');
+		setCaptureProgress('Desktop screenshots...');
 		await captureTabScreenshots(tabs, themes, 'desktop', false);
 
 		// Mobile captures (10 images)
-		captureProgress.set('Mobile screenshots...');
+		setCaptureProgress('Mobile screenshots...');
 		await captureTabScreenshots(tabs, themes, 'mobile', true);
 		disableMobileView();
 
 		// Offline captures (2 images)
-		captureProgress.set('Offline screenshots...');
+		setCaptureProgress('Offline screenshots...');
 		console.log('🌐 Switching to offline mode...');
-		isOnline.set(false);
+		setIsOnline(false);
 		await navigateToTab('general');
 
 		// Extra wait for offline state to fully apply
@@ -309,23 +310,23 @@ async function captureAll(): Promise<void> {
 			console.log(`✅ Successfully captured offline-${theme}.png`);
 		}
 
-		isOnline.set(true);
+		setIsOnline(true);
 		toast.success(`All done! ${imagesCount} screenshots captured`);
 		console.log('✅ Capture complete:', imagesCount, 'images stored');
 
 		// Auto-trigger download
 		console.log('🔽 Auto-triggering download...');
-		captureProgress.set('Downloading ZIP...');
+		setCaptureProgress('Downloading ZIP...');
 		await downloadScreenshotsZip();
 	} catch (error) {
 		console.error('❌ Capture failed:', error);
 		toast.error('Capture failed');
 	} finally {
 		console.log('🧹 Cleaning up after capture...');
-		isCapturing.set(false);
-		captureProgress.set('');
+		setIsCapturing(false);
+		setCaptureProgress('');
 		disableMobileView();
-		isOnline.set(true);
+		setIsOnline(true);
 
 		// Final cleanup wait to ensure everything is reset
 		await new Promise((resolve) => setTimeout(resolve, 500));
@@ -358,12 +359,12 @@ function clearImages(): void {
 	</Card.Header>
 
 	<Card.Content class="space-y-4">
-		{#if $isCapturing}
+		{#if currentlyCapturing}
 			<div
 				class="rounded border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/20"
 			>
 				<div class="text-sm font-medium text-blue-800 dark:text-blue-200">
-					🚀 {$captureProgress}
+					🚀 {progressText}
 				</div>
 				<div class="mt-1 text-xs text-blue-600 dark:text-blue-400">
 					Images: {imagesCount}
@@ -374,11 +375,11 @@ function clearImages(): void {
 		<div class="space-y-3">
 			<Button.Root
 				class="w-full bg-gradient-to-r from-blue-600 to-purple-600"
-				disabled={$isCapturing}
+				disabled={currentlyCapturing}
 				onclick={captureAll}
 			>
 				<Camera class="mr-2 h-4 w-4" />
-				{$isCapturing ? $LL.devtools.capturing() : $LL.devtools.captureAllScreenshots()}
+				{currentlyCapturing ? $LL.devtools.capturing() : $LL.devtools.captureAllScreenshots()}
 			</Button.Root>
 
 			<div class="text-muted-foreground text-center text-xs">

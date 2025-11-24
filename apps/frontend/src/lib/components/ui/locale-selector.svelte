@@ -2,13 +2,12 @@
 import { existingLocales, loadLocaleAsync } from '@ceraui/i18n';
 import { LL, setLocale } from '@ceraui/i18n/svelte';
 import { Globe } from '@lucide/svelte';
-import { get } from 'svelte/store';
 
 import * as Select from '$lib/components/ui/select';
-import { localeStore } from '$lib/stores/locale';
+import { getLocale, setLocale as setLocaleStore } from '$lib/stores/locale.svelte';
 import { cn } from '$lib/utils';
 
-const initialLocale = get(localeStore);
+const initialLocale = getLocale();
 
 let selectedLocale = $state(initialLocale.code);
 const localeName = $derived.by(() => existingLocales.find((l) => l.code === selectedLocale)!.name);
@@ -30,7 +29,7 @@ const handleLocaleChange = async (value: string) => {
 		// Then set it as active
 		setLocale(value as any);
 		// Update the stores
-		localeStore.set(existingLocales.find((l) => l.code === value)!);
+		setLocaleStore(existingLocales.find((l) => l.code === value)!);
 		selectedLocale = value;
 		console.log(`✅ Successfully switched to locale: ${value}`);
 	} catch (error) {

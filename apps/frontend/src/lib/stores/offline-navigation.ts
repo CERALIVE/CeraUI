@@ -1,6 +1,6 @@
 import { derived, writable } from "svelte/store";
 
-import { isOnline } from "./pwa";
+import { isOnline } from "./pwa.svelte";
 import { socket } from "./websocket-store";
 
 // Create a connection state store based on actual socket

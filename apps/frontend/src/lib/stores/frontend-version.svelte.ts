@@ -1,16 +1,30 @@
 import { LL } from "@ceraui/i18n/svelte";
-import { get, writable } from "svelte/store";
+import { get } from "svelte/store";
 import { toast } from "svelte-sonner";
 
 import { CLIENT_VERSION } from "./version-manager";
 
-// Store for tracking frontend version changes
-export const frontendVersion = writable<string>(CLIENT_VERSION);
-export const hasVersionChanged = writable<boolean>(false);
+// State for tracking frontend version changes using Svelte 5 runes
+let frontendVersionState = $state<string>(CLIENT_VERSION);
+let hasVersionChangedState = $state(false);
 
 const FRONTEND_VERSION_KEY = "ceraui_frontend_version";
 const LAST_CHECK_KEY = "ceraui_last_version_check";
 const MIN_CHECK_INTERVAL = 5000; // 5 seconds
+
+// Getters
+export function getFrontendVersion(): string {
+	return frontendVersionState;
+}
+
+export function getHasVersionChanged(): boolean {
+	return hasVersionChangedState;
+}
+
+// Setters
+export function setHasVersionChanged(value: boolean): void {
+	hasVersionChangedState = value;
+}
 
 /**
  * Check if frontend version has changed since last visit
@@ -23,7 +37,7 @@ export function checkFrontendVersionChange(): boolean {
 	// Check if another tab recently handled the version change
 	const lastCheck = localStorage.getItem(LAST_CHECK_KEY);
 	const now = Date.now();
-	if (lastCheck && now - parseInt(lastCheck) < MIN_CHECK_INTERVAL) {
+	if (lastCheck && now - Number.parseInt(lastCheck) < MIN_CHECK_INTERVAL) {
 		return false;
 	}
 
@@ -36,7 +50,7 @@ export function checkFrontendVersionChange(): boolean {
 
 	// Check if version changed
 	const versionChanged = storedVersion !== currentVersion;
-	hasVersionChanged.set(versionChanged);
+	hasVersionChangedState = versionChanged;
 
 	if (versionChanged) {
 		// Update stored version immediately to prevent repeated notifications
@@ -71,12 +85,12 @@ function showVersionChangeNotification(oldVersion: string, newVersion: string) {
 		changeTypeKey = "version.newBuildVersion";
 	}
 
-	const $LL = get(LL);
-	toast.info($LL.version.newVersionAvailable(), {
-		description: `${$LL.version[changeTypeKey.split(".")[1] as keyof typeof $LL.version]()}. ${$LL.version.refreshToUpdate()}.`,
+	const translations = get(LL);
+	toast.info(translations.version.newVersionAvailable(), {
+		description: `${translations.version[changeTypeKey.split(".")[1] as keyof typeof translations.version]()}. ${translations.version.refreshToUpdate()}.`,
 		duration: 8000,
 		action: {
-			label: $LL.version.refreshNow(),
+			label: translations.version.refreshNow(),
 			onClick: () => {
 				window.location.reload();
 			},
@@ -87,9 +101,9 @@ function showVersionChangeNotification(oldVersion: string, newVersion: string) {
 /**
  * Reset version tracking (useful for testing)
  */
-export function resetFrontendVersionTracking() {
+export function resetFrontendVersionTracking(): void {
 	localStorage.removeItem(FRONTEND_VERSION_KEY);
-	hasVersionChanged.set(false);
+	hasVersionChangedState = false;
 }
 
 /**
@@ -99,15 +113,29 @@ export function getFrontendVersionInfo() {
 	return {
 		current: CLIENT_VERSION,
 		stored: localStorage.getItem(FRONTEND_VERSION_KEY),
-		hasChanged: hasVersionChanged,
+		hasChanged: hasVersionChangedState,
 	};
 }
 
 /**
  * Force version change notification (for testing)
  */
-export function forceVersionChangeNotification() {
+export function forceVersionChangeNotification(): void {
 	const storedVersion =
 		localStorage.getItem(FRONTEND_VERSION_KEY) || "test-old-version";
 	showVersionChangeNotification(storedVersion, CLIENT_VERSION);
 }
+
+// Legacy-compatible store-like objects
+export const frontendVersion = {
+	get value() {
+		return frontendVersionState;
+	},
+};
+
+export const hasVersionChanged = {
+	get value() {
+		return hasVersionChangedState;
+	},
+	set: setHasVersionChanged,
+};

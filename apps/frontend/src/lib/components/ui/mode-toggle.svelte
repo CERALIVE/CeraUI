@@ -2,22 +2,20 @@
 import { LL } from '@ceraui/i18n/svelte';
 import { Monitor, Moon, Sun } from '@lucide/svelte';
 import { resetMode, setMode } from 'mode-watcher';
-import { get } from 'svelte/store';
-
 import { Button } from '$lib/components/ui/button/index.js';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-import { themeStore } from '$lib/stores/theme';
+import { getTheme, setTheme, type ThemeMode } from '$lib/stores/theme.svelte';
 import { cn } from '$lib/utils';
 
-let theme = $state(get(themeStore));
+let theme = $state(getTheme());
 
-const handleModeChange = (mode: 'light' | 'dark' | 'system') => {
+const handleModeChange = (mode: ThemeMode) => {
 	if (mode === 'system') {
 		resetMode();
 	} else {
 		setMode(mode);
 	}
-	themeStore.set(mode);
+	setTheme(mode);
 	theme = mode;
 };
 

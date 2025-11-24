@@ -1,5 +1,4 @@
 import { BlobReader, BlobWriter, ZipWriter } from "@zip.js/zip.js";
-import { get, writable } from "svelte/store";
 import { toast } from "svelte-sonner";
 
 // Screenshot data interface
@@ -10,34 +9,53 @@ export interface ScreenshotImage {
 	type: "desktop" | "mobile" | "offline";
 }
 
-// Global screenshot store - persistent across navigation
-export const screenshotImages = writable<ScreenshotImage[]>([]);
-export const isCapturing = writable<boolean>(false);
-export const captureProgress = writable<string>("");
+// Global screenshot state using Svelte 5 runes
+let screenshotImagesState = $state<ScreenshotImage[]>([]);
+let isCapturingState = $state(false);
+let captureProgressState = $state("");
 
-// Helper functions
-export function addScreenshot(image: ScreenshotImage) {
-	screenshotImages.update((images) => {
-		const updated = [...images, image];
-		console.log(
-			`📸 Added ${image.type} ${image.theme} ${image.filename}, total: ${updated.length}`,
-		);
-		return updated;
-	});
+// Getters
+export function getScreenshotImages(): ScreenshotImage[] {
+	return screenshotImagesState;
 }
 
-export function clearScreenshots() {
-	screenshotImages.set([]);
+export function getIsCapturing(): boolean {
+	return isCapturingState;
+}
+
+export function getCaptureProgress(): string {
+	return captureProgressState;
+}
+
+// Setters
+export function setIsCapturing(value: boolean): void {
+	isCapturingState = value;
+}
+
+export function setCaptureProgress(value: string): void {
+	captureProgressState = value;
+}
+
+// Helper functions
+export function addScreenshot(image: ScreenshotImage): void {
+	screenshotImagesState = [...screenshotImagesState, image];
+	console.log(
+		`📸 Added ${image.type} ${image.theme} ${image.filename}, total: ${screenshotImagesState.length}`,
+	);
+}
+
+export function clearScreenshots(): void {
+	screenshotImagesState = [];
 	console.log("🗑️ Screenshots cleared");
 }
 
 export function getScreenshotCount(): number {
-	return get(screenshotImages).length;
+	return screenshotImagesState.length;
 }
 
 // ZIP download function
 export async function downloadScreenshotsZip(): Promise<boolean> {
-	const images = get(screenshotImages);
+	const images = screenshotImagesState;
 	console.log("🔽 Download requested, images available:", images.length);
 
 	if (images.length === 0) {
@@ -79,7 +97,35 @@ export async function downloadScreenshotsZip(): Promise<boolean> {
 		return true;
 	} catch (error) {
 		console.error("❌ Download failed:", error);
-		toast.error(`Download failed: ${error.message}`);
+		toast.error(`Download failed: ${(error as Error).message}`);
 		return false;
 	}
 }
+
+// Legacy-compatible store-like objects for template reactivity
+// These allow using getters that are reactive in Svelte 5
+export const screenshotImages = {
+	get value() {
+		return screenshotImagesState;
+	},
+	subscribe(callback: (value: ScreenshotImage[]) => void): () => void {
+		$effect(() => {
+			callback(screenshotImagesState);
+		});
+		return () => {};
+	},
+};
+
+export const isCapturing = {
+	get value() {
+		return isCapturingState;
+	},
+	set: setIsCapturing,
+};
+
+export const captureProgress = {
+	get value() {
+		return captureProgressState;
+	},
+	set: setCaptureProgress,
+};
