@@ -28,7 +28,7 @@ import {
 	navigationError,
 	navigationStore,
 	transitionDirection,
-} from '$lib/stores/navigation';
+} from '$lib/stores/navigation.svelte';
 
 let CurrentComponent: Component | undefined = $state(undefined);
 const _previousComponent: Component | undefined = $state(undefined);

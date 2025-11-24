@@ -37,7 +37,7 @@ import {
 	enhancedNavigationStore,
 	isNavigationTransitioning,
 	navigationStore,
-} from '$lib/stores/navigation';
+} from '$lib/stores/navigation.svelte';
 import { cn } from '$lib/utils';
 
 let currentNav: NavElements = $state({ general: navElements.general });

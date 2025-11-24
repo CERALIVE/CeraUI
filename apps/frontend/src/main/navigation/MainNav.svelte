@@ -34,7 +34,7 @@ import {
 	enhancedNavigationStore,
 	isNavigationTransitioning,
 	navigationStore,
-} from '$lib/stores/navigation';
+} from '$lib/stores/navigation.svelte';
 import { cn } from '$lib/utils';
 
 const [send, receive] = crossfade({

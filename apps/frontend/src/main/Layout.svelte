@@ -12,7 +12,7 @@ import {
 	stopStreaming as stopStreamingFn,
 } from '$lib/helpers/SystemHelper';
 import { authStatusStore } from '$lib/stores/auth-status.svelte';
-import { shouldShowOfflinePage } from '$lib/stores/offline-navigation';
+import { shouldShowOfflinePage } from '$lib/stores/offline-navigation.svelte';
 import {
 	AuthMessages,
 	NotificationsMessages,

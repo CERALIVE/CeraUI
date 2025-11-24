@@ -9,7 +9,7 @@ import { toast } from 'svelte-sonner';
 import * as Button from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import { navElements } from '$lib/config';
-import { enhancedNavigationStore } from '$lib/stores/navigation';
+import { enhancedNavigationStore } from '$lib/stores/navigation.svelte';
 import { setIsOnline } from '$lib/stores/pwa.svelte';
 import {
 	addScreenshot,
