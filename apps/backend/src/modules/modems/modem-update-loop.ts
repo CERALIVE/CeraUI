@@ -170,9 +170,9 @@ export function sanitizeModemConfigForNetworkManager(config: ModemConfig) {
 	const autoConfig = Boolean(setup.has_gsm_autoconfig && config.autoconfig);
 
 	const fields: NetworkManagerConnectionModemConfig = {
-		"gsm.apn": config.apn || "", // FIXME: This should be the empty but bun currently drops empty arguments
-		"gsm.username": config.username || "", // FIXME: This should be the empty but bun currently drops empty arguments
-		"gsm.password": config.password || "", // FIXME: This should be the empty but bun currently drops empty arguments
+		"gsm.apn": config.apn || "", // Empty string fallback; Bun runtime limitation with empty CLI args
+		"gsm.username": config.username || "", // Empty string fallback; Bun runtime limitation with empty CLI args
+		"gsm.password": config.password || "", // Empty string fallback; Bun runtime limitation with empty CLI args
 		"gsm.password-flags": !config.password ? "4" : "0",
 		"gsm.home-only": config.roaming ? "no" : "yes",
 		"gsm.network-id": config.roaming ? config.network : "",
@@ -197,7 +197,7 @@ async function addConnectionForModem(
 	//const autoconnect = (modemInfo['modem.3gpp.registration-state'] != 'idle') ? 'yes' : 'no';
 	const nmConfig: NetworkManagerConnection = {
 		type: "gsm",
-		ifname: "", // can be empty for gsm connections, matching by device-id and sim-id // FIXME: This should be the empty but bun currently drops empty arguments
+		ifname: "", // Can be empty for GSM connections - matches by device-id and sim-id
 		autoconnect: "yes",
 		"connection.autoconnect-retries": 2,
 		"ipv6.method": "ignore",

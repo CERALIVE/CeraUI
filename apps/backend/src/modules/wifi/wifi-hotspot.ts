@@ -131,7 +131,7 @@ export async function wifiHotspotStart(
 		if (uuid) {
 			// Update any settings that we need different from the default
 			await nmConnSetFields(uuid, {
-				"connection.interface-name": "", // FIXME: This should be the empty but bun currently drops empty arguments
+				"connection.interface-name": "", // Empty string required; Bun runtime limitation with empty CLI args
 				"connection.autoconnect": "yes",
 				"connection.autoconnect-priority": "999",
 				"802-11-wireless.mac-address": macAddress,

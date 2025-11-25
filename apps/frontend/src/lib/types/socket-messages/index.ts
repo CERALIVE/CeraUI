@@ -98,7 +98,8 @@ export type NetifMessage = {
 		error?: string;
 	};
 };
-// TODO improve notifications type
+
+/** Notification message structure for UI alerts and status updates */
 export type NotificationsMessage = {
 	show: Array<{
 		name: string;
