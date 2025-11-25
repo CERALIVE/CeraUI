@@ -251,7 +251,8 @@ describe("autoSelectNextOption", () => {
 			expect(result.framerate).toBe("30");
 		});
 
-		it("should clear pipeline when framerate is invalid", () => {
+		it("should auto-select framerate when invalid value provided and only one option exists", () => {
+			// 720p only has one framerate (30), so invalid "120" gets cleared and auto-selected to "30"
 			const result = autoSelectNextOption(
 				"framerate",
 				{
@@ -263,8 +264,8 @@ describe("autoSelectNextOption", () => {
 				},
 				createMockGroupedPipelines(),
 			);
-			expect(result.framerate).toBe(undefined);
-			expect(result.pipeline).toBe(undefined);
+			expect(result.framerate).toBe("30"); // Auto-selected since only one option
+			expect(result.pipeline).toBe("hdmi_h264_720p30"); // Pipeline built with valid selection
 		});
 	});
 
