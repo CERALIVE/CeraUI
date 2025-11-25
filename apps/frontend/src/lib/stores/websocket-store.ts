@@ -137,11 +137,6 @@ const assignMessage = (message: string) => {
 	const parsedMessage = JSON.parse(message);
 	const messageType = Object.keys(parsedMessage)[0];
 
-	// Debug log for log-related messages
-	if (messageType === "log") {
-		console.log("📥 Received log message:", parsedMessage);
-	}
-
 	switch (messageType) {
 		case "auth":
 			AuthStore.set(parsedMessage.auth);
@@ -166,14 +161,6 @@ const assignMessage = (message: string) => {
 			break;
 		case "revisions":
 			RevisionsStore.set(parsedMessage.revisions);
-
-			// Store server version for display only - no update checking
-			if (parsedMessage.revisions.belaUI) {
-				console.log("📡 Server version stored (frontend updates only):", {
-					belaUI: parsedMessage.revisions.belaUI,
-					frontendVersion: CLIENT_VERSION,
-				});
-			}
 			break;
 		case "sensors":
 			SensorsStatusStore.set(parsedMessage.sensors);
@@ -240,7 +227,6 @@ function waitForSocketConnection(
 				console.warn("Timeout Reached awaiting for socket connection.");
 				onTimeout?.();
 			} else {
-				console.log("wait for connection...");
 				waitForSocketConnection(
 					socket,
 					checkTime,
@@ -284,10 +270,8 @@ export {
 	WifiMessages,
 };
 
-// Debug functions for version tracking
+// Debug functions for version tracking (development only)
 if (typeof window !== "undefined" && !BUILD_INFO.IS_PROD) {
-	console.log("📱 Frontend build version:", CLIENT_VERSION);
-
 	interface WindowWithVersionDebug extends Window {
 		versionDebug?: {
 			clientVersion: () => string;
