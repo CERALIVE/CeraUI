@@ -14,6 +14,9 @@
 		"lint": "eslint",
 		"lint:fix": "eslint --fix",
 		"fix": "eslint --fix",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:coverage": "vitest run --coverage",
 		"clean": "rm -rf dist node_modules/.vite"
 	},
 	"dependencies": {
@@ -25,7 +28,7 @@
 		"html-to-image": "^1.11.13",
 		"mode-watcher": "^1.1.0",
 		"qrcode": "^1.5.4",
-		"svelte": "^5.43.15",
+		"svelte": "^5.44.0",
 		"svelte-sonner": "^1.0.6",
 		"tailwind-merge": "^3.4.0",
 		"tailwind-variants": "^3.2.2",
@@ -64,9 +67,10 @@
 		"typescript": "^5.9.3",
 		"vite": "^7.2.4",
 		"vite-plugin-pwa": "^1.1.0",
-		"workbox-window": "^7.4.0"
+		"workbox-window": "^7.4.0",
+		"vitest": "^3.2.4"
 	},
 	"volta": {
-		"node": "22.11.0"
+		"node": "24.0.0"
 	}
 }
