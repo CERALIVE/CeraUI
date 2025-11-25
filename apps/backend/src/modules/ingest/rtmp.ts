@@ -37,7 +37,7 @@ async function updateRtmpStats(): Promise<void> {
 			const streamName = `RTMP ingest - ${stream.name[0]}` as StreamName;
 
 			// Count total bytes received for this stream
-			currentBytesCounted[streamName] = Number.parseInt(stream.bytes_in[0]);
+			currentBytesCounted[streamName] = Number.parseInt(stream.bytes_in[0], 10);
 
 			// Calculate bandwidth based on difference since last check
 			const previousBytes = previousBytesCounted[streamName] || 0;

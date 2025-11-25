@@ -318,7 +318,7 @@ function doSoftwareUpdate() {
 		if (softUpdateStatus.downloading !== softUpdateStatus.total) {
 			const getMatch = data.match(/Get:(\d+)/);
 			if (getMatch) {
-				const i = Number.parseInt(getMatch[1]);
+				const i = Number.parseInt(getMatch[1], 10);
 				if (i > softUpdateStatus.downloading) {
 					softUpdateStatus.downloading = Math.min(i, softUpdateStatus.total);
 					sendUpdate = true;

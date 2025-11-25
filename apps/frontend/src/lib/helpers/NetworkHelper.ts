@@ -41,7 +41,7 @@ export const networkRename = (name: string) => {
 	let numberSuffix = "";
 	const number = name.match(/\d+$/g)?.[0];
 	if (number) {
-		numberSuffix = ` ${Number.parseInt(number) + 1}`;
+		numberSuffix = ` ${Number.parseInt(number, 10) + 1}`;
 		name = name.slice(0, -number.length).trim();
 	}
 
@@ -151,7 +151,6 @@ export const changeHotspotSettings = ({
 	password: string;
 	channel: string;
 }) => {
-	console.log(channel);
 	socket.send(
 		JSON.stringify({
 			wifi: {
