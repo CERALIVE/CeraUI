@@ -1,14 +1,17 @@
 <script lang="ts">
+import type { Snippet } from 'svelte';
+import type { HTMLAttributes } from 'svelte/elements';
+
 import { cn } from '$lib/utils.js';
 
-type $$Props = {
+interface Props extends HTMLAttributes<HTMLDivElement> {
 	class?: string;
-};
+	children?: Snippet;
+}
 
-let className: $$Props['class'] = undefined;
-export { className as class };
+let { class: className, children, ...restProps }: Props = $props();
 </script>
 
-<div class={cn('px-2 py-1.5 text-sm font-semibold', className)} {...$$restProps}>
-	<slot />
+<div class={cn('px-2 py-1.5 text-sm font-semibold', className)} {...restProps}>
+	{@render children?.()}
 </div>

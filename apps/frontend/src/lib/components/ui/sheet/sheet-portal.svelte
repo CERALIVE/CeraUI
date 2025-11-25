@@ -1,14 +1,13 @@
 <script lang="ts">
 import { Dialog as SheetPrimitive } from 'bits-ui';
+import type { Snippet } from 'svelte';
 
-type $$Props = {
+interface Props extends SheetPrimitive.PortalProps {
 	class?: string;
-};
+	children?: Snippet;
+}
 
-let className: $$Props['class'] = undefined;
-export { className as class };
+let { class: className, children, ...restProps }: Props = $props();
 </script>
 
-<SheetPrimitive.Portal {...$$restProps}>
-	<slot />
-</SheetPrimitive.Portal>
+<SheetPrimitive.Portal {children} {...restProps} />
