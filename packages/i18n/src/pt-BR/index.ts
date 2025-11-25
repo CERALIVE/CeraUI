@@ -599,6 +599,7 @@ const ptBR = {
 		confirmPowerOff: "Deseja desligar este dispositivo?",
 		sshPassword: "Senha SSH (Nome de usuário: {sshUser})",
 		sshPasswordTooltip: "Use esta senha para fazer login via SSH.",
+		sshPasswordPlaceholder: "Senha SSH gerada",
 		passwordCopied: "Senha copiada",
 		passwordCopiedDesc: "A senha SSH foi copiada para a área de transferência.",
 		reset: "Redefinir",

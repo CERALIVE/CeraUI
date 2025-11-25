@@ -123,7 +123,7 @@ export async function hasTranslationKey(
 	try {
 		const translations = await loadLocale(locale);
 		const keys = key.split(".");
-		let current = translations;
+		let current: unknown = translations;
 
 		for (const k of keys) {
 			if (typeof current !== "object" || current === null || !(k in current)) {

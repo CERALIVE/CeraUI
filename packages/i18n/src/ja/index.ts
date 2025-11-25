@@ -433,6 +433,7 @@ const ja = {
 		sshPassword: "SSHパスワード (ユーザー名: {sshUser})",
 		sshPasswordTooltip:
 			"SSHでログインする際にこのパスワードを使用してください。",
+		sshPasswordPlaceholder: "生成されたSSHパスワード",
 		passwordCopied: "パスワードをコピーしました",
 		passwordCopiedDesc: "SSHパスワードがクリップボードにコピーされました。",
 		reset: "リセット",

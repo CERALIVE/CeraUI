@@ -425,6 +425,7 @@ const ko = {
 		confirmPowerOff: "이 기기의 전원을 끄시겠습니까?",
 		sshPassword: "SSH 비밀번호(사용자 이름: {sshUser})",
 		sshPasswordTooltip: "SSH를 통해 로그인할 때 이 비밀번호를 사용하세요.",
+		sshPasswordPlaceholder: "생성된 SSH 비밀번호",
 		passwordCopied: "비밀번호 복사됨",
 		passwordCopiedDesc: "SSH 비밀번호가 클립보드에 복사되었습니다.",
 		reset: "재설정",

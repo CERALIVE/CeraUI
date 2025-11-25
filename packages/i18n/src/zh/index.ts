@@ -393,6 +393,7 @@ const zh = {
 		confirmPowerOff: "您想要关闭此设备吗？",
 		sshPassword: "SSH 密码（用户名：{sshUser}）",
 		sshPasswordTooltip: "使用此密码通过 SSH 登录。",
+		sshPasswordPlaceholder: "已生成的 SSH 密码",
 		passwordCopied: "密码已复制",
 		passwordCopiedDesc: "SSH 密码已复制到剪贴板。",
 		reset: "重置",

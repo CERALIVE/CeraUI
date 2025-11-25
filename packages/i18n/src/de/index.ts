@@ -626,6 +626,7 @@ const de = {
 		sshPassword: "SSH-Passwort (Benutzername: {sshUser})",
 		sshPasswordTooltip:
 			"Verwenden Sie dieses Passwort, um sich über SSH anzumelden.",
+		sshPasswordPlaceholder: "Generiertes SSH-Passwort",
 		passwordCopied: "Passwort kopiert",
 		passwordCopiedDesc: "Das SSH-Passwort wurde in die Zwischenablage kopiert.",
 		reset: "Zurücksetzen",

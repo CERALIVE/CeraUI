@@ -598,6 +598,7 @@ const ar = {
 		confirmPowerOff: "هل تريد إيقاف تشغيل هذا الجهاز؟",
 		sshPassword: "كلمة مرور SSH (اسم المستخدم: {sshUser})",
 		sshPasswordTooltip: "استخدم كلمة المرور هذه لتسجيل الدخول عبر SSH.",
+		sshPasswordPlaceholder: "كلمة مرور SSH المُنشأة",
 		passwordCopied: "تم نسخ كلمة المرور",
 		passwordCopiedDesc: "تم نسخ كلمة مرور SSH إلى الحافظة.",
 		reset: "إعادة تعيين",

@@ -421,6 +421,7 @@ const hi = {
 		confirmPowerOff: "क्या आप इस डिवाइस को बंद करना चाहते हैं?",
 		sshPassword: "SSH पासवर्ड (उपयोगकर्ता नाम: {sshUser})",
 		sshPasswordTooltip: "SSH के माध्यम से लॉगिन करने के लिए इस पासवर्ड का उपयोग करें।",
+		sshPasswordPlaceholder: "जेनरेट किया गया SSH पासवर्ड",
 		passwordCopied: "पासवर्ड कॉपी किया गया",
 		passwordCopiedDesc: "SSH पासवर्ड क्लिपबोर्ड पर कॉपी किया गया है।",
 		reset: "रीसेट करें",

@@ -621,6 +621,7 @@ const fr = {
 		confirmPowerOff: "Voulez-vous éteindre cet appareil ?",
 		sshPassword: "Mot de passe SSH (Nom d'utilisateur : {sshUser})",
 		sshPasswordTooltip: "Utilisez ce mot de passe pour vous connecter via SSH.",
+		sshPasswordPlaceholder: "Mot de passe SSH généré",
 		passwordCopied: "Mot de passe copié",
 		passwordCopiedDesc:
 			"Le mot de passe SSH a été copié dans le presse-papiers.",
