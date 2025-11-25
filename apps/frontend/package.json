@@ -68,7 +68,7 @@
 		"vite": "^7.2.4",
 		"vite-plugin-pwa": "^1.1.0",
 		"workbox-window": "^7.4.0",
-		"vitest": "^3.2.4"
+		"vitest": "^4.0.14"
 	},
 	"volta": {
 		"node": "24.0.0"
