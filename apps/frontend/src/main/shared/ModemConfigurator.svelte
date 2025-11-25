@@ -185,7 +185,7 @@ function resetForm() {
 <div class="space-y-4">
 	<form class="space-y-4" onsubmit={onSubmit}>
 		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="networkType">{$LL.network.modem.networkType()}</Label>
+			<Label class="text-sm font-medium" for="networkType-{deviceId}">{$LL.network.modem.networkType()}</Label>
 			<Select.Root
 				onValueChange={(val) => {
 					if (val) {
@@ -196,7 +196,7 @@ function resetForm() {
 				type="single"
 				value={formData.selectedNetwork}
 			>
-				<Select.Trigger id="networkType" class="w-full">
+				<Select.Trigger id="networkType-{deviceId}" class="w-full">
 					{renameSupportedModemNetwork(formData.selectedNetwork)}
 				</Select.Trigger>
 				<Select.Content>
@@ -242,7 +242,7 @@ function resetForm() {
 
 		{#if formData.roaming}
 			<div class="space-y-2">
-				<Label class="text-sm font-medium" for="roamingNetwork"
+				<Label class="text-sm font-medium" for="roamingNetwork-{deviceId}"
 					>{$LL.network.modem.roamingNetwork()}</Label
 				>
 				<div class="flex gap-2">
@@ -252,7 +252,7 @@ function resetForm() {
 							type="single"
 							value={formData.network}
 						>
-							<Select.Trigger id="roamingNetwork" class="w-full">
+							<Select.Trigger id="roamingNetwork-{deviceId}" class="w-full">
 								{formData.network === '-1'
 									? $LL.network.modem.automaticRoamingNetwork()
 									: modem.available_networks[formData.network].name}
@@ -320,9 +320,9 @@ function resetForm() {
 		{#if !formData.autoconfig}
 			<div class="space-y-4">
 				<div class="space-y-2">
-					<Label class="text-sm font-medium" for="apn">{$LL.network.modem.apn()}</Label>
+					<Label class="text-sm font-medium" for="apn-{deviceId}">{$LL.network.modem.apn()}</Label>
 					<Input
-						id="apn"
+						id="apn-{deviceId}"
 						class={errors.apn ? 'border-red-500' : ''}
 						autocapitalize="none"
 						autocomplete="off"
@@ -336,9 +336,9 @@ function resetForm() {
 				</div>
 
 				<div class="space-y-2">
-					<Label class="text-sm font-medium" for="username">{$LL.network.modem.username()}</Label>
+					<Label class="text-sm font-medium" for="username-{deviceId}">{$LL.network.modem.username()}</Label>
 					<Input
-						id="username"
+						id="username-{deviceId}"
 						autocapitalize="none"
 						autocomplete="off"
 						autocorrect="off"
@@ -348,11 +348,11 @@ function resetForm() {
 				</div>
 
 				<div class="space-y-2">
-					<Label class="text-sm font-medium" for="modemPassword"
+					<Label class="text-sm font-medium" for="modemPassword-{deviceId}"
 						>{$LL.network.modem.password()}</Label
 					>
 					<Input
-						id="modemPassword"
+						id="modemPassword-{deviceId}"
 						autocapitalize="none"
 						autocomplete="off"
 						autocorrect="off"
