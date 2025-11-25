@@ -15,6 +15,19 @@ const connectionSubscribers = new Set<Subscriber<ConnectionStateType>>();
 const offlinePageSubscribers = new Set<Subscriber<boolean>>();
 const fullyOfflineSubscribers = new Set<Subscriber<boolean>>();
 
+// ============================================
+// Offline detection variables - MUST be declared before any functions use them
+// ============================================
+let offlineStartTime: number | null = null;
+let offlineTimeout: number | null = null;
+let periodicCheckInterval: number | null = null;
+let hasCheckedInitialState = false;
+const OFFLINE_THRESHOLD = 3000;
+const PERIODIC_CHECK_INTERVAL = 5000;
+
+// ============================================
+// Notification functions
+// ============================================
 function notifyConnectionSubscribers() {
 	for (const sub of connectionSubscribers) sub(connectionState);
 	notifyFullyOfflineSubscribers();
@@ -31,7 +44,9 @@ function notifyFullyOfflineSubscribers() {
 	for (const sub of fullyOfflineSubscribers) sub(isFullyOfflineValue);
 }
 
+// ============================================
 // Getters
+// ============================================
 export function getConnectionState(): ConnectionStateType {
 	return connectionState;
 }
@@ -46,52 +61,9 @@ export function getIsFullyOffline(): boolean {
 		connectionState === "error";
 }
 
-// Setters
-function setConnectionState(state: ConnectionStateType): void {
-	connectionState = state;
-	notifyConnectionSubscribers();
-	checkOfflineState();
-}
-
-function setShouldShowOfflinePage(show: boolean): void {
-	shouldShowOfflinePageState = show;
-	notifyOfflinePageSubscribers();
-}
-
-// Monitor socket state
-function updateConnectionState() {
-	if (!socket) {
-		setConnectionState("disconnected");
-		return;
-	}
-
-	if (socket.readyState === WebSocket.OPEN) {
-		setConnectionState("connected");
-	} else if (socket.readyState === WebSocket.CONNECTING) {
-		setConnectionState("connecting");
-	} else {
-		setConnectionState("disconnected");
-	}
-}
-
-function handleSocketError() {
-	setConnectionState("error");
-}
-
-// Set initial state and add event listeners
-updateConnectionState();
-socket.addEventListener("open", updateConnectionState);
-socket.addEventListener("close", updateConnectionState);
-socket.addEventListener("error", handleSocketError);
-
-// Offline detection logic
-let offlineStartTime: number | null = null;
-let offlineTimeout: number | null = null;
-let periodicCheckInterval: number | null = null;
-const OFFLINE_THRESHOLD = 3000;
-const PERIODIC_CHECK_INTERVAL = 5000;
-
-// Check connection function
+// ============================================
+// Connection checking functions
+// ============================================
 export async function checkConnection(isInitialCheck = false): Promise<boolean> {
 	try {
 		if (isInitialCheck) {
@@ -137,7 +109,13 @@ export async function checkConnection(isInitialCheck = false): Promise<boolean> 
 	}
 }
 
-// Periodic connection checking
+function stopPeriodicConnectionCheck() {
+	if (periodicCheckInterval) {
+		clearInterval(periodicCheckInterval);
+		periodicCheckInterval = null;
+	}
+}
+
 function startPeriodicConnectionCheck() {
 	if (periodicCheckInterval) {
 		clearInterval(periodicCheckInterval);
@@ -164,67 +142,9 @@ function startPeriodicConnectionCheck() {
 	}, PERIODIC_CHECK_INTERVAL);
 }
 
-function stopPeriodicConnectionCheck() {
-	if (periodicCheckInterval) {
-		clearInterval(periodicCheckInterval);
-		periodicCheckInterval = null;
-	}
-}
-
-// Initial connectivity check
-let hasCheckedInitialState = false;
-
-function checkInitialConnectivity() {
-	if (!navigator.onLine) {
-		setShouldShowOfflinePage(true);
-		startPeriodicConnectionCheck();
-		offlineStartTime = Date.now();
-		hasCheckedInitialState = true;
-		return;
-	}
-
-	setTimeout(async () => {
-		try {
-			const canConnect = await checkConnection(true);
-			if (!canConnect) {
-				setShouldShowOfflinePage(true);
-				startPeriodicConnectionCheck();
-				offlineStartTime = Date.now();
-			}
-		} catch {
-			setShouldShowOfflinePage(true);
-			startPeriodicConnectionCheck();
-			offlineStartTime = Date.now();
-		}
-		hasCheckedInitialState = true;
-	}, 200);
-}
-
-// Browser offline/online handlers
-const handleOffline = () => {
-	setShouldShowOfflinePage(true);
-	startPeriodicConnectionCheck();
-	offlineStartTime = Date.now();
-};
-
-const handleOnline = () => {
-	setTimeout(async () => {
-		const canConnect = await checkConnection();
-		if (canConnect) {
-			setShouldShowOfflinePage(false);
-			stopPeriodicConnectionCheck();
-			offlineStartTime = null;
-		}
-	}, 500);
-};
-
-window.addEventListener("offline", handleOffline);
-window.addEventListener("online", handleOnline);
-
-// Run initial check
-checkInitialConnectivity();
-
-// Check offline state when connection changes
+// ============================================
+// Offline state management
+// ============================================
 function checkOfflineState() {
 	const offline = getIsFullyOffline();
 	
@@ -251,7 +171,105 @@ function checkOfflineState() {
 	}
 }
 
+// ============================================
+// Setters (use checkOfflineState, so must be after it)
+// ============================================
+function setConnectionState(state: ConnectionStateType): void {
+	connectionState = state;
+	notifyConnectionSubscribers();
+	checkOfflineState();
+}
+
+function setShouldShowOfflinePage(show: boolean): void {
+	shouldShowOfflinePageState = show;
+	notifyOfflinePageSubscribers();
+}
+
+// ============================================
+// Socket monitoring (uses setConnectionState, so must be after it)
+// ============================================
+function updateConnectionState() {
+	if (!socket) {
+		setConnectionState("disconnected");
+		return;
+	}
+
+	if (socket.readyState === WebSocket.OPEN) {
+		setConnectionState("connected");
+	} else if (socket.readyState === WebSocket.CONNECTING) {
+		setConnectionState("connecting");
+	} else {
+		setConnectionState("disconnected");
+	}
+}
+
+function handleSocketError() {
+	setConnectionState("error");
+}
+
+// ============================================
+// Browser event handlers
+// ============================================
+const handleOffline = () => {
+	setShouldShowOfflinePage(true);
+	startPeriodicConnectionCheck();
+	offlineStartTime = Date.now();
+};
+
+const handleOnline = () => {
+	setTimeout(async () => {
+		const canConnect = await checkConnection();
+		if (canConnect) {
+			setShouldShowOfflinePage(false);
+			stopPeriodicConnectionCheck();
+			offlineStartTime = null;
+		}
+	}, 500);
+};
+
+// ============================================
+// Initial connectivity check
+// ============================================
+function checkInitialConnectivity() {
+	if (!navigator.onLine) {
+		setShouldShowOfflinePage(true);
+		startPeriodicConnectionCheck();
+		offlineStartTime = Date.now();
+		hasCheckedInitialState = true;
+		return;
+	}
+
+	setTimeout(async () => {
+		try {
+			const canConnect = await checkConnection(true);
+			if (!canConnect) {
+				setShouldShowOfflinePage(true);
+				startPeriodicConnectionCheck();
+				offlineStartTime = Date.now();
+			}
+		} catch {
+			setShouldShowOfflinePage(true);
+			startPeriodicConnectionCheck();
+			offlineStartTime = Date.now();
+		}
+		hasCheckedInitialState = true;
+	}, 200);
+}
+
+// ============================================
+// Initialize - run after all functions are defined
+// ============================================
+updateConnectionState();
+socket.addEventListener("open", updateConnectionState);
+socket.addEventListener("close", updateConnectionState);
+socket.addEventListener("error", handleSocketError);
+window.addEventListener("offline", handleOffline);
+window.addEventListener("online", handleOnline);
+checkInitialConnectivity();
+
+// ============================================
 // Store-compatible exports
+// ============================================
 export const shouldShowOfflinePage = {
 	get value() { return shouldShowOfflinePageState; },
 	set(value: boolean) { setShouldShowOfflinePage(value); },
@@ -271,7 +289,9 @@ export const isFullyOffline = {
 	},
 };
 
+// ============================================
 // Manual control functions
+// ============================================
 export function showOfflinePage() {
 	setShouldShowOfflinePage(true);
 }
@@ -310,7 +330,9 @@ export async function manualConnectionCheck(): Promise<boolean> {
 	return false;
 }
 
+// ============================================
 // Cleanup function
+// ============================================
 export function cleanup() {
 	socket.removeEventListener("open", updateConnectionState);
 	socket.removeEventListener("close", updateConnectionState);
@@ -324,4 +346,3 @@ export function cleanup() {
 	}
 	stopPeriodicConnectionCheck();
 }
-
