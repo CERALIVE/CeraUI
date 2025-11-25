@@ -8,7 +8,6 @@ import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
-import { BRAND_CONFIG } from '$lib/config/branding';
 import {
 	getBelaboxLog,
 	getSystemLog,
@@ -393,7 +392,10 @@ StatusMessages.subscribe((statusMessage) => {
 								<Button
 									class="hover:bg-muted/50 h-8 w-8 rounded-md p-0"
 									onclick={async () => {
-										console.log('🔐 Attempting to copy SSH password:', sshPassword ? 'Password available' : 'No password');
+										console.log(
+											'🔐 Attempting to copy SSH password:',
+											sshPassword ? 'Password available' : 'No password',
+										);
 										try {
 											if (!sshPassword) {
 												throw new Error('No SSH password available to copy');
@@ -417,7 +419,8 @@ StatusMessages.subscribe((statusMessage) => {
 													});
 												} catch (fallbackError) {
 													toast.error('Copy Failed', {
-														description: 'Unable to copy password. Please select and copy manually.',
+														description:
+															'Unable to copy password. Please select and copy manually.',
 													});
 												}
 											} else {

@@ -76,12 +76,15 @@ export function getMockSrtlaStats() {
 	}
 
 	// Generate stats for each connected modem
-	const interfaceStats: Record<string, {
-		sent: number;
-		lost: number;
-		retransmitted: number;
-		rtt: number;
-	}> = {};
+	const interfaceStats: Record<
+		string,
+		{
+			sent: number;
+			lost: number;
+			retransmitted: number;
+			rtt: number;
+		}
+	> = {};
 
 	for (let i = 0; i < config.modems; i++) {
 		const ifname = `usb${i}`;
@@ -112,7 +115,10 @@ export function getMockBcrpStatus() {
 	return {
 		connected: true,
 		relayCount: stats.connectedRelays,
-		serverIps: ["relay1.example.com", "relay2.example.com"].slice(0, stats.connectedRelays),
+		serverIps: ["relay1.example.com", "relay2.example.com"].slice(
+			0,
+			stats.connectedRelays,
+		),
 	};
 }
 
@@ -186,4 +192,3 @@ export function formatMockStreamingStats(): Record<string, string> {
 		"Connected relays": stats.connectedRelays.toString(),
 	};
 }
-

@@ -107,130 +107,130 @@ function updateNetif() {
 
 function processIfconfigOutput(stdout: string) {
 	let intsChanged = false;
-		const newInterfaces: Record<string, NetworkInterface> = {};
+	const newInterfaces: Record<string, NetworkInterface> = {};
 
-		wifiDeviceListStartUpdate();
+	wifiDeviceListStartUpdate();
 
-		const interfaces = stdout.split("\n\n");
+	const interfaces = stdout.split("\n\n");
 
-		for (const int of interfaces) {
-			try {
-				const name = int.split(":")[0] ?? "";
+	for (const int of interfaces) {
+		try {
+			const name = int.split(":")[0] ?? "";
 
-				if (name === "lo" || name.match("^docker") || name.match("^l4tbr"))
-					continue;
+			if (name === "lo" || name.match("^docker") || name.match("^l4tbr"))
+				continue;
 
-				const inetAddrMatch = int.match(/inet (\d+\.\d+\.\d+\.\d+)/);
-				const inetAddr = inetAddrMatch?.[1];
+			const inetAddrMatch = int.match(/inet (\d+\.\d+\.\d+\.\d+)/);
+			const inetAddr = inetAddrMatch?.[1];
 
-				const netmaskMatch = int.match(/netmask (\d+\.\d+\.\d+\.\d+)/);
-				const netmask = netmaskMatch?.[1];
+			const netmaskMatch = int.match(/netmask (\d+\.\d+\.\d+\.\d+)/);
+			const netmask = netmaskMatch?.[1];
 
-				const flags = (int.match(/flags=\d+<([A-Z,]+)>/)?.[1] ?? "").split(",");
-				const isRunning = flags.includes("RUNNING");
+			const flags = (int.match(/flags=\d+<([A-Z,]+)>/)?.[1] ?? "").split(",");
+			const isRunning = flags.includes("RUNNING");
 
-				// update the list of WiFi devices
-				if (name?.match("^wlan")) {
-					const hwAddr = int.match(/ether ([0-9a-f:]+)/);
-					if (hwAddr?.[1]) {
-						wifiDeviceListAdd(name, hwAddr[1], isRunning ? inetAddr : null);
-					}
+			// update the list of WiFi devices
+			if (name?.match("^wlan")) {
+				const hwAddr = int.match(/ether ([0-9a-f:]+)/);
+				if (hwAddr?.[1]) {
+					wifiDeviceListAdd(name, hwAddr[1], isRunning ? inetAddr : null);
 				}
-
-				if (!isRunning) continue;
-
-				const txBytesMatch = int.match(/TX packets \d+ {2}bytes \d+/);
-				const txBytes = Number.parseInt(
-					(txBytesMatch?.[0] ?? "").split(" ").pop() ?? "0",
-					10,
-				);
-
-				let tp = 0;
-				if (netif[name]) {
-					tp = txBytes - netif[name].txb;
-				}
-
-				const enabled = !netif[name] || netif[name].enabled;
-				const error = netif[name] ? netif[name].error : 0;
-				newInterfaces[name] = {
-					ip: inetAddr,
-					netmask,
-					txb: txBytes,
-					tp,
-					enabled,
-					error,
-				};
-
-				// Detect interfaces that are new or with a different address
-				if (!netif[name] || netif[name].ip !== inetAddr) {
-					intsChanged = true;
-				}
-			} catch (err) {
-				logger.error(`Error parsing ifconfig: ${err}`);
 			}
-		}
 
-		// Detect removed interfaces
-		for (const i in netif) {
-			if (!newInterfaces[i]) {
+			if (!isRunning) continue;
+
+			const txBytesMatch = int.match(/TX packets \d+ {2}bytes \d+/);
+			const txBytes = Number.parseInt(
+				(txBytesMatch?.[0] ?? "").split(" ").pop() ?? "0",
+				10,
+			);
+
+			let tp = 0;
+			if (netif[name]) {
+				tp = txBytes - netif[name].txb;
+			}
+
+			const enabled = !netif[name] || netif[name].enabled;
+			const error = netif[name] ? netif[name].error : 0;
+			newInterfaces[name] = {
+				ip: inetAddr,
+				netmask,
+				txb: txBytes,
+				tp,
+				enabled,
+				error,
+			};
+
+			// Detect interfaces that are new or with a different address
+			if (!netif[name] || netif[name].ip !== inetAddr) {
 				intsChanged = true;
 			}
+		} catch (err) {
+			logger.error(`Error parsing ifconfig: ${err}`);
 		}
+	}
 
-		if (intsChanged) {
-			const intAddrs: Record<string, string | Array<string>> = {};
+	// Detect removed interfaces
+	for (const i in netif) {
+		if (!newInterfaces[i]) {
+			intsChanged = true;
+		}
+	}
 
-			// Detect duplicate IP adddresses and set error status
-			for (const i in newInterfaces) {
-				const newInterface = newInterfaces[i];
-				if (!newInterface?.ip) continue;
+	if (intsChanged) {
+		const intAddrs: Record<string, string | Array<string>> = {};
 
-				clearNetifDup(newInterface);
-				const currentValue = intAddrs[newInterface.ip];
+		// Detect duplicate IP adddresses and set error status
+		for (const i in newInterfaces) {
+			const newInterface = newInterfaces[i];
+			if (!newInterface?.ip) continue;
 
-				if (currentValue === undefined) {
-					intAddrs[newInterface.ip] = i;
-				} else {
-					if (Array.isArray(currentValue)) {
-						currentValue.push(i);
-					} else {
-						setNetifDup(newInterfaces[currentValue]);
-						intAddrs[newInterface.ip] = [currentValue, i];
-					}
-					setNetifDup(newInterface);
-				}
-			}
+			clearNetifDup(newInterface);
+			const currentValue = intAddrs[newInterface.ip];
 
-			// Send out an error message for duplicate IP addresses
-			let msg = "";
-			for (const d in intAddrs) {
-				if (Array.isArray(intAddrs[d])) {
-					if (msg !== "") {
-						msg += "; ";
-					}
-					msg += `Interfaces ${intAddrs[d].join(", ")} can't be used because they share the same IP address: ${d}`;
-				}
-			}
-
-			if (msg === "") {
-				notificationRemove("netif_dup_ip");
+			if (currentValue === undefined) {
+				intAddrs[newInterface.ip] = i;
 			} else {
-				notificationBroadcast("netif_dup_ip", "error", msg, 0, true, true);
+				if (Array.isArray(currentValue)) {
+					currentValue.push(i);
+				} else {
+					setNetifDup(newInterfaces[currentValue]);
+					intAddrs[newInterface.ip] = [currentValue, i];
+				}
+				setNetifDup(newInterface);
 			}
 		}
 
-		if (wifiDeviceListEndUpdate()) {
-			logger.info("updated wifi devices");
-			// a delay seems to be needed before NM registers new devices
-			setTimeout(wifiUpdateDevices, 1000);
+		// Send out an error message for duplicate IP addresses
+		let msg = "";
+		for (const d in intAddrs) {
+			if (Array.isArray(intAddrs[d])) {
+				if (msg !== "") {
+					msg += "; ";
+				}
+				msg += `Interfaces ${intAddrs[d].join(", ")} can't be used because they share the same IP address: ${d}`;
+			}
 		}
 
-		netif = newInterfaces;
-
-		if (intsChanged) {
-			triggerNetworkInterfacesChange();
-			updateBcrptSourceIps();
+		if (msg === "") {
+			notificationRemove("netif_dup_ip");
+		} else {
+			notificationBroadcast("netif_dup_ip", "error", msg, 0, true, true);
 		}
+	}
+
+	if (wifiDeviceListEndUpdate()) {
+		logger.info("updated wifi devices");
+		// a delay seems to be needed before NM registers new devices
+		setTimeout(wifiUpdateDevices, 1000);
+	}
+
+	netif = newInterfaces;
+
+	if (intsChanged) {
+		triggerNetworkInterfacesChange();
+		updateBcrptSourceIps();
+	}
 
 	broadcastMsg("netif", netIfBuildMsg(), getms() - ACTIVE_TO);
 }

@@ -28,12 +28,12 @@ export function handleMmcliCommand(args: string[]): string | null {
 	const modemIndex = args.indexOf("-m");
 	if (modemIndex !== -1 && args[modemIndex + 1]) {
 		const modemId = Number.parseInt(args[modemIndex + 1], 10);
-		
+
 		// Check for 3gpp-scan flag
 		if (args.includes("--3gpp-scan")) {
 			return getMockNetworkScan(modemId);
 		}
-		
+
 		return getMockModemInfo(modemId);
 	}
 
@@ -55,9 +55,11 @@ function getMockModemList(): string {
 	const lines: string[] = [];
 
 	lines.push(`modem-list.length: ${config.modems}`);
-	
+
 	for (let i = 0; i < config.modems; i++) {
-		lines.push(`modem-list.value[${i}]: /org/freedesktop/ModemManager1/Modem/${i}`);
+		lines.push(
+			`modem-list.value[${i}]: /org/freedesktop/ModemManager1/Modem/${i}`,
+		);
 	}
 
 	return lines.join("\n");
@@ -68,7 +70,7 @@ function getMockModemList(): string {
  */
 function getMockModemInfo(modemId: number): string {
 	const config = getScenarioConfig();
-	
+
 	if (modemId >= config.modems) {
 		return "";
 	}
@@ -139,7 +141,7 @@ function getMockModemInfo(modemId: number): string {
  */
 function getMockSimInfo(simId: number): string {
 	const config = getScenarioConfig();
-	
+
 	if (simId >= config.modems) {
 		return "";
 	}
@@ -172,7 +174,7 @@ function getMockSimInfo(simId: number): string {
  */
 function getMockNetworkScan(modemId: number): string {
 	const config = getScenarioConfig();
-	
+
 	if (modemId >= config.modems) {
 		return "";
 	}
@@ -196,7 +198,9 @@ function getMockNetworkScan(modemId: number): string {
 
 	for (let i = 0; i < networks.length; i++) {
 		const net = networks[i];
-		lines.push(`modem.3gpp.scan-networks.value[${i}]: operator-code: ${net?.code}, operator-name: ${net?.name}, availability: ${net?.status}`);
+		lines.push(
+			`modem.3gpp.scan-networks.value[${i}]: operator-code: ${net?.code}, operator-name: ${net?.name}, availability: ${net?.status}`,
+		);
 	}
 
 	return lines.join("\n");
@@ -208,4 +212,3 @@ function getMockNetworkScan(modemId: number): string {
 export function shouldMockModems(): boolean {
 	return shouldUseMocks();
 }
-

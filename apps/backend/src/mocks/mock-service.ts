@@ -5,10 +5,10 @@
 
 import { logger } from "../helpers/logger.ts";
 import {
-	type MockScenario,
 	getActiveScenario,
 	getScenarioConfig,
 	isDevelopment,
+	type MockScenario,
 	mockModems,
 	mockWifiNetworks,
 	scenarios,
@@ -73,14 +73,18 @@ export function initMockService(scenarioName?: string): void {
 		"multi-modem-wifi") as MockScenario;
 
 	if (!scenarios[scenario]) {
-		logger.warn(`Unknown mock scenario: ${scenario}, falling back to multi-modem-wifi`);
+		logger.warn(
+			`Unknown mock scenario: ${scenario}, falling back to multi-modem-wifi`,
+		);
 		setActiveScenario("multi-modem-wifi");
 	} else {
 		setActiveScenario(scenario);
 	}
 
 	const config = getScenarioConfig();
-	logger.info(`🎭 Mock service initializing with scenario: ${getActiveScenario()}`);
+	logger.info(
+		`🎭 Mock service initializing with scenario: ${getActiveScenario()}`,
+	);
 	logger.info(`   ${config.description}`);
 
 	// Initialize modem states
@@ -189,7 +193,9 @@ export function getModemSignal(modemId: number): number {
 /**
  * Get modem connection state
  */
-export function getModemState(modemId: number): "registered" | "connected" | "searching" {
+export function getModemState(
+	modemId: number,
+): "registered" | "connected" | "searching" {
 	return mockState.modemStates.get(modemId) ?? "searching";
 }
 
@@ -254,5 +260,10 @@ export function shouldUseMocks(): boolean {
 }
 
 // Re-export commonly used functions
-export { isDevelopment, getActiveScenario, getScenarioConfig, mockModems, mockWifiNetworks };
-
+export {
+	isDevelopment,
+	getActiveScenario,
+	getScenarioConfig,
+	mockModems,
+	mockWifiNetworks,
+};

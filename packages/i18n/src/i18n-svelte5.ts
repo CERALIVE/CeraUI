@@ -12,11 +12,11 @@
 
 // @ts-nocheck
 import { derived, type Readable, writable } from "svelte/store";
+// Import English translations synchronously as fallback
+import en from "./en/index.js";
 import type { Locales, Translation } from "./i18n-types.js";
 import { loadLocaleAsync } from "./i18n-util.async.js";
 import { isLocale, loadedLocales } from "./i18n-util.js";
-// Import English translations synchronously as fallback
-import en from "./en/index.js";
 
 // 🎯 Enhanced translation function with key access
 export interface Svelte5TranslationFunction {

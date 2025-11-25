@@ -181,9 +181,9 @@ export async function mmList() {
 				const modems = mmcliParseSep(mockOutput)["modem-list"] ?? [];
 				const list = [];
 				for (const m of modems) {
-					const id = m.match(/\/org\/freedesktop\/ModemManager1\/Modem\/(\d+)/) as
-						| [string, string]
-						| null;
+					const id = m.match(
+						/\/org\/freedesktop\/ModemManager1\/Modem\/(\d+)/,
+					) as [string, string] | null;
 					if (id) {
 						list.push(Number.parseInt(id[1], 10));
 					}
@@ -284,7 +284,12 @@ export async function mmNetworkScan(id: ModemId, timeout = 240) {
 	try {
 		// Check for mock mode
 		if (shouldMockModems()) {
-			const mockOutput = handleMmcliCommand(["-K", "-m", String(id), "--3gpp-scan"]);
+			const mockOutput = handleMmcliCommand([
+				"-K",
+				"-m",
+				String(id),
+				"--3gpp-scan",
+			]);
 			if (mockOutput) {
 				const networks = (mmcliParseSep(mockOutput)[
 					"modem.3gpp.scan-networks"

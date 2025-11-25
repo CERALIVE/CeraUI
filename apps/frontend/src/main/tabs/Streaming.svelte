@@ -104,7 +104,6 @@ let srtStreamIdTouched = $state(false);
 // Track encoder-related user interactions (separate from ServerCard)
 let userHasInteracted = $state(false);
 
-
 // Track initial restoration phase to prevent premature userHasInteracted setting
 let isInitialMount = $state(true);
 
@@ -218,7 +217,6 @@ $effect.pre(() => {
 	}
 });
 
-
 $effect(() => {
 	// During initial mount, don't interfere with pipeline restoration
 	if (isInitialMount) {
@@ -323,12 +321,12 @@ const startStreamingWithCurrentConfig = () => {
 
 	const config = buildStreamingConfig(properties, { unparsedPipelines: $unparsedPipelinesStore });
 
-
 	if (config) {
 		startStreamingWithConfig(config);
 	} else {
 		toast.error('Unable to start streaming: incomplete or invalid selection.', {
-			description: 'Please ensure input mode, encoder, resolution, and framerate form a valid pipeline.',
+			description:
+				'Please ensure input mode, encoder, resolution, and framerate form a valid pipeline.',
 		});
 	}
 };

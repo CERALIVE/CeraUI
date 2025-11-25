@@ -85,7 +85,7 @@ if (isDevelopment) {
 }
 
 // Use higher ports in development to avoid requiring root
-const httpListenPorts: Array<number | { fd: number }> = 
+const httpListenPorts: Array<number | { fd: number }> =
 	process.env.NODE_ENV === "development" ? [3001, 8080, 8081] : [80, 8080, 81];
 
 export function initHttpServer() {

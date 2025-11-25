@@ -31,18 +31,22 @@ const validation = $derived({
 		isValid: hotspotProperties.name.length >= 3 && hotspotProperties.name.length <= 32,
 		message:
 			hotspotProperties.name.length < 3
-				? $LL?.hotspotConfigurator?.validation?.nameMinLength?.() || 'Name must be at least 3 characters'
+				? $LL?.hotspotConfigurator?.validation?.nameMinLength?.() ||
+					'Name must be at least 3 characters'
 				: hotspotProperties.name.length > 32
-					? $LL?.hotspotConfigurator?.validation?.nameMaxLength?.() || 'Name must be at most 32 characters'
+					? $LL?.hotspotConfigurator?.validation?.nameMaxLength?.() ||
+						'Name must be at most 32 characters'
 					: '',
 	},
 	password: {
 		isValid: hotspotProperties.password.length >= 8 && hotspotProperties.password.length <= 63,
 		message:
 			hotspotProperties.password.length < 8
-				? $LL?.hotspotConfigurator?.validation?.passwordMinLength?.() || 'Password must be at least 8 characters'
+				? $LL?.hotspotConfigurator?.validation?.passwordMinLength?.() ||
+					'Password must be at least 8 characters'
 				: hotspotProperties.password.length > 63
-					? $LL?.hotspotConfigurator?.validation?.passwordMaxLength?.() || 'Password must be at most 63 characters'
+					? $LL?.hotspotConfigurator?.validation?.passwordMaxLength?.() ||
+						'Password must be at most 63 characters'
 					: '',
 	},
 });
@@ -254,7 +258,10 @@ const handleSubmit = async () => {
 						>
 							{#if validation.password.isValid}
 								<CheckCircle class="h-4 w-4" />
-								<span>{$LL?.hotspotConfigurator?.validation?.passwordValid?.() || 'Password is valid'}</span>
+								<span
+									>{$LL?.hotspotConfigurator?.validation?.passwordValid?.() ||
+										'Password is valid'}</span
+								>
 							{:else}
 								<AlertCircle class="h-4 w-4" />
 								<span>{validation.password.message}</span>

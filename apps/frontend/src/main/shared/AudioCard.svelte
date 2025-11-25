@@ -56,15 +56,11 @@ const hasAudioSupport = $derived(
 );
 
 const hasAudioSource = $derived(
-	unparsedPipelines &&
-		properties.pipeline &&
-		unparsedPipelines[properties.pipeline]?.asrc,
+	unparsedPipelines && properties.pipeline && unparsedPipelines[properties.pipeline]?.asrc,
 );
 
 const hasAudioCodec = $derived(
-	unparsedPipelines &&
-		properties.pipeline &&
-		unparsedPipelines[properties.pipeline]?.acodec,
+	unparsedPipelines && properties.pipeline && unparsedPipelines[properties.pipeline]?.acodec,
 );
 </script>
 
@@ -150,7 +146,9 @@ const hasAudioCodec = $derived(
 					>
 						<Select.Trigger id="audioCodec" class="w-full">
 							{properties.audioCodec && audioCodecs
-								? (Object.entries(audioCodecs).find((acodec) => acodec[0] === properties.audioCodec)?.[1] ?? $LL.settings.selectAudioCodec())
+								? (Object.entries(audioCodecs).find(
+										(acodec) => acodec[0] === properties.audioCodec,
+									)?.[1] ?? $LL.settings.selectAudioCodec())
 								: $LL.settings.selectAudioCodec()}
 						</Select.Trigger>
 						<Select.Content>

@@ -19,7 +19,6 @@ import {
 	getIsCapturing,
 	getScreenshotImages,
 	type ScreenshotImage,
-	screenshotImages,
 	setCaptureProgress,
 	setIsCapturing,
 } from '$lib/stores/screenshot.svelte';

@@ -91,7 +91,7 @@ export const downloadLog = ({
 	contents: string;
 }) => {
 	console.log("💾 Downloading log:", { name, contentLength: contents.length });
-	
+
 	const parsedContent = contents
 		.split("\n")
 		.map((line) => line.trim()) // Trim whitespace
@@ -107,6 +107,6 @@ export const downloadLog = ({
 	a.click();
 	document.body.removeChild(a);
 	URL.revokeObjectURL(url);
-	
+
 	console.log("✅ Log download triggered successfully");
 };

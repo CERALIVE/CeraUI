@@ -55,17 +55,29 @@ export function handleNmcliCommand(args: string[]): string | null {
 	}
 
 	// nmcli device wifi list
-	if (argsStr.includes("device") && argsStr.includes("wifi") && argsStr.includes("list")) {
+	if (
+		argsStr.includes("device") &&
+		argsStr.includes("wifi") &&
+		argsStr.includes("list")
+	) {
 		return getMockWifiList();
 	}
 
 	// nmcli device wifi rescan
-	if (argsStr.includes("device") && argsStr.includes("wifi") && argsStr.includes("rescan")) {
+	if (
+		argsStr.includes("device") &&
+		argsStr.includes("wifi") &&
+		argsStr.includes("rescan")
+	) {
 		return ""; // Success (empty output)
 	}
 
 	// nmcli --get-values ... connection show <uuid>
-	if (argsStr.includes("--get-values") && argsStr.includes("connection") && argsStr.includes("show")) {
+	if (
+		argsStr.includes("--get-values") &&
+		argsStr.includes("connection") &&
+		argsStr.includes("show")
+	) {
 		return getMockConnectionFields(args);
 	}
 
@@ -87,26 +99,36 @@ function getMockConnections(args: string[]): string {
 	if (config.wifi) {
 		// Add saved WiFi connections
 		for (const conn of mockSavedConnections) {
-			const values = fieldList.map(f => {
+			const values = fieldList.map((f) => {
 				switch (f.trim()) {
-					case "uuid": return conn.uuid;
-					case "type": return conn.type;
-					case "name": return conn.name;
-					case "timestamp": return "1700000000";
-					default: return "mock";
+					case "uuid":
+						return conn.uuid;
+					case "type":
+						return conn.type;
+					case "name":
+						return conn.name;
+					case "timestamp":
+						return "1700000000";
+					default:
+						return "mock";
 				}
 			});
 			connections.push(values.join(":"));
 		}
 
 		// Add hotspot connection
-		const hotspotValues = fieldList.map(f => {
+		const hotspotValues = fieldList.map((f) => {
 			switch (f.trim()) {
-				case "uuid": return mockHotspotConnection.uuid;
-				case "type": return "802-11-wireless";
-				case "name": return mockHotspotConnection.name;
-				case "timestamp": return "1700000001";
-				default: return "mock";
+				case "uuid":
+					return mockHotspotConnection.uuid;
+				case "type":
+					return "802-11-wireless";
+				case "name":
+					return mockHotspotConnection.name;
+				case "timestamp":
+					return "1700000001";
+				default:
+					return "mock";
 			}
 		});
 		connections.push(hotspotValues.join(":"));
@@ -151,8 +173,13 @@ function getMockWifiList(): string {
 		const signal = Math.round(getWifiSignal(network.ssid));
 		const active = network.active ? "*" : "";
 		// Format: IN-USE:BSSID:SSID:MODE:CHAN:RATE:SIGNAL:BARS:SECURITY
-		const chan = network.frequency > 5000 ? Math.floor((network.frequency - 5000) / 5) + 36 : Math.floor((network.frequency - 2407) / 5);
-		networks.push(`${active}:${network.bssid}:${network.ssid}:Infra:${chan}:540 Mbit/s:${signal}:▂▄▆█:${network.security}`);
+		const chan =
+			network.frequency > 5000
+				? Math.floor((network.frequency - 5000) / 5) + 36
+				: Math.floor((network.frequency - 2407) / 5);
+		networks.push(
+			`${active}:${network.bssid}:${network.ssid}:Infra:${chan}:540 Mbit/s:${signal}:▂▄▆█:${network.security}`,
+		);
 	}
 
 	return networks.join("\n");
@@ -170,49 +197,70 @@ function getMockConnectionFields(args: string[]): string {
 	const uuid = args[args.length - 1];
 
 	// Helper to get field value with proper defaults
-	const getFieldValue = (field: string, conn: {
-		mode: string;
-		ssid: string;
-		macAddress: string;
-		channel?: number;
-	}): string => {
+	const getFieldValue = (
+		field: string,
+		conn: {
+			mode: string;
+			ssid: string;
+			macAddress: string;
+			channel?: number;
+		},
+	): string => {
 		switch (field.trim()) {
-			case "802-11-wireless.mode": return conn.mode;
-			case "802-11-wireless.ssid": return conn.ssid;
-			case "802-11-wireless.mac-address": return conn.macAddress;
-			case "802-11-wireless.channel": return conn.channel ? String(conn.channel) : "36";
-			case "GENERAL.STATE": return "activated";
-			default: return "mock-value";
+			case "802-11-wireless.mode":
+				return conn.mode;
+			case "802-11-wireless.ssid":
+				return conn.ssid;
+			case "802-11-wireless.mac-address":
+				return conn.macAddress;
+			case "802-11-wireless.channel":
+				return conn.channel ? String(conn.channel) : "36";
+			case "GENERAL.STATE":
+				return "activated";
+			default:
+				return "mock-value";
 		}
 	};
 
 	// Check if it's the hotspot
 	if (uuid === mockHotspotConnection.uuid) {
-		return fieldList.map(f => getFieldValue(f, {
-			mode: "ap",
-			ssid: mockHotspotConnection.name,
-			macAddress: "dc:a6:32:12:34:57",
-			channel: mockHotspotConnection.channel,
-		})).join("\n");
+		return fieldList
+			.map((f) =>
+				getFieldValue(f, {
+					mode: "ap",
+					ssid: mockHotspotConnection.name,
+					macAddress: "dc:a6:32:12:34:57",
+					channel: mockHotspotConnection.channel,
+				}),
+			)
+			.join("\n");
 	}
 
 	// Check saved connections
-	const savedConn = mockSavedConnections.find(c => c.uuid === uuid);
+	const savedConn = mockSavedConnections.find((c) => c.uuid === uuid);
 	if (savedConn) {
-		return fieldList.map(f => getFieldValue(f, {
-			mode: "infrastructure",
-			ssid: savedConn.name,
-			macAddress: savedConn.macAddress,
-		})).join("\n");
+		return fieldList
+			.map((f) =>
+				getFieldValue(f, {
+					mode: "infrastructure",
+					ssid: savedConn.name,
+					macAddress: savedConn.macAddress,
+				}),
+			)
+			.join("\n");
 	}
 
 	// For any other connection (like modem connections or dynamically created ones)
 	// Return values that won't cause errors but indicate it's not a wifi connection
-	return fieldList.map(f => getFieldValue(f, {
-		mode: "infrastructure",
-		ssid: `mock-${uuid?.slice(0, 8) || "unknown"}`,
-		macAddress: "00:00:00:00:00:00",
-	})).join("\n");
+	return fieldList
+		.map((f) =>
+			getFieldValue(f, {
+				mode: "infrastructure",
+				ssid: `mock-${uuid?.slice(0, 8) || "unknown"}`,
+				macAddress: "00:00:00:00:00:00",
+			}),
+		)
+		.join("\n");
 }
 
 /**

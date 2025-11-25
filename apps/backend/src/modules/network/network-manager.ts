@@ -20,7 +20,10 @@
 
 import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
-import { handleNmcliCommand, shouldMockWifi } from "../../mocks/providers/wifi.ts";
+import {
+	handleNmcliCommand,
+	shouldMockWifi,
+} from "../../mocks/providers/wifi.ts";
 
 export type ConnectionUUID = string;
 export type MacAddress = string;
@@ -295,12 +298,16 @@ export async function nmDeviceProp(device: string, fields: string) {
 		// In mock mode, return mock device properties
 		if (shouldMockWifi()) {
 			const fieldList = fields.split(",");
-			return fieldList.map(f => {
+			return fieldList.map((f) => {
 				switch (f.trim()) {
-					case "GENERAL.HWADDR": return "dc:a6:32:12:34:57";
-					case "GENERAL.STATE": return "100 (connected)";
-					case "GENERAL.CONNECTION": return "HomeNetwork";
-					default: return "";
+					case "GENERAL.HWADDR":
+						return "dc:a6:32:12:34:57";
+					case "GENERAL.STATE":
+						return "100 (connected)";
+					case "GENERAL.CONNECTION":
+						return "HomeNetwork";
+					default:
+						return "";
 				}
 			});
 		}
@@ -396,7 +403,9 @@ export async function nmHotspot(
 		// In mock mode, return a fake hotspot UUID
 		if (shouldMockWifi()) {
 			const fakeUuid = `hotspot-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-			logger.info(`🎭 Mock: Started hotspot ${ssid} on ${device} with UUID ${fakeUuid}`);
+			logger.info(
+				`🎭 Mock: Started hotspot ${ssid} on ${device} with UUID ${fakeUuid}`,
+			);
 			return fakeUuid;
 		}
 

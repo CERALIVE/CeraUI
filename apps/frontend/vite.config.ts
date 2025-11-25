@@ -71,46 +71,57 @@ export default defineConfig(({ mode }) => ({
 			output: {
 				manualChunks: (id) => {
 					// Vendor chunks for external dependencies
-					if (id.includes('node_modules')) {
+					if (id.includes("node_modules")) {
 						// Core Svelte framework (largest)
-						if (id.includes('svelte') || id.includes('@internationalized/date')) {
-							return 'vendor-core';
+						if (
+							id.includes("svelte") ||
+							id.includes("@internationalized/date")
+						) {
+							return "vendor-core";
 						}
 
 						// UI component libraries
-						if (id.includes('bits-ui') || id.includes('svelte-sonner') ||
-						    id.includes('vaul-svelte') || id.includes('mode-watcher')) {
-							return 'vendor-ui';
+						if (
+							id.includes("bits-ui") ||
+							id.includes("svelte-sonner") ||
+							id.includes("vaul-svelte") ||
+							id.includes("mode-watcher")
+						) {
+							return "vendor-ui";
 						}
 
 						// Utility libraries
-						if (id.includes('clsx') || id.includes('tailwind-merge') ||
-						    id.includes('tailwind-variants') || id.includes('qrcode') ||
-						    id.includes('@macfja/svelte-persistent-store')) {
-							return 'vendor-utils';
+						if (
+							id.includes("clsx") ||
+							id.includes("tailwind-merge") ||
+							id.includes("tailwind-variants") ||
+							id.includes("qrcode") ||
+							id.includes("@macfja/svelte-persistent-store")
+						) {
+							return "vendor-utils";
 						}
 
 						// Image and file processing
-						if (id.includes('html-to-image') || id.includes('@zip.js/zip.js')) {
-							return 'vendor-media';
+						if (id.includes("html-to-image") || id.includes("@zip.js/zip.js")) {
+							return "vendor-media";
 						}
 
 						// i18n system
-						if (id.includes('typesafe-i18n') || id.includes('@ceraui/i18n')) {
-							return 'vendor-i18n';
+						if (id.includes("typesafe-i18n") || id.includes("@ceraui/i18n")) {
+							return "vendor-i18n";
 						}
 
 						// Other vendor dependencies
-						return 'vendor-misc';
+						return "vendor-misc";
 					}
 
 					// Feature-based chunks for our code
-					if (id.includes('/components/streaming/')) {
-						return 'streaming';
+					if (id.includes("/components/streaming/")) {
+						return "streaming";
 					}
 
-					if (id.includes('/components/dev-tools/')) {
-						return 'devtools';
+					if (id.includes("/components/dev-tools/")) {
+						return "devtools";
 					}
 
 					// TEMPORARILY DISABLED: Testing if this causes the "Cannot access 'ye' before initialization" error
@@ -120,11 +131,11 @@ export default defineConfig(({ mode }) => ({
 
 					// Default: let Vite decide natural chunk boundaries
 					return null;
-				}
-			}
+				},
+			},
 		},
 		// Set stricter chunk size warning limit
-		chunkSizeWarningLimit: 300
+		chunkSizeWarningLimit: 300,
 	},
 	resolve: {
 		alias: {

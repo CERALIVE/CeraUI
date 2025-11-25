@@ -70,4 +70,3 @@ export function getMockSensorData(): Record<string, string> {
 		"SoC current": `${sensors.socCurrent.toFixed(3)} A`,
 	};
 }
-

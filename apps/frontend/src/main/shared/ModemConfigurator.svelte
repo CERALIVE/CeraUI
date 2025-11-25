@@ -185,7 +185,9 @@ function resetForm() {
 <div class="space-y-4">
 	<form class="space-y-4" onsubmit={onSubmit}>
 		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="networkType-{deviceId}">{$LL.network.modem.networkType()}</Label>
+			<Label class="text-sm font-medium" for="networkType-{deviceId}"
+				>{$LL.network.modem.networkType()}</Label
+			>
 			<Select.Root
 				onValueChange={(val) => {
 					if (val) {
@@ -336,7 +338,9 @@ function resetForm() {
 				</div>
 
 				<div class="space-y-2">
-					<Label class="text-sm font-medium" for="username-{deviceId}">{$LL.network.modem.username()}</Label>
+					<Label class="text-sm font-medium" for="username-{deviceId}"
+						>{$LL.network.modem.username()}</Label
+					>
 					<Input
 						id="username-{deviceId}"
 						autocapitalize="none"

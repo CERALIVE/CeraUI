@@ -17,9 +17,9 @@ export {
 
 // Service
 export {
+	getMockState,
 	getModemSignal,
 	getModemState,
-	getMockState,
 	getNetworkTraffic,
 	getSensorReadings,
 	getStreamingStats,
@@ -29,25 +29,15 @@ export {
 	shouldUseMocks,
 	stopMockService,
 } from "./mock-service.ts";
-
+export {
+	handleMmcliCommand,
+	shouldMockModems,
+} from "./providers/modems.ts";
 // Providers
 export {
 	getMockIfconfigOutput,
 	shouldMockNetwork,
 } from "./providers/network.ts";
-
-export {
-	handleMmcliCommand,
-	shouldMockModems,
-} from "./providers/modems.ts";
-
-export {
-	getMockHotspotChannels,
-	getMockWifiInterface,
-	handleNmcliCommand,
-	shouldMockWifi,
-} from "./providers/wifi.ts";
-
 export {
 	getMockCurrent,
 	getMockSensorData,
@@ -55,7 +45,6 @@ export {
 	getMockVoltage,
 	shouldMockSensors,
 } from "./providers/sensors.ts";
-
 export {
 	formatMockStreamingStats,
 	getMockBcrpStatus,
@@ -68,4 +57,9 @@ export {
 	startMockStreaming,
 	stopMockStreaming,
 } from "./providers/streaming.ts";
-
+export {
+	getMockHotspotChannels,
+	getMockWifiInterface,
+	handleNmcliCommand,
+	shouldMockWifi,
+} from "./providers/wifi.ts";

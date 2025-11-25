@@ -58,7 +58,9 @@ if (isDevelopment()) {
 	const scenario = process.env.MOCK_SCENARIO || "multi-modem-wifi";
 	initMockService(scenario);
 	logger.info(`🎭 Development mode active with scenario: ${scenario}`);
-	logger.info("   Available scenarios: single-modem, multi-modem-wifi, streaming-active");
+	logger.info(
+		"   Available scenarios: single-modem, multi-modem-wifi, streaming-active",
+	);
 	logger.info("   Set MOCK_SCENARIO env var to change scenario");
 }
 

@@ -3,7 +3,10 @@
 	Defines scenarios and mock state for development mode
 */
 
-export type MockScenario = "single-modem" | "multi-modem-wifi" | "streaming-active";
+export type MockScenario =
+	| "single-modem"
+	| "multi-modem-wifi"
+	| "streaming-active";
 
 export interface ScenarioConfig {
 	modems: number;
@@ -141,6 +144,7 @@ export function getScenarioConfig(): ScenarioConfig {
 }
 
 export function isDevelopment(): boolean {
-	return process.env.NODE_ENV === "development" || process.env.MOCK_MODE === "true";
+	return (
+		process.env.NODE_ENV === "development" || process.env.MOCK_MODE === "true"
+	);
 }
-

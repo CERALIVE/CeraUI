@@ -182,7 +182,7 @@ const isManualAccount = $derived(
 						id="srtlaServerAddress"
 						class="font-mono"
 						disabled={isStreaming}
-                oninput={() => {
+						oninput={() => {
 							addressTouched = true;
 							onSrtlaAddressChange(localSrtlaServerAddress);
 						}}
@@ -202,7 +202,7 @@ const isManualAccount = $derived(
 						id="srtlaServerPort"
 						class="font-mono"
 						disabled={isStreaming}
-                oninput={() => {
+						oninput={() => {
 							portTouched = true;
 							const value = (localSrtlaServerPort || '').toString().trim();
 							if (value === '') {

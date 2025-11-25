@@ -1,0 +1,7 @@
+#!/bin/sh
+# Pre-commit hook - auto-fix lint issues
+
+pnpm lint:fix
+
+# Stage any auto-fixed files
+git add -u

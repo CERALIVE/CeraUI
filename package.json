@@ -11,6 +11,7 @@
 	"author": "Andrés Cera",
 	"license": "GPL-3.0",
 	"scripts": {
+		"prepare": "git config core.hooksPath .githooks",
 		"dev": "dotenv -- mprocs",
 		"dev:single-modem": "MOCK_SCENARIO=single-modem dotenv -- mprocs",
 		"dev:multi-modem": "MOCK_SCENARIO=multi-modem-wifi dotenv -- mprocs",

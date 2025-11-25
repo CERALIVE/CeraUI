@@ -12,5 +12,3 @@ declare global {
 	// Build-time version injected by Vite
 	const __APP_VERSION__: string;
 }
-
-export {};
