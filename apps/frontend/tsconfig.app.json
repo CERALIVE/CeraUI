@@ -3,6 +3,7 @@
   "compilerOptions": {
     "composite": true,
     "target": "ESNext",
+    "types": ["vitest/globals"],
     "useDefineForClassFields": true,
     "module": "ESNext",
     "resolveJsonModule": true,
@@ -29,5 +30,6 @@
       "$main/*": ["./src/main/*"]
     }
   },
-  "include": ["src", "src/**/*.d.ts", "src/**/*.ts", "src/**/*.js", "src/**/*.svelte"]
+  "include": ["src", "src/**/*.d.ts", "src/**/*.ts", "src/**/*.js", "src/**/*.svelte"],
+  "exclude": ["src/**/*.test.ts"]
 }
