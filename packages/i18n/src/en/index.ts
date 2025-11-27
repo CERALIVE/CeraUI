@@ -438,6 +438,10 @@ const en = {
 			roamingNetwork: "Roaming Network",
 			scan: "Scan",
 			scanning: "Scanning",
+			configuration: "Configuration",
+			apnSettings: "APN Settings",
+			autoApnDescription: "Automatically configure APN settings",
+			roamingDescription: "Allow connection to other networks",
 			connectionStatus: {
 				failed: "Failed",
 				registered: "Registered",
