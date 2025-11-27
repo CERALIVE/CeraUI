@@ -139,7 +139,7 @@ const handleSubmit = async () => {
 								!validation.name.isValid && hotspotProperties.name.length > 0
 									? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
 									: validation.name.isValid && hotspotProperties.name.length > 0
-										? 'border-green-400 bg-green-50 focus:border-green-500 focus:ring-green-500 dark:bg-green-950/20'
+										? 'border-emerald-400 bg-emerald-50 focus:border-emerald-500 focus:ring-emerald-500 dark:bg-emerald-950/20'
 										: 'border-slate-200 bg-slate-50 focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800/50',
 							)}
 							autocapitalize="none"
@@ -165,7 +165,7 @@ const handleSubmit = async () => {
 							class={cn(
 								'flex items-center gap-2 rounded-lg p-3 text-sm font-medium',
 								validation.name.isValid
-									? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+									? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
 									: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 							)}
 						>
@@ -214,7 +214,7 @@ const handleSubmit = async () => {
 								!validation.password.isValid && hotspotProperties.password.length > 0
 									? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
 									: validation.password.isValid && hotspotProperties.password.length > 0
-										? 'border-green-400 bg-green-50 focus:border-green-500 focus:ring-green-500 dark:bg-green-950/20'
+										? 'border-emerald-400 bg-emerald-50 focus:border-emerald-500 focus:ring-emerald-500 dark:bg-emerald-950/20'
 										: 'border-slate-200 bg-slate-50 focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800/50',
 							)}
 							autocapitalize="none"
@@ -252,7 +252,7 @@ const handleSubmit = async () => {
 							class={cn(
 								'flex items-center gap-2 rounded-lg p-3 text-sm font-medium',
 								validation.password.isValid
-									? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+									? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
 									: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 							)}
 						>
@@ -289,10 +289,10 @@ const handleSubmit = async () => {
 					for="channel"
 				>
 					<div
-						class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30"
+						class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/30"
 					>
 						<svg
-							class="h-4 w-4 text-orange-600 dark:text-orange-400"
+							class="h-4 w-4 text-amber-600 dark:text-amber-400"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
@@ -335,13 +335,13 @@ const handleSubmit = async () => {
 							</Select.Group>
 						</Select.Content>
 					</Select.Root>
-					<div class="flex items-start gap-2 rounded-lg bg-orange-50 p-3 dark:bg-orange-950/30">
+					<div class="flex items-start gap-2 rounded-lg bg-amber-50 p-3 dark:bg-amber-950/30">
 						<div
-							class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-orange-200 dark:bg-orange-800"
+							class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-amber-200 dark:bg-amber-800"
 						>
-							<span class="text-xs font-bold text-orange-600 dark:text-orange-400">✓</span>
+							<span class="text-xs font-bold text-amber-600 dark:text-amber-400">✓</span>
 						</div>
-						<p class="text-sm leading-relaxed text-orange-700 dark:text-orange-300">
+						<p class="text-sm leading-relaxed text-amber-700 dark:text-amber-300">
 							{$LL.hotspotConfigurator.help.channelHelp()}
 						</p>
 					</div>
@@ -374,7 +374,7 @@ const handleSubmit = async () => {
 					class="rounded-xl border-2 border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 p-4 dark:border-green-700 dark:from-green-950/30 dark:to-emerald-950/30"
 				>
 					<div class="flex items-center gap-3">
-						<div class="flex h-6 w-6 items-center justify-center rounded-full bg-green-500">
+						<div class="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500">
 							<CheckCircle class="h-4 w-4 text-white" />
 						</div>
 						<p class="font-semibold text-green-800 dark:text-green-200">

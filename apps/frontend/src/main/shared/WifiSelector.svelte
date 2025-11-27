@@ -116,7 +116,7 @@ const getFrequencyBand = (freq: number): string => {
 </script>
 
 <SimpleAlertDialog
-	class="max-h-[90vh] max-w-[95vw] overflow-hidden sm:max-w-lg lg:max-w-xl"
+	class="max-h-[90vh] w-full max-w-[95vw] overflow-hidden sm:max-w-lg md:max-w-xl lg:max-w-2xl xl:max-w-3xl"
 	buttonText={$LL.wifiSelector.dialog.searchWifi()}
 	confirmButtonText={$LL.wifiSelector.dialog.close()}
 	extraButtonClasses="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold shadow-lg shadow-emerald-500/25 transition-all duration-300 hover:shadow-emerald-500/40 hover:scale-[1.02] active:scale-[0.98]"
@@ -260,7 +260,7 @@ const getFrequencyBand = (freq: number): string => {
 										class={cn(
 											'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
 											signalCategory === 'excellent'
-												? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+												? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
 												: signalCategory === 'good'
 													? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
 													: signalCategory === 'fair'

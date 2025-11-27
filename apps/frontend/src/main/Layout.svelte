@@ -368,4 +368,4 @@ window.stopStreamingWithNotificationClear = stopStreaming;
 <!-- PWA Status and Notifications -->
 <PWAStatus />
 
-<Toaster richColors></Toaster>
+<Toaster position="bottom-right" />

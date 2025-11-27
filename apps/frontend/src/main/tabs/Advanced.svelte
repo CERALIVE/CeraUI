@@ -238,28 +238,32 @@ $effect(() => {
 						<div class="grid gap-4 sm:grid-cols-2">
 							<!-- Reboot System Card -->
 							<div
-								class="group relative flex h-full flex-col overflow-hidden rounded-xl border border-yellow-200/50 bg-gradient-to-br from-yellow-50/50 to-yellow-100/50 p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-yellow-800/50 dark:from-yellow-950/20 dark:to-yellow-900/20"
+								class="group relative flex h-full flex-col overflow-hidden rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-50 to-orange-50 p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-amber-500/30 dark:from-amber-950/30 dark:to-orange-950/20"
 							>
-								<div class="flex flex-1 items-start justify-between">
-									<div class="flex items-center gap-3">
-										<div class="rounded-lg bg-yellow-500/10 p-2 shadow-sm">
-											<RotateCcw class="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-										</div>
-										<div>
-											<h4 class="font-semibold text-yellow-900 dark:text-yellow-100">
-												{$LL.advanced.reboot()}
-											</h4>
-											<p class="text-xs text-yellow-600/70 dark:text-yellow-300/70">
-												{$LL.advanced.rebootDescription()}
-											</p>
-										</div>
+								<!-- Status bar -->
+								<div
+									class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500 to-orange-500"
+								></div>
+								<div class="flex flex-1 items-start gap-3 pt-1">
+									<div
+										class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-md shadow-amber-500/20"
+									>
+										<RotateCcw class="h-5 w-5 text-white" />
+									</div>
+									<div class="min-w-0 flex-1">
+										<h4 class="font-semibold text-amber-900 dark:text-amber-100">
+											{$LL.advanced.reboot()}
+										</h4>
+										<p class="text-xs text-amber-700/70 dark:text-amber-300/70">
+											{$LL.advanced.rebootDescription()}
+										</p>
 									</div>
 								</div>
 								<div class="mt-4">
 									<SimpleAlertDialog
 										buttonText={$LL.advanced.reboot()}
 										confirmButtonText={$LL.advanced.reboot()}
-										extraButtonClasses="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 border-0 shadow-sm text-white font-medium h-9 text-sm justify-center"
+										extraButtonClasses="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 border-0 shadow-lg shadow-amber-500/25 text-white font-medium h-10 text-sm justify-center"
 										iconPosition="left"
 										onconfirm={reboot}
 									>
@@ -278,28 +282,32 @@ $effect(() => {
 
 							<!-- Power Off System Card -->
 							<div
-								class="group relative flex h-full flex-col overflow-hidden rounded-xl border border-red-200/50 bg-gradient-to-br from-red-50/50 to-red-100/50 p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-red-800/50 dark:from-red-950/20 dark:to-red-900/20"
+								class="group relative flex h-full flex-col overflow-hidden rounded-xl border border-red-500/30 bg-gradient-to-br from-red-50 to-rose-50 p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-red-500/30 dark:from-red-950/30 dark:to-rose-950/20"
 							>
-								<div class="flex flex-1 items-start justify-between">
-									<div class="flex items-center gap-3">
-										<div class="rounded-lg bg-red-500/10 p-2 shadow-sm">
-											<PowerOff class="h-5 w-5 text-red-600 dark:text-red-400" />
-										</div>
-										<div>
-											<h4 class="font-semibold text-red-900 dark:text-red-100">
-												{$LL.advanced.powerOff()}
-											</h4>
-											<p class="text-xs text-red-600/70 dark:text-red-300/70">
-												{$LL.advanced.powerOffDescription()}
-											</p>
-										</div>
+								<!-- Status bar -->
+								<div
+									class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-red-500 to-rose-500"
+								></div>
+								<div class="flex flex-1 items-start gap-3 pt-1">
+									<div
+										class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-red-500 to-rose-500 shadow-md shadow-red-500/20"
+									>
+										<PowerOff class="h-5 w-5 text-white" />
+									</div>
+									<div class="min-w-0 flex-1">
+										<h4 class="font-semibold text-red-900 dark:text-red-100">
+											{$LL.advanced.powerOff()}
+										</h4>
+										<p class="text-xs text-red-700/70 dark:text-red-300/70">
+											{$LL.advanced.powerOffDescription()}
+										</p>
 									</div>
 								</div>
 								<div class="mt-4">
 									<SimpleAlertDialog
 										buttonText={$LL.advanced.powerOff()}
 										confirmButtonText={$LL.advanced.powerOff()}
-										extraButtonClasses="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 border-0 shadow-sm text-white font-medium h-9 text-sm justify-center"
+										extraButtonClasses="w-full bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 border-0 shadow-lg shadow-red-500/25 text-white font-medium h-10 text-sm justify-center"
 										iconPosition="left"
 										onconfirm={powerOff}
 									>
@@ -321,19 +329,22 @@ $effect(() => {
 			</Card.Root>
 
 			<!-- Developer Options Card -->
-			<Card.Root class="bg-card/50 border-0 shadow-lg backdrop-blur-sm">
-				<Card.Header
-					class="border-b bg-gradient-to-r from-purple-50/50 to-purple-100/50 pb-6 dark:from-purple-950/20 dark:to-purple-900/20"
-				>
+			<Card.Root
+				class="bg-card/50 overflow-hidden border border-purple-500/30 shadow-lg backdrop-blur-sm"
+			>
+				<div class="h-1 bg-gradient-to-r from-purple-500 to-violet-600"></div>
+				<Card.Header class="border-b pb-6">
 					<div class="flex items-center space-x-4">
-						<div class="rounded-xl border border-purple-500/20 bg-purple-500/10 p-3 shadow-sm">
-							<Hammer class="h-6 w-6 text-purple-600 dark:text-purple-400" />
+						<div
+							class="grid h-12 w-12 place-items-center rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 shadow-md shadow-purple-500/20"
+						>
+							<Hammer class="h-6 w-6 text-white" />
 						</div>
 						<div class="flex-1">
-							<Card.Title class="text-xl font-bold text-purple-900 dark:text-purple-100">
+							<Card.Title class="text-xl font-semibold">
 								{$LL.advanced.developerOptions()}
 							</Card.Title>
-							<p class="mt-1 text-sm font-medium text-purple-600/70 dark:text-purple-300/70">
+							<p class="text-muted-foreground mt-1 text-sm">
 								{$LL.advanced.developmentToolsAccess()}
 							</p>
 						</div>
@@ -350,33 +361,32 @@ $effect(() => {
 								{$LL.advanced.sshPasswordTooltip()}
 							</p>
 							<div
-								class="rounded-xl border border-purple-200/50 bg-gradient-to-r from-purple-50/30 to-purple-100/30 p-4 shadow-sm dark:border-purple-800/50 dark:from-purple-950/20 dark:to-purple-900/20"
+								class={cn(
+									'flex items-center justify-between rounded-lg border px-4 py-3',
+									sshStatus
+										? 'border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/20'
+										: 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50',
+								)}
 							>
-								<div class="flex items-center gap-3 text-sm">
-									<div class="flex items-center gap-2">
-										<div
-											class={cn(
-												'h-3 w-3 rounded-full shadow-sm',
-												sshStatus
-													? 'bg-emerald-500 shadow-emerald-500/30'
-													: 'bg-slate-400 shadow-slate-400/30',
-											)}
-										></div>
-										<span class="font-semibold text-purple-900 dark:text-purple-100"
-											>{$LL.advanced.sshServer()}:</span
-										>
-									</div>
-									<span
+								<div class="flex items-center gap-2 text-sm">
+									<div
 										class={cn(
-											'rounded-md px-2 py-1 text-xs font-medium',
-											sshStatus
-												? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-												: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
+											'h-2.5 w-2.5 rounded-full',
+											sshStatus ? 'animate-pulse bg-emerald-500' : 'bg-slate-400',
 										)}
-									>
-										{sshStatus ? $LL.advanced.active() : $LL.advanced.inactive()}
-									</span>
+									></div>
+									<span class="font-medium">{$LL.advanced.sshServer()}:</span>
 								</div>
+								<span
+									class={cn(
+										'rounded-md px-2.5 py-1 text-xs font-semibold',
+										sshStatus
+											? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+											: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+									)}
+								>
+									{sshStatus ? $LL.advanced.active() : $LL.advanced.inactive()}
+								</span>
 							</div>
 						</div>
 						<div class="relative">
@@ -481,59 +491,61 @@ $effect(() => {
 					</div>
 
 					<!-- Log Management Section -->
-					<div class="space-y-4 border-t border-purple-200/30 pt-6 dark:border-purple-800/30">
-						<div
-							class="flex items-center gap-3 border-b border-purple-200/50 pb-2 dark:border-purple-800/50"
-						>
-							<div class="rounded-lg bg-purple-500/10 p-2">
-								<Logs class="h-4 w-4 text-purple-600 dark:text-purple-400" />
+					<div class="space-y-4 border-t pt-6">
+						<div class="flex items-center gap-3 pb-2">
+							<div
+								class="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-purple-500 to-violet-600"
+							>
+								<Logs class="h-4 w-4 text-white" />
 							</div>
 							<div>
-								<h3 class="text-sm font-semibold text-purple-900 dark:text-purple-100">
+								<h3 class="text-sm font-semibold">
 									{$LL.advanced.logManagement()}
 								</h3>
-								<p class="text-xs text-purple-600/70 dark:text-purple-300/70">
+								<p class="text-muted-foreground text-xs">
 									{$LL.advanced.logManagementDescription()}
 								</p>
 							</div>
 						</div>
 						<div class="grid gap-4 sm:grid-cols-2">
-							<!-- BELABOX Log Card -->
+							<!-- CERALIVE Log Card -->
 							<div
-								class="group relative flex h-full flex-col overflow-hidden rounded-xl border border-purple-200/50 bg-gradient-to-br from-purple-50/50 to-purple-100/50 p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-purple-800/50 dark:from-purple-950/20 dark:to-purple-900/20"
+								class="group relative flex h-full flex-col overflow-hidden rounded-xl border border-purple-500/30 bg-gradient-to-br from-purple-50 to-violet-50 p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-purple-500/30 dark:from-purple-950/30 dark:to-violet-950/20"
 							>
-								<div class="flex flex-1 items-start justify-between">
-									<div class="flex items-center gap-3">
-										<div class="rounded-lg bg-purple-500/10 p-2 shadow-sm">
-											<svg
-												class="h-5 w-5 text-purple-600 dark:text-purple-400"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-												/>
-											</svg>
-										</div>
-										<div>
-											<h4 class="font-semibold text-purple-900 dark:text-purple-100">
-												CERALIVE Log
-											</h4>
-											<p class="text-xs text-purple-600/70 dark:text-purple-300/70">
-												{$LL.advanced.applicationLogsDescription()}
-											</p>
-										</div>
+								<!-- Status bar -->
+								<div
+									class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-purple-500 to-violet-500"
+								></div>
+								<div class="flex flex-1 items-start gap-3 pt-1">
+									<div
+										class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-purple-500 to-violet-500 shadow-md shadow-purple-500/20"
+									>
+										<svg
+											class="h-5 w-5 text-white"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+										>
+											<path
+												d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+											/>
+										</svg>
+									</div>
+									<div class="min-w-0 flex-1">
+										<h4 class="font-semibold text-purple-900 dark:text-purple-100">CERALIVE Log</h4>
+										<p class="text-xs text-purple-700/70 dark:text-purple-300/70">
+											{$LL.advanced.applicationLogsDescription()}
+										</p>
 									</div>
 								</div>
 								<div class="mt-4">
 									<SimpleAlertDialog
 										buttonText={$LL.advanced.download()}
 										confirmButtonText={$LL.advanced.download()}
-										extraButtonClasses="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 border-0 shadow-sm text-white font-medium h-9 text-sm justify-center"
+										extraButtonClasses="w-full bg-gradient-to-r from-purple-500 to-violet-500 hover:from-purple-600 hover:to-violet-600 border-0 shadow-lg shadow-purple-500/25 text-white font-medium h-10 text-sm justify-center"
 										iconPosition="left"
 										onconfirm={getBelaboxLog}
 									>
@@ -559,38 +571,42 @@ $effect(() => {
 
 							<!-- System Log Card -->
 							<div
-								class="group relative flex h-full flex-col overflow-hidden rounded-xl border border-purple-200/50 bg-gradient-to-br from-purple-50/50 to-purple-100/50 p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-purple-800/50 dark:from-purple-950/20 dark:to-purple-900/20"
+								class="group relative flex h-full flex-col overflow-hidden rounded-xl border border-purple-500/30 bg-gradient-to-br from-purple-50 to-violet-50 p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-purple-500/30 dark:from-purple-950/30 dark:to-violet-950/20"
 							>
-								<div class="flex flex-1 items-start justify-between">
-									<div class="flex items-center gap-3">
-										<div class="rounded-lg bg-purple-500/10 p-2 shadow-sm">
-											<svg
-												class="h-5 w-5 text-purple-600 dark:text-purple-400"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-												/>
-											</svg>
-										</div>
-										<div>
-											<h4 class="font-semibold text-purple-900 dark:text-purple-100">System Log</h4>
-											<p class="text-xs text-purple-600/70 dark:text-purple-300/70">
-												{$LL.advanced.systemLogsDescription()}
-											</p>
-										</div>
+								<!-- Status bar -->
+								<div
+									class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-purple-500 to-violet-500"
+								></div>
+								<div class="flex flex-1 items-start gap-3 pt-1">
+									<div
+										class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-purple-500 to-violet-500 shadow-md shadow-purple-500/20"
+									>
+										<svg
+											class="h-5 w-5 text-white"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+										>
+											<path
+												d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+											/>
+										</svg>
+									</div>
+									<div class="min-w-0 flex-1">
+										<h4 class="font-semibold text-purple-900 dark:text-purple-100">System Log</h4>
+										<p class="text-xs text-purple-700/70 dark:text-purple-300/70">
+											{$LL.advanced.systemLogsDescription()}
+										</p>
 									</div>
 								</div>
 								<div class="mt-4">
 									<SimpleAlertDialog
 										buttonText={$LL.advanced.download()}
 										confirmButtonText={$LL.advanced.download()}
-										extraButtonClasses="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 border-0 shadow-sm text-white font-medium h-9 text-sm justify-center"
+										extraButtonClasses="w-full bg-gradient-to-r from-purple-500 to-violet-500 hover:from-purple-600 hover:to-violet-600 border-0 shadow-lg shadow-purple-500/25 text-white font-medium h-10 text-sm justify-center"
 										iconPosition="left"
 										onconfirm={getSystemLog}
 									>
