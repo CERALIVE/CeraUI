@@ -3,14 +3,12 @@ import { LL } from '@ceraui/i18n/svelte';
 import {
 	ChevronDown,
 	Globe,
-	Key,
 	Loader2,
 	Network,
 	RefreshCw,
 	RotateCcw,
 	Save,
 	Settings,
-	User,
 	Zap,
 } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
@@ -300,22 +298,16 @@ const isScanning = $derived(modemIsScanning || localScanningState);
 							bind:value={formData.apn}
 						/>
 					</div>
-					<div class="grid grid-cols-2 gap-2">
+					<div class="grid grid-cols-2 gap-3">
 						<div class="space-y-1">
-							<Label class="text-muted-foreground flex items-center gap-1.5 text-xs">
-								<User class="h-3.5 w-3.5" />
-								{$LL.network.modem.username()}
-							</Label>
-							<Input class="h-8 text-sm" placeholder="Optional" bind:value={formData.username} />
+							<Label class="text-muted-foreground text-xs">{$LL.network.modem.username()}</Label>
+							<Input class="h-8 text-sm" placeholder="—" bind:value={formData.username} />
 						</div>
 						<div class="space-y-1">
-							<Label class="text-muted-foreground flex items-center gap-1.5 text-xs">
-								<Key class="h-3.5 w-3.5" />
-								{$LL.network.modem.password()}
-							</Label>
+							<Label class="text-muted-foreground text-xs">{$LL.network.modem.password()}</Label>
 							<Input
 								class="h-8 text-sm"
-								placeholder="Optional"
+								placeholder="—"
 								type="password"
 								bind:value={formData.password}
 							/>
