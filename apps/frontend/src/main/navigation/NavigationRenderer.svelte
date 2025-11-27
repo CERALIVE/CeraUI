@@ -24,13 +24,13 @@ import { fade, fly } from 'svelte/transition';
 import { setupHashNavigation } from '$lib/helpers/NavigationHelper';
 import {
 	enhancedNavigationStore,
+	getCurrentNavigation,
 	isNavigationTransitioning,
 	navigationError,
 	navigationStore,
 	transitionDirection,
 } from '$lib/stores/navigation.svelte';
 
-let CurrentComponent: Component | undefined = $state(undefined);
 const _previousComponent: Component | undefined = $state(undefined);
 let showContent = $state(true);
 
@@ -38,18 +38,20 @@ let showContent = $state(true);
 const TRANSITION_DURATION = 300;
 const _LOADING_DELAY = 150;
 
-// Simple navigation subscription without race condition complexity
-$effect(() => {
-	const unsubscribe = navigationStore.subscribe((tab) => {
-		if (tab) {
-			const newComponent = Object.values(tab)[0].component;
-			// Simple component update without complex race condition handling
-			CurrentComponent = newComponent;
-			showContent = true;
-		}
-	});
+// Svelte 5: Use $derived for current component (no side effects)
+const CurrentComponent = $derived.by(() => {
+	const tab = getCurrentNavigation();
+	if (tab) {
+		return Object.values(tab)[0].component;
+	}
+	return undefined;
+});
 
-	return unsubscribe;
+// Handle showContent as a side effect when component changes
+$effect(() => {
+	if (CurrentComponent) {
+		showContent = true;
+	}
 });
 
 // Setup hash navigation

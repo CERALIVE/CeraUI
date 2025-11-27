@@ -1,5 +1,5 @@
-import { LL } from "@ceraui/i18n/svelte";
-import { get } from "svelte/store";
+import { getLL } from "@ceraui/i18n/svelte";
+
 import { toast } from "svelte-sonner";
 
 import { CLIENT_VERSION } from "./version-manager";
@@ -85,7 +85,7 @@ function showVersionChangeNotification(oldVersion: string, newVersion: string) {
 		changeTypeKey = "version.newBuildVersion";
 	}
 
-	const translations = get(LL);
+	const translations = getLL();
 	toast.info(translations.version.newVersionAvailable(), {
 		description: `${translations.version[changeTypeKey.split(".")[1] as keyof typeof translations.version]()}. ${translations.version.refreshToUpdate()}.`,
 		duration: 8000,

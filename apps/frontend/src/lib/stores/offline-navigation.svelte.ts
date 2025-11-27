@@ -1,6 +1,6 @@
 // Offline navigation detection using Svelte 5 runes
 import { getIsOnline } from "./pwa.svelte";
-import { socket } from "./websocket-store";
+import { socket } from "./websocket-store.svelte";
 
 // Connection state type
 type ConnectionStateType = "connected" | "connecting" | "disconnected" | "error";
@@ -38,8 +38,8 @@ function notifyOfflinePageSubscribers() {
 }
 
 function notifyFullyOfflineSubscribers() {
-	const isFullyOfflineValue = !getIsOnline() || 
-		connectionState === "disconnected" || 
+	const isFullyOfflineValue = !getIsOnline() ||
+		connectionState === "disconnected" ||
 		connectionState === "error";
 	for (const sub of fullyOfflineSubscribers) sub(isFullyOfflineValue);
 }
@@ -56,8 +56,8 @@ export function getShouldShowOfflinePage(): boolean {
 }
 
 export function getIsFullyOffline(): boolean {
-	return !getIsOnline() || 
-		connectionState === "disconnected" || 
+	return !getIsOnline() ||
+		connectionState === "disconnected" ||
 		connectionState === "error";
 }
 
@@ -147,7 +147,7 @@ function startPeriodicConnectionCheck() {
 // ============================================
 function checkOfflineState() {
 	const offline = getIsFullyOffline();
-	
+
 	if (offline) {
 		if (offlineStartTime === null) {
 			offlineStartTime = Date.now();

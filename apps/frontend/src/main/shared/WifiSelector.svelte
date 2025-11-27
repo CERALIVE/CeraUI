@@ -17,7 +17,7 @@ import {
 	networkRename,
 	scanWifi,
 } from '$lib/helpers/NetworkHelper.js';
-import { WifiMessages } from '$lib/stores/websocket-store';
+import { getWifi } from '$lib/stores/websocket-store.svelte';
 import type { ValueOf } from '$lib/types';
 import type { StatusMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
@@ -30,7 +30,9 @@ let open = $state(false);
 let connecting: string | undefined = $state();
 let scanning = $state(false);
 
-WifiMessages.subscribe((wifiMessage) => {
+// Svelte 5: Use $effect for side effects (toasts) based on wifi messages
+$effect(() => {
+	const wifiMessage = getWifi();
 	if (wifiMessage) {
 		if (wifiMessage.new?.error) {
 			toast.error($LL.wifiSelector.error.connectionFailed(), {

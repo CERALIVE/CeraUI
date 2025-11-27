@@ -36,7 +36,6 @@
 import { LL } from '@ceraui/i18n/svelte';
 import { Download, Share, WifiOff } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
-import { writable } from 'svelte/store';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
@@ -47,26 +46,25 @@ import {
 	setShowIOSInstallPrompt,
 } from '$lib/stores/pwa.svelte';
 // Create a simple connection state based on socket readiness
-import { socket } from '$lib/stores/websocket-store';
+import { socket } from '$lib/stores/websocket-store.svelte';
 
-const connectionState = writable<'connected' | 'connecting' | 'disconnected' | 'error'>(
-	'connecting',
-);
+// Svelte 5 runes: Use $state instead of writable store
+let connectionState = $state<'connected' | 'connecting' | 'disconnected' | 'error'>('connecting');
 
 // Monitor socket state with event listeners (more efficient than polling)
 const updateConnectionState = () => {
 	if (socket.readyState === WebSocket.OPEN) {
-		connectionState.set('connected');
+		connectionState = 'connected';
 	} else if (socket.readyState === WebSocket.CONNECTING) {
-		connectionState.set('connecting');
+		connectionState = 'connecting';
 	} else {
-		connectionState.set('disconnected'); // CLOSING, CLOSED, or any other state
+		connectionState = 'disconnected'; // CLOSING, CLOSED, or any other state
 	}
 };
 
 // Handle specific error events to set proper error state
 const handleSocketError = () => {
-	connectionState.set('error');
+	connectionState = 'error';
 };
 
 // Set initial state and add event listeners for efficient monitoring
@@ -117,11 +115,11 @@ const isMobile = $derived(() => {
 $effect(() => {
 	const online = getIsOnline();
 	const isFullyOffline =
-		!online || $connectionState === 'disconnected' || $connectionState === 'error';
+		!online || connectionState === 'disconnected' || connectionState === 'error';
 
 	if (isFullyOffline) {
 		showOfflineBanner = true;
-	} else if ($connectionState === 'connected' && online) {
+	} else if (connectionState === 'connected' && online) {
 		// Hide offline banner after a short delay when both are back online
 		setTimeout(() => {
 			showOfflineBanner = false;

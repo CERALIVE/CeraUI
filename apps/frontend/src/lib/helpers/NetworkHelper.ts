@@ -1,13 +1,12 @@
-import { LL } from "@ceraui/i18n/svelte";
+import { getLL } from "@ceraui/i18n/svelte";
 import QRCode from "qrcode";
-import { get } from "svelte/store";
 import { toast } from "svelte-sonner";
 
 import {
-	StatusMessages,
+	getStatus,
 	sendMessage,
 	socket,
-} from "$lib/stores/websocket-store";
+} from "$lib/stores/websocket-store.svelte";
 import type { ValueOf } from "$lib/types";
 import type {
 	NetifMessage,
@@ -46,21 +45,24 @@ export const networkRename = (name: string) => {
 	}
 
 	if (name.startsWith("wl")) {
-		name = get(LL).networking.types.wifi();
+		name = getLL().networking.types.wifi();
 	} else if (name.startsWith("eth") || name.startsWith("en")) {
-		name = get(LL).networking.types.ethernet();
+		name = getLL().networking.types.ethernet();
 	} else if (name.startsWith("ww")) {
-		name = get(LL).networking.types.modem();
+		name = getLL().networking.types.modem();
 	} else if (name.startsWith("usb")) {
-		name = get(LL).networking.types.usb();
+		name = getLL().networking.types.usb();
 	}
 
 	return name + numberSuffix;
 };
 
 export const getModemNetworkName = (name: string) => {
-	const { modems } = get(StatusMessages);
-	const modem = Object.values(modems).find((modem) => modem.ifname === name);
+	const status = getStatus();
+	if (!status?.modems) return "";
+	const modem = Object.values(status.modems).find(
+		(modem) => modem.ifname === name,
+	);
 	return `${modem?.status.network} (${modem?.status.network_type})`;
 };
 
@@ -121,11 +123,11 @@ export const getConnection = (
 
 export const getWifiBand = (freq: number) => {
 	if (freq > 6000) {
-		return get(LL).wifiBands.band_6ghz();
+		return getLL().wifiBands.band_6ghz();
 	} else if (freq > 5000) {
-		return get(LL).wifiBands.band_5ghz();
+		return getLL().wifiBands.band_5ghz();
 	}
-	return get(LL).wifiBands.band_2_4ghz();
+	return getLL().wifiBands.band_2_4ghz();
 };
 
 export const turnHotspotModeOn = (deviceId: number) => {
@@ -202,8 +204,8 @@ export const scanModemNetworks = (deviceId: number) => {
 
 export const scanWifi = (deviceId: number | string, notification = true) => {
 	if (notification) {
-		toast.info(get(LL).networkHelper.toast.scanningWifi(), {
-			description: get(LL).networkHelper.toast.scanningWifiDescription(),
+		toast.info(getLL().networkHelper.toast.scanningWifi(), {
+			description: getLL().networkHelper.toast.scanningWifiDescription(),
 			duration: 5000,
 		});
 	}
@@ -214,8 +216,8 @@ export const disconnectWifi = (
 	uuid: string,
 	wifi: ValueOf<StatusMessage["wifi"]>["available"][number],
 ) => {
-	toast.warning(get(LL).networkHelper.toast.disconnectingWifi(), {
-		description: get(LL).networkHelper.toast.disconnectingWifiDescription({
+	toast.warning(getLL().networkHelper.toast.disconnectingWifi(), {
+		description: getLL().networkHelper.toast.disconnectingWifiDescription({
 			ssid: wifi.ssid,
 		}),
 	});
@@ -232,8 +234,8 @@ export const connectWifi = (
 	uuid: string,
 	wifi: ValueOf<StatusMessage["wifi"]>["available"][number],
 ) => {
-	toast.info(get(LL).networkHelper.toast.connectingWifi(), {
-		description: get(LL).networkHelper.toast.connectingWifiDescription({
+	toast.info(getLL().networkHelper.toast.connectingWifi(), {
+		description: getLL().networkHelper.toast.connectingWifiDescription({
 			ssid: wifi.ssid,
 		}),
 		duration: 12000,
@@ -252,8 +254,8 @@ export const connectToNewWifi = (
 	ssid: string,
 	password: string,
 ) => {
-	toast.info(get(LL).networkHelper.toast.connectingNewWifi(), {
-		description: get(LL).networkHelper.toast.connectingNewWifiDescription({
+	toast.info(getLL().networkHelper.toast.connectingNewWifi(), {
+		description: getLL().networkHelper.toast.connectingNewWifiDescription({
 			ssid,
 		}),
 		duration: 15000,
@@ -275,8 +277,8 @@ export const forgetWifi = (
 	uuid: string,
 	wifi: ValueOf<StatusMessage["wifi"]>["available"][number],
 ) => {
-	toast.info(get(LL).networkHelper.toast.wifiNetworkForgotten(), {
-		description: get(LL).networkHelper.toast.wifiNetworkForgottenDescription({
+	toast.info(getLL().networkHelper.toast.wifiNetworkForgotten(), {
+		description: getLL().networkHelper.toast.wifiNetworkForgottenDescription({
 			ssid: wifi.ssid,
 		}),
 	});

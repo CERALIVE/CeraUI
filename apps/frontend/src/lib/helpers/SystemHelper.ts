@@ -1,4 +1,4 @@
-import { socket } from "$lib/stores/websocket-store";
+import { socket } from "$lib/stores/websocket-store.svelte";
 import type { ConfigMessage } from "$lib/types/socket-messages";
 
 export type AudioCodecs = "aac" | "opus";

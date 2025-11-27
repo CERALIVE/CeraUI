@@ -11,10 +11,10 @@ interface BuildInfo {
 	IS_SSR: boolean;
 }
 
-// Development defaults (backend runs on port 3001)
+// Development defaults (backend runs on port 3002)
 const DEV_DEFAULTS = {
 	SOCKET_ENDPOINT: `ws://${typeof window !== "undefined" ? window.location.hostname : "localhost"}`,
-	SOCKET_PORT: "3001",
+	SOCKET_PORT: "3002",
 };
 
 // Production defaults (backend runs on port 80)
@@ -46,7 +46,7 @@ function getEnvVariable(variable: "SOCKET_ENDPOINT" | "SOCKET_PORT"): string {
 	}
 
 	// Use appropriate defaults based on environment
-	// Development: port 3001 (backend dev server)
+	// Development: port 3002 (backend dev server)
 	// Production: port 80 (standard HTTP)
 	const defaults = import.meta.env.DEV ? DEV_DEFAULTS : PROD_DEFAULTS;
 	return defaults[variable];

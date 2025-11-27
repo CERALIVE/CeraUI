@@ -1,6 +1,5 @@
 import { existingLocales, rtlLanguages } from "@ceraui/i18n";
-import { locale } from "@ceraui/i18n/svelte";
-import { get } from "svelte/store";
+import { getLocale as getI18nLocale } from "@ceraui/i18n/svelte";
 
 import { BRAND_CONFIG } from "$lib/config/branding";
 import { getLocale } from "../stores/locale.svelte";
@@ -27,7 +26,7 @@ export interface PWAManifest {
 }
 
 export function generateDynamicManifest(): PWAManifest {
-	const currentLocale = get(locale) || getLocale()?.code || "en";
+	const currentLocale = getI18nLocale() || getLocale()?.code || "en";
 	const isRTL = rtlLanguages.includes(currentLocale);
 
 	// Get locale info (for future use)

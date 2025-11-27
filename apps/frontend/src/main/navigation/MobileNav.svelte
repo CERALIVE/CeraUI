@@ -35,12 +35,12 @@ import { type NavElements, navElements, siteName } from '$lib/config';
 import {
 	canGoBack,
 	enhancedNavigationStore,
+	getCurrentNavigation,
 	isNavigationTransitioning,
-	navigationStore,
+	navigateTo,
 } from '$lib/stores/navigation.svelte';
 import { cn } from '$lib/utils';
 
-let currentNav: NavElements = $state({ general: navElements.general });
 let open = $state(false);
 let isMenuHovered = $state(false);
 let selectedItem: string | null = $state(null);
@@ -48,6 +48,9 @@ let lastNavigationTime = 0;
 
 // Navigation throttling to prevent race conditions
 const NAVIGATION_THROTTLE_MS = 50;
+
+// Svelte 5: Use $derived for current navigation
+const currentNav = $derived(getCurrentNavigation() ?? { general: navElements.general });
 
 // Enhanced navigation handler with throttling to prevent race conditions
 const handleClick = (nav: NavElements) => {
@@ -75,7 +78,7 @@ const handleClick = (nav: NavElements) => {
 	setTimeout(() => {
 		// Validate nav object before setting to prevent NaN scale animations
 		if (nav && typeof nav === 'object' && Object.keys(nav).length > 0) {
-			navigationStore.set(nav);
+			navigateTo(nav);
 		} else {
 			console.warn('[MobileNav] Invalid nav object, skipping navigation:', nav);
 		}
@@ -135,15 +138,6 @@ const handleBack = () => {
 	enhancedNavigationStore.goBack();
 	open = false;
 };
-
-// Subscribe to navigation changes with enhanced reactivity
-$effect(() => {
-	const unsubscribe = navigationStore.subscribe((navigation) => {
-		currentNav = navigation;
-	});
-
-	return unsubscribe;
-});
 
 // Close menu when navigation starts transitioning
 $effect(() => {

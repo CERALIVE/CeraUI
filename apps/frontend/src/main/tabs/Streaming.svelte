@@ -8,7 +8,7 @@ import {
 	startStreamingWithConfig,
 } from '$lib/components/streaming/StreamingConfigService';
 // Import new modular components
-import { createStreamingStateManager } from '$lib/components/streaming/StreamingStateManager';
+import { createStreamingStateManager } from '$lib/components/streaming/StreamingStateManager.svelte';
 import {
 	getSortedResolutions,
 	normalizeValue,

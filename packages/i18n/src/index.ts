@@ -6,9 +6,9 @@ export { getTranslationKeys, hasTranslationKey } from "./i18n-node.js";
 export type {
 	Svelte5Translation,
 	Svelte5TranslationFunction,
-} from "./i18n-svelte5.js";
+} from "./i18n-svelte5.svelte.js";
 // Export our Svelte 5 integration (now the default)
-export * from "./i18n-svelte5.js";
+export * from "./i18n-svelte5.svelte.js";
 // Export types
 export type { BaseTranslation, Locales } from "./i18n-types.js";
 // Export async loading utilities

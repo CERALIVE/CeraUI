@@ -5,6 +5,9 @@
 	"type": "module",
 	"author": "Andrés Cera",
 	"license": "GPL-3.0",
+	"engines": {
+		"bun": ">=1.0.0"
+	},
 	"dependencies": {
 		"finalhandler": "^2.1.0",
 		"http-proxy": "^1.18.1",
@@ -24,9 +27,9 @@
 		"typescript": "^5.9.3"
 	},
 	"scripts": {
-		"dev": "NODE_ENV=development bun run src/belaUI.ts",
-		"dev:single-modem": "NODE_ENV=development MOCK_SCENARIO=single-modem bun run src/belaUI.ts",
-		"dev:streaming": "NODE_ENV=development MOCK_SCENARIO=streaming-active bun run src/belaUI.ts",
+		"dev": "bun --watch run src/belaUI.ts",
+		"dev:single-modem": "MOCK_SCENARIO=single-modem bun --watch run src/belaUI.ts",
+		"dev:streaming": "MOCK_SCENARIO=streaming-active bun --watch run src/belaUI.ts",
 		"build": "rm -rf ../../dist/ && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; bun build --compile --minify --sourcemap --bytecode --target=$BUN_TARGET src/belaUI.ts --outfile ../../dist/belaUI' && cd ../.. && pnpm run build:frontend",
 		"build:backend-only": "rm -rf ../../dist/belaUI ../../dist/deployment && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; bun build --compile --minify --sourcemap --bytecode --target=$BUN_TARGET src/belaUI.ts --outfile ../../dist/belaUI'",
 		"check": "bun tsc --noEmit",

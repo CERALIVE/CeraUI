@@ -3,17 +3,14 @@ import { LL } from '@ceraui/i18n/svelte';
 import { Network, Radio, Wifi } from '@lucide/svelte';
 
 import * as Card from '$lib/components/ui/card';
-import { StatusMessages } from '$lib/stores/websocket-store';
-import type { StatusMessage } from '$lib/types/socket-messages';
+import { getStatus } from '$lib/stores/websocket-store.svelte';
 
 import ModemCard from '../shared/ModemCard.svelte';
 import Networking from '../shared/Networking.svelte';
 import WiFiCard from '../shared/WiFiCard.svelte';
 
-let currentStatus: StatusMessage | undefined = $state();
-StatusMessages.subscribe((status) => {
-	currentStatus = status;
-});
+// Svelte 5: Use $derived with reactive getter
+const currentStatus = $derived(getStatus());
 </script>
 
 <div class="flex flex-col space-y-8 p-6">

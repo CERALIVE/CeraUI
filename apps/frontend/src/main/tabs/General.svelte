@@ -17,38 +17,22 @@ import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
 import { getUsedNetworks } from '$lib/helpers/NetworkHelper';
 import { installSoftwareUpdates } from '$lib/helpers/SystemHelper';
 import {
-	ConfigMessages,
-	NetifMessages,
-	SensorsStatusMessages,
-	StatusMessages,
-} from '$lib/stores/websocket-store';
-import type { ConfigMessage, NetifMessage, StatusMessage } from '$lib/types/socket-messages';
+	getConfig,
+	getNetif,
+	getSensorsStatus,
+	getStatus,
+} from '$lib/stores/websocket-store.svelte';
 import { cn } from '$lib/utils';
 
 import Networking from '../shared/Networking.svelte';
 
-let sensors: Array<[string, string]> = $state([]);
-let currentStatus: StatusMessage | undefined = $state(undefined);
-let currentNetworks: NetifMessage | undefined = $state();
-let currentConfig: ConfigMessage | undefined = $state();
-
-NetifMessages.subscribe((networks: NetifMessage) => {
-	currentNetworks = networks;
-});
-
-ConfigMessages.subscribe((config) => {
-	currentConfig = config;
-});
-
-SensorsStatusMessages.subscribe((sensorData) => {
-	if (sensorData) {
-		sensors = Object.entries(sensorData);
-	}
-});
-
-StatusMessages.subscribe((status) => {
-	currentStatus = status;
-});
+// Svelte 5: Use $derived with reactive getters
+const currentStatus = $derived(getStatus());
+const currentNetworks = $derived(getNetif());
+const currentConfig = $derived(getConfig());
+const sensors = $derived(
+	getSensorsStatus() ? Object.entries(getSensorsStatus()!) : ([] as [string, string][]),
+);
 
 function formatConfigValue(
 	value: string | number | undefined,

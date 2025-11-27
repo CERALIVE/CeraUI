@@ -32,8 +32,9 @@ import { type NavElements, navElements, siteName } from '$lib/config';
 import {
 	canGoBack,
 	enhancedNavigationStore,
+	getCurrentNavigation,
 	isNavigationTransitioning,
-	navigationStore,
+	navigateTo,
 } from '$lib/stores/navigation.svelte';
 import { cn } from '$lib/utils';
 
@@ -58,7 +59,6 @@ const [send, receive] = crossfade({
 	},
 });
 
-let currentNav: NavElements | undefined = $state({ general: navElements.general });
 let isLogoHovered = $state(false);
 let hoveredTab: string | null = $state(null);
 let lastNavigationTime = 0;
@@ -66,14 +66,8 @@ let lastNavigationTime = 0;
 // Navigation throttling to prevent race conditions
 const NAVIGATION_THROTTLE_MS = 50;
 
-// Enhanced reactive subscription with loading state awareness
-$effect(() => {
-	const unsubscribe = navigationStore.subscribe((navigation) => {
-		currentNav = navigation;
-	});
-
-	return unsubscribe;
-});
+// Svelte 5: Use $derived for current navigation
+const currentNav = $derived(getCurrentNavigation() ?? { general: navElements.general });
 
 // Enhanced tab navigation with throttling to prevent race conditions
 const handleTabNavigation = (identifier: string, navigation: Record<string, unknown>) => {
@@ -95,7 +89,7 @@ const handleTabNavigation = (identifier: string, navigation: Record<string, unkn
 		throttleMs: NAVIGATION_THROTTLE_MS,
 	});
 
-	navigationStore.set({ [identifier]: navigation });
+	navigateTo({ [identifier]: navigation } as NavElements);
 
 	// Reset hover state on navigation
 	hoveredTab = null;
@@ -127,7 +121,7 @@ const handleLogoClick = () => {
 	if (currentKey === defaultKey && $canGoBack) {
 		enhancedNavigationStore.goBack();
 	} else {
-		navigationStore.set({ general: navElements.general });
+		navigateTo({ general: navElements.general });
 	}
 };
 </script>

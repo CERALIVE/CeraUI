@@ -14,19 +14,13 @@ import {
 	networkRenameWithError,
 	setNetif,
 } from '$lib/helpers/NetworkHelper.js';
-import { NetifMessages } from '$lib/stores/websocket-store';
+import { getNetif } from '$lib/stores/websocket-store.svelte';
 import type { NetifMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
-let totalBandwith: number = $state(0);
-let currentNetwoks: NetifMessage = $state({});
-
-NetifMessages.subscribe((networks: NetifMessage) => {
-	if (networks) {
-		currentNetwoks = networks;
-		totalBandwith = getTotalBandwidth(networks);
-	}
-});
+// Svelte 5: Use $derived with reactive getter
+const currentNetwoks = $derived(getNetif() ?? ({} as NetifMessage));
+const totalBandwith = $derived(getTotalBandwidth(getNetif()));
 
 // Helper functions for better network categorization and display
 function getNetworkIcon(

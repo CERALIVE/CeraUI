@@ -10,12 +10,12 @@ import LocaleSelector from '$lib/components/ui/locale-selector.svelte';
 import ModeToggle from '$lib/components/ui/mode-toggle.svelte';
 import { siteName } from '$lib/config';
 import {
-	AuthMessages,
-	NotificationsMessages,
+	getAuth,
+	getNotifications,
+	getStatus,
 	sendAuthMessage,
 	sendCreatePasswordMessage,
-	StatusMessages,
-} from '$lib/stores/websocket-store';
+} from '$lib/stores/websocket-store.svelte';
 import { cn } from '$lib/utils.js';
 
 let className: string | undefined | null = $state(undefined);
@@ -42,7 +42,9 @@ const validation = $derived({
 
 const isFormValid = $derived(validation.password.isValid);
 
-StatusMessages.subscribe((status) => {
+// Svelte 5: Use $effect for side effects
+$effect(() => {
+	const status = getStatus();
 	if (status) {
 		setPassword = status.set_password ?? false;
 		if (setPassword) {
@@ -51,13 +53,15 @@ StatusMessages.subscribe((status) => {
 	}
 });
 
-AuthMessages.subscribe((message) => {
+$effect(() => {
+	const message = getAuth();
 	if (message?.success && remember && password) {
 		localStorage.setItem('auth', password);
 	}
 });
 
-NotificationsMessages.subscribe((messages) => {
+$effect(() => {
+	const messages = getNotifications();
 	if (
 		messages?.show?.find((message) => {
 			return message.name === 'auth';

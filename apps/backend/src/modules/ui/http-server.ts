@@ -86,7 +86,7 @@ if (isDevelopment) {
 
 // Use higher ports in development to avoid requiring root
 const httpListenPorts: Array<number | { fd: number }> =
-	process.env.NODE_ENV === "development" ? [3001, 8080, 8081] : [80, 8080, 81];
+	process.env.NODE_ENV === "development" ? [3002, 8080, 8081] : [80, 8080, 81];
 
 export function initHttpServer() {
 	if (process.env.PORT) {
@@ -107,6 +107,15 @@ export function initHttpServer() {
 			logger.error("HTTP server: error");
 			logger.error(e);
 			process.exit(1);
+		}
+	});
+
+	httpServer.on("listening", () => {
+		const addr = httpServer.address();
+		if (addr && typeof addr === "object") {
+			logger.info(`🚀 HTTP server running on port ${addr.port}`);
+		} else if (typeof addr === "string") {
+			logger.info(`🚀 HTTP server running on ${addr}`);
 		}
 	});
 

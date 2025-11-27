@@ -14,11 +14,11 @@ import {
 import { authStatusStore } from '$lib/stores/auth-status.svelte';
 import { shouldShowOfflinePage } from '$lib/stores/offline-navigation.svelte';
 import {
-	AuthMessages,
-	NotificationsMessages,
+	getAuth,
+	getNotifications,
+	getStatus,
 	sendAuthMessage,
-	StatusMessages,
-} from '$lib/stores/websocket-store';
+} from '$lib/stores/websocket-store.svelte';
 import type { NotificationType, StatusMessage } from '$lib/types/socket-messages';
 
 import Auth from './Auth.svelte';
@@ -199,7 +199,9 @@ const showToast = (type: NotificationType, name: string, options: any) => {
 	}
 };
 
-StatusMessages.subscribe((status) => {
+// Svelte 5: Use $effect for side effects
+$effect(() => {
+	const status = getStatus();
 	updatingStatus =
 		status?.updating && typeof status.updating !== 'boolean' && status.updating.result !== 0;
 });
@@ -229,7 +231,8 @@ if (auth) {
 	isCheckingAuthStatus = false;
 }
 
-AuthMessages.subscribe((message) => {
+$effect(() => {
+	const message = getAuth();
 	if (message?.success) {
 		isCheckingAuthStatus = false;
 		showToast('success', 'AUTH', {
@@ -239,10 +242,11 @@ AuthMessages.subscribe((message) => {
 		});
 		authStatusStore.set(true);
 	}
+});
 
-	authStatusStore.subscribe((status) => {
-		authStatus = status;
-	});
+// Svelte 5: Use $effect for auth status
+$effect(() => {
+	authStatus = authStatusStore.value;
 });
 
 // Aggressive fallback for mobile/PWA: if we're stuck in any loading state, assume offline with NaN safety
@@ -271,7 +275,8 @@ const PERSISTENT_AUTO_CLEAR_TIMEOUT = 5000; // 5 seconds
 // Track timers for auto-clearing persistent notifications
 let persistentNotificationTimers = $state<Record<string, number>>({});
 
-NotificationsMessages.subscribe((notifications) => {
+$effect(() => {
+	const notifications = getNotifications();
 	notifications?.show?.forEach((notification) => {
 		const toastKey = `${notification.type}-${notification.msg}`;
 

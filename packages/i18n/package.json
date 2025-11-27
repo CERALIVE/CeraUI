@@ -11,8 +11,8 @@
 			"import": "./src/index.ts"
 		},
 		"./svelte": {
-			"types": "./src/i18n-svelte5.ts",
-			"import": "./src/i18n-svelte5.ts"
+			"types": "./src/i18n-svelte5.svelte.ts",
+			"import": "./src/i18n-svelte5.svelte.ts"
 		},
 		"./node": {
 			"types": "./src/i18n-node.ts",

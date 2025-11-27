@@ -1,8 +1,9 @@
 packages:
-  - 'apps/*'
-  - 'packages/*'
+  - apps/*
+  - packages/*
 
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
+  - bun
   - es5-ext
   - esbuild

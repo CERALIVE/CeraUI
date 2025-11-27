@@ -19,11 +19,9 @@ import {
 	startSSH,
 	stopSSH,
 } from '$lib/helpers/SystemHelper';
-import { ConfigMessages, RevisionsMessages, StatusMessages } from '$lib/stores/websocket-store';
-import type { RevisionsMessage } from '$lib/types/socket-messages';
+import { getConfig, getRevisions, getStatus } from '$lib/stores/websocket-store.svelte';
 import { cn } from '$lib/utils';
 
-let currentRemoteKey = $state('');
 let remoteKey = $state('');
 
 let showPassword = $state(false);
@@ -31,33 +29,34 @@ let showRemoteKey = $state(false);
 let showSSHPassword = $state(false);
 
 let password = $state('');
-let sshPassword = $state('');
-let sshStatus = $state(false);
-let sshUser = $state('');
 let sshPasswordChanged = $state(false);
+let lastSshPassword = $state('');
 
-ConfigMessages.subscribe((config) => {
-	currentRemoteKey = config?.remote_key ?? '';
-	remoteKey = config?.remote_key ?? '';
+// Svelte 5: Use $derived for computed state
+const currentRemoteKey = $derived(getConfig()?.remote_key ?? '');
+const revisions = $derived(getRevisions());
+const sshPassword = $derived(getConfig()?.ssh_pass ?? '');
+const sshStatus = $derived(getStatus()?.ssh?.active ?? false);
+const sshUser = $derived(getStatus()?.ssh?.user ?? '');
+
+// Sync remoteKey with config when it changes
+$effect(() => {
+	const configRemoteKey = getConfig()?.remote_key ?? '';
+	if (remoteKey === '' || remoteKey === lastSshPassword) {
+		remoteKey = configRemoteKey;
+	}
 });
 
-let revisions = $state<RevisionsMessage | undefined>();
-RevisionsMessages.subscribe((revisionMessage) => {
-	revisions = revisionMessage;
-});
-
-ConfigMessages.subscribe((configMessage) => {
-	if (sshPasswordChanged && configMessage.ssh_pass && sshPassword !== configMessage.ssh_pass) {
+// Handle SSH password change notification
+$effect(() => {
+	const configMessage = getConfig();
+	if (sshPasswordChanged && configMessage?.ssh_pass && lastSshPassword !== configMessage.ssh_pass) {
 		toast.success($LL.advanced.passwordCopied(), {
 			description: $LL.advanced.passwordCopiedDesc(),
 		});
 		sshPasswordChanged = false;
 	}
-	sshPassword = configMessage?.ssh_pass ?? '';
-});
-StatusMessages.subscribe((statusMessage) => {
-	sshStatus = statusMessage?.ssh?.active ?? false;
-	sshUser = statusMessage?.ssh?.user ?? '';
+	lastSshPassword = configMessage?.ssh_pass ?? '';
 });
 </script>
 
@@ -386,7 +385,7 @@ StatusMessages.subscribe((statusMessage) => {
 								placeholder={$LL.advanced.sshPasswordPlaceholder()}
 								readonly
 								type={showSSHPassword ? 'text' : 'password'}
-								bind:value={sshPassword}
+								value={sshPassword}
 							/>
 							<div class="absolute inset-y-0 right-2 flex items-center gap-1">
 								<Button

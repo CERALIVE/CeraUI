@@ -1,8 +1,8 @@
 /**
- * 🚀 Svelte 5 Optimized i18n Adapter
+ * 🚀 Svelte 5 Runes i18n Adapter
  *
  * Features:
- * - 🎯 Built specifically for Svelte 5 runes mode
+ * - 🎯 Built specifically for Svelte 5 runes mode ($state, $derived)
  * - 🔑 Translation key access ($key, $path)
  * - ⚡ Performance optimized with caching
  * - 🎨 Enhanced developer experience
@@ -11,7 +11,6 @@
  */
 
 // @ts-nocheck
-import { derived, type Readable, writable } from "svelte/store";
 // Import English translations synchronously as fallback
 import en from "./en/index.js";
 import type { Locales, Translation } from "./i18n-types.js";
@@ -41,11 +40,81 @@ export type Svelte5Translation = TranslationProxy<Translation>;
 // 🏪 Cache for translation proxies to improve performance
 const translationCache = new Map<string, Svelte5Translation>();
 
-// 📊 Core reactive stores
-// Initialize with English as the default locale (synchronous)
-export const locale = writable<Locales>("en");
-export const isLoading = writable(false);
-export const loadingError = writable<string | null>(null);
+// 📊 Core reactive state using Svelte 5 runes
+let localeState = $state<Locales>("en");
+let isLoadingState = $state(false);
+let loadingErrorState = $state<string | null>(null);
+
+// 🎯 Getters for reactive access
+export function getLocale(): Locales {
+	return localeState;
+}
+
+export function getIsLoading(): boolean {
+	return isLoadingState;
+}
+
+export function getLoadingError(): string | null {
+	return loadingErrorState;
+}
+
+// 🔄 Legacy store-like interface for backward compatibility
+type Subscriber<T> = (value: T) => void;
+const localeSubscribers = new Set<Subscriber<Locales>>();
+
+// Guard to prevent infinite loops
+let isUpdatingLocale = false;
+
+function notifyLocaleSubscribers(): void {
+	for (const callback of localeSubscribers) {
+		callback(localeState);
+	}
+}
+
+// Legacy-compatible locale store
+export const locale = {
+	get value() {
+		return localeState;
+	},
+	subscribe(callback: Subscriber<Locales>): () => void {
+		localeSubscribers.add(callback);
+		callback(localeState);
+		return () => localeSubscribers.delete(callback);
+	},
+	set(value: Locales) {
+		// Prevent infinite loops - use setLocale() for full locale changes
+		if (isUpdatingLocale || value === localeState) return;
+		// Only update state, don't trigger translations (use setLocale for that)
+		localeState = value;
+		notifyLocaleSubscribers();
+	},
+};
+
+// Legacy-compatible isLoading store
+export const isLoading = {
+	get value() {
+		return isLoadingState;
+	},
+	subscribe(callback: Subscriber<boolean>): () => void {
+		const subscribers = new Set<Subscriber<boolean>>();
+		subscribers.add(callback);
+		callback(isLoadingState);
+		return () => subscribers.delete(callback);
+	},
+};
+
+// Legacy-compatible loadingError store
+export const loadingError = {
+	get value() {
+		return loadingErrorState;
+	},
+	subscribe(callback: Subscriber<string | null>): () => void {
+		const subscribers = new Set<Subscriber<string | null>>();
+		subscribers.add(callback);
+		callback(loadingErrorState);
+		return () => subscribers.delete(callback);
+	},
+};
 
 // 🎯 Performance optimized string interpolation
 function interpolateString(
@@ -196,17 +265,26 @@ function clearTranslationCache(): void {
 	translationCache.clear();
 }
 
-// 🎨 Initialize translations store with English as default (synchronous)
-// This prevents undefined errors when components render before async loading completes
-loadedLocales.en = en; // Ensure English is in loadedLocales
-const initialTranslations = createSvelte5Proxy(en, "en", []);
-const translationsStore = writable<Svelte5Translation>(initialTranslations);
+// 🎨 Initialize translations with English as default (synchronous)
+loadedLocales.en = en;
+let translationsState = $state<Svelte5Translation>(
+	createSvelte5Proxy(en, "en", []),
+);
+
+// LL subscribers for backward compatibility
+const llSubscribers = new Set<Subscriber<Svelte5Translation>>();
+
+function notifyLLSubscribers(): void {
+	for (const callback of llSubscribers) {
+		callback(translationsState);
+	}
+}
 
 // 🔄 Function to update translations for a locale
 async function updateTranslations(newLocale: Locales): Promise<void> {
 	try {
-		isLoading.set(true);
-		loadingError.set(null);
+		isLoadingState = true;
+		loadingErrorState = null;
 
 		// 🗑️ Clear cache for new locale
 		clearTranslationCache();
@@ -218,12 +296,8 @@ async function updateTranslations(newLocale: Locales): Promise<void> {
 
 		const translations = loadedLocales[newLocale];
 		if (translations) {
-			const svelte5Translations = createSvelte5Proxy(
-				translations,
-				newLocale,
-				[],
-			);
-			translationsStore.set(svelte5Translations);
+			translationsState = createSvelte5Proxy(translations, newLocale, []);
+			notifyLLSubscribers();
 		} else {
 			throw new Error(`Failed to load translations for locale: ${newLocale}`);
 		}
@@ -231,7 +305,7 @@ async function updateTranslations(newLocale: Locales): Promise<void> {
 		const errorMessage =
 			error instanceof Error ? error.message : "Unknown error";
 		console.error("❌ Translation loading failed:", errorMessage);
-		loadingError.set(errorMessage);
+		loadingErrorState = errorMessage;
 
 		// 🔄 Fallback to English
 		try {
@@ -241,26 +315,40 @@ async function updateTranslations(newLocale: Locales): Promise<void> {
 				}
 				const fallbackTranslations = loadedLocales.en;
 				if (fallbackTranslations) {
-					const svelte5Translations = createSvelte5Proxy(
+					translationsState = createSvelte5Proxy(
 						fallbackTranslations,
 						"en",
 						[],
 					);
-					translationsStore.set(svelte5Translations);
+					notifyLLSubscribers();
 					console.log("✅ Fallback to English successful");
 				}
 			}
 		} catch (fallbackError) {
 			console.error("❌ Even English fallback failed:", fallbackError);
-			loadingError.set("Critical: Cannot load any translations");
+			loadingErrorState = "Critical: Cannot load any translations";
 		}
 	} finally {
-		isLoading.set(false);
+		isLoadingState = false;
 	}
 }
 
-// 🎯 Reactive LL store that updates when locale changes
-export const LL: Readable<Svelte5Translation> = translationsStore;
+// 🎯 Getter for translations (Svelte 5 pattern)
+export function getLL(): Svelte5Translation {
+	return translationsState;
+}
+
+// 🎯 LL export with backward-compatible subscribe
+export const LL = {
+	get value() {
+		return translationsState;
+	},
+	subscribe(callback: Subscriber<Svelte5Translation>): () => void {
+		llSubscribers.add(callback);
+		callback(translationsState);
+		return () => llSubscribers.delete(callback);
+	},
+};
 
 // 🎯 Enhanced setLocale with better error handling
 export async function setLocale(newLocale: Locales): Promise<boolean> {
@@ -269,12 +357,20 @@ export async function setLocale(newLocale: Locales): Promise<boolean> {
 		return false;
 	}
 
-	try {
-		// Update translations first
-		await updateTranslations(newLocale);
+	// Prevent re-entry and skip if same locale
+	if (isUpdatingLocale || newLocale === localeState) {
+		return true;
+	}
 
-		// Then update the locale store
-		locale.set(newLocale);
+	isUpdatingLocale = true;
+
+	try {
+		// Update locale state
+		localeState = newLocale;
+		notifyLocaleSubscribers();
+
+		// Update translations
+		await updateTranslations(newLocale);
 		console.log(`✅ Locale changed to: ${newLocale}`);
 		return true;
 	} catch (error) {
@@ -282,26 +378,23 @@ export async function setLocale(newLocale: Locales): Promise<boolean> {
 			error instanceof Error ? error.message : "Unknown error";
 		console.error(`❌ Failed to set locale to ${newLocale}:`, errorMessage);
 		return false;
+	} finally {
+		isUpdatingLocale = false;
 	}
 }
 
-// 🔄 Subscribe to locale changes to automatically update translations
-locale.subscribe((newLocale) => {
-	updateTranslations(newLocale);
-});
-
 // 🔍 Utility: Get translation by key string (useful for dynamic access)
 export function getTranslationByKey(
-	LL: Svelte5Translation,
+	translations: Svelte5Translation,
 	key: string,
 	params?: Record<string, string | number | boolean>,
 ): string {
 	const keys = key.split(".");
-	let current = LL;
+	let current: unknown = translations;
 
 	for (const k of keys) {
 		if (current && typeof current === "object" && k in current) {
-			current = current[k];
+			current = (current as Record<string, unknown>)[k];
 		} else {
 			console.warn(`⚠️ Translation key not found: ${key}`);
 			return key; // Return key as fallback
@@ -317,18 +410,18 @@ export function getTranslationByKey(
 
 // 🗂️ Utility: Get all available translation keys
 export function getAllTranslationKeys(
-	LL: Svelte5Translation,
+	translations: Svelte5Translation,
 	prefix = "",
 ): string[] {
 	const keys: string[] = [];
 
-	if (!LL || typeof LL !== "object") return keys;
+	if (!translations || typeof translations !== "object") return keys;
 
-	for (const [key, value] of Object.entries(LL)) {
+	for (const [key, value] of Object.entries(translations)) {
 		const fullKey = prefix ? `${prefix}.${key}` : key;
 
 		if (typeof value === "object" && value !== null) {
-			keys.push(...getAllTranslationKeys(value, fullKey));
+			keys.push(...getAllTranslationKeys(value as Svelte5Translation, fullKey));
 		} else if (typeof value === "function") {
 			keys.push(fullKey);
 		}
@@ -339,29 +432,21 @@ export function getAllTranslationKeys(
 
 // 🔍 Utility: Check if translation key exists
 export function hasTranslationKey(
-	LL: Svelte5Translation,
+	translations: Svelte5Translation,
 	key: string,
 ): boolean {
 	const keys = key.split(".");
-	let current = LL;
+	let current: unknown = translations;
 
 	for (const k of keys) {
 		if (current && typeof current === "object" && k in current) {
-			current = current[k];
+			current = (current as Record<string, unknown>)[k];
 		} else {
 			return false;
 		}
 	}
 
 	return typeof current === "function";
-}
-
-// 🎯 Utility: Create reactive translation function for component props
-export function createReactiveTranslation(keyPath: string) {
-	return derived(LL, ($LL) => {
-		return (params?: Record<string, string | number | boolean>) =>
-			getTranslationByKey($LL, keyPath, params);
-	});
 }
 
 // 🧪 Debug utilities (development only)
@@ -376,20 +461,14 @@ export const debug = {
 	clearCache: clearTranslationCache,
 
 	// 🔍 Get current locale info
-	getLocaleInfo: () =>
-		derived(
-			[locale, isLoading, loadingError],
-			([$locale, $isLoading, $error]) => ({
-				currentLocale: $locale,
-				isLoading: $isLoading,
-				error: $error,
-				availableLocales: Object.keys(loadedLocales),
-				cacheSize: translationCache.size,
-			}),
-		),
+	getLocaleInfo: () => ({
+		currentLocale: localeState,
+		isLoading: isLoadingState,
+		error: loadingErrorState,
+		availableLocales: Object.keys(loadedLocales),
+		cacheSize: translationCache.size,
+	}),
 };
 
 // 🚀 Export default for convenience
 export default LL;
-
-// 📝 Types are exported directly from their definitions above
