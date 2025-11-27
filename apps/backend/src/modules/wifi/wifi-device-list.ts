@@ -1,6 +1,6 @@
 /*
-    belaUI - web UI for the BELABOX project
-    Copyright (C) 2020-2022 BELABOX project
+    CeraUI - web UI for the CeraLive project
+    Copyright (C) 2024-2025 CeraLive project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@
   It tracks and detects changes by device name, physical (MAC) addresses and
   IPv4 address. It allows us to only update the WiFi status via nmcli when
   something has changed, because NM is very CPU / power intensive compared
-  to the periodic ifconfig polling that belaUI is already doing
+  to the periodic ifconfig polling that CeraLive is already doing
 */
 
 import type { MacAddress } from "../network/network-manager.ts";

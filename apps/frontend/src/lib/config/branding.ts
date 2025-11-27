@@ -1,14 +1,11 @@
 /**
- * Centralized branding configuration for conditional compilation
- * CERALIVE = main brand (default)
- * BELABOX = secondary frontend-only brand
+ * Centralized branding configuration
+ * CeraLive-only branding
  */
 
-export type BrandName = "CERALIVE" | "BELABOX";
+export type BrandName = "CERALIVE";
 
-// Determine brand from environment variable or default to CERALIVE
-export const CURRENT_BRAND: BrandName =
-	(import.meta.env.VITE_BRAND as BrandName) || "CERALIVE";
+export const CURRENT_BRAND: BrandName = "CERALIVE";
 
 export interface BrandConfig {
 	/** Device/hardware name */
@@ -29,33 +26,17 @@ export interface BrandConfig {
 	organizationName: string;
 }
 
-const brandConfigs: Record<BrandName, BrandConfig> = {
-	CERALIVE: {
-		deviceName: "CERALIVE",
-		siteName: "CeraUI for CERALIVE©",
-		appName: "CeraUI",
-		description:
-			"A modern UI for CERALIVE streaming encoder management and configuration",
-		copyright: "CERALIVE",
-		cloudServiceName: "CERALIVE Cloud",
-		logPrefix: "CERALIVE",
-		organizationName: "CERALIVE",
-	},
-	BELABOX: {
-		deviceName: "BELABOX",
-		siteName: "CeraUI for BELABOX©",
-		appName: "CeraUI",
-		description:
-			"A modern UI for BELABOX streaming encoder management and configuration",
-		copyright: "BELABOX",
-		cloudServiceName: "BELABOX Cloud",
-		logPrefix: "BELABOX",
-		organizationName: "BELABOX",
-	},
+export const BRAND_CONFIG: BrandConfig = {
+	deviceName: "CeraLive",
+	siteName: "CeraUI for CeraLive©",
+	appName: "CeraUI",
+	description:
+		"A modern UI for CeraLive streaming encoder management and configuration",
+	copyright: "CeraLive",
+	cloudServiceName: "CeraLive Cloud",
+	logPrefix: "CeraLive",
+	organizationName: "CeraLive",
 };
-
-// Export the current brand configuration
-export const BRAND_CONFIG = brandConfigs[CURRENT_BRAND];
 
 // Legacy exports for backward compatibility
 export const deviceName = BRAND_CONFIG.deviceName;

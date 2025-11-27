@@ -70,7 +70,7 @@ cat > "$TEMP_DIR/install.sh" << 'EOF'
 set -e
 
 echo "🚀 Installing CeraUI System..."
-echo "This will install CeraUI to replace belaUI or deploy on custom development devices."
+echo "This will install CeraUI to replace ceralive or deploy on custom development devices."
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
@@ -80,34 +80,34 @@ fi
 
 # Install binary
 echo "📦 Installing CERALIVE binary..."
-cp belaUI /usr/local/bin/belaUI
-chmod +x /usr/local/bin/belaUI
+cp ceralive /usr/local/bin/ceralive
+chmod +x /usr/local/bin/ceralive
 
 # Install systemd service
 echo "⚙️  Installing systemd service..."
-cp belaUI.service /etc/systemd/system/
-cp belaUI.socket /etc/systemd/system/
+cp ceralive.service /etc/systemd/system/
+cp ceralive.socket /etc/systemd/system/
 
 # Install udev rules
 echo "🔌 Installing udev rules..."
-cp 98-belaui-audio.rules /etc/udev/rules.d/
-cp 99-belaui-check-usb-devices.rules /etc/udev/rules.d/
+cp 98-ceralive-audio.rules /etc/udev/rules.d/
+cp 99-ceralive-check-usb-devices.rules /etc/udev/rules.d/
 
 # Install web files
 echo "🌐 Installing web interface..."
-mkdir -p /var/www/belaui
-cp -r public/* /var/www/belaui/
+mkdir -p /var/www/ceralive
+cp -r public/* /var/www/ceralive/
 
 # Install configuration
 echo "⚙️  Installing configuration..."
-mkdir -p /etc/belaui
-cp config.json /etc/belaui/
+mkdir -p /etc/ceralive
+cp config.json /etc/ceralive/
 
 # Install scripts
 echo "🛠️  Installing utility scripts..."
-cp override-belaui.sh /usr/local/bin/
+cp override-ceralive.sh /usr/local/bin/
 cp reset-to-default.sh /usr/local/bin/
-chmod +x /usr/local/bin/override-belaui.sh /usr/local/bin/reset-to-default.sh
+chmod +x /usr/local/bin/override-ceralive.sh /usr/local/bin/reset-to-default.sh
 
 # Reload systemd and udev
 systemctl daemon-reload
@@ -116,10 +116,10 @@ udevadm control --reload
 echo "✅ CeraUI system installed successfully!"
 echo ""
 echo "To start the service:"
-echo "  sudo systemctl enable --now belaUI.service"
+echo "  sudo systemctl enable --now ceralive.service"
 echo ""
 echo "To check status:"
-echo "  sudo systemctl status belaUI.service"
+echo "  sudo systemctl status ceralive.service"
 echo ""
 echo "Web interface will be available at: http://localhost:8080"
 EOF
@@ -140,30 +140,30 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Stop and disable service
-systemctl stop belaUI.service 2>/dev/null || true
-systemctl disable belaUI.service 2>/dev/null || true
+systemctl stop ceralive.service 2>/dev/null || true
+systemctl disable ceralive.service 2>/dev/null || true
 
 # Remove systemd files
-rm -f /etc/systemd/system/belaUI.service
-rm -f /etc/systemd/system/belaUI.socket
+rm -f /etc/systemd/system/ceralive.service
+rm -f /etc/systemd/system/ceralive.socket
 
 # Remove udev rules
-rm -f /etc/udev/rules.d/98-belaui-audio.rules
-rm -f /etc/udev/rules.d/99-belaui-check-usb-devices.rules
+rm -f /etc/udev/rules.d/98-ceralive-audio.rules
+rm -f /etc/udev/rules.d/99-ceralive-check-usb-devices.rules
 
 # Remove binary and scripts
-rm -f /usr/local/bin/belaUI
-rm -f /usr/local/bin/override-belaui.sh
+rm -f /usr/local/bin/ceralive
+rm -f /usr/local/bin/override-ceralive.sh
 rm -f /usr/local/bin/reset-to-default.sh
 
 # Remove web files
-rm -rf /var/www/belaui
+rm -rf /var/www/ceralive
 
 # Remove configuration (ask user)
 read -p "Remove configuration files? [y/N] " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    rm -rf /etc/belaui
+    rm -rf /etc/ceralive
 fi
 
 # Reload systemd and udev
@@ -181,14 +181,14 @@ cat > "$TEMP_DIR/build-info.json" << EOF
   "product": "CeraUI",
   "brand": "CERALIVE",
   "type": "full-system-optimized",
-  "purpose": "Replace belaUI or deploy on custom development devices",
+  "purpose": "Replace ceralive or deploy on custom development devices",
   "version": "${VERSION}",
   "commit": "${COMMIT}",
   "buildDate": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "nodeVersion": "$(node --version)",
   "pnpmVersion": "$(pnpm --version)",
   "architecture": "linux-${ARCHITECTURE}",
-  "compatibility": "belaUI replacement compatible",
+  "compatibility": "ceralive replacement compatible",
   "buildOptimizations": {
     "smartCaching": true,
     "bundleSplitting": true,
@@ -196,9 +196,9 @@ cat > "$TEMP_DIR/build-info.json" << EOF
     "buildTimeReduction": "Up to 60% faster builds"
   },
   "includes": [
-    "CeraUI backend binary (as belaUI)",
+    "CeraUI backend binary (as ceralive)",
     "CERALIVE-branded frontend web interface (7 optimized chunks)",
-    "Systemd service files (belaUI.service)",
+    "Systemd service files (ceralive.service)",
     "Udev rules for hardware detection",
     "Installation and uninstallation scripts",
     "Configuration files"
@@ -226,7 +226,7 @@ This package was built using advanced optimization techniques:
 
 ## Contents
 
-- \`belaUI\` - Main CERALIVE backend binary (${ARCHITECTURE})
+- \`ceralive\` - Main CERALIVE backend binary (${ARCHITECTURE})
 - \`public/\` - Optimized web interface files (7 chunks)
 - \`*.service\`, \`*.socket\` - Systemd service files
 - \`*.rules\` - Udev rules for hardware detection

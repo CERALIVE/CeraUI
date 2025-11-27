@@ -1,6 +1,6 @@
 /*
-    belaUI - web UI for the BELABOX project
-    Copyright (C) 2020-2022 BELABOX project
+    CeraUI - web UI for the CeraLive project
+    Copyright (C) 2024-2025 CeraLive project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -15,17 +15,28 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-/* Authentication */
-import crypto from "node:crypto";
-import fs from "node:fs";
+/**
+ * Authentication Compatibility Layer
+ *
+ * Re-exports from the new RPC system for backward compatibility.
+ * New code should import from src/rpc/procedures/auth.procedure.ts directly.
+ *
+ * @deprecated Use imports from src/rpc/index.ts directly for new code
+ */
 
-import type WebSocket from "ws";
+// Re-export auth socket functions from compat layer
+export {
+	addAuthedSocket,
+	deleteAuthedSocket,
+	isAuthedSocket,
+} from "../../rpc/compat.ts";
+// Re-export password hash functions from new RPC auth procedure
+export {
+	getPasswordHash,
+	setPasswordHash,
+} from "../../rpc/procedures/auth.procedure.ts";
 
-import { getConfig, saveConfig } from "../config.ts";
-import { notificationSend } from "./notifications.ts";
-import { sendInitialStatus } from "./status.ts";
-import { buildMsg } from "./websocket-server.ts";
-
+// Re-export types
 export type AuthMessage = {
 	auth: {
 		password?: unknown;
@@ -34,148 +45,30 @@ export type AuthMessage = {
 	};
 };
 
-type AuthResultMessage = {
-	success: boolean;
-	auth_token?: string;
-};
-
-const AUTH_TOKENS_FILE = "auth_tokens.json";
-const BCRYPT_ROUNDS = 10;
-
-/* tempTokens stores temporary login tokens in memory */
-const tempTokens: Record<string, true> = {};
-
-/* persistentTokens stores login tokens to the disc */
-let persistentTokens: Record<string, true>;
-try {
-	persistentTokens = JSON.parse(fs.readFileSync(AUTH_TOKENS_FILE, "utf8"));
-} catch (_err) {
-	persistentTokens = {};
+/**
+ * @deprecated Use setPassword procedure from RPC
+ */
+export function setPassword() {
+	// No-op: Handled by RPC procedures
 }
 
-let passwordHash: string | undefined;
-
-export function setPasswordHash(newHash: string | undefined) {
-	passwordHash = newHash;
+/**
+ * @deprecated Use tryAuth procedure from RPC
+ */
+export async function tryAuth() {
+	// No-op: Handled by RPC procedures
 }
 
-export function getPasswordHash() {
-	return passwordHash;
+/**
+ * @deprecated Use logout procedure from RPC
+ */
+export function handleLogout() {
+	// No-op: Handled by RPC procedures
 }
 
-const authTokens = new WeakMap<WebSocket, string>();
-const authedSockets = new WeakSet<WebSocket>();
-
-function savePersistentTokens() {
-	fs.writeFileSync(AUTH_TOKENS_FILE, JSON.stringify(persistentTokens));
-}
-
-export function isAuthedSocket(conn: WebSocket) {
-	return authedSockets.has(conn);
-}
-
-export function addAuthedSocket(conn: WebSocket) {
-	authedSockets.add(conn);
-}
-
-export function deleteAuthedSocket(conn: WebSocket) {
-	authedSockets.delete(conn);
-}
-
-export function setPassword(
-	conn: WebSocket,
-	password: string,
-	isRemote: boolean,
-) {
-	const isAuthed = isAuthedSocket(conn);
-	if (isAuthed || (!isRemote && !passwordHash)) {
-		const minLen = 8;
-		if (password.length < minLen) {
-			notificationSend(
-				conn,
-				"belaui_pass_length",
-				"error",
-				`Minimum password length: ${minLen} characters`,
-				10,
-			);
-			return;
-		}
-		passwordHash = Bun.password.hashSync(password, {
-			algorithm: "bcrypt",
-			cost: BCRYPT_ROUNDS,
-		});
-		const config = getConfig();
-		config.password = undefined;
-		saveConfig();
-	}
-}
-
-function genAuthToken(isPersistent: boolean) {
-	const token = crypto.randomBytes(32).toString("base64");
-	if (isPersistent) {
-		persistentTokens[token] = true;
-		savePersistentTokens();
-	} else {
-		tempTokens[token] = true;
-	}
-	return token;
-}
-
-function connAuth(conn: WebSocket, sendToken?: string) {
-	addAuthedSocket(conn);
-	const result: AuthResultMessage = { success: true };
-	if (sendToken !== undefined) {
-		result.auth_token = sendToken;
-	}
-	conn.send(buildMsg("auth", result));
-	sendInitialStatus(conn);
-}
-
-export async function tryAuth(conn: WebSocket, msg: AuthMessage["auth"]) {
-	if (!passwordHash) {
-		conn.send(buildMsg("auth", { success: false }));
-		return;
-	}
-
-	if (typeof msg.password === "string") {
-		try {
-			const match = await Bun.password.verify(
-				msg.password,
-				passwordHash,
-				"bcrypt",
-			);
-			if (match) {
-				const token = genAuthToken(msg.persistent_token);
-				authTokens.set(conn, token);
-				connAuth(conn, token);
-				return;
-			}
-		} catch (_) {}
-
-		notificationSend(conn, "auth", "error", "Invalid password");
-	} else if (typeof msg.token === "string") {
-		if (tempTokens[msg.token] || persistentTokens[msg.token]) {
-			connAuth(conn);
-			authTokens.set(conn, msg.token);
-		} else {
-			conn.send(buildMsg("auth", { success: false }));
-		}
-	}
-}
-
-export function handleLogout(conn: WebSocket) {
-	const token = authTokens.get(conn);
-	if (token) {
-		delete tempTokens[token];
-		if (persistentTokens[token]) {
-			delete persistentTokens[token];
-			savePersistentTokens();
-		}
-	}
-	deleteAuthedSocket(conn);
-	authTokens.delete(conn);
-}
-
+/**
+ * Strip passwords from objects for logging
+ */
 function isRecord(obj: unknown): obj is Record<string, unknown> {
 	return obj
 		? typeof obj === "object" &&

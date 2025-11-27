@@ -5,7 +5,7 @@ The CeraUI project supports conditional branding to compile different versions o
 ## Supported Brands
 
 - **CERALIVE** (Main brand, default)
-- **BELABOX** (Secondary frontend-only brand)
+- **CeraLive** (Secondary frontend-only brand)
 
 ## Brand Configuration
 
@@ -17,22 +17,22 @@ The branding is controlled by the `VITE_BRAND` environment variable:
 # Build for CERALIVE (default)
 VITE_BRAND=CERALIVE pnpm build
 
-# Build for BELABOX
-VITE_BRAND=BELABOX pnpm build
+# Build for CeraLive
+VITE_BRAND=CeraLive pnpm build
 ```
 
 ### Build Scripts
 
-The build system defaults to CERALIVE (main brand) with a secondary script for BELABOX:
+The build system defaults to CERALIVE (main brand) with a secondary script for CeraLive:
 
 ```bash
 # Development
 pnpm dev             # Run development server with CERALIVE branding (default)
-pnpm dev:belabox     # Run development server with BELABOX branding
+pnpm dev:ceralive     # Run development server with CeraLive branding
 
 # Production builds
 pnpm build           # Build for CERALIVE (main brand, default)
-pnpm build:belabox   # Build for BELABOX (secondary brand)
+pnpm build:ceralive   # Build for CeraLive (secondary brand)
 ```
 
 ## How It Works
@@ -69,7 +69,7 @@ description: brandTranslation("CeraUI needs an internet connection to manage you
 
 Available placeholders:
 
-- `{{deviceName}}` - Device name (CERALIVE/BELABOX)
+- `{{deviceName}}` - Device name (CERALIVE/CeraLive)
 - `{{deviceNameLower}}` - Lowercase device name
 - `{{siteName}}` - Full site name with copyright
 - `{{cloudService}}` - Cloud service name
@@ -84,7 +84,7 @@ Components can access brand configuration through:
 import { BRAND_CONFIG, deviceName, siteName } from "$lib/config/branding";
 
 // Use in components
-console.log(BRAND_CONFIG.deviceName); // "CERALIVE" or "BELABOX"
+console.log(BRAND_CONFIG.deviceName); // "CERALIVE" or "CeraLive"
 ```
 
 ## File Structure
@@ -136,8 +136,8 @@ To add a new brand:
 # Start development with CERALIVE branding (default)
 pnpm dev
 
-# Start development with BELABOX branding
-pnpm dev:belabox
+# Start development with CeraLive branding
+pnpm dev:ceralive
 ```
 
 ### Production Deployment
@@ -146,8 +146,8 @@ pnpm dev:belabox
 # Build CERALIVE version (main brand, default)
 pnpm build
 
-# Build BELABOX version (secondary brand)
-pnpm build:belabox
+# Build CeraLive version (secondary brand)
+pnpm build:ceralive
 ```
 
 The compiled output will have all brand-specific content correctly replaced throughout the application, including HTML meta tags, PWA manifests, and all translated text.

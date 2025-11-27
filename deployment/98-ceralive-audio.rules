@@ -2,26 +2,26 @@ SUBSYSTEM!="sound", GOTO="end"
 ENV{SOUND_INITIALIZED}!="1", GOTO="end"
 ENV{ID_BUS}!="usb" GOTO="end"
 
-ACTION=="remove", GOTO="signal_belaui"
+ACTION=="remove", GOTO="signal_ceralive"
 
 ACTION!="change", GOTO="end"
 
 # the Cam Link 4K's audio id defaults to C4K - don't modify it
-ATTR{id}=="C4K", GOTO="signal_belaui"
+ATTR{id}=="C4K", GOTO="signal_ceralive"
 
 # it looks like sometimes OA4 comes up without an ID, try to set it
-ENV{ID_MODEL}=="OsmoAction4", ATTR{id}="OsmoAction4", GOTO="signal_belaui"
+ENV{ID_MODEL}=="OsmoAction4", ATTR{id}="OsmoAction4", GOTO="signal_ceralive"
 
 # don't rename the OP3 audio input
-ATTR{id}=="DJIPocket3", GOTO="signal_belaui"
+ATTR{id}=="DJIPocket3", GOTO="signal_ceralive"
 
 # the OA5's name might include part of the SN, discard it
-ATTR{id}=="OsmoAction5*", ATTR{id}="OsmoAction5", GOTO="signal_belaui"
+ATTR{id}=="OsmoAction5*", ATTR{id}="OsmoAction5", GOTO="signal_ceralive"
 
 # set the id for the first USB audio card that's not a camlink 4K
 ATTR{id}="usbaudio"
 
-LABEL="signal_belaui"
-RUN+="/usr/bin/pkill -o -SIGUSR2 -f belaUI"
+LABEL="signal_ceralive"
+RUN+="/usr/bin/pkill -o -SIGUSR2 -f ceralive"
 
 LABEL="end"

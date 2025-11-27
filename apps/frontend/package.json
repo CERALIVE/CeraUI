@@ -2,7 +2,7 @@
 	"name": "frontend",
 	"private": true,
 	"version": "0.0.1",
-	"description": "A modern UI built with Svelte + Vite for CERALIVE/BELABOX streaming hardware backend.",
+	"description": "A modern UI built with Svelte + Vite for CeraLive streaming hardware.",
 	"type": "module",
 	"author": "Andrés Cera",
 	"license": "GPL-3.0",
@@ -21,7 +21,9 @@
 	},
 	"dependencies": {
 		"@ceraui/i18n": "workspace:*",
+		"@ceraui/rpc": "workspace:*",
 		"@internationalized/date": "^3.10.0",
+		"@orpc/client": "^1.11.3",
 		"@zip.js/zip.js": "^2.8.11",
 		"bits-ui": "^2.14.4",
 		"clsx": "^2.1.1",

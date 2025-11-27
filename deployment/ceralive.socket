@@ -1,5 +1,5 @@
 [Unit]
-Description=Listener socket for belaUI's HTTP server
+Description=Listener socket for CeraLive HTTP server
 Before=nginx.service
 
 [Socket]

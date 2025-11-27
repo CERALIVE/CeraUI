@@ -158,11 +158,11 @@ $effect(() => {
 							</p>
 							<a
 								class="text-primary hover:text-primary/80 inline-flex items-center text-sm font-medium transition-colors hover:underline"
-								href="https://cloud.belabox.net"
+								href="https://cloud.ceralive.net"
 								rel="noopener noreferrer"
 								target="_blank"
 							>
-								https://cloud.belabox.net
+								https://cloud.ceralive.net
 								<svg class="ml-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
 										d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"

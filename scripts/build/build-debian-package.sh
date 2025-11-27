@@ -50,22 +50,22 @@ ensure_dir "$TEMP_DIR"
 log_step "Preparing package structure"
 
 # Create directory structure
-ensure_dir "$TEMP_DIR"/{usr/local/bin,etc/systemd/system,etc/udev/rules.d,var/www/belaui,etc/belaui}
+ensure_dir "$TEMP_DIR"/{usr/local/bin,etc/systemd/system,etc/udev/rules.d,var/www/ceralive,etc/ceralive}
 
 # Copy files to appropriate locations
 log_step "Copying files to package structure"
-cp dist/belaUI "$TEMP_DIR/usr/local/bin/belaUI"
-cp dist/belaUI.service "$TEMP_DIR/etc/systemd/system/"
-cp dist/belaUI.socket "$TEMP_DIR/etc/systemd/system/"
-cp dist/98-belaui-audio.rules "$TEMP_DIR/etc/udev/rules.d/"
-cp dist/99-belaui-check-usb-devices.rules "$TEMP_DIR/etc/udev/rules.d/"
-cp -r dist/public/* "$TEMP_DIR/var/www/belaui/"
-cp dist/config.json "$TEMP_DIR/etc/belaui/"
+cp dist/ceralive "$TEMP_DIR/usr/local/bin/ceralive"
+cp dist/ceralive.service "$TEMP_DIR/etc/systemd/system/"
+cp dist/ceralive.socket "$TEMP_DIR/etc/systemd/system/"
+cp dist/98-ceralive-audio.rules "$TEMP_DIR/etc/udev/rules.d/"
+cp dist/99-ceralive-check-usb-devices.rules "$TEMP_DIR/etc/udev/rules.d/"
+cp -r dist/public/* "$TEMP_DIR/var/www/ceralive/"
+cp dist/config.json "$TEMP_DIR/etc/ceralive/"
 cp dist/override-belaui.sh "$TEMP_DIR/usr/local/bin/"
 cp dist/reset-to-default.sh "$TEMP_DIR/usr/local/bin/"
 
 # Make binaries executable
-chmod +x "$TEMP_DIR/usr/local/bin/belaUI"
+chmod +x "$TEMP_DIR/usr/local/bin/ceralive"
 chmod +x "$TEMP_DIR/usr/local/bin/override-belaui.sh"
 chmod +x "$TEMP_DIR/usr/local/bin/reset-to-default.sh"
 
@@ -75,7 +75,7 @@ cat > dist/debian/postinst << 'EOF'
 #!/bin/bash
 set -e
 
-echo "🚀 Configuring CERALIVE after installation..."
+echo "🚀 Configuring CeraLive after installation..."
 
 # Reload systemd daemon
 systemctl daemon-reload
@@ -83,22 +83,22 @@ systemctl daemon-reload
 # Reload udev rules
 udevadm control --reload
 
-# Create belaui user if it doesn't exist
-if ! id "belaui" &>/dev/null; then
-    useradd -r -s /bin/false -d /nonexistent belaui
+# Create ceralive user if it doesn't exist
+if ! id "ceralive" &>/dev/null; then
+    useradd -r -s /bin/false -d /nonexistent ceralive
 fi
 
 # Set permissions
-chown -R belaui:belaui /var/www/belaui
-chown belaui:belaui /etc/belaui/config.json
+chown -R ceralive:ceralive /var/www/ceralive
+chown ceralive:ceralive /etc/ceralive/config.json
 
-echo "✅ CERALIVE device software configured successfully!"
+echo "✅ CeraLive device software configured successfully!"
 echo ""
-echo "To start CERALIVE device:"
-echo "  sudo systemctl enable --now belaUI.service"
+echo "To start CeraLive device:"
+echo "  sudo systemctl enable --now ceralive.service"
 echo ""
 echo "To check status:"
-echo "  sudo systemctl status belaUI.service"
+echo "  sudo systemctl status ceralive.service"
 echo ""
 echo "Web interface will be available at: http://localhost:8080"
 EOF

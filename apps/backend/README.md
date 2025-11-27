@@ -1,32 +1,32 @@
 # CeraUI Backend (CERALIVE)
 
-This is the backend for CERALIVE devices, originally forked from the BELABOX belaUI project. This codebase has been ported to Typescript and ESM (ECMAScript Modules). This fork is maintained by CERALIVE and includes additional features and improvements.
+This is the backend for CERALIVE devices, originally forked from the CeraLive CeraLive project. This codebase has been ported to Typescript and ESM (ECMAScript Modules). This fork is maintained by CERALIVE and includes additional features and improvements.
 
 ## CeraUI Integration
 
-This fork includes an option to use the [CeraUI](https://github.com/CERALIVE/CeraUI) interface, which is an alternative user interface designed for enhanced usability and additional features. When the `USE_CERAUI` option is enabled during installation or deployment, the system will download the latest CeraUI main package from the [release](https://github.com/CERALIVE/CeraUI/releases/latest) and use it instead of the standard BelaUI interface.
+This fork includes an option to use the [CeraUI](https://github.com/CERALIVE/CeraUI) interface, which is an alternative user interface designed for enhanced usability and additional features. When the `USE_CERAUI` option is enabled during installation or deployment, the system will download the latest CeraUI main package from the [release](https://github.com/CERALIVE/CeraUI/releases/latest) and use it instead of the standard CeraLive interface.
 
 ## Install the fork on your CERALIVE device
 
 > **Note:** Replacing the original UI directly may cause issues. When your CERALIVE device is updated, it can revert the UI. Ensure you monitor updates and reapply the override after updates.
 
-- Enable SSH for the default user (`user`) on your existing belaUI
+- Enable SSH for the default user (`user`) on your existing CeraLive
 - Connect to the CERALIVE device via SSH (use Putty on Windows, JuiceSSH on Android)
 - Then run:
 
   ```bash
-  # Standard installation with BelaUI
-  wget -qO- https://raw.githubusercontent.com/CERALIVE/belaUI-ts/main/install.sh | bash
+  # Standard installation with CeraLive
+  wget -qO- https://raw.githubusercontent.com/CERALIVE/CeraLive-ts/main/install.sh | bash
   ```
 
   or
 
   ```bash
   # Installation with CeraUI interface
-  wget -qO- https://raw.githubusercontent.com/CERALIVE/belaUI-ts/main/install.sh | USE_CERAUI=true bash
+  wget -qO- https://raw.githubusercontent.com/CERALIVE/CeraLive-ts/main/install.sh | USE_CERAUI=true bash
   ```
 
-- To get back to the default belaUI, you can then run `sudo bash /opt/belaUI/reset-to-default.sh` through SSH.
+- To get back to the default CeraLive, you can then run `sudo bash /opt/CeraLive/reset-to-default.sh` through SSH.
 
 ## Installation Script
 
@@ -52,7 +52,7 @@ USE_CERAUI=true ./install.sh
 USE_CERAUI=true ./install.sh --remote [SSH_TARGET]
 
 # Examples
-./install.sh --remote root@belabox.local
+./install.sh --remote root@ceralive.local
 ./install.sh --remote root@192.168.1.100
 ```
 
@@ -128,16 +128,16 @@ pair: https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on
 - Run the deployment script by specifying the SSH target as an argument. For example, to deploy as root to a host at 192.168.100.100, run:
 
 ```bash
-# Standard deployment with BelaUI
+# Standard deployment with CeraLive
 ./install.sh --remote root@192.168.100.100
 
 # Deployment with CeraUI interface
 USE_CERAUI=true ./install.sh --remote root@192.168.100.100
 ```
 
-### Reset to default belaUI
+### Reset to default CeraLive
 
-To reset the CERALIVE device to the default belaUI, you can run the reset script from the host (`./reset-local.sh`).
+To reset the CERALIVE device to the default CeraLive, you can run the reset script from the host (`./reset-local.sh`).
 
 ## License
 

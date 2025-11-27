@@ -132,15 +132,7 @@ CeraUI supports two target architectures with specific device compatibility:
 
 ### Build Distributions
 
-#### 1. CeraUI Frontend for BELABOX
-
-Deploy CeraUI frontend on existing BELABOX devices (keeps existing belaUI backend):
-
-```bash
-./scripts/build/build-ceraui-frontend-for-belabox.sh
-```
-
-#### 2. CeraUI Full System
+#### 1. CeraUI Full System
 
 Complete system replacement for development devices:
 
@@ -155,7 +147,7 @@ BUILD_ARCH=amd64 ./scripts/build/build-ceraui-system.sh
 ./scripts/build/build-ceraui-system.sh
 ```
 
-#### 3. Debian Package
+#### 2. Debian Package
 
 Professional deployment with package management:
 

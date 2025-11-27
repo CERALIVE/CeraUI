@@ -74,7 +74,7 @@ is_backend_cache_valid() {
     local arch=$1
     local cache_path="$BACKEND_CACHE/$arch"
 
-    if [ ! -f "$cache_path/hash.txt" ] || [ ! -f "$cache_path/belaUI" ]; then
+    if [ ! -f "$cache_path/hash.txt" ] || [ ! -f "$cache_path/ceralive" ]; then
         return 1
     fi
 
@@ -119,7 +119,7 @@ build_backend_only() {
 
     if is_backend_cache_valid "$arch"; then
         echo "✅ Backend cache valid for $arch - reusing existing build"
-        cp "$cache_path/belaUI" dist/
+        cp "$cache_path/ceralive" dist/
         cp -r "$cache_path/deployment" dist/ 2>/dev/null || true
         return 0
     fi
@@ -133,7 +133,7 @@ build_backend_only() {
     cp -r ./deployment/* ./dist/ 2>/dev/null || true
 
     # Cache the result
-    cp dist/belaUI "$cache_path/"
+    cp dist/ceralive "$cache_path/"
     cp -r dist/deployment "$cache_path/" 2>/dev/null || true
     get_backend_hash > "$cache_path/hash.txt"
 
