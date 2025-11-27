@@ -1,21 +1,25 @@
 <script lang="ts">
 import { existingLocales, loadLocaleAsync } from '@ceraui/i18n';
 import { LL, setLocale } from '@ceraui/i18n/svelte';
-import { Globe } from '@lucide/svelte';
+import { Check, ChevronDown, Globe } from '@lucide/svelte';
 
-import * as Select from '$lib/components/ui/select';
+import { Button } from '$lib/components/ui/button';
+import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 import { getLocale, setLocale as setLocaleStore } from '$lib/stores/locale.svelte';
 import { cn } from '$lib/utils';
 
 const initialLocale = getLocale();
 
 let selectedLocale = $state(initialLocale.code);
-const localeName = $derived.by(() => existingLocales.find((l) => l.code === selectedLocale)!.name);
-const localeFlag = $derived.by(() => existingLocales.find((l) => l.code === selectedLocale)!.flag);
+let isOpen = $state(false);
+
+const localeName = $derived.by(
+	() => existingLocales.find((l) => l.code === selectedLocale)?.name ?? 'English',
+);
+const localeFlag = $derived.by(() => existingLocales.find((l) => l.code === selectedLocale)?.flag);
 
 // Initialize locale in an effect to avoid top-level state updates
 $effect(() => {
-	// Only set locale if it's already loaded, don't load here to avoid conflicts with App.svelte
 	if (initialLocale.code) {
 		setLocale(initialLocale.code as any);
 	}
@@ -24,101 +28,93 @@ $effect(() => {
 const handleLocaleChange = async (value: string) => {
 	try {
 		console.log(`🌍 Loading locale: ${value}`);
-		// First load the new locale
 		await loadLocaleAsync(value as any);
-		// Then set it as active
 		setLocale(value as any);
-		// Update the stores
 		setLocaleStore(existingLocales.find((l) => l.code === value)!);
 		selectedLocale = value;
+		isOpen = false;
 		console.log(`✅ Successfully switched to locale: ${value}`);
 	} catch (error) {
 		console.error(`❌ Failed to load locale ${value}:`, error);
-		// Keep the previous selection on error
 	}
 };
 </script>
 
-<Select.Root onValueChange={handleLocaleChange} type="single" value={selectedLocale}>
-	<Select.Trigger
-		class="h-10 min-w-[120px] rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 shadow-sm transition-all duration-200 hover:from-gray-200 hover:to-gray-300 hover:shadow-md dark:from-gray-800 dark:to-gray-900 dark:hover:from-gray-700 dark:hover:to-gray-800"
-	>
-		<!-- Enhanced Trigger Content -->
-		<div class="flex items-center gap-2">
+<DropdownMenu.Root bind:open={isOpen}>
+	<DropdownMenu.Trigger>
+		<Button
+			class="bg-card hover:bg-accent flex h-10 items-center gap-2 rounded-xl border px-3 shadow-sm transition-all duration-200 hover:shadow-md"
+			variant="ghost"
+		>
 			{#if localeFlag}
-				<span class="text-lg" aria-label={localeName} role="img">{localeFlag}</span>
+				<span class="text-base" aria-label={localeName} role="img">{localeFlag}</span>
 			{:else}
-				<Globe class="h-4 w-4 text-gray-600 dark:text-gray-400" />
+				<Globe class="text-muted-foreground h-4 w-4" />
 			{/if}
 			<span class="text-sm font-medium">{localeName}</span>
-		</div>
-	</Select.Trigger>
+			<ChevronDown
+				class={cn(
+					'text-muted-foreground h-4 w-4 transition-transform duration-200',
+					isOpen && 'rotate-180',
+				)}
+			/>
+		</Button>
+	</DropdownMenu.Trigger>
 
-	<Select.Content
-		class="min-w-[180px] rounded-xl border-2 bg-white/95 p-2 shadow-xl backdrop-blur-md dark:bg-gray-900/95"
+	<DropdownMenu.Content
+		class="bg-card w-56 rounded-xl border p-1.5 shadow-xl"
+		align="end"
+		strategy="fixed"
 	>
 		<!-- Language Header -->
-		<div class="mb-2 px-2 py-1">
-			<h4 class="text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+		<div class="mb-1 px-2 py-1.5">
+			<h4 class="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
 				{$LL.locale.selectLanguage()}
 			</h4>
 		</div>
 
-		<Select.Group>
-			{#each existingLocales as localeOption}
-				{@const isActive = selectedLocale === localeOption.code}
-				<Select.Item
+		{#each existingLocales as localeOption}
+			{@const isActive = selectedLocale === localeOption.code}
+			<DropdownMenu.Item
+				class={cn(
+					'flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200',
+					isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-accent focus:bg-accent',
+				)}
+				onclick={() => handleLocaleChange(localeOption.code)}
+			>
+				<!-- Language Flag/Icon -->
+				<div
 					class={cn(
-						'flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200',
-						isActive
-							? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md'
-							: 'hover:bg-gray-100 dark:hover:bg-gray-800',
+						'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-base transition-colors',
+						isActive ? 'bg-primary-foreground/20' : 'bg-muted',
 					)}
-					label={localeOption.name}
-					value={localeOption.code}
 				>
-					<!-- Language Flag/Icon -->
-					<div
-						class={cn(
-							'flex h-6 w-6 items-center justify-center rounded-md text-base transition-colors',
-							isActive ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800',
-						)}
-					>
-						{#if localeOption.flag}
-							<span aria-label={localeOption.name} role="img">{localeOption.flag}</span>
-						{:else}
-							<Globe
-								class={cn(
-									'h-3.5 w-3.5',
-									isActive ? 'text-white' : 'text-gray-600 dark:text-gray-400',
-								)}
-							/>
-						{/if}
-					</div>
-
-					<!-- Language Info -->
-					<div class="flex-1">
-						<div
-							class={cn(
-								'font-medium',
-								isActive ? 'text-white' : 'text-gray-900 dark:text-gray-100',
-							)}
-						>
-							{localeOption.name}
-						</div>
-						<div
-							class={cn('text-xs', isActive ? 'text-white/80' : 'text-gray-500 dark:text-gray-400')}
-						>
-							{localeOption.code.toUpperCase()}
-						</div>
-					</div>
-
-					<!-- Active Indicator -->
-					{#if isActive}
-						<div class="h-2 w-2 rounded-full bg-white shadow-sm"></div>
+					{#if localeOption.flag}
+						<span aria-label={localeOption.name} role="img">{localeOption.flag}</span>
+					{:else}
+						<Globe
+							class={cn('h-4 w-4', isActive ? 'text-primary-foreground' : 'text-muted-foreground')}
+						/>
 					{/if}
-				</Select.Item>
-			{/each}
-		</Select.Group>
-	</Select.Content>
-</Select.Root>
+				</div>
+
+				<!-- Language Info -->
+				<div class="min-w-0 flex-1">
+					<div class={cn('font-medium', isActive ? 'text-primary-foreground' : 'text-foreground')}>
+						{localeOption.name}
+					</div>
+					<div
+						class={cn('text-xs', isActive ? 'text-primary-foreground/80' : 'text-muted-foreground')}
+					>
+						{localeOption.code.toUpperCase()}
+					</div>
+				</div>
+
+				<!-- Active Indicator -->
+				{#if isActive}
+					<Check class="text-primary-foreground h-4 w-4 shrink-0" />
+				{/if}
+			</DropdownMenu.Item>
+		{/each}
+	</DropdownMenu.Content>
+</DropdownMenu.Root>

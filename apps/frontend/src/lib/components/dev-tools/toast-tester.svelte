@@ -6,10 +6,10 @@
 
 @keyframes toast-demo-highlight {
 	from {
-		box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.3);
+		box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.3);
 	}
 	to {
-		box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.1);
+		box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
 	}
 }
 </style>
@@ -69,9 +69,9 @@ const toastTypes = [
 		name: $LL.devtools.success(),
 		type: 'success',
 		icon: CheckCircle2,
-		color: 'text-green-600',
-		bgColor: 'bg-green-50 dark:bg-green-950/20',
-		borderColor: 'border-green-200 dark:border-green-800',
+		color: 'text-emerald-600 dark:text-emerald-400',
+		bgColor: 'bg-emerald-500/10',
+		borderColor: 'border-emerald-500/30',
 		action: () =>
 			toast.success(customTitle, { description: customDescription, duration: toastDuration }),
 	},
@@ -79,9 +79,9 @@ const toastTypes = [
 		name: $LL.devtools.error(),
 		type: 'error',
 		icon: AlertCircle,
-		color: 'text-red-600',
-		bgColor: 'bg-red-50 dark:bg-red-950/20',
-		borderColor: 'border-red-200 dark:border-red-800',
+		color: 'text-red-600 dark:text-red-400',
+		bgColor: 'bg-red-500/10',
+		borderColor: 'border-red-500/30',
 		action: () =>
 			toast.error(customTitle, { description: customDescription, duration: toastDuration }),
 	},
@@ -89,9 +89,9 @@ const toastTypes = [
 		name: $LL.devtools.warning(),
 		type: 'warning',
 		icon: AlertTriangle,
-		color: 'text-amber-600',
-		bgColor: 'bg-amber-50 dark:bg-amber-950/20',
-		borderColor: 'border-amber-200 dark:border-amber-800',
+		color: 'text-amber-600 dark:text-amber-400',
+		bgColor: 'bg-amber-500/10',
+		borderColor: 'border-amber-500/30',
 		action: () =>
 			toast.warning(customTitle, { description: customDescription, duration: toastDuration }),
 	},
@@ -99,9 +99,9 @@ const toastTypes = [
 		name: $LL.devtools.info(),
 		type: 'info',
 		icon: Info,
-		color: 'text-blue-600',
-		bgColor: 'bg-blue-50 dark:bg-blue-950/20',
-		borderColor: 'border-blue-200 dark:border-blue-800',
+		color: 'text-blue-600 dark:text-blue-400',
+		bgColor: 'bg-blue-500/10',
+		borderColor: 'border-blue-500/30',
 		action: () =>
 			toast.info(customTitle, { description: customDescription, duration: toastDuration }),
 	},
@@ -109,18 +109,18 @@ const toastTypes = [
 		name: $LL.devtools.default(),
 		type: 'default',
 		icon: MessageCircle,
-		color: 'text-gray-600',
-		bgColor: 'bg-gray-50 dark:bg-gray-950/20',
-		borderColor: 'border-gray-200 dark:border-gray-800',
+		color: 'text-slate-600 dark:text-slate-400',
+		bgColor: 'bg-slate-500/10',
+		borderColor: 'border-slate-500/30',
 		action: () => toast(customTitle, { description: customDescription, duration: toastDuration }),
 	},
 	{
 		name: $LL.devtools.loading(),
 		type: 'loading',
 		icon: Loader2,
-		color: 'text-blue-600',
-		bgColor: 'bg-blue-50 dark:bg-blue-950/20',
-		borderColor: 'border-blue-200 dark:border-blue-800',
+		color: 'text-blue-600 dark:text-blue-400',
+		bgColor: 'bg-blue-500/10',
+		borderColor: 'border-blue-500/30',
 		action: () => {
 			const loadingToast = toast.loading(customTitle, { description: customDescription });
 			// Auto-dismiss loading toast after duration
@@ -214,22 +214,25 @@ function dismissAllToasts() {
 }
 </script>
 
-<Card.Root
-	class="border-dashed border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-950/20"
->
+<Card.Root class="overflow-hidden border-purple-500/30">
+	<!-- Status bar -->
+	<div class="h-1 bg-gradient-to-r from-purple-500 to-violet-600"></div>
+
 	<Card.Header>
-		<Card.Title class="flex items-center gap-2 text-purple-700 dark:text-purple-300">
-			<MessageCircle class="h-5 w-5" />
+		<Card.Title class="flex items-center gap-2">
+			<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500">
+				<MessageCircle class="h-4 w-4 text-white" />
+			</div>
 			🍞 {$LL.devtools.toastNotificationTester()}
 		</Card.Title>
-		<Card.Description class="text-purple-600 dark:text-purple-400">
+		<Card.Description>
 			{$LL.devtools.testDifferentTypes()}
 		</Card.Description>
 	</Card.Header>
 
 	<Card.Content class="space-y-6">
 		<!-- Custom Toast Configuration -->
-		<div class="bg-background/50 space-y-4 rounded-lg border p-4">
+		<div class="bg-muted/50 space-y-4 rounded-lg border p-4">
 			<div class="text-sm font-medium">{$LL.devtools.customToastConfig()}</div>
 
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -275,7 +278,7 @@ function dismissAllToasts() {
 			<div class="grid grid-cols-2 gap-2 md:grid-cols-3">
 				{#each toastTypes as toastType}
 					<Button
-						class={`${toastType.bgColor} ${toastType.borderColor} hover:bg-opacity-80 transition-all duration-200`}
+						class={`${toastType.bgColor} ${toastType.borderColor} transition-all duration-200 hover:opacity-80`}
 						onclick={toastType.action}
 						size="sm"
 						variant="outline"
@@ -315,39 +318,39 @@ function dismissAllToasts() {
 			<div class="text-sm font-medium">{$LL.devtools.specialToastActions()}</div>
 			<div class="flex flex-wrap gap-2">
 				<Button
-					class="border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/20"
+					class="border-indigo-500/30 bg-indigo-500/10"
 					onclick={showActionToast}
 					size="sm"
 					variant="outline"
 				>
-					<CheckCircle2 class="mr-2 h-4 w-4 text-indigo-600" />
-					<span class="text-indigo-600">{$LL.devtools.actionToast()}</span>
+					<CheckCircle2 class="mr-2 h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+					<span class="text-indigo-600 dark:text-indigo-400">{$LL.devtools.actionToast()}</span>
 				</Button>
 
 				<Button
-					class="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/20"
+					class="border-amber-500/30 bg-amber-500/10"
 					onclick={showPersistentToast}
 					size="sm"
 					variant="outline"
 				>
-					<AlertTriangle class="mr-2 h-4 w-4 text-orange-600" />
-					<span class="text-orange-600">{$LL.devtools.persistent()}</span>
+					<AlertTriangle class="mr-2 h-4 w-4 text-amber-600 dark:text-amber-400" />
+					<span class="text-amber-600 dark:text-amber-400">{$LL.devtools.persistent()}</span>
 				</Button>
 
 				<Button
-					class="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20"
+					class="border-red-500/30 bg-red-500/10"
 					onclick={dismissAllToasts}
 					size="sm"
 					variant="outline"
 				>
-					<X class="mr-2 h-4 w-4 text-red-600" />
-					<span class="text-red-600">{$LL.devtools.dismissAll()}</span>
+					<X class="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
+					<span class="text-red-600 dark:text-red-400">{$LL.devtools.dismissAll()}</span>
 				</Button>
 			</div>
 		</div>
 
 		<!-- Testing Tips -->
-		<div class="text-muted-foreground bg-muted/30 space-y-1 rounded-md p-3 text-xs">
+		<div class="text-muted-foreground bg-muted/50 space-y-1 rounded-lg p-3 text-xs">
 			<div class="font-medium">💡 {$LL.devtools.testingTips()}:</div>
 			<div>• {$LL.devtools.testingTip1()}</div>
 			<div>• {$LL.devtools.testingTip2()}</div>

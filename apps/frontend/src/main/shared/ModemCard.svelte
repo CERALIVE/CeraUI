@@ -1,9 +1,9 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { ChevronDown, Globe, Loader2, Radio, Settings2, Signal, WifiOff } from '@lucide/svelte';
+import { ChevronDown, Loader2, Radio, Settings2, Signal, WifiOff } from '@lucide/svelte';
 import { slide } from 'svelte/transition';
 
-import SignalQuality from '$lib/components/icons/SignalQuality.svelte';
+import SignalIndicator from '$lib/components/icons/SignalIndicator.svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import * as Collapsible from '$lib/components/ui/collapsible';
@@ -67,13 +67,6 @@ const statusColors = $derived.by(() => {
 	};
 });
 
-// Signal color
-const signalColor = $derived.by(() => {
-	if (signalValue >= 70) return 'text-emerald-600 dark:text-emerald-400';
-	if (signalValue >= 40) return 'text-amber-600 dark:text-amber-400';
-	return 'text-red-600 dark:text-red-400';
-});
-
 // Network type badge
 function getNetworkBadge(type: string) {
 	if (type.includes('5G')) return 'bg-purple-500/10 text-purple-700 dark:text-purple-400';
@@ -91,15 +84,10 @@ const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 
 	<Card.Header class="p-4 pb-3">
 		<!-- Header Row -->
-		<div class="flex items-center justify-between gap-2">
+		<div class="flex items-center justify-between gap-3">
 			<div class="flex min-w-0 items-center gap-2.5">
 				<!-- Icon -->
-				<div
-					class={cn(
-						'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
-						statusColors.icon,
-					)}
-				>
+				<div class={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', statusColors.icon)}>
 					{#if isConnected}
 						<Signal class="h-4 w-4 text-white" />
 					{:else if isConnecting || isScanning}
@@ -111,8 +99,13 @@ const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 
 				<!-- Name & Status -->
 				<div class="min-w-0 flex-1">
-					<Card.Title class="truncate text-sm font-semibold">{cleanModemName}</Card.Title>
-					<div class="mt-0.5 flex flex-wrap items-center gap-1.5">
+					<Card.Title class="text-sm leading-tight font-semibold">
+						{cleanModemName}
+						{#if operatorName && isConnected}
+							<span class="text-muted-foreground font-normal"> | {operatorName}</span>
+						{/if}
+					</Card.Title>
+					<div class="mt-1 flex flex-wrap items-center gap-1.5">
 						<span class={cn('rounded-md px-1.5 py-0.5 text-xs font-medium', statusColors.badge)}>
 							{#if isConnecting}
 								<Loader2 class="mr-1 inline h-3 w-3 animate-spin" />
@@ -139,26 +132,14 @@ const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 				</div>
 			</div>
 
-			<!-- Signal -->
+			<!-- Signal Strength - Vertically centered -->
 			{#if isConnected}
-				<div class="flex shrink-0 items-center gap-1.5">
-					<SignalQuality class="h-5 w-5" signal={signalValue} />
-					<span class={cn('font-mono text-base font-bold', signalColor)}>{signalValue}%</span>
-				</div>
+				<SignalIndicator class="h-9" signal={signalValue} type="cellular" />
 			{/if}
 		</div>
 	</Card.Header>
 
 	<Card.Content class="space-y-3 px-4 pt-0 pb-4">
-		<!-- Connection Info (compact) -->
-		{#if isConnected && operatorName}
-			<div class="flex items-center gap-2 text-sm">
-				<Globe class="text-muted-foreground h-4 w-4 shrink-0" />
-				<span class="text-muted-foreground">Operator:</span>
-				<span class="text-foreground truncate font-medium">{operatorName}</span>
-			</div>
-		{/if}
-
 		<!-- Status Messages -->
 		{#if isScanning}
 			<div

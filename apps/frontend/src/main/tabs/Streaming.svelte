@@ -432,35 +432,12 @@ const handleFramerateChange = (value: string) => {
 };
 </script>
 
-<div class="from-background via-background to-accent/5 bg-gradient-to-br">
+<div class="from-background via-background to-accent/5 bg-gradient-to-br pb-4">
 	<form class="relative" onsubmit={onSubmitStreamingForm}>
-		<!-- Streaming Controls - Sticky Header -->
-		<StreamingControls
-			disabled={false}
-			isStreaming={!!$isStreamingStore}
-			onStart={startStreamingWithCurrentConfig}
-			onStop={() => {
-				// Try to dismiss all toasts first
-				try {
-					toast.dismiss();
-				} catch (error) {
-					console.warn('Could not dismiss toasts:', error);
-				}
-
-				// Stop streaming with proper toast cleanup via the global function
-				if (window.stopStreamingWithNotificationClear) {
-					window.stopStreamingWithNotificationClear();
-				} else {
-					// Fallback
-					stopStreaming();
-				}
-			}}
-		/>
-
 		<!-- Main Content Area -->
 		<div class="container mx-auto max-w-6xl px-4 py-6">
 			<!-- Enhanced Grid Layout with equal heights -->
-			<div class="grid gap-6 lg:grid-cols-3">
+			<div class="grid items-stretch gap-6 lg:grid-cols-3">
 				<!-- Encoder Settings Card -->
 				<div class="h-full">
 					<EncoderCard
@@ -550,5 +527,29 @@ const handleFramerateChange = (value: string) => {
 				</div>
 			</div>
 		</div>
+
+		<!-- Streaming Controls - Floating Button at Bottom -->
+		<StreamingControls
+			disabled={false}
+			isStreaming={!!$isStreamingStore}
+			onStart={startStreamingWithCurrentConfig}
+			onStop={() => {
+				// Try to dismiss all toasts first
+				try {
+					toast.dismiss();
+				} catch (error) {
+					console.warn('Could not dismiss toasts:', error);
+				}
+
+				// Stop streaming with proper toast cleanup via the global function
+				if (window.stopStreamingWithNotificationClear) {
+					window.stopStreamingWithNotificationClear();
+				} else {
+					// Fallback
+					stopStreaming();
+				}
+			}}
+			variant="floating"
+		/>
 	</form>
 </div>

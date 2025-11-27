@@ -155,18 +155,18 @@ const handleLogoClick = () => {
 				class={cn(
 					'absolute -inset-1 rounded-full blur-sm transition-all duration-300',
 					isLogoHovered ? 'bg-primary/30 opacity-100' : 'bg-primary/10 opacity-0',
-					$canGoBack && 'bg-blue-500/20', // Subtle indicator when back is available
+					$canGoBack && 'bg-primary/20', // Subtle indicator when back is available
 				)}
 			></div>
 
 			<!-- Back indicator -->
 			{#if $canGoBack && isLogoHovered}
 				<div
-					class="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-blue-500"
+					class="bg-primary absolute -top-1 -right-1 h-3 w-3 rounded-full"
 					in:scale={{ duration: 200, start: 0.8 }}
 					out:scale={{ duration: 150, start: 1 }}
 				>
-					<div class="h-full w-full animate-ping rounded-full bg-blue-400"></div>
+					<div class="bg-primary/60 h-full w-full animate-ping rounded-full"></div>
 				</div>
 			{/if}
 		</div>

@@ -95,7 +95,7 @@ const handleSubmit = async () => {
 		? $LL.hotspotConfigurator.dialog.saving()
 		: $LL.hotspotConfigurator.dialog.save()}
 	disabledConfirmButton={!isFormValid || isSubmitting}
-	extraButtonClasses="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
+	extraButtonClasses="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-medium shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
 	oncancel={() => resetHotSpotProperties()}
 	onconfirm={handleSubmit}
 	title={$LL.hotspotConfigurator.dialog.configHotspot()}
@@ -111,7 +111,7 @@ const handleSubmit = async () => {
 			<!-- Header Section -->
 			<div class="space-y-2 text-center">
 				<div
-					class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg"
+					class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg"
 				>
 					<Wifi class="h-8 w-8 text-white" />
 				</div>
@@ -140,7 +140,7 @@ const handleSubmit = async () => {
 									? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
 									: validation.name.isValid && hotspotProperties.name.length > 0
 										? 'border-green-400 bg-green-50 focus:border-green-500 focus:ring-green-500 dark:bg-green-950/20'
-										: 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50',
+										: 'border-slate-200 bg-slate-50 focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800/50',
 							)}
 							autocapitalize="none"
 							autocomplete="off"
@@ -215,7 +215,7 @@ const handleSubmit = async () => {
 									? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
 									: validation.password.isValid && hotspotProperties.password.length > 0
 										? 'border-green-400 bg-green-50 focus:border-green-500 focus:ring-green-500 dark:bg-green-950/20'
-										: 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50',
+										: 'border-slate-200 bg-slate-50 focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800/50',
 							)}
 							autocapitalize="none"
 							autocomplete="off"
@@ -234,7 +234,7 @@ const handleSubmit = async () => {
 								{/if}
 							{/if}
 							<button
-								class="text-muted-foreground hover:text-foreground rounded-lg p-1 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+								class="text-muted-foreground hover:text-foreground rounded-lg p-1 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700"
 								onclick={() => (showPassword = !showPassword)}
 								type="button"
 							>
@@ -316,14 +316,14 @@ const handleSubmit = async () => {
 						value={hotspotProperties.selectedChannel}
 					>
 						<Select.Trigger
-							class="focus:ring-opacity-20 h-12 w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 text-base transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50"
+							class="focus:ring-opacity-20 h-12 w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-4 text-base transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800/50"
 						>
 							{hotspotProperties.selectedChannel
 								? wifi.hotspot?.available_channels[hotspotProperties.selectedChannel].name
 								: $LL.hotspotConfigurator.hotspot.selectChannel()}
 						</Select.Trigger>
 						<Select.Content
-							class="rounded-xl border-2 border-gray-200 shadow-xl dark:border-gray-700"
+							class="rounded-xl border-2 border-slate-200 shadow-xl dark:border-slate-700"
 						>
 							<Select.Group>
 								{#if wifi.hotspot?.available_channels}

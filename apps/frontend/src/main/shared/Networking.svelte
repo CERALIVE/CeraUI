@@ -43,21 +43,18 @@ function getNetworkType(name: string, isHotspot: boolean = false) {
 }
 
 function isHotspotNetwork(name: string) {
-	// Check if this is a hotspot network based on naming convention
 	return name.includes('hotspot') || name.toLowerCase().includes('wlan1');
 }
 
 function getBandwidthColor(bandwidth: number) {
 	if (bandwidth === 0) return 'text-muted-foreground';
-	if (bandwidth < 1000) return 'text-yellow-500';
-	if (bandwidth < 5000) return 'text-blue-500';
-	return 'text-green-500';
+	if (bandwidth < 1000) return 'text-amber-600 dark:text-amber-400';
+	if (bandwidth < 5000) return 'text-blue-600 dark:text-blue-400';
+	return 'text-emerald-600 dark:text-emerald-400';
 }
 
 function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) {
-	// Sort order: modem networks first, then by enabled status and type priority
 	if (name.startsWith('ww')) {
-		// Modem networks: enabled first, then disabled
 		return enabled ? 1 : 5;
 	}
 	if (enabled) return isHotspot ? 2 : name.startsWith('wl') ? 3 : 4;
@@ -81,11 +78,11 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 <Card.Content class="space-y-4">
 	{#if Object.keys(currentNetwoks).length === 0}
 		<!-- Empty State -->
-		<div class="flex flex-col items-center justify-center space-y-4 py-12 text-center">
-			<div class="bg-muted rounded-full p-4">
-				<Network class="text-muted-foreground h-8 w-8" />
+		<div class="flex flex-col items-center justify-center space-y-3 py-8 text-center">
+			<div class="bg-muted grid h-14 w-14 place-items-center rounded-xl">
+				<Network class="text-muted-foreground h-7 w-7" />
 			</div>
-			<div class="space-y-2">
+			<div class="space-y-1">
 				<h3 class="font-medium">{$LL.network.emptyStates.noNetworksDetected()}</h3>
 				<p class="text-muted-foreground text-sm">{$LL.network.emptyStates.noNetworkInterfaces()}</p>
 			</div>
@@ -107,43 +104,43 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 				<div
 					class={cn(
 						'bg-card flex h-full flex-col rounded-lg border transition-colors duration-200',
-						network.enabled ? 'border-green-200 dark:border-green-800' : 'border-border',
-						isHotspot && !network.enabled ? 'border-blue-200 dark:border-blue-800' : '',
-						hasRealError ? 'border-red-200 dark:border-red-800' : '',
+						network.enabled ? 'border-emerald-500/30' : 'border-border',
+						isHotspot && !network.enabled ? 'border-blue-500/30' : '',
+						hasRealError ? 'border-red-500/30' : '',
 					)}
 				>
 					<!-- Status Bar at Top -->
 					<div
 						class={cn(
-							'h-1 w-full',
+							'h-1 w-full bg-gradient-to-r',
 							network.enabled
-								? 'bg-green-500'
+								? 'from-emerald-500 to-teal-600'
 								: isHotspot
-									? 'bg-blue-500'
+									? 'from-blue-500 to-indigo-600'
 									: hasRealError
-										? 'bg-red-500'
-										: 'bg-gray-300 dark:bg-gray-700',
+										? 'from-red-500 to-rose-600'
+										: 'from-slate-400 to-slate-500',
 						)}
 					></div>
 
-					<div class="flex flex-1 flex-col p-4">
+					<div class="flex flex-1 flex-col p-3">
 						<!-- Header: Icon + Name + Status -->
-						<div class="mb-3 flex items-start justify-between">
+						<div class="mb-2 flex items-start justify-between">
 							<div class="flex min-w-0 flex-1 items-center gap-3">
-								<!-- Simple Icon -->
+								<!-- Icon Container -->
 								<div
 									class={cn(
-										'flex-shrink-0 rounded-lg p-2',
+										'grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg',
 										network.enabled
-											? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+											? 'bg-emerald-500'
 											: isHotspot
-												? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+												? 'bg-blue-500'
 												: hasRealError
-													? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-													: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+													? 'bg-red-500'
+													: 'bg-slate-400',
 									)}
 								>
-									<Icon class="h-4 w-4" />
+									<Icon class="h-4 w-4 text-white" />
 								</div>
 
 								<!-- Network Name and Type -->
@@ -158,14 +155,14 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 							<!-- Status Badge -->
 							<div
 								class={cn(
-									'inline-flex flex-shrink-0 items-center rounded-full px-2 py-1 text-xs font-medium',
+									'inline-flex flex-shrink-0 items-center rounded-md px-1.5 py-0.5 text-xs font-medium',
 									network.enabled
-										? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+										? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
 										: isHotspot
-											? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+											? 'bg-blue-500/10 text-blue-700 dark:text-blue-400'
 											: hasRealError
-												? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-												: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+												? 'bg-red-500/10 text-red-700 dark:text-red-400'
+												: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
 								)}
 							>
 								{network.enabled
@@ -177,22 +174,22 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 						</div>
 
 						<!-- Details Grid -->
-						<div class="mb-4 flex-1 space-y-2">
+						<div class="mb-3 flex-1 space-y-1.5 text-sm">
 							{#if name.startsWith('ww')}
-								<div class="flex items-center justify-between text-sm">
+								<div class="flex items-center justify-between">
 									<span class="text-muted-foreground">{$LL.networking.labels.network()}</span>
 									<span class="text-xs font-medium">{getModemNetworkName(name)}</span>
 								</div>
 							{/if}
-							<div class="flex items-center justify-between text-sm">
+							<div class="flex items-center justify-between">
 								<span class="text-muted-foreground">{$LL.networking.labels.interface()}</span>
-								<code class="bg-muted rounded px-2 py-1 font-mono text-xs">{name}</code>
+								<code class="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">{name}</code>
 							</div>
-							<div class="flex items-center justify-between text-sm">
+							<div class="flex items-center justify-between">
 								<span class="text-muted-foreground">{$LL.networking.labels.ipAddress()}</span>
-								<code class="bg-muted rounded px-2 py-1 font-mono text-xs">{network.ip}</code>
+								<code class="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">{network.ip}</code>
 							</div>
-							<div class="flex items-center justify-between text-sm">
+							<div class="flex items-center justify-between">
 								<span class="text-muted-foreground">{$LL.networking.labels.bandwidth()}</span>
 								<span class={cn('font-mono text-xs font-bold', getBandwidthColor(bandwidth))}>
 									{$LL.network.summary.totalBandwidth({ total: bandwidth })}
@@ -209,7 +206,7 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 										class={cn(
 											'h-auto px-3 py-1.5 transition-colors',
 											network.enabled
-												? 'data-[state=on]:border-green-600 data-[state=on]:bg-green-600 data-[state=on]:text-white'
+												? 'data-[state=on]:border-emerald-600 data-[state=on]:bg-emerald-600 data-[state=on]:text-white'
 												: '',
 											hasRealError ? 'cursor-not-allowed opacity-50' : '',
 										)}
@@ -219,7 +216,6 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 												await setNetif(name, network.ip, value);
 											} catch (error) {
 												console.error(`Failed to toggle network ${name}:`, error);
-												// Revert the toggle state on error
 												network.enabled = !value;
 											}
 										}}
@@ -241,7 +237,7 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 							<!-- Error Message -->
 							{#if hasRealError}
 								<div
-									class="flex items-center gap-2 rounded-md bg-red-100 p-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300"
+									class="flex items-center gap-2 rounded-md bg-red-500/10 p-2 text-sm text-red-700 dark:text-red-400"
 								>
 									<AlertCircle class="h-4 w-4 flex-shrink-0" />
 									<span>{$LL.network.errors.networkConnectionError()}</span>

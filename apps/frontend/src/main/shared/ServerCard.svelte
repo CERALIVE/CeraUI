@@ -7,6 +7,7 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import type { RelayMessage } from '$lib/types/socket-messages';
+import { cn } from '$lib/utils';
 
 interface Props {
 	relayMessage: RelayMessage | undefined;
@@ -43,7 +44,7 @@ const {
 	normalizeValue,
 }: Props = $props();
 
-// Local state for all fields to prevent binding undefined values (like EncoderCard pattern)
+// Local state for all fields to prevent binding undefined values
 let localSrtlaServerAddress = $state(properties.srtlaServerAddress ?? '');
 let localSrtlaServerPort = $state(properties.srtlaServerPort?.toString() ?? '');
 let localSrtStreamId = $state(properties.srtStreamId ?? '');
@@ -51,51 +52,37 @@ let localSrtLatency = $state(properties.srtLatency ?? 2000);
 let localRelayServer = $state(properties.relayServer ?? '');
 let localRelayAccount = $state(properties.relayAccount ?? '');
 
-// Track if user has touched each field to prevent auto-syncing user-edited fields
+// Track if user has touched each field
 let addressTouched = $state(false);
 let portTouched = $state(false);
 let streamIdTouched = $state(false);
 let relayServerTouched = $state(false);
 let relayAccountTouched = $state(false);
 
-// Sync FROM properties TO local state when parent provides new data (like EncoderCard pattern)
+// Sync FROM properties TO local state when parent provides new data
 $effect(() => {
-	if (!addressTouched) {
-		localSrtlaServerAddress = properties.srtlaServerAddress ?? '';
-	}
+	if (!addressTouched) localSrtlaServerAddress = properties.srtlaServerAddress ?? '';
 });
 
 $effect(() => {
-	if (!portTouched) {
-		localSrtlaServerPort = properties.srtlaServerPort?.toString() ?? '';
-	}
+	if (!portTouched) localSrtlaServerPort = properties.srtlaServerPort?.toString() ?? '';
 });
 
 $effect(() => {
-	if (!streamIdTouched) {
-		localSrtStreamId = properties.srtStreamId ?? '';
-	}
+	if (!streamIdTouched) localSrtStreamId = properties.srtStreamId ?? '';
 });
 
 $effect(() => {
-	if (!relayServerTouched) {
-		localRelayServer = properties.relayServer ?? '';
-	}
+	if (!relayServerTouched) localRelayServer = properties.relayServer ?? '';
 });
 
 $effect(() => {
-	if (!relayAccountTouched) {
-		localRelayAccount = properties.relayAccount ?? '';
-	}
+	if (!relayAccountTouched) localRelayAccount = properties.relayAccount ?? '';
 });
 
 $effect(() => {
-	// Latency can always sync since it's not a text field that users clear
 	localSrtLatency = properties.srtLatency ?? 2000;
 });
-
-// No effects watching local state to prevent timing issues and loops
-// Parent functions are called directly in input handlers (like EncoderCard pattern)
 
 const isManualConfig = $derived(
 	localRelayServer === '-1' || localRelayServer === undefined || localRelayServer === '',
@@ -103,19 +90,38 @@ const isManualConfig = $derived(
 const isManualAccount = $derived(
 	localRelayAccount === '-1' || localRelayAccount === undefined || localRelayAccount === '',
 );
+
+// Status colors based on configuration state
+const statusColors = $derived.by(() => {
+	if (isManualConfig) {
+		return {
+			bg: 'from-amber-500 to-orange-600',
+			border: 'border-amber-500/30',
+			icon: 'bg-amber-500',
+		};
+	}
+	return {
+		bg: 'from-blue-500 to-indigo-600',
+		border: 'border-blue-500/30',
+		icon: 'bg-blue-500',
+	};
+});
 </script>
 
-<Card.Root class="group flex h-full flex-col transition-all duration-200 hover:shadow-md">
-	<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-4">
-		<div class="flex items-center space-x-2">
-			<div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/20">
-				<Server class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+<Card.Root class={cn('flex h-full flex-col overflow-hidden border', statusColors.border)}>
+	<!-- Status Bar -->
+	<div class={cn('h-1 bg-gradient-to-r', statusColors.bg)}></div>
+
+	<Card.Header class="p-4 pb-3">
+		<div class="flex items-center gap-2.5">
+			<div class={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', statusColors.icon)}>
+				<Server class="h-4 w-4 text-white" />
 			</div>
-			<Card.Title class="text-base font-semibold">{$LL.settings.receiverServer()}</Card.Title>
+			<Card.Title class="text-sm font-semibold">{$LL.settings.receiverServer()}</Card.Title>
 		</div>
 	</Card.Header>
 
-	<Card.Content class="flex-1 space-y-4">
+	<Card.Content class="flex-1 space-y-4 px-4 pt-0 pb-4">
 		<!-- Relay Server Selection -->
 		<div class="space-y-2">
 			<Label class="text-sm font-medium" for="relayServer">{$LL.settings.relayServer()}</Label>
@@ -140,7 +146,7 @@ const isManualAccount = $derived(
 					<Select.Group>
 						<Select.Item value="-1">
 							<div class="flex items-center gap-2">
-								<div class="h-2 w-2 rounded-full bg-orange-500"></div>
+								<div class="h-2 w-2 rounded-full bg-amber-500"></div>
 								{$LL.settings.manualConfiguration()}
 							</div>
 						</Select.Item>
@@ -148,7 +154,7 @@ const isManualAccount = $derived(
 							{#each Object.entries(relayMessage?.servers) as [server, serverInfo]}
 								<Select.Item value={server}>
 									<div class="flex items-center gap-2">
-										<div class="h-2 w-2 rounded-full bg-green-500"></div>
+										<div class="h-2 w-2 rounded-full bg-emerald-500"></div>
 										{serverInfo.name}
 									</div>
 								</Select.Item>
@@ -164,12 +170,10 @@ const isManualAccount = $derived(
 
 		{#if isManualConfig}
 			<!-- Manual Server Configuration -->
-			<div
-				class="space-y-4 rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-800 dark:bg-orange-950/20"
-			>
+			<div class="space-y-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
 				<div class="mb-3 flex items-center space-x-2">
-					<div class="h-2 w-2 rounded-full bg-orange-500"></div>
-					<h4 class="text-sm font-medium text-orange-800 dark:text-orange-200">
+					<div class="h-2 w-2 rounded-full bg-amber-500"></div>
+					<h4 class="text-sm font-medium text-amber-700 dark:text-amber-400">
 						{$LL.settings.manualServerConfiguration()}
 					</h4>
 				</div>
@@ -252,7 +256,7 @@ const isManualAccount = $derived(
 						<Select.Group>
 							<Select.Item value="-1">
 								<div class="flex items-center gap-2">
-									<div class="h-2 w-2 rounded-full bg-orange-500"></div>
+									<div class="h-2 w-2 rounded-full bg-amber-500"></div>
 									{$LL.settings.manualConfiguration()}
 								</div>
 							</Select.Item>
@@ -260,7 +264,7 @@ const isManualAccount = $derived(
 								{#each Object.entries(relayMessage?.accounts) as [account, accountInfo]}
 									<Select.Item value={account}>
 										<div class="flex items-center gap-2">
-											<div class="h-2 w-2 rounded-full bg-green-500"></div>
+											<div class="h-2 w-2 rounded-full bg-emerald-500"></div>
 											{accountInfo.name}
 										</div>
 									</Select.Item>
@@ -294,20 +298,18 @@ const isManualAccount = $derived(
 		{/if}
 
 		<!-- SRT Latency Control -->
-		<div class="bg-accent/30 space-y-3 rounded-lg p-4">
+		<div class="space-y-3 rounded-lg border bg-slate-50 p-4 dark:bg-slate-900/50">
 			<Label class="flex items-center gap-2 text-sm font-medium" for="srtLatency">
 				{$LL.settings.srtLatency()}
-				<span
-					class="rounded-md bg-blue-100 px-2 py-1 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
-				>
+				<span class="rounded-md bg-blue-500/10 px-2 py-1 text-xs text-blue-700 dark:text-blue-400">
 					{localSrtLatency || 2000}ms
 				</span>
 			</Label>
-			<!-- Custom slider with visual progress and thumb -->
+			<!-- Custom slider with visual progress -->
 			<div class="relative h-6 w-full">
 				<!-- Track Background -->
 				<div
-					class="absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full bg-gray-200 dark:bg-gray-700"
+					class="absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full bg-slate-200 dark:bg-slate-700"
 				></div>
 				<!-- Progress Fill -->
 				<div
@@ -316,7 +318,7 @@ const isManualAccount = $derived(
 						const percentage = ((safeLatency - 2000) / (12000 - 2000)) * 100;
 						return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
 					})()}%;`}
-					class="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-full bg-gradient-to-r from-blue-400 to-blue-500 transition-all duration-200 dark:from-blue-500 dark:to-blue-600"
+					class="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-200"
 				></div>
 				<!-- Thumb -->
 				<div
@@ -325,9 +327,9 @@ const isManualAccount = $derived(
 						const percentage = ((safeLatency - 2000) / (12000 - 2000)) * 100;
 						return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
 					})()}%;`}
-					class="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 border-white bg-blue-500 shadow-md transition-all duration-200 hover:scale-110 dark:border-gray-800 dark:bg-blue-400"
+					class="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 border-white bg-blue-500 shadow-md transition-all duration-200 hover:scale-110 dark:border-slate-800"
 				></div>
-				<!-- Invisible Input for Interaction -->
+				<!-- Invisible Input -->
 				<input
 					id="srtLatency"
 					class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
@@ -354,14 +356,14 @@ const isManualAccount = $derived(
 					const value = normalizeValue(localSrtLatency, 2000, 12000, 50);
 					if (value !== localSrtLatency) {
 						localSrtLatency = value;
-						onSrtLatencyChange(value); // Only call parent if value actually changed
+						onSrtLatencyChange(value);
 					}
 				}}
 				oninput={(e) => {
 					const inputValue = parseInt(e.currentTarget.value);
 					if (!isNaN(inputValue)) {
 						localSrtLatency = inputValue;
-						onSrtLatencyChange(inputValue); // Call parent to keep everything in sync
+						onSrtLatencyChange(inputValue);
 					}
 				}}
 				step="1"

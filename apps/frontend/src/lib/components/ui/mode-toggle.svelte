@@ -1,6 +1,6 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { Monitor, Moon, Sun } from '@lucide/svelte';
+import { Check, Monitor, Moon, Sun } from '@lucide/svelte';
 import { resetMode, setMode } from 'mode-watcher';
 
 import { Button } from '$lib/components/ui/button/index.js';
@@ -67,31 +67,30 @@ const getThemeDescriptionFallback = (value: string) => {
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger>
 		<Button
-			class="h-10 w-10 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 p-0 shadow-sm transition-all duration-200 hover:from-gray-200 hover:to-gray-300 hover:shadow-md dark:from-gray-800 dark:to-gray-900 dark:hover:from-gray-700 dark:hover:to-gray-800"
+			class="bg-card hover:bg-accent relative flex h-10 w-10 items-center justify-center rounded-xl border p-0 shadow-sm transition-all duration-200 hover:shadow-md"
 			title={$LL?.theme?.changeTheme?.() || 'Change theme'}
 			variant="ghost"
 		>
-			<!-- Enhanced Icon Animation -->
-			<div class="relative h-5 w-5">
-				<Sun
-					class="absolute h-5 w-5 scale-100 rotate-0 text-amber-500 transition-all duration-300 dark:scale-0 dark:rotate-90"
-				/>
-				<Moon
-					class="absolute h-5 w-5 scale-0 -rotate-90 text-blue-400 transition-all duration-300 dark:scale-100 dark:rotate-0"
-				/>
-			</div>
+			<!-- Sun icon - visible in light mode -->
+			<Sun
+				class="h-5 w-5 scale-100 rotate-0 text-amber-500 transition-all duration-300 dark:absolute dark:scale-0 dark:rotate-90"
+			/>
+			<!-- Moon icon - visible in dark mode -->
+			<Moon
+				class="absolute h-5 w-5 scale-0 -rotate-90 text-blue-400 transition-all duration-300 dark:scale-100 dark:rotate-0"
+			/>
 			<span class="sr-only">{$LL?.theme?.toggleTheme?.() || 'Toggle theme'}</span>
 		</Button>
 	</DropdownMenu.Trigger>
 
 	<DropdownMenu.Content
-		class="w-48 rounded-xl border-2 bg-white/95 p-2 shadow-xl backdrop-blur-md dark:bg-gray-900/95"
+		class="bg-card w-52 rounded-xl border p-1.5 shadow-xl"
 		align="end"
 		strategy="fixed"
 	>
 		<!-- Theme Header -->
-		<div class="mb-2 px-2 py-1">
-			<h4 class="text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+		<div class="mb-1 px-2 py-1.5">
+			<h4 class="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
 				{$LL?.theme?.selectTheme?.() || 'Select Theme'}
 			</h4>
 		</div>
@@ -101,37 +100,36 @@ const getThemeDescriptionFallback = (value: string) => {
 			<DropdownMenu.Item
 				class={cn(
 					'flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200',
-					isActive
-						? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md'
-						: 'hover:bg-gray-100 dark:hover:bg-gray-800',
+					isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-accent focus:bg-accent',
 				)}
 				onclick={() => handleModeChange(themeOption.value)}
 			>
 				<!-- Theme Icon -->
 				<div
 					class={cn(
-						'grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors',
-						isActive
-							? 'bg-white/20 text-white'
-							: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+						'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors',
+						isActive ? 'bg-primary-foreground/20' : 'bg-muted',
 					)}
 				>
 					{#if themeOption.icon}
 						{@const IconComponent = themeOption.icon}
-						<IconComponent class="h-4 w-4" />
+						<IconComponent
+							class={cn('h-4 w-4', isActive ? 'text-primary-foreground' : 'text-muted-foreground')}
+						/>
 					{/if}
 				</div>
 
 				<!-- Theme Info -->
-				<div class="flex-1">
-					<div
-						class={cn('font-medium', isActive ? 'text-white' : 'text-gray-900 dark:text-gray-100')}
-					>
+				<div class="min-w-0 flex-1">
+					<div class={cn('font-medium', isActive ? 'text-primary-foreground' : 'text-foreground')}>
 						{$LL?.theme?.[themeOption.value as keyof typeof $LL.theme]?.() ||
 							getThemeFallback(themeOption.value)}
 					</div>
 					<div
-						class={cn('text-xs', isActive ? 'text-white/80' : 'text-gray-500 dark:text-gray-400')}
+						class={cn(
+							'truncate text-xs',
+							isActive ? 'text-primary-foreground/80' : 'text-muted-foreground',
+						)}
 					>
 						{$LL?.theme?.[`${themeOption.value}Description` as keyof typeof $LL.theme]?.() ||
 							getThemeDescriptionFallback(themeOption.value)}
@@ -140,7 +138,7 @@ const getThemeDescriptionFallback = (value: string) => {
 
 				<!-- Active Indicator -->
 				{#if isActive}
-					<div class="h-2 w-2 rounded-full bg-white shadow-sm"></div>
+					<Check class="text-primary-foreground h-4 w-4 shrink-0" />
 				{/if}
 			</DropdownMenu.Item>
 		{/each}

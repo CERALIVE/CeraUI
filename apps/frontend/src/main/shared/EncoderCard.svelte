@@ -8,6 +8,7 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import type { GroupedPipelines } from '$lib/helpers/PipelineHelper';
+import { cn } from '$lib/utils';
 
 interface Props {
 	groupedPipelines: GroupedPipelines[keyof GroupedPipelines] | undefined;
@@ -52,23 +53,22 @@ const {
 	getSortedFramerates,
 }: Props = $props();
 
-// Local state for all select fields to prevent binding undefined values
+// Local state for all select fields
 let localInputMode = $state(properties.inputMode ?? '');
 let localEncoder = $state(properties.encoder ?? '');
 let localResolution = $state(properties.resolution ?? '');
 let localFramerate = $state(properties.framerate ?? '');
 let localBitrate = $state(properties.bitrate ?? 5000);
 
-// Track if user has touched each field to prevent auto-syncing user-edited fields
+// Track if user has touched each field
 let inputModeTouched = $state(false);
 let encoderTouched = $state(false);
 let resolutionTouched = $state(false);
 let framerateTouched = $state(false);
 
-// Track if this is the initial mount to allow forced sync during restoration
+// Track initial mount for forced sync during restoration
 let isComponentInitialMount = $state(true);
 
-// Allow initial sync for a brief period after mount
 $effect(() => {
 	if (isComponentInitialMount) {
 		setTimeout(() => {
@@ -77,124 +77,46 @@ $effect(() => {
 	}
 });
 
-// DEBUG: Track when properties change
-$effect(() => {
-	console.log('🎭 EncoderCard properties changed:', {
-		inputMode: properties.inputMode,
-		encoder: properties.encoder,
-		resolution: properties.resolution,
-		framerate: properties.framerate,
-	});
-});
-
-// Sync FROM properties TO local state when parent provides new data
+// Sync FROM properties TO local state
 $effect(() => {
 	const newValue = properties.inputMode ?? '';
 	const valueChanged = newValue !== localInputMode;
-
-	// ENHANCED SYNC CONDITIONS: Always sync when parent provides different value (auto-selection override)
 	const shouldSync =
 		!inputModeTouched ||
 		isComponentInitialMount ||
 		properties.inputMode === undefined ||
 		valueChanged;
-
-	console.log(
-		`🔍 InputMode sync check: shouldSync=${shouldSync} (touched=${inputModeTouched}, initial=${isComponentInitialMount}, undefined=${properties.inputMode === undefined}, valueChanged=${valueChanged})`,
-	);
-
-	if (shouldSync && valueChanged) {
-		console.log(
-			`🔄 Syncing inputMode: ${localInputMode} → ${newValue} (touched: ${inputModeTouched}) - AUTO-SELECTION OVERRIDE`,
-		);
-		localInputMode = newValue;
-	} else if (shouldSync && !valueChanged) {
-		console.log(`⏸️ InputMode already synced: ${localInputMode} = ${newValue}`);
-	} else {
-		console.log(`❌ InputMode sync blocked by touched state`);
-	}
+	if (shouldSync && valueChanged) localInputMode = newValue;
 });
 
 $effect(() => {
 	const newValue = properties.encoder ?? '';
 	const valueChanged = newValue !== localEncoder;
-
-	// ENHANCED SYNC CONDITIONS: Always sync when parent provides different value (auto-selection override)
 	const shouldSync =
 		!encoderTouched || isComponentInitialMount || properties.encoder === undefined || valueChanged;
-
-	console.log(
-		`🔍 Encoder sync check: shouldSync=${shouldSync} (touched=${encoderTouched}, initial=${isComponentInitialMount}, undefined=${properties.encoder === undefined}, valueChanged=${valueChanged})`,
-	);
-
-	if (shouldSync && valueChanged) {
-		console.log(
-			`🔄 Syncing encoder: ${localEncoder} → ${newValue} (touched: ${encoderTouched}) - AUTO-SELECTION OVERRIDE`,
-		);
-		localEncoder = newValue;
-	} else if (shouldSync && !valueChanged) {
-		console.log(`⏸️ Encoder already synced: ${localEncoder} = ${newValue}`);
-	} else {
-		console.log(`❌ Encoder sync blocked by touched state`);
-	}
+	if (shouldSync && valueChanged) localEncoder = newValue;
 });
 
 $effect(() => {
 	const newValue = properties.resolution ?? '';
 	const valueChanged = newValue !== localResolution;
-
-	// ENHANCED SYNC CONDITIONS: Always sync when parent provides different value (auto-selection override)
 	const shouldSync =
 		!resolutionTouched ||
 		isComponentInitialMount ||
 		properties.resolution === undefined ||
 		valueChanged;
-
-	console.log(
-		`🔍 Resolution sync check: shouldSync=${shouldSync} (touched=${resolutionTouched}, initial=${isComponentInitialMount}, undefined=${properties.resolution === undefined}, valueChanged=${valueChanged})`,
-	);
-
-	if (shouldSync && valueChanged) {
-		console.log(
-			`🔄 Syncing resolution: ${localResolution} → ${newValue} (touched: ${resolutionTouched}) - AUTO-SELECTION OVERRIDE`,
-		);
-		localResolution = newValue;
-	} else if (shouldSync && !valueChanged) {
-		console.log(`⏸️ Resolution already synced: ${localResolution} = ${newValue}`);
-	} else {
-		console.log(`❌ Resolution sync blocked by touched state`);
-	}
+	if (shouldSync && valueChanged) localResolution = newValue;
 });
 
 $effect(() => {
 	const newValue = properties.framerate ?? '';
 	const valueChanged = newValue !== localFramerate;
-
-	// ENHANCED SYNC CONDITIONS:
-	// 1. Not touched by user
-	// 2. Initial mount period
-	// 3. Clearing (undefined values)
-	// 4. AUTO-SELECTION OVERRIDE: When parent provides different value (auto-selection should win)
 	const shouldSync =
 		!framerateTouched ||
 		isComponentInitialMount ||
 		properties.framerate === undefined ||
-		valueChanged; // Always sync when parent provides different value
-
-	console.log(
-		`🔍 Framerate sync check: shouldSync=${shouldSync} (touched=${framerateTouched}, initial=${isComponentInitialMount}, undefined=${properties.framerate === undefined}, valueChanged=${valueChanged})`,
-	);
-
-	if (shouldSync && valueChanged) {
-		console.log(
-			`🔄 Syncing framerate: ${localFramerate} → ${newValue} (touched: ${framerateTouched}) - AUTO-SELECTION OVERRIDE`,
-		);
-		localFramerate = newValue;
-	} else if (shouldSync && !valueChanged) {
-		console.log(`⏸️ Framerate already synced: ${localFramerate} = ${newValue}`);
-	} else {
-		console.log(`❌ Framerate sync blocked by touched state`);
-	}
+		valueChanged;
+	if (shouldSync && valueChanged) localFramerate = newValue;
 });
 
 $effect(() => {
@@ -202,28 +124,34 @@ $effect(() => {
 	localBitrate = newValue;
 });
 
-// Derived value to check if encoding format should be disabled when only one option is available
 const hasOnlyOneEncoder = $derived(
 	properties.inputMode && groupedPipelines?.[properties.inputMode]
 		? Object.keys(groupedPipelines[properties.inputMode]).length === 1
 		: false,
 );
 
-// No effects watching local state to prevent race conditions
-// Parent functions are called directly in onValueChange handlers
+// Status colors for encoder card (info/blue category)
+const statusColors = {
+	bg: 'from-blue-500 to-indigo-600',
+	border: 'border-blue-500/30',
+	icon: 'bg-blue-500',
+};
 </script>
 
-<Card.Root class="group flex h-full flex-col transition-all duration-200 hover:shadow-md">
-	<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-4">
-		<div class="flex items-center space-x-2">
-			<div class="bg-primary/10 rounded-lg p-2">
-				<Binary class="text-primary h-4 w-4" />
+<Card.Root class={cn('flex h-full flex-col overflow-hidden border', statusColors.border)}>
+	<!-- Status Bar -->
+	<div class={cn('h-1 bg-gradient-to-r', statusColors.bg)}></div>
+
+	<Card.Header class="p-4 pb-3">
+		<div class="flex items-center gap-2.5">
+			<div class={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', statusColors.icon)}>
+				<Binary class="h-4 w-4 text-white" />
 			</div>
-			<Card.Title class="text-base font-semibold">{$LL.settings.encoderSettings()}</Card.Title>
+			<Card.Title class="text-sm font-semibold">{$LL.settings.encoderSettings()}</Card.Title>
 		</div>
 	</Card.Header>
 
-	<Card.Content class="flex-1 space-y-4">
+	<Card.Content class="flex-1 space-y-4 px-4 pt-0 pb-4">
 		<!-- Input Mode Selection -->
 		<div class="space-y-2">
 			<Label class="text-sm font-medium" for="inputMode">{$LL.settings.inputMode()}</Label>
@@ -255,7 +183,7 @@ const hasOnlyOneEncoder = $derived(
 				<p class="text-destructive text-sm">{formErrors.inputMode}</p>
 			{/if}
 			{#if properties.inputMode && properties.inputMode.includes('usb')}
-				<p class="text-muted-foreground bg-accent/50 rounded-md p-2 text-xs">
+				<p class="text-muted-foreground rounded-md bg-blue-500/10 p-2 text-xs">
 					ℹ️ {$LL.settings.djiCameraMessage()}
 				</p>
 			{/if}
@@ -367,18 +295,18 @@ const hasOnlyOneEncoder = $derived(
 		</div>
 
 		<!-- Bitrate Control -->
-		<div class="bg-accent/30 space-y-3 rounded-lg p-4">
+		<div class="space-y-3 rounded-lg border bg-slate-50 p-4 dark:bg-slate-900/50">
 			<Label class="flex items-center gap-2 text-sm font-medium" for="bitrate">
 				{$LL.settings.bitrate()}
-				<span class="bg-primary/10 text-primary rounded-md px-2 py-1 text-xs">
+				<span class="rounded-md bg-blue-500/10 px-2 py-1 text-xs text-blue-700 dark:text-blue-400">
 					{localBitrate || 5000} kbps
 				</span>
 			</Label>
-			<!-- Custom slider with visual progress and thumb -->
+			<!-- Custom slider -->
 			<div class="relative h-6 w-full">
 				<!-- Track Background -->
 				<div
-					class="absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full bg-gray-200 dark:bg-gray-700"
+					class="absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full bg-slate-200 dark:bg-slate-700"
 				></div>
 				<!-- Progress Fill -->
 				<div
@@ -387,7 +315,7 @@ const hasOnlyOneEncoder = $derived(
 						const percentage = ((safeBitrate - 2000) / (12000 - 2000)) * 100;
 						return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
 					})()}%;`}
-					class="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-200 dark:from-green-500 dark:to-green-600"
+					class="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-200"
 				></div>
 				<!-- Thumb -->
 				<div
@@ -396,9 +324,9 @@ const hasOnlyOneEncoder = $derived(
 						const percentage = ((safeBitrate - 2000) / (12000 - 2000)) * 100;
 						return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
 					})()}%;`}
-					class="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 border-white bg-green-500 shadow-md transition-all duration-200 hover:scale-110 dark:border-gray-800 dark:bg-green-400"
+					class="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 border-white bg-blue-500 shadow-md transition-all duration-200 hover:scale-110 dark:border-slate-800"
 				></div>
-				<!-- Invisible Input for Interaction -->
+				<!-- Invisible Input -->
 				<input
 					id="bitrate"
 					class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
@@ -434,7 +362,7 @@ const hasOnlyOneEncoder = $derived(
 					if (!isNaN(inputValue)) {
 						localBitrate = inputValue;
 						updateMaxBitrate();
-						onBitrateChange(inputValue); // Call parent to keep everything in sync
+						onBitrateChange(inputValue);
 					}
 				}}
 				step="50"
@@ -445,14 +373,16 @@ const hasOnlyOneEncoder = $derived(
 				<p class="text-destructive text-sm">{formErrors.bitrate}</p>
 			{/if}
 			{#if isStreaming}
-				<p class="rounded-md bg-amber-50 p-2 text-xs text-amber-600 dark:bg-amber-950/20">
+				<p class="rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
 					⚡ {$LL.settings.changeBitrateNotice()}
 				</p>
 			{/if}
 		</div>
 
 		<!-- Bitrate Overlay -->
-		<div class="hover:bg-accent/50 flex items-center gap-3 rounded-lg border p-3 transition-colors">
+		<div
+			class="flex items-center gap-3 rounded-lg border bg-slate-50 p-3 transition-colors hover:bg-slate-100 dark:bg-slate-900/50 dark:hover:bg-slate-800/50"
+		>
 			<Checkbox
 				id="bitrate-overlay"
 				checked={properties.bitrateOverlay}

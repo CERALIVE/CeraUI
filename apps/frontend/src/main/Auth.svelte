@@ -115,7 +115,7 @@ async function onSubmit(event: SubmitEvent) {
 			<div class="flex flex-col space-y-4 text-center">
 				<!-- Enhanced Header with Icon -->
 				<div
-					class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg"
+					class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg"
 				>
 					<Shield class="h-8 w-8 text-white" />
 				</div>
@@ -158,8 +158,8 @@ async function onSubmit(event: SubmitEvent) {
 										!validation.password.isValid && !validation.password.isEmpty
 											? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
 											: validation.password.isValid && !validation.password.isEmpty
-												? 'border-green-400 bg-green-50 focus:border-green-500 focus:ring-green-500 dark:bg-green-950/20'
-												: 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50',
+												? 'border-emerald-400 bg-emerald-50 focus:border-emerald-500 focus:ring-emerald-500 dark:bg-emerald-950/20'
+												: 'border-slate-200 bg-slate-50 focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800/50',
 									)}
 									autocapitalize="none"
 									autocomplete={setPassword ? 'new-password' : 'current-password'}
@@ -174,7 +174,7 @@ async function onSubmit(event: SubmitEvent) {
 
 								<!-- Password Visibility Toggle -->
 								<Button
-									class="absolute top-1/2 right-1 h-10 w-10 -translate-y-1/2 hover:bg-gray-100 dark:hover:bg-gray-800"
+									class="absolute top-1/2 right-1 h-10 w-10 -translate-y-1/2 hover:bg-slate-100 dark:hover:bg-slate-800"
 									aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
 									aria-pressed={showPassword}
 									onclick={() => (showPassword = !showPassword)}
@@ -184,9 +184,9 @@ async function onSubmit(event: SubmitEvent) {
 									variant="ghost"
 								>
 									{#if showPassword}
-										<EyeOff class="h-4 w-4 text-gray-500" aria-hidden="true" />
+										<EyeOff class="h-4 w-4 text-slate-500" aria-hidden="true" />
 									{:else}
-										<Eye class="h-4 w-4 text-gray-500" aria-hidden="true" />
+										<Eye class="h-4 w-4 text-slate-500" aria-hidden="true" />
 									{/if}
 								</Button>
 
@@ -194,7 +194,7 @@ async function onSubmit(event: SubmitEvent) {
 								{#if !validation.password.isEmpty}
 									<div class="absolute top-1/2 right-12 -translate-y-1/2">
 										{#if validation.password.isValid}
-											<CheckCircle class="h-5 w-5 text-green-500" />
+											<CheckCircle class="h-5 w-5 text-emerald-500" />
 										{:else}
 											<AlertCircle class="h-5 w-5 text-red-500" />
 										{/if}
@@ -209,7 +209,7 @@ async function onSubmit(event: SubmitEvent) {
 									<span>{validation.password.message}</span>
 								</div>
 							{:else if setPassword && validation.password.isValid}
-								<div class="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+								<div class="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
 									<CheckCircle class="h-4 w-4" />
 									<span>{$LL?.auth?.validation?.passwordValid?.() || 'Password is valid'}</span>
 								</div>
@@ -218,7 +218,7 @@ async function onSubmit(event: SubmitEvent) {
 
 						<!-- Enhanced Submit Button -->
 						<Button
-							class="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-base font-semibold text-white shadow-lg transition-all duration-300 hover:from-blue-700 hover:to-purple-700 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
+							class="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-base font-semibold text-white shadow-lg transition-all duration-300 hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
 							disabled={isLoading || !isFormValid}
 							type="submit"
 						>
@@ -241,7 +241,7 @@ async function onSubmit(event: SubmitEvent) {
 					</div>
 					<!-- Enhanced Remember Me -->
 					<div
-						class="mt-4 flex items-center space-x-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50"
+						class="mt-4 flex items-center space-x-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50"
 					>
 						<Checkbox id="remember" class="h-5 w-5" bind:checked={remember} />
 						<Label
@@ -256,7 +256,7 @@ async function onSubmit(event: SubmitEvent) {
 				<!-- Enhanced Divider -->
 				<div class="relative">
 					<div class="absolute inset-0 flex items-center">
-						<span class="w-full border-t border-gray-200 dark:border-gray-700"></span>
+						<span class="w-full border-t border-slate-200 dark:border-slate-700"></span>
 					</div>
 					<div class="relative flex justify-center text-xs uppercase">
 						<span class="bg-background text-muted-foreground px-4 font-medium"> {siteName}</span>

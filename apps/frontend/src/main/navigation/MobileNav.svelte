@@ -261,7 +261,7 @@ $effect(() => {
 				{#if $isNavigationTransitioning}
 					<div class="bg-primary h-2 w-2 animate-pulse rounded-full"></div>
 				{:else if $canGoBack}
-					<div class="h-2 w-2 animate-ping rounded-full bg-blue-500"></div>
+					<div class="bg-primary h-2 w-2 animate-ping rounded-full"></div>
 				{/if}
 			</button>
 		</div>

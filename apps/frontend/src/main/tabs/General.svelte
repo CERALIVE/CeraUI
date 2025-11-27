@@ -44,34 +44,65 @@ function formatConfigValue(
 	return value;
 }
 
-function getStatusColor(isStreaming: boolean) {
-	return isStreaming ? 'text-green-500' : 'text-amber-500';
-}
+// Status color helpers
+const streamingStatusColors = $derived.by(() => {
+	if (currentStatus?.is_streaming) {
+		return {
+			bg: 'from-emerald-500 to-teal-600',
+			text: 'text-emerald-600 dark:text-emerald-400',
+			icon: 'text-emerald-500',
+		};
+	}
+	return {
+		bg: 'from-amber-500 to-orange-600',
+		text: 'text-amber-600 dark:text-amber-400',
+		icon: 'text-muted-foreground',
+	};
+});
 
-function getStatusIcon(isStreaming: boolean) {
-	return isStreaming ? CheckCircle : AlertTriangle;
-}
+const serverStatusColors = $derived.by(() => {
+	if (currentConfig?.srtla_addr) {
+		return {
+			bg: 'from-emerald-500 to-teal-600',
+			icon: 'text-emerald-500',
+		};
+	}
+	return {
+		bg: 'from-slate-400 to-slate-500',
+		icon: 'text-muted-foreground',
+	};
+});
+
+const updatesStatusColors = $derived.by(() => {
+	const hasUpdates = (currentStatus?.available_updates?.package_count ?? 0) > 0;
+	if (hasUpdates) {
+		return {
+			bg: 'from-amber-500 to-orange-600',
+		};
+	}
+	return {
+		bg: 'from-emerald-500 to-teal-600',
+	};
+});
 </script>
 
-<div class=" flex-col md:flex">
-	<div class="flex-1 space-y-4 p-8 pt-6">
+<div class="flex-col md:flex">
+	<div class="flex-1 space-y-4 p-4 pt-6 sm:p-8">
 		<!-- Status Overview Cards -->
 		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 			<!-- System Status -->
-			<Card.Root class="relative overflow-hidden">
-				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+			<Card.Root class="overflow-hidden border">
+				<div class={cn('h-1 bg-gradient-to-r', streamingStatusColors.bg)}></div>
+				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
 					<Card.Title class="text-sm font-medium">{$LL.general.status()}</Card.Title>
 					{#if currentStatus?.is_streaming}
-						{@const StatusIcon = getStatusIcon(currentStatus.is_streaming)}
-						<StatusIcon class="h-4 w-4 text-green-500" />
+						<CheckCircle class={cn('h-4 w-4', streamingStatusColors.icon)} />
 					{:else}
-						<RadioTower class="text-muted-foreground h-4 w-4" />
+						<RadioTower class={cn('h-4 w-4', streamingStatusColors.icon)} />
 					{/if}
 				</Card.Header>
-				<Card.Content>
-					<div
-						class={cn(`${getStatusColor(currentStatus?.is_streaming ?? false)} text-2xl font-bold`)}
-					>
+				<Card.Content class="p-4 pt-0">
+					<div class={cn('text-2xl font-bold', streamingStatusColors.text)}>
 						{currentStatus?.is_streaming ? $LL.general.streaming() : $LL.general.offline()}
 					</div>
 					{#if currentNetworks && currentStatus?.is_streaming}
@@ -87,26 +118,20 @@ function getStatusIcon(isStreaming: boolean) {
 						</p>
 					{/if}
 				</Card.Content>
-				<!-- Status indicator line -->
-				<div
-					class={cn(
-						'absolute bottom-0 left-0 h-1 w-full',
-						currentStatus?.is_streaming ? 'bg-green-500' : 'bg-amber-500',
-					)}
-				></div>
 			</Card.Root>
 
 			<!-- Server Configuration Status -->
-			<Card.Root class="relative overflow-hidden">
-				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+			<Card.Root class="overflow-hidden border">
+				<div class={cn('h-1 bg-gradient-to-r', serverStatusColors.bg)}></div>
+				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
 					<Card.Title class="text-sm font-medium">{$LL.general.relayServer()}</Card.Title>
 					{#if currentConfig?.srtla_addr}
-						<Server class="h-4 w-4 text-green-500" />
+						<Server class={cn('h-4 w-4', serverStatusColors.icon)} />
 					{:else}
-						<ServerOff class="text-muted-foreground h-4 w-4" />
+						<ServerOff class={cn('h-4 w-4', serverStatusColors.icon)} />
 					{/if}
 				</Card.Header>
-				<Card.Content>
+				<Card.Content class="p-4 pt-0">
 					<div class="truncate text-2xl font-bold">
 						{currentConfig?.srtla_addr ?? $LL.general.notConfigured()}
 					</div>
@@ -116,21 +141,16 @@ function getStatusIcon(isStreaming: boolean) {
 							: $LL.general.youHaventConfigured()}
 					</p>
 				</Card.Content>
-				<div
-					class={cn(
-						'absolute bottom-0 left-0 h-1 w-full',
-						currentConfig?.srtla_addr ? 'bg-green-500' : 'bg-gray-300',
-					)}
-				></div>
 			</Card.Root>
 
 			<!-- System Updates -->
-			<Card.Root class="relative overflow-hidden">
-				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+			<Card.Root class="overflow-hidden border">
+				<div class={cn('h-1 bg-gradient-to-r', updatesStatusColors.bg)}></div>
+				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
 					<Card.Title class="text-sm font-medium">{$LL.general.updates()}</Card.Title>
 					<RefreshCw class="text-muted-foreground h-4 w-4" />
 				</Card.Header>
-				<Card.Content class="flex items-center">
+				<Card.Content class="flex items-center p-4 pt-0">
 					<div class="flex-1">
 						<div class="text-2xl font-bold">
 							{#if currentStatus?.available_updates?.package_count === 0}
@@ -150,7 +170,7 @@ function getStatusIcon(isStreaming: boolean) {
 						<SimpleAlertDialog
 							buttonText={$LL.general.updateButton()}
 							confirmButtonText={$LL.general.updateButton()}
-							extraButtonClasses="ml-4 shrink-0"
+							extraButtonClasses="ml-4 shrink-0 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white"
 							onconfirm={installSoftwareUpdates}
 						>
 							{#snippet dialogTitle()}
@@ -162,29 +182,29 @@ function getStatusIcon(isStreaming: boolean) {
 						</SimpleAlertDialog>
 					{/if}
 				</Card.Content>
-				<div
-					class={cn(
-						'absolute bottom-0 left-0 h-1 w-full',
-						(currentStatus?.available_updates?.package_count ?? 0) > 0
-							? 'bg-amber-500'
-							: 'bg-green-500',
-					)}
-				></div>
 			</Card.Root>
 		</div>
+
 		<!-- Main Dashboard Content -->
 		<div class="grid gap-6 xl:grid-cols-5">
 			<!-- Configuration Section -->
 			<div class="xl:col-span-3">
-				<Card.Root>
-					<Card.Header>
-						<Card.Title class="flex items-center gap-2">
-							<SquareChartGantt class="h-5 w-5" />
-							{$LL.general.configuration()}
+				<Card.Root class="overflow-hidden border border-blue-500/30">
+					<div class="h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+					<Card.Header class="p-4">
+						<Card.Title class="flex items-center gap-2.5">
+							<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500">
+								<SquareChartGantt class="h-4 w-4 text-white" />
+							</div>
+							<div>
+								<span class="text-sm font-semibold">{$LL.general.configuration()}</span>
+								<p class="text-muted-foreground text-xs font-normal">
+									{$LL.general.serverAndAudio()}
+								</p>
+							</div>
 						</Card.Title>
-						<Card.Description>{$LL.general.serverAndAudio()}</Card.Description>
 					</Card.Header>
-					<Card.Content class="space-y-8">
+					<Card.Content class="space-y-8 px-4 pt-0 pb-4">
 						{#if currentConfig}
 							<!-- Server Settings Grid -->
 							<div class="grid gap-6 sm:grid-cols-2">
@@ -250,7 +270,7 @@ function getStatusIcon(isStreaming: boolean) {
 							</div>
 						{:else}
 							<div class="flex flex-col items-center justify-center space-y-4 py-16 text-center">
-								<div class="bg-muted rounded-full p-4">
+								<div class="flex h-16 w-16 items-center justify-center rounded-lg bg-slate-500/10">
 									<AlertTriangle class="text-muted-foreground h-8 w-8" />
 								</div>
 								<div class="space-y-2">
@@ -273,21 +293,26 @@ function getStatusIcon(isStreaming: boolean) {
 							.includes('temp') || name.toLowerCase().includes('current') || name
 							.toLowerCase()
 							.includes('voltage'))}
-					<Card.Root>
-						<Card.Header>
-							<Card.Title class="flex items-center gap-2">
-								<Thermometer class="h-5 w-5" />
-								{$LL.general.hardwareSensors()}
+					<Card.Root class="overflow-hidden border border-emerald-500/30">
+						<div class="h-1 bg-gradient-to-r from-emerald-500 to-teal-600"></div>
+						<Card.Header class="p-4">
+							<Card.Title class="flex items-center gap-2.5">
+								<div
+									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500"
+								>
+									<Thermometer class="h-4 w-4 text-white" />
+								</div>
+								<span class="text-sm font-semibold">{$LL.general.hardwareSensors()}</span>
 							</Card.Title>
 						</Card.Header>
-						<Card.Content>
+						<Card.Content class="px-4 pt-0 pb-4">
 							<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3">
 								{#each sensors.filter(([name]) => name.toLowerCase().includes('soc') || name
 											.toLowerCase()
 											.includes('temp') || name.toLowerCase().includes('current') || name
 											.toLowerCase()
 											.includes('voltage')) as [sensorName, sensorValue]}
-									<div class="bg-card space-y-2 rounded-lg border p-3">
+									<div class="space-y-2 rounded-lg border bg-slate-50 p-3 dark:bg-slate-900/50">
 										<div class="flex items-center justify-between">
 											<span
 												class="text-muted-foreground text-xs font-medium tracking-wide uppercase"
@@ -308,20 +333,25 @@ function getStatusIcon(isStreaming: boolean) {
 				{#if sensors.some(([name]) => name.toLowerCase().includes('srt') || name
 							.toLowerCase()
 							.includes('rtmp'))}
-					<Card.Root>
-						<Card.Header>
-							<Card.Title class="flex items-center gap-2">
-								<RadioTower class="h-5 w-5" />
-								{$LL.general.streamPerformance()}
+					<Card.Root class="overflow-hidden border border-blue-500/30">
+						<div class="h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+						<Card.Header class="p-4">
+							<Card.Title class="flex items-center gap-2.5">
+								<div
+									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500"
+								>
+									<RadioTower class="h-4 w-4 text-white" />
+								</div>
+								<span class="text-sm font-semibold">{$LL.general.streamPerformance()}</span>
 							</Card.Title>
 						</Card.Header>
-						<Card.Content>
+						<Card.Content class="px-4 pt-0 pb-4">
 							<div class="space-y-3">
 								{#each sensors.filter(([name]) => name.toLowerCase().includes('srt') || name
 											.toLowerCase()
 											.includes('rtmp')) as [sensorName, sensorValue]}
 									<div
-										class="border-border/50 flex items-center justify-between border-b py-2 last:border-0"
+										class="flex items-center justify-between rounded-lg border bg-slate-50 p-3 dark:bg-slate-900/50"
 									>
 										<div class="space-y-1">
 											<span class="text-sm font-medium">{sensorName}</span>
@@ -341,16 +371,21 @@ function getStatusIcon(isStreaming: boolean) {
 
 				<!-- Empty State for System Health -->
 				{#if sensors.length === 0}
-					<Card.Root>
-						<Card.Header>
-							<Card.Title class="flex items-center gap-2">
-								<Activity class="h-5 w-5" />
-								{$LL.general.systemHealth()}
+					<Card.Root class="overflow-hidden border">
+						<div class="h-1 bg-gradient-to-r from-slate-400 to-slate-500"></div>
+						<Card.Header class="p-4">
+							<Card.Title class="flex items-center gap-2.5">
+								<div
+									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-400"
+								>
+									<Activity class="h-4 w-4 text-white" />
+								</div>
+								<span class="text-sm font-semibold">{$LL.general.systemHealth()}</span>
 							</Card.Title>
 						</Card.Header>
-						<Card.Content>
+						<Card.Content class="px-4 pt-0 pb-4">
 							<div class="flex flex-col items-center justify-center space-y-4 py-12 text-center">
-								<div class="bg-muted rounded-full p-4">
+								<div class="flex h-16 w-16 items-center justify-center rounded-lg bg-slate-500/10">
 									<Activity class="text-muted-foreground h-8 w-8" />
 								</div>
 								<div class="space-y-2">

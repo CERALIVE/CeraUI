@@ -344,28 +344,29 @@ function clearImages(): void {
 }
 </script>
 
-<Card.Root
-	class="border-dashed border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20"
->
+<Card.Root class="overflow-hidden border-blue-500/30">
+	<!-- Status bar -->
+	<div class="h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+
 	<Card.Header>
-		<Card.Title class="flex items-center gap-2 text-blue-700 dark:text-blue-300">
-			<Camera class="h-5 w-5" />
+		<Card.Title class="flex items-center gap-2">
+			<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500">
+				<Camera class="h-4 w-4 text-white" />
+			</div>
 			{$LL.devtools.screenshotUtility()}
 		</Card.Title>
-		<Card.Description class="text-blue-600 dark:text-blue-400">
+		<Card.Description>
 			{$LL.devtools.screenshotUtilityDescription()}
 		</Card.Description>
 	</Card.Header>
 
 	<Card.Content class="space-y-4">
 		{#if currentlyCapturing}
-			<div
-				class="rounded border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/20"
-			>
-				<div class="text-sm font-medium text-blue-800 dark:text-blue-200">
+			<div class="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
+				<div class="text-sm font-medium text-blue-700 dark:text-blue-300">
 					🚀 {progressText}
 				</div>
-				<div class="mt-1 text-xs text-blue-600 dark:text-blue-400">
+				<div class="text-muted-foreground mt-1 text-xs">
 					Images: {imagesCount}
 				</div>
 			</div>
@@ -373,7 +374,7 @@ function clearImages(): void {
 
 		<div class="space-y-3">
 			<Button.Root
-				class="w-full bg-gradient-to-r from-blue-600 to-purple-600"
+				class="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
 				disabled={currentlyCapturing}
 				onclick={captureAll}
 			>
@@ -384,7 +385,7 @@ function clearImages(): void {
 			<div class="text-muted-foreground text-center text-xs">
 				{$LL.devtools.screenshotCount()}
 				<br />
-				<span class="text-green-600 dark:text-green-400">{$LL.devtools.enhancedTiming()}</span>
+				<span class="text-emerald-600 dark:text-emerald-400">{$LL.devtools.enhancedTiming()}</span>
 			</div>
 		</div>
 

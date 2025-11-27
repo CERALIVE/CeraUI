@@ -12,7 +12,7 @@
 	left: -100%;
 	width: 100%;
 	height: 100%;
-	background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent);
+	background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.1), transparent);
 	animation: dev-sweep 3s infinite;
 }
 
@@ -51,9 +51,9 @@ const _isDev = BUILD_INFO.IS_DEV;
 		<div class="mb-6 sm:mb-8">
 			<div class="mb-3 flex items-start gap-3 sm:mb-4 sm:items-center">
 				<div
-					class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 sm:h-10 sm:w-10"
+					class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 shadow-md sm:h-12 sm:w-12"
 				>
-					<Wrench class="h-4 w-4 text-white sm:h-6 sm:w-6" />
+					<Wrench class="h-5 w-5 text-white sm:h-6 sm:w-6" />
 				</div>
 				<div class="min-w-0 flex-1">
 					<h1 class="text-xl font-bold tracking-tight break-words sm:text-3xl">
@@ -67,12 +67,12 @@ const _isDev = BUILD_INFO.IS_DEV;
 
 			<!-- Mobile-Optimized Dev Mode Badge -->
 			<div
-				class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-100 px-2 py-1 text-xs sm:px-3 sm:text-sm dark:border-amber-800 dark:bg-amber-900/20"
+				class="inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-2 py-1 text-xs sm:px-3 sm:text-sm"
 			>
 				<div
 					class="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-amber-500 sm:h-2 sm:w-2"
 				></div>
-				<span class="truncate font-medium text-amber-700 dark:text-amber-300">
+				<span class="truncate font-medium text-amber-700 dark:text-amber-400">
 					<span class="hidden sm:inline"
 						>{$LL.devtools.developmentMode()}: {BUILD_INFO.MODE} | {$LL.devtools.status()}: {$LL.devtools.active()}</span
 					>
@@ -101,32 +101,37 @@ const _isDev = BUILD_INFO.IS_DEV;
 				<SystemInfo />
 
 				<!-- Debug Tools Card -->
-				<Card.Root
-					class="border-dashed border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20"
-				>
+				<Card.Root class="overflow-hidden border-red-500/30">
+					<!-- Status bar -->
+					<div class="h-1 bg-gradient-to-r from-red-500 to-rose-600"></div>
+
 					<Card.Header>
-						<Card.Title class="flex items-center gap-2 text-red-700 dark:text-red-300">
-							<Bug class="h-5 w-5" />
+						<Card.Title class="flex items-center gap-2">
+							<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500">
+								<Bug class="h-4 w-4 text-white" />
+							</div>
 							🐛 {$LL.devtools.consoleTesting()}
 						</Card.Title>
-						<Card.Description class="text-red-600 dark:text-red-400">
+						<Card.Description>
 							{$LL.devtools.consoleTestingDesc()}
 						</Card.Description>
 					</Card.Header>
 
 					<Card.Content class="space-y-3">
-						<div class="bg-muted/30 rounded-md p-3">
-							<div class="mb-2 text-xs font-medium">{$LL.devtools.consoleOutputTests()}</div>
+						<div class="bg-muted/50 rounded-lg p-3">
+							<div class="text-muted-foreground mb-2 text-xs font-medium">
+								{$LL.devtools.consoleOutputTests()}
+							</div>
 							<div class="flex flex-wrap gap-2">
 								<button
-									class="bg-background hover:bg-accent rounded border px-2 py-1 text-xs transition-colors"
+									class="bg-card rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-400"
 									onclick={() =>
 										console.log('✅ Console log test:', { timestamp: new Date(), level: 'info' })}
 								>
 									{$LL.devtools.log()}
 								</button>
 								<button
-									class="bg-background hover:bg-accent rounded border px-2 py-1 text-xs transition-colors"
+									class="bg-card rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400"
 									onclick={() =>
 										console.warn('⚠️ Console warning test:', {
 											timestamp: new Date(),
@@ -136,7 +141,7 @@ const _isDev = BUILD_INFO.IS_DEV;
 									{$LL.devtools.warn()}
 								</button>
 								<button
-									class="bg-background hover:bg-accent rounded border px-2 py-1 text-xs transition-colors"
+									class="bg-card rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-700 dark:hover:text-red-400"
 									onclick={() =>
 										console.error('❌ Console error test:', {
 											timestamp: new Date(),
@@ -146,7 +151,7 @@ const _isDev = BUILD_INFO.IS_DEV;
 									{$LL.devtools.error()}
 								</button>
 								<button
-									class="bg-background hover:bg-accent rounded border px-2 py-1 text-xs transition-colors"
+									class="bg-card rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:border-blue-500/30 hover:bg-blue-500/10 hover:text-blue-700 dark:hover:text-blue-400"
 									onclick={() =>
 										console.table({
 											browser: navigator.userAgent.split(' ')[0],
@@ -164,18 +169,18 @@ const _isDev = BUILD_INFO.IS_DEV;
 		</div>
 
 		<!-- Mobile-Friendly Warning Footer -->
-		<div
-			class="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:mt-12 sm:p-4 dark:border-amber-800 dark:bg-amber-950/20"
-		>
+		<div class="mt-8 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 sm:mt-12 sm:p-4">
 			<div class="flex items-start gap-2 sm:gap-3">
-				<div class="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 sm:h-5 sm:w-5 dark:text-amber-400">
-					⚠️
+				<div
+					class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-amber-500 sm:h-9 sm:w-9"
+				>
+					<span class="text-sm text-white">⚠️</span>
 				</div>
 				<div class="min-w-0 flex-1">
-					<div class="text-xs font-medium text-amber-800 sm:text-sm dark:text-amber-200">
+					<div class="text-sm font-semibold text-amber-800 dark:text-amber-200">
 						{$LL.devtools.developmentOnly()}
 					</div>
-					<div class="mt-1 text-xs break-words text-amber-700 dark:text-amber-300">
+					<div class="text-muted-foreground mt-1 text-xs break-words">
 						{$LL.devtools.developmentOnlyDesc()}
 					</div>
 				</div>

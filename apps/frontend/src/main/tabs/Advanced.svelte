@@ -73,19 +73,22 @@ $effect(() => {
 		<!-- Responsive Grid Layout -->
 		<div class="grid gap-6 lg:grid-cols-2 lg:items-start">
 			<!-- System Settings Card -->
-			<Card.Root class="bg-card/50 border-0 shadow-lg backdrop-blur-sm">
-				<Card.Header
-					class="border-b bg-gradient-to-r from-blue-50/50 to-blue-100/50 pb-6 dark:from-blue-950/20 dark:to-blue-900/20"
-				>
+			<Card.Root
+				class="bg-card/50 overflow-hidden border border-blue-500/30 shadow-lg backdrop-blur-sm"
+			>
+				<div class="h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+				<Card.Header class="border-b pb-6">
 					<div class="flex items-center space-x-4">
-						<div class="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 shadow-sm">
-							<Settings class="h-6 w-6 text-blue-600 dark:text-blue-400" />
+						<div
+							class="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-500 shadow-sm"
+						>
+							<Settings class="h-6 w-6 text-white" />
 						</div>
 						<div class="flex-1">
-							<Card.Title class="text-xl font-bold text-blue-900 dark:text-blue-100">
+							<Card.Title class="text-xl font-semibold">
 								{$LL.advanced.systemSettings()}
 							</Card.Title>
-							<p class="mt-1 text-sm font-medium text-blue-600/70 dark:text-blue-300/70">
+							<p class="text-muted-foreground mt-1 text-sm">
 								{$LL.advanced.coreSystemConfiguration()}
 							</p>
 						</div>
@@ -207,12 +210,10 @@ $effect(() => {
 
 					<!-- System Actions Section -->
 					<div class="space-y-4">
-						<div
-							class="flex items-center gap-3 border-b border-blue-200/50 pb-2 dark:border-blue-800/50"
-						>
-							<div class="rounded-lg bg-blue-500/10 p-2">
+						<div class="flex items-center gap-3 border-b pb-2">
+							<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500">
 								<svg
-									class="h-4 w-4 text-blue-600 dark:text-blue-400"
+									class="h-4 w-4 text-white"
 									fill="none"
 									stroke="currentColor"
 									viewBox="0 0 24 24"
@@ -226,10 +227,10 @@ $effect(() => {
 								</svg>
 							</div>
 							<div>
-								<h3 class="text-sm font-semibold text-blue-900 dark:text-blue-100">
+								<h3 class="text-sm font-semibold">
 									{$LL.advanced.systemActions()}
 								</h3>
-								<p class="text-xs text-blue-600/70 dark:text-blue-300/70">
+								<p class="text-muted-foreground text-xs">
 									{$LL.advanced.systemActionsDescription()}
 								</p>
 							</div>
@@ -357,8 +358,8 @@ $effect(() => {
 											class={cn(
 												'h-3 w-3 rounded-full shadow-sm',
 												sshStatus
-													? 'bg-green-500 shadow-green-500/30'
-													: 'bg-gray-400 shadow-gray-400/30',
+													? 'bg-emerald-500 shadow-emerald-500/30'
+													: 'bg-slate-400 shadow-slate-400/30',
 											)}
 										></div>
 										<span class="font-semibold text-purple-900 dark:text-purple-100"
@@ -369,8 +370,8 @@ $effect(() => {
 										class={cn(
 											'rounded-md px-2 py-1 text-xs font-medium',
 											sshStatus
-												? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-												: 'bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400',
+												? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+												: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
 										)}
 									>
 										{sshStatus ? $LL.advanced.active() : $LL.advanced.inactive()}
@@ -447,7 +448,7 @@ $effect(() => {
 									{/if}
 								</Button>
 								<Button
-									class="h-8 border-0 bg-gradient-to-r from-red-500 to-red-600 px-3 shadow-sm hover:from-red-600 hover:to-red-700"
+									class="h-8 border-0 bg-gradient-to-r from-red-500 to-rose-600 px-3 shadow-sm hover:from-red-600 hover:to-rose-700"
 									onclick={() => {
 										resetSSHPasword();
 										sshPasswordChanged = true;
@@ -465,8 +466,8 @@ $effect(() => {
 							class={cn(
 								'h-11 w-full justify-start border-0 font-medium shadow-md transition-all duration-200',
 								sshStatus
-									? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white hover:from-yellow-600 hover:to-yellow-700'
-									: 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700',
+									? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-600 hover:to-orange-700'
+									: 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700',
 							)}
 							onclick={sshStatus ? stopSSH : startSSH}
 						>
@@ -620,9 +621,7 @@ $effect(() => {
 
 		<!-- Version Information Status Bar -->
 		{#if revisions}
-			<div
-				class="border-t border-gray-200/50 bg-gradient-to-r from-gray-50/80 to-gray-100/80 backdrop-blur-md dark:border-gray-800/50 dark:from-gray-900/80 dark:to-gray-800/80"
-			>
+			<div class="border-t bg-slate-50/80 backdrop-blur-md dark:bg-slate-900/80">
 				<div class="container mx-auto max-w-7xl px-4 py-5">
 					<div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
 						<div class="flex items-center gap-4">
@@ -651,37 +650,35 @@ $effect(() => {
 							</div>
 						</div>
 						<div class="grid grid-cols-2 gap-6 text-sm lg:grid-cols-4">
-							<div
-								class="rounded-lg border border-gray-200/50 bg-white/60 p-3 dark:border-gray-700/50 dark:bg-gray-800/60"
-							>
-								<p class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">BelaUI</p>
-								<p class="font-mono font-semibold text-gray-900 dark:text-gray-100">
+							<div class="bg-card rounded-lg border p-3">
+								<p class="text-muted-foreground mb-1 text-xs font-medium">BelaUI</p>
+								<p class="font-mono font-semibold">
 									{revisions.belaUI}
 								</p>
 							</div>
 							<div
-								class="rounded-lg border border-gray-200/50 bg-white/60 p-3 dark:border-gray-700/50 dark:bg-gray-800/60"
+								class="rounded-lg border border-slate-200/50 bg-white/60 p-3 dark:border-slate-700/50 dark:bg-slate-800/60"
 							>
-								<p class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">Belacoder</p>
-								<p class="font-mono font-semibold text-gray-900 dark:text-gray-100">
+								<p class="mb-1 text-xs font-medium text-slate-600 dark:text-slate-400">Belacoder</p>
+								<p class="font-mono font-semibold text-slate-900 dark:text-slate-100">
 									{revisions.belacoder}
 								</p>
 							</div>
 							<div
-								class="rounded-lg border border-gray-200/50 bg-white/60 p-3 dark:border-gray-700/50 dark:bg-gray-800/60"
+								class="rounded-lg border border-slate-200/50 bg-white/60 p-3 dark:border-slate-700/50 dark:bg-slate-800/60"
 							>
-								<p class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">SRTLA</p>
-								<p class="font-mono font-semibold text-gray-900 dark:text-gray-100">
+								<p class="mb-1 text-xs font-medium text-slate-600 dark:text-slate-400">SRTLA</p>
+								<p class="font-mono font-semibold text-slate-900 dark:text-slate-100">
 									{revisions.srtla}
 								</p>
 							</div>
 							<div
-								class="rounded-lg border border-gray-200/50 bg-white/60 p-3 dark:border-gray-700/50 dark:bg-gray-800/60"
+								class="rounded-lg border border-slate-200/50 bg-white/60 p-3 dark:border-slate-700/50 dark:bg-slate-800/60"
 							>
-								<p class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">
+								<p class="mb-1 text-xs font-medium text-slate-600 dark:text-slate-400">
 									CERALIVE Image
 								</p>
-								<p class="font-mono font-semibold text-gray-900 dark:text-gray-100">
+								<p class="font-mono font-semibold text-slate-900 dark:text-slate-100">
 									{revisions['CERALIVE image']}
 								</p>
 							</div>
