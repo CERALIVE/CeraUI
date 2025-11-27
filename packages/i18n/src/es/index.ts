@@ -246,6 +246,7 @@ const es = {
 	},
 	navigation: {
 		toggleMenu: "Alternar Menú",
+		closeMenu: "Cerrar Menú",
 		general: "General",
 		network: "Red",
 		streaming: "Streaming",

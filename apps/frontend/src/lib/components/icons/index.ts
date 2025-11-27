@@ -23,14 +23,14 @@ import {
 	User,
 	X,
 } from "@lucide/svelte";
-import type { SvelteComponent } from "svelte";
+import type { Component } from "svelte";
 
 // import Hamburger from './hamburger.svelte'; // File missing - temporarily commented out
 import Logo from "./Logo.svelte";
 
-export type Icon = SvelteComponent;
+export type Icon = Component;
 
-export const Icons = {
+export const Icons: Record<string, Icon> = {
 	logo: Logo,
 	close: X,
 	spinner: LoaderCircle,

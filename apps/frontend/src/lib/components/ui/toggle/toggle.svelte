@@ -47,9 +47,8 @@ let {
 
 <TogglePrimitive.Root
 	class={cn(toggleVariants({ variant, size }), className)}
+	{children}
 	bind:ref
 	bind:pressed
 	{...restProps}
->
-	{@render children?.()}
-</TogglePrimitive.Root>
+/>

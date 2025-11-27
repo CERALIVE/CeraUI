@@ -7,7 +7,7 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
-import { changeHotspotSettings } from '$lib/helpers/NetworkHelper';
+import { changeHotspotSettings, type WifiBandNames } from '$lib/helpers/NetworkHelper';
 import type { ValueOf } from '$lib/types';
 import type { StatusMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
@@ -310,7 +310,7 @@ const handleSubmit = async () => {
 				<div class="space-y-2">
 					<Select.Root
 						onValueChange={(selected) => {
-							hotspotProperties.selectedChannel = selected;
+							hotspotProperties.selectedChannel = selected as WifiBandNames;
 						}}
 						type="single"
 						value={hotspotProperties.selectedChannel}

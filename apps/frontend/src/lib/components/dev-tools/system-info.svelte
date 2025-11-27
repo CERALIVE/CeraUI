@@ -172,8 +172,10 @@ type PerformanceMemory = {
 // Update performance data
 function updatePerformanceData() {
 	// Memory usage (always update - this should change over time)
-	if (performance.memory) {
-		const memoryData = performance.memory as PerformanceMemory;
+	// performance.memory is Chrome-specific and not in standard types
+	const perfWithMemory = performance as Performance & { memory?: PerformanceMemory };
+	if (perfWithMemory.memory) {
+		const memoryData = perfWithMemory.memory;
 		const usedHeapSize = memoryData.usedJSHeapSize || 0;
 		performanceData.memory = Math.round(usedHeapSize / 1024 / 1024);
 	}
@@ -181,9 +183,9 @@ function updatePerformanceData() {
 	// Navigation timing (only calculate load time once)
 	if (!performanceData.loadTimeCalculated && performance.getEntriesByType) {
 		const navTiming = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
-		if (navTiming && navTiming.loadEventEnd && navTiming.navigationStart) {
+		if (navTiming && navTiming.loadEventEnd && navTiming.startTime !== undefined) {
 			performanceData.timing = navTiming;
-			const loadTime = navTiming.loadEventEnd - navTiming.navigationStart;
+			const loadTime = navTiming.loadEventEnd - navTiming.startTime;
 			// Only set if we have a valid positive number
 			if (loadTime > 0 && isFinite(loadTime)) {
 				performanceData.loadTime = Math.round(loadTime);
@@ -216,7 +218,7 @@ function updateBuildInfo() {
 }
 
 // Real-time updates using runes
-let updateInterval: number;
+let updateInterval: ReturnType<typeof setInterval>;
 
 // Initialize data and set up reactive updates
 $effect(() => {
@@ -430,7 +432,7 @@ async function handleLanguageClick(languageCode: Locales) {
 								localeInfo.currentLocale
 									? 'bg-primary/10 border-primary/30 text-primary ring-primary/20 ring-1'
 									: 'hover:bg-primary/5 hover:border-primary/20'}"
-								onclick={() => handleLanguageClick(supportedLocale.code)}
+								onclick={() => handleLanguageClick(supportedLocale.code as Locales)}
 								title="Switch to {supportedLocale.name}"
 								type="button"
 							>

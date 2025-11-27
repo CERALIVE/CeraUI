@@ -164,7 +164,7 @@ function getBandBadge(freq: number) {
 						buttonText={$LL.network.status.details()}
 						confirmButtonText={$LL.network.dialog.close()}
 						extraButtonClasses="w-full sm:flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white"
-						hideCancelButton={true}
+						hiddeCancelButton={true}
 						title={$LL.network.dialog.hotspotDetails()}
 					>
 						{#snippet icon()}
@@ -175,7 +175,7 @@ function getBandBadge(freq: number) {
 						{/snippet}
 						{#snippet description()}
 							<div class="space-y-4 text-sm">
-								{#if wifi.hotspot.name && wifi.hotspot.password}
+								{#if wifi.hotspot?.name && wifi.hotspot?.password}
 									{#await generateWifiQr(wifi.hotspot.name, wifi.hotspot.password)}
 										<div class="flex justify-center">
 											<Skeleton class="h-40 w-40 rounded-md" />
@@ -193,11 +193,11 @@ function getBandBadge(freq: number) {
 								<div class="space-y-1 text-center">
 									<p>
 										<span class="font-medium">{$LL.network.hotspot.name()}:</span>
-										<span class="ml-1">{wifi.hotspot.name}</span>
+										<span class="ml-1">{wifi.hotspot?.name}</span>
 									</p>
 									<p>
 										<span class="font-medium">{$LL.network.hotspot.password()}:</span>
-										<span class="ml-1">{wifi.hotspot.password}</span>
+										<span class="ml-1">{wifi.hotspot?.password}</span>
 									</p>
 								</div>
 							</div>

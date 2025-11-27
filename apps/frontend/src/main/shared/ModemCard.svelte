@@ -25,13 +25,13 @@ let configOpen = $state(false);
 const signalValue = $derived(modem.status?.signal ?? 0);
 const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
 const networkType = $derived(modem.status?.network_type ?? '');
-const operatorName = $derived(modem.status?.operator ?? '');
+const operatorName = $derived((modem.status as { operator?: string })?.operator ?? '');
 
 // Status helpers
 const isConnected = $derived(connectionStatus === 'connected');
 const isConnecting = $derived(connectionStatus === 'connecting');
 const isScanning = $derived(connectionStatus === 'scanning');
-const isDisconnected = $derived(connectionStatus === 'disconnected');
+const isDisconnected = $derived(!isConnected && !isConnecting && !isScanning);
 
 // Color schemes based on status
 const statusColors = $derived.by(() => {
@@ -164,7 +164,7 @@ const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 
 		<!-- Config Toggle -->
 		<Collapsible.Root bind:open={configOpen}>
-			<Collapsible.Trigger asChild>
+			<Collapsible.Trigger>
 				{#snippet child({ props })}
 					<Button
 						{...props}

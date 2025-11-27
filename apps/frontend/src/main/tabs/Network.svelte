@@ -72,7 +72,7 @@ const currentStatus = $derived(getStatus());
 			<div class="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 				{#each Object.entries(currentStatus.modems) as [deviceId, modem] (Number(deviceId))}
 					{#if !isNaN(Number(deviceId))}
-						<ModemCard deviceId={Number(deviceId)} {modem} />
+						<ModemCard deviceId={String(deviceId)} {modem} />
 					{/if}
 				{/each}
 			</div>

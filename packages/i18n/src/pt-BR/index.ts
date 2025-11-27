@@ -580,6 +580,7 @@ const ptBR = {
 	},
 	navigation: {
 		toggleMenu: "Alternar Menu",
+		closeMenu: "Fechar Menu",
 		general: "Geral",
 		network: "Rede",
 		streaming: "Transmissão",

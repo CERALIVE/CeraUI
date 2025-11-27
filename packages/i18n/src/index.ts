@@ -36,7 +36,7 @@ export const existingLocales = [
 	{ name: "हिन्दी", code: "hi" as const, flag: "🇮🇳" },
 ];
 
-export const rtlLanguages = [
+export const rtlLanguages: string[] = [
 	"ar", // Arabic - most common RTL
 	"he", // Hebrew
 	"fa", // Persian/Farsi

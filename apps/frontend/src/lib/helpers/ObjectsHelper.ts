@@ -1,7 +1,7 @@
-import type { ModemList } from "$lib/types/socket-messages";
+import type { Modem, ModemList } from "$lib/types/socket-messages";
 
-function isObject(item: unknown) {
-	return item && typeof item === "object" && !Array.isArray(item);
+function isObject(item: unknown): item is Record<string, unknown> {
+	return item !== null && typeof item === "object" && !Array.isArray(item);
 }
 
 export function mergeModems(
@@ -25,20 +25,36 @@ export function mergeModems(
 		for (const key in source) {
 			if (isObject(source[key])) {
 				if (!target[key]) Object.assign(target, { [key]: {} });
-				deepMerge(target[key], source[key]);
+				deepMergeModem(target[key] as Modem, source[key] as Modem);
 			} else {
 				Object.assign(target, { [key]: source[key] });
 			}
 		}
 	}
 
-	return deepMerge(target, ...sources);
+	return mergeModems(target, ...sources);
 }
 
-export function deepMerge(
-	target: Record<string, unknown>,
-	...sources: Record<string, unknown>[]
-): Record<string, unknown> {
+function deepMergeModem(target: Modem, source: Modem): Modem {
+	for (const key in source) {
+		const sourceValue = source[key as keyof Modem];
+		if (sourceValue !== undefined && isObject(sourceValue)) {
+			const targetValue = target[key as keyof Modem];
+			if (!targetValue) {
+				Object.assign(target, { [key]: {} });
+			}
+			Object.assign(target[key as keyof Modem] as object, sourceValue);
+		} else if (sourceValue !== undefined) {
+			Object.assign(target, { [key]: sourceValue });
+		}
+	}
+	return target;
+}
+
+export function deepMerge<T extends Record<string, unknown>>(
+	target: T,
+	...sources: T[]
+): T {
 	if (!sources.length) return target;
 	const source = sources.shift();
 
@@ -46,7 +62,10 @@ export function deepMerge(
 		for (const key in source) {
 			if (isObject(source[key])) {
 				if (!target[key]) Object.assign(target, { [key]: {} });
-				deepMerge(target[key], source[key]);
+				deepMerge(
+					target[key] as Record<string, unknown>,
+					source[key] as Record<string, unknown>,
+				);
 			} else {
 				Object.assign(target, { [key]: source[key] });
 			}

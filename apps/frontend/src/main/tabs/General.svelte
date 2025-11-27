@@ -109,7 +109,7 @@ const updatesStatusColors = $derived.by(() => {
 						<p class="text-muted-foreground mt-1 text-xs">
 							{$LL.general.streamingMessage({
 								usingNetworksCount: getUsedNetworks(currentNetworks).length,
-								srtLatency: currentConfig?.srt_latency,
+								srtLatency: currentConfig?.srt_latency ?? 0,
 							})}
 						</p>
 					{:else if !currentStatus?.is_streaming && !currentConfig?.srtla_addr}

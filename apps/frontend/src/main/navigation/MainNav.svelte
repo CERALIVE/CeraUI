@@ -255,7 +255,7 @@ const handleLogoClick = () => {
 							(isHovered || isActive) && 'scale-105',
 						)}
 					>
-						{$LL.navigation[navigation.label]()}
+						{$LL.navigation[navigation.label as keyof typeof $LL.navigation]()}
 					</span>
 
 					<!-- Enhanced hover indicator with smooth animations -->

@@ -231,6 +231,7 @@ const ko = {
 				disconnecting: "연결 해제 중",
 				connecting: "연결 중",
 				scanning: "스캔 중",
+				searching: "검색 중",
 			},
 			reset: "재설정",
 		},
@@ -407,6 +408,7 @@ const ko = {
 	},
 	navigation: {
 		toggleMenu: "메뉴 전환",
+		closeMenu: "메뉴 닫기",
 		general: "일반",
 		network: "네트워크",
 		streaming: "스트리밍",

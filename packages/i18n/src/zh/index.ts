@@ -376,6 +376,7 @@ const zh = {
 	},
 	navigation: {
 		toggleMenu: "切换菜单",
+		closeMenu: "关闭菜单",
 		general: "常规",
 		network: "网络",
 		streaming: "直播",

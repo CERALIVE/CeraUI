@@ -246,6 +246,7 @@ const de = {
 	},
 	navigation: {
 		toggleMenu: "Menü umschalten",
+		closeMenu: "Menü schließen",
 		general: "Allgemein",
 		network: "Netzwerk",
 		streaming: "Streaming",

@@ -603,6 +603,7 @@ const fr = {
 	},
 	navigation: {
 		toggleMenu: "Basculer le Menu",
+		closeMenu: "Fermer le Menu",
 		general: "Général",
 		network: "Réseau",
 		streaming: "Diffusion",

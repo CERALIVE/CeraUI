@@ -580,6 +580,7 @@ const ar = {
 	},
 	navigation: {
 		toggleMenu: "تبديل القائمة",
+		closeMenu: "إغلاق القائمة",
 		general: "عام",
 		network: "الشبكة",
 		streaming: "البث",

@@ -213,9 +213,10 @@ const isScanning = $derived(modemIsScanning || localScanningState);
 						<Select.Group>
 							{#if modem.available_networks}
 								<Select.Item label={$LL.network.modem.automaticRoamingNetwork()} value="-1" />
-								{#each Object.entries(modem.available_networks) as [key, net]}
-									{#if net.availability === 'available'}
-										<Select.Item label={net.name} value={key} />
+								{#each Object.entries(modem.available_networks) as [key, net] (key)}
+									{@const network = net as { name: string; availability: string }}
+									{#if network.availability === 'available'}
+										<Select.Item label={network.name} value={key} />
 									{/if}
 								{/each}
 							{/if}
@@ -264,7 +265,7 @@ const isScanning = $derived(modemIsScanning || localScanningState);
 	<!-- Manual APN -->
 	{#if !formData.autoconfig}
 		<Collapsible.Root bind:open={advancedOpen}>
-			<Collapsible.Trigger asChild>
+			<Collapsible.Trigger>
 				{#snippet child({ props })}
 					<Button
 						{...props}

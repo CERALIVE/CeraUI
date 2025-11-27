@@ -404,6 +404,7 @@ const hi = {
 	},
 	navigation: {
 		toggleMenu: "मेन्यू टॉगल करें",
+		closeMenu: "मेन्यू बंद करें",
 		general: "सामान्य",
 		network: "नेटवर्क",
 		streaming: "स्ट्रीमिंग",

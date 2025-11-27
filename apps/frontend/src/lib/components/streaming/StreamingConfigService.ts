@@ -27,12 +27,12 @@ export interface ConfigServiceOptions {
 export function buildStreamingConfig(
 	properties: Properties,
 	options: ConfigServiceOptions,
-): ConfigMessage | null {
+): Partial<ConfigMessage> | null {
 	const { unparsedPipelines } = options;
-	const config: ConfigMessage = {};
+	const config: Partial<ConfigMessage> = {};
 
 	if (properties.pipeline) {
-		config.pipeline = properties.pipeline;
+		config.pipeline = String(properties.pipeline);
 	}
 
 	// Safely access pipeline data with proper null checks
@@ -97,7 +97,7 @@ export function buildStreamingConfig(
 	return config;
 }
 
-export function startStreamingWithConfig(config: ConfigMessage): void {
+export function startStreamingWithConfig(config: Partial<ConfigMessage>): void {
 	// Try to dismiss all toasts first
 	try {
 		toast.dismiss();
@@ -115,7 +115,9 @@ export function startStreamingWithConfig(config: ConfigMessage): void {
 		// Fallback to direct function call if global function is not available
 		import("$lib/helpers/SystemHelper")
 			.then((module) => {
-				module.startStreaming(config);
+				module.startStreaming(
+					config as Parameters<typeof module.startStreaming>[0],
+				);
 			})
 			.catch((error) => {
 				console.error("Failed to load SystemHelper for streaming:", error);

@@ -266,7 +266,7 @@ function dismissAllToasts() {
 					id="toast-description"
 					class="resize-none text-sm"
 					placeholder="Toast description..."
-					rows="2"
+					rows={2}
 					bind:value={customDescription}
 				/>
 			</div>

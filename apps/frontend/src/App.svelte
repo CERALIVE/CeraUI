@@ -25,8 +25,8 @@ onMount(async () => {
 		}
 
 		// Load the locale
-		await loadLocaleAsync(targetLocale);
-		setLocale(targetLocale);
+		await loadLocaleAsync(targetLocale as Parameters<typeof loadLocaleAsync>[0]);
+		setLocale(targetLocale as Parameters<typeof setLocale>[0]);
 	} catch (error) {
 		console.error('Failed to initialize i18n:', error);
 		// Fallback to English

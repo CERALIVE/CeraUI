@@ -414,6 +414,7 @@ const ja = {
 	},
 	navigation: {
 		toggleMenu: "メニューの切り替え",
+		closeMenu: "メニューを閉じる",
 		general: "一般",
 		network: "ネットワーク",
 		streaming: "ストリーミング",

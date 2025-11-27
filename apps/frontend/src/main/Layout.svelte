@@ -41,10 +41,10 @@ let activeToasts = $state<Record<string, ToastInfo>>({});
 let isUpdatingToasts = false;
 
 // Override original SystemHelper functions to add toast clearing
-const startStreaming = (config: { [key: string]: string | number }) => {
+const startStreaming = (config: Record<string, string | number | boolean>) => {
 	// Guard against infinite updates
 	if (isUpdatingToasts) {
-		startStreamingFn(config);
+		startStreamingFn(config as Parameters<typeof startStreamingFn>[0]);
 		return;
 	}
 
@@ -66,7 +66,7 @@ const startStreaming = (config: { [key: string]: string | number }) => {
 		}, 0);
 
 		// Now call the original function
-		startStreamingFn(config);
+		startStreamingFn(config as Parameters<typeof startStreamingFn>[0]);
 	} finally {
 		// Ensure flag is reset
 		isUpdatingToasts = false;
@@ -202,8 +202,11 @@ const showToast = (type: NotificationType, name: string, options: any) => {
 // Svelte 5: Use $effect for side effects
 $effect(() => {
 	const status = getStatus();
-	updatingStatus =
-		status?.updating && typeof status.updating !== 'boolean' && status.updating.result !== 0;
+	if (status?.updating && typeof status.updating !== 'boolean' && status.updating.result !== 0) {
+		updatingStatus = status.updating;
+	} else {
+		updatingStatus = false;
+	}
 });
 const auth = localStorage.getItem('auth');
 if (auth) {

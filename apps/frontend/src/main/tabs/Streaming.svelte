@@ -52,15 +52,15 @@ type InitialSelectedProperties = Pick<
 // Create state manager
 const stateManager = createStreamingStateManager();
 
-// Extract stores for reactive access
-const { savedConfigStore } = stateManager;
-const { relayMessageStore } = stateManager;
-const { unparsedPipelinesStore } = stateManager;
-const { audioCodecsStore } = stateManager;
-const { groupedPipelinesStore } = stateManager;
-const { isStreamingStore } = stateManager;
-const { audioSourcesStore } = stateManager;
-const { notAvailableAudioSourceStore } = stateManager;
+// Extract reactive state using getters from the state manager
+const savedConfig = $derived(stateManager.savedConfig);
+const relayMessage = $derived(stateManager.relayMessage);
+const unparsedPipelines = $derived(stateManager.unparsedPipelines);
+const audioCodecs = $derived(stateManager.audioCodecs);
+const groupedPipelines = $derived(stateManager.groupedPipelines);
+const isStreaming = $derived(stateManager.isStreaming);
+const audioSources = $derived(stateManager.audioSources);
+const notAvailableAudioSource = $derived(stateManager.notAvailableAudioSource);
 
 let properties: Properties = $state({
 	bitrate: undefined,
@@ -109,7 +109,7 @@ let isInitialMount = $state(true);
 
 // Allow initial restoration to complete before tracking user interactions
 $effect(() => {
-	if (isInitialMount && $savedConfigStore && properties.pipeline) {
+	if (isInitialMount && savedConfig && properties.pipeline) {
 		// Wait for initial state restoration to complete
 		setTimeout(() => {
 			isInitialMount = false;
@@ -119,8 +119,8 @@ $effect(() => {
 
 // React to saved config changes and initialize properties
 $effect(() => {
-	if ($savedConfigStore) {
-		const config = $savedConfigStore;
+	if (savedConfig) {
+		const config = savedConfig;
 
 		if (properties.srtLatency === undefined) {
 			properties.srtLatency = config.srt_latency ?? 2000;
@@ -165,10 +165,10 @@ $effect(() => {
 
 // React to relay server changes
 $effect(() => {
-	if ($relayMessageStore && $savedConfigStore !== undefined && $savedConfigStore.relay_server) {
-		properties.relayServer = $savedConfigStore.relay_server ? $savedConfigStore.relay_server : '-1';
-		if ($savedConfigStore?.relay_account !== undefined) {
-			properties.relayAccount = $savedConfigStore.relay_account;
+	if (relayMessage && savedConfig !== undefined && savedConfig.relay_server) {
+		properties.relayServer = savedConfig.relay_server ? savedConfig.relay_server : '-1';
+		if (savedConfig?.relay_account !== undefined) {
+			properties.relayAccount = savedConfig.relay_account;
 		}
 	} else {
 		properties.relayServer = '-1';
@@ -180,17 +180,17 @@ $effect(() => {
 $effect.pre(() => {
 	const canRun =
 		properties.pipeline &&
-		$unparsedPipelinesStore !== undefined &&
+		unparsedPipelines !== undefined &&
 		$LL &&
 		(!userHasInteracted || isProgrammaticChange);
 
 	if (
 		properties.pipeline &&
-		$unparsedPipelinesStore !== undefined &&
+		unparsedPipelines !== undefined &&
 		$LL &&
 		(!userHasInteracted || isProgrammaticChange)
 	) {
-		const pipelineData = $unparsedPipelinesStore[properties.pipeline];
+		const pipelineData = unparsedPipelines[properties.pipeline];
 		if (!pipelineData) {
 			return;
 		}
@@ -206,10 +206,8 @@ $effect.pre(() => {
 		properties.framerate = parsedPipeline.fps?.toString() ?? undefined;
 
 		// Auto-select aac as default audio codec if pipeline supports audio and no codec is selected
-		if (pipelineData.acodec && !properties.audioCodec && $audioCodecsStore) {
-			const aacCodec = Object.keys($audioCodecsStore).find(
-				(codec) => codec.toLowerCase() === 'aac',
-			);
+		if (pipelineData.acodec && !properties.audioCodec && audioCodecs) {
+			const aacCodec = Object.keys(audioCodecs).find((codec) => codec.toLowerCase() === 'aac');
 			if (aacCodec) {
 				properties.audioCodec = aacCodec as AudioCodecs;
 			}
@@ -269,7 +267,7 @@ function validateForm() {
 
 // Updated helper to use modular update function
 const handleMaxBitrateUpdate = () => {
-	updateMaxBitrate(properties.bitrate, $isStreamingStore);
+	updateMaxBitrate(properties.bitrate, isStreaming);
 };
 
 // Local framerate sorter to match EncoderCard's expected signature
@@ -313,13 +311,13 @@ const startStreamingWithCurrentConfig = () => {
 		properties.encoder &&
 		properties.resolution &&
 		properties.framerate &&
-		$groupedPipelinesStore
+		groupedPipelines
 	) {
-		const result = autoSelectNextOption('framerate', properties, $groupedPipelinesStore);
+		const result = autoSelectNextOption('framerate', properties, groupedPipelines);
 		properties = Object.assign({}, properties, result);
 	}
 
-	const config = buildStreamingConfig(properties, { unparsedPipelines: $unparsedPipelinesStore });
+	const config = buildStreamingConfig(properties, { unparsedPipelines });
 
 	if (config) {
 		startStreamingWithConfig(config);
@@ -344,10 +342,10 @@ const handleInputModeChange = (value: string) => {
 	);
 
 	// Unified flow: validate → clean → auto-select → build pipeline
-	if (value && $groupedPipelinesStore) {
+	if (value && groupedPipelines) {
 		// Create properties with new value for investigation
 		const updatedProperties = { ...properties, inputMode: value };
-		const result = autoSelectNextOption('inputMode', updatedProperties, $groupedPipelinesStore);
+		const result = autoSelectNextOption('inputMode', updatedProperties, groupedPipelines);
 
 		// GUARANTEED REACTIVITY - Create completely new object
 		properties = Object.assign({}, properties, { inputMode: value }, result);
@@ -369,9 +367,9 @@ const handleEncoderChange = (value: string) => {
 	console.log('🔄 Encoder changed - starting unified validation/auto-selection/pipeline building');
 
 	// Unified flow: validate → clean → auto-select → build pipeline
-	if (value && $groupedPipelinesStore) {
+	if (value && groupedPipelines) {
 		const updatedProperties = { ...properties, encoder: value };
-		const result = autoSelectNextOption('encoder', updatedProperties, $groupedPipelinesStore);
+		const result = autoSelectNextOption('encoder', updatedProperties, groupedPipelines);
 
 		// GUARANTEED REACTIVITY - Create completely new object
 		properties = Object.assign({}, properties, { encoder: value }, result);
@@ -394,9 +392,9 @@ const handleResolutionChange = (value: string) => {
 	);
 
 	// Unified flow: validate → clean → auto-select → build pipeline
-	if (value && $groupedPipelinesStore) {
+	if (value && groupedPipelines) {
 		const updatedProperties = { ...properties, resolution: value };
-		const result = autoSelectNextOption('resolution', updatedProperties, $groupedPipelinesStore);
+		const result = autoSelectNextOption('resolution', updatedProperties, groupedPipelines);
 
 		// GUARANTEED REACTIVITY - Create completely new object
 		properties = Object.assign({}, properties, { resolution: value }, result);
@@ -418,9 +416,9 @@ const handleFramerateChange = (value: string) => {
 	console.log('🔄 Framerate changed - starting unified validation/pipeline building');
 
 	// Unified flow: validate → build pipeline
-	if (value && $groupedPipelinesStore) {
+	if (value && groupedPipelines) {
 		const updatedProperties = { ...properties, framerate: value };
-		const result = autoSelectNextOption('framerate', updatedProperties, $groupedPipelinesStore);
+		const result = autoSelectNextOption('framerate', updatedProperties, groupedPipelines);
 
 		// GUARANTEED REACTIVITY - Create completely new object
 		properties = Object.assign({}, properties, { framerate: value }, result);
@@ -444,8 +442,8 @@ const handleFramerateChange = (value: string) => {
 						{formErrors}
 						{getSortedFramerates}
 						{getSortedResolutions}
-						groupedPipelines={$groupedPipelinesStore}
-						isStreaming={!!$isStreamingStore}
+						{groupedPipelines}
+						isStreaming={!!isStreaming}
 						{normalizeValue}
 						onBitrateChange={(value) => (properties.bitrate = value)}
 						onBitrateOverlayChange={(checked) => (properties.bitrateOverlay = checked)}
@@ -468,11 +466,11 @@ const handleFramerateChange = (value: string) => {
 				<!-- Audio Settings Card -->
 				<div class="h-full">
 					<AudioCard
-						audioCodecs={$audioCodecsStore}
-						audioSources={$audioSourcesStore}
-						isStreaming={!!$isStreamingStore}
+						{audioCodecs}
+						{audioSources}
+						isStreaming={!!isStreaming}
 						{normalizeValue}
-						notAvailableAudioSource={$notAvailableAudioSourceStore}
+						{notAvailableAudioSource}
 						onAudioCodecChange={(value) => (properties.audioCodec = value as AudioCodecs)}
 						onAudioDelayChange={(value) => (properties.audioDelay = value)}
 						onAudioSourceChange={(value) => (properties.audioSource = value)}
@@ -482,7 +480,7 @@ const handleFramerateChange = (value: string) => {
 							audioCodec: properties.audioCodec,
 							audioDelay: properties.audioDelay,
 						}}
-						unparsedPipelines={$unparsedPipelinesStore}
+						{unparsedPipelines}
 					/>
 				</div>
 
@@ -490,7 +488,7 @@ const handleFramerateChange = (value: string) => {
 				<div class="h-full">
 					<ServerCard
 						{formErrors}
-						isStreaming={!!$isStreamingStore}
+						isStreaming={!!isStreaming}
 						{normalizeValue}
 						onRelayAccountChange={(value) => (properties.relayAccount = value)}
 						onRelayServerChange={(value) => {
@@ -522,7 +520,7 @@ const handleFramerateChange = (value: string) => {
 							srtStreamId: properties.srtStreamId,
 							srtLatency: properties.srtLatency,
 						}}
-						relayMessage={$relayMessageStore}
+						{relayMessage}
 					/>
 				</div>
 			</div>
@@ -531,7 +529,7 @@ const handleFramerateChange = (value: string) => {
 		<!-- Streaming Controls - Floating Button at Bottom -->
 		<StreamingControls
 			disabled={false}
-			isStreaming={!!$isStreamingStore}
+			isStreaming={!!isStreaming}
 			onStart={startStreamingWithCurrentConfig}
 			onStop={() => {
 				// Try to dismiss all toasts first

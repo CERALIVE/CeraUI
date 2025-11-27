@@ -237,6 +237,7 @@ const en = {
 	},
 	navigation: {
 		toggleMenu: "Toggle Menu",
+		closeMenu: "Close Menu",
 		general: "General",
 		network: "Network",
 		streaming: "Streaming",

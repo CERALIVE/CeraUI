@@ -10,7 +10,7 @@ import { cn } from '$lib/utils';
 
 const initialLocale = getLocale();
 
-let selectedLocale = $state(initialLocale.code);
+let selectedLocale: string = $state(initialLocale.code);
 let isOpen = $state(false);
 
 const localeName = $derived.by(
@@ -25,13 +25,13 @@ $effect(() => {
 	}
 });
 
-const handleLocaleChange = async (value: string) => {
+const handleLocaleChange = async (value: Parameters<typeof setLocale>[0]) => {
 	try {
 		console.log(`🌍 Loading locale: ${value}`);
 		await loadLocaleAsync(value as any);
 		setLocale(value as any);
 		setLocaleStore(existingLocales.find((l) => l.code === value)!);
-		selectedLocale = value;
+		selectedLocale = String(value);
 		isOpen = false;
 		console.log(`✅ Successfully switched to locale: ${value}`);
 	} catch (error) {
