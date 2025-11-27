@@ -24,6 +24,12 @@ import type WebSocket from "ws";
 import { logger } from "../../helpers/logger.ts";
 import { extractMessage } from "../../helpers/types.ts";
 import {
+	getScenarioConfig,
+	getWifiSignal,
+	mockWifiNetworks,
+	shouldUseMocks,
+} from "../../mocks/mock-service.ts";
+import {
 	type ConnectionUUID,
 	nmConnDelete,
 	nmConnect,
@@ -117,6 +123,41 @@ export type WifiInterfaceResponseMessage = Pick<
 };
 
 export function wifiBuildMsg() {
+	// Return mock WiFi data in development mode
+	if (shouldUseMocks()) {
+		const config = getScenarioConfig();
+		if (config.wifi) {
+			const mockAvailable: WifiNetwork[] = mockWifiNetworks.map((network) => ({
+				active: network.active,
+				ssid: network.ssid,
+				signal: Math.round(getWifiSignal(network.ssid)),
+				security: network.security,
+				freq: network.frequency,
+			}));
+
+			// Sort by signal strength
+			mockAvailable.sort((a, b) => b.signal - a.signal);
+
+			const mockSaved: Record<string, string> = {
+				HomeNetwork: "uuid-home-network-12345",
+				Office_Secure: "uuid-office-secure-67890",
+				StreamingStudio: "uuid-streaming-studio-11111",
+			};
+
+			return {
+				0: {
+					ifname: "wlan0",
+					conn: "HomeNetwork",
+					hw: "dc:a6:32:12:34:57",
+					saved: mockSaved,
+					available: mockAvailable,
+					supports_hotspot: true,
+				} satisfies WifiInterfaceResponseMessage,
+			};
+		}
+		return {};
+	}
+
 	const ifs: Record<number, WifiInterfaceResponseMessage> = {};
 	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
 	for (const macAddress in wifiInterfacesByMacAddress) {

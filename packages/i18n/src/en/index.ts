@@ -510,27 +510,32 @@ const en = {
 			close: "Close",
 			searchWifi: "View Available Networks",
 			availableNetworks: "Available Networks",
-			connecting: "Connecting",
+			connecting: "Connecting...",
 			forgetNetwork: "Forget WiFi network",
 			disconnectFrom: "Forget Network",
 			confirmForget:
 				"Are you sure to forget {ssid:string} on the {network:string} network?",
 			connectTo: "Connect to Network",
-			introducePassword: "Please introduce the network password",
+			introducePassword: "Please enter the network password",
 			placeholderPassword: "Network password",
 		},
 		button: {
 			disconnect: "Disconnect",
 			connect: "Connect",
 			forget: "Forget",
-			scanning: "Searching networks...",
-			scan: "Search Networks",
+			scanning: "Scanning...",
+			scan: "Scan",
 		},
 		hotspot: {
 			placeholderPassword: "********",
 		},
 		networks: {
 			found: "networks found",
+		},
+		emptyState: {
+			title: "No Networks Found",
+			description:
+				"Click scan to search for available WiFi networks in your area.",
 		},
 		status: {
 			connected: "Connected",

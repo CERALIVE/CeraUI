@@ -440,9 +440,11 @@ const getFrequencyBand = (freq: number): string => {
 						>
 							<WifiOff class="text-muted-foreground h-8 w-8" />
 						</div>
-						<h4 class="text-foreground mb-1 font-semibold">No Networks Found</h4>
+						<h4 class="text-foreground mb-1 font-semibold">
+							{$LL.wifiSelector.emptyState.title()}
+						</h4>
 						<p class="text-muted-foreground mb-4 max-w-xs text-sm">
-							Click scan to search for available WiFi networks in your area.
+							{$LL.wifiSelector.emptyState.description()}
 						</p>
 						<Button
 							class="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
