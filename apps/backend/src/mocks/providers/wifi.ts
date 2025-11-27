@@ -19,6 +19,20 @@ const mockSavedConnections = [
 		device: "wlan0",
 		macAddress: "dc:a6:32:12:34:57",
 	},
+	{
+		uuid: "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+		name: "Office_Secure",
+		type: "802-11-wireless",
+		device: "wlan0",
+		macAddress: "dc:a6:32:12:34:57",
+	},
+	{
+		uuid: "c3d4e5f6-a7b8-9012-cdef-345678901234",
+		name: "StreamingStudio",
+		type: "802-11-wireless",
+		device: "wlan0",
+		macAddress: "dc:a6:32:12:34:57",
+	},
 ];
 
 // Mock hotspot connection

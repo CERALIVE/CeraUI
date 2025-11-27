@@ -1,6 +1,20 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { Eye, EyeOff, Link, ScanSearch, Trash2, Unlink } from '@lucide/svelte';
+import {
+	Check,
+	Eye,
+	EyeOff,
+	Link,
+	Loader2,
+	Lock,
+	Radio,
+	ScanSearch,
+	Signal,
+	Trash2,
+	Unlock,
+	Wifi,
+	WifiOff,
+} from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import WifiQuality from '$lib/components/icons/WifiQuality.svelte';
@@ -44,7 +58,6 @@ $effect(() => {
 				description: $LL.wifiSelector.success.connectedDescription(),
 			});
 			connecting = undefined;
-			// Close dialog on successful connection
 			open = false;
 		} else {
 			connecting = undefined;
@@ -56,7 +69,6 @@ $effect(() => {
 	let internal: NodeJS.Timeout;
 	if (open) {
 		internal = setInterval(() => {
-			console.log('Doing wifi scan');
 			scanWifi(wifiId, false);
 		}, 22000);
 	}
@@ -83,294 +95,370 @@ const handleWifiConnect = (
 const handleNewWifiConnect = (ssid: string, password: string) => {
 	connecting = ssid;
 	connectToNewWifi(wifiId, ssid, password);
-	// Reset form state after initiating connection
 	networkPassword = '';
 	showPassword = false;
+};
+
+// Get signal strength category for styling
+const getSignalCategory = (signal: number): 'excellent' | 'good' | 'fair' | 'weak' => {
+	if (signal >= 75) return 'excellent';
+	if (signal >= 50) return 'good';
+	if (signal >= 25) return 'fair';
+	return 'weak';
+};
+
+// Get frequency band label
+const getFrequencyBand = (freq: number): string => {
+	if (freq >= 5000) return '5 GHz';
+	if (freq >= 2400) return '2.4 GHz';
+	return `${freq} MHz`;
 };
 </script>
 
 <SimpleAlertDialog
-	class="max-h-[90vh] max-w-[95vw] overflow-hidden sm:max-w-md lg:max-w-2xl"
+	class="max-h-[90vh] max-w-[95vw] overflow-hidden sm:max-w-lg lg:max-w-xl"
 	buttonText={$LL.wifiSelector.dialog.searchWifi()}
 	confirmButtonText={$LL.wifiSelector.dialog.close()}
-	extraButtonClasses="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
+	extraButtonClasses="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold shadow-lg shadow-emerald-500/25 transition-all duration-300 hover:shadow-emerald-500/40 hover:scale-[1.02] active:scale-[0.98]"
 	hiddeCancelButton={true}
 	title={$LL.wifiSelector.dialog.searchWifi()}
 	bind:open
 >
 	{#snippet icon()}
-		<ScanSearch></ScanSearch>
+		<Wifi class="h-4 w-4" />
 	{/snippet}
 	{#snippet dialogTitle()}
-		{$LL.wifiSelector.dialog.availableNetworks({
-			network: networkRename(wifi.ifname),
-		})}
-	{/snippet}
-	<div class="flex max-h-[75vh] flex-col space-y-3 overflow-hidden">
-		<!-- Header with Network Info -->
-		<div
-			class="space-y-2 rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-3 text-center dark:border-blue-800 dark:from-blue-950/30 dark:to-indigo-950/30"
-		>
+		<div class="flex items-center gap-3">
 			<div
-				class="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600"
+				class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/30"
 			>
-				<ScanSearch class="h-5 w-5 text-white" />
+				<Radio class="h-5 w-5 text-white" />
 			</div>
-			<h3 class="text-foreground text-sm font-semibold">
-				{$LL.wifiSelector.dialog.availableNetworks({ network: '' })}
-			</h3>
-			<div class="rounded bg-white/50 px-2 py-1 dark:bg-black/20">
-				<p class="font-mono text-xs break-all">{networkRename(wifi.ifname)}</p>
+			<div>
+				<h2 class="text-foreground text-lg font-bold">
+					{$LL.wifiSelector.dialog.availableNetworks({ network: '' })}
+				</h2>
+				<p class="text-muted-foreground text-sm font-medium">
+					{networkRename(wifi.ifname)}
+				</p>
 			</div>
-			<p class="text-muted-foreground text-xs">
-				{wifi.available.length}
-				{$LL.wifiSelector.networks.found()}
-			</p>
+		</div>
+	{/snippet}
+
+	<div class="flex max-h-[70vh] flex-col gap-4 overflow-hidden">
+		<!-- Stats Bar -->
+		<div
+			class="flex items-center justify-between rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100 px-4 py-3 dark:border-slate-700 dark:from-slate-800/50 dark:to-slate-900/50"
+		>
+			<div class="flex items-center gap-2">
+				<Signal class="h-4 w-4 text-emerald-500" />
+				<span class="text-foreground text-sm font-semibold">
+					{wifi.available.length}
+				</span>
+				<span class="text-muted-foreground text-sm">
+					{$LL.wifiSelector.networks.found()}
+				</span>
+			</div>
+			<Button
+				class={cn(
+					'h-9 gap-2 rounded-lg px-4 text-sm font-medium transition-all duration-300',
+					scanning
+						? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+						: 'bg-emerald-600 text-white shadow-md hover:bg-emerald-700 hover:shadow-lg',
+				)}
+				disabled={scanning}
+				onclick={handleWifiScan}
+				size="sm"
+			>
+				{#if scanning}
+					<Loader2 class="h-4 w-4 animate-spin" />
+					<span>{$LL.wifiSelector.button.scanning()}</span>
+				{:else}
+					<ScanSearch class="h-4 w-4" />
+					<span>{$LL.wifiSelector.button.scan()}</span>
+				{/if}
+			</Button>
 		</div>
 
 		<!-- WiFi Networks List -->
 		<ScrollArea
-			class="min-h-0 w-full flex-1 rounded-xl border-2 border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900/50"
+			class="min-h-0 flex-1 rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/30"
 			type="auto"
 		>
-			<div class="space-y-1 p-2">
-				{#each wifi.available as availableNetwork, _index}
+			<div class="space-y-2 p-3">
+				{#each wifi.available as availableNetwork, index}
 					{@const uuid = getWifiUUID(availableNetwork, wifi.saved)}
 					{@const isConnecting =
 						connecting !== undefined &&
 						(connecting === uuid || connecting === availableNetwork.ssid)}
+					{@const signalCategory = getSignalCategory(availableNetwork.signal)}
+
 					<div
+						style:animation-delay="{index * 50}ms"
 						class={cn(
-							'flex items-center rounded-lg p-3 transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800/50',
+							'group relative overflow-hidden rounded-xl border-2 p-4 transition-all duration-300',
 							availableNetwork.active
-								? 'border-2 border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30'
-								: 'border-2 border-transparent',
-							uuid ? '' : 'cursor-pointer hover:border-blue-200 dark:hover:border-blue-700',
+								? 'border-emerald-400 bg-gradient-to-r from-emerald-50 to-teal-50 shadow-lg shadow-emerald-500/10 dark:border-emerald-600 dark:from-emerald-950/40 dark:to-teal-950/40'
+								: 'border-transparent bg-slate-50 hover:border-slate-300 hover:bg-slate-100 dark:bg-slate-800/50 dark:hover:border-slate-600 dark:hover:bg-slate-800',
 						)}
 					>
-						<!-- Signal Strength -->
-						<div class="flex-shrink-0">
-							<WifiQuality class="h-8 w-8" signal={availableNetwork.signal} />
-						</div>
+						<!-- Active indicator glow -->
+						{#if availableNetwork.active}
+							<div class="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-teal-500/5"></div>
+						{/if}
 
-						<!-- Network Info -->
-						<div class="ml-3 min-w-0 flex-1">
-							<div class="mb-0.5 flex items-center gap-2">
-								<!-- Network Name with Tooltip for Long Names -->
-								<div class="min-w-0 flex-1">
-									{#if availableNetwork.ssid.length > 20}
-										<h4
-											class="text-foreground cursor-help truncate text-sm font-semibold"
-											class:dark:text-green-400={availableNetwork.active}
-											class:text-green-700={availableNetwork.active}
-											title={availableNetwork.ssid}
-										>
-											{availableNetwork.ssid}
-										</h4>
-										<!-- Full name on next line for very long names -->
-										{#if availableNetwork.ssid.length > 32}
-											<p class="text-muted-foreground mt-0.5 text-xs leading-tight break-all">
-												{availableNetwork.ssid}
-											</p>
-										{/if}
-									{:else}
-										<h4
-											class="text-foreground text-sm font-semibold"
-											class:dark:text-green-400={availableNetwork.active}
-											class:text-green-700={availableNetwork.active}
-										>
-											{availableNetwork.ssid}
-										</h4>
-									{/if}
-								</div>
-
-								<!-- Connection Status Badge - Removed as green border already indicates connection -->
-							</div>
-
-							<!-- Security and Signal Info -->
-							<div class="text-muted-foreground flex items-center gap-1.5 text-xs">
-								<span class="inline-flex min-w-0 items-center gap-1">
-									{#if availableNetwork.security.includes('WPA')}
-										<svg class="h-3 w-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-											<path
-												clip-rule="evenodd"
-												d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
-												fill-rule="evenodd"
-											/>
-										</svg>
-									{:else}
-										<svg class="h-3 w-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-											<path
-												clip-rule="evenodd"
-												d="M10 1C5.03 1 1 5.03 1 10s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zM9 5a4 4 0 100 8 4 4 0 000-8zM6.5 9.5a.5.5 0 11-1 0 .5.5 0 011 0z"
-												fill-rule="evenodd"
-											/>
-										</svg>
-									{/if}
-									<span class="max-w-[80px] truncate" title={availableNetwork.security}>
-										{availableNetwork.security.replaceAll(' ', ', ')}
-									</span>
-								</span>
-								<span class="flex-shrink-0">•</span>
-								<span class="flex-shrink-0 font-medium">{availableNetwork.signal}%</span>
-							</div>
-						</div>
-
-						<!-- Action Buttons -->
-						<div class="ml-2 flex-shrink-0">
-							{#if isConnecting}
+						<div class="relative flex items-center gap-4">
+							<!-- Signal Indicator -->
+							<div class="relative flex-shrink-0">
 								<div
-									class="flex items-center gap-1 rounded-lg bg-blue-100 px-2 py-1 dark:bg-blue-900/30"
+									class={cn(
+										'flex h-12 w-12 items-center justify-center rounded-xl transition-all duration-300',
+										availableNetwork.active
+											? 'bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/30'
+											: signalCategory === 'excellent'
+												? 'bg-gradient-to-br from-green-500 to-emerald-600'
+												: signalCategory === 'good'
+													? 'bg-gradient-to-br from-blue-500 to-cyan-600'
+													: signalCategory === 'fair'
+														? 'bg-gradient-to-br from-amber-500 to-orange-600'
+														: 'bg-gradient-to-br from-red-500 to-rose-600',
+									)}
 								>
-									<div
-										class="h-3 w-3 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"
-									></div>
-									<span class="text-xs font-medium text-blue-700 dark:text-blue-300"
-										>{$LL.wifiSelector.dialog.connecting()}</span
-									>
+									<WifiQuality class="h-6 w-6 text-white" signal={availableNetwork.signal} />
 								</div>
-							{:else if uuid}
-								<div class="flex items-center gap-1.5">
-									{#if availableNetwork.active}
-										<Button
-											class="h-9 bg-gradient-to-r from-orange-500 to-orange-600 px-3 text-white shadow-sm transition-all duration-200 hover:from-orange-600 hover:to-orange-700"
-											onclick={() => disconnectWifi(uuid, availableNetwork)}
-											size="sm"
-										>
-											<Unlink class="h-3 w-3" />
-											<span class="ml-1.5 hidden text-xs font-medium sm:inline"
-												>{$LL.wifiSelector.button.disconnect()}</span
-											>
-										</Button>
+								{#if availableNetwork.active}
+									<div
+										class="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900"
+									>
+										<Check class="h-3 w-3 text-white" />
+									</div>
+								{/if}
+							</div>
+
+							<!-- Network Info -->
+							<div class="min-w-0 flex-1">
+								<div class="mb-1 flex items-center gap-2">
+									<h4
+										class={cn(
+											'truncate text-base font-semibold transition-colors',
+											availableNetwork.active
+												? 'text-emerald-700 dark:text-emerald-400'
+												: 'text-foreground',
+										)}
+										title={availableNetwork.ssid}
+									>
+										{availableNetwork.ssid}
+									</h4>
+									{#if availableNetwork.security.includes('WPA')}
+										<Lock class="text-muted-foreground h-3.5 w-3.5 flex-shrink-0" />
 									{:else}
-										<Button
-											class="h-9 bg-gradient-to-r from-blue-500 to-blue-600 px-3 text-white shadow-sm transition-all duration-200 hover:from-blue-600 hover:to-blue-700"
-											onclick={() => handleWifiConnect(uuid, availableNetwork)}
-											size="sm"
-										>
-											<Link class="h-3 w-3" />
-											<span class="ml-1.5 hidden text-xs font-medium sm:inline"
-												>{$LL.wifiSelector.button.connect()}</span
-											>
-										</Button>
+										<Unlock class="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
 									{/if}
+								</div>
+								<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+									<span
+										class={cn(
+											'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+											signalCategory === 'excellent'
+												? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+												: signalCategory === 'good'
+													? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+													: signalCategory === 'fair'
+														? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+														: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+										)}
+									>
+										{availableNetwork.signal}%
+									</span>
+									<span class="text-muted-foreground inline-flex items-center gap-1 text-xs">
+										{getFrequencyBand(availableNetwork.freq)}
+									</span>
+									<span
+										class="text-muted-foreground hidden text-xs sm:inline"
+										title={availableNetwork.security}
+									>
+										{availableNetwork.security.replaceAll(' ', '/')}
+									</span>
+								</div>
+							</div>
+
+							<!-- Actions -->
+							<div class="flex flex-shrink-0 items-center gap-2">
+								{#if isConnecting}
+									<div
+										class="flex items-center gap-2 rounded-lg bg-blue-100 px-3 py-2 dark:bg-blue-900/40"
+									>
+										<Loader2 class="h-4 w-4 animate-spin text-blue-600 dark:text-blue-400" />
+										<span class="text-xs font-medium text-blue-700 dark:text-blue-300">
+											{$LL.wifiSelector.dialog.connecting()}
+										</span>
+									</div>
+								{:else if uuid}
+									<!-- Saved Network Actions -->
+									<div class="flex items-center gap-1.5">
+										{#if availableNetwork.active}
+											<Button
+												class="h-9 gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 px-3 text-white shadow-md transition-all hover:from-amber-600 hover:to-orange-600 hover:shadow-lg"
+												onclick={() => disconnectWifi(uuid, availableNetwork)}
+												size="sm"
+											>
+												<WifiOff class="h-4 w-4" />
+												<span class="hidden text-xs font-medium sm:inline">
+													{$LL.wifiSelector.button.disconnect()}
+												</span>
+											</Button>
+										{:else}
+											<Button
+												class="h-9 gap-1.5 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 px-3 text-white shadow-md transition-all hover:from-blue-600 hover:to-indigo-600 hover:shadow-lg"
+												onclick={() => handleWifiConnect(uuid, availableNetwork)}
+												size="sm"
+											>
+												<Link class="h-4 w-4" />
+												<span class="hidden text-xs font-medium sm:inline">
+													{$LL.wifiSelector.button.connect()}
+												</span>
+											</Button>
+										{/if}
+
+										<!-- Forget Button -->
+										<SimpleAlertDialog
+											class="max-w-md"
+											buttonClasses="h-9 w-9 p-0 rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-all dark:bg-slate-800 dark:hover:bg-red-900/30 dark:text-slate-400 dark:hover:text-red-400"
+											confirmButtonText={$LL.wifiSelector.button.forget()}
+											extraButtonClasses="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold"
+											onconfirm={() => forgetWifi(uuid, availableNetwork)}
+											title={$LL.wifiSelector.dialog.forgetNetwork()}
+										>
+											{#snippet icon()}
+												<Trash2 class="h-4 w-4" />
+											{/snippet}
+											{#snippet dialogTitle()}
+												<div class="flex items-center gap-3">
+													<div
+														class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-rose-600"
+													>
+														<Trash2 class="h-5 w-5 text-white" />
+													</div>
+													<div>
+														<h3 class="text-foreground font-semibold">
+															{$LL.wifiSelector.dialog.forgetNetwork()}
+														</h3>
+														<p
+															class="max-w-[200px] truncate font-mono text-sm text-red-600 dark:text-red-400"
+														>
+															{availableNetwork.ssid}
+														</p>
+													</div>
+												</div>
+											{/snippet}
+											{#snippet description()}
+												<p class="text-muted-foreground">
+													{$LL.wifiSelector.dialog.confirmForget({
+														ssid: availableNetwork.ssid,
+														network: networkRename(wifi.ifname),
+													})}
+												</p>
+											{/snippet}
+										</SimpleAlertDialog>
+									</div>
+								{:else}
+									<!-- New Network - Connect Dialog -->
 									<SimpleAlertDialog
-										class="max-w-[95vw] sm:max-w-md"
-										buttonClasses="h-9 w-9 p-0 bg-gradient-to-r from-gray-100 to-gray-200 hover:from-red-100 hover:to-red-200 text-gray-600 hover:text-red-600 transition-all duration-200 shadow-sm dark:from-gray-700 dark:to-gray-800 dark:hover:from-red-900/30 dark:hover:to-red-800/30 dark:text-gray-400 dark:hover:text-red-400"
-										confirmButtonText={$LL.wifiSelector.button.forget()}
-										extraButtonClasses="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium"
-										onconfirm={() => forgetWifi(uuid, availableNetwork)}
-										title={$LL.wifiSelector.dialog.forgetNetwork()}
+										class="max-w-md"
+										buttonClasses="h-9 gap-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 px-3 text-white shadow-md transition-all hover:from-emerald-600 hover:to-teal-600 hover:shadow-lg text-xs font-medium"
+										confirmButtonText={$LL.wifiSelector.button.connect()}
+										extraButtonClasses="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold"
+										oncancel={() => {
+											networkPassword = '';
+											showPassword = false;
+										}}
+										onconfirm={() => {
+											handleNewWifiConnect(availableNetwork.ssid, networkPassword);
+										}}
 									>
 										{#snippet icon()}
-											<Trash2 class="h-3 w-3" />
+											<Link class="h-4 w-4" />
 										{/snippet}
 										{#snippet dialogTitle()}
-											<div class="space-y-2">
-												<h3 class="font-semibold">
-													{$LL.wifiSelector.dialog.disconnectFrom({ ssid: '' })}
-												</h3>
-												<div class="rounded-lg bg-gray-100 p-2 dark:bg-gray-800">
-													<p class="font-mono text-sm break-all">{availableNetwork.ssid}</p>
+											<div class="flex items-center gap-3">
+												<div
+													class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600"
+												>
+													<Wifi class="h-5 w-5 text-white" />
+												</div>
+												<div>
+													<h3 class="text-foreground font-semibold">
+														{$LL.wifiSelector.dialog.connectTo({ ssid: '' })}
+													</h3>
+													<p
+														class="max-w-[200px] truncate font-mono text-sm text-emerald-600 dark:text-emerald-400"
+													>
+														{availableNetwork.ssid}
+													</p>
 												</div>
 											</div>
 										{/snippet}
 										{#snippet description()}
-											<div class="space-y-3">
+											<div class="space-y-4">
 												<p class="text-muted-foreground text-sm">
-													{$LL.wifiSelector.dialog.confirmForget({
-														ssid: '',
-														network: networkRename(wifi.ifname),
-													})}
+													{$LL.wifiSelector.dialog.introducePassword()}
 												</p>
+												<div class="relative">
+													<Input
+														class="h-11 rounded-xl border-2 border-slate-200 bg-slate-50 pr-12 font-mono text-sm transition-all focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-800/50 dark:focus:border-emerald-500"
+														placeholder={$LL.wifiSelector.hotspot.placeholderPassword()}
+														type={showPassword ? 'text' : 'password'}
+														bind:value={networkPassword}
+													/>
+													<button
+														class="absolute top-1/2 right-3 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+														aria-label={showPassword
+															? $LL.wifiSelector.accessibility.hidePassword()
+															: $LL.wifiSelector.accessibility.showPassword()}
+														onclick={() => (showPassword = !showPassword)}
+														type="button"
+													>
+														{#if showPassword}
+															<EyeOff class="h-4 w-4" />
+														{:else}
+															<Eye class="h-4 w-4" />
+														{/if}
+													</button>
+												</div>
 											</div>
 										{/snippet}
 									</SimpleAlertDialog>
-								</div>
-							{:else}
-								<SimpleAlertDialog
-									class="max-w-[95vw] sm:max-w-md"
-									buttonClasses="h-9 bg-gradient-to-r from-blue-500 to-blue-600 px-3 text-white transition-all duration-200 hover:from-blue-600 hover:to-blue-700 shadow-sm text-xs font-medium"
-									confirmButtonText={$LL.wifiSelector.button.connect()}
-									extraButtonClasses="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium transition-all duration-200"
-									oncancel={() => {
-										networkPassword = '';
-										showPassword = false;
-									}}
-									onconfirm={() => {
-										handleNewWifiConnect(availableNetwork.ssid, networkPassword);
-									}}
-								>
-									{#snippet dialogTitle()}
-										<div class="space-y-2">
-											<h3 class="font-semibold">
-												{$LL.wifiSelector.dialog.connectTo({ ssid: '' })}
-											</h3>
-											<div
-												class="rounded-lg border border-blue-200 bg-blue-50 p-2 dark:border-blue-800 dark:bg-blue-950/30"
-											>
-												<p class="font-mono text-sm break-all text-blue-800 dark:text-blue-200">
-													{availableNetwork.ssid}
-												</p>
-											</div>
-										</div>
-									{/snippet}
-									{#snippet icon()}
-										<Link class="h-3 w-3" />
-									{/snippet}
-									{#snippet description()}
-										<div class="space-y-4">
-											<p class="text-muted-foreground text-sm">
-												{$LL.wifiSelector.dialog.introducePassword()}
-											</p>
-											<div class="relative">
-												<Input
-													id="password"
-													class="focus:ring-opacity-20 h-10 w-full rounded-lg border-2 border-gray-200 bg-gray-50 px-3 pr-10 text-sm transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/50"
-													placeholder={$LL.wifiSelector.hotspot.placeholderPassword()}
-													type={showPassword ? 'text' : 'password'}
-													bind:value={networkPassword}
-												/>
-												<button
-													class="absolute top-1/2 right-3 -translate-y-1/2 text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-													aria-label={showPassword
-														? $LL.wifiSelector.accessibility.hidePassword()
-														: $LL.wifiSelector.accessibility.showPassword()}
-													onclick={() => (showPassword = !showPassword)}
-													type="button"
-												>
-													{#if showPassword}
-														<EyeOff class="h-4 w-4" />
-													{:else}
-														<Eye class="h-4 w-4" />
-													{/if}
-												</button>
-											</div>
-										</div>
-									{/snippet}
-								</SimpleAlertDialog>
-							{/if}
+								{/if}
+							</div>
 						</div>
+					</div>
+				{:else}
+					<!-- Empty State -->
+					<div class="flex flex-col items-center justify-center py-12 text-center">
+						<div
+							class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800"
+						>
+							<WifiOff class="text-muted-foreground h-8 w-8" />
+						</div>
+						<h4 class="text-foreground mb-1 font-semibold">No Networks Found</h4>
+						<p class="text-muted-foreground mb-4 max-w-xs text-sm">
+							Click scan to search for available WiFi networks in your area.
+						</p>
+						<Button
+							class="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
+							disabled={scanning}
+							onclick={handleWifiScan}
+						>
+							{#if scanning}
+								<Loader2 class="h-4 w-4 animate-spin" />
+							{:else}
+								<ScanSearch class="h-4 w-4" />
+							{/if}
+							{$LL.wifiSelector.button.scan()}
+						</Button>
 					</div>
 				{/each}
 			</div>
 		</ScrollArea>
-
-		<!-- Scan Button -->
-		<Button
-			class="h-11 w-full rounded-lg bg-gradient-to-r from-indigo-500 to-indigo-600 text-sm font-medium text-white shadow-md transition-all duration-200 hover:from-indigo-600 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-			disabled={scanning}
-			onclick={handleWifiScan}
-		>
-			{#if scanning}
-				<div
-					class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-				></div>
-				<span>{$LL.wifiSelector.button.scanning()}</span>
-			{:else}
-				<ScanSearch class="mr-2 h-4 w-4" />
-				{$LL.wifiSelector.button.scan()}
-			{/if}
-		</Button>
 	</div>
 </SimpleAlertDialog>
