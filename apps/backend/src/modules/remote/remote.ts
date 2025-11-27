@@ -1,6 +1,6 @@
 /*
-    belaUI - web UI for the BELABOX project
-    Copyright (C) 2020-2022 BELABOX project
+    CeraUI - web UI for the CeraLive project
+    Copyright (C) 2024-2025 CeraLive project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 /*
   A brief remote protocol version history:
   1 - initial remote release
-  2 - belaUI password setting feature
+  2 - CeraLive password setting feature
   3 - apt update feature
   4 - ssh manager
   5 - wifi manager

@@ -1,7 +1,7 @@
 {
 	"name": "backend",
 	"version": "1.0.0",
-	"description": "CeraUI backend - Node.js/Bun server for CERALIVE/BELABOX live streaming hardware",
+	"description": "CeraUI backend - Bun server for CeraLive streaming hardware",
 	"type": "module",
 	"author": "Andrés Cera",
 	"license": "GPL-3.0",
@@ -9,11 +9,13 @@
 		"bun": ">=1.0.0"
 	},
 	"dependencies": {
+		"@ceraui/rpc": "workspace:*",
+		"@orpc/server": "^1.11.3",
 		"finalhandler": "^2.1.0",
+		"zod": "^4.1.13",
 		"http-proxy": "^1.18.1",
 		"serve-static": "^2.2.0",
 		"winston": "^3.18.3",
-		"ws": "^8.18.3",
 		"xml2js": "^0.6.2"
 	},
 	"devDependencies": {
@@ -27,11 +29,11 @@
 		"typescript": "^5.9.3"
 	},
 	"scripts": {
-		"dev": "bun --watch run src/belaUI.ts",
-		"dev:single-modem": "MOCK_SCENARIO=single-modem bun --watch run src/belaUI.ts",
-		"dev:streaming": "MOCK_SCENARIO=streaming-active bun --watch run src/belaUI.ts",
-		"build": "rm -rf ../../dist/ && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; bun build --compile --minify --sourcemap --bytecode --target=$BUN_TARGET src/belaUI.ts --outfile ../../dist/belaUI' && cd ../.. && pnpm run build:frontend",
-		"build:backend-only": "rm -rf ../../dist/belaUI ../../dist/deployment && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; bun build --compile --minify --sourcemap --bytecode --target=$BUN_TARGET src/belaUI.ts --outfile ../../dist/belaUI'",
+		"dev": "bun --watch run src/main.ts",
+		"dev:single-modem": "MOCK_SCENARIO=single-modem bun --watch run src/main.ts",
+		"dev:streaming": "MOCK_SCENARIO=streaming-active bun --watch run src/main.ts",
+		"build": "rm -rf ../../dist/ && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; bun build --compile --minify --sourcemap --bytecode --target=$BUN_TARGET src/main.ts --outfile ../../dist/ceralive' && cd ../.. && pnpm run build:frontend",
+		"build:backend-only": "rm -rf ../../dist/ceralive ../../dist/deployment && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; bun build --compile --minify --sourcemap --bytecode --target=$BUN_TARGET src/main.ts --outfile ../../dist/ceralive'",
 		"check": "bun tsc --noEmit",
 		"lint": "echo 'Backend linting handled by root Biome'",
 		"lint:fix": "echo 'Backend fixing handled by root Biome'",

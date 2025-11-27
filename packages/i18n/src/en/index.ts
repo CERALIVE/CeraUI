@@ -644,10 +644,10 @@ const en = {
 		startSSH: "Start SSH Server",
 		stopSSH: "Stop SSH Server",
 		sshToggleTooltip: "Start or stop the SSH server.",
-		belaboxLog: brandTranslation("{{logName}}"),
+		ceraliveLog: brandTranslation("{{logName}}"),
 		systemLog: "System Log",
 		download: "Download",
-		belaboxLogTooltip: "Download logs for troubleshooting.",
+		ceraliveLogTooltip: "Download logs for troubleshooting.",
 		systemLogTooltip: "Download system logs for debugging.",
 		confirmBelaboxLog: brandTranslation(
 			"Are you sure you want to download the {{logName}}? It may contain sensitive information such as passwords.",

@@ -1,27 +1,11 @@
 /**
- * Dynamic branding support for i18n system
- * This module provides brand-aware translation functions
+ * Branding support for i18n system
+ * CeraLive-only branding
  */
 
-export type BrandName = "CERALIVE" | "BELABOX";
+export type BrandName = "CERALIVE";
 
-// Get brand from environment or default to CERALIVE (main brand)
-export const getCurrentBrand = (): BrandName => {
-	// Browser environment (client-side)
-	if (typeof window !== "undefined") {
-		return (
-			((window as any).__BRAND_CONFIG__?.deviceName as BrandName) || "CERALIVE"
-		);
-	}
-
-	// Node environment (build-time)
-	if (typeof process !== "undefined") {
-		return (process.env.VITE_BRAND as BrandName) || "CERALIVE";
-	}
-
-	// Fallback
-	return "CERALIVE";
-};
+export const getCurrentBrand = (): BrandName => "CERALIVE";
 
 export interface BrandStrings {
 	deviceName: string;
@@ -32,36 +16,23 @@ export interface BrandStrings {
 	organizationName: string;
 }
 
-const brandStrings: Record<BrandName, BrandStrings> = {
-	CERALIVE: {
-		deviceName: "CERALIVE",
-		deviceNameLower: "ceralive",
-		siteName: "CeraUI for CERALIVE©",
-		cloudService: "CERALIVE Cloud",
-		logName: "CERALIVE Log",
-		organizationName: "CERALIVE",
-	},
-	BELABOX: {
-		deviceName: "BELABOX",
-		deviceNameLower: "belabox",
-		siteName: "CeraUI for BELABOX©",
-		cloudService: "BELABOX Cloud",
-		logName: "BELABOX Log",
-		organizationName: "BELABOX",
-	},
+const brandStrings: BrandStrings = {
+	deviceName: "CeraLive",
+	deviceNameLower: "ceralive",
+	siteName: "CeraUI for CeraLive©",
+	cloudService: "CeraLive Cloud",
+	logName: "CeraLive Log",
+	organizationName: "CeraLive",
 };
 
 /**
- * Get brand-specific strings for the current brand
+ * Get brand-specific strings
  */
-export const getBrandStrings = (): BrandStrings => {
-	const brand = getCurrentBrand();
-	return brandStrings[brand];
-};
+export const getBrandStrings = (): BrandStrings => brandStrings;
 
 /**
  * Replace brand placeholders in translation strings
- * Usage: brandTranslation("{{deviceName}} device is powered on") -> "CERALIVE device is powered on"
+ * Usage: brandTranslation("{{deviceName}} device is powered on") -> "CeraLive device is powered on"
  */
 export const brandTranslation = (template: string): string => {
 	const brand = getBrandStrings();

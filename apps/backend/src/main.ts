@@ -1,7 +1,6 @@
 /*
-    CeraUI - web UI for the CERALIVE project
-    Copyright (C) 2020-2022 BELABOX project
-    Copyright (C) 2023-2025 CERALIVE project
+    CeraUI - web UI for the CeraLive project
+    Copyright (C) 2024-2025 CeraLive project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -43,8 +42,7 @@ import { initRevisions } from "./modules/system/revisions.ts";
 import { initHardwareMonitoring } from "./modules/system/sensors.ts";
 import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updates.ts";
 import { getSshStatus } from "./modules/system/ssh.ts";
-import { initHttpServer } from "./modules/ui/http-server.ts";
-import { initWebSocketServer } from "./modules/ui/websocket-server.ts";
+import { initServer } from "./rpc/index.ts";
 
 /* Disable localization for any CLI commands we run */
 process.env.LANG = "C.UTF-8";
@@ -74,7 +72,7 @@ initRemote();
 initPipelines();
 
 initRevisions();
-initWebSocketServer();
+// WebSocket server is now integrated with HTTP server via Bun.serve()
 initHardwareMonitoring();
 initRTMPIngestStats();
 initSRTIngest();
@@ -97,7 +95,7 @@ checkCamlinkUsb2();
 updateAudioDevices();
 startBcrpt();
 
-// Don't autostart when restarting belaUI after a software update or after a crash
+// Don't autostart when restarting CeraLive after a software update or after a crash
 
 /*
   We use an UDEV rule to send a SIGUSR2 when:
@@ -114,5 +112,6 @@ process.on("SIGUSR2", function udevDeviceUpdate() {
 killall(["belacoder"]);
 killall(["srtla_send"]);
 
-initHttpServer();
+// Initialize Bun native HTTP/WebSocket server
+initServer();
 checkAutoStartStream();
