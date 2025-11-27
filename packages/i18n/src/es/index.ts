@@ -449,6 +449,10 @@ const es = {
 			roamingNetwork: "Red de Roaming",
 			scan: "Buscar",
 			scanning: "Buscando",
+			configuration: "Configuración",
+			apnSettings: "Configuración APN",
+			autoApnDescription: "Configurar APN automáticamente",
+			roamingDescription: "Permitir conexión a otras redes",
 			connectionStatus: {
 				failed: "Fallida",
 				registered: "Registrado",
@@ -546,6 +550,11 @@ const es = {
 		},
 		networks: {
 			found: "redes encontradas",
+		},
+		emptyState: {
+			title: "No se encontraron redes",
+			description:
+				"Haz clic en buscar para encontrar redes WiFi disponibles en tu área.",
 		},
 		status: {
 			connected: "Conectado",

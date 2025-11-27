@@ -436,6 +436,10 @@ const de = {
 			roamingNetwork: "Roaming-Netzwerk",
 			scan: "Scannen",
 			scanning: "Wird gescannt",
+			configuration: "Konfiguration",
+			apnSettings: "APN-Einstellungen",
+			autoApnDescription: "APN automatisch konfigurieren",
+			roamingDescription: "Verbindung zu anderen Netzwerken erlauben",
 			connectionStatus: {
 				failed: "Fehlgeschlagen",
 				registered: "Registriert",
@@ -545,6 +549,11 @@ const de = {
 		},
 		networks: {
 			found: "Netzwerke gefunden",
+		},
+		emptyState: {
+			title: "Keine Netzwerke gefunden",
+			description:
+				"Klicken Sie auf Scannen, um verfügbare WLAN-Netzwerke zu finden.",
 		},
 		status: {
 			connected: "Verbunden",

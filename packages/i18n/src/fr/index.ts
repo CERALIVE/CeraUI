@@ -423,6 +423,10 @@ const fr = {
 			roamingNetwork: "Réseau d'itinérance",
 			scan: "Scanner",
 			scanning: "Scan en cours",
+			configuration: "Configuration",
+			apnSettings: "Paramètres APN",
+			autoApnDescription: "Configurer l'APN automatiquement",
+			roamingDescription: "Autoriser la connexion à d'autres réseaux",
 			connectionStatus: {
 				failed: "échoué",
 				registered: "Enregistré",
@@ -533,6 +537,11 @@ const fr = {
 		},
 		networks: {
 			found: "réseaux trouvés",
+		},
+		emptyState: {
+			title: "Aucun réseau trouvé",
+			description:
+				"Cliquez sur Scanner pour trouver les réseaux WiFi disponibles.",
 		},
 		status: {
 			connected: "Connecté",

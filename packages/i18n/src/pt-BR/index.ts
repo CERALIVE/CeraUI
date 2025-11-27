@@ -414,6 +414,10 @@ const ptBR = {
 			roamingNetwork: "Rede de Roaming",
 			scan: "Escanear",
 			scanning: "Escaneando",
+			configuration: "Configuração",
+			apnSettings: "Configurações de APN",
+			autoApnDescription: "Configurar APN automaticamente",
+			roamingDescription: "Permitir conexão com outras redes",
 			connectionStatus: {
 				failed: "Fracassado",
 				registered: "Registrado",
@@ -531,6 +535,10 @@ const ptBR = {
 		},
 		networks: {
 			found: "redes encontradas",
+		},
+		emptyState: {
+			title: "Nenhuma rede encontrada",
+			description: "Clique em Escanear para encontrar redes WiFi disponíveis.",
 		},
 		status: {
 			connected: "Conectado",
