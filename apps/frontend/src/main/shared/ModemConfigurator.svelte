@@ -298,13 +298,17 @@ const isScanning = $derived(modemIsScanning || localScanningState);
 							bind:value={formData.apn}
 						/>
 					</div>
-					<div class="grid grid-cols-2 gap-3">
-						<div class="space-y-1">
-							<Label class="text-muted-foreground text-xs">{$LL.network.modem.username()}</Label>
+					<div class="grid grid-cols-2 items-end gap-3">
+						<div>
+							<Label class="text-muted-foreground mb-1 block truncate text-xs"
+								>{$LL.network.modem.username()}</Label
+							>
 							<Input class="h-8 text-sm" placeholder="—" bind:value={formData.username} />
 						</div>
-						<div class="space-y-1">
-							<Label class="text-muted-foreground text-xs">{$LL.network.modem.password()}</Label>
+						<div>
+							<Label class="text-muted-foreground mb-1 block truncate text-xs"
+								>{$LL.network.modem.password()}</Label
+							>
 							<Input
 								class="h-8 text-sm"
 								placeholder="—"
