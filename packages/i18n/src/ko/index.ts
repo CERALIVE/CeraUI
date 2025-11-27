@@ -218,6 +218,10 @@ const ko = {
 			roamingNetwork: "로밍 네트워크",
 			scan: "스캔",
 			scanning: "스캔 중",
+			configuration: "설정",
+			apnSettings: "APN 설정",
+			autoApnDescription: "자동으로 APN 구성",
+			roamingDescription: "다른 네트워크에 연결 허용",
 			connectionStatus: {
 				failed: "실패",
 				registered: "등록됨",
@@ -325,6 +329,10 @@ const ko = {
 		},
 		networks: {
 			found: "네트워크 발견됨",
+		},
+		emptyState: {
+			title: "네트워크를 찾을 수 없음",
+			description: "스캔을 클릭하여 사용 가능한 WiFi 네트워크를 검색하세요.",
 		},
 		success: {
 			connected: "WiFi 연결됨",

@@ -215,6 +215,10 @@ const hi = {
 			roamingNetwork: "रोमिंग नेटवर्क",
 			scan: "स्कैन",
 			scanning: "स्कैनिंग",
+			configuration: "कॉन्फ़िगरेशन",
+			apnSettings: "APN सेटिंग्स",
+			autoApnDescription: "APN स्वचालित रूप से कॉन्फ़िगर करें",
+			roamingDescription: "अन्य नेटवर्क से कनेक्शन की अनुमति दें",
 			connectionStatus: {
 				failed: "विफल",
 				registered: "पंजीकृत",
@@ -323,6 +327,10 @@ const hi = {
 		},
 		networks: {
 			found: "नेटवर्क मिले",
+		},
+		emptyState: {
+			title: "कोई नेटवर्क नहीं मिला",
+			description: "उपलब्ध WiFi नेटवर्क खोजने के लिए स्कैन पर क्लिक करें।",
 		},
 		success: {
 			connected: "वाई-फाई कनेक्ट हुआ",

@@ -389,6 +389,10 @@ const ar = {
 			roamingNetwork: "شبكة التجوال",
 			scan: "فحص",
 			scanning: "جاري الفحص",
+			configuration: "الإعدادات",
+			apnSettings: "إعدادات APN",
+			autoApnDescription: "تكوين APN تلقائياً",
+			roamingDescription: "السماح بالاتصال بشبكات أخرى",
 			connectionStatus: {
 				failed: "فشل",
 				registered: "مسجل",
@@ -498,6 +502,10 @@ const ar = {
 		},
 		networks: {
 			found: "شبكات موجودة",
+		},
+		emptyState: {
+			title: "لم يتم العثور على شبكات",
+			description: "انقر على مسح للبحث عن شبكات WiFi المتاحة.",
 		},
 		success: {
 			connected: "تم الاتصال بـ WiFi",

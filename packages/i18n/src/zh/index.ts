@@ -209,6 +209,10 @@ const zh = {
 			roamingNetwork: "漫游网络",
 			scan: "扫描",
 			scanning: "扫描中",
+			configuration: "配置",
+			apnSettings: "APN 设置",
+			autoApnDescription: "自动配置 APN",
+			roamingDescription: "允许连接到其他网络",
 			connectionStatus: {
 				failed: "失败",
 				registered: "已注册",
@@ -327,6 +331,10 @@ const zh = {
 		},
 		networks: {
 			found: "找到网络",
+		},
+		emptyState: {
+			title: "未找到网络",
+			description: "点击扫描搜索可用的 WiFi 网络。",
 		},
 		status: {
 			connected: "已连接",

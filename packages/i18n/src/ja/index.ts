@@ -220,6 +220,10 @@ const ja = {
 			roamingNetwork: "ローミングネットワーク",
 			scan: "スキャン",
 			scanning: "スキャン中",
+			configuration: "設定",
+			apnSettings: "APN設定",
+			autoApnDescription: "APNを自動設定する",
+			roamingDescription: "他のネットワークへの接続を許可する",
 			connectionStatus: {
 				failed: "失敗",
 				registered: "登録済み",
@@ -331,6 +335,11 @@ const ja = {
 		},
 		networks: {
 			found: "ネットワークが見つかりました",
+		},
+		emptyState: {
+			title: "ネットワークが見つかりません",
+			description:
+				"スキャンをクリックして利用可能なWiFiネットワークを検索してください。",
 		},
 		success: {
 			connected: "WiFi接続完了",
