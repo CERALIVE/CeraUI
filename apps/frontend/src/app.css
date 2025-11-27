@@ -61,6 +61,24 @@
     --input: 0 0% 89.8%;
     --ring: 0 72.2% 50.6%;
     --radius: 0.5rem;
+
+    /* CeraUI Semantic Status Colors */
+    --status-success: 160 84% 39%; /* emerald-600 */
+    --status-success-foreground: 0 0% 100%;
+    --status-info: 217 91% 60%; /* blue-500 */
+    --status-info-foreground: 0 0% 100%;
+    --status-warning: 38 92% 50%; /* amber-500 */
+    --status-warning-foreground: 0 0% 100%;
+    --status-error: 0 84% 60%; /* red-500 */
+    --status-error-foreground: 0 0% 100%;
+    --status-neutral: 215 16% 47%; /* slate-500 */
+    --status-neutral-foreground: 0 0% 100%;
+
+    /* Signal Quality Colors */
+    --signal-excellent: 142 71% 45%; /* green-500 */
+    --signal-good: 217 91% 60%; /* blue-500 */
+    --signal-fair: 38 92% 50%; /* amber-500 */
+    --signal-weak: 0 84% 60%; /* red-500 */
   }
   .dark {
     --background: 0 0% 3.9%;
@@ -82,6 +100,24 @@
     --border: 0 0% 14.9%;
     --input: 0 0% 14.9%;
     --ring: 0 72.2% 50.6%;
+
+    /* CeraUI Semantic Status Colors (Dark) */
+    --status-success: 158 64% 52%; /* emerald-500 */
+    --status-success-foreground: 0 0% 100%;
+    --status-info: 217 91% 60%; /* blue-500 */
+    --status-info-foreground: 0 0% 100%;
+    --status-warning: 38 92% 50%; /* amber-500 */
+    --status-warning-foreground: 0 0% 100%;
+    --status-error: 0 84% 60%; /* red-500 */
+    --status-error-foreground: 0 0% 100%;
+    --status-neutral: 215 20% 65%; /* slate-400 */
+    --status-neutral-foreground: 0 0% 100%;
+
+    /* Signal Quality Colors (Dark) */
+    --signal-excellent: 142 69% 58%; /* green-400 */
+    --signal-good: 213 94% 68%; /* blue-400 */
+    --signal-fair: 43 96% 56%; /* amber-400 */
+    --signal-weak: 0 91% 71%; /* red-400 */
   }
 }
 
