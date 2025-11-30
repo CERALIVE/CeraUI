@@ -591,9 +591,9 @@ const ptBR = {
 	advanced: {
 		systemSettings: "Configurações do sistema",
 		developerOptions: "Opções do desenvolvedor",
-		lanPassword: "Senha da Interface Web LAN (belaUI)",
+		lanPassword: "Senha da Interface Web LAN",
 		lanPasswordTooltip:
-			"Defina uma senha para proteger o acesso à interface web belaUI.",
+			"Defina uma senha para proteger o acesso à interface web CeraUI.",
 		minLength: "Comprimento mínimo: 8 caracteres",
 		newPassword: "Nova senha",
 		save: "Salvar",

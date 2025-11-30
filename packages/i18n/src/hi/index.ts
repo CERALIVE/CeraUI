@@ -415,8 +415,8 @@ const hi = {
 	advanced: {
 		systemSettings: "सिस्टम सेटिंग्स",
 		developerOptions: "डेवलपर विकल्प",
-		lanPassword: "LAN वेब इंटरफेस (belaUI) पासवर्ड",
-		lanPasswordTooltip: "belaUI वेब इंटरफ़ेस तक पहुंच की सुरक्षा के लिए पासवर्ड सेट करें।",
+		lanPassword: "LAN वेब इंटरफेस पासवर्ड",
+		lanPasswordTooltip: "CeraUI वेब इंटरफ़ेस तक पहुंच की सुरक्षा के लिए पासवर्ड सेट करें।",
 		minLength: "न्यूनतम लंबाई: 8 अक्षर",
 		newPassword: "नया पासवर्ड",
 		save: "सहेजें",

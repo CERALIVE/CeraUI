@@ -425,9 +425,9 @@ const ja = {
 	advanced: {
 		systemSettings: "システム設定",
 		developerOptions: "開発者オプション",
-		lanPassword: "LAN Webインターフェース (belaUI) パスワード",
+		lanPassword: "LAN Webインターフェース パスワード",
 		lanPasswordTooltip:
-			"belaUI Webインターフェースへのアクセスを保護するパスワードを設定します。",
+			"CeraUI Webインターフェースへのアクセスを保護するパスワードを設定します。",
 		minLength: "最小長: 8文字",
 		newPassword: "新しいパスワード",
 		save: "保存",

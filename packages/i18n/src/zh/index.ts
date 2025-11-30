@@ -387,8 +387,8 @@ const zh = {
 	advanced: {
 		systemSettings: "系统设置",
 		developerOptions: "开发者选项",
-		lanPassword: "局域网网页界面 (belaUI) 密码",
-		lanPasswordTooltip: "设置密码以保护对 belaUI 网页界面的访问。",
+		lanPassword: "局域网网页界面密码",
+		lanPasswordTooltip: "设置密码以保护对 CeraUI 网页界面的访问。",
 		minLength: "最小长度：8个字符",
 		newPassword: "新密码",
 		save: "保存",

@@ -419,9 +419,9 @@ const ko = {
 	advanced: {
 		systemSettings: "시스템 설정",
 		developerOptions: "개발자 옵션",
-		lanPassword: "LAN 웹 인터페이스(belaUI) 비밀번호",
+		lanPassword: "LAN 웹 인터페이스 비밀번호",
 		lanPasswordTooltip:
-			"belaUI 웹 인터페이스 접근을 보호하기 위한 비밀번호를 설정합니다.",
+			"CeraUI 웹 인터페이스 접근을 보호하기 위한 비밀번호를 설정합니다.",
 		minLength: "최소 길이: 8자",
 		newPassword: "새 비밀번호",
 		save: "저장",

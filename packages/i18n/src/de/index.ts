@@ -618,9 +618,9 @@ const de = {
 	advanced: {
 		systemSettings: "Systemeinstellungen",
 		developerOptions: "Entwickleroptionen",
-		lanPassword: "LAN-Weboberfläche (belaUI) Passwort",
+		lanPassword: "LAN-Weboberfläche Passwort",
 		lanPasswordTooltip:
-			"Legen Sie ein Passwort fest, um den Zugriff auf die belaUI-Weboberfläche zu schützen.",
+			"Legen Sie ein Passwort fest, um den Zugriff auf die CeraUI-Weboberfläche zu schützen.",
 		minLength: "Mindestlänge: 8 Zeichen",
 		newPassword: "Neues Passwort",
 		save: "Speichern",

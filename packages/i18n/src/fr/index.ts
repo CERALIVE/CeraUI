@@ -614,9 +614,9 @@ const fr = {
 	advanced: {
 		systemSettings: "Paramètres du système",
 		developerOptions: "Options du développeur",
-		lanPassword: "Mot de passe de l'interface Web LAN (belaUI)",
+		lanPassword: "Mot de passe de l'interface Web LAN",
 		lanPasswordTooltip:
-			"Définissez un mot de passe pour protéger l'accès à l'interface Web belaUI.",
+			"Définissez un mot de passe pour protéger l'accès à l'interface Web CeraUI.",
 		minLength: "Longueur minimale : 8 caractères",
 		newPassword: "Nouveau mot de passe",
 		save: "Enregistrer",

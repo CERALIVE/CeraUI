@@ -591,9 +591,9 @@ const ar = {
 	advanced: {
 		systemSettings: "إعدادات النظام",
 		developerOptions: "خيارات المطور",
-		lanPassword: "كلمة مرور واجهة الويب المحلية (belaUI)",
+		lanPassword: "كلمة مرور واجهة الويب المحلية",
 		lanPasswordTooltip:
-			"قم بتعيين كلمة مرور لحماية الوصول إلى واجهة belaUI على الويب.",
+			"قم بتعيين كلمة مرور لحماية الوصول إلى واجهة CeraUI على الويب.",
 		minLength: "الحد الأدنى للطول: 8 أحرف",
 		newPassword: "كلمة المرور الجديدة",
 		save: "حفظ",

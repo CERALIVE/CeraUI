@@ -631,9 +631,9 @@ const es = {
 	advanced: {
 		systemSettings: "Configuración del sistema",
 		developerOptions: "Opciones de desarrollador",
-		lanPassword: "Contraseña de la interfaz web LAN (belaUI)",
+		lanPassword: "Contraseña de la interfaz web LAN",
 		lanPasswordTooltip:
-			"Establezca una contraseña para proteger el acceso a la interfaz web de belaUI.",
+			"Establezca una contraseña para proteger el acceso a la interfaz web de CeraUI.",
 		minLength: "Longitud mínima: 8 caracteres",
 		newPassword: "Nueva Contraseña",
 		save: "Guardar",
