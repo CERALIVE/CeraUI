@@ -649,11 +649,11 @@ const de = {
 		download: "Herunterladen",
 		ceraliveLogTooltip: "Laden Sie Logdatei zur Fehlerbehebung herunter.",
 		systemLogTooltip: "Laden Sie System-Logdatei zum Debuggen herunter.",
-		confirmBelaboxLog:
+		confirmDeviceLog:
 			"Sind Sie sicher, dass Sie das CeraLive-Logdatei herunterladen möchten? Es kann sensible Informationen wie Passwörter enthalten.",
 		confirmSystemLog:
 			"Sind Sie sicher, dass Sie das System-Logdatei herunterladen möchten? Es kann sensible Informationen wie Passwörter enthalten.",
-		downloadBelaboxLog: "CeraLive-Logdatei herunterladen",
+		downloadDeviceLog: "CeraLive-Logdatei herunterladen",
 		downloadSystemLog: "System-Logdatei herunterladen",
 		systemDescription: "Erweiterte Systemkonfiguration und Entwickleroptionen",
 		systemActions: "Systemaktionen",

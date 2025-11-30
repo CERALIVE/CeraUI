@@ -456,11 +456,11 @@ const ja = {
 		download: "ダウンロード",
 		ceraliveLogTooltip: "トラブルシューティング用にログをダウンロードします。",
 		systemLogTooltip: "デバッグ用にシステムログをダウンロードします。",
-		confirmBelaboxLog:
+		confirmDeviceLog:
 			"CeraLiveログをダウンロードしますか？パスワードなどの機密情報が含まれている可能性があります。",
 		confirmSystemLog:
 			"システムログをダウンロードしますか？パスワードなどの機密情報が含まれている可能性があります。",
-		downloadBelaboxLog: "CeraLiveログをダウンロード",
+		downloadDeviceLog: "CeraLiveログをダウンロード",
 		downloadSystemLog: "システムログをダウンロード",
 		systemDescription: "高度なシステム構成と開発者オプション",
 		systemActions: "システムアクション",

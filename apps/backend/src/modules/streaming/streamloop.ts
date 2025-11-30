@@ -66,7 +66,7 @@ type ChildProcess = ChildProcessByStdio<null, null, Readable> & {
 	restartTimer?: ReturnType<typeof setTimeout>;
 };
 
-export const AUTOSTART_CHECK_FILE = "/tmp/belaui_restarted";
+export const AUTOSTART_CHECK_FILE = "/tmp/ceralive_restarted";
 
 export const belacoderExec = `${setup.belacoder_path ?? "/usr/bin"}/belacoder`;
 export const srtlaSendExec = `${setup.srtla_path ?? "/usr/bin"}/srtla_send`;

@@ -124,7 +124,7 @@ export type RelayMessage = {
 	servers: { [key: string]: { name: string } };
 };
 export type RevisionsMessage = {
-	belaUI: string;
+	ceralive: string;
 	belacoder: string;
 	srtla: string;
 	"CERALIVE image": string;

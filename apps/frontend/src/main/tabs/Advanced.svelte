@@ -9,7 +9,7 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
 import {
-	getBelaboxLog,
+	getDeviceLog,
 	getSystemLog,
 	powerOff,
 	reboot,
@@ -547,7 +547,7 @@ $effect(() => {
 										confirmButtonText={$LL.advanced.download()}
 										extraButtonClasses="w-full bg-gradient-to-r from-purple-500 to-violet-500 hover:from-purple-600 hover:to-violet-600 border-0 shadow-lg shadow-purple-500/25 text-white font-medium h-10 text-sm justify-center"
 										iconPosition="left"
-										onconfirm={getBelaboxLog}
+										onconfirm={getDeviceLog}
 									>
 										{#snippet icon()}
 											<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -560,10 +560,10 @@ $effect(() => {
 											</svg>
 										{/snippet}
 										{#snippet dialogTitle()}
-											{$LL.advanced.downloadBelaboxLog()}
+											{$LL.advanced.downloadDeviceLog()}
 										{/snippet}
 										{#snippet description()}
-											{$LL.advanced.confirmBelaboxLog()}
+											{$LL.advanced.confirmDeviceLog()}
 										{/snippet}
 									</SimpleAlertDialog>
 								</div>
@@ -667,9 +667,9 @@ $effect(() => {
 						</div>
 						<div class="grid grid-cols-2 gap-6 text-sm lg:grid-cols-4">
 							<div class="bg-card rounded-lg border p-3">
-								<p class="text-muted-foreground mb-1 text-xs font-medium">BelaUI</p>
+								<p class="text-muted-foreground mb-1 text-xs font-medium">CeraLive</p>
 								<p class="font-mono font-semibold">
-									{revisions.belaUI}
+									{revisions.ceralive}
 								</p>
 							</div>
 							<div

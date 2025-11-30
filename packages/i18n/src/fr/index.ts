@@ -645,11 +645,11 @@ const fr = {
 		download: "Télécharger",
 		ceraliveLogTooltip: "Téléchargez les journaux pour le dépannage.",
 		systemLogTooltip: "Téléchargez les journaux système pour le débogage.",
-		confirmBelaboxLog:
+		confirmDeviceLog:
 			"Êtes-vous sûr de vouloir télécharger le journal CeraLive ? Il peut contenir des informations sensibles, telles que des mots de passe.",
 		confirmSystemLog:
 			"Êtes-vous sûr de vouloir télécharger le journal système ? Il peut contenir des informations sensibles, telles que des mots de passe.",
-		downloadBelaboxLog: "Télécharger le journal CeraLive",
+		downloadDeviceLog: "Télécharger le journal CeraLive",
 		downloadSystemLog: "Télécharger le journal système",
 		systemDescription:
 			"Configuration système avancée et options de développeur",

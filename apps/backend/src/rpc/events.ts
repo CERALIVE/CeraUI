@@ -2,7 +2,7 @@
  * RPC Event System
  * Manages subscriptions and broadcasts for real-time data
  */
-import type { AppWebSocket, BroadcastEvent } from "./types.ts";
+import type { AppWebSocket } from "./types.ts";
 
 type EventHandler<T = unknown> = (data: T) => void;
 type UnsubscribeFn = () => void;
@@ -17,7 +17,7 @@ class EventEmitter {
 		if (!this.handlers.has(event)) {
 			this.handlers.set(event, new Set());
 		}
-		this.handlers.get(event)!.add(handler as EventHandler);
+		this.handlers.get(event)?.add(handler as EventHandler);
 
 		return () => {
 			this.handlers.get(event)?.delete(handler as EventHandler);

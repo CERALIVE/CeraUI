@@ -243,7 +243,7 @@ class RPCClient {
 				timeout: timeoutHandle,
 			});
 
-			this.socket!.send(JSON.stringify(request));
+			this.socket?.send(JSON.stringify(request));
 		});
 	}
 

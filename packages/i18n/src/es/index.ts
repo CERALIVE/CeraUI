@@ -662,11 +662,11 @@ const es = {
 		download: "Descargar",
 		ceraliveLogTooltip: "Descargue registros para solucionar problemas.",
 		systemLogTooltip: "Descargue registros del sistema para depuración.",
-		confirmBelaboxLog:
+		confirmDeviceLog:
 			"¿Está seguro de que desea descargar el registro de CeraLive? Puede contener información sensible, como contraseñas.",
 		confirmSystemLog:
 			"¿Está seguro de que desea descargar el registro del sistema? Puede contener información sensible, como contraseñas.",
-		downloadBelaboxLog: "Descargar registro de CeraLive",
+		downloadDeviceLog: "Descargar registro de CeraLive",
 		downloadSystemLog: "Descargar registro del sistema",
 		systemDescription:
 			"Configuración avanzada del sistema y opciones de desarrollador",

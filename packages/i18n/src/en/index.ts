@@ -649,12 +649,12 @@ const en = {
 		download: "Download",
 		ceraliveLogTooltip: "Download logs for troubleshooting.",
 		systemLogTooltip: "Download system logs for debugging.",
-		confirmBelaboxLog: brandTranslation(
+		confirmDeviceLog: brandTranslation(
 			"Are you sure you want to download the {{logName}}? It may contain sensitive information such as passwords.",
 		),
 		confirmSystemLog:
 			"Are you sure you want to download the system log? It may contain sensitive information such as passwords.",
-		downloadBelaboxLog: brandTranslation("Download {{logName}}"),
+		downloadDeviceLog: brandTranslation("Download {{logName}}"),
 		downloadSystemLog: "Download System Log",
 		systemDescription:
 			"Manage system configuration, developer tools, and device settings.",

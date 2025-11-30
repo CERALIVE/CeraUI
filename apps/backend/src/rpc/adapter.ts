@@ -4,7 +4,7 @@
  */
 
 import { call } from "@orpc/server";
-import type { ServerWebSocket, WebSocketHandler } from "bun";
+import type { WebSocketHandler } from "bun";
 
 import { logger } from "../helpers/logger.ts";
 import { createContext, initSocketData } from "./context.ts";
@@ -291,7 +291,7 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 			removeClient(ws);
 		},
 
-		drain(ws: AppWebSocket) {
+		drain(_ws: AppWebSocket) {
 			logger.debug("WebSocket backpressure relieved");
 		},
 	};

@@ -111,7 +111,7 @@ export async function wifiHotspotStart(
 		}
 	} else {
 		const ms = macAddress.split(":");
-		const name = `BELABOX_${ms[4]}${ms[5]}`;
+		const name = `CERALIVE_${ms[4]}${ms[5]}`;
 		const password = crypto.randomBytes(9).toString("base64");
 
 		// Temporary hotspot config to send to the client

@@ -47,7 +47,7 @@ export const streamingStartProcedure = authedProcedure
 				start: input,
 			});
 			return { success: true, is_streaming: getIsStreaming() };
-		} catch (error) {
+		} catch (_error) {
 			return { success: false, is_streaming: false };
 		}
 	});

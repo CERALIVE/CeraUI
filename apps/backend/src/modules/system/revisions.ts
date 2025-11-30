@@ -36,12 +36,12 @@ function readRevision(cmd: string) {
 
 export function initRevisions() {
 	try {
-		revisions.CeraLive = fs.readFileSync("revision", "utf8");
+		revisions.ceralive = fs.readFileSync("revision", "utf8");
 	} catch (_err) {
-		revisions.CeraLive = readRevision("git rev-parse --short HEAD");
+		revisions.ceralive = readRevision("git rev-parse --short HEAD");
 	}
 
-	revisions.CeraLive += " (pjeweb fork)";
+	revisions.ceralive += " (pjeweb fork)";
 
 	revisions.belacoder = readRevision(`${belacoderExec} -v`);
 	revisions.srtla = readRevision(`${srtlaSendExec} -v`);

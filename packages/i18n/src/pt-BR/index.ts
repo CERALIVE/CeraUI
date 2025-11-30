@@ -621,11 +621,11 @@ const ptBR = {
 		download: "Baixar",
 		ceraliveLogTooltip: "Baixe os logs para solução de problemas.",
 		systemLogTooltip: "Baixe os logs do sistema para depuração.",
-		confirmBelaboxLog:
+		confirmDeviceLog:
 			"Tem certeza de que deseja baixar o log do CeraLive? Ele pode conter informações sensíveis, como senhas.",
 		confirmSystemLog:
 			"Tem certeza de que deseja baixar o log do sistema? Ele pode conter informações sensíveis, como senhas.",
-		downloadBelaboxLog: "Baixar log do CeraLive",
+		downloadDeviceLog: "Baixar log do CeraLive",
 		downloadSystemLog: "Baixar log do sistema",
 		systemDescription:
 			"Configuração avançada do sistema e opções de desenvolvedor",

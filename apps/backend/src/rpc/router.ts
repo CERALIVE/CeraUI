@@ -2,7 +2,6 @@
  * RPC Router - Main router combining all procedures
  */
 
-import { appContract } from "@ceraui/rpc/contracts";
 import { os } from "@orpc/server";
 
 import {
@@ -19,6 +18,10 @@ import {
 	configureNetworkInterfaceProcedure,
 	getNetworkInterfacesProcedure,
 } from "./procedures/network.procedure.ts";
+import {
+	dismissNotificationProcedure,
+	getPersistentNotificationsProcedure,
+} from "./procedures/notifications.procedure.ts";
 import {
 	getRelaysProcedure,
 	getStatusProcedure,
@@ -121,7 +124,8 @@ export const appRouter = os.$context<RPCContext>().router({
 	}),
 
 	notifications: os.router({
-		// TODO: Implement notification procedures
+		getPersistent: getPersistentNotificationsProcedure,
+		dismiss: dismissNotificationProcedure,
 	}),
 });
 

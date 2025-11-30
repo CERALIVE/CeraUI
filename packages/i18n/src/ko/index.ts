@@ -449,11 +449,11 @@ const ko = {
 		download: "다운로드",
 		ceraliveLogTooltip: "문제 해결을 위해 로그를 다운로드합니다.",
 		systemLogTooltip: "디버깅을 위해 시스템 로그를 다운로드합니다.",
-		confirmBelaboxLog:
+		confirmDeviceLog:
 			"CeraLive 로그를 다운로드하시겠습니까? 비밀번호와 같은 민감한 정보가 포함될 수 있습니다.",
 		confirmSystemLog:
 			"시스템 로그를 다운로드하시겠습니까? 비밀번호와 같은 민감한 정보가 포함될 수 있습니다.",
-		downloadBelaboxLog: "CeraLive 로그 다운로드",
+		downloadDeviceLog: "CeraLive 로그 다운로드",
 		downloadSystemLog: "시스템 로그 다운로드",
 		systemDescription: "고급 시스템 구성 및 개발자 옵션",
 		systemActions: "시스템 작업",

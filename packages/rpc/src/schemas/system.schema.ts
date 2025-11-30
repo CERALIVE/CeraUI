@@ -15,7 +15,7 @@ export type SensorsStatus = z.infer<typeof sensorsStatusSchema>;
 
 // Revisions schema
 export const revisionsSchema = z.object({
-	belaUI: z.string(),
+	ceralive: z.string(),
 	belacoder: z.string(),
 	srtla: z.string(),
 	'CERALIVE image': z.string(),

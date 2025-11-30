@@ -415,10 +415,10 @@ const zh = {
 		download: "下载",
 		ceraliveLogTooltip: "下载日志以进行故障排除。",
 		systemLogTooltip: "下载系统日志进行调试。",
-		confirmBelaboxLog:
+		confirmDeviceLog:
 			"您确定要下载 CeraLive 日志吗？它可能包含敏感信息，如密码。",
 		confirmSystemLog: "您确定要下载系统日志吗？它可能包含敏感信息，如密码。",
-		downloadBelaboxLog: "下载 CeraLive 日志",
+		downloadDeviceLog: "下载 CeraLive 日志",
 		downloadSystemLog: "下载系统日志",
 		systemDescription: "高级系统配置和开发者选项",
 		systemActions: "系统操作",

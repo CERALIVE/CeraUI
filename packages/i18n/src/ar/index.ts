@@ -621,11 +621,11 @@ const ar = {
 		download: "تنزيل",
 		ceraliveLogTooltip: "تنزيل السجلات لاستكشاف الأخطاء وإصلاحها.",
 		systemLogTooltip: "تنزيل سجلات النظام للتصحيح.",
-		confirmBelaboxLog:
+		confirmDeviceLog:
 			"هل أنت متأكد من أنك تريد تنزيل سجل CeraLive؟ قد يحتوي على معلومات حساسة مثل كلمات المرور.",
 		confirmSystemLog:
 			"هل أنت متأكد من أنك تريد تنزيل سجل النظام؟ قد يحتوي على معلومات حساسة مثل كلمات المرور.",
-		downloadBelaboxLog: "تنزيل سجل CeraLive",
+		downloadDeviceLog: "تنزيل سجل CeraLive",
 		downloadSystemLog: "تنزيل سجل النظام",
 		systemDescription: "إعدادات النظام المتقدمة وخيارات المطور",
 		systemActions: "إجراءات النظام",

@@ -443,11 +443,11 @@ const hi = {
 		download: "डाउनलोड करें",
 		ceraliveLogTooltip: "समस्या निवारण के लिए लॉग डाउनलोड करें।",
 		systemLogTooltip: "डीबगिंग के लिए सिस्टम लॉग डाउनलोड करें।",
-		confirmBelaboxLog:
+		confirmDeviceLog:
 			"क्या आप सुनिश्चित हैं कि आप CeraLive लॉग डाउनलोड करना चाहते हैं? इसमें पासवर्ड जैसी संवेदनशील जानकारी हो सकती है।",
 		confirmSystemLog:
 			"क्या आप सुनिश्चित हैं कि आप सिस्टम लॉग डाउनलोड करना चाहते हैं? इसमें पासवर्ड जैसी संवेदनशील जानकारी हो सकती है।",
-		downloadBelaboxLog: "CeraLive लॉग डाउनलोड करें",
+		downloadDeviceLog: "CeraLive लॉग डाउनलोड करें",
 		downloadSystemLog: "सिस्टम लॉग डाउनलोड करें",
 		systemDescription: "उन्नत सिस्टम कॉन्फ़िगरेशन और डेवलपर विकल्प",
 		systemActions: "सिस्टम कार्य",

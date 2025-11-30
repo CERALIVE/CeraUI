@@ -19,7 +19,6 @@ import { logger } from "../../helpers/logger.ts";
 import { setRemoteKey as setRemoteKeyModule } from "../../modules/remote/remote.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { setAutostart } from "../../modules/streaming/streamloop.ts";
-import { getLog } from "../../modules/system/logs.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
@@ -59,7 +58,7 @@ export const getSensorsProcedure = authedProcedure
  */
 export const getLogProcedure = authedProcedure
 	.output(logOutputSchema)
-	.handler(async ({ context }) => {
+	.handler(async () => {
 		// getLog sends directly to socket, we need to adapt it
 		// For now, return empty - this will be handled via subscription
 		return { log: "" };
@@ -70,7 +69,7 @@ export const getLogProcedure = authedProcedure
  */
 export const getSyslogProcedure = authedProcedure
 	.output(logOutputSchema)
-	.handler(async ({ context }) => {
+	.handler(async () => {
 		return { log: "" };
 	});
 
