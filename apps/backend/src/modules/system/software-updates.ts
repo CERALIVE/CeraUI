@@ -145,10 +145,6 @@ async function getSoftwareUpdateSize() {
 			"The following packages have been kept back:\n",
 		);
 		if (aptHeldBackPackages) {
-			if (setup.hw === "jetson" && aptHeldBackPackages === "belabox") {
-				// This is a special case for upgrading from an old installation using the stock jetson kernel
-				aptHeldBackPackages = "belabox belabox-linux-tegra";
-			}
 			upgrade = await execPNR(
 				`apt-get install --assume-no ${aptHeldBackPackages}`,
 			);

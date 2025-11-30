@@ -13,27 +13,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const VERSION = generateUniqueVersion();
 
-// Brand configuration
-type BrandName = "CERALIVE" | "BELABOX";
-const CURRENT_BRAND: BrandName =
-	(process.env.VITE_BRAND as BrandName) || "CERALIVE";
-
-const brandConfigs = {
-	CERALIVE: {
-		siteName: "CeraUI for CERALIVE©",
-		description:
-			"A modern PWA for CERALIVE streaming encoder management and configuration",
-		deviceName: "CERALIVE",
-	},
-	BELABOX: {
-		siteName: "CeraUI for BELABOX©",
-		description:
-			"A modern PWA for BELABOX streaming encoder management and configuration",
-		deviceName: "BELABOX",
-	},
+// Brand configuration (CeraLive-only)
+const BRAND_CONFIG = {
+	siteName: "CeraUI for CERALIVE©",
+	description:
+		"A modern PWA for CERALIVE streaming encoder management and configuration",
+	deviceName: "CERALIVE",
 };
-
-const BRAND_CONFIG = brandConfigs[CURRENT_BRAND];
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
