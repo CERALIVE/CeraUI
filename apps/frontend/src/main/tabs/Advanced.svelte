@@ -1,12 +1,23 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { Copy, Eye, EyeOff, Hammer, Logs, PowerOff, RotateCcw, Settings } from '@lucide/svelte';
+import {
+	Cloud,
+	Copy,
+	Eye,
+	EyeOff,
+	Hammer,
+	Logs,
+	PowerOff,
+	RotateCcw,
+	Settings,
+} from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
+import * as Select from '$lib/components/ui/select';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
 import {
 	getDeviceLog,
@@ -15,14 +26,38 @@ import {
 	reboot,
 	resetSSHPasword,
 	savePassword,
-	saveRemoteKey,
+	saveRemoteConfig,
 	startSSH,
 	stopSSH,
 } from '$lib/helpers/SystemHelper';
 import { getConfig, getRevisions, getStatus } from '$lib/stores/websocket-store.svelte';
+import type { CustomProvider, ProviderSelection } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
+// Cloud provider definitions
+const CLOUD_PROVIDERS = [
+	{
+		id: 'ceralive' as const,
+		name: 'CeraLive Cloud',
+		cloudUrl: 'https://cloud.ceralive.net',
+	},
+	{
+		id: 'belabox' as const,
+		name: 'BELABOX Cloud',
+		cloudUrl: 'https://cloud.belabox.net',
+	},
+	{
+		id: 'custom' as const,
+		name: 'Custom Provider',
+		cloudUrl: undefined,
+	},
+] as const;
+
 let remoteKey = $state('');
+let selectedProvider = $state<ProviderSelection>('ceralive');
+let customProviderName = $state('');
+let customProviderHost = $state('');
+let customProviderSecure = $state(true);
 
 let showPassword = $state(false);
 let showRemoteKey = $state(false);
@@ -34,10 +69,30 @@ let lastSshPassword = $state('');
 
 // Svelte 5: Use $derived for computed state
 const currentRemoteKey = $derived(getConfig()?.remote_key ?? '');
+const currentProvider = $derived(getConfig()?.remote_provider ?? 'ceralive');
+const currentCustomProvider = $derived(getConfig()?.custom_provider);
 const revisions = $derived(getRevisions());
 const sshPassword = $derived(getConfig()?.ssh_pass ?? '');
 const sshStatus = $derived(getStatus()?.ssh?.active ?? false);
 const sshUser = $derived(getStatus()?.ssh?.user ?? '');
+
+// Get current provider's cloud URL
+const currentCloudUrl = $derived(() => {
+	if (selectedProvider === 'custom' && customProviderHost) {
+		return undefined;
+	}
+	const provider = CLOUD_PROVIDERS.find((p) => p.id === selectedProvider);
+	return provider?.cloudUrl;
+});
+
+// Check if remote config has changed
+const hasRemoteConfigChanged = $derived(
+	remoteKey !== currentRemoteKey ||
+		selectedProvider !== currentProvider ||
+		(selectedProvider === 'custom' &&
+			(customProviderName !== (currentCustomProvider?.name ?? '') ||
+				customProviderHost !== (currentCustomProvider?.host ?? ''))),
+);
 
 // Sync remoteKey with config when it changes
 $effect(() => {
@@ -46,6 +101,40 @@ $effect(() => {
 		remoteKey = configRemoteKey;
 	}
 });
+
+// Sync provider with config when it changes
+$effect(() => {
+	const configProvider = getConfig()?.remote_provider ?? 'ceralive';
+	if (selectedProvider !== configProvider) {
+		selectedProvider = configProvider;
+	}
+	const configCustomProvider = getConfig()?.custom_provider;
+	if (configCustomProvider) {
+		customProviderName = configCustomProvider.name ?? '';
+		customProviderHost = configCustomProvider.host ?? '';
+		customProviderSecure = configCustomProvider.secure ?? true;
+	}
+});
+
+// Save remote config handler
+function handleSaveRemoteConfig() {
+	const customProvider: CustomProvider | undefined =
+		selectedProvider === 'custom'
+			? {
+					name: customProviderName || 'Custom',
+					host: customProviderHost,
+					secure: customProviderSecure,
+				}
+			: undefined;
+
+	saveRemoteConfig({
+		remote_key: remoteKey,
+		provider: selectedProvider,
+		custom_provider: customProvider,
+	});
+
+	toast.success($LL.advanced.remoteConfigSaved?.() ?? 'Remote configuration saved');
+}
 
 // Handle SSH password change notification
 $effect(() => {
@@ -147,22 +236,90 @@ $effect(() => {
 						</div>
 					</div>
 
-					<!-- Cloud Remote Key Section -->
-					<div class="space-y-3">
+					<!-- Cloud Remote Section -->
+					<div class="space-y-4">
+						<div class="flex items-center gap-3 border-b pb-2">
+							<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500">
+								<Cloud class="h-4 w-4 text-white" />
+							</div>
+							<div>
+								<h3 class="font-semibold">{$LL.advanced.cloudRemote?.() ?? 'Cloud Remote'}</h3>
+								<p class="text-muted-foreground text-sm">
+									{$LL.advanced.cloudRemoteDescription?.() ?? 'Configure remote cloud management'}
+								</p>
+							</div>
+						</div>
+
+						<!-- Provider Selection -->
 						<div class="space-y-2">
-							<Label class="text-sm font-medium" for="remoteKey">
-								{$LL.advanced.cloudRemoteKey()}
+							<Label class="text-sm font-medium" for="cloudProvider">
+								{$LL.advanced.cloudProvider?.() ?? 'Cloud Provider'}
 							</Label>
-							<p class="text-muted-foreground text-sm">
-								{$LL.advanced.cloudRemoteKeyTooltip()}
-							</p>
+							<Select.Root type="single" bind:value={selectedProvider}>
+								<Select.Trigger class="bg-background/50 border-muted-foreground/20 w-full">
+									{CLOUD_PROVIDERS.find((p) => p.id === selectedProvider)?.name ??
+										'Select provider'}
+								</Select.Trigger>
+								<Select.Content>
+									{#each CLOUD_PROVIDERS as provider}
+										<Select.Item value={provider.id}>{provider.name}</Select.Item>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						</div>
+
+						<!-- Custom Provider Fields -->
+						{#if selectedProvider === 'custom'}
+							<div class="bg-muted/30 space-y-3 rounded-lg border p-4">
+								<div class="space-y-2">
+									<Label class="text-sm font-medium" for="customProviderName">
+										{$LL.advanced.providerName?.() ?? 'Provider Name'}
+									</Label>
+									<Input
+										id="customProviderName"
+										class="bg-background/50 border-muted-foreground/20"
+										placeholder="My Custom Cloud"
+										bind:value={customProviderName}
+									/>
+								</div>
+								<div class="space-y-2">
+									<Label class="text-sm font-medium" for="customProviderHost">
+										{$LL.advanced.providerHost?.() ?? 'WebSocket Host'}
+									</Label>
+									<Input
+										id="customProviderHost"
+										class="bg-background/50 border-muted-foreground/20"
+										placeholder="remote.example.com"
+										bind:value={customProviderHost}
+									/>
+									<p class="text-muted-foreground text-xs">
+										{$LL.advanced.providerHostHint?.() ??
+											'Enter the WebSocket server hostname (without protocol)'}
+									</p>
+								</div>
+								<div class="flex items-center gap-2">
+									<input
+										id="customProviderSecure"
+										class="h-4 w-4 rounded"
+										type="checkbox"
+										bind:checked={customProviderSecure}
+									/>
+									<Label class="text-sm" for="customProviderSecure">
+										{$LL.advanced.useSecureConnection?.() ?? 'Use secure connection (wss)'}
+									</Label>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Cloud URL Link -->
+						{#if currentCloudUrl()}
 							<a
 								class="text-primary hover:text-primary/80 inline-flex items-center text-sm font-medium transition-colors hover:underline"
-								href="https://cloud.ceralive.net"
+								href={currentCloudUrl()}
 								rel="noopener noreferrer"
 								target="_blank"
 							>
-								https://cloud.ceralive.net
+								{currentCloudUrl()}
 								<svg class="ml-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
 										d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
@@ -172,6 +329,16 @@ $effect(() => {
 									/>
 								</svg>
 							</a>
+						{/if}
+
+						<!-- Remote Key Input -->
+						<div class="space-y-2">
+							<Label class="text-sm font-medium" for="remoteKey">
+								{$LL.advanced.cloudRemoteKey()}
+							</Label>
+							<p class="text-muted-foreground text-sm">
+								{$LL.advanced.cloudRemoteKeyTooltip()}
+							</p>
 						</div>
 						<div class="relative">
 							<Input
@@ -196,10 +363,9 @@ $effect(() => {
 								</Button>
 								<Button
 									class="bg-primary hover:bg-primary/90 text-primary-foreground h-8 px-3 shadow-sm"
-									disabled={remoteKey === currentRemoteKey}
-									onclick={() => {
-										saveRemoteKey(remoteKey);
-									}}
+									disabled={!hasRemoteConfigChanged ||
+										(selectedProvider === 'custom' && !customProviderHost)}
+									onclick={handleSaveRemoteConfig}
 									size="sm"
 								>
 									{$LL.advanced.save()}

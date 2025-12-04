@@ -24,6 +24,14 @@ import { getSshPasswordHash, setSshPasswordHash } from "./system/ssh.ts";
 
 const CONFIG_FILE = "config.json";
 
+type CustomProvider = {
+	name: string;
+	host: string;
+	path?: string;
+	secure?: boolean;
+	cloudUrl?: string;
+};
+
 let config: {
 	password?: string;
 	password_hash?: string;
@@ -39,6 +47,8 @@ let config: {
 	acodec?: string;
 	bitrate_overlay?: boolean;
 	remote_key?: string;
+	remote_provider?: "ceralive" | "belabox" | "custom";
+	custom_provider?: CustomProvider;
 	max_br?: number;
 	delay?: number;
 	pipeline?: string;

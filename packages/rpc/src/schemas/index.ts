@@ -2,6 +2,7 @@
  * Export all Zod schemas
  */
 export * from './auth.schema';
+export * from './cloud-provider.schema';
 export * from './common.schema';
 export * from './modems.schema';
 export * from './network.schema';

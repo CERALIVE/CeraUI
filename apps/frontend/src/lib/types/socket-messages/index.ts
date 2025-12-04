@@ -73,6 +73,16 @@ export type AudioCodecsMessage = {
 	[key in AudioCodecs]: string;
 };
 
+export type CustomProvider = {
+	name: string;
+	host: string;
+	path?: string;
+	secure?: boolean;
+	cloudUrl?: string;
+};
+
+export type ProviderSelection = "ceralive" | "belabox" | "custom";
+
 export type ConfigMessage = {
 	asrc?: string;
 	ssh_pass: string;
@@ -86,6 +96,8 @@ export type ConfigMessage = {
 	srtla_port?: number;
 	srt_streamid?: string;
 	remote_key?: string;
+	remote_provider?: ProviderSelection;
+	custom_provider?: CustomProvider;
 	relay_account?: string;
 	relay_server?: string;
 };

@@ -53,6 +53,8 @@ export type Pipelines = z.infer<typeof pipelinesSchema>;
 export const audioCodecsMessageSchema = z.record(audioCodecSchema, z.string());
 export type AudioCodecsMessage = z.infer<typeof audioCodecsMessageSchema>;
 
+import { customProviderInputSchema, providerSelectionSchema } from './cloud-provider.schema';
+
 // Config message schema (what the server sends to clients)
 export const configMessageSchema = z.object({
 	asrc: z.string().optional(),
@@ -67,6 +69,8 @@ export const configMessageSchema = z.object({
 	srtla_port: z.number().optional(),
 	srt_streamid: z.string().optional(),
 	remote_key: z.string().optional(),
+	remote_provider: providerSelectionSchema.optional(),
+	custom_provider: customProviderInputSchema.optional(),
 	relay_account: z.string().optional(),
 	relay_server: z.string().optional(),
 });

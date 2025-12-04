@@ -6,8 +6,9 @@
 import { spawnSync } from "node:child_process";
 import {
 	autostartInputSchema,
+	cloudProviderEndpointSchema,
 	logOutputSchema,
-	remoteKeyInputSchema,
+	remoteConfigInputSchema,
 	revisionsSchema,
 	sensorsStatusSchema,
 	successResponseSchema,
@@ -16,7 +17,10 @@ import { os } from "@orpc/server";
 import { z } from "zod";
 
 import { logger } from "../../helpers/logger.ts";
-import { setRemoteKey as setRemoteKeyModule } from "../../modules/remote/remote.ts";
+import {
+	getCloudProviders,
+	setRemoteConfig,
+} from "../../modules/remote/remote.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { setAutostart } from "../../modules/streaming/streamloop.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
@@ -157,13 +161,31 @@ export const sshResetPasswordProcedure = authedProcedure
 	});
 
 /**
- * Set remote key procedure
+ * Get available cloud providers
  */
-export const setRemoteKeyProcedure = authedProcedure
-	.input(remoteKeyInputSchema)
+export const getCloudProvidersProcedure = authedProcedure
+	.output(
+		z.object({
+			providers: z.array(cloudProviderEndpointSchema),
+			current: cloudProviderEndpointSchema,
+		}),
+	)
+	.handler(() => {
+		return getCloudProviders();
+	});
+
+/**
+ * Set remote configuration (key and provider)
+ */
+export const setRemoteConfigProcedure = authedProcedure
+	.input(remoteConfigInputSchema)
 	.output(successResponseSchema)
-	.handler(({ input }) => {
-		setRemoteKeyModule({ remote_key: input.remote_key });
+	.handler(async ({ input }) => {
+		await setRemoteConfig({
+			remote_key: input.remote_key,
+			provider: input.provider,
+			custom_provider: input.custom_provider,
+		});
 		return { success: true };
 	});
 

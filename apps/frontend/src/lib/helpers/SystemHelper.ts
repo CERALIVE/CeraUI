@@ -1,5 +1,9 @@
 import { socket } from "$lib/stores/websocket-store.svelte";
-import type { ConfigMessage } from "$lib/types/socket-messages";
+import type {
+	ConfigMessage,
+	CustomProvider,
+	ProviderSelection,
+} from "$lib/types/socket-messages";
 
 export type AudioCodecs = "aac" | "opus";
 
@@ -52,8 +56,25 @@ export const getDeviceLog = () => {
 	sendCommand("get_log");
 };
 
+export type RemoteConfigParams = {
+	remote_key: string;
+	provider?: ProviderSelection;
+	custom_provider?: CustomProvider;
+};
+
 export const saveRemoteKey = (key: string) => {
 	socket.send(JSON.stringify({ config: { remote_key: key } }));
+};
+
+export const saveRemoteConfig = (params: RemoteConfigParams) => {
+	const config: Partial<ConfigMessage> = {
+		remote_key: params.remote_key,
+		remote_provider: params.provider,
+	};
+	if (params.custom_provider) {
+		config.custom_provider = params.custom_provider;
+	}
+	socket.send(JSON.stringify({ config }));
 };
 
 export const savePassword = (password: string) => {

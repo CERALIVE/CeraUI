@@ -20,6 +20,7 @@ import {
 	streamingStartProcedure,
 	streamingStopProcedure,
 } from "./procedures/streaming.procedure.ts";
+import { setRemoteConfigProcedure } from "./procedures/system.procedure.ts";
 import { appRouter } from "./router.ts";
 import { getPasswordHash } from "./state/password.ts";
 import type { AppWebSocket, SocketData } from "./types.ts";
@@ -159,9 +160,22 @@ async function handleLegacyMessage(
 		return;
 	}
 
-	// Handle config (password setting)
+	// Handle config (password and remote config)
 	if ("config" in message && message.config) {
-		const configMsg = message.config as { password?: string };
+		const configMsg = message.config as {
+			password?: string;
+			remote_key?: string;
+			remote_provider?: "ceralive" | "belabox" | "custom";
+			custom_provider?: {
+				name: string;
+				host: string;
+				path?: string;
+				secure?: boolean;
+				cloudUrl?: string;
+			};
+		};
+
+		// Handle password setting
 		if (configMsg.password) {
 			try {
 				await call(
@@ -171,6 +185,23 @@ async function handleLegacyMessage(
 				);
 			} catch (error) {
 				logger.error(`Set password error: ${error}`);
+			}
+		}
+
+		// Handle remote config (key and provider)
+		if (configMsg.remote_key !== undefined) {
+			try {
+				await call(
+					setRemoteConfigProcedure,
+					{
+						remote_key: configMsg.remote_key,
+						provider: configMsg.remote_provider ?? "ceralive",
+						custom_provider: configMsg.custom_provider,
+					},
+					{ context },
+				);
+			} catch (error) {
+				logger.error(`Set remote config error: ${error}`);
 			}
 		}
 		return;

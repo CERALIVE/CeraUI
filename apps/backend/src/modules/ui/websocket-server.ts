@@ -58,6 +58,14 @@ type ConfigPasswordMessage = {
 
 type ConfigRemoteKeyMessage = {
 	remote_key: string;
+	remote_provider?: "ceralive" | "belabox" | "custom";
+	custom_provider?: {
+		name: string;
+		host: string;
+		path?: string;
+		secure?: boolean;
+		cloudUrl?: string;
+	};
 };
 
 type ConfigMessage = {

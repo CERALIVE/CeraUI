@@ -78,12 +78,6 @@ export const logOutputSchema = z.object({
 });
 export type LogOutput = z.infer<typeof logOutputSchema>;
 
-// Remote key config input schema
-export const remoteKeyInputSchema = z.object({
-	remote_key: z.string(),
-});
-export type RemoteKeyInput = z.infer<typeof remoteKeyInputSchema>;
-
 // Autostart config input schema
 export const autostartInputSchema = z.object({
 	autostart: z.boolean(),

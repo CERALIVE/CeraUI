@@ -35,6 +35,7 @@ import {
 	streamingStopProcedure,
 } from "./procedures/streaming.procedure.ts";
 import {
+	getCloudProvidersProcedure,
 	getLogProcedure,
 	getRevisionsProcedure,
 	getSensorsProcedure,
@@ -42,7 +43,7 @@ import {
 	poweroffProcedure,
 	rebootProcedure,
 	setAutostartProcedure,
-	setRemoteKeyProcedure,
+	setRemoteConfigProcedure,
 	sshResetPasswordProcedure,
 	sshStartProcedure,
 	sshStopProcedure,
@@ -114,7 +115,8 @@ export const appRouter = os.$context<RPCContext>().router({
 		sshStart: sshStartProcedure,
 		sshStop: sshStopProcedure,
 		sshResetPassword: sshResetPasswordProcedure,
-		setRemoteKey: setRemoteKeyProcedure,
+		getCloudProviders: getCloudProvidersProcedure,
+		setRemoteConfig: setRemoteConfigProcedure,
 		setAutostart: setAutostartProcedure,
 	}),
 

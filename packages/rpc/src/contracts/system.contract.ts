@@ -6,8 +6,9 @@ import { z } from 'zod';
 
 import {
 	autostartInputSchema,
+	cloudProviderEndpointSchema,
 	logOutputSchema,
-	remoteKeyInputSchema,
+	remoteConfigInputSchema,
 	revisionsSchema,
 	sensorsStatusSchema,
 	successResponseSchema,
@@ -70,9 +71,19 @@ export const systemContract = oc.router({
 	),
 
 	/**
-	 * Set remote key for remote management
+	 * Get available cloud providers
 	 */
-	setRemoteKey: oc.input(remoteKeyInputSchema).output(successResponseSchema),
+	getCloudProviders: oc.output(
+		z.object({
+			providers: z.array(cloudProviderEndpointSchema),
+			current: cloudProviderEndpointSchema,
+		}),
+	),
+
+	/**
+	 * Set remote configuration (key and provider)
+	 */
+	setRemoteConfig: oc.input(remoteConfigInputSchema).output(successResponseSchema),
 
 	/**
 	 * Set autostart configuration
