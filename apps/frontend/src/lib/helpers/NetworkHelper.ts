@@ -2,7 +2,7 @@ import { getLL } from "@ceraui/i18n/svelte";
 import type {
 	NetifMessage,
 	StatusMessage,
-	WifiBandNames,
+	WifiBand,
 	WifiSecurity,
 } from "@ceraui/rpc/schemas";
 import QRCode from "qrcode";
@@ -12,8 +12,8 @@ import { rpc } from "$lib/rpc/client";
 import { getStatus } from "$lib/stores/websocket-store.svelte";
 import type { ValueOf } from "$lib/types";
 
-// Re-export for backward compatibility
-export type { WifiBandNames };
+// Re-export type
+export type { WifiBand };
 
 export const convertBytesToKbids = (bytes: number) => {
 	return Math.round((bytes * 8) / 1024);

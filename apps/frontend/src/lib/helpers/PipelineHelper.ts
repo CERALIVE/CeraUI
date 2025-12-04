@@ -1,4 +1,4 @@
-import type { PipelinesMessage } from "@ceraui/rpc/schemas";
+import type { Pipelines } from "@ceraui/rpc/schemas";
 
 export type PipelineInfo = {
 	device: string | null;
@@ -70,7 +70,7 @@ export function parsePipelineName(
 }
 
 export const groupPipelinesByDeviceAndFormat = (
-	pipelines: PipelinesMessage,
+	pipelines: Pipelines,
 	translations?: {
 		matchDeviceResolution: string;
 		matchDeviceOutput: string;

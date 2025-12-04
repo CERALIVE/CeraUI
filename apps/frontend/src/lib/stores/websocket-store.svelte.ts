@@ -8,14 +8,14 @@
  */
 import type {
 	AudioCodecsMessage,
-	AuthMessage,
 	ConfigMessage,
+	LoginOutput,
 	NetifMessage,
 	NotificationsMessage,
-	PipelinesMessage,
+	Pipelines,
 	RelayMessage,
-	RevisionsMessage,
-	SensorsStatusMessage,
+	Revisions,
+	SensorsStatus,
 	StatusMessage,
 	WifiMessage,
 } from "@ceraui/rpc/schemas";
@@ -30,15 +30,15 @@ import { ENV_VARIABLES } from "../env";
 // ============================================
 // Svelte 5 Reactive State ($state)
 // ============================================
-let authState = $state<AuthMessage | undefined>(undefined);
+let authState = $state<LoginOutput | undefined>(undefined);
 let audioCodecsState = $state<AudioCodecsMessage | undefined>(undefined);
 let configState = $state<ConfigMessage | undefined>(undefined);
 let netifState = $state<NetifMessage | undefined>(undefined);
 let notificationsState = $state<NotificationsMessage | undefined>(undefined);
-let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
+let pipelinesState = $state<Pipelines | undefined>(undefined);
 let relaysState = $state<RelayMessage | undefined>(undefined);
-let revisionsState = $state<RevisionsMessage | undefined>(undefined);
-let sensorsStatusState = $state<SensorsStatusMessage | undefined>(undefined);
+let revisionsState = $state<Revisions | undefined>(undefined);
+let sensorsStatusState = $state<SensorsStatus | undefined>(undefined);
 let statusState = $state<StatusMessage | undefined>(undefined);
 let wifiState = $state<WifiMessage | undefined>(undefined);
 

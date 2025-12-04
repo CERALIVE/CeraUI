@@ -52,9 +52,6 @@ export type Pipeline = z.infer<typeof pipelineSchema>;
 export const pipelinesSchema = z.record(z.string(), pipelineSchema);
 export type Pipelines = z.infer<typeof pipelinesSchema>;
 
-// Alias for backward compatibility
-export type PipelinesMessage = Pipelines;
-
 // Audio codecs message schema
 export const audioCodecsMessageSchema = z.record(audioCodecSchema, z.string());
 export type AudioCodecsMessage = z.infer<typeof audioCodecsMessageSchema>;

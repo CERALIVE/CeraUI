@@ -7,7 +7,7 @@
 import type {
 	AudioCodecsMessage,
 	ConfigMessage,
-	PipelinesMessage,
+	Pipelines,
 	RelayMessage,
 } from "@ceraui/rpc/schemas";
 import { getLL, locale } from "@ceraui/i18n/svelte";
@@ -26,7 +26,7 @@ import {
 
 export interface StreamingState {
 	groupedPipelines: GroupedPipelines[keyof GroupedPipelines] | undefined;
-	unparsedPipelines: PipelinesMessage | undefined;
+	unparsedPipelines: Pipelines | undefined;
 	isStreaming: boolean | undefined;
 	audioSources: Array<string>;
 	audioCodecs: AudioCodecsMessage | undefined;
@@ -45,7 +45,7 @@ class StreamingStateManager {
 	private _groupedPipelines = $state<
 		GroupedPipelines[keyof GroupedPipelines] | undefined
 	>(undefined);
-	private _unparsedPipelines = $state<PipelinesMessage | undefined>(undefined);
+	private _unparsedPipelines = $state<Pipelines | undefined>(undefined);
 	private _isStreaming = $state<boolean | undefined>(undefined);
 	private _audioSources = $state<Array<string>>([]);
 	private _audioCodecs = $state<AudioCodecsMessage | undefined>(undefined);
