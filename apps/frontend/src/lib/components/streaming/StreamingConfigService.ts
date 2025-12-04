@@ -1,9 +1,9 @@
-import { toast } from "svelte-sonner";
-import type { AudioCodecs } from "$lib/helpers/SystemHelper";
 import type {
+	AudioCodecs,
 	ConfigMessage,
 	PipelinesMessage,
-} from "$lib/types/socket-messages";
+} from "@ceraui/rpc/schemas";
+import { toast } from "svelte-sonner";
 
 type Properties = {
 	pipeline: keyof PipelinesMessage | undefined;

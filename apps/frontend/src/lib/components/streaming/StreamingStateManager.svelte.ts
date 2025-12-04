@@ -4,8 +4,13 @@
  * Manages streaming-related state with reactive $state.
  * Subscribes to WebSocket messages and processes pipeline data.
  */
+import type {
+	AudioCodecsMessage,
+	ConfigMessage,
+	PipelinesMessage,
+	RelayMessage,
+} from "@ceraui/rpc/schemas";
 import { getLL, locale } from "@ceraui/i18n/svelte";
-
 
 import {
 	type GroupedPipelines,
@@ -18,12 +23,6 @@ import {
 	RelaysMessages,
 	StatusMessages,
 } from "$lib/stores/websocket-store.svelte";
-import type {
-	AudioCodecsMessage,
-	ConfigMessage,
-	PipelinesMessage,
-	RelayMessage,
-} from "$lib/types/socket-messages";
 
 export interface StreamingState {
 	groupedPipelines: GroupedPipelines[keyof GroupedPipelines] | undefined;

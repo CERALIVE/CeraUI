@@ -1,5 +1,6 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import type { CustomProviderInput, ProviderSelection } from '@ceraui/rpc/schemas';
 import {
 	Cloud,
 	Copy,
@@ -31,8 +32,9 @@ import {
 	stopSSH,
 } from '$lib/helpers/SystemHelper';
 import { getConfig, getRevisions, getStatus } from '$lib/stores/websocket-store.svelte';
-import type { CustomProvider, ProviderSelection } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
+
+type CustomProvider = CustomProviderInput;
 
 // Cloud provider definitions
 const CLOUD_PROVIDERS = [
@@ -120,11 +122,12 @@ $effect(() => {
 
 // Save remote config handler
 function handleSaveRemoteConfig() {
-	const customProvider: CustomProvider | undefined =
+	const customProvider =
 		selectedProvider === 'custom'
 			? {
 					name: customProviderName || 'Custom',
 					host: customProviderHost,
+					path: '/ws/remote',
 					secure: customProviderSecure,
 				}
 			: undefined;

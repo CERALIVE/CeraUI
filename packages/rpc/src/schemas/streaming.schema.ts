@@ -7,6 +7,9 @@ import { z } from 'zod';
 export const audioCodecSchema = z.enum(['opus', 'aac', 'pcm']);
 export type AudioCodec = z.infer<typeof audioCodecSchema>;
 
+// Alias for frontend compatibility
+export type AudioCodecs = 'aac' | 'opus';
+
 // Streaming configuration input schema
 export const streamingConfigInputSchema = z.object({
 	delay: z.number().int().min(-2000).max(2000).optional(),
@@ -48,6 +51,9 @@ export type Pipeline = z.infer<typeof pipelineSchema>;
 // Pipelines message schema
 export const pipelinesSchema = z.record(z.string(), pipelineSchema);
 export type Pipelines = z.infer<typeof pipelinesSchema>;
+
+// Alias for backward compatibility
+export type PipelinesMessage = Pipelines;
 
 // Audio codecs message schema
 export const audioCodecsMessageSchema = z.record(audioCodecSchema, z.string());

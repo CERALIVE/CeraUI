@@ -1,5 +1,6 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import type { Modem } from '@ceraui/rpc/schemas';
 import {
 	ChevronDown,
 	Globe,
@@ -25,7 +26,6 @@ import {
 	renameSupportedModemNetwork,
 	scanModemNetworks,
 } from '$lib/helpers/NetworkHelper';
-import type { Modem } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
 const { deviceId, modem, modemIsScanning } = $props<{

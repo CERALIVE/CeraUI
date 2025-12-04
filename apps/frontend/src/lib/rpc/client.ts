@@ -2,9 +2,34 @@
  * ORPC Client for CeraUI Frontend
  *
  * Provides type-safe RPC calls to the backend via WebSocket.
- * Supports both ORPC-style calls and legacy message format for gradual migration.
+ * Uses the AppContract from @ceraui/rpc for end-to-end type safety.
  */
-import type { AppContract } from "@ceraui/rpc/contracts";
+import type {
+	BitrateInput,
+	BitrateOutput,
+	HotspotConfigInput,
+	HotspotToggleInput,
+	LoginInput,
+	LoginOutput,
+	LogoutOutput,
+	ModemConfigInput,
+	ModemScanInput,
+	ModemScanOutput,
+	NetifConfigInput,
+	NetifConfigOutput,
+	RemoteConfigInput,
+	SetPasswordInput,
+	StreamingConfigInput,
+	StreamingStartOutput,
+	StreamingStopOutput,
+	SuccessResponse,
+	WifiConnectInput,
+	WifiDisconnectInput,
+	WifiForgetInput,
+	WifiNewInput,
+	WifiOperationOutput,
+	WifiScanInput,
+} from "@ceraui/rpc/schemas";
 
 import { ENV_VARIABLES } from "../env";
 
@@ -300,40 +325,119 @@ class RPCClient {
 
 /**
  * Create a type-safe RPC proxy
+ *
+ * Creates a proxy that allows both property access (for nested routers)
+ * and function calls (for procedures).
+ *
+ * Example:
+ *   rpc.auth.login({ password: "xxx" }) - calls ['auth', 'login'] procedure
+ *   rpc.system.reboot() - calls ['system', 'reboot'] procedure
  */
 function createRPCProxy<T extends object>(
 	client: RPCClient,
 	path: string[] = [],
 ): T {
-	return new Proxy({} as T, {
-		get(_, prop: string) {
-			const newPath = [...path, prop];
-
-			// Return a callable function for procedure calls
-			return new Proxy(
-				async (input?: unknown) => {
-					return client.call(newPath, input);
-				},
-				{
-					get(_, nestedProp: string) {
-						// Allow nested router access
-						return createRPCProxy(client, [...newPath, nestedProp]);
-					},
-				},
-			);
+	// Create a callable function that also supports property access
+	const handler: ProxyHandler<(...args: unknown[]) => Promise<unknown>> = {
+		// Handle function calls: rpc.auth.login(input)
+		apply(_target, _thisArg, args) {
+			const input = args[0];
+			return client.call(path, input);
 		},
-	});
+
+		// Handle property access: rpc.auth or rpc.auth.login
+		get(_target, prop: string | symbol) {
+			if (typeof prop === "symbol") {
+				return undefined;
+			}
+
+			// Special properties that shouldn't be proxied
+			if (prop === "then" || prop === "catch" || prop === "finally") {
+				return undefined;
+			}
+
+			// Create a nested proxy for the new path
+			return createRPCProxy<object>(client, [...path, prop]);
+		},
+	};
+
+	// Use a function as the proxy target so it can be called
+	// biome-ignore lint/complexity/useArrowFunction: needs to be function for proxy apply
+	const target = function () {} as unknown as T;
+	return new Proxy(target, handler as unknown as ProxyHandler<T>);
 }
 
 // Singleton client instance
 export const rpcClient = new RPCClient();
 
 /**
+ * Type-safe RPC interface definition
+ * Maps contract structure to callable async functions
+ */
+export interface TypedRPC {
+	auth: {
+		login: (input: LoginInput) => Promise<LoginOutput>;
+		setPassword: (input: SetPasswordInput) => Promise<SuccessResponse>;
+		logout: () => Promise<LogoutOutput>;
+	};
+	streaming: {
+		start: (input: StreamingConfigInput) => Promise<StreamingStartOutput>;
+		stop: () => Promise<StreamingStopOutput>;
+		setBitrate: (input: BitrateInput) => Promise<BitrateOutput>;
+		getPipelines: () => Promise<unknown>;
+		getAudioCodecs: () => Promise<unknown>;
+		getConfig: () => Promise<unknown>;
+	};
+	modems: {
+		getAll: () => Promise<unknown>;
+		configure: (input: ModemConfigInput) => Promise<SuccessResponse>;
+		scan: (input: ModemScanInput) => Promise<ModemScanOutput>;
+	};
+	wifi: {
+		getStatus: () => Promise<unknown>;
+		connect: (input: WifiConnectInput) => Promise<WifiOperationOutput>;
+		disconnect: (input: WifiDisconnectInput) => Promise<WifiOperationOutput>;
+		connectNew: (input: WifiNewInput) => Promise<WifiOperationOutput>;
+		forget: (input: WifiForgetInput) => Promise<SuccessResponse>;
+		scan: (input: WifiScanInput) => Promise<SuccessResponse>;
+		hotspotStart: (input: HotspotToggleInput) => Promise<SuccessResponse>;
+		hotspotStop: (input: HotspotToggleInput) => Promise<SuccessResponse>;
+		hotspotConfigure: (input: HotspotConfigInput) => Promise<SuccessResponse>;
+	};
+	network: {
+		getInterfaces: () => Promise<unknown>;
+		configure: (input: NetifConfigInput) => Promise<NetifConfigOutput>;
+	};
+	system: {
+		getRevisions: () => Promise<unknown>;
+		getSensors: () => Promise<unknown>;
+		getLog: () => Promise<unknown>;
+		getSyslog: () => Promise<unknown>;
+		poweroff: () => Promise<SuccessResponse>;
+		reboot: () => Promise<SuccessResponse>;
+		startUpdate: () => Promise<SuccessResponse>;
+		sshStart: () => Promise<SuccessResponse>;
+		sshStop: () => Promise<SuccessResponse>;
+		sshResetPassword: () => Promise<{ success: boolean; password?: string }>;
+		getCloudProviders: () => Promise<unknown>;
+		setRemoteConfig: (input: RemoteConfigInput) => Promise<SuccessResponse>;
+		setAutostart: (input: { autostart: boolean }) => Promise<SuccessResponse>;
+	};
+	status: {
+		getStatus: () => Promise<unknown>;
+		getRelays: () => Promise<unknown>;
+	};
+	notifications: {
+		getPersistent: () => Promise<unknown>;
+		dismiss: (input: { name: string }) => Promise<SuccessResponse>;
+	};
+}
+
+/**
  * Type-safe RPC interface
  * Usage: await rpc.auth.login({ password: "xxx" })
  */
-// biome-ignore lint/suspicious/noExplicitAny: Dynamic proxy type
-export const rpc: any = createRPCProxy<AppContract>(rpcClient);
+export const rpc: TypedRPC = createRPCProxy<TypedRPC>(rpcClient);
 
 /**
  * Initialize the RPC client

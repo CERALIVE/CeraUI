@@ -13,6 +13,9 @@ export const sensorsStatusSchema = z.object({
 });
 export type SensorsStatus = z.infer<typeof sensorsStatusSchema>;
 
+// Alias for backward compatibility
+export type SensorsStatusMessage = SensorsStatus;
+
 // Revisions schema
 export const revisionsSchema = z.object({
 	ceralive: z.string(),
@@ -21,6 +24,9 @@ export const revisionsSchema = z.object({
 	'CERALIVE image': z.string(),
 });
 export type Revisions = z.infer<typeof revisionsSchema>;
+
+// Alias for backward compatibility
+export type RevisionsMessage = Revisions;
 
 // SSH status schema
 export const sshStatusSchema = z.object({

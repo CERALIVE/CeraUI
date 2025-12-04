@@ -14,6 +14,7 @@ import {
 	successResponseSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
+import type WebSocket from "ws";
 import { z } from "zod";
 
 import { logger } from "../../helpers/logger.ts";
@@ -128,7 +129,7 @@ export const sshStartProcedure = authedProcedure
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
-		startStopSsh(context.ws as unknown as import("ws").default, "start_ssh");
+		startStopSsh(context.ws as unknown as WebSocket, "start_ssh");
 		return { success: true };
 	});
 
@@ -141,7 +142,7 @@ export const sshStopProcedure = authedProcedure
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
-		startStopSsh(context.ws as unknown as import("ws").default, "stop_ssh");
+		startStopSsh(context.ws as unknown as WebSocket, "stop_ssh");
 		return { success: true };
 	});
 
@@ -156,7 +157,7 @@ export const sshResetPasswordProcedure = authedProcedure
 		}),
 	)
 	.handler(({ context }) => {
-		resetSshPassword(context.ws as unknown as import("ws").default);
+		resetSshPassword(context.ws as unknown as WebSocket);
 		return { success: true };
 	});
 
@@ -196,6 +197,6 @@ export const setAutostartProcedure = authedProcedure
 	.input(autostartInputSchema)
 	.output(successResponseSchema)
 	.handler(({ input }) => {
-		setAutostart({ autostart: input.autostart });
+		setAutostart(input.autostart);
 		return { success: true };
 	});

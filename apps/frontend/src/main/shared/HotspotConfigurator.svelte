@@ -1,5 +1,6 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import type { StatusMessage } from '@ceraui/rpc/schemas';
 import { AlertCircle, Bolt, CheckCircle, Eye, EyeOff, Smartphone, Wifi } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
@@ -9,7 +10,6 @@ import * as Select from '$lib/components/ui/select';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
 import { changeHotspotSettings, type WifiBandNames } from '$lib/helpers/NetworkHelper';
 import type { ValueOf } from '$lib/types';
-import type { StatusMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
 const { deviceId, wifi }: { deviceId: number; wifi: ValueOf<StatusMessage['wifi']> } = $props();

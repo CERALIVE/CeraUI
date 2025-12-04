@@ -8,19 +8,8 @@ import type { WebSocketHandler } from "bun";
 
 import { logger } from "../helpers/logger.ts";
 import { createContext, initSocketData } from "./context.ts";
-import { addClient, broadcast, removeClient, sendToClient } from "./events.ts";
-import {
-	loginProcedure,
-	logoutProcedure,
-	setPasswordProcedure,
-} from "./procedures/auth.procedure.ts";
+import { addClient, removeClient, sendToClient } from "./events.ts";
 import { buildInitialStatus } from "./procedures/status.procedure.ts";
-import {
-	setBitrateProcedure,
-	streamingStartProcedure,
-	streamingStopProcedure,
-} from "./procedures/streaming.procedure.ts";
-import { setRemoteConfigProcedure } from "./procedures/system.procedure.ts";
 import { appRouter } from "./router.ts";
 import { getPasswordHash } from "./state/password.ts";
 import type { AppWebSocket, SocketData } from "./types.ts";
@@ -36,31 +25,24 @@ interface ORPCMessage {
 }
 
 /**
- * Legacy message format (for backward compatibility during migration)
+ * Parse incoming message
  */
-interface LegacyMessage {
-	[key: string]: unknown;
-}
-
-/**
- * Parse incoming message and determine format
- */
-function parseMessage(
-	data: string,
-):
-	| { type: "orpc"; message: ORPCMessage }
-	| { type: "legacy"; message: LegacyMessage }
-	| null {
+function parseMessage(data: string): ORPCMessage | null {
 	try {
 		const parsed = JSON.parse(data);
 
 		// ORPC messages have a specific structure with path array
 		if (parsed.path && Array.isArray(parsed.path)) {
-			return { type: "orpc", message: parsed as ORPCMessage };
+			return parsed as ORPCMessage;
 		}
 
-		// Legacy messages are key-value objects
-		return { type: "legacy", message: parsed as LegacyMessage };
+		// Handle keepalive messages silently
+		if (parsed.keepalive !== undefined) {
+			return null;
+		}
+
+		logger.warn("Received non-ORPC message format:", parsed);
+		return null;
 	} catch (error) {
 		logger.error(`Failed to parse WebSocket message: ${error}`);
 		return null;
@@ -68,7 +50,7 @@ function parseMessage(
 }
 
 /**
- * Handle ORPC-style messages
+ * Handle ORPC messages
  */
 async function handleORPCMessage(
 	ws: AppWebSocket,
@@ -96,6 +78,14 @@ async function handleORPCMessage(
 				result,
 			}),
 		);
+
+		// Handle post-login actions
+		if (
+			message.path?.join(".") === "auth.login" &&
+			(result as { success: boolean })?.success
+		) {
+			sendInitialStatusToClient(ws);
+		}
 	} catch (error) {
 		logger.error(`ORPC procedure error: ${error}`);
 		ws.send(
@@ -108,164 +98,6 @@ async function handleORPCMessage(
 			}),
 		);
 	}
-}
-
-/**
- * Handle legacy-style messages (for backward compatibility)
- * This allows gradual migration from the old WebSocket protocol
- */
-async function handleLegacyMessage(
-	ws: AppWebSocket,
-	message: LegacyMessage,
-): Promise<void> {
-	const context = createContext(ws);
-
-	// Log all received messages except for keepalives
-	if (Object.keys(message).length > 1 || !("keepalive" in message)) {
-		logger.debug("WS legacy message", message);
-	}
-
-	// Handle keepalive
-	if ("keepalive" in message) {
-		context.markActive();
-		return;
-	}
-
-	// Handle auth
-	if ("auth" in message && message.auth) {
-		const authInput = message.auth as {
-			password?: string;
-			token?: string;
-			persistent_token?: boolean;
-		};
-		try {
-			const result = await call(
-				loginProcedure,
-				{
-					password: authInput.password,
-					token: authInput.token,
-					persistent_token: authInput.persistent_token ?? false,
-				},
-				{ context },
-			);
-			sendToClient(ws, "auth", result);
-			if (result.success) {
-				// Send initial status after successful auth
-				sendInitialStatusToClient(ws);
-			}
-		} catch (error) {
-			logger.error(`Login error: ${error}`);
-			sendToClient(ws, "auth", { success: false });
-		}
-		return;
-	}
-
-	// Handle config (password and remote config)
-	if ("config" in message && message.config) {
-		const configMsg = message.config as {
-			password?: string;
-			remote_key?: string;
-			remote_provider?: "ceralive" | "belabox" | "custom";
-			custom_provider?: {
-				name: string;
-				host: string;
-				path?: string;
-				secure?: boolean;
-				cloudUrl?: string;
-			};
-		};
-
-		// Handle password setting
-		if (configMsg.password) {
-			try {
-				await call(
-					setPasswordProcedure,
-					{ password: configMsg.password },
-					{ context },
-				);
-			} catch (error) {
-				logger.error(`Set password error: ${error}`);
-			}
-		}
-
-		// Handle remote config (key and provider)
-		if (configMsg.remote_key !== undefined) {
-			try {
-				await call(
-					setRemoteConfigProcedure,
-					{
-						remote_key: configMsg.remote_key,
-						provider: configMsg.remote_provider ?? "ceralive",
-						custom_provider: configMsg.custom_provider,
-					},
-					{ context },
-				);
-			} catch (error) {
-				logger.error(`Set remote config error: ${error}`);
-			}
-		}
-		return;
-	}
-
-	// Require auth for remaining operations
-	if (!context.isAuthenticated()) {
-		return;
-	}
-
-	// Handle start streaming
-	if ("start" in message && message.start) {
-		try {
-			await call(
-				streamingStartProcedure,
-				message.start as Record<string, unknown>,
-				{ context },
-			);
-		} catch (error) {
-			logger.error(`Start streaming error: ${error}`);
-		}
-		return;
-	}
-
-	// Handle stop streaming
-	if ("stop" in message) {
-		try {
-			await call(streamingStopProcedure, undefined, { context });
-		} catch (error) {
-			logger.error(`Stop streaming error: ${error}`);
-		}
-		return;
-	}
-
-	// Handle bitrate
-	if ("bitrate" in message && message.bitrate) {
-		const bitrateMsg = message.bitrate as { max_br?: number };
-		if (bitrateMsg.max_br) {
-			try {
-				const result = await call(
-					setBitrateProcedure,
-					{ max_br: bitrateMsg.max_br },
-					{ context },
-				);
-				broadcast("bitrate", result, { except: ws });
-			} catch (error) {
-				logger.error(`Set bitrate error: ${error}`);
-			}
-		}
-		return;
-	}
-
-	// Handle logout
-	if ("logout" in message) {
-		try {
-			await call(logoutProcedure, undefined, { context });
-		} catch (error) {
-			logger.error(`Logout error: ${error}`);
-		}
-		return;
-	}
-
-	// Update activity timestamp for any valid message
-	context.markActive();
 }
 
 /**
@@ -303,18 +135,14 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 
 		message(ws: AppWebSocket, data: string | Buffer) {
 			const messageStr = typeof data === "string" ? data : data.toString();
-			const parsed = parseMessage(messageStr);
+			const message = parseMessage(messageStr);
 
-			if (!parsed) {
-				logger.warn("Invalid WebSocket message received");
+			if (!message) {
+				// Keepalive messages return null, which is expected
 				return;
 			}
 
-			if (parsed.type === "orpc") {
-				handleORPCMessage(ws, parsed.message);
-			} else {
-				handleLegacyMessage(ws, parsed.message);
-			}
+			handleORPCMessage(ws, message);
 		},
 
 		close(ws: AppWebSocket, code: number, reason: string) {

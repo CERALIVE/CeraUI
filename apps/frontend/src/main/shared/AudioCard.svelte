@@ -1,12 +1,12 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import type { AudioCodecsMessage, PipelinesMessage } from '@ceraui/rpc/schemas';
 import { Volume } from '@lucide/svelte';
 
 import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import type { AudioCodecsMessage, PipelinesMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
 interface Props {

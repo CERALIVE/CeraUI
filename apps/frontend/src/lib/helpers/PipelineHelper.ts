@@ -1,4 +1,4 @@
-import type { PipelinesMessage } from "$lib/types/socket-messages";
+import type { PipelinesMessage } from "@ceraui/rpc/schemas";
 
 export type PipelineInfo = {
 	device: string | null;

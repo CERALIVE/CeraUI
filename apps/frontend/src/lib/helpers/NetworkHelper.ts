@@ -1,31 +1,35 @@
 import { getLL } from "@ceraui/i18n/svelte";
-import QRCode from "qrcode";
-import { toast } from "svelte-sonner";
-
-import {
-	getStatus,
-	sendMessage,
-	socket,
-} from "$lib/stores/websocket-store.svelte";
-import type { ValueOf } from "$lib/types";
 import type {
 	NetifMessage,
 	StatusMessage,
+	WifiBandNames,
 	WifiSecurity,
-} from "$lib/types/socket-messages";
+} from "@ceraui/rpc/schemas";
+import QRCode from "qrcode";
+import { toast } from "svelte-sonner";
 
-export type WifiBandNames = "auto" | "auto_50" | "auto_24";
+import { rpc } from "$lib/rpc/client";
+import { getStatus } from "$lib/stores/websocket-store.svelte";
+import type { ValueOf } from "$lib/types";
+
+// Re-export for backward compatibility
+export type { WifiBandNames };
 
 export const convertBytesToKbids = (bytes: number) => {
 	return Math.round((bytes * 8) / 1024);
 };
 
-export const setNetif = (
+export const setNetif = async (
 	name: string,
 	ip: string | undefined,
 	enabled: boolean,
 ) => {
-	sendMessage(JSON.stringify({ netif: { name, ip, enabled } }));
+	try {
+		await rpc.network.configure({ name, ip, enabled });
+	} catch (error) {
+		console.error("Failed to configure network interface:", error);
+		throw error;
+	}
 };
 
 export const networkRenameWithError = (name: string, error?: string) => {
@@ -63,7 +67,8 @@ export const getModemNetworkName = (name: string) => {
 	const modem = Object.values(status.modems).find(
 		(modem) => modem.ifname === name,
 	);
-	return `${modem?.status.network} (${modem?.status.network_type})`;
+	if (!modem?.status) return "";
+	return `${modem.status.network} (${modem.status.network_type})`;
 };
 
 export const renameSupportedModemNetwork = (item: string): string => {
@@ -130,19 +135,25 @@ export const getWifiBand = (freq: number) => {
 	return getLL().wifiBands.band_2_4ghz();
 };
 
-export const turnHotspotModeOn = (deviceId: number) => {
-	socket.send(
-		JSON.stringify({ wifi: { hotspot: { start: { device: `${deviceId}` } } } }),
-	);
+export const turnHotspotModeOn = async (deviceId: number) => {
+	try {
+		await rpc.wifi.hotspotStart({ device: String(deviceId) });
+	} catch (error) {
+		console.error("Failed to start hotspot:", error);
+		throw error;
+	}
 };
 
-export const turnHotspotModeOff = (deviceId: number) => {
-	socket.send(
-		JSON.stringify({ wifi: { hotspot: { stop: { device: `${deviceId}` } } } }),
-	);
+export const turnHotspotModeOff = async (deviceId: number) => {
+	try {
+		await rpc.wifi.hotspotStop({ device: String(deviceId) });
+	} catch (error) {
+		console.error("Failed to stop hotspot:", error);
+		throw error;
+	}
 };
 
-export const changeHotspotSettings = ({
+export const changeHotspotSettings = async ({
 	deviceId,
 	name,
 	password,
@@ -153,15 +164,19 @@ export const changeHotspotSettings = ({
 	password: string;
 	channel: string;
 }) => {
-	socket.send(
-		JSON.stringify({
-			wifi: {
-				hotspot: { config: { device: `${deviceId}`, name, password, channel } },
-			},
-		}),
-	);
+	try {
+		await rpc.wifi.hotspotConfigure({
+			device: String(deviceId),
+			name,
+			password,
+			channel,
+		});
+	} catch (error) {
+		console.error("Failed to configure hotspot:", error);
+		throw error;
+	}
 };
-export const changeModemSettings = ({
+export const changeModemSettings = async ({
 	network_type,
 	roaming,
 	network,
@@ -180,39 +195,51 @@ export const changeModemSettings = ({
 	password: string;
 	device: number | string;
 }) => {
-	socket.send(
-		JSON.stringify({
-			modems: {
-				config: {
-					network_type,
-					roaming: roaming ?? false,
-					network: `${network ?? ""}`,
-					autoconfig: autoconfig ?? false,
-					apn,
-					username,
-					password,
-					device: `${device}`,
-				},
-			},
-		}),
-	);
+	try {
+		await rpc.modems.configure({
+			device: String(device),
+			network_type,
+			roaming: roaming ?? false,
+			network: network ?? "",
+			autoconfig: autoconfig ?? false,
+			apn,
+			username,
+			password,
+		});
+	} catch (error) {
+		console.error("Failed to configure modem:", error);
+		throw error;
+	}
 };
 
-export const scanModemNetworks = (deviceId: number) => {
-	socket.send(JSON.stringify({ modems: { scan: { device: deviceId } } }));
+export const scanModemNetworks = async (deviceId: number) => {
+	try {
+		await rpc.modems.scan({ device: deviceId });
+	} catch (error) {
+		console.error("Failed to scan modem networks:", error);
+		throw error;
+	}
 };
 
-export const scanWifi = (deviceId: number | string, notification = true) => {
+export const scanWifi = async (
+	deviceId: number | string,
+	notification = true,
+) => {
 	if (notification) {
 		toast.info(getLL().networkHelper.toast.scanningWifi(), {
 			description: getLL().networkHelper.toast.scanningWifiDescription(),
 			duration: 5000,
 		});
 	}
-	socket.send(JSON.stringify({ wifi: { scan: `${deviceId}` } }));
+	try {
+		await rpc.wifi.scan({ device: String(deviceId) });
+	} catch (error) {
+		console.error("Failed to scan WiFi:", error);
+		throw error;
+	}
 };
 
-export const disconnectWifi = (
+export const disconnectWifi = async (
 	uuid: string,
 	wifi: ValueOf<StatusMessage["wifi"]>["available"][number],
 ) => {
@@ -221,16 +248,15 @@ export const disconnectWifi = (
 			ssid: wifi.ssid,
 		}),
 	});
-	socket.send(
-		JSON.stringify({
-			wifi: {
-				disconnect: uuid,
-			},
-		}),
-	);
+	try {
+		await rpc.wifi.disconnect({ uuid });
+	} catch (error) {
+		console.error("Failed to disconnect WiFi:", error);
+		throw error;
+	}
 };
 
-export const connectWifi = (
+export const connectWifi = async (
 	uuid: string,
 	wifi: ValueOf<StatusMessage["wifi"]>["available"][number],
 ) => {
@@ -240,16 +266,15 @@ export const connectWifi = (
 		}),
 		duration: 12000,
 	});
-	socket.send(
-		JSON.stringify({
-			wifi: {
-				connect: uuid,
-			},
-		}),
-	);
+	try {
+		await rpc.wifi.connect({ uuid });
+	} catch (error) {
+		console.error("Failed to connect WiFi:", error);
+		throw error;
+	}
 };
 
-export const connectToNewWifi = (
+export const connectToNewWifi = async (
 	deviceId: string | number,
 	ssid: string,
 	password: string,
@@ -260,20 +285,19 @@ export const connectToNewWifi = (
 		}),
 		duration: 15000,
 	});
-	socket.send(
-		JSON.stringify({
-			wifi: {
-				new: {
-					device: `${deviceId}`,
-					ssid: `${ssid}`,
-					password: `${password}`,
-				},
-			},
-		}),
-	);
+	try {
+		await rpc.wifi.connectNew({
+			device: String(deviceId),
+			ssid,
+			password,
+		});
+	} catch (error) {
+		console.error("Failed to connect to new WiFi:", error);
+		throw error;
+	}
 };
 
-export const forgetWifi = (
+export const forgetWifi = async (
 	uuid: string,
 	wifi: ValueOf<StatusMessage["wifi"]>["available"][number],
 ) => {
@@ -282,14 +306,12 @@ export const forgetWifi = (
 			ssid: wifi.ssid,
 		}),
 	});
-
-	socket.send(
-		JSON.stringify({
-			wifi: {
-				forget: uuid,
-			},
-		}),
-	);
+	try {
+		await rpc.wifi.forget({ uuid });
+	} catch (error) {
+		console.error("Failed to forget WiFi network:", error);
+		throw error;
+	}
 };
 
 export const getWifiUUID = (

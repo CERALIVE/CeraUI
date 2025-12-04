@@ -11,6 +11,9 @@ export type WifiSecurity = z.infer<typeof wifiSecuritySchema>;
 export const wifiBandSchema = z.enum(['auto', 'auto_50', 'auto_24']);
 export type WifiBand = z.infer<typeof wifiBandSchema>;
 
+// Alias for backward compatibility
+export type WifiBandNames = WifiBand;
+
 // Available WiFi network schema
 export const availableWifiNetworkSchema = z.object({
 	active: z.boolean(),
@@ -99,3 +102,18 @@ export const wifiOperationOutputSchema = z.object({
 	error: z.enum(['auth', 'generic']).optional(),
 });
 export type WifiOperationOutput = z.infer<typeof wifiOperationOutputSchema>;
+
+// WiFi message schema (response from WiFi operations)
+export const wifiMessageSchema = z.object({
+	connect: z.array(z.string()).optional(),
+	device: z.union([z.number(), z.string()]).optional(),
+	disconnect: z.string().optional(),
+	new: z
+		.object({
+			error: z.enum(['auth', 'generic']).optional(),
+			device: z.union([z.number(), z.string()]).optional(),
+			success: z.boolean().optional(),
+		})
+		.optional(),
+});
+export type WifiMessage = z.infer<typeof wifiMessageSchema>;

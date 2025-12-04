@@ -1,5 +1,6 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import type { StatusMessage } from '@ceraui/rpc/schemas';
 import { ChevronDown, Loader2, Radio, Settings2, Signal, WifiOff } from '@lucide/svelte';
 import { slide } from 'svelte/transition';
 
@@ -7,7 +8,6 @@ import SignalIndicator from '$lib/components/icons/SignalIndicator.svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import * as Collapsible from '$lib/components/ui/collapsible';
-import type { StatusMessage } from '$lib/types/socket-messages';
 import { capitalizeFirstLetter, cn } from '$lib/utils.js';
 
 import ModemConfigurator from './ModemConfigurator.svelte';

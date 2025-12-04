@@ -18,6 +18,9 @@ export const loginOutputSchema = z.object({
 });
 export type LoginOutput = z.infer<typeof loginOutputSchema>;
 
+// Alias for backward compatibility
+export type AuthMessage = LoginOutput;
+
 // Set password input schema
 export const setPasswordInputSchema = z.object({
 	password: z.string().min(8, 'Minimum password length: 8 characters'),

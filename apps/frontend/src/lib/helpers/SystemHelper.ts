@@ -1,11 +1,18 @@
-import { socket } from "$lib/stores/websocket-store.svelte";
 import type {
+	AudioCodecs,
 	ConfigMessage,
-	CustomProvider,
+	CustomProviderInput,
 	ProviderSelection,
-} from "$lib/types/socket-messages";
+	StreamingConfigInput,
+} from "@ceraui/rpc/schemas";
 
-export type AudioCodecs = "aac" | "opus";
+import { rpc } from "$lib/rpc/client";
+
+// Re-export type for backward compatibility
+export type { AudioCodecs };
+
+// Alias for backward compatibility
+type CustomProvider = CustomProviderInput;
 
 export type Config = {
 	pipeline: string;
@@ -19,41 +26,79 @@ export type Config = {
 	srt_streamid: string;
 };
 
-const sendCommand = (cmd: string) => {
-	socket.send(JSON.stringify({ command: cmd }));
-};
-export const installSoftwareUpdates = () => {
-	sendCommand("update");
-};
-
-export const reboot = () => {
-	sendCommand("reboot");
+export const installSoftwareUpdates = async () => {
+	try {
+		await rpc.system.startUpdate();
+	} catch (error) {
+		console.error("Failed to start update:", error);
+		throw error;
+	}
 };
 
-export const powerOff = () => {
-	sendCommand("poweroff");
+export const reboot = async () => {
+	try {
+		await rpc.system.reboot();
+	} catch (error) {
+		console.error("Failed to reboot:", error);
+		throw error;
+	}
 };
 
-export const startSSH = () => {
-	sendCommand("start_ssh");
+export const powerOff = async () => {
+	try {
+		await rpc.system.poweroff();
+	} catch (error) {
+		console.error("Failed to power off:", error);
+		throw error;
+	}
 };
 
-export const stopSSH = () => {
-	sendCommand("stop_ssh");
+export const startSSH = async () => {
+	try {
+		await rpc.system.sshStart();
+	} catch (error) {
+		console.error("Failed to start SSH:", error);
+		throw error;
+	}
 };
 
-export const resetSSHPasword = () => {
-	sendCommand("reset_ssh_pass");
+export const stopSSH = async () => {
+	try {
+		await rpc.system.sshStop();
+	} catch (error) {
+		console.error("Failed to stop SSH:", error);
+		throw error;
+	}
 };
 
-export const getSystemLog = () => {
+export const resetSSHPasword = async () => {
+	try {
+		const result = await rpc.system.sshResetPassword();
+		return result.password;
+	} catch (error) {
+		console.error("Failed to reset SSH password:", error);
+		throw error;
+	}
+};
+
+export const getSystemLog = async () => {
 	console.log("🔽 Requesting system log download...");
-	sendCommand("get_syslog");
+	try {
+		await rpc.system.getSyslog();
+	} catch (error) {
+		console.error("Failed to get system log:", error);
+		throw error;
+	}
 };
 
-export const getDeviceLog = () => {
+export const getDeviceLog = async () => {
 	console.log("🔽 Requesting device log download...");
-	sendCommand("get_log");
+	try {
+		await rpc.system.getLog();
+	} catch (error) {
+		console.error("Failed to get device log:", error);
+		throw error;
+	}
 };
 
 export type RemoteConfigParams = {
@@ -62,44 +107,99 @@ export type RemoteConfigParams = {
 	custom_provider?: CustomProvider;
 };
 
-export const saveRemoteKey = (key: string) => {
-	socket.send(JSON.stringify({ config: { remote_key: key } }));
-};
-
-export const saveRemoteConfig = (params: RemoteConfigParams) => {
-	const config: Partial<ConfigMessage> = {
-		remote_key: params.remote_key,
-		remote_provider: params.provider,
-	};
-	if (params.custom_provider) {
-		config.custom_provider = params.custom_provider;
+export const saveRemoteKey = async (key: string) => {
+	try {
+		await rpc.system.setRemoteConfig({
+			remote_key: key,
+			provider: "ceralive",
+		});
+	} catch (error) {
+		console.error("Failed to save remote key:", error);
+		throw error;
 	}
-	socket.send(JSON.stringify({ config }));
 };
 
-export const savePassword = (password: string) => {
-	socket.send(JSON.stringify({ config: { password: password } }));
-	localStorage.setItem("auth", password);
-};
-export const setBitrate = (bitrate: number) => {
-	socket.send(JSON.stringify({ bitrate: { max_br: `${bitrate}` } }));
-};
-
-export const stopStreaming = () => {
-	socket.send(JSON.stringify({ stop: "0" }));
-};
-
-export const startStreaming = (config: ConfigMessage) => {
-	console.log(JSON.stringify({ start: config }));
-	socket.send(JSON.stringify({ start: config }));
+export const saveRemoteConfig = async (params: RemoteConfigParams) => {
+	try {
+		await rpc.system.setRemoteConfig({
+			remote_key: params.remote_key,
+			provider: params.provider ?? "ceralive",
+			custom_provider: params.custom_provider,
+		});
+	} catch (error) {
+		console.error("Failed to save remote config:", error);
+		throw error;
+	}
 };
 
-export const updateConfig = (config: { [key: string]: string | number }) => {
-	socket.send(JSON.stringify({ config }));
+export const savePassword = async (password: string) => {
+	try {
+		await rpc.auth.setPassword({ password });
+		localStorage.setItem("auth", password);
+	} catch (error) {
+		console.error("Failed to save password:", error);
+		throw error;
+	}
 };
 
-export const updateBitrate = (bitrate: number) => {
-	socket.send(JSON.stringify({ bitrate: { max_br: bitrate } }));
+export const setBitrate = async (bitrate: number) => {
+	try {
+		await rpc.streaming.setBitrate({ max_br: bitrate });
+	} catch (error) {
+		console.error("Failed to set bitrate:", error);
+		throw error;
+	}
+};
+
+export const stopStreaming = async () => {
+	try {
+		await rpc.streaming.stop();
+	} catch (error) {
+		console.error("Failed to stop streaming:", error);
+		throw error;
+	}
+};
+
+export const startStreaming = async (config: ConfigMessage) => {
+	console.log("Starting streaming with config:", config);
+	try {
+		// Map ConfigMessage to StreamingConfigInput
+		const input: StreamingConfigInput = {
+			pipeline: config.pipeline,
+			acodec: config.acodec,
+			delay: config.delay,
+			max_br: config.max_br,
+			srt_latency: config.srt_latency,
+			bitrate_overlay: config.bitrate_overlay,
+			srtla_addr: config.srtla_addr,
+			srtla_port: config.srtla_port,
+			srt_streamid: config.srt_streamid,
+			asrc: config.asrc,
+			relay_server: config.relay_server,
+			relay_account: config.relay_account,
+		};
+		await rpc.streaming.start(input);
+	} catch (error) {
+		console.error("Failed to start streaming:", error);
+		throw error;
+	}
+};
+
+export const updateConfig = async (_config: {
+	[key: string]: string | number;
+}) => {
+	// Config updates are handled via specific RPC methods now
+	// This function is kept for backward compatibility
+	console.warn("updateConfig is deprecated, use specific RPC methods instead");
+};
+
+export const updateBitrate = async (bitrate: number) => {
+	try {
+		await rpc.streaming.setBitrate({ max_br: bitrate });
+	} catch (error) {
+		console.error("Failed to update bitrate:", error);
+		throw error;
+	}
 };
 export const downloadLog = ({
 	name,

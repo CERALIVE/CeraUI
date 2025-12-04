@@ -1,5 +1,6 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import type { StatusMessage } from '@ceraui/rpc/schemas';
 import { EyeIcon, Router, Wifi, WifiOff } from '@lucide/svelte';
 
 import SignalIndicator from '$lib/components/icons/SignalIndicator.svelte';
@@ -15,7 +16,6 @@ import {
 	turnHotspotModeOff,
 	turnHotspotModeOn,
 } from '$lib/helpers/NetworkHelper';
-import type { StatusMessage } from '$lib/types/socket-messages';
 import { capitalizeFirstLetter, cn } from '$lib/utils.js';
 
 import HotspotConfigurator from './HotspotConfigurator.svelte';

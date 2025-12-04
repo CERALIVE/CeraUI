@@ -1,5 +1,6 @@
+import type { PipelinesMessage } from "@ceraui/rpc/schemas";
+
 import type { GroupedPipelines } from "$lib/helpers/PipelineHelper";
-import type { PipelinesMessage } from "../../types/socket-messages";
 
 type Properties = {
 	inputMode: string | undefined;

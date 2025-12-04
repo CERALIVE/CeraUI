@@ -1,6 +1,7 @@
 <script lang="ts">
 import { rtlLanguages } from '@ceraui/i18n';
 import { locale } from '@ceraui/i18n/svelte';
+import type { NotificationType, StatusMessage } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
 import { OfflinePage, PWAStatus } from '$lib/components/ui/pwa';
@@ -19,7 +20,6 @@ import {
 	getStatus,
 	sendAuthMessage,
 } from '$lib/stores/websocket-store.svelte';
-import type { NotificationType, StatusMessage } from '$lib/types/socket-messages';
 
 import Auth from './Auth.svelte';
 import Main from './MainView.svelte';
@@ -41,10 +41,10 @@ let activeToasts = $state<Record<string, ToastInfo>>({});
 let isUpdatingToasts = false;
 
 // Override original SystemHelper functions to add toast clearing
-const startStreaming = (config: Record<string, string | number | boolean>) => {
+const startStreaming = (config: Parameters<typeof startStreamingFn>[0]) => {
 	// Guard against infinite updates
 	if (isUpdatingToasts) {
-		startStreamingFn(config as Parameters<typeof startStreamingFn>[0]);
+		startStreamingFn(config);
 		return;
 	}
 
@@ -66,7 +66,7 @@ const startStreaming = (config: Record<string, string | number | boolean>) => {
 		}, 0);
 
 		// Now call the original function
-		startStreamingFn(config as Parameters<typeof startStreamingFn>[0]);
+		startStreamingFn(config);
 	} finally {
 		// Ensure flag is reset
 		isUpdatingToasts = false;

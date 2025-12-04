@@ -12,13 +12,13 @@
 
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import type { StatusMessage } from '@ceraui/rpc/schemas';
 import { CheckCircle2, Cog, Download, Package, RotateCw } from '@lucide/svelte';
 import { onMount } from 'svelte';
 import { toast } from 'svelte-sonner';
 
 import * as Drawer from '$lib/components/ui/drawer/index.js';
 import { Progress } from '$lib/components/ui/progress';
-import type { StatusMessage } from '$lib/types/socket-messages';
 
 const { details }: { details: Exclude<StatusMessage['updating'], boolean | null> } = $props();
 

@@ -6,13 +6,6 @@
  *
  * @deprecated Use $lib/rpc imports directly for new code
  */
-import { toast } from "svelte-sonner";
-
-import { mergeModems } from "$lib/helpers/ObjectsHelper";
-import { downloadLog } from "$lib/helpers/SystemHelper";
-import { rpcClient } from "$lib/rpc/client";
-
-import { BUILD_INFO, ENV_VARIABLES } from "../env";
 import type {
 	AudioCodecsMessage,
 	AuthMessage,
@@ -25,9 +18,14 @@ import type {
 	SensorsStatusMessage,
 	StatusMessage,
 	WifiMessage,
-} from "../types/socket-messages";
-import { resetFrontendVersionTracking } from "./frontend-version.svelte";
-import { CLIENT_VERSION } from "./version-manager";
+} from "@ceraui/rpc/schemas";
+import { toast } from "svelte-sonner";
+
+import { mergeModems } from "$lib/helpers/ObjectsHelper";
+import { downloadLog } from "$lib/helpers/SystemHelper";
+import { rpcClient } from "$lib/rpc/client";
+
+import { ENV_VARIABLES } from "../env";
 
 // ============================================
 // Svelte 5 Reactive State ($state)
@@ -211,19 +209,57 @@ export const socket = {
 // ============================================
 // Message Handling
 // ============================================
-function sendCreatePasswordMessage(password: string) {
-	sendMessage(JSON.stringify({ config: { password } }));
+import { rpc } from "$lib/rpc/client";
+
+async function sendCreatePasswordMessage(password: string) {
+	return new Promise<void>((resolve, reject) => {
+		waitForSocketConnection(
+			50,
+			async () => {
+				try {
+					await rpc.auth.setPassword({ password });
+					resolve();
+				} catch (error) {
+					console.error("Failed to set password:", error);
+					reject(error);
+				}
+			},
+			10000,
+			() => reject(new Error("Connection timeout")),
+		);
+	});
 }
 
-function sendAuthMessage(
+async function sendAuthMessage(
 	password: string,
 	persistentToken: boolean,
 	onTimeout?: () => unknown,
 ) {
-	sendMessage(
-		JSON.stringify({ auth: { password, persistent_token: persistentToken } }),
-		onTimeout,
-	);
+	return new Promise<void>((resolve) => {
+		waitForSocketConnection(
+			50,
+			async () => {
+				try {
+					const result = await rpc.auth.login({
+						password,
+						persistent_token: persistentToken,
+					});
+					AuthStore._set(result);
+					resolve();
+				} catch (error) {
+					console.error("Failed to authenticate:", error);
+					AuthStore._set({ success: false });
+					resolve();
+				}
+			},
+			10000,
+			() => {
+				AuthStore._set({ success: false });
+				onTimeout?.();
+				resolve();
+			},
+		);
+	});
 }
 
 const assignMessage = (data: string) => {
