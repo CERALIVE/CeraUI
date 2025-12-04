@@ -94,25 +94,27 @@ const hasRemoteConfigChanged = $derived(
 				customProviderHost !== (currentCustomProvider?.host ?? ''))),
 );
 
-// Sync remoteKey with config when it changes
-$effect(() => {
-	const configRemoteKey = getConfig()?.remote_key ?? '';
-	if (remoteKey === '' || remoteKey === lastSshPassword) {
-		remoteKey = configRemoteKey;
-	}
-});
+// Track if initial sync has happened
+let initialSyncDone = $state(false);
 
-// Sync provider with config when it changes
+// Sync remoteKey and provider with config only on initial load
 $effect(() => {
-	const configProvider = getConfig()?.remote_provider ?? 'ceralive';
-	if (selectedProvider !== configProvider) {
-		selectedProvider = configProvider;
-	}
-	const configCustomProvider = getConfig()?.custom_provider;
-	if (configCustomProvider) {
-		customProviderName = configCustomProvider.name ?? '';
-		customProviderHost = configCustomProvider.host ?? '';
-		customProviderSecure = configCustomProvider.secure ?? true;
+	const config = getConfig();
+	if (!config) return;
+
+	// Only sync on initial load
+	if (!initialSyncDone) {
+		remoteKey = config.remote_key ?? '';
+		selectedProvider = config.remote_provider ?? 'ceralive';
+
+		const configCustomProvider = config.custom_provider;
+		if (configCustomProvider) {
+			customProviderName = configCustomProvider.name ?? '';
+			customProviderHost = configCustomProvider.host ?? '';
+			customProviderSecure = configCustomProvider.secure ?? true;
+		}
+
+		initialSyncDone = true;
 	}
 });
 
