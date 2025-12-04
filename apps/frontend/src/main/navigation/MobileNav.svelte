@@ -30,6 +30,7 @@ import Logo from '$lib/components/icons/Logo.svelte';
 import { Button } from '$lib/components/ui/button';
 import MobileLink from '$lib/components/ui/mobile-link.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
+import { Separator } from '$lib/components/ui/separator';
 import * as Sheet from '$lib/components/ui/sheet';
 import { type NavElements, navElements, siteName } from '$lib/config';
 import {
@@ -86,8 +87,8 @@ const handleClick = (nav: NavElements) => {
 		// Reset selectedItem safely to prevent animation conflicts
 		setTimeout(() => {
 			selectedItem = null;
-		}, 50); // Small additional delay to let scale animations complete
-	}, 150);
+		}, 30); // Small additional delay to let scale animations complete
+	}, 75);
 };
 
 // Enhanced logo click handler with throttling
@@ -152,7 +153,7 @@ $effect(() => {
 <Sheet.Root bind:open>
 	<Sheet.Trigger>
 		<Button
-			class="hover:bg-accent/50 focus-visible:bg-accent/50 group relative mr-2 rounded-xl px-3 py-2 text-base transition-all duration-300 focus-visible:ring-0 focus-visible:ring-offset-0 md:hidden"
+			class="hover:bg-accent/50 focus-visible:bg-accent/50 group relative mr-2 rounded-xl px-3 py-2 text-base transition-all duration-150 focus-visible:ring-0 focus-visible:ring-offset-0 md:hidden"
 			disabled={$isNavigationTransitioning}
 			onmouseenter={() => (isMenuHovered = true)}
 			onmouseleave={() => (isMenuHovered = false)}
@@ -162,12 +163,12 @@ $effect(() => {
 			<div class="relative">
 				{#if open}
 					<X
-						class="h-5 w-5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-90"
+						class="h-5 w-5 transition-all duration-150 group-hover:scale-110 group-hover:rotate-90"
 					/>
 				{:else}
 					<Menu
 						class={cn(
-							'h-5 w-5 transition-all duration-300 group-hover:scale-110',
+							'h-5 w-5 transition-all duration-150 group-hover:scale-110',
 							$isNavigationTransitioning && 'animate-pulse',
 						)}
 					/>
@@ -181,7 +182,7 @@ $effect(() => {
 			<!-- Enhanced glow effect with reactive states -->
 			<div
 				class={cn(
-					'absolute -inset-1 rounded-xl blur-sm transition-all duration-300',
+					'absolute -inset-1 rounded-xl blur-sm transition-all duration-150',
 					isMenuHovered || open ? 'bg-primary/20 opacity-100' : 'bg-primary/10 opacity-0',
 					$isNavigationTransitioning && 'animate-pulse',
 				)}
@@ -199,7 +200,7 @@ $effect(() => {
 		<div class="border-border/50 border-b px-4 pb-4">
 			<!-- Back button (if history available) -->
 			{#if $canGoBack}
-				<div class="mb-4" in:fly={{ x: -20, duration: 200 }}>
+				<div class="mb-4" in:fly={{ x: -12, duration: 120 }}>
 					<button
 						class="text-muted-foreground hover:text-foreground group flex items-center space-x-2 text-sm transition-all duration-200 disabled:opacity-50"
 						disabled={$isNavigationTransitioning}
@@ -215,7 +216,7 @@ $effect(() => {
 
 			<!-- Enhanced Logo Section -->
 			<button
-				class="hover:bg-accent/50 group flex w-full items-center space-x-3 rounded-xl px-4 py-3 transition-all duration-300"
+				class="hover:bg-accent/50 group flex w-full items-center space-x-3 rounded-xl px-4 py-3 transition-all duration-150"
 				disabled={$isNavigationTransitioning}
 				onclick={handleLogoClick}
 			>
@@ -223,14 +224,14 @@ $effect(() => {
 				<div class="relative">
 					<Logo
 						class={cn(
-							'h-6 w-6 transition-all duration-300 group-hover:scale-105',
+							'h-6 w-6 transition-all duration-150 group-hover:scale-105',
 							$isNavigationTransitioning && 'animate-pulse',
 						)}
 					/>
 
 					<!-- Logo glow effect -->
 					<div
-						class="bg-primary/10 absolute -inset-1 rounded-full opacity-0 blur-sm transition-opacity duration-300 group-hover:opacity-100"
+						class="bg-primary/10 absolute -inset-1 rounded-full opacity-0 blur-sm transition-opacity duration-150 group-hover:opacity-100"
 					></div>
 				</div>
 
@@ -278,12 +279,27 @@ $effect(() => {
 					{@const isSelected = selectedItem === identifier}
 
 					{#if identifier}
+						<!-- Separator before development tools -->
+						{#if navigation.isDev && index > 0}
+							<div
+								class="py-2"
+								in:fly={{
+									x: -16,
+									duration: 150,
+									delay: index * 30,
+									easing: cubicInOut,
+								}}
+							>
+								<Separator class="my-1" />
+							</div>
+						{/if}
+
 						<div
 							class="relative"
 							in:fly={{
-								x: -30,
-								duration: 300,
-								delay: index * 75,
+								x: -16,
+								duration: 150,
+								delay: index * 30,
 								easing: cubicInOut,
 							}}
 						>
@@ -291,7 +307,7 @@ $effect(() => {
 							<div class="relative">
 								<MobileLink
 									class={cn(
-										'transition-all duration-300',
+										'transition-all duration-150',
 										isSelected && 'bg-primary/10 scale-[0.98]',
 										$isNavigationTransitioning &&
 											identifier === Object.keys(currentNav || {})[0] &&
@@ -334,8 +350,8 @@ $effect(() => {
 								{#if isSelected}
 									<div
 										class="bg-primary/5 pointer-events-none absolute inset-0 rounded-lg"
-										in:scale={{ duration: 200, start: isFinite(0.95) ? 0.95 : 1 }}
-										out:fade={{ duration: 150 }}
+										in:scale={{ duration: 120, start: isFinite(0.95) ? 0.95 : 1 }}
+										out:fade={{ duration: 100 }}
 									></div>
 								{/if}
 							</div>
@@ -347,7 +363,7 @@ $effect(() => {
 				{#if $isNavigationTransitioning}
 					<div
 						class="text-muted-foreground flex items-center justify-center py-4 text-sm"
-						in:fade={{ duration: 200 }}
+						in:fade={{ duration: 120 }}
 					>
 						<div class="flex items-center space-x-2">
 							<div

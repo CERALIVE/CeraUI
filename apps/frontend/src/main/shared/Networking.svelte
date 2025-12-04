@@ -1,5 +1,6 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import type { NetifMessage } from '@ceraui/rpc/schemas';
 import { AlertCircle, ArrowUpDown, Check, Network, Signal, Wifi, X } from '@lucide/svelte';
 
 import * as Card from '$lib/components/ui/card';
@@ -15,7 +16,6 @@ import {
 	setNetif,
 } from '$lib/helpers/NetworkHelper.js';
 import { getNetif } from '$lib/stores/websocket-store.svelte';
-import type { NetifMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
 // Svelte 5: Use $derived with reactive getter

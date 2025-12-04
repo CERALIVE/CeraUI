@@ -1,6 +1,6 @@
 /*
-    belaUI - web UI for the BELABOX project
-    Copyright (C) 2020-2022 BELABOX project
+    CeraUI - web UI for the CeraLive project
+    Copyright (C) 2024-2025 CeraLive project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -18,11 +18,19 @@
 import fs from "node:fs";
 
 import { logger } from "../helpers/logger.ts";
+import { getPasswordHash, setPasswordHash } from "../rpc/state/password.ts";
 import { setup } from "./setup.ts";
 import { getSshPasswordHash, setSshPasswordHash } from "./system/ssh.ts";
-import { getPasswordHash, setPasswordHash } from "./ui/auth.ts";
 
 const CONFIG_FILE = "config.json";
+
+type CustomProvider = {
+	name: string;
+	host: string;
+	path?: string;
+	secure?: boolean;
+	cloudUrl?: string;
+};
 
 let config: {
 	password?: string;
@@ -39,6 +47,8 @@ let config: {
 	acodec?: string;
 	bitrate_overlay?: boolean;
 	remote_key?: string;
+	remote_provider?: "ceralive" | "belabox" | "custom";
+	custom_provider?: CustomProvider;
 	max_br?: number;
 	delay?: number;
 	pipeline?: string;

@@ -1,21 +1,21 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import type { AudioCodecsMessage, Pipelines } from '@ceraui/rpc/schemas';
 import { Volume } from '@lucide/svelte';
 
 import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import type { AudioCodecsMessage, PipelinesMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
 interface Props {
 	audioCodecs: AudioCodecsMessage | undefined;
-	unparsedPipelines: PipelinesMessage | undefined;
+	unparsedPipelines: Pipelines | undefined;
 	audioSources: string[];
 	notAvailableAudioSource: string | undefined;
 	properties: {
-		pipeline: keyof PipelinesMessage | undefined;
+		pipeline: keyof Pipelines | undefined;
 		audioSource: string | undefined;
 		audioCodec: string | undefined;
 		audioDelay: number | undefined;

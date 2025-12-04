@@ -1,7 +1,7 @@
 /*
     CeraUI - web UI for the CERALIVE project
-    Copyright (C) 2020-2022 BELABOX project
-    Copyright (C) 2023-2025 CERALIVE project
+    Copyright (C) 2024-2025 CeraLive project
+
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -66,7 +66,7 @@ type ChildProcess = ChildProcessByStdio<null, null, Readable> & {
 	restartTimer?: ReturnType<typeof setTimeout>;
 };
 
-export const AUTOSTART_CHECK_FILE = "/tmp/belaui_restarted";
+export const AUTOSTART_CHECK_FILE = "/tmp/ceralive_restarted";
 
 export const belacoderExec = `${setup.belacoder_path ?? "/usr/bin"}/belacoder`;
 export const srtlaSendExec = `${setup.srtla_path ?? "/usr/bin"}/srtla_send`;
@@ -377,7 +377,7 @@ export function setAutostart(value: boolean): void {
 }
 
 export async function checkAutoStartStream() {
-	// Don't autostart when restarting belaUI after a software update or after a crash
+	// Don't autostart when restarting CeraLive after a software update or after a crash
 	if (getConfig().autostart && !fs.existsSync(AUTOSTART_CHECK_FILE)) {
 		autoStartStream();
 	}

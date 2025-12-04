@@ -463,7 +463,7 @@ const fr = {
 			name: "Nom",
 			password: "Mot de passe",
 			channel: "Canal",
-			placeholderName: "BELABOX",
+			placeholderName: "CeraLive",
 			placeholderPassword: "Entrez un mot de passe sécurisé",
 			selectChannel: "Sélectionnez un canal",
 		},
@@ -614,15 +614,24 @@ const fr = {
 	advanced: {
 		systemSettings: "Paramètres du système",
 		developerOptions: "Options du développeur",
-		lanPassword: "Mot de passe de l'interface Web LAN (belaUI)",
+		lanPassword: "Mot de passe de l'interface Web LAN",
 		lanPasswordTooltip:
-			"Définissez un mot de passe pour protéger l'accès à l'interface Web belaUI.",
+			"Définissez un mot de passe pour protéger l'accès à l'interface Web CeraUI.",
 		minLength: "Longueur minimale : 8 caractères",
 		newPassword: "Nouveau mot de passe",
 		save: "Enregistrer",
-		cloudRemoteKey: "Clé distante de BELABOX Cloud",
+		cloudRemote: "Cloud Distant",
+		cloudRemoteDescription: "Configurer la gestion cloud à distance",
+		cloudProvider: "Fournisseur Cloud",
+		cloudRemoteKey: "Clé Distante",
 		cloudRemoteKeyTooltip:
-			"Saisissez la clé distante pour accéder à BELABOX Cloud.",
+			"Saisissez la clé distante de votre fournisseur cloud.",
+		providerName: "Nom du Fournisseur",
+		providerHost: "Hôte WebSocket",
+		providerHostHint:
+			"Saisissez le nom d'hôte du serveur WebSocket (sans protocole)",
+		useSecureConnection: "Utiliser une connexion sécurisée (wss)",
+		remoteConfigSaved: "Configuration distante enregistrée",
 		reboot: "Redémarrer",
 		rebootTooltip: "Redémarrez l'appareil pour appliquer les modifications.",
 		powerOff: "Éteindre",
@@ -640,16 +649,16 @@ const fr = {
 		startSSH: "Démarrer le serveur SSH",
 		stopSSH: "Arrêter le serveur SSH",
 		sshToggleTooltip: "Démarrer ou arrêter le serveur SSH.",
-		belaboxLog: "Journal BELABOX",
+		ceraliveLog: "Journal CeraLive",
 		systemLog: "Journal du système",
 		download: "Télécharger",
-		belaboxLogTooltip: "Téléchargez les journaux pour le dépannage.",
+		ceraliveLogTooltip: "Téléchargez les journaux pour le dépannage.",
 		systemLogTooltip: "Téléchargez les journaux système pour le débogage.",
-		confirmBelaboxLog:
-			"Êtes-vous sûr de vouloir télécharger le journal BELABOX ? Il peut contenir des informations sensibles, telles que des mots de passe.",
+		confirmDeviceLog:
+			"Êtes-vous sûr de vouloir télécharger le journal CeraLive ? Il peut contenir des informations sensibles, telles que des mots de passe.",
 		confirmSystemLog:
 			"Êtes-vous sûr de vouloir télécharger le journal système ? Il peut contenir des informations sensibles, telles que des mots de passe.",
-		downloadBelaboxLog: "Télécharger le journal BELABOX",
+		downloadDeviceLog: "Télécharger le journal CeraLive",
 		downloadSystemLog: "Télécharger le journal système",
 		systemDescription:
 			"Configuration système avancée et options de développeur",
@@ -695,11 +704,11 @@ const fr = {
 	offline: {
 		title: "Vous êtes hors ligne",
 		description:
-			"CeraUI a besoin d'une connexion Internet pour gérer votre appareil BELABOX.",
+			"CeraUI a besoin d'une connexion Internet pour gérer votre appareil CeraLive.",
 		checkTitle: "Veuillez vérifier :",
 		checkWifi: "Votre connexion Wi-Fi",
 		checkNetwork: "Votre appareil est sur le même réseau",
-		checkDevice: "L'appareil BELABOX est allumé",
+		checkDevice: "L'appareil CeraLive est allumé",
 		tryAgain: "Réessayer",
 		checking: "Vérification...",
 		checkFailed: "Toujours hors ligne",

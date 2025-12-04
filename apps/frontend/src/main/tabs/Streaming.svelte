@@ -1,5 +1,6 @@
 <script lang="ts">
 import { getTranslationByKey, LL } from '@ceraui/i18n/svelte';
+import type { AudioCodecs, Pipelines } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
 import { autoSelectNextOption } from '$lib/components/streaming/StreamingAutoSelection';
@@ -16,9 +17,7 @@ import {
 } from '$lib/components/streaming/StreamingUtils';
 import { validateStreamingForm } from '$lib/components/streaming/StreamingValidation';
 import { parsePipelineName } from '$lib/helpers/PipelineHelper';
-import type { AudioCodecs } from '$lib/helpers/SystemHelper';
 import { stopStreaming } from '$lib/helpers/SystemHelper';
-import type { PipelinesMessage } from '$lib/types/socket-messages';
 import AudioCard from '$main/shared/AudioCard.svelte';
 import EncoderCard from '$main/shared/EncoderCard.svelte';
 import ServerCard from '$main/shared/ServerCard.svelte';
@@ -29,7 +28,7 @@ type Properties = {
 	encoder: string | undefined;
 	resolution: string | undefined;
 	framerate: string | undefined;
-	pipeline: keyof PipelinesMessage | undefined;
+	pipeline: keyof Pipelines | undefined;
 	bitrate: number | undefined;
 	bitrateOverlay: boolean | undefined;
 	audioSource: string | undefined;

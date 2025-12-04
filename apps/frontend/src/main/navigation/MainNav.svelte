@@ -28,6 +28,7 @@ import { crossfade, fly, scale } from 'svelte/transition';
 
 import Logo from '$lib/components/icons/Logo.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
+import { Separator } from '$lib/components/ui/separator';
 import { type NavElements, navElements, siteName } from '$lib/config';
 import {
 	canGoBack,
@@ -39,7 +40,7 @@ import {
 import { cn } from '$lib/utils';
 
 const [send, receive] = crossfade({
-	duration: 400,
+	duration: 200,
 	easing: cubicInOut,
 	fallback(node) {
 		// Validate node exists and has dimensions to prevent NaN values
@@ -52,7 +53,7 @@ const [send, receive] = crossfade({
 		const safeStart = isFinite(startValue) ? startValue : 1;
 
 		return scale(node, {
-			duration: 200,
+			duration: 120,
 			start: safeStart,
 			easing: cubicInOut,
 		});
@@ -130,7 +131,7 @@ const handleLogoClick = () => {
 <div class="mr-6 hidden md:flex">
 	<button
 		class={cn(
-			'group relative flex cursor-pointer items-center space-x-3 rounded-xl px-3 py-2 transition-all duration-300',
+			'group relative flex cursor-pointer items-center space-x-3 rounded-xl px-3 py-2 transition-all duration-150',
 			'hover:bg-accent/50 focus-visible:bg-accent/50',
 			$isNavigationTransitioning && 'pointer-events-none opacity-60',
 		)}
@@ -144,7 +145,7 @@ const handleLogoClick = () => {
 		<div class="relative">
 			<Logo
 				class={cn(
-					'h-7 w-7 transition-all duration-300',
+					'h-7 w-7 transition-all duration-150',
 					isLogoHovered && 'scale-110 rotate-12',
 					$isNavigationTransitioning && 'animate-pulse',
 				)}
@@ -153,7 +154,7 @@ const handleLogoClick = () => {
 			<!-- Enhanced glow effect with reactive states -->
 			<div
 				class={cn(
-					'absolute -inset-1 rounded-full blur-sm transition-all duration-300',
+					'absolute -inset-1 rounded-full blur-sm transition-all duration-150',
 					isLogoHovered ? 'bg-primary/30 opacity-100' : 'bg-primary/10 opacity-0',
 					$canGoBack && 'bg-primary/20', // Subtle indicator when back is available
 				)}
@@ -163,8 +164,8 @@ const handleLogoClick = () => {
 			{#if $canGoBack && isLogoHovered}
 				<div
 					class="bg-primary absolute -top-1 -right-1 h-3 w-3 rounded-full"
-					in:scale={{ duration: 200, start: 0.8 }}
-					out:scale={{ duration: 150, start: 1 }}
+					in:scale={{ duration: 120, start: 0.8 }}
+					out:scale={{ duration: 100, start: 1 }}
 				>
 					<div class="bg-primary/60 h-full w-full animate-ping rounded-full"></div>
 				</div>
@@ -202,10 +203,15 @@ const handleLogoClick = () => {
 					Object.keys(currentNav)[0] === identifier}
 				{@const isHovered = hoveredTab === identifier}
 
+				<!-- Separator before development tools -->
+				{#if navigation.isDev && index > 0}
+					<Separator class="mx-2 h-6" orientation="vertical" />
+				{/if}
+
 				<button
 					id={identifier}
 					class={cn(
-						'group relative flex h-10 min-w-28 cursor-pointer items-center justify-center rounded-xl px-4 text-center text-sm font-medium transition-all duration-300',
+						'group relative flex h-10 min-w-28 cursor-pointer items-center justify-center rounded-xl px-4 text-center text-sm font-medium transition-all duration-150',
 						isActive
 							? 'text-primary shadow-sm'
 							: cn(
@@ -222,9 +228,9 @@ const handleLogoClick = () => {
 					onmouseenter={() => (hoveredTab = identifier)}
 					onmouseleave={() => (hoveredTab = null)}
 					in:fly={{
-						y: 20,
-						duration: 300,
-						delay: index * 50,
+						y: 12,
+						duration: 150,
+						delay: index * 25,
 						easing: cubicInOut,
 					}}
 				>
@@ -232,7 +238,7 @@ const handleLogoClick = () => {
 						<!-- Enhanced active indicator with improved animations -->
 						<div
 							class={cn(
-								'absolute inset-0 rounded-xl border shadow-lg transition-all duration-300',
+								'absolute inset-0 rounded-xl border shadow-lg transition-all duration-150',
 								'from-background to-accent border-border/50 bg-gradient-to-b',
 								'shadow-primary/10',
 							)}
@@ -262,7 +268,7 @@ const handleLogoClick = () => {
 					{#if !isActive}
 						<div
 							class={cn(
-								'absolute bottom-0 left-1/2 h-0.5 transition-all duration-300',
+								'absolute bottom-0 left-1/2 h-0.5 transition-all duration-150',
 								'from-primary/60 via-primary to-primary/60 bg-gradient-to-r',
 								isHovered ? 'w-8 -translate-x-1/2 opacity-100' : 'w-0 -translate-x-1/2 opacity-0',
 							)}

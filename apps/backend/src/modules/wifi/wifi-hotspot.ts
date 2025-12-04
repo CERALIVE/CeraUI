@@ -1,6 +1,6 @@
 /*
-    belaUI - web UI for the BELABOX project
-    Copyright (C) 2020-2022 BELABOX project
+    CeraUI - web UI for the CeraLive project
+    Copyright (C) 2024-2025 CeraLive project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -111,7 +111,7 @@ export async function wifiHotspotStart(
 		}
 	} else {
 		const ms = macAddress.split(":");
-		const name = `BELABOX_${ms[4]}${ms[5]}`;
+		const name = `CERALIVE_${ms[4]}${ms[5]}`;
 		const password = crypto.randomBytes(9).toString("base64");
 
 		// Temporary hotspot config to send to the client

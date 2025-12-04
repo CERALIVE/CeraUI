@@ -1,5 +1,6 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import type { StatusMessage } from '@ceraui/rpc/schemas';
 import { ChevronDown, Loader2, Radio, Settings2, Signal, WifiOff } from '@lucide/svelte';
 import { slide } from 'svelte/transition';
 
@@ -7,7 +8,6 @@ import SignalIndicator from '$lib/components/icons/SignalIndicator.svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import * as Collapsible from '$lib/components/ui/collapsible';
-import type { StatusMessage } from '$lib/types/socket-messages';
 import { capitalizeFirstLetter, cn } from '$lib/utils.js';
 
 import ModemConfigurator from './ModemConfigurator.svelte';
@@ -25,7 +25,7 @@ let configOpen = $state(false);
 const signalValue = $derived(modem.status?.signal ?? 0);
 const connectionStatus = $derived(modem.status?.connection ?? 'disconnected');
 const networkType = $derived(modem.status?.network_type ?? '');
-const operatorName = $derived((modem.status as { operator?: string })?.operator ?? '');
+const operatorName = $derived(modem.status?.network ?? '');
 
 // Status helpers
 const isConnected = $derived(connectionStatus === 'connected');
@@ -75,6 +75,7 @@ function getNetworkBadge(type: string) {
 	return 'bg-slate-500/10 text-slate-600 dark:text-slate-400';
 }
 
+// Clean modem name (remove any leftover "| Unknown" for backwards compatibility)
 const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 </script>
 
@@ -101,10 +102,10 @@ const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 				<div class="min-w-0 flex-1">
 					<Card.Title class="text-sm leading-tight font-semibold">
 						{cleanModemName}
-						{#if operatorName && isConnected}
-							<span class="text-muted-foreground font-normal"> | {operatorName}</span>
-						{/if}
 					</Card.Title>
+					{#if operatorName && isConnected}
+						<p class="text-muted-foreground text-xs">{operatorName}</p>
+					{/if}
 					<div class="mt-1 flex flex-wrap items-center gap-1.5">
 						<span class={cn('rounded-md px-1.5 py-0.5 text-xs font-medium', statusColors.badge)}>
 							{#if isConnecting}

@@ -7,13 +7,17 @@ import General from "$main/tabs/General.svelte";
 import Network from "$main/tabs/Network.svelte";
 import Streaming from "$main/tabs/Streaming.svelte";
 
-export type NavElements = {
-	[key: string]: {
-		label: string;
-		component: Component;
-	};
+export type NavElement = {
+	label: string;
+	component: Component;
+	isDev?: boolean;
 };
-// Base navigation elements (always available)
+
+export type NavElements = {
+	[key: string]: NavElement;
+};
+
+// Base navigation elements (always available - production tools)
 const baseNavElements: NavElements = {
 	general: { label: "general", component: General },
 	network: { label: "network", component: Network },
@@ -26,7 +30,7 @@ export const navElements: NavElements = {
 	...baseNavElements,
 	...(BUILD_INFO.IS_DEV
 		? {
-				devtools: { label: "devtools", component: DevTools },
+				devtools: { label: "devtools", component: DevTools, isDev: true },
 			}
 		: {}),
 };

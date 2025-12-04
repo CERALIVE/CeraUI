@@ -1,8 +1,10 @@
-import type { StreamingConfig } from "$lib/components/streaming/StreamingConfigService";
+import type { ConfigMessage } from "@ceraui/rpc/schemas";
 
 declare global {
 	interface Window {
-		startStreamingWithNotificationClear?: (config: StreamingConfig) => void;
+		startStreamingWithNotificationClear?: (
+			config: Partial<ConfigMessage>,
+		) => void;
 		stopStreamingWithNotificationClear?: () => void;
 	}
 }

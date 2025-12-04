@@ -1,19 +1,19 @@
 # CeraUI
 
-CeraUI is a modern user interface built with **Svelte + Vite**, designed as an alternative frontend for [belaUI](https://github.com/BELABOX/belaUI). It communicates with the BELABOX WebSocket backend to provide a fast, interactive, and user-friendly experience.
+CeraUI is a modern user interface built with **Svelte + Vite**, designed as an alternative frontend for [CeraLive](https://github.com/CeraLive/CeraLive). It communicates with the CeraLive WebSocket backend to provide a fast, interactive, and user-friendly experience.
 
 ## Features
 
 - **Svelte 5 + Vite**: Enjoy a highly reactive and efficient UI built with the latest Svelte and Vite tooling.
 - **Modern Design**: A sleek and minimalistic interface for an enhanced user experience.
 - **Responsive Design**: The UI is optimized for all screen sizes.
-- **WebSocket Integration**: Seamlessly communicates with the BELABOX backend.
-- **Flexible Deployment**: Choose to serve on a different port with PM2 or replace the existing belaUI content.
+- **WebSocket Integration**: Seamlessly communicates with the CeraLive backend.
+- **Flexible Deployment**: Choose to serve on a different port with PM2 or replace the existing CeraLive content.
 - **Remote Control**: Full remote control functionality even without the automatic relay server selection feature.
 
 ## Objectives
 
-One of the long-term objectives of this project, which will commence once the UI has full functionality, is to support both maintaining **vanilla** BELABOX builds (as seen on [belabox.net](https://belabox.net/)) and creating a separate branch for custom development to extend BELABOX functionalities. Additionally, I am interested in the way [pjeweb/belaUI](https://github.com/pjeweb/belaUI) was restructured.
+One of the long-term objectives of this project, which will commence once the UI has full functionality, is to support both maintaining **vanilla** CeraLive builds (as seen on [ceralive.net](https://ceralive.net/)) and creating a separate branch for custom development to extend CeraLive functionalities. Additionally, I am interested in the way [pjeweb/CeraLive](https://github.com/pjeweb/CeraLive) was restructured.
 
 ## Roadmap
 
@@ -55,7 +55,7 @@ For development, you can run the project in dev mode from your computer. First, 
 cp .env.example .env
 ```
 
-Then, replace the `VITE_SOCKET_ENDPOINT` value in the `.env` file with the BELABOX IP address on your local network.
+Then, replace the `VITE_SOCKET_ENDPOINT` value in the `.env` file with the CeraLive IP address on your local network.
 
 **Important:** Before building for production, remove the `.env` file so that the UI can load the IP dynamically from `window.location`.
 
@@ -118,15 +118,15 @@ You can serve the UI on a different port using **PM2** and ensure it runs at sta
     pm2 startup
     ```
 
-### Replacing the Existing belaUI Frontend
+### Replacing the Existing CeraLive Frontend
 
-If you prefer to replace the original belaUI frontend with CeraUI, copy the build files into the correct location:
+If you prefer to replace the original CeraLive frontend with CeraUI, copy the build files into the correct location:
 
 ```sh
-sudo cp -r dist/* /opt/belaUI/public/
+sudo cp -r dist/* /opt/CeraLive/public/
 ```
 
-> **Note:** Replacing the original UI directly may cause issues. When belaUI is updated, it can overwrite these files, removing your custom UI. Ensure you monitor updates and reapply your changes if necessary.
+> **Note:** Replacing the original UI directly may cause issues. When CeraLive is updated, it can overwrite these files, removing your custom UI. Ensure you monitor updates and reapply your changes if necessary.
 
 ## 📸 Screenshots & Visual Documentation
 

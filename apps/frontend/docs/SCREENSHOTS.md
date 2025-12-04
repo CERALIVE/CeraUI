@@ -4,7 +4,7 @@ Welcome to the complete visual documentation of CeraUI - a modern, responsive in
 
 ## 🎯 Overview
 
-CeraUI provides a complete management interface for BELABOX systems with:
+CeraUI provides a complete management interface for CeraLive systems with:
 - **Dual Theme Support**: Seamless dark/light theme switching
 - **Responsive Design**: Optimized for desktop (1920×1080) and mobile (430×932) viewports
 - **Feature-Rich Interface**: Network management, streaming controls, system settings, and developer tools
@@ -137,7 +137,7 @@ CeraUI provides a complete management interface for BELABOX systems with:
 ### **2. Network Management**
 - **WiFi Interfaces**: Individual adapter control (wlan0, wlan1)
 - **Connection Details**: IP addresses, signal strength, bandwidth
-- **Hotspot Management**: BELABOX hotspot configuration
+- **Hotspot Management**: CeraLive hotspot configuration
 - **Security Information**: WPA2 settings and encryption details
 - **Network Monitoring**: Real-time bandwidth and connection status
 
@@ -150,7 +150,7 @@ CeraUI provides a complete management interface for BELABOX systems with:
 
 ### **4. Advanced System Settings**
 - **Security**: Web interface password protection
-- **Cloud Integration**: BELABOX Cloud remote key management
+- **Cloud Integration**: CeraLive Cloud remote key management
 - **System Actions**: Safe reboot and shutdown procedures
 - **Developer Access**: SSH server with secure password controls
 - **Maintenance**: Log downloads and system diagnostics

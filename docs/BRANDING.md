@@ -1,62 +1,31 @@
-# Conditional Branding System
+# CeraLive Branding
 
-The CeraUI project supports conditional branding to compile different versions of the application for different hardware brands.
-
-## Supported Brands
-
-- **CERALIVE** (Main brand, default)
-- **BELABOX** (Secondary frontend-only brand)
+CeraUI is the web interface for the **CeraLive** streaming encoder platform.
 
 ## Brand Configuration
 
-### Environment Variable
+The branding is configured in the following files:
 
-The branding is controlled by the `VITE_BRAND` environment variable:
+| File | Purpose |
+|------|---------|
+| `apps/frontend/src/lib/config/branding.ts` | Frontend brand constants |
+| `apps/frontend/vite.config.ts` | Build-time brand injection |
+| `apps/frontend/pwa.config.ts` | PWA manifest branding |
+| `packages/i18n/src/branding.ts` | i18n brand placeholders |
 
-```bash
-# Build for CERALIVE (default)
-VITE_BRAND=CERALIVE pnpm build
-
-# Build for BELABOX
-VITE_BRAND=BELABOX pnpm build
-```
-
-### Build Scripts
-
-The build system defaults to CERALIVE (main brand) with a secondary script for BELABOX:
+## Build Scripts
 
 ```bash
 # Development
-pnpm dev             # Run development server with CERALIVE branding (default)
-pnpm dev:belabox     # Run development server with BELABOX branding
+pnpm dev              # Start development server
 
 # Production builds
-pnpm build           # Build for CERALIVE (main brand, default)
-pnpm build:belabox   # Build for BELABOX (secondary brand)
+pnpm build            # Build for production
+pnpm build:backend    # Build backend only
+pnpm build:frontend   # Build frontend only
 ```
 
-## How It Works
-
-### 1. Frontend Configuration
-
-The branding system is centralized in `apps/frontend/src/lib/config/branding.ts`:
-
-```typescript
-export const CURRENT_BRAND: BrandName =
-  (import.meta.env.VITE_BRAND as BrandName) || "CERALIVE";
-
-export const BRAND_CONFIG = brandConfigs[CURRENT_BRAND];
-```
-
-### 2. Build-time Replacement
-
-During the build process:
-
-- Vite injects the brand configuration as `__BRAND_CONFIG__`
-- HTML templates are dynamically updated with brand-specific content
-- PWA manifests are generated with the correct brand names
-
-### 3. i18n Integration
+## i18n Integration
 
 The internationalization system supports dynamic branding through placeholder replacement:
 
@@ -67,16 +36,18 @@ cloudRemoteKey: brandTranslation("{{cloudService}} Remote Key"),
 description: brandTranslation("CeraUI needs an internet connection to manage your {{deviceName}} device."),
 ```
 
-Available placeholders:
+### Available Placeholders
 
-- `{{deviceName}}` - Device name (CERALIVE/BELABOX)
-- `{{deviceNameLower}}` - Lowercase device name
-- `{{siteName}}` - Full site name with copyright
-- `{{cloudService}}` - Cloud service name
-- `{{logName}}` - Log file name
-- `{{organizationName}}` - Organization name
+| Placeholder | Value |
+|-------------|-------|
+| `{{deviceName}}` | CERALIVE |
+| `{{deviceNameLower}}` | ceralive |
+| `{{siteName}}` | CeraUI for CERALIVE© |
+| `{{cloudService}}` | CeraLive Cloud |
+| `{{logName}}` | CeraLive Log |
+| `{{organizationName}}` | CeraLive |
 
-### 4. Component Integration
+## Component Integration
 
 Components can access brand configuration through:
 
@@ -84,7 +55,9 @@ Components can access brand configuration through:
 import { BRAND_CONFIG, deviceName, siteName } from "$lib/config/branding";
 
 // Use in components
-console.log(BRAND_CONFIG.deviceName); // "CERALIVE" or "BELABOX"
+console.log(BRAND_CONFIG.deviceName); // "CERALIVE"
+console.log(deviceName);              // "CERALIVE"
+console.log(siteName);                // "CeraUI for CERALIVE©"
 ```
 
 ## File Structure
@@ -92,62 +65,77 @@ console.log(BRAND_CONFIG.deviceName); // "CERALIVE" or "BELABOX"
 ```
 apps/frontend/src/lib/config/
 ├── branding.ts          # Main branding configuration
-└── index.ts            # Re-exports for backward compatibility
+└── index.ts             # Re-exports
 
 packages/i18n/src/
 ├── branding.ts          # i18n branding helpers
-└── en/index.ts         # Updated with brand placeholders
+└── en/index.ts          # Translations with brand placeholders
 
 apps/frontend/
-├── index.html          # Dynamic HTML updates
-├── pwa.config.ts       # PWA branding
-└── vite.config.ts      # Build-time brand injection
+├── index.html           # HTML with brand meta tags
+├── pwa.config.ts        # PWA branding
+└── vite.config.ts       # Build-time brand injection
 ```
 
-## Legacy Compatibility
+## Multi-Provider Cloud Support
 
-The system maintains backward compatibility:
+CeraUI supports multiple cloud providers for remote management. Users can select from predefined providers or configure a custom provider.
 
-- Existing imports from `$lib/config` continue to work
-- The `getBelaboxLog` function is aliased to `getDeviceLog`
-- All hardcoded brand references are replaced with dynamic ones
+### Predefined Providers
 
-## Adding New Brands
+| Provider | Host | Cloud URL |
+|----------|------|-----------|
+| CeraLive Cloud | `remote.ceralive.net` | `https://cloud.ceralive.net` |
+| BELABOX Cloud | `remote.belabox.net` | `https://cloud.belabox.net` |
 
-To add a new brand:
+### Custom Provider Configuration
 
-1. Update the `BrandName` type in `branding.ts`
-2. Add the brand configuration to `brandConfigs`
-3. Update build scripts in `package.json`
-4. Test all components and translations
+Users can configure a custom cloud provider with the following options:
+
+- **Provider Name**: Display name for the provider
+- **WebSocket Host**: The hostname for the WebSocket connection (e.g., `remote.example.com`)
+- **Secure Connection**: Whether to use `wss://` (secure) or `ws://` protocol
+
+### Configuration Storage
+
+Provider configuration is stored in `config.json`:
+
+```json
+{
+  "remote_key": "your-remote-key",
+  "remote_provider": "ceralive",
+  "custom_provider": {
+    "name": "My Provider",
+    "host": "remote.example.com",
+    "path": "/ws/remote",
+    "secure": true
+  }
+}
+```
+
+### Adding New Predefined Providers
+
+To add a new predefined provider, update `packages/rpc/src/schemas/cloud-provider.schema.ts`:
+
+```typescript
+export const CLOUD_PROVIDERS: CloudProviderEndpoint[] = [
+  // ... existing providers
+  {
+    id: 'newprovider',
+    name: 'New Provider Cloud',
+    host: 'remote.newprovider.com',
+    path: '/ws/remote',
+    secure: true,
+    cloudUrl: 'https://cloud.newprovider.com',
+  },
+];
+```
+
+Also update the `providerSelectionSchema` to include the new provider ID.
 
 ## Best Practices
 
 1. **Use placeholders in translations** instead of hardcoded brand names
 2. **Import from `$lib/config/branding`** for brand-specific logic
-3. **Test both brands** during development
-4. **Use the provided build scripts** for consistent builds
-
-## Examples
-
-### Development
-
-```bash
-# Start development with CERALIVE branding (default)
-pnpm dev
-
-# Start development with BELABOX branding
-pnpm dev:belabox
-```
-
-### Production Deployment
-
-```bash
-# Build CERALIVE version (main brand, default)
-pnpm build
-
-# Build BELABOX version (secondary brand)
-pnpm build:belabox
-```
-
-The compiled output will have all brand-specific content correctly replaced throughout the application, including HTML meta tags, PWA manifests, and all translated text.
+3. **Use the provided build scripts** for consistent builds
+4. **Use predefined providers** when possible for consistency

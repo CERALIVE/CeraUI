@@ -12,6 +12,8 @@
     "checkJs": true,
     "isolatedModules": true,
     "esModuleInterop": true,
+    // Strict options (oRPC+Zod handles boundary validation, so noUncheckedIndexedAccess not needed)
+    "noImplicitOverride": true,
     // Enhanced source map configuration for better debugging
     "sourceMap": true,
     "inlineSourceMap": false,

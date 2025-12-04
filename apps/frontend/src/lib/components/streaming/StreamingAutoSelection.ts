@@ -1,19 +1,20 @@
+import type { Pipelines } from "@ceraui/rpc/schemas";
+
 import type { GroupedPipelines } from "$lib/helpers/PipelineHelper";
-import type { PipelinesMessage } from "../../types/socket-messages";
 
 type Properties = {
 	inputMode: string | undefined;
 	encoder: string | undefined;
 	resolution: string | undefined;
 	framerate: string | undefined;
-	pipeline: keyof PipelinesMessage | undefined;
+	pipeline: keyof Pipelines | undefined;
 };
 
 export interface AutoSelectionResult {
 	encoder?: string;
 	resolution?: string;
 	framerate?: string;
-	pipeline?: keyof PipelinesMessage | undefined;
+	pipeline?: keyof Pipelines | undefined;
 }
 
 export function autoSelectNextOption(

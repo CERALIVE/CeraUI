@@ -618,16 +618,23 @@ const en = {
 	advanced: {
 		systemSettings: "System Settings",
 		developerOptions: "Developer Options",
-		lanPassword: "LAN Web Interface (belaUI) Password",
+		lanPassword: "LAN Web Interface Password",
 		lanPasswordTooltip:
-			"Set a password to protect access to the belaUI web interface.",
+			"Set a password to protect access to the CeraUI web interface.",
 		minLength: "Minimum length: 8 characters",
 		newPassword: "New Password",
 		save: "Save",
-		cloudRemoteKey: brandTranslation("{{cloudService}} Remote Key"),
-		cloudRemoteKeyTooltip: brandTranslation(
-			"Enter the remote key for {{cloudService}} access.",
-		),
+		// Cloud Remote Section
+		cloudRemote: "Cloud Remote",
+		cloudRemoteDescription: "Configure remote cloud management",
+		cloudProvider: "Cloud Provider",
+		cloudRemoteKey: "Remote Key",
+		cloudRemoteKeyTooltip: "Enter the remote key from your cloud provider.",
+		providerName: "Provider Name",
+		providerHost: "WebSocket Host",
+		providerHostHint: "Enter the WebSocket server hostname (without protocol)",
+		useSecureConnection: "Use secure connection (wss)",
+		remoteConfigSaved: "Remote configuration saved",
 		reboot: "Reboot",
 		rebootTooltip: "Restart the device to apply changes.",
 		powerOff: "Power Off",
@@ -644,17 +651,17 @@ const en = {
 		startSSH: "Start SSH Server",
 		stopSSH: "Stop SSH Server",
 		sshToggleTooltip: "Start or stop the SSH server.",
-		belaboxLog: brandTranslation("{{logName}}"),
+		ceraliveLog: brandTranslation("{{logName}}"),
 		systemLog: "System Log",
 		download: "Download",
-		belaboxLogTooltip: "Download logs for troubleshooting.",
+		ceraliveLogTooltip: "Download logs for troubleshooting.",
 		systemLogTooltip: "Download system logs for debugging.",
-		confirmBelaboxLog: brandTranslation(
+		confirmDeviceLog: brandTranslation(
 			"Are you sure you want to download the {{logName}}? It may contain sensitive information such as passwords.",
 		),
 		confirmSystemLog:
 			"Are you sure you want to download the system log? It may contain sensitive information such as passwords.",
-		downloadBelaboxLog: brandTranslation("Download {{logName}}"),
+		downloadDeviceLog: brandTranslation("Download {{logName}}"),
 		downloadSystemLog: "Download System Log",
 		systemDescription:
 			"Manage system configuration, developer tools, and device settings.",

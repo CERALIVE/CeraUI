@@ -1,12 +1,12 @@
-import { toast } from "svelte-sonner";
-import type { AudioCodecs } from "$lib/helpers/SystemHelper";
 import type {
+	AudioCodecs,
 	ConfigMessage,
-	PipelinesMessage,
-} from "$lib/types/socket-messages";
+	Pipelines,
+} from "@ceraui/rpc/schemas";
+import { toast } from "svelte-sonner";
 
 type Properties = {
-	pipeline: keyof PipelinesMessage | undefined;
+	pipeline: keyof Pipelines | undefined;
 	audioSource: string | undefined;
 	audioCodec: AudioCodecs | undefined;
 	audioDelay: number | undefined;
@@ -21,7 +21,7 @@ type Properties = {
 };
 
 export interface ConfigServiceOptions {
-	unparsedPipelines: PipelinesMessage | undefined;
+	unparsedPipelines: Pipelines | undefined;
 }
 
 export function buildStreamingConfig(

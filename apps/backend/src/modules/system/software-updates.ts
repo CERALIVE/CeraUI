@@ -1,7 +1,7 @@
 /*
     CeraUI - web UI for the CERALIVE project
-    Copyright (C) 2020-2022 BELABOX project
-    Copyright (C) 2023-2025 CERALIVE project
+    Copyright (C) 2024-2025 CeraLive project
+
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -145,10 +145,6 @@ async function getSoftwareUpdateSize() {
 			"The following packages have been kept back:\n",
 		);
 		if (aptHeldBackPackages) {
-			if (setup.hw === "jetson" && aptHeldBackPackages === "belabox") {
-				// This is a special case for upgrading from an old installation using the stock jetson kernel
-				aptHeldBackPackages = "belabox belabox-linux-tegra";
-			}
 			upgrade = await execPNR(
 				`apt-get install --assume-no ${aptHeldBackPackages}`,
 			);

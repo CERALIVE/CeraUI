@@ -462,7 +462,7 @@ const ptBR = {
 			name: "Nome",
 			password: "Senha",
 			channel: "Canal",
-			placeholderName: "BELABOX",
+			placeholderName: "CeraLive",
 			placeholderPassword: "Digite uma senha segura",
 			selectChannel: "Selecione um canal",
 		},
@@ -591,15 +591,23 @@ const ptBR = {
 	advanced: {
 		systemSettings: "Configurações do sistema",
 		developerOptions: "Opções do desenvolvedor",
-		lanPassword: "Senha da Interface Web LAN (belaUI)",
+		lanPassword: "Senha da Interface Web LAN",
 		lanPasswordTooltip:
-			"Defina uma senha para proteger o acesso à interface web belaUI.",
+			"Defina uma senha para proteger o acesso à interface web CeraUI.",
 		minLength: "Comprimento mínimo: 8 caracteres",
 		newPassword: "Nova senha",
 		save: "Salvar",
-		cloudRemoteKey: "Chave remota do BELABOX Cloud",
-		cloudRemoteKeyTooltip:
-			"Digite a chave remota para acessar o BELABOX Cloud.",
+		cloudRemote: "Nuvem Remota",
+		cloudRemoteDescription: "Configurar gerenciamento remoto na nuvem",
+		cloudProvider: "Provedor de Nuvem",
+		cloudRemoteKey: "Chave Remota",
+		cloudRemoteKeyTooltip: "Digite a chave remota do seu provedor de nuvem.",
+		providerName: "Nome do Provedor",
+		providerHost: "Host WebSocket",
+		providerHostHint:
+			"Digite o nome do host do servidor WebSocket (sem protocolo)",
+		useSecureConnection: "Usar conexão segura (wss)",
+		remoteConfigSaved: "Configuração remota salva",
 		reboot: "Reiniciar",
 		rebootTooltip: "Reinicie o dispositivo para aplicar as alterações.",
 		powerOff: "Desligar",
@@ -616,16 +624,16 @@ const ptBR = {
 		startSSH: "Iniciar servidor SSH",
 		stopSSH: "Parar servidor SSH",
 		sshToggleTooltip: "Iniciar ou parar o servidor SSH.",
-		belaboxLog: "Log do BELABOX",
+		ceraliveLog: "Log do CeraLive",
 		systemLog: "Log do sistema",
 		download: "Baixar",
-		belaboxLogTooltip: "Baixe os logs para solução de problemas.",
+		ceraliveLogTooltip: "Baixe os logs para solução de problemas.",
 		systemLogTooltip: "Baixe os logs do sistema para depuração.",
-		confirmBelaboxLog:
-			"Tem certeza de que deseja baixar o log do BELABOX? Ele pode conter informações sensíveis, como senhas.",
+		confirmDeviceLog:
+			"Tem certeza de que deseja baixar o log do CeraLive? Ele pode conter informações sensíveis, como senhas.",
 		confirmSystemLog:
 			"Tem certeza de que deseja baixar o log do sistema? Ele pode conter informações sensíveis, como senhas.",
-		downloadBelaboxLog: "Baixar log do BELABOX",
+		downloadDeviceLog: "Baixar log do CeraLive",
 		downloadSystemLog: "Baixar log do sistema",
 		systemDescription:
 			"Configuração avançada do sistema e opções de desenvolvedor",
@@ -671,11 +679,11 @@ const ptBR = {
 	offline: {
 		title: "Você está offline",
 		description:
-			"CeraUI precisa de uma conexão com a internet para gerenciar seu dispositivo BELABOX.",
+			"CeraUI precisa de uma conexão com a internet para gerenciar seu dispositivo CeraLive.",
 		checkTitle: "Por favor, verifique:",
 		checkWifi: "Sua conexão Wi-Fi",
 		checkNetwork: "Seu dispositivo está na mesma rede",
-		checkDevice: "Dispositivo BELABOX está ligado",
+		checkDevice: "Dispositivo CeraLive está ligado",
 		tryAgain: "Tentar novamente",
 		checking: "Verificando...",
 		checkFailed: "Ainda offline",

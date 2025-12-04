@@ -2,25 +2,12 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import type { VitePWAOptions } from "vite-plugin-pwa";
 
-// Brand configuration for PWA
-type BrandName = "CERALIVE" | "BELABOX";
-const CURRENT_BRAND: BrandName =
-	(process.env.VITE_BRAND as BrandName) || "CERALIVE";
-
-const brandConfigs = {
-	CERALIVE: {
-		name: "CeraUI for CERALIVE©",
-		description:
-			"A modern UI for CERALIVE streaming encoder management and configuration",
-	},
-	BELABOX: {
-		name: "CeraUI for BELABOX©",
-		description:
-			"A modern UI for BELABOX streaming encoder management and configuration",
-	},
+// Brand configuration (CeraLive-only)
+const BRAND_CONFIG = {
+	name: "CeraUI for CERALIVE©",
+	description:
+		"A modern UI for CERALIVE streaming encoder management and configuration",
 };
-
-const BRAND_CONFIG = brandConfigs[CURRENT_BRAND];
 
 // Generate version from git commit hash + deterministic build ID
 export function generateUniqueVersion(): string {

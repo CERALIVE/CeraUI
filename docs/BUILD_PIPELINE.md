@@ -4,27 +4,27 @@ This document describes the automated build pipeline for creating different Cera
 
 ## 📦 Distribution Types
 
-### 1. CeraUI Frontend for BELABOX
+### 1. CeraUI Frontend for CeraLive
 
-- **Purpose**: CeraUI frontend distribution compatible with existing BELABOX devices
-- **Target**: Devices already running belaUI backend
-- **Brand**: BELABOX
-- **Script**: `scripts/build/build-ceraui-frontend-for-belabox.sh`
-- **Output**: `dist/belabox-frontend/`
+- **Purpose**: CeraUI frontend distribution compatible with existing CeraLive devices
+- **Target**: Devices already running CeraLive backend
+- **Brand**: CeraLive
+- **Script**: `scripts/build/build-ceraui-frontend-for-ceralive.sh`
+- **Output**: `dist/ceralive-frontend/`
 
-**Use Case**: Deploy CeraUI frontend on existing BELABOX devices without touching the backend.
+**Use Case**: Deploy CeraUI frontend on existing CeraLive devices without touching the backend.
 
 ### 2. CeraUI Full System (Compressed)
 
 - **Purpose**: Complete CeraUI system replacement
-- **Target**: Replace belaUI or deploy on custom development devices (not specifically branded)
+- **Target**: Replace CeraLive or deploy on custom development devices (not specifically branded)
 - **Brand**: CERALIVE
 - **Script**: `scripts/build/build-ceraui-system.sh`
 - **Output**: `dist/compressed/`
 
 **Use Case**:
 
-- Replace existing belaUI installations completely
+- Replace existing CeraLive installations completely
 - Deploy on custom development hardware for testing
 - Full system with installation/uninstallation scripts
 - Development and testing environments
@@ -48,10 +48,10 @@ The build pipeline runs **manually only** via workflow dispatch with:
 
 ### Jobs
 
-1. **build-ceraui-frontend-for-belabox**
+1. **build-ceraui-frontend-for-ceralive**
 
-   - Builds CeraUI frontend distribution for BELABOX devices
-   - Uploads artifact: `ceraui-frontend-for-belabox`
+   - Builds CeraUI frontend distribution for CeraLive devices
+   - Uploads artifact: `ceraui-frontend-for-ceralive`
 
 2. **build-ceraui-system**
 
@@ -91,8 +91,8 @@ gem install fpm
 ### Running Build Scripts Locally
 
 ```bash
-# CeraUI frontend for BELABOX
-./scripts/build/build-ceraui-frontend-for-belabox.sh
+# CeraUI frontend for CeraLive
+./scripts/build/build-ceraui-frontend-for-ceralive.sh
 
 # Full CeraUI system
 ./scripts/build/build-ceraui-system.sh
@@ -110,7 +110,7 @@ The build scripts use existing package.json commands:
   "scripts": {
     "build": "VITE_BRAND=CERALIVE pnpm --filter backend run build",
     "build:frontend": "VITE_BRAND=CERALIVE pnpm --filter frontend run build",
-    "build:belabox": "VITE_BRAND=BELABOX pnpm --filter backend run build"
+    "build:ceralive": "VITE_BRAND=CeraLive pnpm --filter backend run build"
   }
 }
 ```
@@ -122,7 +122,7 @@ The build scripts use existing package.json commands:
 ### Frontend Distribution Structure
 
 ```
-dist/belabox-frontend/
+dist/ceralive-frontend/
 ├── index.html
 ├── assets/
 ├── manifest.webmanifest
@@ -153,7 +153,7 @@ dist/debian/
 
 ### Environment Variables
 
-- `VITE_BRAND`: Controls frontend branding (CERALIVE/BELABOX)
+- `VITE_BRAND`: Controls frontend branding (CERALIVE/CeraLive)
 - `NODE_ENV`: Build environment (production for releases)
 
 ### Version Management
@@ -179,8 +179,8 @@ dist/debian/
 
 | Distribution                | Use Case                    | Target              |
 | --------------------------- | --------------------------- | ------------------- |
-| CeraUI Frontend for BELABOX | Deploy CeraUI UI on BELABOX | BELABOX devices     |
-| CeraUI System               | Replace belaUI completely   | Development devices |
+| CeraUI Frontend for CeraLive | Deploy CeraUI UI on CeraLive | CeraLive devices     |
+| CeraUI System               | Replace CeraLive completely   | Development devices |
 | Debian Package              | Professional deployment     | Production systems  |
 
 ## 🔍 Troubleshooting

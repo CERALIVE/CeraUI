@@ -1,4 +1,4 @@
-import type { Modem, ModemList } from "$lib/types/socket-messages";
+import type { Modem, ModemList } from "@ceraui/rpc/schemas";
 
 function isObject(item: unknown): item is Record<string, unknown> {
 	return item !== null && typeof item === "object" && !Array.isArray(item);

@@ -490,7 +490,7 @@ const es = {
 			name: "Nombre",
 			password: "Contraseña",
 			channel: "Canal",
-			placeholderName: "BELABOX",
+			placeholderName: "CeraLive",
 			placeholderPassword: "Ingrese una contraseña segura",
 			selectChannel: "Seleccione un canal",
 		},
@@ -631,15 +631,23 @@ const es = {
 	advanced: {
 		systemSettings: "Configuración del sistema",
 		developerOptions: "Opciones de desarrollador",
-		lanPassword: "Contraseña de la interfaz web LAN (belaUI)",
+		lanPassword: "Contraseña de la interfaz web LAN",
 		lanPasswordTooltip:
-			"Establezca una contraseña para proteger el acceso a la interfaz web de belaUI.",
+			"Establezca una contraseña para proteger el acceso a la interfaz web de CeraUI.",
 		minLength: "Longitud mínima: 8 caracteres",
 		newPassword: "Nueva Contraseña",
 		save: "Guardar",
-		cloudRemoteKey: "Clave remota de BELABOX Cloud",
-		cloudRemoteKeyTooltip:
-			"Ingrese la clave remota para acceder a BELABOX Cloud.",
+		cloudRemote: "Nube Remota",
+		cloudRemoteDescription: "Configurar la gestión remota en la nube",
+		cloudProvider: "Proveedor de Nube",
+		cloudRemoteKey: "Clave Remota",
+		cloudRemoteKeyTooltip: "Ingrese la clave remota de su proveedor de nube.",
+		providerName: "Nombre del Proveedor",
+		providerHost: "Host WebSocket",
+		providerHostHint:
+			"Ingrese el nombre de host del servidor WebSocket (sin protocolo)",
+		useSecureConnection: "Usar conexión segura (wss)",
+		remoteConfigSaved: "Configuración remota guardada",
 		reboot: "Reiniciar",
 		rebootTooltip: "Reinicie el dispositivo para aplicar cambios.",
 		powerOff: "Apagar",
@@ -657,16 +665,16 @@ const es = {
 		startSSH: "Iniciar servidor SSH",
 		stopSSH: "Detener servidor SSH",
 		sshToggleTooltip: "Iniciar o detener el servidor SSH.",
-		belaboxLog: "Registro de BELABOX",
+		ceraliveLog: "Registro de CeraLive",
 		systemLog: "Registro del sistema",
 		download: "Descargar",
-		belaboxLogTooltip: "Descargue registros para solucionar problemas.",
+		ceraliveLogTooltip: "Descargue registros para solucionar problemas.",
 		systemLogTooltip: "Descargue registros del sistema para depuración.",
-		confirmBelaboxLog:
-			"¿Está seguro de que desea descargar el registro de BELABOX? Puede contener información sensible, como contraseñas.",
+		confirmDeviceLog:
+			"¿Está seguro de que desea descargar el registro de CeraLive? Puede contener información sensible, como contraseñas.",
 		confirmSystemLog:
 			"¿Está seguro de que desea descargar el registro del sistema? Puede contener información sensible, como contraseñas.",
-		downloadBelaboxLog: "Descargar registro de BELABOX",
+		downloadDeviceLog: "Descargar registro de CeraLive",
 		downloadSystemLog: "Descargar registro del sistema",
 		systemDescription:
 			"Configuración avanzada del sistema y opciones de desarrollador",
@@ -711,11 +719,11 @@ const es = {
 	offline: {
 		title: "Estás desconectado",
 		description:
-			"CeraUI necesita una conexión a internet para gestionar tu dispositivo BELABOX.",
+			"CeraUI necesita una conexión a internet para gestionar tu dispositivo CeraLive.",
 		checkTitle: "Por favor verifica:",
 		checkWifi: "Tu conexión Wi-Fi",
 		checkNetwork: "Tu dispositivo está en la misma red",
-		checkDevice: "El dispositivo BELABOX está encendido",
+		checkDevice: "El dispositivo CeraLive está encendido",
 		tryAgain: "Intentar de nuevo",
 		checking: "Verificando...",
 		checkFailed: "Aún sin conexión",

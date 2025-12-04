@@ -1,6 +1,6 @@
 /*
-    belaUI - web UI for the BELABOX project
-    Copyright (C) 2020-2022 BELABOX project
+    CeraUI - web UI for the CeraLive project
+    Copyright (C) 2024-2025 CeraLive project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -59,7 +59,7 @@ export type SSID = string;
 export type WifiInterfaceId = number;
 
 export type BaseWifiInterface = {
-	id: WifiInterfaceId; // numeric id for the adapter - temporary for each belaUI execution
+	id: WifiInterfaceId; // numeric id for the adapter - temporary for each CeraLive execution
 	ifname: string;
 	conn: ConnectionUUID | null; // the active connection
 	hw: string; // the name of the wifi adapter hardware

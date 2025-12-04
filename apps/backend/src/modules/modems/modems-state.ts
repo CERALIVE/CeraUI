@@ -1,6 +1,6 @@
 /*
-    belaUI - web UI for the BELABOX project
-    Copyright (C) 2020-2022 BELABOX project
+    CeraUI - web UI for the CeraLive project
+    Copyright (C) 2024-2025 CeraLive project
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@ export type AvailableNetwork = {
 
 export type Modem = {
 	ifname: string; // e.g. wwan0
-	name: string; // e.g. "QUECTEL Broadband Module - 00000 | VINAPHONE"
+	name: string; // e.g. "QUECTEL Broadband Module - 00000"
 	sim_network: string;
 	network_type: {
 		supported: Record<string, NetworkType>; // e.g. { '2g': '2g', '3g': '3g', '3g4g': '3g4g', '4g': '4g' }

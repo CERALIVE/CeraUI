@@ -1,0 +1,42 @@
+{
+	"name": "@ceraui/rpc",
+	"version": "1.0.0",
+	"description": "Shared ORPC contracts and Zod schemas for CeraUI",
+	"type": "module",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"import": "./src/index.ts"
+		},
+		"./contracts": {
+			"types": "./src/contracts/index.ts",
+			"import": "./src/contracts/index.ts"
+		},
+		"./schemas": {
+			"types": "./src/schemas/index.ts",
+			"import": "./src/schemas/index.ts"
+		}
+	},
+	"scripts": {
+		"check": "tsc --noEmit",
+		"lint": "echo 'RPC linting handled by root Biome'",
+		"lint:fix": "echo 'RPC fixing handled by root Biome'"
+	},
+	"dependencies": {
+		"@orpc/contract": "^1.12.2",
+		"zod": "^4.1.13"
+	},
+	"devDependencies": {
+		"typescript": "^5.9.3"
+	},
+	"keywords": [
+		"orpc",
+		"rpc",
+		"websocket",
+		"typesafe",
+		"zod"
+	],
+	"license": "GPL-3.0"
+}

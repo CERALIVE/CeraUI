@@ -1,5 +1,6 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import type { StatusMessage } from '@ceraui/rpc/schemas';
 import {
 	Check,
 	Eye,
@@ -33,7 +34,6 @@ import {
 } from '$lib/helpers/NetworkHelper.js';
 import { getWifi } from '$lib/stores/websocket-store.svelte';
 import type { ValueOf } from '$lib/types';
-import type { StatusMessage } from '$lib/types/socket-messages';
 import { cn } from '$lib/utils';
 
 const { wifi, wifiId }: { wifi: ValueOf<StatusMessage['wifi']>; wifiId: number } = $props();
