@@ -294,7 +294,7 @@ async function registerModem(id: number) {
 
 	const modem: Modem = {
 		ifname: ifname,
-		name: `${hwName} | ${simNetwork}`,
+		name: hwName,
 		sim_network: simNetwork,
 		network_type: {
 			supported: networkTypes,

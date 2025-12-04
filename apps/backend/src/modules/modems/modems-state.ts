@@ -36,7 +36,7 @@ export type AvailableNetwork = {
 
 export type Modem = {
 	ifname: string; // e.g. wwan0
-	name: string; // e.g. "QUECTEL Broadband Module - 00000 | VINAPHONE"
+	name: string; // e.g. "QUECTEL Broadband Module - 00000"
 	sim_network: string;
 	network_type: {
 		supported: Record<string, NetworkType>; // e.g. { '2g': '2g', '3g': '3g', '3g4g': '3g4g', '4g': '4g' }

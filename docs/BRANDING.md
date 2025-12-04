@@ -19,7 +19,7 @@ The branding is configured in the following files:
 # Development
 pnpm dev              # Start development server
 
-# Production builds  
+# Production builds
 pnpm build            # Build for production
 pnpm build:backend    # Build backend only
 pnpm build:frontend   # Build frontend only
