@@ -1,6 +1,7 @@
 <script lang="ts">
 import { getTranslationByKey, LL } from '@ceraui/i18n/svelte';
 import type { AudioCodecs, Pipelines } from '@ceraui/rpc/schemas';
+import { onDestroy } from 'svelte';
 import { toast } from 'svelte-sonner';
 
 import { autoSelectNextOption } from '$lib/components/streaming/StreamingAutoSelection';
@@ -48,8 +49,11 @@ type InitialSelectedProperties = Pick<
 	'audioSource' | 'pipeline' | 'audioCodec' | 'audioDelay' | 'bitrate' | 'bitrateOverlay'
 >;
 
-// Create state manager
+// Create state manager with cleanup on component destroy
 const stateManager = createStreamingStateManager();
+onDestroy(() => {
+	stateManager.cleanup();
+});
 
 // Extract reactive state using getters from the state manager
 const savedConfig = $derived(stateManager.savedConfig);
@@ -100,23 +104,36 @@ let srtlaAddressTouched = $state(false);
 let srtlaPortTouched = $state(false);
 let srtStreamIdTouched = $state(false);
 
+// Track relay server/account touched state from parent (to prevent restore override)
+let relayServerTouched = $state(false);
+let relayAccountTouched = $state(false);
+
 // Track encoder-related user interactions (separate from ServerCard)
 let userHasInteracted = $state(false);
 
 // Track initial restoration phase to prevent premature userHasInteracted setting
 let isInitialMount = $state(true);
+let initialMountTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
-// Allow initial restoration to complete before tracking user interactions
+// Single-shot: transition from initial mount phase after config is restored
 $effect(() => {
-	if (isInitialMount && savedConfig && properties.pipeline) {
-		// Wait for initial state restoration to complete
-		setTimeout(() => {
+	// Only schedule the timeout once when savedConfig and pipeline are both ready
+	if (isInitialMount && savedConfig && properties.pipeline && initialMountTimeoutId === undefined) {
+		initialMountTimeoutId = setTimeout(() => {
 			isInitialMount = false;
 		}, 100);
 	}
 });
 
+// Cleanup timeout on component destroy
+onDestroy(() => {
+	if (initialMountTimeoutId !== undefined) {
+		clearTimeout(initialMountTimeoutId);
+	}
+});
+
 // React to saved config changes and initialize properties
+// Uses === undefined checks to correctly handle falsy values (false, 0, '')
 $effect(() => {
 	if (savedConfig) {
 		const config = savedConfig;
@@ -130,46 +147,57 @@ $effect(() => {
 			properties.srtlaServerPort = config.srtla_port;
 		}
 
-		if (!srtStreamIdTouched && !properties.srtStreamId && config.srt_streamid) {
+		if (!srtStreamIdTouched && properties.srtStreamId === undefined && config.srt_streamid) {
 			properties.srtStreamId = config.srt_streamid;
 		}
 
-		if (!srtlaAddressTouched && !properties.srtlaServerAddress && config.srtla_addr) {
+		if (!srtlaAddressTouched && properties.srtlaServerAddress === undefined && config.srtla_addr) {
 			properties.srtlaServerAddress = config.srtla_addr;
 		}
 
+		// Use === undefined checks to properly handle 0, false, and '' as valid restored values
 		if (initialSelectedProperties.audioDelay === undefined) {
 			properties.audioDelay = initialSelectedProperties.audioDelay = config.delay ?? 0;
 		}
-		if (!initialSelectedProperties.pipeline) {
+		if (initialSelectedProperties.pipeline === undefined) {
 			initialSelectedProperties.pipeline = config.pipeline;
 			properties.pipeline = config.pipeline;
 		}
-		if (!initialSelectedProperties.bitrate) {
+		if (initialSelectedProperties.bitrate === undefined) {
 			properties.bitrate = initialSelectedProperties.bitrate = config?.max_br ?? 5000;
 		}
 
-		if (!initialSelectedProperties.bitrateOverlay) {
+		// bitrateOverlay can legitimately be false, so check === undefined
+		if (initialSelectedProperties.bitrateOverlay === undefined) {
 			properties.bitrateOverlay = initialSelectedProperties.bitrateOverlay =
 				config?.bitrate_overlay ?? false;
 		}
-		if (!initialSelectedProperties.audioSource) {
+		if (initialSelectedProperties.audioSource === undefined) {
 			properties.audioSource = initialSelectedProperties.audioSource = config?.asrc ?? '';
 		}
-		if (!initialSelectedProperties.audioCodec) {
+		if (initialSelectedProperties.audioCodec === undefined) {
 			properties.audioCodec = initialSelectedProperties.audioCodec = config.acodec as AudioCodecs;
 		}
 	}
 });
 
-// React to relay server changes
+// React to relay server changes - only restore if user hasn't touched the fields
 $effect(() => {
 	if (relayMessage && savedConfig !== undefined && savedConfig.relay_server) {
-		properties.relayServer = savedConfig.relay_server ? savedConfig.relay_server : '-1';
-		if (savedConfig?.relay_account !== undefined) {
+		// Only restore relay server if user hasn't touched it
+		if (!relayServerTouched && properties.relayServer === undefined) {
+			properties.relayServer = savedConfig.relay_server ? savedConfig.relay_server : '-1';
+		}
+		// Only restore relay account if user hasn't touched it
+		if (
+			!relayAccountTouched &&
+			properties.relayAccount === undefined &&
+			savedConfig?.relay_account !== undefined
+		) {
 			properties.relayAccount = savedConfig.relay_account;
 		}
-	} else {
+	} else if (properties.relayServer === undefined) {
+		// Set defaults only if not yet set
 		properties.relayServer = '-1';
 		properties.relayAccount = '-1';
 	}
@@ -177,12 +205,6 @@ $effect(() => {
 
 // Parse pipeline to populate encoder fields (during init or programmatic changes, not user interaction)
 $effect.pre(() => {
-	const canRun =
-		properties.pipeline &&
-		unparsedPipelines !== undefined &&
-		$LL &&
-		(!userHasInteracted || isProgrammaticChange);
-
 	if (
 		properties.pipeline &&
 		unparsedPipelines !== undefined &&
@@ -217,17 +239,8 @@ $effect.pre(() => {
 $effect(() => {
 	// During initial mount, don't interfere with pipeline restoration
 	if (isInitialMount) {
-		console.log('🔵 Pipeline validation: Skipping during initial mount');
 		return;
 	}
-
-	console.log('🔍 Pipeline validation triggered:', {
-		inputMode: properties.inputMode,
-		encoder: properties.encoder,
-		resolution: properties.resolution,
-		framerate: properties.framerate,
-		pipeline: properties.pipeline,
-	});
 
 	// Minimal validation effect - just clear pipeline when incomplete
 	// All validation, auto-selection, and pipeline building is now handled in autoSelectNextOption
@@ -238,7 +251,6 @@ $effect(() => {
 		!properties.framerate
 	) {
 		if (properties.pipeline) {
-			console.log('⚠️ Incomplete combination - clearing pipeline');
 			properties.pipeline = undefined;
 		}
 	}
@@ -332,25 +344,16 @@ const startStreamingWithCurrentConfig = () => {
 const handleInputModeChange = (value: string) => {
 	// Only mark user interaction if not during initial restoration
 	if (!isInitialMount) {
-		userHasInteracted = true; // Mark that user has made a selection
+		userHasInteracted = true;
 	}
 	isProgrammaticChange = true;
 
-	console.log(
-		'🔄 InputMode changed - starting unified validation/auto-selection/pipeline building',
-	);
-
 	// Unified flow: validate → clean → auto-select → build pipeline
 	if (value && groupedPipelines) {
-		// Create properties with new value for investigation
 		const updatedProperties = { ...properties, inputMode: value };
 		const result = autoSelectNextOption('inputMode', updatedProperties, groupedPipelines);
-
-		// GUARANTEED REACTIVITY - Create completely new object
 		properties = Object.assign({}, properties, { inputMode: value }, result);
-		console.log('🎯 Unified flow complete - object replacement:', result);
 	} else {
-		// Just update the inputMode if no grouped pipelines
 		properties = { ...properties, inputMode: value };
 	}
 	isProgrammaticChange = false;
@@ -359,20 +362,15 @@ const handleInputModeChange = (value: string) => {
 const handleEncoderChange = (value: string) => {
 	// Only mark user interaction if not during initial restoration
 	if (!isInitialMount) {
-		userHasInteracted = true; // Mark that user has made a selection
+		userHasInteracted = true;
 	}
 	isProgrammaticChange = true;
-
-	console.log('🔄 Encoder changed - starting unified validation/auto-selection/pipeline building');
 
 	// Unified flow: validate → clean → auto-select → build pipeline
 	if (value && groupedPipelines) {
 		const updatedProperties = { ...properties, encoder: value };
 		const result = autoSelectNextOption('encoder', updatedProperties, groupedPipelines);
-
-		// GUARANTEED REACTIVITY - Create completely new object
 		properties = Object.assign({}, properties, { encoder: value }, result);
-		console.log('🎯 Unified flow complete - object replacement:', result);
 	} else {
 		properties = { ...properties, encoder: value };
 	}
@@ -382,46 +380,33 @@ const handleEncoderChange = (value: string) => {
 const handleResolutionChange = (value: string) => {
 	// Only mark user interaction if not during initial restoration
 	if (!isInitialMount) {
-		userHasInteracted = true; // Mark that user has made a selection
+		userHasInteracted = true;
 	}
 	isProgrammaticChange = true;
-
-	console.log(
-		'🔄 Resolution changed - starting unified validation/auto-selection/pipeline building',
-	);
 
 	// Unified flow: validate → clean → auto-select → build pipeline
 	if (value && groupedPipelines) {
 		const updatedProperties = { ...properties, resolution: value };
 		const result = autoSelectNextOption('resolution', updatedProperties, groupedPipelines);
-
-		// GUARANTEED REACTIVITY - Create completely new object
 		properties = Object.assign({}, properties, { resolution: value }, result);
-		console.log('🎯 Unified flow complete - object replacement:', result);
 	} else {
 		properties = { ...properties, resolution: value };
 	}
 	isProgrammaticChange = false;
 };
 
-// Also mark user interaction for framerate changes
 const handleFramerateChange = (value: string) => {
 	// Only mark user interaction if not during initial restoration
 	if (!isInitialMount) {
-		userHasInteracted = true; // Mark that user has made a selection
+		userHasInteracted = true;
 	}
 	isProgrammaticChange = true;
-
-	console.log('🔄 Framerate changed - starting unified validation/pipeline building');
 
 	// Unified flow: validate → build pipeline
 	if (value && groupedPipelines) {
 		const updatedProperties = { ...properties, framerate: value };
 		const result = autoSelectNextOption('framerate', updatedProperties, groupedPipelines);
-
-		// GUARANTEED REACTIVITY - Create completely new object
 		properties = Object.assign({}, properties, { framerate: value }, result);
-		console.log('🎯 Unified flow complete - object replacement:', result);
 	} else {
 		properties = { ...properties, framerate: value };
 	}
@@ -489,9 +474,13 @@ const handleFramerateChange = (value: string) => {
 						{formErrors}
 						isStreaming={!!isStreaming}
 						{normalizeValue}
-						onRelayAccountChange={(value) => (properties.relayAccount = value)}
+						onRelayAccountChange={(value) => {
+							properties.relayAccount = value;
+							relayAccountTouched = true;
+						}}
 						onRelayServerChange={(value) => {
 							properties.relayServer = value;
+							relayServerTouched = true;
 							if (value === '-1') {
 								properties.relayAccount = undefined;
 							}
