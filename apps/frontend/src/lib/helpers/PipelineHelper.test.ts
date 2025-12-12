@@ -119,21 +119,21 @@ describe("parsePipelineName", () => {
 			expect(result.encoder).toBe("h264");
 		});
 
-		it("should parse nvenc encoder format for Jetson", () => {
-			const result = parsePipelineName("jetson/h264_nvenc_1080p60");
-			expect(result.format).toBe("nvenc");
+		it("should skip nvenc and find hdmi source for Jetson", () => {
+			const result = parsePipelineName("jetson/h264_nvenc_hdmi_1080p60");
+			expect(result.format).toBe("hdmi");
 			expect(result.encoder).toBe("h264");
 		});
 
-		it("should parse vaapi encoder format for Intel", () => {
-			const result = parsePipelineName("n100/h265_vaapi_1080p30");
-			expect(result.format).toBe("vaapi");
+		it("should skip vaapi and find usb source for Intel", () => {
+			const result = parsePipelineName("n100/h265_vaapi_usb_1080p30");
+			expect(result.format).toBe("usb");
 			expect(result.encoder).toBe("h265");
 		});
 
-		it("should parse mpp encoder format for RK3588", () => {
-			const result = parsePipelineName("rk3588/h265_mpp_2160p30");
-			expect(result.format).toBe("mpp");
+		it("should skip mpp and find hdmi source for RK3588", () => {
+			const result = parsePipelineName("rk3588/h265_mpp_hdmi_2160p30");
+			expect(result.format).toBe("hdmi");
 			expect(result.encoder).toBe("h265");
 			expect(result.resolution).toBe("2160p");
 		});
