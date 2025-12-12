@@ -256,6 +256,24 @@ $effect(() => {
 	}
 });
 
+// Build pipeline when groupedPipelines becomes available and all fields are set
+// This handles the case where config is restored before pipelines are loaded
+$effect(() => {
+	if (
+		groupedPipelines &&
+		properties.inputMode &&
+		properties.encoder &&
+		properties.resolution &&
+		properties.framerate &&
+		!properties.pipeline
+	) {
+		const result = autoSelectNextOption('framerate', properties, groupedPipelines);
+		if (result.pipeline) {
+			properties.pipeline = result.pipeline;
+		}
+	}
+});
+
 // Updated helper to use modular validation
 function validateForm() {
 	const result = validateStreamingForm(
