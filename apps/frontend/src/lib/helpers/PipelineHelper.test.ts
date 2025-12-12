@@ -56,6 +56,56 @@ describe("parsePipelineName", () => {
 		const result = parsePipelineName("");
 		expect(result.device).toBe(null);
 	});
+
+	// Belacoder-style pipeline naming tests
+	describe("belacoder naming patterns", () => {
+		it("should parse x264 encoder and normalize to h264", () => {
+			const result = parsePipelineName(
+				"generic/x264_superfast_v4l_mjpeg_1080p30",
+			);
+			expect(result.device).toBe("generic");
+			expect(result.encoder).toBe("h264"); // normalized from x264
+			expect(result.format).toBe("superfast");
+			expect(result.resolution).toBe("1080p");
+			expect(result.fps).toBe("30");
+		});
+
+		it("should parse x265 encoder and normalize to h265", () => {
+			const result = parsePipelineName("generic/x265_medium_hdmi_720p60");
+			expect(result.encoder).toBe("h265"); // normalized from x265
+			expect(result.format).toBe("medium");
+			expect(result.resolution).toBe("720p");
+			expect(result.fps).toBe("60");
+		});
+
+		it("should parse h265_rtmp pattern with _30fps suffix", () => {
+			const result = parsePipelineName(
+				"jetson/h265_rtmp_localhost_publish_live_30fps",
+			);
+			expect(result.device).toBe("jetson");
+			expect(result.encoder).toBe("h265");
+			expect(result.format).toBe("rtmp");
+			expect(result.fps).toBe("30");
+		});
+
+		it("should parse 4K resolution (2160p)", () => {
+			const result = parsePipelineName("rk3588/h265_4k_2160p30");
+			expect(result.resolution).toBe("2160p");
+			expect(result.fps).toBe("30");
+		});
+
+		it("should parse decimal fps 59.94", () => {
+			const result = parsePipelineName("n100/h264_hdmi_1080p59.94");
+			expect(result.device).toBe("n100");
+			expect(result.resolution).toBe("1080p");
+			expect(result.fps).toBe("59.94");
+		});
+
+		it("should handle case-insensitive encoder matching", () => {
+			const result = parsePipelineName("generic/X264_superfast_1080p30");
+			expect(result.encoder).toBe("h264");
+		});
+	});
 });
 
 describe("groupPipelinesByDeviceAndFormat", () => {
