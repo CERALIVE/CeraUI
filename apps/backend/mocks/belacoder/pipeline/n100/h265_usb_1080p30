@@ -1,0 +1,12 @@
+# Mock pipeline - Intel N100 h265 USB 1080p30
+v4l2src device=/dev/video0 ! video/x-raw,width=1920,height=1080,framerate=30/1 !
+videoconvert ! video/x-raw,format=NV12 !
+vaapih265enc rate-control=cbr !
+textoverlay text='' valignment=top halignment=right font-desc="Monospace, 5" name=overlay !
+h265parse config-interval=-1 ! mux.
+
+alsasrc device=hw:CARD=usbaudio ! volume volume=1.0 !
+audioconvert ! voaacenc bitrate=128000 ! aacparse ! queue ! mux.
+
+mpegtsmux name=mux ! appsink name=appsink
+

@@ -36,19 +36,56 @@ export function parsePipelineName(
 	// Basic device extraction (everything before /)
 	const deviceMatch = name.match(/^([^/]+)/);
 
+	// Special case for libuvch264 - it's both encoder and source type
+	const isLibUVC = name.includes("libuvch264");
+
 	// Extract encoder: h264, h265, x264, x265 (belacoder uses x264/x265 naming)
 	// Normalize x264->h264, x265->h265 for consistency in UI grouping
-	const encoderMatch = name.match(/(h264|h265|x264|x265)/i);
+	// libuvch264 is also h264 encoding via UVC hardware
 	let encoder: string | null = null;
-	if (encoderMatch) {
-		const raw = encoderMatch[0].toLowerCase();
-		// Normalize x264/x265 to h264/h265 for consistent grouping
-		encoder = raw === "x264" ? "h264" : raw === "x265" ? "h265" : raw;
+	if (isLibUVC) {
+		encoder = "h264";
+	} else {
+		const encoderMatch = name.match(/(h264|h265|x264|x265)/i);
+		if (encoderMatch) {
+			const raw = encoderMatch[0].toLowerCase();
+			// Normalize x264/x265 to h264/h265 for consistent grouping
+			encoder = raw === "x264" ? "h264" : raw === "x265" ? "h265" : raw;
+		}
 	}
 
-	// Format extraction - comes after encoder prefix
-	// Patterns: h264_raw_*, x264_superfast_v4l_mjpeg_*, h265_rtmp_*
-	const formatMatch = name.match(/(?:h264|h265|x264|x265)_([^_]+)/i);
+	// Format/Source extraction
+	// Priority: libuvch264 > explicit source types (hdmi, usb) > format after encoder
+	let format: string | null = null;
+	if (isLibUVC) {
+		format = "libuvch264";
+	} else {
+		// Look for common source types after encoder
+		// Pattern: encoder_source_... where source is hdmi, usb, v4l, etc.
+		const sourceMatch = name.match(/(?:h264|h265|x264|x265)_([^_]+)/i);
+		if (sourceMatch) {
+			const source = sourceMatch[1].toLowerCase();
+			// Check if it's a known source type
+			const knownSources = [
+				"hdmi",
+				"usb",
+				"v4l",
+				"raw",
+				"mjpeg",
+				"rtmp",
+				"superfast",
+				"medium",
+				"nvenc",
+				"vaapi",
+				"mpp",
+			];
+			if (knownSources.includes(source)) {
+				format = source;
+			} else {
+				format = source.replace(/_/g, " ");
+			}
+		}
+	}
 
 	// Extract resolution - formats: NNNp, NNNNp (720p, 1080p, 2160p), or 4k_2160p pattern
 	const resolutionMatch = name.match(/(\d{3,4}p)/);
@@ -62,9 +99,6 @@ export function parsePipelineName(
 		/(?:\d{3,4}p)(\d+(?:\.\d+)?)|_(\d+(?:\.\d+)?)fps/,
 	);
 
-	// Special case for libuvch264
-	const isLibUVC = name.includes("libuvch264");
-
 	// Use translations if provided, fallback to English defaults
 	const defaultResolution =
 		translations?.matchDeviceResolution || "[Match device resolution]";
@@ -74,11 +108,7 @@ export function parsePipelineName(
 	return {
 		device: deviceMatch ? deviceMatch[0] : null,
 		encoder,
-		format: formatMatch
-			? isLibUVC
-				? "usb-libuvch264"
-				: formatMatch[1].replace(/_/g, " ")
-			: null,
+		format,
 		resolution: resolutionMatch ? resolutionMatch[0] : defaultResolution,
 		fps: fpsMatch ? fpsMatch[1] || fpsMatch[2] : defaultOutput,
 	};

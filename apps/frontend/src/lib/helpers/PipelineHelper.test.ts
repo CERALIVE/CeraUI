@@ -28,8 +28,9 @@ describe("parsePipelineName", () => {
 	});
 
 	it("should handle libuvch264 format", () => {
-		const result = parsePipelineName("usb/libuvch264_720p30");
-		expect(result.format).toBe("usb-libuvch264");
+		const result = parsePipelineName("usb/libuvch264_usb_720p30");
+		expect(result.format).toBe("libuvch264");
+		expect(result.encoder).toBe("h264"); // libuvch264 is h264 encoding via UVC
 	});
 
 	it("should handle fps suffix format", () => {
@@ -104,6 +105,45 @@ describe("parsePipelineName", () => {
 		it("should handle case-insensitive encoder matching", () => {
 			const result = parsePipelineName("generic/X264_superfast_1080p30");
 			expect(result.encoder).toBe("h264");
+		});
+
+		it("should parse hdmi source type", () => {
+			const result = parsePipelineName("generic/h264_hdmi_1080p30");
+			expect(result.format).toBe("hdmi");
+			expect(result.encoder).toBe("h264");
+		});
+
+		it("should parse usb source type", () => {
+			const result = parsePipelineName("generic/h264_usb_720p60");
+			expect(result.format).toBe("usb");
+			expect(result.encoder).toBe("h264");
+		});
+
+		it("should parse nvenc encoder format for Jetson", () => {
+			const result = parsePipelineName("jetson/h264_nvenc_1080p60");
+			expect(result.format).toBe("nvenc");
+			expect(result.encoder).toBe("h264");
+		});
+
+		it("should parse vaapi encoder format for Intel", () => {
+			const result = parsePipelineName("n100/h265_vaapi_1080p30");
+			expect(result.format).toBe("vaapi");
+			expect(result.encoder).toBe("h265");
+		});
+
+		it("should parse mpp encoder format for RK3588", () => {
+			const result = parsePipelineName("rk3588/h265_mpp_2160p30");
+			expect(result.format).toBe("mpp");
+			expect(result.encoder).toBe("h265");
+			expect(result.resolution).toBe("2160p");
+		});
+
+		it("should parse libuvch264 with usb suffix", () => {
+			const result = parsePipelineName("generic/libuvch264_usb_1080p30");
+			expect(result.format).toBe("libuvch264");
+			expect(result.encoder).toBe("h264");
+			expect(result.resolution).toBe("1080p");
+			expect(result.fps).toBe("30");
 		});
 	});
 });
