@@ -1,3 +1,4 @@
+import type { Pipelines } from "@ceraui/rpc/schemas";
 import { toast } from "svelte-sonner";
 
 type Properties = {
@@ -9,6 +10,13 @@ type Properties = {
 	relayServer: string | undefined;
 	srtlaServerAddress: string | undefined;
 	srtlaServerPort: number | undefined;
+	pipeline: keyof Pipelines | undefined;
+	audioSource: string | undefined;
+	audioCodec: string | undefined;
+};
+
+type ValidationOptions = {
+	unparsedPipelines: Pipelines | undefined;
 };
 
 export interface ValidationResult {
@@ -19,6 +27,7 @@ export interface ValidationResult {
 export function validateStreamingForm(
 	properties: Properties,
 	t: (key: string) => string,
+	options?: ValidationOptions,
 ): ValidationResult {
 	const formErrors: Record<string, string> = {};
 	let hasErrors = false;
@@ -61,6 +70,26 @@ export function validateStreamingForm(
 		formErrors.bitrate = t("settings.errors.bitrateInvalid");
 		errorMessages.push(t("settings.errors.bitrateInvalid"));
 		hasErrors = true;
+	}
+
+	// Validate Audio Settings (when pipeline requires them)
+	if (options?.unparsedPipelines && properties.pipeline) {
+		const pipelineData = options.unparsedPipelines[properties.pipeline];
+		if (pipelineData) {
+			// Validate audio source when pipeline requires it
+			if (pipelineData.asrc && !properties.audioSource) {
+				formErrors.audioSource = t("settings.errors.audioSourceRequired");
+				errorMessages.push(t("settings.errors.audioSourceRequired"));
+				hasErrors = true;
+			}
+
+			// Validate audio codec when pipeline requires it
+			if (pipelineData.acodec && !properties.audioCodec) {
+				formErrors.audioCodec = t("settings.errors.audioCodecRequired");
+				errorMessages.push(t("settings.errors.audioCodecRequired"));
+				hasErrors = true;
+			}
+		}
 	}
 
 	// Validate Receiver Server Configuration

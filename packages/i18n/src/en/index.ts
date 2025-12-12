@@ -350,6 +350,8 @@ const en = {
 			resolutionRequired: "Please select an encoding resolution",
 			framerateRequired: "Please select a framerate",
 			bitrateInvalid: "Bitrate must be between 2000 and 12000 Kbps",
+			audioSourceRequired: "Please select an audio source",
+			audioCodecRequired: "Please select an audio codec",
 			srtlaServerAddressRequired: "Please enter the SRTLA server address",
 			srtlaServerPortRequired: "Please enter a valid SRTLA server port",
 			relayServerRequired: "Please select a relay server",

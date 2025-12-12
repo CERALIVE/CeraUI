@@ -308,6 +308,8 @@ const ar = {
 			framerateRequired: "يرجى تحديد معدل الإطارات",
 			bitrateInvalid:
 				"يجب أن يكون معدل البت بين 2000 و 12000 كيلوبت في الثانية",
+			audioSourceRequired: "يرجى تحديد مصدر الصوت",
+			audioCodecRequired: "يرجى تحديد برنامج ترميز الصوت",
 			srtlaServerAddressRequired: "يرجى إدخال عنوان خادم SRTLA",
 			srtlaServerPortRequired: "يرجى إدخال منفذ SRTLA صالح",
 			relayServerRequired: "يرجى تحديد خادم الإرسال",

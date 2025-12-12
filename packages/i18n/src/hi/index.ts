@@ -134,6 +134,8 @@ const hi = {
 			resolutionRequired: "कृपया एक एन्कोडिंग रिज़ॉल्यूशन चुनें",
 			framerateRequired: "कृपया एक फ्रेमरेट चुनें",
 			bitrateInvalid: "बिटरेट 2000 से 12000 Kbps के बीच होना चाहिए",
+			audioSourceRequired: "कृपया एक ऑडियो स्रोत चुनें",
+			audioCodecRequired: "कृपया एक ऑडियो कोडेक चुनें",
 			srtlaServerAddressRequired: "कृपया SRTLA सर्वर पता दर्ज करें",
 			srtlaServerPortRequired: "कृपया एक वैध SRTLA सर्वर पोर्ट दर्ज करें",
 			relayServerRequired: "कृपया एक रिले सर्वर चुनें",

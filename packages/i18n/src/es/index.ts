@@ -350,6 +350,8 @@ const es = {
 			resolutionRequired: "Por favor seleccione una resolución de codificación",
 			framerateRequired: "Por favor seleccione una velocidad de fotogramas",
 			bitrateInvalid: "El bitrate debe estar entre 2000 y 12000 Kbps",
+			audioSourceRequired: "Por favor seleccione una fuente de audio",
+			audioCodecRequired: "Por favor seleccione un códec de audio",
 			srtlaServerAddressRequired:
 				"Por favor ingrese la dirección del servidor SRTLA",
 			srtlaServerPortRequired: "Por favor ingrese un puerto SRTLA válido",

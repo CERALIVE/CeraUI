@@ -322,6 +322,8 @@ const fr = {
 			resolutionRequired: "Veuillez sélectionner une résolution d'encodage",
 			framerateRequired: "Veuillez sélectionner une fréquence d'images",
 			bitrateInvalid: "Le débit binaire doit être entre 2000 et 12000 Kbps",
+			audioSourceRequired: "Veuillez sélectionner une source audio",
+			audioCodecRequired: "Veuillez sélectionner un codec audio",
 			srtlaServerAddressRequired: "Veuillez entrer l'adresse du serveur SRTLA",
 			srtlaServerPortRequired: "Veuillez entrer un port SRTLA valide",
 			relayServerRequired: "Veuillez sélectionner un serveur de relais",

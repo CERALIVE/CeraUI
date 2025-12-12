@@ -337,6 +337,8 @@ const de = {
 			resolutionRequired: "Bitte wählen Sie eine Kodierungsauflösung",
 			framerateRequired: "Bitte wählen Sie eine Bildrate",
 			bitrateInvalid: "Die Bitrate muss zwischen 2000 und 12000 Kbps liegen",
+			audioSourceRequired: "Bitte wählen Sie eine Audioquelle",
+			audioCodecRequired: "Bitte wählen Sie einen Audio-Codec",
 			srtlaServerAddressRequired: "Bitte geben Sie die SRTLA-Serveradresse ein",
 			srtlaServerPortRequired: "Bitte geben Sie einen gültigen SRTLA-Port ein",
 			relayServerRequired: "Bitte wählen Sie einen Relay-Server",

@@ -130,6 +130,8 @@ const zh = {
 			resolutionRequired: "请选择编码分辨率",
 			framerateRequired: "请选择帧率",
 			bitrateInvalid: "比特率必须在 2000 到 12000 Kbps 之间",
+			audioSourceRequired: "请选择音频源",
+			audioCodecRequired: "请选择音频编解码器",
 			srtlaServerAddressRequired: "请输入 SRTLA 服务器地址",
 			srtlaServerPortRequired: "请输入有效的 SRTLA 服务器端口",
 			relayServerRequired: "请选择中继服务器",

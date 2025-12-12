@@ -286,8 +286,12 @@ function validateForm() {
 			relayServer: properties.relayServer,
 			srtlaServerAddress: properties.srtlaServerAddress,
 			srtlaServerPort: properties.srtlaServerPort,
+			pipeline: properties.pipeline,
+			audioSource: properties.audioSource,
+			audioCodec: properties.audioCodec,
 		},
 		(key) => getTranslationByKey($LL, key),
+		{ unparsedPipelines },
 	);
 
 	formErrors = result.errors;

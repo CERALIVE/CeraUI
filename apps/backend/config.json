@@ -1,1 +1,1 @@
-{"password_hash":"$2b$10$XYC1GIoTfh2fIuOdBjqJ.eCMddZ0Nz8C/EMSbBNbqSJVr0SPoFAKa"}
+{"password_hash":"$2b$10$XYC1GIoTfh2fIuOdBjqJ.eCMddZ0Nz8C/EMSbBNbqSJVr0SPoFAKa","delay":0,"pipeline":"aa5813aa21487de31570a888272bace773d556e0","max_br":5000,"srt_latency":2000,"bitrate_overlay":false,"acodec":"aac","asrc":"Pipeline default","srtla_addr":"1.1.1.1","srtla_port":2323}

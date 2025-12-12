@@ -134,6 +134,8 @@ const ko = {
 			resolutionRequired: "인코딩 해상도를 선택해주세요",
 			framerateRequired: "프레임레이트를 선택해주세요",
 			bitrateInvalid: "비트레이트는 2000에서 12000 Kbps 사이여야 합니다",
+			audioSourceRequired: "오디오 소스를 선택해주세요",
+			audioCodecRequired: "오디오 코덱을 선택해주세요",
 			srtlaServerAddressRequired: "SRTLA 서버 주소를 입력해주세요",
 			srtlaServerPortRequired: "유효한 SRTLA 서버 포트를 입력해주세요",
 			relayServerRequired: "릴레이 서버를 선택해주세요",
