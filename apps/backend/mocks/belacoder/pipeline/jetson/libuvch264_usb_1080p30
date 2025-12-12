@@ -1,0 +1,10 @@
+# Mock pipeline - Jetson libuvch264 USB 1080p30 (UVC hardware encoding)
+uvch264src device=/dev/video0 ! video/x-h264,width=1920,height=1080,framerate=30/1 !
+textoverlay text='' valignment=top halignment=right font-desc="Monospace, 5" name=overlay !
+h264parse config-interval=-1 ! mux.
+
+alsasrc device=hw:CARD=usbaudio ! volume volume=1.0 !
+audioconvert ! voaacenc bitrate=128000 ! aacparse ! queue ! mux.
+
+mpegtsmux name=mux ! appsink name=appsink
+
