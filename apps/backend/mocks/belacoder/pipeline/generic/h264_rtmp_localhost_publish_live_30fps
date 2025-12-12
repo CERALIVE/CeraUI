@@ -1,0 +1,12 @@
+# Mock pipeline for testing - generic h264 RTMP ingest 30fps
+rtmpsrc location=rtmp://127.0.0.1/publish/live !
+flvdemux name=demux
+
+demux.video !
+queue ! h264parse ! mux.
+
+alsasrc device=hw:CARD=usbaudio ! volume volume=1.0 !
+audioconvert ! voaacenc bitrate=128000 ! aacparse ! queue ! mux.
+
+mpegtsmux name=mux ! appsink name=appsink
+
