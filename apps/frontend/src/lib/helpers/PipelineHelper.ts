@@ -56,33 +56,42 @@ export function parsePipelineName(
 
 	// Format/Source extraction
 	// Priority: libuvch264 > explicit source types (hdmi, usb) > format after encoder
+	// Hardware encoder names (nvenc, vaapi, mpp) should be skipped to find actual source
 	let format: string | null = null;
 	if (isLibUVC) {
 		format = "libuvch264";
 	} else {
-		// Look for common source types after encoder
-		// Pattern: encoder_source_... where source is hdmi, usb, v4l, etc.
-		const sourceMatch = name.match(/(?:h264|h265|x264|x265)_([^_]+)/i);
-		if (sourceMatch) {
-			const source = sourceMatch[1].toLowerCase();
-			// Check if it's a known source type
-			const knownSources = [
-				"hdmi",
-				"usb",
-				"v4l",
-				"raw",
-				"mjpeg",
-				"rtmp",
-				"superfast",
-				"medium",
-				"nvenc",
-				"vaapi",
-				"mpp",
-			];
-			if (knownSources.includes(source)) {
-				format = source;
-			} else {
-				format = source.replace(/_/g, " ");
+		// Hardware encoder prefixes to skip (these are not input sources)
+		const hwEncoders = ["nvenc", "vaapi", "mpp"];
+		// Actual input source types and format types
+		const inputSources = ["hdmi", "usb", "v4l", "rtmp", "raw", "mjpeg"];
+		// Software encoder presets (x264/x265 specific)
+		const presets = ["superfast", "medium", "fast", "slow", "veryfast"];
+
+		// Extract all segments after encoder prefix
+		const afterEncoder = name.match(/(?:h264|h265|x264|x265)_(.+)/i);
+		if (afterEncoder) {
+			const segments = afterEncoder[1].toLowerCase().split("_");
+
+			// Find the first segment that's an input source (skip hw encoder names)
+			for (const seg of segments) {
+				if (inputSources.includes(seg)) {
+					format = seg;
+					break;
+				}
+				// If it's a preset, use that as format
+				if (presets.includes(seg)) {
+					format = seg;
+					break;
+				}
+				// Skip hardware encoder names
+				if (hwEncoders.includes(seg)) {
+					continue;
+				}
+				// If we hit resolution pattern, stop
+				if (/^\d{3,4}p/.test(seg)) {
+					break;
+				}
 			}
 		}
 	}
