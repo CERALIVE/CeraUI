@@ -33,20 +33,35 @@ export function parsePipelineName(
 		matchDeviceOutput: string;
 	},
 ): PipelineInfo {
-	// Basic device extraction
+	// Basic device extraction (everything before /)
 	const deviceMatch = name.match(/^([^/]+)/);
 
-	// Extract encoder (h264 or h265)
-	const encoderMatch = name.match(/(h264|h265)/);
+	// Extract encoder: h264, h265, x264, x265 (belacoder uses x264/x265 naming)
+	// Normalize x264->h264, x265->h265 for consistency in UI grouping
+	const encoderMatch = name.match(/(h264|h265|x264|x265)/i);
+	let encoder: string | null = null;
+	if (encoderMatch) {
+		const raw = encoderMatch[0].toLowerCase();
+		// Normalize x264/x265 to h264/h265 for consistent grouping
+		encoder = raw === "x264" ? "h264" : raw === "x265" ? "h265" : raw;
+	}
 
-	// Format extraction - comes after h264/h265_ prefix
-	const formatMatch = name.match(/(?:h264|h265)_([^_]+)/);
+	// Format extraction - comes after encoder prefix
+	// Patterns: h264_raw_*, x264_superfast_v4l_mjpeg_*, h265_rtmp_*
+	const formatMatch = name.match(/(?:h264|h265|x264|x265)_([^_]+)/i);
 
-	// Extract resolution - typically NNNp format (like 720p, 1080p)
+	// Extract resolution - formats: NNNp, NNNNp (720p, 1080p, 2160p), or 4k_2160p pattern
 	const resolutionMatch = name.match(/(\d{3,4}p)/);
 
-	// Extract framerate - typically pNN format (like p30, p60) or _NNfps (like _30fps, _60fps)
-	const fpsMatch = name.match(/p(\d+(?:\.\d+)?)|_(\d+(?:\.\d+)?)fps/);
+	// Extract framerate - multiple patterns:
+	// 1. pNN (1080p30) - captures after 'p' if followed by digits
+	// 2. _NNfps (like _30fps, _60fps)
+	// 3. Decimal fps (29.97, 59.94)
+	// Pattern must match fps after resolution or standalone _NNfps
+	const fpsMatch = name.match(
+		/(?:\d{3,4}p)(\d+(?:\.\d+)?)|_(\d+(?:\.\d+)?)fps/,
+	);
+
 	// Special case for libuvch264
 	const isLibUVC = name.includes("libuvch264");
 
@@ -58,7 +73,7 @@ export function parsePipelineName(
 
 	return {
 		device: deviceMatch ? deviceMatch[0] : null,
-		encoder: encoderMatch ? encoderMatch[0] : null,
+		encoder,
 		format: formatMatch
 			? isLibUVC
 				? "usb-libuvch264"
