@@ -8,22 +8,33 @@ import {
 	bitrateInputSchema,
 	bitrateOutputSchema,
 	configMessageSchema,
+	getMockHardwareOutputSchema,
 	pipelinesSchema,
+	setMockHardwareInputSchema,
+	setMockHardwareOutputSchema,
 	streamingConfigInputSchema,
 	streamingStartOutputSchema,
 	streamingStopOutputSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { getConfig } from "../../modules/config.ts";
 import { audioCodecs } from "../../modules/streaming/audio.ts";
 import { setBitrate as setEncoderBitrate } from "../../modules/streaming/encoder.ts";
-import { getPipelineList } from "../../modules/streaming/pipelines.ts";
+import {
+	getEffectiveHardware,
+	getMockHardware,
+	getPipelineList,
+	initPipelines,
+	setMockHardware,
+	VALID_HARDWARE_TYPES,
+} from "../../modules/streaming/pipelines.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import {
 	start as startStream,
 	stop as stopStream,
 } from "../../modules/streaming/streamloop.ts";
+import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
@@ -117,5 +128,51 @@ export const getConfigProcedure = authedProcedure
 			remote_key: config.remote_key,
 			relay_account: config.relay_account,
 			relay_server: config.relay_server,
+		};
+	});
+
+/**
+ * Set mock hardware procedure (dev-only)
+ * Changes the active hardware type and reloads/broadcasts pipelines
+ */
+export const setMockHardwareProcedure = authedProcedure
+	.input(setMockHardwareInputSchema)
+	.output(setMockHardwareOutputSchema)
+	.handler(({ input }) => {
+		// Only allow in development/mock mode
+		if (!shouldUseMocks()) {
+			return {
+				success: false,
+				error: "Mock hardware switching only available in development mode",
+			};
+		}
+
+		const success = setMockHardware(input.hardware);
+		if (success) {
+			// Reload pipelines and broadcast to all clients
+			initPipelines();
+			broadcastMsg("pipelines", getPipelineList());
+			return {
+				success: true,
+				hardware: input.hardware,
+			};
+		}
+
+		return {
+			success: false,
+			error: `Invalid hardware type: ${input.hardware}`,
+		};
+	});
+
+/**
+ * Get mock hardware state procedure (dev-only)
+ */
+export const getMockHardwareProcedure = authedProcedure
+	.output(getMockHardwareOutputSchema)
+	.handler(() => {
+		return {
+			hardware: getMockHardware(),
+			effectiveHardware: getEffectiveHardware(),
+			availableHardware: [...VALID_HARDWARE_TYPES],
 		};
 	});

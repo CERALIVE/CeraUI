@@ -91,3 +91,26 @@ export const streamingStopOutputSchema = z.object({
 	success: z.boolean(),
 });
 export type StreamingStopOutput = z.infer<typeof streamingStopOutputSchema>;
+
+// Dev-only mock hardware switcher schemas
+export const mockHardwareTypeSchema = z.enum(['jetson', 'n100', 'rk3588']);
+export type MockHardwareType = z.infer<typeof mockHardwareTypeSchema>;
+
+export const setMockHardwareInputSchema = z.object({
+	hardware: mockHardwareTypeSchema,
+});
+export type SetMockHardwareInput = z.infer<typeof setMockHardwareInputSchema>;
+
+export const setMockHardwareOutputSchema = z.object({
+	success: z.boolean(),
+	hardware: mockHardwareTypeSchema.optional(),
+	error: z.string().optional(),
+});
+export type SetMockHardwareOutput = z.infer<typeof setMockHardwareOutputSchema>;
+
+export const getMockHardwareOutputSchema = z.object({
+	hardware: mockHardwareTypeSchema.nullable(),
+	effectiveHardware: z.string(),
+	availableHardware: z.array(mockHardwareTypeSchema),
+});
+export type GetMockHardwareOutput = z.infer<typeof getMockHardwareOutputSchema>;

@@ -34,6 +34,7 @@ import { LL } from '@ceraui/i18n/svelte';
 import { Bug, Wrench } from '@lucide/svelte';
 
 import DemoOverlayTrigger from '$lib/components/demo-overlay-trigger.svelte';
+import HardwareSwitcher from '$lib/components/dev-tools/hardware-switcher.svelte';
 import ScreenshotUtility from '$lib/components/dev-tools/screenshot-utility.svelte';
 import SystemInfo from '$lib/components/dev-tools/system-info.svelte';
 import ToastTester from '$lib/components/dev-tools/toast-tester.svelte';
@@ -97,6 +98,9 @@ const _isDev = BUILD_INFO.IS_DEV;
 
 			<!-- Debug Information Section -->
 			<div class="space-y-4 sm:space-y-6">
+				<!-- Mock Hardware Switcher -->
+				<HardwareSwitcher />
+
 				<!-- Real System Information -->
 				<SystemInfo />
 

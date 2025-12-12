@@ -33,11 +33,46 @@ export type Pipeline = {
 	asrc?: unknown;
 };
 
+// Valid hardware types for mock mode
+export const VALID_HARDWARE_TYPES = ["jetson", "n100", "rk3588"] as const;
+export type HardwareType = (typeof VALID_HARDWARE_TYPES)[number];
+
 let pipelines: Record<string, Pipeline> = {};
+
+// Dev-only mock hardware override (defaults to null, using setup.hw)
+let mockHardwareOverride: HardwareType | null = null;
 
 const belacoderPipelinesDir: string = setup.belacoder_path
 	? `${setup.belacoder_path}/pipeline`
 	: "/usr/share/belacoder/pipelines";
+
+/**
+ * Get the effective hardware type (mock override or setup.hw)
+ */
+export function getEffectiveHardware(): string {
+	return mockHardwareOverride ?? setup.hw;
+}
+
+/**
+ * Set mock hardware override (dev-only)
+ * Returns true if valid, false if invalid
+ */
+export function setMockHardware(hw: string): boolean {
+	if (!VALID_HARDWARE_TYPES.includes(hw as HardwareType)) {
+		logger.warn(`Invalid mock hardware type: ${hw}`);
+		return false;
+	}
+	mockHardwareOverride = hw as HardwareType;
+	logger.info(`🔧 Mock hardware set to: ${hw}`);
+	return true;
+}
+
+/**
+ * Get current mock hardware override (null if using default)
+ */
+export function getMockHardware(): HardwareType | null {
+	return mockHardwareOverride;
+}
 
 /* Read the list of pipeline files */
 function readDirAbsPath(dir: string, excludePattern?: string) {
@@ -67,14 +102,18 @@ function getPipelines() {
 	const ps: Record<string, Pipeline> = {};
 	Object.assign(ps, readDirAbsPath(`${belacoderPipelinesDir}/custom/`));
 
-	// Get the hardware-specific pipelines
+	// Get the hardware-specific pipelines (use mock override if set)
+	const effectiveHw = getEffectiveHardware();
 	let excludePipelines: string | undefined;
-	if (setup.hw === "rk3588" && !fs.existsSync("/dev/hdmirx")) {
+	if (effectiveHw === "rk3588" && !fs.existsSync("/dev/hdmirx")) {
 		excludePipelines = "h265_hdmi";
 	}
 	Object.assign(
 		ps,
-		readDirAbsPath(`${belacoderPipelinesDir}/${setup.hw}/`, excludePipelines),
+		readDirAbsPath(
+			`${belacoderPipelinesDir}/${effectiveHw}/`,
+			excludePipelines,
+		),
 	);
 
 	Object.assign(ps, readDirAbsPath(`${belacoderPipelinesDir}/generic/`));
