@@ -9,4 +9,3 @@ alsasrc device=hw:CARD=usbaudio ! volume volume=1.0 !
 audioconvert ! voaacenc bitrate=128000 ! aacparse ! queue ! mux.
 
 mpegtsmux name=mux ! appsink name=appsink
-

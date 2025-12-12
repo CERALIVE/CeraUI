@@ -29,8 +29,10 @@ import {
 import {
 	getAudioCodecsProcedure,
 	getConfigProcedure,
+	getMockHardwareProcedure,
 	getPipelinesProcedure,
 	setBitrateProcedure,
+	setMockHardwareProcedure,
 	streamingStartProcedure,
 	streamingStopProcedure,
 } from "./procedures/streaming.procedure.ts";
@@ -79,6 +81,9 @@ export const appRouter = os.$context<RPCContext>().router({
 		getPipelines: getPipelinesProcedure,
 		getAudioCodecs: getAudioCodecsProcedure,
 		getConfig: getConfigProcedure,
+		// Dev-only mock hardware switcher
+		setMockHardware: setMockHardwareProcedure,
+		getMockHardware: getMockHardwareProcedure,
 	}),
 
 	modems: os.router({

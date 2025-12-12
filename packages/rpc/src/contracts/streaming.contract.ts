@@ -8,7 +8,10 @@ import {
 	bitrateInputSchema,
 	bitrateOutputSchema,
 	configMessageSchema,
+	getMockHardwareOutputSchema,
 	pipelinesSchema,
+	setMockHardwareInputSchema,
+	setMockHardwareOutputSchema,
 	streamingConfigInputSchema,
 	streamingStartOutputSchema,
 	streamingStopOutputSchema,
@@ -49,4 +52,15 @@ export const streamingContract = oc.router({
 	 * Subscribe to streaming status changes
 	 */
 	onStatusChange: oc.route({ method: 'GET', path: '/streaming/status' }),
+
+	/**
+	 * Set mock hardware override (dev-only)
+	 * Changes the active hardware type and reloads pipelines
+	 */
+	setMockHardware: oc.input(setMockHardwareInputSchema).output(setMockHardwareOutputSchema),
+
+	/**
+	 * Get current mock hardware state (dev-only)
+	 */
+	getMockHardware: oc.output(getMockHardwareOutputSchema),
 });
