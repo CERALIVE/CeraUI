@@ -79,7 +79,7 @@ const handleStop = () => {
 						{disabled}
 						onclick={handleStart}
 						size="lg"
-						type="submit"
+						type="button"
 					>
 						<div class="flex items-center justify-center gap-3">
 							<Play
@@ -121,7 +121,7 @@ const handleStop = () => {
 					{disabled}
 					onclick={handleStart}
 					size="lg"
-					type="submit"
+					type="button"
 				>
 					<Play class="mr-2 h-5 w-5 transition-transform group-hover:scale-110" />
 					{$LL.settings.startStreaming()}
