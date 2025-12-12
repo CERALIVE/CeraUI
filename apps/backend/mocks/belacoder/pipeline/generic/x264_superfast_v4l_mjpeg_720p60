@@ -1,0 +1,12 @@
+# Mock pipeline for testing - generic x264 superfast 720p60
+v4l2src device=/dev/video0 ! image/jpeg,width=1280,height=720,framerate=60/1 !
+jpegdec ! videoconvert ! video/x-raw,format=NV12 !
+x264enc tune=zerolatency speed-preset=superfast !
+textoverlay text='' valignment=top halignment=right font-desc="Monospace, 5" name=overlay !
+h264parse config-interval=-1 ! mux.
+
+alsasrc device=hw:CARD=usbaudio ! volume volume=1.0 !
+audioconvert ! voaacenc bitrate=128000 ! aacparse ! queue ! mux.
+
+mpegtsmux name=mux ! appsink name=appsink
+
