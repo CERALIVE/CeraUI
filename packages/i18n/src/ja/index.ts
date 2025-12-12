@@ -136,6 +136,8 @@ const ja = {
 			framerateRequired: "フレームレートを選択してください",
 			bitrateInvalid:
 				"ビットレートは2000から12000 Kbpsの間である必要があります",
+			audioSourceRequired: "オーディオソースを選択してください",
+			audioCodecRequired: "オーディオコーデックを選択してください",
 			srtlaServerAddressRequired: "SRTLAサーバーアドレスを入力してください",
 			srtlaServerPortRequired: "有効なSRTLAサーバーポートを入力してください",
 			relayServerRequired: "リレーサーバーを選択してください",

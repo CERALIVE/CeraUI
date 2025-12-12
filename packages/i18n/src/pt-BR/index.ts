@@ -320,6 +320,8 @@ const ptBR = {
 			resolutionRequired: "Por favor, selecione uma resolução de codificação",
 			framerateRequired: "Por favor, selecione uma taxa de quadros",
 			bitrateInvalid: "A taxa de bits deve estar entre 2000 e 12000 Kbps",
+			audioSourceRequired: "Por favor, selecione uma fonte de áudio",
+			audioCodecRequired: "Por favor, selecione um codec de áudio",
 			srtlaServerAddressRequired:
 				"Por favor, insira o endereço do servidor SRTLA",
 			srtlaServerPortRequired: "Por favor, insira uma porta SRTLA válida",
