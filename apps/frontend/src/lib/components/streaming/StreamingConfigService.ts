@@ -83,16 +83,10 @@ export function buildStreamingConfig(
 		config.relay_account = properties.relayAccount;
 	}
 
-	// Add safety checks for required numeric properties
-	if (properties.audioDelay !== undefined) {
-		config.delay = properties.audioDelay;
-	}
-	if (properties.bitrate !== undefined) {
-		config.max_br = properties.bitrate;
-	}
-	if (properties.bitrateOverlay !== undefined) {
-		config.bitrate_overlay = properties.bitrateOverlay;
-	}
+	// These fields are required by the backend, always provide defaults
+	config.delay = properties.audioDelay ?? 0;
+	config.max_br = properties.bitrate ?? 5000;
+	config.bitrate_overlay = properties.bitrateOverlay ?? false;
 
 	return config;
 }
