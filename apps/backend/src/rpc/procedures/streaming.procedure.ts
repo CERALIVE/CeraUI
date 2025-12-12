@@ -53,10 +53,8 @@ export const streamingStartProcedure = authedProcedure
 	.handler(async ({ input, context }) => {
 		try {
 			// The existing start function handles validation and config saving
-			// We need to adapt it to work with our context
-			await startStream(context.ws as unknown as import("ws").default, {
-				start: input,
-			});
+			// Pass input directly - it already matches ConfigParameters
+			await startStream(context.ws as unknown as import("ws").default, input);
 			return { success: true, is_streaming: getIsStreaming() };
 		} catch (_error) {
 			return { success: false, is_streaming: false };
