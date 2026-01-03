@@ -41,7 +41,7 @@
 		"@eslint/compat": "^2.0.0",
 		"@eslint/eslintrc": "^3.3.3",
 		"@lucide/svelte": "^0.562.0",
-		"@macfja/svelte-persistent-runes": "^1.1.0",
+		"svelte-persistent-runes": "^2.0.0",
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
 		"@tailwindcss/postcss": "^4.1.18",
 		"@tailwindcss/vite": "^4.1.18",

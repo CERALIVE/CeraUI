@@ -1,8 +1,8 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { persistPlugin } from "@macfja/svelte-persistent-runes/plugins";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
+import { persistPlugin } from "svelte-persistent-runes/plugins";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
@@ -52,6 +52,8 @@ export default defineConfig(({ mode }) => ({
 		// Build frontend to root dist/public/ folder using absolute path
 		outDir: path.resolve(__dirname, "../../dist/public"),
 		emptyOutDir: true,
+		// Enable inline sourcemaps in development only
+		sourcemap: mode !== "production" && "inline",
 		// Bundle splitting optimization to reduce main chunk size
 		rollupOptions: {
 			output: {
@@ -82,7 +84,7 @@ export default defineConfig(({ mode }) => ({
 							id.includes("tailwind-merge") ||
 							id.includes("tailwind-variants") ||
 							id.includes("qrcode") ||
-							id.includes("@macfja/svelte-persistent-store")
+							id.includes("svelte-persistent-runes")
 						) {
 							return "vendor-utils";
 						}
@@ -145,10 +147,6 @@ export default defineConfig(({ mode }) => ({
 	},
 	// Development-specific optimizations
 	...(mode !== "production" && {
-		// Enable inline source maps for better debugging in development
-		build: {
-			sourcemap: "inline",
-		},
 		// Enhanced dependency optimization for debugging
 		optimizeDeps: {
 			include: [
