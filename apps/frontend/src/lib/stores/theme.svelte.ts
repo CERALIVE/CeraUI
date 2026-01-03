@@ -1,5 +1,5 @@
 // Theme store using Svelte 5 runes with persistence
-import "@macfja/svelte-persistent-runes";
+import "svelte-persistent-runes";
 
 export type ThemeMode = "system" | "dark" | "light";
 

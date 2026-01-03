@@ -1,5 +1,5 @@
 // Locale store using Svelte 5 runes with persistence
-import "@macfja/svelte-persistent-runes";
+import "svelte-persistent-runes";
 
 import { existingLocales } from "@ceraui/i18n";
 
