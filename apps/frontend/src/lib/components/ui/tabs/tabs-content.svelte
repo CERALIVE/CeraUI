@@ -6,17 +6,13 @@ import { cn } from '$lib/utils.js';
 let {
 	ref = $bindable(null),
 	class: className,
-	value,
 	...restProps
 }: TabsPrimitive.ContentProps = $props();
 </script>
 
 <TabsPrimitive.Content
-	class={cn(
-		'ring-offset-background focus-visible:ring-ring mt-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden',
-		className,
-	)}
-	{value}
+	class={cn('flex-1 outline-none', className)}
+	data-slot="tabs-content"
 	bind:ref
 	{...restProps}
 />

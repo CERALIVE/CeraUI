@@ -344,11 +344,11 @@ function clearImages(): void {
 }
 </script>
 
-<Card.Root class="overflow-hidden border-blue-500/30">
+<Card.Root class="gap-0 overflow-hidden border-blue-500/30 py-0">
 	<!-- Status bar -->
 	<div class="h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
 
-	<Card.Header>
+	<Card.Header class="pt-6">
 		<Card.Title class="flex items-center gap-2">
 			<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500">
 				<Camera class="h-4 w-4 text-white" />
@@ -360,7 +360,7 @@ function clearImages(): void {
 		</Card.Description>
 	</Card.Header>
 
-	<Card.Content class="space-y-4">
+	<Card.Content class="space-y-4 pb-6">
 		{#if currentlyCapturing}
 			<div class="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
 				<div class="text-sm font-medium text-blue-700 dark:text-blue-300">

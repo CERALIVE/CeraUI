@@ -1,40 +1,37 @@
-import { Drawer as DrawerPrimitive } from "vaul-svelte";
-
 import Root from "./drawer.svelte";
+import Close from "./drawer-close.svelte";
 import Content from "./drawer-content.svelte";
 import Description from "./drawer-description.svelte";
 import Footer from "./drawer-footer.svelte";
 import Header from "./drawer-header.svelte";
 import NestedRoot from "./drawer-nested.svelte";
 import Overlay from "./drawer-overlay.svelte";
+import Portal from "./drawer-portal.svelte";
 import Title from "./drawer-title.svelte";
-
-const Trigger: typeof DrawerPrimitive.Trigger = DrawerPrimitive.Trigger;
-const Portal: typeof DrawerPrimitive.Portal = DrawerPrimitive.Portal;
-const Close: typeof DrawerPrimitive.Close = DrawerPrimitive.Close;
+import Trigger from "./drawer-trigger.svelte";
 
 export {
-	Close,
+	Root,
+	NestedRoot,
 	Content,
 	Description,
-	//
-	Root as Drawer,
-	Close as DrawerClose,
-	Content as DrawerContent,
-	Description as DrawerDescription,
-	Footer as DrawerFooter,
-	Header as DrawerHeader,
-	NestedRoot as DrawerNestedRoot,
-	Overlay as DrawerOverlay,
-	Portal as DrawerPortal,
-	Title as DrawerTitle,
-	Trigger as DrawerTrigger,
+	Overlay,
 	Footer,
 	Header,
-	NestedRoot,
-	Overlay,
-	Portal,
-	Root,
 	Title,
 	Trigger,
+	Portal,
+	Close,
+	//
+	Root as Drawer,
+	NestedRoot as DrawerNestedRoot,
+	Content as DrawerContent,
+	Description as DrawerDescription,
+	Overlay as DrawerOverlay,
+	Footer as DrawerFooter,
+	Header as DrawerHeader,
+	Title as DrawerTitle,
+	Trigger as DrawerTrigger,
+	Portal as DrawerPortal,
+	Close as DrawerClose,
 };

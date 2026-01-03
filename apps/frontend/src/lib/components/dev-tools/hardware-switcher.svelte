@@ -84,11 +84,11 @@ $effect(() => {
 });
 </script>
 
-<Card.Root class="overflow-hidden border-cyan-500/30">
+<Card.Root class="gap-0 overflow-hidden border-cyan-500/30 py-0">
 	<!-- Status bar -->
 	<div class="h-1 bg-gradient-to-r from-cyan-500 to-teal-600"></div>
 
-	<Card.Header>
+	<Card.Header class="pt-6">
 		<Card.Title class="flex items-center gap-2">
 			<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-500">
 				<Cpu class="h-4 w-4 text-white" />
@@ -100,7 +100,7 @@ $effect(() => {
 		</Card.Description>
 	</Card.Header>
 
-	<Card.Content class="space-y-4">
+	<Card.Content class="space-y-4 pb-6">
 		<!-- Current State -->
 		<div class="bg-muted/50 rounded-lg border p-4">
 			<div class="mb-3 text-sm font-medium">Current State</div>

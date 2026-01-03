@@ -5,10 +5,15 @@ import { buttonVariants } from '$lib/components/ui/button/index.js';
 import { cn } from '$lib/utils.js';
 
 let {
-	class: className,
 	ref = $bindable(null),
+	class: className,
 	...restProps
 }: AlertDialogPrimitive.ActionProps = $props();
 </script>
 
-<AlertDialogPrimitive.Action class={cn(buttonVariants(), className)} bind:ref {...restProps} />
+<AlertDialogPrimitive.Action
+	class={cn(buttonVariants(), className)}
+	data-slot="alert-dialog-action"
+	bind:ref
+	{...restProps}
+/>

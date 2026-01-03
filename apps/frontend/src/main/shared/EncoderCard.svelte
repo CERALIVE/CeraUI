@@ -138,7 +138,9 @@ const statusColors = {
 };
 </script>
 
-<Card.Root class={cn('flex h-full flex-col overflow-hidden border', statusColors.border)}>
+<Card.Root
+	class={cn('flex h-full flex-col gap-0 overflow-hidden border py-0', statusColors.border)}
+>
 	<!-- Status Bar -->
 	<div class={cn('h-1 bg-gradient-to-r', statusColors.bg)}></div>
 

@@ -103,7 +103,7 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 				<!-- Responsive Network Card -->
 				<div
 					class={cn(
-						'bg-card flex h-full flex-col rounded-lg border transition-colors duration-200',
+						'bg-card flex h-full flex-col overflow-hidden rounded-lg border transition-colors duration-200',
 						network.enabled ? 'border-emerald-500/30' : 'border-border',
 						isHotspot && !network.enabled ? 'border-blue-500/30' : '',
 						hasRealError ? 'border-red-500/30' : '',

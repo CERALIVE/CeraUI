@@ -1,12 +1,13 @@
 <script lang="ts">
-import { ScrollArea as ScrollAreaPrimitive, type WithoutChild } from 'bits-ui';
+import { ScrollArea as ScrollAreaPrimitive } from 'bits-ui';
 
-import { cn } from '$lib/utils.js';
+import { cn, type WithoutChild } from '$lib/utils.js';
 
 import { Scrollbar } from './index.js';
 
 let {
-	ref = $bindable(),
+	ref = $bindable(null),
+	viewportRef = $bindable(null),
 	class: className,
 	orientation = 'vertical',
 	scrollbarXClasses = '',
@@ -17,23 +18,21 @@ let {
 	orientation?: 'vertical' | 'horizontal' | 'both' | undefined;
 	scrollbarXClasses?: string | undefined;
 	scrollbarYClasses?: string | undefined;
+	viewportRef?: HTMLElement | null;
 } = $props();
-
-// Use a local ref variable to avoid direct binding conflicts
-let scrollAreaRef = $state(null);
-
-// Sync the local ref with the bindable prop
-$effect(() => {
-	ref = scrollAreaRef;
-});
 </script>
 
 <ScrollAreaPrimitive.Root
-	bind:ref={scrollAreaRef}
+	class={cn('relative', className)}
+	data-slot="scroll-area"
+	bind:ref
 	{...restProps}
-	class={cn('relative overflow-hidden', className)}
 >
-	<ScrollAreaPrimitive.Viewport class="h-full w-full rounded-[inherit]">
+	<ScrollAreaPrimitive.Viewport
+		class="ring-ring/10 dark:ring-ring/20 dark:outline-ring/40 outline-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] focus-visible:ring-4 focus-visible:outline-1"
+		data-slot="scroll-area-viewport"
+		bind:ref={viewportRef}
+	>
 		{@render children?.()}
 	</ScrollAreaPrimitive.Viewport>
 	{#if orientation === 'vertical' || orientation === 'both'}
