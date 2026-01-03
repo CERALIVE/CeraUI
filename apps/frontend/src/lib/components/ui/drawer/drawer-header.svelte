@@ -1,8 +1,7 @@
 <script lang="ts">
-import type { WithElementRef } from 'bits-ui';
 import type { HTMLAttributes } from 'svelte/elements';
 
-import { cn } from '$lib/utils.js';
+import { cn, type WithElementRef } from '$lib/utils.js';
 
 let {
 	ref = $bindable(null),
@@ -14,7 +13,8 @@ let {
 
 <div
 	bind:this={ref}
-	class={cn('grid gap-1.5 p-4 text-center sm:text-left', className)}
+	class={cn('flex flex-col gap-1.5 p-4', className)}
+	data-slot="drawer-header"
 	{...restProps}
 >
 	{@render children?.()}

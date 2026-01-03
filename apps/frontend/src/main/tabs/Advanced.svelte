@@ -168,10 +168,10 @@ $effect(() => {
 		<div class="grid gap-6 lg:grid-cols-2 lg:items-start">
 			<!-- System Settings Card -->
 			<Card.Root
-				class="bg-card/50 overflow-hidden border border-blue-500/30 shadow-lg backdrop-blur-sm"
+				class="bg-card/50 gap-0 overflow-hidden border border-blue-500/30 py-0 shadow-lg backdrop-blur-sm"
 			>
 				<div class="h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
-				<Card.Header class="border-b pb-6">
+				<Card.Header class="border-b pt-6 pb-6">
 					<div class="flex items-center space-x-4">
 						<div
 							class="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-500 shadow-sm"
@@ -188,7 +188,7 @@ $effect(() => {
 						</div>
 					</div>
 				</Card.Header>
-				<Card.Content class="space-y-6">
+				<Card.Content class="space-y-6 pt-6 pb-6">
 					<!-- LAN Password Section -->
 					<div class="space-y-3">
 						<div class="space-y-2">
@@ -501,10 +501,10 @@ $effect(() => {
 
 			<!-- Developer Options Card -->
 			<Card.Root
-				class="bg-card/50 overflow-hidden border border-purple-500/30 shadow-lg backdrop-blur-sm"
+				class="bg-card/50 gap-0 overflow-hidden border border-purple-500/30 py-0 shadow-lg backdrop-blur-sm"
 			>
 				<div class="h-1 bg-gradient-to-r from-purple-500 to-violet-600"></div>
-				<Card.Header class="border-b pb-6">
+				<Card.Header class="border-b pt-6 pb-6">
 					<div class="flex items-center space-x-4">
 						<div
 							class="grid h-12 w-12 place-items-center rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 shadow-md shadow-purple-500/20"
@@ -521,7 +521,7 @@ $effect(() => {
 						</div>
 					</div>
 				</Card.Header>
-				<Card.Content class="space-y-6">
+				<Card.Content class="space-y-6 pt-6 pb-6">
 					<!-- SSH Configuration Section -->
 					<div class="space-y-3">
 						<div class="space-y-2">

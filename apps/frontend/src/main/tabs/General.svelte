@@ -91,7 +91,7 @@ const updatesStatusColors = $derived.by(() => {
 		<!-- Status Overview Cards -->
 		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 			<!-- System Status -->
-			<Card.Root class="overflow-hidden border">
+			<Card.Root class="gap-0 overflow-hidden border py-0">
 				<div class={cn('h-1 bg-gradient-to-r', streamingStatusColors.bg)}></div>
 				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
 					<Card.Title class="text-sm font-medium">{$LL.general.status()}</Card.Title>
@@ -121,7 +121,7 @@ const updatesStatusColors = $derived.by(() => {
 			</Card.Root>
 
 			<!-- Server Configuration Status -->
-			<Card.Root class="overflow-hidden border">
+			<Card.Root class="gap-0 overflow-hidden border py-0">
 				<div class={cn('h-1 bg-gradient-to-r', serverStatusColors.bg)}></div>
 				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
 					<Card.Title class="text-sm font-medium">{$LL.general.relayServer()}</Card.Title>
@@ -144,7 +144,7 @@ const updatesStatusColors = $derived.by(() => {
 			</Card.Root>
 
 			<!-- System Updates -->
-			<Card.Root class="overflow-hidden border">
+			<Card.Root class="gap-0 overflow-hidden border py-0">
 				<div class={cn('h-1 bg-gradient-to-r', updatesStatusColors.bg)}></div>
 				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
 					<Card.Title class="text-sm font-medium">{$LL.general.updates()}</Card.Title>
@@ -189,7 +189,7 @@ const updatesStatusColors = $derived.by(() => {
 		<div class="grid gap-6 xl:grid-cols-5">
 			<!-- Configuration Section -->
 			<div class="xl:col-span-3">
-				<Card.Root class="overflow-hidden border border-blue-500/30">
+				<Card.Root class="gap-0 overflow-hidden border border-blue-500/30 py-0">
 					<div class="h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
 					<Card.Header class="p-4">
 						<Card.Title class="flex items-center gap-2.5">
@@ -293,7 +293,7 @@ const updatesStatusColors = $derived.by(() => {
 							.includes('temp') || name.toLowerCase().includes('current') || name
 							.toLowerCase()
 							.includes('voltage'))}
-					<Card.Root class="overflow-hidden border border-emerald-500/30">
+					<Card.Root class="gap-0 overflow-hidden border border-emerald-500/30 py-0">
 						<div class="h-1 bg-gradient-to-r from-emerald-500 to-teal-600"></div>
 						<Card.Header class="p-4">
 							<Card.Title class="flex items-center gap-2.5">
@@ -333,7 +333,7 @@ const updatesStatusColors = $derived.by(() => {
 				{#if sensors.some(([name]) => name.toLowerCase().includes('srt') || name
 							.toLowerCase()
 							.includes('rtmp'))}
-					<Card.Root class="overflow-hidden border border-blue-500/30">
+					<Card.Root class="gap-0 overflow-hidden border border-blue-500/30 py-0">
 						<div class="h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
 						<Card.Header class="p-4">
 							<Card.Title class="flex items-center gap-2.5">
@@ -371,7 +371,7 @@ const updatesStatusColors = $derived.by(() => {
 
 				<!-- Empty State for System Health -->
 				{#if sensors.length === 0}
-					<Card.Root class="overflow-hidden border">
+					<Card.Root class="gap-0 overflow-hidden border py-0">
 						<div class="h-1 bg-gradient-to-r from-slate-400 to-slate-500"></div>
 						<Card.Header class="p-4">
 							<Card.Title class="flex items-center gap-2.5">

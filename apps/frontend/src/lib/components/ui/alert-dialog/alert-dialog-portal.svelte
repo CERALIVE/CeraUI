@@ -1,12 +1,7 @@
 <script lang="ts">
 import { AlertDialog as AlertDialogPrimitive } from 'bits-ui';
-import type { Snippet } from 'svelte';
 
-interface Props extends AlertDialogPrimitive.PortalProps {
-	children?: Snippet;
-}
-
-let { children, ...restProps }: Props = $props();
+let { ...restProps }: AlertDialogPrimitive.PortalProps = $props();
 </script>
 
-<AlertDialogPrimitive.Portal {children} {...restProps} />
+<AlertDialogPrimitive.Portal {...restProps} />

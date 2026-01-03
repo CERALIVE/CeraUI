@@ -79,7 +79,7 @@ function getNetworkBadge(type: string) {
 const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 </script>
 
-<Card.Root class={cn('overflow-hidden border', statusColors.border)}>
+<Card.Root class={cn('gap-0 overflow-hidden border py-0', statusColors.border)}>
 	<!-- Compact Status Bar -->
 	<div class={cn('h-1 bg-gradient-to-r', statusColors.bg)}></div>
 

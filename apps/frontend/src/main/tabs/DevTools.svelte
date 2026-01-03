@@ -105,11 +105,11 @@ const _isDev = BUILD_INFO.IS_DEV;
 				<SystemInfo />
 
 				<!-- Debug Tools Card -->
-				<Card.Root class="overflow-hidden border-red-500/30">
+				<Card.Root class="gap-0 overflow-hidden border-red-500/30 py-0">
 					<!-- Status bar -->
 					<div class="h-1 bg-gradient-to-r from-red-500 to-rose-600"></div>
 
-					<Card.Header>
+					<Card.Header class="pt-6">
 						<Card.Title class="flex items-center gap-2">
 							<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500">
 								<Bug class="h-4 w-4 text-white" />
@@ -121,7 +121,7 @@ const _isDev = BUILD_INFO.IS_DEV;
 						</Card.Description>
 					</Card.Header>
 
-					<Card.Content class="space-y-3">
+					<Card.Content class="space-y-3 pb-6">
 						<div class="bg-muted/50 rounded-lg p-3">
 							<div class="text-muted-foreground mb-2 text-xs font-medium">
 								{$LL.devtools.consoleOutputTests()}
