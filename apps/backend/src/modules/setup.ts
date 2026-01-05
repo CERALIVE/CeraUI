@@ -15,12 +15,21 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import fs from "node:fs";
-
+import { loadJsonConfigSync } from "../helpers/config-loader.ts";
+import {
+	SETUP_CONFIG_DEFAULTS,
+	type SetupConfig,
+	setupConfigSchema,
+} from "../helpers/config-schemas.ts";
 import { logger } from "../helpers/logger.ts";
 
 const SETUP_FILE = "setup.json";
 
 /* Read the config and setup files */
-export const setup = JSON.parse(fs.readFileSync(SETUP_FILE, "utf8"));
+export const setup: SetupConfig = loadJsonConfigSync(
+	SETUP_FILE,
+	setupConfigSchema,
+	SETUP_CONFIG_DEFAULTS,
+	true, // required - fail if setup.json doesn't exist
+);
 logger.debug("Setup", setup);

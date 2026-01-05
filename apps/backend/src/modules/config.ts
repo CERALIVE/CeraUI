@@ -17,6 +17,12 @@
 
 import fs from "node:fs";
 
+import { loadJsonConfig, saveJsonConfig } from "../helpers/config-loader.ts";
+import {
+	RUNTIME_CONFIG_DEFAULTS,
+	type RuntimeConfig,
+	runtimeConfigSchema,
+} from "../helpers/config-schemas.ts";
 import { logger } from "../helpers/logger.ts";
 import { getPasswordHash, setPasswordHash } from "../rpc/state/password.ts";
 import { setup } from "./setup.ts";
@@ -24,76 +30,53 @@ import { getSshPasswordHash, setSshPasswordHash } from "./system/ssh.ts";
 
 const CONFIG_FILE = "config.json";
 
-type CustomProvider = {
-	name: string;
-	host: string;
-	path?: string;
-	secure?: boolean;
-	cloudUrl?: string;
-};
-
-let config: {
-	password?: string;
-	password_hash?: string;
-	ssh_pass?: string;
-	ssh_pass_hash?: string;
-	relay_server?: string;
-	relay_account?: string;
-	srt_streamid?: string;
-	srt_latency?: number;
-	srtla_addr?: string;
-	srtla_port?: number;
-	asrc?: string;
-	acodec?: string;
-	bitrate_overlay?: boolean;
-	remote_key?: string;
-	remote_provider?: "ceralive" | "belabox" | "custom";
-	custom_provider?: CustomProvider;
-	max_br?: number;
-	delay?: number;
-	pipeline?: string;
-	autostart?: boolean;
-} = {};
+let config: RuntimeConfig = {};
 
 export function loadConfig() {
-	try {
-		config = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
-		logger.debug("config loaded", config);
-		setPasswordHash(config.password_hash);
-		setSshPasswordHash(config.ssh_pass_hash);
-		config.password_hash = undefined;
-		config.ssh_pass_hash = undefined;
-	} catch (err: unknown) {
-		if (err instanceof Error) {
-			logger.warn(
-				`Failed to open the config file: ${err.message}. Creating an empty config`,
-			);
-		}
-		config = {};
+	// Build defaults based on platform
+	const platformDefaults = { ...RUNTIME_CONFIG_DEFAULTS };
 
-		// Configure the default audio source depending on the platform
-		switch (setup.hw) {
-			case "jetson":
-				config.asrc = fs.existsSync("/dev/hdmi_capture") ? "HDMI" : "C4K";
-				break;
-			case "rk3588":
-				config.asrc = fs.existsSync("/dev/hdmirx") ? "HDMI" : "USB audio";
-				break;
-		}
+	// Configure the default audio source depending on the platform
+	switch (setup.hw) {
+		case "jetson":
+			platformDefaults.asrc = fs.existsSync("/dev/hdmi_capture")
+				? "HDMI"
+				: "C4K";
+			break;
+		case "rk3588":
+			platformDefaults.asrc = fs.existsSync("/dev/hdmirx")
+				? "HDMI"
+				: "USB audio";
+			break;
 	}
+
+	const result = loadJsonConfig(
+		CONFIG_FILE,
+		runtimeConfigSchema,
+		platformDefaults,
+	);
+	config = result.data;
+
+	logger.debug("config loaded", config);
+
+	// Extract and set password hashes (they're stored separately for security)
+	setPasswordHash(config.password_hash);
+	setSshPasswordHash(config.ssh_pass_hash);
+
+	// Clear password hashes from in-memory config for security
+	config.password_hash = undefined;
+	config.ssh_pass_hash = undefined;
 }
 
 export function saveConfig() {
-	fs.writeFileSync(
-		CONFIG_FILE,
-		JSON.stringify({
-			...config,
-			password_hash: getPasswordHash(),
-			ssh_pass_hash: getSshPasswordHash(),
-		}),
-	);
+	const dataToSave: RuntimeConfig = {
+		...config,
+		password_hash: getPasswordHash(),
+		ssh_pass_hash: getSshPasswordHash(),
+	};
+	saveJsonConfig(CONFIG_FILE, dataToSave);
 }
 
-export function getConfig() {
+export function getConfig(): RuntimeConfig {
 	return config;
 }

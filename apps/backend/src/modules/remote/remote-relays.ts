@@ -16,8 +16,13 @@
 */
 
 import assert from "node:assert";
-import fs from "node:fs";
 
+import { loadJsonConfig } from "../../helpers/config-loader.ts";
+import {
+	RELAYS_CACHE_DEFAULTS,
+	type RelaysCache,
+	relaysCacheSchema,
+} from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { validatePortNo } from "../../helpers/number.ts";
 import { writeTextFile } from "../../helpers/text-files.ts";
@@ -29,28 +34,7 @@ import {
 } from "../streaming/bcrpt.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
-type RelayCache = {
-	bcrp_key?: string;
-	servers: Record<
-		string,
-		{
-			bcrp_port?: string;
-			type: string;
-			name: string;
-			default?: true;
-			addr: string;
-			port: number;
-		}
-	>;
-	accounts: Record<
-		string,
-		{
-			name: string;
-			ingest_key: string;
-			disabled?: true;
-		}
-	>;
-};
+// Use the shared RelaysCache type from config-schemas
 
 type RelaysResponseMessage = {
 	servers: Record<
@@ -96,14 +80,15 @@ export type ValidateRemoteRelaysMessage = {
 
 const RELAYS_CACHE_FILE = "relays_cache.json";
 
-let relaysCache: RelayCache | undefined;
-try {
-	relaysCache = JSON.parse(
-		fs.readFileSync(RELAYS_CACHE_FILE, "utf8"),
-	) as RelayCache;
-} catch (_err) {
-	logger.warn("Failed to load the relays cache, starting with an empty cache");
-}
+// Load relays cache with Zod validation
+const relaysCacheResult = loadJsonConfig(
+	RELAYS_CACHE_FILE,
+	relaysCacheSchema,
+	RELAYS_CACHE_DEFAULTS,
+);
+let relaysCache: RelaysCache | undefined = relaysCacheResult.loaded
+	? relaysCacheResult.data
+	: undefined;
 
 export function getRelays() {
 	return relaysCache;
@@ -138,7 +123,7 @@ export function buildRelaysMsg(): RelaysResponseMessage {
 	return msg;
 }
 
-export async function updateCachedRelays(relays: RelayCache | undefined) {
+export async function updateCachedRelays(relays: RelaysCache | undefined) {
 	try {
 		assert.deepStrictEqual(relays, relaysCache);
 	} catch (_err) {
@@ -151,7 +136,7 @@ export async function updateCachedRelays(relays: RelayCache | undefined) {
 
 function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 	try {
-		const out: RelayCache = { servers: {}, accounts: {} };
+		const out: RelaysCache = { servers: {}, accounts: {} };
 		for (const r_id in msg.servers) {
 			const r = msg.servers[r_id];
 			if (!r) continue;
