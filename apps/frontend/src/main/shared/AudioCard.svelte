@@ -40,13 +40,12 @@ const {
 	normalizeValue,
 }: Props = $props();
 
-// Local state for slider binding
-let localAudioDelay = $state(properties.audioDelay ?? 0);
+// Local state for slider binding (initialized empty, synced via effect)
+let localAudioDelay = $state(0);
 
 // Sync local state with props
 $effect(() => {
-	const newValue = properties.audioDelay ?? 0;
-	localAudioDelay = newValue;
+	localAudioDelay = properties.audioDelay ?? 0;
 });
 
 const hasAudioSupport = $derived(

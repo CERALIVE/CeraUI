@@ -25,9 +25,9 @@ button:focus-visible {
 
 <script lang="ts">
 import { cubicInOut } from 'svelte/easing';
-import { fly, scale } from 'svelte/transition';
+import { fly } from 'svelte/transition';
 
-import { cn } from '$lib/utils.js';
+import { cn, safeScale } from '$lib/utils.js';
 
 interface Props {
 	class?: string;
@@ -95,8 +95,8 @@ const handleMouseLeave = () => {
 			class="bg-primary absolute top-1/2 left-0 w-1 -translate-y-1/2 rounded-r-full transition-all duration-300"
 			class:h-10={isHovered}
 			class:h-8={!isHovered}
-			in:scale={{ duration: 300, start: isFinite(0.5) ? 0.5 : 1, easing: cubicInOut }}
-			out:scale={{ duration: 200, start: isFinite(1) ? 1 : 1, easing: cubicInOut }}
+			in:safeScale={{ duration: 300, start: 0.5, easing: cubicInOut }}
+			out:safeScale={{ duration: 200, start: 1, easing: cubicInOut }}
 		></div>
 
 		<!-- Subtle pulse effect for active items -->

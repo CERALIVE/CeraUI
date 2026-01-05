@@ -14,12 +14,26 @@ import { cn } from '$lib/utils';
 
 const { deviceId, wifi }: { deviceId: number; wifi: ValueOf<StatusMessage['wifi']> } = $props();
 
-// Enhanced state management with validation
+// Enhanced state management with validation (initialized with defaults, synced via effect)
 let hotspotProperties = $state({
-	selectedChannel: wifi.hotspot?.channel ?? 'auto',
-	password: wifi.hotspot?.password || '',
-	deviceId,
-	name: wifi.hotspot?.name || '',
+	selectedChannel: 'auto' as string,
+	password: '',
+	deviceId: 0,
+	name: '',
+});
+
+// Sync from props on initial mount
+let formInitialized = false;
+$effect.pre(() => {
+	if (!formInitialized) {
+		hotspotProperties = {
+			selectedChannel: wifi.hotspot?.channel ?? 'auto',
+			password: wifi.hotspot?.password || '',
+			deviceId,
+			name: wifi.hotspot?.name || '',
+		};
+		formInitialized = true;
+	}
 });
 
 let showPassword = $state(false);
@@ -54,6 +68,7 @@ const validation = $derived({
 const isFormValid = $derived(validation.name.isValid && validation.password.isValid);
 
 const resetHotSpotProperties = () => {
+	// Re-sync from current props when dialog is cancelled/reopened
 	hotspotProperties = {
 		selectedChannel: wifi.hotspot?.channel ?? 'auto',
 		password: wifi.hotspot?.password || '',

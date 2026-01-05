@@ -61,7 +61,8 @@ $effect.pre(() => {
 	}
 });
 
-let lastModemState: string = JSON.stringify(modem);
+// Track modem state for change detection (initialized empty, first update will sync)
+let lastModemState = '';
 
 function updateFormFromModem() {
 	const currentModemState = JSON.stringify(modem);

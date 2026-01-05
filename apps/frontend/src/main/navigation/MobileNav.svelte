@@ -24,7 +24,7 @@ button:focus-visible {
 import { LL } from '@ceraui/i18n/svelte';
 import { ChevronLeft, Menu, X } from '@lucide/svelte';
 import { cubicInOut } from 'svelte/easing';
-import { fade, fly, scale } from 'svelte/transition';
+import { fade, fly } from 'svelte/transition';
 
 import Logo from '$lib/components/icons/Logo.svelte';
 import { Button } from '$lib/components/ui/button';
@@ -40,7 +40,7 @@ import {
 	isNavigationTransitioning,
 	navigateTo,
 } from '$lib/stores/navigation.svelte';
-import { cn } from '$lib/utils';
+import { cn, safeScale } from '$lib/utils';
 
 let open = $state(false);
 let isMenuHovered = $state(false);
@@ -350,7 +350,7 @@ $effect(() => {
 								{#if isSelected}
 									<div
 										class="bg-primary/5 pointer-events-none absolute inset-0 rounded-lg"
-										in:scale={{ duration: 120, start: isFinite(0.95) ? 0.95 : 1 }}
+										in:safeScale={{ duration: 120, start: 0.95 }}
 										out:fade={{ duration: 100 }}
 									></div>
 								{/if}

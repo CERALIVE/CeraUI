@@ -44,13 +44,13 @@ const {
 	normalizeValue,
 }: Props = $props();
 
-// Local state for all fields to prevent binding undefined values
-let localSrtlaServerAddress = $state(properties.srtlaServerAddress ?? '');
-let localSrtlaServerPort = $state(properties.srtlaServerPort?.toString() ?? '');
-let localSrtStreamId = $state(properties.srtStreamId ?? '');
-let localSrtLatency = $state(properties.srtLatency ?? 2000);
-let localRelayServer = $state(properties.relayServer ?? '');
-let localRelayAccount = $state(properties.relayAccount ?? '');
+// Local state for all fields (initialized with defaults, synced via effects)
+let localSrtlaServerAddress = $state('');
+let localSrtlaServerPort = $state('');
+let localSrtStreamId = $state('');
+let localSrtLatency = $state(2000);
+let localRelayServer = $state('');
+let localRelayAccount = $state('');
 
 // Track if user has touched each field
 let addressTouched = $state(false);

@@ -137,13 +137,19 @@ if (typeof window !== "undefined") {
 	}
 
 	// iOS Safari: Show install instructions
-	if (isIOSSafari && !isScreenshotModeState) {
-		const isStandalone =
-			window.matchMedia("(display-mode: standalone)").matches ||
-			(window.navigator as unknown as { standalone?: boolean }).standalone;
-		if (!isStandalone) {
-			showIOSInstallPromptState = true;
-		}
+	// Delayed via queueMicrotask to allow screenshot mode to be set before checking
+	if (isIOSSafari) {
+		queueMicrotask(() => {
+			// Check screenshot mode at execution time, not at module load
+			if (getIsScreenshotMode()) return;
+
+			const isStandalone =
+				window.matchMedia("(display-mode: standalone)").matches ||
+				(window.navigator as unknown as { standalone?: boolean }).standalone;
+			if (!isStandalone) {
+				showIOSInstallPromptState = true;
+			}
+		});
 	}
 }
 
