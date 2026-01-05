@@ -227,6 +227,9 @@ All interface elements, including notifications and system messages, are fully l
 - Viewport-optimized dimensions
 - Cross-origin resource handling
 
+**Rendering Considerations**
+> ⚠️ **Note**: Some UI elements, particularly header components like the language selector and theme toggle, may appear slightly different in these screenshots compared to the live application. This is due to the automated capture process using html-to-image libraries that render content within custom iframes, which can occasionally affect certain CSS positioning and responsive behaviors.
+
 **Folder Structure**
 ```
 ceraui-screenshots-YYYY-MM-DD.zip
