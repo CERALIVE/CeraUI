@@ -1,66 +1,94 @@
 # CeraUI Build Pipeline
 
-This document describes the automated build pipeline for creating different CeraUI distributions.
+This document describes the automated build pipeline for creating CeraUI distributions.
 
-## 📦 Distribution Types
+## Distribution Types
 
-### 1. CeraUI Full System (Compressed)
+### 1. CeraUI Full System
 
-- **Purpose**: Complete CeraUI system replacement
-- **Target**: Replace CeraLive or deploy on custom development devices (not specifically branded)
-- **Brand**: CERALIVE
+- **Purpose**: Complete CeraUI system deployment
+- **Target**: Custom development devices or system replacement
 - **Script**: `scripts/build/build-ceraui-system.sh`
 - **Output**: `dist/compressed/`
 
-**Use Case**:
-
-- Replace existing installations completely
-- Deploy on custom development hardware for testing
+**Use Cases**:
+- Replace existing installations
+- Deploy on custom development hardware
 - Full system with installation/uninstallation scripts
-- Development and testing environments
 
 ### 2. Debian Package
 
-- **Purpose**: Easy installation via package manager
+- **Purpose**: Installation via package manager
 - **Target**: Debian/Ubuntu-based systems
-- **Brand**: CERALIVE
 - **Script**: `scripts/build/build-debian-package.sh`
 - **Output**: `dist/debian/`
 
-**Use Case**: Professional deployment with proper package management integration.
+**Use Case**: Professional deployment with package management integration.
 
-## 🚀 GitHub Actions Workflow
+## Versioning
 
-The build pipeline runs **manually only** via workflow dispatch with:
+CeraUI uses **Calendar Versioning (CalVer)** with automatic version detection.
 
-- **Version input**: Specify the version number (e.g., 1.2.3)
-- **Release notes**: Optional description of changes
+### Version Format
+
+| Release Type | Format | Example |
+|--------------|--------|---------|
+| Stable | `YYYY.M.patch` | `v2026.1.0`, `v2026.1.1` |
+| Beta | `YYYY.M.patch-beta.N` | `v2026.1.1-beta.1` |
+
+### Version Calculation
+
+Versions are automatically calculated based on existing git tags:
+
+```
+January 2026:
+  First stable release:     v2026.1.0
+  Second stable release:    v2026.1.1
+  First beta (next patch):  v2026.1.2-beta.1
+  Second beta:              v2026.1.2-beta.2
+
+February 2026 (new month):
+  First stable release:     v2026.2.0
+```
+
+## GitHub Actions Workflow
+
+The build pipeline runs manually via workflow dispatch.
+
+### Workflow Inputs
+
+| Input | Required | Description |
+|-------|----------|-------------|
+| `release_type` | Yes | `stable` or `beta` |
+| `release_notes` | No | Description of changes |
+| `force_version` | No | Override auto-detected version |
 
 ### Jobs
 
-1. **build-ceraui-system** (matrix: arm64, amd64)
+1. **calculate-version**
+   - Detects next version from existing git tags
+   - Outputs version, tag, and beta status
 
+2. **build-ceraui-system** (matrix: arm64, amd64)
    - Builds full system with installation scripts
-   - Creates compressed archives (.tar.gz)
-   - Uploads artifact: `ceraui-system-compressed-{arch}`
+   - Creates compressed archive (.tar.gz)
+   - Uploads artifact: `ceraui-system-{arch}`
 
-2. **build-debian-package** (matrix: arm64, amd64)
-
-   - Installs FPM (Effing Package Management)
+3. **build-debian-package** (matrix: arm64, amd64)
    - Creates Debian package for target architecture
-   - Uploads artifact: `ceraui-debian-package-{arch}`
+   - Uploads artifact: `ceraui-debian-{arch}`
 
-3. **build-summary**
-   - Provides build status summary with version information
-   - Shows release notes and artifact information
-   - Runs regardless of job success/failure
+4. **create-release**
+   - Creates GitHub release with all assets
+   - Generates changelog from commit history
+   - Marks beta releases as pre-release
 
-## 🛠️ Local Development
+## Local Development
 
 ### Prerequisites
 
 ```bash
-# Node.js 20+
+# Node.js 24
 node --version
 
 # pnpm
@@ -73,7 +101,7 @@ bun --version
 gem install fpm
 ```
 
-### Running Build Scripts Locally
+### Running Build Scripts
 
 ```bash
 # Full CeraUI system (auto-detect architecture)
@@ -91,110 +119,98 @@ BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh
 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 ```
 
-## 📋 Package.json Integration
+## Build Artifacts
 
-The build scripts use existing package.json commands:
+### Release Assets
 
-```json
-{
-  "scripts": {
-    "build": "VITE_BRAND=CERALIVE pnpm --filter backend run build",
-    "build:frontend": "VITE_BRAND=CERALIVE pnpm --filter frontend run build",
-    "build:ceralive": "VITE_BRAND=CeraLive pnpm --filter backend run build"
-  }
-}
-```
+After a successful workflow run, the following assets are attached to the GitHub release:
 
-**Scripts DO NOT modify package.json** - they reuse existing build commands.
+| File | Description |
+|------|-------------|
+| `ceraui-{version}-arm64.tar.gz` | System archive for ARM64 |
+| `ceraui-{version}-amd64.tar.gz` | System archive for AMD64 |
+| `ceralive-device_{version}_arm64.deb` | Debian package for ARM64 |
+| `ceralive-device_{version}_amd64.deb` | Debian package for AMD64 |
 
-## 🏗️ Build Artifacts
-
-### System Distribution Structure
+### System Archive Contents
 
 ```
-dist/compressed/
-├── ceraui-v1.0.0-abc123-20250101_120000.tar.gz
-├── ceraui-v1.0.0-abc123-20250101_120000.zip
-├── ceraui-v1.0.0-abc123-20250101_120000.tar.gz.sha256
-└── ceraui-v1.0.0-abc123-20250101_120000.zip.sha256
+ceraui-2026.1.0-arm64.tar.gz
+├── ceralive              # Backend binary
+├── public/               # Frontend assets
+├── ceralive.service      # Systemd service
+├── ceralive.socket       # Systemd socket
+├── *.rules               # Udev rules
+├── config.json           # Default configuration
+├── install.sh            # Installation script
+├── uninstall.sh          # Uninstallation script
+└── build-info.json       # Build metadata
 ```
 
-### Debian Package Structure
-
-```
-dist/debian/
-├── ceralive-device_1.0.0-1_arm64.deb
-├── package-info.json
-└── INSTALL.md
-```
-
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
-- `VITE_BRAND`: Controls frontend branding (CERALIVE/CeraLive)
-- `NODE_ENV`: Build environment (production for releases)
+| Variable | Description |
+|----------|-------------|
+| `BUILD_VERSION` | Version string (set by workflow) |
+| `BUILD_ARCH` | Target architecture: `arm64` or `amd64` |
+| `VITE_BRAND` | Frontend branding |
+| `NODE_ENV` | Build environment |
 
-### Version Management
+## Build Process
 
-- **Version**: Manually provided via workflow input (e.g., `1.2.3`)
-- **Commit**: Short commit hash (`git rev-parse --short HEAD`)
-- **Build Date**: UTC timestamp
+1. Navigate to **Actions** in the GitHub repository
+2. Select **Build & Release** workflow
+3. Click **Run workflow**
+4. Select release type (`stable` or `beta`)
+5. Optionally add release notes
+6. Click **Run workflow**
 
-## 📦 Build Process
+The workflow will:
+- Calculate the next version automatically
+- Build for both ARM64 and AMD64
+- Create system archives and Debian packages
+- Publish a GitHub release with all assets
 
-1. **Navigate to GitHub Actions**: Go to the repository's Actions tab
+## Target Hardware
 
-2. **Select Workflow**: Choose "Build Distributions"
+| Architecture | Recommended Devices |
+|--------------|---------------------|
+| **arm64** | Orange Pi 5+, Radxa Rock 5B+, NVIDIA Jetson Orin |
+| **amd64** | Intel N100/N200 Mini PCs, AMD Ryzen, desktop computers |
 
-3. **Run Workflow**: Click "Run workflow" and provide:
+## Troubleshooting
 
-   - **Version**: e.g., `1.2.3` (required)
-   - **Release Notes**: Optional description of changes
+### Build fails on missing dependencies
 
-4. **Download Artifacts**: After build completion, download distributions from the workflow run artifacts
+- Verify all prerequisites are installed
+- Check Node.js version (requires 24+)
+- Verify Bun is installed
 
-## 🎯 Use Cases Summary
+### FPM not found
 
-| Distribution     | Use Case                      | Target Architectures     |
-| ---------------- | ----------------------------- | ------------------------ |
-| CeraUI System    | Full system deployment        | arm64, amd64             |
-| Debian Package   | Professional apt deployment   | arm64, amd64             |
+```bash
+sudo apt install ruby-dev gcc g++
+gem install fpm
+```
 
-### Target Hardware
+### Permission denied on scripts
 
-| Architecture | Recommended Devices                                    |
-| ------------ | ------------------------------------------------------ |
-| **arm64**    | Orange Pi 5+, Radxa Rock 5B+, NVIDIA Jetson Orin       |
-| **amd64**    | Intel N100/N200 Mini PCs, AMD Ryzen, desktop computers |
+```bash
+chmod +x scripts/build/*.sh
+```
 
-## 🔍 Troubleshooting
+### Build metadata
 
-### Common Issues
-
-1. **Build fails on missing dependencies**
-
-   - Ensure all prerequisites are installed
-   - Check Node.js/Bun versions
-
-2. **FPM not found**
-
-   - Install Ruby development headers: `sudo apt install ruby-dev gcc g++`
-   - Install FPM: `gem install fpm`
-
-3. **Permission denied on scripts**
-   - Make scripts executable: `chmod +x scripts/build/*.sh`
-
-### Debug Information
-
-All builds include debug information in `build-info.json`:
+All builds include metadata in `build-info.json`:
 
 ```json
 {
-  "version": "1.0.0",
+  "version": "2026.1.0",
   "commit": "abc123",
-  "buildDate": "2025-01-01T12:00:00Z",
-  "nodeVersion": "v20.x.x",
-  "pnpmVersion": "8.x.x"
+  "buildDate": "2026-01-04T12:00:00Z",
+  "nodeVersion": "v24.x.x",
+  "architecture": "arm64"
 }
 ```
