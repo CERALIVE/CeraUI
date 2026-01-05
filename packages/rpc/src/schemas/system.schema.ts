@@ -18,7 +18,8 @@ export const revisionsSchema = z.object({
 	ceralive: z.string(),
 	belacoder: z.string(),
 	srtla: z.string(),
-	'CERALIVE image': z.string(),
+	bun: z.string(),
+	'CERALIVE image': z.string().optional(),
 });
 export type Revisions = z.infer<typeof revisionsSchema>;
 

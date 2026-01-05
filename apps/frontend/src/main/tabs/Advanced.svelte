@@ -2,6 +2,7 @@
 import { LL } from '@ceraui/i18n/svelte';
 import type { CustomProviderInput, ProviderSelection } from '@ceraui/rpc/schemas';
 import {
+	CheckCircle,
 	Cloud,
 	Copy,
 	Eye,
@@ -806,73 +807,107 @@ $effect(() => {
 			</Card.Root>
 		</div>
 
-		<!-- Version Information Status Bar -->
+		<!-- Version Information Card -->
 		{#if revisions}
-			<div class="border-t bg-slate-50/80 backdrop-blur-md dark:bg-slate-900/80">
-				<div class="container mx-auto max-w-7xl px-4 py-5">
-					<div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-						<div class="flex items-center gap-4">
-							<div class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 shadow-sm">
-								<svg
-									class="h-5 w-5 text-emerald-600 dark:text-emerald-400"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-									/>
-								</svg>
-							</div>
-							<div>
-								<p class="text-base font-semibold text-emerald-900 dark:text-emerald-100">
-									{$LL.advanced.versionInformation()}
-								</p>
-								<p class="text-sm font-medium text-emerald-600/70 dark:text-emerald-300/70">
-									{$LL.advanced.systemComponentsVersions()}
-								</p>
-							</div>
+			<Card.Root
+				class="bg-card/50 col-span-full mt-8 gap-0 overflow-hidden border border-emerald-500/30 py-0 shadow-lg backdrop-blur-sm"
+			>
+				<div class="h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+				<Card.Header class="border-b pt-6 pb-6">
+					<div class="flex items-center space-x-4">
+						<div
+							class="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-500 shadow-sm"
+						>
+							<CheckCircle class="h-6 w-6 text-white" />
 						</div>
-						<div class="grid grid-cols-2 gap-6 text-sm lg:grid-cols-4">
-							<div class="bg-card rounded-lg border p-3">
-								<p class="text-muted-foreground mb-1 text-xs font-medium">CeraLive</p>
-								<p class="font-mono font-semibold">
-									{revisions.ceralive}
-								</p>
-							</div>
-							<div
-								class="rounded-lg border border-slate-200/50 bg-white/60 p-3 dark:border-slate-700/50 dark:bg-slate-800/60"
+						<div class="flex-1">
+							<Card.Title class="text-xl font-semibold">
+								{$LL.advanced.versionInformation()}
+							</Card.Title>
+							<p class="text-muted-foreground mt-1 text-sm">
+								{$LL.advanced.systemComponentsVersions()}
+							</p>
+						</div>
+					</div>
+				</Card.Header>
+				<Card.Content class="pt-6 pb-6">
+					<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+						<!-- CeraLive -->
+						<div
+							class="rounded-xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm dark:border-emerald-800/50 dark:bg-emerald-950/30"
+						>
+							<p
+								class="mb-2 text-xs font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400"
 							>
-								<p class="mb-1 text-xs font-medium text-slate-600 dark:text-slate-400">Belacoder</p>
-								<p class="font-mono font-semibold text-slate-900 dark:text-slate-100">
-									{revisions.belacoder}
-								</p>
-							</div>
-							<div
-								class="rounded-lg border border-slate-200/50 bg-white/60 p-3 dark:border-slate-700/50 dark:bg-slate-800/60"
+								CeraLive
+							</p>
+							<p
+								class="truncate font-mono text-sm font-bold text-emerald-900 dark:text-emerald-100"
 							>
-								<p class="mb-1 text-xs font-medium text-slate-600 dark:text-slate-400">SRTLA</p>
-								<p class="font-mono font-semibold text-slate-900 dark:text-slate-100">
-									{revisions.srtla}
-								</p>
-							</div>
-							<div
-								class="rounded-lg border border-slate-200/50 bg-white/60 p-3 dark:border-slate-700/50 dark:bg-slate-800/60"
+								{revisions.ceralive}
+							</p>
+						</div>
+
+						<!-- Belacoder -->
+						<div
+							class="rounded-xl border border-slate-300 bg-slate-100 p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/40"
+						>
+							<p
+								class="mb-2 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-400"
 							>
-								<p class="mb-1 text-xs font-medium text-slate-600 dark:text-slate-400">
+								Belacoder
+							</p>
+							<p class="truncate font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+								{revisions.belacoder}
+							</p>
+						</div>
+
+						<!-- SRTLA -->
+						<div
+							class="rounded-xl border border-slate-300 bg-slate-100 p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/40"
+						>
+							<p
+								class="mb-2 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-400"
+							>
+								SRTLA
+							</p>
+							<p class="truncate font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+								{revisions.srtla}
+							</p>
+						</div>
+
+						<!-- Bun Runtime -->
+						<div
+							class="rounded-xl border border-slate-300 bg-slate-100 p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/40"
+						>
+							<p
+								class="mb-2 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-400"
+							>
+								Bun Runtime
+							</p>
+							<p class="truncate font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+								{revisions.bun}
+							</p>
+						</div>
+
+						<!-- CERALIVE Image (only shown when available) -->
+						{#if revisions['CERALIVE image']}
+							<div
+								class="rounded-xl border border-slate-300 bg-slate-100 p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/40"
+							>
+								<p
+									class="mb-2 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-400"
+								>
 									CERALIVE Image
 								</p>
-								<p class="font-mono font-semibold text-slate-900 dark:text-slate-100">
+								<p class="truncate font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
 									{revisions['CERALIVE image']}
 								</p>
 							</div>
-						</div>
+						{/if}
 					</div>
-				</div>
-			</div>
+				</Card.Content>
+			</Card.Root>
 		{/if}
 	</div>
 </div>
