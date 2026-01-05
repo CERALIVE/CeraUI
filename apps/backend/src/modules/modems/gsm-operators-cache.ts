@@ -15,9 +15,11 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import fs from "node:fs";
-
-import { logger } from "../../helpers/logger.ts";
+import { loadCacheFile } from "../../helpers/config-loader.ts";
+import {
+	type GsmOperatorCache,
+	gsmOperatorCacheSchema,
+} from "../../helpers/config-schemas.ts";
 import { writeTextFile } from "../../helpers/text-files.ts";
 
 const GSM_OPERATORS_CACHE_FILE = "gsm_operator_cache.json";
@@ -25,23 +27,10 @@ const GSM_OPERATORS_CACHE_FILE = "gsm_operator_cache.json";
 type OperatorId = string;
 type OperatorName = string;
 
-let gsmOperatorsCache: Record<OperatorId, OperatorName> = {};
-try {
-	gsmOperatorsCache = JSON.parse(
-		fs.readFileSync(GSM_OPERATORS_CACHE_FILE, "utf8"),
-	);
-} catch (err) {
-	logger.warn(
-		"Failed to load the persistent GSM operators cache, starting with an empty cache",
-	);
-
-	writeGsmOperatorsCache().catch(() => {
-		logger.warn(
-			"Failed to write the persistent GSM operators cache, the cache will not be saved",
-		);
-		logger.debug(err);
-	});
-}
+const gsmOperatorsCache: GsmOperatorCache = loadCacheFile(
+	GSM_OPERATORS_CACHE_FILE,
+	gsmOperatorCacheSchema,
+);
 
 async function writeGsmOperatorsCache() {
 	await writeTextFile(

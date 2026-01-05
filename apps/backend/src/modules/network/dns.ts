@@ -20,8 +20,9 @@
 */
 
 import { Resolver } from "node:dns";
-import fs from "node:fs";
 
+import { loadCacheFile } from "../../helpers/config-loader.ts";
+import { type DnsCache, dnsCacheSchema } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { writeTextFile } from "../../helpers/text-files.ts";
 
@@ -108,20 +109,8 @@ function resolveP(
 	});
 }
 
-type DnsCacheEntry = {
-	ts: number;
-	results: NonNullable<ResolveResult>;
-};
-
-let dnsCache: Record<string, DnsCacheEntry> = {};
+const dnsCache: DnsCache = loadCacheFile(DNS_CACHE_FILE, dnsCacheSchema);
 const dnsResults: Record<string, ResolveResult> = {};
-try {
-	dnsCache = JSON.parse(fs.readFileSync(DNS_CACHE_FILE, "utf8"));
-} catch (_err) {
-	logger.warn(
-		"Failed to load the persistent DNS cache, starting with an empty cache",
-	);
-}
 
 function isIpv4Addr(val: string) {
 	return val.match(/^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$/) != null;

@@ -14,6 +14,11 @@ import {
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 
+import { loadCacheFile } from "../../helpers/config-loader.ts";
+import {
+	type AuthTokens,
+	authTokensSchema,
+} from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { getPasswordHash, setPasswordHash } from "../state/password.ts";
 import type { RPCContext } from "../types.ts";
@@ -23,13 +28,10 @@ const BCRYPT_ROUNDS = 10;
 
 // Token storage
 const tempTokens: Record<string, true> = {};
-let persistentTokens: Record<string, true>;
-
-try {
-	persistentTokens = JSON.parse(fs.readFileSync(AUTH_TOKENS_FILE, "utf8"));
-} catch (_err) {
-	persistentTokens = {};
-}
+const persistentTokens: AuthTokens = loadCacheFile(
+	AUTH_TOKENS_FILE,
+	authTokensSchema,
+);
 
 // Re-export for backward compatibility
 export { getPasswordHash, setPasswordHash };

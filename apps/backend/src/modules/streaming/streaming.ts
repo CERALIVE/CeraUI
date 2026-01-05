@@ -1,7 +1,7 @@
 /*
     CeraUI - web UI for the CERALIVE project
     Copyright (C) 2024-2025 CeraLive project
-    
+
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 /* Stream starting, stopping, management and monitoring */
 import type WebSocket from "ws";
 
+import { runtimeConfigSchema } from "../../helpers/config-schemas.ts";
 import { validatePortNo } from "../../helpers/number.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
@@ -109,50 +110,52 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 export async function validateConfig(params: Partial<ConfigParameters>) {
 	if (typeof params !== "object") throw new Error("Invalid config");
 
-	// A-V delay
-	if (typeof params.delay !== "number") throw new Error("Invalid audio delay");
-	const delay = Number.parseInt(params.delay.toString(), 10);
-	if (delay !== params.delay || delay < -2000 || delay > 2000)
-		throw new Error(`Invalid audio delay '${params.delay}'`);
-	params.delay = delay;
+	// Pre-validate with Zod schema for type safety and basic constraints
+	const schemaResult = runtimeConfigSchema.partial().safeParse(params);
+	if (!schemaResult.success) {
+		const firstError = schemaResult.error.issues[0];
+		throw new Error(
+			`Invalid config: ${firstError?.path.join(".")} - ${firstError?.message}`,
+		);
+	}
+	const validated = schemaResult.data;
+
+	// A-V delay (schema already validates range -2000 to 2000)
+	if (validated.delay === undefined) throw new Error("Invalid audio delay");
+	params.delay = validated.delay;
 
 	// pipeline
-	if (typeof params.pipeline !== "string") throw new Error("Invalid pipeline");
-	const pipeline = searchPipelines(params.pipeline);
+	if (typeof validated.pipeline !== "string")
+		throw new Error("Invalid pipeline");
+	const pipeline = searchPipelines(validated.pipeline);
 	if (!pipeline) throw new Error("Pipeline not found");
 
 	// audio codec
 	if (pipeline.acodec) {
-		if (typeof params.acodec !== "string")
+		if (typeof validated.acodec !== "string")
 			throw new Error("Invalid audio codec");
-		if (!audioCodecs[params.acodec]) throw new Error("Audio codec not found");
+		if (!audioCodecs[validated.acodec])
+			throw new Error("Audio codec not found");
 	}
 
 	// audio source
 	const config = getConfig();
 	const audioDevicesMap = getAudioDevices();
 	if (pipeline.asrc) {
-		if (typeof params.asrc !== "string")
+		if (typeof validated.asrc !== "string")
 			throw new Error("Invalid audio source");
-		if (params.asrc !== config.asrc && !audioDevicesMap[params.asrc])
+		if (validated.asrc !== config.asrc && !audioDevicesMap[validated.asrc])
 			throw new Error("Selected audio source not found");
 	}
 
-	// bitrate
+	// bitrate (schema already validates range 500-50000)
 	if (!validateBitrate(params))
 		throw new Error(`Invalid max bitrate: '${params.max_br}'`);
 
-	// SRT latency
-	if (typeof params.srt_latency !== "number")
+	// SRT latency (schema already validates range 100-10000)
+	if (validated.srt_latency === undefined)
 		throw new Error("Invalid SRT latency");
-	const srtLatency = Number.parseInt(params.srt_latency.toString(), 10);
-	if (
-		srtLatency !== params.srt_latency ||
-		srtLatency < 100 ||
-		srtLatency > 10_000
-	)
-		throw new Error(`Invalid SRT latency '${params.srt_latency}' ms`);
-	params.srt_latency = srtLatency;
+	params.srt_latency = validated.srt_latency;
 
 	// SRTLA addr and port
 	let srtlaAddr: string;
