@@ -24,7 +24,7 @@ button:focus-visible {
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import { cubicInOut } from 'svelte/easing';
-import { crossfade, fly, scale } from 'svelte/transition';
+import { fly } from 'svelte/transition';
 
 import Logo from '$lib/components/icons/Logo.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
@@ -37,27 +37,12 @@ import {
 	isNavigationTransitioning,
 	navigateTo,
 } from '$lib/stores/navigation.svelte';
-import { cn } from '$lib/utils';
+import { cn, safeCrossfade, safeScale } from '$lib/utils';
 
-const [send, receive] = crossfade({
+// Use safeCrossfade to prevent NaN errors in FLIP animations
+const [receive, send] = safeCrossfade({
 	duration: 200,
 	easing: cubicInOut,
-	fallback(node) {
-		// Validate node exists and has dimensions to prevent NaN values
-		if (!node || !node.getBoundingClientRect) {
-			return { duration: 0, css: () => '' };
-		}
-
-		const startValue = 0.95;
-		// Ensure start value is a valid number to prevent scale(NaN, NaN)
-		const safeStart = isFinite(startValue) ? startValue : 1;
-
-		return scale(node, {
-			duration: 120,
-			start: safeStart,
-			easing: cubicInOut,
-		});
-	},
 });
 
 let isLogoHovered = $state(false);
@@ -164,8 +149,8 @@ const handleLogoClick = () => {
 			{#if $canGoBack && isLogoHovered}
 				<div
 					class="bg-primary absolute -top-1 -right-1 h-3 w-3 rounded-full"
-					in:scale={{ duration: 120, start: 0.8 }}
-					out:scale={{ duration: 100, start: 1 }}
+					in:safeScale={{ duration: 120, start: 0.8 }}
+					out:safeScale={{ duration: 100, start: 1 }}
 				>
 					<div class="bg-primary/60 h-full w-full animate-ping rounded-full"></div>
 				</div>

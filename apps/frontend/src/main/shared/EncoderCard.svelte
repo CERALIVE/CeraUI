@@ -53,12 +53,12 @@ const {
 	getSortedFramerates,
 }: Props = $props();
 
-// Local state for all select fields
-let localInputMode = $state(properties.inputMode ?? '');
-let localEncoder = $state(properties.encoder ?? '');
-let localResolution = $state(properties.resolution ?? '');
-let localFramerate = $state(properties.framerate ?? '');
-let localBitrate = $state(properties.bitrate ?? 5000);
+// Local state for all select fields (initialized with defaults, synced via effects)
+let localInputMode = $state('');
+let localEncoder = $state('');
+let localResolution = $state('');
+let localFramerate = $state('');
+let localBitrate = $state(5000);
 
 // Track if user has touched each field
 let inputModeTouched = $state(false);
