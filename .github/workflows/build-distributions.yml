@@ -138,9 +138,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build CeraUI system distribution for ${{ matrix.architecture }}
-        run: |
-          chmod +x ./scripts/build/*.sh
-          ./scripts/build/build-ceraui-system.sh
+        run: ./scripts/build/build-ceraui-system.sh
         env:
           BUILD_VERSION: ${{ needs.calculate-version.outputs.version }}
           BUILD_ARCH: ${{ matrix.architecture }}
@@ -194,9 +192,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Debian package for ${{ matrix.architecture }}
-        run: |
-          chmod +x ./scripts/build/*.sh
-          ./scripts/build/build-debian-package.sh
+        run: ./scripts/build/build-debian-package.sh
         env:
           BUILD_VERSION: ${{ needs.calculate-version.outputs.version }}
           BUILD_ARCH: ${{ matrix.architecture }}
