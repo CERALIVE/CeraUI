@@ -41,11 +41,9 @@ export function initRevisions() {
 		revisions.ceralive = readRevision("git rev-parse --short HEAD");
 	}
 
-	revisions.ceralive += " (pjeweb fork)";
-
 	revisions.belacoder = readRevision(`${belacoderExec} -v`);
 	revisions.srtla = readRevision(`${srtlaSendExec} -v`);
-	revisions.bun = `${Bun.version} (${Bun.revision})`;
+	revisions.bun = Bun.version;
 
 	// Only show a CERALIVE image version if it exists
 	try {
