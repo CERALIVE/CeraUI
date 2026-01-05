@@ -4,51 +4,80 @@ import { registerSW } from "virtual:pwa-register";
 import { mount } from "svelte";
 
 import App from "./App.svelte";
-import { checkFrontendVersionChange } from "./lib/stores/frontend-version.svelte";
+import {
+	checkAndUpdateVersion,
+	setStoredVersion,
+} from "./lib/stores/version.svelte";
 
-// Register Service Worker (only frontend update mechanism)
+/**
+ * Fallback version check for when PWA service worker is disabled or fails.
+ * Used in development mode or as backup in production.
+ */
+function checkVersionFallback() {
+	const versionChanged = checkAndUpdateVersion(__APP_VERSION__);
+
+	if (versionChanged) {
+		// Show update notification
+		void import("svelte-sonner").then(({ toast }) => {
+			const shortVersion = __APP_VERSION__.split("-")[0];
+			toast.info("App Updated", {
+				description: `Updated to version ${shortVersion}`,
+				duration: 5000,
+			});
+		});
+	}
+}
+
+// Track if PWA successfully registered
+let pwaRegistered = false;
+
+// Register Service Worker for PWA updates
 const updateSW = registerSW({
-	immediate: true, // Register immediately
+	immediate: true,
 	onNeedRefresh() {
-		// Show update available notification for frontend builds
-		// Import toast dynamically to avoid circular dependencies
+		// Show update notification when new version is available
 		void import("svelte-sonner").then(({ toast }) => {
 			toast.info("Update Available", {
-				description: "A new frontend version is available. Refresh to update.",
-				duration: 0, // Persistent
+				description: "A new version is available. Refresh to update.",
+				duration: 0, // Persistent until action
 				action: {
-					label: "Refresh",
-					onClick: () => {
-						updateSW(true);
-					},
+					label: "Update Now",
+					onClick: () => updateSW(true),
 				},
 			});
 		});
 	},
 	onOfflineReady() {
-		console.log("PWA: Service worker is ready for offline use");
-		// Import toast dynamically
-		void import("svelte-sonner").then(({ toast }) => {
-			toast.success("Offline Ready", {
-				description: "App is ready to work offline!",
-				duration: 3000,
-			});
-		});
+		console.log("PWA: Ready for offline use");
 	},
 	onRegistered(registration) {
-		console.log("PWA: Service worker registered", registration);
+		if (registration) {
+			pwaRegistered = true;
+			console.log("PWA: Service worker registered", registration);
+			// Update stored version when PWA registers successfully
+			setStoredVersion(__APP_VERSION__);
+		} else {
+			// PWA disabled (e.g., dev mode) - use fallback
+			console.log("PWA: Disabled, using version fallback");
+			checkVersionFallback();
+		}
 	},
 	onRegisterError(error: Error) {
 		console.error("PWA: Service worker registration failed", error);
+		// PWA failed - use fallback version check
+		checkVersionFallback();
 	},
 });
 
+// Mount the app
 const app = mount(App, { target: document.getElementById("app") as Element });
 
-// Secondary frontend version checking (backup to PWA service worker)
-// This runs after app mount to ensure stores are initialized
+// Additional fallback: if PWA hasn't registered after a delay, check version
+// This handles edge cases where onRegistered never fires
 setTimeout(() => {
-	checkFrontendVersionChange();
-}, 1000);
+	if (!pwaRegistered) {
+		checkVersionFallback();
+	}
+}, 2000);
 
 export default app;

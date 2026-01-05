@@ -5,7 +5,7 @@ import { RefreshCw, Smartphone, WifiOff } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
-import { manualConnectionCheck } from '$lib/stores/offline-navigation.svelte';
+import { manualConnectionCheck } from '$lib/stores/offline-state.svelte';
 
 // RTL support (for future enhancements)
 const _isRTL = $derived(rtlLanguages.includes($locale));

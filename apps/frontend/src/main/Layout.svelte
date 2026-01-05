@@ -7,13 +7,12 @@ import { toast } from 'svelte-sonner';
 import { OfflinePage, PWAStatus } from '$lib/components/ui/pwa';
 import { Toaster } from '$lib/components/ui/sonner';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
-import { updateManifestLink } from '$lib/helpers/ManifestHelper';
 import {
 	startStreaming as startStreamingFn,
 	stopStreaming as stopStreamingFn,
 } from '$lib/helpers/SystemHelper';
 import { authStatusStore } from '$lib/stores/auth-status.svelte';
-import { shouldShowOfflinePage } from '$lib/stores/offline-navigation.svelte';
+import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
 import {
 	getAuth,
 	getNotifications,
@@ -27,6 +26,9 @@ import Main from './MainView.svelte';
 let authStatus = $state(false);
 let isCheckingAuthStatus = $state(true);
 let updatingStatus: StatusMessage['updating'] = $state(false);
+
+// Derived offline state for reactivity
+const showOfflinePage = $derived(getShouldShowOfflinePage());
 
 // Toast tracking system for duplicates
 interface ToastInfo {
@@ -265,7 +267,7 @@ if (isMobileDevice || isPWAApp) {
 
 	setTimeout(() => {
 		// If we're still in a loading state and no offline page is shown, force offline
-		if (isCheckingAuthStatus && !authStatus && !$shouldShowOfflinePage) {
+		if (isCheckingAuthStatus && !authStatus && !showOfflinePage) {
 			isCheckingAuthStatus = false;
 			// This will trigger the auth screen, but offline detection should kick in soon
 		}
@@ -336,18 +338,16 @@ $effect(() => {
 
 // Apply <html lang> and dir using runes-style effect
 $effect(() => {
+	// Update document language and direction for RTL support
 	document.documentElement.lang = $locale;
 	document.documentElement.dir = rtlLanguages.includes($locale) ? 'rtl' : 'ltr';
-
-	// Update PWA manifest to match current locale and direction
-	updateManifestLink();
 });
 // Export our functions to the global scope to make them available to other components
 window.startStreamingWithNotificationClear = startStreaming;
 window.stopStreamingWithNotificationClear = stopStreaming;
 </script>
 
-{#if $shouldShowOfflinePage}
+{#if showOfflinePage}
 	<OfflinePage />
 {:else if authStatus}
 	{#if updatingStatus && typeof updatingStatus !== 'boolean'}
