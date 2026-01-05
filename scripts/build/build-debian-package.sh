@@ -50,7 +50,11 @@ ensure_dir "$TEMP_DIR"
 log_step "Preparing package structure"
 
 # Create directory structure
-ensure_dir "$TEMP_DIR"/{usr/local/bin,etc/systemd/system,etc/udev/rules.d,var/www/ceralive,etc/ceralive}
+mkdir -p "$TEMP_DIR/usr/local/bin"
+mkdir -p "$TEMP_DIR/etc/systemd/system"
+mkdir -p "$TEMP_DIR/etc/udev/rules.d"
+mkdir -p "$TEMP_DIR/var/www/ceralive"
+mkdir -p "$TEMP_DIR/etc/ceralive"
 
 # Copy files to appropriate locations
 log_step "Copying files to package structure"
