@@ -167,7 +167,6 @@ fpm -s dir -t deb \
     --after-install postinst \
     --before-remove prerm \
     --after-remove postrm \
-    --deb-systemd ceralive.service \
     --deb-no-default-config-files \
     -C temp \
     .
