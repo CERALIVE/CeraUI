@@ -1,56 +1,120 @@
-name: Build Distributions
+name: Build & Release
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version number for the build (e.g., 1.2.3)"
+      release_type:
+        description: "Release type"
         required: true
-        type: string
+        type: choice
+        options:
+          - stable
+          - beta
+        default: stable
       release_notes:
-        description: "Release notes (optional)"
+        description: "Release notes (what changed in this release)"
+        required: false
+        type: string
+      force_version:
+        description: "Override auto-detected version (optional, e.g., 2026.1.0)"
         required: false
         type: string
 
+env:
+  NODE_VERSION: "24"
+
 jobs:
-  build-ceraui-frontend-for-belabox:
-    name: Build CeraUI Frontend for BELABOX
+  # Calculate the next CalVer version automatically
+  calculate-version:
+    name: Calculate Version
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.calver.outputs.version }}
+      tag: ${{ steps.calver.outputs.tag }}
+      is_beta: ${{ steps.calver.outputs.is_beta }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "pnpm"
+          fetch-depth: 0 # Need full history for tags
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build CeraUI frontend for BELABOX
-        run: ./scripts/build/build-ceraui-frontend-for-belabox.sh
+      - name: Calculate CalVer version
+        id: calver
         env:
-          BUILD_VERSION: ${{ github.event.inputs.version }}
+          RELEASE_TYPE: ${{ github.event.inputs.release_type }}
+          FORCE_VERSION: ${{ github.event.inputs.force_version }}
+        run: |
+          # Get current year and month
+          YEAR=$(date +%Y)
+          MONTH=$(date +%-m)  # No leading zero
+          IS_BETA=$([[ "$RELEASE_TYPE" == "beta" ]] && echo "true" || echo "false")
 
-      - name: Upload frontend distribution
-        uses: actions/upload-artifact@v4
-        with:
-          name: ceraui-frontend-for-belabox
-          path: dist/belabox-frontend/
+          # Check if force_version is provided
+          if [ -n "$FORCE_VERSION" ]; then
+            VERSION="$FORCE_VERSION"
+            echo "📌 Using forced version: $VERSION"
+          else
+            # Find existing tags for this year.month
+            PREFIX="v${YEAR}.${MONTH}"
+
+            if [ "$IS_BETA" == "true" ]; then
+              # For beta: find highest beta number for this month
+              LATEST_BETA=$(git tag -l "${PREFIX}.*-beta.*" | sed -E "s/.*-beta\.([0-9]+)/\1/" | sort -n | tail -1)
+
+              if [ -z "$LATEST_BETA" ]; then
+                BETA_NUM=1
+                echo "🧪 First beta of ${YEAR}.${MONTH}"
+              else
+                BETA_NUM=$((LATEST_BETA + 1))
+                echo "🔄 Incrementing beta: ${LATEST_BETA} → ${BETA_NUM}"
+              fi
+
+              # Get the base patch (latest stable or 0)
+              LATEST_STABLE=$(git tag -l "${PREFIX}.*" | grep -v beta | sed "s/${PREFIX}\.//" | sort -n | tail -1)
+              PATCH=${LATEST_STABLE:-0}
+              NEXT_PATCH=$((PATCH + 1))
+
+              VERSION="${YEAR}.${MONTH}.${NEXT_PATCH}-beta.${BETA_NUM}"
+            else
+              # For stable: find highest patch number (excluding betas)
+              LATEST_PATCH=$(git tag -l "${PREFIX}.*" | grep -v beta | sed "s/${PREFIX}\.//" | sort -n | tail -1)
+
+              if [ -z "$LATEST_PATCH" ]; then
+                PATCH=0
+                echo "📅 First release of ${YEAR}.${MONTH}"
+              else
+                PATCH=$((LATEST_PATCH + 1))
+                echo "🔄 Incrementing patch: ${LATEST_PATCH} → ${PATCH}"
+              fi
+
+              VERSION="${YEAR}.${MONTH}.${PATCH}"
+            fi
+          fi
+
+          TAG="v${VERSION}"
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "is_beta=${IS_BETA}" >> $GITHUB_OUTPUT
+
+          echo "✅ Next version: ${VERSION}"
+          echo "🏷️  Tag: ${TAG}"
+          echo "🧪 Beta: ${IS_BETA}"
+
+      - name: Version Summary
+        run: |
+          echo "## 🏷️ Version Calculated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ steps.calver.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** \`${{ steps.calver.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Type:** ${{ steps.calver.outputs.is_beta == 'true' && '🧪 Beta' || '✅ Stable' }}" >> $GITHUB_STEP_SUMMARY
 
   build-ceraui-system:
     name: Build CeraUI Full System
     runs-on: ubuntu-latest
+    needs: calculate-version
     strategy:
       matrix:
-        # Multi-architecture build matrix:
-        # arm64: Orange Pi 5+, Radxa Rock 5B+, Raspberry Pi 4/5, Jetson devices
-        # amd64: Intel N100/N200 mini PCs, AMD Ryzen, desktop/laptop computers
         architecture: [arm64, amd64]
     steps:
       - name: Checkout code
@@ -62,7 +126,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
 
       - name: Setup Bun
@@ -76,23 +140,29 @@ jobs:
       - name: Build CeraUI system distribution for ${{ matrix.architecture }}
         run: ./scripts/build/build-ceraui-system.sh
         env:
-          BUILD_VERSION: ${{ github.event.inputs.version }}
+          BUILD_VERSION: ${{ needs.calculate-version.outputs.version }}
           BUILD_ARCH: ${{ matrix.architecture }}
+
+      - name: Rename archive for release
+        run: |
+          cd dist/compressed
+          # Find the generated archive and rename to clean version
+          for f in *.tar.gz; do
+            mv "$f" "ceraui-${{ needs.calculate-version.outputs.version }}-${{ matrix.architecture }}.tar.gz"
+          done
 
       - name: Upload compressed distribution (${{ matrix.architecture }})
         uses: actions/upload-artifact@v4
         with:
-          name: ceraui-system-compressed-${{ matrix.architecture }}
-          path: dist/compressed/
+          name: ceraui-system-${{ matrix.architecture }}
+          path: dist/compressed/*.tar.gz
 
   build-debian-package:
     name: Build Debian Package
     runs-on: ubuntu-latest
+    needs: calculate-version
     strategy:
       matrix:
-        # Multi-architecture Debian packages:
-        # arm64: Orange Pi 5+, Radxa Rock 5B+, Raspberry Pi 4/5, Jetson devices
-        # amd64: Intel N100/N200 mini PCs, AMD Ryzen, desktop/laptop computers
         architecture: [arm64, amd64]
     steps:
       - name: Checkout code
@@ -104,7 +174,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
 
       - name: Setup Bun
@@ -124,43 +194,123 @@ jobs:
       - name: Build Debian package for ${{ matrix.architecture }}
         run: ./scripts/build/build-debian-package.sh
         env:
-          BUILD_VERSION: ${{ github.event.inputs.version }}
+          BUILD_VERSION: ${{ needs.calculate-version.outputs.version }}
           BUILD_ARCH: ${{ matrix.architecture }}
 
       - name: Upload Debian package (${{ matrix.architecture }})
         uses: actions/upload-artifact@v4
         with:
-          name: ceraui-debian-package-${{ matrix.architecture }}
-          path: dist/debian/
+          name: ceraui-debian-${{ matrix.architecture }}
+          path: dist/debian/*.deb
 
-  build-summary:
-    name: Build Summary
+  create-release:
+    name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs:
-      [
-        build-ceraui-frontend-for-belabox,
-        build-ceraui-system,
-        build-debian-package,
-      ]
-    if: always()
+    needs: [calculate-version, build-ceraui-system, build-debian-package]
+    permissions:
+      contents: write
     steps:
-      - name: Build Summary
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Prepare release assets
         run: |
-          echo "## 📦 CeraUI Build Summary" >> $GITHUB_STEP_SUMMARY
+          mkdir -p final-assets
+
+          # Move all archives and packages to final-assets
+          find release-assets -name "*.tar.gz" -exec mv {} final-assets/ \;
+          find release-assets -name "*.deb" -exec mv {} final-assets/ \;
+
+          echo "📦 Release assets:"
+          ls -la final-assets/
+
+      - name: Generate release body
+        env:
+          VERSION: ${{ needs.calculate-version.outputs.version }}
+          TAG: ${{ needs.calculate-version.outputs.tag }}
+          IS_BETA: ${{ needs.calculate-version.outputs.is_beta }}
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
+        run: |
+          # Get the previous tag for changelog
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          # Generate changelog
+          if [ -n "$PREV_TAG" ]; then
+            CHANGELOG_HEADER="Changes since ${PREV_TAG}:"
+            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s" --no-merges | head -20)
+          else
+            CHANGELOG_HEADER="Recent commits:"
+            CHANGELOG=$(git log --pretty=format:"- %s" --no-merges -20)
+          fi
+
+          DATE=$(date -u +"%Y-%m-%d")
+
+          # Build release body using echo (more reliable in CI)
+          {
+            echo "# CeraUI ${TAG}"
+            echo ""
+            if [ "$IS_BETA" == "true" ]; then
+              echo "> ⚠️ **This is a beta release.** It may contain bugs or incomplete features. Use in production at your own risk."
+              echo ""
+            fi
+            echo "**Release Date:** ${DATE}"
+            echo ""
+            echo "## 📦 Downloads"
+            echo ""
+            echo "### System Archives (with install scripts)"
+            echo "| Architecture | File | Target Hardware |"
+            echo "|--------------|------|-----------------|"
+            echo "| ARM64 | \`ceraui-${VERSION}-arm64.tar.gz\` | Orange Pi 5+, Rock 5B+, Jetson Orin |"
+            echo "| AMD64 | \`ceraui-${VERSION}-amd64.tar.gz\` | Intel N100/N200, AMD Ryzen |"
+            echo ""
+            echo "### Debian Packages (apt/dpkg install)"
+            echo "| Architecture | File |"
+            echo "|--------------|------|"
+            echo "| ARM64 | \`ceralive-device_${VERSION}_arm64.deb\` |"
+            echo "| AMD64 | \`ceralive-device_${VERSION}_amd64.deb\` |"
+            echo ""
+            echo "## 📝 Release Notes"
+            echo ""
+            echo "${RELEASE_NOTES:-No release notes provided.}"
+            echo ""
+            echo "## 🔄 What's Changed"
+            echo ""
+            echo "${CHANGELOG_HEADER}"
+            echo ""
+            echo "${CHANGELOG}"
+            echo ""
+            echo "---"
+            echo "🤖 Generated with GitHub Actions"
+          } > release-body.md
+
+          echo "📄 Generated release body:"
+          cat release-body.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.calculate-version.outputs.tag }}
+          name: CeraUI ${{ needs.calculate-version.outputs.tag }}${{ needs.calculate-version.outputs.is_beta == 'true' && ' (Beta)' || '' }}
+          body_path: release-body.md
+          files: final-assets/*
+          draft: false
+          prerelease: ${{ needs.calculate-version.outputs.is_beta == 'true' }}
+
+      - name: Release Summary
+        run: |
+          echo "## 🎉 Release Created!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Version: ${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "### Build Results:" >> $GITHUB_STEP_SUMMARY
-          echo "- **CeraUI Frontend for BELABOX**: ${{ needs.build-ceraui-frontend-for-belabox.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **CeraUI Full System**: ${{ needs.build-ceraui-system.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Debian Packages**: ${{ needs.build-debian-package.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ needs.calculate-version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** \`${{ needs.calculate-version.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Type:** ${{ needs.calculate-version.outputs.is_beta == 'true' && '🧪 Beta (Pre-release)' || '✅ Stable' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Distributions Built:" >> $GITHUB_STEP_SUMMARY
-          echo "1. **CeraUI Frontend for BELABOX** - For existing BELABOX devices with belaUI backend" >> $GITHUB_STEP_SUMMARY
-          echo "2. **CeraUI System Archives** - Full system to replace belaUI or deploy on custom devices (arm64 and amd64)" >> $GITHUB_STEP_SUMMARY
-          echo "3. **Debian Packages** - Easy installation packages for CeraUI system (arm64 and amd64)" >> $GITHUB_STEP_SUMMARY
+          echo "### Assets Uploaded:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Release Notes:" >> $GITHUB_STEP_SUMMARY
-          echo "${{ github.event.inputs.release_notes || 'No release notes provided' }}" >> $GITHUB_STEP_SUMMARY
+          ls -1 final-assets/ | while read f; do echo "- \`$f\`" >> $GITHUB_STEP_SUMMARY; done
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Artifacts:" >> $GITHUB_STEP_SUMMARY
-          echo "All build artifacts are available in the 'Artifacts' section of this workflow run." >> $GITHUB_STEP_SUMMARY
+          echo "🔗 [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.calculate-version.outputs.tag }})" >> $GITHUB_STEP_SUMMARY

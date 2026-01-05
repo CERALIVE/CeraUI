@@ -4,17 +4,7 @@ This document describes the automated build pipeline for creating different Cera
 
 ## 📦 Distribution Types
 
-### 1. CeraUI Frontend for CeraLive
-
-- **Purpose**: CeraUI frontend distribution compatible with existing CeraLive devices
-- **Target**: Devices already running CeraLive backend
-- **Brand**: CeraLive
-- **Script**: `scripts/build/build-ceraui-frontend-for-ceralive.sh`
-- **Output**: `dist/ceralive-frontend/`
-
-**Use Case**: Deploy CeraUI frontend on existing CeraLive devices without touching the backend.
-
-### 2. CeraUI Full System (Compressed)
+### 1. CeraUI Full System (Compressed)
 
 - **Purpose**: Complete CeraUI system replacement
 - **Target**: Replace CeraLive or deploy on custom development devices (not specifically branded)
@@ -24,12 +14,12 @@ This document describes the automated build pipeline for creating different Cera
 
 **Use Case**:
 
-- Replace existing CeraLive installations completely
+- Replace existing installations completely
 - Deploy on custom development hardware for testing
 - Full system with installation/uninstallation scripts
 - Development and testing environments
 
-### 3. Debian Package
+### 2. Debian Package
 
 - **Purpose**: Easy installation via package manager
 - **Target**: Debian/Ubuntu-based systems
@@ -48,24 +38,19 @@ The build pipeline runs **manually only** via workflow dispatch with:
 
 ### Jobs
 
-1. **build-ceraui-frontend-for-ceralive**
-
-   - Builds CeraUI frontend distribution for CeraLive devices
-   - Uploads artifact: `ceraui-frontend-for-ceralive`
-
-2. **build-ceraui-system**
+1. **build-ceraui-system** (matrix: arm64, amd64)
 
    - Builds full system with installation scripts
-   - Creates compressed archives (.tar.gz, .zip)
-   - Uploads artifact: `ceraui-system-compressed`
+   - Creates compressed archives (.tar.gz)
+   - Uploads artifact: `ceraui-system-compressed-{arch}`
 
-3. **build-debian-package**
+2. **build-debian-package** (matrix: arm64, amd64)
 
    - Installs FPM (Effing Package Management)
-   - Creates Debian package
-   - Uploads artifact: `ceraui-debian-package`
+   - Creates Debian package for target architecture
+   - Uploads artifact: `ceraui-debian-package-{arch}`
 
-4. **build-summary**
+3. **build-summary**
    - Provides build status summary with version information
    - Shows release notes and artifact information
    - Runs regardless of job success/failure
@@ -91,14 +76,19 @@ gem install fpm
 ### Running Build Scripts Locally
 
 ```bash
-# CeraUI frontend for CeraLive
-./scripts/build/build-ceraui-frontend-for-ceralive.sh
-
-# Full CeraUI system
+# Full CeraUI system (auto-detect architecture)
 ./scripts/build/build-ceraui-system.sh
 
-# Debian package
+# Full CeraUI system for specific architecture
+BUILD_ARCH=arm64 ./scripts/build/build-ceraui-system.sh
+BUILD_ARCH=amd64 ./scripts/build/build-ceraui-system.sh
+
+# Debian package (auto-detect architecture)
 ./scripts/build/build-debian-package.sh
+
+# Debian package for specific architecture
+BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh
+BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 ```
 
 ## 📋 Package.json Integration
@@ -118,17 +108,6 @@ The build scripts use existing package.json commands:
 **Scripts DO NOT modify package.json** - they reuse existing build commands.
 
 ## 🏗️ Build Artifacts
-
-### Frontend Distribution Structure
-
-```
-dist/ceralive-frontend/
-├── index.html
-├── assets/
-├── manifest.webmanifest
-├── README.md
-└── build-info.json
-```
 
 ### System Distribution Structure
 
@@ -177,11 +156,17 @@ dist/debian/
 
 ## 🎯 Use Cases Summary
 
-| Distribution                | Use Case                    | Target              |
-| --------------------------- | --------------------------- | ------------------- |
-| CeraUI Frontend for CeraLive | Deploy CeraUI UI on CeraLive | CeraLive devices     |
-| CeraUI System               | Replace CeraLive completely   | Development devices |
-| Debian Package              | Professional deployment     | Production systems  |
+| Distribution     | Use Case                      | Target Architectures     |
+| ---------------- | ----------------------------- | ------------------------ |
+| CeraUI System    | Full system deployment        | arm64, amd64             |
+| Debian Package   | Professional apt deployment   | arm64, amd64             |
+
+### Target Hardware
+
+| Architecture | Recommended Devices                                    |
+| ------------ | ------------------------------------------------------ |
+| **arm64**    | Orange Pi 5+, Radxa Rock 5B+, NVIDIA Jetson Orin       |
+| **amd64**    | Intel N100/N200 Mini PCs, AMD Ryzen, desktop computers |
 
 ## 🔍 Troubleshooting
 
