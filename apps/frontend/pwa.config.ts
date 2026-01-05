@@ -40,34 +40,50 @@ export const pwaConfig: VitePWAOptions = {
 		enabled: false,
 	},
 	workbox: {
-		// Explicit static site configuration
-		globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-		// CRITICAL: Force navigation fallback for ALL requests
+		// Simplified precaching - only essential files, avoid duplicates with includeAssets
+		globPatterns: ["**/*.{js,css,html,woff2}"],
+
+		// Navigation fallback for SPA routing
 		navigateFallback: "/index.html",
-		navigateFallbackDenylist: [], // Don't deny any navigation requests
+		navigateFallbackDenylist: [/^\/api\//],
+
 		// Force immediate control
 		skipWaiting: true,
 		clientsClaim: true,
-		// Simple runtime caching for static assets
+
+		// Clean up old caches on new SW activation
+		cleanupOutdatedCaches: true,
+
+		// Optimized runtime caching strategies
 		runtimeCaching: [
-			// Catch all navigation requests and serve index.html
+			// Images: StaleWhileRevalidate for faster perceived performance
+			// Serves cached version immediately while fetching fresh version in background
 			{
-				urlPattern: ({ request }) => request.mode === "navigate",
-				handler: "CacheFirst",
+				urlPattern: /\.(?:png|jpg|jpeg|svg|gif|ico|webp)$/,
+				handler: "StaleWhileRevalidate",
 				options: {
-					cacheName: "navigation-cache",
+					cacheName: "images",
+					expiration: {
+						maxEntries: 50,
+						maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+					},
 				},
 			},
-			// Catch any missed static assets
+			// Fonts: CacheFirst since they rarely change
 			{
-				urlPattern: ({ url }) => url.origin === self.location.origin,
+				urlPattern: /\.(?:woff2?)$/,
 				handler: "CacheFirst",
 				options: {
-					cacheName: "static-assets",
+					cacheName: "fonts",
+					expiration: {
+						maxEntries: 10,
+						maxAgeSeconds: 365 * 24 * 60 * 60, // 1 year
+					},
 				},
 			},
 		],
 	},
+	// Static assets to include in precache (icons and favicons)
 	includeAssets: ["favicon.ico", "apple-touch-icon.png", "favicon-96x96.png"],
 	manifest: {
 		name: BRAND_CONFIG.name,
