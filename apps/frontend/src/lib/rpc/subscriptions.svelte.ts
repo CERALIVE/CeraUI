@@ -11,7 +11,7 @@ import type {
 	ModemList,
 	NetifMessage,
 	NotificationsMessage,
-	Pipelines,
+	PipelinesMessage,
 	RelayMessage,
 	Revisions,
 	SensorsStatus,
@@ -60,8 +60,8 @@ let modemsState = $state<ModemList | undefined>(undefined);
 // System state
 let sensorsState = $state<SensorsStatus | undefined>(undefined);
 let revisionsState = $state<Revisions | undefined>(undefined);
-let pipelinesState = $state<Pipelines | undefined>(undefined);
-let audioCodecsState = $state<Record<string, string> | undefined>(undefined);
+let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
+let audioCodecsState = $state<Record<string, { name: string }> | undefined>(undefined);
 
 // Relay state
 let relaysState = $state<RelayMessage | undefined>(undefined);
@@ -236,11 +236,18 @@ function handleMessage(type: string, data: unknown): void {
 			break;
 
 		case "pipelines":
-			pipelinesState = data as Pipelines;
+			if (data && typeof data === "object" && "pipelines" in (data as Record<string, unknown>)) {
+				pipelinesState = data as PipelinesMessage;
+			} else {
+				pipelinesState = {
+					hardware: (data as { hardware?: string })?.hardware ?? "generic",
+					pipelines: data as Record<string, unknown>,
+				} as unknown as PipelinesMessage;
+			}
 			break;
 
 		case "acodecs":
-			audioCodecsState = data as Record<string, string>;
+			audioCodecsState = data as Record<string, { name: string }>;
 			break;
 
 		case "relays":

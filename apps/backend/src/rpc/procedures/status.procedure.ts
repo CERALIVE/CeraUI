@@ -15,7 +15,7 @@ import {
 } from "../../modules/remote/remote-relays.ts";
 import { getAudioDevices } from "../../modules/streaming/audio.ts";
 import { AUDIO_CODECS } from "@ceralive/ceracoder";
-import { getPipelineList } from "../../modules/streaming/pipelines.ts";
+import { getPipelinesMessage } from "../../modules/streaming/pipelines.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
@@ -71,7 +71,7 @@ export function buildInitialStatus() {
 	const config = getConfig();
 	return {
 		config,
-		pipelines: getPipelineList(),
+		pipelines: getPipelinesMessage(),
 		relays: getRelays() ? buildRelaysMsg() : null,
 		status: {
 			is_streaming: getIsStreaming(),

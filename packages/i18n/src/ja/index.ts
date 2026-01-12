@@ -86,6 +86,24 @@ const ja = {
 	settings: {
 		encoderSettings: "エンコーダー設定",
 		inputMode: "入力モード",
+	hardware: "ハードウェア",
+	hardwareTypes: {
+		jetson: "NVIDIA Jetson",
+		rk3588: "Rockchip RK3588",
+		n100: "Intel N100",
+		generic: "Generic (Software)",
+	},
+	sources: {
+		camlink: "Cam Link 4K",
+		libuvch264: "UVC H264 カメラ",
+		hdmi: "HDMI キャプチャ",
+		usb_mjpeg: "USB MJPEG",
+		v4l_mjpeg: "V4L2 MJPEG",
+		rtmp: "RTMP インジェスト",
+		srt: "SRT インジェスト",
+		test: "テストパターン",
+		decklink: "Decklink SDI",
+	},
 		djiCameraMessage:
 			"DJIカメラはUSB-LIBUVCH264入力モードを使用するとより良く動作する可能性があります",
 		selectInputMode: "入力モードを選択",

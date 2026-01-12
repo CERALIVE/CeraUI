@@ -389,16 +389,16 @@ export interface TypedRPC {
 		getConfig: () => Promise<unknown>;
 		// Dev-only mock hardware switcher
 		setMockHardware: (input: {
-			hardware: "jetson" | "n100" | "rk3588";
+			hardware: "jetson" | "n100" | "rk3588" | "generic";
 		}) => Promise<{
 			success: boolean;
-			hardware?: "jetson" | "n100" | "rk3588";
+			hardware?: "jetson" | "n100" | "rk3588" | "generic";
 			error?: string;
 		}>;
 		getMockHardware: () => Promise<{
-			hardware: "jetson" | "n100" | "rk3588" | null;
+			hardware: "jetson" | "n100" | "rk3588" | "generic" | null;
 			effectiveHardware: string;
-			availableHardware: ("jetson" | "n100" | "rk3588")[];
+			availableHardware: ("jetson" | "n100" | "rk3588" | "generic")[];
 		}>;
 	};
 	modems: {

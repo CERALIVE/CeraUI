@@ -1,51 +1,55 @@
 <script lang="ts">
 import { Cpu, Loader2, RefreshCw } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
+import {
+	type HardwareType,
+	HARDWARE_LABELS,
+	HARDWARE_DESCRIPTIONS,
+	HARDWARE_COLORS,
+	hardwareTypeSchema,
+} from '@ceraui/rpc/schemas';
 
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import { rpc } from '$lib/rpc';
+import { rpc, getIsConnected } from '$lib/rpc';
 
-type HardwareType = 'jetson' | 'n100' | 'rk3588';
+// All available hardware types from schema
+const ALL_HARDWARE_TYPES = hardwareTypeSchema.options as HardwareType[];
 
 // State
 let selectedHardware = $state<HardwareType | null>(null);
-let effectiveHardware = $state<string>('unknown');
-let availableHardware = $state<HardwareType[]>(['jetson', 'n100', 'rk3588']);
+let effectiveHardware = $state<string>('loading...');
+let availableHardware = $state<HardwareType[]>(ALL_HARDWARE_TYPES);
 let isLoading = $state(false);
 let isInitialized = $state(false);
-
-// Hardware type display info
-const hardwareInfo: Record<HardwareType, { name: string; description: string; color: string }> = {
-	jetson: {
-		name: 'NVIDIA Jetson',
-		description: 'NVIDIA nvenc hardware encoding',
-		color: 'text-green-600 dark:text-green-400',
-	},
-	n100: {
-		name: 'Intel N100',
-		description: 'Intel VAAPI hardware encoding',
-		color: 'text-blue-600 dark:text-blue-400',
-	},
-	rk3588: {
-		name: 'Rockchip RK3588',
-		description: 'Rockchip MPP hardware encoding (supports 4K)',
-		color: 'text-orange-600 dark:text-orange-400',
-	},
-};
+let loadError = $state<string | null>(null);
 
 // Load current hardware state on mount
 async function loadHardwareState() {
+	isLoading = true;
+	loadError = null;
 	try {
+		// Wait for connection if not connected
+		const isConnected = getIsConnected();
+		if (!isConnected) {
+			effectiveHardware = 'connecting...';
+			// Retry after a short delay
+			await new Promise(resolve => setTimeout(resolve, 1000));
+		}
+		
 		const state = await rpc.streaming.getMockHardware();
 		selectedHardware = state.hardware;
 		effectiveHardware = state.effectiveHardware;
 		availableHardware = state.availableHardware;
 		isInitialized = true;
-	} catch (_error) {
-		toast.error('Failed to load hardware state');
+	} catch (error) {
+		loadError = error instanceof Error ? error.message : 'Failed to load';
+		effectiveHardware = 'error';
+		console.error('Failed to load hardware state:', error);
+	} finally {
+		isLoading = false;
 	}
 }
 
@@ -59,7 +63,7 @@ async function switchHardware(hardware: HardwareType) {
 		if (result.success) {
 			selectedHardware = result.hardware ?? null;
 			effectiveHardware = hardware;
-			toast.success(`Switched to ${hardwareInfo[hardware].name}`, {
+			toast.success(`Switched to ${HARDWARE_LABELS[hardware]}`, {
 				description: 'Pipelines reloaded and broadcast to all clients',
 			});
 		} else {
@@ -107,13 +111,21 @@ $effect(() => {
 			<div class="grid grid-cols-2 gap-4 text-sm">
 				<div>
 					<span class="text-muted-foreground">Effective Hardware:</span>
-					<span class="ml-2 font-mono font-medium">{effectiveHardware}</span>
+					<span class="ml-2 font-mono font-medium" class:text-yellow-500={effectiveHardware === 'loading...' || effectiveHardware === 'connecting...'} class:text-red-500={effectiveHardware === 'error'}>
+						{#if isLoading && !isInitialized}
+							<Loader2 class="inline h-3 w-3 animate-spin mr-1" />
+						{/if}
+						{effectiveHardware}
+					</span>
 				</div>
 				<div>
 					<span class="text-muted-foreground">Mock Override:</span>
 					<span class="ml-2 font-mono font-medium">{selectedHardware ?? 'None'}</span>
 				</div>
 			</div>
+			{#if loadError}
+				<div class="mt-2 text-xs text-red-500">{loadError}</div>
+			{/if}
 		</div>
 
 		<!-- Hardware Selector -->
@@ -131,16 +143,8 @@ $effect(() => {
 						Switching...
 					{:else if selectedHardware}
 						<div class="flex items-center gap-2">
-							<div
-								class={`h-2 w-2 rounded-full ${
-									selectedHardware === 'jetson'
-										? 'bg-green-500'
-										: selectedHardware === 'n100'
-											? 'bg-blue-500'
-											: 'bg-orange-500'
-								}`}
-							></div>
-							{hardwareInfo[selectedHardware].name}
+							<div class={`h-2 w-2 rounded-full ${HARDWARE_COLORS[selectedHardware].bg}`}></div>
+							{HARDWARE_LABELS[selectedHardware]}
 						</div>
 					{:else}
 						Select hardware...
@@ -151,18 +155,10 @@ $effect(() => {
 						{#each availableHardware as hw}
 							<Select.Item value={hw}>
 								<div class="flex items-center gap-2">
-									<div
-										class={`h-2 w-2 rounded-full ${
-											hw === 'jetson'
-												? 'bg-green-500'
-												: hw === 'n100'
-													? 'bg-blue-500'
-													: 'bg-orange-500'
-										}`}
-									></div>
+									<div class={`h-2 w-2 rounded-full ${HARDWARE_COLORS[hw].bg}`}></div>
 									<div>
-										<div class="font-medium">{hardwareInfo[hw].name}</div>
-										<div class="text-muted-foreground text-xs">{hardwareInfo[hw].description}</div>
+										<div class="font-medium">{HARDWARE_LABELS[hw]}</div>
+										<div class="text-muted-foreground text-xs">{HARDWARE_DESCRIPTIONS[hw]}</div>
 									</div>
 								</div>
 							</Select.Item>
@@ -175,18 +171,10 @@ $effect(() => {
 		<!-- Quick Switch Buttons -->
 		<div class="space-y-2">
 			<Label class="text-sm font-medium">Quick Switch</Label>
-			<div class="grid grid-cols-3 gap-2">
+			<div class="grid grid-cols-2 gap-2">
 				{#each availableHardware as hw}
 					<Button
-						class={`${
-							selectedHardware === hw
-								? hw === 'jetson'
-									? 'border-green-500 bg-green-500/20'
-									: hw === 'n100'
-										? 'border-blue-500 bg-blue-500/20'
-										: 'border-orange-500 bg-orange-500/20'
-								: ''
-						}`}
+						class={selectedHardware === hw ? HARDWARE_COLORS[hw].border : ''}
 						disabled={isLoading}
 						onclick={() => switchHardware(hw)}
 						size="sm"
@@ -195,7 +183,7 @@ $effect(() => {
 						{#if isLoading && selectedHardware === hw}
 							<Loader2 class="mr-1 h-3 w-3 animate-spin" />
 						{/if}
-						<span class={hardwareInfo[hw].color}>{hardwareInfo[hw].name.split(' ')[0]}</span>
+						<span class={HARDWARE_COLORS[hw].text}>{HARDWARE_LABELS[hw].split(' ')[0]}</span>
 					</Button>
 				{/each}
 			</div>

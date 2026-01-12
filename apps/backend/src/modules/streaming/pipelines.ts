@@ -120,7 +120,13 @@ export function searchPipelines(id: string): Pipeline | null {
 // Pipeline list in the format needed by the frontend
 type PipelineResponseEntry = Pick<
 	Pipeline,
-	"name" | "description" | "supportsAudio" | "supportsResolutionOverride" | "supportsFramerateOverride"
+	| "name"
+	| "description"
+	| "supportsAudio"
+	| "supportsResolutionOverride"
+	| "supportsFramerateOverride"
+	| "defaultResolution"
+	| "defaultFramerate"
 >;
 
 export function getPipelineList() {
@@ -135,9 +141,21 @@ export function getPipelineList() {
 			supportsAudio: pipeline.supportsAudio,
 			supportsResolutionOverride: pipeline.supportsResolutionOverride,
 			supportsFramerateOverride: pipeline.supportsFramerateOverride,
+			defaultResolution: pipeline.defaultResolution,
+			defaultFramerate: pipeline.defaultFramerate,
 		};
 	}
 	return list;
+}
+
+/**
+ * Get pipelines message with hardware info (for WebSocket broadcast)
+ */
+export function getPipelinesMessage() {
+	return {
+		hardware: getEffectiveHardware(),
+		pipelines: getPipelineList(),
+	};
 }
 
 /**

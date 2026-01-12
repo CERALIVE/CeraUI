@@ -8,14 +8,11 @@ import type {
 	AudioCodecsMessage,
 	ConfigMessage,
 	Pipelines,
+	PipelinesMessage,
 	RelayMessage,
+	HardwareType,
 } from "@ceraui/rpc/schemas";
-import { getLL, locale } from "@ceraui/i18n/svelte";
 
-import {
-	type GroupedPipelines,
-	groupPipelinesByDeviceAndFormat,
-} from "$lib/helpers/PipelineHelper";
 import {
 	AudioCodecsMessages,
 	ConfigMessages,
@@ -25,8 +22,8 @@ import {
 } from "$lib/stores/websocket-store.svelte";
 
 export interface StreamingState {
-	groupedPipelines: GroupedPipelines[keyof GroupedPipelines] | undefined;
-	unparsedPipelines: Pipelines | undefined;
+	pipelines: Pipelines | undefined;
+	hardware: HardwareType | undefined;
 	isStreaming: boolean | undefined;
 	audioSources: Array<string>;
 	audioCodecs: AudioCodecsMessage | undefined;
@@ -42,10 +39,8 @@ export interface StreamingState {
  */
 class StreamingStateManager {
 	// Svelte 5 reactive state
-	private _groupedPipelines = $state<
-		GroupedPipelines[keyof GroupedPipelines] | undefined
-	>(undefined);
-	private _unparsedPipelines = $state<Pipelines | undefined>(undefined);
+	private _pipelines = $state<Pipelines | undefined>(undefined);
+	private _hardware = $state<HardwareType | undefined>(undefined);
 	private _isStreaming = $state<boolean | undefined>(undefined);
 	private _audioSources = $state<Array<string>>([]);
 	private _audioCodecs = $state<AudioCodecsMessage | undefined>(undefined);
@@ -56,11 +51,11 @@ class StreamingStateManager {
 	private _disposers: (() => void)[] = [];
 
 	// Reactive getters - direct access to $state
-	get groupedPipelines() {
-		return this._groupedPipelines;
+	get pipelines() {
+		return this._pipelines;
 	}
-	get unparsedPipelines() {
-		return this._unparsedPipelines;
+	get hardware() {
+		return this._hardware;
 	}
 	get isStreaming() {
 		return this._isStreaming;
@@ -83,7 +78,6 @@ class StreamingStateManager {
 
 	constructor() {
 		this.setupSubscriptions();
-		this.setupReactiveEffects();
 	}
 
 	public cleanup(): void {
@@ -149,53 +143,26 @@ class StreamingStateManager {
 		});
 		this._disposers.push(unsubRelays);
 
-		// Subscribe to pipeline messages
+		// Subscribe to pipeline messages (now includes hardware info)
 		const unsubPipelines = PipelinesMessages.subscribe((message) => {
 			if (message) {
-				this._unparsedPipelines = message;
-
-				// Process pipelines immediately when they arrive
-				this.processPipelines();
+				if ("pipelines" in (message as Record<string, unknown>)) {
+					this._pipelines = (message as PipelinesMessage).pipelines;
+					this._hardware = (message as PipelinesMessage).hardware;
+				} else {
+					this._pipelines = message as unknown as Pipelines;
+					this._hardware = this._hardware ?? undefined;
+				}
 			}
 		});
 		this._disposers.push(unsubPipelines);
 	}
 
-	private setupReactiveEffects() {
-		// Set up reactive pipeline processing using locale store subscription
-		const unsubLocale = locale.subscribe(() => {
-			// Process pipelines when locale changes (for translation updates)
-			this.processPipelines();
-		});
-		this._disposers.push(unsubLocale);
-	}
-
-	// Extract pipeline processing logic into a separate method
-	private processPipelines() {
-		if (this._unparsedPipelines && getLL()) {
-			const allGroupedPipelines = groupPipelinesByDeviceAndFormat(
-				this._unparsedPipelines,
-				{
-					matchDeviceResolution: getLL().settings.matchDeviceResolution(),
-					matchDeviceOutput: getLL().settings.matchDeviceOutput(),
-				},
-			);
-
-			// Get the first available device dynamically
-			const availableDevices = Object.keys(allGroupedPipelines);
-			if (availableDevices.length > 0) {
-				this._groupedPipelines = allGroupedPipelines[availableDevices[0]];
-			} else {
-				this._groupedPipelines = undefined;
-			}
-		}
-	}
-
 	// Get current state snapshot
 	getState(): StreamingState {
 		return {
-			groupedPipelines: this._groupedPipelines,
-			unparsedPipelines: this._unparsedPipelines,
+			pipelines: this._pipelines,
+			hardware: this._hardware,
 			isStreaming: this._isStreaming,
 			audioSources: this._audioSources,
 			audioCodecs: this._audioCodecs,

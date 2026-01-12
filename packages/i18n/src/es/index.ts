@@ -299,6 +299,26 @@ const es = {
 	settings: {
 		encoderSettings: "Configuración del codificador",
 		inputMode: "Modo de entrada",
+		hardware: "Hardware",
+		// Hardware types
+		hardwareTypes: {
+			jetson: "NVIDIA Jetson",
+			rk3588: "Rockchip RK3588",
+			n100: "Intel N100",
+			generic: "Genérico (Software)",
+		},
+		// Video sources
+		sources: {
+			camlink: "Cam Link 4K",
+			libuvch264: "Cámara UVC H264",
+			hdmi: "Captura HDMI",
+			usb_mjpeg: "USB MJPEG",
+			v4l_mjpeg: "V4L2 MJPEG",
+			rtmp: "Entrada RTMP",
+			srt: "Entrada SRT",
+			test: "Patrón de prueba",
+			decklink: "Decklink SDI",
+		},
 		djiCameraMessage:
 			"Las cámaras DJI suelen funcionar mejor usando el modo de entrada USB-LIBUVCH264",
 		selectInputMode: "Seleccione el modo de Entrada",

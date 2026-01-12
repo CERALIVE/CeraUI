@@ -12,7 +12,7 @@ import type {
 	LoginOutput,
 	NetifMessage,
 	NotificationsMessage,
-	Pipelines,
+	PipelinesMessage,
 	RelayMessage,
 	Revisions,
 	SensorsStatus,
@@ -35,7 +35,7 @@ let audioCodecsState = $state<AudioCodecsMessage | undefined>(undefined);
 let configState = $state<ConfigMessage | undefined>(undefined);
 let netifState = $state<NetifMessage | undefined>(undefined);
 let notificationsState = $state<NotificationsMessage | undefined>(undefined);
-let pipelinesState = $state<Pipelines | undefined>(undefined);
+let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
 let relaysState = $state<RelayMessage | undefined>(undefined);
 let revisionsState = $state<Revisions | undefined>(undefined);
 let sensorsStatusState = $state<SensorsStatus | undefined>(undefined);
@@ -297,7 +297,14 @@ const assignMessage = (data: string) => {
 				NotificationsStore._set(value);
 				break;
 			case "pipelines":
-				PipelinesStore._set(value);
+				if (value && typeof value === "object" && "pipelines" in (value as Record<string, unknown>)) {
+					PipelinesStore._set(value as PipelinesMessage);
+				} else {
+					PipelinesStore._set({
+						hardware: (value as { hardware?: string })?.hardware ?? "generic",
+						pipelines: value as Record<string, unknown>,
+					} as unknown as PipelinesMessage);
+				}
 				break;
 			case "relays":
 				RelaysStore._set(value);

@@ -259,6 +259,24 @@ const ar = {
 	settings: {
 		encoderSettings: "إعدادات المرمز",
 		inputMode: "وضع الإدخال",
+		hardware: "الأجهزة",
+		hardwareTypes: {
+			jetson: "NVIDIA Jetson",
+			rk3588: "Rockchip RK3588",
+			n100: "Intel N100",
+			generic: "Generic (Software)",
+		},
+		sources: {
+			camlink: "Cam Link 4K",
+			libuvch264: "كاميرا UVC H264",
+			hdmi: "التقاط HDMI",
+			usb_mjpeg: "USB MJPEG",
+			v4l_mjpeg: "V4L2 MJPEG",
+			rtmp: "إدخال RTMP",
+			srt: "إدخال SRT",
+			test: "نمط اختبار",
+			decklink: "Decklink SDI",
+		},
 		djiCameraMessage:
 			"قد تعمل كاميرات DJI بشكل أفضل باستخدام وضع الإدخال USB-LIBUVCH264",
 		selectInputMode: "اختر وضع الإدخال",
