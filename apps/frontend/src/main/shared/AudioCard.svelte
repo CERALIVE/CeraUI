@@ -11,7 +11,7 @@ import { cn } from '$lib/utils';
 
 interface Props {
 	audioCodecs: AudioCodecsMessage | undefined;
-	unparsedPipelines: Pipelines | undefined;
+	pipelines: Pipelines | undefined;
 	audioSources: string[];
 	notAvailableAudioSource: string | undefined;
 	properties: {
@@ -29,7 +29,7 @@ interface Props {
 
 const {
 	audioCodecs,
-	unparsedPipelines,
+	pipelines,
 	audioSources,
 	notAvailableAudioSource,
 	properties,
@@ -49,19 +49,14 @@ $effect(() => {
 });
 
 const hasAudioSupport = $derived(
-	unparsedPipelines &&
+	pipelines &&
 		properties.pipeline &&
-		(unparsedPipelines[properties.pipeline]?.asrc ||
-			unparsedPipelines[properties.pipeline]?.acodec),
+		pipelines[properties.pipeline]?.supportsAudio,
 );
 
-const hasAudioSource = $derived(
-	unparsedPipelines && properties.pipeline && unparsedPipelines[properties.pipeline]?.asrc,
-);
-
-const hasAudioCodec = $derived(
-	unparsedPipelines && properties.pipeline && unparsedPipelines[properties.pipeline]?.acodec,
-);
+// With the new pipeline structure, supportsAudio means both source and codec are configurable
+const hasAudioSource = $derived(hasAudioSupport);
+const hasAudioCodec = $derived(hasAudioSupport);
 
 // Status colors based on audio support
 const statusColors = $derived.by(() => {
@@ -170,14 +165,14 @@ const statusColors = $derived.by(() => {
 						<Select.Trigger id="audioCodec" class="w-full">
 							{properties.audioCodec && audioCodecs
 								? (Object.entries(audioCodecs).find(
-										(acodec) => acodec[0] === properties.audioCodec,
-									)?.[1] ?? $LL.settings.selectAudioCodec())
+										([codec]) => codec === properties.audioCodec,
+									)?.[1]?.name ?? $LL.settings.selectAudioCodec())
 								: $LL.settings.selectAudioCodec()}
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Group>
-								{#each Object.entries(audioCodecs || {}) as [codec, label]}
-									<Select.Item {label} value={codec}></Select.Item>
+								{#each Object.entries(audioCodecs || {}) as [codec, meta]}
+									<Select.Item label={meta.name} value={codec}></Select.Item>
 								{/each}
 							</Select.Group>
 						</Select.Content>

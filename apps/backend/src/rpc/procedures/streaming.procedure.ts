@@ -9,7 +9,7 @@ import {
 	bitrateOutputSchema,
 	configMessageSchema,
 	getMockHardwareOutputSchema,
-	pipelinesSchema,
+	pipelinesMessageSchema,
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
 	streamingConfigInputSchema,
@@ -25,6 +25,7 @@ import {
 	getEffectiveHardware,
 	getMockHardware,
 	getPipelineList,
+	getPipelinesMessage,
 	initPipelines,
 	setMockHardware,
 	VALID_HARDWARE_TYPES,
@@ -88,12 +89,15 @@ export const setBitrateProcedure = authedProcedure
 	});
 
 /**
- * Get pipelines procedure
+ * Get pipelines procedure - returns pipelines with hardware info
  */
 export const getPipelinesProcedure = authedProcedure
-	.output(pipelinesSchema)
+	.output(pipelinesMessageSchema)
 	.handler(() => {
-		return getPipelineList();
+		return {
+			hardware: getEffectiveHardware(),
+			pipelines: getPipelineList(),
+		};
 	});
 
 /**
@@ -149,7 +153,7 @@ export const setMockHardwareProcedure = authedProcedure
 		if (success) {
 			// Reload pipelines and broadcast to all clients
 			initPipelines();
-			broadcastMsg("pipelines", getPipelineList());
+			broadcastMsg("pipelines", getPipelinesMessage());
 			return {
 				success: true,
 				hardware: input.hardware,

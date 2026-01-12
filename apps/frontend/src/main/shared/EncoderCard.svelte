@@ -1,68 +1,82 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { Binary } from '@lucide/svelte';
+import { Binary, Cpu } from '@lucide/svelte';
+import type { Pipelines, Pipeline, Resolution, Framerate, HardwareType } from '@ceraui/rpc/schemas';
 
 import * as Card from '$lib/components/ui/card';
 import { Checkbox } from '$lib/components/ui/checkbox';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import type { GroupedPipelines } from '$lib/helpers/PipelineHelper';
+import { getSourceLabel, getResolutionLabel, getFramerateLabel, getHardwareLabel } from '$lib/helpers/PipelineHelper';
 import { cn } from '$lib/utils';
 
+// Available resolutions and framerates
+const RESOLUTIONS: Resolution[] = ["480p", "720p", "1080p", "1440p", "2160p"];
+const FRAMERATES: Framerate[] = [25, 29.97, 30, 50, 59.94, 60];
+
 interface Props {
-	groupedPipelines: GroupedPipelines[keyof GroupedPipelines] | undefined;
+	pipelines: Pipelines | undefined;
+	hardware: HardwareType | undefined;
 	properties: {
-		inputMode: string | undefined;
-		encoder: string | undefined;
-		resolution: string | undefined;
-		framerate: string | undefined;
+		source: string | undefined;
+		resolution: Resolution | undefined;
+		framerate: Framerate | undefined;
 		bitrate: number | undefined;
 		bitrateOverlay: boolean | undefined;
 	};
 	formErrors: Record<string, string>;
 	isStreaming: boolean;
-	onInputModeChange: (value: string) => void;
-	onEncoderChange: (value: string) => void;
-	onResolutionChange: (value: string) => void;
-	onFramerateChange: (value: string) => void;
+	onSourceChange: (value: string) => void;
+	onResolutionChange: (value: Resolution) => void;
+	onFramerateChange: (value: Framerate) => void;
 	onBitrateChange: (value: number) => void;
 	onBitrateOverlayChange: (checked: boolean) => void;
 	updateMaxBitrate: () => void;
 	normalizeValue: (value: number, min: number, max: number, step?: number) => number;
-	getSortedResolutions: (resolutions: string[]) => string[];
-	getSortedFramerates: (
-		framerates: Array<{ extraction: { fps?: string | null } }>,
-	) => Array<{ extraction: { fps?: string | null } }>;
 }
 
 const {
-	groupedPipelines,
+	pipelines,
+	hardware,
 	properties,
 	formErrors,
 	isStreaming,
-	onInputModeChange,
-	onEncoderChange,
+	onSourceChange,
 	onResolutionChange,
 	onFramerateChange,
 	onBitrateChange,
 	onBitrateOverlayChange,
 	updateMaxBitrate,
 	normalizeValue,
-	getSortedResolutions,
-	getSortedFramerates,
 }: Props = $props();
 
-// Local state for all select fields (initialized with defaults, synced via effects)
-let localInputMode = $state('');
-let localEncoder = $state('');
-let localResolution = $state('');
-let localFramerate = $state('');
+// Translation-aware label getters
+const t = (key: string) => {
+	// Use $LL to get translation by key path
+	const parts = key.split('.');
+	let result: unknown = $LL;
+	for (const part of parts) {
+		if (result && typeof result === 'object' && part in result) {
+			result = (result as Record<string, unknown>)[part];
+		} else {
+			return key; // Return key if translation not found
+		}
+	}
+	return typeof result === 'function' ? result() : key;
+};
+
+const getSourceLabelTranslated = (source: string) => getSourceLabel(source, t);
+const getHardwareLabelTranslated = (hw: string) => getHardwareLabel(hw, t);
+
+// Local state for all select fields
+let localSource = $state('');
+let localResolution = $state<Resolution>('1080p');
+let localFramerate = $state<Framerate>(30);
 let localBitrate = $state(5000);
 
 // Track if user has touched each field
-let inputModeTouched = $state(false);
-let encoderTouched = $state(false);
+let sourceTouched = $state(false);
 let resolutionTouched = $state(false);
 let framerateTouched = $state(false);
 
@@ -79,26 +93,18 @@ $effect(() => {
 
 // Sync FROM properties TO local state
 $effect(() => {
-	const newValue = properties.inputMode ?? '';
-	const valueChanged = newValue !== localInputMode;
+	const newValue = properties.source ?? '';
+	const valueChanged = newValue !== localSource;
 	const shouldSync =
-		!inputModeTouched ||
+		!sourceTouched ||
 		isComponentInitialMount ||
-		properties.inputMode === undefined ||
+		properties.source === undefined ||
 		valueChanged;
-	if (shouldSync && valueChanged) localInputMode = newValue;
+	if (shouldSync && valueChanged) localSource = newValue;
 });
 
 $effect(() => {
-	const newValue = properties.encoder ?? '';
-	const valueChanged = newValue !== localEncoder;
-	const shouldSync =
-		!encoderTouched || isComponentInitialMount || properties.encoder === undefined || valueChanged;
-	if (shouldSync && valueChanged) localEncoder = newValue;
-});
-
-$effect(() => {
-	const newValue = properties.resolution ?? '';
+	const newValue = properties.resolution ?? '1080p';
 	const valueChanged = newValue !== localResolution;
 	const shouldSync =
 		!resolutionTouched ||
@@ -109,7 +115,7 @@ $effect(() => {
 });
 
 $effect(() => {
-	const newValue = properties.framerate ?? '';
+	const newValue = properties.framerate ?? 30;
 	const valueChanged = newValue !== localFramerate;
 	const shouldSync =
 		!framerateTouched ||
@@ -124,10 +130,9 @@ $effect(() => {
 	localBitrate = newValue;
 });
 
-const hasOnlyOneEncoder = $derived(
-	properties.inputMode && groupedPipelines?.[properties.inputMode]
-		? Object.keys(groupedPipelines[properties.inputMode]).length === 1
-		: false,
+// Get the selected pipeline
+const selectedPipeline = $derived<Pipeline | undefined>(
+	localSource && pipelines ? pipelines[localSource] : undefined
 );
 
 // Status colors for encoder card (info/blue category)
@@ -145,156 +150,121 @@ const statusColors = {
 	<div class={cn('h-1 bg-gradient-to-r', statusColors.bg)}></div>
 
 	<Card.Header class="p-4 pb-3">
-		<div class="flex items-center gap-2.5">
-			<div class={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', statusColors.icon)}>
-				<Binary class="h-4 w-4 text-white" />
+		<div class="flex items-center justify-between">
+			<div class="flex items-center gap-2.5">
+				<div class={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', statusColors.icon)}>
+					<Binary class="h-4 w-4 text-white" />
+				</div>
+				<Card.Title class="text-sm font-semibold">{$LL.settings.encoderSettings()}</Card.Title>
 			</div>
-			<Card.Title class="text-sm font-semibold">{$LL.settings.encoderSettings()}</Card.Title>
+			{#if hardware}
+				<div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+					<Cpu class="h-3.5 w-3.5" />
+					<span>{getHardwareLabelTranslated(hardware)}</span>
+				</div>
+			{/if}
 		</div>
 	</Card.Header>
 
 	<Card.Content class="flex-1 space-y-4 px-4 pt-0 pb-4">
-		<!-- Input Mode Selection -->
+		<!-- Video Source Selection -->
 		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="inputMode">{$LL.settings.inputMode()}</Label>
+			<Label class="text-sm font-medium" for="videoSource">{$LL.settings.inputMode()}</Label>
 			<Select.Root
 				disabled={isStreaming}
 				onValueChange={(value) => {
-					localInputMode = value;
-					inputModeTouched = true;
-					onInputModeChange(value);
+					localSource = value;
+					sourceTouched = true;
+					onSourceChange(value);
 				}}
 				type="single"
-				value={localInputMode}
+				value={localSource}
 			>
-				<Select.Trigger id="inputMode" class="w-full">
-					{localInputMode ? localInputMode.toUpperCase() : $LL.settings.selectInputMode()}
-				</Select.Trigger>
-				<Select.Content>
-					<Select.Group>
-						{#if groupedPipelines}
-							{#each Object.entries(groupedPipelines) as [pipelineKey, _]}
-								{@const label = pipelineKey.toUpperCase().split(' ')[0]}
-								<Select.Item {label} value={pipelineKey}></Select.Item>
-							{/each}
-						{/if}
-					</Select.Group>
-				</Select.Content>
+			<Select.Trigger id="videoSource" class="w-full">
+				{localSource ? getSourceLabelTranslated(localSource) : $LL.settings.selectInputMode()}
+			</Select.Trigger>
+			<Select.Content>
+				<Select.Group>
+					{#if pipelines}
+						{#each Object.entries(pipelines) as [sourceId, pipeline]}
+							<Select.Item value={sourceId}>
+								<div class="flex flex-col py-1">
+									<span class="font-medium">{getSourceLabelTranslated(sourceId)}</span>
+									<span class="text-xs text-muted-foreground">{pipeline.description}</span>
+								</div>
+							</Select.Item>
+						{/each}
+					{/if}
+				</Select.Group>
+			</Select.Content>
 			</Select.Root>
-			{#if formErrors.inputMode}
-				<p class="text-destructive text-sm">{formErrors.inputMode}</p>
-			{/if}
-			{#if properties.inputMode && properties.inputMode.includes('usb')}
-				<p class="text-muted-foreground rounded-md bg-blue-500/10 p-2 text-xs">
-					ℹ️ {$LL.settings.djiCameraMessage()}
-				</p>
+			{#if formErrors.source}
+				<p class="text-destructive text-sm">{formErrors.source}</p>
 			{/if}
 		</div>
 
-		<!-- Encoding Format Selection -->
-		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="encodingFormat">{$LL.settings.encodingFormat()}</Label
-			>
-			<Select.Root
-				disabled={isStreaming || !properties.inputMode || hasOnlyOneEncoder}
-				onValueChange={(value) => {
-					localEncoder = value;
-					encoderTouched = true;
-					onEncoderChange(value);
-				}}
-				type="single"
-				value={localEncoder}
-			>
-				<Select.Trigger id="encodingFormat" class="w-full">
-					{localEncoder ? localEncoder.toUpperCase() : $LL.settings.selectEncodingOutputFormat()}
-				</Select.Trigger>
-				<Select.Content>
-					<Select.Group>
-						{#if properties.inputMode && groupedPipelines?.[properties.inputMode]}
-							{#each Object.keys(groupedPipelines[properties.inputMode]) as encoder}
-								<Select.Item label={encoder.toUpperCase()} value={encoder}></Select.Item>
+		<!-- Resolution Selection (if supported) -->
+		{#if selectedPipeline?.supportsResolutionOverride}
+			<div class="space-y-2">
+				<Label class="text-sm font-medium" for="resolution">{$LL.settings.encodingResolution()}</Label>
+				<Select.Root
+					disabled={isStreaming}
+					onValueChange={(value) => {
+						localResolution = value as Resolution;
+						resolutionTouched = true;
+						onResolutionChange(value as Resolution);
+					}}
+					type="single"
+					value={localResolution}
+				>
+					<Select.Trigger id="resolution" class="w-full">
+						{localResolution ? getResolutionLabel(localResolution) : $LL.settings.selectEncodingResolution()}
+					</Select.Trigger>
+					<Select.Content>
+						<Select.Group>
+							{#each RESOLUTIONS as resolution}
+								<Select.Item label={getResolutionLabel(resolution)} value={resolution}></Select.Item>
 							{/each}
-						{/if}
-					</Select.Group>
-				</Select.Content>
-			</Select.Root>
-			{#if formErrors.encoder}
-				<p class="text-destructive text-sm">{formErrors.encoder}</p>
-			{/if}
-		</div>
+						</Select.Group>
+					</Select.Content>
+				</Select.Root>
+				{#if formErrors.resolution}
+					<p class="text-destructive text-sm">{formErrors.resolution}</p>
+				{/if}
+			</div>
+		{/if}
 
-		<!-- Encoding Resolution Selection -->
-		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="encodingResolution"
-				>{$LL.settings.encodingResolution()}</Label
-			>
-			<Select.Root
-				disabled={isStreaming || !properties.encoder}
-				onValueChange={(value) => {
-					localResolution = value;
-					resolutionTouched = true;
-					onResolutionChange(value);
-				}}
-				type="single"
-				value={localResolution}
-			>
-				<Select.Trigger id="encodingResolution" class="w-full">
-					{localResolution ? localResolution : $LL.settings.selectEncodingResolution()}
-				</Select.Trigger>
-				<Select.Content>
-					<Select.Group>
-						{#if properties.encoder && properties.inputMode && groupedPipelines?.[properties.inputMode]?.[properties.encoder]}
-							{@const resolutions = getSortedResolutions(
-								Object.keys(groupedPipelines[properties.inputMode][properties.encoder]),
-							)}
-							{#each resolutions as resolution}
-								<Select.Item label={resolution} value={resolution}></Select.Item>
+		<!-- Framerate Selection (if supported) -->
+		{#if selectedPipeline?.supportsFramerateOverride}
+			<div class="space-y-2">
+				<Label class="text-sm font-medium" for="framerate">{$LL.settings.framerate()}</Label>
+				<Select.Root
+					disabled={isStreaming}
+					onValueChange={(value) => {
+						const numValue = parseFloat(value) as Framerate;
+						localFramerate = numValue;
+						framerateTouched = true;
+						onFramerateChange(numValue);
+					}}
+					type="single"
+					value={String(localFramerate)}
+				>
+					<Select.Trigger id="framerate" class="w-full">
+						{localFramerate ? getFramerateLabel(localFramerate) : $LL.settings.selectFramerate()}
+					</Select.Trigger>
+					<Select.Content>
+						<Select.Group>
+							{#each FRAMERATES as framerate}
+								<Select.Item label={getFramerateLabel(framerate)} value={String(framerate)}></Select.Item>
 							{/each}
-						{/if}
-					</Select.Group>
-				</Select.Content>
-			</Select.Root>
-			{#if formErrors.resolution}
-				<p class="text-destructive text-sm">{formErrors.resolution}</p>
-			{/if}
-		</div>
-
-		<!-- Framerate Selection -->
-		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="framerate">{$LL.settings.framerate()}</Label>
-			<Select.Root
-				disabled={isStreaming || !properties.resolution}
-				onValueChange={(value) => {
-					localFramerate = value;
-					framerateTouched = true;
-					onFramerateChange(value);
-				}}
-				type="single"
-				value={localFramerate}
-			>
-				<Select.Trigger id="framerate" class="w-full">
-					{localFramerate ? `${localFramerate} ${$LL.units.fps()}` : $LL.settings.selectFramerate()}
-				</Select.Trigger>
-				<Select.Content>
-					<Select.Group>
-						{#if properties.encoder && properties.inputMode && properties.resolution && groupedPipelines?.[properties.inputMode]?.[properties.encoder][properties.resolution]}
-							{@const framerates = getSortedFramerates(
-								groupedPipelines[properties.inputMode][properties.encoder][properties.resolution],
-							)}
-							{#each framerates as framerate}
-								{#if framerate.extraction.fps}
-									<Select.Item label={framerate.extraction.fps} value={framerate.extraction.fps}
-									></Select.Item>
-								{/if}
-							{/each}
-						{/if}
-					</Select.Group>
-				</Select.Content>
-			</Select.Root>
-			{#if formErrors.framerate}
-				<p class="text-destructive text-sm">{formErrors.framerate}</p>
-			{/if}
-		</div>
+						</Select.Group>
+					</Select.Content>
+				</Select.Root>
+				{#if formErrors.framerate}
+					<p class="text-destructive text-sm">{formErrors.framerate}</p>
+				{/if}
+			</div>
+		{/if}
 
 		<!-- Bitrate Control -->
 		<div class="space-y-3 rounded-lg border bg-slate-50 p-4 dark:bg-slate-900/50">

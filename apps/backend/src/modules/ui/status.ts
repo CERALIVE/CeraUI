@@ -23,7 +23,7 @@ import { netIfBuildMsg } from "../network/network-interfaces.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
 import { getAudioDevices } from "../streaming/audio.ts";
 import { AUDIO_CODECS } from "@ceralive/ceracoder";
-import { getPipelineList } from "../streaming/pipelines.ts";
+import { getPipelinesMessage } from "../streaming/pipelines.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import { getRevisions } from "../system/revisions.ts";
 import { getSensors } from "../system/sensors.ts";
@@ -65,7 +65,7 @@ export function sendStatus(conn: WebSocket) {
 export function sendInitialStatus(conn: WebSocket) {
 	const config = getConfig();
 	conn.send(buildMsg("config", config));
-	conn.send(buildMsg("pipelines", getPipelineList()));
+	conn.send(buildMsg("pipelines", getPipelinesMessage()));
 	if (getRelays()) conn.send(buildMsg("relays", buildRelaysMsg()));
 	sendStatus(conn);
 	conn.send(buildMsg("netif", netIfBuildMsg()));

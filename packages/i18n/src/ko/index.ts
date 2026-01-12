@@ -85,6 +85,24 @@ const ko = {
 	settings: {
 		encoderSettings: "인코더 설정",
 		inputMode: "입력 모드",
+	hardware: "하드웨어",
+	hardwareTypes: {
+		jetson: "NVIDIA Jetson",
+		rk3588: "Rockchip RK3588",
+		n100: "Intel N100",
+		generic: "Generic (Software)",
+	},
+	sources: {
+		camlink: "Cam Link 4K",
+		libuvch264: "UVC H264 카메라",
+		hdmi: "HDMI 캡처",
+		usb_mjpeg: "USB MJPEG",
+		v4l_mjpeg: "V4L2 MJPEG",
+		rtmp: "RTMP 인제스트",
+		srt: "SRT 인제스트",
+		test: "테스트 패턴",
+		decklink: "Decklink SDI",
+	},
 		djiCameraMessage:
 			"DJI 카메라는 USB-LIBUVCH264 입력 모드를 사용하면 더 잘 작동할 수 있습니다",
 		selectInputMode: "입력 모드를 선택",

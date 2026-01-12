@@ -2,10 +2,15 @@ import type {
 	AudioCodecs,
 	ConfigMessage,
 	Pipelines,
+	Resolution,
+	Framerate,
 } from "@ceraui/rpc/schemas";
 import { toast } from "svelte-sonner";
 
 type Properties = {
+	source?: string;
+	resolution?: Resolution;
+	framerate?: Framerate;
 	pipeline: keyof Pipelines | undefined;
 	audioSource: string | undefined;
 	audioCodec: AudioCodecs | undefined;
@@ -21,14 +26,14 @@ type Properties = {
 };
 
 export interface ConfigServiceOptions {
-	unparsedPipelines: Pipelines | undefined;
+	pipelines: Pipelines | undefined;
 }
 
 export function buildStreamingConfig(
 	properties: Properties,
 	options: ConfigServiceOptions,
 ): Partial<ConfigMessage> | null {
-	const { unparsedPipelines } = options;
+	const { pipelines } = options;
 	const config: Partial<ConfigMessage> = {};
 
 	if (properties.pipeline) {
@@ -36,14 +41,14 @@ export function buildStreamingConfig(
 	}
 
 	// Safely access pipeline data with proper null checks
-	if (!unparsedPipelines || !properties.pipeline) {
+	if (!pipelines || !properties.pipeline) {
 		console.warn(
 			"Cannot build streaming config: missing pipeline data or pipeline selection",
 		);
 		return null;
 	}
 
-	const pipelineData = unparsedPipelines[properties.pipeline];
+	const pipelineData = pipelines[properties.pipeline];
 	if (!pipelineData) {
 		console.warn(
 			"Cannot build streaming config: pipeline data not found for",
@@ -52,13 +57,16 @@ export function buildStreamingConfig(
 		return null;
 	}
 
-	if (pipelineData.asrc && properties.audioSource) {
-		config.asrc = properties.audioSource;
-	}
-	// Always send acodec when pipeline requires it, default to 'aac' if not selected
-	if (pipelineData.acodec) {
+	// Audio configuration when pipeline supports it
+	if (pipelineData.supportsAudio) {
+		if (properties.audioSource) {
+			config.asrc = properties.audioSource;
+		}
+		// Default to 'aac' if not selected
 		config.acodec = properties.audioCodec || "aac";
 	}
+
+	// Server configuration
 	if (
 		(properties.relayServer === "-1" || properties.relayServer === undefined) &&
 		properties.srtlaServerAddress
@@ -70,6 +78,7 @@ export function buildStreamingConfig(
 	} else if (properties.relayServer) {
 		config.relay_server = properties.relayServer;
 	}
+
 	if (properties.srtLatency !== undefined) {
 		config.srt_latency = properties.srtLatency;
 	}
@@ -83,7 +92,7 @@ export function buildStreamingConfig(
 		config.relay_account = properties.relayAccount;
 	}
 
-	// These fields are required by the backend, always provide defaults
+	// Required fields with defaults
 	config.delay = properties.audioDelay ?? 0;
 	config.max_br = properties.bitrate ?? 5000;
 	config.bitrate_overlay = properties.bitrateOverlay ?? false;
@@ -92,21 +101,18 @@ export function buildStreamingConfig(
 }
 
 export function startStreamingWithConfig(config: Partial<ConfigMessage>): void {
-	// Try to dismiss all toasts first
 	try {
 		toast.dismiss();
 	} catch (error) {
 		console.warn("Could not dismiss toasts:", error);
 	}
 
-	// Use the global function which handles toast cleanup safely
 	if (
 		typeof window !== "undefined" &&
 		window.startStreamingWithNotificationClear
 	) {
 		window.startStreamingWithNotificationClear(config);
 	} else {
-		// Fallback to direct function call if global function is not available
 		import("$lib/helpers/SystemHelper")
 			.then((module) => {
 				module.startStreaming(
@@ -120,18 +126,15 @@ export function startStreamingWithConfig(config: Partial<ConfigMessage>): void {
 }
 
 export function stopStreaming(): void {
-	// Try to dismiss all toasts first
 	try {
 		toast.dismiss();
 	} catch (error) {
 		console.warn("Could not dismiss toasts:", error);
 	}
 
-	// Use the global function which handles toast cleanup safely
 	if (window.stopStreamingWithNotificationClear) {
 		window.stopStreamingWithNotificationClear();
 	} else {
-		// Fallback
 		import("$lib/helpers/SystemHelper")
 			.then((module) => {
 				module.stopStreaming();
@@ -145,5 +148,4 @@ export function stopStreaming(): void {
 	}
 }
 
-// Export type alias for global use
 export type StreamingConfig = ConfigMessage;

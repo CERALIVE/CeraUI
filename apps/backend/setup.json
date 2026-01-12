@@ -1,5 +1,5 @@
 {
-	"hw": "jetson",
+	"hw": "rk3588",
 	"ceracoder_path": "./mocks/ceracoder/",
 	"ceracoder_config": "/tmp/ceracoder.conf",
 	"srtla_path": "./mocks/srtla/",

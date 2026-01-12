@@ -1,11 +1,10 @@
-import type { Pipelines } from "@ceraui/rpc/schemas";
+import type { Pipelines, Resolution, Framerate } from "@ceraui/rpc/schemas";
 import { toast } from "svelte-sonner";
 
 type Properties = {
-	inputMode: string | undefined;
-	encoder: string | undefined;
-	resolution: string | undefined;
-	framerate: string | undefined;
+	source: string | undefined;
+	resolution: Resolution | undefined;
+	framerate: Framerate | undefined;
 	bitrate: number | undefined;
 	relayServer: string | undefined;
 	srtlaServerAddress: string | undefined;
@@ -16,7 +15,7 @@ type Properties = {
 };
 
 type ValidationOptions = {
-	unparsedPipelines: Pipelines | undefined;
+	pipelines: Pipelines | undefined;
 };
 
 export interface ValidationResult {
@@ -33,31 +32,10 @@ export function validateStreamingForm(
 	let hasErrors = false;
 	const errorMessages: string[] = [];
 
-	// Validate Input Mode
-	if (!properties.inputMode) {
-		formErrors.inputMode = t("settings.errors.inputModeRequired");
+	// Validate Video Source
+	if (!properties.source) {
+		formErrors.source = t("settings.errors.inputModeRequired");
 		errorMessages.push(t("settings.errors.inputModeRequired"));
-		hasErrors = true;
-	}
-
-	// Validate Encoding Format
-	if (!properties.encoder) {
-		formErrors.encoder = t("settings.errors.encoderRequired");
-		errorMessages.push(t("settings.errors.encoderRequired"));
-		hasErrors = true;
-	}
-
-	// Validate Encoding Resolution
-	if (!properties.resolution) {
-		formErrors.resolution = t("settings.errors.resolutionRequired");
-		errorMessages.push(t("settings.errors.resolutionRequired"));
-		hasErrors = true;
-	}
-
-	// Validate Framerate
-	if (!properties.framerate) {
-		formErrors.framerate = t("settings.errors.framerateRequired");
-		errorMessages.push(t("settings.errors.framerateRequired"));
 		hasErrors = true;
 	}
 
@@ -73,18 +51,18 @@ export function validateStreamingForm(
 	}
 
 	// Validate Audio Settings (when pipeline requires them)
-	if (options?.unparsedPipelines && properties.pipeline) {
-		const pipelineData = options.unparsedPipelines[properties.pipeline];
-		if (pipelineData) {
-			// Validate audio source when pipeline requires it
-			if (pipelineData.asrc && !properties.audioSource) {
+	if (options?.pipelines && properties.pipeline) {
+		const pipelineData = options.pipelines[properties.pipeline];
+		if (pipelineData?.supportsAudio) {
+			// Validate audio source when pipeline supports audio
+			if (!properties.audioSource) {
 				formErrors.audioSource = t("settings.errors.audioSourceRequired");
 				errorMessages.push(t("settings.errors.audioSourceRequired"));
 				hasErrors = true;
 			}
 
-			// Validate audio codec when pipeline requires it
-			if (pipelineData.acodec && !properties.audioCodec) {
+			// Validate audio codec when pipeline supports audio
+			if (!properties.audioCodec) {
 				formErrors.audioCodec = t("settings.errors.audioCodecRequired");
 				errorMessages.push(t("settings.errors.audioCodecRequired"));
 				hasErrors = true;
@@ -127,7 +105,6 @@ export function validateStreamingForm(
 
 	// Show toast messages - single error toast for all errors or success
 	if (hasErrors) {
-		// Show a single toast with the first error (to avoid spam)
 		toast.error(errorMessages[0], {
 			description:
 				errorMessages.length > 1

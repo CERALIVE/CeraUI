@@ -85,6 +85,24 @@ const hi = {
 	settings: {
 		encoderSettings: "एनकोडर सेटिंग्स",
 		inputMode: "इनपुट मोड",
+	hardware: "हार्डवेयर",
+	hardwareTypes: {
+		jetson: "NVIDIA Jetson",
+		rk3588: "Rockchip RK3588",
+		n100: "Intel N100",
+		generic: "Generic (Software)",
+	},
+	sources: {
+		camlink: "Cam Link 4K",
+		libuvch264: "UVC H264 कैमरा",
+		hdmi: "HDMI कैप्चर",
+		usb_mjpeg: "USB MJPEG",
+		v4l_mjpeg: "V4L2 MJPEG",
+		rtmp: "RTMP इनजेस्ट",
+		srt: "SRT इनजेस्ट",
+		test: "टेस्ट पैटर्न",
+		decklink: "Decklink SDI",
+	},
 		selectInputMode: "इनपुट मोड चुनें",
 		djiCameraMessage:
 			"DJI कैमरे USB-LIBUVCH264 इनपुट मोड का उपयोग करके बेहतर काम कर सकते हैं",

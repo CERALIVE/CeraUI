@@ -63,6 +63,21 @@ The DevTools tab displays real-time information about the current development en
   - Test toast queue management
 - **Usage**: Click various buttons to trigger different toast notifications
 
+#### 🔧 Mock Hardware Switcher
+- **Purpose**: Switch between hardware profiles to test different pipeline configurations
+- **Features**:
+  - **Hardware Profiles**: Switch between Jetson, RK3588, N100, and Generic (software)
+  - **Live Reload**: Pipelines update immediately and broadcast to all connected clients
+  - **Quick Switch Buttons**: Color-coded buttons for rapid hardware switching
+  - **Dropdown Selector**: Detailed view with hardware descriptions
+  - **State Display**: Shows effective hardware and current mock override
+- **Hardware Types**:
+  - 🟢 **NVIDIA Jetson**: NVIDIA nvenc hardware encoding
+  - 🟠 **Rockchip RK3588**: Rockchip MPP hardware encoding (supports 4K)
+  - 🔵 **Intel N100**: Intel VAAPI hardware encoding
+  - ⚪ **Generic**: Software x264/x265 encoding
+- **Usage**: Select a hardware profile to reload pipelines for that platform. The encoder settings will update to show available video sources for the selected hardware.
+
 ### 📊 System Information
 
 Real-time system and browser information display:
