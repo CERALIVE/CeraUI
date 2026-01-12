@@ -96,3 +96,10 @@ pnpm clean                            # Clean all build artifacts
 - **Frontend**: Svelte 5, TailwindCSS, shadcn-svelte, Vite
 - **Backend**: Bun, TypeScript, WebSocket RPC
 - **Build**: pnpm workspaces, mprocs
+
+## Support the Project
+
+If you find CeraUI useful, consider supporting CeraLive development:
+
+- ☕ [Ko-fi](https://ko-fi.com/andrescera)
+- 💳 [PayPal](https://www.paypal.com/donate/?business=7KKQS9KBSAMNE&no_recurring=0&item_name=CERALIVE+Development+Support&currency_code=USD)
