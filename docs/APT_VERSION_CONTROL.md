@@ -4,8 +4,8 @@
 
 Previously, all packages had hardcoded iteration "1", so APT would see all versions as identical:
 
-- `ceralive-device_1.2.0-1_amd64.deb`
-- `ceralive-device_1.2.0-1_amd64.deb` (same version!)
+- `ceralive-device_2026.1.0-1_amd64.deb`
+- `ceralive-device_2026.1.0-1_amd64.deb` (same version!)
 
 APT would NOT detect newer builds within the same version number.
 
@@ -13,12 +13,14 @@ APT would NOT detect newer builds within the same version number.
 
 Each build now gets a unique timestamp-based iteration:
 
-- `ceralive-device_1.2.0-20250921090000.adb87b3_amd64.deb`
-- `ceralive-device_1.2.0-20250921140000.def5678_amd64.deb`
+- `ceralive-device_2026.1.0-20260112090000.adb87b3_amd64.deb`
+- `ceralive-device_2026.1.0-20260112140000.def5678_amd64.deb`
 
 APT will always detect newer builds as updates.
 
 ## Version Format
+
+CeraUI uses **Calendar Versioning (CalVer)**: `YYYY.MINOR.PATCH`
 
 ```
 {package}_{version}-{iteration}_{architecture}.deb
@@ -27,29 +29,29 @@ APT will always detect newer builds as updates.
 Where:
 
 - **package**: `ceralive-device`
-- **version**: Base version (e.g., `1.2.0`) from git tags or BUILD_VERSION
-- **iteration**: `YYYYMMDDHHMMSS.{commit}` (e.g., `20250921140000.def5678`)
+- **version**: CalVer version (e.g., `2026.1.0`) from git tags or BUILD_VERSION
+- **iteration**: `YYYYMMDDHHMMSS.{commit}` (e.g., `20260112140000.def5678`)
 - **architecture**: `amd64` or `arm64`
 
 ## APT Version Comparison
 
 APT compares versions using these rules:
 
-1. **Version numbers**: `1.2.0 < 1.2.1 < 1.3.0`
-2. **Same version, different iterations**: `1.2.0-20250921090000 < 1.2.0-20250921140000`
+1. **Version numbers**: `2026.1.0 < 2026.1.1 < 2026.2.0`
+2. **Same version, different iterations**: `2026.1.0-20260112090000 < 2026.1.0-20260112140000`
 3. **Timestamps ensure chronological ordering**
 
 ### Example Progression
 
 ```bash
 # Morning build
-ceralive-device_1.2.0-20250921090000.adb87b3_amd64.deb
+ceralive-device_2026.1.0-20260112090000.adb87b3_amd64.deb
 
 # Afternoon build (same day, new commit) - APT sees as NEWER
-ceralive-device_1.2.0-20250921140000.def5678_amd64.deb
+ceralive-device_2026.1.0-20260112140000.def5678_amd64.deb
 
-# Next day with version bump - APT sees as NEWEST
-ceralive-device_1.2.1-20250922100000.ghi9abc_amd64.deb
+# Next release with version bump - APT sees as NEWEST
+ceralive-device_2026.1.1-20260115100000.ghi9abc_amd64.deb
 ```
 
 ## Build Script Changes
@@ -74,12 +76,12 @@ Each package includes comprehensive version information:
 
 ```json
 {
-  "version": "1.2.0",
-  "iteration": "20250921140000.def5678",
-  "fullVersion": "1.2.0-20250921140000.def5678",
+  "version": "2026.1.0",
+  "iteration": "20260112140000.def5678",
+  "fullVersion": "2026.1.0-20260112140000.def5678",
   "apt": {
     "versionProgression": "Each build has unique timestamp-based iteration",
-    "comparisonMethod": "APT compares: 1.2.0-20250921140000.def5678"
+    "comparisonMethod": "APT compares: 2026.1.0-20260112140000.def5678"
   }
 }
 ```
@@ -99,12 +101,12 @@ Test the version progression:
 
 ```bash
 # Build 1
-BUILD_VERSION=1.2.0 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
-# Produces: ceralive-device_1.2.0-20250921090000.abc123_amd64.deb
+BUILD_VERSION=2026.1.0 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
+# Produces: ceralive-device_2026.1.0-20260112090000.abc123_amd64.deb
 
 # Build 2 (later same day)
-BUILD_VERSION=1.2.0 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
-# Produces: ceralive-device_1.2.0-20250921140000.abc123_amd64.deb
+BUILD_VERSION=2026.1.0 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
+# Produces: ceralive-device_2026.1.0-20260112140000.abc123_amd64.deb
 
 # APT will see Build 2 as newer than Build 1
 ```
@@ -112,3 +114,7 @@ BUILD_VERSION=1.2.0 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 ## Result
 
 Your APT repository will now properly support incremental updates. Every build is guaranteed to have a unique, chronologically-ordered version that APT can compare correctly.
+
+## See Also
+
+- [BUILD_PIPELINE.md](BUILD_PIPELINE.md) - CalVer versioning details and automatic version calculation
