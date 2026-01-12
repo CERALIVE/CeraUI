@@ -56,6 +56,10 @@ import {
 	buildCeracoderArgsAndWriteConfig,
 } from "./ceracoder.ts";
 import {
+	buildSrtlaSendArgs,
+	getSrtlaSendExec,
+} from "@ceralive/srtla/sender";
+import {
 	type ConfigParameters,
 	getIsStreaming,
 	startError,
@@ -71,7 +75,7 @@ type ChildProcess = ChildProcessByStdio<null, null, Readable> & {
 export const AUTOSTART_CHECK_FILE = "/tmp/ceralive_restarted";
 
 export const ceracoderExec = getCeracoderExec();
-export const srtlaSendExec = `${setup.srtla_path ?? "/usr/bin"}/srtla_send`;
+export const srtlaSendExec = getSrtlaSendExec(setup.srtla_path);
 export const bcrptExec = `${setup.bcrpt_path ?? "/usr/bin"}/bcrpt`;
 
 let streamingProcesses: Array<ChildProcess> = [];
@@ -135,7 +139,13 @@ export async function startStream(
 	}
 	spawnStreamingLoop(
 		srtlaSendExec,
-		[9000, srtlaAddr, srtlaPort, setup.ips_file],
+		buildSrtlaSendArgs({
+			listenPort: 9000,
+			srtlaHost: srtlaAddr,
+			srtlaPort,
+			ipsFile: setup.ips_file,
+			execPath: setup.srtla_path,
+		}).args,
 		100,
 		(err) => {
 			let msg: string | undefined;

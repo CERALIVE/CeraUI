@@ -10,6 +10,7 @@
 	},
 	"dependencies": {
 		"@ceralive/ceracoder": "link:../../../ceracoder/bindings/typescript",
+		"@ceralive/srtla": "link:../../../srtla/bindings/typescript",
 		"@ceraui/rpc": "workspace:*",
 		"@orpc/server": "^1.13.2",
 		"finalhandler": "^2.1.1",
