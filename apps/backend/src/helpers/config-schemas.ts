@@ -99,14 +99,16 @@ export const hardwareTypeSchema = z.enum(["jetson", "n100", "rk3588"]);
 
 export const setupConfigSchema = z.object({
 	hw: hardwareTypeSchema,
-	belacoder_path: z.string().optional(),
+	// Ceracoder settings
+	ceracoder_path: z.string().optional(),
+	ceracoder_config: z.string().optional(),
+
 	srtla_path: z.string().optional(),
 	sound_device_dir: z.string().optional(),
 	usb_device_dir: z.string().optional(),
 	mmcli_binary: z.string().optional(),
 	killall_binary: z.string().optional(),
 	bcrpt_path: z.string().optional(),
-	bitrate_file: z.string().optional(),
 	ips_file: z.string().optional(),
 });
 
@@ -114,7 +116,9 @@ export type SetupConfig = z.infer<typeof setupConfigSchema>;
 
 // Default paths based on hardware
 export const SETUP_CONFIG_DEFAULTS: Partial<SetupConfig> = {
-	bitrate_file: "/tmp/belacoder_br",
+	// Ceracoder config path for -c and SIGHUP reload
+	ceracoder_config: "/tmp/ceracoder.conf",
+
 	ips_file: "/tmp/srtla_ips",
 };
 

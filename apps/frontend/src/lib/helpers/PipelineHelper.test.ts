@@ -58,8 +58,8 @@ describe("parsePipelineName", () => {
 		expect(result.device).toBe(null);
 	});
 
-	// Belacoder-style pipeline naming tests
-	describe("belacoder naming patterns", () => {
+	// Legacy pipeline naming tests (x264/x265 patterns)
+	describe("legacy naming patterns", () => {
 		it("should parse x264 encoder and normalize to h264", () => {
 			const result = parsePipelineName(
 				"generic/x264_superfast_v4l_mjpeg_1080p30",

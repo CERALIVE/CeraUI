@@ -29,6 +29,9 @@ importers:
 
   apps/backend:
     dependencies:
+      '@ceralive/ceracoder':
+        specifier: link:../../../ceracoder/bindings/typescript
+        version: link:../../../ceracoder/bindings/typescript
       '@ceraui/rpc':
         specifier: workspace:*
         version: link:../../packages/rpc

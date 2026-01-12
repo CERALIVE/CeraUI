@@ -83,7 +83,7 @@ function parseUpgradeDownloadSize(text: string) {
 // Show an update notification if there are pending updates to packages matching this list
 const ceralivePackageList = [
 	"ceralive",
-	"belacoder",
+	"ceracoder",
 	"ceraui",
 	"srtla",
 	"usb-modeswitch-data",

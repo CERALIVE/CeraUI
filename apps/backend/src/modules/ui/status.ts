@@ -21,7 +21,8 @@ import { getConfig } from "../config.ts";
 import { buildModemsMessage } from "../modems/modem-status.ts";
 import { netIfBuildMsg } from "../network/network-interfaces.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
-import { audioCodecs, getAudioDevices } from "../streaming/audio.ts";
+import { getAudioDevices } from "../streaming/audio.ts";
+import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import { getPipelineList } from "../streaming/pipelines.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import { getRevisions } from "../system/revisions.ts";
@@ -70,6 +71,6 @@ export function sendInitialStatus(conn: WebSocket) {
 	conn.send(buildMsg("netif", netIfBuildMsg()));
 	conn.send(buildMsg("sensors", getSensors()));
 	conn.send(buildMsg("revisions", getRevisions()));
-	conn.send(buildMsg("acodecs", audioCodecs));
+	conn.send(buildMsg("acodecs", AUDIO_CODECS));
 	notificationSendPersistent(conn, true);
 }

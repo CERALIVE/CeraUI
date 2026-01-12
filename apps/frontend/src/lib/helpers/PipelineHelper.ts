@@ -39,7 +39,7 @@ export function parsePipelineName(
 	// Special case for libuvch264 - it's both encoder and source type
 	const isLibUVC = name.includes("libuvch264");
 
-	// Extract encoder: h264, h265, x264, x265 (belacoder uses x264/x265 naming)
+	// Extract encoder: h264, h265, x264, x265 (legacy x264/x265 naming)
 	// Normalize x264->h264, x265->h265 for consistency in UI grouping
 	// libuvch264 is also h264 encoding via UVC hardware
 	let encoder: string | null = null;

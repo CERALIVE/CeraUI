@@ -16,25 +16,34 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
-
 import { logger } from "../../helpers/logger.ts";
-import { readTextFile, writeTextFile } from "../../helpers/text-files.ts";
 
 import { setup } from "../setup.ts";
-import { pipelineGetAudioProps } from "./audio.ts";
+import { TEMP_PIPELINE_PATH } from "./ceracoder.ts";
+import {
+	PipelineBuilder,
+	type HardwareType as CeracoderHardwareType,
+	type VideoSource,
+	type PipelineOverrides,
+	type Resolution,
+	type Framerate,
+} from "@ceralive/ceracoder";
 
+// Pipeline interface
 export type Pipeline = {
+	source: VideoSource;
 	name: string;
-	path: string;
-	acodec?: unknown;
-	asrc?: unknown;
+	hardware: CeracoderHardwareType;
+	description: string;
+	defaultResolution?: Resolution;
+	defaultFramerate?: Framerate;
+	supportsAudio: boolean;
+	supportsResolutionOverride: boolean;
+	supportsFramerateOverride: boolean;
 };
 
-// Valid hardware types for mock mode
-export const VALID_HARDWARE_TYPES = ["jetson", "n100", "rk3588"] as const;
+// Valid hardware types
+export const VALID_HARDWARE_TYPES = ["jetson", "n100", "rk3588", "generic"] as const;
 export type HardwareType = (typeof VALID_HARDWARE_TYPES)[number];
 
 let pipelines: Record<string, Pipeline> = {};
@@ -42,15 +51,11 @@ let pipelines: Record<string, Pipeline> = {};
 // Dev-only mock hardware override (defaults to null, using setup.hw)
 let mockHardwareOverride: HardwareType | null = null;
 
-const belacoderPipelinesDir: string = setup.belacoder_path
-	? `${setup.belacoder_path}/pipeline`
-	: "/usr/share/belacoder/pipelines";
-
 /**
  * Get the effective hardware type (mock override or setup.hw)
  */
-export function getEffectiveHardware(): string {
-	return mockHardwareOverride ?? setup.hw;
+export function getEffectiveHardware(): CeracoderHardwareType {
+	return (mockHardwareOverride ?? setup.hw) as CeracoderHardwareType;
 }
 
 /**
@@ -74,56 +79,27 @@ export function getMockHardware(): HardwareType | null {
 	return mockHardwareOverride;
 }
 
-/* Read the list of pipeline files */
-function readDirAbsPath(dir: string, excludePattern?: string) {
-	const pipelines: Record<string, Pipeline> = {};
-
-	try {
-		const files = fs.readdirSync(dir);
-		const basename = path.basename(dir);
-
-		for (const f in files) {
-			const name = `${basename}/${files[f]}`;
-			if (excludePattern && name.match(excludePattern)) continue;
-
-			const id = crypto.createHash("sha1").update(name).digest("hex");
-			const path = dir + files[f];
-			pipelines[id] = { name: name, path: path };
-		}
-	} catch (err) {
-		logger.error(`Failed to read the pipeline files in ${dir}:`);
-		logger.error(err);
-	}
-
-	return pipelines;
-}
-
-function getPipelines() {
+/**
+ * Initialize pipelines from builder
+ */
+function getPipelines(): Record<string, Pipeline> {
 	const ps: Record<string, Pipeline> = {};
-	Object.assign(ps, readDirAbsPath(`${belacoderPipelinesDir}/custom/`));
+	const hardware = getEffectiveHardware();
+	const sources = PipelineBuilder.listSources(hardware);
 
-	// Get the hardware-specific pipelines (use mock override if set)
-	const effectiveHw = getEffectiveHardware();
-	let excludePipelines: string | undefined;
-	if (effectiveHw === "rk3588" && !fs.existsSync("/dev/hdmirx")) {
-		excludePipelines = "h265_hdmi";
-	}
-	Object.assign(
-		ps,
-		readDirAbsPath(
-			`${belacoderPipelinesDir}/${effectiveHw}/`,
-			excludePipelines,
-		),
-	);
-
-	Object.assign(ps, readDirAbsPath(`${belacoderPipelinesDir}/generic/`));
-
-	for (const p in ps) {
-		const pipeline = ps[p];
-		if (!pipeline) continue;
-
-		const props = pipelineGetAudioProps(pipeline.path);
-		Object.assign(pipeline, props);
+	for (const sourceMeta of sources) {
+		const id = sourceMeta.source;
+		ps[id] = {
+			source: sourceMeta.source,
+			name: sourceMeta.source,
+			hardware,
+			description: sourceMeta.description,
+			defaultResolution: sourceMeta.defaultResolution,
+			defaultFramerate: sourceMeta.defaultFramerate,
+			supportsAudio: sourceMeta.supportsAudio,
+			supportsResolutionOverride: sourceMeta.supportsResolutionOverride,
+			supportsFramerateOverride: sourceMeta.supportsFramerateOverride,
+		};
 	}
 
 	return ps;
@@ -131,6 +107,9 @@ function getPipelines() {
 
 export function initPipelines() {
 	pipelines = getPipelines();
+	logger.info(
+		`Initialized ${Object.keys(pipelines).length} pipeline sources for ${getEffectiveHardware()}`,
+	);
 }
 
 export function searchPipelines(id: string): Pipeline | null {
@@ -138,8 +117,11 @@ export function searchPipelines(id: string): Pipeline | null {
 	return null;
 }
 
-// pipeline list in the format needed by the frontend
-type PipelineResponseEntry = Pick<Pipeline, "name" | "asrc" | "acodec">;
+// Pipeline list in the format needed by the frontend
+type PipelineResponseEntry = Pick<
+	Pipeline,
+	"name" | "description" | "supportsAudio" | "supportsResolutionOverride" | "supportsFramerateOverride"
+>;
 
 export function getPipelineList() {
 	const list: Record<string, PipelineResponseEntry> = {};
@@ -149,20 +131,29 @@ export function getPipelineList() {
 
 		list[id] = {
 			name: pipeline.name,
-			asrc: pipeline.asrc,
-			acodec: pipeline.acodec,
+			description: pipeline.description,
+			supportsAudio: pipeline.supportsAudio,
+			supportsResolutionOverride: pipeline.supportsResolutionOverride,
+			supportsFramerateOverride: pipeline.supportsFramerateOverride,
 		};
 	}
 	return list;
 }
 
-export async function removeBitrateOverlay(pipelineFile: string) {
-	let pipeline = await readTextFile(pipelineFile);
-	if (!pipeline) return;
+/**
+ * Generate a pipeline file with overrides
+ */
+export function generatePipelineFile(
+	pipeline: Pipeline,
+	overrides: PipelineOverrides,
+): string {
+	const result = PipelineBuilder.build({
+		hardware: pipeline.hardware,
+		source: pipeline.source,
+		overrides,
+		writeTo: TEMP_PIPELINE_PATH,
+	});
 
-	pipeline = pipeline.replace(/textoverlay[^!]*name=overlay[^!]*!/g, "");
-	const pipelineTmp = "/tmp/belacoder_pipeline";
-	if (!(await writeTextFile(pipelineTmp, pipeline))) return;
-
-	return pipelineTmp;
+	logger.debug(`Generated pipeline for ${pipeline.source} at ${result.path}`);
+	return result.path!;
 }

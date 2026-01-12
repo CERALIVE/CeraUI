@@ -848,17 +848,17 @@ $effect(() => {
 							</p>
 						</div>
 
-						<!-- Belacoder -->
+						<!-- Ceracoder -->
 						<div
 							class="rounded-xl border border-slate-300 bg-slate-100 p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/40"
 						>
 							<p
 								class="mb-2 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-400"
 							>
-								Belacoder
+								Ceracoder
 							</p>
 							<p class="truncate font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
-								{revisions.belacoder}
+								{revisions.ceracoder}
 							</p>
 						</div>
 

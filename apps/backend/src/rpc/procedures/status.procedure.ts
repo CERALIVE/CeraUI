@@ -13,7 +13,8 @@ import {
 	buildRelaysMsg,
 	getRelays,
 } from "../../modules/remote/remote-relays.ts";
-import { audioCodecs, getAudioDevices } from "../../modules/streaming/audio.ts";
+import { getAudioDevices } from "../../modules/streaming/audio.ts";
+import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import { getPipelineList } from "../../modules/streaming/pipelines.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
@@ -84,6 +85,6 @@ export function buildInitialStatus() {
 		netif: netIfBuildMsg(),
 		sensors: getSensors(),
 		revisions: getRevisions(),
-		acodecs: audioCodecs,
+		acodecs: AUDIO_CODECS,
 	};
 }

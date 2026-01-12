@@ -38,14 +38,12 @@ import { broadcastMsg, getSocketSenderId } from "../ui/websocket-server.ts";
 import {
 	asrcProbe,
 	clearAsrcProbeReject,
-	DEFAULT_AUDIO_ID,
 	getAudioSrcId,
 	isAsrcProbeRejectResolved,
-	replaceAudioSettings,
 } from "./audio.ts";
 import { hasLowMtu } from "./bcrpt.ts";
 import { setBitrate } from "./encoder.ts";
-import { type Pipeline, removeBitrateOverlay } from "./pipelines.ts";
+import { type Pipeline, generatePipelineFile } from "./pipelines.ts";
 import {
 	genSrtlaIpList,
 	genSrtlaIpListForLocalIpAddress,
@@ -53,6 +51,10 @@ import {
 	restartSrtla,
 	setSrtlaIpList,
 } from "./srtla.ts";
+import {
+	getCeracoderExec,
+	buildCeracoderArgsAndWriteConfig,
+} from "./ceracoder.ts";
 import {
 	type ConfigParameters,
 	getIsStreaming,
@@ -68,7 +70,7 @@ type ChildProcess = ChildProcessByStdio<null, null, Readable> & {
 
 export const AUTOSTART_CHECK_FILE = "/tmp/ceralive_restarted";
 
-export const belacoderExec = `${setup.belacoder_path ?? "/usr/bin"}/belacoder`;
+export const ceracoderExec = getCeracoderExec();
 export const srtlaSendExec = `${setup.srtla_path ?? "/usr/bin"}/srtla_send`;
 export const bcrptExec = `${setup.bcrpt_path ?? "/usr/bin"}/bcrpt`;
 
@@ -114,29 +116,15 @@ export async function startStream(
 	const config = getConfig();
 	setBitrate(config);
 
-	// remove the bitrate overlay unless enabled in the config
-	let pipelineFile: string | undefined = pipeline.path;
-	if (!config.bitrate_overlay) {
-		pipelineFile = await removeBitrateOverlay(pipelineFile);
-		if (!pipelineFile)
-			throw "failed to generate the pipeline file - bitrate overlay";
-	}
-	// replace the audio source and codec
-	const audioCodec = pipeline.acodec ? config.acodec : undefined;
-	const audioSrcId =
-		pipeline.asrc && config.asrc
-			? getAudioSrcId(config.asrc)
-			: DEFAULT_AUDIO_ID;
-	pipelineFile = await replaceAudioSettings(
-		pipelineFile,
-		audioSrcId,
-		audioCodec,
-	);
-	if (!pipelineFile) {
-		throw "failed to generate the pipeline file - audio settings";
-	}
+	// Generate pipeline with overrides from config
+	const pipelineFile = generatePipelineFile(pipeline, {
+		bitrateOverlay: config.bitrate_overlay,
+		audioCodec: config.acodec as "aac" | "opus" | undefined,
+		audioDevice: config.asrc ? getAudioSrcId(config.asrc) : undefined,
+		volume: 1.0,
+	});
 
-	if (pipeline.asrc && config.asrc) {
+	if (pipeline.supportsAudio && config.asrc) {
 		try {
 			await asrcProbe(config.asrc);
 		} catch (_err) {
@@ -162,27 +150,17 @@ export async function startStream(
 		},
 	);
 
-	const belacoderArgs = [
+	const ceracoderArgs = buildCeracoderArgsAndWriteConfig(
+		config,
 		pipelineFile,
 		"127.0.0.1",
-		"9000",
-		"-d",
-		config.delay,
-		"-b",
-		setup.bitrate_file,
-		"-l",
-		config.srt_latency,
-	];
+		9000,
+		streamid,
+		hasLowMtu(),
+		true, // full override for start streaming
+	);
 
-	if (streamid !== "") {
-		belacoderArgs.push("-s");
-		belacoderArgs.push(streamid);
-	}
-	if (hasLowMtu()) {
-		belacoderArgs.push("-r");
-	}
-
-	spawnStreamingLoop(belacoderExec, belacoderArgs, 2000, (err) => {
+	spawnStreamingLoop(ceracoderExec, ceracoderArgs, 2000, (err) => {
 		let msg: string | undefined;
 		if (err.match("gstreamer error from alsasrc0")) {
 			msg = "Capture card error (audio). Trying to restart...";
@@ -204,7 +182,7 @@ export async function startStream(
 			}
 		}
 		if (msg) {
-			notificationBroadcast("belacoder", "error", msg, 5, true, false);
+			notificationBroadcast("ceracoder", "error", msg, 5, true, false);
 		}
 	});
 }
@@ -339,30 +317,30 @@ export function stop() {
 		logger.error("stop: BUG?: found both an asrcProbe and running processes");
 	}
 
-	let foundBelacoder = false;
+	let foundCeracoder = false;
 
 	for (const p of streamingProcesses) {
 		p.removeAllListeners("exit");
-		if (p.spawnfile.endsWith("belacoder")) {
-			foundBelacoder = true;
-			logger.debug("stop: found the belacoder process");
+		if (p.spawnfile.endsWith("ceracoder")) {
+			foundCeracoder = true;
+			logger.debug("stop: found the ceracoder process");
 
 			if (!stopProcess(p)) {
 				// if the process is active, wait for it to exit
 				p.on("exit", () => {
-					logger.info("stop: belacoder terminated");
+					logger.info("stop: ceracoder terminated");
 					stopAll();
 				});
 			} else {
-				// if belacoder has terminated already, skip to the next step
-				logger.info("stop: belacoder already terminated");
+				// if ceracoder has terminated already, skip to the next step
+				logger.info("stop: ceracoder already terminated");
 				stopAll();
 			}
 		}
 	}
 
-	if (!foundBelacoder) {
-		logger.error("stop: BUG?: belacoder not found, terminating all processes");
+	if (!foundCeracoder) {
+		logger.error("stop: BUG?: ceracoder not found, terminating all processes");
 		stopAll();
 	}
 }

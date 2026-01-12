@@ -21,7 +21,7 @@ import fs from "node:fs";
 
 import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
-import { readTextFile, writeTextFile } from "../../helpers/text-files.ts";
+import { readTextFile } from "../../helpers/text-files.ts";
 
 import { getConfig } from "../config.ts";
 import { setup } from "../setup.ts";
@@ -29,15 +29,6 @@ import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
 const deviceDir = setup.sound_device_dir ?? "/sys/class/sound";
-
-const alsaSrcPattern = /alsasrc device=[A-Za-z0-9:=]+/;
-const alsaPipelinePattern = /alsasrc device=[A-Za-z0-9:]+(.|\s)*?mux\. *\s?/;
-
-const audioCodecPattern = /voaacenc\s+bitrate=(\d+)\s+!\s+aacparse\s+!/;
-export const audioCodecs: Record<string, string> = {
-	opus: "Opus (better quality)",
-	aac: "AAC (backwards compatibility)",
-};
 
 const NO_AUDIO_ID = "No audio";
 export const DEFAULT_AUDIO_ID = "Pipeline default";
@@ -64,49 +55,6 @@ addAudioCardById(audioDevices, DEFAULT_AUDIO_ID);
 
 export function getAudioDevices() {
 	return audioDevices;
-}
-
-export function pipelineGetAudioProps(path: string) {
-	const contents = fs.readFileSync(path, "utf8");
-	return {
-		asrc: contents.match(alsaPipelinePattern) != null,
-		acodec: contents.match(audioCodecPattern) != null,
-	};
-}
-
-export async function replaceAudioSettings(
-	pipelineFile: string,
-	cardId: string,
-	codec?: string,
-) {
-	let pipeline = await readTextFile(pipelineFile);
-	if (pipeline === undefined) return;
-
-	if (cardId && cardId !== DEFAULT_AUDIO_ID) {
-		if (cardId === NO_AUDIO_ID) {
-			pipeline = pipeline.replace(alsaPipelinePattern, "");
-		} else {
-			pipeline = pipeline.replace(
-				alsaSrcPattern,
-				`alsasrc device="hw:${cardId}"`,
-			);
-		}
-	}
-
-	if (codec === "opus") {
-		const br = pipeline.match(audioCodecPattern);
-		if (br) {
-			pipeline = pipeline.replace(
-				audioCodecPattern,
-				`audioresample quality=10 sinc-filter-mode=1 ! opusenc bitrate=${br[1]} ! opusparse !`,
-			);
-		}
-	}
-
-	const pipelineTmp = "/tmp/belacoder_pipeline";
-	if (!(await writeTextFile(pipelineTmp, pipeline))) return;
-
-	return pipelineTmp;
 }
 
 function getAudioSrcName(id: string) {

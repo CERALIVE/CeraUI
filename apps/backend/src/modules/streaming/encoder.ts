@@ -16,11 +16,11 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import fs from "node:fs";
-
-import killall from "../../helpers/killall.ts";
 import { getConfig, saveConfig } from "../config.ts";
-import { setup } from "../setup.ts";
+import {
+	sendCeracoderHup,
+	writeCeracoderConfigFile,
+} from "./ceracoder.ts";
 
 const MIN_BITRATE = 300; // Kbps
 const MAX_BITRATE = 12_000; // Kbps
@@ -44,13 +44,8 @@ export function setBitrate(params: BitrateParams): number | undefined {
 	try {
 		config.max_br = maxBr;
 		saveConfig();
-
-		fs.writeFileSync(
-			setup.bitrate_file,
-			`${MIN_BITRATE * 1000}\n${maxBr * 1000}\n`,
-		);
-
-		killall(["-HUP", "belacoder"]);
+		writeCeracoderConfigFile(config);
+		sendCeracoderHup();
 		return maxBr;
 	} catch (error) {
 		// Restore previous bitrate if operation failed

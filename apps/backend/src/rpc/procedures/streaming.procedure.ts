@@ -19,7 +19,7 @@ import {
 import { os } from "@orpc/server";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { getConfig } from "../../modules/config.ts";
-import { audioCodecs } from "../../modules/streaming/audio.ts";
+import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import { setBitrate as setEncoderBitrate } from "../../modules/streaming/encoder.ts";
 import {
 	getEffectiveHardware,
@@ -102,7 +102,7 @@ export const getPipelinesProcedure = authedProcedure
 export const getAudioCodecsProcedure = authedProcedure
 	.output(audioCodecsMessageSchema)
 	.handler(() => {
-		return audioCodecs;
+		return AUDIO_CODECS;
 	});
 
 /**

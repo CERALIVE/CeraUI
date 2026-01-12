@@ -34,7 +34,7 @@ import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
 import { initPipelines } from "./modules/streaming/pipelines.ts";
 import {
 	bcrptExec,
-	belacoderExec,
+	ceracoderExec,
 	checkAutoStartStream,
 	srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
@@ -62,7 +62,7 @@ if (isDevelopment()) {
 	logger.info("   Set MOCK_SCENARIO env var to change scenario");
 }
 
-checkExecPath(belacoderExec);
+checkExecPath(ceracoderExec);
 checkExecPath(srtlaSendExec);
 checkExecPath(bcrptExec);
 
@@ -109,7 +109,7 @@ process.on("SIGUSR2", function udevDeviceUpdate() {
 });
 
 // make sure we didn't inherit orphan processes
-killall(["belacoder"]);
+killall(["ceracoder"]);
 killall(["srtla_send"]);
 
 // Initialize Bun native HTTP/WebSocket server

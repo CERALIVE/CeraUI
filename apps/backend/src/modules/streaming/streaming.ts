@@ -36,7 +36,8 @@ import {
 	getSocketSenderId,
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
-import { audioCodecs, getAudioDevices } from "./audio.ts";
+import { getAudioDevices } from "./audio.ts";
+import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import { updateBcrptServerIps } from "./bcrpt.ts";
 import { validateBitrate } from "./encoder.ts";
 import { searchPipelines } from "./pipelines.ts";
@@ -131,17 +132,17 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 	if (!pipeline) throw new Error("Pipeline not found");
 
 	// audio codec
-	if (pipeline.acodec) {
+	if (pipeline.supportsAudio) {
 		if (typeof validated.acodec !== "string")
 			throw new Error("Invalid audio codec");
-		if (!audioCodecs[validated.acodec])
+		if (!(validated.acodec in AUDIO_CODECS))
 			throw new Error("Audio codec not found");
 	}
 
 	// audio source
 	const config = getConfig();
 	const audioDevicesMap = getAudioDevices();
-	if (pipeline.asrc) {
+	if (pipeline.supportsAudio) {
 		if (typeof validated.asrc !== "string")
 			throw new Error("Invalid audio source");
 		if (validated.asrc !== config.asrc && !audioDevicesMap[validated.asrc])
@@ -208,10 +209,10 @@ export async function updateConfig(_conn: WebSocket, params: ConfigParameters) {
 	config.srt_latency = params.srt_latency;
 	config.bitrate_overlay = params.bitrate_overlay;
 
-	if (pipeline.acodec && params.acodec) {
+	if (pipeline.supportsAudio && params.acodec) {
 		config.acodec = params.acodec;
 	}
-	if (pipeline.asrc && params.asrc) {
+	if (pipeline.supportsAudio && params.asrc) {
 		config.asrc = params.asrc;
 	}
 

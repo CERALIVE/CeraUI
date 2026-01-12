@@ -1,12 +1,12 @@
 {
 	"hw": "jetson",
-	"belacoder_path": "./mocks/belacoder/",
+	"ceracoder_path": "./mocks/ceracoder/",
+	"ceracoder_config": "/tmp/ceracoder.conf",
 	"srtla_path": "./mocks/srtla/",
 	"sound_device_dir": "./mocks/sound/",
 	"usb_device_dir": "./mocks/usb/",
 	"mmcli_binary": "./mocks/mmcli",
 	"killall_binary": "./mocks/killall",
 	"bcrpt_path": "./mocks/bcrpt",
-	"bitrate_file": "/tmp/belacoder_br",
 	"ips_file": "/tmp/srtla_ips"
 }
