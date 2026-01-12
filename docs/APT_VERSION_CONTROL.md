@@ -2,119 +2,90 @@
 
 ## Problem
 
-Previously, all packages had hardcoded iteration "1", so APT would see all versions as identical:
-
-- `ceralive-device_2026.1.0-1_amd64.deb`
-- `ceralive-device_2026.1.0-1_amd64.deb` (same version!)
-
-APT would NOT detect newer builds within the same version number.
+Previously, all packages had hardcoded iteration "1", so APT would see rebuilds as identical versions and skip updates.
 
 ## Solution
 
-Each build now gets a unique timestamp-based iteration:
-
-- `ceralive-device_2026.1.0-20260112090000.adb87b3_amd64.deb`
-- `ceralive-device_2026.1.0-20260112140000.def5678_amd64.deb`
-
-APT will always detect newer builds as updates.
+Each build gets a unique timestamp-based iteration, ensuring APT always detects newer builds.
 
 ## Version Format
 
-CeraUI uses **Calendar Versioning (CalVer)**: `YYYY.MINOR.PATCH`
+CeraUI uses **Calendar Versioning (CalVer)**: `YYYY.MINOR.PATCH[-beta.N]`
 
 ```
 {package}_{version}-{iteration}_{architecture}.deb
 ```
 
-Where:
+Components:
 
-- **package**: `ceralive-device`
-- **version**: CalVer version (e.g., `2026.1.0`) from git tags or BUILD_VERSION
-- **iteration**: `YYYYMMDDHHMMSS.{commit}` (e.g., `20260112140000.def5678`)
-- **architecture**: `amd64` or `arm64`
+| Part | Source | Example |
+|------|--------|---------|
+| package | Fixed | `ceralive-device` |
+| version | Git tag or `BUILD_VERSION` | `2026.1.0`, `2026.1.1-beta.1` |
+| iteration | Build timestamp + commit | `20260112_143022.abc1234` |
+| architecture | `BUILD_ARCH` or auto-detect | `arm64`, `amd64` |
+
+## How Versions Are Set
+
+**GitHub Actions (production releases):**
+- Workflow calculates next version from existing git tags
+- `release_type`: `stable` or `beta`
+- Creates tag and builds packages
+
+**Local builds:**
+```bash
+# Uses latest git tag
+./scripts/build/build-debian-package.sh
+
+# Override version
+BUILD_VERSION=2026.2.0 ./scripts/build/build-debian-package.sh
+```
 
 ## APT Version Comparison
 
 APT compares versions using these rules:
 
-1. **Version numbers**: `2026.1.0 < 2026.1.1 < 2026.2.0`
-2. **Same version, different iterations**: `2026.1.0-20260112090000 < 2026.1.0-20260112140000`
-3. **Timestamps ensure chronological ordering**
+1. **Base versions**: `2026.1.0 < 2026.1.1 < 2026.2.0`
+2. **Beta vs stable**: `2026.1.1-beta.1 < 2026.1.1-beta.2 < 2026.1.1`
+3. **Same version, different iterations**: chronological by timestamp
 
 ### Example Progression
 
-```bash
-# Morning build
-ceralive-device_2026.1.0-20260112090000.adb87b3_amd64.deb
+```
+# Beta builds
+ceralive-device_2026.1.1-beta.1-20260112_090000.abc123_arm64.deb
+ceralive-device_2026.1.1-beta.2-20260113_140000.def456_arm64.deb
 
-# Afternoon build (same day, new commit) - APT sees as NEWER
-ceralive-device_2026.1.0-20260112140000.def5678_amd64.deb
+# Stable release (always newer than betas of same version)
+ceralive-device_2026.1.1-20260115_100000.ghi789_arm64.deb
 
-# Next release with version bump - APT sees as NEWEST
-ceralive-device_2026.1.1-20260115100000.ghi9abc_amd64.deb
+# Rebuilds of same version are ordered by timestamp
+ceralive-device_2026.1.1-20260115_143022.jkl012_arm64.deb
 ```
 
-## Build Script Changes
+## Build Metadata
 
-### Before
-
-```bash
---iteration "1"  # Hardcoded - broken
-```
-
-### After
-
-```bash
-BUILD_DATE=$(date -u +"%Y%m%d%H%M%S")
-ITERATION="${BUILD_DATE}.${COMMIT}"
---iteration "$ITERATION"  # Dynamic - works
-```
-
-## Generated Metadata
-
-Each package includes comprehensive version information:
+Each package includes `package-info-{arch}.json`:
 
 ```json
 {
-  "version": "2026.1.0",
-  "iteration": "20260112140000.def5678",
-  "fullVersion": "2026.1.0-20260112140000.def5678",
-  "apt": {
-    "versionProgression": "Each build has unique timestamp-based iteration",
-    "comparisonMethod": "APT compares: 2026.1.0-20260112140000.def5678"
-  }
+  "package": "ceralive-device",
+  "version": "2026.1.1",
+  "iteration": "20260112_143022.abc1234",
+  "fullVersion": "2026.1.1-20260112_143022.abc1234",
+  "architecture": "arm64",
+  "commit": "abc1234"
 }
 ```
 
-## Repository Implications
+## APT Repository
 
-When you set up your APT repository:
+When deployed to an APT repository:
 
-1. `apt update` will download package lists with all available versions
-2. `apt upgrade` will detect newer timestamp-based iterations
-3. `apt install ceralive-device` will install the latest available version
-4. Users get automatic updates as you publish newer builds
-
-## Verification
-
-Test the version progression:
-
-```bash
-# Build 1
-BUILD_VERSION=2026.1.0 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
-# Produces: ceralive-device_2026.1.0-20260112090000.abc123_amd64.deb
-
-# Build 2 (later same day)
-BUILD_VERSION=2026.1.0 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
-# Produces: ceralive-device_2026.1.0-20260112140000.abc123_amd64.deb
-
-# APT will see Build 2 as newer than Build 1
-```
-
-## Result
-
-Your APT repository will now properly support incremental updates. Every build is guaranteed to have a unique, chronologically-ordered version that APT can compare correctly.
+1. `apt update` downloads package lists
+2. `apt upgrade` detects newer timestamp iterations
+3. Users get automatic updates as new builds are published
 
 ## See Also
 
-- [BUILD_PIPELINE.md](BUILD_PIPELINE.md) - CalVer versioning details and automatic version calculation
+- [BUILD_PIPELINE.md](BUILD_PIPELINE.md) - Full build system documentation and CalVer details
