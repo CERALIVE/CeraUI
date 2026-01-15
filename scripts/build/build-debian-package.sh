@@ -161,6 +161,10 @@ fpm -s dir -t deb \
     --depends "systemd" \
     --depends "udev" \
     --depends "adduser" \
+    --depends "network-manager" \
+    --depends "modemmanager" \
+    --depends "ceracoder" \
+    --depends "srtla" \
     --conflicts "belaui" \
     --replaces "belaui" \
     --provides "ceralive" \
@@ -202,7 +206,11 @@ cat > dist/debian/package-info-${ARCHITECTURE}.json << EOF
   "dependencies": [
     "systemd",
     "udev",
-    "adduser"
+    "adduser",
+    "network-manager",
+    "modemmanager",
+    "ceracoder",
+    "srtla"
   ],
   "apt": {
     "versionProgression": "Each build has unique timestamp-based iteration",
