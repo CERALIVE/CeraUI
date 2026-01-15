@@ -1,4 +1,4 @@
-name: Build & Release
+name: Publish Release
 
 on:
   workflow_dispatch:
@@ -33,13 +33,15 @@ jobs:
       tag: ${{ steps.calver.outputs.tag }}
       is_beta: ${{ steps.calver.outputs.is_beta }}
     steps:
-      - name: Checkout code
+      - name: Checkout CeraUI
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Need full history for tags
+          path: CeraUI
 
       - name: Calculate CalVer version
         id: calver
+        working-directory: CeraUI
         env:
           RELEASE_TYPE: ${{ github.event.inputs.release_type }}
           FORCE_VERSION: ${{ github.event.inputs.force_version }}
@@ -117,8 +119,22 @@ jobs:
       matrix:
         architecture: [arm64, amd64]
     steps:
-      - name: Checkout code
+      - name: Checkout CeraUI
         uses: actions/checkout@v4
+        with:
+          path: CeraUI
+
+      - name: Checkout ceracoder (sibling dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: CERALIVE/ceracoder
+          path: ceracoder
+
+      - name: Checkout srtla (sibling dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: CERALIVE/srtla
+          path: srtla
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -128,6 +144,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
+          cache-dependency-path: CeraUI/pnpm-lock.yaml
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -135,15 +152,18 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
+        working-directory: CeraUI
         run: pnpm install --frozen-lockfile
 
       - name: Build CeraUI system distribution for ${{ matrix.architecture }}
+        working-directory: CeraUI
         run: ./scripts/build/build-ceraui-system.sh
         env:
           BUILD_VERSION: ${{ needs.calculate-version.outputs.version }}
           BUILD_ARCH: ${{ matrix.architecture }}
 
       - name: Rename archive for release
+        working-directory: CeraUI
         run: |
           cd dist/compressed
           # Find the generated archive and rename to clean version
@@ -155,7 +175,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ceraui-system-${{ matrix.architecture }}
-          path: dist/compressed/*.tar.gz
+          path: CeraUI/dist/compressed/*.tar.gz
 
   build-debian-package:
     name: Build Debian Package
@@ -165,8 +185,22 @@ jobs:
       matrix:
         architecture: [arm64, amd64]
     steps:
-      - name: Checkout code
+      - name: Checkout CeraUI
         uses: actions/checkout@v4
+        with:
+          path: CeraUI
+
+      - name: Checkout ceracoder (sibling dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: CERALIVE/ceracoder
+          path: ceracoder
+
+      - name: Checkout srtla (sibling dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: CERALIVE/srtla
+          path: srtla
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -176,6 +210,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
+          cache-dependency-path: CeraUI/pnpm-lock.yaml
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -189,9 +224,11 @@ jobs:
           sudo gem install fpm
 
       - name: Install dependencies
+        working-directory: CeraUI
         run: pnpm install --frozen-lockfile
 
       - name: Build Debian package for ${{ matrix.architecture }}
+        working-directory: CeraUI
         run: ./scripts/build/build-debian-package.sh
         env:
           BUILD_VERSION: ${{ needs.calculate-version.outputs.version }}
@@ -201,7 +238,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ceraui-debian-${{ matrix.architecture }}
-          path: dist/debian/*.deb
+          path: CeraUI/dist/debian/*.deb
 
   create-release:
     name: Create GitHub Release
@@ -210,8 +247,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout code
+      - name: Checkout CeraUI
         uses: actions/checkout@v4
+        with:
+          path: CeraUI
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -221,15 +260,27 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p final-assets
+          mkdir -p dist/arm64 dist/amd64
 
           # Move all archives and packages to final-assets
           find release-assets -name "*.tar.gz" -exec mv {} final-assets/ \;
-          find release-assets -name "*.deb" -exec mv {} final-assets/ \;
+          find release-assets -name "*.deb" -exec cp {} final-assets/ \;
+
+          # Also organize .deb files by arch for R2 upload
+          find release-assets -name "*arm64*.deb" -exec cp {} dist/arm64/ \;
+          find release-assets -name "*amd64*.deb" -exec cp {} dist/amd64/ \;
+
+          # Generate checksums
+          cd final-assets
+          for f in *.tar.gz *.deb; do
+            sha256sum "$f" > "$f.sha256"
+          done
 
           echo "📦 Release assets:"
-          ls -la final-assets/
+          ls -la
 
       - name: Generate release body
+        working-directory: CeraUI
         env:
           VERSION: ${{ needs.calculate-version.outputs.version }}
           TAG: ${{ needs.calculate-version.outputs.tag }}
@@ -296,7 +347,7 @@ jobs:
         with:
           tag_name: ${{ needs.calculate-version.outputs.tag }}
           name: CeraUI ${{ needs.calculate-version.outputs.tag }}${{ needs.calculate-version.outputs.is_beta == 'true' && ' (Beta)' || '' }}
-          body_path: release-body.md
+          body_path: CeraUI/release-body.md
           files: final-assets/*
           draft: false
           prerelease: ${{ needs.calculate-version.outputs.is_beta == 'true' }}
@@ -314,3 +365,85 @@ jobs:
           ls -1 final-assets/ | while read f; do echo "- \`$f\`" >> $GITHUB_STEP_SUMMARY; done
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "🔗 [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.calculate-version.outputs.tag }})" >> $GITHUB_STEP_SUMMARY
+
+  sign-and-publish-r2:
+    name: Sign and Publish to R2
+    runs-on: ubuntu-latest
+    needs: [calculate-version, build-debian-package, create-release]
+    steps:
+      - name: Download Debian artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare dist directory
+        run: |
+          mkdir -p dist/arm64 dist/amd64
+          find artifacts -name "*arm64*.deb" -exec cp {} dist/arm64/ \;
+          find artifacts -name "*amd64*.deb" -exec cp {} dist/amd64/ \;
+
+      - name: Import GPG key
+        run: |
+          echo "${{ secrets.DEB_SIGNING_KEY_B64 }}" | base64 -d | gpg --batch --import
+
+      - name: Install apt-utils
+        run: sudo apt-get update && sudo apt-get install -y apt-utils
+
+      - name: Generate and sign repo metadata (arm64)
+        run: |
+          cd dist/arm64
+          dpkg-scanpackages . > Packages
+          gzip -k Packages
+          apt-ftparchive release . > Release
+          gpg --batch --yes -abs -o Release.gpg Release
+          gpg --batch --yes --clearsign -o InRelease Release
+
+      - name: Generate and sign repo metadata (amd64)
+        run: |
+          cd dist/amd64
+          dpkg-scanpackages . > Packages
+          gzip -k Packages
+          apt-ftparchive release . > Release
+          gpg --batch --yes -abs -o Release.gpg Release
+          gpg --batch --yes --clearsign -o InRelease Release
+
+      - name: Install AWS CLI
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          sudo ./aws/install
+
+      - name: Determine channel
+        id: channel
+        run: |
+          if [ "${{ needs.calculate-version.outputs.is_beta }}" == "true" ]; then
+            echo "channel=beta" >> $GITHUB_OUTPUT
+          else
+            echo "channel=stable" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload to R2
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CHANNEL: ${{ steps.channel.outputs.channel }}
+        run: |
+          aws configure set aws_access_key_id "$R2_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$R2_SECRET_ACCESS_KEY"
+
+          aws s3 sync dist/arm64/ "s3://$R2_BUCKET/dists/$CHANNEL/binary-arm64/" \
+            --endpoint-url "$R2_ENDPOINT"
+          aws s3 sync dist/amd64/ "s3://$R2_BUCKET/dists/$CHANNEL/binary-amd64/" \
+            --endpoint-url "$R2_ENDPOINT"
+
+      - name: R2 Upload Summary
+        run: |
+          echo "## 📦 Published to R2" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Channel:** \`${{ steps.channel.outputs.channel }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Uploaded Files:" >> $GITHUB_STEP_SUMMARY
+          echo "- ARM64: \`dists/${{ steps.channel.outputs.channel }}/binary-arm64/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- AMD64: \`dists/${{ steps.channel.outputs.channel }}/binary-amd64/\`" >> $GITHUB_STEP_SUMMARY

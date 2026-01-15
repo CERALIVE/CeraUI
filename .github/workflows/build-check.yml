@@ -1,0 +1,80 @@
+name: Build Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [arm64, amd64]
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v4
+        with:
+          path: CeraUI
+
+      - name: Checkout ceracoder (sibling dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: CERALIVE/ceracoder
+          path: ceracoder
+
+      - name: Checkout srtla (sibling dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: CERALIVE/srtla
+          path: srtla
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+          cache-dependency-path: CeraUI/pnpm-lock.yaml
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: pnpm install --frozen-lockfile
+
+      - name: Build backend for ${{ matrix.arch }}
+        working-directory: CeraUI
+        run: pnpm run build:backend
+        env:
+          BUILD_ARCH: ${{ matrix.arch }}
+
+      - name: Build frontend
+        working-directory: CeraUI
+        run: pnpm run build:frontend
+
+      - name: Verify build output
+        working-directory: CeraUI
+        run: |
+          ls -la dist/
+          test -f dist/ceralive || (echo "Backend binary not found" && exit 1)
+          test -d dist/public || (echo "Frontend build not found" && exit 1)
+
+      - name: Build Summary
+        run: |
+          echo "## ✅ Build Check Passed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Architecture:** ${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Artifacts:" >> $GITHUB_STEP_SUMMARY
+          ls -1 CeraUI/dist/ | while read f; do echo "- \`$f\`" >> $GITHUB_STEP_SUMMARY; done
