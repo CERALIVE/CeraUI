@@ -51,6 +51,11 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Install sibling dependencies
+        run: |
+          cd ceracoder/bindings/typescript && pnpm install
+          cd ../../../srtla/bindings/typescript && pnpm install
+
       - name: Install dependencies
         working-directory: CeraUI
         run: pnpm install --frozen-lockfile
