@@ -53,8 +53,8 @@ jobs:
 
       - name: Install sibling dependencies
         run: |
-          cd ceracoder/bindings/typescript && pnpm install
-          cd ../../../srtla/bindings/typescript && pnpm install
+          pnpm install --dir ceracoder/bindings/typescript
+          pnpm install --dir srtla/bindings/typescript
 
       - name: Install dependencies
         working-directory: CeraUI
