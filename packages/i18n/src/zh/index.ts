@@ -53,6 +53,8 @@ const zh = {
 		serverSettings: "服务器设置",
 		streamPerformance: "流媒体性能",
 		systemHealth: "系统健康状态",
+		pageTitle: "控制台",
+		pageDescription: "系统概览与配置",
 	},
 	auth: {
 		createPassword: "创建密码",

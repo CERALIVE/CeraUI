@@ -224,6 +224,8 @@ const ptBR = {
 		serverAndAudio: "Configuração de servidor e streaming de áudio",
 		liveMetrics: "Métricas ao vivo",
 		sensorsUnavailable: "Sensores indisponíveis",
+		pageTitle: "Painel",
+		pageDescription: "Visão geral do sistema e configuração",
 		configurationNotComplete: "Configuração pendente",
 		pleaseConfigureServer:
 			"Por favor configure um servidor de retransmissão para começar a transmissão",

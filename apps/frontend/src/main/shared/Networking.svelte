@@ -193,7 +193,7 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 										class={cn(
 											'h-auto px-3 py-1.5 transition-colors',
 											network.enabled
-												? 'data-[state=on]:border-emerald-600 data-[state=on]:bg-emerald-600 data-[state=on]:text-white'
+												? 'data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground'
 												: '',
 											hasRealError ? 'cursor-not-allowed opacity-50' : '',
 										)}

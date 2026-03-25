@@ -54,8 +54,11 @@ $effect(() => {
 
 $effect(() => {
 	const message = getAuth();
-	if (message?.success && remember && password) {
+	if (message?.success === true && remember && password) {
 		localStorage.setItem('auth', password);
+	}
+	if (message?.success === false) {
+		isLoading = false;
 	}
 });
 
@@ -74,9 +77,9 @@ $effect(() => {
 function login(password: string, remember: boolean) {
 	isLoading = true;
 	if (setPassword) {
-		setPassword = false;
 		sendCreatePasswordMessage(password);
 	}
+	setPassword = false;
 	sendAuthMessage(password, remember, () => (isLoading = false));
 }
 
@@ -102,7 +105,7 @@ async function onSubmit(event: SubmitEvent) {
 			<div class="text-center">
 				<h2 class="text-foreground text-xl font-semibold tracking-tight">{siteName}</h2>
 				<p class="text-muted-foreground mt-2 max-w-xs text-sm leading-relaxed">
-					{$LL?.auth?.brandTagline?.() || 'Professional streaming encoder management'}
+					Professional streaming encoder management
 				</p>
 			</div>
 		</div>
@@ -169,7 +172,7 @@ async function onSubmit(event: SubmitEvent) {
 									{/if}
 									<Button
 										class="h-8 w-8"
-										aria-label={$LL?.auth?.togglePasswordVisibility?.() || 'Toggle password visibility'}
+										aria-label="Toggle password visibility"
 										onclick={() => (showPassword = !showPassword)}
 										type="button"
 										variant="ghost"

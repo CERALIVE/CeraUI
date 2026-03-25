@@ -238,6 +238,45 @@ function validateForm() {
 	return result.isValid;
 }
 
+/** Mirrors required-field checks in validateStreamingForm for button disabled state (no toasts). */
+const streamingStartDisabled = $derived.by(() => {
+	if (!properties.source) return true;
+	if (
+		properties.bitrate === undefined ||
+		properties.bitrate < 2000 ||
+		properties.bitrate > 12000
+	) {
+		return true;
+	}
+
+	const relayManual =
+		properties.relayServer === '-1' || properties.relayServer === undefined;
+	if (relayManual) {
+		if (!properties.srtlaServerAddress?.trim()) return true;
+		const port = properties.srtlaServerPort;
+		if (
+			port === undefined ||
+			!Number.isInteger(port) ||
+			port < 1 ||
+			port > 65535
+		) {
+			return true;
+		}
+	} else if (!properties.relayServer) {
+		return true;
+	}
+
+	if (pipelines && properties.pipeline) {
+		const pipelineData = pipelines[properties.pipeline];
+		if (pipelineData?.supportsAudio) {
+			if (!properties.audioSource) return true;
+			if (!properties.audioCodec) return true;
+		}
+	}
+
+	return false;
+});
+
 const handleMaxBitrateUpdate = () => {
 	updateMaxBitrate(properties.bitrate, isStreaming);
 };
@@ -395,9 +434,13 @@ const handleFramerateChange = (value: Framerate) => {
 
 		<!-- Streaming Controls -->
 		<StreamingControls
-			disabled={false}
+			disabled={streamingStartDisabled}
 			isStreaming={!!isStreaming}
-			onStart={startStreamingWithCurrentConfig}
+			onStart={() => {
+				if (validateForm()) {
+					startStreamingWithCurrentConfig();
+				}
+			}}
 			onStop={() => {
 				try {
 					toast.dismiss();

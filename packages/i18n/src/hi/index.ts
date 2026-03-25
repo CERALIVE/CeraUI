@@ -54,6 +54,8 @@ const hi = {
 		serverSettings: "सर्वर सेटिंग्स",
 		streamPerformance: "स्ट्रीम प्रदर्शन",
 		systemHealth: "सिस्टम स्वास्थ्य",
+		pageTitle: "डैशबोर्ड",
+		pageDescription: "सिस्टम अवलोकन और कॉन्फ़िगरेशन",
 	},
 	auth: {
 		createPassword: "पासवर्ड बनाएं",

@@ -54,6 +54,8 @@ const ko = {
 		serverSettings: "서버 설정",
 		streamPerformance: "스트림 성능",
 		systemHealth: "시스템 상태",
+		pageTitle: "대시보드",
+		pageDescription: "시스템 개요 및 구성",
 	},
 	auth: {
 		createPassword: "비밀번호 생성",

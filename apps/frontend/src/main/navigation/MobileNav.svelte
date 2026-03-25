@@ -33,23 +33,14 @@ const handleClick = (nav: NavElements) => {
 
 	const now = Date.now();
 	if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) {
-		console.log(`[MobileNav] Navigation throttled - too soon after last navigation`);
 		return;
 	}
 
 	lastNavigationTime = now;
-	const navKey =
-		nav && typeof nav === 'object' && Object.keys(nav).length > 0 ? Object.keys(nav)[0] : 'unknown';
-	console.log(`[MobileNav] Navigation to ${navKey}:`, {
-		timestamp: new Date().toISOString(),
-		throttleMs: NAVIGATION_THROTTLE_MS,
-	});
 
 	setTimeout(() => {
 		if (nav && typeof nav === 'object' && Object.keys(nav).length > 0) {
 			navigateTo(nav);
-		} else {
-			console.warn('[MobileNav] Invalid nav object, skipping navigation:', nav);
 		}
 		open = false;
 	}, 75);
@@ -61,15 +52,10 @@ const handleLogoClick = () => {
 
 	const now = Date.now();
 	if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) {
-		console.log(`[MobileNav] Logo navigation throttled`);
 		return;
 	}
 
 	lastNavigationTime = now;
-	console.log(`[MobileNav] Logo navigation:`, {
-		timestamp: new Date().toISOString(),
-		canGoBack: $canGoBack,
-	});
 
 	const currentKey =
 		currentNav && typeof currentNav === 'object' && Object.keys(currentNav).length > 0
@@ -91,14 +77,10 @@ const handleBack = () => {
 
 	const now = Date.now();
 	if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) {
-		console.log(`[MobileNav] Back navigation throttled`);
 		return;
 	}
 
 	lastNavigationTime = now;
-	console.log(`[MobileNav] Back navigation:`, {
-		timestamp: new Date().toISOString(),
-	});
 
 	enhancedNavigationStore.goBack();
 	open = false;
@@ -120,7 +102,7 @@ $effect(() => {
 			class="mr-2 md:hidden"
 			disabled={$isNavigationTransitioning}
 			variant="ghost"
-			size="icon"
+			size="icon-lg"
 		>
 			{#if open}
 				<X class="h-5 w-5" />
@@ -134,11 +116,12 @@ $effect(() => {
 	</Sheet.Trigger>
 
 	<Sheet.Content class="w-80 pt-4 pr-0" side="left">
+		<Sheet.Title class="sr-only">Navigation menu</Sheet.Title>
 		<div class="border-b px-4 pb-4">
 			{#if $canGoBack}
 				<div class="mb-3">
 					<button
-						class="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm transition-colors"
+						class="text-muted-foreground hover:text-foreground flex min-h-11 items-center gap-1.5 text-sm transition-colors"
 						disabled={$isNavigationTransitioning}
 						onclick={handleBack}
 					>

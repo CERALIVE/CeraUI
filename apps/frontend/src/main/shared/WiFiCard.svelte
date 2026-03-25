@@ -148,7 +148,7 @@ function getBandBadge(freq: number) {
 					<SimpleAlertDialog
 						buttonText={$LL.network.status.details()}
 						confirmButtonText={$LL.network.dialog.close()}
-						extraButtonClasses="w-full sm:flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white"
+						extraButtonClasses="w-full sm:flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
 						hiddeCancelButton={true}
 						title={$LL.network.dialog.hotspotDetails()}
 					>
@@ -192,7 +192,7 @@ function getBandBadge(freq: number) {
 					<SimpleAlertDialog
 						buttonText={$LL.network.status.turnOff()}
 						confirmButtonText={$LL.network.dialog.turnOff()}
-						extraButtonClasses="w-full sm:flex-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white"
+						extraButtonClasses="w-full sm:flex-1 bg-secondary text-secondary-foreground hover:bg-secondary/80"
 						onconfirm={() => turnHotspotModeOff(deviceId)}
 						title={$LL.network.dialog.turnHotspotOff()}
 					>
@@ -214,7 +214,7 @@ function getBandBadge(freq: number) {
 				<SimpleAlertDialog
 					buttonText={$LL.network.status.enableHotspot()}
 					confirmButtonText={$LL.network.dialog.turnOn()}
-					extraButtonClasses="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white"
+					extraButtonClasses="w-full bg-primary text-primary-foreground hover:bg-primary/90"
 					onconfirm={() => turnHotspotModeOn(deviceId)}
 					title={$LL.network.dialog.turnHotspotOn()}
 				>

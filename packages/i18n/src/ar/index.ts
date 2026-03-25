@@ -224,6 +224,8 @@ const ar = {
 		pleaseConfigureServer: "يرجى تكوين خادم الترحيل لبدء البث",
 		sensors: "الحساسات",
 		sensorsUnavailable: "الحساسات غير متوفرة",
+		pageTitle: "لوحة التحكم",
+		pageDescription: "نظرة عامة على النظام والإعدادات",
 		serverAndAudio: "تكوين الخادم وبث الصوت",
 		serverSettings: "إعدادات الخادم",
 		streamPerformance: "أداء البث",

@@ -4,7 +4,7 @@ import { AlertDialog as AlertDialogDefault, type WithoutChild } from 'bits-ui';
 import type { Snippet } from 'svelte';
 
 import * as AlertDialog from '$lib/components/ui/alert-dialog/index';
-import { buttonVariants } from '$lib/components/ui/button';
+import { buttonVariants, type ButtonVariant } from '$lib/components/ui/button';
 import { cn } from '$lib/utils';
 
 interface Props extends AlertDialogDefault.RootProps {
@@ -24,6 +24,8 @@ interface Props extends AlertDialogDefault.RootProps {
 	oncancel?: () => unknown;
 	onconfirm?: () => unknown;
 	contentProps?: WithoutChild<AlertDialogDefault.ContentProps>;
+	/** Confirm action button style; use `"destructive"` for reboot, power off, etc. */
+	confirmVariant?: Extract<ButtonVariant, 'default' | 'destructive'>;
 }
 
 let {
@@ -37,6 +39,7 @@ let {
 	onconfirm,
 	cancelButtonText,
 	confirmButtonText,
+	confirmVariant = 'default',
 	class: className,
 	children,
 	buttonText,
@@ -97,12 +100,10 @@ const cancelButtonClasses = cn(
 
 const confirmButtonClasses = $derived(
 	cn(
-		'inline-flex h-10 min-w-[80px] items-center justify-center rounded-lg px-4 py-2 text-sm font-medium',
-		'bg-primary text-primary-foreground shadow-sm',
-		'hover:bg-primary/90',
-		'transition-all duration-200',
-		'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-		'disabled:pointer-events-none disabled:opacity-50',
+		buttonVariants({
+			variant: confirmVariant === 'destructive' ? 'destructive' : 'default',
+		}),
+		'h-10 min-w-[80px] rounded-lg px-4 py-2',
 		disabledConfirmButton ? 'cursor-not-allowed' : 'cursor-pointer',
 	),
 );

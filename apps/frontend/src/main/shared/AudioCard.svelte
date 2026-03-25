@@ -153,23 +153,23 @@ const hasAudioCodec = $derived(hasAudioSupport);
 				<div class="bg-muted space-y-3 rounded-lg border p-4">
 					<Label class="flex items-center gap-2 text-sm font-medium" for="audioDelay">
 						{$LL.settings.audioDelay()}
-						<span
-							class="rounded-md bg-emerald-500/10 px-2 py-1 text-xs text-emerald-700 dark:text-emerald-400"
-						>
+						<span class="bg-primary/10 text-primary rounded-md px-2 py-1 text-xs">
 							{localAudioDelay}ms
 						</span>
 					</Label>
 					<!-- Custom Center-Zero Slider -->
 					<div class="my-4 space-y-2">
-						<div class="relative h-6 w-full">
+						<div
+							class="relative h-6 w-full rounded-lg [&:has(input:focus-visible)]:ring-2 [&:has(input:focus-visible)]:ring-ring [&:has(input:focus-visible)]:ring-offset-2 [&:has(input:focus-visible)]:rounded-lg"
+						>
 							<!-- Track Background -->
 							<div
-								class="absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full bg-slate-200 dark:bg-slate-700"
+								class="bg-muted absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full"
 							></div>
 
 							<!-- Center Line -->
 							<div
-								class="absolute top-1/2 left-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-slate-400 dark:bg-slate-500"
+								class="bg-muted-foreground/40 absolute top-1/2 left-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2"
 							></div>
 
 							<!-- Progress Fill -->
@@ -186,9 +186,7 @@ const hasAudioCodec = $derived(hasAudioSupport);
 								<div
 									style={`${isNegative ? 'right' : 'left'}: 50%; width: ${safePercentage}%;`}
 									class={`absolute top-1/2 h-2 -translate-y-1/2 rounded-full transition-all duration-200 ${
-										isNegative
-											? 'bg-gradient-to-r from-amber-500 to-orange-600'
-											: 'bg-gradient-to-r from-emerald-500 to-teal-600'
+										isNegative ? 'bg-amber-500' : 'bg-primary'
 									}`}
 								></div>
 							{/if}
@@ -201,12 +199,12 @@ const hasAudioCodec = $derived(hasAudioSupport);
 									const percentage = ((clampedDelay + 2000) / 4000) * 100;
 									return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 50;
 								})()}%; transition: left 200ms ease-out, background-color 200ms ease-out;`}
-								class={`absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 border-white shadow-md transition-all duration-200 hover:scale-110 dark:border-slate-800 ${
+								class={`border-background absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 shadow-md transition-all duration-200 hover:scale-110 ${
 									localAudioDelay === 0
-										? 'bg-slate-500 dark:bg-slate-400'
+										? 'bg-muted-foreground'
 										: localAudioDelay < 0
 											? 'bg-amber-500 dark:bg-amber-400'
-											: 'bg-emerald-500 dark:bg-emerald-400'
+											: 'bg-primary'
 								}`}
 							></div>
 
@@ -239,12 +237,13 @@ const hasAudioCodec = $derived(hasAudioSupport);
 							<span class="text-foreground font-medium">{$LL.settings.perfectSync()}</span>
 							<span class="flex items-center gap-1">
 								+2000
-								<div class="h-2 w-2 rounded-full bg-emerald-500"></div>
+								<div class="bg-primary h-2 w-2 rounded-full"></div>
 							</span>
 						</div>
 					</div>
 					<Input
 						id="audioDelayInput"
+						aria-label={$LL.settings.audioDelay()}
 						class="text-center font-mono"
 						disabled={isStreaming}
 						onblur={() => {

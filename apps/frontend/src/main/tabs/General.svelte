@@ -48,13 +48,11 @@ function formatConfigValue(
 const streamingStatusColors = $derived.by(() => {
 	if (currentStatus?.is_streaming) {
 		return {
-			bg: 'from-emerald-500 to-teal-600',
 			text: 'text-emerald-600 dark:text-emerald-400',
 			icon: 'text-emerald-500',
 		};
 	}
 	return {
-		bg: 'from-amber-500 to-orange-600',
 		text: 'text-amber-600 dark:text-amber-400',
 		icon: 'text-muted-foreground',
 	};
@@ -63,31 +61,25 @@ const streamingStatusColors = $derived.by(() => {
 const serverStatusColors = $derived.by(() => {
 	if (currentConfig?.srtla_addr) {
 		return {
-			bg: 'from-emerald-500 to-teal-600',
 			icon: 'text-emerald-500',
 		};
 	}
 	return {
-		bg: 'from-slate-400 to-slate-500',
 		icon: 'text-muted-foreground',
-	};
-});
-
-const updatesStatusColors = $derived.by(() => {
-	const hasUpdates = (currentStatus?.available_updates?.package_count ?? 0) > 0;
-	if (hasUpdates) {
-		return {
-			bg: 'from-amber-500 to-orange-600',
-		};
-	}
-	return {
-		bg: 'from-emerald-500 to-teal-600',
 	};
 });
 </script>
 
 <div class="flex-col md:flex">
 	<div class="flex-1 space-y-4 p-4 pt-6 sm:p-8">
+		<div class="space-y-2">
+			<h1 class="text-3xl font-bold tracking-tight">
+				{$LL.general.pageTitle()}
+			</h1>
+			<p class="text-muted-foreground">
+				{$LL.general.pageDescription()}
+			</p>
+		</div>
 		<!-- Status Overview Cards -->
 		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 			<!-- System Status -->

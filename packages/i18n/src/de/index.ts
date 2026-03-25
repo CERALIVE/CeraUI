@@ -228,6 +228,8 @@ const de = {
 		serverAndAudio: "Server- und Audio-Streaming-Konfiguration",
 		liveMetrics: "Live-Metriken",
 		sensorsUnavailable: "Sensoren nicht verfügbar",
+		pageTitle: "Dashboard",
+		pageDescription: "Systemübersicht und Konfiguration",
 		configurationNotComplete: "Konfiguration ausstehend",
 		pleaseConfigureServer:
 			"Bitte konfigurieren Sie einen Relay-Server, um mit dem Streaming zu beginnen",

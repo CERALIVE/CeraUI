@@ -286,7 +286,9 @@ const isManualAccount = $derived(
 				</span>
 			</Label>
 			<!-- Custom slider with visual progress -->
-			<div class="relative h-6 w-full">
+			<div
+				class="relative h-6 w-full rounded-lg [&:has(input:focus-visible)]:ring-2 [&:has(input:focus-visible)]:ring-ring [&:has(input:focus-visible)]:ring-offset-2 [&:has(input:focus-visible)]:rounded-lg"
+			>
 				<!-- Track Background -->
 				<div
 					class="absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full bg-background"
@@ -330,6 +332,7 @@ const isManualAccount = $derived(
 			</div>
 			<Input
 				id="srtLatencyInput"
+				aria-label={$LL.settings.srtLatency()}
 				class="text-center font-mono"
 				disabled={isStreaming}
 				onblur={() => {

@@ -262,7 +262,9 @@ const selectedPipeline = $derived<Pipeline | undefined>(
 				</span>
 			</Label>
 			<!-- Custom slider -->
-			<div class="relative h-6 w-full">
+			<div
+				class="relative h-6 w-full rounded-lg [&:has(input:focus-visible)]:ring-2 [&:has(input:focus-visible)]:ring-ring [&:has(input:focus-visible)]:ring-offset-2 [&:has(input:focus-visible)]:rounded-lg"
+			>
 				<!-- Track Background -->
 				<div
 					class="absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full bg-background"
@@ -305,6 +307,7 @@ const selectedPipeline = $derived<Pipeline | undefined>(
 				/>
 			</div>
 			<Input
+				aria-label={$LL.settings.bitrate()}
 				class="text-center font-mono"
 				max={12000}
 				min={2000}

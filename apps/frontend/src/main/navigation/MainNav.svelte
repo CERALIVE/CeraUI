@@ -26,21 +26,15 @@ const currentNav = $derived(getCurrentNavigation() ?? { general: navElements.gen
 const handleTabNavigation = (identifier: string, navigation: Record<string, unknown>) => {
 	// Add additional safety checks to prevent NaN issues
 	if ($isNavigationTransitioning || !navigation || !identifier) {
-		console.warn('[MainNav] Navigation blocked - invalid state or transitioning');
 		return;
 	}
 
 	const now = Date.now();
 	if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) {
-		console.log(`[MainNav] Navigation throttled - too soon after last navigation`);
 		return;
 	}
 
 	lastNavigationTime = now;
-	console.log(`[MainNav] Navigation to ${identifier}:`, {
-		timestamp: new Date().toISOString(),
-		throttleMs: NAVIGATION_THROTTLE_MS,
-	});
 
 	navigateTo({ [identifier]: navigation } as NavElements);
 };
@@ -51,15 +45,10 @@ const handleLogoClick = () => {
 
 	const now = Date.now();
 	if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) {
-		console.log(`[MainNav] Logo navigation throttled`);
 		return;
 	}
 
 	lastNavigationTime = now;
-	console.log(`[MainNav] Logo navigation:`, {
-		timestamp: new Date().toISOString(),
-		canGoBack: $canGoBack,
-	});
 
 	const currentKey =
 		currentNav && typeof currentNav === 'object' && Object.keys(currentNav).length > 0
@@ -96,7 +85,7 @@ const handleLogoClick = () => {
 </div>
 
 <!-- Navigation Tabs -->
-<div class="hidden flex-1 md:flex">
+<nav aria-label="Main navigation" class="hidden flex-1 md:flex">
 	<ScrollArea orientation="both" scrollbarXClasses="invisible">
 		<div class="flex items-center gap-1 px-2">
 			{#each Object.entries(navElements) as [identifier, navigation], index}
@@ -129,4 +118,4 @@ const handleLogoClick = () => {
 			{/each}
 		</div>
 	</ScrollArea>
-</div>
+</nav>

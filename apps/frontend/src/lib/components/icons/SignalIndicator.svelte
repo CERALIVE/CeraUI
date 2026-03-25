@@ -14,9 +14,10 @@ const { signal, type = 'cellular', class: className }: Props = $props();
 
 // Signal color based on strength
 const signalColor = $derived.by(() => {
-	if (signal >= 70) return 'text-emerald-600 dark:text-emerald-400';
+	// Strong signal uses brand primary (active/success semantic); amber/red kept for warning/poor.
+	if (signal >= 70) return 'text-primary';
 	if (signal >= 40) return 'text-amber-600 dark:text-amber-400';
-	return 'text-red-600 dark:text-red-400';
+	return 'text-destructive';
 });
 </script>
 

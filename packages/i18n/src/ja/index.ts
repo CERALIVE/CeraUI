@@ -55,6 +55,8 @@ const ja = {
 		serverSettings: "サーバー設定",
 		streamPerformance: "ストリーム性能",
 		systemHealth: "システムヘルス",
+		pageTitle: "ダッシュボード",
+		pageDescription: "システムの概要と設定",
 	},
 	auth: {
 		createPassword: "パスワードを作成",

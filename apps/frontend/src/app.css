@@ -13,7 +13,7 @@
 	::before,
 	::backdrop,
 	::file-selector-button {
-		border-color: var(--color-gray-200, currentColor);
+		border-color: var(--color-gray-200, hsl(var(--border)));
 	}
 }
 
@@ -70,6 +70,15 @@
 		--ring: 14 84% 54%;
 		--radius: 0.5rem;
 
+		--sidebar-background: 30 10% 95%;
+		--sidebar-foreground: 25 25% 10%;
+		--sidebar-primary: 14 84% 54%;
+		--sidebar-primary-foreground: 0 0% 100%;
+		--sidebar-accent: 25 18% 93%;
+		--sidebar-accent-foreground: 14 55% 35%;
+		--sidebar-border: 30 12% 89%;
+		--sidebar-ring: 14 84% 54%;
+
 		/* Semantic Status */
 		--status-success: 142 71% 45%;
 		--status-success-foreground: 0 0% 100%;
@@ -107,7 +116,7 @@
 		--secondary: 25 10% 16%;
 		--secondary-foreground: 30 12% 92%;
 
-		--muted: 25 10% 16%;
+		--muted: 25 8% 14%;
 		--muted-foreground: 25 6% 55%;
 
 		--accent: 25 12% 17%;
@@ -116,9 +125,18 @@
 		--destructive: 0 63% 31%;
 		--destructive-foreground: 0 0% 98%;
 
-		--border: 25 10% 16%;
+		--border: 25 8% 18%;
 		--input: 25 10% 16%;
 		--ring: 14 80% 58%;
+
+		--sidebar-background: 25 13% 10%;
+		--sidebar-foreground: 30 12% 93%;
+		--sidebar-primary: 14 80% 58%;
+		--sidebar-primary-foreground: 0 0% 100%;
+		--sidebar-accent: 25 12% 17%;
+		--sidebar-accent-foreground: 14 55% 70%;
+		--sidebar-border: 25 10% 16%;
+		--sidebar-ring: 14 80% 58%;
 
 		/* Semantic Status (Dark) */
 		--status-success: 142 69% 58%;

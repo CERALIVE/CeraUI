@@ -228,6 +228,8 @@ const es = {
 		serverAndAudio: "Configuración del servidor y transmisión de audio",
 		liveMetrics: "Métricas en vivo",
 		sensorsUnavailable: "Sensores no disponibles",
+		pageTitle: "Panel",
+		pageDescription: "Resumen del sistema y configuración",
 		configurationNotComplete: "Configuración pendiente",
 		pleaseConfigureServer:
 			"Por favor configure un servidor de retransmisión para comenzar la transmisión",

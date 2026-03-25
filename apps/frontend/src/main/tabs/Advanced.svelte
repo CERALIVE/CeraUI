@@ -418,6 +418,7 @@ $effect(() => {
 									<SimpleAlertDialog
 										buttonText={$LL.advanced.reboot()}
 										confirmButtonText={$LL.advanced.reboot()}
+										confirmVariant="destructive"
 										extraButtonClasses="w-full h-10 text-sm justify-center"
 										iconPosition="left"
 										onconfirm={reboot}
@@ -456,6 +457,7 @@ $effect(() => {
 									<SimpleAlertDialog
 										buttonText={$LL.advanced.powerOff()}
 										confirmButtonText={$LL.advanced.powerOff()}
+										confirmVariant="destructive"
 										extraButtonClasses="w-full h-10 text-sm justify-center bg-destructive text-destructive-foreground hover:bg-destructive/90"
 										iconPosition="left"
 										onconfirm={powerOff}
@@ -600,7 +602,7 @@ $effect(() => {
 									{/if}
 								</Button>
 								<Button
-									class="h-8 border-0 bg-gradient-to-r from-red-500 to-rose-600 px-3 shadow-sm hover:from-red-600 hover:to-rose-700"
+									class="h-8 bg-destructive px-3 text-destructive-foreground hover:bg-destructive/90"
 									onclick={() => {
 										resetSSHPasword();
 										sshPasswordChanged = true;

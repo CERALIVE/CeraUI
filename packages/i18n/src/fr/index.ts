@@ -224,6 +224,8 @@ const fr = {
 		serverAndAudio: "Configuration du serveur et diffusion audio",
 		liveMetrics: "Métriques en direct",
 		sensorsUnavailable: "Capteurs indisponibles",
+		pageTitle: "Tableau de bord",
+		pageDescription: "Aperçu du système et configuration",
 		configurationNotComplete: "Configuration en attente",
 		pleaseConfigureServer:
 			"Veuillez configurer un serveur de relais pour commencer la diffusion",

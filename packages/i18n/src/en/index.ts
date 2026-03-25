@@ -234,6 +234,8 @@ const en = {
 		serverAndAudio: "Server and audio streaming configuration",
 		liveMetrics: "Live metrics",
 		sensorsUnavailable: "Sensors unavailable",
+		pageTitle: "Dashboard",
+		pageDescription: "System overview and configuration",
 	},
 	navigation: {
 		toggleMenu: "Toggle Menu",
