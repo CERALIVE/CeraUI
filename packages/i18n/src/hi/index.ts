@@ -367,6 +367,8 @@ const hi = {
 		accessibility: {
 			hidePassword: "पासवर्ड छुपाएं",
 			showPassword: "पासवर्ड दिखाएं",
+			secured: "Secured network",
+			openNetwork: "Open network",
 		},
 		status: {
 			connected: "जुड़ा हुआ",

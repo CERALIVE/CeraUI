@@ -557,6 +557,8 @@ const fr = {
 		accessibility: {
 			hidePassword: "Masquer le mot de passe",
 			showPassword: "Afficher le mot de passe",
+			secured: "Secured network",
+			openNetwork: "Open network",
 		},
 		networks: {
 			found: "réseaux trouvés",

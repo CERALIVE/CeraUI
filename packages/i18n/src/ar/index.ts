@@ -542,6 +542,8 @@ const ar = {
 		accessibility: {
 			hidePassword: "إخفاء كلمة المرور",
 			showPassword: "إظهار كلمة المرور",
+			secured: "Secured network",
+			openNetwork: "Open network",
 		},
 		status: {
 			connected: "متصل",

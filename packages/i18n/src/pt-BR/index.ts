@@ -555,6 +555,8 @@ const ptBR = {
 		accessibility: {
 			hidePassword: "Ocultar senha",
 			showPassword: "Mostrar senha",
+			secured: "Secured network",
+			openNetwork: "Open network",
 		},
 		networks: {
 			found: "redes encontradas",

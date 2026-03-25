@@ -370,6 +370,8 @@ const ko = {
 		accessibility: {
 			hidePassword: "비밀번호 숨기기",
 			showPassword: "비밀번호 표시",
+			secured: "Secured network",
+			openNetwork: "Open network",
 		},
 		status: {
 			connected: "연결됨",

@@ -351,6 +351,8 @@ const zh = {
 		accessibility: {
 			hidePassword: "隐藏密码",
 			showPassword: "显示密码",
+			secured: "Secured network",
+			openNetwork: "Open network",
 		},
 		networks: {
 			found: "找到网络",

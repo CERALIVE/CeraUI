@@ -376,6 +376,8 @@ const ja = {
 		accessibility: {
 			hidePassword: "パスワードを隠す",
 			showPassword: "パスワードを表示",
+			secured: "Secured network",
+			openNetwork: "Open network",
 		},
 		status: {
 			connected: "接続済み",

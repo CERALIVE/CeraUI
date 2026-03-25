@@ -574,6 +574,8 @@ const de = {
 		accessibility: {
 			hidePassword: "Passwort verbergen",
 			showPassword: "Passwort anzeigen",
+			secured: "Secured network",
+			openNetwork: "Open network",
 		},
 		networks: {
 			found: "Netzwerke gefunden",

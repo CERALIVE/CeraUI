@@ -601,6 +601,8 @@ const es = {
 		accessibility: {
 			hidePassword: "Ocultar contraseña",
 			showPassword: "Mostrar contraseña",
+			secured: "Secured network",
+			openNetwork: "Open network",
 		},
 	},
 	networking: {
