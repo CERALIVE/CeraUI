@@ -37,7 +37,7 @@ const isConnected = $derived(wifiStatus === 'connected');
 const statusColors = $derived.by(() => {
 	if (isHotspot) {
 		return {
-			badge: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
+			badge: 'bg-secondary text-secondary-foreground',
 		};
 	}
 	if (isConnected) {
@@ -54,8 +54,9 @@ const statusColors = $derived.by(() => {
 // Band badge color
 function getBandBadge(freq: number) {
 	const band = getWifiBand(freq);
-	if (band.includes('5')) return 'bg-purple-500/10 text-purple-700 dark:text-purple-400';
-	if (band.includes('6')) return 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400';
+	if (band.includes('5') || band.includes('6')) {
+		return 'bg-secondary text-secondary-foreground';
+	}
 	return 'bg-muted text-muted-foreground';
 }
 </script>
@@ -149,7 +150,7 @@ function getBandBadge(freq: number) {
 						buttonText={$LL.network.status.details()}
 						confirmButtonText={$LL.network.dialog.close()}
 						extraButtonClasses="w-full sm:flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
-						hiddeCancelButton={true}
+						hideCancelButton={true}
 						title={$LL.network.dialog.hotspotDetails()}
 					>
 						{#snippet icon()}

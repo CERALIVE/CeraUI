@@ -14,7 +14,7 @@ interface Props extends AlertDialogDefault.RootProps {
 	buttonText?: string;
 	icon?: Snippet;
 	iconPosition?: 'right' | 'left';
-	hiddeCancelButton?: boolean;
+	hideCancelButton?: boolean;
 	dialogTitle?: Snippet;
 	title?: string;
 	disabledConfirmButton?: boolean;
@@ -34,7 +34,7 @@ let {
 	buttonClasses,
 	icon,
 	iconPosition,
-	hiddeCancelButton = false,
+	hideCancelButton = false,
 	oncancel,
 	onconfirm,
 	cancelButtonText,
@@ -55,8 +55,7 @@ let {
 const triggerClasses = $derived(
 	cn(
 		'group relative overflow-hidden transition-all duration-300',
-		'shadow-lg hover:shadow-xl',
-		'transform hover:scale-[1.02] active:scale-[0.98]',
+		'shadow-sm hover:shadow-md',
 		iconPosition === 'left' ? 'flex-row-reverse' : '',
 		buttonVariants({ variant: 'default' }),
 		extraButtonClasses,
@@ -65,14 +64,13 @@ const triggerClasses = $derived(
 );
 
 const overlayClasses =
-	'fixed inset-0 z-50 bg-black/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-200';
+	'fixed inset-0 z-50 bg-foreground/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-200';
 
 const contentClasses = $derived(
 	cn(
 		'fixed left-1/2 top-1/2 z-[100] w-full max-w-lg -translate-x-1/2 -translate-y-1/2',
 		'max-h-[90vh] overflow-hidden flex flex-col',
-		'rounded-2xl border bg-white shadow-xl',
-		'dark:bg-slate-900 dark:border-slate-700',
+		'rounded-2xl border border-border bg-card text-card-foreground shadow-xl',
 		'data-[state=open]:animate-in data-[state=closed]:animate-out',
 		'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
 		'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -90,12 +88,8 @@ const descriptionClasses = 'text-sm text-muted-foreground leading-relaxed';
 const footerClasses = 'flex-shrink-0 flex flex-col-reverse gap-3 p-6 sm:flex-row sm:justify-end';
 
 const cancelButtonClasses = cn(
-	'inline-flex h-10 min-w-[80px] items-center justify-center rounded-lg px-4 py-2 text-sm font-medium',
-	'border border-input bg-background text-foreground',
-	'hover:bg-accent hover:text-accent-foreground',
-	'transition-all duration-200',
-	'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-	'disabled:pointer-events-none disabled:opacity-50',
+	buttonVariants({ variant: 'outline' }),
+	'h-10 min-w-[80px] rounded-lg px-4 py-2',
 );
 
 const confirmButtonClasses = $derived(
@@ -142,7 +136,7 @@ const confirmButtonClasses = $derived(
 			</AlertDialog.Header>
 
 			<AlertDialog.Footer class={footerClasses}>
-				{#if !hiddeCancelButton}
+				{#if !hideCancelButton}
 					<AlertDialog.Cancel class={cancelButtonClasses} onclick={() => oncancel?.()}>
 						{cancelButtonText ?? $LL.dialog.cancel()}
 					</AlertDialog.Cancel>
@@ -153,7 +147,7 @@ const confirmButtonClasses = $derived(
 					disabled={disabledConfirmButton}
 					onclick={() => {
 						onconfirm?.();
-						setTimeout(() => (open = false), 20);
+						open = false;
 					}}
 				>
 					{confirmButtonText ?? $LL.dialog.continue()}

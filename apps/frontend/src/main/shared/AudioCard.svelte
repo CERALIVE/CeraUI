@@ -77,11 +77,11 @@ const hasAudioCodec = $derived(hasAudioSupport);
 			</div>
 		{:else if !hasAudioSupport}
 			<!-- Empty State: No audio support -->
-			<div class="rounded-lg border bg-amber-500/5 px-4 py-3">
-				<h4 class="text-sm font-medium text-amber-700 dark:text-amber-400">
+			<div class="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">
+				<h4 class="text-destructive text-sm font-medium">
 					{$LL.settings.noAudioSettingSupport()}
 				</h4>
-				<p class="mt-1 text-xs text-amber-600/80 dark:text-amber-400/70">
+				<p class="text-destructive/80 mt-1 text-xs">
 					{$LL.settings.selectedPipelineNoAudio()}
 				</p>
 			</div>
@@ -186,7 +186,7 @@ const hasAudioCodec = $derived(hasAudioSupport);
 								<div
 									style={`${isNegative ? 'right' : 'left'}: 50%; width: ${safePercentage}%;`}
 									class={`absolute top-1/2 h-2 -translate-y-1/2 rounded-full transition-all duration-200 ${
-										isNegative ? 'bg-amber-500' : 'bg-primary'
+										isNegative ? 'bg-muted-foreground' : 'bg-primary'
 									}`}
 								></div>
 							{/if}
@@ -203,7 +203,7 @@ const hasAudioCodec = $derived(hasAudioSupport);
 									localAudioDelay === 0
 										? 'bg-muted-foreground'
 										: localAudioDelay < 0
-											? 'bg-amber-500 dark:bg-amber-400'
+											? 'border-muted-foreground bg-muted-foreground'
 											: 'bg-primary'
 								}`}
 							></div>
@@ -231,7 +231,7 @@ const hasAudioCodec = $derived(hasAudioSupport);
 						<!-- Value Labels -->
 						<div class="text-muted-foreground flex justify-between text-xs">
 							<span class="flex items-center gap-1">
-								<div class="h-2 w-2 rounded-full bg-amber-500"></div>
+								<div class="bg-muted-foreground h-2 w-2 rounded-full"></div>
 								-2000
 							</span>
 							<span class="text-foreground font-medium">{$LL.settings.perfectSync()}</span>
@@ -243,6 +243,7 @@ const hasAudioCodec = $derived(hasAudioSupport);
 					</div>
 					<Input
 						id="audioDelayInput"
+						aria-describedby="audio-delay-help"
 						aria-label={$LL.settings.audioDelay()}
 						class="text-center font-mono"
 						disabled={isStreaming}
@@ -262,11 +263,11 @@ const hasAudioCodec = $derived(hasAudioSupport);
 						bind:value={localAudioDelay}
 					></Input>
 					<!-- Additional Help Text -->
-					<div class="text-muted-foreground text-center text-xs">
+					<p id="audio-delay-help" class="text-muted-foreground text-center text-xs">
 						<span
 							>{$LL.settings.audioDelayEarly()} ← 0ms (sync) → {$LL.settings.audioDelayLate()}</span
 						>
-					</div>
+					</p>
 				</div>
 			{/if}
 		{/if}

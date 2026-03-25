@@ -23,7 +23,7 @@ const currentStatus = $derived(getStatus());
 	<!-- Network Interfaces Section -->
 	<section class="space-y-4">
 		<div class="flex items-center gap-2">
-			<Network class="text-muted-foreground h-5 w-5" />
+			<Network aria-hidden={true} class="text-muted-foreground h-5 w-5" />
 			<h2 class="text-xl font-semibold">{$LL.network.sections.networkInterfaces()}</h2>
 		</div>
 		<Card.Root class="gap-0 overflow-hidden py-0">
@@ -35,7 +35,7 @@ const currentStatus = $derived(getStatus());
 	{#if currentStatus?.wifi && Object.keys(currentStatus.wifi).length > 0}
 		<section class="space-y-4">
 			<div class="flex items-center gap-2">
-				<Wifi class="text-muted-foreground h-5 w-5" />
+				<Wifi aria-hidden={true} class="text-muted-foreground h-5 w-5" />
 				<h2 class="text-xl font-semibold">{$LL.network.sections.wifiDevices()}</h2>
 				<span class="bg-secondary text-secondary-foreground rounded-full px-2 py-1 text-xs font-medium">
 					{Object.keys(currentStatus.wifi).length}
@@ -59,7 +59,7 @@ const currentStatus = $derived(getStatus());
 	{#if currentStatus?.modems && Object.keys(currentStatus.modems).length > 0}
 		<section class="space-y-4">
 			<div class="flex items-center gap-2">
-				<Radio class="text-muted-foreground h-5 w-5" />
+				<Radio aria-hidden={true} class="text-muted-foreground h-5 w-5" />
 				<h2 class="text-xl font-semibold">{$LL.network.sections.cellularModems()}</h2>
 				<span class="bg-secondary text-secondary-foreground rounded-full px-2 py-1 text-xs font-medium">
 					{Object.keys(currentStatus.modems).length}

@@ -126,7 +126,7 @@ const isManualAccount = $derived(
 					<Select.Group>
 						<Select.Item value="-1">
 							<div class="flex items-center gap-2">
-								<div class="h-2 w-2 rounded-full bg-muted-foreground"></div>
+								<div aria-hidden={true} class="h-2 w-2 rounded-full bg-muted-foreground"></div>
 								{$LL.settings.manualConfiguration()}
 							</div>
 						</Select.Item>
@@ -134,7 +134,7 @@ const isManualAccount = $derived(
 							{#each Object.entries(relayMessage?.servers) as [server, serverInfo]}
 								<Select.Item value={server}>
 									<div class="flex items-center gap-2">
-										<div class="h-2 w-2 rounded-full bg-primary"></div>
+										<div aria-hidden={true} class="h-2 w-2 rounded-full bg-primary"></div>
 										{serverInfo.name}
 									</div>
 								</Select.Item>
@@ -236,7 +236,7 @@ const isManualAccount = $derived(
 						<Select.Group>
 							<Select.Item value="-1">
 								<div class="flex items-center gap-2">
-									<div class="h-2 w-2 rounded-full bg-muted-foreground"></div>
+									<div aria-hidden={true} class="h-2 w-2 rounded-full bg-muted-foreground"></div>
 									{$LL.settings.manualConfiguration()}
 								</div>
 							</Select.Item>
@@ -244,7 +244,7 @@ const isManualAccount = $derived(
 								{#each Object.entries(relayMessage?.accounts) as [account, accountInfo]}
 									<Select.Item value={account}>
 										<div class="flex items-center gap-2">
-											<div class="h-2 w-2 rounded-full bg-primary"></div>
+											<div aria-hidden={true} class="h-2 w-2 rounded-full bg-primary"></div>
 											{accountInfo.name}
 										</div>
 									</Select.Item>
@@ -314,6 +314,10 @@ const isManualAccount = $derived(
 				<!-- Invisible Input -->
 				<input
 					id="srtLatency"
+					aria-label={$LL?.settings?.srtLatency?.() || 'SRT Latency'}
+					aria-valuemax={12000}
+					aria-valuemin={2000}
+					aria-valuenow={localSrtLatency}
 					class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
 					disabled={isStreaming}
 					max={12000}

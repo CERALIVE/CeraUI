@@ -209,6 +209,9 @@ $effect(() => {
 							/>
 							<div class="absolute inset-y-0 right-2 flex items-center gap-1">
 								<Button
+									aria-label={showPassword
+										? $LL.advanced.hidePassword()
+										: $LL.advanced.showPassword()}
 									class="hover:bg-muted/50 h-8 w-8 rounded-md p-0"
 									onclick={() => (showPassword = !showPassword)}
 									size="sm"
@@ -253,7 +256,10 @@ $effect(() => {
 								{$LL.advanced.cloudProvider?.() ?? 'Cloud Provider'}
 							</Label>
 							<Select.Root type="single" bind:value={selectedProvider}>
-								<Select.Trigger class="bg-background/50 border-muted-foreground/20 w-full">
+								<Select.Trigger
+									class="bg-background/50 border-muted-foreground/20 w-full"
+									id="cloudProvider"
+								>
 									{CLOUD_PROVIDERS.find((p) => p.id === selectedProvider)?.name ??
 										'Select provider'}
 								</Select.Trigger>
@@ -347,6 +353,9 @@ $effect(() => {
 							/>
 							<div class="absolute inset-y-0 right-2 flex items-center gap-1">
 								<Button
+									aria-label={showRemoteKey
+										? $LL.advanced.hideRemoteKey()
+										: $LL.advanced.showRemoteKey()}
 									class="hover:bg-muted/50 h-8 w-8 rounded-md p-0"
 									onclick={() => (showRemoteKey = !showRemoteKey)}
 									size="sm"
@@ -516,7 +525,9 @@ $effect(() => {
 									<div
 										class={cn(
 											'h-2.5 w-2.5 rounded-full',
-											sshStatus ? 'animate-pulse bg-primary' : 'bg-muted-foreground',
+											sshStatus
+										? 'motion-safe:animate-pulse bg-primary'
+										: 'bg-muted-foreground',
 										)}
 									></div>
 									<span class="font-medium">{$LL.advanced.sshServer()}:</span>
@@ -544,18 +555,14 @@ $effect(() => {
 							/>
 							<div class="absolute inset-y-0 right-2 flex items-center gap-1">
 								<Button
+									aria-label={$LL.advanced.copyToClipboard()}
 									class="hover:bg-muted/50 h-8 w-8 rounded-md p-0"
 									onclick={async () => {
-										console.log(
-											'🔐 Attempting to copy SSH password:',
-											sshPassword ? 'Password available' : 'No password',
-										);
 										try {
 											if (!sshPassword) {
 												throw new Error('No SSH password available to copy');
 											}
 											await navigator.clipboard.writeText(sshPassword);
-											console.log('✅ SSH password copied to clipboard successfully');
 											toast.success($LL.advanced.passwordCopied(), {
 												description: $LL.advanced.passwordCopiedDesc(),
 											});
@@ -569,17 +576,17 @@ $effect(() => {
 												try {
 													document.execCommand('copy');
 													toast.success($LL.advanced.passwordCopied(), {
-														description: 'Password selected for copying (manual)',
-													});
-												} catch (fallbackError) {
-													toast.error('Copy Failed', {
 														description:
-															'Unable to copy password. Please select and copy manually.',
+															$LL.advanced.passwordSelectedManualCopyDescription(),
+													});
+												} catch {
+													toast.error($LL.advanced.copyFailed(), {
+														description: $LL.advanced.copyFailedManualDescription(),
 													});
 												}
 											} else {
-												toast.error('Copy Failed', {
-													description: 'Clipboard access denied. Please copy manually.',
+												toast.error($LL.advanced.copyFailed(), {
+													description: $LL.advanced.copyFailedClipboardDeniedDescription(),
 												});
 											}
 										}
@@ -590,6 +597,9 @@ $effect(() => {
 									<Copy class="h-4 w-4" />
 								</Button>
 								<Button
+									aria-label={showSSHPassword
+										? $LL.advanced.hidePassword()
+										: $LL.advanced.showPassword()}
 									class="hover:bg-muted/50 h-8 w-8 rounded-md p-0"
 									onclick={() => (showSSHPassword = !showSSHPassword)}
 									size="sm"
@@ -601,17 +611,27 @@ $effect(() => {
 										<Eye class="h-4 w-4" />
 									{/if}
 								</Button>
-								<Button
-									class="h-8 bg-destructive px-3 text-destructive-foreground hover:bg-destructive/90"
-									onclick={() => {
+								<SimpleAlertDialog
+									buttonText={$LL.advanced.reset()}
+									confirmButtonText={$LL.advanced.reset()}
+									confirmVariant="destructive"
+									extraButtonClasses="h-8 px-3 text-sm justify-center bg-destructive text-destructive-foreground hover:bg-destructive/90"
+									iconPosition="left"
+									onconfirm={() => {
 										resetSSHPasword();
 										sshPasswordChanged = true;
 									}}
-									size="sm"
-									variant="destructive"
 								>
-									{$LL.advanced.reset()}
-								</Button>
+									{#snippet icon()}
+										<RotateCcw class="h-4 w-4" />
+									{/snippet}
+									{#snippet dialogTitle()}
+										{$LL.advanced.confirmResetSshPassword()}
+									{/snippet}
+									{#snippet description()}
+										{$LL.advanced.confirmResetSshPasswordDescription()}
+									{/snippet}
+								</SimpleAlertDialog>
 							</div>
 						</div>
 
@@ -770,7 +790,7 @@ $effect(() => {
 
 		<!-- Version Information Card -->
 		{#if revisions}
-			<Card.Root class="col-span-full mt-8 gap-0 overflow-hidden py-0">
+			<Card.Root class="mt-8 gap-0 overflow-hidden py-0">
 				<Card.Header class="border-b pt-6 pb-6">
 					<div class="flex items-center space-x-4">
 						<CheckCircle class="text-muted-foreground h-6 w-6" />

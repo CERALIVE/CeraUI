@@ -417,6 +417,7 @@ const fr = {
 		},
 		errors: {
 			networkConnectionError: "Erreur de connexion réseau",
+			toggleFailed: "Impossible de modifier l'état du réseau",
 		},
 		hotspot: {
 			name: "Nom",
@@ -666,6 +667,21 @@ const fr = {
 		passwordCopied: "Mot de passe copié",
 		passwordCopiedDesc:
 			"Le mot de passe SSH a été copié dans le presse-papiers.",
+		showPassword: "Afficher le mot de passe",
+		hidePassword: "Masquer le mot de passe",
+		showRemoteKey: "Afficher la clé distante",
+		hideRemoteKey: "Masquer la clé distante",
+		copyToClipboard: "Copier dans le presse-papiers",
+		confirmResetSshPassword: "Réinitialiser le mot de passe SSH ?",
+		confirmResetSshPasswordDescription:
+			"Un nouveau mot de passe SSH sera généré. L’ancien cessera de fonctionner immédiatement.",
+		copyFailed: "Échec de la copie",
+		copyFailedManualDescription:
+			"Impossible de copier le mot de passe. Veuillez le sélectionner et le copier manuellement.",
+		copyFailedClipboardDeniedDescription:
+			"Accès au presse-papiers refusé. Veuillez copier manuellement.",
+		passwordSelectedManualCopyDescription:
+			"Mot de passe sélectionné pour copie (manuel)",
 		reset: "Réinitialiser",
 		resetTooltip: "Réinitialisez le mot de passe SSH.",
 		startSSH: "Démarrer le serveur SSH",

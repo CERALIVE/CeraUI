@@ -19,13 +19,15 @@ async function handleRefresh() {
 			<MainNav />
 			<MobileNav />
 			<div class="flex flex-1 items-center justify-between space-x-2 md:justify-end">
-				<nav class="flex items-center gap-1">
+				<div role="toolbar" aria-label="Settings" class="flex items-center gap-1">
 					<LocaleSelector />
 					<ModeToggle />
-				</nav>
+				</div>
 			</div>
 		</div>
 	</header>
 
-	<NavigationRenderer></NavigationRenderer>
+	<main>
+		<NavigationRenderer></NavigationRenderer>
+	</main>
 </PullToRefresh>

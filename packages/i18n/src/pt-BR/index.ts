@@ -467,6 +467,7 @@ const ptBR = {
 		},
 		errors: {
 			networkConnectionError: "Erro de conexão de rede",
+			toggleFailed: "Falha ao alternar a rede",
 		},
 		toggle: {
 			disableNetwork: "Desabilitar interface de rede",
@@ -641,6 +642,21 @@ const ptBR = {
 		sshPasswordPlaceholder: "Senha SSH gerada",
 		passwordCopied: "Senha copiada",
 		passwordCopiedDesc: "A senha SSH foi copiada para a área de transferência.",
+		showPassword: "Mostrar senha",
+		hidePassword: "Ocultar senha",
+		showRemoteKey: "Mostrar chave remota",
+		hideRemoteKey: "Ocultar chave remota",
+		copyToClipboard: "Copiar para a área de transferência",
+		confirmResetSshPassword: "Redefinir a senha SSH?",
+		confirmResetSshPasswordDescription:
+			"Uma nova senha SSH será gerada. A senha atual deixará de funcionar imediatamente.",
+		copyFailed: "Falha ao copiar",
+		copyFailedManualDescription:
+			"Não foi possível copiar a senha. Selecione e copie manualmente.",
+		copyFailedClipboardDeniedDescription:
+			"Acesso à área de transferência negado. Copie manualmente.",
+		passwordSelectedManualCopyDescription:
+			"Senha selecionada para copiar (manual)",
 		reset: "Redefinir",
 		resetTooltip: "Redefina a senha SSH para uma nova.",
 		startSSH: "Iniciar servidor SSH",

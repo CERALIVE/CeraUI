@@ -435,6 +435,7 @@ const en = {
 		},
 		errors: {
 			networkConnectionError: "Network connection error",
+			toggleFailed: "Failed to toggle network",
 		},
 		hotspot: {
 			name: "Name",
@@ -670,6 +671,21 @@ const en = {
 		sshPasswordPlaceholder: "Generated SSH password",
 		passwordCopied: "Password Copied",
 		passwordCopiedDesc: "The SSH Password has been copied to the clipboard.",
+		showPassword: "Show password",
+		hidePassword: "Hide password",
+		showRemoteKey: "Show remote key",
+		hideRemoteKey: "Hide remote key",
+		copyToClipboard: "Copy to clipboard",
+		confirmResetSshPassword: "Reset SSH password?",
+		confirmResetSshPasswordDescription:
+			"This will generate a new SSH password. The current password will stop working immediately.",
+		copyFailed: "Copy failed",
+		copyFailedManualDescription:
+			"Unable to copy password. Please select and copy manually.",
+		copyFailedClipboardDeniedDescription:
+			"Clipboard access denied. Please copy manually.",
+		passwordSelectedManualCopyDescription:
+			"Password selected for copying (manual)",
 		reset: "Reset",
 		resetTooltip: "Reset the SSH password to a new one.",
 		startSSH: "Start SSH Server",

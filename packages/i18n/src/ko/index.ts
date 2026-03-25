@@ -271,6 +271,7 @@ const ko = {
 		},
 		errors: {
 			networkConnectionError: "네트워크 연결 오류",
+			toggleFailed: "네트워크 전환에 실패했습니다",
 		},
 		summary: {
 			activeNetworks: "{total}개 네트워크 중 {active}개 활성",
@@ -468,6 +469,21 @@ const ko = {
 		sshPasswordPlaceholder: "생성된 SSH 비밀번호",
 		passwordCopied: "비밀번호 복사됨",
 		passwordCopiedDesc: "SSH 비밀번호가 클립보드에 복사되었습니다.",
+		showPassword: "비밀번호 표시",
+		hidePassword: "비밀번호 숨기기",
+		showRemoteKey: "원격 키 표시",
+		hideRemoteKey: "원격 키 숨기기",
+		copyToClipboard: "클립보드에 복사",
+		confirmResetSshPassword: "SSH 비밀번호를 재설정할까요?",
+		confirmResetSshPasswordDescription:
+			"새 SSH 비밀번호가 생성됩니다. 현재 비밀번호는 즉시 사용할 수 없게 됩니다.",
+		copyFailed: "복사 실패",
+		copyFailedManualDescription:
+			"비밀번호를 복사할 수 없습니다. 직접 선택해 복사하세요.",
+		copyFailedClipboardDeniedDescription:
+			"클립보드 접근이 거부되었습니다. 직접 복사하세요.",
+		passwordSelectedManualCopyDescription:
+			"수동 복사를 위해 비밀번호가 선택됨",
 		reset: "재설정",
 		resetTooltip: "SSH 비밀번호를 새 비밀번호로 재설정합니다.",
 		startSSH: "SSH 서버 시작",

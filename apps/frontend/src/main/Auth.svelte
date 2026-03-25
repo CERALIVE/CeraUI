@@ -52,6 +52,11 @@ $effect(() => {
 	}
 });
 
+/**
+ * Remember-me persists the password in localStorage for auto-login on reload.
+ * Intentional for this embedded encoder UI on trusted local networks; plaintext
+ * storage is a deliberate tradeoff for simple device UX—avoid on shared or hostile networks.
+ */
 $effect(() => {
 	const message = getAuth();
 	if (message?.success === true && remember && password) {
@@ -101,9 +106,9 @@ async function onSubmit(event: SubmitEvent) {
 	<!-- Left panel: brand -->
 	<div class="bg-primary/5 relative hidden h-full flex-col items-center justify-center p-10 lg:flex dark:bg-primary/[0.03]">
 		<div class="flex flex-col items-center gap-6">
-			<Logo class="h-16 w-16" />
+			<Logo aria-hidden={true} class="h-16 w-16" />
 			<div class="text-center">
-				<h2 class="text-foreground text-xl font-semibold tracking-tight">{siteName}</h2>
+				<p class="text-foreground text-xl font-semibold tracking-tight">{siteName}</p>
 				<p class="text-muted-foreground mt-2 max-w-xs text-sm leading-relaxed">
 					Professional streaming encoder management
 				</p>
@@ -117,7 +122,7 @@ async function onSubmit(event: SubmitEvent) {
 			<!-- Header -->
 			<div class="flex flex-col space-y-2 text-center lg:text-left">
 				<div class="mb-1 lg:hidden">
-					<Logo class="mx-auto h-10 w-10 lg:mx-0" />
+					<Logo aria-hidden={true} class="mx-auto h-10 w-10 lg:mx-0" />
 				</div>
 				<h1 class="text-2xl font-bold tracking-tight">
 					{setPassword
@@ -143,6 +148,8 @@ async function onSubmit(event: SubmitEvent) {
 							<div class="relative">
 								<Input
 									id="password"
+									aria-describedby={validation.password.message ? 'password-error' : undefined}
+									aria-invalid={!validation.password.isValid && !validation.password.isEmpty}
 									class={cn(
 										'h-11 w-full pr-20 transition-colors',
 										!validation.password.isValid && !validation.password.isEmpty
@@ -165,13 +172,13 @@ async function onSubmit(event: SubmitEvent) {
 								<div class="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
 									{#if !validation.password.isEmpty}
 										{#if validation.password.isValid}
-											<CheckCircle class="h-4 w-4 text-emerald-500" />
+											<CheckCircle class="text-status-success h-4 w-4" />
 										{:else}
 											<AlertCircle class="text-destructive h-4 w-4" />
 										{/if}
 									{/if}
 									<Button
-										class="h-8 w-8"
+										class="h-11 w-11"
 										aria-label="Toggle password visibility"
 										onclick={() => (showPassword = !showPassword)}
 										type="button"
@@ -188,12 +195,15 @@ async function onSubmit(event: SubmitEvent) {
 							</div>
 
 							{#if validation.password.message}
-								<p class="text-destructive flex items-center gap-1.5 text-sm">
+								<p
+									id="password-error"
+									class="text-destructive flex items-center gap-1.5 text-sm"
+								>
 									<AlertCircle class="h-3.5 w-3.5" />
 									{validation.password.message}
 								</p>
 							{:else if setPassword && validation.password.isValid}
-								<p class="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
+								<p class="text-status-success flex items-center gap-1.5 text-sm">
 									<CheckCircle class="h-3.5 w-3.5" />
 									{$LL?.auth?.validation?.passwordValid?.() || 'Password is valid'}
 								</p>

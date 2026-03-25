@@ -2,6 +2,7 @@
 import { LL } from '@ceraui/i18n/svelte';
 import type { NetifMessage } from '@ceraui/rpc/schemas';
 import { AlertCircle, ArrowUpDown, Check, Network, Signal, Wifi, X } from '@lucide/svelte';
+import { toast } from 'svelte-sonner';
 
 import * as Card from '$lib/components/ui/card';
 import { Toggle } from '$lib/components/ui/toggle';
@@ -19,8 +20,8 @@ import { getNetif } from '$lib/stores/websocket-store.svelte';
 import { cn } from '$lib/utils';
 
 // Svelte 5: Use $derived with reactive getter
-const currentNetwoks = $derived(getNetif() ?? ({} as NetifMessage));
-const totalBandwith = $derived(getTotalBandwidth(getNetif()));
+const currentNetworks = $derived(getNetif() ?? ({} as NetifMessage));
+const totalBandwidth = $derived(getTotalBandwidth(getNetif()));
 
 // Helper functions for better network categorization and display
 function getNetworkIcon(
@@ -69,14 +70,14 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 	</Card.Title>
 	<Card.Description>
 		{$LL.network.summary.networksActive({
-			count: Object.keys(currentNetwoks).length,
-			active: getUsedNetworks(currentNetwoks).length,
-			total: totalBandwith,
+			count: Object.keys(currentNetworks).length,
+			active: getUsedNetworks(currentNetworks).length,
+			total: totalBandwidth,
 		})}
 	</Card.Description>
 </Card.Header>
 <Card.Content class="space-y-4 px-4 pt-0 pb-4">
-	{#if Object.keys(currentNetwoks).length === 0}
+	{#if Object.keys(currentNetworks).length === 0}
 		<!-- Empty State -->
 		<div class="flex flex-col items-center justify-center space-y-3 py-8 text-center">
 			<div class="bg-secondary grid h-14 w-14 place-items-center rounded-xl">
@@ -90,7 +91,7 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 	{:else}
 		<!-- Network List - Responsive Grid -->
 		<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-2">
-			{#each Object.entries(currentNetwoks).sort(([nameA, networkA], [nameB, networkB]) => {
+			{#each Object.entries(currentNetworks).sort(([nameA, networkA], [nameB, networkB]) => {
 				const isHotspotA = isHotspotNetwork(nameA);
 				const isHotspotB = isHotspotNetwork(nameB);
 				return getNetworkPriority(nameA, networkA.enabled, isHotspotA) - getNetworkPriority(nameB, networkB.enabled, isHotspotB);
@@ -203,6 +204,10 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 												await setNetif(name, network.ip, value);
 											} catch (error) {
 												console.error(`Failed to toggle network ${name}:`, error);
+												toast.error(
+													$LL?.network?.errors?.toggleFailed?.() ||
+														'Failed to toggle network',
+												);
 												network.enabled = !value;
 											}
 										}}
@@ -224,7 +229,8 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 							<!-- Error Message -->
 							{#if hasRealError}
 								<div
-									class="flex items-center gap-2 rounded-md bg-red-500/10 p-2 text-sm text-red-700 dark:text-red-400"
+									role="alert"
+									class="bg-destructive/10 text-destructive flex items-center gap-2 rounded-md p-2 text-sm"
 								>
 									<AlertCircle class="h-4 w-4 flex-shrink-0" />
 									<span>{$LL.network.errors.networkConnectionError()}</span>
@@ -243,18 +249,18 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 			>
 				<span
 					>{$LL.network.summary.activeNetworks({
-						active: getUsedNetworks(currentNetwoks).length,
-						total: Object.keys(currentNetwoks).length,
+						active: getUsedNetworks(currentNetworks).length,
+						total: Object.keys(currentNetworks).length,
 					})}</span
 				>
 				<span class="hidden sm:inline">•</span>
-				<span>{getAvailableNetworks(currentNetwoks).length} {$LL.network.summary.available()}</span>
+				<span>{getAvailableNetworks(currentNetworks).length} {$LL.network.summary.available()}</span>
 			</div>
 			<div class="flex items-center gap-2">
 				<span class="text-muted-foreground text-sm">{$LL.network.summary.availableBandwidth()}</span
 				>
-				<span class={cn('font-mono text-lg font-bold', getBandwidthColor(totalBandwith))}>
-					{$LL.network.summary.totalBandwidth({ total: totalBandwith })}
+				<span class={cn('font-mono text-lg font-bold', getBandwidthColor(totalBandwidth))}>
+					{$LL.network.summary.totalBandwidth({ total: totalBandwidth })}
 				</span>
 			</div>
 		</div>

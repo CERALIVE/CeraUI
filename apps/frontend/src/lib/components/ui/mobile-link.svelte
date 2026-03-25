@@ -38,7 +38,9 @@ const {
 </script>
 
 <button
-	id={identifier}
+	id={identifier ? `nav-sheet-${identifier}` : undefined}
+	aria-busy={loading}
+	aria-disabled={disabled || loading}
 	class={cn(
 		'group relative w-full cursor-pointer rounded-lg px-4 py-3 text-left transition-colors duration-200',
 		'hover:bg-accent focus-visible:bg-accent/60',

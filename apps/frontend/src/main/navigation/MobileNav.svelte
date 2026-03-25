@@ -21,13 +21,11 @@ import { cn } from '$lib/utils';
 let open = $state(false);
 let lastNavigationTime = 0;
 
-// Navigation throttling to prevent race conditions
 const NAVIGATION_THROTTLE_MS = 50;
 
 // Svelte 5: Use $derived for current navigation
 const currentNav = $derived(getCurrentNavigation() ?? { general: navElements.general });
 
-// Enhanced navigation handler with throttling to prevent race conditions
 const handleClick = (nav: NavElements) => {
 	if ($isNavigationTransitioning) return;
 
@@ -46,7 +44,6 @@ const handleClick = (nav: NavElements) => {
 	}, 75);
 };
 
-// Enhanced logo click handler with throttling
 const handleLogoClick = () => {
 	if ($isNavigationTransitioning) return;
 
@@ -71,7 +68,6 @@ const handleLogoClick = () => {
 	}
 };
 
-// Enhanced back navigation with throttling
 const handleBack = () => {
 	if (!$canGoBack || $isNavigationTransitioning) return;
 
@@ -119,12 +115,14 @@ $effect(() => {
 	</Sheet.Trigger>
 
 	<Sheet.Content class="w-80 pt-4 pr-0" side="left">
-		<Sheet.Title class="sr-only">Navigation menu</Sheet.Title>
+		<Sheet.Title class="sr-only">
+			{$LL?.navigation?.navigationMenu?.() || 'Navigation menu'}
+		</Sheet.Title>
 		<div class="border-b px-4 pb-4">
 			{#if $canGoBack}
 				<div class="mb-3">
 					<button
-						class="text-muted-foreground hover:text-foreground flex min-h-11 items-center gap-1.5 text-sm transition-colors"
+						class="text-muted-foreground hover:text-foreground flex min-h-11 items-center gap-1.5 text-sm transition-colors focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none"
 						disabled={$isNavigationTransitioning}
 						onclick={handleBack}
 					>
@@ -135,7 +133,7 @@ $effect(() => {
 			{/if}
 
 			<button
-				class="hover:bg-accent flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 transition-colors"
+				class="hover:bg-accent flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 transition-colors focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none"
 				disabled={$isNavigationTransitioning}
 				onclick={handleLogoClick}
 			>

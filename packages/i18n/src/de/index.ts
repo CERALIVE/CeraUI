@@ -431,6 +431,7 @@ const de = {
 		},
 		errors: {
 			networkConnectionError: "Netzwerkverbindungsfehler",
+			toggleFailed: "Netzwerk konnte nicht umgeschaltet werden",
 		},
 		hotspot: {
 			name: "Name",
@@ -670,6 +671,21 @@ const de = {
 		sshPasswordPlaceholder: "Generiertes SSH-Passwort",
 		passwordCopied: "Passwort kopiert",
 		passwordCopiedDesc: "Das SSH-Passwort wurde in die Zwischenablage kopiert.",
+		showPassword: "Passwort anzeigen",
+		hidePassword: "Passwort ausblenden",
+		showRemoteKey: "Remote-Schlüssel anzeigen",
+		hideRemoteKey: "Remote-Schlüssel ausblenden",
+		copyToClipboard: "In die Zwischenablage kopieren",
+		confirmResetSshPassword: "SSH-Passwort zurücksetzen?",
+		confirmResetSshPasswordDescription:
+			"Es wird ein neues SSH-Passwort erzeugt. Das aktuelle Passwort funktioniert danach nicht mehr.",
+		copyFailed: "Kopieren fehlgeschlagen",
+		copyFailedManualDescription:
+			"Passwort konnte nicht kopiert werden. Bitte manuell auswählen und kopieren.",
+		copyFailedClipboardDeniedDescription:
+			"Zugriff auf die Zwischenablage verweigert. Bitte manuell kopieren.",
+		passwordSelectedManualCopyDescription:
+			"Passwort zum manuellen Kopieren ausgewählt",
 		reset: "Zurücksetzen",
 		resetTooltip: "Setzen Sie das SSH-Passwort auf ein neues zurück.",
 		startSSH: "SSH-Server starten",

@@ -37,12 +37,12 @@ const handleStop = () => {
 	<!-- Floating Action Button at Bottom -->
 	<div class="fixed right-0 bottom-0 left-0 z-50 p-4 pb-6 sm:pb-4">
 		<div class="mx-auto max-w-md">
-			<!-- Glassmorphism backdrop -->
-			<div class="bg-card/80 rounded-2xl border p-3 backdrop-blur-xl">
+			<!-- Solid control panel surface -->
+			<div class="bg-card rounded-2xl border p-3">
 				{#if isStreaming}
 					<Button
 						class={cn(
-							'group relative w-full overflow-hidden rounded-xl py-6 text-lg font-semibold transition-all duration-300',
+							'group relative w-full overflow-hidden rounded-xl py-6 text-lg font-semibold transition-colors duration-200',
 							'bg-destructive text-destructive-foreground hover:bg-destructive/90',
 						)}
 						onclick={handleStop}
@@ -54,7 +54,7 @@ const handleStop = () => {
 								<Square class="h-6 w-6 transition-transform group-hover:scale-110" />
 								<!-- Recording indicator dot -->
 								<div
-									class="absolute -top-1 -right-1 h-3 w-3 animate-pulse rounded-full bg-white"
+									class="absolute -top-1 -right-1 h-3 w-3 motion-safe:animate-pulse rounded-full bg-destructive-foreground"
 								></div>
 							</div>
 							<span>{$LL.settings.stopStreaming()}</span>
@@ -63,7 +63,7 @@ const handleStop = () => {
 				{:else}
 					<Button
 						class={cn(
-							'group w-full rounded-xl py-6 text-lg font-semibold transition-all duration-300',
+							'group w-full rounded-xl py-6 text-lg font-semibold transition-colors duration-200',
 							'bg-primary text-primary-foreground hover:bg-primary/90',
 							disabled && 'cursor-not-allowed opacity-50',
 						)}

@@ -273,6 +273,7 @@ const ja = {
 		},
 		errors: {
 			networkConnectionError: "ネットワーク接続エラー",
+			toggleFailed: "ネットワークの切り替えに失敗しました",
 		},
 		summary: {
 			activeNetworks: "{total}ネットワークのうち{active}がアクティブ",
@@ -476,6 +477,21 @@ const ja = {
 		sshPasswordPlaceholder: "生成されたSSHパスワード",
 		passwordCopied: "パスワードをコピーしました",
 		passwordCopiedDesc: "SSHパスワードがクリップボードにコピーされました。",
+		showPassword: "パスワードを表示",
+		hidePassword: "パスワードを非表示",
+		showRemoteKey: "リモートキーを表示",
+		hideRemoteKey: "リモートキーを非表示",
+		copyToClipboard: "クリップボードにコピー",
+		confirmResetSshPassword: "SSHパスワードをリセットしますか？",
+		confirmResetSshPasswordDescription:
+			"新しいSSHパスワードが生成されます。現在のパスワードはすぐに使えなくなります。",
+		copyFailed: "コピーに失敗しました",
+		copyFailedManualDescription:
+			"パスワードをコピーできませんでした。手動で選択してコピーしてください。",
+		copyFailedClipboardDeniedDescription:
+			"クリップボードへのアクセスが拒否されました。手動でコピーしてください。",
+		passwordSelectedManualCopyDescription:
+			"手動コピー用にパスワードを選択しました",
 		reset: "リセット",
 		resetTooltip: "SSHパスワードを新しいものにリセットします。",
 		startSSH: "SSHサーバーを開始",

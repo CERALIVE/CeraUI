@@ -263,7 +263,7 @@ const selectedPipeline = $derived<Pipeline | undefined>(
 			</Label>
 			<!-- Custom slider -->
 			<div
-				class="relative h-6 w-full rounded-lg [&:has(input:focus-visible)]:ring-2 [&:has(input:focus-visible)]:ring-ring [&:has(input:focus-visible)]:ring-offset-2 [&:has(input:focus-visible)]:rounded-lg"
+				class="relative min-h-11 w-full rounded-lg [&:has(input:focus-visible)]:ring-2 [&:has(input:focus-visible)]:ring-ring [&:has(input:focus-visible)]:ring-offset-2 [&:has(input:focus-visible)]:rounded-lg"
 			>
 				<!-- Track Background -->
 				<div
@@ -290,6 +290,10 @@ const selectedPipeline = $derived<Pipeline | undefined>(
 				<!-- Invisible Input -->
 				<input
 					id="bitrate"
+					aria-label={$LL?.settings?.bitrate?.() || 'Bitrate'}
+					aria-valuemax={12000}
+					aria-valuemin={2000}
+					aria-valuenow={localBitrate}
 					class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
 					max={12000}
 					min={2000}
@@ -307,6 +311,8 @@ const selectedPipeline = $derived<Pipeline | undefined>(
 				/>
 			</div>
 			<Input
+				aria-describedby={formErrors?.bitrate ? 'bitrate-error' : undefined}
+				aria-invalid={!!formErrors?.bitrate}
 				aria-label={$LL.settings.bitrate()}
 				class="text-center font-mono"
 				max={12000}
@@ -332,7 +338,7 @@ const selectedPipeline = $derived<Pipeline | undefined>(
 				value={localBitrate || 5000}
 			></Input>
 			{#if formErrors.bitrate}
-				<p class="text-destructive text-sm">{formErrors.bitrate}</p>
+				<p class="text-destructive text-sm" id="bitrate-error">{formErrors.bitrate}</p>
 			{/if}
 			{#if isStreaming}
 				<p class="rounded-md bg-muted p-2 text-xs text-muted-foreground">

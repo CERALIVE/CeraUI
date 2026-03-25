@@ -120,7 +120,7 @@ const getFrequencyBand = (freq: number): string => {
 	buttonText={$LL.wifiSelector.dialog.searchWifi()}
 	confirmButtonText={$LL.wifiSelector.dialog.close()}
 	extraButtonClasses="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold shadow-lg shadow-emerald-500/25 transition-all duration-300 hover:shadow-emerald-500/40 hover:scale-[1.02] active:scale-[0.98]"
-	hiddeCancelButton={true}
+	hideCancelButton={true}
 	title={$LL.wifiSelector.dialog.searchWifi()}
 	bind:open
 >

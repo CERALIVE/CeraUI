@@ -27,15 +27,13 @@ $effect(() => {
 
 const handleLocaleChange = async (value: Parameters<typeof setLocale>[0]) => {
 	try {
-		console.log(`🌍 Loading locale: ${value}`);
 		await loadLocaleAsync(value as any);
 		setLocale(value as any);
 		setLocaleStore(existingLocales.find((l) => l.code === value)!);
 		selectedLocale = String(value);
 		isOpen = false;
-		console.log(`✅ Successfully switched to locale: ${value}`);
-	} catch (error) {
-		console.error(`❌ Failed to load locale ${value}:`, error);
+	} catch {
+		// Locale load failed; prior selection remains
 	}
 };
 </script>

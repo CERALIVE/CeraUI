@@ -42,12 +42,12 @@ const statusColors = $derived.by(() => {
 	}
 	if (isConnecting) {
 		return {
-			badge: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
+			badge: 'bg-muted text-muted-foreground',
 		};
 	}
 	if (isScanning) {
 		return {
-			badge: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+			badge: 'bg-muted text-muted-foreground',
 		};
 	}
 	return {
@@ -57,9 +57,9 @@ const statusColors = $derived.by(() => {
 
 // Network type badge
 function getNetworkBadge(type: string) {
-	if (type.includes('5G')) return 'bg-purple-500/10 text-purple-700 dark:text-purple-400';
-	if (type.includes('LTE') || type.includes('4G'))
-		return 'bg-blue-500/10 text-blue-700 dark:text-blue-400';
+	if (type.includes('5G') || type.includes('LTE') || type.includes('4G')) {
+		return 'bg-secondary text-secondary-foreground';
+	}
 	return 'bg-muted text-muted-foreground';
 }
 
@@ -77,7 +77,7 @@ const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 					{#if isConnected}
 						<Signal class="text-muted-foreground h-4 w-4" />
 					{:else if isConnecting || isScanning}
-						<Loader2 class="text-muted-foreground h-4 w-4 animate-spin" />
+						<Loader2 class="text-muted-foreground h-4 w-4 motion-safe:animate-spin" />
 					{:else}
 						<WifiOff class="text-muted-foreground h-4 w-4" />
 					{/if}
@@ -94,9 +94,9 @@ const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 					<div class="mt-1 flex flex-wrap items-center gap-1.5">
 						<span class={cn('rounded-md px-1.5 py-0.5 text-xs font-medium', statusColors.badge)}>
 							{#if isConnecting}
-								<Loader2 class="mr-1 inline h-3 w-3 animate-spin" />
+								<Loader2 class="mr-1 inline h-3 w-3 motion-safe:animate-spin" />
 							{:else if isScanning}
-								<Radio class="mr-1 inline h-3 w-3 animate-pulse" />
+								<Radio class="mr-1 inline h-3 w-3 motion-safe:animate-pulse" />
 							{/if}
 							{capitalizeFirstLetter(
 								$LL.network.modem.connectionStatus[
@@ -129,16 +129,16 @@ const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 		<!-- Status Messages -->
 		{#if isScanning}
 			<div
-				class="flex items-center justify-center gap-2 rounded-lg bg-amber-500/10 py-3 text-amber-700 dark:text-amber-400"
+				class="bg-muted text-muted-foreground flex items-center justify-center gap-2 rounded-lg py-3"
 			>
-				<Loader2 class="h-4 w-4 animate-spin" />
+				<Loader2 class="h-4 w-4 motion-safe:animate-spin" />
 				<span class="text-sm font-medium">{$LL.network.status.scanningNetworks()}</span>
 			</div>
 		{:else if isConnecting}
 			<div
-				class="flex items-center justify-center gap-2 rounded-lg bg-blue-500/10 py-3 text-blue-700 dark:text-blue-400"
+				class="bg-muted text-muted-foreground flex items-center justify-center gap-2 rounded-lg py-3"
 			>
-				<Loader2 class="h-4 w-4 animate-spin" />
+				<Loader2 class="h-4 w-4 motion-safe:animate-spin" />
 				<span class="text-sm font-medium">{$LL.network.status.connecting()}</span>
 			</div>
 		{:else if isDisconnected}
@@ -154,7 +154,7 @@ const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 				{#snippet child({ props })}
 					<Button
 						{...props}
-						class="h-9 w-full justify-between border-dashed"
+						class="min-h-11 w-full justify-between border-dashed"
 						size="sm"
 						variant="outline"
 					>

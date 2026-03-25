@@ -446,6 +446,7 @@ const es = {
 		},
 		errors: {
 			networkConnectionError: "Error de conexión de red",
+			toggleFailed: "No se pudo cambiar el estado de la red",
 		},
 		hotspot: {
 			name: "Nombre",
@@ -684,6 +685,21 @@ const es = {
 		sshPasswordPlaceholder: "Contraseña SSH generada",
 		passwordCopied: "Contraseña copiada",
 		passwordCopiedDesc: "La contraseña SSH se ha copiado al portapapeles.",
+		showPassword: "Mostrar contraseña",
+		hidePassword: "Ocultar contraseña",
+		showRemoteKey: "Mostrar clave remota",
+		hideRemoteKey: "Ocultar clave remota",
+		copyToClipboard: "Copiar al portapapeles",
+		confirmResetSshPassword: "¿Restablecer la contraseña SSH?",
+		confirmResetSshPasswordDescription:
+			"Se generará una nueva contraseña SSH. La contraseña actual dejará de funcionar de inmediato.",
+		copyFailed: "Error al copiar",
+		copyFailedManualDescription:
+			"No se pudo copiar la contraseña. Selecciónela y cópiela manualmente.",
+		copyFailedClipboardDeniedDescription:
+			"Acceso al portapapeles denegado. Cópiela manualmente.",
+		passwordSelectedManualCopyDescription:
+			"Contraseña seleccionada para copiar (manual)",
 		reset: "Restablecer",
 		resetTooltip: "Restablezca la contraseña SSH a una nueva.",
 		startSSH: "Iniciar servidor SSH",

@@ -268,6 +268,7 @@ const hi = {
 		},
 		errors: {
 			networkConnectionError: "नेटवर्क कनेक्शन त्रुटि",
+			toggleFailed: "नेटवर्क टॉगल करने में विफल",
 		},
 		summary: {
 			activeNetworks: "{total} नेटवर्क में से {active} सक्रिय",
@@ -463,6 +464,21 @@ const hi = {
 		sshPasswordPlaceholder: "जेनरेट किया गया SSH पासवर्ड",
 		passwordCopied: "पासवर्ड कॉपी किया गया",
 		passwordCopiedDesc: "SSH पासवर्ड क्लिपबोर्ड पर कॉपी किया गया है।",
+		showPassword: "पासवर्ड दिखाएँ",
+		hidePassword: "पासवर्ड छिपाएँ",
+		showRemoteKey: "रिमोट कुंजी दिखाएँ",
+		hideRemoteKey: "रिमोट कुंजी छिपाएँ",
+		copyToClipboard: "क्लिपबोर्ड पर कॉपी करें",
+		confirmResetSshPassword: "SSH पासवर्ड रीसेट करें?",
+		confirmResetSshPasswordDescription:
+			"एक नया SSH पासवर्ड बनेगा। वर्तमान पासवर्ड तुरंत काम करना बंद कर देगा।",
+		copyFailed: "कॉपी विफल",
+		copyFailedManualDescription:
+			"पासवर्ड कॉपी नहीं हो सका। कृपया मैन्युअल रूप से चुनकर कॉपी करें।",
+		copyFailedClipboardDeniedDescription:
+			"क्लिपबोर्ड पहुँच अस्वीकृत। कृपया मैन्युअल रूप से कॉपी करें।",
+		passwordSelectedManualCopyDescription:
+			"मैन्युअल कॉपी के लिए पासवर्ड चयनित",
 		reset: "रीसेट करें",
 		resetTooltip: "SSH पासवर्ड को नए पासवर्ड पर रीसेट करें।",
 		startSSH: "SSH सर्वर शुरू करें",

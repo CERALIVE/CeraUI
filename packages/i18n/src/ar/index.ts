@@ -442,6 +442,7 @@ const ar = {
 		},
 		errors: {
 			networkConnectionError: "خطأ في اتصال الشبكة",
+			toggleFailed: "فشل تبديل الشبكة",
 		},
 		summary: {
 			activeNetworks: "{active} من {total} شبكة نشطة",
@@ -640,6 +641,21 @@ const ar = {
 		sshPasswordPlaceholder: "كلمة مرور SSH المُنشأة",
 		passwordCopied: "تم نسخ كلمة المرور",
 		passwordCopiedDesc: "تم نسخ كلمة مرور SSH إلى الحافظة.",
+		showPassword: "إظهار كلمة المرور",
+		hidePassword: "إخفاء كلمة المرور",
+		showRemoteKey: "إظهار المفتاح البعيد",
+		hideRemoteKey: "إخفاء المفتاح البعيد",
+		copyToClipboard: "نسخ إلى الحافظة",
+		confirmResetSshPassword: "إعادة تعيين كلمة مرور SSH؟",
+		confirmResetSshPasswordDescription:
+			"سيتم إنشاء كلمة مرور SSH جديدة. ستتوقف كلمة المرور الحالية عن العمل فورًا.",
+		copyFailed: "فشل النسخ",
+		copyFailedManualDescription:
+			"تعذر نسخ كلمة المرور. يرجى تحديدها ونسخها يدويًا.",
+		copyFailedClipboardDeniedDescription:
+			"تم رفض الوصول إلى الحافظة. يرجى النسخ يدويًا.",
+		passwordSelectedManualCopyDescription:
+			"تم تحديد كلمة المرور للنسخ (يدوي)",
 		reset: "إعادة تعيين",
 		resetTooltip: "إعادة تعيين كلمة مرور SSH إلى كلمة مرور جديدة.",
 		startSSH: "بدء خادم SSH",

@@ -168,7 +168,7 @@
 
 	html {
 		scrollbar-gutter: stable;
-		-webkit-tap-highlight-color: rgba(128, 128, 128, 0.5);
+		-webkit-tap-highlight-color: rgba(128, 138, 150, 0.35);
 	}
 
 	body {
@@ -194,11 +194,11 @@
 	}
 
 	html {
-		scrollbar-color: hsl(25 8% 46% / 0.3) transparent;
+		scrollbar-color: hsl(215 10% 46% / 0.3) hsl(210 20% 98%);
 	}
 
 	html.dark {
-		scrollbar-color: hsl(25 6% 55% / 0.3) transparent;
+		scrollbar-color: hsl(215 10% 55% / 0.3) hsl(222 30% 6%);
 	}
 
 	.hide-scrollbar::-webkit-scrollbar {

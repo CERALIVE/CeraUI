@@ -16,13 +16,11 @@ import { cn } from '$lib/utils';
 
 let lastNavigationTime = 0;
 
-// Navigation throttling to prevent race conditions
 const NAVIGATION_THROTTLE_MS = 50;
 
 // Svelte 5: Use $derived for current navigation
 const currentNav = $derived(getCurrentNavigation() ?? { general: navElements.general });
 
-// Enhanced tab navigation with throttling to prevent race conditions
 const handleTabNavigation = (identifier: string, navigation: Record<string, unknown>) => {
 	// Add additional safety checks to prevent NaN issues
 	if ($isNavigationTransitioning || !navigation || !identifier) {
@@ -39,7 +37,6 @@ const handleTabNavigation = (identifier: string, navigation: Record<string, unkn
 	navigateTo({ [identifier]: navigation } as NavElements);
 };
 
-// Logo click handler with enhanced feedback and throttling
 const handleLogoClick = () => {
 	if ($isNavigationTransitioning) return;
 
@@ -73,7 +70,9 @@ const handleLogoClick = () => {
 			'hover:bg-accent focus-visible:bg-accent',
 			$isNavigationTransitioning && 'pointer-events-none opacity-60',
 		)}
-		aria-label={$canGoBack ? 'Go back or home' : 'Go to home'}
+		aria-label={$canGoBack
+			? ($LL?.navigation?.goBackOrHome?.() || 'Go back or home')
+			: ($LL?.navigation?.goHome?.() || 'Go to home')}
 		disabled={$isNavigationTransitioning}
 		onclick={handleLogoClick}
 	>
@@ -100,9 +99,9 @@ const handleLogoClick = () => {
 				{/if}
 
 				<button
-					id={identifier}
+					id={`nav-tab-${identifier}`}
 					class={cn(
-						'relative flex h-9 cursor-pointer items-center justify-center rounded-lg px-3.5 text-sm font-medium transition-colors',
+						'relative flex h-11 cursor-pointer items-center justify-center rounded-lg px-3.5 text-sm font-medium transition-colors',
 						isActive
 							? 'bg-accent text-foreground'
 							: 'text-muted-foreground hover:text-foreground hover:bg-accent/50',

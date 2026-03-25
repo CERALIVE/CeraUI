@@ -261,6 +261,7 @@ const zh = {
 		},
 		errors: {
 			networkConnectionError: "网络连接错误",
+			toggleFailed: "无法切换网络",
 		},
 		summary: {
 			activeNetworks: "{total}个网络中有{active}个活跃",
@@ -435,6 +436,18 @@ const zh = {
 		sshPasswordPlaceholder: "已生成的 SSH 密码",
 		passwordCopied: "密码已复制",
 		passwordCopiedDesc: "SSH 密码已复制到剪贴板。",
+		showPassword: "显示密码",
+		hidePassword: "隐藏密码",
+		showRemoteKey: "显示远程密钥",
+		hideRemoteKey: "隐藏远程密钥",
+		copyToClipboard: "复制到剪贴板",
+		confirmResetSshPassword: "重置 SSH 密码？",
+		confirmResetSshPasswordDescription:
+			"将生成新的 SSH 密码，当前密码将立即失效。",
+		copyFailed: "复制失败",
+		copyFailedManualDescription: "无法复制密码，请手动选择并复制。",
+		copyFailedClipboardDeniedDescription: "无法访问剪贴板，请手动复制。",
+		passwordSelectedManualCopyDescription: "已选中密码以便手动复制",
 		reset: "重置",
 		resetTooltip: "将 SSH 密码重置为新密码。",
 		startSSH: "启动 SSH 服务器",
