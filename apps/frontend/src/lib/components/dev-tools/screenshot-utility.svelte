@@ -344,15 +344,10 @@ function clearImages(): void {
 }
 </script>
 
-<Card.Root class="gap-0 overflow-hidden border-blue-500/30 py-0">
-	<!-- Status bar -->
-	<div class="h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
-
-	<Card.Header class="pt-6">
+<Card.Root class="overflow-hidden">
+	<Card.Header>
 		<Card.Title class="flex items-center gap-2">
-			<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500">
-				<Camera class="h-4 w-4 text-white" />
-			</div>
+			<Camera class="h-5 w-5 text-primary" />
 			{$LL.devtools.screenshotUtility()}
 		</Card.Title>
 		<Card.Description>
@@ -362,8 +357,8 @@ function clearImages(): void {
 
 	<Card.Content class="space-y-4 pb-6">
 		{#if currentlyCapturing}
-			<div class="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
-				<div class="text-sm font-medium text-blue-700 dark:text-blue-300">
+			<div class="rounded-lg border border-primary/30 bg-primary/10 p-3">
+				<div class="text-sm font-medium text-primary">
 					🚀 {progressText}
 				</div>
 				<div class="text-muted-foreground mt-1 text-xs">
@@ -374,7 +369,7 @@ function clearImages(): void {
 
 		<div class="space-y-3">
 			<Button.Root
-				class="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
+				class="w-full"
 				disabled={currentlyCapturing}
 				onclick={captureAll}
 			>
@@ -385,7 +380,7 @@ function clearImages(): void {
 			<div class="text-muted-foreground text-center text-xs">
 				{$LL.devtools.screenshotCount()}
 				<br />
-				<span class="text-emerald-600 dark:text-emerald-400">{$LL.devtools.enhancedTiming()}</span>
+				<span class="text-muted-foreground">{$LL.devtools.enhancedTiming()}</span>
 			</div>
 		</div>
 
