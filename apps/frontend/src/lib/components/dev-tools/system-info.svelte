@@ -1,20 +1,3 @@
-<style>
-/* Real-time data highlighting */
-:global(.live-data) {
-	animation: live-pulse 2s ease-in-out infinite;
-}
-
-@keyframes live-pulse {
-	0%,
-	100% {
-		opacity: 1;
-	}
-	50% {
-		opacity: 0.8;
-	}
-}
-</style>
-
 <script lang="ts">
 import { existingLocales, loadLocaleAsync, type Locales } from '@ceraui/i18n';
 import { LL, locale, setLocale } from '@ceraui/i18n/svelte';
@@ -242,9 +225,19 @@ $effect(() => {
 	window.addEventListener('online', handleOnlineStatus);
 	window.addEventListener('offline', handleOnlineStatus);
 
+	const handleVisibilityChange = () => {
+		if (!document.hidden) {
+			updatePerformanceData();
+			updateWindowInfo();
+		}
+	};
+	document.addEventListener('visibilitychange', handleVisibilityChange);
+
 	// Update performance data every 5 seconds
 	updateInterval = setInterval(() => {
-		updatePerformanceData();
+		if (!document.hidden) {
+			updatePerformanceData();
+		}
 	}, 5000);
 
 	// Cleanup function
@@ -252,6 +245,7 @@ $effect(() => {
 		window.removeEventListener('resize', handleResize);
 		window.removeEventListener('online', handleOnlineStatus);
 		window.removeEventListener('offline', handleOnlineStatus);
+		document.removeEventListener('visibilitychange', handleVisibilityChange);
 		if (updateInterval) {
 			clearInterval(updateInterval);
 		}
@@ -261,15 +255,6 @@ $effect(() => {
 		}
 	};
 });
-
-// Format bytes
-function _formatBytes(bytes: number): string {
-	if (bytes === 0) return '0 B';
-	const k = 1024;
-	const sizes = ['B', 'KB', 'MB', 'GB'];
-	const i = Math.floor(Math.log(bytes) / Math.log(k));
-	return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
 
 // Format milliseconds
 function formatMs(ms: number): string {

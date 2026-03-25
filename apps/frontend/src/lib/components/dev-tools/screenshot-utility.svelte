@@ -192,18 +192,12 @@ async function captureScreenshotWithTheme(
 				}),
 	};
 
-	console.log(`📸 Capturing ${filename} (${theme}) with options:`, {
-		...options,
-		element: element.tagName,
-	});
-
 	// Final pre-capture wait to ensure everything is settled
 	await new Promise((resolve) => setTimeout(resolve, 300));
 
 	const dataUrl = await toPng(element, options);
 	const response = await fetch(dataUrl);
 	const blob = await response.blob();
-	console.log(`✅ Captured ${filename}: ${blob.size} bytes`);
 	return blob;
 }
 
@@ -216,22 +210,17 @@ async function captureTabScreenshots(
 ): Promise<void> {
 	for (const theme of themes) {
 		await switchTheme(theme);
-		console.log(`🎨 Theme switched to ${theme}, waiting for full render...`);
 
 		for (const tab of tabs) {
 			setCaptureProgress(`${type} ${theme} ${tab.name}`);
-			console.log(`🧭 Navigating to ${tab.name}...`);
 			await navigateToTab(tab.key);
 
 			if (useMobile) {
-				console.log(`📱 Setting up mobile view for ${tab.name}...`);
 				disableMobileView();
 				await enableMobileView();
-				console.log(`📱 Mobile view ready for ${tab.name}`);
 			}
 
 			// Additional wait for content stability - especially important for complex tabs
-			console.log(`⏱️ Waiting for content stability before capture...`);
 			if (tab.key === 'streaming' || tab.key === 'advanced' || tab.key === 'devtools') {
 				await new Promise((resolve) => setTimeout(resolve, 800)); // Extra time for complex tabs
 			} else {
@@ -241,7 +230,6 @@ async function captureTabScreenshots(
 			// Final content readiness check
 			await waitForContentReady();
 
-			console.log(`📸 Capturing ${tab.name} (${theme})...`);
 			const blob = await captureScreenshotWithTheme(`${tab.name}.png`, theme, useMobile);
 			const image: ScreenshotImage = {
 				filename: `${tab.name}.png`,
@@ -251,7 +239,6 @@ async function captureTabScreenshots(
 			};
 
 			addScreenshot(image);
-			console.log(`✅ Successfully captured ${tab.name} (${theme})`);
 			toast.success(`Captured ${tab.name} (${theme})`, { duration: 300 });
 		}
 	}
@@ -264,7 +251,6 @@ async function captureAll(): Promise<void> {
 	try {
 		setIsCapturing(true);
 		clearScreenshots();
-		console.log('🚀 Starting capture process...');
 
 		const themes: Array<'dark' | 'light'> = ['dark', 'light'];
 
@@ -279,23 +265,19 @@ async function captureAll(): Promise<void> {
 
 		// Offline captures (2 images)
 		setCaptureProgress('Offline screenshots...');
-		console.log('🌐 Switching to offline mode...');
 		setIsOnline(false);
 		await navigateToTab('general');
 
 		// Extra wait for offline state to fully apply
 		await new Promise((resolve) => setTimeout(resolve, 1000));
-		console.log('🌐 Offline mode activated');
 
 		for (const theme of themes) {
-			console.log(`🌐 Capturing offline ${theme} theme...`);
 			await switchTheme(theme);
 
 			// Extended wait for offline rendering - this is complex state
 			await new Promise((resolve) => setTimeout(resolve, 2000));
 			await waitForContentReady();
 
-			console.log(`📸 Capturing offline-${theme}.png...`);
 			const blob = await captureScreenshotWithTheme(`offline-${theme}.png`, theme);
 
 			const image: ScreenshotImage = {
@@ -306,22 +288,18 @@ async function captureAll(): Promise<void> {
 			};
 
 			addScreenshot(image);
-			console.log(`✅ Successfully captured offline-${theme}.png`);
 		}
 
 		setIsOnline(true);
 		toast.success(`All done! ${imagesCount} screenshots captured`);
-		console.log('✅ Capture complete:', imagesCount, 'images stored');
 
 		// Auto-trigger download
-		console.log('🔽 Auto-triggering download...');
 		setCaptureProgress('Downloading ZIP...');
 		await downloadScreenshotsZip();
 	} catch (error) {
-		console.error('❌ Capture failed:', error);
+		console.error('Capture failed:', error);
 		toast.error('Capture failed');
 	} finally {
-		console.log('🧹 Cleaning up after capture...');
 		setIsCapturing(false);
 		setCaptureProgress('');
 		disableMobileView();
@@ -329,7 +307,6 @@ async function captureAll(): Promise<void> {
 
 		// Final cleanup wait to ensure everything is reset
 		await new Promise((resolve) => setTimeout(resolve, 500));
-		console.log('✅ Cleanup complete');
 	}
 }
 

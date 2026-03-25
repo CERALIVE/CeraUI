@@ -1,19 +1,3 @@
-<style>
-/* Toast tester specific animations */
-:global(.toast-demo) {
-	animation: toast-demo-highlight 2s ease-in-out infinite alternate;
-}
-
-@keyframes toast-demo-highlight {
-	from {
-		box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.3);
-	}
-	to {
-		box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
-	}
-}
-</style>
-
 <script lang="ts">
 import { LL, locale } from '@ceraui/i18n/svelte';
 import {
@@ -37,7 +21,6 @@ import { Textarea } from '$lib/components/ui/textarea';
 let customTitle = $state($LL.devtools.customTitle());
 let customDescription = $state($LL.devtools.customDescription());
 let toastDuration = $state(4000);
-const _selectedPosition = $state('bottom-right');
 
 // Update input values when locale changes
 $effect(() => {
@@ -52,16 +35,6 @@ $effect(() => {
 		customDescription = $LL.devtools.customDescription();
 	}
 });
-
-// Toast positions available in Sonner
-const _toastPositions = [
-	{ value: 'top-left', label: $LL.devtools.topLeft() },
-	{ value: 'top-center', label: $LL.devtools.topCenter() },
-	{ value: 'top-right', label: $LL.devtools.topRight() },
-	{ value: 'bottom-left', label: $LL.devtools.bottomLeft() },
-	{ value: 'bottom-center', label: $LL.devtools.bottomCenter() },
-	{ value: 'bottom-right', label: $LL.devtools.bottomRight() },
-];
 
 // Toast type definitions with their configurations
 const toastTypes = [
