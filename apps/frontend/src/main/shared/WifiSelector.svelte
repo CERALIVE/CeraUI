@@ -33,6 +33,7 @@ import {
 } from '$lib/helpers/NetworkHelper.js';
 import { getWifi } from '$lib/stores/websocket-store.svelte';
 import type { ValueOf } from '$lib/types';
+import { getSignalCategory } from '$lib/helpers/signal';
 import { cn } from '$lib/utils';
 
 const { wifi, wifiId }: { wifi: ValueOf<StatusMessage['wifi']>; wifiId: number } = $props();
@@ -96,14 +97,6 @@ const handleNewWifiConnect = (ssid: string, password: string) => {
 	connectToNewWifi(wifiId, ssid, password);
 	networkPassword = '';
 	showPassword = false;
-};
-
-// Get signal strength category for styling
-const getSignalCategory = (signal: number): 'excellent' | 'good' | 'fair' | 'weak' => {
-	if (signal >= 75) return 'excellent';
-	if (signal >= 50) return 'good';
-	if (signal >= 25) return 'fair';
-	return 'weak';
 };
 
 // Get frequency band label
@@ -193,7 +186,7 @@ const getFrequencyBand = (freq: number): string => {
 
 					<div
 						class={cn(
-							'group relative overflow-hidden rounded-xl border-2 p-4 transition-all duration-300',
+							'group relative overflow-hidden rounded-xl border-2 p-4 transition-colors duration-300',
 							availableNetwork.active
 								? 'border-primary bg-primary/5 shadow-lg shadow-primary/10'
 								: 'border-transparent bg-muted/50 hover:border-border hover:bg-accent',
@@ -238,7 +231,7 @@ const getFrequencyBand = (freq: number): string => {
 							<!-- Network Info -->
 							<div class="min-w-0 flex-1">
 								<div class="mb-1 flex items-center gap-2">
-									<h4
+									<p
 										class={cn(
 											'truncate text-base font-semibold transition-colors',
 											availableNetwork.active ? 'text-primary' : 'text-foreground',
@@ -246,12 +239,14 @@ const getFrequencyBand = (freq: number): string => {
 										title={availableNetwork.ssid}
 									>
 										{availableNetwork.ssid}
-									</h4>
-									{#if availableNetwork.security.includes('WPA')}
-										<Lock class="text-muted-foreground h-3.5 w-3.5 flex-shrink-0" />
-									{:else}
-										<Unlock class="text-status-warning h-3.5 w-3.5 flex-shrink-0" />
-									{/if}
+									</p>
+								{#if availableNetwork.security.includes('WPA')}
+									<Lock class="text-muted-foreground h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+									<span class="sr-only">{$LL.wifiSelector.accessibility.secured()}</span>
+								{:else}
+									<Unlock class="text-status-warning h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+									<span class="sr-only">{$LL.wifiSelector.accessibility.openNetwork()}</span>
+								{/if}
 								</div>
 								<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
 									<span
@@ -297,7 +292,7 @@ const getFrequencyBand = (freq: number): string => {
 									<div class="flex items-center gap-1.5">
 										{#if availableNetwork.active}
 											<Button
-												class="border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 h-9 gap-1.5 rounded-lg border px-3 transition-all"
+												class="border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 h-11 gap-1.5 rounded-lg border px-3 transition-colors"
 												aria-label={`${$LL.wifiSelector.button.disconnect()} ${availableNetwork.ssid}`}
 												onclick={() => disconnectWifi(uuid, availableNetwork)}
 												size="sm"
@@ -309,7 +304,7 @@ const getFrequencyBand = (freq: number): string => {
 											</Button>
 										{:else}
 											<Button
-												class="gradient-info text-status-info-foreground h-9 gap-1.5 rounded-lg px-3 shadow-md transition-all hover:shadow-lg"
+												class="gradient-info text-status-info-foreground h-11 gap-1.5 rounded-lg px-3 shadow-md transition-shadow hover:shadow-lg"
 												aria-label={`${$LL.wifiSelector.button.connect()} ${availableNetwork.ssid}`}
 												onclick={() => handleWifiConnect(uuid, availableNetwork)}
 												size="sm"
@@ -364,7 +359,7 @@ const getFrequencyBand = (freq: number): string => {
 									<!-- New Network - Connect Dialog -->
 									<SimpleAlertDialog
 										class="max-w-md"
-										buttonClasses="gradient-primary text-primary-foreground h-9 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-md transition-all hover:shadow-lg"
+										buttonClasses="gradient-primary text-primary-foreground h-11 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-md transition-shadow hover:shadow-lg"
 										confirmButtonText={$LL.wifiSelector.button.connect()}
 										title={`${$LL.wifiSelector.dialog.connectTo({ ssid: '' })} ${availableNetwork.ssid}`}
 										oncancel={() => {
@@ -401,12 +396,13 @@ const getFrequencyBand = (freq: number): string => {
 													{$LL.wifiSelector.dialog.introducePassword()}
 												</p>
 												<div class="relative">
-													<Input
-														class="border-border bg-muted focus:border-primary focus:ring-primary/20 h-11 rounded-xl border-2 pr-12 font-mono text-sm transition-all focus:bg-card focus:ring-4"
-														placeholder={$LL.wifiSelector.hotspot.placeholderPassword()}
-														type={showPassword ? 'text' : 'password'}
-														bind:value={networkPassword}
-													/>
+												<Input
+													aria-label={$LL.wifiSelector.hotspot.placeholderPassword()}
+													class="border-border bg-muted focus:border-primary focus:ring-primary/20 h-11 rounded-xl border-2 pr-12 font-mono text-sm transition-all focus:bg-card focus:ring-4"
+													placeholder={$LL.wifiSelector.hotspot.placeholderPassword()}
+													type={showPassword ? 'text' : 'password'}
+													bind:value={networkPassword}
+												/>
 													<button
 														class="text-muted-foreground hover:bg-accent hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 rounded-lg p-1.5 transition-colors"
 														aria-label={showPassword

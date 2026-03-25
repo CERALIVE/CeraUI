@@ -586,6 +586,8 @@ const en = {
 		accessibility: {
 			hidePassword: "Hide password",
 			showPassword: "Show password",
+			secured: "Secured network",
+			openNetwork: "Open network",
 		},
 	},
 	networking: {
