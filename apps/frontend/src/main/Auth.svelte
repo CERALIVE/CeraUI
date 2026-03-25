@@ -1,9 +1,10 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { AlertCircle, CheckCircle, Eye, EyeOff, LoaderCircle, Shield } from '@lucide/svelte';
+import { AlertCircle, CheckCircle, Eye, EyeOff, LoaderCircle } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { Checkbox } from '$lib/components/ui/checkbox';
+import Logo from '$lib/components/icons/Logo.svelte';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import LocaleSelector from '$lib/components/ui/locale-selector.svelte';
@@ -28,7 +29,6 @@ let showPassword: boolean = $state(false);
 let isLoading = $state(false);
 let setPassword: boolean = $state(false);
 
-// Enhanced validation
 const validation = $derived({
 	password: {
 		isValid: password.length >= (setPassword ? 8 : 1),
@@ -42,7 +42,6 @@ const validation = $derived({
 
 const isFormValid = $derived(validation.password.isValid);
 
-// Svelte 5: Use $effect for side effects
 $effect(() => {
 	const status = getStatus();
 	if (status) {
@@ -88,63 +87,51 @@ async function onSubmit(event: SubmitEvent) {
 </script>
 
 <div
-	class="relative container grid h-dvh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0"
+	class="relative grid h-dvh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0"
 >
-	<span class="absolute top-4 right-4 flex md:top-8 md:right-8">
-		<span class="mr-3"> <LocaleSelector /></span>
-		<ModeToggle></ModeToggle>
-	</span>
-	<div class="bg-muted relative hidden h-full flex-col p-10 text-white lg:flex dark:border-r">
-		<div
-			style:background-image="url(https://images.unsplash.com/photo-1590069261209-f8e9b8642343?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1376&q=80)"
-			class="absolute inset-0 bg-cover"
-		></div>
-		<div class="relative z-20 flex items-center text-lg font-medium">
-			<!-- <Command class="mr-2 h-6 w-6" /> -->
-			{siteName} Beta UI
-		</div>
-		<div class="relative z-20 mt-auto">
-			<blockquote class="space-y-2">
-				<p class="text-lg">&ldquo;The revolution of IRL...&rdquo;</p>
-				<footer class="text-sm"></footer>
-			</blockquote>
+	<!-- Controls -->
+	<div class="absolute top-4 right-4 z-10 flex items-center gap-1 md:top-6 md:right-6">
+		<LocaleSelector />
+		<ModeToggle />
+	</div>
+
+	<!-- Left panel: brand -->
+	<div class="bg-primary/5 relative hidden h-full flex-col items-center justify-center p-10 lg:flex dark:bg-primary/[0.03]">
+		<div class="flex flex-col items-center gap-6">
+			<Logo class="h-16 w-16" />
+			<div class="text-center">
+				<h2 class="text-foreground text-xl font-semibold tracking-tight">{siteName}</h2>
+				<p class="text-muted-foreground mt-2 max-w-xs text-sm leading-relaxed">
+					{$LL?.auth?.brandTagline?.() || 'Professional streaming encoder management'}
+				</p>
+			</div>
 		</div>
 	</div>
-	<div class="lg:p-8">
-		<div class="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
-			<div class="flex flex-col space-y-4 text-center">
-				<!-- Enhanced Header with Icon -->
-				<div
-					class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg"
-				>
-					<Shield class="h-8 w-8 text-white" />
-				</div>
 
-				<div class="space-y-2">
-					<h1 class="text-2xl font-bold tracking-tight">
-						{setPassword
-							? $LL?.auth?.createPasswordAndLogin?.() || 'Create Password & Login'
-							: $LL?.auth?.loginWithPassword?.() || 'Login with Password'}
-					</h1>
-					<p class="text-muted-foreground text-sm leading-relaxed">
-						{$LL?.auth?.usePassword?.() || 'Use your password to access the device'}
-					</p>
+	<!-- Right panel: form -->
+	<div class="flex items-center justify-center px-4 lg:p-8">
+		<div class="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[360px]">
+			<!-- Header -->
+			<div class="flex flex-col space-y-2 text-center lg:text-left">
+				<div class="mb-1 lg:hidden">
+					<Logo class="mx-auto h-10 w-10 lg:mx-0" />
 				</div>
+				<h1 class="text-2xl font-bold tracking-tight">
+					{setPassword
+						? $LL?.auth?.createPasswordAndLogin?.() || 'Create Password & Login'
+						: $LL?.auth?.loginWithPassword?.() || 'Login with Password'}
+				</h1>
+				<p class="text-muted-foreground text-sm">
+					{$LL?.auth?.usePassword?.() || 'Use your password to access the device'}
+				</p>
 			</div>
-			<div class={cn('grid gap-6', className)}>
+
+			<div class={cn('grid gap-5', className)}>
 				<form onsubmit={onSubmit}>
 					<div class="grid gap-4">
-						<!-- Enhanced Password Field -->
-						<div class="space-y-3">
-							<Label
-								class="text-foreground flex items-center gap-3 text-base font-semibold"
-								for="password"
-							>
-								<div
-									class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30"
-								>
-									<Shield class="h-4 w-4 text-blue-600 dark:text-blue-400" />
-								</div>
+						<!-- Password field -->
+						<div class="space-y-2">
+							<Label class="text-sm font-medium" for="password">
 								{setPassword
 									? $LL?.auth?.newPassword?.() || 'New Password'
 									: $LL?.auth?.password?.() || 'Password'}
@@ -154,12 +141,12 @@ async function onSubmit(event: SubmitEvent) {
 								<Input
 									id="password"
 									class={cn(
-										'focus:ring-opacity-20 h-12 w-full rounded-xl border-2 px-4 pr-12 text-base transition-all duration-300 focus:ring-4',
+										'h-11 w-full pr-20 transition-colors',
 										!validation.password.isValid && !validation.password.isEmpty
-											? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
+											? 'border-destructive focus:border-destructive'
 											: validation.password.isValid && !validation.password.isEmpty
-												? 'border-emerald-400 bg-emerald-50 focus:border-emerald-500 focus:ring-emerald-500 dark:bg-emerald-950/20'
-												: 'border-slate-200 bg-slate-50 focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800/50',
+												? 'border-status-success focus:border-status-success'
+												: '',
 									)}
 									autocapitalize="none"
 									autocomplete={setPassword ? 'new-password' : 'current-password'}
@@ -172,80 +159,68 @@ async function onSubmit(event: SubmitEvent) {
 									bind:value={password}
 								/>
 
-								<!-- Password Visibility Toggle -->
-								<Button
-									class="absolute top-1/2 right-1 h-10 w-10 -translate-y-1/2 hover:bg-slate-100 dark:hover:bg-slate-800"
-									aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
-									aria-pressed={showPassword}
-									onclick={() => (showPassword = !showPassword)}
-									size="sm"
-									title={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
-									type="button"
-									variant="ghost"
-								>
-									{#if showPassword}
-										<EyeOff class="h-4 w-4 text-slate-500" aria-hidden="true" />
-									{:else}
-										<Eye class="h-4 w-4 text-slate-500" aria-hidden="true" />
-									{/if}
-								</Button>
-
-								<!-- Validation Icon -->
-								{#if !validation.password.isEmpty}
-									<div class="absolute top-1/2 right-12 -translate-y-1/2">
+								<div class="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
+									{#if !validation.password.isEmpty}
 										{#if validation.password.isValid}
-											<CheckCircle class="h-5 w-5 text-emerald-500" />
+											<CheckCircle class="h-4 w-4 text-emerald-500" />
 										{:else}
-											<AlertCircle class="h-5 w-5 text-red-500" />
+											<AlertCircle class="text-destructive h-4 w-4" />
 										{/if}
-									</div>
-								{/if}
+									{/if}
+									<Button
+										class="h-8 w-8"
+										aria-label={$LL?.auth?.togglePasswordVisibility?.() || 'Toggle password visibility'}
+										onclick={() => (showPassword = !showPassword)}
+										type="button"
+										variant="ghost"
+										size="icon-sm"
+									>
+										{#if showPassword}
+											<EyeOff class="text-muted-foreground h-4 w-4" />
+										{:else}
+											<Eye class="text-muted-foreground h-4 w-4" />
+										{/if}
+									</Button>
+								</div>
 							</div>
 
-							<!-- Validation Messages -->
 							{#if validation.password.message}
-								<div class="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
-									<AlertCircle class="h-4 w-4" />
-									<span>{validation.password.message}</span>
-								</div>
+								<p class="text-destructive flex items-center gap-1.5 text-sm">
+									<AlertCircle class="h-3.5 w-3.5" />
+									{validation.password.message}
+								</p>
 							{:else if setPassword && validation.password.isValid}
-								<div class="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
-									<CheckCircle class="h-4 w-4" />
-									<span>{$LL?.auth?.validation?.passwordValid?.() || 'Password is valid'}</span>
-								</div>
+								<p class="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
+									<CheckCircle class="h-3.5 w-3.5" />
+									{$LL?.auth?.validation?.passwordValid?.() || 'Password is valid'}
+								</p>
 							{/if}
 						</div>
 
-						<!-- Enhanced Submit Button -->
+						<!-- Submit -->
 						<Button
-							class="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-base font-semibold text-white shadow-lg transition-all duration-300 hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
+							class="h-11 w-full font-medium"
 							disabled={isLoading || !isFormValid}
 							type="submit"
 						>
 							{#if isLoading}
-								<LoaderCircle class="mr-2 h-5 w-5 animate-spin" />
-								<span
-									>{setPassword
-										? $LL?.auth?.creatingPassword?.() || 'Creating Password'
-										: $LL?.auth?.signingIn?.() || 'Signing In'}</span
-								>
+								<LoaderCircle class="mr-2 h-4 w-4 animate-spin" />
+								{setPassword
+									? $LL?.auth?.creatingPassword?.() || 'Creating Password'
+									: $LL?.auth?.signingIn?.() || 'Signing In'}
 							{:else}
-								<Shield class="mr-2 h-5 w-5" />
-								<span
-									>{setPassword
-										? $LL?.auth?.createPassword?.() || 'Create Password'
-										: $LL?.auth?.signIn?.() || 'Sign In'}</span
-								>
+								{setPassword
+									? $LL?.auth?.createPassword?.() || 'Create Password'
+									: $LL?.auth?.signIn?.() || 'Sign In'}
 							{/if}
 						</Button>
 					</div>
-					<!-- Enhanced Remember Me -->
-					<div
-						class="mt-4 flex items-center space-x-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50"
-					>
-						<Checkbox id="remember" class="h-5 w-5" bind:checked={remember} />
+
+					<!-- Remember me -->
+					<div class="mt-4 flex items-center gap-2.5">
+						<Checkbox id="remember" bind:checked={remember} />
 						<Label
-							class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+							class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
 							for="remember"
 						>
 							{$LL?.auth?.rememberMe?.() || 'Remember me'}
@@ -253,26 +228,15 @@ async function onSubmit(event: SubmitEvent) {
 					</div>
 				</form>
 
-				<!-- Enhanced Divider -->
-				<div class="relative">
-					<div class="absolute inset-0 flex items-center">
-						<span class="w-full border-t border-slate-200 dark:border-slate-700"></span>
-					</div>
-					<div class="relative flex justify-center text-xs uppercase">
-						<span class="bg-background text-muted-foreground px-4 font-medium"> {siteName}</span>
-					</div>
-				</div>
-
-				<!-- Enhanced Help Section -->
 				{#if setPassword}
-					<div class="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/20">
+					<div class="bg-accent rounded-lg p-4">
 						<div class="flex items-start gap-3">
-							<Shield class="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+							<AlertCircle class="text-accent-foreground mt-0.5 h-4 w-4 flex-shrink-0" />
 							<div class="space-y-1">
-								<h3 class="text-sm font-semibold text-blue-800 dark:text-blue-200">
+								<p class="text-accent-foreground text-sm font-medium">
 									{$LL?.auth?.help?.createPasswordTitle?.() || 'Create your password'}
-								</h3>
-								<p class="text-xs leading-relaxed text-blue-700 dark:text-blue-300">
+								</p>
+								<p class="text-muted-foreground text-xs leading-relaxed">
 									{$LL?.auth?.help?.createPasswordDescription?.() ||
 										'Create a secure password to protect your device access'}
 								</p>
@@ -282,15 +246,10 @@ async function onSubmit(event: SubmitEvent) {
 				{/if}
 			</div>
 
-			<!-- Enhanced Footer -->
-			<div class="space-y-2 text-center">
-				<p class="text-muted-foreground text-sm">
-					{$LL?.auth?.footerText?.() || 'Secure device access'}
-				</p>
-				<p class="text-muted-foreground/70 text-xs">
-					{siteName} Beta UI - {$LL?.auth?.secureAccess?.() || 'Secure access'}
-				</p>
-			</div>
+			<!-- Footer -->
+			<p class="text-muted-foreground text-center text-xs">
+				{$LL?.auth?.footerText?.() || 'Secure device access'} &middot; {siteName}
+			</p>
 		</div>
 	</div>
 </div>
