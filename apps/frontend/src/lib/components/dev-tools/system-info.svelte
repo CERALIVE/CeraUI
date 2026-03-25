@@ -290,15 +290,13 @@ async function handleLanguageClick(languageCode: Locales) {
 </script>
 
 <!-- Environment Information Card -->
-<Card.Root
-	class="border-dashed border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-950/20"
->
+<Card.Root>
 	<Card.Header>
-		<Card.Title class="flex items-center gap-2 text-purple-700 dark:text-purple-300">
+		<Card.Title class="flex items-center gap-2">
 			<Code class="h-5 w-5" />
-			🔍 {$LL.devtools.systemInfo()}
+			{$LL.devtools.systemInfo()}
 		</Card.Title>
-		<Card.Description class="text-purple-600 dark:text-purple-400">
+		<Card.Description>
 			{$LL.devtools.systemInfoDescription()}
 		</Card.Description>
 	</Card.Header>
@@ -415,7 +413,7 @@ async function handleLanguageClick(languageCode: Locales) {
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
 					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browserLanguage()}</div>
-					<div class="font-mono text-sm font-medium text-gray-600">
+					<div class="font-mono text-sm font-medium text-muted-foreground">
 						{localeInfo.browserLanguage}
 					</div>
 				</div>
@@ -428,7 +426,7 @@ async function handleLanguageClick(languageCode: Locales) {
 					<div class="flex flex-wrap gap-1">
 						{#each localeInfo.supportedLocales as supportedLocale}
 							<button
-								class="bg-background flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-all duration-200 hover:scale-105 hover:shadow-md {supportedLocale.code ===
+								class="bg-background flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors hover:bg-accent {supportedLocale.code ===
 								localeInfo.currentLocale
 									? 'bg-primary/10 border-primary/30 text-primary ring-primary/20 ring-1'
 									: 'hover:bg-primary/5 hover:border-primary/20'}"
@@ -478,13 +476,13 @@ async function handleLanguageClick(languageCode: Locales) {
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
 					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.viewport()}</div>
-					<div class="text-lg font-bold text-blue-600">
+					<div class="text-lg font-bold text-primary">
 						{windowInfo.width}×{windowInfo.height}
 					</div>
 				</div>
 				<div class="bg-background/50 rounded-lg border p-3">
 					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.screen()}</div>
-					<div class="text-lg font-bold text-purple-600">
+					<div class="text-lg font-bold text-primary">
 						{windowInfo.screenWidth}×{windowInfo.screenHeight}
 					</div>
 				</div>
