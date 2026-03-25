@@ -12,23 +12,23 @@
 		"@ceralive/ceracoder": "link:../../../ceracoder/bindings/typescript",
 		"@ceralive/srtla": "link:../../../srtla/bindings/typescript",
 		"@ceraui/rpc": "workspace:*",
-		"@orpc/server": "^1.13.2",
+		"@orpc/server": "^1.13.11",
 		"finalhandler": "^2.1.1",
-		"zod": "^4.3.5",
+		"zod": "^4.3.6",
 		"http-proxy": "^1.18.1",
 		"serve-static": "^2.2.1",
 		"winston": "^3.19.0",
 		"xml2js": "^0.6.2"
 	},
 	"devDependencies": {
-		"@types/bun": "^1.3.5",
+		"@types/bun": "^1.3.11",
 		"@types/finalhandler": "^1.2.4",
 		"@types/http-proxy": "^1.17.17",
 		"@types/serve-static": "^2.2.0",
 		"@types/ws": "^8.18.1",
 		"@types/xml2js": "^0.4.14",
 		"npm-run-all2": "^8.0.4",
-		"typescript": "^5.9.3"
+		"typescript": "^6.0.2"
 	},
 	"scripts": {
 		"dev": "NODE_ENV=development bun --watch run src/main.ts",

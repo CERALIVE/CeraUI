@@ -25,11 +25,11 @@
 		"lint:fix": "echo 'RPC fixing handled by root Biome'"
 	},
 	"dependencies": {
-		"@orpc/contract": "^1.13.2",
-		"zod": "^4.3.5"
+		"@orpc/contract": "^1.13.11",
+		"zod": "^4.3.6"
 	},
 	"devDependencies": {
-		"typescript": "^5.9.3"
+		"typescript": "^6.0.2"
 	},
 	"keywords": [
 		"orpc",

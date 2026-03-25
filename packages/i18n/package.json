@@ -27,10 +27,10 @@
 		"prepare": "typesafe-i18n --no-watch"
 	},
 	"dependencies": {
-		"typesafe-i18n": "^5.26.2"
+		"typesafe-i18n": "^5.27.1"
 	},
 	"devDependencies": {
-		"typescript": "^5.9.3"
+		"typescript": "^6.0.2"
 	},
 	"keywords": [
 		"i18n",

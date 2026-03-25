@@ -1,3 +1,5 @@
+import "@fontsource-variable/plus-jakarta-sans";
+import "@fontsource-variable/jetbrains-mono";
 import "./app.css";
 
 import { registerSW } from "virtual:pwa-register";

@@ -3,12 +3,8 @@
 @config '../tailwind.config.ts';
 
 /*
-  The default border color has changed to `currentColor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
+  Border compatibility for Tailwind CSS v4
+  (default border-color changed to currentColor)
 */
 @layer base {
 
@@ -42,150 +38,109 @@
 
 @layer base {
 	:root {
-		/* Base Theme - Light Mode */
-		--background: 0 0% 100%;
-		--foreground: 222 47% 11%;
-		/* slate-900 */
-		--card: 0 0% 100%;
-		--card-foreground: 222 47% 11%;
-		--popover: 0 0% 100%;
-		--popover-foreground: 222 47% 11%;
+		/* ── Light Mode ─────────────────────────────────
+		   Warm palette derived from CeraLive logo #EB4F27
+		   Neutrals tinted warm instead of cold blue-gray */
 
-		/* Primary: Emerald/Teal (CeraUI brand) */
-		--primary: 160 84% 39%;
-		/* emerald-600 */
+		--background: 40 33% 98%;
+		--foreground: 25 25% 10%;
+
+		--card: 40 20% 99%;
+		--card-foreground: 25 25% 10%;
+		--popover: 40 20% 99%;
+		--popover-foreground: 25 25% 10%;
+
+		--primary: 14 84% 54%;
 		--primary-foreground: 0 0% 100%;
 
-		/* Secondary: Slate for neutral actions */
-		--secondary: 210 40% 96%;
-		/* slate-100 */
-		--secondary-foreground: 222 47% 11%;
+		--secondary: 30 12% 93%;
+		--secondary-foreground: 25 20% 18%;
 
-		/* Muted: Subtle backgrounds */
-		--muted: 210 40% 96%;
-		--muted-foreground: 215 16% 47%;
-		/* slate-500 */
+		--muted: 30 10% 95%;
+		--muted-foreground: 25 8% 46%;
 
-		/* Accent: Teal for highlights */
-		--accent: 166 76% 94%;
-		/* teal-100 */
-		--accent-foreground: 166 72% 28%;
-		/* teal-800 */
+		--accent: 25 18% 93%;
+		--accent-foreground: 14 55% 35%;
 
-		/* Destructive: Red for errors/danger */
 		--destructive: 0 84% 60%;
-		/* red-500 */
 		--destructive-foreground: 0 0% 100%;
 
-		/* Borders & Inputs */
-		--border: 214 32% 91%;
-		/* slate-200 */
-		--input: 214 32% 91%;
-		--ring: 160 84% 39%;
-		/* emerald-600 */
+		--border: 30 12% 89%;
+		--input: 30 12% 89%;
+		--ring: 14 84% 54%;
 		--radius: 0.5rem;
 
-		/* CeraUI Semantic Status Colors */
-		--status-success: 160 84% 39%;
-		/* emerald-600 */
+		/* Semantic Status */
+		--status-success: 142 71% 45%;
 		--status-success-foreground: 0 0% 100%;
 		--status-info: 217 91% 60%;
-		/* blue-500 */
 		--status-info-foreground: 0 0% 100%;
 		--status-warning: 38 92% 50%;
-		/* amber-500 */
 		--status-warning-foreground: 0 0% 100%;
 		--status-error: 0 84% 60%;
-		/* red-500 */
 		--status-error-foreground: 0 0% 100%;
-		--status-neutral: 215 16% 47%;
-		/* slate-500 */
+		--status-neutral: 25 8% 46%;
 		--status-neutral-foreground: 0 0% 100%;
 
-		/* Signal Quality Colors */
+		/* Signal Quality */
 		--signal-excellent: 142 71% 45%;
-		/* green-500 */
 		--signal-good: 217 91% 60%;
-		/* blue-500 */
 		--signal-fair: 38 92% 50%;
-		/* amber-500 */
 		--signal-weak: 0 84% 60%;
-		/* red-500 */
 	}
 
 	.dark {
-		/* Base Theme - Dark Mode */
-		--background: 222 47% 6%;
-		/* slate-950 */
-		--foreground: 210 40% 98%;
-		/* slate-50 */
-		--card: 222 47% 8%;
-		/* slightly lighter than bg */
-		--card-foreground: 210 40% 98%;
-		--popover: 222 47% 8%;
-		--popover-foreground: 210 40% 98%;
+		/* ── Dark Mode ──────────────────────────────────
+		   Warm dark backgrounds, not cold blue-slate */
 
-		/* Primary: Emerald (brighter for dark mode) */
-		--primary: 158 64% 52%;
-		/* emerald-500 */
+		--background: 25 15% 7%;
+		--foreground: 30 12% 93%;
+
+		--card: 25 13% 10%;
+		--card-foreground: 30 12% 93%;
+		--popover: 25 13% 10%;
+		--popover-foreground: 30 12% 93%;
+
+		--primary: 14 80% 58%;
 		--primary-foreground: 0 0% 100%;
 
-		/* Secondary: Dark slate */
-		--secondary: 217 33% 17%;
-		/* slate-800 */
-		--secondary-foreground: 210 40% 98%;
+		--secondary: 25 10% 16%;
+		--secondary-foreground: 30 12% 92%;
 
-		/* Muted: Dark backgrounds */
-		--muted: 217 33% 17%;
-		--muted-foreground: 215 20% 65%;
-		/* slate-400 */
+		--muted: 25 10% 16%;
+		--muted-foreground: 25 6% 55%;
 
-		/* Accent: Dark teal */
-		--accent: 166 72% 15%;
-		/* teal-900 */
-		--accent-foreground: 166 64% 75%;
-		/* teal-300 */
+		--accent: 25 12% 17%;
+		--accent-foreground: 14 55% 70%;
 
-		/* Destructive: Red */
 		--destructive: 0 63% 31%;
-		/* red-900 */
 		--destructive-foreground: 0 0% 98%;
 
-		/* Borders & Inputs */
-		--border: 217 33% 17%;
-		/* slate-800 */
-		--input: 217 33% 17%;
-		--ring: 158 64% 52%;
-		/* emerald-500 */
+		--border: 25 10% 16%;
+		--input: 25 10% 16%;
+		--ring: 14 80% 58%;
 
-		/* CeraUI Semantic Status Colors (Dark) */
-		--status-success: 158 64% 52%;
-		/* emerald-500 */
+		/* Semantic Status (Dark) */
+		--status-success: 142 69% 58%;
 		--status-success-foreground: 0 0% 100%;
 		--status-info: 213 94% 68%;
-		/* blue-400 */
 		--status-info-foreground: 0 0% 100%;
 		--status-warning: 43 96% 56%;
-		/* amber-400 */
 		--status-warning-foreground: 0 0% 100%;
 		--status-error: 0 91% 71%;
-		/* red-400 */
 		--status-error-foreground: 0 0% 100%;
-		--status-neutral: 215 20% 65%;
-		/* slate-400 */
+		--status-neutral: 25 6% 55%;
 		--status-neutral-foreground: 0 0% 100%;
 
-		/* Signal Quality Colors (Dark) */
+		/* Signal Quality (Dark) */
 		--signal-excellent: 142 69% 58%;
-		/* green-400 */
 		--signal-good: 213 94% 68%;
-		/* blue-400 */
 		--signal-fair: 43 96% 56%;
-		/* amber-400 */
 		--signal-weak: 0 91% 71%;
-		/* red-400 */
 	}
 }
+
+/* ── Global Base ──────────────────────────────── */
 
 @layer base {
 	* {
@@ -194,28 +149,21 @@
 
 	html {
 		scrollbar-gutter: stable;
+		-webkit-tap-highlight-color: rgba(128, 128, 128, 0.5);
 	}
 
 	body {
 		@apply bg-background text-foreground;
-		/* font-feature-settings: "rlig" 1, "calt" 1; */
 		font-synthesis-weight: none;
 		text-rendering: optimizeLegibility;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
 	}
 
-	/* Mobile tap highlight */
-	/* https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-tap-highlight-color */
-	html {
-		-webkit-tap-highlight-color: rgba(128, 128, 128, 0.5);
-	}
-
-	/* Font face Geist font */
-
-	/* === Scrollbars === */
+	/* ── Scrollbars ── */
 
 	::-webkit-scrollbar {
-		@apply w-2;
-		@apply h-2;
+		@apply w-2 h-2;
 	}
 
 	::-webkit-scrollbar-track {
@@ -226,14 +174,12 @@
 		@apply bg-muted-foreground/30 rounded-sm;
 	}
 
-	/* Firefox */
-	/* https://developer.mozilla.org/en-US/docs/Web/CSS/scrollbar-color#browser_compatibility */
 	html {
-		scrollbar-color: hsl(215.4 16.3% 46.9% / 0.3);
+		scrollbar-color: hsl(25 8% 46% / 0.3) transparent;
 	}
 
 	html.dark {
-		scrollbar-color: hsl(215.4 16.3% 56.9% / 0.3);
+		scrollbar-color: hsl(25 6% 55% / 0.3) transparent;
 	}
 
 	.hide-scrollbar::-webkit-scrollbar {
@@ -244,18 +190,17 @@
 		-ms-overflow-style: none;
 		scrollbar-width: none;
 	}
-
-	.antialised {
-		-webkit-font-smoothing: antialiased;
-		-moz-osx-font-smoothing: grayscale;
-	}
 }
+
+/* ── Container mobile ── */
 
 @media (max-width: 640px) {
 	.container {
 		@apply px-2;
 	}
 }
+
+/* ── Markdown / code highlighting ── */
 
 .markdown code {
 	@apply bg-muted relative rounded px-[0.3rem] py-[0.2rem] font-mono text-sm;
@@ -343,6 +288,8 @@
 	@apply mt-2;
 }
 
+/* ── Debug tools ── */
+
 .super-debug {
 	@apply !bg-zinc-950 !text-[#FFF8];
 }
@@ -385,6 +332,8 @@
 	--vis-tooltip-border-color: 'transparent';
 }
 
+/* ── Loading animations ── */
+
 .loading::after {
 	display: inline-block;
 	animation: dotty steps(1, end) 1.5s infinite;
@@ -418,7 +367,6 @@
 	}
 }
 
-/* Enhanced loading variants for better visual control */
 .loading-sm::after {
 	animation-duration: 1.2s;
 	font-size: 0.875rem;
@@ -437,7 +385,6 @@
 	animation-duration: 3s;
 }
 
-/* Enhanced loading states with subtle animations */
 .loading-pulse {
 	animation: pulse-subtle 2s ease-in-out infinite;
 }
@@ -470,280 +417,50 @@
 	}
 }
 
-/* Loading status colors for different contexts */
 .loading-success::after {
-	color: rgb(34, 197, 94);
-	/* green-500 */
+	color: hsl(var(--status-success));
 }
 
 .loading-warning::after {
-	color: rgb(245, 158, 11);
-	/* amber-500 */
+	color: hsl(var(--status-warning));
 }
 
 .loading-error::after {
-	color: rgb(239, 68, 68);
-	/* red-500 */
+	color: hsl(var(--status-error));
 }
 
 .loading-info::after {
-	color: rgb(59, 130, 246);
-	/* blue-500 */
+	color: hsl(var(--status-info));
 }
 
-/* ===== ENHANCED NAVIGATION ANIMATIONS ===== */
+/* ── Reduced motion ── */
 
-/* Navigation transition enhancements for smooth menu toggles */
-.nav-transition {
-	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-	will-change: transform, opacity, background-color;
-}
-
-.nav-transition-fast {
-	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-	will-change: transform, opacity;
-}
-
-.nav-transition-smooth {
-	transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-	will-change: transform, opacity, background-color, border-color;
-}
-
-/* Enhanced button interactions with spring-like animations */
-.nav-button {
-	transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-	transform-origin: center;
-}
-
-.nav-button:hover {
-	transform: scale(1.05);
-}
-
-.nav-button:active {
-	transform: scale(0.95);
-	transition-duration: 0.1s;
-}
-
-.nav-button:focus-visible {
-	transform: scale(1.02);
-	box-shadow: 0 0 0 2px hsl(var(--primary) / 0.5);
-}
-
-/* Smooth tab indicator animations */
-.nav-tab-indicator {
-	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-	transform-origin: center;
-}
-
-/* Enhanced mobile menu animations */
-.mobile-menu-enter {
-	animation: mobileMenuSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-.mobile-menu-exit {
-	animation: mobileMenuSlideOut 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-@keyframes mobileMenuSlideIn {
-	from {
-		opacity: 0;
-		transform: translateX(-100%);
-	}
-
-	to {
-		opacity: 1;
-		transform: translateX(0);
-	}
-}
-
-@keyframes mobileMenuSlideOut {
-	from {
-		opacity: 1;
-		transform: translateX(0);
-	}
-
-	to {
-		opacity: 0;
-		transform: translateX(-100%);
-	}
-}
-
-/* Navigation loading states with enhanced feedback */
-.nav-loading {
-	position: relative;
-	overflow: hidden;
-}
-
-.nav-loading::before {
-	content: '';
-	position: absolute;
-	top: 0;
-	left: -100%;
-	width: 100%;
-	height: 2px;
-	background: linear-gradient(90deg, transparent, hsl(var(--primary)), transparent);
-	animation: navLoadingSlide 1.5s infinite;
-	z-index: 10;
-}
-
-@keyframes navLoadingSlide {
-	0% {
-		left: -100%;
-	}
-
-	100% {
-		left: 100%;
-	}
-}
-
-/* Smooth state change indicators */
-.state-indicator {
-	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-	transform-origin: center;
-}
-
-.state-indicator-pulse {
-	animation: stateIndicatorPulse 2s ease-in-out infinite;
-}
-
-@keyframes stateIndicatorPulse {
-
-	0%,
-	100% {
-		opacity: 1;
-		transform: scale(1);
-	}
-
-	50% {
-		opacity: 0.7;
-		transform: scale(1.05);
-	}
-}
-
-/* Navigation error state animations */
-.nav-error {
-	animation: navErrorShake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
-}
-
-@keyframes navErrorShake {
-
-	0%,
-	100% {
-		transform: translateX(0);
-	}
-
-	10%,
-	30%,
-	50%,
-	70%,
-	90% {
-		transform: translateX(-2px);
-	}
-
-	20%,
-	40%,
-	60%,
-	80% {
-		transform: translateX(2px);
-	}
-}
-
-/* Enhanced focus management for keyboard navigation */
-.nav-focus-visible {
-	outline: 2px solid hsl(var(--primary) / 0.5);
-	outline-offset: 2px;
-	border-radius: 0.375rem;
-	transition: outline 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Smooth backdrop transitions */
-.nav-backdrop {
-	backdrop-filter: blur(8px);
-	transition: backdrop-filter 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.nav-backdrop-enhanced {
-	backdrop-filter: blur(12px) saturate(1.2);
-	background: hsl(var(--background) / 0.8);
-}
-
-/* Navigation component entrance animations */
-.nav-entrance {
-	animation: navEntranceSlide 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-@keyframes navEntranceSlide {
-	from {
-		opacity: 0;
-		transform: translateY(-10px);
-	}
-
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
-}
-
-/* Responsive animation adjustments */
-@media (max-width: 768px) {
-
-	.nav-transition,
-	.nav-transition-fast,
-	.nav-transition-smooth {
-		transition-duration: 0.2s;
-	}
-
-	.nav-button:hover {
-		transform: none;
-		/* Disable hover effects on mobile for better performance */
-	}
-}
-
-/* Reduced motion preferences */
 @media (prefers-reduced-motion: reduce) {
 
-	.nav-transition,
-	.nav-transition-fast,
-	.nav-transition-smooth,
-	.nav-button,
-	.nav-tab-indicator,
-	.state-indicator {
-		transition: none;
-		animation: none;
-	}
-
-	.nav-loading::before {
-		display: none;
-	}
-
-	.state-indicator-pulse {
-		animation: none;
+	*,
+	::before,
+	::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
 	}
 }
 
-/* High contrast mode adjustments */
+/* ── High contrast mode ── */
+
 @media (prefers-contrast: high) {
-	.nav-focus-visible {
+	:focus-visible {
 		outline-width: 3px;
 		outline-color: hsl(var(--foreground));
 	}
-
-	.nav-loading::before {
-		background: hsl(var(--foreground));
-	}
 }
 
-/* =================================================================
-   Sonner Toast - Custom Styling
-   Override svelte-sonner styles to match our design system
-   ================================================================= */
+/* ── Sonner Toasts ── */
 
-/* Base toast styling */
 [data-sonner-toast] {
-	border-radius: 0.75rem !important;
-	box-shadow:
-		0 10px 15px -3px rgb(0 0 0 / 0.1),
-		0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
+	border-radius: 0.625rem !important;
+	box-shadow: 0 4px 12px rgb(0 0 0 / 0.08) !important;
 }
 
 [data-sonner-toast] [data-icon] {
@@ -751,20 +468,18 @@
 	height: 1.25rem;
 }
 
-/* Success toast - Emerald/Teal */
 [data-sonner-toast][data-type='success'] {
-	background: hsl(152 76% 95%) !important;
-	border-color: hsl(158 64% 52%) !important;
-	color: hsl(160 84% 25%) !important;
+	background: hsl(142 76% 96%) !important;
+	border-color: hsl(142 71% 45%) !important;
+	color: hsl(142 71% 20%) !important;
 }
 
 .dark [data-sonner-toast][data-type='success'] {
-	background: hsl(158 64% 10%) !important;
-	border-color: hsl(158 64% 40%) !important;
-	color: hsl(152 76% 85%) !important;
+	background: hsl(142 71% 10%) !important;
+	border-color: hsl(142 69% 40%) !important;
+	color: hsl(142 76% 85%) !important;
 }
 
-/* Info toast - Blue/Indigo */
 [data-sonner-toast][data-type='info'] {
 	background: hsl(214 95% 95%) !important;
 	border-color: hsl(217 91% 60%) !important;
@@ -777,7 +492,6 @@
 	color: hsl(214 95% 85%) !important;
 }
 
-/* Warning toast - Amber/Orange */
 [data-sonner-toast][data-type='warning'] {
 	background: hsl(48 96% 93%) !important;
 	border-color: hsl(38 92% 50%) !important;
@@ -790,7 +504,6 @@
 	color: hsl(48 96% 85%) !important;
 }
 
-/* Error toast - Red/Rose */
 [data-sonner-toast][data-type='error'] {
 	background: hsl(0 93% 95%) !important;
 	border-color: hsl(0 84% 60%) !important;
@@ -803,14 +516,7 @@
 	color: hsl(0 93% 85%) !important;
 }
 
-/* Loading toast */
-[data-sonner-toast][data-type='loading'] {
-	background: hsl(var(--card)) !important;
-	border-color: hsl(var(--border)) !important;
-	color: hsl(var(--foreground)) !important;
-}
-
-/* Default/Normal toast */
+[data-sonner-toast][data-type='loading'],
 [data-sonner-toast][data-type='default'],
 [data-sonner-toast][data-type='normal'] {
 	background: hsl(var(--card)) !important;
@@ -818,10 +524,7 @@
 	color: hsl(var(--foreground)) !important;
 }
 
-/* =================================================================
-   Svelte Inspector - Z-index Override
-   Ensure inspector toggle is above floating elements (z-50)
-   ================================================================= */
+/* ── Svelte Inspector ── */
 
 #svelte-inspector-toggle {
 	z-index: 9999 !important;
