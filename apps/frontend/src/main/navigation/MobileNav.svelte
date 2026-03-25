@@ -98,21 +98,24 @@ $effect(() => {
 
 <Sheet.Root bind:open>
 	<Sheet.Trigger>
-		<Button
-			class="mr-2 md:hidden"
-			disabled={$isNavigationTransitioning}
-			variant="ghost"
-			size="icon-lg"
-		>
-			{#if open}
-				<X class="h-5 w-5" />
-			{:else}
-				<Menu class="h-5 w-5" />
-			{/if}
-			<span class="sr-only">
-				{open ? $LL.navigation.closeMenu() : $LL.navigation.toggleMenu()}
-			</span>
-		</Button>
+		{#snippet child({ props })}
+			<Button
+				{...props}
+				class="mr-2 md:hidden"
+				disabled={$isNavigationTransitioning}
+				variant="ghost"
+				size="icon-lg"
+			>
+				{#if open}
+					<X class="h-5 w-5" />
+				{:else}
+					<Menu class="h-5 w-5" />
+				{/if}
+				<span class="sr-only">
+					{open ? $LL.navigation.closeMenu() : $LL.navigation.toggleMenu()}
+				</span>
+			</Button>
+		{/snippet}
 	</Sheet.Trigger>
 
 	<Sheet.Content class="w-80 pt-4 pr-0" side="left">

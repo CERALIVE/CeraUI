@@ -29,20 +29,23 @@ const themes = [
 
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger>
-		<Button
-			class="relative h-9 w-9 rounded-lg"
-			title={$LL?.theme?.changeTheme?.() || 'Change theme'}
-			variant="ghost"
-			size="icon"
-		>
-			<Sun
-				class="h-[1.125rem] w-[1.125rem] scale-100 rotate-0 transition-transform duration-200 dark:scale-0 dark:-rotate-90"
-			/>
-			<Moon
-				class="absolute h-[1.125rem] w-[1.125rem] scale-0 rotate-90 transition-transform duration-200 dark:scale-100 dark:rotate-0"
-			/>
-			<span class="sr-only">{$LL?.theme?.toggleTheme?.() || 'Toggle theme'}</span>
-		</Button>
+		{#snippet child({ props })}
+			<Button
+				{...props}
+				class="relative h-9 w-9 rounded-lg"
+				title={$LL?.theme?.changeTheme?.() || 'Change theme'}
+				variant="ghost"
+				size="icon"
+			>
+				<Sun
+					class="h-[1.125rem] w-[1.125rem] scale-100 rotate-0 transition-transform duration-200 dark:scale-0 dark:-rotate-90"
+				/>
+				<Moon
+					class="absolute h-[1.125rem] w-[1.125rem] scale-0 rotate-90 transition-transform duration-200 dark:scale-100 dark:rotate-0"
+				/>
+				<span class="sr-only">{$LL?.theme?.toggleTheme?.() || 'Toggle theme'}</span>
+			</Button>
+		{/snippet}
 	</DropdownMenu.Trigger>
 
 	<DropdownMenu.Content class="w-36" align="end" strategy="fixed">

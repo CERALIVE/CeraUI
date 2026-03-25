@@ -42,23 +42,26 @@ const handleLocaleChange = async (value: Parameters<typeof setLocale>[0]) => {
 
 <DropdownMenu.Root bind:open={isOpen}>
 	<DropdownMenu.Trigger>
-		<Button
-			class="bg-card hover:bg-accent flex h-10 items-center gap-2 rounded-xl border px-3 shadow-sm transition-all duration-200 hover:shadow-md"
-			variant="ghost"
-		>
-			{#if localeFlag}
-				<span class="text-base" aria-label={localeName} role="img">{localeFlag}</span>
-			{:else}
-				<Globe class="text-muted-foreground h-4 w-4" />
-			{/if}
-			<span class="text-sm font-medium">{localeName}</span>
-			<ChevronDown
-				class={cn(
-					'text-muted-foreground h-4 w-4 transition-transform duration-200',
-					isOpen && 'rotate-180',
-				)}
-			/>
-		</Button>
+		{#snippet child({ props })}
+			<Button
+				{...props}
+				class="bg-card hover:bg-accent flex h-10 items-center gap-2 rounded-xl border px-3 shadow-sm transition-all duration-200 hover:shadow-md"
+				variant="ghost"
+			>
+				{#if localeFlag}
+					<span class="text-base" aria-label={localeName} role="img">{localeFlag}</span>
+				{:else}
+					<Globe class="text-muted-foreground h-4 w-4" />
+				{/if}
+				<span class="text-sm font-medium">{localeName}</span>
+				<ChevronDown
+					class={cn(
+						'text-muted-foreground h-4 w-4 transition-transform duration-200',
+						isOpen && 'rotate-180',
+					)}
+				/>
+			</Button>
+		{/snippet}
 	</DropdownMenu.Trigger>
 
 	<DropdownMenu.Content
