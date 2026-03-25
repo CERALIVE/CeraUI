@@ -49,16 +49,49 @@ const config: Config = {
 					DEFAULT: "hsl(var(--card) / <alpha-value>)",
 					foreground: "hsl(var(--card-foreground) / <alpha-value>)",
 				},
-				sidebar: {
-					DEFAULT: "hsl(var(--sidebar-background))",
-					foreground: "hsl(var(--sidebar-foreground))",
-					primary: "hsl(var(--sidebar-primary))",
-					"primary-foreground": "hsl(var(--sidebar-primary-foreground))",
-					accent: "hsl(var(--sidebar-accent))",
-					"accent-foreground": "hsl(var(--sidebar-accent-foreground))",
-					border: "hsl(var(--sidebar-border))",
-					ring: "hsl(var(--sidebar-ring))",
+			sidebar: {
+				DEFAULT: "hsl(var(--sidebar-background))",
+				foreground: "hsl(var(--sidebar-foreground))",
+				primary: "hsl(var(--sidebar-primary))",
+				"primary-foreground": "hsl(var(--sidebar-primary-foreground))",
+				accent: "hsl(var(--sidebar-accent))",
+				"accent-foreground": "hsl(var(--sidebar-accent-foreground))",
+				border: "hsl(var(--sidebar-border))",
+				ring: "hsl(var(--sidebar-ring))",
+			},
+			status: {
+				success: {
+					DEFAULT: "hsl(var(--status-success) / <alpha-value>)",
+					foreground:
+						"hsl(var(--status-success-foreground) / <alpha-value>)",
 				},
+				info: {
+					DEFAULT: "hsl(var(--status-info) / <alpha-value>)",
+					foreground:
+						"hsl(var(--status-info-foreground) / <alpha-value>)",
+				},
+				warning: {
+					DEFAULT: "hsl(var(--status-warning) / <alpha-value>)",
+					foreground:
+						"hsl(var(--status-warning-foreground) / <alpha-value>)",
+				},
+				error: {
+					DEFAULT: "hsl(var(--status-error) / <alpha-value>)",
+					foreground:
+						"hsl(var(--status-error-foreground) / <alpha-value>)",
+				},
+				neutral: {
+					DEFAULT: "hsl(var(--status-neutral) / <alpha-value>)",
+					foreground:
+						"hsl(var(--status-neutral-foreground) / <alpha-value>)",
+				},
+			},
+			signal: {
+				excellent: "hsl(var(--signal-excellent) / <alpha-value>)",
+				good: "hsl(var(--signal-good) / <alpha-value>)",
+				fair: "hsl(var(--signal-fair) / <alpha-value>)",
+				weak: "hsl(var(--signal-weak) / <alpha-value>)",
+			},
 			},
 			borderRadius: {
 				xl: "calc(var(--radius) + 4px)",

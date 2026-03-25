@@ -36,6 +36,50 @@
 	}
 }
 
+/* ── Semantic Gradient Utilities ──────────────────
+   Two-tone gradients using design token endpoints.
+   Use instead of hardcoded from-*/to-* Tailwind classes. */
+
+@utility gradient-primary {
+	background-image: linear-gradient(
+		to right,
+		hsl(var(--primary)),
+		hsl(var(--gradient-primary-to))
+	);
+}
+
+@utility gradient-success {
+	background-image: linear-gradient(
+		to right,
+		hsl(var(--status-success)),
+		hsl(var(--gradient-success-to))
+	);
+}
+
+@utility gradient-info {
+	background-image: linear-gradient(
+		to right,
+		hsl(var(--status-info)),
+		hsl(var(--gradient-info-to))
+	);
+}
+
+@utility gradient-destructive {
+	background-image: linear-gradient(
+		to right,
+		hsl(var(--destructive)),
+		hsl(var(--gradient-destructive-to))
+	);
+}
+
+@utility gradient-warning {
+	background-image: linear-gradient(
+		to right,
+		hsl(var(--status-warning)),
+		hsl(var(--gradient-warning-to))
+	);
+}
+
 @layer base {
 	:root {
 		/* ── Light Mode ─────────────────────────────────
@@ -96,6 +140,13 @@
 		--signal-good: 217 91% 60%;
 		--signal-fair: 38 92% 50%;
 		--signal-weak: 0 84% 60%;
+
+		/* Gradient Endpoints (shifted hue/lightness for two-tone gradients) */
+		--gradient-primary-to: 190 80% 35%;
+		--gradient-success-to: 160 65% 38%;
+		--gradient-info-to: 235 75% 50%;
+		--gradient-destructive-to: 350 80% 50%;
+		--gradient-warning-to: 25 85% 42%;
 	}
 
 	.dark {
@@ -156,6 +207,13 @@
 		--signal-good: 213 94% 68%;
 		--signal-fair: 43 96% 56%;
 		--signal-weak: 0 91% 71%;
+
+		/* Gradient Endpoints (Dark) */
+		--gradient-primary-to: 190 90% 42%;
+		--gradient-success-to: 160 65% 48%;
+		--gradient-info-to: 235 80% 55%;
+		--gradient-destructive-to: 350 75% 45%;
+		--gradient-warning-to: 25 85% 48%;
 	}
 }
 
