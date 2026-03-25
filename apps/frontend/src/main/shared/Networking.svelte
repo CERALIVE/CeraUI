@@ -62,9 +62,9 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 }
 </script>
 
-<Card.Header>
+<Card.Header class="p-4">
 	<Card.Title class="flex items-center gap-2">
-		<ArrowUpDown class="h-5 w-5" />
+		<ArrowUpDown class="text-muted-foreground h-5 w-5" />
 		{$LL.network.summary.networkInfo()}
 	</Card.Title>
 	<Card.Description>
@@ -75,7 +75,7 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 		})}
 	</Card.Description>
 </Card.Header>
-<Card.Content class="space-y-4">
+<Card.Content class="space-y-4 px-4 pt-0 pb-4">
 	{#if Object.keys(currentNetwoks).length === 0}
 		<!-- Empty State -->
 		<div class="flex flex-col items-center justify-center space-y-3 py-8 text-center">

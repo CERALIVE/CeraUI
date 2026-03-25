@@ -369,6 +369,8 @@ const serverStatusColors = $derived.by(() => {
 		</div>
 
 		<!-- Network Information - Full Width -->
-		<Networking />
+		<Card.Root class="gap-0 overflow-hidden py-0">
+			<Networking />
+		</Card.Root>
 	</div>
 </div>

@@ -2,6 +2,7 @@
 import { LL } from '@ceraui/i18n/svelte';
 import { Network, Radio, Wifi } from '@lucide/svelte';
 
+import * as Card from '$lib/components/ui/card';
 import { getStatus } from '$lib/stores/websocket-store.svelte';
 
 import ModemCard from '../shared/ModemCard.svelte';
@@ -25,7 +26,9 @@ const currentStatus = $derived(getStatus());
 			<Network class="text-muted-foreground h-5 w-5" />
 			<h2 class="text-xl font-semibold">{$LL.network.sections.networkInterfaces()}</h2>
 		</div>
-		<Networking />
+		<Card.Root class="gap-0 overflow-hidden py-0">
+			<Networking />
+		</Card.Root>
 	</section>
 
 	<!-- WiFi Devices Section -->
