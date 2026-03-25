@@ -155,7 +155,7 @@ $effect(() => {
 });
 </script>
 
-<div class="from-background via-background to-accent/5 min-h-screen bg-gradient-to-br">
+<div class="min-h-screen">
 	<div class="container mx-auto max-w-7xl px-4 py-6">
 		<!-- Header Section -->
 		<div class="mb-8">
@@ -168,19 +168,12 @@ $effect(() => {
 		<!-- Responsive Grid Layout -->
 		<div class="grid gap-6 lg:grid-cols-2 lg:items-start">
 			<!-- System Settings Card -->
-			<Card.Root
-				class="bg-card/50 gap-0 overflow-hidden border border-blue-500/30 py-0 shadow-lg backdrop-blur-sm"
-			>
-				<div class="h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+			<Card.Root class="gap-0 overflow-hidden py-0">
 				<Card.Header class="border-b pt-6 pb-6">
 					<div class="flex items-center space-x-4">
-						<div
-							class="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-500 shadow-sm"
-						>
-							<Settings class="h-6 w-6 text-white" />
-						</div>
+						<Settings class="text-muted-foreground h-6 w-6" />
 						<div class="flex-1">
-							<Card.Title class="text-xl font-semibold">
+							<Card.Title class="text-lg font-semibold">
 								{$LL.advanced.systemSettings()}
 							</Card.Title>
 							<p class="text-muted-foreground mt-1 text-sm">
@@ -245,9 +238,7 @@ $effect(() => {
 					<!-- Cloud Remote Section -->
 					<div class="space-y-4">
 						<div class="flex items-center gap-3 border-b pb-2">
-							<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500">
-								<Cloud class="h-4 w-4 text-white" />
-							</div>
+							<Cloud class="text-muted-foreground h-4 w-4" />
 							<div>
 								<h3 class="font-semibold">{$LL.advanced.cloudRemote?.() ?? 'Cloud Remote'}</h3>
 								<p class="text-muted-foreground text-sm">
@@ -383,21 +374,19 @@ $effect(() => {
 					<!-- System Actions Section -->
 					<div class="space-y-4">
 						<div class="flex items-center gap-3 border-b pb-2">
-							<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500">
-								<svg
-									class="h-4 w-4 text-white"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										d="M13 10V3L4 14h7v7l9-11h-7z"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-									/>
-								</svg>
-							</div>
+							<svg
+								class="text-muted-foreground h-4 w-4"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path
+									d="M13 10V3L4 14h7v7l9-11h-7z"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+								/>
+							</svg>
 							<div>
 								<h3 class="text-sm font-semibold">
 									{$LL.advanced.systemActions()}
@@ -409,24 +398,18 @@ $effect(() => {
 						</div>
 						<div class="grid gap-4 sm:grid-cols-2">
 							<!-- Reboot System Card -->
-							<div
-								class="group relative flex h-full flex-col overflow-hidden rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-50 to-orange-50 p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-amber-500/30 dark:from-amber-950/30 dark:to-orange-950/20"
-							>
-								<!-- Status bar -->
-								<div
-									class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500 to-orange-500"
-								></div>
-								<div class="flex flex-1 items-start gap-3 pt-1">
+							<div class="flex h-full flex-col rounded-xl border p-4">
+								<div class="flex flex-1 items-start gap-3">
 									<div
-										class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-md shadow-amber-500/20"
+										class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-secondary"
 									>
-										<RotateCcw class="h-5 w-5 text-white" />
+										<RotateCcw class="text-foreground h-5 w-5" />
 									</div>
 									<div class="min-w-0 flex-1">
-										<h4 class="font-semibold text-amber-900 dark:text-amber-100">
+										<h4 class="font-semibold">
 											{$LL.advanced.reboot()}
 										</h4>
-										<p class="text-xs text-amber-700/70 dark:text-amber-300/70">
+										<p class="text-muted-foreground text-xs">
 											{$LL.advanced.rebootDescription()}
 										</p>
 									</div>
@@ -435,7 +418,7 @@ $effect(() => {
 									<SimpleAlertDialog
 										buttonText={$LL.advanced.reboot()}
 										confirmButtonText={$LL.advanced.reboot()}
-										extraButtonClasses="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 border-0 shadow-lg shadow-amber-500/25 text-white font-medium h-10 text-sm justify-center"
+										extraButtonClasses="w-full h-10 text-sm justify-center"
 										iconPosition="left"
 										onconfirm={reboot}
 									>
@@ -453,24 +436,18 @@ $effect(() => {
 							</div>
 
 							<!-- Power Off System Card -->
-							<div
-								class="group relative flex h-full flex-col overflow-hidden rounded-xl border border-red-500/30 bg-gradient-to-br from-red-50 to-rose-50 p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-red-500/30 dark:from-red-950/30 dark:to-rose-950/20"
-							>
-								<!-- Status bar -->
-								<div
-									class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-red-500 to-rose-500"
-								></div>
-								<div class="flex flex-1 items-start gap-3 pt-1">
+							<div class="flex h-full flex-col rounded-xl border p-4">
+								<div class="flex flex-1 items-start gap-3">
 									<div
-										class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-red-500 to-rose-500 shadow-md shadow-red-500/20"
+										class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-secondary"
 									>
-										<PowerOff class="h-5 w-5 text-white" />
+										<PowerOff class="text-foreground h-5 w-5" />
 									</div>
 									<div class="min-w-0 flex-1">
-										<h4 class="font-semibold text-red-900 dark:text-red-100">
+										<h4 class="font-semibold">
 											{$LL.advanced.powerOff()}
 										</h4>
-										<p class="text-xs text-red-700/70 dark:text-red-300/70">
+										<p class="text-muted-foreground text-xs">
 											{$LL.advanced.powerOffDescription()}
 										</p>
 									</div>
@@ -479,7 +456,7 @@ $effect(() => {
 									<SimpleAlertDialog
 										buttonText={$LL.advanced.powerOff()}
 										confirmButtonText={$LL.advanced.powerOff()}
-										extraButtonClasses="w-full bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 border-0 shadow-lg shadow-red-500/25 text-white font-medium h-10 text-sm justify-center"
+										extraButtonClasses="w-full h-10 text-sm justify-center bg-destructive text-destructive-foreground hover:bg-destructive/90"
 										iconPosition="left"
 										onconfirm={powerOff}
 									>
@@ -501,19 +478,12 @@ $effect(() => {
 			</Card.Root>
 
 			<!-- Developer Options Card -->
-			<Card.Root
-				class="bg-card/50 gap-0 overflow-hidden border border-purple-500/30 py-0 shadow-lg backdrop-blur-sm"
-			>
-				<div class="h-1 bg-gradient-to-r from-purple-500 to-violet-600"></div>
+			<Card.Root class="gap-0 overflow-hidden py-0">
 				<Card.Header class="border-b pt-6 pb-6">
 					<div class="flex items-center space-x-4">
-						<div
-							class="grid h-12 w-12 place-items-center rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 shadow-md shadow-purple-500/20"
-						>
-							<Hammer class="h-6 w-6 text-white" />
-						</div>
+						<Hammer class="text-muted-foreground h-6 w-6" />
 						<div class="flex-1">
-							<Card.Title class="text-xl font-semibold">
+							<Card.Title class="text-lg font-semibold">
 								{$LL.advanced.developerOptions()}
 							</Card.Title>
 							<p class="text-muted-foreground mt-1 text-sm">
@@ -536,15 +506,15 @@ $effect(() => {
 								class={cn(
 									'flex items-center justify-between rounded-lg border px-4 py-3',
 									sshStatus
-										? 'border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/20'
-										: 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50',
+										? 'border-primary/30 bg-primary/5'
+										: 'border-border bg-muted/30',
 								)}
 							>
 								<div class="flex items-center gap-2 text-sm">
 									<div
 										class={cn(
 											'h-2.5 w-2.5 rounded-full',
-											sshStatus ? 'animate-pulse bg-emerald-500' : 'bg-slate-400',
+											sshStatus ? 'animate-pulse bg-primary' : 'bg-muted-foreground',
 										)}
 									></div>
 									<span class="font-medium">{$LL.advanced.sshServer()}:</span>
@@ -553,8 +523,8 @@ $effect(() => {
 									class={cn(
 										'rounded-md px-2.5 py-1 text-xs font-semibold',
 										sshStatus
-											? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
-											: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+											? 'bg-primary/20 text-primary'
+											: 'bg-secondary text-secondary-foreground',
 									)}
 								>
 									{sshStatus ? $LL.advanced.active() : $LL.advanced.inactive()}
@@ -646,16 +616,21 @@ $effect(() => {
 						<!-- SSH Toggle Button -->
 						<Button
 							class={cn(
-								'h-11 w-full justify-start border-0 font-medium shadow-md transition-all duration-200',
+								'h-11 w-full font-medium',
 								sshStatus
-									? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-600 hover:to-orange-700'
-									: 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700',
+									? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+									: 'bg-primary text-primary-foreground hover:bg-primary/90',
 							)}
 							onclick={sshStatus ? stopSSH : startSSH}
 						>
 							<div class="flex items-center gap-3">
 								<div
-									class={cn('h-3 w-3 rounded-full shadow-sm', 'bg-white/90 shadow-white/30')}
+									class={cn(
+										'h-3 w-3 rounded-full',
+										sshStatus
+											? 'bg-destructive-foreground/90'
+											: 'bg-primary-foreground/90',
+									)}
 								></div>
 								{sshStatus ? $LL.advanced.stopSSH() : $LL.advanced.startSSH()}
 							</div>
@@ -665,11 +640,7 @@ $effect(() => {
 					<!-- Log Management Section -->
 					<div class="space-y-4 border-t pt-6">
 						<div class="flex items-center gap-3 pb-2">
-							<div
-								class="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-purple-500 to-violet-600"
-							>
-								<Logs class="h-4 w-4 text-white" />
-							</div>
+							<Logs class="text-muted-foreground h-4 w-4" />
 							<div>
 								<h3 class="text-sm font-semibold">
 									{$LL.advanced.logManagement()}
@@ -681,19 +652,13 @@ $effect(() => {
 						</div>
 						<div class="grid gap-4 sm:grid-cols-2">
 							<!-- CERALIVE Log Card -->
-							<div
-								class="group relative flex h-full flex-col overflow-hidden rounded-xl border border-purple-500/30 bg-gradient-to-br from-purple-50 to-violet-50 p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-purple-500/30 dark:from-purple-950/30 dark:to-violet-950/20"
-							>
-								<!-- Status bar -->
-								<div
-									class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-purple-500 to-violet-500"
-								></div>
-								<div class="flex flex-1 items-start gap-3 pt-1">
+							<div class="flex h-full flex-col rounded-xl border p-4">
+								<div class="flex flex-1 items-start gap-3">
 									<div
-										class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-purple-500 to-violet-500 shadow-md shadow-purple-500/20"
+										class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-secondary"
 									>
 										<svg
-											class="h-5 w-5 text-white"
+											class="text-foreground h-5 w-5"
 											fill="none"
 											stroke="currentColor"
 											viewBox="0 0 24 24"
@@ -707,8 +672,8 @@ $effect(() => {
 										</svg>
 									</div>
 									<div class="min-w-0 flex-1">
-										<h4 class="font-semibold text-purple-900 dark:text-purple-100">CERALIVE Log</h4>
-										<p class="text-xs text-purple-700/70 dark:text-purple-300/70">
+										<h4 class="font-semibold">CERALIVE Log</h4>
+										<p class="text-muted-foreground text-xs">
 											{$LL.advanced.applicationLogsDescription()}
 										</p>
 									</div>
@@ -717,7 +682,7 @@ $effect(() => {
 									<SimpleAlertDialog
 										buttonText={$LL.advanced.download()}
 										confirmButtonText={$LL.advanced.download()}
-										extraButtonClasses="w-full bg-gradient-to-r from-purple-500 to-violet-500 hover:from-purple-600 hover:to-violet-600 border-0 shadow-lg shadow-purple-500/25 text-white font-medium h-10 text-sm justify-center"
+										extraButtonClasses="w-full h-10 text-sm justify-center"
 										iconPosition="left"
 										onconfirm={getDeviceLog}
 									>
@@ -742,19 +707,13 @@ $effect(() => {
 							</div>
 
 							<!-- System Log Card -->
-							<div
-								class="group relative flex h-full flex-col overflow-hidden rounded-xl border border-purple-500/30 bg-gradient-to-br from-purple-50 to-violet-50 p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-purple-500/30 dark:from-purple-950/30 dark:to-violet-950/20"
-							>
-								<!-- Status bar -->
-								<div
-									class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-purple-500 to-violet-500"
-								></div>
-								<div class="flex flex-1 items-start gap-3 pt-1">
+							<div class="flex h-full flex-col rounded-xl border p-4">
+								<div class="flex flex-1 items-start gap-3">
 									<div
-										class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-purple-500 to-violet-500 shadow-md shadow-purple-500/20"
+										class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-secondary"
 									>
 										<svg
-											class="h-5 w-5 text-white"
+											class="text-foreground h-5 w-5"
 											fill="none"
 											stroke="currentColor"
 											viewBox="0 0 24 24"
@@ -768,8 +727,8 @@ $effect(() => {
 										</svg>
 									</div>
 									<div class="min-w-0 flex-1">
-										<h4 class="font-semibold text-purple-900 dark:text-purple-100">System Log</h4>
-										<p class="text-xs text-purple-700/70 dark:text-purple-300/70">
+										<h4 class="font-semibold">System Log</h4>
+										<p class="text-muted-foreground text-xs">
 											{$LL.advanced.systemLogsDescription()}
 										</p>
 									</div>
@@ -778,7 +737,7 @@ $effect(() => {
 									<SimpleAlertDialog
 										buttonText={$LL.advanced.download()}
 										confirmButtonText={$LL.advanced.download()}
-										extraButtonClasses="w-full bg-gradient-to-r from-purple-500 to-violet-500 hover:from-purple-600 hover:to-violet-600 border-0 shadow-lg shadow-purple-500/25 text-white font-medium h-10 text-sm justify-center"
+										extraButtonClasses="w-full h-10 text-sm justify-center"
 										iconPosition="left"
 										onconfirm={getSystemLog}
 									>
@@ -809,17 +768,10 @@ $effect(() => {
 
 		<!-- Version Information Card -->
 		{#if revisions}
-			<Card.Root
-				class="bg-card/50 col-span-full mt-8 gap-0 overflow-hidden border border-emerald-500/30 py-0 shadow-lg backdrop-blur-sm"
-			>
-				<div class="h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+			<Card.Root class="col-span-full mt-8 gap-0 overflow-hidden py-0">
 				<Card.Header class="border-b pt-6 pb-6">
 					<div class="flex items-center space-x-4">
-						<div
-							class="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-500 shadow-sm"
-						>
-							<CheckCircle class="h-6 w-6 text-white" />
-						</div>
+						<CheckCircle class="text-muted-foreground h-6 w-6" />
 						<div class="flex-1">
 							<Card.Title class="text-xl font-semibold">
 								{$LL.advanced.versionInformation()}
@@ -833,74 +785,52 @@ $effect(() => {
 				<Card.Content class="pt-6 pb-6">
 					<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
 						<!-- CeraLive -->
-						<div
-							class="rounded-xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm dark:border-emerald-800/50 dark:bg-emerald-950/30"
-						>
-							<p
-								class="mb-2 text-xs font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-400"
-							>
+						<div class="rounded-xl border bg-secondary p-4">
+							<p class="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">
 								CeraLive
 							</p>
-							<p
-								class="truncate font-mono text-sm font-bold text-emerald-900 dark:text-emerald-100"
-							>
+							<p class="text-foreground truncate font-mono text-sm font-bold">
 								{revisions.ceralive}
 							</p>
 						</div>
 
 						<!-- Ceracoder -->
-						<div
-							class="rounded-xl border border-slate-300 bg-slate-100 p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/40"
-						>
-							<p
-								class="mb-2 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-400"
-							>
+						<div class="rounded-xl border bg-secondary p-4">
+							<p class="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">
 								Ceracoder
 							</p>
-							<p class="truncate font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+							<p class="text-foreground truncate font-mono text-sm font-bold">
 								{revisions.ceracoder}
 							</p>
 						</div>
 
 						<!-- SRTLA -->
-						<div
-							class="rounded-xl border border-slate-300 bg-slate-100 p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/40"
-						>
-							<p
-								class="mb-2 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-400"
-							>
+						<div class="rounded-xl border bg-secondary p-4">
+							<p class="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">
 								SRTLA
 							</p>
-							<p class="truncate font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+							<p class="text-foreground truncate font-mono text-sm font-bold">
 								{revisions.srtla}
 							</p>
 						</div>
 
 						<!-- Bun Runtime -->
-						<div
-							class="rounded-xl border border-slate-300 bg-slate-100 p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/40"
-						>
-							<p
-								class="mb-2 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-400"
-							>
+						<div class="rounded-xl border bg-secondary p-4">
+							<p class="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">
 								Bun Runtime
 							</p>
-							<p class="truncate font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+							<p class="text-foreground truncate font-mono text-sm font-bold">
 								{revisions.bun}
 							</p>
 						</div>
 
 						<!-- CERALIVE Image (only shown when available) -->
 						{#if revisions['CERALIVE image']}
-							<div
-								class="rounded-xl border border-slate-300 bg-slate-100 p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/40"
-							>
-								<p
-									class="mb-2 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-400"
-								>
+							<div class="rounded-xl border bg-secondary p-4">
+								<p class="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">
 									CERALIVE Image
 								</p>
-								<p class="truncate font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+								<p class="text-foreground truncate font-mono text-sm font-bold">
 									{revisions['CERALIVE image']}
 								</p>
 							</div>

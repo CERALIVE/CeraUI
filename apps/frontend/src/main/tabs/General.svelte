@@ -91,8 +91,7 @@ const updatesStatusColors = $derived.by(() => {
 		<!-- Status Overview Cards -->
 		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 			<!-- System Status -->
-			<Card.Root class="gap-0 overflow-hidden border py-0">
-				<div class={cn('h-1 bg-gradient-to-r', streamingStatusColors.bg)}></div>
+			<Card.Root class="overflow-hidden">
 				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
 					<Card.Title class="text-sm font-medium">{$LL.general.status()}</Card.Title>
 					{#if currentStatus?.is_streaming}
@@ -121,8 +120,7 @@ const updatesStatusColors = $derived.by(() => {
 			</Card.Root>
 
 			<!-- Server Configuration Status -->
-			<Card.Root class="gap-0 overflow-hidden border py-0">
-				<div class={cn('h-1 bg-gradient-to-r', serverStatusColors.bg)}></div>
+			<Card.Root class="overflow-hidden">
 				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
 					<Card.Title class="text-sm font-medium">{$LL.general.relayServer()}</Card.Title>
 					{#if currentConfig?.srtla_addr}
@@ -144,8 +142,7 @@ const updatesStatusColors = $derived.by(() => {
 			</Card.Root>
 
 			<!-- System Updates -->
-			<Card.Root class="gap-0 overflow-hidden border py-0">
-				<div class={cn('h-1 bg-gradient-to-r', updatesStatusColors.bg)}></div>
+			<Card.Root class="overflow-hidden">
 				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
 					<Card.Title class="text-sm font-medium">{$LL.general.updates()}</Card.Title>
 					<RefreshCw class="text-muted-foreground h-4 w-4" />
@@ -189,13 +186,10 @@ const updatesStatusColors = $derived.by(() => {
 		<div class="grid gap-6 xl:grid-cols-5">
 			<!-- Configuration Section -->
 			<div class="xl:col-span-3">
-				<Card.Root class="gap-0 overflow-hidden border border-blue-500/30 py-0">
-					<div class="h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+				<Card.Root class="gap-0 overflow-hidden py-0">
 					<Card.Header class="p-4">
 						<Card.Title class="flex items-center gap-2.5">
-							<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500">
-								<SquareChartGantt class="h-4 w-4 text-white" />
-							</div>
+							<SquareChartGantt class="text-muted-foreground h-5 w-5" />
 							<div>
 								<span class="text-sm font-semibold">{$LL.general.configuration()}</span>
 								<p class="text-muted-foreground text-xs font-normal">
@@ -270,7 +264,7 @@ const updatesStatusColors = $derived.by(() => {
 							</div>
 						{:else}
 							<div class="flex flex-col items-center justify-center space-y-4 py-16 text-center">
-								<div class="flex h-16 w-16 items-center justify-center rounded-lg bg-slate-500/10">
+								<div class="flex h-16 w-16 items-center justify-center rounded-lg bg-muted">
 									<AlertTriangle class="text-muted-foreground h-8 w-8" />
 								</div>
 								<div class="space-y-2">
@@ -293,15 +287,10 @@ const updatesStatusColors = $derived.by(() => {
 							.includes('temp') || name.toLowerCase().includes('current') || name
 							.toLowerCase()
 							.includes('voltage'))}
-					<Card.Root class="gap-0 overflow-hidden border border-emerald-500/30 py-0">
-						<div class="h-1 bg-gradient-to-r from-emerald-500 to-teal-600"></div>
+					<Card.Root class="gap-0 overflow-hidden py-0">
 						<Card.Header class="p-4">
 							<Card.Title class="flex items-center gap-2.5">
-								<div
-									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500"
-								>
-									<Thermometer class="h-4 w-4 text-white" />
-								</div>
+								<Thermometer class="text-muted-foreground h-5 w-5" />
 								<span class="text-sm font-semibold">{$LL.general.hardwareSensors()}</span>
 							</Card.Title>
 						</Card.Header>
@@ -312,7 +301,7 @@ const updatesStatusColors = $derived.by(() => {
 											.includes('temp') || name.toLowerCase().includes('current') || name
 											.toLowerCase()
 											.includes('voltage')) as [sensorName, sensorValue]}
-									<div class="space-y-2 rounded-lg border bg-slate-50 p-3 dark:bg-slate-900/50">
+									<div class="space-y-2 rounded-lg border bg-muted p-3">
 										<div class="flex items-center justify-between">
 											<span
 												class="text-muted-foreground text-xs font-medium tracking-wide uppercase"
@@ -333,15 +322,10 @@ const updatesStatusColors = $derived.by(() => {
 				{#if sensors.some(([name]) => name.toLowerCase().includes('srt') || name
 							.toLowerCase()
 							.includes('rtmp'))}
-					<Card.Root class="gap-0 overflow-hidden border border-blue-500/30 py-0">
-						<div class="h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+					<Card.Root class="gap-0 overflow-hidden py-0">
 						<Card.Header class="p-4">
 							<Card.Title class="flex items-center gap-2.5">
-								<div
-									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500"
-								>
-									<RadioTower class="h-4 w-4 text-white" />
-								</div>
+								<RadioTower class="text-muted-foreground h-5 w-5" />
 								<span class="text-sm font-semibold">{$LL.general.streamPerformance()}</span>
 							</Card.Title>
 						</Card.Header>
@@ -350,9 +334,7 @@ const updatesStatusColors = $derived.by(() => {
 								{#each sensors.filter(([name]) => name.toLowerCase().includes('srt') || name
 											.toLowerCase()
 											.includes('rtmp')) as [sensorName, sensorValue]}
-									<div
-										class="flex items-center justify-between rounded-lg border bg-slate-50 p-3 dark:bg-slate-900/50"
-									>
+									<div class="flex items-center justify-between rounded-lg border bg-muted p-3">
 										<div class="space-y-1">
 											<span class="text-sm font-medium">{sensorName}</span>
 											<div class="text-muted-foreground text-xs">{$LL.general.liveMetrics()}</div>
@@ -372,14 +354,9 @@ const updatesStatusColors = $derived.by(() => {
 				<!-- Empty State for System Health -->
 				{#if sensors.length === 0}
 					<Card.Root class="gap-0 overflow-hidden border py-0">
-						<div class="h-1 bg-gradient-to-r from-slate-400 to-slate-500"></div>
 						<Card.Header class="p-4">
 							<Card.Title class="flex items-center gap-2.5">
-								<div
-									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-400"
-								>
-									<Activity class="h-4 w-4 text-white" />
-								</div>
+								<Activity class="text-muted-foreground h-5 w-5" />
 								<span class="text-sm font-semibold">{$LL.general.systemHealth()}</span>
 							</Card.Title>
 						</Card.Header>
@@ -400,8 +377,6 @@ const updatesStatusColors = $derived.by(() => {
 		</div>
 
 		<!-- Network Information - Full Width -->
-		<Card.Root>
-			<Networking />
-		</Card.Root>
+		<Networking />
 	</div>
 </div>

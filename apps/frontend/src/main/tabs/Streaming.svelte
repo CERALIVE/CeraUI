@@ -296,7 +296,7 @@ const handleFramerateChange = (value: Framerate) => {
 };
 </script>
 
-<div class="from-background via-background to-accent/5 bg-gradient-to-br pb-4">
+<div class="pb-4">
 	<form class="relative" onsubmit={onSubmitStreamingForm}>
 		<!-- Main Content Area -->
 		<div class="container mx-auto max-w-6xl px-4 py-6">
