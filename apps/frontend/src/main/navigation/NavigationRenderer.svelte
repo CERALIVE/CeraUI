@@ -1,21 +1,3 @@
-<style>
-/* Enhanced loading animation keyframes */
-@keyframes gentle-pulse {
-	0%,
-	100% {
-		opacity: 0.4;
-	}
-	50% {
-		opacity: 1;
-	}
-}
-
-/* Ensure smooth transitions */
-.container {
-	overflow: hidden;
-}
-</style>
-
 <script lang="ts">
 import type { Component } from 'svelte';
 import { cubicInOut } from 'svelte/easing';
@@ -81,35 +63,10 @@ const transitionParams = $derived.by(() => {
 	{#if $isNavigationTransitioning}
 		<div
 			class="absolute inset-0 z-10 mt-20 flex items-center justify-center"
-			in:fade={{ duration: 200 }}
-			out:fade={{ duration: 200 }}
+			in:fade={{ duration: 150 }}
+			out:fade={{ duration: 150 }}
 		>
-			<div class="flex flex-col items-center space-y-4">
-				<!-- Animated loading spinner -->
-				<div class="relative">
-					<div
-						class="border-muted-foreground/20 border-t-primary h-8 w-8 animate-spin rounded-full border-4"
-					></div>
-					<!-- Subtle glow effect -->
-					<div
-						class="border-t-primary/30 absolute inset-0 h-8 w-8 animate-spin rounded-full border-4 border-transparent blur-sm"
-					></div>
-				</div>
-
-				<!-- Loading text with subtle animation -->
-				<div class="text-muted-foreground flex items-center space-x-1 text-sm">
-					<span>Loading</span>
-					<div class="flex space-x-1">
-						<div class="bg-primary h-1 w-1 animate-pulse rounded-full [animation-delay:0ms]"></div>
-						<div
-							class="bg-primary h-1 w-1 animate-pulse rounded-full [animation-delay:150ms]"
-						></div>
-						<div
-							class="bg-primary h-1 w-1 animate-pulse rounded-full [animation-delay:300ms]"
-						></div>
-					</div>
-				</div>
-			</div>
+			<div class="border-primary/30 border-t-primary h-6 w-6 animate-spin rounded-full border-2"></div>
 		</div>
 	{/if}
 
@@ -165,14 +122,5 @@ const transitionParams = $derived.by(() => {
 				</div>
 			{/if}
 		</div>
-	{/if}
-
-	<!-- Subtle transition overlay for smoother visual experience -->
-	{#if $isNavigationTransitioning}
-		<div
-			class="bg-background/50 pointer-events-none absolute inset-0 backdrop-blur-[2px]"
-			in:fade={{ duration: TRANSITION_DURATION / 2 }}
-			out:fade={{ duration: TRANSITION_DURATION / 2 }}
-		></div>
 	{/if}
 </div>
