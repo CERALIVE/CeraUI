@@ -570,6 +570,12 @@ const de = {
 			connectionFailed: "WLAN-Verbindung Fehlgeschlagen",
 			connectionFailedDescription:
 				"Verbindung zum WLAN-Netzwerk nicht möglich. Überprüfen Sie das Passwort und versuchen Sie es erneut.",
+			authFailed: "Incorrect Password",
+			authFailedDescription:
+				"The password you entered is incorrect. Please check and try again.",
+		},
+		validation: {
+			passwordMinLength: "Minimum 8 characters",
 		},
 		accessibility: {
 			hidePassword: "Passwort verbergen",
@@ -587,6 +593,7 @@ const de = {
 		},
 		status: {
 			connected: "Verbunden",
+			saved: "Saved",
 		},
 	},
 	networking: {

@@ -588,6 +588,7 @@ const es = {
 		},
 		status: {
 			connected: "Conectado",
+			saved: "Saved",
 		},
 		success: {
 			connected: "WiFi Conectado",
@@ -597,6 +598,12 @@ const es = {
 			connectionFailed: "Conexión WiFi Fallida",
 			connectionFailedDescription:
 				"No se pudo conectar a la red WiFi. Verifique la contraseña e inténtelo de nuevo.",
+			authFailed: "Incorrect Password",
+			authFailedDescription:
+				"The password you entered is incorrect. Please check and try again.",
+		},
+		validation: {
+			passwordMinLength: "Minimum 8 characters",
 		},
 		accessibility: {
 			hidePassword: "Ocultar contraseña",

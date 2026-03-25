@@ -372,6 +372,12 @@ const ja = {
 			connectionFailed: "WiFi接続に失敗",
 			connectionFailedDescription:
 				"WiFiネットワークに接続できません。パスワードを確認して再試行してください。",
+			authFailed: "Incorrect Password",
+			authFailedDescription:
+				"The password you entered is incorrect. Please check and try again.",
+		},
+		validation: {
+			passwordMinLength: "Minimum 8 characters",
 		},
 		accessibility: {
 			hidePassword: "パスワードを隠す",
@@ -381,6 +387,7 @@ const ja = {
 		},
 		status: {
 			connected: "接続済み",
+			saved: "Saved",
 		},
 	},
 	networking: {

@@ -347,6 +347,12 @@ const zh = {
 		error: {
 			connectionFailed: "WiFi连接失败",
 			connectionFailedDescription: "无法连接到WiFi网络。请检查密码并重试。",
+			authFailed: "Incorrect Password",
+			authFailedDescription:
+				"The password you entered is incorrect. Please check and try again.",
+		},
+		validation: {
+			passwordMinLength: "Minimum 8 characters",
 		},
 		accessibility: {
 			hidePassword: "隐藏密码",
@@ -363,6 +369,7 @@ const zh = {
 		},
 		status: {
 			connected: "已连接",
+			saved: "Saved",
 		},
 	},
 	networking: {

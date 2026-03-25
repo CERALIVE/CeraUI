@@ -366,6 +366,12 @@ const ko = {
 			connectionFailed: "WiFi 연결 실패",
 			connectionFailedDescription:
 				"WiFi 네트워크에 연결할 수 없습니다. 비밀번호를 확인하고 다시 시도하세요.",
+			authFailed: "Incorrect Password",
+			authFailedDescription:
+				"The password you entered is incorrect. Please check and try again.",
+		},
+		validation: {
+			passwordMinLength: "Minimum 8 characters",
 		},
 		accessibility: {
 			hidePassword: "비밀번호 숨기기",
@@ -375,6 +381,7 @@ const ko = {
 		},
 		status: {
 			connected: "연결됨",
+			saved: "Saved",
 		},
 	},
 	networking: {

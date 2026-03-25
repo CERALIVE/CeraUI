@@ -538,6 +538,12 @@ const ar = {
 			connectionFailed: "فشل الاتصال بـ WiFi",
 			connectionFailedDescription:
 				"غير قادر على الاتصال بشبكة WiFi. الرجاء التحقق من كلمة المرور والمحاولة مرة أخرى.",
+			authFailed: "Incorrect Password",
+			authFailedDescription:
+				"The password you entered is incorrect. Please check and try again.",
+		},
+		validation: {
+			passwordMinLength: "Minimum 8 characters",
 		},
 		accessibility: {
 			hidePassword: "إخفاء كلمة المرور",
@@ -547,6 +553,7 @@ const ar = {
 		},
 		status: {
 			connected: "متصل",
+			saved: "Saved",
 		},
 	},
 	networking: {

@@ -551,6 +551,12 @@ const ptBR = {
 			connectionFailed: "Falha na Conexão WiFi",
 			connectionFailedDescription:
 				"Não foi possível conectar à rede WiFi. Verifique a senha e tente novamente.",
+			authFailed: "Incorrect Password",
+			authFailedDescription:
+				"The password you entered is incorrect. Please check and try again.",
+		},
+		validation: {
+			passwordMinLength: "Minimum 8 characters",
 		},
 		accessibility: {
 			hidePassword: "Ocultar senha",
@@ -567,6 +573,7 @@ const ptBR = {
 		},
 		status: {
 			connected: "Conectado",
+			saved: "Saved",
 		},
 	},
 	networking: {

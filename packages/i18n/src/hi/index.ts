@@ -363,6 +363,12 @@ const hi = {
 			connectionFailed: "वाई-फाई कनेक्शन विफल",
 			connectionFailedDescription:
 				"वाई-फाई नेटवर्क से कनेक्ट नहीं हो सका। कृपया पासवर्ड जांचें और पुनः प्रयास करें।",
+			authFailed: "Incorrect Password",
+			authFailedDescription:
+				"The password you entered is incorrect. Please check and try again.",
+		},
+		validation: {
+			passwordMinLength: "Minimum 8 characters",
 		},
 		accessibility: {
 			hidePassword: "पासवर्ड छुपाएं",
@@ -372,6 +378,7 @@ const hi = {
 		},
 		status: {
 			connected: "जुड़ा हुआ",
+			saved: "Saved",
 		},
 	},
 	networking: {

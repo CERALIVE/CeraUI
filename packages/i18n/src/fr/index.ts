@@ -553,6 +553,12 @@ const fr = {
 			connectionFailed: "Échec de la Connexion WiFi",
 			connectionFailedDescription:
 				"Impossible de se connecter au réseau WiFi. Vérifiez le mot de passe et réessayez.",
+			authFailed: "Incorrect Password",
+			authFailedDescription:
+				"The password you entered is incorrect. Please check and try again.",
+		},
+		validation: {
+			passwordMinLength: "Minimum 8 characters",
 		},
 		accessibility: {
 			hidePassword: "Masquer le mot de passe",
@@ -570,6 +576,7 @@ const fr = {
 		},
 		status: {
 			connected: "Connecté",
+			saved: "Saved",
 		},
 	},
 	networking: {
