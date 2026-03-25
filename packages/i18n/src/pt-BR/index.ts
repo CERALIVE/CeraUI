@@ -188,7 +188,7 @@ const ptBR = {
 		toastNotificationTester: "Testador de Notificação Toast",
 		livePerformanceMetrics: "Métricas de Performance em Tempo Real",
 		userPreferencesAccessibility: "Preferências do Usuário e Acessibilidade",
-		screenshotUtility: "📸 Utilitário de Capturas",
+		screenshotUtility: "Utilitário de Capturas",
 		screenshotUtilityDescription:
 			"Captura simples para todas as abas, temas e modo offline",
 		captureAllScreenshots: "Capturar Todas as Capturas",

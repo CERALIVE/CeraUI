@@ -177,7 +177,7 @@ const ar = {
 		toastNotificationTester: "Toast Notification Tester",
 		livePerformanceMetrics: "Live Performance Metrics",
 		userPreferencesAccessibility: "User Preferences & Accessibility",
-		screenshotUtility: "📸 أداة لقطات الشاشة",
+		screenshotUtility: "أداة لقطات الشاشة",
 		screenshotUtilityDescription:
 			"التقاط بسيط لجميع علامات التبويب والمظاهر والوضع غير المتصل",
 		captureAllScreenshots: "التقاط جميع لقطات الشاشة",

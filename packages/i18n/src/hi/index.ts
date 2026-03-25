@@ -741,7 +741,7 @@ const hi = {
 		toastNotificationTester: "टोस्ट नोटिफिकेशन टेस्टर",
 		livePerformanceMetrics: "लाइव प्रदर्शन मेट्रिक्स",
 		userPreferencesAccessibility: "उपयोगकर्ता प्राथमिकताएं और पहुंच",
-		screenshotUtility: "📸 स्क्रीनशॉट टूल",
+		screenshotUtility: "स्क्रीनशॉट टूल",
 		screenshotUtilityDescription: "सभी टैब, थीम और ऑफलाइन मोड के लिए सरल कैप्चर",
 		captureAllScreenshots: "सभी स्क्रीनशॉट कैप्चर करें",
 		capturing: "कैप्चर कर रहे हैं...",

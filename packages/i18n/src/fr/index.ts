@@ -189,7 +189,7 @@ const fr = {
 		toastNotificationTester: "Testeur de Notification Toast",
 		livePerformanceMetrics: "Métriques de Performance en Direct",
 		userPreferencesAccessibility: "Préférences Utilisateur et Accessibilité",
-		screenshotUtility: "📸 Utilitaire de Captures",
+		screenshotUtility: "Utilitaire de Captures",
 		screenshotUtilityDescription:
 			"Capture simple pour tous les onglets, thèmes et mode hors ligne",
 		captureAllScreenshots: "Capturer Toutes les Captures",

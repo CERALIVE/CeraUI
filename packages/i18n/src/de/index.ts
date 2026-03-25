@@ -188,7 +188,7 @@ const de = {
 		toastNotificationTester: "Toast-Benachrichtigungstester",
 		livePerformanceMetrics: "Live-Leistungsmetriken",
 		userPreferencesAccessibility: "Benutzereinstellungen & Barrierefreiheit",
-		screenshotUtility: "📸 Screenshot-Tool",
+		screenshotUtility: "Screenshot-Tool",
 		screenshotUtilityDescription:
 			"Einfache Erfassung für alle Tabs, Themes und Offline-Modus",
 		captureAllScreenshots: "Alle Screenshots Erfassen",

@@ -745,7 +745,7 @@ const ko = {
 		toastNotificationTester: "토스트 알림 테스터",
 		livePerformanceMetrics: "실시간 성능 메트릭",
 		userPreferencesAccessibility: "사용자 기본 설정 및 접근성",
-		screenshotUtility: "📸 스크린샷 도구",
+		screenshotUtility: "스크린샷 도구",
 		screenshotUtilityDescription:
 			"모든 탭, 테마 및 오프라인 모드에 대한 간단한 캡처",
 		captureAllScreenshots: "모든 스크린샷 캡처",

@@ -757,7 +757,7 @@ const ja = {
 		toastNotificationTester: "Toast Notification Tester",
 		livePerformanceMetrics: "Live Performance Metrics",
 		userPreferencesAccessibility: "User Preferences & Accessibility",
-		screenshotUtility: "📸 スクリーンショットツール",
+		screenshotUtility: "スクリーンショットツール",
 		screenshotUtilityDescription:
 			"すべてのタブ、テーマ、オフラインモードのシンプルキャプチャ",
 		captureAllScreenshots: "すべてのスクリーンショットをキャプチャ",

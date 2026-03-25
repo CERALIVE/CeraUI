@@ -701,7 +701,7 @@ const zh = {
 		toastNotificationTester: "提示通知测试器",
 		livePerformanceMetrics: "实时性能指标",
 		userPreferencesAccessibility: "用户偏好和辅助功能",
-		screenshotUtility: "📸 截图工具",
+		screenshotUtility: "截图工具",
 		screenshotUtilityDescription: "简单捕获所有标签、主题和离线模式",
 		captureAllScreenshots: "捕获所有截图",
 		capturing: "正在捕获...",

@@ -183,7 +183,7 @@ const en = {
 		toastNotificationTester: "Toast Notification Tester",
 		livePerformanceMetrics: "Live Performance Metrics",
 		userPreferencesAccessibility: "User Preferences & Accessibility",
-		screenshotUtility: "📸 Screenshot Utility",
+		screenshotUtility: "Screenshot Utility",
 		screenshotUtilityDescription:
 			"Simple capture for all tabs, themes, and offline mode",
 		captureAllScreenshots: "Capture All Screenshots",
