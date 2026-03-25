@@ -21,7 +21,6 @@ import { toast } from 'svelte-sonner';
 import WifiQuality from '$lib/components/icons/WifiQuality.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
-import { ScrollArea } from '$lib/components/ui/scroll-area';
 import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
 import {
 	connectToNewWifi,
@@ -119,7 +118,7 @@ const getFrequencyBand = (freq: number): string => {
 	class="max-h-[90vh] w-full max-w-[95vw] overflow-hidden sm:max-w-lg md:max-w-xl lg:max-w-2xl xl:max-w-3xl"
 	buttonText={$LL.wifiSelector.dialog.searchWifi()}
 	confirmButtonText={$LL.wifiSelector.dialog.close()}
-	extraButtonClasses="w-full gradient-primary text-primary-foreground font-semibold shadow-lg shadow-primary/25 transition-all duration-300 hover:shadow-primary/40 hover:scale-[1.02] active:scale-[0.98]"
+	extraButtonClasses="w-full gradient-primary text-primary-foreground font-semibold shadow-lg shadow-primary/25 transition-all duration-300 hover:shadow-primary/40"
 	hideCancelButton={true}
 	title={$LL.wifiSelector.dialog.searchWifi()}
 	bind:open
@@ -145,7 +144,7 @@ const getFrequencyBand = (freq: number): string => {
 		</div>
 	{/snippet}
 
-	<div class="flex max-h-[70vh] flex-col gap-4 overflow-hidden">
+	<div class="flex flex-col gap-4">
 		<!-- Stats Bar -->
 		<div
 			class="border-border bg-muted flex items-center justify-between rounded-xl border px-4 py-3"
@@ -181,9 +180,8 @@ const getFrequencyBand = (freq: number): string => {
 		</div>
 
 		<!-- WiFi Networks List -->
-		<ScrollArea
-			class="border-border bg-card/30 min-h-0 flex-1 rounded-xl border"
-			type="auto"
+		<div
+			class="border-border bg-card/30 max-h-[60vh] overflow-y-auto rounded-xl border"
 		>
 			<div class="space-y-2 p-3">
 				{#each wifi.available as availableNetwork, index}
@@ -194,7 +192,6 @@ const getFrequencyBand = (freq: number): string => {
 					{@const signalCategory = getSignalCategory(availableNetwork.signal)}
 
 					<div
-						style:animation-delay="{index * 50}ms"
 						class={cn(
 							'group relative overflow-hidden rounded-xl border-2 p-4 transition-all duration-300',
 							availableNetwork.active
@@ -259,16 +256,17 @@ const getFrequencyBand = (freq: number): string => {
 								<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
 									<span
 										class={cn(
-											'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+											'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold',
 											signalCategory === 'excellent'
-												? 'bg-status-success/15 text-status-success'
+												? 'bg-status-success/15 text-status-success ring-1 ring-status-success/25'
 												: signalCategory === 'good'
-													? 'bg-status-info/15 text-status-info'
+													? 'bg-status-info/15 text-status-info ring-1 ring-status-info/25'
 													: signalCategory === 'fair'
-														? 'bg-status-warning/15 text-status-warning'
-														: 'bg-status-error/15 text-status-error',
+														? 'bg-status-warning/15 text-status-warning ring-1 ring-status-warning/25'
+														: 'bg-status-error/15 text-status-error ring-1 ring-status-error/25',
 										)}
 									>
+										<Signal class="h-3 w-3" />
 										{availableNetwork.signal}%
 									</span>
 									<span class="text-muted-foreground inline-flex items-center gap-1 text-xs">
@@ -299,7 +297,8 @@ const getFrequencyBand = (freq: number): string => {
 									<div class="flex items-center gap-1.5">
 										{#if availableNetwork.active}
 											<Button
-												class="gradient-warning text-status-warning-foreground h-9 gap-1.5 rounded-lg px-3 shadow-md transition-all hover:shadow-lg"
+												class="border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 h-9 gap-1.5 rounded-lg border px-3 transition-all"
+												aria-label={`${$LL.wifiSelector.button.disconnect()} ${availableNetwork.ssid}`}
 												onclick={() => disconnectWifi(uuid, availableNetwork)}
 												size="sm"
 											>
@@ -311,6 +310,7 @@ const getFrequencyBand = (freq: number): string => {
 										{:else}
 											<Button
 												class="gradient-info text-status-info-foreground h-9 gap-1.5 rounded-lg px-3 shadow-md transition-all hover:shadow-lg"
+												aria-label={`${$LL.wifiSelector.button.connect()} ${availableNetwork.ssid}`}
 												onclick={() => handleWifiConnect(uuid, availableNetwork)}
 												size="sm"
 											>
@@ -324,11 +324,11 @@ const getFrequencyBand = (freq: number): string => {
 										<!-- Forget Button -->
 										<SimpleAlertDialog
 											class="max-w-md"
-											buttonClasses="bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive h-9 w-9 rounded-lg p-0 transition-all"
+											buttonClasses="bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive h-11 w-11 rounded-lg p-0 transition-all"
 											confirmButtonText={$LL.wifiSelector.button.forget()}
 											extraButtonClasses="gradient-destructive text-destructive-foreground font-semibold"
 											onconfirm={() => forgetWifi(uuid, availableNetwork)}
-											title={$LL.wifiSelector.dialog.forgetNetwork()}
+											title={`${$LL.wifiSelector.dialog.forgetNetwork()} ${availableNetwork.ssid}`}
 										>
 											{#snippet icon()}
 												<Trash2 class="h-4 w-4" />
@@ -367,6 +367,7 @@ const getFrequencyBand = (freq: number): string => {
 										buttonClasses="gradient-primary text-primary-foreground h-9 gap-1.5 rounded-lg px-3 text-xs font-medium shadow-md transition-all hover:shadow-lg"
 										confirmButtonText={$LL.wifiSelector.button.connect()}
 										extraButtonClasses="gradient-primary text-primary-foreground font-semibold"
+										title={`${$LL.wifiSelector.dialog.connectTo({ ssid: '' })} ${availableNetwork.ssid}`}
 										oncancel={() => {
 											networkPassword = '';
 											showPassword = false;
@@ -458,6 +459,6 @@ const getFrequencyBand = (freq: number): string => {
 					</div>
 				{/each}
 			</div>
-		</ScrollArea>
+		</div>
 	</div>
 </SimpleAlertDialog>
