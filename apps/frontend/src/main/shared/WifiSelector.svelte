@@ -111,7 +111,7 @@ const getFrequencyBand = (freq: number): string => {
 	class="max-h-[90vh] w-full max-w-[95vw] overflow-hidden sm:max-w-lg md:max-w-xl lg:max-w-2xl xl:max-w-3xl"
 	buttonText={$LL.wifiSelector.dialog.searchWifi()}
 	confirmButtonText={$LL.wifiSelector.dialog.close()}
-	extraButtonClasses="w-full gradient-primary text-primary-foreground font-semibold shadow-lg shadow-primary/25 transition-all duration-300 hover:shadow-primary/40"
+	extraButtonClasses="w-full gradient-primary text-primary-foreground font-semibold shadow-lg shadow-primary/25 transition-shadow duration-300 hover:shadow-primary/40"
 	hideCancelButton={true}
 	title={$LL.wifiSelector.dialog.searchWifi()}
 	bind:open
@@ -192,33 +192,22 @@ const getFrequencyBand = (freq: number): string => {
 								: 'border-transparent bg-muted/50 hover:border-border hover:bg-accent',
 						)}
 					>
-						<!-- Active indicator glow -->
-						{#if availableNetwork.active}
-							<div class="absolute inset-0 bg-primary/5"></div>
-						{/if}
-
-						<div class="relative flex items-center gap-4">
-							<!-- Signal Indicator -->
-							<div class="relative flex-shrink-0">
-								<div
-									class={cn(
-										'flex h-12 w-12 items-center justify-center rounded-xl transition-all duration-300',
-										availableNetwork.active
-											? 'gradient-primary shadow-lg shadow-primary/30'
-											: signalCategory === 'excellent'
-												? 'gradient-success'
-												: signalCategory === 'good'
-													? 'gradient-info'
-													: signalCategory === 'fair'
-														? 'gradient-warning'
-														: 'gradient-destructive',
-									)}
-								>
-									<WifiQuality
-										class="h-6 w-6 text-white"
-										signal={availableNetwork.signal}
-									/>
-								</div>
+					<div class="relative flex items-center gap-4">
+						<!-- Signal Indicator -->
+						<div class="relative shrink-0">
+							<div
+								class={cn(
+									'flex h-10 w-10 items-center justify-center rounded-lg',
+									availableNetwork.active
+										? 'gradient-primary shadow-lg shadow-primary/30'
+										: 'bg-muted',
+								)}
+							>
+								<WifiQuality
+									class={cn('h-5 w-5', availableNetwork.active && 'text-white')}
+									signal={availableNetwork.signal}
+								/>
+							</div>
 								{#if availableNetwork.active}
 									<div
 										class="bg-primary ring-background absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full ring-2"
@@ -241,10 +230,10 @@ const getFrequencyBand = (freq: number): string => {
 										{availableNetwork.ssid}
 									</p>
 								{#if availableNetwork.security.includes('WPA')}
-									<Lock class="text-muted-foreground h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+									<Lock class="text-muted-foreground h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 									<span class="sr-only">{$LL.wifiSelector.accessibility.secured()}</span>
 								{:else}
-									<Unlock class="text-status-warning h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+									<Unlock class="text-status-warning h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 									<span class="sr-only">{$LL.wifiSelector.accessibility.openNetwork()}</span>
 								{/if}
 								</div>
@@ -277,7 +266,7 @@ const getFrequencyBand = (freq: number): string => {
 							</div>
 
 							<!-- Actions -->
-							<div class="flex flex-shrink-0 items-center gap-2">
+							<div class="flex shrink-0 items-center gap-2">
 								{#if isConnecting}
 									<div
 										class="bg-status-info/15 flex items-center gap-2 rounded-lg px-3 py-2"
@@ -319,7 +308,7 @@ const getFrequencyBand = (freq: number): string => {
 										<!-- Forget Button -->
 										<SimpleAlertDialog
 											class="max-w-md"
-											buttonClasses="bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive h-11 w-11 rounded-lg p-0 transition-all"
+											buttonClasses="bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive h-11 w-11 rounded-lg p-0 transition-colors"
 											confirmButtonText={$LL.wifiSelector.button.forget()}
 											confirmVariant="destructive"
 											onconfirm={() => forgetWifi(uuid, availableNetwork)}
@@ -398,7 +387,7 @@ const getFrequencyBand = (freq: number): string => {
 												<div class="relative">
 												<Input
 													aria-label={$LL.wifiSelector.hotspot.placeholderPassword()}
-													class="border-border bg-muted focus:border-primary focus:ring-primary/20 h-11 rounded-xl border-2 pr-12 font-mono text-sm transition-all focus:bg-card focus:ring-4"
+													class="border-border bg-muted focus:border-primary focus:ring-primary/20 h-11 rounded-xl border-2 pr-12 font-mono text-sm transition-colors focus:bg-card focus:ring-4"
 													placeholder={$LL.wifiSelector.hotspot.placeholderPassword()}
 													type={showPassword ? 'text' : 'password'}
 													bind:value={networkPassword}
@@ -433,9 +422,9 @@ const getFrequencyBand = (freq: number): string => {
 						>
 							<WifiOff class="text-muted-foreground h-8 w-8" />
 						</div>
-						<h4 class="text-foreground mb-1 font-semibold">
-							{$LL.wifiSelector.emptyState.title()}
-						</h4>
+					<p class="text-foreground mb-1 text-base font-semibold">
+						{$LL.wifiSelector.emptyState.title()}
+					</p>
 						<p class="text-muted-foreground mb-4 max-w-xs text-sm">
 							{$LL.wifiSelector.emptyState.description()}
 						</p>
