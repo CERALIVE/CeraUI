@@ -88,16 +88,11 @@ $effect(() => {
 });
 </script>
 
-<Card.Root class="gap-0 overflow-hidden border-cyan-500/30 py-0">
-	<!-- Status bar -->
-	<div class="h-1 bg-gradient-to-r from-cyan-500 to-teal-600"></div>
-
-	<Card.Header class="pt-6">
+<Card.Root class="overflow-hidden">
+	<Card.Header>
 		<Card.Title class="flex items-center gap-2">
-			<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-500">
-				<Cpu class="h-4 w-4 text-white" />
-			</div>
-			🔧 Mock Hardware Switcher
+			<Cpu class="h-5 w-5 text-primary" />
+			Mock Hardware Switcher
 		</Card.Title>
 		<Card.Description>
 			Switch between hardware profiles to test different pipeline configurations
@@ -203,7 +198,7 @@ $effect(() => {
 
 		<!-- Info -->
 		<div class="text-muted-foreground bg-muted/50 space-y-1 rounded-lg p-3 text-xs">
-			<div class="font-medium">ℹ️ Notes:</div>
+			<div class="font-medium">Notes</div>
 			<div>• Switching hardware reloads pipelines immediately</div>
 			<div>• All connected clients receive the updated pipeline list</div>
 			<div>• This feature is only available in development mode</div>
