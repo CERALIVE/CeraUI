@@ -7,7 +7,6 @@ import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import { cn } from '$lib/utils';
 
 interface Props {
 	audioCodecs: AudioCodecsMessage | undefined;
@@ -58,41 +57,12 @@ const hasAudioSupport = $derived(
 const hasAudioSource = $derived(hasAudioSupport);
 const hasAudioCodec = $derived(hasAudioSupport);
 
-// Status colors based on audio support
-const statusColors = $derived.by(() => {
-	if (!properties.pipeline) {
-		return {
-			bg: 'from-slate-400 to-slate-500',
-			border: 'border-slate-300 dark:border-slate-700',
-			icon: 'bg-slate-400',
-		};
-	}
-	if (!hasAudioSupport) {
-		return {
-			bg: 'from-amber-500 to-orange-600',
-			border: 'border-amber-500/30',
-			icon: 'bg-amber-500',
-		};
-	}
-	return {
-		bg: 'from-emerald-500 to-teal-600',
-		border: 'border-emerald-500/30',
-		icon: 'bg-emerald-500',
-	};
-});
 </script>
 
-<Card.Root
-	class={cn('flex h-full flex-col gap-0 overflow-hidden border py-0', statusColors.border)}
->
-	<!-- Status Bar -->
-	<div class={cn('h-1 bg-gradient-to-r', statusColors.bg)}></div>
-
+<Card.Root class="flex h-full flex-col gap-0 overflow-hidden border py-0">
 	<Card.Header class="p-4 pb-3">
 		<div class="flex items-center gap-2.5">
-			<div class={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', statusColors.icon)}>
-				<Volume class="h-4 w-4 text-white" />
-			</div>
+			<Volume class="text-muted-foreground h-4 w-4 shrink-0" />
 			<Card.Title class="text-sm font-semibold">{$LL.settings.audioSettings()}</Card.Title>
 		</div>
 	</Card.Header>
@@ -107,7 +77,7 @@ const statusColors = $derived.by(() => {
 			</div>
 		{:else if !hasAudioSupport}
 			<!-- Empty State: No audio support -->
-			<div class="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+			<div class="rounded-lg border bg-amber-500/5 px-4 py-3">
 				<h4 class="text-sm font-medium text-amber-700 dark:text-amber-400">
 					{$LL.settings.noAudioSettingSupport()}
 				</h4>
@@ -180,7 +150,7 @@ const statusColors = $derived.by(() => {
 				</div>
 
 				<!-- Audio Delay Control -->
-				<div class="space-y-3 rounded-lg border bg-slate-50 p-4 dark:bg-slate-900/50">
+				<div class="bg-muted space-y-3 rounded-lg border p-4">
 					<Label class="flex items-center gap-2 text-sm font-medium" for="audioDelay">
 						{$LL.settings.audioDelay()}
 						<span

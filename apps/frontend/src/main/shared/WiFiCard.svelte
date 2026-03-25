@@ -37,29 +37,17 @@ const isConnected = $derived(wifiStatus === 'connected');
 const statusColors = $derived.by(() => {
 	if (isHotspot) {
 		return {
-			bg: 'from-blue-500 to-indigo-600',
-			border: 'border-blue-500/30',
 			badge: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
-			icon: 'bg-blue-500',
-			text: 'text-blue-600 dark:text-blue-400',
 		};
 	}
 	if (isConnected) {
 		return {
-			bg: 'from-emerald-500 to-teal-600',
-			border: 'border-emerald-500/30',
-			badge: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-			icon: 'bg-emerald-500',
-			text: 'text-emerald-600 dark:text-emerald-400',
+			badge: 'bg-primary/10 text-primary',
 		};
 	}
 	// Disconnected
 	return {
-		bg: 'from-slate-400 to-slate-500',
-		border: 'border-slate-300 dark:border-slate-700',
-		badge: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
-		icon: 'bg-slate-400',
-		text: 'text-slate-600 dark:text-slate-400',
+		badge: 'bg-muted text-muted-foreground',
 	};
 });
 
@@ -68,24 +56,21 @@ function getBandBadge(freq: number) {
 	const band = getWifiBand(freq);
 	if (band.includes('5')) return 'bg-purple-500/10 text-purple-700 dark:text-purple-400';
 	if (band.includes('6')) return 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400';
-	return 'bg-slate-500/10 text-slate-600 dark:text-slate-400';
+	return 'bg-muted text-muted-foreground';
 }
 </script>
 
-<Card.Root class={cn('gap-0 overflow-hidden border py-0', statusColors.border)}>
-	<!-- Status Bar -->
-	<div class={cn('h-1 bg-gradient-to-r', statusColors.bg)}></div>
-
+<Card.Root class={cn('gap-0 overflow-hidden border border-border py-0')}>
 	<Card.Header class="p-4 pb-3">
 		<!-- Header Row -->
 		<div class="flex items-center justify-between gap-2">
 			<div class="flex min-w-0 items-center gap-2.5">
 				<!-- Icon Container -->
-				<div class={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', statusColors.icon)}>
+				<div class="grid h-9 w-9 shrink-0 place-items-center rounded-lg">
 					{#if isHotspot}
-						<Router class="h-4 w-4 text-white" />
+						<Router class="text-muted-foreground h-4 w-4" />
 					{:else}
-						<Wifi class="h-4 w-4 text-white" />
+						<Wifi class="text-muted-foreground h-4 w-4" />
 					{/if}
 				</div>
 
@@ -147,7 +132,7 @@ function getBandBadge(freq: number) {
 			</div>
 		{:else}
 			<!-- Disconnected State -->
-			<div class="flex items-center justify-center gap-2 rounded-lg bg-slate-500/10 py-3">
+			<div class="bg-muted flex items-center justify-center gap-2 rounded-lg py-3">
 				<WifiOff class="text-muted-foreground h-4 w-4" />
 				<span class="text-muted-foreground text-sm">{$LL.network.status.noActiveConnection()}</span>
 			</div>

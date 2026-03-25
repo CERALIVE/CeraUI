@@ -50,7 +50,7 @@ function getBandwidthColor(bandwidth: number) {
 	if (bandwidth === 0) return 'text-muted-foreground';
 	if (bandwidth < 1000) return 'text-amber-600 dark:text-amber-400';
 	if (bandwidth < 5000) return 'text-blue-600 dark:text-blue-400';
-	return 'text-emerald-600 dark:text-emerald-400';
+	return 'text-primary';
 }
 
 function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) {
@@ -79,7 +79,7 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 	{#if Object.keys(currentNetwoks).length === 0}
 		<!-- Empty State -->
 		<div class="flex flex-col items-center justify-center space-y-3 py-8 text-center">
-			<div class="bg-muted grid h-14 w-14 place-items-center rounded-xl">
+			<div class="bg-secondary grid h-14 w-14 place-items-center rounded-xl">
 				<Network class="text-muted-foreground h-7 w-7" />
 			</div>
 			<div class="space-y-1">
@@ -104,43 +104,30 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 				<div
 					class={cn(
 						'bg-card flex h-full flex-col overflow-hidden rounded-lg border transition-colors duration-200',
-						network.enabled ? 'border-emerald-500/30' : 'border-border',
+						network.enabled ? 'border-primary/30' : 'border-border',
 						isHotspot && !network.enabled ? 'border-blue-500/30' : '',
-						hasRealError ? 'border-red-500/30' : '',
+						hasRealError ? 'border-destructive/30' : '',
 					)}
 				>
-					<!-- Status Bar at Top -->
-					<div
-						class={cn(
-							'h-1 w-full bg-gradient-to-r',
-							network.enabled
-								? 'from-emerald-500 to-teal-600'
-								: isHotspot
-									? 'from-blue-500 to-indigo-600'
-									: hasRealError
-										? 'from-red-500 to-rose-600'
-										: 'from-slate-400 to-slate-500',
-						)}
-					></div>
-
 					<div class="flex flex-1 flex-col p-3">
 						<!-- Header: Icon + Name + Status -->
 						<div class="mb-2 flex items-start justify-between">
 							<div class="flex min-w-0 flex-1 items-center gap-3">
-								<!-- Icon Container -->
-								<div
-									class={cn(
-										'grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg',
-										network.enabled
-											? 'bg-emerald-500'
-											: isHotspot
-												? 'bg-blue-500'
-												: hasRealError
-													? 'bg-red-500'
-													: 'bg-slate-400',
-									)}
-								>
-									<Icon class="h-4 w-4 text-white" />
+								<!-- Icon + status dot -->
+								<div class="flex items-center gap-2.5">
+									<div
+										class={cn(
+											'h-2 w-2 flex-shrink-0 rounded-full',
+											network.enabled
+												? 'bg-primary'
+												: isHotspot
+													? 'bg-blue-500'
+													: hasRealError
+														? 'bg-destructive'
+														: 'bg-muted-foreground/40',
+										)}
+									></div>
+									<Icon class="text-muted-foreground h-4 w-4 flex-shrink-0" />
 								</div>
 
 								<!-- Network Name and Type -->
@@ -157,12 +144,12 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 								class={cn(
 									'inline-flex flex-shrink-0 items-center rounded-md px-1.5 py-0.5 text-xs font-medium',
 									network.enabled
-										? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+										? 'bg-primary/10 text-primary'
 										: isHotspot
-											? 'bg-blue-500/10 text-blue-700 dark:text-blue-400'
+											? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
 											: hasRealError
-												? 'bg-red-500/10 text-red-700 dark:text-red-400'
-												: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
+												? 'bg-destructive/10 text-destructive'
+												: 'bg-secondary text-secondary-foreground',
 								)}
 							>
 								{network.enabled

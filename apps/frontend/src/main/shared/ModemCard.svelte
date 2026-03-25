@@ -37,33 +37,21 @@ const isDisconnected = $derived(!isConnected && !isConnecting && !isScanning);
 const statusColors = $derived.by(() => {
 	if (isConnected) {
 		return {
-			bg: 'from-emerald-500 to-teal-600',
-			border: 'border-emerald-500/30',
-			badge: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-			icon: 'bg-emerald-500',
+			badge: 'bg-primary/10 text-primary',
 		};
 	}
 	if (isConnecting) {
 		return {
-			bg: 'from-blue-500 to-indigo-600',
-			border: 'border-blue-500/30',
 			badge: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
-			icon: 'bg-blue-500',
 		};
 	}
 	if (isScanning) {
 		return {
-			bg: 'from-amber-500 to-orange-600',
-			border: 'border-amber-500/30',
 			badge: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
-			icon: 'bg-amber-500',
 		};
 	}
 	return {
-		bg: 'from-slate-400 to-slate-500',
-		border: 'border-slate-300 dark:border-slate-700',
-		badge: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
-		icon: 'bg-slate-400',
+		badge: 'bg-muted text-muted-foreground',
 	};
 });
 
@@ -72,29 +60,26 @@ function getNetworkBadge(type: string) {
 	if (type.includes('5G')) return 'bg-purple-500/10 text-purple-700 dark:text-purple-400';
 	if (type.includes('LTE') || type.includes('4G'))
 		return 'bg-blue-500/10 text-blue-700 dark:text-blue-400';
-	return 'bg-slate-500/10 text-slate-600 dark:text-slate-400';
+	return 'bg-muted text-muted-foreground';
 }
 
 // Clean modem name (remove any leftover "| Unknown" for backwards compatibility)
 const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 </script>
 
-<Card.Root class={cn('gap-0 overflow-hidden border py-0', statusColors.border)}>
-	<!-- Compact Status Bar -->
-	<div class={cn('h-1 bg-gradient-to-r', statusColors.bg)}></div>
-
+<Card.Root class={cn('gap-0 overflow-hidden border border-border py-0')}>
 	<Card.Header class="p-4 pb-3">
 		<!-- Header Row -->
 		<div class="flex items-center justify-between gap-3">
 			<div class="flex min-w-0 items-center gap-2.5">
 				<!-- Icon -->
-				<div class={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', statusColors.icon)}>
+				<div class="grid h-9 w-9 shrink-0 place-items-center rounded-lg">
 					{#if isConnected}
-						<Signal class="h-4 w-4 text-white" />
+						<Signal class="text-muted-foreground h-4 w-4" />
 					{:else if isConnecting || isScanning}
-						<Loader2 class="h-4 w-4 animate-spin text-white" />
+						<Loader2 class="text-muted-foreground h-4 w-4 animate-spin" />
 					{:else}
-						<WifiOff class="h-4 w-4 text-white" />
+						<WifiOff class="text-muted-foreground h-4 w-4" />
 					{/if}
 				</div>
 
@@ -157,7 +142,7 @@ const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 				<span class="text-sm font-medium">{$LL.network.status.connecting()}</span>
 			</div>
 		{:else if isDisconnected}
-			<div class="flex items-center justify-center gap-2 rounded-lg bg-slate-500/10 py-3">
+			<div class="bg-muted flex items-center justify-center gap-2 rounded-lg py-3">
 				<WifiOff class="text-muted-foreground h-4 w-4" />
 				<span class="text-muted-foreground text-sm">{$LL.network.status.notConnected()}</span>
 			</div>
@@ -184,7 +169,7 @@ const cleanModemName = $derived(modem.name.replace('| Unknown', '').trim());
 
 			<Collapsible.Content>
 				<div
-					class="mt-3 rounded-lg border bg-slate-50 p-3 dark:bg-slate-900/50"
+					class="bg-muted mt-3 rounded-lg border border-border p-3"
 					transition:slide={{ duration: 200 }}
 				>
 					<ModemConfigurator {deviceId} {modem} modemIsScanning={isScanning} />

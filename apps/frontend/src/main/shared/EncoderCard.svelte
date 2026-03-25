@@ -135,26 +135,13 @@ const selectedPipeline = $derived<Pipeline | undefined>(
 	localSource && pipelines ? pipelines[localSource] : undefined
 );
 
-// Status colors for encoder card (info/blue category)
-const statusColors = {
-	bg: 'from-blue-500 to-indigo-600',
-	border: 'border-blue-500/30',
-	icon: 'bg-blue-500',
-};
 </script>
 
-<Card.Root
-	class={cn('flex h-full flex-col gap-0 overflow-hidden border py-0', statusColors.border)}
->
-	<!-- Status Bar -->
-	<div class={cn('h-1 bg-gradient-to-r', statusColors.bg)}></div>
-
+<Card.Root class={cn('flex h-full flex-col gap-0 overflow-hidden border py-0')}>
 	<Card.Header class="p-4 pb-3">
 		<div class="flex items-center justify-between">
 			<div class="flex items-center gap-2.5">
-				<div class={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', statusColors.icon)}>
-					<Binary class="h-4 w-4 text-white" />
-				</div>
+				<Binary class="h-4 w-4 shrink-0 text-muted-foreground" />
 				<Card.Title class="text-sm font-semibold">{$LL.settings.encoderSettings()}</Card.Title>
 			</div>
 			{#if hardware}
@@ -267,10 +254,10 @@ const statusColors = {
 		{/if}
 
 		<!-- Bitrate Control -->
-		<div class="space-y-3 rounded-lg border bg-slate-50 p-4 dark:bg-slate-900/50">
+		<div class="space-y-3 rounded-lg border bg-muted p-4">
 			<Label class="flex items-center gap-2 text-sm font-medium" for="bitrate">
 				{$LL.settings.bitrate()}
-				<span class="rounded-md bg-blue-500/10 px-2 py-1 text-xs text-blue-700 dark:text-blue-400">
+				<span class="rounded-md bg-primary/10 px-2 py-1 text-xs text-primary">
 					{localBitrate || 5000} kbps
 				</span>
 			</Label>
@@ -278,7 +265,7 @@ const statusColors = {
 			<div class="relative h-6 w-full">
 				<!-- Track Background -->
 				<div
-					class="absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full bg-slate-200 dark:bg-slate-700"
+					class="absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full bg-background"
 				></div>
 				<!-- Progress Fill -->
 				<div
@@ -287,7 +274,7 @@ const statusColors = {
 						const percentage = ((safeBitrate - 2000) / (12000 - 2000)) * 100;
 						return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
 					})()}%;`}
-					class="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-200"
+					class="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-full bg-primary transition-all duration-200"
 				></div>
 				<!-- Thumb -->
 				<div
@@ -296,7 +283,7 @@ const statusColors = {
 						const percentage = ((safeBitrate - 2000) / (12000 - 2000)) * 100;
 						return isFinite(percentage) ? Math.max(0, Math.min(100, percentage)) : 0;
 					})()}%;`}
-					class="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 border-white bg-blue-500 shadow-md transition-all duration-200 hover:scale-110 dark:border-slate-800"
+					class="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 border-background bg-primary shadow-md transition-all duration-200 hover:scale-110 dark:border-border"
 				></div>
 				<!-- Invisible Input -->
 				<input
@@ -345,16 +332,14 @@ const statusColors = {
 				<p class="text-destructive text-sm">{formErrors.bitrate}</p>
 			{/if}
 			{#if isStreaming}
-				<p class="rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+				<p class="rounded-md bg-muted p-2 text-xs text-muted-foreground">
 					⚡ {$LL.settings.changeBitrateNotice()}
 				</p>
 			{/if}
 		</div>
 
 		<!-- Bitrate Overlay -->
-		<div
-			class="flex items-center gap-3 rounded-lg border bg-slate-50 p-3 transition-colors hover:bg-slate-100 dark:bg-slate-900/50 dark:hover:bg-slate-800/50"
-		>
+		<div class="flex items-center gap-3 rounded-lg border bg-muted p-3 transition-colors hover:bg-accent">
 			<Checkbox
 				id="bitrate-overlay"
 				checked={properties.bitrateOverlay}
