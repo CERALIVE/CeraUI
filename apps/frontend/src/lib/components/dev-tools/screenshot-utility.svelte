@@ -339,6 +339,7 @@ async function downloadZip(): Promise<void> {
 }
 
 function clearImages(): void {
+	if (imagesCount === 0) return;
 	clearScreenshots();
 	toast.info('Cleared');
 }
@@ -357,9 +358,9 @@ function clearImages(): void {
 
 	<Card.Content class="space-y-4 pb-6">
 		{#if currentlyCapturing}
-			<div class="rounded-lg border border-primary/30 bg-primary/10 p-3">
+			<div class="rounded-lg border border-primary/30 bg-primary/10 p-3" aria-live="polite" role="status">
 				<div class="text-sm font-medium text-primary">
-					🚀 {progressText}
+					{progressText}
 				</div>
 				<div class="text-muted-foreground mt-1 text-xs">
 					Images: {imagesCount}
@@ -372,6 +373,9 @@ function clearImages(): void {
 				class="w-full"
 				disabled={currentlyCapturing}
 				onclick={captureAll}
+				aria-label={currentlyCapturing
+					? 'Capturing screenshots...'
+					: 'Capture all screenshots in dark and light themes'}
 			>
 				<Camera class="mr-2 h-4 w-4" />
 				{currentlyCapturing ? $LL.devtools.capturing() : $LL.devtools.captureAllScreenshots()}
@@ -385,12 +389,23 @@ function clearImages(): void {
 		</div>
 
 		<div class="flex gap-2 border-t pt-3">
-			<Button.Root class="flex-1" disabled={imagesCount === 0} onclick={downloadZip}>
+			<Button.Root
+				class="flex-1"
+				disabled={imagesCount === 0}
+				onclick={downloadZip}
+				aria-label={`Download ${imagesCount} screenshots as ZIP`}
+			>
 				<Download class="mr-2 h-4 w-4" />
 				{$LL.devtools.downloadZip({ count: imagesCount })}
 			</Button.Root>
 
-			<Button.Root disabled={imagesCount === 0} onclick={clearImages} size="sm" variant="outline">
+			<Button.Root
+				disabled={imagesCount === 0}
+				onclick={clearImages}
+				size="sm"
+				variant="outline"
+				aria-label="Clear all captured screenshots"
+			>
 				{$LL.devtools.clear()}
 			</Button.Root>
 		</div>

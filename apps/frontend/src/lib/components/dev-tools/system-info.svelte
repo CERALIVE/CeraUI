@@ -18,9 +18,10 @@
 <script lang="ts">
 import { existingLocales, loadLocaleAsync, type Locales } from '@ceraui/i18n';
 import { LL, locale, setLocale } from '@ceraui/i18n/svelte';
-import { Activity, Clock, Code, Globe, Monitor, Wifi } from '@lucide/svelte';
+import { Activity, ChevronDown, Clock, Code, Globe, Monitor, Wifi } from '@lucide/svelte';
 
 import * as Card from '$lib/components/ui/card';
+import * as Collapsible from '$lib/components/ui/collapsible';
 import { BUILD_INFO, ENV_VARIABLES } from '$lib/env';
 import { setLocale as setLocaleStore } from '$lib/stores/locale.svelte';
 import { CLIENT_VERSION } from '$lib/stores/version-manager';
@@ -75,6 +76,10 @@ let buildInfo = $state({
 	clientVersion: '',
 	timestamp: '',
 });
+
+let browserInfoOpen = $state(false);
+let localeInfoOpen = $state(false);
+let preferencesOpen = $state(false);
 
 // Update system information
 function updateSystemInfo() {
@@ -343,105 +348,115 @@ async function handleLanguageClick(languageCode: Locales) {
 		</div>
 
 		<!-- Browser Information -->
-		<div class="space-y-3">
-			<div class="flex items-center gap-2 text-sm font-medium">
-				<Monitor class="h-4 w-4" />
-				{$LL.devtools.browserInformation()}
-			</div>
-			<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browser()}</div>
-					<div class="font-mono text-sm font-medium">{systemInfo.browser} {systemInfo.version}</div>
+		<Collapsible.Root bind:open={browserInfoOpen}>
+			<Collapsible.Trigger class="flex w-full cursor-pointer items-center justify-between text-sm font-medium hover:text-primary transition-colors">
+				<div class="flex items-center gap-2">
+					<Monitor class="h-4 w-4" />
+					{$LL.devtools.browserInformation()}
 				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.platform()}</div>
-					<div class="font-mono text-sm font-medium">{systemInfo.platform}</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.userAgent()}</div>
-					<div class="truncate font-mono text-xs" title={navigator.userAgent}>
-						{navigator.userAgent.slice(0, 25)}...
+				<ChevronDown class="h-4 w-4 text-muted-foreground transition-transform duration-200 {browserInfoOpen ? 'rotate-180' : ''}" />
+			</Collapsible.Trigger>
+			<Collapsible.Content>
+				<div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+					<div class="bg-background/50 rounded-lg border p-3">
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browser()}</div>
+						<div class="font-mono text-sm font-medium">{systemInfo.browser} {systemInfo.version}</div>
+					</div>
+					<div class="bg-background/50 rounded-lg border p-3">
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.platform()}</div>
+						<div class="font-mono text-sm font-medium">{systemInfo.platform}</div>
+					</div>
+					<div class="bg-background/50 rounded-lg border p-3">
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.userAgent()}</div>
+						<div class="truncate font-mono text-xs" title={navigator.userAgent}>
+							{navigator.userAgent.slice(0, 25)}...
+						</div>
+					</div>
+					<div class="bg-background/50 rounded-lg border p-3">
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.onlineStatus()}</div>
+						<div
+							class="font-mono text-sm font-medium {systemInfo.onLine
+								? 'text-green-600'
+								: 'text-red-600'}"
+						>
+							{systemInfo.onLine ? $LL.devtools.online() : $LL.devtools.offline()}
+						</div>
+					</div>
+					<div class="bg-background/50 rounded-lg border p-3">
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.cookies()}</div>
+						<div
+							class="font-mono text-sm font-medium {systemInfo.cookieEnabled
+								? 'text-green-600'
+								: 'text-red-600'}"
+						>
+							{systemInfo.cookieEnabled ? $LL.devtools.enabled() : $LL.devtools.disabled()}
+						</div>
+					</div>
+					<div class="bg-background/50 rounded-lg border p-3">
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.pixelRatio()}</div>
+						<div class="font-mono text-sm font-medium">{windowInfo.devicePixelRatio}x</div>
 					</div>
 				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.onlineStatus()}</div>
-					<div
-						class="font-mono text-sm font-medium {systemInfo.onLine
-							? 'text-green-600'
-							: 'text-red-600'}"
-					>
-						{systemInfo.onLine ? $LL.devtools.online() : $LL.devtools.offline()}
-					</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.cookies()}</div>
-					<div
-						class="font-mono text-sm font-medium {systemInfo.cookieEnabled
-							? 'text-green-600'
-							: 'text-red-600'}"
-					>
-						{systemInfo.cookieEnabled ? $LL.devtools.enabled() : $LL.devtools.disabled()}
-					</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.pixelRatio()}</div>
-					<div class="font-mono text-sm font-medium">{windowInfo.devicePixelRatio}x</div>
-				</div>
-			</div>
-		</div>
+			</Collapsible.Content>
+		</Collapsible.Root>
 
 		<!-- Locale & Language Information -->
-		<div class="space-y-3">
-			<div class="flex items-center gap-2 text-sm font-medium">
-				<Globe class="h-4 w-4" />
-				App Locale & Language
-			</div>
-			<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.currentLanguage()}</div>
-					<div class="flex items-center gap-2 text-sm font-medium">
-						<span class="text-lg">{localeInfo.currentLanguageFlag}</span>
-						{localeInfo.currentLanguageName}
-						<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-xs"
-							>{$LL.devtools.active()}</span
-						>
-					</div>
+		<Collapsible.Root bind:open={localeInfoOpen}>
+			<Collapsible.Trigger class="flex w-full cursor-pointer items-center justify-between text-sm font-medium hover:text-primary transition-colors">
+				<div class="flex items-center gap-2">
+					<Globe class="h-4 w-4" />
+					App Locale & Language
 				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.localeCode()}</div>
-					<div class="font-mono text-sm font-medium text-blue-600">{localeInfo.currentLocale}</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browserLanguage()}</div>
-					<div class="font-mono text-sm font-medium text-muted-foreground">
-						{localeInfo.browserLanguage}
-					</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3 md:col-span-3">
-					<div class="text-muted-foreground mb-2 text-xs">
-						{$LL.devtools.supportedLanguagesClick({
-							count: localeInfo.supportedLocales.length,
-						})}
-					</div>
-					<div class="flex flex-wrap gap-1">
-						{#each localeInfo.supportedLocales as supportedLocale}
-							<button
-								class="bg-background flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors hover:bg-accent {supportedLocale.code ===
-								localeInfo.currentLocale
-									? 'bg-primary/10 border-primary/30 text-primary ring-primary/20 ring-1'
-									: 'hover:bg-primary/5 hover:border-primary/20'}"
-								onclick={() => handleLanguageClick(supportedLocale.code as Locales)}
-								title="Switch to {supportedLocale.name}"
-								type="button"
+				<ChevronDown class="h-4 w-4 text-muted-foreground transition-transform duration-200 {localeInfoOpen ? 'rotate-180' : ''}" />
+			</Collapsible.Trigger>
+			<Collapsible.Content>
+				<div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+					<div class="bg-background/50 rounded-lg border p-3">
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.currentLanguage()}</div>
+						<div class="flex items-center gap-2 text-sm font-medium">
+							<span class="text-lg">{localeInfo.currentLanguageFlag}</span>
+							{localeInfo.currentLanguageName}
+							<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-xs"
+								>{$LL.devtools.active()}</span
 							>
-								<span class="text-base">{supportedLocale.flag || '🌐'}</span>
-								<span class="font-medium">{supportedLocale.code.toUpperCase()}</span>
-							</button>
-						{/each}
+						</div>
+					</div>
+					<div class="bg-background/50 rounded-lg border p-3">
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.localeCode()}</div>
+						<div class="font-mono text-sm font-medium text-primary">{localeInfo.currentLocale}</div>
+					</div>
+					<div class="bg-background/50 rounded-lg border p-3">
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browserLanguage()}</div>
+						<div class="font-mono text-sm font-medium text-muted-foreground">
+							{localeInfo.browserLanguage}
+						</div>
+					</div>
+					<div class="bg-background/50 rounded-lg border p-3 md:col-span-3">
+						<div class="text-muted-foreground mb-2 text-xs">
+							{$LL.devtools.supportedLanguagesClick({
+								count: localeInfo.supportedLocales.length,
+							})}
+						</div>
+						<div class="flex flex-wrap gap-1">
+							{#each localeInfo.supportedLocales as supportedLocale}
+								<button
+									class="bg-background flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors hover:bg-accent {supportedLocale.code ===
+									localeInfo.currentLocale
+										? 'bg-primary/10 border-primary/30 text-primary ring-primary/20 ring-1'
+										: 'hover:bg-primary/5 hover:border-primary/20'}"
+									onclick={() => handleLanguageClick(supportedLocale.code as Locales)}
+									aria-label="Switch to {supportedLocale.name}"
+									type="button"
+								>
+									<span class="text-base">{supportedLocale.flag || '🌐'}</span>
+									<span class="font-medium">{supportedLocale.code.toUpperCase()}</span>
+								</button>
+							{/each}
+						</div>
 					</div>
 				</div>
-			</div>
-		</div>
+			</Collapsible.Content>
+		</Collapsible.Root>
 
 		<!-- Performance Metrics -->
 		<div class="space-y-3">
@@ -449,7 +464,7 @@ async function handleLanguageClick(languageCode: Locales) {
 				<Activity class="h-4 w-4" />
 				{$LL.devtools.livePerformanceMetrics()}
 			</div>
-			<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+			<div class="grid grid-cols-2 gap-3 md:grid-cols-4" aria-live="polite">
 				<div class="bg-background/50 rounded-lg border p-3">
 					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.pageLoad()}</div>
 					<div
@@ -490,40 +505,45 @@ async function handleLanguageClick(languageCode: Locales) {
 		</div>
 
 		<!-- User Preferences -->
-		<div class="space-y-3">
-			<div class="flex items-center gap-2 text-sm font-medium">
-				<Wifi class="h-4 w-4" />
-				{$LL.devtools.userPreferencesAccessibility()}
-			</div>
-			<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.colorScheme()}</div>
-					<div class="font-mono text-sm font-medium">{windowInfo.colorScheme}</div>
+		<Collapsible.Root bind:open={preferencesOpen}>
+			<Collapsible.Trigger class="flex w-full cursor-pointer items-center justify-between text-sm font-medium hover:text-primary transition-colors">
+				<div class="flex items-center gap-2">
+					<Wifi class="h-4 w-4" />
+					{$LL.devtools.userPreferencesAccessibility()}
 				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.reducedMotion()}</div>
-					<div
-						class="font-mono text-sm font-medium {windowInfo.reducedMotion
-							? 'text-amber-600'
-							: 'text-green-600'}"
-					>
-						{windowInfo.reducedMotion ? $LL.devtools.enabled() : $LL.devtools.disabled()}
+				<ChevronDown class="h-4 w-4 text-muted-foreground transition-transform duration-200 {preferencesOpen ? 'rotate-180' : ''}" />
+			</Collapsible.Trigger>
+			<Collapsible.Content>
+				<div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+					<div class="bg-background/50 rounded-lg border p-3">
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.colorScheme()}</div>
+						<div class="font-mono text-sm font-medium">{windowInfo.colorScheme}</div>
+					</div>
+					<div class="bg-background/50 rounded-lg border p-3">
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.reducedMotion()}</div>
+						<div
+							class="font-mono text-sm font-medium {windowInfo.reducedMotion
+								? 'text-amber-600'
+								: 'text-green-600'}"
+						>
+							{windowInfo.reducedMotion ? $LL.devtools.enabled() : $LL.devtools.disabled()}
+						</div>
+					</div>
+					<div class="bg-background/50 rounded-lg border p-3">
+						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browserLanguages()}</div>
+						<div
+							class="truncate font-mono text-xs font-medium"
+							title={navigator.languages ? navigator.languages.join(', ') : navigator.language}
+						>
+							{navigator.languages ? navigator.languages.slice(0, 2).join(', ') : navigator.language}
+							{navigator.languages && navigator.languages.length > 2
+								? `... (+${navigator.languages.length - 2})`
+								: ''}
+						</div>
 					</div>
 				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browserLanguages()}</div>
-					<div
-						class="truncate font-mono text-xs font-medium"
-						title={navigator.languages ? navigator.languages.join(', ') : navigator.language}
-					>
-						{navigator.languages ? navigator.languages.slice(0, 2).join(', ') : navigator.language}
-						{navigator.languages && navigator.languages.length > 2
-							? `... (+${navigator.languages.length - 2})`
-							: ''}
-					</div>
-				</div>
-			</div>
-		</div>
+			</Collapsible.Content>
+		</Collapsible.Root>
 
 		<!-- Network Information -->
 		{#if systemInfo.connection}
@@ -631,7 +651,7 @@ async function handleLanguageClick(languageCode: Locales) {
 		{/if}
 
 		<!-- Live Timestamp -->
-		<div class="text-muted-foreground bg-muted/30 rounded-md p-2 text-xs">
+		<div class="text-muted-foreground bg-muted/30 rounded-md p-2 text-xs" role="status">
 			<span class="font-medium">{$LL.devtools.lastUpdated()}:</span>
 			{new Date().toLocaleString()}
 			<span class="ml-2">• {$LL.devtools.autoRefresh()}</span>

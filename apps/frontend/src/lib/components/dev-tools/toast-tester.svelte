@@ -333,6 +333,7 @@ function dismissAllToasts() {
 				</Button>
 
 				<Button
+					aria-label="Dismiss all active toast notifications"
 					class="border-red-500/30 bg-red-500/10"
 					onclick={dismissAllToasts}
 					size="sm"
@@ -345,7 +346,7 @@ function dismissAllToasts() {
 		</div>
 
 		<!-- Testing Tips -->
-		<div class="text-muted-foreground bg-muted/50 space-y-1 rounded-lg p-3 text-xs">
+		<div class="text-muted-foreground bg-muted/50 space-y-1 rounded-lg p-3 text-xs" role="note">
 			<div class="font-medium">{$LL.devtools.testingTips()}</div>
 			<div>• {$LL.devtools.testingTip1()}</div>
 			<div>• {$LL.devtools.testingTip2()}</div>

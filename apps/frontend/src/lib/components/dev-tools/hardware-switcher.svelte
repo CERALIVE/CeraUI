@@ -101,7 +101,7 @@ $effect(() => {
 
 	<Card.Content class="space-y-4 pb-6">
 		<!-- Current State -->
-		<div class="bg-muted/50 rounded-lg border p-4">
+		<div class="bg-muted/50 rounded-lg border p-4" aria-live="polite">
 			<div class="mb-3 text-sm font-medium">Current State</div>
 			<div class="grid grid-cols-2 gap-4 text-sm">
 				<div>
@@ -172,7 +172,6 @@ $effect(() => {
 						class={selectedHardware === hw ? HARDWARE_COLORS[hw].border : ''}
 						disabled={isLoading}
 						onclick={() => switchHardware(hw)}
-						size="sm"
 						variant="outline"
 					>
 						{#if isLoading && selectedHardware === hw}
@@ -186,6 +185,7 @@ $effect(() => {
 
 		<!-- Refresh Button -->
 		<Button
+			aria-label="Refresh hardware state"
 			class="w-full"
 			disabled={isLoading}
 			onclick={loadHardwareState}
@@ -197,7 +197,7 @@ $effect(() => {
 		</Button>
 
 		<!-- Info -->
-		<div class="text-muted-foreground bg-muted/50 space-y-1 rounded-lg p-3 text-xs">
+		<div class="text-muted-foreground bg-muted/50 space-y-1 rounded-lg p-3 text-xs" role="note">
 			<div class="font-medium">Notes</div>
 			<div>• Switching hardware reloads pipelines immediately</div>
 			<div>• All connected clients receive the updated pipeline list</div>
