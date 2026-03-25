@@ -42,9 +42,9 @@ const toastTypes = [
 		name: $LL.devtools.success(),
 		type: 'success',
 		icon: CheckCircle2,
-		color: 'text-emerald-600 dark:text-emerald-400',
-		bgColor: 'bg-emerald-500/10',
-		borderColor: 'border-emerald-500/30',
+		color: 'text-status-success',
+		bgColor: 'bg-status-success/10',
+		borderColor: 'border-status-success/30',
 		action: () =>
 			toast.success(customTitle, { description: customDescription, duration: toastDuration }),
 	},
@@ -52,9 +52,9 @@ const toastTypes = [
 		name: $LL.devtools.error(),
 		type: 'error',
 		icon: AlertCircle,
-		color: 'text-red-600 dark:text-red-400',
-		bgColor: 'bg-red-500/10',
-		borderColor: 'border-red-500/30',
+		color: 'text-status-error',
+		bgColor: 'bg-status-error/10',
+		borderColor: 'border-status-error/30',
 		action: () =>
 			toast.error(customTitle, { description: customDescription, duration: toastDuration }),
 	},
@@ -62,9 +62,9 @@ const toastTypes = [
 		name: $LL.devtools.warning(),
 		type: 'warning',
 		icon: AlertTriangle,
-		color: 'text-amber-600 dark:text-amber-400',
-		bgColor: 'bg-amber-500/10',
-		borderColor: 'border-amber-500/30',
+		color: 'text-status-warning',
+		bgColor: 'bg-status-warning/10',
+		borderColor: 'border-status-warning/30',
 		action: () =>
 			toast.warning(customTitle, { description: customDescription, duration: toastDuration }),
 	},
@@ -72,9 +72,9 @@ const toastTypes = [
 		name: $LL.devtools.info(),
 		type: 'info',
 		icon: Info,
-		color: 'text-blue-600 dark:text-blue-400',
-		bgColor: 'bg-blue-500/10',
-		borderColor: 'border-blue-500/30',
+		color: 'text-status-info',
+		bgColor: 'bg-status-info/10',
+		borderColor: 'border-status-info/30',
 		action: () =>
 			toast.info(customTitle, { description: customDescription, duration: toastDuration }),
 	},
@@ -82,18 +82,18 @@ const toastTypes = [
 		name: $LL.devtools.default(),
 		type: 'default',
 		icon: MessageCircle,
-		color: 'text-slate-600 dark:text-slate-400',
-		bgColor: 'bg-slate-500/10',
-		borderColor: 'border-slate-500/30',
+		color: 'text-muted-foreground',
+		bgColor: 'bg-muted',
+		borderColor: 'border-border',
 		action: () => toast(customTitle, { description: customDescription, duration: toastDuration }),
 	},
 	{
 		name: $LL.devtools.loading(),
 		type: 'loading',
 		icon: Loader2,
-		color: 'text-blue-600 dark:text-blue-400',
-		bgColor: 'bg-blue-500/10',
-		borderColor: 'border-blue-500/30',
+		color: 'text-status-info',
+		bgColor: 'bg-status-info/10',
+		borderColor: 'border-status-info/30',
 		action: () => {
 			const loadingToast = toast.loading(customTitle, { description: customDescription });
 			// Auto-dismiss loading toast after duration
@@ -285,34 +285,34 @@ function dismissAllToasts() {
 			<div class="text-sm font-medium">{$LL.devtools.specialToastActions()}</div>
 			<div class="flex flex-wrap gap-2">
 				<Button
-					class="border-indigo-500/30 bg-indigo-500/10"
+					class="border-status-info/30 bg-status-info/10"
 					onclick={showActionToast}
 					size="sm"
 					variant="outline"
 				>
-					<CheckCircle2 class="mr-2 h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-					<span class="text-indigo-600 dark:text-indigo-400">{$LL.devtools.actionToast()}</span>
+					<CheckCircle2 class="mr-2 h-4 w-4 text-status-info" />
+					<span class="text-status-info">{$LL.devtools.actionToast()}</span>
 				</Button>
 
 				<Button
-					class="border-amber-500/30 bg-amber-500/10"
+					class="border-status-warning/30 bg-status-warning/10"
 					onclick={showPersistentToast}
 					size="sm"
 					variant="outline"
 				>
-					<AlertTriangle class="mr-2 h-4 w-4 text-amber-600 dark:text-amber-400" />
-					<span class="text-amber-600 dark:text-amber-400">{$LL.devtools.persistent()}</span>
+					<AlertTriangle class="mr-2 h-4 w-4 text-status-warning" />
+					<span class="text-status-warning">{$LL.devtools.persistent()}</span>
 				</Button>
 
 				<Button
 					aria-label="Dismiss all active toast notifications"
-					class="border-red-500/30 bg-red-500/10"
+					class="border-status-error/30 bg-status-error/10"
 					onclick={dismissAllToasts}
 					size="sm"
 					variant="outline"
 				>
-					<X class="mr-2 h-4 w-4 text-red-600 dark:text-red-400" />
-					<span class="text-red-600 dark:text-red-400">{$LL.devtools.dismissAll()}</span>
+					<X class="mr-2 h-4 w-4 text-status-error" />
+					<span class="text-status-error">{$LL.devtools.dismissAll()}</span>
 				</Button>
 			</div>
 		</div>

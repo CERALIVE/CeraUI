@@ -158,10 +158,10 @@ $effect(() => {
 			// App already installed, don't show any banner
 			showIOSBanner = false;
 		} else if (isAndroid()) {
-			// Android: Always show blue banner (with install button if native prompt available)
+			// Android: Always show install banner (with install button if native prompt available)
 			showIOSBanner = true;
 		} else if (isIOS()) {
-			// iOS: Show blue banner with instructions (no native prompt available)
+			// iOS: Show install banner with instructions (no native prompt available)
 			showIOSBanner = true;
 		} else {
 			// Other mobile devices: Show generic banner
@@ -238,7 +238,7 @@ async function handleMobileInstall() {
 		style:transform="translateZ(0)"
 		style:-webkit-transform="translateZ(0)"
 		style:padding-bottom="calc(1rem + env(safe-area-inset-bottom, 0px))"
-		class="animate-in slide-in-from-bottom fixed right-0 left-0 z-50 bg-blue-500 p-4 text-white"
+		class="animate-in slide-in-from-bottom fixed right-0 left-0 z-50 bg-primary p-4 text-primary-foreground"
 	>
 		<div class="mx-auto flex w-full max-w-sm items-center justify-between gap-3 px-2">
 			<div class="flex min-w-0 flex-1 items-center gap-3">
@@ -263,7 +263,7 @@ async function handleMobileInstall() {
 			<div class="flex flex-shrink-0 gap-2">
 				{#if isAndroid() && canInstallApp}
 					<Button
-						class="bg-white text-blue-500 hover:bg-white/90"
+						class="bg-primary-foreground text-primary hover:bg-primary-foreground/90"
 						onclick={handleMobileInstall}
 						size="sm"
 						variant="secondary"
@@ -272,7 +272,7 @@ async function handleMobileInstall() {
 					</Button>
 				{/if}
 				<Button
-					class="text-white hover:bg-white/20"
+					class="text-primary-foreground hover:bg-primary-foreground/20"
 					onclick={dismissIOSBanner}
 					size="sm"
 					variant="ghost"

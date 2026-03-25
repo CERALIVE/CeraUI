@@ -106,7 +106,7 @@ $effect(() => {
 			<div class="grid grid-cols-2 gap-4 text-sm">
 				<div>
 					<span class="text-muted-foreground">Effective Hardware:</span>
-					<span class="ml-2 font-mono font-medium" class:text-yellow-500={effectiveHardware === 'loading...' || effectiveHardware === 'connecting...'} class:text-red-500={effectiveHardware === 'error'}>
+					<span class="ml-2 font-mono font-medium" class:text-status-warning={effectiveHardware === 'loading...' || effectiveHardware === 'connecting...'} class:text-status-error={effectiveHardware === 'error'}>
 						{#if isLoading && !isInitialized}
 							<Loader2 class="inline h-3 w-3 animate-spin mr-1" />
 						{/if}
@@ -119,7 +119,7 @@ $effect(() => {
 				</div>
 			</div>
 			{#if loadError}
-				<div class="mt-2 text-xs text-red-500">{loadError}</div>
+				<div class="mt-2 text-xs text-status-error">{loadError}</div>
 			{/if}
 		</div>
 

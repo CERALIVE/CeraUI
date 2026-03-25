@@ -335,8 +335,8 @@ function clearImages(): void {
 
 	<Card.Content class="space-y-4 pb-6">
 		{#if currentlyCapturing}
-			<div class="rounded-lg border border-primary/30 bg-primary/10 p-3" aria-live="polite" role="status">
-				<div class="text-sm font-medium text-primary">
+			<div class="rounded-lg border border-status-info/30 bg-status-info/10 p-3" aria-live="polite" role="status">
+				<div class="text-sm font-medium text-status-info">
 					{progressText}
 				</div>
 				<div class="text-muted-foreground mt-1 text-xs">

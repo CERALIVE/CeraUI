@@ -13,18 +13,18 @@ let { signal = 0, class: className }: Props = $props();
 
 {#if signal >= 75}
 	<span title="Excellent">
-		<SignalHigh class={cn('text-green-600 dark:text-green-400', className)} />
+		<SignalHigh class={cn('text-signal-excellent', className)} />
 	</span>
 {:else if signal >= 50}
 	<span title="Good">
-		<SignalMedium class={cn('text-green-600 dark:text-green-400', className)} />
+		<SignalMedium class={cn('text-signal-good', className)} />
 	</span>
 {:else if signal >= 25}
 	<span title="Fair">
-		<SignalLow class={cn('text-yellow-600 dark:text-yellow-400', className)} />
+		<SignalLow class={cn('text-signal-fair', className)} />
 	</span>
 {:else}
 	<span title="Poor">
-		<Signal class={cn('text-red-600 dark:text-red-400', className)} />
+		<Signal class={cn('text-signal-weak', className)} />
 	</span>
 {/if}

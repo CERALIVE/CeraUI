@@ -138,18 +138,18 @@ onMount(() => {
 									>{$LL.updatingOverlay.downloading()}</span
 								>
 							{:else if animationPhase === 'unpacking'}
-								<Package class="h-4 w-4 animate-pulse text-amber-500 sm:h-5 sm:w-5" />
-								<span class="text-sm font-medium text-amber-500 sm:text-base"
+								<Package class="h-4 w-4 animate-pulse text-status-warning sm:h-5 sm:w-5" />
+								<span class="text-sm font-medium text-status-warning sm:text-base"
 									>{$LL.updatingOverlay.unpacking()}</span
 								>
 							{:else if animationPhase === 'installing'}
-								<Cog class="h-4 w-4 animate-spin text-blue-500 sm:h-5 sm:w-5" />
-								<span class="text-sm font-medium text-blue-500 sm:text-base"
+								<Cog class="h-4 w-4 animate-spin text-status-info sm:h-5 sm:w-5" />
+								<span class="text-sm font-medium text-status-info sm:text-base"
 									>{$LL.updatingOverlay.installing()}</span
 								>
 							{:else if animationPhase === 'complete'}
-								<CheckCircle2 class="h-4 w-4 text-green-500 sm:h-5 sm:w-5" />
-								<span class="text-sm font-medium text-green-500 sm:text-base"
+								<CheckCircle2 class="h-4 w-4 text-status-success sm:h-5 sm:w-5" />
+								<span class="text-sm font-medium text-status-success sm:text-base"
 									>{$LL.updatingOverlay.successMessage()}</span
 								>
 							{/if}
@@ -163,7 +163,7 @@ onMount(() => {
 					<div class="flex flex-col items-center justify-center">
 						<div class="relative mb-4 sm:mb-6">
 							{#if animationPhase === 'complete'}
-								<CheckCircle2 class="h-32 w-32 text-green-500 sm:h-40 sm:w-40" />
+								<CheckCircle2 class="h-32 w-32 text-status-success sm:h-40 sm:w-40" />
 							{:else}
 								<RotateCw class="text-primary h-32 w-32 animate-spin sm:h-40 sm:w-40" />
 							{/if}
@@ -253,8 +253,8 @@ onMount(() => {
 					>
 						<div
 							class="flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 sm:h-12 sm:w-12"
-							class:bg-amber-500={details?.unpacking > 0}
-							class:border-amber-500={details?.unpacking > 0}
+							class:bg-status-warning={details?.unpacking > 0}
+							class:border-status-warning={details?.unpacking > 0}
 							class:border-muted={!(details?.unpacking > 0)}
 							class:text-muted-foreground={!(details?.unpacking > 0)}
 							class:text-white={details?.unpacking > 0}
@@ -265,7 +265,7 @@ onMount(() => {
 						</div>
 						<span
 							class="text-center text-[10px] font-medium sm:text-xs"
-							class:text-amber-500={details?.unpacking > 0}
+							class:text-status-warning={details?.unpacking > 0}
 						>
 							{$LL.updatingOverlay.unpacking()}
 						</span>
@@ -287,8 +287,8 @@ onMount(() => {
 					>
 						<div
 							class="flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 sm:h-12 sm:w-12"
-							class:bg-blue-500={details?.setting_up > 0}
-							class:border-blue-500={details?.setting_up > 0}
+							class:bg-status-info={details?.setting_up > 0}
+							class:border-status-info={details?.setting_up > 0}
 							class:border-muted={!(details?.setting_up > 0)}
 							class:text-muted-foreground={!(details?.setting_up > 0)}
 							class:text-white={details?.setting_up > 0}
@@ -299,7 +299,7 @@ onMount(() => {
 						</div>
 						<span
 							class="text-center text-[10px] font-medium sm:text-xs"
-							class:text-blue-500={details?.setting_up > 0}
+							class:text-status-info={details?.setting_up > 0}
 						>
 							{$LL.updatingOverlay.installing()}
 						</span>

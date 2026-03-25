@@ -306,8 +306,8 @@ async function handleLanguageClick(languageCode: Locales) {
 					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.devMode()}</div>
 					<div
 						class="font-mono text-sm font-medium {buildInfo.dev
-							? 'text-green-600'
-							: 'text-red-600'}"
+							? 'text-status-success'
+							: 'text-status-error'}"
 					>
 						{buildInfo.dev ? $LL.devtools.yes() : $LL.devtools.no()}
 					</div>
@@ -356,8 +356,8 @@ async function handleLanguageClick(languageCode: Locales) {
 						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.onlineStatus()}</div>
 						<div
 							class="font-mono text-sm font-medium {systemInfo.onLine
-								? 'text-green-600'
-								: 'text-red-600'}"
+								? 'text-status-success'
+								: 'text-status-error'}"
 						>
 							{systemInfo.onLine ? $LL.devtools.online() : $LL.devtools.offline()}
 						</div>
@@ -366,8 +366,8 @@ async function handleLanguageClick(languageCode: Locales) {
 						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.cookies()}</div>
 						<div
 							class="font-mono text-sm font-medium {systemInfo.cookieEnabled
-								? 'text-green-600'
-								: 'text-red-600'}"
+								? 'text-status-success'
+								: 'text-status-error'}"
 						>
 							{systemInfo.cookieEnabled ? $LL.devtools.enabled() : $LL.devtools.disabled()}
 						</div>
@@ -449,10 +449,10 @@ async function handleLanguageClick(languageCode: Locales) {
 					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.pageLoad()}</div>
 					<div
 						class="text-lg font-bold {performanceData.loadTime < 1000
-							? 'text-green-600'
+							? 'text-status-success'
 							: performanceData.loadTime < 3000
-								? 'text-amber-600'
-								: 'text-red-600'}"
+								? 'text-status-warning'
+								: 'text-status-error'}"
 					>
 						{formatMs(performanceData.loadTime)}
 					</div>
@@ -461,10 +461,10 @@ async function handleLanguageClick(languageCode: Locales) {
 					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.jsMemory()}</div>
 					<div
 						class="text-lg font-bold {performanceData.memory < 50
-							? 'text-green-600'
+							? 'text-status-success'
 							: performanceData.memory < 100
-								? 'text-amber-600'
-								: 'text-red-600'}"
+								? 'text-status-warning'
+								: 'text-status-error'}"
 					>
 						{performanceData.memory}MB
 					</div>
@@ -503,8 +503,8 @@ async function handleLanguageClick(languageCode: Locales) {
 						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.reducedMotion()}</div>
 						<div
 							class="font-mono text-sm font-medium {windowInfo.reducedMotion
-								? 'text-amber-600'
-								: 'text-green-600'}"
+								? 'text-status-warning'
+								: 'text-status-success'}"
 						>
 							{windowInfo.reducedMotion ? $LL.devtools.enabled() : $LL.devtools.disabled()}
 						</div>

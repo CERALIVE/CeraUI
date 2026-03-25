@@ -110,7 +110,7 @@ const handleSubmit = async () => {
 		? $LL.hotspotConfigurator.dialog.saving()
 		: $LL.hotspotConfigurator.dialog.save()}
 	disabledConfirmButton={!isFormValid || isSubmitting}
-	extraButtonClasses="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-medium shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
+	extraButtonClasses="w-full gradient-primary text-primary-foreground font-medium shadow-lg shadow-primary/25 transition-all duration-300 transform hover:scale-[1.02]"
 	oncancel={() => resetHotSpotProperties()}
 	onconfirm={handleSubmit}
 	title={$LL.hotspotConfigurator.dialog.configHotspot()}
@@ -126,9 +126,9 @@ const handleSubmit = async () => {
 			<!-- Header Section -->
 			<div class="space-y-2 text-center">
 				<div
-					class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg"
+					class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl gradient-primary shadow-lg"
 				>
-					<Wifi class="h-8 w-8 text-white" />
+					<Wifi class="h-8 w-8 text-primary-foreground" />
 				</div>
 				<p class="text-muted-foreground text-sm leading-relaxed">
 					{$LL.hotspotConfigurator.help.description()}
@@ -139,9 +139,9 @@ const handleSubmit = async () => {
 			<div class="space-y-3">
 				<Label class="text-foreground flex items-center gap-3 text-base font-semibold" for="name">
 					<div
-						class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30"
+						class="flex h-8 w-8 items-center justify-center rounded-lg bg-status-info/15"
 					>
-						<Wifi class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+						<Wifi class="h-4 w-4 text-status-info" />
 					</div>
 					{$LL.hotspotConfigurator.hotspot.name()}
 				</Label>
@@ -152,10 +152,10 @@ const handleSubmit = async () => {
 							class={cn(
 								'focus:ring-opacity-20 h-12 w-full rounded-xl border-2 px-4 text-base transition-all duration-300 focus:ring-4',
 								!validation.name.isValid && hotspotProperties.name.length > 0
-									? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
+									? 'border-status-error bg-status-error/5 focus:border-status-error focus:ring-status-error/20'
 									: validation.name.isValid && hotspotProperties.name.length > 0
-										? 'border-emerald-400 bg-emerald-50 focus:border-emerald-500 focus:ring-emerald-500 dark:bg-emerald-950/20'
-										: 'border-slate-200 bg-slate-50 focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800/50',
+										? 'border-primary bg-status-success/5 focus:border-primary focus:ring-primary/20'
+										: 'border-border bg-muted focus:border-status-info focus:ring-status-info/20',
 							)}
 							autocapitalize="none"
 							autocomplete="off"
@@ -167,9 +167,9 @@ const handleSubmit = async () => {
 						{#if hotspotProperties.name.length > 0}
 							<div class="absolute top-1/2 right-3 -translate-y-1/2">
 								{#if validation.name.isValid}
-									<CheckCircle class="h-5 w-5 text-green-500" />
+									<CheckCircle class="h-5 w-5 text-status-success" />
 								{:else}
-									<AlertCircle class="h-5 w-5 text-red-500" />
+									<AlertCircle class="h-5 w-5 text-status-error" />
 								{/if}
 							</div>
 						{/if}
@@ -180,8 +180,8 @@ const handleSubmit = async () => {
 							class={cn(
 								'flex items-center gap-2 rounded-lg p-3 text-sm font-medium',
 								validation.name.isValid
-									? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-									: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+									? 'bg-status-success/15 text-status-success'
+									: 'bg-status-error/15 text-status-error',
 							)}
 						>
 							{#if validation.name.isValid}
@@ -193,13 +193,13 @@ const handleSubmit = async () => {
 							{/if}
 						</div>
 					{:else}
-						<div class="flex items-start gap-2 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
+						<div class="flex items-start gap-2 rounded-lg bg-status-info/5 p-3">
 							<div
-								class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-blue-200 dark:bg-blue-800"
+								class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-status-info/15"
 							>
-								<span class="text-xs font-bold text-blue-600 dark:text-blue-400">i</span>
+								<span class="text-xs font-bold text-status-info">i</span>
 							</div>
-							<p class="text-sm leading-relaxed text-blue-700 dark:text-blue-300">
+							<p class="text-sm leading-relaxed text-status-info">
 								{$LL.hotspotConfigurator.help.nameHelp()}
 							</p>
 						</div>
@@ -214,9 +214,9 @@ const handleSubmit = async () => {
 					for="hotspotPassword"
 				>
 					<div
-						class="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900/30"
+						class="flex h-8 w-8 items-center justify-center rounded-lg bg-status-info/15"
 					>
-						<Smartphone class="h-4 w-4 text-purple-600 dark:text-purple-400" />
+						<Smartphone class="h-4 w-4 text-status-info" />
 					</div>
 					{$LL.hotspotConfigurator.hotspot.password()}
 				</Label>
@@ -227,10 +227,10 @@ const handleSubmit = async () => {
 							class={cn(
 								'focus:ring-opacity-20 h-12 w-full rounded-xl border-2 px-4 pr-12 text-base transition-all duration-300 focus:ring-4',
 								!validation.password.isValid && hotspotProperties.password.length > 0
-									? 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-500 dark:bg-red-950/20'
+									? 'border-status-error bg-status-error/5 focus:border-status-error focus:ring-status-error/20'
 									: validation.password.isValid && hotspotProperties.password.length > 0
-										? 'border-emerald-400 bg-emerald-50 focus:border-emerald-500 focus:ring-emerald-500 dark:bg-emerald-950/20'
-										: 'border-slate-200 bg-slate-50 focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800/50',
+										? 'border-primary bg-status-success/5 focus:border-primary focus:ring-primary/20'
+										: 'border-border bg-muted focus:border-status-info focus:ring-status-info/20',
 							)}
 							autocapitalize="none"
 							autocomplete="off"
@@ -243,13 +243,13 @@ const handleSubmit = async () => {
 						<div class="absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2">
 							{#if hotspotProperties.password.length > 0}
 								{#if validation.password.isValid}
-									<CheckCircle class="h-5 w-5 text-green-500" />
+									<CheckCircle class="h-5 w-5 text-status-success" />
 								{:else}
-									<AlertCircle class="h-5 w-5 text-red-500" />
+									<AlertCircle class="h-5 w-5 text-status-error" />
 								{/if}
 							{/if}
 							<button
-								class="text-muted-foreground hover:text-foreground rounded-lg p-1 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700"
+								class="text-muted-foreground hover:text-foreground rounded-lg p-1 transition-colors hover:bg-accent"
 								onclick={() => (showPassword = !showPassword)}
 								type="button"
 							>
@@ -267,8 +267,8 @@ const handleSubmit = async () => {
 							class={cn(
 								'flex items-center gap-2 rounded-lg p-3 text-sm font-medium',
 								validation.password.isValid
-									? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-									: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+									? 'bg-status-success/15 text-status-success'
+									: 'bg-status-error/15 text-status-error',
 							)}
 						>
 							{#if validation.password.isValid}
@@ -283,13 +283,13 @@ const handleSubmit = async () => {
 							{/if}
 						</div>
 					{:else}
-						<div class="flex items-start gap-2 rounded-lg bg-purple-50 p-3 dark:bg-purple-950/30">
+						<div class="flex items-start gap-2 rounded-lg bg-status-info/5 p-3">
 							<div
-								class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 dark:bg-purple-800"
+								class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-status-info/15"
 							>
-								<span class="text-xs font-bold text-purple-600 dark:text-purple-400">!</span>
+								<span class="text-xs font-bold text-status-info">!</span>
 							</div>
-							<p class="text-sm leading-relaxed text-purple-700 dark:text-purple-300">
+							<p class="text-sm leading-relaxed text-status-info">
 								{$LL.hotspotConfigurator.help.passwordHelp()}
 							</p>
 						</div>
@@ -304,10 +304,10 @@ const handleSubmit = async () => {
 					for="channel"
 				>
 					<div
-						class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/30"
+						class="flex h-8 w-8 items-center justify-center rounded-lg bg-status-warning/15"
 					>
 						<svg
-							class="h-4 w-4 text-amber-600 dark:text-amber-400"
+							class="h-4 w-4 text-status-warning"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
@@ -331,14 +331,14 @@ const handleSubmit = async () => {
 						value={hotspotProperties.selectedChannel}
 					>
 						<Select.Trigger
-							class="focus:ring-opacity-20 h-12 w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-4 text-base transition-all duration-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800/50"
+							class="focus:ring-opacity-20 h-12 w-full rounded-xl border-2 border-border bg-muted px-4 text-base transition-all duration-300 focus:border-status-info focus:ring-4 focus:ring-status-info/20"
 						>
 							{hotspotProperties.selectedChannel
 								? wifi.hotspot?.available_channels[hotspotProperties.selectedChannel].name
 								: $LL.hotspotConfigurator.hotspot.selectChannel()}
 						</Select.Trigger>
 						<Select.Content
-							class="rounded-xl border-2 border-slate-200 shadow-xl dark:border-slate-700"
+							class="rounded-xl border-2 border-border shadow-xl"
 						>
 							<Select.Group>
 								{#if wifi.hotspot?.available_channels}
@@ -350,13 +350,13 @@ const handleSubmit = async () => {
 							</Select.Group>
 						</Select.Content>
 					</Select.Root>
-					<div class="flex items-start gap-2 rounded-lg bg-amber-50 p-3 dark:bg-amber-950/30">
+					<div class="flex items-start gap-2 rounded-lg bg-status-warning/5 p-3">
 						<div
-							class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-amber-200 dark:bg-amber-800"
+							class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-status-warning/30"
 						>
-							<span class="text-xs font-bold text-amber-600 dark:text-amber-400">✓</span>
+							<span class="text-xs font-bold text-status-warning">✓</span>
 						</div>
-						<p class="text-sm leading-relaxed text-amber-700 dark:text-amber-300">
+						<p class="text-sm leading-relaxed text-status-warning">
 							{$LL.hotspotConfigurator.help.channelHelp()}
 						</p>
 					</div>
@@ -366,19 +366,19 @@ const handleSubmit = async () => {
 			<!-- Form Summary -->
 			{#if !isFormValid && (hotspotProperties.name.length > 0 || hotspotProperties.password.length > 0)}
 				<div
-					class="rounded-xl border-2 border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 dark:border-amber-700 dark:from-amber-950/30 dark:to-orange-950/30"
+					class="rounded-xl border-2 border-status-warning/30 bg-status-warning/5 p-4"
 				>
 					<div class="flex items-start gap-3">
 						<div
-							class="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-amber-500"
+							class="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-status-warning"
 						>
-							<AlertCircle class="h-4 w-4 text-white" />
+							<AlertCircle class="h-4 w-4 text-status-warning-foreground" />
 						</div>
 						<div>
-							<h4 class="mb-1 font-semibold text-amber-800 dark:text-amber-200">
+							<h4 class="mb-1 font-semibold text-status-warning">
 								{$LL.hotspotConfigurator.validation.almostThere()}
 							</h4>
-							<p class="text-sm leading-relaxed text-amber-700 dark:text-amber-300">
+							<p class="text-sm leading-relaxed text-status-warning">
 								{$LL.hotspotConfigurator.validation.formIncomplete()}
 							</p>
 						</div>
@@ -386,13 +386,13 @@ const handleSubmit = async () => {
 				</div>
 			{:else if isFormValid}
 				<div
-					class="rounded-xl border-2 border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 p-4 dark:border-green-700 dark:from-green-950/30 dark:to-emerald-950/30"
+					class="rounded-xl border-2 border-status-success/30 bg-status-success/5 p-4"
 				>
 					<div class="flex items-center gap-3">
-						<div class="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500">
-							<CheckCircle class="h-4 w-4 text-white" />
+						<div class="flex h-6 w-6 items-center justify-center rounded-full bg-primary">
+							<CheckCircle class="h-4 w-4 text-primary-foreground" />
 						</div>
-						<p class="font-semibold text-green-800 dark:text-green-200">
+						<p class="font-semibold text-status-success">
 							{$LL.hotspotConfigurator.validation.readyToSave()}
 						</p>
 					</div>

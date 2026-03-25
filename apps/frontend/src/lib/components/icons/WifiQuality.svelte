@@ -13,18 +13,18 @@ let { signal = 0, class: className }: Props = $props();
 
 {#if signal >= 80}
 	<span title="High">
-		<Wifi class={cn('text-green-500', className)} />
+		<Wifi class={cn('text-signal-excellent', className)} />
 	</span>
 {:else if signal >= 60}
 	<span title="Medium">
-		<WifiHigh class={cn('text-green-500', className)} />
+		<WifiHigh class={cn('text-signal-good', className)} />
 	</span>
 {:else if signal >= 40}
 	<span title="Low">
-		<WifiLow class={cn('text-yellow-700', className)} />
+		<WifiLow class={cn('text-signal-fair', className)} />
 	</span>
 {:else}
 	<span title="Poor">
-		<WifiZero class={cn('text-red-800', className)} />
+		<WifiZero class={cn('text-signal-weak', className)} />
 	</span>
 {/if}

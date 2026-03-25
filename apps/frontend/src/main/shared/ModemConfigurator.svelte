@@ -164,7 +164,7 @@ const isScanning = $derived(modemIsScanning || localScanningState);
 			type="single"
 			value={formData.selectedNetwork}
 		>
-			<Select.Trigger class={cn('h-9 text-sm', errors.selectedNetwork && 'border-red-500')}>
+			<Select.Trigger class={cn('h-9 text-sm', errors.selectedNetwork && 'border-status-error')}>
 				{renameSupportedModemNetwork(formData.selectedNetwork)}
 			</Select.Trigger>
 			<Select.Content>
@@ -180,16 +180,16 @@ const isScanning = $derived(modemIsScanning || localScanningState);
 
 	<!-- Roaming Toggle -->
 	<div
-		class="flex items-center justify-between rounded-lg border bg-slate-50/50 p-2.5 dark:bg-slate-800/50"
+		class="flex items-center justify-between rounded-lg border bg-muted/50 p-2.5"
 	>
 		<div class="flex items-center gap-2">
 			<Globe
-				class={cn('h-4 w-4', formData.roaming ? 'text-emerald-600' : 'text-muted-foreground')}
+				class={cn('h-4 w-4', formData.roaming ? 'text-status-success' : 'text-muted-foreground')}
 			/>
 			<span class="text-sm font-medium">{$LL.network.modem.enableRoaming()}</span>
 		</div>
 		<Switch
-			class="scale-90 data-[state=checked]:bg-emerald-500"
+			class="scale-90 data-[state=checked]:bg-primary"
 			checked={formData.roaming}
 			onCheckedChange={(checked) => (formData.roaming = checked)}
 		/>
@@ -228,8 +228,8 @@ const isScanning = $derived(modemIsScanning || localScanningState);
 					class={cn(
 						'h-9 px-3',
 						isScanning
-							? 'bg-amber-500/20 text-amber-700'
-							: 'bg-blue-600 text-white hover:bg-blue-700',
+							? 'bg-status-warning/20 text-status-warning'
+							: 'bg-primary text-primary-foreground hover:bg-primary/90',
 					)}
 					disabled={isScanning}
 					onclick={handleScanNetworks}
@@ -248,16 +248,16 @@ const isScanning = $derived(modemIsScanning || localScanningState);
 
 	<!-- Auto APN Toggle -->
 	<div
-		class="flex items-center justify-between rounded-lg border bg-slate-50/50 p-2.5 dark:bg-slate-800/50"
+		class="flex items-center justify-between rounded-lg border bg-muted/50 p-2.5"
 	>
 		<div class="flex items-center gap-2">
 			<Zap
-				class={cn('h-4 w-4', formData.autoconfig ? 'text-emerald-600' : 'text-muted-foreground')}
+				class={cn('h-4 w-4', formData.autoconfig ? 'text-status-success' : 'text-muted-foreground')}
 			/>
 			<span class="text-sm font-medium">{$LL.network.modem.autoapn()}</span>
 		</div>
 		<Switch
-			class="scale-90 data-[state=checked]:bg-emerald-500"
+			class="scale-90 data-[state=checked]:bg-primary"
 			checked={formData.autoconfig}
 			onCheckedChange={(checked) => (formData.autoconfig = checked)}
 		/>
@@ -294,7 +294,7 @@ const isScanning = $derived(modemIsScanning || localScanningState);
 							{$LL.network.modem.apn()}
 						</Label>
 						<Input
-							class={cn('h-8 text-sm', errors.apn && 'border-red-500')}
+							class={cn('h-8 text-sm', errors.apn && 'border-status-error')}
 							oninput={() => (errors.apn = undefined)}
 							placeholder="internet.provider.com"
 							bind:value={formData.apn}
@@ -336,7 +336,7 @@ const isScanning = $derived(modemIsScanning || localScanningState);
 		<Button
 			class={cn(
 				'h-8 flex-1 gap-1.5 text-sm',
-				hasChanges ? 'bg-emerald-600 hover:bg-emerald-700' : '',
+				hasChanges ? 'bg-primary text-primary-foreground hover:bg-primary/90' : '',
 			)}
 			disabled={!hasChanges || isSaving}
 			size="sm"

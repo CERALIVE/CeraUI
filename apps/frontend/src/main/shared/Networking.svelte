@@ -49,8 +49,8 @@ function isHotspotNetwork(name: string) {
 
 function getBandwidthColor(bandwidth: number) {
 	if (bandwidth === 0) return 'text-muted-foreground';
-	if (bandwidth < 1000) return 'text-amber-600 dark:text-amber-400';
-	if (bandwidth < 5000) return 'text-blue-600 dark:text-blue-400';
+	if (bandwidth < 1000) return 'text-status-warning';
+	if (bandwidth < 5000) return 'text-status-info';
 	return 'text-primary';
 }
 
@@ -106,7 +106,7 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 					class={cn(
 						'bg-card flex h-full flex-col overflow-hidden rounded-lg border transition-colors duration-200',
 						network.enabled ? 'border-primary/30' : 'border-border',
-						isHotspot && !network.enabled ? 'border-blue-500/30' : '',
+						isHotspot && !network.enabled ? 'border-status-info/30' : '',
 						hasRealError ? 'border-destructive/30' : '',
 					)}
 				>
@@ -122,7 +122,7 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 											network.enabled
 												? 'bg-primary'
 												: isHotspot
-													? 'bg-blue-500'
+													? 'bg-status-info'
 													: hasRealError
 														? 'bg-destructive'
 														: 'bg-muted-foreground/40',
@@ -147,7 +147,7 @@ function getNetworkPriority(name: string, enabled: boolean, isHotspot: boolean) 
 									network.enabled
 										? 'bg-primary/10 text-primary'
 										: isHotspot
-											? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+											? 'bg-status-info/10 text-status-info'
 											: hasRealError
 												? 'bg-destructive/10 text-destructive'
 												: 'bg-secondary text-secondary-foreground',

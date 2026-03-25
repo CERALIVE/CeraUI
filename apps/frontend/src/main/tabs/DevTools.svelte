@@ -31,12 +31,12 @@ import { BUILD_INFO } from '$lib/env';
 
 			<!-- Mobile-Optimized Dev Mode Badge -->
 			<div
-				class="inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-2 py-1 text-xs sm:px-3 sm:text-sm"
+				class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-2 py-1 text-xs sm:px-3 sm:text-sm"
 			>
 				<div
-					class="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-amber-500 sm:h-2 sm:w-2"
+					class="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-primary sm:h-2 sm:w-2"
 				></div>
-				<span class="truncate font-medium text-amber-700 dark:text-amber-400">
+				<span class="truncate font-medium text-primary">
 					<span class="hidden sm:inline"
 						>{$LL.devtools.developmentMode()}: {BUILD_INFO.MODE} | {$LL.devtools.status()}: {$LL.devtools.active()}</span
 					>
@@ -86,14 +86,14 @@ import { BUILD_INFO } from '$lib/env';
 							</div>
 							<div class="flex flex-wrap gap-2">
 								<button
-									class="bg-card rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-400"
+									class="bg-card rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:border-status-success/30 hover:bg-status-success/10 hover:text-status-success"
 									onclick={() =>
 										console.log('✅ Console log test:', { timestamp: new Date(), level: 'info' })}
 								>
 									{$LL.devtools.log()}
 								</button>
 								<button
-									class="bg-card rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400"
+									class="bg-card rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:border-status-warning/30 hover:bg-status-warning/10 hover:text-status-warning"
 									onclick={() =>
 										console.warn('⚠️ Console warning test:', {
 											timestamp: new Date(),
@@ -103,7 +103,7 @@ import { BUILD_INFO } from '$lib/env';
 									{$LL.devtools.warn()}
 								</button>
 								<button
-									class="bg-card rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-700 dark:hover:text-red-400"
+									class="bg-card rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:border-status-error/30 hover:bg-status-error/10 hover:text-status-error"
 									onclick={() =>
 										console.error('❌ Console error test:', {
 											timestamp: new Date(),
@@ -113,7 +113,7 @@ import { BUILD_INFO } from '$lib/env';
 									{$LL.devtools.error()}
 								</button>
 								<button
-									class="bg-card rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:border-blue-500/30 hover:bg-blue-500/10 hover:text-blue-700 dark:hover:text-blue-400"
+									class="bg-card rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:border-status-info/30 hover:bg-status-info/10 hover:text-status-info"
 									onclick={() =>
 										console.table({
 											browser: navigator.userAgent.split(' ')[0],

@@ -48,12 +48,12 @@ function formatConfigValue(
 const streamingStatusColors = $derived.by(() => {
 	if (currentStatus?.is_streaming) {
 		return {
-			text: 'text-emerald-600 dark:text-emerald-400',
-			icon: 'text-emerald-500',
+			text: 'text-status-success',
+			icon: 'text-status-success',
 		};
 	}
 	return {
-		text: 'text-amber-600 dark:text-amber-400',
+		text: 'text-status-warning',
 		icon: 'text-muted-foreground',
 	};
 });
@@ -61,7 +61,7 @@ const streamingStatusColors = $derived.by(() => {
 const serverStatusColors = $derived.by(() => {
 	if (currentConfig?.srtla_addr) {
 		return {
-			icon: 'text-emerald-500',
+			icon: 'text-status-success',
 		};
 	}
 	return {
@@ -159,7 +159,7 @@ const serverStatusColors = $derived.by(() => {
 						<SimpleAlertDialog
 							buttonText={$LL.general.updateButton()}
 							confirmButtonText={$LL.general.updateButton()}
-							extraButtonClasses="ml-4 shrink-0 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white"
+							extraButtonClasses="ml-4 shrink-0 gradient-primary text-primary-foreground"
 							onconfirm={installSoftwareUpdates}
 						>
 							{#snippet dialogTitle()}
@@ -354,7 +354,7 @@ const serverStatusColors = $derived.by(() => {
 						</Card.Header>
 						<Card.Content class="px-4 pt-0 pb-4">
 							<div class="flex flex-col items-center justify-center space-y-4 py-12 text-center">
-								<div class="flex h-16 w-16 items-center justify-center rounded-lg bg-slate-500/10">
+								<div class="flex h-16 w-16 items-center justify-center rounded-lg bg-muted">
 									<Activity class="text-muted-foreground h-8 w-8" />
 								</div>
 								<div class="space-y-2">
