@@ -86,7 +86,7 @@ const handleLogoClick = () => {
 
 <!-- Navigation Tabs -->
 <nav aria-label="Main navigation" class="hidden flex-1 md:flex">
-	<ScrollArea orientation="both" scrollbarXClasses="invisible">
+	<ScrollArea orientation="horizontal" scrollbarXClasses="invisible">
 		<div class="flex items-center gap-1 px-2">
 			{#each Object.entries(navElements) as [identifier, navigation], index}
 				{@const isActive =
