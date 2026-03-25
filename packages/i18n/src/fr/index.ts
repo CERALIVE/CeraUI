@@ -633,6 +633,10 @@ const fr = {
 		advanced: "Avancé",
 		devtools: "Outils de Développement",
 		back: "Retour",
+		goHome: "Aller à l'accueil",
+		goBackOrHome: "Retour ou accueil",
+		navigationMenu: "Menu de navigation",
+		navigationError: "Erreur de navigation",
 	},
 	advanced: {
 		systemSettings: "Paramètres du système",

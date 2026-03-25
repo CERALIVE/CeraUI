@@ -434,6 +434,10 @@ const hi = {
 		advanced: "उन्नत",
 		devtools: "डेव टूल्स",
 		back: "वापस",
+		goHome: "होम पर जाएँ",
+		goBackOrHome: "वापस जाएँ या होम पर जाएँ",
+		navigationMenu: "नेविगेशन मेनू",
+		navigationError: "नेविगेशन त्रुटि",
 	},
 	advanced: {
 		systemSettings: "सिस्टम सेटिंग्स",

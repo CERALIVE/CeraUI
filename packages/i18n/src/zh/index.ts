@@ -406,6 +406,10 @@ const zh = {
 		advanced: "高级",
 		devtools: "开发工具",
 		back: "返回",
+		goHome: "前往首页",
+		goBackOrHome: "返回或前往首页",
+		navigationMenu: "导航菜单",
+		navigationError: "导航错误",
 	},
 	advanced: {
 		systemSettings: "系统设置",

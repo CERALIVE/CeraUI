@@ -255,6 +255,10 @@ const de = {
 		advanced: "Erweitert",
 		devtools: "Dev Tools",
 		back: "Zurück",
+		goHome: "Zur Startseite",
+		goBackOrHome: "Zurück oder zur Startseite",
+		navigationMenu: "Navigationsmenü",
+		navigationError: "Navigationsfehler",
 	},
 	auth: {
 		createPassword: "Passwort erstellen",

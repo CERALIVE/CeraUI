@@ -438,6 +438,10 @@ const ko = {
 		advanced: "고급",
 		devtools: "개발 도구",
 		back: "뒤로",
+		goHome: "홈으로 이동",
+		goBackOrHome: "뒤로 가기 또는 홈으로",
+		navigationMenu: "탐색 메뉴",
+		navigationError: "탐색 오류",
 	},
 	advanced: {
 		systemSettings: "시스템 설정",

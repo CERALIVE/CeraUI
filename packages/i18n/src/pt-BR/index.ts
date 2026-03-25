@@ -610,6 +610,10 @@ const ptBR = {
 		advanced: "Avançado",
 		devtools: "Ferramentas de Desenvolvimento",
 		back: "Voltar",
+		goHome: "Ir para o início",
+		goBackOrHome: "Voltar ou ir ao início",
+		navigationMenu: "Menu de navegação",
+		navigationError: "Erro de navegação",
 	},
 	advanced: {
 		systemSettings: "Configurações do sistema",

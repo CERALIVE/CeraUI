@@ -246,6 +246,10 @@ const en = {
 		advanced: "Advanced",
 		devtools: "Dev Tools",
 		back: "Back",
+		goHome: "Go to home",
+		goBackOrHome: "Go back or home",
+		navigationMenu: "Navigation menu",
+		navigationError: "Navigation Error",
 	},
 	auth: {
 		createPassword: "Create Password",

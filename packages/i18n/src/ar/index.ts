@@ -610,6 +610,10 @@ const ar = {
 		advanced: "متقدم",
 		devtools: "أدوات التطوير",
 		back: "رجوع",
+		goHome: "الانتقال إلى الرئيسية",
+		goBackOrHome: "الرجوع أو الرئيسية",
+		navigationMenu: "قائمة التنقل",
+		navigationError: "خطأ في التنقل",
 	},
 	advanced: {
 		systemSettings: "إعدادات النظام",

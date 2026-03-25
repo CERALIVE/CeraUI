@@ -444,6 +444,10 @@ const ja = {
 		advanced: "詳細設定",
 		devtools: "開発ツール",
 		back: "戻る",
+		goHome: "ホームへ",
+		goBackOrHome: "戻るかホームへ",
+		navigationMenu: "ナビゲーションメニュー",
+		navigationError: "ナビゲーションエラー",
 	},
 	advanced: {
 		systemSettings: "システム設定",

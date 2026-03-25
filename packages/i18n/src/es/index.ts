@@ -255,6 +255,10 @@ const es = {
 		advanced: "Avanzado",
 		devtools: "Herramientas de Desarrollo",
 		back: "Atrás",
+		goHome: "Ir al inicio",
+		goBackOrHome: "Volver o ir al inicio",
+		navigationMenu: "Menú de navegación",
+		navigationError: "Error de navegación",
 	},
 	auth: {
 		createPassword: "Crear Contraseña",
