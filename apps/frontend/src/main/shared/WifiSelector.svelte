@@ -131,7 +131,7 @@ const getFrequencyBand = (freq: number): string => {
 			<div
 				class="gradient-primary flex h-10 w-10 items-center justify-center rounded-xl shadow-lg shadow-primary/30"
 			>
-				<Radio class="h-5 w-5 text-primary-foreground" />
+				<Radio class="h-5 w-5 text-white" />
 			</div>
 			<div>
 				<h2 class="text-foreground text-lg font-bold">
@@ -222,7 +222,7 @@ const getFrequencyBand = (freq: number): string => {
 									)}
 								>
 									<WifiQuality
-										class="h-6 w-6 text-primary-foreground"
+										class="h-6 w-6 text-white"
 										signal={availableNetwork.signal}
 									/>
 								</div>
@@ -326,7 +326,7 @@ const getFrequencyBand = (freq: number): string => {
 											class="max-w-md"
 											buttonClasses="bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive h-11 w-11 rounded-lg p-0 transition-all"
 											confirmButtonText={$LL.wifiSelector.button.forget()}
-											extraButtonClasses="gradient-destructive text-destructive-foreground font-semibold"
+											confirmVariant="destructive"
 											onconfirm={() => forgetWifi(uuid, availableNetwork)}
 											title={`${$LL.wifiSelector.dialog.forgetNetwork()} ${availableNetwork.ssid}`}
 										>
@@ -364,9 +364,8 @@ const getFrequencyBand = (freq: number): string => {
 									<!-- New Network - Connect Dialog -->
 									<SimpleAlertDialog
 										class="max-w-md"
-										buttonClasses="gradient-primary text-primary-foreground h-9 gap-1.5 rounded-lg px-3 text-xs font-medium shadow-md transition-all hover:shadow-lg"
+										buttonClasses="gradient-primary text-primary-foreground h-9 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-md transition-all hover:shadow-lg"
 										confirmButtonText={$LL.wifiSelector.button.connect()}
-										extraButtonClasses="gradient-primary text-primary-foreground font-semibold"
 										title={`${$LL.wifiSelector.dialog.connectTo({ ssid: '' })} ${availableNetwork.ssid}`}
 										oncancel={() => {
 											networkPassword = '';
@@ -384,7 +383,7 @@ const getFrequencyBand = (freq: number): string => {
 												<div
 													class="gradient-primary flex h-10 w-10 items-center justify-center rounded-xl"
 												>
-													<Wifi class="h-5 w-5 text-primary-foreground" />
+													<Wifi class="h-5 w-5 text-white" />
 												</div>
 												<div>
 													<h3 class="text-foreground font-semibold">
