@@ -573,6 +573,7 @@ const en = {
 		},
 		status: {
 			connected: "Connected",
+			saved: "Saved",
 		},
 		success: {
 			connected: "WiFi Connected",
@@ -582,6 +583,12 @@ const en = {
 			connectionFailed: "WiFi Connection Failed",
 			connectionFailedDescription:
 				"Unable to connect to the WiFi network. Please check the password and try again.",
+			authFailed: "Incorrect Password",
+			authFailedDescription:
+				"The password you entered is incorrect. Please check and try again.",
+		},
+		validation: {
+			passwordMinLength: "Minimum 8 characters",
 		},
 		accessibility: {
 			hidePassword: "Hide password",

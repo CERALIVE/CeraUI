@@ -44,14 +44,29 @@ let open = $state(false);
 let connecting: string | undefined = $state();
 let scanning = $state(false);
 
-// Svelte 5: Use $effect for side effects (toasts) based on wifi messages
+const sortedNetworks = $derived(
+	[...wifi.available].sort((a, b) => {
+		if (a.active !== b.active) return a.active ? -1 : 1;
+		const aSaved = !!getWifiUUID(a, wifi.saved);
+		const bSaved = !!getWifiUUID(b, wifi.saved);
+		if (aSaved !== bSaved) return aSaved ? -1 : 1;
+		return b.signal - a.signal;
+	}),
+);
+
 $effect(() => {
 	const wifiMessage = getWifi();
 	if (wifiMessage) {
 		if (wifiMessage.new?.error) {
-			toast.error($LL.wifiSelector.error.connectionFailed(), {
-				description: $LL.wifiSelector.error.connectionFailedDescription(),
-			});
+			if (wifiMessage.new.error === 'auth') {
+				toast.error($LL.wifiSelector.error.authFailed(), {
+					description: $LL.wifiSelector.error.authFailedDescription(),
+				});
+			} else {
+				toast.error($LL.wifiSelector.error.connectionFailed(), {
+					description: $LL.wifiSelector.error.connectionFailedDescription(),
+				});
+			}
 			connecting = undefined;
 		} else if (wifiMessage.new?.success) {
 			toast.success($LL.wifiSelector.success.connected(), {
@@ -177,7 +192,7 @@ const getFrequencyBand = (freq: number): string => {
 			class="border-border bg-card/30 max-h-[60vh] overflow-y-auto rounded-xl border"
 		>
 			<div class="space-y-2 p-3">
-				{#each wifi.available as availableNetwork, index}
+				{#each sortedNetworks as availableNetwork}
 					{@const uuid = getWifiUUID(availableNetwork, wifi.saved)}
 					{@const isConnecting =
 						connecting !== undefined &&
@@ -229,14 +244,19 @@ const getFrequencyBand = (freq: number): string => {
 									>
 										{availableNetwork.ssid}
 									</p>
-								{#if availableNetwork.security.includes('WPA')}
-									<Lock class="text-muted-foreground h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-									<span class="sr-only">{$LL.wifiSelector.accessibility.secured()}</span>
-								{:else}
-									<Unlock class="text-status-warning h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-									<span class="sr-only">{$LL.wifiSelector.accessibility.openNetwork()}</span>
-								{/if}
-								</div>
+							{#if availableNetwork.security.includes('WPA')}
+								<Lock class="text-muted-foreground h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+								<span class="sr-only">{$LL.wifiSelector.accessibility.secured()}</span>
+							{:else}
+								<Unlock class="text-status-warning h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+								<span class="sr-only">{$LL.wifiSelector.accessibility.openNetwork()}</span>
+							{/if}
+							{#if uuid && !availableNetwork.active}
+								<span class="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+									{$LL.wifiSelector.status.saved()}
+								</span>
+							{/if}
+							</div>
 								<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
 									<span
 										class={cn(
@@ -346,19 +366,20 @@ const getFrequencyBand = (freq: number): string => {
 									</div>
 								{:else}
 									<!-- New Network - Connect Dialog -->
-									<SimpleAlertDialog
-										class="max-w-md"
-										buttonClasses="gradient-primary text-primary-foreground h-11 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-md transition-shadow hover:shadow-lg"
-										confirmButtonText={$LL.wifiSelector.button.connect()}
-										title={`${$LL.wifiSelector.dialog.connectTo({ ssid: '' })} ${availableNetwork.ssid}`}
-										oncancel={() => {
-											networkPassword = '';
-											showPassword = false;
-										}}
-										onconfirm={() => {
-											handleNewWifiConnect(availableNetwork.ssid, networkPassword);
-										}}
-									>
+								<SimpleAlertDialog
+									class="max-w-md"
+									buttonClasses="gradient-primary text-primary-foreground h-11 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-md transition-shadow hover:shadow-lg"
+									confirmButtonText={$LL.wifiSelector.button.connect()}
+									disabledConfirmButton={availableNetwork.security.includes('WPA') && networkPassword.length < 8}
+									title={`${$LL.wifiSelector.dialog.connectTo({ ssid: '' })} ${availableNetwork.ssid}`}
+									oncancel={() => {
+										networkPassword = '';
+										showPassword = false;
+									}}
+									onconfirm={() => {
+										handleNewWifiConnect(availableNetwork.ssid, networkPassword);
+									}}
+								>
 										{#snippet icon()}
 											<Link class="h-4 w-4" />
 										{/snippet}
@@ -407,6 +428,11 @@ const getFrequencyBand = (freq: number): string => {
 														{/if}
 													</button>
 												</div>
+												{#if availableNetwork.security.includes('WPA') && networkPassword.length > 0 && networkPassword.length < 8}
+													<p class="text-status-warning mt-1.5 text-xs">
+														{$LL.wifiSelector.validation.passwordMinLength()}
+													</p>
+												{/if}
 											</div>
 										{/snippet}
 									</SimpleAlertDialog>
