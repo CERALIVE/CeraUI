@@ -39,45 +39,45 @@
 @layer base {
 	:root {
 		/* ── Light Mode ─────────────────────────────────
-		   Warm palette derived from CeraLive logo #EB4F27
-		   Neutrals tinted warm instead of cold blue-gray */
+		   Cool slate neutrals, electric orange accent
+		   "Broadcast Control Room" aesthetic */
 
-		--background: 40 33% 98%;
-		--foreground: 25 25% 10%;
+		--background: 210 20% 98%;
+		--foreground: 222 25% 10%;
 
-		--card: 40 20% 99%;
-		--card-foreground: 25 25% 10%;
-		--popover: 40 20% 99%;
-		--popover-foreground: 25 25% 10%;
+		--card: 0 0% 100%;
+		--card-foreground: 222 25% 10%;
+		--popover: 0 0% 100%;
+		--popover-foreground: 222 25% 10%;
 
-		--primary: 14 84% 54%;
+		--primary: 14 92% 55%;
 		--primary-foreground: 0 0% 100%;
 
-		--secondary: 30 12% 93%;
-		--secondary-foreground: 25 20% 18%;
+		--secondary: 215 16% 93%;
+		--secondary-foreground: 222 20% 18%;
 
-		--muted: 30 10% 95%;
-		--muted-foreground: 25 8% 46%;
+		--muted: 215 12% 95%;
+		--muted-foreground: 215 10% 46%;
 
-		--accent: 25 18% 93%;
-		--accent-foreground: 14 55% 35%;
+		--accent: 215 16% 93%;
+		--accent-foreground: 222 20% 18%;
 
 		--destructive: 0 84% 60%;
 		--destructive-foreground: 0 0% 100%;
 
-		--border: 30 12% 89%;
-		--input: 30 12% 89%;
-		--ring: 14 84% 54%;
+		--border: 215 12% 89%;
+		--input: 215 12% 89%;
+		--ring: 14 92% 55%;
 		--radius: 0.5rem;
 
-		--sidebar-background: 30 10% 95%;
-		--sidebar-foreground: 25 25% 10%;
-		--sidebar-primary: 14 84% 54%;
+		--sidebar-background: 215 12% 95%;
+		--sidebar-foreground: 222 25% 10%;
+		--sidebar-primary: 14 92% 55%;
 		--sidebar-primary-foreground: 0 0% 100%;
-		--sidebar-accent: 25 18% 93%;
-		--sidebar-accent-foreground: 14 55% 35%;
-		--sidebar-border: 30 12% 89%;
-		--sidebar-ring: 14 84% 54%;
+		--sidebar-accent: 215 16% 93%;
+		--sidebar-accent-foreground: 222 20% 18%;
+		--sidebar-border: 215 12% 89%;
+		--sidebar-ring: 14 92% 55%;
 
 		/* Semantic Status */
 		--status-success: 142 71% 45%;
@@ -88,7 +88,7 @@
 		--status-warning-foreground: 0 0% 100%;
 		--status-error: 0 84% 60%;
 		--status-error-foreground: 0 0% 100%;
-		--status-neutral: 25 8% 46%;
+		--status-neutral: 215 10% 46%;
 		--status-neutral-foreground: 0 0% 100%;
 
 		/* Signal Quality */
@@ -100,43 +100,44 @@
 
 	.dark {
 		/* ── Dark Mode ──────────────────────────────────
-		   Warm dark backgrounds, not cold blue-slate */
+		   Deep blue-black backgrounds, electric orange accent
+		   High contrast "control room" aesthetic */
 
-		--background: 25 15% 7%;
-		--foreground: 30 12% 93%;
+		--background: 222 30% 6%;
+		--foreground: 210 20% 95%;
 
-		--card: 25 13% 10%;
-		--card-foreground: 30 12% 93%;
-		--popover: 25 13% 10%;
-		--popover-foreground: 30 12% 93%;
+		--card: 222 22% 9%;
+		--card-foreground: 210 20% 95%;
+		--popover: 222 22% 9%;
+		--popover-foreground: 210 20% 95%;
 
-		--primary: 14 80% 58%;
+		--primary: 14 95% 58%;
 		--primary-foreground: 0 0% 100%;
 
-		--secondary: 25 10% 16%;
-		--secondary-foreground: 30 12% 92%;
+		--secondary: 220 15% 15%;
+		--secondary-foreground: 210 16% 92%;
 
-		--muted: 25 8% 14%;
-		--muted-foreground: 25 6% 55%;
+		--muted: 220 12% 12%;
+		--muted-foreground: 215 10% 55%;
 
-		--accent: 25 12% 17%;
-		--accent-foreground: 14 55% 70%;
+		--accent: 220 15% 15%;
+		--accent-foreground: 210 16% 92%;
 
 		--destructive: 0 63% 31%;
 		--destructive-foreground: 0 0% 98%;
 
-		--border: 25 8% 18%;
-		--input: 25 10% 16%;
-		--ring: 14 80% 58%;
+		--border: 220 10% 18%;
+		--input: 220 12% 16%;
+		--ring: 14 95% 58%;
 
-		--sidebar-background: 25 13% 10%;
-		--sidebar-foreground: 30 12% 93%;
-		--sidebar-primary: 14 80% 58%;
+		--sidebar-background: 222 22% 9%;
+		--sidebar-foreground: 210 20% 95%;
+		--sidebar-primary: 14 95% 58%;
 		--sidebar-primary-foreground: 0 0% 100%;
-		--sidebar-accent: 25 12% 17%;
-		--sidebar-accent-foreground: 14 55% 70%;
-		--sidebar-border: 25 10% 16%;
-		--sidebar-ring: 14 80% 58%;
+		--sidebar-accent: 220 15% 15%;
+		--sidebar-accent-foreground: 210 16% 92%;
+		--sidebar-border: 220 12% 16%;
+		--sidebar-ring: 14 95% 58%;
 
 		/* Semantic Status (Dark) */
 		--status-success: 142 69% 58%;
@@ -147,7 +148,7 @@
 		--status-warning-foreground: 0 0% 100%;
 		--status-error: 0 91% 71%;
 		--status-error-foreground: 0 0% 100%;
-		--status-neutral: 25 6% 55%;
+		--status-neutral: 215 10% 55%;
 		--status-neutral-foreground: 0 0% 100%;
 
 		/* Signal Quality (Dark) */
