@@ -1,4 +1,5 @@
 <script lang="ts">
+import { getSignalCategory } from '$lib/helpers/signal';
 import { cn } from '$lib/utils';
 
 import SignalQuality from './SignalQuality.svelte';
@@ -12,16 +13,22 @@ interface Props {
 
 const { signal, type = 'cellular', class: className }: Props = $props();
 
-// Signal color based on strength
 const signalColor = $derived.by(() => {
-	// Strong signal uses brand primary; fair uses signal token; destructive for weak/poor.
-	if (signal >= 70) return 'text-primary';
-	if (signal >= 40) return 'text-signal-fair';
-	return 'text-destructive';
+	const category = getSignalCategory(signal);
+	switch (category) {
+		case 'excellent':
+			return 'text-signal-excellent';
+		case 'good':
+			return 'text-signal-good';
+		case 'fair':
+			return 'text-signal-fair';
+		case 'weak':
+			return 'text-signal-weak';
+	}
 });
 </script>
 
-<div class={cn('inline-flex items-end gap-1', className)}>
+<div class={cn('inline-flex items-center gap-1', className)}>
 	{#if type === 'wifi'}
 		<WifiQuality class="h-4 w-4" {signal} />
 	{:else}
@@ -29,7 +36,7 @@ const signalColor = $derived.by(() => {
 	{/if}
 	<span
 		class={cn(
-			'translate-y-[2px] font-mono text-sm leading-none font-bold tabular-nums',
+			'font-mono text-sm leading-none font-bold tabular-nums',
 			signalColor,
 		)}
 	>

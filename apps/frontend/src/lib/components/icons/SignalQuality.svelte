@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Signal, SignalHigh, SignalLow, SignalMedium } from '@lucide/svelte';
 
+import { getSignalCategory } from '$lib/helpers/signal';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -9,22 +10,16 @@ interface Props {
 }
 
 let { signal = 0, class: className }: Props = $props();
+
+const category = $derived(getSignalCategory(signal));
 </script>
 
-{#if signal >= 75}
-	<span title="Excellent">
-		<SignalHigh class={cn('text-signal-excellent', className)} />
-	</span>
-{:else if signal >= 50}
-	<span title="Good">
-		<SignalMedium class={cn('text-signal-good', className)} />
-	</span>
-{:else if signal >= 25}
-	<span title="Fair">
-		<SignalLow class={cn('text-signal-fair', className)} />
-	</span>
+{#if category === 'excellent'}
+	<SignalHigh class={cn('text-signal-excellent', className)} aria-hidden="true" />
+{:else if category === 'good'}
+	<SignalMedium class={cn('text-signal-good', className)} aria-hidden="true" />
+{:else if category === 'fair'}
+	<SignalLow class={cn('text-signal-fair', className)} aria-hidden="true" />
 {:else}
-	<span title="Poor">
-		<Signal class={cn('text-signal-weak', className)} />
-	</span>
+	<Signal class={cn('text-signal-weak', className)} aria-hidden="true" />
 {/if}
