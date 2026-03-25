@@ -265,16 +265,11 @@ function formatMs(ms: number): string {
 // Handle language switching from Dev Tools
 async function handleLanguageClick(languageCode: Locales) {
 	try {
-		console.log(`🔧 Dev Tools: Loading locale ${languageCode}`);
-		// Load the locale first
 		await loadLocaleAsync(languageCode);
-		// Then set it as active
 		setLocale(languageCode);
-		// Update the locale store
 		setLocaleStore(existingLocales.find((l) => l.code === languageCode)!);
-		console.log(`✅ Dev Tools: Successfully switched to ${languageCode}`);
 	} catch (error) {
-		console.error(`❌ Dev Tools: Failed to load locale ${languageCode}:`, error);
+		console.error('Failed to load locale:', error);
 	}
 }
 </script>

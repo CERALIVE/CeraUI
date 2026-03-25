@@ -168,7 +168,7 @@ async function captureScreenshotWithTheme(
 	}
 
 	// Theme-aware background color
-	const backgroundColor = theme === 'dark' ? '#0a0a0a' : '#ffffff';
+	const backgroundColor = theme === 'dark' ? '#0b0f1a' : '#f5f7fa';
 
 	// Enhanced quality settings
 	const options = {
@@ -360,8 +360,8 @@ function clearImages(): void {
 
 			<div class="text-muted-foreground text-center text-xs">
 				{$LL.devtools.screenshotCount()}
-				<br />
-				<span class="text-muted-foreground">{$LL.devtools.enhancedTiming()}</span>
+			<br />
+			{$LL.devtools.enhancedTiming()}
 			</div>
 		</div>
 

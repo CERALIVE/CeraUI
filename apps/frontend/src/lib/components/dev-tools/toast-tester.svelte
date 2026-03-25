@@ -245,12 +245,11 @@ function dismissAllToasts() {
 			<div class="text-sm font-medium">{$LL.devtools.toastTypes()}</div>
 			<div class="grid grid-cols-2 gap-2 md:grid-cols-3">
 				{#each toastTypes as toastType}
-					<Button
-						class={`${toastType.bgColor} ${toastType.borderColor} transition-all duration-200 hover:opacity-80`}
-						onclick={toastType.action}
-						size="sm"
-						variant="outline"
-					>
+				<Button
+					class={`${toastType.bgColor} ${toastType.borderColor} transition-all duration-200 hover:opacity-80`}
+					onclick={toastType.action}
+					variant="outline"
+				>
 						{@const IconComponent = toastType.icon}
 						<IconComponent
 							class={`mr-2 h-4 w-4 ${toastType.color} ${toastType.type === 'loading' ? 'animate-spin' : ''}`}
