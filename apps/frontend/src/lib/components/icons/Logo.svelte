@@ -10,7 +10,7 @@ let { ...restProps }: Props = $props();
 	<rect fill="none" height="256" width="256" />
 	<line
 		fill="none"
-		stroke="#EB4F27"
+		stroke="#11C4D4"
 		stroke-linecap="round"
 		stroke-linejoin="round"
 		stroke-width="16"
@@ -21,7 +21,7 @@ let { ...restProps }: Props = $props();
 	/>
 	<line
 		fill="none"
-		stroke="#EB4F27"
+		stroke="#11C4D4"
 		stroke-linecap="round"
 		stroke-linejoin="round"
 		stroke-width="16"

@@ -39,7 +39,7 @@
 @layer base {
 	:root {
 		/* ── Light Mode ─────────────────────────────────
-		   Cool slate neutrals, electric orange accent
+		   Cool slate neutrals, electric cyan accent
 		   "Broadcast Control Room" aesthetic */
 
 		--background: 210 20% 98%;
@@ -50,8 +50,8 @@
 		--popover: 0 0% 100%;
 		--popover-foreground: 222 25% 10%;
 
-		--primary: 14 92% 55%;
-		--primary-foreground: 0 0% 100%;
+		--primary: 185 85% 45%;
+		--primary-foreground: 200 25% 8%;
 
 		--secondary: 215 16% 93%;
 		--secondary-foreground: 222 20% 18%;
@@ -67,17 +67,17 @@
 
 		--border: 215 12% 89%;
 		--input: 215 12% 89%;
-		--ring: 14 92% 55%;
+		--ring: 185 85% 45%;
 		--radius: 0.5rem;
 
 		--sidebar-background: 215 12% 95%;
 		--sidebar-foreground: 222 25% 10%;
-		--sidebar-primary: 14 92% 55%;
-		--sidebar-primary-foreground: 0 0% 100%;
+		--sidebar-primary: 185 85% 45%;
+		--sidebar-primary-foreground: 200 25% 8%;
 		--sidebar-accent: 215 16% 93%;
 		--sidebar-accent-foreground: 222 20% 18%;
 		--sidebar-border: 215 12% 89%;
-		--sidebar-ring: 14 92% 55%;
+		--sidebar-ring: 185 85% 45%;
 
 		/* Semantic Status */
 		--status-success: 142 71% 45%;
@@ -100,7 +100,7 @@
 
 	.dark {
 		/* ── Dark Mode ──────────────────────────────────
-		   Deep blue-black backgrounds, electric orange accent
+		   Deep blue-black backgrounds, electric cyan accent
 		   High contrast "control room" aesthetic */
 
 		--background: 222 30% 6%;
@@ -111,8 +111,8 @@
 		--popover: 222 22% 9%;
 		--popover-foreground: 210 20% 95%;
 
-		--primary: 14 95% 58%;
-		--primary-foreground: 0 0% 100%;
+		--primary: 185 95% 55%;
+		--primary-foreground: 200 25% 8%;
 
 		--secondary: 220 15% 15%;
 		--secondary-foreground: 210 16% 92%;
@@ -128,16 +128,16 @@
 
 		--border: 220 10% 18%;
 		--input: 220 12% 16%;
-		--ring: 14 95% 58%;
+		--ring: 185 95% 55%;
 
 		--sidebar-background: 222 22% 9%;
 		--sidebar-foreground: 210 20% 95%;
-		--sidebar-primary: 14 95% 58%;
-		--sidebar-primary-foreground: 0 0% 100%;
+		--sidebar-primary: 185 95% 55%;
+		--sidebar-primary-foreground: 200 25% 8%;
 		--sidebar-accent: 220 15% 15%;
 		--sidebar-accent-foreground: 210 16% 92%;
 		--sidebar-border: 220 12% 16%;
-		--sidebar-ring: 14 95% 58%;
+		--sidebar-ring: 185 95% 55%;
 
 		/* Semantic Status (Dark) */
 		--status-success: 142 69% 58%;
