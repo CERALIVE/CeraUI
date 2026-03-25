@@ -1,19 +1,3 @@
-<style>
-/* Demo-specific styling */
-:global(.demo-highlight) {
-	animation: demo-glow 2s ease-in-out infinite alternate;
-}
-
-@keyframes demo-glow {
-	from {
-		box-shadow: 0 0 5px rgba(251, 191, 36, 0.3);
-	}
-	to {
-		box-shadow: 0 0 20px rgba(251, 191, 36, 0.6);
-	}
-}
-</style>
-
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import { Play, Square } from '@lucide/svelte';
@@ -110,15 +94,13 @@ $effect(() => {
 </script>
 
 <!-- Demo Controls Card -->
-<Card.Root
-	class="border-dashed border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20"
->
+<Card.Root>
 	<Card.Header>
-		<Card.Title class="flex items-center gap-2 text-amber-700 dark:text-amber-300">
-			<Play class="h-5 w-5" />
-			🎨 {$LL.devtools.overlayDemo()}
+		<Card.Title class="flex items-center gap-2">
+			<Play class="h-5 w-5 text-primary" />
+			{$LL.devtools.overlayDemo()}
 		</Card.Title>
-		<Card.Description class="text-amber-600 dark:text-amber-400">
+		<Card.Description>
 			{$LL.devtools.overlayDemoDescription()}
 		</Card.Description>
 	</Card.Header>
@@ -127,17 +109,14 @@ $effect(() => {
 		<!-- Controls -->
 		<div class="flex gap-3">
 			<Button
-				class="bg-green-500 text-white hover:bg-green-600"
 				disabled={isDemo}
 				onclick={startDemo}
-				variant="secondary"
 			>
 				<Play class="mr-2 h-4 w-4" />
 				{$LL.devtools.startDemo()}
 			</Button>
 
 			<Button
-				class="border-red-200 text-red-600 hover:bg-red-50"
 				disabled={!isDemo}
 				onclick={stopDemo}
 				variant="outline"
@@ -150,9 +129,9 @@ $effect(() => {
 		<!-- Demo Status -->
 		{#if isDemo}
 			<div
-				class="text-muted-foreground rounded-md border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950/20"
+				class="rounded-md border border-primary/30 bg-primary/10 p-3 text-sm"
 			>
-				<div class="mb-1 font-medium">🔄 {$LL.devtools.demoRunning()}</div>
+				<div class="mb-1 font-medium text-primary">{$LL.devtools.demoRunning()}</div>
 				<div>
 					{$LL.devtools.phase()}: {demoPhase}/10 | {$LL.devtools.downloading()}: {demoDetails.downloading}
 					| {$LL.devtools.unpacking()}: {demoDetails.unpacking} | {$LL.devtools.installing()}: {demoDetails.setting_up}

@@ -1,34 +1,3 @@
-<style>
-/* Dev tools specific styling */
-:global(.dev-highlight) {
-	position: relative;
-	overflow: hidden;
-}
-
-:global(.dev-highlight::before) {
-	content: '';
-	position: absolute;
-	top: 0;
-	left: -100%;
-	width: 100%;
-	height: 100%;
-	background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.1), transparent);
-	animation: dev-sweep 3s infinite;
-}
-
-@keyframes dev-sweep {
-	0% {
-		left: -100%;
-	}
-	50% {
-		left: 100%;
-	}
-	100% {
-		left: 100%;
-	}
-}
-</style>
-
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import { Bug, Wrench } from '@lucide/svelte';
@@ -41,24 +10,18 @@ import ToastTester from '$lib/components/dev-tools/toast-tester.svelte';
 import * as Card from '$lib/components/ui/card';
 import { BUILD_INFO } from '$lib/env';
 
-// Development environment info
-const _isDev = BUILD_INFO.IS_DEV;
 </script>
 
 <!-- Dev Tools Page - Mobile First Design -->
-<div class="from-background via-background to-accent/5 min-h-screen bg-gradient-to-br">
+<div class="bg-background min-h-screen">
 	<div class="container mx-auto max-w-7xl px-3 py-4 sm:px-4 sm:py-6">
 		<!-- Mobile-First Header Section -->
 		<div class="mb-6 sm:mb-8">
 			<div class="mb-3 flex items-start gap-3 sm:mb-4 sm:items-center">
-				<div
-					class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 shadow-md sm:h-12 sm:w-12"
-				>
-					<Wrench class="h-5 w-5 text-white sm:h-6 sm:w-6" />
-				</div>
+				<Wrench class="h-6 w-6 shrink-0 text-primary sm:h-7 sm:w-7" />
 				<div class="min-w-0 flex-1">
 					<h1 class="text-xl font-bold tracking-tight break-words sm:text-3xl">
-						🛠️ {$LL.devtools.title()}
+						{$LL.devtools.title()}
 					</h1>
 					<p class="text-muted-foreground mt-1 text-sm sm:text-base">
 						{$LL.devtools.description()}
@@ -105,16 +68,11 @@ const _isDev = BUILD_INFO.IS_DEV;
 				<SystemInfo />
 
 				<!-- Debug Tools Card -->
-				<Card.Root class="gap-0 overflow-hidden border-red-500/30 py-0">
-					<!-- Status bar -->
-					<div class="h-1 bg-gradient-to-r from-red-500 to-rose-600"></div>
-
-					<Card.Header class="pt-6">
-						<Card.Title class="flex items-center gap-2">
-							<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500">
-								<Bug class="h-4 w-4 text-white" />
-							</div>
-							🐛 {$LL.devtools.consoleTesting()}
+			<Card.Root class="overflow-hidden">
+				<Card.Header>
+					<Card.Title class="flex items-center gap-2">
+						<Bug class="h-5 w-5 text-primary" />
+						{$LL.devtools.consoleTesting()}
 						</Card.Title>
 						<Card.Description>
 							{$LL.devtools.consoleTestingDesc()}
@@ -173,21 +131,12 @@ const _isDev = BUILD_INFO.IS_DEV;
 		</div>
 
 		<!-- Mobile-Friendly Warning Footer -->
-		<div class="mt-8 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 sm:mt-12 sm:p-4">
-			<div class="flex items-start gap-2 sm:gap-3">
-				<div
-					class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-amber-500 sm:h-9 sm:w-9"
-				>
-					<span class="text-sm text-white">⚠️</span>
-				</div>
-				<div class="min-w-0 flex-1">
-					<div class="text-sm font-semibold text-amber-800 dark:text-amber-200">
-						{$LL.devtools.developmentOnly()}
-					</div>
-					<div class="text-muted-foreground mt-1 text-xs break-words">
-						{$LL.devtools.developmentOnlyDesc()}
-					</div>
-				</div>
+		<div class="text-muted-foreground bg-muted/30 mt-8 rounded-lg border p-3 sm:mt-12 sm:p-4">
+			<div class="text-sm font-semibold">
+				{$LL.devtools.developmentOnly()}
+			</div>
+			<div class="mt-1 text-xs">
+				{$LL.devtools.developmentOnlyDesc()}
 			</div>
 		</div>
 	</div>
