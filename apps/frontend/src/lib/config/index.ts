@@ -4,13 +4,20 @@ import { BUILD_INFO } from "$lib/env";
 import Advanced from "$main/tabs/Advanced.svelte";
 import DevTools from "$main/tabs/DevTools.svelte";
 import General from "$main/tabs/General.svelte";
+import IdentityPreview from "$main/tabs/IdentityPreview.svelte";
 import Network from "$main/tabs/Network.svelte";
 import Streaming from "$main/tabs/Streaming.svelte";
+
+// Development-only flag (mirrors Vite's import.meta.env.DEV via BUILD_INFO).
+// Dev-only surfaces (DevTools, the identity preview) gate on this.
+export const isDev: boolean = BUILD_INFO.IS_DEV;
 
 export type NavElement = {
 	label: string;
 	component: Component;
 	isDev?: boolean;
+	/** Plain-text label for dev-only routes that have no i18n key. */
+	title?: string;
 };
 
 export type NavElements = {
@@ -28,8 +35,14 @@ const baseNavElements: NavElements = {
 // Add dev tools only in development mode
 export const navElements: NavElements = {
 	...baseNavElements,
-	...(BUILD_INFO.IS_DEV
+	...(isDev
 		? {
+				identity: {
+					label: "_identity",
+					title: "Identity",
+					component: IdentityPreview,
+					isDev: true,
+				},
 				devtools: { label: "devtools", component: DevTools, isDev: true },
 			}
 		: {}),

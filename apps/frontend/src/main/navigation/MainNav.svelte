@@ -112,7 +112,8 @@ const handleLogoClick = () => {
 					disabled={$isNavigationTransitioning}
 					onclick={() => handleTabNavigation(identifier, navigation)}
 				>
-					{$LL.navigation[navigation.label as keyof typeof $LL.navigation]()}
+					{navigation.title ??
+						$LL.navigation[navigation.label as keyof typeof $LL.navigation]()}
 				</button>
 			{/each}
 		</div>

@@ -172,7 +172,10 @@ $effect(() => {
 						>
 							{#snippet children()}
 								<div class="flex w-full items-center justify-between">
-									<span>{$LL.navigation[navigation?.label as keyof typeof $LL.navigation]()}</span>
+									<span
+										>{navigation?.title ??
+											$LL.navigation[navigation?.label as keyof typeof $LL.navigation]()}</span
+									>
 									{#if isActive}
 										<div class="bg-primary h-1.5 w-1.5 rounded-full"></div>
 									{/if}
