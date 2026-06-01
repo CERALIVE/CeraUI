@@ -28,8 +28,10 @@ import { cn } from '$lib/utils';
 import CloudRemoteDialog from './dialogs/CloudRemoteDialog.svelte';
 import LogsDialog from './dialogs/LogsDialog.svelte';
 import PasswordDialog from './dialogs/PasswordDialog.svelte';
+import PowerDialog from './dialogs/PowerDialog.svelte';
 import SshDialog from './dialogs/SshDialog.svelte';
 import UpdatesDialog from './dialogs/UpdatesDialog.svelte';
+import VersionsDialog from './dialogs/VersionsDialog.svelte';
 
 interface Entry {
 	key: string;
@@ -82,15 +84,16 @@ const groups = $derived<Group[]>([
 	},
 ]);
 
-// Real dialogs (Tasks 25-26). Each settings entry routes to its own dialog;
-// `power`/`versions` still use the shared placeholder until their tasks land.
+// Real dialogs (Tasks 25-27). Each settings entry routes to its own dialog.
 let passwordOpen = $state(false);
 let cloudOpen = $state(false);
 let sshOpen = $state(false);
 let logsOpen = $state(false);
 let updatesOpen = $state(false);
+let powerOpen = $state(false);
+let versionsOpen = $state(false);
 
-// Fallback placeholder dialog for not-yet-wired entries.
+// Fallback placeholder dialog for any not-yet-wired entries.
 let open = $state(false);
 let active = $state<Entry | null>(null);
 
@@ -110,6 +113,12 @@ function openEntry(entry: Entry) {
 			return;
 		case 'updates':
 			updatesOpen = true;
+			return;
+		case 'power':
+			powerOpen = true;
+			return;
+		case 'versions':
+			versionsOpen = true;
 			return;
 		default:
 			active = entry;
@@ -197,9 +206,11 @@ const ActiveIcon = $derived(active?.icon);
 	</div>
 </AppDialog>
 
-<!-- Wired settings dialogs (Tasks 25-26) -->
+<!-- Wired settings dialogs (Tasks 25-27) -->
 <PasswordDialog bind:open={passwordOpen} />
 <CloudRemoteDialog bind:open={cloudOpen} />
 <SshDialog bind:open={sshOpen} />
 <LogsDialog bind:open={logsOpen} />
 <UpdatesDialog bind:open={updatesOpen} />
+<PowerDialog bind:open={powerOpen} />
+<VersionsDialog bind:open={versionsOpen} />
