@@ -9,6 +9,8 @@ import {
 	HOTSPOT_NAME_MIN,
 	HOTSPOT_PASSWORD_MAX,
 	HOTSPOT_PASSWORD_MIN,
+	PORT_MAX,
+	PORT_MIN,
 	SRT_LATENCY_MAX,
 	SRT_LATENCY_MIN,
 	WIFI_PASSWORD_MIN,
@@ -23,6 +25,7 @@ export const streamingConstraints = {
 	},
 	srtLatency: { min: SRT_LATENCY_MIN, max: SRT_LATENCY_MAX },
 	audioDelay: { min: AUDIO_DELAY_MIN, max: AUDIO_DELAY_MAX },
+	port: { min: PORT_MIN, max: PORT_MAX },
 } as const;
 
 export const networkConstraints = {

@@ -387,6 +387,7 @@ export interface TypedRPC {
 		getPipelines: () => Promise<unknown>;
 		getAudioCodecs: () => Promise<unknown>;
 		getConfig: () => Promise<unknown>;
+		setConfig: (input: StreamingConfigInput) => Promise<StreamingStopOutput>;
 		// Dev-only mock hardware switcher
 		setMockHardware: (input: {
 			hardware: "jetson" | "n100" | "rk3588" | "generic";

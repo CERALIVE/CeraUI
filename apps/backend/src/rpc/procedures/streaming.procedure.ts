@@ -18,7 +18,7 @@ import {
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
-import { getConfig } from "../../modules/config.ts";
+import { getConfig, saveConfig } from "../../modules/config.ts";
 import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import { setBitrate as setEncoderBitrate } from "../../modules/streaming/encoder.ts";
 import {
@@ -131,6 +131,50 @@ export const getConfigProcedure = authedProcedure
 			relay_account: config.relay_account,
 			relay_server: config.relay_server,
 		};
+	});
+
+/**
+ * Persist streaming/server configuration without starting the stream.
+ * Mirrors the config-write + relay/manual mutual-exclusion of streaming's
+ * updateConfig, minus the DNS resolution and pipeline requirements that only
+ * apply when actually launching a stream.
+ */
+export const setConfigProcedure = authedProcedure
+	.input(streamingConfigInputSchema)
+	.output(streamingStopOutputSchema)
+	.handler(({ input }) => {
+		const config = getConfig();
+
+		if (input.srt_latency !== undefined) config.srt_latency = input.srt_latency;
+		if (input.delay !== undefined) config.delay = input.delay;
+		if (input.pipeline !== undefined) config.pipeline = input.pipeline;
+		if (input.acodec !== undefined) config.acodec = input.acodec;
+		if (input.asrc !== undefined) config.asrc = input.asrc;
+		if (input.max_br !== undefined) config.max_br = input.max_br;
+		if (input.bitrate_overlay !== undefined)
+			config.bitrate_overlay = input.bitrate_overlay;
+
+		if (input.relay_server) {
+			config.relay_server = input.relay_server;
+			config.srtla_addr = undefined;
+			config.srtla_port = undefined;
+		} else if (input.srtla_addr) {
+			config.srtla_addr = input.srtla_addr;
+			config.srtla_port = input.srtla_port;
+			config.relay_server = undefined;
+		}
+
+		if (input.relay_account) {
+			config.relay_account = input.relay_account;
+			config.srt_streamid = undefined;
+		} else if (input.srt_streamid !== undefined) {
+			config.srt_streamid = input.srt_streamid;
+			config.relay_account = undefined;
+		}
+
+		saveConfig();
+		broadcastMsg("config", config);
+		return { success: true };
 	});
 
 /**

@@ -28,6 +28,11 @@ export const SRT_LATENCY_MAX = 10000;
 export const AUDIO_DELAY_MIN = -2000;
 export const AUDIO_DELAY_MAX = 2000;
 
+// Canonical SRTLA/SRT port range. FE port validation derives from these via the
+// ValidationAdapter (no inline literals); srtla_port below references them too.
+export const PORT_MIN = 1;
+export const PORT_MAX = 65535;
+
 // Audio codec enum
 export const audioCodecSchema = z.enum(['opus', 'aac', 'pcm']);
 export type AudioCodec = z.infer<typeof audioCodecSchema>;
@@ -58,7 +63,7 @@ export const streamingConfigInputSchema = z.object({
 	relay_server: z.string().optional(),
 	relay_account: z.string().optional(),
 	srtla_addr: z.string().optional(),
-	srtla_port: z.number().int().min(1).max(65535).optional(),
+	srtla_port: z.number().int().min(PORT_MIN).max(PORT_MAX).optional(),
 	srt_streamid: z.string().optional(),
 	asrc: z.string().optional(),
 	bitrate_overlay: z.boolean().optional(),
