@@ -1,16 +1,20 @@
 import type { Component } from "svelte";
 import { Network as NetworkIcon, Radio, Settings as SettingsIcon } from "@lucide/svelte";
 import { deviceName, siteName } from "$lib/config/branding";
-import { BUILD_INFO } from "$lib/env";
 import Advanced from "$main/tabs/Advanced.svelte";
 import DevTools from "$main/tabs/DevTools.svelte";
 import IdentityPreview from "$main/tabs/IdentityPreview.svelte";
 import Network from "$main/tabs/Network.svelte";
 import Streaming from "$main/tabs/Streaming.svelte";
+import LiveView from "$main/LiveView.svelte";
+import NetworkView from "$main/NetworkView.svelte";
+import SettingsView from "$main/SettingsView.svelte";
 
-// Development-only flag (mirrors Vite's import.meta.env.DEV via BUILD_INFO).
-// Dev-only surfaces (DevTools, the identity preview) gate on this.
-export const isDev: boolean = BUILD_INFO.IS_DEV;
+// Must stay a direct import.meta.env.DEV literal: Vite inlines it to `false` in
+// production, letting Rollup prune the gated branch and tree-shake the dev-only
+// DevTools / IdentityPreview imports. A cross-module read like BUILD_INFO.IS_DEV
+// is not const-folded and ships both surfaces in prod.
+export const isDev: boolean = import.meta.env.DEV;
 
 export type NavElement = {
 	label: string;
@@ -27,17 +31,17 @@ export type NavElements = {
 };
 
 // Primary destinations (always visible) — 3-destination IA: Live / Network / Settings.
-// Temporarily wired to existing tab content; Wave 1 views replace these.
+// Wired to Wave 1 views.
 const baseNavElements: NavElements = {
-	live: { label: "live", component: Streaming, icon: Radio },
-	network: { label: "network", component: Network, icon: NetworkIcon },
-	settings: { label: "settings", component: Advanced, icon: SettingsIcon },
+	live: { label: "live", component: LiveView, icon: Radio },
+	network: { label: "network", component: NetworkView, icon: NetworkIcon },
+	settings: { label: "settings", component: SettingsView, icon: SettingsIcon },
 };
 
 // Add dev tools only in development mode
 export const navElements: NavElements = {
 	...baseNavElements,
-	...(isDev
+	...(import.meta.env.DEV
 		? {
 				identity: {
 					label: "_identity",
