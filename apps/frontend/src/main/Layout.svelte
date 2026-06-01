@@ -6,14 +6,25 @@ import type { NotificationType, StatusMessage } from '@ceraui/rpc/schemas';
 import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
+import {
+	startStreaming as startStreamingFn,
+	stopStreaming as stopStreamingFn,
+} from '$lib/helpers/SystemHelper';
+import { rpcClient } from '$lib/rpc/client';
+import { getUpdating } from '$lib/rpc/subscriptions.svelte';
 import { authStatusStore } from '$lib/stores/auth-status.svelte';
+import {
+	clearSessionExpired,
+	markAuthenticated,
+	markSessionExpired,
+	shouldExpireSession,
+	wasAuthenticated,
+} from '$lib/stores/connection-ux.svelte';
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
 import { getAuth, getStatus, sendAuthMessage } from '$lib/stores/websocket-store.svelte';
 
 import Auth from './Auth.svelte';
 import DisconnectedBanner from './DisconnectedBanner.svelte';
-import LayoutToastHost from './layout/LayoutToastHost.svelte';
-import UpdateBanner from './layout/UpdateBanner.svelte';
 import Main from './MainView.svelte';
 
 let authStatus = $state(false);
@@ -71,12 +82,31 @@ $effect(() => {
 		isCheckingAuthStatus = false;
 		markAuthenticated();
 		clearSessionExpired();
-		toastHost?.showToast('success', 'AUTH', {
+		showToast('success', 'AUTH', {
 			duration: 5000,
 			description: 'Successfully authenticated',
 			dismissable: true,
 		});
 		authStatusStore.set(true);
+	} else if (shouldExpireSession(message?.success, wasAuthenticated()) && authStatusStore.value) {
+		// Auth token rejected mid-session (e.g. expired/invalidated on a reconnect).
+		// Route to the auth gate with an explicit "session expired" message instead
+		// of silently blanking. Device/streaming state in the stores is left intact.
+		markSessionExpired();
+		localStorage.removeItem('auth');
+		authStatusStore.set(false);
+	}
+});
+
+// Re-authenticate after a reconnect using the stored credential. If it fails the
+// auth-success effect above flips us to the session-expired auth gate. The
+// client-level handler survives socket replacement across reconnect cycles.
+rpcClient.onConnectionChange((state) => {
+	if (state === 'connected' && wasAuthenticated()) {
+		const stored = localStorage.getItem('auth');
+		if (stored) {
+			sendAuthMessage(stored, true);
+		}
 	}
 });
 
@@ -120,7 +150,24 @@ $effect(() => {
 		{#if updatingStatus && typeof updatingStatus !== 'boolean'}
 			<UpdatingOverlay details={updatingStatus}></UpdatingOverlay>
 		{/if}
-		<UpdateBanner />
+		{#if isUpdating && !updateBannerDismissed}
+			<div
+				aria-live="polite"
+				class="bg-status-warning/10 border-status-warning/30 text-foreground sticky top-0 z-40 flex items-center gap-2.5 border-b px-4 py-2.5 text-sm backdrop-blur-sm"
+				role="status"
+			>
+				<ArrowUpToLineIcon class="text-status-warning size-4 shrink-0 animate-pulse" />
+				<span class="font-medium">{$LL.notifications.updateInProgress()}</span>
+				<button
+					aria-label={$LL.a11y.close()}
+					class="text-muted-foreground hover:text-foreground hover:bg-status-warning/15 ms-auto inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors"
+					onclick={() => (updateBannerDismissed = true)}
+					type="button"
+				>
+					<XIcon class="size-4" />
+				</button>
+			</div>
+		{/if}
 		<DisconnectedBanner />
 		<Main></Main>
 	{:else if !isCheckingAuthStatus}

@@ -798,8 +798,9 @@ const en = {
 		pullToRefresh: "Pull to refresh",
 	},
 	connection: {
-		lost: "Connection lost. Reconnecting…",
-		failed: "Not connecting. Check the device or network.",
+		lost: "Connection lost — reconnecting…",
+		reconnecting: "Reconnecting…",
+		failed: "Not connecting — check device or network",
 		retry: "Retry",
 		rebooting: "Rebooting device…",
 		rebootingDescription: "The device is restarting. This page will reconnect automatically.",
