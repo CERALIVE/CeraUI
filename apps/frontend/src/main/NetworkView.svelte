@@ -20,6 +20,8 @@ import { getLinks } from '$lib/stores/hud.svelte';
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
 
+import WifiSelectorDialog from './dialogs/WifiSelectorDialog.svelte';
+
 // Getters — always from the non-deprecated subscriptions surface (never websocket-store).
 const wifi = $derived<WifiStatus | undefined>(getWifi());
 const modems = $derived(getModems());
@@ -96,6 +98,14 @@ function activeWifiNetwork(iface: WifiInterface) {
 function comingSoon(feature: string) {
 	toast.info($LL.network.view.comingSoon({ feature }));
 }
+
+// WiFi network selector dialog — targets the primary WiFi station interface.
+let wifiSelectorOpen = $state(false);
+const primaryWifiDevice = $derived(wifiStations[0]?.[0]);
+
+function openWifiSelector() {
+	if (primaryWifiDevice) wifiSelectorOpen = true;
+}
 </script>
 
 <div class="mx-auto w-full max-w-5xl space-y-5 p-4 sm:p-6">
@@ -171,9 +181,10 @@ function comingSoon(feature: string) {
 				<h2 class="text-sm font-semibold tracking-tight">{$LL.network.view.wifi()}</h2>
 				<Button
 					class="ms-auto h-8 gap-1 px-2.5"
+					disabled={!primaryWifiDevice}
 					size="sm"
 					variant="ghost"
-					onclick={() => comingSoon($LL.network.view.wifi())}
+					onclick={openWifiSelector}
 				>
 					{$LL.network.view.connect()}
 					<ChevronRight class="size-3.5 rtl:rotate-180" />
@@ -360,5 +371,9 @@ function comingSoon(feature: string) {
 				{/if}
 			</div>
 		</section>
+	{/if}
+
+	{#if primaryWifiDevice}
+		<WifiSelectorDialog bind:open={wifiSelectorOpen} deviceId={primaryWifiDevice} />
 	{/if}
 </div>
