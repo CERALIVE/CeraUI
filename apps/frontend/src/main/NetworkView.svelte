@@ -279,7 +279,7 @@ function openModemConfig(id: string) {
 						{$LL.network.view.noModems()}
 					</p>
 				{:else}
-					{#each modemEntries as [id, modem] (id)}
+					{#each modemEntries as [id, modem], _i (modem.ifname || id + '-' + _i)}
 						{@const sig = modemSignal(modem)}
 						{@const connected = modem.status?.connection === 'connected'}
 						{@const operator = modem.status?.network || modem.sim_network || modem.name}
