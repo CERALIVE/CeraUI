@@ -268,17 +268,17 @@ async function handleSave() {
 					>
 						<!-- Track -->
 						<div
-							class="bg-muted absolute inset-x-0 inset-y-0 top-1/2 h-2 -translate-y-1/2 rounded-full"
+							class="bg-muted absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full"
 						></div>
 						<!-- Center marker (zero) -->
 						<div
-							style={`inset-inline-start: ${zeroPct}%;`}
-							class="bg-muted-foreground/40 absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rtl:translate-x-1/2"
+							style={`left: ${zeroPct}%;`}
+							class="bg-muted-foreground/40 absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2"
 						></div>
 						<!-- Fill from zero toward thumb -->
 						{#if fillWidth > 0}
 							<div
-								style={`inset-inline-start: ${fillLeft}%; width: ${fillWidth}%;`}
+								style={`left: ${fillLeft}%; width: ${fillWidth}%;`}
 								class={`absolute top-1/2 h-2 -translate-y-1/2 rounded-full transition-all duration-200 ${
 									draftDelay < 0 ? 'bg-muted-foreground' : 'bg-primary'
 								}`}
@@ -286,8 +286,8 @@ async function handleSave() {
 						{/if}
 						<!-- Thumb -->
 						<div
-							style={`inset-inline-start: ${thumbPct}%; transition: inset-inline-start 200ms ease-out, background-color 200ms ease-out;`}
-							class={`border-background absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-md transition-all duration-200 rtl:translate-x-1/2 ${
+							style={`left: ${thumbPct}%; transition: left 200ms ease-out, background-color 200ms ease-out;`}
+							class={`border-background absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-md transition-all duration-200 ${
 								draftDelay === 0
 									? 'bg-muted-foreground'
 									: draftDelay < 0

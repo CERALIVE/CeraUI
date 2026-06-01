@@ -1,10 +1,19 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import {
+	BITRATE_DEFAULT_MAX,
+	BITRATE_DEFAULT_MIN,
+	BITRATE_MAX,
+	BITRATE_MIN,
+} from '@ceraui/rpc/schemas';
+import {
 	ChevronRight,
 	Cpu,
+	Lock,
+	Minus,
 	Pencil,
 	Play,
+	Plus,
 	Server,
 	ServerOff,
 	Square,
@@ -14,18 +23,55 @@ import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
+import { Slider } from '$lib/components/ui/slider';
 import { stopStreaming } from '$lib/helpers/SystemHelper';
+import { rpc } from '$lib/rpc';
 import { getConfig, getIsStreaming, getSensors } from '$lib/rpc/subscriptions.svelte';
+import { isSectionLocked, type StreamSection } from '$lib/streaming/streamingLockPolicy';
+
+import EncoderDialog, { type EncoderConfig } from './dialogs/EncoderDialog.svelte';
+import ServerDialog from './dialogs/ServerDialog.svelte';
+
+let serverDialogOpen = $state(false);
+import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
+import type { AudioCodec } from '@ceraui/rpc/schemas';
 
 // Reactive state — non-deprecated subscriptions getters only.
 const config = $derived(getConfig());
 const isStreaming = $derived(getIsStreaming());
 const sensors = $derived(getSensors());
 
+// Encoder configuration dialog — owns the editable encoder draft; the dialog
+// seeds from the saved device config and writes the selection back here, which
+// the start flow consumes. Opened from the Encoder row's Edit trigger.
+let encoderOpen = $state(false);
+let encoderConfig = $state<EncoderConfig>({
+	source: undefined,
+	resolution: undefined,
+	framerate: undefined,
+	bitrate: undefined,
+	bitrateOverlay: undefined,
+});
+
 // Server target: direct SRTLA address, or a selected relay server.
 const serverTarget = $derived(config?.srtla_addr || config?.relay_server || '');
 const hasServer = $derived(Boolean(serverTarget));
 const showEmptyState = $derived(!hasServer && !isStreaming);
+
+// Audio dialog: working override layered over the saved config until the next
+// stream (re)start folds it into the full config sent to rpc.streaming.start.
+let audioDialogOpen = $state(false);
+let audioOverride = $state<AudioConfigValues | null>(null);
+
+const effectiveAudioSource = $derived(audioOverride?.asrc ?? config?.asrc);
+const effectiveAudioCodec = $derived(
+	(audioOverride?.acodec ?? config?.acodec) as AudioCodec | undefined,
+);
+const effectiveAudioDelay = $derived(audioOverride?.delay ?? config?.delay ?? 0);
+
+function handleAudioSave(values: AudioConfigValues) {
+	audioOverride = values;
+}
 
 function formatBitrate(kbps: number | undefined): string {
 	if (kbps === undefined || kbps === null) return '—';
@@ -46,17 +92,64 @@ function findSensor(predicate: (name: string) => boolean): string | undefined {
 const tempSensor = $derived(findSensor((n) => n.includes('temp')));
 const uptimeSensor = $derived(findSensor((n) => n.includes('uptime')));
 
+// ── Bitrate hot-adjust (the ONLY field changeable mid-stream) ──────────────
+// Practical slider window seeded from the canonical schema constants.
+const BITRATE_STEP = 250;
+let interacting = $state(false);
+// Seeded from the schema default; the $effect below mirrors the live config value.
+let bitrateDraft = $state<number>(BITRATE_DEFAULT_MIN);
+
+// Mirror the authoritative server value while the operator isn't dragging.
+$effect(() => {
+	const serverBr = config?.max_br;
+	if (!interacting && typeof serverBr === 'number') {
+		bitrateDraft = serverBr;
+	}
+});
+
+function clampBitrate(kbps: number): number {
+	return Math.round(Math.max(BITRATE_MIN, Math.min(BITRATE_MAX, kbps)));
+}
+
+// setBitrate applies live via ceracoder — NO stream stop required.
+async function commitBitrate(kbps: number) {
+	const clamped = clampBitrate(kbps);
+	bitrateDraft = clamped;
+	try {
+		await rpc.streaming.setBitrate({ max_br: clamped });
+	} catch {
+		toast.error($LL.notifications.saveFailed());
+	}
+}
+
+function stepBitrate(delta: number) {
+	const next = clampBitrate(bitrateDraft + delta);
+	commitBitrate(next);
+}
+
 // Config-row summaries — distilled from the saved config, never gray placeholders.
 const encoderSummary = $derived.by(() => {
 	const parts: string[] = [];
-	if (config?.pipeline) parts.push(config.pipeline);
-	if (config?.max_br) parts.push(formatBitrate(config.max_br));
+	const pipeline = encoderConfig.source ?? config?.pipeline;
+	const bitrate = encoderConfig.bitrate ?? config?.max_br;
+	if (pipeline) parts.push(pipeline);
+	if (bitrate) parts.push(formatBitrate(bitrate));
 	return parts.length ? parts.join(' · ') : $LL.general.notConfigured();
 });
+
+// Route the per-section Edit trigger: Encoder opens the real dialog; the rest
+// remain Wave 2 placeholders until their dialogs land.
+function editSection(section: StreamSection, label: string) {
+	if (section === 'encoder') {
+		encoderOpen = true;
+	} else {
+		openConfigDialog(label);
+	}
+}
 const audioSummary = $derived.by(() => {
 	const parts: string[] = [];
-	if (config?.acodec) parts.push(String(config.acodec).toUpperCase());
-	if (config?.asrc) parts.push(config.asrc);
+	if (effectiveAudioCodec) parts.push(String(effectiveAudioCodec).toUpperCase());
+	if (effectiveAudioSource) parts.push(effectiveAudioSource);
 	return parts.length ? parts.join(' · ') : $LL.general.notConfigured();
 });
 const serverSummary = $derived.by(() => {
@@ -96,26 +189,26 @@ type ConfigRow = {
 	icon: typeof Cpu;
 	label: string;
 	value: string;
-	section: string;
+	section: StreamSection;
 };
 const configRows = $derived<ConfigRow[]>([
 	{
 		icon: Cpu,
 		label: $LL.settings.encoderSettings(),
 		value: encoderSummary,
-		section: $LL.settings.encoderSettings(),
+		section: 'encoder',
 	},
 	{
 		icon: Volume2,
 		label: $LL.general.audioSettings(),
 		value: audioSummary,
-		section: $LL.general.audioSettings(),
+		section: 'audio',
 	},
 	{
 		icon: Server,
 		label: $LL.general.serverSettings(),
 		value: serverSummary,
-		section: $LL.general.serverSettings(),
+		section: 'server',
 	},
 ]);
 </script>
@@ -152,7 +245,7 @@ const configRows = $derived<ConfigRow[]>([
 		{#if hasServer}
 			<button
 				class="hover:bg-accent focus-visible:ring-ring/50 flex max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
-				onclick={() => openConfigDialog($LL.general.serverSettings())}
+				onclick={() => (serverDialogOpen = true)}
 			>
 				<Server aria-hidden={true} class="text-muted-foreground h-4 w-4 shrink-0" />
 				<span class="max-w-[12rem] truncate font-mono">{serverTarget}</span>
@@ -180,7 +273,7 @@ const configRows = $derived<ConfigRow[]>([
 				</div>
 				<Button
 					class="gap-2"
-					onclick={() => openConfigDialog($LL.general.serverSettings())}
+					onclick={() => (serverDialogOpen = true)}
 				>
 					<Server aria-hidden={true} class="h-4 w-4" />
 					{$LL.live.editSettings()}
@@ -220,6 +313,61 @@ const configRows = $derived<ConfigRow[]>([
 					</div>
 				{/if}
 			</section>
+
+			<!-- Bitrate hot-adjust: applied live via setBitrate, no stream stop -->
+			<section
+				aria-label={$LL.live.adjustBitrate()}
+				class="bg-card space-y-3 rounded-xl border px-5 py-4"
+			>
+				<div class="flex items-center justify-between gap-4">
+					<p class="text-sm font-medium">{$LL.live.adjustBitrate()}</p>
+					<p
+						class="font-mono text-base font-semibold tabular-nums"
+						style="color: var(--status-live);"
+					>
+						{formatBitrate(bitrateDraft)}
+					</p>
+				</div>
+				<div class="flex items-center gap-3">
+					<Button
+						aria-label="-{BITRATE_STEP} {$LL.units.kbps()}"
+						class="size-11 shrink-0 rounded-lg"
+						disabled={bitrateDraft <= BITRATE_MIN}
+						onclick={() => stepBitrate(-BITRATE_STEP)}
+						size="icon"
+						variant="outline"
+					>
+						<Minus aria-hidden={true} class="h-4 w-4" />
+					</Button>
+					<Slider
+						aria-label={$LL.live.adjustBitrate()}
+						class="grow"
+						max={BITRATE_DEFAULT_MAX}
+						min={BITRATE_DEFAULT_MIN}
+						onValueChange={(v: number) => {
+							interacting = true;
+							bitrateDraft = v;
+						}}
+						onValueCommit={(v: number) => {
+							interacting = false;
+							commitBitrate(v);
+						}}
+						step={BITRATE_STEP}
+						type="single"
+						value={bitrateDraft}
+					/>
+					<Button
+						aria-label="+{BITRATE_STEP} {$LL.units.kbps()}"
+						class="size-11 shrink-0 rounded-lg"
+						disabled={bitrateDraft >= BITRATE_MAX}
+						onclick={() => stepBitrate(BITRATE_STEP)}
+						size="icon"
+						variant="outline"
+					>
+						<Plus aria-hidden={true} class="h-4 w-4" />
+					</Button>
+				</div>
+			</section>
 		{/if}
 
 		<!-- Configuration overview — one card, three trigger rows (no nested cards) -->
@@ -229,6 +377,7 @@ const configRows = $derived<ConfigRow[]>([
 			</Card.Header>
 			<Card.Content class="divide-border divide-y py-0">
 				{#each configRows as row (row.label)}
+					{@const locked = isSectionLocked(row.section, isStreaming)}
 					<div class="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
 						<div class="flex min-w-0 items-start gap-3">
 							<row.icon
@@ -240,16 +389,32 @@ const configRows = $derived<ConfigRow[]>([
 								<p class="text-muted-foreground truncate font-mono text-sm">{row.value}</p>
 							</div>
 						</div>
-						<Button
-							class="shrink-0 gap-1.5"
-							onclick={() => openConfigDialog(row.section)}
-							size="sm"
-							variant="ghost"
-						>
-							<Pencil aria-hidden={true} class="h-3.5 w-3.5" />
-							<span class="hidden sm:inline">{$LL.live.editSettings()}</span>
-							<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
-						</Button>
+						{#if locked}
+							<!-- Restart-required while live: stop the stream to change it -->
+							<span
+								class="text-muted-foreground inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium"
+								title={$LL.live.stopToChange()}
+							>
+								<Lock aria-hidden={true} class="h-3.5 w-3.5" />
+								<span class="hidden sm:inline">{$LL.live.stopToChange()}</span>
+							</span>
+						{:else}
+							<Button
+								class="min-h-[44px] shrink-0 gap-1.5"
+								onclick={() => {
+									if (row.section === 'server') serverDialogOpen = true;
+									else if (row.section === 'audio') audioDialogOpen = true;
+									else if (row.section === 'encoder') encoderOpen = true;
+									else openConfigDialog(row.label);
+								}}
+								size="sm"
+								variant="ghost"
+							>
+								<Pencil aria-hidden={true} class="h-3.5 w-3.5" />
+								<span class="hidden sm:inline">{$LL.live.editSettings()}</span>
+								<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
+							</Button>
+						{/if}
 					</div>
 				{/each}
 			</Card.Content>
@@ -258,7 +423,7 @@ const configRows = $derived<ConfigRow[]>([
 		<!-- Streaming control — prominent, lime to start, neutral to stop -->
 		{#if isStreaming}
 			<Button
-				class="bg-secondary text-secondary-foreground hover:bg-secondary/80 group w-full gap-3 py-6 text-base font-semibold"
+				class="bg-secondary text-secondary-foreground hover:bg-secondary/80 group min-h-[44px] w-full gap-3 py-6 text-base font-semibold"
 				onclick={handleStop}
 				size="lg"
 				type="button"
@@ -268,7 +433,7 @@ const configRows = $derived<ConfigRow[]>([
 			</Button>
 		{:else}
 			<Button
-				class="bg-primary text-primary-foreground hover:bg-primary/90 group w-full gap-3 py-6 text-base font-semibold"
+				class="bg-primary text-primary-foreground hover:bg-primary/90 group min-h-[44px] w-full gap-3 py-6 text-base font-semibold"
 				disabled={!hasServer}
 				onclick={handleStart}
 				size="lg"
@@ -283,3 +448,17 @@ const configRows = $derived<ConfigRow[]>([
 		{/if}
 	{/if}
 </div>
+
+<ServerDialog bind:open={serverDialogOpen} />
+
+<!-- Audio configuration dialog (opened from the Audio "Edit" row). -->
+<AudioDialog
+	bind:open={audioDialogOpen}
+	audioCodec={effectiveAudioCodec}
+	audioDelay={effectiveAudioDelay}
+	audioSource={effectiveAudioSource}
+	onSave={handleAudioSave}
+/>
+
+<!-- Encoder configuration dialog (opened from the Encoder "Edit" row). -->
+<EncoderDialog bind:open={encoderOpen} bind:config={encoderConfig} />
