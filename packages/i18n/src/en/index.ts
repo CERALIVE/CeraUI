@@ -249,6 +249,8 @@ const en = {
 		configureToStart: "Configure a relay server to begin streaming",
 		editSettings: "Edit Settings",
 		streamSettings: "Stream Settings",
+		adjustBitrate: "Adjust Bitrate",
+		stopToChange: "Stop stream to change",
 	},
 	dialogs: {
 		close: "Close",

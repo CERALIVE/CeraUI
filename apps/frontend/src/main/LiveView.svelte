@@ -1,6 +1,7 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import {
+	type AudioCodec,
 	BITRATE_DEFAULT_MAX,
 	BITRATE_DEFAULT_MIN,
 	BITRATE_MAX,
@@ -28,23 +29,27 @@ import { stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
 import { getConfig, getIsStreaming, getSensors } from '$lib/rpc/subscriptions.svelte';
 import { isSectionLocked, type StreamSection } from '$lib/streaming/streamingLockPolicy';
-
-import EncoderDialog, { type EncoderConfig } from './dialogs/EncoderDialog.svelte';
-import ServerDialog from './dialogs/ServerDialog.svelte';
-
-let serverDialogOpen = $state(false);
 import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
-import type { AudioCodec } from '@ceraui/rpc/schemas';
+import EncoderDialog, { type EncoderConfig } from '$main/dialogs/EncoderDialog.svelte';
+import ServerDialog from '$main/dialogs/ServerDialog.svelte';
 
 // Reactive state — non-deprecated subscriptions getters only.
 const config = $derived(getConfig());
 const isStreaming = $derived(getIsStreaming());
 const sensors = $derived(getSensors());
 
-// Encoder configuration dialog — owns the editable encoder draft; the dialog
-// seeds from the saved device config and writes the selection back here, which
-// the start flow consumes. Opened from the Encoder row's Edit trigger.
+// Server target: direct SRTLA address, or a selected relay server.
+const serverTarget = $derived(config?.srtla_addr || config?.relay_server || '');
+const hasServer = $derived(Boolean(serverTarget));
+const showEmptyState = $derived(!hasServer && !isStreaming);
+
+// ── Dialog open state ──────────────────────────────────────────────────────
+let serverDialogOpen = $state(false);
+let audioDialogOpen = $state(false);
 let encoderOpen = $state(false);
+
+// Encoder configuration dialog — owns the editable encoder draft; the dialog
+// seeds from the saved device config and writes the selection back here.
 let encoderConfig = $state<EncoderConfig>({
 	source: undefined,
 	resolution: undefined,
@@ -53,14 +58,8 @@ let encoderConfig = $state<EncoderConfig>({
 	bitrateOverlay: undefined,
 });
 
-// Server target: direct SRTLA address, or a selected relay server.
-const serverTarget = $derived(config?.srtla_addr || config?.relay_server || '');
-const hasServer = $derived(Boolean(serverTarget));
-const showEmptyState = $derived(!hasServer && !isStreaming);
-
 // Audio dialog: working override layered over the saved config until the next
 // stream (re)start folds it into the full config sent to rpc.streaming.start.
-let audioDialogOpen = $state(false);
 let audioOverride = $state<AudioConfigValues | null>(null);
 
 const effectiveAudioSource = $derived(audioOverride?.asrc ?? config?.asrc);
@@ -136,16 +135,6 @@ const encoderSummary = $derived.by(() => {
 	if (bitrate) parts.push(formatBitrate(bitrate));
 	return parts.length ? parts.join(' · ') : $LL.general.notConfigured();
 });
-
-// Route the per-section Edit trigger: Encoder opens the real dialog; the rest
-// remain Wave 2 placeholders until their dialogs land.
-function editSection(section: StreamSection, label: string) {
-	if (section === 'encoder') {
-		encoderOpen = true;
-	} else {
-		openConfigDialog(label);
-	}
-}
 const audioSummary = $derived.by(() => {
 	const parts: string[] = [];
 	if (effectiveAudioCodec) parts.push(String(effectiveAudioCodec).toUpperCase());
@@ -157,16 +146,9 @@ const serverSummary = $derived.by(() => {
 	return config?.srtla_port ? `${serverTarget}:${config.srtla_port}` : serverTarget;
 });
 
-// Wave 2 replaces these triggers with real Encoder / Audio / Server dialogs.
-function openConfigDialog(section: string) {
-	toast.info(`${section} — ${$LL.live.editSettings()}`, {
-		description: 'Configuration dialog arrives in Wave 2.',
-	});
-}
-
 function handleStart() {
 	// The full start flow (source / resolution / codec selection) lives in the
-	// encoder + server dialogs landing in Wave 2; the shell points there for now.
+	// encoder + server dialogs; the shell points there for now.
 	toast.info($LL.live.startStream(), {
 		description: 'Stream configuration dialog arrives in Wave 2.',
 	});
@@ -190,6 +172,7 @@ type ConfigRow = {
 	label: string;
 	value: string;
 	section: StreamSection;
+	onEdit: () => void;
 };
 const configRows = $derived<ConfigRow[]>([
 	{
@@ -197,18 +180,21 @@ const configRows = $derived<ConfigRow[]>([
 		label: $LL.settings.encoderSettings(),
 		value: encoderSummary,
 		section: 'encoder',
+		onEdit: () => (encoderOpen = true),
 	},
 	{
 		icon: Volume2,
 		label: $LL.general.audioSettings(),
 		value: audioSummary,
 		section: 'audio',
+		onEdit: () => (audioDialogOpen = true),
 	},
 	{
 		icon: Server,
 		label: $LL.general.serverSettings(),
 		value: serverSummary,
 		section: 'server',
+		onEdit: () => (serverDialogOpen = true),
 	},
 ]);
 </script>
@@ -244,7 +230,7 @@ const configRows = $derived<ConfigRow[]>([
 
 		{#if hasServer}
 			<button
-				class="hover:bg-accent focus-visible:ring-ring/50 flex max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
+				class="hover:bg-accent focus-visible:ring-ring/50 flex min-h-[44px] max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
 				onclick={() => (serverDialogOpen = true)}
 			>
 				<Server aria-hidden={true} class="text-muted-foreground h-4 w-4 shrink-0" />
@@ -401,12 +387,7 @@ const configRows = $derived<ConfigRow[]>([
 						{:else}
 							<Button
 								class="min-h-[44px] shrink-0 gap-1.5"
-								onclick={() => {
-									if (row.section === 'server') serverDialogOpen = true;
-									else if (row.section === 'audio') audioDialogOpen = true;
-									else if (row.section === 'encoder') encoderOpen = true;
-									else openConfigDialog(row.label);
-								}}
+								onclick={row.onEdit}
 								size="sm"
 								variant="ghost"
 							>
