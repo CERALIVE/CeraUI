@@ -23,8 +23,10 @@ import {
 import type { Component } from 'svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
-import { Button } from '$lib/components/ui/button';
 import { cn } from '$lib/utils';
+
+import CloudRemoteDialog from './dialogs/CloudRemoteDialog.svelte';
+import PasswordDialog from './dialogs/PasswordDialog.svelte';
 
 interface Entry {
 	key: string;
@@ -77,12 +79,27 @@ const groups = $derived<Group[]>([
 	},
 ]);
 
+// Real dialogs (Task 25). Each settings entry routes to its own dialog;
+// remaining entries still use the shared placeholder until their tasks land.
+let passwordOpen = $state(false);
+let cloudOpen = $state(false);
+
+// Fallback placeholder dialog for not-yet-wired entries.
 let open = $state(false);
 let active = $state<Entry | null>(null);
 
 function openEntry(entry: Entry) {
-	active = entry;
-	open = true;
+	switch (entry.key) {
+		case 'devicePassword':
+			passwordOpen = true;
+			return;
+		case 'cloudRemote':
+			cloudOpen = true;
+			return;
+		default:
+			active = entry;
+			open = true;
+	}
 }
 
 const ActiveIcon = $derived(active?.icon);
@@ -164,3 +181,7 @@ const ActiveIcon = $derived(active?.icon);
 		</div>
 	</div>
 </AppDialog>
+
+<!-- Wired settings dialogs (Task 25) -->
+<PasswordDialog bind:open={passwordOpen} />
+<CloudRemoteDialog bind:open={cloudOpen} />
