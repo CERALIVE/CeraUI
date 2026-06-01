@@ -71,16 +71,21 @@ export const modemListSchema = z.record(z.string(), modemSchema);
 export type ModemList = z.infer<typeof modemListSchema>;
 
 // Modem config input schema
-export const modemConfigInputSchema = z.object({
-	device: z.string(),
-	network_type: z.string(),
-	roaming: z.boolean().optional(),
-	network: z.string().optional(),
-	autoconfig: z.boolean().optional(),
-	apn: z.string(),
-	username: z.string(),
-	password: z.string(),
-});
+export const modemConfigInputSchema = z
+	.object({
+		device: z.string(),
+		network_type: z.string(),
+		roaming: z.boolean().optional(),
+		network: z.string().optional(),
+		autoconfig: z.boolean().optional(),
+		apn: z.string(),
+		username: z.string(),
+		password: z.string(),
+	})
+	.refine((data) => data.autoconfig !== false || data.apn.length > 0, {
+		message: 'APN is required when auto-configuration is disabled',
+		path: ['apn'],
+	});
 export type ModemConfigInput = z.infer<typeof modemConfigInputSchema>;
 
 // Modem scan input schema
