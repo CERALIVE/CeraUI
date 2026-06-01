@@ -20,6 +20,10 @@ import { getLinks } from '$lib/stores/hud.svelte';
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
 
+import HotspotDialog from './dialogs/HotspotDialog.svelte';
+import ModemConfigDialog from './dialogs/ModemConfigDialog.svelte';
+import NetifDialog from './dialogs/NetifDialog.svelte';
+
 import WifiSelectorDialog from './dialogs/WifiSelectorDialog.svelte';
 
 // Getters — always from the non-deprecated subscriptions surface (never websocket-store).
@@ -42,6 +46,16 @@ const isLoading = $derived(
 const wifiEntries = $derived(Object.entries(wifi ?? {}) as [string, WifiInterface][]);
 const wifiStations = $derived(wifiEntries.filter(([, iface]) => !iface.hotspot));
 const hotspotInterfaces = $derived(wifiEntries.filter(([, iface]) => Boolean(iface.hotspot)));
+
+// Hotspot target for the configurator dialog: prefer an already-active hotspot
+// interface, else the first hotspot-capable WiFi radio, else any WiFi radio.
+const hotspotTarget = $derived(
+	hotspotInterfaces[0] ??
+		wifiEntries.find(([, iface]) => iface.supports_hotspot) ??
+		wifiEntries[0],
+);
+
+let hotspotDialogOpen = $state(false);
 
 const modemEntries = $derived(Object.entries(modems ?? {}) as [string, Modem][]);
 
@@ -99,12 +113,35 @@ function comingSoon(feature: string) {
 	toast.info($LL.network.view.comingSoon({ feature }));
 }
 
+// Per-interface Ethernet configuration dialog (Task 24). The selected interface
+// data is read LIVE from `netif` so the dialog reflects ongoing telemetry.
+let netifDialogOpen = $state(false);
+let selectedNetifName = $state('');
+const selectedNetif = $derived(
+	selectedNetifName ? (netif?.[selectedNetifName] ?? undefined) : undefined,
+);
+
+function configureNetif(name: string) {
+	selectedNetifName = name;
+	netifDialogOpen = true;
+}
+
 // WiFi network selector dialog — targets the primary WiFi station interface.
 let wifiSelectorOpen = $state(false);
 const primaryWifiDevice = $derived(wifiStations[0]?.[0]);
 
 function openWifiSelector() {
 	if (primaryWifiDevice) wifiSelectorOpen = true;
+}
+
+// Per-modem configuration dialog — one instance, keyed by the selected modem id.
+let modemDialogOpen = $state(false);
+let configModemId = $state<string | null>(null);
+const configModem = $derived(modemEntries.find(([id]) => id === configModemId)?.[1]);
+
+function openModemConfig(id: string) {
+	configModemId = id;
+	modemDialogOpen = true;
 }
 </script>
 
@@ -235,15 +272,6 @@ function openWifiSelector() {
 			<div class="flex items-center gap-2 border-b px-4 py-3">
 				<Radio aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
 				<h2 class="text-sm font-semibold tracking-tight">{$LL.network.view.cellular()}</h2>
-				<Button
-					class="ms-auto h-8 gap-1 px-2.5"
-					size="sm"
-					variant="ghost"
-					onclick={() => comingSoon($LL.network.view.cellular())}
-				>
-					{$LL.network.view.configure()}
-					<ChevronRight class="size-3.5 rtl:rotate-180" />
-				</Button>
 			</div>
 			<div class="divide-y">
 				{#if modemEntries.length === 0}
@@ -282,6 +310,15 @@ function openWifiSelector() {
 							{:else}
 								<WifiOff class="text-muted-foreground size-4" aria-hidden="true" />
 							{/if}
+							<Button
+								class="h-8 gap-1 px-2.5"
+								size="sm"
+								variant="ghost"
+								onclick={() => openModemConfig(id)}
+							>
+								{$LL.network.view.configure()}
+								<ChevronRight class="size-3.5 rtl:rotate-180" />
+							</Button>
 						</div>
 					{/each}
 				{/if}
@@ -319,7 +356,7 @@ function openWifiSelector() {
 								class="h-8 gap-1 px-2.5"
 								size="sm"
 								variant="ghost"
-								onclick={() => comingSoon($LL.network.view.ethernet())}
+								onclick={() => configureNetif(name)}
 							>
 								{$LL.network.view.configure()}
 								<ChevronRight class="size-3.5 rtl:rotate-180" />
@@ -339,7 +376,8 @@ function openWifiSelector() {
 					class="ms-auto h-8 gap-1 px-2.5"
 					size="sm"
 					variant="ghost"
-					onclick={() => comingSoon($LL.network.view.hotspot())}
+					disabled={!hotspotTarget}
+					onclick={() => (hotspotDialogOpen = true)}
 				>
 					{$LL.network.view.setup()}
 					<ChevronRight class="size-3.5 rtl:rotate-180" />
@@ -372,8 +410,15 @@ function openWifiSelector() {
 			</div>
 		</section>
 	{/if}
-
-	{#if primaryWifiDevice}
-		<WifiSelectorDialog bind:open={wifiSelectorOpen} deviceId={primaryWifiDevice} />
-	{/if}
 </div>
+
+<!-- Per-interface Ethernet configuration (Task 24) -->
+<NetifDialog bind:open={netifDialogOpen} name={selectedNetifName} iface={selectedNetif} />
+
+{#if hotspotTarget}
+	<HotspotDialog bind:open={hotspotDialogOpen} deviceId={hotspotTarget[0]} iface={hotspotTarget[1]} />
+{/if}
+
+{#if configModem && configModemId}
+	<ModemConfigDialog bind:open={modemDialogOpen} deviceId={configModemId} modem={configModem} />
+{/if}
