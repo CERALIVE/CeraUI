@@ -22,6 +22,22 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Mock hardware data | `mocks/providers/` |
 | Shared RPC schema types | `../../../packages/rpc/` (`@ceraui/rpc`) |
 
+## STREAMING RPC PROCEDURES
+
+The `streaming` router exposes these procedures:
+
+| Procedure | Purpose |
+|-----------|---------|
+| `start(config)` | Validate config, launch stream, persist config |
+| `stop()` | Stop active stream |
+| `setConfig(fields)` | Persist config fields **without** starting the stream (added Task 19) |
+| `setBitrate({ max_br })` | Hot-adjust bitrate while streaming |
+| `getPipelines()` | List available GStreamer pipelines |
+| `getAudioCodecs()` | List available audio codecs |
+| `getConfig()` | Return current config snapshot |
+
+`setConfig` writes the provided fields onto the running config (same relay/manual mutual-exclusion logic as `updateConfig`, minus DNS/pipeline validation), then calls `saveConfig` and broadcasts a `config` message. Use this for all config-only dialogs that must not start the stream.
+
 ## CONVENTIONS
 
 - Runtime: Bun only. No Node-specific APIs (`fs/promises` ok; `node:cluster` not).
@@ -29,6 +45,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 - Tests: `bun test` (not vitest). Files in `src/tests/`.
 - Config files (`config.json`, `setup.json`, `auth_tokens.json`) read/written from working dir — path-sensitive in production.
 - `MOCK_SCENARIO` env activates mock providers. Scenarios: `single-modem`, `streaming-active`, `multi-modem-wifi` (default dev).
+- Frontend dependency `bits-ui` is at v2.18.1 (frontend concern only; backend has no direct bits-ui dep).
 
 ## ANTI-PATTERNS
 

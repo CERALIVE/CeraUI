@@ -19,10 +19,29 @@ CeraUI/
 │   ├── frontend/     # Svelte 5 PWA
 │   └── backend/      # Bun/TypeScript server
 ├── packages/
-│   ├── rpc/          # Shared RPC schemas
+│   ├── rpc/          # Shared RPC schemas + validation constants
 │   └── i18n/         # Internationalization (10 languages)
 └── docs/             # Documentation
 ```
+
+## Features
+
+### 3-Destination Navigation
+
+The app is organized into three primary destinations:
+
+- **Live** — streaming control and configuration. Start/stop the stream, adjust encoder settings, audio, server target, and bitrate. A persistent HUD bar shows live bitrate, per-link signal strength, and SoC telemetry across all destinations.
+- **Network** — connectivity overview. Bonded link status, WiFi networks (connect/disconnect/forget), cellular modems (APN, roaming, network type), Ethernet interfaces, and hotspot configuration.
+- **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, and version info.
+
+A dev-only DevTools destination is available in development builds.
+
+### Other Highlights
+
+- **Progressive Web App**: offline capabilities and native app-like performance
+- **Internationalization**: 10 languages with full RTL support
+- **Touch/kiosk mode**: `?mode=touch` URL flag scales touch targets to 44px minimum
+- **Responsive**: desktop and mobile layouts with a persistent bottom HUD dock on mobile
 
 ## Development
 
@@ -80,8 +99,8 @@ See [BUILD_PIPELINE.md](docs/BUILD_PIPELINE.md) for full build documentation.
 | [BUILD_PIPELINE.md](docs/BUILD_PIPELINE.md) | Build system and CI/CD |
 | [APT_VERSION_CONTROL.md](docs/APT_VERSION_CONTROL.md) | Debian package versioning |
 | [BRANDING.md](docs/BRANDING.md) | Branding guidelines |
+| [TOUCHSCREEN.md](docs/TOUCHSCREEN.md) | Touch/kiosk layout mode |
 | [apps/frontend/docs/DEVTOOLS.md](apps/frontend/docs/DEVTOOLS.md) | Development tools |
-| [apps/frontend/docs/SCREENSHOTS.md](apps/frontend/docs/SCREENSHOTS.md) | Screenshot automation |
 
 ## Workspace Commands
 
@@ -93,8 +112,8 @@ pnpm clean                            # Clean all build artifacts
 
 ## Tech Stack
 
-- **Frontend**: Svelte 5, TailwindCSS, shadcn-svelte, Vite
-- **Backend**: Bun, TypeScript, WebSocket RPC
+- **Frontend**: Svelte 5, TailwindCSS v4, shadcn-svelte (bits-ui v2), Vite
+- **Backend**: Bun, TypeScript, WebSocket RPC (oRPC)
 - **Build**: pnpm workspaces, mprocs
 
 ## Support the Project
