@@ -13,6 +13,7 @@ interface Props {
 	pipelines: Pipelines | undefined;
 	audioSources: string[];
 	notAvailableAudioSource: string | undefined;
+	formErrors: Record<string, string>;
 	properties: {
 		pipeline: keyof Pipelines | undefined;
 		audioSource: string | undefined;
@@ -31,6 +32,7 @@ const {
 	pipelines,
 	audioSources,
 	notAvailableAudioSource,
+	formErrors,
 	properties,
 	isStreaming,
 	onAudioSourceChange,
@@ -119,6 +121,11 @@ const hasAudioCodec = $derived(hasAudioSupport);
 							</Select.Group>
 						</Select.Content>
 					</Select.Root>
+					{#if formErrors.audioSource || !properties.audioSource}
+						<p class="text-destructive text-sm">
+							{formErrors.audioSource ?? $LL.validation.required()}
+						</p>
+					{/if}
 				</div>
 			{/if}
 

@@ -1,11 +1,19 @@
-import type { Pipelines, Resolution, Framerate } from "@ceraui/rpc/schemas";
-import { toast } from "svelte-sonner";
+import type { Framerate, Pipelines, Resolution } from "@ceraui/rpc/schemas";
 
-type Properties = {
+import { streamingConstraints } from "./ValidationAdapter";
+
+/**
+ * Shape of the form values consumed by {@link validateStreamingForm}.
+ * Exported so unit tests (and the Streaming view) can build fixtures against
+ * a single source of truth.
+ */
+export type StreamingFormProperties = {
 	source: string | undefined;
 	resolution: Resolution | undefined;
 	framerate: Framerate | undefined;
 	bitrate: number | undefined;
+	srtLatency: number | undefined;
+	audioDelay: number | undefined;
 	relayServer: string | undefined;
 	srtlaServerAddress: string | undefined;
 	srtlaServerPort: number | undefined;
@@ -23,100 +31,97 @@ export interface ValidationResult {
 	errors: Record<string, string>;
 }
 
+const PORT_MIN = 1;
+const PORT_MAX = 65535;
+
+/**
+ * Pure, side-effect-free validation for the streaming form.
+ *
+ * - All numeric bounds are sourced from {@link streamingConstraints}
+ *   (schema-derived via `ValidationAdapter`), never hardcoded literals.
+ * - Returns a `{ isValid, errors }` result keyed by field name. It does NOT
+ *   raise toasts or touch any global state — the component renders the
+ *   per-field messages inline.
+ * - `t` resolves an i18n key (e.g. `validation.required`) to a localized
+ *   string. Injecting it keeps this function trivially unit-testable
+ *   (pass an identity function to assert on the raw keys).
+ */
 export function validateStreamingForm(
-	properties: Properties,
+	properties: StreamingFormProperties,
 	t: (key: string) => string,
 	options?: ValidationOptions,
 ): ValidationResult {
-	const formErrors: Record<string, string> = {};
-	let hasErrors = false;
-	const errorMessages: string[] = [];
+	const { bitrate, srtLatency, audioDelay } = streamingConstraints;
+	const errors: Record<string, string> = {};
 
-	// Validate Video Source
+	// Video source is always required.
 	if (!properties.source) {
-		formErrors.source = t("settings.errors.inputModeRequired");
-		errorMessages.push(t("settings.errors.inputModeRequired"));
-		hasErrors = true;
+		errors.source = t("validation.required");
 	}
 
-	// Validate Bitrate
+	// Bitrate must sit within the canonical hardware window.
 	if (
-		!properties.bitrate ||
-		properties.bitrate < 2000 ||
-		properties.bitrate > 12000
+		properties.bitrate === undefined ||
+		properties.bitrate < bitrate.min ||
+		properties.bitrate > bitrate.max
 	) {
-		formErrors.bitrate = t("settings.errors.bitrateInvalid");
-		errorMessages.push(t("settings.errors.bitrateInvalid"));
-		hasErrors = true;
+		errors.bitrate = t("validation.bitrateRange");
 	}
 
-	// Validate Audio Settings (when pipeline requires them)
+	// SRT latency is optional, but when present must be within range.
+	if (
+		properties.srtLatency !== undefined &&
+		(properties.srtLatency < srtLatency.min ||
+			properties.srtLatency > srtLatency.max)
+	) {
+		errors.srtLatency = t("validation.invalid");
+	}
+
+	// Audio delay is optional, but when present must be within range.
+	if (
+		properties.audioDelay !== undefined &&
+		(properties.audioDelay < audioDelay.min ||
+			properties.audioDelay > audioDelay.max)
+	) {
+		errors.audioDelay = t("validation.invalid");
+	}
+
+	// Audio source/codec are required only when the pipeline supports audio.
 	if (options?.pipelines && properties.pipeline) {
 		const pipelineData = options.pipelines[properties.pipeline];
 		if (pipelineData?.supportsAudio) {
-			// Validate audio source when pipeline supports audio
 			if (!properties.audioSource) {
-				formErrors.audioSource = t("settings.errors.audioSourceRequired");
-				errorMessages.push(t("settings.errors.audioSourceRequired"));
-				hasErrors = true;
+				errors.audioSource = t("validation.required");
 			}
-
-			// Validate audio codec when pipeline supports audio
 			if (!properties.audioCodec) {
-				formErrors.audioCodec = t("settings.errors.audioCodecRequired");
-				errorMessages.push(t("settings.errors.audioCodecRequired"));
-				hasErrors = true;
+				errors.audioCodec = t("validation.required");
 			}
 		}
 	}
 
-	// Validate Receiver Server Configuration
+	// Receiver configuration: manual SRTLA vs. relay-server selection.
 	if (properties.relayServer === "-1" || properties.relayServer === undefined) {
-		// Manual Configuration - validate SRTLA server settings
 		if (
 			!properties.srtlaServerAddress ||
 			properties.srtlaServerAddress.trim() === ""
 		) {
-			formErrors.srtlaServerAddress = t(
-				"settings.errors.srtlaServerAddressRequired",
-			);
-			errorMessages.push(t("settings.errors.srtlaServerAddressRequired"));
-			hasErrors = true;
+			errors.srtlaServerAddress = t("validation.required");
 		}
 
 		if (
 			!properties.srtlaServerPort ||
 			!Number.isInteger(properties.srtlaServerPort) ||
-			properties.srtlaServerPort < 1 ||
-			properties.srtlaServerPort > 65535
+			properties.srtlaServerPort < PORT_MIN ||
+			properties.srtlaServerPort > PORT_MAX
 		) {
-			formErrors.srtlaServerPort = t("settings.errors.srtlaServerPortRequired");
-			errorMessages.push(t("settings.errors.srtlaServerPortRequired"));
-			hasErrors = true;
+			errors.srtlaServerPort = t("validation.portRange");
 		}
-	} else {
-		// Automatic Configuration - validate relay server selection
-		if (!properties.relayServer || properties.relayServer === "") {
-			formErrors.relayServer = t("settings.errors.relayServerRequired");
-			errorMessages.push(t("settings.errors.relayServerRequired"));
-			hasErrors = true;
-		}
-	}
-
-	// Show toast messages - single error toast for all errors or success
-	if (hasErrors) {
-		toast.error(errorMessages[0], {
-			description:
-				errorMessages.length > 1
-					? `${errorMessages.length} validation errors found`
-					: undefined,
-		});
-	} else {
-		toast.success(t("settings.validation.allFieldsValid"));
+	} else if (!properties.relayServer) {
+		errors.relayServer = t("validation.required");
 	}
 
 	return {
-		isValid: !hasErrors,
-		errors: formErrors,
+		isValid: Object.keys(errors).length === 0,
+		errors,
 	};
 }
