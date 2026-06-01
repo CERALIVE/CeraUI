@@ -444,6 +444,11 @@ const de = {
 		passwordsMismatch: "Passwords don't match.",
 		getYourKey: "Open cloud dashboard",
 		updating: "Updating, please wait\u2026",
+		rebootConfirm: "The device will disconnect for about 30 seconds while it restarts.",
+		powerOffConfirm:
+			"The device will shut down completely. You'll need physical access to turn it back on.",
+		blockedStreaming: "Stop streaming before rebooting.",
+		blockedUpdating: "Update in progress. Wait before rebooting.",
 	},
 		encoderSettings: "Encoder-Einstellungen",
 		inputMode: "Eingabemodus",
