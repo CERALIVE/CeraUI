@@ -11,6 +11,11 @@ let {
 }: WithElementRef<HTMLAttributes<HTMLDivElement>> = $props();
 </script>
 
-<div bind:this={ref} class={cn('px-6', className)} data-slot="card-content" {...restProps}>
+<div
+	bind:this={ref}
+	class={cn('px-4 group-data-[size=sm]/card:px-3', className)}
+	data-slot="card-content"
+	{...restProps}
+>
 	{@render children?.()}
 </div>

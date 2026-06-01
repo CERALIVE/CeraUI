@@ -4,7 +4,7 @@ import { ChevronLeft, Menu, X } from '@lucide/svelte';
 
 import Logo from '$lib/components/icons/Logo.svelte';
 import { Button } from '$lib/components/ui/button';
-import MobileLink from '$lib/components/ui/mobile-link.svelte';
+import MobileLink from '$lib/components/custom/mobile-link.svelte';
 import { ScrollArea } from '$lib/components/ui/scroll-area';
 import { Separator } from '$lib/components/ui/separator';
 import * as Sheet from '$lib/components/ui/sheet';

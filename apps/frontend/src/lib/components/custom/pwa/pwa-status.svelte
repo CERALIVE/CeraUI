@@ -238,7 +238,7 @@ async function handleMobileInstall() {
 		style:transform="translateZ(0)"
 		style:-webkit-transform="translateZ(0)"
 		style:padding-bottom="calc(1rem + env(safe-area-inset-bottom, 0px))"
-		class="animate-in slide-in-from-bottom fixed right-0 left-0 z-50 bg-primary p-4 text-primary-foreground"
+		class="animate-in slide-in-from-bottom bg-primary text-primary-foreground fixed right-0 left-0 z-50 p-4"
 	>
 		<div class="mx-auto flex w-full max-w-sm items-center justify-between gap-3 px-2">
 			<div class="flex min-w-0 flex-1 items-center gap-3">

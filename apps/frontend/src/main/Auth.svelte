@@ -7,8 +7,8 @@ import { Checkbox } from '$lib/components/ui/checkbox';
 import Logo from '$lib/components/icons/Logo.svelte';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
-import LocaleSelector from '$lib/components/ui/locale-selector.svelte';
-import ModeToggle from '$lib/components/ui/mode-toggle.svelte';
+import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
+import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { siteName } from '$lib/config';
 import {
 	getAuth,

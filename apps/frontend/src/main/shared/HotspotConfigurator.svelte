@@ -7,7 +7,7 @@ import { toast } from 'svelte-sonner';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
+import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import { changeHotspotSettings, type WifiBand } from '$lib/helpers/NetworkHelper';
 import type { ValueOf } from '$lib/types';
 import { cn } from '$lib/utils';
@@ -334,7 +334,9 @@ const handleSubmit = async () => {
 							class="focus:ring-opacity-20 h-12 w-full rounded-xl border-2 border-border bg-muted px-4 text-base transition-all duration-300 focus:border-status-info focus:ring-4 focus:ring-status-info/20"
 						>
 							{hotspotProperties.selectedChannel
-								? wifi.hotspot?.available_channels[hotspotProperties.selectedChannel].name
+								? (wifi.hotspot?.available_channels as Record<string, { name: string }> | undefined)?.[
+										hotspotProperties.selectedChannel
+									]?.name
 								: $LL.hotspotConfigurator.hotspot.selectChannel()}
 						</Select.Trigger>
 						<Select.Content

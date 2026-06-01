@@ -21,7 +21,7 @@ import { toast } from 'svelte-sonner';
 import WifiQuality from '$lib/components/icons/WifiQuality.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
-import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
+import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import {
 	connectToNewWifi,
 	connectWifi,

@@ -39,8 +39,6 @@ const {
 
 <button
 	id={identifier ? `nav-sheet-${identifier}` : undefined}
-	aria-busy={loading}
-	aria-disabled={disabled || loading}
 	class={cn(
 		'group relative w-full cursor-pointer rounded-lg px-4 py-3 text-left transition-colors duration-200',
 		'hover:bg-accent focus-visible:bg-accent/60',
@@ -51,21 +49,21 @@ const {
 		disabled && 'pointer-events-none opacity-60',
 		className,
 	)}
+	aria-busy={loading}
+	aria-disabled={disabled || loading}
 	{disabled}
 	{onclick}
 	{...restProps}
 >
 	{#if isActive}
-		<div
-			class="bg-primary absolute top-1/2 left-0 h-8 w-1 -translate-y-1/2 rounded-r-full"
-		></div>
+		<div class="bg-primary absolute top-1/2 left-0 h-8 w-1 -translate-y-1/2 rounded-r-full"></div>
 	{/if}
 
 	<div class={cn('relative block pl-3', isActive && 'pl-4')}>
 		<span
 			class={cn(
 				'transition-colors duration-200',
-				isActive && 'font-semibold tracking-wide group-hover:text-primary/90',
+				isActive && 'group-hover:text-primary/90 font-semibold tracking-wide',
 			)}
 		>
 			{#if children}

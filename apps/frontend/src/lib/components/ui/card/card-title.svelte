@@ -13,7 +13,7 @@ let {
 
 <div
 	bind:this={ref}
-	class={cn('leading-none font-semibold', className)}
+	class={cn('text-base leading-snug font-medium group-data-[size=sm]/card:text-sm', className)}
 	data-slot="card-title"
 	{...restProps}
 >

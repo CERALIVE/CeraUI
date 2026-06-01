@@ -33,9 +33,9 @@ const themes = [
 			<Button
 				{...props}
 				class="relative h-9 w-9 rounded-lg"
+				size="icon"
 				title={$LL?.theme?.changeTheme?.() || 'Change theme'}
 				variant="ghost"
-				size="icon"
 			>
 				<Sun
 					class="h-[1.125rem] w-[1.125rem] scale-100 rotate-0 transition-transform duration-200 dark:scale-0 dark:-rotate-90"

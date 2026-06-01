@@ -4,8 +4,9 @@ import { locale } from '@ceraui/i18n/svelte';
 import type { NotificationType, StatusMessage } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
-import { OfflinePage, PWAStatus } from '$lib/components/ui/pwa';
+import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
 import { Toaster } from '$lib/components/ui/sonner';
+import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import {
 	startStreaming as startStreamingFn,
@@ -347,28 +348,30 @@ window.startStreamingWithNotificationClear = startStreaming;
 window.stopStreamingWithNotificationClear = stopStreaming;
 </script>
 
-{#if showOfflinePage}
-	<OfflinePage />
-{:else if authStatus}
-	{#if updatingStatus && typeof updatingStatus !== 'boolean'}
-		<UpdatingOverlay details={updatingStatus}></UpdatingOverlay>
-	{/if}
-	<Main></Main>
-{:else if !isCheckingAuthStatus}
-	<Auth></Auth>
-{:else}
-	<!-- Loading state while checking auth - show a basic loading indicator -->
-	<div class="flex min-h-screen items-center justify-center">
-		<div class="text-center">
-			<div
-				class="border-primary mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
-			></div>
-			<p class="text-muted-foreground">Loading...</p>
+<Tooltip.Provider>
+	{#if showOfflinePage}
+		<OfflinePage />
+	{:else if authStatus}
+		{#if updatingStatus && typeof updatingStatus !== 'boolean'}
+			<UpdatingOverlay details={updatingStatus}></UpdatingOverlay>
+		{/if}
+		<Main></Main>
+	{:else if !isCheckingAuthStatus}
+		<Auth></Auth>
+	{:else}
+		<!-- Loading state while checking auth - show a basic loading indicator -->
+		<div class="flex min-h-screen items-center justify-center">
+			<div class="text-center">
+				<div
+					class="border-primary mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
+				></div>
+				<p class="text-muted-foreground">Loading...</p>
+			</div>
 		</div>
-	</div>
-{/if}
+	{/if}
 
-<!-- PWA Status and Notifications -->
-<PWAStatus />
+	<!-- PWA Status and Notifications -->
+	<PWAStatus />
 
-<Toaster position="bottom-right" />
+	<Toaster position="bottom-right" />
+</Tooltip.Provider>

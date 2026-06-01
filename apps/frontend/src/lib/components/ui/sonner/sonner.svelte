@@ -15,7 +15,8 @@ let { ...restProps }: SonnerProps = $props();
 	class="toaster group"
 	theme={mode.current}
 	{...restProps}
-	>{#snippet loadingIcon()}
+>
+	{#snippet loadingIcon()}
 		<Loader2Icon class="size-4 animate-spin" />
 	{/snippet}
 	{#snippet successIcon()}
