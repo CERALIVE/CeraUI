@@ -17,6 +17,10 @@
 		"./node": {
 			"types": "./src/i18n-node.ts",
 			"import": "./src/i18n-node.ts"
+		},
+		"./formatters": {
+			"types": "./src/formatters.ts",
+			"import": "./src/formatters.ts"
 		}
 	},
 	"scripts": {

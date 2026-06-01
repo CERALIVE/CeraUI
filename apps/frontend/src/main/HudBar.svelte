@@ -70,7 +70,7 @@ function lastSeen(ts: number | null): string | null {
 				data-hud-region
 				aria-label={$LL.hud.expandDetails()}
 				class={cn(
-					'bg-sidebar text-foreground hover:bg-accent/50 focus-visible:ring-ring/50 flex h-12 w-full items-center gap-3 border-t px-4 text-start text-xs font-medium tracking-wide transition-colors focus-visible:ring-2 focus-visible:outline-none',
+					'bg-sidebar text-foreground hover:bg-accent/50 focus-visible:ring-ring/50 flex h-12 w-full items-center gap-3 border-t px-4 text-left text-xs font-medium tracking-wide transition-colors focus-visible:ring-2 focus-visible:outline-none',
 					className,
 				)}
 			>

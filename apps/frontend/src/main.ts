@@ -6,10 +6,15 @@ import { registerSW } from "virtual:pwa-register";
 import { mount } from "svelte";
 
 import App from "./App.svelte";
+import { initSubscriptions } from "./lib/rpc";
 import {
 	checkAndUpdateVersion,
 	setStoredVersion,
 } from "./lib/stores/version.svelte";
+
+// Feeds the HUD's `subscriptions.svelte` getters from the same shared socket the
+// legacy store drives (idempotent). Without this the live HUD never receives data.
+initSubscriptions();
 
 /**
  * Fallback version check for when PWA service worker is disabled or fails.
