@@ -269,6 +269,18 @@
 		--touch-target-min: 44px;
 		--spacing-touch-scale: 1.25;
 	}
+
+	/* used height = max(height, min-height) regardless of specificity, so this
+	   lifts compact h-* controls to 44px in touch mode; default mode token is 0px. */
+	[data-layout-mode='touch'] :is(
+		[data-slot='button'],
+		[data-slot='alert-dialog-action'],
+		[data-slot='alert-dialog-cancel'],
+		[id^='nav-tab-'],
+		[id^='mobile-nav-tab-']
+	) {
+		min-height: var(--touch-target-min);
+	}
 }
 
 /* ── Global Base ──────────────────────────────── */
