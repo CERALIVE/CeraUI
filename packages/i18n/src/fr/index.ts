@@ -310,6 +310,17 @@ const fr = {
 			versionsDesc: "View installed component and firmware versions",
 		},
 
+	dialogs: {
+		enableInterface: "Enable interface",
+		enableInterfaceDesc: "Use this interface for bonded streaming.",
+		staticIp: "Static IP address",
+		dhcpHint: "Leave blank to use DHCP (automatic addressing).",
+		ipInvalid: "Enter a valid IPv4 or IPv6 address.",
+		confirmPassword: "Confirm password",
+		passwordsMismatch: "Passwords don't match.",
+		getYourKey: "Open cloud dashboard",
+		updating: "Updating, please wait\u2026",
+	},
 		encoderSettings: "Paramètres de l'encodeur",
 		inputMode: "Mode d'entrée",
 		hardware: "Matériel",
