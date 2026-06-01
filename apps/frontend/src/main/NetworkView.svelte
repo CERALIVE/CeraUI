@@ -171,7 +171,7 @@ function openModemConfig(id: string) {
 				<p class="text-muted-foreground text-sm">{$LL.network.view.noLinks()}</p>
 			{:else}
 				<div class="flex flex-wrap gap-2.5">
-					{#each links as link (link.id)}
+					{#each links as link (link.linkIndex)}
 						{@const color = `var(--link-${link.linkIndex + 1})`}
 						{@const bars = signalBars(link.signal)}
 						<div
