@@ -64,7 +64,7 @@ const activeNetworkType = $derived(modem.status?.network_type ?? '');
 // ── Form state ────────────────────────────────────────────────────────────────
 function readModemConfig() {
 	return {
-		selectedNetwork: modem.network_type.active ?? modem.network_type.supported[0] ?? '',
+		selectedNetwork: modem.network_type?.active ?? modem.network_type?.supported?.[0] ?? '',
 		autoconfig: modem.config?.autoconfig ?? false,
 		apn: modem.config?.apn ?? '',
 		username: modem.config?.username ?? '',
