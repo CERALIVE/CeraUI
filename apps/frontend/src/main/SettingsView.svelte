@@ -26,7 +26,10 @@ import { AppDialog } from '$lib/components/dialogs';
 import { cn } from '$lib/utils';
 
 import CloudRemoteDialog from './dialogs/CloudRemoteDialog.svelte';
+import LogsDialog from './dialogs/LogsDialog.svelte';
 import PasswordDialog from './dialogs/PasswordDialog.svelte';
+import SshDialog from './dialogs/SshDialog.svelte';
+import UpdatesDialog from './dialogs/UpdatesDialog.svelte';
 
 interface Entry {
 	key: string;
@@ -79,10 +82,13 @@ const groups = $derived<Group[]>([
 	},
 ]);
 
-// Real dialogs (Task 25). Each settings entry routes to its own dialog;
-// remaining entries still use the shared placeholder until their tasks land.
+// Real dialogs (Tasks 25-26). Each settings entry routes to its own dialog;
+// `power`/`versions` still use the shared placeholder until their tasks land.
 let passwordOpen = $state(false);
 let cloudOpen = $state(false);
+let sshOpen = $state(false);
+let logsOpen = $state(false);
+let updatesOpen = $state(false);
 
 // Fallback placeholder dialog for not-yet-wired entries.
 let open = $state(false);
@@ -95,6 +101,15 @@ function openEntry(entry: Entry) {
 			return;
 		case 'cloudRemote':
 			cloudOpen = true;
+			return;
+		case 'ssh':
+			sshOpen = true;
+			return;
+		case 'logs':
+			logsOpen = true;
+			return;
+		case 'updates':
+			updatesOpen = true;
 			return;
 		default:
 			active = entry;
@@ -182,6 +197,9 @@ const ActiveIcon = $derived(active?.icon);
 	</div>
 </AppDialog>
 
-<!-- Wired settings dialogs (Task 25) -->
+<!-- Wired settings dialogs (Tasks 25-26) -->
 <PasswordDialog bind:open={passwordOpen} />
 <CloudRemoteDialog bind:open={cloudOpen} />
+<SshDialog bind:open={sshOpen} />
+<LogsDialog bind:open={logsOpen} />
+<UpdatesDialog bind:open={updatesOpen} />
