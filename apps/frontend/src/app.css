@@ -587,11 +587,19 @@
 	}
 }
 
-/* ── Sonner Toasts ── */
+/* ── Sonner Toasts ──────────────────────────────
+   Graphite popover base + semantic accent per data-type. Tokens
+   auto-flip light/dark, so no separate .dark rules. sonner's
+   --success-bg/--error-bg vars only apply with richColors, so
+   coloring is driven via the always-present [data-type] attr. */
 
 [data-sonner-toast] {
 	border-radius: 0.625rem !important;
-	box-shadow: 0 4px 12px rgb(0 0 0 / 0.08) !important;
+	border-width: 1px !important;
+	background: var(--popover) !important;
+	color: var(--popover-foreground) !important;
+	border-color: var(--border) !important;
+	box-shadow: var(--shadow-lg) !important;
 }
 
 [data-sonner-toast] [data-icon] {
@@ -599,60 +607,68 @@
 	height: 1.25rem;
 }
 
+[data-sonner-toast] [data-title] {
+	font-weight: 600;
+}
+
+[data-sonner-toast] [data-description] {
+	color: var(--popover-foreground) !important;
+	opacity: 0.9;
+}
+
+[data-sonner-toast] [data-close-button] {
+	background: var(--popover) !important;
+	border-color: var(--border) !important;
+	color: var(--muted-foreground) !important;
+}
+
+[data-sonner-toast] [data-close-button]:hover {
+	color: var(--popover-foreground) !important;
+	border-color: var(--muted-foreground) !important;
+}
+
+/* success — phosphor lime */
 [data-sonner-toast][data-type='success'] {
-	background: hsl(142 76% 96%) !important;
-	border-color: hsl(142 71% 45%) !important;
-	color: hsl(142 71% 20%) !important;
+	background: color-mix(in oklab, var(--status-success) 12%, var(--popover)) !important;
+	border-color: color-mix(in oklab, var(--status-success) 42%, var(--border)) !important;
 }
 
-.dark [data-sonner-toast][data-type='success'] {
-	background: hsl(142 71% 10%) !important;
-	border-color: hsl(142 69% 40%) !important;
-	color: hsl(142 76% 85%) !important;
+[data-sonner-toast][data-type='success'] [data-icon] {
+	color: var(--status-success) !important;
 }
 
-[data-sonner-toast][data-type='info'] {
-	background: hsl(214 95% 95%) !important;
-	border-color: hsl(217 91% 60%) !important;
-	color: hsl(221 83% 30%) !important;
-}
-
-.dark [data-sonner-toast][data-type='info'] {
-	background: hsl(217 91% 10%) !important;
-	border-color: hsl(217 91% 50%) !important;
-	color: hsl(214 95% 85%) !important;
-}
-
+/* warning — amber */
 [data-sonner-toast][data-type='warning'] {
-	background: hsl(48 96% 93%) !important;
-	border-color: hsl(38 92% 50%) !important;
-	color: hsl(32 81% 28%) !important;
+	background: color-mix(in oklab, var(--status-warning) 12%, var(--popover)) !important;
+	border-color: color-mix(in oklab, var(--status-warning) 42%, var(--border)) !important;
 }
 
-.dark [data-sonner-toast][data-type='warning'] {
-	background: hsl(38 92% 10%) !important;
-	border-color: hsl(38 92% 45%) !important;
-	color: hsl(48 96% 85%) !important;
+[data-sonner-toast][data-type='warning'] [data-icon] {
+	color: var(--status-warning) !important;
 }
 
+/* error — coral */
 [data-sonner-toast][data-type='error'] {
-	background: hsl(0 93% 95%) !important;
-	border-color: hsl(0 84% 60%) !important;
-	color: hsl(0 70% 30%) !important;
+	background: color-mix(in oklab, var(--status-error) 14%, var(--popover)) !important;
+	border-color: color-mix(in oklab, var(--status-error) 45%, var(--border)) !important;
 }
 
-.dark [data-sonner-toast][data-type='error'] {
-	background: hsl(0 84% 12%) !important;
-	border-color: hsl(0 84% 50%) !important;
-	color: hsl(0 93% 85%) !important;
+[data-sonner-toast][data-type='error'] [data-icon] {
+	color: var(--status-error) !important;
 }
 
+/* info + default/loading — neutral graphite */
+[data-sonner-toast][data-type='info'],
 [data-sonner-toast][data-type='loading'],
 [data-sonner-toast][data-type='default'],
 [data-sonner-toast][data-type='normal'] {
-	background: var(--card) !important;
+	background: var(--popover) !important;
 	border-color: var(--border) !important;
-	color: var(--foreground) !important;
+}
+
+[data-sonner-toast][data-type='info'] [data-icon],
+[data-sonner-toast][data-type='loading'] [data-icon] {
+	color: var(--muted-foreground) !important;
 }
 
 /* ── Svelte Inspector ── */
