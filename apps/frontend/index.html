@@ -342,6 +342,22 @@
       })();
     </script>
 
+    <!-- Theme Detection Script (prevents dark-mode FOUC) -->
+    <script>
+      (function() {
+        try {
+          var stored = localStorage.getItem('theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var theme = stored || (prefersDark ? 'dark' : 'light');
+          if (theme === 'dark' || (!stored && prefersDark)) {
+            document.documentElement.classList.add('dark');
+          } else if (theme === 'light') {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch(e) {}
+      })();
+    </script>
+
     <!-- Brand Configuration Script -->
     <script>
       // Dynamic branding based on build configuration
