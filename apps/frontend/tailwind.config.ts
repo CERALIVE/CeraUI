@@ -94,10 +94,24 @@ const config: Config = {
 				md: "calc(var(--radius) - 2px)",
 				sm: "calc(var(--radius) - 4px)",
 			},
-			fontFamily: {
-				sans: ["Plus Jakarta Sans Variable", ...fontFamily.sans],
-				mono: ["JetBrains Mono Variable", ...fontFamily.mono],
-			},
+		fontFamily: {
+			sans: [
+				"Space Grotesk Variable",
+				"Space Grotesk",
+				// CJK system fallbacks (Space Grotesk has no CJK glyphs)
+				'"Noto Sans CJK SC"',
+				'"Microsoft YaHei"',
+				'"Hiragino Sans"',
+				'"Noto Sans JP"',
+				'"Noto Sans KR"',
+				// Arabic system fallback
+				'"Noto Sans Arabic"',
+				"Tahoma",
+				"system-ui",
+				"sans-serif",
+			],
+			mono: ["JetBrains Mono Variable", ...fontFamily.mono],
+		},
 			keyframes: {
 				"accordion-down": {
 					from: { height: "0" },
