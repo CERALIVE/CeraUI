@@ -13,7 +13,7 @@
 	::before,
 	::backdrop,
 	::file-selector-button {
-		border-color: var(--color-gray-200, hsl(var(--border)));
+		border-color: var(--color-gray-200, var(--border));
 	}
 }
 
@@ -43,40 +43,40 @@
 @utility gradient-primary {
 	background-image: linear-gradient(
 		to right,
-		hsl(var(--primary)),
-		hsl(var(--gradient-primary-to))
+		var(--primary),
+		var(--gradient-primary-to)
 	);
 }
 
 @utility gradient-success {
 	background-image: linear-gradient(
 		to right,
-		hsl(var(--status-success)),
-		hsl(var(--gradient-success-to))
+		var(--status-success),
+		var(--gradient-success-to)
 	);
 }
 
 @utility gradient-info {
 	background-image: linear-gradient(
 		to right,
-		hsl(var(--status-info)),
-		hsl(var(--gradient-info-to))
+		var(--status-info),
+		var(--gradient-info-to)
 	);
 }
 
 @utility gradient-destructive {
 	background-image: linear-gradient(
 		to right,
-		hsl(var(--destructive)),
-		hsl(var(--gradient-destructive-to))
+		var(--destructive),
+		var(--gradient-destructive-to)
 	);
 }
 
 @utility gradient-warning {
 	background-image: linear-gradient(
 		to right,
-		hsl(var(--status-warning)),
-		hsl(var(--gradient-warning-to))
+		var(--status-warning),
+		var(--gradient-warning-to)
 	);
 }
 
@@ -86,67 +86,67 @@
 		   Cool slate neutrals, electric cyan accent
 		   "Broadcast Control Room" aesthetic */
 
-		--background: 210 20% 98%;
-		--foreground: 222 25% 10%;
+		--background: oklch(0.9843 0.0017 247.84);
+		--foreground: oklch(0.2047 0.0188 266.65);
 
-		--card: 0 0% 100%;
-		--card-foreground: 222 25% 10%;
-		--popover: 0 0% 100%;
-		--popover-foreground: 222 25% 10%;
+		--card: oklch(1 0 0);
+		--card-foreground: oklch(0.2047 0.0188 266.65);
+		--popover: oklch(1 0 0);
+		--popover-foreground: oklch(0.2047 0.0188 266.65);
 
-		--primary: 185 85% 45%;
-		--primary-foreground: 200 25% 8%;
+		--primary: oklch(0.7497 0.1263 205.53);
+		--primary-foreground: oklch(0.1953 0.0124 229.79);
 
-		--secondary: 215 16% 93%;
-		--secondary-foreground: 222 20% 18%;
+		--secondary: oklch(0.9443 0.0052 256.67);
+		--secondary-foreground: oklch(0.2863 0.0249 266.7);
 
-		--muted: 215 12% 95%;
-		--muted-foreground: 215 10% 46%;
+		--muted: oklch(0.9607 0.0028 256.66);
+		--muted-foreground: oklch(0.5533 0.0244 256.78);
 
-		--accent: 215 16% 93%;
-		--accent-foreground: 222 20% 18%;
+		--accent: oklch(0.9443 0.0052 256.67);
+		--accent-foreground: oklch(0.2863 0.0249 266.7);
 
-		--destructive: 0 84% 60%;
-		--destructive-foreground: 0 0% 100%;
+		--destructive: oklch(0.6356 0.2082 25.38);
+		--destructive-foreground: oklch(1 0 0);
 
-		--border: 215 12% 89%;
-		--input: 215 12% 89%;
-		--ring: 185 85% 45%;
+		--border: oklch(0.9129 0.0061 256.68);
+		--input: oklch(0.9129 0.0061 256.68);
+		--ring: oklch(0.7497 0.1263 205.53);
 		--radius: 0.5rem;
 
-		--sidebar-background: 215 12% 95%;
-		--sidebar-foreground: 222 25% 10%;
-		--sidebar-primary: 185 85% 45%;
-		--sidebar-primary-foreground: 200 25% 8%;
-		--sidebar-accent: 215 16% 93%;
-		--sidebar-accent-foreground: 222 20% 18%;
-		--sidebar-border: 215 12% 89%;
-		--sidebar-ring: 185 85% 45%;
+		--sidebar-background: oklch(0.9607 0.0028 256.66);
+		--sidebar-foreground: oklch(0.2047 0.0188 266.65);
+		--sidebar-primary: oklch(0.7497 0.1263 205.53);
+		--sidebar-primary-foreground: oklch(0.1953 0.0124 229.79);
+		--sidebar-accent: oklch(0.9443 0.0052 256.67);
+		--sidebar-accent-foreground: oklch(0.2863 0.0249 266.7);
+		--sidebar-border: oklch(0.9129 0.0061 256.68);
+		--sidebar-ring: oklch(0.7497 0.1263 205.53);
 
 		/* Semantic Status */
-		--status-success: 142 71% 45%;
-		--status-success-foreground: 0 0% 100%;
-		--status-info: 217 91% 60%;
-		--status-info-foreground: 0 0% 100%;
-		--status-warning: 38 92% 50%;
-		--status-warning-foreground: 0 0% 100%;
-		--status-error: 0 84% 60%;
-		--status-error-foreground: 0 0% 100%;
-		--status-neutral: 215 10% 46%;
-		--status-neutral-foreground: 0 0% 100%;
+		--status-success: oklch(0.7205 0.192 149.49);
+		--status-success-foreground: oklch(1 0 0);
+		--status-info: oklch(0.6261 0.1859 259.6);
+		--status-info-foreground: oklch(1 0 0);
+		--status-warning: oklch(0.7697 0.1645 70.61);
+		--status-warning-foreground: oklch(1 0 0);
+		--status-error: oklch(0.6356 0.2082 25.38);
+		--status-error-foreground: oklch(1 0 0);
+		--status-neutral: oklch(0.5533 0.0244 256.78);
+		--status-neutral-foreground: oklch(1 0 0);
 
 		/* Signal Quality */
-		--signal-excellent: 142 71% 45%;
-		--signal-good: 217 91% 60%;
-		--signal-fair: 38 92% 50%;
-		--signal-weak: 0 84% 60%;
+		--signal-excellent: oklch(0.7205 0.192 149.49);
+		--signal-good: oklch(0.6261 0.1859 259.6);
+		--signal-fair: oklch(0.7697 0.1645 70.61);
+		--signal-weak: oklch(0.6356 0.2082 25.38);
 
 		/* Gradient Endpoints (shifted hue/lightness for two-tone gradients) */
-		--gradient-primary-to: 190 80% 35%;
-		--gradient-success-to: 160 65% 38%;
-		--gradient-info-to: 235 75% 50%;
-		--gradient-destructive-to: 350 80% 50%;
-		--gradient-warning-to: 25 85% 42%;
+		--gradient-primary-to: oklch(0.5814 0.1 216.35);
+		--gradient-success-to: oklch(0.6291 0.1235 164.93);
+		--gradient-info-to: oklch(0.4503 0.2549 267.4);
+		--gradient-destructive-to: oklch(0.5907 0.2277 21.33);
+		--gradient-warning-to: oklch(0.5964 0.1557 48.41);
 	}
 
 	.dark {
@@ -154,66 +154,66 @@
 		   Deep blue-black backgrounds, electric cyan accent
 		   High contrast "control room" aesthetic */
 
-		--background: 222 30% 6%;
-		--foreground: 210 20% 95%;
+		--background: oklch(0.1615 0.0144 266.68);
+		--foreground: oklch(0.9607 0.0044 247.87);
 
-		--card: 222 22% 9%;
-		--card-foreground: 210 20% 95%;
-		--popover: 222 22% 9%;
-		--popover-foreground: 210 20% 95%;
+		--card: oklch(0.1956 0.0151 266.8);
+		--card-foreground: oklch(0.9607 0.0044 247.87);
+		--popover: oklch(0.1956 0.0151 266.8);
+		--popover-foreground: oklch(0.9607 0.0044 247.87);
 
-		--primary: 185 95% 55%;
-		--primary-foreground: 200 25% 8%;
+		--primary: oklch(0.8486 0.1414 205.19);
+		--primary-foreground: oklch(0.1953 0.0124 229.79);
 
-		--secondary: 220 15% 15%;
-		--secondary-foreground: 210 16% 92%;
+		--secondary: oklch(0.2612 0.0154 264.26);
+		--secondary-foreground: oklch(0.9373 0.0056 247.88);
 
-		--muted: 220 12% 12%;
-		--muted-foreground: 215 10% 55%;
+		--muted: oklch(0.2319 0.0101 264.36);
+		--muted-foreground: oklch(0.6312 0.023 256.76);
 
-		--accent: 220 15% 15%;
-		--accent-foreground: 210 16% 92%;
+		--accent: oklch(0.2612 0.0154 264.26);
+		--accent-foreground: oklch(0.9373 0.0056 247.88);
 
-		--destructive: 0 63% 31%;
-		--destructive-foreground: 0 0% 98%;
+		--destructive: oklch(0.3996 0.1348 25.77);
+		--destructive-foreground: oklch(0.9848 0 0);
 
-		--border: 220 10% 18%;
-		--input: 220 12% 16%;
-		--ring: 185 95% 55%;
+		--border: oklch(0.2941 0.0119 264.37);
+		--input: oklch(0.2729 0.013 264.33);
+		--ring: oklch(0.8486 0.1414 205.19);
 
-		--sidebar-background: 222 22% 9%;
-		--sidebar-foreground: 210 20% 95%;
-		--sidebar-primary: 185 95% 55%;
-		--sidebar-primary-foreground: 200 25% 8%;
-		--sidebar-accent: 220 15% 15%;
-		--sidebar-accent-foreground: 210 16% 92%;
-		--sidebar-border: 220 12% 16%;
-		--sidebar-ring: 185 95% 55%;
+		--sidebar-background: oklch(0.1956 0.0151 266.8);
+		--sidebar-foreground: oklch(0.9607 0.0044 247.87);
+		--sidebar-primary: oklch(0.8486 0.1414 205.19);
+		--sidebar-primary-foreground: oklch(0.1953 0.0124 229.79);
+		--sidebar-accent: oklch(0.2612 0.0154 264.26);
+		--sidebar-accent-foreground: oklch(0.9373 0.0056 247.88);
+		--sidebar-border: oklch(0.2729 0.013 264.33);
+		--sidebar-ring: oklch(0.8486 0.1414 205.19);
 
 		/* Semantic Status (Dark) */
-		--status-success: 142 69% 58%;
-		--status-success-foreground: 0 0% 100%;
-		--status-info: 213 94% 68%;
-		--status-info-foreground: 0 0% 100%;
-		--status-warning: 43 96% 56%;
-		--status-warning-foreground: 0 0% 100%;
-		--status-error: 0 91% 71%;
-		--status-error-foreground: 0 0% 100%;
-		--status-neutral: 215 10% 55%;
-		--status-neutral-foreground: 0 0% 100%;
+		--status-success: oklch(0.7999 0.1816 151.78);
+		--status-success-foreground: oklch(1 0 0);
+		--status-info: oklch(0.7157 0.1425 254.45);
+		--status-info-foreground: oklch(1 0 0);
+		--status-warning: oklch(0.8334 0.1641 83.87);
+		--status-warning-foreground: oklch(1 0 0);
+		--status-error: oklch(0.7123 0.1656 22.18);
+		--status-error-foreground: oklch(1 0 0);
+		--status-neutral: oklch(0.6312 0.023 256.76);
+		--status-neutral-foreground: oklch(1 0 0);
 
 		/* Signal Quality (Dark) */
-		--signal-excellent: 142 69% 58%;
-		--signal-good: 213 94% 68%;
-		--signal-fair: 43 96% 56%;
-		--signal-weak: 0 91% 71%;
+		--signal-excellent: oklch(0.7999 0.1816 151.78);
+		--signal-good: oklch(0.7157 0.1425 254.45);
+		--signal-fair: oklch(0.8334 0.1641 83.87);
+		--signal-weak: oklch(0.7123 0.1656 22.18);
 
 		/* Gradient Endpoints (Dark) */
-		--gradient-primary-to: 190 90% 42%;
-		--gradient-success-to: 160 65% 48%;
-		--gradient-info-to: 235 80% 55%;
-		--gradient-destructive-to: 350 75% 45%;
-		--gradient-warning-to: 25 85% 48%;
+		--gradient-primary-to: oklch(0.6856 0.1217 217.78);
+		--gradient-success-to: oklch(0.7475 0.1483 164.69);
+		--gradient-info-to: oklch(0.4875 0.2472 269.36);
+		--gradient-destructive-to: oklch(0.5389 0.2019 20.03);
+		--gradient-warning-to: oklch(0.6577 0.1731 48.14);
 	}
 }
 
@@ -418,7 +418,7 @@
 	width: 1.5em;
 	text-align: left;
 	font-weight: normal;
-	color: hsl(var(--muted-foreground));
+	color: var(--muted-foreground);
 	opacity: 0.8;
 }
 
@@ -495,19 +495,19 @@
 }
 
 .loading-success::after {
-	color: hsl(var(--status-success));
+	color: var(--status-success);
 }
 
 .loading-warning::after {
-	color: hsl(var(--status-warning));
+	color: var(--status-warning);
 }
 
 .loading-error::after {
-	color: hsl(var(--status-error));
+	color: var(--status-error);
 }
 
 .loading-info::after {
-	color: hsl(var(--status-info));
+	color: var(--status-info);
 }
 
 /* ── Reduced motion ── */
@@ -529,7 +529,7 @@
 @media (prefers-contrast: high) {
 	:focus-visible {
 		outline-width: 3px;
-		outline-color: hsl(var(--foreground));
+		outline-color: var(--foreground);
 	}
 }
 
@@ -596,9 +596,9 @@
 [data-sonner-toast][data-type='loading'],
 [data-sonner-toast][data-type='default'],
 [data-sonner-toast][data-type='normal'] {
-	background: hsl(var(--card)) !important;
-	border-color: hsl(var(--border)) !important;
-	color: hsl(var(--foreground)) !important;
+	background: var(--card) !important;
+	border-color: var(--border) !important;
+	color: var(--foreground) !important;
 }
 
 /* ── Svelte Inspector ── */
