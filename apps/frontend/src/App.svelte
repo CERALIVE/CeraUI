@@ -6,8 +6,21 @@ import { setLocale } from '@ceraui/i18n/svelte';
 import { ModeWatcher } from 'mode-watcher';
 import { onMount } from 'svelte';
 
+import { getLayoutMode, setLayoutMode } from '$lib/stores/layout-mode.svelte';
 import { getLocale } from '$lib/stores/locale.svelte';
 import Layout from '$main/Layout.svelte';
+
+// URL ?mode=touch|default overrides the persisted layout mode on load.
+$effect(() => {
+	const mode = new URLSearchParams(window.location.search).get('mode');
+	if (mode === 'touch') setLayoutMode('touch');
+	else if (mode === 'default') setLayoutMode('default');
+});
+
+// Reflect the active layout mode onto the document root for CSS token overrides.
+$effect(() => {
+	document.documentElement.dataset.layoutMode = getLayoutMode();
+});
 
 onMount(async () => {
 	try {

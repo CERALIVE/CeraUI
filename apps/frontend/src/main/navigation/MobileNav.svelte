@@ -1,190 +1,64 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { ChevronLeft, Menu, X } from '@lucide/svelte';
 
-import Logo from '$lib/components/icons/Logo.svelte';
-import { Button } from '$lib/components/ui/button';
-import MobileLink from '$lib/components/custom/mobile-link.svelte';
-import { ScrollArea } from '$lib/components/ui/scroll-area';
-import { Separator } from '$lib/components/ui/separator';
-import * as Sheet from '$lib/components/ui/sheet';
-import { type NavElements, navElements, siteName } from '$lib/config';
+import { type NavElements, navElements } from '$lib/config';
 import {
-	canGoBack,
-	enhancedNavigationStore,
 	getCurrentNavigation,
 	isNavigationTransitioning,
 	navigateTo,
 } from '$lib/stores/navigation.svelte';
 import { cn } from '$lib/utils';
 
-let open = $state(false);
 let lastNavigationTime = 0;
-
 const NAVIGATION_THROTTLE_MS = 50;
 
-// Svelte 5: Use $derived for current navigation
-const currentNav = $derived(getCurrentNavigation() ?? { general: navElements.general });
+const currentNav = $derived(getCurrentNavigation() ?? { live: navElements.live });
+const activeKey = $derived(Object.keys(currentNav)[0] ?? 'live');
 
-const handleClick = (nav: NavElements) => {
-	if ($isNavigationTransitioning) return;
-
-	const now = Date.now();
-	if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) {
-		return;
-	}
-
-	lastNavigationTime = now;
-
-	setTimeout(() => {
-		if (nav && typeof nav === 'object' && Object.keys(nav).length > 0) {
-			navigateTo(nav);
-		}
-		open = false;
-	}, 75);
-};
-
-const handleLogoClick = () => {
-	if ($isNavigationTransitioning) return;
+const handleClick = (identifier: string, navigation: NavElements[string]) => {
+	if ($isNavigationTransitioning || !navigation || !identifier) return;
 
 	const now = Date.now();
-	if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) {
-		return;
-	}
-
+	if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) return;
 	lastNavigationTime = now;
 
-	const currentKey =
-		currentNav && typeof currentNav === 'object' && Object.keys(currentNav).length > 0
-			? Object.keys(currentNav)[0]
-			: '';
-	const defaultKey = 'general'; // Always general as the default
-
-	// If already on default, and can go back, go back instead
-	if (currentKey === defaultKey && $canGoBack) {
-		enhancedNavigationStore.goBack();
-	} else {
-		handleClick({ general: navElements.general });
-	}
+	navigateTo({ [identifier]: navigation } as NavElements);
 };
 
-const handleBack = () => {
-	if (!$canGoBack || $isNavigationTransitioning) return;
-
-	const now = Date.now();
-	if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) {
-		return;
-	}
-
-	lastNavigationTime = now;
-
-	enhancedNavigationStore.goBack();
-	open = false;
-};
-
-// Close menu when navigation starts transitioning
-$effect(() => {
-	if ($isNavigationTransitioning && open) {
-		setTimeout(() => {
-			open = false;
-		}, 100);
-	}
-});
+const label = (nav: NavElements[string]) =>
+	nav.title ?? $LL.navigation[nav.label as keyof typeof $LL.navigation]();
 </script>
 
-<Sheet.Root bind:open>
-	<Sheet.Trigger>
-		{#snippet child({ props })}
-			<Button
-				{...props}
-				class="mr-2 md:hidden"
-				disabled={$isNavigationTransitioning}
-				variant="ghost"
-				size="icon-lg"
-			>
-				{#if open}
-					<X class="h-5 w-5" />
-				{:else}
-					<Menu class="h-5 w-5" />
-				{/if}
-				<span class="sr-only">
-					{open ? $LL.navigation.closeMenu() : $LL.navigation.toggleMenu()}
-				</span>
-			</Button>
-		{/snippet}
-	</Sheet.Trigger>
-
-	<Sheet.Content class="w-80 pt-4 pr-0" side="left">
-		<Sheet.Title class="sr-only">
-			{$LL?.navigation?.navigationMenu?.() || 'Navigation menu'}
-		</Sheet.Title>
-		<div class="border-b px-4 pb-4">
-			{#if $canGoBack}
-				<div class="mb-3">
-					<button
-						class="text-muted-foreground hover:text-foreground flex min-h-11 items-center gap-1.5 text-sm transition-colors focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none"
-						disabled={$isNavigationTransitioning}
-						onclick={handleBack}
-					>
-						<ChevronLeft class="h-4 w-4" />
-						<span>{$LL.navigation.back()}</span>
-					</button>
-				</div>
+<nav
+	aria-label="Main navigation"
+	class="bg-sidebar flex items-stretch justify-around border-t"
+>
+	{#each Object.entries(navElements) as [identifier, navigation] (identifier)}
+		{@const isActive = activeKey === identifier}
+		<button
+			id={`mobile-nav-tab-${identifier}`}
+			class={cn(
+				'group relative flex min-h-[56px] flex-1 cursor-pointer flex-col items-center justify-center gap-1 px-1 py-2 text-[0.7rem] font-medium transition-colors',
+				'focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset',
+				isActive ? 'text-primary' : 'text-muted-foreground active:text-foreground',
+				navigation.isDev && !isActive && 'text-muted-foreground/60',
+				$isNavigationTransitioning && 'pointer-events-none opacity-60',
+			)}
+			aria-current={isActive ? 'page' : undefined}
+			disabled={$isNavigationTransitioning}
+			onclick={() => handleClick(identifier, navigation)}
+		>
+			{#if isActive}
+				<span
+					class="bg-primary absolute inset-x-6 top-0 h-0.5 rounded-full"
+					aria-hidden="true"
+				></span>
 			{/if}
-
-			<button
-				class="hover:bg-accent flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 transition-colors focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none"
-				disabled={$isNavigationTransitioning}
-				onclick={handleLogoClick}
-			>
-				<Logo class="h-5 w-5" />
-				<span class="text-base font-semibold">{siteName}</span>
-			</button>
-		</div>
-
-		<ScrollArea class="flex-1 px-4 pt-3" orientation="both">
-			<div class="flex flex-col gap-1 pb-10">
-				{#each Object.entries(navElements) as [identifier, navigation], index}
-					{@const isActive =
-						currentNav &&
-						typeof currentNav === 'object' &&
-						Object.keys(currentNav).length > 0 &&
-						Object.keys(currentNav)[0] === identifier}
-
-					{#if identifier}
-						{#if navigation.isDev && index > 0}
-							<Separator class="my-2" />
-						{/if}
-
-						<MobileLink
-							class={cn(
-								'transition-colors',
-								$isNavigationTransitioning && isActive && 'opacity-60',
-							)}
-							disabled={$isNavigationTransitioning}
-							{identifier}
-							{isActive}
-							onclick={() => {
-								if (identifier && navigation && typeof navigation === 'object') {
-									handleClick({ [identifier]: navigation });
-								}
-							}}
-						>
-							{#snippet children()}
-								<div class="flex w-full items-center justify-between">
-									<span
-										>{navigation?.title ??
-											$LL.navigation[navigation?.label as keyof typeof $LL.navigation]()}</span
-									>
-									{#if isActive}
-										<div class="bg-primary h-1.5 w-1.5 rounded-full"></div>
-									{/if}
-								</div>
-							{/snippet}
-						</MobileLink>
-					{/if}
-				{/each}
-			</div>
-		</ScrollArea>
-	</Sheet.Content>
-</Sheet.Root>
+			{#if navigation.icon}
+				{@const Icon = navigation.icon}
+				<Icon class="h-5 w-5" aria-hidden="true" />
+			{/if}
+			<span class="leading-none">{label(navigation)}</span>
+		</button>
+	{/each}
+</nav>

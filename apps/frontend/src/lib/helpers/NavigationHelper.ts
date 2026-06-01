@@ -1,5 +1,5 @@
 import { type NavElements, navElements } from "$lib/config";
-import General from "$main/tabs/General.svelte";
+import Streaming from "$main/tabs/Streaming.svelte";
 
 /**
  * Options for customizing hash navigation behavior
@@ -41,7 +41,7 @@ export interface SetupHashNavigationOptions {
  * @returns The matching navigation element or fallback
  */
 export function getNavFromHash(options?: HashNavigationOptions): NavElements {
-	const defaultNav = { general: { label: "general", component: General } };
+	const defaultNav = { live: { label: "live", component: Streaming } };
 	const {
 		fallbackElement = defaultNav,
 		caseSensitive = true,

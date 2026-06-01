@@ -10,6 +10,7 @@ import { Label } from '$lib/components/ui/label';
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { siteName } from '$lib/config';
+import { getConnectionState, getIsConnected } from '$lib/rpc/subscriptions.svelte';
 import {
 	getAuth,
 	getNotifications,
@@ -41,6 +42,17 @@ const validation = $derived({
 });
 
 const isFormValid = $derived(validation.password.isValid);
+
+// Slim pre-auth connection strip: WS reachability only, zero device telemetry.
+const connection = $derived.by(() => {
+	if (getIsConnected() && getConnectionState() === 'connected') {
+		return { tone: 'bg-status-success', label: 'Device connected' };
+	}
+	if (getConnectionState() === 'connecting') {
+		return { tone: 'bg-status-warning animate-pulse', label: 'Connecting…' };
+	}
+	return { tone: 'bg-status-error', label: 'Device unreachable' };
+});
 
 $effect(() => {
 	const status = getStatus();
@@ -97,6 +109,16 @@ async function onSubmit(event: SubmitEvent) {
 <div
 	class="relative grid h-dvh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0"
 >
+	<!-- Slim connection strip: WS reachability only (no telemetry pre-auth) -->
+	<div
+		data-connection-strip
+		role="status"
+		class="bg-card/80 text-muted-foreground absolute top-4 left-4 z-10 flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium md:top-6 md:left-6"
+	>
+		<span class={cn('inline-block h-2 w-2 shrink-0 rounded-full', connection.tone)}></span>
+		<span>{connection.label}</span>
+	</div>
+
 	<!-- Controls -->
 	<div class="absolute top-4 right-4 z-10 flex items-center gap-1 md:top-6 md:right-6">
 		<LocaleSelector />

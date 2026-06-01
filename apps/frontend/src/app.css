@@ -255,6 +255,22 @@
 	}
 }
 
+/* ── Layout mode (touch / kiosk foundation) ──────
+   Default keeps web-first sizing; touch scales hit targets
+   and spacing for an attached touchscreen (1024×600 kiosk). */
+
+@layer base {
+	:root {
+		--touch-target-min: 0px;
+		--spacing-touch-scale: 1;
+	}
+
+	[data-layout-mode='touch'] {
+		--touch-target-min: 44px;
+		--spacing-touch-scale: 1.25;
+	}
+}
+
 /* ── Global Base ──────────────────────────────── */
 
 @layer base {
