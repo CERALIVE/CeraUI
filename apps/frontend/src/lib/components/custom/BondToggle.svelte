@@ -4,6 +4,7 @@ import { toast } from 'svelte-sonner';
 
 import { Switch } from '$lib/components/ui/switch';
 import * as Tooltip from '$lib/components/ui/tooltip';
+import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import { rpc } from '$lib/rpc/client';
 import { cn } from '$lib/utils';
 
@@ -74,12 +75,20 @@ async function toggle(next: boolean) {
 
 	target = next;
 	pending = true;
+	// Register this interface's bond-membership edit in the dirty-field registry
+	// (per-interface key, so it never collides with another control). Lock BEFORE
+	// the RPC, release after it settles (resolve or reject) to avoid a permanent
+	// lock. The local `pending`/`target` pair owns the optimistic visual; this
+	// registration only records ownership so the ingestion layer knows the field.
+	const field = `enabled_${name}`;
+	markPending(field, next);
 	try {
 		await rpc.network.configure({ name, ip, enabled: next });
 	} catch (error) {
 		console.error(`Failed to toggle bond membership for ${name}:`, error);
 		toast.error(errorMessage(error) ?? $LL.network.view.lastActiveError());
 	} finally {
+		onRpcResolved(field);
 		// Release the in-flight lock; `displayed` now follows the authoritative
 		// `enabled` prop, which the netif subscription reconciles (confirm on
 		// success, revert on a blocked or failed change).

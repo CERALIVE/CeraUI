@@ -21,6 +21,7 @@ import * as Select from '$lib/components/ui/select';
 import { streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
 import { getConfig, getIsStreaming, getRelays } from '$lib/rpc/subscriptions.svelte';
 import { rpc } from '$lib/rpc';
+import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 
 interface Props {
 	open?: boolean;
@@ -108,12 +109,19 @@ async function handleSave() {
 		input.relay_server = relayServer;
 		if (relayAccount) input.relay_account = relayAccount;
 	}
+	// Lock each field this save changes BEFORE the RPC so a stale server echo
+	// of the old value can't revert the edit; release after it settles (resolve
+	// or reject) to avoid a permanent lock.
+	const fields = Object.entries(input).filter(([, value]) => value !== undefined);
+	for (const [field, value] of fields) markPending(field, value);
 	try {
 		await rpc.streaming.setConfig(input);
 		toast.success($LL.notifications.saved());
 		open = false;
 	} catch {
 		toast.error($LL.notifications.saveFailed());
+	} finally {
+		for (const [field] of fields) onRpcResolved(field);
 	}
 }
 </script>

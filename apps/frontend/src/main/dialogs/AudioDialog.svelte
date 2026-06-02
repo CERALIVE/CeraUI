@@ -35,6 +35,7 @@ import {
 	resolveAudioPipelineKey,
 } from '$lib/streaming/audioGate';
 import { rpc } from '$lib/rpc';
+import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import {
 	getAudioCodecs,
 	getConfig,
@@ -174,15 +175,18 @@ async function handleSave() {
 	};
 	// Optimistic local commit so the Live summary updates immediately…
 	onSave?.(values);
-	// …then persist via the dedicated config RPC (no stream restart).
+	// …then persist via the dedicated config RPC (no stream restart). Lock each
+	// changed field BEFORE the RPC so a stale echo can't revert the edit, and
+	// release after it settles (resolve or reject) to avoid a permanent lock.
+	const input = { asrc: values.asrc, acodec: values.acodec, delay: values.delay };
+	const fields = Object.entries(input).filter(([, value]) => value !== undefined);
+	for (const [field, value] of fields) markPending(field, value);
 	try {
-		await rpc.streaming.setConfig({
-			asrc: values.asrc,
-			acodec: values.acodec,
-			delay: values.delay,
-		});
+		await rpc.streaming.setConfig(input);
 	} catch {
 		toast.error($LL.notifications.saveFailed());
+	} finally {
+		for (const [field] of fields) onRpcResolved(field);
 	}
 }
 </script>
@@ -298,17 +302,17 @@ async function handleSave() {
 					>
 						<!-- Track -->
 						<div
-							class="bg-muted absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full"
+							class="bg-muted absolute inset-x-0 inset-y-0 top-1/2 h-2 -translate-y-1/2 rounded-full"
 						></div>
 						<!-- Center marker (zero) -->
 						<div
-							style={`left: ${zeroPct}%;`}
-							class="bg-muted-foreground/40 absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2"
+							style={`inset-inline-start: ${zeroPct}%;`}
+							class="bg-muted-foreground/40 absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rtl:translate-x-1/2"
 						></div>
 						<!-- Fill from zero toward thumb -->
 						{#if fillWidth > 0}
 							<div
-								style={`left: ${fillLeft}%; width: ${fillWidth}%;`}
+								style={`inset-inline-start: ${fillLeft}%; width: ${fillWidth}%;`}
 								class={`absolute top-1/2 h-2 -translate-y-1/2 rounded-full transition-all duration-200 ${
 									draftDelay < 0 ? 'bg-muted-foreground' : 'bg-primary'
 								}`}
@@ -316,8 +320,8 @@ async function handleSave() {
 						{/if}
 						<!-- Thumb -->
 						<div
-							style={`left: ${thumbPct}%; transition: left 200ms ease-out, background-color 200ms ease-out;`}
-							class={`border-background absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-md transition-all duration-200 ${
+							style={`inset-inline-start: ${thumbPct}%; transition: inset-inline-start 200ms ease-out, background-color 200ms ease-out;`}
+							class={`border-background absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-md transition-all duration-200 rtl:translate-x-1/2 ${
 								draftDelay === 0
 									? 'bg-muted-foreground'
 									: draftDelay < 0
