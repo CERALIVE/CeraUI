@@ -27,7 +27,8 @@ import * as Card from '$lib/components/ui/card';
 import { Slider } from '$lib/components/ui/slider';
 import { stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
-import { getConfig, getIsStreaming, getSensors } from '$lib/rpc/subscriptions.svelte';
+import { getConfig, getIsStreaming, getPipelines, getSensors } from '$lib/rpc/subscriptions.svelte';
+import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
 import { isSectionLocked, type StreamSection } from '$lib/streaming/streamingLockPolicy';
 import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
 import EncoderDialog, { type EncoderConfig } from '$main/dialogs/EncoderDialog.svelte';
@@ -65,6 +66,24 @@ let audioOverride = $state<AudioConfigValues | null>(null);
 // Drives the AudioDialog gate: the drafted encoder source wins, the saved
 // config pipeline is the fallback (mirrors EncoderDialog's own seeding).
 const effectivePipeline = $derived(encoderConfig.source ?? config?.pipeline);
+
+// Pipeline metadata for the effective source — used to capability-gate the
+// resolution/framerate overrides when persisting the encoder draft.
+const effectivePipelineData = $derived(
+	effectivePipeline ? getPipelines()?.pipelines?.[effectivePipeline] : undefined,
+);
+
+// Persist the encoder draft via setConfig when EncoderDialog saves — mirrors
+// the AudioDialog/ServerDialog persistence pattern. Resolution/framerate are
+// capability-gated against the selected pipeline (buildEncoderSetConfig).
+async function handleEncoderSave(saved: EncoderConfig) {
+	try {
+		await rpc.streaming.setConfig(buildEncoderSetConfig(saved, effectivePipelineData));
+		toast.success($LL.notifications.saved());
+	} catch {
+		toast.error($LL.notifications.saveFailed());
+	}
+}
 
 const effectiveAudioSource = $derived(audioOverride?.asrc ?? config?.asrc);
 const effectiveAudioCodec = $derived(
@@ -447,4 +466,4 @@ const configRows = $derived<ConfigRow[]>([
 />
 
 <!-- Encoder configuration dialog (opened from the Encoder "Edit" row). -->
-<EncoderDialog bind:open={encoderOpen} bind:config={encoderConfig} />
+<EncoderDialog bind:open={encoderOpen} bind:config={encoderConfig} onSave={handleEncoderSave} />

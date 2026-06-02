@@ -24,7 +24,8 @@
   • `normalizeValue` (StreamingUtils) clamps/steps the bitrate before commit.
   • On save the live bitrate is applied immediately via `updateMaxBitrate`
     (a no-op unless streaming); the full encoder selection is written back to the
-    bound `config` draft that LiveView owns and feeds into the start flow.
+    bound `config` draft that LiveView owns, and `onSave` notifies LiveView so it
+    can persist the selection via `rpc.streaming.setConfig` (Task 14).
   • RTL-safe (logical spacing, no physical margins), reduced-motion inherits the
     AppDialog suppression, and the breakpoint switches Dialog ⇄ Sheet.
 -->
@@ -64,9 +65,15 @@ import { getConfig, getIsStreaming, getPipelines } from '$lib/rpc/subscriptions.
 interface Props {
 	open?: boolean;
 	config?: EncoderConfig;
+	/**
+	 * Commit handler — receives the assembled encoder draft when Save is pressed,
+	 * so LiveView can persist it via `rpc.streaming.setConfig` (Task 14). Mirrors
+	 * the Audio/Server dialog persistence pattern.
+	 */
+	onSave?: (config: EncoderConfig) => void;
 }
 
-let { open = $bindable(false), config = $bindable() }: Props = $props();
+let { open = $bindable(false), config = $bindable(), onSave }: Props = $props();
 
 // ── Schema-derived bounds (single source of truth, zero literals) ──────────────
 const BITRATE = streamingConstraints.bitrate;
@@ -154,17 +161,21 @@ function handleSave() {
 	localBitrate = normalized;
 
 	// Persist the full encoder selection into the draft LiveView owns + feeds the
-	// start flow. (There is no idle `setConfig` RPC — pipeline RPC is out of scope.)
-	config = {
+	// start flow. Resolution/framerate stay capability-gated at the source.
+	const next: EncoderConfig = {
 		source: localSource || undefined,
 		resolution: selectedPipeline?.supportsResolutionOverride ? localResolution : undefined,
 		framerate: selectedPipeline?.supportsFramerateOverride ? localFramerate : undefined,
 		bitrate: normalized,
 		bitrateOverlay: localOverlay,
 	};
+	config = next;
 
 	// Apply the new bitrate live; no-op unless currently streaming.
 	updateMaxBitrate(normalized, isStreaming);
+
+	// Notify LiveView so it can persist the selection via rpc.streaming.setConfig.
+	onSave?.(next);
 
 	open = false;
 }
