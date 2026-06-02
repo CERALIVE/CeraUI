@@ -56,6 +56,15 @@ export const streamingStartProcedure = authedProcedure
 			// The existing start function handles validation and config saving
 			// Pass input directly - it already matches ConfigParameters
 			await startStream(context.ws as unknown as import("ws").default, input);
+			if (shouldUseMocks()) {
+				setMockEncoderConfig({
+					pipeline: input.pipeline,
+					bitrate_overlay: input.bitrate_overlay,
+					resolution: input.resolution,
+					framerate: input.framerate,
+					max_br: input.max_br,
+				});
+			}
 			return { success: true, is_streaming: getIsStreaming() };
 		} catch (_error) {
 			return { success: false, is_streaming: false };
@@ -123,13 +132,20 @@ export const getConfigProcedure = authedProcedure
 	.handler(() => {
 		const config = getConfig();
 		let max_br = config.max_br;
+		let pipeline = config.pipeline;
+		let bitrate_overlay = config.bitrate_overlay;
+		let resolution = config.resolution;
+		let framerate = config.framerate;
 
-		// In mock mode, overlay mockEncoderConfig.max_br if set
+		// In mock mode, overlay mockEncoderConfig fields if set
 		if (shouldUseMocks()) {
-			const mockState = getMockState();
-			if (mockState.mockEncoderConfig.max_br !== undefined) {
-				max_br = mockState.mockEncoderConfig.max_br;
-			}
+			const { mockEncoderConfig } = getMockState();
+			if (mockEncoderConfig.max_br !== undefined) max_br = mockEncoderConfig.max_br;
+			if (mockEncoderConfig.pipeline !== undefined) pipeline = mockEncoderConfig.pipeline;
+			if (mockEncoderConfig.bitrate_overlay !== undefined)
+				bitrate_overlay = mockEncoderConfig.bitrate_overlay;
+			if (mockEncoderConfig.resolution !== undefined) resolution = mockEncoderConfig.resolution;
+			if (mockEncoderConfig.framerate !== undefined) framerate = mockEncoderConfig.framerate;
 		}
 
 		return {
@@ -137,9 +153,11 @@ export const getConfigProcedure = authedProcedure
 			max_br,
 			acodec: config.acodec as "opus" | "aac" | "pcm" | undefined,
 			delay: config.delay,
-			pipeline: config.pipeline,
+			pipeline,
 			srt_latency: config.srt_latency,
-			bitrate_overlay: config.bitrate_overlay,
+			bitrate_overlay,
+			resolution,
+			framerate,
 			srtla_addr: config.srtla_addr,
 			srtla_port: config.srtla_port,
 			srt_streamid: config.srt_streamid,
@@ -167,6 +185,8 @@ export const setConfigProcedure = authedProcedure
 		if (input.acodec !== undefined) config.acodec = input.acodec;
 		if (input.asrc !== undefined) config.asrc = input.asrc;
 		if (input.max_br !== undefined) config.max_br = input.max_br;
+		if (input.resolution !== undefined) config.resolution = input.resolution;
+		if (input.framerate !== undefined) config.framerate = input.framerate;
 		if (input.bitrate_overlay !== undefined)
 			config.bitrate_overlay = input.bitrate_overlay;
 
@@ -186,6 +206,16 @@ export const setConfigProcedure = authedProcedure
 		} else if (input.srt_streamid !== undefined) {
 			config.srt_streamid = input.srt_streamid;
 			config.relay_account = undefined;
+		}
+
+		if (shouldUseMocks()) {
+			setMockEncoderConfig({
+				pipeline: input.pipeline,
+				bitrate_overlay: input.bitrate_overlay,
+				resolution: input.resolution,
+				framerate: input.framerate,
+				max_br: input.max_br,
+			});
 		}
 
 		saveConfig();
