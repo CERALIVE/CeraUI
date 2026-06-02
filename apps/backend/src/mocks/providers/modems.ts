@@ -82,14 +82,14 @@ function getMockModemInfo(modemId: number): string {
 
 	const signal = Math.round(getModemSignal(modemId));
 	const state = getModemState(modemId);
-	const accessTech = modem.networkType === "5G" ? "5gnr" : "lte";
+	const accessTech = modem.network_type.active === "5g" ? "5gnr" : "lte";
 
 	const lines: string[] = [
 		`modem.dbus-path: /org/freedesktop/ModemManager1/Modem/${modemId}`,
 		`modem.generic.device-identifier: ${modem.imei.slice(0, 8)}`,
 		`modem.generic.manufacturer: ${modem.manufacturer}`,
 		`modem.generic.model: ${modem.model}`,
-		`modem.generic.revision: ${modem.networkType === "5G" ? "RM520NGLAAR01A07M4G" : "SWI9X30C_02.33.03.00"}`,
+		`modem.generic.revision: ${modem.network_type.active === "5g" ? "RM520NGLAAR01A07M4G" : "SWI9X30C_02.33.03.00"}`,
 		`modem.generic.carrier-configuration: default`,
 		`modem.generic.carrier-configuration-revision: --`,
 		`modem.generic.hardware-revision: --`,
