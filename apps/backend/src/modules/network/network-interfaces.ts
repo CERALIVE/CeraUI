@@ -43,6 +43,8 @@ import {
 	wifiDeviceListStartUpdate,
 } from "../wifi/wifi-device-list.ts";
 import { wifiUpdateDevices } from "../wifi/wifi-interfaces.ts";
+import { onNetifChange, setNetifState } from "./state/netif-state.ts";
+import type { MonitorEvent, NetifState } from "./state-types.ts";
 
 export type NetworkInterface = {
 	ip?: string;
@@ -66,10 +68,97 @@ export const NETIF_ERR_HOTSPOT = 0x02;
 
 let netif: Record<string, NetworkInterface> = {};
 
+// Interfaces excluded from dup-IPv4 detection during a station<->hotspot
+// transition: a lingering station lease can transiently share an IP as the
+// hotspot comes up, which would fire a false-alarm netif_dup_ip notification.
+const dupIpSuppressedIfaces = new Set<string>();
+
+export function setNetifDupIpSuppression(ifname: string, suppressed: boolean) {
+	if (suppressed) {
+		dupIpSuppressedIfaces.add(ifname);
+	} else {
+		dupIpSuppressedIfaces.delete(ifname);
+	}
+}
+
 const networkInterfacesEventEmitter = new EventEmitter();
 
+// Reduced-cadence backstop poll: events are the primary driver now, this only
+// refreshes throughput + confirms IP after an event. The old 1s interval is gone.
+const NETIF_POLL_INTERVAL_MS = 5000;
+
+// Mirror legacy `netif` into the NetifState cache (mapping `enabled`→`up`).
+// setNetifState fires onNetifChange only on a real diff → that callback is the
+// sole broadcaster, so identical snapshots produce no `netif` broadcast.
+function syncNetifState(): void {
+	const next: NetifState = {};
+	for (const name in netif) {
+		const i = netif[name];
+		if (!i) continue;
+		next[name] = {
+			ip: i.ip,
+			up: i.enabled,
+			tp: i.tp,
+			txb: i.txb,
+			error: i.error,
+		};
+	}
+	setNetifState(next);
+}
+
 export function triggerNetworkInterfacesChange() {
+	// Reconcile + broadcast on any state mutation (poll, UI toggle, hotspot
+	// marking) — broadcast fires only when the diff is non-empty.
+	syncNetifState();
 	networkInterfacesEventEmitter.emit("change");
+}
+
+function isNetifUpState(state: string): boolean {
+	const s = state.toLowerCase();
+	return s === "up" || s.startsWith("connected");
+}
+
+function isNetifDownState(state: string): boolean {
+	const s = state.toLowerCase();
+	return (
+		s === "down" ||
+		s === "disconnected" ||
+		s === "unavailable" ||
+		s === "unmanaged" ||
+		s.startsWith("deactivat")
+	);
+}
+
+/**
+ * Primary event-driven driver: react to a monitor `device-state` event by
+ * adding (link up) or removing (link down) the interface in the legacy `netif`
+ * map, then reconcile+broadcast. IP/throughput are NOT carried by the event —
+ * the retained slow poll confirms the IP and refreshes throughput afterwards.
+ * Other event kinds (connection-state / modem-*) are ignored here.
+ */
+export function handleNetifMonitorEvent(event: MonitorEvent): void {
+	if (event.type !== "device-state") return;
+
+	const name = event.device;
+	if (name === "lo" || name.match("^docker") || name.match("^l4tbr")) return;
+
+	let mutated = false;
+	if (isNetifUpState(event.state)) {
+		if (!netif[name]) {
+			// New running interface; IP/throughput get filled in by the next poll.
+			netif[name] = { tp: 0, txb: 0, enabled: true, error: 0 };
+			mutated = true;
+		}
+	} else if (isNetifDownState(event.state)) {
+		if (netif[name]) {
+			delete netif[name];
+			mutated = true;
+		}
+	}
+
+	if (mutated) {
+		triggerNetworkInterfacesChange();
+	}
 }
 
 export function onNetworkInterfacesChange(callback: () => void) {
@@ -84,12 +173,17 @@ export function getNetworkInterfaces() {
 	return netif;
 }
 
-export function initNetworkInterfaceMonitoring() {
-	updateNetif();
-	setInterval(updateNetif, 1000);
+function broadcastNetif(): void {
+	broadcastMsg("netif", netIfBuildMsg(), getms() - ACTIVE_TO);
 }
 
-function updateNetif() {
+export function initNetworkInterfaceMonitoring() {
+	onNetifChange(broadcastNetif);
+	updateNetif();
+	setInterval(updateNetif, NETIF_POLL_INTERVAL_MS);
+}
+
+export function updateNetif() {
 	// Use mock data in development mode
 	if (shouldMockNetwork()) {
 		const mockOutput = getMockIfconfigOutput();
@@ -105,7 +199,7 @@ function updateNetif() {
 		});
 }
 
-function processIfconfigOutput(stdout: string) {
+export function processIfconfigOutput(stdout: string) {
 	let intsChanged = false;
 	const newInterfaces: Record<string, NetworkInterface> = {};
 
@@ -186,6 +280,7 @@ function processIfconfigOutput(stdout: string) {
 			if (!newInterface?.ip) continue;
 
 			clearNetifDup(newInterface);
+			if (dupIpSuppressedIfaces.has(i)) continue;
 			const currentValue = intAddrs[newInterface.ip];
 
 			if (currentValue === undefined) {
@@ -232,7 +327,9 @@ function processIfconfigOutput(stdout: string) {
 		updateBcrptSourceIps();
 	}
 
-	broadcastMsg("netif", netIfBuildMsg(), getms() - ACTIVE_TO);
+	// Reconcile + broadcast (covers throughput-only deltas too); no-op when the
+	// snapshot is unchanged, replacing the old unconditional per-tick broadcast.
+	syncNetifState();
 }
 
 // The order is deliberate, we want *hotspot* to have higher priority
@@ -308,7 +405,7 @@ export function netIfBuildMsg() {
 			if (mockConfig.ip !== undefined) m[i].ip = mockConfig.ip;
 		}
 
-		const error = netIfGetErrorMsg(networkInterface);
+		const error = getNetifErrorMsg(networkInterface);
 		if (error) {
 			m[i].error = error;
 		}
