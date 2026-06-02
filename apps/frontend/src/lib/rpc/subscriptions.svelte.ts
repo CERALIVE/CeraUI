@@ -28,6 +28,11 @@ import {
 
 import type { ConnectionState } from "./client";
 import { rpc, rpcClient } from "./client";
+import {
+	expireReactive,
+	reconcileReactive,
+	shouldIgnoreEchoReactive,
+} from "./dirty-registry.svelte";
 import { reauthenticateAndHydrate } from "./reconnect";
 
 // ============================================
@@ -168,11 +173,30 @@ function handleMessage(type: string, data: unknown): void {
 			authState = data as typeof authState;
 			break;
 
-		case "config":
-			configState = data as ConfigMessage;
+		case "config": {
+			// Lock-aware ingestion. The dirty-field registry is keyed on
+			// ConfigMessage field names (max_br, acodec, delay, srtla_addr,
+			// srt_latency, bitrate_overlay, resolution, framerate, ...). For each
+			// field the server echoes: skip it if a stale optimistic lock guards
+			// it (shouldIgnoreEchoReactive), otherwise apply it and reconcile the
+			// lock (release once its RPC resolved and the server echoed the field).
+			const incoming = data as ConfigMessage;
+			const merged: ConfigMessage = { ...configState };
+			for (const [field, value] of Object.entries(incoming)) {
+				if (value === undefined) continue;
+				if (shouldIgnoreEchoReactive(field, value)) continue;
+				(merged as Record<string, unknown>)[field] = value;
+				reconcileReactive(field, value);
+			}
+			configState = merged;
 			break;
+		}
 
 		case "status": {
+			// Status fields are not currently registry-guarded: the dirty-field
+			// registry only covers ConfigMessage fields (see the "config" case).
+			// Status-owned toggles (BondToggle / AsyncSwitch) register their own
+			// fields in T14, so this merge is left untouched to avoid double-guarding.
 			const statusData = data as StatusResponse;
 
 			// Update individual states
@@ -380,6 +404,9 @@ function handleConnectionChange(state: ConnectionState): void {
 
 let isInitialized = false;
 
+const LOCK_EXPIRY_TICK_MS = 5_000;
+let lockExpiryTick: ReturnType<typeof setInterval> | undefined;
+
 /**
  * Initialize subscriptions
  */
@@ -392,6 +419,13 @@ export function initSubscriptions(): void {
 
 	// Set up connection handler
 	rpcClient.onConnectionChange(handleConnectionChange);
+
+	// Drive the dirty-field registry's TTL safety valve from the ingestion layer
+	// so optimistic locks can never outlive FIELD_LOCK_TTL_MS even if a field is
+	// never echoed back by the server.
+	lockExpiryTick ??= setInterval(() => {
+		expireReactive();
+	}, LOCK_EXPIRY_TICK_MS);
 
 	// Connect to server
 	rpcClient.connect();
@@ -417,6 +451,11 @@ export function resetState(): void {
 	audioCodecsState = undefined;
 	relaysState = undefined;
 	notificationsState = undefined;
+
+	if (lockExpiryTick !== undefined) {
+		clearInterval(lockExpiryTick);
+		lockExpiryTick = undefined;
+	}
 }
 
 // ============================================

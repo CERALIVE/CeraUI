@@ -203,6 +203,7 @@ interface DirtyStore {
 	markResolved: (field: string) => void;
 	shouldIgnoreEcho: (field: string, incomingValue: unknown) => boolean;
 	reconcile: (field: string, incomingValue: unknown, now?: number) => ReconcileResult;
+	expire: (now?: number) => string[];
 	getRegistry: () => DirtyRegistry;
 	destroy: () => void;
 }
@@ -237,6 +238,7 @@ function createDirtyStore(): DirtyStore {
 		shouldIgnoreEcho: (field, incomingValue) => shouldIgnoreEcho(registry, field, incomingValue),
 		reconcile: (field, incomingValue, now = Date.now()) =>
 			reconcile(registry, field, incomingValue, registry.locks[field]?.rpcResolved ?? false, now),
+		expire: (now = Date.now()) => expire(registry, now),
 		getRegistry: () => registry,
 		destroy: () => {
 			stopRoot();
@@ -283,6 +285,16 @@ export function shouldIgnoreEchoReactive(field: string, incomingValue: unknown):
 /** Reconcile an incoming field value against the live registry. */
 export function reconcileReactive(field: string, incomingValue: unknown, now?: number): ReconcileResult {
 	return store().reconcile(field, incomingValue, now);
+}
+
+/**
+ * Force-release every lock past its {@link FIELD_LOCK_TTL_MS} TTL on the live
+ * registry, returning the released field names. The reactive store self-sweeps
+ * on its own internal interval; this export lets the socket-ingestion layer
+ * (`subscriptions.svelte.ts`) drive the same safety valve from its own tick.
+ */
+export function expireReactive(now?: number): string[] {
+	return store().expire(now);
 }
 
 /** Tear down the reactive store (TTL timer + effect root). For tests/HMR. */
