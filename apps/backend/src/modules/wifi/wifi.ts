@@ -25,9 +25,11 @@ import { logger } from "../../helpers/logger.ts";
 import { pollWithBackoff } from "../../helpers/retry.ts";
 import { extractMessage } from "../../helpers/types.ts";
 import {
+	getMockState,
 	getScenarioConfig,
 	getWifiSignal,
 	mockWifiNetworks,
+	mockWifiUuidForSsid,
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
 import {
@@ -127,27 +129,29 @@ export function wifiBuildMsg() {
 	if (shouldUseMocks()) {
 		const config = getScenarioConfig();
 		if (config.wifi) {
+			const wlanState = getMockState().wifiConnections.get("wlan0");
+			const activeSsid = wlanState?.activeNetwork;
+			const savedNetworks = wlanState?.savedNetworks ?? [];
+
 			const mockAvailable: WifiNetwork[] = mockWifiNetworks.map((network) => ({
-				active: network.active,
+				active: network.ssid === activeSsid,
 				ssid: network.ssid,
 				signal: Math.round(getWifiSignal(network.ssid)),
 				security: network.security,
 				freq: network.frequency,
 			}));
 
-			// Sort by signal strength
 			mockAvailable.sort((a, b) => b.signal - a.signal);
 
-			const mockSaved: Record<string, string> = {
-				HomeNetwork: "uuid-home-network-12345",
-				Office_Secure: "uuid-office-secure-67890",
-				StreamingStudio: "uuid-streaming-studio-11111",
-			};
+			const mockSaved: Record<string, string> = {};
+			for (const ssid of savedNetworks) {
+				mockSaved[ssid] = mockWifiUuidForSsid(ssid);
+			}
 
 			return {
 				0: {
 					ifname: "wlan0",
-					conn: "HomeNetwork",
+					conn: activeSsid ? mockWifiUuidForSsid(activeSsid) : "",
 					hw: "dc:a6:32:12:34:57",
 					saved: mockSaved,
 					available: mockAvailable,

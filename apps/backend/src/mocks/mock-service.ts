@@ -348,6 +348,32 @@ export function setMockWifiConnection(
 	mockState.wifiConnections.set(deviceId, { ...current, ...update });
 }
 
+/**
+ * Stable, deterministic mock connection UUID for a WiFi SSID.
+ * Used to build the `saved` map in wifiBuildMsg() and to reverse-map the
+ * UUIDs the frontend sends back to connect/disconnect/forget procedures.
+ */
+export function mockWifiUuidForSsid(ssid: string): string {
+	const slug = ssid
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+	return `mock-wifi-${slug}`;
+}
+
+/**
+ * Reverse lookup: resolve the SSID for a mock WiFi UUID by scanning the
+ * known seeded networks. Returns undefined for unknown/real UUIDs.
+ */
+export function mockWifiSsidForUuid(uuid: string): string | undefined {
+	for (const network of mockWifiNetworks) {
+		if (mockWifiUuidForSsid(network.ssid) === uuid) {
+			return network.ssid;
+		}
+	}
+	return undefined;
+}
+
 export function setMockModemConfig(
 	modemId: string,
 	update: Partial<MockModemConfigState>,
