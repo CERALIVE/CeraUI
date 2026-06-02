@@ -15,13 +15,18 @@ import {
 	Cloud,
 	Info,
 	KeyRound,
+	Languages,
+	Palette,
 	Power,
 	RefreshCw,
 	ScrollText,
 	SquareTerminal,
 } from '@lucide/svelte';
 import type { Component } from 'svelte';
+import { MediaQuery } from 'svelte/reactivity';
 
+import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
+import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { AppDialog } from '$lib/components/dialogs';
 import { cn } from '$lib/utils';
 
@@ -48,6 +53,12 @@ interface Group {
 }
 
 const t = $derived($LL.settings.index);
+const appearance = $derived($LL.settings.appearance);
+
+// Language + theme live in the header toolbar on desktop (lg+). On mobile the
+// header is kept uncluttered, so they surface here in an Appearance group.
+// Mobile-only (mirrors AppDialog's `(min-width: 1024px)` query / Tailwind `lg`).
+const isDesktop = new MediaQuery('(min-width: 1024px)');
 
 // Logical grouping (not alphabetical): least-destructive first, power last.
 const groups = $derived<Group[]>([
@@ -139,6 +150,47 @@ const ActiveIcon = $derived(active?.icon);
 
 		<!-- Grouped settings index -->
 		<div class="space-y-7">
+			<!-- Mobile-only: desktop hosts language + theme in the header toolbar instead. -->
+			{#if !isDesktop.current}
+				<section class="space-y-2.5" data-testid="settings-appearance">
+					<h2 class="text-muted-foreground px-1 text-sm font-medium">{appearance.title()}</h2>
+					<div class="divide-border bg-card divide-y overflow-hidden rounded-xl border">
+						<div class="flex w-full items-center gap-4 px-4 py-3.5">
+							<span
+								class="bg-secondary text-foreground grid size-9 shrink-0 place-items-center rounded-lg"
+							>
+								<Languages class="size-[18px]" />
+							</span>
+							<span class="min-w-0 flex-1">
+								<span class="block truncate text-sm font-semibold">{appearance.language()}</span>
+								<span class="text-muted-foreground block truncate text-xs"
+									>{appearance.languageDesc()}</span
+								>
+							</span>
+							<span class="shrink-0" data-testid="settings-locale-selector">
+								<LocaleSelector />
+							</span>
+						</div>
+						<div class="flex w-full items-center gap-4 px-4 py-3.5">
+							<span
+								class="bg-secondary text-foreground grid size-9 shrink-0 place-items-center rounded-lg"
+							>
+								<Palette class="size-[18px]" />
+							</span>
+							<span class="min-w-0 flex-1">
+								<span class="block truncate text-sm font-semibold">{appearance.theme()}</span>
+								<span class="text-muted-foreground block truncate text-xs"
+									>{appearance.themeDesc()}</span
+								>
+							</span>
+							<span class="shrink-0" data-testid="settings-theme-toggle">
+								<ModeToggle />
+							</span>
+						</div>
+					</div>
+				</section>
+			{/if}
+
 			{#each groups as group (group.id)}
 				<section class="space-y-2.5">
 					<h2 class="text-muted-foreground px-1 text-sm font-medium">{group.label}</h2>

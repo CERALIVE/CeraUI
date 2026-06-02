@@ -231,6 +231,13 @@ const fr = {
 		signingIn: "Connexion en cours...",
 	},
 	settings: {
+		appearance: {
+			title: "Apparence",
+			language: "Langue",
+			languageDesc: "Langue d'affichage de l'interface",
+			theme: "Thème",
+			themeDesc: "Clair, sombre ou selon le système",
+		},
 		index: {
 			title: "Paramètres",
 			description: "Configuration de l'appareil, du système et du développeur",

@@ -76,6 +76,13 @@ const zh = {
 		signingIn: "登录中...",
 	},
 	settings: {
+		appearance: {
+			title: "外观",
+			language: "语言",
+			languageDesc: "界面显示语言",
+			theme: "主题",
+			themeDesc: "浅色、深色或跟随系统",
+		},
 		index: {
 			title: "设置",
 			description: "设备、系统和开发者配置",

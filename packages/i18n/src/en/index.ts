@@ -306,6 +306,13 @@ const en = {
 		selectLanguage: "Select Language",
 	},
 	settings: {
+		appearance: {
+			title: "Appearance",
+			language: "Language",
+			languageDesc: "Display language for the interface",
+			theme: "Theme",
+			themeDesc: "Light, dark, or match your system",
+		},
 		index: {
 			title: "Settings",
 			description: "Device, system, and developer configuration",

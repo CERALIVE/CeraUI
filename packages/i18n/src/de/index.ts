@@ -309,6 +309,13 @@ const de = {
 		signingIn: "Anmeldung läuft...",
 	},
 	settings: {
+		appearance: {
+			title: "Darstellung",
+			language: "Sprache",
+			languageDesc: "Anzeigesprache der Oberfläche",
+			theme: "Design",
+			themeDesc: "Hell, dunkel oder Systemeinstellung",
+		},
 		index: {
 			title: "Einstellungen",
 			description: "Geräte-, System- und Entwicklerkonfiguration",

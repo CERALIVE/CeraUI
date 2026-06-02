@@ -217,6 +217,13 @@ const ar = {
 		signingIn: "جاري تسجيل الدخول...",
 	},
 	settings: {
+		appearance: {
+			title: "المظهر",
+			language: "اللغة",
+			languageDesc: "لغة عرض الواجهة",
+			theme: "السمة",
+			themeDesc: "فاتح أو داكن أو حسب النظام",
+		},
 		index: {
 			title: "الإعدادات",
 			description: "إعدادات الجهاز والنظام والمطوّر",

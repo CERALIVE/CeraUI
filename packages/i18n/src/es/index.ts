@@ -318,6 +318,13 @@ const es = {
 		selectLanguage: "Seleccionar Idioma",
 	},
 	settings: {
+		appearance: {
+			title: "Apariencia",
+			language: "Idioma",
+			languageDesc: "Idioma de la interfaz",
+			theme: "Tema",
+			themeDesc: "Claro, oscuro o según el sistema",
+		},
 		index: {
 			title: "Configuración",
 			description: "Configuración de dispositivo, sistema y desarrollador",

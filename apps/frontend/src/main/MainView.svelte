@@ -1,4 +1,6 @@
 <script lang="ts">
+import { MediaQuery } from 'svelte/reactivity';
+
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { PullToRefresh } from '$lib/components/custom/pwa';
@@ -16,6 +18,12 @@ async function handleRefresh() {
 }
 
 const goHome = () => navigateTo({ live: navElements.live });
+
+// Desktop (lg+) hosts the language + theme controls in the header toolbar.
+// On mobile they move into the Settings destination's Appearance group, so the
+// header stays uncluttered. Conditionally rendered (not just hidden) to avoid
+// mounting the dropdowns twice. Mirrors AppDialog's `(min-width: 1024px)` query.
+const isDesktop = new MediaQuery('(min-width: 1024px)');
 </script>
 
 <PullToRefresh onRefresh={handleRefresh}>
@@ -35,12 +43,18 @@ const goHome = () => navigateTo({ live: navElements.live });
 
 				<MainNav />
 
-				<div class="flex flex-1 items-center justify-end">
-					<div role="toolbar" aria-label="Settings" class="flex items-center gap-1">
-						<LocaleSelector />
-						<ModeToggle />
+				{#if isDesktop.current}
+					<div class="flex flex-1 items-center justify-end">
+						<div role="toolbar" aria-label="Settings" class="flex items-center gap-1">
+							<span class="contents" data-testid="header-locale-selector">
+								<LocaleSelector />
+							</span>
+							<span class="contents" data-testid="header-theme-toggle">
+								<ModeToggle />
+							</span>
+						</div>
 					</div>
-				</div>
+				{/if}
 			</div>
 		</header>
 

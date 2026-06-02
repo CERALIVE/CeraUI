@@ -230,6 +230,13 @@ const ptBR = {
 		signingIn: "Fazendo login...",
 	},
 	settings: {
+		appearance: {
+			title: "Aparência",
+			language: "Idioma",
+			languageDesc: "Idioma de exibição da interface",
+			theme: "Tema",
+			themeDesc: "Claro, escuro ou conforme o sistema",
+		},
 		index: {
 			title: "Configurações",
 			description: "Configuração do dispositivo, sistema e desenvolvedor",

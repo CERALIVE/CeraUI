@@ -77,6 +77,13 @@ const ko = {
 		signingIn: "로그인 중...",
 	},
 	settings: {
+		appearance: {
+			title: "화면 표시",
+			language: "언어",
+			languageDesc: "인터페이스 표시 언어",
+			theme: "테마",
+			themeDesc: "밝게, 어둡게 또는 시스템 설정",
+		},
 		index: {
 			title: "설정",
 			description: "기기, 시스템 및 개발자 구성",

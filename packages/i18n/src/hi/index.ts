@@ -77,6 +77,13 @@ const hi = {
 		signingIn: "साइन इन हो रहे हैं...",
 	},
 	settings: {
+		appearance: {
+			title: "रूप",
+			language: "भाषा",
+			languageDesc: "इंटरफ़ेस की प्रदर्शन भाषा",
+			theme: "थीम",
+			themeDesc: "लाइट, डार्क या सिस्टम के अनुसार",
+		},
 		index: {
 			title: "सेटिंग्स",
 			description: "डिवाइस, सिस्टम और डेवलपर कॉन्फ़िगरेशन",

@@ -78,6 +78,13 @@ const ja = {
 		signingIn: "サインイン中...",
 	},
 	settings: {
+		appearance: {
+			title: "外観",
+			language: "言語",
+			languageDesc: "インターフェースの表示言語",
+			theme: "テーマ",
+			themeDesc: "ライト、ダーク、またはシステムに合わせる",
+		},
 		index: {
 			title: "設定",
 			description: "デバイス、システム、開発者の設定",
