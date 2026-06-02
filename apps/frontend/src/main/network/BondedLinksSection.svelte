@@ -3,6 +3,8 @@ import { LL } from '@ceraui/i18n/svelte';
 import type { Modem } from '@ceraui/rpc/schemas';
 import { Radio } from '@lucide/svelte';
 
+import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
+import { formatThroughput } from '$lib/helpers/network-speed';
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
 
@@ -21,12 +23,18 @@ function signalBars(signal: number | null): number {
 	return 1;
 }
 
-/** A short type tag for a bonded link (WiFi, or the modem's network generation). */
+/** A short type tag for a bonded link (WiFi, Ethernet, or the modem's network generation). */
 function linkTypeLabel(link: LinkSignal): string {
 	if (link.type === 'wifi') return $LL.network.view.wifi();
+	if (link.type === 'ethernet') return $LL.network.view.ethernet();
 	const modem = modemEntries.find(([, m]) => (m.ifname || '') === link.id)?.[1];
 	return modem?.status?.network_type || $LL.network.view.cellular();
 }
+
+// Aggregate throughput across every enabled link — the bond's working bandwidth.
+const totalKbps = $derived(
+	links.reduce((sum, link) => (link.enabled ? sum + (link.throughputKbps ?? 0) : sum), 0),
+);
 </script>
 
 <!-- ───────────── Bonded Links overview ───────────── -->
@@ -43,6 +51,7 @@ function linkTypeLabel(link: LinkSignal): string {
 			{#each links as link (link.linkIndex)}
 				{@const color = `var(--link-${link.linkIndex + 1})`}
 				{@const bars = signalBars(link.signal)}
+				{@const hasSignal = link.signal !== null}
 				<div
 					class={cn(
 						'flex items-center gap-2.5 rounded-lg border px-3 py-2',
@@ -56,7 +65,7 @@ function linkTypeLabel(link: LinkSignal): string {
 					>
 					<!-- mini signal bars (match HUD aesthetic) — wired links report no signal -->
 					{#if hasSignal}
-						<div data-live-value class="flex items-end gap-0.5" aria-hidden="true">
+						<div class="flex items-end gap-0.5" aria-hidden="true">
 							{#each [1, 2, 3] as bar (bar)}
 								<span
 									class="w-1 rounded-[1px]"
@@ -66,18 +75,6 @@ function linkTypeLabel(link: LinkSignal): string {
 								></span>
 							{/each}
 						</div>
-					{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
-						<CardSim class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
-					{:else if link.type === 'modem' && link.connectionState === 'scanning'}
-						<Radar
-							class="text-muted-foreground size-4 shrink-0 motion-safe:animate-pulse"
-							aria-hidden="true"
-						/>
-					{:else if link.type === 'modem' && link.connectionState === 'connected'}
-						<LoaderCircle
-							class="text-muted-foreground size-4 shrink-0 motion-safe:animate-spin"
-							aria-hidden="true"
-						/>
 					{/if}
 					<div class="flex min-w-0 flex-col leading-tight">
 						<span class="truncate text-xs font-medium">{link.label}</span>
@@ -86,16 +83,8 @@ function linkTypeLabel(link: LinkSignal): string {
 						>
 					</div>
 					{#if hasSignal}
-						<span data-live-value class="ms-1 font-mono text-xs tabular-nums" style="color: {color};">
+						<span class="ms-1 font-mono text-xs tabular-nums" style="color: {color};">
 							{link.signal}%
-						</span>
-					{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
-						<span class="text-muted-foreground ms-1 text-[10px] uppercase tracking-wide">
-							{$LL.network.view.noSimLink()}
-						</span>
-					{:else if link.type === 'modem' && link.connectionState === 'scanning'}
-						<span class="text-muted-foreground ms-1 text-[10px] uppercase tracking-wide">
-							{$LL.network.modem.scanning()}
 						</span>
 					{/if}
 					<!-- per-link throughput (Task 18) -->
@@ -104,17 +93,14 @@ function linkTypeLabel(link: LinkSignal): string {
 			{/each}
 		</div>
 
-		<!-- total bonded bandwidth (Task 18) — dims with its links when stale -->
+		<!-- total bonded bandwidth (Task 18) -->
 		<div
-			class={cn(
-				'mt-3 flex items-center justify-between border-t pt-3 text-xs transition-opacity',
-				totalStale && 'opacity-50',
-			)}
+			class="mt-3 flex items-center justify-between border-t pt-3 text-xs"
 		>
 			<span class="text-muted-foreground uppercase tracking-wide"
 				>{$LL.network.view.totalBandwidth()}</span
 			>
-			<span data-live-value class="text-foreground font-mono text-sm font-bold tabular-nums">
+			<span class="text-foreground font-mono text-sm font-bold tabular-nums">
 				{formatThroughput(totalKbps)}
 			</span>
 		</div>
