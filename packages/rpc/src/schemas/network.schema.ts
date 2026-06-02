@@ -12,6 +12,7 @@ export const netifEntrySchema = z.object({
 	tp: z.number(),
 	enabled: z.boolean(),
 	error: z.string().optional(),
+	mac: z.string().optional(),
 });
 export type NetifEntry = z.infer<typeof netifEntrySchema>;
 
