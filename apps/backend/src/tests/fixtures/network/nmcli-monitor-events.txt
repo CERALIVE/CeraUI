@@ -1,0 +1,85 @@
+# nmcli monitor — sample event lines (T8 spike fixture)
+#
+# Reconstructed shape of `nmcli monitor` stdout on NetworkManager 1.x (Debian
+# bookworm / Armbian target). nmcli/mmcli are NOT installed on the current dev
+# machine, so these lines are based on the NetworkManager reference manual
+# (networkmanager.dev/docs/api/latest/nmcli.html) and published real-world
+# captures (oneuptime.com nmcli-monitor guide, linuxcommandlibrary), kept
+# faithful to the actual emitted format.
+#
+# `nmcli monitor` (the GLOBAL monitor) emits THREE line shapes:
+#   1. Device line:      "<ifname>: <state>"  or  "<ifname>: <state> to \"<conn>\""
+#   2. Connection line:  "\"<conn-name>\" (<type>, <ip/cidr>): connection <verb>"
+#   3. Global line:      "NetworkManager is now in the '<state>' state"
+#                        "Connectivity is now '<state>'"
+#
+# IMPORTANT: `nmcli monitor` is HUMAN-READABLE. It has NO --terse / -t mode and
+# NO stable field separator. Parsing keys on the leading token before the first
+# ": " for device lines (that token is the ifname — the chosen event key, see
+# MONITOR-NOTES.md "Event keying decision"). Connection lines start with a
+# quote (") and are de-prioritised by the parser.
+#
+# Lines starting with '#' are fixture comments, NOT emitted by nmcli.
+# Device states (per `nmcli device monitor`): connecting | connected |
+# disconnected | unavailable | unmanaged | deactivating.
+
+# ---- Ethernet cable plugged in, DHCP completes ----
+eth0: connecting (prepare)
+eth0: connecting (getting IP configuration)
+eth0: connected to "Wired connection 1"
+"Wired connection 1" (ethernet, 192.168.1.100/24): connection activated
+
+# ---- Ethernet cable unplugged ----
+eth0: disconnected
+"Wired connection 1" (ethernet): connection deactivated
+eth0: unavailable
+
+# ---- WiFi: associate + authenticate + DHCP to an AP ----
+wlan0: connecting (prepare)
+wlan0: connecting (need authentication)
+wlan0: connecting (getting IP configuration)
+wlan0: connected to "FieldHotspot-5G"
+"FieldHotspot-5G" (wifi, 10.0.5.42/24): connection activated
+
+# ---- WiFi: drop / roam away from AP ----
+wlan0: deactivating
+wlan0: disconnected
+
+# ---- USB WiFi adapter HOTPLUG: device appears, becomes managed ----
+# (a brand-new ifname shows up mid-stream — this is an ADD event)
+wlan1: unavailable
+wlan1: disconnected
+
+# ---- USB WiFi adapter UNPLUGGED: device goes unmanaged then vanishes ----
+# (no explicit "removed" line; the ifname simply stops appearing — REMOVAL must
+#  be inferred by reconciling event-seen devices against a poll/snapshot, see
+#  the event-vs-poll table in MONITOR-NOTES.md)
+wlan1: unmanaged
+
+# ---- Cellular / WWAN modem brought up by NetworkManager ----
+ww0: connecting (prepare)
+ww0: connecting (getting IP configuration)
+ww0: connected to "gsm-operator"
+"gsm-operator" (gsm, 100.64.0.7/30): connection activated
+
+# ---- Cellular modem lost signal / disconnected ----
+ww0: disconnected
+ww0: unavailable
+
+# ---- Global NetworkManager connectivity transitions ----
+Connectivity is now 'limited'
+Connectivity is now 'full'
+Connectivity is now 'none'
+
+# ---- Global NetworkManager state transitions ----
+NetworkManager is now in the 'connected (site only)' state
+NetworkManager is now in the 'connected (global)' state
+NetworkManager is now in the 'disconnected' state
+
+# ---- NetworkManager RESTART seen by a long-lived `nmcli monitor` ----
+# The monitor process does NOT exit on `systemctl restart NetworkManager`; it
+# reconnects over D-Bus and emits stopped/running notices, then resumes:
+NetworkManager is stopped
+NetworkManager is running
+NetworkManager is now in the 'connecting' state
+NetworkManager is now in the 'connected (global)' state
