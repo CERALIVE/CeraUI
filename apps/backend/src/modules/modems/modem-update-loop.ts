@@ -48,14 +48,13 @@
 
 import { logger } from "../../helpers/logger.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
-import { createMonitorManager } from "../network/monitor/monitor-manager.ts";
-import { withModemUpdateLock } from "../network/state/device-lock.ts";
-import type {
-	IMonitorEmitter,
-	ModemsState,
-	MonitorEvent,
-	StateDiff,
-} from "../network/state-types.ts";
+import {
+	type NetworkManagerConnection,
+	type NetworkManagerConnectionModemConfig,
+	nmConnAdd,
+	nmConnect,
+	nmConnGetFields,
+} from "../network/network-manager.ts";
 
 import { resetGsmConnections } from "./gsm-connections.ts";
 import { type ModemId } from "./mmcli.ts";
@@ -102,7 +101,10 @@ function publishModemsSnapshot(): void {
 		}
 	}
 
-	broadcastModems(newModems);
+	// Mock must send FULL state: the frontend wholesale-replaces modemsState per
+	// `status` message, so a status-only partial would clobber the dialog's
+	// network_type.supported. Real hardware keeps the partial optimization.
+	broadcastModems(shouldUseMocks() ? undefined : newModems);
 
 	setTimeout(updateModems, modemUpdateInterval);
 }
