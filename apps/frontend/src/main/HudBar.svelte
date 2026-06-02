@@ -3,12 +3,14 @@ import { LL, locale } from '@ceraui/i18n/svelte';
 import { formatBitrate, formatCurrent, formatRelativeTime, formatTemp, formatVoltage } from '@ceraui/i18n/formatters';
 import ActivityIcon from '@lucide/svelte/icons/activity';
 import ClockIcon from '@lucide/svelte/icons/clock';
+import EthernetPortIcon from '@lucide/svelte/icons/ethernet-port';
 import RadioTowerIcon from '@lucide/svelte/icons/radio-tower';
 import SignalZeroIcon from '@lucide/svelte/icons/signal-zero';
 import ThermometerIcon from '@lucide/svelte/icons/thermometer';
 import WifiIcon from '@lucide/svelte/icons/wifi';
 import ZapIcon from '@lucide/svelte/icons/zap';
 
+import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import * as Sheet from '$lib/components/ui/sheet';
 import { getHudState } from '$lib/stores/hud.svelte';
 import type { LinkSignal } from '$lib/types/hud';
@@ -205,16 +207,21 @@ function lastSeen(ts: number | null): string | null {
 								<span class="size-2.5 shrink-0 rounded-full" style:background-color={linkColor(link)} style:opacity={link.isConnected ? '1' : '0.4'}></span>
 								{#if link.type === 'wifi'}
 									<WifiIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+								{:else if link.type === 'ethernet'}
+									<EthernetPortIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
 								{:else}
 									<RadioTowerIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
 								{/if}
 								<span class="truncate font-medium">{link.label}</span>
 							</span>
 							<span class="flex shrink-0 items-center gap-3">
-								<span class="font-mono text-xs tabular-nums" style:color={link.signal != null ? linkColor(link) : undefined}>
-									{link.signal != null ? `${Math.round(link.signal)}%` : $LL.hud.noData()}
-								</span>
-								{@render miniBars(link)}
+								<SpeedBadge kbps={link.throughputKbps} stale={link.isStale} />
+								{#if link.signal != null}
+									<span class="font-mono text-xs tabular-nums" style:color={linkColor(link)}>
+										{Math.round(link.signal)}%
+									</span>
+									{@render miniBars(link)}
+								{/if}
 							</span>
 						</div>
 					{/each}
