@@ -45,6 +45,8 @@ export type ModemsResponseModemBase = {
 export type ModemsResponseModemFull = ModemsResponseModemBase & {
 	ifname: string;
 	name: string;
+	model?: string;
+	manufacturer?: string;
 	network_type: {
 		supported: Array<string>;
 		active: string | null;
@@ -88,6 +90,8 @@ function buildModemMessage(
 		const fullState: ModemsResponseModemFull = {
 			ifname: modem.ifname,
 			name: modem.name,
+			model: modem.model,
+			manufacturer: modem.manufacturer,
 			network_type: {
 				supported: Object.keys(modem.network_type.supported),
 				active: modem.network_type.active,
