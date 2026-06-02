@@ -150,11 +150,11 @@ function lastSeen(ts: number | null): string | null {
 						<span class="text-muted-foreground/60 truncate">{$LL.hud.noData()}</span>
 					{:else}
 						{#each hud.links as link (link.linkIndex)}
-							<span class={cn('inline-flex shrink-0 items-baseline gap-1', link.isStale && 'opacity-50')}>
+							<span class={cn('inline-flex shrink-0 items-center gap-1', link.isStale && 'opacity-50')}>
 								<span class="font-mono text-[0.7rem] leading-none" style:color={linkColor(link)}>
 									L{link.linkIndex + 1}
 								</span>
-								{@render miniBars(link)}
+								<span class="flex h-3.5 items-center justify-center">{@render miniBars(link)}</span>
 							</span>
 						{/each}
 					{/if}
