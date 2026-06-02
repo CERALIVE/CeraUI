@@ -59,7 +59,6 @@ function hotspot(opts: {
 			channel: "auto",
 			availableChannels: ["auto"],
 			warnings: {},
-			forceHotspotStatus: 0,
 		},
 	};
 }
@@ -247,7 +246,6 @@ describe("getModeForInterface", () => {
 				channel: "auto" as const,
 				availableChannels: ["auto" as const],
 				warnings: {},
-				forceHotspotStatus: 0,
 			},
 		};
 		expect(getModeForInterface(iface)).toBe("hotspot");

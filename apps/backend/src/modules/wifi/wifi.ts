@@ -54,7 +54,7 @@ import {
 	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
 	wifiRescan,
-	wifiScheduleScanUpdates,
+	wifiScheduleScanRefresh,
 	wifiUpdateScanResult,
 } from "./wifi-connections.ts";
 import { wifiHotspotStart } from "./wifi-hotspot-activation.ts";
@@ -124,6 +124,8 @@ export type WifiInterfaceResponseMessage = Pick<
 		warnings?: string[];
 	};
 	supports_hotspot?: true;
+	mode?: "station" | "hotspot";
+	transition?: "activating" | "deactivating";
 };
 
 export function wifiBuildMsg() {
@@ -225,6 +227,11 @@ export function wifiBuildMsg() {
 				ifs[id].supports_hotspot = true;
 			}
 		}
+
+		ifs[id].mode = isHotspot(wifiInterface) ? "hotspot" : "station";
+		if (canHotspot(wifiInterface) && wifiInterface.hotspot.transition) {
+			ifs[id].transition = wifiInterface.hotspot.transition;
+		}
 	}
 
 	return ifs;
@@ -325,7 +332,7 @@ async function wifiDisconnect(uuid: ConnectionUUID) {
 
 	if (await nmDisconnect(uuid)) {
 		await wifiUpdateScanResult();
-		wifiScheduleScanUpdates();
+		wifiScheduleScanRefresh();
 	}
 }
 
@@ -335,7 +342,7 @@ async function wifiForget(uuid: ConnectionUUID) {
 	if (await nmConnDelete(uuid)) {
 		await wifiUpdateSavedConns();
 		await wifiUpdateScanResult();
-		wifiScheduleScanUpdates();
+		wifiScheduleScanRefresh();
 	}
 }
 
