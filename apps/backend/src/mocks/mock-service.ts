@@ -14,6 +14,38 @@ import {
 	scenarios,
 	setActiveScenario,
 } from "./mock-config.ts";
+import type { Resolution, Framerate } from "../../../packages/rpc/src/schemas/streaming.schema.ts";
+
+// ─── Mutable session-state slot types ────────────────────────────────────────
+
+/** Per-device WiFi connection state (keyed by device id, e.g. "wlan0") */
+export interface MockWifiConnectionState {
+	activeNetwork?: string;
+	savedNetworks: string[];
+}
+
+/** Per-modem mutable config (keyed by modem id string, e.g. "0", "1") */
+export interface MockModemConfigState {
+	apn?: string;
+	network_type_active?: string;
+	roaming?: boolean;
+}
+
+/** Per-interface mutable netif config (keyed by interface name, e.g. "eth0") */
+export interface MockNetifConfigState {
+	enabled: boolean;
+	dhcp: boolean;
+	ip?: string;
+}
+
+/** Encoder config echo — mirrors the fields T11/T13 mutate */
+export interface MockEncoderConfigState {
+	pipeline?: string;
+	max_br?: number;
+	bitrate_overlay?: boolean;
+	resolution?: Resolution;
+	framerate?: Framerate;
+}
 
 // Dynamic mock state that changes over time
 interface MockState {
@@ -34,6 +66,11 @@ interface MockState {
 		packetLoss: number;
 		connectedRelays: number;
 	};
+	// ── Session-scoped mutable maps (seeded by initMockService) ──
+	wifiConnections: Map<string, MockWifiConnectionState>;
+	modemConfigs: Map<string, MockModemConfigState>;
+	netifConfigs: Map<string, MockNetifConfigState>;
+	mockEncoderConfig: MockEncoderConfigState;
 }
 
 const mockState: MockState = {
@@ -54,19 +91,19 @@ const mockState: MockState = {
 		packetLoss: 0.1,
 		connectedRelays: 0,
 	},
+	wifiConnections: new Map(),
+	modemConfigs: new Map(),
+	netifConfigs: new Map(),
+	mockEncoderConfig: {},
 };
 
 let updateInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
- * Initialize the mock service with a specific scenario
+ * Initialize (or re-initialize) the mock service with a specific scenario.
+ * Re-calling resets all session-scoped maps to seeded defaults.
  */
 export function initMockService(scenarioName?: string): void {
-	if (mockState.initialized) {
-		logger.info("Mock service already initialized");
-		return;
-	}
-
 	// Determine scenario from env or parameter
 	const scenario = (scenarioName ||
 		process.env.MOCK_SCENARIO ||
@@ -87,13 +124,19 @@ export function initMockService(scenarioName?: string): void {
 	);
 	logger.info(`   ${config.description}`);
 
-	// Initialize modem states
+	mockState.modemSignals.clear();
+	mockState.modemStates.clear();
+	mockState.networkTraffic.clear();
+	mockState.wifiSignals.clear();
+	mockState.wifiConnections.clear();
+	mockState.modemConfigs.clear();
+	mockState.netifConfigs.clear();
+
 	for (let i = 0; i < config.modems; i++) {
 		mockState.modemSignals.set(i, 80 + Math.random() * 15);
 		mockState.modemStates.set(i, "connected");
 	}
 
-	// Initialize network traffic counters
 	mockState.networkTraffic.set("eth0", 1000000);
 	if (config.modems > 0) {
 		for (let i = 0; i < config.modems; i++) {
@@ -102,19 +145,57 @@ export function initMockService(scenarioName?: string): void {
 	}
 	if (config.wifi) {
 		mockState.networkTraffic.set("wlan0", 750000);
-		// Initialize WiFi signal strengths
 		for (const network of mockWifiNetworks) {
 			mockState.wifiSignals.set(network.ssid, network.signal);
 		}
 	}
 
-	// Initialize streaming state
 	if (config.streaming) {
 		mockState.streaming.isActive = true;
 		mockState.streaming.connectedRelays = config.modems;
+	} else {
+		mockState.streaming.isActive = false;
+		mockState.streaming.connectedRelays = 0;
 	}
 
-	// Start periodic updates
+	if (config.wifi) {
+		const activeNetwork = mockWifiNetworks.find((n) => n.active);
+		mockState.wifiConnections.set("wlan0", {
+			activeNetwork: activeNetwork?.ssid,
+			savedNetworks: mockWifiNetworks
+				.filter((n) => n.active || n.ssid === "Office_Secure" || n.ssid === "StreamingStudio")
+				.map((n) => n.ssid),
+		});
+	}
+
+	for (let i = 0; i < config.modems; i++) {
+		const modem = mockModems[i];
+		if (!modem) continue;
+		mockState.modemConfigs.set(String(i), {
+			apn: `internet.${modem.carrier.toLowerCase().replace(/[^a-z0-9]/g, "")}.com`,
+			network_type_active: modem.network_type.active,
+			roaming: false,
+		});
+	}
+
+	mockState.netifConfigs.set("eth0", { enabled: true, dhcp: true, ip: "192.168.1.100" });
+	for (let i = 0; i < config.modems; i++) {
+		const modem = mockModems[i];
+		if (!modem) continue;
+		mockState.netifConfigs.set(modem.interfaceName, { enabled: true, dhcp: true, ip: modem.ip });
+	}
+	if (config.wifi) {
+		mockState.netifConfigs.set("wlan0", { enabled: true, dhcp: true, ip: "192.168.2.100" });
+	}
+
+	mockState.mockEncoderConfig = {
+		pipeline: "libuvch264",
+		max_br: 8000,
+		bitrate_overlay: false,
+		resolution: "1080p",
+		framerate: 30,
+	};
+
 	startPeriodicUpdates();
 
 	mockState.initialized = true;
@@ -257,6 +338,34 @@ export function stopMockService(): void {
  */
 export function shouldUseMocks(): boolean {
 	return isDevelopment() && mockState.initialized;
+}
+
+export function setMockWifiConnection(
+	deviceId: string,
+	update: Partial<MockWifiConnectionState>,
+): void {
+	const current = mockState.wifiConnections.get(deviceId) ?? { savedNetworks: [] };
+	mockState.wifiConnections.set(deviceId, { ...current, ...update });
+}
+
+export function setMockModemConfig(
+	modemId: string,
+	update: Partial<MockModemConfigState>,
+): void {
+	const current = mockState.modemConfigs.get(modemId) ?? {};
+	mockState.modemConfigs.set(modemId, { ...current, ...update });
+}
+
+export function setMockNetifConfig(
+	ifName: string,
+	update: Partial<MockNetifConfigState>,
+): void {
+	const current = mockState.netifConfigs.get(ifName) ?? { enabled: true, dhcp: true };
+	mockState.netifConfigs.set(ifName, { ...current, ...update });
+}
+
+export function setMockEncoderConfig(update: Partial<MockEncoderConfigState>): void {
+	mockState.mockEncoderConfig = { ...mockState.mockEncoderConfig, ...update };
 }
 
 // Re-export commonly used functions
