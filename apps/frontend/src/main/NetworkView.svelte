@@ -108,8 +108,8 @@ function openModemConfig(id: string) {
 		</div>
 	{:else}
 		<BondedLinksSection {links} {modemEntries} />
-		<WifiSection {wifiStations} {primaryWifiDevice} onConnect={openWifiSelector} />
-		<CellularSection {modemEntries} onConfigure={openModemConfig} />
+		<WifiSection wifiRadios={wifiEntries} {netif} {primaryWifiDevice} onConnect={openWifiSelector} />
+		<CellularSection {modemEntries} {netif} onConfigure={openModemConfig} />
 		<EthernetSection {wiredEntries} onConfigure={configureNetif} />
 		<HotspotSection {hotspotInterfaces} {hotspotTarget} onSetup={() => (hotspotDialogOpen = true)} />
 	{/if}

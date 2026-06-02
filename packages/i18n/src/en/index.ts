@@ -471,6 +471,7 @@ const en = {
 			hotspotSwitchTitle: "Switch to Hotspot?",
 			hotspotSwitchBody: "Switching to hotspot will disconnect this WiFi network and remove it from the bond.",
 			noSimBond: "No SIM — cannot bond",
+			hotspotNoBond: "Hotspot can't be bonded",
 		},
 		pageTitle: "Network Configuration",
 		pageDescription:

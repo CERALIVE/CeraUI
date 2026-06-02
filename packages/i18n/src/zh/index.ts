@@ -229,6 +229,7 @@ const zh = {
 			hotspotSwitchTitle: "Switch to Hotspot?",
 			hotspotSwitchBody: "Switching to hotspot will disconnect this WiFi network and remove it from the bond.",
 			noSimBond: "No SIM — cannot bond",
+			hotspotNoBond: "Hotspot can't be bonded",
 		},
 		pageTitle: "网络配置",
 		pageDescription: "管理您的WiFi连接、热点、蜂窝调制解调器和网络接口",
