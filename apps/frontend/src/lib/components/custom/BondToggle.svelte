@@ -19,10 +19,17 @@ type Props = {
 	 * text is surfaced as the accessible reason via tooltip + aria-label.
 	 */
 	disabledReason?: string;
+	/**
+	 * Optional async guard run ONLY before a DISABLE toggle. Resolve `false`
+	 * to abort (the switch stays in its current state); resolve `true` to
+	 * proceed with `rpc.network.configure`. Used by Ethernet to surface a
+	 * management-interruption confirm before pulling a wired link from the bond.
+	 */
+	onBeforeDisable?: () => boolean | Promise<boolean>;
 	class?: string;
 };
 
-let { name, enabled, ip, disabledReason, class: className }: Props = $props();
+let { name, enabled, ip, disabledReason, onBeforeDisable, class: className }: Props = $props();
 
 // `enabled` is the server's authoritative value. While a request is in flight
 // we optimistically show the requested `target`, then snap back to the prop
@@ -56,6 +63,14 @@ async function toggle(next: boolean) {
 	// Serialize concurrent toggles: ignore input while a request is in flight
 	// or the control is disabled.
 	if (pending || disabledReason !== undefined) return;
+
+	// Guarded disable: run the caller's confirm before mutating. Aborting here
+	// leaves `displayed` following the (still-true) `enabled` prop, so the
+	// controlled Switch never visually flips on a cancelled disable.
+	if (!next && onBeforeDisable) {
+		const proceed = await onBeforeDisable();
+		if (!proceed) return;
+	}
 
 	target = next;
 	pending = true;

@@ -3,7 +3,11 @@ import { LL } from '@ceraui/i18n/svelte';
 import type { NetifEntry } from '@ceraui/rpc/schemas';
 import { ChevronRight, Network as NetworkIcon } from '@lucide/svelte';
 
+import * as AlertDialog from '$lib/components/ui/alert-dialog';
 import { Button } from '$lib/components/ui/button';
+import BondToggle from '$lib/components/custom/BondToggle.svelte';
+import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
+import { convertBytesToKbids } from '$lib/helpers/network-speed';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -12,6 +16,37 @@ interface Props {
 }
 
 const { wiredEntries, onConfigure }: Props = $props();
+
+// Per-interface throughput → kbps for SpeedBadge. A missing reading renders the
+// muted placeholder rather than a misleading 0.
+function throughputKbps(iface: NetifEntry): number | null {
+	return iface.tp == null ? null : convertBytesToKbids(iface.tp);
+}
+
+// Ethernet footgun guard: disabling a wired link can drop the operator's
+// management / SSH / LAN path, so the BondToggle's disable action is gated
+// behind a confirm. One dialog instance serves every row via a pending
+// promise resolver — BondToggle awaits `confirmDisable()` before mutating.
+let confirmOpen = $state(false);
+let pendingName = $state('');
+let resolveConfirm: ((proceed: boolean) => void) | null = null;
+
+function confirmDisable(name: string): Promise<boolean> {
+	return new Promise((resolve) => {
+		resolveConfirm = resolve;
+		pendingName = name;
+		confirmOpen = true;
+	});
+}
+
+// Idempotent settle: the first caller wins; closing the dialog by any path
+// (Action, Cancel, Escape, overlay) routes through `onOpenChange` and is a
+// no-op once the resolver has fired.
+function settle(proceed: boolean) {
+	resolveConfirm?.(proceed);
+	resolveConfirm = null;
+	confirmOpen = false;
+}
 </script>
 
 <!-- ───────────── Ethernet / interfaces ───────────── -->
@@ -33,7 +68,10 @@ const { wiredEntries, onConfigure }: Props = $props();
 						aria-hidden="true"
 					></span>
 					<div class="min-w-0 flex-1">
-						<p class="truncate text-sm font-medium">{name}</p>
+						<div class="flex items-center gap-2">
+							<p class="truncate text-sm font-medium">{name}</p>
+							<SpeedBadge kbps={throughputKbps(iface)} stale={!iface.enabled} />
+						</div>
 						<p class="text-muted-foreground truncate text-xs">
 							{#if iface.ip}
 								<code class="font-mono">{iface.ip}</code> ·
@@ -41,6 +79,12 @@ const { wiredEntries, onConfigure }: Props = $props();
 							{iface.enabled ? $LL.network.view.connected() : $LL.network.view.off()}
 						</p>
 					</div>
+					<BondToggle
+						name={name}
+						enabled={iface.enabled}
+						ip={iface.ip}
+						onBeforeDisable={() => confirmDisable(name)}
+					/>
 					<Button
 						class="h-8 gap-1 px-2.5"
 						data-testid="open-netif-dialog"
@@ -56,3 +100,29 @@ const { wiredEntries, onConfigure }: Props = $props();
 		{/if}
 	</div>
 </section>
+
+<!-- Management-interruption confirm: gates BondToggle disable on wired links. -->
+<AlertDialog.Root bind:open={confirmOpen} onOpenChange={(open) => !open && settle(false)}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{$LL.network.view.wiredDisableTitle()}</AlertDialog.Title>
+			<AlertDialog.Description>
+				{$LL.network.view.wiredDisableBody()}
+				{#if pendingName}
+					<span class="text-foreground/80 mt-1 block font-mono text-xs">{pendingName}</span>
+				{/if}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel onclick={() => settle(false)}>
+				{$LL.dialog.cancel()}
+			</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+				onclick={() => settle(true)}
+			>
+				{$LL.network.view.disableBond()}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
