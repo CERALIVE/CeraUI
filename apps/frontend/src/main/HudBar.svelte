@@ -2,8 +2,11 @@
 import { LL, locale } from '@ceraui/i18n/svelte';
 import { formatBitrate, formatCurrent, formatRelativeTime, formatTemp, formatVoltage } from '@ceraui/i18n/formatters';
 import ActivityIcon from '@lucide/svelte/icons/activity';
+import CardSimIcon from '@lucide/svelte/icons/card-sim';
 import ClockIcon from '@lucide/svelte/icons/clock';
 import EthernetPortIcon from '@lucide/svelte/icons/ethernet-port';
+import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+import RadarIcon from '@lucide/svelte/icons/radar';
 import RadioTowerIcon from '@lucide/svelte/icons/radio-tower';
 import SignalZeroIcon from '@lucide/svelte/icons/signal-zero';
 import ThermometerIcon from '@lucide/svelte/icons/thermometer';
@@ -12,7 +15,8 @@ import ZapIcon from '@lucide/svelte/icons/zap';
 
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import * as Sheet from '$lib/components/ui/sheet';
-import { getHudState } from '$lib/stores/hud.svelte';
+import { type StalenessState, getStalenessState } from '$lib/helpers/staleness';
+import { getHudState, getSocTelemetry } from '$lib/stores/hud.svelte';
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
 
@@ -27,6 +31,19 @@ const loc = $derived($locale);
 // Connection / streaming state machine for the lead badge.
 const isOffline = $derived(hud.isFullyStale);
 const isLive = $derived(hud.isStreaming && !isOffline);
+
+// SoC telemetry — temp / voltage / current, already parsed by the store
+// (parseSensorNumber / parseVolts / parseCurrentAmps). Each value routes
+// through getStalenessState so the compact bar degrades honestly: 'stale'
+// dims, 'nodata' shows a dash — never a fresh-looking aged value.
+const soc = $derived(getSocTelemetry());
+const socUpdatedAt = $derived(hud.lastUpdatedAt.sensors);
+const tempState = $derived<StalenessState>(getStalenessState(soc.temp, socUpdatedAt, soc.isStale));
+const voltageState = $derived<StalenessState>(getStalenessState(soc.voltage, socUpdatedAt, soc.isStale));
+const currentState = $derived<StalenessState>(getStalenessState(soc.current, socUpdatedAt, soc.isStale));
+const tempText = $derived(soc.temp != null ? formatTemp(loc)(soc.temp) : '—');
+const voltageText = $derived(soc.voltage != null ? formatVoltage(loc)(soc.voltage) : '—');
+const currentText = $derived(soc.current != null ? formatCurrent(loc)(soc.current) : '—');
 
 const linkColor = (link: LinkSignal) => `var(--link-${link.linkIndex + 1})`;
 
@@ -46,9 +63,7 @@ function lastSeen(ts: number | null): string | null {
 </script>
 
 {#snippet miniBars(link: LinkSignal)}
-	{#if link.signal === null}
-		<SignalZeroIcon class="size-3.5 text-muted-foreground/70" aria-hidden="true" />
-	{:else}
+	{#if link.signal !== null}
 		{@const filled = filledBars(link.signal)}
 		<span class="flex items-end gap-px" aria-hidden="true">
 			{#each [0, 1, 2] as i (i)}
@@ -60,7 +75,21 @@ function lastSeen(ts: number | null): string | null {
 				></span>
 			{/each}
 		</span>
+	{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
+		<CardSimIcon class="size-3.5 text-muted-foreground/70" aria-hidden="true" />
+	{:else if link.type === 'modem' && link.connectionState === 'scanning'}
+		<RadarIcon class="size-3.5 text-muted-foreground/70 motion-safe:animate-pulse" aria-hidden="true" />
+	{:else if link.type === 'modem' && link.connectionState === 'connected'}
+		<LoaderCircleIcon class="size-3.5 text-muted-foreground/70 motion-safe:animate-spin" aria-hidden="true" />
+	{:else}
+		<SignalZeroIcon class="size-3.5 text-muted-foreground/70" aria-hidden="true" />
 	{/if}
+{/snippet}
+
+{#snippet socValue(state: StalenessState, text: string, label: string)}
+	<span class={cn('shrink-0', state === 'stale' && 'opacity-50')} title={label}>
+		{state === 'nodata' ? '—' : text}
+	</span>
 {/snippet}
 
 <Sheet.Root bind:open>
@@ -133,17 +162,19 @@ function lastSeen(ts: number | null): string | null {
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
 
-				<!-- SoC temperature -->
+				<!-- SoC telemetry: temperature · voltage · current (compact mono cluster) -->
 				<span
-					class={cn('inline-flex shrink-0 items-center gap-1 font-mono tabular-nums', hud.isSensorsStale && 'opacity-50')}
-					title={$LL.hud.temperature()}
+					class="inline-flex shrink-0 items-center gap-2 font-mono tabular-nums"
+					title={$LL.hud.sensors()}
 				>
-					{#if hud.isSensorsStale}
-						<ClockIcon class="size-3 shrink-0" aria-hidden="true" />
+					{#if soc.isStale}
+						<ClockIcon class="size-3 shrink-0 opacity-50" aria-hidden="true" />
 					{:else}
 						<ThermometerIcon class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
 					{/if}
-					{hud.temperature != null ? formatTemp(loc)(hud.temperature) : '—'}
+					{@render socValue(tempState, tempText, $LL.hud.temperature())}
+					{@render socValue(voltageState, voltageText, $LL.hud.voltage())}
+					{@render socValue(currentState, currentText, $LL.hud.current())}
 				</span>
 			</button>
 		{/snippet}
