@@ -743,6 +743,47 @@
 	color: var(--foreground);
 }
 
+/* ── Pointer-cursor affordance for interactive controls ──
+   Enabled interactive controls signal clickability with a pointer
+   cursor. Keyed on the roles / data-slots the bits-ui v2 primitives
+   already emit, so the CLI-managed ui/ files stay untouched. Unlayered
+   so these win the cascade over the primitives' Tailwind cursor-default
+   utilities (same precedent as the sonner-toast + switch blocks above).
+   The disabled rule is last and overrides every pointer rule. */
+
+button:not(:disabled),
+[role='button']:not([data-disabled]):not([aria-disabled='true']),
+a[href],
+label[for],
+[data-slot='label'][for],
+[role='switch']:not([data-disabled]):not([aria-disabled='true']),
+[role='checkbox']:not([data-disabled]):not([aria-disabled='true']),
+[role='tab']:not([data-disabled]):not([aria-disabled='true']),
+[role='menuitem']:not([data-disabled]):not([aria-disabled='true']),
+[role='menuitemradio']:not([data-disabled]):not([aria-disabled='true']),
+[role='menuitemcheckbox']:not([data-disabled]):not([aria-disabled='true']),
+[role='option']:not([data-disabled]):not([aria-disabled='true']),
+[data-slot='switch']:not([data-disabled]),
+[data-slot='checkbox']:not([data-disabled]),
+[data-slot='toggle']:not([data-disabled]),
+[data-slot='select-trigger']:not(:disabled):not([data-disabled]),
+[data-slot='select-item']:not([data-disabled]),
+[data-slot='dropdown-menu-trigger']:not([data-disabled]):not([aria-disabled='true']),
+[data-slot='dropdown-menu-sub-trigger']:not([data-disabled]),
+[data-slot='dropdown-menu-item']:not([data-disabled]),
+[data-slot='command-item']:not([data-disabled]),
+[data-slot='collapsible-trigger']:not(:disabled):not([data-disabled]),
+[data-slot='accordion-trigger']:not(:disabled):not([data-disabled]) {
+	cursor: pointer;
+}
+
+/* Disabled affordance wins regardless of role/slot above. */
+:disabled,
+[data-disabled],
+[aria-disabled='true'] {
+	cursor: not-allowed;
+}
+
 /* ── Svelte Inspector ── */
 
 #svelte-inspector-toggle {
