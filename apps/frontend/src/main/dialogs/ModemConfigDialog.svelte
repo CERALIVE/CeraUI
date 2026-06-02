@@ -34,13 +34,13 @@ import { onDestroy } from 'svelte';
 import { slide } from 'svelte/transition';
 import { toast } from 'svelte-sonner';
 
+import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import SignalIndicator from '$lib/components/icons/SignalIndicator.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import { Switch } from '$lib/components/ui/switch';
 import {
 	changeModemSettings,
 	renameSupportedModemNetwork,
@@ -235,10 +235,10 @@ const selectedNetworkLabel = $derived(
 						<p class="text-muted-foreground text-xs">{$LL.network.modem.roamingDescription()}</p>
 					</div>
 				</div>
-				<Switch
+				<LabeledSwitch
 					checked={formData.roaming}
-					class="data-[state=checked]:bg-primary"
 					disabled={noSim}
+					label={$LL.network.modem.enableRoaming()}
 					onCheckedChange={(checked) => (formData.roaming = checked)}
 				/>
 			</div>
@@ -311,10 +311,10 @@ const selectedNetworkLabel = $derived(
 						<p class="text-muted-foreground text-xs">{$LL.network.modem.autoApnDescription()}</p>
 					</div>
 				</div>
-				<Switch
+				<LabeledSwitch
 					checked={formData.autoconfig}
-					class="data-[state=checked]:bg-primary"
 					disabled={noSim}
+					label={$LL.network.modem.autoapn()}
 					onCheckedChange={(checked) => (formData.autoconfig = checked)}
 				/>
 			</div>

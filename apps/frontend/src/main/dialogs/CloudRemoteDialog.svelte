@@ -15,12 +15,12 @@ import type { ProviderSelection } from '@ceraui/rpc/schemas';
 import { Cloud, ExternalLink, Eye, EyeOff } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
+import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import { Switch } from '$lib/components/ui/switch';
 import { saveRemoteConfig } from '$lib/helpers/SystemHelper';
 import { getConfig } from '$lib/rpc/subscriptions.svelte';
 
@@ -177,9 +177,9 @@ async function save() {
 				</div>
 				<div class="flex items-center justify-between gap-4">
 					<Label class="text-sm" for="custom-secure">{$LL.advanced.useSecureConnection()}</Label>
-					<Switch
-						id="custom-secure"
+					<LabeledSwitch
 						checked={customSecure}
+						label={$LL.advanced.useSecureConnection()}
 						onCheckedChange={(v) => {
 							customSecure = v;
 							dirtyCustom = true;

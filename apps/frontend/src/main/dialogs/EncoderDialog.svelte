@@ -46,7 +46,7 @@ import { LL } from '@ceraui/i18n/svelte';
 import { Binary, Cpu } from '@lucide/svelte';
 import { AVAILABLE_FRAMERATES, AVAILABLE_RESOLUTIONS, type Pipeline } from '@ceraui/rpc/schemas';
 
-import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
+import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
 import { getOverrideGate } from '$lib/streaming/encoderConfig';
@@ -353,14 +353,10 @@ function handleSave() {
 			<Label class="flex-1 cursor-pointer text-sm" for="encoder-overlay">
 				{$LL.settings.enableBitrateOverlay()}
 			</Label>
-			<AsyncSwitch
-				id="encoder-overlay"
+			<LabeledSwitch
 				checked={localOverlay}
-				data-testid="bitrate-overlay-switch"
-				onCheckedChange={(value) => {
-					localOverlay = value;
-					return Promise.resolve();
-				}}
+				label={$LL.settings.enableBitrateOverlay()}
+				onCheckedChange={(value) => (localOverlay = value)}
 			/>
 		</div>
 	</div>

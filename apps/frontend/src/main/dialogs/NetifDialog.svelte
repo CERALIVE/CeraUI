@@ -16,10 +16,10 @@ import { IP_ADDRESS_REGEX, type NetifEntry } from '@ceraui/rpc/schemas';
 import { Network } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
+import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import { AppDialog } from '$lib/components/dialogs';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
-import { Switch } from '$lib/components/ui/switch';
 import { setNetif } from '$lib/helpers/NetworkHelper';
 
 interface Props {
@@ -104,9 +104,9 @@ async function save() {
 					{$LL.settings.dialogs.enableInterfaceDesc()}
 				</p>
 			</div>
-			<Switch
-				id="netif-enabled"
+			<LabeledSwitch
 				checked={enabled}
+				label={$LL.settings.dialogs.enableInterface()}
 				onCheckedChange={(v) => {
 					enabled = v;
 					dirtyEnabled = true;
