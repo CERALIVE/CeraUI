@@ -186,20 +186,25 @@ const selectedNetworkLabel = $derived(
 					type="single"
 					value={formData.selectedNetwork}
 				>
-					<Select.Trigger class="h-10 w-full text-sm">
-						{formData.selectedNetwork
-							? renameSupportedModemNetwork(formData.selectedNetwork)
-							: '—'}
-					</Select.Trigger>
-					<Select.Content>
-						<Select.Group>
-							{#each modem.network_type.supported as networkType (networkType)}
-								<Select.Item value={networkType}>
-									{renameSupportedModemNetwork(networkType)}
-								</Select.Item>
-							{/each}
-						</Select.Group>
-					</Select.Content>
+				<Select.Trigger class="h-10 w-full text-sm">
+					{formData.selectedNetwork
+						? renameSupportedModemNetwork(formData.selectedNetwork)
+						: '—'}
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Group>
+						{#each modem.network_type?.supported ?? [] as networkType (networkType)}
+							<Select.Item value={networkType}>
+								{renameSupportedModemNetwork(networkType)}
+							</Select.Item>
+						{/each}
+						{#if (modem.network_type?.supported ?? []).length === 0}
+							<div class="text-muted-foreground px-2 py-1.5 text-xs">
+								{$LL.network.modem.noNetworksFound()}
+							</div>
+						{/if}
+					</Select.Group>
+				</Select.Content>
 				</Select.Root>
 			</div>
 
