@@ -17,6 +17,7 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",
+		"test:e2e": "playwright test",
 		"clean": "rm -rf dist node_modules/.vite"
 	},
 	"dependencies": {
@@ -43,9 +44,10 @@
 		"@eslint/compat": "^2.0.3",
 		"@eslint/eslintrc": "^3.3.5",
 		"@lucide/svelte": "^1.17.0",
-		"@sveltejs/vite-plugin-svelte": "^7.0.0",
-		"@tailwindcss/postcss": "^4.2.2",
-		"@tailwindcss/vite": "^4.2.2",
+		"@playwright/test": "^1.60.0",
+		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"@tailwindcss/postcss": "^4.3.0",
+		"@tailwindcss/vite": "^4.3.0",
 		"@tsconfig/svelte": "^5.0.8",
 		"@types/node": "^25.5.0",
 		"@types/qrcode": "^1.5.6",
