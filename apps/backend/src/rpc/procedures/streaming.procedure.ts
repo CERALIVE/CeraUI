@@ -17,7 +17,7 @@ import {
 	streamingStopOutputSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import { shouldUseMocks, setMockEncoderConfig, getMockState } from "../../mocks/mock-service.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import { setBitrate as setEncoderBitrate } from "../../modules/streaming/encoder.ts";
@@ -82,8 +82,14 @@ export const setBitrateProcedure = authedProcedure
 		if (getIsStreaming()) {
 			const newBitrate = setEncoderBitrate({ bitrate: input });
 			if (newBitrate) {
+				if (shouldUseMocks()) {
+					setMockEncoderConfig({ max_br: newBitrate });
+				}
 				return { max_br: newBitrate };
 			}
+		}
+		if (shouldUseMocks()) {
+			setMockEncoderConfig({ max_br: input.max_br });
 		}
 		return { max_br: input.max_br };
 	});
@@ -116,9 +122,19 @@ export const getConfigProcedure = authedProcedure
 	.output(configMessageSchema)
 	.handler(() => {
 		const config = getConfig();
+		let max_br = config.max_br;
+
+		// In mock mode, overlay mockEncoderConfig.max_br if set
+		if (shouldUseMocks()) {
+			const mockState = getMockState();
+			if (mockState.mockEncoderConfig.max_br !== undefined) {
+				max_br = mockState.mockEncoderConfig.max_br;
+			}
+		}
+
 		return {
 			asrc: config.asrc,
-			max_br: config.max_br,
+			max_br,
 			acodec: config.acodec as "opus" | "aac" | "pcm" | undefined,
 			delay: config.delay,
 			pipeline: config.pipeline,
