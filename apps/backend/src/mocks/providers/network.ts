@@ -4,11 +4,15 @@
 */
 
 import {
+	getMockState,
 	getNetworkTraffic,
 	getScenarioConfig,
 	mockModems,
 	shouldUseMocks,
 } from "../mock-service.ts";
+
+const resolveNetifIp = (name: string, fallback: string): string =>
+	getMockState().netifConfigs.get(name)?.ip ?? fallback;
 
 /**
  * Generate mock ifconfig output based on current scenario
@@ -24,7 +28,7 @@ export function getMockIfconfigOutput(): string {
 	// Always include eth0 (ethernet)
 	interfaces.push(
 		generateInterfaceBlock("eth0", {
-			ip: "192.168.1.100",
+			ip: resolveNetifIp("eth0", "192.168.1.100"),
 			netmask: "255.255.255.0",
 			broadcast: "192.168.1.255",
 			mac: "dc:a6:32:12:34:56",
@@ -41,7 +45,7 @@ export function getMockIfconfigOutput(): string {
 
 		interfaces.push(
 			generateInterfaceBlock(modem.interfaceName, {
-				ip: modem.ip,
+				ip: resolveNetifIp(modem.interfaceName, modem.ip),
 				netmask: "255.255.255.0",
 				broadcast: `10.0.${i}.255`,
 				mac: `00:1e:10:1f:${String(i).padStart(2, "0")}:01`,
@@ -56,7 +60,7 @@ export function getMockIfconfigOutput(): string {
 	if (config.wifi) {
 		interfaces.push(
 			generateInterfaceBlock("wlan0", {
-				ip: "192.168.2.100",
+				ip: resolveNetifIp("wlan0", "192.168.2.100"),
 				netmask: "255.255.255.0",
 				broadcast: "192.168.2.255",
 				mac: "dc:a6:32:12:34:57",

@@ -24,6 +24,7 @@ import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
+import { getMockState, shouldUseMocks } from "../../mocks/mock-service.ts";
 import {
 	getMockIfconfigOutput,
 	shouldMockNetwork,
@@ -286,6 +287,11 @@ type NetworkInterfaceResponseMessage = {
 
 export function netIfBuildMsg() {
 	const m: NetworkInterfaceResponseMessage = {};
+	// ifconfig text cannot express the software `enabled` flag, so in dev the
+	// read-back overlays enabled/ip from MockState (written by configure).
+	const mockConfigs = shouldUseMocks()
+		? getMockState().netifConfigs
+		: undefined;
 	for (const i in netif) {
 		const networkInterface = netif[i];
 		if (!networkInterface) continue;
@@ -302,7 +308,7 @@ export function netIfBuildMsg() {
 			if (mockConfig.ip !== undefined) m[i].ip = mockConfig.ip;
 		}
 
-		const error = getNetifErrorMsg(networkInterface);
+		const error = netIfGetErrorMsg(networkInterface);
 		if (error) {
 			m[i].error = error;
 		}

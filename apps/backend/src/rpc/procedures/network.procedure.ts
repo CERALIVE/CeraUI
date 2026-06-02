@@ -11,6 +11,10 @@ import {
 import { os } from "@orpc/server";
 
 import {
+	setMockNetifConfig,
+	shouldUseMocks,
+} from "../../mocks/mock-service.ts";
+import {
 	handleNetif,
 	netIfBuildMsg,
 } from "../../modules/network/network-interfaces.ts";
@@ -46,5 +50,17 @@ export const configureNetworkInterfaceProcedure = authedProcedure
 				enabled: input.enabled,
 			},
 		});
+
+		// handleNetif has no static-IP path; the next mock ifconfig refresh
+		// would clobber the operator's IP. Persist it so the provider replays
+		// it on re-read (undefined IP === DHCP).
+		if (shouldUseMocks()) {
+			setMockNetifConfig(input.name, {
+				enabled: input.enabled,
+				dhcp: input.ip === undefined,
+				ip: input.ip,
+			});
+		}
+
 		return { success: true };
 	});
