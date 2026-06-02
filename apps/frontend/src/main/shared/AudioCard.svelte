@@ -4,6 +4,7 @@ import type { AudioCodecsMessage, Pipelines } from '@ceraui/rpc/schemas';
 import { Volume } from '@lucide/svelte';
 
 import * as Card from '$lib/components/ui/card';
+import { getAudioSourceLabel } from '$lib/helpers/AudioHelper';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
@@ -59,6 +60,30 @@ const hasAudioSupport = $derived(
 const hasAudioSource = $derived(hasAudioSupport);
 const hasAudioCodec = $derived(hasAudioSupport);
 
+// i18n key resolver (mirrors the EncoderDialog helper) — lets the pure
+// AudioHelper resolve localized keys without a store/rune dependency.
+const t = (key: string): string => {
+	const parts = key.split('.');
+	let result: unknown = $LL;
+	for (const part of parts) {
+		if (result && typeof result === 'object' && part in result) {
+			result = (result as Record<string, unknown>)[part];
+		} else {
+			return key;
+		}
+	}
+	return typeof result === 'function' ? (result as () => string)() : key;
+};
+
+const sourceTriggerLabel = $derived(
+	getAudioSourceLabel(properties.audioSource, {
+		available: audioSources,
+		notAvailableSentinel: notAvailableAudioSource ?? '',
+		selectPlaceholder: $LL.settings.selectAudioSource(),
+		t,
+	}),
+);
+
 </script>
 
 <Card.Root class="flex h-full flex-col gap-0 overflow-hidden border py-0">
@@ -99,11 +124,7 @@ const hasAudioCodec = $derived(hasAudioSupport);
 						value={properties.audioSource}
 					>
 						<Select.Trigger id="audioSource" class="w-full">
-							{!properties.audioSource
-								? $LL.settings.selectAudioSource()
-								: properties.audioSource !== notAvailableAudioSource
-									? properties.audioSource
-									: `${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
+							{sourceTriggerLabel}
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Group>

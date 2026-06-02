@@ -26,6 +26,7 @@ import { Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import { AppDialog } from '$lib/components/dialogs';
+import { getAudioSourceLabel } from '$lib/helpers/AudioHelper';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
@@ -135,12 +136,28 @@ const thumbPct = $derived(pct(draftDelay));
 const fillLeft = $derived(Math.min(zeroPct, thumbPct));
 const fillWidth = $derived(Math.abs(thumbPct - zeroPct));
 
+// i18n key resolver (mirrors the EncoderDialog helper) — lets the pure
+// AudioHelper resolve localized keys without a store/rune dependency.
+const t = (key: string): string => {
+	const parts = key.split('.');
+	let result: unknown = $LL;
+	for (const part of parts) {
+		if (result && typeof result === 'object' && part in result) {
+			result = (result as Record<string, unknown>)[part];
+		} else {
+			return key;
+		}
+	}
+	return typeof result === 'function' ? (result as () => string)() : key;
+};
+
 const sourceTriggerLabel = $derived(
-	!draftSource
-		? $LL.settings.selectAudioSource()
-		: draftSource === notAvailableAudioSource
-			? `${draftSource} (${$LL.settings.notAvailableAudioSource()})`
-			: draftSource,
+	getAudioSourceLabel(draftSource, {
+		available: audioSources,
+		notAvailableSentinel: notAvailableAudioSource ?? '',
+		selectPlaceholder: $LL.settings.selectAudioSource(),
+		t,
+	}),
 );
 const codecTriggerLabel = $derived(
 	draftCodec && audioCodecs
