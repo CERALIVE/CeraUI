@@ -158,6 +158,23 @@ export function getPipelinesMessage() {
 	};
 }
 
+export function gatePipelineOverrides(
+	pipeline: Pick<
+		Pipeline,
+		"supportsResolutionOverride" | "supportsFramerateOverride"
+	>,
+	source: { resolution?: Resolution; framerate?: Framerate },
+): { resolution?: Resolution; framerate?: Framerate } {
+	const gated: { resolution?: Resolution; framerate?: Framerate } = {};
+	if (pipeline.supportsResolutionOverride && source.resolution !== undefined) {
+		gated.resolution = source.resolution;
+	}
+	if (pipeline.supportsFramerateOverride && source.framerate !== undefined) {
+		gated.framerate = source.framerate;
+	}
+	return gated;
+}
+
 /**
  * Generate a pipeline file with overrides
  */

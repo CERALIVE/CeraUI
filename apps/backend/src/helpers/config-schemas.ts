@@ -48,6 +48,26 @@ export const providerSelectionSchema = z.enum([
 
 export const audioCodecSchema = z.enum(["opus", "aac", "pcm"]);
 
+// Video resolution/framerate presets — mirror the ceracoder PipelineOverrides
+// and @ceraui/rpc streaming schema enums so persisted config round-trips cleanly.
+export const resolutionSchema = z.enum([
+	"480p",
+	"720p",
+	"1080p",
+	"1440p",
+	"2160p",
+	"4k",
+]);
+
+export const framerateSchema = z.union([
+	z.literal(25),
+	z.literal(29.97),
+	z.literal(30),
+	z.literal(50),
+	z.literal(59.94),
+	z.literal(60),
+]);
+
 export const runtimeConfigSchema = z.object({
 	// Authentication
 	password: z.string().optional(),
@@ -72,6 +92,8 @@ export const runtimeConfigSchema = z.object({
 	max_br: z.number().int().min(500).max(50000).optional(),
 	delay: z.number().int().min(-2000).max(2000).optional(),
 	pipeline: z.string().optional(),
+	resolution: resolutionSchema.optional(),
+	framerate: framerateSchema.optional(),
 	autostart: z.boolean().optional(),
 
 	// Remote/cloud settings
