@@ -106,6 +106,25 @@ export function parseVolts(raw: string | number | null | undefined): number | nu
 
 
 /**
+ * Map a modem's backend `status.connection` + `no_sim` flag onto the HUD's
+ * simplified {@link LinkSignal.connectionState}. `no_sim` wins over everything
+ * (a SIM-less modem can never be connected); otherwise `connected`/`scanning`
+ * pass through and every other backend state (failed/registered/connecting or
+ * a missing status) collapses to `disconnected`.
+ */
+export function modemConnectionState(modem: Modem): LinkSignal["connectionState"] {
+	if (modem.no_sim === true) return "no_sim";
+	switch (modem.status?.connection) {
+		case "connected":
+			return "connected";
+		case "scanning":
+			return "scanning";
+		default:
+			return "disconnected";
+	}
+}
+
+/**
  * Build the ordered list of {@link LinkSignal} entries from wifi, modem, and
  * ethernet data. Throughput and `enabled` are joined from `netif` by `id`
  * (== ifname); ethernet links come from `netif` entries named `eth*` that are
@@ -131,33 +150,35 @@ export function buildLinks(
 
 	for (const [ifname, iface] of Object.entries(wifi ?? {})) {
 		const active = iface.available?.find((network) => network.active);
+		const isConnected = Boolean(active);
 		links.push({
 			id: ifname,
 			type: "wifi",
 			linkIndex: 0,
 			signal: active && Number.isFinite(active.signal) ? active.signal : null,
 			label: active?.ssid || "WiFi",
-			isConnected: Boolean(active),
+			isConnected,
 			isStale: wifiStale || fullyStale,
 			throughputKbps: throughputFor(ifname),
 			enabled: enabledFor(ifname),
-			connectionState: "disconnected",
+			connectionState: isConnected ? "connected" : "disconnected",
 		});
 	}
 
 	for (const [key, modem] of Object.entries(modems ?? {})) {
 		const id = modem.ifname || key;
+		const connectionState = modemConnectionState(modem);
 		links.push({
 			id,
 			type: "modem",
 			linkIndex: 0,
 			signal: modemSignal(modem),
 			label: modem.name || modem.status?.network || "Modem",
-			isConnected: modem.status?.connection === "connected",
+			isConnected: connectionState === "connected",
 			isStale: modemsStale || fullyStale,
 			throughputKbps: throughputFor(id),
 			enabled: enabledFor(id),
-			connectionState: "disconnected",
+			connectionState,
 		});
 	}
 
@@ -173,7 +194,7 @@ export function buildLinks(
 			isStale: fullyStale,
 			throughputKbps: convertBytesToKbids(entry.tp ?? 0),
 			enabled: entry.enabled,
-			connectionState: "disconnected",
+			connectionState: "connected",
 		});
 	}
 
