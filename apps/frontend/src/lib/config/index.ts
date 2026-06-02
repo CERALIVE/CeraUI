@@ -5,7 +5,6 @@ import Advanced from "$main/tabs/Advanced.svelte";
 import DevTools from "$main/tabs/DevTools.svelte";
 import IdentityPreview from "$main/tabs/IdentityPreview.svelte";
 import Network from "$main/tabs/Network.svelte";
-import Streaming from "$main/tabs/Streaming.svelte";
 import LiveView from "$main/LiveView.svelte";
 import NetworkView from "$main/NetworkView.svelte";
 import SettingsView from "$main/SettingsView.svelte";
@@ -54,8 +53,11 @@ export const navElements: NavElements = {
 		: {}),
 };
 
-// Note: defaultNavElement removed to avoid circular dependencies
-// Navigation store now initializes with a direct Streaming component import (label "live")
+// No default-destination export lives here: this module sits in a cycle
+// (config → DevTools → screenshot-utility → navigation store), so an eager
+// navElements read at the store's init would observe navElements undefined.
+// The store seeds its initial state from a direct LiveView import; the hash
+// fallback in NavigationHelper reads navElements.live lazily inside the function.
 
 // Re-export branding configuration for backward compatibility
 export { deviceName, siteName };

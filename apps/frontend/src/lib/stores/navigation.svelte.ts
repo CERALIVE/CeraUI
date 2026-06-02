@@ -1,6 +1,6 @@
 // Navigation store using Svelte 5 runes
 import { type NavElements, navElements } from "$lib/config";
-import Streaming from "$main/tabs/Streaming.svelte";
+import LiveView from "$main/LiveView.svelte";
 
 // Navigation state interface
 interface NavigationState {
@@ -14,11 +14,11 @@ interface NavigationState {
 
 // Initial state — default destination is Live (3-destination IA).
 const initialState: NavigationState = {
-	current: { live: { label: "live", component: Streaming } },
+	current: { live: { label: "live", component: LiveView } },
 	previous: null,
 	isTransitioning: false,
 	transitionDirection: null,
-	history: [{ live: { label: "live", component: Streaming } }],
+	history: [{ live: { label: "live", component: LiveView } }],
 	error: null,
 };
 
