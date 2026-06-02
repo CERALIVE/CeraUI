@@ -25,6 +25,7 @@ import { toast } from 'svelte-sonner';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import { Slider } from '$lib/components/ui/slider';
+import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
 import { getConfig, getIsStreaming, getPipelines, getSensors } from '$lib/rpc/subscriptions.svelte';
@@ -73,6 +74,29 @@ const effectivePipeline = $derived(encoderConfig.source ?? config?.pipeline);
 const effectivePipelineData = $derived(
 	effectivePipeline ? getPipelines()?.pipelines?.[effectivePipeline] : undefined,
 );
+
+// i18n key resolver (mirrors EncoderDialog) — passed to PipelineHelper so the
+// friendly source label is translated, with safe key-passthrough on a miss.
+const t = (key: string): string => {
+	const parts = key.split('.');
+	let result: unknown = $LL;
+	for (const part of parts) {
+		if (result && typeof result === 'object' && part in result) {
+			result = (result as Record<string, unknown>)[part];
+		} else {
+			return key;
+		}
+	}
+	return typeof result === 'function' ? (result as () => string)() : key;
+};
+
+// Whether the effective pipeline resolves to a known registry entry. Single
+// source of truth for the reconfigure-required affordance (consumed by T8).
+const pipelineRecognized = $derived(effectivePipeline ? Boolean(effectivePipelineData) : false);
+
+// Set-but-unrecognized: a stale/legacy pipeline id is persisted but absent from
+// the live registry — surface "reconfigure required" instead of the raw id.
+const pipelineNeedsReconfigure = $derived(Boolean(effectivePipeline) && !pipelineRecognized);
 
 // Persist the encoder draft via setConfig when EncoderDialog saves — mirrors
 // the AudioDialog/ServerDialog persistence pattern. Resolution/framerate are
@@ -155,7 +179,13 @@ const encoderSummary = $derived.by(() => {
 	const parts: string[] = [];
 	const pipeline = encoderConfig.source ?? config?.pipeline;
 	const bitrate = encoderConfig.bitrate ?? config?.max_br;
-	if (pipeline) parts.push(pipeline);
+	if (pipeline) {
+		parts.push(
+			pipelineRecognized
+				? getPipelineDisplayName(pipeline, getPipelines()?.pipelines, t)
+				: $LL.live.reconfigureRequired(),
+		);
+	}
 	if (bitrate) parts.push(formatBitrate(bitrate));
 	return parts.length ? parts.join(' · ') : $LL.general.notConfigured();
 });
@@ -218,6 +248,7 @@ type ConfigRow = {
 	value: string;
 	section: StreamSection;
 	onEdit: () => void;
+	warn?: boolean;
 };
 const configRows = $derived<ConfigRow[]>([
 	{
@@ -226,6 +257,7 @@ const configRows = $derived<ConfigRow[]>([
 		value: encoderSummary,
 		section: 'encoder',
 		onEdit: () => (encoderOpen = true),
+		warn: pipelineNeedsReconfigure,
 	},
 	{
 		icon: Volume2,
@@ -416,8 +448,13 @@ const configRows = $derived<ConfigRow[]>([
 								class="text-muted-foreground mt-0.5 h-5 w-5 shrink-0"
 							/>
 							<div class="min-w-0">
-								<p class="text-sm font-medium">{row.label}</p>
-								<p class="text-muted-foreground truncate font-mono text-sm">{row.value}</p>
+							<p class="text-sm font-medium">{row.label}</p>
+							<p
+								class="truncate font-mono text-sm {row.warn ? 'font-medium' : 'text-muted-foreground'}"
+								style={row.warn ? 'color: var(--status-warning);' : undefined}
+							>
+								{row.value}
+							</p>
 							</div>
 						</div>
 						{#if locked}
