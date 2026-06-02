@@ -13,6 +13,16 @@ export function setTheme(mode: ThemeMode): void {
 	theme = mode;
 }
 
+// On headless devices with no prefers-color-scheme, system defaults to dark.
+// A `prefers-color-scheme: light` miss covers both OS-prefers-dark and no-preference,
+// so this resolves both to dark deterministically (matches mode-watcher + the FOUC script).
+export function resolveSystemMode(): "dark" | "light" {
+	if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+		return "dark";
+	}
+	return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
 // Legacy-compatible store-like object for easier migration
 export const themeStore = {
 	get value() {
