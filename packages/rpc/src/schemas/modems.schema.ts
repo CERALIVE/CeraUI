@@ -55,6 +55,8 @@ export const modemSchema = z.object({
 	ifname: z.string(),
 	name: z.string(),
 	sim_network: z.string().optional(),
+	model: z.string().optional(),
+	manufacturer: z.string().optional(),
 	network_type: z.object({
 		supported: z.array(z.string()),
 		active: z.string().nullable(),
