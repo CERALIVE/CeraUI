@@ -99,6 +99,7 @@ pnpm --filter frontend run test   # vitest frontend unit tests
 - Frontend is a PWA — service worker via `vite-plugin-pwa`.
 - Validation constants live in `packages/rpc/src/schemas/`; the frontend reads them via `ValidationAdapter.ts` — never add inline numeric literals to dialog components.
 - All config dialogs compose `AppDialog.svelte` (desktop Dialog / mobile Sheet via `MediaQuery` from `svelte/reactivity`).
+- E2E Testing: REQUIRED reading before writing E2E tests → [`apps/frontend/tests/e2e/PLAYBOOK.md`](apps/frontend/tests/e2e/PLAYBOOK.md)
 
 ## ANTI-PATTERNS
 
