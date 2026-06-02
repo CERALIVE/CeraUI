@@ -46,6 +46,8 @@ export interface LinkSignal {
 	throughputKbps: number | null;
 	/** Whether this link is enabled/active. */
 	enabled: boolean;
+	/** Modem connection state: connected, scanning, disconnected, or no_sim. */
+	connectionState: "connected" | "scanning" | "disconnected" | "no_sim";
 }
 
 /**

@@ -19,6 +19,7 @@
  * `$lib/stores/websocket-store.svelte` (deprecated wrapper) here.
  */
 import { convertBytesToKbids } from "$lib/helpers/network-speed";
+import { modemSignal } from "$lib/helpers/signal";
 import {
 	getConfig,
 	getConnectionState,
@@ -102,17 +103,7 @@ export function parseVolts(raw: string | number | null | undefined): number | nu
 	return n;
 }
 
-/**
- * Extract a usable signal percentage from a modem, or `null` when there is no
- * meaningful value (no-SIM, missing status, or a negative/sentinel reading).
- */
-export function modemSignal(modem: Modem): number | null {
-	if (modem.no_sim) return null;
-	const signal = modem.status?.signal;
-	if (signal == null) return null;
-	if (!Number.isFinite(signal) || signal < 0) return null;
-	return signal;
-}
+
 
 /**
  * Build the ordered list of {@link LinkSignal} entries from wifi, modem, and

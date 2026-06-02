@@ -116,6 +116,21 @@ function getMockModemInfo(modemId: number): string {
 				? "roaming"
 				: "searching";
 
+	// Generate per-model supported modes based on network_type.supported
+	const supportedModes: string[] = [];
+	const supportedTypes = modem.network_type.supported;
+	
+	// Build mode combinations from supported types
+	if (supportedTypes.includes("4g") && !supportedTypes.includes("5g")) {
+		// 4G only (e.g., EM7455)
+		supportedModes.push("allowed: 4g; preferred: none");
+	} else if (supportedTypes.includes("5g")) {
+		// 5G capable (e.g., RM520N-GL, RM500Q-GL)
+		supportedModes.push("allowed: 4g; preferred: none");
+		supportedModes.push("allowed: 4g, 5g; preferred: 5g");
+		supportedModes.push("allowed: 5g; preferred: none");
+	}
+
 	const lines: string[] = [
 		`modem.dbus-path: /org/freedesktop/ModemManager1/Modem/${modemId}`,
 		`modem.generic.device-identifier: ${modem.imei.slice(0, 8)}`,
@@ -144,10 +159,8 @@ function getMockModemInfo(modemId: number): string {
 		`modem.generic.access-technologies.value[0]: ${accessTech}`,
 		`modem.generic.signal-quality.value: ${signal}`,
 		`modem.generic.signal-quality.recent: yes`,
-		`modem.generic.supported-modes.length: 3`,
-		`modem.generic.supported-modes.value[0]: allowed: 4g; preferred: none`,
-		`modem.generic.supported-modes.value[1]: allowed: 4g, 5g; preferred: 5g`,
-		`modem.generic.supported-modes.value[2]: allowed: 5g; preferred: none`,
+		`modem.generic.supported-modes.length: ${supportedModes.length}`,
+		...supportedModes.map((mode, idx) => `modem.generic.supported-modes.value[${idx}]: ${mode}`),
 		`modem.generic.current-modes: allowed: ${allowed}; preferred: ${preferred}`,
 		`modem.generic.supported-bands.length: 20`,
 		`modem.generic.current-bands.length: 15`,

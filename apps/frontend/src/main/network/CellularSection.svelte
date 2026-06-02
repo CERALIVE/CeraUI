@@ -8,6 +8,7 @@ import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { getSignalCategory } from '$lib/helpers/signal';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
+import { modemSignal, signalTextClass } from '$lib/helpers/signal';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -18,13 +19,6 @@ interface Props {
 }
 
 const { modemEntries, netif, onConfigure }: Props = $props();
-
-function modemSignal(modem: Modem): number | null {
-	if (modem.no_sim) return null;
-	const signal = modem.status?.signal;
-	if (signal == null || !Number.isFinite(signal) || signal < 0) return null;
-	return signal;
-}
 
 /**
  * Hardware identity line: manufacturer + model, rendered RAW (never matched or
