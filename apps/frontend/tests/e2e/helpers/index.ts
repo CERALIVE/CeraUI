@@ -96,7 +96,7 @@ export async function navigateTo(page: Page, destination: Destination): Promise<
  * will time out — which is the documented limitation of agent QA here.
  */
 export async function ensureAuthenticated(page: Page): Promise<void> {
-	const password = process.env.E2E_PASSWORD ?? 'ceralive-e2e';
+	const password = process.env.E2E_PASSWORD ?? '12345678';
 	// The app nests <header> inside <main>, so it has no implicit "banner" role;
 	// locate the app-shell header by tag (it is the first <header> in the DOM,
 	// ahead of any view-level headers). Its presence is the authed-shell signal.
