@@ -242,7 +242,6 @@ export async function wifiUpdateScanResult() {
 	);
 	if (!wifiNetworks) return;
 
-	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
 	for (const wifiInterface of Object.values(wifiInterfacesByMacAddress)) {
 		wifiInterface.available = new Map();
 	}
@@ -270,7 +269,7 @@ export async function wifiUpdateScanResult() {
 			signal: Number.parseInt(signal, 10),
 			security,
 			freq: Number.parseInt(freq, 10),
-		});
+		} satisfies WifiNetwork);
 	}
 
 	// Update the cache and broadcast from the diff. Signal-only fluctuations do
@@ -281,25 +280,47 @@ export async function wifiUpdateScanResult() {
 	}
 }
 
+// ─── debounced scan refresh (HARD CUTOVER from the 6-timer schedule) ─────────
+
 /*
-  The WiFi scan results are updated some time after a rescan command is issued /
-  some time after a new WiFi adapter is plugged in.
-  This function sets up a number of timers to broadcast the updated scan results
-  with the expectation that eventually it will capture any relevant new results
+  WiFi scan results settle some time after a rescan is issued / a new adapter is
+  plugged in. Instead of fanning out a fixed cascade of timers, we DEBOUNCE a
+  single refresh: each new rescan cancels the pending timer and re-arms it, so
+  repeated rescans collapse to exactly one scan after the quiet window.
 */
-const pendingScanUpdates: Array<ReturnType<typeof setTimeout>> = [];
+export const WIFI_SCAN_REFRESH_DEBOUNCE_MS = 3000;
 
-export function wifiScheduleScanUpdates() {
-	for (const timer of pendingScanUpdates) {
-		clearTimeout(timer);
+let scanRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+// The action run when the debounce fires. Overridable in tests to observe
+// execution deterministically without spawning nmcli.
+let scanRefreshAction: () => void | Promise<void> = wifiUpdateScanResult;
+
+export function wifiScheduleScanRefresh(): void {
+	if (scanRefreshTimer !== null) {
+		clearTimeout(scanRefreshTimer);
 	}
+	scanRefreshTimer = setTimeout(() => {
+		scanRefreshTimer = null;
+		void scanRefreshAction();
+	}, WIFI_SCAN_REFRESH_DEBOUNCE_MS);
+}
 
-	pendingScanUpdates.push(setTimeout(wifiUpdateScanResult, 1000));
-	pendingScanUpdates.push(setTimeout(wifiUpdateScanResult, 3000));
-	pendingScanUpdates.push(setTimeout(wifiUpdateScanResult, 5000));
-	pendingScanUpdates.push(setTimeout(wifiUpdateScanResult, 10000));
-	pendingScanUpdates.push(setTimeout(wifiUpdateScanResult, 15000));
-	pendingScanUpdates.push(setTimeout(wifiUpdateScanResult, 20000));
+/** Number of pending debounce timers (0 or 1). Test introspection. */
+export function wifiPendingScanRefreshCount(): number {
+	return scanRefreshTimer === null ? 0 : 1;
+}
+
+/** Cancel any pending debounced scan refresh. */
+export function wifiCancelScanRefresh(): void {
+	if (scanRefreshTimer !== null) {
+		clearTimeout(scanRefreshTimer);
+		scanRefreshTimer = null;
+	}
+}
+
+/** Test seam: override the action run when the debounce timer fires. */
+export function setScanRefreshAction(action: () => void | Promise<void>): void {
+	scanRefreshAction = action;
 }
 
 export async function wifiRescan() {
@@ -308,5 +329,5 @@ export async function wifiRescan() {
 	/* A rescan request will fail if a previous one is in progress,
      but we still attempt to update the results */
 	await wifiUpdateScanResult();
-	wifiScheduleScanUpdates();
+	wifiScheduleScanRefresh();
 }
