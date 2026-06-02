@@ -25,10 +25,11 @@ import { toast } from 'svelte-sonner';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import { Slider } from '$lib/components/ui/slider';
-import { stopStreaming } from '$lib/helpers/SystemHelper';
+import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
 import { getConfig, getIsStreaming, getPipelines, getSensors } from '$lib/rpc/subscriptions.svelte';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
+import { buildStartConfig } from '$lib/streaming/startStreaming';
 import { isSectionLocked, type StreamSection } from '$lib/streaming/streamingLockPolicy';
 import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
 import EncoderDialog, { type EncoderConfig } from '$main/dialogs/EncoderDialog.svelte';
@@ -169,12 +170,33 @@ const serverSummary = $derived.by(() => {
 	return config?.srtla_port ? `${serverTarget}:${config.srtla_port}` : serverTarget;
 });
 
-function handleStart() {
-	// The full start flow (source / resolution / codec selection) lives in the
-	// encoder + server dialogs; the shell points there for now.
-	toast.info($LL.live.startStream(), {
-		description: 'Stream configuration dialog arrives in Wave 2.',
-	});
+// Start: assemble the full ConfigMessage from the SAVED backend config (the
+// encoder/server dialogs persist via setConfig), fold in the unpersisted audio
+// override, validate pipeline + server, then dispatch via SystemHelper →
+// rpc.streaming.start. The streaming/idle UI is driven by getIsStreaming(),
+// updated by the backend status push — never set locally here.
+async function handleStart() {
+	const result = buildStartConfig(config, audioOverride);
+	if (!result.ok) {
+		toast.error(
+			result.error === 'missingPipeline'
+				? $LL.live.cannotStartNoPipeline()
+				: $LL.live.cannotStartNoServer(),
+		);
+		return;
+	}
+
+	try {
+		toast.dismiss();
+	} catch {
+		/* dismiss is best-effort */
+	}
+
+	try {
+		await startStreaming(result.config);
+	} catch {
+		toast.error($LL.live.startFailed());
+	}
 }
 
 function handleStop() {
@@ -186,7 +208,7 @@ function handleStop() {
 	if (typeof window !== 'undefined' && window.stopStreamingWithNotificationClear) {
 		window.stopStreamingWithNotificationClear();
 	} else {
-		stopStreaming();
+		void stopStreaming();
 	}
 }
 

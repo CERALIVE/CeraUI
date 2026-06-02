@@ -251,6 +251,9 @@ const en = {
 		streamSettings: "Stream Settings",
 		adjustBitrate: "Adjust Bitrate",
 		stopToChange: "Stop stream to change",
+		cannotStartNoPipeline: "Select a video source before starting the stream",
+		cannotStartNoServer: "Configure a server before starting the stream",
+		startFailed: "Failed to start stream",
 	},
 	dialogs: {
 		close: "Close",

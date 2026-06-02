@@ -17,7 +17,12 @@ import {
 	streamingStopOutputSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-import { shouldUseMocks, setMockEncoderConfig, getMockState } from "../../mocks/mock-service.ts";
+import {
+	shouldUseMocks,
+	setMockEncoderConfig,
+	getMockState,
+	setStreamingState,
+} from "../../mocks/mock-service.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import { setBitrate as setEncoderBitrate } from "../../modules/streaming/encoder.ts";
@@ -30,7 +35,7 @@ import {
 	setMockHardware,
 	VALID_HARDWARE_TYPES,
 } from "../../modules/streaming/pipelines.ts";
-import { getIsStreaming } from "../../modules/streaming/streaming.ts";
+import { getIsStreaming, updateStatus } from "../../modules/streaming/streaming.ts";
 import {
 	start as startStream,
 	stop as stopStream,
@@ -53,10 +58,10 @@ export const streamingStartProcedure = authedProcedure
 	.output(streamingStartOutputSchema)
 	.handler(async ({ input, context }) => {
 		try {
-			// The existing start function handles validation and config saving
-			// Pass input directly - it already matches ConfigParameters
-			await startStream(context.ws as unknown as import("ws").default, input);
 			if (shouldUseMocks()) {
+				// Dev has no srtla_send/ceracoder binaries: the real start() flips
+				// is_streaming on then immediately errors and flips it off. Simulate
+				// a sustained stream so getIsStreaming() drives the UI as on device.
 				setMockEncoderConfig({
 					pipeline: input.pipeline,
 					bitrate_overlay: input.bitrate_overlay,
@@ -64,7 +69,13 @@ export const streamingStartProcedure = authedProcedure
 					framerate: input.framerate,
 					max_br: input.max_br,
 				});
+				setStreamingState(true);
+				updateStatus(true);
+				return { success: true, is_streaming: getIsStreaming() };
 			}
+			// The existing start function handles validation and config saving
+			// Pass input directly - it already matches ConfigParameters
+			await startStream(context.ws as unknown as import("ws").default, input);
 			return { success: true, is_streaming: getIsStreaming() };
 		} catch (_error) {
 			return { success: false, is_streaming: false };
@@ -77,6 +88,11 @@ export const streamingStartProcedure = authedProcedure
 export const streamingStopProcedure = authedProcedure
 	.output(streamingStopOutputSchema)
 	.handler(() => {
+		if (shouldUseMocks()) {
+			setStreamingState(false);
+			updateStatus(false);
+			return { success: true };
+		}
 		stopStream();
 		return { success: true };
 	});
