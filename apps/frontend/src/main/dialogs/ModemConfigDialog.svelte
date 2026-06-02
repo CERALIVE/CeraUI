@@ -32,6 +32,7 @@ import {
 } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { slide } from 'svelte/transition';
+import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import SignalIndicator from '$lib/components/icons/SignalIndicator.svelte';
@@ -79,6 +80,7 @@ function readModemConfig() {
 
 let formData = $state(readModemConfig());
 let localScanning = $state(false);
+let saving = $state(false);
 const scanTimeouts: number[] = [];
 
 // Re-seed the form from the live modem each time the dialog opens.
@@ -106,18 +108,26 @@ const availableNetworks = $derived(
 	),
 );
 
-function handleSave() {
-	if (primaryDisabled) return;
-	changeModemSettings({
-		device: deviceId,
-		network_type: formData.selectedNetwork,
-		roaming: formData.roaming,
-		network: !formData.roaming || formData.network === '-1' ? '' : formData.network,
-		autoconfig: formData.autoconfig,
-		apn: formData.apn,
-		username: formData.username,
-		password: formData.password,
-	});
+async function handleSave() {
+	if (primaryDisabled || saving) return;
+	saving = true;
+	try {
+		await changeModemSettings({
+			device: deviceId,
+			network_type: formData.selectedNetwork,
+			roaming: formData.roaming,
+			network: !formData.roaming || formData.network === '-1' ? '' : formData.network,
+			autoconfig: formData.autoconfig,
+			apn: formData.apn,
+			username: formData.username,
+			password: formData.password,
+		});
+		open = false;
+	} catch {
+		toast.error($LL.network.errors.toggleFailed());
+	} finally {
+		saving = false;
+	}
 }
 
 function handleScan() {
@@ -135,13 +145,15 @@ const selectedNetworkLabel = $derived(
 </script>
 
 <AppDialog
-	bind:open
+	closeOnPrimary={false}
 	description={$LL.network.modem.configureDescription()}
 	icon={Radio}
 	onPrimary={handleSave}
 	primaryDisabled={primaryDisabled}
 	primaryLabel={$LL.network.modem.save()}
+	primaryLoading={saving}
 	title={modem.name}
+	bind:open
 >
 	<div class="space-y-4">
 		<!-- ── Status strip: operator · network type · signal ────────────────── -->

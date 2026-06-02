@@ -60,6 +60,12 @@ const wifi = $derived<WifiStatus | undefined>(getWifi());
 const iface = $derived(wifi?.[deviceId]);
 const ifaceLabel = $derived(iface ? networkRename(iface.ifname) : '');
 
+// Interface-level transition (T3 additive wifi schema). 'activating' means a
+// connect is already in flight at the NetworkManager layer (DEVICE_BUSY guard) —
+// gate every Connect action and surface a busy chip so the operator can't queue
+// a conflicting request mid-transition.
+const ifaceBusy = $derived(iface?.transition === 'activating');
+
 const sortedNetworks = $derived(
 	[...(iface?.available ?? [])].sort((a, b) => {
 		if (a.active !== b.active) return a.active ? -1 : 1;
@@ -105,6 +111,7 @@ function handleScan() {
 }
 
 function handleConnectSaved(uuid: string, network: AvailableWifiNetwork) {
+	if (ifaceBusy) return;
 	resetInteraction();
 	beginConnect(uuid, network.ssid);
 	connectWifi(uuid, network);
@@ -116,6 +123,7 @@ function handleDisconnect(uuid: string, network: AvailableWifiNetwork) {
 
 /** New (unsaved) network: secured → reveal inline password form; open → connect now. */
 function handleConnectNew(network: AvailableWifiNetwork) {
+	if (ifaceBusy) return;
 	confirmForget = undefined;
 	if (isSecured(network)) {
 		pendingNew = network;
@@ -128,7 +136,7 @@ function handleConnectNew(network: AvailableWifiNetwork) {
 }
 
 function submitNew() {
-	if (!pendingNew) return;
+	if (!pendingNew || ifaceBusy) return;
 	if (isSecured(pendingNew) && password.length < PASSWORD_MIN) return;
 	const ssid = pendingNew.ssid;
 	const pw = password;

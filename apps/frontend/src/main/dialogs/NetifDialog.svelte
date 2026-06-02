@@ -83,14 +83,15 @@ async function save() {
 </script>
 
 <AppDialog
-	bind:open
+	closeOnPrimary={false}
 	description={name}
 	icon={Network}
 	onPrimary={save}
-	primaryDisabled={ipInvalid || saving}
+	primaryDisabled={ipInvalid}
 	primaryLabel={$LL.advanced.save()}
-	closeOnPrimary={false}
+	primaryLoading={saving}
 	title={$LL.network.view.configure()}
+	bind:open
 >
 	<div class="space-y-6">
 		<!-- Enable / disable -->
@@ -123,13 +124,13 @@ async function save() {
 				aria-invalid={ipInvalid}
 				autocomplete="off"
 				inputmode="text"
-				placeholder="192.168.1.50"
-				spellcheck={false}
-				value={ip}
 				oninput={(e) => {
 					ip = e.currentTarget.value;
 					dirtyIp = true;
 				}}
+				placeholder="192.168.1.50"
+				spellcheck={false}
+				value={ip}
 			/>
 			{#if ipInvalid}
 				<p class="text-destructive flex items-center gap-2 text-sm" role="alert">
