@@ -29,9 +29,11 @@ import {
 	getScenarioConfig,
 	getWifiSignal,
 	mockWifiNetworks,
+	mockWifiRadios,
 	mockWifiUuidForSsid,
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
+import { getMockHotspotConfig } from "../../mocks/providers/wifi.ts";
 import {
 	type ConnectionUUID,
 	nmConnDelete,
@@ -128,38 +130,63 @@ export function wifiBuildMsg() {
 	// Return mock WiFi data in development mode
 	if (shouldUseMocks()) {
 		const config = getScenarioConfig();
-		if (config.wifi) {
-			const wlanState = getMockState().wifiConnections.get("wlan0");
+		if (!config.wifi) return {};
+
+		const state = getMockState();
+		const ifs: Record<number, WifiInterfaceResponseMessage> = {};
+
+		mockWifiRadios.forEach((radio, index) => {
+			if (state.wifiModes[radio.device] === "hotspot") {
+				const hotspot = getMockHotspotConfig(radio.device);
+				ifs[index] = {
+					ifname: radio.ifname,
+					conn: hotspot.uuid,
+					hw: radio.macAddress,
+					saved: {},
+					hotspot: {
+						name: hotspot.name,
+						password: hotspot.password,
+						channel: hotspot.channel,
+						available_channels: getWifiChannelMap([
+							"auto",
+							"auto_24",
+							"auto_50",
+						]),
+					},
+				} satisfies WifiInterfaceResponseMessage;
+				return;
+			}
+
+			const wlanState = state.wifiConnections.get(radio.device);
 			const activeSsid = wlanState?.activeNetwork;
 			const savedNetworks = wlanState?.savedNetworks ?? [];
 
-			const mockAvailable: WifiNetwork[] = mockWifiNetworks.map((network) => ({
-				active: network.ssid === activeSsid,
-				ssid: network.ssid,
-				signal: Math.round(getWifiSignal(network.ssid)),
-				security: network.security,
-				freq: network.frequency,
-			}));
+			const available: WifiNetwork[] = mockWifiNetworks
+				.map((network) => ({
+					active: network.ssid === activeSsid,
+					ssid: network.ssid,
+					signal: Math.round(getWifiSignal(network.ssid)),
+					security: network.security,
+					freq: network.frequency,
+				}))
+				.sort((a, b) => b.signal - a.signal);
 
-			mockAvailable.sort((a, b) => b.signal - a.signal);
-
-			const mockSaved: Record<string, string> = {};
+			const saved: Record<string, string> = {};
 			for (const ssid of savedNetworks) {
-				mockSaved[ssid] = mockWifiUuidForSsid(ssid);
+				saved[ssid] = mockWifiUuidForSsid(ssid);
 			}
 
-			return {
-				0: {
-					ifname: "wlan0",
-					conn: activeSsid ? mockWifiUuidForSsid(activeSsid) : "",
-					hw: "dc:a6:32:12:34:57",
-					saved: mockSaved,
-					available: mockAvailable,
-					supports_hotspot: true,
-				} satisfies WifiInterfaceResponseMessage,
-			};
-		}
-		return {};
+			ifs[index] = {
+				ifname: radio.ifname,
+				conn: activeSsid ? mockWifiUuidForSsid(activeSsid) : "",
+				hw: radio.macAddress,
+				saved,
+				available,
+				...(radio.supports_hotspot ? { supports_hotspot: true } : {}),
+			} satisfies WifiInterfaceResponseMessage;
+		});
+
+		return ifs;
 	}
 
 	const ifs: Record<number, WifiInterfaceResponseMessage> = {};

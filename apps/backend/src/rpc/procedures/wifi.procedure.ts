@@ -19,15 +19,23 @@ import { os } from "@orpc/server";
 
 import {
 	getMockState,
+	mockWifiRadios,
 	mockWifiSsidForUuid,
 	setMockWifiConnection,
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
+import { setMockHotspotConfig } from "../../mocks/providers/wifi.ts";
 import { handleWifi, wifiBuildMsg } from "../../modules/wifi/wifi.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
 const MOCK_WIFI_DEVICE = "wlan0";
+
+function resolveMockWifiDevice(device: string): string | undefined {
+	if (mockWifiRadios.some((radio) => radio.device === device)) return device;
+	const index = Number.parseInt(device, 10);
+	return Number.isNaN(index) ? undefined : mockWifiRadios[index]?.device;
+}
 
 // Base procedure with context
 const baseProcedure = os.$context<RPCContext>();
@@ -153,6 +161,13 @@ export const hotspotStartProcedure = authedProcedure
 		handleWifi(context.ws as unknown as import("ws").default, {
 			hotspot: { start: { device: input.device } },
 		});
+		if (shouldUseMocks()) {
+			const device = resolveMockWifiDevice(input.device);
+			if (device) {
+				getMockState().wifiModes[device] = "hotspot";
+				setMockWifiConnection(device, { activeNetwork: undefined });
+			}
+		}
 		return { success: true };
 	});
 
@@ -166,6 +181,12 @@ export const hotspotStopProcedure = authedProcedure
 		handleWifi(context.ws as unknown as import("ws").default, {
 			hotspot: { stop: { device: input.device } },
 		});
+		if (shouldUseMocks()) {
+			const device = resolveMockWifiDevice(input.device);
+			if (device) {
+				getMockState().wifiModes[device] = "station";
+			}
+		}
 		return { success: true };
 	});
 
@@ -186,5 +207,15 @@ export const hotspotConfigureProcedure = authedProcedure
 				},
 			},
 		});
+		if (shouldUseMocks()) {
+			const device = resolveMockWifiDevice(input.device);
+			if (device) {
+				setMockHotspotConfig(device, {
+					name: input.name,
+					password: input.password,
+					channel: input.channel,
+				});
+			}
+		}
 		return { success: true };
 	});
