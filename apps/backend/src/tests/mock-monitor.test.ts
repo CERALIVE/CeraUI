@@ -13,18 +13,15 @@ import { loadFixture, loadFixtureLines } from "./helpers/load-fixture.ts";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const deviceUp = (device: string, connection: string): MonitorEvent => ({
-	source: "nmcli",
-	kind: "device-state",
+const deviceUp = (device: string): MonitorEvent => ({
+	type: "device-state",
 	device,
 	state: "connected",
-	connection,
 });
 
-const modemAdded = (modemId: number): MonitorEvent => ({
-	source: "mmcli",
-	kind: "modem-added",
-	modemId,
+const modemAdded = (id: string): MonitorEvent => ({
+	type: "modem-added",
+	id,
 });
 
 // ─── interface conformance ───────────────────────────────────────────────────
@@ -45,13 +42,13 @@ describe("MockMonitorEmitter — IMonitorEmitter conformance", () => {
 describe("MockMonitorEmitter — scripted emission", () => {
 	test("emits events in scripted order after their delays", async () => {
 		const script: ScriptedMonitorEvent[] = [
-			{ delayMs: 10, event: deviceUp("eth0", "Wired connection 1") },
-			{ delayMs: 20, event: modemAdded(0) },
-			{ delayMs: 30, event: deviceUp("wlan0", "HomeNetwork") },
+			{ delayMs: 10, event: deviceUp("eth0") },
+			{ delayMs: 20, event: modemAdded("0") },
+			{ delayMs: 30, event: deviceUp("wlan0") },
 		];
 		const emitter = new MockMonitorEmitter(script);
 		const received: MonitorEvent[] = [];
-		emitter.on((e) => received.push(e));
+		emitter.on("monitor-event", (e) => received.push(e));
 
 		emitter.start();
 		expect(received).toHaveLength(0); // nothing synchronously
@@ -64,29 +61,29 @@ describe("MockMonitorEmitter — scripted emission", () => {
 
 	test("equal delays preserve array order", async () => {
 		const script: ScriptedMonitorEvent[] = [
-			{ delayMs: 5, event: modemAdded(0) },
-			{ delayMs: 5, event: modemAdded(1) },
-			{ delayMs: 5, event: modemAdded(2) },
+			{ delayMs: 5, event: modemAdded("0") },
+			{ delayMs: 5, event: modemAdded("1") },
+			{ delayMs: 5, event: modemAdded("2") },
 		];
 		const emitter = new MockMonitorEmitter(script);
-		const ids: number[] = [];
-		emitter.on((e) => {
-			if (e.kind === "modem-added") ids.push(e.modemId);
+		const ids: string[] = [];
+		emitter.on("monitor-event", (e) => {
+			if (e.type === "modem-added") ids.push(e.id);
 		});
 
 		emitter.start();
 		await sleep(30);
 
-		expect(ids).toEqual([0, 1, 2]);
+		expect(ids).toEqual(["0", "1", "2"]);
 		emitter.stop();
 	});
 
 	test("start() is idempotent — no double emission", async () => {
 		const emitter = new MockMonitorEmitter([
-			{ delayMs: 5, event: modemAdded(0) },
+			{ delayMs: 5, event: modemAdded("0") },
 		]);
 		let count = 0;
-		emitter.on(() => count++);
+		emitter.on("monitor-event", () => count++);
 
 		emitter.start();
 		emitter.start(); // should be a no-op
@@ -100,13 +97,14 @@ describe("MockMonitorEmitter — scripted emission", () => {
 // ─── listeners ───────────────────────────────────────────────────────────────
 
 describe("MockMonitorEmitter — listeners", () => {
-	test("on() returns a working unsubscribe", async () => {
+	test("off() removes a listener before it fires", async () => {
 		const emitter = new MockMonitorEmitter([
-			{ delayMs: 5, event: modemAdded(0) },
+			{ delayMs: 5, event: modemAdded("0") },
 		]);
 		let count = 0;
-		const unsub = emitter.on(() => count++);
-		unsub();
+		const listener = () => count++;
+		emitter.on("monitor-event", listener);
+		emitter.off("monitor-event", listener);
 
 		emitter.start();
 		await sleep(20);
@@ -117,12 +115,12 @@ describe("MockMonitorEmitter — listeners", () => {
 
 	test("off() removes a listener", async () => {
 		const emitter = new MockMonitorEmitter([
-			{ delayMs: 5, event: modemAdded(0) },
+			{ delayMs: 5, event: modemAdded("0") },
 		]);
 		let count = 0;
 		const listener = () => count++;
-		emitter.on(listener);
-		emitter.off(listener);
+		emitter.on("monitor-event", listener);
+		emitter.off("monitor-event", listener);
 
 		emitter.start();
 		await sleep(20);
@@ -133,22 +131,22 @@ describe("MockMonitorEmitter — listeners", () => {
 
 	test("multiple listeners all receive each event", async () => {
 		const emitter = new MockMonitorEmitter([
-			{ delayMs: 5, event: modemAdded(7) },
+			{ delayMs: 5, event: modemAdded("7") },
 		]);
-		const a: number[] = [];
-		const b: number[] = [];
-		emitter.on((e) => {
-			if (e.kind === "modem-added") a.push(e.modemId);
+		const a: string[] = [];
+		const b: string[] = [];
+		emitter.on("monitor-event", (e) => {
+			if (e.type === "modem-added") a.push(e.id);
 		});
-		emitter.on((e) => {
-			if (e.kind === "modem-added") b.push(e.modemId);
+		emitter.on("monitor-event", (e) => {
+			if (e.type === "modem-added") b.push(e.id);
 		});
 
 		emitter.start();
 		await sleep(20);
 
-		expect(a).toEqual([7]);
-		expect(b).toEqual([7]);
+		expect(a).toEqual(["7"]);
+		expect(b).toEqual(["7"]);
 		emitter.stop();
 	});
 });
@@ -158,10 +156,10 @@ describe("MockMonitorEmitter — listeners", () => {
 describe("MockMonitorEmitter — stop / reset / re-script", () => {
 	test("stop() cancels pending events", async () => {
 		const emitter = new MockMonitorEmitter([
-			{ delayMs: 30, event: modemAdded(0) },
+			{ delayMs: 30, event: modemAdded("0") },
 		]);
 		let count = 0;
-		emitter.on(() => count++);
+		emitter.on("monitor-event", () => count++);
 
 		emitter.start();
 		emitter.stop();
@@ -172,10 +170,10 @@ describe("MockMonitorEmitter — stop / reset / re-script", () => {
 
 	test("can be re-scripted and re-started after stop", async () => {
 		const emitter = new MockMonitorEmitter([
-			{ delayMs: 5, event: modemAdded(0) },
+			{ delayMs: 5, event: modemAdded("0") },
 		]);
 		const received: MonitorEvent[] = [];
-		emitter.on((e) => received.push(e));
+		emitter.on("monitor-event", (e) => received.push(e));
 
 		emitter.start();
 		await sleep(20);
@@ -183,24 +181,24 @@ describe("MockMonitorEmitter — stop / reset / re-script", () => {
 
 		emitter.stop();
 		emitter.script([
-			{ delayMs: 5, event: deviceUp("usb0", "gsm-connection-0") },
-			{ delayMs: 10, event: deviceUp("usb1", "gsm-connection-1") },
+			{ delayMs: 5, event: deviceUp("usb0") },
+			{ delayMs: 10, event: deviceUp("usb1") },
 		]);
 		emitter.start();
 		await sleep(30);
 
 		expect(received).toHaveLength(3);
-		expect(received[1]).toEqual(deviceUp("usb0", "gsm-connection-0"));
-		expect(received[2]).toEqual(deviceUp("usb1", "gsm-connection-1"));
+		expect(received[1]).toEqual(deviceUp("usb0"));
+		expect(received[2]).toEqual(deviceUp("usb1"));
 		emitter.stop();
 	});
 
 	test("reset() clears timers, listeners and script", async () => {
 		const emitter = new MockMonitorEmitter([
-			{ delayMs: 10, event: modemAdded(0) },
+			{ delayMs: 10, event: modemAdded("0") },
 		]);
 		let count = 0;
-		emitter.on(() => count++);
+		emitter.on("monitor-event", () => count++);
 
 		emitter.start();
 		emitter.reset();

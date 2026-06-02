@@ -20,86 +20,23 @@
 
   A scripted, in-memory implementation of the shared monitor interface. It
   emits a pre-defined sequence of `MonitorEvent`s on a timer instead of
-  spawning / parsing real `nmcli monitor` or `mmcli --monitor-state`
+  spawning / parsing real `nmcli monitor` or `mmcli --monitor-modems`
   subprocesses. Used by tests and by the `MOCK_SCENARIO` dev path.
 
-  The REAL subprocess monitor (T12) implements the same `IMonitorEmitter`
-  interface and is the only place allowed to invoke real nmcli/mmcli.
+  The REAL subprocess monitor (T12, `monitor-manager.ts`) implements the same
+  `IMonitorEmitter` interface and is the only place allowed to invoke real
+  nmcli/mmcli.
 */
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TODO: import from ../state-types.ts when T3 lands.
-// state-types.ts (T3) does not exist yet, so `MonitorEvent` and
-// `IMonitorEmitter` are defined inline here as the shared contract. When T3
-// lands, delete these definitions and switch to:
-//   import type { IMonitorEmitter, MonitorEvent, MonitorEventListener }
-//     from "../state-types.ts";
-// ─────────────────────────────────────────────────────────────────────────────
+import type { IMonitorEmitter, MonitorEvent } from "../state-types.ts";
 
-/**
- * A single normalized event surfaced by a network/modem monitor.
- *
- * The `raw` variant carries an unparsed monitor line so consumers (and tests)
- * can exercise downstream parsing; the structured variants describe the
- * state transitions the device control plane actually reacts to.
- */
-export type MonitorEvent =
-	| {
-			source: "nmcli";
-			kind: "device-state";
-			device: string;
-			state: string;
-			connection?: string;
-	  }
-	| {
-			source: "nmcli";
-			kind: "connectivity";
-			state: string;
-	  }
-	| {
-			source: "mmcli";
-			kind: "modem-added";
-			modemId: number;
-	  }
-	| {
-			source: "mmcli";
-			kind: "modem-removed";
-			modemId: number;
-	  }
-	| {
-			source: "mmcli";
-			kind: "modem-state";
-			modemId: number;
-			oldState: string;
-			newState: string;
-	  }
-	| {
-			source: "nmcli" | "mmcli";
-			kind: "raw";
-			line: string;
-	  };
+// `MonitorEvent` and `IMonitorEmitter` are the canonical shared contracts from
+// `state-types.ts` (T3). They are re-exported here for the convenience of
+// existing consumers/tests that import them from this module.
+export type { IMonitorEmitter, MonitorEvent } from "../state-types.ts";
 
 /** Listener invoked for every emitted {@link MonitorEvent}. */
 export type MonitorEventListener = (event: MonitorEvent) => void;
-
-/**
- * Shared monitor contract. Both the mock (this file) and the real subprocess
- * monitor (T12) implement it so the rest of the backend can depend on the
- * interface, not the implementation.
- */
-export interface IMonitorEmitter {
-	/** Begin monitoring / emitting. Calling while already started is a no-op. */
-	start(): void;
-	/** Stop monitoring and clear any pending work. Safe to call when stopped. */
-	stop(): void;
-	/**
-	 * Subscribe to monitor events.
-	 * @returns an unsubscribe function for convenience.
-	 */
-	on(listener: MonitorEventListener): () => void;
-	/** Remove a previously-registered listener. */
-	off(listener: MonitorEventListener): void;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mock implementation
@@ -134,12 +71,11 @@ export class MockMonitorEmitter implements IMonitorEmitter {
 		this.scriptEntries = [...script];
 	}
 
-	on(listener: MonitorEventListener): () => void {
+	on(_event: "monitor-event", listener: MonitorEventListener): void {
 		this.listeners.add(listener);
-		return () => this.off(listener);
 	}
 
-	off(listener: MonitorEventListener): void {
+	off(_event: "monitor-event", listener: MonitorEventListener): void {
 		this.listeners.delete(listener);
 	}
 
