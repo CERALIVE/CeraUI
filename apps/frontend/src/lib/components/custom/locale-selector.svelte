@@ -1,5 +1,5 @@
 <script lang="ts">
-import { existingLocales, loadLocaleAsync } from '@ceraui/i18n';
+import { existingLocales, loadLocaleAsync, rtlLanguages } from '@ceraui/i18n';
 import { LL, setLocale } from '@ceraui/i18n/svelte';
 import { Check, ChevronDown, Globe } from '@lucide/svelte';
 
@@ -25,6 +25,14 @@ $effect(() => {
 	}
 });
 
+// Keep <html lang>/<html dir> in sync with the active locale. Layout.svelte owns
+// this once mounted, but the selector also renders on the pre-auth screen where
+// Layout is absent — so apply it here too (idempotent: both write the same value).
+$effect(() => {
+	document.documentElement.lang = selectedLocale;
+	document.documentElement.dir = rtlLanguages.includes(selectedLocale) ? 'rtl' : 'ltr';
+});
+
 const handleLocaleChange = async (value: Parameters<typeof setLocale>[0]) => {
 	try {
 		await loadLocaleAsync(value as any);
@@ -43,18 +51,20 @@ const handleLocaleChange = async (value: Parameters<typeof setLocale>[0]) => {
 		{#snippet child({ props })}
 			<Button
 				{...props}
-				class="bg-card hover:bg-accent flex h-10 items-center gap-2 rounded-xl border px-3 shadow-sm transition-all duration-200 hover:shadow-md"
+				class="bg-card hover:bg-accent flex h-11 items-center gap-2 rounded-xl border px-3 transition-colors"
+				data-testid="locale-selector"
 				variant="ghost"
 			>
 				{#if localeFlag}
-					<span class="text-base" aria-label={localeName} role="img">{localeFlag}</span>
+					<span class="text-base leading-none" aria-label={localeName} role="img">{localeFlag}</span
+					>
 				{:else}
-					<Globe class="text-muted-foreground h-4 w-4" />
+					<Globe class="text-muted-foreground size-4" />
 				{/if}
 				<span class="text-sm font-medium">{localeName}</span>
 				<ChevronDown
 					class={cn(
-						'text-muted-foreground h-4 w-4 transition-transform duration-200',
+						'text-muted-foreground size-4 transition-transform duration-200',
 						isOpen && 'rotate-180',
 					)}
 				/>
@@ -63,59 +73,66 @@ const handleLocaleChange = async (value: Parameters<typeof setLocale>[0]) => {
 	</DropdownMenu.Trigger>
 
 	<DropdownMenu.Content
-		class="bg-card w-56 rounded-xl border p-1.5 shadow-xl"
+		class="bg-card w-60 rounded-xl border p-1.5 shadow-xl"
 		align="end"
 		strategy="fixed"
 	>
-		<!-- Language Header -->
-		<div class="mb-1 px-2 py-1.5">
+		<div class="px-2 py-1.5">
 			<h4 class="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
 				{$LL.locale.selectLanguage()}
 			</h4>
 		</div>
 
-		{#each existingLocales as localeOption}
-			{@const isActive = selectedLocale === localeOption.code}
-			<DropdownMenu.Item
-				class={cn(
-					'flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200',
-					isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-accent focus:bg-accent',
-				)}
-				onclick={() => handleLocaleChange(localeOption.code)}
-			>
-				<!-- Language Flag/Icon -->
-				<div
+		<div class="max-h-[min(60vh,22rem)] overflow-y-auto pe-0.5">
+			{#each existingLocales as localeOption}
+				{@const isActive = selectedLocale === localeOption.code}
+				<DropdownMenu.Item
 					class={cn(
-						'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-base transition-colors',
-						isActive ? 'bg-primary-foreground/20' : 'bg-muted',
+						'mt-0.5 flex min-h-11 items-center gap-3 rounded-lg px-2.5 py-2 text-sm transition-colors first:mt-0',
+						isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-accent focus:bg-accent',
 					)}
+					data-testid="locale-option-{localeOption.code}"
+					onclick={() => handleLocaleChange(localeOption.code)}
 				>
-					{#if localeOption.flag}
-						<span aria-label={localeOption.name} role="img">{localeOption.flag}</span>
-					{:else}
-						<Globe
-							class={cn('h-4 w-4', isActive ? 'text-primary-foreground' : 'text-muted-foreground')}
-						/>
-					{/if}
-				</div>
-
-				<!-- Language Info -->
-				<div class="min-w-0 flex-1">
-					<div class={cn('font-medium', isActive ? 'text-primary-foreground' : 'text-foreground')}>
-						{localeOption.name}
-					</div>
 					<div
-						class={cn('text-xs', isActive ? 'text-primary-foreground/80' : 'text-muted-foreground')}
+						class={cn(
+							'flex size-8 shrink-0 items-center justify-center rounded-lg text-base leading-none transition-colors',
+							isActive ? 'bg-primary-foreground/20' : 'bg-muted',
+						)}
 					>
-						{localeOption.code.toUpperCase()}
+						{#if localeOption.flag}
+							<span aria-label={localeOption.name} role="img">{localeOption.flag}</span>
+						{:else}
+							<Globe
+								class={cn('size-4', isActive ? 'text-primary-foreground' : 'text-muted-foreground')}
+							/>
+						{/if}
 					</div>
-				</div>
 
-				<!-- Active Indicator -->
-				{#if isActive}
-					<Check class="text-primary-foreground h-4 w-4 shrink-0" />
-				{/if}
-			</DropdownMenu.Item>
-		{/each}
+					<div class="min-w-0 flex-1">
+						<div
+							class={cn(
+								'truncate font-medium',
+								isActive ? 'text-primary-foreground' : 'text-foreground',
+							)}
+						>
+							{localeOption.name}
+						</div>
+						<div
+							class={cn(
+								'font-mono text-xs',
+								isActive ? 'text-primary-foreground/80' : 'text-muted-foreground',
+							)}
+						>
+							{localeOption.code.toUpperCase()}
+						</div>
+					</div>
+
+					{#if isActive}
+						<Check class="text-primary-foreground size-4 shrink-0" />
+					{/if}
+				</DropdownMenu.Item>
+			{/each}
+		</div>
 	</DropdownMenu.Content>
 </DropdownMenu.Root>
