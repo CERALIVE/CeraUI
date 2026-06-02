@@ -1,7 +1,7 @@
-import type { ConfigMessage } from "@ceraui/rpc/schemas";
+import type { ConfigMessage, Pipelines } from "@ceraui/rpc/schemas";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildStartConfig, hasServerTarget } from "./startStreaming";
+import { buildStartConfig, canStartStream, hasServerTarget } from "./startStreaming";
 
 // ── rpc client mock (for start/stop dispatch) ──────────────────────────────
 const startMock = vi.fn().mockResolvedValue({ success: true, is_streaming: true });
@@ -30,6 +30,26 @@ function makeConfig(overrides: Partial<ConfigMessage> = {}): ConfigMessage {
 		srtla_port: 5000,
 		srt_streamid: "publish/live",
 		...overrides,
+	};
+}
+
+// A pipeline registry record, as getPipelines().pipelines hydrates it.
+function makePipelines(): Pipelines {
+	return {
+		hdmi: {
+			name: "HDMI Capture",
+			description: "HDMI capture pipeline",
+			supportsAudio: true,
+			supportsResolutionOverride: true,
+			supportsFramerateOverride: true,
+		},
+		libuvch264: {
+			name: "UVC H264 Camera",
+			description: "UVC H264 pipeline",
+			supportsAudio: true,
+			supportsResolutionOverride: false,
+			supportsFramerateOverride: false,
+		},
 	};
 }
 
@@ -80,6 +100,69 @@ describe("buildStartConfig — validation gates", () => {
 			null,
 		);
 		expect(result).toEqual({ ok: false, error: "missingPipeline" });
+	});
+});
+
+describe("buildStartConfig — pipeline recognition gate", () => {
+	it("still returns ok for a recognized pipeline + server when pipelines is supplied", () => {
+		const result = buildStartConfig(makeConfig(), null, makePipelines());
+		expect(result.ok).toBe(true);
+		if (result.ok) expect(result.config.pipeline).toBe("hdmi");
+	});
+
+	it("refuses with unknownPipeline when the pipeline is absent from supplied pipelines", () => {
+		const result = buildStartConfig(
+			makeConfig({ pipeline: "aa5813aa21487de31570a888272bace773d556e0" }),
+			null,
+			makePipelines(),
+		);
+		expect(result).toEqual({ ok: false, error: "unknownPipeline" });
+	});
+
+	it("checks pipeline presence before recognition", () => {
+		const result = buildStartConfig(makeConfig({ pipeline: undefined }), null, makePipelines());
+		expect(result).toEqual({ ok: false, error: "missingPipeline" });
+	});
+
+	it("checks server before recognition", () => {
+		const result = buildStartConfig(
+			makeConfig({ pipeline: "stale-id", srtla_addr: undefined, relay_server: undefined }),
+			null,
+			makePipelines(),
+		);
+		expect(result).toEqual({ ok: false, error: "missingServer" });
+	});
+
+	it("behaves exactly as today when pipelines is omitted (backward compatible)", () => {
+		const result = buildStartConfig(makeConfig({ pipeline: "stale-id" }), null);
+		expect(result.ok).toBe(true);
+		if (result.ok) expect(result.config.pipeline).toBe("stale-id");
+	});
+});
+
+describe("canStartStream", () => {
+	it("is true for a server-backed, recognized pipeline that is not starting", () => {
+		expect(canStartStream({ hasServer: true, pipelineRecognized: true, starting: false })).toBe(
+			true,
+		);
+	});
+
+	it("is false with no server", () => {
+		expect(canStartStream({ hasServer: false, pipelineRecognized: true, starting: false })).toBe(
+			false,
+		);
+	});
+
+	it("is false when the pipeline is unrecognized", () => {
+		expect(canStartStream({ hasServer: true, pipelineRecognized: false, starting: false })).toBe(
+			false,
+		);
+	});
+
+	it("is false while a start is in flight", () => {
+		expect(canStartStream({ hasServer: true, pipelineRecognized: true, starting: true })).toBe(
+			false,
+		);
 	});
 });
 

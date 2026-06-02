@@ -16,7 +16,7 @@
  * Pure (no runes, no RPC, no Svelte) so the view can call it and tests can
  * exercise assembly + validation without side effects.
  */
-import type { ConfigMessage } from "@ceraui/rpc/schemas";
+import type { ConfigMessage, Pipelines } from "@ceraui/rpc/schemas";
 
 /**
  * Working audio override layered over the saved config until stream (re)start.
@@ -29,7 +29,7 @@ export type AudioOverride = {
 } | null;
 
 /** Reason a start was refused — maps to an i18n error key in the view. */
-export type StartConfigError = "missingPipeline" | "missingServer";
+export type StartConfigError = "missingPipeline" | "missingServer" | "unknownPipeline";
 
 export type StartConfigResult =
 	| { ok: true; config: ConfigMessage }
@@ -50,6 +50,11 @@ export function hasServerTarget(config: ConfigMessage | undefined): boolean {
  * Validation gates (refuse, never start on a half-config):
  *   - `pipeline` must be set  → `missingPipeline`
  *   - a server target must be set → `missingServer`
+ *   - when `pipelines` is supplied, `pipeline` must be a known registry key
+ *     → `unknownPipeline` (a stale/legacy id must never reach the backend)
+ *
+ * `pipelines` is optional and backward compatible: omitting it skips the
+ * recognition gate, preserving the original presence-only behavior.
  *
  * Audio fields prefer the working override, falling back to the saved config —
  * matching LiveView's `effectiveAudio*` deriveds.
@@ -57,6 +62,7 @@ export function hasServerTarget(config: ConfigMessage | undefined): boolean {
 export function buildStartConfig(
 	config: ConfigMessage | undefined,
 	audioOverride: AudioOverride,
+	pipelines?: Pipelines,
 ): StartConfigResult {
 	const pipeline = config?.pipeline;
 	if (!pipeline) {
@@ -65,6 +71,10 @@ export function buildStartConfig(
 
 	if (!hasServerTarget(config)) {
 		return { ok: false, error: "missingServer" };
+	}
+
+	if (pipelines && !(pipeline in pipelines)) {
+		return { ok: false, error: "unknownPipeline" };
 	}
 
 	const asrc = audioOverride?.asrc ?? config.asrc;
@@ -80,4 +90,23 @@ export function buildStartConfig(
 	};
 
 	return { ok: true, config: assembled };
+}
+
+/** Inputs to the Start-button enablement predicate. */
+export type CanStartStreamInput = {
+	hasServer: boolean;
+	pipelineRecognized: boolean;
+	starting: boolean;
+};
+
+/**
+ * Whether the Start button may be enabled: a server target, a recognized
+ * pipeline, and no start already in flight (double-start safety).
+ */
+export function canStartStream({
+	hasServer,
+	pipelineRecognized,
+	starting,
+}: CanStartStreamInput): boolean {
+	return hasServer && pipelineRecognized && !starting;
 }

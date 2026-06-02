@@ -30,7 +30,7 @@ import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
 import { getConfig, getIsStreaming, getPipelines, getSensors } from '$lib/rpc/subscriptions.svelte';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
-import { buildStartConfig } from '$lib/streaming/startStreaming';
+import { buildStartConfig, canStartStream } from '$lib/streaming/startStreaming';
 import { isSectionLocked, type StreamSection } from '$lib/streaming/streamingLockPolicy';
 import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
 import EncoderDialog, { type EncoderConfig } from '$main/dialogs/EncoderDialog.svelte';
@@ -205,13 +205,22 @@ const serverSummary = $derived.by(() => {
 // override, validate pipeline + server, then dispatch via SystemHelper →
 // rpc.streaming.start. The streaming/idle UI is driven by getIsStreaming(),
 // updated by the backend status push — never set locally here.
+// Double-start safety: guards against a second dispatch while one is in flight.
+let starting = $state(false);
+
+// Start is allowed only with a server, a recognized pipeline, and no start
+// already in flight — mirrors the buildStartConfig gates client-side.
+const canStart = $derived(canStartStream({ hasServer, pipelineRecognized, starting }));
+
 async function handleStart() {
-	const result = buildStartConfig(config, audioOverride);
+	if (starting) return;
+
+	const result = buildStartConfig(config, audioOverride, getPipelines()?.pipelines);
 	if (!result.ok) {
 		toast.error(
-			result.error === 'missingPipeline'
-				? $LL.live.cannotStartNoPipeline()
-				: $LL.live.cannotStartNoServer(),
+			result.error === 'missingServer'
+				? $LL.live.cannotStartNoServer()
+				: $LL.live.cannotStartNoPipeline(),
 		);
 		return;
 	}
@@ -222,10 +231,13 @@ async function handleStart() {
 		/* dismiss is best-effort */
 	}
 
+	starting = true;
 	try {
 		await startStreaming(result.config);
 	} catch {
 		toast.error($LL.live.startFailed());
+	} finally {
+		starting = false;
 	}
 }
 
@@ -497,7 +509,7 @@ const configRows = $derived<ConfigRow[]>([
 		{:else}
 			<Button
 				class="bg-primary text-primary-foreground hover:bg-primary/90 group min-h-[44px] w-full gap-3 py-6 text-base font-semibold"
-				disabled={!hasServer}
+				disabled={!canStart}
 				onclick={handleStart}
 				size="lg"
 				type="button"
