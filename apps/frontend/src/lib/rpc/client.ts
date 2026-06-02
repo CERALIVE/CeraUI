@@ -445,6 +445,14 @@ export interface TypedRPC {
 		getPersistent: () => Promise<unknown>;
 		dismiss: (input: { name: string }) => Promise<SuccessResponse>;
 	};
+	// Dev-only: registered on the backend ONLY when NODE_ENV !== "production".
+	// Absent in production builds — guard usage with the optional chain.
+	dev?: {
+		emit: (input: {
+			type: string;
+			payload: unknown;
+		}) => Promise<{ success: boolean }>;
+	};
 }
 
 /**

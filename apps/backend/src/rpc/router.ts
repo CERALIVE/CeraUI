@@ -9,6 +9,7 @@ import {
 	logoutProcedure,
 	setPasswordProcedure,
 } from "./procedures/auth.procedure.ts";
+import { devEmitProcedure } from "./procedures/dev.procedure.ts";
 import {
 	configureModemProcedure,
 	getAllModemsProcedure,
@@ -65,10 +66,22 @@ import {
 } from "./procedures/wifi.procedure.ts";
 import type { RPCContext } from "./types.ts";
 
+// HARD-GATED: the `dev` namespace is registered only outside production, so in a
+// production build `dev.*` paths resolve to "Unknown procedure path".
+const devRouter =
+	process.env.NODE_ENV !== "production"
+		? {
+				dev: os.router({
+					emit: devEmitProcedure,
+				}),
+			}
+		: {};
+
 /**
  * Application router implementing the contract
  */
 export const appRouter = os.$context<RPCContext>().router({
+	...devRouter,
 	auth: os.router({
 		login: loginProcedure,
 		setPassword: setPasswordProcedure,
