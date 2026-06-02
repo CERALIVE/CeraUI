@@ -216,7 +216,7 @@ test.describe("field-lock reconciliation (deterministic, dev.emit driven)", () =
 	);
 
 	test.beforeEach(async ({ page }, testInfo) => {
-		// One project run is enough; the desktop layout exposes navigation tabs + HUD.
+		// One project run is enough; the desktop layout exposes #nav-tab-* + HUD.
 		test.skip(
 			testInfo.project.name !== "desktop",
 			"desktop layout drives the field-lock UI",
@@ -224,7 +224,7 @@ test.describe("field-lock reconciliation (deterministic, dev.emit driven)", () =
 		await page.addInitScript(installWsHarness, TOKEN);
 		await page.goto("/");
 		// Auto-login (localStorage 'auth' → token rewrite) lands the authed shell.
-		await navigateTo(page, "live");
+		await expect(page.locator("#nav-tab-live")).toBeVisible({ timeout: 20000 });
 	});
 
 	test.afterAll(async () => {
