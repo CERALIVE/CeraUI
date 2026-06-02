@@ -4,12 +4,29 @@
 */
 
 import {
+	getMockState,
 	getModemSignal,
 	getModemState,
 	getScenarioConfig,
 	mockModems,
 	shouldUseMocks,
 } from "../mock-service.ts";
+
+/** Label ("5g4g") → mmcli mode fields; ordering must mirror mmConvertNetworkType (mmcli.ts). */
+function buildModesFromType(type: string): {
+	allowed: string;
+	preferred: string;
+	accessTech: string;
+} {
+	const gens = (type.match(/\d+g/gi) ?? []).map((g) => g.toLowerCase());
+	const ordered = [...new Set(gens)].sort();
+	const allowed = ordered.length > 0 ? ordered.join(", ") : "4g";
+	const highest = ordered[ordered.length - 1] ?? "4g";
+	const preferred = ordered.length > 1 ? highest : "none";
+	const accessTech =
+		highest === "5g" ? "5gnr" : highest === "3g" ? "umts" : "lte";
+	return { allowed, preferred, accessTech };
+}
 
 /**
  * Parse mmcli command arguments and return appropriate mock response
@@ -80,16 +97,31 @@ function getMockModemInfo(modemId: number): string {
 		return "";
 	}
 
+	const saved = getMockState().modemConfigs.get(String(modemId));
+	const activeNetworkType =
+		saved?.network_type_active ?? modem.network_type.active;
+	const roaming = saved?.roaming ?? false;
+	const { allowed, preferred, accessTech } =
+		buildModesFromType(activeNetworkType);
+	const is5g = accessTech === "5gnr";
+
 	const signal = Math.round(getModemSignal(modemId));
 	const state = getModemState(modemId);
-	const accessTech = modem.network_type.active === "5g" ? "5gnr" : "lte";
+	const registrationState =
+		state === "connected"
+			? roaming
+				? "roaming"
+				: "home"
+			: state === "registered"
+				? "roaming"
+				: "searching";
 
 	const lines: string[] = [
 		`modem.dbus-path: /org/freedesktop/ModemManager1/Modem/${modemId}`,
 		`modem.generic.device-identifier: ${modem.imei.slice(0, 8)}`,
 		`modem.generic.manufacturer: ${modem.manufacturer}`,
 		`modem.generic.model: ${modem.model}`,
-		`modem.generic.revision: ${modem.network_type.active === "5g" ? "RM520NGLAAR01A07M4G" : "SWI9X30C_02.33.03.00"}`,
+		`modem.generic.revision: ${is5g ? "RM520NGLAAR01A07M4G" : "SWI9X30C_02.33.03.00"}`,
 		`modem.generic.carrier-configuration: default`,
 		`modem.generic.carrier-configuration-revision: --`,
 		`modem.generic.hardware-revision: --`,
@@ -116,7 +148,7 @@ function getMockModemInfo(modemId: number): string {
 		`modem.generic.supported-modes.value[0]: allowed: 4g; preferred: none`,
 		`modem.generic.supported-modes.value[1]: allowed: 4g, 5g; preferred: 5g`,
 		`modem.generic.supported-modes.value[2]: allowed: 5g; preferred: none`,
-		`modem.generic.current-modes: allowed: 4g, 5g; preferred: 5g`,
+		`modem.generic.current-modes: allowed: ${allowed}; preferred: ${preferred}`,
 		`modem.generic.supported-bands.length: 20`,
 		`modem.generic.current-bands.length: 15`,
 		`modem.generic.supported-ip-families: ipv4, ipv6, ipv4v6`,
@@ -125,7 +157,7 @@ function getMockModemInfo(modemId: number): string {
 		`modem.generic.sim-slots.value[0]: /org/freedesktop/ModemManager1/SIM/${modemId}`,
 		`modem.generic.primary-sim-slot: 1`,
 		`modem.3gpp.imei: ${modem.imei}`,
-		`modem.3gpp.registration-state: ${state === "connected" ? "home" : state === "registered" ? "roaming" : "searching"}`,
+		`modem.3gpp.registration-state: ${registrationState}`,
 		`modem.3gpp.operator-code: ${modem.operatorCode}`,
 		`modem.3gpp.operator-name: ${modem.carrier}`,
 		`modem.3gpp.packet-service-state: attached`,
