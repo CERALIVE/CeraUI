@@ -85,7 +85,7 @@ export function isLocked(registry: DirtyRegistry, field: string): boolean {
  * `rpcResolved` flag is reset to `false` because a fresh edit starts a new
  * in-flight write.
  */
-function markPending(
+function markPendingField(
 	registry: DirtyRegistry,
 	field: string,
 	intendedValue: unknown,
@@ -182,7 +182,7 @@ export function expire(registry: DirtyRegistry, now: number): string[] {
 export const registryCore = {
 	createRegistry,
 	isLocked,
-	markPending,
+	markPending: markPendingField,
 	markResolved,
 	shouldIgnoreEcho,
 	reconcile,
@@ -229,7 +229,7 @@ function createDirtyStore(): DirtyStore {
 	return {
 		isPending: (field) => isLocked(registry, field),
 		markPending: (field, intendedValue, now = Date.now()) => {
-			markPending(registry, field, intendedValue, now);
+			markPendingField(registry, field, intendedValue, now);
 		},
 		markResolved: (field) => {
 			markResolved(registry, field);
