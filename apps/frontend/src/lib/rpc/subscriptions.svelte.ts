@@ -20,9 +20,15 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import { downloadLog } from "$lib/helpers/SystemHelper";
+import { authStatusStore } from "$lib/stores/auth-status.svelte";
+import {
+	markSessionExpired,
+	wasAuthenticated,
+} from "$lib/stores/connection-ux.svelte";
 
 import type { ConnectionState } from "./client";
-import { rpcClient } from "./client";
+import { rpc, rpcClient } from "./client";
+import { reauthenticateAndHydrate } from "./reconnect";
 
 // ============================================
 // Svelte 5 Reactive State ($state)
@@ -303,6 +309,51 @@ function handleNotifications(data: NotificationsMessage): void {
 	}
 }
 
+const AUTH_STORAGE_KEY = "auth";
+
+let reauthInFlight = false;
+
+function readStoredToken(): string | null {
+	return typeof localStorage !== "undefined"
+		? localStorage.getItem(AUTH_STORAGE_KEY)
+		: null;
+}
+
+function clearStoredToken(): void {
+	if (typeof localStorage !== "undefined") {
+		localStorage.removeItem(AUTH_STORAGE_KEY);
+	}
+}
+
+function routeToLogin(): void {
+	if (authStatusStore.value) {
+		markSessionExpired();
+		authStatusStore.set(false);
+	}
+}
+
+async function runReconnectReauth(): Promise<void> {
+	if (reauthInFlight) return;
+	reauthInFlight = true;
+	try {
+		await reauthenticateAndHydrate({
+			getStoredToken: readStoredToken,
+			clearStoredToken,
+			// The remember-me credential under localStorage `auth` is the password,
+			// which the backend verifies via `input.password` (not as a `token`).
+			login: (token) =>
+				rpc.auth.login({ password: token, persistent_token: true }),
+			getConfig: () => rpc.streaming.getConfig(),
+			getStatus: () => rpc.status.getStatus(),
+			dispatch: handleMessage,
+			routeToLogin,
+			onError: (error) => console.error("Reconnect re-auth failed:", error),
+		});
+	} finally {
+		reauthInFlight = false;
+	}
+}
+
 /**
  * Handle connection state changes
  */
@@ -312,6 +363,12 @@ function handleConnectionChange(state: ConnectionState): void {
 
 	if (state === "connected") {
 		toast.success("Connection established");
+		// Reconnect-only: the first connect of a page-load is owned by Layout's
+		// initial-load login, so gating on wasAuthenticated() avoids a startup
+		// double-login while keeping initSubscriptions() behavior unchanged.
+		if (wasAuthenticated()) {
+			void runReconnectReauth();
+		}
 	} else if (state === "disconnected") {
 		toast.error("Connection lost, attempting to reconnect...");
 	}
