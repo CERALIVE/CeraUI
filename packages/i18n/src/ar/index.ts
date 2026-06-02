@@ -183,6 +183,7 @@ const ar = {
 		noUpdatesAvailable: "النظام محدث",
 		notAvailable: "غير متوفر",
 		notConfigured: "غير مُكوّن",
+		unknownSource: "Unknown source",
 		pleaseConfigureServer: "يرجى تكوين خادم الترحيل لبدء البث",
 		sensorsUnavailable: "الحساسات غير متوفرة",
 		pageTitle: "لوحة التحكم",
@@ -655,6 +656,7 @@ const ar = {
 		cannotStartNoPipeline: "اختر مصدر فيديو قبل بدء البث",
 		cannotStartNoServer: "قم بتكوين خادم قبل بدء البث",
 		startFailed: "فشل بدء البث",
+		reconfigureRequired: "Reconfigure required",
 	},
 	dialogs: {
 		close: "إغلاق",

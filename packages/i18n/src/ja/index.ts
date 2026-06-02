@@ -43,6 +43,7 @@ const ja = {
 		noUpdatesAvailable: "システムは最新です",
 		notAvailable: "利用不可",
 		notConfigured: "未設定",
+		unknownSource: "Unknown source",
 		pleaseConfigureServer:
 			"ストリーミングを開始するにはリレーサーバーを設定してください",
 		sensorsUnavailable: "センサー利用不可",
@@ -522,6 +523,7 @@ const ja = {
 		cannotStartNoPipeline: "ストリームを開始する前にビデオソースを選択してください",
 		cannotStartNoServer: "ストリームを開始する前にサーバーを設定してください",
 		startFailed: "ストリームの開始に失敗しました",
+		reconfigureRequired: "Reconfigure required",
 	},
 	dialogs: {
 		close: "閉じる",

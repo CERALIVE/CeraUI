@@ -167,6 +167,7 @@ const en = {
 		relayServer: "Relay Server",
 		updates: "Updates",
 		notConfigured: "Not configured",
+		unknownSource: "Unknown source",
 		notAvailable: "Not available",
 		youHaventConfigured: "You haven't configured any server",
 		noSensorData: "No sensor data available",
@@ -254,6 +255,7 @@ const en = {
 		cannotStartNoPipeline: "Select a video source before starting the stream",
 		cannotStartNoServer: "Configure a server before starting the stream",
 		startFailed: "Failed to start stream",
+		reconfigureRequired: "Reconfigure required",
 	},
 	dialogs: {
 		close: "Close",

@@ -204,6 +204,7 @@ const ptBR = {
 		audioSettings: "Configurações de Áudio",
 		hardwareSensors: "Sensores de Hardware",
 		streamPerformance: "Desempenho da Transmissão",
+		unknownSource: "Unknown source",
 	},
 	auth: {
 		usePassword: "Use a senha do dispositivo para acessar as funcionalidades",
@@ -655,6 +656,7 @@ const ptBR = {
 		cannotStartNoPipeline: "Selecione uma fonte de vídeo antes de iniciar a transmissão",
 		cannotStartNoServer: "Configure um servidor antes de iniciar a transmissão",
 		startFailed: "Falha ao iniciar a transmissão",
+		reconfigureRequired: "Reconfigure required",
 	},
 	dialogs: {
 		close: "Fechar",

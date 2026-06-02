@@ -42,6 +42,7 @@ const zh = {
 		noUpdatesAvailable: "系统已是最新版本",
 		notAvailable: "不可用",
 		notConfigured: "未配置",
+		unknownSource: "Unknown source",
 		pleaseConfigureServer: "请配置中继服务器以开始流媒体传输",
 		sensorsUnavailable: "传感器不可用",
 		serverAndAudio: "服务器和音频流媒体配置",
@@ -488,6 +489,7 @@ const zh = {
 		cannotStartNoPipeline: "开始直播前请选择视频源",
 		cannotStartNoServer: "开始直播前请配置服务器",
 		startFailed: "启动直播失败",
+		reconfigureRequired: "Reconfigure required",
 	},
 	dialogs: {
 		close: "关闭",

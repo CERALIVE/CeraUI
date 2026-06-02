@@ -205,6 +205,7 @@ const de = {
 		noSensorData: "Keine Sensordaten verfügbar",
 		notAvailable: "Nicht verfügbar",
 		notConfigured: "Nicht konfiguriert",
+		unknownSource: "Unknown source",
 		systemHealth: "Systemzustand",
 	},
 	navigation: {
@@ -263,6 +264,7 @@ const de = {
 		cannotStartNoPipeline: "Wähle eine Videoquelle, bevor du den Stream startest",
 		cannotStartNoServer: "Konfiguriere einen Server, bevor du den Stream startest",
 		startFailed: "Stream konnte nicht gestartet werden",
+		reconfigureRequired: "Reconfigure required",
 	},
 	dialogs: {
 		close: "Schließen",

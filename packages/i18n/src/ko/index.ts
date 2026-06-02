@@ -43,6 +43,7 @@ const ko = {
 		noUpdatesAvailable: "시스템이 최신 상태입니다",
 		notAvailable: "사용 불가",
 		notConfigured: "구성되지 않음",
+		unknownSource: "Unknown source",
 		pleaseConfigureServer: "스트리밍을 시작하려면 릴레이 서버를 구성하세요",
 		sensorsUnavailable: "센서 사용 불가",
 		serverAndAudio: "서버 및 오디오 스트리밍 구성",
@@ -517,6 +518,7 @@ const ko = {
 		cannotStartNoPipeline: "스트림을 시작하기 전에 비디오 소스를 선택하세요",
 		cannotStartNoServer: "스트림을 시작하기 전에 서버를 구성하세요",
 		startFailed: "스트림 시작 실패",
+		reconfigureRequired: "Reconfigure required",
 	},
 	dialogs: {
 		close: "닫기",
