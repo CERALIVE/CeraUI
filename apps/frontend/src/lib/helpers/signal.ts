@@ -20,8 +20,13 @@ export function getSignalCategory(signal: number): SignalCategory {
  */
 export function modemSignal(modem: Modem | undefined | null): number | null {
 	if (!modem || modem.no_sim) return null;
-	const signal = modem.status?.signal;
-	if (signal == null || !Number.isFinite(signal) || signal < 0) return null;
+	const raw = modem.status?.signal;
+	if (raw == null) return null;
+	// Defense-in-depth: the backend can emit the signal as a string ("53") when
+	// the mmcli `-K` parser leaves it uncoerced. `Number.isFinite("53")` is
+	// false, which would silently drop every modem's signal, so coerce first.
+	const signal = Number(raw);
+	if (!Number.isFinite(signal) || signal < 0) return null;
 	return signal;
 }
 

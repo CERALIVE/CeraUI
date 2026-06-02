@@ -6,7 +6,6 @@ import { CardSim, ChevronRight, LoaderCircle, Radar, Radio, Signal, WifiOff } fr
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import { Button } from '$lib/components/ui/button';
-import { getSignalCategory } from '$lib/helpers/signal';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
 import { modemSignal, signalTextClass } from '$lib/helpers/signal';
 import { getStalenessState } from '$lib/helpers/staleness';
@@ -52,6 +51,7 @@ function modelLabel(modem: Modem): string {
 			{@const sig = modemSignal(modem)}
 				{@const noSim = modem.no_sim === true}
 				{@const connected = modem.status?.connection === 'connected'}
+				{@const scanning = modem.status?.connection === 'scanning'}
 				{@const operator = modem.status?.network || modem.sim_network || modem.name}
 				{@const model = modelLabel(modem)}
 				{@const entry = netif?.[modem.ifname]}
@@ -84,11 +84,24 @@ function modelLabel(modem: Modem): string {
 									{sig}%
 								</span>
 							</div>
+						{:else if noSim}
+							<div class="text-muted-foreground flex items-center gap-1.5">
+								<CardSim class="size-3.5" aria-hidden="true" />
+								<span class="text-xs">{$LL.network.view.noSimLink()}</span>
+							</div>
+						{:else if scanning}
+							<div class="text-muted-foreground flex items-center gap-1.5">
+								<Radar class="size-3.5 motion-safe:animate-pulse" aria-hidden="true" />
+								<span class="text-xs">{$LL.network.modem.scanning()}</span>
+							</div>
+						{:else if connected}
+							<LoaderCircle class="text-muted-foreground size-4 motion-safe:animate-spin" aria-hidden="true" />
 						{:else}
 							<WifiOff class="text-muted-foreground size-4" aria-hidden="true" />
 						{/if}
 						<Button
 							class="h-8 gap-1 px-2.5"
+							data-testid="open-modem-config-dialog"
 							size="sm"
 							variant="ghost"
 							onclick={() => onConfigure(id)}
@@ -111,7 +124,11 @@ function modelLabel(modem: Modem): string {
 							{:else}
 								{operator}{#if modem.status?.network_type}
 									· {modem.status.network_type}{/if} ·
-								{connected ? $LL.network.view.connected() : $LL.network.view.disconnected()}
+								{#if scanning}
+									{$LL.network.modem.scanning()}
+								{:else}
+									{connected ? $LL.network.view.connected() : $LL.network.view.disconnected()}
+								{/if}
 							{/if}
 						</p>
 						<div class="flex shrink-0 items-center gap-3">

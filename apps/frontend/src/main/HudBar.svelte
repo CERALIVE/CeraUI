@@ -251,8 +251,8 @@ function lastSeen(ts: number | null): string | null {
 									<span class="font-mono text-xs tabular-nums" style:color={linkColor(link)}>
 										{Math.round(link.signal)}%
 									</span>
-									{@render miniBars(link)}
 								{/if}
+								{@render miniBars(link)}
 							</span>
 						</div>
 					{/each}
