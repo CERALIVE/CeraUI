@@ -209,8 +209,8 @@ export function isUpdateInProgress(updating: UpdatingStatus | undefined): boolea
 	return typeof updating === "object" && updating.result !== 0;
 }
 
-/** A timestamp is stale when it exists and is older than the threshold. */
-function isTimestampStale(ts: number | null, now: number): boolean {
+/** A timestamp is stale when it exists and is older than {@link STALE_THRESHOLD_MS}. Exported so components share the one global threshold. */
+export function isTimestampStale(ts: number | null, now: number): boolean {
 	if (ts == null) return false;
 	return now - ts >= STALE_THRESHOLD_MS;
 }
