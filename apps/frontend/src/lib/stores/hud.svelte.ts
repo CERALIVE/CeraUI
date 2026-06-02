@@ -18,12 +18,14 @@
  * richer, non-deprecated surface. Never import from
  * `$lib/stores/websocket-store.svelte` (deprecated wrapper) here.
  */
+import { convertBytesToKbids } from "$lib/helpers/network-speed";
 import {
 	getConfig,
 	getConnectionState,
 	getIsConnected,
 	getIsStreaming,
 	getModems,
+	getNetif,
 	getSensors,
 	getUpdating,
 	getWifi,
@@ -36,7 +38,14 @@ import type {
 	HudTimestamps,
 	LinkSignal,
 } from "$lib/types/hud";
-import type { Modem, ModemList, SensorsStatus, UpdatingStatus, WifiStatus } from "@ceraui/rpc/schemas";
+import type {
+	Modem,
+	ModemList,
+	NetifMessage,
+	SensorsStatus,
+	UpdatingStatus,
+	WifiStatus,
+} from "@ceraui/rpc/schemas";
 
 export type { HudConnectionState, HudSources, HudState, HudTimestamps, LinkSignal };
 
@@ -106,20 +115,28 @@ export function modemSignal(modem: Modem): number | null {
 }
 
 /**
- * Build the ordered list of {@link LinkSignal} entries from modem + wifi data.
+ * Build the ordered list of {@link LinkSignal} entries from wifi, modem, and
+ * ethernet data. Throughput and `enabled` are joined from `netif` by `id`
+ * (== ifname); ethernet links come from `netif` entries named `eth*` that are
+ * enabled with an IP.
  *
  * Ordering is stable: wifi interfaces first (so wifi takes `linkIndex` 0 when
- * present), then modems in record order. The list is capped at
+ * present), then modems, then ethernet in record order. The list is capped at
  * {@link MAX_LINKS} and `linkIndex` is the 0-based position.
  */
 export function buildLinks(
 	modems: ModemList | undefined,
 	wifi: WifiStatus | undefined,
+	netif: NetifMessage | undefined,
 	modemsStale: boolean,
 	wifiStale: boolean,
 	fullyStale: boolean,
 ): LinkSignal[] {
 	const links: LinkSignal[] = [];
+	const netifEntries = netif ?? {};
+
+	const throughputFor = (id: string): number => convertBytesToKbids(netifEntries[id]?.tp ?? 0);
+	const enabledFor = (id: string): boolean => netifEntries[id]?.enabled ?? true;
 
 	for (const [ifname, iface] of Object.entries(wifi ?? {})) {
 		const active = iface.available?.find((network) => network.active);
@@ -131,22 +148,38 @@ export function buildLinks(
 			label: active?.ssid || "WiFi",
 			isConnected: Boolean(active),
 			isStale: wifiStale || fullyStale,
-			throughputKbps: null,
-			enabled: true,
+			throughputKbps: throughputFor(ifname),
+			enabled: enabledFor(ifname),
 		});
 	}
 
 	for (const [key, modem] of Object.entries(modems ?? {})) {
+		const id = modem.ifname || key;
 		links.push({
-			id: modem.ifname || key,
+			id,
 			type: "modem",
 			linkIndex: 0,
 			signal: modemSignal(modem),
 			label: modem.name || modem.status?.network || "Modem",
 			isConnected: modem.status?.connection === "connected",
 			isStale: modemsStale || fullyStale,
-			throughputKbps: null,
-			enabled: true,
+			throughputKbps: throughputFor(id),
+			enabled: enabledFor(id),
+		});
+	}
+
+	for (const [ifname, entry] of Object.entries(netifEntries)) {
+		if (!ifname.startsWith("eth") || entry.enabled !== true || !entry.ip) continue;
+		links.push({
+			id: ifname,
+			type: "ethernet",
+			linkIndex: 0,
+			signal: null,
+			label: ifname,
+			isConnected: true,
+			isStale: fullyStale,
+			throughputKbps: convertBytesToKbids(entry.tp ?? 0),
+			enabled: entry.enabled,
 		});
 	}
 
@@ -199,7 +232,14 @@ export function deriveHudState(
 		bitrateKbps: sources.config?.max_br ?? null,
 		isBitrateStale: streamingStale,
 
-		links: buildLinks(sources.modems, sources.wifi, modemsStale, wifiStale, isFullyStale),
+		links: buildLinks(
+			sources.modems,
+			sources.wifi,
+			sources.netif,
+			modemsStale,
+			wifiStale,
+			isFullyStale,
+		),
 
 		temperature: parseSensorNumber(sensors?.["SoC temperature"]),
 		voltage: parseVolts(sensors?.["SoC voltage"]),
@@ -245,6 +285,7 @@ function readSources(): HudSources {
 		config: getConfig(),
 		modems: getModems(),
 		wifi: getWifi(),
+		netif: getNetif(),
 		sensors: getSensors(),
 		updating: getUpdating(),
 	};

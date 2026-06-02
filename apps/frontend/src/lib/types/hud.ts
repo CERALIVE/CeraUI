@@ -11,6 +11,7 @@
 import type {
 	ConfigMessage,
 	ModemList,
+	NetifMessage,
 	SensorsStatus,
 	UpdatingStatus,
 	WifiStatus,
@@ -102,6 +103,7 @@ export interface HudSources {
 	config: ConfigMessage | undefined;
 	modems: ModemList | undefined;
 	wifi: WifiStatus | undefined;
+	netif: NetifMessage | undefined;
 	sensors: SensorsStatus | undefined;
 	updating: UpdatingStatus | undefined;
 }

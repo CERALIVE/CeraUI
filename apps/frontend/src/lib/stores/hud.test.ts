@@ -2,6 +2,7 @@ import type {
 	ConfigMessage,
 	Modem,
 	ModemList,
+	NetifMessage,
 	SensorsStatus,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
@@ -16,12 +17,14 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConfig: vi.fn(() => undefined),
 	getModems: vi.fn(() => undefined),
 	getWifi: vi.fn(() => undefined),
+	getNetif: vi.fn(() => undefined),
 	getSensors: vi.fn(() => undefined),
 	getUpdating: vi.fn(() => null),
 	getIsConnected: vi.fn(() => false),
 	getConnectionState: vi.fn(() => "disconnected"),
 }));
 
+import { convertBytesToKbids } from "$lib/helpers/network-speed";
 import type { HudSources, HudTimestamps } from "$lib/types/hud";
 
 import {
@@ -79,6 +82,22 @@ const sensorsFixture: SensorsStatus = {
 
 const configFixture: ConfigMessage = { max_br: 6000 };
 
+// netif keyed by ifname — the join key between links and netif entries.
+// Shared fixture stays modem/wifi-only so the derivation count tests are
+// unaffected; ethernet-specific cases use netifWithEthFixture below.
+const netifFixture: NetifMessage = {
+	wwan0: { tp: 128_000, enabled: true, ip: "10.0.0.2" },
+	wlan0: { tp: 64_000, enabled: true, ip: "10.0.0.3" },
+};
+
+// eth0 (enabled + ip → link), eth1 (no ip → excluded), lo (non-eth → excluded).
+const netifWithEthFixture: NetifMessage = {
+	...netifFixture,
+	eth0: { tp: 256_000, enabled: true, ip: "10.0.0.4" },
+	eth1: { tp: 0, enabled: true },
+	lo: { tp: 0, enabled: true, ip: "127.0.0.1" },
+};
+
 function makeSources(overrides: Partial<HudSources> = {}): HudSources {
 	return {
 		isStreaming: true,
@@ -87,6 +106,7 @@ function makeSources(overrides: Partial<HudSources> = {}): HudSources {
 		config: configFixture,
 		modems: { modem1: makeModem() } as ModemList,
 		wifi: wifiFixture,
+		netif: netifFixture,
 		sensors: sensorsFixture,
 		updating: false,
 		...overrides,
@@ -308,6 +328,7 @@ describe("deriveHudState — no-SIM / null signal handling", () => {
 			config: undefined,
 			modems: undefined,
 			wifi: undefined,
+			netif: undefined,
 			sensors: undefined,
 			updating: undefined,
 		};
@@ -340,7 +361,7 @@ describe("buildLinks — multiple links & index mapping", () => {
 			}),
 		};
 
-		const links = buildLinks(modems, wifiFixture, false, false, false);
+		const links = buildLinks(modems, wifiFixture, undefined, false, false, false);
 
 		expect(links).toHaveLength(3);
 		expect(links[0]).toMatchObject({ type: "wifi", linkIndex: 0, signal: 65 });
@@ -353,7 +374,7 @@ describe("buildLinks — multiple links & index mapping", () => {
 		for (let i = 0; i < 10; i++) {
 			modems[`m${i}`] = makeModem({ ifname: `wwan${i}` });
 		}
-		const links = buildLinks(modems, undefined, false, false, false);
+		const links = buildLinks(modems, undefined, undefined, false, false, false);
 		expect(links).toHaveLength(6);
 		expect(links.map((l) => l.linkIndex)).toEqual([0, 1, 2, 3, 4, 5]);
 	});
@@ -362,6 +383,7 @@ describe("buildLinks — multiple links & index mapping", () => {
 		const links = buildLinks(
 			{ modem1: makeModem() } as ModemList,
 			wifiFixture,
+			undefined,
 			true,
 			false,
 			false,
@@ -370,5 +392,127 @@ describe("buildLinks — multiple links & index mapping", () => {
 		const wifiLink = links.find((l) => l.type === "wifi")!;
 		expect(modemLink.isStale).toBe(true);
 		expect(wifiLink.isStale).toBe(false);
+	});
+});
+
+// ============================================
+// Ethernet + throughput join + enabled (Task 11)
+// ============================================
+
+describe("buildLinks — ethernet links from netif", () => {
+	it("emits an ethernet link for an eth interface that is enabled with an IP", () => {
+		const links = buildLinks(undefined, undefined, netifWithEthFixture, false, false, false);
+		const eth = links.filter((l) => l.type === "ethernet");
+		expect(eth).toHaveLength(1);
+		expect(eth[0]!.id).toBe("eth0");
+		expect(eth[0]!.enabled).toBe(true);
+		expect(eth[0]!.isConnected).toBe(true);
+	});
+
+	it("excludes eth interfaces without an IP and non-eth entries (lo/wifi/modem)", () => {
+		const links = buildLinks(undefined, undefined, netifWithEthFixture, false, false, false);
+		const ethIds = links.filter((l) => l.type === "ethernet").map((l) => l.id);
+		expect(ethIds).not.toContain("eth1");
+		expect(ethIds).not.toContain("lo");
+	});
+
+	it("excludes a disabled eth interface even when it has an IP", () => {
+		const netif: NetifMessage = {
+			eth0: { tp: 10, enabled: false, ip: "10.0.0.4" },
+		};
+		const links = buildLinks(undefined, undefined, netif, false, false, false);
+		expect(links.filter((l) => l.type === "ethernet")).toHaveLength(0);
+	});
+});
+
+describe("buildLinks — throughput join from netif.tp", () => {
+	it("joins throughputKbps via convertBytesToKbids(tp) for modem, wifi, and ethernet", () => {
+		const links = buildLinks(
+			{ modem1: makeModem({ ifname: "wwan0" }) } as ModemList,
+			wifiFixture,
+			netifWithEthFixture,
+			false,
+			false,
+			false,
+		);
+		const wifi = links.find((l) => l.type === "wifi")!;
+		const modem = links.find((l) => l.type === "modem")!;
+		const eth = links.find((l) => l.type === "ethernet")!;
+		expect(wifi.throughputKbps).toBe(convertBytesToKbids(64_000));
+		expect(modem.throughputKbps).toBe(convertBytesToKbids(128_000));
+		expect(eth.throughputKbps).toBe(convertBytesToKbids(256_000));
+	});
+
+	it("defaults throughputKbps to convertBytesToKbids(0) when there is no netif entry", () => {
+		const links = buildLinks(
+			{ modem1: makeModem({ ifname: "wwan9" }) } as ModemList,
+			undefined,
+			netifFixture,
+			false,
+			false,
+			false,
+		);
+		expect(links[0]!.throughputKbps).toBe(convertBytesToKbids(0));
+	});
+});
+
+describe("buildLinks — enabled propagation from netif", () => {
+	it("carries enabled from the matching netif entry", () => {
+		const netif: NetifMessage = {
+			wwan0: { tp: 0, enabled: false, ip: "10.0.0.2" },
+			wlan0: { tp: 0, enabled: true, ip: "10.0.0.3" },
+		};
+		const links = buildLinks(
+			{ modem1: makeModem({ ifname: "wwan0" }) } as ModemList,
+			wifiFixture,
+			netif,
+			false,
+			false,
+			false,
+		);
+		expect(links.find((l) => l.type === "modem")!.enabled).toBe(false);
+		expect(links.find((l) => l.type === "wifi")!.enabled).toBe(true);
+	});
+
+	it("defaults enabled to true when there is no matching netif entry", () => {
+		const links = buildLinks(
+			{ modem1: makeModem({ ifname: "wwan0" }) } as ModemList,
+			undefined,
+			undefined,
+			false,
+			false,
+			false,
+		);
+		expect(links[0]!.enabled).toBe(true);
+	});
+});
+
+describe("buildLinks — linkIndex stability", () => {
+	it("keeps linkIndex stable for remaining links when one link is disabled", () => {
+		const modems = {
+			modem1: makeModem({ ifname: "wwan0", name: "CarrierA" }),
+			modem2: makeModem({ ifname: "wwan1", name: "CarrierB" }),
+		} as ModemList;
+
+		const allEnabled: NetifMessage = {
+			wlan0: { tp: 0, enabled: true, ip: "10.0.0.3" },
+			wwan0: { tp: 0, enabled: true, ip: "10.0.0.4" },
+			wwan1: { tp: 0, enabled: true, ip: "10.0.0.5" },
+		};
+		const withDisabled: NetifMessage = {
+			wlan0: { tp: 0, enabled: true, ip: "10.0.0.3" },
+			wwan0: { tp: 0, enabled: false, ip: "10.0.0.4" },
+			wwan1: { tp: 0, enabled: true, ip: "10.0.0.5" },
+		};
+
+		const before = buildLinks(modems, wifiFixture, allEnabled, false, false, false);
+		const after = buildLinks(modems, wifiFixture, withDisabled, false, false, false);
+
+		expect(after).toHaveLength(before.length);
+		expect(after.map((l) => l.linkIndex)).toEqual(before.map((l) => l.linkIndex));
+		expect(after.map((l) => l.id)).toEqual(before.map((l) => l.id));
+		const disabled = after.find((l) => l.id === "wwan0")!;
+		expect(disabled.enabled).toBe(false);
+		expect(disabled.linkIndex).toBe(before.find((l) => l.id === "wwan0")!.linkIndex);
 	});
 });
