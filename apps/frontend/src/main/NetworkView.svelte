@@ -2,7 +2,6 @@
 import { LL } from '@ceraui/i18n/svelte';
 import type { Modem, NetifEntry, NetifMessage, WifiInterface, WifiStatus } from '@ceraui/rpc/schemas';
 import { Network as NetworkIcon } from '@lucide/svelte';
-import { toast } from 'svelte-sonner';
 
 import { Skeleton } from '$lib/components/ui/skeleton';
 import { getIsConnected, getModems, getNetif, getWifi } from '$lib/rpc/subscriptions.svelte';
@@ -60,11 +59,6 @@ const wiredEntries = $derived(
 		([name]) => !name.startsWith('ww') && !name.startsWith('wl') && name !== 'lo',
 	) as [string, NetifEntry][],
 );
-
-// Dialog triggers are placeholders until Wave 2 (Tasks 21–24) wires the real dialogs.
-function comingSoon(feature: string) {
-	toast.info($LL.network.view.comingSoon({ feature }));
-}
 
 // Per-interface Ethernet configuration dialog (Task 24). The selected interface
 // data is read LIVE from `netif` so the dialog reflects ongoing telemetry.

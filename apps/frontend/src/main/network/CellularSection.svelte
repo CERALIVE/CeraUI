@@ -4,7 +4,8 @@ import type { Modem } from '@ceraui/rpc/schemas';
 import { ChevronRight, Radio, Signal, WifiOff } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
-import { getSignalCategory } from '$lib/helpers/signal';
+import { convertBytesToKbids } from '$lib/helpers/network-speed';
+import { signalTextClass } from '$lib/helpers/signal';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -13,21 +14,6 @@ interface Props {
 }
 
 const { modemEntries, onConfigure }: Props = $props();
-
-/** Text colour token for a signal reading, matching SignalIndicator tiers. */
-function signalTextClass(signal: number | null): string {
-	if (signal == null) return 'text-muted-foreground';
-	switch (getSignalCategory(signal)) {
-		case 'excellent':
-			return 'text-signal-excellent';
-		case 'good':
-			return 'text-signal-good';
-		case 'fair':
-			return 'text-signal-fair';
-		default:
-			return 'text-signal-weak';
-	}
-}
 
 function modemSignal(modem: Modem): number | null {
 	if (modem.no_sim) return null;
