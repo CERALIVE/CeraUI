@@ -49,44 +49,48 @@ const config: Config = {
 					DEFAULT: "var(--card)",
 					foreground: "var(--card-foreground)",
 				},
-			sidebar: {
-				DEFAULT: "var(--sidebar-background)",
-				foreground: "var(--sidebar-foreground)",
-				primary: "var(--sidebar-primary)",
-				"primary-foreground": "var(--sidebar-primary-foreground)",
-				accent: "var(--sidebar-accent)",
-				"accent-foreground": "var(--sidebar-accent-foreground)",
-				border: "var(--sidebar-border)",
-				ring: "var(--sidebar-ring)",
-			},
-			status: {
-				success: {
-					DEFAULT: "var(--status-success)",
-					foreground: "var(--status-success-foreground)",
+				sidebar: {
+					DEFAULT: "var(--sidebar-background)",
+					foreground: "var(--sidebar-foreground)",
+					primary: "var(--sidebar-primary)",
+					"primary-foreground": "var(--sidebar-primary-foreground)",
+					accent: "var(--sidebar-accent)",
+					"accent-foreground": "var(--sidebar-accent-foreground)",
+					border: "var(--sidebar-border)",
+					ring: "var(--sidebar-ring)",
 				},
-				info: {
-					DEFAULT: "var(--status-info)",
-					foreground: "var(--status-info-foreground)",
+				status: {
+					success: {
+						DEFAULT: "var(--status-success)",
+						foreground: "var(--status-success-foreground)",
+					},
+					info: {
+						DEFAULT: "var(--status-info)",
+						foreground: "var(--status-info-foreground)",
+					},
+					warning: {
+						DEFAULT: "var(--status-warning)",
+						foreground: "var(--status-warning-foreground)",
+					},
+					error: {
+						DEFAULT: "var(--status-error)",
+						foreground: "var(--status-error-foreground)",
+					},
+					neutral: {
+						DEFAULT: "var(--status-neutral)",
+						foreground: "var(--status-neutral-foreground)",
+					},
 				},
-				warning: {
-					DEFAULT: "var(--status-warning)",
-					foreground: "var(--status-warning-foreground)",
+				signal: {
+					excellent: "var(--signal-excellent)",
+					good: "var(--signal-good)",
+					fair: "var(--signal-fair)",
+					weak: "var(--signal-weak)",
 				},
-				error: {
-					DEFAULT: "var(--status-error)",
-					foreground: "var(--status-error-foreground)",
+				switch: {
+					off: "var(--switch-off)",
+					"off-foreground": "var(--switch-off-foreground)",
 				},
-				neutral: {
-					DEFAULT: "var(--status-neutral)",
-					foreground: "var(--status-neutral-foreground)",
-				},
-			},
-			signal: {
-				excellent: "var(--signal-excellent)",
-				good: "var(--signal-good)",
-				fair: "var(--signal-fair)",
-				weak: "var(--signal-weak)",
-			},
 			},
 			borderRadius: {
 				xl: "calc(var(--radius) + 4px)",
@@ -94,24 +98,24 @@ const config: Config = {
 				md: "calc(var(--radius) - 2px)",
 				sm: "calc(var(--radius) - 4px)",
 			},
-		fontFamily: {
-			sans: [
-				"Space Grotesk Variable",
-				"Space Grotesk",
-				// CJK system fallbacks (Space Grotesk has no CJK glyphs)
-				'"Noto Sans CJK SC"',
-				'"Microsoft YaHei"',
-				'"Hiragino Sans"',
-				'"Noto Sans JP"',
-				'"Noto Sans KR"',
-				// Arabic system fallback
-				'"Noto Sans Arabic"',
-				"Tahoma",
-				"system-ui",
-				"sans-serif",
-			],
-			mono: ["JetBrains Mono Variable", ...fontFamily.mono],
-		},
+			fontFamily: {
+				sans: [
+					"Space Grotesk Variable",
+					"Space Grotesk",
+					// CJK system fallbacks (Space Grotesk has no CJK glyphs)
+					'"Noto Sans CJK SC"',
+					'"Microsoft YaHei"',
+					'"Hiragino Sans"',
+					'"Noto Sans JP"',
+					'"Noto Sans KR"',
+					// Arabic system fallback
+					'"Noto Sans Arabic"',
+					"Tahoma",
+					"system-ui",
+					"sans-serif",
+				],
+				mono: ["JetBrains Mono Variable", ...fontFamily.mono],
+			},
 			keyframes: {
 				"accordion-down": {
 					from: { height: "0" },

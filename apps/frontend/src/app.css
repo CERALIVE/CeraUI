@@ -115,6 +115,12 @@
 		--ring: oklch(0.4 0.18 128);
 		--radius: 0.5rem;
 
+		/* Control state — Switch/Toggle/Checkbox OFF track.
+		   Mid-grey: clearly distinct from the near-white card AND
+		   from the ON (--primary darkened-lime) state. */
+		--switch-off: oklch(0.72 0.012 150);
+		--switch-off-foreground: oklch(0.99 0.004 150);
+
 		--sidebar-background: oklch(0.94 0.005 150);
 		--sidebar-foreground: oklch(0.22 0.014 150);
 		--sidebar-primary: oklch(0.4 0.18 128);
@@ -200,6 +206,12 @@
 		--border: oklch(0.28 0.012 150);
 		--input: oklch(0.24 0.01 150);
 		--ring: oklch(0.86 0.2 128);
+
+		/* Control state — Switch/Toggle/Checkbox OFF track.
+		   Raised "inactive" graphite (L>0.35): reads as off, never
+		   collapses into --card/--input, never the lit --primary lime. */
+		--switch-off: oklch(0.42 0.018 150);
+		--switch-off-foreground: oklch(0.96 0.008 150);
 
 		--sidebar-background: oklch(0.13 0.01 150);
 		--sidebar-foreground: oklch(0.88 0.008 150);
@@ -681,6 +693,54 @@
 [data-sonner-toast][data-type='info'] [data-icon],
 [data-sonner-toast][data-type='loading'] [data-icon] {
 	color: var(--muted-foreground) !important;
+}
+
+/* ── Switch / Toggle / Checkbox state contrast ──────
+   Dedicated OFF-track token so the inactive state reads as
+   obviously "off", clearly distinct from card/muted surfaces and
+   from the ON (--primary phosphor-lime) state. Keyed on bits-ui v2
+   data attributes; the ui/ primitives stay CLI-managed. Unlayered
+   so these win the cascade over the primitives' utility classes. */
+
+[data-slot='switch'][data-state='unchecked'] {
+	background-color: var(--switch-off);
+	border-color: color-mix(in oklab, var(--switch-off) 65%, var(--border));
+}
+
+[data-slot='switch'][data-state='checked'] {
+	background-color: var(--primary);
+	border-color: var(--primary);
+}
+
+[data-slot='switch-thumb'][data-state='unchecked'] {
+	background-color: var(--switch-off-foreground);
+}
+
+[data-slot='switch-thumb'][data-state='checked'] {
+	background-color: var(--primary-foreground);
+}
+
+[data-slot='checkbox'][data-state='unchecked'] {
+	border-color: var(--switch-off);
+	background-color: color-mix(in oklab, var(--switch-off) 14%, transparent);
+}
+
+[data-slot='checkbox'][data-state='checked'],
+[data-slot='checkbox'][data-state='indeterminate'] {
+	background-color: var(--primary);
+	border-color: var(--primary);
+	color: var(--primary-foreground);
+}
+
+[data-slot='toggle'][data-state='off'],
+[data-slot='toggle'][aria-pressed='false'] {
+	background-color: transparent;
+}
+
+[data-slot='toggle'][data-state='on'],
+[data-slot='toggle'][aria-pressed='true'] {
+	background-color: color-mix(in oklab, var(--primary) 20%, var(--switch-off));
+	color: var(--foreground);
 }
 
 /* ── Svelte Inspector ── */
