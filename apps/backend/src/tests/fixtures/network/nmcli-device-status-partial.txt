@@ -1,0 +1,4 @@
+eth0:ethernet:connected:Wired connection 1:/org/freedesktop/NetworkManager/ActiveConnection/0
+wlan0:wifi:disconnected::/
+usb0:gsm:unavailable::/
+lo:loopback:unmanaged::/

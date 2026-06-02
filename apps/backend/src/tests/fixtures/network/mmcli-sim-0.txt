@@ -1,0 +1,14 @@
+sim.dbus-path                                   : /org/freedesktop/ModemManager1/SIM/0
+sim.properties.active                           : yes
+sim.properties.iccid                            : 8901410123456789012
+sim.properties.imsi                             : 310410123456789
+sim.properties.eid                              : --
+sim.properties.operator-code                    : 310410
+sim.properties.operator-name                    : AT&T
+sim.properties.gid1                             : --
+sim.properties.gid2                             : --
+sim.properties.emergency-numbers.length         : 3
+sim.properties.emergency-numbers.value[1]       : 911
+sim.properties.emergency-numbers.value[2]       : 112
+sim.properties.emergency-numbers.value[3]       : 000
+sim.properties.preferred-networks.length        : 0

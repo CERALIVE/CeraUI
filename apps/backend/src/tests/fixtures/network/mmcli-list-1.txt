@@ -1,0 +1,2 @@
+modem-list.length                               : 1
+modem-list.value[1]                             : /org/freedesktop/ModemManager1/Modem/0
