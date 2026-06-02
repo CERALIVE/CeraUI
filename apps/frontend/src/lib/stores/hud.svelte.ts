@@ -141,6 +141,7 @@ export function buildLinks(
 			isStale: wifiStale || fullyStale,
 			throughputKbps: throughputFor(ifname),
 			enabled: enabledFor(ifname),
+			connectionState: "disconnected",
 		});
 	}
 
@@ -156,6 +157,7 @@ export function buildLinks(
 			isStale: modemsStale || fullyStale,
 			throughputKbps: throughputFor(id),
 			enabled: enabledFor(id),
+			connectionState: "disconnected",
 		});
 	}
 
@@ -171,6 +173,7 @@ export function buildLinks(
 			isStale: fullyStale,
 			throughputKbps: convertBytesToKbids(entry.tp ?? 0),
 			enabled: entry.enabled,
+			connectionState: "disconnected",
 		});
 	}
 
