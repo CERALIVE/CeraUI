@@ -23,7 +23,7 @@ import { initMockService } from "./mocks/mock-service.ts";
 import { loadConfig } from "./modules/config.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
 import { initSRTIngest } from "./modules/ingest/srt.ts";
-import { updateModems } from "./modules/modems/modem-update-loop.ts";
+import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
 import { initNetworkInterfaceMonitoring } from "./modules/network/network-interfaces.ts";
 import { initRemote } from "./modules/remote/remote.ts";
@@ -83,7 +83,7 @@ void getSshStatus();
 updateGwWrapper();
 setInterval(updateGwWrapper, UPDATE_GW_INT);
 
-updateModems();
+void initModemUpdateLoop();
 
 if (setup.apt_update_enabled) {
 	periodicCheckForSoftwareUpdates();
