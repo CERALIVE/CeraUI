@@ -9,8 +9,10 @@ import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
-import { getSignalCategory } from '$lib/helpers/signal';
+import { signalTextClass } from '$lib/helpers/signal';
+import { getStalenessState } from '$lib/helpers/staleness';
 import { rpc } from '$lib/rpc/client';
+import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
 
 import HotspotDialog from '../dialogs/HotspotDialog.svelte';
@@ -20,11 +22,15 @@ interface Props {
 	wifiRadios: [string, WifiInterface][];
 	/** Per-interface telemetry: bond membership (`enabled`), static `ip`, throughput `tp`. */
 	netif: NetifMessage | undefined;
+	/** HUD bonded-link signals — single source for per-link throughput + staleness. */
+	links: LinkSignal[];
+	/** Whole-app staleness latch: the WS has been down past the global threshold. */
+	isFullyStale: boolean;
 	primaryWifiDevice: string | undefined;
 	onConnect: () => void;
 }
 
-const { wifiRadios, netif, primaryWifiDevice, onConnect }: Props = $props();
+const { wifiRadios, netif, links, isFullyStale, primaryWifiDevice, onConnect }: Props = $props();
 
 function activeWifiNetwork(iface: WifiInterface) {
 	return iface.available?.find((network) => network.active);
@@ -102,7 +108,11 @@ async function switchToStation(device: string) {
 				{@const isHotspot = Boolean(iface.hotspot)}
 				{@const net = activeWifiNetwork(iface)}
 				{@const connected = Boolean(iface.conn && net)}
-				{@const kbps = entry ? convertBytesToKbids(entry.tp) : null}
+				{@const link = links.find((l) => l.id === iface.ifname)}
+				{@const kbps = link ? link.throughputKbps : entry ? convertBytesToKbids(entry.tp) : null}
+				{@const rawStale = link?.isStale ?? isFullyStale}
+				{@const tpStale = getStalenessState(kbps, null, rawStale) === 'stale'}
+				{@const sigStale = net ? getStalenessState(net.signal, null, rawStale) === 'stale' : false}
 				{@const hasIp = Boolean(entry?.ip)}
 				{@const isSwitching = switching === id}
 				{@const hasControls = isHotspot || hasIp || iface.supports_hotspot}
@@ -124,7 +134,12 @@ async function switchToStation(device: string) {
 									{iface.ifname}
 								{/if}
 							</p>
-							<p class="text-muted-foreground truncate text-xs">
+							<p
+								class={cn(
+									'text-muted-foreground truncate text-xs transition-opacity',
+									!isHotspot && rawStale && 'opacity-50',
+								)}
+							>
 								{#if isHotspot}
 									{$LL.network.view.hotspot()} · {iface.ifname}
 								{:else if connected && net}
@@ -135,7 +150,7 @@ async function switchToStation(device: string) {
 							</p>
 						</div>
 						<div class="flex shrink-0 items-center gap-2.5">
-							<SpeedBadge {kbps} />
+							<SpeedBadge {kbps} stale={tpStale} />
 							{#if isHotspot}
 								<span
 									class="bg-status-info/10 text-status-info rounded-md px-1.5 py-0.5 text-xs font-medium"
@@ -143,7 +158,10 @@ async function switchToStation(device: string) {
 									{$LL.network.view.active()}
 								</span>
 							{:else if connected && net}
-								<div class="flex items-center gap-1.5">
+								<div
+									data-live-value
+									class={cn('flex items-center gap-1.5 transition-opacity', sigStale && 'opacity-50')}
+								>
 									<Signal class={cn('size-3.5', signalTextClass(net.signal))} aria-hidden="true" />
 									<span class={cn('font-mono text-xs tabular-nums', signalTextClass(net.signal))}>
 										{net.signal}%

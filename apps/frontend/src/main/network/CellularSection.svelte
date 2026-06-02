@@ -1,7 +1,7 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { Modem, NetifMessage } from '@ceraui/rpc/schemas';
-import { ChevronRight, Radio, Signal, WifiOff } from '@lucide/svelte';
+import { CardSim, ChevronRight, LoaderCircle, Radar, Radio, Signal, WifiOff } from '@lucide/svelte';
 
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
@@ -9,16 +9,22 @@ import { Button } from '$lib/components/ui/button';
 import { getSignalCategory } from '$lib/helpers/signal';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
 import { modemSignal, signalTextClass } from '$lib/helpers/signal';
+import { getStalenessState } from '$lib/helpers/staleness';
+import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
 
 interface Props {
 	modemEntries: [string, Modem][];
 	/** Live per-interface telemetry; supplies bond state (`enabled`/`ip`) and throughput (`tp`). */
 	netif: NetifMessage | undefined;
+	/** HUD bonded-link signals — single source for per-link throughput + staleness. */
+	links: LinkSignal[];
+	/** Whole-app staleness latch: the WS has been down past the global threshold. */
+	isFullyStale: boolean;
 	onConfigure: (id: string) => void;
 }
 
-const { modemEntries, netif, onConfigure }: Props = $props();
+const { modemEntries, netif, links, isFullyStale, onConfigure }: Props = $props();
 
 /**
  * Hardware identity line: manufacturer + model, rendered RAW (never matched or
@@ -43,13 +49,21 @@ function modelLabel(modem: Modem): string {
 			</p>
 		{:else}
 			{#each modemEntries as [id, modem], _i (modem.ifname || id + '-' + _i)}
-				{@const sig = modemSignal(modem)}
+			{@const sig = modemSignal(modem)}
 				{@const noSim = modem.no_sim === true}
 				{@const connected = modem.status?.connection === 'connected'}
 				{@const operator = modem.status?.network || modem.sim_network || modem.name}
 				{@const model = modelLabel(modem)}
 				{@const entry = netif?.[modem.ifname]}
-				{@const kbps = noSim || !entry ? null : convertBytesToKbids(entry.tp)}
+				{@const link = links.find((l) => l.id === (modem.ifname || id))}
+				{@const kbps = link
+					? link.throughputKbps
+					: noSim || !entry
+						? null
+						: convertBytesToKbids(entry.tp)}
+				{@const rawStale = link?.isStale ?? isFullyStale}
+				{@const tpStale = getStalenessState(kbps, null, rawStale) === 'stale'}
+				{@const sigStale = getStalenessState(sig, null, rawStale) === 'stale'}
 				<div class="px-4 py-3">
 					<!-- Identity row: status dot · name/model · signal · configure -->
 					<div class="flex items-center gap-3">
@@ -63,8 +77,8 @@ function modelLabel(modem: Modem): string {
 								<p class="text-muted-foreground truncate text-xs">{model}</p>
 							{/if}
 						</div>
-						{#if sig != null}
-							<div class="flex items-center gap-1.5">
+					{#if sig != null}
+							<div class={cn('flex items-center gap-1.5 transition-opacity', sigStale && 'opacity-50')}>
 								<Signal class={cn('size-3.5', signalTextClass(sig))} aria-hidden="true" />
 								<span class={cn('font-mono text-xs tabular-nums', signalTextClass(sig))}>
 									{sig}%
@@ -86,7 +100,12 @@ function modelLabel(modem: Modem): string {
 
 					<!-- Telemetry row: connection status · speed · bond membership -->
 					<div class="mt-2.5 flex items-center justify-between gap-3 ps-5">
-						<p class="text-muted-foreground min-w-0 flex-1 truncate text-xs">
+						<p
+							class={cn(
+								'text-muted-foreground min-w-0 flex-1 truncate text-xs transition-opacity',
+								rawStale && 'opacity-50',
+							)}
+						>
 							{#if noSim}
 								{$LL.network.view.noModems()}
 							{:else}
@@ -96,7 +115,7 @@ function modelLabel(modem: Modem): string {
 							{/if}
 						</p>
 						<div class="flex shrink-0 items-center gap-3">
-							<SpeedBadge {kbps} />
+							<SpeedBadge {kbps} stale={tpStale} />
 							{#if noSim}
 								<BondToggle
 									name={modem.ifname}

@@ -5,7 +5,7 @@ import { Network as NetworkIcon } from '@lucide/svelte';
 
 import { Skeleton } from '$lib/components/ui/skeleton';
 import { getIsConnected, getModems, getNetif, getWifi } from '$lib/rpc/subscriptions.svelte';
-import { getLinks } from '$lib/stores/hud.svelte';
+import { getHudState } from '$lib/stores/hud.svelte';
 import type { LinkSignal } from '$lib/types/hud';
 
 import HotspotDialog from './dialogs/HotspotDialog.svelte';
@@ -27,7 +27,11 @@ const isConnected = $derived(getIsConnected());
 
 // Bonded links come from the HUD store so colour identity (--link-N) is
 // IDENTICAL to the persistent HUD bar — link.linkIndex (0-based) → --link-{n+1}.
-const links = $derived<LinkSignal[]>(getLinks());
+// The full snapshot also carries `isFullyStale`, threaded into every live-value
+// section so per-source staleness (Task 18) is decided in one place.
+const hud = $derived(getHudState());
+const links = $derived<LinkSignal[]>(hud.links);
+const isFullyStale = $derived(hud.isFullyStale);
 
 // Loading: no telemetry has arrived yet on this connection.
 const isLoading = $derived(
@@ -108,9 +112,16 @@ function openModemConfig(id: string) {
 		</div>
 	{:else}
 		<BondedLinksSection {links} {modemEntries} />
-		<WifiSection wifiRadios={wifiEntries} {netif} {primaryWifiDevice} onConnect={openWifiSelector} />
-		<CellularSection {modemEntries} {netif} onConfigure={openModemConfig} />
-		<EthernetSection {wiredEntries} onConfigure={configureNetif} />
+		<WifiSection
+			wifiRadios={wifiEntries}
+			{netif}
+			{links}
+			{isFullyStale}
+			{primaryWifiDevice}
+			onConnect={openWifiSelector}
+		/>
+		<CellularSection {modemEntries} {netif} {links} {isFullyStale} onConfigure={openModemConfig} />
+		<EthernetSection {wiredEntries} {isFullyStale} onConfigure={configureNetif} />
 		<HotspotSection {hotspotInterfaces} {hotspotTarget} onSetup={() => (hotspotDialogOpen = true)} />
 	{/if}
 </div>

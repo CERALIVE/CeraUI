@@ -1,10 +1,11 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { Modem } from '@ceraui/rpc/schemas';
-import { Radio } from '@lucide/svelte';
+import { CardSim, LoaderCircle, Radar, Radio } from '@lucide/svelte';
 
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import { formatThroughput } from '$lib/helpers/network-speed';
+import { getStalenessState } from '$lib/helpers/staleness';
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
 
@@ -34,6 +35,15 @@ function linkTypeLabel(link: LinkSignal): string {
 // Aggregate throughput across every enabled link — the bond's working bandwidth.
 const totalKbps = $derived(
 	links.reduce((sum, link) => (link.enabled ? sum + (link.throughputKbps ?? 0) : sum), 0),
+);
+
+// The bond total is only as fresh as its links: when every link has aged out
+// (i.e. on a full disconnect, where `isFullyStale` is baked into each
+// `link.isStale`), the aggregate is stale too. Route through the shared helper
+// so the dimming threshold matches every other live value (Task 18).
+const totalStale = $derived(
+	getStalenessState(totalKbps, null, links.length > 0 && links.every((link) => link.isStale)) ===
+		'stale',
 );
 </script>
 
@@ -65,7 +75,7 @@ const totalKbps = $derived(
 					>
 					<!-- mini signal bars (match HUD aesthetic) — wired links report no signal -->
 					{#if hasSignal}
-						<div class="flex items-end gap-0.5" aria-hidden="true">
+						<div data-live-value class="flex items-end gap-0.5" aria-hidden="true">
 							{#each [1, 2, 3] as bar (bar)}
 								<span
 									class="w-1 rounded-[1px]"
@@ -75,6 +85,18 @@ const totalKbps = $derived(
 								></span>
 							{/each}
 						</div>
+					{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
+						<CardSim class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+					{:else if link.type === 'modem' && link.connectionState === 'scanning'}
+						<Radar
+							class="text-muted-foreground size-4 shrink-0 motion-safe:animate-pulse"
+							aria-hidden="true"
+						/>
+					{:else if link.type === 'modem' && link.connectionState === 'connected'}
+						<LoaderCircle
+							class="text-muted-foreground size-4 shrink-0 motion-safe:animate-spin"
+							aria-hidden="true"
+						/>
 					{/if}
 					<div class="flex min-w-0 flex-col leading-tight">
 						<span class="truncate text-xs font-medium">{link.label}</span>
@@ -83,8 +105,16 @@ const totalKbps = $derived(
 						>
 					</div>
 					{#if hasSignal}
-						<span class="ms-1 font-mono text-xs tabular-nums" style="color: {color};">
+						<span data-live-value class="ms-1 font-mono text-xs tabular-nums" style="color: {color};">
 							{link.signal}%
+						</span>
+					{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
+						<span class="text-muted-foreground ms-1 text-[10px] uppercase tracking-wide">
+							{$LL.network.view.noSimLink()}
+						</span>
+					{:else if link.type === 'modem' && link.connectionState === 'scanning'}
+						<span class="text-muted-foreground ms-1 text-[10px] uppercase tracking-wide">
+							{$LL.network.modem.scanning()}
 						</span>
 					{/if}
 					<!-- per-link throughput (Task 18) -->
@@ -93,14 +123,17 @@ const totalKbps = $derived(
 			{/each}
 		</div>
 
-		<!-- total bonded bandwidth (Task 18) -->
+		<!-- total bonded bandwidth (Task 18) — dims with its links when stale -->
 		<div
-			class="mt-3 flex items-center justify-between border-t pt-3 text-xs"
+			class={cn(
+				'mt-3 flex items-center justify-between border-t pt-3 text-xs transition-opacity',
+				totalStale && 'opacity-50',
+			)}
 		>
 			<span class="text-muted-foreground uppercase tracking-wide"
 				>{$LL.network.view.totalBandwidth()}</span
 			>
-			<span class="text-foreground font-mono text-sm font-bold tabular-nums">
+			<span data-live-value class="text-foreground font-mono text-sm font-bold tabular-nums">
 				{formatThroughput(totalKbps)}
 			</span>
 		</div>

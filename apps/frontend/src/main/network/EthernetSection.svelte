@@ -8,19 +8,29 @@ import { Button } from '$lib/components/ui/button';
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
+import { getStalenessState } from '$lib/helpers/staleness';
 import { cn } from '$lib/utils';
 
 interface Props {
 	wiredEntries: [string, NetifEntry][];
+	/** Whole-app staleness latch: the WS has been down past the global threshold. */
+	isFullyStale: boolean;
 	onConfigure: (name: string) => void;
 }
 
-const { wiredEntries, onConfigure }: Props = $props();
+const { wiredEntries, isFullyStale, onConfigure }: Props = $props();
 
 // Per-interface throughput → kbps for SpeedBadge. A missing reading renders the
 // muted placeholder rather than a misleading 0.
 function throughputKbps(iface: NetifEntry): number | null {
 	return iface.tp == null ? null : convertBytesToKbids(iface.tp);
+}
+
+// A wired reading dims when the link is disabled OR the whole app has gone
+// stale on disconnect — routed through the shared helper so the threshold
+// matches every other live value (Task 18).
+function throughputStale(iface: NetifEntry): boolean {
+	return getStalenessState(throughputKbps(iface), null, !iface.enabled || isFullyStale) === 'stale';
 }
 
 // Ethernet footgun guard: disabling a wired link can drop the operator's
@@ -70,7 +80,7 @@ function settle(proceed: boolean) {
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-2">
 							<p class="truncate text-sm font-medium">{name}</p>
-							<SpeedBadge kbps={throughputKbps(iface)} stale={!iface.enabled} />
+							<SpeedBadge kbps={throughputKbps(iface)} stale={throughputStale(iface)} />
 						</div>
 						<p class="text-muted-foreground truncate text-xs">
 							{#if iface.ip}
