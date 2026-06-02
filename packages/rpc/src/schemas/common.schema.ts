@@ -13,6 +13,8 @@ export const nullable = <T extends z.ZodTypeAny>(schema: T) => schema.nullable()
 // Success response schema (common pattern)
 export const successResponseSchema = z.object({
 	success: z.boolean(),
+	// Optional structured failure code, e.g. 'DEVICE_BUSY' from withDeviceLock.
+	error: z.string().optional(),
 });
 export type SuccessResponse = z.infer<typeof successResponseSchema>;
 

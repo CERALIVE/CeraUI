@@ -100,5 +100,6 @@ export type ModemScanInput = z.infer<typeof modemScanInputSchema>;
 export const modemScanOutputSchema = z.object({
 	success: z.boolean(),
 	networks: z.record(z.string(), availableNetworkSchema).optional(),
+	error: z.string().optional(),
 });
 export type ModemScanOutput = z.infer<typeof modemScanOutputSchema>;

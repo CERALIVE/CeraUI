@@ -48,6 +48,7 @@ import { initHardwareMonitoring } from "./modules/system/sensors.ts";
 import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updates.ts";
 import { getSshStatus } from "./modules/system/ssh.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
+import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot.ts";
 import { initServer } from "./rpc/index.ts";
 
 /* Disable localization for any CLI commands we run */
@@ -87,8 +88,6 @@ void getSshStatus();
 updateGwWrapper();
 setInterval(updateGwWrapper, UPDATE_GW_INT);
 
-void initModemUpdateLoop();
-
 if (setup.apt_update_enabled) {
 	periodicCheckForSoftwareUpdates();
 }
@@ -102,6 +101,12 @@ networkMonitor.start();
 
 // Event-driven wifi: same monitor drives connection up/down + diff broadcast
 wifiStateInit(networkMonitor);
+
+// Hotspot NM-confirmation: flips station↔hotspot once NM reports the switch
+networkMonitor.on("monitor-event", handleHotspotMonitorEvent);
+
+// Event-driven modems share the SAME monitor (one nmcli monitor for all)
+void initModemUpdateLoop({ monitor: networkMonitor });
 
 // check for Cam Links on USB2 at startup
 checkCamlinkUsb2();
