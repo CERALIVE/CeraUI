@@ -32,7 +32,7 @@ export type HudConnectionState = "connecting" | "connected" | "disconnected" | "
 export interface LinkSignal {
 	/** Stable identifier — modem `ifname`/key or wifi interface name. */
 	id: string;
-	type: "modem" | "wifi";
+	type: "modem" | "wifi" | "ethernet";
 	/** 0–5, maps to the `--link-1`..`--link-6` CSS color variables. */
 	linkIndex: number;
 	/** 0–100, or `null` when unavailable (no-SIM / null / sentinel). */
@@ -41,6 +41,10 @@ export interface LinkSignal {
 	label: string;
 	isConnected: boolean;
 	isStale: boolean;
+	/** Throughput in kbps, or `null` when unavailable. */
+	throughputKbps: number | null;
+	/** Whether this link is enabled/active. */
+	enabled: boolean;
 }
 
 /**

@@ -131,6 +131,8 @@ export function buildLinks(
 			label: active?.ssid || "WiFi",
 			isConnected: Boolean(active),
 			isStale: wifiStale || fullyStale,
+			throughputKbps: null,
+			enabled: true,
 		});
 	}
 
@@ -143,6 +145,8 @@ export function buildLinks(
 			label: modem.name || modem.status?.network || "Modem",
 			isConnected: modem.status?.connection === "connected",
 			isStale: modemsStale || fullyStale,
+			throughputKbps: null,
+			enabled: true,
 		});
 	}
 
