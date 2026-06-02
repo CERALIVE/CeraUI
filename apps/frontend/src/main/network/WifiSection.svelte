@@ -204,7 +204,7 @@ async function switchToStation(device: string) {
 									<div class="ms-auto">
 										<SimpleAlertDialog
 											buttonText={$LL.network.view.switchToHotspot()}
-											confirmButtonText={$LL.network.view.switchToHotspot()}
+											confirmButtonText={$LL.network.view.hotspotSwitchConfirm()}
 											confirmVariant="destructive"
 											extraButtonClasses="h-8 px-2.5 text-xs shadow-none bg-secondary text-secondary-foreground hover:bg-secondary/80"
 											iconPosition="left"
