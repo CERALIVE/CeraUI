@@ -415,6 +415,11 @@ function openModemConfig(id: string) {
 <!-- Per-interface Ethernet configuration (Task 24) -->
 <NetifDialog bind:open={netifDialogOpen} name={selectedNetifName} iface={selectedNetif} />
 
+<!-- WiFi network selector — targets the primary WiFi station interface -->
+{#if primaryWifiDevice}
+	<WifiSelectorDialog bind:open={wifiSelectorOpen} deviceId={primaryWifiDevice} />
+{/if}
+
 {#if hotspotTarget}
 	<HotspotDialog bind:open={hotspotDialogOpen} deviceId={hotspotTarget[0]} iface={hotspotTarget[1]} />
 {/if}
