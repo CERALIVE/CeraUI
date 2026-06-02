@@ -62,6 +62,10 @@ let encoderConfig = $state<EncoderConfig>({
 // stream (re)start folds it into the full config sent to rpc.streaming.start.
 let audioOverride = $state<AudioConfigValues | null>(null);
 
+// Drives the AudioDialog gate: the drafted encoder source wins, the saved
+// config pipeline is the fallback (mirrors EncoderDialog's own seeding).
+const effectivePipeline = $derived(encoderConfig.source ?? config?.pipeline);
+
 const effectiveAudioSource = $derived(audioOverride?.asrc ?? config?.asrc);
 const effectiveAudioCodec = $derived(
 	(audioOverride?.acodec ?? config?.acodec) as AudioCodec | undefined,
@@ -438,6 +442,7 @@ const configRows = $derived<ConfigRow[]>([
 	audioCodec={effectiveAudioCodec}
 	audioDelay={effectiveAudioDelay}
 	audioSource={effectiveAudioSource}
+	effectivePipeline={effectivePipeline}
 	onSave={handleAudioSave}
 />
 

@@ -29,6 +29,10 @@ import { AppDialog } from '$lib/components/dialogs';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
+import {
+	resolveAudioGateState,
+	resolveAudioPipelineKey,
+} from '$lib/streaming/audioGate';
 import { rpc } from '$lib/rpc';
 import {
 	getAudioCodecs,
@@ -50,6 +54,12 @@ interface Props {
 	audioSource?: string;
 	audioCodec?: AudioCodec;
 	audioDelay?: number;
+	/**
+	 * Effective encoder pipeline driving the audio gate: the DRAFTED encoder
+	 * source first, the saved config pipeline as fallback. When omitted the gate
+	 * falls back to the saved device config alone.
+	 */
+	effectivePipeline?: string;
 	/** Commit handler — receives the validated draft when Save is pressed. */
 	onSave?: (values: AudioConfigValues) => void;
 }
@@ -59,6 +69,7 @@ let {
 	audioSource,
 	audioCodec,
 	audioDelay,
+	effectivePipeline,
 	onSave,
 }: Props = $props();
 
@@ -74,12 +85,14 @@ const audioCodecs = $derived(getAudioCodecs());
 const audioSources = $derived(getStatus()?.asrcs ?? []);
 const isStreaming = $derived(getIsStreaming());
 
-// Does the currently-saved pipeline expose audio configuration at all?
-const pipelineKey = $derived(config?.pipeline);
-const pipelineData = $derived(
-	pipelineKey && pipelines ? pipelines[pipelineKey] : undefined,
+// Gate follows the DRAFTED encoder pipeline first, the saved config second —
+// so picking an audio-capable pipeline in the Encoder dialog clears the gate
+// immediately, without waiting for a stream (re)start to persist it.
+const pipelineKey = $derived(
+	resolveAudioPipelineKey(effectivePipeline, config?.pipeline),
 );
-const hasAudioSupport = $derived(pipelineData?.supportsAudio ?? false);
+const gateState = $derived(resolveAudioGateState(pipelineKey, pipelines));
+const hasAudioSupport = $derived(gateState === 'enabled');
 
 // ---- Draft state (seeded from props each time the dialog opens) ----
 let draftSource = $state<string | undefined>(undefined);
@@ -165,12 +178,12 @@ async function handleSave() {
 	primaryLabel={$LL.dialogs.save()}
 	title={$LL.general.audioSettings()}
 >
-	{#if !pipelineKey}
-		<!-- No pipeline selected yet — audio cannot be configured. -->
+	{#if gateState === 'no-pipeline'}
+		<!-- No pipeline drafted or saved yet — audio cannot be configured. -->
 		<div class="bg-muted/50 rounded-lg px-4 py-3 text-center">
 			<p class="text-muted-foreground text-sm">{$LL.settings.selectPipelineFirst()}</p>
 		</div>
-	{:else if !hasAudioSupport}
+	{:else if gateState === 'no-audio-support'}
 		<!-- Selected pipeline has no audio support. -->
 		<div class="border-destructive/20 bg-destructive/5 rounded-lg border px-4 py-3">
 			<h4 class="text-destructive text-sm font-medium">
