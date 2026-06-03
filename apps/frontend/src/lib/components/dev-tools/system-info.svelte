@@ -1,10 +1,16 @@
 <script lang="ts">
 import { existingLocales, loadLocaleAsync, type Locales } from '@ceraui/i18n';
 import { LL, locale, setLocale } from '@ceraui/i18n/svelte';
-import { Activity, ChevronDown, Clock, Code, Globe, Monitor, Wifi } from '@lucide/svelte';
+import { Code } from '@lucide/svelte';
 
+import SystemBrowserPanel from '$lib/components/dev-tools/system-browser-panel.svelte';
+import SystemBuildPanel from '$lib/components/dev-tools/system-build-panel.svelte';
+import SystemLocalePanel from '$lib/components/dev-tools/system-locale-panel.svelte';
+import SystemNetworkPanel from '$lib/components/dev-tools/system-network-panel.svelte';
+import SystemPerformancePanel from '$lib/components/dev-tools/system-performance-panel.svelte';
+import SystemPreferencesPanel from '$lib/components/dev-tools/system-preferences-panel.svelte';
+import SystemTimingPanel from '$lib/components/dev-tools/system-timing-panel.svelte';
 import * as Card from '$lib/components/ui/card';
-import * as Collapsible from '$lib/components/ui/collapsible';
 import { BUILD_INFO, ENV_VARIABLES } from '$lib/env';
 import { setLocale as setLocaleStore } from '$lib/stores/locale.svelte';
 import { CLIENT_VERSION } from '$lib/stores/version-manager';
@@ -59,10 +65,6 @@ let buildInfo = $state({
 	clientVersion: '',
 	timestamp: '',
 });
-
-let browserInfoOpen = $state(false);
-let localeInfoOpen = $state(false);
-let preferencesOpen = $state(false);
 
 // Update system information
 function updateSystemInfo() {
