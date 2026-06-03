@@ -268,7 +268,7 @@ const isValidNetworkInterfaceErrorCode = (
 	e: number,
 ): e is keyof typeof netIfErrors => e in netIfErrors;
 
-export function netIfGetErrorMsg(i: NetworkInterface) {
+export function getNetifErrorMsg(i: NetworkInterface) {
 	if (i.error === 0) return;
 
 	for (const e in netIfErrors) {
@@ -295,7 +295,14 @@ export function netIfBuildMsg() {
 			tp: networkInterface.tp,
 			enabled: networkInterface.enabled,
 		};
-		const error = netIfGetErrorMsg(networkInterface);
+
+		const mockConfig = mockConfigs?.get(i);
+		if (mockConfig) {
+			m[i].enabled = mockConfig.enabled;
+			if (mockConfig.ip !== undefined) m[i].ip = mockConfig.ip;
+		}
+
+		const error = getNetifErrorMsg(networkInterface);
 		if (error) {
 			m[i].error = error;
 		}
@@ -322,7 +329,7 @@ export function handleNetif(
 
 	if (msg.enabled === true || msg.enabled === false) {
 		if (msg.enabled) {
-			const err = netIfGetErrorMsg(int);
+			const err = getNetifErrorMsg(int);
 			if (err) {
 				notificationSend(
 					conn,

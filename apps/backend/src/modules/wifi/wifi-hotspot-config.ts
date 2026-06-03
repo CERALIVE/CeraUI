@@ -35,7 +35,7 @@ import {
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import { getMacAddressForWifiInterface } from "./wifi-interfaces.ts";
-import { wifiBroadcastState, wifiUpdateSavedConns } from "./wifi.ts";
+import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
 
 // ─── hotspot config validation constants ──────────────────────────────────────
 
@@ -77,7 +77,7 @@ async function stopHotspotLocked(
 	if (!conn) return;
 
 	wifiInterface.hotspot.transition = "deactivating";
-	wifiBroadcastState();
+	broadcastWifiState();
 	syncWifiStateCache(macAddress, wifiInterface);
 
 	await nmConnSetFields(conn, { "connection.autoconnect": "no" });
@@ -89,7 +89,7 @@ async function stopHotspotLocked(
 
 	wifiInterface.hotspot.transition = undefined;
 	setNetifDupIpSuppression(wifiInterface.ifname, false);
-	wifiBroadcastState();
+	broadcastWifiState();
 	syncWifiStateCache(macAddress, wifiInterface);
 	wifiRescan();
 }
@@ -262,7 +262,7 @@ async function reconfigureHotspotLocked(
 
 	// Restart the connection with the updated config
 	wifiInterface.hotspot.transition = "activating";
-	wifiBroadcastState();
+	broadcastWifiState();
 
 	if (
 		isHotspotConfigComplete(wifiInterface) &&
@@ -279,7 +279,7 @@ async function reconfigureHotspotLocked(
 		await nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO);
 
 		wifiInterface.hotspot.transition = undefined;
-		wifiBroadcastState();
+		broadcastWifiState();
 		syncWifiStateCache(macAddress, wifiInterface);
 		return "activating";
 	}
@@ -287,7 +287,7 @@ async function reconfigureHotspotLocked(
 	// Successfully brought up the hotspot with the new settings, reload the conn.
 	wifiInterface.hotspot.transition = undefined;
 	await wifiUpdateSavedConns();
-	wifiBroadcastState();
+	broadcastWifiState();
 	syncWifiStateCache(macAddress, wifiInterface);
 	return "ok";
 }

@@ -26,7 +26,7 @@ import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
 import {
 	getNetworkInterfaces,
-	netIfGetErrorMsg,
+	getNetifErrorMsg,
 } from "./network-interfaces.ts";
 
 export const UPDATE_GW_INT = 2000;
@@ -131,7 +131,7 @@ async function updateGw() {
 			const networkInterface = netif[i];
 			if (!networkInterface) continue;
 
-			const error = netIfGetErrorMsg(networkInterface);
+			const error = getNetifErrorMsg(networkInterface);
 			if (error) {
 				logger.warn(
 					`Not probing internet connectivity via ${i} (${networkInterface.ip}): ${error}`,

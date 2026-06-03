@@ -43,7 +43,7 @@ import {
 	getMacAddressForWifiInterface,
 	wifiUpdateDevices,
 } from "./wifi-interfaces.ts";
-import { wifiBroadcastState, wifiUpdateSavedConns } from "./wifi.ts";
+import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
 
 /** Production defaults: real NetworkManager + broadcast + dup-IP suppression. */
 export const defaultHotspotDeps: HotspotActivationDeps = {
@@ -51,7 +51,7 @@ export const defaultHotspotDeps: HotspotActivationDeps = {
 	nmConnSetFields,
 	nmHotspot,
 	wifiUpdateSavedConns,
-	broadcastState: wifiBroadcastState,
+	broadcastState: broadcastWifiState,
 	setDupIpSuppression: setNetifDupIpSuppression,
 	pollHotspotActive: async (iface) => {
 		// Re-poll authoritative NM device state, then check whether the active
