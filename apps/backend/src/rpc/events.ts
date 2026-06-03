@@ -2,6 +2,12 @@
  * RPC Event System
  * Manages subscriptions and broadcasts for real-time data
  */
+import {
+	type CoalesceState,
+	getCoalesceWindowMs,
+	shouldCoalesce,
+	updateCoalesceState,
+} from "./coalesce.ts";
 import type { AppWebSocket } from "./types.ts";
 
 type EventHandler<T = unknown> = (data: T) => void;
@@ -112,6 +118,13 @@ export function advanceSeq(map: Map<string, number>, type: string): number {
 }
 
 /**
+ * Per-type last-value store for broadcast coalescing. Drops an exact duplicate
+ * emitted faster than its type's window; local windows = intervals, so the
+ * observable local cadence is unchanged. See `coalesce.ts`.
+ */
+const coalesceState: CoalesceState = new Map();
+
+/**
  * Broadcast a message to all authenticated clients
  */
 export function broadcast(
@@ -124,6 +137,12 @@ export function broadcast(
 	} = {},
 ): void {
 	const { except, authedOnly = true, minLastActive = 0 } = options;
+
+	const now = Date.now();
+	if (shouldCoalesce(coalesceState, type, data, now, getCoalesceWindowMs(type))) {
+		return;
+	}
+	updateCoalesceState(coalesceState, type, data, now);
 
 	const seq = advanceSeq(seqCounters, type);
 	const message = JSON.stringify({ [type]: data, seq });
