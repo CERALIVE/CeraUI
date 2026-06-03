@@ -17,10 +17,12 @@
 */
 
 /* Software updates */
-import { type ExecException, exec, spawn, spawnSync } from "node:child_process";
+import { type ExecException, exec, spawn } from "node:child_process";
 
 import { execPNR } from "../../helpers/exec.ts";
+import { invariant } from "../../helpers/invariant.ts";
 import { logger } from "../../helpers/logger.ts";
+import { run } from "../../helpers/run.ts";
 import { getms, oneHour, oneMinute } from "../../helpers/time.ts";
 
 import { queueUpdateGw } from "../network/gateways.ts";
@@ -91,6 +93,77 @@ const ceralivePackageList = [
 ];
 // Reboot instead of just restarting CeraUI if we've updated packages matching this list
 const rebootPackageList = ["l4t", "ceralive-linux-", "ceralive-network-config"];
+
+/**
+ * Allowed characters in a Debian package name as passed to apt-get on argv.
+ * Letters, digits and the Debian-name punctuation set `. + : ~ -`. Anything
+ * containing whitespace or a shell metacharacter (`;`, `&`, `$`, backtick, …)
+ * is rejected — even though argv is shell-free, this keeps a malformed/poisoned
+ * apt output from reaching the package manager as an argument.
+ */
+const APT_PACKAGE_NAME_RE = /^[A-Za-z0-9.+:~-]+$/;
+
+/**
+ * Split a whitespace-separated apt "kept back" package string into individual,
+ * charset-validated package names. Throws (via invariant) on the first name
+ * that does not match {@link APT_PACKAGE_NAME_RE}.
+ */
+export function parseHeldBackPackages(packages: string): string[] {
+	const names = packages
+		.trim()
+		.split(/\s+/)
+		.filter((n) => n.length > 0);
+	for (const name of names) {
+		invariant(
+			APT_PACKAGE_NAME_RE.test(name),
+			`invalid package name in held-back list: ${name}`,
+		);
+	}
+	return names;
+}
+
+/**
+ * Build the argv for the read-only `apt-get install --assume-no <pkgs>` probe.
+ * Each package becomes its own argv element — no shell, no `args.split(" ")`.
+ */
+export function buildAptInstallArgs(packages: string[]): string[] {
+	return ["install", "--assume-no", ...packages];
+}
+
+/**
+ * Build the argv for the actual upgrade run. Held-back packages (already
+ * charset-validated) are installed by name; otherwise a dist-upgrade is run.
+ * Returns one argv element per token — never a space-split string.
+ */
+export function buildAptUpgradeArgs(heldBackPackages?: string[]): string[] {
+	const base = [
+		"-y",
+		"-o",
+		"Dpkg::Options::=--force-confdef",
+		"-o",
+		"Dpkg::Options::=--force-confold",
+	];
+	if (heldBackPackages && heldBackPackages.length > 0) {
+		return [...base, "install", ...heldBackPackages];
+	}
+	return [...base, "dist-upgrade"];
+}
+
+/**
+ * Run `apt-get install --assume-no <pkgs>` argv-only and return its stdout.
+ *
+ * `--assume-no` makes apt-get answer "no" and abort with a non-zero exit code
+ * whenever it would make changes, so run() rejects — but the summary we need to
+ * parse is on the rejection's stdout. Recover it instead of propagating.
+ */
+async function aptAssumeNoInstall(packages: string[]): Promise<string> {
+	try {
+		return await run("apt-get", buildAptInstallArgs(packages));
+	} catch (err) {
+		const e = err as { stdout?: unknown };
+		return typeof e.stdout === "string" ? e.stdout : "";
+	}
+}
 
 function packageListIncludes(list: string, includes: Array<string>) {
 	for (const p of includes) {

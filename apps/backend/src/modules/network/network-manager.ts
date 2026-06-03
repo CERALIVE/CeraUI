@@ -18,8 +18,8 @@
 
 /* NetworkManager / nmcli helpers */
 
-import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import { argMatch, ID_RE, run } from "../../helpers/run.ts";
 import {
 	handleNmcliCommand,
 	shouldMockWifi,
@@ -67,8 +67,8 @@ export async function nmConnAdd(connection: NetworkManagerConnection) {
 			args.push(field);
 			args.push(String(value));
 		}
-		const result = await execFileP("nmcli", args);
-		const success = result.stdout.match(
+		const stdout = await run("nmcli", args);
+		const success = stdout.match(
 			/Connection '.+' \((.+)\) successfully added./,
 		);
 
@@ -96,14 +96,14 @@ export async function nmConnsGet(fields: string) {
 			}
 		}
 
-		const result = await execFileP("nmcli", [
+		const stdout = await run("nmcli", [
 			"--terse",
 			"--fields",
 			fields,
 			"connection",
 			"show",
 		]);
-		return result.stdout.toString().split("\n");
+		return stdout.split("\n");
 	} catch (err) {
 		if (err instanceof Error) {
 			logger.error(`nmConnsGet err: ${err.message}`);
@@ -136,7 +136,7 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 			}
 		}
 
-		const result = await execFileP("nmcli", [
+		const stdout = await run("nmcli", [
 			"--terse",
 			"--escape",
 			"no",
@@ -145,9 +145,9 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 			fields.join(","),
 			"connection",
 			"show",
-			uuid,
+			argMatch(ID_RE, uuid),
 		]);
-		return result.stdout.toString().split("\n") as {
+		return stdout.split("\n") as {
 			[K in keyof Tupel]: string;
 		};
 	} catch (err) {

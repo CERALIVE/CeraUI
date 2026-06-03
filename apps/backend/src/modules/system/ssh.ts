@@ -16,7 +16,6 @@
 */
 
 /* SSH control */
-import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 
@@ -24,6 +23,7 @@ import type WebSocket from "ws";
 
 import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import { runWithStdin } from "../../helpers/run.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import { notificationSend } from "../ui/notifications.ts";
@@ -51,53 +51,6 @@ export function setSshPasswordHash(hash: string | undefined) {
 
 export function getSshPasswordHash() {
 	return sshPasswordHash;
-}
-
-/**
- * LOCAL stdin shim — spawn `bin` with argv `args` (NO shell) and write the
- * secret `input` to the child's stdin. The secret is NEVER placed on argv, so
- * it cannot leak via the process table (`ps`) or a shell string.
- *
- * MIGRATION: Task 8 introduces the canonical `helpers/run.ts#runWithStdin`
- * (same spawn-stdin contract, plus an ALLOWLIST check). Once that lands and is
- * committed, delete this shim and switch resetSshPassword to:
- *   import { runWithStdin } from "../../helpers/run.ts";
- */
-function runWithStdinLocal(
-	bin: string,
-	args: string[],
-	input: string,
-): Promise<string> {
-	return new Promise<string>((resolve, reject) => {
-		const child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"] });
-
-		let stdout = "";
-		let stderr = "";
-
-		child.stdout?.on("data", (chunk) => {
-			stdout += chunk.toString();
-		});
-		child.stderr?.on("data", (chunk) => {
-			stderr += chunk.toString();
-		});
-
-		child.on("error", reject);
-		child.on("close", (code) => {
-			if (code === 0) {
-				resolve(stdout);
-			} else {
-				reject(
-					new Error(
-						`${bin} exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`,
-					),
-				);
-			}
-		});
-
-		// Secret goes to stdin ONLY — never to argv.
-		child.stdin?.write(input);
-		child.stdin?.end();
-	});
 }
 
 /** Escape an ID_RE-validated value for safe literal use inside a RegExp. */
@@ -268,7 +221,7 @@ export async function resetSshPassword(conn: WebSocket) {
 	try {
 		// `passwd` reads the new password twice from stdin. The secret is fed via
 		// stdin ONLY — never on argv, never through a shell string.
-		await runWithStdinLocal("passwd", [ssh_user], `${password}\n${password}\n`);
+		await runWithStdin("passwd", [ssh_user], `${password}\n${password}\n`);
 	} catch (err) {
 		logger.error(`Failed to reset the SSH password for ${ssh_user}: ${err}`);
 		notificationSend(

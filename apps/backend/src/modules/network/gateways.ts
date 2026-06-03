@@ -15,8 +15,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { execP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import { ID_RE, argMatch, run } from "../../helpers/run.ts";
 import { getms } from "../../helpers/time.ts";
 import {
 	notificationBroadcast,
@@ -38,11 +38,53 @@ let updateGwQueue = true;
 async function clear_default_gws() {
 	try {
 		while (true) {
-			await execP("ip route del default");
+			await run("ip", ["route", "del", "default"]);
 		}
 	} catch (_err) {
 		return;
 	}
+}
+
+/**
+ * Split a default-route line from `ip route show ... default` into a well-formed
+ * `ip route add` argv. The `gw` string (e.g. `"default via 192.168.1.1 dev eth0"`)
+ * is tokenized on whitespace into SEPARATE argv elements — security-critical: it
+ * is never passed back as one re-interpolated shell token.
+ */
+export function buildRouteAddArgv(gw: string): string[] {
+	const tokens = gw
+		.trim()
+		.split(/\s+/)
+		.filter((t) => t.length > 0);
+	return ["route", "add", ...tokens];
+}
+
+export type GwDeps = {
+	runner: typeof run;
+	clearDefaultGws: () => Promise<void>;
+};
+
+export async function setDefaultRoute(
+	goodIf: string,
+	deps: Partial<GwDeps> = {},
+): Promise<void> {
+	const runner = deps.runner ?? run;
+	const clearGws = deps.clearDefaultGws ?? clear_default_gws;
+
+	const gw = await runner("ip", [
+		"route",
+		"show",
+		"table",
+		argMatch(ID_RE, goodIf),
+		"default",
+	]);
+
+	await clearGws();
+
+	const argv = buildRouteAddArgv(gw);
+	await runner("ip", argv);
+
+	logger.info(`Set default route: ip ${argv.join(" ")}`);
 }
 
 export function queueUpdateGw() {
@@ -112,13 +154,7 @@ async function updateGw() {
 
 	if (goodIf) {
 		try {
-			const gw = (await execP(`ip route show table ${goodIf} default`)).stdout;
-			await clear_default_gws();
-
-			const route = `ip route add ${gw}`;
-			await execP(route);
-
-			logger.info(`Set default route: ${route}`);
+			await setDefaultRoute(goodIf);
 			notificationRemove("no_internet");
 
 			return true;
