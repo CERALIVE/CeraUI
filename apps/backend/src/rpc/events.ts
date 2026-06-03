@@ -94,6 +94,24 @@ export function getActiveClients(minLastActive: number = 0): AppWebSocket[] {
 }
 
 /**
+ * Per-TYPE monotonic sequence counters.
+ * Each broadcast type carries an independently increasing seq.
+ * NEVER a single global counter. Resets to 0 on process restart (fine).
+ */
+const seqCounters = new Map<string, number>();
+
+/**
+ * Advance and return the next sequence number for a given message type.
+ * Pure helper (operates on the passed map) — exported for unit testing.
+ * Increments the counter for `type` and returns the new value (1-based).
+ */
+export function advanceSeq(map: Map<string, number>, type: string): number {
+	const next = (map.get(type) ?? 0) + 1;
+	map.set(type, next);
+	return next;
+}
+
+/**
  * Broadcast a message to all authenticated clients
  */
 export function broadcast(
@@ -107,7 +125,8 @@ export function broadcast(
 ): void {
 	const { except, authedOnly = true, minLastActive = 0 } = options;
 
-	const message = JSON.stringify({ [type]: data });
+	const seq = advanceSeq(seqCounters, type);
+	const message = JSON.stringify({ [type]: data, seq });
 
 	for (const client of clients) {
 		if (client === except) continue;
