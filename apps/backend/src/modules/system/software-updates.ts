@@ -94,20 +94,10 @@ const ceralivePackageList = [
 // Reboot instead of just restarting CeraUI if we've updated packages matching this list
 const rebootPackageList = ["l4t", "ceralive-linux-", "ceralive-network-config"];
 
-/**
- * Allowed characters in a Debian package name as passed to apt-get on argv.
- * Letters, digits and the Debian-name punctuation set `. + : ~ -`. Anything
- * containing whitespace or a shell metacharacter (`;`, `&`, `$`, backtick, …)
- * is rejected — even though argv is shell-free, this keeps a malformed/poisoned
- * apt output from reaching the package manager as an argument.
- */
+// Debian package-name charset (letters, digits, and `. + : ~ -`); rejects
+// whitespace and shell metacharacters in poisoned/malformed apt output.
 const APT_PACKAGE_NAME_RE = /^[A-Za-z0-9.+:~-]+$/;
 
-/**
- * Split a whitespace-separated apt "kept back" package string into individual,
- * charset-validated package names. Throws (via invariant) on the first name
- * that does not match {@link APT_PACKAGE_NAME_RE}.
- */
 export function parseHeldBackPackages(packages: string): string[] {
 	const names = packages
 		.trim()
@@ -122,19 +112,10 @@ export function parseHeldBackPackages(packages: string): string[] {
 	return names;
 }
 
-/**
- * Build the argv for the read-only `apt-get install --assume-no <pkgs>` probe.
- * Each package becomes its own argv element — no shell, no `args.split(" ")`.
- */
 export function buildAptInstallArgs(packages: string[]): string[] {
 	return ["install", "--assume-no", ...packages];
 }
 
-/**
- * Build the argv for the actual upgrade run. Held-back packages (already
- * charset-validated) are installed by name; otherwise a dist-upgrade is run.
- * Returns one argv element per token — never a space-split string.
- */
 export function buildAptUpgradeArgs(heldBackPackages?: string[]): string[] {
 	const base = [
 		"-y",
@@ -149,17 +130,12 @@ export function buildAptUpgradeArgs(heldBackPackages?: string[]): string[] {
 	return [...base, "dist-upgrade"];
 }
 
-/**
- * Run `apt-get install --assume-no <pkgs>` argv-only and return its stdout.
- *
- * `--assume-no` makes apt-get answer "no" and abort with a non-zero exit code
- * whenever it would make changes, so run() rejects — but the summary we need to
- * parse is on the rejection's stdout. Recover it instead of propagating.
- */
 async function aptAssumeNoInstall(packages: string[]): Promise<string> {
 	try {
 		return await run("apt-get", buildAptInstallArgs(packages));
 	} catch (err) {
+		// --assume-no aborts non-zero whenever changes would be made, so run()
+		// rejects; the summary we parse is still on the rejection's stdout.
 		const e = err as { stdout?: unknown };
 		return typeof e.stdout === "string" ? e.stdout : "";
 	}
@@ -208,7 +184,7 @@ async function getSoftwareUpdateSize() {
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return "busy";
 
 	// First see if any packages can be upgraded by dist-upgrade
-	let upgrade = await execPNR("apt-get dist-upgrade --assume-no");
+	const upgrade = await execPNR("apt-get dist-upgrade --assume-no");
 	let res = parseAptUpgradeSummary(upgrade.stdout);
 
 	// Otherwise, check if any packages have been held back (e.g. by dependencies changing)
@@ -218,10 +194,10 @@ async function getSoftwareUpdateSize() {
 			"The following packages have been kept back:\n",
 		);
 		if (aptHeldBackPackages) {
-			upgrade = await execPNR(
-				`apt-get install --assume-no ${aptHeldBackPackages}`,
+			const stdout = await aptAssumeNoInstall(
+				parseHeldBackPackages(aptHeldBackPackages),
 			);
-			res = parseAptUpgradeSummary(upgrade.stdout);
+			res = parseAptUpgradeSummary(stdout);
 		}
 	} else {
 		// Reset aptHeldBackPackages if some upgrades became available via dist-upgrade
@@ -351,14 +327,10 @@ function doSoftwareUpdate() {
 	let aptLog = "";
 	let aptErr = "";
 
-	let args =
-		"-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold ";
-	if (aptHeldBackPackages) {
-		args += `install ${aptHeldBackPackages}`;
-	} else {
-		args += "dist-upgrade";
-	}
-	const aptUpgrade = spawn("apt-get", args.split(" "));
+	const heldBack = aptHeldBackPackages
+		? parseHeldBackPackages(aptHeldBackPackages)
+		: undefined;
+	const aptUpgrade = spawn("apt-get", buildAptUpgradeArgs(heldBack));
 
 	aptUpgrade.stdout.on("data", (buf) => {
 		let sendUpdate = false;
@@ -437,9 +409,9 @@ function doSoftwareUpdate() {
 
 		if (code === 0) {
 			if (rebootAfterUpgrade) {
-				spawnSync("reboot");
+				void run("reboot", []);
 			} else {
-				process.exit(0);
+				invariant(false, "software update complete; exiting to restart CeraUI");
 			}
 		}
 	});
