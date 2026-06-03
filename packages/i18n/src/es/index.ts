@@ -841,13 +841,12 @@ const es = {
 		pullToRefresh: "Desliza para actualizar",
 	},
 	connection: {
-		lost: "Connection lost — reconnecting…",
-		reconnecting: "Reconnecting…",
-		failed: "Not connecting — check device or network",
-		retry: "Retry",
-		rebooting: "Rebooting device…",
-		rebootingDescription: "The device is restarting. This page will reconnect automatically.",
-		sessionExpired: "Session expired. Please authenticate again.",
+		lost: "Conexión perdida — reconectando…",
+		failed: "Sin conexión — verifica el dispositivo o la red",
+		retry: "Reintentar",
+		rebooting: "Reiniciando el dispositivo…",
+		rebootingDescription: "El dispositivo se está reiniciando. Esta página se reconectará automáticamente.",
+		sessionExpired: "La sesión expiró. Por favor, autentícate de nuevo.",
 	},
 	offline: {
 		title: "Estás desconectado",
@@ -872,6 +871,11 @@ const es = {
 		kbps: "kbps",
 		mbps: "Mbps",
 		ms: "ms",
+	},
+	osActions: {
+		sshToggleFailed: "Failed to change the SSH server. Please try again.",
+		sshResetFailed: "Failed to reset the SSH password. Please try again.",
+		updateFailed: "Failed to start the software update. Please try again.",
 	},
 } satisfies Translation;
 

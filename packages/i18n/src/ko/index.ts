@@ -658,13 +658,12 @@ const ko = {
 		pullToRefresh: "당겨서 새로고침",
 	},
 	connection: {
-		lost: "Connection lost — reconnecting…",
-		reconnecting: "Reconnecting…",
-		failed: "Not connecting — check device or network",
-		retry: "Retry",
-		rebooting: "Rebooting device…",
-		rebootingDescription: "The device is restarting. This page will reconnect automatically.",
-		sessionExpired: "Session expired. Please authenticate again.",
+		lost: "연결이 끊어졌습니다. 다시 연결하는 중…",
+		failed: "연결되지 않습니다. 기기 또는 네트워크를 확인하세요.",
+		retry: "다시 시도",
+		rebooting: "기기를 재시작하는 중…",
+		rebootingDescription: "기기가 재시작 중입니다. 이 페이지는 자동으로 다시 연결됩니다.",
+		sessionExpired: "세션이 만료되었습니다. 다시 인증해 주세요.",
 	},
 	offline: {
 		title: "오프라인입니다",
@@ -840,6 +839,11 @@ const ko = {
 		kbps: "kbps",
 		mbps: "Mbps",
 		ms: "ms",
+	},
+	osActions: {
+		sshToggleFailed: "Failed to change the SSH server. Please try again.",
+		sshResetFailed: "Failed to reset the SSH password. Please try again.",
+		updateFailed: "Failed to start the software update. Please try again.",
 	},
 } satisfies Translation;
 

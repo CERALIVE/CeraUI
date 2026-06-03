@@ -667,13 +667,12 @@ const ja = {
 		pullToRefresh: "プルして更新",
 	},
 	connection: {
-		lost: "Connection lost — reconnecting…",
-		reconnecting: "Reconnecting…",
-		failed: "Not connecting — check device or network",
-		retry: "Retry",
-		rebooting: "Rebooting device…",
-		rebootingDescription: "The device is restarting. This page will reconnect automatically.",
-		sessionExpired: "Session expired. Please authenticate again.",
+		lost: "接続が切断されました。再接続中…",
+		failed: "接続できません。デバイスまたはネットワークを確認してください。",
+		retry: "再試行",
+		rebooting: "デバイスを再起動中…",
+		rebootingDescription: "デバイスは再起動中です。このページは自動的に再接続されます。",
+		sessionExpired: "セッションの有効期限が切れました。もう一度認証してください。",
 	},
 	offline: {
 		title: "オフラインです",
@@ -852,6 +851,11 @@ const ja = {
 		kbps: "kbps",
 		mbps: "Mbps",
 		ms: "ms",
+	},
+	osActions: {
+		sshToggleFailed: "Failed to change the SSH server. Please try again.",
+		sshResetFailed: "Failed to reset the SSH password. Please try again.",
+		updateFailed: "Failed to start the software update. Please try again.",
 	},
 } satisfies Translation;
 

@@ -803,13 +803,12 @@ const ptBR = {
 		pullToRefresh: "Puxe para atualizar",
 	},
 	connection: {
-		lost: "Connection lost — reconnecting…",
-		reconnecting: "Reconnecting…",
-		failed: "Not connecting — check device or network",
-		retry: "Retry",
-		rebooting: "Rebooting device…",
-		rebootingDescription: "The device is restarting. This page will reconnect automatically.",
-		sessionExpired: "Session expired. Please authenticate again.",
+		lost: "Conexão perdida — reconectando…",
+		failed: "Sem conexão — verifique o dispositivo ou a rede",
+		retry: "Tentar novamente",
+		rebooting: "Reiniciando o dispositivo…",
+		rebootingDescription: "O dispositivo está reiniciando. Esta página se reconectará automaticamente.",
+		sessionExpired: "Sessão expirada. Por favor, autentique-se novamente.",
 	},
 	offline: {
 		title: "Você está offline",
@@ -864,6 +863,11 @@ const ptBR = {
 		band_2_4ghz: "2.4 GHz",
 		band_5ghz: "5 GHz",
 		band_6ghz: "6 GHz",
+	},
+	osActions: {
+		sshToggleFailed: "Failed to change the SSH server. Please try again.",
+		sshResetFailed: "Failed to reset the SSH password. Please try again.",
+		updateFailed: "Failed to start the software update. Please try again.",
 	},
 } satisfies Translation;
 

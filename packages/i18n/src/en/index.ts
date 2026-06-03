@@ -825,9 +825,8 @@ const en = {
 		pullToRefresh: "Pull to refresh",
 	},
 	connection: {
-		lost: "Connection lost — reconnecting…",
-		reconnecting: "Reconnecting…",
-		failed: "Not connecting — check device or network",
+		lost: "Connection lost. Reconnecting…",
+		failed: "Not connecting. Check the device or network.",
 		retry: "Retry",
 		rebooting: "Rebooting device…",
 		rebootingDescription: "The device is restarting. This page will reconnect automatically.",
@@ -856,6 +855,11 @@ const en = {
 		kbps: "kbps",
 		mbps: "Mbps",
 		ms: "ms",
+	},
+	osActions: {
+		sshToggleFailed: "Failed to change the SSH server. Please try again.",
+		sshResetFailed: "Failed to reset the SSH password. Please try again.",
+		updateFailed: "Failed to start the software update. Please try again.",
 	},
 } satisfies BaseTranslation;
 

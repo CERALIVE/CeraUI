@@ -655,13 +655,12 @@ const hi = {
 		pullToRefresh: "रिफ्रेश करने के लिए खींचें",
 	},
 	connection: {
-		lost: "Connection lost — reconnecting…",
-		reconnecting: "Reconnecting…",
-		failed: "Not connecting — check device or network",
-		retry: "Retry",
-		rebooting: "Rebooting device…",
-		rebootingDescription: "The device is restarting. This page will reconnect automatically.",
-		sessionExpired: "Session expired. Please authenticate again.",
+		lost: "कनेक्शन टूट गया। पुनः कनेक्ट हो रहा है…",
+		failed: "कनेक्ट नहीं हो रहा। डिवाइस या नेटवर्क जांचें।",
+		retry: "पुनः प्रयास करें",
+		rebooting: "डिवाइस रीबूट हो रहा है…",
+		rebootingDescription: "डिवाइस पुनः आरंभ हो रहा है। यह पेज स्वचालित रूप से पुनः कनेक्ट होगा।",
+		sessionExpired: "सत्र समाप्त हो गया। कृपया पुनः प्रमाणित करें।",
 	},
 	offline: {
 		title: "आप ऑफ़लाइन हैं",
@@ -835,6 +834,11 @@ const hi = {
 		kbps: "kbps",
 		mbps: "Mbps",
 		ms: "ms",
+	},
+	osActions: {
+		sshToggleFailed: "Failed to change the SSH server. Please try again.",
+		sshResetFailed: "Failed to reset the SSH password. Please try again.",
+		updateFailed: "Failed to start the software update. Please try again.",
 	},
 } satisfies Translation;
 

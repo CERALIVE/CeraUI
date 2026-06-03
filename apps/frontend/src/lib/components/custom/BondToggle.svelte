@@ -6,6 +6,8 @@ import { Switch } from '$lib/components/ui/switch';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import { rpc } from '$lib/rpc/client';
+import { shouldReconcileOnReconnect } from '$lib/rpc/reconcile-inflight';
+import { getConnectionState } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
 
 type Props = {
@@ -104,6 +106,22 @@ async function toggle(next: boolean) {
 		pending = false;
 	}
 }
+
+// Reconnect-aware reconciliation (Task 29): if the WS drops mid-toggle, the
+// `rpc.network.configure` promise can be orphaned (socket replaced on
+// reconnect) and never run its `finally`, leaving `pending` stuck. Watch the
+// authoritative connection state and, on the reconnect edge (→ connected),
+// clear a stuck `pending` so `displayed` snaps back to the freshly-hydrated
+// `enabled` prop instead of a stale optimistic `target`.
+let prevConnection = $state(getConnectionState());
+$effect(() => {
+	const next = getConnectionState();
+	if (shouldReconcileOnReconnect(prevConnection, next, pending)) {
+		onRpcResolved(`enabled_${name}`);
+		pending = false;
+	}
+	prevConnection = next;
+});
 </script>
 
 <Tooltip.Provider>

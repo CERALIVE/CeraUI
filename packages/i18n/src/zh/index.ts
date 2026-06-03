@@ -624,13 +624,12 @@ const zh = {
 		pullToRefresh: "下拉刷新",
 	},
 	connection: {
-		lost: "Connection lost — reconnecting…",
-		reconnecting: "Reconnecting…",
-		failed: "Not connecting — check device or network",
-		retry: "Retry",
-		rebooting: "Rebooting device…",
-		rebootingDescription: "The device is restarting. This page will reconnect automatically.",
-		sessionExpired: "Session expired. Please authenticate again.",
+		lost: "连接已断开。正在重新连接…",
+		failed: "无法连接。请检查设备或网络。",
+		retry: "重试",
+		rebooting: "正在重启设备…",
+		rebootingDescription: "设备正在重新启动。此页面将自动重新连接。",
+		sessionExpired: "会话已过期。请重新进行身份验证。",
 	},
 	offline: {
 		title: "您已离线",
@@ -818,6 +817,11 @@ const zh = {
 		band_2_4ghz: "2.4 GHz",
 		band_5ghz: "5 GHz",
 		band_6ghz: "6 GHz",
+	},
+	osActions: {
+		sshToggleFailed: "Failed to change the SSH server. Please try again.",
+		sshResetFailed: "Failed to reset the SSH password. Please try again.",
+		updateFailed: "Failed to start the software update. Please try again.",
 	},
 } satisfies Translation;
 

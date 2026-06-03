@@ -40,6 +40,14 @@ vi.mock('svelte-sonner', () => ({
 	toast: { error: vi.fn(), success: vi.fn() },
 }));
 
+// BondToggle reads `getConnectionState` for reconnect-aware reconciliation
+// (Task 29). Stub it to a steady `connected` so the real subscriptions module —
+// which would touch the mocked-away `rpcClient` — never loads here. The
+// reconcile $effect is exercised separately in BondToggle.reconnect.test.ts.
+vi.mock('$lib/rpc/subscriptions.svelte', () => ({
+	getConnectionState: () => 'connected',
+}));
+
 import { toast } from 'svelte-sonner';
 
 const configure = vi.mocked(rpc.network.configure);

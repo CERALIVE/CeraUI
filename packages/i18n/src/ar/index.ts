@@ -798,13 +798,12 @@ const ar = {
 		pullToRefresh: "اسحب للتحديث",
 	},
 	connection: {
-		lost: "Connection lost — reconnecting…",
-		reconnecting: "Reconnecting…",
-		failed: "Not connecting — check device or network",
-		retry: "Retry",
-		rebooting: "Rebooting device…",
-		rebootingDescription: "The device is restarting. This page will reconnect automatically.",
-		sessionExpired: "Session expired. Please authenticate again.",
+		lost: "انقطع الاتصال. جارٍ إعادة الاتصال…",
+		failed: "تعذّر الاتصال. تحقق من الجهاز أو الشبكة.",
+		retry: "إعادة المحاولة",
+		rebooting: "جارٍ إعادة تشغيل الجهاز…",
+		rebootingDescription: "الجهاز قيد إعادة التشغيل. ستُعيد هذه الصفحة الاتصال تلقائياً.",
+		sessionExpired: "انتهت الجلسة. يرجى المصادقة مرة أخرى.",
 	},
 	offline: {
 		title: "أنت غير متصل",
@@ -838,6 +837,11 @@ const ar = {
 		kbps: "kbps",
 		mbps: "Mbps",
 		ms: "ms",
+	},
+	osActions: {
+		sshToggleFailed: "Failed to change the SSH server. Please try again.",
+		sshResetFailed: "Failed to reset the SSH password. Please try again.",
+		updateFailed: "Failed to start the software update. Please try again.",
 	},
 } satisfies Translation;
 
