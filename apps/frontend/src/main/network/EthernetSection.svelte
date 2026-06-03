@@ -43,6 +43,7 @@ const { wiredEntries, onConfigure }: Props = $props();
 					</div>
 					<Button
 						class="h-8 gap-1 px-2.5"
+						data-testid="open-netif-dialog"
 						size="sm"
 						variant="ghost"
 						onclick={() => onConfigure(name)}

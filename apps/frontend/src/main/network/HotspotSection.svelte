@@ -21,6 +21,7 @@ const { hotspotInterfaces, hotspotTarget, onSetup }: Props = $props();
 		<h2 class="text-sm font-semibold tracking-tight">{$LL.network.view.hotspot()}</h2>
 		<Button
 			class="ms-auto h-8 gap-1 px-2.5"
+			data-testid="open-hotspot-dialog"
 			size="sm"
 			variant="ghost"
 			disabled={!hotspotTarget}

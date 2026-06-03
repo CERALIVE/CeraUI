@@ -98,7 +98,7 @@ export const DIALOG_MAP: DialogEntry[] = [
 		destination: 'network',
 		triggerRole: 'button',
 		triggerName: /^configure$/i, // CellularSection Button; text $LL.network.view.configure() = "Configure"
-		triggerTestId: 'needs-data-testid',
+		triggerTestId: 'open-modem-config-dialog',
 		dialogName: /.+/, // title={modem.name} — DYNAMIC, the modem's reported name (mock has 3 modems)
 		notes:
 			'Network view, Cellular section. SPECIAL CASE: locate the FIRST modem dynamically (mock has 3 modems) — do NOT use a fixed name. REQUIRES data-testid: "Configure" is reused by the Ethernet section too, so /^Configure$/ is ambiguous across sections. dialogName is the modem.name (dynamic) — assert via getByRole("dialog") then read its accessible name, or match the first modem name. Testid added in T11.',
@@ -108,7 +108,7 @@ export const DIALOG_MAP: DialogEntry[] = [
 		destination: 'network',
 		triggerRole: 'button',
 		triggerName: /set up/i, // HotspotSection header Button; text $LL.network.view.setup() = "Set up"
-		triggerTestId: 'needs-data-testid',
+		triggerTestId: 'open-hotspot-dialog',
 		dialogName: 'Configure Hotspot', // title=$LL.hotspotConfigurator.dialog.configHotspot()
 		notes:
 			'Network view, Hotspot section header "Set up" button. The WifiSection also renders per-interface "Set up" buttons (openHotspotSetup), so /set up/i can be ambiguous — scope to the Hotspot section or use a data-testid. Testid added in T11.',
@@ -118,7 +118,7 @@ export const DIALOG_MAP: DialogEntry[] = [
 		destination: 'network',
 		triggerRole: 'button',
 		triggerName: /^connect$/i, // WifiSection header Button; text $LL.network.view.connect() = "Connect"
-		triggerTestId: 'needs-data-testid',
+		triggerTestId: 'open-wifi-selector-dialog',
 		dialogName: 'Available Networks', // title=$LL.wifiSelector.dialog.availableNetworks()
 		notes:
 			'Network view, WiFi section header "Connect" button (targets the primary WiFi station). SPECIAL CASE: after opening, wait for scan results via a web-first assertion before interacting. Trigger only renders when a primaryWifiDevice exists. Scope or testid recommended since per-network "Connect" buttons appear inside the dialog. Testid added in T11.',
@@ -128,7 +128,7 @@ export const DIALOG_MAP: DialogEntry[] = [
 		destination: 'network',
 		triggerRole: 'button',
 		triggerName: /^configure$/i, // EthernetSection Button; text $LL.network.view.configure() = "Configure"
-		triggerTestId: 'needs-data-testid',
+		triggerTestId: 'open-netif-dialog',
 		dialogName: 'Configure', // title=$LL.network.view.configure() = "Configure"
 		notes:
 			'Network view, Ethernet section, per-interface "Configure" button. REQUIRES data-testid: shares the "Configure" label with the Cellular section (same i18n key network.view.configure), and is per-interface dynamic. NOTE dialogName "Configure" collides with the trigger label. Testid added in T11.',
