@@ -81,6 +81,9 @@ export async function navigateTo(page: Page, destination: Destination): Promise<
 	const mobileTab = page.locator(`#mobile-nav-tab-${destination}`);
 
 	const tab = (await desktopTab.isVisible().catch(() => false)) ? desktopTab : mobileTab;
+	// Idempotent: when already on this destination the click is redundant and, on
+	// the mobile bottom dock, can be intercepted by transient toast overlays.
+	if ((await tab.getAttribute('aria-current').catch(() => null)) === 'page') return;
 	await tab.click();
 	await expect(tab).toHaveAttribute('aria-current', 'page');
 }

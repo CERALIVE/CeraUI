@@ -46,10 +46,19 @@ export async function closeDialog(page: Page, dialogName: string): Promise<void>
 	const dialog = page.getByRole('dialog', { name: dialogName });
 	await page.keyboard.press('Escape');
 
-	// Web-first fallback: if Escape did not dismiss within the auto-retry window,
-	// click the header close button (accessible name "Close") inside the dialog.
-	if (await dialog.isVisible().catch(() => false)) {
-		await dialog.getByRole('button', { name: 'Close' }).click();
+	// Wait for Escape to settle before falling back. Dialogs that autofocus a
+	// bits-ui Select trigger delay the first Escape, so an instantaneous
+	// isVisible() check would race the delayed close and click a detaching button.
+	const stillOpen = await dialog
+		.waitFor({ state: 'hidden', timeout: 1000 })
+		.then(() => false)
+		.catch(() => true);
+
+	if (stillOpen) {
+		const closeButton = dialog.getByRole('button', { name: 'Close' });
+		if (await closeButton.isVisible().catch(() => false)) {
+			await closeButton.click().catch(() => undefined);
+		}
 	}
 
 	// Auto-waits for the dialog to leave the accessibility tree / become hidden.

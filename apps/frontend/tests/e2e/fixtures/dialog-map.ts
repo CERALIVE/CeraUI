@@ -66,7 +66,7 @@ export const DIALOG_MAP: DialogEntry[] = [
 		destination: 'live',
 		triggerRole: 'button',
 		triggerName: /edit settings/i, // LiveView config row Button; text "Edit Settings"
-		triggerTestId: 'needs-data-testid',
+		triggerTestId: 'open-encoder-dialog',
 		dialogName: 'Encoder Settings', // title=$LL.settings.encoderSettings()
 		notes:
 			'Live view, Encoder row. REQUIRES data-testid: all 3 Live config rows share the "Edit Settings" label, and the label is `hidden sm:inline` (Pencil icon aria-hidden) so the trigger has NO accessible name on mobile (390px). Testid added in T10.',
@@ -76,7 +76,7 @@ export const DIALOG_MAP: DialogEntry[] = [
 		destination: 'live',
 		triggerRole: 'button',
 		triggerName: /edit settings/i, // LiveView config row Button; text "Edit Settings"
-		triggerTestId: 'needs-data-testid',
+		triggerTestId: 'open-audio-dialog',
 		dialogName: 'Audio Settings', // title=$LL.general.audioSettings()
 		notes:
 			'Live view, Audio row. REQUIRES data-testid (shared "Edit Settings" label, hidden on mobile). Dialog gates on pipeline/audio support — body may show a "select pipeline first" / "no audio support" state instead of controls. Testid added in T10.',
@@ -86,7 +86,7 @@ export const DIALOG_MAP: DialogEntry[] = [
 		destination: 'live',
 		triggerRole: 'button',
 		triggerName: /edit settings/i, // LiveView config row Button; text "Edit Settings"
-		triggerTestId: 'needs-data-testid',
+		triggerTestId: 'open-server-dialog',
 		dialogName: 'Receiver Server', // title=$LL.settings.receiverServer()
 		notes:
 			'Live view, Server row. REQUIRES data-testid (shared "Edit Settings" label, hidden on mobile). Also openable from the header server chip and the empty-state "Edit Settings" button — both unlabeled-on-mobile, so prefer the row testid. Testid added in T10.',
