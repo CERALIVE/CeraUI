@@ -1,9 +1,9 @@
 <script lang="ts">
 import { type Locales } from '@ceraui/i18n';
 import { LL } from '@ceraui/i18n/svelte';
-import { ChevronDown, Globe } from '@lucide/svelte';
+import { Globe } from '@lucide/svelte';
 
-import * as Collapsible from '$lib/components/ui/collapsible';
+import SystemCollapsibleSection from '$lib/components/dev-tools/system-collapsible-section.svelte';
 
 type LocaleInfo = {
 	currentLocale: string;
@@ -17,21 +17,11 @@ let {
 	localeInfo,
 	onLanguageClick,
 }: { localeInfo: LocaleInfo; onLanguageClick: (languageCode: Locales) => void } = $props();
-
-let localeInfoOpen = $state(false);
 </script>
 
 <!-- Locale & Language Information -->
-<Collapsible.Root bind:open={localeInfoOpen}>
-	<Collapsible.Trigger class="flex w-full cursor-pointer items-center justify-between text-sm font-medium hover:text-primary transition-colors">
-		<div class="flex items-center gap-2">
-			<Globe class="h-4 w-4" />
-			App Locale & Language
-		</div>
-		<ChevronDown class="h-4 w-4 text-muted-foreground transition-transform duration-200 {localeInfoOpen ? 'rotate-180' : ''}" />
-	</Collapsible.Trigger>
-	<Collapsible.Content>
-		<div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+<SystemCollapsibleSection icon={Globe} title="App Locale & Language">
+	<div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
 			<div class="bg-background/50 rounded-lg border p-3">
 				<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.currentLanguage()}</div>
 				<div class="flex items-center gap-2 text-sm font-medium">
@@ -75,6 +65,5 @@ let localeInfoOpen = $state(false);
 					{/each}
 				</div>
 			</div>
-		</div>
-	</Collapsible.Content>
-</Collapsible.Root>
+	</div>
+</SystemCollapsibleSection>

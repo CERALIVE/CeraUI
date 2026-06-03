@@ -1,8 +1,8 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { ChevronDown, Monitor } from '@lucide/svelte';
+import { Monitor } from '@lucide/svelte';
 
-import * as Collapsible from '$lib/components/ui/collapsible';
+import SystemCollapsibleSection from '$lib/components/dev-tools/system-collapsible-section.svelte';
 
 type NetworkConnection = {
 	effectiveType?: string;
@@ -30,21 +30,11 @@ type WindowInfo = {
 };
 
 let { systemInfo, windowInfo }: { systemInfo: SystemInfo; windowInfo: WindowInfo } = $props();
-
-let browserInfoOpen = $state(false);
 </script>
 
 <!-- Browser Information -->
-<Collapsible.Root bind:open={browserInfoOpen}>
-	<Collapsible.Trigger class="flex w-full cursor-pointer items-center justify-between text-sm font-medium hover:text-primary transition-colors">
-		<div class="flex items-center gap-2">
-			<Monitor class="h-4 w-4" />
-			{$LL.devtools.browserInformation()}
-		</div>
-		<ChevronDown class="h-4 w-4 text-muted-foreground transition-transform duration-200 {browserInfoOpen ? 'rotate-180' : ''}" />
-	</Collapsible.Trigger>
-	<Collapsible.Content>
-		<div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+<SystemCollapsibleSection icon={Monitor} title={$LL.devtools.browserInformation()}>
+	<div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
 			<div class="bg-background/50 rounded-lg border p-3">
 				<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browser()}</div>
 				<div class="font-mono text-sm font-medium">{systemInfo.browser} {systemInfo.version}</div>
@@ -83,6 +73,5 @@ let browserInfoOpen = $state(false);
 				<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.pixelRatio()}</div>
 				<div class="font-mono text-sm font-medium">{windowInfo.devicePixelRatio}x</div>
 			</div>
-		</div>
-	</Collapsible.Content>
-</Collapsible.Root>
+	</div>
+</SystemCollapsibleSection>
