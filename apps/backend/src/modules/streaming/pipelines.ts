@@ -178,6 +178,26 @@ export function gatePipelineOverrides(
 }
 
 /**
+ * Rejects overrides the selected pipeline cannot honor, so an invalid override
+ * never reaches ceracoder. Counterpart to gatePipelineOverrides, which instead
+ * silently drops unsupported overrides at spawn time.
+ */
+export function validatePipelineOverrides(
+	pipeline: Pick<
+		Pipeline,
+		"supportsResolutionOverride" | "supportsFramerateOverride"
+	>,
+	source: { resolution?: Resolution; framerate?: Framerate },
+): void {
+	if (source.resolution !== undefined && !pipeline.supportsResolutionOverride) {
+		throw new Error("Pipeline does not support resolution override");
+	}
+	if (source.framerate !== undefined && !pipeline.supportsFramerateOverride) {
+		throw new Error("Pipeline does not support framerate override");
+	}
+}
+
+/**
  * Generate a pipeline file with overrides
  */
 export function generatePipelineFile(

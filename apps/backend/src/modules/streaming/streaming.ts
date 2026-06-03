@@ -40,7 +40,7 @@ import { getAudioDevices } from "./audio.ts";
 import { AUDIO_CODECS, type Framerate, type Resolution } from "@ceralive/ceracoder";
 import { updateBcrptServerIps } from "./bcrpt.ts";
 import { validateBitrate } from "./encoder.ts";
-import { searchPipelines } from "./pipelines.ts";
+import { searchPipelines, validatePipelineOverrides } from "./pipelines.ts";
 import { resolveSrtla } from "./srtla.ts";
 
 export type StartMessage = { start: ConfigParameters };
@@ -132,6 +132,11 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 		throw new Error("Invalid pipeline");
 	const pipeline = searchPipelines(validated.pipeline);
 	if (!pipeline) throw new Error("Pipeline not found");
+
+	validatePipelineOverrides(pipeline, {
+		resolution: validated.resolution,
+		framerate: validated.framerate,
+	});
 
 	// audio codec
 	if (pipeline.supportsAudio) {
