@@ -9,6 +9,7 @@ import { toast } from "svelte-sonner";
 import type {
 	ConfigMessage,
 	ModemList,
+	NetifEntry,
 	NetifMessage,
 	NotificationsMessage,
 	PipelinesMessage,
@@ -230,9 +231,35 @@ function handleMessage(type: string, data: unknown): void {
 			break;
 		}
 
-		case "netif":
-			netifState = data as NetifMessage;
+		case "netif": {
+			// Lock-aware ingestion for the `enabled` field only.
+			// BondToggle registers per-interface locks as `enabled_${name}` via
+			// markPending/onRpcResolved. Guard only `enabled` — all other fields
+			// (tp, ip, error, mac) flow through live without registry interaction.
+			const incoming = data as NetifMessage;
+			const merged: NetifMessage = { ...netifState };
+			for (const [ifname, entry] of Object.entries(incoming)) {
+				if (!entry) continue;
+				const existing = merged[ifname] ?? ({} as NetifEntry);
+				// Live fields — always apply.
+				const live: Partial<NetifEntry> = {
+					tp: entry.tp,
+					...(entry.ip !== undefined ? { ip: entry.ip } : {}),
+					...(entry.error !== undefined ? { error: entry.error } : {}),
+					...(entry.mac !== undefined ? { mac: entry.mac } : {}),
+				};
+				// Guard the `enabled` field through the dirty-field registry.
+				const field = `enabled_${ifname}`;
+				let nextEnabled = existing.enabled ?? entry.enabled;
+				if (!shouldIgnoreEchoReactive(field, entry.enabled)) {
+					reconcileReactive(field, entry.enabled, undefined, { strict: true });
+					nextEnabled = entry.enabled;
+				}
+				merged[ifname] = { ...existing, ...live, enabled: nextEnabled };
+			}
+			netifState = merged;
 			break;
+		}
 
 		case "wifi":
 			// WiFi responses can have multiple formats

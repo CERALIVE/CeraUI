@@ -141,11 +141,17 @@ export function reconcile(
 	incomingValue: unknown,
 	rpcResolved: boolean,
 	_now: number,
+	options?: { strict?: boolean },
 ): ReconcileResult {
 	const lock = registry.locks[field];
 	if (!lock) return { apply: true, released: false };
 
 	if (rpcResolved) {
+		// Strict mode holds the lock until a matching echo arrives: a
+		// non-matching echo is neither applied nor released (TTL is the valve).
+		if (options?.strict && incomingValue !== lock.intendedValue) {
+			return { apply: false, released: false };
+		}
 		delete registry.locks[field];
 		return { apply: true, released: true };
 	}
@@ -202,7 +208,12 @@ interface DirtyStore {
 	markPending: (field: string, intendedValue: unknown, now?: number) => void;
 	markResolved: (field: string) => void;
 	shouldIgnoreEcho: (field: string, incomingValue: unknown) => boolean;
-	reconcile: (field: string, incomingValue: unknown, now?: number) => ReconcileResult;
+	reconcile: (
+		field: string,
+		incomingValue: unknown,
+		now?: number,
+		options?: { strict?: boolean },
+	) => ReconcileResult;
 	expire: (now?: number) => string[];
 	getRegistry: () => DirtyRegistry;
 	destroy: () => void;
@@ -236,8 +247,8 @@ function createDirtyStore(): DirtyStore {
 			markResolved(registry, field);
 		},
 		shouldIgnoreEcho: (field, incomingValue) => shouldIgnoreEcho(registry, field, incomingValue),
-		reconcile: (field, incomingValue, now = Date.now()) =>
-			reconcile(registry, field, incomingValue, registry.locks[field]?.rpcResolved ?? false, now),
+		reconcile: (field, incomingValue, now = Date.now(), options?) =>
+			reconcile(registry, field, incomingValue, registry.locks[field]?.rpcResolved ?? false, now, options),
 		expire: (now = Date.now()) => expire(registry, now),
 		getRegistry: () => registry,
 		destroy: () => {
@@ -283,8 +294,13 @@ export function shouldIgnoreEchoReactive(field: string, incomingValue: unknown):
 }
 
 /** Reconcile an incoming field value against the live registry. */
-export function reconcileReactive(field: string, incomingValue: unknown, now?: number): ReconcileResult {
-	return store().reconcile(field, incomingValue, now);
+export function reconcileReactive(
+	field: string,
+	incomingValue: unknown,
+	now?: number,
+	options?: { strict?: boolean },
+): ReconcileResult {
+	return store().reconcile(field, incomingValue, now, options);
 }
 
 /**

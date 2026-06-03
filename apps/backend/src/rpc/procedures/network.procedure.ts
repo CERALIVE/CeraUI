@@ -43,17 +43,10 @@ export const configureNetworkInterfaceProcedure = authedProcedure
 	.input(netifConfigInputSchema)
 	.output(netifConfigOutputSchema)
 	.handler(({ input, context }) => {
-		handleNetif(context.ws as unknown as import("ws").default, {
-			netif: {
-				name: input.name,
-				ip: input.ip ?? "",
-				enabled: input.enabled,
-			},
-		});
-
-		// handleNetif has no static-IP path; the next mock ifconfig refresh
-		// would clobber the operator's IP. Persist it so the provider replays
-		// it on re-read (undefined IP === DHCP).
+		// Order is load-bearing: persist the mock overlay BEFORE handleNetif,
+		// whose synchronous netif broadcasts overlay `enabled`/`ip` from it via
+		// netIfBuildMsg. Writing first makes those broadcasts carry the new
+		// value, not the stale prior one. (undefined IP === DHCP.)
 		if (shouldUseMocks()) {
 			setMockNetifConfig(input.name, {
 				enabled: input.enabled,
@@ -61,6 +54,14 @@ export const configureNetworkInterfaceProcedure = authedProcedure
 				ip: input.ip,
 			});
 		}
+
+		handleNetif(context.ws as unknown as import("ws").default, {
+			netif: {
+				name: input.name,
+				ip: input.ip ?? "",
+				enabled: input.enabled,
+			},
+		});
 
 		return { success: true };
 	});
