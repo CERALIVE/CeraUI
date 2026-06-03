@@ -2,6 +2,15 @@
 
 @config '../tailwind.config.ts';
 
+/* bits-ui v2 emits `data-state="checked|unchecked"` on Switch/Checkbox roots
+   and thumbs; it does NOT emit bare `data-checked`/`data-unchecked` attributes.
+   The shadcn primitives style on `data-checked:`/`data-unchecked:` utilities, so
+   without these mappings every `data-checked:`/`data-unchecked:` class is dead
+   (most visibly: the switch thumb never slides). Map the variants onto the real
+   attribute so the CLI-managed class strings work as written. */
+@custom-variant data-checked (&[data-state='checked']);
+@custom-variant data-unchecked (&[data-state='unchecked']);
+
 /*
   Border compatibility for Tailwind CSS v4
   (default border-color changed to currentColor)
@@ -116,9 +125,11 @@
 		--radius: 0.5rem;
 
 		/* Control state — Switch/Toggle/Checkbox OFF track.
-		   Mid-grey: clearly distinct from the near-white card AND
-		   from the ON (--primary darkened-lime) state. */
-		--switch-off: oklch(0.72 0.012 150);
+		   Mid-grey, pulled darker than the body neutrals so the OFF
+		   track reads as a solid filled pill against the near-white
+		   --card (oklch 0.96): ~0.30 lightness delta, unmistakably a
+		   switch and never the ON (--primary darkened-lime) state. */
+		--switch-off: oklch(0.66 0.022 150);
 		--switch-off-foreground: oklch(0.99 0.004 150);
 
 		--sidebar-background: oklch(0.94 0.005 150);
@@ -208,9 +219,10 @@
 		--ring: oklch(0.86 0.2 128);
 
 		/* Control state — Switch/Toggle/Checkbox OFF track.
-		   Raised "inactive" graphite (L>0.35): reads as off, never
-		   collapses into --card/--input, never the lit --primary lime. */
-		--switch-off: oklch(0.42 0.018 150);
+		   Raised "inactive" graphite (L 0.52, ~0.34 above the near-black
+		   --card at 0.18): the OFF track reads as a solid filled pill,
+		   never collapses into --card/--input, never the lit --primary lime. */
+		--switch-off: oklch(0.52 0.028 150);
 		--switch-off-foreground: oklch(0.96 0.008 150);
 
 		--sidebar-background: oklch(0.13 0.01 150);
@@ -704,21 +716,19 @@
 
 [data-slot='switch'][data-state='unchecked'] {
 	background-color: var(--switch-off);
-	border-color: color-mix(in oklab, var(--switch-off) 65%, var(--border));
+	border-color: color-mix(in oklab, var(--switch-off) 50%, var(--border));
 }
 
-/* Dark hero: the off-track border must stay legible against the
-   near-black --card (oklch 0.18). The base mix above only reaches
-   ~1.8:1 there, so lift toward --muted-foreground for >=3:1 contrast
-   and keep the inactive switch from dissolving into the surface.
-   Scoped to .dark (specificity 0,3,0) so it beats switch.svelte's
-   `border-transparent` utility (0,1,0) without touching the
-   CLI-managed primitive, and leaves light mode untouched. Width
-   stays 1px: the 18.4px track clears the 16px thumb by only ~0.4px,
-   so a 2px border would clip it; the brighter color carries the
-   contrast on its own. */
+/* Dark hero: the off-track border rides slightly brighter than the
+   0.52 track so the pill edge stays crisp against the near-black
+   --card (oklch 0.18). Scoped to .dark (specificity 0,3,0) so it
+   beats switch.svelte's `border-transparent` utility (0,1,0) without
+   touching the CLI-managed primitive, and leaves light mode untouched.
+   Width stays 1px: the 18.4px track clears the 16px thumb by only
+   ~0.4px, so a 2px border would clip it; the brighter color carries
+   the edge definition on its own. */
 .dark [data-slot='switch'][data-state='unchecked'] {
-	border-color: color-mix(in oklab, var(--switch-off) 45%, var(--muted-foreground));
+	border-color: color-mix(in oklab, var(--switch-off) 40%, var(--muted-foreground));
 }
 
 [data-slot='switch'][data-state='checked'] {
