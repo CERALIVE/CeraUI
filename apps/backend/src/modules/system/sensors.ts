@@ -20,8 +20,8 @@ import { spawn } from "node:child_process";
 /* Hardware monitoring */
 import fs from "node:fs";
 
-import { execPNR } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import { argMatch, run, SERVICE_RE } from "../../helpers/run.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
 import {
@@ -85,13 +85,23 @@ function updateSensorsRk3588() {
 }
 
 async function isServiceEnabled(service: string) {
-	const isEnabled = await execPNR(`systemctl is-enabled ${service}`);
-	return isEnabled.code === 0;
+	try {
+		await run("systemctl", ["is-enabled", argMatch(SERVICE_RE, service)]);
+		return true;
+	} catch (_err) {
+		// `systemctl is-enabled` exits non-zero when the unit is disabled/absent.
+		return false;
+	}
 }
 
 async function isServiceFailed(service: string) {
-	const isFailed = await execPNR(`systemctl is-failed ${service}`);
-	return isFailed.code === 0;
+	try {
+		await run("systemctl", ["is-failed", argMatch(SERVICE_RE, service)]);
+		return true;
+	} catch (_err) {
+		// `systemctl is-failed` exits non-zero when the unit is not in a failed state.
+		return false;
+	}
 }
 
 async function monitorBootconfig() {
