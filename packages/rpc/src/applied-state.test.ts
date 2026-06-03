@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'bun:test';
 import {
 	streamingSetConfigOutputSchema,
-	streamingStartOutputSchema,
+	streamingStartOutputSchemaExtended,
 	bitrateOutputSchema,
 	netifConfigOutputSchema,
 } from './schemas';
@@ -67,7 +67,7 @@ describe('Applied-state output schemas', () => {
 		});
 	});
 
-	describe('streamingStartOutputSchema', () => {
+	describe('streamingStartOutputSchemaExtended', () => {
 		it('should include applied config fields', () => {
 			const output = {
 				success: true,
@@ -78,7 +78,7 @@ describe('Applied-state output schemas', () => {
 					acodec: 'aac',
 				},
 			};
-			const result = streamingStartOutputSchema.safeParse(output);
+			const result = streamingStartOutputSchemaExtended.safeParse(output);
 			expect(result.success).toBe(true);
 			if (result.success) {
 				expect(result.data.applied).toBeDefined();
