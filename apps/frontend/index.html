@@ -238,10 +238,9 @@
 
     <!-- Debug script to detect JS loading failure -->
     <script>
-      // Show debug message if main JavaScript doesn't load
+      // Show debug message only if the bundle failed to mount (not just slow connection)
       setTimeout(function () {
-        const app = document.getElementById('app');
-        if (!app || app.children.length === 0) {
+        if (!window.__ceraAppMounted) {
           document.getElementById('js-failed').style.display = 'flex';
         }
       }, 5000);
