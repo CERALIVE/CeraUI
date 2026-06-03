@@ -54,28 +54,69 @@ function linkTypeLabel(link: LinkSignal): string {
 						class="text-xs font-bold tabular-nums"
 						style="color: {color};">L{link.linkIndex + 1}</span
 					>
-					<!-- mini signal bars (match HUD aesthetic) -->
-					<div class="flex items-end gap-0.5" aria-hidden="true">
-						{#each [1, 2, 3] as bar (bar)}
-							<span
-								class="w-1 rounded-[1px]"
-								style="height: {bar * 3 + 2}px; background-color: {bar <= bars
-									? color
-									: 'var(--muted)'};"
-							></span>
-						{/each}
-					</div>
+					<!-- mini signal bars (match HUD aesthetic) — wired links report no signal -->
+					{#if hasSignal}
+						<div data-live-value class="flex items-end gap-0.5" aria-hidden="true">
+							{#each [1, 2, 3] as bar (bar)}
+								<span
+									class="w-1 rounded-[1px]"
+									style="height: {bar * 3 + 2}px; background-color: {bar <= bars
+										? color
+										: 'var(--muted)'};"
+								></span>
+							{/each}
+						</div>
+					{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
+						<CardSim class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+					{:else if link.type === 'modem' && link.connectionState === 'scanning'}
+						<Radar
+							class="text-muted-foreground size-4 shrink-0 motion-safe:animate-pulse"
+							aria-hidden="true"
+						/>
+					{:else if link.type === 'modem' && link.connectionState === 'connected'}
+						<LoaderCircle
+							class="text-muted-foreground size-4 shrink-0 motion-safe:animate-spin"
+							aria-hidden="true"
+						/>
+					{/if}
 					<div class="flex min-w-0 flex-col leading-tight">
 						<span class="truncate text-xs font-medium">{link.label}</span>
 						<span class="text-muted-foreground text-[10px] uppercase tracking-wide"
 							>{linkTypeLabel(link)}</span
 						>
 					</div>
-					<span class="ms-1 font-mono text-xs tabular-nums" style="color: {color};">
-						{link.signal == null ? '—' : `${link.signal}%`}
-					</span>
+					{#if hasSignal}
+						<span data-live-value class="ms-1 font-mono text-xs tabular-nums" style="color: {color};">
+							{link.signal}%
+						</span>
+					{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
+						<span class="text-muted-foreground ms-1 text-[10px] uppercase tracking-wide">
+							{$LL.network.view.noSimLink()}
+						</span>
+					{:else if link.type === 'modem' && link.connectionState === 'scanning'}
+						<span class="text-muted-foreground ms-1 text-[10px] uppercase tracking-wide">
+							{$LL.network.modem.scanning()}
+						</span>
+					{/if}
+					<!-- per-link throughput (Task 18) -->
+					<SpeedBadge class="ms-1" kbps={link.throughputKbps} stale={link.isStale} />
 				</div>
 			{/each}
+		</div>
+
+		<!-- total bonded bandwidth (Task 18) — dims with its links when stale -->
+		<div
+			class={cn(
+				'mt-3 flex items-center justify-between border-t pt-3 text-xs transition-opacity',
+				totalStale && 'opacity-50',
+			)}
+		>
+			<span class="text-muted-foreground uppercase tracking-wide"
+				>{$LL.network.view.totalBandwidth()}</span
+			>
+			<span data-live-value class="text-foreground font-mono text-sm font-bold tabular-nums">
+				{formatThroughput(totalKbps)}
+			</span>
 		</div>
 	{/if}
 </section>
