@@ -154,7 +154,7 @@ function lastSeen(ts: number | null): string | null {
 								<span class="font-mono text-[0.7rem] leading-none" style:color={linkColor(link)}>
 									L{link.linkIndex + 1}
 								</span>
-								<span class="flex h-3.5 items-center justify-center">{@render miniBars(link)}</span>
+								<span class="flex h-3.5 w-[14px] shrink-0 items-center justify-center">{@render miniBars(link)}</span>
 							</span>
 						{/each}
 					{/if}
