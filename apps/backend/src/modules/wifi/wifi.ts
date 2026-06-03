@@ -52,16 +52,15 @@ import {
 	wifiScheduleScanUpdates,
 	wifiUpdateScanResult,
 } from "./wifi-connections.ts";
+import { wifiHotspotStart } from "./wifi-hotspot-activation.ts";
+import { wifiHotspotConfig, wifiHotspotStop } from "./wifi-hotspot-config.ts";
+import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
 import {
 	canHotspot,
-	handleHotspotConn,
 	isHotspot,
 	type WifiHotspot,
 	type WifiHotspotMessage,
-	wifiHotspotConfig,
-	wifiHotspotStart,
-	wifiHotspotStop,
-} from "./wifi-hotspot.ts";
+} from "./wifi-hotspot-types.ts";
 import {
 	type BaseWifiInterface,
 	getMacAddressForWifiInterface,

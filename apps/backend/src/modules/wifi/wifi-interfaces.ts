@@ -53,7 +53,7 @@ import {
 	isHotspot,
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
-} from "./wifi-hotspot.ts";
+} from "./wifi-hotspot-types.ts";
 
 export type SSID = string;
 export type WifiInterfaceId = number;
