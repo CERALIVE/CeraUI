@@ -75,12 +75,12 @@ describe("hasServerTarget", () => {
 
 describe("buildStartConfig — validation gates", () => {
 	it("refuses with missingPipeline when no pipeline is set", () => {
-		const result = buildStartConfig(makeConfig({ pipeline: undefined }), null);
+		const result = buildStartConfig(makeConfig({ pipeline: undefined }), null, makePipelines());
 		expect(result).toEqual({ ok: false, error: "missingPipeline" });
 	});
 
 	it("refuses with missingPipeline for undefined config", () => {
-		expect(buildStartConfig(undefined, null)).toEqual({
+		expect(buildStartConfig(undefined, null, makePipelines())).toEqual({
 			ok: false,
 			error: "missingPipeline",
 		});
@@ -90,6 +90,7 @@ describe("buildStartConfig — validation gates", () => {
 		const result = buildStartConfig(
 			makeConfig({ srtla_addr: undefined, relay_server: undefined }),
 			null,
+			makePipelines(),
 		);
 		expect(result).toEqual({ ok: false, error: "missingServer" });
 	});
@@ -98,25 +99,40 @@ describe("buildStartConfig — validation gates", () => {
 		const result = buildStartConfig(
 			makeConfig({ pipeline: undefined, srtla_addr: undefined }),
 			null,
+			makePipelines(),
 		);
 		expect(result).toEqual({ ok: false, error: "missingPipeline" });
 	});
 });
 
-describe("buildStartConfig — pipeline recognition gate", () => {
-	it("still returns ok for a recognized pipeline + server when pipelines is supplied", () => {
+describe("buildStartConfig — mandatory pipeline recognition gate (Task 28)", () => {
+	it("returns ok for a recognized pipeline + server", () => {
 		const result = buildStartConfig(makeConfig(), null, makePipelines());
 		expect(result.ok).toBe(true);
 		if (result.ok) expect(result.config.pipeline).toBe("hdmi");
 	});
 
-	it("refuses with unknownPipeline when the pipeline is absent from supplied pipelines", () => {
+	it("refuses with unknownPipeline when the pipeline is absent from the registry", () => {
 		const result = buildStartConfig(
 			makeConfig({ pipeline: "aa5813aa21487de31570a888272bace773d556e0" }),
 			null,
 			makePipelines(),
 		);
 		expect(result).toEqual({ ok: false, error: "unknownPipeline" });
+	});
+
+	it("refuses with unknownPipeline when the registry is not yet hydrated (undefined)", () => {
+		const result = buildStartConfig(makeConfig(), null, undefined);
+		expect(result).toEqual({ ok: false, error: "unknownPipeline" });
+	});
+
+	it("rejects an unknown pipeline BEFORE any rpc.streaming.start dispatch", async () => {
+		startMock.mockClear();
+		const { startStreaming } = await import("$lib/helpers/SystemHelper");
+		const result = buildStartConfig(makeConfig({ pipeline: "stale-id" }), null, makePipelines());
+		expect(result).toEqual({ ok: false, error: "unknownPipeline" });
+		if (result.ok) await startStreaming(result.config);
+		expect(startMock).not.toHaveBeenCalled();
 	});
 
 	it("checks pipeline presence before recognition", () => {
@@ -133,10 +149,11 @@ describe("buildStartConfig — pipeline recognition gate", () => {
 		expect(result).toEqual({ ok: false, error: "missingServer" });
 	});
 
-	it("behaves exactly as today when pipelines is omitted (backward compatible)", () => {
-		const result = buildStartConfig(makeConfig({ pipeline: "stale-id" }), null);
-		expect(result.ok).toBe(true);
-		if (result.ok) expect(result.config.pipeline).toBe("stale-id");
+	it("requires the pipelines registry argument (compile-time)", () => {
+		// @ts-expect-error — the registry argument is mandatory; omitting it must
+		// not type-check (the recognition gate can never be skipped).
+		const result = buildStartConfig(makeConfig(), null);
+		expect(result).toEqual({ ok: false, error: "unknownPipeline" });
 	});
 });
 
@@ -169,7 +186,7 @@ describe("canStartStream", () => {
 describe("buildStartConfig — assembly", () => {
 	it("returns the saved config when valid and no audio override", () => {
 		const config = makeConfig();
-		const result = buildStartConfig(config, null);
+		const result = buildStartConfig(config, null, makePipelines());
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.config.pipeline).toBe("hdmi");
@@ -185,17 +202,22 @@ describe("buildStartConfig — assembly", () => {
 		const result = buildStartConfig(
 			makeConfig({ srtla_addr: undefined, relay_server: "relay-eu" }),
 			null,
+			makePipelines(),
 		);
 		expect(result.ok).toBe(true);
 		if (result.ok) expect(result.config.relay_server).toBe("relay-eu");
 	});
 
 	it("folds the audio override over the saved config", () => {
-		const result = buildStartConfig(makeConfig(), {
-			asrc: "USB Mic",
-			acodec: "opus",
-			delay: 250,
-		});
+		const result = buildStartConfig(
+			makeConfig(),
+			{
+				asrc: "USB Mic",
+				acodec: "opus",
+				delay: 250,
+			},
+			makePipelines(),
+		);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.config.asrc).toBe("USB Mic");
@@ -207,7 +229,7 @@ describe("buildStartConfig — assembly", () => {
 	});
 
 	it("keeps saved audio when the override omits a field", () => {
-		const result = buildStartConfig(makeConfig(), { delay: 100 });
+		const result = buildStartConfig(makeConfig(), { delay: 100 }, makePipelines());
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.config.delay).toBe(100);

@@ -48,6 +48,7 @@ import { AVAILABLE_FRAMERATES, AVAILABLE_RESOLUTIONS, type Pipeline } from '@cer
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
+import { getOverrideGate } from '$lib/streaming/encoderConfig';
 import { normalizeValue, updateMaxBitrate } from '$lib/components/streaming/StreamingUtils';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
@@ -127,6 +128,11 @@ $effect(() => {
 const selectedPipeline = $derived<Pipeline | undefined>(
 	localSource && pipelines ? pipelines[localSource] : undefined,
 );
+
+// Capability gate (single source of truth, shared with buildEncoderSetConfig):
+// a pipeline that does not advertise an override has its control disabled +
+// marked invalid so the operator can never push an unsupported override.
+const overrideGate = $derived(getOverrideGate(selectedPipeline));
 
 // Slider can only address the practical band; the number input owns out-of-band
 // (but still valid) values, so the slider is rendered controlled + clamped.
@@ -233,21 +239,30 @@ function handleSave() {
 			{/if}
 		</div>
 
-		<!-- Resolution (pipeline-gated) -->
-		{#if selectedPipeline?.supportsResolutionOverride}
+		<!-- Resolution (pipeline capability-gated: disabled + invalid when unsupported) -->
+		{#if localSource}
 			<div class="space-y-2">
 				<Label class="text-sm font-medium" for="encoder-resolution">
 					{$LL.settings.encodingResolution()}
 				</Label>
 				<Select.Root
+					disabled={!overrideGate.resolution}
 					onValueChange={(value) => (localResolution = value as Resolution)}
 					type="single"
 					value={localResolution}
 				>
-					<Select.Trigger id="encoder-resolution" class="w-full">
-						{localResolution
-							? getResolutionLabel(localResolution)
-							: $LL.settings.selectEncodingResolution()}
+					<Select.Trigger
+						id="encoder-resolution"
+						aria-invalid={!overrideGate.resolution}
+						class="w-full"
+					>
+						{#if overrideGate.resolution}
+							{localResolution
+								? getResolutionLabel(localResolution)
+								: $LL.settings.selectEncodingResolution()}
+						{:else}
+							{$LL.general.notAvailable()}
+						{/if}
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
@@ -260,19 +275,28 @@ function handleSave() {
 			</div>
 		{/if}
 
-		<!-- Framerate (pipeline-gated) -->
-		{#if selectedPipeline?.supportsFramerateOverride}
+		<!-- Framerate (pipeline capability-gated: disabled + invalid when unsupported) -->
+		{#if localSource}
 			<div class="space-y-2">
 				<Label class="text-sm font-medium" for="encoder-framerate">
 					{$LL.settings.framerate()}
 				</Label>
 				<Select.Root
+					disabled={!overrideGate.framerate}
 					onValueChange={(value) => (localFramerate = parseFloat(value) as Framerate)}
 					type="single"
 					value={String(localFramerate)}
 				>
-					<Select.Trigger id="encoder-framerate" class="w-full">
-						{localFramerate ? getFramerateLabel(localFramerate) : $LL.settings.selectFramerate()}
+					<Select.Trigger
+						id="encoder-framerate"
+						aria-invalid={!overrideGate.framerate}
+						class="w-full"
+					>
+						{#if overrideGate.framerate}
+							{localFramerate ? getFramerateLabel(localFramerate) : $LL.settings.selectFramerate()}
+						{:else}
+							{$LL.general.notAvailable()}
+						{/if}
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>

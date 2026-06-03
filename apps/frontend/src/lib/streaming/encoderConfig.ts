@@ -25,6 +25,33 @@ import type { Pipeline, StreamingConfigInput } from "@ceraui/rpc/schemas";
 import type { EncoderConfig } from "$main/dialogs/EncoderDialog.svelte";
 
 /**
+ * Per-field capability verdict for the two pipeline-gated override fields.
+ * `true` means the selected pipeline advertises the capability and the FE may
+ * let the operator set it; `false` means the field must be marked
+ * disabled/invalid and dropped before it reaches the encoder.
+ */
+export type OverrideGate = {
+	resolution: boolean;
+	framerate: boolean;
+};
+
+/**
+ * SINGLE SOURCE OF TRUTH for override capability gating (Task 28).
+ *
+ * Both the EncoderDialog UI (to disable/mark-invalid the resolution/framerate
+ * controls) and {@link buildEncoderSetConfig} (to drop unsupported overrides)
+ * derive their verdict from this one predicate, so the visual gate and the
+ * payload gate can never drift apart. A missing/unknown pipeline gates both
+ * fields off — an unrecognised source supports no overrides.
+ */
+export function getOverrideGate(pipeline: Pipeline | undefined): OverrideGate {
+	return {
+		resolution: Boolean(pipeline?.supportsResolutionOverride),
+		framerate: Boolean(pipeline?.supportsFramerateOverride),
+	};
+}
+
+/**
  * Assemble the `setConfig` payload from an encoder draft and the selected
  * pipeline's capability metadata. Undefined draft fields are omitted so the
  * backend only persists what the operator actually set.
@@ -42,10 +69,11 @@ export function buildEncoderSetConfig(
 	if (draft.bitrate !== undefined) input.max_br = draft.bitrate;
 
 	// Capability-gated overrides: only forward when the pipeline supports them.
-	if (pipeline?.supportsResolutionOverride && draft.resolution !== undefined) {
+	const gate = getOverrideGate(pipeline);
+	if (gate.resolution && draft.resolution !== undefined) {
 		input.resolution = draft.resolution;
 	}
-	if (pipeline?.supportsFramerateOverride && draft.framerate !== undefined) {
+	if (gate.framerate && draft.framerate !== undefined) {
 		input.framerate = draft.framerate;
 	}
 

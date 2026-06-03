@@ -50,11 +50,14 @@ export function hasServerTarget(config: ConfigMessage | undefined): boolean {
  * Validation gates (refuse, never start on a half-config):
  *   - `pipeline` must be set  → `missingPipeline`
  *   - a server target must be set → `missingServer`
- *   - when `pipelines` is supplied, `pipeline` must be a known registry key
+ *   - `pipeline` must be a known key in the supplied `pipelines` registry
  *     → `unknownPipeline` (a stale/legacy id must never reach the backend)
  *
- * `pipelines` is optional and backward compatible: omitting it skips the
- * recognition gate, preserving the original presence-only behavior.
+ * `pipelines` is REQUIRED (Task 28): the registry argument must always be passed
+ * so the recognition gate can never be skipped. An absent registry (the snapshot
+ * has not hydrated yet) is itself a refusal — `unknownPipeline` — because a start
+ * cannot be validated without it. A stale/legacy id is therefore always rejected
+ * BEFORE any RPC dispatch, never silently forwarded to the backend.
  *
  * Audio fields prefer the working override, falling back to the saved config —
  * matching LiveView's `effectiveAudio*` deriveds.
@@ -62,7 +65,7 @@ export function hasServerTarget(config: ConfigMessage | undefined): boolean {
 export function buildStartConfig(
 	config: ConfigMessage | undefined,
 	audioOverride: AudioOverride,
-	pipelines?: Pipelines,
+	pipelines: Pipelines | undefined,
 ): StartConfigResult {
 	const pipeline = config?.pipeline;
 	if (!pipeline) {
@@ -73,7 +76,9 @@ export function buildStartConfig(
 		return { ok: false, error: "missingServer" };
 	}
 
-	if (pipelines && !(pipeline in pipelines)) {
+	// Recognition gate is mandatory: an unhydrated registry (undefined) or a
+	// pipeline id absent from it both refuse with `unknownPipeline`.
+	if (!pipelines || !(pipeline in pipelines)) {
 		return { ok: false, error: "unknownPipeline" };
 	}
 
