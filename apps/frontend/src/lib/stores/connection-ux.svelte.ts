@@ -34,9 +34,12 @@ import { rpcClient } from "$lib/rpc/client";
 // ============================================
 
 /**
- * Reconnect attempts after which we stop promising "reconnecting…" and surface
- * a hard failure. Mirrors `RPCClient.maxReconnectAttempts` (client.ts) so the
- * banner flips to "failed" exactly when the transport gives up retrying.
+ * UI-ONLY threshold: after this many failed reconnects we stop promising
+ * "reconnecting…" and surface a hard-failure banner with a manual "retry now"
+ * affordance. This is purely cosmetic — the transport (client.ts) retries
+ * FOREVER with jittered capped backoff and never stops, so this threshold only
+ * governs when the banner switches its messaging, not whether reconnection
+ * continues. Failed-UI state and transport state are independent.
  */
 export const MAX_RECONNECT_ATTEMPTS = 5;
 

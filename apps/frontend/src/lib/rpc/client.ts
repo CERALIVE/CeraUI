@@ -32,6 +32,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import { ENV_VARIABLES } from "../env";
+import { nextBackoffDelay } from "./backoff";
 
 /**
  * WebSocket connection state
@@ -82,8 +83,10 @@ class RPCClient {
 	private connectionHandlers = new Set<ConnectionHandler>();
 	private requestIdCounter = 0;
 	private reconnectAttempts = 0;
-	private maxReconnectAttempts = 5;
+	/** Base reconnect delay (ms) — first retry waits ~this, jittered. */
 	private reconnectDelay = 1000;
+	/** Hard ceiling (ms ≈ 30s) for the exponential term before jitter. */
+	private reconnectCap = 30000;
 	private keepAliveInterval: ReturnType<typeof setInterval> | null = null;
 
 	/**
@@ -162,21 +165,23 @@ class RPCClient {
 	}
 
 	/**
-	 * Handle reconnection
+	 * Handle reconnection.
+	 *
+	 * The transport retries FOREVER with jittered, capped exponential backoff —
+	 * it never permanently gives up, so a device reboot or transient network blip
+	 * always self-heals once connectivity returns. The "failed" banner is purely a
+	 * UI affordance (connection-ux.svelte.ts) and does NOT halt this loop.
 	 */
 	private handleReconnect(): void {
-		if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-			console.error("Max reconnection attempts reached");
-			return;
-		}
-
+		const delay = nextBackoffDelay(
+			this.reconnectAttempts,
+			this.reconnectDelay,
+			this.reconnectCap,
+		);
 		this.reconnectAttempts++;
-		const delay = this.reconnectDelay * 2 ** (this.reconnectAttempts - 1);
 
 		setTimeout(() => {
-			console.log(
-				`Reconnecting... attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`,
-			);
+			console.log(`Reconnecting... attempt ${this.reconnectAttempts}`);
 			this.connect();
 		}, delay);
 	}
