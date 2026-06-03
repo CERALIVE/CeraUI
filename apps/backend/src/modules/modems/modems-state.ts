@@ -17,7 +17,7 @@
 
 import { getGsmOperatorName } from "./gsm-operators-cache.ts";
 import type { ModemId, NetworkScanResult, NetworkType } from "./mmcli.ts";
-import type { ModemStatus } from "./modem-update-loop.ts";
+import type { ModemStatus } from "./modem-registration.ts";
 
 export type ModemConfig = {
 	conn?: string; // e.g. nmUuid
