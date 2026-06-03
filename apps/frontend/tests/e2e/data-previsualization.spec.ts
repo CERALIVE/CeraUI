@@ -1,6 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures/index.js';
 
-import { ensureAuthenticated, evidencePath, navigateTo } from './helpers';
+import { ensureAuthenticated, navigateTo } from './helpers/index.js';
 
 /**
  * T22 — Data-previsualization integration sweep (agent QA, not CI-gated).
@@ -20,14 +20,12 @@ import { ensureAuthenticated, evidencePath, navigateTo } from './helpers';
  *
  * SCENARIO: targets whatever MOCK_SCENARIO the running backend serves. The
  * default dev stack is `multi-modem-wifi` (3 modems). Drive a single-modem
- * sweep by pointing E2E_PORT at a single-modem stack and SWEEP_LABEL=singlemodem.
+ * sweep by pointing E2E_PORT at a single-modem stack.
  *
  * PORT/AUTH: reuse a running stack via E2E_PORT (baseURL) + E2E_PASSWORD. The WS
  * port differs per stack (3002 default backend, or 8090/8091 for isolated
  * stacks) — the freeze proxy below matches all three.
  */
-
-const SWEEP_LABEL = process.env.SWEEP_LABEL ?? 'multimodem';
 
 test.describe('data-previsualization sweep', () => {
 	test('signals + HUD telemetry + labeled toggle + universal staleness', async ({
@@ -106,11 +104,10 @@ test.describe('data-previsualization sweep', () => {
 		await modemDialog.getByRole('button', { name: 'Close' }).first().click();
 		await expect(modemDialog).toBeHidden();
 
-		// Evidence: healthy, fully-previsualized Network view.
-		await page.screenshot({
-			path: evidencePath(`task-22-sweep-${SWEEP_LABEL}.png`),
-			fullPage: true,
-		});
+		// Healthy, fully-previsualized Network view (pixel evidence: visual/).
+		await expect(
+			page.getByRole('heading', { name: 'Cellular', level: 2 }),
+		).toBeVisible();
 
 		// ── 4. Universal staleness: freeze frames → live values dim ──
 		await expect(temp).not.toHaveClass(/opacity-50/);
