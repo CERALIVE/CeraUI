@@ -71,9 +71,13 @@ export type ModemStatus = {
 
 // Bounded retry for transient mmcli failures (mock mode never retries — the
 // mock provider always returns data on the first call).
+/** Retry configuration for transient mmcli failures. */
 const MMCLI_RETRY = {
+	/** Maximum number of retry attempts for mmcli commands. */
 	maxAttempts: 3,
+	/** Initial backoff delay (ms) for mmcli retry. */
 	baseDelayMs: 200,
+	/** Maximum backoff delay (ms) for mmcli retry. */
 	maxDelayMs: 2000,
 } as const;
 

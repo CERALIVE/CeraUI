@@ -37,6 +37,17 @@ import {
 import { getMacAddressForWifiInterface } from "./wifi-interfaces.ts";
 import { wifiBroadcastState, wifiUpdateSavedConns } from "./wifi.ts";
 
+// ─── hotspot config validation constants ──────────────────────────────────────
+
+/** Minimum length for hotspot SSID name. */
+const HOTSPOT_NAME_MIN_LENGTH = 1;
+/** Maximum length for hotspot SSID name. */
+const HOTSPOT_NAME_MAX_LENGTH = 32;
+/** Minimum length for hotspot password. */
+const HOTSPOT_PASSWORD_MIN_LENGTH = 8;
+/** Maximum length for hotspot password. */
+const HOTSPOT_PASSWORD_MAX_LENGTH = 64;
+
 // ─── stop ────────────────────────────────────────────────────────────────────
 
 export async function wifiHotspotStop(
@@ -136,8 +147,8 @@ export async function wifiHotspotConfig(
 	if (
 		msg.name === undefined ||
 		typeof msg.name !== "string" ||
-		msg.name.length < 1 ||
-		msg.name.length > 32
+		msg.name.length < HOTSPOT_NAME_MIN_LENGTH ||
+		msg.name.length > HOTSPOT_NAME_MAX_LENGTH
 	) {
 		conn.send(
 			buildMsg(
@@ -152,8 +163,8 @@ export async function wifiHotspotConfig(
 	if (
 		msg.password === undefined ||
 		typeof msg.password !== "string" ||
-		msg.password.length < 8 ||
-		msg.password.length > 64
+		msg.password.length < HOTSPOT_PASSWORD_MIN_LENGTH ||
+		msg.password.length > HOTSPOT_PASSWORD_MAX_LENGTH
 	) {
 		conn.send(
 			buildMsg(

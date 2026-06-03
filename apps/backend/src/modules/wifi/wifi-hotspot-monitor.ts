@@ -32,8 +32,11 @@ import type { WifiInterface } from "./wifi-interfaces.ts";
 // Re-polls authoritative NM state until the hotspot connection is reported
 // active, capped so a hotspot that never comes up rolls the transition back
 // instead of hanging in `activating` forever.
+/** Maximum number of retry attempts for hotspot activation confirmation poll. */
 const HOTSPOT_CONFIRM_ATTEMPTS = 8;
+/** Initial backoff delay (ms) for hotspot confirmation retry. */
 const HOTSPOT_CONFIRM_BASE_MS = 500;
+/** Maximum backoff delay (ms) for hotspot confirmation retry. */
 const HOTSPOT_CONFIRM_MAX_MS = 2000;
 
 // ─── cache sync ──────────────────────────────────────────────────────────────

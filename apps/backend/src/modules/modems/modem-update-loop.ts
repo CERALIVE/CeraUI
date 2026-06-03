@@ -76,6 +76,7 @@ import {
 
 // Retained status poll cadence. Reduced from the old 10s self-recursive loop:
 // signal/status only, no presence detection, no gsm reset.
+/** Interval (ms) for retained modem status poll (signal/status refresh only). */
 const STATUS_POLL_INTERVAL_MS = 30_000;
 
 /**
