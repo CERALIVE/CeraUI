@@ -31,5 +31,6 @@ export type NetifConfigInput = z.infer<typeof netifConfigInputSchema>;
 // Network interface config output schema
 export const netifConfigOutputSchema = z.object({
 	success: z.boolean(),
+	applied: netifConfigInputSchema.partial().optional(),
 });
 export type NetifConfigOutput = z.infer<typeof netifConfigOutputSchema>;

@@ -14,14 +14,16 @@ import {
 	setMockHardwareOutputSchema,
 	streamingConfigInputSchema,
 	streamingStartOutputSchema,
+	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
+	streamingSetConfigOutputSchema,
 } from '../schemas';
 
 export const streamingContract = oc.router({
 	/**
 	 * Start streaming with configuration
 	 */
-	start: oc.input(streamingConfigInputSchema).output(streamingStartOutputSchema),
+	start: oc.input(streamingConfigInputSchema).output(streamingStartOutputSchemaExtended),
 
 	/**
 	 * Stop streaming
@@ -51,7 +53,7 @@ export const streamingContract = oc.router({
 	/**
 	 * Persist streaming/server configuration without starting the stream.
 	 */
-	setConfig: oc.input(streamingConfigInputSchema).output(streamingStopOutputSchema),
+	setConfig: oc.input(streamingConfigInputSchema).output(streamingSetConfigOutputSchema),
 
 	/**
 	 * Subscribe to streaming status changes
