@@ -1,5 +1,22 @@
 import path from 'node:path';
+import fs from 'node:fs';
+import { execSync } from 'node:child_process';
 import { defineConfig, devices } from '@playwright/test';
+
+// Ensure auth_tokens.json exists before test discovery
+const tokensPath = path.resolve(import.meta.dirname, '../backend/auth_tokens.json');
+if (!fs.existsSync(tokensPath)) {
+	try {
+		// Try to restore the committed seed from git
+		execSync('git checkout -- apps/backend/auth_tokens.json', {
+			cwd: path.resolve(import.meta.dirname, '../../'),
+			stdio: 'pipe',
+		});
+	} catch {
+		// Not committed — create a minimal valid placeholder so field-lock can load
+		fs.writeFileSync(tokensPath, JSON.stringify({ placeholder: true }), 'utf8');
+	}
+}
 
 const DEV_PORT = Number(process.env.E2E_PORT ?? 6173);
 const DEV_URL = `http://localhost:${DEV_PORT}`;
