@@ -168,7 +168,7 @@ export async function nmConnSetFields(
 			return true;
 		}
 
-		const args = ["con", "modify", uuid];
+		const args = ["con", "modify", argMatch(ID_RE, uuid)];
 		for (const field in fields) {
 			const value = fields[field];
 			if (value === undefined) continue;
@@ -176,8 +176,8 @@ export async function nmConnSetFields(
 			args.push(field);
 			args.push(value);
 		}
-		const result = await execFileP("nmcli", args);
-		return result.stdout === "";
+		const stdout = await run("nmcli", args);
+		return stdout === "";
 	} catch (err) {
 		if (err instanceof Error) {
 			logger.error(`nmConnSetFields err: ${err.message}`);
@@ -212,8 +212,8 @@ export async function nmConnDelete(uuid: ConnectionUUID) {
 			return true;
 		}
 
-		const result = await execFileP("nmcli", ["conn", "del", uuid]);
-		return result.stdout.match("successfully deleted");
+		const stdout = await run("nmcli", ["conn", "del", argMatch(ID_RE, uuid)]);
+		return stdout.match("successfully deleted");
 	} catch (err) {
 		if (err instanceof Error) {
 			logger.error(`nmConnDelete err: ${err.message}`);
@@ -231,11 +231,11 @@ export async function nmConnect(uuid: ConnectionUUID, timeout?: number) {
 		}
 
 		const timeoutArgs = timeout ? ["-w", String(timeout)] : [];
-		const result = await execFileP(
+		const stdout = await run(
 			"nmcli",
-			timeoutArgs.concat(["conn", "up", uuid]),
+			timeoutArgs.concat(["conn", "up", argMatch(ID_RE, uuid)]),
 		);
-		return result.stdout.match("^Connection successfully activated");
+		return stdout.match("^Connection successfully activated");
 	} catch (err) {
 		if (err instanceof Error) {
 			logger.error(`nmConnect err: ${err.message}`);
@@ -252,8 +252,8 @@ export async function nmDisconnect(uuid: ConnectionUUID) {
 			return true;
 		}
 
-		const result = await execFileP("nmcli", ["conn", "down", uuid]);
-		return result.stdout.match("successfully deactivated");
+		const stdout = await run("nmcli", ["conn", "down", argMatch(ID_RE, uuid)]);
+		return stdout.match("successfully deactivated");
 	} catch (err) {
 		if (err instanceof Error) {
 			logger.error(`nmDisconnect err: ${err.message}`);
@@ -278,14 +278,14 @@ export async function nmDevices(fields: string) {
 			}
 		}
 
-		const result = await execFileP("nmcli", [
+		const stdout = await run("nmcli", [
 			"--terse",
 			"--fields",
 			fields,
 			"device",
 			"status",
 		]);
-		return result.stdout.toString().split("\n");
+		return stdout.split("\n");
 	} catch (err) {
 		if (err instanceof Error) {
 			logger.error(`nmDevices err: ${err.message}`);
@@ -312,7 +312,7 @@ export async function nmDeviceProp(device: string, fields: string) {
 			});
 		}
 
-		const result = await execFileP("nmcli", [
+		const stdout = await run("nmcli", [
 			"--terse",
 			"--escape",
 			"no",
@@ -320,9 +320,9 @@ export async function nmDeviceProp(device: string, fields: string) {
 			fields,
 			"device",
 			"show",
-			device,
+			argMatch(ID_RE, device),
 		]);
-		return result.stdout.toString().split("\n");
+		return stdout.split("\n");
 	} catch (err) {
 		if (err instanceof Error) {
 			logger.error(`nmDeviceProp err: ${err.message}`);
@@ -335,7 +335,7 @@ export async function nmRescan(device?: string) {
 		const args = ["device", "wifi", "rescan"];
 		if (device) {
 			args.push("ifname");
-			args.push(device);
+			args.push(argMatch(ID_RE, device));
 		}
 
 		// Check for mock mode
@@ -346,8 +346,8 @@ export async function nmRescan(device?: string) {
 			}
 		}
 
-		const result = await execFileP("nmcli", args);
-		return result.stdout === "";
+		const stdout = await run("nmcli", args);
+		return stdout === "";
 	} catch (err) {
 		if (err instanceof Error) {
 			logger.error(`nmDevices err: ${err.message}`);
@@ -375,7 +375,7 @@ export async function nmScanResults(fields: string) {
 			}
 		}
 
-		const result = await execFileP("nmcli", [
+		const stdout = await run("nmcli", [
 			"--terse",
 			"--fields",
 			fields,
@@ -385,7 +385,7 @@ export async function nmScanResults(fields: string) {
 			"--rescan",
 			"no",
 		]);
-		return result.stdout.toString().split("\n");
+		return stdout.split("\n");
 	} catch (err) {
 		if (err instanceof Error) {
 			logger.error(`nmScanResults err: ${err.message}`);
@@ -410,7 +410,7 @@ export async function nmHotspot(
 		}
 
 		const timeoutArgs = timeout ? ["-w", String(timeout)] : [];
-		const result = await execFileP(
+		const stdout = await run(
 			"nmcli",
 			timeoutArgs.concat([
 				"device",
@@ -421,11 +421,11 @@ export async function nmHotspot(
 				"password",
 				password,
 				"ifname",
-				device,
+				argMatch(ID_RE, device),
 			]),
 		);
 
-		const uuid = result.stdout.match(/successfully activated with '(.+)'/);
+		const uuid = stdout.match(/successfully activated with '(.+)'/);
 		return uuid?.[1] ?? null;
 	} catch (err) {
 		if (err instanceof Error) {
