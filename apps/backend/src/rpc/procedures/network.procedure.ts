@@ -63,5 +63,8 @@ export const configureNetworkInterfaceProcedure = authedProcedure
 			},
 		});
 
-		return { success: true };
+		return {
+			success: true,
+			applied: { name: input.name, ip: input.ip, enabled: input.enabled },
+		};
 	});
