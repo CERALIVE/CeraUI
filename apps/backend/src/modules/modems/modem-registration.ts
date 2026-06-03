@@ -31,7 +31,7 @@
 */
 
 import { logger } from "../../helpers/logger.ts";
-import { retryWithBackoff } from "../../helpers/retry.ts";
+import { pollWithBackoff } from "../../helpers/retry.ts";
 import {
 	type NetworkManagerConnection,
 	type NetworkManagerConnectionModemConfig,
@@ -81,7 +81,7 @@ const MMCLI_RETRY = {
 	maxDelayMs: 2000,
 } as const;
 
-async function modemGetConfig(
+async function getModemConfig(
 	modemInfo: ModemInfo,
 	simInfo: SimInfo,
 ): Promise<ModemConfig | undefined> {
@@ -247,36 +247,24 @@ async function addConnectionForModem(
 async function mmGetModemWithRetry(
 	id: ModemId,
 ): Promise<ModemInfo | undefined> {
-	try {
-		return await retryWithBackoff(async () => {
-			const info = await mmGetModem(id);
-			if (!info) {
-				throw new Error(`mmGetModem(${id}) returned no info`);
-			}
-			return info;
-		}, MMCLI_RETRY);
-	} catch (err) {
-		logger.error(
-			`Failed to get modem info for modem ${id} after retries: ${String(err)}`,
-		);
-		return undefined;
-	}
+	return pollWithBackoff(() => mmGetModem(id), {
+		...MMCLI_RETRY,
+		emptyResultError: () => new Error(`mmGetModem(${id}) returned no info`),
+		onExhausted: (err) =>
+			logger.error(
+				`Failed to get modem info for modem ${id} after retries: ${String(err)}`,
+			),
+	});
 }
 
 /** List modem ids with a bounded backoff retry for transient mmcli failures. */
 export async function mmListWithRetry(): Promise<Array<ModemId> | undefined> {
-	try {
-		return await retryWithBackoff(async () => {
-			const list = await mmList();
-			if (!list) {
-				throw new Error("mmList returned no result");
-			}
-			return list;
-		}, MMCLI_RETRY);
-	} catch (err) {
-		logger.error(`Failed to list modems after retries: ${String(err)}`);
-		return undefined;
-	}
+	return pollWithBackoff(() => mmList(), {
+		...MMCLI_RETRY,
+		emptyResultError: () => new Error("mmList returned no result"),
+		onExhausted: (err) =>
+			logger.error(`Failed to list modems after retries: ${String(err)}`),
+	});
 }
 
 async function registerModem(id: number) {
@@ -303,7 +291,7 @@ async function registerModem(id: number) {
 
 			// If a SIM is present, try to find a matching NM connection or create one
 			if (simInfo) {
-				config = await modemGetConfig(modemInfo, simInfo);
+				config = await getModemConfig(modemInfo, simInfo);
 
 				if (config) {
 					await addConnectionForModem(modemInfo, simInfo, config);
