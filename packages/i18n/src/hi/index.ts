@@ -499,6 +499,12 @@ const hi = {
 	common: {
 		loading: "लोड हो रहा है…",
 	},
+	errorBoundary: {
+		title: "Something went wrong",
+		description:
+			"The interface ran into an unexpected error. Your device and stream are unaffected. Try again to reload this view.",
+		retry: "Try again",
+	},
 	hud: {
 		bitrate: "बिटरेट",
 		temperature: "तापमान",

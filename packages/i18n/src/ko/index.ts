@@ -503,6 +503,12 @@ const ko = {
 	common: {
 		loading: "로딩 중...",
 	},
+	errorBoundary: {
+		title: "Something went wrong",
+		description:
+			"The interface ran into an unexpected error. Your device and stream are unaffected. Try again to reload this view.",
+		retry: "Try again",
+	},
 	hud: {
 		bitrate: "비트레이트",
 		temperature: "온도",

@@ -474,6 +474,12 @@ const zh = {
 	common: {
 		loading: "加载中...",
 	},
+	errorBoundary: {
+		title: "Something went wrong",
+		description:
+			"The interface ran into an unexpected error. Your device and stream are unaffected. Try again to reload this view.",
+		retry: "Try again",
+	},
 	hud: {
 		bitrate: "比特率",
 		temperature: "温度",

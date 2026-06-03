@@ -508,6 +508,12 @@ const ja = {
 	common: {
 		loading: "読み込み中...",
 	},
+	errorBoundary: {
+		title: "Something went wrong",
+		description:
+			"The interface ran into an unexpected error. Your device and stream are unaffected. Try again to reload this view.",
+		retry: "Try again",
+	},
 	hud: {
 		bitrate: "ビットレート",
 		temperature: "温度",

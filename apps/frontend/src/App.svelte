@@ -9,6 +9,7 @@ import { onMount } from 'svelte';
 import { getLayoutMode, setLayoutMode } from '$lib/stores/layout-mode.svelte';
 import { getLocale } from '$lib/stores/locale.svelte';
 import Layout from '$main/Layout.svelte';
+import ErrorBoundary from '$main/layout/ErrorBoundary.svelte';
 
 // URL ?mode=touch|default overrides the persisted layout mode on load.
 $effect(() => {
@@ -56,5 +57,7 @@ onMount(async () => {
 <ModeWatcher />
 
 <main>
-	<Layout />
+	<ErrorBoundary>
+		<Layout />
+	</ErrorBoundary>
 </main>
