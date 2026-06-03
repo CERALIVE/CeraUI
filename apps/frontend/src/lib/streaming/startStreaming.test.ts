@@ -247,7 +247,7 @@ describe("start/stop dispatch (mocked rpc client)", () => {
 
 	it("startStreaming maps the assembled config and calls rpc.streaming.start", async () => {
 		const { startStreaming } = await import("$lib/helpers/SystemHelper");
-		const result = buildStartConfig(makeConfig(), null);
+		const result = buildStartConfig(makeConfig(), null, makePipelines());
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 
