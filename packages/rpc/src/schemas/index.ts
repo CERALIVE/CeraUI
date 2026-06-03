@@ -7,6 +7,7 @@ export * from './cloud-provider.schema';
 export * from './common.schema';
 export * from './dev.schema';
 export * from './envelope.schema';
+export * from './heartbeat.schema';
 export * from './modems.schema';
 export * from './network.schema';
 export * from './notifications.schema';
