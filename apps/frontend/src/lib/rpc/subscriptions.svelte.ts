@@ -85,6 +85,11 @@ let notificationsState = $state<NotificationsMessage | undefined>(undefined);
 let connectionState = $state<ConnectionState>("disconnected");
 let isConnectedState = $state<boolean>(false);
 
+// Boot gate: latches true on first "connected" event OR first inbound message,
+// then never reverts. Event-driven with NO timeout — remote first-connect is
+// legitimately slow and must never be failed by a clock (Oracle Q7).
+let connectionReadyState = $state<boolean>(false);
+
 // ============================================
 // Reactive Getters (Svelte 5 Pattern)
 // ============================================
@@ -161,6 +166,15 @@ export function getIsConnected() {
 	return isConnectedState;
 }
 
+/**
+ * Whether the device has spoken to us at least once this page-load (first
+ * "connected" event or first inbound message). Drives the boot shell's
+ * "Connecting to device…" → live flip. Latches once; never reverts.
+ */
+export function getConnectionReady() {
+	return connectionReadyState;
+}
+
 // ============================================
 // Message Handlers
 // ============================================
@@ -169,6 +183,8 @@ export function getIsConnected() {
  * Handle incoming messages and update state
  */
 function handleMessage(type: string, data: unknown): void {
+	if (!connectionReadyState) connectionReadyState = true;
+
 	switch (type) {
 		case "auth":
 			authState = data as typeof authState;
@@ -413,6 +429,7 @@ function handleConnectionChange(state: ConnectionState): void {
 	isConnectedState = state === "connected";
 
 	if (state === "connected") {
+		if (!connectionReadyState) connectionReadyState = true;
 		toast.success("Connection established");
 		// Reconnect-only: the first connect of a page-load is owned by Layout's
 		// initial-load login, so gating on wasAuthenticated() avoids a startup
@@ -478,6 +495,7 @@ export function resetState(): void {
 	audioCodecsState = undefined;
 	relaysState = undefined;
 	notificationsState = undefined;
+	connectionReadyState = false;
 
 	if (lockExpiryTick !== undefined) {
 		clearInterval(lockExpiryTick);

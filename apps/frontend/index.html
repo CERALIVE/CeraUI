@@ -297,7 +297,6 @@
 
           const checkAppLoad = () => {
             appCheckCount++;
-            const app = document.getElementById('app');
 
             // Already shown offline - stop checking
             if (hasShownOffline) return;
@@ -308,15 +307,18 @@
               return;
             }
 
-            // App has loaded successfully - hide preloader and stop checking
-            if (app && app.children.length > 0) {
+            // Bundle mounted - hide preloader and stop checking. Gate on the
+            // explicit mount signal, NOT app.children.length: the app renders an
+            // optimistic boot shell while it is still connecting to the device,
+            // and "connecting" must never be mistaken for "offline".
+            if (window.__ceraAppMounted) {
               if (preloader) preloader.style.display = 'none';
               const fallback = document.getElementById('offline-fallback');
               if (fallback) fallback.style.display = 'none';
               return;
             }
 
-            // App hasn't loaded after 2 seconds - assume offline
+            // Bundle still hasn't mounted after 2s - genuine load failure.
             if (appCheckCount >= maxAppChecks) {
               showOfflineFallback();
               return;
@@ -329,13 +331,11 @@
           // Start checking after a very short delay
           setTimeout(checkAppLoad, 50);
 
-          // Fallback: if still nothing after 3 seconds, force offline
+          // Fallback: if the bundle still hasn't mounted after 3s, force offline.
+          // A mounted-but-connecting app keeps its own "Connecting…" shell.
           setTimeout(() => {
-            if (!hasShownOffline) {
-              const app = document.getElementById('app');
-              if (!app || app.children.length === 0) {
-                showOfflineFallback();
-              }
+            if (!hasShownOffline && !window.__ceraAppMounted) {
+              showOfflineFallback();
             }
           }, 3000);
         }
