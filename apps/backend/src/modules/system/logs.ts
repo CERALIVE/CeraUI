@@ -16,33 +16,34 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { exec } from "node:child_process";
-
 import type WebSocket from "ws";
 
 import { logger } from "../../helpers/logger.ts";
+import { run } from "../../helpers/run.ts";
 
 import { notificationSend } from "../ui/notifications.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
 
-export function getLog(conn: WebSocket, service?: string) {
+export async function getLog(conn: WebSocket, service?: string) {
 	const senderId = getSocketSenderId(conn);
-	let cmd = "journalctl -b";
+	// Argv-only: each token is a discrete element, so a `service` value can never
+	// be re-parsed as shell syntax (no `sh -c`, so `;`/spaces/`$()` are inert).
+	const args = ["-b"];
 	let name = "ceralive_system_log.txt";
 
 	if (service) {
-		cmd += ` -u ${service}`;
+		args.push("-u", service);
 		name = `${service.replace("CeraLive", "ceralive")}_log.txt`;
 	}
 
-	exec(cmd, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
-		if (err) {
-			const msg = `Failed to fetch the log: ${err}`;
-			notificationSend(conn, "log_error", "error", msg, 10);
-			logger.error(msg);
-			return;
-		}
-
+	try {
+		const stdout = await run("journalctl", args, {
+			maxBuffer: 10 * 1024 * 1024,
+		});
 		conn.send(buildMsg("log", { name, contents: stdout }, senderId));
-	});
+	} catch (err) {
+		const msg = `Failed to fetch the log: ${err}`;
+		notificationSend(conn, "log_error", "error", msg, 10);
+		logger.error(msg);
+	}
 }

@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import {
 	autostartInputSchema,
 	cloudProviderEndpointSchema,
+	logInputSchema,
 	logOutputSchema,
 	remoteConfigInputSchema,
 	revisionsSchema,
@@ -62,6 +63,7 @@ export const getSensorsProcedure = authedProcedure
  * Get application log procedure
  */
 export const getLogProcedure = authedProcedure
+	.input(logInputSchema)
 	.output(logOutputSchema)
 	.handler(async () => {
 		// getLog sends directly to socket, we need to adapt it

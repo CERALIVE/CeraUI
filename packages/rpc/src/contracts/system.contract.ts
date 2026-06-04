@@ -7,6 +7,7 @@ import { z } from 'zod';
 import {
 	autostartInputSchema,
 	cloudProviderEndpointSchema,
+	logInputSchema,
 	logOutputSchema,
 	remoteConfigInputSchema,
 	revisionsSchema,
@@ -28,7 +29,7 @@ export const systemContract = oc.router({
 	/**
 	 * Get application log
 	 */
-	getLog: oc.output(logOutputSchema),
+	getLog: oc.input(logInputSchema).output(logOutputSchema),
 
 	/**
 	 * Get system log
