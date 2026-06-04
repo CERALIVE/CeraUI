@@ -124,9 +124,12 @@ async function handleRequest(req: Request): Promise<Response> {
 	return new Response("Not Found", { status: 404 });
 }
 
-// Port configuration
-const getListenPorts = (): Array<number | { fd: number }> => {
-	const ports: Array<number | { fd: number }> =
+// Bun.serve cannot adopt a systemd-inherited fd: it has no `fd` option and
+// `unix` is a filesystem path (`unix: "3"` creates a file, not an fd bind). So
+// we always bind a real TCP port; the LISTEN_FDS handoff is logged in
+// initServer() only. Do NOT re-introduce a `{ fd }` listen target here.
+const getListenPorts = (): number[] => {
+	const ports: number[] =
 		process.env.NODE_ENV === "development"
 			? [3002, 8080, 8081]
 			: [80, 8080, 81];
@@ -134,11 +137,6 @@ const getListenPorts = (): Array<number | { fd: number }> => {
 	if (process.env.PORT) {
 		const port = Number.parseInt(process.env.PORT, 10);
 		ports.unshift(port);
-	}
-
-	const systemdSock = getSystemdSocket();
-	if (systemdSock) {
-		ports.unshift(systemdSock);
 	}
 
 	return ports;
@@ -158,18 +156,13 @@ function startServer(): void {
 		process.exit(1);
 	}
 
-	const portOrHandle = listenPorts[currentPortIndex];
-	const isPort = typeof portOrHandle === "number";
-	const desc = isPort ? `port ${portOrHandle}` : "the systemd socket";
+	const port = listenPorts[currentPortIndex];
 
-	logger.info(`HTTP server: trying to start on ${desc}...`);
+	logger.info(`HTTP server: trying to start on port ${port}...`);
 
 	try {
 		server = Bun.serve<SocketData>({
-			port: isPort ? portOrHandle : undefined,
-			unix: !isPort
-				? (portOrHandle as { fd: number }).fd.toString()
-				: undefined,
+			port,
 
 			fetch(req, server) {
 				// Handle WebSocket upgrade
@@ -223,6 +216,13 @@ function startServer(): void {
  * Initialize and start the HTTP/WebSocket server
  */
 export function initServer(): void {
+	const systemdSocket = getSystemdSocket();
+	if (systemdSocket) {
+		logger.warn(
+			`systemd socket activation detected (LISTEN_FDS, fd=${systemdSocket.fd}); ` +
+				"Bun.serve cannot adopt an inherited socket — binding the listen port directly.",
+		);
+	}
 	startServer();
 }
 
