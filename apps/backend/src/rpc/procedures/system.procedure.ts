@@ -3,7 +3,6 @@
  * Wraps existing system logic from modules/system/
  */
 
-import { spawnSync } from "node:child_process";
 import {
 	autostartInputSchema,
 	cloudProviderEndpointSchema,
@@ -90,7 +89,7 @@ export const poweroffProcedure = authedProcedure
 			return { success: false };
 		}
 		logger.info("System: poweroff requested");
-		spawnSync("poweroff");
+		Bun.spawnSync(["poweroff"]);
 		return { success: true };
 	});
 
@@ -104,7 +103,7 @@ export const rebootProcedure = authedProcedure
 			return { success: false };
 		}
 		logger.info("System: reboot requested");
-		spawnSync("reboot");
+		Bun.spawnSync(["reboot"]);
 		return { success: true };
 	});
 
