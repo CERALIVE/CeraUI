@@ -447,6 +447,17 @@ const es = {
 		changeBitrateNotice:
 			"Puedes cambiar el bitrate incluso si estás transmitiendo.",
 		optional: "opcional",
+		relayProvider: "Proveedor",
+		autoEndpoint: "Punto de conexión del servidor (autoseleccionado)",
+		manualOverride: "Anulación manual",
+		relaySecret: "Secreto / frase de contraseña",
+		relaySecretPlaceholder: "Frase de contraseña opcional",
+		streamId: "ID de transmisión",
+		validate: "Validar",
+		validating: "Validando…",
+		validationPassed: "Punto de conexión accesible",
+		validationFailed: "Validación fallida",
+		validateBeforeSave: "Valida el punto de conexión antes de guardar",
 		placeholders: {
 			srtlaServerAddress: "ej., 192.168.1.100 o server.example.com",
 			srtlaServerPort: "ej., 8890",

@@ -436,6 +436,17 @@ const de = {
 		changeBitrateNotice:
 			"Sie können die Bitrate auch während des Streamings ändern.",
 		optional: "optional",
+		relayProvider: "Anbieter",
+		autoEndpoint: "Server-Endpunkt (automatisch gewählt)",
+		manualOverride: "Manuell überschreiben",
+		relaySecret: "Geheimnis / Passphrase",
+		relaySecretPlaceholder: "Optionale Passphrase",
+		streamId: "Stream-ID",
+		validate: "Überprüfen",
+		validating: "Überprüfung…",
+		validationPassed: "Endpunkt erreichbar",
+		validationFailed: "Überprüfung fehlgeschlagen",
+		validateBeforeSave: "Überprüfen Sie den Endpunkt vor dem Speichern",
 		placeholders: {
 			srtlaServerAddress: "z.B., 192.168.1.100 oder server.example.com",
 			srtlaServerPort: "z.B., 8890",

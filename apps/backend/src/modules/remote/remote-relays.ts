@@ -45,6 +45,8 @@ type RelaysResponseMessage = {
 			name: string;
 			rtt?: number;
 			default?: true;
+			addr?: string;
+			port?: number;
 		}
 	>;
 	accounts: Record<
@@ -115,6 +117,8 @@ export function buildRelaysMsg(): RelaysResponseMessage {
 			name: srv.name,
 			rtt,
 			default: srv.default,
+			addr: srv.addr,
+			port: srv.port,
 		};
 	});
 

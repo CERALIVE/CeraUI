@@ -62,6 +62,13 @@ export const relayServerSchema = z.object({
 	name: z.string(),
 	rtt: z.number().optional(),
 	default: z.literal(true).optional(),
+	/**
+	 * Resolved SRTLA host. Optional so legacy/minimal catalog pushes round-trip;
+	 * surfaced READ-ONLY by ServerDialog as the auto-preloaded endpoint (Task 16).
+	 */
+	addr: z.string().optional(),
+	/** Resolved SRTLA port (paired with `addr`). Optional for legacy payloads. */
+	port: z.number().optional(),
 	/** Transport protocol; defaults to "srtla" when absent on legacy payloads */
 	protocol: relayProtocolSchema,
 	/** Provider this server belongs to (optional — absent on legacy payloads) */
@@ -121,3 +128,33 @@ export function parseNamespacedRelayId(id: string): RelayIdParts {
 export function isNamespacedRelayId(id: string): boolean {
 	return id.includes(RELAY_ID_SEPARATOR);
 }
+
+// =============================================================================
+// Manual custom-relay validation (relay.validate RPC)
+// =============================================================================
+
+export const RELAY_VALIDATE_STAGES = [
+	'input',
+	'protocol',
+	'endpoint',
+	'dns',
+	'ok',
+] as const;
+export const relayValidateStageSchema = z.enum(RELAY_VALIDATE_STAGES);
+export type RelayValidateStage = (typeof RELAY_VALIDATE_STAGES)[number];
+
+export const relayValidateInputSchema = z.object({
+	addr: z.string(),
+	port: z.number(),
+	streamid: z.string().optional(),
+	passphrase: z.string().optional(),
+	protocol: relayProtocolSchema.optional(),
+});
+export type RelayValidateInput = z.infer<typeof relayValidateInputSchema>;
+
+export const relayValidateOutputSchema = z.object({
+	ok: z.boolean(),
+	stage: relayValidateStageSchema,
+	reason: z.string().optional(),
+});
+export type RelayValidateOutput = z.infer<typeof relayValidateOutputSchema>;

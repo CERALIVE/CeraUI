@@ -328,6 +328,17 @@ const fr = {
 		changeBitrateNotice:
 			"Vous pouvez changer le débit binaire même si vous diffusez.",
 		optional: "optionnel",
+		relayProvider: "Fournisseur",
+		autoEndpoint: "Point de terminaison du serveur (sélection auto)",
+		manualOverride: "Remplacement manuel",
+		relaySecret: "Secret / phrase secrète",
+		relaySecretPlaceholder: "Phrase secrète facultative",
+		streamId: "ID de flux",
+		validate: "Valider",
+		validating: "Validation…",
+		validationPassed: "Point de terminaison accessible",
+		validationFailed: "Échec de la validation",
+		validateBeforeSave: "Validez le point de terminaison avant d'enregistrer",
 		placeholders: {
 			srtlaServerAddress: "ex., 192.168.1.100 ou server.example.com",
 			srtlaServerPort: "ex., 8890",

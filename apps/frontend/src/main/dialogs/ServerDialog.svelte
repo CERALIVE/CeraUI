@@ -1,12 +1,21 @@
 <!--
   ServerDialog.svelte — SRTLA / relay-server configuration, surfaced from Live.
 
-  Replaces the old shared/ServerCard.svelte, dropping its local-state mirror
-  (six `local*` + five `*Touched` fields kept in sync via effects). Instead it
-  reads the live server-pushed config (`getConfig`) and relay catalog
-  (`getRelays`) directly and overlays only the fields the operator has actually
-  edited (the `draft` dirty-field guard). Validation bounds come from the single
-  source `streamingConstraints` (RPC schema consts), never inline literals.
+  Method-based UI (Task 16):
+   • Two transport methods stay as the existing tab toggle — Manual Configuration
+     (a custom relay: address/port/streamid/secret with a "Validate" action) and
+     Relay Server (a managed-provider catalog).
+   • Relay mode adds a provider selector that groups the catalog by origin, an
+     auto-preloaded server endpoint shown READ-ONLY with a "manual override"
+     toggle that reveals editable host/port, and an editable Stream ID seeded
+     from `relay_streamid_override` (Task 9 auto-fill).
+   • Manual mode validates the endpoint through `relay.validate` (Task 8 adapter)
+     and surfaces the failing stage inline; Save is blocked while a validation
+     is failing or in flight.
+
+  Live config (`getConfig`) and the relay catalog (`getRelays`) are read directly
+  and overlaid only with the operator's edits (the `draft` dirty-field guard).
+  Validation bounds come from `streamingConstraints` (RPC schema consts).
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
@@ -16,6 +25,7 @@ import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import RelayRttIndicator from '$lib/components/streaming/RelayRttIndicator.svelte';
+import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
@@ -34,6 +44,14 @@ const LAT = streamingConstraints.srtLatency;
 const LATENCY_FALLBACK = Math.min(Math.max(2000, LAT.min), LAT.max);
 const LATENCY_STEP = 50;
 
+// Managed cloud providers the relay catalog can be grouped under. Brand names
+// are not translated (per the i18n branding convention), so they stay literal.
+const MANAGED_PROVIDERS = ['ceralive', 'belabox'] as const;
+const PROVIDER_LABELS: Record<string, string> = {
+	ceralive: 'CeraLive Cloud',
+	belabox: 'BELABOX Cloud',
+};
+
 const config = $derived(getConfig());
 const relays = $derived(getRelays());
 const isStreaming = $derived(Boolean(getIsStreaming()));
@@ -45,13 +63,29 @@ type Draft = {
 	srtla_port?: string;
 	srt_streamid?: string;
 	srt_latency?: number;
+	relay_provider?: string;
 	relay_server?: string;
 	relay_account?: string;
+	relay_streamid?: string;
+	relay_override?: boolean;
+	relay_override_addr?: string;
+	relay_override_port?: string;
+	passphrase?: string;
 };
 let draft = $state<Draft>({});
 
+type Validation = {
+	state: 'idle' | 'validating' | 'pass' | 'fail';
+	stage?: string;
+	reason?: string;
+};
+let validation = $state<Validation>({ state: 'idle' });
+
 $effect(() => {
-	if (open) draft = {};
+	if (open) {
+		draft = {};
+		validation = { state: 'idle' };
+	}
 });
 
 const mode = $derived<Mode>(draft.mode ?? (config?.relay_server ? 'relay' : 'manual'));
@@ -59,9 +93,11 @@ const mode = $derived<Mode>(draft.mode ?? (config?.relay_server ? 'relay' : 'man
 const addr = $derived(draft.srtla_addr ?? config?.srtla_addr ?? '');
 const portStr = $derived(draft.srtla_port ?? (config?.srtla_port?.toString() ?? ''));
 const streamId = $derived(draft.srt_streamid ?? config?.srt_streamid ?? '');
+const passphrase = $derived(draft.passphrase ?? '');
 const latency = $derived(draft.srt_latency ?? config?.srt_latency ?? LATENCY_FALLBACK);
 const relayServer = $derived(draft.relay_server ?? config?.relay_server ?? '');
 const relayAccount = $derived(draft.relay_account ?? config?.relay_account ?? '');
+const relayStreamId = $derived(draft.relay_streamid ?? config?.relay_streamid_override ?? '');
 
 const serverEntries = $derived(Object.entries(relays?.servers ?? {}));
 const accountEntries = $derived(Object.entries(relays?.accounts ?? {}));
@@ -74,16 +110,54 @@ const relayUnavailable = $derived(relays === undefined || serverEntries.length =
 const relayHint = $derived(
 	relays === undefined ? $LL.notifications.relayWaiting() : $LL.notifications.relayNone(),
 );
-const relayServerName = $derived(relays?.servers?.[relayServer]?.name);
-const relayServerRtt = $derived(relays?.servers?.[relayServer]?.rtt);
+
+// Provider grouping: untagged catalog servers belong to the device's configured
+// provider, so the selector defaults to it and lists only that provider's relays.
+const configProvider = $derived(
+	config?.remote_provider && config.remote_provider !== 'custom'
+		? config.remote_provider
+		: 'ceralive',
+);
+const selectedProvider = $derived(draft.relay_provider ?? configProvider);
+const filteredServerEntries = $derived(
+	serverEntries.filter(([, info]) => (info.provider?.kind ?? configProvider) === selectedProvider),
+);
+
+const relayServerInfo = $derived(relays?.servers?.[relayServer]);
+const relayServerName = $derived(relayServerInfo?.name);
+const relayServerRtt = $derived(relayServerInfo?.rtt);
+const relayServerEndpoint = $derived(
+	relayServerInfo?.addr && relayServerInfo?.port
+		? `${relayServerInfo.addr}:${relayServerInfo.port}`
+		: undefined,
+);
 const relayAccountName = $derived(relays?.accounts?.[relayAccount]?.name);
 
-const portNum = $derived(portStr.trim() === '' ? undefined : Number.parseInt(portStr, 10));
+const relayOverride = $derived(draft.relay_override ?? false);
+const overrideAddr = $derived(draft.relay_override_addr ?? relayServerInfo?.addr ?? '');
+const overridePortStr = $derived(
+	draft.relay_override_port ?? (relayServerInfo?.port?.toString() ?? ''),
+);
+
+function parsePort(value: string): number | undefined {
+	return value.trim() === '' ? undefined : Number.parseInt(value, 10);
+}
+function isPortValid(value: number | undefined): boolean {
+	return (
+		value !== undefined && Number.isInteger(value) && value >= PORT.min && value <= PORT.max
+	);
+}
+
+const portNum = $derived(parsePort(portStr));
 const portError = $derived.by(() => {
 	if (mode !== 'manual' || portStr.trim() === '') return undefined;
-	if (portNum === undefined || !Number.isInteger(portNum) || portNum < PORT.min || portNum > PORT.max) {
-		return $LL.validation.portRange();
-	}
+	if (!isPortValid(portNum)) return $LL.validation.portRange();
+	return undefined;
+});
+const overridePortNum = $derived(parsePort(overridePortStr));
+const overridePortError = $derived.by(() => {
+	if (!relayOverride || overridePortStr.trim() === '') return undefined;
+	if (!isPortValid(overridePortNum)) return $LL.validation.portRange();
 	return undefined;
 });
 const addrError = $derived(
@@ -92,10 +166,22 @@ const addrError = $derived(
 		: undefined,
 );
 
+const canValidate = $derived(
+	!isStreaming &&
+		addr.trim() !== '' &&
+		portStr.trim() !== '' &&
+		portError === undefined &&
+		validation.state !== 'validating',
+);
+
 const canSave = $derived.by(() => {
 	if (isStreaming) return false;
 	if (mode === 'manual') {
+		if (validation.state === 'validating' || validation.state === 'fail') return false;
 		return addr.trim() !== '' && portStr.trim() !== '' && portError === undefined;
+	}
+	if (relayOverride) {
+		return overrideAddr.trim() !== '' && overridePortStr.trim() !== '' && overridePortError === undefined;
 	}
 	return relayServer !== '';
 });
@@ -110,15 +196,49 @@ function clampLatency(value: number): number {
 	return Math.max(LAT.min, Math.min(LAT.max, stepped));
 }
 
+function resetValidation() {
+	if (validation.state !== 'idle') validation = { state: 'idle' };
+}
+
+async function handleValidate() {
+	validation = { state: 'validating' };
+	try {
+		const result = await rpc.relay.validate({
+			addr: addr.trim(),
+			port: portNum ?? 0,
+			streamid: streamId.trim() === '' ? undefined : streamId.trim(),
+			passphrase: passphrase.trim() === '' ? undefined : passphrase.trim(),
+			protocol: 'srtla',
+		});
+		validation = result.ok
+			? { state: 'pass', stage: result.stage }
+			: { state: 'fail', stage: result.stage, reason: result.reason };
+	} catch (error) {
+		validation = {
+			state: 'fail',
+			stage: 'endpoint',
+			reason: error instanceof Error ? error.message : undefined,
+		};
+	}
+}
+
 async function handleSave() {
-	const input: StreamingConfigInput = { srt_latency: clampLatency(latency) };
+	const input: StreamingConfigInput = {
+		srt_latency: clampLatency(latency),
+		relay_protocol: 'srtla',
+	};
 	if (mode === 'manual') {
 		input.srtla_addr = addr.trim();
 		input.srtla_port = portNum;
 		input.srt_streamid = streamId.trim();
+	} else if (relayOverride) {
+		input.srtla_addr = overrideAddr.trim();
+		input.srtla_port = overridePortNum;
+		input.relay_streamid_override = relayStreamId.trim();
 	} else {
 		input.relay_server = relayServer;
 		if (relayAccount) input.relay_account = relayAccount;
+		input.relay_streamid_override = relayStreamId.trim();
 	}
 	// Lock each field this save changes BEFORE the RPC so a stale server echo
 	// of the old value can't revert the edit; release after it settles (resolve
@@ -204,7 +324,10 @@ async function handleSave() {
 					aria-invalid={addrError ? 'true' : undefined}
 					class="font-mono"
 					disabled={isStreaming}
-					oninput={(e) => (draft.srtla_addr = e.currentTarget.value)}
+					oninput={(e) => {
+						draft.srtla_addr = e.currentTarget.value;
+						resetValidation();
+					}}
 					placeholder={$LL.settings.placeholders.srtlaServerAddress()}
 					value={addr}
 				/>
@@ -225,7 +348,10 @@ async function handleSave() {
 					inputmode="numeric"
 					max={PORT.max}
 					min={PORT.min}
-					oninput={(e) => (draft.srtla_port = e.currentTarget.value)}
+					oninput={(e) => {
+						draft.srtla_port = e.currentTarget.value;
+						resetValidation();
+					}}
 					placeholder={$LL.settings.placeholders.srtlaServerPort()}
 					type="number"
 					value={portStr}
@@ -244,12 +370,79 @@ async function handleSave() {
 					id="srt-streamid"
 					class="font-mono"
 					disabled={isStreaming}
-					oninput={(e) => (draft.srt_streamid = e.currentTarget.value)}
+					oninput={(e) => {
+						draft.srt_streamid = e.currentTarget.value;
+						resetValidation();
+					}}
 					placeholder={$LL.settings.placeholders.srtStreamId()}
 					value={streamId}
 				/>
 			</div>
+
+			<div class="space-y-2">
+				<Label class="text-sm font-medium" for="srtla-passphrase">
+					{$LL.settings.relaySecret()}
+					<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
+				</Label>
+				<Input
+					id="srtla-passphrase"
+					class="font-mono"
+					disabled={isStreaming}
+					oninput={(e) => {
+						draft.passphrase = e.currentTarget.value;
+						resetValidation();
+					}}
+					placeholder={$LL.settings.relaySecretPlaceholder()}
+					type="password"
+					value={passphrase}
+				/>
+			</div>
+
+			<!-- Validate the custom relay endpoint via relay.validate (Task 8). -->
+			<div class="space-y-2">
+				<Button
+					id="relay-validate"
+					class="w-full"
+					disabled={!canValidate}
+					onclick={handleValidate}
+					variant="outline"
+				>
+					{validation.state === 'validating' ? $LL.settings.validating() : $LL.settings.validate()}
+				</Button>
+				{#if validation.state === 'pass'}
+					<p class="text-primary text-sm" role="status">
+						{$LL.settings.validationPassed()}
+					</p>
+				{:else if validation.state === 'fail'}
+					<p class="text-destructive text-sm" role="alert">
+						{$LL.settings.validationFailed()} ({validation.stage}){validation.reason
+							? `: ${validation.reason}`
+							: ''}
+					</p>
+				{/if}
+			</div>
 		{:else}
+			<div class="space-y-2">
+				<Label class="text-sm font-medium" for="relay-provider">{$LL.settings.relayProvider()}</Label>
+				<Select.Root
+					disabled={relays === undefined || isStreaming}
+					onValueChange={(value) => (draft.relay_provider = value)}
+					type="single"
+					value={selectedProvider}
+				>
+					<Select.Trigger id="relay-provider" class="w-full">
+						{PROVIDER_LABELS[selectedProvider] ?? selectedProvider}
+					</Select.Trigger>
+					<Select.Content>
+						<Select.Group>
+							{#each MANAGED_PROVIDERS as providerId (providerId)}
+								<Select.Item value={providerId}>{PROVIDER_LABELS[providerId]}</Select.Item>
+							{/each}
+						</Select.Group>
+					</Select.Content>
+				</Select.Root>
+			</div>
+
 			<div class="space-y-2">
 				<Label class="text-sm font-medium" for="relay-server">{$LL.settings.relayServer()}</Label>
 				<Select.Root
@@ -268,7 +461,7 @@ async function handleSave() {
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
-							{#each serverEntries as [id, info] (id)}
+							{#each filteredServerEntries as [id, info] (id)}
 								<Select.Item value={id}>
 									<div class="flex w-full items-center gap-2">
 										<span class="truncate">{info.name}</span>
@@ -279,6 +472,60 @@ async function handleSave() {
 						</Select.Group>
 					</Select.Content>
 				</Select.Root>
+			</div>
+
+			<!-- Auto-preloaded endpoint: read-only by default, with a manual
+			     override toggle revealing editable host/port. -->
+			<div class="space-y-2">
+				<div class="flex items-center justify-between gap-2">
+					<Label class="text-sm font-medium" for="relay-endpoint">{$LL.settings.autoEndpoint()}</Label>
+					<button
+						aria-checked={relayOverride}
+						class="text-xs font-medium {relayOverride
+							? 'text-primary'
+							: 'text-muted-foreground hover:text-foreground'}"
+						disabled={isStreaming}
+						id="relay-manual-override"
+						onclick={() => (draft.relay_override = !relayOverride)}
+						role="switch"
+						type="button"
+					>
+						{$LL.settings.manualOverride()}
+					</button>
+				</div>
+				{#if !relayOverride}
+					<output
+						id="relay-endpoint"
+						class="bg-muted/60 text-muted-foreground block rounded-md border px-3 py-2 font-mono text-sm"
+					>
+						{relayServerEndpoint ?? relayServerName ?? '—'}
+					</output>
+				{:else}
+					<Input
+						id="relay-override-addr"
+						class="font-mono"
+						disabled={isStreaming}
+						oninput={(e) => (draft.relay_override_addr = e.currentTarget.value)}
+						placeholder={$LL.settings.placeholders.srtlaServerAddress()}
+						value={overrideAddr}
+					/>
+					<Input
+						id="relay-override-port"
+						aria-invalid={overridePortError ? 'true' : undefined}
+						class="font-mono"
+						disabled={isStreaming}
+						inputmode="numeric"
+						max={PORT.max}
+						min={PORT.min}
+						oninput={(e) => (draft.relay_override_port = e.currentTarget.value)}
+						placeholder={$LL.settings.placeholders.srtlaServerPort()}
+						type="number"
+						value={overridePortStr}
+					/>
+					{#if overridePortError}
+						<p class="text-destructive text-sm">{overridePortError}</p>
+					{/if}
+				{/if}
 			</div>
 
 			<div class="space-y-2">
@@ -308,6 +555,21 @@ async function handleSave() {
 						</Select.Group>
 					</Select.Content>
 				</Select.Root>
+			</div>
+
+			<div class="space-y-2">
+				<Label class="text-sm font-medium" for="relay-streamid">
+					{$LL.settings.streamId()}
+					<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
+				</Label>
+				<Input
+					id="relay-streamid"
+					class="font-mono"
+					disabled={isStreaming}
+					oninput={(e) => (draft.relay_streamid = e.currentTarget.value)}
+					placeholder={$LL.settings.placeholders.srtStreamId()}
+					value={relayStreamId}
+				/>
 			</div>
 		{/if}
 

@@ -452,6 +452,17 @@ const en = {
 		srtLatency: "SRT latency (ms)",
 		changeBitrateNotice:
 			"You can change the bitrate even if you are streaming.",
+		relayProvider: "Provider",
+		autoEndpoint: "Server endpoint (auto-selected)",
+		manualOverride: "Manual override",
+		relaySecret: "Secret / passphrase",
+		relaySecretPlaceholder: "Optional passphrase",
+		streamId: "Stream ID",
+		validate: "Validate",
+		validating: "Validating\u2026",
+		validationPassed: "Endpoint reachable",
+		validationFailed: "Validation failed",
+		validateBeforeSave: "Validate the endpoint before saving",
 		placeholders: {
 			srtlaServerAddress: "e.g., 192.168.1.100 or server.example.com",
 			srtlaServerPort: "e.g., 8890",

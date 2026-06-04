@@ -327,6 +327,17 @@ const ptBR = {
 		changeBitrateNotice:
 			"Você pode mudar a taxa de bits mesmo enquanto está transmitindo.",
 		optional: "opcional",
+		relayProvider: "Provedor",
+		autoEndpoint: "Endpoint do servidor (selecionado automaticamente)",
+		manualOverride: "Substituição manual",
+		relaySecret: "Segredo / senha",
+		relaySecretPlaceholder: "Senha opcional",
+		streamId: "ID da transmissão",
+		validate: "Validar",
+		validating: "Validando…",
+		validationPassed: "Endpoint acessível",
+		validationFailed: "Falha na validação",
+		validateBeforeSave: "Valide o endpoint antes de salvar",
 		placeholders: {
 			srtlaServerAddress: "ex., 192.168.1.100 ou server.example.com",
 			srtlaServerPort: "ex., 8890",

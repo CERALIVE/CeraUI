@@ -62,6 +62,8 @@ export const streamingConfigInputSchema = z.object({
 	acodec: audioCodecSchema.optional(),
 	relay_server: z.string().optional(),
 	relay_account: z.string().optional(),
+	relay_streamid_override: z.string().optional(),
+	relay_protocol: relayProtocolSchema.optional(),
 	srtla_addr: z.string().optional(),
 	srtla_port: z.number().int().min(PORT_MIN).max(PORT_MAX).optional(),
 	srt_streamid: z.string().optional(),
@@ -181,7 +183,8 @@ export const audioCodecsMessageSchema = z.record(
 );
 export type AudioCodecsMessage = z.infer<typeof audioCodecsMessageSchema>;
 
-import { customProviderInputSchema, providerSelectionSchema } from './cloud-provider.schema';
+import { detectionMethodSchema, customProviderInputSchema, providerSelectionSchema } from './cloud-provider.schema';
+import { relayProtocolSchema } from './relay.schema';
 
 // Config message schema (what the server sends to clients)
 export const configMessageSchema = z.object({
@@ -201,6 +204,9 @@ export const configMessageSchema = z.object({
 	custom_provider: customProviderInputSchema.optional(),
 	relay_account: z.string().optional(),
 	relay_server: z.string().optional(),
+	relay_streamid_override: z.string().optional(),
+	relay_protocol: relayProtocolSchema.optional(),
+	detectionMethod: detectionMethodSchema.optional(),
 	resolution: resolutionSchema.optional(),
 	framerate: framerateSchema.optional(),
 });
