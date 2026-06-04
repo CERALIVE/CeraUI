@@ -23,6 +23,7 @@ import {
 	expire,
 	FIELD_LOCK_TTL_MS,
 	isLocked,
+	onRpcApplied,
 	reconcile,
 	registryCore,
 	shouldIgnoreEcho,
@@ -201,5 +202,59 @@ describe('dirty-registry pure core', () => {
 
 		// Unlocked field → never ignored, regardless of value.
 		expect(shouldIgnoreEcho(reg, 'framerate', 30)).toBe(false);
+	});
+
+	// ----------------------------------------------------------------------
+	// E9 — onRpcApplied (clamp): the owning RPC resolves carrying the SERVER-
+	// APPLIED (clamped) value. The lock releases immediately to that applied
+	// value — not to the client's intended value — without waiting for an echo.
+	// ----------------------------------------------------------------------
+	it('E9: onRpcApplied releases to the clamped server-applied value', () => {
+		const reg = createRegistry();
+
+		// User intends 12000; mark resolved (RPC settled), then applied-state ack.
+		registryCore.markPending(reg, 'max_br', 12000, T0);
+		registryCore.markResolved(reg, 'max_br');
+
+		// Server clamped 12000 → 8000. Lock releases to 8000 (the applied value).
+		const result = onRpcApplied(reg, 'max_br', 8000, T0 + 100);
+		expect(result).toEqual({ apply: true, released: true });
+		expect(isLocked(reg, 'max_br')).toBe(false);
+
+		// onRpcApplied arriving BEFORE the resolve flag adopts the applied value as
+		// the new intent (and marks resolved) so the next matching echo releases.
+		registryCore.markPending(reg, 'srt_latency', 9000, T0 + 200);
+		const pending = onRpcApplied(reg, 'srt_latency', 5000, T0 + 250);
+		expect(pending).toEqual({ apply: true, released: false });
+		expect(isLocked(reg, 'srt_latency')).toBe(true);
+		expect(reg.locks.srt_latency.intendedValue).toBe(5000);
+		expect(reg.locks.srt_latency.rpcResolved).toBe(true);
+		// A stale echo of the OLD value is still ignored; the applied value matches.
+		expect(shouldIgnoreEcho(reg, 'srt_latency', 9000)).toBe(true);
+		expect(shouldIgnoreEcho(reg, 'srt_latency', 5000)).toBe(false);
+		const echo = reconcile(reg, 'srt_latency', 5000, true, T0 + 300);
+		expect(echo).toEqual({ apply: true, released: true });
+		expect(isLocked(reg, 'srt_latency')).toBe(false);
+	});
+
+	// ----------------------------------------------------------------------
+	// E10 — TTL(10s) < RPC-timeout(30s): a slow RPC resolves with applied state
+	// AFTER the TTL safety valve already released the lock. onRpcApplied must be
+	// idempotent — accept the applied value, but NEVER resurrect a stale lock.
+	// ----------------------------------------------------------------------
+	it('E10: slow RPC applied-state after TTL expiry is safe (no lock resurrection)', () => {
+		const reg = createRegistry();
+		registryCore.markPending(reg, 'max_br', 12000, T0);
+
+		// TTL fires first (10s) — the safety valve releases the field.
+		expect(expire(reg, T0 + FIELD_LOCK_TTL_MS + 1)).toEqual(['max_br']);
+		expect(isLocked(reg, 'max_br')).toBe(false);
+
+		// The slow RPC resolves later (~within 30s) carrying the applied value.
+		const late = onRpcApplied(reg, 'max_br', 8000, T0 + 25_000);
+		// Idempotent: the applied value is accepted, but no lock is recreated.
+		expect(late).toEqual({ apply: true, released: false });
+		expect(isLocked(reg, 'max_br')).toBe(false);
+		expect(Object.keys(reg.locks)).toEqual([]);
 	});
 });

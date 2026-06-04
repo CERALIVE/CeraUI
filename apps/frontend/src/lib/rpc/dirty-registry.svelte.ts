@@ -164,6 +164,56 @@ export function reconcile(
 }
 
 /**
+ * Reconcile a field-lock against the **server-applied** value carried by a
+ * resolved command RPC (Task 10 returns applied state; Task 15 wires it here).
+ *
+ * This is the *fast path*: rather than waiting for the next periodic broadcast
+ * echo to release the lock, we release it the instant the owning RPC resolves
+ * with the authoritative applied value — which may differ from the user's
+ * intended value when the server/hardware clamped it.
+ *
+ * Release rule (the chosen contract):
+ *   1. Locked + `rpcResolved` → release the lock and accept `appliedValue` as
+ *      truth (any value, including a clamped one). Caller should apply it.
+ *   2. Locked + still pending → adopt `appliedValue` as the new intended value
+ *      and mark the RPC resolved, so the *next* matching echo releases cleanly
+ *      to the applied value. Meanwhile a stale echo of the OLD value is still
+ *      ignored (the lock keeps guarding via {@link shouldIgnoreEcho}).
+ *   3. NOT locked → **no-op** (idempotent). This is the deliberate resolution of
+ *      the TTL(10s) < RPC-timeout(30s) gap: a slow RPC that resolves *after* the
+ *      TTL safety valve ({@link expire}) already released the field must NEVER
+ *      resurrect a stale lock. Applying applied-state late is therefore safe.
+ *
+ * Note the `now` parameter is accepted for signature symmetry with the other
+ * pure functions (and forward-compatibility); release here is driven by lock
+ * presence + `rpcResolved`, not by elapsed time — the TTL already governs that.
+ */
+export function onRpcApplied(
+	registry: DirtyRegistry,
+	field: string,
+	appliedValue: unknown,
+	_now: number,
+): ReconcileResult {
+	const lock = registry.locks[field];
+	// Case 3: TTL safety valve already released this field — do NOT resurrect it.
+	// Accepting the applied value into view state is fine; releasing nothing.
+	if (!lock) return { apply: true, released: false };
+
+	// Case 1: the owning RPC has resolved — release to the server-applied value.
+	if (lock.rpcResolved) {
+		delete registry.locks[field];
+		return { apply: true, released: true };
+	}
+
+	// Case 2: applied-state arrived before we observed the resolve flag. Adopt the
+	// applied value as the new intent and mark resolved, so the next matching echo
+	// releases to the applied value (and stale OLD-value echoes stay ignored).
+	lock.intendedValue = appliedValue;
+	lock.rpcResolved = true;
+	return { apply: true, released: false };
+}
+
+/**
  * Release every lock older than {@link FIELD_LOCK_TTL_MS}. Returns the names of
  * the fields that were released (empty when nothing expired). This is the safety
  * valve guaranteeing a field can never stay locked forever.
@@ -192,6 +242,7 @@ export const registryCore = {
 	markResolved,
 	shouldIgnoreEcho,
 	reconcile,
+	onRpcApplied,
 	expire,
 } as const;
 
@@ -214,6 +265,7 @@ interface DirtyStore {
 		now?: number,
 		options?: { strict?: boolean },
 	) => ReconcileResult;
+	onRpcApplied: (field: string, appliedValue: unknown, now?: number) => ReconcileResult;
 	expire: (now?: number) => string[];
 	getRegistry: () => DirtyRegistry;
 	destroy: () => void;
@@ -249,6 +301,8 @@ function createDirtyStore(): DirtyStore {
 		shouldIgnoreEcho: (field, incomingValue) => shouldIgnoreEcho(registry, field, incomingValue),
 		reconcile: (field, incomingValue, now = Date.now(), options?) =>
 			reconcile(registry, field, incomingValue, registry.locks[field]?.rpcResolved ?? false, now, options),
+		onRpcApplied: (field, appliedValue, now = Date.now()) =>
+			onRpcApplied(registry, field, appliedValue, now),
 		expire: (now = Date.now()) => expire(registry, now),
 		getRegistry: () => registry,
 		destroy: () => {
@@ -301,6 +355,20 @@ export function reconcileReactive(
 	options?: { strict?: boolean },
 ): ReconcileResult {
 	return store().reconcile(field, incomingValue, now, options);
+}
+
+/**
+ * Reconcile the live registry against the server-applied value returned by a
+ * resolved command RPC (Task 15). Releases the field-lock to the authoritative
+ * applied value immediately, instead of waiting for the next broadcast echo.
+ * Idempotent when the TTL has already released the lock. See {@link onRpcApplied}.
+ */
+export function onRpcAppliedReactive(
+	field: string,
+	appliedValue: unknown,
+	now?: number,
+): ReconcileResult {
+	return store().onRpcApplied(field, appliedValue, now);
 }
 
 /**
