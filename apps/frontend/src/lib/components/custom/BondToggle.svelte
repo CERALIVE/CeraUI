@@ -40,6 +40,15 @@ let { name, enabled, ip, disabledReason, onBeforeDisable, class: className }: Pr
 // the visual state on the next subscription update.
 // `target` is only read while `pending`, and is always assigned before
 // `pending` flips true, so its initial value is never observed.
+//
+// PESSIMISTIC CONTROL (Task 26): the Switch is driven by a function binding
+// `bind:checked={() => displayed, toggle}` rather than a one-way `checked` +
+// `onCheckedChange`. `displayed` is the single read source, so `aria-checked`
+// can never diverge from it. bits-ui's internal `checked = !checked` write on
+// click is routed straight into `toggle(next)`; it cannot mutate the rendered
+// state itself. This is what holds the switch visually ON across the awaited
+// `onBeforeDisable` confirm — the flip only lands once `toggle` advances
+// `target`/`pending`, i.e. AFTER the user confirms.
 let pending = $state(false);
 let target = $state(false);
 
@@ -106,9 +115,8 @@ async function toggle(next: boolean) {
 						{...props}
 						aria-busy={pending}
 						aria-label={tooltipText}
-						checked={displayed}
+						bind:checked={() => displayed, (next) => void toggle(next)}
 						disabled={isDisabled}
-						onCheckedChange={toggle}
 					/>
 				{/snippet}
 			</Tooltip.Trigger>
