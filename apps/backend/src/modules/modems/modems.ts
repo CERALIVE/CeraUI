@@ -34,7 +34,7 @@ import { setGsmOperatorName } from "./gsm-operators-cache.ts";
 import { mmSetNetworkTypes } from "./mmcli.ts";
 import { modemNetworkScan } from "./modem-network-scan.ts";
 import { broadcastModems } from "./modem-status.ts";
-import { sanitizeModemConfigForNetworkManager } from "./modem-update-loop.ts";
+import { sanitizeModemConfigForNetworkManager } from "./modem-registration.ts";
 import { getModem, type ModemConfig } from "./modems-state.ts";
 
 type ModemConfigMessage = {

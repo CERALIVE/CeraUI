@@ -42,6 +42,8 @@ import { initRevisions } from "./modules/system/revisions.ts";
 import { initHardwareMonitoring } from "./modules/system/sensors.ts";
 import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updates.ts";
 import { getSshStatus } from "./modules/system/ssh.ts";
+import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
+import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
 import { initServer } from "./rpc/index.ts";
 
 /* Disable localization for any CLI commands we run */

@@ -34,7 +34,7 @@ import {
 import { updateBcrptSourceIps } from "../streaming/bcrpt.ts";
 import {
 	type WifiNetwork,
-	wifiBroadcastState,
+	broadcastWifiState,
 	wifiUpdateSavedConns,
 } from "./wifi.ts";
 import {
@@ -53,7 +53,7 @@ import {
 	isHotspot,
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
-} from "./wifi-hotspot.ts";
+} from "./wifi-hotspot-types.ts";
 
 export type SSID = string;
 export type WifiInterfaceId = number;
@@ -211,7 +211,7 @@ export async function wifiUpdateDevices() {
 	}
 
 	if (newDevices || statusChange) {
-		wifiBroadcastState();
+		broadcastWifiState();
 
 		// Mark any WiFi hotspot interfaces as unavailable for bonding
 		let hotspotCount = 0;

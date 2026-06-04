@@ -22,6 +22,7 @@ import { type ExecFileException, execFile } from "node:child_process";
 import type WebSocket from "ws";
 
 import { logger } from "../../helpers/logger.ts";
+import { pollWithBackoff } from "../../helpers/retry.ts";
 import { extractMessage } from "../../helpers/types.ts";
 import {
 	getScenarioConfig,
@@ -52,16 +53,15 @@ import {
 	wifiScheduleScanUpdates,
 	wifiUpdateScanResult,
 } from "./wifi-connections.ts";
+import { wifiHotspotStart } from "./wifi-hotspot-activation.ts";
+import { wifiHotspotConfig, wifiHotspotStop } from "./wifi-hotspot-config.ts";
+import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
 import {
 	canHotspot,
-	handleHotspotConn,
 	isHotspot,
 	type WifiHotspot,
 	type WifiHotspotMessage,
-	wifiHotspotConfig,
-	wifiHotspotStart,
-	wifiHotspotStop,
-} from "./wifi-hotspot.ts";
+} from "./wifi-hotspot-types.ts";
 import {
 	type BaseWifiInterface,
 	getMacAddressForWifiInterface,
@@ -199,12 +199,21 @@ export function wifiBuildMsg() {
 	return ifs;
 }
 
-export function wifiBroadcastState() {
+export function broadcastWifiState() {
 	broadcastMsg("status", { wifi: wifiBuildMsg() });
 }
 
 export async function wifiUpdateSavedConns() {
-	const connections = await nmConnsGet("uuid,type");
+	// Retry transient nmcli connection-list failures with exponential backoff (T7).
+	const connections = await pollWithBackoff(() => nmConnsGet("uuid,type"), {
+		maxAttempts: 3,
+		baseDelayMs: 200,
+		maxDelayMs: 1000,
+		emptyResultError: () =>
+			new Error("nmcli connection list returned no results"),
+		onExhausted: (err) =>
+			logger.debug(`wifiUpdateSavedConns: list failed after retries: ${err}`),
+	});
 	if (connections === undefined) return;
 
 	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
