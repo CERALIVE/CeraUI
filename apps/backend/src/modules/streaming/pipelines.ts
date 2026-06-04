@@ -69,6 +69,8 @@ export function setMockHardware(hw: string): boolean {
 	}
 	mockHardwareOverride = hw as HardwareType;
 	logger.info(`🔧 Mock hardware set to: ${hw}`);
+	// Rebuild the registry so lookups reflect the new hardware, not the old.
+	initPipelines();
 	return true;
 }
 
