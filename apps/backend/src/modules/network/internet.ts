@@ -19,8 +19,6 @@
   Check Internet connectivity and if needed update the default route
 */
 
-import http, { type RequestOptions } from "node:http";
-
 import { logger } from "../../helpers/logger.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 
@@ -29,8 +27,12 @@ const CONNECTIVITY_CHECK_PATH = "/generate_204";
 const CONNECTIVITY_CHECK_CODE = 204;
 const CONNECTIVITY_CHECK_BODY = "";
 
-type HttpGetOptions = RequestOptions & {
+type HttpGetOptions = {
+	headers?: Record<string, string>;
+	path?: string;
+	host?: string;
 	timeout?: number;
+	localAddress?: string;
 };
 
 type HttpGetResponse = {
@@ -38,37 +40,42 @@ type HttpGetResponse = {
 	body: string;
 };
 
-export function httpGet(options: HttpGetOptions) {
-	return new Promise<HttpGetResponse>((resolve, reject) => {
-		let to: ReturnType<typeof setTimeout> | undefined;
+export async function httpGet(options: HttpGetOptions) {
+	const { headers, path, host, timeout } = options;
 
-		if (options.timeout) {
-			to = setTimeout(() => {
-				req.destroy();
-				reject("timeout");
-			}, options.timeout);
+	const url = `http://${host}${path || "/"}`;
+	const controller = new AbortController();
+	let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+	if (timeout) {
+		timeoutId = setTimeout(() => {
+			controller.abort();
+		}, timeout);
+	}
+
+	try {
+		const response = await fetch(url, {
+			signal: controller.signal,
+			headers: headers || {},
+		});
+
+		if (timeoutId) {
+			clearTimeout(timeoutId);
 		}
 
-		const req = http.get(options, (res) => {
-			let response = "";
-			res.on("data", (d) => {
-				response += d;
-			});
-			res.on("end", () => {
-				if (to) {
-					clearTimeout(to);
-				}
-				resolve({ code: res.statusCode, body: response });
-			});
-		});
+		let body = "";
+		if (response.body) {
+			body = await response.text();
+		}
 
-		req.on("error", (e) => {
-			if (to) {
-				clearTimeout(to);
-			}
-			reject(e);
-		});
-	});
+		return { code: response.status, body };
+	} catch (error) {
+		if (timeoutId) {
+			clearTimeout(timeoutId);
+		}
+
+		throw error;
+	}
 }
 
 export async function checkConnectivity(
