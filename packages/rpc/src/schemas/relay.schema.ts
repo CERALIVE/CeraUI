@@ -138,6 +138,7 @@ export const RELAY_VALIDATE_STAGES = [
 	'protocol',
 	'endpoint',
 	'dns',
+	'probe',
 	'ok',
 ] as const;
 export const relayValidateStageSchema = z.enum(RELAY_VALIDATE_STAGES);
@@ -153,7 +154,7 @@ export const relayValidateInputSchema = z.object({
 export type RelayValidateInput = z.infer<typeof relayValidateInputSchema>;
 
 export const relayValidateOutputSchema = z.object({
-	ok: z.boolean(),
+	valid: z.boolean(),
 	stage: relayValidateStageSchema,
 	reason: z.string().optional(),
 });

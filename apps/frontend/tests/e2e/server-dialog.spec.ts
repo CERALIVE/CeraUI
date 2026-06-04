@@ -9,7 +9,8 @@
  *      endpoint shown READ-ONLY, and the manual-override toggle revealing
  *      editable host/port.
  *   3. Manual custom-relay validation — a reachable endpoint passes
- *      (`relay.validate` → ok).
+ *      (`relay.validate` → { valid: true, stage: "probe" }). A local UDP echo
+ *      responder answers the backend's post-connection reachability probe.
  *   4. Manual custom-relay validation — an unresolvable host fails at the `dns`
  *      stage and the inline reason is surfaced.
  *
@@ -18,6 +19,8 @@
  * catalog populates from the mock backend a short while after auth, so relay
  * scenarios gate on the relay tab becoming enabled.
  */
+import { createSocket } from 'node:dgram';
+
 import { expect, test } from './fixtures/index.js';
 import { navigateTo } from './helpers/index.js';
 
@@ -101,18 +104,28 @@ test.describe('ServerDialog — method-based UI', () => {
 	test('manual custom-relay validation — reachable endpoint passes', async ({
 		authedPage: page,
 	}) => {
-		const dialog = await openServerDialog(page);
+		// Loopback UDP echo answers the backend `probe` stage on an ephemeral port.
+		const echo = createSocket('udp4');
+		const port = await new Promise<number>((resolve) => {
+			echo.on('message', (msg, rinfo) => echo.send(msg, rinfo.port, rinfo.address));
+			echo.bind(0, '127.0.0.1', () => resolve(echo.address().port));
+		});
 
-		// Manual method is the default; fill a resolvable endpoint (IP literal).
-		await dialog.locator('#srtla-addr').fill('127.0.0.1');
-		await dialog.locator('#srtla-port').fill('5000');
-		await dialog.locator('#srt-streamid').fill('e2e-stream');
+		try {
+			const dialog = await openServerDialog(page);
 
-		await dialog.locator('#relay-validate').click();
-		await expect(dialog.getByText('Endpoint reachable')).toBeVisible({ timeout: 15_000 });
+			await dialog.locator('#srtla-addr').fill('127.0.0.1');
+			await dialog.locator('#srtla-port').fill(String(port));
+			await dialog.locator('#srt-streamid').fill('e2e-stream');
 
-		// A passing validation keeps Save enabled.
-		await expect(dialog.getByRole('button', { name: 'Save' })).toBeEnabled();
+			await dialog.locator('#relay-validate').click();
+			await expect(dialog.getByText('Endpoint reachable')).toBeVisible({ timeout: 15_000 });
+
+			// A passing validation keeps Save enabled.
+			await expect(dialog.getByRole('button', { name: 'Save' })).toBeEnabled();
+		} finally {
+			echo.close();
+		}
 	});
 
 	test('manual custom-relay validation — unresolvable host fails at dns stage', async ({

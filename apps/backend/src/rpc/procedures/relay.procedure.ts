@@ -8,10 +8,14 @@
  *   input    → address/port shape
  *   protocol → a working transport adapter exists for the protocol
  *   endpoint → the transport adapter accepts the config (golden srtla rules)
- *   dns      → the host resolves
+ *   dns      → the host resolves to an IP
+ *   probe    → the resolved IP:port is actually reachable (UDP probe)
  *
  * The endpoint stage reuses the Task 7 transport adapter so validation stays in
- * lock-step with the live resolver.
+ * lock-step with the live resolver. The two-phase design is: stages 1-4 vet the
+ * config/DNS statically, then the `probe` stage does a single timeout-bounded,
+ * post-connection UDP reachability check against the resolved `addr:port` (see
+ * `transport/validate.ts`) — never a full SRT/SRTLA session.
  */
 
 import { lookup } from "node:dns/promises";
@@ -28,6 +32,7 @@ import {
 	NotImplementedError,
 	UnknownProtocolError,
 } from "../../modules/streaming/transport/types.ts";
+import { probeReachability } from "../../modules/streaming/transport/validate.ts";
 import { validatePortNo } from "../../helpers/number.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -36,7 +41,7 @@ const baseProcedure = os.$context<RPCContext>();
 const authedProcedure = baseProcedure.use(authMiddleware);
 
 function fail(stage: RelayValidateOutput["stage"], reason: string): RelayValidateOutput {
-	return { ok: false, stage, reason };
+	return { valid: false, stage, reason };
 }
 
 export const relayValidateProcedure = authedProcedure
@@ -67,11 +72,16 @@ export const relayValidateProcedure = authedProcedure
 			return fail(stage, error instanceof Error ? error.message : "Invalid endpoint");
 		}
 
+		let resolvedIp: string;
 		try {
-			await lookup(addr);
+			resolvedIp = (await lookup(addr)).address;
 		} catch {
 			return fail("dns", `Cannot resolve host '${addr}'`);
 		}
 
-		return { ok: true, stage: "ok" };
+		// Post-connection reachability probe (rationale in transport/validate.ts).
+		const probe = await probeReachability(resolvedIp, input.port);
+		if (!probe.reachable) return fail("probe", probe.reason);
+
+		return { valid: true, stage: "probe" };
 	});

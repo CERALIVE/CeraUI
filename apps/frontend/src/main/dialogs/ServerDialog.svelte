@@ -210,7 +210,7 @@ async function handleValidate() {
 			passphrase: passphrase.trim() === '' ? undefined : passphrase.trim(),
 			protocol: 'srtla',
 		});
-		validation = result.ok
+		validation = result.valid
 			? { state: 'pass', stage: result.stage }
 			: { state: 'fail', stage: result.stage, reason: result.reason };
 	} catch (error) {
