@@ -16,82 +16,81 @@ const config: Config = {
 		},
 		extend: {
 			colors: {
-				border: "hsl(var(--border) / <alpha-value>)",
-				input: "hsl(var(--input) / <alpha-value>)",
-				ring: "hsl(var(--ring) / <alpha-value>)",
-				background: "hsl(var(--background) / <alpha-value>)",
-				foreground: "hsl(var(--foreground) / <alpha-value>)",
+				border: "var(--border)",
+				input: "var(--input)",
+				ring: "var(--ring)",
+				background: "var(--background)",
+				foreground: "var(--foreground)",
 				primary: {
-					DEFAULT: "hsl(var(--primary) / <alpha-value>)",
-					foreground: "hsl(var(--primary-foreground) / <alpha-value>)",
+					DEFAULT: "var(--primary)",
+					foreground: "var(--primary-foreground)",
 				},
 				secondary: {
-					DEFAULT: "hsl(var(--secondary) / <alpha-value>)",
-					foreground: "hsl(var(--secondary-foreground) / <alpha-value>)",
+					DEFAULT: "var(--secondary)",
+					foreground: "var(--secondary-foreground)",
 				},
 				destructive: {
-					DEFAULT: "hsl(var(--destructive) / <alpha-value>)",
-					foreground: "hsl(var(--destructive-foreground) / <alpha-value>)",
+					DEFAULT: "var(--destructive)",
+					foreground: "var(--destructive-foreground)",
 				},
 				muted: {
-					DEFAULT: "hsl(var(--muted) / <alpha-value>)",
-					foreground: "hsl(var(--muted-foreground) / <alpha-value>)",
+					DEFAULT: "var(--muted)",
+					foreground: "var(--muted-foreground)",
 				},
 				accent: {
-					DEFAULT: "hsl(var(--accent) / <alpha-value>)",
-					foreground: "hsl(var(--accent-foreground) / <alpha-value>)",
+					DEFAULT: "var(--accent)",
+					foreground: "var(--accent-foreground)",
 				},
 				popover: {
-					DEFAULT: "hsl(var(--popover) / <alpha-value>)",
-					foreground: "hsl(var(--popover-foreground) / <alpha-value>)",
+					DEFAULT: "var(--popover)",
+					foreground: "var(--popover-foreground)",
 				},
 				card: {
-					DEFAULT: "hsl(var(--card) / <alpha-value>)",
-					foreground: "hsl(var(--card-foreground) / <alpha-value>)",
+					DEFAULT: "var(--card)",
+					foreground: "var(--card-foreground)",
 				},
-			sidebar: {
-				DEFAULT: "hsl(var(--sidebar-background))",
-				foreground: "hsl(var(--sidebar-foreground))",
-				primary: "hsl(var(--sidebar-primary))",
-				"primary-foreground": "hsl(var(--sidebar-primary-foreground))",
-				accent: "hsl(var(--sidebar-accent))",
-				"accent-foreground": "hsl(var(--sidebar-accent-foreground))",
-				border: "hsl(var(--sidebar-border))",
-				ring: "hsl(var(--sidebar-ring))",
-			},
-			status: {
-				success: {
-					DEFAULT: "hsl(var(--status-success) / <alpha-value>)",
-					foreground:
-						"hsl(var(--status-success-foreground) / <alpha-value>)",
+				sidebar: {
+					DEFAULT: "var(--sidebar-background)",
+					foreground: "var(--sidebar-foreground)",
+					primary: "var(--sidebar-primary)",
+					"primary-foreground": "var(--sidebar-primary-foreground)",
+					accent: "var(--sidebar-accent)",
+					"accent-foreground": "var(--sidebar-accent-foreground)",
+					border: "var(--sidebar-border)",
+					ring: "var(--sidebar-ring)",
 				},
-				info: {
-					DEFAULT: "hsl(var(--status-info) / <alpha-value>)",
-					foreground:
-						"hsl(var(--status-info-foreground) / <alpha-value>)",
+				status: {
+					success: {
+						DEFAULT: "var(--status-success)",
+						foreground: "var(--status-success-foreground)",
+					},
+					info: {
+						DEFAULT: "var(--status-info)",
+						foreground: "var(--status-info-foreground)",
+					},
+					warning: {
+						DEFAULT: "var(--status-warning)",
+						foreground: "var(--status-warning-foreground)",
+					},
+					error: {
+						DEFAULT: "var(--status-error)",
+						foreground: "var(--status-error-foreground)",
+					},
+					neutral: {
+						DEFAULT: "var(--status-neutral)",
+						foreground: "var(--status-neutral-foreground)",
+					},
 				},
-				warning: {
-					DEFAULT: "hsl(var(--status-warning) / <alpha-value>)",
-					foreground:
-						"hsl(var(--status-warning-foreground) / <alpha-value>)",
+				signal: {
+					excellent: "var(--signal-excellent)",
+					good: "var(--signal-good)",
+					fair: "var(--signal-fair)",
+					weak: "var(--signal-weak)",
 				},
-				error: {
-					DEFAULT: "hsl(var(--status-error) / <alpha-value>)",
-					foreground:
-						"hsl(var(--status-error-foreground) / <alpha-value>)",
+				switch: {
+					off: "var(--switch-off)",
+					"off-foreground": "var(--switch-off-foreground)",
 				},
-				neutral: {
-					DEFAULT: "hsl(var(--status-neutral) / <alpha-value>)",
-					foreground:
-						"hsl(var(--status-neutral-foreground) / <alpha-value>)",
-				},
-			},
-			signal: {
-				excellent: "hsl(var(--signal-excellent) / <alpha-value>)",
-				good: "hsl(var(--signal-good) / <alpha-value>)",
-				fair: "hsl(var(--signal-fair) / <alpha-value>)",
-				weak: "hsl(var(--signal-weak) / <alpha-value>)",
-			},
 			},
 			borderRadius: {
 				xl: "calc(var(--radius) + 4px)",
@@ -100,7 +99,21 @@ const config: Config = {
 				sm: "calc(var(--radius) - 4px)",
 			},
 			fontFamily: {
-				sans: ["Plus Jakarta Sans Variable", ...fontFamily.sans],
+				sans: [
+					"Space Grotesk Variable",
+					"Space Grotesk",
+					// CJK system fallbacks (Space Grotesk has no CJK glyphs)
+					'"Noto Sans CJK SC"',
+					'"Microsoft YaHei"',
+					'"Hiragino Sans"',
+					'"Noto Sans JP"',
+					'"Noto Sans KR"',
+					// Arabic system fallback
+					'"Noto Sans Arabic"',
+					"Tahoma",
+					"system-ui",
+					"sans-serif",
+				],
 				mono: ["JetBrains Mono Variable", ...fontFamily.mono],
 			},
 			keyframes: {

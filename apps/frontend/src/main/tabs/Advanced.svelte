@@ -20,7 +20,7 @@ import * as Card from '$lib/components/ui/card';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
+import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import {
 	getDeviceLog,
 	getSystemLog,

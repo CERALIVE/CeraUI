@@ -342,6 +342,38 @@
       })();
     </script>
 
+    <!-- Theme Detection Script (prevents dark-mode FOUC) -->
+    <script>
+      (function() {
+        try {
+          // The theme store persists JSON (e.g. "dark"/"system"), so parse before comparing.
+          var raw = localStorage.getItem('theme');
+          var choice = null;
+          if (raw) {
+            try { choice = JSON.parse(raw); } catch (e) { choice = raw; }
+          }
+          if (typeof choice === 'string') choice = choice.replace(/^"+|"+$/g, '');
+
+          var resolved;
+          if (choice === 'light' || choice === 'dark') {
+            resolved = choice;
+          } else {
+            // 'system' or no stored choice. On headless devices with no
+            // prefers-color-scheme, system defaults to dark: a 'light' query miss
+            // covers both OS-prefers-dark and no-preference, resolving both to dark
+            // pre-paint (matches mode-watcher) so there is no light->dark flicker.
+            resolved = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          }
+
+          if (resolved === 'dark') {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch(e) {}
+      })();
+    </script>
+
     <!-- Brand Configuration Script -->
     <script>
       // Dynamic branding based on build configuration

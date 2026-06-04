@@ -13,7 +13,7 @@ import {
 import { RefreshCw } from '@lucide/svelte';
 
 import * as Card from '$lib/components/ui/card';
-import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
+import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import { getUsedNetworks } from '$lib/helpers/NetworkHelper';
 import { installSoftwareUpdates } from '$lib/helpers/SystemHelper';
 import {

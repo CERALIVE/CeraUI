@@ -69,7 +69,7 @@ const transitionParams = $derived.by(() => {
 			in:fade={{ duration: 150 }}
 			out:fade={{ duration: 150 }}
 		>
-			<span class="sr-only">{$LL?.navigation?.loading?.() || 'Loading...'}</span>
+			<span class="sr-only">{$LL.navigation.loading()}</span>
 			<div class="border-primary/30 border-t-primary h-6 w-6 animate-spin rounded-full border-2"></div>
 		</div>
 	{/if}
@@ -106,7 +106,7 @@ const transitionParams = $derived.by(() => {
 					class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-2 transition-colors focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none"
 					onclick={() => enhancedNavigationStore.setError(null)}
 				>
-					{$LL?.navigation?.tryAgain?.() || 'Try Again'}
+					{$LL.navigation.tryAgain()}
 				</button>
 			</div>
 		</div>

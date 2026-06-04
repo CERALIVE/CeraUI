@@ -1,16 +1,21 @@
 import Root from "./tabs.svelte";
 import Content from "./tabs-content.svelte";
-import List from "./tabs-list.svelte";
+import List, {
+	type TabsListVariant,
+	tabsListVariants,
+} from "./tabs-list.svelte";
 import Trigger from "./tabs-trigger.svelte";
 
 export {
-	Root,
 	Content,
+	Content as TabsContent,
 	List,
-	Trigger,
+	List as TabsList,
+	Root,
 	//
 	Root as Tabs,
-	Content as TabsContent,
-	List as TabsList,
+	type TabsListVariant,
+	Trigger,
 	Trigger as TabsTrigger,
+	tabsListVariants,
 };

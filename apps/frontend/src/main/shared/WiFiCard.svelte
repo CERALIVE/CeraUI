@@ -5,7 +5,7 @@ import { EyeIcon, Router, Wifi, WifiOff } from '@lucide/svelte';
 
 import SignalIndicator from '$lib/components/icons/SignalIndicator.svelte';
 import * as Card from '$lib/components/ui/card';
-import SimpleAlertDialog from '$lib/components/ui/simple-alert-dialog.svelte';
+import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import {
 	generateWifiQr,

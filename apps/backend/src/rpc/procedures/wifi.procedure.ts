@@ -17,9 +17,17 @@ import {
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 
+import {
+	getMockState,
+	mockWifiSsidForUuid,
+	setMockWifiConnection,
+	shouldUseMocks,
+} from "../../mocks/mock-service.ts";
 import { handleWifi, wifiBuildMsg } from "../../modules/wifi/wifi.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
+
+const MOCK_WIFI_DEVICE = "wlan0";
 
 // Base procedure with context
 const baseProcedure = os.$context<RPCContext>();
@@ -46,6 +54,12 @@ export const wifiConnectProcedure = authedProcedure
 		handleWifi(context.ws as unknown as import("ws").default, {
 			connect: input.uuid,
 		});
+		if (shouldUseMocks()) {
+			const ssid = mockWifiSsidForUuid(input.uuid);
+			if (ssid) {
+				setMockWifiConnection(MOCK_WIFI_DEVICE, { activeNetwork: ssid });
+			}
+		}
 		return { success: true };
 	});
 
@@ -59,6 +73,9 @@ export const wifiDisconnectProcedure = authedProcedure
 		handleWifi(context.ws as unknown as import("ws").default, {
 			disconnect: input.uuid,
 		});
+		if (shouldUseMocks()) {
+			setMockWifiConnection(MOCK_WIFI_DEVICE, { activeNetwork: undefined });
+		}
 		return { success: true };
 	});
 
@@ -76,6 +93,16 @@ export const wifiConnectNewProcedure = authedProcedure
 				password: input.password,
 			},
 		});
+		if (shouldUseMocks()) {
+			const current = getMockState().wifiConnections.get(MOCK_WIFI_DEVICE);
+			const savedNetworks = current?.savedNetworks ?? [];
+			setMockWifiConnection(MOCK_WIFI_DEVICE, {
+				activeNetwork: input.ssid,
+				savedNetworks: savedNetworks.includes(input.ssid)
+					? savedNetworks
+					: [...savedNetworks, input.ssid],
+			});
+		}
 		return { success: true };
 	});
 
@@ -89,6 +116,17 @@ export const wifiForgetProcedure = authedProcedure
 		handleWifi(context.ws as unknown as import("ws").default, {
 			forget: input.uuid,
 		});
+		if (shouldUseMocks()) {
+			const ssid = mockWifiSsidForUuid(input.uuid);
+			if (ssid) {
+				const current = getMockState().wifiConnections.get(MOCK_WIFI_DEVICE);
+				setMockWifiConnection(MOCK_WIFI_DEVICE, {
+					savedNetworks: (current?.savedNetworks ?? []).filter((s) => s !== ssid),
+					activeNetwork:
+						current?.activeNetwork === ssid ? undefined : current?.activeNetwork,
+				});
+			}
+		}
 		return { success: true };
 	});
 

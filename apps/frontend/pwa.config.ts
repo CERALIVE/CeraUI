@@ -92,8 +92,8 @@ export const pwaConfig: VitePWAOptions = {
 		start_url: "/",
 		scope: "/",
 		display: "standalone",
-		theme_color: "#ffffff",
-		background_color: "#ffffff",
+		theme_color: "#1c1e1c",
+		background_color: "#1c1e1c",
 		orientation: "portrait-primary",
 		icons: [
 			{

@@ -10,6 +10,20 @@ export type AudioCodec = z.infer<typeof audioCodecSchema>;
 // Alias for frontend compatibility
 export type AudioCodecs = 'aac' | 'opus';
 
+// Resolution and framerate types for pipeline overrides
+export const resolutionSchema = z.enum(["480p", "720p", "1080p", "1440p", "2160p", "4k"]);
+export type Resolution = z.infer<typeof resolutionSchema>;
+
+export const framerateSchema = z.union([
+	z.literal(25),
+	z.literal(29.97),
+	z.literal(30),
+	z.literal(50),
+	z.literal(59.94),
+	z.literal(60),
+]);
+export type Framerate = z.infer<typeof framerateSchema>;
+
 // Streaming configuration input schema
 export const streamingConfigInputSchema = z.object({
 	delay: z.number().int().min(-2000).max(2000).optional(),
@@ -25,6 +39,8 @@ export const streamingConfigInputSchema = z.object({
 	bitrate_overlay: z.boolean().optional(),
 	max_br: z.number().int().min(500).max(50000).optional(),
 	autostart: z.boolean().optional(),
+	resolution: resolutionSchema.optional(),
+	framerate: framerateSchema.optional(),
 });
 export type StreamingConfigInput = z.infer<typeof streamingConfigInputSchema>;
 
@@ -39,20 +55,6 @@ export const bitrateOutputSchema = z.object({
 	max_br: z.number(),
 });
 export type BitrateOutput = z.infer<typeof bitrateOutputSchema>;
-
-// Resolution and framerate types for pipeline overrides
-export const resolutionSchema = z.enum(["480p", "720p", "1080p", "1440p", "2160p", "4k"]);
-export type Resolution = z.infer<typeof resolutionSchema>;
-
-export const framerateSchema = z.union([
-	z.literal(25),
-	z.literal(29.97),
-	z.literal(30),
-	z.literal(50),
-	z.literal(59.94),
-	z.literal(60),
-]);
-export type Framerate = z.infer<typeof framerateSchema>;
 
 // Hardware type schema
 export const hardwareTypeSchema = z.enum(["jetson", "rk3588", "n100", "generic"]);
@@ -169,6 +171,8 @@ export const configMessageSchema = z.object({
 	custom_provider: customProviderInputSchema.optional(),
 	relay_account: z.string().optional(),
 	relay_server: z.string().optional(),
+	resolution: resolutionSchema.optional(),
+	framerate: framerateSchema.optional(),
 });
 export type ConfigMessage = z.infer<typeof configMessageSchema>;
 

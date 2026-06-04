@@ -10,6 +10,88 @@ env:
   NODE_VERSION: "24"
 
 jobs:
+  test:
+    name: Test (unit + E2E guardrails)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v4
+        with:
+          path: CeraUI
+
+      - name: Checkout ceracoder (sibling dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: CERALIVE/ceracoder
+          path: ceracoder
+
+      - name: Checkout srtla (sibling dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: CERALIVE/srtla
+          path: srtla
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: CeraUI/package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+          cache-dependency-path: CeraUI/pnpm-lock.yaml
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install sibling dependencies
+        run: |
+          pnpm install --dir ceracoder/bindings/typescript
+          pnpm install --dir srtla/bindings/typescript
+
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: CeraUI
+        run: pnpm --filter frontend exec playwright install chromium --with-deps
+
+      - name: Unit tests (vitest + bun)
+        working-directory: CeraUI
+        run: |
+          pnpm --filter frontend run test
+          pnpm --filter backend run test
+
+      - name: Guardrail — no page.screenshot/toHaveScreenshot in functional specs
+        working-directory: CeraUI
+        run: |
+          ! grep -rE "page\.screenshot\(|toHaveScreenshot\(" apps/frontend/tests/e2e --include="*.spec.ts" | grep -v "\.visual\.spec\.ts"
+
+      - name: Guardrail — no waitForTimeout in specs
+        working-directory: CeraUI
+        run: |
+          ! grep -rE "waitForTimeout|page\.waitFor\(\s*[0-9]" apps/frontend/tests/e2e --include="*.spec.ts"
+
+      - name: Guardrail — no hardcoded #nav-tab- selectors in specs
+        working-directory: CeraUI
+        run: |
+          ! grep -rnE "#nav-tab-" apps/frontend/tests/e2e --include="*.spec.ts"
+
+      - name: Reset auth state
+        working-directory: CeraUI
+        run: rm -f apps/backend/auth_tokens.json
+
+      - name: Functional E2E (screenshot-free, no @visual)
+        working-directory: CeraUI
+        run: CI=true E2E_PASSWORD=12345678 pnpm --filter frontend run test:e2e -- --grep-invert @visual
+        env:
+          MOCK_SCENARIO: multi-modem-wifi
+
   build:
     name: Build ${{ matrix.arch }}
     runs-on: ubuntu-latest

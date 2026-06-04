@@ -6,13 +6,20 @@ import { cn } from '$lib/utils.js';
 let {
 	ref = $bindable(null),
 	loadingStatus = $bindable('loading'),
+	size = 'default',
 	class: className,
 	...restProps
-}: AvatarPrimitive.RootProps = $props();
+}: AvatarPrimitive.RootProps & {
+	size?: 'default' | 'sm' | 'lg';
+} = $props();
 </script>
 
 <AvatarPrimitive.Root
-	class={cn('relative flex size-8 shrink-0 overflow-hidden rounded-full', className)}
+	class={cn(
+		'after:border-border group/avatar relative flex size-8 shrink-0 rounded-full select-none after:absolute after:inset-0 after:rounded-full after:border after:mix-blend-darken data-[size=lg]:size-10 data-[size=sm]:size-6 dark:after:mix-blend-lighten',
+		className,
+	)}
+	data-size={size}
 	data-slot="avatar"
 	bind:ref
 	bind:loadingStatus

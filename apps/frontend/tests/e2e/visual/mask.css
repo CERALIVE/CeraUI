@@ -1,0 +1,33 @@
+/*
+ * mask.css — hides live HUD telemetry for stable @visual baselines.
+ *
+ * The persistent HUD bar (HudBar.svelte) renders its trigger as a single
+ * button[data-hud-region]. Every fluctuating value — the status badge
+ * (LIVE/IDLE/OFFLINE), bitrate (font-mono tabular-nums), per-link signal
+ * mini-bars, and the SoC telemetry cluster (temperature · voltage · current) —
+ * is a <span> child of that button. Hiding those spans neutralises all live
+ * numeric/state churn so the snapshot only captures stable page chrome.
+ *
+ * visibility:hidden (not display:none) preserves layout/height so the rest of
+ * the page does not reflow between baseline and comparison runs.
+ */
+[data-hud-region] span,
+[data-hud-region] svg {
+	visibility: hidden !important;
+}
+
+/*
+ * Live telemetry outside the HUD (SpeedBadge throughput + TOTAL BANDWIDTH) —
+ * ticks with simulated traffic. Uses display:none (not visibility:hidden): the
+ * bonded-link cards are flex-wrap, so a hidden-but-sized variable-width value
+ * ("0 kbps" vs "12.4 Mbps") would reflow neighbouring cards. Removing it from
+ * layout makes card widths depend only on stable label text.
+ */
+[data-live-value] {
+	display: none !important;
+}
+
+/* Transient svelte-sonner toasts (e.g. the auth-bootstrap toast) — presence/opacity is timing-dependent. */
+[data-sonner-toaster] {
+	visibility: hidden !important;
+}

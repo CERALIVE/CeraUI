@@ -45,7 +45,10 @@ export interface MockModemConfig {
 	iccid: string;
 	carrier: string;
 	operatorCode: string;
-	networkType: "4G" | "5G";
+	network_type: {
+		supported: string[];
+		active: string;
+	};
 	interfaceName: string;
 	ip: string;
 }
@@ -59,7 +62,10 @@ export const mockModems: MockModemConfig[] = [
 		iccid: "89014103211118510720",
 		carrier: "T-Mobile",
 		operatorCode: "310260",
-		networkType: "5G",
+		network_type: {
+			supported: ["5g", "4g", "3g"],
+			active: "5g",
+		},
 		interfaceName: "usb0",
 		ip: "10.0.0.2",
 	},
@@ -71,7 +77,10 @@ export const mockModems: MockModemConfig[] = [
 		iccid: "89012104111118512345",
 		carrier: "AT&T",
 		operatorCode: "310410",
-		networkType: "4G",
+		network_type: {
+			supported: ["4g"],
+			active: "4g",
+		},
 		interfaceName: "usb1",
 		ip: "10.0.1.2",
 	},
@@ -83,7 +92,10 @@ export const mockModems: MockModemConfig[] = [
 		iccid: "89011202212312345678",
 		carrier: "Verizon",
 		operatorCode: "311480",
-		networkType: "5G",
+		network_type: {
+			supported: ["5g", "4g"],
+			active: "5g",
+		},
 		interfaceName: "usb2",
 		ip: "10.0.2.2",
 	},

@@ -1,10 +1,16 @@
 <script lang="ts">
 import { existingLocales, loadLocaleAsync, type Locales } from '@ceraui/i18n';
 import { LL, locale, setLocale } from '@ceraui/i18n/svelte';
-import { Activity, ChevronDown, Clock, Code, Globe, Monitor, Wifi } from '@lucide/svelte';
+import { Code } from '@lucide/svelte';
 
+import SystemBrowserPanel from '$lib/components/dev-tools/system-browser-panel.svelte';
+import SystemBuildPanel from '$lib/components/dev-tools/system-build-panel.svelte';
+import SystemLocalePanel from '$lib/components/dev-tools/system-locale-panel.svelte';
+import SystemNetworkPanel from '$lib/components/dev-tools/system-network-panel.svelte';
+import SystemPerformancePanel from '$lib/components/dev-tools/system-performance-panel.svelte';
+import SystemPreferencesPanel from '$lib/components/dev-tools/system-preferences-panel.svelte';
+import SystemTimingPanel from '$lib/components/dev-tools/system-timing-panel.svelte';
 import * as Card from '$lib/components/ui/card';
-import * as Collapsible from '$lib/components/ui/collapsible';
 import { BUILD_INFO, ENV_VARIABLES } from '$lib/env';
 import { setLocale as setLocaleStore } from '$lib/stores/locale.svelte';
 import { CLIENT_VERSION } from '$lib/stores/version-manager';
@@ -59,10 +65,6 @@ let buildInfo = $state({
 	clientVersion: '',
 	timestamp: '',
 });
-
-let browserInfoOpen = $state(false);
-let localeInfoOpen = $state(false);
-let preferencesOpen = $state(false);
 
 // Update system information
 function updateSystemInfo() {
@@ -288,347 +290,25 @@ async function handleLanguageClick(languageCode: Locales) {
 
 	<Card.Content class="space-y-6">
 		<!-- Build Information -->
-		<div class="space-y-3">
-			<div class="flex items-center gap-2 text-sm font-medium">
-				<Code class="h-4 w-4" />
-				{$LL.devtools.buildInformation()}
-			</div>
-			<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.mode()}</div>
-					<div class="font-mono text-sm font-medium">{buildInfo.mode}</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.nodeEnv()}</div>
-					<div class="font-mono text-sm font-medium">{buildInfo.nodeEnv}</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.devMode()}</div>
-					<div
-						class="font-mono text-sm font-medium {buildInfo.dev
-							? 'text-status-success'
-							: 'text-status-error'}"
-					>
-						{buildInfo.dev ? $LL.devtools.yes() : $LL.devtools.no()}
-					</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.clientVersion()}</div>
-					<div class="font-mono text-sm font-medium">{buildInfo.clientVersion}</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.socketEndpoint()}</div>
-					<div class="truncate font-mono text-xs font-medium">{buildInfo.socketEndpoint}</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.socketPort()}</div>
-					<div class="font-mono text-sm font-medium">{buildInfo.socketPort}</div>
-				</div>
-			</div>
-		</div>
+		<SystemBuildPanel {buildInfo} />
 
 		<!-- Browser Information -->
-		<Collapsible.Root bind:open={browserInfoOpen}>
-			<Collapsible.Trigger class="flex w-full cursor-pointer items-center justify-between text-sm font-medium hover:text-primary transition-colors">
-				<div class="flex items-center gap-2">
-					<Monitor class="h-4 w-4" />
-					{$LL.devtools.browserInformation()}
-				</div>
-				<ChevronDown class="h-4 w-4 text-muted-foreground transition-transform duration-200 {browserInfoOpen ? 'rotate-180' : ''}" />
-			</Collapsible.Trigger>
-			<Collapsible.Content>
-				<div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browser()}</div>
-						<div class="font-mono text-sm font-medium">{systemInfo.browser} {systemInfo.version}</div>
-					</div>
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.platform()}</div>
-						<div class="font-mono text-sm font-medium">{systemInfo.platform}</div>
-					</div>
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.userAgent()}</div>
-						<div class="truncate font-mono text-xs" title={navigator.userAgent}>
-							{navigator.userAgent.slice(0, 25)}...
-						</div>
-					</div>
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.onlineStatus()}</div>
-						<div
-							class="font-mono text-sm font-medium {systemInfo.onLine
-								? 'text-status-success'
-								: 'text-status-error'}"
-						>
-							{systemInfo.onLine ? $LL.devtools.online() : $LL.devtools.offline()}
-						</div>
-					</div>
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.cookies()}</div>
-						<div
-							class="font-mono text-sm font-medium {systemInfo.cookieEnabled
-								? 'text-status-success'
-								: 'text-status-error'}"
-						>
-							{systemInfo.cookieEnabled ? $LL.devtools.enabled() : $LL.devtools.disabled()}
-						</div>
-					</div>
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.pixelRatio()}</div>
-						<div class="font-mono text-sm font-medium">{windowInfo.devicePixelRatio}x</div>
-					</div>
-				</div>
-			</Collapsible.Content>
-		</Collapsible.Root>
+		<SystemBrowserPanel {systemInfo} {windowInfo} />
 
 		<!-- Locale & Language Information -->
-		<Collapsible.Root bind:open={localeInfoOpen}>
-			<Collapsible.Trigger class="flex w-full cursor-pointer items-center justify-between text-sm font-medium hover:text-primary transition-colors">
-				<div class="flex items-center gap-2">
-					<Globe class="h-4 w-4" />
-					App Locale & Language
-				</div>
-				<ChevronDown class="h-4 w-4 text-muted-foreground transition-transform duration-200 {localeInfoOpen ? 'rotate-180' : ''}" />
-			</Collapsible.Trigger>
-			<Collapsible.Content>
-				<div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.currentLanguage()}</div>
-						<div class="flex items-center gap-2 text-sm font-medium">
-							<span class="text-lg">{localeInfo.currentLanguageFlag}</span>
-							{localeInfo.currentLanguageName}
-							<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-xs"
-								>{$LL.devtools.active()}</span
-							>
-						</div>
-					</div>
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.localeCode()}</div>
-						<div class="font-mono text-sm font-medium text-primary">{localeInfo.currentLocale}</div>
-					</div>
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browserLanguage()}</div>
-						<div class="font-mono text-sm font-medium text-muted-foreground">
-							{localeInfo.browserLanguage}
-						</div>
-					</div>
-					<div class="bg-background/50 rounded-lg border p-3 md:col-span-3">
-						<div class="text-muted-foreground mb-2 text-xs">
-							{$LL.devtools.supportedLanguagesClick({
-								count: localeInfo.supportedLocales.length,
-							})}
-						</div>
-						<div class="flex flex-wrap gap-1">
-							{#each localeInfo.supportedLocales as supportedLocale}
-								<button
-									class="bg-background flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition-colors hover:bg-accent {supportedLocale.code ===
-									localeInfo.currentLocale
-										? 'bg-primary/10 border-primary/30 text-primary ring-primary/20 ring-1'
-										: 'hover:bg-primary/5 hover:border-primary/20'}"
-									onclick={() => handleLanguageClick(supportedLocale.code as Locales)}
-									aria-label="Switch to {supportedLocale.name}"
-									type="button"
-								>
-									<span class="text-base">{supportedLocale.flag || '🌐'}</span>
-									<span class="font-medium">{supportedLocale.code.toUpperCase()}</span>
-								</button>
-							{/each}
-						</div>
-					</div>
-				</div>
-			</Collapsible.Content>
-		</Collapsible.Root>
+		<SystemLocalePanel {localeInfo} onLanguageClick={handleLanguageClick} />
 
 		<!-- Performance Metrics -->
-		<div class="space-y-3">
-			<div class="flex items-center gap-2 text-sm font-medium">
-				<Activity class="h-4 w-4" />
-				{$LL.devtools.livePerformanceMetrics()}
-			</div>
-			<div class="grid grid-cols-2 gap-3 md:grid-cols-4" aria-live="polite">
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.pageLoad()}</div>
-					<div
-						class="text-lg font-bold {performanceData.loadTime < 1000
-							? 'text-status-success'
-							: performanceData.loadTime < 3000
-								? 'text-status-warning'
-								: 'text-status-error'}"
-					>
-						{formatMs(performanceData.loadTime)}
-					</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.jsMemory()}</div>
-					<div
-						class="text-lg font-bold {performanceData.memory < 50
-							? 'text-status-success'
-							: performanceData.memory < 100
-								? 'text-status-warning'
-								: 'text-status-error'}"
-					>
-						{performanceData.memory}MB
-					</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.viewport()}</div>
-					<div class="text-lg font-bold text-primary">
-						{windowInfo.width}×{windowInfo.height}
-					</div>
-				</div>
-				<div class="bg-background/50 rounded-lg border p-3">
-					<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.screen()}</div>
-					<div class="text-lg font-bold text-primary">
-						{windowInfo.screenWidth}×{windowInfo.screenHeight}
-					</div>
-				</div>
-			</div>
-		</div>
+		<SystemPerformancePanel {performanceData} {windowInfo} {formatMs} />
 
 		<!-- User Preferences -->
-		<Collapsible.Root bind:open={preferencesOpen}>
-			<Collapsible.Trigger class="flex w-full cursor-pointer items-center justify-between text-sm font-medium hover:text-primary transition-colors">
-				<div class="flex items-center gap-2">
-					<Wifi class="h-4 w-4" />
-					{$LL.devtools.userPreferencesAccessibility()}
-				</div>
-				<ChevronDown class="h-4 w-4 text-muted-foreground transition-transform duration-200 {preferencesOpen ? 'rotate-180' : ''}" />
-			</Collapsible.Trigger>
-			<Collapsible.Content>
-				<div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.colorScheme()}</div>
-						<div class="font-mono text-sm font-medium">{windowInfo.colorScheme}</div>
-					</div>
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.reducedMotion()}</div>
-						<div
-							class="font-mono text-sm font-medium {windowInfo.reducedMotion
-								? 'text-status-warning'
-								: 'text-status-success'}"
-						>
-							{windowInfo.reducedMotion ? $LL.devtools.enabled() : $LL.devtools.disabled()}
-						</div>
-					</div>
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browserLanguages()}</div>
-						<div
-							class="truncate font-mono text-xs font-medium"
-							title={navigator.languages ? navigator.languages.join(', ') : navigator.language}
-						>
-							{navigator.languages ? navigator.languages.slice(0, 2).join(', ') : navigator.language}
-							{navigator.languages && navigator.languages.length > 2
-								? `... (+${navigator.languages.length - 2})`
-								: ''}
-						</div>
-					</div>
-				</div>
-			</Collapsible.Content>
-		</Collapsible.Root>
+		<SystemPreferencesPanel {windowInfo} />
 
 		<!-- Network Information -->
-		{#if systemInfo.connection}
-			<div class="space-y-3">
-				<div class="flex items-center gap-2 text-sm font-medium">
-					<Wifi class="h-4 w-4" />
-					Network Connection
-				</div>
-				<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.type()}</div>
-						<div class="font-mono text-sm font-medium">
-							{systemInfo.connection.effectiveType || $LL.devtools.unknown()}
-						</div>
-					</div>
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.downlink()}</div>
-						<div class="font-mono text-sm font-medium">
-							{systemInfo.connection.downlink || $LL.devtools.unknown()}
-							{$LL.devtools.mbps()}
-						</div>
-					</div>
-					<div class="bg-background/50 rounded-lg border p-3">
-						<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.rtt()}</div>
-						<div class="font-mono text-sm font-medium">
-							{systemInfo.connection.rtt || $LL.devtools.unknown()}{$LL.devtools.ms()}
-						</div>
-					</div>
-				</div>
-			</div>
-		{/if}
+		<SystemNetworkPanel connection={systemInfo.connection} />
 
 		<!-- Performance Timing Details -->
-		{#if performanceData.timing}
-			<div class="space-y-3">
-				<div class="flex items-center gap-2 text-sm font-medium">
-					<Clock class="h-4 w-4" />
-					Detailed Timing (Navigation API)
-				</div>
-				<div class="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
-					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$LL.devtools.dnsLookup()}</div>
-						<div class="font-mono">
-							{Math.round(
-								performanceData.timing.domainLookupEnd - performanceData.timing.domainLookupStart,
-							)}ms
-						</div>
-					</div>
-					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$LL.devtools.connect()}</div>
-						<div class="font-mono">
-							{Math.round(
-								performanceData.timing.connectEnd - performanceData.timing.connectStart,
-							)}ms
-						</div>
-					</div>
-					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$LL.devtools.request()}</div>
-						<div class="font-mono">
-							{Math.round(
-								performanceData.timing.responseStart - performanceData.timing.requestStart,
-							)}ms
-						</div>
-					</div>
-					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$LL.devtools.response()}</div>
-						<div class="font-mono">
-							{Math.round(
-								performanceData.timing.responseEnd - performanceData.timing.responseStart,
-							)}ms
-						</div>
-					</div>
-					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$LL.devtools.domContent()}</div>
-						<div class="font-mono">
-							{Math.round(
-								performanceData.timing.domContentLoadedEventEnd -
-									performanceData.timing.domContentLoadedEventStart,
-							)}ms
-						</div>
-					</div>
-					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$LL.devtools.domComplete()}</div>
-						<div class="font-mono">
-							{Math.round(
-								performanceData.timing.domComplete -
-									performanceData.timing.domContentLoadedEventEnd,
-							)}ms
-						</div>
-					</div>
-					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$LL.devtools.loadEvent()}</div>
-						<div class="font-mono">
-							{Math.round(
-								performanceData.timing.loadEventEnd - performanceData.timing.loadEventStart,
-							)}ms
-						</div>
-					</div>
-					<div class="bg-background/50 rounded border p-2">
-						<div class="text-muted-foreground mb-1">{$LL.devtools.total()}</div>
-						<div class="font-mono font-bold">{formatMs(performanceData.loadTime)}</div>
-					</div>
-				</div>
-			</div>
-		{/if}
+		<SystemTimingPanel {performanceData} {formatMs} />
 
 		<!-- Live Timestamp -->
 		<div class="text-muted-foreground bg-muted/30 rounded-md p-2 text-xs" role="status">

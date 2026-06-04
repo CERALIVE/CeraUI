@@ -12,7 +12,7 @@ let {
 </script>
 
 <TabsPrimitive.Root
-	class={cn('flex flex-col gap-2', className)}
+	class={cn('group/tabs flex gap-2 data-[orientation=horizontal]:flex-col', className)}
 	data-slot="tabs"
 	bind:ref
 	bind:value

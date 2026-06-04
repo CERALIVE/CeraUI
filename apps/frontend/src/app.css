@@ -2,6 +2,15 @@
 
 @config '../tailwind.config.ts';
 
+/* bits-ui v2 emits `data-state="checked|unchecked"` on Switch/Checkbox roots
+   and thumbs; it does NOT emit bare `data-checked`/`data-unchecked` attributes.
+   The shadcn primitives style on `data-checked:`/`data-unchecked:` utilities, so
+   without these mappings every `data-checked:`/`data-unchecked:` class is dead
+   (most visibly: the switch thumb never slides). Map the variants onto the real
+   attribute so the CLI-managed class strings work as written. */
+@custom-variant data-checked (&[data-state='checked']);
+@custom-variant data-unchecked (&[data-state='unchecked']);
+
 /*
   Border compatibility for Tailwind CSS v4
   (default border-color changed to currentColor)
@@ -13,7 +22,7 @@
 	::before,
 	::backdrop,
 	::file-selector-button {
-		border-color: var(--color-gray-200, hsl(var(--border)));
+		border-color: var(--color-gray-200, var(--border));
 	}
 }
 
@@ -43,177 +52,258 @@
 @utility gradient-primary {
 	background-image: linear-gradient(
 		to right,
-		hsl(var(--primary)),
-		hsl(var(--gradient-primary-to))
+		var(--primary),
+		var(--gradient-primary-to)
 	);
 }
 
 @utility gradient-success {
 	background-image: linear-gradient(
 		to right,
-		hsl(var(--status-success)),
-		hsl(var(--gradient-success-to))
+		var(--status-success),
+		var(--gradient-success-to)
 	);
 }
 
 @utility gradient-info {
 	background-image: linear-gradient(
 		to right,
-		hsl(var(--status-info)),
-		hsl(var(--gradient-info-to))
+		var(--status-info),
+		var(--gradient-info-to)
 	);
 }
 
 @utility gradient-destructive {
 	background-image: linear-gradient(
 		to right,
-		hsl(var(--destructive)),
-		hsl(var(--gradient-destructive-to))
+		var(--destructive),
+		var(--gradient-destructive-to)
 	);
 }
 
 @utility gradient-warning {
 	background-image: linear-gradient(
 		to right,
-		hsl(var(--status-warning)),
-		hsl(var(--gradient-warning-to))
+		var(--status-warning),
+		var(--gradient-warning-to)
 	);
 }
 
 @layer base {
 	:root {
 		/* ── Light Mode ─────────────────────────────────
-		   Cool slate neutrals, electric cyan accent
-		   "Broadcast Control Room" aesthetic */
+		   Ground Control — true near-white paper (faint olive
+		   undertone, NOT cream), graphite ink, darkened
+		   phosphor-lime primary. Light is first-class, not hero. */
 
-		--background: 210 20% 98%;
-		--foreground: 222 25% 10%;
+		--background: oklch(0.98 0.004 150);
+		--foreground: oklch(0.15 0.015 150);
 
-		--card: 0 0% 100%;
-		--card-foreground: 222 25% 10%;
-		--popover: 0 0% 100%;
-		--popover-foreground: 222 25% 10%;
+		--card: oklch(0.96 0.004 150);
+		--card-foreground: oklch(0.15 0.015 150);
+		--popover: oklch(0.98 0.003 150);
+		--popover-foreground: oklch(0.15 0.015 150);
 
-		--primary: 185 85% 45%;
-		--primary-foreground: 200 25% 8%;
+		--primary: oklch(0.4 0.18 128);
+		--primary-foreground: oklch(0.98 0.003 0);
 
-		--secondary: 215 16% 93%;
-		--secondary-foreground: 222 20% 18%;
+		--secondary: oklch(0.93 0.005 150);
+		--secondary-foreground: oklch(0.22 0.014 150);
 
-		--muted: 215 12% 95%;
-		--muted-foreground: 215 10% 46%;
+		--muted: oklch(0.92 0.005 150);
+		--muted-foreground: oklch(0.42 0.018 150);
 
-		--accent: 215 16% 93%;
-		--accent-foreground: 222 20% 18%;
+		--accent: oklch(0.9 0.006 150);
+		--accent-foreground: oklch(0.18 0.016 150);
 
-		--destructive: 0 84% 60%;
-		--destructive-foreground: 0 0% 100%;
+		--destructive: oklch(0.55 0.22 25);
+		--destructive-foreground: oklch(0.98 0.004 0);
 
-		--border: 215 12% 89%;
-		--input: 215 12% 89%;
-		--ring: 185 85% 45%;
+		--border: oklch(0.88 0.006 150);
+		--input: oklch(0.9 0.005 150);
+		--ring: oklch(0.4 0.18 128);
 		--radius: 0.5rem;
 
-		--sidebar-background: 215 12% 95%;
-		--sidebar-foreground: 222 25% 10%;
-		--sidebar-primary: 185 85% 45%;
-		--sidebar-primary-foreground: 200 25% 8%;
-		--sidebar-accent: 215 16% 93%;
-		--sidebar-accent-foreground: 222 20% 18%;
-		--sidebar-border: 215 12% 89%;
-		--sidebar-ring: 185 85% 45%;
+		/* Control state — Switch/Toggle/Checkbox OFF track.
+		   Mid-grey, pulled darker than the body neutrals so the OFF
+		   track reads as a solid filled pill against the near-white
+		   --card (oklch 0.96): ~0.30 lightness delta, unmistakably a
+		   switch and never the ON (--primary darkened-lime) state. */
+		--switch-off: oklch(0.66 0.022 150);
+		--switch-off-foreground: oklch(0.99 0.004 150);
 
-		/* Semantic Status */
-		--status-success: 142 71% 45%;
-		--status-success-foreground: 0 0% 100%;
-		--status-info: 217 91% 60%;
-		--status-info-foreground: 0 0% 100%;
-		--status-warning: 38 92% 50%;
-		--status-warning-foreground: 0 0% 100%;
-		--status-error: 0 84% 60%;
-		--status-error-foreground: 0 0% 100%;
-		--status-neutral: 215 10% 46%;
-		--status-neutral-foreground: 0 0% 100%;
+		--sidebar-background: oklch(0.94 0.005 150);
+		--sidebar-foreground: oklch(0.22 0.014 150);
+		--sidebar-primary: oklch(0.4 0.18 128);
+		--sidebar-primary-foreground: oklch(0.98 0.003 0);
+		--sidebar-accent: oklch(0.9 0.006 150);
+		--sidebar-accent-foreground: oklch(0.22 0.014 150);
+		--sidebar-border: oklch(0.86 0.006 150);
+		--sidebar-ring: oklch(0.4 0.18 128);
 
-		/* Signal Quality */
-		--signal-excellent: 142 71% 45%;
-		--signal-good: 217 91% 60%;
-		--signal-fair: 38 92% 50%;
-		--signal-weak: 0 84% 60%;
+		/* Semantic Status (darkened for ≥4.5:1 text on near-white) */
+		--status-success: oklch(0.5 0.15 150);
+		--status-success-foreground: oklch(0.99 0.003 0);
+		--status-info: oklch(0.5 0.16 245);
+		--status-info-foreground: oklch(0.99 0.003 0);
+		--status-warning: oklch(0.52 0.13 65);
+		--status-warning-foreground: oklch(0.99 0.003 0);
+		--status-error: oklch(0.55 0.22 25);
+		--status-error-foreground: oklch(0.99 0.004 0);
+		--status-neutral: oklch(0.45 0.018 150);
+		--status-neutral-foreground: oklch(0.99 0.003 0);
 
-		/* Gradient Endpoints (shifted hue/lightness for two-tone gradients) */
-		--gradient-primary-to: 190 80% 35%;
-		--gradient-success-to: 160 65% 38%;
-		--gradient-info-to: 235 75% 50%;
-		--gradient-destructive-to: 350 80% 50%;
-		--gradient-warning-to: 25 85% 42%;
+		/* Status semantics — Ground Control stream states */
+		--status-live: oklch(0.45 0.16 128);
+		--status-standby: oklch(0.55 0.14 70);
+		--status-idle: oklch(0.55 0.01 150);
+
+		/* Signal Quality (darkened for on-white legibility) */
+		--signal-excellent: oklch(0.5 0.16 145);
+		--signal-good: oklch(0.52 0.15 110);
+		--signal-fair: oklch(0.55 0.14 75);
+		--signal-weak: oklch(0.52 0.18 30);
+
+		/* Spectral link ramp — bonded-link identity (HUD + Network) */
+		--link-1: oklch(0.55 0.17 128);
+		--link-2: oklch(0.55 0.15 200);
+		--link-3: oklch(0.52 0.16 252);
+		--link-4: oklch(0.5 0.18 292);
+		--link-5: oklch(0.58 0.16 65);
+		--link-6: oklch(0.55 0.2 20);
+
+		/* Elevation / shadow */
+		--shadow-sm: 0 1px 2px 0 oklch(0.15 0.015 150 / 0.08);
+		--shadow-md: 0 4px 12px -2px oklch(0.15 0.015 150 / 0.1);
+		--shadow-lg: 0 12px 28px -6px oklch(0.15 0.015 150 / 0.14);
+
+		/* Gradient Endpoints (graphite-harmonized two-tone) */
+		--gradient-primary-to: oklch(0.45 0.15 150);
+		--gradient-success-to: oklch(0.45 0.14 165);
+		--gradient-info-to: oklch(0.45 0.16 255);
+		--gradient-destructive-to: oklch(0.48 0.2 15);
+		--gradient-warning-to: oklch(0.5 0.13 60);
 	}
 
 	.dark {
-		/* ── Dark Mode ──────────────────────────────────
-		   Deep blue-black backgrounds, electric cyan accent
-		   High contrast "control room" aesthetic */
+		/* ── Dark Mode (HERO) ───────────────────────────
+		   Ground Control — warm near-black graphite surfaces
+		   (hue 150, NOT blue-black), phosphor-lime live signal,
+		   amber/coral state indicators. The base experience. */
 
-		--background: 222 30% 6%;
-		--foreground: 210 20% 95%;
+		--background: oklch(0.15 0.012 150);
+		--foreground: oklch(0.95 0.008 150);
 
-		--card: 222 22% 9%;
-		--card-foreground: 210 20% 95%;
-		--popover: 222 22% 9%;
-		--popover-foreground: 210 20% 95%;
+		--card: oklch(0.18 0.01 150);
+		--card-foreground: oklch(0.95 0.008 150);
+		--popover: oklch(0.2 0.01 150);
+		--popover-foreground: oklch(0.95 0.008 150);
 
-		--primary: 185 95% 55%;
-		--primary-foreground: 200 25% 8%;
+		--primary: oklch(0.86 0.2 128);
+		--primary-foreground: oklch(0.1 0.02 150);
 
-		--secondary: 220 15% 15%;
-		--secondary-foreground: 210 16% 92%;
+		--secondary: oklch(0.24 0.012 150);
+		--secondary-foreground: oklch(0.9 0.008 150);
 
-		--muted: 220 12% 12%;
-		--muted-foreground: 215 10% 55%;
+		--muted: oklch(0.22 0.01 150);
+		--muted-foreground: oklch(0.62 0.015 150);
 
-		--accent: 220 15% 15%;
-		--accent-foreground: 210 16% 92%;
+		--accent: oklch(0.26 0.012 150);
+		--accent-foreground: oklch(0.92 0.008 150);
 
-		--destructive: 0 63% 31%;
-		--destructive-foreground: 0 0% 98%;
+		--destructive: oklch(0.56 0.22 25);
+		--destructive-foreground: oklch(0.98 0.004 0);
 
-		--border: 220 10% 18%;
-		--input: 220 12% 16%;
-		--ring: 185 95% 55%;
+		--border: oklch(0.28 0.012 150);
+		--input: oklch(0.24 0.01 150);
+		--ring: oklch(0.86 0.2 128);
 
-		--sidebar-background: 222 22% 9%;
-		--sidebar-foreground: 210 20% 95%;
-		--sidebar-primary: 185 95% 55%;
-		--sidebar-primary-foreground: 200 25% 8%;
-		--sidebar-accent: 220 15% 15%;
-		--sidebar-accent-foreground: 210 16% 92%;
-		--sidebar-border: 220 12% 16%;
-		--sidebar-ring: 185 95% 55%;
+		/* Control state — Switch/Toggle/Checkbox OFF track.
+		   Raised "inactive" graphite (L 0.52, ~0.34 above the near-black
+		   --card at 0.18): the OFF track reads as a solid filled pill,
+		   never collapses into --card/--input, never the lit --primary lime. */
+		--switch-off: oklch(0.52 0.028 150);
+		--switch-off-foreground: oklch(0.96 0.008 150);
+
+		--sidebar-background: oklch(0.13 0.01 150);
+		--sidebar-foreground: oklch(0.88 0.008 150);
+		--sidebar-primary: oklch(0.86 0.2 128);
+		--sidebar-primary-foreground: oklch(0.1 0.02 150);
+		--sidebar-accent: oklch(0.22 0.01 150);
+		--sidebar-accent-foreground: oklch(0.88 0.008 150);
+		--sidebar-border: oklch(0.26 0.01 150);
+		--sidebar-ring: oklch(0.86 0.2 128);
 
 		/* Semantic Status (Dark) */
-		--status-success: 142 69% 58%;
-		--status-success-foreground: 0 0% 100%;
-		--status-info: 213 94% 68%;
-		--status-info-foreground: 0 0% 100%;
-		--status-warning: 43 96% 56%;
-		--status-warning-foreground: 0 0% 100%;
-		--status-error: 0 91% 71%;
-		--status-error-foreground: 0 0% 100%;
-		--status-neutral: 215 10% 55%;
-		--status-neutral-foreground: 0 0% 100%;
+		--status-success: oklch(0.8 0.18 145);
+		--status-success-foreground: oklch(0.15 0.02 150);
+		--status-info: oklch(0.74 0.13 230);
+		--status-info-foreground: oklch(0.15 0.02 230);
+		--status-warning: oklch(0.8 0.16 75);
+		--status-warning-foreground: oklch(0.2 0.04 75);
+		--status-error: oklch(0.64 0.2 25);
+		--status-error-foreground: oklch(0.99 0.004 25);
+		--status-neutral: oklch(0.62 0.015 150);
+		--status-neutral-foreground: oklch(0.12 0.02 150);
+
+		/* Status semantics — Ground Control stream states */
+		--status-live: oklch(0.86 0.2 128);
+		--status-standby: oklch(0.8 0.16 75);
+		--status-idle: oklch(0.45 0.01 150);
 
 		/* Signal Quality (Dark) */
-		--signal-excellent: 142 69% 58%;
-		--signal-good: 213 94% 68%;
-		--signal-fair: 43 96% 56%;
-		--signal-weak: 0 91% 71%;
+		--signal-excellent: oklch(0.82 0.2 128);
+		--signal-good: oklch(0.78 0.18 100);
+		--signal-fair: oklch(0.76 0.16 75);
+		--signal-weak: oklch(0.6 0.16 35);
 
-		/* Gradient Endpoints (Dark) */
-		--gradient-primary-to: 190 90% 42%;
-		--gradient-success-to: 160 65% 48%;
-		--gradient-info-to: 235 80% 55%;
-		--gradient-destructive-to: 350 75% 45%;
-		--gradient-warning-to: 25 85% 48%;
+		/* Spectral link ramp — bonded-link identity (HUD + Network) */
+		--link-1: oklch(0.84 0.2 128);
+		--link-2: oklch(0.76 0.18 188);
+		--link-3: oklch(0.72 0.16 252);
+		--link-4: oklch(0.74 0.18 292);
+		--link-5: oklch(0.78 0.18 65);
+		--link-6: oklch(0.7 0.18 15);
+
+		/* Elevation / shadow */
+		--shadow-sm: 0 1px 2px 0 oklch(0 0 0 / 0.4);
+		--shadow-md: 0 4px 8px -2px oklch(0 0 0 / 0.45);
+		--shadow-lg: 0 12px 28px -6px oklch(0 0 0 / 0.55);
+
+		/* Gradient Endpoints (Dark, graphite-harmonized) */
+		--gradient-primary-to: oklch(0.72 0.16 150);
+		--gradient-success-to: oklch(0.68 0.15 165);
+		--gradient-info-to: oklch(0.6 0.15 255);
+		--gradient-destructive-to: oklch(0.5 0.18 15);
+		--gradient-warning-to: oklch(0.7 0.15 55);
+	}
+}
+
+/* ── Layout mode (touch / kiosk foundation) ──────
+   Default keeps web-first sizing; touch scales hit targets
+   and spacing for an attached touchscreen (1024×600 kiosk). */
+
+@layer base {
+	:root {
+		--touch-target-min: 0px;
+		--spacing-touch-scale: 1;
+	}
+
+	[data-layout-mode='touch'] {
+		--touch-target-min: 44px;
+		--spacing-touch-scale: 1.25;
+	}
+
+	/* used height = max(height, min-height) regardless of specificity, so this
+	   lifts compact h-* controls to 44px in touch mode; default mode token is 0px. */
+	[data-layout-mode='touch'] :is(
+		[data-slot='button'],
+		[data-slot='alert-dialog-action'],
+		[data-slot='alert-dialog-cancel'],
+		[id^='nav-tab-'],
+		[id^='mobile-nav-tab-']
+	) {
+		min-height: var(--touch-target-min);
 	}
 }
 
@@ -418,7 +508,7 @@
 	width: 1.5em;
 	text-align: left;
 	font-weight: normal;
-	color: hsl(var(--muted-foreground));
+	color: var(--muted-foreground);
 	opacity: 0.8;
 }
 
@@ -495,19 +585,19 @@
 }
 
 .loading-success::after {
-	color: hsl(var(--status-success));
+	color: var(--status-success);
 }
 
 .loading-warning::after {
-	color: hsl(var(--status-warning));
+	color: var(--status-warning);
 }
 
 .loading-error::after {
-	color: hsl(var(--status-error));
+	color: var(--status-error);
 }
 
 .loading-info::after {
-	color: hsl(var(--status-info));
+	color: var(--status-info);
 }
 
 /* ── Reduced motion ── */
@@ -529,15 +619,23 @@
 @media (prefers-contrast: high) {
 	:focus-visible {
 		outline-width: 3px;
-		outline-color: hsl(var(--foreground));
+		outline-color: var(--foreground);
 	}
 }
 
-/* ── Sonner Toasts ── */
+/* ── Sonner Toasts ──────────────────────────────
+   Graphite popover base + semantic accent per data-type. Tokens
+   auto-flip light/dark, so no separate .dark rules. sonner's
+   --success-bg/--error-bg vars only apply with richColors, so
+   coloring is driven via the always-present [data-type] attr. */
 
 [data-sonner-toast] {
 	border-radius: 0.625rem !important;
-	box-shadow: 0 4px 12px rgb(0 0 0 / 0.08) !important;
+	border-width: 1px !important;
+	background: var(--popover) !important;
+	color: var(--popover-foreground) !important;
+	border-color: var(--border) !important;
+	box-shadow: var(--shadow-lg) !important;
 }
 
 [data-sonner-toast] [data-icon] {
@@ -545,60 +643,169 @@
 	height: 1.25rem;
 }
 
+[data-sonner-toast] [data-title] {
+	font-weight: 600;
+}
+
+[data-sonner-toast] [data-description] {
+	color: var(--popover-foreground) !important;
+	opacity: 0.9;
+}
+
+[data-sonner-toast] [data-close-button] {
+	background: var(--popover) !important;
+	border-color: var(--border) !important;
+	color: var(--muted-foreground) !important;
+}
+
+[data-sonner-toast] [data-close-button]:hover {
+	color: var(--popover-foreground) !important;
+	border-color: var(--muted-foreground) !important;
+}
+
+/* success — phosphor lime */
 [data-sonner-toast][data-type='success'] {
-	background: hsl(142 76% 96%) !important;
-	border-color: hsl(142 71% 45%) !important;
-	color: hsl(142 71% 20%) !important;
+	background: color-mix(in oklab, var(--status-success) 12%, var(--popover)) !important;
+	border-color: color-mix(in oklab, var(--status-success) 42%, var(--border)) !important;
 }
 
-.dark [data-sonner-toast][data-type='success'] {
-	background: hsl(142 71% 10%) !important;
-	border-color: hsl(142 69% 40%) !important;
-	color: hsl(142 76% 85%) !important;
+[data-sonner-toast][data-type='success'] [data-icon] {
+	color: var(--status-success) !important;
 }
 
-[data-sonner-toast][data-type='info'] {
-	background: hsl(214 95% 95%) !important;
-	border-color: hsl(217 91% 60%) !important;
-	color: hsl(221 83% 30%) !important;
-}
-
-.dark [data-sonner-toast][data-type='info'] {
-	background: hsl(217 91% 10%) !important;
-	border-color: hsl(217 91% 50%) !important;
-	color: hsl(214 95% 85%) !important;
-}
-
+/* warning — amber */
 [data-sonner-toast][data-type='warning'] {
-	background: hsl(48 96% 93%) !important;
-	border-color: hsl(38 92% 50%) !important;
-	color: hsl(32 81% 28%) !important;
+	background: color-mix(in oklab, var(--status-warning) 12%, var(--popover)) !important;
+	border-color: color-mix(in oklab, var(--status-warning) 42%, var(--border)) !important;
 }
 
-.dark [data-sonner-toast][data-type='warning'] {
-	background: hsl(38 92% 10%) !important;
-	border-color: hsl(38 92% 45%) !important;
-	color: hsl(48 96% 85%) !important;
+[data-sonner-toast][data-type='warning'] [data-icon] {
+	color: var(--status-warning) !important;
 }
 
+/* error — coral */
 [data-sonner-toast][data-type='error'] {
-	background: hsl(0 93% 95%) !important;
-	border-color: hsl(0 84% 60%) !important;
-	color: hsl(0 70% 30%) !important;
+	background: color-mix(in oklab, var(--status-error) 14%, var(--popover)) !important;
+	border-color: color-mix(in oklab, var(--status-error) 45%, var(--border)) !important;
 }
 
-.dark [data-sonner-toast][data-type='error'] {
-	background: hsl(0 84% 12%) !important;
-	border-color: hsl(0 84% 50%) !important;
-	color: hsl(0 93% 85%) !important;
+[data-sonner-toast][data-type='error'] [data-icon] {
+	color: var(--status-error) !important;
 }
 
+/* info + default/loading — neutral graphite */
+[data-sonner-toast][data-type='info'],
 [data-sonner-toast][data-type='loading'],
 [data-sonner-toast][data-type='default'],
 [data-sonner-toast][data-type='normal'] {
-	background: hsl(var(--card)) !important;
-	border-color: hsl(var(--border)) !important;
-	color: hsl(var(--foreground)) !important;
+	background: var(--popover) !important;
+	border-color: var(--border) !important;
+}
+
+[data-sonner-toast][data-type='info'] [data-icon],
+[data-sonner-toast][data-type='loading'] [data-icon] {
+	color: var(--muted-foreground) !important;
+}
+
+/* ── Switch / Toggle / Checkbox state contrast ──────
+   Dedicated OFF-track token so the inactive state reads as
+   obviously "off", clearly distinct from card/muted surfaces and
+   from the ON (--primary phosphor-lime) state. Keyed on bits-ui v2
+   data attributes; the ui/ primitives stay CLI-managed. Unlayered
+   so these win the cascade over the primitives' utility classes. */
+
+[data-slot='switch'][data-state='unchecked'] {
+	background-color: var(--switch-off);
+	border-color: color-mix(in oklab, var(--switch-off) 50%, var(--border));
+}
+
+/* Dark hero: the off-track border rides slightly brighter than the
+   0.52 track so the pill edge stays crisp against the near-black
+   --card (oklch 0.18). Scoped to .dark (specificity 0,3,0) so it
+   beats switch.svelte's `border-transparent` utility (0,1,0) without
+   touching the CLI-managed primitive, and leaves light mode untouched.
+   Width stays 1px: the 18.4px track clears the 16px thumb by only
+   ~0.4px, so a 2px border would clip it; the brighter color carries
+   the edge definition on its own. */
+.dark [data-slot='switch'][data-state='unchecked'] {
+	border-color: color-mix(in oklab, var(--switch-off) 40%, var(--muted-foreground));
+}
+
+[data-slot='switch'][data-state='checked'] {
+	background-color: var(--primary);
+	border-color: var(--primary);
+}
+
+[data-slot='switch-thumb'][data-state='unchecked'] {
+	background-color: var(--switch-off-foreground);
+}
+
+[data-slot='switch-thumb'][data-state='checked'] {
+	background-color: var(--primary-foreground);
+}
+
+[data-slot='checkbox'][data-state='unchecked'] {
+	border-color: var(--switch-off);
+	background-color: color-mix(in oklab, var(--switch-off) 14%, transparent);
+}
+
+[data-slot='checkbox'][data-state='checked'],
+[data-slot='checkbox'][data-state='indeterminate'] {
+	background-color: var(--primary);
+	border-color: var(--primary);
+	color: var(--primary-foreground);
+}
+
+[data-slot='toggle'][data-state='off'],
+[data-slot='toggle'][aria-pressed='false'] {
+	background-color: transparent;
+}
+
+[data-slot='toggle'][data-state='on'],
+[data-slot='toggle'][aria-pressed='true'] {
+	background-color: color-mix(in oklab, var(--primary) 20%, var(--switch-off));
+	color: var(--foreground);
+}
+
+/* ── Pointer-cursor affordance for interactive controls ──
+   Enabled interactive controls signal clickability with a pointer
+   cursor. Keyed on the roles / data-slots the bits-ui v2 primitives
+   already emit, so the CLI-managed ui/ files stay untouched. Unlayered
+   so these win the cascade over the primitives' Tailwind cursor-default
+   utilities (same precedent as the sonner-toast + switch blocks above).
+   The disabled rule is last and overrides every pointer rule. */
+
+button:not(:disabled),
+[role='button']:not([data-disabled]):not([aria-disabled='true']),
+a[href],
+label[for],
+[data-slot='label'][for],
+[role='switch']:not([data-disabled]):not([aria-disabled='true']),
+[role='checkbox']:not([data-disabled]):not([aria-disabled='true']),
+[role='tab']:not([data-disabled]):not([aria-disabled='true']),
+[role='menuitem']:not([data-disabled]):not([aria-disabled='true']),
+[role='menuitemradio']:not([data-disabled]):not([aria-disabled='true']),
+[role='menuitemcheckbox']:not([data-disabled]):not([aria-disabled='true']),
+[role='option']:not([data-disabled]):not([aria-disabled='true']),
+[data-slot='switch']:not([data-disabled]),
+[data-slot='checkbox']:not([data-disabled]),
+[data-slot='toggle']:not([data-disabled]),
+[data-slot='select-trigger']:not(:disabled):not([data-disabled]),
+[data-slot='select-item']:not([data-disabled]),
+[data-slot='dropdown-menu-trigger']:not([data-disabled]):not([aria-disabled='true']),
+[data-slot='dropdown-menu-sub-trigger']:not([data-disabled]),
+[data-slot='dropdown-menu-item']:not([data-disabled]),
+[data-slot='command-item']:not([data-disabled]),
+[data-slot='collapsible-trigger']:not(:disabled):not([data-disabled]),
+[data-slot='accordion-trigger']:not(:disabled):not([data-disabled]) {
+	cursor: pointer;
+}
+
+/* Disabled affordance wins regardless of role/slot above. */
+:disabled,
+[data-disabled],
+[aria-disabled='true'] {
+	cursor: not-allowed;
 }
 
 /* ── Svelte Inspector ── */
