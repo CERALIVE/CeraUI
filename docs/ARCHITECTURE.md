@@ -122,3 +122,44 @@ Video Source (HDMI/USB/SRT/etc)
 - **Bitrate Adaptation**: ceracoder reads SRT stats, adjusts encoder bitrate dynamically.
 - **Config Reload**: ceracoder supports SIGHUP to reload INI without restart.
 - **Config Persist (no stream start)**: `rpc.streaming.setConfig` saves config fields without launching the stream — used by all Live destination dialogs when not streaming.
+
+## WebSocket Broadcast Events
+
+The backend pushes typed events to all connected clients over the WebSocket channel. Each event type has its own broadcast interval and carries a monotonic sequence number (`seq`) for drop-stale filtering on the frontend.
+
+| Event type | Interval | Source module |
+|------------|----------|---------------|
+| `netif` | 5 s | `modules/network/network-interfaces.ts` |
+| `sensors` | 1 s | `modules/system/sensors.ts` |
+| `gateways` | 2 s | `modules/network/gateways.ts` |
+| `modems` | 30 s | `modules/modems/modem-update-loop.ts` |
+| `status` | on-change | streaming state transitions |
+| `config` | on-change | any `setConfig` / `start` / `stop` call |
+| `wifi` | on-change | WiFi scan / connect / disconnect |
+| `relays` | on-change | relay list mutations |
+| `acodecs` | on-change | audio codec list changes |
+| `pipelines` | on-change | pipeline list changes |
+| `notifications` | on-demand | user-facing toast events |
+| `ping` | 5 s | heartbeat emitter (server → client) |
+
+### Sequence numbers
+
+Each event type tracks its own counter (`Map<string, number>` in `rpc/events.ts`). The counter resets to 0 on server restart. The frontend drops any message whose `seq` is not strictly greater than the last seen value for that type, so stale duplicates from a slow network path are silently discarded. Messages without a `seq` field bypass the check (backward-additive).
+
+### Heartbeat
+
+The server emits `{ ping: { t: number } }` every 5 s. The frontend resets a watchdog timer on each ping; if no ping arrives within ~15 s (≈3 missed intervals) the connection is considered half-open and the transport tears down for a fresh reconnect.
+
+### Post-login initial-state push
+
+Immediately after a client authenticates, the backend pushes a full snapshot of every event type so the frontend can render without waiting for the first periodic tick.
+
+### Applied-state returns
+
+RPC setters (`setConfig`, `setBitrate`, etc.) return `{ success: boolean, applied: <fields> }` where `applied` reflects the post-clamp, post-validation values the backend actually wrote. The frontend releases field locks to the `applied` value, not the client's intended value.
+
+## Connection Topology
+
+The default deployment is **same-device**: the backend and the browser both run on the encoder hardware, so the WebSocket connects to `localhost`. A **remote** topology (browser on a separate machine, backend on the encoder) is also supported via an outbound WSS:443 tunnel — the device always dials out, making CGNAT-traversal feasible without inbound port forwarding.
+
+See [`docs/REMOTE_TOPOLOGY.md`](REMOTE_TOPOLOGY.md) for the remote topology design and [`docs/RPC_COMMUNICATION.md`](RPC_COMMUNICATION.md) for the full wire-protocol reference.
