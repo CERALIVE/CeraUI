@@ -79,6 +79,9 @@ const updateSW = registerSW({
 // Mount the app
 const app = mount(App, { target: document.getElementById("app") as Element });
 
+// Signal successful bundle mount to the boot watchdog
+window.__ceraAppMounted = true;
+
 // Additional fallback: if PWA hasn't registered after a delay, check version
 // This handles edge cases where onRegistered never fires
 setTimeout(() => {
