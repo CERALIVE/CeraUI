@@ -15,6 +15,7 @@ import type { StreamingConfigInput } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
+import RelayRttIndicator from '$lib/components/streaming/RelayRttIndicator.svelte';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
@@ -64,7 +65,17 @@ const relayAccount = $derived(draft.relay_account ?? config?.relay_account ?? ''
 
 const serverEntries = $derived(Object.entries(relays?.servers ?? {}));
 const accountEntries = $derived(Object.entries(relays?.accounts ?? {}));
+
+// Relay availability gate (D6): the relay tab is always rendered but stays
+// disabled with an i18n hint until the catalog exists. `getRelays()` is
+// `undefined` until the cloud provider's relays cache is populated (never in
+// mock/dev), and may arrive empty — surface the matching waiting / none copy.
+const relayUnavailable = $derived(relays === undefined || serverEntries.length === 0);
+const relayHint = $derived(
+	relays === undefined ? $LL.notifications.relayWaiting() : $LL.notifications.relayNone(),
+);
 const relayServerName = $derived(relays?.servers?.[relayServer]?.name);
+const relayServerRtt = $derived(relays?.servers?.[relayServer]?.rtt);
 const relayAccountName = $derived(relays?.accounts?.[relayAccount]?.name);
 
 const portNum = $derived(portStr.trim() === '' ? undefined : Number.parseInt(portStr, 10));
@@ -163,7 +174,7 @@ async function handleSave() {
 				class="rounded-md px-3 py-2 text-sm font-medium transition-colors {mode === 'relay'
 					? 'bg-background text-foreground shadow-sm'
 					: 'text-muted-foreground hover:text-foreground'}"
-				disabled={isStreaming}
+				disabled={relays === undefined || isStreaming}
 				onclick={() => (draft.mode = 'relay')}
 				role="tab"
 				type="button"
@@ -171,6 +182,17 @@ async function handleSave() {
 				{$LL.settings.relayServer()}
 			</button>
 		</div>
+
+		<!-- Relay gate hint (D6): explains the disabled relay tab while the relay
+		     catalog is missing (waiting) or empty (none). Manual stays usable. -->
+		{#if relayUnavailable}
+			<p
+				class="text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-sm"
+				role="status"
+			>
+				{relayHint}
+			</p>
+		{/if}
 
 		{#if mode === 'manual'}
 			<div class="space-y-2">
@@ -237,15 +259,20 @@ async function handleSave() {
 					value={relayServer}
 				>
 					<Select.Trigger id="relay-server" class="w-full">
-						{relayServerName ?? $LL.settings.relayServer()}
+						<span class="flex w-full items-center gap-2">
+							<span class="truncate">{relayServerName ?? $LL.settings.relayServer()}</span>
+							{#if relayServerName}
+								<RelayRttIndicator class="ms-auto" rtt={relayServerRtt} />
+							{/if}
+						</span>
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
 							{#each serverEntries as [id, info] (id)}
 								<Select.Item value={id}>
-									<div class="flex items-center gap-2">
-										<div aria-hidden={true} class="bg-primary h-2 w-2 rounded-full"></div>
-										{info.name}
+									<div class="flex w-full items-center gap-2">
+										<span class="truncate">{info.name}</span>
+										<RelayRttIndicator class="ms-auto" rtt={info.rtt} />
 									</div>
 								</Select.Item>
 							{/each}
