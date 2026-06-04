@@ -26,12 +26,10 @@ import {
 import { logger } from "../../helpers/logger.ts";
 import { validatePortNo } from "../../helpers/number.ts";
 import { writeTextFile } from "../../helpers/text-files.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
-import {
-	getAllRelaysRtt,
-	updateBcrptServerConfig,
-} from "../streaming/bcrpt.ts";
+import { getRelayRtt, updateBcrptServerConfig } from "../streaming/bcrpt.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
 // Use the shared RelaysCache type from config-schemas
@@ -41,6 +39,7 @@ type RelaysResponseMessage = {
 		string,
 		{
 			name: string;
+			rtt?: number;
 			default?: true;
 		}
 	>;
@@ -94,21 +93,23 @@ export function getRelays() {
 	return relaysCache;
 }
 
+// Mock-only in-memory setter: no disk write (unlike updateCachedRelays), so
+// the dev working dir never gets a relays_cache.json. No-op in production.
+export function setRelaysCacheMock(data: RelaysCache | undefined): void {
+	if (!shouldUseMocks()) return;
+	relaysCache = data;
+}
+
 export function buildRelaysMsg(): RelaysResponseMessage {
 	const msg: RelaysResponseMessage = { servers: {}, accounts: {} };
 	if (!relaysCache) return msg;
 
-	// Simplify servers mapping using Object.entries
-	const bcrptRelaysRtt = getAllRelaysRtt();
 	Object.entries(relaysCache.servers).forEach(([id, srv]) => {
 		if (!srv) return;
-		const rtt = bcrptRelaysRtt?.[id];
-		const status =
-			rtt !== undefined ? (rtt <= 80 ? "🟢" : rtt <= 150 ? "🟡" : "🔴") : "";
-		const prefix = status ? `${status} ` : "";
-		const suffix = rtt !== undefined ? ` (${rtt} ms)` : "";
+		const rtt = getRelayRtt(id);
 		msg.servers[id] = {
-			name: `${prefix}${srv.name}${suffix}`,
+			name: srv.name,
+			rtt,
 			default: srv.default,
 		};
 	});
