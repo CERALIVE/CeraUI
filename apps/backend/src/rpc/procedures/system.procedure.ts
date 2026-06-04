@@ -129,7 +129,7 @@ export const sshStartProcedure = authedProcedure
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
-		startStopSsh(context.ws as unknown as WebSocket, "start_ssh");
+		void startStopSsh(context.ws as unknown as WebSocket, "start_ssh");
 		return { success: true };
 	});
 
@@ -142,7 +142,7 @@ export const sshStopProcedure = authedProcedure
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
-		startStopSsh(context.ws as unknown as WebSocket, "stop_ssh");
+		void startStopSsh(context.ws as unknown as WebSocket, "stop_ssh");
 		return { success: true };
 	});
 
@@ -157,7 +157,7 @@ export const sshResetPasswordProcedure = authedProcedure
 		}),
 	)
 	.handler(({ context }) => {
-		resetSshPassword(context.ws as unknown as WebSocket);
+		void resetSshPassword(context.ws as unknown as WebSocket);
 		return { success: true };
 	});
 

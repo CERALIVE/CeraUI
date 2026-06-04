@@ -31,7 +31,7 @@ import {
 	getAvailableUpdates,
 	getSoftUpdateStatus,
 } from "../system/software-updates.ts";
-import { getSshStatus } from "../system/ssh.ts";
+import { getCachedSshStatus, getSshStatus } from "../system/ssh.ts";
 import { wifiBuildMsg } from "../wifi/wifi.ts";
 import { notificationSendPersistent } from "./notifications.ts";
 import { buildMsg } from "./websocket-server.ts";
@@ -40,7 +40,7 @@ export type StatusResponseMessage = {
 	is_streaming?: ReturnType<typeof getIsStreaming>;
 	available_updates?: ReturnType<typeof getAvailableUpdates>;
 	updating?: ReturnType<typeof getSoftUpdateStatus>;
-	ssh?: ReturnType<typeof getSshStatus>;
+	ssh?: ReturnType<typeof getCachedSshStatus>;
 	wifi?: ReturnType<typeof wifiBuildMsg>;
 	modems?: ReturnType<typeof buildModemsMessage>;
 	asrcs?: Array<keyof ReturnType<typeof getAudioDevices>>;
@@ -49,12 +49,14 @@ export type StatusResponseMessage = {
 };
 
 export function sendStatus(conn: WebSocket) {
+	// Re-probe SSH in the background; broadcasts only if the status changed.
+	void getSshStatus();
 	conn.send(
 		buildMsg("status", {
 			is_streaming: getIsStreaming(),
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
-			ssh: getSshStatus(),
+			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),

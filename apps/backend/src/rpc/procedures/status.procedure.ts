@@ -23,7 +23,10 @@ import {
 	getAvailableUpdates,
 	getSoftUpdateStatus,
 } from "../../modules/system/software-updates.ts";
-import { getSshStatus } from "../../modules/system/ssh.ts";
+import {
+	getCachedSshStatus,
+	getSshStatus,
+} from "../../modules/system/ssh.ts";
 import { wifiBuildMsg } from "../../modules/wifi/wifi.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -40,11 +43,12 @@ const authedProcedure = baseProcedure.use(authMiddleware);
 export const getStatusProcedure = authedProcedure
 	.output(statusResponseSchema)
 	.handler(() => {
+		void getSshStatus();
 		return {
 			is_streaming: getIsStreaming(),
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
-			ssh: getSshStatus(),
+			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),
@@ -69,6 +73,7 @@ export const getRelaysProcedure = authedProcedure
  */
 export function buildInitialStatus() {
 	const config = getConfig();
+	void getSshStatus();
 	return {
 		config,
 		pipelines: getPipelinesMessage(),
@@ -77,7 +82,7 @@ export function buildInitialStatus() {
 			is_streaming: getIsStreaming(),
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
-			ssh: getSshStatus(),
+			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),
