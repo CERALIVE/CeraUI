@@ -33,6 +33,8 @@ import type {
 
 import { ENV_VARIABLES } from "../env";
 import { nextBackoffDelay } from "./backoff";
+import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
+import { parseServerPing, shouldForceCloseHalfOpen } from "./half-open";
 
 /**
  * WebSocket connection state
@@ -69,7 +71,7 @@ interface PendingRequest {
 /**
  * Event handler types
  */
-type MessageHandler = (type: string, data: unknown) => void;
+type MessageHandler = (type: string, data: unknown, seq?: number) => void;
 type ConnectionHandler = (state: ConnectionState) => void;
 
 /**
@@ -88,6 +90,8 @@ class RPCClient {
 	/** Hard ceiling (ms ≈ 30s) for the exponential term before jitter. */
 	private reconnectCap = 30000;
 	private keepAliveInterval: ReturnType<typeof setInterval> | null = null;
+	/** Tracks last inbound frame time; drives half-open force-close (Task 14). */
+	private heartbeatTracker = createHeartbeatTracker();
 
 	/**
 	 * Get WebSocket URL
@@ -122,6 +126,7 @@ class RPCClient {
 			this.socket.onopen = () => {
 				this.setConnectionState("connected");
 				this.reconnectAttempts = 0;
+				this.heartbeatTracker.recordTraffic(Date.now());
 				this.startKeepAlive();
 			};
 
@@ -191,6 +196,19 @@ class RPCClient {
 	 */
 	private startKeepAlive(): void {
 		this.keepAliveInterval = setInterval(() => {
+			if (
+				shouldForceCloseHalfOpen(
+					this.heartbeatTracker,
+					Date.now(),
+					this.socket?.readyState,
+				)
+			) {
+				console.warn(
+					`Half-open socket: no inbound traffic for >${HEARTBEAT_THRESHOLD_MS}ms, forcing reconnect`,
+				);
+				this.socket?.close();
+				return;
+			}
 			this.sendLegacy("keepalive", null);
 		}, 10000);
 	}
@@ -212,17 +230,37 @@ class RPCClient {
 		try {
 			const parsed = JSON.parse(data);
 
+			// Any inbound frame proves liveness, refuting half-open (Task 14).
+			this.heartbeatTracker.recordTraffic(Date.now());
+
+			// Server→client heartbeat ping: ack with a pong, never echo a ping.
+			if (parsed && typeof parsed === "object" && "ping" in parsed) {
+				if (parseServerPing((parsed as { ping: unknown }).ping)) {
+					this.sendLegacy("pong", true);
+					return;
+				}
+			}
+
 			// Check if it's an RPC response
 			if (parsed.id && (parsed.result !== undefined || parsed.error)) {
 				this.handleRPCResponse(parsed as RPCResponse);
 				return;
 			}
 
-			// Handle as legacy message
+			// Handle as legacy message. The broadcast envelope is
+			// `{ [type]: data, seq?: N }` — `seq` is transport metadata, not a
+			// message type, so it is lifted out and forwarded alongside each
+			// type→data pair. Per-type drop-stale lives in the subscription layer
+			// (subscriptions.svelte.ts → seq-guard); messages without `seq`
+			// forward `undefined` and bypass the guard (backward-additive).
+			const seq =
+				typeof (parsed as { seq?: unknown }).seq === "number"
+					? (parsed as { seq: number }).seq
+					: undefined;
 			for (const [type, value] of Object.entries(parsed)) {
-				if (type === "id") continue;
+				if (type === "id" || type === "seq") continue;
 				for (const handler of this.messageHandlers) {
-					handler(type, value);
+					handler(type, value, seq);
 				}
 			}
 		} catch (error) {
