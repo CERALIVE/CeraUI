@@ -2,7 +2,7 @@
 
 # CeraUI Monorepo Installation Script
 # 
-# This script installs the CeraUI monorepo (frontend + belaUI backend) to a BELABOX device.
+# This script installs the CeraUI monorepo (frontend + backend) to a CeraLive device.
 # 
 # Usage:
 #   ./install.sh                             # Local installation from GitHub releases
@@ -18,7 +18,7 @@ set -euo pipefail
 # Default values
 DEPLOY_MODE="local"
 SSH_TARGET=""
-BELAUI_PATH="/opt/belaUI"
+BELAUI_PATH="/opt/ceralive"
 
 # GitHub release configuration
 RELEASE_TARBALL="ceraui-monorepo.tar.xz"
@@ -182,14 +182,14 @@ copy_files() {
     rsync -rltvz --delete --chown=root:root $exclude_args "${source}/" "$rsync_target"
   else
     # Local installation
-    echo "Installing belaUI to $dest"
+    echo "Installing CeraUI to $dest"
     sudo rsync -rltz --delete --chown=root:root $exclude_args "${source}/" "$dest"
   fi
 }
 
 
 
-# main orchestrates the installation or deployment of the CeraUI monorepo (frontend + belaUI backend), handling both local and remote modes, dependency checks, file transfers, and post-install configuration.
+# main orchestrates the installation or deployment of the CeraUI monorepo, handling both local and remote modes, dependency checks, file transfers, and post-install configuration.
 main() {
   echo "CeraUI Monorepo Installation Script"
   echo "Mode: $DEPLOY_MODE"
@@ -236,6 +236,10 @@ main() {
     # Ensure rsync is installed on dev machine
     install_if_missing_dev rsync
 
+    # Forward-safe migration: stop old service and clean old path
+    ssh "$SSH_TARGET" "if systemctl is-active --quiet belaUI.service 2>/dev/null; then systemctl stop belaUI.service || true; fi"
+    ssh "$SSH_TARGET" "if [ -d /opt/belaUI ]; then rm -rf /opt/belaUI; fi"
+
     # Deploy files to remote machine
     copy_files "$DIST_PATH" "$BELAUI_PATH" "$exclude_args"
 
@@ -265,6 +269,14 @@ main() {
       exit 1
     fi
 
+    # Forward-safe migration: stop old service and clean old path
+    if systemctl is-active --quiet belaUI.service 2>/dev/null; then
+        systemctl stop belaUI.service || true
+    fi
+    if [ -d /opt/belaUI ]; then
+        rm -rf /opt/belaUI
+    fi
+
     # Ensure target directory exists
     mkdir -p "$BELAUI_PATH"
 
@@ -276,7 +288,7 @@ main() {
   fi
 
   # Common post-installation tasks
-  echo "Configuring BelaUI..."
+  echo "Configuring CeraUI..."
   
   # Set ownership to root:root
   execute_sudo_cmd "chown -R root:root $BELAUI_PATH"
@@ -298,7 +310,7 @@ main() {
   if [[ "$DEPLOY_MODE" == "remote" ]]; then
     echo "CeraUI monorepo deployment complete."
   else
-    echo "CeraUI monorepo (frontend + belaUI backend) installed and override script executed successfully."
+    echo "CeraUI monorepo installed and override script executed successfully."
     echo "You can reset to default by running: sudo $BELAUI_PATH/reset-to-default.sh"
   fi
 }
