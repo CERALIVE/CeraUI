@@ -281,6 +281,28 @@ const en = {
 		saved: "Saved",
 		saveFailed: "Failed to save",
 		updateInProgress: "Update in progress",
+		// Hardware
+		bootconfigUpdating: "Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
+		jetsonUndervoltage: "System undervoltage detected. You may experience system instability, including glitching, freezes and the modems disconnecting",
+		hdmiError: "HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. Try to move any modems away from the HDMI cable and the encoder. If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera",
+		// PWA updates
+		appUpdated: "App Updated",
+		appUpdatedDescription: "Updated to version {version:string}",
+		updateAvailable: "Update Available",
+		updateAvailableDescription: "A new version is available. Refresh to update.",
+		// PWA install
+		appInstalled: "App Installed",
+		appInstalledDescription: "CeraUI has been added to your home screen!",
+		installCancelled: "Installation Cancelled",
+		installCancelledDescription: "You can install the app later from your browser menu.",
+		installFailed: "Installation Failed",
+		installFailedDescription: "Unable to install the app. Please try again.",
+		// Connection
+		connectionRecovered: "Connection restored",
+		connectionLost: "Connection lost",
+		// Relay empty-states
+		relayWaiting: "Waiting for relay servers\u2026",
+		relayNone: "No relay servers available",
 	},
 	a11y: {
 		close: "Close",
