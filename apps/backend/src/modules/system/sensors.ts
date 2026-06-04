@@ -120,7 +120,16 @@ async function monitorBootconfig() {
 	if (!notificationExists("bootconfig")) {
 		const msg =
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...";
-		notificationBroadcast("bootconfig", "warning", msg, 0, true, false, false);
+		notificationBroadcast(
+			"bootconfig",
+			"warning",
+			msg,
+			0,
+			true,
+			false,
+			false,
+			"notifications.bootconfigUpdating",
+		);
 	}
 
 	setTimeout(monitorBootconfig, 2000);
@@ -196,6 +205,8 @@ export function initHardwareMonitoring() {
 						10 * 60,
 						true,
 						false,
+						true,
+						"notifications.jetsonUndervoltage",
 					);
 				}
 			}); // dmesg
@@ -218,7 +229,16 @@ export function initHardwareMonitoring() {
 						"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. " +
 						"Try to move any modems away from the HDMI cable and the encoder. " +
 						"If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera";
-					notificationBroadcast("hdmi_error", "error", msg, 8, true, false);
+					notificationBroadcast(
+						"hdmi_error",
+						"error",
+						msg,
+						8,
+						true,
+						false,
+						true,
+						"notifications.hdmiError",
+					);
 				}
 
 				if (data.match("hdmirx-controller: Err, timing is invalid")) {
