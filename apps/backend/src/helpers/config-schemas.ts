@@ -21,7 +21,9 @@
  */
 
 import {
+	type DetectionMethod,
 	type RelayProtocol,
+	detectionMethodSchema,
 	isNamespacedRelayId,
 	namespacedRelayId,
 	parseNamespacedRelayId,
@@ -32,12 +34,13 @@ import { z } from "zod";
 // Re-export the relay-id namespacing helpers so backend consumers resolve them
 // from the config layer rather than reaching into @ceraui/rpc directly.
 export {
+	detectionMethodSchema,
 	isNamespacedRelayId,
 	namespacedRelayId,
 	parseNamespacedRelayId,
 	relayProtocolSchema,
 };
-export type { RelayProtocol };
+export type { DetectionMethod, RelayProtocol };
 
 // =============================================================================
 // Custom Provider Schema (shared between config and cloud-provider)
@@ -119,6 +122,9 @@ export const runtimeConfigSchema = z.object({
 	remote_key: z.string().optional(),
 	remote_provider: providerSelectionSchema.optional(),
 	custom_provider: customProviderSchema.optional(),
+	// How the active relay selection was sourced. "subscription" is set when a
+	// provider's authenticated catalog push auto-preloads server/account.
+	detectionMethod: detectionMethodSchema.optional(),
 });
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
