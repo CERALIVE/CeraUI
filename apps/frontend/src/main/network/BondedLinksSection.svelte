@@ -1,8 +1,9 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { Modem } from '@ceraui/rpc/schemas';
-import { CardSim, LoaderCircle, Radar, Radio } from '@lucide/svelte';
+import { Radio } from '@lucide/svelte';
 
+import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import { formatThroughput } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
@@ -15,14 +16,6 @@ interface Props {
 }
 
 const { links, modemEntries }: Props = $props();
-
-/** signal % → 0..3 bars (null = no data → 0 bars). */
-function signalBars(signal: number | null): number {
-	if (signal == null) return 0;
-	if (signal >= 66) return 3;
-	if (signal >= 33) return 2;
-	return 1;
-}
 
 /** A short type tag for a bonded link (WiFi, Ethernet, or the modem's network generation). */
 function linkTypeLabel(link: LinkSignal): string {
@@ -60,12 +53,11 @@ const totalStale = $derived(
 		<div class="flex flex-wrap gap-2.5">
 			{#each links as link (link.linkIndex)}
 				{@const color = `var(--link-${link.linkIndex + 1})`}
-				{@const bars = signalBars(link.signal)}
 				{@const hasSignal = link.signal !== null}
 				<div
 					class={cn(
 						'flex items-center gap-2.5 rounded-lg border px-3 py-2',
-						link.isStale && 'opacity-60',
+						link.isStale && 'opacity-50',
 					)}
 					style="border-color: color-mix(in oklab, {color} 35%, transparent); background-color: color-mix(in oklab, {color} 10%, transparent);"
 				>
@@ -73,31 +65,14 @@ const totalStale = $derived(
 						class="text-xs font-bold tabular-nums"
 						style="color: {color};">L{link.linkIndex + 1}</span
 					>
-					<!-- mini signal bars (match HUD aesthetic) — wired links report no signal -->
-					{#if hasSignal}
-						<div data-live-value class="flex items-end gap-0.5" aria-hidden="true">
-							{#each [1, 2, 3] as bar (bar)}
-								<span
-									class="w-1 rounded-[1px]"
-									style="height: {bar * 3 + 2}px; background-color: {bar <= bars
-										? color
-										: 'var(--muted)'};"
-								></span>
-							{/each}
-						</div>
-					{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
-						<CardSim class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
-					{:else if link.type === 'modem' && link.connectionState === 'scanning'}
-						<Radar
-							class="text-muted-foreground size-4 shrink-0 motion-safe:animate-pulse"
-							aria-hidden="true"
-						/>
-					{:else if link.type === 'modem' && link.connectionState === 'connected'}
-						<LoaderCircle
-							class="text-muted-foreground size-4 shrink-0 motion-safe:animate-spin"
-							aria-hidden="true"
-						/>
-					{/if}
+					<LinkIndicator
+						shape="bars"
+						size="md"
+						type={link.type}
+						signal={link.signal}
+						connectionState={link.connectionState}
+						linkIndex={link.linkIndex}
+					/>
 					<div class="flex min-w-0 flex-col leading-tight">
 						<span class="truncate text-xs font-medium">{link.label}</span>
 						<span class="text-muted-foreground text-[10px] uppercase tracking-wide"

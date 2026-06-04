@@ -23,7 +23,7 @@ import {
 	WifiOff,
 } from '@lucide/svelte';
 
-import WifiQuality from '$lib/components/icons/WifiQuality.svelte';
+import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import { Button } from '$lib/components/ui/button';
 import { getWifiUUID } from '$lib/helpers/NetworkHelper';
 import { frequencyBand, isSecured, signalTextClass } from '$lib/helpers/wifi-selector';
@@ -130,7 +130,7 @@ let {
 				<div class="flex items-center gap-3">
 					<!-- Signal -->
 					<div class="relative shrink-0">
-						<WifiQuality class="size-5" signal={network.signal} />
+						<LinkIndicator shape="icon" size="lg" type="wifi" signal={network.signal} />
 						{#if network.active}
 							<span
 								class="bg-primary ring-background absolute -end-1.5 -top-1.5 grid size-3.5 place-items-center rounded-full ring-2"

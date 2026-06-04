@@ -1,15 +1,15 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { NetifMessage, WifiInterface } from '@ceraui/rpc/schemas';
-import { ChevronRight, Loader2, Router, Settings2, Signal, Wifi, WifiOff } from '@lucide/svelte';
+import { ChevronRight, Loader2, Router, Settings2, Wifi, WifiOff } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
+import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
-import { signalTextClass } from '$lib/helpers/signal';
 import { getStalenessState } from '$lib/helpers/staleness';
 import { rpc } from '$lib/rpc/client';
 import type { LinkSignal } from '$lib/types/hud';
@@ -116,7 +116,8 @@ async function switchToStation(device: string) {
 				{@const hasIp = Boolean(entry?.ip)}
 				{@const isSwitching = switching === id}
 				{@const hasControls = isHotspot || hasIp || iface.supports_hotspot}
-				<div class="px-4 py-3">
+				{@const sigColor = link ? `var(--link-${link.linkIndex + 1})` : 'var(--muted-foreground)'}
+				<div class="px-4 py-4">
 					<!-- Identity row -->
 					<div class="flex items-center gap-3">
 						<span
@@ -150,7 +151,6 @@ async function switchToStation(device: string) {
 							</p>
 						</div>
 						<div class="flex shrink-0 items-center gap-2.5">
-							<SpeedBadge {kbps} stale={tpStale} />
 							{#if isHotspot}
 								<span
 									class="bg-status-info/10 text-status-info rounded-md px-1.5 py-0.5 text-xs font-medium"
@@ -162,20 +162,30 @@ async function switchToStation(device: string) {
 									data-live-value
 									class={cn('flex items-center gap-1.5 transition-opacity', sigStale && 'opacity-50')}
 								>
-									<Signal class={cn('size-3.5', signalTextClass(net.signal))} aria-hidden="true" />
-									<span class={cn('font-mono text-xs tabular-nums', signalTextClass(net.signal))}>
-										{net.signal}%
-									</span>
+									<LinkIndicator
+										shape="bars"
+										size="md"
+										type="wifi"
+										signal={net.signal}
+										connectionState="connected"
+										linkIndex={link?.linkIndex}
+									/>
+									{#if net.signal != null}
+										<span class="font-mono text-xs tabular-nums" style:color={sigColor}>
+											{net.signal}%
+										</span>
+									{/if}
 								</div>
 							{:else}
 								<WifiOff class="text-muted-foreground size-4" aria-hidden="true" />
 							{/if}
+							<SpeedBadge {kbps} stale={tpStale} />
 						</div>
 					</div>
 
 					<!-- Control row: bond membership + station⇆hotspot mode -->
 					{#if hasControls}
-						<div class="border-border/60 mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+						<div class="mt-2.5 flex flex-wrap items-center gap-2 ps-5">
 							{#if isHotspot}
 								<!-- Hotspot mode: cannot bond; offer config + revert to station. -->
 								<BondToggle

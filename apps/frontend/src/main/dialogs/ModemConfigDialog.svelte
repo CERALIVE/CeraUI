@@ -35,8 +35,8 @@ import { slide } from 'svelte/transition';
 import { toast } from 'svelte-sonner';
 
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
+import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
-import SignalIndicator from '$lib/components/icons/SignalIndicator.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
@@ -46,6 +46,7 @@ import {
 	renameSupportedModemNetwork,
 	scanModemNetworks,
 } from '$lib/helpers/NetworkHelper';
+import { modemSignal } from '$lib/helpers/signal';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -58,7 +59,7 @@ let { open = $bindable(false), modem, deviceId }: Props = $props();
 
 // ── No-SIM detection (defensive: null OR undefined signal => no SIM) ──────────
 const noSim = $derived(modem.no_sim === true || modem.status?.signal == null);
-const signalValue = $derived(modem.status?.signal ?? 0);
+const signalValue = $derived(modemSignal(modem));
 const operatorName = $derived(modem.status?.network || modem.sim_network || modem.name);
 const activeNetworkType = $derived(modem.status?.network_type ?? '');
 
@@ -164,11 +165,14 @@ const selectedNetworkLabel = $derived(
 					<p class="text-muted-foreground text-xs">{activeNetworkType}</p>
 				{/if}
 			</div>
-			{#if noSim}
-				<SignalZero class="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
-			{:else}
-				<SignalIndicator signal={signalValue} type="cellular" />
-			{/if}
+			<LinkIndicator
+				shape="icon"
+				size="lg"
+				type="modem"
+				signal={signalValue}
+				connectionState={noSim ? 'no_sim' : 'connected'}
+				showPercent
+			/>
 		</div>
 
 		{#if noSim}
