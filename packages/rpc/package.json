@@ -21,6 +21,7 @@
 	},
 	"scripts": {
 		"check": "tsc --noEmit",
+		"test": "bun test",
 		"lint": "echo 'RPC linting handled by root Biome'",
 		"lint:fix": "echo 'RPC fixing handled by root Biome'"
 	},

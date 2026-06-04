@@ -21,7 +21,7 @@
 		"build:frontend": "pnpm --filter frontend run build",
 		"build:backend": "pnpm --filter backend run build:backend-only",
 		"preview": "pnpm --filter frontend run preview",
-		"test": "pnpm --filter frontend run test && pnpm --filter backend run test",
+		"test": "pnpm --filter @ceraui/rpc run test && pnpm --filter frontend run test && pnpm --filter backend run test",
 		"test:e2e": "pnpm --filter frontend run test:e2e -- --grep-invert @visual",
 		"test:e2e:visual": "pnpm --filter frontend run test:e2e -- --grep @visual",
 		"lint": "biome check . ; pnpm --filter backend run check ; pnpm --filter frontend run check ; pnpm --filter backend run lint ; pnpm --filter frontend run lint",

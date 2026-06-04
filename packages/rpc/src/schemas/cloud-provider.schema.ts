@@ -18,6 +18,14 @@
 import { z } from 'zod';
 
 /**
+ * How a relay was sourced: `subscription` (provider's authenticated WS push),
+ * `manual` (user-entered SRTLA addr/port), `belabox` (BELABOX-compatible feed).
+ */
+export const DETECTION_METHODS = ['subscription', 'manual', 'belabox'] as const;
+export const detectionMethodSchema = z.enum(DETECTION_METHODS);
+export type DetectionMethod = (typeof DETECTION_METHODS)[number];
+
+/**
  * Cloud provider endpoint configuration
  */
 export const cloudProviderEndpointSchema = z.object({
@@ -35,6 +43,8 @@ export const cloudProviderEndpointSchema = z.object({
 	cloudUrl: z.string().url().optional(),
 	/** Protocol version (if different from default) */
 	protocolVersion: z.number().optional(),
+	/** How relays for this provider are detected (optional — legacy-safe) */
+	detectionMethod: detectionMethodSchema.optional(),
 });
 
 export type CloudProviderEndpoint = z.infer<typeof cloudProviderEndpointSchema>;
