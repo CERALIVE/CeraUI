@@ -18,6 +18,11 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import fs from "node:fs";
 import { writeTextFile } from "../../helpers/text-files.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import {
+	getAllMockRelaysRtt,
+	getMockRelayRtt,
+} from "../../mocks/providers/relays.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "../network/dns.ts";
 import { getNetworkInterfaces } from "../network/network-interfaces.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
@@ -46,10 +51,16 @@ export function hasLowMtu(): boolean {
 }
 
 export function getRelayRtt(relayId: string): number | undefined {
+	if (shouldUseMocks()) {
+		return getMockRelayRtt(relayId);
+	}
 	return bcrptRelaysRtt[relayId];
 }
 
 export function getAllRelaysRtt(): Record<string, number> {
+	if (shouldUseMocks()) {
+		return getAllMockRelaysRtt();
+	}
 	// generate a copy to prevent external code modification
 	return { ...bcrptRelaysRtt };
 }
