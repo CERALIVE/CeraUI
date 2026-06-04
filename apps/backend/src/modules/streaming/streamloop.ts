@@ -43,7 +43,12 @@ import {
 } from "./audio.ts";
 import { hasLowMtu } from "./bcrpt.ts";
 import { setBitrate } from "./encoder.ts";
-import { type Pipeline, generatePipelineFile } from "./pipelines.ts";
+import {
+	type Pipeline,
+	gatePipelineOverrides,
+	generatePipelineFile,
+} from "./pipelines.ts";
+import type { PipelineOverrides } from "@ceralive/ceracoder";
 import {
 	genSrtlaIpList,
 	genSrtlaIpListForLocalIpAddress,
@@ -120,13 +125,18 @@ export async function startStream(
 	const config = getConfig();
 	setBitrate(config);
 
-	// Generate pipeline with overrides from config
-	const pipelineFile = generatePipelineFile(pipeline, {
+	const overrides: PipelineOverrides = {
 		bitrateOverlay: config.bitrate_overlay,
 		audioCodec: config.acodec as "aac" | "opus" | undefined,
 		audioDevice: config.asrc ? getAudioSrcId(config.asrc) : undefined,
 		volume: 1.0,
-	});
+		...gatePipelineOverrides(pipeline, {
+			resolution: config.resolution,
+			framerate: config.framerate,
+		}),
+	};
+
+	const pipelineFile = generatePipelineFile(pipeline, overrides);
 
 	if (pipeline.supportsAudio && config.asrc) {
 		try {

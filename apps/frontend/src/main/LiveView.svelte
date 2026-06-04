@@ -7,26 +7,34 @@ import {
 	BITRATE_MAX,
 	BITRATE_MIN,
 } from '@ceraui/rpc/schemas';
-import { ChevronRight, Cpu, Server, ServerOff, Volume2 } from '@lucide/svelte';
+import {
+	ChevronRight,
+	Cpu,
+	Lock,
+	Minus,
+	Pencil,
+	Play,
+	Plus,
+	Server,
+	ServerOff,
+	Square,
+	Volume2,
+} from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
+import { Slider } from '$lib/components/ui/slider';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
-import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import { getConfig, getIsStreaming, getPipelines, getSensors } from '$lib/rpc/subscriptions.svelte';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
 import { buildStartConfig, canStartStream } from '$lib/streaming/startStreaming';
+import { isSectionLocked, type StreamSection } from '$lib/streaming/streamingLockPolicy';
 import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
 import EncoderDialog, { type EncoderConfig } from '$main/dialogs/EncoderDialog.svelte';
 import ServerDialog from '$main/dialogs/ServerDialog.svelte';
-import BitrateAdjuster from '$main/live/BitrateAdjuster.svelte';
-import LiveHeader from '$main/live/LiveHeader.svelte';
-import StreamControlButton from '$main/live/StreamControlButton.svelte';
-import StreamSettingsCard, { type ConfigRow } from '$main/live/StreamSettingsCard.svelte';
-import StreamTelemetryStrip from '$main/live/StreamTelemetryStrip.svelte';
 
 // Reactive state — non-deprecated subscriptions getters only.
 const config = $derived(getConfig());
@@ -94,19 +102,11 @@ const pipelineNeedsReconfigure = $derived(Boolean(effectivePipeline) && !pipelin
 // the AudioDialog/ServerDialog persistence pattern. Resolution/framerate are
 // capability-gated against the selected pipeline (buildEncoderSetConfig).
 async function handleEncoderSave(saved: EncoderConfig) {
-	// Lock each field this save actually changes BEFORE the RPC, so a stale
-	// server echo of the old value can't revert the optimistic edit; release
-	// after the RPC settles (resolve or reject) to avoid a permanent lock.
-	const input = buildEncoderSetConfig(saved, effectivePipelineData);
-	const fields = Object.entries(input);
-	for (const [field, value] of fields) markPending(field, value);
 	try {
-		await rpc.streaming.setConfig(input);
+		await rpc.streaming.setConfig(buildEncoderSetConfig(saved, effectivePipelineData));
 		toast.success($LL.notifications.saved());
 	} catch {
 		toast.error($LL.notifications.saveFailed());
-	} finally {
-		for (const [field] of fields) onRpcResolved(field);
 	}
 }
 
@@ -162,15 +162,10 @@ function clampBitrate(kbps: number): number {
 async function commitBitrate(kbps: number) {
 	const clamped = clampBitrate(kbps);
 	bitrateDraft = clamped;
-	// Live edit (no gating): lock max_br before the RPC so a stale config echo
-	// of the prior bitrate can't flicker the slider back; release after settle.
-	markPending('max_br', clamped);
 	try {
 		await rpc.streaming.setBitrate({ max_br: clamped });
 	} catch {
 		toast.error($LL.notifications.saveFailed());
-	} finally {
-		onRpcResolved('max_br');
 	}
 }
 
@@ -259,6 +254,14 @@ function handleStop() {
 	}
 }
 
+type ConfigRow = {
+	icon: typeof Cpu;
+	label: string;
+	value: string;
+	section: StreamSection;
+	onEdit: () => void;
+	warn?: boolean;
+};
 const configRows = $derived<ConfigRow[]>([
 	{
 		icon: Cpu,
@@ -266,7 +269,6 @@ const configRows = $derived<ConfigRow[]>([
 		value: encoderSummary,
 		section: 'encoder',
 		onEdit: () => (encoderOpen = true),
-		testId: 'open-encoder-dialog',
 		warn: pipelineNeedsReconfigure,
 	},
 	{
@@ -275,7 +277,6 @@ const configRows = $derived<ConfigRow[]>([
 		value: audioSummary,
 		section: 'audio',
 		onEdit: () => (audioDialogOpen = true),
-		testId: 'open-audio-dialog',
 	},
 	{
 		icon: Server,
@@ -283,18 +284,50 @@ const configRows = $derived<ConfigRow[]>([
 		value: serverSummary,
 		section: 'server',
 		onEdit: () => (serverDialogOpen = true),
-		testId: 'open-server-dialog',
 	},
 ]);
 </script>
 
 <div class="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6">
-	<LiveHeader
-		{hasServer}
-		{isStreaming}
-		onEditServer={() => (serverDialogOpen = true)}
-		{serverTarget}
-	/>
+	<!-- Header: stream status, title, and a quick server reference -->
+	<header class="flex flex-wrap items-center justify-between gap-4">
+		<div class="flex items-center gap-3">
+			{#if isStreaming}
+				<span
+					class="flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide uppercase"
+					style="color: var(--status-live); border-color: color-mix(in oklab, var(--status-live) 40%, transparent); background-color: color-mix(in oklab, var(--status-live) 12%, transparent);"
+				>
+					<span
+						class="h-2 w-2 rounded-full motion-safe:animate-pulse"
+						style="background-color: var(--status-live);"
+					></span>
+					{$LL.live.streamingActive()}
+				</span>
+			{:else}
+				<span
+					class="text-muted-foreground flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide uppercase"
+				>
+					<span class="bg-muted-foreground/50 h-2 w-2 rounded-full"></span>
+					{$LL.live.notStreaming()}
+				</span>
+			{/if}
+			<div>
+				<h1 class="text-2xl font-bold tracking-tight">{$LL.live.title()}</h1>
+				<p class="text-muted-foreground text-sm">{$LL.live.description()}</p>
+			</div>
+		</div>
+
+		{#if hasServer}
+			<button
+				class="hover:bg-accent focus-visible:ring-ring/50 flex min-h-[44px] max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
+				onclick={() => (serverDialogOpen = true)}
+			>
+				<Server aria-hidden={true} class="text-muted-foreground h-4 w-4 shrink-0" />
+				<span class="max-w-[12rem] truncate font-mono">{serverTarget}</span>
+				<ChevronRight aria-hidden={true} class="text-muted-foreground h-4 w-4 shrink-0 rtl:-scale-x-100" />
+			</button>
+		{/if}
+	</header>
 
 	{#if showEmptyState}
 		<!-- First-boot / empty state: no relay server, actionable prompt -->
@@ -324,37 +357,170 @@ const configRows = $derived<ConfigRow[]>([
 			</Card.Content>
 		</Card.Root>
 	{:else}
-		<!-- Live telemetry strip + bitrate hot-adjust — only meaningful while streaming -->
+		<!-- Live telemetry strip — only meaningful while streaming -->
 		{#if isStreaming}
-			<StreamTelemetryStrip
-				bitrate={formatBitrate(config?.max_br)}
-				{tempSensor}
-				{uptimeSensor}
-			/>
+			<section
+				aria-label={$LL.live.overview()}
+				class="bg-card flex flex-wrap items-center gap-x-10 gap-y-4 rounded-xl border px-5 py-4"
+			>
+				<div class="space-y-1">
+					<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+						{$LL.hud.bitrate()}
+					</p>
+					<p class="font-mono text-lg font-semibold" style="color: var(--status-live);">
+						{formatBitrate(config?.max_br)}
+					</p>
+				</div>
+				{#if tempSensor}
+					<div class="space-y-1">
+						<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+							{$LL.hud.temperature()}
+						</p>
+						<p class="font-mono text-lg font-semibold">{tempSensor}</p>
+					</div>
+				{/if}
+				{#if uptimeSensor}
+					<div class="space-y-1">
+						<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+							{$LL.hud.uptime()}
+						</p>
+						<p class="font-mono text-lg font-semibold">{uptimeSensor}</p>
+					</div>
+				{/if}
+			</section>
 
-			<BitrateAdjuster
-				bitrateDraft={bitrateDraft}
-				bitrateLabel={formatBitrate(bitrateDraft)}
-				bitrateMax={BITRATE_MAX}
-				bitrateMin={BITRATE_MIN}
-				onSliderChange={(v) => {
-					interacting = true;
-					bitrateDraft = v;
-				}}
-				onSliderCommit={(v) => {
-					interacting = false;
-					commitBitrate(v);
-				}}
-				onStep={stepBitrate}
-				sliderMax={BITRATE_DEFAULT_MAX}
-				sliderMin={BITRATE_DEFAULT_MIN}
-				step={BITRATE_STEP}
-			/>
+			<!-- Bitrate hot-adjust: applied live via setBitrate, no stream stop -->
+			<section
+				aria-label={$LL.live.adjustBitrate()}
+				class="bg-card space-y-3 rounded-xl border px-5 py-4"
+			>
+				<div class="flex items-center justify-between gap-4">
+					<p class="text-sm font-medium">{$LL.live.adjustBitrate()}</p>
+					<p
+						class="font-mono text-base font-semibold tabular-nums"
+						style="color: var(--status-live);"
+					>
+						{formatBitrate(bitrateDraft)}
+					</p>
+				</div>
+				<div class="flex items-center gap-3">
+					<Button
+						aria-label="-{BITRATE_STEP} {$LL.units.kbps()}"
+						class="size-11 shrink-0 rounded-lg"
+						disabled={bitrateDraft <= BITRATE_MIN}
+						onclick={() => stepBitrate(-BITRATE_STEP)}
+						size="icon"
+						variant="outline"
+					>
+						<Minus aria-hidden={true} class="h-4 w-4" />
+					</Button>
+					<Slider
+						aria-label={$LL.live.adjustBitrate()}
+						class="grow"
+						max={BITRATE_DEFAULT_MAX}
+						min={BITRATE_DEFAULT_MIN}
+						onValueChange={(v: number) => {
+							interacting = true;
+							bitrateDraft = v;
+						}}
+						onValueCommit={(v: number) => {
+							interacting = false;
+							commitBitrate(v);
+						}}
+						step={BITRATE_STEP}
+						type="single"
+						value={bitrateDraft}
+					/>
+					<Button
+						aria-label="+{BITRATE_STEP} {$LL.units.kbps()}"
+						class="size-11 shrink-0 rounded-lg"
+						disabled={bitrateDraft >= BITRATE_MAX}
+						onclick={() => stepBitrate(BITRATE_STEP)}
+						size="icon"
+						variant="outline"
+					>
+						<Plus aria-hidden={true} class="h-4 w-4" />
+					</Button>
+				</div>
+			</section>
 		{/if}
 
-		<StreamSettingsCard {configRows} {isStreaming} />
+		<!-- Configuration overview — one card, three trigger rows (no nested cards) -->
+		<Card.Root class="overflow-hidden">
+			<Card.Header class="pb-3">
+				<Card.Title class="text-sm font-semibold">{$LL.live.streamSettings()}</Card.Title>
+			</Card.Header>
+			<Card.Content class="divide-border divide-y py-0">
+				{#each configRows as row (row.label)}
+					{@const locked = isSectionLocked(row.section, isStreaming)}
+					<div class="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
+						<div class="flex min-w-0 items-start gap-3">
+							<row.icon
+								aria-hidden={true}
+								class="text-muted-foreground mt-0.5 h-5 w-5 shrink-0"
+							/>
+							<div class="min-w-0">
+							<p class="text-sm font-medium">{row.label}</p>
+							<p
+								class="truncate font-mono text-sm {row.warn ? 'font-medium' : 'text-muted-foreground'}"
+								style={row.warn ? 'color: var(--status-warning);' : undefined}
+							>
+								{row.value}
+							</p>
+							</div>
+						</div>
+						{#if locked}
+							<!-- Restart-required while live: stop the stream to change it -->
+							<span
+								class="text-muted-foreground inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium"
+								title={$LL.live.stopToChange()}
+							>
+								<Lock aria-hidden={true} class="h-3.5 w-3.5" />
+								<span class="hidden sm:inline">{$LL.live.stopToChange()}</span>
+							</span>
+						{:else}
+							<Button
+								class="min-h-[44px] shrink-0 gap-1.5"
+								onclick={row.onEdit}
+								size="sm"
+								variant="ghost"
+							>
+								<Pencil aria-hidden={true} class="h-3.5 w-3.5" />
+								<span class="hidden sm:inline">{$LL.live.editSettings()}</span>
+								<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
+							</Button>
+						{/if}
+					</div>
+				{/each}
+			</Card.Content>
+		</Card.Root>
 
-		<StreamControlButton {canStart} {isStreaming} onStart={handleStart} onStop={handleStop} />
+		<!-- Streaming control — prominent, lime to start, neutral to stop -->
+		{#if isStreaming}
+			<Button
+				class="bg-secondary text-secondary-foreground hover:bg-secondary/80 group min-h-[44px] w-full gap-3 py-6 text-base font-semibold"
+				onclick={handleStop}
+				size="lg"
+				type="button"
+			>
+				<Square aria-hidden={true} class="h-5 w-5 transition-transform group-hover:scale-110" />
+				{$LL.live.stopStream()}
+			</Button>
+		{:else}
+			<Button
+				class="bg-primary text-primary-foreground hover:bg-primary/90 group min-h-[44px] w-full gap-3 py-6 text-base font-semibold"
+				disabled={!canStart}
+				onclick={handleStart}
+				size="lg"
+				type="button"
+			>
+				<Play
+					aria-hidden={true}
+					class="h-5 w-5 transition-transform group-hover:translate-x-0.5 group-hover:scale-110"
+				/>
+				{$LL.live.startStream()}
+			</Button>
+		{/if}
 	{/if}
 </div>
 

@@ -32,6 +32,7 @@ import {
 	getMockHardwareProcedure,
 	getPipelinesProcedure,
 	setBitrateProcedure,
+	setConfigProcedure,
 	setMockHardwareProcedure,
 	streamingStartProcedure,
 	streamingStopProcedure,
@@ -81,6 +82,7 @@ export const appRouter = os.$context<RPCContext>().router({
 		getPipelines: getPipelinesProcedure,
 		getAudioCodecs: getAudioCodecsProcedure,
 		getConfig: getConfigProcedure,
+		setConfig: setConfigProcedure,
 		// Dev-only mock hardware switcher
 		setMockHardware: setMockHardwareProcedure,
 		getMockHardware: getMockHardwareProcedure,

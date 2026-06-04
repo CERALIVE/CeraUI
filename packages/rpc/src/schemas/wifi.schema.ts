@@ -3,9 +3,7 @@
  */
 import { z } from 'zod';
 
-// Length-only bounds. The hotspot SSID accepts any unicode (no charset
-// restriction) and matches the backend's own min-1 check in wifi-hotspot.ts.
-export const HOTSPOT_NAME_MIN = 1;
+export const HOTSPOT_NAME_MIN = 3;
 export const HOTSPOT_NAME_MAX = 32;
 export const HOTSPOT_PASSWORD_MIN = 8;
 export const HOTSPOT_PASSWORD_MAX = 63;
@@ -99,17 +97,13 @@ export const hotspotConfigInputSchema = z.object({
 	device: z.string(),
 	name: z
 		.string()
-		.min(HOTSPOT_NAME_MIN, 'Hotspot name must be at least 1 character')
+		.min(HOTSPOT_NAME_MIN, 'Hotspot name must be at least 3 characters')
 		.max(HOTSPOT_NAME_MAX, 'Hotspot name must be at most 32 characters'),
 	password: z
 		.string()
 		.min(HOTSPOT_PASSWORD_MIN, 'Password must be at least 8 characters')
 		.max(HOTSPOT_PASSWORD_MAX, 'Password must be at most 63 characters'),
-	channel: z
-		.string()
-		.refine((c) => wifiBandSchema.safeParse(c).success, {
-			message: 'Channel must be a supported WiFi band (auto, auto_24, auto_50)',
-		}),
+	channel: z.string(),
 });
 export type HotspotConfigInput = z.infer<typeof hotspotConfigInputSchema>;
 

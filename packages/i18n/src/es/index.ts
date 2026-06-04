@@ -205,6 +205,7 @@ const es = {
 		noSensorData: "No hay datos de sensores disponibles",
 		notAvailable: "No disponible",
 		notConfigured: "No configurado",
+		unknownSource: "Unknown source",
 		systemHealth: "Estado del Sistema",
 	},
 	navigation: {
@@ -260,6 +261,10 @@ const es = {
 		streamSettings: "Configuración de transmisión",
 		adjustBitrate: "Ajustar bitrate",
 		stopToChange: "Detén la transmisión para cambiar",
+		cannotStartNoPipeline: "Selecciona una fuente de video antes de iniciar la transmisión",
+		cannotStartNoServer: "Configura un servidor antes de iniciar la transmisión",
+		startFailed: "No se pudo iniciar la transmisión",
+		reconfigureRequired: "Reconfigure required",
 	},
 	dialogs: {
 		close: "Cerrar",

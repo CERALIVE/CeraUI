@@ -3,6 +3,36 @@
  */
 import { z } from 'zod';
 
+/**
+ * Canonical bitrate range — SINGLE SOURCE OF TRUTH (Task 14).
+ *
+ * DECISION: keep the hardware-accurate range (500–50000 kbps) as the canonical
+ * VALIDATION bound applied on both FE + BE. The encoder (ceracoder) can legitimately
+ * drive bitrates across this full window, so rejecting values inside it would drop
+ * valid hardware states. The narrower 2000–12000 window is the PRACTICAL UI DEFAULT
+ * used to seed the slider — it is a UX hint, NOT a validation gate.
+ *
+ * - BITRATE_MIN / BITRATE_MAX            → hardware limit, used by zod validation.
+ * - BITRATE_DEFAULT_MIN / BITRATE_DEFAULT_MAX → practical slider default for the UI.
+ *
+ * FE slider bounds + FE validation MUST derive from these constants (no literals).
+ */
+export const BITRATE_MIN = 500;
+export const BITRATE_MAX = 50000;
+export const BITRATE_DEFAULT_MIN = 2000;
+export const BITRATE_DEFAULT_MAX = 12000;
+
+export const SRT_LATENCY_MIN = 100;
+export const SRT_LATENCY_MAX = 10000;
+
+export const AUDIO_DELAY_MIN = -2000;
+export const AUDIO_DELAY_MAX = 2000;
+
+// Canonical SRTLA/SRT port range. FE port validation derives from these via the
+// ValidationAdapter (no inline literals); srtla_port below references them too.
+export const PORT_MIN = 1;
+export const PORT_MAX = 65535;
+
 // Audio codec enum
 export const audioCodecSchema = z.enum(['opus', 'aac', 'pcm']);
 export type AudioCodec = z.infer<typeof audioCodecSchema>;
@@ -26,18 +56,18 @@ export type Framerate = z.infer<typeof framerateSchema>;
 
 // Streaming configuration input schema
 export const streamingConfigInputSchema = z.object({
-	delay: z.number().int().min(-2000).max(2000).optional(),
-	srt_latency: z.number().int().min(100).max(10000).optional(),
+	delay: z.number().int().min(AUDIO_DELAY_MIN).max(AUDIO_DELAY_MAX).optional(),
+	srt_latency: z.number().int().min(SRT_LATENCY_MIN).max(SRT_LATENCY_MAX).optional(),
 	pipeline: z.string().optional(),
 	acodec: audioCodecSchema.optional(),
 	relay_server: z.string().optional(),
 	relay_account: z.string().optional(),
 	srtla_addr: z.string().optional(),
-	srtla_port: z.number().int().min(1).max(65535).optional(),
+	srtla_port: z.number().int().min(PORT_MIN).max(PORT_MAX).optional(),
 	srt_streamid: z.string().optional(),
 	asrc: z.string().optional(),
 	bitrate_overlay: z.boolean().optional(),
-	max_br: z.number().int().min(500).max(50000).optional(),
+	max_br: z.number().int().min(BITRATE_MIN).max(BITRATE_MAX).optional(),
 	autostart: z.boolean().optional(),
 	resolution: resolutionSchema.optional(),
 	framerate: framerateSchema.optional(),
@@ -46,7 +76,7 @@ export type StreamingConfigInput = z.infer<typeof streamingConfigInputSchema>;
 
 // Bitrate input schema
 export const bitrateInputSchema = z.object({
-	max_br: z.number().int().min(500).max(50000),
+	max_br: z.number().int().min(BITRATE_MIN).max(BITRATE_MAX),
 });
 export type BitrateInput = z.infer<typeof bitrateInputSchema>;
 

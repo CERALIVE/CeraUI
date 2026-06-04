@@ -69,6 +69,8 @@ export function setMockHardware(hw: string): boolean {
 	}
 	mockHardwareOverride = hw as HardwareType;
 	logger.info(`🔧 Mock hardware set to: ${hw}`);
+	// Rebuild the registry so lookups reflect the new hardware, not the old.
+	initPipelines();
 	return true;
 }
 
@@ -156,6 +158,43 @@ export function getPipelinesMessage() {
 		hardware: getEffectiveHardware(),
 		pipelines: getPipelineList(),
 	};
+}
+
+export function gatePipelineOverrides(
+	pipeline: Pick<
+		Pipeline,
+		"supportsResolutionOverride" | "supportsFramerateOverride"
+	>,
+	source: { resolution?: Resolution; framerate?: Framerate },
+): { resolution?: Resolution; framerate?: Framerate } {
+	const gated: { resolution?: Resolution; framerate?: Framerate } = {};
+	if (pipeline.supportsResolutionOverride && source.resolution !== undefined) {
+		gated.resolution = source.resolution;
+	}
+	if (pipeline.supportsFramerateOverride && source.framerate !== undefined) {
+		gated.framerate = source.framerate;
+	}
+	return gated;
+}
+
+/**
+ * Rejects overrides the selected pipeline cannot honor, so an invalid override
+ * never reaches ceracoder. Counterpart to gatePipelineOverrides, which instead
+ * silently drops unsupported overrides at spawn time.
+ */
+export function validatePipelineOverrides(
+	pipeline: Pick<
+		Pipeline,
+		"supportsResolutionOverride" | "supportsFramerateOverride"
+	>,
+	source: { resolution?: Resolution; framerate?: Framerate },
+): void {
+	if (source.resolution !== undefined && !pipeline.supportsResolutionOverride) {
+		throw new Error("Pipeline does not support resolution override");
+	}
+	if (source.framerate !== undefined && !pipeline.supportsFramerateOverride) {
+		throw new Error("Pipeline does not support framerate override");
+	}
 }
 
 /**

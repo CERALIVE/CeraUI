@@ -26,9 +26,14 @@ import { Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import { AppDialog } from '$lib/components/dialogs';
+import { getAudioSourceLabel } from '$lib/helpers/AudioHelper';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
+import {
+	resolveAudioGateState,
+	resolveAudioPipelineKey,
+} from '$lib/streaming/audioGate';
 import { rpc } from '$lib/rpc';
 import {
 	getAudioCodecs,
@@ -50,6 +55,12 @@ interface Props {
 	audioSource?: string;
 	audioCodec?: AudioCodec;
 	audioDelay?: number;
+	/**
+	 * Effective encoder pipeline driving the audio gate: the DRAFTED encoder
+	 * source first, the saved config pipeline as fallback. When omitted the gate
+	 * falls back to the saved device config alone.
+	 */
+	effectivePipeline?: string;
 	/** Commit handler — receives the validated draft when Save is pressed. */
 	onSave?: (values: AudioConfigValues) => void;
 }
@@ -59,6 +70,7 @@ let {
 	audioSource,
 	audioCodec,
 	audioDelay,
+	effectivePipeline,
 	onSave,
 }: Props = $props();
 
@@ -74,12 +86,14 @@ const audioCodecs = $derived(getAudioCodecs());
 const audioSources = $derived(getStatus()?.asrcs ?? []);
 const isStreaming = $derived(getIsStreaming());
 
-// Does the currently-saved pipeline expose audio configuration at all?
-const pipelineKey = $derived(config?.pipeline);
-const pipelineData = $derived(
-	pipelineKey && pipelines ? pipelines[pipelineKey] : undefined,
+// Gate follows the DRAFTED encoder pipeline first, the saved config second —
+// so picking an audio-capable pipeline in the Encoder dialog clears the gate
+// immediately, without waiting for a stream (re)start to persist it.
+const pipelineKey = $derived(
+	resolveAudioPipelineKey(effectivePipeline, config?.pipeline),
 );
-const hasAudioSupport = $derived(pipelineData?.supportsAudio ?? false);
+const gateState = $derived(resolveAudioGateState(pipelineKey, pipelines));
+const hasAudioSupport = $derived(gateState === 'enabled');
 
 // ---- Draft state (seeded from props each time the dialog opens) ----
 let draftSource = $state<string | undefined>(undefined);
@@ -122,12 +136,28 @@ const thumbPct = $derived(pct(draftDelay));
 const fillLeft = $derived(Math.min(zeroPct, thumbPct));
 const fillWidth = $derived(Math.abs(thumbPct - zeroPct));
 
+// i18n key resolver (mirrors the EncoderDialog helper) — lets the pure
+// AudioHelper resolve localized keys without a store/rune dependency.
+const t = (key: string): string => {
+	const parts = key.split('.');
+	let result: unknown = $LL;
+	for (const part of parts) {
+		if (result && typeof result === 'object' && part in result) {
+			result = (result as Record<string, unknown>)[part];
+		} else {
+			return key;
+		}
+	}
+	return typeof result === 'function' ? (result as () => string)() : key;
+};
+
 const sourceTriggerLabel = $derived(
-	!draftSource
-		? $LL.settings.selectAudioSource()
-		: draftSource === notAvailableAudioSource
-			? `${draftSource} (${$LL.settings.notAvailableAudioSource()})`
-			: draftSource,
+	getAudioSourceLabel(draftSource, {
+		available: audioSources,
+		notAvailableSentinel: notAvailableAudioSource ?? '',
+		selectPlaceholder: $LL.settings.selectAudioSource(),
+		t,
+	}),
 );
 const codecTriggerLabel = $derived(
 	draftCodec && audioCodecs
@@ -165,12 +195,12 @@ async function handleSave() {
 	primaryLabel={$LL.dialogs.save()}
 	title={$LL.general.audioSettings()}
 >
-	{#if !pipelineKey}
-		<!-- No pipeline selected yet — audio cannot be configured. -->
+	{#if gateState === 'no-pipeline'}
+		<!-- No pipeline drafted or saved yet — audio cannot be configured. -->
 		<div class="bg-muted/50 rounded-lg px-4 py-3 text-center">
 			<p class="text-muted-foreground text-sm">{$LL.settings.selectPipelineFirst()}</p>
 		</div>
-	{:else if !hasAudioSupport}
+	{:else if gateState === 'no-audio-support'}
 		<!-- Selected pipeline has no audio support. -->
 		<div class="border-destructive/20 bg-destructive/5 rounded-lg border px-4 py-3">
 			<h4 class="text-destructive text-sm font-medium">
@@ -268,17 +298,17 @@ async function handleSave() {
 					>
 						<!-- Track -->
 						<div
-							class="bg-muted absolute inset-x-0 inset-y-0 top-1/2 h-2 -translate-y-1/2 rounded-full"
+							class="bg-muted absolute inset-y-0 top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full"
 						></div>
 						<!-- Center marker (zero) -->
 						<div
-							style={`inset-inline-start: ${zeroPct}%;`}
-							class="bg-muted-foreground/40 absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rtl:translate-x-1/2"
+							style={`left: ${zeroPct}%;`}
+							class="bg-muted-foreground/40 absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2"
 						></div>
 						<!-- Fill from zero toward thumb -->
 						{#if fillWidth > 0}
 							<div
-								style={`inset-inline-start: ${fillLeft}%; width: ${fillWidth}%;`}
+								style={`left: ${fillLeft}%; width: ${fillWidth}%;`}
 								class={`absolute top-1/2 h-2 -translate-y-1/2 rounded-full transition-all duration-200 ${
 									draftDelay < 0 ? 'bg-muted-foreground' : 'bg-primary'
 								}`}
@@ -286,8 +316,8 @@ async function handleSave() {
 						{/if}
 						<!-- Thumb -->
 						<div
-							style={`inset-inline-start: ${thumbPct}%; transition: inset-inline-start 200ms ease-out, background-color 200ms ease-out;`}
-							class={`border-background absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-md transition-all duration-200 rtl:translate-x-1/2 ${
+							style={`left: ${thumbPct}%; transition: left 200ms ease-out, background-color 200ms ease-out;`}
+							class={`border-background absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-md transition-all duration-200 ${
 								draftDelay === 0
 									? 'bg-muted-foreground'
 									: draftDelay < 0

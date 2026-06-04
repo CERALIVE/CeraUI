@@ -17,8 +17,13 @@ import {
 	streamingStopOutputSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-import { shouldUseMocks } from "../../mocks/mock-service.ts";
-import { getConfig } from "../../modules/config.ts";
+import {
+	shouldUseMocks,
+	setMockEncoderConfig,
+	getMockState,
+	setStreamingState,
+} from "../../mocks/mock-service.ts";
+import { getConfig, saveConfig } from "../../modules/config.ts";
 import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import { setBitrate as setEncoderBitrate } from "../../modules/streaming/encoder.ts";
 import {
@@ -30,7 +35,7 @@ import {
 	setMockHardware,
 	VALID_HARDWARE_TYPES,
 } from "../../modules/streaming/pipelines.ts";
-import { getIsStreaming } from "../../modules/streaming/streaming.ts";
+import { getIsStreaming, updateStatus } from "../../modules/streaming/streaming.ts";
 import {
 	start as startStream,
 	stop as stopStream,
@@ -53,6 +58,21 @@ export const streamingStartProcedure = authedProcedure
 	.output(streamingStartOutputSchema)
 	.handler(async ({ input, context }) => {
 		try {
+			if (shouldUseMocks()) {
+				// Dev has no srtla_send/ceracoder binaries: the real start() flips
+				// is_streaming on then immediately errors and flips it off. Simulate
+				// a sustained stream so getIsStreaming() drives the UI as on device.
+				setMockEncoderConfig({
+					pipeline: input.pipeline,
+					bitrate_overlay: input.bitrate_overlay,
+					resolution: input.resolution,
+					framerate: input.framerate,
+					max_br: input.max_br,
+				});
+				setStreamingState(true);
+				updateStatus(true);
+				return { success: true, is_streaming: getIsStreaming() };
+			}
 			// The existing start function handles validation and config saving
 			// Pass input directly - it already matches ConfigParameters
 			await startStream(context.ws as unknown as import("ws").default, input);
@@ -68,6 +88,11 @@ export const streamingStartProcedure = authedProcedure
 export const streamingStopProcedure = authedProcedure
 	.output(streamingStopOutputSchema)
 	.handler(() => {
+		if (shouldUseMocks()) {
+			setStreamingState(false);
+			updateStatus(false);
+			return { success: true };
+		}
 		stopStream();
 		return { success: true };
 	});
@@ -82,8 +107,14 @@ export const setBitrateProcedure = authedProcedure
 		if (getIsStreaming()) {
 			const newBitrate = setEncoderBitrate({ bitrate: input });
 			if (newBitrate) {
+				if (shouldUseMocks()) {
+					setMockEncoderConfig({ max_br: newBitrate });
+				}
 				return { max_br: newBitrate };
 			}
+		}
+		if (shouldUseMocks()) {
+			setMockEncoderConfig({ max_br: input.max_br });
 		}
 		return { max_br: input.max_br };
 	});
@@ -116,14 +147,33 @@ export const getConfigProcedure = authedProcedure
 	.output(configMessageSchema)
 	.handler(() => {
 		const config = getConfig();
+		let max_br = config.max_br;
+		let pipeline = config.pipeline;
+		let bitrate_overlay = config.bitrate_overlay;
+		let resolution = config.resolution;
+		let framerate = config.framerate;
+
+		// In mock mode, overlay mockEncoderConfig fields if set
+		if (shouldUseMocks()) {
+			const { mockEncoderConfig } = getMockState();
+			if (mockEncoderConfig.max_br !== undefined) max_br = mockEncoderConfig.max_br;
+			if (mockEncoderConfig.pipeline !== undefined) pipeline = mockEncoderConfig.pipeline;
+			if (mockEncoderConfig.bitrate_overlay !== undefined)
+				bitrate_overlay = mockEncoderConfig.bitrate_overlay;
+			if (mockEncoderConfig.resolution !== undefined) resolution = mockEncoderConfig.resolution;
+			if (mockEncoderConfig.framerate !== undefined) framerate = mockEncoderConfig.framerate;
+		}
+
 		return {
 			asrc: config.asrc,
-			max_br: config.max_br,
+			max_br,
 			acodec: config.acodec as "opus" | "aac" | "pcm" | undefined,
 			delay: config.delay,
-			pipeline: config.pipeline,
+			pipeline,
 			srt_latency: config.srt_latency,
-			bitrate_overlay: config.bitrate_overlay,
+			bitrate_overlay,
+			resolution,
+			framerate,
 			srtla_addr: config.srtla_addr,
 			srtla_port: config.srtla_port,
 			srt_streamid: config.srt_streamid,
@@ -131,6 +181,62 @@ export const getConfigProcedure = authedProcedure
 			relay_account: config.relay_account,
 			relay_server: config.relay_server,
 		};
+	});
+
+/**
+ * Persist streaming/server configuration without starting the stream.
+ * Mirrors the config-write + relay/manual mutual-exclusion of streaming's
+ * updateConfig, minus the DNS resolution and pipeline requirements that only
+ * apply when actually launching a stream.
+ */
+export const setConfigProcedure = authedProcedure
+	.input(streamingConfigInputSchema)
+	.output(streamingStopOutputSchema)
+	.handler(({ input }) => {
+		const config = getConfig();
+
+		if (input.srt_latency !== undefined) config.srt_latency = input.srt_latency;
+		if (input.delay !== undefined) config.delay = input.delay;
+		if (input.pipeline !== undefined) config.pipeline = input.pipeline;
+		if (input.acodec !== undefined) config.acodec = input.acodec;
+		if (input.asrc !== undefined) config.asrc = input.asrc;
+		if (input.max_br !== undefined) config.max_br = input.max_br;
+		if (input.resolution !== undefined) config.resolution = input.resolution;
+		if (input.framerate !== undefined) config.framerate = input.framerate;
+		if (input.bitrate_overlay !== undefined)
+			config.bitrate_overlay = input.bitrate_overlay;
+
+		if (input.relay_server) {
+			config.relay_server = input.relay_server;
+			config.srtla_addr = undefined;
+			config.srtla_port = undefined;
+		} else if (input.srtla_addr) {
+			config.srtla_addr = input.srtla_addr;
+			config.srtla_port = input.srtla_port;
+			config.relay_server = undefined;
+		}
+
+		if (input.relay_account) {
+			config.relay_account = input.relay_account;
+			config.srt_streamid = undefined;
+		} else if (input.srt_streamid !== undefined) {
+			config.srt_streamid = input.srt_streamid;
+			config.relay_account = undefined;
+		}
+
+		if (shouldUseMocks()) {
+			setMockEncoderConfig({
+				pipeline: input.pipeline,
+				bitrate_overlay: input.bitrate_overlay,
+				resolution: input.resolution,
+				framerate: input.framerate,
+				max_br: input.max_br,
+			});
+		}
+
+		saveConfig();
+		broadcastMsg("config", config);
+		return { success: true };
 	});
 
 /**

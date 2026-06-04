@@ -12,6 +12,19 @@ type VideoSource = keyof typeof VIDEO_SOURCE_LABELS;
 
 export type { Pipeline, Resolution, Framerate };
 
+// Safe fallback for unknown ids — never surface the raw/uppercased ceracoder hash.
+const UNKNOWN_SOURCE_LABEL = "Unknown source";
+
+function resolveUnknownSourceLabel(t?: (key: string) => string): string {
+	if (t) {
+		const translated = t("general.unknownSource");
+		if (translated && !translated.includes("general.unknownSource")) {
+			return translated;
+		}
+	}
+	return UNKNOWN_SOURCE_LABEL;
+}
+
 // Re-export for convenience
 export { VIDEO_SOURCE_LABELS, HARDWARE_LABELS };
 export type { VideoSource, HardwareType };
@@ -30,7 +43,25 @@ export function getSourceLabel(source: string, t?: (key: string) => string): str
 		}
 	}
 	// Fall back to ceracoder bindings labels
-	return VIDEO_SOURCE_LABELS[source as VideoSource] || source.toUpperCase();
+	return VIDEO_SOURCE_LABELS[source as VideoSource] || resolveUnknownSourceLabel(t);
+}
+
+/**
+ * Resolve a display name for a pipeline id (video source key or opaque ceracoder id).
+ * Pure: prefers the friendly source label, then pipeline metadata, then a safe
+ * fallback. Returns "" for an undefined id and never leaks the raw id.
+ */
+export function getPipelineDisplayName(
+	id: string | undefined,
+	pipelines?: Pipelines,
+	t?: (key: string) => string,
+): string {
+	if (!id) return "";
+	if (VIDEO_SOURCE_LABELS[id as VideoSource]) return getSourceLabel(id, t);
+	const pipeline = pipelines?.[id];
+	if (pipeline?.name) return pipeline.name;
+	if (pipeline?.description) return pipeline.description;
+	return resolveUnknownSourceLabel(t);
 }
 
 /**

@@ -203,6 +203,7 @@ const fr = {
 		noSensorData: "Aucune donnée de capteur disponible",
 		notAvailable: "Non disponible",
 		notConfigured: "Non configuré",
+		unknownSource: "Unknown source",
 		systemHealth: "État du Système",
 	},
 	auth: {
@@ -675,6 +676,10 @@ const fr = {
 		streamSettings: "Paramètres de diffusion",
 		adjustBitrate: "Ajuster le débit",
 		stopToChange: "Arrêtez la diffusion pour modifier",
+		cannotStartNoPipeline: "Sélectionnez une source vidéo avant de démarrer la diffusion",
+		cannotStartNoServer: "Configurez un serveur avant de démarrer la diffusion",
+		startFailed: "Échec du démarrage de la diffusion",
+		reconfigureRequired: "Reconfigure required",
 	},
 	dialogs: {
 		close: "Fermer",

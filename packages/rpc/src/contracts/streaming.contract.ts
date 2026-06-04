@@ -49,6 +49,11 @@ export const streamingContract = oc.router({
 	getConfig: oc.output(configMessageSchema),
 
 	/**
+	 * Persist streaming/server configuration without starting the stream.
+	 */
+	setConfig: oc.input(streamingConfigInputSchema).output(streamingStopOutputSchema),
+
+	/**
 	 * Subscribe to streaming status changes
 	 */
 	onStatusChange: oc.route({ method: 'GET', path: '/streaming/status' }),

@@ -3,6 +3,9 @@
  */
 import { z } from 'zod';
 
+// Accepts dotted-quad IPv4 or a colon-delimited IPv6 hextet string.
+export const IP_ADDRESS_REGEX = /^(\d{1,3}\.){3}\d{1,3}$|^[0-9a-fA-F:]+$/;
+
 // Network interface entry schema
 export const netifEntrySchema = z.object({
 	ip: z.string().optional(),
@@ -19,7 +22,7 @@ export type NetifMessage = z.infer<typeof netifMessageSchema>;
 // Network interface config input schema
 export const netifConfigInputSchema = z.object({
 	name: z.string(),
-	ip: z.string().optional(),
+	ip: z.string().regex(IP_ADDRESS_REGEX, 'Invalid IP address format').optional(),
 	enabled: z.boolean(),
 });
 export type NetifConfigInput = z.infer<typeof netifConfigInputSchema>;

@@ -43,6 +43,7 @@ const hi = {
 		noUpdatesAvailable: "सिस्टम अद्यतित है",
 		notAvailable: "उपलब्ध नहीं",
 		notConfigured: "कॉन्फ़िगर नहीं किया गया",
+		unknownSource: "Unknown source",
 		pleaseConfigureServer: "स्ट्रीमिंग शुरू करने के लिए कृपया रिले सर्वर कॉन्फ़िगर करें",
 		sensorsUnavailable: "सेंसर उपलब्ध नहीं",
 		serverAndAudio: "सर्वर और ऑडियो स्ट्रीमिंग कॉन्फ़िगरेशन",
@@ -510,6 +511,10 @@ const hi = {
 		streamSettings: "स्ट्रीम सेटिंग्स",
 		adjustBitrate: "बिटरेट समायोजित करें",
 		stopToChange: "बदलने के लिए स्ट्रीम रोकें",
+		cannotStartNoPipeline: "स्ट्रीम शुरू करने से पहले एक वीडियो स्रोत चुनें",
+		cannotStartNoServer: "स्ट्रीम शुरू करने से पहले एक सर्वर कॉन्फ़िगर करें",
+		startFailed: "स्ट्रीम शुरू करने में विफल",
+		reconfigureRequired: "Reconfigure required",
 	},
 	dialogs: {
 		close: "बंद करें",

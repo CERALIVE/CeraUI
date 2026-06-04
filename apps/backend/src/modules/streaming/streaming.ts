@@ -37,10 +37,10 @@ import {
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
 import { getAudioDevices } from "./audio.ts";
-import { AUDIO_CODECS } from "@ceralive/ceracoder";
+import { AUDIO_CODECS, type Framerate, type Resolution } from "@ceralive/ceracoder";
 import { updateBcrptServerIps } from "./bcrpt.ts";
 import { validateBitrate } from "./encoder.ts";
-import { searchPipelines } from "./pipelines.ts";
+import { searchPipelines, validatePipelineOverrides } from "./pipelines.ts";
 import { resolveSrtla } from "./srtla.ts";
 
 export type StartMessage = { start: ConfigParameters };
@@ -58,6 +58,8 @@ export type ConfigParameters = {
 	asrc?: string;
 	bitrate_overlay?: boolean;
 	max_br?: number;
+	resolution?: Resolution;
+	framerate?: Framerate;
 	autostart?: boolean;
 };
 
@@ -130,6 +132,11 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 		throw new Error("Invalid pipeline");
 	const pipeline = searchPipelines(validated.pipeline);
 	if (!pipeline) throw new Error("Pipeline not found");
+
+	validatePipelineOverrides(pipeline, {
+		resolution: validated.resolution,
+		framerate: validated.framerate,
+	});
 
 	// audio codec
 	if (pipeline.supportsAudio) {
@@ -208,6 +215,9 @@ export async function updateConfig(_conn: WebSocket, params: ConfigParameters) {
 	config.max_br = params.max_br;
 	config.srt_latency = params.srt_latency;
 	config.bitrate_overlay = params.bitrate_overlay;
+
+	if (params.resolution !== undefined) config.resolution = params.resolution;
+	if (params.framerate !== undefined) config.framerate = params.framerate;
 
 	if (pipeline.supportsAudio && params.acodec) {
 		config.acodec = params.acodec;
