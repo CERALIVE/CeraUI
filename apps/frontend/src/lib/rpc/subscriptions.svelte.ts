@@ -26,6 +26,7 @@ import {
 	markSessionExpired,
 	wasAuthenticated,
 } from "$lib/stores/connection-ux.svelte";
+import { push as pushNotification } from "$lib/stores/notifications.svelte";
 
 import type { ConnectionState } from "./client";
 import { rpc, rpcClient } from "./client";
@@ -341,10 +342,12 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			relaysState = data as RelayMessage;
 			break;
 
-		case "notifications":
-			notificationsState = data as NotificationsMessage;
-			handleNotifications(data as NotificationsMessage);
-			break;
+	case "notifications":
+		notificationsState = data as NotificationsMessage;
+		for (const notification of (data as NotificationsMessage).show) {
+			pushNotification(notification);
+		}
+		break;
 
 		case "bitrate":
 			// Bitrate updates during streaming
@@ -370,28 +373,6 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 	// Advance lastSeen after applying so the next stale/duplicate is dropped.
 	if (seq !== undefined) {
 		seqTracker.advance(type, seq);
-	}
-}
-
-/**
- * Handle notification display
- */
-function handleNotifications(data: NotificationsMessage): void {
-	if (!data.show) return;
-
-	for (const notification of data.show) {
-		const toastFn =
-			notification.type === "error"
-				? toast.error
-				: notification.type === "warning"
-					? toast.warning
-					: notification.type === "success"
-						? toast.success
-						: toast.info;
-
-		toastFn(notification.msg, {
-			duration: notification.duration * 1000,
-		});
 	}
 }
 
@@ -456,15 +437,30 @@ function handleConnectionChange(state: ConnectionState): void {
 		if (previous !== "connected") {
 			seqTracker.resetOnReconnect();
 		}
-		toast.success("Connection established");
-		// Reconnect-only: the first connect of a page-load is owned by Layout's
-		// initial-load login, so gating on wasAuthenticated() avoids a startup
-		// double-login while keeping initSubscriptions() behavior unchanged.
+		// Recovery toast: only emit when reconnecting after a prior drop (wasAuthenticated).
+		// Suppress the initial connect of a page-load — that's owned by Layout's login flow.
 		if (wasAuthenticated()) {
+			pushNotification({
+				name: "connection-recovered",
+				type: "success",
+				key: "notifications.connectionRecovered",
+				msg: "Connection restored",
+				is_dismissable: true,
+				is_persistent: false,
+				duration: 3,
+			});
 			void runReconnectReauth();
 		}
 	} else if (state === "disconnected") {
-		toast.error("Connection lost, attempting to reconnect...");
+		pushNotification({
+			name: "connection-lost",
+			type: "error",
+			key: "notifications.connectionLost",
+			msg: "Connection lost",
+			is_dismissable: true,
+			is_persistent: false,
+			duration: 3,
+		});
 	}
 }
 
