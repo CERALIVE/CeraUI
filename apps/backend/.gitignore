@@ -19,6 +19,7 @@ dist/
 
 # BelaUI specific runtime files
 auth_tokens.json
+config.json
 dns_cache.json
 debug.log
 gsm_operator_cache.json
