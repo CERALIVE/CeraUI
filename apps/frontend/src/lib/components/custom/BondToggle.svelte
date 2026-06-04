@@ -136,7 +136,14 @@ let prevConnection = $state(getConnectionState());
 $effect(() => {
 	const next = getConnectionState();
 	if (shouldReconcileOnReconnect(prevConnection, next, pending)) {
-		onRpcResolved(`enabled_${name}`);
+		const field = `enabled_${name}`;
+		onRpcResolved(field);
+		// Release the field-lock to the authoritative `enabled` prop. Since
+		// `displayed` now follows `isPending(field)` (not just `pending`), clearing
+		// `pending` alone leaves the lock held and `displayed` stuck on `target`.
+		// On reconnect no confirming echo is owed for the orphaned RPC, so release
+		// to the freshly-hydrated prop instead of waiting for an echo/TTL.
+		onRpcAppliedReactive(field, enabled);
 		pending = false;
 	}
 	prevConnection = next;
