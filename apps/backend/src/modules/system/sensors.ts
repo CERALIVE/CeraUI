@@ -16,10 +16,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { spawn } from "node:child_process";
 /* Hardware monitoring */
-import fs from "node:fs";
-
 import { logger } from "../../helpers/logger.ts";
 import { argMatch, run, SERVICE_RE } from "../../helpers/run.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
@@ -47,41 +44,38 @@ export function getSensors() {
 	return sensors;
 }
 
-function updateSensorThermal(id: number, name: string) {
+async function updateSensorThermal(id: number, name: string) {
 	try {
-		const socTempStr = fs.readFileSync(
+		const socTempStr = await Bun.file(
 			`/sys/class/thermal/thermal_zone${id}/temp`,
-			"utf8",
-		);
+		).text();
 		const socTemp = Number.parseInt(socTempStr, 10) / 1000.0;
 		sensors[name] = `${socTemp.toFixed(1)} °C`;
 	} catch (_err) {}
 }
 
-function updateSensorsJetson() {
+async function updateSensorsJetson() {
 	try {
-		const socVoltageStr = fs.readFileSync(
+		const socVoltageStr = await Bun.file(
 			"/sys/bus/i2c/drivers/ina3221x/6-0040/iio:device0/in_voltage0_input",
-			"utf8",
-		);
+		).text();
 		const socVoltage = Number.parseInt(socVoltageStr, 10) / 1000.0;
 		sensors["SoC voltage"] = `${socVoltage.toFixed(3)} V`;
 	} catch (_err) {}
 
 	try {
-		const socCurrentStr = fs.readFileSync(
+		const socCurrentStr = await Bun.file(
 			"/sys/bus/i2c/drivers/ina3221x/6-0040/iio:device0/in_current0_input",
-			"utf8",
-		);
+		).text();
 		const socCurrent = Number.parseInt(socCurrentStr, 10) / 1000.0;
 		sensors["SoC current"] = `${socCurrent.toFixed(3)} A`;
 	} catch (_err) {}
 
-	updateSensorThermal(0, "SoC temperature");
+	await updateSensorThermal(0, "SoC temperature");
 }
 
-function updateSensorsRk3588() {
-	updateSensorThermal(0, "SoC temperature");
+async function updateSensorsRk3588() {
+	await updateSensorThermal(0, "SoC temperature");
 }
 
 async function isServiceEnabled(service: string) {
@@ -156,7 +150,7 @@ export function initHardwareMonitoring() {
 		return;
 	}
 
-	let sensorsFunc: (() => void) | undefined;
+	let sensorsFunc: (() => Promise<void>) | undefined;
 	switch (setup.hw) {
 		case "jetson":
 			sensorsFunc = updateSensorsJetson;
@@ -169,8 +163,8 @@ export function initHardwareMonitoring() {
 	}
 
 	if (sensorsFunc) {
-		const updateSensors = () => {
-			sensorsFunc();
+		const updateSensors = async () => {
+			await sensorsFunc();
 
 			const data = { ...sensors };
 			const srtIngestStats = getSRTIngestStats();
@@ -191,25 +185,32 @@ export function initHardwareMonitoring() {
 	switch (setup.hw) {
 		case "jetson": {
 			/* Monitor the kernel log for undervoltage events */
-			const dmesg = spawn("dmesg", ["-w"]);
-			dmesg.stdout.on("data", (data) => {
-				if (data.toString("utf8").match("soctherm: OC ALARM 0x00000001")) {
-					const msg =
-						"System undervoltage detected. " +
-						"You may experience system instability, " +
-						"including glitching, freezes and the modems disconnecting";
-					notificationBroadcast(
-						"jetson_undervoltage",
-						"error",
-						msg,
-						10 * 60,
-						true,
-						false,
-						true,
-						"notifications.jetsonUndervoltage",
-					);
+			const dmesg = Bun.spawn(["dmesg", "-w"], {
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			void (async () => {
+				const decoder = new TextDecoder();
+				for await (const chunk of dmesg.stdout as ReadableStream<Uint8Array>) {
+					const data = decoder.decode(chunk);
+					if (data.match("soctherm: OC ALARM 0x00000001")) {
+						const msg =
+							"System undervoltage detected. " +
+							"You may experience system instability, " +
+							"including glitching, freezes and the modems disconnecting";
+						notificationBroadcast(
+							"jetson_undervoltage",
+							"error",
+							msg,
+							10 * 60,
+							true,
+							false,
+							true,
+							"notifications.jetsonUndervoltage",
+						);
+					}
 				}
-			}); // dmesg
+			})(); // dmesg
 
 			/* Show an alert while ceralive-firstboot-bootconfig is active */
 			monitorBootconfig();
@@ -217,39 +218,45 @@ export function initHardwareMonitoring() {
 		}
 
 		case "rk3588": {
-			const dmesg = spawn("dmesg", ["-w"]);
-			dmesg.stdout.on("data", (buf) => {
-				const data = buf.toString("utf8");
+			const dmesg = Bun.spawn(["dmesg", "-w"], {
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			void (async () => {
+				const decoder = new TextDecoder();
+				for await (const chunk of dmesg.stdout as ReadableStream<Uint8Array>) {
+					const data = decoder.decode(chunk);
 
-				if (
-					data.match("hdmirx_wait_lock_and_get_timing signal not lock") ||
-					data.match("hdmirx_delayed_work_audio: audio underflow")
-				) {
-					const msg =
-						"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. " +
-						"Try to move any modems away from the HDMI cable and the encoder. " +
-						"If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera";
-					notificationBroadcast(
-						"hdmi_error",
-						"error",
-						msg,
-						8,
-						true,
-						false,
-						true,
-						"notifications.hdmiError",
-					);
-				}
+					if (
+						data.match("hdmirx_wait_lock_and_get_timing signal not lock") ||
+						data.match("hdmirx_delayed_work_audio: audio underflow")
+					) {
+						const msg =
+							"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. " +
+							"Try to move any modems away from the HDMI cable and the encoder. " +
+							"If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera";
+						notificationBroadcast(
+							"hdmi_error",
+							"error",
+							msg,
+							8,
+							true,
+							false,
+							true,
+							"notifications.hdmiError",
+						);
+					}
 
-				if (data.match("hdmirx-controller: Err, timing is invalid")) {
-					const hdmiNotif = notificationExists("hdmi_error");
-					const msg = "No HDMI signal detected";
+					if (data.match("hdmirx-controller: Err, timing is invalid")) {
+						const hdmiNotif = notificationExists("hdmi_error");
+						const msg = "No HDMI signal detected";
 
-					if (!hdmiNotif || hdmiNotif.msg === msg) {
-						notificationBroadcast("hdmi_error", "error", msg, 3, true, false);
+						if (!hdmiNotif || hdmiNotif.msg === msg) {
+							notificationBroadcast("hdmi_error", "error", msg, 3, true, false);
+						}
 					}
 				}
-			});
+			})();
 			break;
 		}
 	}

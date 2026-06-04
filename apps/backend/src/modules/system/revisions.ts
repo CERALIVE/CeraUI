@@ -17,9 +17,6 @@
 */
 
 /* Read the revision numbers */
-import { execSync } from "node:child_process";
-import fs from "node:fs";
-
 import { logger } from "../../helpers/logger.ts";
 
 import { ceracoderExec, srtlaSendExec } from "../streaming/streamloop.ts";
@@ -28,15 +25,19 @@ const revisions: Record<string, string> = {};
 
 function readRevision(cmd: string) {
 	try {
-		return execSync(cmd).toString().trim();
+		const result = Bun.spawnSync(cmd.split(" "), { stdout: "pipe" });
+		if (result.exitCode !== 0) {
+			return "unknown revision";
+		}
+		return result.stdout.toString().trim();
 	} catch (_err) {
 		return "unknown revision";
 	}
 }
 
-export function initRevisions() {
+export async function initRevisions() {
 	try {
-		revisions.ceralive = fs.readFileSync("revision", "utf8");
+		revisions.ceralive = await Bun.file("revision").text();
 	} catch (_err) {
 		revisions.ceralive = readRevision("git rev-parse --short HEAD");
 	}
@@ -47,9 +48,9 @@ export function initRevisions() {
 
 	// Only show a CERALIVE image version if it exists
 	try {
-		revisions["CERALIVE image"] = fs
-			.readFileSync("/etc/ceralive_img_version", "utf8")
-			.trim();
+		revisions["CERALIVE image"] = (
+			await Bun.file("/etc/ceralive_img_version").text()
+		).trim();
 	} catch (_err) {
 		// Silently ignore if CERALIVE image version file doesn't exist
 	}
