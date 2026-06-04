@@ -1,25 +1,37 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import type { Modem } from '@ceraui/rpc/schemas';
-import { ChevronRight, Radio, Signal, WifiOff } from '@lucide/svelte';
+import type { Modem, NetifMessage } from '@ceraui/rpc/schemas';
+import { CardSim, ChevronRight, LoaderCircle, Radar, Radio, Signal, WifiOff } from '@lucide/svelte';
 
+import BondToggle from '$lib/components/custom/BondToggle.svelte';
+import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
-import { signalTextClass } from '$lib/helpers/signal';
+import { modemSignal, signalTextClass } from '$lib/helpers/signal';
+import { getStalenessState } from '$lib/helpers/staleness';
+import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
 
 interface Props {
 	modemEntries: [string, Modem][];
+	/** Live per-interface telemetry; supplies bond state (`enabled`/`ip`) and throughput (`tp`). */
+	netif: NetifMessage | undefined;
+	/** HUD bonded-link signals — single source for per-link throughput + staleness. */
+	links: LinkSignal[];
+	/** Whole-app staleness latch: the WS has been down past the global threshold. */
+	isFullyStale: boolean;
 	onConfigure: (id: string) => void;
 }
 
-const { modemEntries, onConfigure }: Props = $props();
+const { modemEntries, netif, links, isFullyStale, onConfigure }: Props = $props();
 
-function modemSignal(modem: Modem): number | null {
-	if (modem.no_sim) return null;
-	const signal = modem.status?.signal;
-	if (signal == null || !Number.isFinite(signal) || signal < 0) return null;
-	return signal;
+/**
+ * Hardware identity line: manufacturer + model, rendered RAW (never matched or
+ * transformed). Empty when neither field is present, so the row degrades to the
+ * interface/name only without a placeholder artifact.
+ */
+function modelLabel(modem: Modem): string {
+	return [modem.manufacturer, modem.model].filter(Boolean).join(' ');
 }
 </script>
 
@@ -36,8 +48,10 @@ function modemSignal(modem: Modem): number | null {
 			</p>
 		{:else}
 			{#each modemEntries as [id, modem], _i (modem.ifname || id + '-' + _i)}
-				{@const sig = modemSignal(modem)}
+			{@const sig = modemSignal(modem)}
+				{@const noSim = modem.no_sim === true}
 				{@const connected = modem.status?.connection === 'connected'}
+				{@const scanning = modem.status?.connection === 'scanning'}
 				{@const operator = modem.status?.network || modem.sim_network || modem.name}
 				{@const model = modelLabel(modem)}
 				{@const entry = netif?.[modem.ifname]}
@@ -110,29 +124,26 @@ function modemSignal(modem: Modem): number | null {
 							{:else}
 								{operator}{#if modem.status?.network_type}
 									· {modem.status.network_type}{/if} ·
-								{connected ? $LL.network.view.connected() : $LL.network.view.disconnected()}
+								{#if scanning}
+									{$LL.network.modem.scanning()}
+								{:else}
+									{connected ? $LL.network.view.connected() : $LL.network.view.disconnected()}
+								{/if}
 							{/if}
 						</p>
-					</div>
-					{#if sig != null}
-						<div class="flex items-center gap-1.5">
-							<Signal class={cn('size-3.5', signalTextClass(sig))} aria-hidden="true" />
-							<span class={cn('font-mono text-xs tabular-nums', signalTextClass(sig))}>
-								{sig}%
-							</span>
+						<div class="flex shrink-0 items-center gap-3">
+							<SpeedBadge {kbps} stale={tpStale} />
+							{#if noSim}
+								<BondToggle
+									name={modem.ifname}
+									enabled={false}
+									disabledReason={$LL.network.view.noSimBond()}
+								/>
+							{:else if entry?.ip}
+								<BondToggle name={modem.ifname} enabled={entry.enabled} ip={entry.ip} />
+							{/if}
 						</div>
-					{:else}
-						<WifiOff class="text-muted-foreground size-4" aria-hidden="true" />
-					{/if}
-					<Button
-						class="h-8 gap-1 px-2.5"
-						size="sm"
-						variant="ghost"
-						onclick={() => onConfigure(id)}
-					>
-						{$LL.network.view.configure()}
-						<ChevronRight class="size-3.5 rtl:rotate-180" />
-					</Button>
+					</div>
 				</div>
 			{/each}
 		{/if}

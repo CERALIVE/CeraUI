@@ -1,8 +1,11 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { Modem } from '@ceraui/rpc/schemas';
-import { Radio } from '@lucide/svelte';
+import { CardSim, LoaderCircle, Radar, Radio } from '@lucide/svelte';
 
+import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
+import { formatThroughput } from '$lib/helpers/network-speed';
+import { getStalenessState } from '$lib/helpers/staleness';
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
 
@@ -21,12 +24,27 @@ function signalBars(signal: number | null): number {
 	return 1;
 }
 
-/** A short type tag for a bonded link (WiFi, or the modem's network generation). */
+/** A short type tag for a bonded link (WiFi, Ethernet, or the modem's network generation). */
 function linkTypeLabel(link: LinkSignal): string {
 	if (link.type === 'wifi') return $LL.network.view.wifi();
+	if (link.type === 'ethernet') return $LL.network.view.ethernet();
 	const modem = modemEntries.find(([, m]) => (m.ifname || '') === link.id)?.[1];
 	return modem?.status?.network_type || $LL.network.view.cellular();
 }
+
+// Aggregate throughput across every enabled link — the bond's working bandwidth.
+const totalKbps = $derived(
+	links.reduce((sum, link) => (link.enabled ? sum + (link.throughputKbps ?? 0) : sum), 0),
+);
+
+// The bond total is only as fresh as its links: when every link has aged out
+// (i.e. on a full disconnect, where `isFullyStale` is baked into each
+// `link.isStale`), the aggregate is stale too. Route through the shared helper
+// so the dimming threshold matches every other live value (Task 18).
+const totalStale = $derived(
+	getStalenessState(totalKbps, null, links.length > 0 && links.every((link) => link.isStale)) ===
+		'stale',
+);
 </script>
 
 <!-- ───────────── Bonded Links overview ───────────── -->
@@ -43,6 +61,7 @@ function linkTypeLabel(link: LinkSignal): string {
 			{#each links as link (link.linkIndex)}
 				{@const color = `var(--link-${link.linkIndex + 1})`}
 				{@const bars = signalBars(link.signal)}
+				{@const hasSignal = link.signal !== null}
 				<div
 					class={cn(
 						'flex items-center gap-2.5 rounded-lg border px-3 py-2',

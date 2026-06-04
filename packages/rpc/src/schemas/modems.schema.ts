@@ -55,6 +55,8 @@ export const modemSchema = z.object({
 	ifname: z.string(),
 	name: z.string(),
 	sim_network: z.string().optional(),
+	model: z.string().optional(),
+	manufacturer: z.string().optional(),
 	network_type: z.object({
 		supported: z.array(z.string()),
 		active: z.string().nullable(),
@@ -98,5 +100,6 @@ export type ModemScanInput = z.infer<typeof modemScanInputSchema>;
 export const modemScanOutputSchema = z.object({
 	success: z.boolean(),
 	networks: z.record(z.string(), availableNetworkSchema).optional(),
+	error: z.string().optional(),
 });
 export type ModemScanOutput = z.infer<typeof modemScanOutputSchema>;

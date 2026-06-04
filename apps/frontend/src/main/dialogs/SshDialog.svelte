@@ -50,7 +50,7 @@ async function resetPassword() {
 		toast.success($LL.advanced.passwordCopied());
 	} catch (error) {
 		console.error('Failed to reset SSH password:', error);
-		toast.error($LL.advanced.copyFailed());
+		toast.error($LL.osActions.sshResetFailed());
 	}
 }
 
@@ -61,7 +61,7 @@ async function toggle() {
 		await (active ? stopSSH() : startSSH());
 	} catch (error) {
 		console.error('Failed to toggle SSH:', error);
-		toast.error($LL.advanced.copyFailed());
+		toast.error($LL.osActions.sshToggleFailed());
 	} finally {
 		busy = false;
 	}

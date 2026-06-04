@@ -46,6 +46,7 @@ import { LL } from '@ceraui/i18n/svelte';
 import { Binary, Cpu } from '@lucide/svelte';
 import { AVAILABLE_FRAMERATES, AVAILABLE_RESOLUTIONS, type Pipeline } from '@ceraui/rpc/schemas';
 
+import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
 import { getOverrideGate } from '$lib/streaming/encoderConfig';
@@ -54,7 +55,6 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { Slider } from '$lib/components/ui/slider';
-import { Switch } from '$lib/components/ui/switch';
 import {
 	getFramerateLabel,
 	getHardwareLabel,
@@ -353,7 +353,11 @@ function handleSave() {
 			<Label class="flex-1 cursor-pointer text-sm" for="encoder-overlay">
 				{$LL.settings.enableBitrateOverlay()}
 			</Label>
-			<Switch id="encoder-overlay" bind:checked={localOverlay} />
+			<LabeledSwitch
+				checked={localOverlay}
+				label={$LL.settings.enableBitrateOverlay()}
+				onCheckedChange={(value) => (localOverlay = value)}
+			/>
 		</div>
 	</div>
 </AppDialog>

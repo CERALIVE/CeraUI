@@ -37,6 +37,8 @@
                                footer shows primary + cancel buttons.
   primaryLabel?   string     — primary button text (default: dialogs.save).
   primaryDisabled? boolean   — disable the primary button.
+  primaryLoading? boolean    — show an in-flight spinner on the primary button and
+                               disable it while an RPC is awaiting (additive; off by default).
   secondaryLabel? string     — cancel/close button text.
   onSecondary?    () => void — cancel handler.
   closeOnPrimary? boolean    — close after `onPrimary` (default: true).
@@ -45,6 +47,7 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import { Dialog as DialogPrimitive } from 'bits-ui';
+import Loader2 from '@lucide/svelte/icons/loader-2';
 import XIcon from '@lucide/svelte/icons/x';
 import type { Component, Snippet } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
@@ -66,6 +69,7 @@ interface Props {
 	onPrimary?: () => void;
 	primaryLabel?: string;
 	primaryDisabled?: boolean;
+	primaryLoading?: boolean;
 	secondaryLabel?: string;
 	onSecondary?: () => void;
 	closeOnPrimary?: boolean;
@@ -84,6 +88,7 @@ let {
 	onPrimary,
 	primaryLabel,
 	primaryDisabled = false,
+	primaryLoading = false,
 	secondaryLabel,
 	onSecondary,
 	closeOnPrimary = true,
@@ -96,6 +101,7 @@ const isDesktop = new MediaQuery('(min-width: 1024px)');
 const Icon = $derived(icon);
 
 function handlePrimary() {
+	if (primaryLoading) return;
 	onPrimary?.();
 	if (closeOnPrimary) open = false;
 }
@@ -161,10 +167,13 @@ const surfaceClass = cn(
 				</Button>
 				<Button
 					class="sm:min-w-24"
-					disabled={primaryDisabled}
+					disabled={primaryDisabled || primaryLoading}
 					onclick={handlePrimary}
 					variant={destructive ? 'destructive' : 'default'}
 				>
+					{#if primaryLoading}
+						<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
+					{/if}
 					{primaryLabel ?? $LL.dialogs.save()}
 				</Button>
 			{:else}

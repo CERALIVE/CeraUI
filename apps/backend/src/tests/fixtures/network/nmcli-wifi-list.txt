@@ -1,0 +1,5 @@
+*:DC\:A6\:32\:11\:22\:33:HomeNetwork:Infra:36:540 Mbit/s:78:▂▄▆█:WPA2
+ :AA\:BB\:CC\:DD\:EE\:01:Office_Secure:Infra:6:270 Mbit/s:62:▂▄▆_:WPA2
+ :AA\:BB\:CC\:DD\:EE\:02:StreamingStudio:Infra:149:866 Mbit/s:54:▂▄__:WPA2
+ :AA\:BB\:CC\:DD\:EE\:03:Cafe Free WiFi:Infra:11:130 Mbit/s:41:▂▄__:
+ :AA\:BB\:CC\:DD\:EE\:04:Neighbor_5G:Infra:44:780 Mbit/s:27:▂___:WPA3

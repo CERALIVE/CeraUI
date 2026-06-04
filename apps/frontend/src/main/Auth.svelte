@@ -9,6 +9,7 @@ import { Label } from '$lib/components/ui/label';
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { deviceName, siteName } from '$lib/config';
+import { getSessionExpired } from '$lib/stores/connection-ux.svelte';
 import { getConnectionState } from '$lib/stores/offline-state.svelte';
 import {
 	getAuth,
@@ -57,6 +58,10 @@ const isFormValid = $derived(
 		? password.length >= MIN_PASSWORD_LENGTH && confirmPassword === password
 		: password.length >= 1,
 );
+
+// Surfaces when the auth token expired mid-session (Task 16). We arrive here
+// without blanking the UI — the operator simply re-authenticates.
+const sessionExpired = $derived(getSessionExpired());
 
 // Slim pre-auth connection strip: WS reachability only, zero device telemetry.
 // Bound to the live socket connection state (offline-state tracks the rpcClient
@@ -183,6 +188,16 @@ async function onSubmit(event: SubmitEvent) {
 				</p>
 			</div>
 		</div>
+
+		{#if sessionExpired && !setPassword}
+			<div
+				class="bg-status-warning/10 border-status-warning/30 text-foreground mt-6 flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm"
+				role="status"
+			>
+				<AlertCircle class="text-status-warning size-4 shrink-0" />
+				<span>{$LL.connection.sessionExpired()}</span>
+			</div>
+		{/if}
 
 		<form class="mt-8 space-y-5" onsubmit={onSubmit}>
 			<!-- Password field -->

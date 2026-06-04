@@ -23,9 +23,14 @@ import { initMockService } from "./mocks/mock-service.ts";
 import { loadConfig } from "./modules/config.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
 import { initSRTIngest } from "./modules/ingest/srt.ts";
-import { updateModems } from "./modules/modems/modem-update-loop.ts";
+import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
-import { initNetworkInterfaceMonitoring } from "./modules/network/network-interfaces.ts";
+import { createMonitorManager } from "./modules/network/monitor/monitor-manager.ts";
+import {
+	handleNetifMonitorEvent,
+	initNetworkInterfaceMonitoring,
+	updateNetif,
+} from "./modules/network/network-interfaces.ts";
 import { initRemote } from "./modules/remote/remote.ts";
 import { setup } from "./modules/setup.ts";
 import { updateAudioDevices } from "./modules/streaming/audio.ts";
@@ -44,6 +49,7 @@ import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updat
 import { getSshStatus } from "./modules/system/ssh.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
+import { startHeartbeat } from "./rpc/heartbeat.ts";
 import { initServer } from "./rpc/index.ts";
 
 /* Disable localization for any CLI commands we run */
@@ -83,13 +89,25 @@ void getSshStatus();
 updateGwWrapper();
 setInterval(updateGwWrapper, UPDATE_GW_INT);
 
-updateModems();
-
 if (setup.apt_update_enabled) {
 	periodicCheckForSoftwareUpdates();
 }
 
 initNetworkInterfaceMonitoring();
+
+// Event-driven netif: monitor stream drives up/down; onResync re-polls on restart
+const networkMonitor = createMonitorManager(() => updateNetif());
+networkMonitor.on("monitor-event", handleNetifMonitorEvent);
+networkMonitor.start();
+
+// Event-driven wifi: same monitor drives connection up/down + diff broadcast
+wifiStateInit(networkMonitor);
+
+// Hotspot NM-confirmation: flips station↔hotspot once NM reports the switch
+networkMonitor.on("monitor-event", handleHotspotMonitorEvent);
+
+// Event-driven modems share the SAME monitor (one nmcli monitor for all)
+void initModemUpdateLoop({ monitor: networkMonitor });
 
 // check for Cam Links on USB2 at startup
 checkCamlinkUsb2();
@@ -116,4 +134,8 @@ killall(["srtla_send"]);
 
 // Initialize Bun native HTTP/WebSocket server
 initServer();
+
+// Server→client heartbeat: periodic app-level ping for half-open detection
+startHeartbeat();
+
 checkAutoStartStream();

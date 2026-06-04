@@ -4,11 +4,17 @@
 */
 
 import {
+	getMockState,
 	getScenarioConfig,
 	getWifiSignal,
 	mockWifiNetworks,
+	mockWifiRadios,
 	shouldUseMocks,
 } from "../mock-service.ts";
+import {
+	isWifiChannelName,
+	type WifiChannel,
+} from "../../modules/wifi/wifi-channels.ts";
 
 // Mock saved WiFi connections
 const mockSavedConnections = [
@@ -35,13 +41,53 @@ const mockSavedConnections = [
 	},
 ];
 
-// Mock hotspot connection
-const mockHotspotConnection = {
-	uuid: "hotspot-1234-5678-9012-abcdef123456",
-	name: "CeraLive-Hotspot",
-	password: "ceralive123",
-	channel: 36,
+// Mock hotspot config per radio device, mutated at runtime by hotspotConfigure
+export interface MockHotspotConfig {
+	uuid: string;
+	name: string;
+	password: string;
+	channel: WifiChannel;
+}
+
+const mockHotspotConfigs: Record<string, MockHotspotConfig> = {
+	wlan0: {
+		uuid: "hotspot-wlan0-5678-9012-abcdef123456",
+		name: "CeraLive-Hotspot",
+		password: "ceralive123",
+		channel: "auto_50",
+	},
+	wlan1: {
+		uuid: "hotspot-wlan1-5678-9012-abcdef123457",
+		name: "CeraLive-Hotspot-24",
+		password: "ceralive456",
+		channel: "auto_24",
+	},
 };
+
+export function getMockHotspotConfig(device: string): MockHotspotConfig {
+	return mockHotspotConfigs[device] ?? mockHotspotConfigs.wlan0;
+}
+
+export function setMockHotspotConfig(
+	device: string,
+	update: { name?: string; password?: string; channel?: string },
+): void {
+	const current = getMockHotspotConfig(device);
+	const next: MockHotspotConfig = { ...current };
+	if (update.name !== undefined) next.name = update.name;
+	if (update.password !== undefined) next.password = update.password;
+	if (update.channel !== undefined && isWifiChannelName(update.channel)) {
+		next.channel = update.channel;
+	}
+	mockHotspotConfigs[device] = next;
+}
+
+function mockHotspotDeviceForUuid(uuid: string): string | undefined {
+	for (const device in mockHotspotConfigs) {
+		if (mockHotspotConfigs[device]?.uuid === uuid) return device;
+	}
+	return undefined;
+}
 
 /**
  * Handle nmcli commands and return mock responses
@@ -130,22 +176,25 @@ function getMockConnections(args: string[]): string {
 			connections.push(values.join(":"));
 		}
 
-		// Add hotspot connection
-		const hotspotValues = fieldList.map((f) => {
-			switch (f.trim()) {
-				case "uuid":
-					return mockHotspotConnection.uuid;
-				case "type":
-					return "802-11-wireless";
-				case "name":
-					return mockHotspotConnection.name;
-				case "timestamp":
-					return "1700000001";
-				default:
-					return "mock";
-			}
-		});
-		connections.push(hotspotValues.join(":"));
+		for (const device in mockHotspotConfigs) {
+			const hotspot = mockHotspotConfigs[device];
+			if (!hotspot) continue;
+			const hotspotValues = fieldList.map((f) => {
+				switch (f.trim()) {
+					case "uuid":
+						return hotspot.uuid;
+					case "type":
+						return "802-11-wireless";
+					case "name":
+						return hotspot.name;
+					case "timestamp":
+						return "1700000001";
+					default:
+						return "mock";
+				}
+			});
+			connections.push(hotspotValues.join(":"));
+		}
 	}
 
 	// Add empty line at the end (nmcli output typically ends with newline)
@@ -236,15 +285,18 @@ function getMockConnectionFields(args: string[]): string {
 		}
 	};
 
-	// Check if it's the hotspot
-	if (uuid === mockHotspotConnection.uuid) {
+	const wifiModes = getMockState().wifiModes;
+	const hotspotDevice = uuid ? mockHotspotDeviceForUuid(uuid) : undefined;
+	if (hotspotDevice) {
+		const hotspot = getMockHotspotConfig(hotspotDevice);
+		const radio = mockWifiRadios.find((r) => r.device === hotspotDevice);
+		const mode = wifiModes[hotspotDevice] === "hotspot" ? "ap" : "infrastructure";
 		return fieldList
 			.map((f) =>
 				getFieldValue(f, {
-					mode: "ap",
-					ssid: mockHotspotConnection.name,
-					macAddress: "dc:a6:32:12:34:57",
-					channel: mockHotspotConnection.channel,
+					mode,
+					ssid: hotspot.name,
+					macAddress: radio?.macAddress ?? "dc:a6:32:12:34:57",
 				}),
 			)
 			.join("\n");
@@ -253,10 +305,12 @@ function getMockConnectionFields(args: string[]): string {
 	// Check saved connections
 	const savedConn = mockSavedConnections.find((c) => c.uuid === uuid);
 	if (savedConn) {
+		const mode =
+			wifiModes[savedConn.device] === "hotspot" ? "ap" : "infrastructure";
 		return fieldList
 			.map((f) =>
 				getFieldValue(f, {
-					mode: "infrastructure",
+					mode,
 					ssid: savedConn.name,
 					macAddress: savedConn.macAddress,
 				}),

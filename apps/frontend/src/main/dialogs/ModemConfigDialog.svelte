@@ -32,14 +32,15 @@ import {
 } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { slide } from 'svelte/transition';
+import { toast } from 'svelte-sonner';
 
+import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import SignalIndicator from '$lib/components/icons/SignalIndicator.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import { Switch } from '$lib/components/ui/switch';
 import {
 	changeModemSettings,
 	renameSupportedModemNetwork,
@@ -79,6 +80,7 @@ function readModemConfig() {
 
 let formData = $state(readModemConfig());
 let localScanning = $state(false);
+let saving = $state(false);
 const scanTimeouts: number[] = [];
 
 // Re-seed the form from the live modem each time the dialog opens.
@@ -106,18 +108,26 @@ const availableNetworks = $derived(
 	),
 );
 
-function handleSave() {
-	if (primaryDisabled) return;
-	changeModemSettings({
-		device: deviceId,
-		network_type: formData.selectedNetwork,
-		roaming: formData.roaming,
-		network: !formData.roaming || formData.network === '-1' ? '' : formData.network,
-		autoconfig: formData.autoconfig,
-		apn: formData.apn,
-		username: formData.username,
-		password: formData.password,
-	});
+async function handleSave() {
+	if (primaryDisabled || saving) return;
+	saving = true;
+	try {
+		await changeModemSettings({
+			device: deviceId,
+			network_type: formData.selectedNetwork,
+			roaming: formData.roaming,
+			network: !formData.roaming || formData.network === '-1' ? '' : formData.network,
+			autoconfig: formData.autoconfig,
+			apn: formData.apn,
+			username: formData.username,
+			password: formData.password,
+		});
+		open = false;
+	} catch {
+		toast.error($LL.network.errors.toggleFailed());
+	} finally {
+		saving = false;
+	}
 }
 
 function handleScan() {
@@ -135,13 +145,15 @@ const selectedNetworkLabel = $derived(
 </script>
 
 <AppDialog
-	bind:open
+	closeOnPrimary={false}
 	description={$LL.network.modem.configureDescription()}
 	icon={Radio}
 	onPrimary={handleSave}
 	primaryDisabled={primaryDisabled}
 	primaryLabel={$LL.network.modem.save()}
+	primaryLoading={saving}
 	title={modem.name}
+	bind:open
 >
 	<div class="space-y-4">
 		<!-- ── Status strip: operator · network type · signal ────────────────── -->
@@ -223,10 +235,10 @@ const selectedNetworkLabel = $derived(
 						<p class="text-muted-foreground text-xs">{$LL.network.modem.roamingDescription()}</p>
 					</div>
 				</div>
-				<Switch
+				<LabeledSwitch
 					checked={formData.roaming}
-					class="data-[state=checked]:bg-primary"
 					disabled={noSim}
+					label={$LL.network.modem.enableRoaming()}
 					onCheckedChange={(checked) => (formData.roaming = checked)}
 				/>
 			</div>
@@ -299,10 +311,10 @@ const selectedNetworkLabel = $derived(
 						<p class="text-muted-foreground text-xs">{$LL.network.modem.autoApnDescription()}</p>
 					</div>
 				</div>
-				<Switch
+				<LabeledSwitch
 					checked={formData.autoconfig}
-					class="data-[state=checked]:bg-primary"
 					disabled={noSim}
+					label={$LL.network.modem.autoapn()}
 					onCheckedChange={(checked) => (formData.autoconfig = checked)}
 				/>
 			</div>

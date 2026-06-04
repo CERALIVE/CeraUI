@@ -5,14 +5,40 @@
 
 import {
 	getMockState,
-	getNetworkTraffic,
 	getScenarioConfig,
 	mockModems,
+	mockWifiRadios,
 	shouldUseMocks,
 } from "../mock-service.ts";
 
 const resolveNetifIp = (name: string, fallback: string): string =>
 	getMockState().netifConfigs.get(name)?.ip ?? fallback;
+
+// network-interfaces.ts derives `tp = txBytes - prevTxBytes` each ~1s ifconfig
+// poll, so these cumulative counters must advance by interfaceThroughput[name]
+// bytes per tick for `tp` to track the seeded per-link rate. A disabled link
+// advances by 0, collapsing its `tp` to 0 instead of a stale positive value.
+const txByteCounters = new Map<string, number>();
+
+const THROUGHPUT_FLUCTUATION = 0.15;
+
+function advanceInterfaceTraffic(
+	name: string,
+	rxRatio: number,
+): { txBytes: number; rxBytes: number } {
+	const state = getMockState();
+	const enabled = state.netifConfigs.get(name)?.enabled ?? true;
+	const baseRate = state.interfaceThroughput[name] ?? 0;
+	const increment = enabled
+		? baseRate * (1 + (Math.random() - 0.5) * 2 * THROUGHPUT_FLUCTUATION)
+		: 0;
+
+	const previous = txByteCounters.get(name) ?? 0;
+	const txBytes = Math.floor(previous + increment);
+	txByteCounters.set(name, txBytes);
+
+	return { txBytes, rxBytes: Math.floor(txBytes * rxRatio) };
+}
 
 /**
  * Generate mock ifconfig output based on current scenario
@@ -26,14 +52,15 @@ export function getMockIfconfigOutput(): string {
 	const interfaces: string[] = [];
 
 	// Always include eth0 (ethernet)
+	const eth0Traffic = advanceInterfaceTraffic("eth0", 2);
 	interfaces.push(
 		generateInterfaceBlock("eth0", {
 			ip: resolveNetifIp("eth0", "192.168.1.100"),
 			netmask: "255.255.255.0",
 			broadcast: "192.168.1.255",
 			mac: "dc:a6:32:12:34:56",
-			txBytes: getNetworkTraffic("eth0"),
-			rxBytes: getNetworkTraffic("eth0") * 2,
+			txBytes: eth0Traffic.txBytes,
+			rxBytes: eth0Traffic.rxBytes,
 			mtu: 1500,
 		}),
 	);
@@ -43,32 +70,35 @@ export function getMockIfconfigOutput(): string {
 		const modem = mockModems[i];
 		if (!modem) continue;
 
+		const modemTraffic = advanceInterfaceTraffic(modem.interfaceName, 1.5);
 		interfaces.push(
 			generateInterfaceBlock(modem.interfaceName, {
 				ip: resolveNetifIp(modem.interfaceName, modem.ip),
 				netmask: "255.255.255.0",
 				broadcast: `10.0.${i}.255`,
 				mac: `00:1e:10:1f:${String(i).padStart(2, "0")}:01`,
-				txBytes: getNetworkTraffic(modem.interfaceName),
-				rxBytes: getNetworkTraffic(modem.interfaceName) * 1.5,
+				txBytes: modemTraffic.txBytes,
+				rxBytes: modemTraffic.rxBytes,
 				mtu: 1500,
 			}),
 		);
 	}
 
-	// Add wlan0 if WiFi is enabled
 	if (config.wifi) {
-		interfaces.push(
-			generateInterfaceBlock("wlan0", {
-				ip: resolveNetifIp("wlan0", "192.168.2.100"),
-				netmask: "255.255.255.0",
-				broadcast: "192.168.2.255",
-				mac: "dc:a6:32:12:34:57",
-				txBytes: getNetworkTraffic("wlan0"),
-				rxBytes: getNetworkTraffic("wlan0") * 1.8,
-				mtu: 1500,
-			}),
-		);
+		mockWifiRadios.forEach((radio, index) => {
+			const wifiTraffic = advanceInterfaceTraffic(radio.ifname, 1.8);
+			interfaces.push(
+				generateInterfaceBlock(radio.ifname, {
+					ip: resolveNetifIp(radio.ifname, `192.168.2.${100 + index}`),
+					netmask: "255.255.255.0",
+					broadcast: "192.168.2.255",
+					mac: radio.macAddress,
+					txBytes: wifiTraffic.txBytes,
+					rxBytes: wifiTraffic.rxBytes,
+					mtu: 1500,
+				}),
+			);
+		});
 	}
 
 	// Add loopback (always present but filtered out by the parser)

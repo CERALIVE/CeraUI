@@ -17,6 +17,10 @@
 		"./node": {
 			"types": "./src/i18n-node.ts",
 			"import": "./src/i18n-node.ts"
+		},
+		"./formatters": {
+			"types": "./src/formatters.ts",
+			"import": "./src/formatters.ts"
 		}
 	},
 	"scripts": {
@@ -30,7 +34,7 @@
 		"typesafe-i18n": "^5.27.1"
 	},
 	"devDependencies": {
-		"typescript": "^6.0.2"
+		"typescript": "^6.0.3"
 	},
 	"keywords": [
 		"i18n",

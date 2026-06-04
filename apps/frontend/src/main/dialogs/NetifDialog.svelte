@@ -16,10 +16,10 @@ import { IP_ADDRESS_REGEX, type NetifEntry } from '@ceraui/rpc/schemas';
 import { Network } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
+import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import { AppDialog } from '$lib/components/dialogs';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
-import { Switch } from '$lib/components/ui/switch';
 import { setNetif } from '$lib/helpers/NetworkHelper';
 
 interface Props {
@@ -83,14 +83,15 @@ async function save() {
 </script>
 
 <AppDialog
-	bind:open
+	closeOnPrimary={false}
 	description={name}
 	icon={Network}
 	onPrimary={save}
-	primaryDisabled={ipInvalid || saving}
+	primaryDisabled={ipInvalid}
 	primaryLabel={$LL.advanced.save()}
-	closeOnPrimary={false}
+	primaryLoading={saving}
 	title={$LL.network.view.configure()}
+	bind:open
 >
 	<div class="space-y-6">
 		<!-- Enable / disable -->
@@ -103,9 +104,9 @@ async function save() {
 					{$LL.settings.dialogs.enableInterfaceDesc()}
 				</p>
 			</div>
-			<Switch
-				id="netif-enabled"
+			<LabeledSwitch
 				checked={enabled}
+				label={$LL.settings.dialogs.enableInterface()}
 				onCheckedChange={(v) => {
 					enabled = v;
 					dirtyEnabled = true;
@@ -123,13 +124,13 @@ async function save() {
 				aria-invalid={ipInvalid}
 				autocomplete="off"
 				inputmode="text"
-				placeholder="192.168.1.50"
-				spellcheck={false}
-				value={ip}
 				oninput={(e) => {
 					ip = e.currentTarget.value;
 					dirtyIp = true;
 				}}
+				placeholder="192.168.1.50"
+				spellcheck={false}
+				value={ip}
 			/>
 			{#if ipInvalid}
 				<p class="text-destructive flex items-center gap-2 text-sm" role="alert">

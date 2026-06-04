@@ -13,8 +13,10 @@ import {
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
 	streamingConfigInputSchema,
-	streamingStartOutputSchema,
+	streamingSetConfigOutputSchema,
+	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
+	type StreamingConfigInput,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import {
@@ -25,7 +27,10 @@ import {
 } from "../../mocks/mock-service.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { AUDIO_CODECS } from "@ceralive/ceracoder";
-import { setBitrate as setEncoderBitrate } from "../../modules/streaming/encoder.ts";
+import {
+	clampBitrate,
+	setBitrate as setEncoderBitrate,
+} from "../../modules/streaming/encoder.ts";
 import {
 	getEffectiveHardware,
 	getMockHardware,
@@ -55,28 +60,33 @@ const authedProcedure = baseProcedure.use(authMiddleware);
  */
 export const streamingStartProcedure = authedProcedure
 	.input(streamingConfigInputSchema)
-	.output(streamingStartOutputSchema)
+	.output(streamingStartOutputSchemaExtended)
 	.handler(async ({ input, context }) => {
+		const applied: StreamingConfigInput =
+			input.max_br !== undefined
+				? { ...input, max_br: clampBitrate(input.max_br) }
+				: input;
 		try {
 			if (shouldUseMocks()) {
 				// Dev has no srtla_send/ceracoder binaries: the real start() flips
 				// is_streaming on then immediately errors and flips it off. Simulate
 				// a sustained stream so getIsStreaming() drives the UI as on device.
 				setMockEncoderConfig({
-					pipeline: input.pipeline,
-					bitrate_overlay: input.bitrate_overlay,
-					resolution: input.resolution,
-					framerate: input.framerate,
-					max_br: input.max_br,
+					pipeline: applied.pipeline,
+					bitrate_overlay: applied.bitrate_overlay,
+					resolution: applied.resolution,
+					framerate: applied.framerate,
+					max_br: applied.max_br,
 				});
 				setStreamingState(true);
 				updateStatus(true);
-				return { success: true, is_streaming: getIsStreaming() };
+				return { success: true, is_streaming: getIsStreaming(), applied };
 			}
-			// The existing start function handles validation and config saving
-			// Pass input directly - it already matches ConfigParameters
-			await startStream(context.ws as unknown as import("ws").default, input);
-			return { success: true, is_streaming: getIsStreaming() };
+			// The existing start function handles validation and config saving.
+			// Pass the clamped copy so the persisted config matches the applied
+			// state we report back.
+			await startStream(context.ws as unknown as import("ws").default, applied);
+			return { success: true, is_streaming: getIsStreaming(), applied };
 		} catch (_error) {
 			return { success: false, is_streaming: false };
 		}
@@ -104,8 +114,9 @@ export const setBitrateProcedure = authedProcedure
 	.input(bitrateInputSchema)
 	.output(bitrateOutputSchema)
 	.handler(({ input }) => {
+		const applied = clampBitrate(input.max_br);
 		if (getIsStreaming()) {
-			const newBitrate = setEncoderBitrate({ bitrate: input });
+			const newBitrate = setEncoderBitrate({ max_br: applied });
 			if (newBitrate) {
 				if (shouldUseMocks()) {
 					setMockEncoderConfig({ max_br: newBitrate });
@@ -114,9 +125,9 @@ export const setBitrateProcedure = authedProcedure
 			}
 		}
 		if (shouldUseMocks()) {
-			setMockEncoderConfig({ max_br: input.max_br });
+			setMockEncoderConfig({ max_br: applied });
 		}
-		return { max_br: input.max_br };
+		return { max_br: applied };
 	});
 
 /**
@@ -191,7 +202,7 @@ export const getConfigProcedure = authedProcedure
  */
 export const setConfigProcedure = authedProcedure
 	.input(streamingConfigInputSchema)
-	.output(streamingStopOutputSchema)
+	.output(streamingSetConfigOutputSchema)
 	.handler(({ input }) => {
 		const config = getConfig();
 
@@ -200,7 +211,7 @@ export const setConfigProcedure = authedProcedure
 		if (input.pipeline !== undefined) config.pipeline = input.pipeline;
 		if (input.acodec !== undefined) config.acodec = input.acodec;
 		if (input.asrc !== undefined) config.asrc = input.asrc;
-		if (input.max_br !== undefined) config.max_br = input.max_br;
+		if (input.max_br !== undefined) config.max_br = clampBitrate(input.max_br);
 		if (input.resolution !== undefined) config.resolution = input.resolution;
 		if (input.framerate !== undefined) config.framerate = input.framerate;
 		if (input.bitrate_overlay !== undefined)
@@ -224,19 +235,40 @@ export const setConfigProcedure = authedProcedure
 			config.relay_account = undefined;
 		}
 
+		// Reflect the post-clamp config values back for every field the input
+		// touched, so the FE field-lock releases on what the server actually wrote.
+		const applied: StreamingConfigInput = {};
+		if (input.srt_latency !== undefined) applied.srt_latency = config.srt_latency;
+		if (input.delay !== undefined) applied.delay = config.delay;
+		if (input.pipeline !== undefined) applied.pipeline = config.pipeline;
+		if (input.acodec !== undefined) applied.acodec = config.acodec;
+		if (input.asrc !== undefined) applied.asrc = config.asrc;
+		if (input.max_br !== undefined) applied.max_br = config.max_br;
+		if (input.resolution !== undefined) applied.resolution = config.resolution;
+		if (input.framerate !== undefined) applied.framerate = config.framerate;
+		if (input.bitrate_overlay !== undefined)
+			applied.bitrate_overlay = config.bitrate_overlay;
+		if (input.relay_server !== undefined) applied.relay_server = config.relay_server;
+		if (input.relay_account !== undefined)
+			applied.relay_account = config.relay_account;
+		if (input.srtla_addr !== undefined) applied.srtla_addr = config.srtla_addr;
+		if (input.srtla_port !== undefined) applied.srtla_port = config.srtla_port;
+		if (input.srt_streamid !== undefined)
+			applied.srt_streamid = config.srt_streamid;
+
 		if (shouldUseMocks()) {
 			setMockEncoderConfig({
-				pipeline: input.pipeline,
-				bitrate_overlay: input.bitrate_overlay,
-				resolution: input.resolution,
-				framerate: input.framerate,
-				max_br: input.max_br,
+				pipeline: applied.pipeline,
+				bitrate_overlay: applied.bitrate_overlay,
+				resolution: applied.resolution,
+				framerate: applied.framerate,
+				max_br: applied.max_br,
 			});
 		}
 
 		saveConfig();
 		broadcastMsg("config", config);
-		return { success: true };
+		return { success: true, applied };
 	});
 
 /**

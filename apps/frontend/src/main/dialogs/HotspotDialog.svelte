@@ -298,7 +298,7 @@ async function handleToggle() {
 			class="sm:min-w-28"
 			disabled={toggling || (!isActive && !isFormValid)}
 			onclick={handleToggle}
-			variant={isActive ? 'outline' : 'secondary'}
+			variant="outline"
 		>
 			{#if toggling}
 				<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />

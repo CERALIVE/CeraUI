@@ -27,6 +27,14 @@ const MAX_BITRATE = 12_000; // Kbps
 
 export type BitrateParams = { max_br?: number };
 
+// Snaps into the hardware window instead of rejecting (cf. validateBitrate),
+// so setters can report the post-clamp value they actually wrote.
+export function clampBitrate(maxBr: number): number {
+	if (maxBr < MIN_BITRATE) return MIN_BITRATE;
+	if (maxBr > MAX_BITRATE) return MAX_BITRATE;
+	return maxBr;
+}
+
 export function validateBitrate(params: BitrateParams): number | undefined {
 	const maxBr = params.max_br;
 	if (typeof maxBr !== "number" || Number.isNaN(maxBr)) return;

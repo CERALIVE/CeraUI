@@ -1,0 +1,1 @@
+error: couldn't scan networks in modem: 'Couldn't check 3GPP scan support: operation not allowed'

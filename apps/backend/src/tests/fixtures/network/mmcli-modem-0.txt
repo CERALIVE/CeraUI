@@ -1,0 +1,46 @@
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/0
+modem.generic.device-identifier                 : 35907f1abc0123456789def012345678
+modem.generic.manufacturer                      : Quectel
+modem.generic.model                             : RM520N-GL
+modem.generic.revision                          : RM520NGLAAR01A07M4G
+modem.generic.carrier-configuration             : default
+modem.generic.carrier-configuration-revision    : --
+modem.generic.hardware-revision                 : --
+modem.generic.equipment-identifier              : 359071230123456
+modem.generic.device                            : /sys/devices/platform/usb/usb1
+modem.generic.drivers.length                    : 2
+modem.generic.drivers.value[1]                  : qmi_wwan
+modem.generic.drivers.value[2]                  : option
+modem.generic.plugin                            : quectel
+modem.generic.primary-port                      : cdc-wdm0
+modem.generic.ports.length                      : 4
+modem.generic.ports.value[1]                    : cdc-wdm0 (qmi)
+modem.generic.ports.value[2]                    : ttyUSB0 (at)
+modem.generic.ports.value[3]                    : ttyUSB1 (at)
+modem.generic.ports.value[4]                    : wwan0 (net)
+modem.generic.state                             : connected
+modem.generic.state-failed-reason               : --
+modem.generic.power-state                       : on
+modem.generic.access-technologies.length        : 1
+modem.generic.access-technologies.value[1]      : 5gnr
+modem.generic.signal-quality.value              : 84
+modem.generic.signal-quality.recent             : yes
+modem.generic.supported-modes.length            : 3
+modem.generic.supported-modes.value[1]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 4g, 5g; preferred: 5g
+modem.generic.supported-modes.value[3]          : allowed: 5g; preferred: none
+modem.generic.current-modes                     : allowed: 4g, 5g; preferred: 5g
+modem.generic.supported-bands.length            : 20
+modem.generic.current-bands.length              : 15
+modem.generic.supported-ip-families             : ipv4, ipv6, ipv4v6
+modem.generic.sim                               : /org/freedesktop/ModemManager1/SIM/0
+modem.generic.sim-slots.length                  : 1
+modem.generic.sim-slots.value[1]                : /org/freedesktop/ModemManager1/SIM/0
+modem.generic.primary-sim-slot                  : 1
+modem.3gpp.imei                                 : 359071230123456
+modem.3gpp.registration-state                   : home
+modem.3gpp.operator-code                        : 310410
+modem.3gpp.operator-name                        : AT&T
+modem.3gpp.packet-service-state                 : attached
+modem.3gpp.eps.ue-mode-operation                : csps-2
+modem.3gpp.pco                                  : --

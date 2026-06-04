@@ -12,6 +12,7 @@ export const netifEntrySchema = z.object({
 	tp: z.number(),
 	enabled: z.boolean(),
 	error: z.string().optional(),
+	mac: z.string().optional(),
 });
 export type NetifEntry = z.infer<typeof netifEntrySchema>;
 
@@ -30,5 +31,6 @@ export type NetifConfigInput = z.infer<typeof netifConfigInputSchema>;
 // Network interface config output schema
 export const netifConfigOutputSchema = z.object({
 	success: z.boolean(),
+	applied: netifConfigInputSchema.partial().optional(),
 });
 export type NetifConfigOutput = z.infer<typeof netifConfigOutputSchema>;

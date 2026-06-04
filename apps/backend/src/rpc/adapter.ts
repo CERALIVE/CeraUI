@@ -131,6 +131,13 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 			if (!getPasswordHash()) {
 				sendToClient(ws, "status", { set_password: true });
 			}
+
+			// Security gate: only resend state to a socket that is ALREADY
+			// authenticated (per-socket flag). No-op for unauthenticated sockets.
+			const context = createContext(ws);
+			if (context.isAuthenticated()) {
+				sendInitialStatusToClient(ws);
+			}
 		},
 
 		message(ws: AppWebSocket, data: string | Buffer) {

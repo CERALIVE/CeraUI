@@ -1,3 +1,5 @@
+import type { Modem } from '@ceraui/rpc/schemas';
+
 export type SignalCategory = 'excellent' | 'good' | 'fair' | 'weak';
 
 /**
@@ -9,6 +11,23 @@ export function getSignalCategory(signal: number): SignalCategory {
 	if (signal >= 50) return 'good';
 	if (signal >= 25) return 'fair';
 	return 'weak';
+}
+
+/**
+ * Extract a usable signal percentage from a modem, or `null` when there is no
+ * meaningful value (no-SIM, missing status, or a negative/sentinel reading).
+ * Single source of truth — do not duplicate this logic elsewhere.
+ */
+export function modemSignal(modem: Modem | undefined | null): number | null {
+	if (!modem || modem.no_sim) return null;
+	const raw = modem.status?.signal;
+	if (raw == null) return null;
+	// Defense-in-depth: the backend can emit the signal as a string ("53") when
+	// the mmcli `-K` parser leaves it uncoerced. `Number.isFinite("53")` is
+	// false, which would silently drop every modem's signal, so coerce first.
+	const signal = Number(raw);
+	if (!Number.isFinite(signal) || signal < 0) return null;
+	return signal;
 }
 
 /**

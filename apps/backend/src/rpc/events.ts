@@ -2,6 +2,12 @@
  * RPC Event System
  * Manages subscriptions and broadcasts for real-time data
  */
+import {
+	type CoalesceState,
+	getCoalesceWindowMs,
+	shouldCoalesce,
+	updateCoalesceState,
+} from "./coalesce.ts";
 import type { AppWebSocket } from "./types.ts";
 
 type EventHandler<T = unknown> = (data: T) => void;
@@ -94,6 +100,31 @@ export function getActiveClients(minLastActive: number = 0): AppWebSocket[] {
 }
 
 /**
+ * Per-TYPE monotonic sequence counters.
+ * Each broadcast type carries an independently increasing seq.
+ * NEVER a single global counter. Resets to 0 on process restart (fine).
+ */
+const seqCounters = new Map<string, number>();
+
+/**
+ * Advance and return the next sequence number for a given message type.
+ * Pure helper (operates on the passed map) — exported for unit testing.
+ * Increments the counter for `type` and returns the new value (1-based).
+ */
+export function advanceSeq(map: Map<string, number>, type: string): number {
+	const next = (map.get(type) ?? 0) + 1;
+	map.set(type, next);
+	return next;
+}
+
+/**
+ * Per-type last-value store for broadcast coalescing. Drops an exact duplicate
+ * emitted faster than its type's window; local windows = intervals, so the
+ * observable local cadence is unchanged. See `coalesce.ts`.
+ */
+const coalesceState: CoalesceState = new Map();
+
+/**
  * Broadcast a message to all authenticated clients
  */
 export function broadcast(
@@ -107,7 +138,14 @@ export function broadcast(
 ): void {
 	const { except, authedOnly = true, minLastActive = 0 } = options;
 
-	const message = JSON.stringify({ [type]: data });
+	const now = Date.now();
+	if (shouldCoalesce(coalesceState, type, data, now, getCoalesceWindowMs(type))) {
+		return;
+	}
+	updateCoalesceState(coalesceState, type, data, now);
+
+	const seq = advanceSeq(seqCounters, type);
+	const message = JSON.stringify({ [type]: data, seq });
 
 	for (const client of clients) {
 		if (client === except) continue;

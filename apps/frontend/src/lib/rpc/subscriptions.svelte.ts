@@ -9,6 +9,7 @@ import { toast } from "svelte-sonner";
 import type {
 	ConfigMessage,
 	ModemList,
+	NetifEntry,
 	NetifMessage,
 	NotificationsMessage,
 	PipelinesMessage,
@@ -20,9 +21,21 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import { downloadLog } from "$lib/helpers/SystemHelper";
+import { authStatusStore } from "$lib/stores/auth-status.svelte";
+import {
+	markSessionExpired,
+	wasAuthenticated,
+} from "$lib/stores/connection-ux.svelte";
 
 import type { ConnectionState } from "./client";
-import { rpcClient } from "./client";
+import { rpc, rpcClient } from "./client";
+import {
+	expireReactive,
+	reconcileReactive,
+	shouldIgnoreEchoReactive,
+} from "./dirty-registry.svelte";
+import { reauthenticateAndHydrate } from "./reconnect";
+import { createSeqTracker } from "./seq-guard";
 
 // ============================================
 // Svelte 5 Reactive State ($state)
@@ -72,6 +85,11 @@ let notificationsState = $state<NotificationsMessage | undefined>(undefined);
 // Connection state
 let connectionState = $state<ConnectionState>("disconnected");
 let isConnectedState = $state<boolean>(false);
+
+// Boot gate: latches true on first "connected" event OR first inbound message,
+// then never reverts. Event-driven with NO timeout — remote first-connect is
+// legitimately slow and must never be failed by a clock (Oracle Q7).
+let connectionReadyState = $state<boolean>(false);
 
 // ============================================
 // Reactive Getters (Svelte 5 Pattern)
@@ -149,24 +167,67 @@ export function getIsConnected() {
 	return isConnectedState;
 }
 
+/**
+ * Whether the device has spoken to us at least once this page-load (first
+ * "connected" event or first inbound message). Drives the boot shell's
+ * "Connecting to device…" → live flip. Latches once; never reverts.
+ */
+export function getConnectionReady() {
+	return connectionReadyState;
+}
+
 // ============================================
 // Message Handlers
 // ============================================
 
+// Per-type drop-stale guard. The backend tags broadcasts with a top-level
+// `seq` (lifted out in client.ts and forwarded here). Out-of-order or duplicate
+// frames are ignored; lastSeen is reset on reconnect so a restarted server
+// (seq back to 0) is accepted. Messages without `seq` bypass the guard.
+const seqTracker = createSeqTracker();
+
 /**
  * Handle incoming messages and update state
  */
-function handleMessage(type: string, data: unknown): void {
+function handleMessage(type: string, data: unknown, seq?: number): void {
+	// Drop out-of-order/duplicate broadcasts for this type before applying.
+	// Messages without `seq` (local/legacy, or reconnect safety-hydrate
+	// dispatches) bypass the guard.
+	if (seq !== undefined && seqTracker.shouldDrop(type, seq)) {
+		return;
+	}
+
+	if (!connectionReadyState) connectionReadyState = true;
+
 	switch (type) {
 		case "auth":
 			authState = data as typeof authState;
 			break;
 
-		case "config":
-			configState = data as ConfigMessage;
+		case "config": {
+			// Lock-aware ingestion. The dirty-field registry is keyed on
+			// ConfigMessage field names (max_br, acodec, delay, srtla_addr,
+			// srt_latency, bitrate_overlay, resolution, framerate, ...). For each
+			// field the server echoes: skip it if a stale optimistic lock guards
+			// it (shouldIgnoreEchoReactive), otherwise apply it and reconcile the
+			// lock (release once its RPC resolved and the server echoed the field).
+			const incoming = data as ConfigMessage;
+			const merged: ConfigMessage = { ...configState };
+			for (const [field, value] of Object.entries(incoming)) {
+				if (value === undefined) continue;
+				if (shouldIgnoreEchoReactive(field, value)) continue;
+				(merged as Record<string, unknown>)[field] = value;
+				reconcileReactive(field, value);
+			}
+			configState = merged;
 			break;
+		}
 
 		case "status": {
+			// Status fields are not currently registry-guarded: the dirty-field
+			// registry only covers ConfigMessage fields (see the "config" case).
+			// Status-owned toggles (BondToggle / AsyncSwitch) register their own
+			// fields in T14, so this merge is left untouched to avoid double-guarding.
 			const statusData = data as StatusResponse;
 
 			// Update individual states
@@ -200,9 +261,35 @@ function handleMessage(type: string, data: unknown): void {
 			break;
 		}
 
-		case "netif":
-			netifState = data as NetifMessage;
+		case "netif": {
+			// Lock-aware ingestion for the `enabled` field only.
+			// BondToggle registers per-interface locks as `enabled_${name}` via
+			// markPending/onRpcResolved. Guard only `enabled` — all other fields
+			// (tp, ip, error, mac) flow through live without registry interaction.
+			const incoming = data as NetifMessage;
+			const merged: NetifMessage = { ...netifState };
+			for (const [ifname, entry] of Object.entries(incoming)) {
+				if (!entry) continue;
+				const existing = merged[ifname] ?? ({} as NetifEntry);
+				// Live fields — always apply.
+				const live: Partial<NetifEntry> = {
+					tp: entry.tp,
+					...(entry.ip !== undefined ? { ip: entry.ip } : {}),
+					...(entry.error !== undefined ? { error: entry.error } : {}),
+					...(entry.mac !== undefined ? { mac: entry.mac } : {}),
+				};
+				// Guard the `enabled` field through the dirty-field registry.
+				const field = `enabled_${ifname}`;
+				let nextEnabled = existing.enabled ?? entry.enabled;
+				if (!shouldIgnoreEchoReactive(field, entry.enabled)) {
+					reconcileReactive(field, entry.enabled, undefined, { strict: true });
+					nextEnabled = entry.enabled;
+				}
+				merged[ifname] = { ...existing, ...live, enabled: nextEnabled };
+			}
+			netifState = merged;
 			break;
+		}
 
 		case "wifi":
 			// WiFi responses can have multiple formats
@@ -279,6 +366,11 @@ function handleMessage(type: string, data: unknown): void {
 		default:
 			console.debug("Unhandled message type:", type, data);
 	}
+
+	// Advance lastSeen after applying so the next stale/duplicate is dropped.
+	if (seq !== undefined) {
+		seqTracker.advance(type, seq);
+	}
 }
 
 /**
@@ -303,15 +395,74 @@ function handleNotifications(data: NotificationsMessage): void {
 	}
 }
 
+const AUTH_STORAGE_KEY = "auth";
+
+let reauthInFlight = false;
+
+function readStoredToken(): string | null {
+	return typeof localStorage !== "undefined"
+		? localStorage.getItem(AUTH_STORAGE_KEY)
+		: null;
+}
+
+function clearStoredToken(): void {
+	if (typeof localStorage !== "undefined") {
+		localStorage.removeItem(AUTH_STORAGE_KEY);
+	}
+}
+
+function routeToLogin(): void {
+	if (authStatusStore.value) {
+		markSessionExpired();
+		authStatusStore.set(false);
+	}
+}
+
+async function runReconnectReauth(): Promise<void> {
+	if (reauthInFlight) return;
+	reauthInFlight = true;
+	try {
+		await reauthenticateAndHydrate({
+			getStoredToken: readStoredToken,
+			clearStoredToken,
+			// The remember-me credential under localStorage `auth` is the password,
+			// which the backend verifies via `input.password` (not as a `token`).
+			login: (token) =>
+				rpc.auth.login({ password: token, persistent_token: true }),
+			getConfig: () => rpc.streaming.getConfig(),
+			getStatus: () => rpc.status.getStatus(),
+			dispatch: handleMessage,
+			routeToLogin,
+			onError: (error) => console.error("Reconnect re-auth failed:", error),
+		});
+	} finally {
+		reauthInFlight = false;
+	}
+}
+
 /**
  * Handle connection state changes
  */
 function handleConnectionChange(state: ConnectionState): void {
+	const previous = connectionState;
 	connectionState = state;
 	isConnectedState = state === "connected";
 
 	if (state === "connected") {
+		if (!connectionReadyState) connectionReadyState = true;
+		// Reconnect edge: a server that restarted resets its seq to 0, so clear
+		// all per-type lastSeen to accept the fresh sequence. Guarding on
+		// `previous !== "connected"` keeps steady connected ticks inert.
+		if (previous !== "connected") {
+			seqTracker.resetOnReconnect();
+		}
 		toast.success("Connection established");
+		// Reconnect-only: the first connect of a page-load is owned by Layout's
+		// initial-load login, so gating on wasAuthenticated() avoids a startup
+		// double-login while keeping initSubscriptions() behavior unchanged.
+		if (wasAuthenticated()) {
+			void runReconnectReauth();
+		}
 	} else if (state === "disconnected") {
 		toast.error("Connection lost, attempting to reconnect...");
 	}
@@ -322,6 +473,9 @@ function handleConnectionChange(state: ConnectionState): void {
 // ============================================
 
 let isInitialized = false;
+
+const LOCK_EXPIRY_TICK_MS = 5_000;
+let lockExpiryTick: ReturnType<typeof setInterval> | undefined;
 
 /**
  * Initialize subscriptions
@@ -335,6 +489,13 @@ export function initSubscriptions(): void {
 
 	// Set up connection handler
 	rpcClient.onConnectionChange(handleConnectionChange);
+
+	// Drive the dirty-field registry's TTL safety valve from the ingestion layer
+	// so optimistic locks can never outlive FIELD_LOCK_TTL_MS even if a field is
+	// never echoed back by the server.
+	lockExpiryTick ??= setInterval(() => {
+		expireReactive();
+	}, LOCK_EXPIRY_TICK_MS);
 
 	// Connect to server
 	rpcClient.connect();
@@ -360,6 +521,12 @@ export function resetState(): void {
 	audioCodecsState = undefined;
 	relaysState = undefined;
 	notificationsState = undefined;
+	connectionReadyState = false;
+
+	if (lockExpiryTick !== undefined) {
+		clearInterval(lockExpiryTick);
+		lockExpiryTick = undefined;
+	}
 }
 
 // ============================================

@@ -7,6 +7,13 @@ import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { authStatusStore } from '$lib/stores/auth-status.svelte';
+import {
+	clearSessionExpired,
+	markAuthenticated,
+	markSessionExpired,
+	shouldExpireSession,
+	wasAuthenticated,
+} from '$lib/stores/connection-ux.svelte';
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
 import { getAuth, getStatus, sendAuthMessage } from '$lib/stores/websocket-store.svelte';
 
@@ -77,8 +84,19 @@ $effect(() => {
 			dismissable: true,
 		});
 		authStatusStore.set(true);
+	} else if (shouldExpireSession(message?.success, wasAuthenticated()) && authStatusStore.value) {
+		// Auth token rejected mid-session (e.g. expired/invalidated on a reconnect).
+		// Route to the auth gate with an explicit "session expired" message instead
+		// of silently blanking. Device/streaming state in the stores is left intact.
+		markSessionExpired();
+		localStorage.removeItem('auth');
+		authStatusStore.set(false);
 	}
 });
+
+// Reconnect re-authentication + safety hydrate now lives in the RPC layer
+// (subscriptions.svelte `handleConnectionChange` → reconnect.ts), so it routes
+// through the canonical handleMessage path and is unit-tested in isolation.
 
 // Svelte 5: Use $effect for auth status
 $effect(() => {

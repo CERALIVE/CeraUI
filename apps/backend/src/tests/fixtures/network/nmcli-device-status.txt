@@ -1,0 +1,6 @@
+eth0:ethernet:connected:Wired connection 1:/org/freedesktop/NetworkManager/ActiveConnection/0
+wlan0:wifi:connected:HomeNetwork:/org/freedesktop/NetworkManager/ActiveConnection/1
+usb0:gsm:connected:gsm-connection-0:/org/freedesktop/NetworkManager/ActiveConnection/2
+usb1:gsm:connected:gsm-connection-1:/org/freedesktop/NetworkManager/ActiveConnection/3
+usb2:gsm:connected:gsm-connection-2:/org/freedesktop/NetworkManager/ActiveConnection/4
+lo:loopback:unmanaged::/

@@ -145,6 +145,63 @@ export function mmcliParseSep(input: string) {
 	return output;
 }
 
+/**
+ * Pure, version-tolerant extractor for a modem's model/manufacturer from
+ * `mmcli -m <id> -J` output. Accepts either the raw JSON string or an
+ * already-parsed object.
+ *
+ * ModemManager nests these fields under `modem.generic`; some versions also
+ * (or instead) expose a `modem.hardware` block. We surface the RAW strings —
+ * no normalization, no vendor-name guessing. On any unexpected/missing/
+ * malformed input the function returns `{}` (or a partial result) and never
+ * throws.
+ */
+export function parseMmcliModel(raw: string | object): {
+	model?: string;
+	manufacturer?: string;
+} {
+	let data: unknown = raw;
+
+	if (typeof raw === "string") {
+		const trimmed = raw.trim();
+		if (!trimmed) return {};
+		try {
+			data = JSON.parse(trimmed);
+		} catch {
+			return {};
+		}
+	}
+
+	if (data === null || typeof data !== "object") return {};
+
+	const modem = (data as Record<string, unknown>).modem;
+	if (modem === null || typeof modem !== "object") return {};
+
+	const result: { model?: string; manufacturer?: string } = {};
+
+	const pick = (value: unknown): string | undefined => {
+		// mmcli emits "--" for empty fields — treat those as absent.
+		if (typeof value !== "string") return undefined;
+		const trimmed = value.trim();
+		if (!trimmed || trimmed === "--") return undefined;
+		return trimmed;
+	};
+
+	for (const blockName of ["generic", "hardware"] as const) {
+		const block = (modem as Record<string, unknown>)[blockName];
+		if (block === null || typeof block !== "object") continue;
+		const fields = block as Record<string, unknown>;
+
+		result.model ??= pick(fields.model);
+		result.manufacturer ??= pick(fields.manufacturer);
+	}
+
+	if (result.model === undefined) delete result.model;
+	if (result.manufacturer === undefined) delete result.manufacturer;
+
+	return result;
+}
+
 export function mmConvertNetworkType(mmType: string): NetworkTypeWithLabel {
 	const typeMatch = mmType.match(/^allowed: (.+); preferred: (.+)$/) as
 		| [string, string, string]

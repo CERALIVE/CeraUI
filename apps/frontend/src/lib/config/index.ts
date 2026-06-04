@@ -1,10 +1,8 @@
 import type { Component } from "svelte";
 import { Network as NetworkIcon, Radio, Settings as SettingsIcon } from "@lucide/svelte";
 import { deviceName, siteName } from "$lib/config/branding";
-import Advanced from "$main/tabs/Advanced.svelte";
 import DevTools from "$main/tabs/DevTools.svelte";
 import IdentityPreview from "$main/tabs/IdentityPreview.svelte";
-import Network from "$main/tabs/Network.svelte";
 import LiveView from "$main/LiveView.svelte";
 import NetworkView from "$main/NetworkView.svelte";
 import SettingsView from "$main/SettingsView.svelte";

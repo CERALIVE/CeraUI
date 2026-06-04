@@ -1,0 +1,5 @@
+modem.3gpp.scan-networks.length                 : 4
+modem.3gpp.scan-networks.value[1]               : operator-code: 310410, operator-name: AT&T, availability: current
+modem.3gpp.scan-networks.value[2]               : operator-code: 310260, operator-name: T-Mobile, availability: available
+modem.3gpp.scan-networks.value[3]               : operator-code: 311480, operator-name: Verizon, availability: available
+modem.3gpp.scan-networks.value[4]               : operator-code: 310120, operator-name: Sprint, availability: forbidden

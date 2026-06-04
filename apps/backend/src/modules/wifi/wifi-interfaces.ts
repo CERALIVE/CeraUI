@@ -42,7 +42,7 @@ import {
 	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
 	removeWifiInterface,
-	wifiScheduleScanUpdates,
+	wifiScheduleScanRefresh,
 	wifiUpdateScanResult,
 } from "./wifi-connections.ts";
 import {
@@ -160,7 +160,6 @@ export async function wifiUpdateDevices() {
 
 				if (prop[2] === "yes") {
 					const hotspot: WifiHotspot = {
-						forceHotspotStatus: 0,
 						warnings: {},
 						availableChannels: ["auto"],
 					};
@@ -202,12 +201,12 @@ export async function wifiUpdateDevices() {
 
 	if (newDevices) {
 		await wifiUpdateSavedConns();
-		wifiScheduleScanUpdates();
+		wifiScheduleScanRefresh();
 	}
 
 	if (statusChange) {
 		await wifiUpdateScanResult();
-		wifiScheduleScanUpdates();
+		wifiScheduleScanRefresh();
 	}
 
 	if (newDevices || statusChange) {

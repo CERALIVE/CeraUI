@@ -1,0 +1,105 @@
+{
+  "modem": {
+    "3gpp": {
+      "5gnr": {
+        "registration-settings": {
+          "drx-cycle": "--",
+          "mico-mode": "--"
+        }
+      },
+      "enabled-locks": [
+        "fixed-dialing"
+      ],
+      "eps": {
+        "initial-bearer": {
+          "dbus-path": "/org/freedesktop/ModemManager1/Bearer/0",
+          "settings": {
+            "apn": "fast.t-mobile.com",
+            "ip-type": "ipv4v6",
+            "password": "--",
+            "user": "--"
+          }
+        },
+        "ue-mode-operation": "csps-2"
+      },
+      "imei": "867034057012345",
+      "operator-code": "310260",
+      "operator-name": "T-Mobile",
+      "pco": "--",
+      "registration-state": "home"
+    },
+    "cdma": {
+      "activation-state": "--",
+      "cdma1x-registration-state": "--",
+      "esn": "--",
+      "evdo-registration-state": "--",
+      "meid": "--",
+      "nid": "--",
+      "sid": "--"
+    },
+    "dbus-path": "/org/freedesktop/ModemManager1/Modem/0",
+    "generic": {
+      "access-technologies": [
+        "5gnr"
+      ],
+      "bearers": [
+        "/org/freedesktop/ModemManager1/Bearer/0"
+      ],
+      "carrier-configuration": "--",
+      "carrier-configuration-revision": "--",
+      "current-bands": [
+        "eutran-1",
+        "eutran-3",
+        "ngran-78"
+      ],
+      "current-capabilities": [
+        "gsm-umts, lte, 5gnr"
+      ],
+      "current-modes": "allowed: 2g, 3g, 4g, 5g; preferred: none",
+      "device": "/sys/devices/platform/soc/3550000.xhci/usb1/1-2",
+      "device-identifier": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      "drivers": [
+        "option",
+        "qmi_wwan"
+      ],
+      "equipment-identifier": "867034057012345",
+      "hardware-revision": "RM520NGLAAR03A03M4G",
+      "manufacturer": "Quectel",
+      "model": "RM520N-GL",
+      "own-numbers": [],
+      "plugin": "quectel",
+      "ports": [
+        "cdc-wdm0 (qmi)",
+        "ttyUSB0 (qcdm)",
+        "ttyUSB2 (at)",
+        "ttyUSB3 (at)",
+        "wwan0 (net)"
+      ],
+      "power-state": "on",
+      "primary-port": "cdc-wdm0",
+      "primary-sim-slot": "--",
+      "revision": "RM520NGLAAR03A03M4G",
+      "signal-quality": {
+        "recent": "yes",
+        "value": "78"
+      },
+      "sim": "/org/freedesktop/ModemManager1/SIM/0",
+      "sim-slots": [],
+      "state": "connected",
+      "state-failed-reason": "--",
+      "supported-capabilities": [
+        "gsm-umts, lte, 5gnr"
+      ],
+      "supported-ip-families": [
+        "ipv4",
+        "ipv6",
+        "ipv4v6"
+      ],
+      "supported-modes": [
+        "allowed: 2g, 3g, 4g, 5g; preferred: none"
+      ],
+      "unlock-required": "--",
+      "unlock-retries": []
+    }
+  }
+}

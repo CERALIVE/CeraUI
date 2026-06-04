@@ -101,6 +101,29 @@ export const mockModems: MockModemConfig[] = [
 	},
 ];
 
+// Mock WiFi radios
+export interface MockWifiRadio {
+	device: string;
+	ifname: string;
+	macAddress: string;
+	supports_hotspot: boolean;
+}
+
+export const mockWifiRadios: MockWifiRadio[] = [
+	{
+		device: "wlan0",
+		ifname: "wlan0",
+		macAddress: "dc:a6:32:12:34:57",
+		supports_hotspot: true,
+	},
+	{
+		device: "wlan1",
+		ifname: "wlan1",
+		macAddress: "dc:a6:32:12:34:58",
+		supports_hotspot: true,
+	},
+];
+
 // Mock WiFi networks
 export interface MockWifiNetwork {
 	ssid: string;

@@ -1,0 +1,4 @@
+modem-list.length                               : 3
+modem-list.value[1]                             : /org/freedesktop/ModemManager1/Modem/0
+modem-list.value[2]                             : /org/freedesktop/ModemManager1/Modem/1
+modem-list.value[3]                             : /org/freedesktop/ModemManager1/Modem/2

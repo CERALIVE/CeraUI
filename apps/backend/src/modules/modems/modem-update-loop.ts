@@ -93,16 +93,252 @@ function publishModemsSnapshot(): void {
 			snapshot[id] = modem;
 		}
 	}
+	setModemsState(snapshot);
+}
 
-	// If any modems were removed, delete them
-	for (const m in modems) {
-		if (modems[m]?.removed) {
-			logger.warn(`Modem ${m} removed`);
-			removeModem(Number(m));
+/**
+ * Broadcast the `modems` message in response to a reconcile diff.
+ *
+ * Shape is preserved exactly from the legacy loop: in mock mode the FULL state
+ * is sent (the mock frontend wholesale-replaces modemsState per `status`
+ * message), otherwise only newly-added modems carry their full descriptor and
+ * everything else is a status-only partial.
+ */
+function broadcastFromDiff(diff: StateDiff<ModemDiffEntry>): void {
+	if (shouldUseMocks()) {
+		broadcastModems(undefined);
+		return;
+	}
+	const fullState: Record<number, true> = {};
+	for (const entry of diff.added) {
+		fullState[entry.id] = true;
+	}
+	broadcastModems(fullState);
+}
+
+function findModemIdByIfname(ifname: string): ModemId | undefined {
+	for (const id of getModemIds()) {
+		if (getModem(id)?.ifname === ifname) {
+			return id;
 		}
 	}
+	return undefined;
+}
 
-	broadcastModems(newModems);
+// ─────────────────────────────────────────────────────────────────────────────
+// Event-driven drivers
+// ─────────────────────────────────────────────────────────────────────────────
 
-	setTimeout(updateModems, modemUpdateInterval);
+/** A `modem-added` event: register (or refresh if already known) then publish. */
+async function handleModemAdded(id: ModemId): Promise<void> {
+	await withModemUpdateLock(async () => {
+		if (getModem(id)) {
+			// Already present (e.g. discovered at startup) — refresh, don't re-register.
+			await refreshModemStatus(id);
+		} else {
+			await registerModemSafe(id);
+		}
+		// Publish: a freshly registered modem reconciles as `added`, which the
+		// onModemsChange handler turns into a gsm reset + full broadcast.
+		publishModemsSnapshot();
+	});
+}
+
+/** A `modem-removed` event: drop the modem and publish the cleaned-up state. */
+async function handleModemRemoved(id: ModemId): Promise<void> {
+	await withModemUpdateLock(async () => {
+		if (!getModem(id)) {
+			return;
+		}
+		logger.warn(`Modem ${id} removed`);
+		removeModem(id);
+		// Publish: reconciles as `removed` → gsm reset + broadcast (no hot-plug recovery).
+		publishModemsSnapshot();
+	});
+}
+
+/** A `device-state` event for a modem's net interface: refresh that modem only. */
+async function handleDeviceState(device: string): Promise<void> {
+	await withModemUpdateLock(async () => {
+		const id = findModemIdByIfname(device);
+		if (id === undefined) {
+			return;
+		}
+		await refreshModemStatus(id);
+		publishModemsSnapshot();
+	});
+}
+
+async function handleMonitorEvent(event: MonitorEvent): Promise<void> {
+	switch (event.type) {
+		case "modem-added":
+			await handleModemAdded(Number.parseInt(event.id, 10));
+			break;
+		case "modem-removed":
+			await handleModemRemoved(Number.parseInt(event.id, 10));
+			break;
+		case "device-state":
+			await handleDeviceState(event.device);
+			break;
+		default:
+			// connection-state and any other events are handled by other layers.
+			break;
+	}
+}
+
+/**
+ * Full reconcile: list the modems currently present, register the new ones,
+ * drop the gone ones, refresh the survivors, then publish. Used for the initial
+ * startup state and on every monitor restart (`onResync`) — the monitor has no
+ * historical replay, so a full poll is the only way to close the gap.
+ *
+ * This is NOT the retained status poll: it detects presence changes and so its
+ * diff may carry add/remove entries (which reset gsm connections).
+ */
+export async function discoverModems(): Promise<void> {
+	await withModemUpdateLock(async () => {
+		const modemList = (await mmListWithRetry()) ?? [];
+		const present = new Set<ModemId>(modemList);
+
+		for (const id of getModemIds()) {
+			if (!present.has(id)) {
+				logger.warn(`Modem ${id} removed`);
+				removeModem(id);
+			}
+		}
+
+		for (const id of modemList) {
+			if (getModem(id)) {
+				await refreshModemStatus(id);
+			} else {
+				await registerModemSafe(id);
+			}
+		}
+
+		publishModemsSnapshot();
+	});
+}
+
+/**
+ * Retained status poll: refresh signal/status of EVERY known modem at the
+ * reduced cadence. Never lists/registers (presence is event-driven) and never
+ * resets gsm connections — its diff only ever contains `changed` entries.
+ */
+export async function runModemStatusPoll(): Promise<void> {
+	await withModemUpdateLock(async () => {
+		for (const id of getModemIds()) {
+			await refreshModemStatus(id);
+		}
+		publishModemsSnapshot();
+	});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
+
+let initialized = false;
+let monitorRef: IMonitorEmitter | null = null;
+let monitorListener: ((event: MonitorEvent) => void) | null = null;
+let statusPollTimer: ReturnType<typeof setInterval> | null = null;
+let unsubModemsChange: (() => void) | null = null;
+let unsubGsmReset: (() => void) | null = null;
+
+// Serializes async work kicked off by sync monitor callbacks so callers (and
+// tests) can await the loop reaching a quiescent state.
+let pendingWork: Promise<unknown> = Promise.resolve();
+
+function trackWork(work: Promise<unknown>): void {
+	pendingWork = pendingWork.then(
+		() => work,
+		() => work,
+	);
+}
+
+/** Resolves once all in-flight monitor-driven modem updates have settled. */
+export function whenModemUpdatesSettled(): Promise<unknown> {
+	return pendingWork;
+}
+
+export interface InitModemUpdateLoopOptions {
+	/** Inject an emitter (tests). Defaults to the env-selected monitor manager. */
+	monitor?: IMonitorEmitter;
+	/** Run the initial full discovery poll. Default true. */
+	autoDiscover?: boolean;
+	/** Start the retained 30s status poll. Default true. */
+	startPoll?: boolean;
+}
+
+/**
+ * Wire the event-driven modem presence + retained status poll. Replaces the old
+ * always-on 10s self-recursive `updateModems()` loop.
+ */
+export async function initModemUpdateLoop(
+	options: InitModemUpdateLoopOptions = {},
+): Promise<void> {
+	if (initialized) {
+		return;
+	}
+	initialized = true;
+
+	const { autoDiscover = true, startPoll = true } = options;
+
+	// `resetGsmConnections()` is wired EXCLUSIVELY through the T11 hook. It fires
+	// on modem add/remove (triggered from the diff below) and on config change
+	// (modems.ts) — never on a status poll.
+	unsubGsmReset = onGsmConnectionsReset(() => {
+		resetGsmConnections();
+	});
+
+	// Reconcile diffs drive everything observable: presence changes invalidate
+	// the cached NM gsm connections, and every non-empty diff broadcasts.
+	unsubModemsChange = onModemsChange((diff) => {
+		for (const entry of [...diff.added, ...diff.removed]) {
+			triggerGsmConnectionsReset(entry.id);
+		}
+		broadcastFromDiff(diff);
+	});
+
+	const monitor =
+		options.monitor ??
+		createMonitorManager(() => {
+			// Monitor restarted — re-poll to close the no-replay gap.
+			trackWork(discoverModems());
+		});
+	monitorRef = monitor;
+
+	monitorListener = (event: MonitorEvent) => {
+		trackWork(handleMonitorEvent(event));
+	};
+	monitor.on("monitor-event", monitorListener);
+	monitor.start();
+
+	if (autoDiscover) {
+		await discoverModems();
+	}
+
+	if (startPoll) {
+		statusPollTimer = setInterval(() => {
+			trackWork(runModemStatusPoll());
+		}, STATUS_POLL_INTERVAL_MS);
+	}
+}
+
+/** Tear down the loop: clear the poll timer, unsubscribe, and stop the monitor. */
+export function stopModemUpdateLoop(): void {
+	if (statusPollTimer !== null) {
+		clearInterval(statusPollTimer);
+		statusPollTimer = null;
+	}
+	if (monitorRef && monitorListener) {
+		monitorRef.off("monitor-event", monitorListener);
+		monitorRef.stop();
+	}
+	monitorRef = null;
+	monitorListener = null;
+	unsubModemsChange?.();
+	unsubGsmReset?.();
+	unsubModemsChange = null;
+	unsubGsmReset = null;
+	initialized = false;
 }

@@ -3,9 +3,9 @@
  * Provides aggregated status information
  */
 
+import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import { relayMessageSchema, statusResponseSchema } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-
 import { getConfig } from "../../modules/config.ts";
 import { buildModemsMessage } from "../../modules/modems/modem-status.ts";
 import { netIfBuildMsg } from "../../modules/network/network-interfaces.ts";
@@ -14,7 +14,6 @@ import {
 	getRelays,
 } from "../../modules/remote/remote-relays.ts";
 import { getAudioDevices } from "../../modules/streaming/audio.ts";
-import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import { getPipelinesMessage } from "../../modules/streaming/pipelines.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
@@ -39,6 +38,13 @@ const authedProcedure = baseProcedure.use(authMiddleware);
 
 /**
  * Get full status procedure
+ *
+ * The wifi/modems/netif snapshots are produced by `wifiBuildMsg`,
+ * `buildModemsMessage` and `netIfBuildMsg`. These builders read the legacy
+ * source-of-truth maps that the synchronized state caches (getNetifState /
+ * getWifiState / getModemsState, T9/T10/T11) are kept in step with by the
+ * event-driven loops (T14/T15/T17), so the snapshot reflects the synchronized
+ * state while keeping the exact, frozen wire shapes.
  */
 export const getStatusProcedure = authedProcedure
 	.output(statusResponseSchema)

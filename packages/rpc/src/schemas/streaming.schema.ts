@@ -80,7 +80,7 @@ export const bitrateInputSchema = z.object({
 });
 export type BitrateInput = z.infer<typeof bitrateInputSchema>;
 
-// Bitrate output schema
+// Bitrate output schema — returns applied max_br after hardware clamp
 export const bitrateOutputSchema = z.object({
 	max_br: z.number(),
 });
@@ -218,6 +218,21 @@ export const streamingStopOutputSchema = z.object({
 	success: z.boolean(),
 });
 export type StreamingStopOutput = z.infer<typeof streamingStopOutputSchema>;
+
+// Streaming setConfig output — includes applied config fields post-clamp
+export const streamingSetConfigOutputSchema = z.object({
+	success: z.boolean(),
+	applied: streamingConfigInputSchema.partial().optional(),
+});
+export type StreamingSetConfigOutput = z.infer<typeof streamingSetConfigOutputSchema>;
+
+// Streaming start output extended — includes applied config fields post-clamp
+export const streamingStartOutputSchemaExtended = z.object({
+	success: z.boolean(),
+	is_streaming: z.boolean().optional(),
+	applied: streamingConfigInputSchema.partial().optional(),
+});
+export type StreamingStartOutputExtended = z.infer<typeof streamingStartOutputSchemaExtended>;
 
 // Dev-only mock hardware switcher schemas (includes generic for software fallback)
 export const mockHardwareTypeSchema = z.enum(['jetson', 'n100', 'rk3588', 'generic']);

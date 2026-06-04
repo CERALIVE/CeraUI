@@ -9,6 +9,7 @@ import {
 	logoutProcedure,
 	setPasswordProcedure,
 } from "./procedures/auth.procedure.ts";
+import { devEmitProcedure } from "./procedures/dev.procedure.ts";
 import {
 	configureModemProcedure,
 	getAllModemsProcedure,
@@ -65,10 +66,7 @@ import {
 } from "./procedures/wifi.procedure.ts";
 import type { RPCContext } from "./types.ts";
 
-/**
- * Application router implementing the contract
- */
-export const appRouter = os.$context<RPCContext>().router({
+const stableRoutes = {
 	auth: os.router({
 		login: loginProcedure,
 		setPassword: setPasswordProcedure,
@@ -136,6 +134,14 @@ export const appRouter = os.$context<RPCContext>().router({
 		getPersistent: getPersistentNotificationsProcedure,
 		dismiss: dismissNotificationProcedure,
 	}),
-});
+};
+
+// HARD-GATED: the `dev` namespace is registered ONLY outside production, so in a
+// production build `dev.*` paths resolve to "Unknown procedure path".
+export const appRouter = os.$context<RPCContext>().router(
+	process.env.NODE_ENV !== "production"
+		? { ...stableRoutes, dev: os.router({ emit: devEmitProcedure }) }
+		: stableRoutes,
+);
 
 export type AppRouter = typeof appRouter;

@@ -11,6 +11,7 @@ import {
 	type MockScenario,
 	mockModems,
 	mockWifiNetworks,
+	mockWifiRadios,
 	scenarios,
 	setActiveScenario,
 } from "./mock-config.ts";
@@ -53,6 +54,8 @@ interface MockState {
 	modemSignals: Map<number, number>;
 	modemStates: Map<number, "registered" | "connected" | "searching">;
 	networkTraffic: Map<string, number>;
+	interfaceThroughput: Record<string, number>;
+	wifiModes: Record<string, "station" | "hotspot">;
 	wifiSignals: Map<string, number>;
 	sensors: {
 		socTemp: number;
@@ -78,6 +81,8 @@ const mockState: MockState = {
 	modemSignals: new Map(),
 	modemStates: new Map(),
 	networkTraffic: new Map(),
+	interfaceThroughput: {},
+	wifiModes: {},
 	wifiSignals: new Map(),
 	sensors: {
 		socTemp: 52,
@@ -131,6 +136,8 @@ export function initMockService(scenarioName?: string): void {
 	mockState.wifiConnections.clear();
 	mockState.modemConfigs.clear();
 	mockState.netifConfigs.clear();
+	mockState.interfaceThroughput = {};
+	mockState.wifiModes = {};
 
 	for (let i = 0; i < config.modems; i++) {
 		mockState.modemSignals.set(i, 80 + Math.random() * 15);
@@ -148,6 +155,18 @@ export function initMockService(scenarioName?: string): void {
 		for (const network of mockWifiNetworks) {
 			mockState.wifiSignals.set(network.ssid, network.signal);
 		}
+	}
+
+	const mbpsToBytesPerSec = (value: number) => value * 125_000;
+	mockState.interfaceThroughput.eth0 = mbpsToBytesPerSec(75);
+	for (let i = 0; i < config.modems; i++) {
+		mockState.interfaceThroughput[`usb${i}`] = mbpsToBytesPerSec(2 + i * 2);
+	}
+	if (config.wifi) {
+		mockWifiRadios.forEach((radio, index) => {
+			mockState.interfaceThroughput[radio.ifname] = mbpsToBytesPerSec(8 + index * 6);
+			mockState.wifiModes[radio.device] = "station";
+		});
 	}
 
 	if (config.streaming) {
@@ -401,4 +420,5 @@ export {
 	getScenarioConfig,
 	mockModems,
 	mockWifiNetworks,
+	mockWifiRadios,
 };

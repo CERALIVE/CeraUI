@@ -6,5 +6,6 @@ declare global {
 			config: Partial<ConfigMessage>,
 		) => void;
 		stopStreamingWithNotificationClear?: () => void;
+		__ceraAppMounted?: boolean;
 	}
 }

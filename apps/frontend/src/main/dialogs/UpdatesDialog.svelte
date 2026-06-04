@@ -51,7 +51,7 @@ async function doInstall() {
 		await installSoftwareUpdates();
 	} catch (error) {
 		console.error('Failed to start update:', error);
-		toast.error($LL.advanced.copyFailed());
+		toast.error($LL.osActions.updateFailed());
 	}
 }
 </script>

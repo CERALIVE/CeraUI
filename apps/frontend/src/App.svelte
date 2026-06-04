@@ -6,9 +6,19 @@ import { setLocale } from '@ceraui/i18n/svelte';
 import { ModeWatcher } from 'mode-watcher';
 import { onMount } from 'svelte';
 
+import BootShell from '$lib/components/custom/BootShell.svelte';
+import { getConnectionReady } from '$lib/rpc/subscriptions.svelte';
 import { getLayoutMode, setLayoutMode } from '$lib/stores/layout-mode.svelte';
 import { getLocale } from '$lib/stores/locale.svelte';
+import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
 import Layout from '$main/Layout.svelte';
+import ErrorBoundary from '$main/layout/ErrorBoundary.svelte';
+
+// Boot gate: Layout mounts immediately (optimistic shell — auth + offline logic
+// run underneath) while BootShell overlays "Connecting to device…" until the
+// device first speaks. Event-driven via getConnectionReady(); yields to the
+// browser-offline page when that takes over so it never masks a real outage.
+const showBootShell = $derived(!getConnectionReady() && !getShouldShowOfflinePage());
 
 // URL ?mode=touch|default overrides the persisted layout mode on load.
 $effect(() => {
@@ -56,5 +66,10 @@ onMount(async () => {
 <ModeWatcher />
 
 <main>
-	<Layout />
+	<ErrorBoundary>
+		<Layout />
+		{#if showBootShell}
+			<BootShell />
+		{/if}
+	</ErrorBoundary>
 </main>

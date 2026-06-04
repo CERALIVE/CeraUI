@@ -82,6 +82,9 @@ function installWsHarness(token: string): void {
 		_heldFrame: null,
 		_holdNetcfg: false,
 		_dropFakeBitrate: false,
+		// STATELESS (unlike one-shot `_holdNetcfg`): persists until a test clears
+		// it, so a BondToggle can be exercised repeatedly without re-arming.
+		_dropFakeNetcfg: false as false | "success" | "failure",
 		_seq: 0,
 		emit(type: string, payload: unknown) {
 			const s = w.__cera.socket;
@@ -134,9 +137,38 @@ function installWsHarness(token: string): void {
 				}
 
 				// Hold the bond toggle RPC in-flight (observable pending lock).
+				// Ordering: this runs BEFORE the drop+fake branch below, so if a
+				// test sets both flags `_holdNetcfg` wins (acceptable — they target
+				// different scenarios and are not meant to be combined).
 				if (p === "network.configure" && w.__cera._holdNetcfg) {
 					w.__cera._heldFrame = data;
 					w.__cera._holdNetcfg = false;
+					return undefined;
+				}
+
+				// Drop the configure RPC + fake its resolution locally so the
+				// post-resolve window is deterministic without a real backend
+				// confirm. Stays armed across calls (test owns the flag lifecycle).
+				if (p === "network.configure" && w.__cera._dropFakeNetcfg) {
+					const mode = w.__cera._dropFakeNetcfg;
+					const id = msg.id;
+					setTimeout(() => {
+						this.dispatchEvent(
+							new MessageEvent("message", {
+								data: JSON.stringify(
+									mode === "success"
+										? { id, result: { success: true } }
+										: {
+												id,
+												error: {
+													code: -32000,
+													message: "drop+fake: simulated configure failure",
+												},
+											},
+								),
+							}),
+						);
+					}, 0);
 					return undefined;
 				}
 
@@ -463,5 +495,164 @@ test.describe("field-lock reconciliation (deterministic, dev.emit driven)", () =
 			`confirming echo max_br=${intended} → lock RELEASED post-reconnect (slider ${intended}) ✓`,
 		);
 		record("Lifecycle 3 PASS — stale reconnect replay never flipped the field.\n");
+	});
+});
+
+// ── Task 4: `network.configure` drop+fake harness self-tests ─────────────────
+// Validates `_dropFakeNetcfg` in isolation. A dropped configure never reaches the
+// backend, so no confirming netif echo arrives and BondToggle's `displayed`
+// reverts to the authoritative `enabled` prop (ON) in BOTH success and failure —
+// the revert itself proves the drop (a forwarded+confirmed disable would stick
+// OFF). The discriminator is the error toast: present on failure, absent on
+// success.
+test.describe("network.configure drop+fake harness (Task 4)", () => {
+	test.skip(
+		({ browserName }) => browserName !== "chromium",
+		"single-browser harness proof",
+	);
+
+	const FAKE_ERR = "drop+fake: simulated configure failure";
+
+	test.beforeEach(async ({ page }, testInfo) => {
+		test.skip(
+			testInfo.project.name !== "desktop",
+			"desktop layout drives the bond toggles",
+		);
+		await page.addInitScript(installWsHarness, TOKEN);
+		await page.goto("/");
+		await navigateTo(page, "network");
+	});
+
+	async function inBondToggle(page: Page) {
+		const switches = page.getByRole("switch");
+		await expect(switches.first()).toBeVisible({ timeout: 10000 });
+		const count = await switches.count();
+		for (let i = 0; i < count; i++) {
+			const s = switches.nth(i);
+			if (
+				(await s.getAttribute("aria-checked")) === "true" &&
+				(await s.isEnabled())
+			) {
+				return s;
+			}
+		}
+		return switches.first();
+	}
+
+	// Keys of interfaces the backend currently reports as bond-excluded. A dropped
+	// configure must not add the toggled interface here; live `tp` churn is ignored.
+	function disabledNetifKeys(page: Page): Promise<string[]> {
+		return page.evaluate(() => {
+			const n = (window as any).__cera.lastNetif || {};
+			return Object.keys(n)
+				.filter((k) => n[k] && n[k].enabled === false)
+				.sort();
+		});
+	}
+
+	function writeEvidence(fileName: string, lines: string[]): void {
+		const file = evidencePath(fileName);
+		fs.mkdirSync(path.dirname(file), { recursive: true });
+		fs.writeFileSync(
+			file,
+			[
+				"Task 4 — network.configure drop+fake harness self-test",
+				`Generated: ${new Date().toISOString()}`,
+				"",
+				...lines,
+				"",
+			].join("\n"),
+			"utf8",
+		);
+	}
+
+	test("drop+fake success: frame dropped, RPC resolves locally, no error toast", async ({
+		page,
+	}) => {
+		const toggle = await inBondToggle(page);
+		await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+		// Record aria-checked transitions so the transient optimistic flip is
+		// observable even though the local fake-success resolves it immediately.
+		await toggle.evaluate((el) => {
+			const w = window as any;
+			w.__ariaLog = [] as (string | null)[];
+			new MutationObserver((records) => {
+				for (const r of records) w.__ariaLog.push(r.oldValue);
+			}).observe(el, {
+				attributes: true,
+				attributeFilter: ["aria-checked"],
+				attributeOldValue: true,
+			});
+		});
+
+		const disabledBefore = await disabledNetifKeys(page);
+
+		await page.evaluate(() => {
+			(window as any).__cera._dropFakeNetcfg = "success";
+		});
+		await toggle.click();
+
+		await expect
+			.poll(() => page.evaluate(() => (window as any).__ariaLog), {
+				timeout: 5000,
+				message: "optimistic flip + local fake-success resolve should both occur",
+			})
+			.toEqual(expect.arrayContaining(["true", "false"]));
+		await expect(toggle).toHaveAttribute("aria-checked", "true");
+		await expect(page.getByText(FAKE_ERR)).toBeHidden();
+
+		const disabledAfter = await disabledNetifKeys(page);
+		expect(disabledAfter).toEqual(disabledBefore);
+
+		await page.evaluate(() => {
+			(window as any).__cera._dropFakeNetcfg = false;
+		});
+
+		const log = await page.evaluate(() => (window as any).__ariaLog);
+		writeEvidence("task-4-dropfake-success.txt", [
+			"Scenario: __cera._dropFakeNetcfg = 'success'",
+			"Clicked an in-bond toggle → optimistic OFF; configure frame DROPPED.",
+			`aria-checked oldValue log (flip then revert): ${JSON.stringify(log)}`,
+			"RPC resolved locally as success — no error toast surfaced.",
+			`Bond-excluded interfaces unchanged (${JSON.stringify(disabledBefore)})`,
+			"  → no backend netif echo for the change → frame confirmed dropped.",
+			"Toggle reverted to ON (no confirming echo), as expected for drop+fake.",
+			"Result: PASS",
+		]);
+	});
+
+	test("drop+fake failure: frame dropped, RPC rejects locally, error toast + revert", async ({
+		page,
+	}) => {
+		const toggle = await inBondToggle(page);
+		await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+		const disabledBefore = await disabledNetifKeys(page);
+
+		await page.evaluate(() => {
+			(window as any).__cera._dropFakeNetcfg = "failure";
+		});
+		await toggle.click();
+
+		await expect(page.getByText(FAKE_ERR)).toBeVisible();
+		await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+		const disabledAfter = await disabledNetifKeys(page);
+		expect(disabledAfter).toEqual(disabledBefore);
+
+		await page.evaluate(() => {
+			(window as any).__cera._dropFakeNetcfg = false;
+		});
+
+		writeEvidence("task-4-dropfake-failure.txt", [
+			"Scenario: __cera._dropFakeNetcfg = 'failure'",
+			"Clicked an in-bond toggle → optimistic OFF; configure frame DROPPED.",
+			`Error toast surfaced: "${FAKE_ERR}"`,
+			"BondToggle catch path → reverted to original ON state (aria-checked=true).",
+			`Bond-excluded interfaces unchanged (${JSON.stringify(disabledBefore)})`,
+			"  → no backend netif echo for the change → frame confirmed dropped.",
+			"Result: PASS",
+		]);
 	});
 });
