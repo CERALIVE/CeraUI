@@ -11,8 +11,6 @@
  *  - runWithStdin() keeps the secret in stdin and never on argv.
  */
 
-import { EventEmitter } from "node:events";
-
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 
 import * as execMod from "../helpers/exec.ts";
@@ -122,42 +120,35 @@ describe("argMatch() — dynamic argument validation", () => {
 
 describe("runWithStdin() — secret stays in stdin, never on argv", () => {
 	it("writes the secret to child.stdin and keeps it out of argv", async () => {
-		const childProcess = await import("node:child_process");
-
 		const stdinWrites: string[] = [];
-		const fakeChild = new EventEmitter() as EventEmitter & {
-			stdout: EventEmitter;
-			stderr: EventEmitter;
-			stdin: { write: (d: string) => boolean; end: () => void };
-		};
-		fakeChild.stdout = new EventEmitter();
-		fakeChild.stderr = new EventEmitter();
-		fakeChild.stdin = {
-			write: (d: string) => {
-				stdinWrites.push(d);
-				return true;
+		const fakeProc = {
+			stdin: {
+				write: (d: string | Uint8Array) => {
+					stdinWrites.push(typeof d === "string" ? d : Buffer.from(d).toString());
+					return typeof d === "string" ? d.length : d.byteLength;
+				},
+				end: () => 0,
+				flush: () => 0,
 			},
-			end: () => {
-				// Simulate a clean exit once stdin is closed.
-				queueMicrotask(() => fakeChild.emit("close", 0));
-			},
+			stdout: new Response("ok\n").body,
+			stderr: new Response("").body,
+			exited: Promise.resolve(0),
+			kill: () => {},
 		};
 
-		const spy = spyOn(childProcess, "spawn").mockReturnValue(
-			fakeChild as never,
-		);
+		const spy = spyOn(Bun, "spawn").mockReturnValue(fakeProc as never);
 
 		const secret = "pw\npw\n";
 		await runWithStdin("passwd", ["user"], secret);
 
 		expect(spy).toHaveBeenCalledTimes(1);
-		const [bin, args] = spy.mock.calls[0] as [string, string[], unknown];
-		expect(bin).toBe("passwd");
-		expect(args).toEqual(["user"]);
+		// Bun.spawn is argv-only: ([bin, ...args], opts) — no `sh -c`, no string.
+		const [argv] = spy.mock.calls[0] as [string[], unknown];
+		expect(argv).toEqual(["passwd", "user"]);
 
 		// The secret must NEVER appear in argv (process table leak).
-		expect(args).not.toContain(secret);
-		expect(args.join(" ")).not.toContain("pw");
+		expect(argv).not.toContain(secret);
+		expect(argv.join(" ")).not.toContain("pw");
 
 		// It must appear ONLY in what was written to stdin.
 		expect(stdinWrites.join("")).toBe(secret);
@@ -165,8 +156,7 @@ describe("runWithStdin() — secret stays in stdin, never on argv", () => {
 	});
 
 	it("rejects a non-allowlisted binary before spawning", async () => {
-		const childProcess = await import("node:child_process");
-		const spy = spyOn(childProcess, "spawn");
+		const spy = spyOn(Bun, "spawn");
 
 		await expect(runWithStdin("sh", ["-c", "x"], "secret")).rejects.toThrow(
 			"binary not allowlisted: sh",

@@ -1,5 +1,3 @@
-import { spawnSync } from "node:child_process";
-
 import { setup } from "../modules/setup.ts";
 import { ALLOWED, run } from "./run.ts";
 
@@ -19,5 +17,5 @@ export default async function killall(
 	}
 
 	// Custom, non-allowlisted setup.killall_binary path: argv-only (NO shell).
-	spawnSync(killallBinary, [...args]);
+	Bun.spawnSync([killallBinary, ...args]);
 }
