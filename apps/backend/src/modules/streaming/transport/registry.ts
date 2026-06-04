@@ -31,6 +31,7 @@
 
 import type { RelayProtocol } from "../../../helpers/config-schemas.ts";
 
+import { belaboxDetectionMethod } from "./belabox-detection.ts";
 import { srtlaAdapter } from "./srtla-adapter.ts";
 import {
 	type DetectionMethod,
@@ -125,3 +126,5 @@ registerProtocol(
 registerProtocol(
 	createPlaceholderAdapter("rist", "RIST", "RIST not yet implemented"),
 );
+
+registerDetectionMethod(belaboxDetectionMethod);

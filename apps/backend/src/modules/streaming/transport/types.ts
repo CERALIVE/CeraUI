@@ -33,9 +33,14 @@ import type {
 	RelayProtocol,
 	RelaysCache,
 } from "../../../helpers/config-schemas.ts";
-// Detection-method ids are sourced from the Task 3 cloud-provider schema so the
-// taxonomy stays in one place ("subscription" | "manual" | "belabox").
-import type { DetectionMethod as DetectionMethodId } from "@ceraui/rpc/schemas";
+// Detection-method ids + provider taxonomy are sourced from the Task 3
+// cloud-provider/relay schema so the taxonomy stays in one place
+// ("subscription" | "manual" | "belabox").
+import type {
+	DetectionMethod as DetectionMethodId,
+	RelayProviderKind,
+	RelayProviderMeta,
+} from "@ceraui/rpc/schemas";
 
 // =============================================================================
 // Resolution input / output
@@ -107,20 +112,92 @@ export interface TransportAdapter {
 }
 
 // =============================================================================
+// Raw inbound feed → normalized catalog
+// =============================================================================
+
+export interface RawRelayFeedServer {
+	type?: unknown;
+	name?: unknown;
+	addr?: unknown;
+	port?: unknown;
+	default?: unknown;
+	bcrp_port?: unknown;
+}
+
+export interface RawRelayFeedAccount {
+	name?: unknown;
+	ingest_key?: unknown;
+	disabled?: unknown;
+}
+
+/**
+ * A raw, untrusted relay feed pushed by a cloud provider — the historical
+ * `relays` WebSocket message shape. A detection method validates/normalizes it.
+ * The relay catalog is the only concern: the BCRP key is an orthogonal
+ * transport secret and is deliberately not modelled here.
+ */
+export interface RawRelayFeed {
+	servers?: Record<string, RawRelayFeedServer | undefined>;
+	accounts?: Record<string, RawRelayFeedAccount | undefined>;
+}
+
+export interface NormalizedRelayServer {
+	name: string;
+	addr: string;
+	port: number;
+	protocol: RelayProtocol;
+	provider: RelayProviderMeta;
+	default?: true;
+	bcrp_port?: string;
+}
+
+export interface NormalizedRelayAccount {
+	name: string;
+	ingest_key: string;
+	provider: RelayProviderMeta;
+	disabled?: true;
+}
+
+/**
+ * A normalized relay catalog. Ids stay FLAT (un-namespaced) to match the
+ * historical loader and the live flat-lookup resolver; provider identity rides
+ * the additive `provider` field instead.
+ */
+export interface NormalizedRelayConfig {
+	servers: Record<string, NormalizedRelayServer>;
+	accounts: Record<string, NormalizedRelayAccount>;
+}
+
+// =============================================================================
 // Detection-method strategy
 // =============================================================================
 
+/** Context handed to a detection method (provider identity used for tagging). */
+export interface DetectionContext {
+	provider: RelayProviderMeta;
+}
+
 /**
- * Strategy describing how a relay endpoint is detected/sourced for a provider
+ * Strategy describing how a relay catalog is detected/sourced for a provider
  * (subscription push, manual entry, belabox feed). An extension point: register
- * implementations via `registerDetectionMethod`. Not yet consumed by the
- * runtime resolver — wired in by a later task.
+ * implementations via `registerDetectionMethod`.
+ *
+ * `normalize` turns a raw provider feed into a provider-tagged catalog and
+ * returns `undefined` when the feed yields no usable relay server — mirroring
+ * the historical loader's rejection semantics. It is optional because some
+ * methods (e.g. `manual`) carry no feed.
  */
 export interface DetectionMethod {
 	/** Stable detection-method id (matches the cloud-provider taxonomy). */
 	readonly method: DetectionMethodId;
+	/** Provider taxonomy relays from this method are tagged with. */
+	readonly providerKind?: RelayProviderKind;
 	/** Return a human-readable label for this strategy. */
 	describe(): string;
+	normalize?(
+		feed: RawRelayFeed,
+		ctx?: Partial<DetectionContext>,
+	): NormalizedRelayConfig | undefined;
 }
 
 // =============================================================================

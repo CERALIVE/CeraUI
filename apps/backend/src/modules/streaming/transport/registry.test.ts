@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import type { RelaysCache } from "../../../helpers/config-schemas.ts";
 import { validatePortNo } from "../../../helpers/number.ts";
 
+import { belaboxDetectionMethod } from "./belabox-detection.ts";
 import {
 	getAdapter,
 	getDetectionMethod,
@@ -324,7 +325,14 @@ describe("transport registry — extension points", () => {
 		expect(getDetectionMethod("subscription")).toBe(method);
 	});
 
+	it("registers the BELABOX detection method by default (Task 10)", () => {
+		const method = getDetectionMethod("belabox");
+		expect(method).toBe(belaboxDetectionMethod);
+		expect(method?.providerKind).toBe("belabox");
+		expect(typeof method?.normalize).toBe("function");
+	});
+
 	it("returns undefined for an unregistered detection method", () => {
-		expect(getDetectionMethod("belabox")).toBeUndefined();
+		expect(getDetectionMethod("manual")).toBeUndefined();
 	});
 });
