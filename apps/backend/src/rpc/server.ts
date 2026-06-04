@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { logger } from "../helpers/logger.ts";
+import { getIsStreaming } from "../modules/streaming/streaming.ts";
 import { getSystemdSocket } from "../modules/system/systemd.ts";
 import { createWebSocketHandler, initSocketData } from "./adapter.ts";
 import type { SocketData } from "./types.ts";
@@ -109,6 +110,12 @@ async function proxyToDevServer(req: Request): Promise<Response> {
  */
 async function handleRequest(req: Request): Promise<Response> {
 	const url = new URL(req.url);
+
+	// Read-only probe for the dev-sync stream-active guard. Intentional exception
+	// to the oRPC-only rule: a no-auth, side-effect-free status READ (not control).
+	if (req.method === "GET" && url.pathname === "/status") {
+		return Response.json({ is_streaming: getIsStreaming() });
+	}
 
 	// In development, proxy to Vite dev server
 	if (isDevelopment) {
