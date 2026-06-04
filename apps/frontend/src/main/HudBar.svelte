@@ -11,6 +11,7 @@ import RadioTowerIcon from '@lucide/svelte/icons/radio-tower';
 import SignalZeroIcon from '@lucide/svelte/icons/signal-zero';
 import ThermometerIcon from '@lucide/svelte/icons/thermometer';
 import WifiIcon from '@lucide/svelte/icons/wifi';
+import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 import ZapIcon from '@lucide/svelte/icons/zap';
 
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
@@ -64,17 +65,18 @@ function lastSeen(ts: number | null): string | null {
 
 {#snippet miniBars(link: LinkSignal)}
 	{#if link.type === 'ethernet'}
-		<EthernetPortIcon class="size-3.5 shrink-0" style:color={linkColor(link)} aria-hidden="true" />
+		<span class="flex shrink-0" style:color={linkColor(link)} aria-hidden="true">
+			<EthernetPortIcon class="size-3.5" aria-hidden="true" />
+		</span>
 	{:else if link.signal !== null}
 		{@const filled = filledBars(link.signal)}
-		<span class="flex h-3.5 items-center gap-[2px]" aria-hidden="true">
-			{#each [0, 1, 2] as i (i)}
+		<span class="flex items-end gap-0.5" aria-hidden="true">
+			{#each [1, 2, 3] as bar (bar)}
 				<span
 					class="w-1 rounded-[1px]"
-					style:height={`${5 + i * 3}px`}
-					style:background-color={i < filled
-						? linkColor(link)
-						: `color-mix(in oklab, ${linkColor(link)} 32%, transparent)`}
+					style:height={`${bar * 3 + 2}px`}
+					style:background-color={bar <= filled ? linkColor(link) : 'var(--muted-foreground)'}
+					style:opacity={bar <= filled ? '1' : '0.5'}
 				></span>
 			{/each}
 		</span>
@@ -84,6 +86,8 @@ function lastSeen(ts: number | null): string | null {
 		<RadarIcon class="size-3.5 text-muted-foreground/70 motion-safe:animate-pulse" aria-hidden="true" />
 	{:else if link.type === 'modem' && link.connectionState === 'connected'}
 		<LoaderCircleIcon class="size-3.5 text-muted-foreground/70 motion-safe:animate-spin" aria-hidden="true" />
+	{:else if link.type === 'wifi'}
+		<WifiOffIcon class="size-3.5 text-muted-foreground/70" aria-hidden="true" />
 	{:else}
 		<SignalZeroIcon class="size-3.5 text-muted-foreground/70" aria-hidden="true" />
 	{/if}
@@ -104,7 +108,7 @@ function lastSeen(ts: number | null): string | null {
 				data-hud-region
 				aria-label={$LL.hud.expandDetails()}
 				class={cn(
-					'bg-sidebar text-foreground hover:bg-accent/50 focus-visible:ring-ring/50 flex h-12 w-full items-center gap-3 border-t px-4 text-left text-xs font-medium tracking-wide transition-colors focus-visible:ring-2 focus-visible:outline-none',
+					'bg-sidebar text-foreground hover:bg-accent/50 focus-visible:ring-ring/50 flex h-12 w-full items-center gap-3 border-t px-4 text-start text-xs font-medium tracking-wide transition-colors focus-visible:ring-2 focus-visible:outline-none',
 					className,
 				)}
 			>
