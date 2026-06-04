@@ -3,6 +3,14 @@
  */
 import { z } from 'zod';
 
+// Length-only bounds. The hotspot SSID accepts any unicode (no charset
+// restriction) and matches the backend's own min-1 check in wifi-hotspot.ts.
+export const HOTSPOT_NAME_MIN = 1;
+export const HOTSPOT_NAME_MAX = 32;
+export const HOTSPOT_PASSWORD_MIN = 8;
+export const HOTSPOT_PASSWORD_MAX = 63;
+export const WIFI_PASSWORD_MIN = 8;
+
 // WiFi security enum
 export const wifiSecuritySchema = z.enum(['WEP', 'WPA', 'WPA2', 'WPA3']);
 export type WifiSecurity = z.infer<typeof wifiSecuritySchema>;
@@ -39,6 +47,8 @@ export const wifiInterfaceSchema = z.object({
 	available: z.array(availableWifiNetworkSchema),
 	saved: z.record(z.string(), z.string()),
 	supports_hotspot: z.boolean(),
+	transition: z.enum(['activating', 'deactivating']).optional(),
+	mode: z.enum(['station', 'hotspot']).optional(),
 });
 export type WifiInterface = z.infer<typeof wifiInterfaceSchema>;
 
@@ -61,8 +71,8 @@ export type WifiDisconnectInput = z.infer<typeof wifiDisconnectInputSchema>;
 // WiFi new connection input schema
 export const wifiNewInputSchema = z.object({
 	device: z.string(),
-	ssid: z.string(),
-	password: z.string(),
+	ssid: z.string().min(1, 'SSID cannot be empty'),
+	password: z.string().min(WIFI_PASSWORD_MIN, 'Password must be at least 8 characters'),
 });
 export type WifiNewInput = z.infer<typeof wifiNewInputSchema>;
 
@@ -87,16 +97,27 @@ export type HotspotToggleInput = z.infer<typeof hotspotToggleInputSchema>;
 // Hotspot config input schema
 export const hotspotConfigInputSchema = z.object({
 	device: z.string(),
-	name: z.string(),
-	password: z.string(),
-	channel: z.string(),
+	name: z
+		.string()
+		.min(HOTSPOT_NAME_MIN, 'Hotspot name must be at least 1 character')
+		.max(HOTSPOT_NAME_MAX, 'Hotspot name must be at most 32 characters'),
+	password: z
+		.string()
+		.min(HOTSPOT_PASSWORD_MIN, 'Password must be at least 8 characters')
+		.max(HOTSPOT_PASSWORD_MAX, 'Password must be at most 63 characters'),
+	channel: z
+		.string()
+		.refine((c) => wifiBandSchema.safeParse(c).success, {
+			message: 'Channel must be a supported WiFi band (auto, auto_24, auto_50)',
+		}),
 });
 export type HotspotConfigInput = z.infer<typeof hotspotConfigInputSchema>;
 
 // WiFi operation output schema
 export const wifiOperationOutputSchema = z.object({
 	success: z.boolean(),
-	error: z.enum(['auth', 'generic']).optional(),
+	// 'DEVICE_BUSY': per-device lock rejected a concurrent op (additive member).
+	error: z.enum(['auth', 'generic', 'DEVICE_BUSY']).optional(),
 });
 export type WifiOperationOutput = z.infer<typeof wifiOperationOutputSchema>;
 

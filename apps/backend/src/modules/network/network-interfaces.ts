@@ -17,11 +17,11 @@
 */
 
 /* Network interface list */
-import { exec } from "node:child_process";
 import { EventEmitter } from "node:events";
 import type WebSocket from "ws";
 
 import { logger } from "../../helpers/logger.ts";
+import { run } from "../../helpers/run.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
 import {
@@ -96,13 +96,12 @@ function updateNetif() {
 		return;
 	}
 
-	exec("ifconfig", (error, stdout) => {
-		if (error) {
-			logger.error(`Error getting ifconfig: ${error.message}`);
-			return;
-		}
-		processIfconfigOutput(stdout);
-	});
+	run("ifconfig", [])
+		.then(processIfconfigOutput)
+		.catch((error: unknown) => {
+			const message = error instanceof Error ? error.message : String(error);
+			logger.error(`Error getting ifconfig: ${message}`);
+		});
 }
 
 function processIfconfigOutput(stdout: string) {

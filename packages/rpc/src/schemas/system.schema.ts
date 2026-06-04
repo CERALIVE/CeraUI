@@ -79,6 +79,21 @@ export const logOutputSchema = z.object({
 });
 export type LogOutput = z.infer<typeof logOutputSchema>;
 
+// systemd unit/service name: letters, digits and the unit punctuation set
+// `@ . _ : -`. Excludes shell metacharacters (`;`, space, `$`, backtick, etc.),
+// so a `service` value cannot carry a journalctl command injection.
+export const SERVICE_RE = /^[A-Za-z0-9@._:-]+$/;
+
+// Log input schema — `service` is validated at the oRPC boundary so a malicious
+// unit name is rejected before reaching getLog(). Optional/absent input is the
+// whole-system log.
+export const logInputSchema = z
+	.object({
+		service: z.string().regex(SERVICE_RE).optional(),
+	})
+	.optional();
+export type LogInput = z.infer<typeof logInputSchema>;
+
 // Autostart config input schema
 export const autostartInputSchema = z.object({
 	autostart: z.boolean(),

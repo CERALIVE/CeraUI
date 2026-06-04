@@ -76,7 +76,7 @@ initRevisions();
 initHardwareMonitoring();
 initRTMPIngestStats();
 initSRTIngest();
-getSshStatus();
+void getSshStatus();
 
 updateGwWrapper();
 setInterval(updateGwWrapper, UPDATE_GW_INT);

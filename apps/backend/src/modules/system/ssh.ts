@@ -16,12 +16,14 @@
 */
 
 /* SSH control */
-import { exec, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
+import fs from "node:fs";
 
 import type WebSocket from "ws";
 
+import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import { runWithStdin } from "../../helpers/run.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import { notificationSend } from "../ui/notifications.ts";
@@ -32,6 +34,13 @@ type SshStatus = {
 	active?: boolean;
 	user_pass?: boolean;
 };
+
+/**
+ * Identifier guard for `ssh_user`. Letters, digits and `_ . -` only, and the
+ * value may not begin with `-` (which `passwd`/`systemctl` could otherwise
+ * mis-parse as a flag — argument injection). Mirrors helpers/run.ts#ID_RE.
+ */
+const ID_RE = /^[A-Za-z0-9_.-]+$/;
 
 let sshStatus: SshStatus | null = null;
 let sshPasswordHash: string | undefined;
@@ -44,112 +53,194 @@ export function getSshPasswordHash() {
 	return sshPasswordHash;
 }
 
-function handleSshStatus(s: SshStatus) {
-	if (
-		s.user !== undefined &&
-		s.active !== undefined &&
-		s.user_pass !== undefined
-	) {
-		if (
-			!sshStatus ||
-			s.user !== sshStatus.user ||
-			s.active !== sshStatus.active ||
-			s.user_pass !== sshStatus.user_pass
-		) {
-			sshStatus = s;
-			broadcastMsg("status", { ssh: sshStatus });
-		}
+/** Escape an ID_RE-validated value for safe literal use inside a RegExp. */
+function escapeForRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
+}
+
+/**
+ * Parse the crypt hash field for `user` out of a /etc/shadow document, in JS.
+ * Returns the second colon-separated field (the password hash) or undefined
+ * when there is no matching entry.
+ */
+function parseShadowHash(shadow: string, user: string): string | undefined {
+	const re = new RegExp(`^${escapeForRegExp(user)}:([^:]*):`, "m");
+	const match = shadow.match(re);
+	return match ? match[1] : undefined;
+}
+
+/**
+ * Injectable probe surface for {@link getSshStatus}. Defaults talk to the real
+ * OS (argv-only systemctl, JS /etc/shadow read, real broadcast). Tests inject
+ * deterministic stand-ins and a spy broadcast.
+ */
+export type SshStatusDeps = {
+	/** `systemctl is-active ssh` — argv-only, may reject on non-zero exit. */
+	systemctlIsActive: () => Promise<{ stdout: string; stderr: string }>;
+	/** Read the raw /etc/shadow document (JS, no `grep` subprocess). */
+	readShadow: () => string;
+	/** Emit the completed SSH status to clients. */
+	broadcast: (status: SshStatus) => void;
+};
+
+const defaultSshStatusDeps: SshStatusDeps = {
+	systemctlIsActive: () => execFileP("systemctl", ["is-active", "ssh"]),
+	readShadow: () => fs.readFileSync("/etc/shadow", "utf-8"),
+	broadcast: (status) => broadcastMsg("status", { ssh: status }),
+};
+
+/** Resolve whether the ssh service is active, swallowing the non-zero exit. */
+async function probeSshActive(
+	systemctlIsActive: SshStatusDeps["systemctlIsActive"],
+): Promise<boolean> {
+	try {
+		const { stdout } = await systemctlIsActive();
+		return stdout.trim() === "active";
+	} catch (err) {
+		// `is-active` exits non-zero for inactive/failed/unknown; the unit is
+		// simply not active. Treat ANY failure as not-active (never "missing").
+		const stdout = (err as { stdout?: string } | null)?.stdout ?? "";
+		return stdout.trim() === "active";
 	}
 }
 
-function getSshUserHash(callback: (hash: string) => void) {
-	if (!setup.ssh_user) return;
-
-	const cmd = `grep "^${setup.ssh_user}:" /etc/shadow`;
-	exec(cmd, (err, stdout) => {
-		if (err === null && stdout.length) {
-			callback(stdout);
-		} else {
-			logger.error(
-				`Error getting the password hash for ${setup.ssh_user}: ${err}`,
-			);
-		}
-	});
+/** Read + parse the user's crypt hash from /etc/shadow, in JS. */
+function probeSshUserHash(
+	readShadow: SshStatusDeps["readShadow"],
+	user: string,
+): string | undefined {
+	let shadow: string;
+	try {
+		shadow = readShadow();
+	} catch (err) {
+		logger.error(`Error reading /etc/shadow for ${user}: ${err}`);
+		return undefined;
+	}
+	const hash = parseShadowHash(shadow, user);
+	if (hash === undefined) {
+		logger.error(`No /etc/shadow entry found for ${user}`);
+	}
+	return hash;
 }
 
-export function getSshStatus() {
-	if (!setup.ssh_user) return undefined;
-
-	const s: SshStatus = {
-		user: setup.ssh_user,
-		active: undefined,
+/**
+ * Probe the SSH service + user password state and broadcast the result.
+ *
+ * Both probes run concurrently via `Promise.all`; the status object is built
+ * once both have settled, and is broadcast EXACTLY ONCE (only when the complete
+ * status actually changed). No shared-mutable-object callback race, and the
+ * systemctl-error path yields `active: false` rather than dropping the update.
+ *
+ * Returns the current cached status (same wire shape as before) for callers
+ * that want an immediate value.
+ */
+export async function getSshStatus(
+	deps: Partial<SshStatusDeps> = {},
+): Promise<SshStatus | undefined> {
+	const { systemctlIsActive, readShadow, broadcast } = {
+		...defaultSshStatusDeps,
+		...deps,
 	};
 
-	// Check is the SSH server is running
-	exec("systemctl is-active ssh", (err, stdout) => {
-		if (err === null) {
-			s.active = true;
-		} else {
-			if (stdout === "inactive\n") {
-				s.active = false;
-			} else {
-				logger.error(`Error running systemctl is-active ssh: ${err.message}`);
-				return;
-			}
+	const ssh_user = setup.ssh_user;
+	if (!ssh_user) return sshStatus ?? undefined;
+	if (!ID_RE.test(ssh_user) || ssh_user.startsWith("-")) {
+		throw new Error("invalid ssh_user");
+	}
+
+	const [active, hash] = await Promise.all([
+		probeSshActive(systemctlIsActive),
+		Promise.resolve(probeSshUserHash(readShadow, ssh_user)),
+	]);
+
+	const status: SshStatus = {
+		user: ssh_user,
+		active,
+		user_pass: hash !== undefined ? hash !== sshPasswordHash : undefined,
+	};
+
+	// Broadcast exactly once, and only when the complete status changed.
+	if (status.active !== undefined && status.user_pass !== undefined) {
+		if (
+			!sshStatus ||
+			status.user !== sshStatus.user ||
+			status.active !== sshStatus.active ||
+			status.user_pass !== sshStatus.user_pass
+		) {
+			sshStatus = status;
+			broadcast(status);
 		}
+	}
 
-		handleSshStatus(s);
-	});
-
-	// Check if the user's password has been changed
-	getSshUserHash((hash: string) => {
-		s.user_pass = hash !== sshPasswordHash;
-		handleSshStatus(s);
-	});
-
-	// If an immediate result is expected, send the cached status
-	return sshStatus;
+	return sshStatus ?? undefined;
 }
 
-export function startStopSsh(conn: WebSocket, cmd: "start_ssh" | "stop_ssh") {
+/**
+ * Synchronous accessor for the last-known SSH status. The status-message
+ * builders embed this in their response immediately and trigger a background
+ * `getSshStatus()` refresh (which broadcasts only if something changed) —
+ * preserving the original "return cache now, re-probe in the background"
+ * behaviour without making the whole status pipeline async.
+ */
+export function getCachedSshStatus(): SshStatus | undefined {
+	return sshStatus ?? undefined;
+}
+
+export async function startStopSsh(
+	conn: WebSocket,
+	cmd: "start_ssh" | "stop_ssh",
+) {
 	if (!setup.ssh_user) return;
 
 	const action = cmd === "start_ssh" ? "start" : "stop";
 	if (action === "start" && getConfig().ssh_pass === undefined) {
-		resetSshPassword(conn);
+		await resetSshPassword(conn);
 	}
 
-	spawnSync("systemctl", [action, "ssh"]);
-	getSshStatus();
+	try {
+		await execFileP("systemctl", [action, "ssh"]);
+	} catch (err) {
+		logger.error(`Error running systemctl ${action} ssh: ${err}`);
+	}
+	await getSshStatus();
 }
 
-export function resetSshPassword(conn: WebSocket) {
-	if (!setup.ssh_user) return;
+export async function resetSshPassword(conn: WebSocket) {
+	const ssh_user = setup.ssh_user;
+	if (!ssh_user) return;
+	if (!ID_RE.test(ssh_user) || ssh_user.startsWith("-")) {
+		throw new Error("invalid ssh_user");
+	}
 
 	const password = crypto
 		.randomBytes(24)
 		.toString("base64")
 		.replace(/[+/=]/g, "")
 		.substring(0, 20);
-	const cmd = `printf "${password}\n${password}" | passwd ${setup.ssh_user}`;
-	exec(cmd, (err) => {
-		if (err) {
-			notificationSend(
-				conn,
-				"ssh_pass_reset",
-				"error",
-				`Failed to reset the SSH password for ${setup.ssh_user}`,
-				10,
-			);
-			return;
-		}
-		getSshUserHash((hash: string) => {
-			const config = getConfig();
-			config.ssh_pass = password;
-			sshPasswordHash = hash;
-			saveConfig();
-			broadcastMsg("config", config);
-			getSshStatus();
-		});
-	});
+
+	try {
+		// `passwd` reads the new password twice from stdin. The secret is fed via
+		// stdin ONLY — never on argv, never through a shell string.
+		await runWithStdin("passwd", [ssh_user], `${password}\n${password}\n`);
+	} catch (err) {
+		logger.error(`Failed to reset the SSH password for ${ssh_user}: ${err}`);
+		notificationSend(
+			conn,
+			"ssh_pass_reset",
+			"error",
+			`Failed to reset the SSH password for ${ssh_user}`,
+			10,
+		);
+		return;
+	}
+
+	const config = getConfig();
+	config.ssh_pass = password;
+	sshPasswordHash = probeSshUserHash(
+		() => fs.readFileSync("/etc/shadow", "utf-8"),
+		ssh_user,
+	);
+	saveConfig();
+	broadcastMsg("config", config);
+	await getSshStatus();
 }

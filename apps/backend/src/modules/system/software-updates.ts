@@ -17,10 +17,12 @@
 */
 
 /* Software updates */
-import { type ExecException, exec, spawn, spawnSync } from "node:child_process";
+import { type ExecException, exec, spawn } from "node:child_process";
 
 import { execPNR } from "../../helpers/exec.ts";
+import { invariant } from "../../helpers/invariant.ts";
 import { logger } from "../../helpers/logger.ts";
+import { run } from "../../helpers/run.ts";
 import { getms, oneHour, oneMinute } from "../../helpers/time.ts";
 
 import { queueUpdateGw } from "../network/gateways.ts";
@@ -92,6 +94,53 @@ const ceralivePackageList = [
 // Reboot instead of just restarting CeraUI if we've updated packages matching this list
 const rebootPackageList = ["l4t", "ceralive-linux-", "ceralive-network-config"];
 
+// Debian package-name charset (letters, digits, and `. + : ~ -`); rejects
+// whitespace and shell metacharacters in poisoned/malformed apt output.
+const APT_PACKAGE_NAME_RE = /^[A-Za-z0-9.+:~-]+$/;
+
+export function parseHeldBackPackages(packages: string): string[] {
+	const names = packages
+		.trim()
+		.split(/\s+/)
+		.filter((n) => n.length > 0);
+	for (const name of names) {
+		invariant(
+			APT_PACKAGE_NAME_RE.test(name),
+			`invalid package name in held-back list: ${name}`,
+		);
+	}
+	return names;
+}
+
+export function buildAptInstallArgs(packages: string[]): string[] {
+	return ["install", "--assume-no", ...packages];
+}
+
+export function buildAptUpgradeArgs(heldBackPackages?: string[]): string[] {
+	const base = [
+		"-y",
+		"-o",
+		"Dpkg::Options::=--force-confdef",
+		"-o",
+		"Dpkg::Options::=--force-confold",
+	];
+	if (heldBackPackages && heldBackPackages.length > 0) {
+		return [...base, "install", ...heldBackPackages];
+	}
+	return [...base, "dist-upgrade"];
+}
+
+async function aptAssumeNoInstall(packages: string[]): Promise<string> {
+	try {
+		return await run("apt-get", buildAptInstallArgs(packages));
+	} catch (err) {
+		// --assume-no aborts non-zero whenever changes would be made, so run()
+		// rejects; the summary we parse is still on the rejection's stdout.
+		const e = err as { stdout?: unknown };
+		return typeof e.stdout === "string" ? e.stdout : "";
+	}
+}
+
 function packageListIncludes(list: string, includes: Array<string>) {
 	for (const p of includes) {
 		if (list.includes(p)) return true;
@@ -135,7 +184,7 @@ async function getSoftwareUpdateSize() {
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return "busy";
 
 	// First see if any packages can be upgraded by dist-upgrade
-	let upgrade = await execPNR("apt-get dist-upgrade --assume-no");
+	const upgrade = await execPNR("apt-get dist-upgrade --assume-no");
 	let res = parseAptUpgradeSummary(upgrade.stdout);
 
 	// Otherwise, check if any packages have been held back (e.g. by dependencies changing)
@@ -145,10 +194,10 @@ async function getSoftwareUpdateSize() {
 			"The following packages have been kept back:\n",
 		);
 		if (aptHeldBackPackages) {
-			upgrade = await execPNR(
-				`apt-get install --assume-no ${aptHeldBackPackages}`,
+			const stdout = await aptAssumeNoInstall(
+				parseHeldBackPackages(aptHeldBackPackages),
 			);
-			res = parseAptUpgradeSummary(upgrade.stdout);
+			res = parseAptUpgradeSummary(stdout);
 		}
 	} else {
 		// Reset aptHeldBackPackages if some upgrades became available via dist-upgrade
@@ -278,14 +327,10 @@ function doSoftwareUpdate() {
 	let aptLog = "";
 	let aptErr = "";
 
-	let args =
-		"-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold ";
-	if (aptHeldBackPackages) {
-		args += `install ${aptHeldBackPackages}`;
-	} else {
-		args += "dist-upgrade";
-	}
-	const aptUpgrade = spawn("apt-get", args.split(" "));
+	const heldBack = aptHeldBackPackages
+		? parseHeldBackPackages(aptHeldBackPackages)
+		: undefined;
+	const aptUpgrade = spawn("apt-get", buildAptUpgradeArgs(heldBack));
 
 	aptUpgrade.stdout.on("data", (buf) => {
 		let sendUpdate = false;
@@ -364,9 +409,9 @@ function doSoftwareUpdate() {
 
 		if (code === 0) {
 			if (rebootAfterUpgrade) {
-				spawnSync("reboot");
+				void run("reboot", []);
 			} else {
-				process.exit(0);
+				invariant(false, "software update complete; exiting to restart CeraUI");
 			}
 		}
 	});

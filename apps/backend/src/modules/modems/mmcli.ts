@@ -18,8 +18,8 @@
 /*
   mmcli helpers
 */
-import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import { ALLOWED, run } from "../../helpers/run.ts";
 import {
 	handleMmcliCommand,
 	shouldMockModems,
@@ -61,8 +61,42 @@ type NetworkTypeWithLabel = NetworkType & {
 
 const mmcliBinary = setup.mmcli_binary ?? "mmcli";
 
+// Allowlist the operator-pinned mmcli path (config-sourced, NOT RPC input) so
+// run()'s allowlist gate accepts it; default "mmcli" is already present.
+ALLOWED.add(mmcliBinary);
+
 const mmcliKeyPattern = /\.length$/;
 const mmcliValuePattern = /\.value\[\d+]$/;
+
+/**
+ * Valid ModemManager mode tokens accepted by `--set-allowed-modes` /
+ * `--set-preferred-mode`. The `allowed` value may be a pipe-joined combination
+ * (e.g. "4g|5g"), so it is validated token-by-token; `preferred` is a single
+ * token and may additionally be "none".
+ */
+export const VALID_MODES: ReadonlySet<string> = new Set<string>([
+	"any",
+	"2g",
+	"3g",
+	"4g",
+	"5g",
+	"none",
+]);
+
+/**
+ * Validate a mode spec built from RPC input before it becomes an mmcli flag
+ * value. Splits pipe-joined combinations and checks each token against
+ * {@link VALID_MODES}. Throws on any unknown token — this rejects argument
+ * injection such as "--help; rm -rf /" outright.
+ */
+export function validateModeSpec(value: string): string {
+	for (const token of value.split("|")) {
+		if (!VALID_MODES.has(token)) {
+			throw new Error(`invalid mode: ${value}`);
+		}
+	}
+	return value;
+}
 
 export function mmcliParseSep(input: string) {
 	const output: Record<string, string | Array<string>> = {};
@@ -192,8 +226,8 @@ export async function mmList() {
 			}
 		}
 
-		const result = await execFileP(mmcliBinary, ["-K", "-L"]);
-		const modems = mmcliParseSep(result.stdout.toString())["modem-list"] ?? [];
+		const stdout = await run(mmcliBinary, ["-K", "-L"]);
+		const modems = mmcliParseSep(stdout)["modem-list"] ?? [];
 
 		const list = [];
 		for (const m of modems) {
@@ -222,8 +256,8 @@ export async function mmGetModem(id: ModemId) {
 			}
 		}
 
-		const result = await execFileP(mmcliBinary, ["-K", "-m", String(id)]);
-		return mmcliParseSep(result.stdout.toString()) as unknown as ModemInfo;
+		const stdout = await run(mmcliBinary, ["-K", "-m", String(id)]);
+		return mmcliParseSep(stdout) as unknown as ModemInfo;
 	} catch (err) {
 		if (err instanceof Error) {
 			logger.error(`mmGetModem err: ${err.message}`);
@@ -241,8 +275,8 @@ export async function mmGetSim(id: number) {
 			}
 		}
 
-		const result = await execFileP(mmcliBinary, ["-K", "-i", String(id)]);
-		return mmcliParseSep(result.stdout.toString()) as unknown as SimInfo;
+		const stdout = await run(mmcliBinary, ["-K", "-i", String(id)]);
+		return mmcliParseSep(stdout) as unknown as SimInfo;
 	} catch (err) {
 		if (err instanceof Error) {
 			logger.error(`mmGetSim err: ${err.message}`);
@@ -256,12 +290,14 @@ export async function mmSetNetworkTypes(
 	preferred: string,
 ) {
 	try {
+		validateModeSpec(allowed);
+		validateModeSpec(preferred);
 		const args = ["-m", String(id), `--set-allowed-modes=${allowed}`];
 		if (preferred !== "none") {
 			args.push(`--set-preferred-mode=${preferred}`);
 		}
-		const result = await execFileP(mmcliBinary, args);
-		return result.stdout.match(/successfully set current modes in the modem/);
+		const stdout = await run(mmcliBinary, args);
+		return stdout.match(/successfully set current modes in the modem/);
 	} catch (err) {
 		if (err instanceof Error) {
 			logger.error(`mmSetNetworkTypes err: ${err.message}`);
@@ -306,14 +342,14 @@ export async function mmNetworkScan(id: ModemId, timeout = 240) {
 			}
 		}
 
-		const result = await execFileP(mmcliBinary, [
+		const stdout = await run(mmcliBinary, [
 			`--timeout=${timeout}`,
 			"-K",
 			"-m",
 			String(id),
 			"--3gpp-scan",
 		]);
-		const networks = (mmcliParseSep(result.stdout.toString())[
+		const networks = (mmcliParseSep(stdout)[
 			"modem.3gpp.scan-networks"
 		] ?? []) as Array<string>;
 		return networks.map((n) => {

@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import {
 	autostartInputSchema,
 	cloudProviderEndpointSchema,
+	logInputSchema,
 	logOutputSchema,
 	remoteConfigInputSchema,
 	revisionsSchema,
@@ -62,6 +63,7 @@ export const getSensorsProcedure = authedProcedure
  * Get application log procedure
  */
 export const getLogProcedure = authedProcedure
+	.input(logInputSchema)
 	.output(logOutputSchema)
 	.handler(async () => {
 		// getLog sends directly to socket, we need to adapt it
@@ -129,7 +131,7 @@ export const sshStartProcedure = authedProcedure
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
-		startStopSsh(context.ws as unknown as WebSocket, "start_ssh");
+		void startStopSsh(context.ws as unknown as WebSocket, "start_ssh");
 		return { success: true };
 	});
 
@@ -142,7 +144,7 @@ export const sshStopProcedure = authedProcedure
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
-		startStopSsh(context.ws as unknown as WebSocket, "stop_ssh");
+		void startStopSsh(context.ws as unknown as WebSocket, "stop_ssh");
 		return { success: true };
 	});
 
@@ -157,7 +159,7 @@ export const sshResetPasswordProcedure = authedProcedure
 		}),
 	)
 	.handler(({ context }) => {
-		resetSshPassword(context.ws as unknown as WebSocket);
+		void resetSshPassword(context.ws as unknown as WebSocket);
 		return { success: true };
 	});
 
