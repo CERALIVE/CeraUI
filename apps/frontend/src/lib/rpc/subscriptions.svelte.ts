@@ -35,6 +35,7 @@ import {
 	shouldIgnoreEchoReactive,
 } from "./dirty-registry.svelte";
 import { reauthenticateAndHydrate } from "./reconnect";
+import { createSeqTracker } from "./seq-guard";
 
 // ============================================
 // Svelte 5 Reactive State ($state)
@@ -179,10 +180,23 @@ export function getConnectionReady() {
 // Message Handlers
 // ============================================
 
+// Per-type drop-stale guard. The backend tags broadcasts with a top-level
+// `seq` (lifted out in client.ts and forwarded here). Out-of-order or duplicate
+// frames are ignored; lastSeen is reset on reconnect so a restarted server
+// (seq back to 0) is accepted. Messages without `seq` bypass the guard.
+const seqTracker = createSeqTracker();
+
 /**
  * Handle incoming messages and update state
  */
-function handleMessage(type: string, data: unknown): void {
+function handleMessage(type: string, data: unknown, seq?: number): void {
+	// Drop out-of-order/duplicate broadcasts for this type before applying.
+	// Messages without `seq` (local/legacy, or reconnect safety-hydrate
+	// dispatches) bypass the guard.
+	if (seq !== undefined && seqTracker.shouldDrop(type, seq)) {
+		return;
+	}
+
 	if (!connectionReadyState) connectionReadyState = true;
 
 	switch (type) {
@@ -352,6 +366,11 @@ function handleMessage(type: string, data: unknown): void {
 		default:
 			console.debug("Unhandled message type:", type, data);
 	}
+
+	// Advance lastSeen after applying so the next stale/duplicate is dropped.
+	if (seq !== undefined) {
+		seqTracker.advance(type, seq);
+	}
 }
 
 /**
@@ -425,11 +444,18 @@ async function runReconnectReauth(): Promise<void> {
  * Handle connection state changes
  */
 function handleConnectionChange(state: ConnectionState): void {
+	const previous = connectionState;
 	connectionState = state;
 	isConnectedState = state === "connected";
 
 	if (state === "connected") {
 		if (!connectionReadyState) connectionReadyState = true;
+		// Reconnect edge: a server that restarted resets its seq to 0, so clear
+		// all per-type lastSeen to accept the fresh sequence. Guarding on
+		// `previous !== "connected"` keeps steady connected ticks inert.
+		if (previous !== "connected") {
+			seqTracker.resetOnReconnect();
+		}
 		toast.success("Connection established");
 		// Reconnect-only: the first connect of a page-load is owned by Layout's
 		// initial-load login, so gating on wasAuthenticated() avoids a startup
