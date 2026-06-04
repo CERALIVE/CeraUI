@@ -63,15 +63,18 @@ function lastSeen(ts: number | null): string | null {
 </script>
 
 {#snippet miniBars(link: LinkSignal)}
-	{#if link.signal !== null}
+	{#if link.type === 'ethernet'}
+		<EthernetPortIcon class="size-3.5 shrink-0" style:color={linkColor(link)} aria-hidden="true" />
+	{:else if link.signal !== null}
 		{@const filled = filledBars(link.signal)}
-		<span class="flex items-end gap-px" aria-hidden="true">
+		<span class="flex h-3.5 items-center gap-[2px]" aria-hidden="true">
 			{#each [0, 1, 2] as i (i)}
 				<span
 					class="w-1 rounded-[1px]"
-					style:height={`${6 + i * 3}px`}
-					style:background-color={i < filled ? linkColor(link) : 'var(--border)'}
-					style:opacity={i < filled ? '1' : '0.5'}
+					style:height={`${5 + i * 3}px`}
+					style:background-color={i < filled
+						? linkColor(link)
+						: `color-mix(in oklab, ${linkColor(link)} 32%, transparent)`}
 				></span>
 			{/each}
 		</span>
@@ -150,11 +153,11 @@ function lastSeen(ts: number | null): string | null {
 						<span class="text-muted-foreground/60 truncate">{$LL.hud.noData()}</span>
 					{:else}
 						{#each hud.links as link (link.linkIndex)}
-							<span class={cn('inline-flex shrink-0 items-center gap-1', link.isStale && 'opacity-50')}>
+							<span class={cn('inline-flex h-3.5 shrink-0 items-center gap-1.5', link.isStale && 'opacity-50')}>
 								<span class="font-mono text-[0.7rem] leading-none" style:color={linkColor(link)}>
 									L{link.linkIndex + 1}
 								</span>
-								<span class="flex h-3.5 w-[14px] shrink-0 items-center justify-center">{@render miniBars(link)}</span>
+								<span class="flex h-3.5 w-4 shrink-0 items-center justify-center">{@render miniBars(link)}</span>
 							</span>
 						{/each}
 					{/if}
@@ -247,12 +250,14 @@ function lastSeen(ts: number | null): string | null {
 							</span>
 							<span class="flex shrink-0 items-center gap-3">
 								<SpeedBadge kbps={link.throughputKbps} stale={link.isStale} />
-								{#if link.signal != null}
-									<span class="font-mono text-xs tabular-nums" style:color={linkColor(link)}>
-										{Math.round(link.signal)}%
-									</span>
+								{#if link.type !== 'ethernet'}
+									{#if link.signal != null}
+										<span class="font-mono text-xs tabular-nums" style:color={linkColor(link)}>
+											{Math.round(link.signal)}%
+										</span>
+									{/if}
+									{@render miniBars(link)}
 								{/if}
-								{@render miniBars(link)}
 							</span>
 						</div>
 					{/each}
