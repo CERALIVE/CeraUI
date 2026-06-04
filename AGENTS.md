@@ -101,6 +101,19 @@ pnpm --filter frontend run test   # vitest frontend unit tests
 - All config dialogs compose `AppDialog.svelte` (desktop Dialog / mobile Sheet via `MediaQuery` from `svelte/reactivity`).
 - E2E Testing: REQUIRED reading before writing E2E tests → [`apps/frontend/tests/e2e/PLAYBOOK.md`](apps/frontend/tests/e2e/PLAYBOOK.md)
 
+## BUN-NATIVE CONVENTIONS (as of 2026-06)
+
+The backend is fully migrated to Bun-native APIs. Use these patterns for all new backend code:
+
+- **Process spawning**: `Bun.spawn()` / `Bun.$` (shell) / `Bun.spawnSync()` — NOT `node:child_process`
+- **File I/O**: `Bun.file().text()` / `Bun.write()` — NOT `fs.readFileSync` / `fs.writeFileSync`
+- **HTTP client**: `fetch()` with `AbortSignal` — NOT `node:http`
+- **Crypto**: `randomBase64()` from `src/helpers/crypto.ts` — NOT `crypto.randomBytes`
+- **Keep on `node:`**: `node:path`, `node:os`, `node:dns`, `node:assert`, `node:events` — fully supported, no Bun gain
+- **Keep on `node:fs/promises`**: directory ops (`readdir`, `mkdir`) — `Bun.file().exists()` is file-only and returns `false` for directories
+- **`Bun.$` shell interpolation**: dynamic command strings must use `Bun.$\`${{ raw: cmd }}\`` — plain `${cmd}` escapes the whole string into one quoted arg
+- **`process.env` writes**: stay on `process.env` — `Bun.env` is read-only
+
 ## ANTI-PATTERNS
 
 - Don't run `npm install` or `yarn` — pnpm workspaces only.

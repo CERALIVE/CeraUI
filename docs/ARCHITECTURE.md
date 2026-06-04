@@ -162,4 +162,4 @@ RPC setters (`setConfig`, `setBitrate`, etc.) return `{ success: boolean, applie
 
 The default deployment is **same-device**: the backend and the browser both run on the encoder hardware, so the WebSocket connects to `localhost`. A **remote** topology (browser on a separate machine, backend on the encoder) is also supported via an outbound WSS:443 tunnel — the device always dials out, making CGNAT-traversal feasible without inbound port forwarding.
 
-See [`docs/REMOTE_TOPOLOGY.md`](REMOTE_TOPOLOGY.md) for the remote topology design and [`docs/RPC_COMMUNICATION.md`](RPC_COMMUNICATION.md) for the full wire-protocol reference.
+See [`docs/REMOTE_TOPOLOGY.md`](REMOTE_TOPOLOGY.md) (design-only — not yet wired) for the remote topology design and [`docs/RPC_COMMUNICATION.md`](RPC_COMMUNICATION.md) for the full wire-protocol reference.
