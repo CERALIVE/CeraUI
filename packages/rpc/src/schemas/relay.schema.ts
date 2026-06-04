@@ -12,6 +12,8 @@ export type RelayAccount = z.infer<typeof relayAccountSchema>;
 // Relay server schema
 export const relayServerSchema = z.object({
 	name: z.string(),
+	rtt: z.number().optional(),
+	default: z.literal(true).optional(),
 });
 export type RelayServer = z.infer<typeof relayServerSchema>;
 
