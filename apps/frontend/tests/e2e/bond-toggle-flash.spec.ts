@@ -78,6 +78,21 @@ function writeEvidence(fileName: string, lines: string[]): void {
 	);
 }
 
+function writeEvidence19(fileName: string, lines: string[]): void {
+	fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
+	fs.writeFileSync(
+		path.join(EVIDENCE_DIR, fileName),
+		[
+			"Task 19 — Toggle reconciliation edge cases (echo timing, reconnect, failure, TTL)",
+			`Generated: ${new Date().toISOString()}`,
+			"",
+			...lines,
+			"",
+		].join("\n"),
+		"utf8",
+	);
+}
+
 function writeEvidenceJson(fileName: string, data: unknown): void {
 	fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 	fs.writeFileSync(
@@ -101,7 +116,7 @@ function installWsHarness(token: string): void {
 		socket: null,
 		lastNetif: null,
 		lastConfigureName: undefined as string | undefined,
-		_dropFakeNetcfg: false as false | "success" | "failure",
+		_dropFakeNetcfg: false as false | "success" | "failure" | "orphan",
 		_suppressRealNetif: false,
 		// biome-ignore lint/suspicious/noExplicitAny: synthetic frame payload.
 		inject(type: string, payload: any) {
@@ -173,6 +188,11 @@ function installWsHarness(token: string): void {
 				if (p === "network.configure" && w.__cera._dropFakeNetcfg) {
 					w.__cera.lastConfigureName = msg.input && msg.input.name;
 					const mode = w.__cera._dropFakeNetcfg;
+					// Orphan mode: drop the configure RPC and NEVER resolve it, so the
+					// owning promise stays pending forever — emulating a socket that
+					// dropped mid-operation (the component's `finally` never runs, leaving
+					// `pending` stuck until the reconnect-edge reconciliation clears it).
+					if (mode === "orphan") return undefined;
 					const id = msg.id;
 					const input = msg.input ?? {};
 					setTimeout(() => {
@@ -240,6 +260,32 @@ function lastConfigureName(page: Page): Promise<string | undefined> {
 	return page.evaluate(() => (window as any).__cera.lastConfigureName);
 }
 
+function armOrphan(page: Page): Promise<void> {
+	return page.evaluate(() => {
+		const c = (window as any).__cera;
+		c._suppressRealNetif = true;
+		c._dropFakeNetcfg = "orphan";
+	});
+}
+
+/**
+ * Drive the app's connection-state machine deterministically by invoking the
+ * client's own `onclose` / `onopen` handlers on the live socket — WITHOUT
+ * actually closing the transport (readyState stays OPEN, so the transport's
+ * backoff `connect()` is a no-op and no real reconnect timing is involved). A
+ * `close` then `open` (with a frame flush between) reproduces the exact
+ * `disconnected → connected` reconnect edge that `shouldReconcileOnReconnect`
+ * keys on, with zero wall-clock timing dependency.
+ */
+function emitConn(page: Page, phase: "close" | "open"): Promise<void> {
+	return page.evaluate((ph) => {
+		const s = (window as any).__cera.socket;
+		if (!s) return;
+		if (ph === "close") s.onclose?.(new CloseEvent("close"));
+		else s.onopen?.(new Event("open"));
+	}, phase);
+}
+
 /**
  * Yield two animation frames, letting the drop+fake `setTimeout(0)` macrotask
  * and the component's resolve→finally microtasks run. A frame-based wait (not a
@@ -269,6 +315,31 @@ async function findEnabledToggle(page: Page): Promise<Locator> {
 		}
 	}
 	return switches.first();
+}
+
+/** Every in-bond (aria-checked=true), enabled BondToggle plus its interface name. */
+async function findEnabledToggles(
+	page: Page,
+): Promise<{ toggle: Locator; name: string }[]> {
+	const switches = page.getByRole("switch");
+	await expect(switches.first()).toBeVisible({ timeout: 10000 });
+	const count = await switches.count();
+	const found: { toggle: Locator; name: string }[] = [];
+	for (let i = 0; i < count; i++) {
+		const s = switches.nth(i);
+		const testid = await s.getAttribute("data-testid");
+		if (
+			testid?.startsWith("bond-toggle-") &&
+			(await s.getAttribute("aria-checked")) === "true" &&
+			(await s.isEnabled())
+		) {
+			found.push({
+				toggle: page.getByTestId(testid),
+				name: testid.slice("bond-toggle-".length),
+			});
+		}
+	}
+	return found;
 }
 
 /** Record every aria-checked transition (oldValue) on `toggle`. */
@@ -590,6 +661,265 @@ test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 			`aria-checked oldValue log: ${JSON.stringify(await ariaLog(page))}`,
 			"Confirming netif{enabled:false} → lock released, toggle stayed OFF.",
 			"Result: PASS (no flash-back to ON)",
+		]);
+	});
+
+	// ── Scenario G — RPC-before-echo: immediate window + ~5s periodic broadcast ─
+	// Task 19 coverage-proof target. Reverting BondToggle's derivation to
+	// `pending ? target : enabled` makes the post-resolve sample loop observe ON.
+	test("G: RPC resolves before any echo — holds OFF across the post-resolve window; a stale ~5s periodic broadcast is blocked; the matching echo settles OFF", async ({
+		page,
+	}) => {
+		const toggle = await findEnabledToggle(page);
+		await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+		await observeAria(toggle);
+		await armDropFake(page, "success");
+		await toggle.click();
+
+		await expect
+			.poll(() => lastConfigureName(page), { timeout: 5000 })
+			.toBeTruthy();
+		const ifname = (await lastConfigureName(page)) as string;
+
+		const samples: { frame: number; ariaChecked: string | null }[] = [];
+		for (let frame = 0; frame < 8; frame++) {
+			await flush(page);
+			samples.push({
+				frame,
+				ariaChecked: await toggle.getAttribute("aria-checked"),
+			});
+		}
+		expect(
+			samples.some((s) => s.ariaChecked !== "false"),
+			"immediate post-resolve / pre-echo window must hold OFF (no flash-back)",
+		).toBe(false);
+		expect(
+			await ariaLog(page),
+			"exactly one ON→OFF transition in the immediate window",
+		).toEqual(["true"]);
+
+		await inject(page, "netif", { [ifname]: { enabled: true, tp: 333 } });
+		for (let frame = 0; frame < 4; frame++) {
+			await flush(page);
+			await expect(toggle).toHaveAttribute("aria-checked", "false");
+		}
+		expect(
+			await ariaLog(page),
+			"stale ~5s periodic broadcast (enabled:true) must not move the toggle",
+		).toEqual(["true"]);
+
+		await inject(page, "netif", { [ifname]: { enabled: false, tp: 444 } });
+		await expect(toggle).toHaveAttribute("aria-checked", "false");
+		expect(
+			await ariaLog(page),
+			"matching echo release adds no transition (already OFF)",
+		).toEqual(["true"]);
+
+		writeEvidenceJson("task-19-rpc-before-echo-samples.json", {
+			scenario: "RPC-before-echo: immediate window + stale periodic broadcast",
+			interface: ifname,
+			samples,
+			ariaCheckedOldValueLog: await ariaLog(page),
+			result: "PASS — held OFF; stale periodic blocked; matching echo settled OFF",
+		});
+		writeEvidence19("task-19-rpc-before-echo.txt", [
+			"Scenario G — RPC resolves before any echo (immediate + periodic broadcast)",
+			`Interface: ${ifname}`,
+			"drop+fake SUCCESS resolves on a microtask, BEFORE any netif echo.",
+			`Immediate post-resolve samples (all OFF): ${JSON.stringify(samples)}`,
+			"Stale ~5s periodic broadcast netif{enabled:true} → BLOCKED (held OFF).",
+			"Matching netif{enabled:false} → lock released, toggle stayed OFF.",
+			"Result: PASS (no flash-back to ON in either window)",
+		]);
+	});
+
+	// ── Scenario H — WS reconnect mid-toggle (reconcile-inflight) ───────────────
+	test("H: WS reconnect mid-toggle — reconcile-inflight clears the stuck pending and snaps to the authoritative value (no wrong-direction flash)", async ({
+		page,
+	}) => {
+		const enabledToggles = await findEnabledToggles(page);
+		expect(
+			enabledToggles.length,
+			"need at least one in-bond interface",
+		).toBeGreaterThan(0);
+		const { toggle, name } = enabledToggles[0];
+		await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+		await observeAria(toggle);
+		await armOrphan(page);
+		await toggle.click();
+
+		await expect.poll(() => lastConfigureName(page), { timeout: 5000 }).toBe(name);
+		await expect(toggle).toHaveAttribute("aria-checked", "false");
+		await expect(toggle).toHaveAttribute("aria-busy", "true");
+		expect(
+			await ariaLog(page),
+			"only the optimistic ON→OFF flip; the RPC is orphaned (stuck pending)",
+		).toEqual(["true"]);
+
+		await emitConn(page, "close");
+		await flush(page);
+		await emitConn(page, "open");
+		await flush(page);
+
+		await expect(toggle).toHaveAttribute("aria-busy", "false");
+		await expect(toggle).toBeEnabled();
+		await expect(toggle).toHaveAttribute("aria-checked", "true");
+		expect(
+			await ariaLog(page),
+			"ON→OFF optimistic, then OFF→ON reconcile to the authoritative prop",
+		).toEqual(["true", "false"]);
+
+		for (let i = 0; i < 6; i++) {
+			await flush(page);
+			expect(
+				await toggle.getAttribute("aria-checked"),
+				"reconciled state must not oscillate",
+			).toBe("true");
+		}
+		expect(
+			await ariaLog(page),
+			"no further transitions after the reconcile",
+		).toEqual(["true", "false"]);
+
+		await inject(page, "netif", { [name]: { enabled: false, tp: 9 } });
+		await expect(toggle).toHaveAttribute("aria-checked", "false");
+
+		writeEvidence19("task-19-reconnect-inflight.txt", [
+			"Scenario H — WS reconnect mid-toggle (reconcile-inflight)",
+			`Interface: ${name}`,
+			"Orphaned configure RPC → `pending` stuck (aria-busy=true), held OFF.",
+			"Connection driven disconnected → connected (genuine reconnect edge).",
+			"shouldReconcileOnReconnect fired → lock released + pending cleared.",
+			"Toggle snapped to authoritative ON (orphaned disable never applied).",
+			"Post-reconnect echo netif{enabled:false} flowed freely → lock was released.",
+			"Result: PASS (no stuck pending, no wrong-direction flash)",
+		]);
+	});
+
+	// ── Scenario I — RPC failure reverts AND releases the lock ──────────────────
+	test("I: RPC failure reverts to the server value and releases the field-lock (no stuck pending — later echoes flow freely)", async ({
+		page,
+	}) => {
+		const enabledToggles = await findEnabledToggles(page);
+		expect(enabledToggles.length).toBeGreaterThan(0);
+		const { toggle, name } = enabledToggles[0];
+		await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+		await observeAria(toggle);
+		await armDropFake(page, "failure");
+		await toggle.click();
+
+		await expect(page.getByText(FAKE_ERR)).toBeVisible();
+		await expect(toggle).toHaveAttribute("aria-checked", "true");
+		await expect(toggle).toHaveAttribute("aria-busy", "false");
+		await expect(toggle).toBeEnabled();
+		expect(
+			await ariaLog(page),
+			"optimistic ON→OFF then revert OFF→ON; nothing else",
+		).toEqual(["true", "false"]);
+
+		await inject(page, "netif", { [name]: { enabled: false, tp: 5 } });
+		await expect(toggle).toHaveAttribute("aria-checked", "false");
+		await inject(page, "netif", { [name]: { enabled: true, tp: 6 } });
+		await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+		writeEvidence19("task-19-rpc-failure-lock-released.txt", [
+			"Scenario I — RPC failure reverts AND releases the lock",
+			`Interface: ${name}`,
+			"drop+fake FAILURE → toast + immediate revert to authoritative ON.",
+			"Post-failure netif{enabled:false}→OFF then {enabled:true}→ON BOTH applied.",
+			"A stuck intended=false lock would have BLOCKED the later enabled:true.",
+			"Result: PASS (lock released, no stuck pending)",
+		]);
+	});
+
+	// ── Scenario J — two interfaces, independent field locks ────────────────────
+	test("J: two interfaces toggled rapidly — enabled_<ifA>/enabled_<ifB> locks are independent (releasing one never disturbs the other)", async ({
+		page,
+	}) => {
+		const enabledToggles = await findEnabledToggles(page);
+		expect(
+			enabledToggles.length,
+			"need at least two in-bond interfaces",
+		).toBeGreaterThanOrEqual(2);
+		const [a, b] = enabledToggles;
+		expect(a.name).not.toBe(b.name);
+
+		await expect(a.toggle).toHaveAttribute("aria-checked", "true");
+		await expect(b.toggle).toHaveAttribute("aria-checked", "true");
+
+		await armDropFake(page, "success");
+		await a.toggle.click();
+		await b.toggle.click();
+		await expect
+			.poll(() => lastConfigureName(page), { timeout: 5000 })
+			.toBe(b.name);
+		await flush(page);
+		await expect(a.toggle).toHaveAttribute("aria-checked", "false");
+		await expect(b.toggle).toHaveAttribute("aria-checked", "false");
+
+		await inject(page, "netif", { [a.name]: { enabled: false, tp: 1 } });
+		await expect(a.toggle).toHaveAttribute("aria-checked", "false");
+
+		await inject(page, "netif", { [b.name]: { enabled: true, tp: 2 } });
+		await expect(b.toggle).toHaveAttribute("aria-checked", "false");
+
+		await inject(page, "netif", { [a.name]: { enabled: true, tp: 3 } });
+		await expect(a.toggle).toHaveAttribute("aria-checked", "true");
+		await expect(b.toggle).toHaveAttribute("aria-checked", "false");
+
+		await inject(page, "netif", { [b.name]: { enabled: false, tp: 4 } });
+		await expect(b.toggle).toHaveAttribute("aria-checked", "false");
+		await expect(a.toggle).toHaveAttribute("aria-checked", "true");
+
+		writeEvidence19("task-19-two-iface-independent.txt", [
+			"Scenario J — two interfaces, independent per-field locks",
+			`Interface A: ${a.name} · Interface B: ${b.name}`,
+			"Both toggled OFF rapidly (drop+fake SUCCESS) → each holds its own lock.",
+			"Matching echo for A → A's lock released (A OFF, authoritative).",
+			"Stale enabled:true for B → BLOCKED (B's lock intact, no cross-talk).",
+			"Stale enabled:true for A → flows (A's lock gone) → A ON.",
+			"Matching echo for B → B's lock released (B OFF); A unchanged (ON).",
+			"Result: PASS (locks fully independent)",
+		]);
+	});
+
+	// ── Scenario K — TTL self-sweep releases a lock when no echo ever arrives ───
+	test("K: TTL self-sweep releases the lock if no echo ever arrives — a pre-TTL stale echo is blocked, a post-TTL echo flows", async ({
+		page,
+	}) => {
+		const toggle = await findEnabledToggle(page);
+		await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+		const ifname = await dropFakeToggleOff(page, toggle);
+		const start = Date.now();
+
+		await inject(page, "netif", { [ifname]: { enabled: true, tp: 1 } });
+		await expect(toggle).toHaveAttribute("aria-checked", "false");
+
+		await expect
+			.poll(() => Date.now() - start, {
+				timeout: 14000,
+				intervals: [500],
+				message: "wait past FIELD_LOCK_TTL_MS (10s) for the self-sweep",
+			})
+			.toBeGreaterThan(12000);
+
+		await inject(page, "netif", { [ifname]: { enabled: true, tp: 2 } });
+		await expect(toggle).toHaveAttribute("aria-checked", "true");
+		await inject(page, "netif", { [ifname]: { enabled: false, tp: 3 } });
+		await expect(toggle).toHaveAttribute("aria-checked", "false");
+
+		writeEvidence19("task-19-ttl-selfsweep.txt", [
+			"Scenario K — TTL self-sweep (no echo ever arrives)",
+			`Interface: ${ifname}`,
+			"Lock held post-resolve with NO confirming echo (TTL is the only valve).",
+			"Pre-TTL stale netif{enabled:true} → BLOCKED (held OFF).",
+			"Waited > FIELD_LOCK_TTL_MS (10s); lock force-released by expire().",
+			"Post-TTL netif{enabled:true}→ON then {enabled:false}→OFF flowed freely.",
+			"Result: PASS (TTL released the lock)",
 		]);
 	});
 });
