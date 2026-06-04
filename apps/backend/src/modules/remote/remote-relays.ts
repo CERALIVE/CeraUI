@@ -80,7 +80,7 @@ export type ValidateRemoteRelaysMessage = {
 const RELAYS_CACHE_FILE = "relays_cache.json";
 
 // Load relays cache with Zod validation
-const relaysCacheResult = loadJsonConfig(
+const relaysCacheResult = await loadJsonConfig(
 	RELAYS_CACHE_FILE,
 	relaysCacheSchema,
 	RELAYS_CACHE_DEFAULTS,

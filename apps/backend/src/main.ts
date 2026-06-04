@@ -74,7 +74,7 @@ checkExecPath(ceracoderExec);
 checkExecPath(srtlaSendExec);
 checkExecPath(bcrptExec);
 
-loadConfig();
+await loadConfig();
 
 initRemote();
 initPipelines();

@@ -19,11 +19,11 @@
  * Generic JSON config loader with Zod validation
  * Provides warning-based validation with defaults for missing fields
  *
- * Uses Bun's native file APIs where possible for better performance.
- * Sync operations use node:fs which Bun optimizes internally.
+ * Uses Bun's native file APIs (Bun.file().text() / Bun.write()) for all I/O.
+ * Loaders are async; module-level callers await them (top-level await), which
+ * preserves the original boot-time load order without introducing races.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { z } from "zod";
 
 import { logger } from "./logger.ts";
@@ -55,11 +55,11 @@ export type ConfigLoadResult<T> = {
  * @param defaults - Default values to apply for missing fields
  * @returns ConfigLoadResult with validated data and metadata
  */
-export function loadJsonConfig<T extends z.ZodTypeAny>(
+export async function loadJsonConfig<T extends z.ZodTypeAny>(
 	filePath: string,
 	schema: T,
 	defaults: Partial<z.infer<T>> = {},
-): ConfigLoadResult<z.infer<T>> {
+): Promise<ConfigLoadResult<z.infer<T>>> {
 	const result: ConfigLoadResult<z.infer<T>> = {
 		data: { ...defaults } as z.infer<T>,
 		loaded: false,
@@ -71,7 +71,7 @@ export function loadJsonConfig<T extends z.ZodTypeAny>(
 	// Try to read the file
 	let rawData: unknown;
 	try {
-		const fileContents = readFileSync(filePath, "utf8");
+		const fileContents = await Bun.file(filePath).text();
 		rawData = JSON.parse(fileContents);
 		result.loaded = true;
 	} catch (err) {
@@ -177,45 +177,30 @@ export function loadJsonConfig<T extends z.ZodTypeAny>(
 }
 
 /**
- * Synchronously load a JSON config with validation
- * Throws if the file is required and cannot be loaded
+ * Load a JSON config with validation, rejecting when a required file is missing
+ *
+ * Returns only the validated data (without the load metadata). Despite the
+ * historical "Sync" suffix this is async (Bun file I/O); the throw semantics
+ * for required files are preserved as a rejected promise.
  *
  * @param filePath - Path to the JSON file
  * @param schema - Zod schema for validation
  * @param defaults - Default values for missing fields
- * @param required - If true, throws when file doesn't exist or is invalid
+ * @param required - If true, rejects when file doesn't exist or is invalid
  */
-export function loadJsonConfigSync<T extends z.ZodTypeAny>(
+export async function loadJsonConfigSync<T extends z.ZodTypeAny>(
 	filePath: string,
 	schema: T,
 	defaults: Partial<z.infer<T>> = {},
 	required = false,
-): z.infer<T> {
-	const result = loadJsonConfig(filePath, schema, defaults);
+): Promise<z.infer<T>> {
+	const result = await loadJsonConfig(filePath, schema, defaults);
 
 	if (required && !result.loaded) {
 		throw new Error(`Required config file not found or invalid: ${filePath}`);
 	}
 
 	return result.data;
-}
-
-/**
- * Save a config to a JSON file synchronously
- *
- * @param filePath - Path to the JSON file
- * @param data - Data to save
- * @param pretty - Whether to format with indentation (default: false for smaller files)
- */
-export function saveJsonConfig<T>(
-	filePath: string,
-	data: T,
-	pretty = false,
-): void {
-	const contents = pretty
-		? JSON.stringify(data, null, "\t")
-		: JSON.stringify(data);
-	writeFileSync(filePath, contents);
 }
 
 /**
@@ -244,13 +229,13 @@ export async function saveJsonConfigAsync<T>(
  * @param schema - Zod schema for validation
  * @param emptyDefault - Default value to return when file is missing/invalid (defaults to {})
  */
-export function loadCacheFile<T extends z.ZodTypeAny>(
+export async function loadCacheFile<T extends z.ZodTypeAny>(
 	filePath: string,
 	schema: T,
 	emptyDefault: z.infer<T> = {} as z.infer<T>,
-): z.infer<T> {
+): Promise<z.infer<T>> {
 	try {
-		const contents = readFileSync(filePath, "utf8");
+		const contents = await Bun.file(filePath).text();
 		const data = JSON.parse(contents);
 		const result = schema.safeParse(data);
 
@@ -271,7 +256,10 @@ export function loadCacheFile<T extends z.ZodTypeAny>(
 }
 
 /**
- * Check if a file exists
- * Uses Bun-optimized node:fs existsSync
+ * Check if a file exists, using Bun's native file API
+ *
+ * @param filePath - Path to check
+ * @returns Promise resolving to true if the file exists
  */
-export { existsSync as fileExists };
+export const fileExists = (filePath: string): Promise<boolean> =>
+	Bun.file(filePath).exists();

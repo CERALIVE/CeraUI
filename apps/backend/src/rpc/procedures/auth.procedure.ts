@@ -28,7 +28,7 @@ const BCRYPT_ROUNDS = 10;
 
 // Token storage
 const tempTokens: Record<string, true> = {};
-const persistentTokens: AuthTokens = loadCacheFile(
+const persistentTokens: AuthTokens = await loadCacheFile(
 	AUTH_TOKENS_FILE,
 	authTokensSchema,
 );
