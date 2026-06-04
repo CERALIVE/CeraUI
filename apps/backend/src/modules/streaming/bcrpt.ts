@@ -15,8 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { type ChildProcess, spawn } from "node:child_process";
-import fs from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { writeTextFile } from "../../helpers/text-files.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import {
@@ -31,7 +30,7 @@ import { broadcastMsg } from "../ui/websocket-server.ts";
 import { getIsStreaming } from "./streaming.ts";
 import { bcrptExec } from "./streamloop.ts";
 
-let bcrpt: ChildProcess | undefined;
+let bcrpt: Bun.Subprocess<"ignore", "pipe", "pipe"> | undefined;
 let bcrptLowMtuDetected = false;
 
 const bcrptDir = setup.bcrpt_path ?? "/var/run/bcrpt";
@@ -133,9 +132,9 @@ function reloadBcrpt() {
 }
 
 export async function startBcrpt() {
-	if (!fs.existsSync(bcrptDir)) {
-		fs.mkdirSync(bcrptDir);
-	}
+	// Bun.file(dir).exists() is false for directories, so it cannot guard this;
+	// mkdir({ recursive: true }) ensures the working dir idempotently.
+	await mkdir(bcrptDir, { recursive: true });
 
 	// Check if we're using the mock BCRPT (development) or real binary (production)
 	const isMockBcrpt = bcrptExec.includes("mocks/bcrpt");
@@ -185,11 +184,30 @@ export async function startBcrpt() {
 		);
 	}
 
-	bcrpt = spawn(bcrptExec, args);
+	try {
+		bcrpt = Bun.spawn([bcrptExec, ...args], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+	} catch (err) {
+		console.error("bcrpt process error:", err);
+		return;
+	}
 
-	bcrpt.stdout?.on("data", (data) => {
+	const proc = bcrpt;
+	void consumeBcrptStdout(proc);
+	void consumeBcrptStderr(proc);
+	void handleBcrptExit(proc);
+}
+
+async function consumeBcrptStdout(
+	proc: Bun.Subprocess<"ignore", "pipe", "pipe">,
+) {
+	const decoder = new TextDecoder();
+	for await (const chunk of proc.stdout) {
+		const data = decoder.decode(chunk);
 		try {
-			const stats = JSON.parse(data.toString("utf8"));
+			const stats = JSON.parse(data);
 
 			const rtts: Record<string, number> = {};
 			for (const addr in stats.rtt) {
@@ -216,37 +234,44 @@ export async function startBcrpt() {
 			broadcastMsg("relays", buildRelaysMsg());
 		} catch (err) {
 			console.log(err);
-			console.log(data.toString("utf8"));
+			console.log(data);
 		}
-	});
+	}
+}
 
-	bcrpt.stderr?.on("data", (data) => {
-		console.log(`bcrpt: ${data}`);
-	});
+async function consumeBcrptStderr(
+	proc: Bun.Subprocess<"ignore", "pipe", "pipe">,
+) {
+	const decoder = new TextDecoder();
+	for await (const chunk of proc.stderr) {
+		console.log(`bcrpt: ${decoder.decode(chunk)}`);
+	}
+}
 
-	bcrpt.on("error", (err) => {
-		console.error("bcrpt process error:", err);
-	});
+async function handleBcrptExit(
+	proc: Bun.Subprocess<"ignore", "pipe", "pipe">,
+) {
+	await proc.exited;
 
-	bcrpt.on("close", (code, signal) => {
-		let reason: string;
-		if (code != null) {
-			reason = `with code ${code}`;
-		} else {
-			reason = `because of signal ${signal}`;
-		}
-		if (bcrptRetryCount >= MAX_BCRPT_RETRIES) {
-			console.error(
-				`BCRPT process failed ${MAX_BCRPT_RETRIES} times. Stopping restart attempts.`,
-			);
-			return;
-		}
-
-		bcrptRetryCount++;
-		const delay = INITIAL_RETRY_DELAY * 2 ** (bcrptRetryCount - 1);
-		console.log(
-			`bcrpt exited unexpectedly ${reason}. Restarting in ${delay}ms (attempt ${bcrptRetryCount}/${MAX_BCRPT_RETRIES})...`,
+	const code = proc.exitCode;
+	const signal = proc.signalCode;
+	let reason: string;
+	if (code != null) {
+		reason = `with code ${code}`;
+	} else {
+		reason = `because of signal ${signal}`;
+	}
+	if (bcrptRetryCount >= MAX_BCRPT_RETRIES) {
+		console.error(
+			`BCRPT process failed ${MAX_BCRPT_RETRIES} times. Stopping restart attempts.`,
 		);
-		setTimeout(startBcrpt, delay);
-	});
+		return;
+	}
+
+	bcrptRetryCount++;
+	const delay = INITIAL_RETRY_DELAY * 2 ** (bcrptRetryCount - 1);
+	console.log(
+		`bcrpt exited unexpectedly ${reason}. Restarting in ${delay}ms (attempt ${bcrptRetryCount}/${MAX_BCRPT_RETRIES})...`,
+	);
+	setTimeout(startBcrpt, delay);
 }
