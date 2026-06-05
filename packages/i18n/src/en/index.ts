@@ -243,6 +243,11 @@ const en = {
 		current: "Current",
 		sensors: "Sensors",
 		streaming: "Streaming",
+		streamHealth: "Stream health",
+		healthHealthy: "Healthy",
+		healthDegraded: "Degraded",
+		healthDead: "Dead",
+		healthUnknown: "Unknown",
 	},
 	live: {
 		title: "Live",
@@ -300,6 +305,10 @@ const en = {
 		// Connection
 		connectionRecovered: "Connection restored",
 		connectionLost: "Connection lost",
+		// Stream health
+		streamHealthDegraded: "Stream health degraded",
+		streamHealthDead: "Stream is down",
+		streamHealthRecovered: "Stream health recovered",
 		// Relay empty-states
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",

@@ -14,8 +14,16 @@ import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import * as Sheet from '$lib/components/ui/sheet';
 import { type StalenessState, getStalenessState } from '$lib/helpers/staleness';
 import { getHudState, getSocTelemetry } from '$lib/stores/hud.svelte';
+import { getStreamHealthState, type HealthIndicator } from '$lib/stores/stream-health.svelte';
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
+
+const HEALTH_DOT: Record<HealthIndicator, string> = {
+	healthy: 'bg-status-success',
+	degraded: 'bg-status-warning',
+	dead: 'bg-status-error',
+	unknown: 'bg-status-neutral',
+};
 
 let { class: className }: { class?: string } = $props();
 
@@ -28,6 +36,19 @@ const loc = $derived($locale);
 // Connection / streaming state machine for the lead badge.
 const isOffline = $derived(hud.isFullyStale);
 const isLive = $derived(hud.isStreaming && !isOffline);
+
+// Stream-health rollup (Task 13/14): tri-state liveness surfaced as a dot.
+const health = $derived(getStreamHealthState());
+const healthDot = $derived(HEALTH_DOT[health]);
+const healthLabel = $derived(
+	health === 'healthy'
+		? $LL.hud.healthHealthy()
+		: health === 'degraded'
+			? $LL.hud.healthDegraded()
+			: health === 'dead'
+				? $LL.hud.healthDead()
+				: $LL.hud.healthUnknown(),
+);
 
 // SoC telemetry — temp / voltage / current, already parsed by the store
 // (parseSensorNumber / parseVolts / parseCurrentAmps). Each value routes
@@ -103,6 +124,17 @@ function lastSeen(ts: number | null): string | null {
 						{$LL.hud.idle()}
 					</span>
 				{/if}
+
+				<!-- Stream-health indicator -->
+				<span
+					data-testid="stream-health"
+					data-state={health}
+					class="inline-flex shrink-0 items-center"
+					title="{$LL.hud.streamHealth()}: {healthLabel}"
+				>
+					<span class={cn('size-2 rounded-full', healthDot)} aria-hidden="true"></span>
+					<span class="sr-only">{$LL.hud.streamHealth()}: {healthLabel}</span>
+				</span>
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
 
@@ -189,6 +221,13 @@ function lastSeen(ts: number | null): string | null {
 					<span class="font-medium">
 						{isOffline ? $LL.hud.offline() : isLive ? $LL.hud.live() : $LL.hud.idle()}
 					</span>
+				</div>
+				<div class="flex items-center justify-between gap-3 border-b py-2" data-testid="stream-health-detail" data-state={health}>
+					<span class="text-muted-foreground flex items-center gap-2">
+						<span class={cn('size-2 rounded-full', healthDot)} aria-hidden="true"></span>
+						{$LL.hud.streamHealth()}
+					</span>
+					<span class="font-medium">{healthLabel}</span>
 				</div>
 				<div class={cn('flex items-center justify-between gap-3 border-b py-2', hud.isBitrateStale && 'opacity-50')}>
 					<span class="text-muted-foreground flex items-center gap-2">

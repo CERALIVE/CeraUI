@@ -27,6 +27,7 @@ import {
 	wasAuthenticated,
 } from "$lib/stores/connection-ux.svelte";
 import { push as pushNotification } from "$lib/stores/notifications.svelte";
+import { ingestStreamHealth } from "$lib/stores/stream-health.svelte";
 
 import type { ConnectionState } from "./client";
 import { rpc, rpcClient } from "./client";
@@ -348,6 +349,12 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			pushNotification(notification);
 		}
 		break;
+
+		case "health":
+			// Tri-state stream-liveness rollup (Task 13). Read-only: feeds the HUD
+			// indicator + raises a transition toast; never drives restart logic.
+			ingestStreamHealth(data);
+			break;
 
 		case "bitrate":
 			// Bitrate updates during streaming
