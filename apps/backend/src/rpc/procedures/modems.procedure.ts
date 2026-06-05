@@ -8,12 +8,18 @@ import {
 	modemListSchema,
 	modemScanInputSchema,
 	modemScanOutputSchema,
+	simUnlockInputSchema,
+	simUnlockOutputSchema,
 	successResponseSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 
 import { setMockModemConfig } from "../../mocks/mock-service.ts";
 import { shouldMockModems } from "../../mocks/providers/modems.ts";
+import {
+	type SimUnlockResult,
+	unlockSimPin,
+} from "../../modules/modems/mmcli.ts";
 import {
 	broadcastModems,
 	buildModemsMessage,
@@ -101,4 +107,27 @@ export const scanModemProcedure = authedProcedure
 			});
 		});
 		return { success: true };
+	});
+
+/**
+ * Submit a SIM PIN to unlock a PIN-locked modem.
+ *
+ * Runs under `withModemUpdateLock` so the unlock is serialized against the
+ * modem update loop — the PIN is submitted before any (re)registration poll can
+ * race it. In mock/dev mode there is no PIN-locked hardware, so we report
+ * `no-locked-modem` without touching mmcli.
+ */
+export const unlockSimProcedure = authedProcedure
+	.input(simUnlockInputSchema)
+	.output(simUnlockOutputSchema)
+	.handler(async ({ input }) => {
+		if (shouldMockModems()) {
+			return { state: "no-locked-modem" as const };
+		}
+
+		let result: SimUnlockResult = { state: "error" };
+		await withModemUpdateLock(async () => {
+			result = await unlockSimPin(input.modemPath, input.pin);
+		});
+		return result;
 	});

@@ -103,3 +103,28 @@ export const modemScanOutputSchema = z.object({
 	error: z.string().optional(),
 });
 export type ModemScanOutput = z.infer<typeof modemScanOutputSchema>;
+
+// SIM PIN unlock terminal states
+export const simUnlockStateSchema = z.enum([
+	'success',
+	'wrong-pin',
+	'puk-required',
+	'no-locked-modem',
+	'error',
+]);
+export type SimUnlockState = z.infer<typeof simUnlockStateSchema>;
+
+// SIM PIN unlock input schema
+export const simUnlockInputSchema = z.object({
+	modemPath: z.string().min(1),
+	// SIM PIN grammar (4–8 digits): rejects any argv-injection payload at the boundary
+	pin: z.string().regex(/^\d{4,8}$/, { message: 'PIN must be 4–8 digits' }),
+});
+export type SimUnlockInput = z.infer<typeof simUnlockInputSchema>;
+
+// SIM PIN unlock output schema (remainingAttempts present only on wrong-pin)
+export const simUnlockOutputSchema = z.object({
+	state: simUnlockStateSchema,
+	remainingAttempts: z.number().int().nonnegative().optional(),
+});
+export type SimUnlockOutput = z.infer<typeof simUnlockOutputSchema>;

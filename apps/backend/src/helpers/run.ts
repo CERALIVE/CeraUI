@@ -101,7 +101,7 @@ export function argMatch(re: RegExp, v: string): string {
 }
 
 /** Argv tokens whose *following* token is a secret and must not be logged. */
-const SECRET_FLAG_RE = /pass(word)?|secret|psk|token|key/i;
+const SECRET_FLAG_RE = /pass(word)?|secret|psk|token|key|pin/i;
 
 /**
  * Produce a log-safe rendering of argv: any token that immediately follows a
