@@ -48,6 +48,17 @@ export interface MockEncoderConfigState {
 	framerate?: Framerate;
 }
 
+/** Controllable liveness sources for the stream health rollup (Task 13). */
+export interface MockHealthState {
+	processAlive: boolean;
+	framesAdvancing: boolean;
+	frameCount: number;
+	reconnecting: boolean;
+	reconnectCount: number;
+	linkCount: number;
+	activeLinks: number;
+}
+
 // Dynamic mock state that changes over time
 interface MockState {
 	initialized: boolean;
@@ -74,6 +85,7 @@ interface MockState {
 	modemConfigs: Map<string, MockModemConfigState>;
 	netifConfigs: Map<string, MockNetifConfigState>;
 	mockEncoderConfig: MockEncoderConfigState;
+	mockHealth: MockHealthState;
 }
 
 const mockState: MockState = {
@@ -100,6 +112,15 @@ const mockState: MockState = {
 	modemConfigs: new Map(),
 	netifConfigs: new Map(),
 	mockEncoderConfig: {},
+	mockHealth: {
+		processAlive: false,
+		framesAdvancing: false,
+		frameCount: 0,
+		reconnecting: false,
+		reconnectCount: 0,
+		linkCount: 0,
+		activeLinks: 0,
+	},
 };
 
 let updateInterval: ReturnType<typeof setInterval> | null = null;
@@ -213,6 +234,17 @@ export function initMockService(scenarioName?: string): void {
 		bitrate_overlay: false,
 		resolution: "1080p",
 		framerate: 30,
+	};
+
+	const streamingActive = config.streaming;
+	mockState.mockHealth = {
+		processAlive: streamingActive,
+		framesAdvancing: streamingActive,
+		frameCount: 0,
+		reconnecting: false,
+		reconnectCount: 0,
+		linkCount: config.modems,
+		activeLinks: streamingActive ? config.modems : 0,
 	};
 
 	startPeriodicUpdates();
@@ -332,12 +364,24 @@ export function getStreamingStats() {
  */
 export function setStreamingState(isActive: boolean): void {
 	mockState.streaming.isActive = isActive;
+	const config = getScenarioConfig();
 	if (isActive) {
-		const config = getScenarioConfig();
 		mockState.streaming.connectedRelays = config.modems;
 	} else {
 		mockState.streaming.connectedRelays = 0;
 	}
+	mockState.mockHealth.processAlive = isActive;
+	mockState.mockHealth.framesAdvancing = isActive;
+	mockState.mockHealth.linkCount = config.modems;
+	mockState.mockHealth.activeLinks = isActive ? config.modems : 0;
+}
+
+export function getMockHealth(): Readonly<MockHealthState> {
+	return mockState.mockHealth;
+}
+
+export function setMockHealth(update: Partial<MockHealthState>): void {
+	mockState.mockHealth = { ...mockState.mockHealth, ...update };
 }
 
 /**

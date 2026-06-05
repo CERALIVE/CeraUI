@@ -36,6 +36,7 @@ import { setup } from "./modules/setup.ts";
 import { updateAudioDevices } from "./modules/streaming/audio.ts";
 import { startBcrpt } from "./modules/streaming/bcrpt.ts";
 import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
+import { broadcastHealthIfChanged } from "./modules/streaming/health.ts";
 import { initPipelines } from "./modules/streaming/pipelines.ts";
 import {
 	bcrptExec,
@@ -49,7 +50,7 @@ import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updat
 import { getSshStatus } from "./modules/system/ssh.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
-import { startHeartbeat } from "./rpc/heartbeat.ts";
+import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
 import { initServer } from "./rpc/index.ts";
 
 /* Disable localization for any CLI commands we run */
@@ -137,5 +138,8 @@ initServer();
 
 // Server→client heartbeat: periodic app-level ping for half-open detection
 startHeartbeat();
+
+// Stream health rollup: broadcast on the same 5s tick, only on state change
+onHeartbeatTick(broadcastHealthIfChanged);
 
 checkAutoStartStream();

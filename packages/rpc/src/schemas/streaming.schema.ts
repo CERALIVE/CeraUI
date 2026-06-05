@@ -234,6 +234,35 @@ export const streamingStartOutputSchemaExtended = z.object({
 });
 export type StreamingStartOutputExtended = z.infer<typeof streamingStartOutputSchemaExtended>;
 
+// ─── Stream health (Task 13) ────────────────────────────────────────────────
+//
+// Tri-state liveness rollup for the active stream, derived from process
+// liveness, ceracoder frame production, SRT reconnect status, and srtla bond
+// link count. This is the device's single source of truth for "is the stream
+// actually working". READ-ONLY — never drives restart logic.
+export const healthStateSchema = z.enum(["healthy", "degraded", "dead"]);
+export type HealthState = z.infer<typeof healthStateSchema>;
+
+export const streamHealthOutputSchema = z.object({
+	state: healthStateSchema,
+	process: z.object({
+		alive: z.boolean(),
+	}),
+	frames: z.object({
+		advancing: z.boolean(),
+		count: z.number().int().nonnegative(),
+	}),
+	srt: z.object({
+		reconnecting: z.boolean(),
+		reconnectCount: z.number().int().nonnegative(),
+	}),
+	bond: z.object({
+		linkCount: z.number().int().nonnegative(),
+		activeLinks: z.number().int().nonnegative(),
+	}),
+});
+export type StreamHealthOutput = z.infer<typeof streamHealthOutputSchema>;
+
 // Dev-only mock hardware switcher schemas (includes generic for software fallback)
 export const mockHardwareTypeSchema = z.enum(['jetson', 'n100', 'rk3588', 'generic']);
 export type MockHardwareType = z.infer<typeof mockHardwareTypeSchema>;

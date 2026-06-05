@@ -34,6 +34,19 @@ export const HEARTBEAT_STALE_THRESHOLD_MS = 15000;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
+ * Extra work to run on each heartbeat tick (e.g. stream-health broadcast), kept
+ * decoupled so heartbeat.ts owns no domain imports. Listeners run after the ping.
+ */
+const tickListeners = new Set<() => void>();
+
+export function onHeartbeatTick(listener: () => void): () => void {
+	tickListeners.add(listener);
+	return () => {
+		tickListeners.delete(listener);
+	};
+}
+
+/**
  * Broadcast a single ping to all authenticated clients.
  * Exported for testing the emitted shape without driving the timer.
  */
@@ -54,6 +67,13 @@ export function startHeartbeat(
 	}
 	heartbeatTimer = setInterval(() => {
 		emitHeartbeat();
+		for (const listener of tickListeners) {
+			try {
+				listener();
+			} catch (error) {
+				console.error("Heartbeat tick listener error:", error);
+			}
+		}
 	}, intervalMs);
 }
 
