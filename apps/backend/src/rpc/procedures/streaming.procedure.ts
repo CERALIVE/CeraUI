@@ -13,6 +13,7 @@ import {
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
 	streamingConfigInputSchema,
+	streamHealthOutputSchema,
 	streamingSetConfigOutputSchema,
 	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
@@ -40,6 +41,7 @@ import {
 	setMockHardware,
 	VALID_HARDWARE_TYPES,
 } from "../../modules/streaming/pipelines.ts";
+import { getStreamHealth } from "../../modules/streaming/health.ts";
 import { getIsStreaming, updateStatus } from "../../modules/streaming/streaming.ts";
 import {
 	start as startStream,
@@ -313,6 +315,15 @@ export const setMockHardwareProcedure = authedProcedure
 			success: false,
 			error: `Invalid hardware type: ${input.hardware}`,
 		};
+	});
+
+/**
+ * Stream health procedure — read-only tri-state liveness rollup
+ */
+export const streamHealthProcedure = authedProcedure
+	.output(streamHealthOutputSchema)
+	.handler(() => {
+		return getStreamHealth();
 	});
 
 /**

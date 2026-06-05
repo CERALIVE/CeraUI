@@ -13,6 +13,7 @@ import {
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
 	streamingConfigInputSchema,
+	streamHealthOutputSchema,
 	streamingStartOutputSchema,
 	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
@@ -59,6 +60,11 @@ export const streamingContract = oc.router({
 	 * Subscribe to streaming status changes
 	 */
 	onStatusChange: oc.route({ method: 'GET', path: '/streaming/status' }),
+
+	/**
+	 * Tri-state stream health (process + frame + SRT + bond liveness)
+	 */
+	streamHealth: oc.output(streamHealthOutputSchema),
 
 	/**
 	 * Set mock hardware override (dev-only)

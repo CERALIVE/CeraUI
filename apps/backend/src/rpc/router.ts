@@ -36,6 +36,7 @@ import {
 	setBitrateProcedure,
 	setConfigProcedure,
 	setMockHardwareProcedure,
+	streamHealthProcedure,
 	streamingStartProcedure,
 	streamingStopProcedure,
 } from "./procedures/streaming.procedure.ts";
@@ -82,6 +83,7 @@ const stableRoutes = {
 		getAudioCodecs: getAudioCodecsProcedure,
 		getConfig: getConfigProcedure,
 		setConfig: setConfigProcedure,
+		streamHealth: streamHealthProcedure,
 		// Dev-only mock hardware switcher
 		setMockHardware: setMockHardwareProcedure,
 		getMockHardware: getMockHardwareProcedure,
