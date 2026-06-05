@@ -11,6 +11,7 @@ export * from './heartbeat.schema';
 export * from './modems.schema';
 export * from './network.schema';
 export * from './notifications.schema';
+export * from './pairing.schema';
 export * from './relay.schema';
 export * from './status.schema';
 export * from './streaming.schema';

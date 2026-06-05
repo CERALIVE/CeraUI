@@ -122,6 +122,10 @@ export const runtimeConfigSchema = z.object({
 	remote_key: z.string().optional(),
 	remote_provider: providerSelectionSchema.optional(),
 	custom_provider: customProviderSchema.optional(),
+	// Device-pairing claim-code seed. Persistent crypto-random secret that seeds
+	// the HMAC claim-code derivation so codes stay stable across backend
+	// restarts within a window. Created on first use; never leaves the device.
+	pairing_secret: z.string().optional(),
 	// How the active relay selection was sourced. "subscription" is set when a
 	// provider's authenticated catalog push auto-preloads server/account.
 	detectionMethod: detectionMethodSchema.optional(),

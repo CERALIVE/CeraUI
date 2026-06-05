@@ -7,6 +7,7 @@ import { authContract } from './auth.contract';
 import { modemsContract } from './modems.contract';
 import { networkContract } from './network.contract';
 import { notificationsContract } from './notifications.contract';
+import { pairingContract } from './pairing.contract';
 import { relayContract } from './relay.contract';
 import { statusContract } from './status.contract';
 import { streamingContract } from './streaming.contract';
@@ -27,6 +28,7 @@ export const appContract = oc.router({
 	status: statusContract,
 	relay: relayContract,
 	notifications: notificationsContract,
+	pairing: pairingContract,
 });
 
 /**
@@ -39,6 +41,7 @@ export { authContract } from './auth.contract';
 export { modemsContract } from './modems.contract';
 export { networkContract } from './network.contract';
 export { notificationsContract } from './notifications.contract';
+export { pairingContract } from './pairing.contract';
 export { relayContract } from './relay.contract';
 export { statusContract } from './status.contract';
 export { streamingContract } from './streaming.contract';

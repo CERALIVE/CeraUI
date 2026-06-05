@@ -34,3 +34,31 @@ export function randomBase64(byteLength: number): string {
 	crypto.getRandomValues(buf);
 	return Buffer.from(buf).toString("base64");
 }
+
+/**
+ * Compute an HMAC-SHA256 over `message` keyed by `key`, returning the raw
+ * 32-byte digest.
+ *
+ * Uses Bun's native `CryptoHasher` in HMAC mode — no node:crypto import needed.
+ * A hasher cannot be reused after `digest()`, so a fresh one is created per call.
+ *
+ * @param key     Secret key (raw bytes or string).
+ * @param message Message to authenticate (UTF-8 string).
+ */
+export function hmacSha256(key: Uint8Array | string, message: string): Uint8Array {
+	const hasher = new Bun.CryptoHasher("sha256", key);
+	hasher.update(message);
+	return new Uint8Array(hasher.digest());
+}
+
+/**
+ * Compute a hex-encoded SHA-256 digest of `data`.
+ *
+ * Bun-native (`CryptoHasher`) — used to fingerprint provisioned identity
+ * material (e.g. a cert-work client cert) without pulling in node:crypto.
+ */
+export function sha256Hex(data: Uint8Array | string): string {
+	const hasher = new Bun.CryptoHasher("sha256");
+	hasher.update(data);
+	return hasher.digest("hex");
+}
