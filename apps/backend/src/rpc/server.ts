@@ -7,6 +7,7 @@ import path from "node:path";
 
 import { logger } from "../helpers/logger.ts";
 import { getIsStreaming } from "../modules/streaming/streaming.ts";
+import { getLocalObservability } from "../modules/system/observability.ts";
 import { getSystemdSocket } from "../modules/system/systemd.ts";
 import { createWebSocketHandler, initSocketData } from "./adapter.ts";
 import type { SocketData } from "./types.ts";
@@ -115,6 +116,13 @@ async function handleRequest(req: Request): Promise<Response> {
 	// to the oRPC-only rule: a no-auth, side-effect-free status READ (not control).
 	if (req.method === "GET" && url.pathname === "/status") {
 		return Response.json({ is_streaming: getIsStreaming() });
+	}
+
+	// Local observability surface (Task 26): liveness + frame + SRT + bond rollup
+	// reusing the Task 13 health source. LOCAL-ONLY, read-only, no auth — same
+	// intentional oRPC-exception class as `/status`. No remote egress.
+	if (req.method === "GET" && url.pathname === "/api/health") {
+		return Response.json(getLocalObservability());
 	}
 
 	// In development, proxy to Vite dev server
