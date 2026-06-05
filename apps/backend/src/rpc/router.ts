@@ -14,11 +14,13 @@ import {
 	configureModemProcedure,
 	getAllModemsProcedure,
 	scanModemProcedure,
+	unlockSimProcedure,
 } from "./procedures/modems.procedure.ts";
 import {
 	configureNetworkInterfaceProcedure,
 	getNetworkInterfacesProcedure,
 } from "./procedures/network.procedure.ts";
+import { generateClaimCodeProcedure } from "./procedures/pairing.procedure.ts";
 import {
 	dismissNotificationProcedure,
 	getPersistentNotificationsProcedure,
@@ -93,6 +95,7 @@ const stableRoutes = {
 		getAll: getAllModemsProcedure,
 		configure: configureModemProcedure,
 		scan: scanModemProcedure,
+		unlockSim: unlockSimProcedure,
 	}),
 
 	wifi: os.router({
@@ -140,6 +143,10 @@ const stableRoutes = {
 	notifications: os.router({
 		getPersistent: getPersistentNotificationsProcedure,
 		dismiss: dismissNotificationProcedure,
+	}),
+
+	pairing: os.router({
+		generateClaimCode: generateClaimCodeProcedure,
 	}),
 };
 
