@@ -16,8 +16,18 @@
 */
 
 import { getGsmOperatorName } from "./gsm-operators-cache.ts";
-import type { ModemId, NetworkScanResult, NetworkType } from "./mmcli.ts";
+import type {
+	ModemId,
+	NetworkScanResult,
+	NetworkType,
+	SimLockRequired,
+} from "./mmcli.ts";
 import type { ModemStatus } from "./modem-registration.ts";
+
+export type SimLock = {
+	required: SimLockRequired;
+	remainingAttempts?: number;
+};
 
 export type ModemConfig = {
 	conn?: string; // e.g. nmUuid
@@ -48,6 +58,7 @@ export type Modem = {
 	inhibit?: true; // don't bring up automatically
 	config?: ModemConfig;
 	status?: ModemStatus;
+	sim_lock?: SimLock;
 	available_networks?: Record<string, AvailableNetwork>;
 	removed?: true;
 };

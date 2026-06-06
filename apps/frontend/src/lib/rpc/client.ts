@@ -7,6 +7,9 @@
 import type {
 	BitrateInput,
 	BitrateOutput,
+	ClaimCodeOutput,
+	CompletePairingInput,
+	CompletePairingOutput,
 	HotspotConfigInput,
 	HotspotToggleInput,
 	LoginInput,
@@ -21,6 +24,8 @@ import type {
 	RelayValidateOutput,
 	RemoteConfigInput,
 	SetPasswordInput,
+	SimUnlockInput,
+	SimUnlockOutput,
 	StreamingConfigInput,
 	StreamingStartOutput,
 	StreamingStopOutput,
@@ -451,6 +456,7 @@ export interface TypedRPC {
 		getAll: () => Promise<unknown>;
 		configure: (input: ModemConfigInput) => Promise<SuccessResponse>;
 		scan: (input: ModemScanInput) => Promise<ModemScanOutput>;
+		unlockSim: (input: SimUnlockInput) => Promise<SimUnlockOutput>;
 	};
 	wifi: {
 		getStatus: () => Promise<unknown>;
@@ -492,6 +498,12 @@ export interface TypedRPC {
 	notifications: {
 		getPersistent: () => Promise<unknown>;
 		dismiss: (input: { name: string }) => Promise<SuccessResponse>;
+	};
+	pairing: {
+		generateClaimCode: () => Promise<ClaimCodeOutput>;
+		completePairing: (
+			input: CompletePairingInput,
+		) => Promise<CompletePairingOutput>;
 	};
 	// Dev-only: registered on the backend ONLY when NODE_ENV !== "production".
 	// Absent in production builds — guard usage with the optional chain.

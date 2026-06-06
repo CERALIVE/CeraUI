@@ -11,6 +11,7 @@ import type { LinkSignal } from '$lib/types/hud';
 import HotspotDialog from './dialogs/HotspotDialog.svelte';
 import ModemConfigDialog from './dialogs/ModemConfigDialog.svelte';
 import NetifDialog from './dialogs/NetifDialog.svelte';
+import SimUnlockDialog from './dialogs/SimUnlockDialog.svelte';
 import WifiSelectorDialog from './dialogs/WifiSelectorDialog.svelte';
 
 import BondedLinksSection from './network/BondedLinksSection.svelte';
@@ -94,6 +95,32 @@ function openModemConfig(id: string) {
 	configModemId = id;
 	modemDialogOpen = true;
 }
+
+// SIM PIN unlock — auto-prompt for the first modem reporting a SIM lock.
+// `promptedModemId` gates the auto-open so dismissing the dialog (while still
+// locked) does not immediately re-open it; it resets once the lock clears.
+const lockedModemEntry = $derived(
+	modemEntries.find(
+		([, m]) =>
+			m.sim_lock?.required === 'sim-pin' ||
+			m.sim_lock?.required === 'sim-puk' ||
+			m.sim_lock?.required === 'sim-puk2',
+	),
+);
+const lockedModemId = $derived(lockedModemEntry?.[0]);
+const lockedModem = $derived(lockedModemEntry?.[1]);
+
+let simUnlockOpen = $state(false);
+let promptedModemId = $state<string | null>(null);
+
+$effect(() => {
+	if (lockedModemId && promptedModemId !== lockedModemId) {
+		promptedModemId = lockedModemId;
+		simUnlockOpen = true;
+	} else if (!lockedModemId) {
+		promptedModemId = null;
+	}
+});
 </script>
 
 <div class="mx-auto w-full max-w-5xl space-y-5 p-4 sm:p-6">
@@ -140,4 +167,9 @@ function openModemConfig(id: string) {
 
 {#if configModem && configModemId}
 	<ModemConfigDialog bind:open={modemDialogOpen} deviceId={configModemId} modem={configModem} />
+{/if}
+
+<!-- SIM PIN unlock — auto-prompted when a PIN/PUK-locked modem is detected -->
+{#if lockedModem && lockedModemId}
+	<SimUnlockDialog bind:open={simUnlockOpen} deviceId={lockedModemId} modem={lockedModem} />
 {/if}
