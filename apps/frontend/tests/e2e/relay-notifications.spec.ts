@@ -41,8 +41,8 @@ const EVIDENCE_DIR = path.resolve(import.meta.dirname, '../../../../.omo/evidenc
  * absent on demand (scenario 5) — the app sets `socket.onmessage` by assignment
  * (client.ts), so the wrapper intercepts that assignment.
  *
- * Conventions (PLAYBOOK.md): no `page.screenshot()`/`toHaveScreenshot()` in this
- * functional spec, no `waitForTimeout()` — every async wait is a web-first
+ * Conventions (PLAYBOOK.md): no screenshot or visual-snapshot APIs in this
+ * functional spec, and no fixed-delay waits — every async wait is a web-first
  * assertion or `expect.poll` against a real changing signal. Evidence is written
  * as ARIA/text proof (the PLAYBOOK-sanctioned form) to `.omo/evidence/
  * task-21-e2e/`; video is captured at the runner level (allowed — it does not go

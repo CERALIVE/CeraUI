@@ -18,7 +18,7 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers";
  *
  * Auth uses the real first-run flow via `ensureAuthenticated` (the harness does
  * NOT rewrite auth.login), so the spec is self-sufficient regardless of the
- * device's set-up state. No `waitForTimeout`: every step asserts on a stable
+ * device's set-up state. No fixed-delay waits: every step asserts on a stable
  * DOM signal.
  *
  * Prereq (playwright.config webServer): frontend :6173 + backend :3002 with

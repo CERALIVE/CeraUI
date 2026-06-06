@@ -14,8 +14,8 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.j
  * Tri-state `health` broadcasts are injected at known times via the dev-only
  * `dev.emit` (Task 5), exactly as a Task-13 heartbeat broadcast would arrive.
  *
- * Conventions (PLAYBOOK.md): functional spec — no `page.screenshot()` /
- * `toHaveScreenshot()`, no `waitForTimeout()`. Every wait is a web-first
+ * Conventions (PLAYBOOK.md): functional spec — no screenshot or visual-snapshot
+ * APIs, and no fixed-delay waits. Every wait is a web-first
  * assertion or `expect.poll` against the live `data-state` attribute. Health
  * broadcasts reach every authed client, so this file runs `serial`.
  */
