@@ -88,7 +88,7 @@ jobs:
 
       - name: Functional E2E (screenshot-free, no @visual)
         working-directory: CeraUI
-        run: CI=true E2E_PASSWORD=12345678 pnpm --filter frontend run test:e2e -- --grep-invert @visual
+        run: CI=true E2E_PASSWORD=12345678 pnpm --filter frontend exec playwright test --grep-invert @visual
         env:
           MOCK_SCENARIO: multi-modem-wifi
 
