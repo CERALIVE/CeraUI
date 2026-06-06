@@ -1,13 +1,14 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { Modem, NetifMessage } from '@ceraui/rpc/schemas';
-import { CardSim, ChevronRight, LoaderCircle, Radar, Radio, Signal, WifiOff } from '@lucide/svelte';
+import { ChevronRight, Radio } from '@lucide/svelte';
 
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
+import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
-import { modemSignal, signalTextClass } from '$lib/helpers/signal';
+import { modemSignal } from '$lib/helpers/signal';
 import { getStalenessState } from '$lib/helpers/staleness';
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
@@ -24,15 +25,6 @@ interface Props {
 }
 
 const { modemEntries, netif, links, isFullyStale, onConfigure }: Props = $props();
-
-/**
- * Hardware identity line: manufacturer + model, rendered RAW (never matched or
- * transformed). Empty when neither field is present, so the row degrades to the
- * interface/name only without a placeholder artifact.
- */
-function modelLabel(modem: Modem): string {
-	return [modem.manufacturer, modem.model].filter(Boolean).join(' ');
-}
 </script>
 
 <!-- ───────────── Cellular ───────────── -->
@@ -52,8 +44,14 @@ function modelLabel(modem: Modem): string {
 				{@const noSim = modem.no_sim === true}
 				{@const connected = modem.status?.connection === 'connected'}
 				{@const scanning = modem.status?.connection === 'scanning'}
+				{@const connectionState = noSim
+					? 'no_sim'
+					: scanning
+						? 'scanning'
+						: connected
+							? 'connected'
+							: 'disconnected'}
 				{@const operator = modem.status?.network || modem.sim_network || modem.name}
-				{@const model = modelLabel(modem)}
 				{@const entry = netif?.[modem.ifname]}
 				{@const link = links.find((l) => l.id === (modem.ifname || id))}
 				{@const kbps = link
@@ -64,8 +62,9 @@ function modelLabel(modem: Modem): string {
 				{@const rawStale = link?.isStale ?? isFullyStale}
 				{@const tpStale = getStalenessState(kbps, null, rawStale) === 'stale'}
 				{@const sigStale = getStalenessState(sig, null, rawStale) === 'stale'}
-				<div class="px-4 py-3">
-					<!-- Identity row: status dot · name/model · signal · configure -->
+				{@const sigColor = link ? `var(--link-${link.linkIndex + 1})` : 'var(--muted-foreground)'}
+				<div class="px-4 py-4">
+					<!-- Identity row: status dot · name/status · signal · speed -->
 					<div class="flex items-center gap-3">
 						<span
 							class={cn('size-2 shrink-0 rounded-full', connected ? 'bg-primary' : 'bg-muted-foreground/40')}
@@ -73,34 +72,58 @@ function modelLabel(modem: Modem): string {
 						></span>
 						<div class="min-w-0 flex-1">
 							<p class="truncate text-sm font-medium">{modem.name}</p>
-							{#if model}
-								<p class="text-muted-foreground truncate text-xs">{model}</p>
-							{/if}
+							<p
+								class={cn(
+									'text-muted-foreground truncate text-xs transition-opacity',
+									rawStale && 'opacity-50',
+								)}
+							>
+								{#if noSim}
+									{$LL.network.view.noModems()}
+								{:else}
+									{operator}{#if modem.status?.network_type}
+										· {modem.status.network_type}{/if} ·
+									{#if scanning}
+										{$LL.network.modem.scanning()}
+									{:else}
+										{connected ? $LL.network.view.connected() : $LL.network.view.disconnected()}
+									{/if}
+								{/if}
+							</p>
 						</div>
-					{#if sig != null}
+						<div class="flex shrink-0 items-center gap-2.5">
 							<div class={cn('flex items-center gap-1.5 transition-opacity', sigStale && 'opacity-50')}>
-								<Signal class={cn('size-3.5', signalTextClass(sig))} aria-hidden="true" />
-								<span class={cn('font-mono text-xs tabular-nums', signalTextClass(sig))}>
-									{sig}%
-								</span>
+								<LinkIndicator
+									shape="bars"
+									size="md"
+									type="modem"
+									signal={sig}
+									{connectionState}
+									linkIndex={link?.linkIndex}
+								/>
+								{#if sig !== null}
+									<span data-live-value class="font-mono text-xs tabular-nums" style:color={sigColor}>
+										{sig}%
+									</span>
+								{/if}
 							</div>
-						{:else if noSim}
-							<div class="text-muted-foreground flex items-center gap-1.5">
-								<CardSim class="size-3.5" aria-hidden="true" />
-								<span class="text-xs">{$LL.network.view.noSimLink()}</span>
-							</div>
-						{:else if scanning}
-							<div class="text-muted-foreground flex items-center gap-1.5">
-								<Radar class="size-3.5 motion-safe:animate-pulse" aria-hidden="true" />
-								<span class="text-xs">{$LL.network.modem.scanning()}</span>
-							</div>
-						{:else if connected}
-							<LoaderCircle class="text-muted-foreground size-4 motion-safe:animate-spin" aria-hidden="true" />
-						{:else}
-							<WifiOff class="text-muted-foreground size-4" aria-hidden="true" />
+							<SpeedBadge {kbps} stale={tpStale} />
+						</div>
+					</div>
+
+					<!-- Control row: bond membership · configure -->
+					<div class="mt-2.5 flex flex-wrap items-center gap-2 ps-5">
+						{#if noSim}
+							<BondToggle
+								name={modem.ifname}
+								enabled={false}
+								disabledReason={$LL.network.view.noSimBond()}
+							/>
+						{:else if entry?.ip}
+							<BondToggle name={modem.ifname} enabled={entry.enabled} ip={entry.ip} />
 						{/if}
 						<Button
-							class="h-8 gap-1 px-2.5"
+							class="ms-auto h-8 gap-1 px-2.5"
 							data-testid="open-modem-config-dialog"
 							size="sm"
 							variant="ghost"
@@ -109,40 +132,6 @@ function modelLabel(modem: Modem): string {
 							{$LL.network.view.configure()}
 							<ChevronRight class="size-3.5 rtl:rotate-180" />
 						</Button>
-					</div>
-
-					<!-- Telemetry row: connection status · speed · bond membership -->
-					<div class="mt-2.5 flex items-center justify-between gap-3 ps-5">
-						<p
-							class={cn(
-								'text-muted-foreground min-w-0 flex-1 truncate text-xs transition-opacity',
-								rawStale && 'opacity-50',
-							)}
-						>
-							{#if noSim}
-								{$LL.network.view.noModems()}
-							{:else}
-								{operator}{#if modem.status?.network_type}
-									· {modem.status.network_type}{/if} ·
-								{#if scanning}
-									{$LL.network.modem.scanning()}
-								{:else}
-									{connected ? $LL.network.view.connected() : $LL.network.view.disconnected()}
-								{/if}
-							{/if}
-						</p>
-						<div class="flex shrink-0 items-center gap-3">
-							<SpeedBadge {kbps} stale={tpStale} />
-							{#if noSim}
-								<BondToggle
-									name={modem.ifname}
-									enabled={false}
-									disabledReason={$LL.network.view.noSimBond()}
-								/>
-							{:else if entry?.ip}
-								<BondToggle name={modem.ifname} enabled={entry.enabled} ip={entry.ip} />
-							{/if}
-						</div>
 					</div>
 				</div>
 			{/each}

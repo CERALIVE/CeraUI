@@ -1,0 +1,50 @@
+{
+  "servers": {
+    "0": {
+      "type": "srtla",
+      "name": "Frankfurt",
+      "addr": "fra.belabox.net",
+      "port": 5000,
+      "default": true,
+      "bcrp_port": "5001"
+    },
+    "1": {
+      "type": "srtla",
+      "name": "New York",
+      "addr": "nyc.belabox.net",
+      "port": 6000
+    },
+    "srt-only": {
+      "type": "srt",
+      "name": "SRT Only",
+      "addr": "srt.belabox.net",
+      "port": 7000
+    },
+    "bad-port-high": {
+      "type": "srtla",
+      "name": "Out Of Range",
+      "addr": "hi.belabox.net",
+      "port": 70000
+    },
+    "bad-port-zero": {
+      "type": "srtla",
+      "name": "Zero Port",
+      "addr": "zero.belabox.net",
+      "port": 0
+    }
+  },
+  "accounts": {
+    "10": {
+      "name": "Primary",
+      "ingest_key": "ingest-primary-abc"
+    },
+    "11": {
+      "name": "Secondary",
+      "ingest_key": "ingest-secondary-xyz",
+      "disabled": true
+    },
+    "12": {
+      "name": "Missing Key"
+    }
+  }
+}

@@ -27,7 +27,7 @@ const GSM_OPERATORS_CACHE_FILE = "gsm_operator_cache.json";
 type OperatorId = string;
 type OperatorName = string;
 
-const gsmOperatorsCache: GsmOperatorCache = loadCacheFile(
+const gsmOperatorsCache: GsmOperatorCache = await loadCacheFile(
 	GSM_OPERATORS_CACHE_FILE,
 	gsmOperatorCacheSchema,
 );

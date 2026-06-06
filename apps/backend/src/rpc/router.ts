@@ -14,15 +14,21 @@ import {
 	configureModemProcedure,
 	getAllModemsProcedure,
 	scanModemProcedure,
+	unlockSimProcedure,
 } from "./procedures/modems.procedure.ts";
 import {
 	configureNetworkInterfaceProcedure,
 	getNetworkInterfacesProcedure,
 } from "./procedures/network.procedure.ts";
 import {
+	completePairingProcedure,
+	generateClaimCodeProcedure,
+} from "./procedures/pairing.procedure.ts";
+import {
 	dismissNotificationProcedure,
 	getPersistentNotificationsProcedure,
 } from "./procedures/notifications.procedure.ts";
+import { relayValidateProcedure } from "./procedures/relay.procedure.ts";
 import {
 	getRelaysProcedure,
 	getStatusProcedure,
@@ -35,6 +41,7 @@ import {
 	setBitrateProcedure,
 	setConfigProcedure,
 	setMockHardwareProcedure,
+	streamHealthProcedure,
 	streamingStartProcedure,
 	streamingStopProcedure,
 } from "./procedures/streaming.procedure.ts";
@@ -81,6 +88,7 @@ const stableRoutes = {
 		getAudioCodecs: getAudioCodecsProcedure,
 		getConfig: getConfigProcedure,
 		setConfig: setConfigProcedure,
+		streamHealth: streamHealthProcedure,
 		// Dev-only mock hardware switcher
 		setMockHardware: setMockHardwareProcedure,
 		getMockHardware: getMockHardwareProcedure,
@@ -90,6 +98,7 @@ const stableRoutes = {
 		getAll: getAllModemsProcedure,
 		configure: configureModemProcedure,
 		scan: scanModemProcedure,
+		unlockSim: unlockSimProcedure,
 	}),
 
 	wifi: os.router({
@@ -130,9 +139,18 @@ const stableRoutes = {
 		getRelays: getRelaysProcedure,
 	}),
 
+	relay: os.router({
+		validate: relayValidateProcedure,
+	}),
+
 	notifications: os.router({
 		getPersistent: getPersistentNotificationsProcedure,
 		dismiss: dismissNotificationProcedure,
+	}),
+
+	pairing: os.router({
+		generateClaimCode: generateClaimCodeProcedure,
+		completePairing: completePairingProcedure,
 	}),
 };
 

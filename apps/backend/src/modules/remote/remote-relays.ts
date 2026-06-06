@@ -19,19 +19,21 @@ import assert from "node:assert";
 
 import { loadJsonConfig } from "../../helpers/config-loader.ts";
 import {
+	DEFAULT_RELAY_PROVIDER_ID,
+	namespacedRelayId,
+	parseNamespacedRelayId,
 	RELAYS_CACHE_DEFAULTS,
 	type RelaysCache,
 	relaysCacheSchema,
+	type RuntimeConfig,
 } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { validatePortNo } from "../../helpers/number.ts";
 import { writeTextFile } from "../../helpers/text-files.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
-import {
-	getAllRelaysRtt,
-	updateBcrptServerConfig,
-} from "../streaming/bcrpt.ts";
+import { getRelayRtt, updateBcrptServerConfig } from "../streaming/bcrpt.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
 // Use the shared RelaysCache type from config-schemas
@@ -41,7 +43,10 @@ type RelaysResponseMessage = {
 		string,
 		{
 			name: string;
+			rtt?: number;
 			default?: true;
+			addr?: string;
+			port?: number;
 		}
 	>;
 	accounts: Record<
@@ -81,7 +86,7 @@ export type ValidateRemoteRelaysMessage = {
 const RELAYS_CACHE_FILE = "relays_cache.json";
 
 // Load relays cache with Zod validation
-const relaysCacheResult = loadJsonConfig(
+const relaysCacheResult = await loadJsonConfig(
 	RELAYS_CACHE_FILE,
 	relaysCacheSchema,
 	RELAYS_CACHE_DEFAULTS,
@@ -94,22 +99,26 @@ export function getRelays() {
 	return relaysCache;
 }
 
+// Mock-only in-memory setter: no disk write (unlike updateCachedRelays), so
+// the dev working dir never gets a relays_cache.json. No-op in production.
+export function setRelaysCacheMock(data: RelaysCache | undefined): void {
+	if (!shouldUseMocks()) return;
+	relaysCache = data;
+}
+
 export function buildRelaysMsg(): RelaysResponseMessage {
 	const msg: RelaysResponseMessage = { servers: {}, accounts: {} };
 	if (!relaysCache) return msg;
 
-	// Simplify servers mapping using Object.entries
-	const bcrptRelaysRtt = getAllRelaysRtt();
 	Object.entries(relaysCache.servers).forEach(([id, srv]) => {
 		if (!srv) return;
-		const rtt = bcrptRelaysRtt?.[id];
-		const status =
-			rtt !== undefined ? (rtt <= 80 ? "🟢" : rtt <= 150 ? "🟡" : "🔴") : "";
-		const prefix = status ? `${status} ` : "";
-		const suffix = rtt !== undefined ? ` (${rtt} ms)` : "";
+		const rtt = getRelayRtt(id);
 		msg.servers[id] = {
-			name: `${prefix}${srv.name}${suffix}`,
+			name: srv.name,
+			rtt,
 			default: srv.default,
+			addr: srv.addr,
+			port: srv.port,
 		};
 	});
 
@@ -239,6 +248,70 @@ export function convertManualToRemoteRelay() {
 	return modified;
 }
 
+function pickPreferredServerId(relays: RelaysCache): string | undefined {
+	const ids = Object.keys(relays.servers);
+	const defaultId = ids.find((id) => relays.servers[id]?.default === true);
+	return defaultId ?? ids[0];
+}
+
+function pickPreferredAccountId(relays: RelaysCache): string | undefined {
+	return Object.keys(relays.accounts).find(
+		(id) => !relays.accounts[id]?.disabled,
+	);
+}
+
+export function computeSubscriptionPreload(
+	config: RuntimeConfig,
+	relays: RelaysCache,
+	providerId: string,
+): boolean {
+	let modified = false;
+
+	if (config.relay_server) {
+		const { providerId: selectedProvider } = parseNamespacedRelayId(
+			config.relay_server,
+		);
+		if (selectedProvider !== undefined && selectedProvider !== providerId) {
+			config.relay_server = undefined;
+			config.relay_account = undefined;
+			config.relay_streamid_override = undefined;
+			modified = true;
+		}
+	}
+
+	if (!config.relay_server) {
+		const serverId = pickPreferredServerId(relays);
+		if (serverId) {
+			config.relay_server = namespacedRelayId(providerId, serverId);
+			modified = true;
+		}
+	}
+
+	if (!config.relay_account) {
+		const accountId = pickPreferredAccountId(relays);
+		if (accountId) {
+			config.relay_account = namespacedRelayId(providerId, accountId);
+			const ingestKey = relays.accounts[accountId]?.ingest_key;
+			if (ingestKey) config.relay_streamid_override = ingestKey;
+			modified = true;
+		}
+	}
+
+	if (modified) config.detectionMethod = "subscription";
+
+	return modified;
+}
+
+export function autoPreloadSubscriptionRelays(): boolean {
+	if (!relaysCache) return false;
+
+	const config = getConfig();
+	if (!config.remote_key) return false;
+
+	const providerId = config.remote_provider ?? DEFAULT_RELAY_PROVIDER_ID;
+	return computeSubscriptionPreload(config, relaysCache, providerId);
+}
+
 export async function handleRemoteRelays(
 	msg: ValidateRemoteRelaysMessage["relays"],
 ) {
@@ -248,7 +321,9 @@ export async function handleRemoteRelays(
 	const hasUpdated = await updateCachedRelays(validatedUpdate);
 	if (hasUpdated) {
 		broadcastMsg("relays", buildRelaysMsg());
-		if (convertManualToRemoteRelay()) {
+		let configModified = convertManualToRemoteRelay();
+		if (autoPreloadSubscriptionRelays()) configModified = true;
+		if (configModified) {
 			saveConfig();
 			broadcastMsg("config", getConfig());
 		}

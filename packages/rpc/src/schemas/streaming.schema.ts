@@ -62,6 +62,8 @@ export const streamingConfigInputSchema = z.object({
 	acodec: audioCodecSchema.optional(),
 	relay_server: z.string().optional(),
 	relay_account: z.string().optional(),
+	relay_streamid_override: z.string().optional(),
+	relay_protocol: relayProtocolSchema.optional(),
 	srtla_addr: z.string().optional(),
 	srtla_port: z.number().int().min(PORT_MIN).max(PORT_MAX).optional(),
 	srt_streamid: z.string().optional(),
@@ -181,7 +183,8 @@ export const audioCodecsMessageSchema = z.record(
 );
 export type AudioCodecsMessage = z.infer<typeof audioCodecsMessageSchema>;
 
-import { customProviderInputSchema, providerSelectionSchema } from './cloud-provider.schema';
+import { detectionMethodSchema, customProviderInputSchema, providerSelectionSchema } from './cloud-provider.schema';
+import { relayProtocolSchema } from './relay.schema';
 
 // Config message schema (what the server sends to clients)
 export const configMessageSchema = z.object({
@@ -201,6 +204,9 @@ export const configMessageSchema = z.object({
 	custom_provider: customProviderInputSchema.optional(),
 	relay_account: z.string().optional(),
 	relay_server: z.string().optional(),
+	relay_streamid_override: z.string().optional(),
+	relay_protocol: relayProtocolSchema.optional(),
+	detectionMethod: detectionMethodSchema.optional(),
 	resolution: resolutionSchema.optional(),
 	framerate: framerateSchema.optional(),
 });
@@ -233,6 +239,35 @@ export const streamingStartOutputSchemaExtended = z.object({
 	applied: streamingConfigInputSchema.partial().optional(),
 });
 export type StreamingStartOutputExtended = z.infer<typeof streamingStartOutputSchemaExtended>;
+
+// ─── Stream health (Task 13) ────────────────────────────────────────────────
+//
+// Tri-state liveness rollup for the active stream, derived from process
+// liveness, ceracoder frame production, SRT reconnect status, and srtla bond
+// link count. This is the device's single source of truth for "is the stream
+// actually working". READ-ONLY — never drives restart logic.
+export const healthStateSchema = z.enum(["healthy", "degraded", "dead"]);
+export type HealthState = z.infer<typeof healthStateSchema>;
+
+export const streamHealthOutputSchema = z.object({
+	state: healthStateSchema,
+	process: z.object({
+		alive: z.boolean(),
+	}),
+	frames: z.object({
+		advancing: z.boolean(),
+		count: z.number().int().nonnegative(),
+	}),
+	srt: z.object({
+		reconnecting: z.boolean(),
+		reconnectCount: z.number().int().nonnegative(),
+	}),
+	bond: z.object({
+		linkCount: z.number().int().nonnegative(),
+		activeLinks: z.number().int().nonnegative(),
+	}),
+});
+export type StreamHealthOutput = z.infer<typeof streamHealthOutputSchema>;
 
 // Dev-only mock hardware switcher schemas (includes generic for software fallback)
 export const mockHardwareTypeSchema = z.enum(['jetson', 'n100', 'rk3588', 'generic']);

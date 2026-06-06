@@ -109,7 +109,7 @@ function resolveP(
 	});
 }
 
-const dnsCache: DnsCache = loadCacheFile(DNS_CACHE_FILE, dnsCacheSchema);
+const dnsCache: DnsCache = await loadCacheFile(DNS_CACHE_FILE, dnsCacheSchema);
 const dnsResults: Record<string, ResolveResult> = {};
 
 function isIpv4Addr(val: string) {

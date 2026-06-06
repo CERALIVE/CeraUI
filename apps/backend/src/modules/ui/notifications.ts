@@ -41,6 +41,8 @@ type Notification = {
 	name: string;
 	type: "success" | "warning" | "error";
 	msg: string;
+	key?: string;
+	params?: Record<string, unknown>;
 	duration: number;
 	isPersistent: boolean;
 	isDismissable: boolean;
@@ -55,11 +57,14 @@ type PersistentNotification = Notification & {
 
 const persistentNotifications = new Map<string, PersistentNotification>();
 
-function buildNotificationMsg(n: Notification, duration: number) {
+export function buildNotificationMsg(n: Notification, duration: number) {
 	return {
 		name: n.name,
 		type: n.type,
 		msg: n.msg,
+		// Omit key/params when absent so legacy msg-only notifications keep their wire shape.
+		...(n.key !== undefined ? { key: n.key } : {}),
+		...(n.params !== undefined ? { params: n.params } : {}),
 		is_dismissable: n.isDismissable,
 		is_persistent: n.isPersistent,
 		duration,
@@ -75,6 +80,8 @@ export function notificationSend(
 	isPersistent = false,
 	isDismissable = true,
 	authedOnly = true,
+	key?: Notification["key"],
+	params?: Notification["params"],
 ) {
 	if (isPersistent && conn !== undefined) {
 		logger.error("error: attempted to send persistent unicast notification");
@@ -85,6 +92,8 @@ export function notificationSend(
 		name,
 		type,
 		msg,
+		key,
+		params,
 		isDismissable,
 		isPersistent,
 		duration,
@@ -139,6 +148,8 @@ export function notificationBroadcast(
 	isPersistent = false,
 	isDismissable = true,
 	authedOnly = true,
+	key?: Notification["key"],
+	params?: Notification["params"],
 ) {
 	notificationSend(
 		undefined,
@@ -149,6 +160,8 @@ export function notificationBroadcast(
 		isPersistent,
 		isDismissable,
 		authedOnly,
+		key,
+		params,
 	);
 }
 

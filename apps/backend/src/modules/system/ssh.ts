@@ -16,11 +16,9 @@
 */
 
 /* SSH control */
-import crypto from "node:crypto";
-import fs from "node:fs";
-
 import type WebSocket from "ws";
 
+import { randomBase64 } from "../../helpers/crypto.ts";
 import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
 import { runWithStdin } from "../../helpers/run.ts";
@@ -78,14 +76,14 @@ export type SshStatusDeps = {
 	/** `systemctl is-active ssh` — argv-only, may reject on non-zero exit. */
 	systemctlIsActive: () => Promise<{ stdout: string; stderr: string }>;
 	/** Read the raw /etc/shadow document (JS, no `grep` subprocess). */
-	readShadow: () => string;
+	readShadow: () => string | Promise<string>;
 	/** Emit the completed SSH status to clients. */
 	broadcast: (status: SshStatus) => void;
 };
 
 const defaultSshStatusDeps: SshStatusDeps = {
 	systemctlIsActive: () => execFileP("systemctl", ["is-active", "ssh"]),
-	readShadow: () => fs.readFileSync("/etc/shadow", "utf-8"),
+	readShadow: () => Bun.file("/etc/shadow").text(),
 	broadcast: (status) => broadcastMsg("status", { ssh: status }),
 };
 
@@ -105,13 +103,13 @@ async function probeSshActive(
 }
 
 /** Read + parse the user's crypt hash from /etc/shadow, in JS. */
-function probeSshUserHash(
+async function probeSshUserHash(
 	readShadow: SshStatusDeps["readShadow"],
 	user: string,
-): string | undefined {
+): Promise<string | undefined> {
 	let shadow: string;
 	try {
-		shadow = readShadow();
+		shadow = await readShadow();
 	} catch (err) {
 		logger.error(`Error reading /etc/shadow for ${user}: ${err}`);
 		return undefined;
@@ -150,7 +148,7 @@ export async function getSshStatus(
 
 	const [active, hash] = await Promise.all([
 		probeSshActive(systemctlIsActive),
-		Promise.resolve(probeSshUserHash(readShadow, ssh_user)),
+		probeSshUserHash(readShadow, ssh_user),
 	]);
 
 	const status: SshStatus = {
@@ -212,9 +210,7 @@ export async function resetSshPassword(conn: WebSocket) {
 		throw new Error("invalid ssh_user");
 	}
 
-	const password = crypto
-		.randomBytes(24)
-		.toString("base64")
+	const password = randomBase64(24)
 		.replace(/[+/=]/g, "")
 		.substring(0, 20);
 
@@ -236,8 +232,8 @@ export async function resetSshPassword(conn: WebSocket) {
 
 	const config = getConfig();
 	config.ssh_pass = password;
-	sshPasswordHash = probeSshUserHash(
-		() => fs.readFileSync("/etc/shadow", "utf-8"),
+	sshPasswordHash = await probeSshUserHash(
+		() => Bun.file("/etc/shadow").text(),
 		ssh_user,
 	);
 	saveConfig();

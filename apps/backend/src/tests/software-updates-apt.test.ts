@@ -11,6 +11,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	buildAptInstallArgs,
 	buildAptUpgradeArgs,
+	classifyAptUpdateResult,
 	parseHeldBackPackages,
 } from "../modules/system/software-updates.ts";
 
@@ -81,5 +82,25 @@ describe("buildAptUpgradeArgs() — argv mapping", () => {
 			"pkg-a",
 			"pkg-b",
 		]);
+	});
+});
+
+describe("classifyAptUpdateResult() — Bun.$ exit/stderr classification (Task 16)", () => {
+	it("exit 0 with no stderr → null (success)", () => {
+		expect(classifyAptUpdateResult(0, "")).toBeNull();
+	});
+
+	it("exit 0 but stderr present → true (treated as error, legacy semantics)", () => {
+		expect(classifyAptUpdateResult(0, "W: some warning")).toBe(true);
+	});
+
+	it("non-zero exit with no stderr → ExecException-shaped error carrying the code", () => {
+		const res = classifyAptUpdateResult(100, "");
+		expect(res).toBeInstanceOf(Error);
+		expect((res as Error & { code?: number }).code).toBe(100);
+	});
+
+	it("non-zero exit with stderr → true (stderr dominates the classification)", () => {
+		expect(classifyAptUpdateResult(100, "E: failed")).toBe(true);
 	});
 });

@@ -12,7 +12,7 @@ import {
 	Zap,
 } from '@lucide/svelte';
 
-import SignalIndicator from '$lib/components/icons/SignalIndicator.svelte';
+import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import { Badge } from '$lib/components/ui/badge';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
@@ -70,6 +70,53 @@ const hudLinks = [
 	{ index: 1, bars: 3, signal: 85 },
 	{ index: 2, bars: 3, signal: 72 },
 	{ index: 3, bars: 1, signal: 55 },
+];
+
+// Deterministic fixtures for the all-states LinkIndicator showcase (T11 / @visual T13).
+// Hardcoded props only — no live data, no animation gating render.
+type ShowcaseBarState = {
+	label: string;
+	type: 'modem' | 'wifi' | 'ethernet';
+	signal: number | null;
+	connectionState: 'connected' | 'scanning' | 'disconnected' | 'no_sim';
+	linkIndex: number;
+};
+
+const showcaseSizes = ['sm', 'md', 'lg'] as const;
+
+const showcaseBarStates: ShowcaseBarState[] = [
+	{ label: 'Bars filled 0', type: 'modem', signal: 0, connectionState: 'connected', linkIndex: 0 },
+	{ label: 'Bars filled 1', type: 'modem', signal: 20, connectionState: 'connected', linkIndex: 1 },
+	{ label: 'Bars filled 2', type: 'modem', signal: 50, connectionState: 'connected', linkIndex: 2 },
+	{ label: 'Bars filled 3', type: 'modem', signal: 80, connectionState: 'connected', linkIndex: 3 },
+	{ label: 'Ethernet', type: 'ethernet', signal: null, connectionState: 'connected', linkIndex: 5 },
+	{ label: 'WiFi connected', type: 'wifi', signal: 70, connectionState: 'connected', linkIndex: 0 },
+	{
+		label: 'WiFi disconnected',
+		type: 'wifi',
+		signal: null,
+		connectionState: 'disconnected',
+		linkIndex: 0,
+	},
+	{ label: 'No SIM', type: 'modem', signal: null, connectionState: 'no_sim', linkIndex: 0 },
+	{ label: 'Scanning', type: 'modem', signal: null, connectionState: 'scanning', linkIndex: 0 },
+	{ label: 'Acquiring', type: 'modem', signal: null, connectionState: 'connected', linkIndex: 0 },
+	{ label: 'Zero', type: 'modem', signal: null, connectionState: 'disconnected', linkIndex: 0 },
+];
+
+type ShowcaseIconState = {
+	label: string;
+	type: 'modem' | 'wifi';
+	signal: number;
+	size: 'sm' | 'md' | 'lg';
+	showPercent: boolean;
+};
+
+const showcaseIconStates: ShowcaseIconState[] = [
+	{ label: 'Icon cellular sm', type: 'modem', signal: 80, size: 'sm', showPercent: false },
+	{ label: 'Icon cellular md %', type: 'modem', signal: 50, size: 'md', showPercent: true },
+	{ label: 'Icon wifi sm', type: 'wifi', signal: 70, size: 'sm', showPercent: false },
+	{ label: 'Icon wifi lg %', type: 'wifi', signal: 30, size: 'lg', showPercent: true },
 ];
 
 let inputValue = $state('rtmp.ceralive.tv');
@@ -258,11 +305,74 @@ const codecLabels: Record<string, string> = {
 			<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
 				{#each signalTiers as tier}
 					<div class="bg-card flex flex-col items-start gap-2 rounded-lg border p-4">
-						<SignalIndicator signal={tier.signal} type="wifi" />
+						<LinkIndicator shape="icon" size="md" type="wifi" signal={tier.signal} />
 						<p class="text-foreground text-sm font-medium">{tier.label}</p>
 						<p class="text-muted-foreground font-mono text-xs">{tier.token}</p>
 					</div>
 				{/each}
+			</div>
+		</section>
+
+		<section class="space-y-5">
+			<div class="flex items-center gap-2">
+				<SatelliteDish class="text-primary size-5" />
+				<h2 class="text-foreground text-lg font-semibold tracking-tight">
+					LinkIndicator showcase
+				</h2>
+			</div>
+			<p class="text-muted-foreground max-w-prose text-sm">
+				Deterministic, all-states reference grid. Hardcoded fixtures only — renders statically
+				for headless visual diffing.
+			</p>
+
+			<!-- data-testid is the canonical locator for the @visual spec (T13). Do NOT rename. -->
+			<div data-testid="signal-indicator-showcase" class="space-y-8">
+				<div class="bg-card space-y-4 rounded-xl border p-5">
+					<p class="text-muted-foreground text-sm font-medium">Bars — all states × sizes</p>
+					<div
+						class="grid grid-cols-[minmax(9rem,1fr)_repeat(3,minmax(0,3rem))] items-center gap-x-4 gap-y-3"
+					>
+						<span></span>
+						<span class="text-muted-foreground text-center font-mono text-xs">sm</span>
+						<span class="text-muted-foreground text-center font-mono text-xs">md</span>
+						<span class="text-muted-foreground text-center font-mono text-xs">lg</span>
+						{#each showcaseBarStates as state (state.label)}
+							<span class="text-foreground text-sm">{state.label}</span>
+							{#each showcaseSizes as size (size)}
+								<span class="flex items-center justify-center">
+									<LinkIndicator
+										shape="bars"
+										{size}
+										type={state.type}
+										signal={state.signal}
+										connectionState={state.connectionState}
+										linkIndex={state.linkIndex}
+									/>
+								</span>
+							{/each}
+						{/each}
+					</div>
+				</div>
+
+				<div class="bg-card space-y-4 rounded-xl border p-5">
+					<p class="text-muted-foreground text-sm font-medium">Icons — quality color</p>
+					<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+						{#each showcaseIconStates as icon (icon.label)}
+							<div
+								class="bg-background flex items-center justify-between gap-3 rounded-lg border p-3"
+							>
+								<span class="text-foreground text-sm">{icon.label}</span>
+								<LinkIndicator
+									shape="icon"
+									size={icon.size}
+									type={icon.type}
+									signal={icon.signal}
+									showPercent={icon.showPercent}
+								/>
+							</div>
+						{/each}
+					</div>
+				</div>
 			</div>
 		</section>
 
@@ -411,16 +521,13 @@ const codecLabels: Record<string, string> = {
 								class="font-mono text-xs font-bold"
 								style="color: var(--link-{link.index})">L{link.index}</span
 							>
-							<div class="flex items-end gap-0.5">
-								{#each [1, 2, 3] as bar}
-									<span
-										class="w-1 rounded-[1px]"
-										style="height: {bar * 3 + 2}px; background-color: {bar <= link.bars
-											? `var(--link-${link.index})`
-											: 'var(--muted)'}"
-									></span>
-								{/each}
-							</div>
+							<LinkIndicator
+								shape="bars"
+								size="sm"
+								type="modem"
+								signal={link.signal}
+								linkIndex={link.index - 1}
+							/>
 							<span
 								class="font-mono text-xs tabular-nums"
 								style="color: var(--link-{link.index})">{link.signal}%</span

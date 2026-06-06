@@ -157,7 +157,7 @@ function installWsHarness(token: string): void {
 							new MessageEvent("message", {
 								data: JSON.stringify(
 									mode === "success"
-										? { id, result: { success: true } }
+										? { id, result: { success: true, applied: { enabled: true } } }
 										: {
 												id,
 												error: {

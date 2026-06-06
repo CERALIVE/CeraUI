@@ -157,8 +157,10 @@ interface LinkMeasure {
 
 /**
  * Measure, per bonded-link group in the compact HUD, the L# label box and the
- * fixed-width glyph box. The glyph box is the only element carrying `w-[14px]`
- * (inner lucide icons use `size-3.5` → `w-3.5`), so it is unambiguous.
+ * fixed-width glyph box. Each wrapper renders exactly two children — the L#
+ * label then the LinkIndicator glyph box (HudBar `miniBars`) — so children[0]
+ * is the label and children[1] is the glyph box. (LinkIndicator sizes the box
+ * via an inline `style:width`, not a `w-[14px]` class.)
  */
 async function measure(page: Page): Promise<LinkMeasure[]> {
 	return page.evaluate(() => {
@@ -186,8 +188,8 @@ async function measure(page: Page): Promise<LinkMeasure[]> {
 		const container = region.querySelector(".gap-2\\.5");
 		if (!container) throw new Error("bonded-link container not found");
 		return Array.from(container.children).map((wrapper) => {
-			const glyph = wrapper.querySelector('.w-\\[14px\\]');
 			const label = wrapper.children[0];
+			const glyph = wrapper.children[1];
 			if (!glyph || !label)
 				throw new Error("link wrapper missing label or glyph box");
 			return {
@@ -335,10 +337,12 @@ test.describe("compact HUD glyph — fixed width + shared baseline", () => {
 		const m = await measure(page);
 		expect(m.length).toBeGreaterThan(1);
 
-		// (a) Within each link: label and glyph share the same vertical centre
-		//     (the per-link wrapper is items-center → centre is the baseline).
+		// (a) Within each link: label and glyph share a baseline. The per-link
+		//     wrapper is items-end, so the box bottoms align; the label (~11px)
+		//     and the 14px glyph box have different heights, so their centres
+		//     legitimately differ — assert the shared bottom, not the centre.
 		for (const link of m) {
-			expect(Math.abs(link.label.centerY - link.glyph.centerY)).toBeLessThanOrEqual(
+			expect(Math.abs(link.label.bottom - link.glyph.bottom)).toBeLessThanOrEqual(
 				ALIGN_TOL,
 			);
 		}

@@ -52,6 +52,7 @@ import {
 	mmGetSim,
 	mmList,
 	parseMmcliModel,
+	parseModemUnlockInfo,
 	type SimInfo,
 } from "./mmcli.ts";
 import {
@@ -59,6 +60,7 @@ import {
 	type Modem,
 	type ModemConfig,
 	setModem,
+	type SimLock,
 } from "./modems-state.ts";
 
 export type ModemStatus = {
@@ -173,6 +175,19 @@ function buildModemStatus(
 		: modemInfo["modem.generic.state"];
 
 	return { connection, network, network_type, signal, roaming };
+}
+
+function buildSimLock(modemInfo: Readonly<ModemInfo>): SimLock | undefined {
+	const info = parseModemUnlockInfo(
+		modemInfo as unknown as Record<string, string | Array<string>>,
+	);
+	if (info.required === "none") {
+		return undefined;
+	}
+	const remainingAttempts = info.retries[info.required];
+	return remainingAttempts === undefined
+		? { required: info.required }
+		: { required: info.required, remainingAttempts };
 }
 
 function applyAutoconfigToModemConfig(
@@ -370,6 +385,7 @@ async function registerModem(id: number) {
 	};
 
 	modem.status = buildModemStatus(modemInfo, modem);
+	modem.sim_lock = buildSimLock(modemInfo);
 
 	setModem(id, modem);
 }
@@ -407,7 +423,12 @@ export async function refreshModemStatus(id: ModemId): Promise<void> {
 	}
 
 	const status = buildModemStatus(modemInfo, modem);
-	const updated: Modem = { ...modem, status, removed: undefined };
+	const updated: Modem = {
+		...modem,
+		status,
+		sim_lock: buildSimLock(modemInfo),
+		removed: undefined,
+	};
 	setModem(id, updated);
 
 	await connectModemIfNeededAndPossible(updated, id);

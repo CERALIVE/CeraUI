@@ -3,7 +3,17 @@
 	Central service for managing mock state and data generation
 */
 
+import type {
+	Framerate,
+	Resolution,
+} from "../../../packages/rpc/src/schemas/streaming.schema.ts";
 import { logger } from "../helpers/logger.ts";
+import {
+	buildRelaysMsg,
+	getRelays,
+	setRelaysCacheMock,
+} from "../modules/remote/remote-relays.ts";
+import { broadcastMsg } from "../modules/ui/websocket-server.ts";
 import {
 	getActiveScenario,
 	getScenarioConfig,
@@ -15,7 +25,7 @@ import {
 	scenarios,
 	setActiveScenario,
 } from "./mock-config.ts";
-import type { Resolution, Framerate } from "../../../packages/rpc/src/schemas/streaming.schema.ts";
+import { getMockRelaysCache } from "./providers/relays.ts";
 
 // ─── Mutable session-state slot types ────────────────────────────────────────
 
@@ -48,6 +58,17 @@ export interface MockEncoderConfigState {
 	framerate?: Framerate;
 }
 
+/** Controllable liveness sources for the stream health rollup (Task 13). */
+export interface MockHealthState {
+	processAlive: boolean;
+	framesAdvancing: boolean;
+	frameCount: number;
+	reconnecting: boolean;
+	reconnectCount: number;
+	linkCount: number;
+	activeLinks: number;
+}
+
 // Dynamic mock state that changes over time
 interface MockState {
 	initialized: boolean;
@@ -74,6 +95,7 @@ interface MockState {
 	modemConfigs: Map<string, MockModemConfigState>;
 	netifConfigs: Map<string, MockNetifConfigState>;
 	mockEncoderConfig: MockEncoderConfigState;
+	mockHealth: MockHealthState;
 }
 
 const mockState: MockState = {
@@ -100,9 +122,28 @@ const mockState: MockState = {
 	modemConfigs: new Map(),
 	netifConfigs: new Map(),
 	mockEncoderConfig: {},
+	mockHealth: {
+		processAlive: false,
+		framesAdvancing: false,
+		frameCount: 0,
+		reconnecting: false,
+		reconnectCount: 0,
+		linkCount: 0,
+		activeLinks: 0,
+	},
 };
 
 let updateInterval: ReturnType<typeof setInterval> | null = null;
+
+// Delay before the mock relay cache is populated, so the frontend can exercise
+// the "no relays" → populated transition on a fresh dev start.
+const MOCK_RELAY_POPULATE_DELAY_MS = 2000;
+let relayPopulateTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// Periodic mock RTT rebroadcast. Once relays are populated, recompute mock RTT
+// and re-emit `relays` on this cadence so the UI sees live, changing RTT values.
+const MOCK_RTT_INTERVAL_MS = 1500;
+let rttBroadcastInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Initialize (or re-initialize) the mock service with a specific scenario.
@@ -164,7 +205,9 @@ export function initMockService(scenarioName?: string): void {
 	}
 	if (config.wifi) {
 		mockWifiRadios.forEach((radio, index) => {
-			mockState.interfaceThroughput[radio.ifname] = mbpsToBytesPerSec(8 + index * 6);
+			mockState.interfaceThroughput[radio.ifname] = mbpsToBytesPerSec(
+				8 + index * 6,
+			);
 			mockState.wifiModes[radio.device] = "station";
 		});
 	}
@@ -182,7 +225,12 @@ export function initMockService(scenarioName?: string): void {
 		mockState.wifiConnections.set("wlan0", {
 			activeNetwork: activeNetwork?.ssid,
 			savedNetworks: mockWifiNetworks
-				.filter((n) => n.active || n.ssid === "Office_Secure" || n.ssid === "StreamingStudio")
+				.filter(
+					(n) =>
+						n.active ||
+						n.ssid === "Office_Secure" ||
+						n.ssid === "StreamingStudio",
+				)
 				.map((n) => n.ssid),
 		});
 	}
@@ -197,14 +245,26 @@ export function initMockService(scenarioName?: string): void {
 		});
 	}
 
-	mockState.netifConfigs.set("eth0", { enabled: true, dhcp: true, ip: "192.168.1.100" });
+	mockState.netifConfigs.set("eth0", {
+		enabled: true,
+		dhcp: true,
+		ip: "192.168.1.100",
+	});
 	for (let i = 0; i < config.modems; i++) {
 		const modem = mockModems[i];
 		if (!modem) continue;
-		mockState.netifConfigs.set(modem.interfaceName, { enabled: true, dhcp: true, ip: modem.ip });
+		mockState.netifConfigs.set(modem.interfaceName, {
+			enabled: true,
+			dhcp: true,
+			ip: modem.ip,
+		});
 	}
 	if (config.wifi) {
-		mockState.netifConfigs.set("wlan0", { enabled: true, dhcp: true, ip: "192.168.2.100" });
+		mockState.netifConfigs.set("wlan0", {
+			enabled: true,
+			dhcp: true,
+			ip: "192.168.2.100",
+		});
 	}
 
 	mockState.mockEncoderConfig = {
@@ -215,10 +275,59 @@ export function initMockService(scenarioName?: string): void {
 		framerate: 30,
 	};
 
+	const streamingActive = config.streaming;
+	mockState.mockHealth = {
+		processAlive: streamingActive,
+		framesAdvancing: streamingActive,
+		frameCount: 0,
+		reconnecting: false,
+		reconnectCount: 0,
+		linkCount: config.modems,
+		activeLinks: streamingActive ? config.modems : 0,
+	};
+
 	startPeriodicUpdates();
 
 	mockState.initialized = true;
 	logger.info("🎭 Mock service initialized successfully");
+
+	scheduleRelayPopulate();
+}
+
+// After a short delay, drop the mock relay cache in and rebroadcast so the
+// initial connect snapshot sends `relays: null` and the UI transitions to the
+// populated state. Cleared/recreated on re-init to stay idempotent.
+function scheduleRelayPopulate(): void {
+	if (relayPopulateTimeout) {
+		clearTimeout(relayPopulateTimeout);
+	}
+	if (rttBroadcastInterval) {
+		clearInterval(rttBroadcastInterval);
+		rttBroadcastInterval = null;
+	}
+	relayPopulateTimeout = setTimeout(() => {
+		relayPopulateTimeout = null;
+		if (!shouldUseMocks()) return;
+		setRelaysCacheMock(getMockRelaysCache());
+		broadcastMsg("relays", buildRelaysMsg());
+		logger.info("🎭 Mock relays populated after startup delay");
+		startRttBroadcast();
+	}, MOCK_RELAY_POPULATE_DELAY_MS);
+}
+
+function startRttBroadcast(): void {
+	if (rttBroadcastInterval) {
+		clearInterval(rttBroadcastInterval);
+	}
+	rttBroadcastInterval = setInterval(() => {
+		if (!shouldUseMocks()) return;
+		// setRemoteConfig (remote.ts) clears the relay cache on a provider/key
+		// switch; production re-fetches it from the cloud on reconnect, but the
+		// mock has no cloud, so re-seed here to keep the mock catalog continuously
+		// available across a session.
+		if (!getRelays()) setRelaysCacheMock(getMockRelaysCache());
+		broadcastMsg("relays", buildRelaysMsg());
+	}, MOCK_RTT_INTERVAL_MS);
 }
 
 /**
@@ -332,12 +441,24 @@ export function getStreamingStats() {
  */
 export function setStreamingState(isActive: boolean): void {
 	mockState.streaming.isActive = isActive;
+	const config = getScenarioConfig();
 	if (isActive) {
-		const config = getScenarioConfig();
 		mockState.streaming.connectedRelays = config.modems;
 	} else {
 		mockState.streaming.connectedRelays = 0;
 	}
+	mockState.mockHealth.processAlive = isActive;
+	mockState.mockHealth.framesAdvancing = isActive;
+	mockState.mockHealth.linkCount = config.modems;
+	mockState.mockHealth.activeLinks = isActive ? config.modems : 0;
+}
+
+export function getMockHealth(): Readonly<MockHealthState> {
+	return mockState.mockHealth;
+}
+
+export function setMockHealth(update: Partial<MockHealthState>): void {
+	mockState.mockHealth = { ...mockState.mockHealth, ...update };
 }
 
 /**
@@ -348,6 +469,15 @@ export function stopMockService(): void {
 		clearInterval(updateInterval);
 		updateInterval = null;
 	}
+	if (relayPopulateTimeout) {
+		clearTimeout(relayPopulateTimeout);
+		relayPopulateTimeout = null;
+	}
+	if (rttBroadcastInterval) {
+		clearInterval(rttBroadcastInterval);
+		rttBroadcastInterval = null;
+	}
+	setRelaysCacheMock(undefined);
 	mockState.initialized = false;
 	logger.info("🎭 Mock service stopped");
 }
@@ -363,7 +493,9 @@ export function setMockWifiConnection(
 	deviceId: string,
 	update: Partial<MockWifiConnectionState>,
 ): void {
-	const current = mockState.wifiConnections.get(deviceId) ?? { savedNetworks: [] };
+	const current = mockState.wifiConnections.get(deviceId) ?? {
+		savedNetworks: [],
+	};
 	mockState.wifiConnections.set(deviceId, { ...current, ...update });
 }
 
@@ -405,19 +537,24 @@ export function setMockNetifConfig(
 	ifName: string,
 	update: Partial<MockNetifConfigState>,
 ): void {
-	const current = mockState.netifConfigs.get(ifName) ?? { enabled: true, dhcp: true };
+	const current = mockState.netifConfigs.get(ifName) ?? {
+		enabled: true,
+		dhcp: true,
+	};
 	mockState.netifConfigs.set(ifName, { ...current, ...update });
 }
 
-export function setMockEncoderConfig(update: Partial<MockEncoderConfigState>): void {
+export function setMockEncoderConfig(
+	update: Partial<MockEncoderConfigState>,
+): void {
 	mockState.mockEncoderConfig = { ...mockState.mockEncoderConfig, ...update };
 }
 
 // Re-export commonly used functions
 export {
-	isDevelopment,
 	getActiveScenario,
 	getScenarioConfig,
+	isDevelopment,
 	mockModems,
 	mockWifiNetworks,
 	mockWifiRadios,

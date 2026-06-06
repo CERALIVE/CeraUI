@@ -1,5 +1,3 @@
-import { spawn } from "node:child_process";
-
 import {
 	getMockSrtStats,
 	shouldMockStreaming,
@@ -28,9 +26,9 @@ let currentConnectionStats: ConnectionStats = null;
  */
 function startSrtTransmitter(): void {
 	// Launch the srt-live-transmit process with appropriate parameters
-	const transmitProcess = spawn(
-		"srt-live-transmit",
+	const transmitProcess = Bun.spawn(
 		[
+			"srt-live-transmit",
 			"-st:yes",
 			"-stats-report-frequency:500",
 			"-statspf:json",
@@ -38,42 +36,55 @@ function startSrtTransmitter(): void {
 			"udp://127.0.0.1:4001", // UDP output on localhost:4001
 		],
 		{
-			detached: true,
-			stdio: ["ignore", "pipe", "pipe"],
+			stdin: "ignore",
+			stdout: "pipe",
+			stderr: "pipe",
 		},
 	);
 
 	let hasActiveConnection = false;
 
 	// Process statistics output from stdout
-	transmitProcess.stdout.on("data", (data) => {
-		if (!hasActiveConnection) return;
+	const consumeStdout = async () => {
+		const decoder = new TextDecoder();
+		for await (const chunk of transmitProcess.stdout as ReadableStream<Uint8Array>) {
+			if (!hasActiveConnection) continue;
 
-		try {
-			// Parse JSON stats and format connection information
-			const statsData: SrtStatsData = JSON.parse(data.toString("utf8"));
-			const bitrate = Math.round(statsData.recv.mbitRate * 1024);
-			const roundTripTime = Math.round(statsData.link.rtt);
+			try {
+				// Parse JSON stats and format connection information
+				const statsData: SrtStatsData = JSON.parse(
+					decoder.decode(chunk, { stream: false }),
+				);
+				const bitrate = Math.round(statsData.recv.mbitRate * 1024);
+				const roundTripTime = Math.round(statsData.link.rtt);
 
-			currentConnectionStats = `${bitrate} Kbps, ${roundTripTime} ms RTT`;
-		} catch (_err) {
-			// Silently handle parsing errors
+				currentConnectionStats = `${bitrate} Kbps, ${roundTripTime} ms RTT`;
+			} catch (_err) {
+				// Silently handle parsing errors
+			}
 		}
-	});
+	};
 
 	// Monitor connection status from stderr
-	transmitProcess.stderr.on("data", (data) => {
-		const logMessage = data.toString("utf8");
+	const consumeStderr = async () => {
+		const decoder = new TextDecoder();
+		for await (const chunk of transmitProcess.stderr as ReadableStream<Uint8Array>) {
+			const logMessage = decoder.decode(chunk, { stream: false });
 
-		if (logMessage.match("SRT source disconnected")) {
-			// Handle disconnection
-			currentConnectionStats = "";
-			hasActiveConnection = false;
-		} else if (logMessage.match("Accepted SRT source connection")) {
-			// Handle the new connection
-			hasActiveConnection = true;
+			if (logMessage.match("SRT source disconnected")) {
+				// Handle disconnection
+				currentConnectionStats = "";
+				hasActiveConnection = false;
+			} else if (logMessage.match("Accepted SRT source connection")) {
+				// Handle the new connection
+				hasActiveConnection = true;
+			}
 		}
-	});
+	};
+
+	void consumeStdout();
+	void consumeStderr();
+	void transmitProcess.exited;
 }
 
 /**

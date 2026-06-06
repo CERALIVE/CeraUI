@@ -18,6 +18,14 @@
 import { z } from 'zod';
 
 /**
+ * How a relay was sourced: `subscription` (provider's authenticated WS push),
+ * `manual` (user-entered SRTLA addr/port), `belabox` (BELABOX-compatible feed).
+ */
+export const DETECTION_METHODS = ['subscription', 'manual', 'belabox'] as const;
+export const detectionMethodSchema = z.enum(DETECTION_METHODS);
+export type DetectionMethod = (typeof DETECTION_METHODS)[number];
+
+/**
  * Cloud provider endpoint configuration
  */
 export const cloudProviderEndpointSchema = z.object({
@@ -35,6 +43,8 @@ export const cloudProviderEndpointSchema = z.object({
 	cloudUrl: z.string().url().optional(),
 	/** Protocol version (if different from default) */
 	protocolVersion: z.number().optional(),
+	/** How relays for this provider are detected (optional — legacy-safe) */
+	detectionMethod: detectionMethodSchema.optional(),
 });
 
 export type CloudProviderEndpoint = z.infer<typeof cloudProviderEndpointSchema>;
@@ -86,16 +96,28 @@ export const providerSelectionSchema = z.union([
 export type ProviderSelection = z.infer<typeof providerSelectionSchema>;
 
 /**
- * Remote key configuration with provider
+ * Remote key configuration with provider.
+ *
+ * Accepts either a raw `remote_key` (operator-entered, legacy) or a
+ * platform-issued device `token` (claim-code pairing, ADR-0006). When a `token`
+ * is present it becomes the active remote key. At least one of the two must be
+ * supplied.
  */
-export const remoteConfigInputSchema = z.object({
-	/** The remote authentication key */
-	remote_key: z.string(),
-	/** Selected provider ID */
-	provider: providerSelectionSchema.default('ceralive'),
-	/** Custom provider configuration (required if provider is "custom") */
-	custom_provider: customProviderInputSchema.optional(),
-});
+export const remoteConfigInputSchema = z
+	.object({
+		/** The remote authentication key (operator-entered, legacy path). */
+		remote_key: z.string().optional(),
+		/** Platform-issued device token; stored as the active remote key when present. */
+		token: z.string().optional(),
+		/** Selected provider ID */
+		provider: providerSelectionSchema.default('ceralive'),
+		/** Custom provider configuration (required if provider is "custom") */
+		custom_provider: customProviderInputSchema.optional(),
+	})
+	.refine((value) => value.remote_key !== undefined || value.token !== undefined, {
+		message: 'Either remote_key or token must be provided',
+		path: ['remote_key'],
+	});
 
 export type RemoteConfigInput = z.infer<typeof remoteConfigInputSchema>;
 

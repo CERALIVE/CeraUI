@@ -19,8 +19,10 @@
 /* Stream starting, stopping, management and monitoring */
 import type WebSocket from "ws";
 
-import { runtimeConfigSchema } from "../../helpers/config-schemas.ts";
-import { validatePortNo } from "../../helpers/number.ts";
+import {
+	type RelayProtocol,
+	runtimeConfigSchema,
+} from "../../helpers/config-schemas.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
 import {
@@ -42,6 +44,7 @@ import { updateBcrptServerIps } from "./bcrpt.ts";
 import { validateBitrate } from "./encoder.ts";
 import { searchPipelines, validatePipelineOverrides } from "./pipelines.ts";
 import { resolveSrtla } from "./srtla.ts";
+import { resolveStreamEndpoint } from "./transport/resolve-endpoint.ts";
 
 export type StartMessage = { start: ConfigParameters };
 
@@ -52,6 +55,8 @@ export type ConfigParameters = {
 	acodec?: string;
 	relay_server?: string;
 	relay_account?: string;
+	relay_streamid_override?: string;
+	relay_protocol?: RelayProtocol;
 	srtla_addr?: string;
 	srtla_port?: number;
 	srt_streamid?: string;
@@ -165,36 +170,19 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 		throw new Error("Invalid SRT latency");
 	params.srt_latency = validated.srt_latency;
 
-	// SRTLA addr and port
-	let srtlaAddr: string;
-	let srtlaPort: number;
-	const relays = getRelays();
-	if (relays && params.relay_server) {
-		const relayServer = relays.servers[params.relay_server];
-		if (!relayServer) throw new Error("Invalid relay server");
-		srtlaAddr = relayServer.addr;
-		srtlaPort = relayServer.port;
-	} else {
-		if (typeof params.srtla_addr !== "string")
-			throw new Error("Invalid SRTLA address");
-		srtlaAddr = params.srtla_addr.trim();
-
-		const port = validatePortNo(params.srtla_port);
-		if (!port) throw new Error(`Invalid SRTLA port '${params.srtla_port}'`);
-		srtlaPort = params.srtla_port = port;
-	}
-
-	// stream ID
-	let streamid: string;
-	if (relays && params.relay_server && params.relay_account) {
-		const relayAccount = relays.accounts[params.relay_account];
-		if (!relayAccount) throw new Error("Invalid relay account specified!");
-		streamid = relayAccount.ingest_key;
-	} else {
-		if (typeof params.srt_streamid !== "string")
-			throw new Error("SRT streamid not specified");
-		streamid = params.srt_streamid;
-	}
+	const { srtlaAddr, srtlaPort, streamid } = resolveStreamEndpoint(
+		{
+			relay_server: params.relay_server,
+			relay_account: params.relay_account,
+			srtla_addr: params.srtla_addr,
+			srtla_port: params.srtla_port,
+			srt_streamid: params.srt_streamid,
+			relay_streamid_override: params.relay_streamid_override,
+			relay_protocol: params.relay_protocol,
+		},
+		getRelays(),
+		config.relay_protocol,
+	);
 
 	return { pipeline, srtlaAddr, srtlaPort, streamid };
 }

@@ -307,7 +307,8 @@ export async function initRemote() {
 }
 
 export type SetRemoteConfigParams = {
-	remote_key: string;
+	remote_key?: string;
+	token?: string;
 	provider?: ProviderSelection;
 	custom_provider?: {
 		name: string;
@@ -318,9 +319,24 @@ export type SetRemoteConfigParams = {
 	};
 };
 
+/**
+ * Resolve the effective remote key. A platform-issued device `token` (claim-code
+ * pairing, ADR-0006) takes precedence over an operator-entered `remote_key`; the
+ * channel presents whichever this returns on every reconnect.
+ */
+export function resolveRemoteKey(
+	params: Pick<SetRemoteConfigParams, "remote_key" | "token">,
+): string | undefined {
+	return params.token ?? params.remote_key;
+}
+
 export async function setRemoteConfig(params: SetRemoteConfigParams) {
 	const config = getConfig();
-	config.remote_key = params.remote_key;
+	const remoteKey = resolveRemoteKey(params);
+	if (remoteKey === undefined) {
+		throw new Error("setRemoteConfig requires either remote_key or token");
+	}
+	config.remote_key = remoteKey;
 	config.relay_server = undefined;
 	config.relay_account = undefined;
 

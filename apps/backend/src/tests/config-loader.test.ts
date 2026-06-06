@@ -8,7 +8,6 @@ import {
 	loadCacheFile,
 	loadJsonConfig,
 	loadJsonConfigSync,
-	saveJsonConfig,
 	saveJsonConfigAsync,
 } from "../helpers/config-loader.ts";
 
@@ -43,7 +42,7 @@ describe("loadJsonConfig", () => {
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	it("should load a valid config file", () => {
+	it("should load a valid config file", async () => {
 		const validConfig: TestConfig = {
 			name: "test",
 			count: 50,
@@ -51,7 +50,11 @@ describe("loadJsonConfig", () => {
 		};
 		fs.writeFileSync(testFilePath, JSON.stringify(validConfig));
 
-		const result = loadJsonConfig(testFilePath, testConfigSchema, testDefaults);
+		const result = await loadJsonConfig(
+			testFilePath,
+			testConfigSchema,
+			testDefaults,
+		);
 
 		expect(result.loaded).toBe(true);
 		expect(result.data.name).toBe("test");
@@ -60,11 +63,15 @@ describe("loadJsonConfig", () => {
 		expect(result.invalidFields).toEqual([]);
 	});
 
-	it("should apply defaults for missing optional fields", () => {
+	it("should apply defaults for missing optional fields", async () => {
 		const partialConfig = { name: "test", count: 20 };
 		fs.writeFileSync(testFilePath, JSON.stringify(partialConfig));
 
-		const result = loadJsonConfig(testFilePath, testConfigSchema, testDefaults);
+		const result = await loadJsonConfig(
+			testFilePath,
+			testConfigSchema,
+			testDefaults,
+		);
 
 		expect(result.loaded).toBe(true);
 		expect(result.data.name).toBe("test");
@@ -73,10 +80,10 @@ describe("loadJsonConfig", () => {
 		expect(result.defaultedFields).toContain("enabled");
 	});
 
-	it("should return defaults when file doesn't exist", () => {
+	it("should return defaults when file doesn't exist", async () => {
 		const nonExistentPath = path.join(tempDir, "nonexistent.json");
 
-		const result = loadJsonConfig(
+		const result = await loadJsonConfig(
 			nonExistentPath,
 			testConfigSchema,
 			testDefaults,
@@ -87,21 +94,43 @@ describe("loadJsonConfig", () => {
 		expect(result.data.enabled).toBe(false); // from defaults
 	});
 
-	it("should return defaults when JSON is invalid", () => {
+	it("should not throw and return defaults for a path in a missing directory", async () => {
+		const deepMissing = path.join(tempDir, "no", "such", "dir", "config.json");
+
+		const result = await loadJsonConfig(
+			deepMissing,
+			testConfigSchema,
+			testDefaults,
+		);
+
+		expect(result.loaded).toBe(false);
+		expect(result.data.count).toBe(10);
+		expect(result.data.enabled).toBe(false);
+	});
+
+	it("should return defaults when JSON is invalid", async () => {
 		fs.writeFileSync(testFilePath, "{ invalid json }");
 
-		const result = loadJsonConfig(testFilePath, testConfigSchema, testDefaults);
+		const result = await loadJsonConfig(
+			testFilePath,
+			testConfigSchema,
+			testDefaults,
+		);
 
 		expect(result.loaded).toBe(false);
 		expect(result.data.count).toBe(10); // from defaults
 	});
 
-	it("should strip invalid fields and keep valid ones", () => {
+	it("should strip invalid fields and keep valid ones", async () => {
 		// count is out of range (max 100)
 		const mixedConfig = { name: "test", count: 150, enabled: true };
 		fs.writeFileSync(testFilePath, JSON.stringify(mixedConfig));
 
-		const result = loadJsonConfig(testFilePath, testConfigSchema, testDefaults);
+		const result = await loadJsonConfig(
+			testFilePath,
+			testConfigSchema,
+			testDefaults,
+		);
 
 		expect(result.loaded).toBe(true);
 		expect(result.data.name).toBe("test");
@@ -122,18 +151,18 @@ describe("loadJsonConfigSync", () => {
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	it("should throw when required file doesn't exist", () => {
+	it("should reject when required file doesn't exist", async () => {
 		const nonExistentPath = path.join(tempDir, "required.json");
 
-		expect(() =>
+		await expect(
 			loadJsonConfigSync(nonExistentPath, testConfigSchema, testDefaults, true),
-		).toThrow("Required config file not found");
+		).rejects.toThrow("Required config file not found");
 	});
 
-	it("should not throw when optional file doesn't exist", () => {
+	it("should not reject when optional file doesn't exist", async () => {
 		const nonExistentPath = path.join(tempDir, "optional.json");
 
-		const result = loadJsonConfigSync(
+		const result = await loadJsonConfigSync(
 			nonExistentPath,
 			testConfigSchema,
 			testDefaults,
@@ -144,7 +173,7 @@ describe("loadJsonConfigSync", () => {
 	});
 });
 
-describe("saveJsonConfig", () => {
+describe("saveJsonConfigAsync", () => {
 	let tempDir: string;
 	let testFilePath: string;
 
@@ -157,19 +186,19 @@ describe("saveJsonConfig", () => {
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	it("should save config as compact JSON by default", () => {
+	it("should save config as compact JSON by default", async () => {
 		const config = { name: "test", count: 42 };
 
-		saveJsonConfig(testFilePath, config);
+		await saveJsonConfigAsync(testFilePath, config);
 
 		const contents = fs.readFileSync(testFilePath, "utf8");
 		expect(contents).toBe('{"name":"test","count":42}');
 	});
 
-	it("should save config as pretty JSON when requested", () => {
+	it("should save config as pretty JSON when requested", async () => {
 		const config = { name: "test", count: 42 };
 
-		saveJsonConfig(testFilePath, config, true);
+		await saveJsonConfigAsync(testFilePath, config, true);
 
 		const contents = fs.readFileSync(testFilePath, "utf8");
 		expect(contents).toContain("\n");
@@ -199,27 +228,27 @@ describe("loadCacheFile", () => {
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	it("should load a valid cache file", () => {
+	it("should load a valid cache file", async () => {
 		const cacheData = { key1: "value1", key2: "value2" };
 		fs.writeFileSync(testFilePath, JSON.stringify(cacheData));
 
-		const result = loadCacheFile(testFilePath, testCacheSchema);
+		const result = await loadCacheFile(testFilePath, testCacheSchema);
 
 		expect(result).toEqual(cacheData);
 	});
 
-	it("should return empty object when file doesn't exist", () => {
+	it("should return empty object when file doesn't exist", async () => {
 		const nonExistentPath = path.join(tempDir, "nonexistent.json");
 
-		const result = loadCacheFile(nonExistentPath, testCacheSchema);
+		const result = await loadCacheFile(nonExistentPath, testCacheSchema);
 
 		expect(result).toEqual({});
 	});
 
-	it("should return empty object when cache is invalid", () => {
+	it("should return empty object when cache is invalid", async () => {
 		fs.writeFileSync(testFilePath, "{ invalid json }");
 
-		const result = loadCacheFile(testFilePath, testCacheSchema);
+		const result = await loadCacheFile(testFilePath, testCacheSchema);
 
 		expect(result).toEqual({});
 	});

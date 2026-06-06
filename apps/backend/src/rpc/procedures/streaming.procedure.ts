@@ -13,6 +13,7 @@ import {
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
 	streamingConfigInputSchema,
+	streamHealthOutputSchema,
 	streamingSetConfigOutputSchema,
 	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
@@ -40,6 +41,7 @@ import {
 	setMockHardware,
 	VALID_HARDWARE_TYPES,
 } from "../../modules/streaming/pipelines.ts";
+import { getStreamHealth } from "../../modules/streaming/health.ts";
 import { getIsStreaming, updateStatus } from "../../modules/streaming/streaming.ts";
 import {
 	start as startStream,
@@ -191,6 +193,9 @@ export const getConfigProcedure = authedProcedure
 			remote_key: config.remote_key,
 			relay_account: config.relay_account,
 			relay_server: config.relay_server,
+			relay_streamid_override: config.relay_streamid_override,
+			relay_protocol: config.relay_protocol,
+			detectionMethod: config.detectionMethod,
 		};
 	});
 
@@ -235,6 +240,10 @@ export const setConfigProcedure = authedProcedure
 			config.relay_account = undefined;
 		}
 
+		if (input.relay_streamid_override !== undefined)
+			config.relay_streamid_override = input.relay_streamid_override;
+		if (input.relay_protocol !== undefined) config.relay_protocol = input.relay_protocol;
+
 		// Reflect the post-clamp config values back for every field the input
 		// touched, so the FE field-lock releases on what the server actually wrote.
 		const applied: StreamingConfigInput = {};
@@ -255,6 +264,10 @@ export const setConfigProcedure = authedProcedure
 		if (input.srtla_port !== undefined) applied.srtla_port = config.srtla_port;
 		if (input.srt_streamid !== undefined)
 			applied.srt_streamid = config.srt_streamid;
+		if (input.relay_streamid_override !== undefined)
+			applied.relay_streamid_override = config.relay_streamid_override;
+		if (input.relay_protocol !== undefined)
+			applied.relay_protocol = config.relay_protocol;
 
 		if (shouldUseMocks()) {
 			setMockEncoderConfig({
@@ -302,6 +315,15 @@ export const setMockHardwareProcedure = authedProcedure
 			success: false,
 			error: `Invalid hardware type: ${input.hardware}`,
 		};
+	});
+
+/**
+ * Stream health procedure — read-only tri-state liveness rollup
+ */
+export const streamHealthProcedure = authedProcedure
+	.output(streamHealthOutputSchema)
+	.handler(() => {
+		return getStreamHealth();
 	});
 
 /**

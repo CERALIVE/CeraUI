@@ -17,7 +17,7 @@
 
 import fs from "node:fs";
 
-import { loadJsonConfig, saveJsonConfig } from "../helpers/config-loader.ts";
+import { loadJsonConfig } from "../helpers/config-loader.ts";
 import {
 	RUNTIME_CONFIG_DEFAULTS,
 	type RuntimeConfig,
@@ -32,7 +32,7 @@ const CONFIG_FILE = "config.json";
 
 let config: RuntimeConfig = {};
 
-export function loadConfig() {
+export async function loadConfig() {
 	// Build defaults based on platform
 	const platformDefaults = { ...RUNTIME_CONFIG_DEFAULTS };
 
@@ -50,7 +50,7 @@ export function loadConfig() {
 			break;
 	}
 
-	const result = loadJsonConfig(
+	const result = await loadJsonConfig(
 		CONFIG_FILE,
 		runtimeConfigSchema,
 		platformDefaults,
@@ -74,7 +74,9 @@ export function saveConfig() {
 		password_hash: getPasswordHash(),
 		ssh_pass_hash: getSshPasswordHash(),
 	};
-	saveJsonConfig(CONFIG_FILE, dataToSave);
+	// Must stay sync: sync callers (setBitrate/setAutostart) depend on the write
+	// finishing before return, and Bun.write() is async-only.
+	fs.writeFileSync(CONFIG_FILE, JSON.stringify(dataToSave));
 }
 
 export function getConfig(): RuntimeConfig {
