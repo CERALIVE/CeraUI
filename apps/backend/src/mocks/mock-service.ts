@@ -10,6 +10,7 @@ import type {
 import { logger } from "../helpers/logger.ts";
 import {
 	buildRelaysMsg,
+	getRelays,
 	setRelaysCacheMock,
 } from "../modules/remote/remote-relays.ts";
 import { broadcastMsg } from "../modules/ui/websocket-server.ts";
@@ -320,6 +321,11 @@ function startRttBroadcast(): void {
 	}
 	rttBroadcastInterval = setInterval(() => {
 		if (!shouldUseMocks()) return;
+		// setRemoteConfig (remote.ts) clears the relay cache on a provider/key
+		// switch; production re-fetches it from the cloud on reconnect, but the
+		// mock has no cloud, so re-seed here to keep the mock catalog continuously
+		// available across a session.
+		if (!getRelays()) setRelaysCacheMock(getMockRelaysCache());
 		broadcastMsg("relays", buildRelaysMsg());
 	}, MOCK_RTT_INTERVAL_MS);
 }
