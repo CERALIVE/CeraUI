@@ -3,9 +3,52 @@
  * Open/close scope only: no stream start, no form submission, no HUD live values.
  * See PLAYBOOK.md for the assertion decision tree.
  */
-import { expect, test } from './fixtures/index.js';
+import { expect, test as base } from './fixtures/index.js';
 import { LivePage } from './pages/live.js';
 import { ShellPage } from './pages/shell.js';
+
+// Concurrent specs (field-lock, stream-health) inject is_streaming:true via
+// dev.emit, which the backend broadcasts to EVERY authed client — locking these
+// config rows behind "Stop stream to change". Force incoming status frames back
+// to is_streaming:false so the Live controls stay reachable regardless of what
+// another worker broadcasts. Installed via a page-fixture override so it runs
+// before authedPage navigates.
+function pinNotStreaming(): void {
+	const Native = window.WebSocket;
+	class Hooked extends Native {
+		set onmessage(handler: ((this: WebSocket, ev: MessageEvent) => unknown) | null) {
+			if (handler === null) {
+				super.onmessage = handler;
+				return;
+			}
+			super.onmessage = (ev: MessageEvent) => {
+				try {
+					const parsed = JSON.parse(ev.data);
+					if (parsed?.status?.is_streaming) {
+						parsed.status.is_streaming = false;
+						handler.call(this, new MessageEvent('message', { data: JSON.stringify(parsed) }));
+						return;
+					}
+				} catch {
+					/* non-JSON frame — pass through */
+				}
+				handler.call(this, ev);
+			};
+		}
+
+		get onmessage(): ((this: WebSocket, ev: MessageEvent) => unknown) | null {
+			return super.onmessage;
+		}
+	}
+	window.WebSocket = Hooked as typeof WebSocket;
+}
+
+const test = base.extend({
+	page: async ({ page }, use) => {
+		await page.addInitScript(pinNotStreaming);
+		await use(page);
+	},
+});
 
 test.describe('Live destination', () => {
 	test('loads the authenticated Live view', async ({ authedPage: page }) => {

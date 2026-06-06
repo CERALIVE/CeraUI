@@ -18,6 +18,24 @@ if (!fs.existsSync(tokensPath)) {
 	}
 }
 
+// Seed a server before the backend boots so the Live view leaves its empty state
+// and renders the controls specs drive. Must be srtla_addr (manual), not
+// relay_server, or ServerDialog defaults to Relay and breaks its method test.
+// Only when absent, so a dev's real config.json survives.
+const configPath = path.resolve(import.meta.dirname, '../backend/config.json');
+if (!fs.existsSync(configPath)) {
+	fs.writeFileSync(
+		configPath,
+		JSON.stringify({
+			srtla_addr: '127.0.0.1',
+			srtla_port: 5000,
+			srt_streamid: 'e2e',
+			max_br: 5000,
+		}),
+		'utf8',
+	);
+}
+
 const DEV_PORT = Number(process.env.E2E_PORT ?? 6173);
 const DEV_URL = `http://localhost:${DEV_PORT}`;
 
@@ -31,7 +49,12 @@ export default defineConfig({
   globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  // Every worker shares ONE single-threaded mock backend; over-parallelism lets a
+  // dev.emit-heavy spec starve the relay-catalog push to a concurrent relay page.
+  // Pin CI to 2 workers (GitHub's default core count) so beefier runners don't
+  // swamp the backend, and retry any residual contention rather than mask a bug.
+  workers: process.env.CI ? 2 : undefined,
+  retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['line']] : [['list']],
   expect: {
     toHaveScreenshot: { maxDiffPixels: 100 },
@@ -54,7 +77,9 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: 'pnpm --filter backend run dev',
+      // No --watch: tests write config.json/auth_tokens.json, which would
+      // otherwise restart the backend mid-run and drop live WS connections.
+      command: 'pnpm --filter backend run dev:e2e',
       port: 3002,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
