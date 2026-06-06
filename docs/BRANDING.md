@@ -40,9 +40,9 @@ description: brandTranslation("CeraUI needs an internet connection to manage you
 
 | Placeholder | Value |
 |-------------|-------|
-| `{{deviceName}}` | CERALIVE |
+| `{{deviceName}}` | CeraLive |
 | `{{deviceNameLower}}` | ceralive |
-| `{{siteName}}` | CeraUI for CERALIVE© |
+| `{{siteName}}` | CeraUI for CeraLive© |
 | `{{cloudService}}` | CeraLive Cloud |
 | `{{logName}}` | CeraLive Log |
 | `{{organizationName}}` | CeraLive |
@@ -55,9 +55,9 @@ Components can access brand configuration through:
 import { BRAND_CONFIG, deviceName, siteName } from "$lib/config/branding";
 
 // Use in components
-console.log(BRAND_CONFIG.deviceName); // "CERALIVE"
-console.log(deviceName);              // "CERALIVE"
-console.log(siteName);                // "CeraUI for CERALIVE©"
+console.log(BRAND_CONFIG.deviceName); // "CeraLive"
+console.log(deviceName);              // "CeraLive"
+console.log(siteName);                // "CeraUI for CeraLive©"
 ```
 
 ## File Structure

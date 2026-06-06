@@ -1,167 +1,158 @@
-# CeraUI
+# frontend
 
-CeraUI is a modern user interface built with **Svelte + Vite**, designed as an alternative frontend for [CeraLive](https://github.com/CeraLive/CeraLive). It communicates with the CeraLive WebSocket backend to provide a fast, interactive, and user-friendly experience.
+Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming hardware. Talks to the `backend` app exclusively via WebSocket RPC (`@ceraui/rpc`). No REST, no direct hardware access.
 
-## Features
+**Status**: [EXISTS] — active development, part of the `ceralive-workspace` pnpm monorepo.
 
-- **Svelte 5 + Vite**: Enjoy a highly reactive and efficient UI built with the latest Svelte and Vite tooling.
-- **Modern Design**: A sleek and minimalistic interface for an enhanced user experience.
-- **Responsive Design**: The UI is optimized for all screen sizes.
-- **WebSocket Integration**: Seamlessly communicates with the CeraLive backend.
-- **Flexible Deployment**: Choose to serve on a different port with PM2 or replace the existing CeraLive content.
-- **Remote Control**: Full remote control functionality even without the automatic relay server selection feature.
+## Stack
 
-## Objectives
+- **Svelte 5** with runes (`$state`, `$derived`, `$effect`) — no `$:` reactive statements
+- **Vite** dev server and bundler
+- **TailwindCSS v4** with design tokens defined in `app.css`
+- **shadcn-svelte** (bits-ui v2) for UI primitives — CLI-managed, not hand-edited
+- **`@ceraui/rpc`** — shared oRPC schemas and validation constants (workspace package)
+- **`@ceraui/i18n`** — typesafe-i18n, 10 languages (workspace package)
+- **vitest** for unit tests, **Playwright** for E2E
 
-One of the long-term objectives of this project, which will commence once the UI has full functionality, is to support both maintaining **vanilla** CeraLive builds (as seen on [ceralive.net](https://ceralive.net/)) and creating a separate branch for custom development to extend CeraLive functionalities. Additionally, I am interested in the way [pjeweb/CeraLive](https://github.com/pjeweb/CeraLive) was restructured.
+## Sibling-Checkout Layout
 
-## Roadmap
+The workspace root (`ceralive-workspace`) resolves native bindings via `link:` paths. The `backend` app depends on:
 
-- **Updating Overlay Image**: Find a better picture for the updating overlay.
+```
+"@ceralive/ceracoder": "link:../../../ceracoder/bindings/typescript"
+"@ceralive/srtla":     "link:../../../srtla/bindings/typescript"
+```
 
-## Installation
+`ceracoder/`, `srtla/`, and `CeraUI/` must be siblings under the same parent directory. Breaking this layout breaks `pnpm install` for the backend.
+
+```
+ceralive/
+├── ceracoder/bindings/typescript/   ← @ceralive/ceracoder
+├── srtla/bindings/typescript/       ← @ceralive/srtla
+└── CeraUI/                          ← workspace root; backend resolves link: three levels up
+```
+
+## Development
 
 ### Prerequisites
 
-- **Node.js** (v16 or later recommended)
-- **pnpm** (or npm/yarn)
+- **pnpm** (workspace manager — do not use npm or yarn)
+- Sibling repos `ceracoder` and `srtla` checked out at the correct paths (see above)
 
-### Clone the Repository
+### Install
 
-```sh
-git clone https://github.com/CERALIVE/CeraUI.git
-cd CeraUI
-```
-
-### Install Dependencies
-
-Using `pnpm` (recommended):
+Run from the `CeraUI/` workspace root:
 
 ```sh
 pnpm install
 ```
 
-Or using `npm`:
+This installs all workspaces and resolves the `link:` sibling deps.
+
+### Dev Server
 
 ```sh
-npm install
+pnpm dev
 ```
 
-### Local Development Setup
+Starts the frontend (Vite, port 5173) and backend together via mprocs. Run from the workspace root.
 
-For development, you can run the project in dev mode from your computer. First, copy the `.env.example` file to `.env`:
+To run the frontend alone:
 
 ```sh
-cp .env.example .env
+pnpm --filter frontend run dev
 ```
 
-Then, replace the `VITE_SOCKET_ENDPOINT` value in the `.env` file with the CeraLive IP address on your local network.
-
-**Important:** Before building for production, remove the `.env` file so that the UI can load the IP dynamically from `window.location`.
-
-### Running the Development Server
-
-After setting up your environment, start the development server:
+### Build
 
 ```sh
-pnpm run dev
+pnpm build
 ```
 
-This will start a local development server, usually accessible at `http://localhost:5173/`.
-
-### Building for Production
-
-Generate an optimized production build:
+Or frontend only:
 
 ```sh
-pnpm run build
+pnpm --filter frontend run build
 ```
 
-The production build will be output to the `dist` directory.
+Output goes to `dist/`.
 
-### Preview Production Build
+### Other Commands
 
-To serve the production build locally:
+| Command | Description |
+|---------|-------------|
+| `pnpm --filter frontend run check` | Type-check via `svelte-check` |
+| `pnpm --filter frontend run test` | Run vitest unit tests |
+| `pnpm --filter frontend run test:e2e` | Run Playwright E2E tests |
+| `pnpm --filter frontend run lint` | ESLint |
+| `pnpm --filter frontend run preview` | Preview production build locally |
+
+### Mock Scenarios
+
+Development mode mocks hardware. Set `MOCK_SCENARIO` to switch scenarios:
 
 ```sh
-pnpm run preview
+pnpm dev                                      # default: multi-modem + WiFi
+MOCK_SCENARIO=single-modem pnpm dev           # 1 modem, no WiFi
+MOCK_SCENARIO=streaming-active pnpm dev       # active streaming simulation
 ```
 
-## Deployment Options
+## Structure
 
-### Serving on a Different Port with PM2
+```
+src/
+├── main.ts / App.svelte          # entry: initSubscriptions(), auth gate, Layout
+├── main/
+│   ├── LiveView.svelte           # stream control, encoder/audio/server config, bitrate
+│   ├── NetworkView.svelte        # bonded links, WiFi, modems, Ethernet, hotspot
+│   ├── SettingsView.svelte       # grouped config entry points (all via dialogs)
+│   ├── HudBar.svelte             # persistent HUD: bitrate, per-link signals, SoC telemetry
+│   ├── HudRegion.svelte          # responsive HUD mount (desktop top / mobile bottom dock)
+│   ├── DisconnectedBanner.svelte # reconnect/reboot/session-expiry banner
+│   └── dialogs/                  # 14 focused config dialogs, all compose AppDialog
+└── lib/
+    ├── rpc/                      # RPCClient, TypedRPC, subscriptions.svelte.ts
+    ├── stores/                   # hud, connection-ux, layout-mode (Svelte 5 runes)
+    └── components/
+        ├── dialogs/              # AppDialog.svelte — shared responsive dialog chrome
+        ├── custom/               # custom components (not shadcn-managed)
+        ├── streaming/            # ValidationAdapter.ts — FE constraint adapter
+        └── ui/                   # shadcn-svelte primitives (bits-ui v2) — CLI-managed
+```
 
-You can serve the UI on a different port using **PM2** and ensure it runs at startup:
+## Key Conventions
 
-1. Install PM2 globally if you haven't already:
+- **RPC only**: all backend calls go through `rpc.*` or `rpcClient.onMessage`. No direct hardware access.
+- **Validation bounds**: import from `ValidationAdapter.ts` (which sources from `@ceraui/rpc/schemas`). No inline numeric literals in dialog components.
+- **Stores**: Svelte 5 runes only. Files named `*.svelte.ts`.
+- **UI primitives**: add via `pnpm dlx shadcn-svelte@latest add <component>`, not by hand.
+- **Custom components**: go in `lib/components/custom/`, not `lib/components/ui/`.
+- **i18n**: all user-visible strings via `LL.*` from `@ceraui/i18n`.
+- **Design tokens**: Ground Control identity (phosphor lime primary, warm graphite background) defined in `app.css`. Read `../../.impeccable.md` before touching visuals.
+- **Touch/kiosk mode**: `?mode=touch` URL flag. See `../../docs/TOUCHSCREEN.md`.
+- **E2E tests**: read `tests/e2e/PLAYBOOK.md` before writing any E2E test.
 
-    ```sh
-    npm install -g pm2
-    ```
+## Deployment
 
-2. Install a static server like `serve`:
-
-    ```sh
-    npm install -g serve
-    ```
-
-3. Start serving the production build with PM2 on port `8080` (or any port of your choice):
-
-    ```sh
-    pm2 start "serve -s dist -l 8080" --name CeraUI
-    ```
-
-4. Save the PM2 process list and configure it to run at startup:
-
-    ```sh
-    pm2 save
-    pm2 startup
-    ```
-
-### Replacing the Existing CeraLive Frontend
-
-If you prefer to replace the original CeraLive frontend with CeraUI, copy the build files into the correct location:
+The frontend ships as part of the `ceraui` Debian package. The backend serves the compiled `dist/` as static files. Build the `.deb` from the workspace root:
 
 ```sh
-sudo cp -r dist/* /opt/CeraLive/public/
+BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh
+BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 ```
 
-> **Note:** Replacing the original UI directly may cause issues. When CeraLive is updated, it can overwrite these files, removing your custom UI. Ensure you monitor updates and reapply your changes if necessary.
-
-## 📸 Screenshots & Visual Documentation
-
-CeraUI offers a comprehensive and intuitive interface with both light and dark theme support across desktop and mobile platforms. Experience the complete visual journey through our **[📸 Visual Gallery](docs/SCREENSHOTS.md)**.
-
-### 🎯 Quick Preview
-
-| **Desktop Interface** | **Mobile Experience** |
-|:---------------------:|:---------------------:|
-| ![Desktop Preview](docs/screenshots/desktop/dark/general.png) | ![Mobile Preview](docs/screenshots/mobile/dark/general.png) |
-| *Full HD (1920×1080) optimized interface* | *iPhone 14 Pro Max (430×932) responsive design* |
-
-### 🌟 Featured Highlights
-
-- **🎨 Dual Theme Support**: Professional dark mode and clean light theme
-- **📱 Responsive Design**: Seamless desktop and mobile experiences  
-- **🔧 5 Core Tabs**: General, Network, Streaming, Advanced, and DevTools interfaces
-- **🌐 Internationalization**: Complete multi-language support (10+ languages)
-- **⚡ Progressive Web App**: Offline capabilities and native app-like performance
-- **📸 22 Screenshots**: Complete visual documentation with enhanced capture timing
-
-### 📖 Complete Documentation
-
-Explore the full visual documentation with detailed interface breakdowns, feature demonstrations, and technical specifications in our comprehensive **[Screenshots Gallery](docs/SCREENSHOTS.md)**.
+See [`../../docs/BUILD_PIPELINE.md`](../../docs/BUILD_PIPELINE.md) for the full build and CI reference.
 
 ## Documentation
 
-### Visual Documentation
-
-- **[📸 Screenshots Gallery](docs/SCREENSHOTS.md)**: Complete visual documentation showcasing CeraUI's interface across desktop and mobile platforms. Features 22 high-quality screenshots covering all 5 tabs in both dark and light themes, plus PWA offline mode demonstrations.
-
-### Development Tools
-
-- **[🔧 DevTools Tab](docs/DEVTOOLS.md)**: Comprehensive guide to the development utilities and debugging tools available in the DevTools tab. Includes component testing, console debugging, system information, and troubleshooting guides.
+| Document | Description |
+|----------|-------------|
+| [`docs/SCREENSHOTS.md`](docs/SCREENSHOTS.md) | Visual gallery — desktop and mobile, dark and light themes |
+| [`docs/DEVTOOLS.md`](docs/DEVTOOLS.md) | DevTools tab reference (dev builds only) |
+| [`../../docs/TOUCHSCREEN.md`](../../docs/TOUCHSCREEN.md) | Touch/kiosk layout mode |
+| [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) | System overview and data flow |
+| [`tests/e2e/PLAYBOOK.md`](tests/e2e/PLAYBOOK.md) | E2E test playbook (required reading) |
 
 ## License
 
-This project is licensed under the **GPL-3.0 License**. See the [LICENSE](LICENSE) file for more details.
+GPL-3.0. See [LICENSE](LICENSE).

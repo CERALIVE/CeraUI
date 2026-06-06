@@ -83,6 +83,11 @@ The build pipeline runs manually via workflow dispatch.
    - Generates changelog from commit history
    - Marks beta releases as pre-release
 
+5. **sign-and-publish-r2**
+   - Signs Debian packages with GPG
+   - Generates signed apt repo metadata (`Packages`, `Release`, `InRelease`)
+   - Uploads to Cloudflare R2 under the appropriate channel (`stable` or `beta`)
+
 ## Local Development
 
 ### Prerequisites
@@ -161,7 +166,7 @@ ceraui-2026.1.0-arm64.tar.gz
 ## Build Process
 
 1. Navigate to **Actions** in the GitHub repository
-2. Select **Build & Release** workflow
+2. Select **Publish Release** workflow
 3. Click **Run workflow**
 4. Select release type (`stable` or `beta`)
 5. Optionally add release notes

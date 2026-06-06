@@ -2,7 +2,7 @@
 
 ## Problem
 
-Previously, all packages had hardcoded iteration "1", so APT would see rebuilds as identical versions and skip updates.
+Previously, all packages had hardcoded iteration `1`, so APT would see rebuilds as identical versions and skip updates.
 
 ## Solution
 
@@ -10,9 +10,9 @@ Each build gets a unique timestamp-based iteration, ensuring APT always detects 
 
 ## Version Format
 
-CeraUI uses **Calendar Versioning (CalVer)**: `YYYY.MINOR.PATCH[-beta.N]`
+The Debian package name is `ceralive-device`. Versions follow a **Calendar Versioning** convention (`YYYY.MINOR.PATCH`), sourced from the latest git tag or the `BUILD_VERSION` env var. The build script falls back to `1.0.0` if no tag exists.
 
-Debian package naming:
+Debian package filename format:
 
 ```
 {name}_{version}-{iteration}_{arch}.deb
@@ -20,17 +20,19 @@ Debian package naming:
 
 | Component | Source | Example |
 |-----------|--------|---------|
-| name | Fixed | `ceralive-device` |
-| version | Git tag or `BUILD_VERSION` | `2026.1.0` |
-| iteration | `YYYYMMDD_HHMMSS.commit` | `20260112_143022.abc1234` |
-| arch | `BUILD_ARCH` or auto-detect | `arm64` |
+| `name` | Fixed | `ceralive-device` |
+| `version` | Latest git tag or `BUILD_VERSION` | `2026.1.0` |
+| `iteration` | `YYYYMMDD_HHMMSS.commit` | `20260112_143022.abc1234` |
+| `arch` | `BUILD_ARCH` or auto-detect | `arm64` |
+
+The iteration is built from two parts: a UTC timestamp (`get_build_date`) and the short git commit hash. Together they guarantee every build produces a unique, APT-comparable version string.
 
 ## How Versions Are Set
 
-**GitHub Actions:**
-- Workflow calculates next version from existing git tags
+**CI / GitHub Actions:**
+- Workflow calculates the next version from existing git tags
 - `release_type`: `stable` or `beta`
-- Creates tag and builds packages
+- Creates the tag and builds packages
 
 **Local builds:**
 ```bash
@@ -56,14 +58,16 @@ ceralive-device_2026.1.1-20260115_160000.ghi9012_arm64.deb
 
 ## APT Version Comparison
 
-APT compares versions:
+APT compares versions in two stages:
 
 1. Base version: `2026.1.0 < 2026.1.1 < 2026.2.0`
-2. Same version: ordered by iteration timestamp
+2. Same base version: ordered by iteration timestamp
+
+This means a rebuild of the same tagged version still wins over an older build, because the timestamp advances.
 
 ## Build Metadata
 
-Generated in `package-info-{arch}.json`:
+The build script writes `package-info-{arch}.json` alongside the `.deb`:
 
 ```json
 {
@@ -78,4 +82,4 @@ Generated in `package-info-{arch}.json`:
 
 ## See Also
 
-- [BUILD_PIPELINE.md](BUILD_PIPELINE.md) - Full build system and CalVer details
+- [BUILD_PIPELINE.md](BUILD_PIPELINE.md) — full build system, CI workflow, and versioning details
