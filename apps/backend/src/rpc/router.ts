@@ -20,7 +20,10 @@ import {
 	configureNetworkInterfaceProcedure,
 	getNetworkInterfacesProcedure,
 } from "./procedures/network.procedure.ts";
-import { generateClaimCodeProcedure } from "./procedures/pairing.procedure.ts";
+import {
+	completePairingProcedure,
+	generateClaimCodeProcedure,
+} from "./procedures/pairing.procedure.ts";
 import {
 	dismissNotificationProcedure,
 	getPersistentNotificationsProcedure,
@@ -142,6 +145,7 @@ const stableRoutes = {
 
 	pairing: os.router({
 		generateClaimCode: generateClaimCodeProcedure,
+		completePairing: completePairingProcedure,
 	}),
 };
 

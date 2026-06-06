@@ -7,7 +7,11 @@
  */
 import { oc } from '@orpc/contract';
 
-import { claimCodeOutputSchema } from '../schemas';
+import {
+	claimCodeOutputSchema,
+	completePairingInputSchema,
+	completePairingOutputSchema,
+} from '../schemas';
 
 export const pairingContract = oc.router({
 	/**
@@ -17,4 +21,13 @@ export const pairingContract = oc.router({
 	 * validity window and deterministically rotates once the window elapses.
 	 */
 	generateClaimCode: oc.output(claimCodeOutputSchema),
+
+	/**
+	 * Complete pairing against the (mock) platform: submit a claim-code, receive
+	 * a device token, and store it as the active remote key. Mock-mode only until
+	 * the real platform claim endpoint lands.
+	 */
+	completePairing: oc
+		.input(completePairingInputSchema)
+		.output(completePairingOutputSchema),
 });
