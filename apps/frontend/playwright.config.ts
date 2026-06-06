@@ -51,11 +51,12 @@ export default defineConfig({
   globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  // Every worker shares ONE single-threaded mock backend; over-parallelism lets a
-  // dev.emit-heavy spec starve the relay-catalog push to a concurrent relay page.
-  // Pin CI to 2 workers (GitHub's default core count) so beefier runners don't
-  // swamp the backend, and retry any residual contention rather than mask a bug.
-  workers: process.env.CI ? 2 : undefined,
+  // Every worker shares ONE single-threaded mock backend. A concurrent dev.emit
+  // -heavy spec starves the relay-catalog push to a relay page (empty catalog) or
+  // churns its Select mid-click — the two relay specs pass alone but not beside
+  // those. Serialize in CI (closed sockets are reaped, so a single long session
+  // stays healthy on a dedicated runner); retry covers any residual timing.
+  workers: process.env.CI ? 1 : undefined,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['line']] : [['list']],
   expect: {
