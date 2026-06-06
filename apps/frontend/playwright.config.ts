@@ -21,9 +21,11 @@ if (!fs.existsSync(tokensPath)) {
 // Seed a server before the backend boots so the Live view leaves its empty state
 // and renders the controls specs drive. Must be srtla_addr (manual), not
 // relay_server, or ServerDialog defaults to Relay and breaks its method test.
-// Only when absent, so a dev's real config.json survives.
+// Overwrite in CI: the backend unit-test step runs first and leaves a server-less
+// config.json, so a plain "if absent" would skip and the Live view stays empty.
+// Locally, only seed when absent so a dev's real config.json survives.
 const configPath = path.resolve(import.meta.dirname, '../backend/config.json');
-if (!fs.existsSync(configPath)) {
+if (process.env.CI || !fs.existsSync(configPath)) {
 	fs.writeFileSync(
 		configPath,
 		JSON.stringify({
