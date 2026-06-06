@@ -26,6 +26,9 @@ export const EVIDENCE_DIR = path.resolve(import.meta.dirname, '../../../.omo/evi
 export default defineConfig({
   testDir: 'tests/e2e',
   outputDir: EVIDENCE_DIR,
+  // Specs read auth_tokens.json at module-load time, so beforeEach is too late;
+  // globalSetup runs after webServer and before spec collection. See that file.
+  globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
