@@ -50,3 +50,50 @@ export const claimCodeOutputSchema = z.object({
 	windowSeconds: z.number().int().positive(),
 });
 export type ClaimCodeOutput = z.infer<typeof claimCodeOutputSchema>;
+
+/** Subscription standing carried in the device token (`sub_status`, ADR-0006); mirrors platform `Billing.status`. */
+export const SUBSCRIPTION_STATUSES = [
+	'ACTIVE',
+	'FREE',
+	'EXPIRED',
+	'CANCELLED',
+] as const;
+export const subscriptionStatusSchema = z.enum(SUBSCRIPTION_STATUSES);
+export type SubscriptionStatus = z.infer<typeof subscriptionStatusSchema>;
+
+/**
+ * Decoded device-token claims (PASETO v4.public payload, ADR-0006). ADR-0006 is
+ * still `proposed`, so the token is a stub: claims are real but not yet
+ * Ed25519-signed (see `modules/pairing/device-token.ts`).
+ */
+export const deviceTokenClaimsSchema = z.object({
+	/** Device serial — becomes `DeviceConnection.serialNumber` on the platform. */
+	device_id: z.string().min(1),
+	/** Subscription standing at issuance. */
+	sub_status: subscriptionStatusSchema,
+	/** Issued-at, epoch seconds. */
+	iat: z.number().int().nonnegative(),
+	/** Expiry, epoch seconds. The channel rejects expired tokens. */
+	exp: z.number().int().nonnegative(),
+});
+export type DeviceTokenClaims = z.infer<typeof deviceTokenClaimsSchema>;
+
+/** Input for `pairing.completePairing`: the claim-code submitted to the (mock) platform. */
+export const completePairingInputSchema = z.object({
+	code: z.string().regex(CLAIM_CODE_RE),
+});
+export type CompletePairingInput = z.infer<typeof completePairingInputSchema>;
+
+/**
+ * Output of `pairing.completePairing`. `paired` is the discriminant; on success
+ * the device stored the issued token as its active `remote_key`. `validUntil` is
+ * epoch ms (token `exp` is epoch seconds). `error` carries a stable machine code.
+ */
+export const completePairingOutputSchema = z.object({
+	paired: z.boolean(),
+	device_id: z.string().optional(),
+	sub_status: subscriptionStatusSchema.optional(),
+	validUntil: z.number().int().nonnegative().optional(),
+	error: z.string().optional(),
+});
+export type CompletePairingOutput = z.infer<typeof completePairingOutputSchema>;

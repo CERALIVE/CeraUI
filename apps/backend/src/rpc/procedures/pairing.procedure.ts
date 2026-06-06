@@ -3,10 +3,17 @@
  * Device-side claim-code generation (device-pairing-claim-code change).
  */
 
-import { claimCodeOutputSchema } from "@ceraui/rpc/schemas";
+import {
+	claimCodeOutputSchema,
+	completePairingInputSchema,
+	completePairingOutputSchema,
+} from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { generateClaimCode } from "../../modules/pairing/claim-code.ts";
+import { completeMockPairing } from "../../modules/pairing/mock-platform.ts";
+import { setRemoteConfig } from "../../modules/remote/remote.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
@@ -28,4 +35,22 @@ export const generateClaimCodeProcedure = authedProcedure
 	.output(claimCodeOutputSchema)
 	.handler(async () => {
 		return generateClaimCode();
+	});
+
+/**
+ * Complete pairing against the mock platform: validate the submitted claim-code,
+ * receive a device token, and store it as the active remote key (reconnecting
+ * the channel with it). Gated to mock mode — until the real platform claim
+ * endpoint exists, there is no production path to issue a token here.
+ */
+export const completePairingProcedure = authedProcedure
+	.input(completePairingInputSchema)
+	.output(completePairingOutputSchema)
+	.handler(async ({ input }) => {
+		if (!shouldUseMocks()) {
+			return { paired: false, error: "mock-platform-unavailable" };
+		}
+		return completeMockPairing(input.code, {
+			applyToken: (token) => setRemoteConfig({ token }),
+		});
 	});

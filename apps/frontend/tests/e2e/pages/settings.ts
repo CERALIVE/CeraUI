@@ -51,6 +51,22 @@ export class SettingsPage {
 		await this.dismiss('Cloud Remote Server');
 	}
 
+	// ── Device pairing (claim code) ───────────────────────────────────────────
+	/** Generate a claim code and return its trimmed text once rendered. */
+	async generateClaimCode(): Promise<string> {
+		await this.page.getByTestId('generate-claim-code').click();
+		const code = this.page.getByTestId('claim-code');
+		await expect(code).toBeVisible();
+		await expect(this.page.getByTestId('claim-code-expiry')).toBeVisible();
+		return ((await code.textContent()) ?? '').trim();
+	}
+
+	/** Drive the dev-only mock-platform completion and assert the paired state. */
+	async simulatePairing(): Promise<void> {
+		await this.page.getByTestId('simulate-pairing').click();
+		await expect(this.page.getByTestId('pairing-status')).toBeVisible();
+	}
+
 	// ── Device Password ───────────────────────────────────────────────────────
 	async openPassword(): Promise<void> {
 		await openDialog(

@@ -185,6 +185,7 @@ export const setRemoteConfigProcedure = authedProcedure
 	.handler(async ({ input }) => {
 		await setRemoteConfig({
 			remote_key: input.remote_key,
+			token: input.token,
 			provider: input.provider,
 			custom_provider: input.custom_provider,
 		});
