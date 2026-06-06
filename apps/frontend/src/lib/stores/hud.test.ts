@@ -238,24 +238,28 @@ describe("deriveHudState — happy path", () => {
 	});
 });
 
-describe("deriveHudState — staleness", () => {
-	it("flips stale flags once the threshold elapses with no fresh data", () => {
+describe("deriveHudState — staleness (cadence-aware, connection-backed)", () => {
+	it("dims fast periodic sensors on age while connection-backed values stay bright (connected)", () => {
 		const now = T0 + STALE_THRESHOLD_MS + 1;
 		const state = deriveHudState(makeSources(), makeTimestamps(T0), now);
 
-		expect(state.isStreamingStale).toBe(true);
-		expect(state.isBitrateStale).toBe(true);
+		// Sensors push ~every 1s, so a >5s gap is a genuine stall → stale.
 		expect(state.isSensorsStale).toBe(true);
-		expect(state.links.every((l) => l.isStale)).toBe(true);
-		// Still connected, so not fully stale.
+
+		// Bitrate (config, on-change) and links (modems ~30s / wifi on-change) are
+		// connection-backed: they must NOT dim on age while the socket is up, or
+		// healthy data flickers stale in the gaps between slow backend pushes.
+		expect(state.isStreamingStale).toBe(false);
+		expect(state.isBitrateStale).toBe(false);
+		expect(state.links.every((l) => !l.isStale)).toBe(true);
 		expect(state.isFullyStale).toBe(false);
 	});
 
-	it("does not mark fresh data stale just under the threshold", () => {
+	it("does not mark sensors stale just under the threshold", () => {
 		const now = T0 + STALE_THRESHOLD_MS - 1;
 		const state = deriveHudState(makeSources(), makeTimestamps(T0), now);
-		expect(state.isStreamingStale).toBe(false);
 		expect(state.isSensorsStale).toBe(false);
+		expect(state.isStreamingStale).toBe(false);
 	});
 });
 

@@ -257,4 +257,46 @@ describe('dirty-registry pure core', () => {
 		expect(isLocked(reg, 'max_br')).toBe(false);
 		expect(Object.keys(reg.locks)).toEqual([]);
 	});
+
+	// ----------------------------------------------------------------------
+	// E11 — Lock held after pending clears (BondToggle flash-back fix, Task 1):
+	// the owning RPC resolves and reports its server-applied value via
+	// onRpcApplied while the resolve flag has NOT yet been set (in BondToggle the
+	// .then() success path runs BEFORE the finally marks the RPC resolved). The
+	// lock must be HELD — not released — so the optimistic value stays on screen
+	// until the confirming echo arrives. This is exactly what the new display
+	// derivation `(pending || isPending(field)) ? target : enabled` relies on:
+	// isPending stays true across the `pending → false` transition, so the toggle
+	// never snaps back to the stale `enabled` prop (no flash-back).
+	// ----------------------------------------------------------------------
+	it('E11: lock held after pending clears — onRpcApplied (pre-resolve) keeps guarding until a matching echo', () => {
+		const reg = createRegistry();
+		const field = 'enabled_wlan0';
+
+		// User toggles bond membership OFF; the RPC is in flight (rpcResolved=false).
+		registryCore.markPending(reg, field, false, T0);
+		expect(isLocked(reg, field)).toBe(true);
+		expect(reg.locks[field].rpcResolved).toBe(false);
+
+		// RPC resolves carrying the server-applied value. Because the resolve flag
+		// is still false (finally hasn't run), onRpcApplied takes Case 2: it adopts
+		// the applied value as the new intent and marks resolved, but does NOT
+		// release. The lock is STILL held — this is the no-flash guarantee.
+		const applied = onRpcApplied(reg, field, false, T0 + 5);
+		expect(applied).toEqual({ apply: true, released: false });
+		expect(isLocked(reg, field)).toBe(true);
+		expect(reg.locks[field].rpcResolved).toBe(true);
+		expect(reg.locks[field].intendedValue).toBe(false);
+
+		// `pending` clears in the component's finally — but the lock above is held,
+		// so a STALE echo of the OLD value (enabled:true) stays ignored and the
+		// toggle keeps following `target` (no flash-back to the stale prop).
+		expect(shouldIgnoreEcho(reg, field, true)).toBe(true);
+
+		// Only the confirming (matching) echo finally releases the lock, at which
+		// point `displayed` can fall through to the now-authoritative `enabled`.
+		const echo = reconcile(reg, field, false, true, T0 + 50);
+		expect(echo).toEqual({ apply: true, released: true });
+		expect(isLocked(reg, field)).toBe(false);
+	});
 });

@@ -10,6 +10,8 @@ export const notificationSchema = z.object({
 	name: z.string(),
 	type: notificationTypeSchema,
 	msg: z.string(),
+	key: z.string().optional(),
+	params: z.record(z.string(), z.unknown()).optional(),
 	is_dismissable: z.boolean(),
 	is_persistent: z.boolean(),
 	duration: z.number(),

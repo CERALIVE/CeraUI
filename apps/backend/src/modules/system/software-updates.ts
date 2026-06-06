@@ -17,8 +17,6 @@
 */
 
 /* Software updates */
-import { type ExecException, exec, spawn } from "node:child_process";
-
 import { execPNR } from "../../helpers/exec.ts";
 import { invariant } from "../../helpers/invariant.ts";
 import { logger } from "../../helpers/logger.ts";
@@ -224,7 +222,38 @@ async function getSoftwareUpdateSize() {
 	return null;
 }
 
+// Node's ExecException, reproduced structurally so callers keep the same
+// error-classification surface (code/stdout/stderr) without the Node import.
+type ExecException = Error & {
+	code?: number;
+	stdout?: string;
+	stderr?: string;
+};
+
 type SoftwareUpdateError = ExecException | "busy" | true | null;
+
+/**
+ * Classify the outcome of `apt-get update` into the legacy `errOrStderr` value.
+ *
+ * Preserves the exact pre-migration semantics of the `exec()` callback:
+ *   - any stderr output ⇒ `true` (treated as an error, even on exit 0);
+ *   - otherwise a non-zero exit ⇒ an ExecException-shaped error;
+ *   - otherwise (exit 0, no stderr) ⇒ `null` (success).
+ */
+export function classifyAptUpdateResult(
+	exitCode: number,
+	stderr: string,
+): SoftwareUpdateError {
+	if (stderr.length) return true;
+	if (exitCode !== 0) {
+		const err = new Error(
+			`apt-get update exited with code ${exitCode}`,
+		) as ExecException;
+		err.code = exitCode;
+		return err;
+	}
+	return null;
+}
 
 function checkForSoftwareUpdates(
 	callback: (err: SoftwareUpdateError, aptGetUpdateFailures: number) => unknown,
@@ -232,13 +261,18 @@ function checkForSoftwareUpdates(
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return;
 
 	aptGetUpdating = true;
-	exec("apt-get update --allow-releaseinfo-change", (err, stdout, stderr) => {
-		let errOrStderr: SoftwareUpdateError = err;
+	void (async () => {
+		const res = await Bun.$`apt-get update --allow-releaseinfo-change`
+			.nothrow()
+			.quiet();
+		const stdout = res.stdout.toString();
+		const stderr = res.stderr.toString();
 
 		aptGetUpdating = false;
 
+		const errOrStderr = classifyAptUpdateResult(res.exitCode, stderr);
+
 		if (stderr.length) {
-			errOrStderr = true;
 			aptGetUpdateFailures++;
 			queueUpdateGw();
 		} else {
@@ -252,7 +286,7 @@ function checkForSoftwareUpdates(
 		if (stderr) logger.error(stderr);
 
 		if (callback) callback(errOrStderr, aptGetUpdateFailures);
-	});
+	})();
 }
 
 let nextCheckForSoftwareUpdates = getms();
@@ -330,12 +364,14 @@ function doSoftwareUpdate() {
 	const heldBack = aptHeldBackPackages
 		? parseHeldBackPackages(aptHeldBackPackages)
 		: undefined;
-	const aptUpgrade = spawn("apt-get", buildAptUpgradeArgs(heldBack));
+	const aptUpgrade = Bun.spawn(["apt-get", ...buildAptUpgradeArgs(heldBack)], {
+		stdout: "pipe",
+		stderr: "pipe",
+	});
 
-	aptUpgrade.stdout.on("data", (buf) => {
+	const handleStdoutChunk = (data: string) => {
 		let sendUpdate = false;
 
-		const data = buf.toString("utf8");
 		aptLog += data;
 
 		if (!softUpdateStatus) return;
@@ -391,13 +427,29 @@ function doSoftwareUpdate() {
 		if (sendUpdate) {
 			broadcastMsg("status", { updating: softUpdateStatus });
 		}
-	});
+	};
 
-	aptUpgrade.stderr.on("data", (data) => {
-		aptErr += data;
-	});
+	void (async () => {
+		const stdoutDecoder = new TextDecoder();
+		const drainStdout = (async () => {
+			for await (const chunk of aptUpgrade.stdout as ReadableStream<Uint8Array>) {
+				handleStdoutChunk(stdoutDecoder.decode(chunk, { stream: true }));
+			}
+		})();
 
-	aptUpgrade.on("close", (code) => {
+		const stderrDecoder = new TextDecoder();
+		const drainStderr = (async () => {
+			for await (const chunk of aptUpgrade.stderr as ReadableStream<Uint8Array>) {
+				aptErr += stderrDecoder.decode(chunk, { stream: true });
+			}
+		})();
+
+		const [, , code] = await Promise.all([
+			drainStdout,
+			drainStderr,
+			aptUpgrade.exited,
+		]);
+
 		if (softUpdateStatus) {
 			softUpdateStatus.result = code === 0 ? code : aptErr;
 			broadcastMsg("status", { updating: softUpdateStatus });
@@ -414,5 +466,5 @@ function doSoftwareUpdate() {
 				invariant(false, "software update complete; exiting to restart CeraUI");
 			}
 		}
-	});
+	})();
 }

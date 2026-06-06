@@ -148,19 +148,23 @@ export function buildLinks(
 	const throughputFor = (id: string): number => convertBytesToKbids(netifEntries[id]?.tp ?? 0);
 	const enabledFor = (id: string): boolean => netifEntries[id]?.enabled ?? true;
 
-	for (const [ifname, iface] of Object.entries(wifi ?? {})) {
+	for (const [key, iface] of Object.entries(wifi ?? {})) {
+		// Key by the kernel interface name, not the wifi record key: the backend
+		// may key the record by a radio/device id that differs from ifname, which
+		// is what netif and the WiFi view both join on (mirrors the modem path).
+		const id = iface.ifname || key;
 		const active = iface.available?.find((network) => network.active);
 		const isConnected = Boolean(active);
 		links.push({
-			id: ifname,
+			id,
 			type: "wifi",
 			linkIndex: 0,
 			signal: active && Number.isFinite(active.signal) ? active.signal : null,
 			label: active?.ssid || "WiFi",
 			isConnected,
 			isStale: wifiStale || fullyStale,
-			throughputKbps: throughputFor(ifname),
-			enabled: enabledFor(ifname),
+			throughputKbps: throughputFor(id),
+			enabled: enabledFor(id),
 			connectionState: isConnected ? "connected" : "disconnected",
 		});
 	}
@@ -234,10 +238,13 @@ export function deriveHudState(
 		timestamps.connectionLostAt != null &&
 		now - timestamps.connectionLostAt >= STALE_THRESHOLD_MS;
 
-	const streamingStale = isTimestampStale(timestamps.streaming, now) || isFullyStale;
+	// Cadence-aware: only sensors (~1s push) dim on age; modems (~30s), wifi and
+	// config (on-change) are connection-backed and dim solely on disconnect, so
+	// healthy data never flickers stale in the gaps between slow backend pushes.
 	const sensorsStale = isTimestampStale(timestamps.sensors, now) || isFullyStale;
-	const modemsStale = isTimestampStale(timestamps.modems, now);
-	const wifiStale = isTimestampStale(timestamps.wifi, now);
+	const streamingStale = isFullyStale;
+	const modemsStale = isFullyStale;
+	const wifiStale = isFullyStale;
 
 	const sensors: SensorsStatus | undefined = sources.sensors;
 

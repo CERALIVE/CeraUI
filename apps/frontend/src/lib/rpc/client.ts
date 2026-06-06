@@ -20,6 +20,8 @@ import type {
 	ModemScanOutput,
 	NetifConfigInput,
 	NetifConfigOutput,
+	RelayValidateInput,
+	RelayValidateOutput,
 	RemoteConfigInput,
 	SetPasswordInput,
 	SimUnlockInput,
@@ -489,6 +491,9 @@ export interface TypedRPC {
 	status: {
 		getStatus: () => Promise<unknown>;
 		getRelays: () => Promise<unknown>;
+	};
+	relay: {
+		validate: (input: RelayValidateInput) => Promise<RelayValidateOutput>;
 	};
 	notifications: {
 		getPersistent: () => Promise<unknown>;

@@ -3,8 +3,9 @@
  * Wraps existing auth logic from modules/ui/auth.ts
  */
 
-import crypto from "node:crypto";
 import fs from "node:fs";
+
+import { randomBase64 } from "../../helpers/crypto.ts";
 import {
 	loginInputSchema,
 	loginOutputSchema,
@@ -28,7 +29,7 @@ const BCRYPT_ROUNDS = 10;
 
 // Token storage
 const tempTokens: Record<string, true> = {};
-const persistentTokens: AuthTokens = loadCacheFile(
+const persistentTokens: AuthTokens = await loadCacheFile(
 	AUTH_TOKENS_FILE,
 	authTokensSchema,
 );
@@ -41,7 +42,7 @@ function savePersistentTokens() {
 }
 
 function genAuthToken(isPersistent: boolean): string {
-	const token = crypto.randomBytes(32).toString("base64");
+	const token = randomBase64(32);
 	if (isPersistent) {
 		persistentTokens[token] = true;
 		savePersistentTokens();

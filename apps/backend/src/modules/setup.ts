@@ -26,7 +26,7 @@ import { logger } from "../helpers/logger.ts";
 const SETUP_FILE = "setup.json";
 
 /* Read the config and setup files */
-export const setup: SetupConfig = loadJsonConfigSync(
+export const setup: SetupConfig = await loadJsonConfigSync(
 	SETUP_FILE,
 	setupConfigSchema,
 	SETUP_CONFIG_DEFAULTS,

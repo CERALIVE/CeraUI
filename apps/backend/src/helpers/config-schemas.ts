@@ -20,7 +20,27 @@
  * Used for validation and type-safe defaults
  */
 
+import {
+	type DetectionMethod,
+	type RelayProtocol,
+	detectionMethodSchema,
+	isNamespacedRelayId,
+	namespacedRelayId,
+	parseNamespacedRelayId,
+	relayProtocolSchema,
+} from "@ceraui/rpc/schemas";
 import { z } from "zod";
+
+// Re-export the relay-id namespacing helpers so backend consumers resolve them
+// from the config layer rather than reaching into @ceraui/rpc directly.
+export {
+	detectionMethodSchema,
+	isNamespacedRelayId,
+	namespacedRelayId,
+	parseNamespacedRelayId,
+	relayProtocolSchema,
+};
+export type { DetectionMethod, RelayProtocol };
 
 // =============================================================================
 // Custom Provider Schema (shared between config and cloud-provider)
@@ -78,6 +98,8 @@ export const runtimeConfigSchema = z.object({
 	// Relay/SRTLA settings
 	relay_server: z.string().optional(),
 	relay_account: z.string().optional(),
+	relay_streamid_override: z.string().optional(),
+	relay_protocol: relayProtocolSchema.optional(),
 	srt_streamid: z.string().optional(),
 	srt_latency: z.number().int().min(100).max(10000).optional(),
 	srtla_addr: z.string().optional(),
@@ -100,6 +122,13 @@ export const runtimeConfigSchema = z.object({
 	remote_key: z.string().optional(),
 	remote_provider: providerSelectionSchema.optional(),
 	custom_provider: customProviderSchema.optional(),
+	// Device-pairing claim-code seed. Persistent crypto-random secret that seeds
+	// the HMAC claim-code derivation so codes stay stable across backend
+	// restarts within a window. Created on first use; never leaves the device.
+	pairing_secret: z.string().optional(),
+	// How the active relay selection was sourced. "subscription" is set when a
+	// provider's authenticated catalog push auto-preloads server/account.
+	detectionMethod: detectionMethodSchema.optional(),
 });
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
@@ -112,6 +141,24 @@ export const RUNTIME_CONFIG_DEFAULTS: Partial<RuntimeConfig> = {
 	bitrate_overlay: false,
 	autostart: false,
 };
+
+export const DEFAULT_RELAY_PROVIDER_ID = "ceralive";
+
+// Pure, idempotent migration: upgrades legacy flat relay ids ("0") to the
+// provider-qualified form ("ceralive:0") on read; pass-through otherwise.
+export function normalizeRelayIds(config: RuntimeConfig): RuntimeConfig {
+	const providerId = config.remote_provider ?? DEFAULT_RELAY_PROVIDER_ID;
+	const next: RuntimeConfig = { ...config };
+
+	if (next.relay_server && !isNamespacedRelayId(next.relay_server)) {
+		next.relay_server = namespacedRelayId(providerId, next.relay_server);
+	}
+	if (next.relay_account && !isNamespacedRelayId(next.relay_account)) {
+		next.relay_account = namespacedRelayId(providerId, next.relay_account);
+	}
+
+	return next;
+}
 
 // =============================================================================
 // Setup Config (setup.json)

@@ -16,9 +16,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { type ChildProcessByStdio, spawn } from "node:child_process";
 import fs from "node:fs";
-import type { Readable } from "node:stream";
 import type WebSocket from "ws";
 import { isLocalIp } from "../../helpers/ip-addresses.ts";
 import { logger } from "../../helpers/logger.ts";
@@ -43,6 +41,11 @@ import {
 } from "./audio.ts";
 import { hasLowMtu } from "./bcrpt.ts";
 import { setBitrate } from "./encoder.ts";
+import {
+	broadcastHealthIfChanged,
+	clearStreamProcessExit,
+	reportStreamProcessExit,
+} from "./health.ts";
 import {
 	type Pipeline,
 	gatePipelineOverrides,
@@ -73,8 +76,13 @@ import {
 	validateConfig,
 } from "./streaming.ts";
 
-type ChildProcess = ChildProcessByStdio<null, null, Readable> & {
-	restartTimer?: ReturnType<typeof setTimeout>;
+// Bun.Subprocess is not an EventEmitter, so the exit lifecycle is modeled here:
+// `exitListeners` replaces .on("exit")/.removeAllListeners("exit") and fires once
+// when `proc.exited` resolves; `spawnfile` replaces ChildProcess.spawnfile.
+type StreamingProcess = {
+	proc: Bun.Subprocess<"inherit", "inherit", "pipe">;
+	spawnfile: string;
+	exitListeners: Array<() => void>;
 };
 
 export const AUTOSTART_CHECK_FILE = "/tmp/ceralive_restarted";
@@ -83,34 +91,69 @@ export const ceracoderExec = getCeracoderExec();
 export const srtlaSendExec = getSrtlaSendExec(setup.srtla_path);
 export const bcrptExec = `${setup.bcrpt_path ?? "/usr/bin"}/bcrpt`;
 
-let streamingProcesses: Array<ChildProcess> = [];
+let streamingProcesses: Array<StreamingProcess> = [];
 
 function spawnStreamingLoop(
 	command: string,
 	args: Array<string>,
-	cooldown: number,
 	errCallback: (data: string) => void,
 ) {
-	const childProcess = spawn(command, args, {
-		stdio: ["inherit", "inherit", "pipe"],
-	}) as ChildProcess;
-	streamingProcesses.push(childProcess);
+	const proc = Bun.spawn([command, ...args], {
+		stdin: "inherit",
+		stdout: "inherit",
+		stderr: "pipe",
+	});
+
+	const streamingProcess: StreamingProcess = {
+		proc,
+		spawnfile: command,
+		exitListeners: [],
+	};
+	streamingProcesses.push(streamingProcess);
 
 	if (errCallback) {
-		childProcess.stderr.on("data", (data) => {
-			const dataStr = data.toString("utf8");
-			console.log(dataStr);
-			errCallback(dataStr);
+		// Drain stderr by async iteration: chunks arrive in order, matching the
+		// previous stderr.on("data") delivery. Each chunk is decoded on its own,
+		// preserving the per-chunk pattern matching the errCallback relies on.
+		(async () => {
+			const decoder = new TextDecoder();
+			for await (const chunk of proc.stderr) {
+				const dataStr = decoder.decode(chunk);
+				console.log(dataStr);
+				errCallback(dataStr);
+			}
+		})().catch(() => {
+			// stderr is torn down when the process is killed; that surfaces here
+			// as a benign cancellation, not a subprocess error to report.
 		});
 	}
 
-	childProcess.on("exit", () => {
-		childProcess.restartTimer = setTimeout(() => {
-			// remove the old process from the list
-			removeProc(childProcess);
+	// proc.exited resolves once; run whatever exit listeners are registered at
+	// that moment (mirrors a one-shot EventEmitter "exit").
+	proc.exited.then(() => {
+		for (const listener of [...streamingProcess.exitListeners]) {
+			listener();
+		}
+	});
 
-			spawnStreamingLoop(command, args, cooldown, errCallback);
-		}, cooldown);
+	// ADR-0005: systemd is the SOLE process-restart authority. The app must
+	// observe-and-notify only — it logs the exit and updates the health state,
+	// but never respawns the process (that would create a dual restart authority
+	// racing systemd's Restart=on-failure).
+	streamingProcess.exitListeners.push(() => {
+		const { exitCode, signalCode } = streamingProcess.proc;
+		logger.warn(
+			`streamloop: ${streamingProcess.spawnfile} exited (code=${
+				exitCode ?? "null"
+			}, signal=${
+				signalCode ?? "null"
+			}); not respawning — systemd owns process restart (ADR-0005)`,
+		);
+		// remove the dead process from the supervised list
+		removeProc(streamingProcess);
+		// notify health state: the stream is now dead until systemd respawns it
+		reportStreamProcessExit();
+		broadcastHealthIfChanged();
 	});
 }
 
@@ -124,6 +167,10 @@ export async function startStream(
 ) {
 	const config = getConfig();
 	setBitrate(config);
+
+	// A fresh stream start clears any prior unexpected-exit health flag so the
+	// health rollup tracks this new session (ADR-0005 observe-and-notify).
+	clearStreamProcessExit();
 
 	const overrides: PipelineOverrides = {
 		bitrateOverlay: config.bitrate_overlay,
@@ -156,7 +203,6 @@ export async function startStream(
 			ipsFile: setup.ips_file,
 			execPath: setup.srtla_path,
 		}).args,
-		100,
 		(err) => {
 			let msg: string | undefined;
 			if (err.match("Failed to establish any initial connections")) {
@@ -180,7 +226,7 @@ export async function startStream(
 		true, // full override for start streaming
 	);
 
-	spawnStreamingLoop(ceracoderExec, ceracoderArgs, 2000, (err) => {
+	spawnStreamingLoop(ceracoderExec, ceracoderArgs, (err) => {
 		let msg: string | undefined;
 		if (err.match("gstreamer error from alsasrc0")) {
 			msg = "Capture card error (audio). Trying to restart...";
@@ -241,7 +287,7 @@ export async function start(
 		removeNetworkInterfacesChangeListener();
 	}
 
-	const handleSrtlaIpAddresses = () => {
+	const handleSrtlaIpAddresses = async () => {
 		const srtlaIpList = isLocalIp(c.srtlaAddr)
 			? genSrtlaIpListForLocalIpAddress(c.srtlaAddr)
 			: genSrtlaIpList();
@@ -254,7 +300,7 @@ export async function start(
 			return;
 		}
 
-		setSrtlaIpList(srtlaIpList);
+		await setSrtlaIpList(srtlaIpList);
 
 		if (getIsStreaming()) {
 			restartSrtla();
@@ -279,26 +325,27 @@ export async function start(
 	}
 }
 
-function removeProc(process: ChildProcess) {
-	streamingProcesses = streamingProcesses.filter((p) => p !== process);
+function removeProc(streamingProcess: StreamingProcess) {
+	streamingProcesses = streamingProcesses.filter(
+		(p) => p !== streamingProcess,
+	);
 }
 
-function stopProcess(process: ChildProcess) {
-	if (process.restartTimer) {
-		clearTimeout(process.restartTimer);
-	}
-
-	process.removeAllListeners("exit");
-	process.on("exit", () => {
-		removeProc(process);
+function stopProcess(streamingProcess: StreamingProcess) {
+	streamingProcess.exitListeners = [];
+	streamingProcess.exitListeners.push(() => {
+		removeProc(streamingProcess);
 	});
 
-	if (process.exitCode === null && process.signalCode === null) {
-		process.kill("SIGTERM");
+	if (
+		streamingProcess.proc.exitCode === null &&
+		streamingProcess.proc.signalCode === null
+	) {
+		streamingProcess.proc.kill("SIGTERM");
 		return false;
 	}
 
-	removeProc(process);
+	removeProc(streamingProcess);
 	return true;
 }
 
@@ -340,14 +387,14 @@ export function stop() {
 	let foundCeracoder = false;
 
 	for (const p of streamingProcesses) {
-		p.removeAllListeners("exit");
+		p.exitListeners = [];
 		if (p.spawnfile.endsWith("ceracoder")) {
 			foundCeracoder = true;
 			logger.debug("stop: found the ceracoder process");
 
 			if (!stopProcess(p)) {
 				// if the process is active, wait for it to exit
-				p.on("exit", () => {
+				p.exitListeners.push(() => {
 					logger.info("stop: ceracoder terminated");
 					stopAll();
 				});

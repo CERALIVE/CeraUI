@@ -39,6 +39,7 @@ import { onDestroy } from 'svelte';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
+import { push } from '$lib/stores/notifications.svelte';
 import {
 	getCanInstall,
 	getIsOnline,
@@ -176,18 +177,36 @@ async function handleInstall() {
 	try {
 		const success = await installApp();
 		if (success) {
-			toast.success('App Installed', {
-				description: 'CeraUI has been added to your home screen!',
+			push({
+				name: 'appInstalled',
+				type: 'success',
+				msg: 'App Installed',
+				key: 'notifications.appInstalled',
+				is_dismissable: true,
+				is_persistent: false,
+				duration: 5,
 			});
 		} else {
-			toast.info('Installation Cancelled', {
-				description: 'You can install the app later from your browser menu.',
+			push({
+				name: 'installCancelled',
+				type: 'info',
+				msg: 'Installation Cancelled',
+				key: 'notifications.installCancelled',
+				is_dismissable: true,
+				is_persistent: false,
+				duration: 5,
 			});
 		}
 	} catch (error) {
 		console.error('Installation failed:', error);
-		toast.error('Installation Failed', {
-			description: 'Unable to install the app. Please try again.',
+		push({
+			name: 'installFailed',
+			type: 'error',
+			msg: 'Installation Failed',
+			key: 'notifications.installFailed',
+			is_dismissable: true,
+			is_persistent: false,
+			duration: 5,
 		});
 	}
 }

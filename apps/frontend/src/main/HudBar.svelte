@@ -2,18 +2,14 @@
 import { LL, locale } from '@ceraui/i18n/svelte';
 import { formatBitrate, formatCurrent, formatRelativeTime, formatTemp, formatVoltage } from '@ceraui/i18n/formatters';
 import ActivityIcon from '@lucide/svelte/icons/activity';
-import CardSimIcon from '@lucide/svelte/icons/card-sim';
 import ClockIcon from '@lucide/svelte/icons/clock';
 import EthernetPortIcon from '@lucide/svelte/icons/ethernet-port';
-import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
-import RadarIcon from '@lucide/svelte/icons/radar';
 import RadioTowerIcon from '@lucide/svelte/icons/radio-tower';
-import SignalZeroIcon from '@lucide/svelte/icons/signal-zero';
 import ThermometerIcon from '@lucide/svelte/icons/thermometer';
 import WifiIcon from '@lucide/svelte/icons/wifi';
-import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 import ZapIcon from '@lucide/svelte/icons/zap';
 
+import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import * as Sheet from '$lib/components/ui/sheet';
 import { type StalenessState, getStalenessState } from '$lib/helpers/staleness';
@@ -69,15 +65,6 @@ const currentText = $derived(soc.current != null ? formatCurrent(loc)(soc.curren
 
 const linkColor = (link: LinkSignal) => `var(--link-${link.linkIndex + 1})`;
 
-/** 0–3 filled mini-bars from a signal percentage. */
-function filledBars(signal: number | null): number {
-	if (signal == null) return 0;
-	if (signal >= 66) return 3;
-	if (signal >= 33) return 2;
-	if (signal > 0) return 1;
-	return 0;
-}
-
 function lastSeen(ts: number | null): string | null {
 	if (ts == null) return null;
 	return formatRelativeTime(loc)(new Date(ts));
@@ -85,33 +72,14 @@ function lastSeen(ts: number | null): string | null {
 </script>
 
 {#snippet miniBars(link: LinkSignal)}
-	{#if link.type === 'ethernet'}
-		<span class="flex shrink-0" style:color={linkColor(link)} aria-hidden="true">
-			<EthernetPortIcon class="size-3.5" aria-hidden="true" />
-		</span>
-	{:else if link.signal !== null}
-		{@const filled = filledBars(link.signal)}
-		<span class="flex items-end gap-0.5" aria-hidden="true">
-			{#each [1, 2, 3] as bar (bar)}
-				<span
-					class="w-1 rounded-[1px]"
-					style:height={`${bar * 3 + 2}px`}
-					style:background-color={bar <= filled ? linkColor(link) : 'var(--muted-foreground)'}
-					style:opacity={bar <= filled ? '1' : '0.5'}
-				></span>
-			{/each}
-		</span>
-	{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
-		<CardSimIcon class="size-3.5 text-muted-foreground/70" aria-hidden="true" />
-	{:else if link.type === 'modem' && link.connectionState === 'scanning'}
-		<RadarIcon class="size-3.5 text-muted-foreground/70 motion-safe:animate-pulse" aria-hidden="true" />
-	{:else if link.type === 'modem' && link.connectionState === 'connected'}
-		<LoaderCircleIcon class="size-3.5 text-muted-foreground/70 motion-safe:animate-spin" aria-hidden="true" />
-	{:else if link.type === 'wifi'}
-		<WifiOffIcon class="size-3.5 text-muted-foreground/70" aria-hidden="true" />
-	{:else}
-		<SignalZeroIcon class="size-3.5 text-muted-foreground/70" aria-hidden="true" />
-	{/if}
+	<LinkIndicator
+		shape="bars"
+		size="sm"
+		type={link.type}
+		signal={link.signal}
+		connectionState={link.connectionState}
+		linkIndex={link.linkIndex}
+	/>
 {/snippet}
 
 {#snippet socValue(state: StalenessState, text: string, label: string)}
@@ -189,11 +157,11 @@ function lastSeen(ts: number | null): string | null {
 						<span class="text-muted-foreground/60 truncate">{$LL.hud.noData()}</span>
 					{:else}
 						{#each hud.links as link (link.linkIndex)}
-							<span class={cn('inline-flex h-3.5 shrink-0 items-center gap-1.5', link.isStale && 'opacity-50')}>
+							<span class={cn('inline-flex shrink-0 items-end gap-1.5', link.isStale && 'opacity-50')}>
 								<span class="font-mono text-[0.7rem] leading-none" style:color={linkColor(link)}>
 									L{link.linkIndex + 1}
 								</span>
-								<span class="flex h-3.5 w-4 shrink-0 items-center justify-center">{@render miniBars(link)}</span>
+								{@render miniBars(link)}
 							</span>
 						{/each}
 					{/if}

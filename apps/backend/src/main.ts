@@ -75,15 +75,15 @@ checkExecPath(ceracoderExec);
 checkExecPath(srtlaSendExec);
 checkExecPath(bcrptExec);
 
-loadConfig();
+await loadConfig();
 
 initRemote();
 initPipelines();
 
-initRevisions();
+void initRevisions();
 // WebSocket server is now integrated with HTTP server via Bun.serve()
 initHardwareMonitoring();
-initRTMPIngestStats();
+await initRTMPIngestStats();
 initSRTIngest();
 void getSshStatus();
 

@@ -15,8 +15,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import fs from "node:fs";
-
 import { isSameSubnet } from "../../helpers/ip-addresses.ts";
 import killall from "../../helpers/killall.ts";
 
@@ -53,9 +51,9 @@ export async function resolveSrtla(addr: string) {
 	return srtlaAddr;
 }
 
-export function setSrtlaIpList(addresses: string[]) {
+export async function setSrtlaIpList(addresses: string[]) {
 	const list = addresses.join("\n");
-	fs.writeFileSync(setup.ips_file, list);
+	await Bun.write(setup.ips_file, list);
 }
 
 export function restartSrtla() {

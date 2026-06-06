@@ -28,6 +28,7 @@ import {
 	dismissNotificationProcedure,
 	getPersistentNotificationsProcedure,
 } from "./procedures/notifications.procedure.ts";
+import { relayValidateProcedure } from "./procedures/relay.procedure.ts";
 import {
 	getRelaysProcedure,
 	getStatusProcedure,
@@ -136,6 +137,10 @@ const stableRoutes = {
 	status: os.router({
 		getStatus: getStatusProcedure,
 		getRelays: getRelaysProcedure,
+	}),
+
+	relay: os.router({
+		validate: relayValidateProcedure,
 	}),
 
 	notifications: os.router({

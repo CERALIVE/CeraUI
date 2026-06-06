@@ -95,6 +95,7 @@ See [BUILD_PIPELINE.md](docs/BUILD_PIPELINE.md) for full build documentation.
 
 | Document | Description |
 |----------|-------------|
+| [LIVE_DEVELOPMENT.md](../LIVE_DEVELOPMENT.md) | Local dev, deploy to device, image build, debugging |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System overview and data flow diagrams |
 | [BUILD_PIPELINE.md](docs/BUILD_PIPELINE.md) | Build system and CI/CD |
 | [APT_VERSION_CONTROL.md](docs/APT_VERSION_CONTROL.md) | Debian package versioning |

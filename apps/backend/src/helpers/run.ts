@@ -37,8 +37,6 @@
  *    child's stdin only.
  */
 
-import { spawn } from "node:child_process";
-
 import { execFileP } from "./exec.ts";
 import { logger } from "./logger.ts";
 
@@ -154,48 +152,37 @@ export async function run(
  *
  * @throws if `bin` is not in {@link ALLOWED}.
  */
-export function runWithStdin(
+export async function runWithStdin(
 	bin: string,
 	args: string[],
 	input: string,
 ): Promise<string> {
 	if (!ALLOWED.has(bin)) {
-		return Promise.reject(new Error(`binary not allowlisted: ${bin}`));
+		throw new Error(`binary not allowlisted: ${bin}`);
 	}
 
 	logger.debug(`runWithStdin: ${bin} ${redactArgs(args)} <stdin redacted>`);
 
-	return new Promise<string>((resolve, reject) => {
-		const child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"] });
-
-		let stdout = "";
-		let stderr = "";
-
-		child.stdout?.on("data", (chunk) => {
-			stdout += chunk.toString();
-		});
-		child.stderr?.on("data", (chunk) => {
-			stderr += chunk.toString();
-		});
-
-		child.on("error", (err) => {
-			reject(err);
-		});
-
-		child.on("close", (code) => {
-			if (code === 0) {
-				resolve(stdout);
-			} else {
-				reject(
-					new Error(
-						`${bin} exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`,
-					),
-				);
-			}
-		});
-
-		// Secret goes to stdin ONLY — never to argv.
-		child.stdin?.write(input);
-		child.stdin?.end();
+	const child = Bun.spawn([bin, ...args], {
+		stdin: "pipe",
+		stdout: "pipe",
+		stderr: "pipe",
 	});
+
+	// Secret goes to stdin ONLY — never to argv.
+	child.stdin.write(input);
+	child.stdin.end();
+
+	const [stdout, stderr, code] = await Promise.all([
+		new Response(child.stdout).text(),
+		new Response(child.stderr).text(),
+		child.exited,
+	]);
+
+	if (code === 0) {
+		return stdout;
+	}
+	throw new Error(
+		`${bin} exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`,
+	);
 }

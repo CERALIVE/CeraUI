@@ -72,39 +72,46 @@ function settle(proceed: boolean) {
 			</p>
 		{:else}
 			{#each wiredEntries as [name, iface] (name)}
-				<div class="flex items-center gap-3 px-4 py-3">
-					<span
-						class={cn('size-2 shrink-0 rounded-full', iface.enabled ? 'bg-primary' : 'bg-muted-foreground/40')}
-						aria-hidden="true"
-					></span>
-					<div class="min-w-0 flex-1">
-						<div class="flex items-center gap-2">
+				<div class="px-4 py-4">
+					<!-- Identity row: status dot · name/status · speed -->
+					<div class="flex items-center gap-3">
+						<span
+							class={cn('size-2 shrink-0 rounded-full', iface.enabled ? 'bg-primary' : 'bg-muted-foreground/40')}
+							aria-hidden="true"
+						></span>
+						<div class="min-w-0 flex-1">
 							<p class="truncate text-sm font-medium">{name}</p>
+							<p class="text-muted-foreground truncate text-xs">
+								{#if iface.ip}
+									<code class="font-mono">{iface.ip}</code> ·
+								{/if}
+								{iface.enabled ? $LL.network.view.connected() : $LL.network.view.off()}
+							</p>
+						</div>
+						<div class="flex shrink-0 items-center gap-2.5">
 							<SpeedBadge kbps={throughputKbps(iface)} stale={throughputStale(iface)} />
 						</div>
-						<p class="text-muted-foreground truncate text-xs">
-							{#if iface.ip}
-								<code class="font-mono">{iface.ip}</code> ·
-							{/if}
-							{iface.enabled ? $LL.network.view.connected() : $LL.network.view.off()}
-						</p>
 					</div>
-					<BondToggle
-						name={name}
-						enabled={iface.enabled}
-						ip={iface.ip}
-						onBeforeDisable={() => confirmDisable(name)}
-					/>
-					<Button
-						class="h-8 gap-1 px-2.5"
-						data-testid="open-netif-dialog"
-						size="sm"
-						variant="ghost"
-						onclick={() => onConfigure(name)}
-					>
-						{$LL.network.view.configure()}
-						<ChevronRight class="size-3.5 rtl:rotate-180" />
-					</Button>
+
+					<!-- Control row: bond membership · configure -->
+					<div class="mt-2.5 flex flex-wrap items-center gap-2 ps-5">
+						<BondToggle
+							name={name}
+							enabled={iface.enabled}
+							ip={iface.ip}
+							onBeforeDisable={() => confirmDisable(name)}
+						/>
+						<Button
+							class="ms-auto h-8 gap-1 px-2.5"
+							data-testid="open-netif-dialog"
+							size="sm"
+							variant="ghost"
+							onclick={() => onConfigure(name)}
+						>
+							{$LL.network.view.configure()}
+							<ChevronRight class="size-3.5 rtl:rotate-180" />
+						</Button>
+					</div>
 				</div>
 			{/each}
 		{/if}

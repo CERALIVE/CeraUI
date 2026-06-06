@@ -17,8 +17,6 @@
 
 /* NetworkManager / nmcli based Wifi Manager */
 
-import { type ExecFileException, execFile } from "node:child_process";
-
 import type WebSocket from "ws";
 
 import { logger } from "../../helpers/logger.ts";
@@ -390,58 +388,73 @@ function wifiNew(conn: WebSocket, msg: WifiNewMessage["new"]) {
 
 	const senderId = getSocketSenderId(conn);
 
-	execFile(
-		"nmcli",
-		args,
-		async (error: ExecFileException | null, stdout: string, stderr: string) => {
-			if (error || stdout.match("^Error:")) {
-				await wifiDeleteFailedConns();
+	void runWifiNew(conn, msg, macAddress, args, senderId);
+}
 
-				if (stdout.match("Secrets were required, but not provided")) {
-					conn.send(
-						buildMsg(
-							"wifi",
-							{ new: { error: "auth", device: msg.device } },
-							senderId,
-						),
-					);
-				} else {
-					conn.send(
-						buildMsg(
-							"wifi",
-							{ new: { error: "generic", device: msg.device } },
-							senderId,
-						),
-					);
-				}
-			} else {
-				const success = stdout.match(/successfully activated with '(.+)'/);
-				if (success?.[1]) {
-					const uuid = success[1];
-					if (!(await nmConnSetWifiMacAddress(uuid, macAddress))) {
-						logger.warn(
-							"Failed to set the MAC address for the newly created connection",
-						);
-					}
+async function runWifiNew(
+	conn: WebSocket,
+	msg: WifiNewMessage["new"],
+	macAddress: string,
+	args: string[],
+	senderId: ReturnType<typeof getSocketSenderId>,
+) {
+	const proc = Bun.spawn(["nmcli", ...args], {
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const [stdout, stderr] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	]);
+	const exitCode = await proc.exited;
+	const error = exitCode !== 0;
 
-					await wifiUpdateSavedConns();
-					await wifiUpdateScanResult();
+	if (error || stdout.match("^Error:")) {
+		await wifiDeleteFailedConns();
 
-					conn.send(
-						buildMsg(
-							"wifi",
-							{ new: { success: true, device: msg.device } },
-							senderId,
-						),
-					);
-				} else {
-					logger.warn(
-						`wifiNew: no error but not matching a successful connection msg in:\n${stdout}\n${stderr}`,
-					);
-				}
+		if (stdout.match("Secrets were required, but not provided")) {
+			conn.send(
+				buildMsg(
+					"wifi",
+					{ new: { error: "auth", device: msg.device } },
+					senderId,
+				),
+			);
+		} else {
+			conn.send(
+				buildMsg(
+					"wifi",
+					{ new: { error: "generic", device: msg.device } },
+					senderId,
+				),
+			);
+		}
+	} else {
+		const success = stdout.match(/successfully activated with '(.+)'/);
+		if (success?.[1]) {
+			const uuid = success[1];
+			if (!(await nmConnSetWifiMacAddress(uuid, macAddress))) {
+				logger.warn(
+					"Failed to set the MAC address for the newly created connection",
+				);
 			}
-		},
-	);
+
+			await wifiUpdateSavedConns();
+			await wifiUpdateScanResult();
+
+			conn.send(
+				buildMsg(
+					"wifi",
+					{ new: { success: true, device: msg.device } },
+					senderId,
+				),
+			);
+		} else {
+			logger.warn(
+				`wifiNew: no error but not matching a successful connection msg in:\n${stdout}\n${stderr}`,
+			);
+		}
+	}
 }
 
 async function wifiConnect(conn: WebSocket, uuid: ConnectionUUID) {

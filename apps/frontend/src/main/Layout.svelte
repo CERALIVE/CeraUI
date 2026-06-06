@@ -1,7 +1,7 @@
 <script lang="ts">
 import { rtlLanguages } from '@ceraui/i18n';
 import { locale } from '@ceraui/i18n/svelte';
-import type { NotificationType, StatusMessage } from '@ceraui/rpc/schemas';
+import type { StatusMessage } from '@ceraui/rpc/schemas';
 
 import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
 import * as Tooltip from '$lib/components/ui/tooltip';
@@ -29,13 +29,6 @@ let updatingStatus: StatusMessage['updating'] = $state(false);
 
 // Derived offline state for reactivity
 const showOfflinePage = $derived(getShouldShowOfflinePage());
-
-// Toast host instance — owns the de-duplicating toast subsystem and the
-// `svelte-sonner` <Toaster>. The auth-success toast routes through its
-// showToast() so it shares the same tracking/dedup path as notifications.
-let toastHost = $state<{
-	showToast: (type: NotificationType, name: string, options: unknown) => void;
-}>();
 
 // Svelte 5: Use $effect for side effects
 $effect(() => {
@@ -78,11 +71,6 @@ $effect(() => {
 		isCheckingAuthStatus = false;
 		markAuthenticated();
 		clearSessionExpired();
-		toastHost?.showToast('success', 'AUTH', {
-			duration: 5000,
-			description: 'Successfully authenticated',
-			dismissable: true,
-		});
 		authStatusStore.set(true);
 	} else if (shouldExpireSession(message?.success, wasAuthenticated()) && authStatusStore.value) {
 		// Auth token rejected mid-session (e.g. expired/invalidated on a reconnect).
@@ -158,5 +146,5 @@ $effect(() => {
 	<!-- PWA Status and Notifications -->
 	<PWAStatus />
 
-	<LayoutToastHost bind:this={toastHost} />
+	<LayoutToastHost />
 </Tooltip.Provider>

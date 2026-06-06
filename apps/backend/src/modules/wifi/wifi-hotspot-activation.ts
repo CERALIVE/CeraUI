@@ -15,8 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import crypto from "node:crypto";
-
+import { randomBase64 } from "../../helpers/crypto.ts";
 import { setNetifDupIpSuppression } from "../network/network-interfaces.ts";
 import {
 	nmConnect,
@@ -146,7 +145,7 @@ async function startHotspotLocked(
 		// No hotspot connection yet: create one with a generated name/password.
 		const ms = macAddress.split(":");
 		const name = `CERALIVE_${ms[4]}${ms[5]}`;
-		const password = crypto.randomBytes(9).toString("base64");
+		const password = randomBase64(9);
 
 		// Temporary hotspot config to send to the client during activation.
 		wifiInterface.hotspot.name = name;
