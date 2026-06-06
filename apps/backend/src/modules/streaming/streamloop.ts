@@ -42,6 +42,11 @@ import {
 import { hasLowMtu } from "./bcrpt.ts";
 import { setBitrate } from "./encoder.ts";
 import {
+	broadcastHealthIfChanged,
+	clearStreamProcessExit,
+	reportStreamProcessExit,
+} from "./health.ts";
+import {
 	type Pipeline,
 	gatePipelineOverrides,
 	generatePipelineFile,
@@ -77,7 +82,6 @@ import {
 type StreamingProcess = {
 	proc: Bun.Subprocess<"inherit", "inherit", "pipe">;
 	spawnfile: string;
-	restartTimer?: ReturnType<typeof setTimeout>;
 	exitListeners: Array<() => void>;
 };
 
@@ -92,7 +96,6 @@ let streamingProcesses: Array<StreamingProcess> = [];
 function spawnStreamingLoop(
 	command: string,
 	args: Array<string>,
-	cooldown: number,
 	errCallback: (data: string) => void,
 ) {
 	const proc = Bun.spawn([command, ...args], {
@@ -133,13 +136,24 @@ function spawnStreamingLoop(
 		}
 	});
 
+	// ADR-0005: systemd is the SOLE process-restart authority. The app must
+	// observe-and-notify only — it logs the exit and updates the health state,
+	// but never respawns the process (that would create a dual restart authority
+	// racing systemd's Restart=on-failure).
 	streamingProcess.exitListeners.push(() => {
-		streamingProcess.restartTimer = setTimeout(() => {
-			// remove the old process from the list
-			removeProc(streamingProcess);
-
-			spawnStreamingLoop(command, args, cooldown, errCallback);
-		}, cooldown);
+		const { exitCode, signalCode } = streamingProcess.proc;
+		logger.warn(
+			`streamloop: ${streamingProcess.spawnfile} exited (code=${
+				exitCode ?? "null"
+			}, signal=${
+				signalCode ?? "null"
+			}); not respawning — systemd owns process restart (ADR-0005)`,
+		);
+		// remove the dead process from the supervised list
+		removeProc(streamingProcess);
+		// notify health state: the stream is now dead until systemd respawns it
+		reportStreamProcessExit();
+		broadcastHealthIfChanged();
 	});
 }
 
@@ -153,6 +167,10 @@ export async function startStream(
 ) {
 	const config = getConfig();
 	setBitrate(config);
+
+	// A fresh stream start clears any prior unexpected-exit health flag so the
+	// health rollup tracks this new session (ADR-0005 observe-and-notify).
+	clearStreamProcessExit();
 
 	const overrides: PipelineOverrides = {
 		bitrateOverlay: config.bitrate_overlay,
@@ -185,7 +203,6 @@ export async function startStream(
 			ipsFile: setup.ips_file,
 			execPath: setup.srtla_path,
 		}).args,
-		100,
 		(err) => {
 			let msg: string | undefined;
 			if (err.match("Failed to establish any initial connections")) {
@@ -209,7 +226,7 @@ export async function startStream(
 		true, // full override for start streaming
 	);
 
-	spawnStreamingLoop(ceracoderExec, ceracoderArgs, 2000, (err) => {
+	spawnStreamingLoop(ceracoderExec, ceracoderArgs, (err) => {
 		let msg: string | undefined;
 		if (err.match("gstreamer error from alsasrc0")) {
 			msg = "Capture card error (audio). Trying to restart...";
@@ -315,10 +332,6 @@ function removeProc(streamingProcess: StreamingProcess) {
 }
 
 function stopProcess(streamingProcess: StreamingProcess) {
-	if (streamingProcess.restartTimer) {
-		clearTimeout(streamingProcess.restartTimer);
-	}
-
 	streamingProcess.exitListeners = [];
 	streamingProcess.exitListeners.push(() => {
 		removeProc(streamingProcess);
