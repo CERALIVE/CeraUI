@@ -1,6 +1,7 @@
 import { getLL } from "@ceraui/i18n/svelte";
 import type {
 	NetifMessage,
+	SimUnlockOutput,
 	StatusMessage,
 	WifiBand,
 	WifiSecurity,
@@ -217,6 +218,18 @@ export const scanModemNetworks = async (deviceId: number) => {
 		await rpc.modems.scan({ device: deviceId });
 	} catch (error) {
 		console.error("Failed to scan modem networks:", error);
+		throw error;
+	}
+};
+
+export const unlockSimPin = async (
+	modemPath: string,
+	pin: string,
+): Promise<SimUnlockOutput> => {
+	try {
+		return await rpc.modems.unlockSim({ modemPath, pin });
+	} catch (error) {
+		console.error("Failed to unlock SIM:", error);
 		throw error;
 	}
 };

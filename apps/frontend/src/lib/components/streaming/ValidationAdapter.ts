@@ -11,6 +11,8 @@ import {
 	HOTSPOT_PASSWORD_MIN,
 	PORT_MAX,
 	PORT_MIN,
+	SIM_PIN_MAX_LENGTH,
+	SIM_PIN_MIN_LENGTH,
 	SRT_LATENCY_MAX,
 	SRT_LATENCY_MIN,
 	WIFI_PASSWORD_MIN,
@@ -38,5 +40,8 @@ export const networkConstraints = {
 	},
 	auth: {
 		password: { min: WIFI_PASSWORD_MIN },
+	},
+	modem: {
+		simPin: { min: SIM_PIN_MIN_LENGTH, max: SIM_PIN_MAX_LENGTH },
 	},
 } as const;

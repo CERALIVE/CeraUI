@@ -28,6 +28,7 @@ import {
 	getModemIds,
 	type Modem,
 	type ModemConfig,
+	type SimLock,
 } from "./modems-state.ts";
 
 type ModemsResponseModemStatus = {
@@ -56,6 +57,7 @@ export type ModemsResponseModemFull = ModemsResponseModemBase & {
 		"apn" | "username" | "password" | "roaming" | "network" | "autoconfig"
 	>;
 	no_sim?: true;
+	sim_lock?: SimLock;
 	available_networks?: Record<string, AvailableNetwork>;
 };
 
@@ -109,6 +111,9 @@ function buildModemMessage(
 			};
 		} else {
 			fullState.no_sim = true;
+		}
+		if (modem.sim_lock) {
+			fullState.sim_lock = modem.sim_lock;
 		}
 		fullState.available_networks = getAvailableNetworksForModem(modem);
 
