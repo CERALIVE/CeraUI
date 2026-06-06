@@ -1,144 +1,148 @@
-# CeraUI Backend (CERALIVE)
+# CeraUI Backend
 
-This is the backend for CERALIVE devices, originally forked from the CeraLive CeraLive project. This codebase has been ported to Typescript and ESM (ECMAScript Modules). This fork is maintained by CERALIVE and includes additional features and improvements.
+Bun/TypeScript HTTP + WebSocket server for CeraLive streaming hardware. Serves the frontend static bundle and exposes all device control via oRPC over WebSocket.
 
-## CeraUI Integration
+## Overview
 
-This fork includes an option to use the [CeraUI](https://github.com/CERALIVE/CeraUI) interface, which is an alternative user interface designed for enhanced usability and additional features. When the `USE_CERAUI` option is enabled during installation or deployment, the system will download the latest CeraUI main package from the [release](https://github.com/CERALIVE/CeraUI/releases/latest) and use it instead of the standard CeraLive interface.
+The backend is a single compiled binary (`ceralive`) produced by `bun build --compile`. It drives `ceracoder` and `srtla` at runtime through their native TypeScript bindings, which are resolved via `link:` paths to sibling checkouts.
 
-## Install the fork on your CERALIVE device
+**Stack**: Bun, TypeScript, oRPC (`@orpc/server`), Zod, WebSocket RPC  
+**Shared contract**: `@ceraui/rpc` (workspace package at `packages/rpc/`)  
+**Native bindings**: `@ceralive/ceracoder`, `@ceralive/srtla` (local `link:` deps — not npm packages)
 
-> **Note:** Replacing the original UI directly may cause issues. When your CERALIVE device is updated, it can revert the UI. Ensure you monitor updates and reapply the override after updates.
+## Structure
 
-- Enable SSH for the default user (`user`) on your existing CeraLive
-- Connect to the CERALIVE device via SSH (use Putty on Windows, JuiceSSH on Android)
-- Then run:
-
-  ```bash
-  # Standard installation with CeraLive
-  wget -qO- https://raw.githubusercontent.com/CERALIVE/CeraLive-ts/main/install.sh | bash
-  ```
-
-  or
-
-  ```bash
-  # Installation with CeraUI interface
-  wget -qO- https://raw.githubusercontent.com/CERALIVE/CeraLive-ts/main/install.sh | USE_CERAUI=true bash
-  ```
-
-- To get back to the default CeraLive, you can then run `sudo bash /opt/CeraLive/reset-to-default.sh` through SSH.
-
-## Installation Script
-
-This repository includes a unified installation script (`install.sh`) that handles both local installation and remote deployment:
-
-### Local Installation (from GitHub releases)
-
-```bash
-# Standard installation
-./install.sh
-
-# With CeraUI interface
-USE_CERAUI=true ./install.sh
 ```
-
-### Remote Deployment (from local dist folder)
-
-```bash
-# Standard deployment
-./install.sh --remote [SSH_TARGET]
-
-# With CeraUI interface
-USE_CERAUI=true ./install.sh --remote [SSH_TARGET]
-
-# Examples
-./install.sh --remote root@ceralive.local
-./install.sh --remote root@192.168.1.100
+src/
+├── main.ts                  # Entry point
+├── modules/                 # Domain logic (no RPC awareness)
+│   ├── streaming/           # ceracoder + srtla consumers
+│   ├── modems/              # mmcli integration
+│   ├── network/             # Network interfaces, gateways
+│   ├── wifi/                # WiFi scan, connect, disconnect
+│   ├── system/              # Sensors, system info
+│   ├── ui/                  # HTTP + WebSocket servers, auth
+│   ├── ingest/              # Ingest config
+│   ├── remote/              # Cloud remote relay
+│   ├── config.ts            # Config read/write
+│   └── setup.ts             # First-run setup
+├── rpc/                     # oRPC layer
+│   ├── router.ts            # Procedure router
+│   ├── procedures/          # <domain>.procedure.ts files
+│   ├── middleware/          # Auth middleware
+│   └── events.ts            # Typed broadcast events
+├── helpers/                 # Pure utilities
+├── mocks/                   # MOCK_SCENARIO providers
+└── tests/                   # bun:test suites
 ```
-
-Use `./install.sh --help` to see all available options.
-
-> **Note:** The previous separate `install.sh` and `deploy-to-local.sh` scripts have been unified into a single `install.sh` script. The old scripts are available as `.bak` files for reference and will be removed in a future release.
 
 ## Development
 
 ### Prerequisites
 
-You will need to have [bun.sh](https://bun.sh/docs/installation) in version v1.2.3 or newer installed to run the scripts.
-
-### Install dependencies
-
-To install the dependencies, you can use the following command:
+[Bun](https://bun.sh/docs/installation) v1.3.0 or newer. Install dependencies from the workspace root:
 
 ```bash
-bun install
+pnpm install
 ```
 
-### Run locally on dev machine
+### Run in development
 
-Local development is not really supported. Ideally you have a CERALIVE device to test changes. Build for production (see below) and deploy with the deploy script (see above).
-
-You can run the UI locally with the following command:
+From the workspace root, `pnpm dev` starts both frontend and backend together via mprocs. To run the backend alone:
 
 ```bash
-bun run dev:ui
+bun run dev
 ```
 
-To run the server locally, you can use the following command:
+Mock hardware scenarios are available via `MOCK_SCENARIO`:
+
+| Command | Scenario |
+|---------|----------|
+| `bun run dev` | `multi-modem-wifi` (default) |
+| `bun run dev:single-modem` | Single modem, no WiFi |
+| `bun run dev:streaming` | Active streaming simulation |
+
+### Type-check
 
 ```bash
-bun run dev:server
+bun run check
 ```
 
-### Build for production
-
-To build the UI for production, you can use the following command:
+### Tests
 
 ```bash
-bun run build
+bun test
 ```
 
-## Install built version to CERALIVE device
+## Build
 
-### Preparation
-
-It is recommended to create an SSH key pair and install public key on the CERALIVE device, since the deployment script uses
-multiple ssh calls that would require you to type the password each time.
-
-You can follow this tutorial to generate the key
-pair: https://www.digitalocean.com/community/tutorials/how-to-set-up-ssh-keys-on-ubuntu-22-04
-
-### Set up on the CERALIVE device
-
-- Enable SSH for the default user (`user`) and connect via SSH
-- Enable SSH on boot to make things easier (`sudo systemctl enable ssh`)
-- Use `sudo su` to get root privileges and add to the authorized keys for the root user.
-  Add the generated public ssh key to `/root/.ssh/authorized_keys` or create the file if it does not exist yet:
-  1. Create the directory if it does not exist: `mkdir -p /root/.ssh`
-  2. Append your ssh key to the `authorized_keys` file (replace `ssh-...` with your generated public key):
-     `echo "ssh-..." >> /root/.ssh/authorized_keys`).
-- Install rsync (`sudo apt install rsync`)
-- Install an editor (e.g. `sudo apt install nano`)
-
-### Set up on host (currently tested on macOS)
-
-- Install the generated private ssh key on the host (e.g. `~/.ssh/id_rsa` and `~/.ssh/id_rsa.pub`)
-- It might be necessary or recommended to install a newer version of rsync from brew or similar (not tested if
-  necessary)
-- Run the deployment script by specifying the SSH target as an argument. For example, to deploy as root to a host at 192.168.100.100, run:
+The backend compiles to a single self-contained binary. Architecture is controlled by `BUILD_ARCH`:
 
 ```bash
-# Standard deployment with CeraLive
-./install.sh --remote root@192.168.100.100
-
-# Deployment with CeraUI interface
-USE_CERAUI=true ./install.sh --remote root@192.168.100.100
+BUILD_ARCH=arm64 bun run build   # ARM64 (default)
+BUILD_ARCH=amd64 bun run build   # AMD64
 ```
 
-### Reset to default CeraLive
+The full `.deb` package (backend binary + frontend static) is built from the workspace root:
 
-To reset the CERALIVE device to the default CeraLive, you can run the reset script from the host (`./reset-local.sh`).
+```bash
+BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh
+BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
+```
+
+See [`docs/BUILD_PIPELINE.md`](../../docs/BUILD_PIPELINE.md) for the full build and CI reference.
+
+## RPC Architecture
+
+All device control goes through oRPC over WebSocket. There are no HTTP REST endpoints for device state.
+
+### Procedures
+
+Procedures live in `src/rpc/procedures/<domain>.procedure.ts` and are wired into `src/rpc/router.ts`. The shared schema types and validation constants are defined in `@ceraui/rpc` (`packages/rpc/`) and consumed by both the backend and frontend.
+
+Key streaming procedures:
+
+| Procedure | Purpose |
+|-----------|---------|
+| `streaming.start(config)` | Validate config, launch stream, persist config |
+| `streaming.stop()` | Stop active stream |
+| `streaming.setConfig(fields)` | Persist config fields without starting the stream |
+| `streaming.setBitrate({ max_br })` | Hot-adjust bitrate while streaming |
+| `streaming.getPipelines()` | List available GStreamer pipelines |
+| `streaming.getAudioCodecs()` | List available audio codecs |
+| `streaming.getConfig()` | Return current config snapshot |
+
+All setters return `{ success: boolean, applied: <fields> }`. The `applied` object reflects post-validation values actually written to config. Clients must lock their UI to `applied`, not to the raw input.
+
+### Broadcast Events
+
+The backend pushes typed events to all connected clients via `src/rpc/events.ts`. Each event type carries a monotonic `seq` counter that resets on server restart.
+
+| Event | Interval | Source |
+|-------|----------|--------|
+| `netif` | 5 s | `modules/network/network-interfaces.ts` |
+| `sensors` | 1 s | `modules/system/sensors.ts` |
+| `gateways` | 2 s | `modules/network/gateways.ts` |
+| `modems` | 30 s | `modules/modems/modem-update-loop.ts` |
+| `status` | on-change | Streaming state transitions |
+| `config` | on-change | `setConfig` / `start` / `stop` |
+| `wifi` | on-change | WiFi scan / connect / disconnect |
+| `relays` | on-change | Relay list mutations |
+| `ping` | 5 s | Heartbeat (frontend reconnects after ~15 s silence) |
+
+After a client authenticates, the backend immediately pushes a full snapshot of every event type. Clients don't need to wait for the first periodic tick to render.
+
+See [`docs/RPC_COMMUNICATION.md`](../../docs/RPC_COMMUNICATION.md) for the full wire-protocol reference.
+
+## Conventions
+
+- **Runtime**: Bun only. No Node-specific APIs (`node:path`, `node:os`, `node:fs/promises` are fine).
+- **Process spawning**: `Bun.spawn()` / `Bun.$` shell — not `node:child_process`.
+- **File I/O**: `Bun.file().text()` / `Bun.write()` — not `fs.readFileSync`.
+- **Config files**: read/written via `helpers/config-loader.ts` — not raw `fs`.
+- **Error handling**: `invariant` from `helpers/invariant.ts` — not `process.exit`.
+- **All device control**: oRPC over WebSocket — no new HTTP REST endpoints.
 
 ## License
 
-This project is licensed under the **GPL-3.0 License**. See the [LICENSE](LICENSE) file for more details.
+GPL-3.0. See the [LICENSE](LICENSE) file for details.
