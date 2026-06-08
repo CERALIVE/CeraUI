@@ -40,6 +40,7 @@ import {
 	CLOUD_PROVIDERS,
 	type CloudProviderEndpoint,
 	type ProviderSelection,
+	type SubscriptionStatus,
 } from "@ceraui/rpc/schemas";
 import WebSocket, { type RawData } from "ws";
 
@@ -51,6 +52,7 @@ import { extractMessage } from "../../helpers/types.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "../network/dns.ts";
 import { queueUpdateGw } from "../network/gateways.ts";
+import { verifyStubDeviceToken } from "../pairing/device-token.ts";
 import { setup } from "../setup.ts";
 import { addAuthedSocket } from "../ui/auth.ts";
 import { type StatusResponseMessage, sendInitialStatus } from "../ui/status.ts";
@@ -77,6 +79,46 @@ type RemoteAuthEncoderMessage = {
 };
 
 type RemoteMessage = ValidateRemoteRelaysMessage | RemoteAuthEncoderMessage;
+
+/** Proto-v16 `auth/encoder` payload presented on every remote reconnect. */
+export type AuthEncoderPayload = {
+	key: string;
+	version: number;
+	sub_status?: SubscriptionStatus;
+};
+
+/**
+ * Build the `auth/encoder` payload presented on every remote reconnect.
+ *
+ * The stored credential (`config.remote_key`) IS the authentication material:
+ * for a paired device it is the platform-issued device token (ADR-0006); for an
+ * unpaired/legacy device it is the opaque operator key. This cycle the token IS
+ * the `remote_key` (opaque-token path — no real PASETO signing yet), so the same
+ * `key` field carries either and the channel keeps working unchanged.
+ *
+ * When the credential parses as a device token, its `sub_status` claim is read
+ * locally (no DB round-trip, via {@link verifyStubDeviceToken}) and presented
+ * alongside the key so the server learns the device's subscription standing at
+ * authentication time. A legacy opaque key (or an expired/malformed token) reads
+ * back no claims, so only `key` + `version` are sent — backward-compatible.
+ *
+ * Edge E-1: `sub_status` reflects subscription standing AT TOKEN ISSUANCE, not
+ * live billing state. Real-time enforcement is bounded by the token's `exp` plus
+ * a re-pair: a subscription lapse mid-token is not observed on the channel until
+ * the token expires and the device re-pairs. Mid-token revocation is explicitly
+ * out of scope this cycle (no token refresh/revocation path).
+ */
+export function buildAuthEncoderPayload(
+	credential: string,
+	version: number,
+	now: number = Date.now(),
+): AuthEncoderPayload {
+	const claims = verifyStubDeviceToken(credential, now);
+	if (claims) {
+		return { key: credential, version, sub_status: claims.sub_status };
+	}
+	return { key: credential, version };
+}
 
 const DEFAULT_PROTOCOL_VERSION = 16;
 const DEFAULT_PROVIDER_ID: ProviderSelection = "ceralive";
@@ -274,14 +316,14 @@ async function remoteConnect() {
 		}
 
 		const config = getConfig();
-		const auth_msg = {
-			remote: {
-				"auth/encoder": {
-					key: config.remote_key,
-					version: protocolVersion,
-				},
-			},
-		};
+		if (!config.remote_key) return;
+		const payload = buildAuthEncoderPayload(config.remote_key, protocolVersion);
+		if (payload.sub_status) {
+			logger.info(
+				`remote: presenting device token (standing=${payload.sub_status})`,
+			);
+		}
+		const auth_msg = { remote: { "auth/encoder": payload } };
 		this.send(JSON.stringify(auth_msg));
 	});
 	remoteWs.on("close", () => {
@@ -370,7 +412,15 @@ export async function setRemoteConfig(params: SetRemoteConfigParams) {
 }
 
 /**
- * @deprecated Use setRemoteConfig instead for provider support
+ * @deprecated Use setRemoteConfig instead for provider support. Retained for
+ * backward compatibility: existing paired devices and operator-entered keys still
+ * flow through here, writing the opaque credential as the active `remote_key`.
+ *
+ * TODO(high-priority-debt): forced re-pair migration (D3 default) — when PASETO is
+ * ungated, paired-but-tokenless devices must re-pair. Use oracle/ultrabrain to
+ * choose forced-re-pair vs dual-auth window, accounting for CeraUI being
+ * self-hosted on the device (offline-capable verification, no runtime CA, minimal
+ * field re-pair friction).
  */
 export async function setRemoteKey(key: string) {
 	await setRemoteConfig({ remote_key: key });

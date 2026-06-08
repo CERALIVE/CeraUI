@@ -35,6 +35,11 @@
  *                   the token rather than ever accept it unverified.
  * When the ADR is accepted and the key is provisioned, the real Ed25519 verify
  * slots into {@link verifyWithProvisionedKey} without changing callers.
+ *
+ * Edge E-1: the `sub_status` claim reflects subscription standing AT ISSUANCE,
+ * not live billing state. This module enforces only the `iat`/`exp` window;
+ * real-time enforcement of a lapse is therefore bounded by `exp` plus a re-pair.
+ * Mid-token revocation is out of scope (no refresh/revocation path this cycle).
  */
 
 import type {

@@ -19,7 +19,11 @@ import {
 	MOCK_PLATFORM_SUB_STATUS,
 	mockPlatformClaim,
 } from "../modules/pairing/mock-platform.ts";
-import { resolveRemoteKey, setRemoteKey } from "../modules/remote/remote.ts";
+import {
+	buildAuthEncoderPayload,
+	resolveRemoteKey,
+	setRemoteKey,
+} from "../modules/remote/remote.ts";
 
 // Deterministic seed material so claim-code derivation and the issued token are
 // fully reproducible. The live device serial/secret are pinned via env + config
@@ -190,5 +194,40 @@ describe("remote_key channel — token acceptance + deprecated path", () => {
 		expect(resolveRemoteKey({ remote_key: "legacy-key" })).toBe("legacy-key");
 		// The deprecated helper is retained for unpaired devices.
 		expect(typeof setRemoteKey).toBe("function");
+	});
+});
+
+describe("auth/encoder frame — device-token standing + opaque fallback", () => {
+	test("presents a device token and reads its sub_status standing", () => {
+		const token = mintStubDeviceToken({
+			deviceId: SERIAL,
+			subStatus: MOCK_PLATFORM_SUB_STATUS,
+			now: NOW,
+			ttlSeconds: 100,
+		});
+		const payload = buildAuthEncoderPayload(token, 16, NOW);
+		expect(payload.key).toBe(token);
+		expect(payload.version).toBe(16);
+		expect(payload.sub_status).toBe(MOCK_PLATFORM_SUB_STATUS);
+	});
+
+	test("omits sub_status for a legacy opaque key (backward compat)", () => {
+		const payload = buildAuthEncoderPayload("legacy-operator-key", 16, NOW);
+		expect(payload.key).toBe("legacy-operator-key");
+		expect(payload.version).toBe(16);
+		expect(payload.sub_status).toBeUndefined();
+	});
+
+	test("omits sub_status for an expired token but still presents the key", () => {
+		const token = mintStubDeviceToken({
+			deviceId: SERIAL,
+			subStatus: "ACTIVE",
+			now: NOW,
+			ttlSeconds: 100,
+		});
+		const past = NOW + (100 + DEVICE_TOKEN_SKEW_SECONDS + 5) * 1000;
+		const payload = buildAuthEncoderPayload(token, 16, past);
+		expect(payload.key).toBe(token);
+		expect(payload.sub_status).toBeUndefined();
 	});
 });
