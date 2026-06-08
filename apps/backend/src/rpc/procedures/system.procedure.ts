@@ -5,6 +5,7 @@
 
 import {
 	autostartInputSchema,
+	autostartOutputSchema,
 	cloudProviderEndpointSchema,
 	kioskConfigureInputSchema,
 	kioskConfigureOutputSchema,
@@ -209,10 +210,10 @@ export const setRemoteConfigProcedure = authedProcedure
  */
 export const setAutostartProcedure = authedProcedure
 	.input(autostartInputSchema)
-	.output(successResponseSchema)
+	.output(autostartOutputSchema)
 	.handler(({ input }) => {
-		setAutostart(input.autostart);
-		return { success: true };
+		const autostart = setAutostart(input.autostart);
+		return { success: true, applied: { autostart } };
 	});
 
 /**

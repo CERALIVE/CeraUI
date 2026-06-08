@@ -418,8 +418,6 @@ const en = {
 			autostart: "Autostart streaming",
 			autostartDesc: "Start streaming automatically when the device boots",
 			autostartError: "Couldn't change autostart. Please try again.",
-			pairing: "Device Pairing",
-			pairingDesc: "Link this device to your cloud account with a claim code",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",

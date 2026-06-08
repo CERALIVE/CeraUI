@@ -319,13 +319,8 @@ const fr = {
 			versionsDesc:
 				"Afficher les versions des composants et du firmware installés",
 			autostart: "Démarrage auto du streaming",
-			autostartDesc:
-				"Démarrer le streaming automatiquement au démarrage de l'appareil",
-			autostartError:
-				"Impossible de modifier le démarrage auto. Veuillez réessayer.",
-			pairing: "Appairage de l'appareil",
-			pairingDesc:
-				"Associez cet appareil à votre compte cloud avec un code de revendication",
+			autostartDesc: "Démarrer le streaming automatiquement au démarrage de l'appareil",
+			autostartError: "Impossible de modifier le démarrage auto. Veuillez réessayer.",
 		},
 
 		dialogs: {

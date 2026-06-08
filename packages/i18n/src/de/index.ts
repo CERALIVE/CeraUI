@@ -461,11 +461,7 @@ const de = {
 			versionsDesc: "Installierte Komponenten- und Firmware-Versionen anzeigen",
 			autostart: "Streaming automatisch starten",
 			autostartDesc: "Streaming beim Start des Geräts automatisch beginnen",
-			autostartError:
-				"Autostart konnte nicht geändert werden. Bitte erneut versuchen.",
-			pairing: "Gerätekopplung",
-			pairingDesc:
-				"Verknüpfe dieses Gerät über einen Anspruchscode mit deinem Cloud-Konto",
+			autostartError: "Autostart konnte nicht geändert werden. Bitte erneut versuchen.",
 		},
 
 		dialogs: {

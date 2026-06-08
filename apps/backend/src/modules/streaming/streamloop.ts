@@ -407,13 +407,13 @@ export function stop() {
 	}
 }
 
-export function setAutostart(value: boolean): void {
-	if (typeof value !== "boolean") return;
+export function setAutostart(value: boolean): boolean {
 	const config = getConfig();
 	config.autostart = value;
 	saveConfig();
 
 	broadcastMsg("config", config);
+	return config.autostart;
 }
 
 export async function checkAutoStartStream() {

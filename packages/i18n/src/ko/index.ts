@@ -160,8 +160,6 @@ const ko = {
 			powerDesc: "기기를 재시작하거나 종료합니다",
 			versions: "기기 버전",
 			versionsDesc: "설치된 구성 요소 및 펌웨어 버전을 확인합니다",
-			pairing: "기기 페어링",
-			pairingDesc: "클레임 코드로 이 기기를 클라우드 계정에 연결합니다",
 			autostart: "자동 스트리밍 시작",
 			autostartDesc: "기기가 부팅될 때 자동으로 스트리밍을 시작합니다",
 			autostartError: "자동 시작을 변경할 수 없습니다. 다시 시도하세요.",

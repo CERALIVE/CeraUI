@@ -472,9 +472,6 @@ const es = {
 			autostart: "Inicio automático de transmisión",
 			autostartDesc: "Iniciar la transmisión automáticamente al arrancar el dispositivo",
 			autostartError: "No se pudo cambiar el inicio automático. Inténtalo de nuevo.",
-			pairing: "Emparejamiento del dispositivo",
-			pairingDesc:
-				"Vincula este dispositivo a tu cuenta en la nube con un código de reclamación",
 		},
 
 		dialogs: {
