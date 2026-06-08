@@ -249,6 +249,7 @@ const en = {
 		healthDegraded: "Degraded",
 		healthDead: "Dead",
 		healthUnknown: "Unknown",
+		link: "Link",
 	},
 	live: {
 		title: "Live",

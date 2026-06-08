@@ -715,6 +715,7 @@ const ar = {
 		healthDegraded: "متدهور",
 		healthDead: "متوقف",
 		healthUnknown: "غير معروف",
+		link: "رابط",
 	},
 	live: {
 		title: "مباشر",

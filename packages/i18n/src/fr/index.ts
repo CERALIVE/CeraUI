@@ -749,6 +749,7 @@ const fr = {
 		healthDegraded: "Dégradé",
 		healthDead: "Hors service",
 		healthUnknown: "Inconnu",
+		link: "Liaison",
 	},
 	live: {
 		title: "Live",

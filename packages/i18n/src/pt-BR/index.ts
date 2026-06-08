@@ -724,6 +724,7 @@ const ptBR = {
 		healthDegraded: "Degradado",
 		healthDead: "Inativo",
 		healthUnknown: "Desconhecido",
+		link: "Link",
 	},
 	live: {
 		title: "Live",

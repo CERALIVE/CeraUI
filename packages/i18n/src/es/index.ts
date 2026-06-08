@@ -258,6 +258,7 @@ const es = {
 		healthDegraded: "Degradado",
 		healthDead: "Caído",
 		healthUnknown: "Desconocido",
+		link: "Enlace",
 	},
 	live: {
 		title: "Live",

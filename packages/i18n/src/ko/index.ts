@@ -582,6 +582,7 @@ const ko = {
 		healthDegraded: "저하",
 		healthDead: "중단",
 		healthUnknown: "알 수 없음",
+		link: "링크",
 	},
 	live: {
 		title: "라이브",

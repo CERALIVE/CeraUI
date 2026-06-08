@@ -576,6 +576,7 @@ const hi = {
 		healthDegraded: "घटिया",
 		healthDead: "बंद",
 		healthUnknown: "अज्ञात",
+		link: "लिंक",
 	},
 	live: {
 		title: "लाइव",

@@ -546,6 +546,7 @@ const zh = {
 		healthDegraded: "降级",
 		healthDead: "中断",
 		healthUnknown: "未知",
+		link: "链路",
 	},
 	live: {
 		title: "直播",

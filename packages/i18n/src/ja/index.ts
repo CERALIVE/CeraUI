@@ -590,6 +590,7 @@ const ja = {
 		healthDegraded: "劣化",
 		healthDead: "停止",
 		healthUnknown: "不明",
+		link: "リンク",
 	},
 	live: {
 		title: "ライブ",

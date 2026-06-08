@@ -258,6 +258,7 @@ const de = {
 		healthDegraded: "Beeinträchtigt",
 		healthDead: "Ausgefallen",
 		healthUnknown: "Unbekannt",
+		link: "Verbindung",
 	},
 	live: {
 		title: "Live",
