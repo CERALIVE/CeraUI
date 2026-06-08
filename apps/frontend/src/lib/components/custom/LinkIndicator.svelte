@@ -13,6 +13,8 @@ import WifiLowIcon from '@lucide/svelte/icons/wifi-low';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 import WifiZeroIcon from '@lucide/svelte/icons/wifi-zero';
 
+import { LL } from '@ceraui/i18n/svelte';
+
 import { getSignalCategory, linkVisualState, signalTextClass } from '$lib/helpers/signal';
 import { cn } from '$lib/utils';
 
@@ -68,6 +70,14 @@ const identityColor = $derived(
 );
 
 const qualityClass = $derived(signalTextClass(signal));
+
+// Non-color cue (a11y / colorblind / monochrome e-ink): each of the 6 spectral
+// link levels carries its 1-based ordinal as a `data-link-level` test hook and
+// an accessible "Link N" label, so the link is identifiable without relying on
+// the --link-{n} hue alone. Only set when this indicator represents a numbered
+// bonded link (linkIndex present); decorative signal glyphs stay aria-hidden.
+const linkLevel = $derived(linkIndex != null ? linkIndex + 1 : null);
+const linkAriaLabel = $derived(linkLevel != null ? `${$LL.hud.link()} ${linkLevel}` : undefined);
 </script>
 
 {#snippet barCluster(filled: number)}
@@ -112,7 +122,10 @@ const qualityClass = $derived(signalTextClass(signal));
 	</span>
 {:else}
 	<span
-		aria-hidden="true"
+		role={linkLevel != null ? 'img' : undefined}
+		aria-label={linkAriaLabel}
+		aria-hidden={linkLevel != null ? undefined : 'true'}
+		data-link-level={linkLevel ?? undefined}
 		style:width="{sizeConfig.w}px"
 		style:height="{sizeConfig.h}px"
 		class={cn('inline-flex items-end justify-center', className)}

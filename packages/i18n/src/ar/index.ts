@@ -703,6 +703,7 @@ const ar = {
 		noData: "لا توجد بيانات",
 		stale: "قديم",
 		expandDetails: "توسيع التفاصيل",
+		refresh: "تحديث",
 		lastUpdated: "آخر تحديث",
 		idle: "خامل",
 		voltage: "الجهد",
@@ -714,6 +715,7 @@ const ar = {
 		healthDegraded: "متدهور",
 		healthDead: "متوقف",
 		healthUnknown: "غير معروف",
+		link: "رابط",
 	},
 	live: {
 		title: "مباشر",

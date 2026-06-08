@@ -578,6 +578,7 @@ const ja = {
 		noData: "データなし",
 		stale: "古い",
 		expandDetails: "詳細を展開",
+		refresh: "更新",
 		lastUpdated: "最終更新",
 		idle: "アイドル",
 		voltage: "電圧",
@@ -589,6 +590,7 @@ const ja = {
 		healthDegraded: "劣化",
 		healthDead: "停止",
 		healthUnknown: "不明",
+		link: "リンク",
 	},
 	live: {
 		title: "ライブ",

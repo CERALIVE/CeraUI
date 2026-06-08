@@ -712,6 +712,7 @@ const ptBR = {
 		noData: "Sem dados",
 		stale: "Obsoleto",
 		expandDetails: "Expandir detalhes",
+		refresh: "Atualizar",
 		lastUpdated: "Última atualização",
 		idle: "Ocioso",
 		voltage: "Tensão",
@@ -723,6 +724,7 @@ const ptBR = {
 		healthDegraded: "Degradado",
 		healthDead: "Inativo",
 		healthUnknown: "Desconhecido",
+		link: "Link",
 	},
 	live: {
 		title: "Live",

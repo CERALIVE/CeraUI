@@ -737,6 +737,7 @@ const fr = {
 		noData: "Aucune donnée",
 		stale: "Obsolète",
 		expandDetails: "Afficher les détails",
+		refresh: "Actualiser",
 		lastUpdated: "Dernière mise à jour",
 		idle: "Inactif",
 		voltage: "Tension",
@@ -748,6 +749,7 @@ const fr = {
 		healthDegraded: "Dégradé",
 		healthDead: "Hors service",
 		healthUnknown: "Inconnu",
+		link: "Liaison",
 	},
 	live: {
 		title: "Live",

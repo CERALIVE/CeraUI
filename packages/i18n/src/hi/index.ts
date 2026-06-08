@@ -564,6 +564,7 @@ const hi = {
 		noData: "कोई डेटा नहीं",
 		stale: "पुरानी",
 		expandDetails: "विवरण विस्तृत करें",
+		refresh: "रिफ्रेश करें",
 		lastUpdated: "अंतिम अपडेट",
 		idle: "निष्क्रिय",
 		voltage: "वोल्टेज",
@@ -575,6 +576,7 @@ const hi = {
 		healthDegraded: "घटिया",
 		healthDead: "बंद",
 		healthUnknown: "अज्ञात",
+		link: "लिंक",
 	},
 	live: {
 		title: "लाइव",

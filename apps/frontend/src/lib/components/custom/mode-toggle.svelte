@@ -5,12 +5,17 @@ import { resetMode, setMode } from 'mode-watcher';
 
 import { Button } from '$lib/components/ui/button/index.js';
 import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-import { getTheme, resolveSystemMode, setTheme, type ThemeMode } from '$lib/stores/theme.svelte';
+import { getTheme, resolveSystemMode, setTheme } from '$lib/stores/theme.svelte';
 import { cn } from '$lib/utils';
 
 let theme = $state(getTheme());
 
-const handleModeChange = (mode: ThemeMode) => {
+// The toggle only offers the three color modes; "mono" is a display-profile
+// value (theme.svelte.ts) that is never user-selectable here, so it is excluded
+// from this handler — mode-watcher's setMode rejects anything but these three.
+type ColorMode = 'light' | 'dark' | 'system';
+
+const handleModeChange = (mode: ColorMode) => {
 	if (mode === 'system') {
 		// resetMode hands control back to mode-watcher, which resolves the system
 		// preference the same way resolveSystemMode does: headless → dark.

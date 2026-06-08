@@ -1,7 +1,11 @@
 // Theme store using Svelte 5 runes with persistence
 import "svelte-persistent-runes";
 
-export type ThemeMode = "system" | "dark" | "light";
+// "system" | "dark" | "light" are the user-selectable color modes (the
+// mode-toggle surfaces these three). "mono" is the e-ink/mono display-profile
+// counterpart: selected by the display profile, not the toggle, and rendered via
+// the grayscale data-theme="eink" token set rather than a light/dark color mode.
+export type ThemeMode = "system" | "dark" | "light" | "mono";
 
 let theme = $persist<ThemeMode>("dark", "theme");
 

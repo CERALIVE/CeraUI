@@ -8,9 +8,14 @@
 
   Behaviour
   ----------
-  • Responsive: renders as a centered Dialog on desktop (>= lg, 1024px) and as a
-    bottom Sheet (drawer) on mobile. The breakpoint is reactive — resizing across
-    it re-renders the correct surface while preserving `open`.
+  • Responsive: renders as a centered Dialog under "desktop chrome" and as a
+    bottom Sheet (drawer) otherwise. Desktop chrome = `lg` (≥1024px) OR a short
+    landscape panel (≥768px wide ∧ ≤600px tall) — see `$lib/layout`'s
+    DESKTOP_CHROME_QUERY. The latter case is the kiosk touchscreen (e.g. 800×480):
+    a bottom Sheet there is unusable with the on-screen keyboard raised, so it
+    gets the centered Dialog (which the `@media (max-height: 500px)` rule in
+    app.css collapses to a full-height scrollable form). The breakpoint is
+    reactive — resizing across it re-renders the correct surface, preserving `open`.
   • Chrome: sticky header (title + optional icon + description + close button),
     scrollable body, optional pinned footer.
   • Close affordances: ESC, overlay click, and the header close button — all
@@ -55,6 +60,7 @@ import { MediaQuery } from 'svelte/reactivity';
 import { Button } from '$lib/components/ui/button';
 import * as Dialog from '$lib/components/ui/dialog';
 import * as Sheet from '$lib/components/ui/sheet';
+import { DESKTOP_CHROME_QUERY } from '$lib/layout';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -95,8 +101,10 @@ let {
 	contentClass,
 }: Props = $props();
 
-// lg breakpoint — Tailwind's `lg` is 1024px. Desktop => Dialog, mobile => Sheet.
-const isDesktop = new MediaQuery('(min-width: 1024px)');
+// Desktop chrome => centered Dialog; mobile (narrow/tall) => bottom Sheet.
+// Short landscape kiosk panels (≥768px ∧ ≤600px tall) count as desktop chrome
+// so the dialog stays usable with the on-screen keyboard. See $lib/layout.
+const isDesktop = new MediaQuery(DESKTOP_CHROME_QUERY);
 
 const Icon = $derived(icon);
 
@@ -119,7 +127,10 @@ const surfaceClass = cn(
 
 {#snippet body()}
 	<!-- Header -->
-	<div class="bg-card relative flex shrink-0 flex-col gap-1.5 border-b px-5 py-4 pe-14">
+	<div
+		class="bg-card relative flex shrink-0 flex-col gap-1.5 border-b px-5 py-4 pe-14"
+		data-app-dialog-header
+	>
 		<DialogPrimitive.Title class="flex items-center gap-2.5 text-base leading-tight font-semibold">
 			{#if Icon}
 				<Icon class="text-primary size-5 shrink-0" />
@@ -158,6 +169,7 @@ const surfaceClass = cn(
 		<div
 			class="bg-muted/40 flex shrink-0 flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end"
 			style="padding-bottom: max(1rem, env(safe-area-inset-bottom));"
+			data-app-dialog-footer
 		>
 			{#if actions}
 				{@render actions()}

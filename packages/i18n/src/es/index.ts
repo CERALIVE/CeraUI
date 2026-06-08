@@ -246,6 +246,7 @@ const es = {
 		noData: "Sin datos",
 		stale: "Obsoleto",
 		expandDetails: "Expandir detalles",
+		refresh: "Actualizar",
 		lastUpdated: "Última actualización",
 		idle: "Inactivo",
 		voltage: "Voltaje",
@@ -257,6 +258,7 @@ const es = {
 		healthDegraded: "Degradado",
 		healthDead: "Caído",
 		healthUnknown: "Desconocido",
+		link: "Enlace",
 	},
 	live: {
 		title: "Live",

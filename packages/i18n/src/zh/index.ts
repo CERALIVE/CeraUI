@@ -534,6 +534,7 @@ const zh = {
 		noData: "无数据",
 		stale: "陈旧",
 		expandDetails: "展开详情",
+		refresh: "刷新",
 		lastUpdated: "最后更新",
 		idle: "空闲",
 		voltage: "电压",
@@ -545,6 +546,7 @@ const zh = {
 		healthDegraded: "降级",
 		healthDead: "中断",
 		healthUnknown: "未知",
+		link: "链路",
 	},
 	live: {
 		title: "直播",

@@ -1,7 +1,9 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import { MediaQuery } from 'svelte/reactivity';
 
 import { type NavElements, navElements } from '$lib/config';
+import { DESKTOP_CHROME_QUERY } from '$lib/layout';
 import {
 	getCurrentNavigation,
 	isNavigationTransitioning,
@@ -11,6 +13,11 @@ import { cn } from '$lib/utils';
 
 let lastNavigationTime = 0;
 const NAVIGATION_THROTTLE_MS = 50;
+
+// Rail nav belongs to "desktop chrome": ≥1024px OR a short landscape kiosk panel
+// (≥768px ∧ ≤600px tall). Below that the mobile bottom dock (MobileNav) renders
+// instead. Reactive so the rail/dock swap on resize. Mirrors MainView's pivot.
+const isDesktop = new MediaQuery(DESKTOP_CHROME_QUERY);
 
 const currentNav = $derived(getCurrentNavigation() ?? { live: navElements.live });
 const activeKey = $derived(Object.keys(currentNav)[0] ?? 'live');
@@ -29,7 +36,13 @@ const label = (nav: NavElements[string]) =>
 	nav.title ?? $LL.navigation[nav.label as keyof typeof $LL.navigation]();
 </script>
 
-<nav aria-label="Main navigation" class="hidden flex-1 items-center justify-center lg:flex">
+<nav
+	aria-label="Main navigation"
+	data-testid="rail-nav"
+	class="flex-1 items-center justify-center"
+	class:hidden={!isDesktop.current}
+	class:flex={isDesktop.current}
+>
 	<div class="flex items-center gap-1">
 		{#each Object.entries(navElements) as [identifier, navigation] (identifier)}
 			{@const isActive = activeKey === identifier}

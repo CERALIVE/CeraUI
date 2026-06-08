@@ -570,6 +570,7 @@ const ko = {
 		noData: "데이터 없음",
 		stale: "오래됨",
 		expandDetails: "세부정보 펼치기",
+		refresh: "새로고침",
 		lastUpdated: "마지막 업데이트",
 		idle: "유휴",
 		voltage: "전압",
@@ -581,6 +582,7 @@ const ko = {
 		healthDegraded: "저하",
 		healthDead: "중단",
 		healthUnknown: "알 수 없음",
+		link: "링크",
 	},
 	live: {
 		title: "라이브",

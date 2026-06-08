@@ -246,6 +246,7 @@ const de = {
 		noData: "Keine Daten",
 		stale: "Veraltet",
 		expandDetails: "Details anzeigen",
+		refresh: "Aktualisieren",
 		lastUpdated: "Zuletzt aktualisiert",
 		idle: "Leerlauf",
 		voltage: "Spannung",
@@ -257,6 +258,7 @@ const de = {
 		healthDegraded: "Beeinträchtigt",
 		healthDead: "Ausgefallen",
 		healthUnknown: "Unbekannt",
+		link: "Verbindung",
 	},
 	live: {
 		title: "Live",

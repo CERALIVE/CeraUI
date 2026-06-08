@@ -237,6 +237,7 @@ const en = {
 		noData: "No data",
 		stale: "Stale",
 		expandDetails: "Expand details",
+		refresh: "Refresh",
 		lastUpdated: "Last updated",
 		idle: "Idle",
 		voltage: "Voltage",
@@ -248,6 +249,7 @@ const en = {
 		healthDegraded: "Degraded",
 		healthDead: "Dead",
 		healthUnknown: "Unknown",
+		link: "Link",
 	},
 	live: {
 		title: "Live",
