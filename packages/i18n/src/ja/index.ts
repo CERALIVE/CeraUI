@@ -578,6 +578,7 @@ const ja = {
 		noData: "データなし",
 		stale: "古い",
 		expandDetails: "詳細を展開",
+		refresh: "更新",
 		lastUpdated: "最終更新",
 		idle: "アイドル",
 		voltage: "電圧",

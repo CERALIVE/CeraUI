@@ -40,6 +40,7 @@ import {
 	getUpdating,
 	getWifi,
 } from "$lib/rpc/subscriptions.svelte";
+import { onDisplayRefresh } from "$lib/stores/display-refresh.svelte";
 import type {
 	HudConnectionState,
 	HudSources,
@@ -475,6 +476,13 @@ function createHudStore(): HudStore {
 		document.addEventListener("visibilitychange", onVisibilityChange);
 	}
 
+	// Manual refresh (Task 12): advancing `nowTick` re-derives the snapshot from
+	// freshly-read getters, which re-renders the frozen HUD/live fields once. The
+	// only path that ticks the clock outside the gated interval.
+	const releaseRefresh = onDisplayRefresh(() => {
+		nowTick = Date.now();
+	});
+
 	const stopRoot = $effect.root(() => {
 		$effect(() => {
 			const t = Date.now();
@@ -551,6 +559,7 @@ function createHudStore(): HudStore {
 		destroy: () => {
 			clock.stop();
 			stopRoot();
+			releaseRefresh();
 			if (typeof document !== "undefined") {
 				document.removeEventListener("visibilitychange", onVisibilityChange);
 			}

@@ -712,6 +712,7 @@ const ptBR = {
 		noData: "Sem dados",
 		stale: "Obsoleto",
 		expandDetails: "Expandir detalhes",
+		refresh: "Atualizar",
 		lastUpdated: "Última atualização",
 		idle: "Ocioso",
 		voltage: "Tensão",

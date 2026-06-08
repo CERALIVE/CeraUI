@@ -51,6 +51,14 @@ export function prefersEinkTheme(profile: DisplayProfile): boolean {
 	return profile === "eink" || profile === "mono";
 }
 
+// Re-exported from the dedicated `display-refresh` module so the manual e-ink
+// refresh hook (Task 12) is reachable from the display-profile store.
+export {
+	getDisplayRefreshNonce,
+	onDisplayRefresh,
+	requestDisplayRefresh,
+} from "./display-refresh.svelte";
+
 // Legacy-compatible store-like object for easier migration
 export const displayProfileStore = {
 	get value() {

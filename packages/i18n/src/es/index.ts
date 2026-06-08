@@ -246,6 +246,7 @@ const es = {
 		noData: "Sin datos",
 		stale: "Obsoleto",
 		expandDetails: "Expandir detalles",
+		refresh: "Actualizar",
 		lastUpdated: "Última actualización",
 		idle: "Inactivo",
 		voltage: "Voltaje",

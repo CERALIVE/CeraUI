@@ -28,6 +28,7 @@ const isDesktop = new MediaQuery('(min-width: 1024px)');
 
 <PullToRefresh onRefresh={handleRefresh}>
 	<div class="flex min-h-dvh flex-col">
+		<HudRegion affordance />
 		<header class="bg-background sticky top-0 z-40 w-full border-b">
 			<div class="container flex h-14 max-w-7xl items-center gap-4">
 				<button

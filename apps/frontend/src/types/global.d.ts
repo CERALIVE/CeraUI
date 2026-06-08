@@ -7,5 +7,6 @@ declare global {
 		) => void;
 		stopStreamingWithNotificationClear?: () => void;
 		__ceraAppMounted?: boolean;
+		__ceraDisplayRefreshCount?: number;
 	}
 }

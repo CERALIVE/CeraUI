@@ -737,6 +737,7 @@ const fr = {
 		noData: "Aucune donnée",
 		stale: "Obsolète",
 		expandDetails: "Afficher les détails",
+		refresh: "Actualiser",
 		lastUpdated: "Dernière mise à jour",
 		idle: "Inactif",
 		voltage: "Tension",

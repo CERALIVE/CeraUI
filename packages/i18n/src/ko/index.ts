@@ -570,6 +570,7 @@ const ko = {
 		noData: "데이터 없음",
 		stale: "오래됨",
 		expandDetails: "세부정보 펼치기",
+		refresh: "새로고침",
 		lastUpdated: "마지막 업데이트",
 		idle: "유휴",
 		voltage: "전압",
