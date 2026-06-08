@@ -65,10 +65,9 @@ function handleChange(next: boolean) {
 		{id}
 		aria-busy={pending}
 		aria-label={ariaLabel}
-		{checked}
+		bind:checked={() => checked, (next) => handleChange(next)}
 		data-testid={testid}
 		disabled={disabled || pending}
-		onCheckedChange={handleChange}
 	/>
 	{#if pending}
 		<LoaderCircle
