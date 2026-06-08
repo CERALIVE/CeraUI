@@ -279,6 +279,97 @@
 		--gradient-destructive-to: oklch(0.5 0.18 15);
 		--gradient-warning-to: oklch(0.7 0.15 55);
 	}
+
+	/* ── E-ink / Mono ───────────────────────────────
+	   Pure grayscale token set for reflective e-paper and 1-bit/mono
+	   panels. Every color is chroma 0 (no hue), so the palette survives a
+	   grayscale render with no hue-collapse surprises. White paper, black
+	   ink, hard black borders. Covers BOTH the eink and mono display
+	   profiles: App.svelte sets data-theme="eink" for either, while
+	   data-display carries the raw profile. `html[...]` (specificity 0,1,1)
+	   beats the `.dark` / `:root` token blocks above (0,1,0) regardless of
+	   the underlying light/dark mode. Differentiation carried by HUE in
+	   dark/light (status, signal, bonded links) is re-expressed purely as a
+	   LIGHTNESS ramp so the roles stay distinguishable in grayscale. */
+	html[data-display='eink'],
+	html[data-theme='eink'] {
+		--background: oklch(1 0 0);
+		--foreground: oklch(0 0 0);
+
+		--card: oklch(0.98 0 0);
+		--card-foreground: oklch(0 0 0);
+		--popover: oklch(1 0 0);
+		--popover-foreground: oklch(0 0 0);
+
+		--primary: oklch(0 0 0);
+		--primary-foreground: oklch(1 0 0);
+
+		--secondary: oklch(0.9 0 0);
+		--secondary-foreground: oklch(0 0 0);
+
+		--muted: oklch(0.93 0 0);
+		--muted-foreground: oklch(0.3 0 0);
+
+		--accent: oklch(0.88 0 0);
+		--accent-foreground: oklch(0 0 0);
+
+		--destructive: oklch(0 0 0);
+		--destructive-foreground: oklch(1 0 0);
+
+		--border: oklch(0 0 0);
+		--input: oklch(0 0 0);
+		--ring: oklch(0 0 0);
+
+		--switch-off: oklch(0.6 0 0);
+		--switch-off-foreground: oklch(1 0 0);
+
+		--sidebar-background: oklch(0.96 0 0);
+		--sidebar-foreground: oklch(0 0 0);
+		--sidebar-primary: oklch(0 0 0);
+		--sidebar-primary-foreground: oklch(1 0 0);
+		--sidebar-accent: oklch(0.88 0 0);
+		--sidebar-accent-foreground: oklch(0 0 0);
+		--sidebar-border: oklch(0 0 0);
+		--sidebar-ring: oklch(0 0 0);
+
+		--status-success: oklch(0.2 0 0);
+		--status-success-foreground: oklch(1 0 0);
+		--status-info: oklch(0.3 0 0);
+		--status-info-foreground: oklch(1 0 0);
+		--status-warning: oklch(0.45 0 0);
+		--status-warning-foreground: oklch(1 0 0);
+		--status-error: oklch(0 0 0);
+		--status-error-foreground: oklch(1 0 0);
+		--status-neutral: oklch(0.5 0 0);
+		--status-neutral-foreground: oklch(1 0 0);
+
+		--status-live: oklch(0 0 0);
+		--status-standby: oklch(0.4 0 0);
+		--status-idle: oklch(0.62 0 0);
+
+		--signal-excellent: oklch(0.15 0 0);
+		--signal-good: oklch(0.3 0 0);
+		--signal-fair: oklch(0.45 0 0);
+		--signal-weak: oklch(0.55 0 0);
+
+		--link-1: oklch(0 0 0);
+		--link-2: oklch(0.2 0 0);
+		--link-3: oklch(0.35 0 0);
+		--link-4: oklch(0.45 0 0);
+		--link-5: oklch(0.55 0 0);
+		--link-6: oklch(0.65 0 0);
+		--link-bar-empty: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+
+		--shadow-sm: 0 0 0 1px oklch(0 0 0);
+		--shadow-md: 0 0 0 1px oklch(0 0 0);
+		--shadow-lg: 0 0 0 1px oklch(0 0 0);
+
+		--gradient-primary-to: oklch(0 0 0);
+		--gradient-success-to: oklch(0.2 0 0);
+		--gradient-info-to: oklch(0.3 0 0);
+		--gradient-destructive-to: oklch(0 0 0);
+		--gradient-warning-to: oklch(0.45 0 0);
+	}
 }
 
 /* ── Layout mode (touch / kiosk foundation) ──────
@@ -625,6 +716,24 @@
 	}
 }
 
+/* ── E-ink: kill all motion ──────────────────────
+   E-paper repaints ghost; any animation or transition smears. Unlike
+   `prefers-reduced-motion` (which uses a 0.01ms shrink so reduced-but-present
+   motion still completes), e-ink needs motion fully OFF — `none`, not near-zero.
+   Unlayered + !important so it overrides every component transition regardless
+   of cascade layer. Covers both display profiles via the shared
+   data-theme="eink" plus the raw data-display="eink". */
+html[data-display='eink'] *,
+html[data-display='eink'] *::before,
+html[data-display='eink'] *::after,
+html[data-theme='eink'] *,
+html[data-theme='eink'] *::before,
+html[data-theme='eink'] *::after {
+	animation: none !important;
+	transition: none !important;
+	scroll-behavior: auto !important;
+}
+
 /* ── Sonner Toasts ──────────────────────────────
    Graphite popover base + semantic accent per data-type. Tokens
    auto-flip light/dark, so no separate .dark rules. sonner's
@@ -808,6 +917,51 @@ label[for],
 [data-disabled],
 [aria-disabled='true'] {
 	cursor: not-allowed;
+}
+
+/* ── Short-viewport dialog collapse (on-screen keyboard) ────────────
+   On very short viewports (≤500px tall) — e.g. an 800×480 kiosk panel,
+   especially with the on-screen keyboard raised reducing the usable area —
+   the AppDialog surface collapses to a minimal, full-height scrollable form so
+   the footer actions (Save/Cancel) stay on-screen. Unlayered so it beats the
+   `max-h-[85svh]` / `rounded-*` / centering utilities on the surface. Pairs with
+   DESKTOP_CHROME_QUERY's short-landscape branch ($lib/layout): those panels are
+   ≤600px tall, so they render the centered Dialog and hit this at ≤500px. The
+   Sheet branch covers the rare narrow-and-short case (<768px ∧ ≤500px). */
+@media (max-height: 500px) {
+
+	/* Centered Dialog: pin to the full viewport height (top/bottom:0) and drop the
+	   max-h-[85svh] cap + translateY centering, so the surface is EXACTLY the
+	   viewport tall. The flex column then shrinks the scrollable body and keeps the
+	   header and footer fully on-screen, with nothing clipped at the edges the way
+	   a centered, taller-than-viewport box would be. */
+	[data-slot='dialog-content'] {
+		top: 0;
+		bottom: 0;
+		max-height: none;
+		/* Tailwind v4 `-translate-y-1/2` rides the independent `translate` property
+		   (not `transform`), so cancel the vertical shift here: keep the -50% inline
+		   centering (paired with left:50%), zero the vertical. */
+		translate: -50% 0;
+		border-radius: 0;
+	}
+
+	/* Bottom Sheet is already bottom-anchored; just let it fill the short height. */
+	[data-slot='sheet-content'] {
+		max-height: 100svh;
+		border-radius: 0;
+	}
+
+	[data-app-dialog-header] {
+		padding-top: 0.625rem;
+		padding-bottom: 0.625rem;
+	}
+
+	/* Footer padding-bottom is set inline (safe-area aware), so only trim the top
+	   here; the inline rule keeps the bottom inset for the home-indicator. */
+	[data-app-dialog-footer] {
+		padding-top: 0.625rem;
+	}
 }
 
 /* ── Svelte Inspector ── */
