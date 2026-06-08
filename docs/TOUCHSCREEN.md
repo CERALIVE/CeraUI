@@ -74,18 +74,73 @@ touchscreen attached to the device). All three destinations — **Live**,
 overflow**, in both default and touch modes. This is verified with Playwright
 (see `.omo/evidence/task-36-default.png` and `task-36-touch.png`).
 
+## Minimum Supported Resolution
+
+| Orientation | Minimum | Verified |
+|---|---|---|
+| Landscape | **800×480** | `.omo/evidence/task-13-800x480.txt` |
+| Portrait | **600×1024** | `.omo/evidence/task-13-portrait.txt` |
+
+**800×480 landscape is the floor.** Below this the chrome and the larger config
+dialogs (notably `ServerDialog`) can no longer be laid out without clipping. At
+800×480 the panel renders the **desktop chrome** (see Breakpoints) and every
+dialog renders as a centered, collapsible Dialog rather than a bottom Sheet, so
+the form stays usable with the on-screen keyboard raised (verified against a
+simulated 250px bottom inset — the `ServerDialog` Save action remains on-screen).
+
+Portrait panels down to **600×1024** render the mobile layout (bottom-dock nav +
+bottom HUD) with no clipped controls. Narrower or shorter viewports are not a
+supported device target.
+
 ## Breakpoints
 
-CeraUI uses Tailwind's `lg` breakpoint (1024px) as the nav pivot:
+The shell pivots between two layouts. The single source of truth is
+`DESKTOP_CHROME_QUERY` in `apps/frontend/src/lib/layout.ts`, consumed by
+`MainView.svelte`, `MainNav.svelte`, and `AppDialog.svelte` (each instantiates
+its own reactive `MediaQuery` from that string, so the nav and the dialog flip
+together):
 
-- **< 1024px** — mobile bottom nav (`MobileNav.svelte`), HUD docked at the
-  bottom.
-- **≥ 1024px** — desktop rail nav (`MainNav.svelte`), HUD below the header. The
-  1024×600 kiosk therefore renders the **desktop layout**.
+```
+(min-width: 1024px), (min-width: 768px) and (max-height: 600px)
+```
 
-Layout mode is **orthogonal** to these breakpoints: touch mode only scales
-tokens; it does not change which nav renders. A 1024-wide kiosk gets the desktop
-nav whether or not touch mode is on.
+- **Desktop chrome** — rail nav (`MainNav.svelte`), HUD below the header,
+  centered Dialog surfaces. Applies when the viewport is **≥1024px wide** (normal
+  desktop / the 1024×600 kiosk) **OR** is a **short landscape panel** (≥768px
+  wide ∧ ≤600px tall, e.g. **800×480**).
+- **Mobile layout** — bottom-dock nav (`MobileNav.svelte`), HUD docked at the
+  bottom, bottom Sheet (drawer) surfaces. Applies to everything else: narrow
+  and/or tall viewports such as phones and **portrait panels (e.g. 600×1024)**.
+
+The short-landscape branch is the fix for the old `lg=1024` pivot, where an
+800×480 panel fell into the mobile layout and got a bottom Sheet — unusable with
+the on-screen keyboard. Standard desktop/mobile semantics for non-kiosk use are
+unchanged: only the ≥768px-wide ∧ ≤600px-tall band moved from mobile to desktop
+chrome.
+
+### Short-viewport dialog collapse
+
+`app.css` adds an unlayered `@media (max-height: 500px)` rule: on very short
+viewports the AppDialog surface collapses to a **minimal, full-height scrollable
+form**. It overrides the default `max-h-[85svh]` to fill the (small) viewport
+(`max-height: 100svh`), squares off the corners, and trims the header/footer
+padding so more of the height goes to the scrollable body. The footer
+(Save/Cancel) stays pinned on-screen. The `100svh` basis tracks the *small*
+viewport, so when the browser reports a reduced viewport (e.g. an on-screen
+keyboard that resizes the visual viewport) the dialog shrinks with it and Save
+stays reachable.
+
+> **OSK integration note.** The kiosk on-screen keyboard (`wvkbd`, see the image
+> pipeline) is a Wayland compositor overlay and does **not** resize the Chromium
+> viewport or set `env(keyboard-inset-height)`. The collapse rule keeps the
+> dialog usable in the space the viewport reports; reserving space for an overlay
+> keyboard that does not shrink the viewport is a device-integration concern
+> tracked outside CeraUI.
+
+Layout mode (touch/default) is **orthogonal** to these breakpoints: touch mode
+only scales hit-target tokens; it does not change which nav renders or which
+dialog surface is used. A 1024-wide kiosk gets the desktop chrome whether or not
+touch mode is on.
 
 ## Remaining Work for a Full Touch UI
 
