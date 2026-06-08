@@ -47,6 +47,20 @@ export interface HealthSnapshot {
 	previous: HealthIndicator;
 }
 
+/**
+ * Per-subsystem breakdown carried by every `health` broadcast (Task 13's
+ * `StreamHealthOutput`), surfaced in the HUD rollup so the UI shows why the
+ * rolled-up state is what it is, not just the tri-state dot. `state` is always
+ * concrete here; a broadcast never carries `unknown`.
+ */
+export interface HealthRollup {
+	state: Exclude<HealthIndicator, "unknown">;
+	process: { alive: boolean };
+	frames: { advancing: boolean; count: number };
+	srt: { reconnecting: boolean; reconnectCount: number };
+	bond: { linkCount: number; activeLinks: number };
+}
+
 const KNOWN_STATES: ReadonlySet<string> = new Set([
 	"healthy",
 	"degraded",
@@ -74,6 +88,46 @@ export function parseHealthState(data: unknown): HealthIndicator {
 		return state as HealthIndicator;
 	}
 	return "unknown";
+}
+
+function asFlag(value: unknown): boolean {
+	return value === true;
+}
+
+function asCount(value: unknown): number {
+	return typeof value === "number" && Number.isFinite(value) && value >= 0
+		? Math.trunc(value)
+		: 0;
+}
+
+/**
+ * Extract the full {@link HealthRollup} from a raw `health` broadcast payload.
+ * Returns `null` when the payload has no recognised tri-state (so the consumer
+ * keeps its last-known rollup rather than blanking). Every sub-field is coerced
+ * defensively (missing booleans collapse to `false`, missing/invalid counts to
+ * `0`) so a partial frame can never crash the HUD rollup.
+ */
+export function parseHealthRollup(data: unknown): HealthRollup | null {
+	const state = parseHealthState(data);
+	if (state === "unknown") return null;
+	const d = data as Record<string, unknown>;
+	const process = (d.process ?? {}) as Record<string, unknown>;
+	const frames = (d.frames ?? {}) as Record<string, unknown>;
+	const srt = (d.srt ?? {}) as Record<string, unknown>;
+	const bond = (d.bond ?? {}) as Record<string, unknown>;
+	return {
+		state,
+		process: { alive: asFlag(process.alive) },
+		frames: { advancing: asFlag(frames.advancing), count: asCount(frames.count) },
+		srt: {
+			reconnecting: asFlag(srt.reconnecting),
+			reconnectCount: asCount(srt.reconnectCount),
+		},
+		bond: {
+			linkCount: asCount(bond.linkCount),
+			activeLinks: asCount(bond.activeLinks),
+		},
+	};
 }
 
 /**
@@ -152,12 +206,14 @@ interface StreamHealthStore {
 	ingest(data: unknown): void;
 	getState(): HealthIndicator;
 	getSnapshot(): HealthSnapshot;
+	getRollup(): HealthRollup | null;
 	reset(): void;
 	destroy(): void;
 }
 
 function createStreamHealthStore(): StreamHealthStore {
 	let snapshot = $state<HealthSnapshot>(initialHealthSnapshot());
+	let rollup = $state<HealthRollup | null>(null);
 
 	const ingest = (data: unknown): void => {
 		const next = parseHealthState(data);
@@ -167,6 +223,7 @@ function createStreamHealthStore(): StreamHealthStore {
 		if (next === "unknown") return;
 		const notification = notificationForTransition(snapshot.current, next);
 		snapshot = reduceHealth(snapshot, next);
+		rollup = parseHealthRollup(data);
 		if (notification) pushNotification(notification);
 	};
 
@@ -174,11 +231,14 @@ function createStreamHealthStore(): StreamHealthStore {
 		ingest,
 		getState: () => snapshot.current,
 		getSnapshot: () => snapshot,
+		getRollup: () => rollup,
 		reset: () => {
 			snapshot = initialHealthSnapshot();
+			rollup = null;
 		},
 		destroy: () => {
 			snapshot = initialHealthSnapshot();
+			rollup = null;
 		},
 	};
 }
@@ -220,6 +280,14 @@ export function getStreamHealthState(): HealthIndicator {
 /** Current + previous health, for transition-aware consumers. */
 export function getStreamHealthSnapshot(): HealthSnapshot {
 	return store().getSnapshot();
+}
+
+/**
+ * The last-broadcast per-subsystem breakdown (process/frames/SRT/bond), or
+ * `null` before the first `health` broadcast. Drives the HUD rollup.
+ */
+export function getStreamHealthRollup(): HealthRollup | null {
+	return store().getRollup();
 }
 
 /** Reset to `unknown` (e.g. on stream stop). */

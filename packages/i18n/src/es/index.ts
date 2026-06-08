@@ -258,6 +258,20 @@ const es = {
 		healthDegraded: "Degradado",
 		healthDead: "Caído",
 		healthUnknown: "Desconocido",
+		healthProcess: "Proceso",
+		healthFrames: "Fotogramas",
+		healthSrt: "SRT",
+		healthBond: "Agregación",
+		healthRunning: "En ejecución",
+		healthNotRunning: "Detenido",
+		healthAdvancing: "Avanzando",
+		healthStalled: "Estancado",
+		healthStable: "Estable",
+		healthReconnecting: "Reconectando",
+		refreshHealth: "Actualizar estado",
+		healthExplainHealthy: "Proceso en ejecución, fotogramas avanzando, todos los enlaces agregados activos.",
+		healthExplainDegraded: "Transmitiendo, pero los fotogramas están estancados o algunos enlaces agregados están caídos.",
+		healthExplainDead: "El proceso del codificador no está en ejecución. La transmisión está caída.",
 		link: "Enlace",
 	},
 	live: {
@@ -325,6 +339,13 @@ const es = {
 		streamHealthRecovered: "Estado del stream recuperado",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
+		panel: {
+			title: "Notificaciones",
+			trigger: "Notificaciones, {count} sin leer",
+			empty: "Estás al día",
+			emptyHint: "Las alertas persistentes del dispositivo aparecerán aquí.",
+			dismiss: "Descartar notificación",
+		},
 	},
 	a11y: {
 		close: "Cerrar",
@@ -400,6 +421,12 @@ const es = {
 			powerDesc: "Reinicia o apaga el dispositivo",
 			versions: "Versiones del dispositivo",
 			versionsDesc: "Ver versiones de componentes y firmware instalados",
+			autostart: "Inicio automático de transmisión",
+			autostartDesc: "Iniciar la transmisión automáticamente al arrancar el dispositivo",
+			autostartError: "No se pudo cambiar el inicio automático. Inténtalo de nuevo.",
+			pairing: "Emparejamiento del dispositivo",
+			pairingDesc:
+				"Vincula este dispositivo a tu cuenta en la nube con un código de reclamación",
 		},
 
 		dialogs: {
@@ -438,6 +465,15 @@ const es = {
 			pairFailed:
 				"Error de emparejamiento. Verifica el código e inténtalo de nuevo.",
 			pairedToast: "Dispositivo emparejado correctamente.",
+			complete: "Completar emparejamiento",
+			regenerating: "Actualizando el código…",
+			pairedBody: "Este dispositivo ahora está vinculado a tu cuenta en la nube.",
+			deviceLabel: "ID del dispositivo",
+			subscriptionLabel: "Suscripción",
+			statusActive: "Activa",
+			statusFree: "Gratis",
+			statusExpired: "Caducada",
+			statusCancelled: "Cancelada",
 		},
 		encoderSettings: "Configuración del codificador",
 		inputMode: "Modo de entrada",
@@ -499,6 +535,14 @@ const es = {
 		validationPassed: "Punto de conexión accesible",
 		validationFailed: "Validación fallida",
 		validateBeforeSave: "Valida el punto de conexión antes de guardar",
+		validateStages: {
+			input: "Dirección",
+			protocol: "Protocolo",
+			endpoint: "Punto de conexión",
+			dns: "DNS",
+			probe: "Accesibilidad",
+			ok: "Conectado",
+		},
 		placeholders: {
 			srtlaServerAddress: "ej., 192.168.1.100 o server.example.com",
 			srtlaServerPort: "ej., 8890",
@@ -564,6 +608,9 @@ const es = {
 			noSimBond: "No SIM — cannot bond",
 			noSimLink: "No SIM",
 			hotspotNoBond: "Hotspot can't be bonded",
+			stale: "Obsoleto",
+			staleHint: "No se recibió actualización recientemente",
+			refreshing: "Actualizando",
 		},
 		pageTitle: "Configuración de Red",
 		pageDescription:
@@ -595,6 +642,14 @@ const es = {
 		},
 		accessibility: {
 			wifiQrCode: "Código QR WiFi",
+			copyName: "Copiar nombre de red",
+			copyPassword: "Copiar contraseña",
+		},
+		clipboard: {
+			nameCopied: "Nombre de red copiado",
+			passwordCopied: "Contraseña copiada",
+			copyFailed: "Error al copiar",
+			copyFailedDescription: "No se pudo copiar. Por favor, copie manualmente.",
 		},
 		deviceCount: {
 			device: "dispositivo",
@@ -647,6 +702,7 @@ const es = {
 			noNetworksFound:
 				"Aún no se encontraron redes. Busca para encontrar operadores.",
 			scanForNetworks: "Buscar redes",
+			scanFailed: "Error al buscar redes. Inténtalo de nuevo.",
 			credentials: "Credenciales",
 			configureDescription: "Configura los ajustes de conexión celular",
 			simUnlock: {
@@ -846,6 +902,7 @@ const es = {
 		cloudRemote: "Nube Remota",
 		cloudRemoteDescription: "Configurar la gestión remota en la nube",
 		cloudProvider: "Proveedor de Nube",
+		customProvider: "Proveedor Personalizado",
 		cloudRemoteKey: "Clave Remota",
 		cloudRemoteKeyTooltip: "Ingrese la clave remota de su proveedor de nube.",
 		providerName: "Nombre del Proveedor",

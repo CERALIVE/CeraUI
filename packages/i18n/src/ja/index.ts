@@ -114,6 +114,11 @@ const ja = {
 			versions: "デバイスバージョン",
 			versionsDesc:
 				"インストール済みコンポーネントとファームウェアのバージョンを表示します",
+			autostart: "自動ストリーミング開始",
+			autostartDesc: "デバイス起動時に自動的にストリーミングを開始します",
+			autostartError: "自動開始を変更できませんでした。もう一度お試しください。",
+			pairing: "デバイスのペアリング",
+			pairingDesc: "クレームコードでこのデバイスをクラウドアカウントに接続します",
 		},
 
 		dialogs: {
@@ -151,6 +156,15 @@ const ja = {
 			pairFailed:
 				"ペアリングに失敗しました。コードを確認して再試行してください。",
 			pairedToast: "デバイスのペアリングに成功しました。",
+			complete: "ペアリングを完了",
+			regenerating: "コードを更新しています…",
+			pairedBody: "このデバイスはクラウドアカウントに接続されました。",
+			deviceLabel: "デバイスID",
+			subscriptionLabel: "サブスクリプション",
+			statusActive: "有効",
+			statusFree: "無料",
+			statusExpired: "期限切れ",
+			statusCancelled: "キャンセル済み",
 		},
 		encoderSettings: "エンコーダー設定",
 		inputMode: "入力モード",
@@ -209,6 +223,14 @@ const ja = {
 		validationPassed: "エンドポイントに到達可能",
 		validationFailed: "検証に失敗しました",
 		validateBeforeSave: "保存する前にエンドポイントを検証してください",
+		validateStages: {
+			input: "アドレス",
+			protocol: "プロトコル",
+			endpoint: "エンドポイント",
+			dns: "DNS",
+			probe: "到達性",
+			ok: "接続済み",
+		},
 		placeholders: {
 			srtlaServerAddress: "例: 192.168.1.100 または server.example.com",
 			srtlaServerPort: "例: 8890",
@@ -273,6 +295,9 @@ const ja = {
 			noSimBond: "No SIM — cannot bond",
 			noSimLink: "No SIM",
 			hotspotNoBond: "Hotspot can't be bonded",
+			stale: "古い",
+			staleHint: "最近更新を受信していません",
+			refreshing: "更新中",
 		},
 		pageTitle: "ネットワーク設定",
 		pageDescription:
@@ -296,6 +321,14 @@ const ja = {
 		},
 		accessibility: {
 			wifiQrCode: "WiFi QRコード",
+			copyName: "ネットワーク名をコピー",
+			copyPassword: "パスワードをコピー",
+		},
+		clipboard: {
+			nameCopied: "ネットワーク名をコピーしました",
+			passwordCopied: "パスワードをコピーしました",
+			copyFailed: "コピーに失敗しました",
+			copyFailedDescription: "コピーできませんでした。手動でコピーしてください。",
 		},
 		deviceCount: {
 			device: "デバイス",
@@ -343,6 +376,7 @@ const ja = {
 			noNetworksFound:
 				"ネットワークがまだ見つかりません。スキャンして事業者を検索してください。",
 			scanForNetworks: "ネットワークをスキャン",
+			scanFailed: "ネットワークのスキャンに失敗しました。もう一度お試しください。",
 			credentials: "認証情報",
 			configureDescription: "セルラー接続設定を構成します",
 			simUnlock: {
@@ -590,6 +624,20 @@ const ja = {
 		healthDegraded: "劣化",
 		healthDead: "停止",
 		healthUnknown: "不明",
+		healthProcess: "プロセス",
+		healthFrames: "フレーム",
+		healthSrt: "SRT",
+		healthBond: "ボンディング",
+		healthRunning: "実行中",
+		healthNotRunning: "停止中",
+		healthAdvancing: "進行中",
+		healthStalled: "停滞",
+		healthStable: "安定",
+		healthReconnecting: "再接続中",
+		refreshHealth: "状態を更新",
+		healthExplainHealthy: "プロセスが実行中で、フレームが進行し、すべてのボンドリンクがアクティブです。",
+		healthExplainDegraded: "ストリーミング中ですが、フレームが停滞しているか、一部のボンドリンクがダウンしています。",
+		healthExplainDead: "エンコーダープロセスが実行されていません。ストリームがダウンしています。",
 		link: "リンク",
 	},
 	live: {
@@ -656,6 +704,13 @@ const ja = {
 		streamHealthRecovered: "ストリーム状態が回復しました",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
+		panel: {
+			title: "通知",
+			trigger: "通知、未読 {count} 件",
+			empty: "未読の通知はありません",
+			emptyHint: "デバイスの継続的なアラートがここに表示されます。",
+			dismiss: "通知を消去",
+		},
 	},
 	a11y: {
 		close: "閉じる",
@@ -672,6 +727,7 @@ const ja = {
 		cloudRemote: "クラウドリモート",
 		cloudRemoteDescription: "リモートクラウド管理を設定",
 		cloudProvider: "クラウドプロバイダー",
+		customProvider: "カスタムプロバイダー",
 		cloudRemoteKey: "リモートキー",
 		cloudRemoteKeyTooltip:
 			"クラウドプロバイダーからリモートキーを入力してください。",

@@ -21,7 +21,8 @@ src/
 │   ├── dialogs/               # 14 focused config dialogs, all compose AppDialog:
 │   │   ├── EncoderDialog.svelte
 │   │   ├── AudioDialog.svelte
-│   │   ├── ServerDialog.svelte
+│   │   ├── ServerDialog.svelte  # logic container; splits into server/ sub-components (Task 14)
+│   │   │   └── server/          # RelayServerSelector + ManualEndpointForm (presentational)
 │   │   ├── ModemConfigDialog.svelte
 │   │   ├── HotspotDialog.svelte
 │   │   ├── WifiSelectorDialog.svelte

@@ -270,6 +270,14 @@ const fr = {
 			versions: "Versions de l'appareil",
 			versionsDesc:
 				"Afficher les versions des composants et du firmware installés",
+			autostart: "Démarrage auto du streaming",
+			autostartDesc:
+				"Démarrer le streaming automatiquement au démarrage de l'appareil",
+			autostartError:
+				"Impossible de modifier le démarrage auto. Veuillez réessayer.",
+			pairing: "Appairage de l'appareil",
+			pairingDesc:
+				"Associez cet appareil à votre compte cloud avec un code de revendication",
 		},
 
 		dialogs: {
@@ -307,6 +315,15 @@ const fr = {
 			generateFailed: "Impossible de générer un code.",
 			pairFailed: "Échec de l'appairage. Vérifiez le code et réessayez.",
 			pairedToast: "Appareil appairé avec succès.",
+			complete: "Terminer l'appairage",
+			regenerating: "Actualisation du code…",
+			pairedBody: "Cet appareil est maintenant associé à votre compte cloud.",
+			deviceLabel: "ID de l'appareil",
+			subscriptionLabel: "Abonnement",
+			statusActive: "Actif",
+			statusFree: "Gratuit",
+			statusExpired: "Expiré",
+			statusCancelled: "Annulé",
 		},
 		encoderSettings: "Paramètres de l'encodeur",
 		inputMode: "Mode d'entrée",
@@ -364,6 +381,14 @@ const fr = {
 		validationPassed: "Point de terminaison accessible",
 		validationFailed: "Échec de la validation",
 		validateBeforeSave: "Validez le point de terminaison avant d'enregistrer",
+		validateStages: {
+			input: "Adresse",
+			protocol: "Protocole",
+			endpoint: "Point de terminaison",
+			dns: "DNS",
+			probe: "Accessibilité",
+			ok: "Connecté",
+		},
 		placeholders: {
 			srtlaServerAddress: "ex., 192.168.1.100 ou server.example.com",
 			srtlaServerPort: "ex., 8890",
@@ -430,6 +455,9 @@ const fr = {
 			noSimBond: "No SIM — cannot bond",
 			noSimLink: "No SIM",
 			hotspotNoBond: "Hotspot can't be bonded",
+			stale: "Obsolète",
+			staleHint: "Aucune mise à jour reçue récemment",
+			refreshing: "Actualisation",
 		},
 		pageTitle: "Configuration Réseau",
 		pageDescription:
@@ -461,6 +489,14 @@ const fr = {
 		},
 		accessibility: {
 			wifiQrCode: "Code QR WiFi",
+			copyName: "Copier le nom du réseau",
+			copyPassword: "Copier le mot de passe",
+		},
+		clipboard: {
+			nameCopied: "Nom du réseau copié",
+			passwordCopied: "Mot de passe copié",
+			copyFailed: "Échec de la copie",
+			copyFailedDescription: "Impossible de copier. Veuillez copier manuellement.",
 		},
 		deviceCount: {
 			device: "appareil",
@@ -512,6 +548,7 @@ const fr = {
 			noNetworksFound:
 				"Aucun réseau trouvé pour le moment. Recherchez pour trouver des opérateurs.",
 			scanForNetworks: "Rechercher des réseaux",
+			scanFailed: "Échec de la recherche de réseaux. Veuillez réessayer.",
 			credentials: "Identifiants",
 			configureDescription: "Configurer les paramètres de connexion cellulaire",
 			simUnlock: {
@@ -749,6 +786,20 @@ const fr = {
 		healthDegraded: "Dégradé",
 		healthDead: "Hors service",
 		healthUnknown: "Inconnu",
+		healthProcess: "Processus",
+		healthFrames: "Images",
+		healthSrt: "SRT",
+		healthBond: "Agrégation",
+		healthRunning: "En cours",
+		healthNotRunning: "Arrêté",
+		healthAdvancing: "En progression",
+		healthStalled: "Bloqué",
+		healthStable: "Stable",
+		healthReconnecting: "Reconnexion",
+		refreshHealth: "Actualiser l'état",
+		healthExplainHealthy: "Processus en cours, images en progression, toutes les liaisons agrégées actives.",
+		healthExplainDegraded: "Diffusion en cours, mais images bloquées ou certaines liaisons agrégées hors service.",
+		healthExplainDead: "Le processus d'encodage ne tourne pas. Le flux est hors service.",
 		link: "Liaison",
 	},
 	live: {
@@ -815,6 +866,13 @@ const fr = {
 		streamHealthRecovered: "État du flux rétabli",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
+		panel: {
+			title: "Notifications",
+			trigger: "Notifications, {count} non lues",
+			empty: "Vous êtes à jour",
+			emptyHint: "Les alertes persistantes de l'appareil apparaîtront ici.",
+			dismiss: "Ignorer la notification",
+		},
 	},
 	a11y: {
 		close: "Fermer",
@@ -831,6 +889,7 @@ const fr = {
 		cloudRemote: "Cloud Distant",
 		cloudRemoteDescription: "Configurer la gestion cloud à distance",
 		cloudProvider: "Fournisseur Cloud",
+		customProvider: "Fournisseur personnalisé",
 		cloudRemoteKey: "Clé Distante",
 		cloudRemoteKeyTooltip:
 			"Saisissez la clé distante de votre fournisseur cloud.",
