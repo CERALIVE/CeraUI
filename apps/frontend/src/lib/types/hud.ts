@@ -72,6 +72,9 @@ export interface HudState {
 	// Network links (up to 6 bonded links) -----------------------------------
 	links: LinkSignal[];
 
+	/** ifnames whose own data aged past the global threshold while siblings stayed fresh. */
+	staleInterfaces: Set<string>;
+
 	// SoC sensors -------------------------------------------------------------
 	/** °C */
 	temperature: number | null;

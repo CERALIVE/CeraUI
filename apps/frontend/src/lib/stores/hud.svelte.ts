@@ -154,6 +154,7 @@ export function buildLinks(
 	modemsStale: boolean,
 	wifiStale: boolean,
 	fullyStale: boolean,
+	staleIds: Set<string> = new Set(),
 ): LinkSignal[] {
 	const links: LinkSignal[] = [];
 	const netifEntries = netif ?? {};
@@ -176,7 +177,7 @@ export function buildLinks(
 			signal: active && Number.isFinite(active.signal) ? active.signal : null,
 			label: active?.ssid || "WiFi",
 			isConnected,
-			isStale: wifiStale || fullyStale,
+			isStale: wifiStale || fullyStale || staleIds.has(id),
 			throughputKbps: throughputFor(id),
 			enabled: enabledFor(id),
 			connectionState: isConnected ? "connected" : "disconnected",
@@ -193,7 +194,7 @@ export function buildLinks(
 			signal: modemSignal(modem),
 			label: modem.name || modem.status?.network || "Modem",
 			isConnected: connectionState === "connected",
-			isStale: modemsStale || fullyStale,
+			isStale: modemsStale || fullyStale || staleIds.has(id),
 			throughputKbps: throughputFor(id),
 			enabled: enabledFor(id),
 			connectionState,
@@ -210,7 +211,7 @@ export function buildLinks(
 			signal: null,
 			label: ifname,
 			isConnected: true,
-			isStale: fullyStale,
+			isStale: fullyStale || staleIds.has(ifname),
 			throughputKbps: convertBytesToKbids(entry.tp ?? 0),
 			enabled: entry.enabled,
 			connectionState: "connected",
@@ -236,6 +237,108 @@ export function isUpdateInProgress(
 export function isTimestampStale(ts: number | null, now: number): boolean {
 	if (ts == null) return false;
 	return now - ts >= STALE_THRESHOLD_MS;
+}
+
+// ============================================
+// Per-interface staleness (rune-free, unit-testable)
+// ============================================
+
+/** Last-seen content fingerprint + the time it last changed, per interface. */
+export interface InterfaceFreshness {
+	fingerprint: string;
+	lastChangedAt: number;
+}
+
+export type InterfaceFreshnessMap = Map<string, InterfaceFreshness>;
+
+/**
+ * Fingerprint each interface's *telemetry-bearing* fields, keyed by `ifname`
+ * (the join key shared by modems, wifi and netif). A whole-source push refreshes
+ * every interface's object reference, so reference identity cannot tell which
+ * single interface actually got new data; the content fingerprint can. Modem,
+ * wifi and netif parts for the same ifname are concatenated so a fresh push from
+ * ANY source counts as that interface updating.
+ */
+export function interfaceFingerprints(
+	modems: ModemList | undefined,
+	wifi: WifiStatus | undefined,
+	netif: NetifMessage | undefined,
+): Map<string, string> {
+	const fingerprints = new Map<string, string>();
+	const append = (id: string, part: string): void => {
+		fingerprints.set(id, (fingerprints.get(id) ?? "") + part);
+	};
+
+	for (const [key, modem] of Object.entries(modems ?? {})) {
+		append(
+			modem.ifname || key,
+			`m${JSON.stringify([
+				modem.status?.signal ?? null,
+				modem.status?.connection ?? null,
+				modem.status?.network ?? null,
+				modem.no_sim ?? false,
+			])}`,
+		);
+	}
+
+	for (const [key, iface] of Object.entries(wifi ?? {})) {
+		const active = iface.available?.find((network) => network.active);
+		append(
+			iface.ifname || key,
+			`w${JSON.stringify([
+				iface.conn ?? null,
+				active?.ssid ?? null,
+				active?.signal ?? null,
+			])}`,
+		);
+	}
+
+	for (const [name, entry] of Object.entries(netif ?? {})) {
+		append(
+			name,
+			`n${JSON.stringify([entry.tp, entry.enabled, entry.ip ?? null])}`,
+		);
+	}
+
+	return fingerprints;
+}
+
+/**
+ * Advance the per-interface freshness map: an interface whose fingerprint is
+ * unchanged keeps its `lastChangedAt`, a new or changed one is stamped `now`,
+ * and an interface no longer present is dropped. Pure: returns a fresh map.
+ */
+export function trackInterfaceFreshness(
+	previous: InterfaceFreshnessMap,
+	fingerprints: Map<string, string>,
+	now: number,
+): InterfaceFreshnessMap {
+	const next: InterfaceFreshnessMap = new Map();
+	for (const [id, fingerprint] of fingerprints) {
+		const prior = previous.get(id);
+		next.set(
+			id,
+			prior && prior.fingerprint === fingerprint
+				? prior
+				: { fingerprint, lastChangedAt: now },
+		);
+	}
+	return next;
+}
+
+/**
+ * The set of interface ids whose own data aged past {@link STALE_THRESHOLD_MS}.
+ * Reuses the one global threshold; introduces none of its own.
+ */
+export function staleInterfaceIds(
+	freshness: InterfaceFreshnessMap,
+	now: number,
+): Set<string> {
+	const stale = new Set<string>();
+	for (const [id, { lastChangedAt }] of freshness) {
+		if (now - lastChangedAt >= STALE_THRESHOLD_MS) stale.add(id);
+	}
+	return stale;
 }
 
 /**
@@ -287,6 +390,7 @@ export function deriveHudState(
 	sources: HudSources,
 	timestamps: HudTimestamps,
 	now: number,
+	staleInterfaces: Set<string> = new Set(),
 ): HudState {
 	const isConnected =
 		sources.isConnected && sources.connectionState === "connected";
@@ -320,7 +424,10 @@ export function deriveHudState(
 			modemsStale,
 			wifiStale,
 			isFullyStale,
+			staleInterfaces,
 		),
+
+		staleInterfaces,
 
 		temperature: parseSensorNumber(sensors?.["SoC temperature"]),
 		voltage: parseVolts(sensors?.["SoC voltage"]),
@@ -456,6 +563,10 @@ function createHudStore(): HudStore {
 	let prevWifi: unknown;
 	let prevConnected: boolean | undefined;
 
+	// Plain (like the prev* refs) so updating it inside the tracking effect never
+	// re-triggers that effect; staleness still tracks nowTick via the snapshot.
+	let freshness: InterfaceFreshnessMap = new Map();
+
 	const clock = createStalenessClock(
 		() =>
 			shouldClockRun(
@@ -544,6 +655,12 @@ function createHudStore(): HudStore {
 				prevWifi = wifi;
 			}
 
+			freshness = trackInterfaceFreshness(
+				freshness,
+				interfaceFingerprints(modems, wifi, getNetif()),
+				t,
+			);
+
 			const connected = getIsConnected();
 			if (connected) {
 				timestamps.connectionLostAt = null;
@@ -565,7 +682,12 @@ function createHudStore(): HudStore {
 	});
 
 	const snapshot = (): HudState =>
-		deriveHudState(readSources(), timestamps, nowTick);
+		deriveHudState(
+			readSources(),
+			timestamps,
+			nowTick,
+			staleInterfaceIds(freshness, nowTick),
+		);
 
 	return {
 		getHudState: () => snapshot(),

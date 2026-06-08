@@ -33,6 +33,9 @@ const isConnected = $derived(getIsConnected());
 const hud = $derived(getHudState());
 const links = $derived<LinkSignal[]>(hud.links);
 const isFullyStale = $derived(hud.isFullyStale);
+// Per-interface staleness (Task 22): decided once in the HUD store so the
+// section marker matches the bonded-link and HUD-bar verdict exactly.
+const staleInterfaces = $derived(hud.staleInterfaces);
 
 // Loading: no telemetry has arrived yet on this connection.
 const isLoading = $derived(
@@ -144,11 +147,24 @@ $effect(() => {
 			{netif}
 			{links}
 			{isFullyStale}
+			{staleInterfaces}
 			{primaryWifiDevice}
 			onConnect={openWifiSelector}
 		/>
-		<CellularSection {modemEntries} {netif} {links} {isFullyStale} onConfigure={openModemConfig} />
-		<EthernetSection {wiredEntries} {isFullyStale} onConfigure={configureNetif} />
+		<CellularSection
+			{modemEntries}
+			{netif}
+			{links}
+			{isFullyStale}
+			{staleInterfaces}
+			onConfigure={openModemConfig}
+		/>
+		<EthernetSection
+			{wiredEntries}
+			{isFullyStale}
+			{staleInterfaces}
+			onConfigure={configureNetif}
+		/>
 		<HotspotSection {hotspotInterfaces} {hotspotTarget} onSetup={() => (hotspotDialogOpen = true)} />
 	{/if}
 </div>

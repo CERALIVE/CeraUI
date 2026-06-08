@@ -23,6 +23,7 @@ import {
 	WifiOff,
 } from '@lucide/svelte';
 
+import InlineSpinner from '$lib/components/custom/InlineSpinner.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import { Button } from '$lib/components/ui/button';
 import { getWifiUUID } from '$lib/helpers/NetworkHelper';
@@ -92,20 +93,22 @@ let {
 				{iface?.available.length ?? 0}
 			</span>
 			<span class="text-muted-foreground">{$LL.wifiSelector.networks.found()}</span>
-			{#if ifaceBusy}
-				<span
-					class="text-status-info inline-flex items-center gap-1.5 text-xs font-medium"
-					aria-live="polite"
-					role="status"
-				>
-					<Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-					<span>{$LL.wifiSelector.dialog.connecting()}</span>
-				</span>
+			{#if scanning}
+				<InlineSpinner data-testid="wifi-scan-status" label={$LL.wifiSelector.button.scanning()} />
+			{:else if ifaceBusy}
+				<InlineSpinner label={$LL.wifiSelector.dialog.connecting()} />
 			{/if}
 		</div>
-		<Button class="h-9 gap-2" disabled={scanning} onclick={onScan} size="sm" variant="outline">
+		<Button
+			class="h-9 gap-2"
+			data-testid="wifi-scan-button"
+			disabled={scanning}
+			onclick={onScan}
+			size="sm"
+			variant="outline"
+		>
 			{#if scanning}
-				<Loader2 class="size-4 animate-spin" />
+				<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
 				<span>{$LL.wifiSelector.button.scanning()}</span>
 			{:else}
 				<RefreshCw class="size-4" />
