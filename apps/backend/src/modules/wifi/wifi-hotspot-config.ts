@@ -25,8 +25,12 @@ import {
 } from "../network/network-manager.ts";
 import { withDeviceLock } from "../network/state/device-lock.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
+import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
 import { isWifiChannelName, wifiChannels } from "./wifi-channels.ts";
-import { getWifiInterfaceByMacAddress, wifiRescan } from "./wifi-connections.ts";
+import {
+	getWifiInterfaceByMacAddress,
+	wifiRescan,
+} from "./wifi-connections.ts";
 import { settlePending, syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
 import {
 	HOTSPOT_UP_TO,
@@ -35,7 +39,6 @@ import {
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import { getMacAddressForWifiInterface } from "./wifi-interfaces.ts";
-import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
 
 // ─── hotspot config validation constants ──────────────────────────────────────
 

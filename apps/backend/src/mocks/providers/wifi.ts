@@ -4,6 +4,10 @@
 */
 
 import {
+	isWifiChannelName,
+	type WifiChannel,
+} from "../../modules/wifi/wifi-channels.ts";
+import {
 	getMockState,
 	getScenarioConfig,
 	getWifiSignal,
@@ -11,10 +15,6 @@ import {
 	mockWifiRadios,
 	shouldUseMocks,
 } from "../mock-service.ts";
-import {
-	isWifiChannelName,
-	type WifiChannel,
-} from "../../modules/wifi/wifi-channels.ts";
 
 // Mock saved WiFi connections
 const mockSavedConnections = [
@@ -290,7 +290,8 @@ function getMockConnectionFields(args: string[]): string {
 	if (hotspotDevice) {
 		const hotspot = getMockHotspotConfig(hotspotDevice);
 		const radio = mockWifiRadios.find((r) => r.device === hotspotDevice);
-		const mode = wifiModes[hotspotDevice] === "hotspot" ? "ap" : "infrastructure";
+		const mode =
+			wifiModes[hotspotDevice] === "hotspot" ? "ap" : "infrastructure";
 		return fieldList
 			.map((f) =>
 				getFieldValue(f, {

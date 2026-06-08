@@ -11,10 +11,7 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 
 import * as execMod from "../helpers/exec.ts";
-import {
-	initMockService,
-	stopMockService,
-} from "../mocks/mock-service.ts";
+import { initMockService, stopMockService } from "../mocks/mock-service.ts";
 import {
 	mmList,
 	mmSetNetworkTypes,

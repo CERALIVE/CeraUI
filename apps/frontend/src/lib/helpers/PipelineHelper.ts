@@ -1,16 +1,16 @@
 import {
-	type Pipelines,
-	type Pipeline,
-	type Resolution,
 	type Framerate,
-	type HardwareType,
 	HARDWARE_LABELS,
+	type HardwareType,
+	type Pipeline,
+	type Pipelines,
+	type Resolution,
 	VIDEO_SOURCE_LABELS,
 } from "@ceraui/rpc/schemas";
 
 type VideoSource = keyof typeof VIDEO_SOURCE_LABELS;
 
-export type { Pipeline, Resolution, Framerate };
+export type { Framerate, Pipeline, Resolution };
 
 // Safe fallback for unknown ids — never surface the raw/uppercased ceracoder hash.
 const UNKNOWN_SOURCE_LABEL = "Unknown source";
@@ -25,15 +25,18 @@ function resolveUnknownSourceLabel(t?: (key: string) => string): string {
 	return UNKNOWN_SOURCE_LABEL;
 }
 
+export type { HardwareType, VideoSource };
 // Re-export for convenience
-export { VIDEO_SOURCE_LABELS, HARDWARE_LABELS };
-export type { VideoSource, HardwareType };
+export { HARDWARE_LABELS, VIDEO_SOURCE_LABELS };
 
 /**
  * Get a human-readable label for a video source
  * Falls back to ceracoder bindings labels if no translation function provided
  */
-export function getSourceLabel(source: string, t?: (key: string) => string): string {
+export function getSourceLabel(
+	source: string,
+	t?: (key: string) => string,
+): string {
 	// Try translation first if provided
 	if (t) {
 		const translated = t(`settings.sources.${source}`);
@@ -43,7 +46,9 @@ export function getSourceLabel(source: string, t?: (key: string) => string): str
 		}
 	}
 	// Fall back to ceracoder bindings labels
-	return VIDEO_SOURCE_LABELS[source as VideoSource] || resolveUnknownSourceLabel(t);
+	return (
+		VIDEO_SOURCE_LABELS[source as VideoSource] || resolveUnknownSourceLabel(t)
+	);
 }
 
 /**
@@ -68,7 +73,10 @@ export function getPipelineDisplayName(
  * Get a human-readable label for a hardware type
  * Falls back to ceracoder bindings labels if no translation function provided
  */
-export function getHardwareLabel(hardware: string, t?: (key: string) => string): string {
+export function getHardwareLabel(
+	hardware: string,
+	t?: (key: string) => string,
+): string {
 	// Try translation first if provided
 	if (t) {
 		const translated = t(`settings.hardwareTypes.${hardware}`);
@@ -123,7 +131,9 @@ export function sortFramerates(framerates: Framerate[]): Framerate[] {
 /**
  * Get pipelines as a sorted array with IDs
  */
-export function getPipelineArray(pipelines: Pipelines): Array<{ id: string } & Pipeline> {
+export function getPipelineArray(
+	pipelines: Pipelines,
+): Array<{ id: string } & Pipeline> {
 	return Object.entries(pipelines)
 		.map(([id, pipeline]) => ({ id, ...pipeline }))
 		.sort((a, b) => a.name.localeCompare(b.name));

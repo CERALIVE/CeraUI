@@ -248,9 +248,7 @@ async function consumeBcrptStderr(
 	}
 }
 
-async function handleBcrptExit(
-	proc: Bun.Subprocess<"ignore", "pipe", "pipe">,
-) {
+async function handleBcrptExit(proc: Bun.Subprocess<"ignore", "pipe", "pipe">) {
 	await proc.exited;
 
 	const code = proc.exitCode;

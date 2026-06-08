@@ -22,15 +22,16 @@
 
 import {
 	type DetectionMethod,
-	type RelayProtocol,
 	detectionMethodSchema,
 	isNamespacedRelayId,
 	namespacedRelayId,
 	parseNamespacedRelayId,
+	type RelayProtocol,
 	relayProtocolSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 
+export type { DetectionMethod, RelayProtocol };
 // Re-export the relay-id namespacing helpers so backend consumers resolve them
 // from the config layer rather than reaching into @ceraui/rpc directly.
 export {
@@ -40,7 +41,6 @@ export {
 	parseNamespacedRelayId,
 	relayProtocolSchema,
 };
-export type { DetectionMethod, RelayProtocol };
 
 // =============================================================================
 // Custom Provider Schema (shared between config and cloud-provider)

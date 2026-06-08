@@ -4,7 +4,6 @@
  * This module manages real-time data subscriptions using Svelte 5 runes.
  * It provides reactive getters for all server-pushed data.
  */
-import { toast } from "svelte-sonner";
 
 import type {
 	ConfigMessage,
@@ -19,6 +18,7 @@ import type {
 	StatusResponse,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
+import { toast } from "svelte-sonner";
 
 import { downloadLog } from "$lib/helpers/SystemHelper";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
@@ -64,7 +64,9 @@ let statusState = $state<
 // Individual status components
 let isStreamingState = $state<boolean>(false);
 let sshState = $state<StatusResponse["ssh"] | undefined>(undefined);
-let availableUpdatesState = $state<StatusResponse["available_updates"] | undefined>(undefined);
+let availableUpdatesState = $state<
+	StatusResponse["available_updates"] | undefined
+>(undefined);
 let updatingState = $state<StatusResponse["updating"]>(null);
 
 // Network state
@@ -76,7 +78,9 @@ let modemsState = $state<ModemList | undefined>(undefined);
 let sensorsState = $state<SensorsStatus | undefined>(undefined);
 let revisionsState = $state<Revisions | undefined>(undefined);
 let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
-let audioCodecsState = $state<Record<string, { name: string }> | undefined>(undefined);
+let audioCodecsState = $state<Record<string, { name: string }> | undefined>(
+	undefined,
+);
 
 // Relay state
 let relaysState = $state<RelayMessage | undefined>(undefined);
@@ -293,7 +297,7 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			break;
 		}
 
-		case "wifi":
+		case "wifi": {
 			// WiFi responses can have multiple formats
 			const wifiData = data as {
 				connect?: string[];
@@ -308,6 +312,7 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 				toast.success("Connected to WiFi network");
 			}
 			break;
+		}
 
 		case "modems":
 			// Modems data is usually part of status, but can come separately
@@ -325,7 +330,11 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			break;
 
 		case "pipelines":
-			if (data && typeof data === "object" && "pipelines" in (data as Record<string, unknown>)) {
+			if (
+				data &&
+				typeof data === "object" &&
+				"pipelines" in (data as Record<string, unknown>)
+			) {
 				pipelinesState = data as PipelinesMessage;
 			} else {
 				pipelinesState = {
@@ -343,12 +352,12 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			relaysState = data as RelayMessage;
 			break;
 
-	case "notifications":
-		notificationsState = data as NotificationsMessage;
-		for (const notification of (data as NotificationsMessage).show) {
-			pushNotification(notification);
-		}
-		break;
+		case "notifications":
+			notificationsState = data as NotificationsMessage;
+			for (const notification of (data as NotificationsMessage).show) {
+				pushNotification(notification);
+			}
+			break;
 
 		case "health":
 			// Tri-state stream-liveness rollup (Task 13). Read-only: feeds the HUD

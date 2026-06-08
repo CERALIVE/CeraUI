@@ -593,9 +593,8 @@ export async function mmNetworkScan(id: ModemId, timeout = 240) {
 			String(id),
 			"--3gpp-scan",
 		]);
-		const networks = (mmcliParseSep(stdout)[
-			"modem.3gpp.scan-networks"
-		] ?? []) as Array<string>;
+		const networks = (mmcliParseSep(stdout)["modem.3gpp.scan-networks"] ??
+			[]) as Array<string>;
 		return networks.map((n) => {
 			const info = n.split(/, */);
 			const output: Record<string, string> = {};

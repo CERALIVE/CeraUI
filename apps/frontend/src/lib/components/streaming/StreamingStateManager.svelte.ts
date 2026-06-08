@@ -7,10 +7,10 @@
 import type {
 	AudioCodecsMessage,
 	ConfigMessage,
+	HardwareType,
 	Pipelines,
 	PipelinesMessage,
 	RelayMessage,
-	HardwareType,
 } from "@ceraui/rpc/schemas";
 
 import {
@@ -103,13 +103,13 @@ class StreamingStateManager {
 					this._isStreaming = status.is_streaming;
 				}
 
-			// Compare audio sources array content, not just length
-			const audioSourcesChanged =
-				!this._audioSources ||
-				(status.asrcs?.length ?? 0) !== this._audioSources.length ||
-				!status.asrcs?.every(
-					(src, index) => src === this._audioSources?.[index],
-				);
+				// Compare audio sources array content, not just length
+				const audioSourcesChanged =
+					!this._audioSources ||
+					(status.asrcs?.length ?? 0) !== this._audioSources.length ||
+					!status.asrcs?.every(
+						(src, index) => src === this._audioSources?.[index],
+					);
 
 				if (audioSourcesChanged) {
 					this._audioSources = status.asrcs;

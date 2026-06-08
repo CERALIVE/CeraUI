@@ -84,7 +84,7 @@ Output goes to `dist/`.
 | `pnpm --filter frontend run check` | Type-check via `svelte-check` |
 | `pnpm --filter frontend run test` | Run vitest unit tests |
 | `pnpm --filter frontend run test:e2e` | Run Playwright E2E tests |
-| `pnpm --filter frontend run lint` | ESLint |
+| `biome check .` (from workspace root) | Lint/format via Biome (single toolchain) |
 | `pnpm --filter frontend run preview` | Preview production build locally |
 
 ### Mock Scenarios

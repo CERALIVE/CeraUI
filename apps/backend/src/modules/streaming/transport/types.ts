@@ -29,10 +29,6 @@
  * config, never read from a singleton here.
  */
 
-import type {
-	RelayProtocol,
-	RelaysCache,
-} from "../../../helpers/config-schemas.ts";
 // Detection-method ids + provider taxonomy are sourced from the Task 3
 // cloud-provider/relay schema so the taxonomy stays in one place
 // ("subscription" | "manual" | "belabox").
@@ -41,6 +37,10 @@ import type {
 	RelayProviderKind,
 	RelayProviderMeta,
 } from "@ceraui/rpc/schemas";
+import type {
+	RelayProtocol,
+	RelaysCache,
+} from "../../../helpers/config-schemas.ts";
 
 // =============================================================================
 // Resolution input / output

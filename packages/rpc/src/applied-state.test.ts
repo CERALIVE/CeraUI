@@ -2,12 +2,12 @@
  * Applied-state output schema tests
  * TDD: RED first — test that command procedures return applied state post-clamp
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import {
-	streamingSetConfigOutputSchema,
-	streamingStartOutputSchemaExtended,
 	bitrateOutputSchema,
 	netifConfigOutputSchema,
+	streamingSetConfigOutputSchema,
+	streamingStartOutputSchemaExtended,
 } from './schemas';
 
 describe('Applied-state output schemas', () => {

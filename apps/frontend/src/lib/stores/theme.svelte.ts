@@ -17,10 +17,15 @@ export function setTheme(mode: ThemeMode): void {
 // A `prefers-color-scheme: light` miss covers both OS-prefers-dark and no-preference,
 // so this resolves both to dark deterministically (matches mode-watcher + the FOUC script).
 export function resolveSystemMode(): "dark" | "light" {
-	if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+	if (
+		typeof window === "undefined" ||
+		typeof window.matchMedia !== "function"
+	) {
 		return "dark";
 	}
-	return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+	return window.matchMedia("(prefers-color-scheme: light)").matches
+		? "light"
+		: "dark";
 }
 
 // Legacy-compatible store-like object for easier migration

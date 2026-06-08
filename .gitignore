@@ -47,3 +47,4 @@ BUILD_SYSTEM_IMPROVEMENTS.md
 
 # Agent orchestration state (local only)
 .omo/
+*.tsbuildinfo

@@ -52,29 +52,46 @@ export const claimCodeOutputSchema = z.object({
 export type ClaimCodeOutput = z.infer<typeof claimCodeOutputSchema>;
 
 /** Subscription standing carried in the device token (`sub_status`, ADR-0006); mirrors platform `Billing.status`. */
-export const SUBSCRIPTION_STATUSES = [
-	'ACTIVE',
-	'FREE',
-	'EXPIRED',
-	'CANCELLED',
-] as const;
+export const SUBSCRIPTION_STATUSES = ['ACTIVE', 'FREE', 'EXPIRED', 'CANCELLED'] as const;
 export const subscriptionStatusSchema = z.enum(SUBSCRIPTION_STATUSES);
 export type SubscriptionStatus = z.infer<typeof subscriptionStatusSchema>;
 
 /**
- * Decoded device-token claims (PASETO v4.public payload, ADR-0006). ADR-0006 is
- * still `proposed`, so the token is a stub: claims are real but not yet
- * Ed25519-signed (see `modules/pairing/device-token.ts`).
+ * Canonical device-token claims (PASETO v4.public payload, ADR-0006).
+ *
+ * SINGLE SOURCE OF TRUTH for the device-token claim contract. Both the device
+ * (CeraUI `apps/backend/src/modules/pairing/device-token.ts`) and the platform
+ * (`ceralive-platform/apps/api/lib/claim.ts`) reference these exact field names
+ * — there is no divergent duplicate definition. The field names are fixed by the
+ * ADR-0006 claim table (`docs/adr/0006-paseto-device-token.md`): snake_case
+ * `device_id` (not `deviceId`) and `sub_status` (not `sub`).
+ *
+ * Reconciles two prior shapes:
+ *   - ADR-0006 registered/core claims: `device_id`, `sub_status`, `iat`, `exp`.
+ *   - Platform identity-binding claims: `tenantId`, `serial` (the platform issues
+ *     these at claim time — see `claim.ts` `issueDeviceToken`).
+ *
+ * `tenantId`/`serial` are OPTIONAL: the device-side stub mints a token before the
+ * platform has bound a tenant, so it carries only the ADR-0006 core claims; the
+ * platform-issued (real) token additionally carries the binding pair. The schema
+ * therefore validates both the device stub and the future platform token.
+ *
+ * ADR-0006 is still `proposed`, so the token is a stub: claims are real but not
+ * yet Ed25519-signed (see `modules/pairing/device-token.ts`).
  */
 export const deviceTokenClaimsSchema = z.object({
 	/** Device serial — becomes `DeviceConnection.serialNumber` on the platform. */
 	device_id: z.string().min(1),
-	/** Subscription standing at issuance. */
+	/** Subscription standing at issuance (platform `Billing.status`). */
 	sub_status: subscriptionStatusSchema,
 	/** Issued-at, epoch seconds. */
 	iat: z.number().int().nonnegative(),
 	/** Expiry, epoch seconds. The channel rejects expired tokens. */
 	exp: z.number().int().nonnegative(),
+	/** Owning tenant id — platform-issued binding claim (absent on the device stub). */
+	tenantId: z.string().min(1).optional(),
+	/** Device-reported hardware serial — platform-issued binding claim (absent on the device stub). */
+	serial: z.string().min(1).optional(),
 });
 export type DeviceTokenClaims = z.infer<typeof deviceTokenClaimsSchema>;
 

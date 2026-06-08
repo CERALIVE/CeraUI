@@ -1,10 +1,16 @@
 import type { ConfigMessage, Pipelines } from "@ceraui/rpc/schemas";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildStartConfig, canStartStream, hasServerTarget } from "./startStreaming";
+import {
+	buildStartConfig,
+	canStartStream,
+	hasServerTarget,
+} from "./startStreaming";
 
 // ── rpc client mock (for start/stop dispatch) ──────────────────────────────
-const startMock = vi.fn().mockResolvedValue({ success: true, is_streaming: true });
+const startMock = vi
+	.fn()
+	.mockResolvedValue({ success: true, is_streaming: true });
 const stopMock = vi.fn().mockResolvedValue({ success: true });
 
 vi.mock("$lib/rpc/client", () => ({
@@ -68,14 +74,20 @@ describe("hasServerTarget", () => {
 
 	it("is true with a relay_server (no srtla_addr)", () => {
 		expect(
-			hasServerTarget(makeConfig({ srtla_addr: undefined, relay_server: "relay-eu" })),
+			hasServerTarget(
+				makeConfig({ srtla_addr: undefined, relay_server: "relay-eu" }),
+			),
 		).toBe(true);
 	});
 });
 
 describe("buildStartConfig — validation gates", () => {
 	it("refuses with missingPipeline when no pipeline is set", () => {
-		const result = buildStartConfig(makeConfig({ pipeline: undefined }), null, makePipelines());
+		const result = buildStartConfig(
+			makeConfig({ pipeline: undefined }),
+			null,
+			makePipelines(),
+		);
 		expect(result).toEqual({ ok: false, error: "missingPipeline" });
 	});
 
@@ -129,20 +141,32 @@ describe("buildStartConfig — mandatory pipeline recognition gate (Task 28)", (
 	it("rejects an unknown pipeline BEFORE any rpc.streaming.start dispatch", async () => {
 		startMock.mockClear();
 		const { startStreaming } = await import("$lib/helpers/SystemHelper");
-		const result = buildStartConfig(makeConfig({ pipeline: "stale-id" }), null, makePipelines());
+		const result = buildStartConfig(
+			makeConfig({ pipeline: "stale-id" }),
+			null,
+			makePipelines(),
+		);
 		expect(result).toEqual({ ok: false, error: "unknownPipeline" });
 		if (result.ok) await startStreaming(result.config);
 		expect(startMock).not.toHaveBeenCalled();
 	});
 
 	it("checks pipeline presence before recognition", () => {
-		const result = buildStartConfig(makeConfig({ pipeline: undefined }), null, makePipelines());
+		const result = buildStartConfig(
+			makeConfig({ pipeline: undefined }),
+			null,
+			makePipelines(),
+		);
 		expect(result).toEqual({ ok: false, error: "missingPipeline" });
 	});
 
 	it("checks server before recognition", () => {
 		const result = buildStartConfig(
-			makeConfig({ pipeline: "stale-id", srtla_addr: undefined, relay_server: undefined }),
+			makeConfig({
+				pipeline: "stale-id",
+				srtla_addr: undefined,
+				relay_server: undefined,
+			}),
 			null,
 			makePipelines(),
 		);
@@ -159,27 +183,43 @@ describe("buildStartConfig — mandatory pipeline recognition gate (Task 28)", (
 
 describe("canStartStream", () => {
 	it("is true for a server-backed, recognized pipeline that is not starting", () => {
-		expect(canStartStream({ hasServer: true, pipelineRecognized: true, starting: false })).toBe(
-			true,
-		);
+		expect(
+			canStartStream({
+				hasServer: true,
+				pipelineRecognized: true,
+				starting: false,
+			}),
+		).toBe(true);
 	});
 
 	it("is false with no server", () => {
-		expect(canStartStream({ hasServer: false, pipelineRecognized: true, starting: false })).toBe(
-			false,
-		);
+		expect(
+			canStartStream({
+				hasServer: false,
+				pipelineRecognized: true,
+				starting: false,
+			}),
+		).toBe(false);
 	});
 
 	it("is false when the pipeline is unrecognized", () => {
-		expect(canStartStream({ hasServer: true, pipelineRecognized: false, starting: false })).toBe(
-			false,
-		);
+		expect(
+			canStartStream({
+				hasServer: true,
+				pipelineRecognized: false,
+				starting: false,
+			}),
+		).toBe(false);
 	});
 
 	it("is false while a start is in flight", () => {
-		expect(canStartStream({ hasServer: true, pipelineRecognized: true, starting: true })).toBe(
-			false,
-		);
+		expect(
+			canStartStream({
+				hasServer: true,
+				pipelineRecognized: true,
+				starting: true,
+			}),
+		).toBe(false);
 	});
 });
 
@@ -229,7 +269,11 @@ describe("buildStartConfig — assembly", () => {
 	});
 
 	it("keeps saved audio when the override omits a field", () => {
-		const result = buildStartConfig(makeConfig(), { delay: 100 }, makePipelines());
+		const result = buildStartConfig(
+			makeConfig(),
+			{ delay: 100 },
+			makePipelines(),
+		);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.config.delay).toBe(100);

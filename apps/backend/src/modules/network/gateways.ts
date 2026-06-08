@@ -16,7 +16,7 @@
 */
 
 import { logger } from "../../helpers/logger.ts";
-import { ID_RE, argMatch, run } from "../../helpers/run.ts";
+import { argMatch, ID_RE, run } from "../../helpers/run.ts";
 import { getms } from "../../helpers/time.ts";
 import {
 	notificationBroadcast,
@@ -25,8 +25,8 @@ import {
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
 import {
-	getNetworkInterfaces,
 	getNetifErrorMsg,
+	getNetworkInterfaces,
 } from "./network-interfaces.ts";
 
 export const UPDATE_GW_INT = 2000;

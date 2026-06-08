@@ -27,7 +27,5 @@ export const pairingContract = oc.router({
 	 * a device token, and store it as the active remote key. Mock-mode only until
 	 * the real platform claim endpoint lands.
 	 */
-	completePairing: oc
-		.input(completePairingInputSchema)
-		.output(completePairingOutputSchema),
+	completePairing: oc.input(completePairingInputSchema).output(completePairingOutputSchema),
 });

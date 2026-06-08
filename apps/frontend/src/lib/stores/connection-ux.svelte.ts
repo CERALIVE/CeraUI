@@ -47,7 +47,11 @@ export const MAX_RECONNECT_ATTEMPTS = 5;
 // Types
 // ============================================
 
-export type ConnectionUxMode = "connected" | "reconnecting" | "rebooting" | "failed";
+export type ConnectionUxMode =
+	| "connected"
+	| "reconnecting"
+	| "rebooting"
+	| "failed";
 
 export interface ConnectionUx {
 	/** Which treatment to render. */
@@ -100,12 +104,17 @@ export function initialReconnectState(): ReconnectState {
  * - `disconnected`/`error` → no change (the following `connecting` is what we
  *                   count); reboot latch is preserved across the drop.
  */
-export function reduceConnection(prev: ReconnectState, state: ConnectionState): ReconnectState {
+export function reduceConnection(
+	prev: ReconnectState,
+	state: ConnectionState,
+): ReconnectState {
 	switch (state) {
 		case "connected":
 			return { attempts: 0, hasConnected: true, rebooting: false };
 		case "connecting":
-			return prev.hasConnected ? { ...prev, attempts: prev.attempts + 1 } : prev;
+			return prev.hasConnected
+				? { ...prev, attempts: prev.attempts + 1 }
+				: prev;
 		default:
 			return prev;
 	}
@@ -125,11 +134,21 @@ export function reduceConnection(prev: ReconnectState, state: ConnectionState): 
  *    taken over yet) → suppress the banner; the offline page will appear.
  */
 export function deriveConnectionUx(input: ConnectionUxInput): ConnectionUx {
-	const { isConnected, browserOnline, showOfflinePage, reconnectAttempts, rebooting } = input;
+	const {
+		isConnected,
+		browserOnline,
+		showOfflinePage,
+		reconnectAttempts,
+		rebooting,
+	} = input;
 
 	if (showOfflinePage) {
 		return {
-			mode: rebooting ? "rebooting" : isConnected ? "connected" : "reconnecting",
+			mode: rebooting
+				? "rebooting"
+				: isConnected
+					? "connected"
+					: "reconnecting",
 			showBanner: false,
 		};
 	}
@@ -241,7 +260,8 @@ if (typeof window !== "undefined") {
 }
 
 function store(): ConnectionUxStore {
-	return (singleton ??= createConnectionUxStore());
+	singleton ??= createConnectionUxStore();
+	return singleton;
 }
 
 // ============================================

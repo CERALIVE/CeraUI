@@ -13,6 +13,7 @@ import { os } from "@orpc/server";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { generateClaimCode } from "../../modules/pairing/claim-code.ts";
 import { completeMockPairing } from "../../modules/pairing/mock-platform.ts";
+import { completePlatformPairing } from "../../modules/pairing/platform-claim.ts";
 import { setRemoteConfig } from "../../modules/remote/remote.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -38,19 +39,23 @@ export const generateClaimCodeProcedure = authedProcedure
 	});
 
 /**
- * Complete pairing against the mock platform: validate the submitted claim-code,
- * receive a device token, and store it as the active remote key (reconnecting
- * the channel with it). Gated to mock mode — until the real platform claim
- * endpoint exists, there is no production path to issue a token here.
+ * Complete pairing: submit the claim-code, receive a device token, and store it
+ * as the active remote key (reconnecting the channel with it).
+ *
+ * In mock mode (dev/test, `shouldUseMocks()`) the code is validated and a stub
+ * token issued locally via {@link completeMockPairing}. In production the code +
+ * serial are POSTed to the real cloud platform `POST /api/claim`
+ * ({@link completePlatformPairing}); on success the returned opaque device token
+ * is persisted as the active `remote_key`. Both paths apply the token through
+ * {@link setRemoteConfig}, so the channel presents it on the next reconnect.
  */
 export const completePairingProcedure = authedProcedure
 	.input(completePairingInputSchema)
 	.output(completePairingOutputSchema)
 	.handler(async ({ input }) => {
-		if (!shouldUseMocks()) {
-			return { paired: false, error: "mock-platform-unavailable" };
+		const applyToken = (token: string) => setRemoteConfig({ token });
+		if (shouldUseMocks()) {
+			return completeMockPairing(input.code, { applyToken });
 		}
-		return completeMockPairing(input.code, {
-			applyToken: (token) => setRemoteConfig({ token }),
-		});
+		return completePlatformPairing(input.code, { applyToken });
 	});

@@ -19,10 +19,10 @@ vi.mock("@ceraui/i18n/svelte", () => ({
 
 import { clearNotifications, getActive } from "./notifications.svelte";
 import {
-	type HealthIndicator,
-	type HealthSnapshot,
 	getStreamHealthSnapshot,
 	getStreamHealthState,
+	type HealthIndicator,
+	type HealthSnapshot,
 	ingestStreamHealth,
 	initialHealthSnapshot,
 	notificationForTransition,
@@ -114,7 +114,11 @@ describe("notificationForTransition", () => {
 	});
 
 	it("raises an error toast on any → dead", () => {
-		for (const prev of ["healthy", "degraded", "unknown"] as HealthIndicator[]) {
+		for (const prev of [
+			"healthy",
+			"degraded",
+			"unknown",
+		] as HealthIndicator[]) {
 			const n = notificationForTransition(prev, "dead");
 			expect(n?.type).toBe("error");
 			expect(n?.name).toBe("stream-health-dead");
@@ -123,8 +127,12 @@ describe("notificationForTransition", () => {
 	});
 
 	it("raises a success toast when recovering to healthy from degraded or dead", () => {
-		expect(notificationForTransition("degraded", "healthy")?.type).toBe("success");
-		expect(notificationForTransition("dead", "healthy")?.name).toBe("stream-health-recovered");
+		expect(notificationForTransition("degraded", "healthy")?.type).toBe(
+			"success",
+		);
+		expect(notificationForTransition("dead", "healthy")?.name).toBe(
+			"stream-health-recovered",
+		);
 	});
 
 	it("stays silent on the initial unknown → healthy (clean start, no toast)", () => {
@@ -154,7 +162,10 @@ describe("stream-health store (reactive API)", () => {
 
 	it("starts at `unknown` before any broadcast", () => {
 		expect(getStreamHealthState()).toBe("unknown");
-		expect(getStreamHealthSnapshot()).toEqual({ current: "unknown", previous: "unknown" });
+		expect(getStreamHealthSnapshot()).toEqual({
+			current: "unknown",
+			previous: "unknown",
+		});
 	});
 
 	it("updates the indicator across healthy → degraded → dead", () => {
@@ -166,7 +177,10 @@ describe("stream-health store (reactive API)", () => {
 
 		ingestStreamHealth({ state: "dead" });
 		expect(getStreamHealthState()).toBe("dead");
-		expect(getStreamHealthSnapshot()).toEqual({ current: "dead", previous: "degraded" });
+		expect(getStreamHealthSnapshot()).toEqual({
+			current: "dead",
+			previous: "degraded",
+		});
 	});
 
 	it("does not toast on the initial healthy frame, but toasts on the degraded transition", () => {
@@ -190,7 +204,9 @@ describe("stream-health store (reactive API)", () => {
 	it("raises a recovery toast when climbing back to healthy", () => {
 		ingestStreamHealth({ state: "degraded" });
 		ingestStreamHealth({ state: "healthy" });
-		const recovered = getActive().find((n) => n.name === "stream-health-recovered");
+		const recovered = getActive().find(
+			(n) => n.name === "stream-health-recovered",
+		);
 		expect(recovered?.type).toBe("success");
 	});
 

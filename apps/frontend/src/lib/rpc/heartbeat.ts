@@ -36,7 +36,11 @@ export const HEARTBEAT_THRESHOLD_MS = 15000;
  * @param now        Current timestamp (ms), injected by the caller.
  * @param threshold  Maximum allowed gap (ms) before the link is stale.
  */
-export function isHeartbeatStale(lastSeenAt: number, now: number, threshold: number): boolean {
+export function isHeartbeatStale(
+	lastSeenAt: number,
+	now: number,
+	threshold: number,
+): boolean {
 	return now - lastSeenAt > threshold;
 }
 

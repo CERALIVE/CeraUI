@@ -33,8 +33,8 @@ import {
 } from "../network/network-manager.ts";
 import { updateBcrptSourceIps } from "../streaming/bcrpt.ts";
 import {
-	type WifiNetwork,
 	broadcastWifiState,
+	type WifiNetwork,
 	wifiUpdateSavedConns,
 } from "./wifi.ts";
 import {

@@ -24,7 +24,11 @@ import { describe, expect, it } from "vitest";
 const cssPath = fileURLToPath(new URL("../app.css", import.meta.url));
 const css = readFileSync(cssPath, "utf8");
 
-const TRANSPARENT_TOKENS = new Set(["transparent", "rgba(0,0,0,0)", "rgba(0, 0, 0, 0)"]);
+const TRANSPARENT_TOKENS = new Set([
+	"transparent",
+	"rgba(0,0,0,0)",
+	"rgba(0, 0, 0, 0)",
+]);
 
 type Oklch = { L: number; C: number; h: number };
 type Oklab = { L: number; a: number; b: number };
@@ -46,7 +50,8 @@ function balancedBlock(source: string, header: string): string {
 	const open = source.indexOf("{", at);
 	for (let i = open; i < source.length; i++) {
 		if (source[i] === "{") depth++;
-		else if (source[i] === "}" && --depth === 0) return source.slice(open + 1, i);
+		else if (source[i] === "}" && --depth === 0)
+			return source.slice(open + 1, i);
 	}
 	throw new Error(`unbalanced block: ${header}`);
 }
@@ -79,7 +84,11 @@ function resolveColorMix(value: string, tokens: Record<string, Oklch>): Oklab {
 	const wB = 1 - wA;
 	const A = oklchToOklab(tokens[nameA]);
 	const B = oklchToOklab(tokens[nameB]);
-	return { L: A.L * wA + B.L * wB, a: A.a * wA + B.a * wB, b: A.b * wA + B.b * wB };
+	return {
+		L: A.L * wA + B.L * wB,
+		a: A.a * wA + B.a * wB,
+		b: A.b * wA + B.b * wB,
+	};
 }
 
 /** oklab -> linear sRGB -> WCAG relative luminance. */
@@ -104,7 +113,12 @@ function contrastRatio(x: Oklab, y: Oklab): number {
 
 const darkBlock = balancedBlock(css, ".dark {");
 const darkTokens: Record<string, Oklch> = {};
-for (const token of ["--switch-off", "--muted-foreground", "--border", "--card"]) {
+for (const token of [
+	"--switch-off",
+	"--muted-foreground",
+	"--border",
+	"--card",
+]) {
 	darkTokens[token] = parseOklch(declValue(darkBlock, token));
 }
 
@@ -127,7 +141,9 @@ describe("dark-mode off-state switch border", () => {
 
 	it("wins over the primitive's `border-transparent` via higher specificity", () => {
 		const switchSource = readFileSync(
-			fileURLToPath(new URL("../lib/components/ui/switch/switch.svelte", import.meta.url)),
+			fileURLToPath(
+				new URL("../lib/components/ui/switch/switch.svelte", import.meta.url),
+			),
 			"utf8",
 		);
 		// The primitive still ships the transparent utility (0,1,0); our

@@ -154,23 +154,38 @@ describe("buildEncoderSetConfig", () => {
 
 describe("getOverrideGate — capability gating (Task 28)", () => {
 	it("allows both overrides when the pipeline supports both", () => {
-		expect(getOverrideGate(bothOverrides)).toEqual({ resolution: true, framerate: true });
+		expect(getOverrideGate(bothOverrides)).toEqual({
+			resolution: true,
+			framerate: true,
+		});
 	});
 
 	it("blocks both overrides when the pipeline supports neither", () => {
-		expect(getOverrideGate(noOverrides)).toEqual({ resolution: false, framerate: false });
+		expect(getOverrideGate(noOverrides)).toEqual({
+			resolution: false,
+			framerate: false,
+		});
 	});
 
 	it("blocks framerate while allowing resolution", () => {
-		expect(getOverrideGate(resolutionOnly)).toEqual({ resolution: true, framerate: false });
+		expect(getOverrideGate(resolutionOnly)).toEqual({
+			resolution: true,
+			framerate: false,
+		});
 	});
 
 	it("blocks resolution while allowing framerate", () => {
-		expect(getOverrideGate(framerateOnly)).toEqual({ resolution: false, framerate: true });
+		expect(getOverrideGate(framerateOnly)).toEqual({
+			resolution: false,
+			framerate: true,
+		});
 	});
 
 	it("blocks both overrides when no pipeline metadata is available", () => {
-		expect(getOverrideGate(undefined)).toEqual({ resolution: false, framerate: false });
+		expect(getOverrideGate(undefined)).toEqual({
+			resolution: false,
+			framerate: false,
+		});
 	});
 
 	it("agrees with buildEncoderSetConfig: a blocked field is dropped from the payload", () => {

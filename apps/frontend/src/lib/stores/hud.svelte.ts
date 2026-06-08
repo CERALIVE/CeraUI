@@ -18,6 +18,15 @@
  * richer, non-deprecated surface. Never import from
  * `$lib/stores/websocket-store.svelte` (deprecated wrapper) here.
  */
+
+import type {
+	Modem,
+	ModemList,
+	NetifMessage,
+	SensorsStatus,
+	UpdatingStatus,
+	WifiStatus,
+} from "@ceraui/rpc/schemas";
 import { convertBytesToKbids } from "$lib/helpers/network-speed";
 import { modemSignal } from "$lib/helpers/signal";
 import {
@@ -31,7 +40,6 @@ import {
 	getUpdating,
 	getWifi,
 } from "$lib/rpc/subscriptions.svelte";
-
 import type {
 	HudConnectionState,
 	HudSources,
@@ -39,16 +47,14 @@ import type {
 	HudTimestamps,
 	LinkSignal,
 } from "$lib/types/hud";
-import type {
-	Modem,
-	ModemList,
-	NetifMessage,
-	SensorsStatus,
-	UpdatingStatus,
-	WifiStatus,
-} from "@ceraui/rpc/schemas";
 
-export type { HudConnectionState, HudSources, HudState, HudTimestamps, LinkSignal };
+export type {
+	HudConnectionState,
+	HudSources,
+	HudState,
+	HudTimestamps,
+	LinkSignal,
+};
 
 // ============================================
 // Constants
@@ -72,7 +78,9 @@ const CLOCK_INTERVAL_MS = 1000;
  * unit-suffixed string (e.g. "43.2°C", "5.1 V"). Returns `null` on failure
  * rather than throwing or yielding NaN.
  */
-export function parseSensorNumber(raw: string | number | null | undefined): number | null {
+export function parseSensorNumber(
+	raw: string | number | null | undefined,
+): number | null {
 	if (raw == null) return null;
 	if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
 	const match = raw.match(/-?\d+(?:\.\d+)?/);
@@ -85,7 +93,9 @@ export function parseSensorNumber(raw: string | number | null | undefined): numb
  * Parse a current reading and normalise to Amps. Values reported in
  * milliamps (e.g. "1500 mA") are converted to A.
  */
-export function parseCurrentAmps(raw: string | number | null | undefined): number | null {
+export function parseCurrentAmps(
+	raw: string | number | null | undefined,
+): number | null {
 	const n = parseSensorNumber(raw);
 	if (n == null) return null;
 	if (typeof raw === "string" && /m\s*a/i.test(raw)) return n / 1000;
@@ -96,14 +106,14 @@ export function parseCurrentAmps(raw: string | number | null | undefined): numbe
  * Parse a voltage reading and normalise to Volts. Values reported in
  * millivolts (e.g. "5100 mV") are converted to V.
  */
-export function parseVolts(raw: string | number | null | undefined): number | null {
+export function parseVolts(
+	raw: string | number | null | undefined,
+): number | null {
 	const n = parseSensorNumber(raw);
 	if (n == null) return null;
 	if (typeof raw === "string" && /m\s*v/i.test(raw)) return n / 1000;
 	return n;
 }
-
-
 
 /**
  * Map a modem's backend `status.connection` + `no_sim` flag onto the HUD's
@@ -112,7 +122,9 @@ export function parseVolts(raw: string | number | null | undefined): number | nu
  * pass through and every other backend state (failed/registered/connecting or
  * a missing status) collapses to `disconnected`.
  */
-export function modemConnectionState(modem: Modem): LinkSignal["connectionState"] {
+export function modemConnectionState(
+	modem: Modem,
+): LinkSignal["connectionState"] {
 	if (modem.no_sim === true) return "no_sim";
 	switch (modem.status?.connection) {
 		case "connected":
@@ -145,7 +157,8 @@ export function buildLinks(
 	const links: LinkSignal[] = [];
 	const netifEntries = netif ?? {};
 
-	const throughputFor = (id: string): number => convertBytesToKbids(netifEntries[id]?.tp ?? 0);
+	const throughputFor = (id: string): number =>
+		convertBytesToKbids(netifEntries[id]?.tp ?? 0);
 	const enabledFor = (id: string): boolean => netifEntries[id]?.enabled ?? true;
 
 	for (const [key, iface] of Object.entries(wifi ?? {})) {
@@ -187,7 +200,8 @@ export function buildLinks(
 	}
 
 	for (const [ifname, entry] of Object.entries(netifEntries)) {
-		if (!ifname.startsWith("eth") || entry.enabled !== true || !entry.ip) continue;
+		if (!ifname.startsWith("eth") || entry.enabled !== true || !entry.ip)
+			continue;
 		links.push({
 			id: ifname,
 			type: "ethernet",
@@ -202,11 +216,15 @@ export function buildLinks(
 		});
 	}
 
-	return links.slice(0, MAX_LINKS).map((link, index) => ({ ...link, linkIndex: index }));
+	return links
+		.slice(0, MAX_LINKS)
+		.map((link, index) => ({ ...link, linkIndex: index }));
 }
 
 /** Whether an update is currently in progress (boolean flag or progress object). */
-export function isUpdateInProgress(updating: UpdatingStatus | undefined): boolean {
+export function isUpdateInProgress(
+	updating: UpdatingStatus | undefined,
+): boolean {
 	if (updating == null || updating === false) return false;
 	if (updating === true) return true;
 	// Progress object: a finished update reports result === 0.
@@ -231,7 +249,8 @@ export function deriveHudState(
 	timestamps: HudTimestamps,
 	now: number,
 ): HudState {
-	const isConnected = sources.isConnected && sources.connectionState === "connected";
+	const isConnected =
+		sources.isConnected && sources.connectionState === "connected";
 
 	const isFullyStale =
 		!isConnected &&
@@ -241,7 +260,8 @@ export function deriveHudState(
 	// Cadence-aware: only sensors (~1s push) dim on age; modems (~30s), wifi and
 	// config (on-change) are connection-backed and dim solely on disconnect, so
 	// healthy data never flickers stale in the gaps between slow backend pushes.
-	const sensorsStale = isTimestampStale(timestamps.sensors, now) || isFullyStale;
+	const sensorsStale =
+		isTimestampStale(timestamps.sensors, now) || isFullyStale;
 	const streamingStale = isFullyStale;
 	const modemsStale = isFullyStale;
 	const wifiStale = isFullyStale;
@@ -287,7 +307,11 @@ export function deriveHudState(
 
 interface HudStore {
 	getHudState(): HudState;
-	getStreamingLiveState(): { isLive: boolean; bitrateKbps: number | null; isStale: boolean };
+	getStreamingLiveState(): {
+		isLive: boolean;
+		bitrateKbps: number | null;
+		isStale: boolean;
+	};
 	getLinks(): LinkSignal[];
 	getSocTelemetry(): {
 		temp: number | null;
@@ -381,7 +405,8 @@ function createHudStore(): HudStore {
 		nowTick = Date.now();
 	}, CLOCK_INTERVAL_MS);
 
-	const snapshot = (): HudState => deriveHudState(readSources(), timestamps, nowTick);
+	const snapshot = (): HudState =>
+		deriveHudState(readSources(), timestamps, nowTick);
 
 	return {
 		getHudState: () => snapshot(),
@@ -413,7 +438,8 @@ function createHudStore(): HudStore {
 let singleton: HudStore | null = null;
 
 function store(): HudStore {
-	return (singleton ??= createHudStore());
+	singleton ??= createHudStore();
+	return singleton;
 }
 
 // ============================================

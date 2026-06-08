@@ -83,10 +83,7 @@ describe("retryWithBackoff", () => {
 
 		const originalSetTimeout = global.setTimeout;
 
-		global.setTimeout = ((
-			callback: TimerHandler,
-			delay?: number,
-		) => {
+		global.setTimeout = ((callback: TimerHandler, delay?: number) => {
 			if (typeof delay === "number") {
 				capturedDelays.push(delay);
 			}
@@ -127,10 +124,7 @@ describe("retryWithBackoff", () => {
 
 		const originalSetTimeout = global.setTimeout;
 
-		global.setTimeout = ((
-			callback: TimerHandler,
-			delay?: number,
-		) => {
+		global.setTimeout = ((callback: TimerHandler, delay?: number) => {
 			if (typeof delay === "number") {
 				capturedDelays.push(delay);
 			}

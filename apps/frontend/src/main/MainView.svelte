@@ -5,7 +5,7 @@ import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { PullToRefresh } from '$lib/components/custom/pwa';
 import Logo from '$lib/components/icons/Logo.svelte';
-import { navElements, siteName } from '$lib/config';
+import { liveNavElement, siteName } from '$lib/config';
 import { navigateTo } from '$lib/stores/navigation.svelte';
 
 import HudRegion from './HudRegion.svelte';
@@ -17,7 +17,7 @@ async function handleRefresh() {
 	window.location.reload();
 }
 
-const goHome = () => navigateTo({ live: navElements.live });
+const goHome = () => navigateTo({ live: liveNavElement });
 
 // Desktop (lg+) hosts the language + theme controls in the header toolbar.
 // On mobile they move into the Settings destination's Appearance group, so the

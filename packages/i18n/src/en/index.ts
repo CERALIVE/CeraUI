@@ -287,19 +287,24 @@ const en = {
 		saveFailed: "Failed to save",
 		updateInProgress: "Update in progress",
 		// Hardware
-		bootconfigUpdating: "Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
-		jetsonUndervoltage: "System undervoltage detected. You may experience system instability, including glitching, freezes and the modems disconnecting",
-		hdmiError: "HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. Try to move any modems away from the HDMI cable and the encoder. If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera",
+		bootconfigUpdating:
+			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
+		jetsonUndervoltage:
+			"System undervoltage detected. You may experience system instability, including glitching, freezes and the modems disconnecting",
+		hdmiError:
+			"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. Try to move any modems away from the HDMI cable and the encoder. If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera",
 		// PWA updates
 		appUpdated: "App Updated",
 		appUpdatedDescription: "Updated to version {version:string}",
 		updateAvailable: "Update Available",
-		updateAvailableDescription: "A new version is available. Refresh to update.",
+		updateAvailableDescription:
+			"A new version is available. Refresh to update.",
 		// PWA install
 		appInstalled: "App Installed",
 		appInstalledDescription: "CeraUI has been added to your home screen!",
 		installCancelled: "Installation Cancelled",
-		installCancelledDescription: "You can install the app later from your browser menu.",
+		installCancelledDescription:
+			"You can install the app later from your browser menu.",
 		installFailed: "Installation Failed",
 		installFailedDescription: "Unable to install the app. Please try again.",
 		// Connection
@@ -371,7 +376,8 @@ const en = {
 				device: "Device",
 			},
 			devicePassword: "Device Password",
-			devicePasswordDesc: "Set the password used to access this device on the local network",
+			devicePasswordDesc:
+				"Set the password used to access this device on the local network",
 			cloudRemote: "Cloud Remote Server",
 			cloudRemoteDesc: "Connect to a cloud relay for remote management",
 			ssh: "SSH Access",
@@ -395,7 +401,8 @@ const en = {
 			passwordsMismatch: "Passwords don't match.",
 			getYourKey: "Open cloud dashboard",
 			updating: "Updating, please wait\u2026",
-			rebootConfirm: "The device will disconnect for about 30 seconds while it restarts.",
+			rebootConfirm:
+				"The device will disconnect for about 30 seconds while it restarts.",
 			powerOffConfirm:
 				"The device will shut down completely. You'll need physical access to turn it back on.",
 			blockedStreaming: "Stop streaming before rebooting.",
@@ -409,7 +416,8 @@ const en = {
 			codeLabel: "Your claim code",
 			validFor: "Valid for",
 			expired: "This code has expired. Generate a new one.",
-			instructions: "Enter this code on your cloud dashboard to finish pairing.",
+			instructions:
+				"Enter this code on your cloud dashboard to finish pairing.",
 			waiting: "Waiting for the cloud to confirm pairing\u2026",
 			paired: "Device paired",
 			simulate: "Simulate cloud pairing (dev)",
@@ -511,10 +519,10 @@ const en = {
 			setup: "Set up",
 			connected: "Connected",
 			disconnected: "Disconnected",
-		active: "Active",
-		on: "On",
-		off: "Off",
-		noWifi: "No WiFi interfaces found",
+			active: "Active",
+			on: "On",
+			off: "Off",
+			noWifi: "No WiFi interfaces found",
 			noModems: "No SIM cards detected",
 			noEthernet: "No wired interfaces found",
 			hotspotOff: "Hotspot is off",
@@ -529,16 +537,18 @@ const en = {
 			disableBond: "Disable Bond",
 			lastActiveError: "Cannot disable the only active connection",
 			wiredDisableTitle: "Disable Ethernet?",
-			wiredDisableBody: "Disabling Ethernet may interrupt device management and SSH access.",
+			wiredDisableBody:
+				"Disabling Ethernet may interrupt device management and SSH access.",
 			modemModel: "Model",
 			modemManufacturer: "Manufacturer",
-		switchToHotspot: "Switch to Hotspot",
-		switchToStation: "Switch to Station",
-		hotspotSwitchTitle: "Switch to Hotspot?",
-		hotspotSwitchBody: "Switching to hotspot will disconnect this WiFi network and remove it from the bond.",
-		hotspotSwitchConfirm: "Switch to Hotspot",
-		noSimBond: "No SIM — cannot bond",
-		noSimLink: "No SIM",
+			switchToHotspot: "Switch to Hotspot",
+			switchToStation: "Switch to Station",
+			hotspotSwitchTitle: "Switch to Hotspot?",
+			hotspotSwitchBody:
+				"Switching to hotspot will disconnect this WiFi network and remove it from the bond.",
+			hotspotSwitchConfirm: "Switch to Hotspot",
+			noSimBond: "No SIM — cannot bond",
+			noSimLink: "No SIM",
 			hotspotNoBond: "Hotspot can't be bonded",
 		},
 		pageTitle: "Network Configuration",
@@ -625,7 +635,8 @@ const en = {
 			configureDescription: "Configure cellular connection settings",
 			simUnlock: {
 				title: "SIM PIN required",
-				description: "This SIM card is locked. Enter its PIN to unlock the modem.",
+				description:
+					"This SIM card is locked. Enter its PIN to unlock the modem.",
 				pinLabel: "SIM PIN",
 				pinPlaceholder: "Enter PIN",
 				submit: "Unlock SIM",
@@ -903,7 +914,8 @@ const en = {
 		failed: "Not connecting. Check the device or network.",
 		retry: "Retry",
 		rebooting: "Rebooting device…",
-		rebootingDescription: "The device is restarting. This page will reconnect automatically.",
+		rebootingDescription:
+			"The device is restarting. This page will reconnect automatically.",
 		sessionExpired: "Session expired. Please authenticate again.",
 	},
 	offline: {

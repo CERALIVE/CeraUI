@@ -69,7 +69,13 @@ const wifiFixture: WifiStatus = {
 		hw: "00:11:22",
 		available: [
 			{ active: true, ssid: "MyNet", signal: 65, security: "WPA2", freq: 5180 },
-			{ active: false, ssid: "Other", signal: 40, security: "WPA2", freq: 2412 },
+			{
+				active: false,
+				ssid: "Other",
+				signal: 40,
+				security: "WPA2",
+				freq: 2412,
+			},
 		],
 		saved: {},
 		supports_hotspot: false,
@@ -115,7 +121,10 @@ function makeSources(overrides: Partial<HudSources> = {}): HudSources {
 	};
 }
 
-function makeTimestamps(value: number | null, overrides: Partial<HudTimestamps> = {}): HudTimestamps {
+function makeTimestamps(
+	value: number | null,
+	overrides: Partial<HudTimestamps> = {},
+): HudTimestamps {
 	return {
 		streaming: value,
 		sensors: value,
@@ -174,7 +183,11 @@ describe("parseVolts", () => {
 
 describe("modemSignal", () => {
 	it("returns the signal for a normal modem", () => {
-		expect(modemSignal(makeModem({ status: { ...makeModem().status!, signal: 73 } }))).toBe(73);
+		expect(
+			modemSignal(
+				makeModem({ status: { ...makeModem().status!, signal: 73 } }),
+			),
+		).toBe(73);
 	});
 
 	it("returns null for a no-SIM modem", () => {
@@ -182,7 +195,11 @@ describe("modemSignal", () => {
 	});
 
 	it("returns null for a negative/sentinel signal", () => {
-		expect(modemSignal(makeModem({ status: { ...makeModem().status!, signal: -1 } }))).toBeNull();
+		expect(
+			modemSignal(
+				makeModem({ status: { ...makeModem().status!, signal: -1 } }),
+			),
+		).toBeNull();
 	});
 
 	it("returns null when status is missing", () => {
@@ -203,10 +220,21 @@ describe("isUpdateInProgress", () => {
 
 	it("is true for an in-progress object and false for a finished one", () => {
 		expect(
-			isUpdateInProgress({ downloading: 1, unpacking: 0, setting_up: 0, total: 5 }),
+			isUpdateInProgress({
+				downloading: 1,
+				unpacking: 0,
+				setting_up: 0,
+				total: 5,
+			}),
 		).toBe(true);
 		expect(
-			isUpdateInProgress({ downloading: 5, unpacking: 5, setting_up: 5, total: 5, result: 0 }),
+			isUpdateInProgress({
+				downloading: 5,
+				unpacking: 5,
+				setting_up: 5,
+				total: 5,
+				result: 0,
+			}),
 		).toBe(false);
 	});
 });
@@ -266,7 +294,10 @@ describe("deriveHudState — staleness (cadence-aware, connection-backed)", () =
 describe("deriveHudState — disconnect", () => {
 	it("marks fully stale and preserves last-known values (no nulling)", () => {
 		const now = T0 + STALE_THRESHOLD_MS + 1;
-		const sources = makeSources({ isConnected: false, connectionState: "disconnected" });
+		const sources = makeSources({
+			isConnected: false,
+			connectionState: "disconnected",
+		});
 		const timestamps = makeTimestamps(T0, { connectionLostAt: T0 });
 
 		const state = deriveHudState(sources, timestamps, now);
@@ -283,7 +314,10 @@ describe("deriveHudState — disconnect", () => {
 
 	it("is not fully stale immediately after the drop (within grace window)", () => {
 		const now = T0 + 100;
-		const sources = makeSources({ isConnected: false, connectionState: "disconnected" });
+		const sources = makeSources({
+			isConnected: false,
+			connectionState: "disconnected",
+		});
 		const timestamps = makeTimestamps(T0, { connectionLostAt: T0 });
 
 		const state = deriveHudState(sources, timestamps, now);
@@ -314,7 +348,9 @@ describe("deriveHudState — reconnect", () => {
 describe("deriveHudState — no-SIM / null signal handling", () => {
 	it("renders a no-SIM modem with null signal, without crashing", () => {
 		const sources = makeSources({
-			modems: { modem1: makeModem({ no_sim: true, status: undefined }) } as ModemList,
+			modems: {
+				modem1: makeModem({ no_sim: true, status: undefined }),
+			} as ModemList,
 			wifi: undefined,
 		});
 
@@ -367,7 +403,14 @@ describe("buildLinks — multiple links & index mapping", () => {
 			}),
 		};
 
-		const links = buildLinks(modems, wifiFixture, undefined, false, false, false);
+		const links = buildLinks(
+			modems,
+			wifiFixture,
+			undefined,
+			false,
+			false,
+			false,
+		);
 
 		expect(links).toHaveLength(3);
 		expect(links[0]).toMatchObject({ type: "wifi", linkIndex: 0, signal: 65 });
@@ -407,7 +450,14 @@ describe("buildLinks — multiple links & index mapping", () => {
 
 describe("buildLinks — ethernet links from netif", () => {
 	it("emits an ethernet link for an eth interface that is enabled with an IP", () => {
-		const links = buildLinks(undefined, undefined, netifWithEthFixture, false, false, false);
+		const links = buildLinks(
+			undefined,
+			undefined,
+			netifWithEthFixture,
+			false,
+			false,
+			false,
+		);
 		const eth = links.filter((l) => l.type === "ethernet");
 		expect(eth).toHaveLength(1);
 		expect(eth[0]!.id).toBe("eth0");
@@ -416,7 +466,14 @@ describe("buildLinks — ethernet links from netif", () => {
 	});
 
 	it("excludes eth interfaces without an IP and non-eth entries (lo/wifi/modem)", () => {
-		const links = buildLinks(undefined, undefined, netifWithEthFixture, false, false, false);
+		const links = buildLinks(
+			undefined,
+			undefined,
+			netifWithEthFixture,
+			false,
+			false,
+			false,
+		);
 		const ethIds = links.filter((l) => l.type === "ethernet").map((l) => l.id);
 		expect(ethIds).not.toContain("eth1");
 		expect(ethIds).not.toContain("lo");
@@ -511,15 +568,33 @@ describe("buildLinks — linkIndex stability", () => {
 			wwan1: { tp: 0, enabled: true, ip: "10.0.0.5" },
 		};
 
-		const before = buildLinks(modems, wifiFixture, allEnabled, false, false, false);
-		const after = buildLinks(modems, wifiFixture, withDisabled, false, false, false);
+		const before = buildLinks(
+			modems,
+			wifiFixture,
+			allEnabled,
+			false,
+			false,
+			false,
+		);
+		const after = buildLinks(
+			modems,
+			wifiFixture,
+			withDisabled,
+			false,
+			false,
+			false,
+		);
 
 		expect(after).toHaveLength(before.length);
-		expect(after.map((l) => l.linkIndex)).toEqual(before.map((l) => l.linkIndex));
+		expect(after.map((l) => l.linkIndex)).toEqual(
+			before.map((l) => l.linkIndex),
+		);
 		expect(after.map((l) => l.id)).toEqual(before.map((l) => l.id));
 		const disabled = after.find((l) => l.id === "wwan0")!;
 		expect(disabled.enabled).toBe(false);
-		expect(disabled.linkIndex).toBe(before.find((l) => l.id === "wwan0")!.linkIndex);
+		expect(disabled.linkIndex).toBe(
+			before.find((l) => l.id === "wwan0")!.linkIndex,
+		);
 	});
 });
 
@@ -558,7 +633,12 @@ describe("S1 — buildLinks includes a no_sim modem with null signal + connectio
 	it("keeps the no_sim modem alongside a healthy modem (no_sim is not filtered out)", () => {
 		const modems: ModemList = {
 			modem1: makeModem({ ifname: "wwan0", name: "CarrierA" }),
-			modem2: makeModem({ ifname: "wwan1", name: "EmptySlot", no_sim: true, status: undefined }),
+			modem2: makeModem({
+				ifname: "wwan1",
+				name: "EmptySlot",
+				no_sim: true,
+				status: undefined,
+			}),
 		};
 
 		const links = buildLinks(modems, undefined, undefined, false, false, false);
@@ -575,7 +655,12 @@ describe("S1 — buildLinks includes a no_sim modem with null signal + connectio
 	it("no_sim wins even when a stale status still reports 'connected'", () => {
 		const modem = makeModem({
 			no_sim: true,
-			status: { connection: "connected", network_type: "4G", signal: 90, roaming: false },
+			status: {
+				connection: "connected",
+				network_type: "4G",
+				signal: 90,
+				roaming: false,
+			},
 		});
 		expect(modemConnectionState(modem)).toBe("no_sim");
 		expect(modemSignal(modem)).toBeNull();
@@ -627,7 +712,14 @@ describe("S5 — buildLinks caps the returned links at MAX_LINKS", () => {
 			modems[`m${i}`] = makeModem({ ifname: `wwan${i}`, name: `Carrier${i}` });
 		}
 
-		const links = buildLinks(modems, wifiFixture, undefined, false, false, false);
+		const links = buildLinks(
+			modems,
+			wifiFixture,
+			undefined,
+			false,
+			false,
+			false,
+		);
 
 		expect(links).toHaveLength(MAX_LINKS);
 		// WiFi takes index 0; the remaining slots are modems.
@@ -643,7 +735,15 @@ describe("S6 — wifi/ethernet null signal is valid, not an error", () => {
 				ifname: "wlan0",
 				conn: "",
 				hw: "00:11:22",
-				available: [{ active: false, ssid: "Other", signal: 40, security: "WPA2", freq: 2412 }],
+				available: [
+					{
+						active: false,
+						ssid: "Other",
+						signal: 40,
+						security: "WPA2",
+						freq: 2412,
+					},
+				],
 				saved: {},
 				supports_hotspot: false,
 			},
@@ -669,7 +769,13 @@ describe("S6 — wifi/ethernet null signal is valid, not an error", () => {
 				hw: "00:11:22",
 				available: [
 					// Active network with a sentinel/non-finite signal — must coerce to null, stay connected.
-					{ active: true, ssid: "MyNet", signal: Number.NaN, security: "WPA2", freq: 5180 },
+					{
+						active: true,
+						ssid: "MyNet",
+						signal: Number.NaN,
+						security: "WPA2",
+						freq: 5180,
+					},
 				],
 				saved: {},
 				supports_hotspot: false,
@@ -735,7 +841,9 @@ describe("connectionState — per-modem backend mapping", () => {
 	});
 
 	it("collapses a missing status to 'disconnected'", () => {
-		expect(modemConnectionState(makeModem({ status: undefined }))).toBe("disconnected");
+		expect(modemConnectionState(makeModem({ status: undefined }))).toBe(
+			"disconnected",
+		);
 	});
 
 	it("populates connectionState onto each modem link via buildLinks", () => {
@@ -743,15 +851,30 @@ describe("connectionState — per-modem backend mapping", () => {
 			connected: makeModem({ ifname: "wwan0" }),
 			scanning: makeModem({
 				ifname: "wwan1",
-				status: { connection: "scanning", network_type: "4G", signal: 0, roaming: false },
+				status: {
+					connection: "scanning",
+					network_type: "4G",
+					signal: 0,
+					roaming: false,
+				},
 			}),
 			failed: makeModem({
 				ifname: "wwan2",
-				status: { connection: "failed", network_type: "4G", signal: 0, roaming: false },
+				status: {
+					connection: "failed",
+					network_type: "4G",
+					signal: 0,
+					roaming: false,
+				},
 			}),
 			registered: makeModem({
 				ifname: "wwan3",
-				status: { connection: "registered", network_type: "4G", signal: 30, roaming: false },
+				status: {
+					connection: "registered",
+					network_type: "4G",
+					signal: 30,
+					roaming: false,
+				},
 			}),
 			noSim: makeModem({ ifname: "wwan4", no_sim: true, status: undefined }),
 		};
@@ -770,7 +893,10 @@ describe("connectionState — per-modem backend mapping", () => {
 describe("deriveHudState — isFullyStale staleness boundary", () => {
 	it("is fully stale once the connection has been down longer than STALE_THRESHOLD_MS", () => {
 		const now = T0 + STALE_THRESHOLD_MS + 1;
-		const sources = makeSources({ isConnected: false, connectionState: "disconnected" });
+		const sources = makeSources({
+			isConnected: false,
+			connectionState: "disconnected",
+		});
 		const timestamps = makeTimestamps(T0, { connectionLostAt: T0 });
 
 		const state = deriveHudState(sources, timestamps, now);
@@ -787,7 +913,10 @@ describe("deriveHudState — isFullyStale staleness boundary", () => {
 
 	it("is exactly at the threshold (>=) — boundary is inclusive", () => {
 		const now = T0 + STALE_THRESHOLD_MS;
-		const sources = makeSources({ isConnected: false, connectionState: "disconnected" });
+		const sources = makeSources({
+			isConnected: false,
+			connectionState: "disconnected",
+		});
 		const timestamps = makeTimestamps(T0, { connectionLostAt: T0 });
 
 		const state = deriveHudState(sources, timestamps, now);
@@ -796,7 +925,10 @@ describe("deriveHudState — isFullyStale staleness boundary", () => {
 
 	it("is NOT fully stale one ms before the threshold (grace window)", () => {
 		const now = T0 + STALE_THRESHOLD_MS - 1;
-		const sources = makeSources({ isConnected: false, connectionState: "disconnected" });
+		const sources = makeSources({
+			isConnected: false,
+			connectionState: "disconnected",
+		});
 		const timestamps = makeTimestamps(T0, { connectionLostAt: T0 });
 
 		const state = deriveHudState(sources, timestamps, now);
@@ -805,7 +937,11 @@ describe("deriveHudState — isFullyStale staleness boundary", () => {
 
 	it("is never fully stale while still connected, regardless of age", () => {
 		const now = T0 + STALE_THRESHOLD_MS * 100;
-		const state = deriveHudState(makeSources(), makeTimestamps(T0, { connectionLostAt: null }), now);
+		const state = deriveHudState(
+			makeSources(),
+			makeTimestamps(T0, { connectionLostAt: null }),
+			now,
+		);
 		expect(state.isConnected).toBe(true);
 		expect(state.isFullyStale).toBe(false);
 	});
@@ -814,14 +950,24 @@ describe("deriveHudState — isFullyStale staleness boundary", () => {
 describe("modemSignal — frontend defense against string wire values", () => {
 	it("coerces a numeric string signal to a number (backend may emit '53')", () => {
 		const modem = makeModem({
-			status: { connection: "connected", network_type: "4G", signal: "53" as never, roaming: false },
+			status: {
+				connection: "connected",
+				network_type: "4G",
+				signal: "53" as never,
+				roaming: false,
+			},
 		});
 		expect(modemSignal(modem)).toBe(53);
 	});
 
 	it("returns null for a non-numeric string signal (graceful, no NaN leak)", () => {
 		const modem = makeModem({
-			status: { connection: "connected", network_type: "4G", signal: "n/a" as never, roaming: false },
+			status: {
+				connection: "connected",
+				network_type: "4G",
+				signal: "n/a" as never,
+				roaming: false,
+			},
 		});
 		expect(modemSignal(modem)).toBeNull();
 	});

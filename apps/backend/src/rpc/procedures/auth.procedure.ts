@@ -4,8 +4,6 @@
  */
 
 import fs from "node:fs";
-
-import { randomBase64 } from "../../helpers/crypto.ts";
 import {
 	loginInputSchema,
 	loginOutputSchema,
@@ -14,12 +12,12 @@ import {
 	successResponseSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-
 import { loadCacheFile } from "../../helpers/config-loader.ts";
 import {
 	type AuthTokens,
 	authTokensSchema,
 } from "../../helpers/config-schemas.ts";
+import { randomBase64 } from "../../helpers/crypto.ts";
 import { logger } from "../../helpers/logger.ts";
 import { getPasswordHash, setPasswordHash } from "../state/password.ts";
 import type { RPCContext } from "../types.ts";

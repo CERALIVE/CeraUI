@@ -2,10 +2,11 @@
 	// ============================================================================
 	// MONOREPO WORKSPACE SETTINGS - CeraUI
 	// ============================================================================
-	// Perfect tool separation: Biome (TS/JS/JSON) + ESLint+Prettier (Svelte only)
+	// Single toolchain: Biome for TS/JS/JSON and experimental Svelte+TS support.
+	// Svelte files are formatted by the Svelte extension and linted by Biome.
 
 	// ============================================================================
-	// GLOBAL EDITOR SETTINGS (Linux style, consistent with linters)
+	// GLOBAL EDITOR SETTINGS (Linux style, consistent with Biome)
 	// ============================================================================
 	"editor.formatOnSave": true,
 	"editor.formatOnPaste": true,
@@ -17,7 +18,7 @@
 		// Disabled globally - specified per file type to avoid conflicts
 	},
 
-	// File settings (Linux LF style - matches Biome & Prettier)
+	// File settings (Linux LF style - matches Biome)
 	"files.eol": "\n",
 	"files.insertFinalNewline": true,
 	"files.trimFinalNewlines": true,
@@ -32,86 +33,48 @@
 	"typescript.workspaceSymbols.scope": "allOpenProjects",
 
 	// ============================================================================
-	// BIOME CONFIGURATION (Global default for all files except .svelte)
+	// BIOME CONFIGURATION (single linter/formatter for the workspace)
 	// ============================================================================
 	"biome.enabled": true,
 	"biome.lsp.bin": "pnpm exec biome",
 	"biome.rename": true,
 	"biome.requireConfigFile": false,
 
-	// CRITICAL: Completely exclude Svelte files from Biome
-	"biome.files.include": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.json", "**/*.jsonc"],
-	"biome.files.exclude": ["**/*.svelte", "**/node_modules/**", "**/dist/**", "**/.svelte-kit/**"],
-
 	// ============================================================================
-	// ESLINT CONFIGURATION (Only for Svelte files)
+	// DEFAULT FORMATTERS (file-type based)
 	// ============================================================================
-	"eslint.enable": true,
-	"eslint.workingDirectories": [
-		{
-			"directory": "/mnt/Development/Developments-box/CeraUI-Dev/CeraUI/apps/frontend",
-			"changeProcessCWD": true
-		}
-	],
-	"eslint.validate": ["svelte", "javascript", "typescript"],
-	"eslint.options": {},
-	"eslint.alwaysShowStatus": true,
-	"eslint.codeActionsOnSave.timeout": 2000,
-	"eslint.format.enable": false,
-	"eslint.probe": ["svelte", "javascript", "typescript"],
-	"eslint.run": "onSave",
-
-	// ============================================================================
-	// DEFAULT FORMATTERS (Simple file-type based)
-	// ============================================================================
-
-	// Biome handles all these file types globally
 	"[typescript]": {
 		"editor.defaultFormatter": "biomejs.biome",
 		"editor.codeActionsOnSave": {
 			"source.organizeImports.biome": "explicit",
-			"source.fixAll.biome": "explicit",
-			"source.fixAll.eslint": "never"
+			"source.fixAll.biome": "explicit"
 		}
 	},
 	"[javascript]": {
 		"editor.defaultFormatter": "biomejs.biome",
 		"editor.codeActionsOnSave": {
 			"source.organizeImports.biome": "explicit",
-			"source.fixAll.biome": "explicit",
-			"source.fixAll.eslint": "never"
+			"source.fixAll.biome": "explicit"
 		}
 	},
 	"[json]": {
 		"editor.defaultFormatter": "biomejs.biome",
 		"editor.codeActionsOnSave": {
-			"source.fixAll.biome": "explicit",
-			"source.fixAll.eslint": "never"
+			"source.fixAll.biome": "explicit"
 		}
 	},
 	"[jsonc]": {
 		"editor.defaultFormatter": "biomejs.biome",
 		"editor.codeActionsOnSave": {
-			"source.fixAll.biome": "explicit",
-			"source.fixAll.eslint": "never"
+			"source.fixAll.biome": "explicit"
 		}
 	},
 
-	// Svelte files: ESLint + Prettier only (Biome COMPLETELY disabled)
+	// Svelte files: formatted by the Svelte extension, linted by Biome.
+	// Biome's experimental HTML formatter is disabled for .svelte in biome.json,
+	// so it never reformats markup here.
 	"[svelte]": {
-		"biome.enabled": false,
-		"biome.lsp.bin": "",
-		"biome.rename": false,
-		"editor.defaultFormatter": "svelte.svelte-vscode",
-		"editor.formatOnSave": false,
-		"editor.codeActionsOnSave": {
-			"source.fixAll": "never",
-			"source.fixAll.eslint": "never",
-			"source.organizeImports": "never",
-			"source.organizeImports.eslint": "never",
-			"source.fixAll.biome": "never",
-			"source.organizeImports.biome": "never"
-		}
+		"editor.defaultFormatter": "svelte.svelte-vscode"
 	},
 
 	// ============================================================================
@@ -152,7 +115,6 @@
 	// ============================================================================
 	"extensions.experimental.affinity": {
 		"svelte.svelte-vscode": 1,
-		"dbaeumer.vscode-eslint": 1,
 		"biomejs.biome": 1
 	},
 
@@ -185,7 +147,6 @@
 	"typescript.format.enable": false,
 	"html.format.enable": false,
 
-	// NUCLEAR OPTION: Disable Biome for Svelte completely
 	"biome.files.ignoreUnknown": true,
 	"emmet.excludeLanguages": ["svelte"],
 	"files.exclude": {

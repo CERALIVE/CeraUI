@@ -19,7 +19,11 @@ import {
 	MOCK_PLATFORM_SUB_STATUS,
 	mockPlatformClaim,
 } from "../modules/pairing/mock-platform.ts";
-import { resolveRemoteKey, setRemoteKey } from "../modules/remote/remote.ts";
+import {
+	buildAuthEncoderPayload,
+	resolveRemoteKey,
+	setRemoteKey,
+} from "../modules/remote/remote.ts";
 
 // Deterministic seed material so claim-code derivation and the issued token are
 // fully reproducible. The live device serial/secret are pinned via env + config
@@ -30,7 +34,11 @@ const SECRET = "dGVzdC1zZWNyZXQtZm9yLW1vY2stcGxhdGZvcm0tdGFzazI1";
 const WINDOW_MS = CLAIM_CODE_WINDOW_SECONDS * 1000;
 const NOW = 1_700_000_000_000 - (1_700_000_000_000 % WINDOW_MS) + 1_000;
 
-const validCode = deriveClaimCode({ now: NOW, serial: SERIAL, secret: SECRET }).code;
+const validCode = deriveClaimCode({
+	now: NOW,
+	serial: SERIAL,
+	secret: SECRET,
+}).code;
 
 beforeAll(() => {
 	process.env.DEVICE_SERIAL = SERIAL;
@@ -118,7 +126,9 @@ describe("device token — stub verification contract (ADR-0006)", () => {
 
 	test("rejects malformed tokens and wrong headers", () => {
 		expect(verifyStubDeviceToken("not-a-token", NOW)).toBeNull();
-		expect(verifyStubDeviceToken(`${DEVICE_TOKEN_HEADER}!!!notbase64!!!`, NOW)).toBeNull();
+		expect(
+			verifyStubDeviceToken(`${DEVICE_TOKEN_HEADER}!!!notbase64!!!`, NOW),
+		).toBeNull();
 		expect(verifyStubDeviceToken("v2.local.whatever", NOW)).toBeNull();
 	});
 
@@ -172,15 +182,52 @@ describe("full device-side pairing sequence (mock)", () => {
 
 describe("remote_key channel — token acceptance + deprecated path", () => {
 	test("a platform token becomes the active remote key (precedence over raw key)", () => {
-		expect(resolveRemoteKey({ token: "device-token-abc" })).toBe("device-token-abc");
-		expect(resolveRemoteKey({ remote_key: "legacy", token: "device-token-abc" })).toBe(
+		expect(resolveRemoteKey({ token: "device-token-abc" })).toBe(
 			"device-token-abc",
 		);
+		expect(
+			resolveRemoteKey({ remote_key: "legacy", token: "device-token-abc" }),
+		).toBe("device-token-abc");
 	});
 
 	test("deprecated raw remote_key path still resolves", () => {
 		expect(resolveRemoteKey({ remote_key: "legacy-key" })).toBe("legacy-key");
 		// The deprecated helper is retained for unpaired devices.
 		expect(typeof setRemoteKey).toBe("function");
+	});
+});
+
+describe("auth/encoder frame — device-token standing + opaque fallback", () => {
+	test("presents a device token and reads its sub_status standing", () => {
+		const token = mintStubDeviceToken({
+			deviceId: SERIAL,
+			subStatus: MOCK_PLATFORM_SUB_STATUS,
+			now: NOW,
+			ttlSeconds: 100,
+		});
+		const payload = buildAuthEncoderPayload(token, 16, NOW);
+		expect(payload.key).toBe(token);
+		expect(payload.version).toBe(16);
+		expect(payload.sub_status).toBe(MOCK_PLATFORM_SUB_STATUS);
+	});
+
+	test("omits sub_status for a legacy opaque key (backward compat)", () => {
+		const payload = buildAuthEncoderPayload("legacy-operator-key", 16, NOW);
+		expect(payload.key).toBe("legacy-operator-key");
+		expect(payload.version).toBe(16);
+		expect(payload.sub_status).toBeUndefined();
+	});
+
+	test("omits sub_status for an expired token but still presents the key", () => {
+		const token = mintStubDeviceToken({
+			deviceId: SERIAL,
+			subStatus: "ACTIVE",
+			now: NOW,
+			ttlSeconds: 100,
+		});
+		const past = NOW + (100 + DEVICE_TOKEN_SKEW_SECONDS + 5) * 1000;
+		const payload = buildAuthEncoderPayload(token, 16, past);
+		expect(payload.key).toBe(token);
+		expect(payload.sub_status).toBeUndefined();
 	});
 });

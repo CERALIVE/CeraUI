@@ -12,9 +12,12 @@ export const convertBytesToKbids = (bytes: number): number => {
  * - >= 1000 kbps: "X.X Mbps" (one decimal place)
  * - null or non-finite: "—"
  */
-export const formatThroughput = (kbps: number | null, _loc?: string): string => {
+export const formatThroughput = (
+	kbps: number | null,
+	_loc?: string,
+): string => {
 	if (kbps === null || !Number.isFinite(kbps)) {
-		return '—';
+		return "—";
 	}
 
 	if (kbps < 1000) {
@@ -31,18 +34,18 @@ export const formatThroughput = (kbps: number | null, _loc?: string): string => 
  * - 1000 <= kbps < 5000: 'fair' (amber)
  * - >= 5000 kbps: 'good' (green)
  */
-export const speedTier = (kbps: number | null): 'weak' | 'fair' | 'good' => {
+export const speedTier = (kbps: number | null): "weak" | "fair" | "good" => {
 	if (kbps === null) {
-		return 'weak';
+		return "weak";
 	}
 
 	if (kbps < 1000) {
-		return 'weak';
+		return "weak";
 	}
 
 	if (kbps < 5000) {
-		return 'fair';
+		return "fair";
 	}
 
-	return 'good';
+	return "good";
 };

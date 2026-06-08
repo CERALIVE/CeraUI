@@ -13,7 +13,10 @@ import {
 describe("streamingLockPolicy", () => {
 	describe("isFieldLocked", () => {
 		it("locks nothing when not streaming", () => {
-			for (const field of [...RESTART_REQUIRED_FIELDS, ...HOT_CHANGEABLE_FIELDS]) {
+			for (const field of [
+				...RESTART_REQUIRED_FIELDS,
+				...HOT_CHANGEABLE_FIELDS,
+			]) {
 				expect(isFieldLocked(field, false)).toBe(false);
 			}
 		});

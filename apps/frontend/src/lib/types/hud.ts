@@ -21,7 +21,11 @@ import type {
  * WebSocket connection lifecycle (mirrors `ConnectionState` in rpc/client.ts).
  * Re-declared locally to keep this module free of runtime imports.
  */
-export type HudConnectionState = "connecting" | "connected" | "disconnected" | "error";
+export type HudConnectionState =
+	| "connecting"
+	| "connected"
+	| "disconnected"
+	| "error";
 
 /**
  * A single bonded uplink (modem or wifi) as the HUD wants to render it.

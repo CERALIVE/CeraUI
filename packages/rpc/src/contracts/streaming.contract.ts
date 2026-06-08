@@ -12,12 +12,12 @@ import {
 	pipelinesSchema,
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
-	streamingConfigInputSchema,
 	streamHealthOutputSchema,
+	streamingConfigInputSchema,
+	streamingSetConfigOutputSchema,
 	streamingStartOutputSchema,
 	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
-	streamingSetConfigOutputSchema,
 } from '../schemas';
 
 export const streamingContract = oc.router({

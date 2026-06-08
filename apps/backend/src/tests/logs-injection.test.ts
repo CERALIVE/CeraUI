@@ -15,10 +15,17 @@
  * shell creates /tmp/pwned. Post-fix it passes (run() argv, no shell).
  */
 
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	mock,
+	spyOn,
+} from "bun:test";
 import { existsSync, rmSync } from "node:fs";
-
 import { logInputSchema } from "@ceraui/rpc/schemas";
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 
 import * as runModule from "../helpers/run.ts";
 import { getLog } from "../modules/system/logs.ts";
@@ -79,7 +86,9 @@ describe("logs.ts getLog() — journalctl command injection", () => {
 
 describe("oRPC boundary — Zod SERVICE_RE on the log `service` input", () => {
 	it("rejects a malicious service string before it can reach getLog()", () => {
-		expect(logInputSchema.safeParse({ service: MALICIOUS }).success).toBe(false);
+		expect(logInputSchema.safeParse({ service: MALICIOUS }).success).toBe(
+			false,
+		);
 		expect(logInputSchema.safeParse({ service: "ssh && reboot" }).success).toBe(
 			false,
 		);

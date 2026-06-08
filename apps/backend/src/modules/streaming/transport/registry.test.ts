@@ -137,7 +137,9 @@ describe("transport registry — srt/rist placeholders", () => {
 		const adapter = getAdapter("srt");
 		expect(adapter.protocol).toBe("srt");
 		expect(() => adapter.resolveEndpoint({})).toThrow(NotImplementedError);
-		expect(() => adapter.resolveEndpoint({})).toThrow("SRT not yet implemented");
+		expect(() => adapter.resolveEndpoint({})).toThrow(
+			"SRT not yet implemented",
+		);
 	});
 
 	it("returns an adapter for 'rist' that throws NotImplementedError on resolve", () => {
@@ -286,11 +288,15 @@ describe("srtla adapter — error parity", () => {
 
 	it("validate() accepts a resolvable config and rejects an invalid one", () => {
 		expect(() =>
-			srtlaAdapter.validate({ relay_server: "0", relay_account: "acc1", relays }),
+			srtlaAdapter.validate({
+				relay_server: "0",
+				relay_account: "acc1",
+				relays,
+			}),
 		).not.toThrow();
-		expect(() => srtlaAdapter.validate({ relay_server: "999", relays })).toThrow(
-			"Invalid relay server",
-		);
+		expect(() =>
+			srtlaAdapter.validate({ relay_server: "999", relays }),
+		).toThrow("Invalid relay server");
 	});
 });
 

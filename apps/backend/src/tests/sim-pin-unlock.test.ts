@@ -139,9 +139,9 @@ describe("MODEM_PATH_RE", () => {
 	it("accepts a bare index and a ModemManager DBus path", () => {
 		expect(MODEM_PATH_RE.test("0")).toBe(true);
 		expect(MODEM_PATH_RE.test("12")).toBe(true);
-		expect(
-			MODEM_PATH_RE.test("/org/freedesktop/ModemManager1/Modem/3"),
-		).toBe(true);
+		expect(MODEM_PATH_RE.test("/org/freedesktop/ModemManager1/Modem/3")).toBe(
+			true,
+		);
 	});
 
 	it("rejects flag-like and injection payloads", () => {

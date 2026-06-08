@@ -40,8 +40,8 @@ import type {
 
 import { ENV_VARIABLES } from "../env";
 import { nextBackoffDelay } from "./backoff";
-import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
 import { parseServerPing, shouldForceCloseHalfOpen } from "./half-open";
+import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
 
 /**
  * WebSocket connection state
@@ -531,4 +531,4 @@ export function initRPC(): void {
 /**
  * Export types
  */
-export type { ConnectionState, MessageHandler, ConnectionHandler };
+export type { ConnectionHandler, ConnectionState, MessageHandler };

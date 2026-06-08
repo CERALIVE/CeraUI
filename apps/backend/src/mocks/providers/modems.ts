@@ -119,7 +119,7 @@ function getMockModemInfo(modemId: number): string {
 	// Generate per-model supported modes based on network_type.supported
 	const supportedModes: string[] = [];
 	const supportedTypes = modem.network_type.supported;
-	
+
 	// Build mode combinations from supported types
 	if (supportedTypes.includes("4g") && !supportedTypes.includes("5g")) {
 		// 4G only (e.g., EM7455)
@@ -160,7 +160,9 @@ function getMockModemInfo(modemId: number): string {
 		`modem.generic.signal-quality.value: ${signal}`,
 		`modem.generic.signal-quality.recent: yes`,
 		`modem.generic.supported-modes.length: ${supportedModes.length}`,
-		...supportedModes.map((mode, idx) => `modem.generic.supported-modes.value[${idx}]: ${mode}`),
+		...supportedModes.map(
+			(mode, idx) => `modem.generic.supported-modes.value[${idx}]: ${mode}`,
+		),
 		`modem.generic.current-modes: allowed: ${allowed}; preferred: ${preferred}`,
 		`modem.generic.supported-bands.length: 20`,
 		`modem.generic.current-bands.length: 15`,

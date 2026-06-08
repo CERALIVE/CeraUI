@@ -59,8 +59,8 @@ import {
 	getModem,
 	type Modem,
 	type ModemConfig,
-	setModem,
 	type SimLock,
+	setModem,
 } from "./modems-state.ts";
 
 export type ModemStatus = {

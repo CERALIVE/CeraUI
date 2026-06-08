@@ -10,13 +10,13 @@ import {
 	logger,
 } from "../helpers/logger.ts";
 import {
-	buildLocalObservabilitySurface,
-	getLocalObservability,
-} from "../modules/system/observability.ts";
-import {
 	type LivenessSources,
 	setLivenessSourcesForTest,
 } from "../modules/streaming/health.ts";
+import {
+	buildLocalObservabilitySurface,
+	getLocalObservability,
+} from "../modules/system/observability.ts";
 
 const HEALTHY_ROLLUP: StreamHealthOutput = {
 	state: "healthy",

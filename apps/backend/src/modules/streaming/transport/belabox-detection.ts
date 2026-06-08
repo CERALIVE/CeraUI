@@ -75,7 +75,9 @@ export function normalizeBelaboxRelays(
 		// `default`, when present, must be exactly `true` (else drop the server).
 		if (r.default && r.default !== true) continue;
 
-		const port = validatePortNo(typeof r.port === "number" ? r.port : undefined);
+		const port = validatePortNo(
+			typeof r.port === "number" ? r.port : undefined,
+		);
 		if (!port) continue;
 
 		const server: NormalizedRelayServer = {

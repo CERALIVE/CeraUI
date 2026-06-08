@@ -123,7 +123,11 @@ describe("resolveStreamEndpoint — golden resolution", () => {
 describe("resolveStreamEndpoint — streamid override precedence", () => {
 	it("(1) override beats (2) account ingest_key", () => {
 		const { streamid } = resolveStreamEndpoint(
-			{ relay_server: "0", relay_account: "acct1", relay_streamid_override: "OVR" },
+			{
+				relay_server: "0",
+				relay_account: "acct1",
+				relay_streamid_override: "OVR",
+			},
 			relays,
 		);
 		expect(streamid).toBe("OVR");
@@ -147,7 +151,11 @@ describe("resolveStreamEndpoint — streamid override precedence", () => {
 
 	it("empty-string override is treated as unset (falls back to ingest_key)", () => {
 		const { streamid } = resolveStreamEndpoint(
-			{ relay_server: "0", relay_account: "acct1", relay_streamid_override: "" },
+			{
+				relay_server: "0",
+				relay_account: "acct1",
+				relay_streamid_override: "",
+			},
 			relays,
 		);
 		expect(streamid).toBe("KEY_MAIN");
@@ -174,7 +182,10 @@ describe("resolveStreamEndpoint — streamid override precedence", () => {
 describe("resolveStreamEndpoint — protocol + errors", () => {
 	it("defaults to srtla when neither input nor fallback protocol is set", () => {
 		expect(
-			resolveStreamEndpoint({ relay_server: "0", relay_account: "acct1" }, relays),
+			resolveStreamEndpoint(
+				{ relay_server: "0", relay_account: "acct1" },
+				relays,
+			),
 		).toEqual({
 			srtlaAddr: "relay.example.com",
 			srtlaPort: 5000,
@@ -226,13 +237,19 @@ describe("resolveStreamEndpoint — protocol + errors", () => {
 
 	it("invalid relay server id throws golden message", () => {
 		expect(() =>
-			resolveStreamEndpoint({ relay_server: "99", relay_account: "acct1" }, relays),
+			resolveStreamEndpoint(
+				{ relay_server: "99", relay_account: "acct1" },
+				relays,
+			),
 		).toThrow("Invalid relay server");
 	});
 
 	it("invalid relay account id throws golden message", () => {
 		expect(() =>
-			resolveStreamEndpoint({ relay_server: "0", relay_account: "nope" }, relays),
+			resolveStreamEndpoint(
+				{ relay_server: "0", relay_account: "nope" },
+				relays,
+			),
 		).toThrow("Invalid relay account specified!");
 	});
 

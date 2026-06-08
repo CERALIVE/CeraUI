@@ -25,7 +25,7 @@ const _LOADING_DELAY = 150;
 const CurrentComponent = $derived.by(() => {
 	const tab = getCurrentNavigation();
 	if (tab) {
-		return Object.values(tab)[0].component;
+		return Object.values(tab)[0]?.component;
 	}
 	return undefined;
 });

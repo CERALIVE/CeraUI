@@ -139,7 +139,9 @@ export function broadcast(
 	const { except, authedOnly = true, minLastActive = 0 } = options;
 
 	const now = Date.now();
-	if (shouldCoalesce(coalesceState, type, data, now, getCoalesceWindowMs(type))) {
+	if (
+		shouldCoalesce(coalesceState, type, data, now, getCoalesceWindowMs(type))
+	) {
 		return;
 	}
 	updateCoalesceState(coalesceState, type, data, now);

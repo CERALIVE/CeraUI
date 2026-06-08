@@ -8,13 +8,17 @@
  * A naive Bun.file() swap would therefore invert the dev-mode skip logic, so
  * we lock both the wrong behavior (Bun.file) and the correct one (fs access).
  */
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { getRTMPIngestStats, initRTMPIngestStats } from "../modules/ingest/rtmp.ts";
+import {
+	getRTMPIngestStats,
+	initRTMPIngestStats,
+} from "../modules/ingest/rtmp.ts";
 import { getSRTIngestStats } from "../modules/ingest/srt.ts";
 
 async function pathExists(path: string): Promise<boolean> {
@@ -74,9 +78,7 @@ describe("srt ingest — stats accessor (post node:child_process migration)", ()
 	it("getSRTIngestStats returns the connection-stats slot without throwing", () => {
 		const stats = getSRTIngestStats();
 		const ok =
-			stats === null ||
-			stats === "" ||
-			/^\d+ Kbps, \d+ ms RTT$/.test(stats);
+			stats === null || stats === "" || /^\d+ Kbps, \d+ ms RTT$/.test(stats);
 		expect(ok).toBe(true);
 	});
 });

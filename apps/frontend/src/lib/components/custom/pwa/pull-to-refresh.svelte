@@ -30,7 +30,7 @@ const handleTouchStart = (e: TouchEvent) => {
 	if (window.scrollY > 0) return; // Only allow at top of page
 
 	const clientY = e.touches[0]?.clientY;
-	if (!isFinite(clientY)) return; // Prevent NaN coordinates
+	if (clientY === undefined || !isFinite(clientY)) return; // Prevent NaN coordinates
 
 	startY = clientY;
 	isPulling = true;
@@ -40,7 +40,7 @@ const handleTouchMove = (e: TouchEvent) => {
 	if (!isPulling || window.scrollY > 0) return;
 
 	const clientY = e.touches[0]?.clientY;
-	if (!isFinite(clientY) || !isFinite(startY)) return; // Prevent NaN coordinates
+	if (clientY === undefined || !isFinite(clientY) || !isFinite(startY)) return; // Prevent NaN coordinates
 
 	currentY = clientY;
 	const rawPullDistance = currentY - startY;

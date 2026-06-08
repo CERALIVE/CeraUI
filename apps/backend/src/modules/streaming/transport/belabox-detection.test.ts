@@ -1,13 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
 import { validatePortNo } from "../../../helpers/number.ts";
-
-import belaboxFeed from "./belabox-feed.fixture.json";
 import {
 	belaboxDetectionMethod,
 	belaboxProviderMeta,
 	normalizeBelaboxRelays,
 } from "./belabox-detection.ts";
+import belaboxFeed from "./belabox-feed.fixture.json";
 import { getDetectionMethod } from "./registry.ts";
 import type { RawRelayFeed } from "./types.ts";
 
@@ -56,7 +55,9 @@ function historicalValidateRelays(input: RawRelayFeed): HistCache | undefined {
 		)
 			continue;
 		if (r.default && r.default !== true) continue;
-		const port = validatePortNo(typeof r.port === "number" ? r.port : undefined);
+		const port = validatePortNo(
+			typeof r.port === "number" ? r.port : undefined,
+		);
 		if (!port) continue;
 		const server: HistServer = {
 			type: "srtla",
@@ -227,7 +228,9 @@ describe("belabox detection — historical loader parity", () => {
 	});
 
 	it("rejects a feed with no usable server (returns undefined)", () => {
-		expect(normalizeBelaboxRelays({ servers: {}, accounts: {} })).toBeUndefined();
+		expect(
+			normalizeBelaboxRelays({ servers: {}, accounts: {} }),
+		).toBeUndefined();
 		expect(
 			normalizeBelaboxRelays({
 				servers: {

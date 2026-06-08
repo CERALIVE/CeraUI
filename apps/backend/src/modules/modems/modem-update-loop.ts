@@ -58,7 +58,7 @@ import type {
 } from "../network/state-types.ts";
 
 import { resetGsmConnections } from "./gsm-connections.ts";
-import { type ModemId } from "./mmcli.ts";
+import type { ModemId } from "./mmcli.ts";
 import {
 	mmListWithRetry,
 	refreshModemStatus,

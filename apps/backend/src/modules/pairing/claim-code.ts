@@ -39,10 +39,9 @@
 import os from "node:os";
 
 import { CLAIM_CODE_ALPHABET, type ClaimCodeOutput } from "@ceraui/rpc/schemas";
-
-import { getConfig, saveConfig } from "../config.ts";
 import { hmacSha256, randomBase64 } from "../../helpers/crypto.ts";
 import { logger } from "../../helpers/logger.ts";
+import { getConfig, saveConfig } from "../config.ts";
 
 /** Default validity window: 5 minutes. */
 export const CLAIM_CODE_WINDOW_SECONDS = 5 * 60;

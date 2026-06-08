@@ -15,7 +15,7 @@
  */
 
 /** The three render modes a live value can be in. */
-export type StalenessState = 'fresh' | 'stale' | 'nodata';
+export type StalenessState = "fresh" | "stale" | "nodata";
 
 /**
  * Map a live value + its staleness flag onto a {@link StalenessState}.
@@ -37,7 +37,7 @@ export function getStalenessState(
 	_lastUpdatedAt: number | null,
 	isStale: boolean,
 ): StalenessState {
-	if (value == null) return 'nodata';
-	if (isStale === true) return 'stale';
-	return 'fresh';
+	if (value == null) return "nodata";
+	if (isStale === true) return "stale";
+	return "fresh";
 }

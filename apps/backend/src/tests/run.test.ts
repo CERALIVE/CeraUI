@@ -124,7 +124,9 @@ describe("runWithStdin() — secret stays in stdin, never on argv", () => {
 		const fakeProc = {
 			stdin: {
 				write: (d: string | Uint8Array) => {
-					stdinWrites.push(typeof d === "string" ? d : Buffer.from(d).toString());
+					stdinWrites.push(
+						typeof d === "string" ? d : Buffer.from(d).toString(),
+					);
 					return typeof d === "string" ? d.length : d.byteLength;
 				},
 				end: () => 0,

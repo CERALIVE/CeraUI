@@ -16,18 +16,17 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { logger } from "../../helpers/logger.ts";
-
-import { setup } from "../setup.ts";
-import { TEMP_PIPELINE_PATH } from "./ceracoder.ts";
 import {
-	PipelineBuilder,
 	type HardwareType as CeracoderHardwareType,
-	type VideoSource,
+	type Framerate,
+	PipelineBuilder,
 	type PipelineOverrides,
 	type Resolution,
-	type Framerate,
+	type VideoSource,
 } from "@ceralive/ceracoder";
+import { logger } from "../../helpers/logger.ts";
+import { setup } from "../setup.ts";
+import { TEMP_PIPELINE_PATH } from "./ceracoder.ts";
 
 // Pipeline interface
 export type Pipeline = {
@@ -43,7 +42,12 @@ export type Pipeline = {
 };
 
 // Valid hardware types
-export const VALID_HARDWARE_TYPES = ["jetson", "n100", "rk3588", "generic"] as const;
+export const VALID_HARDWARE_TYPES = [
+	"jetson",
+	"n100",
+	"rk3588",
+	"generic",
+] as const;
 export type HardwareType = (typeof VALID_HARDWARE_TYPES)[number];
 
 let pipelines: Record<string, Pipeline> = {};

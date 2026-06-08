@@ -55,7 +55,12 @@ describe("claim-code skew tolerance — preconditions", () => {
 
 describe("claim-code verifies anywhere inside its own window", () => {
 	test("current code accepted across the full window span", () => {
-		for (const now of [START, START + 1_000, START + WINDOW_MS / 2, BOUNDARY - 1]) {
+		for (const now of [
+			START,
+			START + 1_000,
+			START + WINDOW_MS / 2,
+			BOUNDARY - 1,
+		]) {
 			expect(verify(codeN, now)).toBe(true);
 		}
 	});
@@ -130,9 +135,9 @@ describe("default window/skew params match ADR-0006 (±30s)", () => {
 		const now = START + 1_000;
 		const code = deriveClaimCode({ now, serial: SERIAL, secret: SECRET }).code;
 		// No windowSeconds/skewSeconds passed → defaults applied.
-		expect(
-			verifyClaimCode({ code, now, serial: SERIAL, secret: SECRET }),
-		).toBe(true);
+		expect(verifyClaimCode({ code, now, serial: SERIAL, secret: SECRET })).toBe(
+			true,
+		);
 		// Just past the default +30s band the previous code drops out.
 		expect(
 			verifyClaimCode({

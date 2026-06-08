@@ -56,8 +56,9 @@ function makeNotification(overrides: Partial<Notification> = {}): Notification {
 const translations = {
 	notifications: {
 		jetsonUndervoltage: () => "Undervoltage (localized)",
-		appUpdatedDescription: (params?: Record<string, string | number | boolean>) =>
-			`Updated to version ${params?.version ?? "?"}`,
+		appUpdatedDescription: (
+			params?: Record<string, string | number | boolean>,
+		) => `Updated to version ${params?.version ?? "?"}`,
 	},
 };
 
@@ -84,7 +85,10 @@ describe("resolveNotificationText", () => {
 
 	it("falls back to `msg` when `key` is not present in the tree", () => {
 		const text = resolveNotificationText(
-			makeNotification({ key: "notifications.doesNotExist", msg: "Raw fallback" }),
+			makeNotification({
+				key: "notifications.doesNotExist",
+				msg: "Raw fallback",
+			}),
 			translations,
 		);
 		expect(text).toBe("Raw fallback");
@@ -150,7 +154,11 @@ describe("toActiveNotification", () => {
 
 	it("preserves name, type, dismissable flag and receivedAt", () => {
 		const active = toActiveNotification(
-			makeNotification({ name: "hdmi-error", type: "error", is_dismissable: false }),
+			makeNotification({
+				name: "hdmi-error",
+				type: "error",
+				is_dismissable: false,
+			}),
 			translations,
 			T0,
 		);
@@ -168,8 +176,18 @@ describe("toActiveNotification", () => {
 describe("pushNotification", () => {
 	it("dedups by `name`: the same name twice yields one active entry", () => {
 		let active: Map<string, ActiveNotification> = new Map();
-		active = pushNotification(active, makeNotification({ msg: "first" }), translations, T0);
-		active = pushNotification(active, makeNotification({ msg: "second" }), translations, T0 + 1);
+		active = pushNotification(
+			active,
+			makeNotification({ msg: "first" }),
+			translations,
+			T0,
+		);
+		active = pushNotification(
+			active,
+			makeNotification({ msg: "second" }),
+			translations,
+			T0 + 1,
+		);
 
 		expect(active.size).toBe(1);
 		expect(active.get("jetson-undervoltage")?.text).toBe("second");
@@ -177,8 +195,18 @@ describe("pushNotification", () => {
 
 	it("keeps distinct names as separate entries", () => {
 		let active: Map<string, ActiveNotification> = new Map();
-		active = pushNotification(active, makeNotification({ name: "a" }), translations, T0);
-		active = pushNotification(active, makeNotification({ name: "b" }), translations, T0);
+		active = pushNotification(
+			active,
+			makeNotification({ name: "a" }),
+			translations,
+			T0,
+		);
+		active = pushNotification(
+			active,
+			makeNotification({ name: "b" }),
+			translations,
+			T0,
+		);
 
 		expect(active.size).toBe(2);
 		expect([...active.keys()]).toEqual(["a", "b"]);
@@ -186,7 +214,12 @@ describe("pushNotification", () => {
 
 	it("does not mutate the input map (returns a new map)", () => {
 		const input: Map<string, ActiveNotification> = new Map();
-		const output = pushNotification(input, makeNotification(), translations, T0);
+		const output = pushNotification(
+			input,
+			makeNotification(),
+			translations,
+			T0,
+		);
 		expect(input.size).toBe(0);
 		expect(output.size).toBe(1);
 	});
@@ -199,8 +232,18 @@ describe("pushNotification", () => {
 describe("dismissNotification", () => {
 	it("removes the named entry", () => {
 		let active: Map<string, ActiveNotification> = new Map();
-		active = pushNotification(active, makeNotification({ name: "a" }), translations, T0);
-		active = pushNotification(active, makeNotification({ name: "b" }), translations, T0);
+		active = pushNotification(
+			active,
+			makeNotification({ name: "a" }),
+			translations,
+			T0,
+		);
+		active = pushNotification(
+			active,
+			makeNotification({ name: "b" }),
+			translations,
+			T0,
+		);
 
 		active = dismissNotification(active, "a");
 		expect(active.has("a")).toBe(false);
@@ -210,7 +253,12 @@ describe("dismissNotification", () => {
 
 	it("is a no-op for an unknown name (returns an equivalent map)", () => {
 		let active: Map<string, ActiveNotification> = new Map();
-		active = pushNotification(active, makeNotification({ name: "a" }), translations, T0);
+		active = pushNotification(
+			active,
+			makeNotification({ name: "a" }),
+			translations,
+			T0,
+		);
 
 		active = dismissNotification(active, "missing");
 		expect(active.size).toBe(1);
@@ -219,7 +267,12 @@ describe("dismissNotification", () => {
 
 	it("does not mutate the input map", () => {
 		let input: Map<string, ActiveNotification> = new Map();
-		input = pushNotification(input, makeNotification({ name: "a" }), translations, T0);
+		input = pushNotification(
+			input,
+			makeNotification({ name: "a" }),
+			translations,
+			T0,
+		);
 		const output = dismissNotification(input, "a");
 		expect(input.has("a")).toBe(true);
 		expect(output.has("a")).toBe(false);
