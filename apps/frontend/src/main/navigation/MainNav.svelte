@@ -38,6 +38,7 @@ const label = (nav: NavElements[string]) =>
 
 <nav
 	aria-label="Main navigation"
+	data-testid="rail-nav"
 	class="flex-1 items-center justify-center"
 	class:hidden={!isDesktop.current}
 	class:flex={isDesktop.current}

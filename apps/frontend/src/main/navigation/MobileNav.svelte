@@ -31,6 +31,7 @@ const label = (nav: NavElements[string]) =>
 
 <nav
 	aria-label="Main navigation"
+	data-testid="dock-nav"
 	class="bg-sidebar flex items-stretch justify-around border-t"
 >
 	{#each Object.entries(navElements) as [identifier, navigation] (identifier)}

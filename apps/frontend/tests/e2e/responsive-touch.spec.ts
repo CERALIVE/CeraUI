@@ -77,13 +77,13 @@ test.describe('Task 13 — responsive multi-resolution hardening', () => {
 		// Minimum supported landscape resolution.
 		await page.setViewportSize({ width: 800, height: 480 });
 
-		// Pivot: the 800×480 panel must take DESKTOP CHROME, NOT the mobile dock.
-		// (Old lg=1024 pivot would have shown the mobile bottom nav here.)
-		await navigateTo(page, 'live');
-		const railTab = page.locator('#nav-tab-live');
-		const dockTab = page.locator('#mobile-nav-tab-live');
-		await expect(railTab).toBeVisible();
-		await expect(dockTab).toBeHidden();
+	// Pivot: the 800×480 panel must take DESKTOP CHROME, NOT the mobile dock.
+	// (Old lg=1024 pivot would have shown the mobile bottom nav here.)
+	await navigateTo(page, 'live');
+	const railTab = page.getByTestId('rail-nav').getByRole('button', { name: /live/i });
+	const dockTab = page.getByTestId('dock-nav').getByRole('button', { name: /live/i });
+	await expect(railTab).toBeVisible();
+	await expect(dockTab).toBeHidden();
 
 		const overflowBefore = await horizontalOverflowPx(page);
 		expect(overflowBefore).toBeLessThanOrEqual(1);
@@ -127,11 +127,11 @@ test.describe('Task 13 — responsive multi-resolution hardening', () => {
 			[
 				'Task 13 — 800×480 landscape (minimum supported landscape resolution)',
 				'',
-				'Pivot: short-landscape panel resolves to DESKTOP CHROME (rail nav),',
-				'dialogs render as a centered Dialog (not a bottom Sheet).',
-				'',
-				`  #nav-tab-live (rail)        visible = true (expect: true)`,
-				`  #mobile-nav-tab-live (dock) hidden  = true (expect: true)`,
+			'Pivot: short-landscape panel resolves to DESKTOP CHROME (rail nav),',
+			'dialogs render as a centered Dialog (not a bottom Sheet).',
+			'',
+			`  rail-nav "live" button      visible = true (expect: true)`,
+			`  dock-nav "live" button      hidden  = true (expect: true)`,
 				`  ServerDialog surface        = [data-slot=dialog-content] (expect: Dialog, not Sheet)`,
 				'',
 				'Horizontal overflow (documentElement.scrollWidth - clientWidth):',
@@ -165,18 +165,20 @@ test.describe('Task 13 — responsive multi-resolution hardening', () => {
 
 		await navigateTo(page, 'live');
 
-		// Portrait stays on the MOBILE layout: bottom dock nav, not the rail.
-		const dockTab = page.locator('#mobile-nav-tab-live');
-		const railTab = page.locator('#nav-tab-live');
-		await expect(dockTab).toBeVisible();
-		await expect(railTab).toBeHidden();
+	// Portrait stays on the MOBILE layout: bottom dock nav, not the rail.
+	const dockTab = page.getByTestId('dock-nav').getByRole('button', { name: /live/i });
+	const railTab = page.getByTestId('rail-nav').getByRole('button', { name: /live/i });
+	await expect(dockTab).toBeVisible();
+	await expect(railTab).toBeHidden();
 
-		// All three destination tabs present and within the viewport (not clipped).
-		const tabIds = ['#mobile-nav-tab-live', '#mobile-nav-tab-network', '#mobile-nav-tab-settings'];
-		for (const id of tabIds) {
-			await expect(page.locator(id)).toBeVisible();
-			await expect(page.locator(id)).toBeInViewport();
-		}
+	// All three destination tabs present and within the viewport (not clipped).
+	const tabNames = ['live', 'network', 'settings'];
+	const dockNav = page.getByTestId('dock-nav');
+	for (const name of tabNames) {
+		const tab = dockNav.getByRole('button', { name: new RegExp(name, 'i') });
+		await expect(tab).toBeVisible();
+		await expect(tab).toBeInViewport();
+	}
 
 		// Persistent HUD (bottom dock) is mounted and visible.
 		const hud = await hudStructure(page);
@@ -190,10 +192,11 @@ test.describe('Task 13 — responsive multi-resolution hardening', () => {
 		const overflow = await horizontalOverflowPx(page);
 		expect(overflow).toBeLessThanOrEqual(1);
 
-		const tabsInViewport: Record<string, boolean> = {};
-		for (const id of tabIds) {
-			tabsInViewport[id] = await inViewport(page, page.locator(id));
-		}
+	const tabsInViewport: Record<string, boolean> = {};
+	for (const name of tabNames) {
+		const tab = dockNav.getByRole('button', { name: new RegExp(name, 'i') });
+		tabsInViewport[name] = await inViewport(page, tab);
+	}
 		const allTabsInViewport = Object.values(tabsInViewport).every(Boolean);
 		const hudInViewport = await inViewport(page, hud);
 
@@ -210,13 +213,13 @@ test.describe('Task 13 — responsive multi-resolution hardening', () => {
 			[
 				'Task 13 — 600×1024 portrait (minimum supported portrait resolution)',
 				'',
-				'Pivot: portrait panel resolves to the MOBILE layout (bottom-dock nav + bottom HUD).',
+			'Pivot: portrait panel resolves to the MOBILE layout (bottom-dock nav + bottom HUD).',
+			'',
+			`  dock-nav "live" button      visible = ${await dockTab.isVisible()} (expect: true)`,
+			`  rail-nav "live" button      hidden  = ${await railTab.isHidden()} (expect: true)`,
 				'',
-				`  #mobile-nav-tab-live (dock) visible = ${await dockTab.isVisible()} (expect: true)`,
-				`  #nav-tab-live (rail)        hidden  = ${await railTab.isHidden()} (expect: true)`,
-				'',
-				'Bottom-dock destination tabs in viewport (no clipped controls):',
-				...tabIds.map((id) => `  ${id} = ${tabsInViewport[id]} (expect: true)`),
+			'Bottom-dock destination tabs in viewport (no clipped controls):',
+			...tabNames.map((name) => `  dock-nav "${name}" button = ${tabsInViewport[name]} (expect: true)`),
 				'',
 				`  HUD region in viewport      = ${hudInViewport} (expect: true)`,
 				`  <main> visible              = ${await main.isVisible()} (expect: true)`,
