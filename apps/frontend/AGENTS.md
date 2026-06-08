@@ -104,6 +104,10 @@ The transport (`lib/rpc/reconnect.ts`) never stops retrying. Backoff formula: `m
 
 After any RPC setter resolves, the frontend reads `result.applied` (not the client's intended value) and releases field locks to that value. This ensures the UI reflects what the backend actually wrote after clamping and validation, not what the user typed.
 
+### Per-modem state merge
+
+The backend broadcasts modem updates incrementally: a full snapshot carries every field, but targeted broadcasts (`configure`, network-scan completion) send only the changed modem(s), and for those only a subset of fields (e.g. just `available_networks`, or status-only entries for unchanged modems). `subscriptions.svelte.ts` therefore merges `modems`/`status.modems` payloads **field-by-field per modem id** (`mergeModemList`), never replacing the whole map — a wholesale replace would wipe the untouched fields (`status`, `config`, `name`) and flip a live modem to a spurious no-SIM state until the next full snapshot.
+
 See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATTERNS.md) for the full connection-pattern reference.
 
 ## ANTI-PATTERNS
