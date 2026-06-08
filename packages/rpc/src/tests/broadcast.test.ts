@@ -2,7 +2,7 @@
  * Broadcast envelope schema tests
  * TDD: RED first — test optional seq and ack fields
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { broadcastEnvelopeSchema } from '../schemas/broadcast.schema';
 
 describe('broadcastEnvelopeSchema', () => {

@@ -1,16 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { call } from "@orpc/server";
-
-import { addClient, removeClient } from "../rpc/events.ts";
 import {
-	type LivenessSources,
-	HEALTH_EVENT_TYPE,
 	broadcastHealthIfChanged,
 	deriveStreamHealth,
+	HEALTH_EVENT_TYPE,
+	type LivenessSources,
 	resetHealthBroadcastState,
 	setLivenessSourcesForTest,
 } from "../modules/streaming/health.ts";
+import { addClient, removeClient } from "../rpc/events.ts";
 import { streamHealthProcedure } from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
@@ -117,11 +116,9 @@ describe("deriveStreamHealth — tri-state derivation", () => {
 describe("streamHealth RPC procedure", () => {
 	test("reports healthy from injected liveness sources", async () => {
 		setLivenessSourcesForTest(() => HEALTHY);
-		const result = await call(
-			streamHealthProcedure,
-			undefined,
-			{ context: makeContext() },
-		);
+		const result = await call(streamHealthProcedure, undefined, {
+			context: makeContext(),
+		});
 		expect(result.state).toBe("healthy");
 		expect(result.frames.count).toBe(1500);
 		expect(result.bond.activeLinks).toBe(result.bond.linkCount);

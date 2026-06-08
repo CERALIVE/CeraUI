@@ -1,10 +1,6 @@
 import type { StreamHealthOutput } from "@ceraui/rpc/schemas";
-
+import { getMockHealth, shouldUseMocks } from "../../mocks/mock-service.ts";
 import { broadcast } from "../../rpc/events.ts";
-import {
-	getMockHealth,
-	shouldUseMocks,
-} from "../../mocks/mock-service.ts";
 import { genSrtlaIpList } from "./srtla.ts";
 import { getIsStreaming } from "./streaming.ts";
 

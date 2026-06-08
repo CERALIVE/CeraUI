@@ -102,7 +102,10 @@ describe("setDefaultRoute — argv-only add path", () => {
 			order.push("clear");
 		});
 
-		await setDefaultRoute("wwan0", { runner: runner as never, clearDefaultGws });
+		await setDefaultRoute("wwan0", {
+			runner: runner as never,
+			clearDefaultGws,
+		});
 
 		expect(order).toEqual(["clear", "add"]);
 	});

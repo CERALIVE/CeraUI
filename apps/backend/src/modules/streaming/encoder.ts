@@ -17,10 +17,7 @@
 */
 
 import { getConfig, saveConfig } from "../config.ts";
-import {
-	sendCeracoderHup,
-	writeCeracoderConfigFile,
-} from "./ceracoder.ts";
+import { sendCeracoderHup, writeCeracoderConfigFile } from "./ceracoder.ts";
 
 const MIN_BITRATE = 300; // Kbps
 const MAX_BITRATE = 12_000; // Kbps

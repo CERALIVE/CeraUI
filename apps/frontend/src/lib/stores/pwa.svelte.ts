@@ -29,7 +29,9 @@ interface BeforeInstallPromptEvent extends Event {
 // ============================================
 // Reactive State (Svelte 5 runes)
 // ============================================
-let isOnlineState = $state(typeof navigator !== "undefined" ? navigator.onLine : true);
+let isOnlineState = $state(
+	typeof navigator !== "undefined" ? navigator.onLine : true,
+);
 let canInstallState = $state(false);
 let isInstalledState = $state(false);
 let showIOSInstallPromptState = $state(false);
@@ -119,14 +121,16 @@ if (typeof window !== "undefined") {
 		isInstalledState = true;
 	} else {
 		// Desktop fallback: show install option after timeout if no native prompt
-		const isDesktop = !/android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
-			navigator.userAgent,
-		);
+		const isDesktop =
+			!/android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+				navigator.userAgent,
+			);
 		if (isDesktop) {
 			const isLocal =
 				window.location.hostname === "localhost" ||
 				window.location.hostname.endsWith(".local");
-			const timeoutDuration = isLocal && window.location.protocol === "http:" ? 3000 : 10000;
+			const timeoutDuration =
+				isLocal && window.location.protocol === "http:" ? 3000 : 10000;
 
 			setTimeout(() => {
 				if (!canInstallState && !isInstalledState) {
@@ -210,7 +214,8 @@ export function getNetworkInfo() {
 	}
 
 	const nav = navigator as NavigatorWithConnection;
-	const connection = nav.connection || nav.mozConnection || nav.webkitConnection;
+	const connection =
+		nav.connection || nav.mozConnection || nav.webkitConnection;
 
 	if (connection) {
 		return {

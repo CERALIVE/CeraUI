@@ -1,16 +1,16 @@
-import type { Modem } from '@ceraui/rpc/schemas';
+import type { Modem } from "@ceraui/rpc/schemas";
 
-export type SignalCategory = 'excellent' | 'good' | 'fair' | 'weak';
+export type SignalCategory = "excellent" | "good" | "fair" | "weak";
 
 /**
  * Canonical signal strength thresholds used across all signal/wifi components.
  * Single source of truth — do not duplicate these thresholds elsewhere.
  */
 export function getSignalCategory(signal: number): SignalCategory {
-	if (signal >= 75) return 'excellent';
-	if (signal >= 50) return 'good';
-	if (signal >= 25) return 'fair';
-	return 'weak';
+	if (signal >= 75) return "excellent";
+	if (signal >= 50) return "good";
+	if (signal >= 25) return "fair";
+	return "weak";
 }
 
 /**
@@ -36,16 +36,16 @@ export function modemSignal(modem: Modem | undefined | null): number | null {
  * every signal readout (WiFi, Cellular, …) renders the same colour ramp.
  */
 export function signalTextClass(signal: number | null): string {
-	if (signal == null) return 'text-muted-foreground';
+	if (signal == null) return "text-muted-foreground";
 	switch (getSignalCategory(signal)) {
-		case 'excellent':
-			return 'text-signal-excellent';
-		case 'good':
-			return 'text-signal-good';
-		case 'fair':
-			return 'text-signal-fair';
+		case "excellent":
+			return "text-signal-excellent";
+		case "good":
+			return "text-signal-good";
+		case "fair":
+			return "text-signal-fair";
 		default:
-			return 'text-signal-weak';
+			return "text-signal-weak";
 	}
 }
 
@@ -74,13 +74,13 @@ export function signalBarCount(signal: number | null): 0 | 1 | 2 | 3 {
  * Encodes all possible rendering modes: bars, ethernet, no-sim, scanning, acquiring, wifi-off, zero.
  */
 export type LinkVisualState =
-	| { kind: 'bars'; filled: 0 | 1 | 2 | 3 }
-	| { kind: 'ethernet' }
-	| { kind: 'no-sim' }
-	| { kind: 'scanning' }
-	| { kind: 'acquiring' }
-	| { kind: 'wifi-off' }
-	| { kind: 'zero' };
+	| { kind: "bars"; filled: 0 | 1 | 2 | 3 }
+	| { kind: "ethernet" }
+	| { kind: "no-sim" }
+	| { kind: "scanning" }
+	| { kind: "acquiring" }
+	| { kind: "wifi-off" }
+	| { kind: "zero" };
 
 /**
  * Determine the visual state of a link based on type, connection state, and signal.
@@ -95,36 +95,36 @@ export type LinkVisualState =
  *    - otherwise → {kind:'zero'}
  */
 export function linkVisualState(input: {
-	type: 'modem' | 'wifi' | 'ethernet';
-	connectionState: 'connected' | 'scanning' | 'disconnected' | 'no_sim';
+	type: "modem" | "wifi" | "ethernet";
+	connectionState: "connected" | "scanning" | "disconnected" | "no_sim";
 	signal: number | null;
 }): LinkVisualState {
 	const { type, connectionState, signal } = input;
 
 	// 1. Ethernet always wins
-	if (type === 'ethernet') {
-		return { kind: 'ethernet' };
+	if (type === "ethernet") {
+		return { kind: "ethernet" };
 	}
 
 	// 2. Signal present → show bars
 	if (signal !== null) {
-		return { kind: 'bars', filled: signalBarCount(signal) };
+		return { kind: "bars", filled: signalBarCount(signal) };
 	}
 
 	// 3. Signal absent → check connection state
 	switch (connectionState) {
-		case 'no_sim':
-			return { kind: 'no-sim' };
-		case 'scanning':
-			return { kind: 'scanning' };
-		case 'connected':
+		case "no_sim":
+			return { kind: "no-sim" };
+		case "scanning":
+			return { kind: "scanning" };
+		case "connected":
 			// Bug fix: both modem AND wifi connected with null signal → acquiring
-			return { kind: 'acquiring' };
-		case 'disconnected':
+			return { kind: "acquiring" };
+		case "disconnected":
 			// Only wifi shows wifi-off; modems show zero
-			if (type === 'wifi') {
-				return { kind: 'wifi-off' };
+			if (type === "wifi") {
+				return { kind: "wifi-off" };
 			}
-			return { kind: 'zero' };
+			return { kind: "zero" };
 	}
 }

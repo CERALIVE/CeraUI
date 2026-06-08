@@ -38,8 +38,10 @@ describe("hotspotConfigInputSchema", () => {
 
 	it("rejects a name longer than 32 characters", () => {
 		expect(
-			hotspotConfigInputSchema.safeParse({ ...validHotspot, name: "x".repeat(33) })
-				.success,
+			hotspotConfigInputSchema.safeParse({
+				...validHotspot,
+				name: "x".repeat(33),
+			}).success,
 		).toBe(false);
 	});
 
@@ -195,15 +197,15 @@ describe("bitrateInputSchema canonical range", () => {
 	});
 
 	it("rejects a bitrate below BITRATE_MIN", () => {
-		expect(bitrateInputSchema.safeParse({ max_br: BITRATE_MIN - 1 }).success).toBe(
-			false,
-		);
+		expect(
+			bitrateInputSchema.safeParse({ max_br: BITRATE_MIN - 1 }).success,
+		).toBe(false);
 	});
 
 	it("rejects a bitrate above BITRATE_MAX", () => {
-		expect(bitrateInputSchema.safeParse({ max_br: BITRATE_MAX + 1 }).success).toBe(
-			false,
-		);
+		expect(
+			bitrateInputSchema.safeParse({ max_br: BITRATE_MAX + 1 }).success,
+		).toBe(false);
 	});
 
 	it("accepts a bitrate within range", () => {

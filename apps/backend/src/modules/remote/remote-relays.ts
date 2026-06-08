@@ -24,8 +24,8 @@ import {
 	parseNamespacedRelayId,
 	RELAYS_CACHE_DEFAULTS,
 	type RelaysCache,
-	relaysCacheSchema,
 	type RuntimeConfig,
+	relaysCacheSchema,
 } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { validatePortNo } from "../../helpers/number.ts";

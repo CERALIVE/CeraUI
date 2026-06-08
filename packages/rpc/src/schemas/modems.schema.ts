@@ -141,11 +141,9 @@ export type SimUnlockState = z.infer<typeof simUnlockStateSchema>;
 export const simUnlockInputSchema = z.object({
 	modemPath: z.string().min(1),
 	// SIM PIN grammar (4–8 digits): rejects any argv-injection payload at the boundary
-	pin: z
-		.string()
-		.regex(new RegExp(`^\\d{${SIM_PIN_MIN_LENGTH},${SIM_PIN_MAX_LENGTH}}$`), {
-			message: `PIN must be ${SIM_PIN_MIN_LENGTH}–${SIM_PIN_MAX_LENGTH} digits`,
-		}),
+	pin: z.string().regex(new RegExp(`^\\d{${SIM_PIN_MIN_LENGTH},${SIM_PIN_MAX_LENGTH}}$`), {
+		message: `PIN must be ${SIM_PIN_MIN_LENGTH}–${SIM_PIN_MAX_LENGTH} digits`,
+	}),
 });
 export type SimUnlockInput = z.infer<typeof simUnlockInputSchema>;
 

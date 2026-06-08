@@ -40,9 +40,9 @@
  */
 
 import {
+	parseNamespacedRelayId,
 	type RelayProtocol,
 	type RelaysCache,
-	parseNamespacedRelayId,
 } from "../../../helpers/config-schemas.ts";
 
 import { getAdapter } from "./registry.ts";

@@ -1,11 +1,15 @@
+import {
+	Network as NetworkIcon,
+	Radio,
+	Settings as SettingsIcon,
+} from "@lucide/svelte";
 import type { Component } from "svelte";
-import { Network as NetworkIcon, Radio, Settings as SettingsIcon } from "@lucide/svelte";
 import { deviceName, siteName } from "$lib/config/branding";
-import DevTools from "$main/tabs/DevTools.svelte";
-import IdentityPreview from "$main/tabs/IdentityPreview.svelte";
 import LiveView from "$main/LiveView.svelte";
 import NetworkView from "$main/NetworkView.svelte";
 import SettingsView from "$main/SettingsView.svelte";
+import DevTools from "$main/tabs/DevTools.svelte";
+import IdentityPreview from "$main/tabs/IdentityPreview.svelte";
 
 // Must stay a direct import.meta.env.DEV literal: Vite inlines it to `false` in
 // production, letting Rollup prune the gated branch and tree-shake the dev-only
@@ -29,11 +33,13 @@ export type NavElements = {
 
 // Primary destinations (always visible) — 3-destination IA: Live / Network / Settings.
 // Wired to Wave 1 views.
-const baseNavElements: NavElements = {
+const baseNavElements = {
 	live: { label: "live", component: LiveView, icon: Radio },
 	network: { label: "network", component: NetworkView, icon: NetworkIcon },
 	settings: { label: "settings", component: SettingsView, icon: SettingsIcon },
-};
+} satisfies NavElements;
+
+export const liveNavElement: NavElement = baseNavElements.live;
 
 // Add dev tools only in development mode
 export const navElements: NavElements = {

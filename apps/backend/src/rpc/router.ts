@@ -21,13 +21,13 @@ import {
 	getNetworkInterfacesProcedure,
 } from "./procedures/network.procedure.ts";
 import {
-	completePairingProcedure,
-	generateClaimCodeProcedure,
-} from "./procedures/pairing.procedure.ts";
-import {
 	dismissNotificationProcedure,
 	getPersistentNotificationsProcedure,
 } from "./procedures/notifications.procedure.ts";
+import {
+	completePairingProcedure,
+	generateClaimCodeProcedure,
+} from "./procedures/pairing.procedure.ts";
 import { relayValidateProcedure } from "./procedures/relay.procedure.ts";
 import {
 	getRelaysProcedure,
@@ -156,10 +156,12 @@ const stableRoutes = {
 
 // HARD-GATED: the `dev` namespace is registered ONLY outside production, so in a
 // production build `dev.*` paths resolve to "Unknown procedure path".
-export const appRouter = os.$context<RPCContext>().router(
-	process.env.NODE_ENV !== "production"
-		? { ...stableRoutes, dev: os.router({ emit: devEmitProcedure }) }
-		: stableRoutes,
-);
+export const appRouter = os
+	.$context<RPCContext>()
+	.router(
+		process.env.NODE_ENV !== "production"
+			? { ...stableRoutes, dev: os.router({ emit: devEmitProcedure }) }
+			: stableRoutes,
+	);
 
 export type AppRouter = typeof appRouter;

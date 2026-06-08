@@ -67,9 +67,9 @@ export type SessionToken = z.infer<typeof sessionTokenSchema>;
  *
  * @future: not wired — design-only seam (Ambition A remote profile)
  */
-export const visibilitySubscriptionSchema = z.record(z.string(), z.boolean()).describe(
-	'Client visibility subscription: { [view/type]: boolean }',
-);
+export const visibilitySubscriptionSchema = z
+	.record(z.string(), z.boolean())
+	.describe('Client visibility subscription: { [view/type]: boolean }');
 export type VisibilitySubscription = z.infer<typeof visibilitySubscriptionSchema>;
 
 /**
@@ -83,9 +83,11 @@ export type VisibilitySubscription = z.infer<typeof visibilitySubscriptionSchema
  *
  * @future: not wired — design-only seam (Ambition A remote profile)
  */
-export const schemaVersionSchema = z.number().int().positive().describe(
-	'Envelope schema version for future migration detection',
-);
+export const schemaVersionSchema = z
+	.number()
+	.int()
+	.positive()
+	.describe('Envelope schema version for future migration detection');
 export type SchemaVersion = z.infer<typeof schemaVersionSchema>;
 
 /**
@@ -100,9 +102,9 @@ export type SchemaVersion = z.infer<typeof schemaVersionSchema>;
 export const remoteEnvelopeSchema = z.object({
 	deploymentMode: deploymentModeSchema.describe('Deployment mode: local or remote'),
 	sessionToken: sessionTokenSchema.optional().describe('Session token for remote auth'),
-	visibilitySubscription: visibilitySubscriptionSchema.optional().describe(
-		'Client visibility subscription',
-	),
+	visibilitySubscription: visibilitySubscriptionSchema
+		.optional()
+		.describe('Client visibility subscription'),
 	schemaVersion: schemaVersionSchema.describe('Envelope schema version'),
 });
 export type RemoteEnvelope = z.infer<typeof remoteEnvelopeSchema>;

@@ -45,7 +45,10 @@ export function randomBase64(byteLength: number): string {
  * @param key     Secret key (raw bytes or string).
  * @param message Message to authenticate (UTF-8 string).
  */
-export function hmacSha256(key: Uint8Array | string, message: string): Uint8Array {
+export function hmacSha256(
+	key: Uint8Array | string,
+	message: string,
+): Uint8Array {
 	const hasher = new Bun.CryptoHasher("sha256", key);
 	hasher.update(message);
 	return new Uint8Array(hasher.digest());

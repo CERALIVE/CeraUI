@@ -16,7 +16,7 @@
  *   E8 — shouldIgnoreEcho: same value → false, different value → true
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
 import {
 	createRegistry,
@@ -27,24 +27,24 @@ import {
 	reconcile,
 	registryCore,
 	shouldIgnoreEcho,
-} from './dirty-registry.svelte';
+} from "./dirty-registry.svelte";
 
 const T0 = 1_000_000; // arbitrary fixed base timestamp (ms)
 
-describe('dirty-registry pure core', () => {
+describe("dirty-registry pure core", () => {
 	// ----------------------------------------------------------------------
 	// E1 — Rapid spam: marking pending repeatedly on the same field resets the
 	// TTL, keeps only the latest intendedValue, and never accumulates entries.
 	// ----------------------------------------------------------------------
-	it('E1: rapid spam resets TTL, latest value wins, no accumulation', () => {
+	it("E1: rapid spam resets TTL, latest value wins, no accumulation", () => {
 		const reg = createRegistry();
 
-		registryCore.markPending(reg, 'max_br', 1000, T0);
-		registryCore.markPending(reg, 'max_br', 2000, T0 + 50);
-		registryCore.markPending(reg, 'max_br', 3000, T0 + 100);
+		registryCore.markPending(reg, "max_br", 1000, T0);
+		registryCore.markPending(reg, "max_br", 2000, T0 + 50);
+		registryCore.markPending(reg, "max_br", 3000, T0 + 100);
 
 		// Exactly one lock entry for the field — no timer/entry accumulation.
-		expect(Object.keys(reg.locks)).toEqual(['max_br']);
+		expect(Object.keys(reg.locks)).toEqual(["max_br"]);
 
 		const lock = reg.locks.max_br;
 		// Latest intended value wins.
@@ -57,23 +57,29 @@ describe('dirty-registry pure core', () => {
 		// TTL is measured from the LATEST edit: just-before the latest ts + TTL
 		// must NOT expire (proving the timer reset off the earliest edit).
 		expect(expire(reg, T0 + 100 + FIELD_LOCK_TTL_MS)).toEqual([]);
-		expect(isLocked(reg, 'max_br')).toBe(true);
+		expect(isLocked(reg, "max_br")).toBe(true);
 	});
 
 	// ----------------------------------------------------------------------
 	// E2 — Unmount/expire: after the TTL elapses the field is released, and a
 	// subsequent server echo is then applied normally.
 	// ----------------------------------------------------------------------
-	it('E2: expire releases the field; subsequent echo is applied', () => {
+	it("E2: expire releases the field; subsequent echo is applied", () => {
 		const reg = createRegistry();
-		registryCore.markPending(reg, 'srt_latency', 2000, T0);
+		registryCore.markPending(reg, "srt_latency", 2000, T0);
 
 		const released = expire(reg, T0 + FIELD_LOCK_TTL_MS + 1);
-		expect(released).toEqual(['srt_latency']);
-		expect(isLocked(reg, 'srt_latency')).toBe(false);
+		expect(released).toEqual(["srt_latency"]);
+		expect(isLocked(reg, "srt_latency")).toBe(false);
 
 		// With the lock gone, an incoming echo is applied (and releases nothing).
-		const result = reconcile(reg, 'srt_latency', 4000, false, T0 + FIELD_LOCK_TTL_MS + 2);
+		const result = reconcile(
+			reg,
+			"srt_latency",
+			4000,
+			false,
+			T0 + FIELD_LOCK_TTL_MS + 2,
+		);
 		expect(result).toEqual({ apply: true, released: false });
 	});
 
@@ -82,22 +88,28 @@ describe('dirty-registry pure core', () => {
 	// then a reconnect replays the PRE-EDIT config — it is accepted because the
 	// lock was already released by the TTL.
 	// ----------------------------------------------------------------------
-	it('E3: stale pre-edit echo after TTL release is accepted', () => {
+	it("E3: stale pre-edit echo after TTL release is accepted", () => {
 		const reg = createRegistry();
-		const PRE_EDIT = 'manual';
-		const INTENDED = 'relay';
+		const PRE_EDIT = "manual";
+		const INTENDED = "relay";
 
-		registryCore.markPending(reg, 'srtla_addr', INTENDED, T0);
+		registryCore.markPending(reg, "srtla_addr", INTENDED, T0);
 		// While still locked, the stale pre-edit echo would be ignored.
-		expect(shouldIgnoreEcho(reg, 'srtla_addr', PRE_EDIT)).toBe(true);
+		expect(shouldIgnoreEcho(reg, "srtla_addr", PRE_EDIT)).toBe(true);
 
 		// TTL fires (safety valve).
-		expect(expire(reg, T0 + FIELD_LOCK_TTL_MS + 1)).toEqual(['srtla_addr']);
-		expect(isLocked(reg, 'srtla_addr')).toBe(false);
+		expect(expire(reg, T0 + FIELD_LOCK_TTL_MS + 1)).toEqual(["srtla_addr"]);
+		expect(isLocked(reg, "srtla_addr")).toBe(false);
 
 		// Reconnect replays the pre-edit value — now accepted (no lock to honor).
-		expect(shouldIgnoreEcho(reg, 'srtla_addr', PRE_EDIT)).toBe(false);
-		const result = reconcile(reg, 'srtla_addr', PRE_EDIT, false, T0 + FIELD_LOCK_TTL_MS + 2);
+		expect(shouldIgnoreEcho(reg, "srtla_addr", PRE_EDIT)).toBe(false);
+		const result = reconcile(
+			reg,
+			"srtla_addr",
+			PRE_EDIT,
+			false,
+			T0 + FIELD_LOCK_TTL_MS + 2,
+		);
 		expect(result).toEqual({ apply: true, released: false });
 	});
 
@@ -105,39 +117,39 @@ describe('dirty-registry pure core', () => {
 	// E4 — Clamp accepted: when the owning RPC has resolved, reconcile against a
 	// DIFFERENT (server-clamped) value releases the lock and accepts the clamp.
 	// ----------------------------------------------------------------------
-	it('E4: resolved RPC accepts a clamped (different) server value', () => {
+	it("E4: resolved RPC accepts a clamped (different) server value", () => {
 		const reg = createRegistry();
-		registryCore.markPending(reg, 'max_br', 12000, T0);
-		registryCore.markResolved(reg, 'max_br');
+		registryCore.markPending(reg, "max_br", 12000, T0);
+		registryCore.markResolved(reg, "max_br");
 
 		// Server clamps 12000 → 8000. rpcResolved=true forces acceptance + release.
-		const result = reconcile(reg, 'max_br', 8000, true, T0 + 100);
+		const result = reconcile(reg, "max_br", 8000, true, T0 + 100);
 		expect(result).toEqual({ apply: true, released: true });
-		expect(isLocked(reg, 'max_br')).toBe(false);
+		expect(isLocked(reg, "max_br")).toBe(false);
 	});
 
 	// ----------------------------------------------------------------------
 	// E5 — Two fields independent: lock A and B; releasing A leaves B locked, and
 	// a stale echo for B is still ignored after A's release.
 	// ----------------------------------------------------------------------
-	it('E5: releasing one field leaves the other locked and still guarding', () => {
+	it("E5: releasing one field leaves the other locked and still guarding", () => {
 		const reg = createRegistry();
-		registryCore.markPending(reg, 'acodec', 'opus', T0);
-		registryCore.markPending(reg, 'delay', 500, T0);
+		registryCore.markPending(reg, "acodec", "opus", T0);
+		registryCore.markPending(reg, "delay", 500, T0);
 
 		// Release A (acodec) via a resolved reconcile.
-		const aResult = reconcile(reg, 'acodec', 'opus', true, T0 + 100);
+		const aResult = reconcile(reg, "acodec", "opus", true, T0 + 100);
 		expect(aResult.released).toBe(true);
-		expect(isLocked(reg, 'acodec')).toBe(false);
+		expect(isLocked(reg, "acodec")).toBe(false);
 
 		// B (delay) is untouched — still locked.
-		expect(isLocked(reg, 'delay')).toBe(true);
+		expect(isLocked(reg, "delay")).toBe(true);
 
 		// A stale echo for B (old value) is still ignored while B is locked.
-		expect(shouldIgnoreEcho(reg, 'delay', 0)).toBe(true);
-		const bStale = reconcile(reg, 'delay', 0, false, T0 + 150);
+		expect(shouldIgnoreEcho(reg, "delay", 0)).toBe(true);
+		const bStale = reconcile(reg, "delay", 0, false, T0 + 150);
 		expect(bStale).toEqual({ apply: false, released: false });
-		expect(isLocked(reg, 'delay')).toBe(true);
+		expect(isLocked(reg, "delay")).toBe(true);
 	});
 
 	// ----------------------------------------------------------------------
@@ -145,26 +157,26 @@ describe('dirty-registry pure core', () => {
 	// edit 1, then immediately re-edit (val=2); a late echo of val=1 must NOT be
 	// treated as a release of the newer edit.
 	// ----------------------------------------------------------------------
-	it('E6: late echo from a previous edit does not release the newer edit', () => {
+	it("E6: late echo from a previous edit does not release the newer edit", () => {
 		const reg = createRegistry();
 
 		// Edit N-1: value 1, resolves and is echoed back → released.
-		registryCore.markPending(reg, 'pipeline', 1, T0);
-		registryCore.markResolved(reg, 'pipeline');
-		const firstRelease = reconcile(reg, 'pipeline', 1, true, T0 + 10);
+		registryCore.markPending(reg, "pipeline", 1, T0);
+		registryCore.markResolved(reg, "pipeline");
+		const firstRelease = reconcile(reg, "pipeline", 1, true, T0 + 10);
 		expect(firstRelease).toEqual({ apply: true, released: true });
-		expect(isLocked(reg, 'pipeline')).toBe(false);
+		expect(isLocked(reg, "pipeline")).toBe(false);
 
 		// Edit N: re-edit to value 2 (fresh in-flight write, rpcResolved=false).
-		registryCore.markPending(reg, 'pipeline', 2, T0 + 20);
+		registryCore.markPending(reg, "pipeline", 2, T0 + 20);
 		expect(reg.locks.pipeline.intendedValue).toBe(2);
 		expect(reg.locks.pipeline.rpcResolved).toBe(false);
 
 		// A LATE echo of the old value 1 arrives. It is NOT the intended value and
 		// the new edit's RPC has not resolved → must not apply, must not release.
-		const lateEcho = reconcile(reg, 'pipeline', 1, false, T0 + 25);
+		const lateEcho = reconcile(reg, "pipeline", 1, false, T0 + 25);
 		expect(lateEcho).toEqual({ apply: false, released: false });
-		expect(isLocked(reg, 'pipeline')).toBe(true);
+		expect(isLocked(reg, "pipeline")).toBe(true);
 		expect(reg.locks.pipeline.intendedValue).toBe(2);
 	});
 
@@ -172,36 +184,36 @@ describe('dirty-registry pure core', () => {
 	// E7 — Message missing a locked field never releases it: expire within TTL is
 	// a no-op, and reconciling a DIFFERENT field cannot touch the locked one.
 	// ----------------------------------------------------------------------
-	it('E7: a message omitting the locked field does not release it', () => {
+	it("E7: a message omitting the locked field does not release it", () => {
 		const reg = createRegistry();
-		registryCore.markPending(reg, 'asrc', 'hdmi', T0);
+		registryCore.markPending(reg, "asrc", "hdmi", T0);
 
 		// expire() within TTL → nothing released, field still locked.
 		expect(expire(reg, T0 + 100)).toEqual([]);
-		expect(isLocked(reg, 'asrc')).toBe(true);
+		expect(isLocked(reg, "asrc")).toBe(true);
 
 		// A reconcile for a DIFFERENT field (resolved) cannot release 'asrc'.
-		const other = reconcile(reg, 'acodec', 'opus', true, T0 + 120);
+		const other = reconcile(reg, "acodec", "opus", true, T0 + 120);
 		expect(other).toEqual({ apply: true, released: false });
-		expect(isLocked(reg, 'asrc')).toBe(true);
-		expect(reg.locks.asrc.intendedValue).toBe('hdmi');
+		expect(isLocked(reg, "asrc")).toBe(true);
+		expect(reg.locks.asrc.intendedValue).toBe("hdmi");
 	});
 
 	// ----------------------------------------------------------------------
 	// E8 — shouldIgnoreEcho behavior: a locked field ignores echoes that DIFFER
 	// from the intended value, but accepts echoes that MATCH it.
 	// ----------------------------------------------------------------------
-	it('E8: shouldIgnoreEcho is false on match, true on mismatch', () => {
+	it("E8: shouldIgnoreEcho is false on match, true on mismatch", () => {
 		const reg = createRegistry();
-		registryCore.markPending(reg, 'resolution', '1920x1080', T0);
+		registryCore.markPending(reg, "resolution", "1920x1080", T0);
 
 		// Same value as intended → do NOT ignore (the echo matches our intent).
-		expect(shouldIgnoreEcho(reg, 'resolution', '1920x1080')).toBe(false);
+		expect(shouldIgnoreEcho(reg, "resolution", "1920x1080")).toBe(false);
 		// Different value (stale pre-edit echo) → ignore.
-		expect(shouldIgnoreEcho(reg, 'resolution', '1280x720')).toBe(true);
+		expect(shouldIgnoreEcho(reg, "resolution", "1280x720")).toBe(true);
 
 		// Unlocked field → never ignored, regardless of value.
-		expect(shouldIgnoreEcho(reg, 'framerate', 30)).toBe(false);
+		expect(shouldIgnoreEcho(reg, "framerate", 30)).toBe(false);
 	});
 
 	// ----------------------------------------------------------------------
@@ -209,32 +221,32 @@ describe('dirty-registry pure core', () => {
 	// APPLIED (clamped) value. The lock releases immediately to that applied
 	// value — not to the client's intended value — without waiting for an echo.
 	// ----------------------------------------------------------------------
-	it('E9: onRpcApplied releases to the clamped server-applied value', () => {
+	it("E9: onRpcApplied releases to the clamped server-applied value", () => {
 		const reg = createRegistry();
 
 		// User intends 12000; mark resolved (RPC settled), then applied-state ack.
-		registryCore.markPending(reg, 'max_br', 12000, T0);
-		registryCore.markResolved(reg, 'max_br');
+		registryCore.markPending(reg, "max_br", 12000, T0);
+		registryCore.markResolved(reg, "max_br");
 
 		// Server clamped 12000 → 8000. Lock releases to 8000 (the applied value).
-		const result = onRpcApplied(reg, 'max_br', 8000, T0 + 100);
+		const result = onRpcApplied(reg, "max_br", 8000, T0 + 100);
 		expect(result).toEqual({ apply: true, released: true });
-		expect(isLocked(reg, 'max_br')).toBe(false);
+		expect(isLocked(reg, "max_br")).toBe(false);
 
 		// onRpcApplied arriving BEFORE the resolve flag adopts the applied value as
 		// the new intent (and marks resolved) so the next matching echo releases.
-		registryCore.markPending(reg, 'srt_latency', 9000, T0 + 200);
-		const pending = onRpcApplied(reg, 'srt_latency', 5000, T0 + 250);
+		registryCore.markPending(reg, "srt_latency", 9000, T0 + 200);
+		const pending = onRpcApplied(reg, "srt_latency", 5000, T0 + 250);
 		expect(pending).toEqual({ apply: true, released: false });
-		expect(isLocked(reg, 'srt_latency')).toBe(true);
+		expect(isLocked(reg, "srt_latency")).toBe(true);
 		expect(reg.locks.srt_latency.intendedValue).toBe(5000);
 		expect(reg.locks.srt_latency.rpcResolved).toBe(true);
 		// A stale echo of the OLD value is still ignored; the applied value matches.
-		expect(shouldIgnoreEcho(reg, 'srt_latency', 9000)).toBe(true);
-		expect(shouldIgnoreEcho(reg, 'srt_latency', 5000)).toBe(false);
-		const echo = reconcile(reg, 'srt_latency', 5000, true, T0 + 300);
+		expect(shouldIgnoreEcho(reg, "srt_latency", 9000)).toBe(true);
+		expect(shouldIgnoreEcho(reg, "srt_latency", 5000)).toBe(false);
+		const echo = reconcile(reg, "srt_latency", 5000, true, T0 + 300);
 		expect(echo).toEqual({ apply: true, released: true });
-		expect(isLocked(reg, 'srt_latency')).toBe(false);
+		expect(isLocked(reg, "srt_latency")).toBe(false);
 	});
 
 	// ----------------------------------------------------------------------
@@ -242,19 +254,19 @@ describe('dirty-registry pure core', () => {
 	// AFTER the TTL safety valve already released the lock. onRpcApplied must be
 	// idempotent — accept the applied value, but NEVER resurrect a stale lock.
 	// ----------------------------------------------------------------------
-	it('E10: slow RPC applied-state after TTL expiry is safe (no lock resurrection)', () => {
+	it("E10: slow RPC applied-state after TTL expiry is safe (no lock resurrection)", () => {
 		const reg = createRegistry();
-		registryCore.markPending(reg, 'max_br', 12000, T0);
+		registryCore.markPending(reg, "max_br", 12000, T0);
 
 		// TTL fires first (10s) — the safety valve releases the field.
-		expect(expire(reg, T0 + FIELD_LOCK_TTL_MS + 1)).toEqual(['max_br']);
-		expect(isLocked(reg, 'max_br')).toBe(false);
+		expect(expire(reg, T0 + FIELD_LOCK_TTL_MS + 1)).toEqual(["max_br"]);
+		expect(isLocked(reg, "max_br")).toBe(false);
 
 		// The slow RPC resolves later (~within 30s) carrying the applied value.
-		const late = onRpcApplied(reg, 'max_br', 8000, T0 + 25_000);
+		const late = onRpcApplied(reg, "max_br", 8000, T0 + 25_000);
 		// Idempotent: the applied value is accepted, but no lock is recreated.
 		expect(late).toEqual({ apply: true, released: false });
-		expect(isLocked(reg, 'max_br')).toBe(false);
+		expect(isLocked(reg, "max_br")).toBe(false);
 		expect(Object.keys(reg.locks)).toEqual([]);
 	});
 
@@ -269,9 +281,9 @@ describe('dirty-registry pure core', () => {
 	// isPending stays true across the `pending → false` transition, so the toggle
 	// never snaps back to the stale `enabled` prop (no flash-back).
 	// ----------------------------------------------------------------------
-	it('E11: lock held after pending clears — onRpcApplied (pre-resolve) keeps guarding until a matching echo', () => {
+	it("E11: lock held after pending clears — onRpcApplied (pre-resolve) keeps guarding until a matching echo", () => {
 		const reg = createRegistry();
-		const field = 'enabled_wlan0';
+		const field = "enabled_wlan0";
 
 		// User toggles bond membership OFF; the RPC is in flight (rpcResolved=false).
 		registryCore.markPending(reg, field, false, T0);

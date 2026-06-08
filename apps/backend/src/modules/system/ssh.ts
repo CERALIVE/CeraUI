@@ -210,9 +210,7 @@ export async function resetSshPassword(conn: WebSocket) {
 		throw new Error("invalid ssh_user");
 	}
 
-	const password = randomBase64(24)
-		.replace(/[+/=]/g, "")
-		.substring(0, 20);
+	const password = randomBase64(24).replace(/[+/=]/g, "").substring(0, 20);
 
 	try {
 		// `passwd` reads the new password twice from stdin. The secret is fed via

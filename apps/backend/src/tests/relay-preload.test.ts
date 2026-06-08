@@ -26,7 +26,10 @@ import { computeSubscriptionPreload } from "../modules/remote/remote-relays.ts";
 describe("subscription relay auto-preload (Task 9)", () => {
 	it("(a) catalog push preloads the default server endpoint as a namespaced id", () => {
 		const relays = getMockRelaysCache();
-		const config: RuntimeConfig = { remote_key: "k", remote_provider: "ceralive" };
+		const config: RuntimeConfig = {
+			remote_key: "k",
+			remote_provider: "ceralive",
+		};
 
 		const modified = computeSubscriptionPreload(
 			config,
@@ -61,7 +64,10 @@ describe("subscription relay auto-preload (Task 9)", () => {
 
 	it("(b) account selection fills the editable streamid override from ingest_key", () => {
 		const relays = getMockRelaysCache();
-		const config: RuntimeConfig = { remote_key: "k", remote_provider: "ceralive" };
+		const config: RuntimeConfig = {
+			remote_key: "k",
+			remote_provider: "ceralive",
+		};
 
 		computeSubscriptionPreload(config, relays, DEFAULT_RELAY_PROVIDER_ID);
 
@@ -115,7 +121,10 @@ describe("subscription relay auto-preload (Task 9)", () => {
 
 	it("(d) stored namespaced ids resolve back to the correct provider", () => {
 		const relays = getMockRelaysCache();
-		const config: RuntimeConfig = { remote_key: "k", remote_provider: "belabox" };
+		const config: RuntimeConfig = {
+			remote_key: "k",
+			remote_provider: "belabox",
+		};
 
 		computeSubscriptionPreload(config, relays, "belabox");
 
@@ -130,7 +139,10 @@ describe("subscription relay auto-preload (Task 9)", () => {
 
 	it("is idempotent: a second pass with the same provider makes no changes", () => {
 		const relays = getMockRelaysCache();
-		const config: RuntimeConfig = { remote_key: "k", remote_provider: "ceralive" };
+		const config: RuntimeConfig = {
+			remote_key: "k",
+			remote_provider: "ceralive",
+		};
 
 		const first = computeSubscriptionPreload(
 			config,

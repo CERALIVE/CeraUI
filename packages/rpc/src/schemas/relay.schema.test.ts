@@ -14,14 +14,11 @@ import { describe, expect, test } from 'bun:test';
 // backend resolves @ceraui/rpc as a workspace dep, so this is the only
 // direction that avoids a circular package edge).
 import {
-	type RuntimeConfig,
 	normalizeRelayIds,
+	type RuntimeConfig,
 	runtimeConfigSchema,
 } from '../../../../apps/backend/src/helpers/config-schemas';
-import {
-	type DetectionMethod,
-	detectionMethodSchema,
-} from './cloud-provider.schema';
+import { type DetectionMethod, detectionMethodSchema } from './cloud-provider.schema';
 import {
 	isNamespacedRelayId,
 	namespacedRelayId,

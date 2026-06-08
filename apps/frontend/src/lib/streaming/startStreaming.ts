@@ -29,7 +29,10 @@ export type AudioOverride = {
 } | null;
 
 /** Reason a start was refused — maps to an i18n error key in the view. */
-export type StartConfigError = "missingPipeline" | "missingServer" | "unknownPipeline";
+export type StartConfigError =
+	| "missingPipeline"
+	| "missingServer"
+	| "unknownPipeline";
 
 export type StartConfigResult =
 	| { ok: true; config: ConfigMessage }

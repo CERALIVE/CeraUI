@@ -30,7 +30,11 @@ const SECRET = "dGVzdC1zZWNyZXQtZm9yLW1vY2stcGxhdGZvcm0tdGFzazI1";
 const WINDOW_MS = CLAIM_CODE_WINDOW_SECONDS * 1000;
 const NOW = 1_700_000_000_000 - (1_700_000_000_000 % WINDOW_MS) + 1_000;
 
-const validCode = deriveClaimCode({ now: NOW, serial: SERIAL, secret: SECRET }).code;
+const validCode = deriveClaimCode({
+	now: NOW,
+	serial: SERIAL,
+	secret: SECRET,
+}).code;
 
 beforeAll(() => {
 	process.env.DEVICE_SERIAL = SERIAL;
@@ -118,7 +122,9 @@ describe("device token — stub verification contract (ADR-0006)", () => {
 
 	test("rejects malformed tokens and wrong headers", () => {
 		expect(verifyStubDeviceToken("not-a-token", NOW)).toBeNull();
-		expect(verifyStubDeviceToken(`${DEVICE_TOKEN_HEADER}!!!notbase64!!!`, NOW)).toBeNull();
+		expect(
+			verifyStubDeviceToken(`${DEVICE_TOKEN_HEADER}!!!notbase64!!!`, NOW),
+		).toBeNull();
 		expect(verifyStubDeviceToken("v2.local.whatever", NOW)).toBeNull();
 	});
 
@@ -172,10 +178,12 @@ describe("full device-side pairing sequence (mock)", () => {
 
 describe("remote_key channel — token acceptance + deprecated path", () => {
 	test("a platform token becomes the active remote key (precedence over raw key)", () => {
-		expect(resolveRemoteKey({ token: "device-token-abc" })).toBe("device-token-abc");
-		expect(resolveRemoteKey({ remote_key: "legacy", token: "device-token-abc" })).toBe(
+		expect(resolveRemoteKey({ token: "device-token-abc" })).toBe(
 			"device-token-abc",
 		);
+		expect(
+			resolveRemoteKey({ remote_key: "legacy", token: "device-token-abc" }),
+		).toBe("device-token-abc");
 	});
 
 	test("deprecated raw remote_key path still resolves", () => {

@@ -11,9 +11,9 @@
  * the signal, so a write here schedules the effect — the same cross-module
  * reactive wiring the real `subscriptions.svelte` relies on.
  */
-import type { ConnectionState } from '$lib/rpc/client';
+import type { ConnectionState } from "$lib/rpc/client";
 
-let state = $state<ConnectionState>('connected');
+let state = $state<ConnectionState>("connected");
 
 /** Mirrors the real `subscriptions.svelte` getter consumed by BondToggle. */
 export function getConnectionState(): ConnectionState {
@@ -27,5 +27,5 @@ export function setConnectionState(next: ConnectionState): void {
 
 /** Reset to the default connected baseline between tests. */
 export function resetConnectionState(): void {
-	state = 'connected';
+	state = "connected";
 }

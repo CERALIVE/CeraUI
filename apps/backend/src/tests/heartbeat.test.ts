@@ -1,12 +1,11 @@
 import { describe, expect, it } from "bun:test";
-
+import { addClient, removeClient } from "../rpc/events.ts";
 import {
+	emitHeartbeat,
 	HEARTBEAT_INTERVAL_MS,
 	HEARTBEAT_STALE_THRESHOLD_MS,
-	emitHeartbeat,
 	isHeartbeatStale,
 } from "../rpc/heartbeat.ts";
-import { addClient, removeClient } from "../rpc/events.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
 
 describe("isHeartbeatStale", () => {

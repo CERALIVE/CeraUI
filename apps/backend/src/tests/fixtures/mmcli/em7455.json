@@ -1,97 +1,76 @@
 {
-  "modem": {
-    "3gpp": {
-      "enabled-locks": [],
-      "eps": {
-        "initial-bearer": {
-          "dbus-path": "/org/freedesktop/ModemManager1/Bearer/1",
-          "settings": {
-            "apn": "broadband",
-            "ip-type": "ipv4",
-            "password": "--",
-            "user": "--"
-          }
-        },
-        "ue-mode-operation": "csps-2"
-      },
-      "imei": "359072060123456",
-      "operator-code": "310410",
-      "operator-name": "AT&T",
-      "pco": "--",
-      "registration-state": "home"
-    },
-    "cdma": {
-      "activation-state": "--",
-      "cdma1x-registration-state": "--",
-      "esn": "--",
-      "evdo-registration-state": "--",
-      "meid": "--",
-      "nid": "--",
-      "sid": "--"
-    },
-    "dbus-path": "/org/freedesktop/ModemManager1/Modem/1",
-    "generic": {
-      "access-technologies": [
-        "lte"
-      ],
-      "bearers": [
-        "/org/freedesktop/ModemManager1/Bearer/1"
-      ],
-      "carrier-configuration": "GENERIC",
-      "carrier-configuration-revision": "002.026_000",
-      "current-bands": [
-        "eutran-2",
-        "eutran-4",
-        "eutran-12"
-      ],
-      "current-capabilities": [
-        "gsm-umts, lte"
-      ],
-      "current-modes": "allowed: 4g; preferred: none",
-      "device": "/sys/devices/pci0000:00/0000:00:1c.0/0000:01:00.0",
-      "device-identifier": "f0e1d2c3b4a5f0e1d2c3b4a5f0e1d2c3b4a5f0e1",
-      "drivers": [
-        "qcserial",
-        "qmi_wwan"
-      ],
-      "equipment-identifier": "359072060123456",
-      "hardware-revision": "1.0",
-      "manufacturer": "Sierra Wireless, Incorporated",
-      "model": "Sierra Wireless EM7455 Qualcomm Snapdragon X7 LTE-A",
-      "own-numbers": [],
-      "plugin": "sierra",
-      "ports": [
-        "cdc-wdm0 (qmi)",
-        "ttyUSB0 (qcdm)",
-        "ttyUSB1 (gps)",
-        "ttyUSB2 (at)",
-        "wwp0s20f0u3i12 (net)"
-      ],
-      "power-state": "on",
-      "primary-port": "cdc-wdm0",
-      "primary-sim-slot": "--",
-      "revision": "SWI9X30C_02.33.03.00",
-      "signal-quality": {
-        "recent": "yes",
-        "value": "62"
-      },
-      "sim": "/org/freedesktop/ModemManager1/SIM/1",
-      "sim-slots": [],
-      "state": "connected",
-      "state-failed-reason": "--",
-      "supported-capabilities": [
-        "gsm-umts, lte"
-      ],
-      "supported-ip-families": [
-        "ipv4",
-        "ipv6",
-        "ipv4v6"
-      ],
-      "supported-modes": [
-        "allowed: 4g; preferred: none"
-      ],
-      "unlock-required": "--",
-      "unlock-retries": []
-    }
-  }
+	"modem": {
+		"3gpp": {
+			"enabled-locks": [],
+			"eps": {
+				"initial-bearer": {
+					"dbus-path": "/org/freedesktop/ModemManager1/Bearer/1",
+					"settings": {
+						"apn": "broadband",
+						"ip-type": "ipv4",
+						"password": "--",
+						"user": "--"
+					}
+				},
+				"ue-mode-operation": "csps-2"
+			},
+			"imei": "359072060123456",
+			"operator-code": "310410",
+			"operator-name": "AT&T",
+			"pco": "--",
+			"registration-state": "home"
+		},
+		"cdma": {
+			"activation-state": "--",
+			"cdma1x-registration-state": "--",
+			"esn": "--",
+			"evdo-registration-state": "--",
+			"meid": "--",
+			"nid": "--",
+			"sid": "--"
+		},
+		"dbus-path": "/org/freedesktop/ModemManager1/Modem/1",
+		"generic": {
+			"access-technologies": ["lte"],
+			"bearers": ["/org/freedesktop/ModemManager1/Bearer/1"],
+			"carrier-configuration": "GENERIC",
+			"carrier-configuration-revision": "002.026_000",
+			"current-bands": ["eutran-2", "eutran-4", "eutran-12"],
+			"current-capabilities": ["gsm-umts, lte"],
+			"current-modes": "allowed: 4g; preferred: none",
+			"device": "/sys/devices/pci0000:00/0000:00:1c.0/0000:01:00.0",
+			"device-identifier": "f0e1d2c3b4a5f0e1d2c3b4a5f0e1d2c3b4a5f0e1",
+			"drivers": ["qcserial", "qmi_wwan"],
+			"equipment-identifier": "359072060123456",
+			"hardware-revision": "1.0",
+			"manufacturer": "Sierra Wireless, Incorporated",
+			"model": "Sierra Wireless EM7455 Qualcomm Snapdragon X7 LTE-A",
+			"own-numbers": [],
+			"plugin": "sierra",
+			"ports": [
+				"cdc-wdm0 (qmi)",
+				"ttyUSB0 (qcdm)",
+				"ttyUSB1 (gps)",
+				"ttyUSB2 (at)",
+				"wwp0s20f0u3i12 (net)"
+			],
+			"power-state": "on",
+			"primary-port": "cdc-wdm0",
+			"primary-sim-slot": "--",
+			"revision": "SWI9X30C_02.33.03.00",
+			"signal-quality": {
+				"recent": "yes",
+				"value": "62"
+			},
+			"sim": "/org/freedesktop/ModemManager1/SIM/1",
+			"sim-slots": [],
+			"state": "connected",
+			"state-failed-reason": "--",
+			"supported-capabilities": ["gsm-umts, lte"],
+			"supported-ip-families": ["ipv4", "ipv6", "ipv4v6"],
+			"supported-modes": ["allowed: 4g; preferred: none"],
+			"unlock-required": "--",
+			"unlock-retries": []
+		}
+	}
 }

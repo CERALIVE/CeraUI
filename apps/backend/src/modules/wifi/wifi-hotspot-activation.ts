@@ -24,6 +24,7 @@ import {
 } from "../network/network-manager.ts";
 import { withDeviceLock } from "../network/state/device-lock.ts";
 import { getWifiState, setWifiState } from "./state/wifi-state.ts";
+import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
 import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
 import {
 	registerPendingConfirmation,
@@ -31,9 +32,9 @@ import {
 } from "./wifi-hotspot-monitor.ts";
 import {
 	canHotspot,
+	HOTSPOT_UP_TO,
 	type HotspotActivationDeps,
 	type HotspotStartResult,
-	HOTSPOT_UP_TO,
 	isHotspot,
 	type WifiHotspotMessage,
 	type WifiInterfaceWithHotspot,
@@ -42,7 +43,6 @@ import {
 	getMacAddressForWifiInterface,
 	wifiUpdateDevices,
 } from "./wifi-interfaces.ts";
-import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
 
 /** Production defaults: real NetworkManager + broadcast + dup-IP suppression. */
 export const defaultHotspotDeps: HotspotActivationDeps = {

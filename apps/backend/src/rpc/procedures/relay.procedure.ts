@@ -26,21 +26,23 @@ import {
 	relayValidateOutputSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-
+import { validatePortNo } from "../../helpers/number.ts";
 import { getAdapter } from "../../modules/streaming/transport/registry.ts";
 import {
 	NotImplementedError,
 	UnknownProtocolError,
 } from "../../modules/streaming/transport/types.ts";
 import { probeReachability } from "../../modules/streaming/transport/validate.ts";
-import { validatePortNo } from "../../helpers/number.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
 const baseProcedure = os.$context<RPCContext>();
 const authedProcedure = baseProcedure.use(authMiddleware);
 
-function fail(stage: RelayValidateOutput["stage"], reason: string): RelayValidateOutput {
+function fail(
+	stage: RelayValidateOutput["stage"],
+	reason: string,
+): RelayValidateOutput {
 	return { valid: false, stage, reason };
 }
 
@@ -50,14 +52,16 @@ export const relayValidateProcedure = authedProcedure
 	.handler(async ({ input }): Promise<RelayValidateOutput> => {
 		const addr = input.addr.trim();
 		if (addr === "") return fail("input", "Address is required");
-		if (!validatePortNo(input.port)) return fail("input", "Port must be between 1 and 65535");
+		if (!validatePortNo(input.port))
+			return fail("input", "Port must be between 1 and 65535");
 
 		const protocol = input.protocol ?? "srtla";
 		let adapter: ReturnType<typeof getAdapter>;
 		try {
 			adapter = getAdapter(protocol);
 		} catch (error) {
-			if (error instanceof UnknownProtocolError) return fail("protocol", error.message);
+			if (error instanceof UnknownProtocolError)
+				return fail("protocol", error.message);
 			throw error;
 		}
 
@@ -68,8 +72,12 @@ export const relayValidateProcedure = authedProcedure
 				srt_streamid: input.streamid ?? "",
 			});
 		} catch (error) {
-			const stage = error instanceof NotImplementedError ? "protocol" : "endpoint";
-			return fail(stage, error instanceof Error ? error.message : "Invalid endpoint");
+			const stage =
+				error instanceof NotImplementedError ? "protocol" : "endpoint";
+			return fail(
+				stage,
+				error instanceof Error ? error.message : "Invalid endpoint",
+			);
 		}
 
 		let resolvedIp: string;

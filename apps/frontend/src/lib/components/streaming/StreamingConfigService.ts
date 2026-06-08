@@ -1,9 +1,9 @@
 import type {
 	AudioCodecs,
 	ConfigMessage,
+	Framerate,
 	Pipelines,
 	Resolution,
-	Framerate,
 } from "@ceraui/rpc/schemas";
 import { toast } from "svelte-sonner";
 

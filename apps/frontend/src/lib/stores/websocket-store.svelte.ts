@@ -263,7 +263,7 @@ async function sendAuthMessage(
 }
 
 const assignMessage = (data: string) => {
-	let parsedMessage;
+	let parsedMessage: any;
 	try {
 		parsedMessage = JSON.parse(data);
 	} catch (error) {
@@ -272,7 +272,10 @@ const assignMessage = (data: string) => {
 	}
 
 	// Skip if it's an RPC response (has id and result/error)
-	if (parsedMessage.id && (parsedMessage.result !== undefined || parsedMessage.error)) {
+	if (
+		parsedMessage.id &&
+		(parsedMessage.result !== undefined || parsedMessage.error)
+	) {
 		return;
 	}
 
@@ -297,7 +300,11 @@ const assignMessage = (data: string) => {
 				NotificationsStore._set(value);
 				break;
 			case "pipelines":
-				if (value && typeof value === "object" && "pipelines" in (value as Record<string, unknown>)) {
+				if (
+					value &&
+					typeof value === "object" &&
+					"pipelines" in (value as Record<string, unknown>)
+				) {
 					PipelinesStore._set(value as PipelinesMessage);
 				} else {
 					PipelinesStore._set({

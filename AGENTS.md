@@ -93,7 +93,9 @@ pnpm --filter frontend run test   # vitest frontend unit tests
 
 ## CONVENTIONS
 
-- Linting: Biome at workspace root (`biome.json`). ESLint only in `apps/frontend/`.
+- Linting/formatting: Biome only (`@biomejs/biome` 2.4.16) — ESLint and Prettier are fully removed. Run `biome check .` (or `pnpm lint`) from the workspace root. Nested non-root configs live in `apps/frontend/`, `apps/backend/`, `packages/i18n/`.
+- Svelte+TS: Biome's experimental HTML/Svelte support is enabled in the root `biome.json` (`html.experimentalFullSupportEnabled: true` + `html.formatter.enabled: true`). `.svelte` files are linted by Biome; their formatter is disabled in `apps/frontend/biome.json` (`overrides`) because Biome's experimental HTML formatter rewrites the `<script>` block to double quotes and cannot parse Svelte control-flow — so `.svelte` markup is still formatted by the Svelte VS Code extension. The same override silences false-positive `noUnusedVariables`/`noUnusedImports`/`useImportType`/`useConst` that Biome's partial template analysis emits for script vars used in markup.
+- Strict TS: `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` are enabled in `tsconfig.json` (root), `apps/backend`, and `packages/rpc`. The frontend app (`apps/frontend/tsconfig.app.json`) and `tsconfig.node.json` enable `strict` + `noUncheckedIndexedAccess`; `exactOptionalPropertyTypes` is intentionally omitted there because it is incompatible with bits-ui v2 / shadcn-svelte and vite-plugin-pwa types (unfixable "union too complex" errors in CLI-managed components). The e2e tsconfig stays at baseline `strict` (ungated Playwright test code).
 - Mock hardware in dev via `MOCK_SCENARIO` env var (`multi-modem-wifi` default).
 - Backend binary compiled with `bun build --compile`; target set by `BUILD_ARCH`.
 - Frontend is a PWA — service worker via `vite-plugin-pwa`.

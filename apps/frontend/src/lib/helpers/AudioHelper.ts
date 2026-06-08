@@ -39,7 +39,8 @@ export function getAudioSourceLabel(
 
 	// notAvailableSentinel → return with (Not Available) suffix
 	if (source === notAvailableSentinel) {
-		const notAvailableLabel = t?.('settings.notAvailableAudioSource') ?? 'Not Available';
+		const notAvailableLabel =
+			t?.("settings.notAvailableAudioSource") ?? "Not Available";
 		return `${source} (${notAvailableLabel})`;
 	}
 
@@ -47,7 +48,7 @@ export function getAudioSourceLabel(
 	if (source.length > 20) {
 		// If translation function provided, use general.unknownSource
 		if (t) {
-			return t('general.unknownSource');
+			return t("general.unknownSource");
 		}
 		// Otherwise truncate to first 20 chars
 		return source.substring(0, 20);

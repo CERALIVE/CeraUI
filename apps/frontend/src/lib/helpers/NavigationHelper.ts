@@ -1,4 +1,4 @@
-import { type NavElements, navElements } from "$lib/config";
+import { liveNavElement, type NavElements, navElements } from "$lib/config";
 
 /**
  * Options for customizing hash navigation behavior
@@ -40,7 +40,7 @@ export interface SetupHashNavigationOptions {
  * @returns The matching navigation element or fallback
  */
 export function getNavFromHash(options?: HashNavigationOptions): NavElements {
-	const defaultNav = { live: navElements.live };
+	const defaultNav = { live: liveNavElement };
 	const {
 		fallbackElement = defaultNav,
 		caseSensitive = true,
@@ -78,7 +78,8 @@ export function updateHash(
 	const { replaceState = false, preventDuplicate = true } = options ?? {};
 
 	const identifier = Object.keys(navigation)[0];
-	const navElement = navigation[identifier];
+	const navElement = identifier ? navigation[identifier] : undefined;
+	if (!navElement) return;
 	const newHash = `#${navElement.label}`;
 
 	// Only update if hash is different to avoid unnecessary refreshes (when preventDuplicate is true)
@@ -161,13 +162,15 @@ export function setupHashNavigation(
 			!isUpdatingFromHash
 		) {
 			const navKey = Object.keys(navigation)[0];
-			const navLabel = navigation[navKey].label;
-			const newHash = `#${navLabel}`;
-			const currentHash = window.location.hash;
+			const navElement = navKey ? navigation[navKey] : undefined;
+			if (navElement) {
+				const newHash = `#${navElement.label}`;
+				const currentHash = window.location.hash;
 
-			// CRITICAL FIX: Only update hash if it's actually different
-			if (currentHash !== newHash) {
-				updateHash(navigation);
+				// CRITICAL FIX: Only update hash if it's actually different
+				if (currentHash !== newHash) {
+					updateHash(navigation);
+				}
 			}
 		}
 		isInitialSubscription = false;

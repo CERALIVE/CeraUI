@@ -268,13 +268,16 @@ const de = {
 		overview: "Übersicht",
 		streamingActive: "Streaming",
 		notStreaming: "Kein Streaming",
-		configureToStart: "Konfigurieren Sie einen Relay-Server, um mit dem Streaming zu beginnen",
+		configureToStart:
+			"Konfigurieren Sie einen Relay-Server, um mit dem Streaming zu beginnen",
 		editSettings: "Einstellungen bearbeiten",
 		streamSettings: "Stream-Einstellungen",
 		adjustBitrate: "Bitrate anpassen",
 		stopToChange: "Stream stoppen, um zu ändern",
-		cannotStartNoPipeline: "Wähle eine Videoquelle, bevor du den Stream startest",
-		cannotStartNoServer: "Konfiguriere einen Server, bevor du den Stream startest",
+		cannotStartNoPipeline:
+			"Wähle eine Videoquelle, bevor du den Stream startest",
+		cannotStartNoServer:
+			"Konfiguriere einen Server, bevor du den Stream startest",
 		startFailed: "Stream konnte nicht gestartet werden",
 		reconfigureRequired: "Reconfigure required",
 	},
@@ -295,17 +298,22 @@ const de = {
 		saved: "Gespeichert",
 		saveFailed: "Speichern fehlgeschlagen",
 		updateInProgress: "Update läuft",
-		bootconfigUpdating: "Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
-		jetsonUndervoltage: "System undervoltage detected. You may experience system instability, including glitching, freezes and the modems disconnecting",
-		hdmiError: "HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. Try to move any modems away from the HDMI cable and the encoder. If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera",
+		bootconfigUpdating:
+			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
+		jetsonUndervoltage:
+			"System undervoltage detected. You may experience system instability, including glitching, freezes and the modems disconnecting",
+		hdmiError:
+			"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. Try to move any modems away from the HDMI cable and the encoder. If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera",
 		appUpdated: "App Updated",
 		appUpdatedDescription: "Updated to version {version}",
 		updateAvailable: "Update Available",
-		updateAvailableDescription: "A new version is available. Refresh to update.",
+		updateAvailableDescription:
+			"A new version is available. Refresh to update.",
 		appInstalled: "App Installed",
 		appInstalledDescription: "CeraUI has been added to your home screen!",
 		installCancelled: "Installation Cancelled",
-		installCancelledDescription: "You can install the app later from your browser menu.",
+		installCancelledDescription:
+			"You can install the app later from your browser menu.",
 		installFailed: "Installation Failed",
 		installFailedDescription: "Unable to install the app. Please try again.",
 		connectionRecovered: "Connection restored",
@@ -366,7 +374,8 @@ const de = {
 				device: "Gerät",
 			},
 			devicePassword: "Gerätepasswort",
-			devicePasswordDesc: "Legen Sie das Passwort fest, mit dem auf dieses Gerät im lokalen Netzwerk zugegriffen wird",
+			devicePasswordDesc:
+				"Legen Sie das Passwort fest, mit dem auf dieses Gerät im lokalen Netzwerk zugegriffen wird",
 			cloudRemote: "Cloud-Fernzugriffsserver",
 			cloudRemoteDesc: "Mit einem Cloud-Relay für die Fernverwaltung verbinden",
 			ssh: "SSH-Zugang",
@@ -381,36 +390,42 @@ const de = {
 			versionsDesc: "Installierte Komponenten- und Firmware-Versionen anzeigen",
 		},
 
-	dialogs: {
-		enableInterface: "Schnittstelle aktivieren",
-		enableInterfaceDesc: "Diese Schnittstelle für gebündeltes Streaming verwenden.",
-		staticIp: "Statische IP-Adresse",
-		dhcpHint: "Leer lassen, um DHCP (automatische Adressierung) zu verwenden.",
-		ipInvalid: "Geben Sie eine gültige IPv4- oder IPv6-Adresse ein.",
-		confirmPassword: "Passwort bestätigen",
-		passwordsMismatch: "Passwörter stimmen nicht überein.",
-		getYourKey: "Cloud-Dashboard öffnen",
-		updating: "Wird aktualisiert, bitte warten\u2026",
-		rebootConfirm: "Das Gerät wird beim Neustart etwa 30 Sekunden lang getrennt.",
-		powerOffConfirm:
-			"Das Gerät wird vollständig heruntergefahren. Sie benötigen physischen Zugriff, um es wieder einzuschalten.",
-		blockedStreaming: "Beenden Sie das Streaming vor dem Neustart.",
-		blockedUpdating: "Update läuft. Warten Sie vor dem Neustart.",
-	},
-pairing: {
+		dialogs: {
+			enableInterface: "Schnittstelle aktivieren",
+			enableInterfaceDesc:
+				"Diese Schnittstelle für gebündeltes Streaming verwenden.",
+			staticIp: "Statische IP-Adresse",
+			dhcpHint:
+				"Leer lassen, um DHCP (automatische Adressierung) zu verwenden.",
+			ipInvalid: "Geben Sie eine gültige IPv4- oder IPv6-Adresse ein.",
+			confirmPassword: "Passwort bestätigen",
+			passwordsMismatch: "Passwörter stimmen nicht überein.",
+			getYourKey: "Cloud-Dashboard öffnen",
+			updating: "Wird aktualisiert, bitte warten\u2026",
+			rebootConfirm:
+				"Das Gerät wird beim Neustart etwa 30 Sekunden lang getrennt.",
+			powerOffConfirm:
+				"Das Gerät wird vollständig heruntergefahren. Sie benötigen physischen Zugriff, um es wieder einzuschalten.",
+			blockedStreaming: "Beenden Sie das Streaming vor dem Neustart.",
+			blockedUpdating: "Update läuft. Warten Sie vor dem Neustart.",
+		},
+		pairing: {
 			title: "Geräte-Kopplung",
-			description: "Verknüpfen Sie dieses Gerät über einen Anspruchscode mit Ihrem Cloud-Konto.",
+			description:
+				"Verknüpfen Sie dieses Gerät über einen Anspruchscode mit Ihrem Cloud-Konto.",
 			generate: "Code generieren",
 			regenerate: "Code neu generieren",
 			codeLabel: "Ihr Anspruchscode",
 			validFor: "Gültig für",
 			expired: "Dieser Code ist abgelaufen. Generieren Sie einen neuen.",
-			instructions: "Geben Sie diesen Code in Ihrem Cloud-Dashboard ein, um die Kopplung abzuschließen.",
+			instructions:
+				"Geben Sie diesen Code in Ihrem Cloud-Dashboard ein, um die Kopplung abzuschließen.",
 			waiting: "Warten auf die Kopplungsbestätigung der Cloud…",
 			paired: "Gerät gekoppelt",
 			simulate: "Cloud-Kopplung simulieren (Dev)",
 			generateFailed: "Code konnte nicht generiert werden.",
-			pairFailed: "Kopplung fehlgeschlagen. Prüfen Sie den Code und versuchen Sie es erneut.",
+			pairFailed:
+				"Kopplung fehlgeschlagen. Prüfen Sie den Code und versuchen Sie es erneut.",
 			pairedToast: "Gerät erfolgreich gekoppelt.",
 		},
 		encoderSettings: "Encoder-Einstellungen",
@@ -504,10 +519,10 @@ pairing: {
 			setup: "Einrichten",
 			connected: "Verbunden",
 			disconnected: "Getrennt",
-		active: "Aktiv",
-		on: "An",
-		off: "Aus",
-		noWifi: "Keine WLAN-Schnittstellen gefunden",
+			active: "Aktiv",
+			on: "An",
+			off: "Aus",
+			noWifi: "Keine WLAN-Schnittstellen gefunden",
 			noModems: "Keine SIM-Karten erkannt",
 			noEthernet: "Keine kabelgebundenen Schnittstellen gefunden",
 			hotspotOff: "Hotspot ist aus",
@@ -522,16 +537,18 @@ pairing: {
 			disableBond: "Disable Bond",
 			lastActiveError: "Cannot disable the only active connection",
 			wiredDisableTitle: "Disable Ethernet?",
-			wiredDisableBody: "Disabling Ethernet may interrupt device management and SSH access.",
+			wiredDisableBody:
+				"Disabling Ethernet may interrupt device management and SSH access.",
 			modemModel: "Model",
 			modemManufacturer: "Manufacturer",
-		switchToHotspot: "Switch to Hotspot",
-		switchToStation: "Switch to Station",
-		hotspotSwitchTitle: "Switch to Hotspot?",
-		hotspotSwitchBody: "Switching to hotspot will disconnect this WiFi network and remove it from the bond.",
-		hotspotSwitchConfirm: "Switch to Hotspot",
-		noSimBond: "No SIM — cannot bond",
-		noSimLink: "No SIM",
+			switchToHotspot: "Switch to Hotspot",
+			switchToStation: "Switch to Station",
+			hotspotSwitchTitle: "Switch to Hotspot?",
+			hotspotSwitchBody:
+				"Switching to hotspot will disconnect this WiFi network and remove it from the bond.",
+			hotspotSwitchConfirm: "Switch to Hotspot",
+			noSimBond: "No SIM — cannot bond",
+			noSimLink: "No SIM",
 			hotspotNoBond: "Hotspot can't be bonded",
 		},
 		pageTitle: "Netzwerkkonfiguration",
@@ -609,16 +626,20 @@ pairing: {
 			autoApnDescription: "APN automatisch konfigurieren",
 			roamingDescription: "Verbindung zu anderen Netzwerken erlauben",
 			noSim: "Keine SIM-Karte erkannt",
-			noSimHint: "Legen Sie eine SIM-Karte ein, um dieses Modem zu konfigurieren.",
-			apnRequired: "APN ist erforderlich, wenn der automatische APN deaktiviert ist",
+			noSimHint:
+				"Legen Sie eine SIM-Karte ein, um dieses Modem zu konfigurieren.",
+			apnRequired:
+				"APN ist erforderlich, wenn der automatische APN deaktiviert ist",
 			availableNetworks: "Verfügbare Netzwerke",
-			noNetworksFound: "Noch keine Netzwerke gefunden. Suchen Sie nach Anbietern.",
+			noNetworksFound:
+				"Noch keine Netzwerke gefunden. Suchen Sie nach Anbietern.",
 			scanForNetworks: "Nach Netzwerken suchen",
 			credentials: "Anmeldedaten",
 			configureDescription: "Mobilfunkverbindungseinstellungen konfigurieren",
 			simUnlock: {
 				title: "SIM-PIN erforderlich",
-				description: "Diese SIM-Karte ist gesperrt. Geben Sie die PIN ein, um das Modem zu entsperren.",
+				description:
+					"Diese SIM-Karte ist gesperrt. Geben Sie die PIN ein, um das Modem zu entsperren.",
 				pinLabel: "SIM-PIN",
 				pinPlaceholder: "PIN eingeben",
 				submit: "SIM entsperren",
@@ -902,8 +923,10 @@ pairing: {
 		failed: "Keine Verbindung — Gerät oder Netzwerk prüfen",
 		retry: "Erneut versuchen",
 		rebooting: "Gerät wird neu gestartet…",
-		rebootingDescription: "Das Gerät wird neu gestartet. Diese Seite stellt die Verbindung automatisch wieder her.",
-		sessionExpired: "Sitzung abgelaufen. Bitte authentifizieren Sie sich erneut.",
+		rebootingDescription:
+			"Das Gerät wird neu gestartet. Diese Seite stellt die Verbindung automatisch wieder her.",
+		sessionExpired:
+			"Sitzung abgelaufen. Bitte authentifizieren Sie sich erneut.",
 	},
 	offline: {
 		title: "Sie sind offline",

@@ -15,14 +15,13 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import type WebSocket from "ws";
-
 import { getConfig } from "../config.ts";
 import { buildModemsMessage } from "../modems/modem-status.ts";
 import { netIfBuildMsg } from "../network/network-interfaces.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
 import { getAudioDevices } from "../streaming/audio.ts";
-import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import { getPipelinesMessage } from "../streaming/pipelines.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import { getRevisions } from "../system/revisions.ts";

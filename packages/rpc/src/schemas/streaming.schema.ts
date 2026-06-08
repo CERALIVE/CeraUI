@@ -41,7 +41,7 @@ export type AudioCodec = z.infer<typeof audioCodecSchema>;
 export type AudioCodecs = 'aac' | 'opus';
 
 // Resolution and framerate types for pipeline overrides
-export const resolutionSchema = z.enum(["480p", "720p", "1080p", "1440p", "2160p", "4k"]);
+export const resolutionSchema = z.enum(['480p', '720p', '1080p', '1440p', '2160p', '4k']);
 export type Resolution = z.infer<typeof resolutionSchema>;
 
 export const framerateSchema = z.union([
@@ -89,60 +89,60 @@ export const bitrateOutputSchema = z.object({
 export type BitrateOutput = z.infer<typeof bitrateOutputSchema>;
 
 // Hardware type schema
-export const hardwareTypeSchema = z.enum(["jetson", "rk3588", "n100", "generic"]);
+export const hardwareTypeSchema = z.enum(['jetson', 'rk3588', 'n100', 'generic']);
 export type HardwareType = z.infer<typeof hardwareTypeSchema>;
 
 // Hardware labels (browser-safe, no Node deps)
 export const HARDWARE_LABELS: Record<HardwareType, string> = {
-	jetson: "NVIDIA Jetson",
-	rk3588: "Rockchip RK3588",
-	n100: "Intel N100",
-	generic: "Generic (Software)",
+	jetson: 'NVIDIA Jetson',
+	rk3588: 'Rockchip RK3588',
+	n100: 'Intel N100',
+	generic: 'Generic (Software)',
 };
 
 // Hardware descriptions for UI
 export const HARDWARE_DESCRIPTIONS: Record<HardwareType, string> = {
-	jetson: "NVIDIA nvenc hardware encoding",
-	rk3588: "Rockchip MPP hardware encoding (supports 4K)",
-	n100: "Intel VAAPI hardware encoding",
-	generic: "Software x264/x265 encoding",
+	jetson: 'NVIDIA nvenc hardware encoding',
+	rk3588: 'Rockchip MPP hardware encoding (supports 4K)',
+	n100: 'Intel VAAPI hardware encoding',
+	generic: 'Software x264/x265 encoding',
 };
 
 // Hardware colors for UI (Tailwind classes)
 export const HARDWARE_COLORS: Record<HardwareType, { text: string; bg: string; border: string }> = {
 	jetson: {
-		text: "text-green-600 dark:text-green-400",
-		bg: "bg-green-500",
-		border: "border-green-500 bg-green-500/20",
+		text: 'text-green-600 dark:text-green-400',
+		bg: 'bg-green-500',
+		border: 'border-green-500 bg-green-500/20',
 	},
 	rk3588: {
-		text: "text-orange-600 dark:text-orange-400",
-		bg: "bg-orange-500",
-		border: "border-orange-500 bg-orange-500/20",
+		text: 'text-orange-600 dark:text-orange-400',
+		bg: 'bg-orange-500',
+		border: 'border-orange-500 bg-orange-500/20',
 	},
 	n100: {
-		text: "text-blue-600 dark:text-blue-400",
-		bg: "bg-blue-500",
-		border: "border-blue-500 bg-blue-500/20",
+		text: 'text-blue-600 dark:text-blue-400',
+		bg: 'bg-blue-500',
+		border: 'border-blue-500 bg-blue-500/20',
 	},
 	generic: {
-		text: "text-gray-600 dark:text-gray-400",
-		bg: "bg-gray-500",
-		border: "border-gray-500 bg-gray-500/20",
+		text: 'text-gray-600 dark:text-gray-400',
+		bg: 'bg-gray-500',
+		border: 'border-gray-500 bg-gray-500/20',
 	},
 };
 
 // Video source labels (browser-safe)
 export const VIDEO_SOURCE_LABELS: Record<string, string> = {
-	camlink: "Cam Link 4K",
-	libuvch264: "UVC H264 Camera",
-	hdmi: "HDMI Capture",
-	usb_mjpeg: "USB MJPEG",
-	v4l_mjpeg: "V4L2 MJPEG",
-	rtmp: "RTMP Ingest",
-	srt: "SRT Ingest",
-	test: "Test Pattern",
-	decklink: "Decklink SDI",
+	camlink: 'Cam Link 4K',
+	libuvch264: 'UVC H264 Camera',
+	hdmi: 'HDMI Capture',
+	usb_mjpeg: 'USB MJPEG',
+	v4l_mjpeg: 'V4L2 MJPEG',
+	rtmp: 'RTMP Ingest',
+	srt: 'SRT Ingest',
+	test: 'Test Pattern',
+	decklink: 'Decklink SDI',
 };
 
 // Pipeline schema - now based on video sources with structured metadata
@@ -169,7 +169,7 @@ export const pipelinesSchema = z.record(z.string(), pipelineSchema);
 export type Pipelines = z.infer<typeof pipelinesSchema>;
 
 // Available resolutions for UI
-export const AVAILABLE_RESOLUTIONS: Resolution[] = ["480p", "720p", "1080p", "1440p", "2160p"];
+export const AVAILABLE_RESOLUTIONS: Resolution[] = ['480p', '720p', '1080p', '1440p', '2160p'];
 
 // Available framerates for UI
 export const AVAILABLE_FRAMERATES: Framerate[] = [25, 29.97, 30, 50, 59.94, 60];
@@ -183,7 +183,11 @@ export const audioCodecsMessageSchema = z.record(
 );
 export type AudioCodecsMessage = z.infer<typeof audioCodecsMessageSchema>;
 
-import { detectionMethodSchema, customProviderInputSchema, providerSelectionSchema } from './cloud-provider.schema';
+import {
+	customProviderInputSchema,
+	detectionMethodSchema,
+	providerSelectionSchema,
+} from './cloud-provider.schema';
 import { relayProtocolSchema } from './relay.schema';
 
 // Config message schema (what the server sends to clients)
@@ -246,7 +250,7 @@ export type StreamingStartOutputExtended = z.infer<typeof streamingStartOutputSc
 // liveness, ceracoder frame production, SRT reconnect status, and srtla bond
 // link count. This is the device's single source of truth for "is the stream
 // actually working". READ-ONLY — never drives restart logic.
-export const healthStateSchema = z.enum(["healthy", "degraded", "dead"]);
+export const healthStateSchema = z.enum(['healthy', 'degraded', 'dead']);
 export type HealthState = z.infer<typeof healthStateSchema>;
 
 export const streamHealthOutputSchema = z.object({

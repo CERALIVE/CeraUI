@@ -222,7 +222,7 @@ export function expire(registry: DirtyRegistry, now: number): string[] {
 	const released: string[] = [];
 	for (const field of Object.keys(registry.locks)) {
 		const lock = registry.locks[field];
-		if (now - lock.ts > FIELD_LOCK_TTL_MS) {
+		if (lock && now - lock.ts > FIELD_LOCK_TTL_MS) {
 			delete registry.locks[field];
 			released.push(field);
 		}
@@ -265,7 +265,11 @@ interface DirtyStore {
 		now?: number,
 		options?: { strict?: boolean },
 	) => ReconcileResult;
-	onRpcApplied: (field: string, appliedValue: unknown, now?: number) => ReconcileResult;
+	onRpcApplied: (
+		field: string,
+		appliedValue: unknown,
+		now?: number,
+	) => ReconcileResult;
 	expire: (now?: number) => string[];
 	getRegistry: () => DirtyRegistry;
 	destroy: () => void;
@@ -298,9 +302,17 @@ function createDirtyStore(): DirtyStore {
 		markResolved: (field) => {
 			markResolved(registry, field);
 		},
-		shouldIgnoreEcho: (field, incomingValue) => shouldIgnoreEcho(registry, field, incomingValue),
+		shouldIgnoreEcho: (field, incomingValue) =>
+			shouldIgnoreEcho(registry, field, incomingValue),
 		reconcile: (field, incomingValue, now = Date.now(), options?) =>
-			reconcile(registry, field, incomingValue, registry.locks[field]?.rpcResolved ?? false, now, options),
+			reconcile(
+				registry,
+				field,
+				incomingValue,
+				registry.locks[field]?.rpcResolved ?? false,
+				now,
+				options,
+			),
 		onRpcApplied: (field, appliedValue, now = Date.now()) =>
 			onRpcApplied(registry, field, appliedValue, now),
 		expire: (now = Date.now()) => expire(registry, now),
@@ -314,7 +326,8 @@ function createDirtyStore(): DirtyStore {
 let singleton: DirtyStore | null = null;
 
 function store(): DirtyStore {
-	return (singleton ??= createDirtyStore());
+	singleton ??= createDirtyStore();
+	return singleton;
 }
 
 // ============================================
@@ -330,7 +343,11 @@ export function isPending(field: string): boolean {
  * Record an optimistic write for `field`, resetting its per-field TTL. Call this
  * the moment the user commits an edit, before the RPC resolves.
  */
-export function markPending(field: string, intendedValue: unknown, now?: number): void {
+export function markPending(
+	field: string,
+	intendedValue: unknown,
+	now?: number,
+): void {
 	store().markPending(field, intendedValue, now);
 }
 
@@ -343,7 +360,10 @@ export function onRpcResolved(field: string): void {
 }
 
 /** Whether an incoming server echo for `field` should be ignored as stale. */
-export function shouldIgnoreEchoReactive(field: string, incomingValue: unknown): boolean {
+export function shouldIgnoreEchoReactive(
+	field: string,
+	incomingValue: unknown,
+): boolean {
 	return store().shouldIgnoreEcho(field, incomingValue);
 }
 

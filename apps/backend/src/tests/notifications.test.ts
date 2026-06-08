@@ -25,7 +25,18 @@ function emitPersistent(
 	params?: Record<string, unknown>,
 ): WireShow {
 	emitted.add(name);
-	notificationSend(undefined, name, type, msg, 0, true, false, true, key, params);
+	notificationSend(
+		undefined,
+		name,
+		type,
+		msg,
+		0,
+		true,
+		false,
+		true,
+		key,
+		params,
+	);
 
 	const sink: string[] = [];
 	notificationSendPersistent(captureConn(sink), true);

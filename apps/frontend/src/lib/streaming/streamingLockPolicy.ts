@@ -58,10 +58,19 @@ export type StreamSection = "encoder" | "audio" | "server";
 const SECTION_FIELDS: Record<StreamSection, readonly string[]> = {
 	encoder: ["pipeline", "resolution", "framerate", "max_br"],
 	audio: ["asrc", "acodec", "delay"],
-	server: ["relay_server", "relay_account", "srtla_addr", "srtla_port", "srt_latency", "srt_streamid"],
+	server: [
+		"relay_server",
+		"relay_account",
+		"srtla_addr",
+		"srtla_port",
+		"srt_latency",
+		"srt_streamid",
+	],
 };
 
-const restartRequiredSet: ReadonlySet<string> = new Set(RESTART_REQUIRED_FIELDS);
+const restartRequiredSet: ReadonlySet<string> = new Set(
+	RESTART_REQUIRED_FIELDS,
+);
 const hotChangeableSet: ReadonlySet<string> = new Set(HOT_CHANGEABLE_FIELDS);
 
 /**
@@ -73,14 +82,20 @@ const hotChangeableSet: ReadonlySet<string> = new Set(HOT_CHANGEABLE_FIELDS);
  * - Unknown fields default to UNLOCKED (fail-open for UI fields not in the
  *   policy, e.g. cosmetic toggles like `bitrate_overlay`).
  */
-export function isFieldLocked(fieldName: string, isStreaming: boolean): boolean {
+export function isFieldLocked(
+	fieldName: string,
+	isStreaming: boolean,
+): boolean {
 	if (!isStreaming) return false;
 	if (hotChangeableSet.has(fieldName)) return false;
 	return restartRequiredSet.has(fieldName);
 }
 
 /** Convenience inverse of {@link isFieldLocked}. */
-export function isFieldEditable(fieldName: string, isStreaming: boolean): boolean {
+export function isFieldEditable(
+	fieldName: string,
+	isStreaming: boolean,
+): boolean {
 	return !isFieldLocked(fieldName, isStreaming);
 }
 
@@ -94,7 +109,10 @@ export function isFieldHotChangeable(fieldName: string): boolean {
  * locked? Used to badge a dialog/section trigger with "Stop stream to change".
  * Returns false for unknown sections.
  */
-export function isSectionLocked(section: StreamSection, isStreaming: boolean): boolean {
+export function isSectionLocked(
+	section: StreamSection,
+	isStreaming: boolean,
+): boolean {
 	if (!isStreaming) return false;
 	const fields = SECTION_FIELDS[section];
 	if (!fields) return false;

@@ -40,13 +40,19 @@ export function getShouldShowOfflinePage(): boolean {
 }
 
 export function getIsFullyOffline(): boolean {
-	return !getIsOnline() || connectionState === "disconnected" || connectionState === "error";
+	return (
+		!getIsOnline() ||
+		connectionState === "disconnected" ||
+		connectionState === "error"
+	);
 }
 
 // ============================================
 // Connection Checking
 // ============================================
-export async function checkConnection(isInitialCheck = false): Promise<boolean> {
+export async function checkConnection(
+	isInitialCheck = false,
+): Promise<boolean> {
 	try {
 		const controller = new AbortController();
 		const timeout = isInitialCheck ? 500 : 2000;

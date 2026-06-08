@@ -1,12 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-
-import { call } from "@orpc/server";
-
 import {
 	CLAIM_CODE_ALPHABET,
 	CLAIM_CODE_RE,
 	claimCodeOutputSchema,
 } from "@ceraui/rpc/schemas";
+import { call } from "@orpc/server";
 
 import { getConfig } from "../modules/config.ts";
 import {
@@ -49,7 +47,11 @@ function makeContext(authed = true): RPCContext {
 
 describe("claim-code derivation — charset, length, validity window", () => {
 	test("code matches the unambiguous charset and 6–8 length bound", () => {
-		const { code } = deriveClaimCode({ now: NOW, serial: SERIAL, secret: SECRET });
+		const { code } = deriveClaimCode({
+			now: NOW,
+			serial: SERIAL,
+			secret: SECRET,
+		});
 		expect(code).toMatch(CLAIM_CODE_RE);
 		expect(code).toHaveLength(CLAIM_CODE_LENGTH);
 		for (const ch of code) {
@@ -62,12 +64,20 @@ describe("claim-code derivation — charset, length, validity window", () => {
 			expect(CLAIM_CODE_ALPHABET.includes(ch)).toBe(false);
 		}
 		// And no generated code can contain them.
-		const { code } = deriveClaimCode({ now: NOW, serial: SERIAL, secret: SECRET });
+		const { code } = deriveClaimCode({
+			now: NOW,
+			serial: SERIAL,
+			secret: SECRET,
+		});
 		expect(code).not.toMatch(/[0O1IL]/);
 	});
 
 	test("validUntil is the window end and windowSeconds is the configured window", () => {
-		const result = deriveClaimCode({ now: NOW, serial: SERIAL, secret: SECRET });
+		const result = deriveClaimCode({
+			now: NOW,
+			serial: SERIAL,
+			secret: SECRET,
+		});
 		expect(result.windowSeconds).toBe(CLAIM_CODE_WINDOW_SECONDS);
 		expect(result.validUntil).toBe(WINDOW_START + WINDOW_MS);
 		// The code is valid from now until validUntil, and the window is exactly
@@ -78,14 +88,22 @@ describe("claim-code derivation — charset, length, validity window", () => {
 	});
 
 	test("output validates against the shared claimCodeOutputSchema", () => {
-		const result = deriveClaimCode({ now: NOW, serial: SERIAL, secret: SECRET });
+		const result = deriveClaimCode({
+			now: NOW,
+			serial: SERIAL,
+			secret: SECRET,
+		});
 		expect(() => claimCodeOutputSchema.parse(result)).not.toThrow();
 	});
 });
 
 describe("claim-code stability and rotation", () => {
 	test("code is stable for every instant within the same window", () => {
-		const base = deriveClaimCode({ now: WINDOW_START, serial: SERIAL, secret: SECRET });
+		const base = deriveClaimCode({
+			now: WINDOW_START,
+			serial: SERIAL,
+			secret: SECRET,
+		});
 		for (const offset of [0, 1, 1_000, WINDOW_MS / 2, WINDOW_MS - 1]) {
 			const again = deriveClaimCode({
 				now: WINDOW_START + offset,
@@ -98,7 +116,11 @@ describe("claim-code stability and rotation", () => {
 	});
 
 	test("code rotates once the window elapses", () => {
-		const current = deriveClaimCode({ now: WINDOW_START, serial: SERIAL, secret: SECRET });
+		const current = deriveClaimCode({
+			now: WINDOW_START,
+			serial: SERIAL,
+			secret: SECRET,
+		});
 		const next = deriveClaimCode({
 			now: WINDOW_START + WINDOW_MS,
 			serial: SERIAL,
@@ -110,13 +132,21 @@ describe("claim-code stability and rotation", () => {
 
 	test("code is namespaced to the device serial", () => {
 		const a = deriveClaimCode({ now: NOW, serial: SERIAL, secret: SECRET });
-		const b = deriveClaimCode({ now: NOW, serial: "DIFFERENT-SERIAL", secret: SECRET });
+		const b = deriveClaimCode({
+			now: NOW,
+			serial: "DIFFERENT-SERIAL",
+			secret: SECRET,
+		});
 		expect(a.code).not.toBe(b.code);
 	});
 
 	test("code depends on the secret seed (different secret → different code)", () => {
 		const a = deriveClaimCode({ now: NOW, serial: SERIAL, secret: SECRET });
-		const b = deriveClaimCode({ now: NOW, serial: SERIAL, secret: "another-secret-key==" });
+		const b = deriveClaimCode({
+			now: NOW,
+			serial: SERIAL,
+			secret: "another-secret-key==",
+		});
 		expect(a.code).not.toBe(b.code);
 	});
 });

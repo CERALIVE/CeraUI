@@ -34,7 +34,7 @@ import {
 	onWifiChange,
 	setWifiState,
 } from "./state/wifi-state.ts";
-import { type WifiNetwork, broadcastWifiState } from "./wifi.ts";
+import { broadcastWifiState, type WifiNetwork } from "./wifi.ts";
 import { wifiDeviceListGetMacAddress } from "./wifi-device-list.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
 
@@ -234,8 +234,7 @@ export async function wifiUpdateScanResult() {
 			maxAttempts: 3,
 			baseDelayMs: 200,
 			maxDelayMs: 1000,
-			emptyResultError: () =>
-				new Error("nmcli wifi list returned no results"),
+			emptyResultError: () => new Error("nmcli wifi list returned no results"),
 			onExhausted: (err) =>
 				logger.debug(`wifiUpdateScanResult: scan failed after retries: ${err}`),
 		},

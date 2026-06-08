@@ -3,6 +3,7 @@
  * Wraps existing streaming logic from modules/streaming/
  */
 
+import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import {
 	audioCodecsMessageSchema,
 	bitrateInputSchema,
@@ -10,28 +11,28 @@ import {
 	configMessageSchema,
 	getMockHardwareOutputSchema,
 	pipelinesMessageSchema,
+	type StreamingConfigInput,
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
-	streamingConfigInputSchema,
 	streamHealthOutputSchema,
+	streamingConfigInputSchema,
 	streamingSetConfigOutputSchema,
 	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
-	type StreamingConfigInput,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import {
-	shouldUseMocks,
-	setMockEncoderConfig,
 	getMockState,
+	setMockEncoderConfig,
 	setStreamingState,
+	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
-import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import {
 	clampBitrate,
 	setBitrate as setEncoderBitrate,
 } from "../../modules/streaming/encoder.ts";
+import { getStreamHealth } from "../../modules/streaming/health.ts";
 import {
 	getEffectiveHardware,
 	getMockHardware,
@@ -41,8 +42,10 @@ import {
 	setMockHardware,
 	VALID_HARDWARE_TYPES,
 } from "../../modules/streaming/pipelines.ts";
-import { getStreamHealth } from "../../modules/streaming/health.ts";
-import { getIsStreaming, updateStatus } from "../../modules/streaming/streaming.ts";
+import {
+	getIsStreaming,
+	updateStatus,
+} from "../../modules/streaming/streaming.ts";
 import {
 	start as startStream,
 	stop as stopStream,
@@ -169,12 +172,16 @@ export const getConfigProcedure = authedProcedure
 		// In mock mode, overlay mockEncoderConfig fields if set
 		if (shouldUseMocks()) {
 			const { mockEncoderConfig } = getMockState();
-			if (mockEncoderConfig.max_br !== undefined) max_br = mockEncoderConfig.max_br;
-			if (mockEncoderConfig.pipeline !== undefined) pipeline = mockEncoderConfig.pipeline;
+			if (mockEncoderConfig.max_br !== undefined)
+				max_br = mockEncoderConfig.max_br;
+			if (mockEncoderConfig.pipeline !== undefined)
+				pipeline = mockEncoderConfig.pipeline;
 			if (mockEncoderConfig.bitrate_overlay !== undefined)
 				bitrate_overlay = mockEncoderConfig.bitrate_overlay;
-			if (mockEncoderConfig.resolution !== undefined) resolution = mockEncoderConfig.resolution;
-			if (mockEncoderConfig.framerate !== undefined) framerate = mockEncoderConfig.framerate;
+			if (mockEncoderConfig.resolution !== undefined)
+				resolution = mockEncoderConfig.resolution;
+			if (mockEncoderConfig.framerate !== undefined)
+				framerate = mockEncoderConfig.framerate;
 		}
 
 		return {
@@ -242,12 +249,14 @@ export const setConfigProcedure = authedProcedure
 
 		if (input.relay_streamid_override !== undefined)
 			config.relay_streamid_override = input.relay_streamid_override;
-		if (input.relay_protocol !== undefined) config.relay_protocol = input.relay_protocol;
+		if (input.relay_protocol !== undefined)
+			config.relay_protocol = input.relay_protocol;
 
 		// Reflect the post-clamp config values back for every field the input
 		// touched, so the FE field-lock releases on what the server actually wrote.
 		const applied: StreamingConfigInput = {};
-		if (input.srt_latency !== undefined) applied.srt_latency = config.srt_latency;
+		if (input.srt_latency !== undefined)
+			applied.srt_latency = config.srt_latency;
 		if (input.delay !== undefined) applied.delay = config.delay;
 		if (input.pipeline !== undefined) applied.pipeline = config.pipeline;
 		if (input.acodec !== undefined) applied.acodec = config.acodec;
@@ -257,7 +266,8 @@ export const setConfigProcedure = authedProcedure
 		if (input.framerate !== undefined) applied.framerate = config.framerate;
 		if (input.bitrate_overlay !== undefined)
 			applied.bitrate_overlay = config.bitrate_overlay;
-		if (input.relay_server !== undefined) applied.relay_server = config.relay_server;
+		if (input.relay_server !== undefined)
+			applied.relay_server = config.relay_server;
 		if (input.relay_account !== undefined)
 			applied.relay_account = config.relay_account;
 		if (input.srtla_addr !== undefined) applied.srtla_addr = config.srtla_addr;

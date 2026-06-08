@@ -76,7 +76,9 @@ export function getAdapter(protocol: string): TransportAdapter {
 }
 
 /** Resolve a detection-method strategy by id, or `undefined` if unregistered. */
-export function getDetectionMethod(method: string): DetectionMethod | undefined {
+export function getDetectionMethod(
+	method: string,
+): DetectionMethod | undefined {
 	return detectionMethods.get(method);
 }
 

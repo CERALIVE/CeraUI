@@ -47,7 +47,11 @@ export interface HealthSnapshot {
 	previous: HealthIndicator;
 }
 
-const KNOWN_STATES: ReadonlySet<string> = new Set(["healthy", "degraded", "dead"]);
+const KNOWN_STATES: ReadonlySet<string> = new Set([
+	"healthy",
+	"degraded",
+	"dead",
+]);
 
 // ============================================
 // Pure logic (rune-free, unit-testable)
@@ -78,7 +82,10 @@ export function parseHealthState(data: unknown): HealthIndicator {
  * same state still advances `previous` to that state (so `current === previous`
  * marks "no transition").
  */
-export function reduceHealth(prev: HealthSnapshot, next: HealthIndicator): HealthSnapshot {
+export function reduceHealth(
+	prev: HealthSnapshot,
+	next: HealthIndicator,
+): HealthSnapshot {
 	return { current: next, previous: prev.current };
 }
 
@@ -187,7 +194,9 @@ type GlobalWithStore = typeof globalThis & { [STORE_KEY]?: StreamHealthStore };
 
 const singletonStore: StreamHealthStore = ((): StreamHealthStore => {
 	const g = globalThis as GlobalWithStore;
-	return (g[STORE_KEY] ??= createStreamHealthStore());
+	const existing = g[STORE_KEY] ?? createStreamHealthStore();
+	g[STORE_KEY] = existing;
+	return existing;
 })();
 
 function store(): StreamHealthStore {

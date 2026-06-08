@@ -29,8 +29,8 @@ import {
 	deriveConnectionUx,
 	initialReconnectState,
 	MAX_RECONNECT_ATTEMPTS,
-	reduceConnection,
 	type ReconnectState,
+	reduceConnection,
 	shouldExpireSession,
 } from "./connection-ux.svelte";
 import { deriveHudState, STALE_THRESHOLD_MS } from "./hud.svelte";
@@ -47,7 +47,11 @@ describe("reduceConnection", () => {
 	});
 
 	it("resets attempts and clears the reboot latch on connected", () => {
-		const prev: ReconnectState = { attempts: 4, hasConnected: true, rebooting: true };
+		const prev: ReconnectState = {
+			attempts: 4,
+			hasConnected: true,
+			rebooting: true,
+		};
 		const s = reduceConnection(prev, "connected");
 		expect(s).toEqual({ attempts: 0, hasConnected: true, rebooting: false });
 	});
@@ -65,7 +69,11 @@ describe("reduceConnection", () => {
 	});
 
 	it("preserves attempts and the reboot latch across a drop", () => {
-		const prev: ReconnectState = { attempts: 3, hasConnected: true, rebooting: true };
+		const prev: ReconnectState = {
+			attempts: 3,
+			hasConnected: true,
+			rebooting: true,
+		};
 		expect(reduceConnection(prev, "disconnected")).toEqual(prev);
 		expect(reduceConnection(prev, "error")).toEqual(prev);
 	});
@@ -86,7 +94,10 @@ const baseInput = {
 
 describe("deriveConnectionUx", () => {
 	it("shows nothing while connected", () => {
-		expect(deriveConnectionUx(baseInput)).toEqual({ mode: "connected", showBanner: false });
+		expect(deriveConnectionUx(baseInput)).toEqual({
+			mode: "connected",
+			showBanner: false,
+		});
 	});
 
 	it("shows the reconnecting banner when WS is down but the browser is online", () => {
@@ -194,7 +205,10 @@ function makeSources(overrides: Partial<HudSources> = {}): HudSources {
 	};
 }
 
-function makeTimestamps(value: number | null, overrides: Partial<HudTimestamps> = {}): HudTimestamps {
+function makeTimestamps(
+	value: number | null,
+	overrides: Partial<HudTimestamps> = {},
+): HudTimestamps {
 	return {
 		streaming: value,
 		sensors: value,
@@ -209,10 +223,17 @@ const T0 = 1_000_000;
 
 describe("HUD staleness on WS disconnect", () => {
 	it("marks isFullyStale once STALE_THRESHOLD_MS elapses after the drop", () => {
-		const sources = makeSources({ isConnected: false, connectionState: "disconnected" });
+		const sources = makeSources({
+			isConnected: false,
+			connectionState: "disconnected",
+		});
 		const timestamps = makeTimestamps(T0, { connectionLostAt: T0 });
 
-		const justAfter = deriveHudState(sources, timestamps, T0 + STALE_THRESHOLD_MS + 1);
+		const justAfter = deriveHudState(
+			sources,
+			timestamps,
+			T0 + STALE_THRESHOLD_MS + 1,
+		);
 		expect(justAfter.isConnected).toBe(false);
 		expect(justAfter.isFullyStale).toBe(true);
 		// Fields dim but last-known values are preserved (not blanked).
@@ -221,10 +242,17 @@ describe("HUD staleness on WS disconnect", () => {
 	});
 
 	it("is not yet fully stale within the grace window after the drop", () => {
-		const sources = makeSources({ isConnected: false, connectionState: "disconnected" });
+		const sources = makeSources({
+			isConnected: false,
+			connectionState: "disconnected",
+		});
 		const timestamps = makeTimestamps(T0, { connectionLostAt: T0 });
 
-		const withinGrace = deriveHudState(sources, timestamps, T0 + STALE_THRESHOLD_MS - 1);
+		const withinGrace = deriveHudState(
+			sources,
+			timestamps,
+			T0 + STALE_THRESHOLD_MS - 1,
+		);
 		expect(withinGrace.isFullyStale).toBe(false);
 		expect(withinGrace.bitrateKbps).toBe(6000);
 	});

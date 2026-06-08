@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import { call } from "@orpc/server";
-
-import { clampBitrate } from "../modules/streaming/encoder.ts";
 import { getConfig } from "../modules/config.ts";
+import { clampBitrate } from "../modules/streaming/encoder.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
 import {

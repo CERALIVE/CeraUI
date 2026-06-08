@@ -17,6 +17,8 @@
 */
 
 import fs from "node:fs";
+import type { PipelineOverrides } from "@ceralive/ceracoder";
+import { buildSrtlaSendArgs, getSrtlaSendExec } from "@ceralive/srtla/sender";
 import type WebSocket from "ws";
 import { isLocalIp } from "../../helpers/ip-addresses.ts";
 import { logger } from "../../helpers/logger.ts";
@@ -40,6 +42,10 @@ import {
 	isAsrcProbeRejectResolved,
 } from "./audio.ts";
 import { hasLowMtu } from "./bcrpt.ts";
+import {
+	buildCeracoderArgsAndWriteConfig,
+	getCeracoderExec,
+} from "./ceracoder.ts";
 import { setBitrate } from "./encoder.ts";
 import {
 	broadcastHealthIfChanged,
@@ -47,11 +53,10 @@ import {
 	reportStreamProcessExit,
 } from "./health.ts";
 import {
-	type Pipeline,
 	gatePipelineOverrides,
 	generatePipelineFile,
+	type Pipeline,
 } from "./pipelines.ts";
-import type { PipelineOverrides } from "@ceralive/ceracoder";
 import {
 	genSrtlaIpList,
 	genSrtlaIpListForLocalIpAddress,
@@ -59,14 +64,6 @@ import {
 	restartSrtla,
 	setSrtlaIpList,
 } from "./srtla.ts";
-import {
-	getCeracoderExec,
-	buildCeracoderArgsAndWriteConfig,
-} from "./ceracoder.ts";
-import {
-	buildSrtlaSendArgs,
-	getSrtlaSendExec,
-} from "@ceralive/srtla/sender";
 import {
 	type ConfigParameters,
 	getIsStreaming,
@@ -326,9 +323,7 @@ export async function start(
 }
 
 function removeProc(streamingProcess: StreamingProcess) {
-	streamingProcesses = streamingProcesses.filter(
-		(p) => p !== streamingProcess,
-	);
+	streamingProcesses = streamingProcesses.filter((p) => p !== streamingProcess);
 }
 
 function stopProcess(streamingProcess: StreamingProcess) {

@@ -58,7 +58,9 @@ export interface ActiveNotification {
 }
 
 /** A callable translation leaf as exposed by the `$LL` proxy. */
-type TranslateFn = (params?: Record<string, string | number | boolean>) => string;
+type TranslateFn = (
+	params?: Record<string, string | number | boolean>,
+) => string;
 
 // ============================================
 // Pure logic (rune-free, unit-testable)
@@ -75,10 +77,17 @@ type TranslateFn = (params?: Record<string, string | number | boolean>) => strin
  * the key string" fallback — an absent key resolves to `undefined` here, which
  * routes to the `msg` fallback rather than leaking a raw key into the UI.
  */
-function lookupTranslation(translations: unknown, key: string): TranslateFn | undefined {
+function lookupTranslation(
+	translations: unknown,
+	key: string,
+): TranslateFn | undefined {
 	let current: unknown = translations;
 	for (const segment of key.split(".")) {
-		if (current === null || typeof current !== "object" || !(segment in current)) {
+		if (
+			current === null ||
+			typeof current !== "object" ||
+			!(segment in current)
+		) {
 			return undefined;
 		}
 		current = (current as Record<string, unknown>)[segment];
@@ -98,7 +107,9 @@ function toInterpolationParams(
 	if (!params) return out;
 	for (const [name, value] of Object.entries(params)) {
 		out[name] =
-			typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+			typeof value === "string" ||
+			typeof value === "number" ||
+			typeof value === "boolean"
 				? value
 				: String(value);
 	}
@@ -154,7 +165,10 @@ export function pushNotification(
 	now: number,
 ): Map<string, ActiveNotification> {
 	const next = new Map(active);
-	next.set(notification.name, toActiveNotification(notification, translations, now));
+	next.set(
+		notification.name,
+		toActiveNotification(notification, translations, now),
+	);
 	return next;
 }
 
@@ -226,7 +240,9 @@ type GlobalWithStore = typeof globalThis & { [STORE_KEY]?: NotificationStore };
 
 const singletonStore: NotificationStore = ((): NotificationStore => {
 	const g = globalThis as GlobalWithStore;
-	return (g[STORE_KEY] ??= createNotificationStore());
+	const existing = g[STORE_KEY] ?? createNotificationStore();
+	g[STORE_KEY] = existing;
+	return existing;
 })();
 
 function store(): NotificationStore {

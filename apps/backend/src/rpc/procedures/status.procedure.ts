@@ -22,10 +22,7 @@ import {
 	getAvailableUpdates,
 	getSoftUpdateStatus,
 } from "../../modules/system/software-updates.ts";
-import {
-	getCachedSshStatus,
-	getSshStatus,
-} from "../../modules/system/ssh.ts";
+import { getCachedSshStatus, getSshStatus } from "../../modules/system/ssh.ts";
 import { wifiBuildMsg } from "../../modules/wifi/wifi.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";

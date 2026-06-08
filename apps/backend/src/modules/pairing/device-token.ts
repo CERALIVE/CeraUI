@@ -102,7 +102,9 @@ export function verifyStubDeviceToken(
 
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(base64UrlDecode(token.slice(DEVICE_TOKEN_HEADER.length)));
+		parsed = JSON.parse(
+			base64UrlDecode(token.slice(DEVICE_TOKEN_HEADER.length)),
+		);
 	} catch {
 		return null;
 	}

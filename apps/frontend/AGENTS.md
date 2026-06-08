@@ -69,7 +69,8 @@ New procedures: add to `@ceraui/rpc` schemas first, then extend `TypedRPC` in `c
 ## COMMANDS
 
 ```bash
-pnpm dev / build / check / test / lint   # Vite :5173 / dist/ / svelte-check / vitest / ESLint
+pnpm dev / build / check / test          # Vite :5173 / dist/ / svelte-check / vitest
+# Linting is Biome-only, run from the workspace root: `biome check .` (or `pnpm lint`)
 ```
 
 ## CONVENTIONS

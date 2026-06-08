@@ -52,12 +52,7 @@ export const claimCodeOutputSchema = z.object({
 export type ClaimCodeOutput = z.infer<typeof claimCodeOutputSchema>;
 
 /** Subscription standing carried in the device token (`sub_status`, ADR-0006); mirrors platform `Billing.status`. */
-export const SUBSCRIPTION_STATUSES = [
-	'ACTIVE',
-	'FREE',
-	'EXPIRED',
-	'CANCELLED',
-] as const;
+export const SUBSCRIPTION_STATUSES = ['ACTIVE', 'FREE', 'EXPIRED', 'CANCELLED'] as const;
 export const subscriptionStatusSchema = z.enum(SUBSCRIPTION_STATUSES);
 export type SubscriptionStatus = z.infer<typeof subscriptionStatusSchema>;
 

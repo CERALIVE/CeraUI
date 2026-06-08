@@ -26,16 +26,24 @@
  *  4. config.relay_server set + relays undefined → relay tab stays SELECTED
  *     (not switched to manual) and shows the waiting hint.
  */
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/svelte";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import ServerDialog from './ServerDialog.svelte';
+import ServerDialog from "./ServerDialog.svelte";
 
 // Mutable subscription state driven per-test. The dialog reads these through
 // the mocked subscriptions module; values are set BEFORE each render so no
 // cross-render reactivity is required.
 const state = vi.hoisted(() => ({
-	config: undefined as { relay_server?: string; srtla_addr?: string; srtla_port?: number } | undefined,
+	config: undefined as
+		| { relay_server?: string; srtla_addr?: string; srtla_port?: number }
+		| undefined,
 	relays: undefined as
 		| {
 				accounts: Record<string, { name: string }>;
@@ -45,22 +53,22 @@ const state = vi.hoisted(() => ({
 	isStreaming: false,
 }));
 
-vi.mock('$lib/rpc/subscriptions.svelte', () => ({
+vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConfig: () => state.config,
 	getRelays: () => state.relays,
 	getIsStreaming: () => state.isStreaming,
 }));
 
-vi.mock('$lib/rpc', () => ({
+vi.mock("$lib/rpc", () => ({
 	rpc: { streaming: { setConfig: vi.fn() } },
 }));
 
-vi.mock('$lib/rpc/dirty-registry.svelte', () => ({
+vi.mock("$lib/rpc/dirty-registry.svelte", () => ({
 	markPending: vi.fn(),
 	onRpcResolved: vi.fn(),
 }));
 
-vi.mock('svelte-sonner', () => ({
+vi.mock("svelte-sonner", () => ({
 	toast: { success: vi.fn(), error: vi.fn() },
 }));
 
@@ -90,13 +98,15 @@ beforeAll(() => {
 });
 
 // English base copy (the runes i18n adapter defaults to `en` synchronously).
-const MANUAL_LABEL = 'Manual Configuration';
-const RELAY_LABEL = 'Relay Server';
-const WAITING_HINT = 'Waiting for relay servers\u2026';
-const NONE_HINT = 'No relay servers available';
+const MANUAL_LABEL = "Manual Configuration";
+const RELAY_LABEL = "Relay Server";
+const WAITING_HINT = "Waiting for relay servers\u2026";
+const NONE_HINT = "No relay servers available";
 
-const relayTab = () => screen.getByRole('tab', { name: RELAY_LABEL }) as HTMLButtonElement;
-const manualTab = () => screen.getByRole('tab', { name: MANUAL_LABEL }) as HTMLButtonElement;
+const relayTab = () =>
+	screen.getByRole("tab", { name: RELAY_LABEL }) as HTMLButtonElement;
+const manualTab = () =>
+	screen.getByRole("tab", { name: MANUAL_LABEL }) as HTMLButtonElement;
 
 beforeEach(() => {
 	state.config = undefined;
@@ -104,8 +114,8 @@ beforeEach(() => {
 	state.isStreaming = false;
 });
 
-describe('ServerDialog — relay availability gate (Task 11 / D6)', () => {
-	it('renders the relay tab DISABLED with a waiting hint when relays are absent', async () => {
+describe("ServerDialog — relay availability gate (Task 11 / D6)", () => {
+	it("renders the relay tab DISABLED with a waiting hint when relays are absent", async () => {
 		state.relays = undefined;
 
 		render(ServerDialog, { props: { open: true } });
@@ -121,63 +131,65 @@ describe('ServerDialog — relay availability gate (Task 11 / D6)', () => {
 		expect(manualTab().disabled).toBe(false);
 	});
 
-	it('enables the relay tab and lists server entries once relays arrive', async () => {
+	it("enables the relay tab and lists server entries once relays arrive", async () => {
 		state.relays = {
 			accounts: {},
 			servers: {
-				'srv-eu': { name: 'EU West', default: true },
-				'srv-us': { name: 'US East' },
+				"srv-eu": { name: "EU West", default: true },
+				"srv-us": { name: "US East" },
 			},
 		};
-		state.config = { relay_server: 'srv-eu' };
+		state.config = { relay_server: "srv-eu" };
 
 		render(ServerDialog, { props: { open: true } });
 
 		// Relay tab is now usable and selected (config intent → relay mode).
 		expect(relayTab().disabled).toBe(false);
-		expect(relayTab().getAttribute('aria-selected')).toBe('true');
+		expect(relayTab().getAttribute("aria-selected")).toBe("true");
 
 		// No empty-state hint while a populated catalog exists.
 		expect(screen.queryByText(WAITING_HINT)).toBeNull();
 		expect(screen.queryByText(NONE_HINT)).toBeNull();
 
 		// The selected server name is surfaced (the servers map is consumed).
-		expect(screen.getAllByText('EU West').length).toBeGreaterThan(0);
+		expect(screen.getAllByText("EU West").length).toBeGreaterThan(0);
 
 		// Opening the catalog lists the other server entry too.
-		const trigger = document.getElementById('relay-server');
+		const trigger = document.getElementById("relay-server");
 		expect(trigger).not.toBeNull();
 		await fireEvent.pointerDown(trigger as HTMLElement);
 		await fireEvent.pointerUp(trigger as HTMLElement);
 		await fireEvent.click(trigger as HTMLElement);
-		await waitFor(() => expect(screen.getAllByText('US East').length).toBeGreaterThan(0));
+		await waitFor(() =>
+			expect(screen.getAllByText("US East").length).toBeGreaterThan(0),
+		);
 	});
 
-	it('keeps manual SRTLA usable whether or not relays are present', async () => {
+	it("keeps manual SRTLA usable whether or not relays are present", async () => {
 		// State A: no relays — manual must still be reachable.
 		const a = render(ServerDialog, { props: { open: true } });
 		await fireEvent.click(manualTab());
-		expect(document.getElementById('srtla-addr')).not.toBeNull();
+		expect(document.getElementById("srtla-addr")).not.toBeNull();
 		a.unmount();
 
 		// State B: relays present — manual remains an explicit fallback.
-		state.relays = { accounts: {}, servers: { 'srv-eu': { name: 'EU West' } } };
+		state.relays = { accounts: {}, servers: { "srv-eu": { name: "EU West" } } };
 		render(ServerDialog, { props: { open: true } });
 		expect(manualTab().disabled).toBe(false);
 		await fireEvent.click(manualTab());
-		expect(document.getElementById('srtla-addr')).not.toBeNull();
+		expect(document.getElementById("srtla-addr")).not.toBeNull();
 	});
 
-	it('does not silently switch a relay-configured user to manual while relays load', async () => {
+	it("does not silently switch a relay-configured user to manual while relays load", async () => {
 		// Saved intent is relay, but the catalog has not arrived yet.
-		state.config = { relay_server: 'srv-eu' };
+		state.config = { relay_server: "srv-eu" };
 		state.relays = undefined;
 
 		render(ServerDialog, { props: { open: true } });
 
 		// Mode intent preserved: relay tab is the selected one, not manual…
-		expect(relayTab().getAttribute('aria-selected')).toBe('true');
-		expect(manualTab().getAttribute('aria-selected')).toBe('false');
+		expect(relayTab().getAttribute("aria-selected")).toBe("true");
+		expect(manualTab().getAttribute("aria-selected")).toBe("false");
 		// …but it is gated with the waiting hint until relays load.
 		expect(relayTab().disabled).toBe(true);
 		expect(screen.getByText(WAITING_HINT)).toBeTruthy();
@@ -194,8 +206,8 @@ describe('ServerDialog — relay availability gate (Task 11 / D6)', () => {
  * the trigger and the per-entry badges in the open catalog, each carrying the
  * tier `RelayRttIndicator` derives from its raw `rtt`.
  */
-describe('ServerDialog — empty catalog & RTT-indicator display (Task 19)', () => {
-	it('shows the relayNone hint (not the waiting hint) when the catalog arrives empty', () => {
+describe("ServerDialog — empty catalog & RTT-indicator display (Task 19)", () => {
+	it("shows the relayNone hint (not the waiting hint) when the catalog arrives empty", () => {
 		// Defined-but-empty is the second `relayUnavailable` branch: the catalog
 		// exists yet lists nothing, so the copy must be "none", never "waiting".
 		state.relays = { accounts: {}, servers: {} };
@@ -211,24 +223,24 @@ describe('ServerDialog — empty catalog & RTT-indicator display (Task 19)', () 
 	it("surfaces the selected server's RTT badge with the correct tier in the trigger", () => {
 		state.relays = {
 			accounts: {},
-			servers: { 'srv-eu': { name: 'EU West', rtt: 42, default: true } },
+			servers: { "srv-eu": { name: "EU West", rtt: 42, default: true } },
 		};
-		state.config = { relay_server: 'srv-eu' };
+		state.config = { relay_server: "srv-eu" };
 
 		render(ServerDialog, { props: { open: true } });
 
-		const trigger = document.getElementById('relay-server');
+		const trigger = document.getElementById("relay-server");
 		expect(trigger).not.toBeNull();
-		const badge = within(trigger as HTMLElement).getByLabelText('42 ms');
-		expect(badge.getAttribute('data-rtt-tier')).toBe('good');
+		const badge = within(trigger as HTMLElement).getByLabelText("42 ms");
+		expect(badge.getAttribute("data-rtt-tier")).toBe("good");
 	});
 
-	it('maps each catalog entry to its RTT tier badge once the dropdown opens', async () => {
+	it("maps each catalog entry to its RTT tier badge once the dropdown opens", async () => {
 		state.relays = {
 			accounts: {},
 			servers: {
-				'srv-eu': { name: 'EU West', rtt: 42 },
-				'srv-asia': { name: 'Asia SE', rtt: 200 },
+				"srv-eu": { name: "EU West", rtt: 42 },
+				"srv-asia": { name: "Asia SE", rtt: 200 },
 			},
 		};
 
@@ -238,14 +250,18 @@ describe('ServerDialog — empty catalog & RTT-indicator display (Task 19)', () 
 		// enabled) relay tab so the server Select mounts.
 		await fireEvent.click(relayTab());
 
-		const trigger = document.getElementById('relay-server');
+		const trigger = document.getElementById("relay-server");
 		expect(trigger).not.toBeNull();
 		await fireEvent.pointerDown(trigger as HTMLElement);
 		await fireEvent.pointerUp(trigger as HTMLElement);
 		await fireEvent.click(trigger as HTMLElement);
 
-		await waitFor(() => expect(screen.getByLabelText('200 ms')).toBeTruthy());
-		expect(screen.getByLabelText('42 ms').getAttribute('data-rtt-tier')).toBe('good');
-		expect(screen.getByLabelText('200 ms').getAttribute('data-rtt-tier')).toBe('weak');
+		await waitFor(() => expect(screen.getByLabelText("200 ms")).toBeTruthy());
+		expect(screen.getByLabelText("42 ms").getAttribute("data-rtt-tier")).toBe(
+			"good",
+		);
+		expect(screen.getByLabelText("200 ms").getAttribute("data-rtt-tier")).toBe(
+			"weak",
+		);
 	});
 });

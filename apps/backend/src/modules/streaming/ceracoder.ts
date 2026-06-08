@@ -1,19 +1,18 @@
 import {
 	buildCeracoderConfig,
 	buildCeracoderRunArtifacts,
+	CERACODER_PATHS,
+	configExists as checkConfigExists,
 	DEFAULT_ADAPTIVE,
 	DEFAULT_AIMD,
 	getCeracoderExec as getExecFromBindings,
-	CERACODER_PATHS,
 	sendHup as sendHupFromBindings,
 	writeConfig,
-	configExists as checkConfigExists,
 } from "@ceralive/ceracoder";
-
-import killall from "../../helpers/killall.ts";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
-import { setup } from "../setup.ts";
+import killall from "../../helpers/killall.ts";
 import { logger } from "../../helpers/logger.ts";
+import { setup } from "../setup.ts";
 
 // Re-export the temp pipeline path from bindings
 export const TEMP_PIPELINE_PATH = CERACODER_PATHS.pipeline;

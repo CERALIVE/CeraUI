@@ -105,11 +105,9 @@ export const hotspotConfigInputSchema = z.object({
 		.string()
 		.min(HOTSPOT_PASSWORD_MIN, 'Password must be at least 8 characters')
 		.max(HOTSPOT_PASSWORD_MAX, 'Password must be at most 63 characters'),
-	channel: z
-		.string()
-		.refine((c) => wifiBandSchema.safeParse(c).success, {
-			message: 'Channel must be a supported WiFi band (auto, auto_24, auto_50)',
-		}),
+	channel: z.string().refine((c) => wifiBandSchema.safeParse(c).success, {
+		message: 'Channel must be a supported WiFi band (auto, auto_24, auto_50)',
+	}),
 });
 export type HotspotConfigInput = z.infer<typeof hotspotConfigInputSchema>;
 
