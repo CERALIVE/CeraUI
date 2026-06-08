@@ -258,6 +258,20 @@ const de = {
 		healthDegraded: "Beeinträchtigt",
 		healthDead: "Ausgefallen",
 		healthUnknown: "Unbekannt",
+		healthProcess: "Prozess",
+		healthFrames: "Frames",
+		healthSrt: "SRT",
+		healthBond: "Bündelung",
+		healthRunning: "Läuft",
+		healthNotRunning: "Läuft nicht",
+		healthAdvancing: "Aktiv",
+		healthStalled: "Stockt",
+		healthStable: "Stabil",
+		healthReconnecting: "Neu verbinden",
+		refreshHealth: "Zustand aktualisieren",
+		healthExplainHealthy: "Prozess läuft, Frames laufen, alle gebündelten Verbindungen aktiv.",
+		healthExplainDegraded: "Streaming läuft, aber Frames stocken oder einige gebündelte Verbindungen sind ausgefallen.",
+		healthExplainDead: "Encoder-Prozess läuft nicht. Der Stream ist ausgefallen.",
 		link: "Verbindung",
 	},
 	live: {
@@ -325,6 +339,13 @@ const de = {
 		streamHealthRecovered: "Stream-Zustand wiederhergestellt",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
+		panel: {
+			title: "Benachrichtigungen",
+			trigger: "Benachrichtigungen, {count} ungelesen",
+			empty: "Alles erledigt",
+			emptyHint: "Dauerhafte Gerätemeldungen erscheinen hier.",
+			dismiss: "Benachrichtigung verwerfen",
+		},
 	},
 	a11y: {
 		close: "Schließen",
@@ -390,6 +411,13 @@ const de = {
 			powerDesc: "Das Gerät neu starten oder herunterfahren",
 			versions: "Geräteversionen",
 			versionsDesc: "Installierte Komponenten- und Firmware-Versionen anzeigen",
+			autostart: "Streaming automatisch starten",
+			autostartDesc: "Streaming beim Start des Geräts automatisch beginnen",
+			autostartError:
+				"Autostart konnte nicht geändert werden. Bitte erneut versuchen.",
+			pairing: "Gerätekopplung",
+			pairingDesc:
+				"Verknüpfe dieses Gerät über einen Anspruchscode mit deinem Cloud-Konto",
 		},
 
 		dialogs: {
@@ -429,6 +457,15 @@ const de = {
 			pairFailed:
 				"Kopplung fehlgeschlagen. Prüfen Sie den Code und versuchen Sie es erneut.",
 			pairedToast: "Gerät erfolgreich gekoppelt.",
+			complete: "Kopplung abschließen",
+			regenerating: "Code wird aktualisiert…",
+			pairedBody: "Dieses Gerät ist jetzt mit deinem Cloud-Konto verknüpft.",
+			deviceLabel: "Geräte-ID",
+			subscriptionLabel: "Abonnement",
+			statusActive: "Aktiv",
+			statusFree: "Kostenlos",
+			statusExpired: "Abgelaufen",
+			statusCancelled: "Gekündigt",
 		},
 		encoderSettings: "Encoder-Einstellungen",
 		inputMode: "Eingabemodus",
@@ -560,6 +597,9 @@ const de = {
 			noSimBond: "No SIM — cannot bond",
 			noSimLink: "No SIM",
 			hotspotNoBond: "Hotspot can't be bonded",
+			stale: "Veraltet",
+			staleHint: "Kürzlich keine Aktualisierung empfangen",
+			refreshing: "Aktualisierung",
 		},
 		pageTitle: "Netzwerkkonfiguration",
 		pageDescription:
@@ -592,6 +632,14 @@ const de = {
 		},
 		accessibility: {
 			wifiQrCode: "WiFi-QR-Code",
+			copyName: "Netzwerknamen kopieren",
+			copyPassword: "Passwort kopieren",
+		},
+		clipboard: {
+			nameCopied: "Netzwerkname kopiert",
+			passwordCopied: "Passwort kopiert",
+			copyFailed: "Kopieren fehlgeschlagen",
+			copyFailedDescription: "Kopieren nicht möglich. Bitte manuell kopieren.",
 		},
 		deviceCount: {
 			device: "Gerät",
@@ -644,6 +692,7 @@ const de = {
 			noNetworksFound:
 				"Noch keine Netzwerke gefunden. Suchen Sie nach Anbietern.",
 			scanForNetworks: "Nach Netzwerken suchen",
+			scanFailed: "Netzwerksuche fehlgeschlagen. Bitte erneut versuchen.",
 			credentials: "Anmeldedaten",
 			configureDescription: "Mobilfunkverbindungseinstellungen konfigurieren",
 			simUnlock: {
@@ -843,6 +892,7 @@ const de = {
 		cloudRemote: "Cloud-Fernzugriff",
 		cloudRemoteDescription: "Remote-Cloud-Verwaltung konfigurieren",
 		cloudProvider: "Cloud-Anbieter",
+		customProvider: "Benutzerdefinierter Anbieter",
 		cloudRemoteKey: "Remote-Schlüssel",
 		cloudRemoteKeyTooltip:
 			"Geben Sie den Remote-Schlüssel von Ihrem Cloud-Anbieter ein.",

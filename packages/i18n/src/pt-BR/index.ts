@@ -266,6 +266,12 @@ const ptBR = {
 			powerDesc: "Reinicie ou desligue o dispositivo",
 			versions: "Versões do dispositivo",
 			versionsDesc: "Veja as versões de componentes e firmware instalados",
+			pairing: "Emparelhamento do dispositivo",
+			pairingDesc:
+				"Vincule este dispositivo à sua conta na nuvem com um código de reivindicação",
+			autostart: "Iniciar transmissão automaticamente",
+			autostartDesc: "Iniciar a transmissão automaticamente quando o dispositivo inicializar",
+			autostartError: "Não foi possível alterar o início automático. Tente novamente.",
 		},
 
 		dialogs: {
@@ -303,6 +309,15 @@ const ptBR = {
 			pairFailed:
 				"Falha no emparelhamento. Verifique o código e tente novamente.",
 			pairedToast: "Dispositivo emparelhado com sucesso.",
+			complete: "Concluir emparelhamento",
+			regenerating: "Atualizando o código…",
+			pairedBody: "Este dispositivo agora está vinculado à sua conta na nuvem.",
+			deviceLabel: "ID do dispositivo",
+			subscriptionLabel: "Assinatura",
+			statusActive: "Ativa",
+			statusFree: "Grátis",
+			statusExpired: "Expirada",
+			statusCancelled: "Cancelada",
 		},
 		encoderSettings: "Configurações do Codificador",
 		inputMode: "Modo de Entrada",
@@ -435,6 +450,9 @@ const ptBR = {
 			noSimBond: "No SIM — cannot bond",
 			noSimLink: "No SIM",
 			hotspotNoBond: "Hotspot can't be bonded",
+			stale: "Desatualizado",
+			staleHint: "Nenhuma atualização recebida recentemente",
+			refreshing: "Atualizando",
 		},
 		pageTitle: "Configuração de Rede",
 		pageDescription:
@@ -466,6 +484,14 @@ const ptBR = {
 		},
 		accessibility: {
 			wifiQrCode: "Código QR WiFi",
+			copyName: "Copiar nome da rede",
+			copyPassword: "Copiar senha",
+		},
+		clipboard: {
+			nameCopied: "Nome da rede copiado",
+			passwordCopied: "Senha copiada",
+			copyFailed: "Falha ao copiar",
+			copyFailedDescription: "Não foi possível copiar. Por favor, copie manualmente.",
 		},
 		deviceCount: {
 			device: "dispositivo",
@@ -513,6 +539,7 @@ const ptBR = {
 			noNetworksFound:
 				"Nenhuma rede encontrada ainda. Procure para encontrar operadoras.",
 			scanForNetworks: "Procurar redes",
+			scanFailed: "Falha na busca de redes. Tente novamente.",
 			credentials: "Credenciais",
 			configureDescription: "Configure as definições de conexão celular",
 			simUnlock: {
@@ -732,6 +759,20 @@ const ptBR = {
 		healthDegraded: "Degradado",
 		healthDead: "Inativo",
 		healthUnknown: "Desconhecido",
+		healthProcess: "Processo",
+		healthFrames: "Quadros",
+		healthSrt: "SRT",
+		healthBond: "Agregação",
+		healthRunning: "Em execução",
+		healthNotRunning: "Parado",
+		healthAdvancing: "Avançando",
+		healthStalled: "Travado",
+		healthStable: "Estável",
+		healthReconnecting: "Reconectando",
+		refreshHealth: "Atualizar estado",
+		healthExplainHealthy: "Processo em execução, quadros avançando, todos os links agregados ativos.",
+		healthExplainDegraded: "Transmitindo, mas os quadros estão travados ou alguns links agregados estão fora do ar.",
+		healthExplainDead: "O processo do codificador não está em execução. A transmissão está fora do ar.",
 		link: "Link",
 	},
 	live: {
@@ -798,6 +839,13 @@ const ptBR = {
 		streamHealthRecovered: "Status da transmissão recuperado",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
+		panel: {
+			title: "Notificações",
+			trigger: "Notificações, {count} não lidas",
+			empty: "Tudo em dia",
+			emptyHint: "Alertas persistentes do dispositivo aparecerão aqui.",
+			dismiss: "Dispensar notificação",
+		},
 	},
 	a11y: {
 		close: "Fechar",
@@ -814,6 +862,7 @@ const ptBR = {
 		cloudRemote: "Nuvem Remota",
 		cloudRemoteDescription: "Configurar gerenciamento remoto na nuvem",
 		cloudProvider: "Provedor de Nuvem",
+		customProvider: "Provedor Personalizado",
 		cloudRemoteKey: "Chave Remota",
 		cloudRemoteKeyTooltip: "Digite a chave remota do seu provedor de nuvem.",
 		providerName: "Nome do Provedor",

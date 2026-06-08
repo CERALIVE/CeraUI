@@ -1,28 +1,45 @@
 <script lang="ts">
+import { untrack } from 'svelte';
 import { LL, locale } from '@ceraui/i18n/svelte';
 import { formatBitrate, formatCurrent, formatRelativeTime, formatTemp, formatVoltage } from '@ceraui/i18n/formatters';
 import ActivityIcon from '@lucide/svelte/icons/activity';
+import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+import CircleHelpIcon from '@lucide/svelte/icons/circle-help';
+import CircleXIcon from '@lucide/svelte/icons/circle-x';
 import ClockIcon from '@lucide/svelte/icons/clock';
 import EthernetPortIcon from '@lucide/svelte/icons/ethernet-port';
+import InfoIcon from '@lucide/svelte/icons/info';
 import RadioTowerIcon from '@lucide/svelte/icons/radio-tower';
 import ThermometerIcon from '@lucide/svelte/icons/thermometer';
+import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 import WifiIcon from '@lucide/svelte/icons/wifi';
 import ZapIcon from '@lucide/svelte/icons/zap';
 
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import * as Sheet from '$lib/components/ui/sheet';
+import * as Tooltip from '$lib/components/ui/tooltip';
 import { type StalenessState, getStalenessState } from '$lib/helpers/staleness';
+import { getDisplayProfile, getDisplayRefreshNonce, prefersEinkTheme } from '$lib/stores/display-profile.svelte';
 import { getHudState, getSocTelemetry } from '$lib/stores/hud.svelte';
-import { getStreamHealthState, type HealthIndicator } from '$lib/stores/stream-health.svelte';
+import { getStreamHealthRollup, getStreamHealthState, type HealthIndicator, type HealthRollup } from '$lib/stores/stream-health.svelte';
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
 
-const HEALTH_DOT: Record<HealthIndicator, string> = {
-	healthy: 'bg-status-success',
-	degraded: 'bg-status-warning',
-	dead: 'bg-status-error',
-	unknown: 'bg-status-neutral',
+// Rollup state is coded by ICON SHAPE, not color alone — a check, warning
+// triangle, cross, and query glyph stay distinguishable on monochrome / e-ink
+// panels and to colorblind users. Color is layered on top as a secondary cue.
+const HEALTH_ICON: Record<HealthIndicator, typeof CircleCheckIcon> = {
+	healthy: CircleCheckIcon,
+	degraded: TriangleAlertIcon,
+	dead: CircleXIcon,
+	unknown: CircleHelpIcon,
+};
+const HEALTH_ICON_COLOR: Record<HealthIndicator, string> = {
+	healthy: 'text-status-success',
+	degraded: 'text-status-warning',
+	dead: 'text-status-error',
+	unknown: 'text-status-neutral',
 };
 
 let { class: className }: { class?: string } = $props();
@@ -39,13 +56,44 @@ const isLive = $derived(hud.isStreaming && !isOffline);
 
 // Stream-health rollup (Task 13/14): tri-state liveness surfaced as a dot.
 const health = $derived(getStreamHealthState());
-const healthDot = $derived(HEALTH_DOT[health]);
+const HealthIcon = $derived(HEALTH_ICON[health]);
+const healthIconColor = $derived(HEALTH_ICON_COLOR[health]);
 const healthLabel = $derived(
 	health === 'healthy'
 		? $LL.hud.healthHealthy()
 		: health === 'degraded'
 			? $LL.hud.healthDegraded()
 			: health === 'dead'
+				? $LL.hud.healthDead()
+				: $LL.hud.healthUnknown(),
+);
+
+// Stream-health rollup DETAIL (Task 15): the per-subsystem breakdown
+// (process / frames / SRT / bond) the backend already rolls up, surfaced in the
+// expandable HUD sheet. Under the e-ink / mono profile it is FROZEN like the
+// kiosk HUD: the live read is untracked so an incoming broadcast can never
+// repaint the e-paper, and the only re-sample is a manual display refresh
+// (the Task 12 nonce). On lcd it tracks the live broadcast.
+const isEink = $derived(prefersEinkTheme(getDisplayProfile()));
+let frozenRollup = $state<HealthRollup | null>(getStreamHealthRollup());
+$effect(() => {
+	void getDisplayRefreshNonce();
+	if (isEink) {
+		untrack(() => {
+			frozenRollup = getStreamHealthRollup();
+		});
+	}
+});
+const rollup = $derived(isEink ? frozenRollup : getStreamHealthRollup());
+const rollupState = $derived<HealthIndicator>(rollup?.state ?? 'unknown');
+const RollupIcon = $derived(HEALTH_ICON[rollupState]);
+const rollupIconColor = $derived(HEALTH_ICON_COLOR[rollupState]);
+const rollupLabel = $derived(
+	rollupState === 'healthy'
+		? $LL.hud.healthHealthy()
+		: rollupState === 'degraded'
+			? $LL.hud.healthDegraded()
+			: rollupState === 'dead'
 				? $LL.hud.healthDead()
 				: $LL.hud.healthUnknown(),
 );
@@ -88,6 +136,22 @@ function lastSeen(ts: number | null): string | null {
 	</span>
 {/snippet}
 
+{#snippet rollupRow(testid: string, label: string, ok: boolean, okText: string, badText: string, okIcon: typeof CircleCheckIcon | null, badIcon: typeof CircleCheckIcon)}
+	<div class="flex items-center justify-between gap-2" data-testid={testid}>
+		<dt class="text-muted-foreground">{label}</dt>
+		<dd class={cn('inline-flex items-center gap-1 font-medium', ok ? 'text-status-success' : 'text-status-warning')}>
+			{#if ok}
+				{#if okIcon}{@const OkIcon = okIcon}<OkIcon class="size-3.5 shrink-0" aria-hidden="true" />{/if}
+				{okText}
+			{:else}
+				{@const BadIcon = badIcon}
+				<BadIcon class="size-3.5 shrink-0" aria-hidden="true" />
+				{badText}
+			{/if}
+		</dd>
+	</div>
+{/snippet}
+
 <Sheet.Root bind:open>
 	<Sheet.Trigger>
 		{#snippet child({ props })}
@@ -125,15 +189,16 @@ function lastSeen(ts: number | null): string | null {
 					</span>
 				{/if}
 
-				<!-- Stream-health indicator -->
+				<!-- Stream-health indicator: icon SHAPE + visible label (never color alone) -->
 				<span
 					data-testid="stream-health"
 					data-state={health}
-					class="inline-flex shrink-0 items-center"
+					class="inline-flex shrink-0 items-center gap-1"
 					title="{$LL.hud.streamHealth()}: {healthLabel}"
 				>
-					<span class={cn('size-2 rounded-full', healthDot)} aria-hidden="true"></span>
-					<span class="sr-only">{$LL.hud.streamHealth()}: {healthLabel}</span>
+					<HealthIcon class={cn('size-3.5 shrink-0', healthIconColor)} aria-hidden="true" />
+					<span class="text-[0.7rem] font-semibold">{healthLabel}</span>
+					<span class="sr-only">{$LL.hud.streamHealth()}</span>
 				</span>
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
@@ -222,13 +287,98 @@ function lastSeen(ts: number | null): string | null {
 						{isOffline ? $LL.hud.offline() : isLive ? $LL.hud.live() : $LL.hud.idle()}
 					</span>
 				</div>
-				<div class="flex items-center justify-between gap-3 border-b py-2" data-testid="stream-health-detail" data-state={health}>
-					<span class="text-muted-foreground flex items-center gap-2">
-						<span class={cn('size-2 rounded-full', healthDot)} aria-hidden="true"></span>
-						{$LL.hud.streamHealth()}
-					</span>
-					<span class="font-medium">{healthLabel}</span>
+
+				<!-- Stream-health rollup: state + process/frames/SRT/bond breakdown (Task 15) -->
+				<div class="flex flex-col gap-2 border-b py-2" data-testid="stream-health-detail" data-state={rollupState}>
+					<div class="flex items-center justify-between gap-3">
+						<span class="text-muted-foreground flex items-center gap-1.5">
+							{$LL.hud.streamHealth()}
+							<Tooltip.Provider>
+								<Tooltip.Root>
+									<Tooltip.Trigger>
+										{#snippet child({ props })}
+											<button
+												{...props}
+												type="button"
+												data-testid="stream-health-info"
+												aria-label={$LL.hud.streamHealth()}
+												class="text-muted-foreground/70 hover:text-foreground focus-visible:ring-ring/50 inline-flex rounded-full transition-colors focus-visible:ring-2 focus-visible:outline-none"
+											>
+												<InfoIcon class="size-3.5" aria-hidden="true" />
+											</button>
+										{/snippet}
+									</Tooltip.Trigger>
+									<Tooltip.Content class="max-w-72">
+										<ul class="flex flex-col gap-1.5 text-xs">
+											<li class="flex items-start gap-1.5">
+												<CircleCheckIcon class="text-status-success mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+												<span><span class="font-semibold">{$LL.hud.healthHealthy()}:</span> {$LL.hud.healthExplainHealthy()}</span>
+											</li>
+											<li class="flex items-start gap-1.5">
+												<TriangleAlertIcon class="text-status-warning mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+												<span><span class="font-semibold">{$LL.hud.healthDegraded()}:</span> {$LL.hud.healthExplainDegraded()}</span>
+											</li>
+											<li class="flex items-start gap-1.5">
+												<CircleXIcon class="text-status-error mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+												<span><span class="font-semibold">{$LL.hud.healthDead()}:</span> {$LL.hud.healthExplainDead()}</span>
+											</li>
+										</ul>
+									</Tooltip.Content>
+								</Tooltip.Root>
+							</Tooltip.Provider>
+						</span>
+						<span class="inline-flex items-center gap-1.5 font-medium" data-testid="stream-health-state">
+							<RollupIcon class={cn('size-4 shrink-0', rollupIconColor)} aria-hidden="true" />
+							{rollupLabel}
+						</span>
+					</div>
+
+					{#if rollup}
+						<dl class="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs" data-testid="stream-health-rollup">
+							{@render rollupRow(
+								'health-process',
+								$LL.hud.healthProcess(),
+								rollup.process.alive,
+								$LL.hud.healthRunning(),
+								$LL.hud.healthNotRunning(),
+								CircleCheckIcon,
+								CircleXIcon,
+							)}
+							{@render rollupRow(
+								'health-frames',
+								$LL.hud.healthFrames(),
+								rollup.frames.advancing,
+								$LL.hud.healthAdvancing(),
+								$LL.hud.healthStalled(),
+								null,
+								TriangleAlertIcon,
+							)}
+							{@render rollupRow(
+								'health-srt',
+								$LL.hud.healthSrt(),
+								!rollup.srt.reconnecting,
+								$LL.hud.healthStable(),
+								$LL.hud.healthReconnecting(),
+								null,
+								TriangleAlertIcon,
+							)}
+							<div class="flex items-center justify-between gap-2" data-testid="health-bond">
+								<dt class="text-muted-foreground">{$LL.hud.healthBond()}</dt>
+								<dd
+									class={cn(
+										'font-mono font-medium tabular-nums',
+										rollup.bond.activeLinks < rollup.bond.linkCount && 'text-status-warning',
+									)}
+								>
+									{rollup.bond.activeLinks}/{rollup.bond.linkCount}
+								</dd>
+							</div>
+						</dl>
+					{:else}
+						<p class="text-muted-foreground/70 text-xs" data-testid="stream-health-rollup-empty">{$LL.hud.noData()}</p>
+					{/if}
 				</div>
+
 				<div class={cn('flex items-center justify-between gap-3 border-b py-2', hud.isBitrateStale && 'opacity-50')}>
 					<span class="text-muted-foreground flex items-center gap-2">
 						{#if hud.isBitrateStale}<ClockIcon class="size-3.5" aria-hidden="true" />{/if}
