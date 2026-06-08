@@ -39,6 +39,7 @@ import { cn } from '$lib/utils';
 
 import CloudRemoteDialog from './dialogs/CloudRemoteDialog.svelte';
 import LogsDialog from './dialogs/LogsDialog.svelte';
+import PairingDialog from './dialogs/PairingDialog.svelte';
 import PasswordDialog from './dialogs/PasswordDialog.svelte';
 import PowerDialog from './dialogs/PowerDialog.svelte';
 import OnDeviceDisplaySection from './settings/OnDeviceDisplaySection.svelte';
@@ -129,7 +130,10 @@ const groups = $derived<Group[]>([
 	{
 		id: 'streaming',
 		label: t.groups.streaming(),
-		entries: [{ key: 'cloudRemote', title: t.cloudRemote(), desc: t.cloudRemoteDesc(), icon: Cloud }],
+		entries: [
+			{ key: 'devicePairing', title: t.pairing(), desc: t.pairingDesc(), icon: Link2 },
+			{ key: 'cloudRemote', title: t.cloudRemote(), desc: t.cloudRemoteDesc(), icon: Cloud },
+		],
 	},
 	{
 		id: 'developer',
@@ -161,6 +165,7 @@ const groups = $derived<Group[]>([
 
 // Real dialogs (Tasks 25-27). Each settings entry routes to its own dialog.
 let passwordOpen = $state(false);
+let pairingOpen = $state(false);
 let cloudOpen = $state(false);
 let sshOpen = $state(false);
 let logsOpen = $state(false);
@@ -177,6 +182,9 @@ function openEntry(entry: Entry) {
 	switch (entry.key) {
 		case 'devicePassword':
 			passwordOpen = true;
+			return;
+		case 'devicePairing':
+			pairingOpen = true;
 			return;
 		case 'cloudRemote':
 			cloudOpen = true;
@@ -347,6 +355,7 @@ const ActiveIcon = $derived(active?.icon);
 
 <!-- Wired settings dialogs (Tasks 25-27) -->
 <PasswordDialog bind:open={passwordOpen} />
+<PairingDialog bind:open={pairingOpen} />
 <CloudRemoteDialog bind:open={cloudOpen} />
 <SshDialog bind:open={sshOpen} />
 <LogsDialog bind:open={logsOpen} />
