@@ -24,6 +24,9 @@ import {
 	type DetectionMethod,
 	detectionMethodSchema,
 	isNamespacedRelayId,
+	kioskDisplaySchema,
+	kioskPerformanceSchema,
+	kioskStateSchema,
 	namespacedRelayId,
 	parseNamespacedRelayId,
 	type RelayProtocol,
@@ -129,6 +132,16 @@ export const runtimeConfigSchema = z.object({
 	// How the active relay selection was sourced. "subscription" is set when a
 	// provider's authenticated catalog push auto-preloads server/account.
 	detectionMethod: detectionMethodSchema.optional(),
+
+	// Kiosk toggle state machine (DC-2). `kiosk_enabled` is the user toggle;
+	// `kiosk_last_state` restores the UI state on restart without waiting for the
+	// first poll; the remaining fields are the persisted display profile.
+	kiosk_enabled: z.boolean().optional(),
+	kiosk_last_state: kioskStateSchema.optional(),
+	kiosk_display: kioskDisplaySchema.optional(),
+	kiosk_touch: z.boolean().optional(),
+	kiosk_motion: z.boolean().optional(),
+	kiosk_performance: kioskPerformanceSchema.optional(),
 });
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
@@ -140,6 +153,12 @@ export const RUNTIME_CONFIG_DEFAULTS: Partial<RuntimeConfig> = {
 	delay: 0,
 	bitrate_overlay: false,
 	autostart: false,
+	kiosk_enabled: false,
+	kiosk_last_state: "disabled",
+	kiosk_display: "lcd",
+	kiosk_touch: true,
+	kiosk_motion: true,
+	kiosk_performance: "balanced",
 };
 
 export const DEFAULT_RELAY_PROVIDER_ID = "ceralive";

@@ -51,6 +51,10 @@ import {
 	getRevisionsProcedure,
 	getSensorsProcedure,
 	getSyslogProcedure,
+	kioskConfigureProcedure,
+	kioskStartProcedure,
+	kioskStatusProcedure,
+	kioskStopProcedure,
 	poweroffProcedure,
 	rebootProcedure,
 	setAutostartProcedure,
@@ -132,6 +136,10 @@ const stableRoutes = {
 		getCloudProviders: getCloudProvidersProcedure,
 		setRemoteConfig: setRemoteConfigProcedure,
 		setAutostart: setAutostartProcedure,
+		kioskStatus: kioskStatusProcedure,
+		kioskStart: kioskStartProcedure,
+		kioskStop: kioskStopProcedure,
+		kioskConfigure: kioskConfigureProcedure,
 	}),
 
 	status: os.router({

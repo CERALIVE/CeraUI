@@ -7,6 +7,10 @@ import { z } from 'zod';
 import {
 	autostartInputSchema,
 	cloudProviderEndpointSchema,
+	kioskConfigureInputSchema,
+	kioskConfigureOutputSchema,
+	kioskStatusSchema,
+	kioskToggleOutputSchema,
 	logInputSchema,
 	logOutputSchema,
 	remoteConfigInputSchema,
@@ -90,6 +94,26 @@ export const systemContract = oc.router({
 	 * Set autostart configuration
 	 */
 	setAutostart: oc.input(autostartInputSchema).output(successResponseSchema),
+
+	/**
+	 * Get the live kiosk status (persisted toggle + live polled state — DC-2)
+	 */
+	kioskStatus: oc.output(kioskStatusSchema),
+
+	/**
+	 * Kiosk toggle-on (T1)
+	 */
+	kioskStart: oc.output(kioskToggleOutputSchema),
+
+	/**
+	 * Kiosk toggle-off (T3)
+	 */
+	kioskStop: oc.output(kioskToggleOutputSchema),
+
+	/**
+	 * Persist the kiosk display profile (display + touch + motion + performance)
+	 */
+	kioskConfigure: oc.input(kioskConfigureInputSchema).output(kioskConfigureOutputSchema),
 
 	/**
 	 * Subscribe to sensor updates
