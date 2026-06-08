@@ -15,7 +15,7 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { WifiInterface } from '@ceraui/rpc/schemas';
-import { Eye, EyeOff, Loader2, Power, QrCode, Router, Save, Wifi } from '@lucide/svelte';
+import { Copy, Eye, EyeOff, Loader2, Power, QrCode, Router, Save, Wifi } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import { AppDialog } from '$lib/components/dialogs';
@@ -155,6 +155,31 @@ async function handleToggle() {
 		toggling = false;
 	}
 }
+
+// ── Copy SSID / password to clipboard (never logs the secret) ──
+async function copyName() {
+	if (!name) return;
+	try {
+		await navigator.clipboard.writeText(name);
+		toast.success($LL.network.clipboard.nameCopied());
+	} catch {
+		toast.error($LL.network.clipboard.copyFailed(), {
+			description: $LL.network.clipboard.copyFailedDescription(),
+		});
+	}
+}
+
+async function copyPassword() {
+	if (!password) return;
+	try {
+		await navigator.clipboard.writeText(password);
+		toast.success($LL.network.clipboard.passwordCopied());
+	} catch {
+		toast.error($LL.network.clipboard.copyFailed(), {
+			description: $LL.network.clipboard.copyFailedDescription(),
+		});
+	}
+}
 </script>
 
 <AppDialog
@@ -200,17 +225,31 @@ async function handleToggle() {
 		<!-- Name -->
 		<div class="space-y-1.5">
 			<Label class="text-sm font-medium" for="hotspot-name">{$LL.network.hotspot.name()}</Label>
-			<Input
-				id="hotspot-name"
-				autocapitalize="none"
-				autocomplete="off"
-				autocorrect="off"
-				maxlength={bounds.name.max}
-				minlength={bounds.name.min}
-				placeholder={$LL.hotspotConfigurator.hotspot.placeholderName()}
-				aria-invalid={Boolean(nameError)}
-				bind:value={name}
-			/>
+			<div class="relative">
+				<Input
+					id="hotspot-name"
+					class="pe-10"
+					autocapitalize="none"
+					autocomplete="off"
+					autocorrect="off"
+					maxlength={bounds.name.max}
+					minlength={bounds.name.min}
+					placeholder={$LL.hotspotConfigurator.hotspot.placeholderName()}
+					aria-invalid={Boolean(nameError)}
+					bind:value={name}
+				/>
+				<Button
+					class="absolute end-1 top-1/2 size-8 -translate-y-1/2 rounded-md"
+					aria-label={$LL.network.accessibility.copyName()}
+					disabled={!name}
+					onclick={copyName}
+					size="icon"
+					type="button"
+					variant="ghost"
+				>
+					<Copy class="size-4" />
+				</Button>
+			</div>
 			{#if nameError}
 				<p class="text-destructive text-xs">{nameError}</p>
 			{/if}
@@ -224,7 +263,7 @@ async function handleToggle() {
 			<div class="relative">
 				<Input
 					id="hotspot-password"
-					class="pe-10"
+					class="pe-20"
 					autocapitalize="none"
 					autocomplete="off"
 					autocorrect="off"
@@ -235,20 +274,33 @@ async function handleToggle() {
 					aria-invalid={Boolean(passwordError)}
 					bind:value={password}
 				/>
-				<Button
-					class="absolute end-1 top-1/2 size-8 -translate-y-1/2 rounded-md"
-					aria-label={showPassword ? $LL.auth.hidePassword() : $LL.auth.showPassword()}
-					onclick={() => (showPassword = !showPassword)}
-					size="icon"
-					type="button"
-					variant="ghost"
-				>
-					{#if showPassword}
-						<EyeOff class="size-4" />
-					{:else}
-						<Eye class="size-4" />
-					{/if}
-				</Button>
+				<div class="absolute end-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+					<Button
+						class="size-8 rounded-md"
+						aria-label={$LL.network.accessibility.copyPassword()}
+						disabled={!password}
+						onclick={copyPassword}
+						size="icon"
+						type="button"
+						variant="ghost"
+					>
+						<Copy class="size-4" />
+					</Button>
+					<Button
+						class="size-8 rounded-md"
+						aria-label={showPassword ? $LL.auth.hidePassword() : $LL.auth.showPassword()}
+						onclick={() => (showPassword = !showPassword)}
+						size="icon"
+						type="button"
+						variant="ghost"
+					>
+						{#if showPassword}
+							<EyeOff class="size-4" />
+						{:else}
+							<Eye class="size-4" />
+						{/if}
+					</Button>
+				</div>
 			</div>
 			{#if passwordError}
 				<p class="text-destructive text-xs">{passwordError}</p>
