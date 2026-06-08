@@ -27,7 +27,10 @@ import {
 	markSessionExpired,
 	wasAuthenticated,
 } from "$lib/stores/connection-ux.svelte";
-import { push as pushNotification } from "$lib/stores/notifications.svelte";
+import {
+	dismiss as dismissNotification,
+	push as pushNotification,
+} from "$lib/stores/notifications.svelte";
 import { ingestStreamHealth } from "$lib/stores/stream-health.svelte";
 
 import type { ConnectionState } from "./client";
@@ -388,12 +391,20 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			relaysState = data as RelayMessage;
 			break;
 
-		case "notifications":
+		case "notifications": {
+			// `show` adds/updates; `remove` (backend `notificationRemove`, or
+			// another client dismissing a persistent item) drops it live. The
+			// remove-only frame carries no `show`, so both arrays are optional.
+			const message = data as NotificationsMessage & { remove?: string[] };
 			notificationsState = data as NotificationsMessage;
-			for (const notification of (data as NotificationsMessage).show) {
+			for (const notification of message.show ?? []) {
 				pushNotification(notification);
 			}
+			for (const name of message.remove ?? []) {
+				dismissNotification(name);
+			}
 			break;
+		}
 
 		case "kiosk":
 			// DC-2 live state. The backend pushes the full status on every kiosk

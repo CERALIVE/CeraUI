@@ -18,6 +18,8 @@ src/
 │   ├── HudBar.svelte          # Persistent HUD bar — bitrate, per-link signals, SoC telemetry, tap-to-expand Sheet
 │   ├── HudRegion.svelte       # Responsive HUD mount (desktop top / mobile bottom dock)
 │   ├── DisconnectedBanner.svelte  # Reconnect/reboot/session-expiry banner (authed branch only)
+│   ├── notifications/         # NotificationsPanel.svelte — header bell + unread badge;
+│   │                          #   AppDialog listing notifications.getPersistent() with per-item dismiss
 │   ├── dialogs/               # 14 focused config dialogs, all compose AppDialog:
 │   │   ├── EncoderDialog.svelte
 │   │   ├── AudioDialog.svelte
@@ -41,6 +43,8 @@ src/
 │   ├── stores/
 │   │   ├── hud.svelte.ts          # HUD state: pure derivation fns + lazy runes store + selectors
 │   │   ├── connection-ux.svelte.ts # Reconnect/reboot/session-expiry UX (eager-init in browser)
+│   │   ├── notifications.svelte.ts # Active notifications (toast + persistent); getActive() feeds
+│   │   │                          #   the toast host, getPersistent() feeds NotificationsPanel
 │   │   └── layout-mode.svelte.ts  # Touch/kiosk layout flag ($persist "layout-mode")
 │   ├── components/
 │   │   ├── dialogs/           # AppDialog.svelte — shared responsive dialog chrome

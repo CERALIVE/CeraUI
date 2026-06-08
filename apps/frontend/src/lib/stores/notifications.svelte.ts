@@ -193,8 +193,22 @@ interface NotificationStore {
 	push(notification: Notification): void;
 	dismiss(name: string): void;
 	getActive(): ActiveNotification[];
+	getPersistent(): ActiveNotification[];
 	clear(): void;
 	destroy(): void;
+}
+
+/**
+ * Filter the active list down to the *persistent* notifications (the ones the
+ * dedicated panel surfaces, distinct from the transient toast stream), newest
+ * first. Pure + rune-free so it is unit-testable without the Svelte runtime.
+ */
+export function selectPersistent(
+	active: Iterable<ActiveNotification>,
+): ActiveNotification[] {
+	return Array.from(active)
+		.filter((n) => n.isPersistent)
+		.sort((a, b) => b.receivedAt - a.receivedAt);
 }
 
 /**
@@ -213,6 +227,7 @@ function createNotificationStore(): NotificationStore {
 			active = dismissNotification(active, name);
 		},
 		getActive: () => Array.from(active.values()),
+		getPersistent: () => selectPersistent(active.values()),
 		clear: () => {
 			active = new Map();
 		},
@@ -266,6 +281,11 @@ export function dismiss(name: string): void {
 /** The current ordered list of active notifications. */
 export function getActive(): ActiveNotification[] {
 	return store().getActive();
+}
+
+/** The persistent notifications only, newest first — drives the panel + badge. */
+export function getPersistent(): ActiveNotification[] {
+	return store().getPersistent();
 }
 
 /** Clear every active notification (e.g. on stream start/stop). */
