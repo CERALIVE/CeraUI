@@ -3,11 +3,17 @@ import './app.css';
 
 import { isLocale, loadLocaleAsync } from '@ceraui/i18n';
 import { setLocale } from '@ceraui/i18n/svelte';
-import { ModeWatcher } from 'mode-watcher';
-import { onMount } from 'svelte';
+import { ModeWatcher, setTheme as setCustomTheme } from 'mode-watcher';
+import { onMount, untrack } from 'svelte';
 
 import BootShell from '$lib/components/custom/BootShell.svelte';
 import { getConnectionReady } from '$lib/rpc/subscriptions.svelte';
+import {
+	getDisplayProfile,
+	parseDisplayProfile,
+	prefersEinkTheme,
+	setDisplayProfile,
+} from '$lib/stores/display-profile.svelte';
 import { getLayoutMode, setLayoutMode } from '$lib/stores/layout-mode.svelte';
 import { getLocale } from '$lib/stores/locale.svelte';
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
@@ -27,9 +33,31 @@ $effect(() => {
 	else if (mode === 'default') setLayoutMode('default');
 });
 
+// URL ?display=lcd|eink|mono overrides the persisted display profile on load.
+// Only applied when the param is present so an in-SPA reload without it keeps
+// the persisted profile (mirrors the ?mode handling above). Unknown values
+// normalize to the default (lcd) via parseDisplayProfile.
+$effect(() => {
+	const display = new URLSearchParams(window.location.search).get('display');
+	if (display !== null) setDisplayProfile(parseDisplayProfile(display));
+});
+
 // Reflect the active layout mode onto the document root for CSS token overrides.
 $effect(() => {
 	document.documentElement.dataset.layoutMode = getLayoutMode();
+});
+
+// Reflect the active display profile onto the document root: data-display always,
+// plus data-theme="eink" for the e-ink/mono profiles. mode-watcher owns the
+// <html> data-theme attribute (its $derived writer clobbers any direct write),
+// so route through its setTheme — cleared to '' for lcd. The setter performs
+// reactive reads internally; untrack keeps those out of this effect's
+// dependency set so writing the theme never re-triggers the effect (which would
+// otherwise read-and-write the same state → effect_update_depth_exceeded).
+$effect(() => {
+	const profile = getDisplayProfile();
+	document.documentElement.dataset.display = profile;
+	untrack(() => setCustomTheme(prefersEinkTheme(profile) ? 'eink' : ''));
 });
 
 onMount(async () => {
