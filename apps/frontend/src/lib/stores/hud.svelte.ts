@@ -238,6 +238,44 @@ export function isTimestampStale(ts: number | null, now: number): boolean {
 }
 
 /**
+ * Whether the staleness clock needs to keep ticking. The clock only advances
+ * `now` so a staleness flag can flip; once nothing can transition, ticking is
+ * waste — a foot-gun on an always-foreground kiosk with no `visibilitychange`
+ * relief. A tick is needed while `streaming`, or while a dropped link is still
+ * inside the {@link STALE_THRESHOLD_MS} window counting toward `isFullyStale`.
+ *
+ * `connectionLostAt` is the one timestamp safe to gate on: set once on
+ * disconnect and never refreshed, it ages out deterministically. Refresh-driven
+ * sources (sensors/modems/wifi) are intentionally excluded — gating on them
+ * would keep an idle-connected device awake forever (the wakeup we remove); their
+ * staleness still resolves while streaming, and `isFullyStale` covers disconnect.
+ */
+export function isClockTickNeeded(
+	streaming: boolean,
+	connectionLostAt: number | null,
+	now: number,
+): boolean {
+	if (streaming) return true;
+	return (
+		connectionLostAt != null && now - connectionLostAt < STALE_THRESHOLD_MS
+	);
+}
+
+/**
+ * The full clock gate: tick only when the document is visible AND a tick is
+ * actually {@link isClockTickNeeded | needed}. A hidden document never ticks,
+ * even mid-stream — there is no one watching for data to go stale.
+ */
+export function shouldClockRun(
+	visible: boolean,
+	streaming: boolean,
+	connectionLostAt: number | null,
+	now: number,
+): boolean {
+	return visible && isClockTickNeeded(streaming, connectionLostAt, now);
+}
+
+/**
  * Pure derivation: turn a point-in-time {@link HudSources} snapshot plus
  * {@link HudTimestamps} and a clock value into a complete {@link HudState}.
  *
@@ -302,6 +340,63 @@ export function deriveHudState(
 }
 
 // ============================================
+// Staleness clock (rune-free, gated)
+// ============================================
+
+/** Whether the document is currently visible (headless/SSR → treated visible). */
+function isDocumentVisible(): boolean {
+	return typeof document === "undefined" || document.hidden !== true;
+}
+
+export interface StalenessClock {
+	/** Re-evaluate the gate and start/stop the interval to match. */
+	sync(): void;
+	/** Whether the interval is currently running. */
+	isRunning(): boolean;
+	/** Stop the interval and dispose. */
+	stop(): void;
+}
+
+/**
+ * A self-gating staleness clock. Unlike a bare {@link setInterval} it only runs
+ * while `shouldRun()` holds: {@link StalenessClock.sync} starts or stops it on
+ * demand, and each tick re-checks `shouldRun()` so the interval stops itself the
+ * instant the staleness window elapses. Rune-free so the gating is unit-testable
+ * under plain vitest with fake timers.
+ */
+export function createStalenessClock(
+	shouldRun: () => boolean,
+	onTick: () => void,
+	intervalMs: number = CLOCK_INTERVAL_MS,
+): StalenessClock {
+	let handle: ReturnType<typeof setInterval> | null = null;
+
+	const stop = (): void => {
+		if (handle !== null) {
+			clearInterval(handle);
+			handle = null;
+		}
+	};
+
+	const start = (): void => {
+		if (handle !== null) return;
+		handle = setInterval(() => {
+			onTick();
+			if (!shouldRun()) stop();
+		}, intervalMs);
+	};
+
+	return {
+		sync: () => {
+			if (shouldRun()) start();
+			else stop();
+		},
+		isRunning: () => handle !== null,
+		stop,
+	};
+}
+
+// ============================================
 // Reactive store (runes — lazily created)
 // ============================================
 
@@ -360,6 +455,26 @@ function createHudStore(): HudStore {
 	let prevWifi: unknown;
 	let prevConnected: boolean | undefined;
 
+	const clock = createStalenessClock(
+		() =>
+			shouldClockRun(
+				isDocumentVisible(),
+				getIsStreaming(),
+				timestamps.connectionLostAt,
+				Date.now(),
+			),
+		() => {
+			nowTick = Date.now();
+		},
+	);
+
+	// A kiosk never backgrounds, but a phone/desktop tab does: pause the clock
+	// while hidden and re-evaluate the gate the moment it returns.
+	const onVisibilityChange = (): void => clock.sync();
+	if (typeof document !== "undefined") {
+		document.addEventListener("visibilitychange", onVisibilityChange);
+	}
+
 	const stopRoot = $effect.root(() => {
 		$effect(() => {
 			const t = Date.now();
@@ -399,11 +514,16 @@ function createHudStore(): HudStore {
 			}
 			prevConnected = connected;
 		});
-	});
 
-	const clock = setInterval(() => {
-		nowTick = Date.now();
-	}, CLOCK_INTERVAL_MS);
+		// Resume/stop the clock when a reactive gate input changes: `sync()` reads
+		// `getIsStreaming()` and `timestamps.connectionLostAt` as arguments, so
+		// this effect re-runs on streaming flips and link drops/recoveries. The
+		// visibility half is driven by the listener; the elapsed-window stop is
+		// the clock's own per-tick self-check.
+		$effect(() => {
+			clock.sync();
+		});
+	});
 
 	const snapshot = (): HudState =>
 		deriveHudState(readSources(), timestamps, nowTick);
@@ -429,8 +549,11 @@ function createHudStore(): HudStore {
 			};
 		},
 		destroy: () => {
-			clearInterval(clock);
+			clock.stop();
 			stopRoot();
+			if (typeof document !== "undefined") {
+				document.removeEventListener("visibilitychange", onVisibilityChange);
+			}
 		},
 	};
 }
