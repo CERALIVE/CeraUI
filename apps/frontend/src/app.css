@@ -707,12 +707,64 @@
 	}
 }
 
-/* ── High contrast mode ── */
+/* ── High contrast mode ──
+   Both keywords listed: the spec value is `more`; `high` is the legacy alias
+   some engines still match. Brand hues stay put; only neutral contrast tokens,
+   border weights, shadows, and gradients are pushed to their extremes. */
 
-@media (prefers-contrast: high) {
+@media (prefers-contrast: more), (prefers-contrast: high) {
+	:root,
+	.dark {
+		--border: var(--foreground);
+		--input: var(--foreground);
+		--ring: var(--foreground);
+		--sidebar-border: var(--foreground);
+		--muted-foreground: var(--foreground);
+
+		--shadow-sm: 0 0 0 1px var(--foreground);
+		--shadow-md: 0 0 0 1px var(--foreground);
+		--shadow-lg: 0 0 0 1px var(--foreground);
+
+		--gradient-primary-to: var(--primary);
+		--gradient-success-to: var(--status-success);
+		--gradient-info-to: var(--status-info);
+		--gradient-destructive-to: var(--destructive);
+		--gradient-warning-to: var(--status-warning);
+
+		--contrast-mode: high;
+	}
+
 	:focus-visible {
 		outline-width: 3px;
 		outline-color: var(--foreground);
+	}
+
+	/* Per-side widths: Tailwind's preflight sets `border: 0 solid`, so bumping
+	   the shorthand on a single-edge utility (border-t/-b/-l/-r) would render
+	   three phantom solid edges. Widen only the edge each utility owns. */
+	.border {
+		border-width: 2px;
+	}
+
+	.border-t {
+		border-top-width: 2px;
+	}
+
+	.border-b {
+		border-bottom-width: 2px;
+	}
+
+	.border-l {
+		border-left-width: 2px;
+	}
+
+	.border-r {
+		border-right-width: 2px;
+	}
+
+	.loading-shimmer {
+		background: none;
+		animation: none;
 	}
 }
 
