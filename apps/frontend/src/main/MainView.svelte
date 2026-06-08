@@ -13,7 +13,6 @@ import HudRegion from './HudRegion.svelte';
 import MainNav from './navigation/MainNav.svelte';
 import MobileNav from './navigation/MobileNav.svelte';
 import NavigationRenderer from './navigation/NavigationRenderer.svelte';
-import NotificationsPanel from './notifications/NotificationsPanel.svelte';
 
 async function handleRefresh() {
 	window.location.reload();
@@ -55,11 +54,10 @@ const isWideDesktop = new MediaQuery(WIDE_DESKTOP_QUERY);
 					</span>
 				</button>
 
-				<MainNav />
+			<MainNav />
 
-				<div class="flex flex-1 items-center justify-end gap-1">
-					<NotificationsPanel />
-					{#if isWideDesktop.current}
+			<div class="flex flex-1 items-center justify-end gap-1">
+				{#if isWideDesktop.current}
 						<div role="toolbar" aria-label="Settings" class="flex items-center gap-1">
 							<span class="contents" data-testid="header-locale-selector">
 								<LocaleSelector />
