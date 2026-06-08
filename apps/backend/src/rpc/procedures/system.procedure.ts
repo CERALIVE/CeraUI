@@ -8,6 +8,7 @@ import {
 	cloudProviderEndpointSchema,
 	kioskConfigureInputSchema,
 	kioskConfigureOutputSchema,
+	kioskOskInputSchema,
 	kioskStatusSchema,
 	kioskToggleOutputSchema,
 	logInputSchema,
@@ -31,6 +32,7 @@ import { setAutostart } from "../../modules/streaming/streamloop.ts";
 import {
 	getKioskStatus,
 	kioskConfigure,
+	kioskOsk,
 	kioskStart,
 	kioskStop,
 } from "../../modules/system/kiosk.ts";
@@ -261,4 +263,15 @@ export const kioskConfigureProcedure = authedProcedure
 	.handler(({ input }) => {
 		const applied = kioskConfigure(input);
 		return { success: true, applied };
+	});
+
+/**
+ * Show/hide the on-device on-screen keyboard (wvkbd) via SIGUSR2/SIGUSR1.
+ */
+export const kioskOskProcedure = authedProcedure
+	.input(kioskOskInputSchema)
+	.output(successResponseSchema)
+	.handler(async ({ input }) => {
+		await kioskOsk(input.visible);
+		return { success: true };
 	});

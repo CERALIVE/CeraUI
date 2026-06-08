@@ -7,6 +7,7 @@
 
 import type {
 	ConfigMessage,
+	KioskStatus,
 	ModemList,
 	NetifEntry,
 	NetifMessage,
@@ -88,6 +89,12 @@ let relaysState = $state<RelayMessage | undefined>(undefined);
 // Notifications state
 let notificationsState = $state<NotificationsMessage | undefined>(undefined);
 
+// Kiosk state (DC-2). Persisted toggle + live polled state, pushed by the
+// backend `kiosk` broadcast on every transition. The settings UI reads the
+// live `state` field, not just `enabled`, so it never shows "running" on a
+// failed unit.
+let kioskState = $state<KioskStatus | undefined>(undefined);
+
 // Connection state
 let connectionState = $state<ConnectionState>("disconnected");
 let isConnectedState = $state<boolean>(false);
@@ -163,6 +170,10 @@ export function getRelays() {
 
 export function getNotifications() {
 	return notificationsState;
+}
+
+export function getKiosk() {
+	return kioskState;
 }
 
 export function getConnectionState() {
@@ -359,6 +370,15 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			}
 			break;
 
+		case "kiosk":
+			// DC-2 live state. The backend pushes the full status on every kiosk
+			// transition (toggle, start resolve, crash-loop auto-disable). Replace
+			// wholesale — each broadcast carries the complete, authoritative status.
+			if (data && typeof data === "object") {
+				kioskState = data as KioskStatus;
+			}
+			break;
+
 		case "health":
 			// Tri-state stream-liveness rollup (Task 13). Read-only: feeds the HUD
 			// indicator + raises a transition toast; never drives restart logic.
@@ -533,6 +553,7 @@ export function resetState(): void {
 	audioCodecsState = undefined;
 	relaysState = undefined;
 	notificationsState = undefined;
+	kioskState = undefined;
 	connectionReadyState = false;
 
 	if (lockExpiryTick !== undefined) {

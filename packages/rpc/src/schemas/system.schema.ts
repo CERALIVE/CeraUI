@@ -180,3 +180,11 @@ export const kioskToggleOutputSchema = z.object({
 	}),
 });
 export type KioskToggleOutput = z.infer<typeof kioskToggleOutputSchema>;
+
+// kioskOsk input — show/hide the on-screen keyboard (wvkbd). `visible = true`
+// signals SIGUSR2 (show), `false` signals SIGUSR1 (hide). The backend owns the
+// signal mapping so the wvkbd convention is never inlined in the UI.
+export const kioskOskInputSchema = z.object({
+	visible: z.boolean(),
+});
+export type KioskOskInput = z.infer<typeof kioskOskInputSchema>;

@@ -52,6 +52,7 @@ import {
 	getSensorsProcedure,
 	getSyslogProcedure,
 	kioskConfigureProcedure,
+	kioskOskProcedure,
 	kioskStartProcedure,
 	kioskStatusProcedure,
 	kioskStopProcedure,
@@ -140,6 +141,7 @@ const stableRoutes = {
 		kioskStart: kioskStartProcedure,
 		kioskStop: kioskStopProcedure,
 		kioskConfigure: kioskConfigureProcedure,
+		kioskOsk: kioskOskProcedure,
 	}),
 
 	status: os.router({

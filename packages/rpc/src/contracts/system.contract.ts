@@ -9,6 +9,7 @@ import {
 	cloudProviderEndpointSchema,
 	kioskConfigureInputSchema,
 	kioskConfigureOutputSchema,
+	kioskOskInputSchema,
 	kioskStatusSchema,
 	kioskToggleOutputSchema,
 	logInputSchema,
@@ -114,6 +115,11 @@ export const systemContract = oc.router({
 	 * Persist the kiosk display profile (display + touch + motion + performance)
 	 */
 	kioskConfigure: oc.input(kioskConfigureInputSchema).output(kioskConfigureOutputSchema),
+
+	/**
+	 * Show/hide the on-device on-screen keyboard (wvkbd)
+	 */
+	kioskOsk: oc.input(kioskOskInputSchema).output(successResponseSchema),
 
 	/**
 	 * Subscribe to sensor updates

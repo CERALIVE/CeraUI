@@ -39,6 +39,13 @@ const KIOSK_SERVICE = "kiosk.service";
 // no DRM output was found. Distinguishes display-unplug from a crash-loop.
 const KIOSK_NO_DISPLAY_MARKER = "/run/kiosk-no-display";
 
+// The on-screen keyboard process CeraUI signals. wvkbd shows on SIGUSR2 and
+// hides on SIGUSR1 (its documented signal convention); the mapping lives here
+// so the convention is never inlined in the RPC layer or the UI.
+const KIOSK_OSK_PROCESS = "wvkbd-mobintl";
+
+export type OskSignal = "SIGUSR1" | "SIGUSR2";
+
 /**
  * Injectable systemd/marker probe surface. Defaults talk to the real OS
  * (argv-only systemctl, tmpfs marker, real broadcast). Tests inject
@@ -57,6 +64,8 @@ export type KioskDeps = {
 	noDisplayMarkerExists: () => Promise<boolean>;
 	/** Delete the display-failure marker (best-effort). */
 	removeNoDisplayMarker: () => Promise<void>;
+	/** Signal the on-screen keyboard process (wvkbd) to show/hide. */
+	oskSignal: (signal: OskSignal) => Promise<void>;
 	/** Emit the current kiosk status to all clients. */
 	broadcast: (status: KioskStatus) => void;
 };
@@ -110,6 +119,9 @@ const defaultKioskDeps: KioskDeps = {
 	noDisplayMarkerExists: () => Bun.file(KIOSK_NO_DISPLAY_MARKER).exists(),
 	removeNoDisplayMarker: async () => {
 		await rm(KIOSK_NO_DISPLAY_MARKER, { force: true });
+	},
+	oskSignal: async (signal) => {
+		await execFileP("pkill", ["--signal", signal, "-x", KIOSK_OSK_PROCESS]);
 	},
 	broadcast: (status) => broadcastMsg("kiosk", status),
 };
@@ -344,6 +356,23 @@ export function kioskConfigure(
 		motion: config.kiosk_motion,
 		performance: config.kiosk_performance,
 	};
+}
+
+/**
+ * Show or hide the on-device on-screen keyboard. `visible = true` signals
+ * SIGUSR2 (show), `false` signals SIGUSR1 (hide) — the wvkbd convention. A
+ * failure (e.g. wvkbd not running) is logged, never thrown, so toggling the
+ * keyboard from the LAN browser can never crash the RPC.
+ */
+export async function kioskOsk(
+	visible: boolean,
+	deps: KioskDeps = activeDeps,
+): Promise<void> {
+	try {
+		await deps.oskSignal(visible ? "SIGUSR2" : "SIGUSR1");
+	} catch (err) {
+		logger.error(`kiosk: failed to signal ${KIOSK_OSK_PROCESS}: ${err}`);
+	}
 }
 
 /**

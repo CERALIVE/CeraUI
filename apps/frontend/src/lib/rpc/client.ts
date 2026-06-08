@@ -12,6 +12,11 @@ import type {
 	CompletePairingOutput,
 	HotspotConfigInput,
 	HotspotToggleInput,
+	KioskConfigureInput,
+	KioskConfigureOutput,
+	KioskOskInput,
+	KioskStatus,
+	KioskToggleOutput,
 	LoginInput,
 	LoginOutput,
 	LogoutOutput,
@@ -486,7 +491,14 @@ export interface TypedRPC {
 		sshResetPassword: () => Promise<{ success: boolean; password?: string }>;
 		getCloudProviders: () => Promise<unknown>;
 		setRemoteConfig: (input: RemoteConfigInput) => Promise<SuccessResponse>;
-		setAutostart: (input: { autostart: boolean }) => Promise<SuccessResponse>;
+		setAutostart: (input: { autostart: boolean }) => Promise<AutostartOutput>;
+		kioskStatus: () => Promise<KioskStatus>;
+		kioskStart: () => Promise<KioskToggleOutput>;
+		kioskStop: () => Promise<KioskToggleOutput>;
+		kioskConfigure: (
+			input: KioskConfigureInput,
+		) => Promise<KioskConfigureOutput>;
+		kioskOsk: (input: KioskOskInput) => Promise<SuccessResponse>;
 	};
 	status: {
 		getStatus: () => Promise<unknown>;
