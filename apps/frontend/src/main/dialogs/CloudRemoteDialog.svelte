@@ -11,8 +11,8 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import type { ProviderSelection } from '@ceraui/rpc/schemas';
-import { Check, Cloud, ExternalLink, Eye, EyeOff, Link2, Loader2, RefreshCw } from '@lucide/svelte';
+import type { CloudProviderEndpoint, ProviderSelection } from '@ceraui/rpc/schemas';
+import { Cloud, ExternalLink, Eye, EyeOff } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
@@ -22,7 +22,7 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { saveRemoteConfig } from '$lib/helpers/SystemHelper';
-import { PairingController } from '$lib/pairing/pairing.svelte';
+import { rpc } from '$lib/rpc/client';
 import { getConfig } from '$lib/rpc/subscriptions.svelte';
 
 interface Props {
@@ -31,11 +31,22 @@ interface Props {
 
 let { open = $bindable(false) }: Props = $props();
 
-const PROVIDERS = [
-	{ id: 'ceralive' as const, name: 'CeraLive Cloud', cloudUrl: 'https://cloud.ceralive.net' },
-	{ id: 'belabox' as const, name: 'BELABOX Cloud', cloudUrl: 'https://cloud.belabox.net' },
-	{ id: 'custom' as const, name: 'Custom Provider', cloudUrl: undefined },
-];
+// Provider list is sourced from the backend (system.getCloudProviders) — never
+// hardcoded. The synthetic `custom` option (appended in providerOptions) carries
+// the manual-override escape hatch.
+let providers = $state<CloudProviderEndpoint[]>([]);
+
+async function loadProviders() {
+	try {
+		const result = (await rpc.system.getCloudProviders()) as {
+			providers: CloudProviderEndpoint[];
+			current: CloudProviderEndpoint;
+		};
+		providers = result.providers;
+	} catch (error) {
+		console.error('Failed to load cloud providers:', error);
+	}
+}
 
 const config = $derived(getConfig());
 
@@ -57,6 +68,7 @@ let wasOpen = false;
 $effect(() => {
 	// Open edge → seed the form from config and clear dirty flags.
 	if (open && !wasOpen) {
+		void loadProviders();
 		provider = config?.remote_provider ?? 'ceralive';
 		remoteKey = config?.remote_key ?? '';
 		customName = config?.custom_provider?.name ?? '';
@@ -82,45 +94,21 @@ $effect(() => {
 	}
 });
 
-const selected = $derived(PROVIDERS.find((p) => p.id === provider));
+// Backend providers + the synthetic custom-override option. The custom label is
+// i18n'd; predefined names come straight from the backend.
+const providerOptions = $derived<Array<{ id: ProviderSelection; name: string; cloudUrl?: string }>>([
+	...providers.map((p) => ({
+		id: p.id as ProviderSelection,
+		name: p.name,
+		cloudUrl: p.cloudUrl,
+	})),
+	{ id: 'custom', name: $LL.advanced.customProvider() },
+]);
+
+const selected = $derived(providerOptions.find((p) => p.id === provider));
 const cloudUrl = $derived(provider === 'custom' ? undefined : selected?.cloudUrl);
 const customIncomplete = $derived(provider === 'custom' && customHost.trim() === '');
 const canSave = $derived(!customIncomplete && !saving);
-
-// Claim-code pairing. The mock-platform "simulate" affordance is dev-only; in
-// production the real cloud dashboard completes the claim and the device polls.
-const pairing = new PairingController();
-const isDev = import.meta.env.DEV;
-
-$effect(() => {
-	if (open) {
-		pairing.startCountdown();
-	} else {
-		pairing.stopCountdown();
-		pairing.reset();
-	}
-});
-
-async function generateCode() {
-	try {
-		await pairing.generate();
-	} catch {
-		toast.error($LL.settings.pairing.generateFailed());
-	}
-}
-
-async function simulatePairing() {
-	try {
-		const result = await pairing.complete();
-		if (result?.paired) {
-			toast.success($LL.settings.pairing.pairedToast());
-		} else {
-			toast.error($LL.settings.pairing.pairFailed());
-		}
-	} catch {
-		toast.error($LL.settings.pairing.pairFailed());
-	}
-}
 
 async function save() {
 	if (!canSave) return;
@@ -140,6 +128,13 @@ async function save() {
 					: undefined,
 		});
 		toast.success($LL.advanced.remoteConfigSaved());
+		// Lock fields to the backend-applied config. setRemoteConfig persists then
+		// broadcasts the authoritative `config`; clearing the dirty guard lets the
+		// live-config sync reflect what the backend actually wrote, not the
+		// in-flight intended value.
+		dirtyProvider = false;
+		dirtyKey = false;
+		dirtyCustom = false;
 		open = false;
 	} catch (error) {
 		console.error('Failed to save remote config:', error);
@@ -161,89 +156,6 @@ async function save() {
 	title={$LL.settings.index.cloudRemote()}
 >
 	<div class="space-y-5">
-		<!-- Device pairing (claim code) -->
-		<section class="bg-muted/40 space-y-3 rounded-lg border p-4" data-testid="device-pairing">
-			<div class="flex items-start gap-3">
-				<span
-					class="bg-secondary text-foreground grid size-9 shrink-0 place-items-center rounded-lg"
-				>
-					<Link2 class="size-[18px]" />
-				</span>
-				<div class="min-w-0 flex-1 space-y-0.5">
-					<h3 class="text-sm font-semibold">{$LL.settings.pairing.title()}</h3>
-					<p class="text-muted-foreground text-xs">{$LL.settings.pairing.description()}</p>
-				</div>
-			</div>
-
-			{#if pairing.status === 'paired'}
-				<div
-					class="text-primary flex items-center gap-2 text-sm font-medium"
-					data-testid="pairing-status"
-				>
-					<Check class="size-4" />
-					{$LL.settings.pairing.paired()}
-				</div>
-			{:else if pairing.code}
-				<div class="space-y-2">
-					<p class="text-muted-foreground text-xs">{$LL.settings.pairing.codeLabel()}</p>
-					<div
-						class="bg-background rounded-md border px-4 py-3 text-center font-mono text-2xl font-bold tracking-[0.3em]"
-						data-testid="claim-code"
-					>
-						{pairing.code}
-					</div>
-					{#if pairing.expired}
-						<p class="text-destructive text-xs" data-testid="claim-code-expiry">
-							{$LL.settings.pairing.expired()}
-						</p>
-					{:else}
-						<p class="text-muted-foreground text-xs" data-testid="claim-code-expiry">
-							{$LL.settings.pairing.validFor()}
-							<span class="font-mono">{pairing.remainingLabel}</span>
-						</p>
-					{/if}
-					<p class="text-muted-foreground text-xs">{$LL.settings.pairing.instructions()}</p>
-				</div>
-
-				<div class="flex flex-wrap gap-2">
-					<Button
-						disabled={pairing.status === 'generating'}
-						onclick={generateCode}
-						size="sm"
-						variant="outline"
-					>
-						<RefreshCw class="size-4" />
-						{$LL.settings.pairing.regenerate()}
-					</Button>
-					{#if isDev}
-						<Button
-							disabled={pairing.status === 'pairing' || pairing.expired}
-							onclick={simulatePairing}
-							size="sm"
-							data-testid="simulate-pairing"
-						>
-							{#if pairing.status === 'pairing'}
-								<Loader2 class="size-4 animate-spin" />
-							{/if}
-							{$LL.settings.pairing.simulate()}
-						</Button>
-					{/if}
-				</div>
-			{:else}
-				<Button
-					disabled={pairing.status === 'generating'}
-					onclick={generateCode}
-					size="sm"
-					data-testid="generate-claim-code"
-				>
-					{#if pairing.status === 'generating'}
-						<Loader2 class="size-4 animate-spin" />
-					{/if}
-					{$LL.settings.pairing.generate()}
-				</Button>
-			{/if}
-		</section>
-
 		<!-- Provider select -->
 		<div class="space-y-2">
 			<Label class="text-sm font-medium" for="cloud-provider">{$LL.advanced.cloudProvider()}</Label>
@@ -259,7 +171,7 @@ async function save() {
 					{selected?.name ?? $LL.advanced.cloudProvider()}
 				</Select.Trigger>
 				<Select.Content>
-					{#each PROVIDERS as p (p.id)}
+					{#each providerOptions as p (p.id)}
 						<Select.Item value={p.id}>{p.name}</Select.Item>
 					{/each}
 				</Select.Content>
