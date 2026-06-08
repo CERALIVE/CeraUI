@@ -360,6 +360,14 @@ const ptBR = {
 		validationPassed: "Endpoint acessível",
 		validationFailed: "Falha na validação",
 		validateBeforeSave: "Valide o endpoint antes de salvar",
+		validateStages: {
+			input: "Endereço",
+			protocol: "Protocolo",
+			endpoint: "Endpoint",
+			dns: "DNS",
+			probe: "Acessibilidade",
+			ok: "Conectado",
+		},
 		placeholders: {
 			srtlaServerAddress: "ex., 192.168.1.100 ou server.example.com",
 			srtlaServerPort: "ex., 8890",

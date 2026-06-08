@@ -498,6 +498,14 @@ const en = {
 		validationPassed: "Endpoint reachable",
 		validationFailed: "Validation failed",
 		validateBeforeSave: "Validate the endpoint before saving",
+		validateStages: {
+			input: "Address",
+			protocol: "Protocol",
+			endpoint: "Endpoint",
+			dns: "DNS",
+			probe: "Reachability",
+			ok: "Connected",
+		},
 		placeholders: {
 			srtlaServerAddress: "e.g., 192.168.1.100 or server.example.com",
 			srtlaServerPort: "e.g., 8890",

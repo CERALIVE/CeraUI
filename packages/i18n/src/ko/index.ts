@@ -205,6 +205,14 @@ const ko = {
 		validationPassed: "엔드포인트 연결 가능",
 		validationFailed: "검증 실패",
 		validateBeforeSave: "저장하기 전에 엔드포인트를 검증하세요",
+		validateStages: {
+			input: "주소",
+			protocol: "프로토콜",
+			endpoint: "엔드포인트",
+			dns: "DNS",
+			probe: "도달 가능성",
+			ok: "연결됨",
+		},
 		placeholders: {
 			srtlaServerAddress: "예: 192.168.1.100 또는 server.example.com",
 			srtlaServerPort: "예: 8890",

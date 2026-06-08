@@ -200,6 +200,14 @@ const zh = {
 		validationPassed: "端点可达",
 		validationFailed: "验证失败",
 		validateBeforeSave: "保存前请验证端点",
+		validateStages: {
+			input: "地址",
+			protocol: "协议",
+			endpoint: "端点",
+			dns: "DNS",
+			probe: "可达性",
+			ok: "已连接",
+		},
 		placeholders: {
 			srtlaServerAddress: "例如：192.168.1.100 或 server.example.com",
 			srtlaServerPort: "例如：8890",

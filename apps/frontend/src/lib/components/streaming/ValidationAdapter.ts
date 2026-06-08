@@ -30,6 +30,21 @@ export const streamingConstraints = {
 	port: { min: PORT_MIN, max: PORT_MAX },
 } as const;
 
+// Port parse + bounds live here (not inlined in dialogs) so the PORT_MIN/PORT_MAX
+// schema bounds stay the single source, per the no-inline-literals rule.
+export function parsePort(value: string): number | undefined {
+	return value.trim() === "" ? undefined : Number.parseInt(value, 10);
+}
+
+export function isPortValid(value: number | undefined): boolean {
+	return (
+		value !== undefined &&
+		Number.isInteger(value) &&
+		value >= streamingConstraints.port.min &&
+		value <= streamingConstraints.port.max
+	);
+}
+
 export const networkConstraints = {
 	hotspot: {
 		name: { min: HOTSPOT_NAME_MIN, max: HOTSPOT_NAME_MAX },

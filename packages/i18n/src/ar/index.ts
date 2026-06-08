@@ -342,6 +342,14 @@ const ar = {
 		validationPassed: "نقطة النهاية قابلة للوصول",
 		validationFailed: "فشل التحقق",
 		validateBeforeSave: "تحقق من نقطة النهاية قبل الحفظ",
+		validateStages: {
+			input: "العنوان",
+			protocol: "البروتوكول",
+			endpoint: "نقطة النهاية",
+			dns: "DNS",
+			probe: "إمكانية الوصول",
+			ok: "متصل",
+		},
 		placeholders: {
 			srtlaServerAddress: "مثل: 192.168.1.100 أو server.example.com",
 			srtlaServerPort: "مثل: 8890",

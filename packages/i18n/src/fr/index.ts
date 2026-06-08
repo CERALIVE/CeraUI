@@ -364,6 +364,14 @@ const fr = {
 		validationPassed: "Point de terminaison accessible",
 		validationFailed: "Échec de la validation",
 		validateBeforeSave: "Validez le point de terminaison avant d'enregistrer",
+		validateStages: {
+			input: "Adresse",
+			protocol: "Protocole",
+			endpoint: "Point de terminaison",
+			dns: "DNS",
+			probe: "Accessibilité",
+			ok: "Connecté",
+		},
 		placeholders: {
 			srtlaServerAddress: "ex., 192.168.1.100 ou server.example.com",
 			srtlaServerPort: "ex., 8890",

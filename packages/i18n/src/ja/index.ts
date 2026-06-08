@@ -209,6 +209,14 @@ const ja = {
 		validationPassed: "エンドポイントに到達可能",
 		validationFailed: "検証に失敗しました",
 		validateBeforeSave: "保存する前にエンドポイントを検証してください",
+		validateStages: {
+			input: "アドレス",
+			protocol: "プロトコル",
+			endpoint: "エンドポイント",
+			dns: "DNS",
+			probe: "到達性",
+			ok: "接続済み",
+		},
 		placeholders: {
 			srtlaServerAddress: "例: 192.168.1.100 または server.example.com",
 			srtlaServerPort: "例: 8890",

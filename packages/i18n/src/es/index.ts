@@ -499,6 +499,14 @@ const es = {
 		validationPassed: "Punto de conexión accesible",
 		validationFailed: "Validación fallida",
 		validateBeforeSave: "Valida el punto de conexión antes de guardar",
+		validateStages: {
+			input: "Dirección",
+			protocol: "Protocolo",
+			endpoint: "Punto de conexión",
+			dns: "DNS",
+			probe: "Accesibilidad",
+			ok: "Conectado",
+		},
 		placeholders: {
 			srtlaServerAddress: "ej., 192.168.1.100 o server.example.com",
 			srtlaServerPort: "ej., 8890",

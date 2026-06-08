@@ -204,6 +204,14 @@ const hi = {
 		validationPassed: "एंडपॉइंट पहुँच योग्य",
 		validationFailed: "सत्यापन विफल",
 		validateBeforeSave: "सहेजने से पहले एंडपॉइंट सत्यापित करें",
+		validateStages: {
+			input: "पता",
+			protocol: "प्रोटोकॉल",
+			endpoint: "एंडपॉइंट",
+			dns: "DNS",
+			probe: "पहुँच",
+			ok: "कनेक्टेड",
+		},
 		placeholders: {
 			srtlaServerAddress: "उदा., 192.168.1.100 या server.example.com",
 			srtlaServerPort: "उदा., 8890",

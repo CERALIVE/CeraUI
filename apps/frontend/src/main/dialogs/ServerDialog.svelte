@@ -1,21 +1,21 @@
 <!--
   ServerDialog.svelte — SRTLA / relay-server configuration, surfaced from Live.
 
-  Method-based UI (Task 16):
+  Method-based UI (Task 16), split into focused sub-components (Task 14):
    • Two transport methods stay as the existing tab toggle — Manual Configuration
-     (a custom relay: address/port/streamid/secret with a "Validate" action) and
-     Relay Server (a managed-provider catalog).
-   • Relay mode adds a provider selector that groups the catalog by origin, an
-     auto-preloaded server endpoint shown READ-ONLY with a "manual override"
-     toggle that reveals editable host/port, and an editable Stream ID seeded
-     from `relay_streamid_override` (Task 9 auto-fill).
+     (`ManualEndpointForm`: a custom relay address/port/streamid/secret with a
+     "Validate" action) and Relay Server (`RelayServerSelector`: a managed-provider
+     catalog with provider grouping, an auto-preloaded READ-ONLY endpoint + manual
+     override, account selector, and an editable Stream ID).
    • Manual mode validates the endpoint through `relay.validate` (Task 8 adapter)
-     and surfaces the failing stage inline; Save is blocked while a validation
-     is failing or in flight.
+     and surfaces the multi-stage result inline; Save is blocked while a validation
+     is in flight or failing (the `relay-validation` reducer owns that gate).
 
-  Live config (`getConfig`) and the relay catalog (`getRelays`) are read directly
-  and overlaid only with the operator's edits (the `draft` dirty-field guard).
-  Validation bounds come from `streamingConstraints` (RPC schema consts).
+  This dialog stays the logic container: it owns the `draft` dirty-field guard,
+  every derived value, and the validate + save handlers; the sub-components are
+  presentational. Live config (`getConfig`) and the relay catalog (`getRelays`)
+  are read directly and overlaid only with the operator's edits. Validation bounds
+  and port parsing come from `ValidationAdapter` (RPC schema consts).
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
@@ -24,15 +24,23 @@ import type { StreamingConfigInput } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
-import RelayRttIndicator from '$lib/components/streaming/RelayRttIndicator.svelte';
-import { Button } from '$lib/components/ui/button';
-import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
-import * as Select from '$lib/components/ui/select';
-import { streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
+import {
+	isPortValid,
+	parsePort,
+	streamingConstraints,
+} from '$lib/components/streaming/ValidationAdapter';
+import {
+	type Validation,
+	manualSaveEnabled,
+	reduceValidateError,
+	reduceValidateResult,
+} from '$lib/components/streaming/relay-validation';
 import { getConfig, getIsStreaming, getRelays } from '$lib/rpc/subscriptions.svelte';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
+import ManualEndpointForm from './server/ManualEndpointForm.svelte';
+import RelayServerSelector from './server/RelayServerSelector.svelte';
 
 interface Props {
 	open?: boolean;
@@ -74,11 +82,6 @@ type Draft = {
 };
 let draft = $state<Draft>({});
 
-type Validation = {
-	state: 'idle' | 'validating' | 'pass' | 'fail';
-	stage?: string;
-	reason?: string;
-};
 let validation = $state<Validation>({ state: 'idle' });
 
 $effect(() => {
@@ -139,15 +142,6 @@ const overridePortStr = $derived(
 	draft.relay_override_port ?? (relayServerInfo?.port?.toString() ?? ''),
 );
 
-function parsePort(value: string): number | undefined {
-	return value.trim() === '' ? undefined : Number.parseInt(value, 10);
-}
-function isPortValid(value: number | undefined): boolean {
-	return (
-		value !== undefined && Number.isInteger(value) && value >= PORT.min && value <= PORT.max
-	);
-}
-
 const portNum = $derived(parsePort(portStr));
 const portError = $derived.by(() => {
 	if (mode !== 'manual' || portStr.trim() === '') return undefined;
@@ -175,13 +169,22 @@ const canValidate = $derived(
 );
 
 const canSave = $derived.by(() => {
-	if (isStreaming) return false;
 	if (mode === 'manual') {
-		if (validation.state === 'validating' || validation.state === 'fail') return false;
-		return addr.trim() !== '' && portStr.trim() !== '' && portError === undefined;
+		return manualSaveEnabled({
+			isStreaming,
+			addr,
+			portStr,
+			hasPortError: portError !== undefined,
+			validation,
+		});
 	}
+	if (isStreaming) return false;
 	if (relayOverride) {
-		return overrideAddr.trim() !== '' && overridePortStr.trim() !== '' && overridePortError === undefined;
+		return (
+			overrideAddr.trim() !== '' &&
+			overridePortStr.trim() !== '' &&
+			overridePortError === undefined
+		);
 	}
 	return relayServer !== '';
 });
@@ -210,15 +213,9 @@ async function handleValidate() {
 			passphrase: passphrase.trim() === '' ? undefined : passphrase.trim(),
 			protocol: 'srtla',
 		});
-		validation = result.valid
-			? { state: 'pass', stage: result.stage }
-			: { state: 'fail', stage: result.stage, reason: result.reason };
+		validation = reduceValidateResult(result);
 	} catch (error) {
-		validation = {
-			state: 'fail',
-			stage: 'endpoint',
-			reason: error instanceof Error ? error.message : undefined,
-		};
+		validation = reduceValidateError(error);
 	}
 }
 
@@ -315,262 +312,64 @@ async function handleSave() {
 		{/if}
 
 		{#if mode === 'manual'}
-			<div class="space-y-2">
-				<Label class="text-sm font-medium" for="srtla-addr">
-					{$LL.settings.srtlaServerAddress()}
-				</Label>
-				<Input
-					id="srtla-addr"
-					aria-invalid={addrError ? 'true' : undefined}
-					class="font-mono"
-					disabled={isStreaming}
-					oninput={(e) => {
-						draft.srtla_addr = e.currentTarget.value;
-						resetValidation();
-					}}
-					placeholder={$LL.settings.placeholders.srtlaServerAddress()}
-					value={addr}
-				/>
-				{#if addrError}
-					<p class="text-destructive text-sm">{addrError}</p>
-				{/if}
-			</div>
-
-			<div class="space-y-2">
-				<Label class="text-sm font-medium" for="srtla-port">
-					{$LL.settings.srtlaServerPort()}
-				</Label>
-				<Input
-					id="srtla-port"
-					aria-invalid={portError ? 'true' : undefined}
-					class="font-mono"
-					disabled={isStreaming}
-					inputmode="numeric"
-					max={PORT.max}
-					min={PORT.min}
-					oninput={(e) => {
-						draft.srtla_port = e.currentTarget.value;
-						resetValidation();
-					}}
-					placeholder={$LL.settings.placeholders.srtlaServerPort()}
-					type="number"
-					value={portStr}
-				/>
-				{#if portError}
-					<p class="text-destructive text-sm">{portError}</p>
-				{/if}
-			</div>
-
-			<div class="space-y-2">
-				<Label class="text-sm font-medium" for="srt-streamid">
-					{$LL.settings.srtStreamId()}
-					<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
-				</Label>
-				<Input
-					id="srt-streamid"
-					class="font-mono"
-					disabled={isStreaming}
-					oninput={(e) => {
-						draft.srt_streamid = e.currentTarget.value;
-						resetValidation();
-					}}
-					placeholder={$LL.settings.placeholders.srtStreamId()}
-					value={streamId}
-				/>
-			</div>
-
-			<div class="space-y-2">
-				<Label class="text-sm font-medium" for="srtla-passphrase">
-					{$LL.settings.relaySecret()}
-					<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
-				</Label>
-				<Input
-					id="srtla-passphrase"
-					class="font-mono"
-					disabled={isStreaming}
-					oninput={(e) => {
-						draft.passphrase = e.currentTarget.value;
-						resetValidation();
-					}}
-					placeholder={$LL.settings.relaySecretPlaceholder()}
-					type="password"
-					value={passphrase}
-				/>
-			</div>
-
-			<!-- Validate the custom relay endpoint via relay.validate (Task 8). -->
-			<div class="space-y-2">
-				<Button
-					id="relay-validate"
-					class="w-full"
-					disabled={!canValidate}
-					onclick={handleValidate}
-					variant="outline"
-				>
-					{validation.state === 'validating' ? $LL.settings.validating() : $LL.settings.validate()}
-				</Button>
-				{#if validation.state === 'pass'}
-					<p class="text-primary text-sm" role="status">
-						{$LL.settings.validationPassed()}
-					</p>
-				{:else if validation.state === 'fail'}
-					<p class="text-destructive text-sm" role="alert">
-						{$LL.settings.validationFailed()} ({validation.stage}){validation.reason
-							? `: ${validation.reason}`
-							: ''}
-					</p>
-				{/if}
-			</div>
+			<ManualEndpointForm
+				{addr}
+				{addrError}
+				{canValidate}
+				{isStreaming}
+				onAddr={(value) => {
+					draft.srtla_addr = value;
+					resetValidation();
+				}}
+				onPassphrase={(value) => {
+					draft.passphrase = value;
+					resetValidation();
+				}}
+				onPort={(value) => {
+					draft.srtla_port = value;
+					resetValidation();
+				}}
+				onStreamId={(value) => {
+					draft.srt_streamid = value;
+					resetValidation();
+				}}
+				onValidate={handleValidate}
+				{passphrase}
+				port={PORT}
+				{portError}
+				{portStr}
+				{streamId}
+				{validation}
+			/>
 		{:else}
-			<div class="space-y-2">
-				<Label class="text-sm font-medium" for="relay-provider">{$LL.settings.relayProvider()}</Label>
-				<Select.Root
-					disabled={relays === undefined || isStreaming}
-					onValueChange={(value) => (draft.relay_provider = value)}
-					type="single"
-					value={selectedProvider}
-				>
-					<Select.Trigger id="relay-provider" class="w-full">
-						{PROVIDER_LABELS[selectedProvider] ?? selectedProvider}
-					</Select.Trigger>
-					<Select.Content>
-						<Select.Group>
-							{#each MANAGED_PROVIDERS as providerId (providerId)}
-								<Select.Item value={providerId}>{PROVIDER_LABELS[providerId]}</Select.Item>
-							{/each}
-						</Select.Group>
-					</Select.Content>
-				</Select.Root>
-			</div>
-
-			<div class="space-y-2">
-				<Label class="text-sm font-medium" for="relay-server">{$LL.settings.relayServer()}</Label>
-				<Select.Root
-					disabled={relays === undefined || isStreaming}
-					onValueChange={(value) => (draft.relay_server = value)}
-					type="single"
-					value={relayServer}
-				>
-					<Select.Trigger id="relay-server" class="w-full">
-						<span class="flex w-full items-center gap-2">
-							<span class="truncate">{relayServerName ?? $LL.settings.relayServer()}</span>
-							{#if relayServerName}
-								<RelayRttIndicator class="ms-auto" rtt={relayServerRtt} />
-							{/if}
-						</span>
-					</Select.Trigger>
-					<Select.Content>
-						<Select.Group>
-							{#each filteredServerEntries as [id, info] (id)}
-								<Select.Item value={id}>
-									<div class="flex w-full items-center gap-2">
-										<span class="truncate">{info.name}</span>
-										<RelayRttIndicator class="ms-auto" rtt={info.rtt} />
-									</div>
-								</Select.Item>
-							{/each}
-						</Select.Group>
-					</Select.Content>
-				</Select.Root>
-			</div>
-
-			<!-- Auto-preloaded endpoint: read-only by default, with a manual
-			     override toggle revealing editable host/port. -->
-			<div class="space-y-2">
-				<div class="flex items-center justify-between gap-2">
-					<Label class="text-sm font-medium" for="relay-endpoint">{$LL.settings.autoEndpoint()}</Label>
-					<button
-						aria-checked={relayOverride}
-						class="text-xs font-medium {relayOverride
-							? 'text-primary'
-							: 'text-muted-foreground hover:text-foreground'}"
-						disabled={isStreaming}
-						id="relay-manual-override"
-						onclick={() => (draft.relay_override = !relayOverride)}
-						role="switch"
-						type="button"
-					>
-						{$LL.settings.manualOverride()}
-					</button>
-				</div>
-				{#if !relayOverride}
-					<output
-						id="relay-endpoint"
-						class="bg-muted/60 text-muted-foreground block rounded-md border px-3 py-2 font-mono text-sm"
-					>
-						{relayServerEndpoint ?? relayServerName ?? '—'}
-					</output>
-				{:else}
-					<Input
-						id="relay-override-addr"
-						class="font-mono"
-						disabled={isStreaming}
-						oninput={(e) => (draft.relay_override_addr = e.currentTarget.value)}
-						placeholder={$LL.settings.placeholders.srtlaServerAddress()}
-						value={overrideAddr}
-					/>
-					<Input
-						id="relay-override-port"
-						aria-invalid={overridePortError ? 'true' : undefined}
-						class="font-mono"
-						disabled={isStreaming}
-						inputmode="numeric"
-						max={PORT.max}
-						min={PORT.min}
-						oninput={(e) => (draft.relay_override_port = e.currentTarget.value)}
-						placeholder={$LL.settings.placeholders.srtlaServerPort()}
-						type="number"
-						value={overridePortStr}
-					/>
-					{#if overridePortError}
-						<p class="text-destructive text-sm">{overridePortError}</p>
-					{/if}
-				{/if}
-			</div>
-
-			<div class="space-y-2">
-				<Label class="text-sm font-medium" for="relay-account">
-					{$LL.settings.relayServerAccount()}
-					<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
-				</Label>
-				<Select.Root
-					disabled={relays === undefined || isStreaming}
-					onValueChange={(value) => (draft.relay_account = value)}
-					type="single"
-					value={relayAccount}
-				>
-					<Select.Trigger id="relay-account" class="w-full">
-						{relayAccountName ?? $LL.settings.manualConfiguration()}
-					</Select.Trigger>
-					<Select.Content>
-						<Select.Group>
-							{#each accountEntries as [id, info] (id)}
-								<Select.Item value={id}>
-									<div class="flex items-center gap-2">
-										<div aria-hidden={true} class="bg-primary h-2 w-2 rounded-full"></div>
-										{info.name}
-									</div>
-								</Select.Item>
-							{/each}
-						</Select.Group>
-					</Select.Content>
-				</Select.Root>
-			</div>
-
-			<div class="space-y-2">
-				<Label class="text-sm font-medium" for="relay-streamid">
-					{$LL.settings.streamId()}
-					<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
-				</Label>
-				<Input
-					id="relay-streamid"
-					class="font-mono"
-					disabled={isStreaming}
-					oninput={(e) => (draft.relay_streamid = e.currentTarget.value)}
-					placeholder={$LL.settings.placeholders.srtStreamId()}
-					value={relayStreamId}
-				/>
-			</div>
+			<RelayServerSelector
+				{accountEntries}
+				{filteredServerEntries}
+				{isStreaming}
+				managedProviders={MANAGED_PROVIDERS}
+				onAccount={(value) => (draft.relay_account = value)}
+				onOverrideAddr={(value) => (draft.relay_override_addr = value)}
+				onOverridePort={(value) => (draft.relay_override_port = value)}
+				onProvider={(value) => (draft.relay_provider = value)}
+				onRelayStreamId={(value) => (draft.relay_streamid = value)}
+				onServer={(value) => (draft.relay_server = value)}
+				onToggleOverride={() => (draft.relay_override = !relayOverride)}
+				{overrideAddr}
+				{overridePortError}
+				{overridePortStr}
+				port={PORT}
+				providerLabels={PROVIDER_LABELS}
+				{relayAccount}
+				{relayAccountName}
+				{relayOverride}
+				{relayServer}
+				{relayServerEndpoint}
+				{relayServerName}
+				{relayServerRtt}
+				relaysUnavailable={relays === undefined}
+				{relayStreamId}
+				{selectedProvider}
+			/>
 		{/if}
 
 		<!-- SRT latency: bounds come from streamingConstraints.srtLatency -->

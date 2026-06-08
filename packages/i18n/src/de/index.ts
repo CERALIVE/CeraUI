@@ -488,6 +488,14 @@ const de = {
 		validationPassed: "Endpunkt erreichbar",
 		validationFailed: "Überprüfung fehlgeschlagen",
 		validateBeforeSave: "Überprüfen Sie den Endpunkt vor dem Speichern",
+		validateStages: {
+			input: "Adresse",
+			protocol: "Protokoll",
+			endpoint: "Endpunkt",
+			dns: "DNS",
+			probe: "Erreichbarkeit",
+			ok: "Verbunden",
+		},
 		placeholders: {
 			srtlaServerAddress: "z.B., 192.168.1.100 oder server.example.com",
 			srtlaServerPort: "z.B., 8890",
