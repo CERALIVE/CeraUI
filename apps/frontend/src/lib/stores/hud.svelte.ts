@@ -483,6 +483,36 @@ function createHudStore(): HudStore {
 		nowTick = Date.now();
 	});
 
+	// One-shot sensor-staleness latch (frozen-stream dimming).
+	//
+	// A FROZEN telemetry stream — WS frames stop arriving WITHOUT a disconnect, so
+	// `connectionLostAt` never sets and the gated interval clock above stays parked —
+	// must still dim live SoC values once they age past STALE_THRESHOLD_MS. Gating the
+	// interval clock on sensor freshness instead would re-tick every second forever
+	// (the exact foot-gun `isClockTickNeeded` deliberately avoids), so we use a single
+	// deferred check, not an interval: every new sensor frame reschedules it, so in
+	// steady state it is perpetually deferred and never fires; the instant frames stop
+	// it fires exactly once, advancing `nowTick` so the derivation re-runs and
+	// `isSensorsStale` flips. Disconnect staleness stays covered by the gated clock via
+	// `connectionLostAt` -> `isFullyStale`.
+	let sensorStaleLatch: ReturnType<typeof setTimeout> | null = null;
+	const clearSensorStaleLatch = (): void => {
+		if (sensorStaleLatch !== null) {
+			clearTimeout(sensorStaleLatch);
+			sensorStaleLatch = null;
+		}
+	};
+	const armSensorStaleLatch = (sensorsAt: number): void => {
+		clearSensorStaleLatch();
+		// Fire one tick the moment this frame would age past the threshold. A fresher
+		// frame before then re-arms (clearing this), so healthy data never ticks.
+		const delay = Math.max(0, sensorsAt + STALE_THRESHOLD_MS - Date.now());
+		sensorStaleLatch = setTimeout(() => {
+			sensorStaleLatch = null;
+			nowTick = Date.now();
+		}, delay);
+	};
+
 	const stopRoot = $effect.root(() => {
 		$effect(() => {
 			const t = Date.now();
@@ -499,6 +529,7 @@ function createHudStore(): HudStore {
 			if (sensors !== prevSensors) {
 				timestamps.sensors = t;
 				prevSensors = sensors;
+				armSensorStaleLatch(t);
 			}
 
 			const modems = getModems();
@@ -558,6 +589,7 @@ function createHudStore(): HudStore {
 		},
 		destroy: () => {
 			clock.stop();
+			clearSensorStaleLatch();
 			stopRoot();
 			releaseRefresh();
 			if (typeof document !== "undefined") {
