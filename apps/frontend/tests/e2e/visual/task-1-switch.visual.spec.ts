@@ -3,12 +3,10 @@ import path from 'node:path';
 
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
-import { navigateTo, setTheme } from '../helpers/index.js';
+import { EVIDENCE_DIR, navigateTo, setTheme } from '../helpers/index.js';
 
-// Repo-local evidence dir (apps/frontend/tests/e2e/visual -> CeraUI root, 5 up).
-const REPO_EVIDENCE_DIR = path.resolve(import.meta.dirname, '../../../../../.omo/evidence');
 function repoEvidence(name: string): string {
-	return path.join(REPO_EVIDENCE_DIR, name);
+	return path.join(EVIDENCE_DIR, name);
 }
 
 /**

@@ -211,7 +211,7 @@ Key patterns it demonstrates:
 - **`expect.poll`** instead of `waitForTimeout` for async state that has no immediate DOM signal
 - **`emit(page, type, payload)`** to inject server echoes at known times, making timing deterministic
 - **Serial test ordering** (`test.describe.configure({ mode: 'serial' })`) for stateful integration sequences
-- **Evidence files** written to `.omo/evidence/` via `evidencePath()` from `helpers/index.ts`
+- **Evidence files** written to the repo-local `test-results/` (gitignored) via `evidencePath()` from `helpers/index.ts`
 
 Do not modify `field-lock.spec.ts`. It is a deterministic integration proof and a reference implementation.
 

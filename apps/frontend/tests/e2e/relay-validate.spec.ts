@@ -13,7 +13,7 @@
  * A loopback UDP echo answers the backend's post-connection reachability probe.
  * It replies on a short delay so the in-flight (validating) state is observable
  * via web-first auto-retry — no fixed sleeps (PLAYBOOK.md). Evidence is written
- * to .omo/evidence per the task contract.
+ * to the repo-local test-results dir per the task contract.
  */
 import { createSocket } from 'node:dgram';
 import fs from 'node:fs';

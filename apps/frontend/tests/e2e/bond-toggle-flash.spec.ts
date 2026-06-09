@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
-import { navigateTo } from "./helpers";
+import { EVIDENCE_DIR, navigateTo } from "./helpers";
 
 /**
  * Task 1 — Bond-toggle no-flash proof, end-to-end.
@@ -55,13 +55,6 @@ const TOKEN: string = (() => {
 })();
 
 const FAKE_ERR = "drop+fake: simulated configure failure";
-
-// Workspace-root evidence dir: 5 levels up from tests/e2e == /mnt/.../ceralive.
-const EVIDENCE_DIR = path.resolve(
-	import.meta.dirname,
-	"../../../../..",
-	".omo/evidence",
-);
 
 function writeEvidence(fileName: string, lines: string[]): void {
 	fs.mkdirSync(EVIDENCE_DIR, { recursive: true });

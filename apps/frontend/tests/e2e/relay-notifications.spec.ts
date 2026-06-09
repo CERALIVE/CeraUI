@@ -3,11 +3,7 @@ import path from 'node:path';
 
 import { expect, type Page, test } from '@playwright/test';
 
-import { navigateTo } from './helpers/index.js';
-
-// Workstream evidence root: CeraUI/.omo/evidence (where every prior task in this
-// workstream wrote its evidence). e2e -> tests -> frontend -> apps -> CeraUI.
-const EVIDENCE_DIR = path.resolve(import.meta.dirname, '../../../../.omo/evidence');
+import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
 
 /**
  * Task 21 — Relay catalog + notification toasts, integrated E2E (mock mode).
@@ -43,10 +39,10 @@ const EVIDENCE_DIR = path.resolve(import.meta.dirname, '../../../../.omo/evidenc
  *
  * Conventions (PLAYBOOK.md): no screenshot or visual-snapshot APIs in this
  * functional spec, and no fixed-delay waits — every async wait is a web-first
- * assertion or `expect.poll` against a real changing signal. Evidence is written
- * as ARIA/text proof (the PLAYBOOK-sanctioned form) to `.omo/evidence/
- * task-21-e2e/`; video is captured at the runner level (allowed — it does not go
- * through the guarded `page.screenshot`).
+  * assertion or `expect.poll` against a real changing signal. Evidence is written
+  * as ARIA/text proof (the PLAYBOOK-sanctioned form) to the repo-local
+  * `test-results/task-21-e2e/`; video is captured at the runner level (allowed —
+  * it does not go through the guarded `page.screenshot`).
  *
  * Backend broadcasts reach EVERY authed client, so this file runs `serial` to
  * keep `dev.emit` injections from leaking between its own tests.
