@@ -204,6 +204,31 @@ export function getConnectionReady() {
 const seqTracker = createSeqTracker();
 
 /**
+ * Per-modem merge of an incoming modems payload onto the current state.
+ *
+ * The backend broadcasts modem updates incrementally: a full snapshot carries
+ * every field, but targeted broadcasts (configure, network-scan completion)
+ * send only the changed modem(s) — and for those, only a subset of fields
+ * (e.g. just `available_networks`, or status-only entries for the modems that
+ * did not change). Replacing the whole map on each broadcast therefore wipes
+ * the untouched fields (status, config, name), which flips a live modem to a
+ * spurious no-SIM state until the next full snapshot. Merging field-by-field
+ * per modem id keeps incremental updates non-destructive; a full snapshot still
+ * overwrites every field it carries.
+ */
+function mergeModemList(
+	prev: ModemList | undefined,
+	incoming: ModemList,
+): ModemList {
+	const next: ModemList = { ...prev };
+	for (const [id, modem] of Object.entries(incoming)) {
+		if (!modem) continue;
+		next[id] = { ...next[id], ...modem };
+	}
+	return next;
+}
+
+/**
  * Handle incoming messages and update state
  */
 function handleMessage(type: string, data: unknown, seq?: number): void {
@@ -264,7 +289,7 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 				wifiState = statusData.wifi;
 			}
 			if (statusData.modems !== undefined) {
-				modemsState = statusData.modems;
+				modemsState = mergeModemList(modemsState, statusData.modems);
 			}
 
 			// Update aggregated status
@@ -328,7 +353,7 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 		case "modems":
 			// Modems data is usually part of status, but can come separately
 			if (data && typeof data === "object") {
-				modemsState = { ...modemsState, ...(data as ModemList) };
+				modemsState = mergeModemList(modemsState, data as ModemList);
 			}
 			break;
 

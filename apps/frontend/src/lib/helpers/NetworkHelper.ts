@@ -215,7 +215,7 @@ export const changeModemSettings = async ({
 
 export const scanModemNetworks = async (deviceId: number) => {
 	try {
-		await rpc.modems.scan({ device: deviceId });
+		return await rpc.modems.scan({ device: deviceId });
 	} catch (error) {
 		console.error("Failed to scan modem networks:", error);
 		throw error;

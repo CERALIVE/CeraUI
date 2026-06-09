@@ -11,7 +11,7 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import type { ProviderSelection } from '@ceraui/rpc/schemas';
+import type { CloudProviderEndpoint, ProviderSelection } from '@ceraui/rpc/schemas';
 import { Check, Cloud, ExternalLink, Eye, EyeOff, Link2, Loader2, RefreshCw } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
@@ -23,6 +23,7 @@ import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { saveRemoteConfig } from '$lib/helpers/SystemHelper';
 import { PairingController } from '$lib/pairing/pairing.svelte';
+import { rpc } from '$lib/rpc/client';
 import { getConfig } from '$lib/rpc/subscriptions.svelte';
 
 interface Props {
@@ -31,11 +32,22 @@ interface Props {
 
 let { open = $bindable(false) }: Props = $props();
 
-const PROVIDERS = [
-	{ id: 'ceralive' as const, name: 'CeraLive Cloud', cloudUrl: 'https://cloud.ceralive.net' },
-	{ id: 'belabox' as const, name: 'BELABOX Cloud', cloudUrl: 'https://cloud.belabox.net' },
-	{ id: 'custom' as const, name: 'Custom Provider', cloudUrl: undefined },
-];
+// Provider list is sourced from the backend (system.getCloudProviders) — never
+// hardcoded. The synthetic `custom` option (appended in providerOptions) carries
+// the manual-override escape hatch.
+let providers = $state<CloudProviderEndpoint[]>([]);
+
+async function loadProviders() {
+	try {
+		const result = (await rpc.system.getCloudProviders()) as {
+			providers: CloudProviderEndpoint[];
+			current: CloudProviderEndpoint;
+		};
+		providers = result.providers;
+	} catch (error) {
+		console.error('Failed to load cloud providers:', error);
+	}
+}
 
 const config = $derived(getConfig());
 
@@ -57,6 +69,7 @@ let wasOpen = false;
 $effect(() => {
 	// Open edge → seed the form from config and clear dirty flags.
 	if (open && !wasOpen) {
+		void loadProviders();
 		provider = config?.remote_provider ?? 'ceralive';
 		remoteKey = config?.remote_key ?? '';
 		customName = config?.custom_provider?.name ?? '';
@@ -82,7 +95,18 @@ $effect(() => {
 	}
 });
 
-const selected = $derived(PROVIDERS.find((p) => p.id === provider));
+// Backend providers + the synthetic custom-override option. The custom label is
+// i18n'd; predefined names come straight from the backend.
+const providerOptions = $derived<Array<{ id: ProviderSelection; name: string; cloudUrl?: string }>>([
+	...providers.map((p) => ({
+		id: p.id as ProviderSelection,
+		name: p.name,
+		cloudUrl: p.cloudUrl,
+	})),
+	{ id: 'custom', name: $LL.advanced.customProvider() },
+]);
+
+const selected = $derived(providerOptions.find((p) => p.id === provider));
 const cloudUrl = $derived(provider === 'custom' ? undefined : selected?.cloudUrl);
 const customIncomplete = $derived(provider === 'custom' && customHost.trim() === '');
 const canSave = $derived(!customIncomplete && !saving);
@@ -140,6 +164,9 @@ async function save() {
 					: undefined,
 		});
 		toast.success($LL.advanced.remoteConfigSaved());
+		dirtyProvider = false;
+		dirtyKey = false;
+		dirtyCustom = false;
 		open = false;
 	} catch (error) {
 		console.error('Failed to save remote config:', error);
@@ -259,7 +286,7 @@ async function save() {
 					{selected?.name ?? $LL.advanced.cloudProvider()}
 				</Select.Trigger>
 				<Select.Content>
-					{#each PROVIDERS as p (p.id)}
+					{#each providerOptions as p (p.id)}
 						<Select.Item value={p.id}>{p.name}</Select.Item>
 					{/each}
 				</Select.Content>

@@ -57,6 +57,12 @@ interface Props {
 
 let { open = $bindable(false), modem, deviceId }: Props = $props();
 
+// Watchdog that releases the in-flight scan state if the modems broadcast with
+// fresh results never lands (real hardware scans are async and fire-and-forget
+// on the backend; results stream back over the `modems` broadcast, not the RPC
+// response). Not a validation bound — a UI timing guard, so it lives inline.
+const SCAN_WATCHDOG_MS = 12_000;
+
 // ── No-SIM detection (defensive: null OR undefined signal => no SIM) ──────────
 const noSim = $derived(modem.no_sim === true || modem.status?.signal == null);
 const signalValue = $derived(modemSignal(modem));
@@ -81,8 +87,19 @@ function readModemConfig() {
 
 let formData = $state(readModemConfig());
 let localScanning = $state(false);
+let scanError = $state(false);
 let saving = $state(false);
-const scanTimeouts: number[] = [];
+// Available-network count captured when a scan starts; the in-flight state is
+// released as soon as the broadcast count diverges from this baseline.
+let scanBaseline = $state(0);
+let scanWatchdog: number | undefined;
+
+function clearScanWatchdog() {
+	if (scanWatchdog !== undefined) {
+		clearTimeout(scanWatchdog);
+		scanWatchdog = undefined;
+	}
+}
 
 // Re-seed the form from the live modem each time the dialog opens.
 let prevOpen = false;
@@ -90,13 +107,13 @@ $effect(() => {
 	if (open && !prevOpen) {
 		formData = readModemConfig();
 		localScanning = false;
+		scanError = false;
+		clearScanWatchdog();
 	}
 	prevOpen = open;
 });
 
-onDestroy(() => {
-	for (const id of scanTimeouts) clearTimeout(id);
-});
+onDestroy(clearScanWatchdog);
 
 // APN required when Automatic APN is disabled (mirrors backend zod refine).
 const apnError = $derived(!formData.autoconfig && formData.apn.trim().length === 0);
@@ -108,6 +125,17 @@ const availableNetworks = $derived(
 		([, net]) => net.availability === 'available',
 	),
 );
+
+// Release the in-flight scan state the moment fresh results land. The backend
+// answers the scan RPC immediately and streams the operator list back over the
+// `modems` broadcast, so completion is signalled by the available-network count
+// diverging from the baseline captured when the scan started.
+$effect(() => {
+	if (localScanning && availableNetworks.length !== scanBaseline) {
+		localScanning = false;
+		clearScanWatchdog();
+	}
+});
 
 async function handleSave() {
 	if (primaryDisabled || saving) return;
@@ -131,11 +159,30 @@ async function handleSave() {
 	}
 }
 
-function handleScan() {
+async function handleScan() {
 	if (noSim || localScanning) return;
+	scanError = false;
+	scanBaseline = availableNetworks.length;
 	localScanning = true;
-	scanModemNetworks(Number(deviceId));
-	scanTimeouts.push(window.setTimeout(() => (localScanning = false), 10000));
+	clearScanWatchdog();
+	scanWatchdog = window.setTimeout(() => {
+		localScanning = false;
+		scanWatchdog = undefined;
+	}, SCAN_WATCHDOG_MS);
+
+	try {
+		const result = await scanModemNetworks(Number(deviceId));
+		// The RPC is accepted before the operator list is ready; a `success:false`
+		// payload is the backend's only synchronous failure channel.
+		if (result && result.success === false) {
+			throw new Error(result.error ?? 'scan failed');
+		}
+	} catch {
+		scanError = true;
+		localScanning = false;
+		clearScanWatchdog();
+		toast.error($LL.network.modem.scanFailed());
+	}
 }
 
 const selectedNetworkLabel = $derived(
@@ -256,6 +303,7 @@ const selectedNetworkLabel = $derived(
 						</Label>
 						<Button
 							class="h-8 gap-1.5 px-2.5 text-xs"
+							data-testid="modem-scan-button"
 							disabled={noSim || localScanning}
 							onclick={handleScan}
 							size="sm"
@@ -280,7 +328,9 @@ const selectedNetworkLabel = $derived(
 						type="single"
 						value={formData.network}
 					>
-						<Select.Trigger class="h-10 w-full text-sm">{selectedNetworkLabel}</Select.Trigger>
+						<Select.Trigger class="h-10 w-full text-sm" data-testid="modem-network-trigger">
+							{selectedNetworkLabel}
+						</Select.Trigger>
 						<Select.Content>
 							<Select.Group>
 								<Select.Item
@@ -288,13 +338,17 @@ const selectedNetworkLabel = $derived(
 									value="-1"
 								/>
 								{#each availableNetworks as [key, net] (key)}
-									<Select.Item label={net.name} value={key} />
+									<Select.Item data-testid="modem-network-option" label={net.name} value={key} />
 								{/each}
 							</Select.Group>
 						</Select.Content>
 					</Select.Root>
 
-					{#if availableNetworks.length === 0 && !localScanning}
+					{#if scanError}
+						<p class="text-status-error text-xs" data-testid="modem-scan-error" role="alert">
+							{$LL.network.modem.scanFailed()}
+						</p>
+					{:else if availableNetworks.length === 0 && !localScanning}
 						<p class="text-muted-foreground text-xs">{$LL.network.modem.noNetworksFound()}</p>
 					{/if}
 				</div>
