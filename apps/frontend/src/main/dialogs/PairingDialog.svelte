@@ -159,6 +159,18 @@ const subStatus = $derived(pairing.subStatus);
 					{/if}
 				</dl>
 			</div>
+		{:else if pairing.status === 'error'}
+			<!-- Error precedes the active-code branch: a rejected complete leaves
+			     status='error' while pairing.code is still set, so this must be
+			     matched first or the code branch shadows it and the failure never
+			     surfaces. -->
+			<div class="space-y-3">
+				<p class="text-destructive text-sm" data-testid="pairing-error">{t.pairFailed()}</p>
+				<Button onclick={generate} size="sm" data-testid="generate-claim-code">
+					<RefreshCw class="size-4" />
+					{t.regenerate()}
+				</Button>
+			</div>
 		{:else if pairing.code}
 			<!-- Active code: display, live countdown, complete + regenerate. -->
 			<div class="space-y-3">
@@ -206,15 +218,6 @@ const subStatus = $derived(pairing.subStatus);
 					variant="outline"
 					data-testid="regenerate-claim-code"
 				>
-					<RefreshCw class="size-4" />
-					{t.regenerate()}
-				</Button>
-			</div>
-		{:else if pairing.status === 'error'}
-			<!-- Error: stable failure message + retry. -->
-			<div class="space-y-3">
-				<p class="text-destructive text-sm" data-testid="pairing-error">{t.pairFailed()}</p>
-				<Button onclick={generate} size="sm" data-testid="generate-claim-code">
 					<RefreshCw class="size-4" />
 					{t.regenerate()}
 				</Button>
