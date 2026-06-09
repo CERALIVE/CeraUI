@@ -16,10 +16,13 @@ import { expect, type Page } from '@playwright/test';
  */
 
 /**
- * Absolute path to the workspace evidence directory.
- * helpers/ -> e2e -> tests -> frontend -> apps -> CeraUI -> ceralive (6 up).
+ * Absolute path to the repo-local test-artifact directory (gitignored).
+ * helpers/ -> e2e -> tests -> frontend (3 up) == apps/frontend/test-results.
+ * This is the single source of truth for the evidence dir — specs MUST import it
+ * from here rather than recomputing an external path. Tests never write outside
+ * the repo (the orchestration workspace above the checkout is off-limits).
  */
-export const EVIDENCE_DIR = path.resolve(import.meta.dirname, '../../../../../../.omo/evidence');
+export const EVIDENCE_DIR = path.resolve(import.meta.dirname, '../../../test-results');
 
 /** Resolve an evidence screenshot path by file name. */
 export function evidencePath(fileName: string): string {

@@ -45,6 +45,9 @@ build-test-outputs*/
 # Development analysis files
 BUILD_SYSTEM_IMPROVEMENTS.md
 
+# Test artifacts (Playwright traces + E2E evidence) — never tracked
+test-results/
+
 # Agent orchestration state (local only)
 .omo/
 *.tsbuildinfo

@@ -20,7 +20,7 @@ describe("Mock Modems Output — Task 8 Evidence", () => {
 		}
 
 		// Write to evidence file
-		const evidencePath = ".omo/evidence/task-8-mock-modems.json";
+		const evidencePath = "test-results/task-8-mock-modems.json";
 		Bun.write(evidencePath, JSON.stringify(output, null, 2));
 
 		console.log(`✅ Evidence written to ${evidencePath}`);

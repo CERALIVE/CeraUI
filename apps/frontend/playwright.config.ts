@@ -41,7 +41,10 @@ if (process.env.CI || !fs.existsSync(configPath)) {
 const DEV_PORT = Number(process.env.E2E_PORT ?? 6173);
 const DEV_URL = `http://localhost:${DEV_PORT}`;
 
-export const EVIDENCE_DIR = path.resolve(import.meta.dirname, '../../../.omo/evidence');
+// Repo-local test-artifact dir. Playwright traces/screenshots AND human-readable
+// evidence files land here; gitignored. Never write outside the repo — tests must
+// not depend on the orchestration workspace that may sit above this checkout.
+export const EVIDENCE_DIR = path.resolve(import.meta.dirname, 'test-results');
 
 export default defineConfig({
   testDir: 'tests/e2e',

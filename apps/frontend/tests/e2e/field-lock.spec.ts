@@ -56,7 +56,7 @@ const TOKEN: string = (() => {
 	return tokens[0];
 })();
 
-// Accumulated human-readable evidence, flushed to .omo/evidence at the end.
+// Accumulated human-readable evidence, flushed to the repo-local test-results dir at the end.
 const evidence: string[] = [];
 function record(line: string): void {
 	evidence.push(line);
