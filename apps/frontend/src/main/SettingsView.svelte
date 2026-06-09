@@ -16,6 +16,8 @@ import {
 	Info,
 	KeyRound,
 	Languages,
+	Link2,
+	Monitor,
 	Palette,
 	Power,
 	RefreshCw,
@@ -28,12 +30,15 @@ import { MediaQuery } from 'svelte/reactivity';
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { AppDialog } from '$lib/components/dialogs';
+import { rpc } from '$lib/rpc/client';
+import { getConfig, getKiosk } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
 
 import CloudRemoteDialog from './dialogs/CloudRemoteDialog.svelte';
 import LogsDialog from './dialogs/LogsDialog.svelte';
 import PasswordDialog from './dialogs/PasswordDialog.svelte';
 import PowerDialog from './dialogs/PowerDialog.svelte';
+import OnDeviceDisplaySection from './settings/OnDeviceDisplaySection.svelte';
 import SshDialog from './dialogs/SshDialog.svelte';
 import UpdatesDialog from './dialogs/UpdatesDialog.svelte';
 import VersionsDialog from './dialogs/VersionsDialog.svelte';
@@ -54,6 +59,28 @@ interface Group {
 
 const t = $derived($LL.settings.index);
 const appearance = $derived($LL.settings.appearance);
+const odd = $derived($LL.settings.onDeviceDisplay);
+
+// On-Device Display entry desc tracks the live DC-2 state for at-a-glance
+// status; falls back to the static description before the first kiosk push.
+const kiosk = $derived(getKiosk());
+const displayDesc = $derived.by(() => {
+	const state = kiosk?.state;
+	switch (state) {
+		case 'disabled':
+			return odd.states.disabled();
+		case 'enabled-stopped':
+			return odd.states.enabledStopped();
+		case 'enabled-running':
+			return odd.states.enabledRunning();
+		case 'enabled-failed':
+			return odd.states.enabledFailed();
+		case 'failed-no-display':
+			return odd.states.failedNoDisplay();
+		default:
+			return odd.description();
+	}
+});
 
 // Language + theme live in the header toolbar on desktop (lg+). On mobile the
 // header is kept uncluttered, so they surface here in an Appearance group.
@@ -86,6 +113,11 @@ const groups = $derived<Group[]>([
 		entries: [{ key: 'updates', title: t.updates(), desc: t.updatesDesc(), icon: RefreshCw }],
 	},
 	{
+		id: 'display',
+		label: t.groups.display(),
+		entries: [{ key: 'onDeviceDisplay', title: odd.title(), desc: displayDesc, icon: Monitor }],
+	},
+	{
 		id: 'device',
 		label: t.groups.device(),
 		entries: [
@@ -103,6 +135,7 @@ let logsOpen = $state(false);
 let updatesOpen = $state(false);
 let powerOpen = $state(false);
 let versionsOpen = $state(false);
+let displayOpen = $state(false);
 
 // Fallback placeholder dialog for any not-yet-wired entries.
 let open = $state(false);
@@ -130,6 +163,9 @@ function openEntry(entry: Entry) {
 			return;
 		case 'versions':
 			versionsOpen = true;
+			return;
+		case 'onDeviceDisplay':
+			displayOpen = true;
 			return;
 		default:
 			active = entry;
@@ -266,3 +302,4 @@ const ActiveIcon = $derived(active?.icon);
 <UpdatesDialog bind:open={updatesOpen} />
 <PowerDialog bind:open={powerOpen} />
 <VersionsDialog bind:open={versionsOpen} />
+<OnDeviceDisplaySection bind:open={displayOpen} />

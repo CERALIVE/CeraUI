@@ -58,6 +58,16 @@ function invalidateToken(token: string) {
 	}
 }
 
+/**
+ * Mint a non-persistent session token for the single-use loopback kiosk
+ * exchange (DC-3). Same in-memory temp-token store as a password login, so the
+ * kiosk browser can authenticate the WebSocket with it. Not persisted to disk;
+ * unrelated to the PASETO device token.
+ */
+export function issueKioskSessionToken(): string {
+	return genAuthToken(false);
+}
+
 // Base procedure with context
 const baseProcedure = os.$context<RPCContext>();
 

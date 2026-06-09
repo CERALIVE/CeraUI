@@ -6,6 +6,11 @@
 import {
 	autostartInputSchema,
 	cloudProviderEndpointSchema,
+	kioskConfigureInputSchema,
+	kioskConfigureOutputSchema,
+	kioskOskInputSchema,
+	kioskStatusSchema,
+	kioskToggleOutputSchema,
 	logInputSchema,
 	logOutputSchema,
 	remoteConfigInputSchema,
@@ -24,6 +29,13 @@ import {
 } from "../../modules/remote/remote.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { setAutostart } from "../../modules/streaming/streamloop.ts";
+import {
+	getKioskStatus,
+	kioskConfigure,
+	kioskOsk,
+	kioskStart,
+	kioskStop,
+} from "../../modules/system/kiosk.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
@@ -200,5 +212,66 @@ export const setAutostartProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(({ input }) => {
 		setAutostart(input.autostart);
+		return { success: true };
+	});
+
+/**
+ * Get the live kiosk status (DC-2): persisted toggle + live polled state.
+ */
+export const kioskStatusProcedure = authedProcedure
+	.output(kioskStatusSchema)
+	.handler(() => {
+		return getKioskStatus();
+	});
+
+/**
+ * Kiosk toggle-on (T1). Fires unmask + enable --now + polling without blocking;
+ * the synchronous prelude lets us return the committed enabled-stopped state.
+ */
+export const kioskStartProcedure = authedProcedure
+	.output(kioskToggleOutputSchema)
+	.handler(() => {
+		void kioskStart();
+		const status = getKioskStatus();
+		return {
+			success: true,
+			applied: { enabled: status.enabled, state: status.state },
+		};
+	});
+
+/**
+ * Kiosk toggle-off (T3). Stops/disables/masks the unit; returns the committed
+ * disabled state synchronously.
+ */
+export const kioskStopProcedure = authedProcedure
+	.output(kioskToggleOutputSchema)
+	.handler(() => {
+		void kioskStop();
+		const status = getKioskStatus();
+		return {
+			success: true,
+			applied: { enabled: status.enabled, state: status.state },
+		};
+	});
+
+/**
+ * Persist the kiosk display profile (display + touch + motion + performance).
+ */
+export const kioskConfigureProcedure = authedProcedure
+	.input(kioskConfigureInputSchema)
+	.output(kioskConfigureOutputSchema)
+	.handler(({ input }) => {
+		const applied = kioskConfigure(input);
+		return { success: true, applied };
+	});
+
+/**
+ * Show/hide the on-device on-screen keyboard (wvkbd) via SIGUSR2/SIGUSR1.
+ */
+export const kioskOskProcedure = authedProcedure
+	.input(kioskOskInputSchema)
+	.output(successResponseSchema)
+	.handler(async ({ input }) => {
+		await kioskOsk(input.visible);
 		return { success: true };
 	});

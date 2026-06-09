@@ -2,14 +2,22 @@
  * Bun Native Server
  * HTTP and WebSocket server using Bun.serve()
  */
+
 import fs from "node:fs";
 import path from "node:path";
+import type { Server } from "bun";
 
 import { logger } from "../helpers/logger.ts";
 import { getIsStreaming } from "../modules/streaming/streaming.ts";
 import { getLocalObservability } from "../modules/system/observability.ts";
 import { getSystemdSocket } from "../modules/system/systemd.ts";
+import {
+	handleKioskTokenExchange,
+	KIOSK_TOKEN_PARAM,
+	mintKioskToken,
+} from "../modules/ui/kiosk-token.ts";
 import { createWebSocketHandler, initSocketData } from "./adapter.ts";
+import { issueKioskSessionToken } from "./procedures/auth.procedure.ts";
 import type { SocketData } from "./types.ts";
 
 const isDevelopment =
@@ -109,8 +117,22 @@ async function proxyToDevServer(req: Request): Promise<Response> {
 /**
  * HTTP request handler
  */
-async function handleRequest(req: Request): Promise<Response> {
+async function handleRequest(req: Request, server: Server): Promise<Response> {
 	const url = new URL(req.url);
+
+	// Single-use loopback kiosk-token exchange (DC-3): swap the tmpfs token for a
+	// session cookie, loopback-only. Returns null when no kiosk_token is present
+	// so the request falls through to the normal flow.
+	if (req.method === "GET" && url.searchParams.has(KIOSK_TOKEN_PARAM)) {
+		const exchange = await handleKioskTokenExchange(
+			req,
+			server.requestIP(req)?.address,
+			issueKioskSessionToken,
+		);
+		if (exchange) {
+			return exchange;
+		}
+	}
 
 	// Read-only probe for the dev-sync stream-active guard. Intentional exception
 	// to the oRPC-only rule: a no-auth, side-effect-free status READ (not control).
@@ -194,7 +216,7 @@ function startServer(): void {
 				}
 
 				// Handle HTTP requests
-				return handleRequest(req);
+				return handleRequest(req, server);
 			},
 
 			websocket: createWebSocketHandler(),
@@ -238,6 +260,16 @@ export function initServer(): void {
 				"Bun.serve cannot adopt an inherited socket — binding the listen port directly.",
 		);
 	}
+
+	// Mint the single-use loopback kiosk token (DC-3) at startup so the image
+	// kiosk.service can read it at Chromium launch. tmpfs-only and non-fatal when
+	// /run is not writable (e.g. unprivileged dev); skipped in development.
+	if (!isDevelopment) {
+		void mintKioskToken().catch((error) => {
+			logger.warn(`Kiosk: could not mint loopback token: ${error}`);
+		});
+	}
+
 	startServer();
 }
 

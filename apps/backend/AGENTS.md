@@ -19,6 +19,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | srtla binding calls (flux — check `../../../srtla/AGENTS.md` first) | `modules/streaming/srtla.ts` |
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
+| Kiosk loopback token (DC-3, single-use, tmpfs) | `modules/ui/kiosk-token.ts` + `rpc/server.ts` |
 | Mock hardware data | `mocks/providers/` |
 | Shared RPC schema types | `../../../packages/rpc/` (`@ceraui/rpc`) |
 

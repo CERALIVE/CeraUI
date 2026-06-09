@@ -77,6 +77,12 @@ CeraUI/
 | Debian versioning | `docs/APT_VERSION_CONTROL.md` |
 | System data flow | `docs/ARCHITECTURE.md` |
 | Touch/kiosk CSS spec | `docs/TOUCHSCREEN.md` |
+| **Kiosk capability + inert-by-default model** | `docs/ON_DEVICE_DISPLAY.md` (cross-repo arch) |
+| Kiosk state machine (DC-2) | `docs/KIOSK_STATE_MACHINE.md` |
+| Kiosk token contract (DC-3) | `docs/KIOSK_TOKEN_CONTRACT.md` |
+| Kiosk RPC + polling loop (backend) | `apps/backend/src/` (kiosk procedures, Task 23) |
+| Kiosk settings dialog (frontend) | `apps/frontend/src/main/dialogs/` (Task 25) |
+| Display-profile store + `?display=` param | `apps/frontend/src/lib/stores/display-profile.svelte.ts` |
 | Design rules | `.impeccable.md` |
 
 ## COMMANDS

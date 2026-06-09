@@ -99,3 +99,92 @@ export const autostartInputSchema = z.object({
 	autostart: z.boolean(),
 });
 export type AutostartInput = z.infer<typeof autostartInputSchema>;
+
+// Autostart applied-state output schema (`applied` = value persisted post-write)
+export const autostartOutputSchema = z.object({
+	success: z.boolean(),
+	applied: z.object({
+		autostart: z.boolean(),
+	}),
+});
+export type AutostartOutput = z.infer<typeof autostartOutputSchema>;
+
+// =============================================================================
+// Kiosk toggle state machine (DC-2 — docs/KIOSK_STATE_MACHINE.md)
+// =============================================================================
+
+// The five kiosk states. No others exist. The single source of truth for both
+// the persisted `kiosk_last_state` field and the live broadcast `state`.
+export const KIOSK_STATES = [
+	'disabled',
+	'enabled-stopped',
+	'enabled-running',
+	'enabled-failed',
+	'failed-no-display',
+] as const;
+export const kioskStateSchema = z.enum(KIOSK_STATES);
+export type KioskState = z.infer<typeof kioskStateSchema>;
+
+// Display profile for the kiosk loopback URL (?display=lcd|eink|mono — DC-4).
+export const kioskDisplaySchema = z.enum(['lcd', 'eink', 'mono']);
+export type KioskDisplay = z.infer<typeof kioskDisplaySchema>;
+
+// Performance preset that bounds the kiosk render budget on constrained SBCs.
+export const kioskPerformanceSchema = z.enum(['low', 'balanced', 'high']);
+export type KioskPerformance = z.infer<typeof kioskPerformanceSchema>;
+
+// Crash-loop classification bound (systemd StartLimitBurst). When the unit is in
+// `failed` state and NRestarts is at least this, the backend treats it as a
+// crash-loop and applies the auto-disable rule (T5). Single source of truth so
+// the bound is never inlined in the poll loop.
+export const KIOSK_CRASH_LOOP_RESTART_THRESHOLD = 3;
+
+// Backend failure-observation poll cadence (ms) while kiosk_enabled = true.
+export const KIOSK_POLL_INTERVAL_MS = 2000;
+
+// kioskConfigure input — display profile + touch mode + motion + performance.
+export const kioskConfigureInputSchema = z.object({
+	display: kioskDisplaySchema,
+	touch: z.boolean(),
+	motion: z.boolean(),
+	performance: kioskPerformanceSchema,
+});
+export type KioskConfigureInput = z.infer<typeof kioskConfigureInputSchema>;
+
+// kioskConfigure applied-state output (`applied` = values persisted post-write).
+export const kioskConfigureOutputSchema = z.object({
+	success: z.boolean(),
+	applied: kioskConfigureInputSchema,
+});
+export type KioskConfigureOutput = z.infer<typeof kioskConfigureOutputSchema>;
+
+// kioskStatus output — the persisted toggle plus the live polled state. The
+// toggle (`enabled`) and the live `state` can diverge after auto-disable (T5).
+export const kioskStatusSchema = z.object({
+	enabled: z.boolean(),
+	state: kioskStateSchema,
+	display: kioskDisplaySchema,
+	touch: z.boolean(),
+	motion: z.boolean(),
+	performance: kioskPerformanceSchema,
+});
+export type KioskStatus = z.infer<typeof kioskStatusSchema>;
+
+// kioskStart / kioskStop applied-state output. `applied` echoes the persisted
+// toggle + the synchronous post-transition state the backend committed.
+export const kioskToggleOutputSchema = z.object({
+	success: z.boolean(),
+	applied: z.object({
+		enabled: z.boolean(),
+		state: kioskStateSchema,
+	}),
+});
+export type KioskToggleOutput = z.infer<typeof kioskToggleOutputSchema>;
+
+// kioskOsk input — show/hide the on-screen keyboard (wvkbd). `visible = true`
+// signals SIGUSR2 (show), `false` signals SIGUSR1 (hide). The backend owns the
+// signal mapping so the wvkbd convention is never inlined in the UI.
+export const kioskOskInputSchema = z.object({
+	visible: z.boolean(),
+});
+export type KioskOskInput = z.infer<typeof kioskOskInputSchema>;
