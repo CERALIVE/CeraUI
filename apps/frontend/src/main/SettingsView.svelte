@@ -21,12 +21,15 @@ import {
 	Palette,
 	Power,
 	RefreshCw,
+	Rocket,
 	ScrollText,
 	SquareTerminal,
 } from '@lucide/svelte';
 import type { Component } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
+import { toast } from 'svelte-sonner';
 
+import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { AppDialog } from '$lib/components/dialogs';
@@ -81,6 +84,35 @@ const displayDesc = $derived.by(() => {
 			return odd.description();
 	}
 });
+
+// Autostart streaming. The switch is pessimistic (AsyncSwitch never flips
+// optimistically): `autostart` follows the authoritative config broadcast, and
+// the RPC result is adopted from `applied` (the persisted value), not the
+// intended one. A failed call leaves `autostart` untouched, so AsyncSwitch
+// reverts to the prior position.
+let autostart = $state(getConfig()?.autostart ?? false);
+$effect(() => {
+	const cfg = getConfig();
+	if (cfg && typeof cfg.autostart === 'boolean') {
+		autostart = cfg.autostart;
+	}
+});
+
+function errorMessage(error: unknown): string | undefined {
+	if (error instanceof Error && error.message) return error.message;
+	if (typeof error === 'string' && error) return error;
+	return undefined;
+}
+
+async function handleAutostartChange(next: boolean) {
+	try {
+		const result = await rpc.system.setAutostart({ autostart: next });
+		autostart = result.applied.autostart;
+	} catch (error) {
+		toast.error(errorMessage(error) ?? t.autostartError());
+		throw error;
+	}
+}
 
 // Language + theme live in the header toolbar on desktop (lg+). On mobile the
 // header is kept uncluttered, so they surface here in an Appearance group.
@@ -231,6 +263,25 @@ const ActiveIcon = $derived(active?.icon);
 				<section class="space-y-2.5">
 					<h2 class="text-muted-foreground px-1 text-sm font-medium">{group.label}</h2>
 					<div class="divide-border bg-card divide-y overflow-hidden rounded-xl border">
+						{#if group.id === 'streaming'}
+							<div class="flex w-full items-center gap-4 px-4 py-3.5" data-testid="settings-autostart">
+								<span class="bg-secondary text-foreground grid size-9 shrink-0 place-items-center rounded-lg">
+									<Rocket class="size-[18px]" />
+								</span>
+								<span class="min-w-0 flex-1">
+									<span class="block truncate text-sm font-semibold">{t.autostart()}</span>
+									<span class="text-muted-foreground block truncate text-xs">{t.autostartDesc()}</span>
+								</span>
+								<span class="shrink-0">
+									<AsyncSwitch
+										aria-label={t.autostart()}
+										checked={autostart}
+										data-testid="settings-autostart-switch"
+										onCheckedChange={handleAutostartChange}
+									/>
+								</span>
+							</div>
+						{/if}
 						{#each group.entries as entry (entry.key)}
 							{@const EntryIcon = entry.icon}
 							<button

@@ -7,6 +7,7 @@ import * as AlertDialog from '$lib/components/ui/alert-dialog';
 import { Button } from '$lib/components/ui/button';
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
+import StaleBadge from '$lib/components/custom/StaleBadge.svelte';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
 import { cn } from '$lib/utils';
@@ -15,10 +16,12 @@ interface Props {
 	wiredEntries: [string, NetifEntry][];
 	/** Whole-app staleness latch: the WS has been down past the global threshold. */
 	isFullyStale: boolean;
+	/** ifnames whose own telemetry aged out while siblings stayed fresh (Task 22). */
+	staleInterfaces: Set<string>;
 	onConfigure: (name: string) => void;
 }
 
-const { wiredEntries, isFullyStale, onConfigure }: Props = $props();
+const { wiredEntries, isFullyStale, staleInterfaces, onConfigure }: Props = $props();
 
 // Per-interface throughput → kbps for SpeedBadge. A missing reading renders the
 // muted placeholder rather than a misleading 0.
@@ -72,6 +75,7 @@ function settle(proceed: boolean) {
 			</p>
 		{:else}
 			{#each wiredEntries as [name, iface] (name)}
+				{@const showStale = iface.enabled && (staleInterfaces.has(name) || isFullyStale)}
 				<div class="px-4 py-4">
 					<!-- Identity row: status dot · name/status · speed -->
 					<div class="flex items-center gap-3">
@@ -89,6 +93,9 @@ function settle(proceed: boolean) {
 							</p>
 						</div>
 						<div class="flex shrink-0 items-center gap-2.5">
+							{#if showStale}
+								<StaleBadge data-stale-interface={name} />
+							{/if}
 							<SpeedBadge kbps={throughputKbps(iface)} stale={throughputStale(iface)} />
 						</div>
 					</div>

@@ -158,8 +158,6 @@ const zh = {
 			powerDesc: "重启或关闭设备",
 			versions: "设备版本",
 			versionsDesc: "查看已安装的组件和固件版本",
-			pairing: "设备配对",
-			pairingDesc: "使用申领码将此设备关联到您的云账户",
 			autostart: "自动开始推流",
 			autostartDesc: "设备启动时自动开始推流",
 			autostartError: "无法更改自动启动。请重试。",

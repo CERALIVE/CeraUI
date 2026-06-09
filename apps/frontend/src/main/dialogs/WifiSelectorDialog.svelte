@@ -85,6 +85,8 @@ let showPassword = $state(false);
 let confirmForget = $state<string | undefined>(undefined);
 
 let connectTimeout: ReturnType<typeof setTimeout> | undefined;
+let scanTimeout: ReturnType<typeof setTimeout> | undefined;
+let scanStartedAt = 0;
 
 function resetInteraction() {
 	pendingNew = undefined;
@@ -105,7 +107,11 @@ function beginConnect(key: string, ssid: string) {
 function handleScan() {
 	scanWifi(deviceId);
 	scanning = true;
-	setTimeout(() => {
+	scanStartedAt = Date.now();
+	clearTimeout(scanTimeout);
+	// Safety net only: the spinner normally clears the moment fresh results land
+	// (see the wifi-watch effect below), so an action never looks frozen.
+	scanTimeout = setTimeout(() => {
 		scanning = false;
 	}, 20000);
 }
@@ -165,6 +171,20 @@ $effect(() => {
 	}
 });
 
+// Resolve the manual-scan spinner the moment fresh results arrive, so the
+// indicator reflects scan completion instead of always running the full timeout.
+let prevWifiRef: WifiStatus | undefined;
+$effect(() => {
+	const current = getWifi();
+	if (current !== prevWifiRef) {
+		prevWifiRef = current;
+		if (scanning && Date.now() - scanStartedAt > 250) {
+			scanning = false;
+			clearTimeout(scanTimeout);
+		}
+	}
+});
+
 // Initial + periodic silent rescan while the dialog is open.
 $effect(() => {
 	if (!open) return;
@@ -180,6 +200,7 @@ $effect(() => {
 		connecting = undefined;
 		scanning = false;
 		clearTimeout(connectTimeout);
+		clearTimeout(scanTimeout);
 	}
 });
 </script>

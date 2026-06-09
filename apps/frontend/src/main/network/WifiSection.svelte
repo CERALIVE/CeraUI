@@ -8,6 +8,7 @@ import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
+import StaleBadge from '$lib/components/custom/StaleBadge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
@@ -26,11 +27,14 @@ interface Props {
 	links: LinkSignal[];
 	/** Whole-app staleness latch: the WS has been down past the global threshold. */
 	isFullyStale: boolean;
+	/** ifnames whose own telemetry aged out while siblings stayed fresh (Task 22). */
+	staleInterfaces: Set<string>;
 	primaryWifiDevice: string | undefined;
 	onConnect: () => void;
 }
 
-const { wifiRadios, netif, links, isFullyStale, primaryWifiDevice, onConnect }: Props = $props();
+const { wifiRadios, netif, links, isFullyStale, staleInterfaces, primaryWifiDevice, onConnect }: Props =
+	$props();
 
 function activeWifiNetwork(iface: WifiInterface) {
 	return iface.available?.find((network) => network.active);
@@ -110,9 +114,11 @@ async function switchToStation(device: string) {
 				{@const connected = Boolean(iface.conn && net)}
 				{@const link = links.find((l) => l.id === iface.ifname)}
 				{@const kbps = link ? link.throughputKbps : entry ? convertBytesToKbids(entry.tp) : null}
-				{@const rawStale = link?.isStale ?? isFullyStale}
+				{@const ifaceStale = staleInterfaces.has(iface.ifname) || isFullyStale}
+				{@const rawStale = link?.isStale ?? ifaceStale}
 				{@const tpStale = getStalenessState(kbps, null, rawStale) === 'stale'}
 				{@const sigStale = net ? getStalenessState(net.signal, null, rawStale) === 'stale' : false}
+				{@const showStale = ifaceStale && !isHotspot && connected}
 				{@const hasIp = Boolean(entry?.ip)}
 				{@const isSwitching = switching === id}
 				{@const hasControls = isHotspot || hasIp || iface.supports_hotspot}
@@ -151,6 +157,9 @@ async function switchToStation(device: string) {
 							</p>
 						</div>
 						<div class="flex shrink-0 items-center gap-2.5">
+							{#if showStale}
+								<StaleBadge data-stale-interface={iface.ifname} />
+							{/if}
 							{#if isHotspot}
 								<span
 									class="bg-status-info/10 text-status-info rounded-md px-1.5 py-0.5 text-xs font-medium"

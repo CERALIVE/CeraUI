@@ -6,6 +6,7 @@ import { ChevronRight, Radio } from '@lucide/svelte';
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
+import StaleBadge from '$lib/components/custom/StaleBadge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
 import { modemSignal } from '$lib/helpers/signal';
@@ -21,10 +22,13 @@ interface Props {
 	links: LinkSignal[];
 	/** Whole-app staleness latch: the WS has been down past the global threshold. */
 	isFullyStale: boolean;
+	/** ifnames whose own telemetry aged out while siblings stayed fresh (Task 22). */
+	staleInterfaces: Set<string>;
 	onConfigure: (id: string) => void;
 }
 
-const { modemEntries, netif, links, isFullyStale, onConfigure }: Props = $props();
+const { modemEntries, netif, links, isFullyStale, staleInterfaces, onConfigure }: Props =
+	$props();
 </script>
 
 <!-- ───────────── Cellular ───────────── -->
@@ -59,9 +63,11 @@ const { modemEntries, netif, links, isFullyStale, onConfigure }: Props = $props(
 					: noSim || !entry
 						? null
 						: convertBytesToKbids(entry.tp)}
-				{@const rawStale = link?.isStale ?? isFullyStale}
+				{@const ifaceStale = staleInterfaces.has(modem.ifname) || isFullyStale}
+				{@const rawStale = link?.isStale ?? ifaceStale}
 				{@const tpStale = getStalenessState(kbps, null, rawStale) === 'stale'}
 				{@const sigStale = getStalenessState(sig, null, rawStale) === 'stale'}
+				{@const showStale = ifaceStale && !noSim}
 				{@const sigColor = link ? `var(--link-${link.linkIndex + 1})` : 'var(--muted-foreground)'}
 				<div class="px-4 py-4">
 					<!-- Identity row: status dot · name/status · signal · speed -->
@@ -92,6 +98,9 @@ const { modemEntries, netif, links, isFullyStale, onConfigure }: Props = $props(
 							</p>
 						</div>
 						<div class="flex shrink-0 items-center gap-2.5">
+							{#if showStale}
+								<StaleBadge data-stale-interface={modem.ifname} />
+							{/if}
 							<div class={cn('flex items-center gap-1.5 transition-opacity', sigStale && 'opacity-50')}>
 								<LinkIndicator
 									shape="bars"

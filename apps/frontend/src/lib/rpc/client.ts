@@ -5,6 +5,7 @@
  * Uses the AppContract from @ceraui/rpc for end-to-end type safety.
  */
 import type {
+	AutostartOutput,
 	BitrateInput,
 	BitrateOutput,
 	ClaimCodeOutput,

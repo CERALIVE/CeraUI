@@ -165,8 +165,6 @@ const ja = {
 			autostart: "自動ストリーミング開始",
 			autostartDesc: "デバイス起動時に自動的にストリーミングを開始します",
 			autostartError: "自動開始を変更できませんでした。もう一度お試しください。",
-			pairing: "デバイスのペアリング",
-			pairingDesc: "クレームコードでこのデバイスをクラウドアカウントに接続します",
 		},
 
 		dialogs: {

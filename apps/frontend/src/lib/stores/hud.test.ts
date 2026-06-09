@@ -31,6 +31,8 @@ import type { HudSources, HudTimestamps } from "$lib/types/hud";
 import {
 	buildLinks,
 	deriveHudState,
+	type InterfaceFreshnessMap,
+	interfaceFingerprints,
 	isUpdateInProgress,
 	MAX_LINKS,
 	modemConnectionState,
@@ -38,6 +40,8 @@ import {
 	parseSensorNumber,
 	parseVolts,
 	STALE_THRESHOLD_MS,
+	staleInterfaceIds,
+	trackInterfaceFreshness,
 } from "./hud.svelte";
 
 // ============================================
@@ -970,5 +974,152 @@ describe("modemSignal — frontend defense against string wire values", () => {
 			},
 		});
 		expect(modemSignal(modem)).toBeNull();
+	});
+});
+
+// ============================================
+// Per-interface staleness (Task 22)
+// ============================================
+
+describe("interfaceFingerprints — keyed by ifname across sources", () => {
+	it("produces one entry per interface, keyed by ifname", () => {
+		const fps = interfaceFingerprints(
+			{ m1: makeModem({ ifname: "wwan0" }) } as ModemList,
+			wifiFixture,
+			netifFixture,
+		);
+		expect(new Set(fps.keys())).toEqual(new Set(["wwan0", "wlan0"]));
+	});
+
+	it("changes the fingerprint when a modem's signal changes", () => {
+		const before = interfaceFingerprints(
+			{ m1: makeModem({ ifname: "wwan0" }) } as ModemList,
+			undefined,
+			undefined,
+		);
+		const after = interfaceFingerprints(
+			{
+				m1: makeModem({
+					ifname: "wwan0",
+					status: { ...makeModem().status!, signal: 40 },
+				}),
+			} as ModemList,
+			undefined,
+			undefined,
+		);
+		expect(after.get("wwan0")).not.toBe(before.get("wwan0"));
+	});
+
+	it("changes the fingerprint when a netif throughput changes", () => {
+		const before = interfaceFingerprints(undefined, undefined, {
+			eth0: { tp: 10, enabled: true, ip: "10.0.0.4" },
+		});
+		const after = interfaceFingerprints(undefined, undefined, {
+			eth0: { tp: 999, enabled: true, ip: "10.0.0.4" },
+		});
+		expect(after.get("eth0")).not.toBe(before.get("eth0"));
+	});
+});
+
+describe("trackInterfaceFreshness — stamps changes, keeps unchanged", () => {
+	it("stamps every interface as changed on first sight", () => {
+		const fps = new Map([
+			["wwan0", "a"],
+			["wlan0", "b"],
+		]);
+		const next = trackInterfaceFreshness(new Map(), fps, T0);
+		expect(next.get("wwan0")?.lastChangedAt).toBe(T0);
+		expect(next.get("wlan0")?.lastChangedAt).toBe(T0);
+	});
+
+	it("keeps lastChangedAt for an unchanged fingerprint but advances a changed one", () => {
+		const prev: InterfaceFreshnessMap = new Map([
+			["wwan0", { fingerprint: "a", lastChangedAt: T0 }],
+			["wwan1", { fingerprint: "x", lastChangedAt: T0 }],
+		]);
+		const next = trackInterfaceFreshness(
+			prev,
+			new Map([
+				["wwan0", "a"],
+				["wwan1", "y"],
+			]),
+			T0 + 1000,
+		);
+		// Frozen interface keeps its original stamp; changed one advances.
+		expect(next.get("wwan0")?.lastChangedAt).toBe(T0);
+		expect(next.get("wwan1")?.lastChangedAt).toBe(T0 + 1000);
+	});
+
+	it("drops interfaces no longer present", () => {
+		const prev: InterfaceFreshnessMap = new Map([
+			["wwan0", { fingerprint: "a", lastChangedAt: T0 }],
+		]);
+		const next = trackInterfaceFreshness(prev, new Map(), T0 + 1000);
+		expect(next.has("wwan0")).toBe(false);
+	});
+});
+
+describe("staleInterfaceIds — global threshold, per interface", () => {
+	it("marks only interfaces older than STALE_THRESHOLD_MS", () => {
+		const map: InterfaceFreshnessMap = new Map([
+			["wwan0", { fingerprint: "a", lastChangedAt: T0 }],
+			["wwan1", { fingerprint: "b", lastChangedAt: T0 + STALE_THRESHOLD_MS }],
+		]);
+		const now = T0 + STALE_THRESHOLD_MS + 1;
+		const stale = staleInterfaceIds(map, now);
+		expect(stale.has("wwan0")).toBe(true);
+		expect(stale.has("wwan1")).toBe(false);
+	});
+
+	it("the boundary is inclusive (>=)", () => {
+		const map: InterfaceFreshnessMap = new Map([
+			["wwan0", { fingerprint: "a", lastChangedAt: T0 }],
+		]);
+		expect(staleInterfaceIds(map, T0 + STALE_THRESHOLD_MS).has("wwan0")).toBe(
+			true,
+		);
+		expect(
+			staleInterfaceIds(map, T0 + STALE_THRESHOLD_MS - 1).has("wwan0"),
+		).toBe(false);
+	});
+});
+
+describe("per-interface staleness threads onto one link, not its siblings", () => {
+	it("marks only the stale interface's link, leaving fresh siblings bright", () => {
+		const modems: ModemList = {
+			m0: makeModem({ ifname: "wwan0", name: "Fresh" }),
+			m1: makeModem({ ifname: "wwan1", name: "Frozen" }),
+		};
+		const links = buildLinks(
+			modems,
+			undefined,
+			undefined,
+			false,
+			false,
+			false,
+			new Set(["wwan1"]),
+		);
+		expect(links.find((l) => l.id === "wwan0")?.isStale).toBe(false);
+		expect(links.find((l) => l.id === "wwan1")?.isStale).toBe(true);
+	});
+
+	it("deriveHudState exposes the stale interface set and threads it onto links", () => {
+		const state = deriveHudState(
+			makeSources(),
+			makeTimestamps(T0),
+			T0,
+			new Set(["wwan0"]),
+		);
+		expect(state.staleInterfaces.has("wwan0")).toBe(true);
+		// wwan0 is the modem ifname in makeSources(); its link must be stale,
+		// while the wifi link (wlan0) stays fresh.
+		expect(state.links.find((l) => l.id === "wwan0")?.isStale).toBe(true);
+		expect(state.links.find((l) => l.id === "wlan0")?.isStale).toBe(false);
+	});
+
+	it("defaults to an empty stale set (back-compat with existing callers)", () => {
+		const state = deriveHudState(makeSources(), makeTimestamps(T0), T0);
+		expect(state.staleInterfaces.size).toBe(0);
+		expect(state.links.every((l) => !l.isStale)).toBe(true);
 	});
 });

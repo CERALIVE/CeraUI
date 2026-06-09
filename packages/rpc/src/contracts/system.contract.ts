@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import {
 	autostartInputSchema,
+	autostartOutputSchema,
 	cloudProviderEndpointSchema,
 	kioskConfigureInputSchema,
 	kioskConfigureOutputSchema,
@@ -94,7 +95,7 @@ export const systemContract = oc.router({
 	/**
 	 * Set autostart configuration
 	 */
-	setAutostart: oc.input(autostartInputSchema).output(successResponseSchema),
+	setAutostart: oc.input(autostartInputSchema).output(autostartOutputSchema),
 
 	/**
 	 * Get the live kiosk status (persisted toggle + live polled state — DC-2)

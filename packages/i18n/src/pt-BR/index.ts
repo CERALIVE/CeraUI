@@ -314,9 +314,6 @@ const ptBR = {
 			powerDesc: "Reinicie ou desligue o dispositivo",
 			versions: "Versões do dispositivo",
 			versionsDesc: "Veja as versões de componentes e firmware instalados",
-			pairing: "Emparelhamento do dispositivo",
-			pairingDesc:
-				"Vincule este dispositivo à sua conta na nuvem com um código de reivindicação",
 			autostart: "Iniciar transmissão automaticamente",
 			autostartDesc: "Iniciar a transmissão automaticamente quando o dispositivo inicializar",
 			autostartError: "Não foi possível alterar o início automático. Tente novamente.",
