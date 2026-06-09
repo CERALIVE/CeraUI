@@ -31,6 +31,15 @@ import { logger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
+// Real-device detection (T4). Re-exported here so kiosk callers (and T13's RPC
+// gate) get the detector from the kiosk module surface. Detection only — the
+// handlers are NOT gated on it yet.
+export {
+	type DeviceDetectionDeps,
+	defaultDeviceDetectionDeps,
+	isRealDevice,
+} from "./device-detection.ts";
+
 // The systemd unit CeraUI drives. Cage is NEVER started by any other path — the
 // backend only ever toggles this unit (DC-1: the image owns the chassis).
 const KIOSK_SERVICE = "kiosk.service";

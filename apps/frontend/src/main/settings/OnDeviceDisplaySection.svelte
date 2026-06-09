@@ -16,6 +16,7 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import {
+	KIOSK_UNAVAILABLE_ERROR,
 	kioskDisplaySchema,
 	type KioskConfigureInput,
 	type KioskDisplay,
@@ -60,6 +61,10 @@ let performance = $state<KioskPerformance>('balanced');
 let loaded = $state(false);
 let oskBusy = $state(false);
 
+// Set when the backend reports the kiosk is unavailable in emulated mode (T13):
+// surfaces a calm banner instead of an error toast, and the toggle reverts.
+let unavailable = $state(false);
+
 // Reconcile from the authoritative broadcast whenever it changes. Never calls
 // kioskStart on its own, so a headless unit stays disabled by default (DC-2).
 $effect(() => {
@@ -97,20 +102,32 @@ function errorMessage(error: unknown): string | undefined {
 }
 
 async function handleEnableChange(next: boolean) {
+	let result: Awaited<ReturnType<typeof rpc.system.kioskStart>>;
 	try {
-		const result = next ? await rpc.system.kioskStart() : await rpc.system.kioskStop();
-		enabled = result.applied.enabled;
-		liveState = result.applied.state;
+		result = next ? await rpc.system.kioskStart() : await rpc.system.kioskStop();
 	} catch (error) {
 		toast.error(errorMessage(error) ?? t.toggleError());
 		throw error;
 	}
+	if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.applied) {
+		unavailable = true;
+		// Reject so AsyncSwitch reverts to the prior value without an error toast.
+		throw new Error(KIOSK_UNAVAILABLE_ERROR);
+	}
+	unavailable = false;
+	enabled = result.applied.enabled;
+	liveState = result.applied.state;
 }
 
 async function configure(patch: Partial<KioskConfigureInput>) {
 	const next: KioskConfigureInput = { display, touch, motion, performance, ...patch };
 	try {
 		const result = await rpc.system.kioskConfigure(next);
+		if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.applied) {
+			unavailable = true;
+			return;
+		}
+		unavailable = false;
 		display = result.applied.display;
 		touch = result.applied.touch;
 		motion = result.applied.motion;
@@ -124,7 +141,12 @@ async function signalOsk(visible: boolean) {
 	if (oskBusy) return;
 	oskBusy = true;
 	try {
-		await rpc.system.kioskOsk({ visible });
+		const result = await rpc.system.kioskOsk({ visible });
+		if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.success) {
+			unavailable = true;
+			return;
+		}
+		unavailable = false;
 	} catch (error) {
 		toast.error(errorMessage(error) ?? t.keyboardError());
 	} finally {
@@ -202,6 +224,16 @@ const isRunning = $derived(liveState === 'enabled-running');
 	title={t.title()}
 >
 	<div class="space-y-5">
+		{#if unavailable}
+			<div
+				class="border-border bg-muted/40 text-muted-foreground rounded-lg border px-4 py-3 text-sm"
+				data-testid="kiosk-unavailable"
+				role="status"
+			>
+				{t.unavailable()}
+			</div>
+		{/if}
+
 		<!-- Live DC-2 state indicator -->
 		<div
 			class={cn('flex items-start gap-3 rounded-lg border px-4 py-3', panelClass)}

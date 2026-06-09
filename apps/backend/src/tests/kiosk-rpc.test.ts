@@ -12,7 +12,7 @@
  * oracle for client-facing state events.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { KioskStatus } from "@ceraui/rpc/schemas";
+import { KIOSK_UNAVAILABLE_ERROR, type KioskStatus } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
 import { getConfig } from "../modules/config.ts";
@@ -25,6 +25,7 @@ import {
 	kioskConfigure,
 	kioskStart,
 	kioskStop,
+	type OskSignal,
 	pollKioskOnce,
 	resetKioskDeps,
 	setKioskDeps,
@@ -32,6 +33,7 @@ import {
 } from "../modules/system/kiosk.ts";
 import {
 	kioskConfigureProcedure,
+	kioskOskProcedure,
 	kioskStartProcedure,
 	kioskStatusProcedure,
 	kioskStopProcedure,
@@ -360,6 +362,19 @@ describe("kioskConfigure", () => {
 });
 
 describe("system.kiosk* RPC procedures", () => {
+	// The four action handlers gate on isRealDevice() (T13); these delegation
+	// tests pin the real-device branch via the explicit override so the suite is
+	// deterministic on any host.
+	let savedDeviceType: string | undefined;
+	beforeEach(() => {
+		savedDeviceType = process.env.CERALIVE_DEVICE_TYPE;
+		process.env.CERALIVE_DEVICE_TYPE = "real";
+	});
+	afterEach(() => {
+		if (savedDeviceType === undefined) delete process.env.CERALIVE_DEVICE_TYPE;
+		else process.env.CERALIVE_DEVICE_TYPE = savedDeviceType;
+	});
+
 	test("kioskStatus returns the persisted toggle + live state", async () => {
 		setKioskDeps(makeHarness().deps);
 
@@ -431,5 +446,182 @@ describe("system.kiosk* RPC procedures", () => {
 				{ context: makeContext(false) },
 			),
 		).rejects.toThrow();
+	});
+});
+
+/*
+ * T13 — the four action handlers gate on isRealDevice(). On a dev/CI/emulated
+ * host the user-reported bug was that toggling kiosk pushed the developer's own
+ * machine into host kiosk mode. The gate must short-circuit BEFORE any kiosk
+ * module function runs, so systemd is never touched. The harness spies the whole
+ * KioskDeps surface (systemctl + oskSignal + broadcast); a gated handler must
+ * leave every spy untouched and the persisted config unchanged.
+ */
+describe("kiosk RPC isRealDevice() gate (T13)", () => {
+	type GateHarness = {
+		deps: KioskDeps;
+		systemctlCalls: string[][];
+		broadcasts: KioskStatus[];
+		oskSignals: OskSignal[];
+	};
+
+	function makeGateHarness(): GateHarness {
+		const systemctlCalls: string[][] = [];
+		const broadcasts: KioskStatus[] = [];
+		const oskSignals: OskSignal[] = [];
+		const deps: KioskDeps = {
+			systemctl: async (args) => {
+				systemctlCalls.push(args);
+				return { stdout: "", stderr: "" };
+			},
+			isFailed: async () => false,
+			isActive: async () => false,
+			getNRestarts: async () => 0,
+			noDisplayMarkerExists: async () => false,
+			removeNoDisplayMarker: async () => {},
+			oskSignal: async (signal) => {
+				oskSignals.push(signal);
+			},
+			broadcast: (status) => {
+				broadcasts.push(status);
+			},
+		};
+		return { deps, systemctlCalls, broadcasts, oskSignals };
+	}
+
+	let savedDeviceType: string | undefined;
+	beforeEach(() => {
+		savedDeviceType = process.env.CERALIVE_DEVICE_TYPE;
+	});
+	afterEach(() => {
+		if (savedDeviceType === undefined) delete process.env.CERALIVE_DEVICE_TYPE;
+		else process.env.CERALIVE_DEVICE_TYPE = savedDeviceType;
+	});
+
+	describe("emulated host — every action returns unavailable, touches nothing", () => {
+		beforeEach(() => {
+			process.env.CERALIVE_DEVICE_TYPE = "emulated";
+		});
+
+		test("kioskStart: unavailable, never unmasks the unit, leaves toggle off", async () => {
+			const h = makeGateHarness();
+			setKioskDeps(h.deps);
+
+			const result = await call(kioskStartProcedure, undefined, {
+				context: makeContext(),
+			});
+
+			expect(result.success).toBe(false);
+			expect(result.error).toBe(KIOSK_UNAVAILABLE_ERROR);
+			expect(result.applied).toBeUndefined();
+			expect(h.systemctlCalls).toHaveLength(0);
+			expect(getConfig().kiosk_enabled).toBe(false);
+		});
+
+		test("kioskStop: unavailable, never stops/masks the unit", async () => {
+			const h = makeGateHarness();
+			setKioskDeps(h.deps);
+
+			const result = await call(kioskStopProcedure, undefined, {
+				context: makeContext(),
+			});
+
+			expect(result.success).toBe(false);
+			expect(result.error).toBe(KIOSK_UNAVAILABLE_ERROR);
+			expect(result.applied).toBeUndefined();
+			expect(h.systemctlCalls).toHaveLength(0);
+		});
+
+		test("kioskConfigure: unavailable, never persists or broadcasts", async () => {
+			const h = makeGateHarness();
+			setKioskDeps(h.deps);
+
+			const result = await call(
+				kioskConfigureProcedure,
+				{ display: "eink", touch: false, motion: false, performance: "low" },
+				{ context: makeContext() },
+			);
+
+			expect(result.success).toBe(false);
+			expect(result.error).toBe(KIOSK_UNAVAILABLE_ERROR);
+			expect(result.applied).toBeUndefined();
+			expect(h.broadcasts).toHaveLength(0);
+			expect(getConfig().kiosk_display).toBe("lcd");
+		});
+
+		test("kioskOsk: unavailable, never signals wvkbd", async () => {
+			const h = makeGateHarness();
+			setKioskDeps(h.deps);
+
+			const result = await call(
+				kioskOskProcedure,
+				{ visible: true },
+				{ context: makeContext() },
+			);
+
+			expect(result.success).toBe(false);
+			expect(result.error).toBe(KIOSK_UNAVAILABLE_ERROR);
+			expect(h.oskSignals).toHaveLength(0);
+		});
+	});
+
+	describe("real device — handlers delegate to the kiosk module as before", () => {
+		beforeEach(() => {
+			process.env.CERALIVE_DEVICE_TYPE = "real";
+		});
+
+		test("kioskStart commits the toggle and drives the unit", async () => {
+			const h = makeGateHarness();
+			setKioskDeps(h.deps);
+
+			const result = await call(kioskStartProcedure, undefined, {
+				context: makeContext(),
+			});
+
+			expect(result.success).toBe(true);
+			expect(result.error).toBeUndefined();
+			expect(result.applied?.enabled).toBe(true);
+			expect(result.applied?.state).toBe("enabled-stopped");
+			expect(getConfig().kiosk_enabled).toBe(true);
+			expect(h.systemctlCalls).toContainEqual(["unmask", "kiosk.service"]);
+
+			stopKioskPolling();
+		});
+
+		test("kioskConfigure persists the profile and broadcasts", async () => {
+			const h = makeGateHarness();
+			setKioskDeps(h.deps);
+
+			const result = await call(
+				kioskConfigureProcedure,
+				{ display: "mono", touch: true, motion: false, performance: "high" },
+				{ context: makeContext() },
+			);
+
+			expect(result.success).toBe(true);
+			expect(result.applied).toEqual({
+				display: "mono",
+				touch: true,
+				motion: false,
+				performance: "high",
+			});
+			expect(getConfig().kiosk_display).toBe("mono");
+			expect(h.broadcasts.length).toBeGreaterThan(0);
+		});
+
+		test("kioskOsk signals wvkbd to show", async () => {
+			const h = makeGateHarness();
+			setKioskDeps(h.deps);
+
+			const result = await call(
+				kioskOskProcedure,
+				{ visible: true },
+				{ context: makeContext() },
+			);
+
+			expect(result.success).toBe(true);
+			expect(result.error).toBeUndefined();
+			expect(h.oskSignals).toContainEqual("SIGUSR2");
+		});
 	});
 });

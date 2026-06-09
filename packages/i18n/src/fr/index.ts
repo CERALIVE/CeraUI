@@ -278,6 +278,7 @@ const fr = {
 			toggleError: "Couldn't change the kiosk display. Please try again.",
 			configureError: "Couldn't save display settings. Please try again.",
 			keyboardError: "Couldn't signal the on-screen keyboard.",
+			unavailable: "Kiosk mode is only available on a physical device.",
 		},
 		appearance: {
 			title: "Apparence",

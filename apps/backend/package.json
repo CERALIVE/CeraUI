@@ -12,7 +12,7 @@
 		"@ceralive/ceracoder": "link:../../../ceracoder/bindings/typescript",
 		"@ceralive/srtla": "link:../../../srtla/bindings/typescript",
 		"@ceraui/rpc": "workspace:*",
-		"@orpc/server": "^1.14.4",
+		"@orpc/server": "^1.14.5",
 		"finalhandler": "^2.1.1",
 		"zod": "^4.4.3",
 		"http-proxy": "^1.18.1",
