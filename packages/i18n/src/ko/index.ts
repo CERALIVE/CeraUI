@@ -133,6 +133,8 @@ const ko = {
 			themeDesc: "밝게, 어둡게 또는 시스템 설정",
 		},
 		index: {
+			pairing: "기기 페어링",
+			pairingDesc: "클레임 코드로 이 기기를 클라우드 계정에 연결합니다.",
 			title: "설정",
 			description: "기기, 시스템 및 개발자 구성",
 			comingSoon: "곧 출시 예정",

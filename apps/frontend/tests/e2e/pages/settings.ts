@@ -52,6 +52,18 @@ export class SettingsPage {
 	}
 
 	// ── Device pairing (claim code) ───────────────────────────────────────────
+	// Pairing has its own dedicated Settings entry/dialog ("Device Pairing").
+	async openPairing(): Promise<void> {
+		await openDialog(
+			this.page,
+			this.page.getByRole('button', { name: 'Device Pairing' }),
+			'Device Pairing',
+		);
+	}
+	async closePairing(): Promise<void> {
+		await this.dismiss('Device Pairing');
+	}
+
 	/** Generate a claim code and return its trimmed text once rendered. */
 	async generateClaimCode(): Promise<string> {
 		await this.page.getByTestId('generate-claim-code').click();
@@ -61,9 +73,9 @@ export class SettingsPage {
 		return ((await code.textContent()) ?? '').trim();
 	}
 
-	/** Drive the dev-only mock-platform completion and assert the paired state. */
-	async simulatePairing(): Promise<void> {
-		await this.page.getByTestId('simulate-pairing').click();
+	/** Submit the claim code and assert the paired state surfaces. */
+	async completePairing(): Promise<void> {
+		await this.page.getByTestId('complete-pairing').click();
 		await expect(this.page.getByTestId('pairing-status')).toBeVisible();
 	}
 

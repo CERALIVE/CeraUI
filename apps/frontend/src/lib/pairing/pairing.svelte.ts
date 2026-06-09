@@ -18,6 +18,7 @@ import {
 	formatClaimCodeRemaining,
 	isClaimCodeExpired,
 } from "./claim-code-format";
+import { reducePairingResult } from "./pairing-result";
 
 export type PairingStatus =
 	| "idle"
@@ -70,13 +71,14 @@ export class PairingController {
 		this.error = null;
 		try {
 			const result = await rpc.pairing.completePairing({ code: this.code });
-			if (result.paired) {
+			const outcome = reducePairingResult(result);
+			if (outcome.kind === "paired") {
 				this.status = "paired";
-				this.deviceId = result.device_id ?? null;
-				this.subStatus = result.sub_status ?? null;
+				this.deviceId = outcome.deviceId;
+				this.subStatus = outcome.subStatus;
 			} else {
 				this.status = "error";
-				this.error = result.error ?? "pair-failed";
+				this.error = outcome.error;
 			}
 			return result;
 		} catch (error) {

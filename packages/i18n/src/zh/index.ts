@@ -132,6 +132,8 @@ const zh = {
 			themeDesc: "浅色、深色或跟随系统",
 		},
 		index: {
+			pairing: "设备配对",
+			pairingDesc: "使用认领码将此设备链接到您的云账户。",
 			title: "设置",
 			description: "设备、系统和开发者配置",
 			comingSoon: "即将推出",
