@@ -97,6 +97,34 @@ bun tsc --noEmit      # type-check backend (run from apps/backend/)
 pnpm --filter frontend run test   # vitest frontend unit tests
 ```
 
+## DEVICE DETECTION + KIOSK EMULATION SAFETY
+
+`isRealDevice()` lives in `apps/backend/src/modules/system/device-detection.ts` and is re-exported from `apps/backend/src/modules/system/kiosk.ts`. It follows the same `deps`-injection pattern as the rest of the kiosk module (`DeviceDetectionDeps` + `defaultDeviceDetectionDeps`).
+
+Detection contract (fail-safe, defaults to `false`):
+1. `CERALIVE_DEVICE_TYPE==="real"` → true; `==="emulated"` → false (env override wins over everything)
+2. `isDevelopment()` → false (short-circuits before any hardware probe)
+3. `/proc/device-tree/model` contains `"Rockchip"` or `"RK3588"` → true
+4. probe throws (file absent/unreadable) → false (never propagates)
+5. unrecognised model → false
+
+**Kiosk RPC handlers are emulated-safe.** The 4 action handlers (`kioskStart`, `kioskStop`, `kioskConfigure`, `kioskOsk`) in `apps/backend/src/rpc/procedures/system.procedure.ts` gate on `await isRealDevice()` at entry. In dev/emulated mode they return `{ success: false, error: "kiosk_unavailable_in_emulated_mode" }` without invoking `systemctl`. `kioskStatus` is NOT gated (read-only config; the settings UI needs it to render).
+
+The error constant `KIOSK_UNAVAILABLE_ERROR` is the single source of truth in `packages/rpc/src/schemas/system.schema.ts`. The frontend (`OnDeviceDisplaySection.svelte`) renders a calm `role="status"` banner (`data-testid="kiosk-unavailable"`, i18n key `onDeviceDisplay.unavailable`) when the gate fires — not an error toast.
+
+Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEach`/`afterEach` to pick the branch deterministically on any host.
+
+## DEP BASELINE (as of 2026-06)
+
+| Package | Version |
+|---------|---------|
+| `@orpc/*` (client, server, contract) | 1.14.5 |
+| Bun pin (`.bun-version`) | 1.3.14 |
+| `svelte` | 5.56.3 |
+| `vitest` | 4.1.8 |
+
+Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2/docs/fast-reload.md`](../image-building-pipeline/v2/docs/fast-reload.md)
+
 ## CONVENTIONS
 
 - Linting/formatting: Biome only (`@biomejs/biome` 2.4.16) — ESLint and Prettier are fully removed. Run `biome check .` (or `pnpm lint`) from the workspace root. Nested non-root configs live in `apps/frontend/`, `apps/backend/`, `packages/i18n/`.
