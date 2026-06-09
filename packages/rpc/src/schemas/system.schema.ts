@@ -151,10 +151,19 @@ export const kioskConfigureInputSchema = z.object({
 });
 export type KioskConfigureInput = z.infer<typeof kioskConfigureInputSchema>;
 
+// Structured failure code returned by the kiosk RPC handlers when the backend
+// is NOT running on a real device (T13). Single source of truth so neither the
+// backend gate nor the frontend banner inlines the literal. On a dev/CI/emulated
+// host the handlers return this WITHOUT touching systemd (DC-1: only the real
+// device owns the chassis).
+export const KIOSK_UNAVAILABLE_ERROR = "kiosk_unavailable_in_emulated_mode";
+
 // kioskConfigure applied-state output (`applied` = values persisted post-write).
+// `applied` is absent and `error` is set on the emulated-mode gate (T13).
 export const kioskConfigureOutputSchema = z.object({
 	success: z.boolean(),
-	applied: kioskConfigureInputSchema,
+	applied: kioskConfigureInputSchema.optional(),
+	error: z.string().optional(),
 });
 export type KioskConfigureOutput = z.infer<typeof kioskConfigureOutputSchema>;
 
@@ -171,13 +180,17 @@ export const kioskStatusSchema = z.object({
 export type KioskStatus = z.infer<typeof kioskStatusSchema>;
 
 // kioskStart / kioskStop applied-state output. `applied` echoes the persisted
-// toggle + the synchronous post-transition state the backend committed.
+// toggle + the synchronous post-transition state the backend committed; it is
+// absent and `error` is set on the emulated-mode gate (T13).
 export const kioskToggleOutputSchema = z.object({
 	success: z.boolean(),
-	applied: z.object({
-		enabled: z.boolean(),
-		state: kioskStateSchema,
-	}),
+	applied: z
+		.object({
+			enabled: z.boolean(),
+			state: kioskStateSchema,
+		})
+		.optional(),
+	error: z.string().optional(),
 });
 export type KioskToggleOutput = z.infer<typeof kioskToggleOutputSchema>;
 

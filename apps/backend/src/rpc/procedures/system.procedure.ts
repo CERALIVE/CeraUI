@@ -7,6 +7,7 @@ import {
 	autostartInputSchema,
 	autostartOutputSchema,
 	cloudProviderEndpointSchema,
+	KIOSK_UNAVAILABLE_ERROR,
 	kioskConfigureInputSchema,
 	kioskConfigureOutputSchema,
 	kioskOskInputSchema,
@@ -32,6 +33,7 @@ import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { setAutostart } from "../../modules/streaming/streamloop.ts";
 import {
 	getKioskStatus,
+	isRealDevice,
 	kioskConfigure,
 	kioskOsk,
 	kioskStart,
@@ -231,7 +233,10 @@ export const kioskStatusProcedure = authedProcedure
  */
 export const kioskStartProcedure = authedProcedure
 	.output(kioskToggleOutputSchema)
-	.handler(() => {
+	.handler(async () => {
+		if (!(await isRealDevice())) {
+			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
+		}
 		void kioskStart();
 		const status = getKioskStatus();
 		return {
@@ -246,7 +251,10 @@ export const kioskStartProcedure = authedProcedure
  */
 export const kioskStopProcedure = authedProcedure
 	.output(kioskToggleOutputSchema)
-	.handler(() => {
+	.handler(async () => {
+		if (!(await isRealDevice())) {
+			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
+		}
 		void kioskStop();
 		const status = getKioskStatus();
 		return {
@@ -261,7 +269,10 @@ export const kioskStopProcedure = authedProcedure
 export const kioskConfigureProcedure = authedProcedure
 	.input(kioskConfigureInputSchema)
 	.output(kioskConfigureOutputSchema)
-	.handler(({ input }) => {
+	.handler(async ({ input }) => {
+		if (!(await isRealDevice())) {
+			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
+		}
 		const applied = kioskConfigure(input);
 		return { success: true, applied };
 	});
@@ -273,6 +284,9 @@ export const kioskOskProcedure = authedProcedure
 	.input(kioskOskInputSchema)
 	.output(successResponseSchema)
 	.handler(async ({ input }) => {
+		if (!(await isRealDevice())) {
+			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
+		}
 		await kioskOsk(input.visible);
 		return { success: true };
 	});
