@@ -286,6 +286,8 @@ const ptBR = {
 			themeDesc: "Claro, escuro ou conforme o sistema",
 		},
 		index: {
+			pairing: "Emparelhamento do dispositivo",
+			pairingDesc: "Vincule este dispositivo à sua conta na nuvem com um código de reivindicação.",
 			title: "Configurações",
 			description: "Configuração do dispositivo, sistema e desenvolvedor",
 			comingSoon: "Em breve",

@@ -441,6 +441,8 @@ const es = {
 			themeDesc: "Claro, oscuro o según el sistema",
 		},
 		index: {
+			pairing: "Emparejamiento del dispositivo",
+			pairingDesc: "Vincula este dispositivo a tu cuenta en la nube con un código de reclamación.",
 			title: "Configuración",
 			description: "Configuración de dispositivo, sistema y desarrollador",
 			comingSoon: "Próximamente",

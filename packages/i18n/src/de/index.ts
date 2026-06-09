@@ -432,6 +432,8 @@ const de = {
 			themeDesc: "Hell, dunkel oder Systemeinstellung",
 		},
 		index: {
+			pairing: "Geräte-Kopplung",
+			pairingDesc: "Verknüpfen Sie dieses Gerät über einen Anspruchscode mit Ihrem Cloud-Konto.",
 			title: "Einstellungen",
 			description: "Geräte-, System- und Entwicklerkonfiguration",
 			comingSoon: "Demnächst verfügbar",

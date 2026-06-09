@@ -134,6 +134,8 @@ const ja = {
 			themeDesc: "ライト、ダーク、またはシステムに合わせる",
 		},
 		index: {
+			pairing: "デバイスのペアリング",
+			pairingDesc: "クレームコードでこのデバイスをクラウドアカウントにリンクします。",
 			title: "設定",
 			description: "デバイス、システム、開発者の設定",
 			comingSoon: "近日公開",

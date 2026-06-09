@@ -388,6 +388,8 @@ const en = {
 			themeDesc: "Light, dark, or match your system",
 		},
 		index: {
+			pairing: "Device Pairing",
+			pairingDesc: "Link this device to your cloud account with a claim code.",
 			title: "Settings",
 			description: "Device, system, and developer configuration",
 			comingSoon: "Coming soon",

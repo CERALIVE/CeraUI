@@ -287,6 +287,8 @@ const fr = {
 			themeDesc: "Clair, sombre ou selon le système",
 		},
 		index: {
+			pairing: "Appairage de l'appareil",
+			pairingDesc: "Liez cet appareil à votre compte cloud avec un code d'enregistrement.",
 			title: "Paramètres",
 			description: "Configuration de l'appareil, du système et du développeur",
 			comingSoon: "Bientôt disponible",
