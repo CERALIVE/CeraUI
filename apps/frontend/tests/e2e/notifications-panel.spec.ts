@@ -3,11 +3,7 @@ import path from 'node:path';
 
 import { expect, type Page, test } from '@playwright/test';
 
-import { navigateTo } from './helpers/index.js';
-
-// Workstream evidence root: CeraUI/.omo/evidence. e2e -> tests -> frontend ->
-// apps -> CeraUI.
-const EVIDENCE_DIR = path.resolve(import.meta.dirname, '../../../../.omo/evidence');
+import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
 
 /**
  * Task 16 — Persistent-notifications panel, integrated E2E (mock backend).
