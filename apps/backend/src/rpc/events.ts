@@ -13,6 +13,10 @@ import type { AppWebSocket } from "./types.ts";
 type EventHandler<T = unknown> = (data: T) => void;
 type UnsubscribeFn = () => void;
 
+// Source-of-truth event name for the 5-signal device-stats broadcast (S1 lock).
+// 5s coalescing window registered in coalesce.ts; emitter in device-stats.ts.
+export const DEVICE_STATS_EVENT = "device-stats" as const;
+
 /**
  * Simple event emitter for internal broadcasts
  */

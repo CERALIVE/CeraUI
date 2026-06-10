@@ -44,6 +44,7 @@ import {
 	checkAutoStartStream,
 	srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
+import { initDeviceStats } from "./modules/system/device-stats.ts";
 import { initRevisions } from "./modules/system/revisions.ts";
 import { initHardwareMonitoring } from "./modules/system/sensors.ts";
 import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updates.ts";
@@ -83,6 +84,7 @@ initPipelines();
 void initRevisions();
 // WebSocket server is now integrated with HTTP server via Bun.serve()
 initHardwareMonitoring();
+initDeviceStats();
 await initRTMPIngestStats();
 initSRTIngest();
 void getSshStatus();

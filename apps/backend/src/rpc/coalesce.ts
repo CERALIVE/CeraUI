@@ -32,10 +32,11 @@ export type CoalesceState = Map<string, CoalesceEntry>;
  * Per-type coalescing windows for the LOCAL profile, in milliseconds.
  *
  * Each window equals the type's broadcast interval (see the emitters):
- * - netif    5000ms (`network-interfaces.ts`)
- * - sensors  1000ms (`sensors.ts`)
- * - gateways 2000ms (`gateways.ts`)
- * - modems  30000ms (`modem-update-loop.ts`)
+ * - netif        5000ms (`network-interfaces.ts`)
+ * - sensors      1000ms (`sensors.ts`)
+ * - gateways     2000ms (`gateways.ts`)
+ * - modems      30000ms (`modem-update-loop.ts`)
+ * - device-stats 5000ms (`device-stats.ts`)
  *
  * Types not listed here are never coalesced (window resolves to 0).
  */
@@ -44,6 +45,7 @@ export const COALESCE_WINDOW_MS: Record<string, number> = {
 	sensors: 1000,
 	gateways: 2000,
 	modems: 30000,
+	"device-stats": 5000,
 };
 
 /**
