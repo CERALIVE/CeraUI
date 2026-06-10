@@ -10,6 +10,7 @@ import type {
 	ConfigMessage,
 	DeviceStats,
 	KioskStatus,
+	LinkTelemetryMessage,
 	ModemList,
 	NetifEntry,
 	NetifMessage,
@@ -79,6 +80,13 @@ let updatingState = $state<StatusResponse["updating"]>(null);
 let netifState = $state<NetifMessage | undefined>(undefined);
 let wifiState = $state<WifiStatus | undefined>(undefined);
 let modemsState = $state<ModemList | undefined>(undefined);
+
+// Per-uplink srtla_send telemetry, folded into the `status` flow. `null` while
+// srtla_send is not running or no fresh snapshot has arrived; `undefined` before
+// the first status push. Links carry their own `stale` flag.
+let linkTelemetryState = $state<LinkTelemetryMessage | null | undefined>(
+	undefined,
+);
 
 // System state
 let deviceStatsState = $state<DeviceStats | undefined>(undefined);
@@ -157,6 +165,10 @@ export function getWifi() {
 
 export function getModems() {
 	return modemsState;
+}
+
+export function getLinkTelemetry() {
+	return linkTelemetryState;
 }
 
 export function getSensors() {
@@ -309,6 +321,9 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			}
 			if (statusData.modems !== undefined) {
 				modemsState = mergeModemList(modemsState, statusData.modems);
+			}
+			if (statusData.linkTelemetry !== undefined) {
+				linkTelemetryState = statusData.linkTelemetry;
 			}
 
 			// Update aggregated status
@@ -614,6 +629,7 @@ export function resetState(): void {
 	netifState = undefined;
 	wifiState = undefined;
 	modemsState = undefined;
+	linkTelemetryState = undefined;
 	sensorsState = undefined;
 	deviceStatsState = undefined;
 	revisionsState = undefined;

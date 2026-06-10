@@ -1,9 +1,10 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import type { Modem } from '@ceraui/rpc/schemas';
+import type { LinkTelemetryEntry, LinkTelemetryMessage, Modem } from '@ceraui/rpc/schemas';
 import { Radio } from '@lucide/svelte';
 
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
+import LinkTelemetry from '$lib/components/custom/LinkTelemetry.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import { formatThroughput } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
@@ -13,9 +14,19 @@ import { cn } from '$lib/utils';
 interface Props {
 	links: LinkSignal[];
 	modemEntries: [string, Modem][];
+	linkTelemetry?: LinkTelemetryMessage | null;
 }
 
-const { links, modemEntries }: Props = $props();
+const { links, modemEntries, linkTelemetry = undefined }: Props = $props();
+
+// Index telemetry rows by their resolved interface name so each card can join
+// its own values. `link.id` is the kernel ifname, which the backend resolves
+// `conn_id` -> `iface` to (link-telemetry.ts). No match -> "--" placeholders.
+const telemetryByIface = $derived(
+	new Map<string, LinkTelemetryEntry>(
+		(linkTelemetry?.links ?? []).map((entry) => [entry.iface, entry]),
+	),
+);
 
 /** A short type tag for a bonded link (WiFi, Ethernet, or the modem's network generation). */
 function linkTypeLabel(link: LinkSignal): string {
@@ -55,45 +66,57 @@ const totalStale = $derived(
 				{@const color = `var(--link-${link.linkIndex + 1})`}
 				{@const hasSignal = link.signal !== null}
 				<div
+					data-testid="bonded-link-card"
+					data-link-id={link.id}
 					class={cn(
-						'flex items-center gap-2.5 rounded-lg border px-3 py-2',
+						'flex min-w-[12rem] flex-1 flex-col gap-2 rounded-lg border px-3 py-2',
 						link.isStale && 'opacity-50',
 					)}
 					style="border-color: color-mix(in oklab, {color} 35%, transparent); background-color: color-mix(in oklab, {color} 10%, transparent);"
 				>
-					<span
-						class="text-xs font-bold tabular-nums"
-						style="color: {color};">L{link.linkIndex + 1}</span
-					>
-					<LinkIndicator
-						shape="bars"
-						size="md"
-						type={link.type}
-						signal={link.signal}
-						connectionState={link.connectionState}
-						linkIndex={link.linkIndex}
-					/>
-					<div class="flex min-w-0 flex-col leading-tight">
-						<span class="truncate text-xs font-medium">{link.label}</span>
-						<span class="text-muted-foreground text-[10px] uppercase tracking-wide"
-							>{linkTypeLabel(link)}</span
+					<div class="flex items-center gap-2.5">
+						<span
+							class="text-xs font-bold tabular-nums"
+							style="color: {color};">L{link.linkIndex + 1}</span
 						>
+						<LinkIndicator
+							shape="bars"
+							size="md"
+							type={link.type}
+							signal={link.signal}
+							connectionState={link.connectionState}
+							linkIndex={link.linkIndex}
+						/>
+						<div class="flex min-w-0 flex-col leading-tight">
+							<span class="truncate text-xs font-medium">{link.label}</span>
+							<span class="text-muted-foreground text-[10px] uppercase tracking-wide"
+								>{linkTypeLabel(link)}</span
+							>
+						</div>
+						{#if hasSignal}
+							<span data-live-value class="ms-1 font-mono text-xs tabular-nums" style="color: {color};">
+								{link.signal}%
+							</span>
+						{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
+							<span class="text-muted-foreground ms-1 text-[10px] uppercase tracking-wide">
+								{$LL.network.view.noSimLink()}
+							</span>
+						{:else if link.type === 'modem' && link.connectionState === 'scanning'}
+							<span class="text-muted-foreground ms-1 text-[10px] uppercase tracking-wide">
+								{$LL.network.modem.scanning()}
+							</span>
+						{/if}
+						<!-- per-link throughput (Task 18) -->
+						<SpeedBadge class="ms-1" kbps={link.throughputKbps} stale={link.isStale} />
 					</div>
-					{#if hasSignal}
-						<span data-live-value class="ms-1 font-mono text-xs tabular-nums" style="color: {color};">
-							{link.signal}%
-						</span>
-					{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
-						<span class="text-muted-foreground ms-1 text-[10px] uppercase tracking-wide">
-							{$LL.network.view.noSimLink()}
-						</span>
-					{:else if link.type === 'modem' && link.connectionState === 'scanning'}
-						<span class="text-muted-foreground ms-1 text-[10px] uppercase tracking-wide">
-							{$LL.network.modem.scanning()}
-						</span>
-					{/if}
-					<!-- per-link throughput (Task 18) -->
-					<SpeedBadge class="ms-1" kbps={link.throughputKbps} stale={link.isStale} />
+
+					<!-- per-link srtla telemetry: RTT / NAK / weight (Task 22) -->
+					<div
+						class="border-t pt-2"
+						style="border-color: color-mix(in oklab, {color} 20%, transparent);"
+					>
+						<LinkTelemetry entry={telemetryByIface.get(link.id)} />
+					</div>
 				</div>
 			{/each}
 		</div>

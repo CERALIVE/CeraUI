@@ -511,6 +511,10 @@ const ptBR = {
 			stale: "Desatualizado",
 			staleHint: "Nenhuma atualização recebida recentemente",
 			refreshing: "Atualizando",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "Peso",
+			telemetry: "Telemetria do link",
 		},
 		pageTitle: "Configuração de Rede",
 		pageDescription:

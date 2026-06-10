@@ -4,7 +4,13 @@ import type { Modem, NetifEntry, NetifMessage, WifiInterface, WifiStatus } from 
 import { Network as NetworkIcon } from '@lucide/svelte';
 
 import { Skeleton } from '$lib/components/ui/skeleton';
-import { getIsConnected, getModems, getNetif, getWifi } from '$lib/rpc/subscriptions.svelte';
+import {
+	getIsConnected,
+	getLinkTelemetry,
+	getModems,
+	getNetif,
+	getWifi,
+} from '$lib/rpc/subscriptions.svelte';
 import { getHudState } from '$lib/stores/hud.svelte';
 import type { LinkSignal } from '$lib/types/hud';
 
@@ -25,6 +31,7 @@ const wifi = $derived<WifiStatus | undefined>(getWifi());
 const modems = $derived(getModems());
 const netif = $derived<NetifMessage | undefined>(getNetif());
 const isConnected = $derived(getIsConnected());
+const linkTelemetry = $derived(getLinkTelemetry());
 
 // Bonded links come from the HUD store so colour identity (--link-N) is
 // IDENTICAL to the persistent HUD bar — link.linkIndex (0-based) → --link-{n+1}.
@@ -141,7 +148,7 @@ $effect(() => {
 			<Skeleton class="h-32 w-full rounded-xl" />
 		</div>
 	{:else}
-		<BondedLinksSection {links} {modemEntries} />
+		<BondedLinksSection {links} {modemEntries} {linkTelemetry} />
 		<WifiSection
 			wifiRadios={wifiEntries}
 			{netif}

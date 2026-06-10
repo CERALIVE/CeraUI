@@ -657,6 +657,10 @@ const de = {
 			stale: "Veraltet",
 			staleHint: "Kürzlich keine Aktualisierung empfangen",
 			refreshing: "Aktualisierung",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "Gewicht",
+			telemetry: "Verbindungstelemetrie",
 		},
 		pageTitle: "Netzwerkkonfiguration",
 		pageDescription:
