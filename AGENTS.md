@@ -49,11 +49,13 @@ CeraUI/
 │           ├── helpers/
 │           │   ├── config-loader.ts       # loadJsonConfig + writeFileAtomicSync (E3)
 │           │   └── config-schemas.ts      # runtimeConfigSchema — addons key lives here
-│           └── modules/system/
-│               ├── device-stats.ts        # 5-signal device stats (S1 lock)
-│               ├── device-detection.ts    # isRealDevice() — gates all add-on ops
-│               ├── kiosk.ts               # Kiosk state machine (template for add-on manager)
-│               └── software-updates.ts    # apt/size parsing; APT_PACKAGE_NAME_RE
+│           ├── modules/system/
+│           │   ├── device-stats.ts        # 5-signal device stats (S1 lock)
+│           │   ├── device-detection.ts    # isRealDevice() — gates all add-on ops
+│           │   ├── kiosk.ts               # Kiosk state machine (template for add-on manager)
+│           │   └── software-updates.ts    # apt/size parsing; APT_PACKAGE_NAME_RE
+│           └── modules/addons/
+│               └── manager.ts             # Add-on enable/disable state machine (T28)
 ├── packages/
 │   ├── rpc/          # Shared oRPC schemas (workspace:*) — validation constants live here
 │   │   └── src/schemas/
@@ -96,6 +98,7 @@ CeraUI/
 | Kiosk settings dialog (frontend) | `apps/frontend/src/main/dialogs/` (Task 25) |
 | Display-profile store + `?display=` param | `apps/frontend/src/lib/stores/display-profile.svelte.ts` |
 | **Add-on Zod schemas (descriptor + state)** | `packages/rpc/src/schemas/addons.schema.ts` |
+| **Add-on manager (enable/disable state machine, T28)** | `apps/backend/src/modules/addons/manager.ts` |
 | **Device stats (5-signal broadcast)** | `apps/backend/src/modules/system/device-stats.ts` |
 | **Config atomicity (E3)** | `apps/backend/src/helpers/config-loader.ts` — `writeFileAtomicSync` |
 | **Runtime config schema (addons key)** | `apps/backend/src/helpers/config-schemas.ts` — `runtimeConfigSchema` |
@@ -146,6 +149,35 @@ corrupts the live config. The `addons` key in `runtimeConfigSchema` defaults to
 Test coverage: `apps/backend/src/tests/addons-config-state.test.ts` — round-trip,
 crash-mid-write, and missing-key defaulting.
 
+**Manager state machine** (`apps/backend/src/modules/addons/manager.ts`) [EXISTS]
+
+The runtime orchestration layer (T28). Mirrors the kiosk state machine: every
+OS/network/persistence primitive is injected through `AddonManagerDeps` (DI for
+tests), and the SAME crash-loop discriminator drives auto-disable.
+
+- **Manager phases** (`AddonManagerPhase`): `disabled → enabling → enabled`,
+  `enabled → disabling → disabled`, plus `failed`, `pending`, `auto_disabled`.
+  `toAddonState`/`phaseFromState` losslessly map these onto the schema-valid
+  `AddonState` triple (`enabled` + `phase` + `autoDisabled`), so `config.json`
+  always parses even though the persisted `phase` enum is coarser.
+- **Enable pipeline** (ordered, each gated/atomic): `isRealDevice()` (G6) →
+  free-space precheck (E1: `/data` free > `sizeInstalled × 2 + 512 MiB`) →
+  download → `/data/tmp/<id>.raw.tmp` → sha256 (+ helper GPG) verify → atomic
+  rename → `/data/extensions/<id>.raw` → `ceralive-addon-helper enable <id>` →
+  unmask + start descriptor units → validation probe (auto-disable on failure).
+- **Disable pipeline**: reverse + idempotent — stop + mask units → helper
+  `disable` → remove artifact → drop config state.
+- **Crash-loop auto-disable**: `pollAddonCrashLoop` reads `NRestarts` per unit;
+  `>= ADDON_CRASH_LOOP_RESTART_THRESHOLD` (3) masks the units and parks the
+  add-on in `auto_disabled` (same rule as kiosk T5).
+- All privileged work is delegated to `ceralive-addon-helper` (G-trust); the
+  manager never mutates the sysext scan dir or systemd directly on the trusted
+  path — it drives the helper and argv-only `systemctl`.
+
+Test coverage: `apps/backend/src/tests/manager.test.ts` — pure mapping, the
+enable/disable pipelines, crash-loop + validation auto-disable, and the G6/E1
+negative paths.
+
 **sysext refresh protocol**
 
 The add-on manager must follow the protocol from
@@ -162,7 +194,9 @@ transition real.
 All add-on operations (install, enable, disable, refresh) MUST call
 `await isRealDevice()` at entry. In dev/emulated mode return
 `{ success: false, error: "addon_unavailable_in_emulated_mode" }` without touching
-`systemd-sysext` or `systemctl`. Read-only status queries are NOT gated.
+`systemd-sysext` or `systemctl`. Read-only status queries are NOT gated. The
+manager's `enableAddon`/`disableAddon`/`pollAddonCrashLoop` all enforce this gate
+as their first step (`ADDON_UNAVAILABLE_ERROR`).
 
 ## DEVICE STATS [EXISTS]
 
