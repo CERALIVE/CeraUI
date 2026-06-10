@@ -23,7 +23,7 @@
  * across the repo boundary — a CeraUI test stays self-contained.
  */
 
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, mock } from "bun:test";
 
 import {
 	type AddonDescriptor,
@@ -31,16 +31,34 @@ import {
 	type AddonState,
 } from "@ceraui/rpc/schemas";
 
-import {
-	ADDON_UNAVAILABLE_ERROR,
-	type AddonManagerDeps,
-	disableAddon,
-	enableAddon,
-} from "../modules/addons/manager.ts";
+import type { AddonManagerDeps } from "../modules/addons/manager.ts";
 import {
 	type ReconcilerDeps,
 	runAddonReconciler,
 } from "../modules/addons/reconciler.ts";
+
+// manager.ts → config.ts → setup.ts, whose top-level `await loadJsonConfigSync`
+// throws when setup.json is absent — so a STATIC manager import would crash this
+// file at load on any host without setup.json. Stub the one setup.json reader and
+// load the manager dynamically AFTER (config.ts reads setup.hw only lazily). The
+// stub is torn down in afterAll so it never leaks to another test file.
+mock.module("../modules/setup.ts", () => ({ setup: { hw: "rk3588" } }));
+
+let enableAddon: typeof import("../modules/addons/manager.ts").enableAddon;
+let disableAddon: typeof import("../modules/addons/manager.ts").disableAddon;
+let ADDON_UNAVAILABLE_ERROR: string;
+
+beforeAll(async () => {
+	const mgr = await import("../modules/addons/manager.ts");
+	enableAddon = mgr.enableAddon;
+	disableAddon = mgr.disableAddon;
+	ADDON_UNAVAILABLE_ERROR = mgr.ADDON_UNAVAILABLE_ERROR;
+});
+
+afterAll(() => {
+	// Drop the setup.ts stub so the real module is restored for other files.
+	mock.restore();
+});
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 
