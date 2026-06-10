@@ -1,6 +1,7 @@
 /**
  * Export all procedures
  */
+export * from "./addons.procedure.ts";
 export * from "./auth.procedure.ts";
 export * from "./modems.procedure.ts";
 export * from "./network.procedure.ts";
