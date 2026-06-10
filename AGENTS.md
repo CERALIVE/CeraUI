@@ -52,7 +52,7 @@ CeraUI/
 │           ├── modules/system/
 │           │   ├── device-stats.ts        # 5-signal device stats (S1 lock)
 │           │   ├── device-detection.ts    # isRealDevice() — gates all add-on ops
-│           │   ├── kiosk.ts               # Kiosk state machine (template for add-on manager)
+│           │   ├── kiosk.ts               # Kiosk DC-2 state machine; toggle runs the cog-display add-on via the manager
 │           │   └── software-updates.ts    # apt/size parsing; APT_PACKAGE_NAME_RE
 │           └── modules/addons/
 │               └── manager.ts             # Add-on enable/disable state machine (T28)
