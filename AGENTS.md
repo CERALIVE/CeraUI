@@ -45,8 +45,20 @@ CeraUI/
 │   │               ├── connection-ux.svelte.ts # Reconnect/reboot/session-expiry UX state
 │   │               └── layout-mode.svelte.ts  # Touch/kiosk layout flag ($persist)
 │   └── backend/      # Bun server — WebSocket RPC via oRPC, serves frontend static
+│       └── src/
+│           ├── helpers/
+│           │   ├── config-loader.ts       # loadJsonConfig + writeFileAtomicSync (E3)
+│           │   └── config-schemas.ts      # runtimeConfigSchema — addons key lives here
+│           └── modules/system/
+│               ├── device-stats.ts        # 5-signal device stats (S1 lock)
+│               ├── device-detection.ts    # isRealDevice() — gates all add-on ops
+│               ├── kiosk.ts               # Kiosk state machine (template for add-on manager)
+│               └── software-updates.ts    # apt/size parsing; APT_PACKAGE_NAME_RE
 ├── packages/
 │   ├── rpc/          # Shared oRPC schemas (workspace:*) — validation constants live here
+│   │   └── src/schemas/
+│   │       ├── addons.schema.ts           # AddonDescriptorSchema + AddonStateSchema (T21)
+│   │       └── system.schema.ts           # KIOSK_UNAVAILABLE_ERROR + system schemas
 │   └── i18n/         # typesafe-i18n, 10 languages (workspace:*)
 ├── scripts/build/    # build-debian-package.sh — produces ceraui .deb
 ├── docs/             # ARCHITECTURE, BUILD_PIPELINE, APT_VERSION_CONTROL, BRANDING, TOUCHSCREEN
@@ -83,6 +95,10 @@ CeraUI/
 | Kiosk RPC + polling loop (backend) | `apps/backend/src/` (kiosk procedures, Task 23) |
 | Kiosk settings dialog (frontend) | `apps/frontend/src/main/dialogs/` (Task 25) |
 | Display-profile store + `?display=` param | `apps/frontend/src/lib/stores/display-profile.svelte.ts` |
+| **Add-on Zod schemas (descriptor + state)** | `packages/rpc/src/schemas/addons.schema.ts` |
+| **Device stats (5-signal broadcast)** | `apps/backend/src/modules/system/device-stats.ts` |
+| **Config atomicity (E3)** | `apps/backend/src/helpers/config-loader.ts` — `writeFileAtomicSync` |
+| **Runtime config schema (addons key)** | `apps/backend/src/helpers/config-schemas.ts` — `runtimeConfigSchema` |
 | Design rules | `.impeccable.md` |
 
 ## COMMANDS
@@ -96,6 +112,74 @@ BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh   # .deb for AMD64
 bun tsc --noEmit      # type-check backend (run from apps/backend/)
 pnpm --filter frontend run test   # vitest frontend unit tests
 ```
+
+## ADD-ON SUBSYSTEM [EXISTS]
+
+The add-on subsystem lets CeraUI install, enable, and disable optional feature
+sysexts at runtime without a reflash. It is gated on `isRealDevice()` — all
+add-on operations are no-ops in dev/emulated mode.
+
+**Zod schemas** (`packages/rpc/src/schemas/addons.schema.ts`) [EXISTS]
+
+`AddonDescriptorSchema` mirrors the image-baked JSON descriptor format from
+`image-building-pipeline/v2/manifests/schema/addon.schema.json`. It is the single
+TypeScript source of truth for the descriptor shape — never duplicate it in `apps/`.
+
+`AddonStateSchema` describes per-feature runtime state persisted under the `addons`
+key of `config.json`. Fields: `enabled`, `phase`, `versionMaterialized`,
+`userConfig`, `autoDisabled`.
+
+Key regex constants (defined once in `addons.schema.ts`, imported everywhere):
+- `ADDON_ID_RE` — lowercase alphanumeric + hyphens (stricter than `APT_PACKAGE_NAME_RE`)
+- `SEMVER_RE` — `MAJOR.MINOR.PATCH` with optional pre-release/build
+- `SYSEXT_PATH_RE` — `/usr/…` or `/opt/…` only (G2 contract)
+- `ARTIFACT_URL_RE` — HTTPS with mandatory `{os_version}` placeholder
+
+**Config atomicity (E3)** [EXISTS]
+
+All writes to `config.json` go through `writeFileAtomicSync` in
+`apps/backend/src/helpers/config-loader.ts`. The pattern: write to a sibling temp
+file (`.<name>.<pid>.tmp`), `fsync`, then `rename` — so a crash mid-write never
+corrupts the live config. The `addons` key in `runtimeConfigSchema` defaults to
+`{}` when absent, so old configs without the key parse cleanly.
+
+Test coverage: `apps/backend/src/tests/addons-config-state.test.ts` — round-trip,
+crash-mid-write, and missing-key defaulting.
+
+**sysext refresh protocol**
+
+The add-on manager must follow the protocol from
+`image-building-pipeline/v2/docs/addon-sysext-refresh.md`:
+- **Update:** `systemd-sysext refresh` → `systemctl restart <addon>.service`
+- **Disable:** `systemctl stop <addon>.service` → `systemd-sysext refresh`
+
+Never report an add-on "updated" or "disabled" on the strength of the sysext call
+alone. The service restart (on update) or stop (on disable) is what makes the
+transition real.
+
+**isRealDevice() gate**
+
+All add-on operations (install, enable, disable, refresh) MUST call
+`await isRealDevice()` at entry. In dev/emulated mode return
+`{ success: false, error: "addon_unavailable_in_emulated_mode" }` without touching
+`systemd-sysext` or `systemctl`. Read-only status queries are NOT gated.
+
+## DEVICE STATS [EXISTS]
+
+`apps/backend/src/modules/system/device-stats.ts` broadcasts exactly **5 signals**
+on a `device-stats` event every 5 seconds (S1 lock):
+
+| Signal | Description |
+|--------|-------------|
+| `disk` | Used/total bytes on `/data` + media type (SSD/HDD/eMMC/unknown) |
+| `cpuLoad1` | 1-minute load average |
+| `socTemp` | SoC temperature (wired from `sensors.ts` — no second `/sys/class/thermal` read) |
+| `ifaceRxTx` | Per-interface RX/TX byte counters |
+| `raucSlot` | Active RAUC A/B slot |
+
+Adding a sixth field is a deliberate contract change, not a tweak. Every collector
+wraps its read in its own `try/catch` and degrades to `null` on failure — a missing
+`/sys` path or absent `rauc` binary must never crash the sampling loop.
 
 ## DEVICE DETECTION + KIOSK EMULATION SAFETY
 
