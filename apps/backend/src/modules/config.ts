@@ -17,7 +17,12 @@
 
 import fs from "node:fs";
 
-import { loadJsonConfig } from "../helpers/config-loader.ts";
+import type { AddonConfig, AddonState } from "@ceraui/rpc/schemas";
+
+import {
+	loadJsonConfig,
+	writeFileAtomicSync,
+} from "../helpers/config-loader.ts";
 import {
 	RUNTIME_CONFIG_DEFAULTS,
 	type RuntimeConfig,
@@ -75,10 +80,26 @@ export function saveConfig() {
 		ssh_pass_hash: getSshPasswordHash(),
 	};
 	// Must stay sync: sync callers (setBitrate/setAutostart) depend on the write
-	// finishing before return, and Bun.write() is async-only.
-	fs.writeFileSync(CONFIG_FILE, JSON.stringify(dataToSave));
+	// finishing before return. Atomic (temp+fsync+rename) so a crash mid-write
+	// can't corrupt config.json — add-on state lives here too (E3).
+	writeFileAtomicSync(CONFIG_FILE, JSON.stringify(dataToSave));
 }
 
 export function getConfig(): RuntimeConfig {
 	return config;
+}
+
+export function getAddons(): AddonConfig {
+	return config.addons ?? {};
+}
+
+export function setAddonState(id: string, state: AddonState): void {
+	config.addons = { ...getAddons(), [id]: state };
+	saveConfig();
+}
+
+export function removeAddonState(id: string): void {
+	const { [id]: _removed, ...rest } = getAddons();
+	config.addons = rest;
+	saveConfig();
 }

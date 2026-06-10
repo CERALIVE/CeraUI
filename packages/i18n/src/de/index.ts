@@ -377,6 +377,16 @@ const de = {
 		signingIn: "Anmeldung läuft...",
 	},
 	settings: {
+		deviceStats: {
+			title: "Gerätestatistik",
+			description: "Live-Hardware-Telemetrie dieses Geräts.",
+			disk: "Datenträger",
+			cpuLoad: "CPU-Last",
+			socTemp: "SoC-Temp.",
+			network: "Netzwerk",
+			bootSlot: "Boot-Slot",
+			unavailable: "Nicht verfügbar",
+		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
 			description: "Manage the on-device kiosk display, profile, and input.",

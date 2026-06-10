@@ -11,6 +11,7 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import {
+	Blocks,
 	ChevronRight,
 	Cloud,
 	Info,
@@ -42,6 +43,8 @@ import LogsDialog from './dialogs/LogsDialog.svelte';
 import PairingDialog from './dialogs/PairingDialog.svelte';
 import PasswordDialog from './dialogs/PasswordDialog.svelte';
 import PowerDialog from './dialogs/PowerDialog.svelte';
+import AddonsSection from './settings/AddonsSection.svelte';
+import DeviceStatsSection from './settings/DeviceStatsSection.svelte';
 import OnDeviceDisplaySection from './settings/OnDeviceDisplaySection.svelte';
 import SshDialog from './dialogs/SshDialog.svelte';
 import UpdatesDialog from './dialogs/UpdatesDialog.svelte';
@@ -146,7 +149,15 @@ const groups = $derived<Group[]>([
 	{
 		id: 'software',
 		label: t.groups.software(),
-		entries: [{ key: 'updates', title: t.updates(), desc: t.updatesDesc(), icon: RefreshCw }],
+		entries: [
+			{ key: 'updates', title: t.updates(), desc: t.updatesDesc(), icon: RefreshCw },
+			{
+				key: 'addons',
+				title: 'Add-ons',
+				desc: 'Install and manage optional device features',
+				icon: Blocks,
+			},
+		],
 	},
 	{
 		id: 'display',
@@ -173,6 +184,7 @@ let updatesOpen = $state(false);
 let powerOpen = $state(false);
 let versionsOpen = $state(false);
 let displayOpen = $state(false);
+let addonsOpen = $state(false);
 
 // Fallback placeholder dialog for any not-yet-wired entries.
 let open = $state(false);
@@ -207,6 +219,9 @@ function openEntry(entry: Entry) {
 		case 'onDeviceDisplay':
 			displayOpen = true;
 			return;
+		case 'addons':
+			addonsOpen = true;
+			return;
 		default:
 			active = entry;
 			open = true;
@@ -226,6 +241,9 @@ const ActiveIcon = $derived(active?.icon);
 
 		<!-- Grouped settings index -->
 		<div class="space-y-7">
+			<!-- Live device telemetry first: status at a glance, no dialog to open. -->
+			<DeviceStatsSection />
+
 			<!-- Mobile-only: desktop hosts language + theme in the header toolbar instead. -->
 			{#if !isDesktop.current}
 				<section class="space-y-2.5" data-testid="settings-appearance">
@@ -363,3 +381,4 @@ const ActiveIcon = $derived(active?.icon);
 <PowerDialog bind:open={powerOpen} />
 <VersionsDialog bind:open={versionsOpen} />
 <OnDeviceDisplaySection bind:open={displayOpen} />
+<AddonsSection bind:open={addonsOpen} />

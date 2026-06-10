@@ -13,6 +13,15 @@ import type { AppWebSocket } from "./types.ts";
 type EventHandler<T = unknown> = (data: T) => void;
 type UnsubscribeFn = () => void;
 
+// Source-of-truth event name for the 5-signal device-stats broadcast (S1 lock).
+// 5s coalescing window registered in coalesce.ts; emitter in device-stats.ts.
+export const DEVICE_STATS_EVENT = "device-stats" as const;
+
+// Per-add-on state broadcast channel. The manager is the single source of truth
+// (it owns the `broadcastMsg(ADDON_EVENT, …)` push); re-exported here so the RPC
+// layer resolves the channel name from the events surface like every other event.
+export { ADDON_EVENT } from "../modules/addons/manager.ts";
+
 /**
  * Simple event emitter for internal broadcasts
  */

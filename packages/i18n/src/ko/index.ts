@@ -78,6 +78,16 @@ const ko = {
 		signingIn: "로그인 중...",
 	},
 	settings: {
+		deviceStats: {
+			title: "장치 통계",
+			description: "이 장치의 실시간 하드웨어 텔레메트리.",
+			disk: "디스크",
+			cpuLoad: "CPU 부하",
+			socTemp: "SoC 온도",
+			network: "네트워크",
+			bootSlot: "부트 슬롯",
+			unavailable: "사용 불가",
+		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
 			description: "Manage the on-device kiosk display, profile, and input.",

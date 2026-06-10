@@ -20,6 +20,9 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
 | Kiosk loopback token (DC-3, single-use, tmpfs) | `modules/ui/kiosk-token.ts` + `rpc/server.ts` |
+| Kiosk DC-2 state machine (toggle runs the `cog-display` add-on via the manager) | `modules/system/kiosk.ts` |
+| Add-on enable/disable state machine (T28) | `modules/addons/manager.ts` |
+| Post-boot add-on reconciler (T29, non-blocking; never gates rollback) | `modules/addons/reconciler.ts` |
 | Mock hardware data | `mocks/providers/` |
 | Shared RPC schema types | `../../../packages/rpc/` (`@ceraui/rpc`) |
 

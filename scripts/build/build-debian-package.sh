@@ -51,8 +51,10 @@ log_step "Preparing package structure"
 
 # Create directory structure
 mkdir -p "$TEMP_DIR/usr/local/bin"
+mkdir -p "$TEMP_DIR/usr/bin"
 mkdir -p "$TEMP_DIR/etc/systemd/system"
 mkdir -p "$TEMP_DIR/etc/udev/rules.d"
+mkdir -p "$TEMP_DIR/etc/sudoers.d"
 mkdir -p "$TEMP_DIR/var/www/ceralive"
 mkdir -p "$TEMP_DIR/etc/ceralive"
 
@@ -61,6 +63,8 @@ log_step "Copying files to package structure"
 cp dist/ceralive "$TEMP_DIR/usr/local/bin/ceralive"
 cp dist/ceralive.service "$TEMP_DIR/etc/systemd/system/"
 cp dist/ceralive.socket "$TEMP_DIR/etc/systemd/system/"
+# Post-boot add-on reconciler oneshot (T29). Non-blocking; never gates rollback.
+cp dist/ceralive-addon-reconciler.service "$TEMP_DIR/etc/systemd/system/"
 cp dist/98-ceralive-audio.rules "$TEMP_DIR/etc/udev/rules.d/"
 cp dist/99-ceralive-check-usb-devices.rules "$TEMP_DIR/etc/udev/rules.d/"
 cp -r dist/public/* "$TEMP_DIR/var/www/ceralive/"
@@ -68,10 +72,18 @@ cp dist/config.json "$TEMP_DIR/etc/ceralive/"
 cp dist/override-belaui.sh "$TEMP_DIR/usr/local/bin/"
 cp dist/reset-to-default.sh "$TEMP_DIR/usr/local/bin/"
 
+# Privileged add-on lifecycle helper (T27) + its narrow sudoers drop-in, copied
+# straight from the repo (a plain script, not a bun-build artifact).
+cp apps/backend/ceralive-addon-helper "$TEMP_DIR/usr/bin/ceralive-addon-helper"
+cp apps/backend/ceralive-addon-helper.sudoers "$TEMP_DIR/etc/sudoers.d/ceralive-addon-helper"
+
 # Make binaries executable
 chmod +x "$TEMP_DIR/usr/local/bin/ceralive"
 chmod +x "$TEMP_DIR/usr/local/bin/override-belaui.sh"
 chmod +x "$TEMP_DIR/usr/local/bin/reset-to-default.sh"
+chmod 0755 "$TEMP_DIR/usr/bin/ceralive-addon-helper"
+# sudo REFUSES a drop-in that is group/world-writable — ship it 0440.
+chmod 0440 "$TEMP_DIR/etc/sudoers.d/ceralive-addon-helper"
 
 # Create post-install script
 log_step "Creating maintenance scripts"
@@ -84,6 +96,10 @@ echo "🚀 Configuring CeraLive after installation..."
 # Reload systemd daemon
 systemctl daemon-reload
 
+# Enable the post-boot add-on reconciler oneshot (T29). It is non-blocking and
+# deliberately decoupled from the OS-update healthcheck/rollback chain.
+systemctl enable ceralive-addon-reconciler.service 2>/dev/null || true
+
 # Reload udev rules
 udevadm control --reload
 
@@ -95,6 +111,17 @@ fi
 # Set permissions
 chown -R ceralive:ceralive /var/www/ceralive
 chown ceralive:ceralive /etc/ceralive/config.json
+
+# The add-on helper runs as root via sudo; sudo IGNORES a drop-in unless it is
+# owned by root and not group/world-writable. Enforce both on install.
+if [ -f /etc/sudoers.d/ceralive-addon-helper ]; then
+    chown root:root /etc/sudoers.d/ceralive-addon-helper
+    chmod 0440 /etc/sudoers.d/ceralive-addon-helper
+fi
+if [ -f /usr/bin/ceralive-addon-helper ]; then
+    chown root:root /usr/bin/ceralive-addon-helper
+    chmod 0755 /usr/bin/ceralive-addon-helper
+fi
 
 echo "✅ CeraLive device software configured successfully!"
 echo ""

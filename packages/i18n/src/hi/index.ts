@@ -78,6 +78,16 @@ const hi = {
 		signingIn: "साइन इन हो रहे हैं...",
 	},
 	settings: {
+		deviceStats: {
+			title: "डिवाइस आँकड़े",
+			description: "इस डिवाइस से लाइव हार्डवेयर टेलीमेट्री।",
+			disk: "डिस्क",
+			cpuLoad: "CPU लोड",
+			socTemp: "SoC तापमान",
+			network: "नेटवर्क",
+			bootSlot: "बूट स्लॉट",
+			unavailable: "अनुपलब्ध",
+		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
 			description: "Manage the on-device kiosk display, profile, and input.",

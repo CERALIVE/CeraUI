@@ -5,6 +5,13 @@
 import { os } from "@orpc/server";
 
 import {
+	configureAddonProcedure,
+	getAddonStatusProcedure,
+	installAddonProcedure,
+	listAddonsProcedure,
+	uninstallAddonProcedure,
+} from "./procedures/addons.procedure.ts";
+import {
 	loginProcedure,
 	logoutProcedure,
 	setPasswordProcedure,
@@ -161,6 +168,14 @@ const stableRoutes = {
 	pairing: os.router({
 		generateClaimCode: generateClaimCodeProcedure,
 		completePairing: completePairingProcedure,
+	}),
+
+	addons: os.router({
+		list: listAddonsProcedure,
+		install: installAddonProcedure,
+		uninstall: uninstallAddonProcedure,
+		configure: configureAddonProcedure,
+		getStatus: getAddonStatusProcedure,
 	}),
 };
 

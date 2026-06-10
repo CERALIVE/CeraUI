@@ -6,7 +6,9 @@
  */
 
 import type {
+	AddonState,
 	ConfigMessage,
+	DeviceStats,
 	KioskStatus,
 	ModemList,
 	NetifEntry,
@@ -79,6 +81,7 @@ let wifiState = $state<WifiStatus | undefined>(undefined);
 let modemsState = $state<ModemList | undefined>(undefined);
 
 // System state
+let deviceStatsState = $state<DeviceStats | undefined>(undefined);
 let sensorsState = $state<SensorsStatus | undefined>(undefined);
 let revisionsState = $state<Revisions | undefined>(undefined);
 let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
@@ -97,6 +100,11 @@ let notificationsState = $state<NotificationsMessage | undefined>(undefined);
 // live `state` field, not just `enabled`, so it never shows "running" on a
 // failed unit.
 let kioskState = $state<KioskStatus | undefined>(undefined);
+
+// Live per-add-on runtime state, keyed by id. The `addons` broadcast carries a
+// PARTIAL map of only the changed add-ons, so it is merged per id, never replaced
+// wholesale. Descriptors come from rpc.addons.list(); this tracks state only.
+let addonsState = $state<Record<string, AddonState>>({});
 
 // Connection state
 let connectionState = $state<ConnectionState>("disconnected");
@@ -155,6 +163,10 @@ export function getSensors() {
 	return sensorsState;
 }
 
+export function getDeviceStats() {
+	return deviceStatsState;
+}
+
 export function getRevisions() {
 	return revisionsState;
 }
@@ -177,6 +189,10 @@ export function getNotifications() {
 
 export function getKiosk() {
 	return kioskState;
+}
+
+export function getAddons() {
+	return addonsState;
 }
 
 export function getConnectionState() {
@@ -364,6 +380,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			sensorsState = data as SensorsStatus;
 			break;
 
+		case "device-stats":
+			deviceStatsState = data as DeviceStats;
+			break;
+
 		case "revisions":
 			revisionsState = data as Revisions;
 			break;
@@ -412,6 +432,17 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			// wholesale — each broadcast carries the complete, authoritative status.
 			if (data && typeof data === "object") {
 				kioskState = data as KioskStatus;
+			}
+			break;
+
+		case "addons":
+			// Partial map of changed add-ons: merge per id so an untouched add-on's
+			// state is preserved (mirrors the modem per-id merge above).
+			if (data && typeof data === "object") {
+				addonsState = {
+					...addonsState,
+					...(data as Record<string, AddonState>),
+				};
 			}
 			break;
 
@@ -584,12 +615,14 @@ export function resetState(): void {
 	wifiState = undefined;
 	modemsState = undefined;
 	sensorsState = undefined;
+	deviceStatsState = undefined;
 	revisionsState = undefined;
 	pipelinesState = undefined;
 	audioCodecsState = undefined;
 	relaysState = undefined;
 	notificationsState = undefined;
 	kioskState = undefined;
+	addonsState = {};
 	connectionReadyState = false;
 
 	if (lockExpiryTick !== undefined) {

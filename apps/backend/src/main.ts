@@ -20,6 +20,7 @@ import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
 import { isDevelopment } from "./mocks/mock-config.ts";
 import { initMockService } from "./mocks/mock-service.ts";
+import { runAddonReconciler } from "./modules/addons/reconciler.ts";
 import { loadConfig } from "./modules/config.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
 import { initSRTIngest } from "./modules/ingest/srt.ts";
@@ -44,6 +45,7 @@ import {
 	checkAutoStartStream,
 	srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
+import { initDeviceStats } from "./modules/system/device-stats.ts";
 import { initRevisions } from "./modules/system/revisions.ts";
 import { initHardwareMonitoring } from "./modules/system/sensors.ts";
 import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updates.ts";
@@ -83,6 +85,7 @@ initPipelines();
 void initRevisions();
 // WebSocket server is now integrated with HTTP server via Bun.serve()
 initHardwareMonitoring();
+initDeviceStats();
 await initRTMPIngestStats();
 initSRTIngest();
 void getSshStatus();
@@ -143,3 +146,13 @@ startHeartbeat();
 onHeartbeatTick(broadcastHealthIfChanged);
 
 checkAutoStartStream();
+
+// Post-boot add-on reconciler (T29): fire-and-forget. Add-ons NEVER gate boot or
+// the OS-update healthcheck/rollback, so this is a non-blocking background task
+// whose failures are swallowed inside runAddonReconciler(). The
+// ceralive-addon-reconciler.service oneshot re-triggers a pass via SIGUSR1; the
+// run self-serialises, so the boot fire and the signal can both fire harmlessly.
+void runAddonReconciler();
+process.on("SIGUSR1", function reconcileAddons() {
+	void runAddonReconciler();
+});

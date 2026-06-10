@@ -1,0 +1,280 @@
+#!/usr/bin/env bash
+#
+# ceralive-addon-helper — privileged (root) add-on lifecycle helper.
+#
+# CeraUI's backend runs UNPRIVILEGED. Every operation that needs root to
+# activate or tear down a systemd-sysext add-on is funnelled through this one
+# binary, invoked argv-only as `sudo ceralive-addon-helper <subcommand> [id]`
+# (the sudoers drop-in scopes NOPASSWD to exactly this path). This helper — NOT
+# the backend — is the trust boundary: it re-derives the allowlist and
+# re-verifies every signature itself, so a compromised backend can never enable
+# arbitrary code.
+#
+# TRUST MODEL (G-trust — do NOT weaken):
+#   * The set of installable add-ons is EXACTLY the descriptors BAKED read-only
+#     into the image at /usr/share/ceralive/addons/<id>.json. An <id> with no
+#     baked descriptor is refused.
+#   * A descriptor delivered any other way (e.g. dropped into a merged sysext,
+#     which overlays /usr and could shadow the registry path) can NEVER expand
+#     the trusted set: a descriptor only NAMES an id + an expected sha256, while
+#     the AUTHORITY to activate is the detached GPG signature, which must verify
+#     against the image-baked add-on keyring at
+#     /usr/share/ceralive/addon-keyring.gpg. An attacker who can shadow a
+#     descriptor still cannot forge a signature for that keyring.
+#   * Both the sha256 (against the baked descriptor) AND the GPG signature
+#     (against the baked keyring) are re-checked here on every enable, even if
+#     the backend already checked them. Verification is NEVER skipped.
+#
+# Every filesystem location and external tool is overridable via env vars so the
+# security logic is exercised hermetically by the test suite — without root,
+# without a real device, without touching the host. On the device the defaults
+# below are the only values used.
+#
+# shellcheck shell=bash
+# Embedded jq filters use single quotes intentionally: $id/$k/$i/$installed are
+# jq variables, NOT bash — they must NOT be expanded by the shell.
+# shellcheck disable=SC2016
+set -euo pipefail
+
+# --- Injectable locations (device defaults; tests override via env) -----------
+# REGISTRY_DIR is the SOLE source of the allowlist (G-trust). Baked, read-only.
+REGISTRY_DIR="${CERALIVE_ADDON_REGISTRY_DIR:-/usr/share/ceralive/addons}"
+# Image-baked PUBLIC add-on keyring — the root of authenticity. Distinct trust
+# domain from the RAUC OS-signing key.
+KEYRING="${CERALIVE_ADDON_KEYRING:-/usr/share/ceralive/addon-keyring.gpg}"
+# Persistent store the verified .raw is written to / removed from (survives OTA).
+STAGE_DIR="${CERALIVE_ADDON_STAGE_DIR:-/data/extensions}"
+# Directory systemd-sysext scans + `status` enumerates. On the device this is a
+# bind mount of STAGE_DIR (/var/lib/extensions -> /data/extensions); when the
+# two differ the staged .raw is linked here so a refresh can find it.
+EXT_DIR="${CERALIVE_ADDON_EXT_DIR:-/var/lib/extensions}"
+# Where the backend has already downloaded <id>.raw + <id>.raw.sig for re-verify.
+CACHE_DIR="${CERALIVE_ADDON_CACHE_DIR:-/var/cache/ceralive/addons}"
+
+# --- Injectable tools (device defaults; tests point at real tools / stubs) ----
+JQ="${CERALIVE_JQ:-jq}"
+GPGV="${CERALIVE_GPGV:-gpgv}"
+SHA256SUM="${CERALIVE_SHA256SUM:-sha256sum}"
+SYSTEMCTL="${CERALIVE_SYSTEMCTL:-systemctl}"
+SYSEXT="${CERALIVE_SYSEXT:-systemd-sysext}"
+
+# --- Validation patterns (mirror packages/rpc addons.schema.ts) --------------
+# Add-on id: lowercase alphanumeric with internal hyphens. The charset forbids
+# '/' and '.', so it cannot express path traversal (../, absolute paths).
+ADDON_ID_RE='^[a-z0-9][a-z0-9-]*$'
+# Lowercase hex SHA-256 (64 chars).
+SHA256_RE='^[a-f0-9]{64}$'
+# systemd unit name with a mandatory unit-type suffix.
+UNIT_RE='^[A-Za-z0-9@._:-]+\.(service|socket|target|timer|path|mount)$'
+
+fail() {
+	printf 'ceralive-addon-helper: %s\n' "$*" >&2
+	exit 1
+}
+
+need() {
+	command -v "$1" >/dev/null 2>&1 || fail "required tool not found: $1"
+}
+
+usage() {
+	cat >&2 <<'EOF'
+Usage: ceralive-addon-helper <subcommand> [id]
+
+Subcommands:
+  enable <id>   Verify (sha256 + GPG against the baked keyring) and activate the
+                baked add-on <id>: stage its .raw, refresh sysext, unmask/enable/
+                start its units.
+  disable <id>  Reverse enable: stop/disable/mask units, remove the staged .raw,
+                refresh sysext.
+  refresh       Run `systemd-sysext refresh` only.
+  status        Emit JSON describing the baked registry + installed state.
+
+The add-on <id> is resolved ONLY against the image-baked registry; signatures
+are re-verified against the image-baked keyring. Neither can be overridden by a
+descriptor delivered through a merged sysext.
+EOF
+}
+
+validate_id() {
+	[[ "$1" =~ $ADDON_ID_RE ]] || fail "invalid add-on id: $1"
+}
+
+# Resolve <id> to its baked descriptor path, enforcing the G-trust allowlist:
+# the descriptor MUST be a regular file living directly in the baked registry.
+# Symlinks are rejected so a merged sysext cannot redirect the lookup out of the
+# baked tree.
+require_baked_descriptor() {
+	local id="$1" desc="${REGISTRY_DIR}/$1.json"
+	[[ -f "$desc" && ! -L "$desc" ]] || fail "add-on not in baked registry: ${id}"
+	printf '%s' "$desc"
+}
+
+# Re-verify the cached artifact for <id> against the BAKED descriptor + keyring.
+# Refuses on any mismatch. This is the activation authority — a shadowed/injected
+# descriptor cannot pass it without a signature from the baked keyring.
+verify_artifact() {
+	local id="$1" desc="$2" raw sig want_sha got_sha payload desc_id
+	need "$JQ"
+	need "$SHA256SUM"
+	need "$GPGV"
+
+	payload="$("$JQ" -r '.payload.type' "$desc")"
+	[[ "$payload" == "sysext" ]] || fail "unsupported payload type for ${id}: ${payload}"
+
+	desc_id="$("$JQ" -r '.id' "$desc")"
+	[[ "$desc_id" == "$id" ]] || fail "descriptor id mismatch: ${desc_id} != ${id}"
+
+	want_sha="$("$JQ" -r '.artifact.sha256' "$desc")"
+	[[ "$want_sha" =~ $SHA256_RE ]] || fail "descriptor sha256 malformed for ${id}"
+
+	raw="${CACHE_DIR}/${id}.raw"
+	sig="${raw}.sig"
+	[[ -f "$raw" ]] || fail "artifact not present in cache: ${raw}"
+	[[ -f "$sig" ]] || fail "signature not present in cache: ${sig}"
+
+	got_sha="$("$SHA256SUM" "$raw" | cut -d' ' -f1)"
+	[[ "$got_sha" == "$want_sha" ]] \
+		|| fail "sha256 mismatch for ${id}: artifact does not match baked descriptor"
+
+	"$GPGV" --keyring "$KEYRING" "$sig" "$raw" >/dev/null 2>&1 \
+		|| fail "GPG verify failed for ${id}: not signed by the baked add-on keyring"
+}
+
+# Emit the units of one list (unmask|enable|start) and run <verb> on each.
+run_units() {
+	local desc="$1" key="$2" verb="$3" u
+	while IFS= read -r u; do
+		[[ -n "$u" ]] || continue
+		[[ "$u" =~ $UNIT_RE ]] || fail "invalid unit name in descriptor: ${u}"
+		"$SYSTEMCTL" "$verb" "$u"
+	done < <("$JQ" -r --arg k "$key" '.units[$k][]? // empty' "$desc")
+}
+
+# Make the staged .raw discoverable by systemd-sysext. When STAGE_DIR and
+# EXT_DIR are the same directory (the device bind-mount case) the install already
+# placed it in the scan dir; otherwise link it in (bytes stay in STAGE_DIR).
+ensure_discoverable() {
+	local id="$1"
+	mkdir -p "$EXT_DIR"
+	if [[ ! "${EXT_DIR}/${id}.raw" -ef "${STAGE_DIR}/${id}.raw" ]]; then
+		ln -sf "${STAGE_DIR}/${id}.raw" "${EXT_DIR}/${id}.raw"
+	fi
+}
+
+cmd_enable() {
+	local id="$1" desc
+	validate_id "$id"
+	need "$SYSEXT"
+	need "$SYSTEMCTL"
+	desc="$(require_baked_descriptor "$id")"
+	verify_artifact "$id" "$desc"
+
+	mkdir -p "$STAGE_DIR"
+	install -m 0644 "${CACHE_DIR}/${id}.raw" "${STAGE_DIR}/${id}.raw"
+	ensure_discoverable "$id"
+
+	# Filesystem-level merge first, THEN unit lifecycle. The refresh is live-safe
+	# but does not hot-swap running code (T1 protocol) — units are (re)started
+	# below so they pick up the freshly merged binaries.
+	"$SYSEXT" refresh
+	run_units "$desc" unmask unmask
+	run_units "$desc" enable enable
+	run_units "$desc" start start
+
+	"$JQ" -cn --arg id "$id" '{ok: true, id: $id, action: "enable"}'
+}
+
+cmd_disable() {
+	local id="$1" desc
+	validate_id "$id"
+	need "$SYSEXT"
+	need "$SYSTEMCTL"
+	desc="$(require_baked_descriptor "$id")"
+
+	# Stop BEFORE teardown so each service shuts down via its still-present binary
+	# rather than lingering on a deleted inode (T1 sysext restart protocol).
+	run_units "$desc" start stop
+	run_units "$desc" enable disable
+	run_units "$desc" unmask mask
+
+	rm -f "${STAGE_DIR}/${id}.raw" "${EXT_DIR}/${id}.raw"
+	"$SYSEXT" refresh
+
+	"$JQ" -cn --arg id "$id" '{ok: true, id: $id, action: "disable"}'
+}
+
+cmd_refresh() {
+	need "$SYSEXT"
+	need "$JQ"
+	"$SYSEXT" refresh
+	"$JQ" -cn '{ok: true, action: "refresh"}'
+}
+
+# JSON array of ids currently staged in the sysext scan dir.
+status_installed_ids() {
+	local ids=() f id
+	shopt -s nullglob
+	for f in "$EXT_DIR"/*.raw; do
+		id="$(basename "${f%.raw}")"
+		ids+=("$id")
+	done
+	shopt -u nullglob
+	if [[ ${#ids[@]} -eq 0 ]]; then
+		printf '[]'
+		return 0
+	fi
+	printf '%s\n' "${ids[@]}" | "$JQ" -R . | "$JQ" -s .
+}
+
+cmd_status() {
+	need "$JQ"
+	local files=() installed
+	shopt -s nullglob
+	files=("$REGISTRY_DIR"/*.json)
+	shopt -u nullglob
+
+	if [[ ${#files[@]} -eq 0 ]]; then
+		"$JQ" -cn '{ok: true, addons: []}'
+		return 0
+	fi
+
+	installed="$(status_installed_ids)"
+	"$JQ" -c -s --argjson installed "$installed" \
+		'map({
+			id, name, version, category,
+			units: (.units // {}),
+			installed: (.id as $i | $installed | index($i) != null)
+		}) | {ok: true, addons: .}' "${files[@]}"
+}
+
+main() {
+	local sub="${1:-}"
+	case "$sub" in
+		enable)
+			[[ $# -eq 2 ]] || { usage; fail "enable requires exactly one <id>"; }
+			cmd_enable "$2"
+			;;
+		disable)
+			[[ $# -eq 2 ]] || { usage; fail "disable requires exactly one <id>"; }
+			cmd_disable "$2"
+			;;
+		refresh)
+			[[ $# -eq 1 ]] || { usage; fail "refresh takes no arguments"; }
+			cmd_refresh
+			;;
+		status)
+			[[ $# -eq 1 ]] || { usage; fail "status takes no arguments"; }
+			cmd_status
+			;;
+		-h | --help | "")
+			usage
+			exit 0
+			;;
+		*)
+			usage
+			fail "unknown subcommand: ${sub}"
+			;;
+	esac
+}
+
+main "$@"

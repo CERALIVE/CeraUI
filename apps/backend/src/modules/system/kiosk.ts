@@ -16,9 +16,12 @@
 */
 
 /* Kiosk toggle state machine (DC-2 — docs/KIOSK_STATE_MACHINE.md) */
+import { readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 
 import {
+	type AddonDescriptor,
+	AddonDescriptorSchema,
 	KIOSK_CRASH_LOOP_RESTART_THRESHOLD,
 	KIOSK_POLL_INTERVAL_MS,
 	type KioskConfigureInput,
@@ -28,6 +31,11 @@ import {
 
 import { type ExecResult, execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import {
+	type AddonOpResult,
+	disableAddon as managerDisableAddon,
+	enableAddon as managerEnableAddon,
+} from "../addons/manager.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
@@ -40,9 +48,22 @@ export {
 	isRealDevice,
 } from "./device-detection.ts";
 
-// The systemd unit CeraUI drives. Cage is NEVER started by any other path — the
-// backend only ever toggles this unit (DC-1: the image owns the chassis).
+// The systemd unit the DC-2 failure-observation poll loop watches for live
+// state. Its lifecycle is driven by the cog-display add-on (DC-1: the image owns
+// the chassis); the backend never starts cage by any other path.
 const KIOSK_SERVICE = "kiosk.service";
+
+// The on-device display engine ships as the managed `cog-display` add-on; the
+// add-on manager owns its sysext lifecycle. The DC-2 state machine wraps that
+// with the 5-state poll loop, crash-loop auto-disable, display/touch/motion/
+// performance profiles, and OSK.
+const COG_DISPLAY_ADDON_ID = "cog-display";
+
+// Image-baked descriptor (T37) defining the display engine's units + signed
+// sysext artifact. Read + schema-validated at toggle time; only reached on a
+// real device, since the kiosk RPC handlers gate on isRealDevice() first (G6).
+const COG_DISPLAY_DESCRIPTOR_PATH =
+	"/usr/share/ceralive/addons/cog-display.json";
 
 // tmpfs marker written by the unit's OnFailure handler when cage exits because
 // no DRM output was found. Distinguishes display-unplug from a crash-loop.
@@ -77,7 +98,36 @@ export type KioskDeps = {
 	oskSignal: (signal: OskSignal) => Promise<void>;
 	/** Emit the current kiosk status to all clients. */
 	broadcast: (status: KioskStatus) => void;
+	/** Read + schema-validate the baked cog-display descriptor; null if absent. */
+	loadCogDescriptor: () => AddonDescriptor | null;
+	/** Enable the cog-display add-on via the add-on manager (T28). */
+	enableAddon: (descriptor: AddonDescriptor) => Promise<AddonOpResult>;
+	/** Disable the cog-display add-on via the add-on manager (T28). */
+	disableAddon: (descriptor: AddonDescriptor) => Promise<AddonOpResult>;
 };
+
+// Synchronous (not Bun.file().text()) so the manager enable/disable call is
+// issued in the same tick as the persisted-state commit — the RPC handler fires
+// kioskStart/kioskStop fire-and-forget. Returns null instead of throwing so a
+// missing/malformed descriptor degrades the toggle rather than crashing it.
+function loadCogDescriptorFromDisk(): AddonDescriptor | null {
+	try {
+		const raw = JSON.parse(readFileSync(COG_DISPLAY_DESCRIPTOR_PATH, "utf8"));
+		const descriptor = AddonDescriptorSchema.parse(raw);
+		if (descriptor.id !== COG_DISPLAY_ADDON_ID) {
+			logger.error(
+				`kiosk: descriptor id mismatch: expected ${COG_DISPLAY_ADDON_ID}, got ${descriptor.id}`,
+			);
+			return null;
+		}
+		return descriptor;
+	} catch (err) {
+		logger.error(
+			`kiosk: failed to load ${COG_DISPLAY_DESCRIPTOR_PATH}: ${err}`,
+		);
+		return null;
+	}
+}
 
 /** Resolve whether the kiosk unit is active, swallowing the non-zero exit. */
 async function probeIsActive(): Promise<boolean> {
@@ -133,6 +183,9 @@ const defaultKioskDeps: KioskDeps = {
 		await execFileP("pkill", ["--signal", signal, "-x", KIOSK_OSK_PROCESS]);
 	},
 	broadcast: (status) => broadcastMsg("kiosk", status),
+	loadCogDescriptor: loadCogDescriptorFromDisk,
+	enableAddon: (descriptor) => managerEnableAddon(descriptor),
+	disableAddon: (descriptor) => managerDisableAddon(descriptor),
 };
 
 let activeDeps: KioskDeps = defaultKioskDeps;
@@ -297,9 +350,10 @@ export function stopKioskPolling(): void {
 
 /**
  * T1 — toggle-on. Synchronously (before the first await) persist
- * `kiosk_enabled = true` and snap to `enabled-stopped`, then unmask + enable
- * --now the unit and begin polling. The synchronous prelude lets RPC handlers
- * read the committed state immediately without blocking on systemd.
+ * `kiosk_enabled = true` and snap to `enabled-stopped`, then enable the
+ * cog-display add-on (manager owns the sysext + unit lifecycle) and begin
+ * polling. The synchronous prelude lets RPC handlers read the committed state
+ * immediately without blocking on the add-on materialisation.
  */
 export async function kioskStart(
 	deps: KioskDeps = activeDeps,
@@ -307,11 +361,14 @@ export async function kioskStart(
 	getConfig().kiosk_enabled = true;
 	applyState("enabled-stopped", deps);
 
-	try {
-		await deps.systemctl(["unmask", KIOSK_SERVICE]);
-		await deps.systemctl(["enable", "--now", KIOSK_SERVICE]);
-	} catch (err) {
-		logger.error(`kiosk: failed to enable --now ${KIOSK_SERVICE}: ${err}`);
+	const descriptor = deps.loadCogDescriptor();
+	if (descriptor) {
+		const result = await deps.enableAddon(descriptor);
+		if (!result.success) {
+			logger.error(`kiosk: cog-display enable failed: ${result.error}`);
+		}
+	} else {
+		logger.error("kiosk: cog-display descriptor unavailable; cannot enable");
 	}
 
 	startKioskPolling(deps);
@@ -319,9 +376,10 @@ export async function kioskStart(
 }
 
 /**
- * T3 — toggle-off. Synchronously persist the toggle off + `disabled`, then
- * stop + disable + mask the unit, delete the display-failure marker, and stop
- * polling. Valid from `enabled-running` and from `failed-no-display`.
+ * T3 — toggle-off. Synchronously persist the toggle off + `disabled` and stop
+ * polling, then disable the cog-display add-on (manager stops + masks the units
+ * and tears down the sysext) and delete the display-failure marker. Valid from
+ * `enabled-running` and from `failed-no-display`.
  */
 export async function kioskStop(
 	deps: KioskDeps = activeDeps,
@@ -330,12 +388,14 @@ export async function kioskStop(
 	applyState("disabled", deps);
 	stopKioskPolling();
 
-	try {
-		await deps.systemctl(["stop", KIOSK_SERVICE]);
-		await deps.systemctl(["disable", KIOSK_SERVICE]);
-		await deps.systemctl(["mask", KIOSK_SERVICE]);
-	} catch (err) {
-		logger.error(`kiosk: failed to stop ${KIOSK_SERVICE}: ${err}`);
+	const descriptor = deps.loadCogDescriptor();
+	if (descriptor) {
+		const result = await deps.disableAddon(descriptor);
+		if (!result.success) {
+			logger.error(`kiosk: cog-display disable failed: ${result.error}`);
+		}
+	} else {
+		logger.error("kiosk: cog-display descriptor unavailable; cannot disable");
 	}
 	try {
 		await deps.removeNoDisplayMarker();

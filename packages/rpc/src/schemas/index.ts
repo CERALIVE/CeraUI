@@ -1,6 +1,7 @@
 /**
  * Export all Zod schemas
  */
+export * from './addons.schema';
 export * from './auth.schema';
 export * from './broadcast.schema';
 export * from './cloud-provider.schema';

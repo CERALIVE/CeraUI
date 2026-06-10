@@ -54,11 +54,14 @@ Six transitions. Each entry lists the trigger, the systemd actions the backend t
 
 **Backend actions:**
 1. Write `kiosk_enabled = true` to persisted config.
-2. `systemctl unmask kiosk.service`
-3. `systemctl enable kiosk.service`
-4. `systemctl start kiosk.service`
+2. Enable the `cog-display` add-on through the add-on manager (`enableAddon`). The
+   manager owns the sysext lifecycle (materialise → verify → stage → helper →
+   unmask + start the descriptor's units → validate). The display engine units
+   (incl. `kiosk.service`) are unmasked and started by that pipeline.
 
-The backend transitions to `enabled-stopped` synchronously after issuing the start command, then polls (see Failure-Observation Channel) to confirm the service reached `active (running)`.
+The backend transitions to `enabled-stopped` synchronously after committing the
+toggle (before the add-on enable resolves), then polls `kiosk.service` (see
+Failure-Observation Channel) to confirm the service reached `active (running)`.
 
 ---
 
@@ -77,11 +80,11 @@ The backend transitions to `enabled-stopped` synchronously after issuing the sta
 **To:** `enabled-stopped` (transient) then `disabled`
 
 **Backend actions:**
-1. `systemctl stop kiosk.service`
-2. `systemctl disable kiosk.service`
-3. `systemctl mask kiosk.service`
-4. Write `kiosk_enabled = false` to persisted config.
-5. Delete the display-failure marker file if present (`/run/kiosk-no-display`).
+1. Write `kiosk_enabled = false` to persisted config and stop polling.
+2. Disable the `cog-display` add-on through the add-on manager (`disableAddon`).
+   The manager stops + masks the descriptor's units (incl. `kiosk.service`) and
+   tears down the staged sysext.
+3. Delete the display-failure marker file if present (`/run/kiosk-no-display`).
 
 ---
 

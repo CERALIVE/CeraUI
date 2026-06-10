@@ -79,6 +79,16 @@ const ja = {
 		signingIn: "サインイン中...",
 	},
 	settings: {
+		deviceStats: {
+			title: "デバイス統計",
+			description: "このデバイスのライブハードウェアテレメトリ。",
+			disk: "ディスク",
+			cpuLoad: "CPU 負荷",
+			socTemp: "SoC 温度",
+			network: "ネットワーク",
+			bootSlot: "ブートスロット",
+			unavailable: "利用不可",
+		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
 			description: "Manage the on-device kiosk display, profile, and input.",

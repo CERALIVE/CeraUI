@@ -5,14 +5,19 @@
  * state classifier (all five states), the crash-loop auto-disable rule, every
  * one of the six transitions, and the four authenticated RPC procedures.
  *
- * All systemd interaction is injected through the `KioskDeps` surface (mirrors
- * the `SshStatusDeps` pattern in modules/system/ssh.ts) so the suite never
- * shells out to a real `systemctl`. The injected `systemctl` spy records the
- * exact argv the state machine issued; the injected `broadcast` spy is the
- * oracle for client-facing state events.
+ * All OS interaction is injected through the `KioskDeps` surface (mirrors the
+ * `SshStatusDeps` pattern in modules/system/ssh.ts) so the suite never shells
+ * out to a real `systemctl`. The poll loop + auto-disable drive `kiosk.service`
+ * via the injected `systemctl` spy; toggle-on/off route through the injected
+ * `enableAddon`/`disableAddon` spies (the cog-display add-on manager); the
+ * injected `broadcast` spy is the oracle for client-facing state events.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { KIOSK_UNAVAILABLE_ERROR, type KioskStatus } from "@ceraui/rpc/schemas";
+import {
+	type AddonDescriptor,
+	KIOSK_UNAVAILABLE_ERROR,
+	type KioskStatus,
+} from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
 import { getConfig } from "../modules/config.ts";
@@ -51,8 +56,39 @@ type KioskHarness = {
 	deps: KioskDeps;
 	systemctlCalls: string[][];
 	broadcasts: KioskStatus[];
+	enableAddonCalls: AddonDescriptor[];
+	disableAddonCalls: AddonDescriptor[];
 	markerRemoved: () => number;
 	signals: KioskSignals;
+};
+
+// A schema-valid stand-in for the image-baked cog-display descriptor (T37). The
+// kiosk module loads this (injected) and hands it to the add-on manager.
+const COG_DESCRIPTOR: AddonDescriptor = {
+	id: "cog-display",
+	name: "Cog Display Engine",
+	version: "0.16.1",
+	category: "display",
+	payload: { type: "sysext" },
+	sysextLevel: "1",
+	versionId: "12",
+	compatibleOsVersions: ["12"],
+	artifact: {
+		urlTemplate:
+			"https://apt.ceralive.tv/addons/cog-display/{os_version}/cog-display.raw",
+		sha256: "a".repeat(64),
+		gpgSigRef:
+			"https://apt.ceralive.tv/addons/cog-display/{os_version}/cog-display.raw.sig",
+		sizeDownload: 57671680,
+		sizeInstalled: 125829120,
+	},
+	provides: ["/usr/bin/cog", "/usr/bin/cage"],
+	units: {
+		unmask: ["kiosk.service"],
+		enable: ["kiosk.service"],
+		start: ["kiosk.service"],
+	},
+	validate: { cmd: "/usr/bin/cog --version", timeout: 10 },
 };
 
 function makeHarness(initial: Partial<KioskSignals> = {}): KioskHarness {
@@ -65,6 +101,8 @@ function makeHarness(initial: Partial<KioskSignals> = {}): KioskHarness {
 	};
 	const systemctlCalls: string[][] = [];
 	const broadcasts: KioskStatus[] = [];
+	const enableAddonCalls: AddonDescriptor[] = [];
+	const disableAddonCalls: AddonDescriptor[] = [];
 	let markerRemovedCount = 0;
 
 	const deps: KioskDeps = {
@@ -80,8 +118,18 @@ function makeHarness(initial: Partial<KioskSignals> = {}): KioskHarness {
 			markerRemovedCount++;
 			signals.marker = false;
 		},
+		oskSignal: async () => {},
 		broadcast: (status) => {
 			broadcasts.push(status);
+		},
+		loadCogDescriptor: () => COG_DESCRIPTOR,
+		enableAddon: async (descriptor) => {
+			enableAddonCalls.push(descriptor);
+			return { success: true, phase: "enabled" };
+		},
+		disableAddon: async (descriptor) => {
+			disableAddonCalls.push(descriptor);
+			return { success: true, phase: "disabled" };
 		},
 	};
 
@@ -89,6 +137,8 @@ function makeHarness(initial: Partial<KioskSignals> = {}): KioskHarness {
 		deps,
 		systemctlCalls,
 		broadcasts,
+		enableAddonCalls,
+		disableAddonCalls,
 		markerRemoved: () => markerRemovedCount,
 		signals,
 	};
@@ -222,7 +272,7 @@ describe("isCrashLoop — auto-disable classification", () => {
 });
 
 describe("kioskStart (T1: toggle-on)", () => {
-	test("persists the toggle, snaps to enabled-stopped, unmasks + enable --now", async () => {
+	test("persists the toggle, snaps to enabled-stopped, enables the cog-display add-on", async () => {
 		const h = makeHarness();
 		setKioskDeps(h.deps);
 
@@ -232,12 +282,8 @@ describe("kioskStart (T1: toggle-on)", () => {
 		expect(status.state).toBe("enabled-stopped");
 		expect(getKioskLiveState()).toBe("enabled-stopped");
 		expect(getConfig().kiosk_last_state).toBe("enabled-stopped");
-		expect(h.systemctlCalls).toContainEqual(["unmask", "kiosk.service"]);
-		expect(h.systemctlCalls).toContainEqual([
-			"enable",
-			"--now",
-			"kiosk.service",
-		]);
+		expect(h.enableAddonCalls).toContainEqual(COG_DESCRIPTOR);
+		expect(h.disableAddonCalls).toHaveLength(0);
 		expect(lastBroadcast(h)?.state).toBe("enabled-stopped");
 
 		stopKioskPolling();
@@ -263,28 +309,25 @@ describe("pollKioskOnce (T2: start resolves OK)", () => {
 });
 
 describe("kioskStop (T3: toggle-off)", () => {
-	test("from enabled-running: stop + disable + mask, remove marker, persist disabled", async () => {
+	test("from enabled-running: disables the cog-display add-on, removes marker, persists disabled", async () => {
 		const h = makeHarness({ isActive: true });
 		getConfig().kiosk_enabled = true;
 		setKioskDeps(h.deps);
 		await pollKioskOnce(h.deps);
 		expect(getKioskLiveState()).toBe("enabled-running");
 
-		h.systemctlCalls.length = 0;
 		h.broadcasts.length = 0;
 		const status = await kioskStop(h.deps);
 
 		expect(getConfig().kiosk_enabled).toBe(false);
 		expect(status.state).toBe("disabled");
 		expect(getKioskLiveState()).toBe("disabled");
-		expect(h.systemctlCalls).toContainEqual(["stop", "kiosk.service"]);
-		expect(h.systemctlCalls).toContainEqual(["disable", "kiosk.service"]);
-		expect(h.systemctlCalls).toContainEqual(["mask", "kiosk.service"]);
+		expect(h.disableAddonCalls).toContainEqual(COG_DESCRIPTOR);
 		expect(h.markerRemoved()).toBeGreaterThanOrEqual(1);
 		expect(lastBroadcast(h)?.state).toBe("disabled");
 	});
 
-	test("from failed-no-display: toggle-off returns to disabled", async () => {
+	test("from failed-no-display: toggle-off disables the add-on and returns to disabled", async () => {
 		const h = makeHarness({ isFailed: true, marker: true, nRestarts: 0 });
 		getConfig().kiosk_enabled = true;
 		setKioskDeps(h.deps);
@@ -293,6 +336,7 @@ describe("kioskStop (T3: toggle-off)", () => {
 		const status = await kioskStop(h.deps);
 		expect(status.state).toBe("disabled");
 		expect(getConfig().kiosk_enabled).toBe(false);
+		expect(h.disableAddonCalls).toContainEqual(COG_DESCRIPTOR);
 	});
 });
 
@@ -453,9 +497,10 @@ describe("system.kiosk* RPC procedures", () => {
  * T13 — the four action handlers gate on isRealDevice(). On a dev/CI/emulated
  * host the user-reported bug was that toggling kiosk pushed the developer's own
  * machine into host kiosk mode. The gate must short-circuit BEFORE any kiosk
- * module function runs, so systemd is never touched. The harness spies the whole
- * KioskDeps surface (systemctl + oskSignal + broadcast); a gated handler must
- * leave every spy untouched and the persisted config unchanged.
+ * module function runs, so systemd and the add-on manager are never touched. The
+ * harness spies the whole KioskDeps surface (systemctl + oskSignal + broadcast +
+ * enableAddon/disableAddon); a gated handler must leave every spy untouched and
+ * the persisted config unchanged.
  */
 describe("kiosk RPC isRealDevice() gate (T13)", () => {
 	type GateHarness = {
@@ -463,12 +508,16 @@ describe("kiosk RPC isRealDevice() gate (T13)", () => {
 		systemctlCalls: string[][];
 		broadcasts: KioskStatus[];
 		oskSignals: OskSignal[];
+		enableAddonCalls: AddonDescriptor[];
+		disableAddonCalls: AddonDescriptor[];
 	};
 
 	function makeGateHarness(): GateHarness {
 		const systemctlCalls: string[][] = [];
 		const broadcasts: KioskStatus[] = [];
 		const oskSignals: OskSignal[] = [];
+		const enableAddonCalls: AddonDescriptor[] = [];
+		const disableAddonCalls: AddonDescriptor[] = [];
 		const deps: KioskDeps = {
 			systemctl: async (args) => {
 				systemctlCalls.push(args);
@@ -485,8 +534,24 @@ describe("kiosk RPC isRealDevice() gate (T13)", () => {
 			broadcast: (status) => {
 				broadcasts.push(status);
 			},
+			loadCogDescriptor: () => COG_DESCRIPTOR,
+			enableAddon: async (descriptor) => {
+				enableAddonCalls.push(descriptor);
+				return { success: true, phase: "enabled" };
+			},
+			disableAddon: async (descriptor) => {
+				disableAddonCalls.push(descriptor);
+				return { success: true, phase: "disabled" };
+			},
 		};
-		return { deps, systemctlCalls, broadcasts, oskSignals };
+		return {
+			deps,
+			systemctlCalls,
+			broadcasts,
+			oskSignals,
+			enableAddonCalls,
+			disableAddonCalls,
+		};
 	}
 
 	let savedDeviceType: string | undefined;
@@ -503,7 +568,7 @@ describe("kiosk RPC isRealDevice() gate (T13)", () => {
 			process.env.CERALIVE_DEVICE_TYPE = "emulated";
 		});
 
-		test("kioskStart: unavailable, never unmasks the unit, leaves toggle off", async () => {
+		test("kioskStart: unavailable, never enables the add-on, leaves toggle off", async () => {
 			const h = makeGateHarness();
 			setKioskDeps(h.deps);
 
@@ -515,10 +580,11 @@ describe("kiosk RPC isRealDevice() gate (T13)", () => {
 			expect(result.error).toBe(KIOSK_UNAVAILABLE_ERROR);
 			expect(result.applied).toBeUndefined();
 			expect(h.systemctlCalls).toHaveLength(0);
+			expect(h.enableAddonCalls).toHaveLength(0);
 			expect(getConfig().kiosk_enabled).toBe(false);
 		});
 
-		test("kioskStop: unavailable, never stops/masks the unit", async () => {
+		test("kioskStop: unavailable, never disables the add-on", async () => {
 			const h = makeGateHarness();
 			setKioskDeps(h.deps);
 
@@ -530,6 +596,7 @@ describe("kiosk RPC isRealDevice() gate (T13)", () => {
 			expect(result.error).toBe(KIOSK_UNAVAILABLE_ERROR);
 			expect(result.applied).toBeUndefined();
 			expect(h.systemctlCalls).toHaveLength(0);
+			expect(h.disableAddonCalls).toHaveLength(0);
 		});
 
 		test("kioskConfigure: unavailable, never persists or broadcasts", async () => {
@@ -570,7 +637,7 @@ describe("kiosk RPC isRealDevice() gate (T13)", () => {
 			process.env.CERALIVE_DEVICE_TYPE = "real";
 		});
 
-		test("kioskStart commits the toggle and drives the unit", async () => {
+		test("kioskStart commits the toggle and enables the cog-display add-on", async () => {
 			const h = makeGateHarness();
 			setKioskDeps(h.deps);
 
@@ -583,7 +650,7 @@ describe("kiosk RPC isRealDevice() gate (T13)", () => {
 			expect(result.applied?.enabled).toBe(true);
 			expect(result.applied?.state).toBe("enabled-stopped");
 			expect(getConfig().kiosk_enabled).toBe(true);
-			expect(h.systemctlCalls).toContainEqual(["unmask", "kiosk.service"]);
+			expect(h.enableAddonCalls).toContainEqual(COG_DESCRIPTOR);
 
 			stopKioskPolling();
 		});

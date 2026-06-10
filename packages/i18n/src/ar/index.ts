@@ -216,6 +216,16 @@ const ar = {
 		signingIn: "جاري تسجيل الدخول...",
 	},
 	settings: {
+		deviceStats: {
+			title: "إحصاءات الجهاز",
+			description: "قياس مباشر لأجهزة هذا الجهاز.",
+			disk: "القرص",
+			cpuLoad: "حمل المعالج",
+			socTemp: "حرارة المعالج",
+			network: "الشبكة",
+			bootSlot: "فتحة الإقلاع",
+			unavailable: "غير متاح",
+		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
 			description: "Manage the on-device kiosk display, profile, and input.",

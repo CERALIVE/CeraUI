@@ -21,6 +21,7 @@
  */
 
 import {
+	AddonConfigSchema,
 	type DetectionMethod,
 	detectionMethodSchema,
 	isNamespacedRelayId,
@@ -142,6 +143,10 @@ export const runtimeConfigSchema = z.object({
 	kiosk_touch: z.boolean().optional(),
 	kiosk_motion: z.boolean().optional(),
 	kiosk_performance: kioskPerformanceSchema.optional(),
+
+	// Per-add-on runtime state (id -> AddonState): device-local metadata only,
+	// never the sysext `.raw` payload bytes.
+	addons: AddonConfigSchema.optional(),
 });
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
@@ -159,6 +164,7 @@ export const RUNTIME_CONFIG_DEFAULTS: Partial<RuntimeConfig> = {
 	kiosk_touch: true,
 	kiosk_motion: true,
 	kiosk_performance: "balanced",
+	addons: {},
 };
 
 export const DEFAULT_RELAY_PROVIDER_ID = "ceralive";

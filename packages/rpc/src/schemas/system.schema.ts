@@ -201,3 +201,38 @@ export const kioskOskInputSchema = z.object({
 	visible: z.boolean(),
 });
 export type KioskOskInput = z.infer<typeof kioskOskInputSchema>;
+
+// =============================================================================
+// Device stats broadcast (T32 — `device-stats` event)
+// =============================================================================
+//
+// S1 lock: exactly these five signals, mirroring the backend emitter
+// (`apps/backend/src/modules/system/device-stats.ts`). Adding a sixth is a
+// deliberate contract change. Every field is independently nullable (raucSlot
+// degrades to the string "unavailable") so one dead source never blanks the
+// whole panel.
+export const diskTypeSchema = z.enum(['SSD', 'HDD', 'eMMC', 'unknown']);
+export type DiskType = z.infer<typeof diskTypeSchema>;
+
+export const diskStatSchema = z.object({
+	used: z.number(),
+	total: z.number(),
+	type: diskTypeSchema,
+});
+export type DiskStat = z.infer<typeof diskStatSchema>;
+
+export const ifaceRxTxStatSchema = z.object({
+	iface: z.string(),
+	rxBytesPerSec: z.number(),
+	txBytesPerSec: z.number(),
+});
+export type IfaceRxTxStat = z.infer<typeof ifaceRxTxStatSchema>;
+
+export const deviceStatsSchema = z.object({
+	disk: diskStatSchema.nullable(),
+	cpuLoad1: z.number().nullable(),
+	socTemp: z.number().nullable(),
+	ifaceRxTx: ifaceRxTxStatSchema.nullable(),
+	raucSlot: z.string(),
+});
+export type DeviceStats = z.infer<typeof deviceStatsSchema>;
