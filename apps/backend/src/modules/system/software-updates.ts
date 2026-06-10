@@ -16,18 +16,18 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-/* Software updates */
 import { execPNR } from "../../helpers/exec.ts";
 import { invariant } from "../../helpers/invariant.ts";
 import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
 import { getms, oneHour, oneMinute } from "../../helpers/time.ts";
-
 import { queueUpdateGw } from "../network/gateways.ts";
 import { setup } from "../setup.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+/* Software updates */
+import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
 
 let availableUpdates:
 	| {
@@ -91,10 +91,6 @@ const ceralivePackageList = [
 ];
 // Reboot instead of just restarting CeraUI if we've updated packages matching this list
 const rebootPackageList = ["l4t", "ceralive-linux-", "ceralive-network-config"];
-
-// Debian package-name charset (letters, digits, and `. + : ~ -`); rejects
-// whitespace and shell metacharacters in poisoned/malformed apt output.
-const APT_PACKAGE_NAME_RE = /^[A-Za-z0-9.+:~-]+$/;
 
 export function parseHeldBackPackages(packages: string): string[] {
 	const names = packages
