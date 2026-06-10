@@ -24,6 +24,9 @@
  * preserves the original boot-time load order without introducing races.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
 import type { z } from "zod";
 
 import { logger } from "./logger.ts";
@@ -219,6 +222,40 @@ export async function saveJsonConfigAsync<T>(
 		? JSON.stringify(data, null, "\t")
 		: JSON.stringify(data);
 	await Bun.write(filePath, contents);
+}
+
+/**
+ * Atomically write a string to disk: write to a sibling temp file, fsync it to
+ * durable storage, then rename over the target. The rename is atomic on POSIX,
+ * so a crash mid-write leaves the original file intact — readers never observe a
+ * truncated config.json (E3 guardrail). Synchronous because config save callers
+ * (setBitrate/setAutostart) depend on the write completing before they return.
+ */
+export function writeFileAtomicSync(filePath: string, contents: string): void {
+	const dir = path.dirname(filePath);
+	const tmpPath = path.join(
+		dir,
+		`.${path.basename(filePath)}.${process.pid}.tmp`,
+	);
+
+	const fd = fs.openSync(tmpPath, "w");
+	try {
+		fs.writeFileSync(fd, contents);
+		fs.fsyncSync(fd);
+	} finally {
+		fs.closeSync(fd);
+	}
+
+	try {
+		fs.renameSync(tmpPath, filePath);
+	} catch (err) {
+		try {
+			fs.unlinkSync(tmpPath);
+		} catch {
+			// Temp already gone; nothing to clean up.
+		}
+		throw err;
+	}
 }
 
 /**
