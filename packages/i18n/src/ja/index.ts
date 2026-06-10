@@ -357,6 +357,10 @@ const ja = {
 			stale: "古い",
 			staleHint: "最近更新を受信していません",
 			refreshing: "更新中",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "重み",
+			telemetry: "リンクテレメトリ",
 		},
 		pageTitle: "ネットワーク設定",
 		pageDescription:

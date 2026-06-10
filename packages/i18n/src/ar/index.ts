@@ -488,6 +488,10 @@ const ar = {
 			stale: "قديم",
 			staleHint: "لم يتم استلام تحديث مؤخرًا",
 			refreshing: "جارٍ التحديث",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "الوزن",
+			telemetry: "قياس عن بعد للرابط",
 		},
 		pageTitle: "إعدادات الشبكة",
 		pageDescription:

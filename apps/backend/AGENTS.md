@@ -17,6 +17,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
 | ceracoder binding calls | `modules/streaming/ceracoder.ts` |
 | srtla binding calls (flux — check `../../../srtla/AGENTS.md` first) | `modules/streaming/srtla.ts` |
+| srtla per-link telemetry → `status.linkTelemetry` | `modules/streaming/link-telemetry.ts` |
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
 | Kiosk loopback token (DC-3, single-use, tmpfs) | `modules/ui/kiosk-token.ts` + `rpc/server.ts` |
@@ -61,7 +62,7 @@ The backend pushes typed events to all connected clients via `rpc/events.ts`. Ea
 | `sensors` | 1 s | `modules/system/sensors.ts` |
 | `gateways` | 2 s | `modules/network/gateways.ts` |
 | `modems` | 30 s | `modules/modems/modem-update-loop.ts` |
-| `status` | on-change | streaming state transitions |
+| `status` | on-change + 5 s | streaming state transitions; carries `linkTelemetry` |
 | `config` | on-change | `setConfig` / `start` / `stop` |
 | `wifi` | on-change | WiFi scan / connect / disconnect |
 | `relays` | on-change | relay list mutations |
@@ -85,6 +86,43 @@ High-frequency sensor ticks (1 s) are coalesced before broadcast — only the la
 ### Applied-state returns
 
 All RPC setters return `{ success: boolean, applied: <fields> }`. The `applied` object reflects post-clamp, post-validation values actually written to config — not the raw client input. Clients must lock fields to `applied`, not to their intended value.
+
+### srtla link telemetry (`status.linkTelemetry`)
+
+`modules/streaming/link-telemetry.ts` folds `srtla_send`'s per-uplink telemetry
+into the existing `status` flow as a `linkTelemetry` field — no new endpoint.
+`startStream` passes `--stats-file` (`srtlaStatsFile()` → `/tmp/srtla-send-stats-9000.json`,
+the binding's `senderTelemetryPath` convention) and starts the binding's
+`watchTelemetry`; the watcher stops when `srtla_send` exits or the stream stops.
+`broadcastLinkTelemetryIfChanged` is wired onto the 5 s heartbeat tick and emits
+a `status` message only when the payload changes.
+
+Shape (`null` when unavailable):
+
+```ts
+linkTelemetry: {
+  links: Array<{
+    conn_id: string;       // srtla tlm_id, stringified
+    iface: string;         // human name from the backend-owned IP list
+    rtt_ms: number;        // sender reports 0 (RTT is receiver-side)
+    nak_count: number;
+    weight_percent: number; // sender reports a constant 100
+    stale: boolean;
+  }>;
+} | null
+```
+
+Three observable states: `srtla_send` not running (or no fresh snapshot yet) →
+`null`; last read stale/absent while running → cached links flagged `stale: true`;
+fresh read → values populated, `stale: false`.
+
+**conn_id → iface mapping is backend-only.** `srtla_send` assigns each link a
+stable numeric `tlm_id` in source-IP-file order on first appearance (monotonic,
+reset on process restart). CeraUI WROTE that file, so it is the only component
+that can map a `conn_id` back to an interface name. `registerSrtlaIpList`
+(called from `setSrtlaIpList`) mirrors srtla's assignment exactly so SIGHUP
+reloads stay correlated. Do not change `SRTLA_LISTEN_PORT` (9000) without
+updating both the spawn site and the stats-file path.
 
 See [`docs/RPC_COMMUNICATION.md`](../../docs/RPC_COMMUNICATION.md) for the full wire-protocol reference.
 

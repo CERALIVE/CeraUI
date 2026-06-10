@@ -22,6 +22,7 @@ import { dnsCacheResolve, dnsCacheValidate } from "../network/dns.ts";
 import { queueUpdateGw } from "../network/gateways.ts";
 import { getNetworkInterfaces } from "../network/network-interfaces.ts";
 import { setup } from "../setup.ts";
+import { registerSrtlaIpList } from "./link-telemetry.ts";
 
 export async function resolveSrtla(addr: string) {
 	let srtlaAddr = addr;
@@ -54,6 +55,9 @@ export async function resolveSrtla(addr: string) {
 export async function setSrtlaIpList(addresses: string[]) {
 	const list = addresses.join("\n");
 	await Bun.write(setup.ips_file, list);
+	// Keep the conn_id->iface registry in lockstep with what srtla_send reads on
+	// SIGHUP reload, mirroring its monotonic tlm_id assignment.
+	registerSrtlaIpList(addresses);
 }
 
 export function restartSrtla() {

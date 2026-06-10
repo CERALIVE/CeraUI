@@ -53,6 +53,12 @@ import {
 	reportStreamProcessExit,
 } from "./health.ts";
 import {
+	SRTLA_LISTEN_PORT,
+	srtlaStatsFile,
+	startLinkTelemetry,
+	stopLinkTelemetry,
+} from "./link-telemetry.ts";
+import {
 	gatePipelineOverrides,
 	generatePipelineFile,
 	type Pipeline,
@@ -148,6 +154,10 @@ function spawnStreamingLoop(
 		);
 		// remove the dead process from the supervised list
 		removeProc(streamingProcess);
+		// srtla_send is the telemetry producer; its exit ends the stats stream.
+		if (streamingProcess.spawnfile.endsWith("srtla_send")) {
+			stopLinkTelemetry();
+		}
 		// notify health state: the stream is now dead until systemd respawns it
 		reportStreamProcessExit();
 		broadcastHealthIfChanged();
@@ -191,13 +201,15 @@ export async function startStream(
 			return;
 		}
 	}
+	const statsFile = srtlaStatsFile();
 	spawnStreamingLoop(
 		srtlaSendExec,
 		buildSrtlaSendArgs({
-			listenPort: 9000,
+			listenPort: SRTLA_LISTEN_PORT,
 			srtlaHost: srtlaAddr,
 			srtlaPort,
 			ipsFile: setup.ips_file,
+			statsFile,
 			execPath: setup.srtla_path,
 		}).args,
 		(err) => {
@@ -213,11 +225,19 @@ export async function startStream(
 		},
 	);
 
+	// Begin ingesting srtla_send's per-uplink telemetry. Seed the conn_id->iface
+	// registry from the exact file srtla_send reads at spawn so tlm_id (file
+	// order) maps back to interface names.
+	const ipsContent = await Bun.file(setup.ips_file)
+		.text()
+		.catch(() => "");
+	startLinkTelemetry(statsFile, ipsContent.split("\n"));
+
 	const ceracoderArgs = buildCeracoderArgsAndWriteConfig(
 		config,
 		pipelineFile,
 		"127.0.0.1",
-		9000,
+		SRTLA_LISTEN_PORT,
 		streamid,
 		hasLowMtu(),
 		true, // full override for start streaming
@@ -350,6 +370,7 @@ function waitForAllProcessesToTerminate() {
 	if (streamingProcesses.length === 0) {
 		logger.info("stop: all processes terminated");
 		updateStatus(false);
+		stopLinkTelemetry();
 
 		periodicCheckForSoftwareUpdates();
 	} else {
@@ -373,6 +394,7 @@ export function stop() {
 
 		if (streamingProcesses.length === 0) {
 			updateStatus(false);
+			stopLinkTelemetry();
 			return;
 		}
 

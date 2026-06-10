@@ -658,6 +658,10 @@ const en = {
 			stale: "Stale",
 			staleHint: "No update received recently",
 			refreshing: "Refreshing",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "Weight",
+			telemetry: "Link telemetry",
 		},
 		pageTitle: "Network Configuration",
 		pageDescription:

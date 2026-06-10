@@ -669,6 +669,10 @@ const es = {
 			stale: "Obsoleto",
 			staleHint: "No se recibió actualización recientemente",
 			refreshing: "Actualizando",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "Peso",
+			telemetry: "Telemetría de enlace",
 		},
 		pageTitle: "Configuración de Red",
 		pageDescription:

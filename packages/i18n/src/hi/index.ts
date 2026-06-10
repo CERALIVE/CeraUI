@@ -350,6 +350,10 @@ const hi = {
 			stale: "पुराना",
 			staleHint: "हाल ही में कोई अपडेट नहीं मिला",
 			refreshing: "रिफ्रेश हो रहा है",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "भार",
+			telemetry: "लिंक टेलीमेट्री",
 		},
 		pageTitle: "नेटवर्क कॉन्फ़िगरेशन",
 		pageDescription:

@@ -353,6 +353,10 @@ const ko = {
 			stale: "오래됨",
 			staleHint: "최근 업데이트를 받지 못함",
 			refreshing: "새로 고치는 중",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "가중치",
+			telemetry: "링크 텔레메트리",
 		},
 		pageTitle: "네트워크 설정",
 		pageDescription:

@@ -514,6 +514,10 @@ const fr = {
 			stale: "Obsolète",
 			staleHint: "Aucune mise à jour reçue récemment",
 			refreshing: "Actualisation",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "Poids",
+			telemetry: "Télémétrie de liaison",
 		},
 		pageTitle: "Configuration Réseau",
 		pageDescription:

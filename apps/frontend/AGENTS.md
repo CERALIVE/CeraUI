@@ -91,6 +91,7 @@ pnpm dev / build / check / test          # Vite :5173 / dist/ / svelte-check / v
 - Validation bounds: import from `ValidationAdapter.ts` (which sources from `@ceraui/rpc/schemas` constants). No inline numeric literals in dialog components.
 - Touch/kiosk: `data-layout-mode` attribute on `<html>` drives CSS token scaling. Read `docs/TOUCHSCREEN.md`.
 - Live-data feedback: dim aged values via `getStalenessState`; mark a single aged interface with `custom/StaleBadge.svelte` (fed by `hud.staleInterfaces`); show in-flight actions with `custom/InlineSpinner.svelte` (role=status). All three are CSS-animation/transition based, so the e-ink freeze (`app.css` `[data-display='eink']`) stills them automatically — never JS-drive these animations.
+- Per-link srtla telemetry (RTT/NAK/weight): `getLinkTelemetry()` (subscriptions, fed by the `status.linkTelemetry` push) → `NetworkView` → `BondedLinksSection`, rendered per card by `custom/LinkTelemetry.svelte`. Cards join telemetry by `link.id === entry.iface`; the three values always render (`--` when absent) so card height never shifts, and `entry.stale` dims the row + shows a `StaleBadge`. `rtt_ms=0` / `weight_percent=100` are valid sender constants — shown as-is, never `--`.
 - E2E Testing: REQUIRED reading before writing E2E tests → [`tests/e2e/PLAYBOOK.md`](tests/e2e/PLAYBOOK.md)
 
 ## CONNECTION RELIABILITY
