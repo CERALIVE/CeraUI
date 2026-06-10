@@ -6,6 +6,7 @@
  */
 
 import type {
+	AddonState,
 	ConfigMessage,
 	DeviceStats,
 	KioskStatus,
@@ -100,6 +101,11 @@ let notificationsState = $state<NotificationsMessage | undefined>(undefined);
 // failed unit.
 let kioskState = $state<KioskStatus | undefined>(undefined);
 
+// Live per-add-on runtime state, keyed by id. The `addons` broadcast carries a
+// PARTIAL map of only the changed add-ons, so it is merged per id, never replaced
+// wholesale. Descriptors come from rpc.addons.list(); this tracks state only.
+let addonsState = $state<Record<string, AddonState>>({});
+
 // Connection state
 let connectionState = $state<ConnectionState>("disconnected");
 let isConnectedState = $state<boolean>(false);
@@ -183,6 +189,10 @@ export function getNotifications() {
 
 export function getKiosk() {
 	return kioskState;
+}
+
+export function getAddons() {
+	return addonsState;
 }
 
 export function getConnectionState() {
@@ -425,6 +435,17 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			}
 			break;
 
+		case "addons":
+			// Partial map of changed add-ons: merge per id so an untouched add-on's
+			// state is preserved (mirrors the modem per-id merge above).
+			if (data && typeof data === "object") {
+				addonsState = {
+					...addonsState,
+					...(data as Record<string, AddonState>),
+				};
+			}
+			break;
+
 		case "health":
 			// Tri-state stream-liveness rollup (Task 13). Read-only: feeds the HUD
 			// indicator + raises a transition toast; never drives restart logic.
@@ -601,6 +622,7 @@ export function resetState(): void {
 	relaysState = undefined;
 	notificationsState = undefined;
 	kioskState = undefined;
+	addonsState = {};
 	connectionReadyState = false;
 
 	if (lockExpiryTick !== undefined) {

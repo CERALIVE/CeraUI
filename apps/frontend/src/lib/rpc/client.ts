@@ -5,6 +5,8 @@
  * Uses the AppContract from @ceraui/rpc for end-to-end type safety.
  */
 import type {
+	AddonDescriptor,
+	AddonState,
 	AutostartOutput,
 	BitrateInput,
 	BitrateOutput,
@@ -426,6 +428,27 @@ function createRPCProxy<T extends object>(
 // Singleton client instance
 export const rpcClient = new RPCClient();
 
+// Mirrors the backend AddonManagerPhase union (modules/addons/manager.ts). No
+// shared schema source exists for it, so it is kept in lockstep by hand.
+export type AddonManagerPhase =
+	| "disabled"
+	| "pending"
+	| "enabling"
+	| "enabled"
+	| "disabling"
+	| "failed"
+	| "auto_disabled";
+
+export interface AddonListItem {
+	descriptor: AddonDescriptor;
+	state: AddonState;
+	managerPhase: AddonManagerPhase;
+}
+
+export type AddonOpResult =
+	| { success: true; phase: AddonManagerPhase }
+	| { success: false; error: string };
+
 /**
  * Type-safe RPC interface definition
  * Maps contract structure to callable async functions
@@ -517,6 +540,15 @@ export interface TypedRPC {
 		completePairing: (
 			input: CompletePairingInput,
 		) => Promise<CompletePairingOutput>;
+	};
+	addons: {
+		list: () => Promise<{ addons: AddonListItem[] }>;
+		install: (input: {
+			id: string;
+			userConfig?: Record<string, unknown>;
+		}) => Promise<AddonOpResult>;
+		uninstall: (input: { id: string }) => Promise<AddonOpResult>;
+		getStatus: (input: { id: string }) => Promise<AddonListItem | null>;
 	};
 	// Dev-only: registered on the backend ONLY when NODE_ENV !== "production".
 	// Absent in production builds — guard usage with the optional chain.
