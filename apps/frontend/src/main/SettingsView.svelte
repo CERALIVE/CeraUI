@@ -42,6 +42,7 @@ import LogsDialog from './dialogs/LogsDialog.svelte';
 import PairingDialog from './dialogs/PairingDialog.svelte';
 import PasswordDialog from './dialogs/PasswordDialog.svelte';
 import PowerDialog from './dialogs/PowerDialog.svelte';
+import DeviceStatsSection from './settings/DeviceStatsSection.svelte';
 import OnDeviceDisplaySection from './settings/OnDeviceDisplaySection.svelte';
 import SshDialog from './dialogs/SshDialog.svelte';
 import UpdatesDialog from './dialogs/UpdatesDialog.svelte';
@@ -226,6 +227,9 @@ const ActiveIcon = $derived(active?.icon);
 
 		<!-- Grouped settings index -->
 		<div class="space-y-7">
+			<!-- Live device telemetry first: status at a glance, no dialog to open. -->
+			<DeviceStatsSection />
+
 			<!-- Mobile-only: desktop hosts language + theme in the header toolbar instead. -->
 			{#if !isDesktop.current}
 				<section class="space-y-2.5" data-testid="settings-appearance">

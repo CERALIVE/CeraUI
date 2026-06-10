@@ -232,6 +232,16 @@ const fr = {
 		signingIn: "Connexion en cours...",
 	},
 	settings: {
+		deviceStats: {
+			title: "État de l'appareil",
+			description: "Télémétrie matérielle en direct de cet appareil.",
+			disk: "Disque",
+			cpuLoad: "Charge CPU",
+			socTemp: "Temp. SoC",
+			network: "Réseau",
+			bootSlot: "Slot de démarrage",
+			unavailable: "Indisponible",
+		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
 			description: "Manage the on-device kiosk display, profile, and input.",

@@ -421,6 +421,16 @@ const en = {
 			autostartDesc: "Start streaming automatically when the device boots",
 			autostartError: "Couldn't change autostart. Please try again.",
 		},
+		deviceStats: {
+			title: "Device Stats",
+			description: "Live hardware telemetry from this device.",
+			disk: "Disk",
+			cpuLoad: "CPU Load",
+			socTemp: "SoC Temp",
+			network: "Network",
+			bootSlot: "Boot Slot",
+			unavailable: "Unavailable",
+		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
 			description: "Manage the on-device kiosk display, profile, and input.",

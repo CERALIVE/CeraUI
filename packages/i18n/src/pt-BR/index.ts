@@ -231,6 +231,16 @@ const ptBR = {
 		signingIn: "Fazendo login...",
 	},
 	settings: {
+		deviceStats: {
+			title: "Status do dispositivo",
+			description: "Telemetria de hardware ao vivo deste dispositivo.",
+			disk: "Disco",
+			cpuLoad: "Carga da CPU",
+			socTemp: "Temp. SoC",
+			network: "Rede",
+			bootSlot: "Slot de inicialização",
+			unavailable: "Indisponível",
+		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
 			description: "Manage the on-device kiosk display, profile, and input.",

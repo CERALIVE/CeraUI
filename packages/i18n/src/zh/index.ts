@@ -77,6 +77,16 @@ const zh = {
 		signingIn: "登录中...",
 	},
 	settings: {
+		deviceStats: {
+			title: "设备统计",
+			description: "本设备的实时硬件遥测。",
+			disk: "磁盘",
+			cpuLoad: "CPU 负载",
+			socTemp: "SoC 温度",
+			network: "网络",
+			bootSlot: "启动分区",
+			unavailable: "不可用",
+		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
 			description: "Manage the on-device kiosk display, profile, and input.",

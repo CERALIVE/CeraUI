@@ -7,6 +7,7 @@
 
 import type {
 	ConfigMessage,
+	DeviceStats,
 	KioskStatus,
 	ModemList,
 	NetifEntry,
@@ -79,6 +80,7 @@ let wifiState = $state<WifiStatus | undefined>(undefined);
 let modemsState = $state<ModemList | undefined>(undefined);
 
 // System state
+let deviceStatsState = $state<DeviceStats | undefined>(undefined);
 let sensorsState = $state<SensorsStatus | undefined>(undefined);
 let revisionsState = $state<Revisions | undefined>(undefined);
 let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
@@ -153,6 +155,10 @@ export function getModems() {
 
 export function getSensors() {
 	return sensorsState;
+}
+
+export function getDeviceStats() {
+	return deviceStatsState;
 }
 
 export function getRevisions() {
@@ -362,6 +368,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 
 		case "sensors":
 			sensorsState = data as SensorsStatus;
+			break;
+
+		case "device-stats":
+			deviceStatsState = data as DeviceStats;
 			break;
 
 		case "revisions":
@@ -584,6 +594,7 @@ export function resetState(): void {
 	wifiState = undefined;
 	modemsState = undefined;
 	sensorsState = undefined;
+	deviceStatsState = undefined;
 	revisionsState = undefined;
 	pipelinesState = undefined;
 	audioCodecsState = undefined;

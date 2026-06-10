@@ -386,6 +386,16 @@ const es = {
 		selectLanguage: "Seleccionar Idioma",
 	},
 	settings: {
+		deviceStats: {
+			title: "Estado del dispositivo",
+			description: "Telemetría de hardware en vivo de este dispositivo.",
+			disk: "Disco",
+			cpuLoad: "Carga de CPU",
+			socTemp: "Temp. SoC",
+			network: "Red",
+			bootSlot: "Ranura de arranque",
+			unavailable: "No disponible",
+		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
 			description: "Manage the on-device kiosk display, profile, and input.",
