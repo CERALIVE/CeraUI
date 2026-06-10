@@ -38,6 +38,7 @@ import { updateAudioDevices } from "./modules/streaming/audio.ts";
 import { startBcrpt } from "./modules/streaming/bcrpt.ts";
 import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
 import { broadcastHealthIfChanged } from "./modules/streaming/health.ts";
+import { broadcastLinkTelemetryIfChanged } from "./modules/streaming/link-telemetry.ts";
 import { initPipelines } from "./modules/streaming/pipelines.ts";
 import {
 	bcrptExec,
@@ -144,6 +145,9 @@ startHeartbeat();
 
 // Stream health rollup: broadcast on the same 5s tick, only on state change
 onHeartbeatTick(broadcastHealthIfChanged);
+
+// srtla link telemetry: fold into the status flow on the same tick, on-change
+onHeartbeatTick(broadcastLinkTelemetryIfChanged);
 
 checkAutoStartStream();
 

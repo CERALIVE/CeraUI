@@ -22,6 +22,10 @@ import { buildModemsMessage } from "../modems/modem-status.ts";
 import { netIfBuildMsg } from "../network/network-interfaces.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
 import { getAudioDevices } from "../streaming/audio.ts";
+import {
+	buildLinkTelemetry,
+	type LinkTelemetryMessage,
+} from "../streaming/link-telemetry.ts";
 import { getPipelinesMessage } from "../streaming/pipelines.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import { getRevisions } from "../system/revisions.ts";
@@ -45,6 +49,7 @@ export type StatusResponseMessage = {
 	asrcs?: Array<keyof ReturnType<typeof getAudioDevices>>;
 	set_password?: boolean;
 	remote?: true | { error: string };
+	linkTelemetry?: LinkTelemetryMessage | null;
 };
 
 export function sendStatus(conn: WebSocket) {
@@ -59,6 +64,7 @@ export function sendStatus(conn: WebSocket) {
 			wifi: wifiBuildMsg(),
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),
+			linkTelemetry: buildLinkTelemetry(),
 		} satisfies StatusResponseMessage),
 	);
 }

@@ -18,9 +18,15 @@ import { describe, expect, test } from "bun:test";
 // Guarded exports (must stay in lockstep with streamloop.ts imports):
 //   - buildSrtlaSendArgs
 //   - getSrtlaSendExec
+//
+// The link-telemetry module (modules/streaming/link-telemetry.ts) additionally
+// consumes the @ceralive/srtla/telemetry surface; those exports are guarded in
+// the second describe block below for the same fail-loud reason.
 
 import * as sender from "@ceralive/srtla/sender";
 import { buildSrtlaSendArgs, getSrtlaSendExec } from "@ceralive/srtla/sender";
+import * as telemetry from "@ceralive/srtla/telemetry";
+import { senderTelemetryPath, watchTelemetry } from "@ceralive/srtla/telemetry";
 
 describe("srtla bindings version-skew guard", () => {
 	test("required sender exports exist and are callable", () => {
@@ -89,5 +95,35 @@ describe("srtla bindings version-skew guard", () => {
 		const fallback = getSrtlaSendExec();
 		expect(typeof fallback).toBe("string");
 		expect(fallback.length).toBeGreaterThan(0);
+	});
+});
+
+describe("srtla telemetry bindings version-skew guard", () => {
+	test("required telemetry exports exist and are callable", () => {
+		expect(typeof telemetry.senderTelemetryPath).toBe("function");
+		expect(typeof telemetry.watchTelemetry).toBe("function");
+		expect(typeof telemetry.readTelemetry).toBe("function");
+
+		// Named-import identity must match the namespace member.
+		expect(senderTelemetryPath).toBe(telemetry.senderTelemetryPath);
+		expect(watchTelemetry).toBe(telemetry.watchTelemetry);
+	});
+
+	test("senderTelemetryPath derives the listen-port stats path link-telemetry relies on", () => {
+		// link-telemetry.ts computes the --stats-file path from the listen port;
+		// a change to this convention would silently break producer/consumer pairing.
+		expect(senderTelemetryPath(9000)).toBe("/tmp/srtla-send-stats-9000.json");
+	});
+
+	test("watchTelemetry returns a handle with an idempotent stop()", () => {
+		// startLinkTelemetry depends on { stop } to halt polling on stream stop.
+		const handle = watchTelemetry(
+			"/tmp/ceralive-skew-nonexistent.json",
+			() => {},
+			{ intervalMs: 60_000 },
+		);
+		expect(typeof handle.stop).toBe("function");
+		handle.stop();
+		handle.stop(); // idempotent — must not throw
 	});
 });
