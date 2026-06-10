@@ -1,0 +1,16 @@
+# CeraLive add-on helper — narrow privilege escalation for add-on lifecycle.
+#
+# The CeraUI backend runs UNPRIVILEGED (user `ceraui`). Activating or tearing
+# down a systemd-sysext add-on needs root, so the backend shells out to the
+# single privileged helper below — argv-only, no shell — as:
+#
+#     sudo ceralive-addon-helper <enable|disable|refresh|status> [id]
+#
+# This rule grants password-less sudo for EXACTLY that one binary path and
+# nothing else: no wildcards, no arguments grammar, no other commands. The
+# helper itself is the trust boundary — it re-derives the add-on allowlist from
+# the image-baked registry and re-verifies every signature against the baked
+# keyring, so this rule cannot be leveraged to run arbitrary code.
+#
+# Install: /etc/sudoers.d/ceralive-addon-helper, owned root:root, mode 0440.
+ceraui ALL=(root) NOPASSWD: /usr/bin/ceralive-addon-helper
