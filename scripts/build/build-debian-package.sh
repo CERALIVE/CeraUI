@@ -63,6 +63,8 @@ log_step "Copying files to package structure"
 cp dist/ceralive "$TEMP_DIR/usr/local/bin/ceralive"
 cp dist/ceralive.service "$TEMP_DIR/etc/systemd/system/"
 cp dist/ceralive.socket "$TEMP_DIR/etc/systemd/system/"
+# Post-boot add-on reconciler oneshot (T29). Non-blocking; never gates rollback.
+cp dist/ceralive-addon-reconciler.service "$TEMP_DIR/etc/systemd/system/"
 cp dist/98-ceralive-audio.rules "$TEMP_DIR/etc/udev/rules.d/"
 cp dist/99-ceralive-check-usb-devices.rules "$TEMP_DIR/etc/udev/rules.d/"
 cp -r dist/public/* "$TEMP_DIR/var/www/ceralive/"
@@ -93,6 +95,10 @@ echo "🚀 Configuring CeraLive after installation..."
 
 # Reload systemd daemon
 systemctl daemon-reload
+
+# Enable the post-boot add-on reconciler oneshot (T29). It is non-blocking and
+# deliberately decoupled from the OS-update healthcheck/rollback chain.
+systemctl enable ceralive-addon-reconciler.service 2>/dev/null || true
 
 # Reload udev rules
 udevadm control --reload

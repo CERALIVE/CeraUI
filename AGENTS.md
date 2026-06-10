@@ -130,7 +130,12 @@ TypeScript source of truth for the descriptor shape — never duplicate it in `a
 
 `AddonStateSchema` describes per-feature runtime state persisted under the `addons`
 key of `config.json`. Fields: `enabled`, `phase`, `versionMaterialized`,
-`userConfig`, `autoDisabled`.
+`osVersionMaterialized`, `userConfig`, `lastError`, `autoDisabled`.
+`osVersionMaterialized` (T29) records the OS VERSION_ID the staged `.raw` was
+fetched for, so the reconciler can detect an OTA-stale artifact by exact (G1)
+match. The persisted `phase` enum (`ADDON_PHASES`) is
+`idle | installing | active | pending | disabling | error`; `pending` (T29) is
+the reconciler's non-terminal "wanted but not yet materialisable" state.
 
 Key regex constants (defined once in `addons.schema.ts`, imported everywhere):
 - `ADDON_ID_RE` — lowercase alphanumeric + hyphens (stricter than `APT_PACKAGE_NAME_RE`)
@@ -177,6 +182,35 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
 Test coverage: `apps/backend/src/tests/manager.test.ts` — pure mapping, the
 enable/disable pipelines, crash-loop + validation auto-disable, and the G6/E1
 negative paths.
+
+**Post-boot reconciler** (`apps/backend/src/modules/addons/reconciler.ts`) [EXISTS]
+
+`runAddonReconciler()` (T29) reconciles desired state (config.json `addons`)
+against the materialised `/data/extensions/<id>.raw` sysexts after a boot/OTA. It
+is **fire-and-forget and NEVER gates boot or the OS-update healthcheck/rollback** —
+every failure is caught and downgraded to a persisted `pending` phase; the run
+never throws and self-serialises (a concurrent call is a no-op).
+
+- Per enabled add-on: if the staged `.raw` is missing **or** its
+  `osVersionMaterialized` ≠ the live `/etc/os-release` VERSION_ID (G1 exact
+  match — never loosened), re-fetch `artifact.urlTemplate` (substituting
+  `{os_version}` + `{board}`) → sha256 + GPG verify → atomic stage → helper
+  `refresh`.
+- **No compatible artifact** (404 / network / descriptor `compatibleOsVersions`
+  excludes the live OS): set `phase: pending` + `lastError:
+  addon_not_available_for_os_version`. Boot is unaffected.
+- **Live stream**: a disruptive refresh is deferred — set `phase: pending` +
+  `lastError: addon_refresh_deferred_streaming`; retried on the next boot.
+- Triggered from `main.ts` at startup (non-blocking) and re-pokable via SIGUSR1
+  from the `ceralive-addon-reconciler.service` oneshot (deployment/), which is
+  deliberately NOT wired into any rollback/healthcheck target.
+- All effectful surface is injected via `ReconcilerDeps`; default deps are built
+  lazily (dynamic import) so the module never pulls the streaming/config graph or
+  requires `setup.json` at test-import time.
+
+Test coverage: `apps/backend/src/tests/addon-reconciler.test.ts` — re-materialise
+(missing + VERSION_ID mismatch), idempotency, the pending/defer negative paths,
+and the boot-safety (never-throws) + emulated-mode no-op guarantees.
 
 **sysext refresh protocol**
 

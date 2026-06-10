@@ -1,0 +1,21 @@
+[Unit]
+Description=CeraLive post-boot add-on reconciler (desired-state; non-blocking)
+Documentation=https://github.com/CERALIVE/CeraUI
+# Run after the main service so the backend (which owns the reconcile logic) is
+# up to receive the trigger. Add-ons NEVER gate boot or the OS-update
+# healthcheck/rollback, so this unit is deliberately NOT a dependency of any
+# rollback/healthcheck target and never blocks the boot transaction.
+After=ceralive.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# The reconcile pass lives inside the running ceralive backend; poke it with
+# SIGUSR1 (handled in main.ts). The leading '-' tolerates a non-running backend
+# so this oneshot can never fail the boot transaction — the backend also fires
+# one reconcile pass on its own startup.
+ExecStart=-/usr/bin/systemctl kill --signal=SIGUSR1 ceralive.service
+
+[Install]
+WantedBy=multi-user.target

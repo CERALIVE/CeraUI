@@ -101,7 +101,18 @@ export const AddonDescriptorSchema = z
 export type AddonDescriptor = z.infer<typeof AddonDescriptorSchema>;
 
 // Lifecycle phase of one add-on as the manager materialises/enables/disables it.
-export const ADDON_PHASES = ['idle', 'installing', 'active', 'disabling', 'error'] as const;
+// `pending` is the post-boot reconciler's non-terminal "wanted but not yet
+// materialisable" state (T29): no compatible artifact for the current OS
+// VERSION_ID, or a refresh deferred because a stream is live. It is desired-state
+// preserving (`enabled` stays true) and retried on the next boot — never an error.
+export const ADDON_PHASES = [
+	'idle',
+	'installing',
+	'active',
+	'pending',
+	'disabling',
+	'error',
+] as const;
 export const addonPhaseSchema = z.enum(ADDON_PHASES);
 export type AddonPhase = z.infer<typeof addonPhaseSchema>;
 
@@ -112,6 +123,10 @@ export const AddonStateSchema = z
 		enabled: z.boolean(),
 		phase: addonPhaseSchema,
 		versionMaterialized: z.string().optional(),
+		// OS VERSION_ID the staged .raw was fetched for. The reconciler (T29)
+		// compares it to the live /etc/os-release VERSION_ID to detect an
+		// OTA-stale artifact (G1 exact match) and re-fetch for the new os_version.
+		osVersionMaterialized: z.string().optional(),
 		userConfig: z.record(z.string(), z.unknown()).optional(),
 		lastError: z.string().optional(),
 		autoDisabled: z.boolean(),
