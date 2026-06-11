@@ -40,16 +40,17 @@ import {
 } from "./modules/streaming/audio.ts";
 import { startBcrpt } from "./modules/streaming/bcrpt.ts";
 import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
+import { startDeviceDiscovery } from "./modules/streaming/devices.ts";
 import { broadcastHealthIfChanged } from "./modules/streaming/health.ts";
 import { broadcastLinkTelemetryIfChanged } from "./modules/streaming/link-telemetry.ts";
 import { initPipelines } from "./modules/streaming/pipelines.ts";
+import { getStreamingProcesses } from "./modules/streaming/streamloop/process-runner.ts";
 import {
 	bcrptExec,
 	ceracoderExec,
 	checkAutoStartStream,
 	srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
-import { getStreamingProcesses } from "./modules/streaming/streamloop/process-runner.ts";
 import { initDeviceStats } from "./modules/system/device-stats.ts";
 import { initRevisions } from "./modules/system/revisions.ts";
 import { initHardwareMonitoring } from "./modules/system/sensors.ts";
@@ -125,6 +126,9 @@ updateAudioDevices();
 // Live device list: inotify on the sound dir (+ debounce), polling fallback only
 // while streaming. The SIGUSR2 udev hook below stays as a belt-and-suspenders path.
 startAudioDeviceWatcher(() => getStreamingProcesses().length > 0);
+// Hotplug input discovery (Task 34): v4l2 + unified audio scan, broadcasts the
+// `devices` payload that feeds the cerastream picker + live switch-input RPC.
+startDeviceDiscovery();
 startBcrpt();
 
 // Don't autostart when restarting CeraLive after a software update or after a crash

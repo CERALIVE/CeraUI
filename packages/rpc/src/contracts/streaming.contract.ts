@@ -8,16 +8,19 @@ import {
 	bitrateInputSchema,
 	bitrateOutputSchema,
 	configMessageSchema,
+	getEngineOutputSchema,
 	getMockHardwareOutputSchema,
+	listDevicesOutputSchema,
 	pipelinesSchema,
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
 	streamHealthOutputSchema,
 	streamingConfigInputSchema,
 	streamingSetConfigOutputSchema,
-	streamingStartOutputSchema,
 	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
+	switchInputInputSchema,
+	switchInputOutputSchema,
 } from '../schemas';
 
 export const streamingContract = oc.router({
@@ -76,4 +79,19 @@ export const streamingContract = oc.router({
 	 * Get current mock hardware state (dev-only)
 	 */
 	getMockHardware: oc.output(getMockHardwareOutputSchema),
+
+	/**
+	 * Which streaming engine the device runs (drives the picker conditional).
+	 */
+	getEngine: oc.output(getEngineOutputSchema),
+
+	/**
+	 * List the currently discovered input sources (hotplug-aware picker).
+	 */
+	listDevices: oc.output(listDevicesOutputSchema),
+
+	/**
+	 * Live-switch the active input; returns the glitch-free gap in ms.
+	 */
+	switchInput: oc.input(switchInputInputSchema).output(switchInputOutputSchema),
 });

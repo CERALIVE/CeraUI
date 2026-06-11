@@ -6,19 +6,25 @@ import {
 	BITRATE_DEFAULT_MIN,
 	BITRATE_MAX,
 	BITRATE_MIN,
+	SWITCH_INPUT_ERRORS,
 } from '@ceraui/rpc/schemas';
 import { ChevronRight, Cpu, Server, ServerOff, Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
 import IngestStats from '$lib/components/custom/IngestStats.svelte';
+import InputPicker from '$lib/components/custom/InputPicker.svelte';
+import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 import * as Card from '$lib/components/ui/card';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import {
+	getActiveInput,
 	getConfig,
+	getDevices,
+	getEngine,
 	getIsStreaming,
 	getLinkTelemetry,
 	getPipelines,
@@ -42,6 +48,36 @@ const sensors = $derived(getSensors());
 // Per-link srtla ingest telemetry (RTT/NAK/weight) — already broadcast via
 // status.linkTelemetry; surfaced here as a read-only panel, no new collector.
 const linkTelemetry = $derived(getLinkTelemetry());
+
+// Hotplug input picker (Task 34) — cerastream only. The legacy ceracoder
+// pipeline picker (EncoderDialog) is untouched.
+const engine = $derived(getEngine());
+const devices = $derived(getDevices());
+const activeInput = $derived(getActiveInput());
+let selectedInput = $state<string | undefined>(undefined);
+let switchingInput = $state<string | undefined>(undefined);
+
+async function handleSwitchInput(inputId: string) {
+	switchingInput = inputId;
+	try {
+		const res = await rpc.streaming.switchInput({ input_id: inputId });
+		if (res.success) {
+			toast.success($LL.live.inputPicker.switched({ ms: res.gap_ms ?? 0 }));
+		} else if (res.error === SWITCH_INPUT_ERRORS.SOURCE_LOST) {
+			toast.error($LL.live.inputPicker.sourceLost());
+		} else {
+			toast.error($LL.live.inputPicker.switchFailed());
+		}
+	} catch {
+		toast.error($LL.live.inputPicker.switchFailed());
+	} finally {
+		switchingInput = undefined;
+	}
+}
+
+function handleSelectInput(inputId: string) {
+	selectedInput = inputId;
+}
 
 // Server target: direct SRTLA address, or a selected relay server.
 const serverTarget = $derived(config?.srtla_addr || config?.relay_server || '');
@@ -363,6 +399,25 @@ const configRows = $derived<ConfigRow[]>([
 
 			<!-- Bonded-ingest telemetry (RTT / NAK / weight per uplink) — Task 21 -->
 			<IngestStats telemetry={linkTelemetry} />
+		{/if}
+
+		{#if engine === 'cerastream'}
+			<Card.Root>
+				<Card.Content class="p-4 sm:p-6">
+					<InputPicker
+						activeInput={activeInput}
+						devices={devices}
+						engine="cerastream"
+						isStreaming={isStreaming}
+						onSelect={handleSelectInput}
+						onSwitch={handleSwitchInput}
+						selectedInput={selectedInput}
+						switchingInput={switchingInput}
+					/>
+				</Card.Content>
+			</Card.Root>
+
+			<PreviewCanvas engine="cerastream" />
 		{/if}
 
 		<StreamSettingsCard {configRows} {isStreaming} />

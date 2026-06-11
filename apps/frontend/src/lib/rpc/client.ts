@@ -13,6 +13,7 @@ import type {
 	ClaimCodeOutput,
 	CompletePairingInput,
 	CompletePairingOutput,
+	GetEngineOutput,
 	HotspotConfigInput,
 	HotspotToggleInput,
 	KioskConfigureInput,
@@ -20,6 +21,7 @@ import type {
 	KioskOskInput,
 	KioskStatus,
 	KioskToggleOutput,
+	ListDevicesOutput,
 	LoginInput,
 	LoginOutput,
 	LogoutOutput,
@@ -38,6 +40,8 @@ import type {
 	StreamingStartOutput,
 	StreamingStopOutput,
 	SuccessResponse,
+	SwitchInputInput,
+	SwitchInputOutput,
 	WifiConnectInput,
 	WifiDisconnectInput,
 	WifiForgetInput,
@@ -480,6 +484,9 @@ export interface TypedRPC {
 			effectiveHardware: string;
 			availableHardware: ("jetson" | "n100" | "rk3588" | "generic")[];
 		}>;
+		getEngine: () => Promise<GetEngineOutput>;
+		listDevices: () => Promise<ListDevicesOutput>;
+		switchInput: (input: SwitchInputInput) => Promise<SwitchInputOutput>;
 	};
 	modems: {
 		getAll: () => Promise<unknown>;

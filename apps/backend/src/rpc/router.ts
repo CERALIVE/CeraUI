@@ -43,14 +43,17 @@ import {
 import {
 	getAudioCodecsProcedure,
 	getConfigProcedure,
+	getEngineProcedure,
 	getMockHardwareProcedure,
 	getPipelinesProcedure,
+	listDevicesProcedure,
 	setBitrateProcedure,
 	setConfigProcedure,
 	setMockHardwareProcedure,
 	streamHealthProcedure,
 	streamingStartProcedure,
 	streamingStopProcedure,
+	switchInputProcedure,
 } from "./procedures/streaming.procedure.ts";
 import {
 	getCloudProvidersProcedure,
@@ -101,6 +104,9 @@ const stableRoutes = {
 		getConfig: getConfigProcedure,
 		setConfig: setConfigProcedure,
 		streamHealth: streamHealthProcedure,
+		getEngine: getEngineProcedure,
+		listDevices: listDevicesProcedure,
+		switchInput: switchInputProcedure,
 		// Dev-only mock hardware switcher
 		setMockHardware: setMockHardwareProcedure,
 		getMockHardware: getMockHardwareProcedure,

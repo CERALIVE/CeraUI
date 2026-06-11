@@ -200,6 +200,7 @@ export const configMessageSchema = z.object({
 	pipeline: z.string().optional(),
 	srt_latency: z.number().optional(),
 	bitrate_overlay: z.boolean().optional(),
+	autostart: z.boolean().optional(),
 	srtla_addr: z.string().optional(),
 	srtla_port: z.number().optional(),
 	srt_streamid: z.string().optional(),
@@ -272,6 +273,78 @@ export const streamHealthOutputSchema = z.object({
 	}),
 });
 export type StreamHealthOutput = z.infer<typeof streamHealthOutputSchema>;
+
+// ─── Hotplug input picker + live switch (Task 34) ───────────────────────────
+//
+// The frontend picker is conditional on the engine: `cerastream` renders the
+// hotplug-aware device picker + live switch; `ceracoder` keeps the legacy
+// pipeline picker untouched. Mirrors the backend `streamingEngineSchema`.
+export const streamingEngineSchema = z.enum(['ceracoder', 'cerastream']);
+export type StreamingEngineKind = z.infer<typeof streamingEngineSchema>;
+
+export const deviceKindSchema = z.enum(['hdmi', 'usb', 'network', 'test', 'audio', 'other']);
+export type DeviceKind = z.infer<typeof deviceKindSchema>;
+
+export const deviceMediaClassSchema = z.enum(['video', 'audio']);
+export type DeviceMediaClass = z.infer<typeof deviceMediaClassSchema>;
+
+export const captureCapSchema = z.object({
+	width: z.number().int().optional(),
+	height: z.number().int().optional(),
+	framerate: z.string().optional(),
+});
+export type CaptureCap = z.infer<typeof captureCapSchema>;
+
+// Mirrors the cerastream `captureDeviceSchema` plus two CeraUI-owned UI facets:
+// `kind` for grouping and `lost` for the unplugged-during-session grace state.
+export const captureDeviceSchema = z.object({
+	input_id: z.string(),
+	device_path: z.string(),
+	display_name: z.string(),
+	media_class: deviceMediaClassSchema,
+	kind: deviceKindSchema,
+	caps: z.array(captureCapSchema).optional(),
+	lost: z.boolean().optional(),
+});
+export type CaptureDevice = z.infer<typeof captureDeviceSchema>;
+
+export const devicesMessageSchema = z.object({
+	engine: streamingEngineSchema,
+	active_input: z.string().optional(),
+	devices: z.array(captureDeviceSchema),
+});
+export type DevicesMessage = z.infer<typeof devicesMessageSchema>;
+
+export const listDevicesOutputSchema = devicesMessageSchema;
+export type ListDevicesOutput = DevicesMessage;
+
+export const getEngineOutputSchema = z.object({ engine: streamingEngineSchema });
+export type GetEngineOutput = z.infer<typeof getEngineOutputSchema>;
+
+export const switchInputInputSchema = z.object({ input_id: z.string() });
+export type SwitchInputInput = z.infer<typeof switchInputInputSchema>;
+
+// `SOURCE_LOST` is the unplugged-during-switch race; callers surface it as a
+// specific toast (never a generic error).
+export const SWITCH_INPUT_ERRORS = {
+	SOURCE_LOST: 'SOURCE_LOST',
+	NOT_STREAMING: 'NOT_STREAMING',
+	SWITCH_FAILED: 'SWITCH_FAILED',
+} as const;
+export const switchInputErrorSchema = z.enum([
+	SWITCH_INPUT_ERRORS.SOURCE_LOST,
+	SWITCH_INPUT_ERRORS.NOT_STREAMING,
+	SWITCH_INPUT_ERRORS.SWITCH_FAILED,
+]);
+export type SwitchInputError = z.infer<typeof switchInputErrorSchema>;
+
+export const switchInputOutputSchema = z.object({
+	success: z.boolean(),
+	active_input: z.string().optional(),
+	gap_ms: z.number().int().nonnegative().optional(),
+	error: switchInputErrorSchema.optional(),
+});
+export type SwitchInputOutput = z.infer<typeof switchInputOutputSchema>;
 
 // Dev-only mock hardware switcher schemas (includes generic for software fallback)
 export const mockHardwareTypeSchema = z.enum(['jetson', 'n100', 'rk3588', 'generic']);

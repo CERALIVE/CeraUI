@@ -9,7 +9,9 @@ import {
 	bitrateInputSchema,
 	bitrateOutputSchema,
 	configMessageSchema,
+	getEngineOutputSchema,
 	getMockHardwareOutputSchema,
+	listDevicesOutputSchema,
 	pipelinesMessageSchema,
 	type StreamingConfigInput,
 	setMockHardwareInputSchema,
@@ -19,6 +21,8 @@ import {
 	streamingSetConfigOutputSchema,
 	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
+	switchInputInputSchema,
+	switchInputOutputSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import {
@@ -28,6 +32,7 @@ import {
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
+import { deviceRegistry } from "../../modules/streaming/devices.ts";
 import { clampBitrate } from "../../modules/streaming/encoder.ts";
 import { getStreamHealth } from "../../modules/streaming/health.ts";
 import {
@@ -46,7 +51,10 @@ import {
 	getIsStreaming,
 	updateStatus,
 } from "../../modules/streaming/streaming.ts";
-import { getStreamingBackend } from "../../modules/streaming/streaming-engine.ts";
+import {
+	getConfiguredEngine,
+	getStreamingBackend,
+} from "../../modules/streaming/streaming-engine.ts";
 import {
 	start as startStream,
 	stop as stopStream,
@@ -377,4 +385,33 @@ export const getMockHardwareProcedure = authedProcedure
 			effectiveHardware: getEffectiveHardware(),
 			availableHardware: [...VALID_HARDWARE_TYPES],
 		};
+	});
+
+/**
+ * Which engine the device runs — drives the frontend picker conditional.
+ */
+export const getEngineProcedure = authedProcedure
+	.output(getEngineOutputSchema)
+	.handler(() => {
+		return { engine: getConfiguredEngine() };
+	});
+
+/**
+ * List the live input sources (hotplug-aware picker). Read-only re-scan.
+ */
+export const listDevicesProcedure = authedProcedure
+	.output(listDevicesOutputSchema)
+	.handler(() => {
+		return deviceRegistry.rescan();
+	});
+
+/**
+ * Live-switch the active input. Returns the glitch-free gap in ms, or a typed
+ * error (SOURCE_LOST when the target was unplugged before the switch landed).
+ */
+export const switchInputProcedure = authedProcedure
+	.input(switchInputInputSchema)
+	.output(switchInputOutputSchema)
+	.handler(({ input }) => {
+		return deviceRegistry.switchInput(input.input_id);
 	});

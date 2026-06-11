@@ -14,6 +14,7 @@ import {
 	getRelays,
 } from "../../modules/remote/remote-relays.ts";
 import { getAudioDevices } from "../../modules/streaming/audio.ts";
+import { getDevicesMessage } from "../../modules/streaming/devices.ts";
 import { getPipelinesMessage } from "../../modules/streaming/pipelines.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
@@ -94,5 +95,6 @@ export function buildInitialStatus() {
 		sensors: getSensors(),
 		revisions: getRevisions(),
 		acodecs: AUDIO_CODECS,
+		devices: getDevicesMessage(),
 	};
 }

@@ -35,3 +35,10 @@ export const AUDIO_HOTPLUG_DEBOUNCE_MS = 500;
 
 /** Fallback poll interval (ms) while streaming when fs.watch is unavailable (QW-E). */
 export const AUDIO_HOTPLUG_POLL_INTERVAL_MS = 5_000;
+
+/** Debounce window (ms) collapsing bursts of video device watcher events (T34). */
+export const VIDEO_HOTPLUG_DEBOUNCE_MS = 200;
+
+/** Unconditional rescan poll (ms): the reliable detector behind fs.watch so a
+ *  hotplug is reflected in the picker within the 3s product budget (T34). */
+export const VIDEO_HOTPLUG_POLL_INTERVAL_MS = 2_000;
