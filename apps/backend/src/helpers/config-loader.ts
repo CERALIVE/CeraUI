@@ -31,6 +31,51 @@ import type { z } from "zod";
 
 import { logger } from "./logger.ts";
 
+/**
+ * Type guard for Zod v4 schema shape: { _zod: { def: unknown } }
+ * Zod v4 stores the schema definition under _zod.def
+ */
+function isZodV4Schema(schema: unknown): schema is { _zod: { def: unknown } } {
+	return (
+		typeof schema === "object" &&
+		schema !== null &&
+		"_zod" in schema &&
+		typeof (schema as Record<string, unknown>)._zod === "object" &&
+		(schema as Record<string, unknown>)._zod !== null &&
+		"def" in ((schema as Record<string, unknown>)._zod as Record<string, unknown>)
+	);
+}
+
+/**
+ * Type guard for legacy Zod schema shape: { _def: unknown }
+ * Zod v3 and some v4 compat paths store the schema definition under _def
+ */
+function isZodLegacySchema(schema: unknown): schema is { _def: unknown } {
+	return (
+		typeof schema === "object" &&
+		schema !== null &&
+		"_def" in schema &&
+		typeof (schema as Record<string, unknown>)._def === "object"
+	);
+}
+
+/**
+ * Type-safe accessor for Zod schema definition
+ * Handles both Zod v4 (_zod.def) and legacy (_def) paths
+ * Returns undefined if neither path exists (preserves ?? semantics)
+ */
+function getSchemaDefinition(
+	schema: unknown,
+): Record<string, unknown> | undefined {
+	if (isZodV4Schema(schema)) {
+		return (schema._zod.def as Record<string, unknown>) ?? undefined;
+	}
+	if (isZodLegacySchema(schema)) {
+		return (schema._def as Record<string, unknown>) ?? undefined;
+	}
+	return undefined;
+}
+
 export type ConfigLoadResult<T> = {
 	/** The validated and defaulted config data */
 	data: T;
@@ -129,10 +174,8 @@ export async function loadJsonConfig<T extends z.ZodTypeAny>(
 
 			// Get the shape of the schema if it's an object schema
 			// Zod v4 uses _zod.def.shape which is a plain object
-			// biome-ignore lint/suspicious/noExplicitAny: Need to access schema internals
-			const schemaDef = (schema as any)._zod?.def ?? (schema as any)._def;
-			// biome-ignore lint/suspicious/noExplicitAny: Need to access schema internals
-			let schemaShape: Record<string, any> | undefined;
+			const schemaDef = getSchemaDefinition(schema);
+			let schemaShape: Record<string, unknown> | undefined;
 
 			if (schemaDef?.shape) {
 				// Zod v4 stores shape as an object directly
