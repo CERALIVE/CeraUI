@@ -87,6 +87,9 @@ importers:
 
   apps/frontend:
     dependencies:
+      '@ceralive/design-tokens':
+        specifier: link:../../../ceralive-platform/packages/design-tokens
+        version: link:../../../ceralive-platform/packages/design-tokens
       '@ceraui/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
