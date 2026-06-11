@@ -4,18 +4,27 @@ Parent: [`../AGENTS.md`](../AGENTS.md)
 
 ## ROLE IN THE GROUP
 
-Device control plane. Svelte 5 PWA (frontend) + Bun/TypeScript WebSocket-RPC backend. Drives `ceracoder` and `srtla` at runtime via their native TS bindings. Produces the `ceraui` .deb for ARM64 and AMD64 device images.
+Device control plane. Svelte 5 PWA (frontend) + Bun/TypeScript WebSocket-RPC backend. Drives `cerastream` (active engine) and `srtla` at runtime. Produces the `ceraui` .deb for ARM64 and AMD64 device images.
 
-The backend resolves `@ceralive/ceracoder` and `@ceralive/srtla` via pnpm `link:` paths that point three levels up:
+**Dual-backend transition.** The backend currently carries both engine packages:
+
+- `@ceralive/cerastream` — active engine, consumed as a `file:` tarball at
+  `vendor/ceralive-cerastream.tgz`. This is the primary control path.
+- `@ceralive/ceracoder` — legacy engine, retained as a sibling `link:` until
+  `cerastream/tests/boot-parity.sh` passes. Once the gate clears, this link
+  and the `ceracoder` sibling checkout are removed.
+
+The backend also resolves `@ceralive/srtla` via a pnpm `link:` path:
 
 ```
-"@ceralive/ceracoder": "link:../../../ceracoder/bindings/typescript"
-"@ceralive/srtla":     "link:../../../srtla/bindings/typescript"
+"@ceralive/cerastream": "file:vendor/ceralive-cerastream.tgz"
+"@ceralive/ceracoder":  "link:../../../ceracoder/bindings/typescript"
+"@ceralive/srtla":      "link:../../../srtla/bindings/typescript"
 ```
 
-**LOAD-BEARING layout.** CI must check out `ceracoder`, `srtla`, and `CeraUI` as siblings under the same parent. These paths are correct as-is — do not rename or restructure them.
+**LOAD-BEARING layout.** CI must check out `ceracoder`, `srtla`, and `CeraUI` as siblings under the same parent. The `ceracoder` and `srtla` link: paths are correct as-is — do not rename or restructure them. `cerastream` is NOT a sibling link; it is a vendored tarball.
 
-The srtla binding API may be in flux while the upstream srtla merge is in progress. Check `../srtla/AGENTS.md` before touching anything that calls `@ceralive/srtla`.
+The srtla binding API is settled (v0.2.0, additive telemetry module). Check `../srtla/AGENTS.md` before touching anything that calls `@ceralive/srtla`.
 
 ## STRUCTURE
 
