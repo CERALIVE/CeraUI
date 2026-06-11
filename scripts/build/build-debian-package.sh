@@ -28,6 +28,23 @@ MAINTAINER="Andrés Cera <andres@ceralive.com>"
 DESCRIPTION="CERALIVE device software - live streaming hardware controller"
 URL="https://github.com/CERALIVE/CeraUI"
 
+# Engine protocol-major coupling (engine ↔ UI version-skew guard). The cerastream
+# .deb Provides cerastream-ipc-<major>; we Depends on the major our baked-in
+# bindings speak, so apt refuses a cross-protocol-major skew on-device and mkosi
+# fails a mismatched pair at image-build time. Derived from the vendored bindings
+# (the single source of truth for what's compiled in) — never hardcoded.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+VENDOR_TGZ="$SCRIPT_DIR/../../apps/backend/vendor/ceralive-cerastream.tgz"
+IPC_PROTOCOL="$(tar -xzOf "$VENDOR_TGZ" package/dist/constants.js 2>/dev/null \
+    | grep -oE 'cerastream-ipc/[0-9]+' | head -1)"
+IPC_MAJOR="${IPC_PROTOCOL##*/}"
+if ! printf '%s' "$IPC_MAJOR" | grep -qE '^[0-9]+$'; then
+    log_error "Could not derive cerastream protocol major from vendored bindings: $VENDOR_TGZ"
+    exit 1
+fi
+IPC_VPKG="cerastream-ipc-${IPC_MAJOR}"
+log_info "Engine protocol coupling: Depends $IPC_VPKG"
+
 # Clean previous builds
 log_step "Cleaning previous builds"
 rm -rf dist/debian
@@ -191,6 +208,7 @@ fpm -s dir -t deb \
     --depends "network-manager" \
     --depends "modemmanager" \
     --depends "cerastream" \
+    --depends "$IPC_VPKG" \
     --depends "srtla" \
     --conflicts "belaui" \
     --replaces "belaui" \
@@ -237,6 +255,7 @@ cat > dist/debian/package-info-${ARCHITECTURE}.json << EOF
     "network-manager",
     "modemmanager",
     "cerastream",
+    "$IPC_VPKG",
     "srtla"
   ],
   "apt": {

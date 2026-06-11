@@ -1,0 +1,91 @@
+name: Refresh vendored cerastream bindings
+
+# Keeps apps/backend/vendor/ceralive-cerastream.tgz in step with the published
+# @ceralive/cerastream npm package, so CeraUI's baked-in bindings never silently
+# lag the engine. Fired automatically by a repository_dispatch from cerastream's
+# publish-bindings workflow, or manually with a specific version/dist-tag.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "npm version or dist-tag of @ceralive/cerastream"
+        required: false
+        default: "next"
+  repository_dispatch:
+    types: [cerastream-bindings-published]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  refresh:
+    name: Refresh vendored tarball and open PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v4
+        with:
+          path: CeraUI
+
+      - name: "Checkout srtla (sibling link: dependency)"
+        uses: actions/checkout@v4
+        with:
+          repository: CERALIVE/srtla
+          path: srtla
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: CeraUI/package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org/
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install srtla sibling bindings
+        run: pnpm install --dir srtla/bindings/typescript
+
+      - name: Resolve target version
+        id: ver
+        run: |
+          V="${{ github.event.inputs.version || github.event.client_payload.version || 'next' }}"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Refresh vendored bindings
+        working-directory: CeraUI
+        run: bash scripts/refresh-cerastream-vendor.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Verify bindings skew
+        working-directory: CeraUI
+        run: pnpm --filter backend test src/tests/cerastream-bindings-skew.test.ts
+
+      - name: Open pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          path: CeraUI
+          branch: chore/refresh-cerastream-bindings
+          delete-branch: true
+          title: "chore: refresh vendored @ceralive/cerastream to ${{ steps.ver.outputs.version }}"
+          commit-message: "chore: refresh vendored @ceralive/cerastream to ${{ steps.ver.outputs.version }}"
+          body: |
+            Automated refresh of `apps/backend/vendor/ceralive-cerastream.tgz` to
+            `@ceralive/cerastream@${{ steps.ver.outputs.version }}`, triggered by a
+            cerastream bindings publish (or manual dispatch).
+
+            The backend bindings-skew test ran here; **Build Check** runs the full
+            suite on this PR before it can merge.
+          labels: |
+            dependencies
+            automated

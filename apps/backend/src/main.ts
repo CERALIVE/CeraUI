@@ -40,6 +40,7 @@ import {
 } from "./modules/streaming/audio.ts";
 import { startBcrpt } from "./modules/streaming/bcrpt.ts";
 import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
+import { checkEngineCompatibilityOnStartup } from "./modules/streaming/cerastream-backend.ts";
 import { startDeviceDiscovery } from "./modules/streaming/devices.ts";
 import { broadcastHealthIfChanged } from "./modules/streaming/health.ts";
 import { broadcastLinkTelemetryIfChanged } from "./modules/streaming/link-telemetry.ts";
@@ -159,6 +160,12 @@ onHeartbeatTick(broadcastHealthIfChanged);
 onHeartbeatTick(broadcastLinkTelemetryIfChanged);
 
 checkAutoStartStream();
+
+// Engine protocol-compatibility probe (T-skew): fire-and-forget. A protocol-major
+// mismatch (e.g. a newer engine .deb against older baked-in bindings) raises a
+// persistent notification rather than failing silently at first stream. Never
+// gates boot — failures are handled inside the call.
+void checkEngineCompatibilityOnStartup();
 
 // Post-boot add-on reconciler (T29): fire-and-forget. Add-ons NEVER gate boot or
 // the OS-update healthcheck/rollback, so this is a non-blocking background task

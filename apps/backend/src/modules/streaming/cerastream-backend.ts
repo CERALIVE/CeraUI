@@ -36,6 +36,9 @@ import { existsSync } from "node:fs";
 import {
 	CERASTREAM_BIN,
 	type CerastreamClient,
+	CerastreamConnectionError,
+	CerastreamRpcError,
+	CerastreamTimeoutError,
 	type ConnectOptions,
 	connect,
 	DEFAULT_BALANCER,
@@ -49,6 +52,7 @@ import {
 	type PartialCerastreamConfig,
 	type ReloadConfigParams,
 	type RuntimeErrorEvent,
+	SCHEMA_VERSION,
 	type StartParams,
 	type Subscription,
 	type SwitchInputParams,
@@ -146,6 +150,67 @@ function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 		configPath: DEFAULT_CONFIG_PATH,
 		logger: defaultLogger,
 	};
+}
+
+/**
+ * Outcome of a startup `hello` handshake against the engine. The protocol MAJOR
+ * is the hard compatibility contract (the engine rejects a mismatched major and
+ * the client's `helloResultSchema` is a literal); `schema_version` differences
+ * within a major are additive-only and informational (ADR-0002 §4).
+ */
+export type EngineProbeStatus =
+	| "compatible"
+	| "protocol_incompatible"
+	| "unreachable"
+	| "error";
+
+export interface EngineProbe {
+	status: EngineProbeStatus;
+	protocol?: string;
+	engineVersion?: string;
+	schemaVersion?: string;
+	detail?: string;
+}
+
+function probeErrorMessage(err: unknown): string {
+	return err instanceof Error ? err.message : String(err);
+}
+
+/** A ZodError raised inside the bindings' own bundled Zod copy (cross-instance
+ * `instanceof` is unreliable, so match by name) means the engine returned a
+ * hello shape the frozen literal schema rejected — a protocol mismatch. */
+function isZodLikeError(err: unknown): boolean {
+	return (
+		typeof err === "object" &&
+		err !== null &&
+		(err as { name?: string }).name === "ZodError"
+	);
+}
+
+/** Classify a failed `connect()`/handshake into an {@link EngineProbe}. */
+export function classifyEngineProbeError(err: unknown): EngineProbe {
+	if (err instanceof CerastreamRpcError) {
+		if (
+			err.dataCode === "cerastream.protocol.unsupported_version" ||
+			err.code === -32000
+		) {
+			return { status: "protocol_incompatible", detail: err.message };
+		}
+		return { status: "error", detail: err.message };
+	}
+	if (isZodLikeError(err)) {
+		return {
+			status: "protocol_incompatible",
+			detail: "engine returned an unexpected hello shape",
+		};
+	}
+	if (
+		err instanceof CerastreamConnectionError ||
+		err instanceof CerastreamTimeoutError
+	) {
+		return { status: "unreachable", detail: probeErrorMessage(err) };
+	}
+	return { status: "error", detail: probeErrorMessage(err) };
 }
 
 export class CerastreamBackend implements StreamingBackend {
@@ -275,6 +340,41 @@ export class CerastreamBackend implements StreamingBackend {
 
 	getTelemetry(): EngineTelemetry | null {
 		return this.telemetry;
+	}
+
+	/**
+	 * Connect, run the `hello` handshake, and disconnect — a cheap startup probe
+	 * of engine compatibility independent of any stream. The engine is a
+	 * systemd-owned service, so `close()` only drops our connection; it never
+	 * spawns or stops the engine. A protocol-major mismatch surfaces here as
+	 * `protocol_incompatible` instead of waiting for the first stream to fail.
+	 */
+	async probeEngine(): Promise<EngineProbe> {
+		let client: CerastreamClient | undefined;
+		try {
+			client = await this.deps.connect(this.deps.connectOptions);
+			const hello = client.hello;
+			if (hello.schema_version !== SCHEMA_VERSION) {
+				this.deps.logger.warn(
+					"cerastream: engine schema_version differs from bindings (additive-only, informational)",
+					{ engine: hello.schema_version, bindings: SCHEMA_VERSION },
+				);
+			}
+			return {
+				status: "compatible",
+				protocol: hello.protocol,
+				engineVersion: hello.engine_version,
+				schemaVersion: hello.schema_version,
+			};
+		} catch (err) {
+			return classifyEngineProbeError(err);
+		} finally {
+			try {
+				await client?.close();
+			} catch {
+				// Best-effort disconnect of a probe connection; never respawns the engine.
+			}
+		}
 	}
 
 	// ---- additive cerastream-only RPC passthroughs (NOT on the frozen seam) ----
@@ -456,3 +556,62 @@ export class CerastreamBackend implements StreamingBackend {
 // Process-wide singleton; the engine registry (streaming-engine.ts) hands this
 // out to every streaming call site.
 export const cerastreamBackend = new CerastreamBackend();
+
+/** The persistent notification name for an engine-protocol incompatibility. */
+export const ENGINE_COMPAT_NOTIFICATION = "cerastream-engine-compat";
+
+/** Injectable surface for {@link checkEngineCompatibilityOnStartup} (tests). */
+export interface EngineCompatDeps {
+	probe: () => Promise<EngineProbe>;
+	notify: CerastreamBridge["notify"];
+	logger: CerastreamLogger;
+}
+
+/**
+ * Run a startup engine probe and surface a protocol incompatibility as a
+ * persistent, non-dismissable notification (the UI already renders these), so a
+ * new-engine/old-bindings skew is visible immediately rather than only when a
+ * stream is first attempted. Unreachable/transient failures only log — the
+ * engine may simply not be up yet at boot. Returns the probe for the caller.
+ */
+export async function checkEngineCompatibilityOnStartup(
+	deps: Partial<EngineCompatDeps> = {},
+): Promise<EngineProbe> {
+	const probe = deps.probe ?? (() => cerastreamBackend.probeEngine());
+	const notify = deps.notify ?? notificationBroadcast;
+	const logger = deps.logger ?? defaultLogger;
+
+	const result = await probe();
+	switch (result.status) {
+		case "protocol_incompatible":
+			logger.error("cerastream: engine protocol incompatible at startup", {
+				probe: result,
+			});
+			notify(
+				ENGINE_COMPAT_NOTIFICATION,
+				"error",
+				"The streaming engine speaks an incompatible protocol version. A system update is required before streaming will work.",
+				0,
+				true,
+				false,
+			);
+			break;
+		case "unreachable":
+			logger.warn("cerastream: engine unreachable at startup", {
+				probe: result,
+			});
+			break;
+		case "error":
+			logger.warn("cerastream: engine probe failed at startup", {
+				probe: result,
+			});
+			break;
+		case "compatible":
+			logger.info("cerastream: engine compatible", {
+				engine: result.engineVersion,
+				protocol: result.protocol,
+			});
+			break;
+	}
+	return result;
+}
