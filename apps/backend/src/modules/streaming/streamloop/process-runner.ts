@@ -27,6 +27,7 @@ import {
 	broadcastHealthIfChanged,
 	reportStreamProcessExit,
 } from "../health.ts";
+import { SHUTDOWN_SIGKILL_TIMEOUT_MS } from "../constants.ts";
 import { stopLinkTelemetry } from "../link-telemetry.ts";
 import { updateStatus } from "../streaming.ts";
 
@@ -139,20 +140,44 @@ export function stopProcess(streamingProcess: StreamingProcess) {
 }
 
 const stopCheckInterval = 50;
+let shutdownStartTime: number | null = null;
 
 function waitForAllProcessesToTerminate() {
 	if (streamingProcesses.length === 0) {
 		logger.info("stop: all processes terminated");
 		updateStatus(false);
 		stopLinkTelemetry();
+		shutdownStartTime = null;
 
 		periodicCheckForSoftwareUpdates();
+		return;
+	}
+
+	// Initialize shutdown timer on first call
+	if (shutdownStartTime === null) {
+		shutdownStartTime = Date.now();
+	}
+
+	const elapsedMs = Date.now() - shutdownStartTime;
+
+	// If timeout exceeded, SIGKILL remaining processes
+	if (elapsedMs >= SHUTDOWN_SIGKILL_TIMEOUT_MS) {
+		const killedProcesses = [...streamingProcesses];
+		for (const p of killedProcesses) {
+			logger.warn(
+				`stop: SIGKILL timeout (${SHUTDOWN_SIGKILL_TIMEOUT_MS}ms) exceeded for ${p.spawnfile}; sending SIGKILL`,
+			);
+			p.proc.kill("SIGKILL");
+		}
+		// Reset timer and continue polling for actual termination
+		shutdownStartTime = Date.now();
 	} else {
 		for (const p of streamingProcesses) {
 			logger.info(`stop: still waiting for ${p.spawnfile} to terminate...`);
 		}
-		setTimeout(waitForAllProcessesToTerminate, stopCheckInterval);
 	}
+
+	setTimeout(waitForAllProcessesToTerminate, stopCheckInterval);
 }
 
 export function stopAll() {

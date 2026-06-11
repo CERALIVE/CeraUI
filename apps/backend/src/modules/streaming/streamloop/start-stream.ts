@@ -32,8 +32,8 @@ import { hasLowMtu } from "../bcrpt.ts";
 import { buildCeracoderArgsAndWriteConfig } from "../ceracoder.ts";
 import { setBitrate } from "../encoder.ts";
 import { clearStreamProcessExit } from "../health.ts";
+import { SRTLA_LISTEN_PORT } from "../constants.ts";
 import {
-	SRTLA_LISTEN_PORT,
 	srtlaStatsFile,
 	startLinkTelemetry,
 } from "../link-telemetry.ts";
@@ -43,6 +43,7 @@ import {
 	type Pipeline,
 } from "../pipelines.ts";
 import { ceracoderExec, srtlaSendExec } from "./exec-paths.ts";
+import { resolveProcessError } from "./process-error-patterns.ts";
 import { spawnStreamingLoop } from "./process-runner.ts";
 
 export async function startStream(
@@ -92,14 +93,9 @@ export async function startStream(
 			execPath: setup.srtla_path,
 		}).args,
 		(err) => {
-			let msg: string | undefined;
-			if (err.match("Failed to establish any initial connections")) {
-				msg = "Failed to connect to the SRTLA server. Retrying...";
-			} else if (err.match("no available connections")) {
-				msg = "All SRTLA connections failed. Trying to reconnect...";
-			}
-			if (msg) {
-				notificationBroadcast("srtla", "error", msg, 5, true, false);
+			const resolved = resolveProcessError("srtla", err);
+			if (resolved) {
+				notificationBroadcast("srtla", "error", resolved.message, 5, true, false);
 			}
 		},
 	);
@@ -123,28 +119,19 @@ export async function startStream(
 	);
 
 	spawnStreamingLoop(ceracoderExec, ceracoderArgs, (err) => {
-		let msg: string | undefined;
-		if (err.match("gstreamer error from alsasrc0")) {
-			msg = "Capture card error (audio). Trying to restart...";
-		} else if (err.match("gstreamer error from v4l2src0")) {
-			msg = "Capture card error (video). Trying to restart...";
-		} else if (err.match("Pipeline stall detected")) {
-			msg = "The input source has stalled. Trying to restart...";
-		} else if (err.match("Failed to establish an SRT connection")) {
-			if (!notificationExists("srtla")) {
-				const reasonMatch = err.match(
-					/Failed to establish an SRT connection: ([\w ]+)\./,
-				);
-				const reason = reasonMatch?.[1] ? ` (${reasonMatch[1]})` : "";
-				msg = `Failed to connect to the SRT server${reason}. Retrying...`;
-			}
-		} else if (err.match(/The SRT connection.+, exiting/)) {
-			if (!notificationExists("srtla")) {
-				msg = "The SRT connection failed. Trying to reconnect...";
-			}
-		}
-		if (msg) {
-			notificationBroadcast("ceracoder", "error", msg, 5, true, false);
+		const resolved = resolveProcessError("ceracoder", err);
+		if (
+			resolved &&
+			!(resolved.suppressIfSrtlaNotified && notificationExists("srtla"))
+		) {
+			notificationBroadcast(
+				"ceracoder",
+				"error",
+				resolved.message,
+				5,
+				true,
+				false,
+			);
 		}
 	});
 }

@@ -27,6 +27,7 @@ import * as sender from "@ceralive/srtla/sender";
 import { buildSrtlaSendArgs, getSrtlaSendExec } from "@ceralive/srtla/sender";
 import * as telemetry from "@ceralive/srtla/telemetry";
 import { senderTelemetryPath, watchTelemetry } from "@ceralive/srtla/telemetry";
+import { SRTLA_LISTEN_PORT } from "../modules/streaming/constants.ts";
 
 describe("srtla bindings version-skew guard", () => {
 	test("required sender exports exist and are callable", () => {
@@ -112,7 +113,9 @@ describe("srtla telemetry bindings version-skew guard", () => {
 	test("senderTelemetryPath derives the listen-port stats path link-telemetry relies on", () => {
 		// link-telemetry.ts computes the --stats-file path from the listen port;
 		// a change to this convention would silently break producer/consumer pairing.
-		expect(senderTelemetryPath(9000)).toBe("/tmp/srtla-send-stats-9000.json");
+		expect(senderTelemetryPath(SRTLA_LISTEN_PORT)).toBe(
+			"/tmp/srtla-send-stats-9000.json",
+		);
 	});
 
 	test("watchTelemetry returns a handle with an idempotent stop()", () => {

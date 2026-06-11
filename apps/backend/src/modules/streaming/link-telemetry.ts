@@ -16,6 +16,8 @@
 */
 
 /*
+    TRANSITIONAL — superseded by cerastream structured IPC (plan Task 32).
+
     srtla_send link telemetry ingestion (ADR-001 consumer side).
 
     srtla_send publishes a per-uplink JSON snapshot to its --stats-file every
@@ -47,10 +49,10 @@ import {
 	watchTelemetry,
 } from "@ceralive/srtla/telemetry";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { SRTLA_LISTEN_PORT } from "./constants.ts";
 
 // srtla_send listens for the local SRT encoder on this port; the stats file path
 // is derived from it (mirrors the receiver's /tmp/srtla-group-<PORT> convention).
-export const SRTLA_LISTEN_PORT = 9000;
 
 /** Canonical stats-file path passed to srtla_send `--stats-file` and read back. */
 export function srtlaStatsFile(listenPort: number = SRTLA_LISTEN_PORT): string {
@@ -71,6 +73,12 @@ export interface LinkTelemetryEntry {
 
 export interface LinkTelemetryMessage {
 	links: Array<LinkTelemetryEntry>;
+	/**
+	 * CeraUI-side wall-clock ms of the last SUCCESSFUL read — derived here, not
+	 * from the frozen srtla snapshot. Advances on a fresh tick, freezes when reads
+	 * go stale/absent, so the UI has an explicit staleness clock.
+	 */
+	lastReadMs: number;
 }
 
 // ---------------------------------------------------------------------------
