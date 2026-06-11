@@ -14,6 +14,7 @@
  */
 import type { Ping } from "@ceraui/rpc/schemas";
 
+import { logger } from "../helpers/logger.ts";
 import { broadcast } from "./events.ts";
 
 /**
@@ -71,7 +72,7 @@ export function startHeartbeat(
 			try {
 				listener();
 			} catch (error) {
-				console.error("Heartbeat tick listener error:", error);
+				logger.error("Heartbeat tick listener error", { err: error });
 			}
 		}
 	}, intervalMs);

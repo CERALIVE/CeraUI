@@ -16,6 +16,11 @@
 */
 
 import { mkdir } from "node:fs/promises";
+import {
+	INITIAL_RETRY_DELAY,
+	MAX_BCRPT_RETRIES,
+} from "../../helpers/timing-constants.ts";
+import { logger } from "../../helpers/logger.ts";
 import { writeTextFile } from "../../helpers/text-files.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import {
@@ -41,8 +46,6 @@ const bcrptKeyFile = `${bcrptDir}/key`;
 const bcrptIpsToRelays: Record<string, string> = {};
 let bcrptRelaysRtt: Record<string, number> = {};
 let bcrptRetryCount = 0;
-const MAX_BCRPT_RETRIES = 5;
-const INITIAL_RETRY_DELAY = 1000;
 
 // Getter functions for safe external access
 export function hasLowMtu(): boolean {
@@ -148,7 +151,7 @@ export async function startBcrpt() {
 		if (!isMockBcrpt) {
 			const relaysCache = getRelays();
 			if (!relaysCache?.bcrp_key || relaysCache.bcrp_key.trim() === "") {
-				console.warn(
+				logger.warn(
 					"BCRPT: No valid key available. Skipping BCRPT startup until relay configuration is available.",
 				);
 				return;
@@ -159,7 +162,7 @@ export async function startBcrpt() {
 		bcrptRetryCount = 0;
 	} catch (_err) {
 		if (bcrptRetryCount >= MAX_BCRPT_RETRIES) {
-			console.error(
+			logger.error(
 				`Failed to generate BCRPT config after ${MAX_BCRPT_RETRIES} attempts. Giving up.`,
 			);
 			return;
@@ -167,7 +170,7 @@ export async function startBcrpt() {
 
 		bcrptRetryCount++;
 		const delay = INITIAL_RETRY_DELAY * 2 ** (bcrptRetryCount - 1); // Exponential backoff
-		console.warn(
+		logger.warn(
 			`BCRPT config generation failed (attempt ${bcrptRetryCount}/${MAX_BCRPT_RETRIES}). Retrying in ${delay}ms...`,
 		);
 		setTimeout(startBcrpt, delay);
@@ -177,9 +180,9 @@ export async function startBcrpt() {
 	const args = [bcrptSourceIpsFile, bcrptServerIpsFile, bcrptKeyFile];
 
 	if (isMockBcrpt) {
-		console.log("Starting BCRPT in development mode (using mock)");
+		logger.info("Starting BCRPT in development mode (using mock)");
 	} else {
-		console.log(
+		logger.info(
 			"Starting BCRPT in production mode (using apt-installed binary)",
 		);
 	}
@@ -190,7 +193,7 @@ export async function startBcrpt() {
 			stderr: "pipe",
 		});
 	} catch (err) {
-		console.error("bcrpt process error:", err);
+		logger.error("bcrpt process error", { err });
 		return;
 	}
 
@@ -225,7 +228,7 @@ async function consumeBcrptStdout(
 			for (const conn in stats.mtu) {
 				if (!bcrptLowMtuDetected && stats.mtu[conn] < 1336) {
 					bcrptLowMtuDetected = true;
-					console.log(
+					logger.info(
 						"Detected low MTU network. Using reduced SRT packet size",
 					);
 				}
@@ -233,8 +236,7 @@ async function consumeBcrptStdout(
 
 			broadcastMsg("relays", buildRelaysMsg());
 		} catch (err) {
-			console.log(err);
-			console.log(data);
+			logger.debug("BCRPT stdout parse error", { err, data });
 		}
 	}
 }
@@ -244,7 +246,7 @@ async function consumeBcrptStderr(
 ) {
 	const decoder = new TextDecoder();
 	for await (const chunk of proc.stderr) {
-		console.log(`bcrpt: ${decoder.decode(chunk)}`);
+		logger.debug(`bcrpt stderr: ${decoder.decode(chunk)}`);
 	}
 }
 
@@ -260,7 +262,7 @@ async function handleBcrptExit(proc: Bun.Subprocess<"ignore", "pipe", "pipe">) {
 		reason = `because of signal ${signal}`;
 	}
 	if (bcrptRetryCount >= MAX_BCRPT_RETRIES) {
-		console.error(
+		logger.error(
 			`BCRPT process failed ${MAX_BCRPT_RETRIES} times. Stopping restart attempts.`,
 		);
 		return;
@@ -268,7 +270,7 @@ async function handleBcrptExit(proc: Bun.Subprocess<"ignore", "pipe", "pipe">) {
 
 	bcrptRetryCount++;
 	const delay = INITIAL_RETRY_DELAY * 2 ** (bcrptRetryCount - 1);
-	console.log(
+	logger.warn(
 		`bcrpt exited unexpectedly ${reason}. Restarting in ${delay}ms (attempt ${bcrptRetryCount}/${MAX_BCRPT_RETRIES})...`,
 	);
 	setTimeout(startBcrpt, delay);

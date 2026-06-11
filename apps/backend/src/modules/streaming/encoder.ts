@@ -16,6 +16,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { logger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { sendCeracoderHup, writeCeracoderConfigFile } from "./ceracoder.ts";
 
@@ -55,7 +56,7 @@ export function setBitrate(params: BitrateParams): number | undefined {
 	} catch (error) {
 		// Restore previous bitrate if operation failed
 		config.max_br = previousBitrate;
-		console.error("Failed to set bitrate:", error);
+		logger.error("Failed to set bitrate", { error });
 		throw error;
 	}
 }
