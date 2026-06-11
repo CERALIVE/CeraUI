@@ -156,7 +156,7 @@ export type KioskConfigureInput = z.infer<typeof kioskConfigureInputSchema>;
 // backend gate nor the frontend banner inlines the literal. On a dev/CI/emulated
 // host the handlers return this WITHOUT touching systemd (DC-1: only the real
 // device owns the chassis).
-export const KIOSK_UNAVAILABLE_ERROR = "kiosk_unavailable_in_emulated_mode";
+export const KIOSK_UNAVAILABLE_ERROR = 'kiosk_unavailable_in_emulated_mode';
 
 // kioskConfigure applied-state output (`applied` = values persisted post-write).
 // `applied` is absent and `error` is set on the emulated-mode gate (T13).

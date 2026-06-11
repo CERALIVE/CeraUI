@@ -9,8 +9,8 @@ import {
 	type RuntimeConfig,
 	runtimeConfigSchema,
 } from "../helpers/config-schemas.ts";
-import { CeracoderBackend } from "../modules/streaming/ceracoder-backend.ts";
 import { setup } from "../modules/setup.ts";
+import { CeracoderBackend } from "../modules/streaming/ceracoder-backend.ts";
 
 const FIXTURES = path.join(import.meta.dir, "fixtures");
 
@@ -118,7 +118,10 @@ describe("legacy config.json migration", () => {
 
 describe("ceracoder.conf INI byte-parity (pre/post refactor)", () => {
 	const PARITY: Array<{ golden: string; config: RuntimeConfig }> = [
-		{ golden: "default-adaptive.conf", config: { max_br: 6000, srt_latency: 2000 } },
+		{
+			golden: "default-adaptive.conf",
+			config: { max_br: 6000, srt_latency: 2000 },
+		},
 		{
 			golden: "high-bitrate-adaptive.conf",
 			config: { max_br: 12000, srt_latency: 1500 },

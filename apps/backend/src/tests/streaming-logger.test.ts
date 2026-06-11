@@ -19,7 +19,7 @@ describe("streaming modules logger integration", () => {
 	test("bcrpt: logger.warn accepts config generation retry message", () => {
 		// Verify logger.warn method exists and accepts the expected message format
 		const MAX_BCRPT_RETRIES = 5;
-		let bcrptRetryCount = 1;
+		const bcrptRetryCount = 1;
 		const INITIAL_RETRY_DELAY = 1000;
 
 		expect(() => {

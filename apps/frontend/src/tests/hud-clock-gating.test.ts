@@ -39,15 +39,14 @@ import type {
 	SensorsStatus,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
-import type { HudSources, HudTimestamps } from "$lib/types/hud";
-
 import {
 	createStalenessClock,
 	deriveHudState,
 	isClockTickNeeded,
-	shouldClockRun,
 	STALE_THRESHOLD_MS,
+	shouldClockRun,
 } from "$lib/stores/hud.svelte";
+import type { HudSources, HudTimestamps } from "$lib/types/hud";
 
 const T0 = 1_000_000;
 
@@ -59,9 +58,9 @@ describe("isClockTickNeeded — when a staleness tick is needed", () => {
 	it("is needed while streaming, regardless of connection age", () => {
 		expect(isClockTickNeeded(true, null, T0)).toBe(true);
 		// Streaming wins even past the staleness window.
-		expect(
-			isClockTickNeeded(true, T0 - STALE_THRESHOLD_MS * 10, T0),
-		).toBe(true);
+		expect(isClockTickNeeded(true, T0 - STALE_THRESHOLD_MS * 10, T0)).toBe(
+			true,
+		);
 	});
 
 	it("is NOT needed when idle and freshly connected (no link-loss pending)", () => {

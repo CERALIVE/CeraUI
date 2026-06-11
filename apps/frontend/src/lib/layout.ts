@@ -27,7 +27,7 @@
  * from this single string so the nav and the dialog pivot together.
  */
 export const DESKTOP_CHROME_QUERY =
-	'(min-width: 1024px), (min-width: 768px) and (max-height: 600px)';
+	"(min-width: 1024px), (min-width: 768px) and (max-height: 600px)";
 
 /**
  * The wide-desktop breakpoint (Tailwind `lg`, 1024px) on its own.
@@ -40,4 +40,4 @@ export const DESKTOP_CHROME_QUERY =
  * `SettingsView` already shows that group below 1024px, so the two agree without
  * extra coordination.
  */
-export const WIDE_DESKTOP_QUERY = '(min-width: 1024px)';
+export const WIDE_DESKTOP_QUERY = "(min-width: 1024px)";

@@ -269,9 +269,12 @@ const de = {
 		healthStable: "Stabil",
 		healthReconnecting: "Neu verbinden",
 		refreshHealth: "Zustand aktualisieren",
-		healthExplainHealthy: "Prozess läuft, Frames laufen, alle gebündelten Verbindungen aktiv.",
-		healthExplainDegraded: "Streaming läuft, aber Frames stocken oder einige gebündelte Verbindungen sind ausgefallen.",
-		healthExplainDead: "Encoder-Prozess läuft nicht. Der Stream ist ausgefallen.",
+		healthExplainHealthy:
+			"Prozess läuft, Frames laufen, alle gebündelten Verbindungen aktiv.",
+		healthExplainDegraded:
+			"Streaming läuft, aber Frames stocken oder einige gebündelte Verbindungen sind ausgefallen.",
+		healthExplainDead:
+			"Encoder-Prozess läuft nicht. Der Stream ist ausgefallen.",
 		link: "Verbindung",
 	},
 	live: {
@@ -493,7 +496,8 @@ const de = {
 		},
 		index: {
 			pairing: "Geräte-Kopplung",
-			pairingDesc: "Verknüpfen Sie dieses Gerät über einen Anspruchscode mit Ihrem Cloud-Konto.",
+			pairingDesc:
+				"Verknüpfen Sie dieses Gerät über einen Anspruchscode mit Ihrem Cloud-Konto.",
 			title: "Einstellungen",
 			description: "Geräte-, System- und Entwicklerkonfiguration",
 			comingSoon: "Demnächst verfügbar",
@@ -523,7 +527,8 @@ const de = {
 			versionsDesc: "Installierte Komponenten- und Firmware-Versionen anzeigen",
 			autostart: "Streaming automatisch starten",
 			autostartDesc: "Streaming beim Start des Geräts automatisch beginnen",
-			autostartError: "Autostart konnte nicht geändert werden. Bitte erneut versuchen.",
+			autostartError:
+				"Autostart konnte nicht geändert werden. Bitte erneut versuchen.",
 		},
 
 		dialogs: {

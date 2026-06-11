@@ -153,7 +153,8 @@ The `StreamingBackend` interface (`modules/streaming/streaming-backend.ts`) has
 
 **Engine selection** is the `engine` flag in `setup.json`
 (`"ceracoder" | "cerastream"`, schema in `helpers/config-schemas.ts`, default
-`"ceracoder"` until Task 37 flips it post boot-parity gate). Every streaming call
+`"cerastream"` since Task 37 flipped it post generic boot-parity gate; ceracoder
+stays selectable until the hardware profiles pass). Every streaming call
 site routes through `getStreamingBackend()` (`streaming-engine.ts`) — a **lazy,
 memoized** resolve (eager resolution would hit a TDZ ReferenceError through the
 streamloop import cycle, see `ceracoder.ts`). Switching engines needs no code

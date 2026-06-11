@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import fs from "node:fs";
-import { mkdtempSync, rmSync } from "node:fs";
+import fs, { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 

@@ -30,7 +30,7 @@ import { ceracoderBackend } from "./ceracoder-backend.ts";
 import { cerastreamBackend } from "./cerastream-backend.ts";
 import type { StreamingBackend } from "./streaming-backend.ts";
 
-export const DEFAULT_STREAMING_ENGINE: StreamingEngine = "ceracoder";
+export const DEFAULT_STREAMING_ENGINE: StreamingEngine = "cerastream";
 
 /** Pure selector: engine flag -> the matching backend singleton. */
 export function resolveStreamingBackend(
@@ -39,7 +39,7 @@ export function resolveStreamingBackend(
 	return engine === "cerastream" ? cerastreamBackend : ceracoderBackend;
 }
 
-/** The configured engine, defaulting to ceracoder until Task 37 flips it. */
+/** The configured engine; defaults to cerastream (Task 37, post boot-parity). */
 export function getConfiguredEngine(): StreamingEngine {
 	return setup.engine ?? DEFAULT_STREAMING_ENGINE;
 }

@@ -23,11 +23,11 @@
 
 import { logger } from "../../../helpers/logger.ts";
 import { periodicCheckForSoftwareUpdates } from "../../system/software-updates.ts";
+import { SHUTDOWN_SIGKILL_TIMEOUT_MS } from "../constants.ts";
 import {
 	broadcastHealthIfChanged,
 	reportStreamProcessExit,
 } from "../health.ts";
-import { SHUTDOWN_SIGKILL_TIMEOUT_MS } from "../constants.ts";
 import { stopLinkTelemetry } from "../link-telemetry.ts";
 import { updateStatus } from "../streaming.ts";
 

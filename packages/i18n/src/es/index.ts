@@ -269,9 +269,12 @@ const es = {
 		healthStable: "Estable",
 		healthReconnecting: "Reconectando",
 		refreshHealth: "Actualizar estado",
-		healthExplainHealthy: "Proceso en ejecución, fotogramas avanzando, todos los enlaces agregados activos.",
-		healthExplainDegraded: "Transmitiendo, pero los fotogramas están estancados o algunos enlaces agregados están caídos.",
-		healthExplainDead: "El proceso del codificador no está en ejecución. La transmisión está caída.",
+		healthExplainHealthy:
+			"Proceso en ejecución, fotogramas avanzando, todos los enlaces agregados activos.",
+		healthExplainDegraded:
+			"Transmitiendo, pero los fotogramas están estancados o algunos enlaces agregados están caídos.",
+		healthExplainDead:
+			"El proceso del codificador no está en ejecución. La transmisión está caída.",
 		link: "Enlace",
 	},
 	live: {
@@ -502,7 +505,8 @@ const es = {
 		},
 		index: {
 			pairing: "Emparejamiento del dispositivo",
-			pairingDesc: "Vincula este dispositivo a tu cuenta en la nube con un código de reclamación.",
+			pairingDesc:
+				"Vincula este dispositivo a tu cuenta en la nube con un código de reclamación.",
 			title: "Configuración",
 			description: "Configuración de dispositivo, sistema y desarrollador",
 			comingSoon: "Próximamente",
@@ -532,8 +536,10 @@ const es = {
 			versions: "Versiones del dispositivo",
 			versionsDesc: "Ver versiones de componentes y firmware instalados",
 			autostart: "Inicio automático de transmisión",
-			autostartDesc: "Iniciar la transmisión automáticamente al arrancar el dispositivo",
-			autostartError: "No se pudo cambiar el inicio automático. Inténtalo de nuevo.",
+			autostartDesc:
+				"Iniciar la transmisión automáticamente al arrancar el dispositivo",
+			autostartError:
+				"No se pudo cambiar el inicio automático. Inténtalo de nuevo.",
 		},
 
 		dialogs: {
@@ -574,7 +580,8 @@ const es = {
 			pairedToast: "Dispositivo emparejado correctamente.",
 			complete: "Completar emparejamiento",
 			regenerating: "Actualizando el código…",
-			pairedBody: "Este dispositivo ahora está vinculado a tu cuenta en la nube.",
+			pairedBody:
+				"Este dispositivo ahora está vinculado a tu cuenta en la nube.",
 			deviceLabel: "ID del dispositivo",
 			subscriptionLabel: "Suscripción",
 			statusActive: "Activa",

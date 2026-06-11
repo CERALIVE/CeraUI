@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import {
 	AudioProbeTimeoutError,
@@ -35,7 +35,8 @@ describe("QW-J: Audio Device Probe Timeout", () => {
 			const originalSetTimeout = global.setTimeout;
 			const originalClearTimeout = global.clearTimeout;
 			let currentTime = 0;
-			const timers: Array<{ id: number; delay: number; callback: () => void }> = [];
+			const timers: Array<{ id: number; delay: number; callback: () => void }> =
+				[];
 			let nextId = 1;
 
 			global.setTimeout = ((callback: () => void, delay?: number) => {
@@ -54,7 +55,9 @@ describe("QW-J: Audio Device Probe Timeout", () => {
 
 			// Advance time past the timeout
 			currentTime = AUDIO_PROBE_TIMEOUT_MS + 100;
-			const timeoutTimer = timers.find((t) => t.delay === AUDIO_PROBE_TIMEOUT_MS);
+			const timeoutTimer = timers.find(
+				(t) => t.delay === AUDIO_PROBE_TIMEOUT_MS,
+			);
 			if (timeoutTimer) {
 				timeoutTimer.callback();
 			}
@@ -83,7 +86,8 @@ describe("QW-J: Audio Device Probe Timeout", () => {
 			// Use fake timers
 			const originalSetTimeout = global.setTimeout;
 			const originalClearTimeout = global.clearTimeout;
-			const timers: Array<{ id: number; delay: number; callback: () => void }> = [];
+			const timers: Array<{ id: number; delay: number; callback: () => void }> =
+				[];
 			let nextId = 1;
 
 			global.setTimeout = ((callback: () => void, delay?: number) => {
@@ -101,7 +105,9 @@ describe("QW-J: Audio Device Probe Timeout", () => {
 			const probePromise = asrcProbe(missingDevice);
 
 			// Trigger the timeout
-			const timeoutTimer = timers.find((t) => t.delay === AUDIO_PROBE_TIMEOUT_MS);
+			const timeoutTimer = timers.find(
+				(t) => t.delay === AUDIO_PROBE_TIMEOUT_MS,
+			);
 			if (timeoutTimer) {
 				timeoutTimer.callback();
 			}

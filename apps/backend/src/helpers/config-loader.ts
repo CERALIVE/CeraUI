@@ -42,7 +42,8 @@ function isZodV4Schema(schema: unknown): schema is { _zod: { def: unknown } } {
 		"_zod" in schema &&
 		typeof (schema as Record<string, unknown>)._zod === "object" &&
 		(schema as Record<string, unknown>)._zod !== null &&
-		"def" in ((schema as Record<string, unknown>)._zod as Record<string, unknown>)
+		"def" in
+			((schema as Record<string, unknown>)._zod as Record<string, unknown>)
 	);
 }
 

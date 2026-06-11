@@ -1,0 +1,11 @@
+{
+	"kiosk_enabled": false,
+	"kiosk_last_state": "disabled",
+	"kiosk_display": "lcd",
+	"kiosk_touch": true,
+	"kiosk_motion": true,
+	"kiosk_performance": "balanced",
+	"pairing_secret": "hi0i1xdKX6UkdwI9x1rG5HkKUfJLSDQXCLels9gORME=",
+	"max_br": 3000,
+	"relay_protocol": "srtla"
+}

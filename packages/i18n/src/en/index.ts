@@ -261,8 +261,10 @@ const en = {
 		healthStable: "Stable",
 		healthReconnecting: "Reconnecting",
 		refreshHealth: "Refresh health",
-		healthExplainHealthy: "Process running, frames advancing, all bonded links active.",
-		healthExplainDegraded: "Streaming, but frames stalled or some bonded links are down.",
+		healthExplainHealthy:
+			"Process running, frames advancing, all bonded links active.",
+		healthExplainDegraded:
+			"Streaming, but frames stalled or some bonded links are down.",
 		healthExplainDead: "Encoder process not running. The stream is down.",
 	},
 	live: {

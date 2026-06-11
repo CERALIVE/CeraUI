@@ -654,7 +654,8 @@ const zh = {
 		healthStable: "稳定",
 		healthReconnecting: "重新连接中",
 		refreshHealth: "刷新状态",
-		healthExplainHealthy: "进程运行中，帧持续推进，所有绑定链路均处于活动状态。",
+		healthExplainHealthy:
+			"进程运行中，帧持续推进，所有绑定链路均处于活动状态。",
 		healthExplainDegraded: "正在推流，但帧已停滞或部分绑定链路已断开。",
 		healthExplainDead: "编码器进程未运行。推流已中断。",
 		link: "链路",

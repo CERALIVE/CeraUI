@@ -298,7 +298,8 @@ const ptBR = {
 		},
 		index: {
 			pairing: "Emparelhamento do dispositivo",
-			pairingDesc: "Vincule este dispositivo à sua conta na nuvem com um código de reivindicação.",
+			pairingDesc:
+				"Vincule este dispositivo à sua conta na nuvem com um código de reivindicação.",
 			title: "Configurações",
 			description: "Configuração do dispositivo, sistema e desenvolvedor",
 			comingSoon: "Em breve",
@@ -328,8 +329,10 @@ const ptBR = {
 			versions: "Versões do dispositivo",
 			versionsDesc: "Veja as versões de componentes e firmware instalados",
 			autostart: "Iniciar transmissão automaticamente",
-			autostartDesc: "Iniciar a transmissão automaticamente quando o dispositivo inicializar",
-			autostartError: "Não foi possível alterar o início automático. Tente novamente.",
+			autostartDesc:
+				"Iniciar a transmissão automaticamente quando o dispositivo inicializar",
+			autostartError:
+				"Não foi possível alterar o início automático. Tente novamente.",
 		},
 
 		dialogs: {
@@ -553,7 +556,8 @@ const ptBR = {
 			nameCopied: "Nome da rede copiado",
 			passwordCopied: "Senha copiada",
 			copyFailed: "Falha ao copiar",
-			copyFailedDescription: "Não foi possível copiar. Por favor, copie manualmente.",
+			copyFailedDescription:
+				"Não foi possível copiar. Por favor, copie manualmente.",
 		},
 		deviceCount: {
 			device: "dispositivo",
@@ -832,9 +836,12 @@ const ptBR = {
 		healthStable: "Estável",
 		healthReconnecting: "Reconectando",
 		refreshHealth: "Atualizar estado",
-		healthExplainHealthy: "Processo em execução, quadros avançando, todos os links agregados ativos.",
-		healthExplainDegraded: "Transmitindo, mas os quadros estão travados ou alguns links agregados estão fora do ar.",
-		healthExplainDead: "O processo do codificador não está em execução. A transmissão está fora do ar.",
+		healthExplainHealthy:
+			"Processo em execução, quadros avançando, todos os links agregados ativos.",
+		healthExplainDegraded:
+			"Transmitindo, mas os quadros estão travados ou alguns links agregados estão fora do ar.",
+		healthExplainDead:
+			"O processo do codificador não está em execução. A transmissão está fora do ar.",
 		link: "Link",
 	},
 	live: {

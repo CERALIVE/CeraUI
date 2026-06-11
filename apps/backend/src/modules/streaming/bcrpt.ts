@@ -16,12 +16,12 @@
 */
 
 import { mkdir } from "node:fs/promises";
+import { logger } from "../../helpers/logger.ts";
+import { writeTextFile } from "../../helpers/text-files.ts";
 import {
 	INITIAL_RETRY_DELAY,
 	MAX_BCRPT_RETRIES,
 } from "../../helpers/timing-constants.ts";
-import { logger } from "../../helpers/logger.ts";
-import { writeTextFile } from "../../helpers/text-files.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import {
 	getAllMockRelaysRtt,

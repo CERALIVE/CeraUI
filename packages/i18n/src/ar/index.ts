@@ -823,8 +823,10 @@ const ar = {
 		healthStable: "مستقر",
 		healthReconnecting: "إعادة الاتصال",
 		refreshHealth: "تحديث الحالة",
-		healthExplainHealthy: "العملية قيد التشغيل، الإطارات تتقدم، وجميع روابط التجميع نشطة.",
-		healthExplainDegraded: "يجري البث، لكن الإطارات متعثرة أو بعض روابط التجميع معطلة.",
+		healthExplainHealthy:
+			"العملية قيد التشغيل، الإطارات تتقدم، وجميع روابط التجميع نشطة.",
+		healthExplainDegraded:
+			"يجري البث، لكن الإطارات متعثرة أو بعض روابط التجميع معطلة.",
 		healthExplainDead: "عملية المُرمِّز لا تعمل. البث متوقف.",
 		link: "رابط",
 	},

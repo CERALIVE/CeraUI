@@ -18,11 +18,10 @@
 
 /* Audio input selection and codec */
 import fs from "node:fs";
-
-import { AUDIO_SOURCE_POLL_DELAY } from "../../helpers/timing-constants.ts";
 import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";
+import { AUDIO_SOURCE_POLL_DELAY } from "../../helpers/timing-constants.ts";
 
 import { getConfig } from "../config.ts";
 import { setup } from "../setup.ts";
@@ -156,7 +155,9 @@ export function clearAsrcProbeReject() {
 
 export class AudioProbeTimeoutError extends Error {
 	constructor(public readonly device: string) {
-		super(`Audio device '${device}' did not appear within ${AUDIO_PROBE_TIMEOUT_MS}ms`);
+		super(
+			`Audio device '${device}' did not appear within ${AUDIO_PROBE_TIMEOUT_MS}ms`,
+		);
 		this.name = "AudioProbeTimeoutError";
 	}
 }

@@ -299,7 +299,8 @@ const fr = {
 		},
 		index: {
 			pairing: "Appairage de l'appareil",
-			pairingDesc: "Liez cet appareil à votre compte cloud avec un code d'enregistrement.",
+			pairingDesc:
+				"Liez cet appareil à votre compte cloud avec un code d'enregistrement.",
 			title: "Paramètres",
 			description: "Configuration de l'appareil, du système et du développeur",
 			comingSoon: "Bientôt disponible",
@@ -332,8 +333,10 @@ const fr = {
 			versionsDesc:
 				"Afficher les versions des composants et du firmware installés",
 			autostart: "Démarrage auto du streaming",
-			autostartDesc: "Démarrer le streaming automatiquement au démarrage de l'appareil",
-			autostartError: "Impossible de modifier le démarrage auto. Veuillez réessayer.",
+			autostartDesc:
+				"Démarrer le streaming automatiquement au démarrage de l'appareil",
+			autostartError:
+				"Impossible de modifier le démarrage auto. Veuillez réessayer.",
 		},
 
 		dialogs: {
@@ -556,7 +559,8 @@ const fr = {
 			nameCopied: "Nom du réseau copié",
 			passwordCopied: "Mot de passe copié",
 			copyFailed: "Échec de la copie",
-			copyFailedDescription: "Impossible de copier. Veuillez copier manuellement.",
+			copyFailedDescription:
+				"Impossible de copier. Veuillez copier manuellement.",
 		},
 		deviceCount: {
 			device: "appareil",
@@ -857,9 +861,12 @@ const fr = {
 		healthStable: "Stable",
 		healthReconnecting: "Reconnexion",
 		refreshHealth: "Actualiser l'état",
-		healthExplainHealthy: "Processus en cours, images en progression, toutes les liaisons agrégées actives.",
-		healthExplainDegraded: "Diffusion en cours, mais images bloquées ou certaines liaisons agrégées hors service.",
-		healthExplainDead: "Le processus d'encodage ne tourne pas. Le flux est hors service.",
+		healthExplainHealthy:
+			"Processus en cours, images en progression, toutes les liaisons agrégées actives.",
+		healthExplainDegraded:
+			"Diffusion en cours, mais images bloquées ou certaines liaisons agrégées hors service.",
+		healthExplainDead:
+			"Le processus d'encodage ne tourne pas. Le flux est hors service.",
 		link: "Liaison",
 	},
 	live: {

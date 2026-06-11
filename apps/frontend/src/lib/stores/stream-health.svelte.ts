@@ -118,7 +118,10 @@ export function parseHealthRollup(data: unknown): HealthRollup | null {
 	return {
 		state,
 		process: { alive: asFlag(process.alive) },
-		frames: { advancing: asFlag(frames.advancing), count: asCount(frames.count) },
+		frames: {
+			advancing: asFlag(frames.advancing),
+			count: asCount(frames.count),
+		},
 		srt: {
 			reconnecting: asFlag(srt.reconnecting),
 			reconnectCount: asCount(srt.reconnectCount),

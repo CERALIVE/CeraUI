@@ -224,8 +224,8 @@ describe("engine flag selection", () => {
 		expect(resolveStreamingBackend("cerastream")).toBe(cerastreamBackend);
 	});
 
-	test("default engine stays ceracoder until Task 37 flips it", () => {
-		expect(DEFAULT_STREAMING_ENGINE).toBe("ceracoder");
+	test("default engine is cerastream after the Task 37 boot-parity flip", () => {
+		expect(DEFAULT_STREAMING_ENGINE).toBe("cerastream");
 		expect(["ceracoder", "cerastream"]).toContain(getConfiguredEngine());
 	});
 });

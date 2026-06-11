@@ -690,9 +690,12 @@ const ko = {
 		healthStable: "안정적",
 		healthReconnecting: "재연결 중",
 		refreshHealth: "상태 새로고침",
-		healthExplainHealthy: "프로세스가 실행 중이고, 프레임이 진행되며, 모든 본딩 링크가 활성 상태입니다.",
-		healthExplainDegraded: "스트리밍 중이지만 프레임이 정체되었거나 일부 본딩 링크가 다운되었습니다.",
-		healthExplainDead: "인코더 프로세스가 실행되고 있지 않습니다. 스트림이 다운되었습니다.",
+		healthExplainHealthy:
+			"프로세스가 실행 중이고, 프레임이 진행되며, 모든 본딩 링크가 활성 상태입니다.",
+		healthExplainDegraded:
+			"스트리밍 중이지만 프레임이 정체되었거나 일부 본딩 링크가 다운되었습니다.",
+		healthExplainDead:
+			"인코더 프로세스가 실행되고 있지 않습니다. 스트림이 다운되었습니다.",
 		link: "링크",
 	},
 	live: {

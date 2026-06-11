@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,8 +6,8 @@ import { z } from "zod";
 
 import {
 	PipelineOverrideError,
-	validatePipelineOverrides,
 	searchPipelines,
+	validatePipelineOverrides,
 } from "../modules/streaming/pipelines.ts";
 
 describe("QW-I: Pipeline Override Validation at Save Time", () => {
@@ -95,10 +95,7 @@ describe("QW-I: Pipeline Override Validation at Save Time", () => {
 
 	describe("PipelineOverrideError", () => {
 		it("should have correct error name and properties", () => {
-			const err = new PipelineOverrideError(
-				"resolution",
-				"Test message",
-			);
+			const err = new PipelineOverrideError("resolution", "Test message");
 
 			expect(err.name).toBe("PipelineOverrideError");
 			expect(err.field).toBe("resolution");

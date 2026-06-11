@@ -224,8 +224,11 @@ export const hardwareTypeSchema = z.enum(["jetson", "n100", "rk3588"]);
 // Which streaming engine the backend drives behind the StreamingBackend seam.
 // Boot identity, not a runtime UI toggle: it is read once at startup to pick the
 // engine implementation (ceracoder INI/spawn vs cerastream structured IPC). The
-// image / first-run setup.json owns the value; Task 37 flips the default to
-// "cerastream" post boot-parity gate. Absent ⇒ "ceracoder" (see SETUP defaults).
+// image / first-run setup.json owns the value. Task 37 flipped the default to
+// "cerastream" after the generic boot-parity gate passed
+// (cerastream/docs/notes/boot-parity-results.md). Absent ⇒ "cerastream" (see
+// SETUP defaults). ceracoder stays selectable until the hardware-gated profiles
+// also pass and it is removed from the image.
 export const streamingEngineSchema = z.enum(["ceracoder", "cerastream"]);
 export type StreamingEngine = z.infer<typeof streamingEngineSchema>;
 
@@ -252,7 +255,7 @@ export type SetupConfig = z.infer<typeof setupConfigSchema>;
 
 // Default paths based on hardware
 export const SETUP_CONFIG_DEFAULTS: Partial<SetupConfig> = {
-	engine: "ceracoder",
+	engine: "cerastream",
 	// Ceracoder config path for -c and SIGHUP reload
 	ceracoder_config: "/tmp/ceracoder.conf",
 

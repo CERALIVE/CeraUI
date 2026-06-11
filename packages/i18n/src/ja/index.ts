@@ -146,7 +146,8 @@ const ja = {
 		},
 		index: {
 			pairing: "デバイスのペアリング",
-			pairingDesc: "クレームコードでこのデバイスをクラウドアカウントにリンクします。",
+			pairingDesc:
+				"クレームコードでこのデバイスをクラウドアカウントにリンクします。",
 			title: "設定",
 			description: "デバイス、システム、開発者の設定",
 			comingSoon: "近日公開",
@@ -177,7 +178,8 @@ const ja = {
 				"インストール済みコンポーネントとファームウェアのバージョンを表示します",
 			autostart: "自動ストリーミング開始",
 			autostartDesc: "デバイス起動時に自動的にストリーミングを開始します",
-			autostartError: "自動開始を変更できませんでした。もう一度お試しください。",
+			autostartError:
+				"自動開始を変更できませんでした。もう一度お試しください。",
 		},
 
 		dialogs: {
@@ -391,7 +393,8 @@ const ja = {
 			nameCopied: "ネットワーク名をコピーしました",
 			passwordCopied: "パスワードをコピーしました",
 			copyFailed: "コピーに失敗しました",
-			copyFailedDescription: "コピーできませんでした。手動でコピーしてください。",
+			copyFailedDescription:
+				"コピーできませんでした。手動でコピーしてください。",
 		},
 		deviceCount: {
 			device: "デバイス",
@@ -439,7 +442,8 @@ const ja = {
 			noNetworksFound:
 				"ネットワークがまだ見つかりません。スキャンして事業者を検索してください。",
 			scanForNetworks: "ネットワークをスキャン",
-			scanFailed: "ネットワークのスキャンに失敗しました。もう一度お試しください。",
+			scanFailed:
+				"ネットワークのスキャンに失敗しました。もう一度お試しください。",
 			credentials: "認証情報",
 			configureDescription: "セルラー接続設定を構成します",
 			simUnlock: {
@@ -698,9 +702,12 @@ const ja = {
 		healthStable: "安定",
 		healthReconnecting: "再接続中",
 		refreshHealth: "状態を更新",
-		healthExplainHealthy: "プロセスが実行中で、フレームが進行し、すべてのボンドリンクがアクティブです。",
-		healthExplainDegraded: "ストリーミング中ですが、フレームが停滞しているか、一部のボンドリンクがダウンしています。",
-		healthExplainDead: "エンコーダープロセスが実行されていません。ストリームがダウンしています。",
+		healthExplainHealthy:
+			"プロセスが実行中で、フレームが進行し、すべてのボンドリンクがアクティブです。",
+		healthExplainDegraded:
+			"ストリーミング中ですが、フレームが停滞しているか、一部のボンドリンクがダウンしています。",
+		healthExplainDead:
+			"エンコーダープロセスが実行されていません。ストリームがダウンしています。",
 		link: "リンク",
 	},
 	live: {

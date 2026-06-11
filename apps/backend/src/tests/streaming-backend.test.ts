@@ -8,8 +8,9 @@ import type {
 } from "../modules/streaming/streaming-backend.ts";
 
 // Contract test for the StreamingBackend seam. It pins the call sequencing every
-// engine implementation (ceracoder today, cerastream later) must honour, using a
-// fully in-memory fake — no subprocess spawn, no real ceracoder. The CONCRETE
+// engine implementation (cerastream is the default engine; ceracoder is retained
+// until the hardware boot-parity profiles pass) must honour, using a fully
+// in-memory fake — no subprocess spawn, no real ceracoder. The CONCRETE
 // CeracoderBackend is verified to structurally satisfy the same interface at the
 // end so the seam can't drift away from a real implementation.
 
