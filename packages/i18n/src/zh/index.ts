@@ -678,6 +678,17 @@ const zh = {
 		cannotStartNoServer: "开始直播前请配置服务器",
 		startFailed: "启动直播失败",
 		reconfigureRequired: "Reconfigure required",
+		ingest: {
+			title: "采集统计",
+			link: "链路",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "权重",
+			links: "链路",
+			total: "合计",
+			waiting: "正在等待链路遥测\u2026",
+			ariaLabel: "采集统计",
+		},
 	},
 	dialogs: {
 		close: "关闭",

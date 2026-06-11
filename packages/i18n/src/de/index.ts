@@ -296,6 +296,17 @@ const de = {
 			"Konfiguriere einen Server, bevor du den Stream startest",
 		startFailed: "Stream konnte nicht gestartet werden",
 		reconfigureRequired: "Reconfigure required",
+		ingest: {
+			title: "Ingest-Statistiken",
+			link: "Verbindung",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "Gewicht",
+			links: "Verbindungen",
+			total: "Gesamt",
+			waiting: "Warte auf Verbindungstelemetrie\u2026",
+			ariaLabel: "Ingest-Statistiken",
+		},
 	},
 	dialogs: {
 		close: "Schließen",

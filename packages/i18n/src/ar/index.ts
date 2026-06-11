@@ -847,6 +847,17 @@ const ar = {
 		cannotStartNoServer: "قم بتكوين خادم قبل بدء البث",
 		startFailed: "فشل بدء البث",
 		reconfigureRequired: "Reconfigure required",
+		ingest: {
+			title: "إحصائيات الإدخال",
+			link: "الرابط",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "الوزن",
+			links: "الروابط",
+			total: "الإجمالي",
+			waiting: "في انتظار قياس الروابط\u2026",
+			ariaLabel: "إحصائيات الإدخال",
+		},
 	},
 	dialogs: {
 		close: "إغلاق",

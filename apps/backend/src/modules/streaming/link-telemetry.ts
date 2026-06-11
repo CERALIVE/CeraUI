@@ -195,6 +195,15 @@ let handle: WatchTelemetryHandle | null = null;
 let lastSnapshot: Telemetry | null = null;
 // Whether the most recent watch tick delivered fresh data. False => stale/absent.
 let lastTickFresh = false;
+// CeraUI-side wall-clock ms of the last successful (non-null) read; 0 until one.
+let lastReadMs = 0;
+
+let nowFn: () => number = Date.now;
+
+/** Test seam: pin the staleness clock (null restores Date.now). */
+export function setTelemetryClockForTest(fn: (() => number) | null): void {
+	nowFn = fn ?? Date.now;
+}
 
 export interface StartLinkTelemetryOptions {
 	intervalMs?: number;
@@ -211,6 +220,7 @@ function ingestTelemetry(telemetry: Telemetry | null): void {
 	if (telemetry) {
 		lastSnapshot = telemetry;
 		lastTickFresh = true;
+		lastReadMs = nowFn();
 	} else {
 		lastTickFresh = false;
 	}
@@ -242,6 +252,7 @@ export function startLinkTelemetry(
 
 	lastSnapshot = null;
 	lastTickFresh = false;
+	lastReadMs = 0;
 
 	// Resolve the default interface resolver eagerly (best-effort) so live reads
 	// can map conn_id -> iface without awaiting inside the broadcast path. Skip
@@ -266,6 +277,7 @@ export function stopLinkTelemetry(): void {
 	}
 	lastSnapshot = null;
 	lastTickFresh = false;
+	lastReadMs = 0;
 	resetConnIdRegistry();
 }
 
@@ -295,6 +307,7 @@ export function buildLinkTelemetry(): LinkTelemetryMessage | null {
 			weight_percent: c.weight_percent,
 			stale,
 		})),
+		lastReadMs,
 	};
 }
 

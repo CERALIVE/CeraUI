@@ -708,6 +708,17 @@ const hi = {
 		cannotStartNoServer: "स्ट्रीम शुरू करने से पहले एक सर्वर कॉन्फ़िगर करें",
 		startFailed: "स्ट्रीम शुरू करने में विफल",
 		reconfigureRequired: "Reconfigure required",
+		ingest: {
+			title: "इन्जेस्ट आँकड़े",
+			link: "लिंक",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "वज़न",
+			links: "लिंक",
+			total: "कुल",
+			waiting: "लिंक टेलीमेट्री की प्रतीक्षा\u2026",
+			ariaLabel: "इन्जेस्ट आँकड़े",
+		},
 	},
 	dialogs: {
 		close: "बंद करें",

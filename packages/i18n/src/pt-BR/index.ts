@@ -858,6 +858,17 @@ const ptBR = {
 		cannotStartNoServer: "Configure um servidor antes de iniciar a transmissão",
 		startFailed: "Falha ao iniciar a transmissão",
 		reconfigureRequired: "Reconfigure required",
+		ingest: {
+			title: "Estatísticas de ingestão",
+			link: "Link",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "Peso",
+			links: "Links",
+			total: "Total",
+			waiting: "Aguardando telemetria dos links\u2026",
+			ariaLabel: "Estatísticas de ingestão",
+		},
 	},
 	dialogs: {
 		close: "Fechar",

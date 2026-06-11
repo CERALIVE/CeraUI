@@ -185,7 +185,19 @@ export function gatePipelineOverrides(
  * Rejects overrides the selected pipeline cannot honor, so an invalid override
  * never reaches ceracoder. Counterpart to gatePipelineOverrides, which instead
  * silently drops unsupported overrides at spawn time.
+ *
+ * Throws a typed error with the offending field name for RPC rejection.
  */
+export class PipelineOverrideError extends Error {
+	constructor(
+		public readonly field: "resolution" | "framerate",
+		message: string,
+	) {
+		super(message);
+		this.name = "PipelineOverrideError";
+	}
+}
+
 export function validatePipelineOverrides(
 	pipeline: Pick<
 		Pipeline,
@@ -194,10 +206,16 @@ export function validatePipelineOverrides(
 	source: { resolution?: Resolution; framerate?: Framerate },
 ): void {
 	if (source.resolution !== undefined && !pipeline.supportsResolutionOverride) {
-		throw new Error("Pipeline does not support resolution override");
+		throw new PipelineOverrideError(
+			"resolution",
+			"Pipeline does not support resolution override",
+		);
 	}
 	if (source.framerate !== undefined && !pipeline.supportsFramerateOverride) {
-		throw new Error("Pipeline does not support framerate override");
+		throw new PipelineOverrideError(
+			"framerate",
+			"Pipeline does not support framerate override",
+		);
 	}
 }
 

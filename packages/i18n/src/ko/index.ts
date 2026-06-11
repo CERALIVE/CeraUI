@@ -714,6 +714,17 @@ const ko = {
 		cannotStartNoServer: "스트림을 시작하기 전에 서버를 구성하세요",
 		startFailed: "스트림 시작 실패",
 		reconfigureRequired: "Reconfigure required",
+		ingest: {
+			title: "인제스트 통계",
+			link: "링크",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "가중치",
+			links: "링크",
+			total: "합계",
+			waiting: "링크 텔레메트리 대기 중\u2026",
+			ariaLabel: "인제스트 통계",
+		},
 	},
 	dialogs: {
 		close: "닫기",

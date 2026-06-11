@@ -41,6 +41,9 @@ import {
 	initPipelines,
 	setMockHardware,
 	VALID_HARDWARE_TYPES,
+	searchPipelines,
+	PipelineOverrideError,
+	validatePipelineOverrides,
 } from "../../modules/streaming/pipelines.ts";
 import {
 	getIsStreaming,
@@ -208,6 +211,8 @@ export const getConfigProcedure = authedProcedure
 
 /**
  * Persist streaming/server configuration without starting the stream.
+ * Validates pipeline overrides at save time (QW-I) — invalid overrides reject
+ * the RPC with a typed error naming the offending field.
  * Mirrors the config-write + relay/manual mutual-exclusion of streaming's
  * updateConfig, minus the DNS resolution and pipeline requirements that only
  * apply when actually launching a stream.
@@ -217,6 +222,29 @@ export const setConfigProcedure = authedProcedure
 	.output(streamingSetConfigOutputSchema)
 	.handler(({ input }) => {
 		const config = getConfig();
+
+		// Validate pipeline overrides at save time (QW-I)
+		if (input.pipeline !== undefined || input.resolution !== undefined || input.framerate !== undefined) {
+			const pipelineId = input.pipeline ?? config.pipeline;
+			const pipeline = searchPipelines(pipelineId);
+			if (pipeline) {
+				try {
+					validatePipelineOverrides(pipeline, {
+						resolution: input.resolution,
+						framerate: input.framerate,
+					});
+				} catch (err) {
+					if (err instanceof PipelineOverrideError) {
+						return {
+							success: false,
+							error: `Pipeline does not support ${err.field} override`,
+							applied: {},
+						};
+					}
+					throw err;
+				}
+			}
+		}
 
 		if (input.srt_latency !== undefined) config.srt_latency = input.srt_latency;
 		if (input.delay !== undefined) config.delay = input.delay;

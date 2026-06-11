@@ -13,6 +13,7 @@ import {
 	registerSrtlaIpList,
 	resetLinkTelemetryBroadcastState,
 	setIfaceResolverForTest,
+	setTelemetryClockForTest,
 	startLinkTelemetry,
 	stopLinkTelemetry,
 } from "../modules/streaming/link-telemetry.ts";
@@ -77,12 +78,14 @@ function captureClient(sink: string[]): AppWebSocket {
 beforeEach(() => {
 	stopLinkTelemetry();
 	setIfaceResolverForTest(null);
+	setTelemetryClockForTest(null);
 	resetLinkTelemetryBroadcastState();
 });
 
 afterEach(() => {
 	stopLinkTelemetry();
 	setIfaceResolverForTest(null);
+	setTelemetryClockForTest(null);
 	resetLinkTelemetryBroadcastState();
 });
 
@@ -219,7 +222,51 @@ describe("ingestion + mapping + payload shape", () => {
 		setIfaceResolverForTest(() => undefined);
 		startLinkTelemetry("/tmp/stats.json", [], { watch: w.watch });
 		w.emit(snapshot([]));
-		expect(buildLinkTelemetry()).toEqual({ links: [] });
+		const payload = buildLinkTelemetry();
+		expect(payload?.links).toEqual([]);
+		expect(typeof payload?.lastReadMs).toBe("number");
+	});
+});
+
+describe("lastReadMs staleness clock (QW-H)", () => {
+	test("advances on each fresh read and freezes when reads go null", () => {
+		const w = captureWatch();
+		setIfaceResolverForTest(() => "usb0");
+		let clock = 1000;
+		setTelemetryClockForTest(() => clock);
+		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1"], { watch: w.watch });
+
+		clock = 1000;
+		w.emit(snapshot([{ conn_id: "0" }]));
+		const first = buildLinkTelemetry()?.lastReadMs;
+		expect(first).toBe(1000);
+
+		clock = 2000;
+		w.emit(snapshot([{ conn_id: "0" }]));
+		const second = buildLinkTelemetry()?.lastReadMs;
+		expect(second).toBe(2000);
+		expect(second).toBeGreaterThan(first as number);
+
+		// Stats file deleted/stale -> watchTelemetry yields null. The clock must
+		// freeze at the last successful read rather than advancing.
+		clock = 3000;
+		w.emit(null);
+		const frozen = buildLinkTelemetry();
+		expect(frozen?.lastReadMs).toBe(2000);
+		expect(frozen?.links[0]?.stale).toBe(true);
+	});
+
+	test("resets to 0 on stop so a restarted watcher starts cold", () => {
+		const w = captureWatch();
+		setIfaceResolverForTest(() => "usb0");
+		setTelemetryClockForTest(() => 5000);
+		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1"], { watch: w.watch });
+		w.emit(snapshot([{ conn_id: "0" }]));
+		expect(buildLinkTelemetry()?.lastReadMs).toBe(5000);
+
+		stopLinkTelemetry();
+		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1"], { watch: w.watch });
+		expect(buildLinkTelemetry()).toBeNull();
 	});
 });
 

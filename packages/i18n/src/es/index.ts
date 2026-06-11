@@ -296,6 +296,17 @@ const es = {
 			"Configura un servidor antes de iniciar la transmisión",
 		startFailed: "No se pudo iniciar la transmisión",
 		reconfigureRequired: "Reconfigure required",
+		ingest: {
+			title: "Estadísticas de ingesta",
+			link: "Enlace",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "Peso",
+			links: "Enlaces",
+			total: "Total",
+			waiting: "Esperando telemetría de enlaces\u2026",
+			ariaLabel: "Estadísticas de ingesta",
+		},
 	},
 	dialogs: {
 		close: "Cerrar",

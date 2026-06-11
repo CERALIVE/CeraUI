@@ -284,6 +284,17 @@ const en = {
 		cannotStartNoServer: "Configure a server before starting the stream",
 		startFailed: "Failed to start stream",
 		reconfigureRequired: "Reconfigure required",
+		ingest: {
+			title: "Ingest Stats",
+			link: "Link",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "Weight",
+			links: "Links",
+			total: "Total",
+			waiting: "Waiting for link telemetry\u2026",
+			ariaLabel: "Ingest statistics",
+		},
 	},
 	dialogs: {
 		close: "Close",

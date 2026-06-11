@@ -28,6 +28,7 @@ import { getConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { AUDIO_PROBE_TIMEOUT_MS } from "./constants.ts";
 
 const deviceDir = setup.sound_device_dir ?? "/sys/class/sound";
 
@@ -131,7 +132,7 @@ export async function updateAudioDevices() {
 	broadcastMsg("status", { asrcs: Object.keys(audioDevices) });
 }
 
-let asrcProbeReject: (() => void) | undefined;
+let asrcProbeReject: ((err: Error) => void) | undefined;
 
 export function isAsrcProbeRejectResolved() {
 	return asrcProbeReject !== undefined;
@@ -142,19 +143,37 @@ export function clearAsrcProbeReject() {
 	asrcProbeReject = undefined;
 }
 
+export class AudioProbeTimeoutError extends Error {
+	constructor(public readonly device: string) {
+		super(`Audio device '${device}' did not appear within ${AUDIO_PROBE_TIMEOUT_MS}ms`);
+		this.name = "AudioProbeTimeoutError";
+	}
+}
+
 export async function asrcProbe(asrc: string): Promise<string> {
 	let audioSrcId: string | undefined = audioDevices[asrc];
 	if (audioSrcId) return audioSrcId;
 
-	return new Promise((res: (id: string) => void, rej: () => void) => {
+	return new Promise((res: (id: string) => void, rej: (err: Error) => void) => {
 		// Cancel any prior pending probe before starting a new one
 		clearAsrcProbeReject();
-		asrcProbeReject = rej;
+		asrcProbeReject = () => {
+			rej(new AudioProbeTimeoutError(asrc));
+		};
+
+		// Set timeout for audio device probe (QW-J)
+		const timeoutHandle = setTimeout(() => {
+			if (asrcProbeReject) {
+				asrcProbeReject();
+				asrcProbeReject = undefined;
+			}
+		}, AUDIO_PROBE_TIMEOUT_MS);
 
 		const poll = async () => {
-			while (asrcProbeReject === rej) {
+			while (asrcProbeReject) {
 				audioSrcId = audioDevices[asrc];
 				if (audioSrcId) {
+					clearTimeout(timeoutHandle);
 					asrcProbeReject = undefined;
 					res(audioSrcId);
 					return;
@@ -163,12 +182,13 @@ export async function asrcProbe(asrc: string): Promise<string> {
 				const msg = `Selected audio input '${config.asrc}' is unavailable. Waiting for it before starting the stream...`;
 				notificationBroadcast("asrc_not_found", "error", msg, 2, true, false);
 
-			// sleep for one second
-			await new Promise<void>((r) => {
-				setTimeout(r, AUDIO_SOURCE_POLL_DELAY);
-			});
+				// sleep for one second
+				await new Promise<void>((r) => {
+					setTimeout(r, AUDIO_SOURCE_POLL_DELAY);
+				});
 			}
 			// If the loop exited, then rej() was already called externally. Nothing left to do
+			clearTimeout(timeoutHandle);
 		};
 
 		poll();

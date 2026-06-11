@@ -724,6 +724,17 @@ const ja = {
 		cannotStartNoServer: "ストリームを開始する前にサーバーを設定してください",
 		startFailed: "ストリームの開始に失敗しました",
 		reconfigureRequired: "Reconfigure required",
+		ingest: {
+			title: "インジェスト統計",
+			link: "リンク",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "重み",
+			links: "リンク",
+			total: "合計",
+			waiting: "リンクテレメトリを待機中\u2026",
+			ariaLabel: "インジェスト統計",
+		},
 	},
 	dialogs: {
 		close: "閉じる",

@@ -883,6 +883,17 @@ const fr = {
 		cannotStartNoServer: "Configurez un serveur avant de démarrer la diffusion",
 		startFailed: "Échec du démarrage de la diffusion",
 		reconfigureRequired: "Reconfigure required",
+		ingest: {
+			title: "Statistiques d'ingestion",
+			link: "Liaison",
+			rtt: "RTT",
+			nak: "NAK",
+			weight: "Poids",
+			links: "Liaisons",
+			total: "Total",
+			waiting: "En attente de la télémétrie des liaisons\u2026",
+			ariaLabel: "Statistiques d'ingestion",
+		},
 	},
 	dialogs: {
 		close: "Fermer",
