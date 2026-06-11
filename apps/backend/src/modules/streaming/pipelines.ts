@@ -1,7 +1,7 @@
 /*
     CeraUI - web UI for the CERALIVE project
     Copyright (C) 2024-2025 CeraLive project
-    
+
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,23 +16,21 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import {
-	type HardwareType as CeracoderHardwareType,
-	type Framerate,
-	PipelineBuilder,
-	type PipelineOverrides,
-	type Resolution,
-	type VideoSource,
-} from "@ceralive/ceracoder";
 import { logger } from "../../helpers/logger.ts";
 import { setup } from "../setup.ts";
-import { TEMP_PIPELINE_PATH } from "./ceracoder.ts";
+import {
+	type Framerate,
+	listPipelineSources,
+	type PipelineHardwareType,
+	type Resolution,
+	type VideoSource,
+} from "./pipeline-sources.ts";
 
 // Pipeline interface
 export type Pipeline = {
 	source: VideoSource;
 	name: string;
-	hardware: CeracoderHardwareType;
+	hardware: PipelineHardwareType;
 	description: string;
 	defaultResolution?: Resolution;
 	defaultFramerate?: Framerate;
@@ -58,8 +56,8 @@ let mockHardwareOverride: HardwareType | null = null;
 /**
  * Get the effective hardware type (mock override or setup.hw)
  */
-export function getEffectiveHardware(): CeracoderHardwareType {
-	return (mockHardwareOverride ?? setup.hw) as CeracoderHardwareType;
+export function getEffectiveHardware(): PipelineHardwareType {
+	return (mockHardwareOverride ?? setup.hw) as PipelineHardwareType;
 }
 
 /**
@@ -86,12 +84,12 @@ export function getMockHardware(): HardwareType | null {
 }
 
 /**
- * Initialize pipelines from builder
+ * Initialize pipelines from the per-hardware source tables
  */
 function getPipelines(): Record<string, Pipeline> {
 	const ps: Record<string, Pipeline> = {};
 	const hardware = getEffectiveHardware();
-	const sources = PipelineBuilder.listSources(hardware);
+	const sources = listPipelineSources(hardware);
 
 	for (const sourceMeta of sources) {
 		const id = sourceMeta.source;
@@ -164,27 +162,9 @@ export function getPipelinesMessage() {
 	};
 }
 
-export function gatePipelineOverrides(
-	pipeline: Pick<
-		Pipeline,
-		"supportsResolutionOverride" | "supportsFramerateOverride"
-	>,
-	source: { resolution?: Resolution; framerate?: Framerate },
-): { resolution?: Resolution; framerate?: Framerate } {
-	const gated: { resolution?: Resolution; framerate?: Framerate } = {};
-	if (pipeline.supportsResolutionOverride && source.resolution !== undefined) {
-		gated.resolution = source.resolution;
-	}
-	if (pipeline.supportsFramerateOverride && source.framerate !== undefined) {
-		gated.framerate = source.framerate;
-	}
-	return gated;
-}
-
 /**
  * Rejects overrides the selected pipeline cannot honor, so an invalid override
- * never reaches ceracoder. Counterpart to gatePipelineOverrides, which instead
- * silently drops unsupported overrides at spawn time.
+ * never reaches the engine.
  *
  * Throws a typed error with the offending field name for RPC rejection.
  */
@@ -217,22 +197,4 @@ export function validatePipelineOverrides(
 			"Pipeline does not support framerate override",
 		);
 	}
-}
-
-/**
- * Generate a pipeline file with overrides
- */
-export function generatePipelineFile(
-	pipeline: Pipeline,
-	overrides: PipelineOverrides,
-): string {
-	const result = PipelineBuilder.build({
-		hardware: pipeline.hardware,
-		source: pipeline.source,
-		overrides,
-		writeTo: TEMP_PIPELINE_PATH,
-	});
-
-	logger.debug(`Generated pipeline for ${pipeline.source} at ${result.path}`);
-	return result.path!;
 }

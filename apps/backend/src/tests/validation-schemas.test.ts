@@ -9,6 +9,7 @@ import {
 	netifConfigInputSchema,
 	wifiNewInputSchema,
 } from "@ceraui/rpc/schemas";
+import { setupConfigSchema } from "../helpers/config-schemas.ts";
 
 const validHotspot = {
 	device: "wlan0",
@@ -210,5 +211,38 @@ describe("bitrateInputSchema canonical range", () => {
 
 	it("accepts a bitrate within range", () => {
 		expect(bitrateInputSchema.safeParse({ max_br: 6000 }).success).toBe(true);
+	});
+});
+
+describe("setupConfigSchema engine field (legacy tolerance)", () => {
+	it("accepts the cerastream engine", () => {
+		const parsed = setupConfigSchema.parse({
+			hw: "rk3588",
+			engine: "cerastream",
+		});
+		expect(parsed.engine).toBe("cerastream");
+	});
+
+	it("coerces a persisted legacy engine value to cerastream instead of crashing", () => {
+		// Devices in the field may still have the retired legacy engine name
+		// persisted in setup.json — boot must parse it, not throw.
+		const parsed = setupConfigSchema.parse({
+			hw: "rk3588",
+			engine: "legacy-engine",
+		});
+		expect(parsed.engine).toBe("cerastream");
+	});
+
+	it("coerces an unknown engine value to cerastream", () => {
+		const parsed = setupConfigSchema.parse({
+			hw: "jetson",
+			engine: "some-future-engine",
+		});
+		expect(parsed.engine).toBe("cerastream");
+	});
+
+	it("leaves a missing engine undefined (defaulted at the call site)", () => {
+		const parsed = setupConfigSchema.parse({ hw: "n100" });
+		expect(parsed.engine).toBeUndefined();
 	});
 });

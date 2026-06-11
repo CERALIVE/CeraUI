@@ -16,7 +16,6 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import type { StreamingEngineKind } from '@ceraui/rpc/schemas';
 import { Eye, EyeOff, Loader } from '@lucide/svelte';
 
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
@@ -25,11 +24,10 @@ import { getPreviewSocketUrl } from '$lib/env';
 import { cn } from '$lib/utils';
 
 interface Props {
-	engine?: StreamingEngineKind;
 	class?: string;
 }
 
-const { engine = 'cerastream', class: className = undefined }: Props = $props();
+const { class: className = undefined }: Props = $props();
 
 type PreviewStatus =
 	| 'idle'
@@ -338,91 +336,89 @@ const overlayText = $derived.by(() => {
 });
 </script>
 
-{#if engine === 'cerastream'}
-	<section
-		data-testid="preview"
-		data-status={status}
-		data-tier={tier}
-		class={cn('bg-card rounded-xl border p-4 sm:p-5', className)}
-	>
-		<div class="mb-3 flex items-center gap-2">
-			<Eye aria-hidden="true" class="text-primary size-4 shrink-0" />
-			<h2 class="text-sm font-semibold tracking-tight">{$LL.live.preview.title()}</h2>
-			<Button
-				class="ms-auto gap-1.5"
-				data-testid="preview-toggle"
-				aria-pressed={enabled}
-				aria-label={$LL.live.preview.toggleAria()}
-				onclick={toggle}
-				size="sm"
-				variant={enabled ? 'secondary' : 'default'}
-			>
-				{#if enabled}
-					<EyeOff aria-hidden="true" class="size-3.5" />
-					{$LL.live.preview.stop()}
-				{:else}
-					<Eye aria-hidden="true" class="size-3.5" />
-					{$LL.live.preview.start()}
-				{/if}
-			</Button>
+<section
+	data-testid="preview"
+	data-status={status}
+	data-tier={tier}
+	class={cn('bg-card rounded-xl border p-4 sm:p-5', className)}
+>
+	<div class="mb-3 flex items-center gap-2">
+		<Eye aria-hidden="true" class="text-primary size-4 shrink-0" />
+		<h2 class="text-sm font-semibold tracking-tight">{$LL.live.preview.title()}</h2>
+		<Button
+			class="ms-auto gap-1.5"
+			data-testid="preview-toggle"
+			aria-pressed={enabled}
+			aria-label={$LL.live.preview.toggleAria()}
+			onclick={toggle}
+			size="sm"
+			variant={enabled ? 'secondary' : 'default'}
+		>
+			{#if enabled}
+				<EyeOff aria-hidden="true" class="size-3.5" />
+				{$LL.live.preview.stop()}
+			{:else}
+				<Eye aria-hidden="true" class="size-3.5" />
+				{$LL.live.preview.start()}
+			{/if}
+		</Button>
+	</div>
+
+	{#if enabled}
+		<div class="bg-muted/40 relative aspect-video w-full overflow-hidden rounded-lg">
+			{#if tier === 'webcodecs'}
+				<canvas
+					bind:this={canvasEl}
+					data-testid="preview-canvas"
+					aria-label={$LL.live.preview.canvasAria()}
+					class="h-full w-full object-contain"
+				></canvas>
+			{:else if tier === 'mse'}
+				<!-- svelte-ignore a11y_media_has_caption -->
+				<video
+					bind:this={videoEl}
+					data-testid="preview-video"
+					class="h-full w-full object-contain"
+					autoplay
+					muted
+					playsinline
+				></video>
+			{/if}
+
+			{#if status === 'reconnecting'}
+				<div
+					data-testid="preview-reconnecting"
+					role="status"
+					class="bg-status-standby/15 text-status-standby absolute top-2 left-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium backdrop-blur-sm"
+				>
+					<Loader aria-hidden="true" class="size-3 animate-spin" />
+					{$LL.live.preview.reconnecting()}
+				</div>
+			{/if}
+
+			{#if tier === 'mse'}
+				<span
+					data-testid="preview-compat"
+					class="bg-background/70 text-muted-foreground absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+				>
+					{$LL.live.preview.compatBadge()}
+				</span>
+			{/if}
+
+			{#if status !== 'live' && status !== 'reconnecting' && overlayText}
+				<div
+					class="text-muted-foreground absolute inset-0 grid place-items-center p-4 text-center text-sm"
+					role="status"
+				>
+					{overlayText}
+				</div>
+			{/if}
 		</div>
 
-		{#if enabled}
-			<div class="bg-muted/40 relative aspect-video w-full overflow-hidden rounded-lg">
-				{#if tier === 'webcodecs'}
-					<canvas
-						bind:this={canvasEl}
-						data-testid="preview-canvas"
-						aria-label={$LL.live.preview.canvasAria()}
-						class="h-full w-full object-contain"
-					></canvas>
-				{:else if tier === 'mse'}
-					<!-- svelte-ignore a11y_media_has_caption -->
-					<video
-						bind:this={videoEl}
-						data-testid="preview-video"
-						class="h-full w-full object-contain"
-						autoplay
-						muted
-						playsinline
-					></video>
-				{/if}
-
-				{#if status === 'reconnecting'}
-					<div
-						data-testid="preview-reconnecting"
-						role="status"
-						class="bg-status-standby/15 text-status-standby absolute top-2 left-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium backdrop-blur-sm"
-					>
-						<Loader aria-hidden="true" class="size-3 animate-spin" />
-						{$LL.live.preview.reconnecting()}
-					</div>
-				{/if}
-
-				{#if tier === 'mse'}
-					<span
-						data-testid="preview-compat"
-						class="bg-background/70 text-muted-foreground absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
-					>
-						{$LL.live.preview.compatBadge()}
-					</span>
-				{/if}
-
-				{#if status !== 'live' && status !== 'reconnecting' && overlayText}
-					<div
-						class="text-muted-foreground absolute inset-0 grid place-items-center p-4 text-center text-sm"
-						role="status"
-					>
-						{overlayText}
-					</div>
-				{/if}
-			</div>
-
-			<div class="mt-3">
-				<AudioLevelMeter {rmsDb} {peakDb} />
-			</div>
-		{:else}
-			<p class="text-muted-foreground text-sm">{$LL.live.preview.noSignal()}</p>
-		{/if}
-	</section>
-{/if}
+		<div class="mt-3">
+			<AudioLevelMeter {rmsDb} {peakDb} />
+		</div>
+	{:else}
+		<p class="text-muted-foreground text-sm">{$LL.live.preview.noSignal()}</p>
+	{/if}
+</section>

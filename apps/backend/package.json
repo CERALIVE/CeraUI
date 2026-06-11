@@ -9,7 +9,6 @@
 		"bun": ">=1.3.0"
 	},
 	"dependencies": {
-		"@ceralive/ceracoder": "link:../../../ceracoder/bindings/typescript",
 		"@ceralive/cerastream": "file:vendor/ceralive-cerastream.tgz",
 		"@ceralive/srtla": "link:../../../srtla/bindings/typescript",
 		"@ceraui/rpc": "workspace:*",

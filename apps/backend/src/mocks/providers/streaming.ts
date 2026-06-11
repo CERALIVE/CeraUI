@@ -1,6 +1,6 @@
 /*
 CeraUI - Streaming Mock Provider
-Simulates ceracoder/srtla streaming statistics for development mode
+Simulates cerastream/srtla streaming statistics for development mode
 */
 
 import {
@@ -22,7 +22,7 @@ export function isStreamingScenario(): boolean {
 }
 
 /**
- * Get mock bitrate data (legacy compatibility; now uses ceracoder config)
+ * Get mock bitrate data (legacy compatibility; now uses the encoder config)
  */
 export function getMockBitrateData(): string {
 	if (!shouldUseMocks()) {

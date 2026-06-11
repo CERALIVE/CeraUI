@@ -331,7 +331,7 @@ Software version strings. Emitted once as part of the post-login push.
 {
   "revisions": {
     "ceraui": "1.4.2",
-    "ceracoder": "0.9.1"
+    "cerastream": "0.9.1"
   }
 }
 ```

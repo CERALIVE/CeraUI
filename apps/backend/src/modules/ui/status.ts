@@ -15,7 +15,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import type WebSocket from "ws";
 import { getConfig } from "../config.ts";
 import { buildModemsMessage } from "../modems/modem-status.ts";
@@ -26,6 +25,7 @@ import {
 	buildLinkTelemetry,
 	type LinkTelemetryMessage,
 } from "../streaming/link-telemetry.ts";
+import { AUDIO_CODECS } from "../streaming/pipeline-sources.ts";
 import { getPipelinesMessage } from "../streaming/pipelines.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import { getRevisions } from "../system/revisions.ts";

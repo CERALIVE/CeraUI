@@ -16,15 +16,12 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import {
-	AUDIO_CODECS,
-	type Framerate,
-	type Resolution,
-} from "@ceralive/ceracoder";
 /* Stream starting, stopping, management and monitoring */
 import type WebSocket from "ws";
 import {
+	type Framerate,
 	type RelayProtocol,
+	type Resolution,
 	runtimeConfigSchema,
 } from "../../helpers/config-schemas.ts";
 import { getConfig, saveConfig } from "../config.ts";
@@ -44,6 +41,7 @@ import {
 import { getAudioDevices } from "./audio.ts";
 import { updateBcrptServerIps } from "./bcrpt.ts";
 import { validateBitrate } from "./encoder.ts";
+import { AUDIO_CODECS } from "./pipeline-sources.ts";
 import { searchPipelines, validatePipelineOverrides } from "./pipelines.ts";
 import { resolveSrtla } from "./srtla.ts";
 import { resolveStreamEndpoint } from "./transport/resolve-endpoint.ts";

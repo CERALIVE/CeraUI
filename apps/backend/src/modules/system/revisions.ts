@@ -19,7 +19,7 @@
 /* Read the revision numbers */
 import { logger } from "../../helpers/logger.ts";
 
-import { ceracoderExec, srtlaSendExec } from "../streaming/streamloop.ts";
+import { srtlaSendExec } from "../streaming/streamloop.ts";
 
 const revisions: Record<string, string> = {};
 
@@ -42,7 +42,6 @@ export async function initRevisions() {
 		revisions.ceralive = readRevision("git rev-parse --short HEAD");
 	}
 
-	revisions.ceracoder = readRevision(`${ceracoderExec} -v`);
 	revisions.srtla = readRevision(`${srtlaSendExec} -v`);
 	revisions.bun = Bun.version;
 

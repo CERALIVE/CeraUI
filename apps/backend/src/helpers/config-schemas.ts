@@ -23,13 +23,12 @@
  * streaming config. It covers two concerns in one shape:
  *   1. runtime UI/streaming state persisted to `config.json` (relay target,
  *      audio, video, kiosk, add-ons, …), and
- *   2. the fields the encoder backend turns into `ceracoder.conf` INI —
- *      `max_br` (→ general.max_bitrate), `srt_latency` (→ srt.latency),
- *      `balancer` (→ general.balancer) and `delay` (→ run-arg A/V delay).
+ *   2. the fields the engine backend serializes into its own config —
+ *      `max_br`, `srt_latency`, `balancer` and `delay`.
  *
- * INI serialization itself is NOT done here. It is an implementation detail of
- * `CeracoderBackend` (modules/streaming/ceracoder-backend.ts), the only place
- * allowed to translate this schema into the engine's `ceracoder.conf` grammar.
+ * Engine-config serialization itself is NOT done here. It is an implementation
+ * detail of `CerastreamBackend` (modules/streaming/cerastream-backend.ts), the
+ * only place allowed to translate this schema into the engine's config format.
  * That keeps the wire format invisible above the StreamingBackend seam, so a
  * future engine can satisfy the same contract without a different config schema.
  *
@@ -55,6 +54,7 @@ import {
 	relayProtocolSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
+import { logger } from "./logger.ts";
 
 export type { DetectionMethod, RelayProtocol };
 // Re-export the relay-id namespacing helpers so backend consumers resolve them
@@ -93,8 +93,8 @@ export const providerSelectionSchema = z.enum([
 
 export const audioCodecSchema = z.enum(["opus", "aac", "pcm"]);
 
-// Video resolution/framerate presets — mirror the ceracoder PipelineOverrides
-// and @ceraui/rpc streaming schema enums so persisted config round-trips cleanly.
+// Video resolution/framerate presets — mirror the @ceraui/rpc streaming schema
+// enums so persisted config round-trips cleanly.
 export const resolutionSchema = z.enum([
 	"480p",
 	"720p",
@@ -113,9 +113,11 @@ export const framerateSchema = z.union([
 	z.literal(60),
 ]);
 
-// Mirrors ceracoder's `balancerAlgorithmSchema` (→ `[general] balancer` INI),
-// defined locally — like resolution/framerate above — to keep this schema free
-// of an engine-binding dependency.
+export type Resolution = z.infer<typeof resolutionSchema>;
+export type Framerate = z.infer<typeof framerateSchema>;
+
+// Bitrate balancer algorithm, defined locally — like resolution/framerate above
+// — to keep this schema free of an engine-binding dependency.
 export const balancerSchema = z.enum(["adaptive", "fixed", "aimd"]);
 
 export type Balancer = z.infer<typeof balancerSchema>;
@@ -221,24 +223,36 @@ export function normalizeRelayIds(config: RuntimeConfig): RuntimeConfig {
 
 export const hardwareTypeSchema = z.enum(["jetson", "n100", "rk3588"]);
 
-// Which streaming engine the backend drives behind the StreamingBackend seam.
-// Boot identity, not a runtime UI toggle: it is read once at startup to pick the
-// engine implementation (ceracoder INI/spawn vs cerastream structured IPC). The
-// image / first-run setup.json owns the value. Task 37 flipped the default to
-// "cerastream" after the generic boot-parity gate passed
-// (cerastream/docs/notes/boot-parity-results.md). Absent ⇒ "cerastream" (see
-// SETUP defaults). ceracoder stays selectable until the hardware-gated profiles
-// also pass and it is removed from the image.
-export const streamingEngineSchema = z.enum(["ceracoder", "cerastream"]);
+// The streaming engine behind the StreamingBackend seam. cerastream is the ONLY
+// engine since the legacy engine was retired (post Task 37 boot-parity
+// flip); the field survives as boot identity so setup.json stays explicit and
+// forward-extensible.
+export const streamingEngineSchema = z.literal("cerastream");
 export type StreamingEngine = z.infer<typeof streamingEngineSchema>;
+
+// MIGRATION TOLERANCE: devices in the field may still have a legacy engine name
+// persisted in setup.json. Boot must never crash on it — any legacy/unknown
+// value is coerced to "cerastream" with one warning line.
+const legacyTolerantStreamingEngineSchema = streamingEngineSchema.catch(
+	(ctx) => {
+		const raw = (ctx as { input?: unknown }).input;
+		// An absent key also flows through here under `.optional()` — only a
+		// present-but-unsupported value deserves the migration warning.
+		if (raw !== undefined) {
+			logger.warn(
+				`setup.json: unsupported streaming engine ${JSON.stringify(
+					raw,
+				)} — legacy engines are retired; coercing to "cerastream"`,
+			);
+		}
+		return "cerastream" as const;
+	},
+);
 
 export const setupConfigSchema = z.object({
 	hw: hardwareTypeSchema,
-	engine: streamingEngineSchema.optional(),
-	// Ceracoder settings
-	ceracoder_path: z.string().optional(),
-	ceracoder_config: z.string().optional(),
-	// Cerastream control-socket / exec overrides (parity with ceracoder paths).
+	engine: legacyTolerantStreamingEngineSchema.optional(),
+	// Cerastream control-socket / exec overrides.
 	cerastream_path: z.string().optional(),
 	cerastream_socket: z.string().optional(),
 
@@ -256,9 +270,6 @@ export type SetupConfig = z.infer<typeof setupConfigSchema>;
 // Default paths based on hardware
 export const SETUP_CONFIG_DEFAULTS: Partial<SetupConfig> = {
 	engine: "cerastream",
-	// Ceracoder config path for -c and SIGHUP reload
-	ceracoder_config: "/tmp/ceracoder.conf",
-
 	ips_file: "/tmp/srtla_ips",
 };
 

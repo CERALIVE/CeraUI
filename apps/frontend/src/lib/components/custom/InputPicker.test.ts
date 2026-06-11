@@ -1,26 +1,9 @@
 // @vitest-environment jsdom
-import type { CaptureDevice, Pipeline } from "@ceraui/rpc/schemas";
+import type { CaptureDevice } from "@ceraui/rpc/schemas";
 import { fireEvent, render, within } from "@testing-library/svelte";
 import { describe, expect, it, vi } from "vitest";
 
 import InputPicker from "./InputPicker.svelte";
-
-const PIPELINES: Record<string, Pipeline> = {
-	hdmi: {
-		name: "HDMI Capture",
-		description: "HDMI input",
-		supportsAudio: true,
-		supportsResolutionOverride: true,
-		supportsFramerateOverride: true,
-	},
-	test: {
-		name: "Test Pattern",
-		description: "Synthetic test source",
-		supportsAudio: false,
-		supportsResolutionOverride: false,
-		supportsFramerateOverride: false,
-	},
-};
 
 const DEVICES: CaptureDevice[] = [
 	{
@@ -47,38 +30,15 @@ const DEVICES: CaptureDevice[] = [
 	},
 ];
 
-// bits-ui Select mints non-deterministic ids; strip them so the legacy-picker
-// snapshot is stable across renders.
-function normalize(html: string): string {
-	return html
-		.replace(/bits-[A-Za-z0-9_-]+/g, "bits-x")
-		.replace(/\s(aria-controls|aria-labelledby|aria-describedby)="[^"]*"/g, "");
-}
-
-describe("InputPicker — engine conditional (Task 34)", () => {
-	it("ceracoder mode renders the legacy pipeline picker unchanged", () => {
+describe("InputPicker — hotplug picker (Task 34)", () => {
+	it("renders the hotplug picker with all device groups", () => {
 		const { container } = render(InputPicker, {
-			props: { engine: "ceracoder", pipelines: PIPELINES, source: "hdmi" },
+			props: { devices: DEVICES, activeInput: "video0" },
 		});
 		const picker = container.querySelector<HTMLElement>(
 			'[data-testid="input-picker"]',
 		);
 		expect(picker).not.toBeNull();
-		// Legacy trigger preserved (id + role), hotplug UI absent.
-		expect(picker?.querySelector("#encoder-source")).not.toBeNull();
-		expect(picker?.querySelector("[data-switch-input]")).toBeNull();
-		expect(normalize(picker?.outerHTML ?? "")).toMatchSnapshot();
-	});
-
-	it("cerastream mode renders the hotplug picker", () => {
-		const { container } = render(InputPicker, {
-			props: { engine: "cerastream", devices: DEVICES, activeInput: "video0" },
-		});
-		const picker = container.querySelector<HTMLElement>(
-			'[data-testid="input-picker"]',
-		);
-		expect(picker).not.toBeNull();
-		expect(picker?.querySelector("#encoder-source")).toBeNull();
 		expect(picker?.textContent).toContain("QA-Cam");
 		expect(picker?.textContent).toContain("USB audio");
 		expect(picker?.outerHTML).toMatchSnapshot();
@@ -92,7 +52,6 @@ describe("InputPicker — hotplug behaviour", () => {
 		);
 		const { container } = render(InputPicker, {
 			props: {
-				engine: "cerastream",
 				devices: lost,
 				activeInput: "video0",
 				isStreaming: true,
@@ -115,7 +74,6 @@ describe("InputPicker — hotplug behaviour", () => {
 		const onSwitch = vi.fn();
 		const { container } = render(InputPicker, {
 			props: {
-				engine: "cerastream",
 				devices: DEVICES,
 				activeInput: "video0",
 				isStreaming: true,
@@ -132,7 +90,7 @@ describe("InputPicker — hotplug behaviour", () => {
 
 	it("renders an empty state when no sources are present", () => {
 		const { container } = render(InputPicker, {
-			props: { engine: "cerastream", devices: [] },
+			props: { devices: [] },
 		});
 		const picker = container.querySelector<HTMLElement>(
 			'[data-testid="input-picker"]',

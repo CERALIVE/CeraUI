@@ -27,7 +27,6 @@ const rows = $derived(
 	revisions
 		? [
 				{ label: 'CeraLive', value: revisions.ceralive },
-				{ label: 'Ceracoder', value: revisions.ceracoder },
 				{ label: 'SRTLA', value: revisions.srtla },
 				{ label: 'Bun Runtime', value: revisions.bun },
 				...(revisions['CERALIVE image']

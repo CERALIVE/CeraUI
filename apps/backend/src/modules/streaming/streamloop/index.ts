@@ -28,7 +28,6 @@ export {
 } from "./autostart.ts";
 export {
 	bcrptExec,
-	ceracoderExec,
 	srtlaSendExec,
 } from "./exec-paths.ts";
 export { start, stop } from "./session.ts";

@@ -9,7 +9,7 @@ import {
 } from "../modules/streaming/pipelines.ts";
 import { validateConfig } from "../modules/streaming/streaming.ts";
 
-// jetson source capability flags (from @ceralive/ceracoder PipelineBuilder):
+// jetson source capability flags (pipeline-sources.ts tables):
 //   camlink : resolution=true,  framerate=true,  audio=true
 //   rtmp    : resolution=false, framerate=true,  audio=true
 //   srt     : resolution=false, framerate=true,  audio=true

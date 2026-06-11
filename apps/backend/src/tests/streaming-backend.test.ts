@@ -8,19 +8,17 @@ import type {
 } from "../modules/streaming/streaming-backend.ts";
 
 // Contract test for the StreamingBackend seam. It pins the call sequencing every
-// engine implementation (cerastream is the default engine; ceracoder is retained
-// until the hardware boot-parity profiles pass) must honour, using a fully
-// in-memory fake — no subprocess spawn, no real ceracoder. The CONCRETE
-// CeracoderBackend is verified to structurally satisfy the same interface at the
-// end so the seam can't drift away from a real implementation.
+// engine implementation must honour, using a fully in-memory fake — no IPC, no
+// real engine. The CONCRETE CerastreamBackend is verified to structurally
+// satisfy the same interface at the end so the seam can't drift away from a real
+// implementation.
 
 const RUN_OPTS: StreamRunOptions = {
-	pipelineFile: "/tmp/pipeline.txt",
+	pipeline: "hdmi",
 	host: "127.0.0.1",
 	port: 9000,
 	streamid: "stream-1",
 	reducedPacketSize: false,
-	fullOverride: true,
 };
 
 const HW_MIN = 300;
@@ -166,13 +164,13 @@ describe("StreamingBackend contract", () => {
 	});
 });
 
-describe("CeracoderBackend satisfies the contract", () => {
+describe("CerastreamBackend satisfies the contract", () => {
 	test("the production singleton structurally implements StreamingBackend", async () => {
-		const { ceracoderBackend } = await import(
-			"../modules/streaming/ceracoder-backend.ts"
+		const { cerastreamBackend } = await import(
+			"../modules/streaming/cerastream-backend.ts"
 		);
 
-		const impl: StreamingBackend = ceracoderBackend;
+		const impl: StreamingBackend = cerastreamBackend;
 		expect(typeof impl.start).toBe("function");
 		expect(typeof impl.stop).toBe("function");
 		expect(typeof impl.setBitrate).toBe("function");

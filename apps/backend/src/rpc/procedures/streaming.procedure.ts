@@ -3,7 +3,6 @@
  * Wraps existing streaming logic from modules/streaming/
  */
 
-import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import {
 	audioCodecsMessageSchema,
 	bitrateInputSchema,
@@ -35,6 +34,7 @@ import { getConfig, saveConfig } from "../../modules/config.ts";
 import { deviceRegistry } from "../../modules/streaming/devices.ts";
 import { clampBitrate } from "../../modules/streaming/encoder.ts";
 import { getStreamHealth } from "../../modules/streaming/health.ts";
+import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import {
 	getEffectiveHardware,
 	getMockHardware,
@@ -82,7 +82,7 @@ export const streamingStartProcedure = authedProcedure
 				: input;
 		try {
 			if (shouldUseMocks()) {
-				// Dev has no srtla_send/ceracoder binaries: the real start() flips
+				// Dev has no srtla_send/cerastream binaries: the real start() flips
 				// is_streaming on then immediately errors and flips it off. Simulate
 				// a sustained stream so getIsStreaming() drives the UI as on device.
 				setMockEncoderConfig({

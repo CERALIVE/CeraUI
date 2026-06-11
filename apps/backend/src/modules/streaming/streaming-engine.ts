@@ -16,17 +16,15 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Engine registry behind the StreamingBackend seam. The `engine` flag in
-// setup.json picks which implementation every streaming call site drives — no
-// code change to switch engines. Resolution is LAZY + memoized: the backends sit
-// in a streamloop import cycle, so reading the singletons at module-eval would
-// hit a TDZ ReferenceError (see ceracoder.ts). `getStreamingBackend()` defers the
-// lookup to first call (always post-init); `resolveStreamingBackend` is the pure
-// selector the tests boot in both modes.
+// Engine registry behind the StreamingBackend seam. cerastream is the ONLY
+// engine since the legacy engine was retired, so resolution is
+// trivial — every streaming call site still goes through `getStreamingBackend()`
+// so a future engine can slot in behind the same seam. Legacy `engine` values
+// persisted in setup.json are coerced to "cerastream" at schema-parse time
+// (helpers/config-schemas.ts).
 
 import type { StreamingEngine } from "../../helpers/config-schemas.ts";
 import { setup } from "../setup.ts";
-import { ceracoderBackend } from "./ceracoder-backend.ts";
 import { cerastreamBackend } from "./cerastream-backend.ts";
 import type { StreamingBackend } from "./streaming-backend.ts";
 
@@ -34,22 +32,17 @@ export const DEFAULT_STREAMING_ENGINE: StreamingEngine = "cerastream";
 
 /** Pure selector: engine flag -> the matching backend singleton. */
 export function resolveStreamingBackend(
-	engine: StreamingEngine,
+	_engine: StreamingEngine,
 ): StreamingBackend {
-	return engine === "cerastream" ? cerastreamBackend : ceracoderBackend;
+	return cerastreamBackend;
 }
 
-/** The configured engine; defaults to cerastream (Task 37, post boot-parity). */
+/** The configured engine; always "cerastream" (legacy values are coerced). */
 export function getConfiguredEngine(): StreamingEngine {
 	return setup.engine ?? DEFAULT_STREAMING_ENGINE;
 }
 
-let resolvedBackend: StreamingBackend | undefined;
-
-/** The active backend for the configured engine (memoized on first call). */
+/** The active backend every streaming call site drives. */
 export function getStreamingBackend(): StreamingBackend {
-	if (!resolvedBackend) {
-		resolvedBackend = resolveStreamingBackend(getConfiguredEngine());
-	}
-	return resolvedBackend;
+	return cerastreamBackend;
 }

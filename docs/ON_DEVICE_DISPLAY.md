@@ -240,7 +240,7 @@ All Phase-3 items are hardware-blocked: no RK3588 board is reachable from the de
 
 **What:** A live video preview of the encoded stream rendered inside the CeraUI kiosk UI, so the operator can see what is being broadcast without a separate monitor.
 
-**Why deferred:** Requires either a WebRTC or HLS re-mux path from ceracoder's output into the browser, or a GStreamer pipeline feeding a `<video>` element via a local HTTP endpoint. Both approaches need hardware-accelerated decode on the RK3588 (libmali + V4L2 stateless decoder or Rockchip MPP decode path) to avoid CPU contention with the encoder. None of this has been validated on hardware.
+**Why deferred:** Requires either a WebRTC or HLS re-mux path from cerastream's output into the browser, or a GStreamer pipeline feeding a `<video>` element via a local HTTP endpoint. Both approaches need hardware-accelerated decode on the RK3588 (libmali + V4L2 stateless decoder or Rockchip MPP decode path) to avoid CPU contention with the encoder. None of this has been validated on hardware.
 
 **Current state:** Not designed. The HUD bar shows bitrate and link telemetry; no video preview surface exists.
 

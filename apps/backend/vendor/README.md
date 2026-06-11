@@ -8,7 +8,7 @@ filename is intentionally version-agnostic so the `file:` reference stays stable
 across CalVer bumps of the upstream package — only the tarball contents change.
 
 It is consumed as a **plain npm dependency** (`file:` tarball), **not** a sibling
-`link:` — unlike `@ceralive/ceracoder` / `@ceralive/srtla`. This is a deliberate
+`link:` — unlike `@ceralive/srtla`. This is a deliberate
 break from the sibling-link pattern (cerastream ARCHITECTURE §7 / ADR-0002
 Decision 13): cerastream ships to CeraUI as a CI-published npm package, so the
 backend must build standalone with **no sibling checkout** (Rule D).

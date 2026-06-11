@@ -190,7 +190,7 @@ fpm -s dir -t deb \
     --depends "adduser" \
     --depends "network-manager" \
     --depends "modemmanager" \
-    --depends "ceracoder" \
+    --depends "cerastream" \
     --depends "srtla" \
     --conflicts "belaui" \
     --replaces "belaui" \
@@ -236,7 +236,7 @@ cat > dist/debian/package-info-${ARCHITECTURE}.json << EOF
     "adduser",
     "network-manager",
     "modemmanager",
-    "ceracoder",
+    "cerastream",
     "srtla"
   ],
   "apt": {

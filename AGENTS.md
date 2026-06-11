@@ -6,23 +6,20 @@ Parent: [`../AGENTS.md`](../AGENTS.md)
 
 Device control plane. Svelte 5 PWA (frontend) + Bun/TypeScript WebSocket-RPC backend. Drives `cerastream` (active engine) and `srtla` at runtime. Produces the `ceraui` .deb for ARM64 and AMD64 device images.
 
-**Dual-backend transition.** The backend currently carries both engine packages:
+**Single engine.** `@ceralive/cerastream` is the ONLY streaming engine, consumed
+as a `file:` tarball at `vendor/ceralive-cerastream.tgz`. The legacy ceracoder
+engine and its sibling `link:` dependency are fully retired (legacy `engine`
+values persisted in device setup.json are coerced to `"cerastream"` at parse
+time with a warning).
 
-- `@ceralive/cerastream` — active engine, consumed as a `file:` tarball at
-  `vendor/ceralive-cerastream.tgz`. This is the primary control path.
-- `@ceralive/ceracoder` — legacy engine, retained as a sibling `link:` until
-  `cerastream/tests/boot-parity.sh` passes. Once the gate clears, this link
-  and the `ceracoder` sibling checkout are removed.
-
-The backend also resolves `@ceralive/srtla` via a pnpm `link:` path:
+The backend resolves `@ceralive/srtla` via a pnpm `link:` path:
 
 ```
 "@ceralive/cerastream": "file:vendor/ceralive-cerastream.tgz"
-"@ceralive/ceracoder":  "link:../../../ceracoder/bindings/typescript"
 "@ceralive/srtla":      "link:../../../srtla/bindings/typescript"
 ```
 
-**LOAD-BEARING layout.** CI must check out `ceracoder`, `srtla`, and `CeraUI` as siblings under the same parent. The `ceracoder` and `srtla` link: paths are correct as-is — do not rename or restructure them. `cerastream` is NOT a sibling link; it is a vendored tarball.
+**LOAD-BEARING layout.** CI must check out `srtla` and `CeraUI` as siblings under the same parent. The `srtla` link: path is correct as-is — do not rename or restructure it. `cerastream` is NOT a sibling link; it is a vendored tarball.
 
 The srtla binding API is settled (v0.2.0, additive telemetry module). Check `../srtla/AGENTS.md` before touching anything that calls `@ceralive/srtla`.
 
@@ -323,16 +320,16 @@ are unmodified.
 
 ```
 modules/streaming/streamloop/
-├── exec-paths.ts    # ceracoderExec, srtlaSendExec, bcrptExec constants
+├── exec-paths.ts    # srtlaSendExec, bcrptExec constants
 ├── process-runner.ts # mutable streamingProcesses list + spawnStreamingLoop/stopProcess/stopAll/getStreamingProcesses
-├── start-stream.ts  # startStream — builds argv, spawns ceracoder + srtla_send, wires telemetry
+├── start-stream.ts  # startStream — spawns srtla_send, wires telemetry, starts the engine session over the seam
 ├── session.ts       # start / stop + removeNetworkInterfacesChangeListener module-state
 ├── autostart.ts     # AUTOSTART_CHECK_FILE / setAutostart / checkAutoStartStream / autoStartStream backoff
 └── index.ts         # named re-export barrel (exactly the 10 public exports)
 ```
 
-**Locked public API surface (10 exports):** `AUTOSTART_CHECK_FILE`, `autoStartStream`,
-`bcrptExec`, `ceracoderExec`, `checkAutoStartStream`, `setAutostart`, `srtlaSendExec`,
+**Locked public API surface (9 exports):** `AUTOSTART_CHECK_FILE`, `autoStartStream`,
+`bcrptExec`, `checkAutoStartStream`, `setAutostart`, `srtlaSendExec`,
 `start`, `startStream`, `stop`. Adding or removing any of these is a breaking change.
 
 ### timing-constants.ts
@@ -358,7 +355,7 @@ logger from `apps/backend/src/helpers/logger.ts`. Empty catches now log via
 ## ANTI-PATTERNS
 
 - Don't run `npm install` or `yarn` — pnpm workspaces only.
-- Don't add `@ceralive/ceracoder` or `@ceralive/srtla` to `package.json` as npm packages — they are local `link:` deps by design. **`@ceralive/cerastream` is the deliberate exception**: it is a plain npm dependency, vendored as a `file:` tarball at `apps/backend/vendor/ceralive-cerastream.tgz` (ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:`.
+- Don't add `@ceralive/srtla` to `package.json` as an npm package — it is a local `link:` dep by design. **`@ceralive/cerastream` is the deliberate exception**: it is a plain npm dependency, vendored as a `file:` tarball at `apps/backend/vendor/ceralive-cerastream.tgz` (ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:`.
 - Don't edit `.impeccable.md` for code changes — it's a design reference, not config.
 - Don't touch srtla binding call sites without checking `../srtla/AGENTS.md` first (API in flux).
 - Don't add custom UI components to `lib/components/ui/` — that directory is managed by the shadcn-svelte CLI. Custom components go in `lib/components/custom/`.

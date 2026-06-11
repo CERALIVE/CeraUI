@@ -3,7 +3,6 @@
  * Provides aggregated status information
  */
 
-import { AUDIO_CODECS } from "@ceralive/ceracoder";
 import { relayMessageSchema, statusResponseSchema } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import { getConfig } from "../../modules/config.ts";
@@ -15,6 +14,7 @@ import {
 } from "../../modules/remote/remote-relays.ts";
 import { getAudioDevices } from "../../modules/streaming/audio.ts";
 import { getDevicesMessage } from "../../modules/streaming/devices.ts";
+import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import { getPipelinesMessage } from "../../modules/streaming/pipelines.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";

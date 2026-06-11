@@ -16,20 +16,19 @@ Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming h
 
 ## Sibling-Checkout Layout
 
-The workspace root (`ceralive-workspace`) resolves native bindings via `link:` paths. The `backend` app depends on:
+The `backend` app consumes the cerastream Rust engine as a vendored npm tarball, and resolves the srtla native binding via a `link:` path:
 
 ```
-"@ceralive/ceracoder": "link:../../../ceracoder/bindings/typescript"
-"@ceralive/srtla":     "link:../../../srtla/bindings/typescript"
+"@ceralive/cerastream": "file:vendor/ceralive-cerastream.tgz"
+"@ceralive/srtla":      "link:../../../srtla/bindings/typescript"
 ```
 
-`ceracoder/`, `srtla/`, and `CeraUI/` must be siblings under the same parent directory. Breaking this layout breaks `pnpm install` for the backend.
+`srtla/` and `CeraUI/` must be siblings under the same parent directory. Breaking this layout breaks `pnpm install` for the backend. (A sibling `ceracoder/` checkout was previously required as well — ceracoder was retired 2026-06-11; repo preserved at github.com/CERALIVE/ceracoder.)
 
 ```
 ceralive/
-├── ceracoder/bindings/typescript/   ← @ceralive/ceracoder
-├── srtla/bindings/typescript/       ← @ceralive/srtla
-└── CeraUI/                          ← workspace root; backend resolves link: three levels up
+├── srtla/bindings/typescript/   ← @ceralive/srtla
+└── CeraUI/                      ← workspace root; backend resolves link: three levels up
 ```
 
 ## Development
@@ -37,7 +36,7 @@ ceralive/
 ### Prerequisites
 
 - **pnpm** (workspace manager — do not use npm or yarn)
-- Sibling repos `ceracoder` and `srtla` checked out at the correct paths (see above)
+- Sibling repo `srtla` checked out at the correct path (see above)
 
 ### Install
 

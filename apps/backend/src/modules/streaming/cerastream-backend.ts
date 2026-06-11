@@ -17,13 +17,11 @@
 */
 
 // CerastreamBackend: the StreamingBackend implementation for the Rust `cerastream`
-// engine. It satisfies the SAME seam as CeracoderBackend, but every operation is
-// a structured JSON-RPC call over cerastream's control socket (`@ceralive/cerastream`)
-// instead of an INI write + spawn + SIGHUP + stderr scrape:
+// engine — the only engine CeraUI drives. Every operation is a structured
+// JSON-RPC call over cerastream's control socket (`@ceralive/cerastream`):
 //
 //   * config  -> the unified config is serialized via the binding's canonical
-//                serializer + pushed over IPC (`start` / `reload-config`), NOT
-//                ceracoder.conf INI.
+//                serializer + pushed over IPC (`start` / `reload-config`).
 //   * errors  -> the engine emits STRUCTURED Tier-2 error events; they are mapped
 //                onto Task-7's code table by `cerastream-error-mapping.ts` (no
 //                stderr regex lives on this path).
@@ -410,7 +408,7 @@ export class CerastreamBackend implements StreamingBackend {
 		if (opts.streamid) srt.streamid = opts.streamid;
 
 		return startParamsSchema.parse({
-			pipeline: config.pipeline ?? pipelineIdFromFile(opts.pipelineFile),
+			pipeline: config.pipeline ?? opts.pipeline,
 			srt,
 			bitrate: {
 				min_bitrate: DEFAULT_MIN_BITRATE,
@@ -455,12 +453,6 @@ export class CerastreamBackend implements StreamingBackend {
 	}
 }
 
-function pipelineIdFromFile(pipelineFile: string): string {
-	const base = pipelineFile.split("/").pop() ?? pipelineFile;
-	const dot = base.lastIndexOf(".");
-	return (dot > 0 ? base.slice(0, dot) : base) || "default";
-}
-
-// Process-wide singleton mirroring `ceracoderBackend`; the engine registry
-// (streaming-engine.ts) hands this out when the engine flag selects cerastream.
+// Process-wide singleton; the engine registry (streaming-engine.ts) hands this
+// out to every streaming call site.
 export const cerastreamBackend = new CerastreamBackend();

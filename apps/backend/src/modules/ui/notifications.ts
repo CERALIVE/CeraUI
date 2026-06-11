@@ -18,7 +18,7 @@
 /* Notification system */
 /*
   conn - send it to a specific client, or undefined to broadcast
-  name - identifier for the notification, e.g. 'ceracoder'
+  name - identifier for the notification, e.g. 'cerastream'
   type - 'success', 'warning', 'error'
   msg - the human readable notification message
   duration - 0-never expires

@@ -18,7 +18,7 @@
 
 // User-driven stream session control: the WebSocket-triggered `start` (validate
 // config, refresh the srtla link list, launch) and the public `stop`
-// orchestration that brings ceracoder down first, then the rest.
+// orchestration that brings the engine down first, then the rest.
 
 import type WebSocket from "ws";
 import { isLocalIp } from "../../../helpers/ip-addresses.ts";

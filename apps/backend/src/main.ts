@@ -47,7 +47,6 @@ import { initPipelines } from "./modules/streaming/pipelines.ts";
 import { getStreamingProcesses } from "./modules/streaming/streamloop/process-runner.ts";
 import {
 	bcrptExec,
-	ceracoderExec,
 	checkAutoStartStream,
 	srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
@@ -79,7 +78,6 @@ if (isDevelopment()) {
 	logger.info("   Set MOCK_SCENARIO env var to change scenario");
 }
 
-checkExecPath(ceracoderExec);
 checkExecPath(srtlaSendExec);
 checkExecPath(bcrptExec);
 
@@ -144,8 +142,8 @@ process.on("SIGUSR2", function udevDeviceUpdate() {
 	updateAudioDevices();
 });
 
-// make sure we didn't inherit orphan processes
-killall(["ceracoder"]);
+// make sure we didn't inherit orphan processes (cerastream is systemd-owned and
+// never spawned by CeraUI, so only srtla_send needs the orphan sweep)
 killall(["srtla_send"]);
 
 // Initialize Bun native HTTP/WebSocket server

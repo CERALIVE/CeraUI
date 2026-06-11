@@ -4,11 +4,11 @@ Bun/TypeScript HTTP + WebSocket server for CeraLive streaming hardware. Serves t
 
 ## Overview
 
-The backend is a single compiled binary (`ceralive`) produced by `bun build --compile`. It drives `ceracoder` and `srtla` at runtime through their native TypeScript bindings, which are resolved via `link:` paths to sibling checkouts.
+The backend is a single compiled binary (`ceralive`) produced by `bun build --compile`. It drives the `cerastream` Rust streaming engine — the sole engine (ceracoder retired 2026-06-11) — over JSON-RPC on a Unix domain socket via the `@ceralive/cerastream` npm tarball, and supervises `srtla_send` as a separate process (streamloop) through the `@ceralive/srtla` binding, resolved via a `link:` path to a sibling checkout.
 
 **Stack**: Bun, TypeScript, oRPC (`@orpc/server`), Zod, WebSocket RPC  
 **Shared contract**: `@ceraui/rpc` (workspace package at `packages/rpc/`)  
-**Native bindings**: `@ceralive/ceracoder`, `@ceralive/srtla` (local `link:` deps — not npm packages)
+**Engine/bindings**: `@ceralive/cerastream` (vendored npm tarball — JSON-RPC/UDS client), `@ceralive/srtla` (local `link:` dep — not an npm package)
 
 ## Structure
 
@@ -16,7 +16,7 @@ The backend is a single compiled binary (`ceralive`) produced by `bun build --co
 src/
 ├── main.ts                  # Entry point
 ├── modules/                 # Domain logic (no RPC awareness)
-│   ├── streaming/           # ceracoder + srtla consumers
+│   ├── streaming/           # cerastream JSON-RPC client + srtla supervision (streamloop)
 │   ├── modems/              # mmcli integration
 │   ├── network/             # Network interfaces, gateways
 │   ├── wifi/                # WiFi scan, connect, disconnect

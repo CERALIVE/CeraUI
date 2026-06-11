@@ -6,7 +6,6 @@ import type {
 	EventParams,
 } from "@ceralive/cerastream";
 import type { RuntimeConfig } from "../helpers/config-schemas.ts";
-import { ceracoderBackend } from "../modules/streaming/ceracoder-backend.ts";
 import {
 	CerastreamBackend,
 	type CerastreamBackendDeps,
@@ -19,22 +18,21 @@ import type {
 import {
 	DEFAULT_STREAMING_ENGINE,
 	getConfiguredEngine,
+	getStreamingBackend,
 	resolveStreamingBackend,
 } from "../modules/streaming/streaming-engine.ts";
 
-// Shared StreamingBackend contract suite. The seam was modelled on ceracoder, so
-// the SAME structural conformance the original CeracoderBackend test pins is run
-// here against BOTH engine singletons (proving cerastream slots into the seam),
-// and the full behavioural contract is exercised against a real CerastreamBackend
-// driven by an in-memory fake control client.
+// StreamingBackend contract suite for the cerastream engine (the only engine):
+// structural conformance of the production singleton against the seam, plus the
+// full behavioural contract exercised against a real CerastreamBackend driven by
+// an in-memory fake control client.
 
 const RUN_OPTS: StreamRunOptions = {
-	pipelineFile: "/tmp/h264_hdmi_1080p.pipeline",
+	pipeline: "hdmi",
 	host: "127.0.0.1",
 	port: 9000,
 	streamid: "stream-1",
 	reducedPacketSize: false,
-	fullOverride: true,
 };
 
 const STREAM_CONFIG: RuntimeConfig = {
@@ -191,15 +189,12 @@ function makeBackend(
 }
 
 // ---------------------------------------------------------------------------
-// Parameterized structural conformance — the same suite for BOTH engines.
+// Structural conformance of the production singleton.
 // ---------------------------------------------------------------------------
 
-describe.each([
-	["ceracoder", ceracoderBackend],
-	["cerastream", cerastreamBackend],
-])("StreamingBackend seam — %s satisfies the contract", (_name, impl) => {
+describe("StreamingBackend seam — cerastream satisfies the contract", () => {
 	test("the production singleton exposes the full StreamingBackend surface", () => {
-		const backend: StreamingBackend = impl;
+		const backend: StreamingBackend = cerastreamBackend;
 		expect(typeof backend.start).toBe("function");
 		expect(typeof backend.stop).toBe("function");
 		expect(typeof backend.setBitrate).toBe("function");
@@ -215,18 +210,18 @@ describe.each([
 });
 
 // ---------------------------------------------------------------------------
-// Engine flag selection — boots both modes without a code change.
+// Engine selection — cerastream is the only engine.
 // ---------------------------------------------------------------------------
 
-describe("engine flag selection", () => {
-	test("resolveStreamingBackend maps each flag to its backend", () => {
-		expect(resolveStreamingBackend("ceracoder")).toBe(ceracoderBackend);
+describe("engine selection", () => {
+	test("resolveStreamingBackend resolves to the cerastream backend", () => {
 		expect(resolveStreamingBackend("cerastream")).toBe(cerastreamBackend);
 	});
 
-	test("default engine is cerastream after the Task 37 boot-parity flip", () => {
+	test("the configured engine is always cerastream (legacy values coerced)", () => {
 		expect(DEFAULT_STREAMING_ENGINE).toBe("cerastream");
-		expect(["ceracoder", "cerastream"]).toContain(getConfiguredEngine());
+		expect(getConfiguredEngine()).toBe("cerastream");
+		expect(getStreamingBackend()).toBe(cerastreamBackend);
 	});
 });
 

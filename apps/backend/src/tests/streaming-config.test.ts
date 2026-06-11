@@ -9,8 +9,6 @@ import {
 	type RuntimeConfig,
 	runtimeConfigSchema,
 } from "../helpers/config-schemas.ts";
-import { setup } from "../modules/setup.ts";
-import { CeracoderBackend } from "../modules/streaming/ceracoder-backend.ts";
 
 const FIXTURES = path.join(import.meta.dir, "fixtures");
 
@@ -114,56 +112,6 @@ describe("legacy config.json migration", () => {
 		// Nothing left to default once the migrated shape has been written back.
 		expect(second.defaultedFields).toEqual([]);
 	});
-});
-
-describe("ceracoder.conf INI byte-parity (pre/post refactor)", () => {
-	const PARITY: Array<{ golden: string; config: RuntimeConfig }> = [
-		{
-			golden: "default-adaptive.conf",
-			config: { max_br: 6000, srt_latency: 2000 },
-		},
-		{
-			golden: "high-bitrate-adaptive.conf",
-			config: { max_br: 12000, srt_latency: 1500 },
-		},
-		{
-			golden: "aimd.conf",
-			config: { max_br: 8000, srt_latency: 2500, balancer: "aimd" },
-		},
-		{
-			golden: "fixed.conf",
-			config: { max_br: 5000, srt_latency: 3000, balancer: "fixed" },
-		},
-	];
-
-	const backend = new CeracoderBackend();
-	let dir: string;
-	let prevConfigPath: string | undefined;
-
-	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(os.tmpdir(), "ini-parity-"));
-		prevConfigPath = setup.ceracoder_config;
-		setup.ceracoder_config = path.join(dir, "ceracoder.conf");
-	});
-
-	afterEach(() => {
-		if (prevConfigPath === undefined) {
-			delete setup.ceracoder_config;
-		} else {
-			setup.ceracoder_config = prevConfigPath;
-		}
-		fs.rmSync(dir, { recursive: true, force: true });
-	});
-
-	for (const { golden, config } of PARITY) {
-		it(`writeConfig emits byte-identical INI for ${golden}`, () => {
-			const written = backend.writeConfig(config);
-			const actual = fs.readFileSync(written, "utf8");
-			const expected = fs.readFileSync(path.join(FIXTURES, golden), "utf8");
-
-			expect(actual).toBe(expected);
-		});
-	}
 });
 
 describe("corrupt config.json handling", () => {

@@ -64,7 +64,7 @@ describe("streaming modules logger integration", () => {
 
 	test("encoder: logger.error accepts bitrate set failure with structured metadata", () => {
 		// Verify logger.error method exists and accepts structured metadata
-		const error = new Error("Failed to write ceracoder config");
+		const error = new Error("Failed to write engine config");
 		expect(() => {
 			logger.error("Failed to set bitrate", { error });
 		}).not.toThrow();

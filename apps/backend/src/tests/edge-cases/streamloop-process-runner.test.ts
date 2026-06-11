@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 // Edge-case hardening for the stream subprocess supervisor
 // (streamloop/process-runner.ts). This is the layer that owns every live
-// ceracoder / srtla_send process. The device relies on three invariants here:
+// srtla_send process. The device relies on three invariants here:
 //
 //   1. stderr is drained and every chunk is routed to the per-process error
 //      callback (that callback is how a "Failed to establish any initial

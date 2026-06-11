@@ -16,24 +16,20 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Core stream launch: builds the srtla_send + ceracoder argument vectors, spawns
-// both under the process-runner supervisor, and wires srtla per-uplink telemetry.
+// Core stream launch: spawns srtla_send under the process-runner supervisor,
+// wires srtla per-uplink telemetry, then starts the engine session over the
+// StreamingBackend seam.
 
-import type { PipelineOverrides } from "@ceralive/ceracoder";
 import { buildSrtlaSendArgs } from "@ceralive/srtla/sender";
 import { getConfig } from "../../config.ts";
 import { setup } from "../../setup.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
-import { asrcProbe, getAudioSrcId } from "../audio.ts";
+import { asrcProbe } from "../audio.ts";
 import { hasLowMtu } from "../bcrpt.ts";
 import { SRTLA_LISTEN_PORT } from "../constants.ts";
 import { clearStreamProcessExit } from "../health.ts";
 import { srtlaStatsFile, startLinkTelemetry } from "../link-telemetry.ts";
-import {
-	gatePipelineOverrides,
-	generatePipelineFile,
-	type Pipeline,
-} from "../pipelines.ts";
+import type { Pipeline } from "../pipelines.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
 import { resolveProcessError } from "./process-error-patterns.ts";
@@ -51,19 +47,6 @@ export async function startStream(
 	// A fresh stream start clears any prior unexpected-exit health flag so the
 	// health rollup tracks this new session (ADR-0005 observe-and-notify).
 	clearStreamProcessExit();
-
-	const overrides: PipelineOverrides = {
-		bitrateOverlay: config.bitrate_overlay,
-		audioCodec: config.acodec as "aac" | "opus" | undefined,
-		audioDevice: config.asrc ? getAudioSrcId(config.asrc) : undefined,
-		volume: 1.0,
-		...gatePipelineOverrides(pipeline, {
-			resolution: config.resolution,
-			framerate: config.framerate,
-		}),
-	};
-
-	const pipelineFile = generatePipelineFile(pipeline, overrides);
 
 	if (pipeline.supportsAudio && config.asrc) {
 		try {
@@ -108,13 +91,12 @@ export async function startStream(
 		.catch(() => "");
 	startLinkTelemetry(statsFile, ipsContent.split("\n"));
 
-	// Engine launch (argv build + spawn + stderr classification) is behind the seam.
+	// Engine launch (session start over structured IPC) is behind the seam.
 	getStreamingBackend().start(config, {
-		pipelineFile,
+		pipeline: pipeline.source,
 		host: "127.0.0.1",
 		port: SRTLA_LISTEN_PORT,
 		streamid,
 		reducedPacketSize: hasLowMtu(),
-		fullOverride: true, // full override for start streaming
 	});
 }

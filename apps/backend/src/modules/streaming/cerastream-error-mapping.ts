@@ -16,12 +16,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// The "table swap" the TRANSITIONAL stderr table (process-error-patterns.ts)
-// promised for Task 32: cerastream reports a STRUCTURED Tier-2 error code over
-// IPC, so we look the user-message up BY CODE instead of regex-scraping stderr.
-// The static messages + the suppress flags are lifted verbatim from the shared
-// Task-7 table (the single source of truth), so the two stay in lockstep; this
-// module itself contains NO stderr regex (the structured code is the key).
+// Structured engine-error resolution (Task 32): cerastream reports a STRUCTURED
+// Tier-2 error code over IPC, so we look the user-message up BY CODE in the
+// shared Task-7 catalog (process-error-patterns.ts, the single source of truth)
+// — this module contains NO stderr regex (the structured code is the key).
 
 import type {
 	ProcessErrorCode,
@@ -29,16 +27,8 @@ import type {
 } from "@ceralive/cerastream";
 import {
 	PROCESS_ERROR_CODES,
-	PROCESS_ERROR_PATTERNS,
+	PROCESS_ERROR_MESSAGES,
 } from "./streamloop/process-error-patterns.ts";
-
-const SUPPRESS_IF_SRTLA_NOTIFIED = new Set<ProcessErrorCode>();
-const STATIC_MESSAGE = new Map<ProcessErrorCode, string>();
-for (const row of PROCESS_ERROR_PATTERNS) {
-	if (row.suppressIfSrtlaNotified) SUPPRESS_IF_SRTLA_NOTIFIED.add(row.code);
-	if (typeof row.message === "string")
-		STATIC_MESSAGE.set(row.code, row.message);
-}
 
 /** Notification channel CeraUI routes the resolved error onto. */
 export type CerastreamErrorChannel = "srtla" | "cerastream";
@@ -64,13 +54,14 @@ export function resolveCerastreamError(
 	return {
 		code,
 		message: messageFor(code, reason),
-		suppressIfSrtlaNotified: SUPPRESS_IF_SRTLA_NOTIFIED.has(code),
+		suppressIfSrtlaNotified:
+			PROCESS_ERROR_MESSAGES[code]?.suppressIfSrtlaNotified ?? false,
 		channel: source === "srtla" ? "srtla" : "cerastream",
 	};
 }
 
 function messageFor(code: ProcessErrorCode, reason?: string): string {
-	const fixed = STATIC_MESSAGE.get(code);
+	const fixed = PROCESS_ERROR_MESSAGES[code]?.message;
 	if (fixed !== undefined) return fixed;
 
 	// srt_connect_failed is the only Task-7 row whose message folds in a runtime

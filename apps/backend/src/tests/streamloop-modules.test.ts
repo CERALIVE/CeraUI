@@ -20,7 +20,6 @@ import {
 } from "../modules/streaming/streamloop/autostart.ts";
 import {
 	bcrptExec as bcrptExecOwned,
-	ceracoderExec as ceracoderExecOwned,
 	srtlaSendExec as srtlaSendExecOwned,
 } from "../modules/streaming/streamloop/exec-paths.ts";
 import { getStreamingProcesses } from "../modules/streaming/streamloop/process-runner.ts";
@@ -31,12 +30,12 @@ import {
 import { startStream as startStreamOwned } from "../modules/streaming/streamloop/start-stream.ts";
 import * as barrel from "../modules/streaming/streamloop.ts";
 
-// The exact symbols the pre-split streamloop.ts exported, with their kinds.
+// The exact symbols streamloop.ts exports (post legacy-engine retirement), with
+// their kinds.
 const LOCKED_API: Record<string, "string" | "function"> = {
 	AUTOSTART_CHECK_FILE: "string",
 	autoStartStream: "function",
 	bcrptExec: "string",
-	ceracoderExec: "string",
 	checkAutoStartStream: "function",
 	setAutostart: "function",
 	srtlaSendExec: "string",
@@ -60,7 +59,6 @@ describe("streamloop public API surface is preserved by the split", () => {
 
 describe("barrel routes each symbol to its new owning sub-module", () => {
 	test("exec-path constants are owned by exec-paths.ts", () => {
-		expect(barrel.ceracoderExec).toBe(ceracoderExecOwned);
 		expect(barrel.srtlaSendExec).toBe(srtlaSendExecOwned);
 		expect(barrel.bcrptExec).toBe(bcrptExecOwned);
 	});
@@ -86,7 +84,6 @@ describe("exec-paths.ts extraction", () => {
 	test("derives the bcrpt executable path and exposes string exec paths", () => {
 		expect(typeof bcrptExecOwned).toBe("string");
 		expect(bcrptExecOwned.endsWith("/bcrpt")).toBe(true);
-		expect(typeof ceracoderExecOwned).toBe("string");
 		expect(typeof srtlaSendExecOwned).toBe("string");
 	});
 });

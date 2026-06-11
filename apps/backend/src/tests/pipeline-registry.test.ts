@@ -8,7 +8,7 @@ import {
 	setMockHardware,
 } from "../modules/streaming/pipelines.ts";
 
-// Source lists differ per hardware (from @ceralive/ceracoder PipelineBuilder):
+// Source lists differ per hardware (pipeline-sources.ts tables):
 //   jetson : camlink, libuvch264, v4l_mjpeg, rtmp, srt, test
 //   n100   : libuvch264, v4l_mjpeg, decklink, rtmp, test
 // "camlink" is jetson-only, "decklink" is n100-only — ideal discriminators.

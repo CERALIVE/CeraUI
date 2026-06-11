@@ -12,7 +12,7 @@ type VideoSource = keyof typeof VIDEO_SOURCE_LABELS;
 
 export type { Framerate, Pipeline, Resolution };
 
-// Safe fallback for unknown ids — never surface the raw/uppercased ceracoder hash.
+// Safe fallback for unknown ids — never surface a raw/uppercased opaque id.
 const UNKNOWN_SOURCE_LABEL = "Unknown source";
 
 function resolveUnknownSourceLabel(t?: (key: string) => string): string {
@@ -31,7 +31,7 @@ export { HARDWARE_LABELS, VIDEO_SOURCE_LABELS };
 
 /**
  * Get a human-readable label for a video source
- * Falls back to ceracoder bindings labels if no translation function provided
+ * Falls back to the shared VIDEO_SOURCE_LABELS if no translation function provided
  */
 export function getSourceLabel(
 	source: string,
@@ -45,14 +45,14 @@ export function getSourceLabel(
 			return translated;
 		}
 	}
-	// Fall back to ceracoder bindings labels
+	// Fall back to the shared source labels
 	return (
 		VIDEO_SOURCE_LABELS[source as VideoSource] || resolveUnknownSourceLabel(t)
 	);
 }
 
 /**
- * Resolve a display name for a pipeline id (video source key or opaque ceracoder id).
+ * Resolve a display name for a pipeline id (video source key or opaque legacy id).
  * Pure: prefers the friendly source label, then pipeline metadata, then a safe
  * fallback. Returns "" for an undefined id and never leaks the raw id.
  */
@@ -71,7 +71,7 @@ export function getPipelineDisplayName(
 
 /**
  * Get a human-readable label for a hardware type
- * Falls back to ceracoder bindings labels if no translation function provided
+ * Falls back to the shared VIDEO_SOURCE_LABELS if no translation function provided
  */
 export function getHardwareLabel(
 	hardware: string,
@@ -85,7 +85,7 @@ export function getHardwareLabel(
 			return translated;
 		}
 	}
-	// Fall back to ceracoder bindings labels
+	// Fall back to the shared source labels
 	return HARDWARE_LABELS[hardware as HardwareType] || hardware.toUpperCase();
 }
 

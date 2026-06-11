@@ -7,7 +7,7 @@
  * (read-only, "Stop stream to change") until the operator stops the stream.
  *
  * Exactly ONE field is HOT-CHANGEABLE while live: the target bitrate
- * (`max_br`), which ceracoder applies on the fly via `rpc.streaming.setBitrate`
+ * (`max_br`), which the engine applies on the fly via `rpc.streaming.setBitrate`
  * with no pipeline restart.
  *
  * This module is PURE (no runes, no RPC, no Svelte) so it can be imported by

@@ -82,10 +82,10 @@ export function clearStreamProcessExit(): void {
 	processExited = false;
 }
 
-// Device path: ceracoder frame/reconnect telemetry (Task 8/12 C exports) is not
-// yet surfaced through the TS bindings, so frame advancement tracks the running
-// process and bond counts come from the configured srtla source-IP list. Wire
-// the real ceracoder counters here once the bindings expose them.
+// Device path: engine frame/reconnect telemetry is not yet folded into this
+// rollup, so frame advancement tracks the running process and bond counts come
+// from the configured srtla source-IP list. Wire the real cerastream telemetry
+// counters here once the rollup consumes them.
 function collectRealLiveness(): LivenessSources {
 	const alive = getIsStreaming() && !processExited;
 	const links = genSrtlaIpList().length;

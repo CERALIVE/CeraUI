@@ -18,24 +18,22 @@
 
 // StreamingBackend: the seam around the encoder engine that CeraUI drives.
 //
-// Today the only implementation is `CeracoderBackend` (ceracoder-backend.ts),
-// which wraps the CURRENT C `ceracoder` binary + its `@ceralive/ceracoder`
-// bindings. The method set below is derived strictly from the existing ceracoder
-// call sites — it is NOT modelled on any future engine's IPC. A second
-// implementation (the planned `cerastream` engine) can later satisfy the same
-// contract without the streaming RPC procedures changing.
+// The only implementation is `CerastreamBackend` (cerastream-backend.ts), which
+// drives the Rust `cerastream` engine over structured JSON-RPC IPC. The seam
+// predates it (it was derived from the retired legacy engine's call sites),
+// and it stays so every streaming call site keeps talking to an interface — a
+// future engine can satisfy the same contract without the streaming RPC
+// procedures changing.
 //
 // SCOPE — what is and isn't behind this seam:
-//   * IN:  everything ceracoder-specific — exec path, config file write, the
-//          SIGHUP hot-reload, run-arg construction, the engine process spawn and
-//          its stderr error classification, the streaming-time bitrate setter.
+//   * IN:  everything engine-specific — exec path, config persistence, the
+//          config hot-reload, run-arg construction, the engine session
+//          start/stop, error classification, the streaming-time bitrate setter.
 //   * OUT: `bcrpt` (the BCRP relay-probe binary). It is an INDEPENDENT process
 //          with its own spawn/retry lifecycle in `bcrpt.ts` and is unrelated to
 //          the encoder, so `bcrptExec` deliberately stays outside this interface.
 //   * OUT: srtla link bonding + per-link telemetry. srtla_send is a separate
 //          supervised process; its telemetry is owned by `link-telemetry.ts`.
-//          ceracoder exposes no engine-side telemetry of its own today, so the
-//          optional `getTelemetry` hook is left unimplemented by CeracoderBackend.
 
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 
@@ -43,35 +41,34 @@ import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 export type BitrateParams = { max_br?: number };
 
 /**
- * Inputs for a single engine launch: the generated pipeline file plus the SRT
- * endpoint and transport flags the engine needs to build its run config.
+ * Inputs for a single engine launch: the selected pipeline (video source) id
+ * plus the SRT endpoint and transport flags the engine needs to build its run
+ * config.
  */
 export interface StreamRunOptions {
-	pipelineFile: string;
+	pipeline: string;
 	host: string;
 	port: number;
 	streamid: string;
 	reducedPacketSize: boolean;
-	fullOverride: boolean;
 }
 
 /**
- * Listener for a classified engine error. Receives the raw stderr chunk so a
- * consumer (e.g. a test, or a future health probe) can observe the same signal
+ * Listener for a classified engine error. Receives the raw error description so
+ * a consumer (e.g. a test, or a future health probe) can observe the same signal
  * the engine uses for its built-in user-facing notifications.
  */
 export type BackendErrorListener = (rawStderr: string) => void;
 
 /**
- * Reserved engine-side telemetry snapshot. The current ceracoder engine has no
- * telemetry channel of its own (srtla owns per-link telemetry separately), so
- * this stays an open marker type rather than a ceracoder-shaped payload.
+ * Engine-side telemetry snapshot (srtla owns per-link telemetry separately).
+ * Kept as an open marker type so the seam stays engine-agnostic.
  */
 export type EngineTelemetry = Record<string, unknown>;
 
 /**
- * The control surface CeraUI uses to drive the encoder engine. Every member maps
- * to a real, current ceracoder operation; see SCOPE in the module header.
+ * The control surface CeraUI uses to drive the encoder engine; see SCOPE in the
+ * module header.
  */
 export interface StreamingBackend {
 	/** Resolved engine executable path. */
@@ -101,12 +98,12 @@ export interface StreamingBackend {
 	 * Returns the applied value, or `undefined` when the input fails validation.
 	 */
 	setBitrate(params: BitrateParams): number | undefined;
-	/** Signal the running engine to re-read its config file (SIGHUP). */
+	/** Signal the running engine to re-read its config. */
 	reloadConfig(): void;
 
 	/** Register an extra listener for classified engine error events. */
 	onError(listener: BackendErrorListener): void;
 
-	/** Optional engine-side telemetry hook (unused by ceracoder today). */
+	/** Optional engine-side telemetry hook. */
 	getTelemetry?(): EngineTelemetry | null;
 }

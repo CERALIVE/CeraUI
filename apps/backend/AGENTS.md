@@ -4,19 +4,18 @@ Parent: [`../../AGENTS.md`](../../AGENTS.md)
 
 ## OVERVIEW
 
-Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, exposes all device control via oRPC over WebSocket, and drives `ceracoder` + `srtla` via `link:` bindings.
+Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, exposes all device control via oRPC over WebSocket, drives the `cerastream` engine over structured IPC (`@ceralive/cerastream` vendored tarball) and `srtla` via its `link:` binding.
 
 ## STRUCTURE
 
-`src/main.ts` — entry. `src/modules/` — domain logic (no RPC awareness): `streaming/` (ceracoder + srtla consumers), `modems/` (mmcli), `network/`, `wifi/`, `system/`, `ui/` (HTTP + WS servers, auth), `ingest/`, `remote/`, `config.ts`, `setup.ts`. `src/rpc/` — oRPC layer: `router.ts`, `procedures/<domain>.procedure.ts`, `middleware/`, `events.ts`. `src/helpers/` — pure utils. `src/mocks/` — MOCK_SCENARIO providers. `src/tests/` — bun:test.
+`src/main.ts` — entry. `src/modules/` — domain logic (no RPC awareness): `streaming/` (cerastream + srtla consumers), `modems/` (mmcli), `network/`, `wifi/`, `system/`, `ui/` (HTTP + WS servers, auth), `ingest/`, `remote/`, `config.ts`, `setup.ts`. `src/rpc/` — oRPC layer: `router.ts`, `procedures/<domain>.procedure.ts`, `middleware/`, `events.ts`. `src/helpers/` — pure utils. `src/mocks/` — MOCK_SCENARIO providers. `src/tests/` — bun:test.
 
 ## WHERE TO LOOK
 
 | Task | Location |
 |------|----------|
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
-| ceracoder binding calls | `modules/streaming/ceracoder.ts` |
-| Engine seam + engine-flag registry (ceracoder ↔ cerastream) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
+| Engine seam + registry (cerastream-only) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
 | Cerastream engine backend (structured IPC, `@ceralive/cerastream`) | `modules/streaming/cerastream-backend.ts` |
 | Structured engine error → notification (Task-7 table swap, no regex) | `modules/streaming/cerastream-error-mapping.ts` |
 | srtla binding calls (flux — check `../../../srtla/AGENTS.md` first) | `modules/streaming/srtla.ts` |
@@ -130,13 +129,12 @@ updating both the spawn site and the stats-file path.
 
 See [`docs/RPC_COMMUNICATION.md`](../../docs/RPC_COMMUNICATION.md) for the full wire-protocol reference.
 
-## STREAMING ENGINE SEAM (dual-engine) [EXISTS]
+## STREAMING ENGINE SEAM [EXISTS]
 
 The `StreamingBackend` interface (`modules/streaming/streaming-backend.ts`) has
-**two** implementations behind one seam:
+**one** implementation behind the seam (the legacy ceracoder engine is fully
+retired):
 
-- `CeracoderBackend` (`ceracoder-backend.ts`) — the C `ceracoder`: INI config +
-  spawn + SIGHUP + stderr classification.
 - `CerastreamBackend` (`cerastream-backend.ts`, Task 32) — the Rust `cerastream`:
   every op is a structured JSON-RPC call over the control socket via the
   `@ceralive/cerastream` npm package (NOT a sibling `link:` — see below). Config
@@ -151,26 +149,23 @@ The `StreamingBackend` interface (`modules/streaming/streaming-backend.ts`) has
   frozen seam. All effectful collaborators are injected (`CerastreamBackendDeps`)
   so the contract suite drives a real backend against an in-memory fake client.
 
-**Engine selection** is the `engine` flag in `setup.json`
-(`"ceracoder" | "cerastream"`, schema in `helpers/config-schemas.ts`, default
-`"cerastream"` since Task 37 flipped it post generic boot-parity gate; ceracoder
-stays selectable until the hardware profiles pass). Every streaming call
-site routes through `getStreamingBackend()` (`streaming-engine.ts`) — a **lazy,
-memoized** resolve (eager resolution would hit a TDZ ReferenceError through the
-streamloop import cycle, see `ceracoder.ts`). Switching engines needs no code
-change. `resolveStreamingBackend(engine)` is the pure selector the tests boot in
-both modes.
+**Engine selection** is the `engine` flag in `setup.json` (`"cerastream"` only,
+schema in `helpers/config-schemas.ts`; a persisted legacy value is coerced to
+`"cerastream"` at parse time with one warning — boot never crashes on it). Every
+streaming call site still routes through `getStreamingBackend()`
+(`streaming-engine.ts`) so a future engine can slot in behind the same seam.
 
 **`@ceralive/cerastream` is a plain npm dependency, vendored as a `file:` tarball**
 (`apps/backend/vendor/ceralive-cerastream.tgz`, version-agnostic filename) — NOT a
-sibling `link:` like ceracoder/srtla (cerastream ARCHITECTURE §7 / ADR-0002
+sibling `link:` like srtla (cerastream ARCHITECTURE §7 / ADR-0002
 Decision 13: it ships to CeraUI as a published npm package, so the backend builds
 standalone with no sibling checkout). `tests/cerastream-bindings-skew.test.ts`
 guards the exact imported surface against drift in a refreshed tarball.
 
-Contract coverage: `tests/streaming-backend-contract.test.ts` runs the shared
-structural contract over BOTH singletons + the cerastream behavioural contract,
-error-mapping, status-bridge, passthroughs, engine-crash, and flag selection.
+Contract coverage: `tests/streaming-backend-contract.test.ts` runs the
+structural contract over the production singleton + the cerastream behavioural
+contract, error-mapping, status-bridge, passthroughs, engine-crash, and engine
+selection.
 
 ## ANTI-PATTERNS
 
@@ -178,8 +173,8 @@ error-mapping, status-bridge, passthroughs, engine-crash, and flag selection.
 - Don't add HTTP REST endpoints — all device control goes through oRPC over WebSocket.
 - Don't use `process.exit` directly — use `invariant` from `helpers/invariant.ts`.
 - Don't read config files with raw `fs` — use `helpers/config-loader.ts`.
-- Don't drive an engine directly — route through `getStreamingBackend()`, never the
-  `ceracoderBackend`/`cerastreamBackend` singletons. Keep resolution lazy (TDZ cycle).
+- Don't drive the engine directly — route through `getStreamingBackend()`, never
+  the `cerastreamBackend` singleton.
 - Don't re-add stderr regex on the cerastream path — engine errors are structured
   codes mapped via `cerastream-error-mapping.ts`.
 - Don't wire `@ceralive/cerastream` as a sibling `link:` — it is a vendored npm

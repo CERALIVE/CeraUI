@@ -31,20 +31,8 @@ afterEach(() => {
 });
 
 describe("PreviewCanvas (Task 33)", () => {
-	it("renders nothing for the legacy ceracoder engine", () => {
-		const { container } = render(PreviewCanvas, {
-			props: { engine: "ceracoder" as const },
-		});
-		expect(container.querySelector('[data-testid="preview"]')).toBeNull();
-		expect(
-			container.querySelector('[data-testid="preview-toggle"]'),
-		).toBeNull();
-	});
-
 	it("shows the toggle and stays off until the operator enables it", () => {
-		const { container } = render(PreviewCanvas, {
-			props: { engine: "cerastream" as const },
-		});
+		const { container } = render(PreviewCanvas);
 		expect(
 			container.querySelector('[data-testid="preview-toggle"]'),
 		).not.toBeNull();
@@ -67,9 +55,7 @@ describe("PreviewCanvas (Task 33)", () => {
 		);
 		vi.stubGlobal("WebSocket", FakeWebSocket);
 
-		const { container, getByTestId } = render(PreviewCanvas, {
-			props: { engine: "cerastream" as const },
-		});
+		const { container, getByTestId } = render(PreviewCanvas);
 
 		await fireEvent.click(getByTestId("preview-toggle"));
 		await tick();
@@ -97,9 +83,7 @@ describe("PreviewCanvas (Task 33)", () => {
 			delete target.VideoDecoder;
 			delete target.MediaSource;
 		}
-		const { container, getByTestId } = render(PreviewCanvas, {
-			props: { engine: "cerastream" as const },
-		});
+		const { container, getByTestId } = render(PreviewCanvas);
 
 		await fireEvent.click(getByTestId("preview-toggle"));
 		await tick();
@@ -125,9 +109,7 @@ describe("PreviewCanvas (Task 33)", () => {
 		);
 		vi.stubGlobal("WebSocket", FakeWebSocket);
 
-		const { container, getByTestId } = render(PreviewCanvas, {
-			props: { engine: "cerastream" as const },
-		});
+		const { container, getByTestId } = render(PreviewCanvas);
 
 		await fireEvent.click(getByTestId("preview-toggle"));
 		await tick();

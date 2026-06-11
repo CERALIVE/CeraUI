@@ -419,7 +419,7 @@ const codecLabels: Record<string, string> = {
 									</Dialog.Description>
 								</Dialog.Header>
 								<div class="bg-muted/50 rounded-lg p-3 font-mono text-xs">
-									ceracoder · pid 2041 · h265 · 1,234 kbps
+									cerastream · pid 2041 · h265 · 1,234 kbps
 								</div>
 								<Dialog.Footer>
 									<Dialog.Close>

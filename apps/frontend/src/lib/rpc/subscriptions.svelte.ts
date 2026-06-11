@@ -22,7 +22,6 @@ import type {
 	Revisions,
 	SensorsStatus,
 	StatusResponse,
-	StreamingEngineKind,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
 import { toast } from "svelte-sonner";
@@ -100,30 +99,10 @@ let audioCodecsState = $state<Record<string, { name: string }> | undefined>(
 	undefined,
 );
 
-// Hotplug input picker (Task 34). `devices` is the live list; `engine` drives the
-// picker conditional; `activeInput` is the engine's current source. A dev/e2e
-// engine override (URL `?engine=` or localStorage `engine`) wins over the wire
-// value so the cerastream picker is exercisable against the default dev backend.
-const engineOverride: StreamingEngineKind | undefined = readEngineOverride();
+// Hotplug input picker (Task 34). `devices` is the live list; `activeInput` is
+// the engine's current source (cerastream is the only engine).
 let devicesState = $state<CaptureDevice[]>([]);
-let engineState = $state<StreamingEngineKind>(engineOverride ?? "ceracoder");
 let activeInputState = $state<string | undefined>(undefined);
-
-function readEngineOverride(): StreamingEngineKind | undefined {
-	try {
-		if (typeof window !== "undefined") {
-			const fromUrl = new URLSearchParams(window.location.search).get("engine");
-			if (fromUrl === "cerastream" || fromUrl === "ceracoder") return fromUrl;
-		}
-		if (typeof localStorage !== "undefined") {
-			const stored = localStorage.getItem("engine");
-			if (stored === "cerastream" || stored === "ceracoder") return stored;
-		}
-	} catch {
-		// storage/URL unavailable — fall back to the wire value
-	}
-	return undefined;
-}
 
 // Relay state
 let relaysState = $state<RelayMessage | undefined>(undefined);
@@ -221,10 +200,6 @@ export function getAudioCodecs() {
 
 export function getDevices() {
 	return devicesState;
-}
-
-export function getEngine(): StreamingEngineKind {
-	return engineState;
 }
 
 export function getActiveInput() {
@@ -474,7 +449,6 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 				.map((d) => ({ ...d, lost: true }));
 			devicesState = [...incoming, ...retainedLost];
 			activeInputState = msg.active_input;
-			if (!engineOverride && msg.engine) engineState = msg.engine;
 			break;
 		}
 

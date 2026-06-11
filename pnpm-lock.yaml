@@ -29,9 +29,6 @@ importers:
 
   apps/backend:
     dependencies:
-      '@ceralive/ceracoder':
-        specifier: link:../../../ceracoder/bindings/typescript
-        version: link:../../../ceracoder/bindings/typescript
       '@ceralive/cerastream':
         specifier: file:vendor/ceralive-cerastream.tgz
         version: file:apps/backend/vendor/ceralive-cerastream.tgz

@@ -17,8 +17,8 @@
 */
 
 // Pure bitrate validation helpers. The streaming-time bitrate setter (which
-// persists config + hot-reloads the engine) now lives behind the StreamingBackend
-// seam as `ceracoderBackend.setBitrate` (ceracoder-backend.ts); these clamp/
+// persists config + hot-reloads the engine) lives behind the StreamingBackend
+// seam as `cerastreamBackend.setBitrate` (cerastream-backend.ts); these clamp/
 // validate helpers stay engine-agnostic and side-effect free.
 
 import type { BitrateParams } from "./streaming-backend.ts";

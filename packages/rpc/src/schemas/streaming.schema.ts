@@ -7,7 +7,7 @@ import { z } from 'zod';
  * Canonical bitrate range — SINGLE SOURCE OF TRUTH (Task 14).
  *
  * DECISION: keep the hardware-accurate range (500–50000 kbps) as the canonical
- * VALIDATION bound applied on both FE + BE. The encoder (ceracoder) can legitimately
+ * VALIDATION bound applied on both FE + BE. The encoder engine can legitimately
  * drive bitrates across this full window, so rejecting values inside it would drop
  * valid hardware states. The narrower 2000–12000 window is the PRACTICAL UI DEFAULT
  * used to seed the slider — it is a UX hint, NOT a validation gate.
@@ -248,7 +248,7 @@ export type StreamingStartOutputExtended = z.infer<typeof streamingStartOutputSc
 // ─── Stream health (Task 13) ────────────────────────────────────────────────
 //
 // Tri-state liveness rollup for the active stream, derived from process
-// liveness, ceracoder frame production, SRT reconnect status, and srtla bond
+// liveness, engine frame production, SRT reconnect status, and srtla bond
 // link count. This is the device's single source of truth for "is the stream
 // actually working". READ-ONLY — never drives restart logic.
 export const healthStateSchema = z.enum(['healthy', 'degraded', 'dead']);
@@ -276,10 +276,10 @@ export type StreamHealthOutput = z.infer<typeof streamHealthOutputSchema>;
 
 // ─── Hotplug input picker + live switch (Task 34) ───────────────────────────
 //
-// The frontend picker is conditional on the engine: `cerastream` renders the
-// hotplug-aware device picker + live switch; `ceracoder` keeps the legacy
-// pipeline picker untouched. Mirrors the backend `streamingEngineSchema`.
-export const streamingEngineSchema = z.enum(['ceracoder', 'cerastream']);
+// `cerastream` is the only streaming engine; the schema stays so the wire shape
+// (devices broadcast / getEngine RPC) is explicit and forward-extensible.
+// Mirrors the backend `streamingEngineSchema`.
+export const streamingEngineSchema = z.enum(['cerastream']);
 export type StreamingEngineKind = z.infer<typeof streamingEngineSchema>;
 
 export const deviceKindSchema = z.enum(['hdmi', 'usb', 'network', 'test', 'audio', 'other']);

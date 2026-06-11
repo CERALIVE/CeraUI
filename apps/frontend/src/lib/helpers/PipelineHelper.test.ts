@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { getPipelineDisplayName, getSourceLabel } from "./PipelineHelper";
 
-// A realistic ceracoder pipeline id that is NOT a known video source — this is
+// A realistic legacy pipeline id (opaque hash) that is NOT a known video source — this is
 // the value that used to leak through `source.toUpperCase()` (PipelineHelper.ts:33).
 const HASH_ID = "aa5813aa21487de31570a888272bace773d556e0";
 

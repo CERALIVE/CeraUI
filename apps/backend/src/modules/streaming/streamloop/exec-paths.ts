@@ -23,8 +23,6 @@
 
 import { getSrtlaSendExec } from "@ceralive/srtla/sender";
 import { setup } from "../../setup.ts";
-import { getCeracoderExec } from "../ceracoder.ts";
 
-export const ceracoderExec = getCeracoderExec();
 export const srtlaSendExec = getSrtlaSendExec(setup.srtla_path);
 export const bcrptExec = `${setup.bcrpt_path ?? "/usr/bin"}/bcrpt`;

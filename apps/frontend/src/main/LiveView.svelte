@@ -24,7 +24,6 @@ import {
 	getActiveInput,
 	getConfig,
 	getDevices,
-	getEngine,
 	getIsStreaming,
 	getLinkTelemetry,
 	getPipelines,
@@ -49,9 +48,8 @@ const sensors = $derived(getSensors());
 // status.linkTelemetry; surfaced here as a read-only panel, no new collector.
 const linkTelemetry = $derived(getLinkTelemetry());
 
-// Hotplug input picker (Task 34) — cerastream only. The legacy ceracoder
-// pipeline picker (EncoderDialog) is untouched.
-const engine = $derived(getEngine());
+// Hotplug input picker (Task 34). The pipeline picker (EncoderDialog) is
+// untouched.
 const devices = $derived(getDevices());
 const activeInput = $derived(getActiveInput());
 let selectedInput = $state<string | undefined>(undefined);
@@ -204,7 +202,7 @@ function clampBitrate(kbps: number): number {
 	return Math.round(Math.max(BITRATE_MIN, Math.min(BITRATE_MAX, kbps)));
 }
 
-// setBitrate applies live via ceracoder — NO stream stop required.
+// setBitrate applies live via the engine — NO stream stop required.
 async function commitBitrate(kbps: number) {
 	const clamped = clampBitrate(kbps);
 	bitrateDraft = clamped;
@@ -401,24 +399,21 @@ const configRows = $derived<ConfigRow[]>([
 			<IngestStats telemetry={linkTelemetry} />
 		{/if}
 
-		{#if engine === 'cerastream'}
-			<Card.Root>
-				<Card.Content class="p-4 sm:p-6">
-					<InputPicker
-						activeInput={activeInput}
-						devices={devices}
-						engine="cerastream"
-						isStreaming={isStreaming}
-						onSelect={handleSelectInput}
-						onSwitch={handleSwitchInput}
-						selectedInput={selectedInput}
-						switchingInput={switchingInput}
-					/>
-				</Card.Content>
-			</Card.Root>
+		<Card.Root>
+			<Card.Content class="p-4 sm:p-6">
+				<InputPicker
+					activeInput={activeInput}
+					devices={devices}
+					isStreaming={isStreaming}
+					onSelect={handleSelectInput}
+					onSwitch={handleSwitchInput}
+					selectedInput={selectedInput}
+					switchingInput={switchingInput}
+				/>
+			</Card.Content>
+		</Card.Root>
 
-			<PreviewCanvas engine="cerastream" />
-		{/if}
+		<PreviewCanvas />
 
 		<StreamSettingsCard {configRows} {isStreaming} />
 

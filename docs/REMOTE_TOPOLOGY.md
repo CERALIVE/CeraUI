@@ -46,7 +46,7 @@ This is the only wired topology today.
 │  └────────────────┘  │        │  └──────────────────────┘   │
 │                      │        │                              │
 │  ┌────────────────┐  │        │  bonded cellular links       │
-│  │  Cloud relay   │  │        │  (srtla / ceracoder)         │
+│  │  Cloud relay   │  │        │  (srtla / cerastream)        │
 │  │  (broker TBD)  │  │        └──────────────────────────────┘
 │  └────────────────┘  │
 └──────────────────────┘

@@ -3,8 +3,8 @@
 ## Components
 
 - **Frontend (Svelte 5 PWA)**: Browser UI with 3 primary destinations. Talks to backend via WebSocket/RPC. Served as static files by the backend.
-- **Backend (Bun/TypeScript)**: Orchestrates ceracoder, srtla, network/modem, relays RPC events. Serves frontend static bundle.
-- **ceracoder**: Runs GStreamer pipeline internally (capture, encode, mux) and sends SRT.
+- **Backend (Bun/TypeScript)**: Drives cerastream over JSON-RPC/UDS, supervises srtla, manages network/modem, relays RPC events. Serves frontend static bundle.
+- **cerastream**: Rust streaming engine — the sole engine (ceracoder retired 2026-06-11). Runs the GStreamer pipeline internally (capture, encode, mux) and sends SRT. Consumed via the `@ceralive/cerastream` npm tarball; controlled over JSON-RPC on a Unix domain socket.
 - **srtla**: Splits SRT packets across multiple interfaces (bonding).
 - **srtla_rec**: Reassembles bonded streams on the server.
 - **srt-live-transmit**: Relays to the final consumer (OBS/Player/CDN).
@@ -18,9 +18,9 @@ Browser (CeraUI Frontend)
     v
 Backend (Bun/TypeScript)
     |
-    | spawn / signal / configure
+    | JSON-RPC / UDS (cerastream)  +  spawn (srtla_send via streamloop)
     v
-ceracoder
+cerastream
     |
     | SRT (localhost)
     v
@@ -74,7 +74,7 @@ ENCODER DEVICE (Field)                        SERVER (Ingest/Cloud)
 Video Source (HDMI/USB/SRT/etc)
         |
         v
-   ceracoder
+   cerastream
    +---------------------------+
    | GStreamer (internal)      |
    | - Capture/Encode/Mux      |
@@ -117,10 +117,10 @@ Video Source (HDMI/USB/SRT/etc)
 
 ## Data & Control Paths
 
-- **Control**: Frontend → Backend (RPC) → ceracoder/srtla (spawn, config, SIGHUP).
-- **Media**: ceracoder (GStreamer) → SRT → srtla → bonded links → srtla_rec → srt-live-transmit → consumer.
-- **Bitrate Adaptation**: ceracoder reads SRT stats, adjusts encoder bitrate dynamically.
-- **Config Reload**: ceracoder supports SIGHUP to reload INI without restart.
+- **Control**: Frontend → Backend (RPC) → cerastream (JSON-RPC over UDS) and srtla_send (spawned/supervised as a separate process via streamloop).
+- **Media**: cerastream (GStreamer) → SRT → srtla → bonded links → srtla_rec → srt-live-transmit → consumer.
+- **Bitrate Adaptation**: cerastream reads SRT stats, adjusts encoder bitrate dynamically.
+- **Config Reload**: cerastream applies config changes live via the `reload-config` JSON-RPC method — no restart, no signal. (The former SIGHUP/INI reload was ceracoder-specific; retired 2026-06-11.)
 - **Config Persist (no stream start)**: `rpc.streaming.setConfig` saves config fields without launching the stream — used by all Live destination dialogs when not streaming.
 
 ## WebSocket Broadcast Events
