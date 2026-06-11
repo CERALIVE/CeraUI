@@ -18,6 +18,27 @@
 /**
  * Zod schemas for all JSON configuration files
  * Used for validation and type-safe defaults
+ *
+ * `runtimeConfigSchema` is the SINGLE source of truth for the on-device
+ * streaming config. It covers two concerns in one shape:
+ *   1. runtime UI/streaming state persisted to `config.json` (relay target,
+ *      audio, video, kiosk, add-ons, …), and
+ *   2. the fields the encoder backend turns into `ceracoder.conf` INI —
+ *      `max_br` (→ general.max_bitrate), `srt_latency` (→ srt.latency),
+ *      `balancer` (→ general.balancer) and `delay` (→ run-arg A/V delay).
+ *
+ * INI serialization itself is NOT done here. It is an implementation detail of
+ * `CeracoderBackend` (modules/streaming/ceracoder-backend.ts), the only place
+ * allowed to translate this schema into the engine's `ceracoder.conf` grammar.
+ * That keeps the wire format invisible above the StreamingBackend seam, so a
+ * future engine can satisfy the same contract without a different config schema.
+ *
+ * `setup.json` (setupConfigSchema, below) is deliberately a SEPARATE schema. It
+ * is boot-time hardware identity / path overrides written once at image-build /
+ * first-run time (`hw`, exec + config paths, device dirs). It is read at module
+ * load before the runtime config and is never mutated by the streaming flow, so
+ * folding it into the runtime schema would conflate immutable boot identity with
+ * mutable runtime state. They stay distinct on purpose.
  */
 
 import {
@@ -92,6 +113,13 @@ export const framerateSchema = z.union([
 	z.literal(60),
 ]);
 
+// Mirrors ceracoder's `balancerAlgorithmSchema` (→ `[general] balancer` INI),
+// defined locally — like resolution/framerate above — to keep this schema free
+// of an engine-binding dependency.
+export const balancerSchema = z.enum(["adaptive", "fixed", "aimd"]);
+
+export type Balancer = z.infer<typeof balancerSchema>;
+
 export const runtimeConfigSchema = z.object({
 	// Authentication
 	password: z.string().optional(),
@@ -117,6 +145,7 @@ export const runtimeConfigSchema = z.object({
 	bitrate_overlay: z.boolean().optional(),
 	max_br: z.number().int().min(500).max(50000).optional(),
 	delay: z.number().int().min(-2000).max(2000).optional(),
+	balancer: balancerSchema.optional(),
 	pipeline: z.string().optional(),
 	resolution: resolutionSchema.optional(),
 	framerate: framerateSchema.optional(),
@@ -156,6 +185,7 @@ export const RUNTIME_CONFIG_DEFAULTS: Partial<RuntimeConfig> = {
 	srt_latency: 2000,
 	max_br: 5000,
 	delay: 0,
+	balancer: "adaptive",
 	bitrate_overlay: false,
 	autostart: false,
 	kiosk_enabled: false,

@@ -26,6 +26,12 @@
 //
 // `bcrpt` stays out of this module on purpose — it is an independent binary with
 // its own lifecycle in `bcrpt.ts` (see SCOPE in streaming-backend.ts).
+//
+// INI BOUNDARY: this file is the ONLY place that translates the unified
+// `runtimeConfigSchema` (helpers/config-schemas.ts) into `ceracoder.conf` INI.
+// `writeConfig`/`buildRunArgs` map the runtime fields (`max_br`, `srt_latency`,
+// `balancer`, `delay`) onto the engine's INI grammar via `buildCeracoderConfig`.
+// Nothing above the StreamingBackend seam knows the INI exists.
 
 import {
 	buildCeracoderConfig,

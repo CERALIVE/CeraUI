@@ -1,0 +1,17 @@
+{
+	"relay_server": "ceralive:0",
+	"relay_account": "ceralive:abc123",
+	"relay_protocol": "srtla",
+	"srt_latency": 2000,
+	"asrc": "HDMI",
+	"acodec": "opus",
+	"bitrate_overlay": true,
+	"max_br": 6000,
+	"delay": 0,
+	"pipeline": "h264_hdmi_1080p",
+	"resolution": "1080p",
+	"framerate": 30,
+	"autostart": false,
+	"remote_key": "legacy-remote-key",
+	"remote_provider": "ceralive"
+}
