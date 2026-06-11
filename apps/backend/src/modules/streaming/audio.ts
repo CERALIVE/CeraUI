@@ -28,6 +28,10 @@ import { getConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import {
+	type AudioDeviceWatcher,
+	createAudioDeviceWatcher,
+} from "./audio-watcher.ts";
 import { AUDIO_PROBE_TIMEOUT_MS } from "./constants.ts";
 
 const deviceDir = setup.sound_device_dir ?? "/sys/class/sound";
@@ -74,7 +78,7 @@ function addAudioCardById(list: Record<string, string>, id: string) {
 	list[name] = id;
 }
 
-export async function updateAudioDevices() {
+export async function updateAudioDevices(dir: string = deviceDir) {
 	// Ignore the onboard audio cards
 	const exclude = [
 		"tegrahda",
@@ -95,7 +99,7 @@ export async function updateAudioDevices() {
 		"usbaudio",
 	];
 
-	const devices = await readdirP(deviceDir);
+	const devices = await readdirP(dir);
 	const list: Record<string, true> = {};
 
 	for (const d of devices) {
@@ -103,7 +107,7 @@ export async function updateAudioDevices() {
 		if (!d.match(/^card/)) continue;
 
 		// Get the card's ID
-		const id = ((await readTextFile(`${deviceDir}/${d}/id`)) ?? "").trim();
+		const id = ((await readTextFile(`${dir}/${d}/id`)) ?? "").trim();
 
 		// Skip over the IDs known not to be valid audio inputs
 		if (exclude.includes(id)) continue;
@@ -130,9 +134,15 @@ export async function updateAudioDevices() {
 	logger.debug("audio devices:", audioDevices);
 
 	broadcastMsg("status", { asrcs: Object.keys(audioDevices) });
+
+	// A hotplug re-enumeration may have brought in the device a stream start is
+	// waiting on — wake the pending probe so it re-checks now instead of after
+	// the next poll tick, beating the QW-J timeout (QW-E ↔ QW-J interaction).
+	asrcProbeWake?.();
 }
 
 let asrcProbeReject: ((err: Error) => void) | undefined;
+let asrcProbeWake: (() => void) | undefined;
 
 export function isAsrcProbeRejectResolved() {
 	return asrcProbeReject !== undefined;
@@ -141,6 +151,7 @@ export function isAsrcProbeRejectResolved() {
 export function clearAsrcProbeReject() {
 	asrcProbeReject?.();
 	asrcProbeReject = undefined;
+	asrcProbeWake = undefined;
 }
 
 export class AudioProbeTimeoutError extends Error {
@@ -182,15 +193,40 @@ export async function asrcProbe(asrc: string): Promise<string> {
 				const msg = `Selected audio input '${config.asrc}' is unavailable. Waiting for it before starting the stream...`;
 				notificationBroadcast("asrc_not_found", "error", msg, 2, true, false);
 
-				// sleep for one second
+				// Sleep one poll interval, but wake early if a hotplug re-enumeration
+				// signals a device-list change (asrcProbeWake from updateAudioDevices).
 				await new Promise<void>((r) => {
-					setTimeout(r, AUDIO_SOURCE_POLL_DELAY);
+					const sleepHandle = setTimeout(r, AUDIO_SOURCE_POLL_DELAY);
+					asrcProbeWake = () => {
+						clearTimeout(sleepHandle);
+						asrcProbeWake = undefined;
+						r();
+					};
 				});
 			}
 			// If the loop exited, then rej() was already called externally. Nothing left to do
+			asrcProbeWake = undefined;
 			clearTimeout(timeoutHandle);
 		};
 
 		poll();
 	});
+}
+
+let audioWatcher: AudioDeviceWatcher | undefined;
+
+export function startAudioDeviceWatcher(isStreaming?: () => boolean) {
+	if (audioWatcher) return audioWatcher;
+	const opts = {
+		dir: deviceDir,
+		onChange: () => void updateAudioDevices(),
+		...(isStreaming ? { isStreaming } : {}),
+	};
+	audioWatcher = createAudioDeviceWatcher(opts);
+	return audioWatcher;
+}
+
+export function stopAudioDeviceWatcher() {
+	audioWatcher?.stop();
+	audioWatcher = undefined;
 }

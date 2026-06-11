@@ -29,3 +29,9 @@ export const SHUTDOWN_SIGKILL_TIMEOUT_MS = 10_000;
 
 /** Timeout (ms) for audio device probe before failing stream start (QW-J). */
 export const AUDIO_PROBE_TIMEOUT_MS = 15_000;
+
+/** Debounce window (ms) collapsing bursts of audio device watcher events (QW-E). */
+export const AUDIO_HOTPLUG_DEBOUNCE_MS = 500;
+
+/** Fallback poll interval (ms) while streaming when fs.watch is unavailable (QW-E). */
+export const AUDIO_HOTPLUG_POLL_INTERVAL_MS = 5_000;

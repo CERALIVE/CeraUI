@@ -34,7 +34,10 @@ import {
 } from "./modules/network/network-interfaces.ts";
 import { initRemote } from "./modules/remote/remote.ts";
 import { setup } from "./modules/setup.ts";
-import { updateAudioDevices } from "./modules/streaming/audio.ts";
+import {
+	startAudioDeviceWatcher,
+	updateAudioDevices,
+} from "./modules/streaming/audio.ts";
 import { startBcrpt } from "./modules/streaming/bcrpt.ts";
 import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
 import { broadcastHealthIfChanged } from "./modules/streaming/health.ts";
@@ -46,6 +49,7 @@ import {
 	checkAutoStartStream,
 	srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
+import { getStreamingProcesses } from "./modules/streaming/streamloop/process-runner.ts";
 import { initDeviceStats } from "./modules/system/device-stats.ts";
 import { initRevisions } from "./modules/system/revisions.ts";
 import { initHardwareMonitoring } from "./modules/system/sensors.ts";
@@ -118,6 +122,9 @@ void initModemUpdateLoop({ monitor: networkMonitor });
 checkCamlinkUsb2();
 
 updateAudioDevices();
+// Live device list: inotify on the sound dir (+ debounce), polling fallback only
+// while streaming. The SIGUSR2 udev hook below stays as a belt-and-suspenders path.
+startAudioDeviceWatcher(() => getStreamingProcesses().length > 0);
 startBcrpt();
 
 // Don't autostart when restarting CeraLive after a software update or after a crash
