@@ -26,18 +26,15 @@ import { setup } from "../../setup.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
 import { asrcProbe, getAudioSrcId } from "../audio.ts";
 import { hasLowMtu } from "../bcrpt.ts";
-import { ceracoderBackend } from "../ceracoder-backend.ts";
-import { clearStreamProcessExit } from "../health.ts";
 import { SRTLA_LISTEN_PORT } from "../constants.ts";
-import {
-	srtlaStatsFile,
-	startLinkTelemetry,
-} from "../link-telemetry.ts";
+import { clearStreamProcessExit } from "../health.ts";
+import { srtlaStatsFile, startLinkTelemetry } from "../link-telemetry.ts";
 import {
 	gatePipelineOverrides,
 	generatePipelineFile,
 	type Pipeline,
 } from "../pipelines.ts";
+import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
 import { resolveProcessError } from "./process-error-patterns.ts";
 import { spawnStreamingLoop } from "./process-runner.ts";
@@ -49,7 +46,7 @@ export async function startStream(
 	streamid: string,
 ) {
 	const config = getConfig();
-	ceracoderBackend.setBitrate(config);
+	getStreamingBackend().setBitrate(config);
 
 	// A fresh stream start clears any prior unexpected-exit health flag so the
 	// health rollup tracks this new session (ADR-0005 observe-and-notify).
@@ -91,7 +88,14 @@ export async function startStream(
 		(err) => {
 			const resolved = resolveProcessError("srtla", err);
 			if (resolved) {
-				notificationBroadcast("srtla", "error", resolved.message, 5, true, false);
+				notificationBroadcast(
+					"srtla",
+					"error",
+					resolved.message,
+					5,
+					true,
+					false,
+				);
 			}
 		},
 	);
@@ -105,7 +109,7 @@ export async function startStream(
 	startLinkTelemetry(statsFile, ipsContent.split("\n"));
 
 	// Engine launch (argv build + spawn + stderr classification) is behind the seam.
-	ceracoderBackend.start(config, {
+	getStreamingBackend().start(config, {
 		pipelineFile,
 		host: "127.0.0.1",
 		port: SRTLA_LISTEN_PORT,

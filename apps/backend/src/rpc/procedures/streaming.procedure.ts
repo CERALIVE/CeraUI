@@ -28,7 +28,6 @@ import {
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
-import { ceracoderBackend } from "../../modules/streaming/ceracoder-backend.ts";
 import { clampBitrate } from "../../modules/streaming/encoder.ts";
 import { getStreamHealth } from "../../modules/streaming/health.ts";
 import {
@@ -37,16 +36,17 @@ import {
 	getPipelineList,
 	getPipelinesMessage,
 	initPipelines,
+	PipelineOverrideError,
+	searchPipelines,
 	setMockHardware,
 	VALID_HARDWARE_TYPES,
-	searchPipelines,
-	PipelineOverrideError,
 	validatePipelineOverrides,
 } from "../../modules/streaming/pipelines.ts";
 import {
 	getIsStreaming,
 	updateStatus,
 } from "../../modules/streaming/streaming.ts";
+import { getStreamingBackend } from "../../modules/streaming/streaming-engine.ts";
 import {
 	start as startStream,
 	stop as stopStream,
@@ -122,7 +122,7 @@ export const setBitrateProcedure = authedProcedure
 	.handler(({ input }) => {
 		const applied = clampBitrate(input.max_br);
 		if (getIsStreaming()) {
-			const newBitrate = ceracoderBackend.setBitrate({ max_br: applied });
+			const newBitrate = getStreamingBackend().setBitrate({ max_br: applied });
 			if (newBitrate) {
 				if (shouldUseMocks()) {
 					setMockEncoderConfig({ max_br: newBitrate });
@@ -222,7 +222,11 @@ export const setConfigProcedure = authedProcedure
 		const config = getConfig();
 
 		// Validate pipeline overrides at save time (QW-I)
-		if (input.pipeline !== undefined || input.resolution !== undefined || input.framerate !== undefined) {
+		if (
+			input.pipeline !== undefined ||
+			input.resolution !== undefined ||
+			input.framerate !== undefined
+		) {
 			const pipelineId = input.pipeline ?? config.pipeline;
 			const pipeline = searchPipelines(pipelineId);
 			if (pipeline) {

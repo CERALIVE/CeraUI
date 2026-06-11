@@ -349,7 +349,7 @@ logger from `apps/backend/src/helpers/logger.ts`. Empty catches now log via
 ## ANTI-PATTERNS
 
 - Don't run `npm install` or `yarn` — pnpm workspaces only.
-- Don't add `@ceralive/ceracoder` or `@ceralive/srtla` to `package.json` as npm packages — they are local `link:` deps by design.
+- Don't add `@ceralive/ceracoder` or `@ceralive/srtla` to `package.json` as npm packages — they are local `link:` deps by design. **`@ceralive/cerastream` is the deliberate exception**: it is a plain npm dependency, vendored as a `file:` tarball at `apps/backend/vendor/ceralive-cerastream.tgz` (ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:`.
 - Don't edit `.impeccable.md` for code changes — it's a design reference, not config.
 - Don't touch srtla binding call sites without checking `../srtla/AGENTS.md` first (API in flux).
 - Don't add custom UI components to `lib/components/ui/` — that directory is managed by the shadcn-svelte CLI. Custom components go in `lib/components/custom/`.

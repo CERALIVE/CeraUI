@@ -16,6 +16,9 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 |------|----------|
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
 | ceracoder binding calls | `modules/streaming/ceracoder.ts` |
+| Engine seam + engine-flag registry (ceracoder ↔ cerastream) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
+| Cerastream engine backend (structured IPC, `@ceralive/cerastream`) | `modules/streaming/cerastream-backend.ts` |
+| Structured engine error → notification (Task-7 table swap, no regex) | `modules/streaming/cerastream-error-mapping.ts` |
 | srtla binding calls (flux — check `../../../srtla/AGENTS.md` first) | `modules/streaming/srtla.ts` |
 | srtla per-link telemetry → `status.linkTelemetry` | `modules/streaming/link-telemetry.ts` |
 | Stream lifecycle (spawn supervision, start/stop, autostart, exec paths) | `modules/streaming/streamloop/` (barrel: `modules/streaming/streamloop.ts`) |
@@ -127,9 +130,56 @@ updating both the spawn site and the stats-file path.
 
 See [`docs/RPC_COMMUNICATION.md`](../../docs/RPC_COMMUNICATION.md) for the full wire-protocol reference.
 
+## STREAMING ENGINE SEAM (dual-engine) [EXISTS]
+
+The `StreamingBackend` interface (`modules/streaming/streaming-backend.ts`) has
+**two** implementations behind one seam:
+
+- `CeracoderBackend` (`ceracoder-backend.ts`) — the C `ceracoder`: INI config +
+  spawn + SIGHUP + stderr classification.
+- `CerastreamBackend` (`cerastream-backend.ts`, Task 32) — the Rust `cerastream`:
+  every op is a structured JSON-RPC call over the control socket via the
+  `@ceralive/cerastream` npm package (NOT a sibling `link:` — see below). Config
+  is the unified config serialized by the binding + pushed over IPC (no INI);
+  errors arrive as **structured** Tier-2 events mapped onto Task-7's code table by
+  `cerastream-error-mapping.ts` (zero stderr regex on this path); telemetry /
+  device / status events are bridged into the existing `status` broadcast, and the
+  engine telemetry snapshot is surfaced through the optional `getTelemetry()`
+  hook. cerastream is systemd-owned (ADR-0005) — CeraUI connects, never spawns, so
+  `start`/`stop` drive the pipeline over IPC. Additive cerastream-only RPC
+  passthroughs (`switchInput`, `listDevices`) live on the concrete class, off the
+  frozen seam. All effectful collaborators are injected (`CerastreamBackendDeps`)
+  so the contract suite drives a real backend against an in-memory fake client.
+
+**Engine selection** is the `engine` flag in `setup.json`
+(`"ceracoder" | "cerastream"`, schema in `helpers/config-schemas.ts`, default
+`"ceracoder"` until Task 37 flips it post boot-parity gate). Every streaming call
+site routes through `getStreamingBackend()` (`streaming-engine.ts`) — a **lazy,
+memoized** resolve (eager resolution would hit a TDZ ReferenceError through the
+streamloop import cycle, see `ceracoder.ts`). Switching engines needs no code
+change. `resolveStreamingBackend(engine)` is the pure selector the tests boot in
+both modes.
+
+**`@ceralive/cerastream` is a plain npm dependency, vendored as a `file:` tarball**
+(`apps/backend/vendor/ceralive-cerastream.tgz`, version-agnostic filename) — NOT a
+sibling `link:` like ceracoder/srtla (cerastream ARCHITECTURE §7 / ADR-0002
+Decision 13: it ships to CeraUI as a published npm package, so the backend builds
+standalone with no sibling checkout). `tests/cerastream-bindings-skew.test.ts`
+guards the exact imported surface against drift in a refreshed tarball.
+
+Contract coverage: `tests/streaming-backend-contract.test.ts` runs the shared
+structural contract over BOTH singletons + the cerastream behavioural contract,
+error-mapping, status-bridge, passthroughs, engine-crash, and flag selection.
+
 ## ANTI-PATTERNS
 
 - Don't import from `@ceralive/srtla` without checking upstream merge status — binding API is in flux.
 - Don't add HTTP REST endpoints — all device control goes through oRPC over WebSocket.
 - Don't use `process.exit` directly — use `invariant` from `helpers/invariant.ts`.
 - Don't read config files with raw `fs` — use `helpers/config-loader.ts`.
+- Don't drive an engine directly — route through `getStreamingBackend()`, never the
+  `ceracoderBackend`/`cerastreamBackend` singletons. Keep resolution lazy (TDZ cycle).
+- Don't re-add stderr regex on the cerastream path — engine errors are structured
+  codes mapped via `cerastream-error-mapping.ts`.
+- Don't wire `@ceralive/cerastream` as a sibling `link:` — it is a vendored npm
+  tarball by design (refresh: see `apps/backend/vendor/README.md`).

@@ -221,11 +221,23 @@ export function normalizeRelayIds(config: RuntimeConfig): RuntimeConfig {
 
 export const hardwareTypeSchema = z.enum(["jetson", "n100", "rk3588"]);
 
+// Which streaming engine the backend drives behind the StreamingBackend seam.
+// Boot identity, not a runtime UI toggle: it is read once at startup to pick the
+// engine implementation (ceracoder INI/spawn vs cerastream structured IPC). The
+// image / first-run setup.json owns the value; Task 37 flips the default to
+// "cerastream" post boot-parity gate. Absent ⇒ "ceracoder" (see SETUP defaults).
+export const streamingEngineSchema = z.enum(["ceracoder", "cerastream"]);
+export type StreamingEngine = z.infer<typeof streamingEngineSchema>;
+
 export const setupConfigSchema = z.object({
 	hw: hardwareTypeSchema,
+	engine: streamingEngineSchema.optional(),
 	// Ceracoder settings
 	ceracoder_path: z.string().optional(),
 	ceracoder_config: z.string().optional(),
+	// Cerastream control-socket / exec overrides (parity with ceracoder paths).
+	cerastream_path: z.string().optional(),
+	cerastream_socket: z.string().optional(),
 
 	srtla_path: z.string().optional(),
 	sound_device_dir: z.string().optional(),
@@ -240,6 +252,7 @@ export type SetupConfig = z.infer<typeof setupConfigSchema>;
 
 // Default paths based on hardware
 export const SETUP_CONFIG_DEFAULTS: Partial<SetupConfig> = {
+	engine: "ceracoder",
 	// Ceracoder config path for -c and SIGHUP reload
 	ceracoder_config: "/tmp/ceracoder.conf",
 

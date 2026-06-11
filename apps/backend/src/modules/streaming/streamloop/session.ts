@@ -43,7 +43,7 @@ import {
 	updateConfig,
 	updateStatus,
 } from "../streaming.ts";
-import { ceracoderBackend } from "../ceracoder-backend.ts";
+import { getStreamingBackend } from "../streaming-engine.ts";
 import { getStreamingProcesses, stopAll } from "./process-runner.ts";
 import { startStream } from "./start-stream.ts";
 
@@ -134,12 +134,12 @@ export function stop() {
 		logger.error("stop: BUG?: found both an asrcProbe and running processes");
 	}
 
-	// Bring the engine down first (it owns the ceracoder-first shutdown ordering),
+	// Bring the engine down first (it owns the engine-first shutdown ordering),
 	// then sweep the rest once it has exited.
-	const foundCeracoder = ceracoderBackend.stop(() => stopAll());
+	const foundEngine = getStreamingBackend().stop(() => stopAll());
 
-	if (!foundCeracoder) {
-		logger.error("stop: BUG?: ceracoder not found, terminating all processes");
+	if (!foundEngine) {
+		logger.error("stop: BUG?: engine not found, terminating all processes");
 		stopAll();
 	}
 }
