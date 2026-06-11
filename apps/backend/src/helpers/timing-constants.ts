@@ -1,7 +1,6 @@
 /*
-    CeraUI - web UI for the CERALIVE project
+    CeraUI - web UI for the CeraLive project
     Copyright (C) 2024-2025 CeraLive project
-
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,9 +15,19 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Re-export barrel. The streamloop implementation was split into focused modules
-// under ./streamloop/ — see ./streamloop/index.ts for the locked public surface.
-// This file exists so every existing `from ".../streamloop.ts"` import keeps
-// resolving to the same symbols.
+/**
+ * Centralized timing constants for streaming modules
+ * Extracted from hardcoded values to enable consistent tuning and testing
+ */
 
-export * from "./streamloop/index.ts";
+// BCRPT retry logic (bcrpt.ts)
+export const MAX_BCRPT_RETRIES = 5;
+export const INITIAL_RETRY_DELAY = 1000; // ms
+
+// Autostart retry delay (streamloop.ts)
+// Retry interval when no interfaces are available or autostart fails
+export const AUTOSTART_RETRY_DELAY = 1000; // ms
+
+// Audio source polling delay (audio.ts)
+// Retry interval when selected audio input is unavailable
+export const AUDIO_SOURCE_POLL_DELAY = 1000; // ms

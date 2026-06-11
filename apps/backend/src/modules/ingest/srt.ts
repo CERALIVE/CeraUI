@@ -1,3 +1,4 @@
+import { logger } from "../../helpers/logger.ts";
 import {
 	getMockSrtStats,
 	shouldMockStreaming,
@@ -93,7 +94,7 @@ function startSrtTransmitter(): void {
 export function initSRTIngest(): void {
 	// Skip starting real transmitter in development mode
 	if (shouldMockStreaming()) {
-		console.log("🎭 SRT ingest: Using mock streaming stats");
+		logger.info("🎭 SRT ingest: Using mock streaming stats");
 		return;
 	}
 	startSrtTransmitter();

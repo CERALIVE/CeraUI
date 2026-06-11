@@ -19,6 +19,7 @@
 /* Audio input selection and codec */
 import fs from "node:fs";
 
+import { AUDIO_SOURCE_POLL_DELAY } from "../../helpers/timing-constants.ts";
 import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";
@@ -162,10 +163,10 @@ export async function asrcProbe(asrc: string): Promise<string> {
 				const msg = `Selected audio input '${config.asrc}' is unavailable. Waiting for it before starting the stream...`;
 				notificationBroadcast("asrc_not_found", "error", msg, 2, true, false);
 
-				// sleep for one second
-				await new Promise<void>((r) => {
-					setTimeout(r, 1000);
-				});
+			// sleep for one second
+			await new Promise<void>((r) => {
+				setTimeout(r, AUDIO_SOURCE_POLL_DELAY);
+			});
 			}
 			// If the loop exited, then rej() was already called externally. Nothing left to do
 		};

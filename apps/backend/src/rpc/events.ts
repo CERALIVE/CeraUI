@@ -2,6 +2,7 @@
  * RPC Event System
  * Manages subscriptions and broadcasts for real-time data
  */
+import { logger } from "../helpers/logger.ts";
 import {
 	type CoalesceState,
 	getCoalesceWindowMs,
@@ -46,7 +47,7 @@ class EventEmitter {
 				try {
 					handler(data);
 				} catch (error) {
-					console.error(`Event handler error for ${event}:`, error);
+					logger.error(`Event handler error for ${event}`, { err: error });
 				}
 			}
 		}
@@ -166,7 +167,7 @@ export function broadcast(
 		try {
 			client.send(message);
 		} catch (error) {
-			console.error("Broadcast send error:", error);
+			logger.error("Broadcast send error", { err: error });
 		}
 	}
 }
@@ -182,7 +183,7 @@ export function sendToClient(
 	try {
 		ws.send(JSON.stringify({ [type]: data }));
 	} catch (error) {
-		console.error("Send error:", error);
+		logger.error("Send error", { err: error });
 	}
 }
 

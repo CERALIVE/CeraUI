@@ -1,5 +1,6 @@
 import { access } from "node:fs/promises";
 import { parseStringPromise as parseXmlStringPromise } from "xml2js";
+import { logger } from "../../helpers/logger.ts";
 import { httpGet } from "../network/internet";
 
 // Define specific types for the RTMP statistics
@@ -70,7 +71,7 @@ export async function initRTMPIngestStats(): Promise<void> {
 		process.env.NODE_ENV === "development" && !(await pathExists("public"));
 
 	if (isDevelopment) {
-		console.log("Development mode: Skipping RTMP statistics polling");
+		logger.debug("Development mode: Skipping RTMP statistics polling");
 		return;
 	}
 
@@ -78,7 +79,7 @@ export async function initRTMPIngestStats(): Promise<void> {
 		try {
 			await updateRtmpStats();
 		} catch (error) {
-			console.log(error);
+			logger.debug("RTMP stats update error", { err: error });
 		}
 	}, 1000);
 }

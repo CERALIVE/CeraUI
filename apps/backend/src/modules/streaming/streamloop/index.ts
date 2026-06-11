@@ -16,9 +16,20 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Re-export barrel. The streamloop implementation was split into focused modules
-// under ./streamloop/ — see ./streamloop/index.ts for the locked public surface.
-// This file exists so every existing `from ".../streamloop.ts"` import keeps
-// resolving to the same symbols.
+// Public surface of the streamloop module. The split is internal only — these
+// named re-exports reproduce exactly the symbols the original streamloop.ts
+// exposed, so every existing `from ".../streamloop.ts"` import resolves unchanged.
 
-export * from "./streamloop/index.ts";
+export {
+	AUTOSTART_CHECK_FILE,
+	autoStartStream,
+	checkAutoStartStream,
+	setAutostart,
+} from "./autostart.ts";
+export {
+	bcrptExec,
+	ceracoderExec,
+	srtlaSendExec,
+} from "./exec-paths.ts";
+export { start, stop } from "./session.ts";
+export { startStream } from "./start-stream.ts";
