@@ -302,6 +302,50 @@ The backend is fully migrated to Bun-native APIs. Use these patterns for all new
 - **`Bun.$` shell interpolation**: dynamic command strings must use `Bun.$\`${{ raw: cmd }}\`` — plain `${cmd}` escapes the whole string into one quoted arg
 - **`process.env` writes**: stay on `process.env` — `Bun.env` is read-only
 
+## STREAMING BACKEND QUALITY [EXISTS]
+
+Quality improvements landed in `chore/backend-quality` (Tasks 5–7, 13–14).
+
+### streamloop module split
+
+`apps/backend/src/modules/streaming/streamloop.ts` is now a 5-line barrel re-exporting
+from `streamloop/index.ts`. The 10 public exports are unchanged — all caller import paths
+are unmodified.
+
+```
+modules/streaming/streamloop/
+├── exec-paths.ts    # ceracoderExec, srtlaSendExec, bcrptExec constants
+├── process-runner.ts # mutable streamingProcesses list + spawnStreamingLoop/stopProcess/stopAll/getStreamingProcesses
+├── start-stream.ts  # startStream — builds argv, spawns ceracoder + srtla_send, wires telemetry
+├── session.ts       # start / stop + removeNetworkInterfacesChangeListener module-state
+├── autostart.ts     # AUTOSTART_CHECK_FILE / setAutostart / checkAutoStartStream / autoStartStream backoff
+└── index.ts         # named re-export barrel (exactly the 10 public exports)
+```
+
+**Locked public API surface (10 exports):** `AUTOSTART_CHECK_FILE`, `autoStartStream`,
+`bcrptExec`, `ceracoderExec`, `checkAutoStartStream`, `setAutostart`, `srtlaSendExec`,
+`start`, `startStream`, `stop`. Adding or removing any of these is a breaking change.
+
+### timing-constants.ts
+
+`apps/backend/src/modules/streaming/timing-constants.ts` centralizes all hardcoded
+timeout/retry values. Import from here — never add inline numeric literals to streaming
+modules.
+
+| Constant | Value | Used in |
+|----------|-------|---------|
+| `MAX_BCRPT_RETRIES` | 5 | `bcrpt.ts` |
+| `INITIAL_RETRY_DELAY` | 1000ms | `bcrpt.ts` |
+| `AUTOSTART_RETRY_DELAY` | 1000ms | `streamloop/autostart.ts` |
+| `AUDIO_SOURCE_POLL_DELAY` | 1000ms | `audio.ts` |
+
+### Logger migration
+
+All `console.*` calls in streaming and ingest/rpc modules are replaced with the Winston
+logger from `apps/backend/src/helpers/logger.ts`. Empty catches now log via
+`logger.debug`/`logger.warn` before suppressing. No `console.*` calls remain in
+`modules/ingest/` or `modules/streaming/` (verified by grep gate).
+
 ## ANTI-PATTERNS
 
 - Don't run `npm install` or `yarn` — pnpm workspaces only.
@@ -310,3 +354,5 @@ The backend is fully migrated to Bun-native APIs. Use these patterns for all new
 - Don't touch srtla binding call sites without checking `../srtla/AGENTS.md` first (API in flux).
 - Don't add custom UI components to `lib/components/ui/` — that directory is managed by the shadcn-svelte CLI. Custom components go in `lib/components/custom/`.
 - Don't hardcode validation bounds (min/max lengths, bitrate limits, port ranges) in dialog components — import from `ValidationAdapter.ts` which sources from `packages/rpc/src/schemas/`.
+- Don't hardcode timeout/retry values in streaming modules — import from `timing-constants.ts`.
+- Don't add new exports to the streamloop barrel without updating the locked-API surface test in `tests/streamloop-modules.test.ts`.
