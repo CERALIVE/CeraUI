@@ -11,12 +11,19 @@ import { ChevronRight, Cpu, Server, ServerOff, Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
+import IngestStats from '$lib/components/custom/IngestStats.svelte';
 import * as Card from '$lib/components/ui/card';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
-import { getConfig, getIsStreaming, getPipelines, getSensors } from '$lib/rpc/subscriptions.svelte';
+import {
+	getConfig,
+	getIsStreaming,
+	getLinkTelemetry,
+	getPipelines,
+	getSensors,
+} from '$lib/rpc/subscriptions.svelte';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
 import { buildStartConfig, canStartStream } from '$lib/streaming/startStreaming';
 import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
@@ -32,6 +39,9 @@ import StreamTelemetryStrip from '$main/live/StreamTelemetryStrip.svelte';
 const config = $derived(getConfig());
 const isStreaming = $derived(getIsStreaming());
 const sensors = $derived(getSensors());
+// Per-link srtla ingest telemetry (RTT/NAK/weight) — already broadcast via
+// status.linkTelemetry; surfaced here as a read-only panel, no new collector.
+const linkTelemetry = $derived(getLinkTelemetry());
 
 // Server target: direct SRTLA address, or a selected relay server.
 const serverTarget = $derived(config?.srtla_addr || config?.relay_server || '');
@@ -350,6 +360,9 @@ const configRows = $derived<ConfigRow[]>([
 				sliderMin={BITRATE_DEFAULT_MIN}
 				step={BITRATE_STEP}
 			/>
+
+			<!-- Bonded-ingest telemetry (RTT / NAK / weight per uplink) — Task 21 -->
+			<IngestStats telemetry={linkTelemetry} />
 		{/if}
 
 		<StreamSettingsCard {configRows} {isStreaming} />
