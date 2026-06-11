@@ -16,9 +16,15 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Re-export barrel. The streamloop implementation was split into focused modules
-// under ./streamloop/ — see ./streamloop/index.ts for the locked public surface.
-// This file exists so every existing `from ".../streamloop.ts"` import keeps
-// resolving to the same symbols.
+// Resolved executable paths for the supervised stream subprocesses. Kept in a
+// dependency-light module (no streaming logic) so other modules — bcrpt.ts,
+// system/revisions.ts — can read them without pulling in the spawn/orchestration
+// graph, which also breaks the streamloop<->bcrpt import cycle cleanly.
 
-export * from "./streamloop/index.ts";
+import { getSrtlaSendExec } from "@ceralive/srtla/sender";
+import { setup } from "../../setup.ts";
+import { getCeracoderExec } from "../ceracoder.ts";
+
+export const ceracoderExec = getCeracoderExec();
+export const srtlaSendExec = getSrtlaSendExec(setup.srtla_path);
+export const bcrptExec = `${setup.bcrpt_path ?? "/usr/bin"}/bcrpt`;
