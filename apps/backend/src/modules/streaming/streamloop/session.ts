@@ -43,11 +43,8 @@ import {
 	updateConfig,
 	updateStatus,
 } from "../streaming.ts";
-import {
-	getStreamingProcesses,
-	stopAll,
-	stopProcess,
-} from "./process-runner.ts";
+import { ceracoderBackend } from "../ceracoder-backend.ts";
+import { getStreamingProcesses, stopAll } from "./process-runner.ts";
 import { startStream } from "./start-stream.ts";
 
 let removeNetworkInterfacesChangeListener: (() => void) | undefined;
@@ -137,27 +134,9 @@ export function stop() {
 		logger.error("stop: BUG?: found both an asrcProbe and running processes");
 	}
 
-	let foundCeracoder = false;
-
-	for (const p of getStreamingProcesses()) {
-		p.exitListeners = [];
-		if (p.spawnfile.endsWith("ceracoder")) {
-			foundCeracoder = true;
-			logger.debug("stop: found the ceracoder process");
-
-			if (!stopProcess(p)) {
-				// if the process is active, wait for it to exit
-				p.exitListeners.push(() => {
-					logger.info("stop: ceracoder terminated");
-					stopAll();
-				});
-			} else {
-				// if ceracoder has terminated already, skip to the next step
-				logger.info("stop: ceracoder already terminated");
-				stopAll();
-			}
-		}
-	}
+	// Bring the engine down first (it owns the ceracoder-first shutdown ordering),
+	// then sweep the rest once it has exited.
+	const foundCeracoder = ceracoderBackend.stop(() => stopAll());
 
 	if (!foundCeracoder) {
 		logger.error("stop: BUG?: ceracoder not found, terminating all processes");

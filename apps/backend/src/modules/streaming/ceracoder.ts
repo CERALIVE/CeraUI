@@ -1,130 +1,44 @@
+/*
+    CeraUI - web UI for the CERALIVE project
+    Copyright (C) 2024-2025 CeraLive project
+
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+// Dependency-light ceracoder path accessors. The engine OPERATIONS (config
+// write, SIGHUP reload, run-arg build, bitrate set, spawn/stop, stderr
+// classification) all moved behind the StreamingBackend seam in
+// `ceracoder-backend.ts`. These two trivial binding reads deliberately stay here,
+// reading `@ceralive/ceracoder` directly rather than through the backend
+// singleton, so this module pulls in NONE of the spawn/orchestration graph. That
+// keeps it a leaf for `pipelines.ts` (TEMP_PIPELINE_PATH) and
+// `streamloop/exec-paths.ts` (getCeracoderExec) and avoids an
+// engine-driver ⇄ pipelines import cycle (the singleton would otherwise be read
+// at module-eval time mid-cycle → temporal-dead-zone ReferenceError).
+
 import {
-	buildCeracoderConfig,
-	buildCeracoderRunArtifacts,
 	CERACODER_PATHS,
-	configExists as checkConfigExists,
-	DEFAULT_ADAPTIVE,
-	DEFAULT_AIMD,
 	getCeracoderExec as getExecFromBindings,
-	sendHup as sendHupFromBindings,
-	writeConfig,
 } from "@ceralive/ceracoder";
-import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
-import killall from "../../helpers/killall.ts";
-import { logger } from "../../helpers/logger.ts";
 import { setup } from "../setup.ts";
 
-// Re-export the temp pipeline path from bindings
 export const TEMP_PIPELINE_PATH = CERACODER_PATHS.pipeline;
 
 /**
- * Get the ceracoder executable path
- * Uses setup.ceracoder_path as override if configured
+ * Get the ceracoder executable path.
+ * Uses setup.ceracoder_path as override if configured.
  */
 export function getCeracoderExec(): string {
 	return getExecFromBindings({ execPath: setup.ceracoder_path });
-}
-
-/**
- * Get the ceracoder config file path
- */
-export function getCeracoderConfigPath(): string {
-	return setup.ceracoder_config ?? CERACODER_PATHS.config;
-}
-
-/**
- * Write config and return the path
- */
-export function writeCeracoderConfigFile(runtimeConfig: RuntimeConfig): string {
-	const { ini } = buildCeracoderConfig({
-		general: {
-			min_bitrate: 300,
-			max_bitrate: runtimeConfig.max_br,
-			balancer: runtimeConfig.balancer ?? "adaptive",
-		},
-		srt: {
-			latency: runtimeConfig.srt_latency,
-		},
-	});
-
-	const configPath = getCeracoderConfigPath();
-	writeConfig(ini, configPath);
-
-	logger.debug(`Ceracoder config written to ${configPath}`);
-	return configPath;
-}
-
-/**
- * Send SIGHUP to reload ceracoder config
- */
-export function sendCeracoderHup() {
-	// Use the CeraUI killall helper for consistency with other process management
-	sendHupFromBindings({ killall });
-}
-
-/**
- * Check if config file exists
- */
-export function configExists(): boolean {
-	return checkConfigExists(getCeracoderConfigPath());
-}
-
-/**
- * Build ceracoder CLI arguments and write config file
- */
-export function buildCeracoderArgsAndWriteConfig(
-	runtimeConfig: RuntimeConfig,
-	pipelineFile: string,
-	host: string,
-	port: number,
-	streamid: string,
-	reducedPacketSize: boolean,
-	fullOverride = false,
-): Array<string> {
-	const configPath = getCeracoderConfigPath();
-	const balancer = runtimeConfig.balancer ?? "adaptive";
-
-	const { ini, args } = buildCeracoderRunArtifacts({
-		pipelineFile,
-		host,
-		port,
-		configFile: configPath,
-		config: {
-			general: {
-				min_bitrate: 300,
-				max_bitrate: runtimeConfig.max_br,
-				balancer,
-			},
-			srt: {
-				latency: runtimeConfig.srt_latency,
-			},
-			adaptive:
-				balancer === "adaptive"
-					? {
-							incr_step: DEFAULT_ADAPTIVE.incr_step,
-							decr_step: DEFAULT_ADAPTIVE.decr_step,
-							incr_interval: DEFAULT_ADAPTIVE.incr_interval,
-							decr_interval: DEFAULT_ADAPTIVE.decr_interval,
-							loss_threshold: DEFAULT_ADAPTIVE.loss_threshold,
-						}
-					: undefined,
-			aimd:
-				balancer === "aimd"
-					? {
-							incr_step: DEFAULT_AIMD.incr_step,
-							decr_mult: DEFAULT_AIMD.decr_mult,
-							incr_interval: DEFAULT_AIMD.incr_interval,
-							decr_interval: DEFAULT_AIMD.decr_interval,
-						}
-					: undefined,
-		},
-		delayMs: runtimeConfig.delay,
-		streamId: streamid || undefined,
-		latencyMs: runtimeConfig.srt_latency,
-		reducedPacketSize,
-		fullOverride,
-	});
-
-	writeConfig(ini, configPath);
-	return args;
 }

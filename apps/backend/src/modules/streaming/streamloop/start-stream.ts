@@ -23,14 +23,10 @@ import type { PipelineOverrides } from "@ceralive/ceracoder";
 import { buildSrtlaSendArgs } from "@ceralive/srtla/sender";
 import { getConfig } from "../../config.ts";
 import { setup } from "../../setup.ts";
-import {
-	notificationBroadcast,
-	notificationExists,
-} from "../../ui/notifications.ts";
+import { notificationBroadcast } from "../../ui/notifications.ts";
 import { asrcProbe, getAudioSrcId } from "../audio.ts";
 import { hasLowMtu } from "../bcrpt.ts";
-import { buildCeracoderArgsAndWriteConfig } from "../ceracoder.ts";
-import { setBitrate } from "../encoder.ts";
+import { ceracoderBackend } from "../ceracoder-backend.ts";
 import { clearStreamProcessExit } from "../health.ts";
 import { SRTLA_LISTEN_PORT } from "../constants.ts";
 import {
@@ -42,7 +38,7 @@ import {
 	generatePipelineFile,
 	type Pipeline,
 } from "../pipelines.ts";
-import { ceracoderExec, srtlaSendExec } from "./exec-paths.ts";
+import { srtlaSendExec } from "./exec-paths.ts";
 import { resolveProcessError } from "./process-error-patterns.ts";
 import { spawnStreamingLoop } from "./process-runner.ts";
 
@@ -53,7 +49,7 @@ export async function startStream(
 	streamid: string,
 ) {
 	const config = getConfig();
-	setBitrate(config);
+	ceracoderBackend.setBitrate(config);
 
 	// A fresh stream start clears any prior unexpected-exit health flag so the
 	// health rollup tracks this new session (ADR-0005 observe-and-notify).
@@ -108,30 +104,13 @@ export async function startStream(
 		.catch(() => "");
 	startLinkTelemetry(statsFile, ipsContent.split("\n"));
 
-	const ceracoderArgs = buildCeracoderArgsAndWriteConfig(
-		config,
+	// Engine launch (argv build + spawn + stderr classification) is behind the seam.
+	ceracoderBackend.start(config, {
 		pipelineFile,
-		"127.0.0.1",
-		SRTLA_LISTEN_PORT,
+		host: "127.0.0.1",
+		port: SRTLA_LISTEN_PORT,
 		streamid,
-		hasLowMtu(),
-		true, // full override for start streaming
-	);
-
-	spawnStreamingLoop(ceracoderExec, ceracoderArgs, (err) => {
-		const resolved = resolveProcessError("ceracoder", err);
-		if (
-			resolved &&
-			!(resolved.suppressIfSrtlaNotified && notificationExists("srtla"))
-		) {
-			notificationBroadcast(
-				"ceracoder",
-				"error",
-				resolved.message,
-				5,
-				true,
-				false,
-			);
-		}
+		reducedPacketSize: hasLowMtu(),
+		fullOverride: true, // full override for start streaming
 	});
 }

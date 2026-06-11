@@ -28,10 +28,8 @@ import {
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
-import {
-	clampBitrate,
-	setBitrate as setEncoderBitrate,
-} from "../../modules/streaming/encoder.ts";
+import { ceracoderBackend } from "../../modules/streaming/ceracoder-backend.ts";
+import { clampBitrate } from "../../modules/streaming/encoder.ts";
 import { getStreamHealth } from "../../modules/streaming/health.ts";
 import {
 	getEffectiveHardware,
@@ -124,7 +122,7 @@ export const setBitrateProcedure = authedProcedure
 	.handler(({ input }) => {
 		const applied = clampBitrate(input.max_br);
 		if (getIsStreaming()) {
-			const newBitrate = setEncoderBitrate({ max_br: applied });
+			const newBitrate = ceracoderBackend.setBitrate({ max_br: applied });
 			if (newBitrate) {
 				if (shouldUseMocks()) {
 					setMockEncoderConfig({ max_br: newBitrate });

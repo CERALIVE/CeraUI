@@ -16,14 +16,17 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { logger } from "../../helpers/logger.ts";
-import { getConfig, saveConfig } from "../config.ts";
-import { sendCeracoderHup, writeCeracoderConfigFile } from "./ceracoder.ts";
+// Pure bitrate validation helpers. The streaming-time bitrate setter (which
+// persists config + hot-reloads the engine) now lives behind the StreamingBackend
+// seam as `ceracoderBackend.setBitrate` (ceracoder-backend.ts); these clamp/
+// validate helpers stay engine-agnostic and side-effect free.
+
+import type { BitrateParams } from "./streaming-backend.ts";
+
+export type { BitrateParams };
 
 const MIN_BITRATE = 300; // Kbps
 const MAX_BITRATE = 12_000; // Kbps
-
-export type BitrateParams = { max_br?: number };
 
 // Snaps into the hardware window instead of rejecting (cf. validateBitrate),
 // so setters can report the post-clamp value they actually wrote.
@@ -38,25 +41,4 @@ export function validateBitrate(params: BitrateParams): number | undefined {
 	if (typeof maxBr !== "number" || Number.isNaN(maxBr)) return;
 	if (maxBr < MIN_BITRATE || maxBr > MAX_BITRATE) return;
 	return maxBr;
-}
-
-export function setBitrate(params: BitrateParams): number | undefined {
-	const maxBr = validateBitrate(params);
-	if (maxBr === undefined) return;
-
-	const config = getConfig();
-	const previousBitrate = config.max_br;
-
-	try {
-		config.max_br = maxBr;
-		saveConfig();
-		writeCeracoderConfigFile(config);
-		sendCeracoderHup();
-		return maxBr;
-	} catch (error) {
-		// Restore previous bitrate if operation failed
-		config.max_br = previousBitrate;
-		logger.error("Failed to set bitrate", { error });
-		throw error;
-	}
 }
