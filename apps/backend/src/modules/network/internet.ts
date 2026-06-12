@@ -35,11 +35,6 @@ type HttpGetOptions = {
 	localAddress?: string;
 };
 
-type HttpGetResponse = {
-	code: number | undefined;
-	body: string;
-};
-
 export async function httpGet(options: HttpGetOptions) {
 	const { headers, path, host, timeout } = options;
 

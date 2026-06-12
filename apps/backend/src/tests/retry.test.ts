@@ -91,8 +91,8 @@ describe("retryWithBackoff", () => {
 			if (typeof callback === "function") {
 				callback();
 			}
-			return 0 as any;
-		}) as any;
+			return 0 as unknown as ReturnType<typeof setTimeout>;
+		}) as typeof setTimeout;
 
 		try {
 			await retryWithBackoff(
@@ -131,8 +131,8 @@ describe("retryWithBackoff", () => {
 			if (typeof callback === "function") {
 				callback();
 			}
-			return 0 as any;
-		}) as any;
+			return 0 as unknown as ReturnType<typeof setTimeout>;
+		}) as typeof setTimeout;
 
 		try {
 			await retryWithBackoff(

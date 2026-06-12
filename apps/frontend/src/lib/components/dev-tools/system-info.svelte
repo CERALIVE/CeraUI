@@ -271,7 +271,10 @@ async function handleLanguageClick(languageCode: Locales) {
 	try {
 		await loadLocaleAsync(languageCode);
 		setLocale(languageCode);
-		setLocaleStore(existingLocales.find((l) => l.code === languageCode)!);
+		const foundLocale = existingLocales.find((l) => l.code === languageCode);
+		if (foundLocale) {
+			setLocaleStore(foundLocale);
+		}
 	} catch (error) {
 		console.error('Failed to load locale:', error);
 	}

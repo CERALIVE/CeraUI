@@ -5,8 +5,9 @@ import { existingLocales } from "@ceraui/i18n";
 
 export type LocaleInfo = (typeof existingLocales)[number];
 
-// Default to English
-const defaultLocale: LocaleInfo = existingLocales[0]!;
+// Default to English (existingLocales is guaranteed to have at least one element from @ceraui/i18n)
+const defaultLocale: LocaleInfo =
+	existingLocales[0] ?? (existingLocales as unknown as [LocaleInfo])[0];
 
 let locale = $persist<LocaleInfo>(defaultLocale, "locale");
 

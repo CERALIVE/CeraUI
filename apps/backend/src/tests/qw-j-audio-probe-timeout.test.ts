@@ -42,13 +42,13 @@ describe("QW-J: Audio Device Probe Timeout", () => {
 			global.setTimeout = ((callback: () => void, delay?: number) => {
 				const id = nextId++;
 				timers.push({ id, delay: delay ?? 0, callback });
-				return id as any;
-			}) as any;
+				return id as unknown as ReturnType<typeof setTimeout>;
+			}) as typeof setTimeout;
 
-			global.clearTimeout = ((id: number) => {
-				const idx = timers.findIndex((t) => t.id === id);
+			global.clearTimeout = ((id: ReturnType<typeof setTimeout>) => {
+				const idx = timers.findIndex((t) => t.id === (id as unknown as number));
 				if (idx >= 0) timers.splice(idx, 1);
-			}) as any;
+			}) as typeof clearTimeout;
 
 			const nonExistentDevice = "nonexistent-audio-device-xyz";
 			const probePromise = asrcProbe(nonExistentDevice);
@@ -93,13 +93,13 @@ describe("QW-J: Audio Device Probe Timeout", () => {
 			global.setTimeout = ((callback: () => void, delay?: number) => {
 				const id = nextId++;
 				timers.push({ id, delay: delay ?? 0, callback });
-				return id as any;
-			}) as any;
+				return id as unknown as ReturnType<typeof setTimeout>;
+			}) as typeof setTimeout;
 
-			global.clearTimeout = ((id: number) => {
-				const idx = timers.findIndex((t) => t.id === id);
+			global.clearTimeout = ((id: ReturnType<typeof setTimeout>) => {
+				const idx = timers.findIndex((t) => t.id === (id as unknown as number));
 				if (idx >= 0) timers.splice(idx, 1);
-			}) as any;
+			}) as typeof clearTimeout;
 
 			const missingDevice = "missing-device-qw-j-test";
 			const probePromise = asrcProbe(missingDevice);

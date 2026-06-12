@@ -21,7 +21,7 @@ const localeFlag = $derived.by(() => existingLocales.find((l) => l.code === sele
 // Initialize locale in an effect to avoid top-level state updates
 $effect(() => {
 	if (initialLocale.code) {
-		setLocale(initialLocale.code as any);
+		setLocale(initialLocale.code as Parameters<typeof setLocale>[0]);
 	}
 });
 
@@ -35,9 +35,12 @@ $effect(() => {
 
 const handleLocaleChange = async (value: Parameters<typeof setLocale>[0]) => {
 	try {
-		await loadLocaleAsync(value as any);
-		setLocale(value as any);
-		setLocaleStore(existingLocales.find((l) => l.code === value)!);
+		await loadLocaleAsync(value);
+		setLocale(value);
+		const foundLocale = existingLocales.find((l) => l.code === value);
+		if (foundLocale) {
+			setLocaleStore(foundLocale);
+		}
 		selectedLocale = String(value);
 		isOpen = false;
 	} catch {

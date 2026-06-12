@@ -49,7 +49,8 @@ if (auth) {
 	const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
 	const isPWA =
 		window.matchMedia('(display-mode: standalone)').matches ||
-		(window.navigator as any).standalone ||
+		(typeof (window.navigator as unknown as { standalone?: boolean }).standalone === 'boolean' &&
+			(window.navigator as unknown as { standalone?: boolean }).standalone) ||
 		document.referrer.includes('android-app://');
 
 	// Very aggressive timeout for PWA launches to prevent blank screens
@@ -96,7 +97,8 @@ const userAgent = navigator.userAgent || '';
 const isMobileDevice = /iphone|ipad|ipod|android/i.test(userAgent);
 const isPWAApp =
 	(window.matchMedia?.('(display-mode: standalone)').matches) ||
-	!!(window.navigator && (window.navigator as any).standalone) ||
+	(typeof (window.navigator as unknown as { standalone?: boolean }).standalone === 'boolean' &&
+		!!(window.navigator && (window.navigator as unknown as { standalone?: boolean }).standalone)) ||
 	(document.referrer?.includes('android-app://'));
 
 if (isMobileDevice || isPWAApp) {

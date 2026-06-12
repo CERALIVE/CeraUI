@@ -48,7 +48,7 @@ describe("AudioHelper", () => {
 		});
 
 		it("should return selectPlaceholder for null source", () => {
-			const result = getAudioSourceLabel(null as any, {
+			const result = getAudioSourceLabel(null, {
 				available: ["HDMI"],
 				notAvailableSentinel,
 				selectPlaceholder,
@@ -57,7 +57,7 @@ describe("AudioHelper", () => {
 		});
 
 		it("should return selectPlaceholder for undefined source", () => {
-			const result = getAudioSourceLabel(undefined as any, {
+			const result = getAudioSourceLabel(undefined, {
 				available: ["HDMI"],
 				notAvailableSentinel,
 				selectPlaceholder,

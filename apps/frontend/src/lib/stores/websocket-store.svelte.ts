@@ -260,9 +260,9 @@ async function sendAuthMessage(
 }
 
 const assignMessage = (data: string) => {
-	let parsedMessage: any;
+	let parsedMessage: Record<string, unknown>;
 	try {
-		parsedMessage = JSON.parse(data);
+		parsedMessage = JSON.parse(data) as Record<string, unknown>;
 	} catch (error) {
 		console.error("Failed to parse message:", error);
 		return;
@@ -282,19 +282,19 @@ const assignMessage = (data: string) => {
 
 		switch (key) {
 			case "auth":
-				AuthStore._set(value);
+				AuthStore._set(value as Parameters<typeof AuthStore._set>[0]);
 				break;
 			case "acodecs":
-				AudioCodecsStore._set(value);
+				AudioCodecsStore._set(value as Parameters<typeof AudioCodecsStore._set>[0]);
 				break;
 			case "config":
-				ConfigStore._set(value);
+				ConfigStore._set(value as Parameters<typeof ConfigStore._set>[0]);
 				break;
 			case "netif":
-				NetifStore._set(value);
+				NetifStore._set(value as Parameters<typeof NetifStore._set>[0]);
 				break;
 			case "notifications":
-				NotificationsStore._set(value);
+				NotificationsStore._set(value as Parameters<typeof NotificationsStore._set>[0]);
 				break;
 			case "pipelines":
 				if (
@@ -311,38 +311,45 @@ const assignMessage = (data: string) => {
 				}
 				break;
 			case "relays":
-				RelaysStore._set(value);
+				RelaysStore._set(value as Parameters<typeof RelaysStore._set>[0]);
 				break;
 			case "revisions":
-				RevisionsStore._set(value);
+				RevisionsStore._set(value as Parameters<typeof RevisionsStore._set>[0]);
 				break;
 			case "sensors":
-				SensorsStatusStore._set(value);
+				SensorsStatusStore._set(value as Parameters<typeof SensorsStatusStore._set>[0]);
 				break;
 			case "status":
 				// Merge status with existing state, preserving modems properly
-				if (statusState && value.modems) {
+				const statusValue = value as Record<string, unknown>;
+				if (statusState && statusValue.modems) {
 					const mergedModems = mergeModems(
 						{ ...statusState.modems },
-						value.modems,
+						statusValue.modems as Parameters<typeof mergeModems>[1],
 					);
-					StatusStore._set({ ...statusState, ...value, modems: mergedModems });
+				StatusStore._set({
+						...statusState,
+						...statusValue,
+						modems: mergedModems,
+					} as Parameters<typeof StatusStore._set>[0]);
 				} else {
-					StatusStore._set(statusState ? { ...statusState, ...value } : value);
+					StatusStore._set(
+						statusState ? { ...statusState, ...statusValue } : (statusValue as Parameters<typeof StatusStore._set>[0]),
+					);
 				}
 				break;
 			case "wifi":
-				WifiStore._set(value);
+				WifiStore._set(value as Parameters<typeof WifiStore._set>[0]);
 				break;
 			case "bitrate":
-				if (configState && value?.max_br) {
-					ConfigStore._set({ ...configState, max_br: value.max_br });
+				if (configState && typeof value === "object" && value !== null && "max_br" in value) {
+					ConfigStore._set({ ...configState, max_br: (value as { max_br?: number }).max_br });
 				}
 				break;
 			case "log":
-				downloadLog(value);
+				downloadLog(value as Parameters<typeof downloadLog>[0]);
 				break;
-		}
+			}
 	}
 };
 
