@@ -124,12 +124,6 @@ jobs:
         with:
           path: CeraUI
 
-      - name: Checkout ceracoder (sibling dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: CERALIVE/ceracoder
-          path: ceracoder
-
       - name: Checkout srtla (sibling dependency)
         uses: actions/checkout@v4
         with:
@@ -189,12 +183,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: CeraUI
-
-      - name: Checkout ceracoder (sibling dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: CERALIVE/ceracoder
-          path: ceracoder
 
       - name: Checkout srtla (sibling dependency)
         uses: actions/checkout@v4
@@ -318,12 +306,11 @@ jobs:
             echo "\`\`\`"
             echo "srt (SRT library with bonding)"
             echo "  └── srtla (link aggregation)"
-            echo "        └── ceracoder (video encoder)"
-            echo "              │"
+            echo "        │"
             echo "gstlibuvch264src ─┤"
             echo "                  │"
             echo "                  └── ceralive-device (this package)"
-            echo "                        ├── Depends: ceracoder, srtla"
+            echo "                        ├── Depends: cerastream, srtla"
             echo "                        ├── Depends: network-manager (nmcli)"
             echo "                        └── Depends: modemmanager (mmcli)"
             echo "\`\`\`"
