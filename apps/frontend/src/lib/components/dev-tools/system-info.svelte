@@ -11,7 +11,7 @@ import SystemPerformancePanel from '$lib/components/dev-tools/system-performance
 import SystemPreferencesPanel from '$lib/components/dev-tools/system-preferences-panel.svelte';
 import SystemTimingPanel from '$lib/components/dev-tools/system-timing-panel.svelte';
 import * as Card from '$lib/components/ui/card';
-import { BUILD_INFO, ENV_VARIABLES } from '$lib/env';
+import { BUILD_INFO, getSocketUrl } from '$lib/env';
 import { setLocale as setLocaleStore } from '$lib/stores/locale.svelte';
 import { CLIENT_VERSION } from '$lib/stores/version-manager';
 
@@ -196,12 +196,14 @@ function updatePerformanceData() {
 
 // Update build information
 function updateBuildInfo() {
+	const socketUrl = getSocketUrl();
+	const parsed = socketUrl ? new URL(socketUrl) : null;
 	buildInfo = {
 		mode: BUILD_INFO.MODE,
 		nodeEnv: BUILD_INFO.NODE_ENV,
 		dev: BUILD_INFO.IS_DEV,
-		socketEndpoint: ENV_VARIABLES.SOCKET_ENDPOINT,
-		socketPort: ENV_VARIABLES.SOCKET_PORT,
+		socketEndpoint: parsed ? `${parsed.protocol}//${parsed.hostname}` : socketUrl,
+		socketPort: parsed ? parsed.port || '—' : '—',
 		clientVersion: CLIENT_VERSION,
 		timestamp: new Date().toISOString(),
 	};

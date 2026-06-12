@@ -124,7 +124,7 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - No direct backend calls — everything through `rpc.*` or `rpcClient.onMessage`.
 - No manual UI primitive files in `lib/components/ui/` — use the shadcn-svelte CLI.
 - No `$:` reactive statements — Svelte 5 runes only.
-- No hardcoded socket URL — use `ENV_VARIABLES` from `$lib/env`.
+- No hardcoded socket URL — call `getSocketUrl()` from `$lib/env`. It derives the RPC WebSocket URL from `window.location` in production (origin host:port, scheme from protocol) and ignores `VITE_SOCKET_*` there; those overrides apply to dev only. Never reconstruct the URL from `hostname` + a port literal.
 - Don't read connection state from `lib/stores/offline-state.svelte` in authed components — use `subscriptions.svelte` `getIsConnected()`/`getConnectionState()` (survives socket replacement on reconnect). `offline-state` is only reliable for the pre-auth strip.
 - Don't add inline validation literals to dialogs — import from `ValidationAdapter.ts`.
 - Don't release field locks to the client's intended value — always use `result.applied` from the RPC response.

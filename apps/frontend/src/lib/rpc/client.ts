@@ -50,7 +50,7 @@ import type {
 	WifiScanInput,
 } from "@ceraui/rpc/schemas";
 
-import { ENV_VARIABLES } from "../env";
+import { getSocketUrl } from "../env";
 import { nextBackoffDelay } from "./backoff";
 import { parseServerPing, shouldForceCloseHalfOpen } from "./half-open";
 import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
@@ -116,7 +116,7 @@ class RPCClient {
 	 * Get WebSocket URL
 	 */
 	private getUrl(): string {
-		return `${ENV_VARIABLES.SOCKET_ENDPOINT}:${ENV_VARIABLES.SOCKET_PORT}`;
+		return getSocketUrl();
 	}
 
 	/**
