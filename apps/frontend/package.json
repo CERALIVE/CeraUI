@@ -22,7 +22,7 @@
 		"clean": "rm -rf dist node_modules/.vite"
 	},
 	"dependencies": {
-		"@ceralive/design-tokens": "link:../../../ceralive-platform/packages/design-tokens",
+		"@ceralive/design-tokens": "^0.1.0",
 		"@ceraui/i18n": "workspace:*",
 		"@ceraui/rpc": "workspace:*",
 		"@fontsource-variable/jetbrains-mono": "^5.2.8",

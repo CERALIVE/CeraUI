@@ -88,8 +88,8 @@ importers:
   apps/frontend:
     dependencies:
       '@ceralive/design-tokens':
-        specifier: link:../../../ceralive-platform/packages/design-tokens
-        version: link:../../../ceralive-platform/packages/design-tokens
+        specifier: ^0.1.0
+        version: 0.1.0
       '@ceraui/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
@@ -824,6 +824,9 @@ packages:
   '@ceralive/cerastream@file:apps/backend/vendor/ceralive-cerastream.tgz':
     resolution: {integrity: sha512-3wRSiDACy4F4jVebAvqsw6GJKNQa+WfQqWSxgS3Q54FjV5JLgMzgYWa4N//W6Z9pUnjUCLD938UTY3H5VCctXA==, tarball: file:apps/backend/vendor/ceralive-cerastream.tgz}
     version: 2026.6.0-rc.1
+
+  '@ceralive/design-tokens@0.1.0':
+    resolution: {integrity: sha512-k7UV5VFuE4jR4ofNkcYruO0wcor7x2l4TBilnC+z3FNH8YrtnHhBToX5W4ddiBE7JQCXFBWne8L3EmkFKsBsPQ==}
 
   '@colors/colors@1.6.0':
     resolution: {integrity: sha512-Ir+AOibqzrIsL6ajt3Rz3LskB7OiMVHqltZmspbW/TJuTVuyOMirVqAkjfY6JISiLHgyNqicAC8AyHHGzNd/dA==}
@@ -4509,6 +4512,8 @@ snapshots:
   '@ceralive/cerastream@file:apps/backend/vendor/ceralive-cerastream.tgz':
     dependencies:
       zod: 4.4.3
+
+  '@ceralive/design-tokens@0.1.0': {}
 
   '@colors/colors@1.6.0': {}
 
