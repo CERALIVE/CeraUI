@@ -464,9 +464,9 @@ describe("buildLinks — ethernet links from netif", () => {
 		);
 		const eth = links.filter((l) => l.type === "ethernet");
 		expect(eth).toHaveLength(1);
-		expect(eth[0]!.id).toBe("eth0");
-		expect(eth[0]!.enabled).toBe(true);
-		expect(eth[0]!.isConnected).toBe(true);
+		expect(eth[0]?.id).toBe("eth0");
+		expect(eth[0]?.enabled).toBe(true);
+		expect(eth[0]?.isConnected).toBe(true);
 	});
 
 	it("excludes eth interfaces without an IP and non-eth entries (lo/wifi/modem)", () => {
@@ -519,7 +519,7 @@ describe("buildLinks — throughput join from netif.tp", () => {
 			false,
 			false,
 		);
-		expect(links[0]!.throughputKbps).toBe(convertBytesToKbids(0));
+		expect(links[0]?.throughputKbps).toBe(convertBytesToKbids(0));
 	});
 });
 
@@ -537,8 +537,8 @@ describe("buildLinks — enabled propagation from netif", () => {
 			false,
 			false,
 		);
-		expect(links.find((l) => l.type === "modem")!.enabled).toBe(false);
-		expect(links.find((l) => l.type === "wifi")!.enabled).toBe(true);
+		expect(links.find((l) => l.type === "modem")?.enabled).toBe(false);
+		expect(links.find((l) => l.type === "wifi")?.enabled).toBe(true);
 	});
 
 	it("defaults enabled to true when there is no matching netif entry", () => {
@@ -550,7 +550,7 @@ describe("buildLinks — enabled propagation from netif", () => {
 			false,
 			false,
 		);
-		expect(links[0]!.enabled).toBe(true);
+		expect(links[0]?.enabled).toBe(true);
 	});
 });
 
@@ -597,7 +597,7 @@ describe("buildLinks — linkIndex stability", () => {
 		const disabled = after.find((l) => l.id === "wwan0")!;
 		expect(disabled.enabled).toBe(false);
 		expect(disabled.linkIndex).toBe(
-			before.find((l) => l.id === "wwan0")!.linkIndex,
+			before.find((l) => l.id === "wwan0")?.linkIndex,
 		);
 	});
 });
@@ -727,7 +727,7 @@ describe("S5 — buildLinks caps the returned links at MAX_LINKS", () => {
 
 		expect(links).toHaveLength(MAX_LINKS);
 		// WiFi takes index 0; the remaining slots are modems.
-		expect(links[0]!.type).toBe("wifi");
+		expect(links[0]?.type).toBe("wifi");
 		expect(links.filter((l) => l.type === "modem")).toHaveLength(MAX_LINKS - 1);
 	});
 });

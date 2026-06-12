@@ -95,9 +95,9 @@ $effect(() => {
 const userAgent = navigator.userAgent || '';
 const isMobileDevice = /iphone|ipad|ipod|android/i.test(userAgent);
 const isPWAApp =
-	(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+	(window.matchMedia?.('(display-mode: standalone)').matches) ||
 	!!(window.navigator && (window.navigator as any).standalone) ||
-	(document.referrer && document.referrer.includes('android-app://'));
+	(document.referrer?.includes('android-app://'));
 
 if (isMobileDevice || isPWAApp) {
 	const fallbackTimeout = isPWAApp ? 300 : 1000; // Even more aggressive for PWA

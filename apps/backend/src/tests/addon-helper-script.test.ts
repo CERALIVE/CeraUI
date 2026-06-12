@@ -206,6 +206,19 @@ afterAll(() => {
 	if (ROOT) rmSync(ROOT, { recursive: true, force: true });
 });
 
+/**
+ * HAVE_TOOLS gate: These test suites require the ceralive-addon-helper bash
+ * script and its dependencies (bash, jq, gpg, gpgv, sha256sum) to be available
+ * on the system. The gate checks for all required tools at the top of the file
+ * and skips the entire suite cleanly if any are missing (e.g. in minimal CI
+ * images) rather than reporting false failures.
+ *
+ * To install the required tools on a Debian/Ubuntu system:
+ *   sudo apt-get install bash jq gnupg coreutils
+ *
+ * The ceralive-addon-helper script itself must be present at the path resolved
+ * by `import.meta.dir` (see line 28).
+ */
 describe.skipIf(!HAVE_TOOLS)("ceralive-addon-helper — happy path", () => {
 	it("enable verifies + activates a baked, validly-signed add-on", async () => {
 		const sb = mkSandbox();
@@ -277,6 +290,10 @@ describe.skipIf(!HAVE_TOOLS)("ceralive-addon-helper — happy path", () => {
 	});
 });
 
+/**
+ * HAVE_TOOLS gate: See the comment above the first describe.skipIf block for
+ * details on the gate and how to install required tools.
+ */
 describe.skipIf(!HAVE_TOOLS)("ceralive-addon-helper — G-trust refusals", () => {
 	it("refuses an id with no baked descriptor (allowlist = baked registry only)", () => {
 		const sb = mkSandbox();

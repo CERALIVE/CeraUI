@@ -16,8 +16,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-/* Audio input selection and codec */
-import fs from "node:fs";
 import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";

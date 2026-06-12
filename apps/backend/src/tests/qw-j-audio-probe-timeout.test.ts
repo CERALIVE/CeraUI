@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import {
 	AudioProbeTimeoutError,
@@ -34,7 +34,7 @@ describe("QW-J: Audio Device Probe Timeout", () => {
 			// Use fake timers to avoid actual 15s wait
 			const originalSetTimeout = global.setTimeout;
 			const originalClearTimeout = global.clearTimeout;
-			let currentTime = 0;
+			let _currentTime = 0;
 			const timers: Array<{ id: number; delay: number; callback: () => void }> =
 				[];
 			let nextId = 1;
@@ -54,7 +54,7 @@ describe("QW-J: Audio Device Probe Timeout", () => {
 			const probePromise = asrcProbe(nonExistentDevice);
 
 			// Advance time past the timeout
-			currentTime = AUDIO_PROBE_TIMEOUT_MS + 100;
+			_currentTime = AUDIO_PROBE_TIMEOUT_MS + 100;
 			const timeoutTimer = timers.find(
 				(t) => t.delay === AUDIO_PROBE_TIMEOUT_MS,
 			);

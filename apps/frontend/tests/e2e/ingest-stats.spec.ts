@@ -40,7 +40,6 @@ type TelemetryEntry = {
 const evidence: string[] = [];
 function record(line: string): void {
 	evidence.push(line);
-	console.log(`[task-21-ui] ${line}`);
 }
 
 function writeEvidence(fileName: string, lines: string[]): void {

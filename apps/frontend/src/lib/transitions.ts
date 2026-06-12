@@ -17,8 +17,8 @@ function hasValidDimensions(rect: DOMRect): boolean {
 	return (
 		rect.width > 0 &&
 		rect.height > 0 &&
-		isFinite(rect.width) &&
-		isFinite(rect.height)
+		Number.isFinite(rect.width) &&
+		Number.isFinite(rect.height)
 	);
 }
 
@@ -39,7 +39,7 @@ function createFadeTransition(
 
 /** Ensure a number is finite, returning a fallback if not */
 function safeNumber(value: number, fallback: number): number {
-	return isFinite(value) ? value : fallback;
+	return Number.isFinite(value) ? value : fallback;
 }
 
 // ============================================

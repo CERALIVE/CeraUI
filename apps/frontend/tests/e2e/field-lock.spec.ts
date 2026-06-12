@@ -60,8 +60,6 @@ const TOKEN: string = (() => {
 const evidence: string[] = [];
 function record(line: string): void {
 	evidence.push(line);
-	// Surface in the Playwright `list` reporter output too.
-	console.log(`[task-21] ${line}`);
 }
 
 /**

@@ -74,7 +74,6 @@ async function openHud(page: Page): Promise<void> {
 const evidence: string[] = [];
 function record(line: string): void {
 	evidence.push(line);
-	console.log(`[task-15] ${line}`);
 }
 
 test.describe.configure({ mode: "serial" });

@@ -38,13 +38,13 @@ describe("retryWithBackoff", () => {
 					maxAttempts: 3,
 					baseDelayMs: 10,
 					maxDelayMs: 100,
-					shouldRetry: (err: unknown) => {
+					shouldRetry: (_err: unknown) => {
 						shouldRetryCallCount++;
 						return false;
 					},
 				},
 			);
-		} catch (err) {
+		} catch (_err) {
 			// Expected to throw
 		}
 

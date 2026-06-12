@@ -55,7 +55,7 @@ function broadcastModemAvailableNetworks(id: number) {
 export async function modemNetworkScan(id: number) {
 	const modem = getModem(id);
 
-	if (!modem || !modem.config || !modem.status || modem.is_scanning) return;
+	if (!modem?.config || !modem.status || modem.is_scanning) return;
 
 	modem.is_scanning = true;
 

@@ -72,7 +72,6 @@ test.describe.configure({ mode: 'serial' });
 const evidence: string[] = [];
 function record(line: string): void {
 	evidence.push(line);
-	console.log(`[task-21-e2e] ${line}`);
 }
 
 test.afterAll(() => {

@@ -30,7 +30,7 @@ const handleTouchStart = (e: TouchEvent) => {
 	if (window.scrollY > 0) return; // Only allow at top of page
 
 	const clientY = e.touches[0]?.clientY;
-	if (clientY === undefined || !isFinite(clientY)) return; // Prevent NaN coordinates
+	if (clientY === undefined || !Number.isFinite(clientY)) return; // Prevent NaN coordinates
 
 	startY = clientY;
 	isPulling = true;
@@ -40,13 +40,13 @@ const handleTouchMove = (e: TouchEvent) => {
 	if (!isPulling || window.scrollY > 0) return;
 
 	const clientY = e.touches[0]?.clientY;
-	if (clientY === undefined || !isFinite(clientY) || !isFinite(startY)) return; // Prevent NaN coordinates
+	if (clientY === undefined || !Number.isFinite(clientY) || !Number.isFinite(startY)) return; // Prevent NaN coordinates
 
 	currentY = clientY;
 	const rawPullDistance = currentY - startY;
-	pullDistance = isFinite(rawPullDistance) ? Math.max(0, rawPullDistance) : 0;
+	pullDistance = Number.isFinite(rawPullDistance) ? Math.max(0, rawPullDistance) : 0;
 
-	canRefresh = pullDistance > threshold ? true : false;
+	canRefresh = pullDistance  > threshold;
 
 	// Prevent default scrolling when pulling
 	if (pullDistance > 0) {
@@ -54,18 +54,18 @@ const handleTouchMove = (e: TouchEvent) => {
 	}
 
 	// Apply transform with resistance (from -48px hidden to 0px visible) - NaN safe
-	const safePullDistance = isFinite(pullDistance) ? pullDistance : 0;
-	const safeThreshold = isFinite(threshold) && threshold > 0 ? threshold : 80;
-	const safeDistance = isFinite(distance) ? distance : 150;
+	const safePullDistance = Number.isFinite(pullDistance) ? pullDistance : 0;
+	const safeThreshold = Number.isFinite(threshold) && threshold > 0 ? threshold : 80;
+	const safeDistance = Number.isFinite(distance) ? distance : 150;
 
 	const resistance = Math.min(safePullDistance / 2, safeDistance);
-	const safeResistance = isFinite(resistance) ? resistance : 0;
+	const safeResistance = Number.isFinite(resistance) ? resistance : 0;
 
 	const transformCalculation = -48 + Math.min((safeResistance * 48) / safeThreshold, 48);
-	const transformY = isFinite(transformCalculation) ? transformCalculation : -48;
+	const transformY = Number.isFinite(transformCalculation) ? transformCalculation : -48;
 
 	const opacityCalculation = Math.min(safePullDistance / safeThreshold, 1);
-	const opacity = isFinite(opacityCalculation) ? opacityCalculation : 0;
+	const opacity = Number.isFinite(opacityCalculation) ? opacityCalculation : 0;
 
 	if (refreshElement) {
 		refreshElement.style.transform = `translateY(${transformY}px)`;
@@ -125,7 +125,7 @@ onMount(() => {
 	// Only add touch listeners on mobile/tablet devices (including iPad) with NaN safety
 	const { maxTouchPoints } = navigator;
 	const hasTouchScreen =
-		'ontouchstart' in window || (isFinite(maxTouchPoints) && maxTouchPoints > 0);
+		'ontouchstart' in window || (Number.isFinite(maxTouchPoints) && maxTouchPoints > 0);
 	const userAgent = navigator.userAgent || '';
 	const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
 		userAgent,

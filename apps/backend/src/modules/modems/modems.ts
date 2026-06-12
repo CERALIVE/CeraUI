@@ -85,7 +85,7 @@ async function handleModemConfig(
 		return;
 	}
 
-	if (!modem.config || !modem.config.conn) {
+	if (!modem.config?.conn) {
 		logger.info(`Ignoring modem config for unconfigured modem ${msg.device}`);
 		logger.debug("Modem config", modem.config);
 		return;
@@ -128,7 +128,7 @@ async function handleModemConfig(
 		msg.network &&
 		msg.network !== "" &&
 		msg.network !== modem.config.network &&
-		(!modem.available_networks || !modem.available_networks[msg.network])
+		!modem.available_networks?.[msg.network]
 	) {
 		logger.warn(
 			`Received unavailable network ${msg.network} for modem ${msg.device}`,
@@ -140,8 +140,7 @@ async function handleModemConfig(
 	const newNetwork =
 		msg.network &&
 		msg.network !== "" &&
-		modem.available_networks &&
-		modem.available_networks[msg.network];
+		modem.available_networks?.[msg.network];
 	if (newNetwork) {
 		setGsmOperatorName(msg.network, newNetwork.name);
 	}

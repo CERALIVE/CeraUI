@@ -106,13 +106,13 @@ function updateWindowInfo() {
 	const screenH = screen.height;
 
 	windowInfo = {
-		width: isFinite(width) ? width : 0,
-		height: isFinite(height) ? height : 0,
-		devicePixelRatio: isFinite(dpr) ? dpr : 1,
+		width: Number.isFinite(width) ? width : 0,
+		height: Number.isFinite(height) ? height : 0,
+		devicePixelRatio: Number.isFinite(dpr) ? dpr : 1,
 		colorScheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
 		reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-		screenWidth: isFinite(screenW) ? screenW : 0,
-		screenHeight: isFinite(screenH) ? screenH : 0,
+		screenWidth: Number.isFinite(screenW) ? screenW : 0,
+		screenHeight: Number.isFinite(screenH) ? screenH : 0,
 	};
 }
 
@@ -173,11 +173,11 @@ function updatePerformanceData() {
 	// Navigation timing (only calculate load time once)
 	if (!performanceData.loadTimeCalculated && performance.getEntriesByType) {
 		const navTiming = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
-		if (navTiming && navTiming.loadEventEnd && navTiming.startTime !== undefined) {
+		if (navTiming?.loadEventEnd && navTiming.startTime !== undefined) {
 			performanceData.timing = navTiming;
 			const loadTime = navTiming.loadEventEnd - navTiming.startTime;
 			// Only set if we have a valid positive number
-			if (loadTime > 0 && isFinite(loadTime)) {
+			if (loadTime > 0 && Number.isFinite(loadTime)) {
 				performanceData.loadTime = Math.round(loadTime);
 				performanceData.loadTimeCalculated = true; // Mark as calculated
 			}
@@ -185,7 +185,7 @@ function updatePerformanceData() {
 			// Only use performance.now() fallback when page is fully loaded
 			// This represents time since page start, not ideal but better than increasing value
 			const loadTime = performance.now();
-			if (loadTime > 0 && isFinite(loadTime)) {
+			if (loadTime > 0 && Number.isFinite(loadTime)) {
 				performanceData.loadTime = Math.round(loadTime);
 				performanceData.loadTimeCalculated = true; // Mark as calculated to prevent further updates
 			}
