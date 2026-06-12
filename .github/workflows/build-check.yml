@@ -19,12 +19,6 @@ jobs:
         with:
           path: CeraUI
 
-      - name: Checkout ceracoder (sibling dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: CERALIVE/ceracoder
-          path: ceracoder
-
       - name: Checkout srtla (sibling dependency)
         uses: actions/checkout@v4
         with:
@@ -50,7 +44,6 @@ jobs:
 
       - name: Install sibling dependencies
         run: |
-          pnpm install --dir ceracoder/bindings/typescript
           pnpm install --dir srtla/bindings/typescript
 
       - name: Install dependencies
@@ -104,12 +97,6 @@ jobs:
         with:
           path: CeraUI
 
-      - name: Checkout ceracoder (sibling dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: CERALIVE/ceracoder
-          path: ceracoder
-
       - name: Checkout srtla (sibling dependency)
         uses: actions/checkout@v4
         with:
@@ -135,7 +122,6 @@ jobs:
 
       - name: Install sibling dependencies
         run: |
-          pnpm install --dir ceracoder/bindings/typescript
           pnpm install --dir srtla/bindings/typescript
 
       - name: Install dependencies
@@ -151,6 +137,23 @@ jobs:
       - name: Build frontend
         working-directory: CeraUI
         run: pnpm run build:frontend
+
+      - name: Guard — poisoned .env cannot leak into the production bundle
+        working-directory: CeraUI
+        run: |
+          # A root .env is loaded by Vite in EVERY mode. Prove that even a
+          # deliberately poisoned dev-only socket override cannot survive a
+          # production build into dist/public (vite.config.ts outDir).
+          echo "VITE_SOCKET_ENDPOINT=ws://localhost" > .env
+          pnpm run build:frontend
+          if grep -rq "ws://localhost" dist/public/; then
+            echo "::error::poisoned .env leaked ws://localhost into the production bundle"
+            grep -rl "ws://localhost" dist/public/ || true
+            rm -f .env
+            exit 1
+          fi
+          rm -f .env
+          echo "OK: no ws://localhost in dist/public after a poisoned-.env prod build"
 
       - name: Verify build output
         working-directory: CeraUI

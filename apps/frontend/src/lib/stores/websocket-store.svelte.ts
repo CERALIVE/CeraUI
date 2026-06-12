@@ -25,8 +25,6 @@ import { mergeModems } from "$lib/helpers/ObjectsHelper";
 import { downloadLog } from "$lib/helpers/SystemHelper";
 import { rpcClient } from "$lib/rpc/client";
 
-import { ENV_VARIABLES } from "../env";
-
 // ============================================
 // Svelte 5 Reactive State ($state)
 // ============================================
@@ -182,7 +180,6 @@ const WifiStore = createReadableFromState(
 // ============================================
 // WebSocket Connection (using new RPC client)
 // ============================================
-const connectionUrl = `${ENV_VARIABLES.SOCKET_ENDPOINT}:${ENV_VARIABLES.SOCKET_PORT}`;
 
 // Use the RPC client's socket
 export const socket = {

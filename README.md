@@ -67,13 +67,27 @@ MOCK_SCENARIO=streaming-active pnpm dev  # Override inline
 
 ### Environment Variables
 
-All optional in development mode:
+In **production** the WebSocket RPC URL is derived purely from the page origin
+(`window.location`): the single backend binary serves the static frontend and the
+WebSocket on the same host and port, so no socket host/port/protocol is configured
+and the `VITE_SOCKET_*` variables are ignored. The variables below apply to
+**development only**, where Vite (`:6173`) and the backend (`:3002`) are separate
+origins; all are optional.
 
-| Variable | Dev Default | Description |
-|----------|-------------|-------------|
-| `VITE_SOCKET_ENDPOINT` | `ws://localhost` | WebSocket URL |
-| `VITE_SOCKET_PORT` | `3001` | WebSocket port |
-| `MOCK_SCENARIO` | `multi-modem-wifi` | Hardware mock scenario |
+These dev-only values live in the tracked **`.env.development`** file, which Vite
+loads only in `mode === "development"` and the `pnpm dev` scripts load via
+`dotenv -e .env.development`. A production build never reads `.env.development`, so
+none of these can reach the shipped bundle. The gitignored root `.env` is loaded in
+**every** Vite mode, so it must stay absent — a CI guard fails the build if a stray
+`.env` bakes a `ws://localhost` literal into `dist/public`. `NODE_ENV` is not read
+from any env file (Vite sets the frontend mode; the backend `dev` scripts export it
+inline). See `.env.example` for the full layout.
+
+| Variable | Scope | Home | Dev Default | Description |
+|----------|-------|------|-------------|-------------|
+| `VITE_SOCKET_ENDPOINT` | dev only | `.env.development` | `ws://<page hostname>` | WebSocket endpoint (scheme + host, no port) |
+| `VITE_SOCKET_PORT` | dev only | `.env.development` | `3002` | Backend dev WebSocket port |
+| `MOCK_SCENARIO` | dev only | `.env.development` | `multi-modem-wifi` | Hardware mock scenario |
 
 ## Build & Deploy
 
