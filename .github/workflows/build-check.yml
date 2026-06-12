@@ -19,12 +19,6 @@ jobs:
         with:
           path: CeraUI
 
-      - name: Checkout ceracoder (sibling dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: CERALIVE/ceracoder
-          path: ceracoder
-
       - name: Checkout srtla (sibling dependency)
         uses: actions/checkout@v4
         with:
@@ -50,7 +44,6 @@ jobs:
 
       - name: Install sibling dependencies
         run: |
-          pnpm install --dir ceracoder/bindings/typescript
           pnpm install --dir srtla/bindings/typescript
 
       - name: Install dependencies
@@ -104,12 +97,6 @@ jobs:
         with:
           path: CeraUI
 
-      - name: Checkout ceracoder (sibling dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: CERALIVE/ceracoder
-          path: ceracoder
-
       - name: Checkout srtla (sibling dependency)
         uses: actions/checkout@v4
         with:
@@ -135,7 +122,6 @@ jobs:
 
       - name: Install sibling dependencies
         run: |
-          pnpm install --dir ceracoder/bindings/typescript
           pnpm install --dir srtla/bindings/typescript
 
       - name: Install dependencies
