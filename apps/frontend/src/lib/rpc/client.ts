@@ -137,10 +137,17 @@ class RPCClient {
 			return;
 		}
 
+		// NON_BROWSER_SOCKET_URL is "" — skip connecting outside a real browser
+		// (SSR, vitest jsdom). Attempting new WebSocket("") throws Invalid URL.
+		const url = this.getUrl();
+		if (!url) {
+			return;
+		}
+
 		this.setConnectionState("connecting");
 
 		try {
-			this.socket = new WebSocket(this.getUrl());
+			this.socket = new WebSocket(url);
 
 			this.socket.onopen = () => {
 				this.setConnectionState("connected");
