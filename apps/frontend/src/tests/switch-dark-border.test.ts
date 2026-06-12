@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -23,6 +24,15 @@ import { describe, expect, it } from "vitest";
 
 const cssPath = fileURLToPath(new URL("../app.css", import.meta.url));
 const css = readFileSync(cssPath, "utf8");
+
+// The brand token values (light/dark) now live in the shared
+// @ceralive/design-tokens package, imported by app.css. Resolve that
+// stylesheet the same way the bundler does so this test reads the real
+// cascade rather than app.css in isolation.
+const tokensCss = readFileSync(
+	createRequire(import.meta.url).resolve("@ceralive/design-tokens/tokens.css"),
+	"utf8",
+);
 
 const TRANSPARENT_TOKENS = new Set([
 	"transparent",
@@ -111,7 +121,7 @@ function contrastRatio(x: Oklab, y: Oklab): number {
 	return (hi + 0.05) / (lo + 0.05);
 }
 
-const darkBlock = balancedBlock(css, ".dark {");
+const darkBlock = balancedBlock(tokensCss, '[data-theme="dark"]');
 const darkTokens: Record<string, Oklch> = {};
 for (const token of [
 	"--switch-off",
