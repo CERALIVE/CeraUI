@@ -109,11 +109,18 @@ function browserLocation(): SocketLocation | undefined {
  * every WebSocket consumer (rpc/client, websocket-store) routes through this.
  */
 export function getSocketUrl(): string {
+	// DEV-gate the override reads so prod statically folds them to `undefined`: a
+	// poisoned `VITE_SOCKET_ENDPOINT` in the root `.env` must never bake as a
+	// literal into the bundle (incl. the non-tree-shaken DevTools chunk).
 	return resolveSocketUrl({
 		location: browserLocation(),
 		isProd: import.meta.env.PROD,
-		endpointOverride: import.meta.env.VITE_SOCKET_ENDPOINT,
-		portOverride: import.meta.env.VITE_SOCKET_PORT,
+		endpointOverride: import.meta.env.DEV
+			? import.meta.env.VITE_SOCKET_ENDPOINT
+			: undefined,
+		portOverride: import.meta.env.DEV
+			? import.meta.env.VITE_SOCKET_PORT
+			: undefined,
 	});
 }
 
