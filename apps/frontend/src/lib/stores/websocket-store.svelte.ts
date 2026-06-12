@@ -285,7 +285,9 @@ const assignMessage = (data: string) => {
 				AuthStore._set(value as Parameters<typeof AuthStore._set>[0]);
 				break;
 			case "acodecs":
-				AudioCodecsStore._set(value as Parameters<typeof AudioCodecsStore._set>[0]);
+				AudioCodecsStore._set(
+					value as Parameters<typeof AudioCodecsStore._set>[0],
+				);
 				break;
 			case "config":
 				ConfigStore._set(value as Parameters<typeof ConfigStore._set>[0]);
@@ -294,7 +296,9 @@ const assignMessage = (data: string) => {
 				NetifStore._set(value as Parameters<typeof NetifStore._set>[0]);
 				break;
 			case "notifications":
-				NotificationsStore._set(value as Parameters<typeof NotificationsStore._set>[0]);
+				NotificationsStore._set(
+					value as Parameters<typeof NotificationsStore._set>[0],
+				);
 				break;
 			case "pipelines":
 				if (
@@ -317,9 +321,11 @@ const assignMessage = (data: string) => {
 				RevisionsStore._set(value as Parameters<typeof RevisionsStore._set>[0]);
 				break;
 			case "sensors":
-				SensorsStatusStore._set(value as Parameters<typeof SensorsStatusStore._set>[0]);
+				SensorsStatusStore._set(
+					value as Parameters<typeof SensorsStatusStore._set>[0],
+				);
 				break;
-			case "status":
+			case "status": {
 				// Merge status with existing state, preserving modems properly
 				const statusValue = value as Record<string, unknown>;
 				if (statusState && statusValue.modems) {
@@ -327,29 +333,40 @@ const assignMessage = (data: string) => {
 						{ ...statusState.modems },
 						statusValue.modems as Parameters<typeof mergeModems>[1],
 					);
-				StatusStore._set({
+					StatusStore._set({
 						...statusState,
 						...statusValue,
 						modems: mergedModems,
 					} as Parameters<typeof StatusStore._set>[0]);
 				} else {
 					StatusStore._set(
-						statusState ? { ...statusState, ...statusValue } : (statusValue as Parameters<typeof StatusStore._set>[0]),
+						statusState
+							? { ...statusState, ...statusValue }
+							: (statusValue as Parameters<typeof StatusStore._set>[0]),
 					);
 				}
 				break;
+			}
 			case "wifi":
 				WifiStore._set(value as Parameters<typeof WifiStore._set>[0]);
 				break;
 			case "bitrate":
-				if (configState && typeof value === "object" && value !== null && "max_br" in value) {
-					ConfigStore._set({ ...configState, max_br: (value as { max_br?: number }).max_br });
+				if (
+					configState &&
+					typeof value === "object" &&
+					value !== null &&
+					"max_br" in value
+				) {
+					ConfigStore._set({
+						...configState,
+						max_br: (value as { max_br?: number }).max_br,
+					});
 				}
 				break;
 			case "log":
 				downloadLog(value as Parameters<typeof downloadLog>[0]);
 				break;
-			}
+		}
 	}
 };
 
