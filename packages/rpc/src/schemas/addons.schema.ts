@@ -96,6 +96,9 @@ export const AddonDescriptorSchema = z
 		units: addonUnitsSchema.optional(),
 		configSchemaRef: z.string().min(1).optional(),
 		validate: addonValidateSchema.optional(),
+		compatibleHardware: z.array(z.enum(['jetson', 'n100', 'rk3588', 'generic'])).optional(),
+		docs: z.string().optional(),
+		helpUrl: z.string().url().optional(),
 	})
 	.strict();
 export type AddonDescriptor = z.infer<typeof AddonDescriptorSchema>;

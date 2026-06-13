@@ -67,6 +67,51 @@ describe('AddonDescriptorSchema', () => {
 		const paths = result.error.issues.map((i) => i.path.join('.'));
 		expect(paths).toContain('sysextLevel');
 	});
+
+	test('descriptor WITH compatibleHardware + docs + helpUrl parses successfully', () => {
+		const withNewFields = {
+			...validDebugToolset,
+			compatibleHardware: ['rk3588', 'jetson'],
+			docs: '# Debug Toolset\n\nProvides debugging utilities.',
+			helpUrl: 'https://docs.ceralive.tv/addons/debug-toolset',
+		};
+		const parsed = AddonDescriptorSchema.parse(withNewFields);
+		expect(parsed.compatibleHardware).toEqual(['rk3588', 'jetson']);
+		expect(parsed.docs).toBe('# Debug Toolset\n\nProvides debugging utilities.');
+		expect(parsed.helpUrl).toBe('https://docs.ceralive.tv/addons/debug-toolset');
+	});
+
+	test('legacy descriptor WITHOUT new fields is valid (treated as all-hardware)', () => {
+		const legacy = { ...validDebugToolset };
+		const parsed = AddonDescriptorSchema.parse(legacy);
+		expect(parsed.compatibleHardware).toBeUndefined();
+		expect(parsed.docs).toBeUndefined();
+		expect(parsed.helpUrl).toBeUndefined();
+	});
+
+	test('compatibleHardware with invalid enum value is rejected', () => {
+		const badHardware = {
+			...validDebugToolset,
+			compatibleHardware: ['rk3588', 'banana'],
+		};
+		const result = AddonDescriptorSchema.safeParse(badHardware);
+		expect(result.success).toBe(false);
+		if (result.success) throw new Error('expected invalid hardware enum to be rejected');
+		const paths = result.error.issues.map((i) => i.path.join('.'));
+		expect(paths).toContain('compatibleHardware.1');
+	});
+
+	test('helpUrl with invalid URL is rejected', () => {
+		const badUrl = {
+			...validDebugToolset,
+			helpUrl: 'not-a-url',
+		};
+		const result = AddonDescriptorSchema.safeParse(badUrl);
+		expect(result.success).toBe(false);
+		if (result.success) throw new Error('expected invalid URL to be rejected');
+		const paths = result.error.issues.map((i) => i.path.join('.'));
+		expect(paths).toContain('helpUrl');
+	});
 });
 
 describe('AddonStateSchema / AddonConfigSchema', () => {
