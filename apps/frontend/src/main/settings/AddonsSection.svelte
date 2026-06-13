@@ -15,12 +15,13 @@
 -->
 <script lang="ts">
 import type { AddonDescriptor, AddonState } from '@ceraui/rpc/schemas';
-import { Blocks, HardDrive, LoaderCircle, Package } from '@lucide/svelte';
+import { Ban, Blocks, BookOpen, ChevronDown, ExternalLink, HardDrive, LoaderCircle, Package, TriangleAlert } from '@lucide/svelte';
 import { onMount } from 'svelte';
 import { toast } from 'svelte-sonner';
 
 import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
+import * as Tooltip from '$lib/components/ui/tooltip';
 import { type AddonManagerPhase, rpc } from '$lib/rpc/client';
 import { getAddons } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
@@ -45,6 +46,23 @@ let seedStates = $state<Record<string, AddonState>>({});
 let loaded = $state(false);
 let unavailable = $state(false);
 
+// Detected board, resolved once on open. Drives the client-side compatibility
+// reflection: the server is the authoritative gate (addons.procedure rejects an
+// incompatible install), the UI only mirrors it so an unusable toggle reads as
+// disabled-with-a-reason instead of failing on tap. `null` = not yet known, in
+// which case nothing is gated (fail-open until the board is resolved).
+let effectiveHardware = $state<string | null>(null);
+
+// Per-add-on inline warning surfaced from the backend's STRUCTURED enable error
+// (addon_conflict / addon_dependency_missing / addon_incompatible_hardware).
+// The toggle still reverts (the op failed), but instead of a transient toast the
+// reason stays pinned to the card so the operator sees why the enable was blocked.
+let actionErrors = $state<Record<string, string>>({});
+
+// Ids whose docs/help panel is expanded. Descriptor-driven: only add-ons that
+// ship a `docs` string (or a `helpUrl`) get the affordance at all.
+let docsOpen = $state<Record<string, boolean>>({});
+
 // Lossless mirror of the backend phaseFromState (manager.ts): the persisted
 // (autoDisabled + phase + enabled) triple encodes all 7 manager phases.
 function phaseFromState(state: AddonState): AddonManagerPhase {
@@ -63,11 +81,32 @@ function phaseFromState(state: AddonState): AddonManagerPhase {
 	}
 }
 
+// Reflects the SERVER gate (manager.addonCompatibilityError): an add-on that
+// declares `compatibleHardware` but excludes the detected board can never enable
+// on this device. Absent/empty `compatibleHardware` means all-hardware. Returns
+// the human reason, or null when the add-on may run here (or the board is still
+// unknown, in which case we never gate).
+function incompatibleReason(descriptor: AddonDescriptor, board: string | null): string | null {
+	const compatible = descriptor.compatibleHardware;
+	if (!compatible || compatible.length === 0) return null;
+	if (board === null) return null;
+	if ((compatible as readonly string[]).includes(board)) return null;
+	const requirement = compatible.join(' or ');
+	return `Requires ${requirement} hardware \u2014 this device is ${board}.`;
+}
+
 const cards = $derived.by(() => {
 	const live = getAddons();
+	const board = effectiveHardware;
 	return descriptors.map((descriptor) => {
 		const state = live[descriptor.id] ?? seedStates[descriptor.id] ?? DEFAULT_STATE;
-		return { descriptor, state, phase: phaseFromState(state) };
+		return {
+			descriptor,
+			state,
+			phase: phaseFromState(state),
+			incompatible: incompatibleReason(descriptor, board),
+			hasDocs: Boolean(descriptor.docs) || Boolean(descriptor.helpUrl),
+		};
 	});
 });
 
@@ -80,6 +119,16 @@ onMount(async () => {
 		console.error('Failed to load add-ons:', error);
 	} finally {
 		loaded = true;
+	}
+
+	// Resolve the detected board for the compatibility reflection. Best-effort:
+	// if it fails, `effectiveHardware` stays null and nothing is gated client-side
+	// (the server still rejects an incompatible enable).
+	try {
+		const hw = await rpc.streaming.getMockHardware();
+		effectiveHardware = hw.effectiveHardware;
+	} catch (error) {
+		console.error('Failed to resolve detected board:', error);
 	}
 });
 
@@ -114,6 +163,21 @@ function humanError(code: string | undefined): string | undefined {
 	return ERROR_COPY[code] ?? code;
 }
 
+// Structured compatibility errors the SERVER raises when an enable is refused by
+// the hardware/deps/conflicts gate (manager.addonCompatibilityError). These are
+// surfaced INLINE on the card (a pinned warning) rather than as a transient
+// toast, so the operator keeps seeing why the add-on can't turn on.
+const COMPAT_ERROR_COPY: Record<string, string> = {
+	addon_conflict:
+		'Conflicts with another enabled add-on. Disable the conflicting add-on first, then try again.',
+	addon_dependency_missing: 'A required add-on must be enabled first before this one can turn on.',
+	addon_incompatible_hardware: "This add-on isn't compatible with this device's hardware.",
+};
+
+function isCompatError(code: string | undefined): code is keyof typeof COMPAT_ERROR_COPY {
+	return code !== undefined && code in COMPAT_ERROR_COPY;
+}
+
 const PHASE_META = {
 	disabled: { label: 'Disabled', badge: 'bg-status-neutral/12 text-status-neutral', busy: false },
 	pending: { label: 'Update pending', badge: 'bg-status-info/12 text-status-info', busy: false },
@@ -133,7 +197,16 @@ function metaLine(descriptor: AddonDescriptor): string {
 	return `${category} \u00b7 v${descriptor.version}`;
 }
 
+function clearActionError(id: string) {
+	if (id in actionErrors) {
+		const { [id]: _removed, ...rest } = actionErrors;
+		actionErrors = rest;
+	}
+}
+
 async function handleToggle(id: string, next: boolean) {
+	// A fresh attempt clears any pinned warning from the previous one.
+	clearActionError(id);
 	let result: Awaited<ReturnType<typeof rpc.addons.install>>;
 	try {
 		result = next ? await rpc.addons.install({ id }) : await rpc.addons.uninstall({ id });
@@ -147,10 +220,20 @@ async function handleToggle(id: string, next: boolean) {
 			// Reject so AsyncSwitch reverts to the prior value without a toast.
 			throw new Error(ADDON_UNAVAILABLE_ERROR);
 		}
+		if (isCompatError(result.error)) {
+			// Pin the structured gate reason to the card instead of a transient
+			// toast — the enable was blocked by the server, not a flaky failure.
+			actionErrors = { ...actionErrors, [id]: result.error };
+			throw new Error(result.error);
+		}
 		toast.error(humanError(result.error) ?? 'Add-on action failed.');
 		throw new Error(result.error);
 	}
 	unavailable = false;
+}
+
+function toggleDocs(id: string) {
+	docsOpen = { ...docsOpen, [id]: !docsOpen[id] };
 }
 </script>
 
@@ -204,13 +287,39 @@ async function handleToggle(id: string, next: boolean) {
 						<p class="truncate text-sm font-semibold">{card.descriptor.name}</p>
 						<p class="text-muted-foreground truncate text-xs">{metaLine(card.descriptor)}</p>
 					</div>
-					<AsyncSwitch
-						aria-label={`Enable ${card.descriptor.name}`}
-						checked={card.state.enabled}
-						data-testid={`addon-switch-${card.descriptor.id}`}
-						disabled={!loaded || meta.busy}
-						onCheckedChange={(next) => handleToggle(card.descriptor.id, next)}
-					/>
+					{#if card.incompatible}
+						<!-- Incompatible with the detected board: the toggle is locked and
+						     the reason is surfaced on hover/focus (tooltip + native title),
+						     mirroring the server's hardware gate. -->
+						<Tooltip.Provider>
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									{#snippet child({ props })}
+										<span {...props} class="inline-flex items-center" title={card.incompatible}>
+											<AsyncSwitch
+												aria-label={`Enable ${card.descriptor.name}`}
+												checked={card.state.enabled}
+												data-testid={`addon-switch-${card.descriptor.id}`}
+												disabled
+												onCheckedChange={(next) => handleToggle(card.descriptor.id, next)}
+											/>
+										</span>
+									{/snippet}
+								</Tooltip.Trigger>
+								<Tooltip.Content>
+									<p class="max-w-[16rem] text-xs leading-relaxed">{card.incompatible}</p>
+								</Tooltip.Content>
+							</Tooltip.Root>
+						</Tooltip.Provider>
+					{:else}
+						<AsyncSwitch
+							aria-label={`Enable ${card.descriptor.name}`}
+							checked={card.state.enabled}
+							data-testid={`addon-switch-${card.descriptor.id}`}
+							disabled={!loaded || meta.busy}
+							onCheckedChange={(next) => handleToggle(card.descriptor.id, next)}
+						/>
+					{/if}
 				</div>
 
 				<div class="flex items-center justify-between gap-3">
@@ -267,6 +376,78 @@ async function handleToggle(id: string, next: boolean) {
 					>
 						{humanError(card.state.lastError)}
 					</p>
+				{/if}
+
+				{#if card.incompatible}
+					<!-- Always-visible reason: incompatible add-ons are shown disabled
+					     WITH the reason, never hidden. -->
+					<p
+						class="text-status-warning bg-status-warning/8 inline-flex items-start gap-1.5 rounded-md px-3 py-2 text-xs leading-relaxed"
+						data-testid={`addon-incompatible-${card.descriptor.id}`}
+						role="note"
+					>
+						<Ban class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+						<span>{card.incompatible}</span>
+					</p>
+				{/if}
+
+				{#if actionErrors[card.descriptor.id]}
+					{@const code = actionErrors[card.descriptor.id]}
+					<!-- Pinned warning from the server's structured enable error
+					     (conflict / missing dependency). -->
+					<p
+						class="text-status-warning bg-status-warning/8 inline-flex items-start gap-1.5 rounded-md px-3 py-2 text-xs leading-relaxed"
+						data-testid={`addon-conflict-${card.descriptor.id}`}
+						role="alert"
+					>
+						<TriangleAlert class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+						<span>{(code && COMPAT_ERROR_COPY[code]) ?? code}</span>
+					</p>
+				{/if}
+
+				{#if card.hasDocs}
+					{@const isOpen = Boolean(docsOpen[card.descriptor.id])}
+					<div class="border-border/60 border-t pt-3">
+						<button
+							class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
+							type="button"
+							aria-expanded={isOpen}
+							aria-controls={`addon-docs-${card.descriptor.id}`}
+							data-testid={`addon-docs-toggle-${card.descriptor.id}`}
+							onclick={() => toggleDocs(card.descriptor.id)}
+						>
+							<BookOpen class="size-3.5" aria-hidden="true" />
+							{isOpen ? 'Hide help' : 'Help & documentation'}
+							<ChevronDown
+								class={cn('size-3.5 transition-transform duration-200', isOpen && 'rotate-180')}
+								aria-hidden="true"
+							/>
+						</button>
+
+						{#if isOpen}
+							<div
+								class="text-muted-foreground mt-2 space-y-2 text-xs leading-relaxed"
+								data-testid={`addon-docs-${card.descriptor.id}`}
+								id={`addon-docs-${card.descriptor.id}`}
+							>
+								{#if card.descriptor.docs}
+									<p class="whitespace-pre-line">{card.descriptor.docs}</p>
+								{/if}
+								{#if card.descriptor.helpUrl}
+									<a
+										class="text-primary hover:text-primary/80 inline-flex items-center gap-1.5 font-medium transition-colors"
+										data-testid={`addon-helpurl-${card.descriptor.id}`}
+										href={card.descriptor.helpUrl}
+										rel="noopener noreferrer"
+										target="_blank"
+									>
+										<ExternalLink class="size-3.5" aria-hidden="true" />
+										Open documentation
+									</a>
+								{/if}
+							</div>
+						{/if}
+					</div>
 				{/if}
 			</div>
 		{/each}
