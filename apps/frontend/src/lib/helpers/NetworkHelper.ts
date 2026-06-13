@@ -1,6 +1,7 @@
 import { getLL } from "@ceraui/i18n/svelte";
 import type {
 	NetifMessage,
+	SimPukUnlockOutput,
 	SimUnlockOutput,
 	StatusMessage,
 	WifiBand,
@@ -230,6 +231,19 @@ export const unlockSimPin = async (
 		return await rpc.modems.unlockSim({ modemPath, pin });
 	} catch (error) {
 		console.error("Failed to unlock SIM:", error);
+		throw error;
+	}
+};
+
+export const unlockSimPuk = async (
+	modemPath: string,
+	puk: string,
+	newPin: string,
+): Promise<SimPukUnlockOutput> => {
+	try {
+		return await rpc.modems.unlockSimPuk({ modemPath, puk, newPin });
+	} catch (error) {
+		console.error("Failed to unlock SIM with PUK:", error);
 		throw error;
 	}
 };

@@ -7,6 +7,7 @@
 
 import type {
 	AddonState,
+	CapabilitiesMessage,
 	CaptureDevice,
 	ConfigMessage,
 	DeviceStats,
@@ -95,6 +96,7 @@ let deviceStatsState = $state<DeviceStats | undefined>(undefined);
 let sensorsState = $state<SensorsStatus | undefined>(undefined);
 let revisionsState = $state<Revisions | undefined>(undefined);
 let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
+let capabilitiesState = $state<CapabilitiesMessage | undefined>(undefined);
 let audioCodecsState = $state<Record<string, { name: string }> | undefined>(
 	undefined,
 );
@@ -192,6 +194,10 @@ export function getRevisions() {
 
 export function getPipelines() {
 	return pipelinesState;
+}
+
+export function getCapabilities() {
+	return capabilitiesState;
 }
 
 export function getAudioCodecs() {
@@ -433,6 +439,12 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			}
 			break;
 
+		case "capabilities":
+			if (data && typeof data === "object") {
+				capabilitiesState = data as CapabilitiesMessage;
+			}
+			break;
+
 		case "acodecs":
 			audioCodecsState = data as Record<string, { name: string }>;
 			break;
@@ -664,6 +676,7 @@ export function resetState(): void {
 	deviceStatsState = undefined;
 	revisionsState = undefined;
 	pipelinesState = undefined;
+	capabilitiesState = undefined;
 	audioCodecsState = undefined;
 	relaysState = undefined;
 	notificationsState = undefined;

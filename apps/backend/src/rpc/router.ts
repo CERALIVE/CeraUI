@@ -22,6 +22,7 @@ import {
 	getAllModemsProcedure,
 	scanModemProcedure,
 	unlockSimProcedure,
+	unlockSimPukProcedure,
 } from "./procedures/modems.procedure.ts";
 import {
 	configureNetworkInterfaceProcedure,
@@ -117,6 +118,7 @@ const stableRoutes = {
 		configure: configureModemProcedure,
 		scan: scanModemProcedure,
 		unlockSim: unlockSimProcedure,
+		unlockSimPuk: unlockSimPukProcedure,
 	}),
 
 	wifi: os.router({

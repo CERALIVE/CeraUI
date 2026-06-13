@@ -7,13 +7,15 @@
 
   Controls
   --------
-  • Video source — chosen from the pipeline metadata (`getPipelines()`).
+  • Video source — pipeline metadata (`getPipelines()`) plus any UVC source a
+    device advertises as `video/x-h265` (`getDevices()`).
+  • Codec        — capability-derived (`getCapabilities()`); generic H.265 is
+    offered WITH a software-encode warning badge, never hidden.
   • Resolution   — only when the selected pipeline supports the override.
   • Framerate    — only when the selected pipeline supports the override.
-  • Bitrate      — Slider seeded across the practical UI band
-    (`streamingConstraints.bitrate.defaultMin..defaultMax`) plus a precise
-    number input; validated against the canonical hardware window
-    (`streamingConstraints.bitrate.min..max`).
+  • Bitrate      — Slider + number input clamped to the board's per-board window
+    (`capabilities.encoder.bitrate_range`), falling back to the schema range only
+    until the capability contract arrives.
   • Bitrate overlay — on/off Switch.
 
   Behaviour
@@ -43,13 +45,20 @@ export interface EncoderConfig {
 
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { Binary, Cpu } from '@lucide/svelte';
-import { AVAILABLE_FRAMERATES, AVAILABLE_RESOLUTIONS, type Pipeline } from '@ceraui/rpc/schemas';
+import { Binary, Cpu, TriangleAlert } from '@lucide/svelte';
+import { BITRATE_DEFAULT_MIN, type Pipeline } from '@ceraui/rpc/schemas';
 
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
-import { streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
-import { getOverrideGate } from '$lib/streaming/encoderConfig';
+import {
+	bitrateBoundsFromCaps,
+	deriveCodecOptions,
+	deriveUvcH265Sources,
+	framerateOptions,
+	offeredEncoderCaps,
+	platformCapsForHardware,
+	resolutionOptions,
+} from '$lib/components/streaming/ValidationAdapter';
 import { normalizeValue, updateMaxBitrate } from '$lib/components/streaming/StreamingUtils';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
@@ -61,7 +70,13 @@ import {
 	getResolutionLabel,
 	getSourceLabel,
 } from '$lib/helpers/PipelineHelper';
-import { getConfig, getIsStreaming, getPipelines } from '$lib/rpc/subscriptions.svelte';
+import {
+	getCapabilities,
+	getConfig,
+	getDevices,
+	getIsStreaming,
+	getPipelines,
+} from '$lib/rpc/subscriptions.svelte';
 
 interface Props {
 	open?: boolean;
@@ -76,8 +91,6 @@ interface Props {
 
 let { open = $bindable(false), config = $bindable(), onSave }: Props = $props();
 
-// ── Schema-derived bounds (single source of truth, zero literals) ──────────────
-const BITRATE = streamingConstraints.bitrate;
 const BITRATE_STEP = 50;
 
 // ── Live data from the non-deprecated subscriptions surface ────────────────────
@@ -86,6 +99,19 @@ const pipelines = $derived(pipelinesMessage?.pipelines);
 const hardware = $derived(pipelinesMessage?.hardware);
 const isStreaming = $derived(getIsStreaming());
 const savedConfig = $derived(getConfig());
+
+// ── Capability contract: per-board bitrate window, codec offers, UVC H.265 ─────
+const capabilities = $derived(getCapabilities());
+const devices = $derived(getDevices());
+const platformCaps = $derived(capabilities?.platform ?? platformCapsForHardware(hardware));
+// Bitrate clamps to the board's real window (encoder.bitrate_range), falling
+// back to the schema-wide range only until the contract arrives.
+const BITRATE = $derived(bitrateBoundsFromCaps(capabilities));
+const codecOptions = $derived(deriveCodecOptions(platformCaps));
+const uvcH265Sources = $derived(deriveUvcH265Sources(devices));
+const h265SoftwareWarning = $derived(
+	codecOptions.some((codec) => codec.value === 'h265' && codec.softwareWarning),
+);
 
 // ── i18n key resolver (mirrors the legacy EncoderCard helper) ──────────────────
 const t = (key: string): string => {
@@ -105,7 +131,7 @@ const t = (key: string): string => {
 let localSource = $state('');
 let localResolution = $state<Resolution>('1080p');
 let localFramerate = $state<Framerate>(30);
-let localBitrate = $state<number>(BITRATE.defaultMin);
+let localBitrate = $state<number>(BITRATE_DEFAULT_MIN);
 let localOverlay = $state(false);
 
 // Seed the working copy from the bound draft first, falling back to the saved
@@ -129,10 +155,14 @@ const selectedPipeline = $derived<Pipeline | undefined>(
 	localSource && pipelines ? pipelines[localSource] : undefined,
 );
 
-// Capability gate (single source of truth, shared with buildEncoderSetConfig):
-// a pipeline that does not advertise an override has its control disabled +
-// marked invalid so the operator can never push an unsupported override.
-const overrideGate = $derived(getOverrideGate(selectedPipeline));
+// Capability-driven offered set (platform ∩ selected source) from intersectCaps.
+// Drives per-option enable/disable so an incompatible resolution/framerate is
+// shown disabled with a reason rather than hidden or all-or-nothing gated.
+const offered = $derived(offeredEncoderCaps(hardware, localSource || undefined, selectedPipeline));
+const resolutionChoices = $derived(resolutionOptions(offered));
+const framerateChoices = $derived(framerateOptions(offered));
+const resolutionSupported = $derived(offered.resolutions.includes(localResolution));
+const framerateSupported = $derived(offered.framerates.includes(localFramerate));
 
 // Slider can only address the practical band; the number input owns out-of-band
 // (but still valid) values, so the slider is rendered controlled + clamped.
@@ -158,7 +188,9 @@ const errors = $derived.by(() => {
 const isValid = $derived(Object.keys(errors).length === 0);
 
 function commitBitrate(raw: number) {
-	localBitrate = Number.isFinite(raw) ? raw : localBitrate;
+	// Clamp to the board ceiling so an out-of-band entry (e.g. 50000 on a
+	// 15000-cap board) snaps to the contract max instead of failing validation.
+	localBitrate = Number.isFinite(raw) ? Math.min(BITRATE.max, raw) : localBitrate;
 }
 
 function handleSave() {
@@ -231,43 +263,96 @@ function handleSave() {
 								</Select.Item>
 							{/each}
 						{/if}
+						{#each uvcH265Sources as uvc (uvc.inputId)}
+							<Select.Item value={uvc.sourceKind}>
+								<div class="flex flex-col py-1">
+									<span class="font-medium">{getSourceLabel(uvc.sourceKind, t)}</span>
+									<span class="text-muted-foreground text-xs">{uvc.displayName}</span>
+								</div>
+							</Select.Item>
+						{/each}
 					</Select.Group>
 				</Select.Content>
 			</Select.Root>
 			{#if errors.source}
 				<p class="text-destructive text-sm">{errors.source}</p>
 			{/if}
+			{#if uvcH265Sources.length > 0}
+				<div class="flex flex-wrap items-center gap-1.5">
+					{#each uvcH265Sources as uvc (uvc.inputId)}
+						<span
+							class="bg-primary/10 text-primary inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-xs"
+							data-input-id={uvc.inputId}
+							data-testid="source-uvc_h265"
+						>
+							{getSourceLabel(uvc.sourceKind, t)} · {uvc.displayName}
+						</span>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
-		<!-- Resolution (pipeline capability-gated: disabled + invalid when unsupported) -->
+		<!-- Encoder codec: capability-derived. Generic H.265 is offered WITH the
+		     software-encode warning, never hidden. -->
+		<div class="space-y-2">
+			<Label class="text-sm font-medium">{$LL.settings.videoCodec()}</Label>
+			<div class="flex flex-wrap items-center gap-2" data-testid="encoder-codecs">
+				{#each codecOptions as codec (codec.value)}
+					<span
+						class="bg-muted inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs"
+						data-testid={`codec-${codec.value}`}
+					>
+						{codec.value === 'h265'
+							? 'H.265'
+							: codec.value === 'h264'
+								? 'H.264'
+								: codec.mediaType}
+						{#if codec.softwareWarning}
+							<span
+								class="bg-status-warning/15 text-status-warning inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+								data-testid="h265-software-warning"
+							>
+								<TriangleAlert aria-hidden={true} class="size-3 shrink-0" />
+								{$LL.settings.softwareEncodeWarning()}
+							</span>
+						{/if}
+					</span>
+				{/each}
+			</div>
+		</div>
+
+		<!-- Resolution: every rung is shown; rungs outside the capability-offered
+		     set render disabled (aria-disabled + reason title), never hidden. -->
 		{#if localSource}
 			<div class="space-y-2">
 				<Label class="text-sm font-medium" for="encoder-resolution">
 					{$LL.settings.encodingResolution()}
 				</Label>
 				<Select.Root
-					disabled={!overrideGate.resolution}
 					onValueChange={(value) => (localResolution = value as Resolution)}
 					type="single"
 					value={localResolution}
 				>
 					<Select.Trigger
 						id="encoder-resolution"
-						aria-invalid={!overrideGate.resolution}
+						aria-invalid={!resolutionSupported}
 						class="w-full"
 					>
-						{#if overrideGate.resolution}
-							{localResolution
-								? getResolutionLabel(localResolution)
-								: $LL.settings.selectEncodingResolution()}
-						{:else}
-							{$LL.general.notAvailable()}
-						{/if}
+						{localResolution
+							? getResolutionLabel(localResolution)
+							: $LL.settings.selectEncodingResolution()}
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
-							{#each AVAILABLE_RESOLUTIONS as resolution (resolution)}
-								<Select.Item label={getResolutionLabel(resolution)} value={resolution}></Select.Item>
+							{#each resolutionChoices as option (option.value)}
+								<Select.Item
+									aria-disabled={option.supported ? undefined : 'true'}
+									data-testid="resolution-option"
+									disabled={!option.supported}
+									label={getResolutionLabel(option.value)}
+									title={option.reason}
+									value={option.value}
+								></Select.Item>
 							{/each}
 						</Select.Group>
 					</Select.Content>
@@ -275,33 +360,36 @@ function handleSave() {
 			</div>
 		{/if}
 
-		<!-- Framerate (pipeline capability-gated: disabled + invalid when unsupported) -->
+		<!-- Framerate: same capability filtering as resolution — incompatible
+		     rates render disabled with a reason, never hidden. -->
 		{#if localSource}
 			<div class="space-y-2">
 				<Label class="text-sm font-medium" for="encoder-framerate">
 					{$LL.settings.framerate()}
 				</Label>
 				<Select.Root
-					disabled={!overrideGate.framerate}
 					onValueChange={(value) => (localFramerate = parseFloat(value) as Framerate)}
 					type="single"
 					value={String(localFramerate)}
 				>
 					<Select.Trigger
 						id="encoder-framerate"
-						aria-invalid={!overrideGate.framerate}
+						aria-invalid={!framerateSupported}
 						class="w-full"
 					>
-						{#if overrideGate.framerate}
-							{localFramerate ? getFramerateLabel(localFramerate) : $LL.settings.selectFramerate()}
-						{:else}
-							{$LL.general.notAvailable()}
-						{/if}
+						{localFramerate ? getFramerateLabel(localFramerate) : $LL.settings.selectFramerate()}
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
-							{#each AVAILABLE_FRAMERATES as framerate (framerate)}
-								<Select.Item label={getFramerateLabel(framerate)} value={String(framerate)}></Select.Item>
+							{#each framerateChoices as option (option.value)}
+								<Select.Item
+									aria-disabled={option.supported ? undefined : 'true'}
+									data-testid="framerate-option"
+									disabled={!option.supported}
+									label={getFramerateLabel(option.value)}
+									title={option.reason}
+									value={String(option.value)}
+								></Select.Item>
 							{/each}
 						</Select.Group>
 					</Select.Content>

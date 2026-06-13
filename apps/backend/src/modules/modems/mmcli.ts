@@ -560,6 +560,101 @@ export async function unlockSimPin(
 	}
 }
 
+/**
+ * Submit a PUK + new PIN to a modem via
+ * `mmcli -m <path> --puk <puk> --pin <newpin>`.
+ *
+ * Both secrets are passed as their own argv tokens so run()'s redactArgs() —
+ * keyed on the preceding `--puk` / `--pin` flags — masks them to `***` in the
+ * debug log. Rejects (via run/execFileP) on a non-zero exit, which is how a
+ * wrong PUK surfaces to the caller.
+ *
+ * NOTE: execFileP's rejection `.message` embeds the full argv (both secrets), so
+ * callers MUST NOT log that message verbatim.
+ */
+export async function mmSendSimPuk(
+	modemPath: string,
+	puk: string,
+	newPin: string,
+): Promise<void> {
+	await run(mmcliBinary, ["-m", modemPath, "--puk", puk, "--pin", newPin]);
+}
+
+/**
+ * Terminal result of a SIM PUK unlock attempt. Mirrors `simPukUnlockOutputSchema`
+ * in `@ceraui/rpc`; kept as a local union so this low-level module carries no
+ * dependency on the RPC schema layer.
+ */
+export type SimPukUnlockResult =
+	| { success: true }
+	| { success: false; error: "wrong-puk"; remainingAttempts?: number }
+	| { success: false; error: "locked"; remainingAttempts: 0 }
+	| { success: false; error: "no-locked-modem" }
+	| { success: false; error: "error" };
+
+/**
+ * Submit a SIM PUK + new PIN to a PUK-locked modem and classify the outcome.
+ *
+ * Like {@link unlockSimPin}, the lock state is READ before the PUK is submitted
+ * and the submit happens EXACTLY ONCE — a PUK has its own (typically 10) attempt
+ * budget and exhausting it bricks the SIM permanently, so a blind resubmit is
+ * never performed. On a wrong PUK the lock state is re-read only to report the
+ * remaining PUK attempts; when those reach 0 the SIM is permanently `locked`.
+ * Neither the PUK nor the new PIN is ever logged in plaintext.
+ */
+export async function unlockSimPuk(
+	modemPath: string,
+	puk: string,
+	newPin: string,
+): Promise<SimPukUnlockResult> {
+	// Defense in depth: the RPC schema already constrains all three, but this is
+	// an exported helper — reject anything that could escape the argv boundary.
+	if (
+		!MODEM_PATH_RE.test(modemPath) ||
+		!/^\d{8}$/.test(puk) ||
+		!/^\d{4,8}$/.test(newPin)
+	) {
+		logger.warn("unlockSimPuk: rejected invalid modem path / puk / pin shape");
+		return { success: false, error: "error" };
+	}
+
+	const before = await mmGetModemUnlockInfo(modemPath);
+	if (!before) {
+		return { success: false, error: "error" };
+	}
+
+	// Only a pending SIM-PUK (or PUK2) is recoverable with a PUK; anything else
+	// (none / pin / pin2 / unknown) means there is nothing for this RPC to do.
+	if (before.required !== "sim-puk" && before.required !== "sim-puk2") {
+		return { success: false, error: "no-locked-modem" };
+	}
+
+	const pukKind = before.required;
+
+	try {
+		await mmSendSimPuk(modemPath, puk, newPin);
+		return { success: true };
+	} catch {
+		// Deliberately secret-free: execFileP's error message embeds the argv
+		// (PUK + PIN included), so we never log it. mmcli's stderr is also omitted.
+		logger.warn(
+			`SIM PUK unlock rejected for modem ${modemPath} (re-checking lock state)`,
+		);
+
+		// Re-read to classify: how many PUK attempts remain? Zero means the SIM is
+		// now permanently locked. We do NOT resubmit.
+		const after = await mmGetModemUnlockInfo(modemPath);
+		const remainingAttempts = after?.retries[pukKind];
+		if (remainingAttempts === 0) {
+			return { success: false, error: "locked", remainingAttempts: 0 };
+		}
+		if (remainingAttempts !== undefined) {
+			return { success: false, error: "wrong-puk", remainingAttempts };
+		}
+		return { success: false, error: "wrong-puk" };
+	}
+}
+
 export async function mmNetworkScan(id: ModemId, timeout = 240) {
 	try {
 		// Check for mock mode

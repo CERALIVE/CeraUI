@@ -8,6 +8,8 @@ import {
 	modemListSchema,
 	modemScanInputSchema,
 	modemScanOutputSchema,
+	simPukUnlockInputSchema,
+	simPukUnlockOutputSchema,
 	simUnlockInputSchema,
 	simUnlockOutputSchema,
 	successResponseSchema,
@@ -33,6 +35,11 @@ export const modemsContract = oc.router({
 	 * Submit a SIM PIN to unlock a PIN-locked modem
 	 */
 	unlockSim: oc.input(simUnlockInputSchema).output(simUnlockOutputSchema),
+
+	/**
+	 * Submit a SIM PUK + new PIN to recover a PUK-locked modem
+	 */
+	unlockSimPuk: oc.input(simPukUnlockInputSchema).output(simPukUnlockOutputSchema),
 
 	/**
 	 * Subscribe to modem status changes

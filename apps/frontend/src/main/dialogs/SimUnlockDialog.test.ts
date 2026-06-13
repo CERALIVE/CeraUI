@@ -10,16 +10,22 @@
  *   locked       → PIN field + submit present, submit gated on a valid PIN
  */
 
-import type { Modem, SimUnlockOutput } from "@ceraui/rpc/schemas";
+import type {
+	Modem,
+	SimPukUnlockOutput,
+	SimUnlockOutput,
+} from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import SimUnlockDialog from "./SimUnlockDialog.svelte";
 
 const unlockSimPin = vi.hoisted(() => vi.fn());
+const unlockSimPuk = vi.hoisted(() => vi.fn());
 
 vi.mock("$lib/helpers/NetworkHelper", () => ({
 	unlockSimPin,
+	unlockSimPuk,
 }));
 
 vi.mock("svelte-sonner", () => ({
@@ -60,9 +66,15 @@ function makeModem(sim_lock: Modem["sim_lock"]): Modem {
 const pinInput = () => screen.getByTestId("sim-pin-input") as HTMLInputElement;
 const submitButton = () =>
 	screen.getByTestId("sim-pin-submit") as HTMLButtonElement;
+const pukInput = () => screen.getByTestId("sim-puk-input") as HTMLInputElement;
+const newPinInput = () =>
+	screen.getByTestId("sim-puk-newpin-input") as HTMLInputElement;
+const pukSubmit = () =>
+	screen.getByTestId("sim-puk-submit") as HTMLButtonElement;
 
 beforeEach(() => {
 	unlockSimPin.mockReset();
+	unlockSimPuk.mockReset();
 });
 
 describe("SimUnlockDialog — PIN entry (Task 23)", () => {
@@ -152,5 +164,139 @@ describe("SimUnlockDialog — PIN entry (Task 23)", () => {
 		expect(screen.queryByTestId("sim-pin-input")).toBeNull();
 		expect(screen.queryByTestId("sim-pin-submit")).toBeNull();
 		expect(unlockSimPin).not.toHaveBeenCalled();
+	});
+});
+
+describe("SimUnlockDialog — PUK recovery", () => {
+	it("shows the PUK + new-PIN fields and the attempts counter, submit gated on valid input", () => {
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "0",
+				modem: makeModem({ required: "sim-puk", remainingAttempts: 10 }),
+			},
+		});
+
+		expect(pukInput()).toBeTruthy();
+		expect(newPinInput()).toBeTruthy();
+		// The PIN-only flow is not rendered for a PUK lock.
+		expect(screen.queryByTestId("sim-pin-input")).toBeNull();
+		// Remaining PUK attempts are surfaced.
+		expect(screen.getByTestId("sim-puk-attempts").textContent).toContain("10");
+
+		// Empty → submit disabled.
+		expect(pukSubmit().disabled).toBe(true);
+		// A too-short PUK (< 8 digits) keeps submit disabled even with a valid PIN.
+		fireEvent.input(pukInput(), { target: { value: "1234567" } });
+		fireEvent.input(newPinInput(), { target: { value: "1234" } });
+		expect(pukSubmit().disabled).toBe(true);
+		// A full 8-digit PUK + valid new PIN enables submit.
+		fireEvent.input(pukInput(), { target: { value: "12345678" } });
+		expect(pukSubmit().disabled).toBe(false);
+	});
+
+	it("submits the PUK + new PIN via unlockSimPuk and closes on success", async () => {
+		unlockSimPuk.mockResolvedValue({
+			success: true,
+		} satisfies SimPukUnlockOutput);
+
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "1",
+				modem: makeModem({ required: "sim-puk", remainingAttempts: 10 }),
+			},
+		});
+
+		fireEvent.input(pukInput(), { target: { value: "12345678" } });
+		fireEvent.input(newPinInput(), { target: { value: "4321" } });
+		await fireEvent.click(pukSubmit());
+
+		expect(unlockSimPuk).toHaveBeenCalledWith("1", "12345678", "4321");
+		await waitFor(() =>
+			expect(screen.queryByTestId("sim-puk-input")).toBeNull(),
+		);
+	});
+
+	it("surfaces the decremented PUK attempts on a wrong PUK without resubmitting", async () => {
+		unlockSimPuk.mockResolvedValue({
+			success: false,
+			error: "wrong-puk",
+			remainingAttempts: 9,
+		} satisfies SimPukUnlockOutput);
+
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "0",
+				modem: makeModem({ required: "sim-puk", remainingAttempts: 10 }),
+			},
+		});
+
+		fireEvent.input(pukInput(), { target: { value: "00000000" } });
+		fireEvent.input(newPinInput(), { target: { value: "4321" } });
+		await fireEvent.click(pukSubmit());
+
+		expect(await screen.findByTestId("sim-puk-error")).toBeTruthy();
+		// The counter reflects the decremented remaining-attempt count.
+		await waitFor(() =>
+			expect(screen.getByTestId("sim-puk-attempts").textContent).toContain(
+				"9",
+			),
+		);
+		// Submitted exactly once — never a blind resubmit toward a lockout.
+		expect(unlockSimPuk).toHaveBeenCalledTimes(1);
+		// The PUK field is cleared so the next attempt is deliberate.
+		expect(pukInput().value).toBe("");
+		// Dialog stays open (still PUK-locked).
+		expect(screen.queryByTestId("sim-puk-input")).not.toBeNull();
+	});
+
+	it("shows the permanent lockout state when the PUK attempts hit zero", async () => {
+		unlockSimPuk.mockResolvedValue({
+			success: false,
+			error: "locked",
+			remainingAttempts: 0,
+		} satisfies SimPukUnlockOutput);
+
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "0",
+				modem: makeModem({ required: "sim-puk", remainingAttempts: 1 }),
+			},
+		});
+
+		fireEvent.input(pukInput(), { target: { value: "00000000" } });
+		fireEvent.input(newPinInput(), { target: { value: "4321" } });
+		await fireEvent.click(pukSubmit());
+
+		expect(await screen.findByTestId("sim-puk-locked")).toBeTruthy();
+		// The recovery form and its submit are gone — the SIM is bricked.
+		expect(screen.queryByTestId("sim-puk-input")).toBeNull();
+		expect(screen.queryByTestId("sim-puk-submit")).toBeNull();
+	});
+
+	it("hands off from the PIN flow to the PUK form when a wrong PIN exhausts attempts", async () => {
+		unlockSimPin.mockResolvedValue({
+			state: "puk-required",
+		} satisfies SimUnlockOutput);
+
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "0",
+				modem: makeModem({ required: "sim-pin", remainingAttempts: 1 }),
+			},
+		});
+
+		fireEvent.input(pinInput(), { target: { value: "0000" } });
+		await fireEvent.click(submitButton());
+
+		// The dialog switches from the PIN entry to the PUK recovery form.
+		await waitFor(() =>
+			expect(screen.queryByTestId("sim-puk-input")).not.toBeNull(),
+		);
+		expect(screen.queryByTestId("sim-pin-input")).toBeNull();
 	});
 });

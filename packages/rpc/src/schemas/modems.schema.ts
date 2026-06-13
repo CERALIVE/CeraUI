@@ -72,6 +72,9 @@ export type SimLock = z.infer<typeof simLockSchema>;
 export const SIM_PIN_MIN_LENGTH = 4;
 export const SIM_PIN_MAX_LENGTH = 8;
 
+// A carrier-issued SIM PUK is always exactly 8 digits.
+export const SIM_PUK_LENGTH = 8;
+
 // Modem schema
 export const modemSchema = z.object({
 	ifname: z.string(),
@@ -144,6 +147,10 @@ export const simUnlockInputSchema = z.object({
 	pin: z.string().regex(new RegExp(`^\\d{${SIM_PIN_MIN_LENGTH},${SIM_PIN_MAX_LENGTH}}$`), {
 		message: `PIN must be ${SIM_PIN_MIN_LENGTH}–${SIM_PIN_MAX_LENGTH} digits`,
 	}),
+	// Opt-in "remember PIN": persist a confirmed-correct PIN to a chmod-600 tmpfs
+	// secrets file (NOT config.json) for boot auto-unlock. `false` opts back out
+	// and clears any stored PIN; absent leaves the stored PIN untouched.
+	remember: z.boolean().optional(),
 });
 export type SimUnlockInput = z.infer<typeof simUnlockInputSchema>;
 
@@ -153,3 +160,27 @@ export const simUnlockOutputSchema = z.object({
 	remainingAttempts: z.number().int().nonnegative().optional(),
 });
 export type SimUnlockOutput = z.infer<typeof simUnlockOutputSchema>;
+
+// SIM PUK unlock failure reasons (absent on success)
+export const simPukErrorSchema = z.enum(['wrong-puk', 'locked', 'no-locked-modem', 'error']);
+export type SimPukError = z.infer<typeof simPukErrorSchema>;
+
+// SIM PUK unlock input: the PUK plus a new PIN to program onto the SIM
+export const simPukUnlockInputSchema = z.object({
+	modemPath: z.string().min(1),
+	puk: z.string().regex(new RegExp(`^\\d{${SIM_PUK_LENGTH}}$`), {
+		message: `PUK must be ${SIM_PUK_LENGTH} digits`,
+	}),
+	newPin: z.string().regex(new RegExp(`^\\d{${SIM_PIN_MIN_LENGTH},${SIM_PIN_MAX_LENGTH}}$`), {
+		message: `PIN must be ${SIM_PIN_MIN_LENGTH}–${SIM_PIN_MAX_LENGTH} digits`,
+	}),
+});
+export type SimPukUnlockInput = z.infer<typeof simPukUnlockInputSchema>;
+
+// SIM PUK unlock output: remainingAttempts carries the PUK retry count on failure
+export const simPukUnlockOutputSchema = z.object({
+	success: z.boolean(),
+	remainingAttempts: z.number().int().nonnegative().optional(),
+	error: simPukErrorSchema.optional(),
+});
+export type SimPukUnlockOutput = z.infer<typeof simPukUnlockOutputSchema>;

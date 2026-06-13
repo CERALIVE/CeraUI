@@ -136,6 +136,8 @@ export const HARDWARE_COLORS: Record<HardwareType, { text: string; bg: string; b
 export const VIDEO_SOURCE_LABELS: Record<string, string> = {
 	camlink: 'Cam Link 4K',
 	libuvch264: 'UVC H264 Camera',
+	uvc_h264: 'UVC H.264 Camera',
+	uvc_h265: 'UVC H.265 Camera',
 	hdmi: 'HDMI Capture',
 	usb_mjpeg: 'USB MJPEG',
 	v4l_mjpeg: 'V4L2 MJPEG',
@@ -167,6 +169,45 @@ export type PipelinesMessage = z.infer<typeof pipelinesMessageSchema>;
 // Legacy alias for backwards compatibility
 export const pipelinesSchema = z.record(z.string(), pipelineSchema);
 export type Pipelines = z.infer<typeof pipelinesSchema>;
+
+// Capability contract broadcast (Option A: cerastream emits, CeraUI consumes).
+// Mirrors the backend capability service (`modules/streaming/capabilities.ts`)
+// and the pure `intersectCaps` input types. The encoder dialog reads it to clamp
+// bitrate per-board, offer codecs (incl. generic/software H.265), and warn on
+// software encode. Field names are snake_case to match the engine wire contract.
+export const platformCapsSchema = z.object({
+	supports_h265: z.boolean(),
+	hardware_accelerated: z.boolean(),
+	max_resolution: z.string(),
+});
+
+export const encoderCapsSchema = z.object({
+	codecs: z.array(z.string()),
+	bitrate_range: z.object({
+		min: z.number(),
+		max: z.number(),
+		unit: z.string(),
+	}),
+});
+
+export const videoSourceCapSchema = z.object({
+	id: z.string(),
+	supports_audio: z.boolean(),
+	supports_resolution_override: z.boolean(),
+	supports_framerate_override: z.boolean(),
+	default_resolution: z.string(),
+	default_framerate: z.number(),
+});
+
+export const capabilitiesMessageSchema = z.object({
+	platform: platformCapsSchema,
+	encoder: encoderCapsSchema,
+	sources: z.array(videoSourceCapSchema),
+	engineUnavailable: z.boolean().optional(),
+	engineStarting: z.boolean().optional(),
+	schemaVersionMismatch: z.boolean().optional(),
+});
+export type CapabilitiesMessage = z.infer<typeof capabilitiesMessageSchema>;
 
 // Available resolutions for UI
 export const AVAILABLE_RESOLUTIONS: Resolution[] = ['480p', '720p', '1080p', '1440p', '2160p'];
@@ -295,6 +336,8 @@ export const captureCapSchema = z.object({
 	width: z.number().int().optional(),
 	height: z.number().int().optional(),
 	framerate: z.string().optional(),
+	// GStreamer media-type token (e.g. `video/x-h265`); additive, may be absent.
+	media_type: z.string().optional(),
 });
 export type CaptureCap = z.infer<typeof captureCapSchema>;
 

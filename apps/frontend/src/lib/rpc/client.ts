@@ -34,6 +34,8 @@ import type {
 	RelayValidateOutput,
 	RemoteConfigInput,
 	SetPasswordInput,
+	SimPukUnlockInput,
+	SimPukUnlockOutput,
 	SimUnlockInput,
 	SimUnlockOutput,
 	StreamingConfigInput,
@@ -500,6 +502,7 @@ export interface TypedRPC {
 		configure: (input: ModemConfigInput) => Promise<SuccessResponse>;
 		scan: (input: ModemScanInput) => Promise<ModemScanOutput>;
 		unlockSim: (input: SimUnlockInput) => Promise<SimUnlockOutput>;
+		unlockSimPuk: (input: SimPukUnlockInput) => Promise<SimPukUnlockOutput>;
 	};
 	wifi: {
 		getStatus: () => Promise<unknown>;
