@@ -31,6 +31,7 @@ import {
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
+import { validatePersistedPipeline } from "../../modules/streaming/config-migration.ts";
 import { deviceRegistry } from "../../modules/streaming/devices.ts";
 import { clampBitrate } from "../../modules/streaming/encoder.ts";
 import { getStreamHealth } from "../../modules/streaming/health.ts";
@@ -80,6 +81,21 @@ export const streamingStartProcedure = authedProcedure
 			input.max_br !== undefined
 				? { ...input, max_br: clampBitrate(input.max_br) }
 				: input;
+
+		// Block start when the effective pipeline is not in the offered set — a
+		// persisted pipeline the current hardware no longer offers. No silent
+		// reset; the client surfaces the structured code so the operator re-picks.
+		const effectivePipeline = applied.pipeline ?? getConfig().pipeline;
+		if (effectivePipeline !== undefined) {
+			const check = validatePersistedPipeline(
+				effectivePipeline,
+				Object.keys(getPipelineList()),
+			);
+			if (!check.valid) {
+				return { success: false, is_streaming: false, error: check.error };
+			}
+		}
+
 		try {
 			if (shouldUseMocks()) {
 				// Dev has no srtla_send/cerastream binaries: the real start() flips

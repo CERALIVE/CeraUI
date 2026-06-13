@@ -21,7 +21,7 @@ import { logger } from "./helpers/logger.ts";
 import { isDevelopment } from "./mocks/mock-config.ts";
 import { initMockService } from "./mocks/mock-service.ts";
 import { runAddonReconciler } from "./modules/addons/reconciler.ts";
-import { loadConfig } from "./modules/config.ts";
+import { getConfig, loadConfig } from "./modules/config.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
 import { initSRTIngest } from "./modules/ingest/srt.ts";
 import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
@@ -44,7 +44,11 @@ import { checkEngineCompatibilityOnStartup } from "./modules/streaming/cerastrea
 import { startDeviceDiscovery } from "./modules/streaming/devices.ts";
 import { broadcastHealthIfChanged } from "./modules/streaming/health.ts";
 import { broadcastLinkTelemetryIfChanged } from "./modules/streaming/link-telemetry.ts";
-import { initPipelines } from "./modules/streaming/pipelines.ts";
+import { reconcilePersistedPipeline } from "./modules/streaming/config-migration.ts";
+import {
+	getPipelineList,
+	initPipelines,
+} from "./modules/streaming/pipelines.ts";
 import { getStreamingProcesses } from "./modules/streaming/streamloop/process-runner.ts";
 import {
 	bcrptExec,
@@ -86,6 +90,14 @@ await loadConfig();
 
 initRemote();
 initPipelines();
+
+// Migrate persisted config vs the offered set: a `pipeline` the current hardware
+// no longer offers is marked unavailable (blocks stream-start) and warned about —
+// never silently reset.
+reconcilePersistedPipeline(
+	getConfig().pipeline,
+	Object.keys(getPipelineList()),
+);
 
 void initRevisions();
 // WebSocket server is now integrated with HTTP server via Bun.serve()

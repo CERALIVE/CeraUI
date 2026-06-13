@@ -237,11 +237,14 @@ export const streamingSetConfigOutputSchema = z.object({
 });
 export type StreamingSetConfigOutput = z.infer<typeof streamingSetConfigOutputSchema>;
 
-// Streaming start output extended — includes applied config fields post-clamp
+// Streaming start output extended — applied config fields post-clamp, plus a
+// stable structured `error` code on a blocked start (e.g. a persisted pipeline
+// the current hardware no longer offers).
 export const streamingStartOutputSchemaExtended = z.object({
 	success: z.boolean(),
 	is_streaming: z.boolean().optional(),
 	applied: streamingConfigInputSchema.partial().optional(),
+	error: z.string().optional(),
 });
 export type StreamingStartOutputExtended = z.infer<typeof streamingStartOutputSchemaExtended>;
 
