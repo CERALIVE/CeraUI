@@ -60,6 +60,7 @@ import {
 import { type ExecResult, execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
 import { getAddons, removeAddonState, setAddonState } from "../config.ts";
+import { getEffectiveHardware as getEffectiveHardwareImpl } from "../streaming/pipelines.ts";
 import { isRealDevice } from "../system/device-detection.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
@@ -77,6 +78,13 @@ export const ADDON_DISABLE_FAILED_ERROR = "addon_disable_failed";
 export const ADDON_VALIDATION_FAILED_ERROR = "addon_validation_failed";
 /** lastError reason persisted when a crash-loop triggers the auto-disable. */
 export const ADDON_CRASH_LOOP_REASON = "addon_crash_loop";
+
+/** Install/enable refused (T23): the effective board is not in `compatibleHardware`. */
+export const ADDON_INCOMPATIBLE_HARDWARE_ERROR = "addon_incompatible_hardware";
+/** Install/enable refused (T23): a required `deps[]` add-on is not enabled. */
+export const ADDON_DEPENDENCY_MISSING_ERROR = "addon_dependency_missing";
+/** Install/enable refused (T23): a `conflicts[]` add-on is currently enabled. */
+export const ADDON_CONFLICT_ERROR = "addon_conflict";
 
 /** Broadcast channel for per-add-on state pushes. */
 export const ADDON_EVENT = "addons";
@@ -102,6 +110,11 @@ const DEFAULT_VALIDATE_TIMEOUT_MS = 10_000;
 
 /** Descriptor `units` sub-shape (unmask/enable/start lists), all optional. */
 type AddonUnits = NonNullable<AddonDescriptor["units"]>;
+
+/** The board values an add-on may declare in `compatibleHardware` (schema-derived). */
+export type AddonHardware = NonNullable<
+	AddonDescriptor["compatibleHardware"]
+>[number];
 
 /**
  * Manager-level lifecycle phase. Richer than the persisted `AddonState.phase`
@@ -201,6 +214,43 @@ export function phaseFromState(state: AddonState): AddonManagerPhase {
 	}
 }
 
+// ─── compatibility gate (hardware ∩ deps ∩ conflicts) — T23 ──────────────────
+
+/** An add-on counts as "enabled" for deps/conflicts only once fully active. */
+export function isAddonEnabledState(state: AddonState | undefined): boolean {
+	return state !== undefined && phaseFromState(state) === "enabled";
+}
+
+/**
+ * The server-side install/enable gate. Returns the structured error code that
+ * must reject the install, or `null` when the add-on may proceed:
+ *   - `compatibleHardware` present but excluding the effective board → incompatible;
+ *   - any `deps[]` add-on not currently enabled → dependency missing;
+ *   - any `conflicts[]` add-on currently enabled → conflict.
+ * An absent `compatibleHardware` means all-hardware and is never rejected.
+ */
+export function addonCompatibilityError(
+	descriptor: AddonDescriptor,
+	effectiveHardware: AddonHardware,
+	getState: (id: string) => AddonState | undefined,
+): string | null {
+	const compatible = descriptor.compatibleHardware;
+	if (compatible !== undefined && !compatible.includes(effectiveHardware)) {
+		return ADDON_INCOMPATIBLE_HARDWARE_ERROR;
+	}
+	for (const depId of descriptor.deps ?? []) {
+		if (!isAddonEnabledState(getState(depId))) {
+			return ADDON_DEPENDENCY_MISSING_ERROR;
+		}
+	}
+	for (const conflictId of descriptor.conflicts ?? []) {
+		if (isAddonEnabledState(getState(conflictId))) {
+			return ADDON_CONFLICT_ERROR;
+		}
+	}
+	return null;
+}
+
 // ─── pure helpers (free-space, crash-loop, paths, url, df) ───────────────────
 
 /** Bytes that must be free on /data to enable: payload ×2 + 512 MiB headroom. */
@@ -270,6 +320,8 @@ function allUnits(units: AddonUnits | undefined): string[] {
 export type AddonManagerDeps = {
 	/** G6 gate — true only on a real RK3588 board. */
 	isRealDevice: () => Promise<boolean>;
+	/** Effective board (resolves `generic`) for the compatibleHardware gate (T23). */
+	getEffectiveHardware: () => AddonHardware;
 	/** Free bytes on /data (E1 precheck input). */
 	getDataFreeBytes: () => Promise<number>;
 	/** OS VERSION_ID substituted into the artifact url template. */
@@ -401,6 +453,7 @@ async function runValidateCmd(
 
 const defaultAddonManagerDeps: AddonManagerDeps = {
 	isRealDevice: () => isRealDevice(),
+	getEffectiveHardware: () => getEffectiveHardwareImpl(),
 	getDataFreeBytes: probeDataFreeBytes,
 	getOsVersion: probeOsVersion,
 	download: downloadArtifact,
@@ -531,6 +584,16 @@ export async function enableAddon(
 	// 1. G6 — never drive the host OS in dev/emulated mode.
 	if (!(await deps.isRealDevice())) {
 		return { success: false, error: ADDON_UNAVAILABLE_ERROR };
+	}
+
+	// 1b. T23 — hardware ∩ deps ∩ conflicts gate, before any state mutation.
+	const compatError = addonCompatibilityError(
+		descriptor,
+		deps.getEffectiveHardware(),
+		(id) => deps.getState(id),
+	);
+	if (compatError) {
+		return { success: false, error: compatError };
 	}
 
 	// 2. E1 — free-space precheck BEFORE any download or state mutation.

@@ -28,14 +28,17 @@ import { logger } from "../../helpers/logger.ts";
 import {
 	ADDON_MANAGER_PHASES,
 	ADDON_UNAVAILABLE_ERROR,
+	type AddonHardware,
 	type AddonManagerPhase,
 	type AddonOpResult,
+	addonCompatibilityError,
 	disableAddon,
 	enableAddon,
 	getAddonPhase,
 	toAddonState,
 } from "../../modules/addons/manager.ts";
 import { getAddons, setAddonState } from "../../modules/config.ts";
+import { getEffectiveHardware as getEffectiveHardwareImpl } from "../../modules/streaming/pipelines.ts";
 import { isRealDevice } from "../../modules/system/kiosk.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -84,6 +87,7 @@ const configureResultSchema = z.union([
 export type AddonProcedureDeps = {
 	readDescriptors: () => Promise<AddonDescriptor[]>;
 	isRealDevice: () => Promise<boolean>;
+	getEffectiveHardware: () => AddonHardware;
 	getAddonPhase: (id: string) => AddonManagerPhase;
 	getAddonState: (id: string) => AddonState | undefined;
 	enableAddon: (descriptor: AddonDescriptor) => Promise<AddonOpResult>;
@@ -114,6 +118,7 @@ async function readBakedDescriptors(): Promise<AddonDescriptor[]> {
 const defaultAddonProcedureDeps: AddonProcedureDeps = {
 	readDescriptors: readBakedDescriptors,
 	isRealDevice: () => isRealDevice(),
+	getEffectiveHardware: () => getEffectiveHardwareImpl(),
 	getAddonPhase: (id) => getAddonPhase(id),
 	getAddonState: (id) => getAddons()[id],
 	enableAddon: (descriptor) => enableAddon(descriptor),
@@ -179,6 +184,15 @@ export const installAddonProcedure = authedProcedure
 		const descriptor = await findDescriptor(input.id, deps);
 		if (!descriptor) {
 			return { success: false, error: ADDON_NOT_FOUND_ERROR };
+		}
+		// T23 — reject an incompatible install before persisting any userConfig.
+		const compatError = addonCompatibilityError(
+			descriptor,
+			deps.getEffectiveHardware(),
+			(id) => deps.getAddonState(id),
+		);
+		if (compatError) {
+			return { success: false, error: compatError };
 		}
 		if (input.userConfig !== undefined) {
 			const base = deps.getAddonState(input.id) ?? toAddonState("disabled");

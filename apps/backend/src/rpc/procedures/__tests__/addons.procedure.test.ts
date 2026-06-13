@@ -80,6 +80,7 @@ function makeManagerHarness(): ManagerHarness {
 
 	const deps: AddonManagerDeps = {
 		isRealDevice: () => Promise.resolve(true),
+		getEffectiveHardware: () => "rk3588",
 		getDataFreeBytes: () => Promise.resolve(100 * 1024 * 1024 * 1024),
 		getOsVersion: () => Promise.resolve("12"),
 		download: () => Promise.resolve(),
@@ -276,6 +277,36 @@ describe("addons.install (gated on isRealDevice, drives the manager)", () => {
 		);
 
 		expect(result).toEqual({ success: false, error: ADDON_NOT_FOUND_ERROR });
+	});
+
+	test("rejects an install whose compatibleHardware excludes the board", async () => {
+		const h = makeManagerHarness();
+		setAddonManagerDeps(h.deps);
+		const descriptor = makeDescriptor({ compatibleHardware: ["jetson"] });
+		const saved: Array<{ id: string; state: AddonState }> = [];
+		setAddonProcedureDeps({
+			isRealDevice: () => Promise.resolve(true),
+			getEffectiveHardware: () => "n100",
+			readDescriptors: () => Promise.resolve([descriptor]),
+			setAddonState: (id, state) => {
+				saved.push({ id, state });
+			},
+		});
+
+		const result = await call(
+			installAddonProcedure,
+			{ id: "debug-toolset", userConfig: { verbose: true } },
+			{ context: makeContext() },
+		);
+
+		expect(result).toEqual({
+			success: false,
+			error: "addon_incompatible_hardware",
+		});
+		// Rejected before persisting userConfig or driving the manager.
+		expect(saved).toHaveLength(0);
+		expect(h.helperEnable).toHaveLength(0);
+		expect(getAddonPhase("debug-toolset")).toBe("disabled");
 	});
 });
 

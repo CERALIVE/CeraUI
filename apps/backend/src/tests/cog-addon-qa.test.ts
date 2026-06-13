@@ -205,6 +205,7 @@ describe("T39 cog-display — manager G6 emulated-mode gate", () => {
 			// G6 — emulated mode. Every other primitive flips a "touched" flag so
 			// the test proves the gate returns BEFORE any OS/network side effect.
 			isRealDevice: () => Promise.resolve(false),
+			getEffectiveHardware: () => "rk3588",
 			getDataFreeBytes: () => {
 				unreached("os");
 				return Promise.resolve(Number.MAX_SAFE_INTEGER);

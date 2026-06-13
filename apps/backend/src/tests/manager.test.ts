@@ -25,13 +25,17 @@ import {
 } from "@ceraui/rpc/schemas";
 
 import {
+	ADDON_CONFLICT_ERROR,
 	ADDON_CRASH_LOOP_RESTART_THRESHOLD,
+	ADDON_DEPENDENCY_MISSING_ERROR,
 	ADDON_ENABLE_FAILED_ERROR,
 	ADDON_FREE_SPACE_HEADROOM_BYTES,
+	ADDON_INCOMPATIBLE_HARDWARE_ERROR,
 	ADDON_INSUFFICIENT_SPACE_ERROR,
 	ADDON_MANAGER_PHASES,
 	ADDON_UNAVAILABLE_ERROR,
 	ADDON_VALIDATION_FAILED_ERROR,
+	type AddonHardware,
 	type AddonManagerDeps,
 	type AddonManagerPhase,
 	disableAddon,
@@ -83,6 +87,7 @@ function makeDescriptor(over: Partial<AddonDescriptor> = {}): AddonDescriptor {
 
 type Signals = {
 	isRealDevice: boolean;
+	hardware: AddonHardware;
 	freeBytes: number;
 	nRestarts: number;
 	validateOk: boolean;
@@ -122,6 +127,7 @@ function makeHarness(
 ): Harness {
 	const signals: Signals = {
 		isRealDevice: true,
+		hardware: "rk3588",
 		freeBytes: 100 * 1024 * 1024 * 1024, // 100 GiB — never the limiting factor
 		nRestarts: 0,
 		validateOk: true,
@@ -145,6 +151,7 @@ function makeHarness(
 
 	const deps: AddonManagerDeps = {
 		isRealDevice: () => Promise.resolve(signals.isRealDevice),
+		getEffectiveHardware: () => signals.hardware,
 		getDataFreeBytes: () => Promise.resolve(signals.freeBytes),
 		getOsVersion: () => Promise.resolve("12"),
 		download: (url, dest) => {
@@ -517,5 +524,97 @@ describe("enableAddon — negative: E1 insufficient space", () => {
 		expect(h.rec.setState).toHaveLength(0);
 		expect(h.rec.download).toHaveLength(0);
 		expect(getAddonPhase(d.id)).toBe("disabled");
+	});
+});
+
+// ─── compatibility gate (T23: hardware ∩ deps ∩ conflicts) ───────────────────
+
+describe("enableAddon — compatibility gate (T23)", () => {
+	test("rejects when compatibleHardware excludes the effective board", async () => {
+		const h = makeHarness({ hardware: "n100" });
+		const d = makeDescriptor({ compatibleHardware: ["jetson"] });
+
+		const result = await enableAddon(d, h.deps);
+
+		expect(result).toEqual({
+			success: false,
+			error: ADDON_INCOMPATIBLE_HARDWARE_ERROR,
+		});
+		// Gate fires before any state mutation or download.
+		expect(h.rec.setState).toHaveLength(0);
+		expect(h.rec.download).toHaveLength(0);
+		expect(getAddonPhase(d.id)).toBe("disabled");
+	});
+
+	test("proceeds when compatibleHardware includes the effective board", async () => {
+		const h = makeHarness({ hardware: "n100" });
+		const d = makeDescriptor({ compatibleHardware: ["n100", "generic"] });
+
+		const result = await enableAddon(d, h.deps);
+
+		expect(result).toEqual({ success: true, phase: "enabled" });
+		expect(getAddonPhase(d.id)).toBe("enabled");
+	});
+
+	test("absent compatibleHardware is treated as all-hardware", async () => {
+		const h = makeHarness({ hardware: "jetson" });
+		const d = makeDescriptor();
+
+		const result = await enableAddon(d, h.deps);
+
+		expect(result).toEqual({ success: true, phase: "enabled" });
+	});
+
+	test("rejects when a declared dependency is not enabled", async () => {
+		const h = makeHarness();
+		const d = makeDescriptor({ id: "needs-dep", deps: ["debug-toolset"] });
+
+		const result = await enableAddon(d, h.deps);
+
+		expect(result).toEqual({
+			success: false,
+			error: ADDON_DEPENDENCY_MISSING_ERROR,
+		});
+		expect(h.rec.download).toHaveLength(0);
+		expect(getAddonPhase(d.id)).toBe("disabled");
+	});
+
+	test("proceeds once every declared dependency is enabled", async () => {
+		const h = makeHarness();
+		// Bring the dependency fully active in the shared store first.
+		await enableAddon(makeDescriptor({ id: "debug-toolset" }), h.deps);
+
+		const dependent = makeDescriptor({
+			id: "needs-dep",
+			deps: ["debug-toolset"],
+			units: { start: ["needs-dep.service"] },
+		});
+		const result = await enableAddon(dependent, h.deps);
+
+		expect(result).toEqual({ success: true, phase: "enabled" });
+	});
+
+	test("rejects when a conflicting add-on is currently enabled", async () => {
+		const h = makeHarness();
+		await enableAddon(makeDescriptor({ id: "addon-a" }), h.deps);
+
+		const conflicting = makeDescriptor({
+			id: "addon-b",
+			conflicts: ["addon-a"],
+			units: { start: ["addon-b.service"] },
+		});
+		const result = await enableAddon(conflicting, h.deps);
+
+		expect(result).toEqual({ success: false, error: ADDON_CONFLICT_ERROR });
+		expect(getAddonPhase("addon-b")).toBe("disabled");
+	});
+
+	test("proceeds when a declared conflict is not enabled", async () => {
+		const h = makeHarness();
+		const d = makeDescriptor({ id: "addon-b", conflicts: ["addon-a"] });
+
+		const result = await enableAddon(d, h.deps);
+
+		expect(result).toEqual({ success: true, phase: "enabled" });
 	});
 });
