@@ -10,9 +10,9 @@
 	},
 	"dependencies": {
 		"@ceralive/cerastream": "file:vendor/ceralive-cerastream.tgz",
-		"@ceralive/srtla-send": "1.0.0",
+		"@ceralive/srtla-send": "2026.6.0",
 		"@ceraui/rpc": "workspace:*",
-		"@orpc/server": "^1.14.5",
+		"@orpc/server": "^1.14.6",
 		"finalhandler": "^2.1.1",
 		"zod": "^4.4.3",
 		"http-proxy": "^1.18.1",
@@ -27,7 +27,7 @@
 		"@types/serve-static": "^2.2.0",
 		"@types/ws": "^8.18.1",
 		"@types/xml2js": "^0.4.14",
-		"npm-run-all2": "^9.0.1",
+		"npm-run-all2": "^9.0.2",
 		"typescript": "^6.0.3"
 	},
 	"scripts": {

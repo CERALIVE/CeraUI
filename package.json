@@ -30,16 +30,16 @@
 		"clean:all": "pnpm clean && rm -rf node_modules/.pnpm-store"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.4.16",
-		"@types/node": "^25.9.2",
+		"@biomejs/biome": "^2.5.0",
+		"@types/node": "^25.9.3",
 		"dotenv-cli": "^11.0.0",
 		"glob": "^13.0.6",
-		"mprocs": "^0.9.5",
+		"mprocs": "^0.9.6",
 		"typescript": "^6.0.3"
 	},
 	"volta": {
 		"node": "24.0.0"
 	},
-	"packageManager": "pnpm@11.5.0",
+	"packageManager": "pnpm@11.6.0",
 	"bunVersion": "1.3.14"
 }
