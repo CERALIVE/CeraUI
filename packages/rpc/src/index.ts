@@ -19,3 +19,6 @@ export * from './contracts';
 
 // Export all schemas
 export * from './schemas';
+
+// Export capability-intersection helpers (pure, browser-safe)
+export * from './capabilities';

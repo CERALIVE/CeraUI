@@ -10,9 +10,10 @@ Shared oRPC contract + Zod schema layer. The single source of truth for the WebS
 
 ```
 src/
-├── contracts/   # oRPC oc.router() defs — auth, streaming, modems, wifi, network, system, status, notifications
-│   └── index.ts # appContract root router + AppContract type
-└── schemas/     # Zod v4 schemas mirroring contracts/ + common.schema.ts, relay.schema.ts
+├── contracts/     # oRPC oc.router() defs — auth, streaming, modems, wifi, network, system, status, notifications
+│   └── index.ts   # appContract root router + AppContract type
+├── schemas/       # Zod v4 schemas mirroring contracts/ + common.schema.ts, relay.schema.ts
+└── capabilities/  # pure, browser-safe capability-intersection helpers (intersectCaps)
 ```
 
 ## WHERE TO LOOK
@@ -21,6 +22,7 @@ src/
 |------|----------|
 | Add a new RPC procedure | `contracts/{domain}.contract.ts` → wire into `contracts/index.ts` |
 | Add/change input or output shape | `schemas/{domain}.schema.ts` |
+| Effective caps for a platform/source/mode | `capabilities/intersect-caps.ts` → `intersectCaps()` (pure) |
 | Root router type (client inference) | `contracts/index.ts` → `AppContract` |
 | New domain (e.g. `audio`) | New `audio.contract.ts` + `audio.schema.ts`, add to `appContract` router |
 
