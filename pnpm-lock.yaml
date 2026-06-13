@@ -30,8 +30,8 @@ importers:
   apps/backend:
     dependencies:
       '@ceralive/cerastream':
-        specifier: file:vendor/ceralive-cerastream.tgz
-        version: file:apps/backend/vendor/ceralive-cerastream.tgz
+        specifier: 2026.6.1
+        version: 2026.6.1
       '@ceralive/srtla-send':
         specifier: 2026.6.0
         version: 2026.6.0
@@ -852,9 +852,8 @@ packages:
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
 
-  '@ceralive/cerastream@file:apps/backend/vendor/ceralive-cerastream.tgz':
-    resolution: {integrity: sha512-2vR69eIMo7kAYG3gbMhSRsD5RiMwxi4BJskXIR2WyB7uNKHVrZ9yi3lyzLvH2wTQKzkC0zj5tCWO+Q/FyE/p5w==, tarball: file:apps/backend/vendor/ceralive-cerastream.tgz}
-    version: 2026.6.1
+  '@ceralive/cerastream@2026.6.1':
+    resolution: {integrity: sha512-2vR69eIMo7kAYG3gbMhSRsD5RiMwxi4BJskXIR2WyB7uNKHVrZ9yi3lyzLvH2wTQKzkC0zj5tCWO+Q/FyE/p5w==}
 
   '@ceralive/design-tokens@0.1.0':
     resolution: {integrity: sha512-k7UV5VFuE4jR4ofNkcYruO0wcor7x2l4TBilnC+z3FNH8YrtnHhBToX5W4ddiBE7JQCXFBWne8L3EmkFKsBsPQ==}
@@ -4582,7 +4581,7 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@ceralive/cerastream@file:apps/backend/vendor/ceralive-cerastream.tgz':
+  '@ceralive/cerastream@2026.6.1':
     dependencies:
       zod: 4.4.3
 

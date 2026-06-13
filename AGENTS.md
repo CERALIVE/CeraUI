@@ -7,19 +7,18 @@ Parent: [`../AGENTS.md`](../AGENTS.md)
 Device control plane. Svelte 5 PWA (frontend) + Bun/TypeScript WebSocket-RPC backend. Drives `cerastream` (active engine) and `srtla-send-rs` at runtime. Produces the `ceraui` .deb for ARM64 and AMD64 device images.
 
 **Single engine.** `@ceralive/cerastream` is the ONLY streaming engine, consumed
-as a `file:` tarball at `vendor/ceralive-cerastream.tgz`. The legacy ceracoder
-engine and its sibling `link:` dependency are fully retired (legacy `engine`
-values persisted in device setup.json are coerced to `"cerastream"` at parse
-time with a warning).
+as a public-npm registry dep. The legacy ceracoder engine and its sibling `link:`
+dependency are fully retired (legacy `engine` values persisted in device
+setup.json are coerced to `"cerastream"` at parse time with a warning).
 
-The backend resolves both streaming deps as registry packages — no sibling checkout required:
+The backend resolves both streaming deps as public-npm registry packages — no sibling checkout, no vendored tarball:
 
 ```
-"@ceralive/cerastream":  "file:vendor/ceralive-cerastream.tgz"
-"@ceralive/srtla-send":  registry dep (@ceralive scope, GitHub Packages)
+"@ceralive/cerastream":  "2026.6.1"   (public npm, @ceralive scope)
+"@ceralive/srtla-send":  "2026.6.0"   (public npm, @ceralive scope)
 ```
 
-`cerastream` is a vendored tarball (not a sibling link). `@ceralive/srtla-send` is a published npm package from `srtla-send-rs/bindings/` — consumed as a normal registry dep, not a `link:` path. No sibling checkout of `srtla` or `srtla-send-rs` is needed for `CeraUI` to install or build.
+Both are published npm packages (`@ceralive` scope on npmjs.org) consumed as normal registry deps, not `link:` paths and not vendored `.tgz` files. No sibling checkout of `srtla` or `srtla-send-rs` is needed for `CeraUI` to install or build.
 
 ## STRUCTURE
 
@@ -397,7 +396,7 @@ logger from `apps/backend/src/helpers/logger.ts`. Empty catches now log via
 ## ANTI-PATTERNS
 
 - Don't run `npm install` or `yarn` — pnpm workspaces only.
-- Don't add `@ceralive/srtla` to `package.json` — that package is retired from CeraUI. The sender binding is `@ceralive/srtla-send` (registry dep, `@ceralive` scope on GitHub Packages). **`@ceralive/cerastream` is vendored**: it is a plain npm dependency at `apps/backend/vendor/ceralive-cerastream.tgz` (ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:`.
+- Don't add `@ceralive/srtla` to `package.json` — that package is retired from CeraUI. The sender binding is `@ceralive/srtla-send` (public-npm registry dep, `@ceralive` scope). **`@ceralive/cerastream` is a public-npm registry dep** (`@ceralive` scope, pinned to a CalVer version; ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:` or vendored `.tgz`.
 - Don't edit `.impeccable.md` for code changes — it's a design reference, not config.
 - Don't touch `@ceralive/srtla-send` call sites without checking `../srtla-send-rs/AGENTS.md` first (binding API).
 - Don't add custom UI components to `lib/components/ui/` — that directory is managed by the shadcn-svelte CLI. Custom components go in `lib/components/custom/`.
