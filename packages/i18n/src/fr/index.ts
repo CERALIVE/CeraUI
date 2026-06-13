@@ -900,6 +900,10 @@ const fr = {
 			total: "Total",
 			waiting: "En attente de la télémétrie des liaisons\u2026",
 			ariaLabel: "Statistiques d'ingestion",
+			trendLabel: "Tendance RTT de {iface}",
+			healthy: "Stable",
+			degraded: "Se dégrade",
+			alert: "Latence croissante sur une ou plusieurs liaisons",
 		},
 		preview: {
 			title: "Preview",

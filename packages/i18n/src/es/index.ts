@@ -309,6 +309,10 @@ const es = {
 			total: "Total",
 			waiting: "Esperando telemetría de enlaces\u2026",
 			ariaLabel: "Estadísticas de ingesta",
+			trendLabel: "Tendencia de RTT de {iface}",
+			healthy: "Estable",
+			degraded: "Degradando",
+			alert: "Latencia en aumento en uno o más enlaces",
 		},
 		preview: {
 			title: "Preview",

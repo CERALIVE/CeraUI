@@ -309,6 +309,10 @@ const de = {
 			total: "Gesamt",
 			waiting: "Warte auf Verbindungstelemetrie\u2026",
 			ariaLabel: "Ingest-Statistiken",
+			trendLabel: "RTT-Trend für {iface}",
+			healthy: "Stabil",
+			degraded: "Verschlechtert sich",
+			alert: "Steigende Latenz auf einer oder mehreren Verbindungen",
 		},
 		preview: {
 			title: "Preview",

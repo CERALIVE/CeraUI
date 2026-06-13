@@ -859,6 +859,10 @@ const ar = {
 			total: "الإجمالي",
 			waiting: "في انتظار قياس الروابط\u2026",
 			ariaLabel: "إحصائيات الإدخال",
+			trendLabel: "اتجاه RTT لـ {iface}",
+			healthy: "مستقر",
+			degraded: "يتدهور",
+			alert: "زمن استجابة متزايد على رابط واحد أو أكثر",
 		},
 		preview: {
 			title: "Preview",

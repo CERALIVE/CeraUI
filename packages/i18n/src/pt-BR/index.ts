@@ -875,6 +875,10 @@ const ptBR = {
 			total: "Total",
 			waiting: "Aguardando telemetria dos links\u2026",
 			ariaLabel: "Estatísticas de ingestão",
+			trendLabel: "Tendência de RTT de {iface}",
+			healthy: "Estável",
+			degraded: "Degradando",
+			alert: "Latência crescente em um ou mais links",
 		},
 		preview: {
 			title: "Preview",

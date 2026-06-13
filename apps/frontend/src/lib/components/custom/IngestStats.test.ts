@@ -17,7 +17,8 @@
 
 import type { LinkTelemetryMessage } from "@ceraui/rpc/schemas";
 import { render, within } from "@testing-library/svelte";
-import { describe, expect, it } from "vitest";
+import { flushSync } from "svelte";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import IngestStats from "./IngestStats.svelte";
 
@@ -208,5 +209,134 @@ describe("IngestStats — render contract (Task 21)", () => {
 				.getByTestId("ingest-weight")
 				.textContent?.trim(),
 		).toBe("100%");
+	});
+});
+
+/**
+ * Historical trends — fixed-size ring buffer, per-link sparklines, and the
+ * health/degradation alert (this task).
+ *
+ * The panel takes a single `telemetry` prop; the live feed is simulated by
+ * re-rendering with a fresh frame and flushing Svelte's effect that appends one
+ * sample per link into the bounded ring. The ring is RAM-only (no persistence,
+ * no configurable window) and drops its oldest sample once RING_CAPACITY (60) is
+ * reached. The sparkline exposes its buffered sample count (`data-samples`) and
+ * trend (`data-trend`) for assertion; per-link health is `data-status`; the
+ * bond-level banner is `[data-testid="ingest-alert"]`.
+ */
+function oneLink(
+	rtt: number,
+	opts: { nak?: number; weight?: number; conn_id?: string; iface?: string } = {},
+): LinkTelemetryMessage {
+	return {
+		links: [
+			{
+				conn_id: opts.conn_id ?? "0",
+				iface: opts.iface ?? "eth0",
+				rtt_ms: rtt,
+				nak_count: opts.nak ?? 0,
+				weight_percent: opts.weight ?? 100,
+				stale: false,
+			},
+		],
+	};
+}
+
+function sparklineOf(container: HTMLElement, iface = "eth0"): HTMLElement {
+	const spark = panelOf(container).querySelector<HTMLElement>(
+		`[data-testid="ingest-sparkline"][data-iface="${iface}"]`,
+	);
+	expect(spark, "sparkline must render for the link").not.toBeNull();
+	return spark as HTMLElement;
+}
+
+describe("IngestStats — historical trends + health alert", () => {
+	it("ring buffer retains at most ~60 samples after 120 feeds (oldest dropped)", async () => {
+		const { container, rerender } = render(IngestStats, {
+			props: { telemetry: oneLink(10) },
+		});
+		flushSync(); // run the append effect for the initial frame
+
+		// 1 (initial) + 119 = 120 frames fed; the ring must cap at 60.
+		for (let i = 1; i < 120; i++) {
+			await rerender({ telemetry: oneLink(10 + i) });
+			flushSync();
+		}
+
+		const samples = Number(sparklineOf(container).getAttribute("data-samples"));
+		expect(samples).toBe(60);
+		expect(samples).toBeLessThanOrEqual(60);
+	});
+
+	it("renders a per-link sparkline whose polyline reflects a rising RTT trend", async () => {
+		const { container, rerender } = render(IngestStats, {
+			props: { telemetry: oneLink(10) },
+		});
+		flushSync();
+
+		// 60 strictly-rising frames fill the ring with an upward latency ramp.
+		for (let i = 1; i < 60; i++) {
+			await rerender({ telemetry: oneLink(10 + i * 2) });
+			flushSync();
+		}
+
+		const spark = sparklineOf(container);
+		expect(spark.getAttribute("data-trend")).toBe("rising");
+
+		// The polyline draws one vertex per buffered sample.
+		const poly = spark.querySelector("polyline");
+		expect(poly).not.toBeNull();
+		const pointCount = (poly?.getAttribute("points") ?? "")
+			.trim()
+			.split(/\s+/)
+			.filter(Boolean).length;
+		expect(pointCount).toBe(Number(spark.getAttribute("data-samples")));
+		expect(pointCount).toBe(60);
+	});
+
+	it("activates the health/alert indicator when the RTT trend crosses the threshold", async () => {
+		const { container, rerender } = render(IngestStats, {
+			props: { telemetry: oneLink(20) },
+		});
+		flushSync();
+
+		// Leading window ~20 ms, trailing window ~80 ms: trail avg > 2× lead avg.
+		const ramp = [
+			...Array<number>(9).fill(20),
+			...Array<number>(10).fill(80),
+		];
+		for (const rtt of ramp) {
+			await rerender({ telemetry: oneLink(rtt) });
+			flushSync();
+		}
+
+		const panel = panelOf(container);
+		const health = panel.querySelector<HTMLElement>(
+			'[data-testid="ingest-health"][data-iface="eth0"]',
+		);
+		expect(health?.getAttribute("data-status")).toBe("degraded");
+		expect(sparklineOf(container).getAttribute("data-trend")).toBe("rising");
+
+		// The bond-level degradation banner is raised.
+		expect(panel.querySelector('[data-testid="ingest-alert"]')).not.toBeNull();
+	});
+
+	it("stays healthy with no alert when RTT holds flat", async () => {
+		const { container, rerender } = render(IngestStats, {
+			props: { telemetry: oneLink(25) },
+		});
+		flushSync();
+
+		for (let i = 0; i < 30; i++) {
+			await rerender({ telemetry: oneLink(25) });
+			flushSync();
+		}
+
+		const panel = panelOf(container);
+		const health = panel.querySelector<HTMLElement>(
+			'[data-testid="ingest-health"][data-iface="eth0"]',
+		);
+		expect(health?.getAttribute("data-status")).toBe("healthy");
+		expect(panel.querySelector('[data-testid="ingest-alert"]')).toBeNull();
 	});
 });

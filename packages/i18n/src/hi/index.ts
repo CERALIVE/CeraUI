@@ -720,6 +720,10 @@ const hi = {
 			total: "कुल",
 			waiting: "लिंक टेलीमेट्री की प्रतीक्षा\u2026",
 			ariaLabel: "इन्जेस्ट आँकड़े",
+			trendLabel: "{iface} के लिए RTT रुझान",
+			healthy: "स्थिर",
+			degraded: "गिरावट",
+			alert: "एक या अधिक लिंक पर बढ़ती लेटेंसी",
 		},
 		preview: {
 			title: "Preview",

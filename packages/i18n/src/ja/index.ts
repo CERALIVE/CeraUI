@@ -741,6 +741,10 @@ const ja = {
 			total: "合計",
 			waiting: "リンクテレメトリを待機中\u2026",
 			ariaLabel: "インジェスト統計",
+			trendLabel: "{iface} のRTT傾向",
+			healthy: "安定",
+			degraded: "悪化中",
+			alert: "1つ以上のリンクでレイテンシが上昇しています",
 		},
 		preview: {
 			title: "Preview",

@@ -727,6 +727,10 @@ const ko = {
 			total: "합계",
 			waiting: "링크 텔레메트리 대기 중\u2026",
 			ariaLabel: "인제스트 통계",
+			trendLabel: "{iface}의 RTT 추세",
+			healthy: "안정",
+			degraded: "저하 중",
+			alert: "하나 이상의 링크에서 지연 시간이 증가하고 있습니다",
 		},
 		preview: {
 			title: "Preview",

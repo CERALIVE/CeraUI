@@ -296,6 +296,10 @@ const en = {
 			total: "Total",
 			waiting: "Waiting for link telemetry\u2026",
 			ariaLabel: "Ingest statistics",
+			trendLabel: "RTT trend for {iface:string}",
+			healthy: "Stable",
+			degraded: "Degrading",
+			alert: "Rising latency on one or more links",
 		},
 		preview: {
 			title: "Preview",

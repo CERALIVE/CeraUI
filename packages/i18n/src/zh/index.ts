@@ -689,6 +689,10 @@ const zh = {
 			total: "合计",
 			waiting: "正在等待链路遥测\u2026",
 			ariaLabel: "采集统计",
+			trendLabel: "{iface} 的 RTT 趋势",
+			healthy: "稳定",
+			degraded: "正在劣化",
+			alert: "一个或多个链路的延迟正在上升",
 		},
 		preview: {
 			title: "Preview",
