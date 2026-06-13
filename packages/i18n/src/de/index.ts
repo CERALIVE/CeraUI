@@ -844,7 +844,8 @@ const de = {
 				newPinLabel: "Neue SIM-PIN",
 				newPinPlaceholder: "Neue PIN wählen",
 				pukSubmit: "Mit PUK entsperren",
-				pukLengthHint: "Der PUK ist ein {length}-stelliger Code Ihres Anbieters.",
+				pukLengthHint:
+					"Der PUK ist ein {length}-stelliger Code Ihres Anbieters.",
 				pukAttemptsLabel: "Verbleibende PUK-Versuche",
 				wrongPuk: "Falscher PUK. Bitte erneut versuchen.",
 				pukSuccess: "SIM entsperrt und neue PIN festgelegt.",

@@ -629,7 +629,8 @@ const ptBR = {
 				newPinLabel: "Novo PIN do SIM",
 				newPinPlaceholder: "Escolha um novo PIN",
 				pukSubmit: "Desbloquear com PUK",
-				pukLengthHint: "O PUK é um código de {length} dígitos da sua operadora.",
+				pukLengthHint:
+					"O PUK é um código de {length} dígitos da sua operadora.",
 				pukAttemptsLabel: "Tentativas de PUK restantes",
 				wrongPuk: "PUK incorreto. Tente novamente.",
 				pukSuccess: "SIM desbloqueado e novo PIN definido.",

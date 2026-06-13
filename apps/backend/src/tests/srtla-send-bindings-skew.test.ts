@@ -34,8 +34,8 @@ import {
 	buildSrtlaSendArgs,
 	getSrtlaSendExec,
 	isSrtlaSendRunning,
-	sendSrtlaSendHup,
 	type SrtlaSendOptions,
+	sendSrtlaSendHup,
 	spawnSrtlaSend,
 	srtlaSendOptionsSchema,
 } from "@ceralive/srtla-send/sender";
@@ -165,9 +165,7 @@ describe("srtla-send telemetry bindings version-skew guard", () => {
 		expect(watchTelemetry).toBe(telemetry.watchTelemetry);
 		expect(readTelemetry).toBe(telemetry.readTelemetry);
 		expect(telemetrySchema).toBe(telemetry.telemetrySchema);
-		expect(connectionTelemetrySchema).toBe(
-			telemetry.connectionTelemetrySchema,
-		);
+		expect(connectionTelemetrySchema).toBe(telemetry.connectionTelemetrySchema);
 		expect(SENDER_TELEMETRY_STALE_MS).toBe(telemetry.SENDER_TELEMETRY_STALE_MS);
 		expect(SENDER_TELEMETRY_PATH_PREFIX).toBe(
 			telemetry.SENDER_TELEMETRY_PATH_PREFIX,

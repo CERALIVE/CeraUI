@@ -38,8 +38,8 @@
 
 import {
 	type CerastreamClient,
-	connect,
 	type ConnectOptions,
+	connect,
 	type GetCapabilitiesResult,
 	getCapabilitiesResultSchema,
 	SCHEMA_VERSION,

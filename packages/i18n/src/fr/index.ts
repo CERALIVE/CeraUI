@@ -636,7 +636,8 @@ const fr = {
 				newPinLabel: "Nouveau code PIN de la SIM",
 				newPinPlaceholder: "Choisir un nouveau code PIN",
 				pukSubmit: "Déverrouiller avec le PUK",
-				pukLengthHint: "Le code PUK est un code à {length} chiffres fourni par votre opérateur.",
+				pukLengthHint:
+					"Le code PUK est un code à {length} chiffres fourni par votre opérateur.",
 				pukAttemptsLabel: "Tentatives PUK restantes",
 				wrongPuk: "Code PUK incorrect. Veuillez réessayer.",
 				pukSuccess: "SIM déverrouillée et nouveau code PIN défini.",

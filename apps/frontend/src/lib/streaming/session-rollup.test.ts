@@ -23,10 +23,34 @@ import {
 // Two bonded links. wlan0 goes stale for samples 3–4 (a single up→down drop),
 // while eth0 stays up the whole session. Bitrate is hot-adjusted up then down.
 const SESSION: SessionSample[] = [
-	{ bitrateKbps: 4000, links: [{ iface: "eth0", stale: false }, { iface: "wlan0", stale: false }] },
-	{ bitrateKbps: 6000, links: [{ iface: "eth0", stale: false }, { iface: "wlan0", stale: false }] },
-	{ bitrateKbps: 8000, links: [{ iface: "eth0", stale: false }, { iface: "wlan0", stale: true }] },
-	{ bitrateKbps: 5000, links: [{ iface: "eth0", stale: false }, { iface: "wlan0", stale: true }] },
+	{
+		bitrateKbps: 4000,
+		links: [
+			{ iface: "eth0", stale: false },
+			{ iface: "wlan0", stale: false },
+		],
+	},
+	{
+		bitrateKbps: 6000,
+		links: [
+			{ iface: "eth0", stale: false },
+			{ iface: "wlan0", stale: false },
+		],
+	},
+	{
+		bitrateKbps: 8000,
+		links: [
+			{ iface: "eth0", stale: false },
+			{ iface: "wlan0", stale: true },
+		],
+	},
+	{
+		bitrateKbps: 5000,
+		links: [
+			{ iface: "eth0", stale: false },
+			{ iface: "wlan0", stale: true },
+		],
+	},
 ];
 
 describe("computeSessionRollup — mock session", () => {
@@ -52,10 +76,34 @@ describe("computeSessionRollup — mock session", () => {
 		// wlan0 flaps: up, down, up, down → two up→down edges. A link that starts
 		// down (never up) contributes no drop.
 		const flap: SessionSample[] = [
-			{ bitrateKbps: 5000, links: [{ iface: "wlan0", stale: false }, { iface: "lte0", stale: true }] },
-			{ bitrateKbps: 5000, links: [{ iface: "wlan0", stale: true }, { iface: "lte0", stale: true }] },
-			{ bitrateKbps: 5000, links: [{ iface: "wlan0", stale: false }, { iface: "lte0", stale: true }] },
-			{ bitrateKbps: 5000, links: [{ iface: "wlan0", stale: true }, { iface: "lte0", stale: true }] },
+			{
+				bitrateKbps: 5000,
+				links: [
+					{ iface: "wlan0", stale: false },
+					{ iface: "lte0", stale: true },
+				],
+			},
+			{
+				bitrateKbps: 5000,
+				links: [
+					{ iface: "wlan0", stale: true },
+					{ iface: "lte0", stale: true },
+				],
+			},
+			{
+				bitrateKbps: 5000,
+				links: [
+					{ iface: "wlan0", stale: false },
+					{ iface: "lte0", stale: true },
+				],
+			},
+			{
+				bitrateKbps: 5000,
+				links: [
+					{ iface: "wlan0", stale: true },
+					{ iface: "lte0", stale: true },
+				],
+			},
 		];
 		const rollup = computeSessionRollup(flap);
 		expect(rollup.dropCount).toBe(2);
@@ -141,7 +189,10 @@ describe("device-local guarantee — no cloud/platform calls", () => {
 		for (const file of files) {
 			const src = fs.readFileSync(file, "utf8");
 			for (const pattern of forbidden) {
-				expect(pattern.test(src), `${path.basename(file)} must not match ${pattern}`).toBe(false);
+				expect(
+					pattern.test(src),
+					`${path.basename(file)} must not match ${pattern}`,
+				).toBe(false);
 			}
 		}
 	});

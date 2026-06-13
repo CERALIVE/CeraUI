@@ -2,9 +2,9 @@ import type { Pipeline } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
+	framerateOptions,
 	OPTION_FIXED_BY_SOURCE,
 	OPTION_UNSUPPORTED_ON_PLATFORM,
-	framerateOptions,
 	offeredEncoderCaps,
 	platformCapsForHardware,
 	resolutionOptions,
@@ -58,7 +58,10 @@ describe("videoSourceCapFromPipeline", () => {
 	it("falls back to 1080p/30 when the pipeline omits defaults", () => {
 		const cap = videoSourceCapFromPipeline(
 			"hdmi",
-			makePipeline({ defaultResolution: undefined, defaultFramerate: undefined }),
+			makePipeline({
+				defaultResolution: undefined,
+				defaultFramerate: undefined,
+			}),
 		);
 		expect(cap.default_resolution).toBe("1080p");
 		expect(cap.default_framerate).toBe(30);

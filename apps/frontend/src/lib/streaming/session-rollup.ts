@@ -13,7 +13,7 @@
  * serialise the rollup for a client-side `URL.createObjectURL` download; they
  * never transmit it.
  */
-import type { LinkTelemetryEntry } from '@ceraui/rpc/schemas';
+import type { LinkTelemetryEntry } from "@ceraui/rpc/schemas";
 
 /** One sampled instant of a streaming session. */
 export interface SessionSample {
@@ -49,7 +49,9 @@ export interface SessionRollup {
 
 /** Coerce any numeric to a finite, non-negative integer count (else 0). */
 function asCount(value: unknown): number {
-	return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
+	return typeof value === "number" && Number.isFinite(value) && value >= 0
+		? Math.trunc(value)
+		: 0;
 }
 
 /**
@@ -59,11 +61,14 @@ function asCount(value: unknown): number {
  */
 export function createSample(
 	bitrateKbps: number | undefined,
-	links: ReadonlyArray<Pick<LinkTelemetryEntry, 'iface' | 'stale'>> | undefined,
+	links: ReadonlyArray<Pick<LinkTelemetryEntry, "iface" | "stale">> | undefined,
 ): SessionSample {
 	return {
 		bitrateKbps: asCount(bitrateKbps),
-		links: (links ?? []).map((l) => ({ iface: l.iface, stale: l.stale === true })),
+		links: (links ?? []).map((l) => ({
+			iface: l.iface,
+			stale: l.stale === true,
+		})),
 	};
 }
 
@@ -79,10 +84,18 @@ function isUp(sample: SessionSample, iface: string): boolean {
  * the configured bitrate; uptime and drops are derived purely from per-link
  * presence + staleness across the sample sequence.
  */
-export function computeSessionRollup(samples: ReadonlyArray<SessionSample>): SessionRollup {
+export function computeSessionRollup(
+	samples: ReadonlyArray<SessionSample>,
+): SessionRollup {
 	const sampleCount = samples.length;
 	if (sampleCount === 0) {
-		return { sampleCount: 0, peakBitrateKbps: 0, avgBitrateKbps: 0, dropCount: 0, links: [] };
+		return {
+			sampleCount: 0,
+			peakBitrateKbps: 0,
+			avgBitrateKbps: 0,
+			dropCount: 0,
+			links: [],
+		};
 	}
 
 	let peak = 0;
@@ -118,7 +131,10 @@ export function computeSessionRollup(samples: ReadonlyArray<SessionSample>): Ses
 			if (i > 0 && wasUp && !up) dropCount++;
 			wasUp = up;
 		}
-		return { iface, uptimePercent: Math.round((upSamples / sampleCount) * 100) };
+		return {
+			iface,
+			uptimePercent: Math.round((upSamples / sampleCount) * 100),
+		};
 	});
 
 	return {
@@ -148,14 +164,16 @@ function csvField(value: string | number): string {
  */
 export function rollupToCsv(rollup: SessionRollup): string {
 	const lines: string[] = [
-		'metric,value',
+		"metric,value",
 		`peak_bitrate_kbps,${csvField(rollup.peakBitrateKbps)}`,
 		`avg_bitrate_kbps,${csvField(rollup.avgBitrateKbps)}`,
 		`drop_count,${csvField(rollup.dropCount)}`,
 		`sample_count,${csvField(rollup.sampleCount)}`,
-		'',
-		'iface,uptime_percent',
-		...rollup.links.map((l) => `${csvField(l.iface)},${csvField(l.uptimePercent)}`),
+		"",
+		"iface,uptime_percent",
+		...rollup.links.map(
+			(l) => `${csvField(l.iface)},${csvField(l.uptimePercent)}`,
+		),
 	];
-	return lines.join('\n');
+	return lines.join("\n");
 }

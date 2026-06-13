@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { type GetCapabilitiesResult, SCHEMA_VERSION } from "@ceralive/cerastream";
+import {
+	type GetCapabilitiesResult,
+	SCHEMA_VERSION,
+} from "@ceralive/cerastream";
 import { pipelinesMessageSchema } from "@ceraui/rpc/schemas";
 import {
 	getPipelineList,

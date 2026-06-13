@@ -16,7 +16,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { SCHEMA_VERSION, type GetCapabilitiesResult } from "@ceralive/cerastream";
+import {
+	type GetCapabilitiesResult,
+	SCHEMA_VERSION,
+} from "@ceralive/cerastream";
 import { BITRATE_MAX, BITRATE_MIN } from "@ceraui/rpc/schemas";
 import {
 	framerateSchema,
@@ -29,11 +32,11 @@ import {
 	type EngineCapabilitiesSnapshot,
 	getCapabilities,
 } from "./capabilities.ts";
-import {
-	type Framerate,
-	type PipelineHardwareType,
-	type Resolution,
-	type VideoSource,
+import type {
+	Framerate,
+	PipelineHardwareType,
+	Resolution,
+	VideoSource,
 } from "./pipeline-sources.ts";
 
 // Pipeline interface

@@ -41,10 +41,10 @@ import {
 import { startBcrpt } from "./modules/streaming/bcrpt.ts";
 import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
 import { checkEngineCompatibilityOnStartup } from "./modules/streaming/cerastream-backend.ts";
+import { reconcilePersistedPipeline } from "./modules/streaming/config-migration.ts";
 import { startDeviceDiscovery } from "./modules/streaming/devices.ts";
 import { broadcastHealthIfChanged } from "./modules/streaming/health.ts";
 import { broadcastLinkTelemetryIfChanged } from "./modules/streaming/link-telemetry.ts";
-import { reconcilePersistedPipeline } from "./modules/streaming/config-migration.ts";
 import {
 	getPipelineList,
 	initPipelines,

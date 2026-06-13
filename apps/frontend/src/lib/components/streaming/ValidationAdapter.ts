@@ -1,11 +1,11 @@
 import {
+	intersectCaps,
 	MEDIA_TYPE_H264,
 	MEDIA_TYPE_H265,
+	mediaTypeToSourceKind,
 	type OfferedSet,
 	type PlatformCaps,
 	type VideoSourceCap,
-	intersectCaps,
-	mediaTypeToSourceKind,
 } from "@ceraui/rpc";
 import {
 	AUDIO_DELAY_MAX,
@@ -92,10 +92,26 @@ export const OPTION_FIXED_BY_SOURCE = "Fixed by the selected source";
  * engine's real PlatformCaps and deleted.
  */
 const PLATFORM_CAPS_BY_HARDWARE: Record<HardwareType, PlatformCaps> = {
-	jetson: { supports_h265: true, hardware_accelerated: true, max_resolution: "2160p" },
-	rk3588: { supports_h265: true, hardware_accelerated: true, max_resolution: "2160p" },
-	n100: { supports_h265: true, hardware_accelerated: true, max_resolution: "2160p" },
-	generic: { supports_h265: true, hardware_accelerated: false, max_resolution: "1080p" },
+	jetson: {
+		supports_h265: true,
+		hardware_accelerated: true,
+		max_resolution: "2160p",
+	},
+	rk3588: {
+		supports_h265: true,
+		hardware_accelerated: true,
+		max_resolution: "2160p",
+	},
+	n100: {
+		supports_h265: true,
+		hardware_accelerated: true,
+		max_resolution: "2160p",
+	},
+	generic: {
+		supports_h265: true,
+		hardware_accelerated: false,
+		max_resolution: "1080p",
+	},
 };
 
 /** Resolve the platform capability profile for a board, defaulting to `generic`. */
@@ -161,7 +177,9 @@ export interface EncoderOption<T> {
 function reasonFor(overrideAllowed: boolean): string {
 	// When the source itself forbids the override, every non-default rung is
 	// "fixed by the source"; otherwise an excluded rung is a platform ceiling.
-	return overrideAllowed ? OPTION_UNSUPPORTED_ON_PLATFORM : OPTION_FIXED_BY_SOURCE;
+	return overrideAllowed
+		? OPTION_UNSUPPORTED_ON_PLATFORM
+		: OPTION_FIXED_BY_SOURCE;
 }
 
 /**
@@ -169,27 +187,35 @@ function reasonFor(overrideAllowed: boolean): string {
  * set includes it and, when not, why. Incompatible rungs are returned (not
  * filtered out) so the dialog can show them disabled with a reason.
  */
-export function resolutionOptions(offered: OfferedSet): EncoderOption<Resolution>[] {
+export function resolutionOptions(
+	offered: OfferedSet,
+): EncoderOption<Resolution>[] {
 	const offeredSet = new Set(offered.resolutions);
 	return AVAILABLE_RESOLUTIONS.map((value) => {
 		const supported = offeredSet.has(value);
 		return {
 			value,
 			supported,
-			reason: supported ? undefined : reasonFor(offered.supportsResolutionOverride),
+			reason: supported
+				? undefined
+				: reasonFor(offered.supportsResolutionOverride),
 		};
 	});
 }
 
 /** As {@link resolutionOptions}, for the framerate candidate universe. */
-export function framerateOptions(offered: OfferedSet): EncoderOption<Framerate>[] {
+export function framerateOptions(
+	offered: OfferedSet,
+): EncoderOption<Framerate>[] {
 	const offeredSet = new Set(offered.framerates);
 	return AVAILABLE_FRAMERATES.map((value) => {
 		const supported = offeredSet.has(value);
 		return {
 			value,
 			supported,
-			reason: supported ? undefined : reasonFor(offered.supportsFramerateOverride),
+			reason: supported
+				? undefined
+				: reasonFor(offered.supportsFramerateOverride),
 		};
 	});
 }
@@ -221,7 +247,10 @@ export function bitrateBoundsFromCaps(
 	return { min, max, defaultMin, defaultMax };
 }
 
-export function clampBitrateToBounds(value: number, bounds: BitrateBounds): number {
+export function clampBitrateToBounds(
+	value: number,
+	bounds: BitrateBounds,
+): number {
 	if (!Number.isFinite(value)) return bounds.defaultMin;
 	return Math.min(bounds.max, Math.max(bounds.min, value));
 }
@@ -244,7 +273,9 @@ export function deriveCodecOptions(
 	platform: PlatformCaps | undefined,
 ): CodecOption[] {
 	if (!platform) {
-		return [{ mediaType: MEDIA_TYPE_H264, value: "h264", softwareWarning: false }];
+		return [
+			{ mediaType: MEDIA_TYPE_H264, value: "h264", softwareWarning: false },
+		];
 	}
 	const offered = intersectCaps(platform, undefined, STREAMING_MODE);
 	return offered.codecs.map((mediaType) => ({

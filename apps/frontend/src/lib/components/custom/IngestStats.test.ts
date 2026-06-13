@@ -226,7 +226,12 @@ describe("IngestStats — render contract (Task 21)", () => {
  */
 function oneLink(
 	rtt: number,
-	opts: { nak?: number; weight?: number; conn_id?: string; iface?: string } = {},
+	opts: {
+		nak?: number;
+		weight?: number;
+		conn_id?: string;
+		iface?: string;
+	} = {},
 ): LinkTelemetryMessage {
 	return {
 		links: [
@@ -301,10 +306,7 @@ describe("IngestStats — historical trends + health alert", () => {
 		flushSync();
 
 		// Leading window ~20 ms, trailing window ~80 ms: trail avg > 2× lead avg.
-		const ramp = [
-			...Array<number>(9).fill(20),
-			...Array<number>(10).fill(80),
-		];
+		const ramp = [...Array<number>(9).fill(20), ...Array<number>(10).fill(80)];
 		for (const rtt of ramp) {
 			await rerender({ telemetry: oneLink(rtt) });
 			flushSync();
@@ -353,8 +355,22 @@ describe("IngestStats — historical trends + health alert", () => {
 function bonded(stale: boolean): LinkTelemetryMessage {
 	return {
 		links: [
-			{ conn_id: "0", iface: "eth0", rtt_ms: 18, nak_count: 0, weight_percent: 50, stale: false },
-			{ conn_id: "1", iface: "wlan0", rtt_ms: 30, nak_count: 0, weight_percent: 50, stale },
+			{
+				conn_id: "0",
+				iface: "eth0",
+				rtt_ms: 18,
+				nak_count: 0,
+				weight_percent: 50,
+				stale: false,
+			},
+			{
+				conn_id: "1",
+				iface: "wlan0",
+				rtt_ms: 30,
+				nak_count: 0,
+				weight_percent: 50,
+				stale,
+			},
 		],
 	};
 }
@@ -376,10 +392,12 @@ describe("IngestStats — session summary + export (device-local)", () => {
 	beforeEach(() => {
 		// jsdom does not implement the object-URL API; stub so we can spy on it.
 		if (typeof URL.createObjectURL !== "function") {
-			(URL as unknown as { createObjectURL: () => string }).createObjectURL = () => "blob:stub";
+			(URL as unknown as { createObjectURL: () => string }).createObjectURL =
+				() => "blob:stub";
 		}
 		if (typeof URL.revokeObjectURL !== "function") {
-			(URL as unknown as { revokeObjectURL: () => void }).revokeObjectURL = () => {};
+			(URL as unknown as { revokeObjectURL: () => void }).revokeObjectURL =
+				() => {};
 		}
 	});
 
@@ -390,18 +408,28 @@ describe("IngestStats — session summary + export (device-local)", () => {
 	it("renders the rollup after the stream stops", () => {
 		const panel = runMockSession();
 
-		expect(panel.querySelector('[data-testid="ingest-summary"]')).not.toBeNull();
+		expect(
+			panel.querySelector('[data-testid="ingest-summary"]'),
+		).not.toBeNull();
 		// The live table is gone while the summary is shown.
-		expect(panel.querySelectorAll('[data-testid="ingest-row"]')).toHaveLength(0);
+		expect(panel.querySelectorAll('[data-testid="ingest-row"]')).toHaveLength(
+			0,
+		);
 
 		expect(
-			panel.querySelector('[data-testid="ingest-summary-peak"]')?.textContent?.trim(),
+			panel
+				.querySelector('[data-testid="ingest-summary-peak"]')
+				?.textContent?.trim(),
 		).toBe("8 Mbps");
 		expect(
-			panel.querySelector('[data-testid="ingest-summary-avg"]')?.textContent?.trim(),
+			panel
+				.querySelector('[data-testid="ingest-summary-avg"]')
+				?.textContent?.trim(),
 		).toBe("6 Mbps");
 		expect(
-			panel.querySelector('[data-testid="ingest-summary-drops"]')?.textContent?.trim(),
+			panel
+				.querySelector('[data-testid="ingest-summary-drops"]')
+				?.textContent?.trim(),
 		).toBe("1");
 
 		const eth0 = panel.querySelector<HTMLElement>(
@@ -411,24 +439,32 @@ describe("IngestStats — session summary + export (device-local)", () => {
 			'[data-testid="ingest-uptime-row"][data-iface="wlan0"]',
 		);
 		expect(
-			within(eth0 as HTMLElement).getByTestId("ingest-uptime").textContent?.trim(),
+			within(eth0 as HTMLElement)
+				.getByTestId("ingest-uptime")
+				.textContent?.trim(),
 		).toBe("100%");
 		expect(
-			within(wlan0 as HTMLElement).getByTestId("ingest-uptime").textContent?.trim(),
+			within(wlan0 as HTMLElement)
+				.getByTestId("ingest-uptime")
+				.textContent?.trim(),
 		).toBe("50%");
 	});
 
 	it("exports a JSON file carrying the rollup fields", async () => {
 		const blobs: Blob[] = [];
-		vi.spyOn(URL, "createObjectURL").mockImplementation((b: Blob | MediaSource) => {
-			blobs.push(b as Blob);
-			return "blob:mock";
-		});
+		vi.spyOn(URL, "createObjectURL").mockImplementation(
+			(b: Blob | MediaSource) => {
+				blobs.push(b as Blob);
+				return "blob:mock";
+			},
+		);
 		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
 		vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 
 		const panel = runMockSession();
-		const jsonBtn = panel.querySelector<HTMLElement>('[data-testid="ingest-export-json"]');
+		const jsonBtn = panel.querySelector<HTMLElement>(
+			'[data-testid="ingest-export-json"]',
+		);
 		expect(jsonBtn, "export json button must render").not.toBeNull();
 		jsonBtn?.click();
 
@@ -446,15 +482,19 @@ describe("IngestStats — session summary + export (device-local)", () => {
 
 	it("exports a CSV file carrying the rollup fields", async () => {
 		const blobs: Blob[] = [];
-		vi.spyOn(URL, "createObjectURL").mockImplementation((b: Blob | MediaSource) => {
-			blobs.push(b as Blob);
-			return "blob:mock";
-		});
+		vi.spyOn(URL, "createObjectURL").mockImplementation(
+			(b: Blob | MediaSource) => {
+				blobs.push(b as Blob);
+				return "blob:mock";
+			},
+		);
 		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
 		vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 
 		const panel = runMockSession();
-		panel.querySelector<HTMLElement>('[data-testid="ingest-export-csv"]')?.click();
+		panel
+			.querySelector<HTMLElement>('[data-testid="ingest-export-csv"]')
+			?.click();
 
 		expect(blobs).toHaveLength(1);
 		expect((blobs[0] as Blob).type).toBe("text/csv");

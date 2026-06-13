@@ -33,9 +33,8 @@
  * primitive is a spy, and the descriptors are read from the repo-local fixtures.
  */
 
-import { join } from "node:path";
-
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import {
 	type AddonDescriptor,
 	AddonDescriptorSchema,

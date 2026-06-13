@@ -1,15 +1,20 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { type GetCapabilitiesResult, SCHEMA_VERSION } from "@ceralive/cerastream";
+import {
+	type GetCapabilitiesResult,
+	SCHEMA_VERSION,
+} from "@ceralive/cerastream";
 import { BITRATE_MAX, BITRATE_MIN } from "@ceraui/rpc/schemas";
-
+import type {
+	PipelineHardwareType,
+	VideoSource,
+} from "../modules/streaming/pipeline-sources.ts";
 import {
 	getPipelineList,
 	getPipelinesMessage,
 	initPipelines,
 	setMockHardware,
 } from "../modules/streaming/pipelines.ts";
-import { type PipelineHardwareType, type VideoSource } from "../modules/streaming/pipeline-sources.ts";
 
 // CAPABILITY CONTRACT REGRESSION TEST
 //

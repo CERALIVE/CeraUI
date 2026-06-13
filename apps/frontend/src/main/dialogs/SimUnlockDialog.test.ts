@@ -240,9 +240,7 @@ describe("SimUnlockDialog — PUK recovery", () => {
 		expect(await screen.findByTestId("sim-puk-error")).toBeTruthy();
 		// The counter reflects the decremented remaining-attempt count.
 		await waitFor(() =>
-			expect(screen.getByTestId("sim-puk-attempts").textContent).toContain(
-				"9",
-			),
+			expect(screen.getByTestId("sim-puk-attempts").textContent).toContain("9"),
 		);
 		// Submitted exactly once — never a blind resubmit toward a lockout.
 		expect(unlockSimPuk).toHaveBeenCalledTimes(1);

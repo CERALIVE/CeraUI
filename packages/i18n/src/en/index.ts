@@ -839,7 +839,8 @@ const en = {
 				newPinLabel: "New SIM PIN",
 				newPinPlaceholder: "Choose a new PIN",
 				pukSubmit: "Unlock with PUK",
-				pukLengthHint: "The PUK is a {length:number}-digit code from your carrier.",
+				pukLengthHint:
+					"The PUK is a {length:number}-digit code from your carrier.",
 				pukAttemptsLabel: "PUK attempts remaining",
 				wrongPuk: "Incorrect PUK. Please try again.",
 				pukSuccess: "SIM unlocked and new PIN set.",

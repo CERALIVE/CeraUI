@@ -11,12 +11,12 @@
  *  3. an add-on that ships `docs` / `helpUrl` exposes an expandable help panel
  *     rendering exactly the descriptor text (no invented copy).
  */
-import type { AddonDescriptor, AddonState } from '@ceraui/rpc/schemas';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AddonDescriptor, AddonState } from "@ceraui/rpc/schemas";
+import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AddonOpResult } from '$lib/rpc/client';
-import AddonsSection from './AddonsSection.svelte';
+import type { AddonOpResult } from "$lib/rpc/client";
+import AddonsSection from "./AddonsSection.svelte";
 
 const rpcMocks = vi.hoisted(() => ({
 	list: vi.fn(),
@@ -25,7 +25,7 @@ const rpcMocks = vi.hoisted(() => ({
 	getMockHardware: vi.fn(),
 }));
 
-vi.mock('$lib/rpc/client', () => ({
+vi.mock("$lib/rpc/client", () => ({
 	rpc: {
 		addons: {
 			list: rpcMocks.list,
@@ -36,11 +36,11 @@ vi.mock('$lib/rpc/client', () => ({
 	},
 }));
 
-vi.mock('$lib/rpc/subscriptions.svelte', () => ({
+vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getAddons: () => ({}),
 }));
 
-vi.mock('svelte-sonner', () => ({
+vi.mock("svelte-sonner", () => ({
 	toast: { success: vi.fn(), error: vi.fn() },
 }));
 
@@ -64,41 +64,41 @@ beforeAll(() => {
 	proto.scrollIntoView ??= vi.fn();
 });
 
-const IDLE: AddonState = { enabled: false, phase: 'idle', autoDisabled: false };
+const IDLE: AddonState = { enabled: false, phase: "idle", autoDisabled: false };
 
 function makeDescriptor(overrides: Partial<AddonDescriptor>): AddonDescriptor {
 	return {
-		id: 'sample',
-		name: 'Sample Add-on',
-		version: '1.0.0',
-		category: 'media',
-		payload: { type: 'sysext' },
-		sysextLevel: '1',
-		versionId: '12',
+		id: "sample",
+		name: "Sample Add-on",
+		version: "1.0.0",
+		category: "media",
+		payload: { type: "sysext" },
+		sysextLevel: "1",
+		versionId: "12",
 		artifact: {
-			urlTemplate: 'https://example.com/{os_version}/sample.raw',
-			sha256: 'a'.repeat(64),
-			gpgSigRef: 'sig',
+			urlTemplate: "https://example.com/{os_version}/sample.raw",
+			sha256: "a".repeat(64),
+			gpgSigRef: "sig",
 			sizeDownload: 1000,
 			sizeInstalled: 2000,
 		},
-		provides: ['/usr/lib/sample'],
+		provides: ["/usr/lib/sample"],
 		...overrides,
 	} as AddonDescriptor;
 }
 
-function seedList(descriptors: AddonDescriptor[], board = 'n100'): void {
+function seedList(descriptors: AddonDescriptor[], board = "n100"): void {
 	rpcMocks.list.mockResolvedValue({
 		addons: descriptors.map((descriptor) => ({
 			descriptor,
 			state: IDLE,
-			managerPhase: 'disabled',
+			managerPhase: "disabled",
 		})),
 	});
 	rpcMocks.getMockHardware.mockResolvedValue({
 		hardware: null,
 		effectiveHardware: board,
-		availableHardware: ['jetson', 'n100', 'rk3588', 'generic'],
+		availableHardware: ["jetson", "n100", "rk3588", "generic"],
 	});
 }
 
@@ -106,87 +106,99 @@ beforeEach(() => {
 	vi.clearAllMocks();
 });
 
-describe('AddonsSection — board gating', () => {
-	it('disables an add-on whose compatibleHardware excludes the detected board and shows the reason', async () => {
-		const descriptor = makeDescriptor({ id: 'rk-only', compatibleHardware: ['rk3588'] });
-		seedList([descriptor], 'n100');
+describe("AddonsSection — board gating", () => {
+	it("disables an add-on whose compatibleHardware excludes the detected board and shows the reason", async () => {
+		const descriptor = makeDescriptor({
+			id: "rk-only",
+			compatibleHardware: ["rk3588"],
+		});
+		seedList([descriptor], "n100");
 
 		render(AddonsSection, { props: { open: true } });
 
-		const note = await screen.findByTestId('addon-incompatible-rk-only');
-		expect(note.textContent).toContain('rk3588');
-		expect(note.textContent).toContain('n100');
+		const note = await screen.findByTestId("addon-incompatible-rk-only");
+		expect(note.textContent).toContain("rk3588");
+		expect(note.textContent).toContain("n100");
 
-		const sw = screen.getByTestId('addon-switch-rk-only') as HTMLButtonElement;
+		const sw = screen.getByTestId("addon-switch-rk-only") as HTMLButtonElement;
 		expect(sw.disabled).toBe(true);
 	});
 
-	it('leaves a compatible add-on enabled (no incompatibility note)', async () => {
-		const descriptor = makeDescriptor({ id: 'multi', compatibleHardware: ['n100', 'generic'] });
-		seedList([descriptor], 'n100');
+	it("leaves a compatible add-on enabled (no incompatibility note)", async () => {
+		const descriptor = makeDescriptor({
+			id: "multi",
+			compatibleHardware: ["n100", "generic"],
+		});
+		seedList([descriptor], "n100");
 
 		render(AddonsSection, { props: { open: true } });
 
-		const sw = (await screen.findByTestId('addon-switch-multi')) as HTMLButtonElement;
+		const sw = (await screen.findByTestId(
+			"addon-switch-multi",
+		)) as HTMLButtonElement;
 		expect(sw.disabled).toBe(false);
-		expect(screen.queryByTestId('addon-incompatible-multi')).toBeNull();
+		expect(screen.queryByTestId("addon-incompatible-multi")).toBeNull();
 	});
 });
 
-describe('AddonsSection — conflict warning', () => {
-	it('pins a visible warning when an enable is blocked by addon_conflict', async () => {
-		const descriptor = makeDescriptor({ id: 'conflicting' });
-		seedList([descriptor], 'n100');
+describe("AddonsSection — conflict warning", () => {
+	it("pins a visible warning when an enable is blocked by addon_conflict", async () => {
+		const descriptor = makeDescriptor({ id: "conflicting" });
+		seedList([descriptor], "n100");
 		rpcMocks.install.mockResolvedValue({
 			success: false,
-			error: 'addon_conflict',
+			error: "addon_conflict",
 		} satisfies AddonOpResult);
 
 		render(AddonsSection, { props: { open: true } });
 
-		const sw = (await screen.findByTestId('addon-switch-conflicting')) as HTMLButtonElement;
+		const sw = (await screen.findByTestId(
+			"addon-switch-conflicting",
+		)) as HTMLButtonElement;
 		await fireEvent.click(sw);
 
-		const warning = await screen.findByTestId('addon-conflict-conflicting');
-		expect(warning.getAttribute('role')).toBe('alert');
-		expect(warning.textContent?.toLowerCase()).toContain('conflict');
+		const warning = await screen.findByTestId("addon-conflict-conflicting");
+		expect(warning.getAttribute("role")).toBe("alert");
+		expect(warning.textContent?.toLowerCase()).toContain("conflict");
 		// The op failed → the toggle reverts to off (pessimistic).
-		await waitFor(() => expect(sw.getAttribute('aria-checked')).toBe('false'));
+		await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("false"));
 	});
 });
 
-describe('AddonsSection — docs panel', () => {
-	it('renders the descriptor docs and helpUrl behind the help affordance', async () => {
+describe("AddonsSection — docs panel", () => {
+	it("renders the descriptor docs and helpUrl behind the help affordance", async () => {
 		const descriptor = makeDescriptor({
-			id: 'documented',
-			docs: 'Streams the secondary HDMI input as a picture-in-picture overlay.',
-			helpUrl: 'https://docs.example.com/pip',
+			id: "documented",
+			docs: "Streams the secondary HDMI input as a picture-in-picture overlay.",
+			helpUrl: "https://docs.example.com/pip",
 		});
-		seedList([descriptor], 'n100');
+		seedList([descriptor], "n100");
 
 		render(AddonsSection, { props: { open: true } });
 
-		const toggle = await screen.findByTestId('addon-docs-toggle-documented');
-		expect(toggle.getAttribute('aria-expanded')).toBe('false');
-		expect(screen.queryByTestId('addon-docs-documented')).toBeNull();
+		const toggle = await screen.findByTestId("addon-docs-toggle-documented");
+		expect(toggle.getAttribute("aria-expanded")).toBe("false");
+		expect(screen.queryByTestId("addon-docs-documented")).toBeNull();
 
 		await fireEvent.click(toggle);
 
-		const panel = await screen.findByTestId('addon-docs-documented');
-		expect(panel.textContent).toContain('picture-in-picture overlay');
+		const panel = await screen.findByTestId("addon-docs-documented");
+		expect(panel.textContent).toContain("picture-in-picture overlay");
 
-		const link = screen.getByTestId('addon-helpurl-documented') as HTMLAnchorElement;
-		expect(link.getAttribute('href')).toBe('https://docs.example.com/pip');
-		expect(link.getAttribute('target')).toBe('_blank');
+		const link = screen.getByTestId(
+			"addon-helpurl-documented",
+		) as HTMLAnchorElement;
+		expect(link.getAttribute("href")).toBe("https://docs.example.com/pip");
+		expect(link.getAttribute("target")).toBe("_blank");
 	});
 
-	it('omits the help affordance for an add-on with no docs or helpUrl', async () => {
-		const descriptor = makeDescriptor({ id: 'bare' });
-		seedList([descriptor], 'n100');
+	it("omits the help affordance for an add-on with no docs or helpUrl", async () => {
+		const descriptor = makeDescriptor({ id: "bare" });
+		seedList([descriptor], "n100");
 
 		render(AddonsSection, { props: { open: true } });
 
-		await screen.findByTestId('addon-card-bare');
-		expect(screen.queryByTestId('addon-docs-toggle-bare')).toBeNull();
+		await screen.findByTestId("addon-card-bare");
+		expect(screen.queryByTestId("addon-docs-toggle-bare")).toBeNull();
 	});
 });

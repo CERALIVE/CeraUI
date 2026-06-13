@@ -20,7 +20,10 @@ function makeCaps(min: number, max: number): CapabilitiesMessage {
 			hardware_accelerated: false,
 			max_resolution: "1080p",
 		},
-		encoder: { codecs: ["H264", "H265"], bitrate_range: { min, max, unit: "kbps" } },
+		encoder: {
+			codecs: ["H264", "H265"],
+			bitrate_range: { min, max, unit: "kbps" },
+		},
 		sources: [],
 	};
 }
@@ -48,7 +51,9 @@ function makeDevice(mediaType: string | undefined): CaptureDevice {
 		display_name: "QA H.265 Cam",
 		media_class: "video",
 		kind: "usb",
-		caps: mediaType ? [{ width: 1920, height: 1080, media_type: mediaType }] : [],
+		caps: mediaType
+			? [{ width: 1920, height: 1080, media_type: mediaType }]
+			: [],
 	};
 }
 
