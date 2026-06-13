@@ -310,6 +310,48 @@ The backend is fully migrated to Bun-native APIs. Use these patterns for all new
 - **`Bun.$` shell interpolation**: dynamic command strings must use `Bun.$\`${{ raw: cmd }}\`` — plain `${cmd}` escapes the whole string into one quoted arg
 - **`process.env` writes**: stay on `process.env` — `Bun.env` is read-only
 
+## CAPABILITY CONSUMER [PARTIAL]
+
+CeraUI is the strict consumer of the `get-capabilities` IPC contract emitted by
+`cerastream`. The backend calls `get-capabilities` (a post-hello JSON-RPC method on
+the UDS control plane) and forwards the tiered response to the frontend. The frontend
+renders only the intersected offered set:
+
+```
+platform caps ∩ capture-source caps ∩ current-mode → offered set
+```
+
+Options outside the offered set are shown **disabled with a reason tooltip** — never
+hidden, so operators can see what the hardware doesn't support and why.
+
+**`pipeline-sources.ts` per-board tables deleted [PARTIAL].** The static per-board
+capability tables that previously lived in `pipeline-sources.ts` are removed. All
+capability data is now derived from the `get-capabilities` response at runtime. Do not
+re-add static board tables; the contract is the single source of truth.
+
+**Tier-4 add-on compat [PARTIAL].** Add-on compatibility is resolved entirely inside
+CeraUI and is NOT part of the `get-capabilities` response. Three enforcement layers:
+
+- `compatibleHardware` field in `AddonDescriptorSchema` gates which boards may enable
+  an add-on (server-side enforcement in `apps/backend/src/modules/addons/manager.ts`
+  — not UI-only).
+- `deps[]` / `conflicts[]` in `AddonDescriptorSchema` are enforced at enable time
+  (previously declared but unenforced).
+- In-UI docs: incompatible add-ons show a reason tooltip explaining the hardware or
+  dependency constraint.
+
+**Recent enhancements [PARTIAL]:**
+
+- **SIM PUK recovery** — UI flow for entering the PUK code when a SIM is PUK-locked.
+- **SIM PIN auto-unlock** — `maybeAutoUnlockSimPins()` submits the opt-in PIN (stored
+  in the chmod-600 tmpfs file `/run/ceralive/sim-pin.secret`, never in `config.json`)
+  at most once per locked modem on boot, then clears the PIN and stops on any failure.
+  See `apps/backend/src/modules/modems/sim-autounlock.ts`.
+- **Ingest sparklines** — fixed ~60-sample in-memory ring buffer per link; no
+  persistence. Rendered in the HUD bar as a compact bitrate history.
+- **Session summary** — post-stream summary panel showing duration, average bitrate,
+  and per-link stats for the completed session.
+
 ## STREAMING BACKEND QUALITY [EXISTS]
 
 Quality improvements landed in `chore/backend-quality` (Tasks 5–7, 13–14).
