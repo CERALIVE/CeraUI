@@ -41,9 +41,13 @@ src/
 ├── lib/
 │   ├── rpc/                   # RPCClient + TypedRPC + subscriptions.svelte.ts
 │   ├── stores/
-│   │   ├── hud.svelte.ts          # HUD state: pure derivation fns + lazy runes store + selectors
+│   │   ├── hud.svelte.ts          # HUD state: BARREL re-exporting hud/ sub-stores (public surface unchanged)
 │   │   │                          #   exposes staleInterfaces (per-interface staleness, fingerprint-tracked,
 │   │   │                          #   global STALE_THRESHOLD_MS, resolves while clock ticks: streaming/disconnect)
+│   │   ├── hud/                   # split by derivation domain (all rune-free except store):
+│   │   │                          #   constants · soc-telemetry (sensor parse) · link-status (buildLinks)
+│   │   │                          #   · staleness (freshness+gated clock) · derive (deriveHudState)
+│   │   │                          #   · store.svelte.ts (lazy runes store + selectors)
 │   │   ├── connection-ux.svelte.ts # Reconnect/reboot/session-expiry UX (eager-init in browser)
 │   │   ├── notifications.svelte.ts # Active notifications (toast + persistent); getActive() feeds
 │   │   │                          #   the toast host, getPersistent() feeds NotificationsPanel
