@@ -1,7 +1,7 @@
 {
 	"name": "frontend",
 	"private": true,
-	"version": "0.1.0",
+	"version": "2026.6.1",
 	"description": "A modern UI built with Svelte + Vite for CeraLive streaming hardware.",
 	"type": "module",
 	"author": "Andrés Cera",
@@ -22,7 +22,7 @@
 		"clean": "rm -rf dist node_modules/.vite"
 	},
 	"dependencies": {
-		"@ceralive/design-tokens": "^0.1.0",
+		"@ceralive/design-tokens": "^2026.6.1",
 		"@ceraui/i18n": "workspace:*",
 		"@ceraui/rpc": "workspace:*",
 		"@fontsource-variable/jetbrains-mono": "^5.2.8",

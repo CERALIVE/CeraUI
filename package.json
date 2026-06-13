@@ -1,7 +1,7 @@
 {
 	"name": "ceralive-workspace",
 	"private": true,
-	"version": "1.0.0",
+	"version": "2026.6.1",
 	"description": "Monorepo workspace containing CeraUI frontend and CeraLive backend",
 	"type": "module",
 	"repository": {

@@ -1,6 +1,6 @@
 {
 	"name": "@ceraui/i18n",
-	"version": "1.0.0",
+	"version": "2026.6.1",
 	"description": "Typesafe internationalization package for CeraUI",
 	"type": "module",
 	"main": "./src/index.ts",

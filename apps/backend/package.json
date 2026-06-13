@@ -1,6 +1,6 @@
 {
 	"name": "backend",
-	"version": "1.0.0",
+	"version": "2026.6.1",
 	"description": "CeraUI backend - Bun server for CeraLive streaming hardware",
 	"type": "module",
 	"author": "Andrés Cera",
@@ -10,7 +10,7 @@
 	},
 	"dependencies": {
 		"@ceralive/cerastream": "2026.6.1",
-		"@ceralive/srtla-send": "2026.6.0",
+		"@ceralive/srtla-send": "2026.6.1",
 		"@ceraui/rpc": "workspace:*",
 		"@orpc/server": "^1.14.6",
 		"finalhandler": "^2.1.1",
