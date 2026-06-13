@@ -4,7 +4,7 @@ Parent: [`../../AGENTS.md`](../../AGENTS.md)
 
 ## OVERVIEW
 
-Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, exposes all device control via oRPC over WebSocket, drives the `cerastream` engine over structured IPC (`@ceralive/cerastream` vendored tarball) and `srtla-send-rs` via the `@ceralive/srtla-send` npm package.
+Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, exposes all device control via oRPC over WebSocket, drives the `cerastream` engine over structured IPC (`@ceralive/cerastream` public-npm registry dep) and `srtla-send-rs` via the `@ceralive/srtla-send` npm package.
 
 ## STRUCTURE
 
@@ -183,12 +183,13 @@ schema in `helpers/config-schemas.ts`; a persisted legacy value is coerced to
 streaming call site still routes through `getStreamingBackend()`
 (`streaming-engine.ts`) so a future engine can slot in behind the same seam.
 
-**`@ceralive/cerastream` is a plain npm dependency, vendored as a `file:` tarball**
-(`apps/backend/vendor/ceralive-cerastream.tgz`, version-agnostic filename) — NOT a
-sibling `link:` like srtla (cerastream ARCHITECTURE §7 / ADR-0002
-Decision 13: it ships to CeraUI as a published npm package, so the backend builds
-standalone with no sibling checkout). `tests/cerastream-bindings-skew.test.ts`
-guards the exact imported surface against drift in a refreshed tarball.
+**`@ceralive/cerastream` is a public-npm registry dependency** (`@ceralive` scope on
+npmjs.org, pinned to a CalVer version — `2026.6.1` at time of writing) — NOT a
+sibling `link:` like srtla and no longer a vendored `file:` tarball (cerastream
+ARCHITECTURE §7 / ADR-0002 Decision 13: it ships to CeraUI as a published npm
+package, so the backend builds standalone with no sibling checkout).
+`tests/cerastream-bindings-skew.test.ts` guards the exact imported surface against
+drift on a version bump.
 
 Contract coverage: `tests/streaming-backend-contract.test.ts` runs the
 structural contract over the production singleton + the cerastream behavioural
@@ -205,5 +206,6 @@ selection.
   the `cerastreamBackend` singleton.
 - Don't re-add stderr regex on the cerastream path — engine errors are structured
   codes mapped via `cerastream-error-mapping.ts`.
-- Don't wire `@ceralive/cerastream` as a sibling `link:` — it is a vendored npm
-  tarball by design (refresh: see `apps/backend/vendor/README.md`).
+- Don't wire `@ceralive/cerastream` as a sibling `link:` or vendored `.tgz` — it
+  is a public-npm registry dep by design; bump the pinned version in
+  `package.json` to track the engine.

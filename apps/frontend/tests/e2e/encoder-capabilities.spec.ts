@@ -11,9 +11,6 @@ import { navigateTo } from "./helpers";
  * backend. The capability contract + capture devices are injected as synthetic
  * broadcast frames through the app's own authenticated socket (no `dev.emit`,
  * no new backend route), exactly the shape `subscriptions.handleMessage` parses.
- *
- * Screenshots are written as evidence to the repo-local, gitignored
- * `CeraUI/test-results/` (Rule D), NOT as visual-regression baselines.
  */
 
 const TOKEN: string | null = (() => {
@@ -30,13 +27,6 @@ const TOKEN: string | null = (() => {
 		return null;
 	}
 })();
-
-// CeraUI/test-results — five levels up from this spec's directory.
-const EVIDENCE_DIR = path.resolve(import.meta.dirname, "../../../../test-results");
-function evidence(name: string): string {
-	fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
-	return path.join(EVIDENCE_DIR, name);
-}
 
 function installWsHarness(token: string): void {
 	// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
@@ -176,8 +166,6 @@ test.describe("encoder capability wiring", () => {
 		const input = page.locator("#encoder-bitrate");
 		await input.fill("50000");
 		await expect(input).toHaveValue("15000");
-
-		await page.screenshot({ path: evidence("bitrate-clamp.png") });
 	});
 
 	test("surfaces a UVC H.265 source when a device advertises video/x-h265", async ({
@@ -204,7 +192,5 @@ test.describe("encoder capability wiring", () => {
 		const badge = page.getByTestId("h265-software-warning").first();
 		await expect(badge).toBeVisible();
 		await expect(badge).toContainText(/software/i);
-
-		await page.screenshot({ path: evidence("uvc-h265-generic-warning.png") });
 	});
 });

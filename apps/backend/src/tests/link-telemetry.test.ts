@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import type {
 	Telemetry,
+	TelemetryUpdate,
 	watchTelemetry as WatchTelemetryFn,
 } from "@ceralive/srtla-send/telemetry";
 import {
@@ -41,7 +42,7 @@ function snapshot(
 // A watch double that captures the callback so the test drives ticks directly,
 // and records the path/options it was started with.
 function captureWatch() {
-	const calls: Array<{ path: string; cb: (t: Telemetry | null) => void }> = [];
+	const calls: Array<{ path: string; cb: (u: TelemetryUpdate) => void }> = [];
 	let stopped = 0;
 	const watch: typeof WatchTelemetryFn = (path, cb) => {
 		calls.push({ path, cb });
@@ -54,7 +55,7 @@ function captureWatch() {
 	return {
 		watch,
 		emit: (t: Telemetry | null) => {
-			for (const c of calls) c.cb(t);
+			for (const c of calls) c.cb({ data: t, stale: t === null });
 		},
 		get stopped() {
 			return stopped;

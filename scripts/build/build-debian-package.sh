@@ -29,17 +29,17 @@ DESCRIPTION="CERALIVE device software - live streaming hardware controller"
 URL="https://github.com/CERALIVE/CeraUI"
 
 # Engine protocol-major coupling (engine ↔ UI version-skew guard). The cerastream
-# .deb Provides cerastream-ipc-<major>; we Depends on the major our baked-in
+# .deb Provides cerastream-ipc-<major>; we Depends on the major our installed
 # bindings speak, so apt refuses a cross-protocol-major skew on-device and mkosi
-# fails a mismatched pair at image-build time. Derived from the vendored bindings
-# (the single source of truth for what's compiled in) — never hardcoded.
+# fails a mismatched pair at image-build time. Derived from the installed
+# @ceralive/cerastream package (the single source of truth for what's compiled
+# in) — never hardcoded. Requires `pnpm install` to have run first.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VENDOR_TGZ="$SCRIPT_DIR/../../apps/backend/vendor/ceralive-cerastream.tgz"
-IPC_PROTOCOL="$(tar -xzOf "$VENDOR_TGZ" package/dist/constants.js 2>/dev/null \
-    | grep -oE 'cerastream-ipc/[0-9]+' | head -1)"
+CERASTREAM_CONSTANTS="$SCRIPT_DIR/../../apps/backend/node_modules/@ceralive/cerastream/dist/constants.js"
+IPC_PROTOCOL="$(grep -oE 'cerastream-ipc/[0-9]+' "$CERASTREAM_CONSTANTS" 2>/dev/null | head -1)"
 IPC_MAJOR="${IPC_PROTOCOL##*/}"
 if ! printf '%s' "$IPC_MAJOR" | grep -qE '^[0-9]+$'; then
-    log_error "Could not derive cerastream protocol major from vendored bindings: $VENDOR_TGZ"
+    log_error "Could not derive cerastream protocol major from installed bindings: $CERASTREAM_CONSTANTS"
     exit 1
 fi
 IPC_VPKG="cerastream-ipc-${IPC_MAJOR}"
