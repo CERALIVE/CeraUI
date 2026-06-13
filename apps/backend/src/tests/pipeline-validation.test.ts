@@ -29,14 +29,14 @@ const FPS_BLOCKED = {
 };
 
 describe("pipeline init + lookup", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		setMockHardware("jetson");
-		initPipelines();
+		await initPipelines();
 	});
 
-	afterAll(() => {
+	afterAll(async () => {
 		setMockHardware("rk3588");
-		initPipelines();
+		await initPipelines();
 	});
 
 	it("populates a non-empty registry after initPipelines()", () => {
@@ -87,14 +87,14 @@ describe("validatePipelineOverrides gating", () => {
 });
 
 describe("validateConfig capability + override rejection", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		setMockHardware("jetson");
-		initPipelines();
+		await initPipelines();
 	});
 
-	afterAll(() => {
+	afterAll(async () => {
 		setMockHardware("rk3588");
-		initPipelines();
+		await initPipelines();
 	});
 
 	it("rejects an unknown pipeline id", async () => {

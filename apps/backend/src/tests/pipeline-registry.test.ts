@@ -8,52 +8,61 @@ import {
 	setMockHardware,
 } from "../modules/streaming/pipelines.ts";
 
-// Source lists differ per hardware (pipeline-sources.ts tables):
+// Source lists differ per hardware. The registry is now derived from the
+// capability contract; the default (table-derived) contract mirrors the
+// pipeline-sources.ts parity tables MINUS decklink, which is dropped on every
+// board (no cerastream support):
 //   jetson : camlink, libuvch264, v4l_mjpeg, rtmp, srt, test
-//   n100   : libuvch264, v4l_mjpeg, decklink, rtmp, test
-// "camlink" is jetson-only, "decklink" is n100-only — ideal discriminators.
+//   n100   : libuvch264, v4l_mjpeg, rtmp, test
+// "camlink" and "srt" are jetson-only — the jetson↔n100 discriminators.
 
 describe("pipeline registry recompute on hardware switch", () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		// Establish a deterministic jetson baseline regardless of setup.hw.
 		setMockHardware("jetson");
-		initPipelines();
+		await initPipelines();
 	});
 
-	afterAll(() => {
+	afterAll(async () => {
 		// Restore the default device hardware so we don't pollute other tests.
 		setMockHardware("rk3588");
-		initPipelines();
+		await initPipelines();
 	});
 
-	it("reflects the new hardware's sources after setMockHardware", () => {
-		// Sanity: jetson baseline is loaded.
+	it("reflects the new hardware's sources after a hardware switch", async () => {
+		// Sanity: jetson baseline is loaded; decklink is dropped on every board.
 		expect(searchPipelines("camlink")).not.toBeNull();
 		expect(searchPipelines("decklink")).toBeNull();
 
-		// Switch to a different hardware type.
 		const ok = setMockHardware("n100");
 		expect(ok).toBe(true);
+		await initPipelines();
 		expect(getEffectiveHardware()).toBe("n100");
 
 		// Registry must now reflect n100, not the stale jetson list.
-		expect(searchPipelines("decklink")).not.toBeNull();
+		expect(searchPipelines("libuvch264")).not.toBeNull();
 		expect(searchPipelines("camlink")).toBeNull();
+		expect(searchPipelines("srt")).toBeNull();
+		// Decklink stays dropped on n100 (no engine support).
+		expect(searchPipelines("decklink")).toBeNull();
 	});
 
-	it("updates getPipelineList() to the new hardware after switch", () => {
+	it("updates getPipelineList() to the new hardware after switch", async () => {
 		setMockHardware("n100");
+		await initPipelines();
 
 		const list = getPipelineList();
-		expect(Object.keys(list)).toContain("decklink");
+		expect(Object.keys(list)).toContain("libuvch264");
 		expect(Object.keys(list)).not.toContain("camlink");
+		expect(Object.keys(list)).not.toContain("decklink");
 	});
 
-	it("tags returned pipelines with the switched hardware", () => {
+	it("tags returned pipelines with the switched hardware", async () => {
 		setMockHardware("n100");
+		await initPipelines();
 
-		const decklink = searchPipelines("decklink");
-		expect(decklink).not.toBeNull();
-		expect(decklink?.hardware).toBe("n100");
+		const libuvch264 = searchPipelines("libuvch264");
+		expect(libuvch264).not.toBeNull();
+		expect(libuvch264?.hardware).toBe("n100");
 	});
 });

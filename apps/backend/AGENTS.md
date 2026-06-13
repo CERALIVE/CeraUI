@@ -16,6 +16,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 |------|----------|
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
 | Engine seam + registry (cerastream-only) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
+| Capability contract service (engine emits, CeraUI consumes; cache + fallback ladder) | `modules/streaming/capabilities.ts` (`getCapabilities`) |
+| Pipeline registry (derived from the capability contract; `initPipelines` is async) | `modules/streaming/pipelines.ts` |
 | Cerastream engine backend (structured IPC, `@ceralive/cerastream`) | `modules/streaming/cerastream-backend.ts` |
 | Structured engine error → notification (Task-7 table swap, no regex) | `modules/streaming/cerastream-error-mapping.ts` |
 | srtla binding calls (flux — check `../../../srtla/AGENTS.md` first) | `modules/streaming/srtla.ts` |
@@ -40,7 +42,7 @@ The `streaming` router exposes these procedures:
 | `stop()` | Stop active stream |
 | `setConfig(fields)` | Persist config fields **without** starting the stream (added Task 19) |
 | `setBitrate({ max_br })` | Hot-adjust bitrate while streaming |
-| `getPipelines()` | List available GStreamer pipelines |
+| `getPipelines()` | List available capture sources, derived from the capability contract (`getCapabilities`) — NOT the `pipeline-sources.ts` tables directly |
 | `getAudioCodecs()` | List available audio codecs |
 | `getConfig()` | Return current config snapshot |
 

@@ -89,7 +89,7 @@ checkExecPath(bcrptExec);
 await loadConfig();
 
 initRemote();
-initPipelines();
+await initPipelines();
 
 // Migrate persisted config vs the offered set: a `pipeline` the current hardware
 // no longer offers is marked unavailable (blocks stream-start) and warned about —

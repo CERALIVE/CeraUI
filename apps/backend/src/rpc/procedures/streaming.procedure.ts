@@ -166,10 +166,7 @@ export const setBitrateProcedure = authedProcedure
 export const getPipelinesProcedure = authedProcedure
 	.output(pipelinesMessageSchema)
 	.handler(() => {
-		return {
-			hardware: getEffectiveHardware(),
-			pipelines: getPipelineList(),
-		};
+		return getPipelinesMessage();
 	});
 
 /**
@@ -355,7 +352,7 @@ export const setConfigProcedure = authedProcedure
 export const setMockHardwareProcedure = authedProcedure
 	.input(setMockHardwareInputSchema)
 	.output(setMockHardwareOutputSchema)
-	.handler(({ input }) => {
+	.handler(async ({ input }) => {
 		// Only allow in development/mock mode
 		if (!shouldUseMocks()) {
 			return {
@@ -367,7 +364,7 @@ export const setMockHardwareProcedure = authedProcedure
 		const success = setMockHardware(input.hardware);
 		if (success) {
 			// Reload pipelines and broadcast to all clients
-			initPipelines();
+			await initPipelines();
 			broadcastMsg("pipelines", getPipelinesMessage());
 			return {
 				success: true,
