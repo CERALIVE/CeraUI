@@ -1,0 +1,24 @@
+{
+	"id": "test-addon-b",
+	"name": "Synthetic Test Add-on B (depends on C)",
+	"version": "1.0.0",
+	"category": "other",
+	"payload": { "type": "sysext" },
+	"sysextLevel": "1",
+	"versionId": "12",
+	"artifact": {
+		"urlTemplate": "https://apt.ceralive.tv/addons/test-addon-b/{os_version}/test-addon-b.raw",
+		"sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"gpgSigRef": "https://apt.ceralive.tv/addons/test-addon-b/{os_version}/test-addon-b.raw.sig",
+		"sizeDownload": 1024,
+		"sizeInstalled": 4096
+	},
+	"provides": ["/usr/bin/test-addon-b"],
+	"deps": ["test-addon-c"],
+	"units": {
+		"unmask": ["test-addon-b.service"],
+		"enable": ["test-addon-b.service"],
+		"start": ["test-addon-b.service"]
+	},
+	"validate": { "cmd": "test -x /usr/bin/test-addon-b" }
+}

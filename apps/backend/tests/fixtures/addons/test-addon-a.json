@@ -1,0 +1,24 @@
+{
+	"id": "test-addon-a",
+	"name": "Synthetic Test Add-on A (board-gated)",
+	"version": "1.0.0",
+	"category": "other",
+	"payload": { "type": "sysext" },
+	"sysextLevel": "1",
+	"versionId": "12",
+	"artifact": {
+		"urlTemplate": "https://apt.ceralive.tv/addons/test-addon-a/{os_version}/test-addon-a.raw",
+		"sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"gpgSigRef": "https://apt.ceralive.tv/addons/test-addon-a/{os_version}/test-addon-a.raw.sig",
+		"sizeDownload": 1024,
+		"sizeInstalled": 4096
+	},
+	"provides": ["/usr/bin/test-addon-a"],
+	"compatibleHardware": ["rk3588"],
+	"units": {
+		"unmask": ["test-addon-a.service"],
+		"enable": ["test-addon-a.service"],
+		"start": ["test-addon-a.service"]
+	},
+	"validate": { "cmd": "test -x /usr/bin/test-addon-a" }
+}
