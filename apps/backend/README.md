@@ -8,7 +8,7 @@ The backend is a single compiled binary (`ceralive`) produced by `bun build --co
 
 **Stack**: Bun, TypeScript, oRPC (`@orpc/server`), Zod, WebSocket RPC  
 **Shared contract**: `@ceraui/rpc` (workspace package at `packages/rpc/`)  
-**Engine/bindings**: `@ceralive/cerastream` (vendored npm tarball — JSON-RPC/UDS client), `@ceralive/srtla` (local `link:` dep — not an npm package)
+**Engine/bindings**: `@ceralive/cerastream` (vendored npm tarball — JSON-RPC/UDS client), `@ceralive/srtla-send` (GitHub Packages registry dep)
 
 ## Structure
 

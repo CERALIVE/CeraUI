@@ -16,19 +16,19 @@ Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming h
 
 ## Sibling-Checkout Layout
 
-The `backend` app consumes the cerastream Rust engine as a vendored npm tarball, and resolves the srtla native binding via a `link:` path:
+The `backend` app consumes the cerastream Rust engine as a vendored npm tarball, and resolves the srtla sender binding as a registry npm package:
 
 ```
 "@ceralive/cerastream": "file:vendor/ceralive-cerastream.tgz"
-"@ceralive/srtla":      "link:../../../srtla/bindings/typescript"
+"@ceralive/srtla-send": registry dep (@ceralive scope, GitHub Packages)
 ```
 
-`srtla/` and `CeraUI/` must be siblings under the same parent directory. Breaking this layout breaks `pnpm install` for the backend. (A sibling `ceracoder/` checkout was previously required as well — ceracoder was retired 2026-06-11; repo preserved at github.com/CERALIVE/ceracoder.)
+No sibling checkout of `srtla` or `srtla-send-rs` is required for `CeraUI` to install or build. (A sibling `ceracoder/` checkout was previously required as well — ceracoder was retired 2026-06-11; repo preserved at github.com/CERALIVE/ceracoder.)
 
 ```
 ceralive/
-├── srtla/bindings/typescript/   ← @ceralive/srtla
-└── CeraUI/                      ← workspace root; backend resolves link: three levels up
+├── srtla-send-rs/bindings/   ← source of @ceralive/srtla-send (published to GitHub Packages)
+└── CeraUI/                   ← workspace root; backend resolves @ceralive/srtla-send as registry dep
 ```
 
 ## Development
