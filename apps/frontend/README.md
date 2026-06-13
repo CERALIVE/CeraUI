@@ -36,7 +36,6 @@ ceralive/
 ### Prerequisites
 
 - **pnpm** (workspace manager — do not use npm or yarn)
-- Sibling repo `srtla` checked out at the correct path (see above)
 
 ### Install
 
@@ -46,7 +45,7 @@ Run from the `CeraUI/` workspace root:
 pnpm install
 ```
 
-This installs all workspaces and resolves the `link:` sibling deps.
+This installs all workspaces and resolves all registry deps (no sibling checkout required).
 
 ### Dev Server
 

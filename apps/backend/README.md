@@ -4,7 +4,7 @@ Bun/TypeScript HTTP + WebSocket server for CeraLive streaming hardware. Serves t
 
 ## Overview
 
-The backend is a single compiled binary (`ceralive`) produced by `bun build --compile`. It drives the `cerastream` Rust streaming engine — the sole engine (ceracoder retired 2026-06-11) — over JSON-RPC on a Unix domain socket via the `@ceralive/cerastream` npm tarball, and supervises `srtla_send` as a separate process (streamloop) through the `@ceralive/srtla` binding, resolved via a `link:` path to a sibling checkout.
+The backend is a single compiled binary (`ceralive`) produced by `bun build --compile`. It drives the `cerastream` Rust streaming engine — the sole engine (ceracoder retired 2026-06-11) — over JSON-RPC on a Unix domain socket via the `@ceralive/cerastream` npm tarball, and supervises `srtla_send` as a separate process (streamloop) through the `@ceralive/srtla-send` npm package (GitHub Packages registry dep).
 
 **Stack**: Bun, TypeScript, oRPC (`@orpc/server`), Zod, WebSocket RPC  
 **Shared contract**: `@ceraui/rpc` (workspace package at `packages/rpc/`)  
