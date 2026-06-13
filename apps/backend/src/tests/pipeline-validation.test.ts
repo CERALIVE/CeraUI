@@ -1,5 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 
+import { type GetCapabilitiesResult, SCHEMA_VERSION } from "@ceralive/cerastream";
+import { BITRATE_MAX, BITRATE_MIN } from "@ceraui/rpc/schemas";
+
 import {
 	getPipelineList,
 	initPipelines,
@@ -7,6 +10,7 @@ import {
 	setMockHardware,
 	validatePipelineOverrides,
 } from "../modules/streaming/pipelines.ts";
+import { type PipelineHardwareType, type VideoSource } from "../modules/streaming/pipeline-sources.ts";
 import { validateConfig } from "../modules/streaming/streaming.ts";
 
 // jetson source capability flags (pipeline-sources.ts tables):
@@ -28,15 +32,57 @@ const FPS_BLOCKED = {
 	supportsFramerateOverride: false,
 };
 
+function mockCapabilitiesForBoard(
+	board: PipelineHardwareType,
+): GetCapabilitiesResult {
+	const boardSources: Record<PipelineHardwareType, VideoSource[]> = {
+		jetson: ["camlink", "libuvch264", "v4l_mjpeg", "rtmp", "srt", "test"],
+		rk3588: ["hdmi", "libuvch264", "usb_mjpeg", "rtmp", "srt", "test"],
+		n100: ["libuvch264", "v4l_mjpeg", "rtmp", "test"],
+		generic: ["camlink", "v4l_mjpeg", "test"],
+	};
+
+	const sources = boardSources[board].map((id) => ({
+		id,
+		supports_audio: true,
+		supports_resolution_override: id !== "rtmp" && id !== "srt",
+		supports_framerate_override: true,
+		default_resolution: "1080p" as const,
+		default_framerate: 30,
+	}));
+
+	return {
+		platform: {
+			supports_h265: true,
+			hardware_accelerated: board !== "generic",
+			max_resolution: "1080p",
+		},
+		encoder: {
+			codecs: ["h264", "h265"],
+			bitrate_range: { min: BITRATE_MIN, max: BITRATE_MAX, unit: "kbps" },
+		},
+		sources,
+	};
+}
+
+function provide(board: PipelineHardwareType) {
+	return {
+		fetchEngineCapabilities: async () => ({
+			caps: mockCapabilitiesForBoard(board),
+			schemaVersion: SCHEMA_VERSION,
+		}),
+	};
+}
+
 describe("pipeline init + lookup", () => {
 	beforeEach(async () => {
 		setMockHardware("jetson");
-		await initPipelines();
+		await initPipelines(provide("jetson"));
 	});
 
 	afterAll(async () => {
 		setMockHardware("rk3588");
-		await initPipelines();
+		await initPipelines(provide("rk3588"));
 	});
 
 	it("populates a non-empty registry after initPipelines()", () => {
@@ -89,12 +135,12 @@ describe("validatePipelineOverrides gating", () => {
 describe("validateConfig capability + override rejection", () => {
 	beforeEach(async () => {
 		setMockHardware("jetson");
-		await initPipelines();
+		await initPipelines(provide("jetson"));
 	});
 
 	afterAll(async () => {
 		setMockHardware("rk3588");
-		await initPipelines();
+		await initPipelines(provide("rk3588"));
 	});
 
 	it("rejects an unknown pipeline id", async () => {

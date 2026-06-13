@@ -1,5 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 
+import { type GetCapabilitiesResult, SCHEMA_VERSION } from "@ceralive/cerastream";
+import { BITRATE_MAX, BITRATE_MIN } from "@ceraui/rpc/schemas";
+
 import {
 	getEffectiveHardware,
 	getPipelineList,
@@ -7,6 +10,7 @@ import {
 	searchPipelines,
 	setMockHardware,
 } from "../modules/streaming/pipelines.ts";
+import { type PipelineHardwareType, type VideoSource } from "../modules/streaming/pipeline-sources.ts";
 
 // Source lists differ per hardware. The registry is now derived from the
 // capability contract; the default (table-derived) contract mirrors the
@@ -16,17 +20,59 @@ import {
 //   n100   : libuvch264, v4l_mjpeg, rtmp, test
 // "camlink" and "srt" are jetson-only — the jetson↔n100 discriminators.
 
+function mockCapabilitiesForBoard(
+	board: PipelineHardwareType,
+): GetCapabilitiesResult {
+	const boardSources: Record<PipelineHardwareType, VideoSource[]> = {
+		jetson: ["camlink", "libuvch264", "v4l_mjpeg", "rtmp", "srt", "test"],
+		rk3588: ["hdmi", "libuvch264", "usb_mjpeg", "rtmp", "srt", "test"],
+		n100: ["libuvch264", "v4l_mjpeg", "rtmp", "test"],
+		generic: ["camlink", "v4l_mjpeg", "test"],
+	};
+
+	const sources = boardSources[board].map((id) => ({
+		id,
+		supports_audio: true,
+		supports_resolution_override: id !== "rtmp" && id !== "srt",
+		supports_framerate_override: true,
+		default_resolution: "1080p" as const,
+		default_framerate: 30,
+	}));
+
+	return {
+		platform: {
+			supports_h265: true,
+			hardware_accelerated: board !== "generic",
+			max_resolution: "1080p",
+		},
+		encoder: {
+			codecs: ["h264", "h265"],
+			bitrate_range: { min: BITRATE_MIN, max: BITRATE_MAX, unit: "kbps" },
+		},
+		sources,
+	};
+}
+
+function provide(board: PipelineHardwareType) {
+	return {
+		fetchEngineCapabilities: async () => ({
+			caps: mockCapabilitiesForBoard(board),
+			schemaVersion: SCHEMA_VERSION,
+		}),
+	};
+}
+
 describe("pipeline registry recompute on hardware switch", () => {
 	beforeEach(async () => {
 		// Establish a deterministic jetson baseline regardless of setup.hw.
 		setMockHardware("jetson");
-		await initPipelines();
+		await initPipelines(provide("jetson"));
 	});
 
 	afterAll(async () => {
 		// Restore the default device hardware so we don't pollute other tests.
 		setMockHardware("rk3588");
-		await initPipelines();
+		await initPipelines(provide("rk3588"));
 	});
 
 	it("reflects the new hardware's sources after a hardware switch", async () => {
@@ -36,7 +82,7 @@ describe("pipeline registry recompute on hardware switch", () => {
 
 		const ok = setMockHardware("n100");
 		expect(ok).toBe(true);
-		await initPipelines();
+		await initPipelines(provide("n100"));
 		expect(getEffectiveHardware()).toBe("n100");
 
 		// Registry must now reflect n100, not the stale jetson list.
@@ -49,7 +95,7 @@ describe("pipeline registry recompute on hardware switch", () => {
 
 	it("updates getPipelineList() to the new hardware after switch", async () => {
 		setMockHardware("n100");
-		await initPipelines();
+		await initPipelines(provide("n100"));
 
 		const list = getPipelineList();
 		expect(Object.keys(list)).toContain("libuvch264");
@@ -59,7 +105,7 @@ describe("pipeline registry recompute on hardware switch", () => {
 
 	it("tags returned pipelines with the switched hardware", async () => {
 		setMockHardware("n100");
-		await initPipelines();
+		await initPipelines(provide("n100"));
 
 		const libuvch264 = searchPipelines("libuvch264");
 		expect(libuvch264).not.toBeNull();

@@ -31,7 +31,6 @@ import {
 } from "./capabilities.ts";
 import {
 	type Framerate,
-	listPipelineSources,
 	type PipelineHardwareType,
 	type Resolution,
 	type VideoSource,
@@ -133,48 +132,9 @@ function toFramerate(value: number): Framerate | undefined {
 	return parsed.success ? parsed.data : undefined;
 }
 
-// Bridge until cerastream exposes the get-capabilities IPC method: derive the
-// capability contract from the per-board source tables (parity target; deleted
-// T29), dropping unsupported sources. Passed to getCapabilities() as the live
-// fetcher so the registry builds from the T14 contract shape, not the tables
-// directly. platform/encoder are required by the contract but unused by the
-// registry build (only `sources` is), so they carry placeholders.
-function deriveCapabilitiesFromSourceTables(
-	hardware: PipelineHardwareType,
-): GetCapabilitiesResult {
-	const sources = listPipelineSources(hardware)
-		.filter((meta) => !UNSUPPORTED_SOURCES.has(meta.source))
-		.map((meta) => ({
-			id: meta.source,
-			supports_audio: meta.supportsAudio,
-			supports_resolution_override: meta.supportsResolutionOverride,
-			supports_framerate_override: meta.supportsFramerateOverride,
-			default_resolution: meta.defaultResolution ?? "1080p",
-			default_framerate: meta.defaultFramerate ?? 30,
-		}));
-
-	return {
-		platform: {
-			supports_h265: true,
-			hardware_accelerated: hardware !== "generic",
-			max_resolution: "1080p",
-		},
-		encoder: {
-			codecs: ["h264", "h265"],
-			bitrate_range: { min: BITRATE_MIN, max: BITRATE_MAX, unit: "kbps" },
-		},
-		sources,
-	};
-}
-
-function fetchParityCapabilities(
-	hardware: PipelineHardwareType,
-): Promise<EngineCapabilitiesSnapshot> {
-	return Promise.resolve({
-		caps: deriveCapabilitiesFromSourceTables(hardware),
-		schemaVersion: SCHEMA_VERSION,
-	});
-}
+// The registry builds from the engine's get-capabilities response via
+// getCapabilities(). In tests, the capability service is injected with a mock
+// fetcher that stands in for the engine's IPC method.
 
 function buildPipelineRegistry(
 	sources: GetCapabilitiesResult["sources"],
