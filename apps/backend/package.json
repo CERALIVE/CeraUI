@@ -10,7 +10,7 @@
 	},
 	"dependencies": {
 		"@ceralive/cerastream": "file:vendor/ceralive-cerastream.tgz",
-		"@ceralive/srtla": "link:../../../srtla/bindings/typescript",
+		"@ceralive/srtla-send": "1.0.0",
 		"@ceraui/rpc": "workspace:*",
 		"@orpc/server": "^1.14.5",
 		"finalhandler": "^2.1.1",
