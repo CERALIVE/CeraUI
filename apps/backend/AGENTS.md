@@ -4,7 +4,7 @@ Parent: [`../../AGENTS.md`](../../AGENTS.md)
 
 ## OVERVIEW
 
-Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, exposes all device control via oRPC over WebSocket, drives the `cerastream` engine over structured IPC (`@ceralive/cerastream` vendored tarball) and `srtla` via its `link:` binding.
+Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, exposes all device control via oRPC over WebSocket, drives the `cerastream` engine over structured IPC (`@ceralive/cerastream` vendored tarball) and `srtla-send-rs` via the `@ceralive/srtla-send` npm package.
 
 ## STRUCTURE
 
@@ -197,7 +197,7 @@ selection.
 
 ## ANTI-PATTERNS
 
-- Don't import from `@ceralive/srtla` without checking upstream merge status — binding API is in flux.
+- Don't import from `@ceralive/srtla` — that package is retired from CeraUI. Use `@ceralive/srtla-send` (the `srtla-send-rs` binding, registry dep). Check `../../../srtla-send-rs/AGENTS.md` before touching call sites.
 - Don't add HTTP REST endpoints — all device control goes through oRPC over WebSocket.
 - Don't use `process.exit` directly — use `invariant` from `helpers/invariant.ts`.
 - Don't read config files with raw `fs` — use `helpers/config-loader.ts`.

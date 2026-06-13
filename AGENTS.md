@@ -4,7 +4,7 @@ Parent: [`../AGENTS.md`](../AGENTS.md)
 
 ## ROLE IN THE GROUP
 
-Device control plane. Svelte 5 PWA (frontend) + Bun/TypeScript WebSocket-RPC backend. Drives `cerastream` (active engine) and `srtla` at runtime. Produces the `ceraui` .deb for ARM64 and AMD64 device images.
+Device control plane. Svelte 5 PWA (frontend) + Bun/TypeScript WebSocket-RPC backend. Drives `cerastream` (active engine) and `srtla-send-rs` at runtime. Produces the `ceraui` .deb for ARM64 and AMD64 device images.
 
 **Single engine.** `@ceralive/cerastream` is the ONLY streaming engine, consumed
 as a `file:` tarball at `vendor/ceralive-cerastream.tgz`. The legacy ceracoder
@@ -12,16 +12,14 @@ engine and its sibling `link:` dependency are fully retired (legacy `engine`
 values persisted in device setup.json are coerced to `"cerastream"` at parse
 time with a warning).
 
-The backend resolves `@ceralive/srtla` via a pnpm `link:` path:
+The backend resolves both streaming deps as registry packages — no sibling checkout required:
 
 ```
-"@ceralive/cerastream": "file:vendor/ceralive-cerastream.tgz"
-"@ceralive/srtla":      "link:../../../srtla/bindings/typescript"
+"@ceralive/cerastream":  "file:vendor/ceralive-cerastream.tgz"
+"@ceralive/srtla-send":  registry dep (@ceralive scope, GitHub Packages)
 ```
 
-**LOAD-BEARING layout.** CI must check out `srtla` and `CeraUI` as siblings under the same parent. The `srtla` link: path is correct as-is — do not rename or restructure it. `cerastream` is NOT a sibling link; it is a vendored tarball.
-
-The srtla binding API is settled (v0.2.0, additive telemetry module). Check `../srtla/AGENTS.md` before touching anything that calls `@ceralive/srtla`.
+`cerastream` is a vendored tarball (not a sibling link). `@ceralive/srtla-send` is a published npm package from `srtla-send-rs/bindings/` — consumed as a normal registry dep, not a `link:` path. No sibling checkout of `srtla` or `srtla-send-rs` is needed for `CeraUI` to install or build.
 
 ## STRUCTURE
 
@@ -113,7 +111,7 @@ CeraUI/
 ## COMMANDS
 
 ```bash
-pnpm install          # installs all workspaces; resolves link: deps (siblings must exist)
+pnpm install          # installs all workspaces; resolves registry deps (no sibling checkout required)
 pnpm dev              # frontend + backend via mprocs TUI (port 5173 + 3001)
 pnpm build            # compile backend binary + frontend static
 BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh   # .deb for ARM64
@@ -399,9 +397,9 @@ logger from `apps/backend/src/helpers/logger.ts`. Empty catches now log via
 ## ANTI-PATTERNS
 
 - Don't run `npm install` or `yarn` — pnpm workspaces only.
-- Don't add `@ceralive/srtla` to `package.json` as an npm package — it is a local `link:` dep by design. **`@ceralive/cerastream` is the deliberate exception**: it is a plain npm dependency, vendored as a `file:` tarball at `apps/backend/vendor/ceralive-cerastream.tgz` (ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:`.
+- Don't add `@ceralive/srtla` to `package.json` — that package is retired from CeraUI. The sender binding is `@ceralive/srtla-send` (registry dep, `@ceralive` scope on GitHub Packages). **`@ceralive/cerastream` is vendored**: it is a plain npm dependency at `apps/backend/vendor/ceralive-cerastream.tgz` (ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:`.
 - Don't edit `.impeccable.md` for code changes — it's a design reference, not config.
-- Don't touch srtla binding call sites without checking `../srtla/AGENTS.md` first (API in flux).
+- Don't touch `@ceralive/srtla-send` call sites without checking `../srtla-send-rs/AGENTS.md` first (binding API).
 - Don't add custom UI components to `lib/components/ui/` — that directory is managed by the shadcn-svelte CLI. Custom components go in `lib/components/custom/`.
 - Don't hardcode validation bounds (min/max lengths, bitrate limits, port ranges) in dialog components — import from `ValidationAdapter.ts` which sources from `packages/rpc/src/schemas/`.
 - Don't hardcode timeout/retry values in streaming modules — import from `timing-constants.ts`.
