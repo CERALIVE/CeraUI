@@ -131,9 +131,15 @@ test.describe("Task 21 — ingest stats panel", () => {
 		await expect(panel.getByTestId("ingest-weight").nth(0)).toHaveText("60%");
 		await expect(panel.getByTestId("ingest-weight").nth(1)).toHaveText("40%");
 
-		// Interfaces are surfaced per row.
-		await expect(panel.locator('[data-iface="eth0"]')).toBeVisible();
-		await expect(panel.locator('[data-iface="wlan0"]')).toBeVisible();
+		// Interfaces are surfaced per row. Scope to the row element — the
+		// sparkline and health glyphs also carry data-iface, so a bare
+		// [data-iface] selector is a strict-mode triple-match.
+		await expect(
+			panel.locator('[data-testid="ingest-row"][data-iface="eth0"]'),
+		).toBeVisible();
+		await expect(
+			panel.locator('[data-testid="ingest-row"][data-iface="wlan0"]'),
+		).toBeVisible();
 
 		// Weight cells sum to ~100%; the totals footer confirms it.
 		await expect(panel.getByTestId("ingest-total-weight")).toHaveText("100%");
