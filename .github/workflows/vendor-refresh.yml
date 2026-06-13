@@ -18,6 +18,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  packages: read # pull @ceralive/srtla-send from GitHub Packages during pnpm install
 
 env:
   NODE_VERSION: "24"
@@ -31,12 +32,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: CeraUI
-
-      - name: "Checkout srtla (sibling link: dependency)"
-        uses: actions/checkout@v4
-        with:
-          repository: CERALIVE/srtla
-          path: srtla
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -54,8 +49,11 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Install srtla sibling bindings
-        run: pnpm install --dir srtla/bindings/typescript
+      # Inject the GitHub Packages token for that host ONLY — do not add a setup-node
+      # `scope: @ceralive` redirect here: cerastream is `npm pack`ed from npmjs.org, and
+      # a scope redirect would send that pack to GitHub Packages and break the refresh.
+      - name: Authenticate pnpm to GitHub Packages (@ceralive scope)
+        run: echo "//npm.pkg.github.com/:_authToken=\${NODE_AUTH_TOKEN}" >> CeraUI/.npmrc
 
       - name: Resolve target version
         id: ver
@@ -66,10 +64,14 @@ jobs:
       - name: Refresh vendored bindings
         working-directory: CeraUI
         run: bash scripts/refresh-cerastream-vendor.sh "${{ steps.ver.outputs.version }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify bindings skew
         working-directory: CeraUI
         run: pnpm --filter backend test src/tests/cerastream-bindings-skew.test.ts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Open pull request
         uses: peter-evans/create-pull-request@v7

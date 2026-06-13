@@ -23,6 +23,10 @@ on:
 env:
   NODE_VERSION: "24"
 
+permissions:
+  contents: read
+  packages: read # pull @ceralive/srtla-send from GitHub Packages
+
 jobs:
   # Calculate the next CalVer version automatically
   calculate-version:
@@ -124,12 +128,6 @@ jobs:
         with:
           path: CeraUI
 
-      - name: Checkout srtla (sibling dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: CERALIVE/srtla
-          path: srtla
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -139,6 +137,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
           cache-dependency-path: CeraUI/pnpm-lock.yaml
+          registry-url: https://npm.pkg.github.com
+          scope: "@ceralive"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -148,6 +148,8 @@ jobs:
       - name: Install dependencies
         working-directory: CeraUI
         run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build CeraUI system distribution for ${{ matrix.architecture }}
         working-directory: CeraUI
@@ -184,12 +186,6 @@ jobs:
         with:
           path: CeraUI
 
-      - name: Checkout srtla (sibling dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: CERALIVE/srtla
-          path: srtla
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -199,6 +195,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
           cache-dependency-path: CeraUI/pnpm-lock.yaml
+          registry-url: https://npm.pkg.github.com
+          scope: "@ceralive"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -214,6 +212,8 @@ jobs:
       - name: Install dependencies
         working-directory: CeraUI
         run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Debian package for ${{ matrix.architecture }}
         working-directory: CeraUI
@@ -305,12 +305,10 @@ jobs:
             echo ""
             echo "\`\`\`"
             echo "srt (SRT library with bonding)"
-            echo "  └── srtla (link aggregation)"
-            echo "        │"
             echo "gstlibuvch264src ─┤"
             echo "                  │"
             echo "                  └── ceralive-device (this package)"
-            echo "                        ├── Depends: cerastream, srtla"
+            echo "                        ├── Depends: cerastream"
             echo "                        ├── Depends: network-manager (nmcli)"
             echo "                        └── Depends: modemmanager (mmcli)"
             echo "\`\`\`"
