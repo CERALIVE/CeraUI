@@ -25,7 +25,6 @@ const HEALTH_INDICATOR = "[data-testid='stream-health']";
 const evidence: string[] = [];
 function record(line: string): void {
 	evidence.push(line);
-	console.log(`[task-14] ${line}`);
 }
 
 /** Inject a `health` broadcast (Task 13 shape) via the dev-only `dev.emit`. */

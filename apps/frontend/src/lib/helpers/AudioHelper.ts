@@ -30,7 +30,7 @@ export function getAudioSourceLabel(
 	source: string | null | undefined,
 	options: AudioSourceLabelOptions,
 ): string {
-	const { available, notAvailableSentinel, selectPlaceholder, t } = options;
+	const { notAvailableSentinel, selectPlaceholder, t } = options;
 
 	// Falsy source → return placeholder
 	if (!source) {

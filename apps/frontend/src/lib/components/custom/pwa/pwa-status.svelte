@@ -99,7 +99,7 @@ const isMobile = $derived(() => {
 	// Check for touch capability with NaN safety
 	const { maxTouchPoints } = navigator;
 	const hasTouchScreen =
-		'ontouchstart' in window || (isFinite(maxTouchPoints) && maxTouchPoints > 0);
+		'ontouchstart' in window || (Number.isFinite(maxTouchPoints) && maxTouchPoints > 0);
 
 	// Check user agent for mobile/tablet devices
 	const userAgent = navigator.userAgent || '';

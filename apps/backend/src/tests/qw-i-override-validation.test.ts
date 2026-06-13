@@ -1,12 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { z } from "zod";
+import { describe, expect, it } from "bun:test";
 
 import {
 	PipelineOverrideError,
-	searchPipelines,
 	validatePipelineOverrides,
 } from "../modules/streaming/pipelines.ts";
 

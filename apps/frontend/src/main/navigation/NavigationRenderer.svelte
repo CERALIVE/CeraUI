@@ -52,8 +52,8 @@ const transitionParams = $derived.by(() => {
 	const xValue = isForward ? 300 : -300;
 
 	return {
-		x: isFinite(xValue) ? xValue : 0,
-		duration: isFinite(TRANSITION_DURATION) ? TRANSITION_DURATION : 300,
+		x: Number.isFinite(xValue) ? xValue : 0,
+		duration: Number.isFinite(TRANSITION_DURATION) ? TRANSITION_DURATION : 300,
 		easing: cubicInOut,
 	};
 });

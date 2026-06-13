@@ -29,7 +29,6 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.j
 const evidence: string[] = [];
 function record(line: string): void {
 	evidence.push(line);
-	console.log(`[task-22] ${line}`);
 }
 
 function writeEvidence(fileName: string, lines: string[]): void {

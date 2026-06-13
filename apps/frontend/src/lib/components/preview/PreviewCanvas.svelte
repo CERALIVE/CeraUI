@@ -135,7 +135,7 @@ function configureMse(msg: { mime?: string; init_segment?: string }): void {
 	mediaSource.addEventListener(
 		'sourceopen',
 		() => {
-			if (!mediaSource || mediaSource.readyState !== 'open') return;
+			if (mediaSource?.readyState !== 'open') return;
 			try {
 				sourceBuffer = mediaSource.addSourceBuffer(mime);
 				sourceBuffer.addEventListener('updateend', flushSegments);
@@ -163,7 +163,7 @@ function flushSegments(): void {
 }
 
 function decodeAccessUnit(buffer: ArrayBuffer): void {
-	if (!decoder || decoder.state !== 'configured') return;
+	if (decoder?.state !== 'configured') return;
 	// 9-byte header: [flags:u8][pts_us:i64 BE]; flags bit 0 = keyframe.
 	if (buffer.byteLength <= 9) return;
 	const view = new DataView(buffer);

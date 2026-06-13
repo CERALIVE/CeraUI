@@ -34,7 +34,7 @@ const progress: number = $derived.by(() => {
 	const unpacking = Number(details.unpacking) || 0;
 	const setting_up = Number(details.setting_up) || 0;
 	const total = downloading + unpacking + setting_up;
-	return isFinite(total) ? total : 0;
+	return Number.isFinite(total) ? total : 0;
 });
 
 // Safe total calculation with minimum value and NaN prevention
@@ -42,16 +42,16 @@ const total: number = $derived.by(() => {
 	if (!details?.total) return 1;
 	const calculatedTotal = 3 * (Number(details.total) || 0);
 	const safeTotal = Math.max(calculatedTotal, 1);
-	return isFinite(safeTotal) ? safeTotal : 1;
+	return Number.isFinite(safeTotal) ? safeTotal : 1;
 });
 
 // Progress percentage with enhanced NaN prevention
 const progressPercentage = $derived.by(() => {
-	if (!details || total <= 0 || !isFinite(progress) || !isFinite(total)) {
+	if (!details || total <= 0 || !Number.isFinite(progress) || !Number.isFinite(total)) {
 		return 0;
 	}
 	const percentage = (progress / total) * 100;
-	return isFinite(percentage) ? Math.min(percentage, 100) : 0;
+	return Number.isFinite(percentage) ? Math.min(percentage, 100) : 0;
 });
 
 // Determine current animation phase

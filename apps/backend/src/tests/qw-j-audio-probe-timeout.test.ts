@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import {
 	AudioProbeTimeoutError,
@@ -34,7 +34,7 @@ describe("QW-J: Audio Device Probe Timeout", () => {
 			// Use fake timers to avoid actual 15s wait
 			const originalSetTimeout = global.setTimeout;
 			const originalClearTimeout = global.clearTimeout;
-			let currentTime = 0;
+			let _currentTime = 0;
 			const timers: Array<{ id: number; delay: number; callback: () => void }> =
 				[];
 			let nextId = 1;
@@ -42,19 +42,19 @@ describe("QW-J: Audio Device Probe Timeout", () => {
 			global.setTimeout = ((callback: () => void, delay?: number) => {
 				const id = nextId++;
 				timers.push({ id, delay: delay ?? 0, callback });
-				return id as any;
-			}) as any;
+				return id as unknown as ReturnType<typeof setTimeout>;
+			}) as typeof setTimeout;
 
-			global.clearTimeout = ((id: number) => {
-				const idx = timers.findIndex((t) => t.id === id);
+			global.clearTimeout = ((id: ReturnType<typeof setTimeout>) => {
+				const idx = timers.findIndex((t) => t.id === (id as unknown as number));
 				if (idx >= 0) timers.splice(idx, 1);
-			}) as any;
+			}) as typeof clearTimeout;
 
 			const nonExistentDevice = "nonexistent-audio-device-xyz";
 			const probePromise = asrcProbe(nonExistentDevice);
 
 			// Advance time past the timeout
-			currentTime = AUDIO_PROBE_TIMEOUT_MS + 100;
+			_currentTime = AUDIO_PROBE_TIMEOUT_MS + 100;
 			const timeoutTimer = timers.find(
 				(t) => t.delay === AUDIO_PROBE_TIMEOUT_MS,
 			);
@@ -93,13 +93,13 @@ describe("QW-J: Audio Device Probe Timeout", () => {
 			global.setTimeout = ((callback: () => void, delay?: number) => {
 				const id = nextId++;
 				timers.push({ id, delay: delay ?? 0, callback });
-				return id as any;
-			}) as any;
+				return id as unknown as ReturnType<typeof setTimeout>;
+			}) as typeof setTimeout;
 
-			global.clearTimeout = ((id: number) => {
-				const idx = timers.findIndex((t) => t.id === id);
+			global.clearTimeout = ((id: ReturnType<typeof setTimeout>) => {
+				const idx = timers.findIndex((t) => t.id === (id as unknown as number));
 				if (idx >= 0) timers.splice(idx, 1);
-			}) as any;
+			}) as typeof clearTimeout;
 
 			const missingDevice = "missing-device-qw-j-test";
 			const probePromise = asrcProbe(missingDevice);

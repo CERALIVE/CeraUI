@@ -43,7 +43,6 @@ const evidence = new Map<string, string[]>();
 function record(file: string, line: string): void {
 	if (!evidence.has(file)) evidence.set(file, []);
 	evidence.get(file)?.push(line);
-	console.log(`[task-16] ${line}`);
 }
 
 test.afterAll(() => {

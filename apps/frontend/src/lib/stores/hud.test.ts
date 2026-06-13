@@ -66,6 +66,19 @@ function makeModem(overrides: Partial<Modem> = {}): Modem {
 	};
 }
 
+// Helper to safely get modem status (guaranteed to exist from makeModem)
+function getModemStatus(modem: Modem) {
+	return (
+		modem.status ?? {
+			connection: "connected",
+			network_type: "4G",
+			signal: 80,
+			roaming: false,
+			network: "CarrierA",
+		}
+	);
+}
+
 const wifiFixture: WifiStatus = {
 	wlan0: {
 		ifname: "wlan0",
@@ -189,7 +202,7 @@ describe("modemSignal", () => {
 	it("returns the signal for a normal modem", () => {
 		expect(
 			modemSignal(
-				makeModem({ status: { ...makeModem().status!, signal: 73 } }),
+				makeModem({ status: { ...getModemStatus(makeModem()), signal: 73 } }),
 			),
 		).toBe(73);
 	});
@@ -201,7 +214,7 @@ describe("modemSignal", () => {
 	it("returns null for a negative/sentinel signal", () => {
 		expect(
 			modemSignal(
-				makeModem({ status: { ...makeModem().status!, signal: -1 } }),
+				makeModem({ status: { ...getModemStatus(makeModem()), signal: -1 } }),
 			),
 		).toBeNull();
 	});
@@ -360,10 +373,13 @@ describe("deriveHudState — no-SIM / null signal handling", () => {
 
 		const state = deriveHudState(sources, makeTimestamps(T0), T0);
 		expect(state.links).toHaveLength(1);
-		const link = state.links[0]!;
-		expect(link.type).toBe("modem");
-		expect(link.signal).toBeNull();
-		expect(link.isConnected).toBe(false);
+		const link = state.links[0];
+		expect(link).toBeDefined();
+		if (link) {
+			expect(link.type).toBe("modem");
+			expect(link.signal).toBeNull();
+			expect(link.isConnected).toBe(false);
+		}
 	});
 
 	it("survives entirely empty sources", () => {
@@ -441,10 +457,14 @@ describe("buildLinks — multiple links & index mapping", () => {
 			false,
 			false,
 		);
-		const modemLink = links.find((l) => l.type === "modem")!;
-		const wifiLink = links.find((l) => l.type === "wifi")!;
-		expect(modemLink.isStale).toBe(true);
-		expect(wifiLink.isStale).toBe(false);
+		const modemLink = links.find((l) => l.type === "modem");
+		const wifiLink = links.find((l) => l.type === "wifi");
+		expect(modemLink).toBeDefined();
+		expect(wifiLink).toBeDefined();
+		if (modemLink && wifiLink) {
+			expect(modemLink.isStale).toBe(true);
+			expect(wifiLink.isStale).toBe(false);
+		}
 	});
 });
 
@@ -464,9 +484,9 @@ describe("buildLinks — ethernet links from netif", () => {
 		);
 		const eth = links.filter((l) => l.type === "ethernet");
 		expect(eth).toHaveLength(1);
-		expect(eth[0]!.id).toBe("eth0");
-		expect(eth[0]!.enabled).toBe(true);
-		expect(eth[0]!.isConnected).toBe(true);
+		expect(eth[0]?.id).toBe("eth0");
+		expect(eth[0]?.enabled).toBe(true);
+		expect(eth[0]?.isConnected).toBe(true);
 	});
 
 	it("excludes eth interfaces without an IP and non-eth entries (lo/wifi/modem)", () => {
@@ -502,12 +522,17 @@ describe("buildLinks — throughput join from netif.tp", () => {
 			false,
 			false,
 		);
-		const wifi = links.find((l) => l.type === "wifi")!;
-		const modem = links.find((l) => l.type === "modem")!;
-		const eth = links.find((l) => l.type === "ethernet")!;
-		expect(wifi.throughputKbps).toBe(convertBytesToKbids(64_000));
-		expect(modem.throughputKbps).toBe(convertBytesToKbids(128_000));
-		expect(eth.throughputKbps).toBe(convertBytesToKbids(256_000));
+		const wifi = links.find((l) => l.type === "wifi");
+		const modem = links.find((l) => l.type === "modem");
+		const eth = links.find((l) => l.type === "ethernet");
+		expect(wifi).toBeDefined();
+		expect(modem).toBeDefined();
+		expect(eth).toBeDefined();
+		if (wifi && modem && eth) {
+			expect(wifi.throughputKbps).toBe(convertBytesToKbids(64_000));
+			expect(modem.throughputKbps).toBe(convertBytesToKbids(128_000));
+			expect(eth.throughputKbps).toBe(convertBytesToKbids(256_000));
+		}
 	});
 
 	it("defaults throughputKbps to convertBytesToKbids(0) when there is no netif entry", () => {
@@ -519,7 +544,7 @@ describe("buildLinks — throughput join from netif.tp", () => {
 			false,
 			false,
 		);
-		expect(links[0]!.throughputKbps).toBe(convertBytesToKbids(0));
+		expect(links[0]?.throughputKbps).toBe(convertBytesToKbids(0));
 	});
 });
 
@@ -537,8 +562,8 @@ describe("buildLinks — enabled propagation from netif", () => {
 			false,
 			false,
 		);
-		expect(links.find((l) => l.type === "modem")!.enabled).toBe(false);
-		expect(links.find((l) => l.type === "wifi")!.enabled).toBe(true);
+		expect(links.find((l) => l.type === "modem")?.enabled).toBe(false);
+		expect(links.find((l) => l.type === "wifi")?.enabled).toBe(true);
 	});
 
 	it("defaults enabled to true when there is no matching netif entry", () => {
@@ -550,7 +575,7 @@ describe("buildLinks — enabled propagation from netif", () => {
 			false,
 			false,
 		);
-		expect(links[0]!.enabled).toBe(true);
+		expect(links[0]?.enabled).toBe(true);
 	});
 });
 
@@ -594,11 +619,14 @@ describe("buildLinks — linkIndex stability", () => {
 			before.map((l) => l.linkIndex),
 		);
 		expect(after.map((l) => l.id)).toEqual(before.map((l) => l.id));
-		const disabled = after.find((l) => l.id === "wwan0")!;
-		expect(disabled.enabled).toBe(false);
-		expect(disabled.linkIndex).toBe(
-			before.find((l) => l.id === "wwan0")!.linkIndex,
-		);
+		const disabled = after.find((l) => l.id === "wwan0");
+		expect(disabled).toBeDefined();
+		if (disabled) {
+			expect(disabled.enabled).toBe(false);
+			expect(disabled.linkIndex).toBe(
+				before.find((l) => l.id === "wwan0")?.linkIndex,
+			);
+		}
 	});
 });
 
@@ -626,12 +654,15 @@ describe("S1 — buildLinks includes a no_sim modem with null signal + connectio
 		const links = buildLinks(modems, undefined, undefined, false, false, false);
 
 		expect(links).toHaveLength(1);
-		const link = links[0]!;
-		expect(link.type).toBe("modem");
-		expect(link.id).toBe("wwan0");
-		expect(link.signal).toBeNull();
-		expect(link.connectionState).toBe("no_sim");
-		expect(link.isConnected).toBe(false);
+		const link = links[0];
+		expect(link).toBeDefined();
+		if (link) {
+			expect(link.type).toBe("modem");
+			expect(link.id).toBe("wwan0");
+			expect(link.signal).toBeNull();
+			expect(link.connectionState).toBe("no_sim");
+			expect(link.isConnected).toBe(false);
+		}
 	});
 
 	it("keeps the no_sim modem alongside a healthy modem (no_sim is not filtered out)", () => {
@@ -648,12 +679,18 @@ describe("S1 — buildLinks includes a no_sim modem with null signal + connectio
 		const links = buildLinks(modems, undefined, undefined, false, false, false);
 
 		expect(links).toHaveLength(2);
-		const noSim = links.find((l) => l.id === "wwan1")!;
-		expect(noSim.connectionState).toBe("no_sim");
-		expect(noSim.signal).toBeNull();
-		const healthy = links.find((l) => l.id === "wwan0")!;
-		expect(healthy.connectionState).toBe("connected");
-		expect(healthy.signal).toBe(80);
+		const noSim = links.find((l) => l.id === "wwan1");
+		expect(noSim).toBeDefined();
+		if (noSim) {
+			expect(noSim.connectionState).toBe("no_sim");
+			expect(noSim.signal).toBeNull();
+		}
+		const healthy = links.find((l) => l.id === "wwan0");
+		expect(healthy).toBeDefined();
+		if (healthy) {
+			expect(healthy.connectionState).toBe("connected");
+			expect(healthy.signal).toBe(80);
+		}
 	});
 
 	it("no_sim wins even when a stale status still reports 'connected'", () => {
@@ -689,9 +726,12 @@ describe("S2 — buildLinks marks a scanning modem with connectionState 'scannin
 		const links = buildLinks(modems, undefined, undefined, false, false, false);
 
 		expect(links).toHaveLength(1);
-		const link = links[0]!;
-		expect(link.connectionState).toBe("scanning");
-		expect(link.isConnected).toBe(false);
+		const link = links[0];
+		expect(link).toBeDefined();
+		if (link) {
+			expect(link.connectionState).toBe("scanning");
+			expect(link.isConnected).toBe(false);
+		}
 	});
 });
 
@@ -727,7 +767,7 @@ describe("S5 — buildLinks caps the returned links at MAX_LINKS", () => {
 
 		expect(links).toHaveLength(MAX_LINKS);
 		// WiFi takes index 0; the remaining slots are modems.
-		expect(links[0]!.type).toBe("wifi");
+		expect(links[0]?.type).toBe("wifi");
 		expect(links.filter((l) => l.type === "modem")).toHaveLength(MAX_LINKS - 1);
 	});
 });
@@ -756,13 +796,16 @@ describe("S6 — wifi/ethernet null signal is valid, not an error", () => {
 		const links = buildLinks(undefined, wifi, undefined, false, false, false);
 
 		expect(links).toHaveLength(1);
-		const link = links[0]!;
-		expect(link.type).toBe("wifi");
-		expect(link.signal).toBeNull();
-		expect(link.isConnected).toBe(false);
-		expect(link.connectionState).toBe("disconnected");
-		// Generic fallback label when no active SSID.
-		expect(link.label).toBe("WiFi");
+		const link = links[0];
+		expect(link).toBeDefined();
+		if (link) {
+			expect(link.type).toBe("wifi");
+			expect(link.signal).toBeNull();
+			expect(link.isConnected).toBe(false);
+			expect(link.connectionState).toBe("disconnected");
+			// Generic fallback label when no active SSID.
+			expect(link.label).toBe("WiFi");
+		}
 	});
 
 	it("includes an active wifi link with signal null when the reading is non-finite (no crash)", () => {
@@ -789,10 +832,13 @@ describe("S6 — wifi/ethernet null signal is valid, not an error", () => {
 		const links = buildLinks(undefined, wifi, undefined, false, false, false);
 
 		expect(links).toHaveLength(1);
-		const link = links[0]!;
-		expect(link.signal).toBeNull();
-		expect(link.isConnected).toBe(true);
-		expect(link.connectionState).toBe("connected");
+		const link = links[0];
+		expect(link).toBeDefined();
+		if (link) {
+			expect(link.signal).toBeNull();
+			expect(link.isConnected).toBe(true);
+			expect(link.connectionState).toBe("connected");
+		}
 	});
 
 	it("includes an ethernet link with signal null (ethernet never reports a signal)", () => {
@@ -803,11 +849,14 @@ describe("S6 — wifi/ethernet null signal is valid, not an error", () => {
 		const links = buildLinks(undefined, undefined, netif, false, false, false);
 
 		expect(links).toHaveLength(1);
-		const link = links[0]!;
-		expect(link.type).toBe("ethernet");
-		expect(link.signal).toBeNull();
-		expect(link.isConnected).toBe(true);
-		expect(link.connectionState).toBe("connected");
+		const link = links[0];
+		expect(link).toBeDefined();
+		if (link) {
+			expect(link.type).toBe("ethernet");
+			expect(link.signal).toBeNull();
+			expect(link.isConnected).toBe(true);
+			expect(link.connectionState).toBe("connected");
+		}
 	});
 });
 
@@ -884,13 +933,27 @@ describe("connectionState — per-modem backend mapping", () => {
 		};
 
 		const links = buildLinks(modems, undefined, undefined, false, false, false);
-		const byId = (id: string) => links.find((l) => l.id === id)!;
+		const byId = (id: string) => links.find((l) => l.id === id);
 
-		expect(byId("wwan0").connectionState).toBe("connected");
-		expect(byId("wwan1").connectionState).toBe("scanning");
-		expect(byId("wwan2").connectionState).toBe("disconnected");
-		expect(byId("wwan3").connectionState).toBe("disconnected");
-		expect(byId("wwan4").connectionState).toBe("no_sim");
+		const link0 = byId("wwan0");
+		const link1 = byId("wwan1");
+		const link2 = byId("wwan2");
+		const link3 = byId("wwan3");
+		const link4 = byId("wwan4");
+
+		expect(link0).toBeDefined();
+		expect(link1).toBeDefined();
+		expect(link2).toBeDefined();
+		expect(link3).toBeDefined();
+		expect(link4).toBeDefined();
+
+		if (link0 && link1 && link2 && link3 && link4) {
+			expect(link0.connectionState).toBe("connected");
+			expect(link1.connectionState).toBe("scanning");
+			expect(link2.connectionState).toBe("disconnected");
+			expect(link3.connectionState).toBe("disconnected");
+			expect(link4.connectionState).toBe("no_sim");
+		}
 	});
 });
 
@@ -1001,7 +1064,7 @@ describe("interfaceFingerprints — keyed by ifname across sources", () => {
 			{
 				m1: makeModem({
 					ifname: "wwan0",
-					status: { ...makeModem().status!, signal: 40 },
+					status: { ...getModemStatus(makeModem()), signal: 40 },
 				}),
 			} as ModemList,
 			undefined,
