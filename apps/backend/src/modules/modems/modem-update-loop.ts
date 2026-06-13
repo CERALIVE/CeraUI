@@ -66,6 +66,7 @@ import {
 } from "./modem-registration.ts";
 import { broadcastModems } from "./modem-status.ts";
 import { getModem, getModemIds, removeModem } from "./modems-state.ts";
+import { maybeAutoUnlockSimPins } from "./sim-autounlock.ts";
 import {
 	type ModemDiffEntry,
 	onGsmConnectionsReset,
@@ -265,6 +266,8 @@ export interface InitModemUpdateLoopOptions {
 	monitor?: IMonitorEmitter;
 	/** Run the initial full discovery poll. Default true. */
 	autoDiscover?: boolean;
+	/** Boot SIM PIN auto-unlock after the initial discovery. Default true. */
+	autoUnlock?: boolean;
 	/** Start the retained 30s status poll. Default true. */
 	startPoll?: boolean;
 }
@@ -281,7 +284,7 @@ export async function initModemUpdateLoop(
 	}
 	initialized = true;
 
-	const { autoDiscover = true, startPoll = true } = options;
+	const { autoDiscover = true, autoUnlock = true, startPoll = true } = options;
 
 	// `resetGsmConnections()` is wired EXCLUSIVELY through the T11 hook. It fires
 	// on modem add/remove (triggered from the diff below) and on config change
@@ -315,6 +318,10 @@ export async function initModemUpdateLoop(
 
 	if (autoDiscover) {
 		await discoverModems();
+	}
+
+	if (autoUnlock) {
+		await maybeAutoUnlockSimPins();
 	}
 
 	if (startPoll) {

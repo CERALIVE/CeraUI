@@ -26,6 +26,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
 | Kiosk loopback token (DC-3, single-use, tmpfs) | `modules/ui/kiosk-token.ts` + `rpc/server.ts` |
+| SIM PIN secrets store (opt-in "remember PIN", chmod-600 tmpfs) | `modules/modems/sim-secrets.ts` |
+| Boot SIM PIN auto-unlock hook (bounded, single attempt) | `modules/modems/sim-autounlock.ts` |
 | Kiosk DC-2 state machine (toggle runs the `cog-display` add-on via the manager) | `modules/system/kiosk.ts` |
 | Add-on enable/disable state machine (T28) | `modules/addons/manager.ts` |
 | Post-boot add-on reconciler (T29, non-blocking; never gates rollback) | `modules/addons/reconciler.ts` |
@@ -47,6 +49,30 @@ The `streaming` router exposes these procedures:
 | `getConfig()` | Return current config snapshot |
 
 `setConfig` writes the provided fields onto the running config (same relay/manual mutual-exclusion logic as `updateConfig`, minus DNS/pipeline validation), then calls `saveConfig` and broadcasts a `config` message. Use this for all config-only dialogs that must not start the stream.
+
+## SIM PIN AUTO-UNLOCK [EXISTS]
+
+Opt-in boot auto-unlock for a PIN-locked SIM. Two modules under `modules/modems/`:
+
+- **`sim-secrets.ts`** — the secret store. `storeSimPin` / `loadSimPin` / `clearSimPin`
+  read/write the PIN to a **chmod-600 tmpfs** file `/run/ceralive/sim-pin.secret`
+  (override `CERALIVE_RUN_DIR` in tests — same pattern as `kiosk-token.ts`).
+  Content I/O is `Bun.write` / `Bun.file`; the 0600 mode is enforced with a
+  `node:fs/promises` chmod afterwards (Bun.write ignores mode on an existing file).
+  **The PIN is NEVER in `config.json`** — `runtimeConfigSchema` has no `simPin` field.
+- **`sim-autounlock.ts`** — the boot hook `maybeAutoUnlockSimPins(deps)`, wired into
+  `initModemUpdateLoop` (after the initial discovery, gated by the `autoUnlock`
+  option, default true). Contract: gated on `isRealDevice()`; submits the stored
+  PIN **at most once** per locked modem; on the FIRST non-success it **clears the
+  stored PIN and stops** (no loop toward a PUK lockout — the modem surfaces for
+  manual entry via the `unlockSim` RPC); a success triggers one re-discovery.
+
+The opt-in is performed via `storeSimPin` (persist a **confirmed-correct** PIN) /
+`clearSimPin` (opt back out) — only a PIN the SIM has accepted is ever stored, so
+boot never resubmits a known-wrong PIN. The unlock flow is the intended caller
+(store on a successful unlock when the user chooses "remember"). Coverage:
+`tests/sim-autounlock.test.ts` (mode-600 + config-untouched, boot unlock, bounded
+wrong-PIN, and the no-op gates).
 
 ## CONVENTIONS
 
