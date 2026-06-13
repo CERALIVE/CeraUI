@@ -20,7 +20,7 @@
 // wires srtla per-uplink telemetry, then starts the engine session over the
 // StreamingBackend seam.
 
-import { buildSrtlaSendArgs } from "@ceralive/srtla/sender";
+import { buildSrtlaSendArgs } from "@ceralive/srtla-send/sender";
 import { getConfig } from "../../config.ts";
 import { setup } from "../../setup.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";

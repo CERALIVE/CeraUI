@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type {
 	Telemetry,
 	watchTelemetry as WatchTelemetryFn,
-} from "@ceralive/srtla/telemetry";
+} from "@ceralive/srtla-send/telemetry";
 import {
 	broadcastLinkTelemetryIfChanged,
 	buildLinkTelemetry,

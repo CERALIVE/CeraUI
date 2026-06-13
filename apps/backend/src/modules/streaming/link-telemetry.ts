@@ -47,7 +47,7 @@ import {
 	type Telemetry,
 	type WatchTelemetryHandle,
 	watchTelemetry,
-} from "@ceralive/srtla/telemetry";
+} from "@ceralive/srtla-send/telemetry";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { SRTLA_LISTEN_PORT } from "./constants.ts";
 

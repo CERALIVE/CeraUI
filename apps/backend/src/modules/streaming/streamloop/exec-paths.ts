@@ -21,7 +21,7 @@
 // system/revisions.ts — can read them without pulling in the spawn/orchestration
 // graph, which also breaks the streamloop<->bcrpt import cycle cleanly.
 
-import { getSrtlaSendExec } from "@ceralive/srtla/sender";
+import { getSrtlaSendExec } from "@ceralive/srtla-send/sender";
 import { setup } from "../../setup.ts";
 
 export const srtlaSendExec = getSrtlaSendExec(setup.srtla_path);
