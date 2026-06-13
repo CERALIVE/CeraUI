@@ -48,6 +48,15 @@ const sensors = $derived(getSensors());
 // status.linkTelemetry; surfaced here as a read-only panel, no new collector.
 const linkTelemetry = $derived(getLinkTelemetry());
 
+// Keep the ingest panel mounted across the streaming→idle edge so its end-of-
+// session summary (peak/avg bitrate, per-link uptime, drops) survives the stream
+// stopping — the live table unmounts with the streaming-only strip, but the
+// device-local summary must persist until the next session starts.
+let hadSession = $state(false);
+$effect(() => {
+	if (isStreaming) hadSession = true;
+});
+
 // Hotplug input picker (Task 34). The pipeline picker (EncoderDialog) is
 // untouched.
 const devices = $derived(getDevices());
@@ -395,8 +404,12 @@ const configRows = $derived<ConfigRow[]>([
 				step={BITRATE_STEP}
 			/>
 
-			<!-- Bonded-ingest telemetry (RTT / NAK / weight per uplink) — Task 21 -->
-			<IngestStats telemetry={linkTelemetry} />
+		{/if}
+
+		<!-- Bonded-ingest telemetry + per-session summary/export (#21). Kept mounted
+		     across the streaming→idle edge so the rollup survives stream stop. -->
+		{#if isStreaming || hadSession}
+			<IngestStats telemetry={linkTelemetry} {isStreaming} bitrateKbps={config?.max_br} />
 		{/if}
 
 		<Card.Root>

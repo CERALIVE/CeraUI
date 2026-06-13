@@ -340,3 +340,129 @@ describe("IngestStats — historical trends + health alert", () => {
 		expect(panel.querySelector('[data-testid="ingest-alert"]')).toBeNull();
 	});
 });
+
+/**
+ * Per-session summary + export (device-local).
+ *
+ * Drives a mock session via the `isStreaming` + `bitrateKbps` props: each
+ * telemetry frame while streaming samples one instant; flipping `isStreaming`
+ * false folds those samples into the end-of-stream rollup. The summary then
+ * surfaces peak/avg bitrate, per-link uptime, and the drop count, plus JSON/CSV
+ * export buttons that build a client-side Blob download (no transmission).
+ */
+function bonded(stale: boolean): LinkTelemetryMessage {
+	return {
+		links: [
+			{ conn_id: "0", iface: "eth0", rtt_ms: 18, nak_count: 0, weight_percent: 50, stale: false },
+			{ conn_id: "1", iface: "wlan0", rtt_ms: 30, nak_count: 0, weight_percent: 50, stale },
+		],
+	};
+}
+
+/** Render, sample two frames (4000→8000 kbps, wlan0 drops), then stop. */
+function runMockSession(): HTMLElement {
+	const { container, rerender } = render(IngestStats, {
+		props: { telemetry: bonded(false), isStreaming: true, bitrateKbps: 4000 },
+	});
+	flushSync();
+	rerender({ telemetry: bonded(true), isStreaming: true, bitrateKbps: 8000 });
+	flushSync();
+	rerender({ telemetry: { links: [] }, isStreaming: false, bitrateKbps: 8000 });
+	flushSync();
+	return panelOf(container);
+}
+
+describe("IngestStats — session summary + export (device-local)", () => {
+	beforeEach(() => {
+		// jsdom does not implement the object-URL API; stub so we can spy on it.
+		if (typeof URL.createObjectURL !== "function") {
+			(URL as unknown as { createObjectURL: () => string }).createObjectURL = () => "blob:stub";
+		}
+		if (typeof URL.revokeObjectURL !== "function") {
+			(URL as unknown as { revokeObjectURL: () => void }).revokeObjectURL = () => {};
+		}
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("renders the rollup after the stream stops", () => {
+		const panel = runMockSession();
+
+		expect(panel.querySelector('[data-testid="ingest-summary"]')).not.toBeNull();
+		// The live table is gone while the summary is shown.
+		expect(panel.querySelectorAll('[data-testid="ingest-row"]')).toHaveLength(0);
+
+		expect(
+			panel.querySelector('[data-testid="ingest-summary-peak"]')?.textContent?.trim(),
+		).toBe("8 Mbps");
+		expect(
+			panel.querySelector('[data-testid="ingest-summary-avg"]')?.textContent?.trim(),
+		).toBe("6 Mbps");
+		expect(
+			panel.querySelector('[data-testid="ingest-summary-drops"]')?.textContent?.trim(),
+		).toBe("1");
+
+		const eth0 = panel.querySelector<HTMLElement>(
+			'[data-testid="ingest-uptime-row"][data-iface="eth0"]',
+		);
+		const wlan0 = panel.querySelector<HTMLElement>(
+			'[data-testid="ingest-uptime-row"][data-iface="wlan0"]',
+		);
+		expect(
+			within(eth0 as HTMLElement).getByTestId("ingest-uptime").textContent?.trim(),
+		).toBe("100%");
+		expect(
+			within(wlan0 as HTMLElement).getByTestId("ingest-uptime").textContent?.trim(),
+		).toBe("50%");
+	});
+
+	it("exports a JSON file carrying the rollup fields", async () => {
+		const blobs: Blob[] = [];
+		vi.spyOn(URL, "createObjectURL").mockImplementation((b: Blob | MediaSource) => {
+			blobs.push(b as Blob);
+			return "blob:mock";
+		});
+		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+		vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+		const panel = runMockSession();
+		const jsonBtn = panel.querySelector<HTMLElement>('[data-testid="ingest-export-json"]');
+		expect(jsonBtn, "export json button must render").not.toBeNull();
+		jsonBtn?.click();
+
+		expect(blobs).toHaveLength(1);
+		expect((blobs[0] as Blob).type).toBe("application/json");
+		const parsed = JSON.parse(await (blobs[0] as Blob).text());
+		expect(parsed.peakBitrateKbps).toBe(8000);
+		expect(parsed.avgBitrateKbps).toBe(6000);
+		expect(parsed.dropCount).toBe(1);
+		expect(parsed.links).toEqual([
+			{ iface: "eth0", uptimePercent: 100 },
+			{ iface: "wlan0", uptimePercent: 50 },
+		]);
+	});
+
+	it("exports a CSV file carrying the rollup fields", async () => {
+		const blobs: Blob[] = [];
+		vi.spyOn(URL, "createObjectURL").mockImplementation((b: Blob | MediaSource) => {
+			blobs.push(b as Blob);
+			return "blob:mock";
+		});
+		vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+		vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+		const panel = runMockSession();
+		panel.querySelector<HTMLElement>('[data-testid="ingest-export-csv"]')?.click();
+
+		expect(blobs).toHaveLength(1);
+		expect((blobs[0] as Blob).type).toBe("text/csv");
+		const csv = await (blobs[0] as Blob).text();
+		expect(csv).toContain("peak_bitrate_kbps,8000");
+		expect(csv).toContain("avg_bitrate_kbps,6000");
+		expect(csv).toContain("drop_count,1");
+		expect(csv).toContain("eth0,100");
+		expect(csv).toContain("wlan0,50");
+	});
+});
