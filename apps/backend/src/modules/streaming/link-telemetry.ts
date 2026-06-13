@@ -266,7 +266,13 @@ export function startLinkTelemetry(
 	const watch = opts.watch ?? watchTelemetry;
 	const watchOpts =
 		opts.intervalMs !== undefined ? { intervalMs: opts.intervalMs } : {};
-	handle = watch(statsFile, ingestTelemetry, watchOpts);
+	// watchTelemetry's callback gets a TelemetryUpdate ({ data, stale }), not a raw
+	// snapshot — collapse stale ticks to null so ingestTelemetry caches correctly.
+	handle = watch(
+		statsFile,
+		(update) => ingestTelemetry(update.stale ? null : update.data),
+		watchOpts,
+	);
 }
 
 /** Stop consuming the stats file and clear the conn_id registry (process reset). */

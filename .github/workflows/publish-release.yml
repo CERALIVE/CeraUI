@@ -25,7 +25,6 @@ env:
 
 permissions:
   contents: read
-  packages: read # pull @ceralive/srtla-send from GitHub Packages
 
 jobs:
   # Calculate the next CalVer version automatically
@@ -137,8 +136,6 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
           cache-dependency-path: CeraUI/pnpm-lock.yaml
-          registry-url: https://npm.pkg.github.com
-          scope: "@ceralive"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -148,8 +145,6 @@ jobs:
       - name: Install dependencies
         working-directory: CeraUI
         run: pnpm install --frozen-lockfile
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build CeraUI system distribution for ${{ matrix.architecture }}
         working-directory: CeraUI
@@ -195,8 +190,6 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
           cache-dependency-path: CeraUI/pnpm-lock.yaml
-          registry-url: https://npm.pkg.github.com
-          scope: "@ceralive"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -212,8 +205,6 @@ jobs:
       - name: Install dependencies
         working-directory: CeraUI
         run: pnpm install --frozen-lockfile
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Debian package for ${{ matrix.architecture }}
         working-directory: CeraUI
