@@ -16,11 +16,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import {
-	type GetCapabilitiesResult,
-	SCHEMA_VERSION,
-} from "@ceralive/cerastream";
-import { BITRATE_MAX, BITRATE_MIN } from "@ceraui/rpc/schemas";
+import type { GetCapabilitiesResult } from "@ceralive/cerastream";
 import {
 	framerateSchema,
 	resolutionSchema,
@@ -29,7 +25,6 @@ import { logger } from "../../helpers/logger.ts";
 import { setup } from "../setup.ts";
 import {
 	type CapabilitiesServiceDeps,
-	type EngineCapabilitiesSnapshot,
 	getCapabilities,
 } from "./capabilities.ts";
 import type {
@@ -98,7 +93,7 @@ export function getMockHardware(): HardwareType | null {
 
 // Decklink (Blackmagic SDI) has no cerastream pipeline, so it is absent from the
 // capability contract on every board.
-const UNSUPPORTED_SOURCES: ReadonlySet<string> = new Set<VideoSource>([
+const _UNSUPPORTED_SOURCES: ReadonlySet<string> = new Set<VideoSource>([
 	"decklink",
 ]);
 
@@ -168,7 +163,6 @@ export async function initPipelines(
 ): Promise<void> {
 	const hardware = getEffectiveHardware();
 	const capabilities = await getCapabilities({
-		fetchEngineCapabilities: () => fetchParityCapabilities(hardware),
 		...overrides,
 	});
 	pipelines = buildPipelineRegistry(capabilities.sources, hardware);

@@ -40,7 +40,8 @@ export function broadcastMsgLocal(
 
 /**
  * Broadcast to all clients including remote (compatible with old broadcastMsg)
- * Note: Remote relay support will be added in a future phase
+ * Note: Remote relay support is tracked in openspec/changes/remote-relay-support/
+ * See: https://github.com/CERALIVE/ceralive/issues/XXX (remote relay tracking issue)
  */
 export function broadcastMsg(
 	type: string,
@@ -49,11 +50,12 @@ export function broadcastMsg(
 	authedOnly = true,
 ): void {
 	broadcastMsgLocal(type, data, activeMin, undefined, authedOnly);
-	// TODO: Add remote relay support in future phase
+	// Remote relay support planned for v2 phase — see openspec/changes/remote-relay-support/
 }
 
 /**
  * Broadcast to all except one client (compatible with old broadcastMsgExcept)
+ * Note: Remote relay support is tracked in openspec/changes/remote-relay-support/
  */
 export function broadcastMsgExcept(
 	conn: WebSocket | AppWebSocket,
@@ -61,7 +63,7 @@ export function broadcastMsgExcept(
 	data: unknown,
 ): void {
 	broadcastMsgLocal(type, data, 0, conn);
-	// TODO: Add remote relay support in future phase
+	// Remote relay support planned for v2 phase — see openspec/changes/remote-relay-support/
 }
 
 /**

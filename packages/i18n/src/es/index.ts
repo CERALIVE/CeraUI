@@ -305,6 +305,7 @@ const es = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "Peso",
+			trend: "Tendencia",
 			links: "Enlaces",
 			total: "Total",
 			waiting: "Esperando telemetría de enlaces\u2026",
@@ -322,6 +323,8 @@ const es = {
 			exportJson: "Exportar JSON",
 			exportCsv: "Exportar CSV",
 			exportAria: "Exportar resumen de sesión",
+			exportError:
+				"No se pudo exportar el resumen de sesión. Inténtalo de nuevo.",
 		},
 		preview: {
 			title: "Preview",

@@ -1,6 +1,6 @@
 {
 	"name": "backend",
-	"version": "2026.6.1",
+	"version": "2026.6.2",
 	"description": "CeraUI backend - Bun server for CeraLive streaming hardware",
 	"type": "module",
 	"author": "Andrés Cera",

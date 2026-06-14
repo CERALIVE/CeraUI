@@ -3,10 +3,20 @@
 	Central service for managing mock state and data generation
 */
 
-import type {
-	Framerate,
-	Resolution,
-} from "../../../packages/rpc/src/schemas/streaming.schema.ts";
+// State lifecycle: init → mutate via updateMockState() → reset via resetMockState()
+//
+//   init    initMockService(scenario) seeds the mutable `mockState` from the
+//           active scenario, captures a deep pristine snapshot, and starts the
+//           periodic-fluctuation + relay timers.
+//   mutate  every write to `mockState` funnels through updateMockState(partial):
+//           the four public setters (modem / wifi-connection / netif / encoder)
+//           are thin wrappers that compute the next slice and hand it to the
+//           single typed merger. `mockState` is the sole owner of session state.
+//   reset   resetMockState() restores the pristine snapshot AND clears every
+//           timer — side-effect-clean, so each test starts from the scenario's
+//           seeded state with no leaked intervals or cross-test bleed.
+
+import type { AddonConfig, AddonState } from "@ceraui/rpc/schemas";
 import { logger } from "../helpers/logger.ts";
 import {
 	buildRelaysMsg,
@@ -14,6 +24,7 @@ import {
 	setRelaysCacheMock,
 } from "../modules/remote/remote-relays.ts";
 import { broadcastMsg } from "../modules/ui/websocket-server.ts";
+import { buildMockSimState } from "./fixture-factory.ts";
 import {
 	getActiveScenario,
 	getScenarioConfig,
@@ -25,52 +36,51 @@ import {
 	scenarios,
 	setActiveScenario,
 } from "./mock-config.ts";
+import {
+	BITRATE_MAX_KBPS,
+	BITRATE_MIN_KBPS,
+	MOCK_RELAY_POPULATE_DELAY_MS,
+	MOCK_RTT_INTERVAL_MS,
+	MODEM_SIGNAL_FLUCTUATION_PERCENT,
+	SENSOR_CURRENT_IDLE_A,
+	SENSOR_CURRENT_IDLE_RANGE_A,
+	SENSOR_CURRENT_STREAMING_A,
+	SENSOR_CURRENT_STREAMING_RANGE_A,
+	SENSOR_TEMP_BASE_IDLE_C,
+	SENSOR_TEMP_BASE_STREAMING_C,
+	SENSOR_TEMP_FLUCTUATION_C,
+	SENSOR_VOLTAGE_BASE_V,
+	SENSOR_VOLTAGE_RANGE_V,
+	WIFI_SIGNAL_FLUCTUATION_PERCENT,
+} from "./mock-constants.ts";
+import type {
+	MockEncoderConfigState,
+	MockHealthState,
+	MockModemConfigState,
+	MockNetifConfigState,
+	MockSimState,
+	MockStreamErrorState,
+	MockWifiConnectionState,
+} from "./mock-schemas.ts";
+import { validateMockFixtures } from "./mock-schemas.ts";
+import { MockAddonDescriptor, MockAddonState } from "./providers/addons.ts";
+import { resetMockKioskState } from "./providers/kiosk.ts";
 import { getMockRelaysCache } from "./providers/relays.ts";
 
-// ─── Mutable session-state slot types ────────────────────────────────────────
-
-/** Per-device WiFi connection state (keyed by device id, e.g. "wlan0") */
-export interface MockWifiConnectionState {
-	activeNetwork?: string;
-	savedNetworks: string[];
-}
-
-/** Per-modem mutable config (keyed by modem id string, e.g. "0", "1") */
-export interface MockModemConfigState {
-	apn?: string;
-	network_type_active?: string;
-	roaming?: boolean;
-}
-
-/** Per-interface mutable netif config (keyed by interface name, e.g. "eth0") */
-export interface MockNetifConfigState {
-	enabled: boolean;
-	dhcp: boolean;
-	ip?: string;
-}
-
-/** Encoder config echo — mirrors the fields T11/T13 mutate */
-export interface MockEncoderConfigState {
-	pipeline?: string;
-	max_br?: number;
-	bitrate_overlay?: boolean;
-	resolution?: Resolution;
-	framerate?: Framerate;
-}
-
-/** Controllable liveness sources for the stream health rollup (Task 13). */
-export interface MockHealthState {
-	processAlive: boolean;
-	framesAdvancing: boolean;
-	frameCount: number;
-	reconnecting: boolean;
-	reconnectCount: number;
-	linkCount: number;
-	activeLinks: number;
-}
+// Session-state slot shapes + their Zod schemas live in mock-schemas.ts, so the
+// same schema both types these slots and validates the shipped fixtures at init.
+export type {
+	MockEncoderConfigState,
+	MockHealthState,
+	MockModemConfigState,
+	MockNetifConfigState,
+	MockSimState,
+	MockStreamErrorState,
+	MockWifiConnectionState,
+};
 
 // Dynamic mock state that changes over time
-interface MockState {
+export interface MockState {
 	initialized: boolean;
 	modemSignals: Map<number, number>;
 	modemStates: Map<number, "registered" | "connected" | "searching">;
@@ -95,7 +105,19 @@ interface MockState {
 	modemConfigs: Map<string, MockModemConfigState>;
 	netifConfigs: Map<string, MockNetifConfigState>;
 	mockEncoderConfig: MockEncoderConfigState;
-	mockHealth: MockHealthState;
+	// `null` = health is fully engine-derived (deriveMockHealth); a partial here
+	// is layered on top by getMockHealth() for edge-case tests only.
+	mockHealthOverride: Partial<MockHealthState> | null;
+	// Last cerastream Tier-2 structured error driven in via injectMockStreamError,
+	// or null when none (Task 16); resets with the scenario like the maps above.
+	injectedStreamError: MockStreamErrorState;
+	// Per-modem SIM lock state (keyed by modem id string) + the in-memory stand-in
+	// for the chmod-600 tmpfs PIN secret read; both reset with the scenario.
+	simStates: Map<string, MockSimState>;
+	simPinSecret: string | null;
+	// Add-on runtime state (config.json `addons` shape), seeded from the mock
+	// fixture so resetMockState() restores it like every other session slot.
+	mockAddons: AddonConfig;
 }
 
 const mockState: MockState = {
@@ -122,27 +144,25 @@ const mockState: MockState = {
 	modemConfigs: new Map(),
 	netifConfigs: new Map(),
 	mockEncoderConfig: {},
-	mockHealth: {
-		processAlive: false,
-		framesAdvancing: false,
-		frameCount: 0,
-		reconnecting: false,
-		reconnectCount: 0,
-		linkCount: 0,
-		activeLinks: 0,
-	},
+	mockHealthOverride: null,
+	injectedStreamError: null,
+	simStates: new Map(),
+	simPinSecret: null,
+	mockAddons: {},
 };
+
+// Deep snapshot of `mockState` captured at the end of initMockService — the
+// pristine seeded state for the active scenario that resetMockState() restores.
+let pristineSnapshot: MockState | null = null;
 
 let updateInterval: ReturnType<typeof setInterval> | null = null;
 
 // Delay before the mock relay cache is populated, so the frontend can exercise
 // the "no relays" → populated transition on a fresh dev start.
-const MOCK_RELAY_POPULATE_DELAY_MS = 2000;
 let relayPopulateTimeout: ReturnType<typeof setTimeout> | null = null;
 
 // Periodic mock RTT rebroadcast. Once relays are populated, recompute mock RTT
 // and re-emit `relays` on this cadence so the UI sees live, changing RTT values.
-const MOCK_RTT_INTERVAL_MS = 1500;
 let rttBroadcastInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
@@ -150,6 +170,9 @@ let rttBroadcastInterval: ReturnType<typeof setInterval> | null = null;
  * Re-calling resets all session-scoped maps to seeded defaults.
  */
 export function initMockService(scenarioName?: string): void {
+	// Fail loudly on a drifted fixture before any state is seeded from it.
+	validateMockFixtures();
+
 	// Determine scenario from env or parameter
 	const scenario = (scenarioName ||
 		process.env.MOCK_SCENARIO ||
@@ -177,6 +200,10 @@ export function initMockService(scenarioName?: string): void {
 	mockState.wifiConnections.clear();
 	mockState.modemConfigs.clear();
 	mockState.netifConfigs.clear();
+	mockState.simStates.clear();
+	mockState.simPinSecret = null;
+	mockState.mockHealthOverride = null;
+	mockState.injectedStreamError = null;
 	mockState.interfaceThroughput = {};
 	mockState.wifiModes = {};
 
@@ -243,6 +270,7 @@ export function initMockService(scenarioName?: string): void {
 			network_type_active: modem.network_type.active,
 			roaming: false,
 		});
+		mockState.simStates.set(String(i), buildMockSimState());
 	}
 
 	mockState.netifConfigs.set("eth0", {
@@ -275,20 +303,14 @@ export function initMockService(scenarioName?: string): void {
 		framerate: 30,
 	};
 
-	const streamingActive = config.streaming;
-	mockState.mockHealth = {
-		processAlive: streamingActive,
-		framesAdvancing: streamingActive,
-		frameCount: 0,
-		reconnecting: false,
-		reconnectCount: 0,
-		linkCount: config.modems,
-		activeLinks: streamingActive ? config.modems : 0,
+	mockState.mockAddons = {
+		[MockAddonDescriptor.id]: structuredClone(MockAddonState),
 	};
 
 	startPeriodicUpdates();
 
 	mockState.initialized = true;
+	pristineSnapshot = structuredClone(mockState);
 	logger.info("🎭 Mock service initialized successfully");
 
 	scheduleRelayPopulate();
@@ -339,19 +361,20 @@ function startPeriodicUpdates(): void {
 	}
 
 	updateInterval = setInterval(() => {
-		updateMockState();
+		applyPeriodicFluctuations();
 	}, 1000);
 }
 
 /**
  * Update mock state with realistic fluctuations
  */
-function updateMockState(): void {
+function applyPeriodicFluctuations(): void {
 	const config = getScenarioConfig();
 
-	// Update modem signals (fluctuate ±5%)
+	// Update modem signals (fluctuate ±MODEM_SIGNAL_FLUCTUATION_PERCENT%)
 	for (const [id, signal] of mockState.modemSignals) {
-		const fluctuation = (Math.random() - 0.5) * 10;
+		const fluctuation =
+			(Math.random() - 0.5) * (MODEM_SIGNAL_FLUCTUATION_PERCENT * 2);
 		const newSignal = Math.max(50, Math.min(100, signal + fluctuation));
 		mockState.modemSignals.set(id, newSignal);
 	}
@@ -364,22 +387,29 @@ function updateMockState(): void {
 
 	// Update WiFi signals
 	for (const [ssid, signal] of mockState.wifiSignals) {
-		const fluctuation = (Math.random() - 0.5) * 6;
+		const fluctuation =
+			(Math.random() - 0.5) * (WIFI_SIGNAL_FLUCTUATION_PERCENT * 2);
 		const newSignal = Math.max(20, Math.min(100, signal + fluctuation));
 		mockState.wifiSignals.set(ssid, newSignal);
 	}
 
 	// Update sensors
-	const baseTemp = config.streaming ? 58 : 48;
-	mockState.sensors.socTemp = baseTemp + (Math.random() - 0.5) * 10;
-	mockState.sensors.socVoltage = 4.9 + Math.random() * 0.3;
+	const baseTemp = config.streaming
+		? SENSOR_TEMP_BASE_STREAMING_C
+		: SENSOR_TEMP_BASE_IDLE_C;
+	mockState.sensors.socTemp =
+		baseTemp + (Math.random() - 0.5) * SENSOR_TEMP_FLUCTUATION_C;
+	mockState.sensors.socVoltage =
+		SENSOR_VOLTAGE_BASE_V + Math.random() * SENSOR_VOLTAGE_RANGE_V;
 	mockState.sensors.socCurrent = config.streaming
-		? 2.5 + Math.random() * 0.5
-		: 1.5 + Math.random() * 0.3;
+		? SENSOR_CURRENT_STREAMING_A +
+			Math.random() * SENSOR_CURRENT_STREAMING_RANGE_A
+		: SENSOR_CURRENT_IDLE_A + Math.random() * SENSOR_CURRENT_IDLE_RANGE_A;
 
 	// Update streaming stats
 	if (config.streaming && mockState.streaming.isActive) {
-		mockState.streaming.bitrate = 9000 + Math.random() * 3000;
+		mockState.streaming.bitrate =
+			BITRATE_MIN_KBPS + Math.random() * (BITRATE_MAX_KBPS - BITRATE_MIN_KBPS);
 		mockState.streaming.srtLatency = 180 + Math.random() * 80;
 		mockState.streaming.packetLoss = Math.random() * 0.5;
 	}
@@ -447,24 +477,42 @@ export function setStreamingState(isActive: boolean): void {
 	} else {
 		mockState.streaming.connectedRelays = 0;
 	}
-	mockState.mockHealth.processAlive = isActive;
-	mockState.mockHealth.framesAdvancing = isActive;
-	mockState.mockHealth.linkCount = config.modems;
-	mockState.mockHealth.activeLinks = isActive ? config.modems : 0;
+}
+
+function deriveMockHealth(): MockHealthState {
+	const { streaming } = mockState;
+	const linkCount = getScenarioConfig().modems;
+	const activeLinks = streaming.isActive
+		? Math.min(streaming.connectedRelays, linkCount)
+		: 0;
+	return {
+		processAlive: streaming.isActive,
+		framesAdvancing: streaming.isActive,
+		frameCount: 0,
+		reconnecting: false,
+		reconnectCount: 0,
+		linkCount,
+		activeLinks,
+	};
 }
 
 export function getMockHealth(): Readonly<MockHealthState> {
-	return mockState.mockHealth;
+	const derived = deriveMockHealth();
+	const override = mockState.mockHealthOverride;
+	return override ? { ...derived, ...override } : derived;
 }
 
 export function setMockHealth(update: Partial<MockHealthState>): void {
-	mockState.mockHealth = { ...mockState.mockHealth, ...update };
+	updateMockState({
+		mockHealthOverride: { ...(mockState.mockHealthOverride ?? {}), ...update },
+	});
 }
 
-/**
- * Stop the mock service
- */
-export function stopMockService(): void {
+export function setMockStreamError(event: MockStreamErrorState): void {
+	updateMockState({ injectedStreamError: event });
+}
+
+function clearMockTimers(): void {
 	if (updateInterval) {
 		clearInterval(updateInterval);
 		updateInterval = null;
@@ -477,9 +525,38 @@ export function stopMockService(): void {
 		clearInterval(rttBroadcastInterval);
 		rttBroadcastInterval = null;
 	}
+}
+
+/**
+ * Stop the mock service
+ */
+export function stopMockService(): void {
+	clearMockTimers();
 	setRelaysCacheMock(undefined);
 	mockState.initialized = false;
 	logger.info("🎭 Mock service stopped");
+}
+
+/**
+ * Single typed entry point for every write to `mockState` (see the lifecycle
+ * note at the top of the file). Merges the provided top-level slices into the
+ * mutable state object; the named setters below are thin wrappers over this.
+ */
+export function updateMockState(partial: Partial<MockState>): void {
+	Object.assign(mockState, partial);
+}
+
+/**
+ * Restore the active scenario's pristine seeded state and clear every running
+ * timer. Side-effect-clean (no broadcasts, no new timers) so unit tests get
+ * per-test isolation without leaking intervals. No-op until initMockService has
+ * captured a snapshot.
+ */
+export function resetMockState(): void {
+	clearMockTimers();
+	resetMockKioskState();
+	if (!pristineSnapshot) return;
+	Object.assign(mockState, structuredClone(pristineSnapshot));
 }
 
 /**
@@ -496,7 +573,9 @@ export function setMockWifiConnection(
 	const current = mockState.wifiConnections.get(deviceId) ?? {
 		savedNetworks: [],
 	};
-	mockState.wifiConnections.set(deviceId, { ...current, ...update });
+	const wifiConnections = new Map(mockState.wifiConnections);
+	wifiConnections.set(deviceId, { ...current, ...update });
+	updateMockState({ wifiConnections });
 }
 
 /**
@@ -530,7 +609,9 @@ export function setMockModemConfig(
 	update: Partial<MockModemConfigState>,
 ): void {
 	const current = mockState.modemConfigs.get(modemId) ?? {};
-	mockState.modemConfigs.set(modemId, { ...current, ...update });
+	const modemConfigs = new Map(mockState.modemConfigs);
+	modemConfigs.set(modemId, { ...current, ...update });
+	updateMockState({ modemConfigs });
 }
 
 export function setMockNetifConfig(
@@ -541,13 +622,45 @@ export function setMockNetifConfig(
 		enabled: true,
 		dhcp: true,
 	};
-	mockState.netifConfigs.set(ifName, { ...current, ...update });
+	const netifConfigs = new Map(mockState.netifConfigs);
+	netifConfigs.set(ifName, { ...current, ...update });
+	updateMockState({ netifConfigs });
 }
 
 export function setMockEncoderConfig(
 	update: Partial<MockEncoderConfigState>,
 ): void {
-	mockState.mockEncoderConfig = { ...mockState.mockEncoderConfig, ...update };
+	updateMockState({
+		mockEncoderConfig: { ...mockState.mockEncoderConfig, ...update },
+	});
+}
+
+export function setMockSimState(
+	modemId: string,
+	update: Partial<MockSimState>,
+): void {
+	const current = mockState.simStates.get(modemId) ?? buildMockSimState();
+	const simStates = new Map(mockState.simStates);
+	simStates.set(modemId, { ...current, ...update });
+	updateMockState({ simStates });
+}
+
+export function setMockSimPinSecret(pin: string | null): void {
+	updateMockState({ simPinSecret: pin });
+}
+
+export function getMockAddons(): Readonly<AddonConfig> {
+	return mockState.mockAddons;
+}
+
+export function setMockAddonState(id: string, state: AddonState): void {
+	updateMockState({ mockAddons: { ...mockState.mockAddons, [id]: state } });
+}
+
+export function removeMockAddonState(id: string): void {
+	const mockAddons = { ...mockState.mockAddons };
+	delete mockAddons[id];
+	updateMockState({ mockAddons });
 }
 
 // Re-export commonly used functions

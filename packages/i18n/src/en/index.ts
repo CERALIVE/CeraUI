@@ -292,6 +292,7 @@ const en = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "Weight",
+			trend: "Trend",
 			links: "Links",
 			total: "Total",
 			waiting: "Waiting for link telemetry\u2026",
@@ -309,6 +310,7 @@ const en = {
 			exportJson: "Export JSON",
 			exportCsv: "Export CSV",
 			exportAria: "Export session summary",
+			exportError: "Couldn't export the session summary. Please try again.",
 		},
 		preview: {
 			title: "Preview",

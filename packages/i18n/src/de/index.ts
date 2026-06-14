@@ -305,6 +305,7 @@ const de = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "Gewicht",
+			trend: "Trend",
 			links: "Verbindungen",
 			total: "Gesamt",
 			waiting: "Warte auf Verbindungstelemetrie\u2026",
@@ -322,6 +323,8 @@ const de = {
 			exportJson: "JSON exportieren",
 			exportCsv: "CSV exportieren",
 			exportAria: "Sitzungsübersicht exportieren",
+			exportError:
+				"Sitzungsübersicht konnte nicht exportiert werden. Bitte erneut versuchen.",
 		},
 		preview: {
 			title: "Preview",

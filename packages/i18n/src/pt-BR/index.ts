@@ -886,6 +886,7 @@ const ptBR = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "Peso",
+			trend: "Tendência",
 			links: "Links",
 			total: "Total",
 			waiting: "Aguardando telemetria dos links\u2026",
@@ -903,6 +904,8 @@ const ptBR = {
 			exportJson: "Exportar JSON",
 			exportCsv: "Exportar CSV",
 			exportAria: "Exportar resumo da sessão",
+			exportError:
+				"Não foi possível exportar o resumo da sessão. Tente novamente.",
 		},
 		preview: {
 			title: "Preview",

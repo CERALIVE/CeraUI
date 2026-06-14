@@ -34,6 +34,9 @@ export const HEARTBEAT_STALE_THRESHOLD_MS = 15000;
  */
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
+/** Monotonic tick counter for the debug-level cadence trace. */
+let heartbeatTickCount = 0;
+
 /**
  * Extra work to run on each heartbeat tick (e.g. stream-health broadcast), kept
  * decoupled so heartbeat.ts owns no domain imports. Listeners run after the ping.
@@ -67,6 +70,7 @@ export function startHeartbeat(
 		return;
 	}
 	heartbeatTimer = setInterval(() => {
+		logger.debug("heartbeat tick", { tick: ++heartbeatTickCount });
 		emitHeartbeat();
 		for (const listener of tickListeners) {
 			try {

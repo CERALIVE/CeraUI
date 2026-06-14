@@ -869,6 +869,7 @@ const ar = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "الوزن",
+			trend: "الاتجاه",
 			links: "الروابط",
 			total: "الإجمالي",
 			waiting: "في انتظار قياس الروابط\u2026",
@@ -886,6 +887,7 @@ const ar = {
 			exportJson: "تصدير JSON",
 			exportCsv: "تصدير CSV",
 			exportAria: "تصدير ملخص الجلسة",
+			exportError: "تعذّر تصدير ملخص الجلسة. يرجى المحاولة مرة أخرى.",
 		},
 		preview: {
 			title: "Preview",
