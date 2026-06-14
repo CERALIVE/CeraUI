@@ -406,6 +406,12 @@ const hi = {
 			name: "नाम",
 			channel: "चैनल",
 			password: "पासवर्ड",
+			connectPhoneTitle: "अपना फ़ोन कनेक्ट करें",
+			connectPhoneInstructions:
+				"हॉटस्पॉट से जुड़ें, फिर नीचे दिया URL अपने ब्राउज़र में खोलें",
+			deviceAccessQrLabel: "CeraUI खोलने के लिए स्कैन करें",
+			navigateManuallyNote: "अगर पेज अपने आप नहीं खुलता, तो URL पर मैन्युअल रूप से जाएं",
+			hotspotOffPrompt: "अपना फ़ोन कनेक्ट करने के लिए हॉटस्पॉट शुरू करें",
 		},
 		wifi: {
 			ssid: "SSID",

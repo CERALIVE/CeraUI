@@ -417,6 +417,14 @@ const ja = {
 			name: "名前",
 			channel: "チャンネル",
 			password: "パスワード",
+			connectPhoneTitle: "スマートフォンを接続",
+			connectPhoneInstructions:
+				"ホットスポットに接続し、下のURLをブラウザで開いてください",
+			deviceAccessQrLabel: "スキャンしてCeraUIを開く",
+			navigateManuallyNote:
+				"ページが自動的に開かない場合は、URLに手動でアクセスしてください",
+			hotspotOffPrompt:
+				"スマートフォンを接続するにはホットスポットを起動してください",
 		},
 		wifi: {
 			ssid: "SSID",

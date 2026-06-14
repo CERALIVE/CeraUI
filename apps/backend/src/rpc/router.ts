@@ -79,6 +79,7 @@ import {
 import {
 	getWifiStatusProcedure,
 	hotspotConfigureProcedure,
+	hotspotInfoProcedure,
 	hotspotStartProcedure,
 	hotspotStopProcedure,
 	wifiConnectNewProcedure,
@@ -123,6 +124,7 @@ const stableRoutes = {
 
 	wifi: os.router({
 		getStatus: getWifiStatusProcedure,
+		hotspotInfo: hotspotInfoProcedure,
 		connect: wifiConnectProcedure,
 		disconnect: wifiDisconnectProcedure,
 		connectNew: wifiConnectNewProcedure,

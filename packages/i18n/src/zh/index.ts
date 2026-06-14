@@ -400,6 +400,11 @@ const zh = {
 			name: "名称",
 			channel: "频道",
 			password: "密码",
+			connectPhoneTitle: "连接您的手机",
+			connectPhoneInstructions: "加入热点，然后在浏览器中打开下方的网址",
+			deviceAccessQrLabel: "扫描以打开 CeraUI",
+			navigateManuallyNote: "如果页面未自动打开，请手动导航到该网址",
+			hotspotOffPrompt: "启动热点以连接您的手机",
 		},
 		wifi: {
 			ssid: "SSID",

@@ -111,6 +111,16 @@ export const hotspotConfigInputSchema = z.object({
 });
 export type HotspotConfigInput = z.infer<typeof hotspotConfigInputSchema>;
 
+// Hotspot info output schema — connect-phone surface. Deliberately carries NO
+// password: it exposes only the SSID, the device's gateway IP on the hotspot
+// subnet, and whether the hotspot is currently active (G3).
+export const HotspotInfoOutput = z.object({
+	ssid: z.string(),
+	gatewayIp: z.string(),
+	isActive: z.boolean(),
+});
+export type HotspotInfo = z.infer<typeof HotspotInfoOutput>;
+
 // WiFi operation output schema
 export const wifiOperationOutputSchema = z.object({
 	success: z.boolean(),
