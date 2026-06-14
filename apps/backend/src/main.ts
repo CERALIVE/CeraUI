@@ -29,6 +29,7 @@ import { isDevelopment } from "./mocks/mock-config.ts";
 import { initMockService } from "./mocks/mock-service.ts";
 import { runAddonReconciler } from "./modules/addons/reconciler.ts";
 import { getConfig, loadConfig } from "./modules/config.ts";
+import { initIdentity } from "./modules/identity/index.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
 import { initSRTIngest } from "./modules/ingest/srt.ts";
 import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
@@ -40,6 +41,7 @@ import {
 	updateNetif,
 } from "./modules/network/network-interfaces.ts";
 import { initRemote } from "./modules/remote/remote.ts";
+import { initControlChannel } from "./modules/remote-control/channel.ts";
 import { setup } from "./modules/setup.ts";
 import {
 	startAudioDeviceWatcher,
@@ -111,6 +113,15 @@ await loadConfig();
 logger.info(bootTimer.phase("🔧", "config"));
 
 initRemote();
+// Resolve device_id + paired state before anything that gates the control
+// channel (spec §9: it MUST NOT dial until identity is resolved). Fail-soft —
+// never blocks boot.
+await initIdentity();
+// Second, independent outbound control channel (spec §9): dials the pinned
+// device-gateway hub once identity is resolved + paired. Distinct from the BCRPT
+// relay socket above — its own endpoint, token audience, and lifecycle. Fail-soft,
+// never blocks boot.
+await initControlChannel();
 await initPipelines();
 
 // Migrate persisted config vs the offered set: a `pipeline` the current hardware
