@@ -15,6 +15,13 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import pkg from "../package.json" with { type: "json" };
+import {
+	APP_NAME,
+	buildBootBanner,
+	createBootTimer,
+	formatReadyLine,
+} from "./helpers/boot-banner.ts";
 import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
@@ -63,7 +70,7 @@ import { getSshStatus } from "./modules/system/ssh.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
-import { initServer } from "./rpc/index.ts";
+import { getServer, initServer } from "./rpc/index.ts";
 
 /* Disable localization for any CLI commands we run */
 process.env.LANG = "C.UTF-8";
@@ -71,6 +78,20 @@ process.env.LANGUAGE = "C";
 
 /* Make sure apt-get doesn't expect any interactive user input */
 process.env.DEBIAN_FRONTEND = "noninteractive";
+
+// Port is unknown until the server binds — omitted here, reported on the ready line.
+const bootTimer = createBootTimer();
+logger.info(
+	buildBootBanner({
+		name: APP_NAME,
+		version: pkg.version,
+		env: process.env.NODE_ENV ?? "production",
+		scenario: isDevelopment()
+			? process.env.MOCK_SCENARIO || "multi-modem-wifi"
+			: null,
+		port: null,
+	}),
+);
 
 /* Initialize mock service in development mode */
 if (isDevelopment()) {
@@ -87,6 +108,7 @@ checkExecPath(srtlaSendExec);
 checkExecPath(bcrptExec);
 
 await loadConfig();
+logger.info(bootTimer.phase("🔧", "config"));
 
 initRemote();
 await initPipelines();
@@ -98,6 +120,7 @@ reconcilePersistedPipeline(
 	getConfig().pipeline,
 	Object.keys(getPipelineList()),
 );
+logger.info(bootTimer.phase("🔌", "pipelines"));
 
 void initRevisions();
 // WebSocket server is now integrated with HTTP server via Bun.serve()
@@ -106,6 +129,7 @@ initDeviceStats();
 await initRTMPIngestStats();
 initSRTIngest();
 void getSshStatus();
+logger.info(bootTimer.phase("🖥️", "hardware"));
 
 updateGwWrapper();
 setInterval(updateGwWrapper, UPDATE_GW_INT);
@@ -129,6 +153,7 @@ networkMonitor.on("monitor-event", handleHotspotMonitorEvent);
 
 // Event-driven modems share the SAME monitor (one nmcli monitor for all)
 void initModemUpdateLoop({ monitor: networkMonitor });
+logger.info(bootTimer.phase("🌐", "network"));
 
 // check for Cam Links on USB2 at startup
 checkCamlinkUsb2();
@@ -141,6 +166,7 @@ startAudioDeviceWatcher(() => getStreamingProcesses().length > 0);
 // `devices` payload that feeds the cerastream picker + live switch-input RPC.
 startDeviceDiscovery();
 startBcrpt();
+logger.info(bootTimer.phase("🎵", "audio & devices"));
 
 // Don't autostart when restarting CeraLive after a software update or after a crash
 
@@ -161,6 +187,8 @@ killall(["srtla_send"]);
 
 // Initialize Bun native HTTP/WebSocket server
 initServer();
+const boundPort = Number(getServer()?.url.port) || null;
+logger.info(bootTimer.phase("🚀", "server"));
 
 // Server→client heartbeat: periodic app-level ping for half-open detection
 startHeartbeat();
@@ -188,3 +216,6 @@ void runAddonReconciler();
 process.on("SIGUSR1", function reconcileAddons() {
 	void runAddonReconciler();
 });
+logger.info(bootTimer.phase("▶️", "autostart & reconciler"));
+
+logger.info(formatReadyLine(bootTimer.elapsedMs(), boundPort));

@@ -11,6 +11,7 @@ import { createContext, initSocketData } from "./context.ts";
 import { addClient, removeClient, sendToClient } from "./events.ts";
 import { buildInitialStatus } from "./procedures/status.procedure.ts";
 import { appRouter } from "./router.ts";
+import { instrumentRpcCall } from "./rpc-logging.ts";
 import { getPasswordHash } from "./state/password.ts";
 import type { AppWebSocket, SocketData } from "./types.ts";
 
@@ -68,8 +69,14 @@ async function handleORPCMessage(
 			}
 		}
 
-		// Execute the procedure using ORPC's call function
-		const result = await call(procedure, message.input, { context });
+		// Execute the procedure using ORPC's call function, wrapped in the
+		// per-RPC logging interceptor (cid + latency + ok/err, dev/debug-gated).
+		const result = await instrumentRpcCall(
+			message.path ?? [],
+			message.input,
+			context,
+			() => call(procedure, message.input, { context }),
+		);
 
 		// Send response
 		ws.send(

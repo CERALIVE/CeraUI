@@ -264,6 +264,30 @@ export function parseRaucSlot(stdout: string): string | null {
 	return null;
 }
 
+// ─── degradation logging ────────────────────────────────────────────────────
+
+/** Signal identifiers used in the degradation WARN + debug tick summary. */
+type DeviceStatsSignal =
+	| "disk"
+	| "cpuLoad1"
+	| "socTemp"
+	| "ifaceRxTx"
+	| "raucSlot";
+
+function errMessage(err: unknown): string {
+	return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * A collector hit a real read/exec error and is degrading the signal to `null`.
+ * WARN-level so silent hardware-read failures (missing /sys path, unreadable
+ * /proc file, exec failure) surface even in production — distinct from the
+ * EXPECTED null cases (first-sample baseline, rauc absent) which stay quiet.
+ */
+function warnDegraded(signal: DeviceStatsSignal, err: unknown): void {
+	logger.warn("device-stats degraded", { signal, reason: errMessage(err) });
+}
+
 // ─── per-signal collectors (each degrades to null/"unavailable") ─────────────
 
 async function collectDisk(deps: DeviceStatsDeps): Promise<DiskStat | null> {
@@ -284,6 +308,8 @@ async function collectDisk(deps: DeviceStatsDeps): Promise<DiskStat | null> {
 					`/sys/block/${blockDev}/queue/rotational`,
 				);
 			} catch {
+				// Missing rotational flag only loses the media classification (→
+				// "unknown"); the disk signal itself is still valid, so no WARN.
 				rotational = null;
 			}
 		}
@@ -292,7 +318,8 @@ async function collectDisk(deps: DeviceStatsDeps): Promise<DiskStat | null> {
 			total: df.total,
 			type: classifyDiskType(blockDev, rotational),
 		};
-	} catch {
+	} catch (err) {
+		warnDegraded("disk", err);
 		return null;
 	}
 }
@@ -300,7 +327,22 @@ async function collectDisk(deps: DeviceStatsDeps): Promise<DiskStat | null> {
 async function collectCpuLoad1(deps: DeviceStatsDeps): Promise<number | null> {
 	try {
 		return parseLoadAvg(await deps.readText("/proc/loadavg"));
-	} catch {
+	} catch (err) {
+		warnDegraded("cpuLoad1", err);
+		return null;
+	}
+}
+
+/**
+ * Read the SoC temperature from the injected sensors value (no second thermal
+ * read). Synchronous, but wrapped so a throwing `getSocTempRaw` degrades the
+ * single signal to `null` (with a WARN) instead of failing the whole tick.
+ */
+function collectSocTemp(deps: DeviceStatsDeps): number | null {
+	try {
+		return parseSocTemp(deps.getSocTempRaw());
+	} catch (err) {
+		warnDegraded("socTemp", err);
 		return null;
 	}
 }
@@ -316,7 +358,8 @@ async function collectIfaceRxTx(
 		state.prevNetDev = { time: now, ifaces };
 		if (!prev) return null; // first sample establishes the baseline only
 		return computeIfaceRates(prev.ifaces, ifaces, (now - prev.time) / 1000);
-	} catch {
+	} catch (err) {
+		warnDegraded("ifaceRxTx", err);
 		return null;
 	}
 }
@@ -349,8 +392,30 @@ export async function collectDeviceStats(
 		collectIfaceRxTx(deps, state),
 		collectRaucSlot(deps),
 	]);
-	const socTemp = parseSocTemp(deps.getSocTempRaw());
-	return { disk, cpuLoad1, socTemp, ifaceRxTx, raucSlot };
+	const socTemp = collectSocTemp(deps);
+	const payload: DeviceStatsPayload = {
+		disk,
+		cpuLoad1,
+		socTemp,
+		ifaceRxTx,
+		raucSlot,
+	};
+	logger.debug("device-stats tick", { signals: summarizeSignals(payload) });
+	return payload;
+}
+
+type SignalState = "ok" | "null" | "unavailable";
+
+function summarizeSignals(
+	p: DeviceStatsPayload,
+): Record<DeviceStatsSignal, SignalState> {
+	return {
+		disk: p.disk !== null ? "ok" : "null",
+		cpuLoad1: p.cpuLoad1 !== null ? "ok" : "null",
+		socTemp: p.socTemp !== null ? "ok" : "null",
+		ifaceRxTx: p.ifaceRxTx !== null ? "ok" : "null",
+		raucSlot: p.raucSlot === "unavailable" ? "unavailable" : "ok",
+	};
 }
 
 // ─── production wiring ───────────────────────────────────────────────────────

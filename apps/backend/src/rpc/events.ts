@@ -159,6 +159,7 @@ export function broadcast(
 	const seq = advanceSeq(seqCounters, type);
 	const message = JSON.stringify({ [type]: data, seq });
 
+	let recipients = 0;
 	for (const client of clients) {
 		if (client === except) continue;
 		if (authedOnly && !client.data.isAuthenticated) continue;
@@ -166,10 +167,13 @@ export function broadcast(
 
 		try {
 			client.send(message);
+			recipients++;
 		} catch (error) {
 			logger.error("Broadcast send error", { err: error });
 		}
 	}
+
+	logger.debug("broadcast", { event: type, clients: recipients });
 }
 
 /**
