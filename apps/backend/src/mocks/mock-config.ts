@@ -3,6 +3,17 @@
 	Defines scenarios and mock state for development mode
 */
 
+// Type-only import on purpose: mock-schemas imports these fixtures at runtime,
+// so a value import here would create a module cycle. `satisfies` below turns
+// fixture/schema drift into a compile error.
+import type {
+	MockModemConfig,
+	MockWifiNetwork,
+	MockWifiRadio,
+} from "./mock-schemas.ts";
+
+export type { MockModemConfig, MockWifiNetwork, MockWifiRadio };
+
 export type MockScenario =
 	| "single-modem"
 	| "multi-modem-wifi"
@@ -37,23 +48,7 @@ export const scenarios: Record<MockScenario, ScenarioConfig> = {
 };
 
 // Mock modem definitions
-export interface MockModemConfig {
-	id: number;
-	model: string;
-	manufacturer: string;
-	imei: string;
-	iccid: string;
-	carrier: string;
-	operatorCode: string;
-	network_type: {
-		supported: string[];
-		active: string;
-	};
-	interfaceName: string;
-	ip: string;
-}
-
-export const mockModems: MockModemConfig[] = [
+export const mockModems = [
 	{
 		id: 0,
 		model: "RM520N-GL",
@@ -99,17 +94,10 @@ export const mockModems: MockModemConfig[] = [
 		interfaceName: "usb2",
 		ip: "10.0.2.2",
 	},
-];
+] satisfies MockModemConfig[];
 
 // Mock WiFi radios
-export interface MockWifiRadio {
-	device: string;
-	ifname: string;
-	macAddress: string;
-	supports_hotspot: boolean;
-}
-
-export const mockWifiRadios: MockWifiRadio[] = [
+export const mockWifiRadios = [
 	{
 		device: "wlan0",
 		ifname: "wlan0",
@@ -122,19 +110,10 @@ export const mockWifiRadios: MockWifiRadio[] = [
 		macAddress: "dc:a6:32:12:34:58",
 		supports_hotspot: true,
 	},
-];
+] satisfies MockWifiRadio[];
 
 // Mock WiFi networks
-export interface MockWifiNetwork {
-	ssid: string;
-	bssid: string;
-	signal: number;
-	frequency: number;
-	security: string;
-	active: boolean;
-}
-
-export const mockWifiNetworks: MockWifiNetwork[] = [
+export const mockWifiNetworks = [
 	{
 		ssid: "HomeNetwork",
 		bssid: "AA:BB:CC:DD:EE:01",
@@ -215,7 +194,7 @@ export const mockWifiNetworks: MockWifiNetwork[] = [
 		security: "WPA2",
 		active: false,
 	},
-];
+] satisfies MockWifiNetwork[];
 
 // Active scenario state
 let activeScenario: MockScenario = "multi-modem-wifi";

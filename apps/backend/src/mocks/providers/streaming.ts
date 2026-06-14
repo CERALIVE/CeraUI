@@ -3,9 +3,16 @@ CeraUI - Streaming Mock Provider
 Simulates cerastream/srtla streaming statistics for development mode
 */
 
+import type {
+	ProcessErrorCode,
+	ProcessErrorSource,
+	RuntimeErrorEvent,
+} from "@ceralive/cerastream";
 import {
+	getMockState,
 	getScenarioConfig,
 	getStreamingStats,
+	setMockStreamError,
 	setStreamingState,
 	shouldUseMocks,
 } from "../mock-service.ts";
@@ -191,4 +198,68 @@ export function formatMockStreamingStats(): Record<string, string> {
 		"Packet loss": `${stats.packetLoss.toFixed(2)}%`,
 		"Connected relays": stats.connectedRelays.toString(),
 	};
+}
+
+// ─── cerastream Tier-2 structured-error injection (Task 16) ───────────────────
+
+/**
+ * A cerastream Tier-2 structured error class — exactly the engine's runtime
+ * error codes (`RuntimeErrorEvent["code"]`), so the mock can never invent a code
+ * the real engine does not emit.
+ */
+export type CerastreamTier2Error = ProcessErrorCode;
+
+// Canonical emitting source per Tier-2 code, mirroring the real engine contract:
+// srtla-bonding failures originate from the srtla process; capture / pipeline /
+// SRT-transport (state-transition) failures originate from the engine. The
+// exhaustive Record turns a binding-side code addition into a compile error here.
+const TIER2_ERROR_SOURCE: Record<ProcessErrorCode, ProcessErrorSource> = {
+	srtla_initial_connect_failed: "srtla",
+	srtla_no_connections: "srtla",
+	capture_audio_error: "engine",
+	capture_video_error: "engine",
+	pipeline_stall: "engine",
+	srt_connect_failed: "engine",
+	srt_connection_lost: "engine",
+};
+
+/**
+ * Drive a cerastream Tier-2 structured error into the mock streaming state so a
+ * test can exercise the backend's structured error-mapping path. Builds the real
+ * `RuntimeErrorEvent` wire shape (correct source per the contract) and records it
+ * as the injected error. No-op (returns null) unless the mock service is active.
+ */
+export function injectMockStreamError(
+	errorClass: CerastreamTier2Error,
+	reason?: string,
+): RuntimeErrorEvent | null {
+	if (!shouldUseMocks()) {
+		return null;
+	}
+	const previous = getMockState().injectedStreamError;
+	const event: RuntimeErrorEvent = {
+		type: "error",
+		seq: previous ? previous.seq + 1 : 0,
+		code: errorClass,
+		source: TIER2_ERROR_SOURCE[errorClass],
+		...(reason !== undefined ? { reason } : {}),
+	};
+	setMockStreamError(event);
+	return event;
+}
+
+/** The currently injected Tier-2 error event, or null when none / mocks inactive. */
+export function getInjectedMockStreamError(): RuntimeErrorEvent | null {
+	if (!shouldUseMocks()) {
+		return null;
+	}
+	return getMockState().injectedStreamError;
+}
+
+/** Clear any injected Tier-2 error. No-op unless the mock service is active. */
+export function clearMockStreamError(): void {
+	if (!shouldUseMocks()) {
+		return;
+	}
+	setMockStreamError(null);
 }

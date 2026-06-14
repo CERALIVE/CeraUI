@@ -56,6 +56,10 @@ export function setLivenessSourcesForTest(
 	sourcesOverride = fn;
 }
 
+// getMockHealth() now derives liveness from the mock streaming/srtla engine
+// state (process active, connected-relay count) rather than disconnected manual
+// setters, so this rollup reflects the mock engine; manual override stays
+// available for edge-case tests via setMockHealth().
 function collectMockLiveness(): LivenessSources {
 	const h = getMockHealth();
 	return {
