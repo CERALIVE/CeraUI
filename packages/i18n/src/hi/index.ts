@@ -730,6 +730,7 @@ const hi = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "वज़न",
+			trend: "रुझान",
 			links: "लिंक",
 			total: "कुल",
 			waiting: "लिंक टेलीमेट्री की प्रतीक्षा\u2026",
@@ -747,6 +748,7 @@ const hi = {
 			exportJson: "JSON निर्यात करें",
 			exportCsv: "CSV निर्यात करें",
 			exportAria: "सत्र सारांश निर्यात करें",
+			exportError: "सत्र सारांश निर्यात नहीं किया जा सका। कृपया पुनः प्रयास करें।",
 		},
 		preview: {
 			title: "Preview",

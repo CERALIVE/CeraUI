@@ -737,6 +737,7 @@ const ko = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "가중치",
+			trend: "추세",
 			links: "링크",
 			total: "합계",
 			waiting: "링크 텔레메트리 대기 중\u2026",
@@ -754,6 +755,7 @@ const ko = {
 			exportJson: "JSON 내보내기",
 			exportCsv: "CSV 내보내기",
 			exportAria: "세션 요약 내보내기",
+			exportError: "세션 요약을 내보낼 수 없습니다. 다시 시도해 주세요.",
 		},
 		preview: {
 			title: "Preview",

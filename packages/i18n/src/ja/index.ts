@@ -751,6 +751,7 @@ const ja = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "重み",
+			trend: "傾向",
 			links: "リンク",
 			total: "合計",
 			waiting: "リンクテレメトリを待機中\u2026",
@@ -768,6 +769,8 @@ const ja = {
 			exportJson: "JSONをエクスポート",
 			exportCsv: "CSVをエクスポート",
 			exportAria: "セッションサマリーをエクスポート",
+			exportError:
+				"セッションサマリーをエクスポートできませんでした。もう一度お試しください。",
 		},
 		preview: {
 			title: "Preview",

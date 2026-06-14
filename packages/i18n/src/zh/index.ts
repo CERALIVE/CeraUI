@@ -699,6 +699,7 @@ const zh = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "权重",
+			trend: "趋势",
 			links: "链路",
 			total: "合计",
 			waiting: "正在等待链路遥测\u2026",
@@ -716,6 +717,7 @@ const zh = {
 			exportJson: "导出 JSON",
 			exportCsv: "导出 CSV",
 			exportAria: "导出会话摘要",
+			exportError: "无法导出会话摘要，请重试。",
 		},
 		preview: {
 			title: "Preview",

@@ -911,6 +911,7 @@ const fr = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "Poids",
+			trend: "Tendance",
 			links: "Liaisons",
 			total: "Total",
 			waiting: "En attente de la télémétrie des liaisons\u2026",
@@ -928,6 +929,8 @@ const fr = {
 			exportJson: "Exporter JSON",
 			exportCsv: "Exporter CSV",
 			exportAria: "Exporter le résumé de session",
+			exportError:
+				"Impossible d'exporter le résumé de session. Veuillez réessayer.",
 		},
 		preview: {
 			title: "Preview",
