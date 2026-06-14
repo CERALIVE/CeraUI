@@ -31,7 +31,7 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.0",
-		"@ceralive/biome-config": "^1.0.0",
+		"@ceralive/biome-config": "^2026.6.1",
 		"@types/node": "^25.9.3",
 		"dotenv-cli": "^11.0.0",
 		"glob": "^13.0.6",

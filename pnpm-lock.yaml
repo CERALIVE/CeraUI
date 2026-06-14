@@ -12,8 +12,8 @@ importers:
         specifier: ^2.5.0
         version: 2.5.0
       '@ceralive/biome-config':
-        specifier: ^1.0.0
-        version: 1.0.0
+        specifier: ^2026.6.1
+        version: 2026.6.1
       '@types/node':
         specifier: ^25.9.3
         version: 25.9.3
@@ -855,8 +855,8 @@ packages:
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
 
-  '@ceralive/biome-config@1.0.0':
-    resolution: {integrity: sha512-FzSY0lkw1X/b3GNDJx7UY5qdJj9Jj7tw3NqBLP5C0sJ5gdgPpT2k9Wlt1WJF4SYGuX/5xtzZFMIT+nSjmoWTUA==}
+  '@ceralive/biome-config@2026.6.1':
+    resolution: {integrity: sha512-azjL0i9UJ/hASfv8abvR+Vrt+yLEahSUdOqJFfF/ats3k6/1t9wwh1fUlq+xKRbrJxEVkuUgSpXn9Jxt+bTkrg==}
 
   '@ceralive/cerastream@2026.6.1':
     resolution: {integrity: sha512-2vR69eIMo7kAYG3gbMhSRsD5RiMwxi4BJskXIR2WyB7uNKHVrZ9yi3lyzLvH2wTQKzkC0zj5tCWO+Q/FyE/p5w==}
@@ -4587,7 +4587,7 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@ceralive/biome-config@1.0.0': {}
+  '@ceralive/biome-config@2026.6.1': {}
 
   '@ceralive/cerastream@2026.6.1':
     dependencies:
