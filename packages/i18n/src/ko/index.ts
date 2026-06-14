@@ -410,6 +410,13 @@ const ko = {
 			name: "이름",
 			channel: "채널",
 			password: "비밀번호",
+			connectPhoneTitle: "휴대폰 연결",
+			connectPhoneInstructions:
+				"핫스팟에 연결한 후 아래 URL을 브라우저에서 여세요",
+			deviceAccessQrLabel: "스캔하여 CeraUI 열기",
+			navigateManuallyNote:
+				"페이지가 자동으로 열리지 않으면 URL로 직접 이동하세요",
+			hotspotOffPrompt: "휴대폰을 연결하려면 핫스팟을 시작하세요",
 		},
 		wifi: {
 			ssid: "SSID",

@@ -579,6 +579,13 @@ const ptBR = {
 			name: "Nome",
 			channel: "Canal",
 			password: "Senha",
+			connectPhoneTitle: "Conectar seu celular",
+			connectPhoneInstructions:
+				"Entre no hotspot e abra a URL abaixo no seu navegador",
+			deviceAccessQrLabel: "Escaneie para abrir o CeraUI",
+			navigateManuallyNote:
+				"Se a página não abrir automaticamente, navegue manualmente para a URL",
+			hotspotOffPrompt: "Inicie o hotspot para conectar seu celular",
 		},
 		wifi: {
 			ssid: "SSID",

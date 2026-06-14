@@ -796,6 +796,13 @@ const de = {
 			name: "Name",
 			channel: "Kanal",
 			password: "Passwort",
+			connectPhoneTitle: "Handy verbinden",
+			connectPhoneInstructions:
+				"Verbinde dich mit dem Hotspot und öffne dann die URL unten im Browser",
+			deviceAccessQrLabel: "Scannen, um CeraUI zu öffnen",
+			navigateManuallyNote:
+				"Falls die Seite nicht automatisch öffnet, navigiere manuell zur URL",
+			hotspotOffPrompt: "Starte den Hotspot, um dein Handy zu verbinden",
 		},
 		wifi: {
 			ssid: "SSID",

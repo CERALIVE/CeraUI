@@ -793,6 +793,13 @@ const en = {
 			name: "Name",
 			channel: "Channel",
 			password: "Password",
+			connectPhoneTitle: "Connect Your Phone",
+			connectPhoneInstructions:
+				"Join the hotspot, then open the URL below in your browser",
+			deviceAccessQrLabel: "Scan to open CeraUI",
+			navigateManuallyNote:
+				"If the page doesn't open automatically, navigate manually to the URL",
+			hotspotOffPrompt: "Start the hotspot to connect your phone",
 		},
 		wifi: {
 			ssid: "SSID",

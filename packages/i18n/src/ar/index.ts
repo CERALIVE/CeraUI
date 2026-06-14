@@ -544,6 +544,13 @@ const ar = {
 			name: "الاسم",
 			channel: "القناة",
 			password: "كلمة المرور",
+			connectPhoneTitle: "اتصل بهاتفك",
+			connectPhoneInstructions:
+				"انضم إلى نقطة الاتصال، ثم افتح الرابط أدناه في متصفحك",
+			deviceAccessQrLabel: "امسح للوصول إلى CeraUI",
+			navigateManuallyNote:
+				"إذا لم تفتح الصفحة تلقائيًا، انتقل يدويًا إلى الرابط",
+			hotspotOffPrompt: "شغّل نقطة الاتصال للاتصال بهاتفك",
 		},
 		wifi: {
 			ssid: "SSID",
