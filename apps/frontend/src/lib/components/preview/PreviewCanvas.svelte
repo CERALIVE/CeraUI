@@ -25,9 +25,15 @@ import { cn } from '$lib/utils';
 
 interface Props {
 	class?: string;
+	/**
+	 * Drop the standalone card chrome (border/padding) for hosts that already
+	 * supply their own — e.g. the EncoderDialog modal (#72). Behaviour is
+	 * otherwise identical; default keeps the full Live-view card.
+	 */
+	compact?: boolean;
 }
 
-const { class: className = undefined }: Props = $props();
+const { class: className = undefined, compact = false }: Props = $props();
 
 type PreviewStatus =
 	| 'idle'
@@ -340,7 +346,8 @@ const overlayText = $derived.by(() => {
 	data-testid="preview"
 	data-status={status}
 	data-tier={tier}
-	class={cn('bg-card rounded-xl border p-4 sm:p-5', className)}
+	data-compact={compact ? 'true' : 'false'}
+	class={cn(compact ? undefined : 'bg-card rounded-xl border p-4 sm:p-5', className)}
 >
 	<div class="mb-3 flex items-center gap-2">
 		<Eye aria-hidden="true" class="text-primary size-4 shrink-0" />

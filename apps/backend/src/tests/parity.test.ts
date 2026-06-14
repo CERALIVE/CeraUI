@@ -37,7 +37,7 @@ const BOARDS: ReadonlyArray<PipelineHardwareType> = [
 
 // `decklink` (Blackmagic SDI) has no cerastream pipeline, so a real HAL/capability
 // contract never emits it. The registry intentionally drops it.
-const DROPPED_SOURCES: ReadonlySet<VideoSource> = new Set<VideoSource>([
+const _DROPPED_SOURCES: ReadonlySet<VideoSource> = new Set<VideoSource>([
 	"decklink",
 ]);
 
