@@ -92,15 +92,20 @@ export type AuthEncoderPayload = {
  *
  * The stored credential (`config.remote_key`) IS the authentication material:
  * for a paired device it is the platform-issued device token (ADR-0006); for an
- * unpaired/legacy device it is the opaque operator key. This cycle the token IS
- * the `remote_key` (opaque-token path — no real PASETO signing yet), so the same
- * `key` field carries either and the channel keeps working unchanged.
+ * unpaired/legacy device it is the opaque operator key. The same `key` field
+ * carries either, so the channel keeps working unchanged.
  *
  * When the credential parses as a device token, its `sub_status` claim is read
  * locally (no DB round-trip, via {@link verifyStubDeviceToken}) and presented
  * alongside the key so the server learns the device's subscription standing at
- * authentication time. A legacy opaque key (or an expired/malformed token) reads
- * back no claims, so only `key` + `version` are sent — backward-compatible.
+ * authentication time. Whether that claim is TRUSTED is gated on
+ * `PASETO_PUBLIC_KEY` (ADR-0006 D2): when the Ed25519 public key is provisioned
+ * the claim is read only after a REAL `v4.public` signature check — a forged,
+ * unsigned, expired, or wrong-key token is refused and presents `key` + `version`
+ * alone; when no key is provisioned the MVP opaque path validates the claim shape
+ * and the `iat`/`exp` window WITHOUT a signature check (key-absent fallback). A
+ * legacy opaque key reads back no claims either way, so only `key` + `version`
+ * are sent — backward-compatible.
  *
  * Edge E-1: `sub_status` reflects subscription standing AT TOKEN ISSUANCE, not
  * live billing state. Real-time enforcement is bounded by the token's `exp` plus
