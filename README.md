@@ -1,5 +1,8 @@
 # CeraUI
 
+[![CI](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml)
+[![Release](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml)
+
 Web-based control interface for live video streaming with cellular bonding. Built with Svelte 5 (frontend) and Bun (backend).
 
 ## Quick Start
