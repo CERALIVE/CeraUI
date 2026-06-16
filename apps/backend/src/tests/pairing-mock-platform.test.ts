@@ -1,4 +1,13 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import {
+	afterAll,
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	test,
+} from "bun:test";
+import { generateKeyPairSync, type KeyObject } from "node:crypto";
 
 import { deviceTokenClaimsSchema } from "@ceraui/rpc/schemas";
 
@@ -9,6 +18,7 @@ import {
 } from "../modules/pairing/claim-code.ts";
 import {
 	DEVICE_TOKEN_HEADER,
+	DEVICE_TOKEN_PUBLIC_KEY_ENV,
 	DEVICE_TOKEN_SKEW_SECONDS,
 	mintStubDeviceToken,
 	stubDeviceTokenVerifier,
@@ -19,6 +29,10 @@ import {
 	MOCK_PLATFORM_SUB_STATUS,
 	mockPlatformClaim,
 } from "../modules/pairing/mock-platform.ts";
+import {
+	exportEd25519PublicKeyBase64,
+	signV4Public,
+} from "../modules/pairing/paseto-v4.ts";
 import {
 	buildAuthEncoderPayload,
 	resolveRemoteKey,
@@ -229,5 +243,102 @@ describe("auth/encoder frame — device-token standing + opaque fallback", () =>
 		const payload = buildAuthEncoderPayload(token, 16, past);
 		expect(payload.key).toBe(token);
 		expect(payload.sub_status).toBeUndefined();
+	});
+});
+
+// A provisioned PASETO_PUBLIC_KEY makes signature verification mandatory; the env
+// var is mutated per-test, so snapshot and restore it to keep the gate from
+// leaking into the key-absent auth/encoder suite above (a stray key would refuse
+// every opaque token).
+describe("auth/encoder frame — real PASETO verification when key provisioned", () => {
+	const NOW_SECONDS = Math.floor(NOW / 1000);
+
+	let savedKey: string | undefined;
+	let platform: { publicKey: KeyObject; privateKey: KeyObject };
+
+	function signRelayToken(
+		claims: Record<string, unknown>,
+		secret: KeyObject = platform.privateKey,
+	): string {
+		return signV4Public(JSON.stringify(claims), secret);
+	}
+
+	function relayClaims(overrides: Record<string, unknown> = {}) {
+		return {
+			device_id: SERIAL,
+			sub_status: MOCK_PLATFORM_SUB_STATUS,
+			iat: NOW_SECONDS,
+			exp: NOW_SECONDS + 3600,
+			...overrides,
+		};
+	}
+
+	beforeEach(() => {
+		savedKey = process.env[DEVICE_TOKEN_PUBLIC_KEY_ENV];
+		platform = generateKeyPairSync("ed25519");
+		process.env[DEVICE_TOKEN_PUBLIC_KEY_ENV] = exportEd25519PublicKeyBase64(
+			platform.publicKey,
+		);
+	});
+
+	afterEach(() => {
+		if (savedKey === undefined) {
+			delete process.env[DEVICE_TOKEN_PUBLIC_KEY_ENV];
+		} else {
+			process.env[DEVICE_TOKEN_PUBLIC_KEY_ENV] = savedKey;
+		}
+	});
+
+	test("a validly signed token authorizes — sub_status is read and presented", () => {
+		const token = signRelayToken(relayClaims());
+		const payload = buildAuthEncoderPayload(token, 16, NOW);
+		expect(payload.key).toBe(token);
+		expect(payload.version).toBe(16);
+		expect(payload.sub_status).toBe(MOCK_PLATFORM_SUB_STATUS);
+	});
+
+	test("a token signed by a DIFFERENT key is rejected — sub_status omitted, key still presented", () => {
+		const attacker = generateKeyPairSync("ed25519");
+		const forged = signRelayToken(relayClaims(), attacker.privateKey);
+		const payload = buildAuthEncoderPayload(forged, 16, NOW);
+		expect(payload.key).toBe(forged);
+		expect(payload.sub_status).toBeUndefined();
+	});
+
+	test("an unsigned (opaque) token is rejected when the key is provisioned", () => {
+		const unsigned = mintStubDeviceToken({
+			deviceId: SERIAL,
+			subStatus: "ACTIVE",
+			now: NOW,
+		});
+		const payload = buildAuthEncoderPayload(unsigned, 16, NOW);
+		expect(payload.key).toBe(unsigned);
+		expect(payload.sub_status).toBeUndefined();
+	});
+
+	test("a validly signed but expired token is rejected beyond the ±30s skew band", () => {
+		const expiredAt = NOW_SECONDS - 60;
+		const token = signRelayToken(
+			relayClaims({ iat: expiredAt - 3600, exp: expiredAt }),
+		);
+		const past = (expiredAt + DEVICE_TOKEN_SKEW_SECONDS + 5) * 1000;
+		const payload = buildAuthEncoderPayload(token, 16, past);
+		expect(payload.key).toBe(token);
+		expect(payload.sub_status).toBeUndefined();
+	});
+
+	test("the gate is key-conditional: the same unsigned token is refused with a key, accepted on the opaque fallback without one", () => {
+		const unsigned = mintStubDeviceToken({
+			deviceId: SERIAL,
+			subStatus: "ACTIVE",
+			now: NOW,
+		});
+
+		const withKey = buildAuthEncoderPayload(unsigned, 16, NOW);
+		expect(withKey.sub_status).toBeUndefined();
+
+		delete process.env[DEVICE_TOKEN_PUBLIC_KEY_ENV];
+		const withoutKey = buildAuthEncoderPayload(unsigned, 16, NOW);
+		expect(withoutKey.sub_status).toBe("ACTIVE");
 	});
 });
