@@ -1,0 +1,162 @@
+name: Publish ceralive-device .deb
+
+# Tag-triggered release publisher for the on-device control-plane package.
+# A `v*` tag push builds the `ceralive-device` .deb for arm64 + amd64 via the
+# canonical `scripts/build/build-debian-package.sh` recipe, attaches each arch's
+# .deb to the GitHub release, then hands off to the central index owner
+# (CERALIVE/apt-worker) via an `apt-reindex` repository_dispatch.
+#
+# This workflow does NO R2 upload and NO per-repo APT metadata generation or
+# signing. Both the object-store upload and Packages/Release/InRelease ownership
+# live in apt-worker, which pulls the .deb from the release asset, then
+# regenerates and signs once per channel (no per-repo reindex race). The legacy
+# workflow_dispatch `publish-release.yml` is left untouched for manual/beta cuts.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  NODE_VERSION: "24"
+
+permissions:
+  contents: read
+
+jobs:
+  # Derive the package version from the tag (strip the leading `v`). The build
+  # recipe reads $BUILD_VERSION first (shared-build-functions.sh::get_version),
+  # so the .deb version tracks the tag exactly.
+  resolve-version:
+    name: Resolve version from tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - name: Strip leading v from tag
+        id: ver
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION} (from tag ${GITHUB_REF_NAME})"
+
+  build-deb:
+    name: Build ceralive-device .deb (${{ matrix.architecture }})
+    runs-on: ubuntu-latest
+    needs: resolve-version
+    strategy:
+      matrix:
+        architecture: [arm64, amd64]
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v4
+        with:
+          path: CeraUI
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: CeraUI/package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+          cache-dependency-path: CeraUI/pnpm-lock.yaml
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install Ruby and FPM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby-dev gcc g++
+          sudo gem install fpm
+
+      # Resolves @ceralive/cerastream into node_modules so the build recipe can
+      # derive cerastream-ipc-<major> from the installed bindings' constants.js
+      # (the engine↔UI protocol-skew guard). Without this install the recipe
+      # aborts — the major is NEVER hardcoded.
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: pnpm install --frozen-lockfile
+
+      # arm64 and amd64 are both produced on this amd64 runner: the backend is a
+      # bun --compile cross-target (build:backend-only maps BUILD_ARCH→bun target,
+      # i.e. bun-linux-arm64 / bun-linux-x64) and fpm stamps Architecture from -a
+      # without inspecting the ELF.
+      - name: Build Debian package for ${{ matrix.architecture }}
+        working-directory: CeraUI
+        run: ./scripts/build/build-debian-package.sh
+        env:
+          BUILD_VERSION: ${{ needs.resolve-version.outputs.version }}
+          BUILD_ARCH: ${{ matrix.architecture }}
+
+      - name: Upload Debian package artifact (${{ matrix.architecture }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: ceralive-device-${{ matrix.architecture }}
+          path: CeraUI/dist/debian/*.deb
+
+  publish:
+    name: Attach .debs to release + dispatch reindex
+    runs-on: ubuntu-latest
+    needs: [resolve-version, build-deb]
+    # contents:write is required to attach the .deb assets to the GitHub release.
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Stage .debs for release
+        run: |
+          mkdir -p dist
+          cp artifacts/ceralive-device-arm64/*.deb dist/
+          cp artifacts/ceralive-device-amd64/*.deb dist/
+          echo "Staged .debs:"
+          ls -la dist
+
+      # Attach both arch .debs to the GitHub release for this tag. apt-worker
+      # pulls the assets from here on the apt-reindex dispatch below — there is
+      # no R2 upload and no per-repo APT metadata generation in this repo.
+      - name: Attach .debs to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: CeraUI ${{ github.ref_name }}
+          files: dist/*.deb
+
+      # Hand off to the central index owner: apt-worker fetches the release
+      # assets, uploads to R2, then regenerates and signs Packages/Release for
+      # the stable channel — once per channel, no per-repo reindex race.
+      # CERALIVE_DISPATCH_TOKEN: fine-grained PAT, contents:write on CERALIVE/apt-worker only
+      - name: Trigger centralized APT reindex
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.CERALIVE_DISPATCH_TOKEN }}
+          repository: CERALIVE/apt-worker
+          event-type: apt-reindex
+          client-payload: >-
+            {"component":"ceralive-device","version":"${{ needs.resolve-version.outputs.version }}","channel":"stable","tag":"${{ github.ref_name }}"}
+
+      - name: Publish Summary
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          {
+            echo "## Published ceralive-device"
+            echo ""
+            echo "**Version:** \`${VERSION}\`"
+            echo "**Tag:** \`${TAG}\`"
+            echo "**Channel:** \`stable\`"
+            echo ""
+            echo "Attached arm64 + amd64 .debs to the GitHub release."
+            echo "Dispatched \`apt-reindex\` to CERALIVE/apt-worker for centralized R2 upload + metadata regen."
+          } >> "$GITHUB_STEP_SUMMARY"
