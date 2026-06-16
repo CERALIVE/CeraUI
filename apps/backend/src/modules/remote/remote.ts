@@ -52,7 +52,10 @@ import { extractMessage } from "../../helpers/types.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "../network/dns.ts";
 import { queueUpdateGw } from "../network/gateways.ts";
-import { verifyStubDeviceToken } from "../pairing/device-token.ts";
+import {
+	DEVICE_TOKEN_PUBLIC_KEY_ENV,
+	verifyStubDeviceToken,
+} from "../pairing/device-token.ts";
 import { setup } from "../setup.ts";
 import { addAuthedSocket } from "../ui/auth.ts";
 import { type StatusResponseMessage, sendInitialStatus } from "../ui/status.ts";
@@ -123,6 +126,50 @@ export function buildAuthEncoderPayload(
 		return { key: credential, version, sub_status: claims.sub_status };
 	}
 	return { key: credential, version };
+}
+
+/** `status.remote` error code telling clients the device must re-pair (D3). */
+export const REMOTE_REPAIR_STATUS = "repair";
+
+/**
+ * Whether real PASETO Ed25519 verification is live — the D3 trigger. Mirrors the
+ * gate in {@link ../pairing/device-token.ts}: a non-blank `PASETO_PUBLIC_KEY`
+ * (presence, not any baked default) selects real verification.
+ */
+export function isPasetoVerificationActive(): boolean {
+	return Boolean(process.env[DEVICE_TOKEN_PUBLIC_KEY_ENV]?.trim());
+}
+
+export type RemoteRepairReason = "tokenless-on-paseto-activation";
+
+export type RemoteAuthDecision =
+	| { action: "present"; payload: AuthEncoderPayload }
+	| { action: "force-repair"; reason: RemoteRepairReason };
+
+/**
+ * Fork between "grant control" and "route to re-pair" for a stored credential
+ * under the current PASETO gate (ADR-0006 D3). A credential that verifies as a
+ * device token is presented; once real verification is live, one that does NOT
+ * verify is a paired-but-tokenless device and is forced to re-pair instead of
+ * presenting a dead credential the platform would silently reject (lockout).
+ * Below the gate, an unverifiable credential is a legacy opaque key and is still
+ * presented, so the key-less fleet keeps working (backward-compatible MVP path).
+ */
+export function resolveRemoteAuthDecision(
+	credential: string,
+	version: number,
+	now: number = Date.now(),
+): RemoteAuthDecision {
+	const claims = verifyStubDeviceToken(credential, now);
+
+	if (claims === null && isPasetoVerificationActive()) {
+		return { action: "force-repair", reason: "tokenless-on-paseto-activation" };
+	}
+
+	return {
+		action: "present",
+		payload: buildAuthEncoderPayload(credential, version, now),
+	};
 }
 
 const DEFAULT_PROTOCOL_VERSION = 16;
@@ -259,6 +306,31 @@ function remoteClose(conn: WebSocket) {
 	}
 }
 
+/**
+ * Execute the D3 forced re-pair (ADR-0006): clear+persist the dead credential so
+ * the device drops to the unpaired floor and surfaces re-pairing locally, then
+ * push the re-pair status. `remoteStatusHandled` is latched first so the
+ * follow-on socket close does not also broadcast a spurious network error.
+ */
+export function forceRepairMigration(reason: RemoteRepairReason): void {
+	logger.warn(
+		`remote: paired device holds no valid PASETO token (${reason}); forcing re-pair (ADR-0006 D3)`,
+	);
+
+	const config = getConfig();
+	config.remote_key = undefined;
+	config.device_id = undefined;
+	saveConfig();
+
+	remoteStatusHandled = true;
+	broadcastMsgLocal(
+		"status",
+		{ remote: { error: REMOTE_REPAIR_STATUS } } satisfies StatusResponseMessage,
+		getms() - ACTIVE_TO,
+	);
+	broadcastMsg("config", config);
+}
+
 async function remoteConnect() {
 	if (remoteConnectTimer !== undefined) {
 		clearTimeout(remoteConnectTimer);
@@ -322,7 +394,18 @@ async function remoteConnect() {
 
 		const config = getConfig();
 		if (!config.remote_key) return;
-		const payload = buildAuthEncoderPayload(config.remote_key, protocolVersion);
+
+		const decision = resolveRemoteAuthDecision(
+			config.remote_key,
+			protocolVersion,
+		);
+		if (decision.action === "force-repair") {
+			forceRepairMigration(decision.reason);
+			this.terminate();
+			return;
+		}
+
+		const { payload } = decision;
 		if (payload.sub_status) {
 			logger.info(
 				`remote: presenting device token (standing=${payload.sub_status})`,
@@ -421,11 +504,14 @@ export async function setRemoteConfig(params: SetRemoteConfigParams) {
  * backward compatibility: existing paired devices and operator-entered keys still
  * flow through here, writing the opaque credential as the active `remote_key`.
  *
- * TODO(high-priority-debt): forced re-pair migration (D3 default) — when PASETO is
- * ungated, paired-but-tokenless devices must re-pair. Use oracle/ultrabrain to
- * choose forced-re-pair vs dual-auth window, accounting for CeraUI being
- * self-hosted on the device (offline-capable verification, no runtime CA, minimal
- * field re-pair friction).
+ * D3 forced re-pair migration (ADR-0006) is now wired at the auth fork: once
+ * real PASETO verification is live (`PASETO_PUBLIC_KEY` provisioned), a paired
+ * device whose stored credential is not a valid device token is routed through
+ * {@link forceRepairMigration} on connect rather than presenting a dead
+ * credential. Forced re-pair (not a dual-auth window) is the chosen path: CeraUI
+ * verifies offline against a build-time-provisioned key with no runtime CA, so
+ * the lowest-friction recovery is to drop to unpaired and re-pair locally. See
+ * {@link resolveRemoteAuthDecision}.
  */
 export async function setRemoteKey(key: string) {
 	await setRemoteConfig({ remote_key: key });
