@@ -648,6 +648,9 @@ const en = {
 		srtlaServerPort: "SRTLA receiver port",
 		srtStreamId: "SRT stream id",
 		srtLatency: "SRT latency (ms)",
+		transportProtocol: "Transport Protocol",
+		protocolRistUnavailable: "RIST is not available on this device",
+		protocolReserved: "Not yet available",
 		changeBitrateNotice:
 			"You can change the bitrate even if you are streaming.",
 		relayProvider: "Provider",

@@ -424,6 +424,9 @@ const ptBR = {
 		srtlaServerPort: "Porto do servidor SRTLA",
 		srtStreamId: "ID do fluxo SRT",
 		srtLatency: "Latência SRT (ms)",
+		transportProtocol: "Protocolo de transporte",
+		protocolRistUnavailable: "RIST não está disponível neste dispositivo",
+		protocolReserved: "Ainda não disponível",
 		changeBitrateNotice:
 			"Você pode mudar a taxa de bits mesmo enquanto está transmitindo.",
 		optional: "opcional",

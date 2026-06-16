@@ -17,6 +17,7 @@
 */
 
 /* Stream starting, stopping, management and monitoring */
+import { RIST_TRANSPORT } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
 import {
 	type Framerate,
@@ -40,6 +41,7 @@ import {
 } from "../ui/websocket-server.ts";
 import { getAudioDevices } from "./audio.ts";
 import { updateBcrptServerIps } from "./bcrpt.ts";
+import { getSupportedTransports } from "./capabilities.ts";
 import { validateBitrate } from "./encoder.ts";
 import { AUDIO_CODECS } from "./pipeline-sources.ts";
 import { searchPipelines, validatePipelineOverrides } from "./pipelines.ts";
@@ -182,6 +184,7 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 		},
 		getRelays(),
 		config.relay_protocol,
+		{ ristAvailable: getSupportedTransports().includes(RIST_TRANSPORT) },
 	);
 
 	return { pipeline, srtlaAddr, srtlaPort, streamid };

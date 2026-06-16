@@ -265,3 +265,104 @@ describe("resolveStreamEndpoint — protocol + errors", () => {
 		).toThrow("SRT streamid not specified");
 	});
 });
+
+// =============================================================================
+// RIST promotion (Task 20) — capability gate + active resolution
+// =============================================================================
+//
+// `rist` is promoted from a reserved placeholder to an active protocol, but it
+// is only honoured when the engine advertises RIST capability. The resolver is
+// the enforcement point: `resolveStreamEndpoint(..., { ristAvailable })`.
+
+describe("resolveStreamEndpoint — RIST capability gate", () => {
+	it("resolves a rist relay endpoint when the capability is present", () => {
+		expect(
+			resolveStreamEndpoint(
+				{ relay_server: "0", relay_account: "acct1", relay_protocol: "rist" },
+				relays,
+				undefined,
+				{ ristAvailable: true },
+			),
+		).toEqual({
+			srtlaAddr: "relay.example.com",
+			srtlaPort: 5000,
+			streamid: "KEY_MAIN",
+		});
+	});
+
+	it("resolves a manual rist endpoint (even data port) when capability is present", () => {
+		expect(
+			resolveStreamEndpoint(
+				{
+					srtla_addr: "  rist.host  ",
+					srtla_port: 4000,
+					relay_protocol: "rist",
+				},
+				undefined,
+				undefined,
+				{ ristAvailable: true },
+			),
+		).toEqual({
+			srtlaAddr: "rist.host",
+			srtlaPort: 4000,
+			streamid: "",
+		});
+	});
+
+	it("rejects rist with a clear reason when the capability is absent", () => {
+		expect(() =>
+			resolveStreamEndpoint(
+				{ relay_server: "0", relay_account: "acct1", relay_protocol: "rist" },
+				relays,
+				undefined,
+				{ ristAvailable: false },
+			),
+		).toThrow("RIST transport is not available on this device");
+	});
+
+	it("rejects rist when no options are supplied (capability defaults to absent)", () => {
+		expect(() =>
+			resolveStreamEndpoint(
+				{ relay_server: "0", relay_account: "acct1", relay_protocol: "rist" },
+				relays,
+			),
+		).toThrow("RIST transport is not available on this device");
+	});
+
+	it("rejects a manual rist endpoint whose data port is odd (simple-profile)", () => {
+		expect(() =>
+			resolveStreamEndpoint(
+				{ srtla_addr: "rist.host", srtla_port: 4001, relay_protocol: "rist" },
+				undefined,
+				undefined,
+				{ ristAvailable: true },
+			),
+		).toThrow("RIST requires an even data port");
+	});
+
+	it("leaves SRTLA selection unaffected by the ristAvailable option", () => {
+		expect(
+			resolveStreamEndpoint(
+				{ relay_server: "0", relay_account: "acct1", relay_protocol: "srtla" },
+				relays,
+				undefined,
+				{ ristAvailable: false },
+			),
+		).toEqual({
+			srtlaAddr: "relay.example.com",
+			srtlaPort: 5000,
+			streamid: "KEY_MAIN",
+		});
+	});
+
+	it("leaves SRT reserved-placeholder behaviour unaffected by the gate", () => {
+		expect(() =>
+			resolveStreamEndpoint(
+				{ relay_server: "0", relay_account: "acct1", relay_protocol: "srt" },
+				relays,
+				undefined,
+				{ ristAvailable: true },
+			),
+		).toThrow("SRT not yet implemented");
+	});
+});

@@ -3,11 +3,16 @@ CeraUI - Streaming Mock Provider
 Simulates cerastream/srtla streaming statistics for development mode
 */
 
-import type {
-	ProcessErrorCode,
-	ProcessErrorSource,
-	RuntimeErrorEvent,
+import {
+	type ProcessErrorCode,
+	type ProcessErrorSource,
+	type RuntimeErrorEvent,
+	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
+import {
+	type EngineCapabilitiesSnapshot,
+	MINIMAL_SAFE_CAPABILITIES,
+} from "../../modules/streaming/capabilities.ts";
 import {
 	getMockState,
 	getScenarioConfig,
@@ -16,6 +21,19 @@ import {
 	setStreamingState,
 	shouldUseMocks,
 } from "../mock-service.ts";
+
+/**
+ * Mock engine capability snapshot for dev/e2e. Sources mirror the minimal safe
+ * set (so the dev pipeline list is unchanged) but the transport list advertises
+ * RIST, so the protocol selector can exercise the RIST capability path.
+ */
+export function getMockEngineCapabilities(): EngineCapabilitiesSnapshot {
+	return {
+		caps: structuredClone(MINIMAL_SAFE_CAPABILITIES),
+		schemaVersion: SCHEMA_VERSION,
+		transports: ["srtla", "rist"],
+	};
+}
 
 /**
  * Check if streaming scenario is active

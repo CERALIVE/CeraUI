@@ -59,12 +59,44 @@ export type CapabilitiesResult = GetCapabilitiesResult & {
 	engineUnavailable: boolean;
 	engineStarting?: boolean;
 	schemaVersionMismatch?: boolean;
+	/** Relay transports the engine can honor; always includes "srtla". */
+	transports: string[];
 };
 
 /** A live engine snapshot plus the `schema_version` it was negotiated under. */
 export interface EngineCapabilitiesSnapshot {
 	caps: GetCapabilitiesResult;
 	schemaVersion: string;
+	/** Relay transports advertised by the engine (additive; "srtla" implied). */
+	transports?: string[];
+}
+
+/** SRTLA is always available; promoted transports (e.g. "rist") are additive. */
+const BASE_TRANSPORTS = ["srtla"] as const;
+
+/** Merge engine-advertised transports onto the always-present SRTLA base. */
+function deriveTransports(advertised: string[] | undefined): string[] {
+	const out = new Set<string>(BASE_TRANSPORTS);
+	for (const t of advertised ?? []) {
+		if (typeof t === "string" && t.length > 0) out.add(t);
+	}
+	return [...out];
+}
+
+/** Last-known transport set; sync source for the streaming resolver gate. */
+let lastTransports: string[] = [...BASE_TRANSPORTS];
+
+/** The transports the engine last advertised (always includes "srtla"). */
+export function getSupportedTransports(): string[] {
+	return [...lastTransports];
+}
+
+/** Last full capability snapshot; sync source for the post-login broadcast. */
+let lastCapabilities: CapabilitiesResult | undefined;
+
+/** The last resolved capability snapshot, or `undefined` before the first fetch. */
+export function getLastCapabilities(): CapabilitiesResult | undefined {
+	return lastCapabilities;
 }
 
 /** Minimal logger surface (winston satisfies it; tests pass a silent stub). */
@@ -148,7 +180,13 @@ async function defaultFetchEngineCapabilities(): Promise<EngineCapabilitiesSnaps
 		}
 		const raw = await capable.getCapabilities();
 		const caps = getCapabilitiesResultSchema.parse(raw);
-		return { caps, schemaVersion };
+		// `transports` is additive and not on the frozen result schema (which
+		// strips unknowns), so read it from the raw response before the parse drop.
+		const rawTransports = (raw as { transports?: unknown }).transports;
+		const transports = Array.isArray(rawTransports)
+			? rawTransports.filter((t): t is string => typeof t === "string")
+			: undefined;
+		return { caps, schemaVersion, transports };
 	} finally {
 		try {
 			await client?.close();
@@ -173,6 +211,8 @@ let lastKnownGood: GetCapabilitiesResult | undefined;
 /** Drop the cached snapshot. Test seam + a hook for an engine-incompatible boot. */
 export function clearCapabilitiesCache(): void {
 	lastKnownGood = undefined;
+	lastTransports = [...BASE_TRANSPORTS];
+	lastCapabilities = undefined;
 }
 
 /** The cached last-known-good snapshot, or `undefined` if none yet. */
@@ -192,7 +232,8 @@ export async function getCapabilities(
 	const deps: CapabilitiesServiceDeps = { ...defaultDeps(), ...overrides };
 
 	try {
-		const { caps, schemaVersion } = await deps.fetchEngineCapabilities();
+		const { caps, schemaVersion, transports } =
+			await deps.fetchEngineCapabilities();
 		const mismatch = schemaVersion !== deps.bindingsSchemaVersion;
 		if (mismatch) {
 			// Additive-only within the protocol major (ADR-0002): warn + flag, but
@@ -203,27 +244,38 @@ export async function getCapabilities(
 			);
 		}
 		lastKnownGood = caps;
-		return {
+		lastTransports = deriveTransports(transports);
+		lastCapabilities = {
 			...caps,
 			engineUnavailable: false,
 			...(mismatch ? { schemaVersionMismatch: true } : {}),
+			transports: [...lastTransports],
 		};
+		return lastCapabilities;
 	} catch (err) {
 		if (lastKnownGood) {
 			deps.logger.warn(
 				"capabilities: engine unavailable; serving last-known-good snapshot",
 				{ err },
 			);
-			return { ...lastKnownGood, engineUnavailable: true };
+			lastCapabilities = {
+				...lastKnownGood,
+				engineUnavailable: true,
+				transports: [...lastTransports],
+			};
+			return lastCapabilities;
 		}
 		deps.logger.warn(
 			"capabilities: engine unavailable and no cached snapshot; serving minimal safe set",
 			{ err },
 		);
-		return {
+		lastTransports = [...BASE_TRANSPORTS];
+		lastCapabilities = {
 			...structuredClone(MINIMAL_SAFE_CAPABILITIES),
 			engineUnavailable: true,
 			engineStarting: true,
+			transports: [...lastTransports],
 		};
+		return lastCapabilities;
 	}
 }

@@ -640,6 +640,9 @@ const de = {
 		srtlaServerPort: "SRTLA-Empfängerport",
 		srtStreamId: "SRT-Stream-ID",
 		srtLatency: "SRT-Latenz (ms)",
+		transportProtocol: "Transportprotokoll",
+		protocolRistUnavailable: "RIST ist auf diesem Gerät nicht verfügbar",
+		protocolReserved: "Noch nicht verfügbar",
 		changeBitrateNotice:
 			"Sie können die Bitrate auch während des Streamings ändern.",
 		optional: "optional",
