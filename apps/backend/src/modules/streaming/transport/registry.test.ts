@@ -4,7 +4,6 @@ import type { RelaysCache } from "../../../helpers/config-schemas.ts";
 import { validatePortNo } from "../../../helpers/number.ts";
 
 import { belaboxDetectionMethod } from "./belabox-detection.ts";
-import { ristAdapter } from "./rist-adapter.ts";
 import {
 	getAdapter,
 	getDetectionMethod,
@@ -12,6 +11,7 @@ import {
 	registerDetectionMethod,
 	registerProtocol,
 } from "./registry.ts";
+import { ristAdapter } from "./rist-adapter.ts";
 import { srtlaAdapter } from "./srtla-adapter.ts";
 import {
 	type DetectionMethod,
