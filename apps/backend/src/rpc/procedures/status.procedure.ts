@@ -13,6 +13,7 @@ import {
 	getRelays,
 } from "../../modules/remote/remote-relays.ts";
 import { getAudioDevices } from "../../modules/streaming/audio.ts";
+import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { getDevicesMessage } from "../../modules/streaming/devices.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import { getPipelinesMessage } from "../../modules/streaming/pipelines.ts";
@@ -96,5 +97,6 @@ export function buildInitialStatus() {
 		revisions: getRevisions(),
 		acodecs: AUDIO_CODECS,
 		devices: getDevicesMessage(),
+		capabilities: getLastCapabilities(),
 	};
 }

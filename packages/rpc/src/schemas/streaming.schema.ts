@@ -203,6 +203,9 @@ export const capabilitiesMessageSchema = z.object({
 	platform: platformCapsSchema,
 	encoder: encoderCapsSchema,
 	sources: z.array(videoSourceCapSchema),
+	// Relay transports the engine can honor (e.g. ["srtla", "rist"]). Absent on
+	// legacy snapshots → the consumer treats it as srtla-only (back-compat).
+	transports: z.array(z.string()).optional(),
 	engineUnavailable: z.boolean().optional(),
 	engineStarting: z.boolean().optional(),
 	schemaVersionMismatch: z.boolean().optional(),

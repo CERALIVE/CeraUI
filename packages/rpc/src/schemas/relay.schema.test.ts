@@ -20,11 +20,13 @@ import {
 } from '../../../../apps/backend/src/helpers/config-schemas';
 import { type DetectionMethod, detectionMethodSchema } from './cloud-provider.schema';
 import {
+	ACTIVE_RELAY_PROTOCOLS,
 	isNamespacedRelayId,
 	namespacedRelayId,
 	parseNamespacedRelayId,
 	relayAccountSchema,
 	relayMessageSchema,
+	relayProtocolAvailability,
 	relayProtocolSchema,
 	relayProviderKindSchema,
 	relayProviderMetaSchema,
@@ -121,6 +123,39 @@ describe('relay.schema — protocol enum (placeholders)', () => {
 
 	test('(d) unknown protocol value is rejected', () => {
 		expect(() => relayProtocolSchema.parse('quic')).toThrow();
+	});
+});
+
+describe('relayProtocolAvailability — capability gate (Task 20)', () => {
+	test('srtla is always selectable, regardless of advertised transports', () => {
+		expect(relayProtocolAvailability('srtla', undefined)).toEqual({ selectable: true });
+		expect(relayProtocolAvailability('srtla', [])).toEqual({ selectable: true });
+		expect(relayProtocolAvailability('srtla', ['srtla'])).toEqual({ selectable: true });
+	});
+
+	test('rist is selectable only when the engine advertises it', () => {
+		expect(relayProtocolAvailability('rist', ['srtla', 'rist'])).toEqual({ selectable: true });
+		expect(relayProtocolAvailability('rist', ['srtla'])).toEqual({
+			selectable: false,
+			reason: 'capability',
+		});
+		expect(relayProtocolAvailability('rist', undefined)).toEqual({
+			selectable: false,
+			reason: 'capability',
+		});
+	});
+
+	test('srt is reserved — never selectable, even when advertised', () => {
+		expect(relayProtocolAvailability('srt', ['srtla', 'srt'])).toEqual({
+			selectable: false,
+			reason: 'reserved',
+		});
+	});
+
+	test('rist is an active protocol; srt is not', () => {
+		expect(ACTIVE_RELAY_PROTOCOLS).toContain('rist');
+		expect(ACTIVE_RELAY_PROTOCOLS).toContain('srtla');
+		expect(ACTIVE_RELAY_PROTOCOLS).not.toContain('srt');
 	});
 });
 

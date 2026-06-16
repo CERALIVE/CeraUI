@@ -16,7 +16,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 |------|----------|
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
 | Engine seam + registry (cerastream-only) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
-| Capability contract service (engine emits, CeraUI consumes; cache + fallback ladder) | `modules/streaming/capabilities.ts` (`getCapabilities`) |
+| Capability contract service (engine emits, CeraUI consumes; cache + fallback ladder; `transports` + `getSupportedTransports()`) | `modules/streaming/capabilities.ts` (`getCapabilities`) |
+| Transport resolver + protocol registry (srtla/rist active, srt reserved; RIST capability-gated via `ristAvailable`) | `modules/streaming/transport/` (`resolveStreamEndpoint`, `registry.ts`, `rist-adapter.ts`) |
 | Pipeline registry (derived from the capability contract; `initPipelines` is async) | `modules/streaming/pipelines.ts` |
 | Cerastream engine backend (structured IPC, `@ceralive/cerastream`) | `modules/streaming/cerastream-backend.ts` |
 | Structured engine error → notification (Task-7 table swap, no regex) | `modules/streaming/cerastream-error-mapping.ts` |
@@ -108,6 +109,7 @@ The backend pushes typed events to all connected clients via `rpc/events.ts`. Ea
 | `relays` | on-change | relay list mutations |
 | `acodecs` | on-change | audio codec list changes |
 | `pipelines` | on-change | pipeline list changes |
+| `capabilities` | post-login snapshot | engine capability contract; carries `transports` (relay transports the engine can honor) |
 | `notifications` | on-demand | user-facing toast events |
 | `ping` | 5 s | heartbeat emitter |
 

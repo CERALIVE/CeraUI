@@ -400,6 +400,18 @@ capability tables that previously lived in `pipeline-sources.ts` are removed. Al
 capability data is now derived from the `get-capabilities` response at runtime. Do not
 re-add static board tables; the contract is the single source of truth.
 
+**Relay transports + RIST protocol [EXISTS].** The capability contract carries a
+`transports` list (the relay transports the engine can honor; always includes
+`srtla`). The capability service derives it (`getSupportedTransports()` is the sync
+backend gate source) and broadcasts the snapshot in the `capabilities` event. The
+transport resolver promotes `rist` from a reserved placeholder to an active protocol
+(`apps/backend/src/modules/streaming/transport/rist-adapter.ts`, RIST simple-profile:
+even data port) gated on `ristAvailable` in `resolveStreamEndpoint`; `srt` stays
+reserved. The shared selectability rule lives in `@ceraui/rpc/schemas`
+(`relayProtocolAvailability`). `ServerDialog` renders the SRTLA/SRT/RIST selector:
+RIST is shown **disabled with a reason** until the engine advertises the `rist`
+transport, SRT is always reserved — never hidden.
+
 **Tier-4 add-on compat [PARTIAL].** Add-on compatibility is resolved entirely inside
 CeraUI and is NOT part of the `get-capabilities` response. Three enforcement layers:
 

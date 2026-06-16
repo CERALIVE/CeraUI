@@ -26,7 +26,8 @@ import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
 import { isDevelopment } from "./mocks/mock-config.ts";
-import { initMockService } from "./mocks/mock-service.ts";
+import { initMockService, shouldUseMocks } from "./mocks/mock-service.ts";
+import { getMockEngineCapabilities } from "./mocks/providers/streaming.ts";
 import { runAddonReconciler } from "./modules/addons/reconciler.ts";
 import { getConfig, loadConfig } from "./modules/config.ts";
 import { initIdentity } from "./modules/identity/index.ts";
@@ -122,7 +123,11 @@ await initIdentity();
 // relay socket above — its own endpoint, token audience, and lifecycle. Fail-soft,
 // never blocks boot.
 await initControlChannel();
-await initPipelines();
+await initPipelines(
+	shouldUseMocks()
+		? { fetchEngineCapabilities: async () => getMockEngineCapabilities() }
+		: {},
+);
 
 // Migrate persisted config vs the offered set: a `pipeline` the current hardware
 // no longer offers is marked unavailable (blocks stream-start) and warned about —

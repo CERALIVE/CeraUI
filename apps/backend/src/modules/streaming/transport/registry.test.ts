@@ -4,6 +4,7 @@ import type { RelaysCache } from "../../../helpers/config-schemas.ts";
 import { validatePortNo } from "../../../helpers/number.ts";
 
 import { belaboxDetectionMethod } from "./belabox-detection.ts";
+import { ristAdapter } from "./rist-adapter.ts";
 import {
 	getAdapter,
 	getDetectionMethod,
@@ -132,7 +133,7 @@ describe("transport registry — protocol routing", () => {
 // Placeholder protocols
 // =============================================================================
 
-describe("transport registry — srt/rist placeholders", () => {
+describe("transport registry — srt placeholder", () => {
 	it("returns an adapter for 'srt' that throws NotImplementedError on resolve", () => {
 		const adapter = getAdapter("srt");
 		expect(adapter.protocol).toBe("srt");
@@ -142,19 +143,41 @@ describe("transport registry — srt/rist placeholders", () => {
 		);
 	});
 
-	it("returns an adapter for 'rist' that throws NotImplementedError on resolve", () => {
+	it("reports the srt placeholder as not implemented via describe()", () => {
+		expect(getAdapter("srt").describe().implemented).toBe(false);
+		expect(getAdapter("srtla").describe().implemented).toBe(true);
+	});
+});
+
+describe("transport registry — rist active adapter (Task 20)", () => {
+	it("returns the active RIST adapter for the 'rist' protocol", () => {
 		const adapter = getAdapter("rist");
+		expect(adapter).toBe(ristAdapter);
 		expect(adapter.protocol).toBe("rist");
-		expect(() => adapter.resolveEndpoint({})).toThrow(NotImplementedError);
-		expect(() => adapter.resolveEndpoint({})).toThrow(
-			"RIST not yet implemented",
-		);
 	});
 
-	it("reports placeholders as not implemented via describe()", () => {
-		expect(getAdapter("srt").describe().implemented).toBe(false);
-		expect(getAdapter("rist").describe().implemented).toBe(false);
-		expect(getAdapter("srtla").describe().implemented).toBe(true);
+	it("reports rist as implemented via describe()", () => {
+		expect(getAdapter("rist").describe().implemented).toBe(true);
+		expect(getAdapter("rist").describe().label).toBe("RIST");
+	});
+
+	it("resolves a manual rist endpoint on an even data port", () => {
+		expect(
+			ristAdapter.resolveEndpoint({
+				srtla_addr: "rist.example.com",
+				srtla_port: 5000,
+				srt_streamid: "stream",
+			}),
+		).toEqual({ addr: "rist.example.com", port: 5000, streamid: "stream" });
+	});
+
+	it("rejects an odd data port (RIST simple profile)", () => {
+		expect(() =>
+			ristAdapter.resolveEndpoint({
+				srtla_addr: "rist.example.com",
+				srtla_port: 5001,
+			}),
+		).toThrow("RIST requires an even data port");
 	});
 });
 

@@ -124,6 +124,9 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	sendToClient(ws, "revisions", initialStatus.revisions);
 	sendToClient(ws, "acodecs", initialStatus.acodecs);
 	sendToClient(ws, "devices", initialStatus.devices);
+	if (initialStatus.capabilities) {
+		sendToClient(ws, "capabilities", initialStatus.capabilities);
+	}
 }
 
 /**

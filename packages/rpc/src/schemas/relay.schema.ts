@@ -10,10 +10,12 @@ import { z } from 'zod';
 /**
  * Relay transport protocol.
  *
- * - `srtla` is the only protocol active in the runtime resolver today.
- * - `srt` and `rist` are reserved placeholders: accepted by the schema so that
- *   future relay pushes round-trip, but rejected by the runtime resolver until
- *   their transports are implemented.
+ * - `srtla` and `rist` are active in the runtime resolver. `rist` is
+ *   additionally capability-gated: the engine must advertise RIST support (built
+ *   with `--features rist`) before the resolver will route to it (Task 19/20).
+ * - `srt` is a reserved placeholder: accepted by the schema so future relay
+ *   pushes round-trip, but rejected by the runtime resolver until its transport
+ *   is implemented.
  *
  * Defaults to `srtla` so old payloads (which carry no protocol field) normalise
  * to the active protocol on read.
@@ -21,6 +23,46 @@ import { z } from 'zod';
 export const RELAY_PROTOCOLS = ['srtla', 'srt', 'rist'] as const;
 export const relayProtocolSchema = z.enum(RELAY_PROTOCOLS).default('srtla');
 export type RelayProtocol = (typeof RELAY_PROTOCOLS)[number];
+
+/** Protocols with a working runtime resolver (`srt` is still a placeholder). */
+export const ACTIVE_RELAY_PROTOCOLS = ['srtla', 'rist'] as const;
+
+/** Active protocols that require an engine capability before they are selectable. */
+export const CAPABILITY_GATED_RELAY_PROTOCOLS = ['rist'] as const;
+
+/** The transport id the engine advertises for the RIST capability. */
+export const RIST_TRANSPORT = 'rist';
+
+/** Why a protocol is not currently selectable, for the UI's disabled reason. */
+export type RelayProtocolUnavailableReason = 'reserved' | 'capability';
+
+export interface RelayProtocolAvailability {
+	selectable: boolean;
+	reason?: RelayProtocolUnavailableReason;
+}
+
+/**
+ * Resolve whether a relay protocol can be selected given the engine's advertised
+ * transports. Shared by the UI (option gating) and the backend (resolver gate)
+ * so both honour one rule: `srtla` always selectable, `rist` only when the
+ * engine advertises it, `srt` never (reserved).
+ */
+export function relayProtocolAvailability(
+	protocol: RelayProtocol,
+	availableTransports: readonly string[] | undefined,
+): RelayProtocolAvailability {
+	if (protocol === 'srtla') return { selectable: true };
+	if (!(ACTIVE_RELAY_PROTOCOLS as readonly string[]).includes(protocol)) {
+		return { selectable: false, reason: 'reserved' };
+	}
+	const advertised = availableTransports ?? [];
+	if ((CAPABILITY_GATED_RELAY_PROTOCOLS as readonly string[]).includes(protocol)) {
+		return advertised.includes(protocol)
+			? { selectable: true }
+			: { selectable: false, reason: 'capability' };
+	}
+	return { selectable: true };
+}
 
 // =============================================================================
 // Provider metadata

@@ -46,6 +46,13 @@ import {
 } from "../../../helpers/config-schemas.ts";
 
 import { getAdapter } from "./registry.ts";
+import { RistUnavailableError } from "./types.ts";
+
+/** Capability flags that gate which promoted protocols the resolver may route to. */
+export interface ResolveEndpointOptions {
+	/** Whether the engine advertises RIST capability (Task 19/20). */
+	ristAvailable?: boolean;
+}
 
 /** Resolution input — the relay/manual selection plus the editable streamid. */
 export interface StreamResolutionInput {
@@ -84,13 +91,19 @@ function flatRelayId(id: string | undefined): string | undefined {
  * @param relays Relays-cache snapshot (`getRelays()`); `undefined` ⇒ manual.
  * @param fallbackProtocol Protocol to use when `input.relay_protocol` is unset
  *                         (typically the persisted `config.relay_protocol`).
+ * @param options Capability flags; RIST is rejected unless `ristAvailable`.
  */
 export function resolveStreamEndpoint(
 	input: StreamResolutionInput,
 	relays: RelaysCache | undefined,
 	fallbackProtocol?: RelayProtocol,
+	options?: ResolveEndpointOptions,
 ): ResolvedStreamEndpoint {
 	const protocol = input.relay_protocol ?? fallbackProtocol ?? "srtla";
+
+	if (protocol === "rist" && !options?.ristAvailable) {
+		throw new RistUnavailableError();
+	}
 
 	// Strip the provider namespace before the flat relays-cache lookup. Flat ids
 	// (no separator) pass through unchanged, preserving golden parity.

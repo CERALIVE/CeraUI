@@ -23,15 +23,17 @@
  * and each detection-method id to a `DetectionMethod` strategy. Both are open
  * extension points (`registerProtocol`, `registerDetectionMethod`).
  *
- * `srtla` ships with a working adapter; `srt` and `rist` are registered as
- * placeholders whose resolver throws `NotImplementedError` until their
- * transports land. `getAdapter` throws `UnknownProtocolError` for anything that
- * has no registered adapter.
+ * `srtla` and `rist` ship with working adapters; `srt` is registered as a
+ * placeholder whose resolver throws `NotImplementedError` until its transport
+ * lands. `getAdapter` throws `UnknownProtocolError` for anything that has no
+ * registered adapter. RIST is additionally capability-gated one layer up, in
+ * `resolve-endpoint`, so a present adapter alone never bypasses the gate.
  */
 
 import type { RelayProtocol } from "../../../helpers/config-schemas.ts";
 
 import { belaboxDetectionMethod } from "./belabox-detection.ts";
+import { ristAdapter } from "./rist-adapter.ts";
 import { srtlaAdapter } from "./srtla-adapter.ts";
 import {
 	type DetectionMethod,
@@ -88,7 +90,7 @@ export function listProtocols(): RelayProtocol[] {
 }
 
 // =============================================================================
-// Placeholder adapters (srt / rist)
+// Placeholder adapters (srt)
 // =============================================================================
 
 /**
@@ -122,11 +124,9 @@ function createPlaceholderAdapter(
 // =============================================================================
 
 registerProtocol(srtlaAdapter);
+registerProtocol(ristAdapter);
 registerProtocol(
 	createPlaceholderAdapter("srt", "SRT", "SRT not yet implemented"),
-);
-registerProtocol(
-	createPlaceholderAdapter("rist", "RIST", "RIST not yet implemented"),
 );
 
 registerDetectionMethod(belaboxDetectionMethod);
