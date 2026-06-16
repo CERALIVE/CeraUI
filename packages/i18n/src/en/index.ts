@@ -292,6 +292,7 @@ const en = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "Weight",
+			trend: "Trend",
 			links: "Links",
 			total: "Total",
 			waiting: "Waiting for link telemetry\u2026",
@@ -309,6 +310,7 @@ const en = {
 			exportJson: "Export JSON",
 			exportCsv: "Export CSV",
 			exportAria: "Export session summary",
+			exportError: "Couldn't export the session summary. Please try again.",
 		},
 		preview: {
 			title: "Preview",
@@ -646,6 +648,9 @@ const en = {
 		srtlaServerPort: "SRTLA receiver port",
 		srtStreamId: "SRT stream id",
 		srtLatency: "SRT latency (ms)",
+		transportProtocol: "Transport Protocol",
+		protocolRistUnavailable: "RIST is not available on this device",
+		protocolReserved: "Not yet available",
 		changeBitrateNotice:
 			"You can change the bitrate even if you are streaming.",
 		relayProvider: "Provider",
@@ -791,6 +796,13 @@ const en = {
 			name: "Name",
 			channel: "Channel",
 			password: "Password",
+			connectPhoneTitle: "Connect Your Phone",
+			connectPhoneInstructions:
+				"Join the hotspot, then open the URL below in your browser",
+			deviceAccessQrLabel: "Scan to open CeraUI",
+			navigateManuallyNote:
+				"If the page doesn't open automatically, navigate manually to the URL",
+			hotspotOffPrompt: "Start the hotspot to connect your phone",
 		},
 		wifi: {
 			ssid: "SSID",

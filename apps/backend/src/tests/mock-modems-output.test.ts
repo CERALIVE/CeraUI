@@ -23,6 +23,7 @@ describe("Mock Modems Output — Task 8 Evidence", () => {
 		const evidencePath = "test-results/task-8-mock-modems.json";
 		Bun.write(evidencePath, JSON.stringify(output, null, 2));
 
+		// intentional: test output for evidence capture
 		console.log(`✅ Evidence written to ${evidencePath}`);
 		console.log("\n=== MODEM LIST ===");
 		console.log(output["modem-list"]);

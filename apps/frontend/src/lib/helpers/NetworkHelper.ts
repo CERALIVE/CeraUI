@@ -368,3 +368,12 @@ export async function generateWifiQr(
 		width: 256,
 	});
 }
+
+export async function generateDeviceAccessQr(url: string): Promise<string> {
+	if (!url) throw new Error("Device URL is required");
+
+	return QRCode.toDataURL(url, {
+		errorCorrectionLevel: "H",
+		width: 256,
+	});
+}

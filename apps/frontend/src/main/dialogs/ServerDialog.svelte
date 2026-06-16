@@ -20,7 +20,13 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import { Server } from '@lucide/svelte';
-import type { StreamingConfigInput } from '@ceraui/rpc/schemas';
+import {
+	RELAY_PROTOCOLS,
+	type RelayProtocol,
+	type RelayProtocolUnavailableReason,
+	relayProtocolAvailability,
+	type StreamingConfigInput,
+} from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
@@ -36,7 +42,7 @@ import {
 	reduceValidateError,
 	reduceValidateResult,
 } from '$lib/components/streaming/relay-validation';
-import { getConfig, getIsStreaming, getRelays } from '$lib/rpc/subscriptions.svelte';
+import { getCapabilities, getConfig, getIsStreaming, getRelays } from '$lib/rpc/subscriptions.svelte';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import ManualEndpointForm from './server/ManualEndpointForm.svelte';
@@ -64,9 +70,24 @@ const config = $derived(getConfig());
 const relays = $derived(getRelays());
 const isStreaming = $derived(Boolean(getIsStreaming()));
 
+// Transport protocol selection. Protocol acronyms are technical identifiers, not
+// translated copy (mirrors the literal provider brand names below).
+const PROTOCOL_LABELS: Record<RelayProtocol, string> = {
+	srtla: 'SRTLA',
+	srt: 'SRT',
+	rist: 'RIST',
+};
+
+function protocolReason(reason: RelayProtocolUnavailableReason | undefined): string | undefined {
+	if (reason === 'capability') return $LL.settings.protocolRistUnavailable();
+	if (reason === 'reserved') return $LL.settings.protocolReserved();
+	return undefined;
+}
+
 type Mode = 'manual' | 'relay';
 type Draft = {
 	mode?: Mode;
+	relay_protocol?: RelayProtocol;
 	srtla_addr?: string;
 	srtla_port?: string;
 	srt_streamid?: string;
@@ -92,6 +113,23 @@ $effect(() => {
 });
 
 const mode = $derived<Mode>(draft.mode ?? (config?.relay_server ? 'relay' : 'manual'));
+
+// RIST is capability-gated: the option stays visible but disabled (with a
+// reason) until the engine advertises the `rist` transport; SRT is reserved.
+const transports = $derived(getCapabilities()?.transports);
+const protocol = $derived<RelayProtocol>(
+	draft.relay_protocol ?? config?.relay_protocol ?? 'srtla',
+);
+const protocolOptions = $derived(
+	RELAY_PROTOCOLS.map((value) => ({
+		value,
+		label: PROTOCOL_LABELS[value],
+		...relayProtocolAvailability(value, transports),
+	})),
+);
+const protocolSelectable = $derived(
+	relayProtocolAvailability(protocol, transports).selectable,
+);
 
 const addr = $derived(draft.srtla_addr ?? config?.srtla_addr ?? '');
 const portStr = $derived(draft.srtla_port ?? (config?.srtla_port?.toString() ?? ''));
@@ -169,6 +207,9 @@ const canValidate = $derived(
 );
 
 const canSave = $derived.by(() => {
+	// A capability-gated or reserved protocol can never be saved (RIST without
+	// the engine capability, or the reserved SRT placeholder).
+	if (!protocolSelectable) return false;
 	if (mode === 'manual') {
 		return manualSaveEnabled({
 			isStreaming,
@@ -222,7 +263,7 @@ async function handleValidate() {
 async function handleSave() {
 	const input: StreamingConfigInput = {
 		srt_latency: clampLatency(latency),
-		relay_protocol: 'srtla',
+		relay_protocol: protocol,
 	};
 	if (mode === 'manual') {
 		input.srtla_addr = addr.trim();
@@ -271,6 +312,44 @@ async function handleSave() {
 				{$LL.live.stopToChange()}
 			</p>
 		{/if}
+
+		<!-- Transport protocol: SRTLA always available; RIST gated on the engine
+		     capability; SRT reserved. Unavailable options stay visible but disabled
+		     with a reason (never hidden), per the capability-consumer pattern. -->
+		<div class="space-y-2">
+			<Label class="text-sm font-medium" for="transport-protocol">
+				{$LL.settings.transportProtocol()}
+			</Label>
+			<div
+				id="transport-protocol"
+				class="grid grid-cols-3 gap-1"
+				data-testid="transport-protocol"
+				role="radiogroup"
+			>
+				{#each protocolOptions as option (option.value)}
+					{@const reason = protocolReason(option.reason)}
+					<button
+						aria-checked={protocol === option.value}
+						class="flex flex-col items-center gap-0.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors {protocol ===
+						option.value
+							? 'border-primary bg-primary/10 text-foreground'
+							: 'border-border text-muted-foreground hover:text-foreground'} disabled:cursor-not-allowed disabled:opacity-50"
+						data-protocol={option.value}
+						data-testid={`protocol-${option.value}`}
+						disabled={isStreaming || !option.selectable}
+						onclick={() => (draft.relay_protocol = option.value)}
+						role="radio"
+						title={reason}
+						type="button"
+					>
+						<span class="font-mono">{option.label}</span>
+						{#if reason}
+							<span class="text-muted-foreground text-[0.65rem] leading-tight">{reason}</span>
+						{/if}
+					</button>
+				{/each}
+			</div>
+		</div>
 
 		<!-- Mode toggle: manual SRTLA target vs a managed relay server -->
 		<div class="bg-muted grid grid-cols-2 gap-1 rounded-lg p-1" role="tablist">

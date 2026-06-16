@@ -1,5 +1,8 @@
 # CeraUI
 
+[![CI](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml)
+[![Release](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml)
+
 Web-based control interface for live video streaming with cellular bonding. Built with Svelte 5 (frontend) and Bun (backend).
 
 ## Quick Start
@@ -56,14 +59,25 @@ A dev-only DevTools destination is available in development builds.
 
 ### Mock Scenarios
 
-Development mode includes hardware mocking:
+Development mode includes hardware mocking. All mock state is Zod-validated at startup
+and can be reset between tests via `resetMockState()`.
 
 ```bash
-pnpm dev                           # Default: 3 modems + WiFi
+pnpm dev                           # Default: 3 modems + WiFi (multi-modem-wifi)
 pnpm dev:single-modem              # 1 modem, no WiFi
 pnpm dev:streaming                 # Active streaming simulation
 MOCK_SCENARIO=streaming-active pnpm dev  # Override inline
 ```
+
+| Scenario | Modems | WiFi | Streaming |
+|----------|--------|------|-----------|
+| `multi-modem-wifi` | 3 (5G/4G/3G) | Yes | Idle |
+| `single-modem` | 1 | No | Idle |
+| `streaming-active` | 3 | Yes | Active (with live telemetry) |
+
+The mock subsystem also simulates add-on state, kiosk state, SIM PIN/PUK lock states,
+cerastream engine errors, and device-detection overrides. See `apps/backend/src/mocks/`
+for the fixture factory and schema definitions.
 
 ### Environment Variables
 
@@ -88,6 +102,7 @@ inline). See `.env.example` for the full layout.
 | `VITE_SOCKET_ENDPOINT` | dev only | `.env.development` | `ws://<page hostname>` | WebSocket endpoint (scheme + host, no port) |
 | `VITE_SOCKET_PORT` | dev only | `.env.development` | `3002` | Backend dev WebSocket port |
 | `MOCK_SCENARIO` | dev only | `.env.development` | `multi-modem-wifi` | Hardware mock scenario |
+| `LOG_LEVEL` | dev + prod | shell / systemd env | _(per-transport default)_ | Override Winston log level for all transports. Dev console default: `info`; prod console: `warn`; file: `debug`. Set to `debug` to enable per-RPC call trace lines. |
 
 ## Build & Deploy
 

@@ -424,6 +424,9 @@ const ptBR = {
 		srtlaServerPort: "Porto do servidor SRTLA",
 		srtStreamId: "ID do fluxo SRT",
 		srtLatency: "Latência SRT (ms)",
+		transportProtocol: "Protocolo de transporte",
+		protocolRistUnavailable: "RIST não está disponível neste dispositivo",
+		protocolReserved: "Ainda não disponível",
 		changeBitrateNotice:
 			"Você pode mudar a taxa de bits mesmo enquanto está transmitindo.",
 		optional: "opcional",
@@ -579,6 +582,13 @@ const ptBR = {
 			name: "Nome",
 			channel: "Canal",
 			password: "Senha",
+			connectPhoneTitle: "Conectar seu celular",
+			connectPhoneInstructions:
+				"Entre no hotspot e abra a URL abaixo no seu navegador",
+			deviceAccessQrLabel: "Escaneie para abrir o CeraUI",
+			navigateManuallyNote:
+				"Se a página não abrir automaticamente, navegue manualmente para a URL",
+			hotspotOffPrompt: "Inicie o hotspot para conectar seu celular",
 		},
 		wifi: {
 			ssid: "SSID",
@@ -886,6 +896,7 @@ const ptBR = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "Peso",
+			trend: "Tendência",
 			links: "Links",
 			total: "Total",
 			waiting: "Aguardando telemetria dos links\u2026",
@@ -903,6 +914,8 @@ const ptBR = {
 			exportJson: "Exportar JSON",
 			exportCsv: "Exportar CSV",
 			exportAria: "Exportar resumo da sessão",
+			exportError:
+				"Não foi possível exportar o resumo da sessão. Tente novamente.",
 		},
 		preview: {
 			title: "Preview",

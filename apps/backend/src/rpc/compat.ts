@@ -5,6 +5,11 @@
  */
 import type WebSocket from "ws";
 
+import {
+	isRelayable,
+	nextRelaySeq,
+	relayStatusToGateway,
+} from "../modules/remote-control/status-relay.ts";
 import { broadcast, buildMessage } from "./events.ts";
 import type { AppWebSocket } from "./types.ts";
 
@@ -39,8 +44,12 @@ export function broadcastMsgLocal(
 }
 
 /**
- * Broadcast to all clients including remote (compatible with old broadcastMsg)
- * Note: Remote relay support will be added in a future phase
+ * Broadcast to all clients including remote (compatible with old broadcastMsg).
+ *
+ * Local clients are served first (unchanged); relayable status types are then
+ * mirrored onto the control channel as `kind:status` frames (spec §8). The relay
+ * is a no-op until the control channel is wired (Task 13) and only fires while
+ * it reports connected — the local path is never affected.
  */
 export function broadcastMsg(
 	type: string,
@@ -49,11 +58,16 @@ export function broadcastMsg(
 	authedOnly = true,
 ): void {
 	broadcastMsgLocal(type, data, activeMin, undefined, authedOnly);
-	// TODO: Add remote relay support in future phase
+	if (isRelayable(type)) {
+		relayStatusToGateway(type, data, nextRelaySeq(type));
+	}
 }
 
 /**
- * Broadcast to all except one client (compatible with old broadcastMsgExcept)
+ * Broadcast to all except one client (compatible with old broadcastMsgExcept).
+ *
+ * Same dual delivery as {@link broadcastMsg}: unchanged local broadcast, then a
+ * control-channel `kind:status` relay for relayable types (spec §8).
  */
 export function broadcastMsgExcept(
 	conn: WebSocket | AppWebSocket,
@@ -61,7 +75,9 @@ export function broadcastMsgExcept(
 	data: unknown,
 ): void {
 	broadcastMsgLocal(type, data, 0, conn);
-	// TODO: Add remote relay support in future phase
+	if (isRelayable(type)) {
+		relayStatusToGateway(type, data, nextRelaySeq(type));
+	}
 }
 
 /**

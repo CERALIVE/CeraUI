@@ -16,10 +16,18 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { LinkTelemetryEntry, LinkTelemetryMessage } from '@ceraui/rpc/schemas';
-import { Activity, Download, TrendingUp } from '@lucide/svelte';
+import { Activity, AlertTriangle, Download, TrendingUp } from '@lucide/svelte';
 import { untrack } from 'svelte';
 
 import StaleBadge from '$lib/components/custom/StaleBadge.svelte';
+import {
+	createLinkViewCache,
+	type LinkViewComputed,
+	RING_CAPACITY,
+	type Sample,
+	SPARK_H,
+	SPARK_W,
+} from '$lib/components/custom/ingest-link-view';
 import { Button } from '$lib/components/ui/button';
 import {
 	computeSessionRollup,
@@ -55,24 +63,12 @@ const totalWeight = $derived(links.reduce((sum, link) => sum + link.weight_perce
 // Shared 4-column track so header, rows, and totals stay aligned on any width.
 const COLS = 'grid grid-cols-[minmax(0,1.4fr)_1fr_1fr_1fr] gap-x-3';
 
-// ── Fixed-size history ring (RAM-only, per-link) ──────────────────────────────
-// One bounded buffer per uplink (keyed by conn_id). When full, the oldest sample
-// is dropped — never persisted, never resized at runtime, never aggregated beyond
-// the raw ring.
-const RING_CAPACITY = 60;
-// Trend math compares the leading vs trailing window of the ring.
-const TREND_WINDOW = 10;
-const MIN_SAMPLES_FOR_TREND = TREND_WINDOW * 2;
-// "Degrading" = trailing RTT average climbed past this multiple of the leading
-// average. The floor keeps the rtt_ms=0 startup constant from tripping the alert.
-const DEGRADE_FACTOR = 2;
-const RTT_FLOOR_MS = 5;
-// Sparkline drawing box (unitless SVG user space; the <svg> scales to its cell).
-const SPARK_W = 100;
-const SPARK_H = 24;
-
-type Sample = { rtt: number; nak: number; weight: number };
-type Trend = 'rising' | 'falling' | 'flat';
+// Per-link RTT-trend derivation — constants, math, and the memoizing cache — lives
+// in `ingest-link-view.ts` (pure + unit-testable). RING_CAPACITY bounds the ring
+// appended below; SPARK_W/SPARK_H size the SVG viewBox in the template.
+const viewCache = createLinkViewCache();
+// Stable empty buffer so a link still awaiting its first frame stays a memo hit.
+const EMPTY_SAMPLES: readonly Sample[] = [];
 
 let history = $state<Record<string, Sample[]>>({});
 
@@ -97,80 +93,18 @@ $effect(() => {
 	});
 });
 
-function avg(nums: number[]): number {
-	return nums.length === 0 ? 0 : nums.reduce((sum, n) => sum + n, 0) / nums.length;
-}
+type LinkView = LinkViewComputed & { link: LinkTelemetryEntry };
 
-// Build an SVG polyline from RTT values, normalised over the ring's own min/max so
-// the trace fills the box regardless of absolute latency. A higher RTT draws higher.
-function sparkPoints(values: number[]): string {
-	if (values.length === 0) return '';
-	if (values.length === 1) return `0,${SPARK_H / 2} ${SPARK_W},${SPARK_H / 2}`;
-	const min = Math.min(...values);
-	const max = Math.max(...values);
-	const span = max - min || 1;
-	const stepX = SPARK_W / (values.length - 1);
-	return values
-		.map((v, i) => {
-			const x = i * stepX;
-			const y = SPARK_H - ((v - min) / span) * SPARK_H;
-			return `${x.toFixed(1)},${y.toFixed(1)}`;
-		})
-		.join(' ');
-}
-
-function trendOf(samples: Sample[]): Trend {
-	if (samples.length < 4) return 'flat';
-	const w = Math.min(TREND_WINDOW, Math.floor(samples.length / 2));
-	const lead = avg(samples.slice(0, w).map((s) => s.rtt));
-	const trail = avg(samples.slice(-w).map((s) => s.rtt));
-	const delta = trail - lead;
-	const threshold = Math.max(2, lead * 0.1);
-	if (delta > threshold) return 'rising';
-	if (delta < -threshold) return 'falling';
-	return 'flat';
-}
-
-// Degradation: trailing RTT average more than DEGRADE_FACTOR× the leading average,
-// with a floor so a link still settling from rtt_ms=0 doesn't false-alarm.
-function isDegraded(samples: Sample[]): boolean {
-	if (samples.length < MIN_SAMPLES_FOR_TREND) return false;
-	const lead = avg(samples.slice(0, TREND_WINDOW).map((s) => s.rtt));
-	const trail = avg(samples.slice(-TREND_WINDOW).map((s) => s.rtt));
-	if (trail < RTT_FLOOR_MS) return false;
-	return trail > DEGRADE_FACTOR * Math.max(lead, RTT_FLOOR_MS / DEGRADE_FACTOR);
-}
-
-// 100 = stable; drops ~50 pts per doubling of trailing RTT, clamped to [0,100].
-function healthScore(samples: Sample[]): number {
-	if (samples.length < MIN_SAMPLES_FOR_TREND) return 100;
-	const lead = avg(samples.slice(0, TREND_WINDOW).map((s) => s.rtt));
-	const trail = avg(samples.slice(-TREND_WINDOW).map((s) => s.rtt));
-	const ratio = trail / Math.max(lead, RTT_FLOOR_MS);
-	return Math.round(Math.max(0, Math.min(100, 100 - (ratio - 1) * 50)));
-}
-
-type LinkView = {
-	link: LinkTelemetryEntry;
-	count: number;
-	points: string;
-	trend: Trend;
-	degraded: boolean;
-	score: number;
-};
-
+// Memoized per conn_id: a link whose samples buffer is reference-unchanged since
+// the last derivation reuses its cached view (path string + trend + health) rather
+// than rebuilding the SVG path. The ring effect only swaps a link's array when it
+// appends a sample, so the audit's per-tick redraw cost is now paid only on a
+// genuinely new sample for that link — not on every component re-render.
 const linkViews = $derived<LinkView[]>(
-	links.map((link) => {
-		const samples = history[link.conn_id] ?? [];
-		return {
-			link,
-			count: samples.length,
-			points: sparkPoints(samples.map((s) => s.rtt)),
-			trend: trendOf(samples),
-			degraded: isDegraded(samples),
-			score: healthScore(samples),
-		};
-	}),
+	links.map((link) => ({
+		link,
+		...viewCache.get(link.conn_id, history[link.conn_id] ?? EMPTY_SAMPLES),
+	})),
 );
 
 const anyDegraded = $derived(linkViews.some((v) => v.degraded));
@@ -215,18 +149,32 @@ function formatBitrate(kbps: number): string {
 	return `${kbps} ${$LL.units.kbps()}`;
 }
 
+// Surfaced inline when a device-local export fails (e.g. Blob/object-URL
+// creation throws under storage pressure). Calm, recoverable, never thrown.
+let exportError = $state(false);
+
+// Guarded client-side download: any failure in Blob/object-URL/anchor flips the
+// inline error state instead of throwing, and the object URL is always revoked
+// in `finally` so a partial success never leaks it.
 function triggerDownload(filename: string, mime: string, content: string): void {
 	if (typeof document === 'undefined') return;
-	const blob = new Blob([content], { type: mime });
-	const url = URL.createObjectURL(blob);
-	const anchor = document.createElement('a');
-	anchor.href = url;
-	anchor.download = filename;
-	anchor.rel = 'noopener';
-	document.body.appendChild(anchor);
-	anchor.click();
-	anchor.remove();
-	URL.revokeObjectURL(url);
+	let url: string | undefined;
+	try {
+		const blob = new Blob([content], { type: mime });
+		url = URL.createObjectURL(blob);
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = filename;
+		anchor.rel = 'noopener';
+		document.body.appendChild(anchor);
+		anchor.click();
+		anchor.remove();
+		exportError = false;
+	} catch {
+		exportError = true;
+	} finally {
+		if (url !== undefined) URL.revokeObjectURL(url);
+	}
 }
 
 function exportJson(): void {
@@ -243,28 +191,37 @@ function exportCsv(): void {
 	class={cn('bg-card rounded-xl border p-4 sm:p-5', className)}
 	aria-label={$LL.live.ingest.ariaLabel()}
 >
-	<div class="mb-3 flex items-center gap-2">
-		<Activity aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
+	<div class="mb-4 flex items-center gap-2.5">
+		<span
+			aria-hidden="true"
+			class="bg-primary/10 text-primary flex size-7 shrink-0 items-center justify-center rounded-lg"
+		>
+			<Activity class="size-4" />
+		</span>
 		<h2 class="text-sm font-semibold tracking-tight">
 			{showSummary ? $LL.live.ingest.summary() : $LL.live.ingest.title()}
 		</h2>
 		{#if showSummary && rollup}
-			<span class="text-muted-foreground ms-auto font-mono text-xs tabular-nums">
+			<span
+				class="bg-secondary/60 text-muted-foreground ms-auto rounded-full px-2 py-0.5 font-mono text-xs tabular-nums"
+			>
 				{rollup.sampleCount}&nbsp;{$LL.live.ingest.samples()}
 			</span>
 		{:else if hasLinks}
-			<span class="text-muted-foreground ms-auto font-mono text-xs tabular-nums">
+			<span
+				class="bg-secondary/60 text-muted-foreground ms-auto rounded-full px-2 py-0.5 font-mono text-xs tabular-nums"
+			>
 				{links.length}&nbsp;{$LL.live.ingest.links()}
 			</span>
 		{/if}
 	</div>
 
 	{#if anyDegraded}
-		<!-- Bond-level degradation alert — raised when any link's RTT trend climbs. -->
+		<!-- Bond-level degradation alert — calm amber band, bordered for definition. -->
 		<div
 			role="alert"
 			data-testid="ingest-alert"
-			class="bg-status-warning/10 text-status-warning mb-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium"
+			class="border-status-warning/30 bg-status-warning/10 text-status-warning mb-4 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
 		>
 			<TrendingUp aria-hidden="true" class="size-4 shrink-0" />
 			<span>{$LL.live.ingest.alert()}</span>
@@ -275,35 +232,47 @@ function exportCsv(): void {
 		<!-- Per-session summary: peak/avg bitrate, drops, then per-link uptime. -->
 		<div data-testid="ingest-summary">
 			<div class="grid grid-cols-3 gap-3">
-				<div class="bg-secondary/40 rounded-lg p-3">
-					<div class="text-muted-foreground text-[10px] uppercase tracking-wide">
-						{$LL.live.ingest.peak()}
+				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
+					<div
+						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
+					>
+						<TrendingUp aria-hidden="true" class="size-3 shrink-0" />
+						<span class="truncate">{$LL.live.ingest.peak()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-peak"
-						class="text-foreground mt-1 font-mono text-sm font-semibold tabular-nums"
+						class="text-foreground font-mono text-sm font-semibold tabular-nums"
 					>
 						{formatBitrate(rollup.peakBitrateKbps)}
 					</div>
 				</div>
-				<div class="bg-secondary/40 rounded-lg p-3">
-					<div class="text-muted-foreground text-[10px] uppercase tracking-wide">
-						{$LL.live.ingest.avg()}
+				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
+					<div
+						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
+					>
+						<Activity aria-hidden="true" class="size-3 shrink-0" />
+						<span class="truncate">{$LL.live.ingest.avg()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-avg"
-						class="text-foreground mt-1 font-mono text-sm font-semibold tabular-nums"
+						class="text-foreground font-mono text-sm font-semibold tabular-nums"
 					>
 						{formatBitrate(rollup.avgBitrateKbps)}
 					</div>
 				</div>
-				<div class="bg-secondary/40 rounded-lg p-3">
-					<div class="text-muted-foreground text-[10px] uppercase tracking-wide">
-						{$LL.live.ingest.drops()}
+				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
+					<div
+						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
+					>
+						<AlertTriangle aria-hidden="true" class="size-3 shrink-0" />
+						<span class="truncate">{$LL.live.ingest.drops()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-drops"
-						class="text-foreground mt-1 font-mono text-sm font-semibold tabular-nums"
+						class={cn(
+							'font-mono text-sm font-semibold tabular-nums',
+							rollup.dropCount > 0 ? 'text-status-warning' : 'text-foreground',
+						)}
 					>
 						{rollup.dropCount}
 					</div>
@@ -313,12 +282,13 @@ function exportCsv(): void {
 			{#if rollup.links.length > 0}
 				<div
 					class={cn(
-						'text-muted-foreground mt-4 mb-1.5 flex items-center border-b pb-1.5',
-						'text-[10px] uppercase tracking-wide',
+						'text-muted-foreground mt-4 mb-1.5 flex items-center gap-3 border-b pb-1.5',
+						'text-[10px] font-medium uppercase tracking-wide',
 					)}
 				>
-					<span class="flex-1">{$LL.live.ingest.link()}</span>
-					<span>{$LL.live.ingest.uptime()}</span>
+					<span class="w-20 shrink-0">{$LL.live.ingest.link()}</span>
+					<span class="flex-1">{$LL.live.ingest.uptime()}</span>
+					<span class="w-10 text-end">%</span>
 				</div>
 				<div role="list">
 					{#each rollup.links as link (link.iface)}
@@ -326,10 +296,22 @@ function exportCsv(): void {
 							role="listitem"
 							data-testid="ingest-uptime-row"
 							data-iface={link.iface}
-							class="flex items-center border-b py-1.5 text-xs last:border-b-0"
+							class="flex items-center gap-3 border-b py-2 text-xs last:border-b-0"
 						>
-							<span class="flex-1 truncate font-medium">{link.iface}</span>
-							<span data-testid="ingest-uptime" class="text-foreground font-mono tabular-nums">
+							<span class="w-20 shrink-0 truncate font-medium">{link.iface}</span>
+							<div
+								aria-hidden="true"
+								class="bg-secondary/60 relative h-1.5 flex-1 overflow-hidden rounded-full"
+							>
+								<div
+									class="bg-primary h-full rounded-full"
+									style={`width:${link.uptimePercent}%`}
+								></div>
+							</div>
+							<span
+								data-testid="ingest-uptime"
+								class="text-foreground w-10 text-end font-mono tabular-nums"
+							>
 								{link.uptimePercent}%
 							</span>
 						</div>
@@ -337,12 +319,15 @@ function exportCsv(): void {
 				</div>
 			{/if}
 
-			<div class="mt-4 flex flex-wrap gap-2" aria-label={$LL.live.ingest.exportAria()}>
+			<div
+				class="mt-4 flex flex-wrap gap-2 border-t pt-4"
+				aria-label={$LL.live.ingest.exportAria()}
+			>
 				<Button
 					data-testid="ingest-export-json"
 					variant="outline"
 					size="sm"
-					class="gap-1.5"
+					class="flex-1 gap-1.5 sm:flex-none"
 					onclick={exportJson}
 				>
 					<Download aria-hidden="true" class="size-3.5" />
@@ -352,27 +337,40 @@ function exportCsv(): void {
 					data-testid="ingest-export-csv"
 					variant="outline"
 					size="sm"
-					class="gap-1.5"
+					class="flex-1 gap-1.5 sm:flex-none"
 					onclick={exportCsv}
 				>
 					<Download aria-hidden="true" class="size-3.5" />
 					{$LL.live.ingest.exportCsv()}
 				</Button>
 			</div>
+
+			{#if exportError}
+				<!-- Calm, recoverable export-failure notice; the panel stays interactive. -->
+				<p
+					role="alert"
+					data-testid="ingest-export-error"
+					class="border-status-warning/30 bg-status-warning/10 text-status-warning mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+				>
+					<AlertTriangle aria-hidden="true" class="size-4 shrink-0" />
+					<span>{$LL.live.ingest.exportError()}</span>
+				</p>
+			{/if}
 		</div>
 	{:else if !hasLinks}
-		<p class="text-muted-foreground text-sm" data-testid="ingest-waiting">
-			{$LL.live.ingest.waiting()}
-		</p>
+		<div class="text-muted-foreground flex items-center gap-2 py-2 text-sm" data-testid="ingest-waiting">
+			<Activity aria-hidden="true" class="size-4 shrink-0 opacity-60" />
+			<span>{$LL.live.ingest.waiting()}</span>
+		</div>
 	{:else}
-		<!-- column header -->
+		<!-- column header (ps-4 aligns "Link" past the per-link signal dot) -->
 		<div
 			class={cn(
 				COLS,
-				'text-muted-foreground border-b pb-1.5 text-[10px] uppercase tracking-wide',
+				'text-muted-foreground border-b pb-1.5 text-[10px] font-medium uppercase tracking-wide',
 			)}
 		>
-			<span>{$LL.live.ingest.link()}</span>
+			<span class="ps-4">{$LL.live.ingest.link()}</span>
 			<span class="text-end">{$LL.live.ingest.rtt()}</span>
 			<span class="text-end">{$LL.live.ingest.nak()}</span>
 			<span class="text-end">{$LL.live.ingest.weight()}</span>
@@ -380,7 +378,7 @@ function exportCsv(): void {
 
 		<!-- per-link rows -->
 		<div role="list">
-			{#each linkViews as view (view.link.conn_id)}
+			{#each linkViews as view, i (view.link.conn_id)}
 				{@const link = view.link}
 				<div
 					role="listitem"
@@ -389,12 +387,18 @@ function exportCsv(): void {
 					data-stale={link.stale ? 'true' : 'false'}
 					data-health={view.degraded ? 'degraded' : 'healthy'}
 					class={cn(
-						'border-b py-1.5 transition-opacity last:border-b-0',
+						'border-b py-2 transition-opacity last:border-b-0',
 						link.stale && 'opacity-50',
 					)}
 				>
 					<div class={cn(COLS, 'items-center text-xs')}>
-						<div class="flex min-w-0 items-center gap-1.5">
+						<div class="flex min-w-0 items-center gap-2">
+							<!-- Spectral per-link identity dot (--link-1..6 ramp). -->
+							<span
+								aria-hidden="true"
+								class="size-2 shrink-0 rounded-full"
+								style={`background-color: var(--link-${(i % 6) + 1})`}
+							></span>
 							<span class="truncate font-medium">{link.iface}</span>
 							{#if link.stale}
 								<StaleBadge data-stale-interface={link.iface} />
@@ -411,8 +415,13 @@ function exportCsv(): void {
 						</span>
 					</div>
 
-					<!-- recent-trend strip: RTT sparkline + per-link health verdict -->
-					<div class="mt-1.5 flex items-center gap-2">
+					<!-- recent-trend strip: labelled RTT sparkline + per-link health pill -->
+					<div class="mt-2 flex items-center gap-2">
+						<span
+							class="text-muted-foreground shrink-0 text-[10px] font-medium uppercase tracking-wide"
+						>
+							{$LL.live.ingest.trend()}
+						</span>
 						<svg
 							data-testid="ingest-sparkline"
 							data-iface={link.iface}
@@ -421,12 +430,23 @@ function exportCsv(): void {
 							viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
 							preserveAspectRatio="none"
 							class={cn(
-								'h-5 min-w-0 flex-1',
+								'h-6 min-w-0 flex-1',
 								view.degraded ? 'text-status-warning' : 'text-primary',
 							)}
 							role="img"
 							aria-label={$LL.live.ingest.trendLabel({ iface: link.iface })}
 						>
+							<!-- Baseline track so a short/empty trace still reads as calibrated. -->
+							<line
+								x1="0"
+								y1={SPARK_H - 0.75}
+								x2={SPARK_W}
+								y2={SPARK_H - 0.75}
+								stroke="currentColor"
+								stroke-width="1"
+								vector-effect="non-scaling-stroke"
+								class="text-muted-foreground/25"
+							/>
 							{#if view.points}
 								<polyline
 									points={view.points}
@@ -445,10 +465,20 @@ function exportCsv(): void {
 							data-status={view.degraded ? 'degraded' : 'healthy'}
 							data-score={view.score}
 							class={cn(
-								'shrink-0 font-mono text-[10px] uppercase tracking-wide tabular-nums',
-								view.degraded ? 'text-status-warning' : 'text-muted-foreground',
+								'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5',
+								'font-mono text-[10px] uppercase tracking-wide tabular-nums',
+								view.degraded
+									? 'bg-status-warning/10 text-status-warning'
+									: 'bg-secondary/60 text-muted-foreground',
 							)}
 						>
+							<span
+								aria-hidden="true"
+								class={cn(
+									'size-1.5 rounded-full',
+									view.degraded ? 'bg-status-warning' : 'bg-primary',
+								)}
+							></span>
 							{view.degraded ? $LL.live.ingest.degraded() : $LL.live.ingest.healthy()}
 						</span>
 					</div>
@@ -457,8 +487,10 @@ function exportCsv(): void {
 		</div>
 
 		<!-- bond totals -->
-		<div class={cn(COLS, 'items-center pt-2 text-xs')}>
-			<span class="text-muted-foreground uppercase tracking-wide">{$LL.live.ingest.total()}</span>
+		<div class={cn(COLS, 'items-center pt-3 text-xs')}>
+			<span class="text-muted-foreground ps-4 uppercase tracking-wide"
+				>{$LL.live.ingest.total()}</span
+			>
 			<span aria-hidden="true" class="text-end">&nbsp;</span>
 			<span
 				data-testid="ingest-total-nak"

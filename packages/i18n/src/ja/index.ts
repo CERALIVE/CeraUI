@@ -273,6 +273,9 @@ const ja = {
 		srtlaServerPort: "SRTLAレシーバーポート",
 		srtStreamId: "SRTストリームID",
 		srtLatency: "SRTレイテンシ (ms)",
+		transportProtocol: "トランスポートプロトコル",
+		protocolRistUnavailable: "このデバイスでは RIST を利用できません",
+		protocolReserved: "まだ利用できません",
 		changeBitrateNotice: "ストリーミング中でもビットレートを変更できます。",
 		optional: "オプション",
 		relayProvider: "プロバイダー",
@@ -417,6 +420,14 @@ const ja = {
 			name: "名前",
 			channel: "チャンネル",
 			password: "パスワード",
+			connectPhoneTitle: "スマートフォンを接続",
+			connectPhoneInstructions:
+				"ホットスポットに接続し、下のURLをブラウザで開いてください",
+			deviceAccessQrLabel: "スキャンしてCeraUIを開く",
+			navigateManuallyNote:
+				"ページが自動的に開かない場合は、URLに手動でアクセスしてください",
+			hotspotOffPrompt:
+				"スマートフォンを接続するにはホットスポットを起動してください",
 		},
 		wifi: {
 			ssid: "SSID",
@@ -751,6 +762,7 @@ const ja = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "重み",
+			trend: "傾向",
 			links: "リンク",
 			total: "合計",
 			waiting: "リンクテレメトリを待機中\u2026",
@@ -768,6 +780,8 @@ const ja = {
 			exportJson: "JSONをエクスポート",
 			exportCsv: "CSVをエクスポート",
 			exportAria: "セッションサマリーをエクスポート",
+			exportError:
+				"セッションサマリーをエクスポートできませんでした。もう一度お試しください。",
 		},
 		preview: {
 			title: "Preview",

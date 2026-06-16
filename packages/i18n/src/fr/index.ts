@@ -428,6 +428,9 @@ const fr = {
 		srtlaServerPort: "Port du serveur SRTLA",
 		srtStreamId: "ID du flux SRT",
 		srtLatency: "Latence SRT (ms)",
+		transportProtocol: "Protocole de transport",
+		protocolRistUnavailable: "RIST n'est pas disponible sur cet appareil",
+		protocolReserved: "Pas encore disponible",
 		changeBitrateNotice:
 			"Vous pouvez changer le débit binaire même si vous diffusez.",
 		optional: "optionnel",
@@ -587,6 +590,13 @@ const fr = {
 			name: "Nom",
 			channel: "Canal",
 			password: "Mot de passe",
+			connectPhoneTitle: "Connecter votre téléphone",
+			connectPhoneInstructions:
+				"Rejoignez le hotspot, puis ouvrez l'URL ci-dessous dans votre navigateur",
+			deviceAccessQrLabel: "Scanner pour ouvrir CeraUI",
+			navigateManuallyNote:
+				"Si la page ne s'ouvre pas automatiquement, naviguez manuellement vers l'URL",
+			hotspotOffPrompt: "Démarrez le hotspot pour connecter votre téléphone",
 		},
 		wifi: {
 			ssid: "SSID",
@@ -911,6 +921,7 @@ const fr = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "Poids",
+			trend: "Tendance",
 			links: "Liaisons",
 			total: "Total",
 			waiting: "En attente de la télémétrie des liaisons\u2026",
@@ -928,6 +939,8 @@ const fr = {
 			exportJson: "Exporter JSON",
 			exportCsv: "Exporter CSV",
 			exportAria: "Exporter le résumé de session",
+			exportError:
+				"Impossible d'exporter le résumé de session. Veuillez réessayer.",
 		},
 		preview: {
 			title: "Preview",

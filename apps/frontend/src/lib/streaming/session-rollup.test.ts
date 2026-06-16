@@ -136,6 +136,138 @@ describe("computeSessionRollup — mock session", () => {
 	});
 });
 
+describe("computeSessionRollup — edge cases", () => {
+	it("folds a single sample without crediting a phantom drop", () => {
+		// One sample → no consecutive pair → no up→down edge can exist. A stale
+		// link in that lone sample is simply 0% uptime, not a drop.
+		const rollup = computeSessionRollup([
+			{
+				bitrateKbps: 4000,
+				links: [
+					{ iface: "eth0", stale: false },
+					{ iface: "wlan0", stale: true },
+				],
+			},
+		]);
+		expect(rollup.sampleCount).toBe(1);
+		expect(rollup.peakBitrateKbps).toBe(4000);
+		expect(rollup.avgBitrateKbps).toBe(4000);
+		expect(rollup.dropCount).toBe(0);
+		expect(rollup.links).toEqual([
+			{ iface: "eth0", uptimePercent: 100 },
+			{ iface: "wlan0", uptimePercent: 0 },
+		]);
+	});
+
+	it("reports 0% uptime and no drops when every link is stale all session", () => {
+		// A link that is never up cannot transition up→down, so dropCount stays 0
+		// even though both links carry the whole session stale.
+		const allStale: SessionSample[] = [
+			{
+				bitrateKbps: 3000,
+				links: [
+					{ iface: "eth0", stale: true },
+					{ iface: "wlan0", stale: true },
+				],
+			},
+			{
+				bitrateKbps: 3000,
+				links: [
+					{ iface: "eth0", stale: true },
+					{ iface: "wlan0", stale: true },
+				],
+			},
+			{
+				bitrateKbps: 3000,
+				links: [
+					{ iface: "eth0", stale: true },
+					{ iface: "wlan0", stale: true },
+				],
+			},
+		];
+		const rollup = computeSessionRollup(allStale);
+		expect(rollup.sampleCount).toBe(3);
+		expect(rollup.dropCount).toBe(0);
+		expect(rollup.avgBitrateKbps).toBe(3000);
+		expect(rollup.links).toEqual([
+			{ iface: "eth0", uptimePercent: 0 },
+			{ iface: "wlan0", uptimePercent: 0 },
+		]);
+	});
+
+	it("keeps peak/avg at 0 for an all-zero-bitrate session", () => {
+		// A configured bitrate of 0 across the session is a valid (idle-encoder)
+		// state: peak and avg collapse to 0 while link uptime is still computed.
+		const zeroBitrate: SessionSample[] = [
+			{ bitrateKbps: 0, links: [{ iface: "eth0", stale: false }] },
+			{ bitrateKbps: 0, links: [{ iface: "eth0", stale: false }] },
+		];
+		const rollup = computeSessionRollup(zeroBitrate);
+		expect(rollup.peakBitrateKbps).toBe(0);
+		expect(rollup.avgBitrateKbps).toBe(0);
+		expect(rollup.links).toEqual([{ iface: "eth0", uptimePercent: 100 }]);
+	});
+
+	it("rounds fractional uptime to the nearest integer percent", () => {
+		// eth0 up in 1 of 3 samples → 33.33% → rounds to 33; wlan0 up in 2 of 3 →
+		// 66.67% → rounds to 67. Guards the Math.round at the uptime boundary.
+		const thirds: SessionSample[] = [
+			{
+				bitrateKbps: 5000,
+				links: [
+					{ iface: "eth0", stale: false },
+					{ iface: "wlan0", stale: false },
+				],
+			},
+			{
+				bitrateKbps: 5000,
+				links: [
+					{ iface: "eth0", stale: true },
+					{ iface: "wlan0", stale: false },
+				],
+			},
+			{
+				bitrateKbps: 5000,
+				links: [
+					{ iface: "eth0", stale: true },
+					{ iface: "wlan0", stale: true },
+				],
+			},
+		];
+		const rollup = computeSessionRollup(thirds);
+		expect(rollup.links).toEqual([
+			{ iface: "eth0", uptimePercent: 33 },
+			{ iface: "wlan0", uptimePercent: 67 },
+		]);
+	});
+});
+
+describe("rollup export — empty session", () => {
+	// The export path must serialise a zeroed rollup without emitting any per-link
+	// rows (no links → only the header line survives in the CSV link block).
+	const empty = computeSessionRollup([]);
+
+	it("JSON export carries zeroed fields and an empty links array", () => {
+		expect(JSON.parse(rollupToJson(empty))).toEqual({
+			sampleCount: 0,
+			peakBitrateKbps: 0,
+			avgBitrateKbps: 0,
+			dropCount: 0,
+			links: [],
+		});
+	});
+
+	it("CSV export keeps the metric block and an empty link block", () => {
+		const csv = rollupToCsv(empty);
+		expect(csv).toContain("peak_bitrate_kbps,0");
+		expect(csv).toContain("avg_bitrate_kbps,0");
+		expect(csv).toContain("drop_count,0");
+		expect(csv).toContain("sample_count,0");
+		// The link block header is the final line — no iface rows follow it.
+		expect(csv.trimEnd().endsWith("iface,uptime_percent")).toBe(true);
+	});
+});
+
 describe("rollup export — JSON and CSV", () => {
 	const rollup = computeSessionRollup(SESSION);
 

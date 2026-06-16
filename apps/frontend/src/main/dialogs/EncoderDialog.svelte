@@ -50,6 +50,7 @@ import { BITRATE_DEFAULT_MIN, type Pipeline } from '@ceraui/rpc/schemas';
 
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
+import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 import {
 	bitrateBoundsFromCaps,
 	deriveCodecOptions,
@@ -320,6 +321,11 @@ function handleSave() {
 				{/each}
 			</div>
 		</div>
+
+		<!-- Live preview (#72): the same PreviewCanvas as the Live view, compact so
+		     the dialog supplies the chrome. Active-encode-only — it owns its socket
+		     + toggle and tears down on dialog close (unmount). -->
+		<PreviewCanvas compact />
 
 		<!-- Resolution: every rung is shown; rungs outside the capability-offered
 		     set render disabled (aria-disabled + reason title), never hidden. -->

@@ -51,12 +51,14 @@ const state = vi.hoisted(() => ({
 		  }
 		| undefined,
 	isStreaming: false,
+	capabilities: undefined as { transports?: string[] } | undefined,
 }));
 
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConfig: () => state.config,
 	getRelays: () => state.relays,
 	getIsStreaming: () => state.isStreaming,
+	getCapabilities: () => state.capabilities,
 }));
 
 vi.mock("$lib/rpc", () => ({
@@ -112,6 +114,7 @@ beforeEach(() => {
 	state.config = undefined;
 	state.relays = undefined;
 	state.isStreaming = false;
+	state.capabilities = undefined;
 });
 
 describe("ServerDialog — relay availability gate (Task 11 / D6)", () => {

@@ -4,6 +4,7 @@
 */
 
 import type { RelaysCache } from "../../helpers/config-schemas.ts";
+import { buildMockRelay } from "../fixture-factory.ts";
 
 // ─── Stable server IDs for T5 (RTT generator) and T7 (rebroadcast) ──────────
 
@@ -34,32 +35,24 @@ export function getMockRelaysCache(): RelaysCache {
 	return {
 		bcrp_key: "mock-bcrp-key-12345",
 		servers: {
-			[MOCK_RELAY_SERVER_IDS.EU_WEST]: {
-				type: "srt",
+			[MOCK_RELAY_SERVER_IDS.EU_WEST]: buildMockRelay({
 				name: "EU-West (Primary)",
 				addr: "relay-eu-west.example.com",
-				port: 2001,
 				default: true,
 				bcrp_port: "2002",
-			},
-			[MOCK_RELAY_SERVER_IDS.US_EAST]: {
-				type: "srt",
+			}),
+			[MOCK_RELAY_SERVER_IDS.US_EAST]: buildMockRelay({
 				name: "US-East",
 				addr: "relay-us-east.example.com",
-				port: 2001,
-			},
-			[MOCK_RELAY_SERVER_IDS.ASIA_SE]: {
-				type: "srt",
+			}),
+			[MOCK_RELAY_SERVER_IDS.ASIA_SE]: buildMockRelay({
 				name: "Asia-SE",
 				addr: "relay-asia-se.example.com",
-				port: 2001,
-			},
-			[MOCK_RELAY_SERVER_IDS.US_WEST]: {
-				type: "srt",
+			}),
+			[MOCK_RELAY_SERVER_IDS.US_WEST]: buildMockRelay({
 				name: "US-West",
 				addr: "relay-us-west.example.com",
-				port: 2001,
-			},
+			}),
 		},
 		accounts: {
 			[MOCK_RELAY_ACCOUNT_IDS.PRIMARY]: {
@@ -76,7 +69,7 @@ export function getMockRelaysCache(): RelaysCache {
 }
 
 // ─── RTT Generator (T5) ─────────────────────────────────────────────────────
-// Per-server RTT bands exercising thresholds: ≤80 🟢, ≤150 🟡, >150 🔴
+// Per-server RTT bands exercising thresholds: ≤RELAY_RTT_GREEN_MS 🟢, ≤RELAY_RTT_YELLOW_MS 🟡, >RELAY_RTT_YELLOW_MS 🔴
 
 /**
  * Get mock RTT for a single relay server
@@ -84,7 +77,7 @@ export function getMockRelaysCache(): RelaysCache {
  * Bands are assigned to exercise all threshold boundaries
  */
 export function getMockRelayRtt(serverId: string): number {
-	// EU-West: steady green (≤80ms)
+	// EU-West: steady green (≤RELAY_RTT_GREEN_MS)
 	if (serverId === MOCK_RELAY_SERVER_IDS.EU_WEST) {
 		return 40 + Math.random() * 35; // 40-75ms
 	}
@@ -94,7 +87,7 @@ export function getMockRelayRtt(serverId: string): number {
 		return 70 + Math.random() * 55; // 70-125ms
 	}
 
-	// Asia-SE: yellow/red (>150ms occasionally, ~100-200ms)
+	// Asia-SE: yellow/red (>RELAY_RTT_YELLOW_MS occasionally, ~100-200ms)
 	if (serverId === MOCK_RELAY_SERVER_IDS.ASIA_SE) {
 		return 100 + Math.random() * 110; // 100-210ms
 	}
@@ -104,7 +97,7 @@ export function getMockRelayRtt(serverId: string): number {
 		return 120 + Math.random() * 70; // 120-190ms
 	}
 
-	// EU-Central (if present): steady yellow (≤150ms)
+	// EU-Central (if present): steady yellow (≤RELAY_RTT_YELLOW_MS)
 	if (serverId === MOCK_RELAY_SERVER_IDS.EU_CENTRAL) {
 		return 90 + Math.random() * 55; // 90-145ms
 	}

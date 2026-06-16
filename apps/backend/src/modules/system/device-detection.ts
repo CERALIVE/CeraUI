@@ -95,3 +95,36 @@ export async function isRealDevice(
 		return false;
 	}
 }
+
+/**
+ * Test helper: deterministically override `isRealDevice()` for a single test.
+ *
+ * Sets `CERALIVE_DEVICE_TYPE` env to the specified value before calling `fn`,
+ * then restores the original env value after `fn` completes (even on error).
+ * This is the canonical way to flip the device-detection gate in unit tests
+ * for the dozen gated subsystems (add-ons, kiosk, SIM auto-unlock).
+ *
+ * @example
+ * ```typescript
+ * await withDeviceType("real", async () => {
+ *   const isReal = await isRealDevice();
+ *   expect(isReal).toBe(true);
+ * });
+ * ```
+ */
+export async function withDeviceType(
+	type: "real" | "emulated",
+	fn: () => void | Promise<void>,
+): Promise<void> {
+	const original = process.env.CERALIVE_DEVICE_TYPE;
+	try {
+		process.env.CERALIVE_DEVICE_TYPE = type;
+		await fn();
+	} finally {
+		if (original === undefined) {
+			delete process.env.CERALIVE_DEVICE_TYPE;
+		} else {
+			process.env.CERALIVE_DEVICE_TYPE = original;
+		}
+	}
+}

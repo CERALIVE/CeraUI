@@ -219,3 +219,15 @@ export class UnknownProtocolError extends Error {
 		this.name = "UnknownProtocolError";
 	}
 }
+
+/** Stable reason surfaced when RIST is selected but the engine lacks the capability. */
+export const RIST_UNAVAILABLE_MESSAGE =
+	"RIST transport is not available on this device";
+
+/** Thrown when `rist` is selected but the engine does not advertise RIST capability. */
+export class RistUnavailableError extends Error {
+	constructor() {
+		super(RIST_UNAVAILABLE_MESSAGE);
+		this.name = "RistUnavailableError";
+	}
+}

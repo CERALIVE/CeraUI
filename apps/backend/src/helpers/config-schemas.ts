@@ -155,6 +155,9 @@ export const runtimeConfigSchema = z.object({
 
 	// Remote/cloud settings
 	remote_key: z.string().optional(),
+	// Platform Device.id (UUID) from the device-control token claim (spec §9/§10),
+	// persisted at pairing time. initIdentity() only reads it — never mints one.
+	device_id: z.uuid().optional(),
 	remote_provider: providerSelectionSchema.optional(),
 	custom_provider: customProviderSchema.optional(),
 	// Device-pairing claim-code seed. Persistent crypto-random secret that seeds

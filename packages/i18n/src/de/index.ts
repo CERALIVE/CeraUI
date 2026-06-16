@@ -305,6 +305,7 @@ const de = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "Gewicht",
+			trend: "Trend",
 			links: "Verbindungen",
 			total: "Gesamt",
 			waiting: "Warte auf Verbindungstelemetrie\u2026",
@@ -322,6 +323,8 @@ const de = {
 			exportJson: "JSON exportieren",
 			exportCsv: "CSV exportieren",
 			exportAria: "Sitzungsübersicht exportieren",
+			exportError:
+				"Sitzungsübersicht konnte nicht exportiert werden. Bitte erneut versuchen.",
 		},
 		preview: {
 			title: "Preview",
@@ -637,6 +640,9 @@ const de = {
 		srtlaServerPort: "SRTLA-Empfängerport",
 		srtStreamId: "SRT-Stream-ID",
 		srtLatency: "SRT-Latenz (ms)",
+		transportProtocol: "Transportprotokoll",
+		protocolRistUnavailable: "RIST ist auf diesem Gerät nicht verfügbar",
+		protocolReserved: "Noch nicht verfügbar",
 		changeBitrateNotice:
 			"Sie können die Bitrate auch während des Streamings ändern.",
 		optional: "optional",
@@ -793,6 +799,13 @@ const de = {
 			name: "Name",
 			channel: "Kanal",
 			password: "Passwort",
+			connectPhoneTitle: "Handy verbinden",
+			connectPhoneInstructions:
+				"Verbinde dich mit dem Hotspot und öffne dann die URL unten im Browser",
+			deviceAccessQrLabel: "Scannen, um CeraUI zu öffnen",
+			navigateManuallyNote:
+				"Falls die Seite nicht automatisch öffnet, navigiere manuell zur URL",
+			hotspotOffPrompt: "Starte den Hotspot, um dein Handy zu verbinden",
 		},
 		wifi: {
 			ssid: "SSID",

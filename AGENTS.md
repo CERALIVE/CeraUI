@@ -105,6 +105,12 @@ CeraUI/
 | **Device stats (5-signal broadcast)** | `apps/backend/src/modules/system/device-stats.ts` |
 | **Config atomicity (E3)** | `apps/backend/src/helpers/config-loader.ts` — `writeFileAtomicSync` |
 | **Runtime config schema (addons key)** | `apps/backend/src/helpers/config-schemas.ts` — `runtimeConfigSchema` |
+| **Logger (dev pretty + prod JSON + redaction + boot banner)** | `apps/backend/src/helpers/logger.ts` + `helpers/boot-banner.ts` |
+| **Per-RPC call tracing** | `apps/backend/src/rpc/rpc-logging.ts` |
+| **Mock subsystem (state, reset, schemas, fixture factory)** | `apps/backend/src/mocks/` — `mock-service.ts`, `mock-schemas.ts`, `fixture-factory.ts` |
+| **Device-detection override helper (tests)** | `apps/backend/src/modules/system/device-detection.ts` — `withDeviceType()` |
+| **Ingest sparkline memoization** | `apps/frontend/src/lib/components/custom/ingest-link-view.ts` |
+| **Ingest visual/UX + @visual spec** | `apps/frontend/src/lib/components/custom/IngestStats.svelte` + `tests/e2e/visual/ingest-states.visual.spec.ts` |
 | Design rules | `.impeccable.md` |
 
 ## COMMANDS
@@ -235,6 +241,73 @@ All add-on operations (install, enable, disable, refresh) MUST call
 manager's `enableAddon`/`disableAddon`/`pollAddonCrashLoop` all enforce this gate
 as their first step (`ADDON_UNAVAILABLE_ERROR`).
 
+## MOCK SUBSYSTEM [EXISTS]
+
+The mock subsystem provides hardware simulation for development and testing. It is
+activated by `MOCK_SCENARIO` env var and gated behind `shouldUseMocks()` — never
+`isDevelopment()` directly. All mock state is owned by `mock-service.ts`.
+
+**Zod-validated fixtures (`mocks/mock-schemas.ts`):**
+Every shipped fixture in `mock-config.ts` is validated against a Zod schema at
+`initMockService()` time. A drifted fixture (wrong IMEI length, bad IPv4, unknown
+SIM-lock state) fails loudly in dev instead of silently feeding malformed data into
+the mmcli/nmcli/relay providers. Schema types are the single source of truth — both
+`mock-config.ts` and `mock-service.ts` re-export `z.infer<...>` types from here.
+
+**`resetMockState()` for per-test isolation:**
+`initMockService()` captures a deep `structuredClone` of the seeded state as a
+pristine snapshot. `resetMockState()` restores that snapshot AND clears all timers
+(periodic-fluctuation + relay) — side-effect-clean, so each test starts from the
+scenario's seeded state with no leaked intervals or cross-test bleed. Use in
+`afterEach` for any test that mutates mock state.
+
+**`updateMockState(partial)` — single write path:**
+All writes to `mockState` funnel through the typed `updateMockState(partial)` mutator
+(Object.assign top-level merge). The four named setters (`setMockModemConfig`,
+`setMockWifiConnection`, `setMockNetifConfig`, `setMockEncoderConfig`) are thin
+wrappers that compute the next slice and delegate to it.
+
+**Add-on + kiosk mocks (`providers/addons.ts`, `providers/kiosk.ts`):**
+`MockAddonDescriptor` and `MockAddonState` are the canonical fixtures for add-on
+tests. `MOCK_KIOSK_STATUS`, `MOCK_KIOSK_TOKEN`, and `MOCK_COG_DISPLAY_DESCRIPTOR`
+are the kiosk fixtures. `resetMockKioskState()` resets kiosk state between tests.
+
+**SIM PIN mock (`mocks/mock-schemas.ts` + `fixture-factory.ts`):**
+`MockSimState` carries `lock`, `pinRetries`, and `pukRetries`. The factory's
+`buildMockSimState(overrides)` builds a schema-valid SIM state for tests that need
+to exercise the PIN/PUK unlock flow without a real modem.
+
+**Cerastream error simulation (`providers/streaming.ts`):**
+The streaming mock provider can simulate structured engine errors (Tier-2 codes from
+`cerastream-error-mapping.ts`) so the frontend notification path is testable without
+a real cerastream process.
+
+**Device-detection override (`modules/system/device-detection.ts`):**
+`withDeviceType(type, fn)` is the canonical test helper for flipping the
+`isRealDevice()` gate. Sets `CERALIVE_DEVICE_TYPE` before calling `fn`, restores
+(or deletes) in a `finally` block — exception-safe and supports nesting.
+
+**Fixture factory (`mocks/fixture-factory.ts`):**
+One typed builder per mock domain object: `buildMockModem`, `buildMockWifiRadio`,
+`buildMockWifiNetwork`, `buildMockRelay`, `buildMockAddonDescriptor`,
+`buildMockAddonState`, `buildMockKioskToken`, `buildMockSimState`. Each builder
+merges caller overrides with sensible defaults and runs the result through the same
+Zod schema that validates the shipped fixtures — an out-of-range value throws at the
+build site, not at the provider.
+
+**Engine-driven health mock:**
+The streaming mock provider exposes a `MockHealthState` slot that drives the
+`ingest-health` signal in dev. Tests can set `health.score` and `health.degraded`
+via `updateMockState` to exercise the health-alert rendering path.
+
+**Scenarios:**
+
+| `MOCK_SCENARIO` | Description |
+|-----------------|-------------|
+| `multi-modem-wifi` | Default: 3 modems + WiFi (multi-modem-wifi) |
+| `single-modem` | 1 modem, no WiFi |
+| `streaming-active` | Active streaming simulation with live telemetry |
+
 ## DEVICE STATS [EXISTS]
 
 `apps/backend/src/modules/system/device-stats.ts` broadcasts exactly **5 signals**
@@ -284,10 +357,11 @@ Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2
 
 ## CONVENTIONS
 
-- Linting/formatting: Biome only (`@biomejs/biome` 2.4.16) — ESLint and Prettier are fully removed. Run `biome check .` (or `pnpm lint`) from the workspace root. Nested non-root configs live in `apps/frontend/`, `apps/backend/`, `packages/i18n/`.
-- Svelte+TS: Biome's experimental HTML/Svelte support is enabled in the root `biome.json` (`html.experimentalFullSupportEnabled: true` + `html.formatter.enabled: true`). `.svelte` files are linted by Biome; their formatter is disabled in `apps/frontend/biome.json` (`overrides`) because Biome's experimental HTML formatter rewrites the `<script>` block to double quotes and cannot parse Svelte control-flow — so `.svelte` markup is still formatted by the Svelte VS Code extension. The same override silences false-positive `noUnusedVariables`/`noUnusedImports`/`useImportType`/`useConst` that Biome's partial template analysis emits for script vars used in markup.
+- Linting/formatting: Biome 2.5 via `@ceralive/biome-config` — ESLint and Prettier are fully removed. The root `biome.json` extends `@ceralive/biome-config` (`"extends": ["@ceralive/biome-config"]`). Run `biome check .` (or `pnpm lint`) from the workspace root. Nested non-root configs live in `apps/frontend/`, `apps/backend/`, `packages/i18n/`.
+- Svelte+TS: Biome's experimental HTML/Svelte support is enabled via the shared config (`html.experimentalFullSupportEnabled: true` + `html.formatter.enabled: true`). `.svelte` files are linted by Biome; their formatter is disabled in `apps/frontend/biome.json` (`overrides`) because Biome's experimental HTML formatter rewrites the `<script>` block to double quotes and cannot parse Svelte control-flow — so `.svelte` markup is still formatted by the Svelte VS Code extension. The same override silences false-positive `noUnusedVariables`/`noUnusedImports`/`useImportType`/`useConst` that Biome's partial template analysis emits for script vars used in markup.
 - Strict TS: `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` are enabled in `tsconfig.json` (root), `apps/backend`, and `packages/rpc`. The frontend app (`apps/frontend/tsconfig.app.json`) and `tsconfig.node.json` enable `strict` + `noUncheckedIndexedAccess`; `exactOptionalPropertyTypes` is intentionally omitted there because it is incompatible with bits-ui v2 / shadcn-svelte and vite-plugin-pwa types (unfixable "union too complex" errors in CLI-managed components). The e2e tsconfig stays at baseline `strict` (ungated Playwright test code).
-- Mock hardware in dev via `MOCK_SCENARIO` env var (`multi-modem-wifi` default).
+- Mock hardware in dev via `MOCK_SCENARIO` env var (`multi-modem-wifi` default). Use `shouldUseMocks()` — never raw `isDevelopment()` — to gate mock paths.
+- `LOG_LEVEL` env var overrides the Winston transport level for ALL transports (console + file). Unset = per-transport defaults (dev console `info`, prod console `warn`, file `debug`). Set `LOG_LEVEL=debug` to enable per-RPC trace lines.
 - Backend binary compiled with `bun build --compile`; target set by `BUILD_ARCH`.
 - Frontend is a PWA — service worker via `vite-plugin-pwa`.
 - Validation constants live in `packages/rpc/src/schemas/`; the frontend reads them via `ValidationAdapter.ts` — never add inline numeric literals to dialog components.
@@ -326,6 +400,18 @@ capability tables that previously lived in `pipeline-sources.ts` are removed. Al
 capability data is now derived from the `get-capabilities` response at runtime. Do not
 re-add static board tables; the contract is the single source of truth.
 
+**Relay transports + RIST protocol [EXISTS].** The capability contract carries a
+`transports` list (the relay transports the engine can honor; always includes
+`srtla`). The capability service derives it (`getSupportedTransports()` is the sync
+backend gate source) and broadcasts the snapshot in the `capabilities` event. The
+transport resolver promotes `rist` from a reserved placeholder to an active protocol
+(`apps/backend/src/modules/streaming/transport/rist-adapter.ts`, RIST simple-profile:
+even data port) gated on `ristAvailable` in `resolveStreamEndpoint`; `srt` stays
+reserved. The shared selectability rule lives in `@ceraui/rpc/schemas`
+(`relayProtocolAvailability`). `ServerDialog` renders the SRTLA/SRT/RIST selector:
+RIST is shown **disabled with a reason** until the engine advertises the `rist`
+transport, SRT is always reserved — never hidden.
+
 **Tier-4 add-on compat [PARTIAL].** Add-on compatibility is resolved entirely inside
 CeraUI and is NOT part of the `get-capabilities` response. Three enforcement layers:
 
@@ -348,6 +434,11 @@ CeraUI and is NOT part of the `get-capabilities` response. Three enforcement lay
   persistence. Rendered in the HUD bar as a compact bitrate history.
 - **Session summary** — post-stream summary panel showing duration, average bitrate,
   and per-link stats for the completed session.
+- **EncoderDialog modal preview (#72)** — live encoder settings preview rendered inside
+  the EncoderDialog modal before the user applies changes.
+- **HotspotDialog connect-phone section (#67, Phase-0)** — QR-code section in
+  HotspotDialog that lets a phone scan and join the device hotspot. Backed by the
+  `wifi.hotspotInfo` RPC and the `generateDeviceAccessQr` helper.
 
 ## STREAMING BACKEND QUALITY [EXISTS]
 
@@ -386,12 +477,112 @@ modules.
 | `AUTOSTART_RETRY_DELAY` | 1000ms | `streamloop/autostart.ts` |
 | `AUDIO_SOURCE_POLL_DELAY` | 1000ms | `audio.ts` |
 
-### Logger migration
+### Logger (`apps/backend/src/helpers/logger.ts`) [EXISTS]
 
 All `console.*` calls in streaming and ingest/rpc modules are replaced with the Winston
-logger from `apps/backend/src/helpers/logger.ts`. Empty catches now log via
-`logger.debug`/`logger.warn` before suppressing. No `console.*` calls remain in
-`modules/ingest/` or `modules/streaming/` (verified by grep gate).
+logger. Empty catches now log via `logger.debug`/`logger.warn` before suppressing. No
+`console.*` calls remain in `modules/ingest/` or `modules/streaming/` (verified by grep
+gate).
+
+**Dev console (TTY-gated colorized pretty-print):**
+`formatConsoleEntry(info, useColor)` emits `HH:MM:SS.mmm LEVEL message` with 2-space-indented
+JSON metadata on subsequent lines. Color is raw ANSI (no chalk/picocolors dep) — error=red,
+warn=yellow, info=green, debug=dim. `shouldColorizeConsole()` gates on
+`isDevelopment() && process.stdout.isTTY`, evaluated per-record so CI/piped/prod never emit
+ANSI escapes.
+
+**Prod JSON schema (file transport + prod console):**
+`formatProdEntry(info)` serializes to a single-line JSON record with a fixed shape:
+```ts
+{ ts: string, level: string, msg: string, module?: string, meta?: Record<string, unknown> }
+```
+`ts` is ISO-8601 UTC; `module` is promoted to top-level (not buried in `meta`); all other
+non-reserved fields fold under `meta`. `jsonReplacer` surfaces `Error` objects as
+`{name, message, stack}` rather than `{}`. Both the file transport and the production
+console use this same schema so log shippers parse one format.
+
+**`LOG_LEVEL` env override:**
+`resolveLogLevel(defaultLevel)` reads `process.env.LOG_LEVEL` (non-empty, trimmed) and
+applies it to EVERY transport when set. Defaults: dev console `info`, prod console `warn`,
+file `debug`. Set `LOG_LEVEL=debug` to enable per-RPC trace lines in production.
+
+**Per-RPC call tracing (`rpc/rpc-logging.ts`):**
+`instrumentRpcCall` wraps every oRPC procedure dispatch with a debug-level trace line
+carrying `{ procedure, cid, latency_ms, ok }`. Gated on `isRpcTraceEnabled()` (dev or
+`LOG_LEVEL=debug`) so a shipped device never pays the per-call cost. Auth procedures
+(`auth.*`) have their args omitted entirely — not even redacted-partial. All other
+procedure args pass through `logRedact()` before logging.
+
+**Boot banner + per-phase markers (`helpers/boot-banner.ts`):**
+`buildBootBanner(info)` emits a one-line startup banner: `🎬 CeraUI vX · env=… · scenario=…`.
+`createBootTimer()` tracks per-phase deltas (injectable clock for tests). `main.ts` emits
+7 phase markers (🔧 config / 🔌 pipelines / 🖥️ hardware / 🌐 network / 🎵 audio & devices /
+🚀 server / ▶️ autostart & reconciler) and a final `✅ CeraUI ready on port N in Xms` line.
+
+**Secret redaction (all transports):**
+`redact()` format scrubs every record before it reaches any transport. Keys matching
+`/pin|password|token|secret|paseto|bcrp|auth/i` are replaced with `[REDACTED]`. Value-shaped
+secrets (PASETO `v4.public.*`, JWT `eyJ…`, Bearer credentials) are also scrubbed from string
+values. The `logRedact(value)` helper is exported for call sites building metadata objects.
+
+**Loop visibility:**
+Streaming and ingest loop modules log entry/exit and error paths via `logger.debug`/`logger.warn`
+so the boot sequence and per-tick activity are visible in dev without noise in prod.
+
+## INGEST HARDENING [EXISTS]
+
+Quality improvements to the ingest pipeline landed across Tasks 6, 19, and 23.
+
+### Export-failure handling
+
+`IngestStats.svelte` catches `URL.createObjectURL` / `Blob` failures during JSON/CSV
+export and renders a calm amber bordered band (`ingest-export-error`) instead of
+silently swallowing the error. The error state is driven by a local `exportError`
+slot and clears on the next successful export.
+
+### Sparkline memoization (`lib/components/custom/ingest-link-view.ts`)
+
+The per-link SVG sparkline computation is extracted into a pure rune-free module.
+`createLinkViewCache()` keeps a `Map<conn_id, {ref, view}>` and recomputes only when
+the samples-buffer reference differs from the last call for that `conn_id`. The ring
+effect allocates a fresh array only on append (`[...prev, sample]`), so a stable
+reference means unchanged samples and a memo hit; a genuinely new sample swaps the
+reference and triggers exactly one recompute. The cache is per-component-instance
+(freed on unmount) — no module-global state, no unbounded growth.
+
+`EMPTY_SAMPLES` is a shared stable empty buffer so a link awaiting its first frame
+is also a memo hit. `RING_CAPACITY` (60 samples), `SPARK_W`, `SPARK_H`, and the
+`Sample` / `LinkViewComputed` types are all exported from this module — never
+duplicated in the component.
+
+### Visual/UX polish (Task 23)
+
+`IngestStats.svelte` markup was polished without changing any data logic, thresholds,
+or `Props`:
+
+- Header: phosphor-lime icon chip + count/sample pill.
+- Per-link table: spectral identity dot (CSS `--link-1..6` ramp) before each iface;
+  column headers aligned past the dot.
+- Sparkline strip: leading `Trend` micro-label (i18n key `live.ingest.trend`, added
+  to all 10 locales), taller `h-6`, neutral baseline `<line>` (NOT a second
+  `<polyline>` — keeps `spark.locator("polyline").toHaveCount(1)` valid).
+- Health verdict: pill with a leading dot (lime healthy, amber degraded).
+- Alert + export-error: calm amber bands with icon.
+- Summary: stat tiles with icons; drops value goes amber when `> 0`; per-link uptime
+  rows gain a `--primary` progress bar.
+
+### @visual spec (`tests/e2e/visual/ingest-states.visual.spec.ts`)
+
+5 desktop visual tests (tag `@visual`): idle / streaming / summary / health-alert /
+export-error. Each captures one PNG to `apps/frontend/test-results/`. The export-error
+state is driven by overriding `URL.createObjectURL` via `page.evaluate` at click time.
+
+### Ring-buffer lifecycle
+
+The 60-sample ring is per-component-instance `$state<Record<conn_id, Sample[]>>` —
+NOT module-global. Verified: fill → unmount → remount starts at 1 sample, not 61.
+Per-`conn_id` rings bound independently: two `conn_id`s fed 99 frames each both cap
+at exactly 60.
 
 ## ANTI-PATTERNS
 

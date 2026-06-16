@@ -16,7 +16,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 |------|----------|
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
 | Engine seam + registry (cerastream-only) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
-| Capability contract service (engine emits, CeraUI consumes; cache + fallback ladder) | `modules/streaming/capabilities.ts` (`getCapabilities`) |
+| Capability contract service (engine emits, CeraUI consumes; cache + fallback ladder; `transports` + `getSupportedTransports()`) | `modules/streaming/capabilities.ts` (`getCapabilities`) |
+| Transport resolver + protocol registry (srtla/rist active, srt reserved; RIST capability-gated via `ristAvailable`) | `modules/streaming/transport/` (`resolveStreamEndpoint`, `registry.ts`, `rist-adapter.ts`) |
 | Pipeline registry (derived from the capability contract; `initPipelines` is async) | `modules/streaming/pipelines.ts` |
 | Cerastream engine backend (structured IPC, `@ceralive/cerastream`) | `modules/streaming/cerastream-backend.ts` |
 | Structured engine error → notification (Task-7 table swap, no regex) | `modules/streaming/cerastream-error-mapping.ts` |
@@ -25,6 +26,16 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Stream lifecycle (spawn supervision, start/stop, autostart, exec paths) | `modules/streaming/streamloop/` (barrel: `modules/streaming/streamloop.ts`) |
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
+| PASETO device-token verification (relay-config + device-control, ADR-0006) | `modules/pairing/device-token.ts` — `verifyDeviceControlToken`, `resolveControlChannelEndpoint` |
+| D3 forced re-pair migration (paired-but-tokenless device on PASETO activation, ADR-0006) | `modules/remote/remote.ts` — `resolveRemoteAuthDecision`, `forceRepairMigration`, `isPasetoVerificationActive` |
+| PASETO v4.public crypto primitives (PAE, Ed25519 sign/verify, key import) | `modules/pairing/paseto-v4.ts` |
+| Control-channel hub endpoint pinning (rejects `custom_provider`, spec §10) | `modules/remote/control-endpoint.ts` |
+| **Device identity init (`initIdentity`, `canDialControlChannel`)** | `modules/identity/index.ts` — resolves `device_id` + `paired` at boot; gates the control channel |
+| **Remote-control channel (second outbound WS, independent of BCRPT relay)** | `modules/remote-control/channel.ts` — `initControlChannel`, `sendFrame`, `isConnected`; exponential backoff + keepalive |
+| **Inbound command routing (PASETO-authed, role-checked, RPC dispatch)** | `modules/remote-control/command-router.ts` — `routeCommand`; NEVER_REMOTE guard, owner-only, streaming dispatch |
+| **Outbound status relay (broadcast → gateway fan-out)** | `modules/remote-control/status-relay.ts` — `relayStatusToGateway`, `RELAYABLE_TYPES` (7 types), per-type seq |
+| **self_fencing watchdog (commit-confirm + auto-revert)** | `modules/remote-control/self-fencing.ts` — `handleSelfFencingOp`, `handleSelfFencingConfirm`; 30 s watchdog |
+| **Wire-envelope Zod schema + contract test** | `modules/remote-control/protocol.ts` — `FrameSchema`, `CommandSchema`, `StatusSchema`, `COMMAND_REGISTRY`, `NEVER_REMOTE` |
 | Kiosk loopback token (DC-3, single-use, tmpfs) | `modules/ui/kiosk-token.ts` + `rpc/server.ts` |
 | SIM PIN secrets store (opt-in "remember PIN", chmod-600 tmpfs) | `modules/modems/sim-secrets.ts` |
 | Boot SIM PIN auto-unlock hook (bounded, single attempt) | `modules/modems/sim-autounlock.ts` |
@@ -99,6 +110,7 @@ The backend pushes typed events to all connected clients via `rpc/events.ts`. Ea
 | `relays` | on-change | relay list mutations |
 | `acodecs` | on-change | audio codec list changes |
 | `pipelines` | on-change | pipeline list changes |
+| `capabilities` | post-login snapshot | engine capability contract; carries `transports` (relay transports the engine can honor) |
 | `notifications` | on-demand | user-facing toast events |
 | `ping` | 5 s | heartbeat emitter |
 
@@ -196,6 +208,42 @@ structural contract over the production singleton + the cerastream behavioural
 contract, error-mapping, status-bridge, passthroughs, engine-crash, and engine
 selection.
 
+## REMOTE CONTROL PLANE [EXISTS]
+
+The remote control plane (v2.0) adds a **second, independent outbound WebSocket** from the device to the cloud platform hub. It does NOT multiplex onto the existing BCRPT relay socket (`modules/remote/remote.ts`) and does NOT touch the proto-v16 relay protocol.
+
+### Architecture
+
+```
+modules/identity/index.ts          # initIdentity() — resolves device_id + paired at boot
+modules/remote/control-endpoint.ts # resolveControlChannelEndpoint() — reads CERALIVE_CONTROL_HUB_URL (build-time pin)
+modules/pairing/paseto-v4.ts       # Ed25519 sign/verify primitives (node:crypto, synchronous)
+modules/pairing/device-token.ts    # verifyDeviceControlToken — purpose gate BEFORE claim-shape validation
+modules/remote-control/
+├── protocol.ts          # Zod envelope schemas (FrameSchema, CommandSchema, StatusSchema, NEVER_REMOTE)
+├── channel.ts           # initControlChannel — second outbound WS; exponential backoff; WS-level keepalive ping
+├── command-router.ts    # routeCommand — NEVER_REMOTE → unknown → role → self_fencing → streaming dispatch
+├── status-relay.ts      # relayStatusToGateway — wired into broadcastMsg; 7 relayable types; per-type seq
+└── self-fencing.ts      # handleSelfFencingOp / handleSelfFencingConfirm — 30 s watchdog; revertible + non-revertible
+```
+
+### Key invariants
+
+- **Gate = `canDialControlChannel()`** (`paired && deviceId !== undefined`). An unpaired device or one whose `device_id` is missing never dials the hub.
+- **`CERALIVE_CONTROL_HUB_URL`** is the build-time-pinned hub URL. It is NOT operator-configurable and is NOT derived from `custom_provider` or `remote_provider`.
+- **Two token audiences** (`purpose: "device-control"` vs `purpose: "relay-config"`). The purpose check runs BEFORE claim-schema validation — a validly-signed relay-config token is rejected by purpose, not by signature failure.
+- **`RELAYABLE_TYPES`** = `[status, config, sensors, netif, modems, device-stats, notifications]`. No auth/token/secret-bearing type is ever in this set. The no-secrets contract test enforces this.
+- **`self_fencing: true`** is a TOP-LEVEL frame flag, NOT inside payload. Revertible ops emit two result frames (apply + commit/revert). Non-revertible ops do NOT execute until an explicit `self_fencing.confirm` arrives.
+- The control channel grants ZERO local UI-client authority — it never calls `addAuthedSocket` and has no import of `modules/remote/remote.ts`.
+
+### Boot wiring order (main.ts)
+
+```
+initIdentity()        # resolves device_id + paired
+initControlChannel()  # gates on canDialControlChannel(); dials hub if paired
+initPipelines()       # streaming engine init (unaffected)
+```
+
 ## ANTI-PATTERNS
 
 - Don't import from `@ceralive/srtla` — that package is retired from CeraUI. Use `@ceralive/srtla-send` (the `srtla-send-rs` binding, registry dep). Check `../../../srtla-send-rs/AGENTS.md` before touching call sites.
@@ -209,3 +257,5 @@ selection.
 - Don't wire `@ceralive/cerastream` as a sibling `link:` or vendored `.tgz` — it
   is a public-npm registry dep by design; bump the pinned version in
   `package.json` to track the engine.
+- Don't multiplex the control channel onto the BCRPT relay socket — the two channels are independent by design (different token audiences, different endpoints, different authority models).
+- Don't add secret-bearing event types to `RELAYABLE_TYPES` — the no-secrets contract test will catch it.

@@ -267,6 +267,9 @@ const ko = {
 		srtlaServerPort: "SRTLA 수신기 포트",
 		srtStreamId: "SRT 스트림 ID",
 		srtLatency: "SRT 지연 시간(ms)",
+		transportProtocol: "전송 프로토콜",
+		protocolRistUnavailable: "이 기기에서는 RIST를 사용할 수 없습니다",
+		protocolReserved: "아직 사용할 수 없습니다",
 		changeBitrateNotice: "스트리밍 중에도 비트레이트를 변경할 수 있습니다.",
 		optional: "선택사항",
 		relayProvider: "공급자",
@@ -410,6 +413,13 @@ const ko = {
 			name: "이름",
 			channel: "채널",
 			password: "비밀번호",
+			connectPhoneTitle: "휴대폰 연결",
+			connectPhoneInstructions:
+				"핫스팟에 연결한 후 아래 URL을 브라우저에서 여세요",
+			deviceAccessQrLabel: "스캔하여 CeraUI 열기",
+			navigateManuallyNote:
+				"페이지가 자동으로 열리지 않으면 URL로 직접 이동하세요",
+			hotspotOffPrompt: "휴대폰을 연결하려면 핫스팟을 시작하세요",
 		},
 		wifi: {
 			ssid: "SSID",
@@ -737,6 +747,7 @@ const ko = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "가중치",
+			trend: "추세",
 			links: "링크",
 			total: "합계",
 			waiting: "링크 텔레메트리 대기 중\u2026",
@@ -754,6 +765,7 @@ const ko = {
 			exportJson: "JSON 내보내기",
 			exportCsv: "CSV 내보내기",
 			exportAria: "세션 요약 내보내기",
+			exportError: "세션 요약을 내보낼 수 없습니다. 다시 시도해 주세요.",
 		},
 		preview: {
 			title: "Preview",

@@ -266,6 +266,9 @@ const hi = {
 		srtlaServerPort: "SRTLA रिसीवर पोर्ट",
 		srtStreamId: "SRT स्ट्रीम आईडी",
 		srtLatency: "SRT लेटेंसी (ms)",
+		transportProtocol: "ट्रांसपोर्ट प्रोटोकॉल",
+		protocolRistUnavailable: "इस डिवाइस पर RIST उपलब्ध नहीं है",
+		protocolReserved: "अभी उपलब्ध नहीं",
 		changeBitrateNotice: "आप स्ट्रीमिंग करते समय भी बिटरेट बदल सकते हैं।",
 		optional: "वैकल्पिक",
 		relayProvider: "प्रदाता",
@@ -406,6 +409,12 @@ const hi = {
 			name: "नाम",
 			channel: "चैनल",
 			password: "पासवर्ड",
+			connectPhoneTitle: "अपना फ़ोन कनेक्ट करें",
+			connectPhoneInstructions:
+				"हॉटस्पॉट से जुड़ें, फिर नीचे दिया URL अपने ब्राउज़र में खोलें",
+			deviceAccessQrLabel: "CeraUI खोलने के लिए स्कैन करें",
+			navigateManuallyNote: "अगर पेज अपने आप नहीं खुलता, तो URL पर मैन्युअल रूप से जाएं",
+			hotspotOffPrompt: "अपना फ़ोन कनेक्ट करने के लिए हॉटस्पॉट शुरू करें",
 		},
 		wifi: {
 			ssid: "SSID",
@@ -730,6 +739,7 @@ const hi = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "वज़न",
+			trend: "रुझान",
 			links: "लिंक",
 			total: "कुल",
 			waiting: "लिंक टेलीमेट्री की प्रतीक्षा\u2026",
@@ -747,6 +757,7 @@ const hi = {
 			exportJson: "JSON निर्यात करें",
 			exportCsv: "CSV निर्यात करें",
 			exportAria: "सत्र सारांश निर्यात करें",
+			exportError: "सत्र सारांश निर्यात नहीं किया जा सका। कृपया पुनः प्रयास करें।",
 		},
 		preview: {
 			title: "Preview",

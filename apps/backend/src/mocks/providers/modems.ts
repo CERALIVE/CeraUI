@@ -3,14 +3,25 @@
 	Simulates mmcli (ModemManager) output for development mode
 */
 
+import type { SimUnlockResult } from "../../modules/modems/mmcli.ts";
+import type { LockedModem } from "../../modules/modems/sim-autounlock.ts";
+import {
+	MOCK_SIM_PIN_RETRIES,
+	MOCK_SIM_PUK_RETRIES,
+} from "../mock-constants.ts";
+import type { MockSimLock, MockSimState } from "../mock-schemas.ts";
 import {
 	getMockState,
 	getModemSignal,
 	getModemState,
 	getScenarioConfig,
 	mockModems,
+	setMockSimPinSecret,
+	setMockSimState,
 	shouldUseMocks,
 } from "../mock-service.ts";
+
+export type { MockSimLock };
 
 /** Label ("5g4g") → mmcli mode fields; ordering must mirror mmConvertNetworkType (mmcli.ts). */
 function buildModesFromType(type: string): {
@@ -105,6 +116,19 @@ function getMockModemInfo(modemId: number): string {
 		buildModesFromType(activeNetworkType);
 	const is5g = accessTech === "5gnr";
 
+	const sim = getMockSimState(modemId);
+	const simLock: MockSimLock = sim?.lock ?? "unlocked";
+	const unlockRequired =
+		simLock === "pin-locked"
+			? "sim-pin"
+			: simLock === "puk-locked"
+				? "sim-puk"
+				: "none";
+	const unlockRetries = [
+		`sim-pin (${sim?.pinRetries ?? MOCK_SIM_PIN_RETRIES})`,
+		`sim-puk (${sim?.pukRetries ?? MOCK_SIM_PUK_RETRIES})`,
+	];
+
 	const signal = Math.round(getModemSignal(modemId));
 	const state = getModemState(modemId);
 	const registrationState =
@@ -155,6 +179,11 @@ function getMockModemInfo(modemId: number): string {
 		`modem.generic.state: ${state}`,
 		`modem.generic.state-failed-reason: --`,
 		`modem.generic.power-state: on`,
+		`modem.generic.unlock-required: ${unlockRequired}`,
+		`modem.generic.unlock-retries.length: ${unlockRetries.length}`,
+		...unlockRetries.map(
+			(entry, idx) => `modem.generic.unlock-retries.value[${idx}]: ${entry}`,
+		),
 		`modem.generic.access-technologies.length: 1`,
 		`modem.generic.access-technologies.value[0]: ${accessTech}`,
 		`modem.generic.signal-quality.value: ${signal}`,
@@ -258,4 +287,107 @@ function getMockNetworkScan(modemId: number): string {
  */
 export function shouldMockModems(): boolean {
 	return shouldUseMocks();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mock SIM lock state machine
+//
+// Deterministic stand-ins for the boot SIM-PIN auto-unlock + SIM PUK recovery
+// flows. The mmcli mock above reports each modem's lock via
+// `modem.generic.unlock-required`/`unlock-retries`; the helpers here drive that
+// state and provide the injectable surface the auto-unlock contract test wires
+// into SimAutoUnlockDeps — so the once-then-stop / no-PUK-loop behaviour is
+// exercised with no hardware and no /run access.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fixture PIN the mock tmpfs secret "stores" for the opt-in auto-unlock path.
+ * CLEARLY NOT A REAL PIN — a well-known dev/test value, never a credential, and
+ * redacted by the logger's `pin` key/value scrub if it ever reaches a log line.
+ */
+export const MOCK_SIM_PIN_FIXTURE = "0000";
+
+function modemPathToId(modemPath: string): number | null {
+	const m = modemPath.match(/(\d+)$/);
+	return m?.[1] !== undefined ? Number.parseInt(m[1], 10) : null;
+}
+
+export function getMockSimState(modemId: number): MockSimState | undefined {
+	return getMockState().simStates.get(String(modemId));
+}
+
+/**
+ * Controllable transition for tests/dev: set a modem's SIM lock state, reseeding
+ * the retry budgets so the mock mmcli output and the unlock state machine start
+ * from a faithful count (PUK-locked implies the PIN budget is already spent).
+ */
+export function setMockSimLockState(modemId: number, lock: MockSimLock): void {
+	setMockSimState(String(modemId), {
+		lock,
+		pinRetries: lock === "puk-locked" ? 0 : MOCK_SIM_PIN_RETRIES,
+		pukRetries: MOCK_SIM_PUK_RETRIES,
+	});
+}
+
+/** Mock the chmod-600 tmpfs PIN secret read — returns the in-memory stand-in, never touches /run. */
+export function mockLoadSimPinSecret(): string | null {
+	return getMockState().simPinSecret;
+}
+
+/** Mock clearing the stored PIN secret (the auto-unlock SIM-lockout guard). */
+export function mockClearSimPinSecret(): void {
+	setMockSimPinSecret(null);
+}
+
+/** Enumerate the modems the mock currently reports as SIM-PIN locked, in the LockedModem shape the boot auto-unlock consumes. */
+export function getMockPinLockedModems(): Array<LockedModem> {
+	const config = getScenarioConfig();
+	const locked: Array<LockedModem> = [];
+	for (let i = 0; i < config.modems; i++) {
+		if (getMockSimState(i)?.lock === "pin-locked") {
+			locked.push({ id: i, path: String(i) });
+		}
+	}
+	return locked;
+}
+
+/**
+ * Mock a SINGLE SIM-PIN submit, classified exactly like the real `unlockSimPin`:
+ * a PUK lock surfaces `puk-required` without ever submitting; the correct fixture
+ * PIN unlocks; a wrong PIN burns one attempt and trips the SIM to PUK once the
+ * budget hits zero. This performs ONE attempt only — the boot hook's
+ * once-then-stop contract is what guarantees it is never looped toward a lockout.
+ */
+export function mockAttemptSimUnlock(
+	modemPath: string,
+	pin: string,
+): SimUnlockResult {
+	const modemId = modemPathToId(modemPath);
+	if (modemId === null) {
+		return { state: "error" };
+	}
+	const sim = getMockSimState(modemId);
+	if (!sim) {
+		return { state: "error" };
+	}
+
+	if (sim.lock === "puk-locked") {
+		return { state: "puk-required" };
+	}
+	if (sim.lock !== "pin-locked") {
+		return { state: "no-locked-modem" };
+	}
+
+	if (pin === MOCK_SIM_PIN_FIXTURE) {
+		setMockSimLockState(modemId, "unlocked");
+		return { state: "success" };
+	}
+
+	const pinRetries = Math.max(0, sim.pinRetries - 1);
+	if (pinRetries === 0) {
+		setMockSimState(String(modemId), { lock: "puk-locked", pinRetries: 0 });
+		return { state: "puk-required" };
+	}
+	setMockSimState(String(modemId), { lock: "pin-locked", pinRetries });
+	return { state: "wrong-pin", remainingAttempts: pinRetries };
 }

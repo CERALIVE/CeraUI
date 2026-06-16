@@ -6,8 +6,8 @@
  */
 import { describe, expect, it } from 'bun:test';
 import {
-	captureCapResolution,
 	type CaptureFormatCap,
+	captureCapResolution,
 	intersectCaps,
 	MEDIA_TYPE_H264,
 	MEDIA_TYPE_H265,

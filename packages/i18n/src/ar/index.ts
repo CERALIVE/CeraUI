@@ -404,6 +404,9 @@ const ar = {
 		srtlaServerPort: "منفذ استقبال SRTLA",
 		srtStreamId: "معرف بث SRT",
 		srtLatency: "زمن استجابة SRT (مللي ثانية)",
+		transportProtocol: "بروتوكول النقل",
+		protocolRistUnavailable: "RIST غير متوفر على هذا الجهاز",
+		protocolReserved: "غير متوفر بعد",
 		changeBitrateNotice: "يمكنك تغيير معدل البت حتى أثناء البث.",
 		optional: "اختياري",
 		relayProvider: "المزود",
@@ -544,6 +547,13 @@ const ar = {
 			name: "الاسم",
 			channel: "القناة",
 			password: "كلمة المرور",
+			connectPhoneTitle: "اتصل بهاتفك",
+			connectPhoneInstructions:
+				"انضم إلى نقطة الاتصال، ثم افتح الرابط أدناه في متصفحك",
+			deviceAccessQrLabel: "امسح للوصول إلى CeraUI",
+			navigateManuallyNote:
+				"إذا لم تفتح الصفحة تلقائيًا، انتقل يدويًا إلى الرابط",
+			hotspotOffPrompt: "شغّل نقطة الاتصال للاتصال بهاتفك",
 		},
 		wifi: {
 			ssid: "SSID",
@@ -869,6 +879,7 @@ const ar = {
 			rtt: "RTT",
 			nak: "NAK",
 			weight: "الوزن",
+			trend: "الاتجاه",
 			links: "الروابط",
 			total: "الإجمالي",
 			waiting: "في انتظار قياس الروابط\u2026",
@@ -886,6 +897,7 @@ const ar = {
 			exportJson: "تصدير JSON",
 			exportCsv: "تصدير CSV",
 			exportAria: "تصدير ملخص الجلسة",
+			exportError: "تعذّر تصدير ملخص الجلسة. يرجى المحاولة مرة أخرى.",
 		},
 		preview: {
 			title: "Preview",
