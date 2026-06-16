@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { generateKeyPairSync, type KeyObject } from "node:crypto";
+import { rm } from "node:fs/promises";
 
 import { getConfig } from "../modules/config.ts";
 import {
@@ -156,16 +157,23 @@ describe("isPasetoVerificationActive — the D3 trigger gate", () => {
 });
 
 describe("forceRepairMigration — drops a tokenless device to the unpaired floor", () => {
-	// forceRepairMigration persists via the real saveConfig; snapshot+restore the
-	// file bytes so the test never clobbers the dev config.json.
-	let savedConfigBytes: string;
+	// forceRepairMigration persists via the real saveConfig. config.json is
+	// gitignored — present in dev, absent in CI — so snapshot it only when it
+	// exists and on teardown restore those bytes or remove the file the migration
+	// created. Reading it unconditionally throws on a fresh CI checkout.
+	let savedConfigBytes: string | undefined;
 
 	beforeEach(async () => {
-		savedConfigBytes = await Bun.file("config.json").text();
+		const file = Bun.file("config.json");
+		savedConfigBytes = (await file.exists()) ? await file.text() : undefined;
 	});
 
 	afterEach(async () => {
-		await Bun.write("config.json", savedConfigBytes);
+		if (savedConfigBytes === undefined) {
+			await rm("config.json", { force: true });
+		} else {
+			await Bun.write("config.json", savedConfigBytes);
+		}
 	});
 
 	test("clears the dead credential + device_id so re-pairing is surfaced locally", () => {
