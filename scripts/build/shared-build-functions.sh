@@ -22,7 +22,7 @@ get_commit() {
 }
 
 get_build_date() {
-    date -u +"%Y%m%d_%H%M%S"
+    date -u +"%Y%m%dT%H%M%S"
 }
 
 get_architecture() {
