@@ -5,15 +5,15 @@
  * reconciliation to authoritative broadcast, and failure revert with reason.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
+	clearStopReason,
 	createOptimismStore,
-	transitionToStarting,
-	transitionToStopping,
 	reconcileToAuthority,
 	revertWithReason,
-	clearStopReason,
 	type StreamingOptimismStore,
+	transitionToStarting,
+	transitionToStopping,
 } from "./streaming-optimism.svelte";
 
 describe("streaming-optimism", () => {

@@ -335,7 +335,8 @@ const es = {
 			reconnecting: "Reconectando\u2026",
 			waiting: "Esperando vídeo\u2026",
 			noSignal: "Sin señal",
-			unsupported: "La vista previa en vivo no es compatible con este navegador",
+			unsupported:
+				"La vista previa en vivo no es compatible con este navegador",
 			error: "Vista previa no disponible",
 			compatBadge: "Modo de compatibilidad",
 			canvasAria: "Vista previa de vídeo en vivo",

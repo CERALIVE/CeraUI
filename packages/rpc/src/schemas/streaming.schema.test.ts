@@ -11,7 +11,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { isAudioLiveSwitchEnabled } from '../capabilities/audio';
-import { capabilitiesMessageSchema, type CapabilitiesMessage } from './streaming.schema';
+import { type CapabilitiesMessage, capabilitiesMessageSchema } from './streaming.schema';
 
 describe('capabilitiesMessageSchema — audio_live_switch field', () => {
 	test('(a) legacy snapshot without audio_live_switch parses successfully', () => {

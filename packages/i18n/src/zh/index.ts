@@ -775,8 +775,7 @@ const zh = {
 		},
 		sourcePreference: {
 			title: "来源优先级",
-			description:
-				"排列您切换的来源顺序。自动故障转移忽略此列表。",
+			description: "排列您切换的来源顺序。自动故障转移忽略此列表。",
 			empty: "未检测到视频来源",
 			moveUp: "上移 {name}",
 			moveDown: "下移 {name}",
@@ -789,8 +788,7 @@ const zh = {
 				failedOver: "已故障转移",
 			},
 			lostHint: "此来源已离线。",
-			failedOverHint:
-				"您的首选来源离线后，引擎自动切换到此处。",
+			failedOverHint: "您的首选来源离线后，引擎自动切换到此处。",
 			sync: {
 				applying: "正在保存顺序\u2026",
 				applied: "顺序已保存",
@@ -798,8 +796,7 @@ const zh = {
 			},
 			failover: {
 				title: "自动故障转移",
-				reasonSourceLost:
-					"{name} 已离线，因此引擎切换到了 {to}。",
+				reasonSourceLost: "{name} 已离线，因此引擎切换到了 {to}。",
 				sticky:
 					"自动故障转移是粘性的 \u2014 不会自动切换回来。使用来源列表手动返回。",
 			},

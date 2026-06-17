@@ -123,7 +123,12 @@ describe("field-sync-state pure core", () => {
 
 		// resolve: the reactive layer's exact composition.
 		registryCore.markResolved(dirty, "max_br");
-		const released = registryCore.onRpcApplied(dirty, "max_br", APPLIED, T0 + 10);
+		const released = registryCore.onRpcApplied(
+			dirty,
+			"max_br",
+			APPLIED,
+			T0 + 10,
+		);
 		syncCore.markApplied(sync, "max_br", T0 + 10);
 
 		// Lock released to the CLAMPED server value, and the FSM reads `applied`.
@@ -197,7 +202,9 @@ describe("field-sync-state pure core", () => {
 
 		// Every advertised status field is refused.
 		for (const field of STATUS_FIELDS) {
-			expect(syncCore.beginPending(createSyncRegistry(), field, T0)).toBe(false);
+			expect(syncCore.beginPending(createSyncRegistry(), field, T0)).toBe(
+				false,
+			);
 		}
 	});
 

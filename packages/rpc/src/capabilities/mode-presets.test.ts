@@ -5,13 +5,8 @@
  * presetMatchesOffered helper.
  */
 import { describe, expect, it } from 'bun:test';
-import {
-	CANONICAL_PRESETS,
-	presetMatchesOffered,
-	type ModePreset,
-} from './mode-presets';
-import { type OfferedSet } from './intersect-caps';
-import { MEDIA_TYPE_H264, MEDIA_TYPE_H265 } from './intersect-caps';
+import { MEDIA_TYPE_H264, MEDIA_TYPE_H265, type OfferedSet } from './intersect-caps';
+import { CANONICAL_PRESETS, presetMatchesOffered } from './mode-presets';
 
 describe('mode-presets', () => {
 	describe('canonical presets', () => {

@@ -9,7 +9,7 @@
  * from `streaming.schema.ts` — no raw literals.
  */
 
-import { type Framerate, type Resolution } from '../schemas/streaming.schema';
+import type { Framerate, Resolution } from '../schemas/streaming.schema';
 import { MEDIA_TYPE_H264, MEDIA_TYPE_H265, type OfferedSet } from './intersect-caps';
 
 /**

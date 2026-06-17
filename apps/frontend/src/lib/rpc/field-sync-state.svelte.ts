@@ -106,7 +106,10 @@ export type FieldSyncState =
 type ActiveSyncState = Exclude<FieldSyncState, "idle">;
 
 /** The two in-flight phases that hold a dirty-registry lock and obey the TTL valve. */
-const IN_FLIGHT: ReadonlySet<ActiveSyncState> = new Set(["pending", "applying"]);
+const IN_FLIGHT: ReadonlySet<ActiveSyncState> = new Set([
+	"pending",
+	"applying",
+]);
 
 /** The two terminal phases that linger briefly, then decay to `idle`. */
 const TERMINAL: ReadonlySet<ActiveSyncState> = new Set(["applied", "failed"]);
@@ -130,7 +133,10 @@ export function createSyncRegistry(): SyncRegistry {
 }
 
 /** The current lifecycle phase of `field` (`idle` when it holds no entry). */
-export function getState(registry: SyncRegistry, field: string): FieldSyncState {
+export function getState(
+	registry: SyncRegistry,
+	field: string,
+): FieldSyncState {
 	return registry.fields[field]?.state ?? "idle";
 }
 
@@ -268,9 +274,17 @@ export const syncCore = {
 
 interface SyncStore {
 	getFieldState: (field: string) => FieldSyncState;
-	beginFieldSync: (field: string, intendedValue: unknown, now?: number) => boolean;
+	beginFieldSync: (
+		field: string,
+		intendedValue: unknown,
+		now?: number,
+	) => boolean;
 	markFieldApplying: (field: string, now?: number) => void;
-	markFieldApplied: (field: string, appliedValue: unknown, now?: number) => void;
+	markFieldApplied: (
+		field: string,
+		appliedValue: unknown,
+		now?: number,
+	) => void;
 	markFieldFailed: (
 		field: string,
 		authoritativeValue: unknown,

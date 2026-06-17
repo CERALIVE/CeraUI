@@ -951,7 +951,8 @@ const fr = {
 			reconnecting: "Reconnexion\u2026",
 			waiting: "En attente de la vidéo\u2026",
 			noSignal: "Pas de signal",
-			unsupported: "L'aperçu en direct n'est pas pris en charge par ce navigateur",
+			unsupported:
+				"L'aperçu en direct n'est pas pris en charge par ce navigateur",
 			error: "Aperçu indisponible",
 			compatBadge: "Mode de compatibilité",
 			canvasAria: "Aperçu vidéo en direct",
