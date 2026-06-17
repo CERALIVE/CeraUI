@@ -17,6 +17,7 @@ import {
 	BITRATE_MAX,
 	BITRATE_MIN,
 	type CapabilitiesMessage,
+	type CaptureCap,
 	type CaptureDevice,
 	type Framerate,
 	type HardwareType,
@@ -75,11 +76,14 @@ export function isPortValid(value: number | undefined): boolean {
 
 export const STREAMING_MODE = "streaming";
 
-// Reason tooltips surfaced on a disabled option's `title`. Phrased so the
-// platform-ceiling case literally reads "not supported", which is the signal the
-// operator (and the capability e2e proof) keys on.
-export const OPTION_UNSUPPORTED_ON_PLATFORM = "Not supported on this platform";
-export const OPTION_FIXED_BY_SOURCE = "Fixed by the selected source";
+// i18n keys for disabled-option reason tooltips. Consumers pass these to LL
+// (e.g. LL.live.education.reason.unsupportedPlatform()) — never render the key
+// string directly. The key names are the stable contract; the English text lives
+// in packages/i18n/src/en/index.ts under live.education.reason.*.
+export const OPTION_UNSUPPORTED_ON_PLATFORM =
+	"live.education.reason.unsupportedPlatform" as const;
+export const OPTION_FIXED_BY_SOURCE =
+	"live.education.reason.fixedBySource" as const;
 
 /**
  * Bridge the `HardwareType` the pipelines broadcast already carries to the
@@ -255,11 +259,16 @@ export function clampBitrateToBounds(
 	return Math.min(bounds.max, Math.max(bounds.min, value));
 }
 
-// `softwareWarning` flags H.265 on a board with no hardware encoder (`generic`):
-// it runs in x265 software and is offered WITH the high-CPU warning, never hidden.
+// Every codec carries a UNIFORM `hardwareAccelerated` flag (the board's encode
+// path is hardware or software for ALL codecs alike) so the dialog labels H.264
+// and H.265 consistently instead of warning only H.265. `softwareWarning` is the
+// narrower, codec-specific caveat: H.265 on a board with no hardware encoder
+// (`generic`) runs in x265 software and is offered WITH the high-CPU warning,
+// never hidden.
 export interface CodecOption {
 	mediaType: string;
 	value: string;
+	hardwareAccelerated: boolean;
 	softwareWarning: boolean;
 }
 
@@ -274,16 +283,76 @@ export function deriveCodecOptions(
 ): CodecOption[] {
 	if (!platform) {
 		return [
-			{ mediaType: MEDIA_TYPE_H264, value: "h264", softwareWarning: false },
+			{
+				mediaType: MEDIA_TYPE_H264,
+				value: "h264",
+				hardwareAccelerated: false,
+				softwareWarning: false,
+			},
 		];
 	}
 	const offered = intersectCaps(platform, undefined, STREAMING_MODE);
 	return offered.codecs.map((mediaType) => ({
 		mediaType,
 		value: codecValueFor(mediaType),
+		hardwareAccelerated: platform.hardware_accelerated,
 		softwareWarning:
 			mediaType === MEDIA_TYPE_H265 && !platform.hardware_accelerated,
 	}));
+}
+
+// ── Probed capability surfacing ──────────────────────────────────────────────
+//
+// Each capture device the engine probes advertises a list of `CaptureCap`
+// formats (resolution / framerate / media-type). The encoder/source area shows
+// these inline so the operator sees exactly what the connected hardware reports,
+// rather than guessing from the offered set alone.
+export interface ProbedCapsSummary {
+	inputId: string;
+	displayName: string;
+	caps: string[];
+}
+
+function shortMediaType(mediaType: string): string {
+	if (mediaType === MEDIA_TYPE_H265) return "H.265";
+	if (mediaType === MEDIA_TYPE_H264) return "H.264";
+	return mediaType;
+}
+
+/** Render one probed format as a compact spec string (e.g. `1920×1080 @ 30 H.265`). */
+export function formatProbedCap(cap: CaptureCap): string {
+	const parts: string[] = [];
+	if (cap.width !== undefined && cap.height !== undefined) {
+		parts.push(`${cap.width}\u00d7${cap.height}`);
+	}
+	if (cap.framerate) parts.push(`@ ${cap.framerate}`);
+	if (cap.media_type) parts.push(shortMediaType(cap.media_type));
+	return parts.join(" ");
+}
+
+/**
+ * Summarise the probed capabilities of every device that advertises at least one
+ * renderable format. Devices with no probed formats are omitted so the surface
+ * only shows real, advertised capabilities.
+ */
+export function summarizeProbedCaps(
+	devices: readonly CaptureDevice[] | undefined,
+): ProbedCapsSummary[] {
+	if (!devices) return [];
+	const out: ProbedCapsSummary[] = [];
+	for (const device of devices) {
+		if (!device.caps || device.caps.length === 0) continue;
+		const caps = device.caps
+			.map(formatProbedCap)
+			.filter((label) => label.length > 0);
+		if (caps.length === 0) continue;
+		out.push({
+			inputId: device.input_id,
+			displayName: device.display_name,
+			caps,
+		});
+	}
+	return out;
 }
 
 export interface UvcH265Source {

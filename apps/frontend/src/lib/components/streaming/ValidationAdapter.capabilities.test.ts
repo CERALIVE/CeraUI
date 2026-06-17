@@ -110,7 +110,7 @@ describe("resolutionOptions", () => {
 		const uhd = options.find((o) => o.value === "2160p");
 		expect(uhd?.supported).toBe(false);
 		expect(uhd?.reason).toBe(OPTION_UNSUPPORTED_ON_PLATFORM);
-		expect(uhd?.reason).toMatch(/not supported/i);
+		expect(uhd?.reason).toBe("live.education.reason.unsupportedPlatform");
 	});
 
 	it("leaves a compatible rung selectable with no reason", () => {
