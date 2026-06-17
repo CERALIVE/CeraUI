@@ -209,7 +209,6 @@ fpm -s dir -t deb \
     --depends "modemmanager" \
     --depends "cerastream" \
     --depends "$IPC_VPKG" \
-    --depends "srtla" \
     --conflicts "belaui" \
     --replaces "belaui" \
     --provides "ceralive" \
@@ -255,8 +254,7 @@ cat > dist/debian/package-info-${ARCHITECTURE}.json << EOF
     "network-manager",
     "modemmanager",
     "cerastream",
-    "$IPC_VPKG",
-    "srtla"
+    "$IPC_VPKG"
   ],
   "apt": {
     "versionProgression": "Each build has unique timestamp-based iteration",

@@ -161,3 +161,40 @@ Keeping them separate means a `.deb` release and a binding release can happen in
 - `cerastream/Cargo.toml` — `[workspace.package]` comment cites this file as the convention anchor.
 - `srtla-send-rs/.github/workflows/publish-bindings.yml` — implements the `-rc.N` → `next` dist-tag rule.
 - `versions.yaml` — pins component versions; header links here for the format spec.
+
+---
+
+## Exception: srtla-send-rs (upstream semver)
+
+`srtla-send-rs` is the **one** first-party component that does NOT use CalVer for its
+Debian package version.
+
+**Why:** `srtla-send-rs` is a CERALIVE fork of the upstream
+[irlserver/srtla_send](https://github.com/irlserver/srtla_send) Rust sender. The
+upstream project uses conventional semver (`MAJOR.MINOR.PATCH`). Keeping the upstream
+version line in `Cargo.toml` preserves direct traceability to upstream releases and
+avoids a confusing divergence between the fork's package version and the upstream
+version it was built from.
+
+**Package version source:** `ci/build-deb.sh` derives the `.deb` version directly from
+`Cargo.toml` `[workspace.package] version`. The current package version is `3.0.0`.
+`versions.yaml` pins it at `v3.0.0`.
+
+**Tag namespace:** The CERALIVE fork's GitHub release tags follow `v1.0.0+` (e.g.
+`v1.0.0`, `v1.1.0`). These tags are **decoupled** from the package version — the tag
+triggers the `.deb` build workflow; the package version comes from `Cargo.toml`. A
+`v1.x` tag can produce a `3.0.0` package if that is what `Cargo.toml` carries.
+
+**npm binding version:** The `@ceralive/srtla-send` npm binding ships on its own
+`bindings-vYYYY.M.P` tag namespace and uses CalVer (matching `@ceralive/cerastream`).
+The binding version is independent of the Rust crate / `.deb` version.
+
+**Debian version ordering:** APT's version comparison still works correctly across the
+mixed scheme. A future CalVer release of any other component (e.g. `2026.7.1`) sorts
+above `3.0.0` as expected. The `Conflicts/Replaces: srtla (<< 2026.6.2)` relation in
+the `srtla-send-rs` package compares `srtla`'s own version, not `srtla-send-rs`'s
+version, so the cutover logic is unaffected.
+
+**All other first-party packages** (`ceralive-device`, `srtla`, `cerastream`,
+`gstreamer1.0-libuvch264src`) remain on CalVer (`YYYY.MINOR.PATCH`) as described
+above.
