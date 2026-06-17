@@ -3,6 +3,7 @@ import { LL } from '@ceraui/i18n/svelte';
 import { Bug, Wrench } from '@lucide/svelte';
 
 import DemoOverlayTrigger from '$lib/components/demo-overlay-trigger.svelte';
+import FieldSyncDemo from '$lib/components/dev-tools/field-sync-demo.svelte';
 import HardwareSwitcher from '$lib/components/dev-tools/hardware-switcher.svelte';
 import ScreenshotUtility from '$lib/components/dev-tools/screenshot-utility.svelte';
 import SystemInfo from '$lib/components/dev-tools/system-info.svelte';
@@ -59,6 +60,9 @@ import { BUILD_INFO } from '$lib/env';
 
 				<!-- Toast Notification Tester -->
 				<ToastTester />
+
+				<!-- Per-field Sync-State demo (Task 5) -->
+				<FieldSyncDemo />
 			</div>
 
 			<!-- Debug Information Section -->
