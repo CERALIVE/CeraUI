@@ -1,5 +1,6 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
+import { isAudioLiveSwitchEnabled } from '@ceraui/rpc';
 import {
 	type AudioCodec,
 	BITRATE_DEFAULT_MAX,
@@ -8,12 +9,21 @@ import {
 	BITRATE_MIN,
 	SWITCH_INPUT_ERRORS,
 } from '@ceraui/rpc/schemas';
-import { ChevronRight, Cpu, Server, ServerOff, Volume2 } from '@lucide/svelte';
+import {
+	ChevronRight,
+	Cpu,
+	PictureInPicture2,
+	Server,
+	ServerOff,
+	Shuffle,
+	Volume2,
+} from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
+import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import IngestStats from '$lib/components/custom/IngestStats.svelte';
-import InputPicker from '$lib/components/custom/InputPicker.svelte';
+import SourceSection from '$lib/components/custom/SourceSection.svelte';
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 import * as Card from '$lib/components/ui/card';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
@@ -21,20 +31,44 @@ import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import {
+	beginFieldSync,
+	markFieldApplied,
+	markFieldApplying,
+	markFieldFailed,
+} from '$lib/rpc/field-sync-state.svelte';
+import {
+	deriveFailover,
+	normalizeOrder,
+	reorderSource,
+} from '$lib/streaming/source-preference';
+import {
 	getActiveInput,
+	getCapabilities,
 	getConfig,
 	getDevices,
 	getIsStreaming,
 	getLinkTelemetry,
 	getPipelines,
 	getSensors,
+	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
+import {
+	getStreamingOptimismState,
+	getStreamingStopReason,
+	startStreamingOptimism,
+	stopStreamingOptimism,
+	reconcileStreamingOptimism,
+	revertStreamingOptimism,
+	clearStreamingStopReason,
+} from '$lib/rpc/streaming-optimism.svelte';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
+import { canLiveSwitchInput } from '$lib/streaming/liveAudioSwitch';
 import { buildStartConfig, canStartStream } from '$lib/streaming/startStreaming';
 import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
 import EncoderDialog, { type EncoderConfig } from '$main/dialogs/EncoderDialog.svelte';
 import ServerDialog from '$main/dialogs/ServerDialog.svelte';
 import BitrateAdjuster from '$main/live/BitrateAdjuster.svelte';
+import CapabilityTierBanner from '$main/live/CapabilityTierBanner.svelte';
 import LiveHeader from '$main/live/LiveHeader.svelte';
 import StreamControlButton from '$main/live/StreamControlButton.svelte';
 import StreamSettingsCard, { type ConfigRow } from '$main/live/StreamSettingsCard.svelte';
@@ -47,6 +81,22 @@ const sensors = $derived(getSensors());
 // Per-link srtla ingest telemetry (RTT/NAK/weight) — already broadcast via
 // status.linkTelemetry; surfaced here as a read-only panel, no new collector.
 const linkTelemetry = $derived(getLinkTelemetry());
+
+// Streaming optimism state (Task 6): reflects user intent immediately on click.
+const streamingOptimismState = $derived(getStreamingOptimismState());
+const streamingStopReason = $derived(getStreamingStopReason());
+
+// Reconcile optimism to authoritative is_streaming broadcast.
+$effect(() => {
+	reconcileStreamingOptimism(isStreaming);
+});
+
+// Show error toast if start failed (stop reason set).
+$effect(() => {
+	if (streamingStopReason) {
+		toast.error($LL.live.startFailed());
+	}
+});
 
 // Keep the ingest panel mounted across the streaming→idle edge so its end-of-
 // session summary (peak/avg bitrate, per-link uptime, drops) survives the stream
@@ -64,7 +114,21 @@ const activeInput = $derived(getActiveInput());
 let selectedInput = $state<string | undefined>(undefined);
 let switchingInput = $state<string | undefined>(undefined);
 
+// Sole gate for the live audio-switch affordance (G2): the engine capability
+// flag, never a version string. False in Track 1, so audio sources render a
+// disabled "coming soon" affordance and can never be live-switched.
+const audioLiveSwitchEnabled = $derived(isAudioLiveSwitchEnabled(getCapabilities()));
+
 async function handleSwitchInput(inputId: string) {
+	// Defense-in-depth: even if a UI path offered an audio switch, refuse to
+	// dispatch switchInput for an audio:* id while the capability is off — the
+	// engine would reject it with DeviceNotFound (TD-live-audio-switch).
+	if (!canLiveSwitchInput(inputId, audioLiveSwitchEnabled)) {
+		console.warn(
+			`[CeraUI] Blocked live switchInput for audio source "${inputId}": live audio switching is not available (audio_live_switch capability is off).`,
+		);
+		return;
+	}
 	switchingInput = inputId;
 	try {
 		const res = await rpc.streaming.switchInput({ input_id: inputId });
@@ -84,6 +148,30 @@ async function handleSwitchInput(inputId: string) {
 
 function handleSelectInput(inputId: string) {
 	selectedInput = inputId;
+}
+
+// Operator-ordered source preference (Task 11). Display order is the persisted
+// preference reconciled against the live device list; the engine's auto-failover
+// is sticky and does NOT consult this order.
+const SOURCE_PREFERENCE_FIELD = 'source_preference';
+const sourceOrder = $derived(normalizeOrder(devices, config?.source_preference));
+const sourceFailover = $derived(deriveFailover(sourceOrder, devices, activeInput));
+
+async function handleReorderSource(inputId: string, direction: 'up' | 'down') {
+	const current = normalizeOrder(devices, config?.source_preference);
+	const next = reorderSource(current, inputId, direction);
+	if (next.length === current.length && next.every((id, i) => id === current[i])) {
+		return;
+	}
+	beginFieldSync(SOURCE_PREFERENCE_FIELD, next);
+	markFieldApplying(SOURCE_PREFERENCE_FIELD);
+	try {
+		await rpc.streaming.setConfig({ source_preference: next });
+		markFieldApplied(SOURCE_PREFERENCE_FIELD, next);
+	} catch {
+		markFieldFailed(SOURCE_PREFERENCE_FIELD, current);
+		toast.error($LL.live.sourcePreference.sync.failed());
+	}
 }
 
 // Server target: direct SRTLA address, or a selected relay server.
@@ -169,8 +257,33 @@ const effectiveAudioCodec = $derived(
 );
 const effectiveAudioDelay = $derived(audioOverride?.delay ?? config?.delay ?? 0);
 
+// Pipeline-reported audio sources (status.asrcs) — the pre-start asrc selection
+// surfaced inline in the unified Source section, identical feed to AudioDialog.
+const audioSources = $derived(getStatus()?.asrcs ?? []);
+
 function handleAudioSave(values: AudioConfigValues) {
 	audioOverride = values;
+}
+
+// Inline pre-start audio-source pick from the Source section. Folds into the
+// working audio override (keeping codec/delay) so the Live summary + start
+// config reflect it immediately, then persists via setConfig (no stream restart)
+// — mirrors AudioDialog's asrc path. Live audio switching stays gated (Task 10):
+// the Source section only offers this control while idle.
+async function handleSelectAudioSource(asrc: string) {
+	audioOverride = {
+		asrc,
+		acodec: effectiveAudioCodec ?? 'aac',
+		delay: effectiveAudioDelay,
+	};
+	markPending('asrc', asrc);
+	try {
+		await rpc.streaming.setConfig({ asrc });
+	} catch {
+		toast.error($LL.notifications.saveFailed());
+	} finally {
+		onRpcResolved('asrc');
+	}
 }
 
 function formatBitrate(kbps: number | undefined): string {
@@ -263,15 +376,18 @@ const serverSummary = $derived.by(() => {
 // override, validate pipeline + server, then dispatch via SystemHelper →
 // rpc.streaming.start. The streaming/idle UI is driven by getIsStreaming(),
 // updated by the backend status push — never set locally here.
-// Double-start safety: guards against a second dispatch while one is in flight.
-let starting = $state(false);
-
-// Start is allowed only with a server, a recognized pipeline, and no start
-// already in flight — mirrors the buildStartConfig gates client-side.
-const canStart = $derived(canStartStream({ hasServer, pipelineRecognized, starting }));
+// Optimistic transient: Start button shows `starting` immediately on click,
+// then reconciles to authoritative is_streaming broadcast (Task 6).
+const canStart = $derived(
+	canStartStream({
+		hasServer,
+		pipelineRecognized,
+		starting: streamingOptimismState === 'starting',
+	}),
+);
 
 async function handleStart() {
-	if (starting) return;
+	if (streamingOptimismState !== 'idle') return;
 
 	const result = buildStartConfig(config, audioOverride, getPipelines()?.pipelines);
 	if (!result.ok) {
@@ -289,13 +405,17 @@ async function handleStart() {
 		/* dismiss is best-effort */
 	}
 
-	starting = true;
+	// Optimistic transient: show `starting` immediately.
+	startStreamingOptimism();
+
 	try {
 		await startStreaming(result.config);
-	} catch {
-		toast.error($LL.live.startFailed());
-	} finally {
-		starting = false;
+		// Success: reconciliation happens via the is_streaming broadcast.
+	} catch (error) {
+		// Start failed: revert to idle with reason.
+		const reason =
+			error instanceof Error ? error.message : 'unknown_error';
+		revertStreamingOptimism(reason);
 	}
 }
 
@@ -305,6 +425,10 @@ function handleStop() {
 	} catch {
 		/* dismiss is best-effort */
 	}
+
+	// Optimistic transient: show `stopping` immediately.
+	stopStreamingOptimism();
+
 	if (typeof window !== 'undefined' && window.stopStreamingWithNotificationClear) {
 		window.stopStreamingWithNotificationClear();
 	} else {
@@ -348,6 +472,10 @@ const configRows = $derived<ConfigRow[]>([
 		onEditServer={() => (serverDialogOpen = true)}
 		{serverTarget}
 	/>
+
+	<!-- Capability-tier state: calm banner when the engine is offline/starting or
+	     reports a schema mismatch. Renders nothing in the normal tier. -->
+	<CapabilityTierBanner caps={getCapabilities()} />
 
 	{#if showEmptyState}
 		<!-- First-boot / empty state: no relay server, actionable prompt -->
@@ -412,25 +540,64 @@ const configRows = $derived<ConfigRow[]>([
 			<IngestStats telemetry={linkTelemetry} {isStreaming} bitrateKbps={config?.max_br} />
 		{/if}
 
-		<Card.Root>
-			<Card.Content class="p-4 sm:p-6">
-				<InputPicker
-					activeInput={activeInput}
-					devices={devices}
-					isStreaming={isStreaming}
-					onSelect={handleSelectInput}
-					onSwitch={handleSwitchInput}
-					selectedInput={selectedInput}
-					switchingInput={switchingInput}
-				/>
-			</Card.Content>
-		</Card.Root>
+		<SourceSection
+			{activeInput}
+			{audioLiveSwitchEnabled}
+			{audioSources}
+			capabilities={getCapabilities()}
+			{devices}
+			{isStreaming}
+			onReorderSource={handleReorderSource}
+			onSelect={handleSelectInput}
+			onSelectAudioSource={handleSelectAudioSource}
+			onSwitch={handleSwitchInput}
+			selectedAudioSource={effectiveAudioSource}
+			{selectedInput}
+			sourceFailover={sourceFailover}
+			sourceOrder={sourceOrder}
+			sourcePreferenceField={SOURCE_PREFERENCE_FIELD}
+			{switchingInput}
+		/>
+
+		<!--
+			Roadmap affordances — genuine future features surfaced as calm, purely
+			informational pills (NOT the disabled-with-reason warning treatment). Each
+			ComingSoon renders a dynamic data-debt-id into the DOM for tests; the static
+			binding the CI gate (scripts/check-tech-debt.mjs) verifies lives in the literal
+			ids on the next line.
+			roadmap: data-debt-id="TD-pip" data-debt-id="TD-mode-fallback"
+		-->
+		<div
+			class="bg-muted/30 flex flex-col gap-2.5 rounded-lg border px-4 py-3"
+			data-testid="live-roadmap"
+		>
+			<div class="flex items-center justify-between gap-3">
+				<span class="text-muted-foreground flex items-center gap-2 text-sm">
+					<PictureInPicture2 aria-hidden={true} class="size-4 shrink-0" />
+					{$LL.live.comingSoon.pip()}
+				</span>
+				<ComingSoon debtId="TD-pip" />
+			</div>
+			<div class="flex items-center justify-between gap-3">
+				<span class="text-muted-foreground flex items-center gap-2 text-sm">
+					<Shuffle aria-hidden={true} class="size-4 shrink-0" />
+					{$LL.live.comingSoon.modeFallback()}
+				</span>
+				<ComingSoon debtId="TD-mode-fallback" />
+			</div>
+		</div>
 
 		<PreviewCanvas />
 
 		<StreamSettingsCard {configRows} {isStreaming} />
 
-		<StreamControlButton {canStart} {isStreaming} onStart={handleStart} onStop={handleStop} />
+		<StreamControlButton
+			{canStart}
+			{isStreaming}
+			optimismState={streamingOptimismState}
+			onStart={handleStart}
+			onStop={handleStop}
+		/>
 	{/if}
 </div>
 
