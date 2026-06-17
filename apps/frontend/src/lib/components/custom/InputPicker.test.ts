@@ -88,6 +88,74 @@ describe("InputPicker — hotplug behaviour", () => {
 		expect(onSwitch).toHaveBeenCalledWith("video63");
 	});
 
+	it("gates the audio source: deferred affordance + no enabled Switch while flag is false", () => {
+		const { container } = render(InputPicker, {
+			props: {
+				devices: DEVICES,
+				activeInput: "video0",
+				isStreaming: true,
+				audioLiveSwitchEnabled: false,
+			},
+		});
+		expect(
+			container.querySelector('[data-switch-input="audio:usbaudio"]'),
+		).toBeNull();
+		const comingSoon = container.querySelector<HTMLElement>(
+			'[data-audio-switch-deferred="audio:usbaudio"]',
+		);
+		if (!comingSoon) throw new Error("deferred affordance not rendered");
+		expect(comingSoon.getAttribute("data-debt-id")).toBe(
+			"TD-live-audio-switch",
+		);
+		expect(comingSoon.querySelector("button")).toBeNull();
+		expect(comingSoon.textContent?.toLowerCase()).toContain("coming soon");
+		expect(
+			container.querySelector('[data-switch-input="video63"]'),
+		).not.toBeNull();
+	});
+
+	it("never dispatches onSwitch for the audio source while the flag is false", async () => {
+		const onSwitch = vi.fn();
+		const { container } = render(InputPicker, {
+			props: {
+				devices: DEVICES,
+				activeInput: "video0",
+				isStreaming: true,
+				audioLiveSwitchEnabled: false,
+				onSwitch,
+			},
+		});
+		const comingSoon = container.querySelector<HTMLElement>(
+			'[data-audio-switch-deferred="audio:usbaudio"]',
+		);
+		expect(comingSoon?.querySelector("button")).toBeNull();
+		if (comingSoon) await fireEvent.click(comingSoon);
+		expect(onSwitch).not.toHaveBeenCalledWith("audio:usbaudio");
+	});
+
+	it("offers an enabled audio Switch once the capability flag is true", async () => {
+		const onSwitch = vi.fn();
+		const { container } = render(InputPicker, {
+			props: {
+				devices: DEVICES,
+				activeInput: "video0",
+				isStreaming: true,
+				audioLiveSwitchEnabled: true,
+				onSwitch,
+			},
+		});
+		expect(
+			container.querySelector('[data-audio-switch-deferred="audio:usbaudio"]'),
+		).toBeNull();
+		const switchBtn = container.querySelector<HTMLButtonElement>(
+			'[data-switch-input="audio:usbaudio"]',
+		);
+		if (!switchBtn) throw new Error("audio switch button not rendered");
+		expect(switchBtn.disabled).toBe(false);
+		await fireEvent.click(switchBtn);
+		expect(onSwitch).toHaveBeenCalledWith("audio:usbaudio");
+	});
+
 	it("renders an empty state when no sources are present", () => {
 		const { container } = render(InputPicker, {
 			props: { devices: [] },
