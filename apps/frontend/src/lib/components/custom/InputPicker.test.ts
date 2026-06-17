@@ -88,7 +88,10 @@ describe("InputPicker — hotplug behaviour", () => {
 		expect(onSwitch).toHaveBeenCalledWith("video63");
 	});
 
-	it("gates the audio source: deferred affordance + no enabled Switch while flag is false", () => {
+	it("shows an enabled Switch for audio even when audioLiveSwitchEnabled is false (TD-live-audio-switch resolved)", () => {
+		// TD-live-audio-switch is resolved: the coming-soon affordance is gone.
+		// The dispatch guard (canLiveSwitchInput) lives in LiveView, not here.
+		// InputPicker always renders a Switch button for audio while streaming.
 		const { container } = render(InputPicker, {
 			props: {
 				devices: DEVICES,
@@ -98,23 +101,20 @@ describe("InputPicker — hotplug behaviour", () => {
 			},
 		});
 		expect(
-			container.querySelector('[data-switch-input="audio:usbaudio"]'),
+			container.querySelector('[data-audio-switch-deferred="audio:usbaudio"]'),
 		).toBeNull();
-		const comingSoon = container.querySelector<HTMLElement>(
-			'[data-audio-switch-deferred="audio:usbaudio"]',
+		const switchBtn = container.querySelector<HTMLButtonElement>(
+			'[data-switch-input="audio:usbaudio"]',
 		);
-		if (!comingSoon) throw new Error("deferred affordance not rendered");
-		expect(comingSoon.getAttribute("data-debt-id")).toBe(
-			"TD-live-audio-switch",
-		);
-		expect(comingSoon.querySelector("button")).toBeNull();
-		expect(comingSoon.textContent?.toLowerCase()).toContain("coming soon");
+		expect(switchBtn).not.toBeNull();
 		expect(
 			container.querySelector('[data-switch-input="video63"]'),
 		).not.toBeNull();
 	});
 
-	it("never dispatches onSwitch for the audio source while the flag is false", async () => {
+	it("dispatches onSwitch for the audio source regardless of audioLiveSwitchEnabled (TD-live-audio-switch resolved)", async () => {
+		// TD-live-audio-switch is resolved: the picker no longer blocks audio switch.
+		// The parent (LiveView) guards the dispatch via canLiveSwitchInput.
 		const onSwitch = vi.fn();
 		const { container } = render(InputPicker, {
 			props: {
@@ -125,12 +125,12 @@ describe("InputPicker — hotplug behaviour", () => {
 				onSwitch,
 			},
 		});
-		const comingSoon = container.querySelector<HTMLElement>(
-			'[data-audio-switch-deferred="audio:usbaudio"]',
+		const switchBtn = container.querySelector<HTMLButtonElement>(
+			'[data-switch-input="audio:usbaudio"]',
 		);
-		expect(comingSoon?.querySelector("button")).toBeNull();
-		if (comingSoon) await fireEvent.click(comingSoon);
-		expect(onSwitch).not.toHaveBeenCalledWith("audio:usbaudio");
+		if (!switchBtn) throw new Error("audio switch button not rendered");
+		await fireEvent.click(switchBtn);
+		expect(onSwitch).toHaveBeenCalledWith("audio:usbaudio");
 	});
 
 	it("offers an enabled audio Switch once the capability flag is true", async () => {

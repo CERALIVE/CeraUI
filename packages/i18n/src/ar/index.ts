@@ -930,6 +930,12 @@ const ar = {
 			sourceLost: "المصدر غير متاح \u2014 تم فصله",
 			comingSoon: "قريباً",
 			audioSwitchWorkaround: "أوقف البث وأعد تشغيله لتغيير مصدر الصوت",
+			audioApplying: "جارٍ تبديل الصوت…",
+			audioApplied: "تم تبديل الصوت",
+			audioFailed: "فشل تبديل الصوت",
+			audioSwitched: "تم تبديل الصوت خلال {ms}م.ث",
+			audioSwitchFailed: "فشل تبديل مصدر الصوت",
+			audioSourceLost: "مصدر الصوت غير متوفر",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",

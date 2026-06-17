@@ -429,20 +429,21 @@ track (Tasks 4–16). New components and modules shipped:
   state machine; bridges the gap between `startStream` RPC dispatch and the first
   `is_streaming=true` push so the UI never flickers back to idle mid-start.
 
-**Track-1 tech-debt register [EXISTS].** Five deferred items from this overhaul are
-tracked in `docs/TECHNICAL_DEBT.md` and enforced by `scripts/check-tech-debt.mjs`:
+**Track-1 tech-debt register [EXISTS].** Items from this overhaul are tracked in
+`docs/TECHNICAL_DEBT.md` and enforced by `scripts/check-tech-debt.mjs`. Three remain
+open; two are resolved (Task 26):
 
-| ID | Feature | Exit condition |
-|----|---------|----------------|
-| `TD-live-audio-switch` | Live audio source switch | `capability:audio_live_switch` |
-| `TD-live-audio-codec` | Live audio codec change | `capability:audio_codec_switch` |
-| `TD-live-audio-delay` | Live audio delay change | `capability:audio_live_switch` |
-| `TD-pip` | Picture-in-picture / compositing | `capability:pip_supported` |
-| `TD-mode-fallback` | Mode-level automatic source fallback | `capability:mode_fallback` |
+| ID | Feature | Status | Exit condition |
+|----|---------|--------|----------------|
+| `TD-live-audio-switch` | Live audio source switch | resolved 2026-06-17 | `capability:audio_live_switch` |
+| `TD-live-audio-delay` | Live audio delay change | resolved 2026-06-17 | `capability:audio_live_switch` |
+| `TD-live-audio-codec` | Live audio codec change | open | `capability:audio_codec_switch` |
+| `TD-pip` | Picture-in-picture / compositing | open | `capability:pip_supported` |
+| `TD-mode-fallback` | Mode-level automatic source fallback | open | `capability:mode_fallback` |
 
-All five are `status: open`, `track: 2` (cerastream engine dependency), and carry
-`coming-soon` affordances in the Live destination. The CI gate (`check:tech-debt`)
-fails if any source `data-debt-id` is orphaned or any entry is malformed.
+Open items are `track: 2` (cerastream engine dependency) and carry `coming-soon`
+affordances in the Live destination. The CI gate (`check:tech-debt`) fails if any
+source `data-debt-id` is orphaned or any entry is malformed.
 
 **Relay transports + RIST protocol [EXISTS].** The capability contract carries a
 `transports` list (the relay transports the engine can honor; always includes

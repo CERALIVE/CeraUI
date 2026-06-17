@@ -358,6 +358,12 @@ const de = {
 			comingSoon: "Demnächst",
 			audioSwitchWorkaround:
 				"Zum Ändern der Audioquelle stoppen und neu starten",
+			audioApplying: "Audio wird umgeschaltet…",
+			audioApplied: "Audio umgeschaltet",
+			audioFailed: "Audioumschaltung fehlgeschlagen",
+			audioSwitched: "Audio in {ms}ms umgeschaltet",
+			audioSwitchFailed: "Audioquelle konnte nicht umgeschaltet werden",
+			audioSourceLost: "Audioquelle nicht verfügbar",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",

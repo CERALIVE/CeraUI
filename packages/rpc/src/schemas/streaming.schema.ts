@@ -406,6 +406,54 @@ export const switchInputOutputSchema = z.object({
 });
 export type SwitchInputOutput = z.infer<typeof switchInputOutputSchema>;
 
+// ── Live audio source switch (Phase 1.5) ───────────────────────────────────
+// Audio mirror of switchInput, gated on the engine's `audio_live_switch`
+// capability. The engine returns a DISTINCT error for an unknown audio device
+// (`cerastream.audio.device_not_found`, -32006) — never reuse the video
+// SOURCE_LOST code. `mode` is optional (defaults to "manual" at the engine).
+export const switchAudioInputSchema = z.object({
+	audio_input_id: z.string(),
+	mode: z.enum(['manual', 'auto']).optional(),
+});
+export type SwitchAudioInput = z.infer<typeof switchAudioInputSchema>;
+
+// `AUDIO_DEVICE_NOT_FOUND` maps the engine's `cerastream.audio.device_not_found`
+// (-32006); `SWITCH_FAILED` covers any other dispatch failure.
+export const SWITCH_AUDIO_ERRORS = {
+	AUDIO_DEVICE_NOT_FOUND: 'AUDIO_DEVICE_NOT_FOUND',
+	NOT_STREAMING: 'NOT_STREAMING',
+	SWITCH_FAILED: 'SWITCH_FAILED',
+} as const;
+export const switchAudioErrorSchema = z.enum([
+	SWITCH_AUDIO_ERRORS.AUDIO_DEVICE_NOT_FOUND,
+	SWITCH_AUDIO_ERRORS.NOT_STREAMING,
+	SWITCH_AUDIO_ERRORS.SWITCH_FAILED,
+]);
+export type SwitchAudioError = z.infer<typeof switchAudioErrorSchema>;
+
+export const switchAudioOutputSchema = z.object({
+	success: z.boolean(),
+	active_audio_input: z.string().optional(),
+	gap_ms: z.number().int().nonnegative().optional(),
+	error: switchAudioErrorSchema.optional(),
+});
+export type SwitchAudioOutput = z.infer<typeof switchAudioOutputSchema>;
+
+// Live audio delay re-config (Phase 1.5) — hot-applies the audio delay via the
+// engine's `reload-config.audio.delay_ms` (no stream restart). The bound mirrors
+// the canonical AUDIO_DELAY_MAX; the engine clamps and echoes the applied value.
+export const reloadAudioDelayInputSchema = z.object({
+	delay_ms: z.number().int().min(0).max(AUDIO_DELAY_MAX),
+});
+export type ReloadAudioDelayInput = z.infer<typeof reloadAudioDelayInputSchema>;
+
+export const reloadAudioDelayOutputSchema = z.object({
+	success: z.boolean(),
+	delay_ms: z.number().int().nonnegative().optional(),
+	error: z.string().optional(),
+});
+export type ReloadAudioDelayOutput = z.infer<typeof reloadAudioDelayOutputSchema>;
+
 // Dev-only mock hardware switcher schemas (includes generic for software fallback)
 export const mockHardwareTypeSchema = z.enum(['jetson', 'n100', 'rk3588', 'generic']);
 export type MockHardwareType = z.infer<typeof mockHardwareTypeSchema>;

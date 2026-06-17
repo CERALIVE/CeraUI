@@ -758,6 +758,12 @@ const zh = {
 			sourceLost: "来源不可用 \u2014 已被拔出",
 			comingSoon: "即将推出",
 			audioSwitchWorkaround: "停止并重新启动以更改音频源",
+			audioApplying: "正在切换音频…",
+			audioApplied: "音频已切换",
+			audioFailed: "音频切换失败",
+			audioSwitched: "已在 {ms}ms 内切换音频",
+			audioSwitchFailed: "切换音频源失败",
+			audioSourceLost: "音频源不可用",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",

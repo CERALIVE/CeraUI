@@ -343,6 +343,12 @@ const en = {
 			sourceLost: "Source unavailable \u2014 it was unplugged",
 			comingSoon: "Coming soon",
 			audioSwitchWorkaround: "Stop & restart to change the audio source",
+			audioApplying: "Switching audio\u2026",
+			audioApplied: "Audio switched",
+			audioFailed: "Audio switch failed",
+			audioSwitched: "Audio switched in {ms:number}ms",
+			audioSwitchFailed: "Failed to switch audio source",
+			audioSourceLost: "Audio source unavailable",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",

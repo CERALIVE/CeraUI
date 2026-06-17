@@ -3,6 +3,7 @@
  * Wraps existing streaming logic from modules/streaming/
  */
 
+import { CerastreamRpcError } from "@ceralive/cerastream";
 import {
 	audioCodecsMessageSchema,
 	bitrateInputSchema,
@@ -12,7 +13,10 @@ import {
 	getMockHardwareOutputSchema,
 	listDevicesOutputSchema,
 	pipelinesMessageSchema,
+	reloadAudioDelayInputSchema,
+	reloadAudioDelayOutputSchema,
 	type StreamingConfigInput,
+	SWITCH_AUDIO_ERRORS,
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
 	streamHealthOutputSchema,
@@ -20,6 +24,8 @@ import {
 	streamingSetConfigOutputSchema,
 	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
+	switchAudioInputSchema,
+	switchAudioOutputSchema,
 	switchInputInputSchema,
 	switchInputOutputSchema,
 } from "@ceraui/rpc/schemas";
@@ -427,4 +433,79 @@ export const switchInputProcedure = authedProcedure
 	.output(switchInputOutputSchema)
 	.handler(({ input }) => {
 		return deviceRegistry.switchInput(input.input_id);
+	});
+
+/**
+ * Live-switch the active audio source (Phase 1.5). Gated on the engine's
+ * `audio_live_switch` capability (the frontend never offers this control until
+ * the engine advertises it). Maps the engine's distinct
+ * `cerastream.audio.device_not_found` to AUDIO_DEVICE_NOT_FOUND — never the
+ * video SOURCE_LOST code.
+ */
+export const switchAudioProcedure = authedProcedure
+	.input(switchAudioInputSchema)
+	.output(switchAudioOutputSchema)
+	.handler(async ({ input }) => {
+		if (shouldUseMocks()) {
+			return {
+				success: true,
+				active_audio_input: input.audio_input_id,
+				gap_ms: 0,
+			};
+		}
+		if (!getIsStreaming()) {
+			return { success: false, error: SWITCH_AUDIO_ERRORS.NOT_STREAMING };
+		}
+		const started = performance.now();
+		try {
+			const { cerastreamBackend } = await import(
+				"../../modules/streaming/cerastream-backend.ts"
+			);
+			const result = await cerastreamBackend.switchAudio({
+				audio_input_id: input.audio_input_id,
+				mode: input.mode ?? "manual",
+			});
+			const gap_ms = Math.max(0, Math.round(performance.now() - started));
+			return {
+				success: true,
+				active_audio_input: result.active_audio_input,
+				gap_ms,
+			};
+		} catch (err) {
+			if (
+				err instanceof CerastreamRpcError &&
+				err.dataCode === "cerastream.audio.device_not_found"
+			) {
+				return {
+					success: false,
+					error: SWITCH_AUDIO_ERRORS.AUDIO_DEVICE_NOT_FOUND,
+				};
+			}
+			return { success: false, error: SWITCH_AUDIO_ERRORS.SWITCH_FAILED };
+		}
+	});
+
+/**
+ * Hot-apply the audio delay (Phase 1.5) via reload-config — no stream restart.
+ * The engine clamps and echoes the applied value.
+ */
+export const reloadAudioDelayProcedure = authedProcedure
+	.input(reloadAudioDelayInputSchema)
+	.output(reloadAudioDelayOutputSchema)
+	.handler(async ({ input }) => {
+		if (shouldUseMocks()) {
+			return { success: true, delay_ms: input.delay_ms };
+		}
+		try {
+			const { cerastreamBackend } = await import(
+				"../../modules/streaming/cerastream-backend.ts"
+			);
+			const applied = await cerastreamBackend.reloadAudioDelay(input.delay_ms);
+			return {
+				success: true,
+				delay_ms: applied.applied?.audio?.delay_ms ?? input.delay_ms,
+			};
+		} catch (_err) {
+			return { success: false, error: "RELOAD_FAILED" };
+		}
 	});

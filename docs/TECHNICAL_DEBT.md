@@ -87,28 +87,6 @@ register is "empty" precisely when there are none.
 ## Open Debt
 
 ```debt
-id: TD-live-audio-switch
-title: Live audio source switch
-track: 2
-status: open
-exit_criteria: `isAudioLiveSwitchEnabled(caps) === true`
-owner: ceraui-team
-registered_at: 2026-06-17
-resolved_at: null
-unblock: cerastream switch-audio IPC (Track 2 Task 18)
-```
-
-The live picker offers a gapless **video** input switch while streaming, but audio
-sources cannot yet be switched live: the engine's `switch-input` path rejects an
-`audio:*` id with `DeviceNotFound`. Until cerastream advertises
-`audio_live_switch=true` and wires the switch-audio IPC, audio entries in the live
-picker render disabled with a "coming soon" affordance
-(`data-debt-id="TD-live-audio-switch"`) and the dispatch path refuses to emit
-`switchInput` for an `audio:*` id. Pre-start audio selection (the Audio dialog
-`asrc` path) is unaffected. Resolve by removing the marker and flipping this entry
-to `resolved` once `isAudioLiveSwitchEnabled(caps)` returns `true` on device.
-
-```debt
 id: TD-pip
 title: Picture-in-picture / source compositing
 track: 2
@@ -144,23 +122,6 @@ with a "coming soon" affordance (`data-debt-id="TD-live-audio-codec"`) instead o
 enabled select. Pre-start codec selection is unaffected.
 
 ```debt
-id: TD-live-audio-delay
-title: Live audio delay change
-track: 2
-status: open
-exit_criteria: capability:audio_live_switch
-owner: ceraui-team
-registered_at: 2026-06-17
-resolved_at: null
-unblock: cerastream advertises audio_live_switch=true and reload-config accepts audio.delay_ms mid-stream; replace the Audio dialog "coming soon" affordance (data-debt-id="TD-live-audio-delay") with an enabled control and flip this entry to resolved.
-```
-
-Audio delay cannot be retimed mid-stream: the delay is baked at pipeline start.
-While streaming, the Audio dialog renders the delay control disabled with a
-"coming soon" affordance (`data-debt-id="TD-live-audio-delay"`). Pre-start delay
-configuration is unaffected.
-
-```debt
 id: TD-mode-fallback
 title: Mode-level automatic source fallback
 track: 2
@@ -181,7 +142,38 @@ the engine advertises `mode_fallback`.
 
 ## Resolved Debt
 
-_None._
+```debt
+id: TD-live-audio-switch
+title: Live audio source switch
+track: 2
+status: resolved
+exit_criteria: `isAudioLiveSwitchEnabled(caps) === true`
+owner: ceraui-team
+registered_at: 2026-06-17
+resolved_at: 2026-06-17
+unblock: cerastream switch-audio IPC (Track 2 Task 18)
+```
+
+Resolved in Task 25. `isAudioLiveSwitchEnabled(caps)` now returns `true` when the
+engine advertises `audio_live_switch`. The live picker's audio entries render with
+an enabled Switch button; the `coming-soon` affordance and `data-debt-id` marker
+are removed from `InputPicker.svelte`.
+
+```debt
+id: TD-live-audio-delay
+title: Live audio delay change
+track: 2
+status: resolved
+exit_criteria: capability:audio_live_switch
+owner: ceraui-team
+registered_at: 2026-06-17
+resolved_at: 2026-06-17
+unblock: cerastream advertises audio_live_switch=true and reload-config accepts audio.delay_ms mid-stream; replace the Audio dialog "coming soon" affordance (data-debt-id="TD-live-audio-delay") with an enabled control and flip this entry to resolved.
+```
+
+Resolved in Task 19 (cerastream `reload-config.audio.delay_ms`). The Audio dialog
+delay slider is now enabled while streaming; the `coming-soon` affordance and
+`data-debt-id` marker are removed from `AudioDialog.svelte`.
 
 ---
 

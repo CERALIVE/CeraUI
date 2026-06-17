@@ -790,6 +790,12 @@ const hi = {
 			sourceLost: "स्रोत अनुपलब्ध \u2014 इसे अनप्लग किया गया",
 			comingSoon: "जल्द आ रहा है",
 			audioSwitchWorkaround: "ऑडियो स्रोत बदलने के लिए रोकें और पुनः आरंभ करें",
+			audioApplying: "ऑडियो बदल रहा है…",
+			audioApplied: "ऑडियो बदल गया",
+			audioFailed: "ऑडियो बदलना विफल",
+			audioSwitched: "{ms}ms में ऑडियो बदला गया",
+			audioSwitchFailed: "ऑडियो स्रोत बदलने में विफल",
+			audioSourceLost: "ऑडियो स्रोत अनुपलब्ध",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",

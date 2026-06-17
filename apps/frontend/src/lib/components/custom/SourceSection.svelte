@@ -42,6 +42,8 @@ interface Props {
 	switchingInput?: string | undefined;
 	/** Forwarded to InputPicker: gates the live audio-switch affordance (G2). */
 	audioLiveSwitchEnabled?: boolean;
+	/** Forwarded to InputPicker: field-sync key driving the audio-switch glyph. */
+	audioLiveSwitchField?: string;
 	onSelect?: (id: string) => void;
 	onSwitch?: (id: string) => void;
 	// ── Audio ──
@@ -64,6 +66,7 @@ let {
 	isStreaming = false,
 	switchingInput,
 	audioLiveSwitchEnabled = false,
+	audioLiveSwitchField,
 	onSelect,
 	onSwitch,
 	audioSources = [],
@@ -166,6 +169,7 @@ const hasLostDevice = $derived(lostDevices.length > 0);
 		<InputPicker
 			{activeInput}
 			{audioLiveSwitchEnabled}
+			{audioLiveSwitchField}
 			{devices}
 			{isStreaming}
 			{onSelect}

@@ -310,14 +310,8 @@ async function handleSave() {
 				</Select.Root>
 			</div>
 
-			<!-- Audio Delay (schema-driven center-zero slider) -->
-			<div class="bg-muted/40 space-y-3 rounded-lg border p-4">
-				{#if isStreaming}
-					<!-- CI gate static marker (component renders data-debt-id dynamically): data-debt-id="TD-live-audio-delay" -->
-					<div class="flex justify-end">
-						<ComingSoon debtId="TD-live-audio-delay" />
-					</div>
-				{/if}
+		<!-- Audio Delay (schema-driven center-zero slider; live-configurable via reload-config.audio.delay_ms) -->
+		<div class="bg-muted/40 space-y-3 rounded-lg border p-4">
 				<Label class="flex items-center justify-between gap-2 text-sm font-medium" for="audioDelay">
 					<span>{$LL.settings.audioDelay()}</span>
 					<span class="bg-primary/10 text-primary rounded-md px-2 py-1 font-mono text-xs">
@@ -356,13 +350,12 @@ async function handleSave() {
 									: draftDelay < 0
 										? 'bg-muted-foreground'
 										: 'bg-primary'
-							} ${isStreaming ? '' : 'cursor-pointer hover:scale-110'}`}
+							} cursor-pointer hover:scale-110`}
 						></div>
 						<!-- Interaction layer -->
 						<input
 							id="audioDelay"
 							class="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-							disabled={isStreaming}
 							max={DELAY_MAX}
 							min={DELAY_MIN}
 							oninput={(e) => {

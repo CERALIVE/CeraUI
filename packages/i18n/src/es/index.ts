@@ -357,6 +357,12 @@ const es = {
 			sourceLost: "Fuente no disponible \u2014 fue desconectada",
 			comingSoon: "Próximamente",
 			audioSwitchWorkaround: "Detén y reinicia para cambiar la fuente de audio",
+			audioApplying: "Cambiando audio…",
+			audioApplied: "Audio cambiado",
+			audioFailed: "Error al cambiar el audio",
+			audioSwitched: "Audio cambiado en {ms}ms",
+			audioSwitchFailed: "No se pudo cambiar la fuente de audio",
+			audioSourceLost: "Fuente de audio no disponible",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",

@@ -798,6 +798,12 @@ const ko = {
 			sourceLost: "소스 사용 불가 \u2014 연결이 끊어졌습니다",
 			comingSoon: "곧 제공 예정",
 			audioSwitchWorkaround: "오디오 소스를 변경하려면 중지 후 다시 시작하세요",
+			audioApplying: "오디오 전환 중…",
+			audioApplied: "오디오 전환됨",
+			audioFailed: "오디오 전환 실패",
+			audioSwitched: "{ms}ms 만에 오디오 전환됨",
+			audioSwitchFailed: "오디오 소스 전환 실패",
+			audioSourceLost: "오디오 소스를 사용할 수 없음",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",

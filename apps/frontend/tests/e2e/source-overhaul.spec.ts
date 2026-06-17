@@ -54,6 +54,12 @@ let heldSetConfigId: string | number | null = null;
 // WITHOUT mutating the shared mock backend (a real start would broadcast
 // is_streaming=true to every parallel worker and corrupt their layout).
 let dropStreamStart = false;
+// Hold the next `streaming.switchAudio` RPC in-flight (captures its id) so the
+// per-field `applying` window is observable; cleared once released. The audio
+// switch never reaches the shared mock backend — the proxy owns its result.
+let holdSwitchAudio = false;
+let heldSwitchAudioId: string | number | null = null;
+let heldSwitchAudioInput: string | null = null;
 
 function send(payload: unknown): void {
 	pageWs?.send(JSON.stringify(payload));
@@ -64,6 +70,24 @@ function resolveHeldSetConfig(): void {
 	if (heldSetConfigId !== null) {
 		pageWs?.send(JSON.stringify({ id: heldSetConfigId, result: { success: true } }));
 		heldSetConfigId = null;
+	}
+}
+
+/** Fake-resolve a held switchAudio RPC as a successful gapless switch. */
+function resolveHeldSwitchAudio(gapMs: number): void {
+	if (heldSwitchAudioId !== null) {
+		pageWs?.send(
+			JSON.stringify({
+				id: heldSwitchAudioId,
+				result: {
+					success: true,
+					active_audio_input: heldSwitchAudioInput ?? "audio:mic0",
+					gap_ms: gapMs,
+				},
+			}),
+		);
+		heldSwitchAudioId = null;
+		heldSwitchAudioInput = null;
 	}
 }
 
@@ -173,20 +197,32 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		holdSetConfig = false;
 		heldSetConfigId = null;
 		dropStreamStart = false;
+		holdSwitchAudio = false;
+		heldSwitchAudioId = null;
+		heldSwitchAudioInput = null;
 
 		await page.routeWebSocket(/:(3002|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 
 			ws.onMessage((m) => {
-				if (holdSetConfig || dropStreamStart) {
+				if (holdSetConfig || dropStreamStart || holdSwitchAudio) {
 					const text = typeof m === "string" ? m : m.toString();
 					try {
-						const frame = JSON.parse(text) as { id?: string | number; path?: unknown };
+						const frame = JSON.parse(text) as {
+							id?: string | number;
+							path?: unknown;
+							input?: { audio_input_id?: string };
+						};
 						const rpc = Array.isArray(frame.path) ? frame.path.join(".") : null;
 						if (holdSetConfig && rpc === "streaming.setConfig") {
 							heldSetConfigId = frame.id ?? null;
 							return; // hold in-flight: don't forward to the backend
+						}
+						if (holdSwitchAudio && rpc === "streaming.switchAudio") {
+							heldSwitchAudioId = frame.id ?? null;
+							heldSwitchAudioInput = frame.input?.audio_input_id ?? null;
+							return; // hold in-flight: the proxy owns the audio-switch result
 						}
 						if (dropStreamStart && rpc === "streaming.start") {
 							return; // never mutate the shared backend's stream state
@@ -423,5 +459,80 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		sendCapabilities({ engineUnavailable: true });
 		await expect(page.getByTestId("capability-engine-unavailable")).toBeVisible();
 		await expect(page.getByTestId("capability-engine-starting")).toHaveCount(0);
+	});
+
+	// ── 7. Live audio switch (Task 25): applying → applied + gap toast ─────────
+	test("a live audio source switch succeeds, shows applying then applied, and raises a gap toast", async ({
+		page,
+	}) => {
+		controlStreaming = true;
+		streamingFlag = true;
+		dropServerDevices = true;
+		// Hold the switchAudio RPC so the per-field `applying` glyph is observable;
+		// the proxy resolves it as a successful gapless switch (no DeviceNotFound).
+		holdSwitchAudio = true;
+
+		serverConfig();
+		sendCapabilities({ audio_live_switch: true });
+		sendStatus(true);
+		sendDevices("video0", [HDMI, MIC]);
+
+		const picker = page.getByTestId("input-picker");
+		await expect(picker).toBeVisible({ timeout: 15_000 });
+
+		// With the capability advertised the audio source is a real, enabled live
+		// Switch control — never the coming-soon affordance.
+		const audioSwitch = picker.locator('[data-switch-input="audio:mic0"]');
+		await expect(audioSwitch).toBeVisible();
+		await expect(
+			picker.locator('[data-audio-switch-deferred="audio:mic0"]'),
+		).toHaveCount(0);
+
+		await audioSwitch.click();
+
+		// The Task-5 field-sync indicator shows the in-flight `applying` phase.
+		await expect(page.getByText(/switching audio/i)).toBeVisible();
+
+		// Release the held RPC as a successful 18 ms gapless switch.
+		holdSwitchAudio = false;
+		resolveHeldSwitchAudio(18);
+
+		// applied phase glyph + the non-blocking informational gap toast.
+		await expect(page.getByText(/audio switched/i).first()).toBeVisible();
+		// No DeviceNotFound / failure surface appeared.
+		await expect(page.getByText(/audio switch failed/i)).toHaveCount(0);
+		await expect(page.getByText(/audio source unavailable/i)).toHaveCount(0);
+	});
+
+	// ── 8. Still-deferred roadmap items remain coming-soon ─────────────────────
+	test("a still-deferred capability keeps its coming-soon affordance even when audio live-switch is on", async ({
+		page,
+	}) => {
+		controlStreaming = true;
+		streamingFlag = true;
+		dropServerDevices = true;
+
+		serverConfig();
+		// Audio live-switch is advertised, but the mode-fallback / PiP roadmap
+		// items have no capability flag → they MUST stay coming-soon (G2).
+		sendCapabilities({ audio_live_switch: true });
+		sendStatus(true);
+		sendDevices("video0", [HDMI, MIC]);
+
+		const roadmap = page.getByTestId("live-roadmap");
+		await expect(roadmap).toBeVisible({ timeout: 15_000 });
+
+		// The deferred roadmap affordances are still bound to their OPEN debt ids.
+		await expect(roadmap.locator('[data-comingsoon="TD-pip"]')).toBeVisible();
+		await expect(
+			roadmap.locator('[data-comingsoon="TD-mode-fallback"]'),
+		).toBeVisible();
+
+		// And the audio source is NOT coming-soon — it is a live Switch control.
+		const picker = page.getByTestId("input-picker");
+		await expect(picker.locator('[data-switch-input="audio:mic0"]')).toBeVisible();
+		await expect(
+			picker.locator('[data-audio-switch-deferred="audio:mic0"]'),
+		).toHaveCount(0);
 	});
 });

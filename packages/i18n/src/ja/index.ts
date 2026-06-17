@@ -815,6 +815,12 @@ const ja = {
 			comingSoon: "近日公開",
 			audioSwitchWorkaround:
 				"オーディオソースを変更するには停止して再起動してください",
+			audioApplying: "オーディオを切り替え中…",
+			audioApplied: "オーディオを切り替えました",
+			audioFailed: "オーディオの切り替えに失敗",
+			audioSwitched: "{ms}msでオーディオを切り替えました",
+			audioSwitchFailed: "オーディオソースの切り替えに失敗しました",
+			audioSourceLost: "オーディオソースを利用できません",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",

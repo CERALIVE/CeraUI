@@ -948,6 +948,12 @@ const ptBR = {
 			sourceLost: "Fonte indisponível \u2014 foi desconectada",
 			comingSoon: "Em breve",
 			audioSwitchWorkaround: "Pare e reinicie para alterar a fonte de áudio",
+			audioApplying: "Trocando áudio…",
+			audioApplied: "Áudio trocado",
+			audioFailed: "Falha ao trocar o áudio",
+			audioSwitched: "Áudio trocado em {ms}ms",
+			audioSwitchFailed: "Falha ao trocar a fonte de áudio",
+			audioSourceLost: "Fonte de áudio indisponível",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",

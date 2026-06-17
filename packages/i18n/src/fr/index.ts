@@ -974,6 +974,12 @@ const fr = {
 			comingSoon: "Bientôt disponible",
 			audioSwitchWorkaround:
 				"Arrêtez et redémarrez pour changer la source audio",
+			audioApplying: "Changement audio…",
+			audioApplied: "Audio changé",
+			audioFailed: "Échec du changement audio",
+			audioSwitched: "Audio changé en {ms}ms",
+			audioSwitchFailed: "Échec du changement de source audio",
+			audioSourceLost: "Source audio indisponible",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",

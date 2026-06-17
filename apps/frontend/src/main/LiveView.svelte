@@ -7,6 +7,7 @@ import {
 	BITRATE_DEFAULT_MIN,
 	BITRATE_MAX,
 	BITRATE_MIN,
+	SWITCH_AUDIO_ERRORS,
 	SWITCH_INPUT_ERRORS,
 } from '@ceraui/rpc/schemas';
 import {
@@ -62,7 +63,7 @@ import {
 	clearStreamingStopReason,
 } from '$lib/rpc/streaming-optimism.svelte';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
-import { canLiveSwitchInput } from '$lib/streaming/liveAudioSwitch';
+import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
 import { buildStartConfig, canStartStream } from '$lib/streaming/startStreaming';
 import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
 import EncoderDialog, { type EncoderConfig } from '$main/dialogs/EncoderDialog.svelte';
@@ -119,14 +120,22 @@ let switchingInput = $state<string | undefined>(undefined);
 // disabled "coming soon" affordance and can never be live-switched.
 const audioLiveSwitchEnabled = $derived(isAudioLiveSwitchEnabled(getCapabilities()));
 
+// One per-field sync key drives the audio-switch applying/applied/failed glyph
+// in the picker (Task 5 machine), regardless of which audio source is targeted.
+const AUDIO_SWITCH_FIELD = 'audio_switch';
+
 async function handleSwitchInput(inputId: string) {
 	// Defense-in-depth: even if a UI path offered an audio switch, refuse to
-	// dispatch switchInput for an audio:* id while the capability is off — the
+	// dispatch a live switch for an audio:* id while the capability is off — the
 	// engine would reject it with DeviceNotFound (TD-live-audio-switch).
 	if (!canLiveSwitchInput(inputId, audioLiveSwitchEnabled)) {
 		console.warn(
-			`[CeraUI] Blocked live switchInput for audio source "${inputId}": live audio switching is not available (audio_live_switch capability is off).`,
+			`[CeraUI] Blocked live switch for audio source "${inputId}": live audio switching is not available (audio_live_switch capability is off).`,
 		);
+		return;
+	}
+	if (isAudioInputId(inputId)) {
+		await handleSwitchAudio(inputId);
 		return;
 	}
 	switchingInput = inputId;
@@ -141,6 +150,34 @@ async function handleSwitchInput(inputId: string) {
 		}
 	} catch {
 		toast.error($LL.live.inputPicker.switchFailed());
+	} finally {
+		switchingInput = undefined;
+	}
+}
+
+// Live audio source switch (Task 25): gated on audio_live_switch, dispatched via
+// the dedicated switchAudio procedure with the Task-5 applying→applied/failed
+// machine and a non-blocking informational gap toast on success.
+async function handleSwitchAudio(inputId: string) {
+	switchingInput = inputId;
+	beginFieldSync(AUDIO_SWITCH_FIELD, inputId);
+	markFieldApplying(AUDIO_SWITCH_FIELD);
+	try {
+		const res = await rpc.streaming.switchAudio({ audio_input_id: inputId });
+		if (res.success) {
+			markFieldApplied(AUDIO_SWITCH_FIELD, res.active_audio_input ?? inputId);
+			toast.info($LL.live.inputPicker.audioSwitched({ ms: res.gap_ms ?? 0 }));
+		} else {
+			markFieldFailed(AUDIO_SWITCH_FIELD, activeInput ?? inputId);
+			toast.error(
+				res.error === SWITCH_AUDIO_ERRORS.AUDIO_DEVICE_NOT_FOUND
+					? $LL.live.inputPicker.audioSourceLost()
+					: $LL.live.inputPicker.audioSwitchFailed(),
+			);
+		}
+	} catch {
+		markFieldFailed(AUDIO_SWITCH_FIELD, activeInput ?? inputId);
+		toast.error($LL.live.inputPicker.audioSwitchFailed());
 	} finally {
 		switchingInput = undefined;
 	}
@@ -540,13 +577,14 @@ const configRows = $derived<ConfigRow[]>([
 			<IngestStats telemetry={linkTelemetry} {isStreaming} bitrateKbps={config?.max_br} />
 		{/if}
 
-		<SourceSection
-			{activeInput}
-			{audioLiveSwitchEnabled}
-			{audioSources}
-			capabilities={getCapabilities()}
-			{devices}
-			{isStreaming}
+	<SourceSection
+		{activeInput}
+		audioLiveSwitchField={AUDIO_SWITCH_FIELD}
+		{audioLiveSwitchEnabled}
+		{audioSources}
+		capabilities={getCapabilities()}
+		{devices}
+		{isStreaming}
 			onReorderSource={handleReorderSource}
 			onSelect={handleSelectInput}
 			onSelectAudioSource={handleSelectAudioSource}

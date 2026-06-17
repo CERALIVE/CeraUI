@@ -12,8 +12,9 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { CaptureDevice, DeviceKind } from '@ceraui/rpc/schemas';
-import { Check, Clock, Loader, RadioTower, TriangleAlert } from '@lucide/svelte';
+import { Check, Loader, RadioTower, TriangleAlert } from '@lucide/svelte';
 
+import FieldSyncIndicator from '$lib/components/custom/FieldSyncIndicator.svelte';
 import { Button } from '$lib/components/ui/button';
 
 interface Props {
@@ -22,11 +23,14 @@ interface Props {
 	selectedInput?: string | undefined;
 	isStreaming?: boolean;
 	switchingInput?: string | undefined;
-	// Sole gate for the live audio-switch affordance (G2): derived from
-	// isAudioLiveSwitchEnabled(getCapabilities()) by the parent. When false
-	// (always in Track 1), audio sources cannot be switched live — they render
-	// disabled with a "coming soon" affordance instead of a Switch button.
+	// Gate for live audio-switch (G2): derived from
+	// isAudioLiveSwitchEnabled(getCapabilities()) by the parent. When false,
+	// audio sources cannot be switched live — the Switch button is disabled.
 	audioLiveSwitchEnabled?: boolean;
+	// Field-sync key whose applying/applied/failed phase drives the live
+	// audio-switch glyph (Task 5 machine). Set by the parent when the engine
+	// advertises audio_live_switch.
+	audioLiveSwitchField?: string;
 	onSelect?: (id: string) => void;
 	onSwitch?: (id: string) => void;
 }
@@ -38,6 +42,7 @@ let {
 	isStreaming = false,
 	switchingInput,
 	audioLiveSwitchEnabled = false,
+	audioLiveSwitchField,
 	onSelect,
 	onSwitch,
 }: Props = $props();
@@ -97,11 +102,9 @@ function capsLabel(device: CaptureDevice): string {
 						{#each group.devices as device (device.input_id)}
 							{@const isActive = device.input_id === activeInput}
 							{@const isSelected = device.input_id === selectedInput}
-							{@const isSwitching = device.input_id === switchingInput}
-							{@const caps = capsLabel(device)}
-							{@const audioComingSoon =
-								device.kind === 'audio' && !audioLiveSwitchEnabled}
-							<li
+						{@const isSwitching = device.input_id === switchingInput}
+						{@const caps = capsLabel(device)}
+						<li
 								class={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors ${
 									device.lost
 										? 'border-destructive/40 bg-destructive/5 opacity-70'
@@ -138,48 +141,35 @@ function capsLabel(device: CaptureDevice): string {
 									{/if}
 								</div>
 
-								{#if isStreaming && audioComingSoon}
-									<!--
-										Live audio-switch is deferred (TD-live-audio-switch): the
-										engine's switch-input path rejects an audio:* id until
-										cerastream advertises audio_live_switch. Render a disabled
-										"coming soon" affordance + workaround note instead of an
-										actionable Switch — never an enabled control that could emit
-										switchInput for an audio id.
-									-->
-									<div
-										class="flex max-w-[12rem] flex-col items-end gap-1 text-right"
-										data-audio-switch-deferred={device.input_id}
-										data-debt-id="TD-live-audio-switch"
-									>
-										<span
-											class="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
-										>
-											<Clock aria-hidden={true} class="size-3" />
-											{$LL.live.inputPicker.comingSoon()}
-										</span>
-										<span class="text-muted-foreground text-[0.7rem] leading-tight">
-											{$LL.live.inputPicker.audioSwitchWorkaround()}
-										</span>
-									</div>
-								{:else if isStreaming}
-									<Button
-										aria-label={`${$LL.live.inputPicker.switch()} \u2013 ${device.display_name}`}
-										data-switch-input={device.input_id}
-										disabled={isActive || isSwitching}
-										onclick={() => onSwitch?.(device.input_id)}
-										size="sm"
-										variant={isActive ? 'secondary' : 'default'}
-									>
-										{#if isSwitching}
-											<Loader aria-hidden={true} class="size-3.5 animate-spin" />
-											{$LL.live.inputPicker.switching()}
-										{:else if isActive}
-											{$LL.live.inputPicker.active()}
-										{:else}
-											{$LL.live.inputPicker.switch()}
+							{#if isStreaming}
+									<div class="flex items-center gap-2">
+										{#if device.kind === 'audio' && audioLiveSwitchField}
+											<FieldSyncIndicator
+												appliedLabel={$LL.live.inputPicker.audioApplied()}
+												applyingLabel={$LL.live.inputPicker.audioApplying()}
+												failedLabel={$LL.live.inputPicker.audioFailed()}
+												field={audioLiveSwitchField}
+												labelHidden={true}
+											/>
 										{/if}
-									</Button>
+										<Button
+											aria-label={`${$LL.live.inputPicker.switch()} \u2013 ${device.display_name}`}
+											data-switch-input={device.input_id}
+											disabled={isActive || isSwitching}
+											onclick={() => onSwitch?.(device.input_id)}
+											size="sm"
+											variant={isActive ? 'secondary' : 'default'}
+										>
+											{#if isSwitching}
+												<Loader aria-hidden={true} class="size-3.5 animate-spin" />
+												{$LL.live.inputPicker.switching()}
+											{:else if isActive}
+												{$LL.live.inputPicker.active()}
+											{:else}
+												{$LL.live.inputPicker.switch()}
+											{/if}
+										</Button>
+									</div>
 								{:else}
 									<Button
 										aria-label={`${$LL.live.inputPicker.select()} \u2013 ${device.display_name}`}

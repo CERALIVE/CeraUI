@@ -125,6 +125,20 @@ function makeFakeClient(): FakeClientHarness {
 			calls.push({ op: "close" });
 		},
 	};
+	// `switch-audio` is dispatched by the backend through the client's raw
+	// JSON-RPC primitive (it is absent from the binding's typed surface); expose
+	// it on the fake so the audio passthrough is exercisable.
+	(client as unknown as Record<string, unknown>).rawRequest = async (
+		method: string,
+		params?: unknown,
+	) => {
+		calls.push({ op: method, params });
+		if (method === "switch-audio") {
+			const p = params as { audio_input_id: string; mode?: "manual" | "auto" };
+			return { active_audio_input: p.audio_input_id, mode: p.mode ?? "manual" };
+		}
+		return {};
+	};
 	return { client, calls };
 }
 
@@ -455,6 +469,36 @@ describe("CerastreamBackend RPC passthroughs", () => {
 	test("a passthrough without an active connection rejects", async () => {
 		const { backend } = makeBackend();
 		await expect(backend.listDevices()).rejects.toThrow();
+	});
+
+	test("switchAudio dispatches switch-audio and returns the active audio input", async () => {
+		const { backend, fake } = makeBackend();
+		backend.start(STREAM_CONFIG, RUN_OPTS);
+		await backend.settle();
+
+		const result = await backend.switchAudio({
+			audio_input_id: "audio:mic1",
+			mode: "manual",
+		});
+		expect(result.active_audio_input).toBe("audio:mic1");
+		expect(fake.calls.some((c) => c.op === "switch-audio")).toBe(true);
+	});
+
+	test("reloadAudioDelay applies the audio delay via reload-config", async () => {
+		const { backend, fake } = makeBackend();
+		backend.start(STREAM_CONFIG, RUN_OPTS);
+		await backend.settle();
+
+		const applied = await backend.reloadAudioDelay(120);
+		expect(applied.applied.audio?.delay_ms).toBe(120);
+		expect(
+			fake.calls.some(
+				(c) =>
+					c.op === "reload-config" &&
+					(c.params as { audio?: { delay_ms?: number } }).audio?.delay_ms ===
+						120,
+			),
+		).toBe(true);
 	});
 });
 

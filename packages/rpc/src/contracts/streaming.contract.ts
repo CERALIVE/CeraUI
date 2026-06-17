@@ -12,6 +12,8 @@ import {
 	getMockHardwareOutputSchema,
 	listDevicesOutputSchema,
 	pipelinesSchema,
+	reloadAudioDelayInputSchema,
+	reloadAudioDelayOutputSchema,
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
 	streamHealthOutputSchema,
@@ -19,6 +21,8 @@ import {
 	streamingSetConfigOutputSchema,
 	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
+	switchAudioInputSchema,
+	switchAudioOutputSchema,
 	switchInputInputSchema,
 	switchInputOutputSchema,
 } from '../schemas';
@@ -94,4 +98,15 @@ export const streamingContract = oc.router({
 	 * Live-switch the active input; returns the glitch-free gap in ms.
 	 */
 	switchInput: oc.input(switchInputInputSchema).output(switchInputOutputSchema),
+
+	/**
+	 * Live-switch the active audio source (Phase 1.5). Gated on the engine's
+	 * `audio_live_switch` capability; returns the glitch-free gap in ms.
+	 */
+	switchAudio: oc.input(switchAudioInputSchema).output(switchAudioOutputSchema),
+
+	/**
+	 * Hot-apply the audio delay (Phase 1.5) via reload-config — no stream restart.
+	 */
+	reloadAudioDelay: oc.input(reloadAudioDelayInputSchema).output(reloadAudioDelayOutputSchema),
 });
