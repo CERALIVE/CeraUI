@@ -73,6 +73,10 @@ export const streamingConfigInputSchema = z.object({
 	autostart: z.boolean().optional(),
 	resolution: resolutionSchema.optional(),
 	framerate: framerateSchema.optional(),
+	// Operator-ordered video-source preference (input_id list, most-preferred
+	// first). Governs operator-initiated switching only — the engine's
+	// auto-failover is sticky and does NOT consult this list (Task 11).
+	source_preference: z.array(z.string()).optional(),
 });
 export type StreamingConfigInput = z.infer<typeof streamingConfigInputSchema>;
 
@@ -209,6 +213,10 @@ export const capabilitiesMessageSchema = z.object({
 	engineUnavailable: z.boolean().optional(),
 	engineStarting: z.boolean().optional(),
 	schemaVersionMismatch: z.boolean().optional(),
+	// Audio live-switch capability flag (Task 2). Absent on legacy snapshots →
+	// the consumer treats it as false (back-compat). Only the engine advertises
+	// this; the backend never synthesizes it.
+	audio_live_switch: z.boolean().optional(),
 });
 export type CapabilitiesMessage = z.infer<typeof capabilitiesMessageSchema>;
 
@@ -258,6 +266,9 @@ export const configMessageSchema = z.object({
 	detectionMethod: detectionMethodSchema.optional(),
 	resolution: resolutionSchema.optional(),
 	framerate: framerateSchema.optional(),
+	// Operator-ordered video-source preference (input_id list, most-preferred
+	// first) — echoed back so the UI can render the saved order (Task 11).
+	source_preference: z.array(z.string()).optional(),
 });
 export type ConfigMessage = z.infer<typeof configMessageSchema>;
 
