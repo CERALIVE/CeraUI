@@ -341,6 +341,8 @@ const en = {
 			switched: "Switched in {ms:number}ms",
 			switchFailed: "Failed to switch input",
 			sourceLost: "Source unavailable \u2014 it was unplugged",
+			comingSoon: "Coming soon",
+			audioSwitchWorkaround: "Stop & restart to change the audio source",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -349,6 +351,117 @@ const en = {
 				audio: "Audio",
 				other: "Other",
 			},
+		},
+		sourcePreference: {
+			title: "Source Priority",
+			description:
+				"Order the sources you switch between. Auto-failover ignores this list.",
+			empty: "No video sources detected",
+			moveUp: "Move {name:string} up",
+			moveDown: "Move {name:string} down",
+			rankLabel: "Priority {rank:number}",
+			stickyNote:
+				"Auto-failover is sticky \u2014 the engine does not auto-return. Use the source list to switch back manually.",
+			states: {
+				active: "Active",
+				lost: "Lost",
+				failedOver: "Failed over",
+			},
+			lostHint: "This source is offline.",
+			failedOverHint:
+				"The engine switched here automatically after your preferred source went offline.",
+			sync: {
+				applying: "Saving order\u2026",
+				applied: "Order saved",
+				failed: "Couldn't save order",
+			},
+			failover: {
+				title: "Auto-failover",
+				reasonSourceLost:
+					"{name:string} went offline, so the engine switched to {to:string}.",
+				sticky:
+					"Auto-failover is sticky \u2014 it won't switch back on its own. Use the source list to return manually.",
+			},
+		},
+		source: {
+			label: "Source",
+			none: "No source selected",
+			select: "Select a source",
+			capabilities: "Capabilities",
+			lostTitle: "Device disconnected",
+			lostBody: "Reconnect the device to resume streaming from this source.",
+			audioNone: "No audio source detected",
+		},
+		modes: {
+			label: "Mode",
+			streaming: "Streaming",
+			preview: "Preview",
+		},
+		education: {
+			reason: {
+				unsupportedPlatform: "Not supported on this platform",
+				fixedBySource: "Fixed by the selected source",
+			},
+			info: "About {field:string}",
+			close: "Got it",
+			reasonLabel: "Why it's unavailable",
+			field: {
+				source: {
+					title: "Video source",
+					body: "Where the encoder pulls video from — a capture card, a UVC camera, or a network ingest. The source decides which resolutions and frame rates the encoder can offer.",
+				},
+				mode: {
+					title: "Mode",
+					body: "Streaming sends the encoded video to your server; preview renders it locally without going live. The active mode narrows the options shown to what that mode supports.",
+				},
+				codec: {
+					title: "Video codec",
+					body: "How the video is compressed. H.264 is the broadest compatibility; H.265 saves bandwidth but needs a hardware encoder to stay smooth — on a software board it runs with a high-CPU warning.",
+				},
+				audio: {
+					title: "Audio",
+					body: "The audio input and codec folded into the stream. Available sources come from the selected video pipeline; a pipeline without audio support hides these controls.",
+				},
+			},
+			tier: {
+				engineUnavailable: {
+					title: "Streaming engine offline",
+					body: "The encoder engine isn't responding, so the options below may be out of date. Configuration is paused until it reconnects — your saved settings are kept.",
+				},
+				engineStarting: {
+					title: "Streaming engine starting",
+					body: "The encoder engine is coming online. Capabilities are loading; the controls unlock once it's ready.",
+				},
+				schemaVersionMismatch: {
+					title: "Capabilities may be approximate",
+					body: "The engine reports a different capability format than this interface expects. Everything still works, but a few options may not exactly match the hardware.",
+				},
+			},
+		},
+		comingSoon: {
+			label: "Coming soon",
+			hint: "This feature will be available in a future update.",
+			pip: "Picture-in-picture",
+			modeFallback: "Automatic fallback",
+		},
+		fallback: {
+			unavailable: "Unavailable",
+			notConfigured: "Not configured",
+		},
+		presets: {
+			heading: "Mode presets",
+			advanced: "Advanced / Custom",
+			applying: "Applying preset\u2026",
+			applied: "Preset applied",
+			failed: "Couldn't apply preset",
+		},
+		encoder: {
+			appliesNextStart: "Applies on next start",
+			accelerated: "Hardware",
+			software: "Software",
+			bitrateRangeHint: "Supported range",
+			bitrateClamped: "Adjusted to the supported range",
+			probedCaps: "Detected capabilities",
 		},
 	},
 	dialogs: {
