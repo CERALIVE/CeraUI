@@ -10,8 +10,9 @@ import { ensureAuthenticated, navigateTo } from './helpers/index.js';
  *
  * Proves the already-shipped local preview meets the issue's intent against the
  * real frontend in a browser:
- *   1. <PreviewCanvas> (data-testid="preview") renders DIRECTLY under the
- *      <InputPicker> device selector (data-testid="input-picker") in LiveView.
+ *   1. <PreviewCanvas> (data-testid="preview") renders under the <SourceSection>
+ *      (data-testid="source-section"), which wraps the <InputPicker> device
+ *      selector (data-testid="input-picker"), in the same Live column.
  *   2. The preview toggle is operable (aria-pressed flips, canvas mounts).
  *   3. The audio level meter mounts when the preview is on.
  *   4. With no active encode the preview reaches the `waiting` state and shows
@@ -22,7 +23,7 @@ import { ensureAuthenticated, navigateTo } from './helpers/index.js';
  *     pinned to is_streaming:false (so the idle Live DOM is stable regardless of
  *     what other workers broadcast via dev.emit), and a server `config` frame is
  *     injected after navigation so the Live view leaves its empty state and
- *     renders the InputPicker + PreviewCanvas siblings.
+ *     renders the SourceSection + PreviewCanvas siblings.
  *   • Preview (:9997) — cerastream serves the preview WS here; it is unserved
  *     under the mock stack, so we mock it: on the client's {action:"start"} we
  *     reply with a codec-config (→ decoder configured → status "waiting") and an
@@ -103,7 +104,7 @@ test.describe('LiveView preview placement (#72)', () => {
 		injectServerConfig();
 	});
 
-	test('PreviewCanvas renders directly under the InputPicker, toggle + meter operable', async ({
+	test('PreviewCanvas renders under the source section, toggle + meter operable', async ({
 		page,
 	}) => {
 		const picker = page.getByTestId('input-picker');
@@ -111,18 +112,26 @@ test.describe('LiveView preview placement (#72)', () => {
 		await expect(picker).toBeVisible();
 		await expect(preview).toBeVisible();
 
-		// DOM proof: preview follows the picker in document order AND the picker's
-		// card is the element immediately preceding the preview section.
-		const adjacency = await page.evaluate(() => {
-			const p = document.querySelector('[data-testid="input-picker"]');
-			const v = document.querySelector('[data-testid="preview"]');
-			if (!p || !v) return 'missing';
-			const follows = !!(p.compareDocumentPosition(v) & Node.DOCUMENT_POSITION_FOLLOWING);
-			const card = v.previousElementSibling;
-			const adjacent = !!card && card.contains(p);
-			return follows && adjacent ? 'ok' : `follows=${follows} adjacent=${adjacent}`;
+		// DOM proof for the overhauled Live column (Task 4–16): the bare
+		// <InputPicker> is now wrapped by <SourceSection> and the roadmap pills sit
+		// between it and the preview, so the preview is no longer the picker's
+		// immediate sibling. The invariant is that the preview is a same-column
+		// sibling that FOLLOWS the source section which contains the input picker.
+		const placement = await page.evaluate(() => {
+			const section = document.querySelector('[data-testid="source-section"]');
+			const picker = document.querySelector('[data-testid="input-picker"]');
+			const preview = document.querySelector('[data-testid="preview"]');
+			if (!section || !picker || !preview) return 'missing';
+			const wrapsPicker = section.contains(picker);
+			const followsSection = !!(
+				section.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING
+			);
+			const sameColumn = section.parentElement === preview.parentElement;
+			return wrapsPicker && followsSection && sameColumn
+				? 'ok'
+				: `wraps=${wrapsPicker} follows=${followsSection} sameColumn=${sameColumn}`;
 		});
-		expect(adjacency).toBe('ok');
+		expect(placement).toBe('ok');
 
 		// Toggle the preview on: aria-pressed flips, canvas + audio meter mount.
 		const toggle = page.getByTestId('preview-toggle');

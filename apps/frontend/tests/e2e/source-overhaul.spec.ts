@@ -24,8 +24,8 @@ import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
  * Coverage (the Track-1 mergeability gate):
  *   1. mode-preset selection seeds the Advanced fields + unsupported preset is
  *      disabled-with-reason (never hidden);
- *   2. capability gate — live-audio "coming soon" with the flag absent, a live
- *      Switch control once the mock advertises `audio_live_switch`;
+ *   2. capability gate — the audio live-switch dispatch is blocked while the flag
+ *      is absent and becomes live once the mock advertises `audio_live_switch`;
  *   3. native-feel optimism — the per-field `applying` indicator holds through a
  *      delayed WS echo with no flicker;
  *   4. `is_streaming` optimism — Start shows the transient `starting` state and
@@ -297,13 +297,16 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		await expect(dialog.locator("#encoder-bitrate")).toHaveValue("6000");
 	});
 
-	// ── 2. Capability gate: live-audio coming-soon ⇄ enabled by mock flag ──────
-	test("live-audio switch is 'coming soon' when the flag is absent, and enabled once the mock advertises it", async ({
+	// ── 2. Capability gate: live-audio dispatch gated off ⇄ enabled by flag ────
+	test("the audio live-switch dispatch is gated off until the engine advertises audio_live_switch", async ({
 		page,
 	}) => {
 		controlStreaming = true;
 		streamingFlag = true;
 		dropServerDevices = true;
+		// Capture any dispatched switchAudio so we can prove NONE escapes the
+		// frontend gate while the capability is absent.
+		holdSwitchAudio = true;
 
 		serverConfig();
 		sendCapabilities(); // no audio_live_switch → gate off
@@ -313,20 +316,34 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		const picker = page.getByTestId("input-picker");
 		await expect(picker).toBeVisible({ timeout: 15_000 });
 
-		// Flag absent: the audio source surfaces the calm coming-soon affordance
-		// (bound to the open debt id) and offers NO live Switch control.
-		const deferred = picker.locator('[data-audio-switch-deferred="audio:mic0"]');
-		await expect(deferred).toBeVisible();
-		await expect(deferred).toHaveAttribute("data-debt-id", "TD-live-audio-switch");
-		await expect(picker.locator('[data-switch-input="audio:mic0"]')).toHaveCount(0);
-
-		// Engine now advertises the capability → the audio source becomes a real,
-		// enabled live-switch control and the coming-soon affordance is gone.
-		sendCapabilities({ audio_live_switch: true });
-		await expect(picker.locator('[data-switch-input="audio:mic0"]')).toBeVisible();
+		// TD-live-audio-switch is resolved (Task 26): the coming-soon affordance is
+		// gone — the audio source always renders a real Switch control while
+		// streaming, never a `data-audio-switch-deferred` pill.
+		const audioSwitch = picker.locator('[data-switch-input="audio:mic0"]');
+		await expect(audioSwitch).toBeVisible();
 		await expect(
 			picker.locator('[data-audio-switch-deferred="audio:mic0"]'),
 		).toHaveCount(0);
+
+		// Capability absent → the frontend gate (canLiveSwitchInput) blocks the
+		// dispatch: clicking raises NO applying indicator and the switchAudio RPC
+		// is never sent (the proxy never captures it). The blocked path returns
+		// synchronously before any await, so this read is race-free post-click.
+		await audioSwitch.click();
+		await expect(page.getByText(/switching audio/i)).toHaveCount(0);
+		expect(heldSwitchAudioId).toBeNull();
+
+		// Engine now advertises the capability → the SAME control becomes live: a
+		// click dispatches switchAudio and surfaces the per-field applying glyph.
+		sendCapabilities({ audio_live_switch: true });
+		await audioSwitch.click();
+		await expect(page.getByText(/switching audio/i)).toBeVisible();
+		expect(heldSwitchAudioId).not.toBeNull();
+
+		// Release the held RPC as a successful gapless switch → applied + gap toast.
+		holdSwitchAudio = false;
+		resolveHeldSwitchAudio(12);
+		await expect(page.getByText(/audio switched/i).first()).toBeVisible();
 	});
 
 	// ── 3. Native-feel optimism: applying indicator holds through a delayed echo ─
