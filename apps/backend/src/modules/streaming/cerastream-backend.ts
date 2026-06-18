@@ -51,13 +51,18 @@ import {
 	type ListDevicesResult,
 	type PartialCerastreamConfig,
 	type ReloadConfigParams,
+	type ReloadConfigResult,
 	type RuntimeErrorEvent,
 	SCHEMA_VERSION,
 	type StartParams,
 	type Subscription,
+	type SwitchAudioParams,
+	type SwitchAudioResult,
 	type SwitchInputParams,
 	type SwitchInputResult,
 	startParamsSchema,
+	switchAudioParamsSchema,
+	switchAudioResultSchema,
 	writeCerastreamConfig,
 } from "@ceralive/cerastream";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
@@ -385,6 +390,23 @@ export class CerastreamBackend implements StreamingBackend {
 
 	async listDevices(params?: ListDevicesParams): Promise<ListDevicesResult> {
 		return this.requireClient().listDevices(params);
+	}
+
+	// `switch-audio` is an additive Phase-1.5 method kept OUT of the binding's
+	// frozen V1 `requestSchemas`, so the typed client exposes no `switchAudio()`.
+	// Dispatch it through the client's raw JSON-RPC primitive, validating both
+	// ends with the bindings' exported schemas so the call stays contract-safe.
+	async switchAudio(params: SwitchAudioParams): Promise<SwitchAudioResult> {
+		const parsed = switchAudioParamsSchema.parse(params);
+		const client = this.requireClient() as unknown as {
+			rawRequest(method: string, params?: unknown): Promise<unknown>;
+		};
+		const raw = await client.rawRequest("switch-audio", parsed);
+		return switchAudioResultSchema.parse(raw);
+	}
+
+	async reloadAudioDelay(delayMs: number): Promise<ReloadConfigResult> {
+		return this.requireClient().reloadConfig({ audio: { delay_ms: delayMs } });
 	}
 
 	/** Test seam: resolve once every queued IPC op has settled. */

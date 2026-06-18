@@ -130,6 +130,8 @@ See [BUILD_PIPELINE.md](docs/BUILD_PIPELINE.md) for full build documentation.
 | [APT_VERSION_CONTROL.md](docs/APT_VERSION_CONTROL.md) | Debian package versioning |
 | [BRANDING.md](docs/BRANDING.md) | Branding guidelines |
 | [TOUCHSCREEN.md](docs/TOUCHSCREEN.md) | Touch/kiosk layout mode |
+| [TECHNICAL_DEBT.md](docs/TECHNICAL_DEBT.md) | Machine-checkable tech-debt register (source-experience overhaul) |
+| [CONVENTIONS.md](docs/CONVENTIONS.md) | CeraUI-local conventions including tech-debt register contract |
 | [apps/frontend/docs/DEVTOOLS.md](apps/frontend/docs/DEVTOOLS.md) | Development tools |
 
 ## Workspace Commands

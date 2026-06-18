@@ -11,6 +11,7 @@ import {
 	clampBitrateToBounds,
 	deriveCodecOptions,
 	deriveUvcH265Sources,
+	summarizeProbedCaps,
 } from "./ValidationAdapter";
 
 function makeCaps(min: number, max: number): CapabilitiesMessage {
@@ -109,7 +110,12 @@ describe("clampBitrateToBounds", () => {
 describe("deriveCodecOptions", () => {
 	it("offers H.264 only when nothing is known", () => {
 		expect(deriveCodecOptions(undefined)).toEqual([
-			{ mediaType: MEDIA_TYPE_H264, value: "h264", softwareWarning: false },
+			{
+				mediaType: MEDIA_TYPE_H264,
+				value: "h264",
+				hardwareAccelerated: false,
+				softwareWarning: false,
+			},
 		]);
 	});
 
@@ -130,6 +136,40 @@ describe("deriveCodecOptions", () => {
 	it("omits H.265 entirely when the platform does not support it", () => {
 		const options = deriveCodecOptions(noH265);
 		expect(options.some((o) => o.value === "h265")).toBe(false);
+	});
+
+	it("labels EVERY codec hardware-accelerated uniformly on an accelerated board", () => {
+		const options = deriveCodecOptions(accel);
+		expect(options.length).toBeGreaterThan(1);
+		expect(options.every((o) => o.hardwareAccelerated)).toBe(true);
+	});
+
+	it("labels EVERY codec software uniformly on a generic board", () => {
+		const options = deriveCodecOptions(generic);
+		expect(options.length).toBeGreaterThan(1);
+		expect(options.every((o) => !o.hardwareAccelerated)).toBe(true);
+		const h264 = options.find((o) => o.value === "h264");
+		expect(h264?.hardwareAccelerated).toBe(false);
+	});
+});
+
+describe("summarizeProbedCaps", () => {
+	it("returns nothing for an absent device list", () => {
+		expect(summarizeProbedCaps(undefined)).toEqual([]);
+	});
+
+	it("omits a device that advertises no formats", () => {
+		expect(summarizeProbedCaps([makeDevice(undefined)])).toEqual([]);
+	});
+
+	it("formats a probed format as a compact resolution + codec spec", () => {
+		expect(summarizeProbedCaps([makeDevice(MEDIA_TYPE_H265)])).toEqual([
+			{
+				inputId: "usb-cam-0",
+				displayName: "QA H.265 Cam",
+				caps: ["1920\u00d71080 H.265"],
+			},
+		]);
 	});
 });
 

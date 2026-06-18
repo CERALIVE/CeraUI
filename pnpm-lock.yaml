@@ -33,8 +33,8 @@ importers:
   apps/backend:
     dependencies:
       '@ceralive/cerastream':
-        specifier: 2026.6.1
-        version: 2026.6.1
+        specifier: 2026.6.2
+        version: 2026.6.2
       '@ceralive/srtla-send':
         specifier: 2026.6.1
         version: 2026.6.1
@@ -858,8 +858,8 @@ packages:
   '@ceralive/biome-config@2026.6.1':
     resolution: {integrity: sha512-azjL0i9UJ/hASfv8abvR+Vrt+yLEahSUdOqJFfF/ats3k6/1t9wwh1fUlq+xKRbrJxEVkuUgSpXn9Jxt+bTkrg==}
 
-  '@ceralive/cerastream@2026.6.1':
-    resolution: {integrity: sha512-2vR69eIMo7kAYG3gbMhSRsD5RiMwxi4BJskXIR2WyB7uNKHVrZ9yi3lyzLvH2wTQKzkC0zj5tCWO+Q/FyE/p5w==}
+  '@ceralive/cerastream@2026.6.2':
+    resolution: {integrity: sha512-JXI7szQS0ieh89LiEO1PJPO0iEFZ8ru0YoFOQ4jcnp7g1TQeLUCX9nF+2uqvJVQofawS+V/Gpa0Hhr3e+b/gOg==}
 
   '@ceralive/design-tokens@2026.6.1':
     resolution: {integrity: sha512-u0Ja75p7rcJY9anvU+Ke/0PKLWrK6Y8bNO1RnrbNDuQduiKLXK0bgWnsOIMtuv3mxDgp2Kvshpc7cog20znOzw==}
@@ -4589,7 +4589,7 @@ snapshots:
 
   '@ceralive/biome-config@2026.6.1': {}
 
-  '@ceralive/cerastream@2026.6.1':
+  '@ceralive/cerastream@2026.6.2':
     dependencies:
       zod: 4.4.3
 

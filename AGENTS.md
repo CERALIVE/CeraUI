@@ -93,6 +93,8 @@ CeraUI/
 | Build system / CI | `docs/BUILD_PIPELINE.md` |
 | Debian versioning | `docs/APT_VERSION_CONTROL.md` |
 | System data flow | `docs/ARCHITECTURE.md` |
+| **Repo conventions (incl. tech-debt register)** | `docs/CONVENTIONS.md` |
+| **Technical-debt register (machine-checkable ledger)** | `docs/TECHNICAL_DEBT.md` + `scripts/check-tech-debt.mjs` |
 | Touch/kiosk CSS spec | `docs/TOUCHSCREEN.md` |
 | **Kiosk capability + inert-by-default model** | `docs/ON_DEVICE_DISPLAY.md` (cross-repo arch) |
 | Kiosk state machine (DC-2) | `docs/KIOSK_STATE_MACHINE.md` |
@@ -367,6 +369,7 @@ Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2
 - Validation constants live in `packages/rpc/src/schemas/`; the frontend reads them via `ValidationAdapter.ts` — never add inline numeric literals to dialog components.
 - All config dialogs compose `AppDialog.svelte` (desktop Dialog / mobile Sheet via `MediaQuery` from `svelte/reactivity`).
 - E2E Testing: REQUIRED reading before writing E2E tests → [`apps/frontend/tests/e2e/PLAYBOOK.md`](apps/frontend/tests/e2e/PLAYBOOK.md)
+- Technical debt: every debt this overhaul introduces is tracked in the machine-checkable register `docs/TECHNICAL_DEBT.md`, enforced by `scripts/check-tech-debt.mjs` (the `check:tech-debt` script, **blocking** in the `test` CI job). Any source `data-debt-id="TD-NNN"`, `coming-soon`, or in-source `[PARTIAL]` marker MUST point at an `open` register entry — an orphan marker or a malformed entry fails CI. It extends the `image-building-pipeline/v2/docs/DEFERRED.md` ledger pattern and does NOT duplicate the root status-label system (`docs/CONVENTIONS.md`). Full contract: `docs/CONVENTIONS.md` → Technical-Debt Register.
 
 ## BUN-NATIVE CONVENTIONS (as of 2026-06)
 
@@ -381,7 +384,7 @@ The backend is fully migrated to Bun-native APIs. Use these patterns for all new
 - **`Bun.$` shell interpolation**: dynamic command strings must use `Bun.$\`${{ raw: cmd }}\`` — plain `${cmd}` escapes the whole string into one quoted arg
 - **`process.env` writes**: stay on `process.env` — `Bun.env` is read-only
 
-## CAPABILITY CONSUMER [PARTIAL]
+## CAPABILITY CONSUMER [EXISTS]
 
 CeraUI is the strict consumer of the `get-capabilities` IPC contract emitted by
 `cerastream`. The backend calls `get-capabilities` (a post-hello JSON-RPC method on
@@ -395,10 +398,52 @@ platform caps ∩ capture-source caps ∩ current-mode → offered set
 Options outside the offered set are shown **disabled with a reason tooltip** — never
 hidden, so operators can see what the hardware doesn't support and why.
 
-**`pipeline-sources.ts` per-board tables deleted [PARTIAL].** The static per-board
+**`pipeline-sources.ts` per-board tables deleted [EXISTS].** The static per-board
 capability tables that previously lived in `pipeline-sources.ts` are removed. All
 capability data is now derived from the `get-capabilities` response at runtime. Do not
 re-add static board tables; the contract is the single source of truth.
+
+**Source-experience overhaul [EXISTS].** The Live destination's source-selection and
+encoder-configuration surfaces were overhauled as part of the ceraui-source-experience
+track (Tasks 4–16). New components and modules shipped:
+
+- `apps/frontend/src/lib/components/custom/SourceSection.svelte` — live input picker
+  section; renders the active source, a live-switch affordance, and the PiP/fallback
+  coming-soon pills.
+- `apps/frontend/src/lib/components/custom/SourcePreference.svelte` — pre-start source
+  preference selector (video + audio); drives `source-preference.ts`.
+- `apps/frontend/src/lib/components/custom/ComingSoon.svelte` — calm roadmap pill +
+  tooltip; takes a `debtId` prop and renders `data-debt-id` into the DOM. Every
+  instance MUST point at an `open` entry in `docs/TECHNICAL_DEBT.md`.
+- `apps/frontend/src/lib/components/custom/InfoPopover.svelte` — lightweight info
+  popover (question-mark trigger + tooltip body); used by SourceSection and
+  CapabilityTierBanner.
+- `apps/frontend/src/lib/streaming/source-preference.ts` — pure source-preference
+  logic (default selection, persistence key, validation).
+- `apps/frontend/src/lib/streaming/sourceSummary.ts` — derives a human-readable
+  source summary string from the active config for the HUD and Live header.
+- `apps/frontend/src/lib/streaming/liveAudioSwitch.ts` — live audio switch gate;
+  `isAudioLiveSwitchEnabled(caps)` is the single source of truth for the
+  `TD-live-audio-switch` capability check.
+- `apps/frontend/src/lib/rpc/streaming-optimism.svelte.ts` — optimistic streaming
+  state machine; bridges the gap between `startStream` RPC dispatch and the first
+  `is_streaming=true` push so the UI never flickers back to idle mid-start.
+
+**Track-1 tech-debt register [EXISTS].** Items from this overhaul are tracked in
+`docs/TECHNICAL_DEBT.md` and enforced by `scripts/check-tech-debt.mjs`. Three remain
+open; two are resolved (Task 26):
+
+| ID | Feature | Status | Exit condition |
+|----|---------|--------|----------------|
+| `TD-live-audio-switch` | Live audio source switch | resolved 2026-06-17 | `capability:audio_live_switch` |
+| `TD-live-audio-delay` | Live audio delay change | resolved 2026-06-17 | `capability:audio_live_switch` |
+| `TD-live-audio-codec` | Live audio codec change | open | `capability:audio_codec_switch` |
+| `TD-pip` | Picture-in-picture / compositing | open | `capability:pip_supported` |
+| `TD-mode-fallback` | Mode-level automatic source fallback | open | `capability:mode_fallback` |
+
+Open items are `track: 2` (cerastream engine dependency) and carry `coming-soon`
+affordances in the Live destination. The CI gate (`check:tech-debt`) fails if any
+source `data-debt-id` is orphaned or any entry is malformed.
 
 **Relay transports + RIST protocol [EXISTS].** The capability contract carries a
 `transports` list (the relay transports the engine can honor; always includes

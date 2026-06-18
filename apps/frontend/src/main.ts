@@ -7,12 +7,17 @@ import { mount } from "svelte";
 
 import App from "./App.svelte";
 import { initSubscriptions } from "./lib/rpc";
+import { initFieldSyncState } from "./lib/rpc/field-sync-state.svelte";
 import { push } from "./lib/stores/notifications.svelte";
 import { setStoredVersion } from "./lib/stores/version.svelte";
 
 // Feeds the HUD's `subscriptions.svelte` getters from the same shared socket the
 // legacy store drives (idempotent). Without this the live HUD never receives data.
 initSubscriptions();
+
+// Create the per-field sync-state store before any component mounts, so its
+// reactive root is never first built mid-render (which would break getFieldState).
+initFieldSyncState();
 
 // Register Service Worker for PWA updates
 registerSW({

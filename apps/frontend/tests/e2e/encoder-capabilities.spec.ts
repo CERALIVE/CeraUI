@@ -163,6 +163,9 @@ test.describe("encoder capability wiring", () => {
 			),
 		);
 
+		// Bitrate lives under the Advanced / Custom expander (Task 7) — open it.
+		await page.getByTestId("encoder-advanced-summary").click();
+
 		const input = page.locator("#encoder-bitrate");
 		await input.fill("50000");
 		await expect(input).toHaveValue("15000");
@@ -188,6 +191,9 @@ test.describe("encoder capability wiring", () => {
 				{ min: 500, max: 6000 },
 			),
 		);
+
+		// Codec badges live under the Advanced / Custom expander (Task 7) — open it.
+		await page.getByTestId("encoder-advanced-summary").click();
 
 		const badge = page.getByTestId("h265-software-warning").first();
 		await expect(badge).toBeVisible();

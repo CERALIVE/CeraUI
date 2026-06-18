@@ -25,7 +25,9 @@ import type { AudioCodec } from '@ceraui/rpc/schemas';
 import { Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
+import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { AppDialog } from '$lib/components/dialogs';
+import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import { getAudioSourceLabel } from '$lib/helpers/AudioHelper';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
@@ -225,9 +227,17 @@ async function handleSave() {
 
 			<!-- Audio Source -->
 			<div class="space-y-2">
-				<Label class="text-sm font-medium" for="audioSource">
-					{$LL.settings.audioSource()}
-				</Label>
+				<div class="flex items-center gap-1">
+					<Label class="text-sm font-medium" for="audioSource">
+						{$LL.settings.audioSource()}
+					</Label>
+					<InfoPopover
+						body={$LL.live.education.field.audio.body()}
+						reason={notAvailableAudioSource ? $LL.settings.notAvailableAudioSource() : undefined}
+						testId="info-audio-source"
+						title={$LL.live.education.field.audio.title()}
+					/>
+				</div>
 				<Select.Root
 					disabled={isStreaming}
 					onValueChange={(value) => (draftSource = value)}
@@ -265,9 +275,22 @@ async function handleSave() {
 
 			<!-- Audio Codec (depends on a chosen source) -->
 			<div class="space-y-2">
-				<Label class="text-sm font-medium" for="audioCodec">
-					{$LL.settings.audioCodec()}
-				</Label>
+				<div class="flex items-center justify-between gap-2">
+					<div class="flex items-center gap-1">
+						<Label class="text-sm font-medium" for="audioCodec">
+							{$LL.settings.audioCodec()}
+						</Label>
+						<InfoPopover
+							body={$LL.live.education.field.codec.body()}
+							testId="info-audio-codec"
+							title={$LL.live.education.field.codec.title()}
+						/>
+					</div>
+					{#if isStreaming}
+						<!-- CI gate static marker (component renders data-debt-id dynamically): data-debt-id="TD-live-audio-codec" -->
+						<ComingSoon debtId="TD-live-audio-codec" />
+					{/if}
+				</div>
 				<Select.Root
 					disabled={isStreaming || !draftSource}
 					onValueChange={(value) => (draftCodec = value as AudioCodec)}
@@ -287,8 +310,8 @@ async function handleSave() {
 				</Select.Root>
 			</div>
 
-			<!-- Audio Delay (schema-driven center-zero slider) -->
-			<div class="bg-muted/40 space-y-3 rounded-lg border p-4">
+		<!-- Audio Delay (schema-driven center-zero slider; live-configurable via reload-config.audio.delay_ms) -->
+		<div class="bg-muted/40 space-y-3 rounded-lg border p-4">
 				<Label class="flex items-center justify-between gap-2 text-sm font-medium" for="audioDelay">
 					<span>{$LL.settings.audioDelay()}</span>
 					<span class="bg-primary/10 text-primary rounded-md px-2 py-1 font-mono text-xs">
@@ -327,13 +350,12 @@ async function handleSave() {
 									: draftDelay < 0
 										? 'bg-muted-foreground'
 										: 'bg-primary'
-							} ${isStreaming ? '' : 'cursor-pointer hover:scale-110'}`}
+							} cursor-pointer hover:scale-110`}
 						></div>
 						<!-- Interaction layer -->
 						<input
 							id="audioDelay"
 							class="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-							disabled={isStreaming}
 							max={DELAY_MAX}
 							min={DELAY_MIN}
 							oninput={(e) => {

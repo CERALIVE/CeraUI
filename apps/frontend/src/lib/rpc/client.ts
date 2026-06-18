@@ -33,6 +33,8 @@ import type {
 	NetifConfigOutput,
 	RelayValidateInput,
 	RelayValidateOutput,
+	ReloadAudioDelayInput,
+	ReloadAudioDelayOutput,
 	RemoteConfigInput,
 	SetPasswordInput,
 	SimPukUnlockInput,
@@ -43,6 +45,8 @@ import type {
 	StreamingStartOutput,
 	StreamingStopOutput,
 	SuccessResponse,
+	SwitchAudioInput,
+	SwitchAudioOutput,
 	SwitchInputInput,
 	SwitchInputOutput,
 	WifiConnectInput,
@@ -497,6 +501,10 @@ export interface TypedRPC {
 		getEngine: () => Promise<GetEngineOutput>;
 		listDevices: () => Promise<ListDevicesOutput>;
 		switchInput: (input: SwitchInputInput) => Promise<SwitchInputOutput>;
+		switchAudio: (input: SwitchAudioInput) => Promise<SwitchAudioOutput>;
+		reloadAudioDelay: (
+			input: ReloadAudioDelayInput,
+		) => Promise<ReloadAudioDelayOutput>;
 	};
 	modems: {
 		getAll: () => Promise<unknown>;

@@ -53,6 +53,12 @@ jobs:
           pnpm --filter frontend run test
           pnpm --filter backend run test
 
+      - name: Tech-debt register gate (validator unit tests + live register check)
+        working-directory: CeraUI
+        run: |
+          pnpm run test:tech-debt
+          pnpm run check:tech-debt
+
       - name: Guardrail — no page.screenshot/toHaveScreenshot in functional specs
         working-directory: CeraUI
         run: |

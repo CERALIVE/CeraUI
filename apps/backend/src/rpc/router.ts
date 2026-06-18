@@ -48,12 +48,14 @@ import {
 	getMockHardwareProcedure,
 	getPipelinesProcedure,
 	listDevicesProcedure,
+	reloadAudioDelayProcedure,
 	setBitrateProcedure,
 	setConfigProcedure,
 	setMockHardwareProcedure,
 	streamHealthProcedure,
 	streamingStartProcedure,
 	streamingStopProcedure,
+	switchAudioProcedure,
 	switchInputProcedure,
 } from "./procedures/streaming.procedure.ts";
 import {
@@ -109,6 +111,8 @@ const stableRoutes = {
 		getEngine: getEngineProcedure,
 		listDevices: listDevicesProcedure,
 		switchInput: switchInputProcedure,
+		switchAudio: switchAudioProcedure,
+		reloadAudioDelay: reloadAudioDelayProcedure,
 		// Dev-only mock hardware switcher
 		setMockHardware: setMockHardwareProcedure,
 		getMockHardware: getMockHardwareProcedure,
