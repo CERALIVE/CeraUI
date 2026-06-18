@@ -15,7 +15,9 @@ import { evidencePath } from "../helpers/index.js";
  */
 
 async function openDevTools(page: Page): Promise<void> {
-	const tab = page.locator("#nav-tab-devtools");
+	const tab = page
+		.getByRole("navigation", { name: "Main navigation" })
+		.getByRole("button", { name: /devtools/i });
 	await tab.click();
 	await expect(tab).toHaveAttribute("aria-current", "page");
 }
