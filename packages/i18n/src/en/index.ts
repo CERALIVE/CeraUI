@@ -268,6 +268,20 @@ const en = {
 		healthExplainDead: "Encoder process not running. The stream is down.",
 	},
 	live: {
+		server: {
+			bondedAcross: "Bonded across {count:number} {{link|links}}",
+			singleLink: "Single link",
+			kind: {
+				srtlaRelay: "SRTLA · Bonded",
+				srtlaCustom: "SRTLA · Custom",
+				ristRelay: "RIST · Managed",
+				ristCustom: "RIST · Custom",
+				srtCustom: "SRT · Custom",
+			},
+			manageLinks: "Manage links",
+			singleLinkHint:
+				"This receiver uses a single direct link. Bonding across multiple links isn't used for this transport.",
+		},
 		title: "Live",
 		description: "Stream control and live metrics",
 		startStream: "Start Stream",
@@ -279,6 +293,7 @@ const en = {
 		notStreaming: "Not streaming",
 		configureToStart: "Configure a relay server to begin streaming",
 		editSettings: "Edit Settings",
+		chooseDestination: "Choose a destination",
 		streamSettings: "Stream Settings",
 		adjustBitrate: "Adjust Bitrate",
 		stopToChange: "Stop stream to change",
@@ -565,6 +580,22 @@ const en = {
 		selectLanguage: "Select Language",
 	},
 	settings: {
+		destination: "Destination",
+		destinationManaged: "My cloud account",
+		destinationCustom: "Custom receiver",
+		destinationManagedHint:
+			"Stream through a relay tied to your cloud account.",
+		destinationCustomHint: "Enter your own receiver address and port.",
+		transportKind: "Transport",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · Bonded",
+			srtlaSingle: "SRTLA · Single link",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "Advanced",
+		transportKindHint:
+			"How your stream reaches the receiver. SRTLA bonds multiple network links; RIST and SRT use a single link.",
 		appearance: {
 			title: "Appearance",
 			language: "Language",
@@ -765,11 +796,14 @@ const en = {
 		relayServerAccount: "Relay Server Account",
 		srtlaServerAddress: "SRTLA receiver server address",
 		srtlaServerPort: "SRTLA receiver port",
+		receiverAddress: "Receiver address",
+		receiverPort: "Receiver port",
 		srtStreamId: "SRT stream id",
 		srtLatency: "SRT latency (ms)",
 		transportProtocol: "Transport Protocol",
 		protocolRistUnavailable: "RIST is not available on this device",
 		protocolReserved: "Not yet available",
+		ristEvenPortHint: "RIST requires an even port number",
 		changeBitrateNotice:
 			"You can change the bitrate even if you are streaming.",
 		relayProvider: "Provider",
@@ -799,6 +833,7 @@ const en = {
 		errors: {
 			audioSourceRequired: "Please select an audio source",
 			srtlaServerAddressRequired: "Please enter the SRTLA server address",
+			receiverAddressRequired: "Please enter the receiver address",
 		},
 	},
 	network: {

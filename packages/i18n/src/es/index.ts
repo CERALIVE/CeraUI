@@ -278,6 +278,20 @@ const es = {
 		link: "Enlace",
 	},
 	live: {
+		server: {
+			bondedAcross: "Combinado en {count} {{enlace|enlaces}}",
+			singleLink: "Enlace único",
+			kind: {
+				srtlaRelay: "SRTLA · Combinado",
+				srtlaCustom: "SRTLA · Personalizado",
+				ristRelay: "RIST · Gestionado",
+				ristCustom: "RIST · Personalizado",
+				srtCustom: "SRT · Personalizado",
+			},
+			manageLinks: "Gestionar enlaces",
+			singleLinkHint:
+				"Este receptor usa un único enlace directo. La combinación de varios enlaces no se utiliza para este transporte.",
+		},
 		title: "Live",
 		description: "Control de transmisión y métricas en vivo",
 		startStream: "Iniciar transmisión",
@@ -290,6 +304,7 @@ const es = {
 		configureToStart:
 			"Configura un servidor de retransmisión para comenzar a transmitir",
 		editSettings: "Editar configuración",
+		chooseDestination: "Elige un destino",
 		streamSettings: "Configuración de transmisión",
 		adjustBitrate: "Ajustar bitrate",
 		stopToChange: "Detén la transmisión para cambiar",
@@ -575,6 +590,23 @@ const es = {
 		selectLanguage: "Seleccionar Idioma",
 	},
 	settings: {
+		destination: "Destino",
+		destinationManaged: "Mi cuenta en la nube",
+		destinationCustom: "Receptor personalizado",
+		destinationManagedHint:
+			"Transmite a través de un relé vinculado a tu cuenta en la nube.",
+		destinationCustomHint:
+			"Introduce la dirección y el puerto de tu propio receptor.",
+		transportKind: "Transporte",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · Combinado",
+			srtlaSingle: "SRTLA · Enlace único",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "Avanzado",
+		transportKindHint:
+			"Cómo llega tu transmisión al receptor. SRTLA combina varios enlaces de red; RIST y SRT usan un solo enlace.",
 		deviceStats: {
 			title: "Estado del dispositivo",
 			description: "Telemetría de hardware en vivo de este dispositivo.",
@@ -772,11 +804,14 @@ const es = {
 		relayServerAccount: "Cuenta de Retransmisión",
 		srtlaServerAddress: "Dirección del servidor receptor SRTLA",
 		srtlaServerPort: "Puerto del servidor SRTLA",
+		receiverAddress: "Dirección del receptor",
+		receiverPort: "Puerto del receptor",
 		srtStreamId: "ID de transmisión SRT",
 		srtLatency: "Latencia SRT (ms)",
 		transportProtocol: "Protocolo de transporte",
 		protocolRistUnavailable: "RIST no está disponible en este dispositivo",
 		protocolReserved: "Aún no disponible",
+		ristEvenPortHint: "RIST requiere un número de puerto par",
 		changeBitrateNotice:
 			"Puedes cambiar el bitrate incluso si estás transmitiendo.",
 		optional: "opcional",
@@ -806,6 +841,7 @@ const es = {
 		},
 		errors: {
 			audioSourceRequired: "Por favor seleccione una fuente de audio",
+			receiverAddressRequired: "Por favor ingrese la dirección del receptor",
 			srtlaServerAddressRequired:
 				"Por favor ingrese la dirección del servidor SRTLA",
 		},

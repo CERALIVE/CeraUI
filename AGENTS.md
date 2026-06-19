@@ -35,6 +35,7 @@ CeraUI/
 │   │       │   ├── HudRegion.svelte       # Responsive HUD mount (desktop top / mobile bottom)
 │   │       │   ├── DisconnectedBanner.svelte  # Reconnect/reboot/failed banner
 │   │       │   ├── dialogs/               # 14 focused config dialogs (AppDialog-based)
+│   │       │   │   └── server/            # ServerDialog sub-components: DestinationSection, CustomEndpointForm, TransportBadge
 │   │       │   └── tabs/                  # Legacy tab views (Streaming, Network, General, Advanced, DevTools)
 │   │       └── lib/
 │   │           ├── components/
@@ -114,6 +115,13 @@ CeraUI/
 | **Ingest sparkline memoization** | `apps/frontend/src/lib/components/custom/ingest-link-view.ts` |
 | **Ingest visual/UX + @visual spec** | `apps/frontend/src/lib/components/custom/IngestStats.svelte` + `tests/e2e/visual/ingest-states.visual.spec.ts` |
 | Design rules | `.impeccable.md` |
+| **Receiver-kind model + Scope-B plain-SRT contract** | `docs/RECEIVER_MODEL.md` |
+| **ServerDialog destination-first container** | `apps/frontend/src/main/dialogs/ServerDialog.svelte` |
+| **ServerDialog sub-components (DestinationSection, CustomEndpointForm, TransportBadge)** | `apps/frontend/src/main/dialogs/server/` |
+| **Receiver-experience pure logic (deriveDestination, resolveReceiverKind, buildServerSetConfig)** | `apps/frontend/src/lib/streaming/receiver-experience.ts` |
+| **relay.validate procedure + mock seam** | `apps/backend/src/rpc/procedures/relay.procedure.ts` + `apps/backend/src/mocks/providers/relay.ts` |
+| **Live server readiness hint (SRTLA bonded/single)** | `apps/frontend/src/main/live/ServerReadiness.svelte` |
+| **Live header server chip (destination + kind)** | `apps/frontend/src/main/live/LiveHeader.svelte` |
 
 ## COMMANDS
 
@@ -414,9 +422,10 @@ capability tables that previously lived in `pipeline-sources.ts` are removed. Al
 capability data is now derived from the `get-capabilities` response at runtime. Do not
 re-add static board tables; the contract is the single source of truth.
 
-**Source-experience overhaul [EXISTS].** The Live destination's source-selection and
-encoder-configuration surfaces were overhauled as part of the ceraui-source-experience
-track (Tasks 4–16). New components and modules shipped:
+**Source-experience overhaul [EXISTS].** The Live destination's source-selection,
+encoder-configuration, and server-destination surfaces were overhauled as part of the
+ceraui-source-experience / ceraui-receiver-experience tracks (Tasks 1–16). New
+components and modules shipped:
 
 - `apps/frontend/src/lib/components/custom/SourceSection.svelte` — live input picker
   section; renders the active source, a live-switch affordance, and the PiP/fallback
@@ -439,6 +448,23 @@ track (Tasks 4–16). New components and modules shipped:
 - `apps/frontend/src/lib/rpc/streaming-optimism.svelte.ts` — optimistic streaming
   state machine; bridges the gap between `startStream` RPC dispatch and the first
   `is_streaming=true` push so the UI never flickers back to idle mid-start.
+- `apps/frontend/src/lib/streaming/receiver-experience.ts` — pure, rune-free module
+  for the receiver-experience track. Exports: `Destination`, `deriveDestination`,
+  `resolveReceiverKind`, `kindBadgeLabelKey`, `buildServerSetConfig`,
+  `ServerReadiness`, `deriveServerReadiness`, `buildServerSummary`. The single source
+  of truth for destination derivation, kind-badge i18n keys, and the field set sent
+  to `streaming.setConfig` on save.
+- `apps/frontend/src/main/dialogs/server/DestinationSection.svelte` — destination
+  radiogroup (managed vs custom); provider-aware label from `config.remote_provider`.
+- `apps/frontend/src/main/dialogs/server/CustomEndpointForm.svelte` — custom/manual
+  endpoint fields driven by `receiverKindManifest(kind)` (addr, port, optional stream
+  ID, optional secret for SRTLA/SRT custom).
+- `apps/frontend/src/main/dialogs/server/TransportBadge.svelte` — transport summary
+  chip + Advanced disclosure for protocol selection; reads `getCapabilities()` itself.
+- `apps/frontend/src/main/live/ServerReadiness.svelte` — SRTLA bonded/single-link
+  readiness hint in the Live destination; driven by `deriveServerReadiness`.
+- `apps/frontend/src/main/live/LiveHeader.svelte` — Live header chip showing the
+  active destination + kind badge; opens `ServerDialog` on tap.
 
 **Track-1 tech-debt register [EXISTS].** Items from this overhaul are tracked in
 `docs/TECHNICAL_DEBT.md` and enforced by `scripts/check-tech-debt.mjs`. Three remain
@@ -451,6 +477,7 @@ open; two are resolved (Task 26):
 | `TD-live-audio-codec` | Live audio codec change | open | `capability:audio_codec_switch` |
 | `TD-pip` | Picture-in-picture / compositing | open | `capability:pip_supported` |
 | `TD-mode-fallback` | Mode-level automatic source fallback | open | `capability:mode_fallback` |
+| `TD-plain-srt-egress` | Plain-SRT (non-SRTLA) receiver egress | open | `capability:srt` |
 
 Open items are `track: 2` (cerastream engine dependency) and carry `coming-soon`
 affordances in the Live destination. The CI gate (`check:tech-debt`) fails if any
@@ -464,9 +491,68 @@ transport resolver promotes `rist` from a reserved placeholder to an active prot
 (`apps/backend/src/modules/streaming/transport/rist-adapter.ts`, RIST simple-profile:
 even data port) gated on `ristAvailable` in `resolveStreamEndpoint`; `srt` stays
 reserved. The shared selectability rule lives in `@ceraui/rpc/schemas`
-(`relayProtocolAvailability`). `ServerDialog` renders the SRTLA/SRT/RIST selector:
-RIST is shown **disabled with a reason** until the engine advertises the `rist`
-transport, SRT is always reserved — never hidden.
+(`relayProtocolAvailability`). `ServerDialog` renders the SRTLA/SRT/RIST selector
+inside the `TransportBadge` Advanced disclosure: RIST is shown **disabled with a
+reason** until the engine advertises the `rist` transport, SRT is always reserved
+(`data-debt-id="TD-plain-srt-egress"`) — never hidden.
+
+**Destination-first receiver-experience overhaul [EXISTS].** `ServerDialog` was
+rewritten as a destination-first container (ceraui-receiver-experience track, Tasks
+1–14). The dialog now leads with a destination choice before exposing transport or
+endpoint fields. Key concepts:
+
+- **Receiver-kind model** (`packages/rpc/src/schemas/relay.schema.ts`): every stream
+  destination is one of `srtla_relay`, `srtla_custom`, `rist_relay`, `rist_custom`,
+  or `srt_custom`. `deriveReceiverKind` derives the kind from the current config;
+  `receiverKindManifest(kind)` describes which fields are required and whether the
+  kind is bonded or single-link. See [`docs/RECEIVER_MODEL.md`](docs/RECEIVER_MODEL.md)
+  for the full model and the Scope-B plain-SRT contract.
+- **Transport × destination model**: the two axes are independent. Destination
+  (`managed` relay vs `custom` endpoint) is chosen first; transport (SRTLA / RIST /
+  SRT) is chosen second inside `TransportBadge`. A managed relay may advertise
+  multiple protocols via `server.protocols`; the dialog seeds the best available
+  default when the selected server's protocol set excludes the current draft.
+- **`relay.validate` mock seam (T4)**: `apps/backend/src/rpc/procedures/relay.procedure.ts`
+  exposes a `relay.validate` procedure that runs ordered stages (`input` → `protocol`
+  → `endpoint` → `dns` → `probe`). The `dns` and `probe` stages are stubbed by the
+  mock seam (`shouldUseMocks()` gate) so integration tests can exercise the full
+  validation pipeline without real DNS or UDP reachability. See
+  `apps/backend/src/mocks/providers/relay.ts` for the mock provider.
+
+**New `server/` sub-components [EXISTS]:**
+
+- `apps/frontend/src/main/dialogs/server/DestinationSection.svelte` — presentational
+  radiogroup (managed vs custom); provider-aware label driven by `config.remote_provider`
+  (set in `CloudRemoteDialog`); D6-gated (managed disabled when no relay servers are
+  configured or while streaming).
+- `apps/frontend/src/main/dialogs/server/CustomEndpointForm.svelte` — field set for
+  custom/manual endpoints; fields driven by `receiverKindManifest(kind)` (addr, port,
+  optional stream ID, optional secret for SRTLA/SRT custom).
+- `apps/frontend/src/main/dialogs/server/TransportBadge.svelte` — transport summary
+  chip + Advanced disclosure; renders the active receiver kind via `kindBadgeLabelKey`
+  (from `lib/streaming/receiver-experience.ts`), a bonding readiness line for SRTLA,
+  and an expandable radiogroup for protocol selection. Reads `getCapabilities()` itself
+  so the container does not need to thread capability state.
+
+**Scope decisions (record for future agents):**
+
+- **HUD bar does NOT surface the server target.** The persistent `HudBar.svelte` shows
+  bitrate, per-link signals, and SoC telemetry only. The Live header chip
+  (`main/live/LiveHeader.svelte`) and the Live destination summary row own the
+  server-target display. Adding server-target to the HUD is explicitly out of scope
+  and would duplicate the Live header.
+- **Provider-switch stale-`relay_server` (known limitation).** `DestinationSection`
+  labels the managed option using `config.remote_provider` (set by `CloudRemoteDialog`).
+  If the operator switches provider in `CloudRemoteDialog` without clearing the server
+  selection in `ServerDialog`, the persisted `relay_server` may reference a server from
+  the previous provider's relay list. The dialog does not auto-clear `relay_server` on
+  provider change. This is a known limitation: the operator must re-open `ServerDialog`
+  and re-select a server after switching provider.
+
+**Plain-SRT / RIST roadmap.** Plain-SRT egress requires three layers to land together
+(capability advertisement, real `srtAdapter`, and a `startStream` protocol branch).
+Full spec: [`docs/RECEIVER_MODEL.md`](docs/RECEIVER_MODEL.md) §3. Tracked as
+`TD-plain-srt-egress` in [`docs/TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md).
 
 **Tier-4 add-on compat [PARTIAL].** Add-on compatibility is resolved entirely inside
 CeraUI and is NOT part of the `get-capabilities` response. Three enforcement layers:

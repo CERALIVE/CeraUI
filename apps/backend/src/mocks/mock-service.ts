@@ -58,6 +58,7 @@ import type {
 	MockHealthState,
 	MockModemConfigState,
 	MockNetifConfigState,
+	MockRelayValidateFault,
 	MockSimState,
 	MockStreamErrorState,
 	MockWifiConnectionState,
@@ -74,6 +75,7 @@ export type {
 	MockHealthState,
 	MockModemConfigState,
 	MockNetifConfigState,
+	MockRelayValidateFault,
 	MockSimState,
 	MockStreamErrorState,
 	MockWifiConnectionState,
@@ -111,6 +113,9 @@ export interface MockState {
 	// Last cerastream Tier-2 structured error driven in via injectMockStreamError,
 	// or null when none (Task 16); resets with the scenario like the maps above.
 	injectedStreamError: MockStreamErrorState;
+	// Forced relay.validate network-stage fault for the deterministic mock seam in
+	// relay.procedure.ts (test-infra only); null = default successful probe.
+	relayValidateFault: MockRelayValidateFault;
 	// Per-modem SIM lock state (keyed by modem id string) + the in-memory stand-in
 	// for the chmod-600 tmpfs PIN secret read; both reset with the scenario.
 	simStates: Map<string, MockSimState>;
@@ -146,6 +151,7 @@ const mockState: MockState = {
 	mockEncoderConfig: {},
 	mockHealthOverride: null,
 	injectedStreamError: null,
+	relayValidateFault: null,
 	simStates: new Map(),
 	simPinSecret: null,
 	mockAddons: {},
@@ -204,6 +210,7 @@ export function initMockService(scenarioName?: string): void {
 	mockState.simPinSecret = null;
 	mockState.mockHealthOverride = null;
 	mockState.injectedStreamError = null;
+	mockState.relayValidateFault = null;
 	mockState.interfaceThroughput = {};
 	mockState.wifiModes = {};
 
@@ -510,6 +517,10 @@ export function setMockHealth(update: Partial<MockHealthState>): void {
 
 export function setMockStreamError(event: MockStreamErrorState): void {
 	updateMockState({ injectedStreamError: event });
+}
+
+export function setMockRelayValidateFault(fault: MockRelayValidateFault): void {
+	updateMockState({ relayValidateFault: fault });
 }
 
 function clearMockTimers(): void {

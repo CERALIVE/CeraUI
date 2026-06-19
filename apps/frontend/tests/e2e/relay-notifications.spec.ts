@@ -253,10 +253,12 @@ test.describe('relay catalog + notifications (live mock backend)', () => {
 
 		const dialog = await openServerDialog(page);
 
-		const relayTab = dialog.getByRole('tab', { name: 'Relay Server' });
-		await expect(relayTab).toBeEnabled();
-		await relayTab.click();
-		record('Scenario 2: catalog populated → relay tab ENABLED ✓');
+		// Destination-first (T9): pick the managed cloud account instead of the
+		// retired "Relay Server" method tab; it enables once the catalog populates.
+		const managed = dialog.getByTestId('destination-managed');
+		await expect(managed).toBeEnabled();
+		await managed.click();
+		record('Scenario 2: catalog populated → managed destination ENABLED ✓');
 
 		// Open the server catalog and assert RTT indicators render with real tiers.
 		await dialog.locator('#relay-server').click();
@@ -381,13 +383,13 @@ test.describe('relay gate + manual fallback (catalog absent)', () => {
 
 		const dialog = await openServerDialog(page);
 
-		// D6 gate: relay tab disabled + waiting hint.
-		await expect(dialog.getByRole('tab', { name: 'Relay Server' })).toBeDisabled();
+		// D6 gate: managed destination disabled + waiting hint.
+		await expect(dialog.getByTestId('destination-managed')).toBeDisabled();
 		await expect(page.getByText('Waiting for relay servers')).toBeVisible();
-		record('Scenario 5: catalog absent → relay tab DISABLED + waiting hint shown ✓');
+		record('Scenario 5: catalog absent → managed destination DISABLED + waiting hint shown ✓');
 
-		// Manual SRTLA path still usable.
-		await dialog.getByRole('tab', { name: 'Manual Configuration' }).click();
+		// Custom receiver path still usable.
+		await dialog.getByTestId('destination-custom').click();
 		await dialog.locator('#srtla-addr').fill('192.168.50.10');
 		await dialog.locator('#srtla-port').fill('5000');
 

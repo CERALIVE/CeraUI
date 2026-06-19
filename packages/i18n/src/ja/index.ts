@@ -79,6 +79,22 @@ const ja = {
 		signingIn: "サインイン中...",
 	},
 	settings: {
+		destination: "配信先",
+		destinationManaged: "マイクラウドアカウント",
+		destinationCustom: "カスタムレシーバー",
+		destinationManagedHint:
+			"クラウドアカウントに紐づくリレー経由で配信します。",
+		destinationCustomHint: "ご自身のレシーバーのアドレスとポートを入力します。",
+		transportKind: "トランスポート",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · ボンディング",
+			srtlaSingle: "SRTLA · シングルリンク",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "詳細設定",
+		transportKindHint:
+			"ストリームがレシーバーに届く方法です。SRTLA は複数のネットワーク回線を束ね、RIST と SRT は単一回線を使用します。",
 		deviceStats: {
 			title: "デバイス統計",
 			description: "このデバイスのライブハードウェアテレメトリ。",
@@ -271,11 +287,14 @@ const ja = {
 		relayServerAccount: "リレーサーバーアカウント",
 		srtlaServerAddress: "SRTLAレシーバーサーバーアドレス",
 		srtlaServerPort: "SRTLAレシーバーポート",
+		receiverAddress: "レシーバーアドレス",
+		receiverPort: "レシーバーポート",
 		srtStreamId: "SRTストリームID",
 		srtLatency: "SRTレイテンシ (ms)",
 		transportProtocol: "トランスポートプロトコル",
 		protocolRistUnavailable: "このデバイスでは RIST を利用できません",
 		protocolReserved: "まだ利用できません",
+		ristEvenPortHint: "RIST では偶数のポート番号が必要です",
 		changeBitrateNotice: "ストリーミング中でもビットレートを変更できます。",
 		optional: "オプション",
 		relayProvider: "プロバイダー",
@@ -304,6 +323,7 @@ const ja = {
 		},
 		errors: {
 			audioSourceRequired: "オーディオソースを選択してください",
+			receiverAddressRequired: "レシーバーアドレスを入力してください",
 			srtlaServerAddressRequired: "SRTLAサーバーアドレスを入力してください",
 		},
 		completeRequiredFields:
@@ -736,6 +756,20 @@ const ja = {
 		link: "リンク",
 	},
 	live: {
+		server: {
+			bondedAcross: "{count} 本のリンクで結合",
+			singleLink: "シングルリンク",
+			kind: {
+				srtlaRelay: "SRTLA · ボンディング",
+				srtlaCustom: "SRTLA · カスタム",
+				ristRelay: "RIST · マネージド",
+				ristCustom: "RIST · カスタム",
+				srtCustom: "SRT · カスタム",
+			},
+			manageLinks: "リンクを管理",
+			singleLinkHint:
+				"この受信先は単一の直接リンクを使用します。このトランスポートでは複数リンクのボンディングは使用されません。",
+		},
 		title: "ライブ",
 		description: "ストリーム制御とライブメトリクス",
 		startStream: "ストリーム開始",
@@ -748,6 +782,7 @@ const ja = {
 		configureToStart:
 			"ストリーミングを開始するにはリレーサーバーを設定してください",
 		editSettings: "設定を編集",
+		chooseDestination: "配信先を選択",
 		streamSettings: "ストリーム設定",
 		adjustBitrate: "ビットレートを調整",
 		stopToChange: "変更するにはストリームを停止してください",

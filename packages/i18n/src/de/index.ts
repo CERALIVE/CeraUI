@@ -278,6 +278,20 @@ const de = {
 		link: "Verbindung",
 	},
 	live: {
+		server: {
+			bondedAcross: "Gebündelt über {count} {{Verbindung|Verbindungen}}",
+			singleLink: "Einzelne Verbindung",
+			kind: {
+				srtlaRelay: "SRTLA · Gebündelt",
+				srtlaCustom: "SRTLA · Benutzerdefiniert",
+				ristRelay: "RIST · Verwaltet",
+				ristCustom: "RIST · Benutzerdefiniert",
+				srtCustom: "SRT · Benutzerdefiniert",
+			},
+			manageLinks: "Verbindungen verwalten",
+			singleLinkHint:
+				"Dieser Empfänger verwendet eine einzelne direkte Verbindung. Bündelung mehrerer Verbindungen wird für diesen Transport nicht genutzt.",
+		},
 		title: "Live",
 		description: "Stream-Steuerung und Live-Metriken",
 		startStream: "Stream starten",
@@ -290,6 +304,7 @@ const de = {
 		configureToStart:
 			"Konfigurieren Sie einen Relay-Server, um mit dem Streaming zu beginnen",
 		editSettings: "Einstellungen bearbeiten",
+		chooseDestination: "Ziel auswählen",
 		streamSettings: "Stream-Einstellungen",
 		adjustBitrate: "Bitrate anpassen",
 		stopToChange: "Stream stoppen, um zu ändern",
@@ -566,6 +581,23 @@ const de = {
 		signingIn: "Anmeldung läuft...",
 	},
 	settings: {
+		destination: "Ziel",
+		destinationManaged: "Mein Cloud-Konto",
+		destinationCustom: "Eigener Empfänger",
+		destinationManagedHint:
+			"Streame über ein Relay, das mit deinem Cloud-Konto verknüpft ist.",
+		destinationCustomHint:
+			"Gib Adresse und Port deines eigenen Empfängers ein.",
+		transportKind: "Transport",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · Gebündelt",
+			srtlaSingle: "SRTLA · Einzelne Verbindung",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "Erweitert",
+		transportKindHint:
+			"Wie dein Stream den Empfänger erreicht. SRTLA bündelt mehrere Netzwerkverbindungen; RIST und SRT nutzen eine einzelne Verbindung.",
 		deviceStats: {
 			title: "Gerätestatistik",
 			description: "Live-Hardware-Telemetrie dieses Geräts.",
@@ -759,11 +791,14 @@ const de = {
 		relayServerAccount: "Relay-Server-Konto",
 		srtlaServerAddress: "SRTLA-Empfängerserveradresse",
 		srtlaServerPort: "SRTLA-Empfängerport",
+		receiverAddress: "Empfängeradresse",
+		receiverPort: "Empfängerport",
 		srtStreamId: "SRT-Stream-ID",
 		srtLatency: "SRT-Latenz (ms)",
 		transportProtocol: "Transportprotokoll",
 		protocolRistUnavailable: "RIST ist auf diesem Gerät nicht verfügbar",
 		protocolReserved: "Noch nicht verfügbar",
+		ristEvenPortHint: "RIST erfordert eine gerade Portnummer",
 		changeBitrateNotice:
 			"Sie können die Bitrate auch während des Streamings ändern.",
 		optional: "optional",
@@ -793,6 +828,7 @@ const de = {
 		},
 		errors: {
 			audioSourceRequired: "Bitte wählen Sie eine Audioquelle",
+			receiverAddressRequired: "Bitte geben Sie die Empfängeradresse ein",
 			srtlaServerAddressRequired: "Bitte geben Sie die SRTLA-Serveradresse ein",
 		},
 		completeRequiredFields:

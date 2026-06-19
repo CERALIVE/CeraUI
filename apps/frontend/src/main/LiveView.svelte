@@ -38,10 +38,18 @@ import {
 	markFieldFailed,
 } from '$lib/rpc/field-sync-state.svelte';
 import {
+	buildServerSummary,
+	type Destination,
+	deriveDestination,
+	kindBadgeLabelKey,
+	resolveReceiverKind,
+} from '$lib/streaming/receiver-experience';
+import {
 	deriveFailover,
 	normalizeOrder,
 	reorderSource,
 } from '$lib/streaming/source-preference';
+import { navElements } from '$lib/config';
 import {
 	getActiveInput,
 	getCapabilities,
@@ -50,6 +58,7 @@ import {
 	getIsStreaming,
 	getLinkTelemetry,
 	getPipelines,
+	getRelays,
 	getSensors,
 	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
@@ -71,6 +80,7 @@ import ServerDialog from '$main/dialogs/ServerDialog.svelte';
 import BitrateAdjuster from '$main/live/BitrateAdjuster.svelte';
 import CapabilityTierBanner from '$main/live/CapabilityTierBanner.svelte';
 import LiveHeader from '$main/live/LiveHeader.svelte';
+import ServerReadiness from '$main/live/ServerReadiness.svelte';
 import StreamControlButton from '$main/live/StreamControlButton.svelte';
 import StreamSettingsCard, { type ConfigRow } from '$main/live/StreamSettingsCard.svelte';
 import StreamTelemetryStrip from '$main/live/StreamTelemetryStrip.svelte';
@@ -215,6 +225,54 @@ async function handleReorderSource(inputId: string, direction: 'up' | 'down') {
 const serverTarget = $derived(config?.srtla_addr || config?.relay_server || '');
 const hasServer = $derived(Boolean(serverTarget));
 const showEmptyState = $derived(!hasServer && !isStreaming);
+
+// Destination + receiver kind for the header chip (T5 helpers). Managed shows a
+// provider label, custom shows the endpoint; both append the transport badge.
+// Brand provider names are non-translated literals (i18n branding convention;
+// mirrors ServerDialog's PROVIDER_LABELS).
+const PROVIDER_LABELS: Record<string, string> = {
+	ceralive: 'CeraLive Cloud',
+	belabox: 'BELABOX Cloud',
+};
+const relays = $derived(getRelays());
+const relayServerInfo = $derived(
+	config?.relay_server ? relays?.servers?.[config.relay_server] : undefined,
+);
+const destination = $derived<Destination | undefined>(
+	hasServer ? deriveDestination(config) : undefined,
+);
+const receiverKind = $derived(
+	hasServer
+		? resolveReceiverKind({
+				protocol: config?.relay_protocol,
+				destination: destination ?? 'custom',
+				server: relayServerInfo,
+			})
+		: undefined,
+);
+const providerName = $derived(
+	PROVIDER_LABELS[config?.remote_provider ?? ''] ?? relayServerInfo?.name ?? 'CeraLive Cloud',
+);
+const receiverEndpoint = $derived.by(() => {
+	if (!config?.srtla_addr) return undefined;
+	return config?.srtla_port ? `${config.srtla_addr}:${config.srtla_port}` : config.srtla_addr;
+});
+
+// Live active-link count drives the bonded-links readiness hint (T13). Null
+// while idle (`getLinkTelemetry()` is null) so SRTLA degrades to label-only —
+// never a stale count. The readiness reuses the header's `receiverKind`.
+const linkCount = $derived(linkTelemetry ? linkTelemetry.links.length : null);
+
+async function handleManageLinks() {
+	const network = navElements.network;
+	if (!network) return;
+	// Lazy import severs the LiveView→navigation static edge: navigation.svelte.ts
+	// (and $lib/config) statically import LiveView for the default destination, so
+	// a static back-import here closes a module cycle whose initializer touches
+	// LiveView before it is defined (TDZ at app mount). Resolved at click time.
+	const { navigateTo } = await import('$lib/stores/navigation.svelte');
+	navigateTo({ network });
+}
 
 // ── Dialog open state ──────────────────────────────────────────────────────
 let serverDialogOpen = $state(false);
@@ -403,10 +461,19 @@ const audioSummary = $derived.by(() => {
 	if (effectiveAudioSource) parts.push(effectiveAudioSource);
 	return parts.length ? parts.join(' · ') : $LL.general.notConfigured();
 });
-const serverSummary = $derived.by(() => {
-	if (!serverTarget) return $LL.general.notConfigured();
-	return config?.srtla_port ? `${serverTarget}:${config.srtla_port}` : serverTarget;
-});
+// Kind-aware server config-row summary (T11): reuses the header's `receiverKind`
+// and the live `linkCount` (null while idle → 0, so a disconnected receiver
+// shows no fresh bonding clause).
+const serverSummary = $derived(
+	buildServerSummary(config, receiverKind, linkCount ?? 0, {
+		notConfigured: $LL.general.notConfigured(),
+		kindLabel: (k) => t(kindBadgeLabelKey(k)),
+		bondedAcross: (count) => $LL.live.server.bondedAcross({ count }),
+		singleLink: $LL.live.server.singleLink(),
+		providerLabel: (provider) =>
+			provider && provider !== 'custom' ? PROVIDER_LABELS[provider] : undefined,
+	}),
+);
 
 // Start: assemble the full ConfigMessage from the SAVED backend config (the
 // encoder/server dialogs persist via setConfig), fold in the unpersisted audio
@@ -506,8 +573,11 @@ const configRows = $derived<ConfigRow[]>([
 	<LiveHeader
 		{hasServer}
 		{isStreaming}
+		{destination}
+		kind={receiverKind}
+		{providerName}
+		endpoint={receiverEndpoint}
 		onEditServer={() => (serverDialogOpen = true)}
-		{serverTarget}
 	/>
 
 	<!-- Capability-tier state: calm banner when the engine is offline/starting or
@@ -526,9 +596,9 @@ const configRows = $derived<ConfigRow[]>([
 					<ServerOff aria-hidden={true} class="text-muted-foreground h-8 w-8" />
 				</div>
 				<div class="space-y-2">
-					<h2 class="text-lg font-semibold">{$LL.general.youHaventConfigured()}</h2>
+					<h2 class="text-lg font-semibold">{$LL.live.chooseDestination()}</h2>
 					<p class="text-muted-foreground mx-auto max-w-sm text-sm">
-						{$LL.live.configureToStart()}
+						{$LL.settings.destinationCustomHint()}
 					</p>
 				</div>
 				<Button
@@ -626,6 +696,14 @@ const configRows = $derived<ConfigRow[]>([
 		</div>
 
 		<PreviewCanvas />
+
+		{#if receiverKind}
+			<ServerReadiness
+				kind={receiverKind}
+				{linkCount}
+				onManageLinks={handleManageLinks}
+			/>
+		{/if}
 
 		<StreamSettingsCard {configRows} {isStreaming} />
 

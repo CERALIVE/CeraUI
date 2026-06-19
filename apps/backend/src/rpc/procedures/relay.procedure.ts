@@ -27,6 +27,8 @@ import {
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import { validatePortNo } from "../../helpers/number.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import { resolveMockRelayValidate } from "../../mocks/providers/relay-validate.ts";
 import { getAdapter } from "../../modules/streaming/transport/registry.ts";
 import {
 	NotImplementedError,
@@ -79,6 +81,11 @@ export const relayValidateProcedure = authedProcedure
 				error instanceof Error ? error.message : "Invalid endpoint",
 			);
 		}
+
+		// Test-infra seam (NOT egress): mock mode stubs ONLY the dns+probe network
+		// stages below; input/protocol/endpoint above always run. Production
+		// (shouldUseMocks() === false) takes the real network path, untouched.
+		if (shouldUseMocks()) return resolveMockRelayValidate();
 
 		let resolvedIp: string;
 		try {

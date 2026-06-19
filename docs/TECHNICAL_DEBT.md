@@ -138,6 +138,18 @@ input — recovery is operator-driven via the input picker. The Live destination
 surfaces a calm "coming soon" affordance (`data-debt-id="TD-mode-fallback"`) until
 the engine advertises `mode_fallback`.
 
+```debt
+id: TD-plain-srt-egress
+title: Plain-SRT (non-SRTLA) receiver egress
+track: 2
+status: open
+exit_criteria: capability:srt
+owner: ceraui-team
+registered_at: 2026-06-19
+resolved_at: null
+unblock: Three layers must land together before plain-SRT egress is live. (1) cerastream must advertise a "srt" transport in its get-capabilities response, which CeraUI surfaces in capabilities.transports and uses to promote "srt" from CAPABILITY_GATED_RELAY_PROTOCOLS to an active protocol. (2) The srt TransportAdapter in transport/registry.ts must replace the current createPlaceholderAdapter("srt", ...) with a real implementation whose resolveEndpoint delivers a remote SRT caller target directly to the engine — bypassing srtla_send entirely. (3) startStream (streamloop/start-stream.ts) unconditionally spawns srtla_send and connects the engine to 127.0.0.1:9000; a protocol branch is needed so plain-SRT skips the srtla_send spawn and passes the remote target straight to the engine IPC. This branch is a PREREQUISITE refactor shared by both RIST and SRT, because session.ts and autostart.ts carry no protocol parameter today. When all three layers are in place, remove the ServerDialog reserved-SRT affordance and flip this entry to resolved.
+```
+
 ---
 
 ## Resolved Debt

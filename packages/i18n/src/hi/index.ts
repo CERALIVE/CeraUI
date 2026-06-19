@@ -78,6 +78,21 @@ const hi = {
 		signingIn: "साइन इन हो रहे हैं...",
 	},
 	settings: {
+		destination: "गंतव्य",
+		destinationManaged: "मेरा क्लाउड खाता",
+		destinationCustom: "कस्टम रिसीवर",
+		destinationManagedHint: "अपने क्लाउड खाते से जुड़े रिले के माध्यम से स्ट्रीम करें।",
+		destinationCustomHint: "अपने रिसीवर का पता और पोर्ट दर्ज करें।",
+		transportKind: "ट्रांसपोर्ट",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · बॉन्डेड",
+			srtlaSingle: "SRTLA · एकल लिंक",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "उन्नत",
+		transportKindHint:
+			"आपकी स्ट्रीम रिसीवर तक कैसे पहुँचती है। SRTLA कई नेटवर्क लिंक को जोड़ता है; RIST और SRT एकल लिंक का उपयोग करते हैं।",
 		deviceStats: {
 			title: "डिवाइस आँकड़े",
 			description: "इस डिवाइस से लाइव हार्डवेयर टेलीमेट्री।",
@@ -264,11 +279,14 @@ const hi = {
 		relayServerAccount: "रिले सर्वर खाता",
 		srtlaServerAddress: "SRTLA रिसीवर सर्वर पता",
 		srtlaServerPort: "SRTLA रिसीवर पोर्ट",
+		receiverAddress: "रिसीवर पता",
+		receiverPort: "रिसीवर पोर्ट",
 		srtStreamId: "SRT स्ट्रीम आईडी",
 		srtLatency: "SRT लेटेंसी (ms)",
 		transportProtocol: "ट्रांसपोर्ट प्रोटोकॉल",
 		protocolRistUnavailable: "इस डिवाइस पर RIST उपलब्ध नहीं है",
 		protocolReserved: "अभी उपलब्ध नहीं",
+		ristEvenPortHint: "RIST के लिए सम पोर्ट संख्या आवश्यक है",
 		changeBitrateNotice: "आप स्ट्रीमिंग करते समय भी बिटरेट बदल सकते हैं।",
 		optional: "वैकल्पिक",
 		relayProvider: "प्रदाता",
@@ -297,6 +315,7 @@ const hi = {
 		},
 		errors: {
 			audioSourceRequired: "कृपया एक ऑडियो स्रोत चुनें",
+			receiverAddressRequired: "कृपया रिसीवर पता दर्ज करें",
 			srtlaServerAddressRequired: "कृपया SRTLA सर्वर पता दर्ज करें",
 		},
 		completeRequiredFields: "स्ट्रीमिंग सक्षम करने के लिए कृपया सभी आवश्यक फ़ील्ड पूरा करें",
@@ -715,6 +734,20 @@ const hi = {
 		link: "लिंक",
 	},
 	live: {
+		server: {
+			bondedAcross: "{count} {{लिंक|लिंक}} पर बॉन्डेड",
+			singleLink: "एकल लिंक",
+			kind: {
+				srtlaRelay: "SRTLA · बॉन्डेड",
+				srtlaCustom: "SRTLA · कस्टम",
+				ristRelay: "RIST · प्रबंधित",
+				ristCustom: "RIST · कस्टम",
+				srtCustom: "SRT · कस्टम",
+			},
+			manageLinks: "लिंक प्रबंधित करें",
+			singleLinkHint:
+				"यह रिसीवर एकल सीधे लिंक का उपयोग करता है। इस ट्रांसपोर्ट के लिए कई लिंक का बॉन्डिंग उपयोग नहीं किया जाता।",
+		},
 		title: "लाइव",
 		description: "स्ट्रीम नियंत्रण और लाइव मेट्रिक्स",
 		startStream: "स्ट्रीम शुरू करें",
@@ -726,6 +759,7 @@ const hi = {
 		notStreaming: "स्ट्रीमिंग नहीं हो रही",
 		configureToStart: "स्ट्रीमिंग शुरू करने के लिए रिले सर्वर कॉन्फ़िगर करें",
 		editSettings: "सेटिंग्स संपादित करें",
+		chooseDestination: "गंतव्य चुनें",
 		streamSettings: "स्ट्रीम सेटिंग्स",
 		adjustBitrate: "बिटरेट समायोजित करें",
 		stopToChange: "बदलने के लिए स्ट्रीम रोकें",

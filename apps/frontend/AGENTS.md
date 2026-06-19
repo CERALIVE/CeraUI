@@ -23,8 +23,8 @@ src/
 │   ├── dialogs/               # 14 focused config dialogs, all compose AppDialog:
 │   │   ├── EncoderDialog.svelte
 │   │   ├── AudioDialog.svelte
-│   │   ├── ServerDialog.svelte  # logic container; splits into server/ sub-components (Task 14)
-│   │   │   └── server/          # RelayServerSelector + ManualEndpointForm (presentational)
+│   │   ├── ServerDialog.svelte  # destination-first logic container (receiver-experience track, Tasks 1–14)
+│   │   │   └── server/          # DestinationSection · CustomEndpointForm · TransportBadge (presentational)
 │   │   ├── ModemConfigDialog.svelte
 │   │   ├── HotspotDialog.svelte
 │   │   ├── WifiSelectorDialog.svelte
@@ -108,6 +108,12 @@ pnpm dev / build / check / test          # Vite :5173 / dist/ / svelte-check / v
 - Source summary [EXISTS]: `lib/streaming/sourceSummary.ts` derives a human-readable source summary string (e.g. `"USB Cam · Built-in Mic"`) from the active config for the Live header and HUD. Pure function, no side effects.
 - Live audio switch gate [EXISTS]: `lib/streaming/liveAudioSwitch.ts` exports `isAudioLiveSwitchEnabled(caps)` — the single source of truth for whether the engine supports a live audio source switch. The Live picker calls this before dispatching `switchInput` for an `audio:*` id; `SourceSection` calls it to decide whether to render audio entries enabled or disabled. `TD-live-audio-switch` is resolved (Task 26) — the `coming-soon` affordance is removed from `InputPicker.svelte`.
 - Streaming optimism [EXISTS]: `lib/rpc/streaming-optimism.svelte.ts` is an optimistic streaming state machine. It bridges the gap between `startStream` RPC dispatch and the first `is_streaming=true` push so the Live destination never flickers back to idle mid-start. Consumers read `getOptimisticIsStreaming()` instead of the raw `getIsStreaming()` during the transition window.
+- Receiver-experience module [EXISTS]: `lib/streaming/receiver-experience.ts` is the pure, rune-free source of truth for the destination-first server dialog. Key exports: `deriveDestination(config)` → `'managed' | 'custom'`; `resolveReceiverKind(destination, protocol, server)` → `ReceiverKind`; `kindBadgeLabelKey(kind)` → i18n dot-path key; `buildServerSetConfig(draft, derived)` → the exact field set sent to `streaming.setConfig` (prunes undefined, enforces the lock-loop-safety invariant); `deriveServerReadiness(kind, linkCount)` → `ServerReadiness` union for the SRTLA bonded/single hint; `buildServerSummary(config, kind, linkCount, labels)` → human-readable server row string for the Live header. All are unit-tested in `receiver-experience.test.ts`.
+- ServerDialog destination-first model [EXISTS]: `main/dialogs/ServerDialog.svelte` leads with `DestinationSection` (managed vs custom radiogroup), then shows `RelayServerSelector` (managed path) or `CustomEndpointForm` (custom path), then `TransportBadge` (transport chip + Advanced disclosure). The save path calls `buildServerSetConfig` and iterates its output for the field-lock loop, then calls `streaming.setConfig` once.
+- ServerDialog provider-sync [EXISTS]: `DestinationSection` labels the managed option using `config.remote_provider` (set by `CloudRemoteDialog`). If the operator switches provider without re-opening `ServerDialog`, the persisted `relay_server` may reference a server from the previous provider's relay list. This is a known limitation — the operator must re-select a server after switching provider. Do not auto-clear `relay_server` on provider change without a deliberate UX decision.
+- HUD bar scope [EXISTS]: `HudBar.svelte` deliberately does NOT surface the server target. The Live header chip (`main/live/LiveHeader.svelte`) and the Live destination summary row own server-target display. Do not add server-target to the HUD.
+- relay.validate mock seam [EXISTS]: `relay.validate` in `apps/backend/src/rpc/procedures/relay.procedure.ts` runs ordered stages (`input` → `protocol` → `endpoint` → `dns` → `probe`). The `dns` and `probe` stages are stubbed by the mock seam (`shouldUseMocks()` gate in `apps/backend/src/mocks/providers/relay.ts`) so tests can exercise the full pipeline without real DNS or UDP reachability. See `apps/backend/AGENTS.md` for the mock subsystem contract.
+- Plain-SRT / RIST roadmap [EXISTS]: plain-SRT egress requires three layers (capability advertisement, real `srtAdapter`, `startStream` protocol branch). Full spec: [`../../docs/RECEIVER_MODEL.md`](../../docs/RECEIVER_MODEL.md). Tracked as `TD-plain-srt-egress` in [`../../docs/TECHNICAL_DEBT.md`](../../docs/TECHNICAL_DEBT.md). The `ServerDialog` reserved-SRT affordance carries `data-debt-id="TD-plain-srt-egress"` — do not remove it until all three layers land.
 - E2E Testing: REQUIRED reading before writing E2E tests → [`tests/e2e/PLAYBOOK.md`](tests/e2e/PLAYBOOK.md)
 
 ## CONNECTION RELIABILITY
@@ -143,3 +149,5 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - Don't read connection state from `lib/stores/offline-state.svelte` in authed components — use `subscriptions.svelte` `getIsConnected()`/`getConnectionState()` (survives socket replacement on reconnect). `offline-state` is only reliable for the pre-auth strip.
 - Don't add inline validation literals to dialogs — import from `ValidationAdapter.ts`.
 - Don't release field locks to the client's intended value — always use `result.applied` from the RPC response.
+- Don't add custom endpoint fields inline in `ServerDialog` — use `CustomEndpointForm.svelte` in `main/dialogs/server/` (fields driven by `receiverKindManifest(kind)`).
+- Don't derive receiver kind or build the `setConfig` field set inline in `ServerDialog` — use `resolveReceiverKind` and `buildServerSetConfig` from `lib/streaming/receiver-experience.ts`.

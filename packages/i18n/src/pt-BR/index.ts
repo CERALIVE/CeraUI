@@ -231,6 +231,23 @@ const ptBR = {
 		signingIn: "Fazendo login...",
 	},
 	settings: {
+		destination: "Destino",
+		destinationManaged: "Minha conta na nuvem",
+		destinationCustom: "Receptor personalizado",
+		destinationManagedHint:
+			"Transmita por um relé vinculado à sua conta na nuvem.",
+		destinationCustomHint:
+			"Informe o endereço e a porta do seu próprio receptor.",
+		transportKind: "Transporte",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · Agregado",
+			srtlaSingle: "SRTLA · Link único",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "Avançado",
+		transportKindHint:
+			"Como sua transmissão chega ao receptor. O SRTLA agrega vários links de rede; RIST e SRT usam um único link.",
 		deviceStats: {
 			title: "Status do dispositivo",
 			description: "Telemetria de hardware ao vivo deste dispositivo.",
@@ -422,11 +439,14 @@ const ptBR = {
 		receiverServer: "Servidor Receptor",
 		srtlaServerAddress: "Endereço do servidor receptor SRTLA",
 		srtlaServerPort: "Porto do servidor SRTLA",
+		receiverAddress: "Endereço do receptor",
+		receiverPort: "Porta do receptor",
 		srtStreamId: "ID do fluxo SRT",
 		srtLatency: "Latência SRT (ms)",
 		transportProtocol: "Protocolo de transporte",
 		protocolRistUnavailable: "RIST não está disponível neste dispositivo",
 		protocolReserved: "Ainda não disponível",
+		ristEvenPortHint: "O RIST requer um número de porta par",
 		changeBitrateNotice:
 			"Você pode mudar a taxa de bits mesmo enquanto está transmitindo.",
 		optional: "opcional",
@@ -456,6 +476,7 @@ const ptBR = {
 		},
 		errors: {
 			audioSourceRequired: "Por favor, selecione uma fonte de áudio",
+			receiverAddressRequired: "Por favor, insira o endereço do receptor",
 			srtlaServerAddressRequired:
 				"Por favor, insira o endereço do servidor SRTLA",
 		},
@@ -870,6 +891,20 @@ const ptBR = {
 		link: "Link",
 	},
 	live: {
+		server: {
+			bondedAcross: "Agregado em {count} {{link|links}}",
+			singleLink: "Link único",
+			kind: {
+				srtlaRelay: "SRTLA · Agregado",
+				srtlaCustom: "SRTLA · Personalizado",
+				ristRelay: "RIST · Gerenciado",
+				ristCustom: "RIST · Personalizado",
+				srtCustom: "SRT · Personalizado",
+			},
+			manageLinks: "Gerenciar links",
+			singleLinkHint:
+				"Este receptor usa um único link direto. A combinação de vários links não é usada para este transporte.",
+		},
 		title: "Live",
 		description: "Controle de transmissão e métricas ao vivo",
 		startStream: "Iniciar transmissão",
@@ -882,6 +917,7 @@ const ptBR = {
 		configureToStart:
 			"Configure um servidor de retransmissão para começar a transmitir",
 		editSettings: "Editar configurações",
+		chooseDestination: "Escolha um destino",
 		streamSettings: "Configurações de transmissão",
 		adjustBitrate: "Ajustar bitrate",
 		stopToChange: "Pare a transmissão para alterar",

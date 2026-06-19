@@ -113,6 +113,15 @@ export const relayServerSchema = z.object({
 	port: z.number().optional(),
 	/** Transport protocol; defaults to "srtla" when absent on legacy payloads */
 	protocol: relayProtocolSchema,
+	/**
+	 * Transports this single server endpoint can honor. ADDITIVE + OPTIONAL: a
+	 * managed relay may advertise more than one transport for the same host/port
+	 * (e.g. an endpoint that serves both `srtla` and `rist`). Absent on every
+	 * legacy/current payload — when missing, the server supports exactly its
+	 * scalar `protocol` (see `serverSupportedProtocols`). Adding this does NOT
+	 * change `protocol`, which stays the canonical single-transport field.
+	 */
+	protocols: z.array(relayProtocolSchema).optional(),
 	/** Provider this server belongs to (optional — absent on legacy payloads) */
 	provider: relayProviderMetaSchema.optional(),
 });
@@ -124,6 +133,137 @@ export const relayMessageSchema = z.object({
 	servers: z.record(z.string(), relayServerSchema),
 });
 export type RelayMessage = z.infer<typeof relayMessageSchema>;
+
+// =============================================================================
+// Receiver kind (transport × destination)
+// =============================================================================
+
+/**
+ * The receiver "kind" is the cross product of transport (srtla/rist/srt) and
+ * destination (managed relay vs. custom endpoint). It is a pure UI/derivation
+ * concept owned by this RPC schema layer — it is NOT persisted. The backend's
+ * decoupled relay-cache shape (`apps/backend/src/helpers/config-schemas.ts`
+ * `relaysCacheSchema`) is unchanged in Scope A; nothing here writes a new
+ * config field.
+ *
+ * `srt` has no managed variant in Scope A, so there is no `srt_relay`.
+ */
+export const RECEIVER_KINDS = [
+	'srtla_relay',
+	'srtla_custom',
+	'rist_relay',
+	'rist_custom',
+	'srt_custom',
+] as const;
+export type ReceiverKind = (typeof RECEIVER_KINDS)[number];
+
+export interface DeriveReceiverKindInput {
+	protocol: RelayProtocol | undefined;
+	hasRelayServer: boolean;
+}
+
+/**
+ * Derive the receiver kind from the persisted shape. `protocol` is parsed
+ * through `relayProtocolSchema` so a legacy config with no protocol field
+ * (undefined) coerces to `srtla` — matching how the config round-trips.
+ *
+ * Reload caveat (documented, not a bug): the relay-override case persists
+ * `srtla_addr/port + relay_streamid_override` with NO `relay_server`, so on
+ * reload `hasRelayServer` is false and this returns `srtla_custom`. The override
+ * does NOT round-trip back to `srtla_relay` — there is no persisted server to
+ * key the managed destination off of.
+ */
+export function deriveReceiverKind({
+	protocol,
+	hasRelayServer,
+}: DeriveReceiverKindInput): ReceiverKind {
+	const resolved = relayProtocolSchema.parse(protocol);
+	switch (resolved) {
+		case 'srtla':
+			return hasRelayServer ? 'srtla_relay' : 'srtla_custom';
+		case 'rist':
+			return hasRelayServer ? 'rist_relay' : 'rist_custom';
+		case 'srt':
+			return 'srt_custom';
+	}
+}
+
+export type ReceiverField =
+	| 'provider'
+	| 'server'
+	| 'account'
+	| 'streamid'
+	| 'addr'
+	| 'port'
+	| 'secret';
+
+export interface ReceiverKindManifest {
+	destination: 'managed' | 'custom';
+	bonded: boolean;
+	fields: ReceiverField[];
+	requiresStreamId: boolean;
+	requiresEvenPort: boolean;
+}
+
+/**
+ * Per-kind form manifest for the receiver dialog. `requiresStreamId` is ADVISORY
+ * ONLY — it drives a hint, never a Save gate. `rist_*` require an even data port
+ * (simple-profile) and treat the stream id as optional.
+ */
+export function receiverKindManifest(kind: ReceiverKind): ReceiverKindManifest {
+	switch (kind) {
+		case 'srtla_relay':
+			return {
+				destination: 'managed',
+				bonded: true,
+				fields: ['provider', 'server', 'account', 'streamid'],
+				requiresStreamId: true,
+				requiresEvenPort: false,
+			};
+		case 'srtla_custom':
+			return {
+				destination: 'custom',
+				bonded: true,
+				fields: ['addr', 'port', 'streamid', 'secret'],
+				requiresStreamId: true,
+				requiresEvenPort: false,
+			};
+		case 'rist_relay':
+			return {
+				destination: 'managed',
+				bonded: false,
+				fields: ['provider', 'server', 'account', 'streamid'],
+				requiresStreamId: false,
+				requiresEvenPort: true,
+			};
+		case 'rist_custom':
+			return {
+				destination: 'custom',
+				bonded: false,
+				fields: ['addr', 'port', 'streamid', 'secret'],
+				requiresStreamId: false,
+				requiresEvenPort: true,
+			};
+		case 'srt_custom':
+			return {
+				destination: 'custom',
+				bonded: false,
+				fields: ['addr', 'port', 'streamid', 'secret'],
+				requiresStreamId: true,
+				requiresEvenPort: false,
+			};
+	}
+}
+
+/**
+ * Transports a single relay server supports. Falls back to the scalar
+ * `protocol` when the additive `protocols` array is absent or empty, so legacy
+ * and current single-transport payloads behave exactly as before.
+ */
+export function serverSupportedProtocols(server: RelayServer): RelayProtocol[] {
+	if (server.protocols && server.protocols.length > 0) return server.protocols;
+	return [server.protocol];
+}
 
 // =============================================================================
 // Provider-qualified relay-id namespacing

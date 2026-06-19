@@ -78,6 +78,22 @@ const ko = {
 		signingIn: "로그인 중...",
 	},
 	settings: {
+		destination: "대상",
+		destinationManaged: "내 클라우드 계정",
+		destinationCustom: "사용자 지정 수신기",
+		destinationManagedHint:
+			"클라우드 계정에 연결된 릴레이를 통해 스트리밍합니다.",
+		destinationCustomHint: "사용자 수신기의 주소와 포트를 입력하세요.",
+		transportKind: "전송",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · 본딩",
+			srtlaSingle: "SRTLA · 단일 링크",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "고급",
+		transportKindHint:
+			"스트림이 수신기에 도달하는 방식입니다. SRTLA는 여러 네트워크 링크를 묶고, RIST와 SRT는 단일 링크를 사용합니다.",
 		deviceStats: {
 			title: "장치 통계",
 			description: "이 장치의 실시간 하드웨어 텔레메트리.",
@@ -265,11 +281,14 @@ const ko = {
 		relayServerAccount: "릴레이 서버 계정",
 		srtlaServerAddress: "SRTLA 수신기 서버 주소",
 		srtlaServerPort: "SRTLA 수신기 포트",
+		receiverAddress: "수신기 주소",
+		receiverPort: "수신기 포트",
 		srtStreamId: "SRT 스트림 ID",
 		srtLatency: "SRT 지연 시간(ms)",
 		transportProtocol: "전송 프로토콜",
 		protocolRistUnavailable: "이 기기에서는 RIST를 사용할 수 없습니다",
 		protocolReserved: "아직 사용할 수 없습니다",
+		ristEvenPortHint: "RIST는 짝수 포트 번호가 필요합니다",
 		changeBitrateNotice: "스트리밍 중에도 비트레이트를 변경할 수 있습니다.",
 		optional: "선택사항",
 		relayProvider: "공급자",
@@ -298,6 +317,7 @@ const ko = {
 		},
 		errors: {
 			audioSourceRequired: "오디오 소스를 선택해주세요",
+			receiverAddressRequired: "수신기 주소를 입력해주세요",
 			srtlaServerAddressRequired: "SRTLA 서버 주소를 입력해주세요",
 		},
 		completeRequiredFields:
@@ -723,6 +743,20 @@ const ko = {
 		link: "링크",
 	},
 	live: {
+		server: {
+			bondedAcross: "{count}개 링크로 본딩됨",
+			singleLink: "단일 링크",
+			kind: {
+				srtlaRelay: "SRTLA · 본딩",
+				srtlaCustom: "SRTLA · 사용자 지정",
+				ristRelay: "RIST · 관리형",
+				ristCustom: "RIST · 사용자 지정",
+				srtCustom: "SRT · 사용자 지정",
+			},
+			manageLinks: "링크 관리",
+			singleLinkHint:
+				"이 수신기는 단일 직접 링크를 사용합니다. 이 전송 방식에서는 여러 링크 본딩이 사용되지 않습니다.",
+		},
 		title: "라이브",
 		description: "스트림 제어 및 실시간 지표",
 		startStream: "스트림 시작",
@@ -734,6 +768,7 @@ const ko = {
 		notStreaming: "스트리밍하지 않음",
 		configureToStart: "스트리밍을 시작하려면 릴레이 서버를 구성하세요",
 		editSettings: "설정 편집",
+		chooseDestination: "대상 선택",
 		streamSettings: "스트림 설정",
 		adjustBitrate: "비트레이트 조정",
 		stopToChange: "변경하려면 스트림을 중지하세요",

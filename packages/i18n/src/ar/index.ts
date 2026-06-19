@@ -216,6 +216,21 @@ const ar = {
 		signingIn: "جاري تسجيل الدخول...",
 	},
 	settings: {
+		destination: "الوجهة",
+		destinationManaged: "حسابي السحابي",
+		destinationCustom: "مستقبِل مخصّص",
+		destinationManagedHint: "ابثّ عبر مُرحِّل مرتبط بحسابك السحابي.",
+		destinationCustomHint: "أدخل عنوان ومنفذ المستقبِل الخاص بك.",
+		transportKind: "النقل",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · مجمّع",
+			srtlaSingle: "SRTLA · رابط واحد",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "متقدّم",
+		transportKindHint:
+			"كيفية وصول بثّك إلى المستقبِل. يجمع SRTLA عدّة روابط شبكة؛ بينما يستخدم RIST وSRT رابطًا واحدًا.",
 		deviceStats: {
 			title: "إحصاءات الجهاز",
 			description: "قياس مباشر لأجهزة هذا الجهاز.",
@@ -402,11 +417,14 @@ const ar = {
 		relayServerAccount: "حساب خادم الترحيل",
 		srtlaServerAddress: "عنوان خادم استقبال SRTLA",
 		srtlaServerPort: "منفذ استقبال SRTLA",
+		receiverAddress: "عنوان المستقبل",
+		receiverPort: "منفذ المستقبل",
 		srtStreamId: "معرف بث SRT",
 		srtLatency: "زمن استجابة SRT (مللي ثانية)",
 		transportProtocol: "بروتوكول النقل",
 		protocolRistUnavailable: "RIST غير متوفر على هذا الجهاز",
 		protocolReserved: "غير متوفر بعد",
+		ristEvenPortHint: "يتطلب RIST رقم منفذ زوجي",
 		changeBitrateNotice: "يمكنك تغيير معدل البت حتى أثناء البث.",
 		optional: "اختياري",
 		relayProvider: "المزود",
@@ -435,6 +453,7 @@ const ar = {
 		},
 		errors: {
 			audioSourceRequired: "يرجى تحديد مصدر الصوت",
+			receiverAddressRequired: "يرجى إدخال عنوان المستقبل",
 			srtlaServerAddressRequired: "يرجى إدخال عنوان خادم SRTLA",
 		},
 		completeRequiredFields: "يرجى إكمال جميع الحقول المطلوبة لتمكين البث",
@@ -855,6 +874,20 @@ const ar = {
 		link: "رابط",
 	},
 	live: {
+		server: {
+			bondedAcross: "مجمّع عبر {count} {{روابط|رابط|رابطين|روابط|رابطًا|رابط}}",
+			singleLink: "رابط واحد",
+			kind: {
+				srtlaRelay: "SRTLA · مجمّع",
+				srtlaCustom: "SRTLA · مخصّص",
+				ristRelay: "RIST · مُدار",
+				ristCustom: "RIST · مخصّص",
+				srtCustom: "SRT · مخصّص",
+			},
+			manageLinks: "إدارة الروابط",
+			singleLinkHint:
+				"يستخدم هذا المستقبِل رابطًا مباشرًا واحدًا. لا يُستخدم تجميع عدة روابط مع وسيلة النقل هذه.",
+		},
 		title: "مباشر",
 		description: "التحكم في البث والمقاييس المباشرة",
 		startStream: "بدء البث",
@@ -866,6 +899,7 @@ const ar = {
 		notStreaming: "لا يوجد بث",
 		configureToStart: "قم بتكوين خادم ترحيل لبدء البث",
 		editSettings: "تعديل الإعدادات",
+		chooseDestination: "اختر وجهة",
 		streamSettings: "إعدادات البث",
 		adjustBitrate: "ضبط معدل البت",
 		stopToChange: "أوقف البث للتغيير",
