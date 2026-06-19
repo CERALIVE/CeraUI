@@ -24,6 +24,7 @@ import {
 	AddonStateSchema,
 	framerateSchema,
 	kioskStatusSchema,
+	type RelayValidateStage,
 	resolutionSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
@@ -202,6 +203,20 @@ export type MockSimState = z.infer<typeof mockSimStateSchema>;
  * can never drift from the real wire shape; `null` when nothing is injected.
  */
 export type MockStreamErrorState = RuntimeErrorEvent | null;
+
+/**
+ * Forced relay.validate network-stage fault (TEST-INFRA ONLY — never egress).
+ *
+ * Drives the deterministic mock seam in `relay.procedure.ts`: when set, the mock
+ * short-circuit fails at the named network stage instead of returning a
+ * successful probe. Only the `dns` and `probe` stages are stubbable — the seam
+ * sits AFTER the `input`/`protocol`/`endpoint` adapter checks, which always run.
+ * `null` when no fault is forced (the default, which yields a successful probe).
+ */
+export type MockRelayValidateFault = {
+	stage: Extract<RelayValidateStage, "dns" | "probe">;
+	reason: string;
+} | null;
 
 // Mock kiosk loopback token (DC-3): 64 lowercase hex chars — the 32-byte → hex
 // shape `mintKioskToken()` (modules/ui/kiosk-token.ts) emits. `generateMockKioskToken`
