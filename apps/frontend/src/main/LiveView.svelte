@@ -50,7 +50,6 @@ import {
 	reorderSource,
 } from '$lib/streaming/source-preference';
 import { navElements } from '$lib/config';
-import { navigateTo } from '$lib/stores/navigation.svelte';
 import {
 	getActiveInput,
 	getCapabilities,
@@ -264,9 +263,15 @@ const receiverEndpoint = $derived.by(() => {
 // never a stale count. The readiness reuses the header's `receiverKind`.
 const linkCount = $derived(linkTelemetry ? linkTelemetry.links.length : null);
 
-function handleManageLinks() {
+async function handleManageLinks() {
 	const network = navElements.network;
-	if (network) navigateTo({ network });
+	if (!network) return;
+	// Lazy import severs the LiveView→navigation static edge: navigation.svelte.ts
+	// (and $lib/config) statically import LiveView for the default destination, so
+	// a static back-import here closes a module cycle whose initializer touches
+	// LiveView before it is defined (TDZ at app mount). Resolved at click time.
+	const { navigateTo } = await import('$lib/stores/navigation.svelte');
+	navigateTo({ network });
 }
 
 // ── Dialog open state ──────────────────────────────────────────────────────
