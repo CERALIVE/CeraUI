@@ -65,6 +65,7 @@ const state = vi.hoisted(() => ({
 }));
 
 const setConfig = vi.hoisted(() => vi.fn());
+const relayValidate = vi.hoisted(() => vi.fn());
 const markPending = vi.hoisted(() => vi.fn());
 const onRpcResolved = vi.hoisted(() => vi.fn());
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -77,7 +78,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 }));
 
 vi.mock("$lib/rpc", () => ({
-	rpc: { streaming: { setConfig }, relay: { validate: vi.fn() } },
+	rpc: { streaming: { setConfig }, relay: { validate: relayValidate } },
 }));
 
 vi.mock("$lib/rpc/dirty-registry.svelte", () => ({
@@ -109,6 +110,8 @@ beforeEach(() => {
 	state.capabilities = undefined;
 	setConfig.mockReset();
 	setConfig.mockResolvedValue({ success: true, applied: {} });
+	relayValidate.mockReset();
+	relayValidate.mockResolvedValue({ valid: true, stage: "probe" });
 	markPending.mockReset();
 	onRpcResolved.mockReset();
 	toast.success.mockReset();
@@ -362,6 +365,89 @@ describe("ServerDialog — kind behaviour (T10)", () => {
 		expect(setConfig.mock.calls[0]?.[0]).toMatchObject({
 			relay_protocol: "rist",
 		});
+	});
+
+	it("passes the derived protocol (not a hardcoded 'srtla') to relay.validate for a RIST custom endpoint", async () => {
+		state.capabilities = { transports: ["srtla", "rist"] };
+		state.config = { relay_protocol: "rist" };
+
+		render(ServerDialog, { props: { open: true } });
+
+		await typeInto("srtla-addr", "rist.example");
+		await typeInto("srtla-port", "5000");
+
+		const validateBtn = document.getElementById(
+			"relay-validate",
+		) as HTMLButtonElement;
+		await waitFor(() => expect(validateBtn.disabled).toBe(false));
+		await fireEvent.click(validateBtn);
+
+		await waitFor(() => expect(relayValidate).toHaveBeenCalledTimes(1));
+		expect(relayValidate.mock.calls[0]?.[0]).toMatchObject({
+			addr: "rist.example",
+			protocol: "rist",
+		});
+	});
+
+	it("passes protocol 'srtla' to relay.validate for an SRTLA custom endpoint (no regression)", async () => {
+		render(ServerDialog, { props: { open: true } });
+
+		await typeInto("srtla-addr", "srtla.example");
+		await typeInto("srtla-port", "5000");
+
+		const validateBtn = document.getElementById(
+			"relay-validate",
+		) as HTMLButtonElement;
+		await waitFor(() => expect(validateBtn.disabled).toBe(false));
+		await fireEvent.click(validateBtn);
+
+		await waitFor(() => expect(relayValidate).toHaveBeenCalledTimes(1));
+		expect(relayValidate.mock.calls[0]?.[0]).toMatchObject({
+			protocol: "srtla",
+		});
+	});
+
+	it("labels the address/port generically for rist_custom and SRTLA-specifically for srtla_custom", () => {
+		// srtla_custom: SRTLA-specific labels.
+		const srtla = render(ServerDialog, { props: { open: true } });
+		expect(
+			document.querySelector('label[for="srtla-addr"]')?.textContent?.trim(),
+		).toBe("SRTLA receiver server address");
+		expect(
+			document.querySelector('label[for="srtla-port"]')?.textContent?.trim(),
+		).toBe("SRTLA receiver port");
+		srtla.unmount();
+
+		// rist_custom: generic receiver labels (a RIST receiver is not SRTLA).
+		state.capabilities = { transports: ["srtla", "rist"] };
+		state.config = { relay_protocol: "rist" };
+		render(ServerDialog, { props: { open: true } });
+		expect(
+			document.querySelector('label[for="srtla-addr"]')?.textContent?.trim(),
+		).toBe("Receiver address");
+		expect(
+			document.querySelector('label[for="srtla-port"]')?.textContent?.trim(),
+		).toBe("Receiver port");
+	});
+
+	it("shows a generic 'receiver address' required error for rist_custom (not the SRTLA one)", async () => {
+		state.capabilities = { transports: ["srtla", "rist"] };
+		state.config = { relay_protocol: "rist" };
+
+		render(ServerDialog, { props: { open: true } });
+
+		// Type then clear the address to trigger the required error.
+		await typeInto("srtla-addr", "x");
+		await typeInto("srtla-addr", "");
+
+		await waitFor(() =>
+			expect(
+				screen.getByText("Please enter the receiver address"),
+			).toBeTruthy(),
+		);
+		expect(
+			screen.queryByText("Please enter the SRTLA server address"),
+		).toBeNull();
 	});
 
 	it("shows the secret field for srtla_custom and hides it (with even-port hint) for rist_custom", () => {

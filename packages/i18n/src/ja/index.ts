@@ -287,6 +287,8 @@ const ja = {
 		relayServerAccount: "リレーサーバーアカウント",
 		srtlaServerAddress: "SRTLAレシーバーサーバーアドレス",
 		srtlaServerPort: "SRTLAレシーバーポート",
+		receiverAddress: "レシーバーアドレス",
+		receiverPort: "レシーバーポート",
 		srtStreamId: "SRTストリームID",
 		srtLatency: "SRTレイテンシ (ms)",
 		transportProtocol: "トランスポートプロトコル",
@@ -321,6 +323,7 @@ const ja = {
 		},
 		errors: {
 			audioSourceRequired: "オーディオソースを選択してください",
+			receiverAddressRequired: "レシーバーアドレスを入力してください",
 			srtlaServerAddressRequired: "SRTLAサーバーアドレスを入力してください",
 		},
 		completeRequiredFields:

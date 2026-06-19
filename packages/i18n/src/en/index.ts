@@ -796,6 +796,8 @@ const en = {
 		relayServerAccount: "Relay Server Account",
 		srtlaServerAddress: "SRTLA receiver server address",
 		srtlaServerPort: "SRTLA receiver port",
+		receiverAddress: "Receiver address",
+		receiverPort: "Receiver port",
 		srtStreamId: "SRT stream id",
 		srtLatency: "SRT latency (ms)",
 		transportProtocol: "Transport Protocol",
@@ -831,6 +833,7 @@ const en = {
 		errors: {
 			audioSourceRequired: "Please select an audio source",
 			srtlaServerAddressRequired: "Please enter the SRTLA server address",
+			receiverAddressRequired: "Please enter the receiver address",
 		},
 	},
 	network: {

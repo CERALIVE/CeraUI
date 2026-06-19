@@ -83,7 +83,7 @@ function stageLabel(stage: RelayValidateStage): string {
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="srtla-addr">
-		{$LL.settings.srtlaServerAddress()}
+		{kind === 'rist_custom' ? $LL.settings.receiverAddress() : $LL.settings.srtlaServerAddress()}
 	</Label>
 	<Input
 		id="srtla-addr"
@@ -101,7 +101,7 @@ function stageLabel(stage: RelayValidateStage): string {
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="srtla-port">
-		{$LL.settings.srtlaServerPort()}
+		{kind === 'rist_custom' ? $LL.settings.receiverPort() : $LL.settings.srtlaServerPort()}
 	</Label>
 	<Input
 		id="srtla-port"

@@ -417,6 +417,8 @@ const ar = {
 		relayServerAccount: "حساب خادم الترحيل",
 		srtlaServerAddress: "عنوان خادم استقبال SRTLA",
 		srtlaServerPort: "منفذ استقبال SRTLA",
+		receiverAddress: "عنوان المستقبل",
+		receiverPort: "منفذ المستقبل",
 		srtStreamId: "معرف بث SRT",
 		srtLatency: "زمن استجابة SRT (مللي ثانية)",
 		transportProtocol: "بروتوكول النقل",
@@ -451,6 +453,7 @@ const ar = {
 		},
 		errors: {
 			audioSourceRequired: "يرجى تحديد مصدر الصوت",
+			receiverAddressRequired: "يرجى إدخال عنوان المستقبل",
 			srtlaServerAddressRequired: "يرجى إدخال عنوان خادم SRTLA",
 		},
 		completeRequiredFields: "يرجى إكمال جميع الحقول المطلوبة لتمكين البث",

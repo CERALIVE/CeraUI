@@ -281,6 +281,8 @@ const ko = {
 		relayServerAccount: "릴레이 서버 계정",
 		srtlaServerAddress: "SRTLA 수신기 서버 주소",
 		srtlaServerPort: "SRTLA 수신기 포트",
+		receiverAddress: "수신기 주소",
+		receiverPort: "수신기 포트",
 		srtStreamId: "SRT 스트림 ID",
 		srtLatency: "SRT 지연 시간(ms)",
 		transportProtocol: "전송 프로토콜",
@@ -315,6 +317,7 @@ const ko = {
 		},
 		errors: {
 			audioSourceRequired: "오디오 소스를 선택해주세요",
+			receiverAddressRequired: "수신기 주소를 입력해주세요",
 			srtlaServerAddressRequired: "SRTLA 서버 주소를 입력해주세요",
 		},
 		completeRequiredFields:

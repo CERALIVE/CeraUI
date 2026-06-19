@@ -275,6 +275,8 @@ const zh = {
 		relayServerAccount: "中继服务器账户",
 		srtlaServerAddress: "SRTLA 接收服务器地址",
 		srtlaServerPort: "SRTLA 接收端口",
+		receiverAddress: "接收端地址",
+		receiverPort: "接收端端口",
 		srtStreamId: "SRT 流 ID",
 		srtLatency: "SRT 延迟（毫秒）",
 		transportProtocol: "传输协议",
@@ -309,6 +311,7 @@ const zh = {
 		},
 		errors: {
 			audioSourceRequired: "请选择音频源",
+			receiverAddressRequired: "请输入接收端地址",
 			srtlaServerAddressRequired: "请输入 SRTLA 服务器地址",
 		},
 		completeRequiredFields: "请完成所有必填字段以启用流媒体",

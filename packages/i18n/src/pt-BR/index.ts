@@ -439,6 +439,8 @@ const ptBR = {
 		receiverServer: "Servidor Receptor",
 		srtlaServerAddress: "Endereço do servidor receptor SRTLA",
 		srtlaServerPort: "Porto do servidor SRTLA",
+		receiverAddress: "Endereço do receptor",
+		receiverPort: "Porta do receptor",
 		srtStreamId: "ID do fluxo SRT",
 		srtLatency: "Latência SRT (ms)",
 		transportProtocol: "Protocolo de transporte",
@@ -474,6 +476,7 @@ const ptBR = {
 		},
 		errors: {
 			audioSourceRequired: "Por favor, selecione uma fonte de áudio",
+			receiverAddressRequired: "Por favor, insira o endereço do receptor",
 			srtlaServerAddressRequired:
 				"Por favor, insira o endereço do servidor SRTLA",
 		},

@@ -791,6 +791,8 @@ const de = {
 		relayServerAccount: "Relay-Server-Konto",
 		srtlaServerAddress: "SRTLA-Empfängerserveradresse",
 		srtlaServerPort: "SRTLA-Empfängerport",
+		receiverAddress: "Empfängeradresse",
+		receiverPort: "Empfängerport",
 		srtStreamId: "SRT-Stream-ID",
 		srtLatency: "SRT-Latenz (ms)",
 		transportProtocol: "Transportprotokoll",
@@ -826,6 +828,7 @@ const de = {
 		},
 		errors: {
 			audioSourceRequired: "Bitte wählen Sie eine Audioquelle",
+			receiverAddressRequired: "Bitte geben Sie die Empfängeradresse ein",
 			srtlaServerAddressRequired: "Bitte geben Sie die SRTLA-Serveradresse ein",
 		},
 		completeRequiredFields:

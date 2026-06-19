@@ -279,6 +279,8 @@ const hi = {
 		relayServerAccount: "रिले सर्वर खाता",
 		srtlaServerAddress: "SRTLA रिसीवर सर्वर पता",
 		srtlaServerPort: "SRTLA रिसीवर पोर्ट",
+		receiverAddress: "रिसीवर पता",
+		receiverPort: "रिसीवर पोर्ट",
 		srtStreamId: "SRT स्ट्रीम आईडी",
 		srtLatency: "SRT लेटेंसी (ms)",
 		transportProtocol: "ट्रांसपोर्ट प्रोटोकॉल",
@@ -313,6 +315,7 @@ const hi = {
 		},
 		errors: {
 			audioSourceRequired: "कृपया एक ऑडियो स्रोत चुनें",
+			receiverAddressRequired: "कृपया रिसीवर पता दर्ज करें",
 			srtlaServerAddressRequired: "कृपया SRTLA सर्वर पता दर्ज करें",
 		},
 		completeRequiredFields: "स्ट्रीमिंग सक्षम करने के लिए कृपया सभी आवश्यक फ़ील्ड पूरा करें",

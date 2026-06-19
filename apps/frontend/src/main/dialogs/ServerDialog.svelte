@@ -190,7 +190,9 @@ const overridePortError = $derived.by(() => {
 });
 const addrError = $derived(
 	destination === 'custom' && draft.srtla_addr !== undefined && draft.srtla_addr.trim() === ''
-		? $LL.settings.errors.srtlaServerAddressRequired()
+		? kind === 'rist_custom'
+			? $LL.settings.errors.receiverAddressRequired()
+			: $LL.settings.errors.srtlaServerAddressRequired()
 		: undefined,
 );
 
@@ -248,7 +250,7 @@ async function handleValidate() {
 			port: portNum ?? 0,
 			streamid: streamId.trim() === '' ? undefined : streamId.trim(),
 			passphrase: passphrase.trim() === '' ? undefined : passphrase.trim(),
-			protocol: 'srtla',
+			protocol,
 		});
 		validation = reduceValidateResult(result);
 	} catch (error) {

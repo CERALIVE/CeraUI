@@ -442,6 +442,8 @@ const fr = {
 		receiverServer: "Serveur récepteur",
 		srtlaServerAddress: "Adresse du serveur récepteur SRTLA",
 		srtlaServerPort: "Port du serveur SRTLA",
+		receiverAddress: "Adresse du récepteur",
+		receiverPort: "Port du récepteur",
 		srtStreamId: "ID du flux SRT",
 		srtLatency: "Latence SRT (ms)",
 		transportProtocol: "Protocole de transport",
@@ -477,6 +479,7 @@ const fr = {
 		},
 		errors: {
 			audioSourceRequired: "Veuillez sélectionner une source audio",
+			receiverAddressRequired: "Veuillez entrer l'adresse du récepteur",
 			srtlaServerAddressRequired: "Veuillez entrer l'adresse du serveur SRTLA",
 		},
 		completeRequiredFields:
