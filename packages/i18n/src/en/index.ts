@@ -591,6 +591,8 @@ const en = {
 			srt: "SRT",
 		},
 		transportAdvanced: "Advanced",
+		transportKindHint:
+			"How your stream reaches the receiver. SRTLA bonds multiple network links; RIST and SRT use a single link.",
 		appearance: {
 			title: "Appearance",
 			language: "Language",
@@ -796,6 +798,7 @@ const en = {
 		transportProtocol: "Transport Protocol",
 		protocolRistUnavailable: "RIST is not available on this device",
 		protocolReserved: "Not yet available",
+		ristEvenPortHint: "RIST requires an even port number",
 		changeBitrateNotice:
 			"You can change the bitrate even if you are streaming.",
 		relayProvider: "Provider",

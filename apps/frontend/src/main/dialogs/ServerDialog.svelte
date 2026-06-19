@@ -25,6 +25,7 @@ import {
 	type RelayProtocol,
 	type RelayProtocolUnavailableReason,
 	relayProtocolAvailability,
+	serverSupportedProtocols,
 	type StreamingConfigInput,
 } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
@@ -173,6 +174,23 @@ const relayServerEndpoint = $derived(
 		: undefined,
 );
 const relayAccountName = $derived(relays?.accounts?.[relayAccount]?.name);
+
+// Transports the selected managed server advertises (T1). A length > 1 reveals
+// the per-server transport chooser inside RelayServerSelector.
+const relayServerProtocols = $derived(
+	relayServerInfo ? serverSupportedProtocols(relayServerInfo) : [],
+);
+
+// Default best = bonded SRTLA: when a multi-transport server is selected whose
+// advertised set excludes the current protocol, snap the persisted protocol to
+// SRTLA (bonded) when offered, else the first advertised transport. The chooser
+// stays the single user-facing writer; this only seeds a valid default.
+$effect(() => {
+	if (mode !== 'relay' || relayServerProtocols.length <= 1) return;
+	if (relayServerProtocols.includes(protocol)) return;
+	const best = relayServerProtocols.includes('srtla') ? 'srtla' : relayServerProtocols[0];
+	if (best && draft.relay_protocol !== best) draft.relay_protocol = best;
+});
 
 const relayOverride = $derived(draft.relay_override ?? false);
 const overrideAddr = $derived(draft.relay_override_addr ?? relayServerInfo?.addr ?? '');
@@ -429,6 +447,7 @@ async function handleSave() {
 				onAccount={(value) => (draft.relay_account = value)}
 				onOverrideAddr={(value) => (draft.relay_override_addr = value)}
 				onOverridePort={(value) => (draft.relay_override_port = value)}
+				onProtocol={(value) => (draft.relay_protocol = value)}
 				onProvider={(value) => (draft.relay_provider = value)}
 				onRelayStreamId={(value) => (draft.relay_streamid = value)}
 				onServer={(value) => (draft.relay_server = value)}
@@ -441,12 +460,14 @@ async function handleSave() {
 				{relayAccount}
 				{relayAccountName}
 				{relayOverride}
+				relayProtocol={protocol}
 				{relayServer}
 				{relayServerEndpoint}
 				{relayServerName}
 				{relayServerRtt}
 				relaysUnavailable={relays === undefined}
 				{relayStreamId}
+				serverProtocols={relayServerProtocols}
 				{selectedProvider}
 			/>
 		{/if}

@@ -602,6 +602,8 @@ const es = {
 			srt: "SRT",
 		},
 		transportAdvanced: "Avanzado",
+		transportKindHint:
+			"Cómo llega tu transmisión al receptor. SRTLA combina varios enlaces de red; RIST y SRT usan un solo enlace.",
 		deviceStats: {
 			title: "Estado del dispositivo",
 			description: "Telemetría de hardware en vivo de este dispositivo.",
@@ -804,6 +806,7 @@ const es = {
 		transportProtocol: "Protocolo de transporte",
 		protocolRistUnavailable: "RIST no está disponible en este dispositivo",
 		protocolReserved: "Aún no disponible",
+		ristEvenPortHint: "RIST requiere un número de puerto par",
 		changeBitrateNotice:
 			"Puedes cambiar el bitrate incluso si estás transmitiendo.",
 		optional: "opcional",

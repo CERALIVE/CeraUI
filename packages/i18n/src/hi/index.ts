@@ -91,6 +91,8 @@ const hi = {
 			srt: "SRT",
 		},
 		transportAdvanced: "उन्नत",
+		transportKindHint:
+			"आपकी स्ट्रीम रिसीवर तक कैसे पहुँचती है। SRTLA कई नेटवर्क लिंक को जोड़ता है; RIST और SRT एकल लिंक का उपयोग करते हैं।",
 		deviceStats: {
 			title: "डिवाइस आँकड़े",
 			description: "इस डिवाइस से लाइव हार्डवेयर टेलीमेट्री।",
@@ -282,6 +284,7 @@ const hi = {
 		transportProtocol: "ट्रांसपोर्ट प्रोटोकॉल",
 		protocolRistUnavailable: "इस डिवाइस पर RIST उपलब्ध नहीं है",
 		protocolReserved: "अभी उपलब्ध नहीं",
+		ristEvenPortHint: "RIST के लिए सम पोर्ट संख्या आवश्यक है",
 		changeBitrateNotice: "आप स्ट्रीमिंग करते समय भी बिटरेट बदल सकते हैं।",
 		optional: "वैकल्पिक",
 		relayProvider: "प्रदाता",

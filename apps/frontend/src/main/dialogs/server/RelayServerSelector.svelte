@@ -9,7 +9,7 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import type { RelayAccount, RelayServer } from '@ceraui/rpc/schemas';
+import type { RelayAccount, RelayProtocol, RelayServer } from '@ceraui/rpc/schemas';
 
 import RelayRttIndicator from '$lib/components/streaming/RelayRttIndicator.svelte';
 import { Input } from '$lib/components/ui/input';
@@ -27,6 +27,14 @@ interface Props {
 	relayServerRtt?: number;
 	relayServerEndpoint?: string;
 	filteredServerEntries: [string, RelayServer][];
+	/**
+	 * Transports the selected catalog server advertises (T1
+	 * `serverSupportedProtocols`). A length > 1 reveals the compact transport
+	 * chooser; the chooser is the SINGLE writer of `draft.relay_protocol` (via
+	 * `onProtocol`) so the persisted protocol matches the chosen kind.
+	 */
+	serverProtocols: readonly RelayProtocol[];
+	relayProtocol: RelayProtocol;
 	relayOverride: boolean;
 	overrideAddr: string;
 	overridePortStr: string;
@@ -38,6 +46,7 @@ interface Props {
 	relayStreamId: string;
 	onProvider: (value: string) => void;
 	onServer: (value: string) => void;
+	onProtocol: (value: RelayProtocol) => void;
 	onToggleOverride: () => void;
 	onOverrideAddr: (value: string) => void;
 	onOverridePort: (value: string) => void;
@@ -56,6 +65,8 @@ let {
 	relayServerRtt,
 	relayServerEndpoint,
 	filteredServerEntries,
+	serverProtocols,
+	relayProtocol,
 	relayOverride,
 	overrideAddr,
 	overridePortStr,
@@ -67,12 +78,23 @@ let {
 	relayStreamId,
 	onProvider,
 	onServer,
+	onProtocol,
 	onToggleOverride,
 	onOverrideAddr,
 	onOverridePort,
 	onAccount,
 	onRelayStreamId,
 }: Props = $props();
+
+// Show the transport chooser only when the selected server honors more than one
+// transport (e.g. an endpoint serving both SRTLA and RIST).
+const showTransportChooser = $derived(serverProtocols.length > 1);
+
+function protocolBadge(protocol: RelayProtocol): string {
+	if (protocol === 'rist') return $LL.settings.transportKindBadge.rist();
+	if (protocol === 'srt') return $LL.settings.transportKindBadge.srt();
+	return $LL.settings.transportKindBadge.srtlaBonded();
+}
 </script>
 
 <div class="space-y-2">
@@ -126,6 +148,41 @@ let {
 		</Select.Content>
 	</Select.Root>
 </div>
+
+<!-- Transport chooser: only when the selected server advertises more than one
+     transport. This is the single writer of the persisted protocol for a managed
+     server, so the chosen kind round-trips to the saved `relay_protocol`. -->
+{#if showTransportChooser}
+	<div class="space-y-2">
+		<Label class="text-sm font-medium" for="relay-transport-kind">
+			{$LL.settings.transportKind()}
+		</Label>
+		<div
+			id="relay-transport-kind"
+			class="bg-muted grid auto-cols-fr grid-flow-col gap-1 rounded-lg p-1"
+			data-testid="relay-transport-kind"
+			role="radiogroup"
+		>
+			{#each serverProtocols as protocol (protocol)}
+				<button
+					aria-checked={relayProtocol === protocol}
+					class="rounded-md px-3 py-2 text-sm font-medium transition-colors {relayProtocol ===
+					protocol
+						? 'bg-background text-foreground shadow-sm'
+						: 'text-muted-foreground hover:text-foreground'}"
+					data-protocol={protocol}
+					data-testid={`relay-protocol-${protocol}`}
+					disabled={isStreaming}
+					onclick={() => onProtocol(protocol)}
+					role="radio"
+					type="button"
+				>
+					{protocolBadge(protocol)}
+				</button>
+			{/each}
+		</div>
+	</div>
+{/if}
 
 <!-- Auto-preloaded endpoint: read-only by default, with a manual override toggle. -->
 <div class="space-y-2">

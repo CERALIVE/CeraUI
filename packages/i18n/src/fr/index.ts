@@ -246,6 +246,8 @@ const fr = {
 			srt: "SRT",
 		},
 		transportAdvanced: "Avancé",
+		transportKindHint:
+			"Comment votre flux atteint le récepteur. SRTLA agrège plusieurs liens réseau ; RIST et SRT utilisent un seul lien.",
 		deviceStats: {
 			title: "État de l'appareil",
 			description: "Télémétrie matérielle en direct de cet appareil.",
@@ -445,6 +447,7 @@ const fr = {
 		transportProtocol: "Protocole de transport",
 		protocolRistUnavailable: "RIST n'est pas disponible sur cet appareil",
 		protocolReserved: "Pas encore disponible",
+		ristEvenPortHint: "RIST nécessite un numéro de port pair",
 		changeBitrateNotice:
 			"Vous pouvez changer le débit binaire même si vous diffusez.",
 		optional: "optionnel",

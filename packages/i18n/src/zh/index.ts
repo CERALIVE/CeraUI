@@ -90,6 +90,8 @@ const zh = {
 			srt: "SRT",
 		},
 		transportAdvanced: "高级",
+		transportKindHint:
+			"您的推流如何到达接收端。SRTLA 聚合多条网络链路；RIST 和 SRT 使用单条链路。",
 		deviceStats: {
 			title: "设备统计",
 			description: "本设备的实时硬件遥测。",
@@ -278,6 +280,7 @@ const zh = {
 		transportProtocol: "传输协议",
 		protocolRistUnavailable: "此设备不支持 RIST",
 		protocolReserved: "尚未可用",
+		ristEvenPortHint: "RIST 需要偶数端口号",
 		changeBitrateNotice: "即使在直播过程中，您也可以更改比特率。",
 		optional: "可选",
 		relayProvider: "提供商",

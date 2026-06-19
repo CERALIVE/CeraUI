@@ -92,6 +92,8 @@ const ko = {
 			srt: "SRT",
 		},
 		transportAdvanced: "고급",
+		transportKindHint:
+			"스트림이 수신기에 도달하는 방식입니다. SRTLA는 여러 네트워크 링크를 묶고, RIST와 SRT는 단일 링크를 사용합니다.",
 		deviceStats: {
 			title: "장치 통계",
 			description: "이 장치의 실시간 하드웨어 텔레메트리.",
@@ -284,6 +286,7 @@ const ko = {
 		transportProtocol: "전송 프로토콜",
 		protocolRistUnavailable: "이 기기에서는 RIST를 사용할 수 없습니다",
 		protocolReserved: "아직 사용할 수 없습니다",
+		ristEvenPortHint: "RIST는 짝수 포트 번호가 필요합니다",
 		changeBitrateNotice: "스트리밍 중에도 비트레이트를 변경할 수 있습니다.",
 		optional: "선택사항",
 		relayProvider: "공급자",

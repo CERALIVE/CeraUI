@@ -93,6 +93,8 @@ const ja = {
 			srt: "SRT",
 		},
 		transportAdvanced: "詳細設定",
+		transportKindHint:
+			"ストリームがレシーバーに届く方法です。SRTLA は複数のネットワーク回線を束ね、RIST と SRT は単一回線を使用します。",
 		deviceStats: {
 			title: "デバイス統計",
 			description: "このデバイスのライブハードウェアテレメトリ。",
@@ -290,6 +292,7 @@ const ja = {
 		transportProtocol: "トランスポートプロトコル",
 		protocolRistUnavailable: "このデバイスでは RIST を利用できません",
 		protocolReserved: "まだ利用できません",
+		ristEvenPortHint: "RIST では偶数のポート番号が必要です",
 		changeBitrateNotice: "ストリーミング中でもビットレートを変更できます。",
 		optional: "オプション",
 		relayProvider: "プロバイダー",

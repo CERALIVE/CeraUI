@@ -593,6 +593,8 @@ const de = {
 			srt: "SRT",
 		},
 		transportAdvanced: "Erweitert",
+		transportKindHint:
+			"Wie dein Stream den Empfänger erreicht. SRTLA bündelt mehrere Netzwerkverbindungen; RIST und SRT nutzen eine einzelne Verbindung.",
 		deviceStats: {
 			title: "Gerätestatistik",
 			description: "Live-Hardware-Telemetrie dieses Geräts.",
@@ -791,6 +793,7 @@ const de = {
 		transportProtocol: "Transportprotokoll",
 		protocolRistUnavailable: "RIST ist auf diesem Gerät nicht verfügbar",
 		protocolReserved: "Noch nicht verfügbar",
+		ristEvenPortHint: "RIST erfordert eine gerade Portnummer",
 		changeBitrateNotice:
 			"Sie können die Bitrate auch während des Streamings ändern.",
 		optional: "optional",

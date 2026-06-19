@@ -229,6 +229,8 @@ const ar = {
 			srt: "SRT",
 		},
 		transportAdvanced: "متقدّم",
+		transportKindHint:
+			"كيفية وصول بثّك إلى المستقبِل. يجمع SRTLA عدّة روابط شبكة؛ بينما يستخدم RIST وSRT رابطًا واحدًا.",
 		deviceStats: {
 			title: "إحصاءات الجهاز",
 			description: "قياس مباشر لأجهزة هذا الجهاز.",
@@ -420,6 +422,7 @@ const ar = {
 		transportProtocol: "بروتوكول النقل",
 		protocolRistUnavailable: "RIST غير متوفر على هذا الجهاز",
 		protocolReserved: "غير متوفر بعد",
+		ristEvenPortHint: "يتطلب RIST رقم منفذ زوجي",
 		changeBitrateNotice: "يمكنك تغيير معدل البت حتى أثناء البث.",
 		optional: "اختياري",
 		relayProvider: "المزود",
