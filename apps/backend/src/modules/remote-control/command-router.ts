@@ -37,8 +37,13 @@ import {
 import type { AppWebSocket, RPCContext } from "../../rpc/types.ts";
 import { sendFrame } from "./channel.ts";
 import {
+	getSharedSeenCidStore,
+	type SeenCidStore,
+} from "./command-idempotency.ts";
+import {
 	COMMAND_REGISTRY,
 	type Command,
+	type DeliveryAck,
 	NEVER_REMOTE,
 	PROTOCOL_VERSION,
 	type Result,
@@ -114,6 +119,10 @@ const NEVER_REMOTE_SET: ReadonlySet<string> = new Set(NEVER_REMOTE);
 export interface CommandRouterDeps {
 	/** Best-effort result-frame sink (spec §6). Defaults to the live channel. */
 	sendResult: (frame: Result) => boolean;
+	/** Best-effort delivery-ack sink (spec §6.1). Defaults to the live channel. */
+	sendDeliveryAck: (frame: DeliveryAck) => boolean;
+	/** Seen-cid store backing command idempotency (spec §6.1 de-dup of replays). */
+	seenCids: SeenCidStore;
 	/** Command-type → procedure dispatch table. */
 	dispatch: Record<string, ProcedureDispatcher>;
 	/** Authenticated context the device trusts for hub-stamped owner frames. */
@@ -151,9 +160,25 @@ function buildControlContext(): RPCContext {
 function defaultDeps(): CommandRouterDeps {
 	return {
 		sendResult: sendFrame,
+		sendDeliveryAck: sendFrame,
+		seenCids: getSharedSeenCidStore(),
 		dispatch: STREAMING_DISPATCH,
 		context: buildControlContext(),
 		selfFencing: {},
+	};
+}
+
+/**
+ * Build a `delivery.ack` frame echoing the command's `type` + `cid` (spec §6.1).
+ * `role` is only echoed when present (exactOptionalPropertyTypes).
+ */
+function buildDeliveryAck(frame: Command): DeliveryAck {
+	return {
+		v: PROTOCOL_VERSION,
+		kind: "delivery.ack",
+		type: frame.type,
+		cid: frame.cid,
+		...(frame.role !== undefined ? { role: frame.role } : {}),
 	};
 }
 
@@ -234,22 +259,36 @@ export async function routeCommand(
 		return;
 	}
 
-	// 3. Authority derives from the hub-stamped role (spec §12). v2.0 is
+	// 3. Confirm receipt (spec §6.1) BEFORE applying — the hub bounds its delivery
+	//    retries on this ack. `type` is now known to be in the registry so the ack
+	//    is valid platform-side. Emitted for replays too, so the hub stops retrying
+	//    even when an earlier `result` never confirmed.
+	deps.sendDeliveryAck(buildDeliveryAck(frame));
+
+	// 4. Authority derives from the hub-stamped role (spec §12). v2.0 is
 	//    owner-only: only `owner` frames execute.
 	if (frame.role !== "owner") {
 		emit(deps, frame, { ok: false, applied: null, error: "unauthorized" });
 		return;
 	}
 
-	// 4. Self_fencing ops route through the commit-confirm watchdog (Task 16). A
-	//    `self_fencing.confirm` resolves a pending op by `cid` (commit a revertible
-	//    op, or execute a gated non-revertible one); the five connectivity/lifecycle
-	//    ops apply behind the watchdog (revertible) or gate behind a pre-confirm
-	//    (non-revertible). Result frames flow through the same best-effort sink.
+	// 5. A `self_fencing.confirm` resolves a pending op by `cid` (Task 16). It
+	//    deliberately REUSES the original command's `cid`, so it is handled BEFORE
+	//    the idempotency gate — otherwise the matching original cid would swallow it.
 	if (frame.type === "self_fencing.confirm") {
 		await handleSelfFencingConfirm(frame.cid);
 		return;
 	}
+
+	// 6. Idempotency (spec §6.1): a replayed `cid` was acknowledged above but MUST
+	//    NOT execute twice. The first sighting records the cid; a repeat returns here.
+	if (deps.seenCids.checkAndRemember(frame.cid)) {
+		return;
+	}
+
+	// 7. Self_fencing ops route through the commit-confirm watchdog (Task 16): the
+	//    five connectivity/lifecycle ops apply behind the watchdog (revertible) or
+	//    gate behind a pre-confirm (non-revertible). Results use the same sink.
 	if (SELF_FENCING_TYPES_SET.has(frame.type)) {
 		await handleSelfFencingOp(frame, {
 			sendResult: deps.sendResult,
@@ -258,7 +297,7 @@ export async function routeCommand(
 		return;
 	}
 
-	// 5. Dispatch to the matching RPC procedure and echo its applied state.
+	// 8. Dispatch to the matching RPC procedure and echo its applied state.
 	const dispatcher = deps.dispatch[frame.type];
 	if (dispatcher === undefined) {
 		emit(deps, frame, { ok: false, applied: null, error: "unknown_command" });

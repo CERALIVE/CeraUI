@@ -553,6 +553,7 @@ const es = {
 	},
 	a11y: {
 		close: "Cerrar",
+		skipToContent: "Saltar al contenido principal",
 	},
 	auth: {
 		usePassword:
@@ -752,6 +753,7 @@ const es = {
 			pairedBody:
 				"Este dispositivo ahora está vinculado a tu cuenta en la nube.",
 			deviceLabel: "ID del dispositivo",
+			scanToPair: "O escanea este código QR con tu teléfono para vincular al instante.",
 			subscriptionLabel: "Suscripción",
 			statusActive: "Activa",
 			statusFree: "Gratis",

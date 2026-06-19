@@ -229,6 +229,7 @@ const hi = {
 			regenerating: "कोड ताज़ा किया जा रहा है…",
 			pairedBody: "यह डिवाइस अब आपके क्लाउड खाते से लिंक है।",
 			deviceLabel: "डिवाइस आईडी",
+			scanToPair: "या तुरंत पेयर करने के लिए इस QR कोड को अपने फ़ोन से स्कैन करें।",
 			subscriptionLabel: "सदस्यता",
 			statusActive: "सक्रिय",
 			statusFree: "निःशुल्क",
@@ -1002,6 +1003,7 @@ const hi = {
 	},
 	a11y: {
 		close: "बंद करें",
+		skipToContent: "मुख्य सामग्री पर जाएँ",
 	},
 	advanced: {
 		systemSettings: "सिस्टम सेटिंग्स",

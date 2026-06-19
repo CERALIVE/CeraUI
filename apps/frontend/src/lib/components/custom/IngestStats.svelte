@@ -267,11 +267,13 @@ function exportCsv(): void {
 						<AlertTriangle aria-hidden="true" class="size-3 shrink-0" />
 						<span class="truncate">{$LL.live.ingest.drops()}</span>
 					</div>
+					<!-- Informational, not actionable: a passive drop tally uses the
+					     info token; amber is reserved for the actionable alert. -->
 					<div
 						data-testid="ingest-summary-drops"
 						class={cn(
 							'font-mono text-sm font-semibold tabular-nums',
-							rollup.dropCount > 0 ? 'text-status-warning' : 'text-foreground',
+							rollup.dropCount > 0 ? 'text-status-info' : 'text-foreground',
 						)}
 					>
 						{rollup.dropCount}

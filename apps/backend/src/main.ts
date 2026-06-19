@@ -43,6 +43,10 @@ import {
 } from "./modules/network/network-interfaces.ts";
 import { initRemote } from "./modules/remote/remote.ts";
 import { initControlChannel } from "./modules/remote-control/channel.ts";
+import {
+	recordTelemetryTick,
+	startTelemetryRecorder,
+} from "./modules/remote-control/telemetry-recorder.ts";
 import { setup } from "./modules/setup.ts";
 import {
 	startAudioDeviceWatcher,
@@ -59,7 +63,10 @@ import {
 	getPipelineList,
 	initPipelines,
 } from "./modules/streaming/pipelines.ts";
-import { getStreamingProcesses } from "./modules/streaming/streamloop/process-runner.ts";
+import {
+	getStreamingProcesses,
+	gracefulShutdown,
+} from "./modules/streaming/streamloop/process-runner.ts";
 import {
 	bcrptExec,
 	checkAutoStartStream,
@@ -215,6 +222,12 @@ onHeartbeatTick(broadcastHealthIfChanged);
 // srtla link telemetry: fold into the status flow on the same tick, on-change
 onHeartbeatTick(broadcastLinkTelemetryIfChanged);
 
+// Telemetry recorder (spec §8.1): batch per-link samples and emit `telemetry`
+// status frames to the hub for durable persistence. Non-blocking — each tick is
+// synchronous and exception-safe, so it never stalls the heartbeat/live loop.
+startTelemetryRecorder();
+onHeartbeatTick(recordTelemetryTick);
+
 checkAutoStartStream();
 
 // Engine protocol-compatibility probe (T-skew): fire-and-forget. A protocol-major
@@ -232,6 +245,22 @@ void runAddonReconciler();
 process.on("SIGUSR1", function reconcileAddons() {
 	void runAddonReconciler();
 });
+
+// Graceful shutdown: drain streaming subprocesses (SIGTERM → SIGKILL after the
+// grace window) before exit so no orphaned srtla_send survives. Guarded so a
+// second signal mid-drain is ignored.
+let shuttingDown = false;
+function handleTerminationSignal(signal: NodeJS.Signals): void {
+	if (shuttingDown) return;
+	shuttingDown = true;
+	logger.info(`received ${signal}; shutting down streaming processes`);
+	void gracefulShutdown().then(() => {
+		process.exit(0);
+	});
+}
+process.on("SIGTERM", () => handleTerminationSignal("SIGTERM"));
+process.on("SIGINT", () => handleTerminationSignal("SIGINT"));
+
 logger.info(bootTimer.phase("▶️", "autostart & reconciler"));
 
 logger.info(formatReadyLine(bootTimer.elapsedMs(), boundPort));

@@ -110,6 +110,39 @@ export function getActiveClients(minLastActive: number = 0): AppWebSocket[] {
 }
 
 /**
+ * Drop clients whose last inbound activity is older than `thresholdMs`.
+ *
+ * A half-open socket (peer vanished without a TCP FIN) never fires `close`, so
+ * it lingers in `clients` forever and every broadcast keeps paying a doomed
+ * `send`. Healthy clients refresh `lastActive` via their own keepalive, so a
+ * stale timestamp means the link is gone. Pruning closes the socket (best
+ * effort) and removes it; the `close` handler's `removeClient` is then a no-op.
+ *
+ * Returns the number of clients pruned. Pure over the injected clock so the
+ * staleness boundary is unit-testable.
+ */
+export function pruneStaleClients(
+	thresholdMs: number,
+	now: number = Date.now(),
+): number {
+	let pruned = 0;
+	for (const ws of [...clients]) {
+		if (now - ws.data.lastActive <= thresholdMs) continue;
+		try {
+			ws.close();
+		} catch (error) {
+			logger.debug("pruneStaleClients: close failed", { err: error });
+		}
+		clients.delete(ws);
+		pruned++;
+	}
+	if (pruned > 0) {
+		logger.warn("pruned stale WS clients", { pruned, thresholdMs });
+	}
+	return pruned;
+}
+
+/**
  * Per-TYPE monotonic sequence counters.
  * Each broadcast type carries an independently increasing seq.
  * NEVER a single global counter. Resets to 0 on process restart (fine).
@@ -117,11 +150,26 @@ export function getActiveClients(minLastActive: number = 0): AppWebSocket[] {
 const seqCounters = new Map<string, number>();
 
 /**
+ * Upper bound on distinct broadcast types tracked in a seq map. The legitimate
+ * type set is small and fixed, so this is purely a guard against an unbounded
+ * leak if a caller ever broadcasts attacker- or bug-controlled dynamic types.
+ */
+export const SEQ_COUNTERS_MAX_SIZE = 64;
+
+/**
  * Advance and return the next sequence number for a given message type.
  * Pure helper (operates on the passed map) — exported for unit testing.
  * Increments the counter for `type` and returns the new value (1-based).
+ *
+ * Capacity-bounded: introducing a NEW type while the map is at capacity evicts
+ * the oldest entry (Map preserves insertion order) so the map can never grow
+ * without bound. An already-tracked type is exempt — its counter stays monotonic.
  */
 export function advanceSeq(map: Map<string, number>, type: string): number {
+	if (!map.has(type) && map.size >= SEQ_COUNTERS_MAX_SIZE) {
+		const oldest = map.keys().next().value;
+		if (oldest !== undefined) map.delete(oldest);
+	}
 	const next = (map.get(type) ?? 0) + 1;
 	map.set(type, next);
 	return next;
@@ -159,21 +207,54 @@ export function broadcast(
 	const seq = advanceSeq(seqCounters, type);
 	const message = JSON.stringify({ [type]: data, seq });
 
+	// Per-client failure isolation. `send` is fired synchronously per client in
+	// iteration order (so a given socket keeps receiving in seq order — the
+	// guarantee seq-drop-stale relies on — and the post-login snapshot stays
+	// strictly ordered), but the OUTCOME of each send is awaited concurrently via
+	// Promise.allSettled. A client whose send throws or whose backpressured write
+	// settles late can no longer abort or stall the fan-out to the others.
+	const settlements: Array<Promise<PromiseSettledResult<void>>> = [];
 	let recipients = 0;
 	for (const client of clients) {
 		if (client === except) continue;
 		if (authedOnly && !client.data.isAuthenticated) continue;
 		if (client.data.lastActive < minLastActive) continue;
 
-		try {
-			client.send(message);
-			recipients++;
-		} catch (error) {
-			logger.error("Broadcast send error", { err: error });
-		}
+		settlements.push(sendToOne(client, message));
+		recipients++;
+	}
+
+	if (settlements.length > 0) {
+		void Promise.allSettled(settlements).then((results) => {
+			const failed = results.filter((r) => r.status === "rejected").length;
+			if (failed > 0) {
+				logger.error("Broadcast send error", { event: type, failed });
+			}
+		});
 	}
 
 	logger.debug("broadcast", { event: type, clients: recipients });
+}
+
+/**
+ * Dispatch one message to one client, isolating its failure. `send` runs
+ * synchronously here (preserving per-socket ordering); a synchronous throw
+ * rejects without touching siblings, and a thenable return (a backpressured
+ * write) is awaited so Promise.allSettled can wait without blocking dispatch.
+ */
+function sendToOne(
+	client: AppWebSocket,
+	message: string,
+): Promise<PromiseSettledResult<void>> {
+	try {
+		const result = client.send(message) as unknown;
+		return Promise.resolve(result).then(
+			() => ({ status: "fulfilled", value: undefined }),
+			(error: unknown) => ({ status: "rejected", reason: error }),
+		);
+	} catch (error) {
+		return Promise.resolve({ status: "rejected", reason: error });
+	}
 }
 
 /**

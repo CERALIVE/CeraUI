@@ -56,6 +56,7 @@ import type {
 	MonitorEvent,
 	StateDiff,
 } from "../network/state-types.ts";
+import { applyJitter } from "../streaming/constants.ts";
 
 import { resetGsmConnections } from "./gsm-connections.ts";
 import type { ModemId } from "./mmcli.ts";
@@ -241,7 +242,7 @@ export async function runModemStatusPoll(): Promise<void> {
 let initialized = false;
 let monitorRef: IMonitorEmitter | null = null;
 let monitorListener: ((event: MonitorEvent) => void) | null = null;
-let statusPollTimer: ReturnType<typeof setInterval> | null = null;
+let statusPollTimer: ReturnType<typeof setTimeout> | null = null;
 let unsubModemsChange: (() => void) | null = null;
 let unsubGsmReset: (() => void) | null = null;
 
@@ -325,9 +326,16 @@ export async function initModemUpdateLoop(
 	}
 
 	if (startPoll) {
-		statusPollTimer = setInterval(() => {
-			trackWork(runModemStatusPoll());
-		}, STATUS_POLL_INTERVAL_MS);
+		// Self-rescheduling jittered timeout (not setInterval) so a fleet of
+		// devices de-correlates its 30s polls instead of all hitting mmcli — and,
+		// downstream, the modems broadcast — on the same wall-clock boundary.
+		const scheduleStatusPoll = (): void => {
+			statusPollTimer = setTimeout(() => {
+				trackWork(runModemStatusPoll());
+				scheduleStatusPoll();
+			}, applyJitter(STATUS_POLL_INTERVAL_MS));
+		};
+		scheduleStatusPoll();
 	}
 }
 

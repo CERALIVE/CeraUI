@@ -394,6 +394,7 @@ const fr = {
 			regenerating: "Actualisation du code…",
 			pairedBody: "Cet appareil est maintenant associé à votre compte cloud.",
 			deviceLabel: "ID de l'appareil",
+			scanToPair: "Ou scannez ce QR code avec votre téléphone pour appairer instantanément.",
 			subscriptionLabel: "Abonnement",
 			statusActive: "Actif",
 			statusFree: "Gratuit",
@@ -1190,6 +1191,7 @@ const fr = {
 	},
 	a11y: {
 		close: "Fermer",
+		skipToContent: "Aller au contenu principal",
 	},
 	advanced: {
 		systemSettings: "Paramètres du système",

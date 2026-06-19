@@ -164,7 +164,7 @@ let {
 							{/if}
 							{#if uuid && !network.active}
 								<span
-									class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[10px] font-medium"
+									class="bg-muted text-muted-foreground text-micro rounded px-1.5 py-0.5 font-medium"
 								>
 									{$LL.wifiSelector.status.saved()}
 								</span>

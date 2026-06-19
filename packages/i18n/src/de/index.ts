@@ -553,6 +553,7 @@ const de = {
 	},
 	a11y: {
 		close: "Schließen",
+		skipToContent: "Zum Hauptinhalt springen",
 	},
 	auth: {
 		usePassword:
@@ -741,6 +742,7 @@ const de = {
 			regenerating: "Code wird aktualisiert…",
 			pairedBody: "Dieses Gerät ist jetzt mit deinem Cloud-Konto verknüpft.",
 			deviceLabel: "Geräte-ID",
+			scanToPair: "Oder scannen Sie diesen QR-Code mit Ihrem Telefon, um sofort zu koppeln.",
 			subscriptionLabel: "Abonnement",
 			statusActive: "Aktiv",
 			statusFree: "Kostenlos",

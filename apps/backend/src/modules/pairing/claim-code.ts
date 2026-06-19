@@ -173,7 +173,7 @@ export function deriveClaimCode(params: ClaimCodeParams): ClaimCodeOutput {
 	const windowIndex = Math.floor(params.now / windowMs);
 	const validUntil = (windowIndex + 1) * windowMs;
 	const code = codeForWindow(params.secret, params.serial, windowIndex, length);
-	return { code, validUntil, windowSeconds };
+	return { code, validUntil, windowSeconds, serial: params.serial };
 }
 
 export interface ClaimCodeVerifyParams extends ClaimCodeParams {

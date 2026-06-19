@@ -27,6 +27,8 @@ import { toast } from 'svelte-sonner';
 
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
+import { generateDeviceAccessQr } from '$lib/helpers/NetworkHelper';
+import { buildPairingDeepLink } from '$lib/pairing/pairing-link';
 import { PairingController } from '$lib/pairing/pairing.svelte';
 import {
 	shouldAutoRegenerate,
@@ -64,6 +66,31 @@ $effect(() => {
 	if (shouldAutoRegenerate(pairing.status, pairing.expired)) {
 		void generate();
 	}
+});
+
+// QR deep-link: encode `/pair?code=…&serial=…` for the cloud portal so an
+// operator scans it with a phone and the platform auto-fills the claim form.
+// Regenerated whenever the active code/serial changes; cleared otherwise.
+let qrDataUrl = $state<string | null>(null);
+
+$effect(() => {
+	const code = pairing.code;
+	const serial = pairing.serial;
+	if (!code || !serial) {
+		qrDataUrl = null;
+		return;
+	}
+	let cancelled = false;
+	void generateDeviceAccessQr(buildPairingDeepLink({ code, serial }))
+		.then((url) => {
+			if (!cancelled) qrDataUrl = url;
+		})
+		.catch(() => {
+			if (!cancelled) qrDataUrl = null;
+		});
+	return () => {
+		cancelled = true;
+	};
 });
 
 async function generate(): Promise<void> {
@@ -195,6 +222,19 @@ const subStatus = $derived(pairing.subStatus);
 				{/if}
 
 				<p class="text-muted-foreground text-xs">{t.instructions()}</p>
+
+				{#if qrDataUrl}
+					<div class="flex flex-col items-center gap-2 pt-1" data-testid="pairing-qr">
+						<img
+							src={qrDataUrl}
+							alt={t.scanToPair()}
+							class="bg-background size-40 rounded-md border p-2"
+							width="160"
+							height="160"
+						/>
+						<p class="text-muted-foreground max-w-xs text-center text-xs">{t.scanToPair()}</p>
+					</div>
+				{/if}
 			</div>
 
 			<div class="flex flex-wrap gap-2">

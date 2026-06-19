@@ -15,6 +15,7 @@ import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 import WifiIcon from '@lucide/svelte/icons/wifi';
 import ZapIcon from '@lucide/svelte/icons/zap';
 
+import BondConstellation from '$lib/components/custom/BondConstellation.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import * as Sheet from '$lib/components/ui/sheet';
@@ -117,6 +118,28 @@ function lastSeen(ts: number | null): string | null {
 	if (ts == null) return null;
 	return formatRelativeTime(loc)(new Date(ts));
 }
+
+// Polite live-region announcement of the HUD telemetry. The raw values change
+// every tick; announcing each one would flood a screen reader, so a single
+// concise summary (state · bitrate · link count) is DEBOUNCED — only the value
+// that survives a quiet window is announced. Detail stays in the expandable
+// sheet; this is the at-a-glance read for assistive tech.
+const TELEMETRY_ANNOUNCE_DEBOUNCE_MS = 1500;
+const telemetrySummary = $derived(
+	[
+		isOffline ? $LL.hud.offline() : isLive ? $LL.hud.live() : $LL.hud.idle(),
+		`${$LL.hud.bitrate()}: ${hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—'}`,
+		`${$LL.hud.network()}: ${hud.links.length}`,
+	].join(' · '),
+);
+let announcedTelemetry = $state('');
+$effect(() => {
+	const next = telemetrySummary;
+	const id = setTimeout(() => {
+		announcedTelemetry = next;
+	}, TELEMETRY_ANNOUNCE_DEBOUNCE_MS);
+	return () => clearTimeout(id);
+});
 </script>
 
 {#snippet miniBars(link: LinkSignal)}
@@ -151,6 +174,8 @@ function lastSeen(ts: number | null): string | null {
 		</dd>
 	</div>
 {/snippet}
+
+<span role="status" aria-live="polite" class="sr-only" data-testid="hud-telemetry-status">{announcedTelemetry}</span>
 
 <Sheet.Root bind:open>
 	<Sheet.Trigger>
@@ -273,6 +298,12 @@ function lastSeen(ts: number | null): string | null {
 			<!-- Streaming -->
 			<section class="flex flex-col gap-1">
 				<h3 class="text-muted-foreground mb-1 text-xs font-medium">{$LL.hud.streaming()}</h3>
+
+				<!-- Bond constellation: visualizes the bond the rollup below states numerically -->
+				<div class="mx-auto mb-2 w-full max-w-[22rem]">
+					<BondConstellation links={hud.links} live={isLive} frozen={isEink} />
+				</div>
+
 				<div class="flex items-center justify-between gap-3 border-b py-2">
 					<span class="text-muted-foreground flex items-center gap-2">
 						<span

@@ -32,6 +32,7 @@ const COUNTDOWN_INTERVAL_MS = 1000;
 
 export class PairingController {
 	code = $state<string | null>(null);
+	serial = $state<string | null>(null);
 	validUntil = $state(0);
 	windowSeconds = $state(0);
 	status = $state<PairingStatus>("idle");
@@ -54,6 +55,7 @@ export class PairingController {
 		try {
 			const result = await rpc.pairing.generateClaimCode();
 			this.code = result.code;
+			this.serial = result.serial;
 			this.validUntil = result.validUntil;
 			this.windowSeconds = result.windowSeconds;
 			this.now = Date.now();
@@ -106,6 +108,7 @@ export class PairingController {
 	reset(): void {
 		this.stopCountdown();
 		this.code = null;
+		this.serial = null;
 		this.validUntil = 0;
 		this.windowSeconds = 0;
 		this.status = "idle";

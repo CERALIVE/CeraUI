@@ -18,6 +18,7 @@ import { ZodError } from "zod";
 import {
 	AckSchema,
 	CommandSchema,
+	DeliveryAckSchema,
 	EnvelopeSchema,
 	FrameSchema,
 	HandshakeDeviceSchema,
@@ -60,9 +61,26 @@ const FIXTURE_14_2 = {
 			"self_fencing.confirm",
 		],
 		deviceCaps: {
+			ceraui_version: "2026.6.1",
+			config_schema_version: 3,
 			engine: "cerastream",
 			selfFencing: true,
 			maxBitrateBps: 12000000,
+		},
+	},
+};
+
+/** §14.2 variant — a not-yet-updated device omits the version caps (safe-rollout tolerance). */
+const FIXTURE_14_2_NO_VERSION = {
+	v: 1,
+	kind: "handshake",
+	type: "device.hello",
+	cid: "1a4d8f02-7c3e-4b1a-9e2d-5f6a7b8c9d0e",
+	payload: {
+		v: 1,
+		supportedTypes: ["streaming.start", "streaming.stop"],
+		deviceCaps: {
+			engine: "cerastream",
 		},
 	},
 };
@@ -221,6 +239,14 @@ const FIXTURE_14_14 = {
 	},
 };
 
+/** §14.17 Delivery acknowledgement */
+const FIXTURE_14_17 = {
+	v: 1,
+	kind: "delivery.ack",
+	type: "streaming.setConfig",
+	cid: "9b2c5e7a-1f3d-4a8b-bc6e-2d4f6a8c0e12",
+};
+
 describe("control-plane protocol — §14 wire fixtures parse", () => {
 	it("§14.1 minimal valid envelope parses as base Envelope and Command", () => {
 		expect(EnvelopeSchema.parse(FIXTURE_14_1)).toMatchObject({
@@ -237,6 +263,26 @@ describe("control-plane protocol — §14 wire fixtures parse", () => {
 		expect(body.v).toBe(1);
 		expect(body.supportedTypes).toContain("self_fencing.confirm");
 		expect(body.deviceCaps.engine).toBe("cerastream");
+		expect(body.deviceCaps.ceraui_version).toBe("2026.6.1");
+		expect(body.deviceCaps.config_schema_version).toBe(3);
+	});
+
+	it("§4.1 device hello tolerates a hello omitting the version caps (safe rollout)", () => {
+		const body = HandshakeDeviceSchema.parse(FIXTURE_14_2_NO_VERSION.payload);
+		expect(body.deviceCaps.ceraui_version).toBeUndefined();
+		expect(body.deviceCaps.config_schema_version).toBeUndefined();
+		expect(body.deviceCaps.engine).toBe("cerastream");
+	});
+
+	it("§4.1 device hello rejects a non-integer config_schema_version", () => {
+		const bad = {
+			...FIXTURE_14_2.payload,
+			deviceCaps: {
+				...FIXTURE_14_2.payload.deviceCaps,
+				config_schema_version: 1.5,
+			},
+		};
+		expect(HandshakeDeviceSchema.safeParse(bad).success).toBe(false);
 	});
 
 	it("§14.3 hub hello parses as Handshake frame + HandshakeHub body", () => {
@@ -304,6 +350,13 @@ describe("control-plane protocol — §14 wire fixtures parse", () => {
 		expect(ack.type).toBe("command.forbidden");
 	});
 
+	it("§14.17 delivery ack parses and echoes the command type + cid", () => {
+		const ack = DeliveryAckSchema.parse(FIXTURE_14_17);
+		expect(ack.kind).toBe("delivery.ack");
+		expect(ack.type).toBe("streaming.setConfig");
+		expect(ack.cid).toBe("9b2c5e7a-1f3d-4a8b-bc6e-2d4f6a8c0e12");
+	});
+
 	it("every frame fixture routes through the FrameSchema discriminated union", () => {
 		const frameFixtures = [
 			FIXTURE_14_1,
@@ -320,6 +373,7 @@ describe("control-plane protocol — §14 wire fixtures parse", () => {
 			FIXTURE_14_12,
 			FIXTURE_14_13,
 			FIXTURE_14_14,
+			FIXTURE_14_17,
 		];
 		for (const fixture of frameFixtures) {
 			expect(() => FrameSchema.parse(fixture)).not.toThrow();

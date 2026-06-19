@@ -728,7 +728,7 @@ at exactly 60.
 
 ## ANTI-PATTERNS
 
-- Don't run `npm install` or `yarn` — pnpm workspaces only.
+- Don't run `npm install` or `yarn` — use `pnpm` (current) or `bun` (after Todo 13 migration PR lands). Until Todo 13 merges, `bun install` will produce a mismatched lockfile; stay on `pnpm install`.
 - Don't add `@ceralive/srtla` to `package.json` — that package is retired from CeraUI. The sender binding is `@ceralive/srtla-send` (public-npm registry dep, `@ceralive` scope). **`@ceralive/cerastream` is a public-npm registry dep** (`@ceralive` scope, pinned to a CalVer version; ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:` or vendored `.tgz`.
 - Don't edit `.impeccable.md` for code changes — it's a design reference, not config.
 - Don't touch `@ceralive/srtla-send` call sites without checking `../srtla-send-rs/AGENTS.md` first (binding API).
