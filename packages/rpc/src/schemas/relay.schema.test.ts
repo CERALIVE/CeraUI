@@ -21,9 +21,11 @@ import {
 import { type DetectionMethod, detectionMethodSchema } from './cloud-provider.schema';
 import {
 	ACTIVE_RELAY_PROTOCOLS,
+	deriveReceiverKind,
 	isNamespacedRelayId,
 	namespacedRelayId,
 	parseNamespacedRelayId,
+	receiverKindManifest,
 	relayAccountSchema,
 	relayMessageSchema,
 	relayProtocolAvailability,
@@ -31,6 +33,7 @@ import {
 	relayProviderKindSchema,
 	relayProviderMetaSchema,
 	relayServerSchema,
+	serverSupportedProtocols,
 } from './relay.schema';
 
 describe('relay.schema — backward compatibility (old config parses)', () => {
@@ -249,5 +252,124 @@ describe('relay_streamid_override (editable stream id)', () => {
 	test('override is absent on old config (undefined, no throw)', () => {
 		const parsed = runtimeConfigSchema.parse({ relay_account: '1' });
 		expect(parsed.relay_streamid_override).toBeUndefined();
+	});
+});
+
+describe('deriveReceiverKind (transport × destination)', () => {
+	test('srtla + relay server → srtla_relay', () => {
+		expect(deriveReceiverKind({ protocol: 'srtla', hasRelayServer: true })).toBe('srtla_relay');
+	});
+
+	test('srtla + no relay server → srtla_custom', () => {
+		expect(deriveReceiverKind({ protocol: 'srtla', hasRelayServer: false })).toBe('srtla_custom');
+	});
+
+	test('rist + relay server → rist_relay', () => {
+		expect(deriveReceiverKind({ protocol: 'rist', hasRelayServer: true })).toBe('rist_relay');
+	});
+
+	test('rist + no relay server → rist_custom', () => {
+		expect(deriveReceiverKind({ protocol: 'rist', hasRelayServer: false })).toBe('rist_custom');
+	});
+
+	test('srt always → srt_custom (no managed variant in Scope A)', () => {
+		expect(deriveReceiverKind({ protocol: 'srt', hasRelayServer: true })).toBe('srt_custom');
+		expect(deriveReceiverKind({ protocol: 'srt', hasRelayServer: false })).toBe('srt_custom');
+	});
+
+	test('legacy config (protocol undefined) coerces to srtla → srtla_relay', () => {
+		expect(deriveReceiverKind({ protocol: undefined, hasRelayServer: true })).toBe('srtla_relay');
+		expect(deriveReceiverKind({ protocol: undefined, hasRelayServer: false })).toBe('srtla_custom');
+	});
+
+	test('relay-override reload caveat: addr/port + override but no server → srtla_custom', () => {
+		const config = runtimeConfigSchema.parse({
+			srtla_addr: '1.2.3.4',
+			srtla_port: 5000,
+			relay_streamid_override: 'custom-stream-key',
+		});
+		const hasRelayServer = config.relay_server !== undefined;
+		expect(hasRelayServer).toBe(false);
+		expect(deriveReceiverKind({ protocol: undefined, hasRelayServer })).toBe('srtla_custom');
+	});
+});
+
+describe('receiverKindManifest (per-kind form shape)', () => {
+	test('*_relay kinds → managed destination with provider/server/account/streamid', () => {
+		for (const kind of ['srtla_relay', 'rist_relay'] as const) {
+			const manifest = receiverKindManifest(kind);
+			expect(manifest.destination).toBe('managed');
+			expect(manifest.fields).toEqual(['provider', 'server', 'account', 'streamid']);
+		}
+	});
+
+	test('*_custom kinds → custom destination with addr/port/streamid + secret', () => {
+		for (const kind of ['srtla_custom', 'rist_custom', 'srt_custom'] as const) {
+			const manifest = receiverKindManifest(kind);
+			expect(manifest.destination).toBe('custom');
+			expect(manifest.fields).toEqual(['addr', 'port', 'streamid', 'secret']);
+		}
+	});
+
+	test('srtla_* kinds are bonded; rist_*/srt_custom are not', () => {
+		expect(receiverKindManifest('srtla_relay').bonded).toBe(true);
+		expect(receiverKindManifest('srtla_custom').bonded).toBe(true);
+		expect(receiverKindManifest('rist_relay').bonded).toBe(false);
+		expect(receiverKindManifest('rist_custom').bonded).toBe(false);
+		expect(receiverKindManifest('srt_custom').bonded).toBe(false);
+	});
+
+	test('rist_* require an even data port and treat stream id as optional', () => {
+		for (const kind of ['rist_relay', 'rist_custom'] as const) {
+			const manifest = receiverKindManifest(kind);
+			expect(manifest.requiresEvenPort).toBe(true);
+			expect(manifest.requiresStreamId).toBe(false);
+		}
+	});
+
+	test('non-rist kinds do not require an even port', () => {
+		for (const kind of ['srtla_relay', 'srtla_custom', 'srt_custom'] as const) {
+			expect(receiverKindManifest(kind).requiresEvenPort).toBe(false);
+		}
+	});
+
+	test('requiresStreamId is advisory — present as a boolean for every kind, never absent', () => {
+		for (const kind of ['srtla_relay', 'srtla_custom', 'rist_relay', 'rist_custom', 'srt_custom'] as const) {
+			expect(typeof receiverKindManifest(kind).requiresStreamId).toBe('boolean');
+		}
+	});
+});
+
+describe('serverSupportedProtocols (additive protocols field)', () => {
+	test('back-compat: falls back to scalar protocol when protocols absent', () => {
+		const server = relayServerSchema.parse({ name: 'Frankfurt', protocol: 'srtla' });
+		expect(serverSupportedProtocols(server)).toEqual(['srtla']);
+	});
+
+	test('returns the protocols array when present', () => {
+		const server = relayServerSchema.parse({
+			name: 'Multi',
+			protocol: 'srtla',
+			protocols: ['srtla', 'rist'],
+		});
+		expect(serverSupportedProtocols(server)).toEqual(['srtla', 'rist']);
+	});
+
+	test('empty protocols array falls back to the scalar protocol', () => {
+		const server = relayServerSchema.parse({ name: 'Empty', protocol: 'rist', protocols: [] });
+		expect(serverSupportedProtocols(server)).toEqual(['rist']);
+	});
+
+	test('protocols is additive — a server without it still parses', () => {
+		expect(() => relayServerSchema.parse({ name: 'Legacy', rtt: 5, default: true })).not.toThrow();
+	});
+});
+
+describe('relayProtocolAvailability — srt is never selectable among active transports', () => {
+	test('srt is not selectable even when srtla/rist are advertised', () => {
+		expect(relayProtocolAvailability('srt', ['srtla', 'rist'])).toEqual({
+			selectable: false,
+			reason: 'reserved',
+		});
 	});
 });
