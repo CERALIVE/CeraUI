@@ -1,33 +1,34 @@
 <!--
-  ServerDialog.svelte — SRTLA / relay-server configuration, surfaced from Live.
+  ServerDialog.svelte — receiver/server configuration, surfaced from Live.
 
-  Method-based UI (Task 16), split into focused sub-components (Task 14):
-   • Two transport methods stay as the existing tab toggle — Manual Configuration
-     (`ManualEndpointForm`: a custom relay address/port/streamid/secret with a
-     "Validate" action) and Relay Server (`RelayServerSelector`: a managed-provider
-     catalog with provider grouping, an auto-preloaded READ-ONLY endpoint + manual
-     override, account selector, and an editable Stream ID).
-   • Manual mode validates the endpoint through `relay.validate` (Task 8 adapter)
-     and surfaces the multi-stage result inline; Save is blocked while a validation
-     is in flight or failing (the `relay-validation` reducer owns that gate).
+  Destination-first orchestration (Task 9). The dialog leads with WHERE the
+  stream is sent and only then HOW it gets there:
 
-  This dialog stays the logic container: it owns the `draft` dirty-field guard,
-  every derived value, and the validate + save handlers; the sub-components are
-  presentational. Live config (`getConfig`) and the relay catalog (`getRelays`)
-  are read directly and overlaid only with the operator's edits. Validation bounds
+   1. Streaming-lock banner — config changes need a stop first.
+   2. DestinationSection (T6) — managed cloud relay vs. custom receiver, with the
+      D6 relay-availability gate baked into the managed choice.
+   3. Endpoint config, immediately under the destination pick:
+        • managed → RelayServerSelector (provider/server/endpoint/account/streamid,
+          plus the per-server transport chooser for multi-transport endpoints).
+        • custom  → CustomEndpointForm (kind-driven address/port/streamid/secret +
+          the relay.validate action and its multi-stage result).
+   4. TransportBadge (T8) — the calm derived "how it reaches the receiver" badge
+      with an Advanced disclosure that mounts the transport-protocol radiogroup.
+   5. SRT latency slider.
+
+  This stays the logic container: it owns the `draft` dirty-field guard, every
+  derived value (destination/protocol/kind via the pure T5
+  `receiver-experience` helpers), the relay-validation gate, and the validate +
+  save handlers. Live config (`getConfig`) and the relay catalog (`getRelays`)
+  are read directly and overlaid only with the operator's edits. The save handler
+  delegates the persisted-field selection to `buildServerSetConfig` (T5) and locks
+  every field of that SAME object before the RPC (field-lock-before-RPC). Bounds
   and port parsing come from `ValidationAdapter` (RPC schema consts).
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import { Server } from '@lucide/svelte';
-import {
-	RELAY_PROTOCOLS,
-	type RelayProtocol,
-	type RelayProtocolUnavailableReason,
-	relayProtocolAvailability,
-	serverSupportedProtocols,
-	type StreamingConfigInput,
-} from '@ceraui/rpc/schemas';
+import { type RelayProtocol, serverSupportedProtocols } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
@@ -43,11 +44,21 @@ import {
 	reduceValidateError,
 	reduceValidateResult,
 } from '$lib/components/streaming/relay-validation';
-import { getCapabilities, getConfig, getIsStreaming, getRelays } from '$lib/rpc/subscriptions.svelte';
+import { getConfig, getIsStreaming, getRelays } from '$lib/rpc/subscriptions.svelte';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
-import ManualEndpointForm from './server/ManualEndpointForm.svelte';
+import {
+	type Destination,
+	type ServerSetDerived,
+	type ServerSetDraft,
+	buildServerSetConfig,
+	deriveDestination,
+	resolveReceiverKind,
+} from '$lib/streaming/receiver-experience';
+import CustomEndpointForm from './server/CustomEndpointForm.svelte';
+import DestinationSection from './server/DestinationSection.svelte';
 import RelayServerSelector from './server/RelayServerSelector.svelte';
+import TransportBadge from './server/TransportBadge.svelte';
 
 interface Props {
 	open?: boolean;
@@ -71,23 +82,8 @@ const config = $derived(getConfig());
 const relays = $derived(getRelays());
 const isStreaming = $derived(Boolean(getIsStreaming()));
 
-// Transport protocol selection. Protocol acronyms are technical identifiers, not
-// translated copy (mirrors the literal provider brand names below).
-const PROTOCOL_LABELS: Record<RelayProtocol, string> = {
-	srtla: 'SRTLA',
-	srt: 'SRT',
-	rist: 'RIST',
-};
-
-function protocolReason(reason: RelayProtocolUnavailableReason | undefined): string | undefined {
-	if (reason === 'capability') return $LL.settings.protocolRistUnavailable();
-	if (reason === 'reserved') return $LL.settings.protocolReserved();
-	return undefined;
-}
-
-type Mode = 'manual' | 'relay';
 type Draft = {
-	mode?: Mode;
+	destination?: Destination;
 	relay_protocol?: RelayProtocol;
 	srtla_addr?: string;
 	srtla_port?: string;
@@ -113,24 +109,11 @@ $effect(() => {
 	}
 });
 
-const mode = $derived<Mode>(draft.mode ?? (config?.relay_server ? 'relay' : 'manual'));
-
-// RIST is capability-gated: the option stays visible but disabled (with a
-// reason) until the engine advertises the `rist` transport; SRT is reserved.
-const transports = $derived(getCapabilities()?.transports);
-const protocol = $derived<RelayProtocol>(
-	draft.relay_protocol ?? config?.relay_protocol ?? 'srtla',
-);
-const protocolOptions = $derived(
-	RELAY_PROTOCOLS.map((value) => ({
-		value,
-		label: PROTOCOL_LABELS[value],
-		...relayProtocolAvailability(value, transports),
-	})),
-);
-const protocolSelectable = $derived(
-	relayProtocolAvailability(protocol, transports).selectable,
-);
+// Destination + transport: the destination defaults to the persisted config
+// (a non-empty `relay_server` = managed), the protocol to the persisted protocol
+// (legacy configs with none coerce to SRTLA downstream).
+const destination = $derived<Destination>(draft.destination ?? deriveDestination(config));
+const protocol = $derived<RelayProtocol>(draft.relay_protocol ?? config?.relay_protocol ?? 'srtla');
 
 const addr = $derived(draft.srtla_addr ?? config?.srtla_addr ?? '');
 const portStr = $derived(draft.srtla_port ?? (config?.srtla_port?.toString() ?? ''));
@@ -143,15 +126,6 @@ const relayStreamId = $derived(draft.relay_streamid ?? config?.relay_streamid_ov
 
 const serverEntries = $derived(Object.entries(relays?.servers ?? {}));
 const accountEntries = $derived(Object.entries(relays?.accounts ?? {}));
-
-// Relay availability gate (D6): the relay tab is always rendered but stays
-// disabled with an i18n hint until the catalog exists. `getRelays()` is
-// `undefined` until the cloud provider's relays cache is populated (never in
-// mock/dev), and may arrive empty — surface the matching waiting / none copy.
-const relayUnavailable = $derived(relays === undefined || serverEntries.length === 0);
-const relayHint = $derived(
-	relays === undefined ? $LL.notifications.relayWaiting() : $LL.notifications.relayNone(),
-);
 
 // Provider grouping: untagged catalog servers belong to the device's configured
 // provider, so the selector defaults to it and lists only that provider's relays.
@@ -181,12 +155,16 @@ const relayServerProtocols = $derived(
 	relayServerInfo ? serverSupportedProtocols(relayServerInfo) : [],
 );
 
+// Receiver kind = transport × destination (T5). For a managed server the
+// effective transport is constrained to what that server actually advertises.
+const kind = $derived(resolveReceiverKind({ protocol, destination, server: relayServerInfo }));
+
 // Default best = bonded SRTLA: when a multi-transport server is selected whose
 // advertised set excludes the current protocol, snap the persisted protocol to
 // SRTLA (bonded) when offered, else the first advertised transport. The chooser
 // stays the single user-facing writer; this only seeds a valid default.
 $effect(() => {
-	if (mode !== 'relay' || relayServerProtocols.length <= 1) return;
+	if (destination !== 'managed' || relayServerProtocols.length <= 1) return;
 	if (relayServerProtocols.includes(protocol)) return;
 	const best = relayServerProtocols.includes('srtla') ? 'srtla' : relayServerProtocols[0];
 	if (best && draft.relay_protocol !== best) draft.relay_protocol = best;
@@ -200,7 +178,7 @@ const overridePortStr = $derived(
 
 const portNum = $derived(parsePort(portStr));
 const portError = $derived.by(() => {
-	if (mode !== 'manual' || portStr.trim() === '') return undefined;
+	if (destination !== 'custom' || portStr.trim() === '') return undefined;
 	if (!isPortValid(portNum)) return $LL.validation.portRange();
 	return undefined;
 });
@@ -211,7 +189,7 @@ const overridePortError = $derived.by(() => {
 	return undefined;
 });
 const addrError = $derived(
-	mode === 'manual' && draft.srtla_addr !== undefined && draft.srtla_addr.trim() === ''
+	destination === 'custom' && draft.srtla_addr !== undefined && draft.srtla_addr.trim() === ''
 		? $LL.settings.errors.srtlaServerAddressRequired()
 		: undefined,
 );
@@ -225,10 +203,10 @@ const canValidate = $derived(
 );
 
 const canSave = $derived.by(() => {
-	// A capability-gated or reserved protocol can never be saved (RIST without
-	// the engine capability, or the reserved SRT placeholder).
-	if (!protocolSelectable) return false;
-	if (mode === 'manual') {
+	// The reserved plain-SRT kind can never be saved (mirrors the old
+	// `!protocolSelectable` reserved-protocol gate).
+	if (kind === 'srt_custom') return false;
+	if (destination === 'custom') {
 		return manualSaveEnabled({
 			isStreaming,
 			addr,
@@ -279,27 +257,27 @@ async function handleValidate() {
 }
 
 async function handleSave() {
-	const input: StreamingConfigInput = {
-		srt_latency: clampLatency(latency),
-		relay_protocol: protocol,
+	const draftValues: ServerSetDraft = {
+		latency: clampLatency(latency),
+		protocol,
+		addr,
+		portStr,
+		streamId,
+		overrideAddr,
+		overridePortStr,
+		relayStreamId,
+		relayServer,
+		relayAccount,
 	};
-	if (mode === 'manual') {
-		input.srtla_addr = addr.trim();
-		input.srtla_port = portNum;
-		input.srt_streamid = streamId.trim();
-	} else if (relayOverride) {
-		input.srtla_addr = overrideAddr.trim();
-		input.srtla_port = overridePortNum;
-		input.relay_streamid_override = relayStreamId.trim();
-	} else {
-		input.relay_server = relayServer;
-		if (relayAccount) input.relay_account = relayAccount;
-		input.relay_streamid_override = relayStreamId.trim();
-	}
-	// Lock each field this save changes BEFORE the RPC so a stale server echo
-	// of the old value can't revert the edit; release after it settles (resolve
-	// or reject) to avoid a permanent lock.
-	const fields = Object.entries(input).filter(([, value]) => value !== undefined);
+	const derived: ServerSetDerived = { destination, relayOverride };
+	// The SAME object is both locked and persisted: buildServerSetConfig prunes
+	// every undefined-valued key, so `Object.entries(input)` is exactly the set
+	// of fields setConfig will write.
+	const input = buildServerSetConfig(draftValues, derived);
+	const fields = Object.entries(input);
+	// Lock each field this save changes BEFORE the RPC so a stale server echo of
+	// the old value can't revert the edit; release after it settles (resolve or
+	// reject) to avoid a permanent lock.
 	for (const [field, value] of fields) markPending(field, value);
 	try {
 		await rpc.streaming.setConfig(input);
@@ -331,114 +309,18 @@ async function handleSave() {
 			</p>
 		{/if}
 
-		<!-- Transport protocol: SRTLA always available; RIST gated on the engine
-		     capability; SRT reserved. Unavailable options stay visible but disabled
-		     with a reason (never hidden), per the capability-consumer pattern. -->
-		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="transport-protocol">
-				{$LL.settings.transportProtocol()}
-			</Label>
-			<div
-				id="transport-protocol"
-				class="grid grid-cols-3 gap-1"
-				data-testid="transport-protocol"
-				role="radiogroup"
-			>
-				{#each protocolOptions as option (option.value)}
-					{@const reason = protocolReason(option.reason)}
-					<button
-						aria-checked={protocol === option.value}
-						class="flex flex-col items-center gap-0.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors {protocol ===
-						option.value
-							? 'border-primary bg-primary/10 text-foreground'
-							: 'border-border text-muted-foreground hover:text-foreground'} disabled:cursor-not-allowed disabled:opacity-50"
-						data-protocol={option.value}
-						data-testid={`protocol-${option.value}`}
-						disabled={isStreaming || !option.selectable}
-						onclick={() => (draft.relay_protocol = option.value)}
-						role="radio"
-						title={reason}
-						type="button"
-					>
-						<span class="font-mono">{option.label}</span>
-						{#if reason}
-							<span class="text-muted-foreground text-[0.65rem] leading-tight">{reason}</span>
-						{/if}
-					</button>
-				{/each}
-			</div>
-		</div>
+		<!-- Destination first (T6): WHERE the stream is sent. The managed choice
+		     carries the D6 relay-availability gate (waiting / none hint). -->
+		<DestinationSection
+			{isStreaming}
+			onDestination={(value) => (draft.destination = value)}
+			{relays}
+			remoteProvider={config?.remote_provider}
+			selected={destination}
+		/>
 
-		<!-- Mode toggle: manual SRTLA target vs a managed relay server -->
-		<div class="bg-muted grid grid-cols-2 gap-1 rounded-lg p-1" role="tablist">
-			<button
-				aria-selected={mode === 'manual'}
-				class="rounded-md px-3 py-2 text-sm font-medium transition-colors {mode === 'manual'
-					? 'bg-background text-foreground shadow-sm'
-					: 'text-muted-foreground hover:text-foreground'}"
-				disabled={isStreaming}
-				onclick={() => (draft.mode = 'manual')}
-				role="tab"
-				type="button"
-			>
-				{$LL.settings.manualConfiguration()}
-			</button>
-			<button
-				aria-selected={mode === 'relay'}
-				class="rounded-md px-3 py-2 text-sm font-medium transition-colors {mode === 'relay'
-					? 'bg-background text-foreground shadow-sm'
-					: 'text-muted-foreground hover:text-foreground'}"
-				disabled={relays === undefined || isStreaming}
-				onclick={() => (draft.mode = 'relay')}
-				role="tab"
-				type="button"
-			>
-				{$LL.settings.relayServer()}
-			</button>
-		</div>
-
-		<!-- Relay gate hint (D6): explains the disabled relay tab while the relay
-		     catalog is missing (waiting) or empty (none). Manual stays usable. -->
-		{#if relayUnavailable}
-			<p
-				class="text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-sm"
-				role="status"
-			>
-				{relayHint}
-			</p>
-		{/if}
-
-		{#if mode === 'manual'}
-			<ManualEndpointForm
-				{addr}
-				{addrError}
-				{canValidate}
-				{isStreaming}
-				onAddr={(value) => {
-					draft.srtla_addr = value;
-					resetValidation();
-				}}
-				onPassphrase={(value) => {
-					draft.passphrase = value;
-					resetValidation();
-				}}
-				onPort={(value) => {
-					draft.srtla_port = value;
-					resetValidation();
-				}}
-				onStreamId={(value) => {
-					draft.srt_streamid = value;
-					resetValidation();
-				}}
-				onValidate={handleValidate}
-				{passphrase}
-				port={PORT}
-				{portError}
-				{portStr}
-				{streamId}
-				{validation}
-			/>
-		{:else}
+		<!-- Endpoint config, immediately under the destination pick. -->
+		{#if destination === 'managed'}
 			<RelayServerSelector
 				{accountEntries}
 				{filteredServerEntries}
@@ -470,7 +352,47 @@ async function handleSave() {
 				serverProtocols={relayServerProtocols}
 				{selectedProvider}
 			/>
+		{:else}
+			<CustomEndpointForm
+				{addr}
+				{addrError}
+				{canValidate}
+				{isStreaming}
+				{kind}
+				onAddr={(value) => {
+					draft.srtla_addr = value;
+					resetValidation();
+				}}
+				onPassphrase={(value) => {
+					draft.passphrase = value;
+					resetValidation();
+				}}
+				onPort={(value) => {
+					draft.srtla_port = value;
+					resetValidation();
+				}}
+				onStreamId={(value) => {
+					draft.srt_streamid = value;
+					resetValidation();
+				}}
+				onValidate={handleValidate}
+				{passphrase}
+				port={PORT}
+				{portError}
+				{portStr}
+				{streamId}
+				{validation}
+			/>
 		{/if}
+
+		<!-- Transport badge + Advanced disclosure (T8): the derived "how it
+		     reaches the receiver" kind, with the protocol radiogroup behind it. -->
+		<TransportBadge
+			hasRelayServer={destination === 'managed'}
+			{isStreaming}
+			onProtocol={(value) => (draft.relay_protocol = value)}
+			{protocol}
+		/>
 
 		<!-- SRT latency: bounds come from streamingConstraints.srtLatency -->
 		<div class="space-y-3">
