@@ -293,6 +293,7 @@ async function handleSave() {
 
 <AppDialog
 	bind:open
+	closeOnPrimary={false}
 	icon={Server}
 	onPrimary={handleSave}
 	primaryDisabled={!canSave}

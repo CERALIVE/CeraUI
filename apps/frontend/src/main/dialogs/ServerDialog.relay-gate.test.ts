@@ -1,30 +1,29 @@
 // @vitest-environment jsdom
 /**
- * ServerDialog — relay availability gate (Task 11 / decision D6).
+ * ServerDialog — relay availability gate (decision D6), destination-first.
  *
- * Relay servers exist ONLY when the device's cloud provider has populated its
- * `relays_cache.json`; in mock/dev (and on a fresh boot) `getRelays()` returns
- * `undefined`, so the relay catalog is simply absent. The old UI silently hid
- * the relay option in that window, which read as "the feature displays nothing".
- *
- * D6 settles this: the relay tab is ALWAYS rendered, but it is DISABLED with an
- * i18n hint while `relays === undefined` (`notifications.relayWaiting`) or while
- * the catalog arrived empty (`notifications.relayNone`). Manual SRTLA is the
- * always-available fallback in either state. The existing streaming lock
- * (`disabled = … || isStreaming`) is preserved.
+ * The destination-first rewrite (T9) replaces the old manual/relay tabs with the
+ * DestinationSection radiogroup (T6): `destination-managed` (the cloud relay) and
+ * `destination-custom` (a self-entered receiver). The D6 gate now lives on the
+ * managed CHOICE: it is ALWAYS rendered, but DISABLED with an i18n hint while the
+ * relay catalog is missing (`getRelays() === undefined` → `relayWaiting`) or while
+ * it arrived empty (`relayNone`). Custom is the always-available fallback in either
+ * state. The streaming lock (`disabled = … || isStreaming`) is preserved.
  *
  * A user whose saved `config.relay_server` is set but whose relays have not yet
- * arrived must NOT be silently dropped to manual: the relay tab stays selected
- * (mode intent preserved) and surfaces the waiting hint instead.
+ * arrived must NOT be silently dropped to custom: the managed choice stays SELECTED
+ * (destination intent preserved via `deriveDestination`) and surfaces the waiting
+ * hint instead.
  *
- * Coverage:
- *  1. relays === undefined → relay tab present + DISABLED + waiting hint; manual
- *     tab present + ENABLED (fallback intact).
- *  2. relays with servers → relay tab ENABLED, no hint, selected server name
+ * Coverage (ported from the old Task 11 / Task 19 suites onto T6 testids):
+ *  1. relays === undefined → managed DISABLED + waiting hint; custom ENABLED.
+ *  2. relays with servers → managed ENABLED + selected, no hint, server name
  *     surfaced and entries listed in the catalog.
- *  3. Manual SRTLA usable in BOTH states (its inputs mount when selected).
- *  4. config.relay_server set + relays undefined → relay tab stays SELECTED
- *     (not switched to manual) and shows the waiting hint.
+ *  3. Custom always usable in BOTH states (its inputs mount when selected).
+ *  4. config.relay_server set + relays undefined → managed stays SELECTED (not
+ *     switched to custom) and shows the waiting hint.
+ *  5. Empty catalog → relayNone hint (distinct from the undefined→relayWaiting).
+ *  6. RTT-indicator tiers (`data-rtt-tier`) in the trigger and per catalog entry.
  */
 import {
 	fireEvent,
@@ -37,9 +36,6 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ServerDialog from "./ServerDialog.svelte";
 
-// Mutable subscription state driven per-test. The dialog reads these through
-// the mocked subscriptions module; values are set BEFORE each render so no
-// cross-render reactivity is required.
 const state = vi.hoisted(() => ({
 	config: undefined as
 		| { relay_server?: string; srtla_addr?: string; srtla_port?: number }
@@ -62,7 +58,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 }));
 
 vi.mock("$lib/rpc", () => ({
-	rpc: { streaming: { setConfig: vi.fn() } },
+	rpc: { streaming: { setConfig: vi.fn() }, relay: { validate: vi.fn() } },
 }));
 
 vi.mock("$lib/rpc/dirty-registry.svelte", () => ({
@@ -74,9 +70,6 @@ vi.mock("svelte-sonner", () => ({
 	toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-// AppDialog picks its surface (Dialog vs Sheet) via `new MediaQuery(...)`, which
-// reads `window.matchMedia` — absent in jsdom. Stub it to the desktop branch so
-// the dialog renders its Dialog surface (portaled to document.body).
 beforeAll(() => {
 	if (!window.matchMedia) {
 		window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -100,15 +93,13 @@ beforeAll(() => {
 });
 
 // English base copy (the runes i18n adapter defaults to `en` synchronously).
-const MANUAL_LABEL = "Manual Configuration";
-const RELAY_LABEL = "Relay Server";
 const WAITING_HINT = "Waiting for relay servers\u2026";
 const NONE_HINT = "No relay servers available";
 
-const relayTab = () =>
-	screen.getByRole("tab", { name: RELAY_LABEL }) as HTMLButtonElement;
-const manualTab = () =>
-	screen.getByRole("tab", { name: MANUAL_LABEL }) as HTMLButtonElement;
+const managedChoice = () =>
+	screen.getByTestId("destination-managed") as HTMLButtonElement;
+const customChoice = () =>
+	screen.getByTestId("destination-custom") as HTMLButtonElement;
 
 beforeEach(() => {
 	state.config = undefined;
@@ -117,24 +108,24 @@ beforeEach(() => {
 	state.capabilities = undefined;
 });
 
-describe("ServerDialog — relay availability gate (Task 11 / D6)", () => {
-	it("renders the relay tab DISABLED with a waiting hint when relays are absent", async () => {
+describe("ServerDialog — relay availability gate (D6, destination-first)", () => {
+	it("renders the managed choice DISABLED with a waiting hint when relays are absent", () => {
 		state.relays = undefined;
 
 		render(ServerDialog, { props: { open: true } });
 
-		// Relay tab is visible but gated off (never hidden — D6).
-		expect(relayTab()).toBeTruthy();
-		expect(relayTab().disabled).toBe(true);
+		// Managed is visible but gated off (never hidden — D6).
+		expect(managedChoice()).toBeTruthy();
+		expect(managedChoice().disabled).toBe(true);
 
 		// The i18n hint explains why it is gated.
 		expect(screen.getByText(WAITING_HINT)).toBeTruthy();
 
-		// Manual SRTLA stays available as the fallback.
-		expect(manualTab().disabled).toBe(false);
+		// Custom stays available as the fallback.
+		expect(customChoice().disabled).toBe(false);
 	});
 
-	it("enables the relay tab and lists server entries once relays arrive", async () => {
+	it("enables the managed choice and lists server entries once relays arrive", async () => {
 		state.relays = {
 			accounts: {},
 			servers: {
@@ -146,9 +137,9 @@ describe("ServerDialog — relay availability gate (Task 11 / D6)", () => {
 
 		render(ServerDialog, { props: { open: true } });
 
-		// Relay tab is now usable and selected (config intent → relay mode).
-		expect(relayTab().disabled).toBe(false);
-		expect(relayTab().getAttribute("aria-selected")).toBe("true");
+		// Managed is now usable and selected (config intent → managed destination).
+		expect(managedChoice().disabled).toBe(false);
+		expect(managedChoice().getAttribute("aria-checked")).toBe("true");
 
 		// No empty-state hint while a populated catalog exists.
 		expect(screen.queryByText(WAITING_HINT)).toBeNull();
@@ -168,50 +159,51 @@ describe("ServerDialog — relay availability gate (Task 11 / D6)", () => {
 		);
 	});
 
-	it("keeps manual SRTLA usable whether or not relays are present", async () => {
-		// State A: no relays — manual must still be reachable.
+	it("keeps custom usable whether or not relays are present", async () => {
+		// State A: no relays — custom must still be reachable.
 		const a = render(ServerDialog, { props: { open: true } });
-		await fireEvent.click(manualTab());
+		expect(customChoice().disabled).toBe(false);
+		await fireEvent.click(customChoice());
 		expect(document.getElementById("srtla-addr")).not.toBeNull();
 		a.unmount();
 
-		// State B: relays present — manual remains an explicit fallback.
+		// State B: relays present — custom remains an explicit fallback.
 		state.relays = { accounts: {}, servers: { "srv-eu": { name: "EU West" } } };
 		render(ServerDialog, { props: { open: true } });
-		expect(manualTab().disabled).toBe(false);
-		await fireEvent.click(manualTab());
+		expect(customChoice().disabled).toBe(false);
+		await fireEvent.click(customChoice());
 		expect(document.getElementById("srtla-addr")).not.toBeNull();
 	});
 
-	it("does not silently switch a relay-configured user to manual while relays load", async () => {
-		// Saved intent is relay, but the catalog has not arrived yet.
+	it("does not silently switch a relay-configured user to custom while relays load", () => {
+		// Saved intent is managed, but the catalog has not arrived yet.
 		state.config = { relay_server: "srv-eu" };
 		state.relays = undefined;
 
 		render(ServerDialog, { props: { open: true } });
 
-		// Mode intent preserved: relay tab is the selected one, not manual…
-		expect(relayTab().getAttribute("aria-selected")).toBe("true");
-		expect(manualTab().getAttribute("aria-selected")).toBe("false");
+		// Destination intent preserved: managed is selected, not custom…
+		expect(managedChoice().getAttribute("aria-checked")).toBe("true");
+		expect(customChoice().getAttribute("aria-checked")).toBe("false");
 		// …but it is gated with the waiting hint until relays load.
-		expect(relayTab().disabled).toBe(true);
+		expect(managedChoice().disabled).toBe(true);
 		expect(screen.getByText(WAITING_HINT)).toBeTruthy();
-		// Manual is still an available escape hatch.
-		expect(manualTab().disabled).toBe(false);
+		// Custom is still an available escape hatch.
+		expect(customChoice().disabled).toBe(false);
 	});
 });
 
 /**
- * Task 19 — extends the Task 11 gate suite with the conditional-display cases it
- * does not reach: the SECOND `relayUnavailable` branch (catalog arrived EMPTY →
- * `relayNone`, distinct from the `undefined`→`relayWaiting` branch above), and
- * the RTT-indicator wiring inside the dialog — the selected server's badge in
- * the trigger and the per-entry badges in the open catalog, each carrying the
+ * Empty-catalog and RTT-indicator display, ported from the old Task 19 suite onto
+ * the T6 destination testids: the SECOND `managedUnavailable` branch (catalog
+ * arrived EMPTY → `relayNone`, distinct from `undefined`→`relayWaiting`), and the
+ * RTT-indicator wiring inside the managed selector — the selected server's badge
+ * in the trigger and the per-entry badges in the open catalog, each carrying the
  * tier `RelayRttIndicator` derives from its raw `rtt`.
  */
-describe("ServerDialog — empty catalog & RTT-indicator display (Task 19)", () => {
+describe("ServerDialog — empty catalog & RTT-indicator display (D6 port)", () => {
 	it("shows the relayNone hint (not the waiting hint) when the catalog arrives empty", () => {
-		// Defined-but-empty is the second `relayUnavailable` branch: the catalog
+		// Defined-but-empty is the second `managedUnavailable` branch: the catalog
 		// exists yet lists nothing, so the copy must be "none", never "waiting".
 		state.relays = { accounts: {}, servers: {} };
 
@@ -220,7 +212,8 @@ describe("ServerDialog — empty catalog & RTT-indicator display (Task 19)", () 
 		expect(screen.getByText(NONE_HINT)).toBeTruthy();
 		expect(screen.queryByText(WAITING_HINT)).toBeNull();
 
-		expect(manualTab().disabled).toBe(false);
+		expect(managedChoice().disabled).toBe(true);
+		expect(customChoice().disabled).toBe(false);
 	});
 
 	it("surfaces the selected server's RTT badge with the correct tier in the trigger", () => {
@@ -249,9 +242,9 @@ describe("ServerDialog — empty catalog & RTT-indicator display (Task 19)", () 
 
 		render(ServerDialog, { props: { open: true } });
 
-		// No saved relay_server → mode defaults to manual; switch to the (now
-		// enabled) relay tab so the server Select mounts.
-		await fireEvent.click(relayTab());
+		// No saved relay_server → destination defaults to custom; switch to the
+		// (now enabled) managed choice so the server Select mounts.
+		await fireEvent.click(managedChoice());
 
 		const trigger = document.getElementById("relay-server");
 		expect(trigger).not.toBeNull();
