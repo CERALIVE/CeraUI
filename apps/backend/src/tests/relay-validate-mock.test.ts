@@ -10,14 +10,7 @@
  *   - the input/protocol/endpoint adapter checks run BEFORE the seam, so a
  *     malformed input still fails at its real stage.
  */
-import {
-	afterAll,
-	afterEach,
-	beforeAll,
-	describe,
-	expect,
-	it,
-} from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { call } from "@orpc/server";
 import {
@@ -109,7 +102,10 @@ describe("relay.validate deterministic mock seam (Task 4)", () => {
 	});
 
 	it("still fails at the input stage for a blank address (adapter checks intact)", async () => {
-		setMockRelayValidateFault({ stage: "probe", reason: "should not be reached" });
+		setMockRelayValidateFault({
+			stage: "probe",
+			reason: "should not be reached",
+		});
 
 		const result = await validate({ addr: "   ", port: 9000 });
 
@@ -118,7 +114,10 @@ describe("relay.validate deterministic mock seam (Task 4)", () => {
 	});
 
 	it("still fails at the endpoint stage for an odd RIST data port (adapter checks intact)", async () => {
-		setMockRelayValidateFault({ stage: "probe", reason: "should not be reached" });
+		setMockRelayValidateFault({
+			stage: "probe",
+			reason: "should not be reached",
+		});
 
 		const result = await validate({
 			addr: "relay.invalid",

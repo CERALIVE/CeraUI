@@ -173,7 +173,10 @@ export interface DeriveReceiverKindInput {
  * does NOT round-trip back to `srtla_relay` — there is no persisted server to
  * key the managed destination off of.
  */
-export function deriveReceiverKind({ protocol, hasRelayServer }: DeriveReceiverKindInput): ReceiverKind {
+export function deriveReceiverKind({
+	protocol,
+	hasRelayServer,
+}: DeriveReceiverKindInput): ReceiverKind {
 	const resolved = relayProtocolSchema.parse(protocol);
 	switch (resolved) {
 		case 'srtla':
@@ -185,7 +188,14 @@ export function deriveReceiverKind({ protocol, hasRelayServer }: DeriveReceiverK
 	}
 }
 
-export type ReceiverField = 'provider' | 'server' | 'account' | 'streamid' | 'addr' | 'port' | 'secret';
+export type ReceiverField =
+	| 'provider'
+	| 'server'
+	| 'account'
+	| 'streamid'
+	| 'addr'
+	| 'port'
+	| 'secret';
 
 export interface ReceiverKindManifest {
 	destination: 'managed' | 'custom';

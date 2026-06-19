@@ -334,7 +334,13 @@ describe('receiverKindManifest (per-kind form shape)', () => {
 	});
 
 	test('requiresStreamId is advisory — present as a boolean for every kind, never absent', () => {
-		for (const kind of ['srtla_relay', 'srtla_custom', 'rist_relay', 'rist_custom', 'srt_custom'] as const) {
+		for (const kind of [
+			'srtla_relay',
+			'srtla_custom',
+			'rist_relay',
+			'rist_custom',
+			'srt_custom',
+		] as const) {
 			expect(typeof receiverKindManifest(kind).requiresStreamId).toBe('boolean');
 		}
 	});

@@ -519,9 +519,7 @@ export function setMockStreamError(event: MockStreamErrorState): void {
 	updateMockState({ injectedStreamError: event });
 }
 
-export function setMockRelayValidateFault(
-	fault: MockRelayValidateFault,
-): void {
+export function setMockRelayValidateFault(fault: MockRelayValidateFault): void {
 	updateMockState({ relayValidateFault: fault });
 }
 
