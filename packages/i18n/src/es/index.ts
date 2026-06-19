@@ -278,6 +278,18 @@ const es = {
 		link: "Enlace",
 	},
 	live: {
+		server: {
+			bondedAcross: "Combinado en {count} {{enlace|enlaces}}",
+			singleLink: "Enlace único",
+			kind: {
+				srtlaRelay: "SRTLA · Combinado",
+				srtlaCustom: "SRTLA · Personalizado",
+				ristRelay: "RIST · Gestionado",
+				ristCustom: "RIST · Personalizado",
+				srtCustom: "SRT · Personalizado",
+			},
+			manageLinks: "Gestionar enlaces",
+		},
 		title: "Live",
 		description: "Control de transmisión y métricas en vivo",
 		startStream: "Iniciar transmisión",
@@ -575,6 +587,21 @@ const es = {
 		selectLanguage: "Seleccionar Idioma",
 	},
 	settings: {
+		destination: "Destino",
+		destinationManaged: "Mi cuenta en la nube",
+		destinationCustom: "Receptor personalizado",
+		destinationManagedHint:
+			"Transmite a través de un relé vinculado a tu cuenta en la nube.",
+		destinationCustomHint:
+			"Introduce la dirección y el puerto de tu propio receptor.",
+		transportKind: "Transporte",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · Combinado",
+			srtlaSingle: "SRTLA · Enlace único",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "Avanzado",
 		deviceStats: {
 			title: "Estado del dispositivo",
 			description: "Telemetría de hardware en vivo de este dispositivo.",

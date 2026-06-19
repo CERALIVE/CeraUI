@@ -79,6 +79,20 @@ const ja = {
 		signingIn: "サインイン中...",
 	},
 	settings: {
+		destination: "配信先",
+		destinationManaged: "マイクラウドアカウント",
+		destinationCustom: "カスタムレシーバー",
+		destinationManagedHint:
+			"クラウドアカウントに紐づくリレー経由で配信します。",
+		destinationCustomHint: "ご自身のレシーバーのアドレスとポートを入力します。",
+		transportKind: "トランスポート",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · ボンディング",
+			srtlaSingle: "SRTLA · シングルリンク",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "詳細設定",
 		deviceStats: {
 			title: "デバイス統計",
 			description: "このデバイスのライブハードウェアテレメトリ。",
@@ -736,6 +750,18 @@ const ja = {
 		link: "リンク",
 	},
 	live: {
+		server: {
+			bondedAcross: "{count} 本のリンクで結合",
+			singleLink: "シングルリンク",
+			kind: {
+				srtlaRelay: "SRTLA · ボンディング",
+				srtlaCustom: "SRTLA · カスタム",
+				ristRelay: "RIST · マネージド",
+				ristCustom: "RIST · カスタム",
+				srtCustom: "SRT · カスタム",
+			},
+			manageLinks: "リンクを管理",
+		},
 		title: "ライブ",
 		description: "ストリーム制御とライブメトリクス",
 		startStream: "ストリーム開始",

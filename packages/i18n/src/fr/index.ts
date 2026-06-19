@@ -232,6 +232,20 @@ const fr = {
 		signingIn: "Connexion en cours...",
 	},
 	settings: {
+		destination: "Destination",
+		destinationManaged: "Mon compte cloud",
+		destinationCustom: "Récepteur personnalisé",
+		destinationManagedHint: "Diffusez via un relais lié à votre compte cloud.",
+		destinationCustomHint:
+			"Saisissez l'adresse et le port de votre propre récepteur.",
+		transportKind: "Transport",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · Agrégé",
+			srtlaSingle: "SRTLA · Lien unique",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "Avancé",
 		deviceStats: {
 			title: "État de l'appareil",
 			description: "Télémétrie matérielle en direct de cet appareil.",
@@ -895,6 +909,18 @@ const fr = {
 		link: "Liaison",
 	},
 	live: {
+		server: {
+			bondedAcross: "Agrégé sur {count} {{lien|liens}}",
+			singleLink: "Lien unique",
+			kind: {
+				srtlaRelay: "SRTLA · Agrégé",
+				srtlaCustom: "SRTLA · Personnalisé",
+				ristRelay: "RIST · Géré",
+				ristCustom: "RIST · Personnalisé",
+				srtCustom: "SRT · Personnalisé",
+			},
+			manageLinks: "Gérer les liens",
+		},
 		title: "Live",
 		description: "Contrôle de diffusion et métriques en direct",
 		startStream: "Démarrer la diffusion",

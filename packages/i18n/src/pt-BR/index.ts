@@ -231,6 +231,21 @@ const ptBR = {
 		signingIn: "Fazendo login...",
 	},
 	settings: {
+		destination: "Destino",
+		destinationManaged: "Minha conta na nuvem",
+		destinationCustom: "Receptor personalizado",
+		destinationManagedHint:
+			"Transmita por um relé vinculado à sua conta na nuvem.",
+		destinationCustomHint:
+			"Informe o endereço e a porta do seu próprio receptor.",
+		transportKind: "Transporte",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · Agregado",
+			srtlaSingle: "SRTLA · Link único",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "Avançado",
 		deviceStats: {
 			title: "Status do dispositivo",
 			description: "Telemetria de hardware ao vivo deste dispositivo.",
@@ -870,6 +885,18 @@ const ptBR = {
 		link: "Link",
 	},
 	live: {
+		server: {
+			bondedAcross: "Agregado em {count} {{link|links}}",
+			singleLink: "Link único",
+			kind: {
+				srtlaRelay: "SRTLA · Agregado",
+				srtlaCustom: "SRTLA · Personalizado",
+				ristRelay: "RIST · Gerenciado",
+				ristCustom: "RIST · Personalizado",
+				srtCustom: "SRT · Personalizado",
+			},
+			manageLinks: "Gerenciar links",
+		},
 		title: "Live",
 		description: "Controle de transmissão e métricas ao vivo",
 		startStream: "Iniciar transmissão",

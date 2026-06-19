@@ -77,6 +77,19 @@ const zh = {
 		signingIn: "登录中...",
 	},
 	settings: {
+		destination: "目标",
+		destinationManaged: "我的云账户",
+		destinationCustom: "自定义接收器",
+		destinationManagedHint: "通过与您的云账户关联的中继进行推流。",
+		destinationCustomHint: "输入您自己的接收器地址和端口。",
+		transportKind: "传输",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · 绑定",
+			srtlaSingle: "SRTLA · 单链路",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "高级",
 		deviceStats: {
 			title: "设备统计",
 			description: "本设备的实时硬件遥测。",
@@ -683,6 +696,18 @@ const zh = {
 		link: "链路",
 	},
 	live: {
+		server: {
+			bondedAcross: "通过 {count} 条链路绑定",
+			singleLink: "单链路",
+			kind: {
+				srtlaRelay: "SRTLA · 绑定",
+				srtlaCustom: "SRTLA · 自定义",
+				ristRelay: "RIST · 托管",
+				ristCustom: "RIST · 自定义",
+				srtCustom: "SRT · 自定义",
+			},
+			manageLinks: "管理链路",
+		},
 		title: "直播",
 		description: "直播控制和实时指标",
 		startStream: "开始直播",

@@ -78,6 +78,19 @@ const hi = {
 		signingIn: "साइन इन हो रहे हैं...",
 	},
 	settings: {
+		destination: "गंतव्य",
+		destinationManaged: "मेरा क्लाउड खाता",
+		destinationCustom: "कस्टम रिसीवर",
+		destinationManagedHint: "अपने क्लाउड खाते से जुड़े रिले के माध्यम से स्ट्रीम करें।",
+		destinationCustomHint: "अपने रिसीवर का पता और पोर्ट दर्ज करें।",
+		transportKind: "ट्रांसपोर्ट",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · बॉन्डेड",
+			srtlaSingle: "SRTLA · एकल लिंक",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "उन्नत",
 		deviceStats: {
 			title: "डिवाइस आँकड़े",
 			description: "इस डिवाइस से लाइव हार्डवेयर टेलीमेट्री।",
@@ -715,6 +728,18 @@ const hi = {
 		link: "लिंक",
 	},
 	live: {
+		server: {
+			bondedAcross: "{count} {{लिंक|लिंक}} पर बॉन्डेड",
+			singleLink: "एकल लिंक",
+			kind: {
+				srtlaRelay: "SRTLA · बॉन्डेड",
+				srtlaCustom: "SRTLA · कस्टम",
+				ristRelay: "RIST · प्रबंधित",
+				ristCustom: "RIST · कस्टम",
+				srtCustom: "SRT · कस्टम",
+			},
+			manageLinks: "लिंक प्रबंधित करें",
+		},
 		title: "लाइव",
 		description: "स्ट्रीम नियंत्रण और लाइव मेट्रिक्स",
 		startStream: "स्ट्रीम शुरू करें",

@@ -268,6 +268,18 @@ const en = {
 		healthExplainDead: "Encoder process not running. The stream is down.",
 	},
 	live: {
+		server: {
+			bondedAcross: "Bonded across {count:number} {{link|links}}",
+			singleLink: "Single link",
+			kind: {
+				srtlaRelay: "SRTLA · Bonded",
+				srtlaCustom: "SRTLA · Custom",
+				ristRelay: "RIST · Managed",
+				ristCustom: "RIST · Custom",
+				srtCustom: "SRT · Custom",
+			},
+			manageLinks: "Manage links",
+		},
 		title: "Live",
 		description: "Stream control and live metrics",
 		startStream: "Start Stream",
@@ -565,6 +577,20 @@ const en = {
 		selectLanguage: "Select Language",
 	},
 	settings: {
+		destination: "Destination",
+		destinationManaged: "My cloud account",
+		destinationCustom: "Custom receiver",
+		destinationManagedHint:
+			"Stream through a relay tied to your cloud account.",
+		destinationCustomHint: "Enter your own receiver address and port.",
+		transportKind: "Transport",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · Bonded",
+			srtlaSingle: "SRTLA · Single link",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "Advanced",
 		appearance: {
 			title: "Appearance",
 			language: "Language",

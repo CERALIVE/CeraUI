@@ -278,6 +278,18 @@ const de = {
 		link: "Verbindung",
 	},
 	live: {
+		server: {
+			bondedAcross: "Gebündelt über {count} {{Verbindung|Verbindungen}}",
+			singleLink: "Einzelne Verbindung",
+			kind: {
+				srtlaRelay: "SRTLA · Gebündelt",
+				srtlaCustom: "SRTLA · Benutzerdefiniert",
+				ristRelay: "RIST · Verwaltet",
+				ristCustom: "RIST · Benutzerdefiniert",
+				srtCustom: "SRT · Benutzerdefiniert",
+			},
+			manageLinks: "Verbindungen verwalten",
+		},
 		title: "Live",
 		description: "Stream-Steuerung und Live-Metriken",
 		startStream: "Stream starten",
@@ -566,6 +578,21 @@ const de = {
 		signingIn: "Anmeldung läuft...",
 	},
 	settings: {
+		destination: "Ziel",
+		destinationManaged: "Mein Cloud-Konto",
+		destinationCustom: "Eigener Empfänger",
+		destinationManagedHint:
+			"Streame über ein Relay, das mit deinem Cloud-Konto verknüpft ist.",
+		destinationCustomHint:
+			"Gib Adresse und Port deines eigenen Empfängers ein.",
+		transportKind: "Transport",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · Gebündelt",
+			srtlaSingle: "SRTLA · Einzelne Verbindung",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "Erweitert",
 		deviceStats: {
 			title: "Gerätestatistik",
 			description: "Live-Hardware-Telemetrie dieses Geräts.",

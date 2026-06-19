@@ -216,6 +216,19 @@ const ar = {
 		signingIn: "جاري تسجيل الدخول...",
 	},
 	settings: {
+		destination: "الوجهة",
+		destinationManaged: "حسابي السحابي",
+		destinationCustom: "مستقبِل مخصّص",
+		destinationManagedHint: "ابثّ عبر مُرحِّل مرتبط بحسابك السحابي.",
+		destinationCustomHint: "أدخل عنوان ومنفذ المستقبِل الخاص بك.",
+		transportKind: "النقل",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · مجمّع",
+			srtlaSingle: "SRTLA · رابط واحد",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "متقدّم",
 		deviceStats: {
 			title: "إحصاءات الجهاز",
 			description: "قياس مباشر لأجهزة هذا الجهاز.",
@@ -855,6 +868,18 @@ const ar = {
 		link: "رابط",
 	},
 	live: {
+		server: {
+			bondedAcross: "مجمّع عبر {count} {{روابط|رابط|رابطين|روابط|رابطًا|رابط}}",
+			singleLink: "رابط واحد",
+			kind: {
+				srtlaRelay: "SRTLA · مجمّع",
+				srtlaCustom: "SRTLA · مخصّص",
+				ristRelay: "RIST · مُدار",
+				ristCustom: "RIST · مخصّص",
+				srtCustom: "SRT · مخصّص",
+			},
+			manageLinks: "إدارة الروابط",
+		},
 		title: "مباشر",
 		description: "التحكم في البث والمقاييس المباشرة",
 		startStream: "بدء البث",

@@ -78,6 +78,20 @@ const ko = {
 		signingIn: "로그인 중...",
 	},
 	settings: {
+		destination: "대상",
+		destinationManaged: "내 클라우드 계정",
+		destinationCustom: "사용자 지정 수신기",
+		destinationManagedHint:
+			"클라우드 계정에 연결된 릴레이를 통해 스트리밍합니다.",
+		destinationCustomHint: "사용자 수신기의 주소와 포트를 입력하세요.",
+		transportKind: "전송",
+		transportKindBadge: {
+			srtlaBonded: "SRTLA · 본딩",
+			srtlaSingle: "SRTLA · 단일 링크",
+			rist: "RIST",
+			srt: "SRT",
+		},
+		transportAdvanced: "고급",
 		deviceStats: {
 			title: "장치 통계",
 			description: "이 장치의 실시간 하드웨어 텔레메트리.",
@@ -723,6 +737,18 @@ const ko = {
 		link: "링크",
 	},
 	live: {
+		server: {
+			bondedAcross: "{count}개 링크로 본딩됨",
+			singleLink: "단일 링크",
+			kind: {
+				srtlaRelay: "SRTLA · 본딩",
+				srtlaCustom: "SRTLA · 사용자 지정",
+				ristRelay: "RIST · 관리형",
+				ristCustom: "RIST · 사용자 지정",
+				srtCustom: "SRT · 사용자 지정",
+			},
+			manageLinks: "링크 관리",
+		},
 		title: "라이브",
 		description: "스트림 제어 및 실시간 지표",
 		startStream: "스트림 시작",
