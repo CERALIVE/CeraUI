@@ -1164,6 +1164,7 @@ const ptBR = {
 	},
 	a11y: {
 		close: "Fechar",
+		skipToContent: "Pular para o conteúdo principal",
 	},
 	advanced: {
 		systemSettings: "Configurações do sistema",

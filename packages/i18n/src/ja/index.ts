@@ -1030,6 +1030,7 @@ const ja = {
 	},
 	a11y: {
 		close: "閉じる",
+		skipToContent: "メインコンテンツへスキップ",
 	},
 	advanced: {
 		systemSettings: "システム設定",

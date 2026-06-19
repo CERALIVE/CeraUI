@@ -1002,6 +1002,7 @@ const hi = {
 	},
 	a11y: {
 		close: "बंद करें",
+		skipToContent: "मुख्य सामग्री पर जाएँ",
 	},
 	advanced: {
 		systemSettings: "सिस्टम सेटिंग्स",

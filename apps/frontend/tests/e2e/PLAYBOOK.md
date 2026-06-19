@@ -217,6 +217,16 @@ Do not modify `field-lock.spec.ts`. It is a deterministic integration proof and 
 
 ---
 
+## Accessibility Gate (`a11y.spec.ts`)
+
+`a11y.spec.ts` is the axe-core CI gate. It runs `@axe-core/playwright` on the live/network/settings destinations and fails the build ONLY on `critical` + `serious` impact violations. Pre-existing violations are baselined per-page in `a11y-baseline.json` (a rule-id allowlist), so the gate never breaks CI on day one — only a NEW critical/serious rule fails it.
+
+- Runs serial + desktop-only (one worker owns the shared evidence/allowlist files).
+- Helper: `helpers/axe.ts` `runAxe(page)` returns only the gated (critical/serious) violations.
+- Refresh the baseline after an intentional change: `UPDATE_A11Y_BASELINE=1 pnpm --filter frontend exec playwright test a11y.spec.ts --project=desktop -g "axe gate"`. Capture mode rewrites the allowlist and `test-results/task-7-a11y-baseline.json` and never fails. A normal run writes `test-results/task-7-a11y-gate.json` and enforces.
+- All three tests are tagged `@a11y`; the dedicated CI step runs them and the broad Functional E2E step grep-inverts `@a11y` to avoid a duplicate dev-server boot.
+- To prove the gate works, seed a violation with a rule id NOT already baselined (e.g. an `<img>` without `alt` → `image-alt`). Seeding more `color-contrast` will be tolerated — it is the baselined rule.
+
 ## navigateTo Helper
 
 `navigateTo(page, destination)` from `helpers/index.ts` is the only correct way to navigate between the three primary destinations in specs.

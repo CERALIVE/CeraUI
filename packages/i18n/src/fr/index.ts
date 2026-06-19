@@ -1190,6 +1190,7 @@ const fr = {
 	},
 	a11y: {
 		close: "Fermer",
+		skipToContent: "Aller au contenu principal",
 	},
 	advanced: {
 		systemSettings: "Paramètres du système",

@@ -1,4 +1,5 @@
 <script lang="ts">
+import { LL } from '@ceraui/i18n/svelte';
 import { MediaQuery } from 'svelte/reactivity';
 
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
@@ -41,6 +42,13 @@ const isWideDesktop = new MediaQuery(WIDE_DESKTOP_QUERY);
 
 <PullToRefresh onRefresh={handleRefresh}>
 	<div class="flex min-h-dvh flex-col">
+		<!-- First focusable element: sr-only until Tab-focused, then jumps past the chrome to <main>. -->
+		<a
+			href="#main-content"
+			class="bg-primary text-primary-foreground focus-visible:ring-ring sr-only rounded-md px-4 py-2 text-sm font-semibold shadow-lg transition-none focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:outline-none focus-visible:ring-2"
+		>
+			{$LL.a11y.skipToContent()}
+		</a>
 		<HudRegion affordance />
 		<header class="bg-background sticky top-0 z-40 w-full border-b">
 			<div class="container flex h-14 max-w-7xl items-center gap-4">
@@ -78,7 +86,7 @@ const isWideDesktop = new MediaQuery(WIDE_DESKTOP_QUERY);
 			<HudRegion class="flex" />
 		{/if}
 
-		<main class="flex-1" class:pb-28={!isDesktop.current}>
+		<main id="main-content" tabindex="-1" class="flex-1 focus:outline-none" class:pb-28={!isDesktop.current}>
 			<NavigationRenderer></NavigationRenderer>
 		</main>
 

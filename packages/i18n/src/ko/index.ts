@@ -1012,6 +1012,7 @@ const ko = {
 	},
 	a11y: {
 		close: "닫기",
+		skipToContent: "본문으로 건너뛰기",
 	},
 	advanced: {
 		systemSettings: "시스템 설정",

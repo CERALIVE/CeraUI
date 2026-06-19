@@ -1141,6 +1141,7 @@ const ar = {
 	},
 	a11y: {
 		close: "إغلاق",
+		skipToContent: "تخطّ إلى المحتوى الرئيسي",
 	},
 	advanced: {
 		systemSettings: "إعدادات النظام",

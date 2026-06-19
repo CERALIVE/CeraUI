@@ -43,6 +43,7 @@
 		"typesafe-i18n": "^5.27.1"
 	},
 	"devDependencies": {
+		"@axe-core/playwright": "^4.11.3",
 		"@lucide/svelte": "^1.18.0",
 		"@playwright/test": "^1.60.0",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",

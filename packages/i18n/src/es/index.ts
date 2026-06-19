@@ -553,6 +553,7 @@ const es = {
 	},
 	a11y: {
 		close: "Cerrar",
+		skipToContent: "Saltar al contenido principal",
 	},
 	auth: {
 		usePassword:

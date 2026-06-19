@@ -117,6 +117,28 @@ function lastSeen(ts: number | null): string | null {
 	if (ts == null) return null;
 	return formatRelativeTime(loc)(new Date(ts));
 }
+
+// Polite live-region announcement of the HUD telemetry. The raw values change
+// every tick; announcing each one would flood a screen reader, so a single
+// concise summary (state · bitrate · link count) is DEBOUNCED — only the value
+// that survives a quiet window is announced. Detail stays in the expandable
+// sheet; this is the at-a-glance read for assistive tech.
+const TELEMETRY_ANNOUNCE_DEBOUNCE_MS = 1500;
+const telemetrySummary = $derived(
+	[
+		isOffline ? $LL.hud.offline() : isLive ? $LL.hud.live() : $LL.hud.idle(),
+		`${$LL.hud.bitrate()}: ${hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—'}`,
+		`${$LL.hud.network()}: ${hud.links.length}`,
+	].join(' · '),
+);
+let announcedTelemetry = $state('');
+$effect(() => {
+	const next = telemetrySummary;
+	const id = setTimeout(() => {
+		announcedTelemetry = next;
+	}, TELEMETRY_ANNOUNCE_DEBOUNCE_MS);
+	return () => clearTimeout(id);
+});
 </script>
 
 {#snippet miniBars(link: LinkSignal)}
@@ -151,6 +173,8 @@ function lastSeen(ts: number | null): string | null {
 		</dd>
 	</div>
 {/snippet}
+
+<span role="status" aria-live="polite" class="sr-only" data-testid="hud-telemetry-status">{announcedTelemetry}</span>
 
 <Sheet.Root bind:open>
 	<Sheet.Trigger>

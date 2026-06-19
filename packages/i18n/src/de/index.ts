@@ -553,6 +553,7 @@ const de = {
 	},
 	a11y: {
 		close: "Schließen",
+		skipToContent: "Zum Hauptinhalt springen",
 	},
 	auth: {
 		usePassword:

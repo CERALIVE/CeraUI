@@ -967,6 +967,7 @@ const zh = {
 	},
 	a11y: {
 		close: "关闭",
+		skipToContent: "跳转到主要内容",
 	},
 	advanced: {
 		systemSettings: "系统设置",

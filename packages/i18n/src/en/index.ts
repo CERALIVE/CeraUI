@@ -544,6 +544,7 @@ const en = {
 	},
 	a11y: {
 		close: "Close",
+		skipToContent: "Skip to main content",
 	},
 	auth: {
 		usePassword: "Use the device password to access the functionalities",
