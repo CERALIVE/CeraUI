@@ -237,6 +237,7 @@ const ja = {
 			regenerating: "コードを更新しています…",
 			pairedBody: "このデバイスはクラウドアカウントに接続されました。",
 			deviceLabel: "デバイスID",
+			scanToPair: "または、このQRコードをスマートフォンでスキャンしてすぐにペアリングします。",
 			subscriptionLabel: "サブスクリプション",
 			statusActive: "有効",
 			statusFree: "無料",

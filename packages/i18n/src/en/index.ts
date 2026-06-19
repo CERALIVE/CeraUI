@@ -733,6 +733,7 @@ const en = {
 			regenerating: "Refreshing code\u2026",
 			pairedBody: "This device is now linked to your cloud account.",
 			deviceLabel: "Device ID",
+			scanToPair: "Or scan this QR code with your phone to pair instantly.",
 			subscriptionLabel: "Subscription",
 			statusActive: "Active",
 			statusFree: "Free",

@@ -13,9 +13,9 @@
  * broadcast path (per-type seq is appended automatically — backward-additive).
  */
 import type { Ping } from "@ceraui/rpc/schemas";
-
 import { logger } from "../helpers/logger.ts";
-import { broadcast } from "./events.ts";
+import { applyJitter } from "../modules/streaming/constants.ts";
+import { broadcast, pruneStaleClients } from "./events.ts";
 
 /**
  * Interval between server→client pings (~5s).
@@ -30,9 +30,10 @@ export const HEARTBEAT_INTERVAL_MS = 5000;
 export const HEARTBEAT_STALE_THRESHOLD_MS = 15000;
 
 /**
- * Active interval handle, or null when the heartbeat is stopped.
+ * Active timer handle, or null when the heartbeat is stopped. A self-rescheduling
+ * `setTimeout` (not `setInterval`) so each tick's delay carries its own jitter.
  */
-let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Monotonic tick counter for the debug-level cadence trace. */
 let heartbeatTickCount = 0;
@@ -69,9 +70,13 @@ export function startHeartbeat(
 	if (heartbeatTimer !== null) {
 		return;
 	}
-	heartbeatTimer = setInterval(() => {
+	const tick = (): void => {
 		logger.debug("heartbeat tick", { tick: ++heartbeatTickCount });
 		emitHeartbeat();
+		// A half-open client never advances lastActive; ~3 missed pings (the
+		// client's own staleness window) means the link is gone — drop it so the
+		// broadcast loop stops paying for a doomed socket.
+		pruneStaleClients(HEARTBEAT_STALE_THRESHOLD_MS);
 		for (const listener of tickListeners) {
 			try {
 				listener();
@@ -79,7 +84,11 @@ export function startHeartbeat(
 				logger.error("Heartbeat tick listener error", { err: error });
 			}
 		}
-	}, intervalMs);
+		// Reschedule with fresh jitter so a fleet of devices never phase-aligns
+		// onto the same wall-clock boundary.
+		heartbeatTimer = setTimeout(tick, applyJitter(intervalMs));
+	};
+	heartbeatTimer = setTimeout(tick, applyJitter(intervalMs));
 }
 
 /**

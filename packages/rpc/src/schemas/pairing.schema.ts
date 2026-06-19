@@ -43,11 +43,16 @@ export const CLAIM_CODE_RE = new RegExp(
  * - `validUntil`   — epoch milliseconds at which the current code window ends.
  *                    The code is stable until this instant, then rotates.
  * - `windowSeconds`— length of the validity window in seconds.
+ * - `serial`       — the device hardware serial the code is namespaced to. It is
+ *                    NOT a secret (the unguessability comes from the HMAC secret,
+ *                    not the serial) and the platform claim needs it alongside the
+ *                    code, so it is surfaced here to drive the QR-pairing deep link.
  */
 export const claimCodeOutputSchema = z.object({
 	code: z.string().regex(CLAIM_CODE_RE),
 	validUntil: z.number().int().nonnegative(),
 	windowSeconds: z.number().int().positive(),
+	serial: z.string().min(1),
 });
 export type ClaimCodeOutput = z.infer<typeof claimCodeOutputSchema>;
 

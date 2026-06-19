@@ -39,6 +39,8 @@
  * the procedure does that resolution and hands the IP down here.
  */
 
+import { logger } from "../../../helpers/logger.ts";
+
 /** Hard upper bound on how long a single probe may run. */
 export const PROBE_TIMEOUT_MS = 3000;
 
@@ -114,8 +116,11 @@ export async function probeReachability(
 					finish({ reachable: false, reason: "refused" });
 				}
 			})
-			.catch(() => {
-				// Socket creation/connect failed — treat as a hard refusal.
+			.catch((err) => {
+				// Socket creation/connect failed — treat as a hard refusal, but
+				// surface the discarded cause at debug so a systemic bind/socket
+				// failure is not invisible behind every "refused" verdict.
+				logger.debug("probeReachability: socket setup failed", { err });
 				finish({ reachable: false, reason: "refused" });
 			});
 	});

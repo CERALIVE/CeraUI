@@ -23,7 +23,10 @@
 
 import { logger } from "../../../helpers/logger.ts";
 import { periodicCheckForSoftwareUpdates } from "../../system/software-updates.ts";
-import { SHUTDOWN_SIGKILL_TIMEOUT_MS } from "../constants.ts";
+import {
+	SHUTDOWN_SIGKILL_TIMEOUT_MS,
+	SHUTDOWN_SIGTERM_GRACE_MS,
+} from "../constants.ts";
 import {
 	broadcastHealthIfChanged,
 	reportStreamProcessExit,
@@ -78,9 +81,10 @@ export function spawnStreamingLoop(
 				logger.debug(`${streamingProcess.spawnfile} stderr: ${dataStr}`);
 				errCallback(dataStr);
 			}
-		})().catch(() => {
+		})().catch((err) => {
 			// stderr is torn down when the process is killed; that surfaces here
 			// as a benign cancellation, not a subprocess error to report.
+			logger.debug(`${streamingProcess.spawnfile} stderr drain ended`, { err });
 		});
 	}
 
@@ -185,4 +189,72 @@ export function stopAll() {
 		stopProcess(p);
 	}
 	setTimeout(waitForAllProcessesToTerminate, stopCheckInterval);
+}
+
+type Timer = ReturnType<typeof globalThis.setTimeout>;
+
+// Injectable so the SIGTERM→SIGKILL escalation is testable with no real wait.
+export interface ShutdownTimers {
+	setTimeout(fn: () => void, ms: number): Timer;
+	clearTimeout(timer: Timer): void;
+}
+
+const realShutdownTimers: ShutdownTimers = {
+	setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
+	clearTimeout: (timer) => {
+		globalThis.clearTimeout(timer);
+	},
+};
+
+function isProcAlive(sp: StreamingProcess): boolean {
+	return sp.proc.exitCode === null && sp.proc.signalCode === null;
+}
+
+/**
+ * Process-level graceful shutdown (systemd SIGTERM / SIGINT). SIGTERM every live
+ * subprocess, resolve as soon as they have all exited, and SIGKILL any survivor
+ * once `timeoutMs` elapses. Resolves either way so the caller can exit cleanly.
+ *
+ * Unlike {@link stopAll} (the in-app stream-stop poll), this is the short window
+ * systemd grants before it kills CeraUI itself. The process list and timers are
+ * injectable so the escalation is testable with zero real waits.
+ */
+export function gracefulShutdown(
+	timeoutMs: number = SHUTDOWN_SIGTERM_GRACE_MS,
+	procs: Array<StreamingProcess> = streamingProcesses,
+	timers: ShutdownTimers = realShutdownTimers,
+): Promise<void> {
+	const remaining = new Set([...procs].filter(isProcAlive));
+	if (remaining.size === 0) return Promise.resolve();
+
+	return new Promise<void>((resolve) => {
+		let settled = false;
+		let killTimer: Timer | null = null;
+		const finish = (): void => {
+			if (settled) return;
+			settled = true;
+			if (killTimer !== null) timers.clearTimeout(killTimer);
+			resolve();
+		};
+
+		for (const sp of remaining) {
+			sp.exitListeners.push(() => {
+				removeProc(sp);
+				remaining.delete(sp);
+				if (remaining.size === 0) finish();
+			});
+			sp.proc.kill("SIGTERM");
+		}
+
+		killTimer = timers.setTimeout(() => {
+			for (const sp of remaining) {
+				if (!isProcAlive(sp)) continue;
+				logger.warn(
+					`gracefulShutdown: ${sp.spawnfile} ignored SIGTERM for ${timeoutMs}ms; sending SIGKILL`,
+				);
+				sp.proc.kill("SIGKILL");
+			}
+			finish();
+		}, timeoutMs);
+	});
 }

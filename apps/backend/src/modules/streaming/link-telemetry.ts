@@ -48,8 +48,13 @@ import {
 	type WatchTelemetryHandle,
 	watchTelemetry,
 } from "@ceralive/srtla-send/telemetry";
+import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
-import { SRTLA_LISTEN_PORT } from "./constants.ts";
+import {
+	IFACE_RESOLVER_MAX_RETRIES,
+	IFACE_RESOLVER_RETRY_DELAY_MS,
+	SRTLA_LISTEN_PORT,
+} from "./constants.ts";
 
 // srtla_send listens for the local SRT encoder on this port; the stats file path
 // is derived from it (mirrors the receiver's /tmp/srtla-group-<PORT> convention).
@@ -154,20 +159,74 @@ type IfaceResolver = (ip: string) => string | undefined;
 
 let defaultIfaceResolver: IfaceResolver | null = null;
 
-async function loadDefaultIfaceResolver(): Promise<IfaceResolver> {
-	if (defaultIfaceResolver) return defaultIfaceResolver;
-	// Lazy import keeps the network module out of the test-import graph.
+/** Lazy import keeps the network module out of the test-import graph. */
+async function importDefaultResolver(): Promise<IfaceResolver> {
 	const { getNetworkInterfaces } = await import(
 		"../network/network-interfaces.ts"
 	);
-	defaultIfaceResolver = (ip: string): string | undefined => {
+	return (ip: string): string | undefined => {
 		const netif = getNetworkInterfaces();
 		for (const name in netif) {
 			if (netif[name]?.ip === ip) return name;
 		}
 		return undefined;
 	};
+}
+
+type ResolverLoader = () => Promise<IfaceResolver>;
+
+let resolverLoaderOverride: ResolverLoader | null = null;
+
+/** Test seam: replace the resolver loader (null restores the lazy import).
+ *  Also clears the cached resolver so each test re-loads from a clean slate. */
+export function setResolverLoaderForTest(fn: ResolverLoader | null): void {
+	resolverLoaderOverride = fn;
+	defaultIfaceResolver = null;
+}
+
+async function loadDefaultIfaceResolver(): Promise<IfaceResolver> {
+	if (defaultIfaceResolver) return defaultIfaceResolver;
+	const loader = resolverLoaderOverride ?? importDefaultResolver;
+	defaultIfaceResolver = await loader();
 	return defaultIfaceResolver;
+}
+
+const sleep = (ms: number): Promise<void> =>
+	new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Load the default iface resolver, retrying a transient failure (the network
+ * module not yet importable at spawn) before giving up. Each failed attempt
+ * logs at debug; exhausting all attempts logs one warn — the conn_id/IP
+ * fallback still keeps the telemetry `iface` field populated, so this only
+ * degrades the human-readable name, never the link rows.
+ *
+ * Returns true once the resolver is loaded, false if every attempt failed.
+ * The delay source is injectable so the retry is unit-testable without waiting.
+ */
+export async function loadDefaultIfaceResolverWithRetry(
+	maxRetries: number = IFACE_RESOLVER_MAX_RETRIES,
+	delayMs: number = IFACE_RESOLVER_RETRY_DELAY_MS,
+	delay: (ms: number) => Promise<void> = sleep,
+): Promise<boolean> {
+	for (let attempt = 1; attempt <= maxRetries; attempt++) {
+		try {
+			await loadDefaultIfaceResolver();
+			return true;
+		} catch (err) {
+			logger.debug("link-telemetry: iface resolver load failed", {
+				attempt,
+				maxRetries,
+				err,
+			});
+			if (attempt < maxRetries) await delay(delayMs);
+		}
+	}
+	logger.warn(
+		"link-telemetry: iface resolver unavailable after retries; using IP/conn_id fallback",
+		{ maxRetries },
+	);
+	return false;
 }
 
 let ifaceResolverOverride: IfaceResolver | null = null;
@@ -258,9 +317,7 @@ export function startLinkTelemetry(
 	// can map conn_id -> iface without awaiting inside the broadcast path. Skip
 	// when a test override is active to avoid pulling the network graph.
 	if (!ifaceResolverOverride) {
-		void loadDefaultIfaceResolver().catch(() => {
-			/* network module unavailable (e.g. tests) — fallbacks cover it */
-		});
+		void loadDefaultIfaceResolverWithRetry();
 	}
 
 	const watch = opts.watch ?? watchTelemetry;

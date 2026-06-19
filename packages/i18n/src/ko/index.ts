@@ -231,6 +231,7 @@ const ko = {
 			regenerating: "코드를 새로 고치는 중…",
 			pairedBody: "이 기기가 이제 클라우드 계정에 연결되었습니다.",
 			deviceLabel: "기기 ID",
+			scanToPair: "또는 이 QR 코드를 휴대폰으로 스캔하여 바로 페어링하세요.",
 			subscriptionLabel: "구독",
 			statusActive: "활성",
 			statusFree: "무료",

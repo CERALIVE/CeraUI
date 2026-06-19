@@ -367,6 +367,7 @@ const ar = {
 			regenerating: "جارٍ تحديث الرمز…",
 			pairedBody: "هذا الجهاز مرتبط الآن بحسابك السحابي.",
 			deviceLabel: "معرّف الجهاز",
+			scanToPair: "أو امسح رمز QR هذا بهاتفك للإقران فورًا.",
 			subscriptionLabel: "الاشتراك",
 			statusActive: "نشط",
 			statusFree: "مجاني",

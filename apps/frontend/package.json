@@ -33,6 +33,7 @@
 		"@zip.js/zip.js": "^2.8.26",
 		"bits-ui": "^2.18.1",
 		"clsx": "^2.1.1",
+		"gsap": "^3.15.0",
 		"html-to-image": "^1.11.13",
 		"mode-watcher": "^1.1.0",
 		"qrcode": "^1.5.4",

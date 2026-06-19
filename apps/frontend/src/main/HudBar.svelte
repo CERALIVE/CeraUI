@@ -15,6 +15,7 @@ import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 import WifiIcon from '@lucide/svelte/icons/wifi';
 import ZapIcon from '@lucide/svelte/icons/zap';
 
+import BondConstellation from '$lib/components/custom/BondConstellation.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
 import * as Sheet from '$lib/components/ui/sheet';
@@ -297,6 +298,12 @@ $effect(() => {
 			<!-- Streaming -->
 			<section class="flex flex-col gap-1">
 				<h3 class="text-muted-foreground mb-1 text-xs font-medium">{$LL.hud.streaming()}</h3>
+
+				<!-- Bond constellation: visualizes the bond the rollup below states numerically -->
+				<div class="mx-auto mb-2 w-full max-w-[22rem]">
+					<BondConstellation links={hud.links} live={isLive} frozen={isEink} />
+				</div>
+
 				<div class="flex items-center justify-between gap-3 border-b py-2">
 					<span class="text-muted-foreground flex items-center gap-2">
 						<span

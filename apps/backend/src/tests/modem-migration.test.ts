@@ -199,19 +199,23 @@ describe("modem migration — event-driven presence + retained status poll", () 
 		expect(gsmResets).toBe(1);
 	});
 
-	test("the migrated module has NO self-recursive setTimeout loop", async () => {
+	test("the old 10s self-recursive presence driver is gone; the retained poll is jittered + reduced-cadence", async () => {
 		const src = await Bun.file(
 			`${import.meta.dir}/../modules/modems/modem-update-loop.ts`,
 		).text();
 
-		// The old 10s self-recursive driver is gone…
-		expect(src).not.toMatch(/setTimeout\s*\(/);
+		// The old always-on 10s self-recursive presence driver is gone: no
+		// `setTimeout(updateModems, …)` re-listing loop, no 10s cadence.
 		expect(src).not.toContain("setTimeout(updateModems");
 		expect(src).not.toContain("10_000");
 
-		// …and the retained status poll uses a reduced-cadence interval + events.
-		expect(src).toContain("setInterval(");
+		// The retained status poll runs at the reduced 30s cadence, event-driven
+		// presence still drives add/remove, and the poll is jittered to
+		// de-correlate the fleet (a self-rescheduling jittered setTimeout, NOT a
+		// resurrection of the old presence driver).
 		expect(src).toContain("STATUS_POLL_INTERVAL_MS");
+		expect(src).toContain("30_000");
+		expect(src).toContain("applyJitter(");
 		expect(src).toContain('"modem-added"');
 		expect(src).toContain('"modem-removed"');
 	});

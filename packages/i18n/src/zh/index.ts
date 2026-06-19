@@ -225,6 +225,7 @@ const zh = {
 			regenerating: "正在刷新代码…",
 			pairedBody: "此设备现已关联到您的云账户。",
 			deviceLabel: "设备 ID",
+			scanToPair: "或使用手机扫描此二维码以立即配对。",
 			subscriptionLabel: "订阅",
 			statusActive: "有效",
 			statusFree: "免费",

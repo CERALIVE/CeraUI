@@ -26,6 +26,7 @@ export const FRAME_KINDS = [
 	"result",
 	"ack",
 	"handshake",
+	"delivery.ack",
 ] as const;
 export type FrameKind = (typeof FRAME_KINDS)[number];
 
@@ -79,7 +80,16 @@ export type SelfFencingType = (typeof SELF_FENCING_TYPES)[number];
 export const NEVER_REMOTE = ["auth.login", "auth.setPassword"] as const;
 export type NeverRemoteType = (typeof NEVER_REMOTE)[number];
 
-/** Relayable upstream status `type` values — the closed v2.0 set (spec §8). */
+/**
+ * Relayable upstream status `type` values — the closed v2.0 set (spec §8).
+ *
+ * `telemetry` (spec §8.1) is the batched per-SRTLA-link telemetry surface,
+ * distinct from the live `status.linkTelemetry` snapshot. It is additive
+ * (non-breaking, spec §13) and read-only — it adds no command and carries no
+ * secret. It is NOT a local broadcast event type, so it is intentionally NOT in
+ * `status-relay.ts` `RELAYABLE_TYPES`; the device telemetry recorder emits it
+ * directly over the control channel rather than through `broadcastMsg`.
+ */
 export const STATUS_TYPES = [
 	"status",
 	"config",
@@ -88,6 +98,7 @@ export const STATUS_TYPES = [
 	"modems",
 	"device-stats",
 	"notifications",
+	"telemetry",
 ] as const;
 export type StatusType = (typeof STATUS_TYPES)[number];
 
@@ -169,6 +180,20 @@ export const AckSchema = EnvelopeSchema.extend({
 });
 export type Ack = z.infer<typeof AckSchema>;
 
+/**
+ * `delivery.ack` frame (spec §6.1) — the device's receipt confirmation for a
+ * command, emitted upstream BEFORE the command is applied and independently of
+ * any later `result`. It echoes the command's `type` and `cid` and carries no
+ * payload. The hub uses it to bound its command-delivery retries (it stops
+ * retrying once a matching `delivery.ack` arrives). Re-acking a replayed `cid`
+ * is intentional: it lets the hub terminate retries even when the first `result`
+ * never confirmed.
+ */
+export const DeliveryAckSchema = EnvelopeSchema.extend({
+	kind: z.literal("delivery.ack"),
+});
+export type DeliveryAck = z.infer<typeof DeliveryAckSchema>;
+
 /** `handshake` frame envelope (spec §4). Body lives in `payload`; `cid` is informational. */
 export const HandshakeSchema = EnvelopeSchema.extend({
 	kind: z.literal("handshake"),
@@ -177,14 +202,29 @@ export const HandshakeSchema = EnvelopeSchema.extend({
 export type Handshake = z.infer<typeof HandshakeSchema>;
 
 /**
+ * Device capability object carried in `device.hello` (spec §4.1). Open for forward
+ * compatibility (`catchall` keeps unknown keys), but pins the two normative keys the
+ * hub's version-support gate reads: `ceraui_version` (CalVer `YYYY.MINOR.PATCH`) and
+ * `config_schema_version` (monotonic int). Both are OPTIONAL for safe rollout — a hub
+ * tolerates a hello that omits them (a not-yet-updated device → "version unknown" gate).
+ */
+export const DeviceCapsSchema = z
+	.object({
+		ceraui_version: z.string().optional(),
+		config_schema_version: z.number().int().optional(),
+	})
+	.catchall(z.unknown());
+export type DeviceCaps = z.infer<typeof DeviceCapsSchema>;
+
+/**
  * Device→Hub `device.hello` body (spec §4 / §14.2) — carried in the handshake
  * frame's `payload`. Advertises the protocol version, the serviceable message
- * types, and a free-form capability object.
+ * types, and the {@link DeviceCapsSchema} capability object.
  */
 export const HandshakeDeviceSchema = z.object({
 	v: z.literal(PROTOCOL_VERSION),
 	supportedTypes: z.array(z.string()),
-	deviceCaps: z.record(z.string(), z.unknown()),
+	deviceCaps: DeviceCapsSchema,
 });
 export type HandshakeDevice = z.infer<typeof HandshakeDeviceSchema>;
 
@@ -209,5 +249,6 @@ export const FrameSchema = z.discriminatedUnion("kind", [
 	StatusSchema,
 	AckSchema,
 	HandshakeSchema,
+	DeliveryAckSchema,
 ]);
 export type Frame = z.infer<typeof FrameSchema>;

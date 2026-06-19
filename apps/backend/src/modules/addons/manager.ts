@@ -646,7 +646,9 @@ export async function enableAddon(
 		logger.error(`addon ${id}: enable failed: ${message}`);
 		transition(id, "failed", deps, { lastError: message });
 		// Best-effort: drop the partial temp so a retry starts clean.
-		await deps.removeArtifact(tmpPath).catch(() => {});
+		await deps.removeArtifact(tmpPath).catch((cleanupErr) => {
+			logger.debug(`addon ${id}: temp cleanup failed`, { err: cleanupErr });
+		});
 		return { success: false, error: ADDON_ENABLE_FAILED_ERROR };
 	}
 }

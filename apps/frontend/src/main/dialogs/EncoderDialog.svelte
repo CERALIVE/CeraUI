@@ -57,6 +57,7 @@ import { BITRATE_DEFAULT_MIN, type Pipeline } from '@ceraui/rpc/schemas';
 import AppliesNextStart from '$lib/components/custom/AppliesNextStart.svelte';
 import FieldSyncIndicator from '$lib/components/custom/FieldSyncIndicator.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
+import StatusBadge from '$lib/components/custom/StatusBadge.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 import {
@@ -444,7 +445,7 @@ function handleSave() {
 							<div class="flex flex-wrap items-center gap-1">
 								{#each device.caps as cap, i (i)}
 									<span
-										class="bg-card/60 text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[10px]"
+										class="bg-card/60 text-muted-foreground text-micro rounded px-1.5 py-0.5 font-mono"
 									>
 										{cap}
 									</span>
@@ -519,7 +520,7 @@ function handleSave() {
 							{getFramerateLabel(view.preset.framerate)} · {codecShortLabel(view.preset.codec)}
 						</span>
 						{#if view.preset.bitrateDefault !== undefined}
-							<span class="text-muted-foreground/80 font-mono text-[10px]">
+							<span class="text-muted-foreground/80 text-micro font-mono">
 								{view.preset.bitrateDefault} {$LL.units.kbps()}
 							</span>
 						{/if}
@@ -647,42 +648,53 @@ function handleSave() {
 						{#each codecOptions as codec (codec.value)}
 							{@const codecActive = localCodec === codec.mediaType}
 							<span
-								class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs {codecActive
+								class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs {codecActive
 									? 'border-primary bg-primary/10 text-primary'
 									: 'bg-muted'}"
 								data-active={codecActive}
 								data-testid={`codec-${codec.value}`}
 							>
-								{codec.value === 'h265'
-									? 'H.265'
-									: codec.value === 'h264'
-										? 'H.264'
-										: codec.mediaType}
+								<span class="font-mono">
+									{codec.value === 'h265'
+										? 'H.265'
+										: codec.value === 'h264'
+											? 'H.264'
+											: codec.mediaType}
+								</span>
 								{#if codec.hardwareAccelerated}
-									<span
-										class="bg-primary/10 text-primary inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+									<StatusBadge
+										variant="success"
+										size="micro"
 										data-testid={`codec-accel-${codec.value}`}
 									>
-										<Cpu aria-hidden={true} class="size-3 shrink-0" />
+										{#snippet icon()}
+											<Cpu aria-hidden={true} class="size-3 shrink-0" />
+										{/snippet}
 										{$LL.live.encoder.accelerated()}
-									</span>
+									</StatusBadge>
 								{:else}
-									<span
-										class="bg-status-warning/15 text-status-warning inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+									<StatusBadge
+										variant="warning"
+										size="micro"
 										data-testid={`codec-accel-${codec.value}`}
 									>
-										<TriangleAlert aria-hidden={true} class="size-3 shrink-0" />
+										{#snippet icon()}
+											<TriangleAlert aria-hidden={true} class="size-3 shrink-0" />
+										{/snippet}
 										{$LL.live.encoder.software()}
-									</span>
+									</StatusBadge>
 								{/if}
 								{#if codec.softwareWarning}
-									<span
-										class="bg-status-warning/15 text-status-warning inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+									<StatusBadge
+										variant="warning"
+										size="micro"
 										data-testid="h265-software-warning"
 									>
-										<TriangleAlert aria-hidden={true} class="size-3 shrink-0" />
+										{#snippet icon()}
+											<TriangleAlert aria-hidden={true} class="size-3 shrink-0" />
+										{/snippet}
 										{$LL.settings.softwareEncodeWarning()}
-									</span>
+									</StatusBadge>
 								{/if}
 							</span>
 						{/each}

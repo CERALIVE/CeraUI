@@ -51,12 +51,14 @@ describe("PairingController.generate", () => {
 			code: "ABCD2345",
 			validUntil: 10_000,
 			windowSeconds: 300,
+			serial: "CERATESTSERIAL01",
 		});
 		const pairing = new PairingController();
 
 		await pairing.generate();
 
 		expect(pairing.code).toBe("ABCD2345");
+		expect(pairing.serial).toBe("CERATESTSERIAL01");
 		expect(pairing.validUntil).toBe(10_000);
 		expect(pairing.windowSeconds).toBe(300);
 		expect(pairing.status).toBe("active");
@@ -78,6 +80,7 @@ describe("PairingController countdown derivation", () => {
 			code: "ABCD2345",
 			validUntil: 100_000,
 			windowSeconds: 300,
+			serial: "CERATESTSERIAL01",
 		});
 		const pairing = new PairingController();
 		await pairing.generate();
@@ -99,6 +102,7 @@ describe("PairingController.complete", () => {
 			code: "ABCD2345",
 			validUntil: 100_000,
 			windowSeconds: 300,
+			serial: "CERATESTSERIAL01",
 		});
 		completePairing.mockResolvedValue({
 			paired: true,
@@ -122,6 +126,7 @@ describe("PairingController.complete", () => {
 			code: "ABCD2345",
 			validUntil: 100_000,
 			windowSeconds: 300,
+			serial: "CERATESTSERIAL01",
 		});
 		completePairing.mockResolvedValue({
 			paired: false,
@@ -150,6 +155,7 @@ describe("PairingController.reset", () => {
 			code: "ABCD2345",
 			validUntil: 100_000,
 			windowSeconds: 300,
+			serial: "CERATESTSERIAL01",
 		});
 		const pairing = new PairingController();
 		await pairing.generate();
@@ -157,6 +163,7 @@ describe("PairingController.reset", () => {
 		pairing.reset();
 
 		expect(pairing.code).toBeNull();
+		expect(pairing.serial).toBeNull();
 		expect(pairing.status).toBe("idle");
 		expect(pairing.validUntil).toBe(0);
 	});

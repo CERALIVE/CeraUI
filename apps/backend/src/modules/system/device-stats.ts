@@ -38,6 +38,7 @@ import { logger } from "../../helpers/logger.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
 import { DEVICE_STATS_EVENT } from "../../rpc/events.ts";
+import { DEVICE_STATS_COLLECTOR_TIMEOUT_MS } from "../streaming/constants.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { getSensors } from "./sensors.ts";
 
@@ -288,6 +289,38 @@ function warnDegraded(signal: DeviceStatsSignal, err: unknown): void {
 	logger.warn("device-stats degraded", { signal, reason: errMessage(err) });
 }
 
+/**
+ * Race one collector against a hard timeout. A hung hardware read (df, /proc,
+ * rauc) degrades its single signal to `fallback` within `timeoutMs` so it can
+ * never stall the whole 5s tick. The underlying read keeps running in the
+ * background but its result is discarded — the tick already moved on.
+ */
+async function withCollectorTimeout<T>(
+	signal: DeviceStatsSignal,
+	fallback: T,
+	run: () => Promise<T>,
+	timeoutMs: number,
+): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const timeout = new Promise<T>((resolve) => {
+		timer = setTimeout(() => {
+			warnDegraded(
+				signal,
+				new Error(`collector timed out after ${timeoutMs}ms`),
+			);
+			resolve(fallback);
+		}, timeoutMs);
+	});
+	try {
+		return await Promise.race([run(), timeout]);
+	} catch (err) {
+		warnDegraded(signal, err);
+		return fallback;
+	} finally {
+		if (timer !== undefined) clearTimeout(timer);
+	}
+}
+
 // ─── per-signal collectors (each degrades to null/"unavailable") ─────────────
 
 async function collectDisk(deps: DeviceStatsDeps): Promise<DiskStat | null> {
@@ -385,12 +418,28 @@ async function collectRaucSlot(deps: DeviceStatsDeps): Promise<string> {
 export async function collectDeviceStats(
 	deps: DeviceStatsDeps,
 	state: DeviceStatsState,
+	timeoutMs: number = DEVICE_STATS_COLLECTOR_TIMEOUT_MS,
 ): Promise<DeviceStatsPayload> {
 	const [disk, cpuLoad1, ifaceRxTx, raucSlot] = await Promise.all([
-		collectDisk(deps),
-		collectCpuLoad1(deps),
-		collectIfaceRxTx(deps, state),
-		collectRaucSlot(deps),
+		withCollectorTimeout("disk", null, () => collectDisk(deps), timeoutMs),
+		withCollectorTimeout(
+			"cpuLoad1",
+			null,
+			() => collectCpuLoad1(deps),
+			timeoutMs,
+		),
+		withCollectorTimeout(
+			"ifaceRxTx",
+			null,
+			() => collectIfaceRxTx(deps, state),
+			timeoutMs,
+		),
+		withCollectorTimeout(
+			"raucSlot",
+			"unavailable",
+			() => collectRaucSlot(deps),
+			timeoutMs,
+		),
 	]);
 	const socTemp = collectSocTemp(deps);
 	const payload: DeviceStatsPayload = {
