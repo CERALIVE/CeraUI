@@ -279,6 +279,8 @@ const en = {
 				srtCustom: "SRT · Custom",
 			},
 			manageLinks: "Manage links",
+			singleLinkHint:
+				"This receiver uses a single direct link. Bonding across multiple links isn't used for this transport.",
 		},
 		title: "Live",
 		description: "Stream control and live metrics",
@@ -291,6 +293,7 @@ const en = {
 		notStreaming: "Not streaming",
 		configureToStart: "Configure a relay server to begin streaming",
 		editSettings: "Edit Settings",
+		chooseDestination: "Choose a destination",
 		streamSettings: "Stream Settings",
 		adjustBitrate: "Adjust Bitrate",
 		stopToChange: "Stop stream to change",

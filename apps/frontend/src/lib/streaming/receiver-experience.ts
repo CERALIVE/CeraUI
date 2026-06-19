@@ -116,6 +116,47 @@ export function kindBadgeLabelKey(kind: ReceiverKind): string {
 }
 
 /**
+ * The bonded-links readiness state for the Live server surface (T13).
+ *
+ * SRTLA is the ONLY wired bonded path, so it is the only kind that may assert a
+ * "bonded across N links" claim — and only while streaming, when the live link
+ * count is actually known. RIST / plain-SRT never claim bonding (RIST egress is
+ * resolver-only per the receiver model T3); they read as a fixed single link.
+ *
+ * - `bonded` — SRTLA, streaming, ≥2 active links → "Bonded across N links".
+ * - `single` — SRTLA, streaming, exactly 1 active link → honest "Single link".
+ * - `idle`   — SRTLA, telemetry absent (not streaming) → transport label only,
+ *              NEVER a stale count.
+ * - `fixed`  — non-SRTLA → single-link intended topology (no bonding claim).
+ */
+export type ServerReadiness =
+	| { variant: "bonded"; count: number }
+	| { variant: "single" }
+	| { variant: "idle" }
+	| { variant: "fixed" };
+
+/**
+ * Derive the bonded-links readiness for the Live server surface from the receiver
+ * kind and the live active-link count.
+ *
+ * `linkCount` is `null` when the engine is not streaming (`getLinkTelemetry()`
+ * returns `null`) — in that case an SRTLA receiver degrades to a label-only
+ * `idle` state rather than asserting a stale count. A non-SRTLA kind is always
+ * `fixed` (single-link topology) regardless of the count: bonding is never
+ * claimed for a transport that cannot bond.
+ */
+export function deriveServerReadiness(
+	kind: ReceiverKind,
+	linkCount: number | null,
+): ServerReadiness {
+	const isSrtla = kind === "srtla_relay" || kind === "srtla_custom";
+	if (!isSrtla) return { variant: "fixed" };
+	if (linkCount === null || linkCount <= 0) return { variant: "idle" };
+	if (linkCount === 1) return { variant: "single" };
+	return { variant: "bonded", count: linkCount };
+}
+
+/**
  * The resolved draft values the save handler reads. All string fields are the
  * RAW operator inputs (trimmed by {@link buildServerSetConfig}); ports are RAW
  * strings parsed via the ValidationAdapter. `latency` is the already-resolved
@@ -221,4 +262,61 @@ export function buildServerSetConfig(
 		relay_account: draft.relayAccount ? draft.relayAccount : undefined,
 		relay_streamid_override: draft.relayStreamId.trim(),
 	});
+}
+
+/** The persisted-config subset the Live server summary reads (T11). */
+export interface ServerSummaryConfig {
+	srtla_addr?: string | undefined;
+	srtla_port?: number | undefined;
+	relay_server?: string | undefined;
+	remote_provider?: string | undefined;
+}
+
+/** i18n resolvers the summary composes, keeping {@link buildServerSummary} `$LL`-free. */
+export interface ServerSummaryLabels {
+	notConfigured: string;
+	kindLabel: (kind: ReceiverKind) => string;
+	bondedAcross: (count: number) => string;
+	singleLink: string;
+	providerLabel: (provider: string | undefined) => string | undefined;
+}
+
+const SUMMARY_SEPARATOR = " · ";
+
+/**
+ * Distil the saved receiver config into the destination/kind-aware Live server
+ * summary (T11). Three shapes: none → `notConfigured`; managed →
+ * `Provider · <kind badge> · <bonding clause>` (the bonding clause appended only
+ * for the bonded SRTLA relay kind AND only when a live link count is observed,
+ * so an idle/disconnected receiver never asserts a stale bonding fact); custom →
+ * `addr:port · <kind badge>`. Pure — all copy arrives via {@link ServerSummaryLabels}.
+ */
+export function buildServerSummary(
+	config: ServerSummaryConfig | undefined,
+	kind: ReceiverKind | undefined,
+	linkCount: number,
+	labels: ServerSummaryLabels,
+): string {
+	const hasServer = Boolean(config?.srtla_addr || config?.relay_server);
+	if (!hasServer || !kind) return labels.notConfigured;
+
+	if (deriveDestination(config) === "managed") {
+		const parts: string[] = [];
+		const provider = labels.providerLabel(config?.remote_provider);
+		if (provider) parts.push(provider);
+		parts.push(labels.kindLabel(kind));
+		if (kind === "srtla_relay" && linkCount > 0) {
+			parts.push(
+				linkCount > 1 ? labels.bondedAcross(linkCount) : labels.singleLink,
+			);
+		}
+		return parts.join(SUMMARY_SEPARATOR);
+	}
+
+	const addr = config?.srtla_addr ?? "";
+	const target =
+		addr && config?.srtla_port ? `${addr}:${config.srtla_port}` : addr;
+	return target
+		? `${target}${SUMMARY_SEPARATOR}${labels.kindLabel(kind)}`
+		: labels.kindLabel(kind);
 }

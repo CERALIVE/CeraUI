@@ -289,6 +289,8 @@ const de = {
 				srtCustom: "SRT · Benutzerdefiniert",
 			},
 			manageLinks: "Verbindungen verwalten",
+			singleLinkHint:
+				"Dieser Empfänger verwendet eine einzelne direkte Verbindung. Bündelung mehrerer Verbindungen wird für diesen Transport nicht genutzt.",
 		},
 		title: "Live",
 		description: "Stream-Steuerung und Live-Metriken",
@@ -302,6 +304,7 @@ const de = {
 		configureToStart:
 			"Konfigurieren Sie einen Relay-Server, um mit dem Streaming zu beginnen",
 		editSettings: "Einstellungen bearbeiten",
+		chooseDestination: "Ziel auswählen",
 		streamSettings: "Stream-Einstellungen",
 		adjustBitrate: "Bitrate anpassen",
 		stopToChange: "Stream stoppen, um zu ändern",

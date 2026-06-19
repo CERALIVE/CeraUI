@@ -764,6 +764,8 @@ const ja = {
 				srtCustom: "SRT · カスタム",
 			},
 			manageLinks: "リンクを管理",
+			singleLinkHint:
+				"この受信先は単一の直接リンクを使用します。このトランスポートでは複数リンクのボンディングは使用されません。",
 		},
 		title: "ライブ",
 		description: "ストリーム制御とライブメトリクス",
@@ -777,6 +779,7 @@ const ja = {
 		configureToStart:
 			"ストリーミングを開始するにはリレーサーバーを設定してください",
 		editSettings: "設定を編集",
+		chooseDestination: "配信先を選択",
 		streamSettings: "ストリーム設定",
 		adjustBitrate: "ビットレートを調整",
 		stopToChange: "変更するにはストリームを停止してください",

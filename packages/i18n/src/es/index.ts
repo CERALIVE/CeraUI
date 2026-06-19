@@ -289,6 +289,8 @@ const es = {
 				srtCustom: "SRT · Personalizado",
 			},
 			manageLinks: "Gestionar enlaces",
+			singleLinkHint:
+				"Este receptor usa un único enlace directo. La combinación de varios enlaces no se utiliza para este transporte.",
 		},
 		title: "Live",
 		description: "Control de transmisión y métricas en vivo",
@@ -302,6 +304,7 @@ const es = {
 		configureToStart:
 			"Configura un servidor de retransmisión para comenzar a transmitir",
 		editSettings: "Editar configuración",
+		chooseDestination: "Elige un destino",
 		streamSettings: "Configuración de transmisión",
 		adjustBitrate: "Ajustar bitrate",
 		stopToChange: "Detén la transmisión para cambiar",

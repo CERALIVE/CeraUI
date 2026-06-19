@@ -751,6 +751,8 @@ const ko = {
 				srtCustom: "SRT · 사용자 지정",
 			},
 			manageLinks: "링크 관리",
+			singleLinkHint:
+				"이 수신기는 단일 직접 링크를 사용합니다. 이 전송 방식에서는 여러 링크 본딩이 사용되지 않습니다.",
 		},
 		title: "라이브",
 		description: "스트림 제어 및 실시간 지표",
@@ -763,6 +765,7 @@ const ko = {
 		notStreaming: "스트리밍하지 않음",
 		configureToStart: "스트리밍을 시작하려면 릴레이 서버를 구성하세요",
 		editSettings: "설정 편집",
+		chooseDestination: "대상 선택",
 		streamSettings: "스트림 설정",
 		adjustBitrate: "비트레이트 조정",
 		stopToChange: "변경하려면 스트림을 중지하세요",

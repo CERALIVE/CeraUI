@@ -4,12 +4,15 @@ import { describe, expect, it } from "vitest";
 
 import {
 	buildServerSetConfig,
+	buildServerSummary,
 	type Destination,
 	deriveDestination,
+	deriveServerReadiness,
 	kindBadgeLabelKey,
 	resolveReceiverKind,
 	type ServerSetDerived,
 	type ServerSetDraft,
+	type ServerSummaryLabels,
 } from "./receiver-experience";
 
 function relayServer(overrides: Partial<RelayServer> = {}): RelayServer {
@@ -167,6 +170,50 @@ describe("kindBadgeLabelKey", () => {
 	});
 });
 
+describe("deriveServerReadiness — SRTLA-only bonding claim (T13)", () => {
+	it("SRTLA streaming with multiple links → bonded across N", () => {
+		expect(deriveServerReadiness("srtla_custom", 3)).toEqual({
+			variant: "bonded",
+			count: 3,
+		});
+		expect(deriveServerReadiness("srtla_relay", 2)).toEqual({
+			variant: "bonded",
+			count: 2,
+		});
+	});
+
+	it("SRTLA streaming with a single active link → honest single link", () => {
+		expect(deriveServerReadiness("srtla_custom", 1)).toEqual({
+			variant: "single",
+		});
+	});
+
+	it("SRTLA idle (linkTelemetry === null) → label only, no count", () => {
+		expect(deriveServerReadiness("srtla_custom", null)).toEqual({
+			variant: "idle",
+		});
+		expect(deriveServerReadiness("srtla_relay", null)).toEqual({
+			variant: "idle",
+		});
+		// 0 links is not a count worth asserting either — also label-only.
+		expect(deriveServerReadiness("srtla_custom", 0)).toEqual({
+			variant: "idle",
+		});
+	});
+
+	it("non-SRTLA kinds never assert bonding (rist/srt → fixed single link)", () => {
+		expect(deriveServerReadiness("rist_relay", 3)).toEqual({
+			variant: "fixed",
+		});
+		expect(deriveServerReadiness("rist_custom", null)).toEqual({
+			variant: "fixed",
+		});
+		expect(deriveServerReadiness("srt_custom", 5)).toEqual({
+			variant: "fixed",
+		});
+	});
+});
+
 describe("buildServerSetConfig — byte-identical to today's handleSave branches", () => {
 	it("manual (custom) emits exactly the manual field set", () => {
 		const result = buildServerSetConfig(draft(), CUSTOM);
@@ -287,5 +334,139 @@ describe("buildServerSetConfig — byte-identical to today's handleSave branches
 				srt_streamid: "publish/abc",
 			});
 		});
+	});
+});
+
+function summaryLabels(
+	overrides: Partial<ServerSummaryLabels> = {},
+): ServerSummaryLabels {
+	const kinds: Record<string, string> = {
+		srtla_relay: "SRTLA · Bonded",
+		srtla_custom: "SRTLA · Custom",
+		rist_relay: "RIST · Managed",
+		rist_custom: "RIST · Custom",
+		srt_custom: "SRT · Custom",
+	};
+	const providers: Record<string, string> = {
+		ceralive: "CeraLive Cloud",
+		belabox: "BELABOX Cloud",
+	};
+	return {
+		notConfigured: "Not configured",
+		kindLabel: (kind) => kinds[kind] ?? kind,
+		bondedAcross: (count) => `Bonded across ${count} links`,
+		singleLink: "Single link",
+		providerLabel: (provider) => (provider ? providers[provider] : undefined),
+		...overrides,
+	};
+}
+
+describe("buildServerSummary — destination/kind-aware Live server summary (T11)", () => {
+	it("none (no receiver configured) → notConfigured", () => {
+		expect(buildServerSummary({}, undefined, 0, summaryLabels())).toBe(
+			"Not configured",
+		);
+		expect(
+			buildServerSummary(undefined, "srtla_custom", 3, summaryLabels()),
+		).toBe("Not configured");
+	});
+
+	it("managed SRTLA relay while streaming → Provider · kind · bonded across N", () => {
+		expect(
+			buildServerSummary(
+				{ relay_server: "fra", remote_provider: "ceralive" },
+				"srtla_relay",
+				3,
+				summaryLabels(),
+			),
+		).toBe("CeraLive Cloud · SRTLA · Bonded · Bonded across 3 links");
+	});
+
+	it("managed SRTLA relay on a single active link → Provider · kind · single link", () => {
+		expect(
+			buildServerSummary(
+				{ relay_server: "fra", remote_provider: "ceralive" },
+				"srtla_relay",
+				1,
+				summaryLabels(),
+			),
+		).toBe("CeraLive Cloud · SRTLA · Bonded · Single link");
+	});
+
+	it("managed SRTLA relay while idle (0 links) → no fresh bonding clause", () => {
+		expect(
+			buildServerSummary(
+				{ relay_server: "fra", remote_provider: "ceralive" },
+				"srtla_relay",
+				0,
+				summaryLabels(),
+			),
+		).toBe("CeraLive Cloud · SRTLA · Bonded");
+	});
+
+	it("managed RIST relay never asserts bonding (even with multiple links)", () => {
+		expect(
+			buildServerSummary(
+				{ relay_server: "fra", remote_provider: "belabox" },
+				"rist_relay",
+				4,
+				summaryLabels(),
+			),
+		).toBe("BELABOX Cloud · RIST · Managed");
+	});
+
+	it("managed with an unknown/custom provider omits the brand prefix", () => {
+		expect(
+			buildServerSummary(
+				{ relay_server: "fra" },
+				"srtla_relay",
+				0,
+				summaryLabels(),
+			),
+		).toBe("SRTLA · Bonded");
+	});
+
+	it("custom SRTLA endpoint → addr:port · kind badge", () => {
+		expect(
+			buildServerSummary(
+				{ srtla_addr: "custom.example", srtla_port: 5000 },
+				"srtla_custom",
+				0,
+				summaryLabels(),
+			),
+		).toBe("custom.example:5000 · SRTLA · Custom");
+	});
+
+	it("custom RIST endpoint → addr:port · kind badge", () => {
+		expect(
+			buildServerSummary(
+				{ srtla_addr: "rist.example", srtla_port: 5004 },
+				"rist_custom",
+				0,
+				summaryLabels(),
+			),
+		).toBe("rist.example:5004 · RIST · Custom");
+	});
+
+	it("custom SRT endpoint → addr:port · kind badge", () => {
+		expect(
+			buildServerSummary(
+				{ srtla_addr: "srt.example", srtla_port: 4001 },
+				"srt_custom",
+				0,
+				summaryLabels(),
+			),
+		).toBe("srt.example:4001 · SRT · Custom");
+	});
+
+	it("custom endpoint without a port → addr · kind badge", () => {
+		expect(
+			buildServerSummary(
+				{ srtla_addr: "custom.example" },
+				"srtla_custom",
+				0,
+				summaryLabels(),
+			),
+		).toBe("custom.example · SRTLA · Custom");
 	});
 });

@@ -899,6 +899,8 @@ const ptBR = {
 				srtCustom: "SRT · Personalizado",
 			},
 			manageLinks: "Gerenciar links",
+			singleLinkHint:
+				"Este receptor usa um único link direto. A combinação de vários links não é usada para este transporte.",
 		},
 		title: "Live",
 		description: "Controle de transmissão e métricas ao vivo",
@@ -912,6 +914,7 @@ const ptBR = {
 		configureToStart:
 			"Configure um servidor de retransmissão para começar a transmitir",
 		editSettings: "Editar configurações",
+		chooseDestination: "Escolha um destino",
 		streamSettings: "Configurações de transmissão",
 		adjustBitrate: "Ajustar bitrate",
 		stopToChange: "Pare a transmissão para alterar",

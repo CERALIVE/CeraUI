@@ -882,6 +882,8 @@ const ar = {
 				srtCustom: "SRT · مخصّص",
 			},
 			manageLinks: "إدارة الروابط",
+			singleLinkHint:
+				"يستخدم هذا المستقبِل رابطًا مباشرًا واحدًا. لا يُستخدم تجميع عدة روابط مع وسيلة النقل هذه.",
 		},
 		title: "مباشر",
 		description: "التحكم في البث والمقاييس المباشرة",
@@ -894,6 +896,7 @@ const ar = {
 		notStreaming: "لا يوجد بث",
 		configureToStart: "قم بتكوين خادم ترحيل لبدء البث",
 		editSettings: "تعديل الإعدادات",
+		chooseDestination: "اختر وجهة",
 		streamSettings: "إعدادات البث",
 		adjustBitrate: "ضبط معدل البت",
 		stopToChange: "أوقف البث للتغيير",

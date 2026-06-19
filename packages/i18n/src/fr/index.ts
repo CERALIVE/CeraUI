@@ -923,6 +923,8 @@ const fr = {
 				srtCustom: "SRT · Personnalisé",
 			},
 			manageLinks: "Gérer les liens",
+			singleLinkHint:
+				"Ce récepteur utilise un seul lien direct. L'agrégation de plusieurs liens n'est pas utilisée pour ce transport.",
 		},
 		title: "Live",
 		description: "Contrôle de diffusion et métriques en direct",
@@ -936,6 +938,7 @@ const fr = {
 		configureToStart:
 			"Configurez un serveur de relais pour commencer la diffusion",
 		editSettings: "Modifier les paramètres",
+		chooseDestination: "Choisir une destination",
 		streamSettings: "Paramètres de diffusion",
 		adjustBitrate: "Ajuster le débit",
 		stopToChange: "Arrêtez la diffusion pour modifier",
