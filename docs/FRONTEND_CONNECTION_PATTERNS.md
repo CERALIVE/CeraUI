@@ -358,3 +358,44 @@ The backend tags broadcast messages with a top-level `seq` number. `client.ts` l
 The tracker is per-type (`Map<string, number>`), never a global counter. A slow `modems` broadcast does not affect the `sensors` sequence.
 
 `seqTracker.advance(type, seq)` is called after applying a message, not before, so the `lastSeen` only advances on messages that were actually processed.
+
+---
+
+## Status-domain OS-operation transient layer
+
+The `async-operation.svelte.ts` module provides a keyed transient state machine for OS-mutating commands that are fire-and-forget (the device reports back asynchronously via broadcast) or synchronous (the RPC returns the real result).
+
+### Problem it solves
+
+Before this layer, each OS-control dialog hand-rolled its own `$effect` that watched the incoming broadcast to clear its own spinner or auto-close the dialog. This caused:
+- **Clobber**: a periodic `status` broadcast would reset the spinner mid-operation
+- **Auto-close**: dialogs would close before the operation was confirmed
+- **Silent failures**: `{success:false}` responses from `SystemHelper` wrappers were discarded
+
+### Architecture
+
+- **Pure core** (`asyncOpCore`): rune-free functions (`begin`, `confirm`, `fail`, `timeout`, `sweep`) testable under plain vitest
+- **Reactive layer**: lazy singleton with `$effect.root` self-sweep (1s interval) for TTL/linger decay
+- **`osCommand()`**: the single dispatch helper — re-entry guard, `beginOperation`, await RPC, classify result, `failOperation`/`confirmOperation`, single toast path
+
+### Phase lifecycle
+
+```
+idle → pending → confirmed
+              ↘ failed
+              ↘ timed_out (TTL lapsed, renders "Still working / Retry")
+```
+
+Terminal phases linger `ASYNC_OP_TERMINAL_LINGER_MS` (4s) then decay to `idle`.
+
+### When to use
+
+- Status-domain OS commands: WiFi connect/disconnect/forget/scan, mode switch, modem scan/configure, SIM PIN/PUK, hotspot start/stop/configure, SSH, software-update START
+- G4 status fields (`ssh`, `wifi`, `modems`, …) that cannot use dirty-registry
+
+### When NOT to use
+
+- Config-field writes → `field-sync-state.svelte.ts`
+- Streaming start/stop → `streaming-optimism.svelte.ts`
+- Netif enable/disable → dirty-registry/BondToggle
+- Power/reboot → direct raw-rpc (device going down IS the success signal)

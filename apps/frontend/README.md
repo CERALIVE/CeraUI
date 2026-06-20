@@ -129,6 +129,7 @@ src/
 - **Design tokens**: Ground Control identity (phosphor lime primary, warm graphite background) defined in `app.css`. Read `../../.impeccable.md` before touching visuals.
 - **Touch/kiosk mode**: `?mode=touch` URL flag. See `../../docs/TOUCHSCREEN.md`.
 - **E2E tests**: read `tests/e2e/PLAYBOOK.md` before writing any E2E test.
+- **Additional shadcn-svelte components**: [shadcn-svelte-extras.com](https://www.shadcn-svelte-extras.com/) — additional components styled to match shadcn-svelte. See `AGENTS.md` for the convention. Custom components go in `lib/components/custom/`.
 
 ## Deployment
 
