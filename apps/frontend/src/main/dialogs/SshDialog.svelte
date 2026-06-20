@@ -3,8 +3,9 @@
 
   Shows the current SSH server status, the generated SSH password (masked, with
   copy + show/hide), a reset action, and a start/stop toggle. State is read from
-  the live subscriptions surface (getSsh / getConfig); actions go through the
-  system RPC via the SystemHelper wrappers.
+  the live subscriptions surface (getSsh / getConfig). The start/stop toggle is an
+  OS op routed through `osCommand` (raw rpc.system.sshStart/sshStop); the password
+  reset is a one-shot helper call (resetSSHPasword) with its own success toast.
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';

@@ -7,8 +7,9 @@
 
   • Name / password / channel form, schema-driven bounds from ValidationAdapter
     (HOTSPOT_NAME_MIN/MAX, HOTSPOT_PASSWORD_MIN/MAX) — single source of truth.
-  • Save  → rpc.wifi.hotspotConfigure (via changeHotspotSettings helper).
-  • Start → rpc.wifi.hotspotStart, Stop → rpc.wifi.hotspotStop.
+  • Save  → rpc.wifi.hotspotConfigure, Start → rpc.wifi.hotspotStart,
+    Stop → rpc.wifi.hotspotStop — all dispatched through `osCommand` (the single
+    OS-op feedback path: keyed spinner, DEVICE_BUSY + failure toasts).
   • When the hotspot is active, a QR encoding the live credentials
     (WIFI:T:WPA;S:<name>;P:<password>;;) is rendered so phones can join by scan.
 -->

@@ -26,15 +26,6 @@ export type Config = {
 	srt_streamid: string;
 };
 
-export const installSoftwareUpdates = async () => {
-	try {
-		await rpc.system.startUpdate();
-	} catch (error) {
-		console.error("Failed to start update:", error);
-		throw error;
-	}
-};
-
 export const reboot = async () => {
 	try {
 		await rpc.system.reboot();
@@ -49,24 +40,6 @@ export const powerOff = async () => {
 		await rpc.system.poweroff();
 	} catch (error) {
 		console.error("Failed to power off:", error);
-		throw error;
-	}
-};
-
-export const startSSH = async () => {
-	try {
-		await rpc.system.sshStart();
-	} catch (error) {
-		console.error("Failed to start SSH:", error);
-		throw error;
-	}
-};
-
-export const stopSSH = async () => {
-	try {
-		await rpc.system.sshStop();
-	} catch (error) {
-		console.error("Failed to stop SSH:", error);
 		throw error;
 	}
 };

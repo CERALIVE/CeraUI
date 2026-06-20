@@ -8,7 +8,6 @@ import type {
 	WifiSecurity,
 } from "@ceraui/rpc/schemas";
 import QRCode from "qrcode";
-import { toast } from "svelte-sonner";
 
 import { rpc } from "$lib/rpc/client";
 import { getStatus } from "$lib/stores/websocket-store.svelte";
@@ -137,92 +136,6 @@ export const getWifiBand = (freq: number) => {
 	return getLL().wifiBands.band_2_4ghz();
 };
 
-export const turnHotspotModeOn = async (deviceId: number) => {
-	try {
-		await rpc.wifi.hotspotStart({ device: String(deviceId) });
-	} catch (error) {
-		console.error("Failed to start hotspot:", error);
-		throw error;
-	}
-};
-
-export const turnHotspotModeOff = async (deviceId: number) => {
-	try {
-		await rpc.wifi.hotspotStop({ device: String(deviceId) });
-	} catch (error) {
-		console.error("Failed to stop hotspot:", error);
-		throw error;
-	}
-};
-
-export const changeHotspotSettings = async ({
-	deviceId,
-	name,
-	password,
-	channel,
-}: {
-	deviceId: string | number;
-	name: string;
-	password: string;
-	channel: string;
-}) => {
-	try {
-		await rpc.wifi.hotspotConfigure({
-			device: String(deviceId),
-			name,
-			password,
-			channel,
-		});
-	} catch (error) {
-		console.error("Failed to configure hotspot:", error);
-		throw error;
-	}
-};
-export const changeModemSettings = async ({
-	network_type,
-	roaming,
-	network,
-	autoconfig,
-	apn,
-	username,
-	password,
-	device,
-}: {
-	network_type: string;
-	roaming?: boolean;
-	network?: string;
-	autoconfig?: boolean;
-	apn: string;
-	username: string;
-	password: string;
-	device: number | string;
-}) => {
-	try {
-		await rpc.modems.configure({
-			device: String(device),
-			network_type,
-			roaming: roaming ?? false,
-			network: network ?? "",
-			autoconfig: autoconfig ?? false,
-			apn,
-			username,
-			password,
-		});
-	} catch (error) {
-		console.error("Failed to configure modem:", error);
-		throw error;
-	}
-};
-
-export const scanModemNetworks = async (deviceId: number) => {
-	try {
-		return await rpc.modems.scan({ device: deviceId });
-	} catch (error) {
-		console.error("Failed to scan modem networks:", error);
-		throw error;
-	}
-};
-
 export const unlockSimPin = async (
 	modemPath: string,
 	pin: string,
@@ -244,99 +157,6 @@ export const unlockSimPuk = async (
 		return await rpc.modems.unlockSimPuk({ modemPath, puk, newPin });
 	} catch (error) {
 		console.error("Failed to unlock SIM with PUK:", error);
-		throw error;
-	}
-};
-
-export const scanWifi = async (
-	deviceId: number | string,
-	notification = true,
-) => {
-	if (notification) {
-		toast.info(getLL().networkHelper.toast.scanningWifi(), {
-			description: getLL().networkHelper.toast.scanningWifiDescription(),
-			duration: 5000,
-		});
-	}
-	try {
-		await rpc.wifi.scan({ device: String(deviceId) });
-	} catch (error) {
-		console.error("Failed to scan WiFi:", error);
-		throw error;
-	}
-};
-
-export const disconnectWifi = async (
-	uuid: string,
-	wifi: ValueOf<StatusMessage["wifi"]>["available"][number],
-) => {
-	toast.warning(getLL().networkHelper.toast.disconnectingWifi(), {
-		description: getLL().networkHelper.toast.disconnectingWifiDescription({
-			ssid: wifi.ssid,
-		}),
-	});
-	try {
-		await rpc.wifi.disconnect({ uuid });
-	} catch (error) {
-		console.error("Failed to disconnect WiFi:", error);
-		throw error;
-	}
-};
-
-export const connectWifi = async (
-	uuid: string,
-	wifi: ValueOf<StatusMessage["wifi"]>["available"][number],
-) => {
-	toast.info(getLL().networkHelper.toast.connectingWifi(), {
-		description: getLL().networkHelper.toast.connectingWifiDescription({
-			ssid: wifi.ssid,
-		}),
-		duration: 12000,
-	});
-	try {
-		await rpc.wifi.connect({ uuid });
-	} catch (error) {
-		console.error("Failed to connect WiFi:", error);
-		throw error;
-	}
-};
-
-export const connectToNewWifi = async (
-	deviceId: string | number,
-	ssid: string,
-	password: string,
-) => {
-	toast.info(getLL().networkHelper.toast.connectingNewWifi(), {
-		description: getLL().networkHelper.toast.connectingNewWifiDescription({
-			ssid,
-		}),
-		duration: 15000,
-	});
-	try {
-		await rpc.wifi.connectNew({
-			device: String(deviceId),
-			ssid,
-			password,
-		});
-	} catch (error) {
-		console.error("Failed to connect to new WiFi:", error);
-		throw error;
-	}
-};
-
-export const forgetWifi = async (
-	uuid: string,
-	wifi: ValueOf<StatusMessage["wifi"]>["available"][number],
-) => {
-	toast.info(getLL().networkHelper.toast.wifiNetworkForgotten(), {
-		description: getLL().networkHelper.toast.wifiNetworkForgottenDescription({
-			ssid: wifi.ssid,
-		}),
-	});
-	try {
-		await rpc.wifi.forget({ uuid });
-	} catch (error) {
-		console.error("Failed to forget WiFi network:", error);
 		throw error;
 	}
 };

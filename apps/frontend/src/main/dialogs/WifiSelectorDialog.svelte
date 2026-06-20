@@ -30,7 +30,7 @@ import { Wifi } from '@lucide/svelte';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { networkConstraints } from '$lib/components/streaming/ValidationAdapter';
-import { getWifiUUID, networkRename, scanWifi } from '$lib/helpers/NetworkHelper';
+import { getWifiUUID, networkRename } from '$lib/helpers/NetworkHelper';
 import { isSecured } from '$lib/helpers/wifi-selector';
 import {
 	deriveWifiDisconnectOutcome,
@@ -279,11 +279,14 @@ $effect(() => {
 	}
 });
 
-// Initial + periodic silent rescan while the dialog is open.
+// Initial + periodic silent rescan while the dialog is open. This is a passive
+// query-style refresh (no spinner, no toast) — it deliberately does NOT route
+// through `osCommand`, which is reserved for the user-initiated scan (`handleScan`,
+// keyed on `scanKey`). A fire-and-forget raw `rpc.wifi.scan` keeps the two apart.
 $effect(() => {
 	if (!open) return;
-	scanWifi(deviceId, false);
-	const id = setInterval(() => scanWifi(deviceId, false), 22000);
+	void rpc.wifi.scan({ device: deviceId });
+	const id = setInterval(() => void rpc.wifi.scan({ device: deviceId }), 22000);
 	return () => clearInterval(id);
 });
 
