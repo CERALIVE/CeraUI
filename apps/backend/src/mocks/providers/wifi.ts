@@ -89,6 +89,53 @@ function mockHotspotDeviceForUuid(uuid: string): string | undefined {
 	return undefined;
 }
 
+// ─── WiFi mock-seam fault injection (test infra, T9) ─────────────────────────
+// Drives the WifiSelectorDialog's operation-phase paths (fail / busy / timed_out)
+// through the REAL wifi RPC procedures without hardware. Each flag is independent
+// and composes; resetMockWifiFaults() (wired into resetMockState) clears them so a
+// fault set in one test never bleeds into the next.
+export interface MockWifiFaults {
+	/** Saved-network connect emits the failing result frame `{ connect:false, device }`. */
+	savedConnectFails: boolean;
+	/** connectNew emits the wrong-password frame `{ new:{ error:"auth", device } }`. */
+	connectNewAuthFails: boolean;
+	/** Every mutating WiFi op returns `{ success:false, error:"DEVICE_BUSY" }`. */
+	deviceBusy: boolean;
+	/**
+	 * Suppress the confirming mock-state mutation: a saved/new connect is accepted
+	 * but never marks the target active, so no authoritative snapshot ever confirms
+	 * it. The frontend op stays `pending` until its TTL valve flips it to
+	 * `timed_out` — the calm "still connecting / Retry" affordance.
+	 */
+	suppressConfirm: boolean;
+}
+
+function defaultWifiFaults(): MockWifiFaults {
+	return {
+		savedConnectFails: false,
+		connectNewAuthFails: false,
+		deviceBusy: false,
+		suppressConfirm: false,
+	};
+}
+
+let mockWifiFaults: MockWifiFaults = defaultWifiFaults();
+
+/** The active WiFi fault knobs the wifi procedures consult in mock mode. */
+export function getMockWifiFaults(): Readonly<MockWifiFaults> {
+	return mockWifiFaults;
+}
+
+/** Set one or more WiFi fault knobs (the unset flags keep their current value). */
+export function setMockWifiFaults(partial: Partial<MockWifiFaults>): void {
+	mockWifiFaults = { ...mockWifiFaults, ...partial };
+}
+
+/** Clear every WiFi fault knob. Wired into resetMockState() for per-test isolation. */
+export function resetMockWifiFaults(): void {
+	mockWifiFaults = defaultWifiFaults();
+}
+
 /**
  * Handle nmcli commands and return mock responses
  */

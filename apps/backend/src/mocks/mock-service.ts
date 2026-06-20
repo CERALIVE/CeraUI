@@ -66,6 +66,7 @@ import type {
 import { validateMockFixtures } from "./mock-schemas.ts";
 import { MockAddonDescriptor, MockAddonState } from "./providers/addons.ts";
 import { resetMockKioskState } from "./providers/kiosk.ts";
+import { resetMockWifiFaults } from "./providers/wifi.ts";
 import { getMockRelaysCache } from "./providers/relays.ts";
 
 // Session-state slot shapes + their Zod schemas live in mock-schemas.ts, so the
@@ -566,6 +567,7 @@ export function updateMockState(partial: Partial<MockState>): void {
 export function resetMockState(): void {
 	clearMockTimers();
 	resetMockKioskState();
+	resetMockWifiFaults();
 	if (!pristineSnapshot) return;
 	Object.assign(mockState, structuredClone(pristineSnapshot));
 }

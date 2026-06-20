@@ -31,7 +31,10 @@ import {
 	setMockWifiConnection,
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
-import { setMockHotspotConfig } from "../../mocks/providers/wifi.ts";
+import {
+	getMockWifiFaults,
+	setMockHotspotConfig,
+} from "../../mocks/providers/wifi.ts";
 import { withDeviceLock } from "../../modules/network/state/device-lock.ts";
 import { handleWifi, wifiBuildMsg } from "../../modules/wifi/wifi.ts";
 import { getWifiInterfacesByMacAddress } from "../../modules/wifi/wifi-connections.ts";
@@ -45,7 +48,25 @@ import type { RPCContext } from "../types.ts";
 
 const MOCK_WIFI_DEVICE = "wlan0";
 
+// The WifiStatus key (radio index) the frontend op store keys `wifi:<id>` on for
+// the mock wlan0 — used as the `device` field of the injected fault frames so a
+// forced failure resolves the SAME keyed operation the dialog dispatched.
+const MOCK_WIFI_DEVICE_INDEX = String(
+	Math.max(
+		0,
+		mockWifiRadios.findIndex((radio) => radio.device === MOCK_WIFI_DEVICE),
+	),
+);
+
 type MutationResult = { success: boolean; error?: string };
+
+// Mock-seam DEVICE_BUSY knob: in mock mode a forced-busy fault makes every
+// mutating WiFi op return the same contention signal the device-lock would, so
+// the dialog's calm busy toast + re-enable path is exercisable without a real
+// concurrent operation.
+function mockWifiBusy(): boolean {
+	return shouldUseMocks() && getMockWifiFaults().deviceBusy;
+}
 
 function resolveMockWifiDevice(device: string): string | undefined {
 	if (mockWifiRadios.some((radio) => radio.device === device)) return device;
@@ -126,14 +147,27 @@ export const wifiConnectProcedure = authedProcedure
 	.input(wifiConnectInputSchema)
 	.output(wifiOperationOutputSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
+		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws as unknown as WebSocket;
 		const busy = await runGuarded(macForConnectionUuid(input.uuid), () => {
 			handleWifi(ws, { connect: input.uuid });
 			if (shouldUseMocks()) {
-				const ssid = mockWifiSsidForUuid(input.uuid);
-				if (ssid) {
-					setMockWifiConnection(MOCK_WIFI_DEVICE, { activeNetwork: ssid });
+				const faults = getMockWifiFaults();
+				if (faults.savedConnectFails) {
+					// Emit the failing result frame the WifiSelectorDialog routes into
+					// the keyed op store → failed (calm re-enable, no snapshot mutation).
+					broadcast("wifi", {
+						connect: false,
+						device: MOCK_WIFI_DEVICE_INDEX,
+					});
+				} else if (!faults.suppressConfirm) {
+					const ssid = mockWifiSsidForUuid(input.uuid);
+					if (ssid) {
+						setMockWifiConnection(MOCK_WIFI_DEVICE, { activeNetwork: ssid });
+					}
 				}
+				// suppressConfirm: accept but never mark active → op stays pending →
+				// the frontend TTL valve flips it to timed_out.
 			}
 			broadcast("wifi", { connect: [input.uuid] });
 		});
@@ -148,10 +182,11 @@ export const wifiDisconnectProcedure = authedProcedure
 	.input(wifiDisconnectInputSchema)
 	.output(wifiOperationOutputSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
+		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws as unknown as WebSocket;
 		const busy = await runGuarded(macForConnectionUuid(input.uuid), () => {
 			handleWifi(ws, { disconnect: input.uuid });
-			if (shouldUseMocks()) {
+			if (shouldUseMocks() && !getMockWifiFaults().suppressConfirm) {
 				setMockWifiConnection(MOCK_WIFI_DEVICE, { activeNetwork: undefined });
 			}
 		});
@@ -165,7 +200,8 @@ export const wifiDisconnectProcedure = authedProcedure
 export const wifiConnectNewProcedure = authedProcedure
 	.input(wifiNewInputSchema)
 	.output(wifiOperationOutputSchema)
-	.handler(({ input, context }) => {
+	.handler(({ input, context }): MutationResult => {
+		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		handleWifi(context.ws as unknown as WebSocket, {
 			new: {
 				device: input.device,
@@ -174,14 +210,25 @@ export const wifiConnectNewProcedure = authedProcedure
 			},
 		});
 		if (shouldUseMocks()) {
-			const current = getMockState().wifiConnections.get(MOCK_WIFI_DEVICE);
-			const savedNetworks = current?.savedNetworks ?? [];
-			setMockWifiConnection(MOCK_WIFI_DEVICE, {
-				activeNetwork: input.ssid,
-				savedNetworks: savedNetworks.includes(input.ssid)
-					? savedNetworks
-					: [...savedNetworks, input.ssid],
-			});
+			const faults = getMockWifiFaults();
+			if (faults.connectNewAuthFails) {
+				// Wrong-password result: route into the keyed op store as a failure on
+				// the SAME device key the dialog dispatched (calm re-enable).
+				broadcast("wifi", {
+					new: { error: "auth", device: input.device },
+				});
+				return { success: true };
+			}
+			if (!faults.suppressConfirm) {
+				const current = getMockState().wifiConnections.get(MOCK_WIFI_DEVICE);
+				const savedNetworks = current?.savedNetworks ?? [];
+				setMockWifiConnection(MOCK_WIFI_DEVICE, {
+					activeNetwork: input.ssid,
+					savedNetworks: savedNetworks.includes(input.ssid)
+						? savedNetworks
+						: [...savedNetworks, input.ssid],
+				});
+			}
 		}
 		return { success: true };
 	});
@@ -193,6 +240,7 @@ export const wifiForgetProcedure = authedProcedure
 	.input(wifiForgetInputSchema)
 	.output(successResponseSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
+		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws as unknown as WebSocket;
 		const busy = await runGuarded(macForConnectionUuid(input.uuid), () => {
 			handleWifi(ws, { forget: input.uuid });
@@ -223,6 +271,7 @@ export const wifiScanProcedure = authedProcedure
 	.input(wifiScanInputSchema)
 	.output(successResponseSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
+		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws as unknown as WebSocket;
 		const busy = await runGuarded(macForDeviceId(input.device), () => {
 			handleWifi(ws, { scan: input.device });
@@ -238,12 +287,13 @@ export const hotspotStartProcedure = authedProcedure
 	.input(hotspotToggleInputSchema)
 	.output(successResponseSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
+		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws as unknown as WebSocket;
 		const busy = await runGuarded(macForDeviceId(input.device), () => {
 			handleWifi(ws, {
 				hotspot: { start: { device: input.device } },
 			});
-			if (shouldUseMocks()) {
+			if (shouldUseMocks() && !getMockWifiFaults().suppressConfirm) {
 				const device = resolveMockWifiDevice(input.device);
 				if (device) {
 					getMockState().wifiModes[device] = "hotspot";
@@ -262,12 +312,13 @@ export const hotspotStopProcedure = authedProcedure
 	.input(hotspotToggleInputSchema)
 	.output(successResponseSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
+		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws as unknown as WebSocket;
 		const busy = await runGuarded(macForDeviceId(input.device), () => {
 			handleWifi(ws, {
 				hotspot: { stop: { device: input.device } },
 			});
-			if (shouldUseMocks()) {
+			if (shouldUseMocks() && !getMockWifiFaults().suppressConfirm) {
 				const device = resolveMockWifiDevice(input.device);
 				if (device) {
 					getMockState().wifiModes[device] = "station";
