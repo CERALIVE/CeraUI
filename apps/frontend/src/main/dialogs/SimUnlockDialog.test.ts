@@ -2,8 +2,9 @@
 /**
  * SimUnlockDialog — SIM PIN unlock UI (Task 23).
  *
- * Drives the dialog against a mocked `unlockSimPin` helper (the Task 22 RPC
- * boundary) and asserts the four terminal-state paths the UI must distinguish:
+ * Drives the dialog against a mocked `rpc.modems.unlockSim` (the RPC boundary the
+ * dialog now dispatches through via osCommand) and asserts the four terminal-
+ * state paths the UI must distinguish:
  *   success      → toast + dialog closes
  *   wrong-pin    → inline error surfaces the remaining attempts; PIN cleared
  *   puk-required → PUK state shown; the PIN field/submit are hidden
@@ -20,12 +21,18 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import SimUnlockDialog from "./SimUnlockDialog.svelte";
 
-const unlockSimPin = vi.hoisted(() => vi.fn());
+// The dialog now dispatches the SIM unlock RPCs directly (via osCommand), so the
+// test seam moves from the NetworkHelper wrappers to `rpc.modems.*`.
+const unlockSim = vi.hoisted(() => vi.fn());
 const unlockSimPuk = vi.hoisted(() => vi.fn());
 
-vi.mock("$lib/helpers/NetworkHelper", () => ({
-	unlockSimPin,
-	unlockSimPuk,
+vi.mock("$lib/rpc", () => ({
+	rpc: {
+		modems: {
+			unlockSim,
+			unlockSimPuk,
+		},
+	},
 }));
 
 vi.mock("svelte-sonner", () => ({
@@ -73,7 +80,7 @@ const pukSubmit = () =>
 	screen.getByTestId("sim-puk-submit") as HTMLButtonElement;
 
 beforeEach(() => {
-	unlockSimPin.mockReset();
+	unlockSim.mockReset();
 	unlockSimPuk.mockReset();
 });
 
@@ -100,8 +107,8 @@ describe("SimUnlockDialog — PIN entry (Task 23)", () => {
 		expect(submitButton().disabled).toBe(false);
 	});
 
-	it("submits the PIN via unlockSimPin and closes on success", async () => {
-		unlockSimPin.mockResolvedValue({
+	it("submits the PIN via rpc.modems.unlockSim and closes on success", async () => {
+		unlockSim.mockResolvedValue({
 			state: "success",
 		} satisfies SimUnlockOutput);
 
@@ -116,7 +123,7 @@ describe("SimUnlockDialog — PIN entry (Task 23)", () => {
 		fireEvent.input(pinInput(), { target: { value: "4321" } });
 		await fireEvent.click(submitButton());
 
-		expect(unlockSimPin).toHaveBeenCalledWith("2", "4321");
+		expect(unlockSim).toHaveBeenCalledWith({ modemPath: "2", pin: "4321" });
 		// Success closes the dialog → the PIN field is removed from the DOM.
 		await waitFor(() =>
 			expect(screen.queryByTestId("sim-pin-input")).toBeNull(),
@@ -124,7 +131,7 @@ describe("SimUnlockDialog — PIN entry (Task 23)", () => {
 	});
 
 	it("surfaces the remaining attempts on a wrong PIN without auto-resubmitting", async () => {
-		unlockSimPin.mockResolvedValue({
+		unlockSim.mockResolvedValue({
 			state: "wrong-pin",
 			remainingAttempts: 2,
 		} satisfies SimUnlockOutput);
@@ -143,7 +150,7 @@ describe("SimUnlockDialog — PIN entry (Task 23)", () => {
 		const error = await screen.findByTestId("sim-pin-error");
 		expect(error.textContent).toContain("2");
 		// Exactly one submit — never a blind resubmit.
-		expect(unlockSimPin).toHaveBeenCalledTimes(1);
+		expect(unlockSim).toHaveBeenCalledTimes(1);
 		// The PIN field is cleared so the next attempt is deliberate.
 		expect(pinInput().value).toBe("");
 		// Dialog stays open (still locked).
@@ -163,7 +170,7 @@ describe("SimUnlockDialog — PIN entry (Task 23)", () => {
 		// A PIN cannot clear a PUK lock — the entry field and submit are hidden.
 		expect(screen.queryByTestId("sim-pin-input")).toBeNull();
 		expect(screen.queryByTestId("sim-pin-submit")).toBeNull();
-		expect(unlockSimPin).not.toHaveBeenCalled();
+		expect(unlockSim).not.toHaveBeenCalled();
 	});
 });
 
@@ -212,7 +219,11 @@ describe("SimUnlockDialog — PUK recovery", () => {
 		fireEvent.input(newPinInput(), { target: { value: "4321" } });
 		await fireEvent.click(pukSubmit());
 
-		expect(unlockSimPuk).toHaveBeenCalledWith("1", "12345678", "4321");
+		expect(unlockSimPuk).toHaveBeenCalledWith({
+			modemPath: "1",
+			puk: "12345678",
+			newPin: "4321",
+		});
 		await waitFor(() =>
 			expect(screen.queryByTestId("sim-puk-input")).toBeNull(),
 		);
@@ -276,7 +287,7 @@ describe("SimUnlockDialog — PUK recovery", () => {
 	});
 
 	it("hands off from the PIN flow to the PUK form when a wrong PIN exhausts attempts", async () => {
-		unlockSimPin.mockResolvedValue({
+		unlockSim.mockResolvedValue({
 			state: "puk-required",
 		} satisfies SimUnlockOutput);
 

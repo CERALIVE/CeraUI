@@ -28,7 +28,12 @@ import { networkConstraints } from '$lib/components/streaming/ValidationAdapter'
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
-import { unlockSimPin, unlockSimPuk } from '$lib/helpers/NetworkHelper';
+import { rpc } from '$lib/rpc';
+import { isOperationPending, osCommand } from '$lib/rpc/async-operation.svelte';
+import {
+	classifySimPinResult,
+	classifySimPukResult,
+} from '$lib/rpc/sim-unlock-outcome';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -45,8 +50,14 @@ const pukLength = networkConstraints.modem.simPuk.length;
 const pinPattern = new RegExp(`^\\d{${pinMin},${pinMax}}$`);
 const pukPattern = new RegExp(`^\\d{${pukLength}}$`);
 
+// PIN + PUK share ONE keyed op per modem — the osCommand re-entry guard enforces
+// a single SIM unlock in flight at a time (a blind resubmit walks the SIM toward
+// an irreversible lockout). SIM unlocks are SYNCHRONOUS (await mmcli, return the
+// real terminal in the RPC body), so they dispatch with `confirmOnResolve: true`.
+const simKey = $derived(`sim:${deviceId}`);
+const submitting = $derived(isOperationPending(simKey));
+
 let pin = $state('');
-let submitting = $state(false);
 let errorState = $state<SimUnlockOutput['state'] | null>(null);
 let remainingAttempts = $state<number | undefined>(undefined);
 
@@ -75,14 +86,16 @@ const dialogTitle = $derived(
 );
 const dialogIcon = $derived(locked ? ShieldX : pukRequired ? ShieldAlert : KeyRound);
 
-// Re-seed from the live modem each time the dialog opens.
+// Re-seed from the live modem each time the dialog opens. The error/attempt
+// state below is LOCAL $state, set only here (open edge) and from a submit
+// result — never re-derived from a live broadcast — so a periodic `modems` push
+// can never clear the inline error the operator is reading.
 let prevOpen = false;
 $effect(() => {
 	if (open && !prevOpen) {
 		pin = '';
 		puk = '';
 		newPin = '';
-		submitting = false;
 		errorState = null;
 		pukErrorState = null;
 		remainingAttempts = modem.sim_lock?.remainingAttempts;
@@ -94,76 +107,94 @@ $effect(() => {
 	prevOpen = open;
 });
 
+// Apply a PIN result to the inline UI. success closes; wrong-pin/puk-required/
+// no-locked-modem are handled here (no generic toast); a genuine error toast is
+// owned by osCommand's failure path.
+function applyPinResult(result: SimUnlockOutput) {
+	const verdict = classifySimPinResult(result);
+	if (verdict.ok) {
+		toast.success($LL.network.modem.simUnlock.success());
+		open = false;
+		return;
+	}
+	switch (verdict.reason) {
+		case 'wrong-pin':
+			errorState = 'wrong-pin';
+			remainingAttempts = result.remainingAttempts;
+			pin = '';
+			break;
+		case 'puk-required':
+			errorState = 'puk-required';
+			pin = '';
+			break;
+		case 'no-locked-modem':
+			open = false;
+			break;
+		default:
+			// Generic failure: osCommand already toasted via failMessage.
+			errorState = 'error';
+	}
+}
+
+function applyPukResult(result: SimPukUnlockOutput) {
+	const verdict = classifySimPukResult(result);
+	if (verdict.ok) {
+		toast.success($LL.network.modem.simUnlock.pukSuccess());
+		open = false;
+		return;
+	}
+	switch (verdict.reason) {
+		case 'wrong-puk':
+			pukErrorState = 'wrong-puk';
+			pukRemainingAttempts = result.remainingAttempts;
+			puk = '';
+			newPin = '';
+			break;
+		case 'locked':
+			pukErrorState = 'locked';
+			pukRemainingAttempts = 0;
+			puk = '';
+			newPin = '';
+			break;
+		case 'no-locked-modem':
+			open = false;
+			break;
+		default:
+			pukErrorState = 'error';
+	}
+}
+
 async function handleSubmit() {
 	if (!pinValid || submitting || pukRequired) return;
-	submitting = true;
-	try {
-		const result = await unlockSimPin(String(deviceId), pin);
-		switch (result.state) {
-			case 'success':
-				toast.success($LL.network.modem.simUnlock.success());
-				open = false;
-				break;
-			case 'wrong-pin':
-				errorState = 'wrong-pin';
-				({ remainingAttempts } = result);
-				pin = '';
-				break;
-			case 'puk-required':
-				errorState = 'puk-required';
-				pin = '';
-				break;
-			case 'no-locked-modem':
-				open = false;
-				break;
-			default:
-				errorState = 'error';
-				toast.error($LL.network.modem.simUnlock.error());
-		}
-	} catch {
-		errorState = 'error';
-		toast.error($LL.network.modem.simUnlock.error());
-	} finally {
-		submitting = false;
-	}
+	await osCommand({
+		key: simKey,
+		rpc: () => rpc.modems.unlockSim({ modemPath: String(deviceId), pin }),
+		confirmOnResolve: true,
+		// Only a genuine `error` surfaces osCommand's failure toast/phase; every
+		// other non-ok terminal (wrong-pin / puk-required / no-locked-modem) is
+		// handled inline by applyPinResult, so report it as ok to suppress the toast.
+		classify: (r) => {
+			const v = classifySimPinResult(r);
+			return v.reason === 'error' ? { ok: false, reason: 'error' } : { ok: true };
+		},
+		failMessage: () => $LL.network.os.operationFailed(),
+		onResult: (r) => applyPinResult(r),
+	});
 }
 
 async function handleSubmitPuk() {
 	if (!pukFormValid || submitting || locked) return;
-	submitting = true;
-	try {
-		const result = await unlockSimPuk(String(deviceId), puk, newPin);
-		if (result.success) {
-			toast.success($LL.network.modem.simUnlock.pukSuccess());
-			open = false;
-			return;
-		}
-		switch (result.error) {
-			case 'wrong-puk':
-				pukErrorState = 'wrong-puk';
-				pukRemainingAttempts = result.remainingAttempts;
-				puk = '';
-				newPin = '';
-				break;
-			case 'locked':
-				pukErrorState = 'locked';
-				pukRemainingAttempts = 0;
-				puk = '';
-				newPin = '';
-				break;
-			case 'no-locked-modem':
-				open = false;
-				break;
-			default:
-				pukErrorState = 'error';
-				toast.error($LL.network.modem.simUnlock.error());
-		}
-	} catch {
-		pukErrorState = 'error';
-		toast.error($LL.network.modem.simUnlock.error());
-	} finally {
-		submitting = false;
-	}
+	await osCommand({
+		key: simKey,
+		rpc: () => rpc.modems.unlockSimPuk({ modemPath: String(deviceId), puk, newPin }),
+		confirmOnResolve: true,
+		classify: (r) => {
+			const v = classifySimPukResult(r);
+			return v.reason === 'error' ? { ok: false, reason: 'error' } : { ok: true };
+		},
+		failMessage: () => $LL.network.os.operationFailed(),
+		onResult: (r) => applyPukResult(r),
+	});
 }
 
 function handlePinKeydown(event: KeyboardEvent) {
