@@ -24,12 +24,13 @@ import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
+import { generateWifiQr } from '$lib/helpers/NetworkHelper';
 import {
-	changeHotspotSettings,
-	generateWifiQr,
-	turnHotspotModeOff,
-	turnHotspotModeOn,
-} from '$lib/helpers/NetworkHelper';
+	confirmOperation,
+	getOperationPhase,
+	osCommand,
+} from '$lib/rpc/async-operation.svelte';
+import { rpc } from '$lib/rpc/client';
 import { cn } from '$lib/utils';
 
 import ConnectPhoneSection from './hotspot/ConnectPhoneSection.svelte';
@@ -49,13 +50,24 @@ const bounds = networkConstraints.hotspot;
 // The hotspot is "active" when the interface is currently broadcasting one.
 const isActive = $derived(Boolean(iface?.hotspot));
 
+// ── Keyed async-operation phases ──────────────────────────────────────────
+// start/stop shares the `hotspot:${deviceId}` key with WifiSection's mode switch
+// (T8) — the osCommand re-entry guard enforces a single hotspot op per device.
+// configure uses a SEPARATE key so a save never collides with a start/stop.
+const toggleKey = $derived(`hotspot:${deviceId}`);
+const configKey = $derived(`hotspot-config:${deviceId}`);
+const toggling = $derived(getOperationPhase(toggleKey) === 'pending');
+const configuring = $derived(getOperationPhase(configKey) === 'pending');
+
+// Local intent for the pending start/stop: the confirm $effect flips the op to
+// `confirmed` the moment the authoritative snapshot reports the target mode.
+let toggleTarget = $state<'hotspot' | 'station' | null>(null);
+
 // ── Form state (synced once from props; user edits are never clobbered) ──
 let name = $state('');
 let password = $state('');
 let channel = $state('auto');
 let showPassword = $state(false);
-let configuring = $state(false);
-let toggling = $state(false);
 
 let initialized = false;
 $effect.pre(() => {
@@ -123,40 +135,58 @@ $effect(() => {
 	}
 });
 
+// Save dispatches the reconfigure; `hotspotConfigure` resolves immediately with a
+// dispatch ack, so we DON'T confirmOnResolve — the real outcome arrives later as
+// a `wifi` event carrying `hotspot.config`, which the subscriptions handler routes
+// into `hotspot-config:${deviceId}`. The one-time form sync (`initialized` guard)
+// keeps the live QR/iface re-broadcast from clobbering the in-progress edits.
 async function handleSave() {
 	if (!isFormValid || configuring) return;
-	configuring = true;
-	try {
-		await changeHotspotSettings({ deviceId, name, password, channel });
-		toast.success($LL.hotspotConfigurator.success.title(), {
-			description: $LL.hotspotConfigurator.success.description(),
+	await osCommand({
+		key: configKey,
+		rpc: () => rpc.wifi.hotspotConfigure({ device: deviceId, name, password, channel }),
+		failMessage: () => $LL.network.os.operationFailed(),
+		busyMessage: () => $LL.network.os.deviceBusy(),
+		// NO confirmOnResolve — confirm comes from the deferred hotspot.config event.
+	});
+}
+
+// Start/stop through the shared keyed op. Stay `pending` after dispatch; the
+// confirm $effect below flips to `confirmed` once the snapshot reports the target
+// mode (the 15 s TTL valve is the backstop if the device never reports back).
+async function handleToggle() {
+	if (isActive) {
+		toggleTarget = 'station';
+		await osCommand({
+			key: toggleKey,
+			target: 'station',
+			rpc: () => rpc.wifi.hotspotStop({ device: deviceId }),
+			failMessage: () => $LL.network.os.operationFailed(),
+			busyMessage: () => $LL.network.os.deviceBusy(),
 		});
-	} catch {
-		toast.error($LL.hotspotConfigurator.error.title(), {
-			description: $LL.hotspotConfigurator.error.description(),
+	} else {
+		toggleTarget = 'hotspot';
+		await osCommand({
+			key: toggleKey,
+			target: 'hotspot',
+			rpc: () => rpc.wifi.hotspotStart({ device: deviceId }),
+			failMessage: () => $LL.network.os.operationFailed(),
+			busyMessage: () => $LL.network.os.deviceBusy(),
 		});
-	} finally {
-		configuring = false;
 	}
 }
 
-async function handleToggle() {
-	if (toggling) return;
-	toggling = true;
-	try {
-		if (isActive) {
-			await turnHotspotModeOff(Number(deviceId));
-		} else {
-			await turnHotspotModeOn(Number(deviceId));
-		}
-	} catch {
-		toast.error($LL.hotspotConfigurator.error.title(), {
-			description: $LL.hotspotConfigurator.error.description(),
-		});
-	} finally {
-		toggling = false;
+// Confirm a pending start/stop as soon as the authoritative `wifi` snapshot
+// reports the target mode — the QR section then syncs from the live `iface.hotspot`
+// naturally (post-confirm).
+$effect(() => {
+	if (getOperationPhase(toggleKey) !== 'pending') return;
+	if (toggleTarget === 'hotspot' && isActive) {
+		confirmOperation(toggleKey);
+	} else if (toggleTarget === 'station' && !isActive) {
+		confirmOperation(toggleKey);
 	}
-}
+});
 
 // ── Copy SSID / password to clipboard (never logs the secret) ──
 async function copyName() {
