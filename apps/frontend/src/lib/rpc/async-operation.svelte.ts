@@ -89,6 +89,17 @@ export const ASYNC_OP_TTL_MS = 15_000;
  */
 export const ASYNC_OP_TERMINAL_LINGER_MS = 4_000;
 
+/**
+ * The scan-settle window for a manual WiFi scan. `rpc.wifi.scan` returns the
+ * moment the rescan is dispatched and the available-network set carries no
+ * scan-complete marker, so a scan is confirmed only when its content signature
+ * changes (a new/removed AP). If the environment yields no change within this
+ * window the absolute TTL valve ({@link ASYNC_OP_TTL_MS}) flips the op to
+ * `timed_out`, which a scan surface renders as a NEUTRAL "scan complete / no new
+ * networks" — never an error. Distinct from {@link ASYNC_OP_TTL_MS} on purpose.
+ */
+export const WIFI_SCAN_SETTLE_MS = 8_000;
+
 // ============================================
 // Pure core (rune-free, unit-testable)
 //

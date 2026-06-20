@@ -40,7 +40,14 @@ import {
 	scanWifi,
 } from '$lib/helpers/NetworkHelper';
 import { isSecured } from '$lib/helpers/wifi-selector';
+import {
+	confirmOperation,
+	getOperationPhase,
+	osCommand,
+} from '$lib/rpc/async-operation.svelte';
+import { rpc } from '$lib/rpc';
 import { getWifi } from '$lib/rpc/subscriptions.svelte';
+import { wifiScanSignature } from '$lib/rpc/wifi-scan-signature';
 
 import WifiNetworkList from './WifiNetworkList.svelte';
 
@@ -76,17 +83,23 @@ const sortedNetworks = $derived(
 	}),
 );
 
+// Scan key — DISTINCT from the connect/disconnect/forget key. The scan op is
+// tracked through the keyed async-operation state machine; its `pending` phase
+// drives the spinner and its content-signature confirm resolves it.
+const scanKey = $derived(`wifi-scan:${deviceId}`);
+
 // Inline interaction state.
-let scanning = $state(false);
 let connecting = $state<{ key: string; ssid: string } | undefined>(undefined);
 let pendingNew = $state<AvailableWifiNetwork | undefined>(undefined);
 let password = $state('');
 let showPassword = $state(false);
 let confirmForget = $state<string | undefined>(undefined);
 
+// Signature of the available-network set captured at scan dispatch. A later
+// broadcast whose signature differs confirms the scan (new/removed AP).
+let scanBaseline = $state<string | undefined>(undefined);
+
 let connectTimeout: ReturnType<typeof setTimeout> | undefined;
-let scanTimeout: ReturnType<typeof setTimeout> | undefined;
-let scanStartedAt = 0;
 
 function resetInteraction() {
 	pendingNew = undefined;
@@ -104,16 +117,15 @@ function beginConnect(key: string, ssid: string) {
 	}, 20000);
 }
 
-function handleScan() {
-	scanWifi(deviceId);
-	scanning = true;
-	scanStartedAt = Date.now();
-	clearTimeout(scanTimeout);
-	// Safety net only: the spinner normally clears the moment fresh results land
-	// (see the wifi-watch effect below), so an action never looks frozen.
-	scanTimeout = setTimeout(() => {
-		scanning = false;
-	}, 20000);
+async function handleScan() {
+	// Capture the baseline BEFORE dispatch so a fresh result is detectable.
+	scanBaseline = wifiScanSignature(iface?.available ?? []);
+	await osCommand({
+		key: scanKey,
+		rpc: () => rpc.wifi.scan({ device: deviceId }),
+		busyMessage: () => $LL.network.os.deviceBusy(),
+		failMessage: () => $LL.network.os.operationFailed(),
+	});
 }
 
 function handleConnectSaved(uuid: string, network: AvailableWifiNetwork) {
@@ -171,17 +183,18 @@ $effect(() => {
 	}
 });
 
-// Resolve the manual-scan spinner the moment fresh results arrive, so the
-// indicator reflects scan completion instead of always running the full timeout.
-let prevWifiRef: WifiStatus | undefined;
+// Confirm a manual scan when its content signature changes (a new/removed AP),
+// NOT on a mere getWifi() reference change — a periodic full-state re-broadcast
+// re-references the same set and must not clear the spinner. An environment that
+// yields no new networks legitimately produces no change: the absolute TTL valve
+// (ASYNC_OP_TTL_MS) then flips the op to timed_out, rendered NEUTRALLY as "scan
+// complete", never an error.
 $effect(() => {
-	const current = getWifi();
-	if (current !== prevWifiRef) {
-		prevWifiRef = current;
-		if (scanning && Date.now() - scanStartedAt > 250) {
-			scanning = false;
-			clearTimeout(scanTimeout);
-		}
+	if (getOperationPhase(scanKey) !== 'pending') return;
+	const currentSig = wifiScanSignature(iface?.available ?? []);
+	if (scanBaseline !== undefined && currentSig !== scanBaseline) {
+		confirmOperation(scanKey);
+		scanBaseline = undefined;
 	}
 });
 
@@ -198,9 +211,8 @@ $effect(() => {
 	if (!open) {
 		resetInteraction();
 		connecting = undefined;
-		scanning = false;
+		scanBaseline = undefined;
 		clearTimeout(connectTimeout);
-		clearTimeout(scanTimeout);
 	}
 });
 </script>
@@ -228,7 +240,7 @@ $effect(() => {
 		onSubmitNew={submitNew}
 		passwordMin={PASSWORD_MIN}
 		{pendingNew}
-		{scanning}
+		scanning={getOperationPhase(scanKey) === 'pending'}
 		bind:password
 		bind:showPassword
 	/>
