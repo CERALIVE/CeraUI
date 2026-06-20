@@ -190,11 +190,12 @@ export function broadcast(
 	data: unknown,
 	options: {
 		except?: AppWebSocket;
+		only?: AppWebSocket;
 		authedOnly?: boolean;
 		minLastActive?: number;
 	} = {},
 ): void {
-	const { except, authedOnly = true, minLastActive = 0 } = options;
+	const { except, only, authedOnly = true, minLastActive = 0 } = options;
 
 	const now = Date.now();
 	if (
@@ -216,6 +217,7 @@ export function broadcast(
 	const settlements: Array<Promise<PromiseSettledResult<void>>> = [];
 	let recipients = 0;
 	for (const client of clients) {
+		if (only && client !== only) continue;
 		if (client === except) continue;
 		if (authedOnly && !client.data.isAuthenticated) continue;
 		if (client.data.lastActive < minLastActive) continue;

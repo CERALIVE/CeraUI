@@ -3,7 +3,10 @@
 	Simulates mmcli (ModemManager) output for development mode
 */
 
-import type { SimUnlockResult } from "../../modules/modems/mmcli.ts";
+import type {
+	SimPukUnlockResult,
+	SimUnlockResult,
+} from "../../modules/modems/mmcli.ts";
 import type { LockedModem } from "../../modules/modems/sim-autounlock.ts";
 import {
 	MOCK_SIM_PIN_RETRIES,
@@ -390,4 +393,54 @@ export function mockAttemptSimUnlock(
 	}
 	setMockSimState(String(modemId), { lock: "pin-locked", pinRetries });
 	return { state: "wrong-pin", remainingAttempts: pinRetries };
+}
+
+/**
+ * Fixture PUK the mock "accepts" on the SIM PUK recovery path. CLEARLY NOT A REAL
+ * PUK — a well-known dev/test value (the 8-digit shape mmcli enforces), never a
+ * credential, and redacted by the logger's `puk`/`secret` scrub if it ever reaches
+ * a log line.
+ */
+export const MOCK_SIM_PUK_FIXTURE = "12345678";
+
+/**
+ * Mock a SINGLE SIM-PUK submit, classified exactly like the real `unlockSimPuk`:
+ * a SIM that is not PUK-locked surfaces `no-locked-modem` without ever submitting;
+ * the correct fixture PUK clears the lock; a wrong PUK burns one attempt and
+ * bricks the SIM (`locked`) once the PUK budget hits zero. This performs ONE
+ * attempt only — like the PIN mock, the never-loop contract lives in the caller.
+ *
+ * The deterministic stand-in for the SIM PUK recovery UI's terminal states
+ * (success / wrong-puk / locked / no-locked-modem), so the frontend PUK flow can
+ * be exercised with no PUK-locked hardware.
+ */
+export function mockAttemptSimPukUnlock(
+	modemPath: string,
+	puk: string,
+): SimPukUnlockResult {
+	const modemId = modemPathToId(modemPath);
+	if (modemId === null) {
+		return { success: false, error: "error" };
+	}
+	const sim = getMockSimState(modemId);
+	if (!sim) {
+		return { success: false, error: "error" };
+	}
+
+	if (sim.lock !== "puk-locked") {
+		return { success: false, error: "no-locked-modem" };
+	}
+
+	if (puk === MOCK_SIM_PUK_FIXTURE) {
+		setMockSimLockState(modemId, "unlocked");
+		return { success: true };
+	}
+
+	const pukRetries = Math.max(0, sim.pukRetries - 1);
+	if (pukRetries === 0) {
+		setMockSimState(String(modemId), { lock: "puk-locked", pukRetries: 0 });
+		return { success: false, error: "locked", remainingAttempts: 0 };
+	}
+	setMockSimState(String(modemId), { lock: "puk-locked", pukRetries });
+	return { success: false, error: "wrong-puk", remainingAttempts: pukRetries };
 }

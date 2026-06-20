@@ -5,6 +5,11 @@
  * (Playwright) can inject a conflicting `config`/`status` echo at a known time —
  * deterministic QA of the field-lock race-condition fix.
  *
+ * Delivery is scoped to the CALLING socket (`only: context.ws`). The echo is for
+ * the requesting test client alone; fanning it out to every connected client lets
+ * one Playwright worker's injected state (e.g. a `sim_lock` that auto-opens a
+ * dialog) bleed into another worker's page over the shared dev backend.
+ *
  * HARD-GATED: this procedure is only registered when `NODE_ENV !== 'production'`
  * (see ../router.ts). It must never be reachable in a production build.
  */
@@ -30,12 +35,12 @@ const authedProcedure = baseProcedure.use(authMiddleware);
 export const devEmitProcedure = authedProcedure
 	.input(devEmitInputSchema)
 	.output(devEmitOutputSchema)
-	.handler(({ input }) => {
+	.handler(({ input, context }) => {
 		// Defense-in-depth: never emit in production even if somehow registered.
 		if (process.env.NODE_ENV === "production") {
 			return { success: false };
 		}
 
-		broadcast(input.type, input.payload);
+		broadcast(input.type, input.payload, { only: context.ws });
 		return { success: true };
 	});
