@@ -22,6 +22,7 @@ import {
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
+import { sshIsActive, sshToggleConfirmed } from '$lib/rpc/os-toggle-predicates';
 import { getConfig, getSsh } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
 
@@ -32,7 +33,7 @@ interface Props {
 let { open = $bindable(false) }: Props = $props();
 
 const ssh = $derived(getSsh());
-const active = $derived(ssh?.active ?? false);
+const active = $derived(sshIsActive(ssh));
 const user = $derived(ssh?.user ?? '');
 const sshPass = $derived(getConfig()?.ssh_pass ?? '');
 
@@ -81,7 +82,7 @@ async function toggle() {
 // Confirm the toggle once the live snapshot reports the target SSH state.
 $effect(() => {
 	if (getOperationPhase('ssh') !== 'pending') return;
-	if (toggleTarget !== null && active === toggleTarget) {
+	if (sshToggleConfirmed(active, toggleTarget)) {
 		confirmOperation('ssh');
 	}
 });

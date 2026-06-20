@@ -31,6 +31,7 @@ import {
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
+import { hotspotIsActive, hotspotToggleConfirmed } from '$lib/rpc/os-toggle-predicates';
 import { cn } from '$lib/utils';
 
 import ConnectPhoneSection from './hotspot/ConnectPhoneSection.svelte';
@@ -48,7 +49,7 @@ let { open = $bindable(false), deviceId, iface }: Props = $props();
 const bounds = networkConstraints.hotspot;
 
 // The hotspot is "active" when the interface is currently broadcasting one.
-const isActive = $derived(Boolean(iface?.hotspot));
+const isActive = $derived(hotspotIsActive(iface));
 
 // ── Keyed async-operation phases ──────────────────────────────────────────
 // start/stop shares the `hotspot:${deviceId}` key with WifiSection's mode switch
@@ -181,9 +182,7 @@ async function handleToggle() {
 // naturally (post-confirm).
 $effect(() => {
 	if (getOperationPhase(toggleKey) !== 'pending') return;
-	if (toggleTarget === 'hotspot' && isActive) {
-		confirmOperation(toggleKey);
-	} else if (toggleTarget === 'station' && !isActive) {
+	if (hotspotToggleConfirmed(toggleTarget, isActive)) {
 		confirmOperation(toggleKey);
 	}
 });
