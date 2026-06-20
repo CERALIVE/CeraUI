@@ -11,11 +11,11 @@
   • Network list: live `WifiStatus` from `$lib/rpc/subscriptions.svelte` (the
     non-deprecated surface) keyed by `deviceId`. Reactive — refreshes as scan
     results arrive.
-  • Actions: the canonical `NetworkHelper` wrappers around `rpc.wifi.*`
-    (scan / connect / connectNew / disconnect / forget). Those wrappers emit the
-    "scanning…/connecting…" action toasts; the subscriptions `wifi` handler emits
-    the success / auth-failure result toast, so this component does NOT duplicate
-    result toasts — it only drives the inline UI (spinner, close-on-success).
+  • Actions: scan / connect / connectNew / disconnect / forget all dispatch via
+    the keyed `osCommand` state machine (raw `rpc.wifi.*` calls). `osCommand` owns
+    the single failure-feedback path; the subscriptions `wifi` handler routes the
+    broadcast result into the op store. This component drives the inline UI only
+    (phase-based spinner, calm `timed_out` Retry, close-on-confirm).
 
   Validation
   ----------
@@ -30,24 +30,22 @@ import { Wifi } from '@lucide/svelte';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { networkConstraints } from '$lib/components/streaming/ValidationAdapter';
-import {
-	connectToNewWifi,
-	connectWifi,
-	disconnectWifi,
-	forgetWifi,
-	getWifiUUID,
-	networkRename,
-	scanWifi,
-} from '$lib/helpers/NetworkHelper';
+import { getWifiUUID, networkRename, scanWifi } from '$lib/helpers/NetworkHelper';
 import { isSecured } from '$lib/helpers/wifi-selector';
+import {
+	deriveWifiDisconnectOutcome,
+	deriveWifiForgetOutcome,
+} from '$lib/helpers/wifi-outcomes';
 import {
 	confirmOperation,
 	getOperationPhase,
+	isOperationPending,
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc';
 import { getWifi } from '$lib/rpc/subscriptions.svelte';
 import { wifiScanSignature } from '$lib/rpc/wifi-scan-signature';
+import { deriveWifiConnectOutcome } from '$lib/rpc/wifi-connect-outcome';
 
 import WifiNetworkList from './WifiNetworkList.svelte';
 
@@ -88,18 +86,31 @@ const sortedNetworks = $derived(
 // drives the spinner and its content-signature confirm resolves it.
 const scanKey = $derived(`wifi-scan:${deviceId}`);
 
+// Connect / disconnect / forget share ONE key per interface — the osCommand
+// re-entry guard enforces a single WiFi mutation in flight at a time.
+const wifiOpKey = $derived(`wifi:${deviceId}`);
+
 // Inline interaction state.
-let connecting = $state<{ key: string; ssid: string } | undefined>(undefined);
+// `connecting` is the local intent for the third op sharing `wifiOpKey`: the SSID
+// this surface is connecting to. Kept set through `timed_out` so the row can
+// render the calm "still connecting / Retry" affordance; cleared on confirm
+// (close), hard fail, or idle decay.
+let connecting = $state<string | undefined>(undefined);
 let pendingNew = $state<AvailableWifiNetwork | undefined>(undefined);
 let password = $state('');
 let showPassword = $state(false);
 let confirmForget = $state<string | undefined>(undefined);
 
+// Local intent for the two ops that share `wifiOpKey`: which uuid this surface
+// dispatched a disconnect / forget for. The shared key can't tell connect from
+// disconnect/forget apart, so the confirm $effects below gate on these flags and
+// resolve only the matching pure outcome.
+let disconnecting = $state<string | undefined>(undefined);
+let forgetting = $state<string | undefined>(undefined);
+
 // Signature of the available-network set captured at scan dispatch. A later
 // broadcast whose signature differs confirms the scan (new/removed AP).
 let scanBaseline = $state<string | undefined>(undefined);
-
-let connectTimeout: ReturnType<typeof setTimeout> | undefined;
 
 function resetInteraction() {
 	pendingNew = undefined;
@@ -108,13 +119,19 @@ function resetInteraction() {
 	confirmForget = undefined;
 }
 
-function beginConnect(key: string, ssid: string) {
-	connecting = { key, ssid };
-	clearTimeout(connectTimeout);
-	// Safety: clear the spinner if no status update resolves the attempt.
-	connectTimeout = setTimeout(() => {
-		connecting = undefined;
-	}, 20000);
+// Dispatch a connect (saved or new) through the shared keyed op. The subscriptions
+// `wifi` handler resolves the op on the broadcast result; the connect-confirm
+// $effect below adds a snapshot-based secondary confirm and owns close-on-success.
+async function connectVia(ssid: string, run: () => Promise<unknown>) {
+	if (ifaceBusy || isOperationPending(wifiOpKey)) return;
+	connecting = ssid;
+	await osCommand({
+		key: wifiOpKey,
+		target: ssid,
+		rpc: run,
+		failMessage: () => $LL.network.os.operationFailed(),
+		busyMessage: () => $LL.network.os.deviceBusy(),
+	});
 }
 
 async function handleScan() {
@@ -131,12 +148,19 @@ async function handleScan() {
 function handleConnectSaved(uuid: string, network: AvailableWifiNetwork) {
 	if (ifaceBusy) return;
 	resetInteraction();
-	beginConnect(uuid, network.ssid);
-	connectWifi(uuid, network);
+	void connectVia(network.ssid, () => rpc.wifi.connect({ uuid }));
 }
 
-function handleDisconnect(uuid: string, network: AvailableWifiNetwork) {
-	disconnectWifi(uuid, network);
+async function handleDisconnect(uuid: string, network: AvailableWifiNetwork) {
+	if (isOperationPending(wifiOpKey)) return;
+	disconnecting = uuid;
+	await osCommand({
+		key: wifiOpKey,
+		target: network.ssid,
+		rpc: () => rpc.wifi.disconnect({ uuid }),
+		failMessage: () => $LL.network.os.operationFailed(),
+		busyMessage: () => $LL.network.os.deviceBusy(),
+	});
 }
 
 /** New (unsaved) network: secured → reveal inline password form; open → connect now. */
@@ -148,8 +172,10 @@ function handleConnectNew(network: AvailableWifiNetwork) {
 		password = '';
 		showPassword = false;
 	} else {
-		beginConnect(network.ssid, network.ssid);
-		connectToNewWifi(deviceId, network.ssid, '');
+		const ssid = network.ssid;
+		void connectVia(ssid, () =>
+			rpc.wifi.connectNew({ device: deviceId, ssid, password: '' }),
+		);
 	}
 }
 
@@ -161,25 +187,48 @@ function submitNew() {
 	pendingNew = undefined;
 	password = '';
 	showPassword = false;
-	beginConnect(ssid, ssid);
-	connectToNewWifi(deviceId, ssid, pw);
+	void connectVia(ssid, () =>
+		rpc.wifi.connectNew({ device: deviceId, ssid, password: pw }),
+	);
 }
 
-function handleForget(uuid: string, network: AvailableWifiNetwork) {
+async function handleForget(uuid: string, network: AvailableWifiNetwork) {
 	confirmForget = undefined;
-	forgetWifi(uuid, network);
+	if (isOperationPending(wifiOpKey)) return;
+	forgetting = uuid;
+	await osCommand({
+		key: wifiOpKey,
+		target: network.ssid,
+		rpc: () => rpc.wifi.forget({ uuid }),
+		failMessage: () => $LL.network.os.operationFailed(),
+		busyMessage: () => $LL.network.os.deviceBusy(),
+	});
 }
 
-// Resolve the connecting spinner + close the dialog once the target goes active.
+// Connect confirm: the subscriptions `wifi` handler routes the broadcast result
+// into `wifiOpKey`; this effect adds a snapshot-based SECONDARY confirm (the
+// target SSID showing active) and owns close-on-success. The `connecting` intent
+// is kept through `timed_out` so the row renders the calm Retry affordance — it
+// is cleared only on confirm (close), hard fail, or idle decay.
 $effect(() => {
-	const target = connecting;
-	if (!target) return;
-	const match = (iface?.available ?? []).find((n) => n.ssid === target.ssid);
-	if (match?.active) {
-		clearTimeout(connectTimeout);
+	const ssid = connecting;
+	if (!ssid) return;
+	const phase = getOperationPhase(wifiOpKey);
+	if (phase === 'confirmed') {
 		connecting = undefined;
 		resetInteraction();
 		open = false;
+		return;
+	}
+	if (phase === 'failed' || phase === 'idle') {
+		connecting = undefined;
+		return;
+	}
+	if (
+		phase === 'pending' &&
+		deriveWifiConnectOutcome({}, deviceId, ssid, iface?.available ?? []) === 'confirmed'
+	) {
+		confirmOperation(wifiOpKey);
 	}
 });
 
@@ -198,6 +247,38 @@ $effect(() => {
 	}
 });
 
+// Confirm an in-flight disconnect once the snapshot shows the iface dropped the
+// target connection, or release the intent if the op already left `pending`
+// (failure / TTL). Gated by the local `disconnecting` intent so the shared
+// wifiOpKey is never confirmed for a connect/forget op.
+$effect(() => {
+	const uuid = disconnecting;
+	if (!uuid) return;
+	if (getOperationPhase(wifiOpKey) !== 'pending') {
+		disconnecting = undefined;
+		return;
+	}
+	if (deriveWifiDisconnectOutcome(iface, uuid) === 'confirmed') {
+		confirmOperation(wifiOpKey);
+		disconnecting = undefined;
+	}
+});
+
+// Confirm an in-flight forget once the uuid leaves the saved map, or release the
+// intent if the op already left `pending`. Same shared-key guard as disconnect.
+$effect(() => {
+	const uuid = forgetting;
+	if (!uuid) return;
+	if (getOperationPhase(wifiOpKey) !== 'pending') {
+		forgetting = undefined;
+		return;
+	}
+	if (deriveWifiForgetOutcome(iface?.saved, uuid) === 'confirmed') {
+		confirmOperation(wifiOpKey);
+		forgetting = undefined;
+	}
+});
+
 // Initial + periodic silent rescan while the dialog is open.
 $effect(() => {
 	if (!open) return;
@@ -211,8 +292,9 @@ $effect(() => {
 	if (!open) {
 		resetInteraction();
 		connecting = undefined;
+		disconnecting = undefined;
+		forgetting = undefined;
 		scanBaseline = undefined;
-		clearTimeout(connectTimeout);
 	}
 });
 </script>
@@ -227,6 +309,9 @@ $effect(() => {
 	<WifiNetworkList
 		{confirmForget}
 		{connecting}
+		{deviceId}
+		{disconnecting}
+		{forgetting}
 		{iface}
 		{ifaceBusy}
 		networks={sortedNetworks}

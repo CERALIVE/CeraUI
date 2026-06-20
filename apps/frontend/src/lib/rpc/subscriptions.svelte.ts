@@ -25,7 +25,6 @@ import type {
 	StatusResponse,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
-import { toast } from "svelte-sonner";
 
 import { downloadLog } from "$lib/helpers/SystemHelper";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
@@ -40,7 +39,9 @@ import {
 import { ingestStreamHealth } from "$lib/stores/stream-health.svelte";
 
 import {
+	confirmOperation,
 	destroyAsyncOperations,
+	failOperation,
 	reconcileOperationsOnReconnect,
 } from "./async-operation.svelte";
 import type { ConnectionState } from "./client";
@@ -393,18 +394,34 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 		}
 
 		case "wifi": {
-			// WiFi responses can have multiple formats
+			// WiFi responses carry several shapes. The connect/new RESULT frames are
+			// routed into the keyed async-operation store (the single feedback path
+			// for the WifiSelectorDialog) — never a hardcoded toast here.
 			const wifiData = data as {
-				connect?: string[];
+				connect?: boolean | string[];
+				device?: string | number;
 				disconnect?: string;
-				new?: { error?: string; success?: boolean };
+				new?: { error?: string; success?: boolean; device?: string | number };
 			};
 
-			// Handle connection responses
-			if (wifiData.new?.error === "auth") {
-				toast.error("WiFi authentication failed");
-			} else if (wifiData.new?.success) {
-				toast.success("Connected to WiFi network");
+			// Boolean connect result (saved network). The array ack (connect:
+			// string[]) is a dispatch echo and is intentionally ignored.
+			if (typeof wifiData.connect === "boolean" && wifiData.device !== undefined) {
+				const key = `wifi:${wifiData.device}`;
+				if (wifiData.connect) {
+					confirmOperation(key);
+				} else {
+					failOperation(key, "connect_failed");
+				}
+			}
+			// New-network result.
+			if (wifiData.new?.device !== undefined) {
+				const key = `wifi:${wifiData.new.device}`;
+				if (wifiData.new.success) {
+					confirmOperation(key);
+				} else if (wifiData.new.error) {
+					failOperation(key, wifiData.new.error);
+				}
 			}
 			break;
 		}

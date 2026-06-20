@@ -27,6 +27,7 @@ import InlineSpinner from '$lib/components/custom/InlineSpinner.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import { Button } from '$lib/components/ui/button';
 import { getWifiUUID } from '$lib/helpers/NetworkHelper';
+import { getOperationPhase, isOperationPending } from '$lib/rpc/async-operation.svelte';
 import { frequencyBand, isSecured, signalTextClass } from '$lib/helpers/wifi-selector';
 import { cn } from '$lib/utils';
 
@@ -41,8 +42,14 @@ interface Props {
 	ifaceBusy: boolean;
 	/** Manual-scan spinner flag. */
 	scanning: boolean;
-	/** The network currently being connected, if any. */
-	connecting: { key: string; ssid: string } | undefined;
+	/** WifiStatus key (interface device id) — drives the connect op phase reads. */
+	deviceId: string;
+	/** SSID of the network currently being connected, if any (local intent). */
+	connecting: string | undefined;
+	/** UUID of the saved network whose disconnect is in flight, if any. */
+	disconnecting: string | undefined;
+	/** UUID of the saved network whose forget is in flight, if any. */
+	forgetting: string | undefined;
 	/** The new secured network whose inline password form is expanded, if any. */
 	pendingNew: AvailableWifiNetwork | undefined;
 	/** SSID currently showing the forget-confirm affordance, if any. */
@@ -68,7 +75,10 @@ let {
 	networks,
 	ifaceBusy,
 	scanning,
+	deviceId,
 	connecting,
+	disconnecting,
+	forgetting,
 	pendingNew,
 	confirmForget,
 	passwordMin,
@@ -121,7 +131,13 @@ let {
 	<div class="divide-y rounded-lg border">
 		{#each networks as network (network.ssid)}
 			{@const uuid = getWifiUUID(network, iface?.saved ?? {})}
-			{@const isConnecting = connecting?.ssid === network.ssid}
+			{@const opPending = isOperationPending(`wifi:${deviceId}`)}
+			{@const isConnecting = connecting === network.ssid && opPending}
+			{@const isConnectTimedOut =
+				connecting === network.ssid && getOperationPhase(`wifi:${deviceId}`) === 'timed_out'}
+			{@const isDisconnecting = !!uuid && disconnecting === uuid}
+			{@const isForgetting = !!uuid && forgetting === uuid}
+			{@const osBusy = !!connecting || !!disconnecting || !!forgetting}
 			{@const expanded = pendingNew?.ssid === network.ssid}
 			{@const confirming = confirmForget === network.ssid}
 			<div
@@ -188,7 +204,33 @@ let {
 						{#if isConnecting}
 							<span class="text-status-info inline-flex items-center gap-1.5 text-xs font-medium">
 								<Loader2 class="size-4 animate-spin" />
-								<span class="hidden sm:inline">{$LL.wifiSelector.dialog.connecting()}</span>
+								<span class="hidden sm:inline">{$LL.network.os.connecting()}</span>
+							</span>
+						{:else if isConnectTimedOut}
+							<span
+								class="text-muted-foreground hidden items-center text-xs font-medium sm:inline-flex"
+							>
+								{$LL.network.os.stillWorking()}
+							</span>
+							<Button
+								aria-label={`${$LL.network.os.retry()} ${network.ssid}`}
+								class="gap-1.5"
+								onclick={() => (uuid ? onConnectSaved(uuid, network) : onConnectNew(network))}
+								size="sm"
+								variant="outline"
+							>
+								<RefreshCw class="size-4" />
+								<span class="hidden sm:inline">{$LL.network.os.retry()}</span>
+							</Button>
+						{:else if isDisconnecting}
+							<span class="text-status-info inline-flex items-center gap-1.5 text-xs font-medium">
+								<Loader2 class="size-4 animate-spin" />
+								<span class="hidden sm:inline">{$LL.network.os.disconnecting()}</span>
+							</span>
+						{:else if isForgetting}
+							<span class="text-status-info inline-flex items-center gap-1.5 text-xs font-medium">
+								<Loader2 class="size-4 animate-spin" />
+								<span class="hidden sm:inline">{$LL.network.os.applying()}</span>
 							</span>
 						{:else if confirming}
 							<Button onclick={() => uuid && onForget(uuid, network)} size="sm" variant="destructive">
@@ -202,6 +244,7 @@ let {
 								<Button
 									aria-label={`${$LL.wifiSelector.button.disconnect()} ${network.ssid}`}
 									class="gap-1.5"
+									disabled={osBusy}
 									onclick={() => onDisconnect(uuid, network)}
 									size="sm"
 									variant="outline"
@@ -213,7 +256,7 @@ let {
 								<Button
 									aria-label={`${$LL.wifiSelector.button.connect()} ${network.ssid}`}
 									class="gap-1.5"
-									disabled={ifaceBusy}
+									disabled={ifaceBusy || osBusy}
 									onclick={() => onConnectSaved(uuid, network)}
 									size="sm"
 								>
@@ -224,6 +267,7 @@ let {
 							<Button
 								aria-label={`${$LL.wifiSelector.button.forget()} ${network.ssid}`}
 								class="text-muted-foreground hover:text-destructive size-9"
+								disabled={osBusy}
 								onclick={() => onConfirmForget(network.ssid)}
 								size="icon"
 								variant="ghost"
@@ -234,7 +278,7 @@ let {
 							<Button
 								aria-label={`${$LL.wifiSelector.button.connect()} ${network.ssid}`}
 								class="gap-1.5"
-								disabled={ifaceBusy}
+								disabled={ifaceBusy || osBusy}
 								onclick={() => onConnectNew(network)}
 								size="sm"
 								variant={expanded ? 'outline' : 'default'}
