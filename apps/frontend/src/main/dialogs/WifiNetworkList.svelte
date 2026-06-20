@@ -202,10 +202,7 @@ let {
 					<!-- Actions -->
 					<div class="flex shrink-0 items-center gap-1.5">
 						{#if isConnecting}
-							<span class="text-status-info inline-flex items-center gap-1.5 text-xs font-medium">
-								<Loader2 class="size-4 animate-spin" />
-								<span class="hidden sm:inline">{$LL.network.os.connecting()}</span>
-							</span>
+							<InlineSpinner size="md" label={$LL.network.os.connecting()} />
 						{:else if isConnectTimedOut}
 							<span
 								class="text-muted-foreground hidden items-center text-xs font-medium sm:inline-flex"
@@ -223,15 +220,9 @@ let {
 								<span class="hidden sm:inline">{$LL.network.os.retry()}</span>
 							</Button>
 						{:else if isDisconnecting}
-							<span class="text-status-info inline-flex items-center gap-1.5 text-xs font-medium">
-								<Loader2 class="size-4 animate-spin" />
-								<span class="hidden sm:inline">{$LL.network.os.disconnecting()}</span>
-							</span>
+							<InlineSpinner size="md" label={$LL.network.os.disconnecting()} />
 						{:else if isForgetting}
-							<span class="text-status-info inline-flex items-center gap-1.5 text-xs font-medium">
-								<Loader2 class="size-4 animate-spin" />
-								<span class="hidden sm:inline">{$LL.network.os.applying()}</span>
-							</span>
+							<InlineSpinner size="md" label={$LL.network.os.applying()} />
 						{:else if confirming}
 							<Button onclick={() => uuid && onForget(uuid, network)} size="sm" variant="destructive">
 								{$LL.wifiSelector.button.forget()}
