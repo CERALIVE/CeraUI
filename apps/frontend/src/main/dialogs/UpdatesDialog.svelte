@@ -10,12 +10,16 @@
 import { LL } from '@ceraui/i18n/svelte';
 import type { UpdateProgress } from '@ceraui/rpc/schemas';
 import { Download, RefreshCw } from '@lucide/svelte';
-import { toast } from 'svelte-sonner';
 
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import { Progress } from '$lib/components/ui/progress';
-import { installSoftwareUpdates } from '$lib/helpers/SystemHelper';
+import {
+	confirmOperation,
+	getOperationPhase,
+	osCommand,
+} from '$lib/rpc/async-operation.svelte';
+import { rpc } from '$lib/rpc/client';
 import { getAvailableUpdates, getUpdating } from '$lib/rpc/subscriptions.svelte';
 
 interface Props {
@@ -46,14 +50,27 @@ const progressValue = $derived.by(() => {
 
 let confirmOpen = $state(false);
 
+// `update` op covers ONLY the brief start-dispatch window: it stays `pending`
+// from the startUpdate dispatch until the first `updating` broadcast confirms it
+// (or a `{ success: false }`/reject fails it with a calm toast). The progress UI
+// below keeps reading the broadcast directly — it is NOT under this op's TTL.
+const starting = $derived(getOperationPhase('update') === 'pending');
+
 async function doInstall() {
-	try {
-		await installSoftwareUpdates();
-	} catch (error) {
-		console.error('Failed to start update:', error);
-		toast.error($LL.osActions.updateFailed());
-	}
+	await osCommand({
+		key: 'update',
+		rpc: () => rpc.system.startUpdate(),
+		failMessage: () => $LL.network.os.operationFailed(),
+		busyMessage: () => $LL.network.os.deviceBusy(),
+		// NO confirmOnResolve — the first `updating` broadcast confirms the start.
+	});
 }
+
+// Confirm the start-dispatch op once the first `updating` broadcast lands.
+$effect(() => {
+	if (getOperationPhase('update') !== 'pending') return;
+	if (isUpdating) confirmOperation('update');
+});
 </script>
 
 <AppDialog
@@ -80,13 +97,19 @@ async function doInstall() {
 		</div>
 
 		{#if isUpdating}
-			<!-- In-progress -->
+			<!-- In-progress (reads the live broadcast, not the start-dispatch op) -->
 			<div class="space-y-2" aria-live="polite">
 				<div class="flex items-center gap-2 text-sm font-medium">
 					<RefreshCw class="text-primary size-4 motion-safe:animate-spin" />
 					{$LL.settings.dialogs.updating()}
 				</div>
 				<Progress value={progressValue ?? 100} />
+			</div>
+		{:else if starting}
+			<!-- Brief start-dispatch window before the first `updating` broadcast -->
+			<div class="flex items-center gap-2 text-sm font-medium" aria-live="polite">
+				<RefreshCw class="text-primary size-4 motion-safe:animate-spin" />
+				{$LL.network.os.applying()}
 			</div>
 		{:else if count > 0}
 			<!-- Install action (opens destructive confirmation) -->

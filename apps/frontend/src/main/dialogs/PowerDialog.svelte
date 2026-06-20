@@ -23,7 +23,7 @@ import { toast } from 'svelte-sonner';
 
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
-import { powerOff, reboot } from '$lib/helpers/SystemHelper';
+import { rpc } from '$lib/rpc/client';
 import { getIsStreaming, getUpdating } from '$lib/rpc/subscriptions.svelte';
 import { markRebooting } from '$lib/stores/connection-ux.svelte';
 import { cn } from '$lib/utils';
@@ -73,23 +73,31 @@ function request(action: PendingAction) {
 	confirmOpen = true;
 }
 
+// Power/reboot deliberately stay OUT of the pending→confirm machine: the device
+// going down IS the success signal (the DisconnectedBanner owns that UX). But the
+// dispatch calls `rpc.system.*` DIRECTLY — not the SystemHelper wrappers, which
+// discard the `{ success: false }` body — so a backend-refused op (streaming /
+// updating guard) surfaces a calm toast and never advances to "rebooting"/close.
 async function confirmAction() {
 	const action = pending;
 	if (!action || busy) return;
 	busy = true;
 	try {
+		const result =
+			action === 'reboot' ? await rpc.system.reboot() : await rpc.system.poweroff();
+		if (!result.success) {
+			toast.error($LL.network.os.operationFailed());
+			return; // do NOT mark rebooting / close on a refused op
+		}
 		if (action === 'reboot') {
-			await reboot();
 			// Hand the reconnect UX to the Task-16 banner; it auto-clears on
 			// reconnect. Closing this dialog lets the banner own the screen.
 			markRebooting();
-		} else {
-			await powerOff();
 		}
 		open = false;
 	} catch (error) {
 		console.error(`Failed to ${action}:`, error);
-		toast.error($LL.notifications.error());
+		toast.error($LL.network.os.operationFailed());
 	} finally {
 		busy = false;
 		pending = null;
