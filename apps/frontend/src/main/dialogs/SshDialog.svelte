@@ -15,7 +15,13 @@ import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
-import { resetSSHPasword, startSSH, stopSSH } from '$lib/helpers/SystemHelper';
+import { resetSSHPasword } from '$lib/helpers/SystemHelper';
+import {
+	confirmOperation,
+	getOperationPhase,
+	osCommand,
+} from '$lib/rpc/async-operation.svelte';
+import { rpc } from '$lib/rpc/client';
 import { getConfig, getSsh } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
 
@@ -31,7 +37,13 @@ const user = $derived(ssh?.user ?? '');
 const sshPass = $derived(getConfig()?.ssh_pass ?? '');
 
 let show = $state(false);
-let busy = $state(false);
+
+// SSH active is a G4 status field — it CANNOT use the dirty-registry/field-sync
+// layer, so the toggle routes through the keyed async-operation transient layer.
+// Stay `pending` after dispatch; the confirm $effect resolves it once `ssh.active`
+// matches the target (the 15 s TTL valve is the backstop).
+const busy = $derived(getOperationPhase('ssh') === 'pending');
+let toggleTarget = $state<boolean | null>(null);
 
 async function copyPassword() {
 	if (!sshPass) return;
@@ -55,17 +67,24 @@ async function resetPassword() {
 }
 
 async function toggle() {
-	if (busy) return;
-	busy = true;
-	try {
-		await (active ? stopSSH() : startSSH());
-	} catch (error) {
-		console.error('Failed to toggle SSH:', error);
-		toast.error($LL.osActions.sshToggleFailed());
-	} finally {
-		busy = false;
-	}
+	const target = !active;
+	toggleTarget = target;
+	await osCommand({
+		key: 'ssh',
+		target,
+		rpc: () => (target ? rpc.system.sshStart() : rpc.system.sshStop()),
+		failMessage: () => $LL.network.os.operationFailed(),
+		busyMessage: () => $LL.network.os.deviceBusy(),
+	});
 }
+
+// Confirm the toggle once the live snapshot reports the target SSH state.
+$effect(() => {
+	if (getOperationPhase('ssh') !== 'pending') return;
+	if (toggleTarget !== null && active === toggleTarget) {
+		confirmOperation('ssh');
+	}
+});
 </script>
 
 <AppDialog
