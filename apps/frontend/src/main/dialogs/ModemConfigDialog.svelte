@@ -30,9 +30,7 @@ import {
 	SignalZero,
 	Zap,
 } from '@lucide/svelte';
-import { onDestroy } from 'svelte';
 import { slide } from 'svelte/transition';
-import { toast } from 'svelte-sonner';
 
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
@@ -41,12 +39,20 @@ import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import {
-	changeModemSettings,
-	renameSupportedModemNetwork,
-	scanModemNetworks,
-} from '$lib/helpers/NetworkHelper';
+import { renameSupportedModemNetwork } from '$lib/helpers/NetworkHelper';
 import { modemSignal } from '$lib/helpers/signal';
+import { rpc } from '$lib/rpc';
+import {
+	confirmOperation,
+	getOperationPhase,
+	isOperationPending,
+	osCommand,
+} from '$lib/rpc/async-operation.svelte';
+import {
+	type ModemConfigSent,
+	modemConfigEchoMatches,
+} from '$lib/rpc/modem-config-echo';
+import { modemScanSignature } from '$lib/rpc/modem-scan-signature';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -57,11 +63,13 @@ interface Props {
 
 let { open = $bindable(false), modem, deviceId }: Props = $props();
 
-// Watchdog that releases the in-flight scan state if the modems broadcast with
-// fresh results never lands (real hardware scans are async and fire-and-forget
-// on the backend; results stream back over the `modems` broadcast, not the RPC
-// response). Not a validation bound — a UI timing guard, so it lives inline.
-const SCAN_WATCHDOG_MS = 12_000;
+// Keyed async-operation domains. Scan and configure are tracked SEPARATELY so an
+// in-flight scan never gates a save and vice-versa. The `osCommand` re-entry
+// guard on each key is the real anti-double-dispatch protection — in particular
+// the modem GLOBAL lock SILENTLY DROPS a re-entrant scan (returns success-shaped,
+// no-op), and the keyed guard is what stops that from leaving a stuck spinner.
+const scanKey = $derived(`modem-scan:${deviceId}`);
+const configKey = $derived(`modem-config:${deviceId}`);
 
 // ── No-SIM detection (defensive: null OR undefined signal => no SIM) ──────────
 const noSim = $derived(modem.no_sim === true || modem.status?.signal == null);
@@ -85,35 +93,36 @@ function readModemConfig() {
 	};
 }
 
+// `formData` is a one-shot SNAPSHOT seeded on the open edge — it is NOT live-
+// synced from the `modem` prop, so an incremental `mergeModemList` broadcast can
+// never clobber an in-progress edit (the configure-echo confirm below reads the
+// live `modem` directly; the form keeps the operator's typed values). This is
+// the save-time form guard: the snapshot of what we sent (`saveExpected`) is
+// captured at dispatch, so the confirm compares against intent, not a later edit.
 let formData = $state(readModemConfig());
-let localScanning = $state(false);
-let scanError = $state(false);
-let saving = $state(false);
-// Available-network count captured when a scan starts; the in-flight state is
-// released as soon as the broadcast count diverges from this baseline.
-let scanBaseline = $state(0);
-let scanWatchdog: number | undefined;
+// The config we dispatched, captured at save time; drives the echo confirm and
+// is cleared once the op settles. Absent ⇒ no save in flight.
+let saveExpected = $state<ModemConfigSent | undefined>(undefined);
+// Signature of the available-operator set captured at scan dispatch. A later
+// broadcast whose signature DIFFERS confirms the scan (a new/removed operator);
+// mere re-presence of the same set on a periodic broadcast must not confirm.
+let scanSignatureBaseline = $state<string | undefined>(undefined);
 
-function clearScanWatchdog() {
-	if (scanWatchdog !== undefined) {
-		clearTimeout(scanWatchdog);
-		scanWatchdog = undefined;
-	}
-}
+const scanning = $derived(isOperationPending(scanKey));
+const scanError = $derived(getOperationPhase(scanKey) === 'failed');
+const savePending = $derived(isOperationPending(configKey));
 
-// Re-seed the form from the live modem each time the dialog opens.
+// Re-seed the form from the live modem each time the dialog opens. Guarded off
+// while a save is in flight so a close/reopen race can't drop the snapshot.
 let prevOpen = false;
 $effect(() => {
-	if (open && !prevOpen) {
+	if (open && !prevOpen && !savePending) {
 		formData = readModemConfig();
-		localScanning = false;
-		scanError = false;
-		clearScanWatchdog();
+		saveExpected = undefined;
+		scanSignatureBaseline = undefined;
 	}
 	prevOpen = open;
 });
-
-onDestroy(clearScanWatchdog);
 
 // APN required when Automatic APN is disabled (mirrors backend zod refine).
 const apnError = $derived(!formData.autoconfig && formData.apn.trim().length === 0);
@@ -126,63 +135,89 @@ const availableNetworks = $derived(
 	),
 );
 
-// Release the in-flight scan state the moment fresh results land. The backend
-// answers the scan RPC immediately and streams the operator list back over the
-// `modems` broadcast, so completion is signalled by the available-network count
-// diverging from the baseline captured when the scan started.
+// Confirm a scan when its operator-set signature changes (a new/removed
+// operator), NOT on a mere `modems` reference change — a periodic full-state
+// re-broadcast re-sends the same `available_networks` and must not clear the
+// spinner. An environment that yields no new operators legitimately produces no
+// change: the absolute TTL valve then flips the op to `timed_out`.
 $effect(() => {
-	if (localScanning && availableNetworks.length !== scanBaseline) {
-		localScanning = false;
-		clearScanWatchdog();
+	if (getOperationPhase(scanKey) !== 'pending') return;
+	const sig = modemScanSignature(modem.available_networks);
+	if (scanSignatureBaseline !== undefined && sig !== scanSignatureBaseline) {
+		confirmOperation(scanKey);
+		scanSignatureBaseline = undefined;
+	}
+});
+
+// Confirm a configure once a broadcast `modem` echo proves the device stored
+// what we sent (configure-echo predicate). A `connecting → connected` cycle on
+// any re-attach must NOT confirm — only a matching stored config does. Closes
+// the dialog on confirm; releases the snapshot on any terminal phase.
+$effect(() => {
+	const expected = saveExpected;
+	if (!expected) return;
+	const phase = getOperationPhase(configKey);
+	if (phase === 'confirmed') {
+		saveExpected = undefined;
+		open = false;
+		return;
+	}
+	if (phase === 'failed' || phase === 'timed_out' || phase === 'idle') {
+		saveExpected = undefined;
+		return;
+	}
+	if (
+		phase === 'pending' &&
+		modemConfigEchoMatches(expected, {
+			networkTypeActive: modem.network_type?.active ?? null,
+			config: modem.config,
+		})
+	) {
+		confirmOperation(configKey);
 	}
 });
 
 async function handleSave() {
-	if (primaryDisabled || saving) return;
-	saving = true;
-	try {
-		await changeModemSettings({
-			device: deviceId,
-			network_type: formData.selectedNetwork,
-			roaming: formData.roaming,
-			network: !formData.roaming || formData.network === '-1' ? '' : formData.network,
-			autoconfig: formData.autoconfig,
-			apn: formData.apn,
-			username: formData.username,
-			password: formData.password,
-		});
-		open = false;
-	} catch {
-		toast.error($LL.network.errors.toggleFailed());
-	} finally {
-		saving = false;
-	}
+	if (primaryDisabled || isOperationPending(configKey)) return;
+	const input = {
+		device: String(deviceId),
+		network_type: formData.selectedNetwork,
+		roaming: formData.roaming,
+		network: !formData.roaming || formData.network === '-1' ? '' : formData.network,
+		autoconfig: formData.autoconfig,
+		apn: formData.apn,
+		username: formData.username,
+		password: formData.password,
+	};
+	// Capture the dispatched config as the echo baseline BEFORE the broadcast can
+	// land, so the confirm compares against what we sent — never a later edit.
+	saveExpected = {
+		network_type: input.network_type,
+		roaming: input.roaming,
+		network: input.network,
+		autoconfig: input.autoconfig,
+		apn: input.apn,
+		username: input.username,
+		password: input.password,
+	};
+	await osCommand({
+		key: configKey,
+		rpc: () => rpc.modems.configure(input),
+		busyMessage: () => $LL.network.os.deviceBusy(),
+		failMessage: () => $LL.network.os.operationFailed(),
+	});
 }
 
 async function handleScan() {
-	if (noSim || localScanning) return;
-	scanError = false;
-	scanBaseline = availableNetworks.length;
-	localScanning = true;
-	clearScanWatchdog();
-	scanWatchdog = window.setTimeout(() => {
-		localScanning = false;
-		scanWatchdog = undefined;
-	}, SCAN_WATCHDOG_MS);
-
-	try {
-		const result = await scanModemNetworks(Number(deviceId));
-		// The RPC is accepted before the operator list is ready; a `success:false`
-		// payload is the backend's only synchronous failure channel.
-		if (result && result.success === false) {
-			throw new Error(result.error ?? 'scan failed');
-		}
-	} catch {
-		scanError = true;
-		localScanning = false;
-		clearScanWatchdog();
-		toast.error($LL.network.modem.scanFailed());
-	}
+	if (noSim || isOperationPending(scanKey)) return;
+	// Capture the baseline BEFORE dispatch so a fresh result is detectable.
+	scanSignatureBaseline = modemScanSignature(modem.available_networks);
+	await osCommand({
+		key: scanKey,
+		rpc: () => rpc.modems.scan({ device: Number(deviceId) }),
+		busyMessage: () => $LL.network.os.deviceBusy(),
+		failMessage: () => $LL.network.os.operationFailed(),
+	});
 }
 
 const selectedNetworkLabel = $derived(
@@ -199,7 +234,7 @@ const selectedNetworkLabel = $derived(
 	onPrimary={handleSave}
 	primaryDisabled={primaryDisabled}
 	primaryLabel={$LL.network.modem.save()}
-	primaryLoading={saving}
+	primaryLoading={savePending}
 	title={modem.name}
 	bind:open
 >
@@ -304,13 +339,13 @@ const selectedNetworkLabel = $derived(
 						<Button
 							class="h-8 gap-1.5 px-2.5 text-xs"
 							data-testid="modem-scan-button"
-							disabled={noSim || localScanning}
+							disabled={noSim || scanning}
 							onclick={handleScan}
 							size="sm"
 							type="button"
 							variant="outline"
 						>
-							{#if localScanning}
+							{#if scanning}
 								<Loader2 class="size-3.5 motion-safe:animate-spin" />
 								{$LL.network.modem.scanning()}
 							{:else}
@@ -348,7 +383,7 @@ const selectedNetworkLabel = $derived(
 						<p class="text-status-error text-xs" data-testid="modem-scan-error" role="alert">
 							{$LL.network.modem.scanFailed()}
 						</p>
-					{:else if availableNetworks.length === 0 && !localScanning}
+					{:else if availableNetworks.length === 0 && !scanning}
 						<p class="text-muted-foreground text-xs">{$LL.network.modem.noNetworksFound()}</p>
 					{/if}
 				</div>
