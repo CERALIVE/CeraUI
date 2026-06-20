@@ -36,6 +36,9 @@
  * the unit tests) with an `$effect.root` self-sweep.
  */
 
+import { getLL } from "@ceraui/i18n/svelte";
+import { toast } from "svelte-sonner";
+
 import type { ConnectionState } from "./client";
 import { shouldReconcileOnReconnect } from "./reconcile-inflight";
 
@@ -428,4 +431,101 @@ export function initAsyncOperations(): void {
 export function destroyAsyncOperations(): void {
 	singleton?.destroy();
 	singleton = null;
+}
+
+// ============================================
+// osCommand — the single OS-op dispatch helper
+//
+// The one entry point a surface calls to fire an OS command (reboot, update,
+// SSH toggle, modem configure, WiFi connect, …) AND own its feedback. It begins
+// the keyed operation, awaits the raw `rpc.*` call the caller hands it,
+// classifies the result, and surfaces the SINGLE source of failure feedback —
+// no surface that routes through `osCommand` should toast a failure elsewhere.
+// ============================================
+
+/** The classification of an OS-op result: terminal-ok, busy, or a discrete failure. */
+interface OsCommandVerdict {
+	ok: boolean;
+	busy?: boolean;
+	reason?: string;
+}
+
+/**
+ * The default result classifier: a structured `{ success, error }` mutation
+ * result is a failure when `success` is false; `error === "DEVICE_BUSY"` is the
+ * device-global-lock contention signal (busy). Anything else (no `success`
+ * field, or `success: true`) is treated as ok. A custom `classify` on the
+ * options overrides this for non-`{success}`-shaped results.
+ */
+function defaultClassify(r: unknown): OsCommandVerdict {
+	if (r !== null && typeof r === "object" && "success" in r) {
+		const result = r as { success: boolean; error?: string };
+		if (!result.success) {
+			return {
+				ok: false,
+				busy: result.error === "DEVICE_BUSY",
+				reason: result.error,
+			};
+		}
+	}
+	return { ok: true };
+}
+
+/**
+ * Dispatch an OS command through the keyed async-operation state machine and own
+ * its feedback in one place.
+ *
+ * Contract:
+ *  - **Re-entry guard**: if `key` is already `pending`, this is a NO-OP and
+ *    returns `undefined` without dispatching `opts.rpc` — the real
+ *    anti-double-dispatch guard, and the reason a re-entrant call dropped by the
+ *    modem global lock never leaves a stuck spinner.
+ *  - `opts.rpc` MUST be a raw `rpc.*` method call; `osCommand` only awaits it.
+ *  - On a non-ok verdict it transitions `key → failed` and toasts the busy/fail
+ *    message thunk (falling back to `wifiSelector.os.operationFailed`). This is
+ *    the SINGLE failure-feedback path for the surface.
+ *  - With `confirmOnResolve` (synchronous ops only — SIM PIN/PUK) an ok verdict
+ *    transitions `key → confirmed`. Without it the op stays `pending`: the
+ *    per-surface `$effect` confirms on the authoritative broadcast, or the TTL
+ *    valve flips it to `timed_out`.
+ *  - `onResult` runs with the raw result on any resolve (ok or not).
+ *  - A thrown `rpc` transitions `key → failed` and toasts, returning `undefined`.
+ */
+export async function osCommand<T>(opts: {
+	key: string;
+	target?: unknown;
+	rpc: () => Promise<T>;
+	classify?: (r: T) => OsCommandVerdict;
+	confirmOnResolve?: boolean;
+	busyMessage?: () => string;
+	failMessage?: () => string;
+	onResult?: (r: T) => void;
+}): Promise<T | undefined> {
+	// Re-entry guard: never dispatch a second RPC for an in-flight key.
+	if (isOperationPending(opts.key)) return undefined;
+
+	beginOperation(opts.key, opts.target);
+	try {
+		const r = await opts.rpc();
+		const v = opts.classify?.(r) ?? defaultClassify(r);
+		if (!v.ok) {
+			failOperation(opts.key, v.reason ?? (v.busy ? "device_busy" : "failed"));
+			toast.error(
+				(v.busy ? opts.busyMessage : opts.failMessage)?.() ??
+					getLL().wifiSelector.os.operationFailed(),
+			);
+		} else if (opts.confirmOnResolve) {
+			confirmOperation(opts.key);
+		}
+		// else: stay pending; the per-surface $effect confirms on the authoritative
+		// broadcast, or the TTL valve flips it to timed_out.
+		opts.onResult?.(r);
+		return r;
+	} catch (e) {
+		failOperation(opts.key, e instanceof Error ? e.message : "error");
+		toast.error(
+			opts.failMessage?.() ?? getLL().wifiSelector.os.operationFailed(),
+		);
+		return undefined;
+	}
 }
