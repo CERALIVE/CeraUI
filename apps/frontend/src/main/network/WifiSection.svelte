@@ -2,7 +2,6 @@
 import { LL } from '@ceraui/i18n/svelte';
 import type { NetifMessage, WifiInterface } from '@ceraui/rpc/schemas';
 import { ChevronRight, Loader2, Router, Settings2, Wifi, WifiOff } from '@lucide/svelte';
-import { toast } from 'svelte-sonner';
 
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
@@ -12,6 +11,12 @@ import StaleBadge from '$lib/components/custom/StaleBadge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
+import {
+	confirmOperation,
+	getOperationPhase,
+	isOperationPending,
+	osCommand,
+} from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
@@ -53,35 +58,53 @@ function openHotspotSetup(id: string) {
 // ── Station ⇆ hotspot mode switching (a radio is ONE mode at a time) ──
 // Switching to hotspot is destructive (drops the WiFi link + bond membership)
 // so it is gated behind a confirm dialog; switching back to station is not.
-let switching = $state<string | null>(null);
+//
+// The transition is owned by the keyed async-operation store under
+// `hotspot:${device}` — the SAME key HotspotDialog uses, so only one hotspot op
+// per device is ever in flight (osCommand's re-entry guard enforces it). The
+// per-device target is remembered locally so the confirm $effect below can flip
+// the op to `confirmed` the moment the authoritative `wifi` snapshot reports the
+// target mode, and so the label is held on the CURRENT mode until then — a raw
+// `wifi` broadcast must never clobber the label mid-switch.
+const switchTargets = $state<Record<string, 'hotspot' | 'station'>>({});
 
 async function switchToHotspot(device: string) {
-	if (switching) return;
-	switching = device;
-	try {
-		await rpc.wifi.hotspotStart({ device });
-	} catch {
-		toast.error($LL.hotspotConfigurator.error.title(), {
-			description: $LL.hotspotConfigurator.error.description(),
-		});
-	} finally {
-		switching = null;
-	}
+	switchTargets[device] = 'hotspot';
+	await osCommand({
+		key: `hotspot:${device}`,
+		target: 'hotspot',
+		rpc: () => rpc.wifi.hotspotStart({ device }),
+		failMessage: () => $LL.network.os.operationFailed(),
+		busyMessage: () => $LL.network.os.deviceBusy(),
+	});
 }
 
 async function switchToStation(device: string) {
-	if (switching) return;
-	switching = device;
-	try {
-		await rpc.wifi.hotspotStop({ device });
-	} catch {
-		toast.error($LL.hotspotConfigurator.error.title(), {
-			description: $LL.hotspotConfigurator.error.description(),
-		});
-	} finally {
-		switching = null;
-	}
+	switchTargets[device] = 'station';
+	await osCommand({
+		key: `hotspot:${device}`,
+		target: 'station',
+		rpc: () => rpc.wifi.hotspotStop({ device }),
+		failMessage: () => $LL.network.os.operationFailed(),
+		busyMessage: () => $LL.network.os.deviceBusy(),
+	});
 }
+
+// Confirm a pending mode switch as soon as the authoritative `wifi` snapshot
+// reports the target mode. The store's 15 s TTL valve is the backstop if the
+// device never reports back (the op then decays to `timed_out`).
+$effect(() => {
+	for (const [id, iface] of wifiRadios) {
+		if (getOperationPhase(`hotspot:${id}`) !== 'pending') continue;
+		const target = switchTargets[id];
+		const isHotspot = Boolean(iface.hotspot);
+		if (target === 'hotspot' && isHotspot) {
+			confirmOperation(`hotspot:${id}`);
+		} else if (target === 'station' && !isHotspot) {
+			confirmOperation(`hotspot:${id}`);
+		}
+	}
+});
 </script>
 
 <!-- ───────────── WiFi ───────────── -->
@@ -110,6 +133,10 @@ async function switchToStation(device: string) {
 			{#each wifiRadios as [id, iface] (id)}
 				{@const entry = netif?.[iface.ifname]}
 				{@const isHotspot = Boolean(iface.hotspot)}
+				{@const isSwitching = isOperationPending(`hotspot:${id}`)}
+				<!-- Hold the label on the CURRENT mode while a switch is pending: a raw
+				     `wifi` broadcast must not flip it before the op is confirmed. -->
+				{@const displayIsHotspot = isSwitching ? switchTargets[id] === 'station' : isHotspot}
 				{@const net = activeWifiNetwork(iface)}
 				{@const connected = Boolean(iface.conn && net)}
 				{@const link = links.find((l) => l.id === iface.ifname)}
@@ -118,10 +145,9 @@ async function switchToStation(device: string) {
 				{@const rawStale = link?.isStale ?? ifaceStale}
 				{@const tpStale = getStalenessState(kbps, null, rawStale) === 'stale'}
 				{@const sigStale = net ? getStalenessState(net.signal, null, rawStale) === 'stale' : false}
-				{@const showStale = ifaceStale && !isHotspot && connected}
+				{@const showStale = ifaceStale && !displayIsHotspot && connected}
 				{@const hasIp = Boolean(entry?.ip)}
-				{@const isSwitching = switching === id}
-				{@const hasControls = isHotspot || hasIp || iface.supports_hotspot}
+				{@const hasControls = displayIsHotspot || hasIp || iface.supports_hotspot}
 				{@const sigColor = link ? `var(--link-${link.linkIndex + 1})` : 'var(--muted-foreground)'}
 				<div class="px-4 py-4">
 					<!-- Identity row -->
@@ -129,13 +155,13 @@ async function switchToStation(device: string) {
 						<span
 							class={cn(
 								'size-2 shrink-0 rounded-full',
-								isHotspot ? 'bg-status-info' : connected ? 'bg-primary' : 'bg-muted-foreground/40',
+								displayIsHotspot ? 'bg-status-info' : connected ? 'bg-primary' : 'bg-muted-foreground/40',
 							)}
 							aria-hidden="true"
 						></span>
 						<div class="min-w-0 flex-1">
 							<p class="truncate text-sm font-medium">
-								{#if isHotspot}
+								{#if displayIsHotspot}
 									{iface.hotspot?.name || iface.ifname}
 								{:else}
 									{iface.ifname}
@@ -144,10 +170,10 @@ async function switchToStation(device: string) {
 							<p
 								class={cn(
 									'text-muted-foreground truncate text-xs transition-opacity',
-									!isHotspot && rawStale && 'opacity-50',
+									!displayIsHotspot && rawStale && 'opacity-50',
 								)}
 							>
-								{#if isHotspot}
+								{#if displayIsHotspot}
 									{$LL.network.view.hotspot()} · {iface.ifname}
 								{:else if connected && net}
 									{$LL.network.view.connected()} · {net.ssid}
@@ -160,7 +186,7 @@ async function switchToStation(device: string) {
 							{#if showStale}
 								<StaleBadge data-stale-interface={iface.ifname} />
 							{/if}
-							{#if isHotspot}
+							{#if displayIsHotspot}
 								<span
 									class="bg-status-info/10 text-status-info rounded-md px-1.5 py-0.5 text-xs font-medium"
 								>
@@ -195,7 +221,7 @@ async function switchToStation(device: string) {
 					<!-- Control row: bond membership + station⇆hotspot mode -->
 					{#if hasControls}
 						<div class="mt-2.5 flex flex-wrap items-center gap-2 ps-5">
-							{#if isHotspot}
+							{#if displayIsHotspot}
 								<!-- Hotspot mode: cannot bond; offer config + revert to station. -->
 								<BondToggle
 									name={iface.ifname}
@@ -239,25 +265,39 @@ async function switchToStation(device: string) {
 								{/if}
 								{#if iface.supports_hotspot}
 									<div class="ms-auto">
-										<SimpleAlertDialog
-											buttonText={$LL.network.view.switchToHotspot()}
-											confirmButtonText={$LL.network.view.hotspotSwitchConfirm()}
-											confirmVariant="destructive"
-											extraButtonClasses="h-8 px-2.5 text-xs shadow-none bg-secondary text-secondary-foreground hover:bg-secondary/80"
-											iconPosition="left"
-											title={$LL.network.view.hotspotSwitchTitle()}
-											onconfirm={() => switchToHotspot(id)}
-										>
-											{#snippet icon()}
-												<Router class="size-3.5" />
-											{/snippet}
-											{#snippet dialogTitle()}
-												{$LL.network.view.hotspotSwitchTitle()}
-											{/snippet}
-											{#snippet description()}
-												{$LL.network.view.hotspotSwitchBody()}
-											{/snippet}
-										</SimpleAlertDialog>
+										{#if isSwitching}
+											<!-- Switch confirmed at the click; hold a spinner until the
+											     authoritative snapshot flips the label to hotspot. -->
+											<Button
+												class="h-8 gap-1.5 px-2.5 text-xs"
+												disabled
+												size="sm"
+												variant="secondary"
+											>
+												<Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
+												{$LL.network.view.switchToHotspot()}
+											</Button>
+										{:else}
+											<SimpleAlertDialog
+												buttonText={$LL.network.view.switchToHotspot()}
+												confirmButtonText={$LL.network.view.hotspotSwitchConfirm()}
+												confirmVariant="destructive"
+												extraButtonClasses="h-8 px-2.5 text-xs shadow-none bg-secondary text-secondary-foreground hover:bg-secondary/80"
+												iconPosition="left"
+												title={$LL.network.view.hotspotSwitchTitle()}
+												onconfirm={() => switchToHotspot(id)}
+											>
+												{#snippet icon()}
+													<Router class="size-3.5" />
+												{/snippet}
+												{#snippet dialogTitle()}
+													{$LL.network.view.hotspotSwitchTitle()}
+												{/snippet}
+												{#snippet description()}
+													{$LL.network.view.hotspotSwitchBody()}
+												{/snippet}
+											</SimpleAlertDialog>
+										{/if}
 									</div>
 								{/if}
 							{/if}
