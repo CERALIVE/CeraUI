@@ -1152,6 +1152,20 @@ const de = {
 			connected: "Verbunden",
 			saved: "Gespeichert",
 		},
+		os: {
+			deviceBusy: "Gerät ist beschäftigt, bitte in einem Moment erneut versuchen",
+			operationFailed: "Aktion konnte nicht abgeschlossen werden",
+			retry: "Wiederholen",
+			stillWorking: "Noch in Bearbeitung — dauert länger als erwartet",
+			connecting: "Verbinde…",
+			disconnecting: "Trenne…",
+			applying: "Anwenden…",
+			scanning: "Suche…",
+			enabling: "Aktiviere…",
+			disabling: "Deaktiviere…",
+			awaitingResult: "Warte auf Ergebnis…",
+			done: "Fertig",
+		},
 	},
 	networking: {
 		types: {

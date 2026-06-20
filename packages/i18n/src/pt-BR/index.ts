@@ -800,6 +800,20 @@ const ptBR = {
 			connected: "Conectado",
 			saved: "Salvo",
 		},
+		os: {
+			deviceBusy: "O dispositivo está ocupado, tente novamente em um momento",
+			operationFailed: "Não foi possível concluir a ação",
+			retry: "Tentar novamente",
+			stillWorking: "Ainda trabalhando — demorando mais do que o esperado",
+			connecting: "Conectando…",
+			disconnecting: "Desconectando…",
+			applying: "Aplicando…",
+			scanning: "Procurando…",
+			enabling: "Ativando…",
+			disabling: "Desativando…",
+			awaitingResult: "Aguardando resultado…",
+			done: "Concluído",
+		},
 	},
 	networking: {
 		types: {

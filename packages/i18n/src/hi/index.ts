@@ -625,6 +625,20 @@ const hi = {
 			connected: "जुड़ा हुआ",
 			saved: "सहेजा गया",
 		},
+		os: {
+			deviceBusy: "डिवाइस व्यस्त है, एक पल में पुनः प्रयास करें",
+			operationFailed: "क्रिया पूरी नहीं हो सकी",
+			retry: "पुनः प्रयास",
+			stillWorking: "अभी भी काम हो रहा है — अपेक्षा से अधिक समय लग रहा है",
+			connecting: "कनेक्ट हो रहा है…",
+			disconnecting: "डिस्कनेक्ट हो रहा है…",
+			applying: "लागू हो रहा है…",
+			scanning: "स्कैन हो रहा है…",
+			enabling: "सक्षम हो रहा है…",
+			disabling: "अक्षम हो रहा है…",
+			awaitingResult: "परिणाम की प्रतीक्षा…",
+			done: "हो गया",
+		},
 	},
 	networking: {
 		types: {

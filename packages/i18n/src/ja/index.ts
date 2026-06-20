@@ -645,6 +645,20 @@ const ja = {
 			connected: "接続済み",
 			saved: "保存済み",
 		},
+		os: {
+			deviceBusy: "デバイスが使用中です。しばらくしてから再試行してください",
+			operationFailed: "操作を完了できませんでした",
+			retry: "再試行",
+			stillWorking: "まだ処理中 — 予想より時間がかかっています",
+			connecting: "接続中…",
+			disconnecting: "切断中…",
+			applying: "適用中…",
+			scanning: "スキャン中…",
+			enabling: "有効化中…",
+			disabling: "無効化中…",
+			awaitingResult: "結果を待っています…",
+			done: "完了",
+		},
 	},
 	networking: {
 		types: {

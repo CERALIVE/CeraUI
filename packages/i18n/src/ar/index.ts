@@ -764,6 +764,20 @@ const ar = {
 			connected: "متصل",
 			saved: "محفوظة",
 		},
+		os: {
+			deviceBusy: "الجهاز مشغول، حاول مرة أخرى بعد لحظة",
+			operationFailed: "تعذّر إتمام الإجراء",
+			retry: "إعادة المحاولة",
+			stillWorking: "لا يزال يعمل — يستغرق وقتاً أطول من المتوقع",
+			connecting: "جارٍ الاتصال…",
+			disconnecting: "جارٍ قطع الاتصال…",
+			applying: "جارٍ التطبيق…",
+			scanning: "جارٍ البحث…",
+			enabling: "جارٍ التفعيل…",
+			disabling: "جارٍ التعطيل…",
+			awaitingResult: "في انتظار النتيجة…",
+			done: "تم",
+		},
 	},
 	networking: {
 		types: {

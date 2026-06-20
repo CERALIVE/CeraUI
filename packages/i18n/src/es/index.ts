@@ -1166,6 +1166,20 @@ const es = {
 			secured: "Red segura",
 			openNetwork: "Red abierta",
 		},
+		os: {
+			deviceBusy: "El dispositivo está ocupado, inténtalo de nuevo en un momento",
+			operationFailed: "No se pudo completar la acción",
+			retry: "Reintentar",
+			stillWorking: "Aún trabajando — tardando más de lo esperado",
+			connecting: "Conectando…",
+			disconnecting: "Desconectando…",
+			applying: "Aplicando…",
+			scanning: "Buscando…",
+			enabling: "Activando…",
+			disabling: "Desactivando…",
+			awaitingResult: "Esperando resultado…",
+			done: "Listo",
+		},
 	},
 	networking: {
 		types: {

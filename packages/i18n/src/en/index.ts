@@ -1140,6 +1140,20 @@ const en = {
 			secured: "Secured network",
 			openNetwork: "Open network",
 		},
+		os: {
+			deviceBusy: "Device is busy, try again in a moment",
+			operationFailed: "Couldn't complete the action",
+			retry: "Retry",
+			stillWorking: "Still working — taking longer than expected",
+			connecting: "Connecting…",
+			disconnecting: "Disconnecting…",
+			applying: "Applying…",
+			scanning: "Scanning…",
+			enabling: "Enabling…",
+			disabling: "Disabling…",
+			awaitingResult: "Awaiting result…",
+			done: "Done",
+		},
 	},
 	networking: {
 		types: {
