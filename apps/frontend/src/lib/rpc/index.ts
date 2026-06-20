@@ -14,6 +14,25 @@ export {
 	rpcClient,
 } from "./client";
 
+// Async-operation store (keyed OS-command transition primitive)
+export {
+	ASYNC_OP_TERMINAL_LINGER_MS,
+	ASYNC_OP_TTL_MS,
+	type AsyncOpPhase,
+	type AsyncOpRegistry,
+	beginOperation,
+	clearOperation,
+	confirmOperation,
+	destroyAsyncOperations,
+	failOperation,
+	getOperationPhase,
+	getOperationReason,
+	initAsyncOperations,
+	isOperationPending,
+	reconcileOperationsOnReconnect,
+	timeoutOperation,
+} from "./async-operation.svelte";
+
 // Subscriptions (reactive state)
 export {
 	getAudioCodecs,

@@ -7,6 +7,7 @@ import { mount } from "svelte";
 
 import App from "./App.svelte";
 import { initSubscriptions } from "./lib/rpc";
+import { initAsyncOperations } from "./lib/rpc/async-operation.svelte";
 import { initFieldSyncState } from "./lib/rpc/field-sync-state.svelte";
 import { push } from "./lib/stores/notifications.svelte";
 import { setStoredVersion } from "./lib/stores/version.svelte";
@@ -18,6 +19,11 @@ initSubscriptions();
 // Create the per-field sync-state store before any component mounts, so its
 // reactive root is never first built mid-render (which would break getFieldState).
 initFieldSyncState();
+
+// Eagerly create the keyed async-operation store before mount, for the same
+// reason: its reactive root must not be first instantiated mid-render, or
+// later external transitions (begin/confirm/reconcile) never reach the surface.
+initAsyncOperations();
 
 // Register Service Worker for PWA updates
 registerSW({

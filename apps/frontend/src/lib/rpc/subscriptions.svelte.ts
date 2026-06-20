@@ -39,6 +39,10 @@ import {
 } from "$lib/stores/notifications.svelte";
 import { ingestStreamHealth } from "$lib/stores/stream-health.svelte";
 
+import {
+	destroyAsyncOperations,
+	reconcileOperationsOnReconnect,
+} from "./async-operation.svelte";
 import type { ConnectionState } from "./client";
 import { rpc, rpcClient } from "./client";
 import {
@@ -589,6 +593,12 @@ function handleConnectionChange(state: ConnectionState): void {
 	connectionState = state;
 	isConnectedState = state === "connected";
 
+	// On the reconnect edge drop every still-pending OS-operation latch: the
+	// post-reconnect getStatus hydrate (kicked async by runReconnectReauth below)
+	// is the authoritative snapshot, so a stale pending must not linger. Steady
+	// connected→connected ticks reconcile nothing.
+	reconcileOperationsOnReconnect(previous, state);
+
 	if (state === "connected") {
 		if (!connectionReadyState) connectionReadyState = true;
 		// Reconnect edge: a server that restarted resets its seq to 0, so clear
@@ -690,6 +700,10 @@ export function resetState(): void {
 		clearInterval(lockExpiryTick);
 		lockExpiryTick = undefined;
 	}
+
+	// Tear down the keyed async-operation store (sweep timer + effect root) for
+	// test/logout symmetry — mirrors the per-field sync-state lifecycle.
+	destroyAsyncOperations();
 }
 
 // ============================================
