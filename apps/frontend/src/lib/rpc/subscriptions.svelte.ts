@@ -402,6 +402,13 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 				device?: string | number;
 				disconnect?: string;
 				new?: { error?: string; success?: boolean; device?: string | number };
+				hotspot?: {
+					config?: {
+						device?: string | number;
+						success?: boolean;
+						error?: string;
+					};
+				};
 			};
 
 			// Boolean connect result (saved network). The array ack (connect:
@@ -421,6 +428,17 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 					confirmOperation(key);
 				} else if (wifiData.new.error) {
 					failOperation(key, wifiData.new.error);
+				}
+			}
+			// Deferred hotspot reconfigure result. `hotspotConfigure` only acks the
+			// dispatch; the real outcome arrives here and resolves the separate
+			// `hotspot-config:${device}` key the HotspotDialog save op stays pending on.
+			if (wifiData.hotspot?.config?.device !== undefined) {
+				const key = `hotspot-config:${wifiData.hotspot.config.device}`;
+				if (wifiData.hotspot.config.success) {
+					confirmOperation(key);
+				} else {
+					failOperation(key, wifiData.hotspot.config.error ?? "failed");
 				}
 			}
 			break;
