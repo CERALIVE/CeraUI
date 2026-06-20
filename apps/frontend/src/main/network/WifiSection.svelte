@@ -11,6 +11,7 @@ import StaleBadge from '$lib/components/custom/StaleBadge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
+import { deriveWifiModeOutcome } from '$lib/helpers/wifi-mode-outcome';
 import {
 	confirmOperation,
 	getOperationPhase,
@@ -96,11 +97,7 @@ async function switchToStation(device: string) {
 $effect(() => {
 	for (const [id, iface] of wifiRadios) {
 		if (getOperationPhase(`hotspot:${id}`) !== 'pending') continue;
-		const target = switchTargets[id];
-		const isHotspot = Boolean(iface.hotspot);
-		if (target === 'hotspot' && isHotspot) {
-			confirmOperation(`hotspot:${id}`);
-		} else if (target === 'station' && !isHotspot) {
+		if (deriveWifiModeOutcome(switchTargets[id], Boolean(iface.hotspot)) === 'confirmed') {
 			confirmOperation(`hotspot:${id}`);
 		}
 	}
