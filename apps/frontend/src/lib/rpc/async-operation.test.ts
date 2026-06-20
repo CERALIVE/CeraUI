@@ -37,7 +37,7 @@ vi.mock("svelte-sonner", () => ({
 
 vi.mock("@ceraui/i18n/svelte", () => ({
 	getLL: () => ({
-		wifiSelector: { os: { operationFailed: () => "operation_failed" } },
+		network: { os: { operationFailed: () => "operation_failed" } },
 	}),
 }));
 

@@ -536,6 +536,20 @@ const ko = {
 			networksActive: "{count}개 네트워크, {active}개 활성 • 총: {total} Kbps",
 			totalBandwidth: "{total} Kbps",
 		},
+		os: {
+			deviceBusy: "기기가 사용 중입니다. 잠시 후 다시 시도하세요",
+			operationFailed: "작업을 완료할 수 없습니다",
+			retry: "다시 시도",
+			stillWorking: "아직 처리 중 — 예상보다 오래 걸리고 있습니다",
+			connecting: "연결 중…",
+			disconnecting: "연결 해제 중…",
+			applying: "적용 중…",
+			scanning: "검색 중…",
+			enabling: "활성화 중…",
+			disabling: "비활성화 중…",
+			awaitingResult: "결과 대기 중…",
+			done: "완료",
+		},
 	},
 	hotspotConfigurator: {
 		dialog: {
@@ -631,20 +645,6 @@ const ko = {
 		status: {
 			connected: "연결됨",
 			saved: "저장됨",
-		},
-		os: {
-			deviceBusy: "기기가 사용 중입니다. 잠시 후 다시 시도하세요",
-			operationFailed: "작업을 완료할 수 없습니다",
-			retry: "다시 시도",
-			stillWorking: "아직 처리 중 — 예상보다 오래 걸리고 있습니다",
-			connecting: "연결 중…",
-			disconnecting: "연결 해제 중…",
-			applying: "적용 중…",
-			scanning: "검색 중…",
-			enabling: "활성화 중…",
-			disabling: "비활성화 중…",
-			awaitingResult: "결과 대기 중…",
-			done: "완료",
 		},
 	},
 	networking: {

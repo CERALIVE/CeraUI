@@ -702,6 +702,20 @@ const fr = {
 			turnHotspotOnDescription:
 				"Êtes-vous sûr de vouloir activer le mode point d'accès ? Cela permettra de partager votre internet mais déconnectera toutes les connexions WiFi.",
 		},
+		os: {
+			deviceBusy: "L'appareil est occupé, réessayez dans un moment",
+			operationFailed: "Impossible de terminer l'action",
+			retry: "Réessayer",
+			stillWorking: "Toujours en cours — prend plus de temps que prévu",
+			connecting: "Connexion…",
+			disconnecting: "Déconnexion…",
+			applying: "Application…",
+			scanning: "Recherche…",
+			enabling: "Activation…",
+			disabling: "Désactivation…",
+			awaitingResult: "En attente du résultat…",
+			done: "Terminé",
+		},
 	},
 	hotspotConfigurator: {
 		dialog: {
@@ -803,20 +817,6 @@ const fr = {
 		status: {
 			connected: "Connecté",
 			saved: "Enregistré",
-		},
-		os: {
-			deviceBusy: "L'appareil est occupé, réessayez dans un moment",
-			operationFailed: "Impossible de terminer l'action",
-			retry: "Réessayer",
-			stillWorking: "Toujours en cours — prend plus de temps que prévu",
-			connecting: "Connexion…",
-			disconnecting: "Déconnexion…",
-			applying: "Application…",
-			scanning: "Recherche…",
-			enabling: "Activation…",
-			disabling: "Désactivation…",
-			awaitingResult: "En attente du résultat…",
-			done: "Terminé",
 		},
 	},
 	networking: {

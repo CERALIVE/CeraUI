@@ -668,6 +668,20 @@ const ar = {
 				"{count} شبكة، {active} نشطة • الإجمالي: {total} كيلوبت/ثانية",
 			totalBandwidth: "{total} كيلوبت/ثانية",
 		},
+		os: {
+			deviceBusy: "الجهاز مشغول، حاول مرة أخرى بعد لحظة",
+			operationFailed: "تعذّر إتمام الإجراء",
+			retry: "إعادة المحاولة",
+			stillWorking: "لا يزال يعمل — يستغرق وقتاً أطول من المتوقع",
+			connecting: "جارٍ الاتصال…",
+			disconnecting: "جارٍ قطع الاتصال…",
+			applying: "جارٍ التطبيق…",
+			scanning: "جارٍ البحث…",
+			enabling: "جارٍ التفعيل…",
+			disabling: "جارٍ التعطيل…",
+			awaitingResult: "في انتظار النتيجة…",
+			done: "تم",
+		},
 	},
 	hotspotConfigurator: {
 		dialog: {
@@ -763,20 +777,6 @@ const ar = {
 		status: {
 			connected: "متصل",
 			saved: "محفوظة",
-		},
-		os: {
-			deviceBusy: "الجهاز مشغول، حاول مرة أخرى بعد لحظة",
-			operationFailed: "تعذّر إتمام الإجراء",
-			retry: "إعادة المحاولة",
-			stillWorking: "لا يزال يعمل — يستغرق وقتاً أطول من المتوقع",
-			connecting: "جارٍ الاتصال…",
-			disconnecting: "جارٍ قطع الاتصال…",
-			applying: "جارٍ التطبيق…",
-			scanning: "جارٍ البحث…",
-			enabling: "جارٍ التفعيل…",
-			disabling: "جارٍ التعطيل…",
-			awaitingResult: "في انتظار النتيجة…",
-			done: "تم",
 		},
 	},
 	networking: {

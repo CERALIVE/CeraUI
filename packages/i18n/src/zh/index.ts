@@ -520,6 +520,20 @@ const zh = {
 			networksActive: "{count}个网络，{active}个活跃 • 总计：{total} Kbps",
 			totalBandwidth: "{total} Kbps",
 		},
+		os: {
+			deviceBusy: "设备繁忙，请稍后重试",
+			operationFailed: "无法完成操作",
+			retry: "重试",
+			stillWorking: "仍在处理中 — 比预期花费更长时间",
+			connecting: "连接中…",
+			disconnecting: "断开中…",
+			applying: "应用中…",
+			scanning: "扫描中…",
+			enabling: "启用中…",
+			disabling: "禁用中…",
+			awaitingResult: "等待结果…",
+			done: "完成",
+		},
 	},
 	hotspotConfigurator: {
 		dialog: {
@@ -612,20 +626,6 @@ const zh = {
 		status: {
 			connected: "已连接",
 			saved: "已保存",
-		},
-		os: {
-			deviceBusy: "设备繁忙，请稍后重试",
-			operationFailed: "无法完成操作",
-			retry: "重试",
-			stillWorking: "仍在处理中 — 比预期花费更长时间",
-			connecting: "连接中…",
-			disconnecting: "断开中…",
-			applying: "应用中…",
-			scanning: "扫描中…",
-			enabling: "启用中…",
-			disabling: "禁用中…",
-			awaitingResult: "等待结果…",
-			done: "完成",
 		},
 	},
 	networking: {

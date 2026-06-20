@@ -1042,6 +1042,20 @@ const en = {
 			turnHotspotOnDescription:
 				"Are you sure you want to turn the hotspot mode ON? It will allow sharing your internet but disconnect all WiFi connections.",
 		},
+		os: {
+			deviceBusy: "Device is busy, try again in a moment",
+			operationFailed: "Couldn't complete the action",
+			retry: "Retry",
+			stillWorking: "Still working — taking longer than expected",
+			connecting: "Connecting…",
+			disconnecting: "Disconnecting…",
+			applying: "Applying…",
+			scanning: "Scanning…",
+			enabling: "Enabling…",
+			disabling: "Disabling…",
+			awaitingResult: "Awaiting result…",
+			done: "Done",
+		},
 	},
 	hotspotConfigurator: {
 		dialog: {
@@ -1139,20 +1153,6 @@ const en = {
 			showPassword: "Show password",
 			secured: "Secured network",
 			openNetwork: "Open network",
-		},
-		os: {
-			deviceBusy: "Device is busy, try again in a moment",
-			operationFailed: "Couldn't complete the action",
-			retry: "Retry",
-			stillWorking: "Still working — taking longer than expected",
-			connecting: "Connecting…",
-			disconnecting: "Disconnecting…",
-			applying: "Applying…",
-			scanning: "Scanning…",
-			enabling: "Enabling…",
-			disabling: "Disabling…",
-			awaitingResult: "Awaiting result…",
-			done: "Done",
 		},
 	},
 	networking: {

@@ -512,7 +512,7 @@ export async function osCommand<T>(opts: {
 			failOperation(opts.key, v.reason ?? (v.busy ? "device_busy" : "failed"));
 			toast.error(
 				(v.busy ? opts.busyMessage : opts.failMessage)?.() ??
-					getLL().wifiSelector.os.operationFailed(),
+					getLL().network.os.operationFailed(),
 			);
 		} else if (opts.confirmOnResolve) {
 			confirmOperation(opts.key);
@@ -524,7 +524,7 @@ export async function osCommand<T>(opts: {
 	} catch (e) {
 		failOperation(opts.key, e instanceof Error ? e.message : "error");
 		toast.error(
-			opts.failMessage?.() ?? getLL().wifiSelector.os.operationFailed(),
+			opts.failMessage?.() ?? getLL().network.os.operationFailed(),
 		);
 		return undefined;
 	}

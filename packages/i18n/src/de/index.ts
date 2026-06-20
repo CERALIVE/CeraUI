@@ -1051,6 +1051,20 @@ const de = {
 			turnHotspotOnDescription:
 				"Sind Sie sicher, dass Sie den Hotspot-Modus einschalten möchten? Dadurch wird das Teilen Ihres Internets ermöglicht, aber alle WLAN-Verbindungen werden getrennt.",
 		},
+		os: {
+			deviceBusy: "Gerät ist beschäftigt, bitte in einem Moment erneut versuchen",
+			operationFailed: "Aktion konnte nicht abgeschlossen werden",
+			retry: "Wiederholen",
+			stillWorking: "Noch in Bearbeitung — dauert länger als erwartet",
+			connecting: "Verbinde…",
+			disconnecting: "Trenne…",
+			applying: "Anwenden…",
+			scanning: "Suche…",
+			enabling: "Aktiviere…",
+			disabling: "Deaktiviere…",
+			awaitingResult: "Warte auf Ergebnis…",
+			done: "Fertig",
+		},
 	},
 	hotspotConfigurator: {
 		dialog: {
@@ -1151,20 +1165,6 @@ const de = {
 		status: {
 			connected: "Verbunden",
 			saved: "Gespeichert",
-		},
-		os: {
-			deviceBusy: "Gerät ist beschäftigt, bitte in einem Moment erneut versuchen",
-			operationFailed: "Aktion konnte nicht abgeschlossen werden",
-			retry: "Wiederholen",
-			stillWorking: "Noch in Bearbeitung — dauert länger als erwartet",
-			connecting: "Verbinde…",
-			disconnecting: "Trenne…",
-			applying: "Anwenden…",
-			scanning: "Suche…",
-			enabling: "Aktiviere…",
-			disabling: "Deaktiviere…",
-			awaitingResult: "Warte auf Ergebnis…",
-			done: "Fertig",
 		},
 	},
 	networking: {

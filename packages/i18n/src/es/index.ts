@@ -1064,6 +1064,20 @@ const es = {
 			turnHotspotOnDescription:
 				"¿Estás seguro de que deseas encender el modo punto de acceso? Esto permitirá compartir internet pero desconectará todas las conexiones WiFi.",
 		},
+		os: {
+			deviceBusy: "El dispositivo está ocupado, inténtalo de nuevo en un momento",
+			operationFailed: "No se pudo completar la acción",
+			retry: "Reintentar",
+			stillWorking: "Aún trabajando — tardando más de lo esperado",
+			connecting: "Conectando…",
+			disconnecting: "Desconectando…",
+			applying: "Aplicando…",
+			scanning: "Buscando…",
+			enabling: "Activando…",
+			disabling: "Desactivando…",
+			awaitingResult: "Esperando resultado…",
+			done: "Listo",
+		},
 	},
 	hotspotConfigurator: {
 		dialog: {
@@ -1165,20 +1179,6 @@ const es = {
 			showPassword: "Mostrar contraseña",
 			secured: "Red segura",
 			openNetwork: "Red abierta",
-		},
-		os: {
-			deviceBusy: "El dispositivo está ocupado, inténtalo de nuevo en un momento",
-			operationFailed: "No se pudo completar la acción",
-			retry: "Reintentar",
-			stillWorking: "Aún trabajando — tardando más de lo esperado",
-			connecting: "Conectando…",
-			disconnecting: "Desconectando…",
-			applying: "Aplicando…",
-			scanning: "Buscando…",
-			enabling: "Activando…",
-			disabling: "Desactivando…",
-			awaitingResult: "Esperando resultado…",
-			done: "Listo",
 		},
 	},
 	networking: {
