@@ -6,7 +6,37 @@
  */
 
 import { cubicOut } from "svelte/easing";
-import type { TransitionConfig } from "svelte/transition";
+import { fade, fly, slide, type TransitionConfig } from "svelte/transition";
+
+import {
+	getDisplayProfile,
+	prefersEinkTheme,
+} from "$lib/stores/display-profile.svelte";
+
+// ============================================
+// E-ink Motion Gate
+// ============================================
+
+// Svelte's css-based transitions (slide/fade/fly) compile to the Web Animations
+// API (Element.prototype.animate), which runs OUTSIDE CSS — so the global e-ink
+// freeze `[data-display='eink'] * { transition/animation: none !important }`
+// cannot stop them, and they smear on e-paper. This gate returns a css-less,
+// zero-duration config under the e-ink/mono profiles so Svelte never starts an
+// animation; the lcd profile passes straight through to the real transition.
+export function gateForEink<Args extends unknown[]>(
+	transition: (node: Element, ...args: Args) => TransitionConfig,
+): (node: Element, ...args: Args) => TransitionConfig {
+	return (node, ...args) => {
+		if (prefersEinkTheme(getDisplayProfile())) {
+			return { duration: 0 };
+		}
+		return transition(node, ...args);
+	};
+}
+
+export const einkGatedSlide = gateForEink(slide);
+export const einkGatedFade = gateForEink(fade);
+export const einkGatedFly = gateForEink(fly);
 
 // ============================================
 // Shared Helpers

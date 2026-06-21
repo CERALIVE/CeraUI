@@ -2,7 +2,8 @@
 import { LL } from '@ceraui/i18n/svelte';
 import type { Component } from 'svelte';
 import { cubicInOut } from 'svelte/easing';
-import { fade, fly } from 'svelte/transition';
+
+import { einkGatedFade as fade, einkGatedFly as fly } from '$lib/transitions';
 
 import { setupHashNavigation } from '$lib/helpers/NavigationHelper';
 import {

@@ -30,7 +30,7 @@ import {
 	SignalZero,
 	Zap,
 } from '@lucide/svelte';
-import { slide } from 'svelte/transition';
+import { einkGatedSlide as slide } from '$lib/transitions';
 
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
