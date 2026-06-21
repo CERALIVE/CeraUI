@@ -21,6 +21,7 @@ import { invariant } from "../../helpers/invariant.ts";
 import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
 import { getms, oneHour, oneMinute } from "../../helpers/time.ts";
+import { isDevelopment } from "../../mocks/mock-config.ts";
 import { queueUpdateGw } from "../network/gateways.ts";
 import { setup } from "../setup.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
@@ -57,6 +58,30 @@ export function getSoftUpdateStatus() {
 
 export function isUpdating() {
 	return softUpdateStatus != null;
+}
+
+// Auto-reboot runner DI seam: default runs the real argv-only run(); tests spy it.
+type RebootRunner = (bin: string, args: string[]) => void;
+
+const defaultRebootRunner: RebootRunner = (bin, args) => {
+	void run(bin, args);
+};
+
+let rebootRunner: RebootRunner = defaultRebootRunner;
+
+export function setRebootRunner(runner: RebootRunner): void {
+	rebootRunner = runner;
+}
+
+export function resetRebootRunner(): void {
+	rebootRunner = defaultRebootRunner;
+}
+
+// Gate on isDevelopment() so a dev host is never rebooted after an update.
+export function rebootAfterUpdate(): void {
+	if (!isDevelopment()) {
+		rebootRunner("reboot", []);
+	}
 }
 
 function parseUpgradePackageCount(text: string) {
@@ -457,7 +482,7 @@ function doSoftwareUpdate() {
 
 		if (code === 0) {
 			if (rebootAfterUpgrade) {
-				void run("reboot", []);
+				rebootAfterUpdate();
 			} else {
 				invariant(false, "software update complete; exiting to restart CeraUI");
 			}

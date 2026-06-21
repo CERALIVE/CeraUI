@@ -25,6 +25,7 @@ import type WebSocket from "ws";
 import { z } from "zod";
 
 import { logger } from "../../helpers/logger.ts";
+import { isDevelopment } from "../../mocks/mock-config.ts";
 import {
 	getCloudProviders,
 	setRemoteConfig,
@@ -94,31 +95,65 @@ export const getSyslogProcedure = authedProcedure
 		return { log: "" };
 	});
 
-/**
- * Power off procedure
- */
+// Host-power runner DI seam (mirrors setKioskDeps): the default issues the real
+// Bun.spawnSync([command]) so the production path is unchanged; tests inject a
+// spy to assert the spawn without powering off the host.
+type PowerCommand = "poweroff" | "reboot";
+type PowerCommandRunner = (command: PowerCommand) => void;
+
+const defaultPowerCommandRunner: PowerCommandRunner = (command) => {
+	Bun.spawnSync([command]);
+};
+
+let powerCommandRunner: PowerCommandRunner = defaultPowerCommandRunner;
+
+export function setPowerCommandRunner(runner: PowerCommandRunner): void {
+	powerCommandRunner = runner;
+}
+
+export function resetPowerCommandRunner(): void {
+	powerCommandRunner = defaultPowerCommandRunner;
+}
+
+// Gate on isDevelopment() — NOT isRealDevice(), which is false for an
+// unrecognised board and would make a real device silently skip poweroff.
 export const poweroffProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(() => {
+		if (isDevelopment()) {
+			logger.info("dev: skipping spawn", {
+				module: "system.power",
+				action: "poweroff",
+				dev: true,
+			});
+			// T2 dev disconnect simulation will be wired here in a follow-up task
+			return { success: true };
+		}
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
 		logger.info("System: poweroff requested");
-		Bun.spawnSync(["poweroff"]);
+		powerCommandRunner("poweroff");
 		return { success: true };
 	});
 
-/**
- * Reboot procedure
- */
 export const rebootProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(() => {
+		if (isDevelopment()) {
+			logger.info("dev: skipping spawn", {
+				module: "system.power",
+				action: "reboot",
+				dev: true,
+			});
+			// T2 dev disconnect simulation will be wired here in a follow-up task
+			return { success: true };
+		}
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
 		logger.info("System: reboot requested");
-		Bun.spawnSync(["reboot"]);
+		powerCommandRunner("reboot");
 		return { success: true };
 	});
 
