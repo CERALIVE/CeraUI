@@ -18,7 +18,7 @@
  *                             toggle that holds disabled until the device confirms.
  *
  * Conventions (PLAYBOOK.md): role/text/ARIA assertions only — never screenshots,
- * never `waitForTimeout`, never `#nav-tab-*` selectors. Navigation goes through
+ * never fixed-delay waits, never `#nav-tab-*` selectors. Navigation goes through
  * `navigateTo()`. Each state is isolated per-page with a `routeWebSocket` proxy
  * (no global `dev.emit` broadcast) so a state forced here can never leak into a
  * sibling spec running in parallel. Every suite includes an axe gate.

@@ -14,7 +14,7 @@
  * be dismissed at any time; the dismissal persists in localStorage across reloads.
  *
  * Conventions (PLAYBOOK.md): role/test-id/ARIA assertions only — never
- * screenshots, never `waitForTimeout`, never `#nav-tab-*`. A page-local
+ * screenshots, never fixed-delay waits, never `#nav-tab-*`. A page-local
  * `routeWebSocket` proxy forces the first-run state (no server + no network) by
  * stripping the seeded server fields and dropping every `netif` frame, so the
  * scenario can never leak into a sibling spec running in parallel.

@@ -28,7 +28,7 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.j
  *     (> 0), proving the gate is profile-scoped and never regresses lcd motion.
  *
  * The probe is deterministic (it records the `.animate()` call itself, so there
- * is no animation-frame race) — no `waitForTimeout`, no screenshots.
+ * is no animation-frame race) — no fixed-delay waits, no screenshots.
  */
 
 const TRANSITION_PROPS = ["transform", "opacity", "height", "overflow"] as const;
