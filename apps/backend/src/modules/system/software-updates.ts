@@ -22,6 +22,7 @@ import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
 import { getms, oneHour, oneMinute } from "../../helpers/time.ts";
 import { isDevelopment } from "../../mocks/mock-config.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { queueUpdateGw } from "../network/gateways.ts";
 import { setup } from "../setup.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
@@ -37,13 +38,14 @@ let availableUpdates:
 	  }
 	| null
 	| false = setup.apt_update_enabled ? null : false;
-let softUpdateStatus: {
+type SoftUpdateStatus = {
 	total: number;
 	downloading: number;
 	unpacking: number;
 	setting_up: number;
 	result?: string | 0;
-} | null = null;
+};
+let softUpdateStatus: SoftUpdateStatus | null = null;
 let aptGetUpdating = false;
 let aptGetUpdateFailures = 0;
 let aptHeldBackPackages: string | undefined;
@@ -351,15 +353,14 @@ export function periodicCheckForSoftwareUpdates() {
 	});
 }
 
-export function startSoftwareUpdate() {
-	if (!setup.apt_update_enabled || getIsStreaming() || isUpdating()) return;
+// apt spawn seam (T8): the default kicks off the real `apt-get update` →
+// dist-upgrade pipeline. The dev/mock path NEVER calls it (it simulates the
+// progress sequence instead); tests spy it to assert the real path fired (prod)
+// or stayed untouched (dev). This is SEPARATE from the rebootRunner seam above,
+// which only gates the post-update reboot — this gates the entire apt spawn.
+type SoftwareUpdateRunner = () => void;
 
-	// if an apt-get update is already in progress, retry later
-	if (aptGetUpdating) {
-		setTimeout(startSoftwareUpdate, 3 * 1000);
-		return;
-	}
-
+const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = () => {
 	checkForSoftwareUpdates((err) => {
 		if (err === null) {
 			doSoftwareUpdate();
@@ -373,6 +374,74 @@ export function startSoftwareUpdate() {
 
 	softUpdateStatus = { downloading: 0, unpacking: 0, setting_up: 0, total: 0 };
 	broadcastMsg("status", { updating: softUpdateStatus });
+};
+
+let softwareUpdateRunner: SoftwareUpdateRunner = defaultSoftwareUpdateRunner;
+
+export function setSoftwareUpdateRunner(runner: SoftwareUpdateRunner): void {
+	softwareUpdateRunner = runner;
+}
+
+export function resetSoftwareUpdateRunner(): void {
+	softwareUpdateRunner = defaultSoftwareUpdateRunner;
+}
+
+const MOCK_UPDATE_STEP_DELAY_MS = 120;
+const MOCK_UPDATE_TOTAL = 4;
+
+let mockSoftwareUpdatePromise: Promise<void> | null = null;
+
+export function getMockSoftwareUpdatePromise(): Promise<void> | null {
+	return mockSoftwareUpdatePromise;
+}
+
+// Emulate the on-device update progression WITHOUT spawning apt: total resolves,
+// then downloading, unpacking and setting_up each fill to total in turn, and
+// finally a completion frame (result: 0) — the same wire shape doSoftwareUpdate
+// produces from real apt stdout.
+async function simulateMockSoftwareUpdate(): Promise<void> {
+	softUpdateStatus = { total: 0, downloading: 0, unpacking: 0, setting_up: 0 };
+	broadcastMsg("status", { updating: softUpdateStatus });
+
+	const steps: Array<Partial<SoftUpdateStatus>> = [
+		{ total: MOCK_UPDATE_TOTAL },
+		{ downloading: MOCK_UPDATE_TOTAL },
+		{ unpacking: MOCK_UPDATE_TOTAL },
+		{ setting_up: MOCK_UPDATE_TOTAL },
+	];
+
+	for (const step of steps) {
+		await Bun.sleep(MOCK_UPDATE_STEP_DELAY_MS);
+		if (!softUpdateStatus) return;
+		softUpdateStatus = { ...softUpdateStatus, ...step };
+		broadcastMsg("status", { updating: softUpdateStatus });
+	}
+
+	await Bun.sleep(MOCK_UPDATE_STEP_DELAY_MS);
+	if (!softUpdateStatus) return;
+	softUpdateStatus = { ...softUpdateStatus, result: 0 };
+	broadcastMsg("status", { updating: softUpdateStatus });
+	softUpdateStatus = null;
+}
+
+export function startSoftwareUpdate() {
+	if (!setup.apt_update_enabled || getIsStreaming() || isUpdating()) return;
+
+	// if an apt-get update is already in progress, retry later
+	if (aptGetUpdating) {
+		setTimeout(startSoftwareUpdate, 3 * 1000);
+		return;
+	}
+
+	// Dev/mock seam: simulate the progress→complete sequence without ever
+	// spawning apt, so the update UI is exercisable on a dev box.
+	if (shouldUseMocks()) {
+		mockSoftwareUpdatePromise = simulateMockSoftwareUpdate();
+		void mockSoftwareUpdatePromise;
+		return;
+	}
+
+	softwareUpdateRunner();
 }
 
 function doSoftwareUpdate() {
