@@ -213,6 +213,13 @@ const zh = {
 			rebootConfirm: "重启时设备将断开连接约 30 秒。",
 			powerOffConfirm: "设备将完全关闭。您需要物理访问才能重新开启它。",
 			blockedStreaming: "重启前请停止直播。",
+			rebootCountdownTitle: "正在重启…",
+			rebootCountdownDescription: "设备正在重启，将自动重新连接。",
+			rebootCountdownRemaining: "{seconds}秒后恢复",
+			rebootRecoveryTitle: "重启可能未开始",
+			rebootRecoveryDescription: "重启时间结束后设备仍有响应。它可能没有重启——请重试，或关闭以继续使用。",
+			rebootRecoveryRetry: "再次重启",
+			rebootRecoveryDismiss: "关闭",
 			blockedUpdating: "更新正在进行中。请等待后再重启。",
 		},
 		pairing: {

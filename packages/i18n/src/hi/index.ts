@@ -217,6 +217,13 @@ const hi = {
 			powerOffConfirm:
 				"डिवाइस पूरी तरह बंद हो जाएगा। इसे वापस चालू करने के लिए आपको भौतिक पहुंच की आवश्यकता होगी।",
 			blockedStreaming: "रीबूट करने से पहले स्ट्रीमिंग बंद करें।",
+			rebootCountdownTitle: "रीबूट हो रहा है…",
+			rebootCountdownDescription: "डिवाइस पुनः आरंभ हो रहा है और स्वचालित रूप से पुनः कनेक्ट हो जाएगा।",
+			rebootCountdownRemaining: "{seconds} सेकंड में वापस",
+			rebootRecoveryTitle: "रीबूट शायद शुरू नहीं हुआ",
+			rebootRecoveryDescription: "रीस्टार्ट विंडो के बाद भी डिवाइस प्रतिक्रिया दे रहा है। शायद यह रीबूट नहीं हुआ — फिर से प्रयास करें, या उपयोग जारी रखने के लिए खारिज करें।",
+			rebootRecoveryRetry: "फिर से रीबूट करें",
+			rebootRecoveryDismiss: "खारिज करें",
 			blockedUpdating: "अपडेट प्रगति पर है। रीबूट करने से पहले प्रतीक्षा करें।",
 		},
 		pairing: {

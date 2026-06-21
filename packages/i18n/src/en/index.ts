@@ -758,6 +758,15 @@ const en = {
 				"The device will shut down completely. You'll need physical access to turn it back on.",
 			blockedStreaming: "Stop streaming before rebooting.",
 			blockedUpdating: "Update in progress. Wait before rebooting.",
+			rebootCountdownTitle: "Rebooting\u2026",
+			rebootCountdownDescription:
+				"The device is restarting and will reconnect automatically.",
+			rebootCountdownRemaining: "Back in {seconds:number}s",
+			rebootRecoveryTitle: "Reboot may not have started",
+			rebootRecoveryDescription:
+				"The device is still responding after the restart window. It may not have rebooted \u2014 try again, or dismiss to keep using it.",
+			rebootRecoveryRetry: "Reboot again",
+			rebootRecoveryDismiss: "Dismiss",
 		},
 		pairing: {
 			title: "Device Pairing",

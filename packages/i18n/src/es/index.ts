@@ -774,6 +774,13 @@ const es = {
 			powerOffConfirm:
 				"El dispositivo se apagará por completo. Necesitarás acceso físico para volver a encenderlo.",
 			blockedStreaming: "Detén la transmisión antes de reiniciar.",
+			rebootCountdownTitle: "Reiniciando…",
+			rebootCountdownDescription: "El dispositivo se está reiniciando y se reconectará automáticamente.",
+			rebootCountdownRemaining: "Vuelve en {seconds}s",
+			rebootRecoveryTitle: "Es posible que el reinicio no haya comenzado",
+			rebootRecoveryDescription: "El dispositivo sigue respondiendo tras la ventana de reinicio. Puede que no se haya reiniciado: inténtalo de nuevo o descártalo para seguir usándolo.",
+			rebootRecoveryRetry: "Reiniciar de nuevo",
+			rebootRecoveryDismiss: "Descartar",
 			blockedUpdating: "Actualización en curso. Espera antes de reiniciar.",
 		},
 		pairing: {

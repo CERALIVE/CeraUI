@@ -355,6 +355,13 @@ const ar = {
 			powerOffConfirm:
 				"سيتوقف الجهاز عن العمل تماماً. ستحتاج إلى وصول فعلي لإعادة تشغيله.",
 			blockedStreaming: "أوقف البث قبل إعادة التشغيل.",
+			rebootCountdownTitle: "جارٍ إعادة التشغيل…",
+			rebootCountdownDescription: "الجهاز يُعيد التشغيل وسيُعيد الاتصال تلقائيًا.",
+			rebootCountdownRemaining: "يعود خلال {seconds} ثانية",
+			rebootRecoveryTitle: "قد لا تكون إعادة التشغيل قد بدأت",
+			rebootRecoveryDescription: "لا يزال الجهاز يستجيب بعد نافذة إعادة التشغيل. قد لا يكون قد أُعيد تشغيله — أعد المحاولة أو تجاهل للاستمرار في استخدامه.",
+			rebootRecoveryRetry: "إعادة التشغيل مرة أخرى",
+			rebootRecoveryDismiss: "تجاهل",
 			blockedUpdating: "التحديث قيد التقدم. انتظر قبل إعادة التشغيل.",
 		},
 		pairing: {

@@ -764,6 +764,13 @@ const de = {
 			powerOffConfirm:
 				"Das Gerät wird vollständig heruntergefahren. Sie benötigen physischen Zugriff, um es wieder einzuschalten.",
 			blockedStreaming: "Beenden Sie das Streaming vor dem Neustart.",
+			rebootCountdownTitle: "Neustart…",
+			rebootCountdownDescription: "Das Gerät startet neu und verbindet sich automatisch wieder.",
+			rebootCountdownRemaining: "Zurück in {seconds}s",
+			rebootRecoveryTitle: "Neustart wurde möglicherweise nicht gestartet",
+			rebootRecoveryDescription: "Das Gerät antwortet nach dem Neustartfenster noch. Möglicherweise wurde es nicht neu gestartet – versuchen Sie es erneut oder schließen Sie, um es weiter zu verwenden.",
+			rebootRecoveryRetry: "Erneut neu starten",
+			rebootRecoveryDismiss: "Schließen",
 			blockedUpdating: "Update läuft. Warten Sie vor dem Neustart.",
 		},
 		pairing: {

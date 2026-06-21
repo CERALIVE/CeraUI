@@ -376,6 +376,13 @@ const ptBR = {
 			powerOffConfirm:
 				"O dispositivo será desligado completamente. Você precisará de acesso físico para ligá-lo novamente.",
 			blockedStreaming: "Pare a transmissão antes de reiniciar.",
+			rebootCountdownTitle: "Reiniciando…",
+			rebootCountdownDescription: "O dispositivo está reiniciando e se reconectará automaticamente.",
+			rebootCountdownRemaining: "De volta em {seconds}s",
+			rebootRecoveryTitle: "A reinicialização pode não ter começado",
+			rebootRecoveryDescription: "O dispositivo ainda responde após a janela de reinicialização. Talvez não tenha reiniciado — tente novamente ou dispense para continuar usando.",
+			rebootRecoveryRetry: "Reiniciar novamente",
+			rebootRecoveryDismiss: "Dispensar",
 			blockedUpdating: "Atualização em andamento. Aguarde antes de reiniciar.",
 		},
 		pairing: {

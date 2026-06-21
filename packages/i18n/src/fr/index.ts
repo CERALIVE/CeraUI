@@ -380,6 +380,13 @@ const fr = {
 			powerOffConfirm:
 				"L'appareil s'éteindra complètement. Vous aurez besoin d'un accès physique pour le rallumer.",
 			blockedStreaming: "Arrêtez la diffusion avant de redémarrer.",
+			rebootCountdownTitle: "Redémarrage…",
+			rebootCountdownDescription: "L'appareil redémarre et se reconnectera automatiquement.",
+			rebootCountdownRemaining: "De retour dans {seconds}s",
+			rebootRecoveryTitle: "Le redémarrage n'a peut-être pas commencé",
+			rebootRecoveryDescription: "L'appareil répond toujours après la fenêtre de redémarrage. Il n'a peut-être pas redémarré : réessayez ou fermez pour continuer à l'utiliser.",
+			rebootRecoveryRetry: "Redémarrer à nouveau",
+			rebootRecoveryDismiss: "Ignorer",
 			blockedUpdating: "Mise à jour en cours. Attendez avant de redémarrer.",
 		},
 		pairing: {

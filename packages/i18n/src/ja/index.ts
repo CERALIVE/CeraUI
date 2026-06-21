@@ -222,6 +222,13 @@ const ja = {
 			powerOffConfirm:
 				"デバイスは完全にシャットダウンします。再び電源を入れるには物理的なアクセスが必要です。",
 			blockedStreaming: "再起動する前にストリーミングを停止してください。",
+			rebootCountdownTitle: "再起動中…",
+			rebootCountdownDescription: "デバイスは再起動中で、自動的に再接続します。",
+			rebootCountdownRemaining: "あと{seconds}秒",
+			rebootRecoveryTitle: "再起動が開始されなかった可能性があります",
+			rebootRecoveryDescription: "再起動の待機時間が過ぎてもデバイスが応答しています。再起動されていない可能性があります。もう一度試すか、閉じて使用を続けてください。",
+			rebootRecoveryRetry: "もう一度再起動",
+			rebootRecoveryDismiss: "閉じる",
 			blockedUpdating: "更新中です。再起動する前にお待ちください。",
 		},
 		pairing: {

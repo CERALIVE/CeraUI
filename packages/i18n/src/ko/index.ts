@@ -217,6 +217,13 @@ const ko = {
 			powerOffConfirm:
 				"기기가 완전히 종료됩니다. 다시 켜려면 물리적 접근이 필요합니다.",
 			blockedStreaming: "재시작하기 전에 스트리밍을 중지하세요.",
+			rebootCountdownTitle: "재시작 중…",
+			rebootCountdownDescription: "기기가 재시작 중이며 자동으로 다시 연결됩니다.",
+			rebootCountdownRemaining: "{seconds}초 후 복귀",
+			rebootRecoveryTitle: "재시작이 시작되지 않았을 수 있습니다",
+			rebootRecoveryDescription: "재시작 시간이 지난 후에도 기기가 응답하고 있습니다. 재시작되지 않았을 수 있습니다. 다시 시도하거나 닫고 계속 사용하세요.",
+			rebootRecoveryRetry: "다시 재시작",
+			rebootRecoveryDismiss: "닫기",
 			blockedUpdating:
 				"업데이트가 진행 중입니다. 재시작하기 전에 기다려 주세요.",
 		},

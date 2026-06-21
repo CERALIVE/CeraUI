@@ -210,6 +210,7 @@ interface ConnectionUxStore {
 	getIsRebooting(): boolean;
 	getSessionExpired(): boolean;
 	markRebooting(): void;
+	clearRebooting(): void;
 	markSessionExpired(): void;
 	clearSessionExpired(): void;
 	retryConnection(): void;
@@ -231,6 +232,9 @@ function createConnectionUxStore(): ConnectionUxStore {
 		getSessionExpired: () => sessionExpired,
 		markRebooting: () => {
 			reconnect = { ...reconnect, rebooting: true };
+		},
+		clearRebooting: () => {
+			reconnect = { ...reconnect, rebooting: false };
 		},
 		markSessionExpired: () => {
 			sessionExpired = true;
@@ -286,6 +290,17 @@ export function getSessionExpired(): boolean {
 /** Flag that a reboot/poweroff was triggered — drives the "Rebooting…" banner. */
 export function markRebooting(): void {
 	store().markRebooting();
+}
+
+/**
+ * Drop the rebooting latch WITHOUT a reconnect. The latch normally clears only
+ * when the device comes back (`reduceConnection` on the next "connected"). But a
+ * reboot that never takes the device down leaves it stuck on — so when the
+ * PowerDialog proves the device is still reachable after the restart window, it
+ * clears the latch here so the "rebooting" banner stops contradicting reality.
+ */
+export function clearRebooting(): void {
+	store().clearRebooting();
 }
 
 /** Flag that the auth token expired mid-session. */
