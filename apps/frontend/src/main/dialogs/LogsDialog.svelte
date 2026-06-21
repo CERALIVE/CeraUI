@@ -7,8 +7,7 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { Download, FileText, ScrollText, Terminal } from '@lucide/svelte';
-import { toast } from 'svelte-sonner';
+import { AlertTriangle, Download, FileText, Loader2, RefreshCw, ScrollText, Terminal } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
@@ -20,18 +19,26 @@ interface Props {
 
 let { open = $bindable(false) }: Props = $props();
 
-let busy = $state(false);
+type LogKind = 'device' | 'system';
 
-async function download(kind: 'device' | 'system') {
-	if (busy) return;
-	busy = true;
+// In-flight + failure are surfaced INLINE (progress spinner on the row, calm
+// amber retry band below) rather than via a bare toast — a transient toast is
+// easy to miss and offers no recovery. The download is a single awaited request
+// with no backend progress events, so "progress" is the in-flight indicator.
+let downloading = $state<LogKind | null>(null);
+let failed = $state<LogKind | null>(null);
+
+async function download(kind: LogKind) {
+	if (downloading !== null) return;
+	downloading = kind;
+	failed = null;
 	try {
 		await (kind === 'device' ? getDeviceLog() : getSystemLog());
 	} catch (error) {
 		console.error(`Failed to request ${kind} log:`, error);
-		toast.error($LL.advanced.copyFailed());
+		failed = kind;
 	} finally {
-		busy = false;
+		downloading = null;
 	}
 }
 
@@ -61,7 +68,8 @@ const logs = $derived([
 	<div class="space-y-3">
 		{#each logs as log (log.id)}
 			{@const Icon = log.icon}
-			<div class="flex items-center gap-3 rounded-lg border p-3">
+			{@const isDownloading = downloading === log.id}
+			<div class="flex items-center gap-3 rounded-lg border p-3" data-testid={`log-row-${log.id}`}>
 				<span class="bg-secondary text-foreground grid size-10 shrink-0 place-items-center rounded-lg">
 					<Icon class="size-5" />
 				</span>
@@ -71,15 +79,44 @@ const logs = $derived([
 				</div>
 				<Button
 					class="shrink-0 gap-1.5"
-					disabled={busy}
+					data-testid={`log-download-${log.id}`}
+					disabled={downloading !== null}
 					onclick={() => download(log.id)}
 					size="sm"
 					variant="outline"
 				>
-					<Download class="size-4" />
-					{$LL.advanced.download()}
+					{#if isDownloading}
+						<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
+						{$LL.advanced.downloading()}
+					{:else}
+						<Download class="size-4" />
+						{$LL.advanced.download()}
+					{/if}
 				</Button>
 			</div>
 		{/each}
+
+		{#if failed}
+			<!-- Calm amber recovery band — the failed download stays actionable. -->
+			<div
+				class="border-status-warning/30 bg-status-warning/10 flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center"
+				data-testid="log-download-error"
+				role="alert"
+			>
+				<AlertTriangle aria-hidden="true" class="text-status-warning size-4 shrink-0" />
+				<p class="text-status-warning min-w-0 flex-1 text-xs">{$LL.advanced.downloadFailed()}</p>
+				<Button
+					class="shrink-0 gap-1.5"
+					data-testid="log-download-retry"
+					disabled={downloading !== null}
+					onclick={() => failed && download(failed)}
+					size="sm"
+					variant="outline"
+				>
+					<RefreshCw class="size-4" />
+					{$LL.advanced.retryDownload()}
+				</Button>
+			</div>
+		{/if}
 	</div>
 </AppDialog>

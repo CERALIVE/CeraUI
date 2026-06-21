@@ -104,6 +104,10 @@ const ja = {
 			network: "ネットワーク",
 			bootSlot: "ブートスロット",
 			unavailable: "利用不可",
+			lowDiskTitle: "ディスク空き容量が少ない",
+			lowDiskBody:
+				"/data の空き容量が 512 MiB 未満です。録画・ログ・更新が動作し続けるよう空き容量を確保してください。",
+			lowDiskAction: "ログを表示",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -347,6 +351,7 @@ const ja = {
 	network: {
 		view: {
 			bondedLinks: "ボンディングリンク",
+			telemetryLoading: "リンクテレメトリを読み込み中…",
 			noLinks: "アクティブなリンクはまだありません",
 			wifi: "WiFi",
 			cellular: "セルラー",
@@ -757,6 +762,9 @@ const ja = {
 		healthDegraded: "劣化",
 		healthDead: "停止",
 		healthUnknown: "不明",
+		announceStreamStarted: "配信を開始しました",
+		announceStreamStopped: "配信を停止しました",
+		announceLinkDropped: "ボンディングされたリンクが切断されました",
 		healthProcess: "プロセス",
 		healthFrames: "フレーム",
 		healthSrt: "SRT",
@@ -824,6 +832,9 @@ const ja = {
 			waiting: "リンクテレメトリを待機中\u2026",
 			ariaLabel: "インジェスト統計",
 			trendLabel: "{iface} のRTT傾向",
+			idleTitle: "ボンディングされたリンクがまだありません",
+			idleHint:
+				"ネットワークでセルラー・Wi-Fi・イーサネットのリンクを追加してボンディングを開始します。配信が始まるとインジェストのテレメトリがここに表示されます。",
 			healthy: "安定",
 			degraded: "悪化中",
 			alert: "1つ以上のリンクでレイテンシが上昇しています",
@@ -1105,6 +1116,10 @@ const ja = {
 		ceraliveLog: "CeraLiveログ",
 		systemLog: "システムログ",
 		download: "ダウンロード",
+		downloading: "ダウンロード中…",
+		downloadFailed:
+			"ログをダウンロードできませんでした。接続を確認して再試行してください。",
+		retryDownload: "再試行",
 		ceraliveLogTooltip: "トラブルシューティング用にログをダウンロードします。",
 		systemLogTooltip: "デバッグ用にシステムログをダウンロードします。",
 		confirmDeviceLog:

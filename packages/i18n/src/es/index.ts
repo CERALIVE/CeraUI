@@ -258,6 +258,9 @@ const es = {
 		healthDegraded: "Degradado",
 		healthDead: "Caído",
 		healthUnknown: "Desconocido",
+		announceStreamStarted: "Transmisión iniciada",
+		announceStreamStopped: "Transmisión detenida",
+		announceLinkDropped: "Se cayó un enlace agrupado",
 		healthProcess: "Proceso",
 		healthFrames: "Fotogramas",
 		healthSrt: "SRT",
@@ -326,6 +329,9 @@ const es = {
 			waiting: "Esperando telemetría de enlaces\u2026",
 			ariaLabel: "Estadísticas de ingesta",
 			trendLabel: "Tendencia de RTT de {iface}",
+			idleTitle: "Aún no hay enlaces agrupados",
+			idleHint:
+				"Añade enlaces de móvil, Wi-Fi o Ethernet en Red para empezar a agrupar. La telemetría de ingesta aparece aquí cuando el directo está activo.",
 			healthy: "Estable",
 			degraded: "Degradando",
 			alert: "Latencia en aumento en uno o más enlaces",
@@ -617,6 +623,10 @@ const es = {
 			network: "Red",
 			bootSlot: "Ranura de arranque",
 			unavailable: "No disponible",
+			lowDiskTitle: "Poco espacio en disco",
+			lowDiskBody:
+				"Menos de 512 MiB libres en /data. Libera espacio para que la grabación, los registros y las actualizaciones sigan funcionando.",
+			lowDiskAction: "Ver registros",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -866,6 +876,7 @@ const es = {
 	network: {
 		view: {
 			bondedLinks: "Enlaces combinados",
+			telemetryLoading: "Cargando telemetría de enlaces…",
 			noLinks: "Aún no hay enlaces activos",
 			wifi: "WiFi",
 			cellular: "Celular",
@@ -1280,6 +1291,10 @@ const es = {
 		ceraliveLog: "Registro de CeraLive",
 		systemLog: "Registro del sistema",
 		download: "Descargar",
+		downloading: "Descargando…",
+		downloadFailed:
+			"No se pudo descargar el registro. Comprueba la conexión e inténtalo de nuevo.",
+		retryDownload: "Reintentar",
 		ceraliveLogTooltip: "Descargue registros para solucionar problemas.",
 		systemLogTooltip: "Descargue registros del sistema para depuración.",
 		confirmDeviceLog:

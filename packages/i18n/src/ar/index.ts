@@ -240,6 +240,10 @@ const ar = {
 			network: "الشبكة",
 			bootSlot: "فتحة الإقلاع",
 			unavailable: "غير متاح",
+			lowDiskTitle: "مساحة القرص منخفضة",
+			lowDiskBody:
+				"أقل من 512 ميبي‌بايت متاحة على /data. حرّر مساحة حتى يستمر التسجيل والسجلات والتحديثات في العمل.",
+			lowDiskAction: "عرض السجلات",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -473,6 +477,7 @@ const ar = {
 	network: {
 		view: {
 			bondedLinks: "الروابط المجمّعة",
+			telemetryLoading: "جارٍ تحميل قياسات الروابط…",
 			noLinks: "لا توجد روابط نشطة بعد",
 			wifi: "WiFi",
 			cellular: "خلوي",
@@ -874,6 +879,9 @@ const ar = {
 		healthDegraded: "متدهور",
 		healthDead: "متوقف",
 		healthUnknown: "غير معروف",
+		announceStreamStarted: "بدأ البث",
+		announceStreamStopped: "توقف البث",
+		announceLinkDropped: "انقطع أحد الروابط المجمّعة",
 		healthProcess: "العملية",
 		healthFrames: "الإطارات",
 		healthSrt: "SRT",
@@ -938,6 +946,9 @@ const ar = {
 			waiting: "في انتظار قياس الروابط\u2026",
 			ariaLabel: "إحصائيات الإدخال",
 			trendLabel: "اتجاه RTT لـ {iface}",
+			idleTitle: "لا توجد روابط مجمّعة بعد",
+			idleHint:
+				"أضف روابط خلوية أو Wi-Fi أو إيثرنت في الشبكة لبدء التجميع. تظهر قياسات الإدخال هنا بمجرد أن يصبح البث مباشرًا.",
 			healthy: "مستقر",
 			degraded: "يتدهور",
 			alert: "زمن استجابة متزايد على رابط واحد أو أكثر",
@@ -1211,6 +1222,9 @@ const ar = {
 		ceraliveLog: "سجل CeraLive",
 		systemLog: "سجل النظام",
 		download: "تنزيل",
+		downloading: "جارٍ التنزيل…",
+		downloadFailed: "تعذّر تنزيل السجل. تحقق من الاتصال وحاول مرة أخرى.",
+		retryDownload: "إعادة المحاولة",
 		ceraliveLogTooltip: "تنزيل السجلات لاستكشاف الأخطاء وإصلاحها.",
 		systemLogTooltip: "تنزيل سجلات النظام للتصحيح.",
 		confirmDeviceLog:

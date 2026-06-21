@@ -249,6 +249,9 @@ const en = {
 		healthDegraded: "Degraded",
 		healthDead: "Dead",
 		healthUnknown: "Unknown",
+		announceStreamStarted: "Streaming started",
+		announceStreamStopped: "Streaming stopped",
+		announceLinkDropped: "A bonded link dropped",
 		link: "Link",
 		healthProcess: "Process",
 		healthFrames: "Frames",
@@ -313,6 +316,9 @@ const en = {
 			waiting: "Waiting for link telemetry\u2026",
 			ariaLabel: "Ingest statistics",
 			trendLabel: "RTT trend for {iface:string}",
+			idleTitle: "No bonded links yet",
+			idleHint:
+				"Add cellular, Wi-Fi, or Ethernet links in Network to start bonding. Ingest telemetry appears here once the stream is live.",
 			healthy: "Stable",
 			degraded: "Degrading",
 			alert: "Rising latency on one or more links",
@@ -647,6 +653,10 @@ const en = {
 			network: "Network",
 			bootSlot: "Boot Slot",
 			unavailable: "Unavailable",
+			lowDiskTitle: "Low disk space",
+			lowDiskBody:
+				"Less than 512 MiB free on /data. Free up space so recording, logs, and updates keep working.",
+			lowDiskAction: "View logs",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -845,6 +855,7 @@ const en = {
 	network: {
 		view: {
 			bondedLinks: "Bonded Links",
+			telemetryLoading: "Loading link telemetry…",
 			noLinks: "No active links yet",
 			wifi: "WiFi",
 			cellular: "Cellular",
@@ -1253,6 +1264,10 @@ const en = {
 		ceraliveLog: brandTranslation("{{logName}}"),
 		systemLog: "System Log",
 		download: "Download",
+		downloading: "Downloading…",
+		downloadFailed:
+			"Couldn't download the log. Check the connection and try again.",
+		retryDownload: "Retry",
 		ceraliveLogTooltip: "Download logs for troubleshooting.",
 		systemLogTooltip: "Download system logs for debugging.",
 		confirmDeviceLog: brandTranslation(

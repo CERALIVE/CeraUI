@@ -101,6 +101,10 @@ const zh = {
 			network: "网络",
 			bootSlot: "启动分区",
 			unavailable: "不可用",
+			lowDiskTitle: "磁盘空间不足",
+			lowDiskBody:
+				"/data 可用空间不足 512 MiB。请释放空间，以保证录制、日志和更新正常运行。",
+			lowDiskAction: "查看日志",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -330,6 +334,7 @@ const zh = {
 	network: {
 		view: {
 			bondedLinks: "绑定链路",
+			telemetryLoading: "正在加载链路遥测…",
 			noLinks: "尚无活动链路",
 			wifi: "WiFi",
 			cellular: "蜂窝网络",
@@ -703,6 +708,9 @@ const zh = {
 		healthDegraded: "降级",
 		healthDead: "中断",
 		healthUnknown: "未知",
+		announceStreamStarted: "已开始推流",
+		announceStreamStopped: "已停止推流",
+		announceLinkDropped: "一条绑定链路已断开",
 		healthProcess: "进程",
 		healthFrames: "帧",
 		healthSrt: "SRT",
@@ -765,6 +773,9 @@ const zh = {
 			waiting: "正在等待链路遥测\u2026",
 			ariaLabel: "采集统计",
 			trendLabel: "{iface} 的 RTT 趋势",
+			idleTitle: "尚无绑定链路",
+			idleHint:
+				"在“网络”中添加蜂窝、Wi-Fi 或以太网链路以开始绑定。直播开始后，接入遥测将在此显示。",
 			healthy: "稳定",
 			degraded: "正在劣化",
 			alert: "一个或多个链路的延迟正在上升",
@@ -1034,6 +1045,9 @@ const zh = {
 		ceraliveLog: "CeraLive 日志",
 		systemLog: "系统日志",
 		download: "下载",
+		downloading: "正在下载…",
+		downloadFailed: "无法下载日志。请检查连接后重试。",
+		retryDownload: "重试",
 		ceraliveLogTooltip: "下载日志以进行故障排除。",
 		systemLogTooltip: "下载系统日志进行调试。",
 		confirmDeviceLog:

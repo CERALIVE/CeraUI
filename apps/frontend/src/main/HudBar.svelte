@@ -145,6 +145,55 @@ $effect(() => {
 	}, TELEMETRY_ANNOUNCE_DEBOUNCE_MS);
 	return () => clearTimeout(id);
 });
+
+// Accessible names for the compact badges. Each carries its current value AND its
+// staleness ("Stale") so assistive tech reads the same degradation the sighted
+// dimming conveys — never a fresh-sounding value for an aged reading.
+const staleSuffix = (isStale: boolean) => (isStale ? `, ${$LL.hud.stale()}` : '');
+const bitrateLabel = $derived(
+	`${$LL.hud.bitrate()}: ${hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : $LL.hud.noData()}${staleSuffix(hud.isBitrateStale)}`,
+);
+const socLabel = $derived(
+	`${$LL.hud.sensors()}: ${$LL.hud.temperature()} ${tempState === 'nodata' ? '—' : tempText}, ${$LL.hud.voltage()} ${voltageState === 'nodata' ? '—' : voltageText}, ${$LL.hud.current()} ${currentState === 'nodata' ? '—' : currentText}${staleSuffix(soc.isStale)}`,
+);
+function linkLabel(link: LinkSignal): string {
+	const sig = link.signal != null ? `${Math.round(link.signal)}%` : $LL.hud.noData();
+	return `${$LL.hud.network()} L${link.linkIndex + 1}: ${sig}${staleSuffix(link.isStale)}`;
+}
+
+// Critical-transition announcer (separate from the continuous summary above): a
+// SECOND polite region that speaks only the rare, important edges — stream
+// started/stopped, a bonded link dropping — so a screen-reader user hears the
+// events that matter without the per-tick value noise. Edge-detected against the
+// prior render's state (plain locals, not runes, so the compare never re-triggers
+// the effect) and debounced so a burst coalesces to its final message.
+const activeLinkCount = $derived(hud.links.filter((link) => link.isConnected).length);
+let announcedTransition = $state('');
+let prevLive = false;
+let prevActiveLinks = 0;
+let primed = false;
+$effect(() => {
+	const live = isLive;
+	const links = activeLinkCount;
+	let message: string | undefined;
+	if (!primed) {
+		primed = true;
+	} else if (live && !prevLive) {
+		message = $LL.hud.announceStreamStarted();
+	} else if (!live && prevLive) {
+		message = $LL.hud.announceStreamStopped();
+	} else if (links < prevActiveLinks) {
+		message = $LL.hud.announceLinkDropped();
+	}
+	prevLive = live;
+	prevActiveLinks = links;
+	if (message === undefined) return;
+	const next = message;
+	const id = setTimeout(() => {
+		announcedTransition = next;
+	}, TELEMETRY_ANNOUNCE_DEBOUNCE_MS);
+	return () => clearTimeout(id);
+});
 </script>
 
 {#snippet miniBars(link: LinkSignal)}
@@ -181,6 +230,7 @@ $effect(() => {
 {/snippet}
 
 <span role="status" aria-live="polite" class="sr-only" data-testid="hud-telemetry-status">{announcedTelemetry}</span>
+<span role="status" aria-live="polite" class="sr-only" data-testid="hud-transition-status">{announcedTransition}</span>
 
 <Sheet.Root bind:open>
 	<Sheet.Trigger>
@@ -246,6 +296,8 @@ $effect(() => {
 				<!-- Bitrate -->
 				<span
 					class={cn('inline-flex shrink-0 items-center gap-1 font-mono tabular-nums', hud.isBitrateStale && 'opacity-50')}
+					role="img"
+					aria-label={bitrateLabel}
 					title={$LL.hud.bitrate()}
 				>
 					{#if hud.isBitrateStale}
@@ -262,7 +314,11 @@ $effect(() => {
 						<span class="text-muted-foreground/60 truncate">{$LL.hud.noData()}</span>
 					{:else}
 						{#each hud.links as link (link.linkIndex)}
-							<span class={cn('inline-flex shrink-0 items-end gap-1.5', link.isStale && 'opacity-50')}>
+							<span
+								class={cn('inline-flex shrink-0 items-end gap-1.5', link.isStale && 'opacity-50')}
+								role="img"
+								aria-label={linkLabel(link)}
+							>
 								<span class="font-mono text-[0.7rem] leading-none" style:color={linkColor(link)}>
 									L{link.linkIndex + 1}
 								</span>
@@ -277,6 +333,8 @@ $effect(() => {
 				<!-- SoC telemetry: temperature · voltage · current (compact mono cluster) -->
 				<span
 					class="inline-flex shrink-0 items-center gap-2 font-mono tabular-nums"
+					role="img"
+					aria-label={socLabel}
 					title={$LL.hud.sensors()}
 				>
 					{#if soc.isStale}

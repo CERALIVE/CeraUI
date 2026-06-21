@@ -73,6 +73,11 @@ const pukRequired = $derived(
 		modem.sim_lock?.required === 'sim-puk2',
 );
 const locked = $derived(pukErrorState === 'locked');
+// Zero PUK retries remaining: the next wrong PUK bricks the SIM, so the submit
+// is disabled the moment a PUK-locked modem opens reporting 0 — even before the
+// terminal `locked` state is reached via a submit. Derived from the existing
+// SIM status field (pukRetries), never a new data source.
+const pukExhausted = $derived(pukRemainingAttempts === 0);
 const pinValid = $derived(pinPattern.test(pin));
 const pukValid = $derived(pukPattern.test(puk));
 const newPinValid = $derived(pinPattern.test(newPin));
@@ -183,7 +188,7 @@ async function handleSubmit() {
 }
 
 async function handleSubmitPuk() {
-	if (!pukFormValid || submitting || locked) return;
+	if (!pukFormValid || submitting || locked || pukExhausted) return;
 	await osCommand({
 		key: simKey,
 		rpc: () => rpc.modems.unlockSimPuk({ modemPath: String(deviceId), puk, newPin }),
@@ -361,7 +366,7 @@ function handlePukKeydown(event: KeyboardEvent) {
 			<Button
 				class="sm:min-w-24"
 				data-testid="sim-puk-submit"
-				disabled={!pukFormValid || submitting}
+				disabled={!pukFormValid || submitting || pukExhausted}
 				onclick={handleSubmitPuk}
 			>
 				{#if submitting}

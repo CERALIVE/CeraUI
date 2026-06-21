@@ -102,6 +102,10 @@ const hi = {
 			network: "नेटवर्क",
 			bootSlot: "बूट स्लॉट",
 			unavailable: "अनुपलब्ध",
+			lowDiskTitle: "डिस्क स्थान कम है",
+			lowDiskBody:
+				"/data पर 512 MiB से कम खाली है। रिकॉर्डिंग, लॉग और अपडेट चलते रहें इसके लिए स्थान खाली करें।",
+			lowDiskAction: "लॉग देखें",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -335,6 +339,7 @@ const hi = {
 	network: {
 		view: {
 			bondedLinks: "बॉन्डेड लिंक",
+			telemetryLoading: "लिंक टेलीमेट्री लोड हो रही है…",
 			noLinks: "अभी तक कोई सक्रिय लिंक नहीं",
 			wifi: "WiFi",
 			cellular: "सेल्युलर",
@@ -734,6 +739,9 @@ const hi = {
 		healthDegraded: "घटिया",
 		healthDead: "बंद",
 		healthUnknown: "अज्ञात",
+		announceStreamStarted: "स्ट्रीमिंग शुरू हुई",
+		announceStreamStopped: "स्ट्रीमिंग रुकी",
+		announceLinkDropped: "एक बॉन्डेड लिंक गिर गया",
 		healthProcess: "प्रक्रिया",
 		healthFrames: "फ़्रेम",
 		healthSrt: "SRT",
@@ -798,6 +806,9 @@ const hi = {
 			waiting: "लिंक टेलीमेट्री की प्रतीक्षा\u2026",
 			ariaLabel: "इन्जेस्ट आँकड़े",
 			trendLabel: "{iface} के लिए RTT रुझान",
+			idleTitle: "अभी तक कोई बॉन्डेड लिंक नहीं",
+			idleHint:
+				"बॉन्डिंग शुरू करने के लिए नेटवर्क में सेल्युलर, वाई-फाई या ईथरनेट लिंक जोड़ें। स्ट्रीम लाइव होने पर इंजेस्ट टेलीमेट्री यहाँ दिखाई देगी।",
 			healthy: "स्थिर",
 			degraded: "गिरावट",
 			alert: "एक या अधिक लिंक पर बढ़ती लेटेंसी",
@@ -1071,6 +1082,9 @@ const hi = {
 		ceraliveLog: "CeraLive लॉग",
 		systemLog: "सिस्टम लॉग",
 		download: "डाउनलोड करें",
+		downloading: "डाउनलोड हो रहा है…",
+		downloadFailed: "लॉग डाउनलोड नहीं हो सका। कनेक्शन जाँचें और फिर से प्रयास करें।",
+		retryDownload: "पुनः प्रयास करें",
 		ceraliveLogTooltip: "समस्या निवारण के लिए लॉग डाउनलोड करें।",
 		systemLogTooltip: "डीबगिंग के लिए सिस्टम लॉग डाउनलोड करें।",
 		confirmDeviceLog:

@@ -258,6 +258,9 @@ const de = {
 		healthDegraded: "Beeinträchtigt",
 		healthDead: "Ausgefallen",
 		healthUnknown: "Unbekannt",
+		announceStreamStarted: "Streaming gestartet",
+		announceStreamStopped: "Streaming gestoppt",
+		announceLinkDropped: "Ein gebündelter Link wurde getrennt",
 		healthProcess: "Prozess",
 		healthFrames: "Frames",
 		healthSrt: "SRT",
@@ -326,6 +329,9 @@ const de = {
 			waiting: "Warte auf Verbindungstelemetrie\u2026",
 			ariaLabel: "Ingest-Statistiken",
 			trendLabel: "RTT-Trend für {iface}",
+			idleTitle: "Noch keine gebündelten Links",
+			idleHint:
+				"Fügen Sie in Netzwerk Mobilfunk-, WLAN- oder Ethernet-Links hinzu, um die Bündelung zu starten. Ingest-Telemetrie erscheint hier, sobald der Stream läuft.",
 			healthy: "Stabil",
 			degraded: "Verschlechtert sich",
 			alert: "Steigende Latenz auf einer oder mehreren Verbindungen",
@@ -608,6 +614,10 @@ const de = {
 			network: "Netzwerk",
 			bootSlot: "Boot-Slot",
 			unavailable: "Nicht verfügbar",
+			lowDiskTitle: "Wenig Speicherplatz",
+			lowDiskBody:
+				"Weniger als 512 MiB frei auf /data. Geben Sie Speicher frei, damit Aufnahme, Protokolle und Updates weiter funktionieren.",
+			lowDiskAction: "Protokolle anzeigen",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -852,6 +862,7 @@ const de = {
 	network: {
 		view: {
 			bondedLinks: "Gebündelte Verbindungen",
+			telemetryLoading: "Link-Telemetrie wird geladen…",
 			noLinks: "Noch keine aktiven Verbindungen",
 			wifi: "WLAN",
 			cellular: "Mobilfunk",
@@ -1268,6 +1279,10 @@ const de = {
 		ceraliveLog: "CeraLive-Protokoll",
 		systemLog: "Systemprotokoll",
 		download: "Herunterladen",
+		downloading: "Wird heruntergeladen…",
+		downloadFailed:
+			"Protokoll konnte nicht heruntergeladen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
+		retryDownload: "Erneut versuchen",
 		ceraliveLogTooltip: "Laden Sie Logdatei zur Fehlerbehebung herunter.",
 		systemLogTooltip: "Laden Sie System-Logdatei zum Debuggen herunter.",
 		confirmDeviceLog:

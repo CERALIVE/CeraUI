@@ -257,6 +257,10 @@ const ptBR = {
 			network: "Rede",
 			bootSlot: "Slot de inicialização",
 			unavailable: "Indisponível",
+			lowDiskTitle: "Pouco espaço em disco",
+			lowDiskBody:
+				"Menos de 512 MiB livres em /data. Libere espaço para que gravação, logs e atualizações continuem funcionando.",
+			lowDiskAction: "Ver logs",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -502,6 +506,7 @@ const ptBR = {
 	network: {
 		view: {
 			bondedLinks: "Links agregados",
+			telemetryLoading: "Carregando telemetria dos links…",
 			noLinks: "Ainda não há links ativos",
 			wifi: "WiFi",
 			cellular: "Celular",
@@ -891,6 +896,9 @@ const ptBR = {
 		healthDegraded: "Degradado",
 		healthDead: "Inativo",
 		healthUnknown: "Desconhecido",
+		announceStreamStarted: "Transmissão iniciada",
+		announceStreamStopped: "Transmissão interrompida",
+		announceLinkDropped: "Um link agrupado caiu",
 		healthProcess: "Processo",
 		healthFrames: "Quadros",
 		healthSrt: "SRT",
@@ -958,6 +966,9 @@ const ptBR = {
 			waiting: "Aguardando telemetria dos links\u2026",
 			ariaLabel: "Estatísticas de ingestão",
 			trendLabel: "Tendência de RTT de {iface}",
+			idleTitle: "Ainda sem links agrupados",
+			idleHint:
+				"Adicione links de celular, Wi-Fi ou Ethernet em Rede para iniciar o agrupamento. A telemetria de ingestão aparece aqui quando a transmissão está ao vivo.",
 			healthy: "Estável",
 			degraded: "Degradando",
 			alert: "Latência crescente em um ou mais links",
@@ -1237,6 +1248,10 @@ const ptBR = {
 		ceraliveLog: "Log do CeraLive",
 		systemLog: "Log do sistema",
 		download: "Baixar",
+		downloading: "Baixando…",
+		downloadFailed:
+			"Não foi possível baixar o log. Verifique a conexão e tente novamente.",
+		retryDownload: "Tentar novamente",
 		ceraliveLogTooltip: "Baixe os logs para solução de problemas.",
 		systemLogTooltip: "Baixe os logs do sistema para depuração.",
 		confirmDeviceLog:

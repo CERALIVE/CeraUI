@@ -103,6 +103,10 @@ const ko = {
 			network: "네트워크",
 			bootSlot: "부트 슬롯",
 			unavailable: "사용 불가",
+			lowDiskTitle: "디스크 공간 부족",
+			lowDiskBody:
+				"/data의 여유 공간이 512 MiB 미만입니다. 녹화, 로그, 업데이트가 계속 작동하도록 공간을 확보하세요.",
+			lowDiskAction: "로그 보기",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -339,6 +343,7 @@ const ko = {
 	network: {
 		view: {
 			bondedLinks: "본딩 링크",
+			telemetryLoading: "링크 텔레메트리 불러오는 중…",
 			noLinks: "아직 활성 링크가 없습니다",
 			wifi: "WiFi",
 			cellular: "셀룰러",
@@ -742,6 +747,9 @@ const ko = {
 		healthDegraded: "저하",
 		healthDead: "중단",
 		healthUnknown: "알 수 없음",
+		announceStreamStarted: "스트리밍이 시작되었습니다",
+		announceStreamStopped: "스트리밍이 중지되었습니다",
+		announceLinkDropped: "본딩된 링크가 끊어졌습니다",
 		healthProcess: "프로세스",
 		healthFrames: "프레임",
 		healthSrt: "SRT",
@@ -807,6 +815,9 @@ const ko = {
 			waiting: "링크 텔레메트리 대기 중\u2026",
 			ariaLabel: "인제스트 통계",
 			trendLabel: "{iface}의 RTT 추세",
+			idleTitle: "아직 본딩된 링크가 없습니다",
+			idleHint:
+				"네트워크에서 셀룰러, Wi-Fi 또는 이더넷 링크를 추가하여 본딩을 시작하세요. 스트림이 시작되면 인제스트 텔레메트리가 여기에 표시됩니다.",
 			healthy: "안정",
 			degraded: "저하 중",
 			alert: "하나 이상의 링크에서 지연 시간이 증가하고 있습니다",
@@ -1082,6 +1093,10 @@ const ko = {
 		ceraliveLog: "CeraLive 로그",
 		systemLog: "시스템 로그",
 		download: "다운로드",
+		downloading: "다운로드 중…",
+		downloadFailed:
+			"로그를 다운로드하지 못했습니다. 연결을 확인하고 다시 시도하세요.",
+		retryDownload: "다시 시도",
 		ceraliveLogTooltip: "문제 해결을 위해 로그를 다운로드합니다.",
 		systemLogTooltip: "디버깅을 위해 시스템 로그를 다운로드합니다.",
 		confirmDeviceLog:

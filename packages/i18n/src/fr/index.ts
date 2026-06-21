@@ -257,6 +257,10 @@ const fr = {
 			network: "Réseau",
 			bootSlot: "Slot de démarrage",
 			unavailable: "Indisponible",
+			lowDiskTitle: "Espace disque faible",
+			lowDiskBody:
+				"Moins de 512 Mio libres sur /data. Libérez de l'espace pour que l'enregistrement, les journaux et les mises à jour continuent de fonctionner.",
+			lowDiskAction: "Voir les journaux",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -504,6 +508,7 @@ const fr = {
 	network: {
 		view: {
 			bondedLinks: "Liens agrégés",
+			telemetryLoading: "Chargement de la télémétrie des liens…",
 			noLinks: "Aucun lien actif pour le moment",
 			wifi: "WiFi",
 			cellular: "Cellulaire",
@@ -915,6 +920,9 @@ const fr = {
 		healthDegraded: "Dégradé",
 		healthDead: "Hors service",
 		healthUnknown: "Inconnu",
+		announceStreamStarted: "Diffusion démarrée",
+		announceStreamStopped: "Diffusion arrêtée",
+		announceLinkDropped: "Un lien agrégé a été perdu",
 		healthProcess: "Processus",
 		healthFrames: "Images",
 		healthSrt: "SRT",
@@ -982,6 +990,9 @@ const fr = {
 			waiting: "En attente de la télémétrie des liaisons\u2026",
 			ariaLabel: "Statistiques d'ingestion",
 			trendLabel: "Tendance RTT de {iface}",
+			idleTitle: "Aucun lien agrégé pour l'instant",
+			idleHint:
+				"Ajoutez des liens cellulaire, Wi-Fi ou Ethernet dans Réseau pour démarrer l'agrégation. La télémétrie d'ingestion apparaît ici dès que le direct est actif.",
 			healthy: "Stable",
 			degraded: "Se dégrade",
 			alert: "Latence croissante sur une ou plusieurs liaisons",
@@ -1265,6 +1276,10 @@ const fr = {
 		ceraliveLog: "Journal CeraLive",
 		systemLog: "Journal du système",
 		download: "Télécharger",
+		downloading: "Téléchargement…",
+		downloadFailed:
+			"Impossible de télécharger le journal. Vérifiez la connexion et réessayez.",
+		retryDownload: "Réessayer",
 		ceraliveLogTooltip: "Téléchargez les journaux pour le dépannage.",
 		systemLogTooltip: "Téléchargez les journaux système pour le débogage.",
 		confirmDeviceLog:
