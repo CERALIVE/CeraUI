@@ -27,7 +27,6 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import { downloadLog } from "$lib/helpers/SystemHelper";
-import type { ManagedIngestAccount } from "$lib/streaming/receiver-experience";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
 import {
 	markSessionExpired,
@@ -38,6 +37,7 @@ import {
 	push as pushNotification,
 } from "$lib/stores/notifications.svelte";
 import { ingestStreamHealth } from "$lib/stores/stream-health.svelte";
+import type { ManagedIngestAccount } from "$lib/streaming/receiver-experience";
 
 import {
 	confirmOperation,
@@ -427,7 +427,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 
 			// Boolean connect result (saved network). The array ack (connect:
 			// string[]) is a dispatch echo and is intentionally ignored.
-			if (typeof wifiData.connect === "boolean" && wifiData.device !== undefined) {
+			if (
+				typeof wifiData.connect === "boolean" &&
+				wifiData.device !== undefined
+			) {
 				const key = `wifi:${wifiData.device}`;
 				if (wifiData.connect) {
 					confirmOperation(key);

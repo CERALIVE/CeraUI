@@ -91,25 +91,6 @@ const config = $derived(getConfig());
 const relays = $derived(getRelays());
 const isStreaming = $derived(Boolean(getIsStreaming()));
 
-// Platform-managed ingest slots (T19). When present they supersede the relay
-// catalog selector inside the managed destination: the slot auto-resolves (one
-// slot → silent; many → default/last-used else prompt) and the operator can
-// one-tap switch. The manual custom endpoint remains the always-available
-// fallback via the destination radiogroup.
-const managedAccounts = $derived(getManagedIngestAccounts());
-const hasManagedSlots = $derived(managedAccounts.length > 0);
-const slotSelection = $derived(
-	autoSelectIngestSlot(managedAccounts, getSelectedIngestEndpoint()),
-);
-const autoSlotId = $derived(
-	slotSelection.kind === 'managed' ? slotSelection.account.endpointId : undefined,
-);
-const activeSlotId = $derived(draft.selected_slot ?? autoSlotId);
-const activeSlot = $derived(
-	managedAccounts.find((account) => account.endpointId === activeSlotId),
-);
-const slotPrompting = $derived(hasManagedSlots && activeSlot === undefined);
-
 type Draft = {
 	destination?: Destination;
 	relay_protocol?: RelayProtocol;
@@ -128,6 +109,25 @@ type Draft = {
 	selected_slot?: string;
 };
 let draft = $state<Draft>({});
+
+// Platform-managed ingest slots (T19). When present they supersede the relay
+// catalog selector inside the managed destination: the slot auto-resolves (one
+// slot → silent; many → default/last-used else prompt) and the operator can
+// one-tap switch. The manual custom endpoint remains the always-available
+// fallback via the destination radiogroup.
+const managedAccounts = $derived(getManagedIngestAccounts());
+const hasManagedSlots = $derived(managedAccounts.length > 0);
+const slotSelection = $derived(
+	autoSelectIngestSlot(managedAccounts, getSelectedIngestEndpoint()),
+);
+const autoSlotId = $derived(
+	slotSelection.kind === 'managed' ? slotSelection.account.endpointId : undefined,
+);
+const activeSlotId = $derived(draft.selected_slot ?? autoSlotId);
+const activeSlot = $derived(
+	managedAccounts.find((account) => account.endpointId === activeSlotId),
+);
+const slotPrompting = $derived(hasManagedSlots && activeSlot === undefined);
 
 let validation = $state<Validation>({ state: 'idle' });
 

@@ -164,7 +164,9 @@ export function selectIngestSlot(endpointId: string): boolean {
 }
 
 /** Subscribe to managed-account changes; returns an unsubscribe handle. */
-export function onIngestSlotsChanged(listener: IngestSlotsListener): () => void {
+export function onIngestSlotsChanged(
+	listener: IngestSlotsListener,
+): () => void {
 	listeners.add(listener);
 	return () => {
 		listeners.delete(listener);
@@ -172,7 +174,9 @@ export function onIngestSlotsChanged(listener: IngestSlotsListener): () => void 
 }
 
 /** Test seam: override the injected persistence deps. */
-export function configureIngestSlots(overrides: Partial<IngestSlotsDeps>): void {
+export function configureIngestSlots(
+	overrides: Partial<IngestSlotsDeps>,
+): void {
 	state.deps = { ...state.deps, ...overrides };
 }
 

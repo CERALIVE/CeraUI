@@ -54,7 +54,9 @@ afterEach(async () => {
 	await initControlChannel({ canDial: () => false, logger: silent });
 });
 
-function makeSlot(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function makeSlot(
+	overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
 	return {
 		endpointId: "ep-1",
 		obsInstanceId: "obs-1",
@@ -191,7 +193,9 @@ describe("ingest.slots — slot → managed account mapping", () => {
 	});
 
 	test("a later push fully replaces the prior managed-account set", () => {
-		handleIngestSlots({ slots: [makeSlot(), makeSlot({ endpointId: "ep-2" })] });
+		handleIngestSlots({
+			slots: [makeSlot(), makeSlot({ endpointId: "ep-2" })],
+		});
 		expect(getManagedIngestAccounts()).toHaveLength(2);
 
 		handleIngestSlots({ slots: [makeSlot({ endpointId: "ep-3" })] });
@@ -238,7 +242,9 @@ describe("ingest.slots — empty + malformed payloads", () => {
 
 describe("ingest.slots — selection persistence by endpointId", () => {
 	test("selectIngestSlot persists the selected endpointId", () => {
-		handleIngestSlots({ slots: [makeSlot(), makeSlot({ endpointId: "ep-2" })] });
+		handleIngestSlots({
+			slots: [makeSlot(), makeSlot({ endpointId: "ep-2" })],
+		});
 
 		expect(selectIngestSlot("ep-2")).toBe(true);
 		expect(selectedStore).toBe("ep-2");
@@ -312,10 +318,10 @@ describe("ingest.slots — inbound command routing", () => {
 		const cap = capture();
 		handleIngestSlots({ slots: [makeSlot()] });
 
-		await routeCommand(
-			makeIngestCommand({ slots: [{ endpointId: "x" }] }),
-			{ sendResult: cap.sendResult, sendDeliveryAck: cap.sendDeliveryAck },
-		);
+		await routeCommand(makeIngestCommand({ slots: [{ endpointId: "x" }] }), {
+			sendResult: cap.sendResult,
+			sendDeliveryAck: cap.sendDeliveryAck,
+		});
 
 		expect(getManagedIngestAccounts()).toHaveLength(1);
 		expect(cap.results[0]?.payload).toEqual({

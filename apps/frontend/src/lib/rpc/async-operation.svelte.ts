@@ -534,9 +534,7 @@ export async function osCommand<T>(opts: {
 		return r;
 	} catch (e) {
 		failOperation(opts.key, e instanceof Error ? e.message : "error");
-		toast.error(
-			opts.failMessage?.() ?? getLL().network.os.operationFailed(),
-		);
+		toast.error(opts.failMessage?.() ?? getLL().network.os.operationFailed());
 		return undefined;
 	}
 }

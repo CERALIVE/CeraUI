@@ -64,22 +64,34 @@ describe("modemConfigEchoMatches — manual APN", () => {
 
 	it("does NOT confirm when roaming differs", () => {
 		expect(
-			modemConfigEchoMatches(sentManual, echoFor(sentManual, { roaming: false })),
+			modemConfigEchoMatches(
+				sentManual,
+				echoFor(sentManual, { roaming: false }),
+			),
 		).toBe(false);
 	});
 
 	it("does NOT confirm when the selected network differs", () => {
 		expect(
-			modemConfigEchoMatches(sentManual, echoFor(sentManual, { network: "26202" })),
+			modemConfigEchoMatches(
+				sentManual,
+				echoFor(sentManual, { network: "26202" }),
+			),
 		).toBe(false);
 	});
 
 	it("does NOT confirm until the APN credentials echo back", () => {
 		expect(
-			modemConfigEchoMatches(sentManual, echoFor(sentManual, { apn: "old.apn" })),
+			modemConfigEchoMatches(
+				sentManual,
+				echoFor(sentManual, { apn: "old.apn" }),
+			),
 		).toBe(false);
 		expect(
-			modemConfigEchoMatches(sentManual, echoFor(sentManual, { password: "old" })),
+			modemConfigEchoMatches(
+				sentManual,
+				echoFor(sentManual, { password: "old" }),
+			),
 		).toBe(false);
 	});
 
@@ -87,7 +99,12 @@ describe("modemConfigEchoMatches — manual APN", () => {
 		expect(
 			modemConfigEchoMatches(
 				sentManual,
-				echoFor(sentManual, { autoconfig: true, apn: "", username: "", password: "" }),
+				echoFor(sentManual, {
+					autoconfig: true,
+					apn: "",
+					username: "",
+					password: "",
+				}),
 			),
 		).toBe(false);
 	});
@@ -108,7 +125,12 @@ describe("modemConfigEchoMatches — auto APN", () => {
 		expect(
 			modemConfigEchoMatches(
 				sentAuto,
-				echoFor(sentAuto, { apn: "", username: "", password: "", autoconfig: true }),
+				echoFor(sentAuto, {
+					apn: "",
+					username: "",
+					password: "",
+					autoconfig: true,
+				}),
 			),
 		).toBe(true);
 	});
@@ -125,9 +147,9 @@ describe("modemConfigEchoMatches — auto APN", () => {
 	});
 
 	it("still requires the active network type / roaming / network to match", () => {
-		expect(
-			modemConfigEchoMatches(sentAuto, echoFor(sentAuto, {}, "4g")),
-		).toBe(false);
+		expect(modemConfigEchoMatches(sentAuto, echoFor(sentAuto, {}, "4g"))).toBe(
+			false,
+		);
 		expect(
 			modemConfigEchoMatches(sentAuto, echoFor(sentAuto, { roaming: true })),
 		).toBe(false);

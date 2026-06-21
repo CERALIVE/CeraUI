@@ -18,12 +18,9 @@ describe("deriveWifiConnectOutcome", () => {
 	describe("saved-network connect (boolean result vs array ack)", () => {
 		it("treats the array ack as pending (not a result)", () => {
 			expect(
-				deriveWifiConnectOutcome(
-					{ connect: ["uuid-1"] },
-					DEVICE,
-					SSID,
-					[{ ssid: SSID, active: false }],
-				),
+				deriveWifiConnectOutcome({ connect: ["uuid-1"] }, DEVICE, SSID, [
+					{ ssid: SSID, active: false },
+				]),
 			).toBe("pending");
 		});
 
@@ -42,12 +39,9 @@ describe("deriveWifiConnectOutcome", () => {
 		it("prefers the boolean result over a stale snapshot", () => {
 			// connect:false wins even though the snapshot still shows it active.
 			expect(
-				deriveWifiConnectOutcome(
-					{ connect: false },
-					DEVICE,
-					SSID,
-					[{ ssid: SSID, active: true }],
-				),
+				deriveWifiConnectOutcome({ connect: false }, DEVICE, SSID, [
+					{ ssid: SSID, active: true },
+				]),
 			).toBe("failed");
 		});
 	});
@@ -55,23 +49,13 @@ describe("deriveWifiConnectOutcome", () => {
 	describe("new-network connect", () => {
 		it("confirms on new.success", () => {
 			expect(
-				deriveWifiConnectOutcome(
-					{ new: { success: true } },
-					DEVICE,
-					SSID,
-					[],
-				),
+				deriveWifiConnectOutcome({ new: { success: true } }, DEVICE, SSID, []),
 			).toBe("confirmed");
 		});
 
 		it("fails on new.error (auth)", () => {
 			expect(
-				deriveWifiConnectOutcome(
-					{ new: { error: "auth" } },
-					DEVICE,
-					SSID,
-					[],
-				),
+				deriveWifiConnectOutcome({ new: { error: "auth" } }, DEVICE, SSID, []),
 			).toBe("failed");
 		});
 
@@ -90,37 +74,26 @@ describe("deriveWifiConnectOutcome", () => {
 	describe("secondary snapshot confirm", () => {
 		it("confirms when the target SSID is active in the snapshot", () => {
 			expect(
-				deriveWifiConnectOutcome(
-					{},
-					DEVICE,
-					SSID,
-					[
-						{ ssid: "Other", active: false },
-						{ ssid: SSID, active: true },
-					],
-				),
+				deriveWifiConnectOutcome({}, DEVICE, SSID, [
+					{ ssid: "Other", active: false },
+					{ ssid: SSID, active: true },
+				]),
 			).toBe("confirmed");
 		});
 
 		it("stays pending when the target SSID is present but not active", () => {
 			expect(
-				deriveWifiConnectOutcome(
-					{},
-					DEVICE,
-					SSID,
-					[{ ssid: SSID, active: false }],
-				),
+				deriveWifiConnectOutcome({}, DEVICE, SSID, [
+					{ ssid: SSID, active: false },
+				]),
 			).toBe("pending");
 		});
 
 		it("does not confirm when a different SSID is active", () => {
 			expect(
-				deriveWifiConnectOutcome(
-					{},
-					DEVICE,
-					SSID,
-					[{ ssid: "Other", active: true }],
-				),
+				deriveWifiConnectOutcome({}, DEVICE, SSID, [
+					{ ssid: "Other", active: true },
+				]),
 			).toBe("pending");
 		});
 	});

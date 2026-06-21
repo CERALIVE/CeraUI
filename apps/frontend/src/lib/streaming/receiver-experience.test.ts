@@ -20,7 +20,9 @@ import {
 	type ServerSummaryLabels,
 } from "./receiver-experience";
 
-function slot(overrides: Partial<ManagedIngestAccount> = {}): ManagedIngestAccount {
+function slot(
+	overrides: Partial<ManagedIngestAccount> = {},
+): ManagedIngestAccount {
 	return {
 		endpointId: "ep-1",
 		host: "ingest1.example",

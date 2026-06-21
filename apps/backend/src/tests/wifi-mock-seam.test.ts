@@ -124,10 +124,12 @@ describe("wifi mock-seam — deviceBusy", () => {
 		const before = activeNetwork();
 		const ctx = { context: makeContext() };
 
-		expect(await call(wifiConnectProcedure, { uuid: SAVED_UUID }, ctx)).toEqual({
-			success: false,
-			error: "DEVICE_BUSY",
-		});
+		expect(await call(wifiConnectProcedure, { uuid: SAVED_UUID }, ctx)).toEqual(
+			{
+				success: false,
+				error: "DEVICE_BUSY",
+			},
+		);
 		expect(
 			await call(wifiDisconnectProcedure, { uuid: SAVED_UUID }, ctx),
 		).toEqual({ success: false, error: "DEVICE_BUSY" });
@@ -158,7 +160,11 @@ describe("wifi mock-seam — savedConnectFails", () => {
 		const before = activeNetwork();
 
 		const payloads = await withWifiCapture(() =>
-			call(wifiConnectProcedure, { uuid: SAVED_UUID }, { context: makeContext() }),
+			call(
+				wifiConnectProcedure,
+				{ uuid: SAVED_UUID },
+				{ context: makeContext() },
+			),
 		);
 
 		expect(payloads).toContainEqual({ connect: false, device: "0" });

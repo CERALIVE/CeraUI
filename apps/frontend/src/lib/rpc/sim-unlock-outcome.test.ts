@@ -74,7 +74,11 @@ describe("classifySimPukResult", () => {
 
 	it("classifies locked as the terminal lockout reason", () => {
 		expect(
-			classifySimPukResult({ success: false, error: "locked", remainingAttempts: 0 }),
+			classifySimPukResult({
+				success: false,
+				error: "locked",
+				remainingAttempts: 0,
+			}),
 		).toEqual({ ok: false, reason: "locked" });
 	});
 

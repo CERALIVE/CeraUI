@@ -379,7 +379,8 @@ export function autoSelectIngestSlot(
 	const lastUsed = selectedEndpointId
 		? accounts.find((account) => account.endpointId === selectedEndpointId)
 		: undefined;
-	if (lastUsed) return { kind: "managed", account: lastUsed, reason: "lastUsed" };
+	if (lastUsed)
+		return { kind: "managed", account: lastUsed, reason: "lastUsed" };
 	return { kind: "prompt", accounts };
 }
 

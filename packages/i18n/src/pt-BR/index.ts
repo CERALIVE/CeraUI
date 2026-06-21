@@ -391,7 +391,8 @@ const ptBR = {
 			regenerating: "Atualizando o código…",
 			pairedBody: "Este dispositivo agora está vinculado à sua conta na nuvem.",
 			deviceLabel: "ID do dispositivo",
-			scanToPair: "Ou escaneie este QR code com seu telefone para parear instantaneamente.",
+			scanToPair:
+				"Ou escaneie este QR code com seu telefone para parear instantaneamente.",
 			subscriptionLabel: "Assinatura",
 			statusActive: "Ativa",
 			statusFree: "Grátis",

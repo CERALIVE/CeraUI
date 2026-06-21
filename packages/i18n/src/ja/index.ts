@@ -237,7 +237,8 @@ const ja = {
 			regenerating: "コードを更新しています…",
 			pairedBody: "このデバイスはクラウドアカウントに接続されました。",
 			deviceLabel: "デバイスID",
-			scanToPair: "または、このQRコードをスマートフォンでスキャンしてすぐにペアリングします。",
+			scanToPair:
+				"または、このQRコードをスマートフォンでスキャンしてすぐにペアリングします。",
 			subscriptionLabel: "サブスクリプション",
 			statusActive: "有効",
 			statusFree: "無料",
@@ -302,7 +303,8 @@ const ja = {
 		autoEndpoint: "サーバーエンドポイント（自動選択）",
 		manualOverride: "手動で上書き",
 		ingestSlot: "クラウドインスタンス",
-		ingestSlotHint: "ストリームを受信するクラウドインスタンスを選択してください。",
+		ingestSlotHint:
+			"ストリームを受信するクラウドインスタンスを選択してください。",
 		ingestSlotPrompt: "続行するにはクラウドインスタンスを選択してください。",
 		ingestSlotDefault: "デフォルト",
 		relaySecret: "シークレット / パスフレーズ",

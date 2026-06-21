@@ -753,7 +753,8 @@ const es = {
 			pairedBody:
 				"Este dispositivo ahora está vinculado a tu cuenta en la nube.",
 			deviceLabel: "ID del dispositivo",
-			scanToPair: "O escanea este código QR con tu teléfono para vincular al instante.",
+			scanToPair:
+				"O escanea este código QR con tu teléfono para vincular al instante.",
 			subscriptionLabel: "Suscripción",
 			statusActive: "Activa",
 			statusFree: "Gratis",
@@ -1069,7 +1070,8 @@ const es = {
 				"¿Estás seguro de que deseas encender el modo punto de acceso? Esto permitirá compartir internet pero desconectará todas las conexiones WiFi.",
 		},
 		os: {
-			deviceBusy: "El dispositivo está ocupado, inténtalo de nuevo en un momento",
+			deviceBusy:
+				"El dispositivo está ocupado, inténtalo de nuevo en un momento",
 			operationFailed: "No se pudo completar la acción",
 			retry: "Reintentar",
 			stillWorking: "Aún trabajando — tardando más de lo esperado",
