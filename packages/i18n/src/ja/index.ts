@@ -79,6 +79,10 @@ const ja = {
 		signingIn: "サインイン中...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "オーディオコーデックを変更するにはストリームを停止してください",
+			noSource: "先にオーディオソースを選択してください",
+		},
 		destination: "配信先",
 		destinationManaged: "マイクラウドアカウント",
 		destinationCustom: "カスタムレシーバー",
@@ -466,6 +470,7 @@ const ja = {
 			security: "セキュリティ",
 		},
 		modem: {
+			scanningForNetworks: "事業者を検索中…",
 			save: "保存",
 			autoapn: "自動APN",
 			apn: "APN",
@@ -573,6 +578,10 @@ const ja = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "ホットスポットの操作を実行中",
+			formInvalid: "ホットスポットを開始するには有効な名前とパスワードを入力してください",
+		},
 		dialog: {
 			save: "保存",
 			saving: "保存中...",
@@ -616,6 +625,13 @@ const ja = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "スキャン中",
+		},
+		scanningState: {
+			title: "ネットワークを検索中…",
+			description: "近くの利用可能なWiFiネットワークを検索しています。",
+		},
 		dialog: {
 			close: "閉じる",
 			searchWifi: "WiFiネットワークを検索",

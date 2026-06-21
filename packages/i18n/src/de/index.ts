@@ -610,6 +610,10 @@ const de = {
 		signingIn: "Anmeldung läuft...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "Stream beenden, um den Audio-Codec zu ändern",
+			noSource: "Zuerst eine Audioquelle auswählen",
+		},
 		destination: "Ziel",
 		destinationManaged: "Mein Cloud-Konto",
 		destinationCustom: "Eigener Empfänger",
@@ -1009,6 +1013,7 @@ const de = {
 			security: "Sicherheit",
 		},
 		modem: {
+			scanningForNetworks: "Suche nach Anbietern…",
 			save: "Speichern",
 			autoapn: "Automatischer APN",
 			apn: "APN",
@@ -1106,6 +1111,10 @@ const de = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "Hotspot-Aktion wird ausgeführt",
+			formInvalid: "Gültigen Namen und gültiges Passwort eingeben, um den Hotspot zu starten",
+		},
 		dialog: {
 			save: "Speichern",
 			saving: "Speichern...",
@@ -1151,6 +1160,13 @@ const de = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "Suche läuft",
+		},
+		scanningState: {
+			title: "Suche nach Netzwerken…",
+			description: "Es wird nach verfügbaren WLAN-Netzwerken in der Nähe gesucht.",
+		},
 		dialog: {
 			close: "Schließen",
 			searchWifi: "WLAN-Netzwerke suchen",

@@ -77,6 +77,10 @@ const zh = {
 		signingIn: "登录中...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "停止推流后才能更改音频编解码器",
+			noSource: "请先选择音频源",
+		},
 		destination: "目标",
 		destinationManaged: "我的云账户",
 		destinationCustom: "自定义接收器",
@@ -443,6 +447,7 @@ const zh = {
 			security: "安全性",
 		},
 		modem: {
+			scanningForNetworks: "正在搜索运营商…",
 			save: "保存",
 			autoapn: "自动 APN",
 			apn: "APN",
@@ -545,6 +550,10 @@ const zh = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "热点操作正在进行",
+			formInvalid: "请输入有效的名称和密码以启动热点",
+		},
 		dialog: {
 			save: "保存",
 			saving: "保存中...",
@@ -586,6 +595,13 @@ const zh = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "正在扫描",
+		},
+		scanningState: {
+			title: "正在搜索网络…",
+			description: "正在搜索附近可用的 WiFi 网络。",
+		},
 		dialog: {
 			close: "关闭",
 			searchWifi: "搜索 WiFi 网络",

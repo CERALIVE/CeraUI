@@ -115,6 +115,7 @@ let {
 			disabled={scanning}
 			onclick={onScan}
 			size="sm"
+			title={scanning ? $LL.wifiSelector.scanReason.scanning() : undefined}
 			variant="outline"
 		>
 			{#if scanning}
@@ -294,26 +295,47 @@ let {
 				{/if}
 			</div>
 		{:else}
-			<!-- Empty state -->
-			<div class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
-				<div class="bg-muted grid size-14 place-items-center rounded-2xl">
-					<WifiOff class="text-muted-foreground size-7" />
+			{#if scanning}
+				<!-- Scanning state — distinct from the settled empty state below. -->
+				<div
+					class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center"
+					data-testid="wifi-scanning-state"
+				>
+					<div class="bg-muted grid size-14 place-items-center rounded-2xl">
+						<Loader2 class="text-muted-foreground size-7 animate-spin motion-reduce:animate-none" />
+					</div>
+					<div>
+						<p class="text-sm font-semibold">{$LL.wifiSelector.scanningState.title()}</p>
+						<p class="text-muted-foreground mt-1 max-w-xs text-xs">
+							{$LL.wifiSelector.scanningState.description()}
+						</p>
+					</div>
 				</div>
-				<div>
-					<p class="text-sm font-semibold">{$LL.wifiSelector.emptyState.title()}</p>
-					<p class="text-muted-foreground mt-1 max-w-xs text-xs">
-						{$LL.wifiSelector.emptyState.description()}
-					</p>
+			{:else}
+				<!-- Empty state -->
+				<div
+					class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center"
+					data-testid="wifi-empty-state"
+				>
+					<div class="bg-muted grid size-14 place-items-center rounded-2xl">
+						<WifiOff class="text-muted-foreground size-7" />
+					</div>
+					<div>
+						<p class="text-sm font-semibold">{$LL.wifiSelector.emptyState.title()}</p>
+						<p class="text-muted-foreground mt-1 max-w-xs text-xs">
+							{$LL.wifiSelector.emptyState.description()}
+						</p>
+					</div>
+					<Button class="gap-2" disabled={scanning} onclick={onScan} size="sm">
+						{#if scanning}
+							<Loader2 class="size-4 animate-spin" />
+						{:else}
+							<RefreshCw class="size-4" />
+						{/if}
+						{$LL.wifiSelector.button.scan()}
+					</Button>
 				</div>
-				<Button class="gap-2" disabled={scanning} onclick={onScan} size="sm">
-					{#if scanning}
-						<Loader2 class="size-4 animate-spin" />
-					{:else}
-						<RefreshCw class="size-4" />
-					{/if}
-					{$LL.wifiSelector.button.scan()}
-				</Button>
-			</div>
+			{/if}
 		{/each}
 	</div>
 </div>

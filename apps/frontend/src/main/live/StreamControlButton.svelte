@@ -9,11 +9,14 @@ interface Props {
 	isStreaming: boolean;
 	canStart: boolean;
 	optimismState: StreamingOptimismState;
+	/** Reason the start control is disabled, surfaced as a hover/`title` hint. */
+	disabledReason?: string;
 	onStart: () => void;
 	onStop: () => void;
 }
 
-const { isStreaming, canStart, optimismState, onStart, onStop }: Props = $props();
+const { isStreaming, canStart, optimismState, disabledReason, onStart, onStop }: Props =
+	$props();
 
 // Disable button during transient states (starting/stopping).
 const isTransient = $derived(optimismState === 'starting' || optimismState === 'stopping');
@@ -41,6 +44,7 @@ const isTransient = $derived(optimismState === 'starting' || optimismState === '
 		disabled={!canStart || isTransient}
 		onclick={onStart}
 		size="lg"
+		title={!canStart || isTransient ? disabledReason : undefined}
 		type="button"
 	>
 		{#if optimismState === 'starting'}

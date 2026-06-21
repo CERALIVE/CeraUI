@@ -520,6 +520,18 @@ const canStart = $derived(
 	}),
 );
 
+// Reason the Start control is disabled, surfaced as a hover hint (reuses the
+// existing cannot-start copy; ordered to match canStartStream's predicate).
+const startDisabledReason = $derived(
+	streamingOptimismState === 'starting'
+		? $LL.live.starting()
+		: !pipelineRecognized
+			? $LL.live.cannotStartNoPipeline()
+			: !hasServer
+				? $LL.live.cannotStartNoServer()
+				: undefined,
+);
+
 async function handleStart() {
 	if (streamingOptimismState !== 'idle') return;
 
@@ -773,6 +785,7 @@ const configRows = $derived<ConfigRow[]>([
 
 		<StreamControlButton
 			{canStart}
+			disabledReason={startDisabledReason}
 			{isStreaming}
 			optimismState={streamingOptimismState}
 			onStart={handleStart}

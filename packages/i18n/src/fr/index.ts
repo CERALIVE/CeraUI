@@ -232,6 +232,10 @@ const fr = {
 		signingIn: "Connexion en cours...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "Arrêtez le flux pour changer le codec audio",
+			noSource: "Sélectionnez d'abord une source audio",
+		},
 		destination: "Destination",
 		destinationManaged: "Mon compte cloud",
 		destinationCustom: "Récepteur personnalisé",
@@ -634,6 +638,7 @@ const fr = {
 			security: "Sécurité",
 		},
 		modem: {
+			scanningForNetworks: "Recherche d'opérateurs…",
 			save: "Enregistrer",
 			autoapn: "APN Automatique",
 			apn: "APN",
@@ -728,6 +733,10 @@ const fr = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "Action du point d'accès en cours",
+			formInvalid: "Saisissez un nom et un mot de passe valides pour démarrer le point d'accès",
+		},
 		dialog: {
 			save: "Enregistrer",
 			saving: "Enregistrement...",
@@ -775,6 +784,13 @@ const fr = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "Recherche en cours",
+		},
+		scanningState: {
+			title: "Recherche de réseaux…",
+			description: "Recherche des réseaux WiFi disponibles à proximité.",
+		},
 		dialog: {
 			close: "Fermer",
 			searchWifi: "Rechercher des réseaux WiFi",

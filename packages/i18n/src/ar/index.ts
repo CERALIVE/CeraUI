@@ -216,6 +216,10 @@ const ar = {
 		signingIn: "جاري تسجيل الدخول...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "أوقف البث لتغيير ترميز الصوت",
+			noSource: "اختر مصدر الصوت أولاً",
+		},
 		destination: "الوجهة",
 		destinationManaged: "حسابي السحابي",
 		destinationCustom: "مستقبِل مخصّص",
@@ -589,6 +593,7 @@ const ar = {
 			security: "الأمان",
 		},
 		modem: {
+			scanningForNetworks: "جارٍ البحث عن المشغّلين…",
 			save: "حفظ",
 			autoapn: "APN تلقائي",
 			apn: "APN",
@@ -693,6 +698,10 @@ const ar = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "جارٍ تنفيذ إجراء نقطة الاتصال",
+			formInvalid: "أدخل اسمًا وكلمة مرور صالحين لبدء نقطة الاتصال",
+		},
 		dialog: {
 			save: "حفظ",
 			configHotspot: "إعداد نقطة الاتصال",
@@ -735,6 +744,13 @@ const ar = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "جارٍ البحث",
+		},
+		scanningState: {
+			title: "جارٍ البحث عن الشبكات…",
+			description: "يتم البحث عن شبكات WiFi المتاحة القريبة.",
+		},
 		dialog: {
 			close: "إغلاق",
 			searchWifi: "البحث عن شبكات WiFi",

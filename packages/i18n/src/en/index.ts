@@ -609,6 +609,10 @@ const en = {
 		selectLanguage: "Select Language",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "Stop the stream to change the audio codec",
+			noSource: "Select an audio source first",
+		},
 		destination: "Destination",
 		destinationManaged: "My cloud account",
 		destinationCustom: "Custom receiver",
@@ -1002,6 +1006,7 @@ const en = {
 			security: "Security",
 		},
 		modem: {
+			scanningForNetworks: "Searching for operators…",
 			save: "Save",
 			autoapn: "Automatic APN",
 			apn: "APN",
@@ -1095,6 +1100,10 @@ const en = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "Hotspot action in progress",
+			formInvalid: "Enter a valid name and password to start the hotspot",
+		},
 		dialog: {
 			save: "Save",
 			saving: "Saving...",
@@ -1137,6 +1146,13 @@ const en = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "Scanning in progress",
+		},
+		scanningState: {
+			title: "Searching for networks…",
+			description: "Looking for available WiFi networks nearby.",
+		},
 		dialog: {
 			close: "Close",
 			searchWifi: "View Available Networks",

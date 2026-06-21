@@ -231,6 +231,10 @@ const ptBR = {
 		signingIn: "Fazendo login...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "Pare a transmissão para alterar o codec de áudio",
+			noSource: "Selecione primeiro uma fonte de áudio",
+		},
 		destination: "Destino",
 		destinationManaged: "Minha conta na nuvem",
 		destinationCustom: "Receptor personalizado",
@@ -627,6 +631,7 @@ const ptBR = {
 			security: "Segurança",
 		},
 		modem: {
+			scanningForNetworks: "Procurando operadoras…",
 			save: "Salvar",
 			autoapn: "APN Automático",
 			apn: "APN",
@@ -726,6 +731,10 @@ const ptBR = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "Ação do ponto de acesso em andamento",
+			formInvalid: "Insira um nome e uma senha válidos para iniciar o ponto de acesso",
+		},
 		dialog: {
 			save: "Salvar",
 			saving: "Salvando...",
@@ -771,6 +780,13 @@ const ptBR = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "Busca em andamento",
+		},
+		scanningState: {
+			title: "Procurando redes…",
+			description: "Procurando redes WiFi disponíveis por perto.",
+		},
 		dialog: {
 			close: "Fechar",
 			searchWifi: "Buscar redes WiFi",

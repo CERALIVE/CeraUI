@@ -383,7 +383,11 @@ const selectedNetworkLabel = $derived(
 						<p class="text-status-error text-xs" data-testid="modem-scan-error" role="alert">
 							{$LL.network.modem.scanFailed()}
 						</p>
-					{:else if availableNetworks.length === 0 && !scanning}
+					{:else if scanning}
+						<p class="text-muted-foreground text-xs" data-testid="modem-scanning-state">
+							{$LL.network.modem.scanningForNetworks()}
+						</p>
+					{:else if availableNetworks.length === 0}
 						<p class="text-muted-foreground text-xs">{$LL.network.modem.noNetworksFound()}</p>
 					{/if}
 				</div>

@@ -78,6 +78,10 @@ const hi = {
 		signingIn: "साइन इन हो रहे हैं...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "ऑडियो कोडेक बदलने के लिए स्ट्रीम रोकें",
+			noSource: "पहले एक ऑडियो स्रोत चुनें",
+		},
 		destination: "गंतव्य",
 		destinationManaged: "मेरा क्लाउड खाता",
 		destinationCustom: "कस्टम रिसीवर",
@@ -450,6 +454,7 @@ const hi = {
 			security: "सुरक्षा",
 		},
 		modem: {
+			scanningForNetworks: "ऑपरेटर खोजे जा रहे हैं…",
 			save: "सहेजें",
 			autoapn: "स्वचालित APN",
 			apn: "APN",
@@ -554,6 +559,10 @@ const hi = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "हॉटस्पॉट कार्रवाई जारी है",
+			formInvalid: "हॉटस्पॉट शुरू करने के लिए मान्य नाम और पासवर्ड दर्ज करें",
+		},
 		dialog: {
 			save: "सहेजें",
 			configHotspot: "हॉटस्पॉट कॉन्फ़िगर करें",
@@ -596,6 +605,13 @@ const hi = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "खोज जारी है",
+		},
+		scanningState: {
+			title: "नेटवर्क खोजे जा रहे हैं…",
+			description: "आस-पास उपलब्ध WiFi नेटवर्क खोजे जा रहे हैं।",
+		},
 		dialog: {
 			close: "बंद करें",
 			searchWifi: "वाई-फाई नेटवर्क खोजें",

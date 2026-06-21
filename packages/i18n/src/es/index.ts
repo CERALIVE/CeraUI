@@ -619,6 +619,10 @@ const es = {
 		selectLanguage: "Seleccionar Idioma",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "Detén la transmisión para cambiar el códec de audio",
+			noSource: "Selecciona primero una fuente de audio",
+		},
 		destination: "Destino",
 		destinationManaged: "Mi cuenta en la nube",
 		destinationCustom: "Receptor personalizado",
@@ -1023,6 +1027,7 @@ const es = {
 			security: "Seguridad",
 		},
 		modem: {
+			scanningForNetworks: "Buscando operadores…",
 			save: "Guardar",
 			autoapn: "APN Automático",
 			apn: "APN",
@@ -1119,6 +1124,10 @@ const es = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "Acción del punto de acceso en curso",
+			formInvalid: "Introduce un nombre y una contraseña válidos para iniciar el punto de acceso",
+		},
 		dialog: {
 			save: "Guardar",
 			saving: "Guardando...",
@@ -1166,6 +1175,13 @@ const es = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "Búsqueda en curso",
+		},
+		scanningState: {
+			title: "Buscando redes…",
+			description: "Buscando redes WiFi disponibles cercanas.",
+		},
 		dialog: {
 			close: "Cerrar",
 			searchWifi: "Ver redes disponibles",

@@ -123,6 +123,16 @@ const notAvailableAudioSource = $derived(
 const sourceMissing = $derived(hasAudioSupport && !draftSource);
 const saveDisabled = $derived(!hasAudioSupport || sourceMissing || isStreaming);
 
+// Reason for the locked codec select: streaming (cannot apply without a restart)
+// or no source chosen yet. Mirrors the Select.Root `disabled` condition.
+const codecDisabledReason = $derived(
+	isStreaming
+		? $LL.settings.codecDisabledReason.streaming()
+		: !draftSource
+			? $LL.settings.codecDisabledReason.noSource()
+			: undefined,
+);
+
 function clampDelay(value: number): number {
 	if (!Number.isFinite(value)) return 0;
 	return Math.max(DELAY_MIN, Math.min(DELAY_MAX, value));
@@ -297,7 +307,7 @@ async function handleSave() {
 					type="single"
 					value={draftCodec}
 				>
-					<Select.Trigger id="audioCodec" class="w-full">
+					<Select.Trigger id="audioCodec" class="w-full" title={codecDisabledReason}>
 						{codecTriggerLabel}
 					</Select.Trigger>
 					<Select.Content>

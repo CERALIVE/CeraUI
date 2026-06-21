@@ -78,6 +78,10 @@ const ko = {
 		signingIn: "로그인 중...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "오디오 코덱을 변경하려면 스트림을 중지하세요",
+			noSource: "먼저 오디오 소스를 선택하세요",
+		},
 		destination: "대상",
 		destinationManaged: "내 클라우드 계정",
 		destinationCustom: "사용자 지정 수신기",
@@ -456,6 +460,7 @@ const ko = {
 			security: "보안",
 		},
 		modem: {
+			scanningForNetworks: "사업자 검색 중…",
 			save: "저장",
 			autoapn: "자동 APN",
 			apn: "APN",
@@ -561,6 +566,10 @@ const ko = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "핫스팟 작업 진행 중",
+			formInvalid: "핫스팟을 시작하려면 유효한 이름과 비밀번호를 입력하세요",
+		},
 		dialog: {
 			save: "저장",
 			configHotspot: "핫스팟 구성",
@@ -603,6 +612,13 @@ const ko = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "검색 중",
+		},
+		scanningState: {
+			title: "네트워크 검색 중…",
+			description: "주변에서 사용 가능한 WiFi 네트워크를 검색하고 있습니다.",
+		},
 		dialog: {
 			close: "닫기",
 			searchWifi: "WiFi 네트워크 검색",
