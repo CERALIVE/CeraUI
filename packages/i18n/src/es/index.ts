@@ -623,6 +623,10 @@ const es = {
 			network: "Red",
 			bootSlot: "Ranura de arranque",
 			unavailable: "No disponible",
+			lowDiskTitle: "Poco espacio en disco",
+			lowDiskBody:
+				"Menos de 512 MiB libres en /data. Libera espacio para que la grabación, los registros y las actualizaciones sigan funcionando.",
+			lowDiskAction: "Ver registros",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",

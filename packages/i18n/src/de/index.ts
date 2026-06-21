@@ -614,6 +614,10 @@ const de = {
 			network: "Netzwerk",
 			bootSlot: "Boot-Slot",
 			unavailable: "Nicht verfügbar",
+			lowDiskTitle: "Wenig Speicherplatz",
+			lowDiskBody:
+				"Weniger als 512 MiB frei auf /data. Geben Sie Speicher frei, damit Aufnahme, Protokolle und Updates weiter funktionieren.",
+			lowDiskAction: "Protokolle anzeigen",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",

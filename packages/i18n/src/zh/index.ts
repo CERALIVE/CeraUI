@@ -101,6 +101,10 @@ const zh = {
 			network: "网络",
 			bootSlot: "启动分区",
 			unavailable: "不可用",
+			lowDiskTitle: "磁盘空间不足",
+			lowDiskBody:
+				"/data 可用空间不足 512 MiB。请释放空间，以保证录制、日志和更新正常运行。",
+			lowDiskAction: "查看日志",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",

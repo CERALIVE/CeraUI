@@ -32,6 +32,7 @@ import { toast } from 'svelte-sonner';
 
 import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
+import LowDiskBanner from '$lib/components/custom/LowDiskBanner.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { AppDialog } from '$lib/components/dialogs';
 import { rpc } from '$lib/rpc/client';
@@ -243,6 +244,9 @@ const ActiveIcon = $derived(active?.icon);
 		<div class="space-y-7">
 			<!-- Live device telemetry first: status at a glance, no dialog to open. -->
 			<DeviceStatsSection />
+
+			<!-- Production-readiness signal: low free space on /data points to Logs. -->
+			<LowDiskBanner onViewLogs={() => (logsOpen = true)} />
 
 			<!-- Mobile-only: desktop hosts language + theme in the header toolbar instead. -->
 			{#if !isDesktop.current}

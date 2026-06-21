@@ -103,6 +103,10 @@ const ko = {
 			network: "네트워크",
 			bootSlot: "부트 슬롯",
 			unavailable: "사용 불가",
+			lowDiskTitle: "디스크 공간 부족",
+			lowDiskBody:
+				"/data의 여유 공간이 512 MiB 미만입니다. 녹화, 로그, 업데이트가 계속 작동하도록 공간을 확보하세요.",
+			lowDiskAction: "로그 보기",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",

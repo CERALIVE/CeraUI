@@ -257,6 +257,10 @@ const fr = {
 			network: "Réseau",
 			bootSlot: "Slot de démarrage",
 			unavailable: "Indisponible",
+			lowDiskTitle: "Espace disque faible",
+			lowDiskBody:
+				"Moins de 512 Mio libres sur /data. Libérez de l'espace pour que l'enregistrement, les journaux et les mises à jour continuent de fonctionner.",
+			lowDiskAction: "Voir les journaux",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",

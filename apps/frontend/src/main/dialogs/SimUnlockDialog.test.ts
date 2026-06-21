@@ -286,6 +286,51 @@ describe("SimUnlockDialog — PUK recovery", () => {
 		expect(screen.queryByTestId("sim-puk-submit")).toBeNull();
 	});
 
+	it("disables submit when the SIM opens with 0 PUK retries remaining", () => {
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "0",
+				modem: makeModem({ required: "sim-puk", remainingAttempts: 0 }),
+			},
+		});
+
+		// Even a fully valid PUK + new PIN cannot be submitted — the next wrong
+		// PUK would brick the SIM, so submit stays disabled at zero retries.
+		fireEvent.input(pukInput(), { target: { value: "12345678" } });
+		fireEvent.input(newPinInput(), { target: { value: "4321" } });
+		expect(pukSubmit().disabled).toBe(true);
+	});
+
+	it("warns (status-error styling) on the retry counter at <= 2 remaining", () => {
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "0",
+				modem: makeModem({ required: "sim-puk", remainingAttempts: 2 }),
+			},
+		});
+
+		const attempts = screen.getByTestId("sim-puk-attempts");
+		expect(attempts.textContent).toContain("2");
+		// The low-retries warning is the status-error color on the count.
+		expect(attempts.querySelector(".text-status-error")).not.toBeNull();
+	});
+
+	it("does NOT warn on the retry counter above 2 remaining", () => {
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "0",
+				modem: makeModem({ required: "sim-puk", remainingAttempts: 3 }),
+			},
+		});
+
+		const attempts = screen.getByTestId("sim-puk-attempts");
+		expect(attempts.textContent).toContain("3");
+		expect(attempts.querySelector(".text-status-error")).toBeNull();
+	});
+
 	it("hands off from the PIN flow to the PUK form when a wrong PIN exhausts attempts", async () => {
 		unlockSim.mockResolvedValue({
 			state: "puk-required",

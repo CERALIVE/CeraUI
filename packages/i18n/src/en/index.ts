@@ -653,6 +653,10 @@ const en = {
 			network: "Network",
 			bootSlot: "Boot Slot",
 			unavailable: "Unavailable",
+			lowDiskTitle: "Low disk space",
+			lowDiskBody:
+				"Less than 512 MiB free on /data. Free up space so recording, logs, and updates keep working.",
+			lowDiskAction: "View logs",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",

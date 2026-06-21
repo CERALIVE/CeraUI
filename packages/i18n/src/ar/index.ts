@@ -240,6 +240,10 @@ const ar = {
 			network: "الشبكة",
 			bootSlot: "فتحة الإقلاع",
 			unavailable: "غير متاح",
+			lowDiskTitle: "مساحة القرص منخفضة",
+			lowDiskBody:
+				"أقل من 512 ميبي‌بايت متاحة على /data. حرّر مساحة حتى يستمر التسجيل والسجلات والتحديثات في العمل.",
+			lowDiskAction: "عرض السجلات",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",

@@ -257,6 +257,10 @@ const ptBR = {
 			network: "Rede",
 			bootSlot: "Slot de inicialização",
 			unavailable: "Indisponível",
+			lowDiskTitle: "Pouco espaço em disco",
+			lowDiskBody:
+				"Menos de 512 MiB livres em /data. Libere espaço para que gravação, logs e atualizações continuem funcionando.",
+			lowDiskAction: "Ver logs",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",

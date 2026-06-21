@@ -102,6 +102,10 @@ const hi = {
 			network: "नेटवर्क",
 			bootSlot: "बूट स्लॉट",
 			unavailable: "अनुपलब्ध",
+			lowDiskTitle: "डिस्क स्थान कम है",
+			lowDiskBody:
+				"/data पर 512 MiB से कम खाली है। रिकॉर्डिंग, लॉग और अपडेट चलते रहें इसके लिए स्थान खाली करें।",
+			lowDiskAction: "लॉग देखें",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",

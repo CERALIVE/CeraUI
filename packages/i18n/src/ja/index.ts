@@ -104,6 +104,10 @@ const ja = {
 			network: "ネットワーク",
 			bootSlot: "ブートスロット",
 			unavailable: "利用不可",
+			lowDiskTitle: "ディスク空き容量が少ない",
+			lowDiskBody:
+				"/data の空き容量が 512 MiB 未満です。録画・ログ・更新が動作し続けるよう空き容量を確保してください。",
+			lowDiskAction: "ログを表示",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
