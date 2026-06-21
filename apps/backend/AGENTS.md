@@ -20,7 +20,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Transport resolver + protocol registry (srtla/rist active, srt reserved; RIST capability-gated via `ristAvailable`) | `modules/streaming/transport/` (`resolveStreamEndpoint`, `registry.ts`, `rist-adapter.ts`) |
 | Pipeline registry (derived from the capability contract; `initPipelines` is async) | `modules/streaming/pipelines.ts` |
 | Cerastream engine backend (structured IPC, `@ceralive/cerastream`) | `modules/streaming/cerastream-backend.ts` |
-| Structured engine error → notification (Task-7 table swap, no regex) | `modules/streaming/cerastream-error-mapping.ts` |
+| Structured engine error → notification (Task-7 table swap, no regex); `mapCerastreamError()` maps a `RuntimeErrorEvent` to a Tier-2 code string (T16) | `modules/streaming/cerastream-error-mapping.ts` |
 | srtla binding calls (flux — check `../../../srtla/AGENTS.md` first) | `modules/streaming/srtla.ts` |
 | srtla per-link telemetry → `status.linkTelemetry` | `modules/streaming/link-telemetry.ts` |
 | Stream lifecycle (spawn supervision, start/stop, autostart, exec paths) | `modules/streaming/streamloop/` (barrel: `modules/streaming/streamloop.ts`) |
@@ -87,14 +87,98 @@ boot never resubmits a known-wrong PIN. The unlock flow is the intended caller
 `tests/sim-autounlock.test.ts` (mode-600 + config-untouched, boot unlock, bounded
 wrong-PIN, and the no-op gates).
 
+## DEV MOCK SEAMS [EXISTS]
+
+These seams let tests and dev mode exercise real code paths without hardware. All
+are gated by `shouldUseMocks()` or `isDevelopment()` — never active in production.
+
+### isDevelopment() power-gate (T1)
+
+`isDevelopment()` (`mocks/mock-config.ts`: `NODE_ENV==="development" ||
+MOCK_MODE==="true"`) gates all dev-only side-effects. The `system.poweroff` and
+`system.reboot` handlers skip the real OS spawn when `isDevelopment()` is true.
+The post-update reboot in `software-updates.ts` is gated via `rebootAfterUpdate()`.
+DI runner seams (`setPowerCommandRunner`, `setRebootRunner`) let tests assert the
+exact command without touching the host.
+
+### simulateDevReboot (T2)
+
+`simulateDevReboot()` (`rpc/events.ts`) reproduces the real-device reboot effect in
+dev: snapshots `getAuthenticatedClients()` and closes each socket after a macrotask
+delay (`setTimeout(..., 0)`). The delay lets the in-flight `system.reboot` reply
+flush before the socket drops, matching the real-device sequence. Gated by
+`isDevelopment()` — the early return means no production call site can schedule
+socket teardown through this helper.
+
+### Adapter diagnostics (T3)
+
+`extractValidationDetails(error)` (`rpc/error-enrichment.ts`) turns an opaque
+oRPC/Zod validation failure into `ValidationDetails`:
+`{ phase: "input" | "output" | "unknown", issues: ValidationIssueDetail[] }`.
+The WS adapter attaches the result as a `validation` field on the `RpcCallTrace`
+log record. These adapter diagnostics surface which schema field failed and whether
+it was an input or output validation error — visible at `LOG_LEVEL=debug`. Phase is
+classified from the oRPC wrapper message then the error code. Issue paths are schema
+field names (safe); messages are scrubbed through `logRedact`. Returns `undefined`
+when the error has no issue list.
+
+### Scenario-seeded capability profiles (T5)
+
+Three `MOCK_SCENARIO` values seed the engine-capability state:
+
+| Scenario | Behaviour |
+|----------|-----------|
+| `caps-full` | Full engine profile: H265 + hw accel, audio-capable HDMI source, `audio_live_switch`, `transports: ["srtla","srt"]` |
+| `engine-starting` | Mock fetcher throws with empty cache → minimal safe floor + `engineStarting: true` |
+| `engine-unavailable` | Mock fetcher throws after seeding last-known-good → cached snapshot + `engineUnavailable: true` |
+
+`setMockEngineCapabilities(partial)` (`mocks/providers/streaming.ts`) merges a
+`Partial<ScenarioCapabilities>` onto the active scenario's profile and immediately
+re-broadcasts the `capabilities` event. Gated by `shouldUseMocks()`. Use in tests
+that need a specific capability combination without switching the full scenario.
+
+### Kiosk dev-seam gate (T6)
+
+`resolveActiveKioskDeps()` (`modules/system/kiosk.ts`) returns the mock kiosk
+harness under `shouldUseMocks()`, else the production `activeDeps`. The kiosk RPC
+handlers call `kioskStart(resolveActiveKioskDeps())` etc. so dev exercises the full
+state machine against in-memory fakes without touching `systemctl`. The gate in
+`system.procedure.ts` was widened to `if (!shouldUseMocks() && !(await
+isRealDevice())) return UNAVAILABLE` so dev bypasses the emulated-mode guard.
+`peekMockKioskHarness()` returns the singleton without building it — use in prod
+tests to assert the mock double was never constructed.
+
+### Add-on dev-seam gate (T7)
+
+`resolveActiveAddonManagerDeps()` (`modules/addons/manager.ts`) returns a
+lazily-built mock `AddonManagerDeps` singleton under `shouldUseMocks()`, else the
+production `activeDeps`. `resolveReconcilerDeps()` (`modules/addons/reconciler.ts`)
+mirrors the same pattern for the post-boot reconciler. Both are the default-parameter
+values for their respective public functions, so existing tests that pass deps
+explicitly are unaffected.
+
+### Software-update + SSH dev mock seams (T8)
+
+- `simulateMockSoftwareUpdate()` (internal, called by `startSoftwareUpdate()` under
+  `shouldUseMocks()`) broadcasts a realistic sequence of `{updating: SoftUpdateStatus}`
+  frames without spawning `apt-get`. The in-flight promise is accessible via
+  `getMockSoftwareUpdatePromise()` for test awaiting.
+- `setSoftwareUpdateRunner(runner)` (`modules/system/software-updates.ts`) replaces
+  the default apt spawn with an injected function. Use in prod tests to assert the
+  runner was called without running a real update.
+- `setSshServiceRunner(runner)` (`modules/system/ssh.ts`) replaces the default
+  `systemctl start/stop ssh` spawn. The `shouldUseMocks()` branch in `startStopSsh()`
+  flips `mockSshActive` and broadcasts `{ssh}` without touching `systemctl` or `passwd`.
+
 ## CONVENTIONS
 
 - Runtime: Bun only. No Node-specific APIs (`fs/promises` ok; `node:cluster` not).
 - Build: `bun build --compile --minify --bytecode --target=bun-linux-{arm64|amd64}` — single binary, no runtime on device.
 - Tests: `bun test` (not vitest). Files in `src/tests/`.
 - Config files (`config.json`, `setup.json`, `auth_tokens.json`) read/written from working dir — path-sensitive in production.
-- `MOCK_SCENARIO` env activates mock providers. Scenarios: `single-modem`, `streaming-active`, `multi-modem-wifi` (default dev).
+- `MOCK_SCENARIO` env activates mock providers. Scenarios: `single-modem`, `streaming-active`, `multi-modem-wifi` (default dev). Three additional scenario-seeded capability scenarios: `caps-full`, `engine-starting`, `engine-unavailable` (T5).
 - Frontend dependency `bits-ui` is at v2.18.1 (frontend concern only; backend has no direct bits-ui dep).
+- Use `shouldUseMocks()` — never raw `isDevelopment()` — to gate mock-hardware paths. `shouldUseMocks()` requires both `isDevelopment()` AND `mockState.initialized`.
 
 ## BROADCAST EVENTS
 

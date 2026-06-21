@@ -74,6 +74,9 @@ MOCK_SCENARIO=streaming-active pnpm dev  # Override inline
 | `multi-modem-wifi` | 3 (5G/4G/3G) | Yes | Idle |
 | `single-modem` | 1 | No | Idle |
 | `streaming-active` | 3 | Yes | Active (with live telemetry) |
+| `caps-full` | 2 | Yes | Idle — full engine caps: H265 + hw accel, audio-capable source, live audio switch, SRT transport |
+| `engine-starting` | 1 | No | Idle — engine still booting, minimal safe floor + `engineStarting` flag |
+| `engine-unavailable` | 1 | No | Idle — engine unreachable, cached/minimal snapshot + `engineUnavailable` flag |
 
 The mock subsystem also simulates add-on state, kiosk state, SIM PIN/PUK lock states,
 cerastream engine errors, and device-detection overrides. See `apps/backend/src/mocks/`
