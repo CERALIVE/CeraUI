@@ -211,6 +211,7 @@ const ja = {
 			enableInterfaceDesc:
 				"このインターフェースをボンディングストリーミングに使用します。",
 			staticIp: "静的IPアドレス",
+			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "DHCP（自動アドレス割り当て）を使用する場合は空欄にします。",
 			ipInvalid: "有効なIPv4またはIPv6アドレスを入力してください。",
 			confirmPassword: "パスワードを確認",
@@ -474,6 +475,7 @@ const ja = {
 			save: "保存",
 			autoapn: "自動APN",
 			apn: "APN",
+			apnPlaceholder: "internet.provider.com",
 			username: "ユーザー名",
 			password: "パスワード",
 			enableRoaming: "ローミングを許可",
@@ -1119,7 +1121,9 @@ const ja = {
 		cloudRemoteKeyTooltip:
 			"クラウドプロバイダーからリモートキーを入力してください。",
 		providerName: "プロバイダー名",
+		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "WebSocketホスト",
+		providerHostPlaceholder: "remote.example.com",
 		providerHostHint: "WebSocketサーバーのホスト名を入力（プロトコルなし）",
 		useSecureConnection: "セキュア接続を使用 (wss)",
 		remoteConfigSaved: "リモート設定を保存しました",

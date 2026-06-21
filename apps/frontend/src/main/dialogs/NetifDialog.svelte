@@ -128,7 +128,7 @@ async function save() {
 					ip = e.currentTarget.value;
 					dirtyIp = true;
 				}}
-				placeholder="192.168.1.50"
+				placeholder={$LL.settings.dialogs.ipPlaceholder()}
 				spellcheck={false}
 				value={ip}
 			/>

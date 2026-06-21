@@ -300,7 +300,7 @@ async function save() {
 					<Label class="text-sm font-medium" for="custom-name">{$LL.advanced.providerName()}</Label>
 					<Input
 						id="custom-name"
-						placeholder="My Custom Cloud"
+						placeholder={$LL.advanced.providerNamePlaceholder()}
 						value={customName}
 						oninput={(e) => {
 							customName = e.currentTarget.value;
@@ -312,7 +312,7 @@ async function save() {
 					<Label class="text-sm font-medium" for="custom-host">{$LL.advanced.providerHost()}</Label>
 					<Input
 						id="custom-host"
-						placeholder="remote.example.com"
+						placeholder={$LL.advanced.providerHostPlaceholder()}
 						value={customHost}
 						oninput={(e) => {
 							customHost = e.currentTarget.value;

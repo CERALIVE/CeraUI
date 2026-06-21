@@ -368,6 +368,7 @@ const fr = {
 			enableInterfaceDesc:
 				"Utiliser cette interface pour la diffusion agrégée.",
 			staticIp: "Adresse IP statique",
+			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "Laissez vide pour utiliser DHCP (adressage automatique).",
 			ipInvalid: "Saisissez une adresse IPv4 ou IPv6 valide.",
 			confirmPassword: "Confirmer le mot de passe",
@@ -642,6 +643,7 @@ const fr = {
 			save: "Enregistrer",
 			autoapn: "APN Automatique",
 			apn: "APN",
+			apnPlaceholder: "internet.provider.com",
 			username: "Nom d'utilisateur",
 			password: "Mot de passe",
 			enableRoaming: "Autoriser l'itinérance",
@@ -1278,7 +1280,9 @@ const fr = {
 		cloudRemoteKeyTooltip:
 			"Saisissez la clé distante de votre fournisseur cloud.",
 		providerName: "Nom du Fournisseur",
+		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "Hôte WebSocket",
+		providerHostPlaceholder: "remote.example.com",
 		providerHostHint:
 			"Saisissez le nom d'hôte du serveur WebSocket (sans protocole)",
 		useSecureConnection: "Utiliser une connexion sécurisée (wss)",

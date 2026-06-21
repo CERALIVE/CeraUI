@@ -742,6 +742,7 @@ const de = {
 			enableInterfaceDesc:
 				"Diese Schnittstelle für gebündeltes Streaming verwenden.",
 			staticIp: "Statische IP-Adresse",
+			ipPlaceholder: "192.168.1.50",
 			dhcpHint:
 				"Leer lassen, um DHCP (automatische Adressierung) zu verwenden.",
 			ipInvalid: "Geben Sie eine gültige IPv4- oder IPv6-Adresse ein.",
@@ -1017,6 +1018,7 @@ const de = {
 			save: "Speichern",
 			autoapn: "Automatischer APN",
 			apn: "APN",
+			apnPlaceholder: "internet.provider.com",
 			username: "Benutzername",
 			password: "Passwort",
 			enableRoaming: "Roaming erlauben",
@@ -1281,7 +1283,9 @@ const de = {
 		cloudRemoteKeyTooltip:
 			"Geben Sie den Remote-Schlüssel von Ihrem Cloud-Anbieter ein.",
 		providerName: "Anbietername",
+		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "WebSocket-Host",
+		providerHostPlaceholder: "remote.example.com",
 		providerHostHint:
 			"Geben Sie den WebSocket-Server-Hostnamen ein (ohne Protokoll)",
 		useSecureConnection: "Sichere Verbindung verwenden (wss)",

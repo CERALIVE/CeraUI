@@ -428,8 +428,8 @@ const selectedNetworkLabel = $derived(
 							id="modem-apn"
 							aria-invalid={apnError}
 							class={cn('h-10 text-sm', apnError && 'border-status-error focus-visible:ring-status-error')}
-							disabled={noSim}
-							placeholder="internet.provider.com"
+						disabled={noSim}
+						placeholder={$LL.network.modem.apnPlaceholder()}
 							bind:value={formData.apn}
 						/>
 						{#if apnError}

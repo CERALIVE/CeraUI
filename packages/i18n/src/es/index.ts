@@ -752,6 +752,7 @@ const es = {
 			enableInterface: "Habilitar interfaz",
 			enableInterfaceDesc: "Usa esta interfaz para transmisión combinada.",
 			staticIp: "Dirección IP estática",
+			ipPlaceholder: "192.168.1.50",
 			dhcpHint:
 				"Déjalo en blanco para usar DHCP (direccionamiento automático).",
 			ipInvalid: "Ingresa una dirección IPv4 o IPv6 válida.",
@@ -1031,6 +1032,7 @@ const es = {
 			save: "Guardar",
 			autoapn: "APN Automático",
 			apn: "APN",
+			apnPlaceholder: "internet.provider.com",
 			username: "Nombre de usuario",
 			password: "Contraseña",
 			enableRoaming: "Permitir Roaming",
@@ -1293,7 +1295,9 @@ const es = {
 		cloudRemoteKey: "Clave Remota",
 		cloudRemoteKeyTooltip: "Ingrese la clave remota de su proveedor de nube.",
 		providerName: "Nombre del Proveedor",
+		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "Host WebSocket",
+		providerHostPlaceholder: "remote.example.com",
 		providerHostHint:
 			"Ingrese el nombre de host del servidor WebSocket (sin protocolo)",
 		useSecureConnection: "Usar conexión segura (wss)",
