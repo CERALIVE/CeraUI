@@ -51,6 +51,11 @@ import {
 import { addonRefresh } from "../../helpers/addon-helper.ts";
 import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import {
+	createMockReconcilerDeps,
+	type MockReconcilerHarness,
+} from "../../mocks/providers/addons.ts";
 import { isRealDevice } from "../system/device-detection.ts";
 
 /** Persisted on `lastError` when no compatible artifact exists for the live OS. */
@@ -244,6 +249,38 @@ async function reconcileOne(
 let inFlight = false;
 
 /**
+ * The dev in-memory harness used for a {@link shouldUseMocks} reconcile pass.
+ * Built per run (the reconciler is stateless across passes) and exposed via
+ * {@link peekMockReconcilerHarness}; never constructed on a production path.
+ */
+let mockReconcilerHarness: MockReconcilerHarness | null = null;
+
+/** The dev harness from the last reconcile pass (null until a dev pass runs). */
+export function peekMockReconcilerHarness(): MockReconcilerHarness | null {
+	return mockReconcilerHarness;
+}
+
+/** Drop the dev harness — test-isolation reset (mirrors resetAddonManagerDeps). */
+export function resetAddonReconcilerMock(): void {
+	mockReconcilerHarness = null;
+}
+
+/**
+ * Build the deps a no-arg {@link runAddonReconciler} runs against: a dev
+ * harness under {@link shouldUseMocks} (so the reconcile flow is exercisable on
+ * a dev box as a controlled pass — `rawExists: false` drives a full
+ * fetch/stage/refresh against the fakes), else the real device primitives. The
+ * real-path branch NEVER constructs a mock double.
+ */
+async function resolveReconcilerDeps(): Promise<ReconcilerDeps> {
+	if (shouldUseMocks()) {
+		mockReconcilerHarness = createMockReconcilerDeps({ rawExists: false });
+		return mockReconcilerHarness.deps;
+	}
+	return buildDefaultDeps();
+}
+
+/**
  * Reconcile every enabled add-on against the live OS VERSION_ID. Idempotent,
  * never throws, and self-serialises (a second concurrent call is a no-op) so the
  * boot hook and the oneshot SIGUSR1 trigger can both fire harmlessly.
@@ -252,7 +289,7 @@ export async function runAddonReconciler(deps?: ReconcilerDeps): Promise<void> {
 	if (inFlight) return;
 	inFlight = true;
 	try {
-		const d = deps ?? (await buildDefaultDeps());
+		const d = deps ?? (await resolveReconcilerDeps());
 
 		if (!(await d.isRealDevice())) {
 			d.log("addon reconciler: skipped (emulated / not a real device)");
