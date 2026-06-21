@@ -3,17 +3,34 @@ import type { RelayServer, StreamingConfigInput } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
+	autoSelectIngestSlot,
+	buildManagedSlotConfig,
 	buildServerSetConfig,
 	buildServerSummary,
 	type Destination,
 	deriveDestination,
 	deriveServerReadiness,
+	findActiveSlot,
 	kindBadgeLabelKey,
+	type ManagedIngestAccount,
+	managedSlotLabel,
 	resolveReceiverKind,
 	type ServerSetDerived,
 	type ServerSetDraft,
 	type ServerSummaryLabels,
 } from "./receiver-experience";
+
+function slot(overrides: Partial<ManagedIngestAccount> = {}): ManagedIngestAccount {
+	return {
+		endpointId: "ep-1",
+		host: "ingest1.example",
+		port: 5000,
+		protocol: "srtla",
+		key: "publish/abc",
+		label: "Studio A",
+		...overrides,
+	};
+}
 
 function relayServer(overrides: Partial<RelayServer> = {}): RelayServer {
 	return {
@@ -468,5 +485,113 @@ describe("buildServerSummary — destination/kind-aware Live server summary (T11
 				summaryLabels(),
 			),
 		).toBe("custom.example · SRTLA · Custom");
+	});
+});
+
+describe("autoSelectIngestSlot — managed ingest auto-detection (T19)", () => {
+	it("no slots → custom fallback", () => {
+		expect(autoSelectIngestSlot([], undefined)).toEqual({ kind: "custom" });
+		expect(autoSelectIngestSlot([], "ep-1")).toEqual({ kind: "custom" });
+	});
+
+	it("exactly one slot → silent managed auto-select (reason single)", () => {
+		const only = slot({ endpointId: "ep-only" });
+		expect(autoSelectIngestSlot([only], undefined)).toEqual({
+			kind: "managed",
+			account: only,
+			reason: "single",
+		});
+	});
+
+	it("many slots → picks the default one", () => {
+		const a = slot({ endpointId: "ep-a" });
+		const b = slot({ endpointId: "ep-b", default: true });
+		const c = slot({ endpointId: "ep-c" });
+		expect(autoSelectIngestSlot([a, b, c], undefined)).toEqual({
+			kind: "managed",
+			account: b,
+			reason: "default",
+		});
+	});
+
+	it("many slots, no default → picks the last-used (selected_ingest_endpoint)", () => {
+		const a = slot({ endpointId: "ep-a" });
+		const b = slot({ endpointId: "ep-b" });
+		expect(autoSelectIngestSlot([a, b], "ep-b")).toEqual({
+			kind: "managed",
+			account: b,
+			reason: "lastUsed",
+		});
+	});
+
+	it("default wins over last-used when both are present", () => {
+		const a = slot({ endpointId: "ep-a", default: true });
+		const b = slot({ endpointId: "ep-b" });
+		expect(autoSelectIngestSlot([a, b], "ep-b")).toEqual({
+			kind: "managed",
+			account: a,
+			reason: "default",
+		});
+	});
+
+	it("many slots, no default and no last-used → prompt (never silent)", () => {
+		const a = slot({ endpointId: "ep-a" });
+		const b = slot({ endpointId: "ep-b" });
+		expect(autoSelectIngestSlot([a, b], undefined)).toEqual({
+			kind: "prompt",
+			accounts: [a, b],
+		});
+		// A stale/unknown last-used id also falls through to prompt.
+		expect(autoSelectIngestSlot([a, b], "ep-gone")).toEqual({
+			kind: "prompt",
+			accounts: [a, b],
+		});
+	});
+});
+
+describe("managedSlotLabel / findActiveSlot", () => {
+	it("uses the platform label, falling back to endpointId", () => {
+		expect(managedSlotLabel(slot({ label: "Studio A" }))).toBe("Studio A");
+		expect(managedSlotLabel(slot({ label: "", endpointId: "ep-x" }))).toBe(
+			"ep-x",
+		);
+	});
+
+	it("resolves the active slot by endpointId, undefined when absent/unknown", () => {
+		const a = slot({ endpointId: "ep-a" });
+		const b = slot({ endpointId: "ep-b" });
+		expect(findActiveSlot([a, b], "ep-b")).toBe(b);
+		expect(findActiveSlot([a, b], undefined)).toBeUndefined();
+		expect(findActiveSlot([a, b], "ep-gone")).toBeUndefined();
+	});
+});
+
+describe("buildManagedSlotConfig — persisted slot selection", () => {
+	it("persists the slot endpoint plus the stable selected_ingest_endpoint", () => {
+		const result = buildManagedSlotConfig(
+			slot({
+				endpointId: "ep-1",
+				host: "ingest1.example",
+				port: 6000,
+				protocol: "srtla",
+				key: "publish/xyz",
+			}),
+			2500,
+		);
+		expect(result).toEqual<StreamingConfigInput>({
+			srt_latency: 2500,
+			relay_protocol: "srtla",
+			srtla_addr: "ingest1.example",
+			srtla_port: 6000,
+			srt_streamid: "publish/xyz",
+			selected_ingest_endpoint: "ep-1",
+		});
+		// No relay_server — a slot is a managed endpoint, not a catalog relay.
+		expect(result).not.toHaveProperty("relay_server");
+	});
+
+	it("coerces an unknown slot protocol to srtla (never undefined)", () => {
+		const result = buildManagedSlotConfig(slot({ protocol: "bogus" }), 2000);
+		expect(result.relay_protocol).toBe("srtla");
 	});
 });

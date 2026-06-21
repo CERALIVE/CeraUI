@@ -41,7 +41,9 @@ import {
 	buildServerSummary,
 	type Destination,
 	deriveDestination,
+	findActiveSlot,
 	kindBadgeLabelKey,
+	managedSlotLabel,
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
 import {
@@ -57,6 +59,7 @@ import {
 	getDevices,
 	getIsStreaming,
 	getLinkTelemetry,
+	getManagedIngestAccounts,
 	getPipelines,
 	getRelays,
 	getSensors,
@@ -257,6 +260,13 @@ const receiverEndpoint = $derived.by(() => {
 	if (!config?.srtla_addr) return undefined;
 	return config?.srtla_port ? `${config.srtla_addr}:${config.srtla_port}` : config.srtla_addr;
 });
+
+// Active managed ingest slot (T19): when the persisted selection resolves to a
+// known platform slot, its label names the instance in the header chip.
+const activeSlot = $derived(
+	findActiveSlot(getManagedIngestAccounts(), config?.selected_ingest_endpoint),
+);
+const slotLabel = $derived(activeSlot ? managedSlotLabel(activeSlot) : undefined);
 
 // Live active-link count drives the bonded-links readiness hint (T13). Null
 // while idle (`getLinkTelemetry()` is null) so SRTLA degrades to label-only —
@@ -576,6 +586,7 @@ const configRows = $derived<ConfigRow[]>([
 		{destination}
 		kind={receiverKind}
 		{providerName}
+		{slotLabel}
 		endpoint={receiverEndpoint}
 		onEditServer={() => (serverDialogOpen = true)}
 	/>

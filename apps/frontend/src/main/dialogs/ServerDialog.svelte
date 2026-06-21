@@ -44,13 +44,21 @@ import {
 	reduceValidateError,
 	reduceValidateResult,
 } from '$lib/components/streaming/relay-validation';
-import { getConfig, getIsStreaming, getRelays } from '$lib/rpc/subscriptions.svelte';
+import {
+	getConfig,
+	getIsStreaming,
+	getManagedIngestAccounts,
+	getRelays,
+	getSelectedIngestEndpoint,
+} from '$lib/rpc/subscriptions.svelte';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import {
 	type Destination,
 	type ServerSetDerived,
 	type ServerSetDraft,
+	autoSelectIngestSlot,
+	buildManagedSlotConfig,
 	buildServerSetConfig,
 	deriveDestination,
 	resolveReceiverKind,
@@ -58,6 +66,7 @@ import {
 import CustomEndpointForm from './server/CustomEndpointForm.svelte';
 import DestinationSection from './server/DestinationSection.svelte';
 import RelayServerSelector from './server/RelayServerSelector.svelte';
+import ServerIngestSlots from './server/ServerIngestSlots.svelte';
 import TransportBadge from './server/TransportBadge.svelte';
 
 interface Props {
@@ -82,6 +91,25 @@ const config = $derived(getConfig());
 const relays = $derived(getRelays());
 const isStreaming = $derived(Boolean(getIsStreaming()));
 
+// Platform-managed ingest slots (T19). When present they supersede the relay
+// catalog selector inside the managed destination: the slot auto-resolves (one
+// slot → silent; many → default/last-used else prompt) and the operator can
+// one-tap switch. The manual custom endpoint remains the always-available
+// fallback via the destination radiogroup.
+const managedAccounts = $derived(getManagedIngestAccounts());
+const hasManagedSlots = $derived(managedAccounts.length > 0);
+const slotSelection = $derived(
+	autoSelectIngestSlot(managedAccounts, getSelectedIngestEndpoint()),
+);
+const autoSlotId = $derived(
+	slotSelection.kind === 'managed' ? slotSelection.account.endpointId : undefined,
+);
+const activeSlotId = $derived(draft.selected_slot ?? autoSlotId);
+const activeSlot = $derived(
+	managedAccounts.find((account) => account.endpointId === activeSlotId),
+);
+const slotPrompting = $derived(hasManagedSlots && activeSlot === undefined);
+
 type Draft = {
 	destination?: Destination;
 	relay_protocol?: RelayProtocol;
@@ -97,6 +125,7 @@ type Draft = {
 	relay_override_addr?: string;
 	relay_override_port?: string;
 	passphrase?: string;
+	selected_slot?: string;
 };
 let draft = $state<Draft>({});
 
@@ -218,6 +247,8 @@ const canSave = $derived.by(() => {
 		});
 	}
 	if (isStreaming) return false;
+	// Managed ingest slots: saveable once a slot is resolved/picked.
+	if (hasManagedSlots) return activeSlot !== undefined;
 	if (relayOverride) {
 		return (
 			overrideAddr.trim() !== '' &&
@@ -259,23 +290,26 @@ async function handleValidate() {
 }
 
 async function handleSave() {
-	const draftValues: ServerSetDraft = {
-		latency: clampLatency(latency),
-		protocol,
-		addr,
-		portStr,
-		streamId,
-		overrideAddr,
-		overridePortStr,
-		relayStreamId,
-		relayServer,
-		relayAccount,
-	};
-	const derived: ServerSetDerived = { destination, relayOverride };
-	// The SAME object is both locked and persisted: buildServerSetConfig prunes
-	// every undefined-valued key, so `Object.entries(input)` is exactly the set
-	// of fields setConfig will write.
-	const input = buildServerSetConfig(draftValues, derived);
+	// A resolved managed slot persists its endpoint + the stable
+	// selected_ingest_endpoint identity; every other path keeps today's field set.
+	const input =
+		destination === 'managed' && hasManagedSlots && activeSlot
+			? buildManagedSlotConfig(activeSlot, clampLatency(latency))
+			: buildServerSetConfig(
+					{
+						latency: clampLatency(latency),
+						protocol,
+						addr,
+						portStr,
+						streamId,
+						overrideAddr,
+						overridePortStr,
+						relayStreamId,
+						relayServer,
+						relayAccount,
+					} satisfies ServerSetDraft,
+					{ destination, relayOverride } satisfies ServerSetDerived,
+				);
 	const fields = Object.entries(input);
 	// Lock each field this save changes BEFORE the RPC so a stale server echo of
 	// the old value can't revert the edit; release after it settles (resolve or
@@ -323,7 +357,15 @@ async function handleSave() {
 		/>
 
 		<!-- Endpoint config, immediately under the destination pick. -->
-		{#if destination === 'managed'}
+		{#if destination === 'managed' && hasManagedSlots}
+			<ServerIngestSlots
+				accounts={managedAccounts}
+				activeEndpointId={activeSlotId}
+				{isStreaming}
+				onSelectSlot={(value) => (draft.selected_slot = value)}
+				prompting={slotPrompting}
+			/>
+		{:else if destination === 'managed'}
 			<RelayServerSelector
 				{accountEntries}
 				{filteredServerEntries}
