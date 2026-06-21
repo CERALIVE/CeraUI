@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { hudStructure } from './helpers/aria.js';
 import { runAxe, type AxeViolationSummary } from './helpers/axe.js';
 import { type Destination, navigateTo } from './helpers/index.js';
 import { expect, test } from './fixtures/index.js';
@@ -129,5 +130,23 @@ test.describe('a11y', () => {
 		await expect(status).toHaveAttribute('aria-live', 'polite');
 		// A debounced summary settles to non-empty text once telemetry arrives.
 		await expect.poll(async () => (await status.textContent())?.trim().length ?? 0).toBeGreaterThan(0);
+	});
+
+	test('HUD telemetry badges expose accessible names + a critical-transition region @a11y', async ({
+		authedPage: page,
+	}, testInfo) => {
+		test.skip(testInfo.project.name !== 'desktop', 'HUD label assertion runs once');
+
+		await navigateTo(page, 'live');
+
+		const hud = await hudStructure(page);
+		// The bitrate badge carries an accessible name (value + staleness state),
+		// not just a visual glyph — assistive tech reads the same telemetry.
+		await expect(hud.getByRole('img', { name: /bitrate/i })).toBeVisible();
+
+		// A second polite region announces only critical transitions (start/stop/drop).
+		const transition = page.locator('[data-testid="hud-transition-status"]').first();
+		await expect(transition).toHaveAttribute('role', 'status');
+		await expect(transition).toHaveAttribute('aria-live', 'polite');
 	});
 });
