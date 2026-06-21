@@ -312,8 +312,19 @@ export type StreamingStartOutputExtended = z.infer<typeof streamingStartOutputSc
 export const healthStateSchema = z.enum(['healthy', 'degraded', 'dead']);
 export type HealthState = z.infer<typeof healthStateSchema>;
 
+// The single most-actionable cause behind a non-healthy state — `component`
+// names the failing subsystem (`process` | `frames` | `links`), `detail` is a
+// short operator-facing sentence (e.g. "1 of 3 links down"). Present only when
+// the stream is degraded or dead; a healthy stream carries no reason.
+export const streamHealthReasonSchema = z.object({
+	component: z.string(),
+	detail: z.string(),
+});
+export type StreamHealthReason = z.infer<typeof streamHealthReasonSchema>;
+
 export const streamHealthOutputSchema = z.object({
 	state: healthStateSchema,
+	reason: streamHealthReasonSchema.optional(),
 	process: z.object({
 		alive: z.boolean(),
 	}),

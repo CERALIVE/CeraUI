@@ -48,6 +48,32 @@ describe("parseHealthRollup", () => {
 		expect(rollup?.bond).toEqual({ linkCount: 3, activeLinks: 1 });
 	});
 
+	it("extracts the reason from a degraded frame that carries one", () => {
+		const rollup = parseHealthRollup({
+			...healthyFrame,
+			state: "degraded",
+			reason: { component: "links", detail: "1 of 3 links down" },
+		});
+		expect(rollup?.reason).toEqual({
+			component: "links",
+			detail: "1 of 3 links down",
+		});
+	});
+
+	it("omits reason on a healthy frame", () => {
+		expect(parseHealthRollup(healthyFrame)?.reason).toBeUndefined();
+	});
+
+	it("ignores a malformed reason instead of throwing", () => {
+		const rollup = parseHealthRollup({
+			...healthyFrame,
+			state: "degraded",
+			reason: { component: 42 },
+		});
+		expect(rollup?.state).toBe("degraded");
+		expect(rollup?.reason).toBeUndefined();
+	});
+
 	it("reports a dead process from a dead frame", () => {
 		const rollup = parseHealthRollup({
 			state: "dead",

@@ -53,8 +53,18 @@ export interface HealthSnapshot {
  * rolled-up state is what it is, not just the tri-state dot. `state` is always
  * concrete here; a broadcast never carries `unknown`.
  */
+/**
+ * The single most-actionable cause behind a non-healthy rollup, mirrored from
+ * the backend `reason` field. Present only when the stream is degraded or dead.
+ */
+export interface HealthReason {
+	component: string;
+	detail: string;
+}
+
 export interface HealthRollup {
 	state: Exclude<HealthIndicator, "unknown">;
+	reason?: HealthReason;
 	process: { alive: boolean };
 	frames: { advancing: boolean; count: number };
 	srt: { reconnecting: boolean; reconnectCount: number };
@@ -107,6 +117,16 @@ function asCount(value: unknown): number {
  * defensively (missing booleans collapse to `false`, missing/invalid counts to
  * `0`) so a partial frame can never crash the HUD rollup.
  */
+function parseHealthReason(value: unknown): HealthReason | undefined {
+	if (value === null || typeof value !== "object") return undefined;
+	const component = (value as { component?: unknown }).component;
+	const detail = (value as { detail?: unknown }).detail;
+	if (typeof component === "string" && typeof detail === "string") {
+		return { component, detail };
+	}
+	return undefined;
+}
+
 export function parseHealthRollup(data: unknown): HealthRollup | null {
 	const state = parseHealthState(data);
 	if (state === "unknown") return null;
@@ -115,8 +135,10 @@ export function parseHealthRollup(data: unknown): HealthRollup | null {
 	const frames = (d.frames ?? {}) as Record<string, unknown>;
 	const srt = (d.srt ?? {}) as Record<string, unknown>;
 	const bond = (d.bond ?? {}) as Record<string, unknown>;
+	const reason = parseHealthReason(d.reason);
 	return {
 		state,
+		...(reason ? { reason } : {}),
 		process: { alive: asFlag(process.alive) },
 		frames: {
 			advancing: asFlag(frames.advancing),

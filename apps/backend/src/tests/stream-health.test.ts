@@ -113,6 +113,45 @@ describe("deriveStreamHealth — tri-state derivation", () => {
 	});
 });
 
+describe("deriveStreamHealth — reason (Task 16)", () => {
+	test("healthy carries no reason", () => {
+		expect(deriveStreamHealth(HEALTHY).reason).toBeUndefined();
+	});
+
+	test("a down bond link reports the links component with a count detail", () => {
+		expect(deriveStreamHealth(ONE_LINK_DOWN).reason).toEqual({
+			component: "links",
+			detail: "1 of 3 links down",
+		});
+	});
+
+	test("a frame stall reports the frames component", () => {
+		expect(deriveStreamHealth(FRAME_STALL).reason).toEqual({
+			component: "frames",
+			detail: "No frames advancing",
+		});
+	});
+
+	test("zero configured links reports the links component", () => {
+		expect(
+			deriveStreamHealth({ ...HEALTHY, linkCount: 0, activeLinks: 0 }).reason,
+		).toEqual({ component: "links", detail: "No bonded links configured" });
+	});
+
+	test("a dead process reports the process component", () => {
+		expect(deriveStreamHealth(DEAD).reason).toEqual({
+			component: "process",
+			detail: "Streaming process not running",
+		});
+	});
+
+	test("a single down link is singular-pluralized correctly", () => {
+		expect(
+			deriveStreamHealth({ ...HEALTHY, linkCount: 1, activeLinks: 0 }).reason,
+		).toEqual({ component: "links", detail: "1 of 1 link down" });
+	});
+});
+
 describe("streamHealth RPC procedure", () => {
 	test("reports healthy from injected liveness sources", async () => {
 		setLivenessSourcesForTest(() => HEALTHY);

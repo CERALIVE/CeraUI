@@ -1,4 +1,7 @@
-import type { StreamHealthOutput } from "@ceraui/rpc/schemas";
+import type {
+	StreamHealthOutput,
+	StreamHealthReason,
+} from "@ceraui/rpc/schemas";
 import { getMockHealth, shouldUseMocks } from "../../mocks/mock-service.ts";
 import { broadcast } from "../../rpc/events.ts";
 import { genSrtlaIpList } from "./srtla.ts";
@@ -25,6 +28,26 @@ export const HEALTH_EVENT_TYPE = "health";
  * `linkCount` is the expected bonded-link count; `activeLinks` the currently-up
  * subset. Zero expected links cannot be healthy (there is no working bond).
  */
+function deriveReason(s: LivenessSources): StreamHealthReason | undefined {
+	if (!s.processAlive) {
+		return { component: "process", detail: "Streaming process not running" };
+	}
+	if (!s.framesAdvancing) {
+		return { component: "frames", detail: "No frames advancing" };
+	}
+	if (s.linkCount === 0) {
+		return { component: "links", detail: "No bonded links configured" };
+	}
+	if (s.activeLinks < s.linkCount) {
+		const down = s.linkCount - s.activeLinks;
+		return {
+			component: "links",
+			detail: `${down} of ${s.linkCount} link${s.linkCount === 1 ? "" : "s"} down`,
+		};
+	}
+	return undefined;
+}
+
 export function deriveStreamHealth(s: LivenessSources): StreamHealthOutput {
 	let state: StreamHealthOutput["state"];
 	if (!s.processAlive) {
@@ -39,8 +62,11 @@ export function deriveStreamHealth(s: LivenessSources): StreamHealthOutput {
 		state = "healthy";
 	}
 
+	const reason = state === "healthy" ? undefined : deriveReason(s);
+
 	return {
 		state,
+		...(reason ? { reason } : {}),
 		process: { alive: s.processAlive },
 		frames: { advancing: s.framesAdvancing, count: s.frameCount },
 		srt: { reconnecting: s.reconnecting, reconnectCount: s.reconnectCount },
