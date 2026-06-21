@@ -3,6 +3,7 @@
  * Manages subscriptions and broadcasts for real-time data
  */
 import { logger } from "../helpers/logger.ts";
+import { isDevelopment } from "../mocks/mock-config.ts";
 import {
 	type CoalesceState,
 	getCoalesceWindowMs,
@@ -98,6 +99,43 @@ export function getClients(): Set<AppWebSocket> {
  */
 export function getAuthenticatedClients(): AppWebSocket[] {
 	return Array.from(clients).filter((ws) => ws.data.isAuthenticated);
+}
+
+/**
+ * Dev-only: simulate a device reboot by dropping the authenticated sockets.
+ *
+ * On a real device `system.reboot`/`system.poweroff` take the host down, so
+ * every WebSocket drops and the frontend's DisconnectedBanner takes over the
+ * reconnect UX. In dev the OS spawn is gated off (see system.procedure.ts), so
+ * that UX was never reachable. Closing the authenticated sockets reproduces the
+ * real-reboot effect: each client sees its socket close, then reconnects and
+ * RE-AUTHENTICATES through the normal post-reconnect flow — no token is
+ * invalidated, the auth_tokens store is untouched.
+ *
+ * The teardown is deferred to the next macrotask, NOT run synchronously, for
+ * real-device parity: the caller's in-flight `system.reboot` reply
+ * (`{success:true}`) is sent by the adapter AFTER its `await call(...)`
+ * resolves, and Bun drops any `send()` issued after `close()`. On hardware the
+ * reply reaches the client before systemd takes the socket down; deferring the
+ * close lets that post-await `ws.send` flush first, so the frontend receives
+ * `{success:true}`, latches "rebooting", and only THEN sees the disconnect —
+ * exactly the sequence the DisconnectedBanner expects.
+ *
+ * Prod-absence proof: the early return means no production call site can ever
+ * perform — or even schedule — socket teardown through this helper.
+ */
+export function simulateDevReboot(): void {
+	if (!isDevelopment()) return;
+	const targets = getAuthenticatedClients();
+	setTimeout(() => {
+		for (const ws of targets) {
+			try {
+				ws.close();
+			} catch (error) {
+				logger.debug("simulateDevReboot: close failed", { err: error });
+			}
+		}
+	}, 0);
 }
 
 /**

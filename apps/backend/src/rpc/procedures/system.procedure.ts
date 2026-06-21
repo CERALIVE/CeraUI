@@ -49,6 +49,7 @@ import {
 	startSoftwareUpdate,
 } from "../../modules/system/software-updates.ts";
 import { resetSshPassword, startStopSsh } from "../../modules/system/ssh.ts";
+import { simulateDevReboot } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
@@ -128,7 +129,7 @@ export const poweroffProcedure = authedProcedure
 				action: "poweroff",
 				dev: true,
 			});
-			// T2 dev disconnect simulation will be wired here in a follow-up task
+			simulateDevReboot(); // close authed sockets → frontend reconnect banner
 			return { success: true };
 		}
 		if (getIsStreaming() || isUpdating()) {
@@ -148,7 +149,7 @@ export const rebootProcedure = authedProcedure
 				action: "reboot",
 				dev: true,
 			});
-			// T2 dev disconnect simulation will be wired here in a follow-up task
+			simulateDevReboot(); // close authed sockets → frontend reconnect banner
 			return { success: true };
 		}
 		if (getIsStreaming() || isUpdating()) {
