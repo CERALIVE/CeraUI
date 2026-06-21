@@ -179,6 +179,13 @@ describe("adapter diagnostics", () => {
 		expect(JSON.stringify(warnLog)).not.toContain(KNOWN_SECRET);
 	});
 
+	test("(4) heartbeat pong frame is allow-listed silently, never warned", () => {
+		const result = parseMessage(JSON.stringify({ pong: true }), fakeWs());
+
+		expect(result).toBeNull();
+		expect(cap.logs.find((l) => l.level === "warn")).toBeUndefined();
+	});
+
 	test("extractValidationDetails returns undefined for a non-validation error", () => {
 		expect(extractValidationDetails(new Error("plain boom"))).toBeUndefined();
 		expect(extractValidationDetails("just a string")).toBeUndefined();

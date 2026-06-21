@@ -11,8 +11,10 @@ export const HOTSPOT_PASSWORD_MIN = 8;
 export const HOTSPOT_PASSWORD_MAX = 63;
 export const WIFI_PASSWORD_MIN = 8;
 
-// WiFi security enum
-export const wifiSecuritySchema = z.enum(['WEP', 'WPA', 'WPA2', 'WPA3']);
+// Raw nmcli SECURITY token list (e.g. "WPA2", "WPA1 WPA2 802.1X", "" for open).
+// The backend passes it through verbatim and the UI matches via substring, so the
+// contract is a free-form string — an enum rejected real and mock open/enterprise rows.
+export const wifiSecuritySchema = z.string();
 export type WifiSecurity = z.infer<typeof wifiSecuritySchema>;
 
 // WiFi band names enum

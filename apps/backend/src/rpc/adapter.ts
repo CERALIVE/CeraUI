@@ -49,6 +49,11 @@ export function parseMessage(
 			return null;
 		}
 
+		// Handle the client's heartbeat pong (answer to each server ping) silently
+		if (parsed.pong !== undefined) {
+			return null;
+		}
+
 		logger.warn("rpc: unrecognised frame", {
 			module: "rpc.adapter",
 			clientId: ws.remoteAddress,
