@@ -118,7 +118,7 @@ test.describe('a11y', () => {
 		await expect(main).toBeFocused();
 	});
 
-	test('HUD telemetry exposes a polite live status region @a11y', async ({
+	test('HUD telemetry exposes labelled badges + polite live regions @a11y', async ({
 		authedPage: page,
 	}, testInfo) => {
 		test.skip(testInfo.project.name !== 'desktop', 'telemetry-region assertion runs once');
@@ -130,14 +130,6 @@ test.describe('a11y', () => {
 		await expect(status).toHaveAttribute('aria-live', 'polite');
 		// A debounced summary settles to non-empty text once telemetry arrives.
 		await expect.poll(async () => (await status.textContent())?.trim().length ?? 0).toBeGreaterThan(0);
-	});
-
-	test('HUD telemetry badges expose accessible names + a critical-transition region @a11y', async ({
-		authedPage: page,
-	}, testInfo) => {
-		test.skip(testInfo.project.name !== 'desktop', 'HUD label assertion runs once');
-
-		await navigateTo(page, 'live');
 
 		const hud = await hudStructure(page);
 		// The bitrate badge carries an accessible name (value + staleness state),
