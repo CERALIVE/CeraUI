@@ -326,6 +326,9 @@ const de = {
 			waiting: "Warte auf Verbindungstelemetrie\u2026",
 			ariaLabel: "Ingest-Statistiken",
 			trendLabel: "RTT-Trend für {iface}",
+			idleTitle: "Noch keine gebündelten Links",
+			idleHint:
+				"Fügen Sie in Netzwerk Mobilfunk-, WLAN- oder Ethernet-Links hinzu, um die Bündelung zu starten. Ingest-Telemetrie erscheint hier, sobald der Stream läuft.",
 			healthy: "Stabil",
 			degraded: "Verschlechtert sich",
 			alert: "Steigende Latenz auf einer oder mehreren Verbindungen",
@@ -852,6 +855,7 @@ const de = {
 	network: {
 		view: {
 			bondedLinks: "Gebündelte Verbindungen",
+			telemetryLoading: "Link-Telemetrie wird geladen…",
 			noLinks: "Noch keine aktiven Verbindungen",
 			wifi: "WLAN",
 			cellular: "Mobilfunk",

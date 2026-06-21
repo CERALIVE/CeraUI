@@ -19,6 +19,11 @@ interface Props {
 
 const { links, modemEntries, linkTelemetry = undefined }: Props = $props();
 
+// The feed is `undefined` only before the first status push lands. Distinguish
+// that "not arrived yet" state from a delivered-but-empty feed (null / no entry
+// for this link) so cards show a skeleton on first paint instead of a "--" flicker.
+const telemetryLoading = $derived(linkTelemetry === undefined);
+
 // Index telemetry rows by their resolved interface name so each card can join
 // its own values. `link.id` is the kernel ifname, which the backend resolves
 // `conn_id` -> `iface` to (link-telemetry.ts). No match -> "--" placeholders.
@@ -115,7 +120,7 @@ const totalStale = $derived(
 						class="border-t pt-2"
 						style="border-color: color-mix(in oklab, {color} 20%, transparent);"
 					>
-						<LinkTelemetry entry={telemetryByIface.get(link.id)} />
+						<LinkTelemetry entry={telemetryByIface.get(link.id)} loading={telemetryLoading} />
 					</div>
 				</div>
 			{/each}

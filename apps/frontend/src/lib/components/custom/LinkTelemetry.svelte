@@ -15,14 +15,17 @@ import { LL } from '@ceraui/i18n/svelte';
 import type { LinkTelemetryEntry } from '@ceraui/rpc/schemas';
 
 import Badge from '$lib/components/custom/Badge.svelte';
+import { Skeleton } from '$lib/components/ui/skeleton';
 import { cn } from '$lib/utils';
 
 interface Props {
 	entry: LinkTelemetryEntry | undefined;
+	/** The telemetry FEED has not arrived yet — render a skeleton, not a "--" flicker. */
+	loading?: boolean;
 	class?: string;
 }
 
-const { entry, class: className = undefined }: Props = $props();
+const { entry, loading = false, class: className = undefined }: Props = $props();
 
 const PLACEHOLDER = '--';
 
@@ -38,53 +41,67 @@ const weight = $derived(hasData ? `${entry?.weight_percent}%` : PLACEHOLDER);
 <dl
 	data-testid="link-telemetry"
 	data-stale={stale ? 'true' : 'false'}
+	data-loading={loading ? 'true' : 'false'}
+	aria-busy={loading}
 	class={cn(
 		'grid grid-cols-3 gap-x-3 gap-y-0.5 transition-opacity',
 		stale && 'opacity-50',
 		className,
 	)}
-	aria-label={$LL.network.view.telemetry()}
+	aria-label={loading ? $LL.network.view.telemetryLoading() : $LL.network.view.telemetry()}
 >
 	<div class="flex min-w-0 flex-col">
 		<dt class="text-muted-foreground text-[10px] uppercase tracking-wide">
 			{$LL.network.view.rtt()}
 		</dt>
-		{#key rtt}
-			<dd
-				data-testid="link-rtt"
-				class={cn('value font-mono text-xs tabular-nums', hasData ? 'text-foreground' : 'text-muted-foreground')}
-			>
-				{rtt}
-			</dd>
-		{/key}
+		{#if loading}
+			<dd aria-busy="true"><Skeleton class="mt-0.5 h-3.5 w-10" data-testid="link-telemetry-skeleton" /></dd>
+		{:else}
+			{#key rtt}
+				<dd
+					data-testid="link-rtt"
+					class={cn('value font-mono text-xs tabular-nums', hasData ? 'text-foreground' : 'text-muted-foreground')}
+				>
+					{rtt}
+				</dd>
+			{/key}
+		{/if}
 	</div>
 
 	<div class="flex min-w-0 flex-col">
 		<dt class="text-muted-foreground text-[10px] uppercase tracking-wide">
 			{$LL.network.view.nak()}
 		</dt>
-		{#key nak}
-			<dd
-				data-testid="link-nak"
-				class={cn('value font-mono text-xs tabular-nums', hasData ? 'text-foreground' : 'text-muted-foreground')}
-			>
-				{nak}
-			</dd>
-		{/key}
+		{#if loading}
+			<dd aria-busy="true"><Skeleton class="mt-0.5 h-3.5 w-10" /></dd>
+		{:else}
+			{#key nak}
+				<dd
+					data-testid="link-nak"
+					class={cn('value font-mono text-xs tabular-nums', hasData ? 'text-foreground' : 'text-muted-foreground')}
+				>
+					{nak}
+				</dd>
+			{/key}
+		{/if}
 	</div>
 
 	<div class="flex min-w-0 flex-col">
 		<dt class="text-muted-foreground text-[10px] uppercase tracking-wide">
 			{$LL.network.view.weight()}
 		</dt>
-		{#key weight}
-			<dd
-				data-testid="link-weight"
-				class={cn('value font-mono text-xs tabular-nums', hasData ? 'text-foreground' : 'text-muted-foreground')}
-			>
-				{weight}
-			</dd>
-		{/key}
+		{#if loading}
+			<dd aria-busy="true"><Skeleton class="mt-0.5 h-3.5 w-10" /></dd>
+		{:else}
+			{#key weight}
+				<dd
+					data-testid="link-weight"
+					class={cn('value font-mono text-xs tabular-nums', hasData ? 'text-foreground' : 'text-muted-foreground')}
+				>
+					{weight}
+				</dd>
+			{/key}
+		{/if}
 	</div>
 
 	{#if stale}

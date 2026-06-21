@@ -502,6 +502,7 @@ const ptBR = {
 	network: {
 		view: {
 			bondedLinks: "Links agregados",
+			telemetryLoading: "Carregando telemetria dos links…",
 			noLinks: "Ainda não há links ativos",
 			wifi: "WiFi",
 			cellular: "Celular",
@@ -958,6 +959,9 @@ const ptBR = {
 			waiting: "Aguardando telemetria dos links\u2026",
 			ariaLabel: "Estatísticas de ingestão",
 			trendLabel: "Tendência de RTT de {iface}",
+			idleTitle: "Ainda sem links agrupados",
+			idleHint:
+				"Adicione links de celular, Wi-Fi ou Ethernet em Rede para iniciar o agrupamento. A telemetria de ingestão aparece aqui quando a transmissão está ao vivo.",
 			healthy: "Estável",
 			degraded: "Degradando",
 			alert: "Latência crescente em um ou mais links",

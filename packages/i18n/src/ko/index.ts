@@ -339,6 +339,7 @@ const ko = {
 	network: {
 		view: {
 			bondedLinks: "본딩 링크",
+			telemetryLoading: "링크 텔레메트리 불러오는 중…",
 			noLinks: "아직 활성 링크가 없습니다",
 			wifi: "WiFi",
 			cellular: "셀룰러",
@@ -807,6 +808,9 @@ const ko = {
 			waiting: "링크 텔레메트리 대기 중\u2026",
 			ariaLabel: "인제스트 통계",
 			trendLabel: "{iface}의 RTT 추세",
+			idleTitle: "아직 본딩된 링크가 없습니다",
+			idleHint:
+				"네트워크에서 셀룰러, Wi-Fi 또는 이더넷 링크를 추가하여 본딩을 시작하세요. 스트림이 시작되면 인제스트 텔레메트리가 여기에 표시됩니다.",
 			healthy: "안정",
 			degraded: "저하 중",
 			alert: "하나 이상의 링크에서 지연 시간이 증가하고 있습니다",

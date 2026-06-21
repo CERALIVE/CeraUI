@@ -326,6 +326,9 @@ const es = {
 			waiting: "Esperando telemetría de enlaces\u2026",
 			ariaLabel: "Estadísticas de ingesta",
 			trendLabel: "Tendencia de RTT de {iface}",
+			idleTitle: "Aún no hay enlaces agrupados",
+			idleHint:
+				"Añade enlaces de móvil, Wi-Fi o Ethernet en Red para empezar a agrupar. La telemetría de ingesta aparece aquí cuando el directo está activo.",
 			healthy: "Estable",
 			degraded: "Degradando",
 			alert: "Latencia en aumento en uno o más enlaces",
@@ -866,6 +869,7 @@ const es = {
 	network: {
 		view: {
 			bondedLinks: "Enlaces combinados",
+			telemetryLoading: "Cargando telemetría de enlaces…",
 			noLinks: "Aún no hay enlaces activos",
 			wifi: "WiFi",
 			cellular: "Celular",

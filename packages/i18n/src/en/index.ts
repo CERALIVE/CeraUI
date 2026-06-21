@@ -313,6 +313,9 @@ const en = {
 			waiting: "Waiting for link telemetry\u2026",
 			ariaLabel: "Ingest statistics",
 			trendLabel: "RTT trend for {iface:string}",
+			idleTitle: "No bonded links yet",
+			idleHint:
+				"Add cellular, Wi-Fi, or Ethernet links in Network to start bonding. Ingest telemetry appears here once the stream is live.",
 			healthy: "Stable",
 			degraded: "Degrading",
 			alert: "Rising latency on one or more links",
@@ -845,6 +848,7 @@ const en = {
 	network: {
 		view: {
 			bondedLinks: "Bonded Links",
+			telemetryLoading: "Loading link telemetry…",
 			noLinks: "No active links yet",
 			wifi: "WiFi",
 			cellular: "Cellular",

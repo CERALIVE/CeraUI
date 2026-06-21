@@ -504,6 +504,7 @@ const fr = {
 	network: {
 		view: {
 			bondedLinks: "Liens agrégés",
+			telemetryLoading: "Chargement de la télémétrie des liens…",
 			noLinks: "Aucun lien actif pour le moment",
 			wifi: "WiFi",
 			cellular: "Cellulaire",
@@ -982,6 +983,9 @@ const fr = {
 			waiting: "En attente de la télémétrie des liaisons\u2026",
 			ariaLabel: "Statistiques d'ingestion",
 			trendLabel: "Tendance RTT de {iface}",
+			idleTitle: "Aucun lien agrégé pour l'instant",
+			idleHint:
+				"Ajoutez des liens cellulaire, Wi-Fi ou Ethernet dans Réseau pour démarrer l'agrégation. La télémétrie d'ingestion apparaît ici dès que le direct est actif.",
 			healthy: "Stable",
 			degraded: "Se dégrade",
 			alert: "Latence croissante sur une ou plusieurs liaisons",

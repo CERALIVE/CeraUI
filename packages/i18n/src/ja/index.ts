@@ -347,6 +347,7 @@ const ja = {
 	network: {
 		view: {
 			bondedLinks: "ボンディングリンク",
+			telemetryLoading: "リンクテレメトリを読み込み中…",
 			noLinks: "アクティブなリンクはまだありません",
 			wifi: "WiFi",
 			cellular: "セルラー",
@@ -824,6 +825,9 @@ const ja = {
 			waiting: "リンクテレメトリを待機中\u2026",
 			ariaLabel: "インジェスト統計",
 			trendLabel: "{iface} のRTT傾向",
+			idleTitle: "ボンディングされたリンクがまだありません",
+			idleHint:
+				"ネットワークでセルラー・Wi-Fi・イーサネットのリンクを追加してボンディングを開始します。配信が始まるとインジェストのテレメトリがここに表示されます。",
 			healthy: "安定",
 			degraded: "悪化中",
 			alert: "1つ以上のリンクでレイテンシが上昇しています",

@@ -330,6 +330,7 @@ const zh = {
 	network: {
 		view: {
 			bondedLinks: "绑定链路",
+			telemetryLoading: "正在加载链路遥测…",
 			noLinks: "尚无活动链路",
 			wifi: "WiFi",
 			cellular: "蜂窝网络",
@@ -765,6 +766,9 @@ const zh = {
 			waiting: "正在等待链路遥测\u2026",
 			ariaLabel: "采集统计",
 			trendLabel: "{iface} 的 RTT 趋势",
+			idleTitle: "尚无绑定链路",
+			idleHint:
+				"在“网络”中添加蜂窝、Wi-Fi 或以太网链路以开始绑定。直播开始后，接入遥测将在此显示。",
 			healthy: "稳定",
 			degraded: "正在劣化",
 			alert: "一个或多个链路的延迟正在上升",

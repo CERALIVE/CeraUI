@@ -14,6 +14,7 @@ import {
 	ChevronRight,
 	Cpu,
 	PictureInPicture2,
+	Radio,
 	Server,
 	ServerOff,
 	Shuffle,
@@ -656,6 +657,25 @@ const configRows = $derived<ConfigRow[]>([
 		     across the streaming→idle edge so the rollup survives stream stop. -->
 		{#if isStreaming || hadSession}
 			<IngestStats telemetry={linkTelemetry} {isStreaming} bitrateKbps={config?.max_br} />
+		{:else}
+			<!-- Idle ingest area: no live bond yet. Calm, informational (no telemetry
+			     values shown, so no fresh-looking stale data) — points to Network. -->
+			<Card.Root>
+				<Card.Content class="flex flex-col items-center gap-4 px-6 py-10 text-center" data-testid="ingest-idle-empty">
+					<div class="bg-secondary grid size-12 place-items-center rounded-xl">
+						<Radio aria-hidden={true} class="text-muted-foreground h-6 w-6" />
+					</div>
+					<div class="space-y-1.5">
+						<h2 class="text-base font-semibold">{$LL.live.ingest.idleTitle()}</h2>
+						<p class="text-muted-foreground mx-auto max-w-sm text-sm">{$LL.live.ingest.idleHint()}</p>
+					</div>
+					<Button class="gap-2" onclick={handleManageLinks} variant="outline">
+						<Radio aria-hidden={true} class="h-4 w-4" />
+						{$LL.live.server.manageLinks()}
+						<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
+					</Button>
+				</Card.Content>
+			</Card.Root>
 		{/if}
 
 	<SourceSection
