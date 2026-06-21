@@ -12,23 +12,27 @@ env:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test (unit + E2E guardrails)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout CeraUI
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: CeraUI
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           package_json_file: CeraUI/package.json
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
@@ -98,17 +102,17 @@ jobs:
         arch: [arm64, amd64]
     steps:
       - name: Checkout CeraUI
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: CeraUI
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           package_json_file: CeraUI/package.json
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
@@ -159,9 +163,11 @@ jobs:
 
       - name: Build Summary
         run: |
-          echo "## ✅ Build Check Passed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Architecture:** ${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Build Artifacts:" >> $GITHUB_STEP_SUMMARY
-          ls -1 CeraUI/dist/ | while read f; do echo "- \`$f\`" >> $GITHUB_STEP_SUMMARY; done
+          {
+            echo "## ✅ Build Check Passed"
+            echo ""
+            echo "**Architecture:** ${{ matrix.arch }}"
+            echo ""
+            echo "### Build Artifacts:"
+            for f in CeraUI/dist/*; do echo "- \`$(basename "$f")\`"; done
+          } >> "$GITHUB_STEP_SUMMARY"
