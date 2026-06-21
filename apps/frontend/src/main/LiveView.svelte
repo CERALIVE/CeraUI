@@ -112,10 +112,29 @@ $effect(() => {
 	reconcileStreamingOptimism(isStreaming);
 });
 
+// The cerastream Tier-2 reason codes that carry a SPECIFIC start-failure
+// message; any other reason (or an unstructured throw) shows the generic copy.
+const STREAM_START_REASON_KEYS = [
+	'srt_connect_failed',
+	'srt_connection_lost',
+	'srtla_initial_connect_failed',
+	'srtla_no_connections',
+	'capture_audio_error',
+	'capture_video_error',
+	'pipeline_stall',
+] as const;
+type StreamStartReasonKey = (typeof STREAM_START_REASON_KEYS)[number];
+
+function startFailedMessage(reason: string): string {
+	return (STREAM_START_REASON_KEYS as readonly string[]).includes(reason)
+		? $LL.live.startFailed[reason as StreamStartReasonKey]()
+		: $LL.live.startFailed.generic();
+}
+
 // Show error toast if start failed (stop reason set).
 $effect(() => {
 	if (streamingStopReason) {
-		toast.error($LL.live.startFailed());
+		toast.error(startFailedMessage(streamingStopReason));
 	}
 });
 
@@ -555,10 +574,15 @@ async function handleStart() {
 	startStreamingOptimism();
 
 	try {
-		await startStreaming(result.config);
-		// Success: reconciliation happens via the is_streaming broadcast.
+		const startResult = await startStreaming(result.config);
+		// A structured `{ success: false, reason }` is the engine refusing the
+		// start — surface the SPECIFIC reason code so the toast names it. On
+		// success, reconciliation happens via the is_streaming broadcast.
+		if (startResult && !startResult.success) {
+			revertStreamingOptimism(startResult.reason ?? 'unknown_error');
+		}
 	} catch (error) {
-		// Start failed: revert to idle with reason.
+		// Transport/validation throw: revert to idle with the error message.
 		const reason =
 			error instanceof Error ? error.message : 'unknown_error';
 		revertStreamingOptimism(reason);

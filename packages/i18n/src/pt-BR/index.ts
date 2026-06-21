@@ -970,7 +970,16 @@ const ptBR = {
 		cannotStartNoPipeline:
 			"Selecione uma fonte de vídeo antes de iniciar a transmissão",
 		cannotStartNoServer: "Configure um servidor antes de iniciar a transmissão",
-		startFailed: "Falha ao iniciar a transmissão",
+		startFailed: {
+			generic: "Falha ao iniciar a transmissão",
+			srt_connect_failed: "Não foi possível acessar o servidor SRT. Verifique o destino e sua conexão e tente novamente.",
+			srt_connection_lost: "A conexão SRT caiu antes do início da transmissão. Tentar novamente pode ajudar.",
+			srtla_initial_connect_failed: "Não foi possível conectar ao servidor SRTLA. Verifique o destino e sua conexão.",
+			srtla_no_connections: "Nenhuma conexão agregada disponível. Verifique se seus links de rede estão ativos.",
+			capture_audio_error: "O dispositivo de captura relatou um erro de áudio. Reconecte-o e tente novamente.",
+			capture_video_error: "O dispositivo de captura relatou um erro de vídeo. Reconecte-o e tente novamente.",
+			pipeline_stall: "A fonte de entrada travou ao iniciar. Verifique a fonte e tente novamente.",
+		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {
 			title: "Comece a configuração",

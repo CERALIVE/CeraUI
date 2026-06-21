@@ -994,7 +994,16 @@ const fr = {
 		cannotStartNoPipeline:
 			"Sélectionnez une source vidéo avant de démarrer la diffusion",
 		cannotStartNoServer: "Configurez un serveur avant de démarrer la diffusion",
-		startFailed: "Échec du démarrage de la diffusion",
+		startFailed: {
+			generic: "Échec du démarrage de la diffusion",
+			srt_connect_failed: "Impossible de joindre le serveur SRT. Vérifiez la destination et votre connexion, puis réessayez.",
+			srt_connection_lost: "La connexion SRT a été perdue avant le démarrage. Réessayer peut aider.",
+			srtla_initial_connect_failed: "Impossible de se connecter au serveur SRTLA. Vérifiez la destination et votre connexion.",
+			srtla_no_connections: "Aucune connexion agrégée disponible. Vérifiez que vos liens réseau sont actifs.",
+			capture_audio_error: "Le périphérique de capture a signalé une erreur audio. Reconnectez-le et réessayez.",
+			capture_video_error: "Le périphérique de capture a signalé une erreur vidéo. Reconnectez-le et réessayez.",
+			pipeline_stall: "La source d'entrée s'est bloquée au démarrage. Vérifiez la source et réessayez.",
+		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {
 			title: "Lancer la configuration",

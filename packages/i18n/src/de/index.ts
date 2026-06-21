@@ -315,7 +315,16 @@ const de = {
 			"Wähle eine Videoquelle, bevor du den Stream startest",
 		cannotStartNoServer:
 			"Konfiguriere einen Server, bevor du den Stream startest",
-		startFailed: "Stream konnte nicht gestartet werden",
+		startFailed: {
+			generic: "Stream konnte nicht gestartet werden",
+			srt_connect_failed: "SRT-Server nicht erreichbar. Prüfe das Ziel und deine Verbindung und versuche es erneut.",
+			srt_connection_lost: "Die SRT-Verbindung wurde vor dem Start getrennt. Ein erneuter Versuch kann helfen.",
+			srtla_initial_connect_failed: "Verbindung zum SRTLA-Server fehlgeschlagen. Prüfe das Ziel und deine Verbindung.",
+			srtla_no_connections: "Keine gebündelten Verbindungen verfügbar. Prüfe, ob deine Netzwerk-Links aktiv sind.",
+			capture_audio_error: "Das Aufnahmegerät meldete einen Audiofehler. Schließe es erneut an und versuche es noch einmal.",
+			capture_video_error: "Das Aufnahmegerät meldete einen Videofehler. Schließe es erneut an und versuche es noch einmal.",
+			pipeline_stall: "Die Eingangsquelle blockierte beim Start. Prüfe die Quelle und versuche es erneut.",
+		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {
 			title: "Einrichtung starten",

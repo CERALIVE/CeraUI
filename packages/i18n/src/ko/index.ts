@@ -819,7 +819,16 @@ const ko = {
 		stopToChange: "변경하려면 스트림을 중지하세요",
 		cannotStartNoPipeline: "스트림을 시작하기 전에 비디오 소스를 선택하세요",
 		cannotStartNoServer: "스트림을 시작하기 전에 서버를 구성하세요",
-		startFailed: "스트림 시작 실패",
+		startFailed: {
+			generic: "스트림 시작 실패",
+			srt_connect_failed: "SRT 서버에 연결할 수 없습니다. 대상과 연결을 확인한 후 다시 시도하세요.",
+			srt_connection_lost: "스트림이 시작되기 전에 SRT 연결이 끊어졌습니다. 다시 시도해 보세요.",
+			srtla_initial_connect_failed: "SRTLA 서버에 연결할 수 없습니다. 대상과 연결을 확인하세요.",
+			srtla_no_connections: "사용 가능한 본딩 연결이 없습니다. 네트워크 링크가 활성 상태인지 확인하세요.",
+			capture_audio_error: "캡처 장치에서 오디오 오류가 보고되었습니다. 다시 연결한 후 시도하세요.",
+			capture_video_error: "캡처 장치에서 비디오 오류가 보고되었습니다. 다시 연결한 후 시도하세요.",
+			pipeline_stall: "시작 중 입력 소스가 멈췄습니다. 소스를 확인한 후 다시 시도하세요.",
+		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {
 			title: "설정 시작하기",

@@ -151,7 +151,7 @@ export const startStreaming = async (config: ConfigMessage) => {
 			relay_server: config.relay_server,
 			relay_account: config.relay_account,
 		};
-		await rpc.streaming.start(input);
+		return await rpc.streaming.start(input);
 	} catch (error) {
 		console.error("Failed to start streaming:", error);
 		throw error;

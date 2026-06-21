@@ -60,6 +60,26 @@ export function resolveCerastreamError(
 	};
 }
 
+const TIER2_CODE_SET: ReadonlySet<string> = new Set(
+	Object.values(PROCESS_ERROR_CODES),
+);
+
+/**
+ * Extract the stable Tier-2 reason code from a caught stream-start failure (a
+ * cerastream `RuntimeErrorEvent`, or any object whose `code` is in the Tier-2
+ * catalog), or `undefined` for an unstructured failure — the client then shows
+ * the generic "failed to start" toast. Never throws (Task 16).
+ */
+export function mapCerastreamError(error: unknown): string | undefined {
+	if (typeof error === "object" && error !== null && "code" in error) {
+		const { code } = error as { code: unknown };
+		if (typeof code === "string" && TIER2_CODE_SET.has(code)) {
+			return code;
+		}
+	}
+	return undefined;
+}
+
 function messageFor(code: ProcessErrorCode, reason?: string): string {
 	const fixed = PROCESS_ERROR_MESSAGES[code]?.message;
 	if (fixed !== undefined) return fixed;

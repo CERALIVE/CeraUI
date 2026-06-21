@@ -777,7 +777,16 @@ const zh = {
 		stopToChange: "停止直播以更改",
 		cannotStartNoPipeline: "开始直播前请选择视频源",
 		cannotStartNoServer: "开始直播前请配置服务器",
-		startFailed: "启动直播失败",
+		startFailed: {
+			generic: "启动直播失败",
+			srt_connect_failed: "无法连接到 SRT 服务器。请检查目标地址和网络连接后重试。",
+			srt_connection_lost: "直播开始前 SRT 连接已断开。重试可能会有帮助。",
+			srtla_initial_connect_failed: "无法连接到 SRTLA 服务器。请检查目标地址和网络连接。",
+			srtla_no_connections: "没有可用的聚合连接。请检查网络链路是否已启用。",
+			capture_audio_error: "采集设备报告音频错误。请重新连接后重试。",
+			capture_video_error: "采集设备报告视频错误。请重新连接后重试。",
+			pipeline_stall: "启动时输入源停滞。请检查输入源后重试。",
+		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {
 			title: "开始设置",

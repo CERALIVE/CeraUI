@@ -836,7 +836,16 @@ const ja = {
 		cannotStartNoPipeline:
 			"ストリームを開始する前にビデオソースを選択してください",
 		cannotStartNoServer: "ストリームを開始する前にサーバーを設定してください",
-		startFailed: "ストリームの開始に失敗しました",
+		startFailed: {
+			generic: "ストリームの開始に失敗しました",
+			srt_connect_failed: "SRTサーバーに接続できませんでした。宛先と接続を確認して、もう一度お試しください。",
+			srt_connection_lost: "開始前にSRT接続が切断されました。再試行すると解決する場合があります。",
+			srtla_initial_connect_failed: "SRTLAサーバーに接続できませんでした。宛先と接続を確認してください。",
+			srtla_no_connections: "利用可能なボンディング接続がありません。ネットワークリンクが有効か確認してください。",
+			capture_audio_error: "キャプチャデバイスで音声エラーが発生しました。再接続してもう一度お試しください。",
+			capture_video_error: "キャプチャデバイスで映像エラーが発生しました。再接続してもう一度お試しください。",
+			pipeline_stall: "開始時に入力ソースが停止しました。ソースを確認してもう一度お試しください。",
+		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {
 			title: "セットアップを始める",
