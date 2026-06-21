@@ -10,6 +10,8 @@ import type {
 	AudioCodecsMessage,
 	ConfigMessage,
 	LoginOutput,
+	Modem,
+	ModemList,
 	NetifMessage,
 	NotificationsMessage,
 	PipelinesMessage,
@@ -21,9 +23,66 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { toast } from "svelte-sonner";
 
-import { mergeModems } from "$lib/helpers/ObjectsHelper";
 import { downloadLog } from "$lib/helpers/SystemHelper";
 import { rpcClient } from "$lib/rpc/client";
+
+function isObject(item: unknown): item is Record<string, unknown> {
+	return item !== null && typeof item === "object" && !Array.isArray(item);
+}
+
+/**
+ * Merge an incoming modem snapshot into the current one, preserving per-modem
+ * fields the broadcast did not carry. The backend sends incremental modem
+ * updates (a targeted broadcast may include only the changed modem, and for it
+ * only a subset of fields), so a wholesale replace would wipe untouched fields
+ * and flip a live modem to a spurious no-SIM state until the next full snapshot.
+ *
+ * Folded in from the former `$lib/helpers/ObjectsHelper`; this store is its only
+ * consumer.
+ */
+function mergeModems(target: ModemList, ...sources: ModemList[]): ModemList {
+	if (!sources.length) return target;
+	const source = sources.shift();
+
+	if (isObject(target) && isObject(source)) {
+		// Remove keys from target that don't exist in source
+		if (source) {
+			for (const key in target) {
+				if (!(key in source)) {
+					delete target[key];
+				}
+			}
+		}
+
+		// Merge remaining keys
+		for (const key in source) {
+			if (isObject(source[key])) {
+				if (!target[key]) Object.assign(target, { [key]: {} });
+				deepMergeModem(target[key] as Modem, source[key] as Modem);
+			} else {
+				Object.assign(target, { [key]: source[key] });
+			}
+		}
+	}
+
+	return mergeModems(target, ...sources);
+}
+
+function deepMergeModem(target: Modem, source: Modem): Modem {
+	for (const key in source) {
+		const sourceValue = source[key as keyof Modem];
+		if (sourceValue !== undefined && isObject(sourceValue)) {
+			const targetValue = target[key as keyof Modem];
+			if (!targetValue) {
+				Object.assign(target, { [key]: {} });
+			}
+			Object.assign(target[key as keyof Modem] as object, sourceValue);
+		} else if (sourceValue !== undefined) {
+			Object.assign(target, { [key]: sourceValue });
+		}
+	}
+	return target;
+}
 
 // ============================================
 // Svelte 5 Reactive State ($state)

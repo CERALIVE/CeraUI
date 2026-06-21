@@ -9,7 +9,7 @@
     failed   → static alert     (calm error affordance)
     pending / idle → nothing    (no chrome until the RPC is actually dispatched)
 
-  Like InlineSpinner and StaleBadge, every visual here is CSS/animation-driven
+  Like InlineSpinner and the stale Badge, every visual here is CSS/animation-driven
   (the spinner) or fully static (the check / alert) — NEVER JS-driven — so the
   e-ink display freeze (`app.css` [data-display='eink'] { animation: none }) stills
   the spinner to a static glyph instead of smearing, with no extra handling.

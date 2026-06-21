@@ -6,8 +6,7 @@ import { ChevronRight, Loader2, Router, Settings2, Wifi, WifiOff } from '@lucide
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
-import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
-import StaleBadge from '$lib/components/custom/StaleBadge.svelte';
+import Badge from '$lib/components/custom/Badge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
@@ -181,7 +180,7 @@ $effect(() => {
 						</div>
 						<div class="flex shrink-0 items-center gap-2.5">
 							{#if showStale}
-								<StaleBadge data-stale-interface={iface.ifname} />
+								<Badge variant="stale" data-stale-interface={iface.ifname} />
 							{/if}
 							{#if displayIsHotspot}
 								<span
@@ -211,7 +210,7 @@ $effect(() => {
 							{:else}
 								<WifiOff class="text-muted-foreground size-4" aria-hidden="true" />
 							{/if}
-							<SpeedBadge {kbps} stale={tpStale} />
+							<Badge variant="speed" {kbps} stale={tpStale} />
 						</div>
 					</div>
 

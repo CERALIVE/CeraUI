@@ -4,7 +4,7 @@
   Renders the three values for one bonded link, sourced from the backend's
   `status.linkTelemetry` feed (see link-telemetry.ts). Three states:
     • live   — fresh values, a brief phosphor-lime pulse on each change
-    • stale  — dimmed values + a StaleBadge marker
+    • stale  — dimmed values + a stale Badge marker
     • nodata — `entry` is null/absent: every value reads "--", same row height
 
   The three cells are ALWAYS rendered (placeholder "--" when no data) so the
@@ -14,7 +14,7 @@
 import { LL } from '@ceraui/i18n/svelte';
 import type { LinkTelemetryEntry } from '@ceraui/rpc/schemas';
 
-import StaleBadge from '$lib/components/custom/StaleBadge.svelte';
+import Badge from '$lib/components/custom/Badge.svelte';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -89,7 +89,7 @@ const weight = $derived(hasData ? `${entry?.weight_percent}%` : PLACEHOLDER);
 
 	{#if stale}
 		<div class="col-span-3 mt-0.5">
-			<StaleBadge data-stale-interface={entry?.iface} />
+			<Badge variant="stale" data-stale-interface={entry?.iface} />
 		</div>
 	{/if}
 </dl>

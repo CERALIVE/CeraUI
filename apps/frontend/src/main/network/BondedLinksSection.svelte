@@ -5,7 +5,7 @@ import { Radio } from '@lucide/svelte';
 
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import LinkTelemetry from '$lib/components/custom/LinkTelemetry.svelte';
-import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
+import Badge from '$lib/components/custom/Badge.svelte';
 import { formatThroughput } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
 import type { LinkSignal } from '$lib/types/hud';
@@ -107,7 +107,7 @@ const totalStale = $derived(
 							</span>
 						{/if}
 						<!-- per-link throughput (Task 18) -->
-						<SpeedBadge class="ms-1" kbps={link.throughputKbps} stale={link.isStale} />
+						<Badge variant="speed" class="ms-1" kbps={link.throughputKbps} stale={link.isStale} />
 					</div>
 
 					<!-- per-link srtla telemetry: RTT / NAK / weight (Task 22) -->
