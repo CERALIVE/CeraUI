@@ -6,14 +6,18 @@
 import { call } from "@orpc/server";
 import type { WebSocketHandler } from "bun";
 
-import { logger } from "../helpers/logger.ts";
+import { logger, logRedact } from "../helpers/logger.ts";
 import { createContext, initSocketData } from "./context.ts";
+import { extractValidationDetails } from "./error-enrichment.ts";
 import { addClient, removeClient, sendToClient } from "./events.ts";
 import { buildInitialStatus } from "./procedures/status.procedure.ts";
 import { appRouter } from "./router.ts";
 import { instrumentRpcCall } from "./rpc-logging.ts";
 import { getPasswordHash } from "./state/password.ts";
 import type { AppWebSocket, SocketData } from "./types.ts";
+
+/** Cap on the redacted frame preview so a stray giant payload never bloats a log. */
+const FRAME_PREVIEW_MAX_CHARS = 100;
 
 /**
  * ORPC message format
@@ -28,7 +32,10 @@ interface ORPCMessage {
 /**
  * Parse incoming message
  */
-function parseMessage(data: string): ORPCMessage | null {
+export function parseMessage(
+	data: string,
+	ws: AppWebSocket,
+): ORPCMessage | null {
 	try {
 		const parsed = JSON.parse(data);
 
@@ -42,7 +49,17 @@ function parseMessage(data: string): ORPCMessage | null {
 			return null;
 		}
 
-		logger.warn("Received non-ORPC message format:", parsed);
+		logger.warn("rpc: unrecognised frame", {
+			module: "rpc.adapter",
+			clientId: ws.remoteAddress,
+			senderId: ws.data?.senderId,
+			bytes: data.length,
+			keys: Object.keys(parsed),
+			hasId: "id" in parsed,
+			preview: logRedact(
+				JSON.stringify(parsed).slice(0, FRAME_PREVIEW_MAX_CHARS),
+			),
+		});
 		return null;
 	} catch (error) {
 		logger.error(`Failed to parse WebSocket message: ${error}`);
@@ -53,15 +70,18 @@ function parseMessage(data: string): ORPCMessage | null {
 /**
  * Handle ORPC messages
  */
-async function handleORPCMessage(
+export async function handleORPCMessage(
 	ws: AppWebSocket,
 	message: ORPCMessage,
+	router: unknown = appRouter,
 ): Promise<void> {
 	const context = createContext(ws);
+	const clientId = ws.remoteAddress;
+	const senderId = ws.data?.senderId;
 
 	try {
 		// Navigate to the procedure using the path
-		let procedure: unknown = appRouter;
+		let procedure: unknown = router;
 		for (const segment of message.path || []) {
 			procedure = (procedure as Record<string, unknown>)[segment];
 			if (!procedure) {
@@ -94,7 +114,14 @@ async function handleORPCMessage(
 			sendInitialStatusToClient(ws);
 		}
 	} catch (error) {
-		logger.error(`ORPC procedure error: ${error}`);
+		logger.error("rpc: handler error", {
+			module: "rpc.adapter",
+			procedure: message.path?.join("."),
+			messageId: message.id,
+			clientId,
+			senderId,
+			validation: extractValidationDetails(error),
+		});
 		ws.send(
 			JSON.stringify({
 				id: message.id,
@@ -153,7 +180,7 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 
 		message(ws: AppWebSocket, data: string | Buffer) {
 			const messageStr = typeof data === "string" ? data : data.toString();
-			const message = parseMessage(messageStr);
+			const message = parseMessage(messageStr, ws);
 
 			if (!message) {
 				// Keepalive messages return null, which is expected
