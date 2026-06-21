@@ -33,6 +33,7 @@ import {
 	mockModems,
 	mockWifiNetworks,
 	mockWifiRadios,
+	type ScenarioCapabilities,
 	scenarios,
 	setActiveScenario,
 } from "./mock-config.ts";
@@ -124,6 +125,10 @@ export interface MockState {
 	// Add-on runtime state (config.json `addons` shape), seeded from the mock
 	// fixture so resetMockState() restores it like every other session slot.
 	mockAddons: AddonConfig;
+	// TEST-ONLY engine-capability override layered over the active scenario's
+	// capabilities sub-config by setMockEngineCapabilities(); null = scenario
+	// default. Resets with the scenario like every other session slot.
+	capabilityOverride: ScenarioCapabilities | null;
 }
 
 const mockState: MockState = {
@@ -156,6 +161,7 @@ const mockState: MockState = {
 	simStates: new Map(),
 	simPinSecret: null,
 	mockAddons: {},
+	capabilityOverride: null,
 };
 
 // Deep snapshot of `mockState` captured at the end of initMockService — the
@@ -212,6 +218,7 @@ export function initMockService(scenarioName?: string): void {
 	mockState.mockHealthOverride = null;
 	mockState.injectedStreamError = null;
 	mockState.relayValidateFault = null;
+	mockState.capabilityOverride = null;
 	mockState.interfaceThroughput = {};
 	mockState.wifiModes = {};
 

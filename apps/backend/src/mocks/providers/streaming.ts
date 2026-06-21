@@ -4,6 +4,8 @@ Simulates cerastream/srtla streaming statistics for development mode
 */
 
 import {
+	CerastreamConnectionError,
+	type GetCapabilitiesResult,
 	type ProcessErrorCode,
 	type ProcessErrorSource,
 	type RuntimeErrorEvent,
@@ -11,8 +13,12 @@ import {
 } from "@ceralive/cerastream";
 import {
 	type EngineCapabilitiesSnapshot,
+	getCapabilities,
+	getLastCapabilities,
 	MINIMAL_SAFE_CAPABILITIES,
 } from "../../modules/streaming/capabilities.ts";
+import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
+import type { ScenarioCapabilities } from "../mock-config.ts";
 import {
 	getMockState,
 	getScenarioConfig,
@@ -20,19 +26,112 @@ import {
 	setMockStreamError,
 	setStreamingState,
 	shouldUseMocks,
+	updateMockState,
 } from "../mock-service.ts";
 
+// The caps-full hardware profile: H265 + hardware acceleration and an
+// audio-capable HDMI source alongside the always-present TestPattern.
+// Deliberately distinct from MINIMAL_SAFE_CAPABILITIES so a resolved snapshot is
+// never mistaken for the floor.
+const FULL_PROFILE_CAPABILITIES: GetCapabilitiesResult = {
+	platform: {
+		supports_h265: true,
+		hardware_accelerated: true,
+		max_resolution: "3840x2160",
+	},
+	encoder: {
+		codecs: ["H264", "H265"],
+		bitrate_range: { min: 1000, max: 12000, unit: "kbps" },
+	},
+	sources: [
+		{
+			id: "hdmi",
+			supports_audio: true,
+			supports_resolution_override: true,
+			supports_framerate_override: true,
+			default_resolution: "1920x1080",
+			default_framerate: 60,
+		},
+		{
+			id: "test",
+			supports_audio: false,
+			supports_resolution_override: false,
+			supports_framerate_override: false,
+			default_resolution: "1920x1080",
+			default_framerate: 30,
+		},
+	],
+};
+
+const DEFAULT_MOCK_TRANSPORTS = ["srtla", "rist"] as const;
+
+// Active scenario's capabilities sub-config with any TEST-ONLY override
+// (setMockEngineCapabilities) layered on top. Pure read of seeded state.
+function resolveScenarioCapabilities(): ScenarioCapabilities {
+	const scenario = getScenarioConfig().capabilities ?? {};
+	const override = getMockState().capabilityOverride ?? {};
+	return { ...scenario, ...override };
+}
+
 /**
- * Mock engine capability snapshot for dev/e2e. Sources mirror the minimal safe
- * set (so the dev pipeline list is unchanged) but the transport list advertises
- * RIST, so the protocol selector can exercise the RIST capability path.
+ * Mock engine capability snapshot for dev/e2e, seeded by the active MOCK_SCENARIO
+ * at boot (main.ts wires it as initPipelines' fetchEngineCapabilities). Resolvable
+ * scenarios return a snapshot; the engine-starting / engine-unavailable profiles
+ * THROW, so the real getCapabilities() fallback ladder produces the engineStarting
+ * / engineUnavailable flags exactly as it does for a down engine on device.
+ * Default scenarios keep the historical snapshot (MINIMAL_SAFE_CAPABILITIES +
+ * ["srtla", "rist"]).
  */
 export function getMockEngineCapabilities(): EngineCapabilitiesSnapshot {
-	return {
-		caps: structuredClone(MINIMAL_SAFE_CAPABILITIES),
-		schemaVersion: SCHEMA_VERSION,
-		transports: ["srtla", "rist"],
-	};
+	const profile = resolveScenarioCapabilities();
+
+	if (profile.engineStarting) {
+		throw new CerastreamConnectionError(
+			"mock: engine starting — no live snapshot yet (scenario)",
+		);
+	}
+	if (profile.engineUnavailable) {
+		throw new CerastreamConnectionError("mock: engine unavailable (scenario)");
+	}
+
+	const caps = structuredClone(
+		profile.fullProfile ? FULL_PROFILE_CAPABILITIES : MINIMAL_SAFE_CAPABILITIES,
+	);
+	if (profile.audioLiveSwitch) {
+		caps.audio_live_switch = true;
+	}
+	const transports = [...(profile.transports ?? DEFAULT_MOCK_TRANSPORTS)];
+	const schemaVersion = profile.schemaVersionMismatch
+		? `${SCHEMA_VERSION}-mock-skew`
+		: SCHEMA_VERSION;
+
+	return { caps, schemaVersion, transports };
+}
+
+/**
+ * TEST-ONLY seam: layer a capability-profile override onto the active scenario,
+ * then re-resolve through the real getCapabilities() path and rebroadcast the
+ * `capabilities` event — mirroring the boot injection so unit/e2e fixtures can
+ * drive engine-gated UI without a runtime mutator.
+ *
+ * INTENDED FOR IDLE STATE ONLY: the rebroadcast is reliable when the device is
+ * not actively streaming. Do NOT assert its mid-active-stream rebroadcast
+ * semantics — a live stream owns the engine and its own capability lifecycle.
+ * No-op unless the mock service is active (shouldUseMocks()), so production never
+ * invokes the mock fetcher or this rebroadcast.
+ */
+export async function setMockEngineCapabilities(
+	partial: Partial<ScenarioCapabilities>,
+): Promise<void> {
+	if (!shouldUseMocks()) {
+		return;
+	}
+	const current = getMockState().capabilityOverride ?? {};
+	updateMockState({ capabilityOverride: { ...current, ...partial } });
+	await getCapabilities({
+		fetchEngineCapabilities: async () => getMockEngineCapabilities(),
+	});
+	broadcastMsg("capabilities", getLastCapabilities());
 }
 
 /**
