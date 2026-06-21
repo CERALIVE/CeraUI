@@ -26,6 +26,10 @@ env:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # Calculate the next CalVer version automatically
   calculate-version:
@@ -37,7 +41,7 @@ jobs:
       is_beta: ${{ steps.calver.outputs.is_beta }}
     steps:
       - name: Checkout CeraUI
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0 # Need full history for tags
           path: CeraUI
@@ -98,9 +102,11 @@ jobs:
 
           TAG="v${VERSION}"
 
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "is_beta=${IS_BETA}" >> $GITHUB_OUTPUT
+          {
+            echo "version=${VERSION}"
+            echo "tag=${TAG}"
+            echo "is_beta=${IS_BETA}"
+          } >> "$GITHUB_OUTPUT"
 
           echo "✅ Next version: ${VERSION}"
           echo "🏷️  Tag: ${TAG}"
@@ -108,11 +114,13 @@ jobs:
 
       - name: Version Summary
         run: |
-          echo "## 🏷️ Version Calculated" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** \`${{ steps.calver.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Tag:** \`${{ steps.calver.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Type:** ${{ steps.calver.outputs.is_beta == 'true' && '🧪 Beta' || '✅ Stable' }}" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## 🏷️ Version Calculated"
+            echo ""
+            echo "**Version:** \`${{ steps.calver.outputs.version }}\`"
+            echo "**Tag:** \`${{ steps.calver.outputs.tag }}\`"
+            echo "**Type:** ${{ steps.calver.outputs.is_beta == 'true' && '🧪 Beta' || '✅ Stable' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build-ceraui-system:
     name: Build CeraUI Full System
@@ -123,17 +131,17 @@ jobs:
         architecture: [arm64, amd64]
     steps:
       - name: Checkout CeraUI
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: CeraUI
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: "11.6.0"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
@@ -165,7 +173,7 @@ jobs:
           done
 
       - name: Upload compressed distribution (${{ matrix.architecture }})
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ceraui-system-${{ matrix.architecture }}
           path: CeraUI/dist/compressed/*.tar.gz
@@ -179,17 +187,17 @@ jobs:
         architecture: [arm64, amd64]
     steps:
       - name: Checkout CeraUI
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: CeraUI
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: "11.6.0"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
@@ -218,7 +226,7 @@ jobs:
           BUILD_ARCH: ${{ matrix.architecture }}
 
       - name: Upload Debian package (${{ matrix.architecture }})
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ceraui-debian-${{ matrix.architecture }}
           path: CeraUI/dist/debian/*.deb
@@ -231,12 +239,12 @@ jobs:
       contents: write
     steps:
       - name: Checkout CeraUI
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: CeraUI
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-assets
 
@@ -271,7 +279,7 @@ jobs:
           # Generate changelog
           if [ -n "$PREV_TAG" ]; then
             CHANGELOG_HEADER="Changes since ${PREV_TAG}:"
-            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s" --no-merges | head -20)
+            CHANGELOG=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" --no-merges | head -20)
           else
             CHANGELOG_HEADER="Recent commits:"
             CHANGELOG=$(git log --pretty=format:"- %s" --no-merges -20)
@@ -335,7 +343,7 @@ jobs:
           cat release-body.md
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.calculate-version.outputs.tag }}
           name: CeraUI ${{ needs.calculate-version.outputs.tag }}${{ needs.calculate-version.outputs.is_beta == 'true' && ' (Beta)' || '' }}
@@ -346,14 +354,16 @@ jobs:
 
       - name: Release Summary
         run: |
-          echo "## 🎉 Release Created!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** \`${{ needs.calculate-version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Tag:** \`${{ needs.calculate-version.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Type:** ${{ needs.calculate-version.outputs.is_beta == 'true' && '🧪 Beta (Pre-release)' || '✅ Stable' }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Assets Uploaded:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          ls -1 final-assets/ | while read f; do echo "- \`$f\`" >> $GITHUB_STEP_SUMMARY; done
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🔗 [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.calculate-version.outputs.tag }})" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## 🎉 Release Created!"
+            echo ""
+            echo "**Version:** \`${{ needs.calculate-version.outputs.version }}\`"
+            echo "**Tag:** \`${{ needs.calculate-version.outputs.tag }}\`"
+            echo "**Type:** ${{ needs.calculate-version.outputs.is_beta == 'true' && '🧪 Beta (Pre-release)' || '✅ Stable' }}"
+            echo ""
+            echo "### Assets Uploaded:"
+            echo ""
+            for f in final-assets/*; do echo "- \`$(basename "$f")\`"; done
+            echo ""
+            echo "🔗 [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.calculate-version.outputs.tag }})"
+          } >> "$GITHUB_STEP_SUMMARY"

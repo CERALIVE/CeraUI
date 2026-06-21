@@ -23,6 +23,10 @@ env:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # Derive the package version from the tag (strip the leading `v`). The build
   # recipe reads $BUILD_VERSION first (shared-build-functions.sh::get_version),
@@ -49,17 +53,17 @@ jobs:
         architecture: [arm64, amd64]
     steps:
       - name: Checkout CeraUI
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: CeraUI
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           package_json_file: CeraUI/package.json
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
@@ -96,7 +100,7 @@ jobs:
           BUILD_ARCH: ${{ matrix.architecture }}
 
       - name: Upload Debian package artifact (${{ matrix.architecture }})
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ceralive-device-${{ matrix.architecture }}
           path: CeraUI/dist/debian/*.deb
@@ -110,7 +114,7 @@ jobs:
       contents: write
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -126,7 +130,7 @@ jobs:
       # pulls the assets from here on the apt-reindex dispatch below — there is
       # no R2 upload and no per-repo APT metadata generation in this repo.
       - name: Attach .debs to GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: CeraUI ${{ github.ref_name }}
@@ -137,7 +141,7 @@ jobs:
       # the stable channel — once per channel, no per-repo reindex race.
       # CERALIVE_DISPATCH_TOKEN: fine-grained PAT, contents:write on CERALIVE/apt-worker only
       - name: Trigger centralized APT reindex
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.CERALIVE_DISPATCH_TOKEN }}
           repository: CERALIVE/apt-worker
