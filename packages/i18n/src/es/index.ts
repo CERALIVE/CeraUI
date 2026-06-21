@@ -1287,6 +1287,10 @@ const es = {
 		ceraliveLog: "Registro de CeraLive",
 		systemLog: "Registro del sistema",
 		download: "Descargar",
+		downloading: "Descargando…",
+		downloadFailed:
+			"No se pudo descargar el registro. Comprueba la conexión e inténtalo de nuevo.",
+		retryDownload: "Reintentar",
 		ceraliveLogTooltip: "Descargue registros para solucionar problemas.",
 		systemLogTooltip: "Descargue registros del sistema para depuración.",
 		confirmDeviceLog:

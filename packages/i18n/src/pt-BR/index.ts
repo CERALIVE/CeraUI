@@ -1244,6 +1244,10 @@ const ptBR = {
 		ceraliveLog: "Log do CeraLive",
 		systemLog: "Log do sistema",
 		download: "Baixar",
+		downloading: "Baixando…",
+		downloadFailed:
+			"Não foi possível baixar o log. Verifique a conexão e tente novamente.",
+		retryDownload: "Tentar novamente",
 		ceraliveLogTooltip: "Baixe os logs para solução de problemas.",
 		systemLogTooltip: "Baixe os logs do sistema para depuração.",
 		confirmDeviceLog:

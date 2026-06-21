@@ -1078,6 +1078,9 @@ const hi = {
 		ceraliveLog: "CeraLive लॉग",
 		systemLog: "सिस्टम लॉग",
 		download: "डाउनलोड करें",
+		downloading: "डाउनलोड हो रहा है…",
+		downloadFailed: "लॉग डाउनलोड नहीं हो सका। कनेक्शन जाँचें और फिर से प्रयास करें।",
+		retryDownload: "पुनः प्रयास करें",
 		ceraliveLogTooltip: "समस्या निवारण के लिए लॉग डाउनलोड करें।",
 		systemLogTooltip: "डीबगिंग के लिए सिस्टम लॉग डाउनलोड करें।",
 		confirmDeviceLog:

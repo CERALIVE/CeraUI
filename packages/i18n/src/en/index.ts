@@ -1260,6 +1260,10 @@ const en = {
 		ceraliveLog: brandTranslation("{{logName}}"),
 		systemLog: "System Log",
 		download: "Download",
+		downloading: "Downloading…",
+		downloadFailed:
+			"Couldn't download the log. Check the connection and try again.",
+		retryDownload: "Retry",
 		ceraliveLogTooltip: "Download logs for troubleshooting.",
 		systemLogTooltip: "Download system logs for debugging.",
 		confirmDeviceLog: brandTranslation(

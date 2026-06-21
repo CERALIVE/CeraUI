@@ -1041,6 +1041,9 @@ const zh = {
 		ceraliveLog: "CeraLive 日志",
 		systemLog: "系统日志",
 		download: "下载",
+		downloading: "正在下载…",
+		downloadFailed: "无法下载日志。请检查连接后重试。",
+		retryDownload: "重试",
 		ceraliveLogTooltip: "下载日志以进行故障排除。",
 		systemLogTooltip: "下载系统日志进行调试。",
 		confirmDeviceLog:

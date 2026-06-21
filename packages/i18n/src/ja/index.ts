@@ -1112,6 +1112,10 @@ const ja = {
 		ceraliveLog: "CeraLiveログ",
 		systemLog: "システムログ",
 		download: "ダウンロード",
+		downloading: "ダウンロード中…",
+		downloadFailed:
+			"ログをダウンロードできませんでした。接続を確認して再試行してください。",
+		retryDownload: "再試行",
 		ceraliveLogTooltip: "トラブルシューティング用にログをダウンロードします。",
 		systemLogTooltip: "デバッグ用にシステムログをダウンロードします。",
 		confirmDeviceLog:

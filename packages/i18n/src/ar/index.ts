@@ -1218,6 +1218,9 @@ const ar = {
 		ceraliveLog: "سجل CeraLive",
 		systemLog: "سجل النظام",
 		download: "تنزيل",
+		downloading: "جارٍ التنزيل…",
+		downloadFailed: "تعذّر تنزيل السجل. تحقق من الاتصال وحاول مرة أخرى.",
+		retryDownload: "إعادة المحاولة",
 		ceraliveLogTooltip: "تنزيل السجلات لاستكشاف الأخطاء وإصلاحها.",
 		systemLogTooltip: "تنزيل سجلات النظام للتصحيح.",
 		confirmDeviceLog:

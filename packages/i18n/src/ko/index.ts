@@ -1089,6 +1089,10 @@ const ko = {
 		ceraliveLog: "CeraLive 로그",
 		systemLog: "시스템 로그",
 		download: "다운로드",
+		downloading: "다운로드 중…",
+		downloadFailed:
+			"로그를 다운로드하지 못했습니다. 연결을 확인하고 다시 시도하세요.",
+		retryDownload: "다시 시도",
 		ceraliveLogTooltip: "문제 해결을 위해 로그를 다운로드합니다.",
 		systemLogTooltip: "디버깅을 위해 시스템 로그를 다운로드합니다.",
 		confirmDeviceLog:

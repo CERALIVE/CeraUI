@@ -1275,6 +1275,10 @@ const de = {
 		ceraliveLog: "CeraLive-Protokoll",
 		systemLog: "Systemprotokoll",
 		download: "Herunterladen",
+		downloading: "Wird heruntergeladen…",
+		downloadFailed:
+			"Protokoll konnte nicht heruntergeladen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
+		retryDownload: "Erneut versuchen",
 		ceraliveLogTooltip: "Laden Sie Logdatei zur Fehlerbehebung herunter.",
 		systemLogTooltip: "Laden Sie System-Logdatei zum Debuggen herunter.",
 		confirmDeviceLog:

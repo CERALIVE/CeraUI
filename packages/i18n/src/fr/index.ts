@@ -1272,6 +1272,10 @@ const fr = {
 		ceraliveLog: "Journal CeraLive",
 		systemLog: "Journal du système",
 		download: "Télécharger",
+		downloading: "Téléchargement…",
+		downloadFailed:
+			"Impossible de télécharger le journal. Vérifiez la connexion et réessayez.",
+		retryDownload: "Réessayer",
 		ceraliveLogTooltip: "Téléchargez les journaux pour le dépannage.",
 		systemLogTooltip: "Téléchargez les journaux système pour le débogage.",
 		confirmDeviceLog:
