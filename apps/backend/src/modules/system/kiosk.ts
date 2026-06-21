@@ -31,6 +31,11 @@ import {
 
 import { type ExecResult, execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import {
+	createMockKioskDeps,
+	type MockKioskHarness,
+} from "../../mocks/providers/kiosk.ts";
 import {
 	type AddonOpResult,
 	disableAddon as managerDisableAddon,
@@ -195,9 +200,41 @@ export function setKioskDeps(deps: Partial<KioskDeps>): void {
 	activeDeps = { ...defaultKioskDeps, ...deps };
 }
 
-/** Restore the real-OS probe surface. */
+/** Restore the real-OS probe surface and drop any dev mock harness. */
 export function resetKioskDeps(): void {
 	activeDeps = defaultKioskDeps;
+	mockKioskHarness = null;
+}
+
+// ─── dev mock harness (shouldUseMocks) — T6 ──────────────────────────────────
+
+/**
+ * The dev in-memory kiosk harness, lazily built on the first dev-mode toggle and
+ * reused so the faked unit state + recorded broadcasts persist across a
+ * start→stop pair within a session. NEVER constructed on a production path —
+ * {@link resolveActiveKioskDeps} only builds it under {@link shouldUseMocks}.
+ * Mirrors the add-on manager's mock seam (modules/addons/manager.ts).
+ */
+let mockKioskHarness: MockKioskHarness | null = null;
+
+/** The current dev kiosk harness WITHOUT building one (null until the first dev op). */
+export function peekMockKioskHarness(): MockKioskHarness | null {
+	return mockKioskHarness;
+}
+
+/**
+ * Resolve the deps a kiosk toggle handler runs against when invoked from the RPC
+ * layer: the dev in-memory harness under {@link shouldUseMocks} (so the kiosk
+ * flows are exercisable on a dev box with no board / systemctl / systemd-sysext),
+ * else the real systemd/marker probe surface. The real-path branch NEVER
+ * constructs a mock double.
+ */
+export function resolveActiveKioskDeps(): KioskDeps {
+	if (shouldUseMocks()) {
+		mockKioskHarness ??= createMockKioskDeps();
+		return mockKioskHarness.deps;
+	}
+	return activeDeps;
 }
 
 let kioskLiveState: KioskState = "disabled";

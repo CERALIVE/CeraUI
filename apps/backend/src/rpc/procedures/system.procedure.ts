@@ -26,6 +26,7 @@ import { z } from "zod";
 
 import { logger } from "../../helpers/logger.ts";
 import { isDevelopment } from "../../mocks/mock-config.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import {
 	getCloudProviders,
 	setRemoteConfig,
@@ -39,6 +40,7 @@ import {
 	kioskOsk,
 	kioskStart,
 	kioskStop,
+	resolveActiveKioskDeps,
 } from "../../modules/system/kiosk.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
@@ -269,10 +271,10 @@ export const kioskStatusProcedure = authedProcedure
 export const kioskStartProcedure = authedProcedure
 	.output(kioskToggleOutputSchema)
 	.handler(async () => {
-		if (!(await isRealDevice())) {
+		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		void kioskStart();
+		void kioskStart(resolveActiveKioskDeps());
 		const status = getKioskStatus();
 		return {
 			success: true,
@@ -287,10 +289,10 @@ export const kioskStartProcedure = authedProcedure
 export const kioskStopProcedure = authedProcedure
 	.output(kioskToggleOutputSchema)
 	.handler(async () => {
-		if (!(await isRealDevice())) {
+		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		void kioskStop();
+		void kioskStop(resolveActiveKioskDeps());
 		const status = getKioskStatus();
 		return {
 			success: true,
@@ -305,10 +307,10 @@ export const kioskConfigureProcedure = authedProcedure
 	.input(kioskConfigureInputSchema)
 	.output(kioskConfigureOutputSchema)
 	.handler(async ({ input }) => {
-		if (!(await isRealDevice())) {
+		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		const applied = kioskConfigure(input);
+		const applied = kioskConfigure(input, resolveActiveKioskDeps());
 		return { success: true, applied };
 	});
 
@@ -319,9 +321,9 @@ export const kioskOskProcedure = authedProcedure
 	.input(kioskOskInputSchema)
 	.output(successResponseSchema)
 	.handler(async ({ input }) => {
-		if (!(await isRealDevice())) {
+		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		await kioskOsk(input.visible);
+		await kioskOsk(input.visible, resolveActiveKioskDeps());
 		return { success: true };
 	});
