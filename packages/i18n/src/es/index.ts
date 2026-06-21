@@ -317,6 +317,28 @@ const es = {
 			"Configura un servidor antes de iniciar la transmisión",
 		startFailed: "No se pudo iniciar la transmisión",
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "Comienza la configuración",
+			subtitle: "Tres pasos hasta tu primer stream combinado.",
+			dismiss: "Ocultar la guía de configuración",
+			done: "Listo",
+			steps: {
+				network: {
+					title: "Conecta tus enlaces",
+					hint: "Añade celular, Wi-Fi o Ethernet para que el stream pueda combinarlos.",
+					action: "Configurar red",
+				},
+				server: {
+					title: "Elige un destino",
+					hint: "Apunta el codificador a un servidor relay o a tu propio receptor.",
+					action: "Elegir destino",
+				},
+				start: {
+					title: "Sal en directo",
+					hint: "Cuando los enlaces y un destino estén listos, inicia tu stream.",
+				},
+			},
+		},
 		ingest: {
 			title: "Estadísticas de ingesta",
 			link: "Enlace",

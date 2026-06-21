@@ -934,6 +934,28 @@ const ar = {
 		cannotStartNoServer: "قم بتكوين خادم قبل بدء البث",
 		startFailed: "فشل بدء البث",
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "ابدأ الإعداد",
+			subtitle: "ثلاث خطوات نحو أول بث مجمّع لك.",
+			dismiss: "إخفاء دليل الإعداد",
+			done: "تم",
+			steps: {
+				network: {
+					title: "وصّل روابطك",
+					hint: "أضف شبكة خلوية أو Wi-Fi أو Ethernet ليتمكّن البث من تجميعها.",
+					action: "إعداد الشبكة",
+				},
+				server: {
+					title: "اختر وجهة",
+					hint: "وجّه المُرمّز إلى خادم ترحيل أو إلى المستقبِل الخاص بك.",
+					action: "اختر وجهة",
+				},
+				start: {
+					title: "ابدأ البث المباشر",
+					hint: "بمجرد جاهزية الروابط والوجهة، ابدأ بثّك.",
+				},
+			},
+		},
 		ingest: {
 			title: "إحصائيات الإدخال",
 			link: "الرابط",

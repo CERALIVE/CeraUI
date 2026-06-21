@@ -317,6 +317,28 @@ const de = {
 			"Konfiguriere einen Server, bevor du den Stream startest",
 		startFailed: "Stream konnte nicht gestartet werden",
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "Einrichtung starten",
+			subtitle: "Drei Schritte bis zu deinem ersten gebündelten Stream.",
+			dismiss: "Einrichtungshilfe ausblenden",
+			done: "Fertig",
+			steps: {
+				network: {
+					title: "Verbindungen herstellen",
+					hint: "Füge Mobilfunk, WLAN oder Ethernet hinzu, damit der Stream darüber bündeln kann.",
+					action: "Netzwerk einrichten",
+				},
+				server: {
+					title: "Ziel auswählen",
+					hint: "Richte den Encoder auf einen Relay-Server oder deinen eigenen Empfänger aus.",
+					action: "Ziel auswählen",
+				},
+				start: {
+					title: "Live gehen",
+					hint: "Sobald Verbindungen und ein Ziel bereit sind, starte deinen Stream.",
+				},
+			},
+		},
 		ingest: {
 			title: "Ingest-Statistiken",
 			link: "Verbindung",

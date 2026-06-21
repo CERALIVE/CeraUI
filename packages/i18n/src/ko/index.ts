@@ -803,6 +803,28 @@ const ko = {
 		cannotStartNoServer: "스트림을 시작하기 전에 서버를 구성하세요",
 		startFailed: "스트림 시작 실패",
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "설정 시작하기",
+			subtitle: "첫 본딩 스트림까지 세 단계.",
+			dismiss: "설정 가이드 닫기",
+			done: "완료",
+			steps: {
+				network: {
+					title: "링크 연결",
+					hint: "셀룰러, Wi-Fi 또는 이더넷을 추가해 스트림을 본딩할 수 있도록 합니다.",
+					action: "네트워크 설정",
+				},
+				server: {
+					title: "대상 선택",
+					hint: "인코더를 릴레이 서버나 사용자 수신기로 지정합니다.",
+					action: "대상 선택",
+				},
+				start: {
+					title: "라이브 시작",
+					hint: "링크와 대상이 준비되면 스트림을 시작합니다.",
+				},
+			},
+		},
 		ingest: {
 			title: "인제스트 통계",
 			link: "링크",

@@ -820,6 +820,28 @@ const ja = {
 		cannotStartNoServer: "ストリームを開始する前にサーバーを設定してください",
 		startFailed: "ストリームの開始に失敗しました",
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "セットアップを始める",
+			subtitle: "最初のボンディング配信までの3ステップ。",
+			dismiss: "セットアップガイドを閉じる",
+			done: "完了",
+			steps: {
+				network: {
+					title: "回線を接続する",
+					hint: "セルラー、Wi-Fi、イーサネットを追加して、配信をボンディングできるようにします。",
+					action: "ネットワークを設定",
+				},
+				server: {
+					title: "配信先を選択する",
+					hint: "エンコーダーをリレーサーバーまたは自分の受信先に向けます。",
+					action: "配信先を選択",
+				},
+				start: {
+					title: "ライブを開始する",
+					hint: "回線と配信先が準備できたら、配信を開始します。",
+				},
+			},
+		},
 		ingest: {
 			title: "インジェスト統計",
 			link: "リンク",

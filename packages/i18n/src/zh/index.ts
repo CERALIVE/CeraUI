@@ -761,6 +761,28 @@ const zh = {
 		cannotStartNoServer: "开始直播前请配置服务器",
 		startFailed: "启动直播失败",
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "开始设置",
+			subtitle: "三步开启你的首个聚合推流。",
+			dismiss: "隐藏设置向导",
+			done: "完成",
+			steps: {
+				network: {
+					title: "连接你的链路",
+					hint: "添加蜂窝、Wi-Fi 或以太网，让推流可以在它们之间聚合。",
+					action: "设置网络",
+				},
+				server: {
+					title: "选择目标",
+					hint: "将编码器指向中继服务器或你自己的接收端。",
+					action: "选择目标",
+				},
+				start: {
+					title: "开始直播",
+					hint: "链路和目标准备就绪后，启动你的推流。",
+				},
+			},
+		},
 		ingest: {
 			title: "采集统计",
 			link: "链路",

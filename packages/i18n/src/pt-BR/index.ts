@@ -954,6 +954,28 @@ const ptBR = {
 		cannotStartNoServer: "Configure um servidor antes de iniciar a transmissão",
 		startFailed: "Falha ao iniciar a transmissão",
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "Comece a configuração",
+			subtitle: "Três passos até seu primeiro stream combinado.",
+			dismiss: "Ocultar o guia de configuração",
+			done: "Concluído",
+			steps: {
+				network: {
+					title: "Conecte seus enlaces",
+					hint: "Adicione celular, Wi-Fi ou Ethernet para que o stream possa combiná-los.",
+					action: "Configurar rede",
+				},
+				server: {
+					title: "Escolha um destino",
+					hint: "Aponte o encoder para um servidor relay ou seu próprio receptor.",
+					action: "Escolher destino",
+				},
+				start: {
+					title: "Entre ao vivo",
+					hint: "Quando os enlaces e um destino estiverem prontos, inicie seu stream.",
+				},
+			},
+		},
 		ingest: {
 			title: "Estatísticas de ingestão",
 			link: "Link",

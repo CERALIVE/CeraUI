@@ -304,6 +304,28 @@ const en = {
 		cannotStartNoServer: "Configure a server before starting the stream",
 		startFailed: "Failed to start stream",
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "Get set up",
+			subtitle: "Three steps to your first bonded stream.",
+			dismiss: "Dismiss setup guide",
+			done: "Done",
+			steps: {
+				network: {
+					title: "Connect your links",
+					hint: "Add cellular, Wi-Fi, or Ethernet so the stream can bond across them.",
+					action: "Set up Network",
+				},
+				server: {
+					title: "Choose a destination",
+					hint: "Point the encoder at a relay server or your own receiver.",
+					action: "Choose destination",
+				},
+				start: {
+					title: "Go live",
+					hint: "Once links and a destination are ready, start your stream.",
+				},
+			},
+		},
 		ingest: {
 			title: "Ingest Stats",
 			link: "Link",

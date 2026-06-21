@@ -978,6 +978,28 @@ const fr = {
 		cannotStartNoServer: "Configurez un serveur avant de démarrer la diffusion",
 		startFailed: "Échec du démarrage de la diffusion",
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "Lancer la configuration",
+			subtitle: "Trois étapes vers votre premier flux agrégé.",
+			dismiss: "Masquer le guide de configuration",
+			done: "Terminé",
+			steps: {
+				network: {
+					title: "Connectez vos liaisons",
+					hint: "Ajoutez de la cellulaire, du Wi-Fi ou de l'Ethernet pour que le flux puisse les agréger.",
+					action: "Configurer le réseau",
+				},
+				server: {
+					title: "Choisissez une destination",
+					hint: "Dirigez l'encodeur vers un serveur relais ou votre propre récepteur.",
+					action: "Choisir une destination",
+				},
+				start: {
+					title: "Passer en direct",
+					hint: "Une fois les liaisons et une destination prêtes, démarrez votre flux.",
+				},
+			},
+		},
 		ingest: {
 			title: "Statistiques d'ingestion",
 			link: "Liaison",

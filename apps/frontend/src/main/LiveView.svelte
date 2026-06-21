@@ -61,11 +61,16 @@ import {
 	getIsStreaming,
 	getLinkTelemetry,
 	getManagedIngestAccounts,
+	getNetif,
 	getPipelines,
 	getRelays,
 	getSensors,
 	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
+import {
+	dismissOnboarding,
+	isOnboardingDismissed,
+} from '$lib/stores/onboarding.svelte';
 import {
 	getStreamingOptimismState,
 	getStreamingStopReason,
@@ -84,6 +89,7 @@ import ServerDialog from '$main/dialogs/ServerDialog.svelte';
 import BitrateAdjuster from '$main/live/BitrateAdjuster.svelte';
 import CapabilityTierBanner from '$main/live/CapabilityTierBanner.svelte';
 import LiveHeader from '$main/live/LiveHeader.svelte';
+import OnboardingChecklist from '$main/live/OnboardingChecklist.svelte';
 import ServerReadiness from '$main/live/ServerReadiness.svelte';
 import StreamControlButton from '$main/live/StreamControlButton.svelte';
 import StreamSettingsCard, { type ConfigRow } from '$main/live/StreamSettingsCard.svelte';
@@ -229,6 +235,19 @@ async function handleReorderSource(inputId: string, direction: 'up' | 'down') {
 const serverTarget = $derived(config?.srtla_addr || config?.relay_server || '');
 const hasServer = $derived(Boolean(serverTarget));
 const showEmptyState = $derived(!hasServer && !isStreaming);
+
+// First-run onboarding (T13). Each step is checked off from existing state — no
+// new subscription. Network = at least one enabled bonded interface that has an
+// IP; Server = the existing `hasServer`; Start = the stream is or has been live.
+// The checklist auto-hides once both CONFIG steps (Network + Server) are done, so
+// a fully-configured device never sees it; it can also be dismissed (persisted).
+const netif = $derived(getNetif());
+const hasNetwork = $derived(
+	Object.values(netif ?? {}).some((entry) => Boolean(entry?.enabled) && Boolean(entry?.ip)),
+);
+const onboardingStartDone = $derived(isStreaming || hadSession);
+const onboardingComplete = $derived(hasNetwork && hasServer);
+const showOnboarding = $derived(!isOnboardingDismissed() && !onboardingComplete);
 
 // Destination + receiver kind for the header chip (T5 helpers). Managed shows a
 // provider label, custom shows the endpoint; both append the transport badge.
@@ -595,6 +614,20 @@ const configRows = $derived<ConfigRow[]>([
 	<!-- Capability-tier state: calm banner when the engine is offline/starting or
 	     reports a schema mismatch. Renders nothing in the normal tier. -->
 	<CapabilityTierBanner caps={getCapabilities()} />
+
+	<!-- First-run guidance (T13): a calm Network → Server → Start checklist that
+	     complements (never replaces) the empty-state hero below. Auto-hides once
+	     Network + Server are configured; dismissible, with the dismissal persisted. -->
+	{#if showOnboarding}
+		<OnboardingChecklist
+			networkDone={hasNetwork}
+			serverDone={hasServer}
+			startDone={onboardingStartDone}
+			onConfigureNetwork={handleManageLinks}
+			onConfigureServer={() => (serverDialogOpen = true)}
+			onDismiss={dismissOnboarding}
+		/>
+	{/if}
 
 	{#if showEmptyState}
 		<!-- First-boot / empty state: no relay server, actionable prompt -->
