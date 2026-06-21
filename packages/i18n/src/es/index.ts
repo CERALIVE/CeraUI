@@ -317,13 +317,20 @@ const es = {
 			"Configura un servidor antes de iniciar la transmisión",
 		startFailed: {
 			generic: "No se pudo iniciar la transmisión",
-			srt_connect_failed: "No se pudo conectar al servidor SRT. Comprueba el destino y tu conexión, e inténtalo de nuevo.",
-			srt_connection_lost: "La conexión SRT se perdió antes de iniciar la transmisión. Vuelve a intentarlo.",
-			srtla_initial_connect_failed: "No se pudo conectar al servidor SRTLA. Comprueba el destino y tu conexión.",
-			srtla_no_connections: "No hay conexiones combinadas disponibles. Comprueba que tus enlaces de red estén activos.",
-			capture_audio_error: "El dispositivo de captura informó un error de audio. Vuelve a conectarlo e inténtalo de nuevo.",
-			capture_video_error: "El dispositivo de captura informó un error de vídeo. Vuelve a conectarlo e inténtalo de nuevo.",
-			pipeline_stall: "La fuente de entrada se detuvo al iniciar. Comprueba la fuente e inténtalo de nuevo.",
+			srt_connect_failed:
+				"No se pudo conectar al servidor SRT. Comprueba el destino y tu conexión, e inténtalo de nuevo.",
+			srt_connection_lost:
+				"La conexión SRT se perdió antes de iniciar la transmisión. Vuelve a intentarlo.",
+			srtla_initial_connect_failed:
+				"No se pudo conectar al servidor SRTLA. Comprueba el destino y tu conexión.",
+			srtla_no_connections:
+				"No hay conexiones combinadas disponibles. Comprueba que tus enlaces de red estén activos.",
+			capture_audio_error:
+				"El dispositivo de captura informó un error de audio. Vuelve a conectarlo e inténtalo de nuevo.",
+			capture_video_error:
+				"El dispositivo de captura informó un error de vídeo. Vuelve a conectarlo e inténtalo de nuevo.",
+			pipeline_stall:
+				"La fuente de entrada se detuvo al iniciar. Comprueba la fuente e inténtalo de nuevo.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {
@@ -775,10 +782,12 @@ const es = {
 				"El dispositivo se apagará por completo. Necesitarás acceso físico para volver a encenderlo.",
 			blockedStreaming: "Detén la transmisión antes de reiniciar.",
 			rebootCountdownTitle: "Reiniciando…",
-			rebootCountdownDescription: "El dispositivo se está reiniciando y se reconectará automáticamente.",
+			rebootCountdownDescription:
+				"El dispositivo se está reiniciando y se reconectará automáticamente.",
 			rebootCountdownRemaining: "Vuelve en {seconds}s",
 			rebootRecoveryTitle: "Es posible que el reinicio no haya comenzado",
-			rebootRecoveryDescription: "El dispositivo sigue respondiendo tras la ventana de reinicio. Puede que no se haya reiniciado: inténtalo de nuevo o descártalo para seguir usándolo.",
+			rebootRecoveryDescription:
+				"El dispositivo sigue respondiendo tras la ventana de reinicio. Puede que no se haya reiniciado: inténtalo de nuevo o descártalo para seguir usándolo.",
 			rebootRecoveryRetry: "Reiniciar de nuevo",
 			rebootRecoveryDismiss: "Descartar",
 			blockedUpdating: "Actualización en curso. Espera antes de reiniciar.",
@@ -1144,7 +1153,8 @@ const es = {
 	hotspotConfigurator: {
 		toggleReason: {
 			busy: "Acción del punto de acceso en curso",
-			formInvalid: "Introduce un nombre y una contraseña válidos para iniciar el punto de acceso",
+			formInvalid:
+				"Introduce un nombre y una contraseña válidos para iniciar el punto de acceso",
 		},
 		dialog: {
 			save: "Guardar",

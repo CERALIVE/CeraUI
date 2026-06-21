@@ -359,7 +359,8 @@ const ar = {
 			rebootCountdownDescription: "الجهاز يُعيد التشغيل وسيُعيد الاتصال تلقائيًا.",
 			rebootCountdownRemaining: "يعود خلال {seconds} ثانية",
 			rebootRecoveryTitle: "قد لا تكون إعادة التشغيل قد بدأت",
-			rebootRecoveryDescription: "لا يزال الجهاز يستجيب بعد نافذة إعادة التشغيل. قد لا يكون قد أُعيد تشغيله — أعد المحاولة أو تجاهل للاستمرار في استخدامه.",
+			rebootRecoveryDescription:
+				"لا يزال الجهاز يستجيب بعد نافذة إعادة التشغيل. قد لا يكون قد أُعيد تشغيله — أعد المحاولة أو تجاهل للاستمرار في استخدامه.",
 			rebootRecoveryRetry: "إعادة التشغيل مرة أخرى",
 			rebootRecoveryDismiss: "تجاهل",
 			blockedUpdating: "التحديث قيد التقدم. انتظر قبل إعادة التشغيل.",
@@ -959,13 +960,20 @@ const ar = {
 		cannotStartNoServer: "قم بتكوين خادم قبل بدء البث",
 		startFailed: {
 			generic: "فشل بدء البث",
-			srt_connect_failed: "تعذّر الوصول إلى خادم SRT. تحقّق من الوجهة واتصالك ثم حاول مرة أخرى.",
-			srt_connection_lost: "انقطع اتصال SRT قبل بدء البث. قد تساعد إعادة المحاولة.",
-			srtla_initial_connect_failed: "تعذّر الاتصال بخادم SRTLA. تحقّق من الوجهة واتصالك.",
-			srtla_no_connections: "لا توجد اتصالات مجمّعة متاحة. تأكّد من أن روابط الشبكة لديك نشطة.",
-			capture_audio_error: "أبلغ جهاز الالتقاط عن خطأ في الصوت. أعد توصيله وحاول مرة أخرى.",
-			capture_video_error: "أبلغ جهاز الالتقاط عن خطأ في الفيديو. أعد توصيله وحاول مرة أخرى.",
-			pipeline_stall: "توقّف مصدر الإدخال أثناء البدء. تحقّق من المصدر وحاول مرة أخرى.",
+			srt_connect_failed:
+				"تعذّر الوصول إلى خادم SRT. تحقّق من الوجهة واتصالك ثم حاول مرة أخرى.",
+			srt_connection_lost:
+				"انقطع اتصال SRT قبل بدء البث. قد تساعد إعادة المحاولة.",
+			srtla_initial_connect_failed:
+				"تعذّر الاتصال بخادم SRTLA. تحقّق من الوجهة واتصالك.",
+			srtla_no_connections:
+				"لا توجد اتصالات مجمّعة متاحة. تأكّد من أن روابط الشبكة لديك نشطة.",
+			capture_audio_error:
+				"أبلغ جهاز الالتقاط عن خطأ في الصوت. أعد توصيله وحاول مرة أخرى.",
+			capture_video_error:
+				"أبلغ جهاز الالتقاط عن خطأ في الفيديو. أعد توصيله وحاول مرة أخرى.",
+			pipeline_stall:
+				"توقّف مصدر الإدخال أثناء البدء. تحقّق من المصدر وحاول مرة أخرى.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {

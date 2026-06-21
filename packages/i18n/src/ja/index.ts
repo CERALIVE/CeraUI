@@ -80,7 +80,8 @@ const ja = {
 	},
 	settings: {
 		codecDisabledReason: {
-			streaming: "オーディオコーデックを変更するにはストリームを停止してください",
+			streaming:
+				"オーディオコーデックを変更するにはストリームを停止してください",
 			noSource: "先にオーディオソースを選択してください",
 		},
 		destination: "配信先",
@@ -223,10 +224,12 @@ const ja = {
 				"デバイスは完全にシャットダウンします。再び電源を入れるには物理的なアクセスが必要です。",
 			blockedStreaming: "再起動する前にストリーミングを停止してください。",
 			rebootCountdownTitle: "再起動中…",
-			rebootCountdownDescription: "デバイスは再起動中で、自動的に再接続します。",
+			rebootCountdownDescription:
+				"デバイスは再起動中で、自動的に再接続します。",
 			rebootCountdownRemaining: "あと{seconds}秒",
 			rebootRecoveryTitle: "再起動が開始されなかった可能性があります",
-			rebootRecoveryDescription: "再起動の待機時間が過ぎてもデバイスが応答しています。再起動されていない可能性があります。もう一度試すか、閉じて使用を続けてください。",
+			rebootRecoveryDescription:
+				"再起動の待機時間が過ぎてもデバイスが応答しています。再起動されていない可能性があります。もう一度試すか、閉じて使用を続けてください。",
 			rebootRecoveryRetry: "もう一度再起動",
 			rebootRecoveryDismiss: "閉じる",
 			blockedUpdating: "更新中です。再起動する前にお待ちください。",
@@ -589,7 +592,8 @@ const ja = {
 	hotspotConfigurator: {
 		toggleReason: {
 			busy: "ホットスポットの操作を実行中",
-			formInvalid: "ホットスポットを開始するには有効な名前とパスワードを入力してください",
+			formInvalid:
+				"ホットスポットを開始するには有効な名前とパスワードを入力してください",
 		},
 		dialog: {
 			save: "保存",
@@ -845,13 +849,20 @@ const ja = {
 		cannotStartNoServer: "ストリームを開始する前にサーバーを設定してください",
 		startFailed: {
 			generic: "ストリームの開始に失敗しました",
-			srt_connect_failed: "SRTサーバーに接続できませんでした。宛先と接続を確認して、もう一度お試しください。",
-			srt_connection_lost: "開始前にSRT接続が切断されました。再試行すると解決する場合があります。",
-			srtla_initial_connect_failed: "SRTLAサーバーに接続できませんでした。宛先と接続を確認してください。",
-			srtla_no_connections: "利用可能なボンディング接続がありません。ネットワークリンクが有効か確認してください。",
-			capture_audio_error: "キャプチャデバイスで音声エラーが発生しました。再接続してもう一度お試しください。",
-			capture_video_error: "キャプチャデバイスで映像エラーが発生しました。再接続してもう一度お試しください。",
-			pipeline_stall: "開始時に入力ソースが停止しました。ソースを確認してもう一度お試しください。",
+			srt_connect_failed:
+				"SRTサーバーに接続できませんでした。宛先と接続を確認して、もう一度お試しください。",
+			srt_connection_lost:
+				"開始前にSRT接続が切断されました。再試行すると解決する場合があります。",
+			srtla_initial_connect_failed:
+				"SRTLAサーバーに接続できませんでした。宛先と接続を確認してください。",
+			srtla_no_connections:
+				"利用可能なボンディング接続がありません。ネットワークリンクが有効か確認してください。",
+			capture_audio_error:
+				"キャプチャデバイスで音声エラーが発生しました。再接続してもう一度お試しください。",
+			capture_video_error:
+				"キャプチャデバイスで映像エラーが発生しました。再接続してもう一度お試しください。",
+			pipeline_stall:
+				"開始時に入力ソースが停止しました。ソースを確認してもう一度お試しください。",
 		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {

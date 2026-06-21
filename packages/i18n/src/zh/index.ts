@@ -217,7 +217,8 @@ const zh = {
 			rebootCountdownDescription: "设备正在重启，将自动重新连接。",
 			rebootCountdownRemaining: "{seconds}秒后恢复",
 			rebootRecoveryTitle: "重启可能未开始",
-			rebootRecoveryDescription: "重启时间结束后设备仍有响应。它可能没有重启——请重试，或关闭以继续使用。",
+			rebootRecoveryDescription:
+				"重启时间结束后设备仍有响应。它可能没有重启——请重试，或关闭以继续使用。",
 			rebootRecoveryRetry: "再次重启",
 			rebootRecoveryDismiss: "关闭",
 			blockedUpdating: "更新正在进行中。请等待后再重启。",
@@ -786,9 +787,11 @@ const zh = {
 		cannotStartNoServer: "开始直播前请配置服务器",
 		startFailed: {
 			generic: "启动直播失败",
-			srt_connect_failed: "无法连接到 SRT 服务器。请检查目标地址和网络连接后重试。",
+			srt_connect_failed:
+				"无法连接到 SRT 服务器。请检查目标地址和网络连接后重试。",
 			srt_connection_lost: "直播开始前 SRT 连接已断开。重试可能会有帮助。",
-			srtla_initial_connect_failed: "无法连接到 SRTLA 服务器。请检查目标地址和网络连接。",
+			srtla_initial_connect_failed:
+				"无法连接到 SRTLA 服务器。请检查目标地址和网络连接。",
 			srtla_no_connections: "没有可用的聚合连接。请检查网络链路是否已启用。",
 			capture_audio_error: "采集设备报告音频错误。请重新连接后重试。",
 			capture_video_error: "采集设备报告视频错误。请重新连接后重试。",

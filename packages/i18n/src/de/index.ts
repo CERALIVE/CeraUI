@@ -317,13 +317,20 @@ const de = {
 			"Konfiguriere einen Server, bevor du den Stream startest",
 		startFailed: {
 			generic: "Stream konnte nicht gestartet werden",
-			srt_connect_failed: "SRT-Server nicht erreichbar. Prüfe das Ziel und deine Verbindung und versuche es erneut.",
-			srt_connection_lost: "Die SRT-Verbindung wurde vor dem Start getrennt. Ein erneuter Versuch kann helfen.",
-			srtla_initial_connect_failed: "Verbindung zum SRTLA-Server fehlgeschlagen. Prüfe das Ziel und deine Verbindung.",
-			srtla_no_connections: "Keine gebündelten Verbindungen verfügbar. Prüfe, ob deine Netzwerk-Links aktiv sind.",
-			capture_audio_error: "Das Aufnahmegerät meldete einen Audiofehler. Schließe es erneut an und versuche es noch einmal.",
-			capture_video_error: "Das Aufnahmegerät meldete einen Videofehler. Schließe es erneut an und versuche es noch einmal.",
-			pipeline_stall: "Die Eingangsquelle blockierte beim Start. Prüfe die Quelle und versuche es erneut.",
+			srt_connect_failed:
+				"SRT-Server nicht erreichbar. Prüfe das Ziel und deine Verbindung und versuche es erneut.",
+			srt_connection_lost:
+				"Die SRT-Verbindung wurde vor dem Start getrennt. Ein erneuter Versuch kann helfen.",
+			srtla_initial_connect_failed:
+				"Verbindung zum SRTLA-Server fehlgeschlagen. Prüfe das Ziel und deine Verbindung.",
+			srtla_no_connections:
+				"Keine gebündelten Verbindungen verfügbar. Prüfe, ob deine Netzwerk-Links aktiv sind.",
+			capture_audio_error:
+				"Das Aufnahmegerät meldete einen Audiofehler. Schließe es erneut an und versuche es noch einmal.",
+			capture_video_error:
+				"Das Aufnahmegerät meldete einen Videofehler. Schließe es erneut an und versuche es noch einmal.",
+			pipeline_stall:
+				"Die Eingangsquelle blockierte beim Start. Prüfe die Quelle und versuche es erneut.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {
@@ -765,10 +772,12 @@ const de = {
 				"Das Gerät wird vollständig heruntergefahren. Sie benötigen physischen Zugriff, um es wieder einzuschalten.",
 			blockedStreaming: "Beenden Sie das Streaming vor dem Neustart.",
 			rebootCountdownTitle: "Neustart…",
-			rebootCountdownDescription: "Das Gerät startet neu und verbindet sich automatisch wieder.",
+			rebootCountdownDescription:
+				"Das Gerät startet neu und verbindet sich automatisch wieder.",
 			rebootCountdownRemaining: "Zurück in {seconds}s",
 			rebootRecoveryTitle: "Neustart wurde möglicherweise nicht gestartet",
-			rebootRecoveryDescription: "Das Gerät antwortet nach dem Neustartfenster noch. Möglicherweise wurde es nicht neu gestartet – versuchen Sie es erneut oder schließen Sie, um es weiter zu verwenden.",
+			rebootRecoveryDescription:
+				"Das Gerät antwortet nach dem Neustartfenster noch. Möglicherweise wurde es nicht neu gestartet – versuchen Sie es erneut oder schließen Sie, um es weiter zu verwenden.",
 			rebootRecoveryRetry: "Erneut neu starten",
 			rebootRecoveryDismiss: "Schließen",
 			blockedUpdating: "Update läuft. Warten Sie vor dem Neustart.",
@@ -1131,7 +1140,8 @@ const de = {
 	hotspotConfigurator: {
 		toggleReason: {
 			busy: "Hotspot-Aktion wird ausgeführt",
-			formInvalid: "Gültigen Namen und gültiges Passwort eingeben, um den Hotspot zu starten",
+			formInvalid:
+				"Gültigen Namen und gültiges Passwort eingeben, um den Hotspot zu starten",
 		},
 		dialog: {
 			save: "Speichern",
@@ -1183,7 +1193,8 @@ const de = {
 		},
 		scanningState: {
 			title: "Suche nach Netzwerken…",
-			description: "Es wird nach verfügbaren WLAN-Netzwerken in der Nähe gesucht.",
+			description:
+				"Es wird nach verfügbaren WLAN-Netzwerken in der Nähe gesucht.",
 		},
 		dialog: {
 			close: "Schließen",

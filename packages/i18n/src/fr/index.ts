@@ -381,10 +381,12 @@ const fr = {
 				"L'appareil s'éteindra complètement. Vous aurez besoin d'un accès physique pour le rallumer.",
 			blockedStreaming: "Arrêtez la diffusion avant de redémarrer.",
 			rebootCountdownTitle: "Redémarrage…",
-			rebootCountdownDescription: "L'appareil redémarre et se reconnectera automatiquement.",
+			rebootCountdownDescription:
+				"L'appareil redémarre et se reconnectera automatiquement.",
 			rebootCountdownRemaining: "De retour dans {seconds}s",
 			rebootRecoveryTitle: "Le redémarrage n'a peut-être pas commencé",
-			rebootRecoveryDescription: "L'appareil répond toujours après la fenêtre de redémarrage. Il n'a peut-être pas redémarré : réessayez ou fermez pour continuer à l'utiliser.",
+			rebootRecoveryDescription:
+				"L'appareil répond toujours après la fenêtre de redémarrage. Il n'a peut-être pas redémarré : réessayez ou fermez pour continuer à l'utiliser.",
 			rebootRecoveryRetry: "Redémarrer à nouveau",
 			rebootRecoveryDismiss: "Ignorer",
 			blockedUpdating: "Mise à jour en cours. Attendez avant de redémarrer.",
@@ -744,7 +746,8 @@ const fr = {
 	hotspotConfigurator: {
 		toggleReason: {
 			busy: "Action du point d'accès en cours",
-			formInvalid: "Saisissez un nom et un mot de passe valides pour démarrer le point d'accès",
+			formInvalid:
+				"Saisissez un nom et un mot de passe valides pour démarrer le point d'accès",
 		},
 		dialog: {
 			save: "Enregistrer",
@@ -1003,13 +1006,20 @@ const fr = {
 		cannotStartNoServer: "Configurez un serveur avant de démarrer la diffusion",
 		startFailed: {
 			generic: "Échec du démarrage de la diffusion",
-			srt_connect_failed: "Impossible de joindre le serveur SRT. Vérifiez la destination et votre connexion, puis réessayez.",
-			srt_connection_lost: "La connexion SRT a été perdue avant le démarrage. Réessayer peut aider.",
-			srtla_initial_connect_failed: "Impossible de se connecter au serveur SRTLA. Vérifiez la destination et votre connexion.",
-			srtla_no_connections: "Aucune connexion agrégée disponible. Vérifiez que vos liens réseau sont actifs.",
-			capture_audio_error: "Le périphérique de capture a signalé une erreur audio. Reconnectez-le et réessayez.",
-			capture_video_error: "Le périphérique de capture a signalé une erreur vidéo. Reconnectez-le et réessayez.",
-			pipeline_stall: "La source d'entrée s'est bloquée au démarrage. Vérifiez la source et réessayez.",
+			srt_connect_failed:
+				"Impossible de joindre le serveur SRT. Vérifiez la destination et votre connexion, puis réessayez.",
+			srt_connection_lost:
+				"La connexion SRT a été perdue avant le démarrage. Réessayer peut aider.",
+			srtla_initial_connect_failed:
+				"Impossible de se connecter au serveur SRTLA. Vérifiez la destination et votre connexion.",
+			srtla_no_connections:
+				"Aucune connexion agrégée disponible. Vérifiez que vos liens réseau sont actifs.",
+			capture_audio_error:
+				"Le périphérique de capture a signalé une erreur audio. Reconnectez-le et réessayez.",
+			capture_video_error:
+				"Le périphérique de capture a signalé une erreur vidéo. Reconnectez-le et réessayez.",
+			pipeline_stall:
+				"La source d'entrée s'est bloquée au démarrage. Vérifiez la source et réessayez.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {

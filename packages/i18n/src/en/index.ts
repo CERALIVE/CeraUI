@@ -304,13 +304,20 @@ const en = {
 		cannotStartNoServer: "Configure a server before starting the stream",
 		startFailed: {
 			generic: "Failed to start stream",
-			srt_connect_failed: "Couldn't reach the SRT server. Check the destination and your connection, then try again.",
-			srt_connection_lost: "The SRT connection dropped before the stream could start. Trying again may help.",
-			srtla_initial_connect_failed: "Couldn't connect to the SRTLA server. Check the destination and your connection.",
-			srtla_no_connections: "No bonded connections are available. Check that your network links are up.",
-			capture_audio_error: "The capture device reported an audio error. Reconnect it and try again.",
-			capture_video_error: "The capture device reported a video error. Reconnect it and try again.",
-			pipeline_stall: "The input source stalled while starting. Check the source and try again.",
+			srt_connect_failed:
+				"Couldn't reach the SRT server. Check the destination and your connection, then try again.",
+			srt_connection_lost:
+				"The SRT connection dropped before the stream could start. Trying again may help.",
+			srtla_initial_connect_failed:
+				"Couldn't connect to the SRTLA server. Check the destination and your connection.",
+			srtla_no_connections:
+				"No bonded connections are available. Check that your network links are up.",
+			capture_audio_error:
+				"The capture device reported an audio error. Reconnect it and try again.",
+			capture_video_error:
+				"The capture device reported a video error. Reconnect it and try again.",
+			pipeline_stall:
+				"The input source stalled while starting. Check the source and try again.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {

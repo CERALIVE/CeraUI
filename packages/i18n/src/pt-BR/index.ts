@@ -377,10 +377,12 @@ const ptBR = {
 				"O dispositivo será desligado completamente. Você precisará de acesso físico para ligá-lo novamente.",
 			blockedStreaming: "Pare a transmissão antes de reiniciar.",
 			rebootCountdownTitle: "Reiniciando…",
-			rebootCountdownDescription: "O dispositivo está reiniciando e se reconectará automaticamente.",
+			rebootCountdownDescription:
+				"O dispositivo está reiniciando e se reconectará automaticamente.",
 			rebootCountdownRemaining: "De volta em {seconds}s",
 			rebootRecoveryTitle: "A reinicialização pode não ter começado",
-			rebootRecoveryDescription: "O dispositivo ainda responde após a janela de reinicialização. Talvez não tenha reiniciado — tente novamente ou dispense para continuar usando.",
+			rebootRecoveryDescription:
+				"O dispositivo ainda responde após a janela de reinicialização. Talvez não tenha reiniciado — tente novamente ou dispense para continuar usando.",
 			rebootRecoveryRetry: "Reiniciar novamente",
 			rebootRecoveryDismiss: "Dispensar",
 			blockedUpdating: "Atualização em andamento. Aguarde antes de reiniciar.",
@@ -742,7 +744,8 @@ const ptBR = {
 	hotspotConfigurator: {
 		toggleReason: {
 			busy: "Ação do ponto de acesso em andamento",
-			formInvalid: "Insira um nome e uma senha válidos para iniciar o ponto de acesso",
+			formInvalid:
+				"Insira um nome e uma senha válidos para iniciar o ponto de acesso",
 		},
 		dialog: {
 			save: "Salvar",
@@ -979,13 +982,20 @@ const ptBR = {
 		cannotStartNoServer: "Configure um servidor antes de iniciar a transmissão",
 		startFailed: {
 			generic: "Falha ao iniciar a transmissão",
-			srt_connect_failed: "Não foi possível acessar o servidor SRT. Verifique o destino e sua conexão e tente novamente.",
-			srt_connection_lost: "A conexão SRT caiu antes do início da transmissão. Tentar novamente pode ajudar.",
-			srtla_initial_connect_failed: "Não foi possível conectar ao servidor SRTLA. Verifique o destino e sua conexão.",
-			srtla_no_connections: "Nenhuma conexão agregada disponível. Verifique se seus links de rede estão ativos.",
-			capture_audio_error: "O dispositivo de captura relatou um erro de áudio. Reconecte-o e tente novamente.",
-			capture_video_error: "O dispositivo de captura relatou um erro de vídeo. Reconecte-o e tente novamente.",
-			pipeline_stall: "A fonte de entrada travou ao iniciar. Verifique a fonte e tente novamente.",
+			srt_connect_failed:
+				"Não foi possível acessar o servidor SRT. Verifique o destino e sua conexão e tente novamente.",
+			srt_connection_lost:
+				"A conexão SRT caiu antes do início da transmissão. Tentar novamente pode ajudar.",
+			srtla_initial_connect_failed:
+				"Não foi possível conectar ao servidor SRTLA. Verifique o destino e sua conexão.",
+			srtla_no_connections:
+				"Nenhuma conexão agregada disponível. Verifique se seus links de rede estão ativos.",
+			capture_audio_error:
+				"O dispositivo de captura relatou um erro de áudio. Reconecte-o e tente novamente.",
+			capture_video_error:
+				"O dispositivo de captura relatou um erro de vídeo. Reconecte-o e tente novamente.",
+			pipeline_stall:
+				"A fonte de entrada travou ao iniciar. Verifique a fonte e tente novamente.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {

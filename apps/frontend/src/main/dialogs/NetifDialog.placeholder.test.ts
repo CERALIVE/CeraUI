@@ -42,7 +42,9 @@ describe("NetifDialog — IP placeholder resolves from i18n", () => {
 			props: { open: true, name: "eth0", iface: undefined },
 		});
 
-		const input = document.getElementById("netif-ip") as HTMLInputElement | null;
+		const input = document.getElementById(
+			"netif-ip",
+		) as HTMLInputElement | null;
 		expect(input).toBeTruthy();
 
 		const resolved = getLL().settings.dialogs.ipPlaceholder();

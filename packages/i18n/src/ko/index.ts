@@ -218,10 +218,12 @@ const ko = {
 				"기기가 완전히 종료됩니다. 다시 켜려면 물리적 접근이 필요합니다.",
 			blockedStreaming: "재시작하기 전에 스트리밍을 중지하세요.",
 			rebootCountdownTitle: "재시작 중…",
-			rebootCountdownDescription: "기기가 재시작 중이며 자동으로 다시 연결됩니다.",
+			rebootCountdownDescription:
+				"기기가 재시작 중이며 자동으로 다시 연결됩니다.",
 			rebootCountdownRemaining: "{seconds}초 후 복귀",
 			rebootRecoveryTitle: "재시작이 시작되지 않았을 수 있습니다",
-			rebootRecoveryDescription: "재시작 시간이 지난 후에도 기기가 응답하고 있습니다. 재시작되지 않았을 수 있습니다. 다시 시도하거나 닫고 계속 사용하세요.",
+			rebootRecoveryDescription:
+				"재시작 시간이 지난 후에도 기기가 응답하고 있습니다. 재시작되지 않았을 수 있습니다. 다시 시도하거나 닫고 계속 사용하세요.",
 			rebootRecoveryRetry: "다시 재시작",
 			rebootRecoveryDismiss: "닫기",
 			blockedUpdating:
@@ -828,13 +830,20 @@ const ko = {
 		cannotStartNoServer: "스트림을 시작하기 전에 서버를 구성하세요",
 		startFailed: {
 			generic: "스트림 시작 실패",
-			srt_connect_failed: "SRT 서버에 연결할 수 없습니다. 대상과 연결을 확인한 후 다시 시도하세요.",
-			srt_connection_lost: "스트림이 시작되기 전에 SRT 연결이 끊어졌습니다. 다시 시도해 보세요.",
-			srtla_initial_connect_failed: "SRTLA 서버에 연결할 수 없습니다. 대상과 연결을 확인하세요.",
-			srtla_no_connections: "사용 가능한 본딩 연결이 없습니다. 네트워크 링크가 활성 상태인지 확인하세요.",
-			capture_audio_error: "캡처 장치에서 오디오 오류가 보고되었습니다. 다시 연결한 후 시도하세요.",
-			capture_video_error: "캡처 장치에서 비디오 오류가 보고되었습니다. 다시 연결한 후 시도하세요.",
-			pipeline_stall: "시작 중 입력 소스가 멈췄습니다. 소스를 확인한 후 다시 시도하세요.",
+			srt_connect_failed:
+				"SRT 서버에 연결할 수 없습니다. 대상과 연결을 확인한 후 다시 시도하세요.",
+			srt_connection_lost:
+				"스트림이 시작되기 전에 SRT 연결이 끊어졌습니다. 다시 시도해 보세요.",
+			srtla_initial_connect_failed:
+				"SRTLA 서버에 연결할 수 없습니다. 대상과 연결을 확인하세요.",
+			srtla_no_connections:
+				"사용 가능한 본딩 연결이 없습니다. 네트워크 링크가 활성 상태인지 확인하세요.",
+			capture_audio_error:
+				"캡처 장치에서 오디오 오류가 보고되었습니다. 다시 연결한 후 시도하세요.",
+			capture_video_error:
+				"캡처 장치에서 비디오 오류가 보고되었습니다. 다시 연결한 후 시도하세요.",
+			pipeline_stall:
+				"시작 중 입력 소스가 멈췄습니다. 소스를 확인한 후 다시 시도하세요.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		onboarding: {
