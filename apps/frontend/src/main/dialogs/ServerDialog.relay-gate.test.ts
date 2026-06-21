@@ -55,6 +55,8 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getRelays: () => state.relays,
 	getIsStreaming: () => state.isStreaming,
 	getCapabilities: () => state.capabilities,
+	getManagedIngestAccounts: () => [],
+	getSelectedIngestEndpoint: () => undefined,
 }));
 
 vi.mock("$lib/rpc", () => ({

@@ -66,8 +66,8 @@ import type {
 import { validateMockFixtures } from "./mock-schemas.ts";
 import { MockAddonDescriptor, MockAddonState } from "./providers/addons.ts";
 import { resetMockKioskState } from "./providers/kiosk.ts";
-import { resetMockWifiFaults } from "./providers/wifi.ts";
 import { getMockRelaysCache } from "./providers/relays.ts";
+import { resetMockWifiFaults } from "./providers/wifi.ts";
 
 // Session-state slot shapes + their Zod schemas live in mock-schemas.ts, so the
 // same schema both types these slots and validates the shipped fixtures at init.

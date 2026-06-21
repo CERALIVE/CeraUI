@@ -12,6 +12,7 @@ type HeaderProps = {
 	destination: "managed" | "custom" | undefined;
 	kind: ReceiverKind | undefined;
 	providerName: string | undefined;
+	slotLabel: string | undefined;
 	endpoint: string | undefined;
 	onEditServer: () => void;
 };
@@ -22,6 +23,7 @@ const base: HeaderProps = {
 	destination: "managed",
 	kind: "srtla_relay",
 	providerName: "CeraLive Cloud",
+	slotLabel: undefined,
 	endpoint: undefined,
 	onEditServer: () => {},
 };
@@ -76,6 +78,13 @@ describe("LiveHeader — destination/kind-aware chip (T12)", () => {
 			},
 		});
 		expect(chipText(container)).toBe("host.example:4000 · SRT · Custom");
+	});
+
+	it("an active managed slot names the instance ahead of the provider", () => {
+		const { container } = render(LiveHeader, {
+			props: { ...base, slotLabel: "Studio A" },
+		});
+		expect(chipText(container)).toBe("Studio A · SRTLA · Bonded");
 	});
 
 	it("none (no server) renders the calm 'Not configured' chip", () => {

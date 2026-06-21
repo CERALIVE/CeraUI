@@ -4,16 +4,6 @@
  * Provides type-safe RPC communication with the backend.
  */
 
-// Client
-export {
-	type ConnectionHandler,
-	type ConnectionState,
-	initRPC,
-	type MessageHandler,
-	rpc,
-	rpcClient,
-} from "./client";
-
 // Async-operation store (keyed OS-command transition primitive)
 export {
 	ASYNC_OP_TERMINAL_LINGER_MS,
@@ -32,6 +22,15 @@ export {
 	reconcileOperationsOnReconnect,
 	timeoutOperation,
 } from "./async-operation.svelte";
+// Client
+export {
+	type ConnectionHandler,
+	type ConnectionState,
+	initRPC,
+	type MessageHandler,
+	rpc,
+	rpcClient,
+} from "./client";
 
 // Subscriptions (reactive state)
 export {

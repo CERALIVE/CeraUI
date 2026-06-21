@@ -138,6 +138,10 @@ export const runtimeConfigSchema = z.object({
 	srt_latency: z.number().int().min(100).max(10000).optional(),
 	srtla_addr: z.string().optional(),
 	srtla_port: z.number().int().min(1).max(65535).optional(),
+	// endpointId of the selected platform-pushed ingest slot (T18). The slot
+	// IDENTITY is the endpointId, never host+port — host/port may change between
+	// pushes while the operator's selection follows the stable endpointId.
+	selected_ingest_endpoint: z.string().optional(),
 
 	// Audio settings
 	asrc: z.string().optional(),

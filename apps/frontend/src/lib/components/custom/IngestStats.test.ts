@@ -8,7 +8,7 @@
  *   1. Populated — one row per uplink with iface / RTT / NAK / weight; totals
  *      footer sums NAK and weight across links.
  *   2. Stale     — a link's `stale` flag sets data-stale="true" on its row and
- *      renders a StaleBadge; siblings stay non-stale.
+ *      renders a stale Badge; siblings stay non-stale.
  *   3. Waiting   — null / empty feed keeps the panel mounted and shows the
  *      "waiting" line with zero rows (so the panel never disappears mid-stream).
  *   4. Sender constants — rtt_ms=0 and weight_percent=100 render literally, not

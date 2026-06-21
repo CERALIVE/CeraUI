@@ -390,6 +390,23 @@ Both are unset by default, so the control channel stays gated until provisioned.
 - E2E Testing: REQUIRED reading before writing E2E tests → [`apps/frontend/tests/e2e/PLAYBOOK.md`](apps/frontend/tests/e2e/PLAYBOOK.md)
 - Technical debt: every debt this overhaul introduces is tracked in the machine-checkable register `docs/TECHNICAL_DEBT.md`, enforced by `scripts/check-tech-debt.mjs` (the `check:tech-debt` script, **blocking** in the `test` CI job). Any source `data-debt-id="TD-NNN"`, `coming-soon`, or in-source `[PARTIAL]` marker MUST point at an `open` register entry — an orphan marker or a malformed entry fails CI. It extends the `image-building-pipeline/v2/docs/DEFERRED.md` ledger pattern and does NOT duplicate the root status-label system (`docs/CONVENTIONS.md`). Full contract: `docs/CONVENTIONS.md` → Technical-Debt Register.
 
+## Release & CI rules
+
+These two rules govern how multi-repo efforts land. They COMPLEMENT — never replace
+— the root workflow rules (`../AGENTS.md` Rules A–E) and CeraUI's testing gate.
+
+**R1 — CI-green gate:** Every commit must pass lint + typecheck + Tier-1 unit tests (DB-free).
+`check:tech-debt` runs on **CeraUI only** (ceralive-platform has no such script).
+Every PR additionally passes Tier-2 integration tests (live Postgres/Redis) + Playwright e2e +
+CeraUI backend tests + `bun run build` (platform). Tier-3 is release/manual only — NOT a PR gate.
+A red gate blocks the PR; no skip/weaken of any test.
+
+**R2 — single integration branch → one PR per repo:** All work for an effort lands on ONE
+integration branch per repo (e.g. `feat/refined-experience`), stacked as wave-ordered coherent
+commits. Exactly ONE PR per repo. Merge order: root policy PR → ceralive-platform → CeraUI.
+Rebase onto `origin/<canonical>` between waves (Rule B); conflicts STOP-and-surface.
+R2 is a COMPLEMENT to Rule C ("one focused PR per repo"), not an override.
+
 ## BUN-NATIVE CONVENTIONS (as of 2026-06)
 
 The backend is fully migrated to Bun-native APIs. Use these patterns for all new backend code:

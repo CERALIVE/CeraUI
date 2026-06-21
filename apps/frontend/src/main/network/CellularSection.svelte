@@ -5,8 +5,7 @@ import { ChevronRight, Radio } from '@lucide/svelte';
 
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
-import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
-import StaleBadge from '$lib/components/custom/StaleBadge.svelte';
+import Badge from '$lib/components/custom/Badge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
 import { modemSignal } from '$lib/helpers/signal';
@@ -99,7 +98,7 @@ const { modemEntries, netif, links, isFullyStale, staleInterfaces, onConfigure }
 						</div>
 						<div class="flex shrink-0 items-center gap-2.5">
 							{#if showStale}
-								<StaleBadge data-stale-interface={modem.ifname} />
+								<Badge variant="stale" data-stale-interface={modem.ifname} />
 							{/if}
 							<div class={cn('flex items-center gap-1.5 transition-opacity', sigStale && 'opacity-50')}>
 								<LinkIndicator
@@ -116,7 +115,7 @@ const { modemEntries, netif, links, isFullyStale, staleInterfaces, onConfigure }
 									</span>
 								{/if}
 							</div>
-							<SpeedBadge {kbps} stale={tpStale} />
+							<Badge variant="speed" {kbps} stale={tpStale} />
 						</div>
 					</div>
 

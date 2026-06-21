@@ -320,3 +320,103 @@ export function buildServerSummary(
 		? `${target}${SUMMARY_SEPARATOR}${labels.kindLabel(kind)}`
 		: labels.kindLabel(kind);
 }
+
+/**
+ * A platform-pushed ingest slot mapped into the device's relay/receiver model
+ * (T18). Mirrors the backend `ManagedIngestAccount` shape: identity is the stable
+ * `endpointId` (never host+port), `key` is the slot's stream credential, and
+ * `label` falls back to `endpointId` when the platform sends no `instanceLabel`.
+ */
+export interface ManagedIngestAccount {
+	endpointId: string;
+	host: string;
+	port: number;
+	protocol: string;
+	key: string;
+	label: string;
+	region?: string;
+	state?: string;
+	default?: boolean;
+}
+
+/**
+ * The outcome of auto-selecting an ingest slot (T19):
+ * - `managed` — a slot is chosen for the operator (silent: one eligible slot, or
+ *   resolved by `default`/last-used among many). `reason` records which rule won.
+ * - `prompt`  — multiple slots, none default and none last-used: the operator
+ *   must pick one (NEVER auto-selected silently).
+ * - `custom`  — no managed slots: fall through to the manual/custom endpoint.
+ */
+export type IngestSlotSelection =
+	| {
+			kind: "managed";
+			account: ManagedIngestAccount;
+			reason: "single" | "default" | "lastUsed";
+	  }
+	| { kind: "prompt"; accounts: readonly ManagedIngestAccount[] }
+	| { kind: "custom" };
+
+/**
+ * Auto-select an ingest slot from the managed accounts + the persisted last-used
+ * `selected_ingest_endpoint` (T19). Rule: exactly one slot → that slot (silent);
+ * many → the `default` slot, else the last-used slot, else prompt; none → custom.
+ * The manual/custom endpoint stays reachable in every branch — this only decides
+ * the managed pre-selection, never disables the fallback.
+ */
+export function autoSelectIngestSlot(
+	accounts: readonly ManagedIngestAccount[],
+	selectedEndpointId: string | undefined,
+): IngestSlotSelection {
+	if (accounts.length === 0) return { kind: "custom" };
+	if (accounts.length === 1) {
+		const account = accounts[0];
+		if (account) return { kind: "managed", account, reason: "single" };
+	}
+	const defaultSlot = accounts.find((account) => account.default);
+	if (defaultSlot) {
+		return { kind: "managed", account: defaultSlot, reason: "default" };
+	}
+	const lastUsed = selectedEndpointId
+		? accounts.find((account) => account.endpointId === selectedEndpointId)
+		: undefined;
+	if (lastUsed)
+		return { kind: "managed", account: lastUsed, reason: "lastUsed" };
+	return { kind: "prompt", accounts };
+}
+
+/** Human label for a managed slot — the platform label, else its endpointId. */
+export function managedSlotLabel(account: ManagedIngestAccount): string {
+	return account.label || account.endpointId;
+}
+
+/**
+ * The managed account a persisted `selected_ingest_endpoint` resolves to, or
+ * `undefined` when none is selected or the id is no longer among the slots.
+ */
+export function findActiveSlot(
+	accounts: readonly ManagedIngestAccount[],
+	selectedEndpointId: string | undefined,
+): ManagedIngestAccount | undefined {
+	if (!selectedEndpointId) return undefined;
+	return accounts.find((account) => account.endpointId === selectedEndpointId);
+}
+
+/**
+ * Build the `streaming.setConfig` payload that persists a managed slot selection:
+ * the slot's endpoint (host/port/protocol/stream-key) plus the stable
+ * `selected_ingest_endpoint` identity. Pruned like {@link buildServerSetConfig}
+ * so no key carries an `undefined` value (lock-loop safe).
+ */
+export function buildManagedSlotConfig(
+	account: ManagedIngestAccount,
+	latency: number,
+): StreamingConfigInput {
+	return pruneUndefined({
+		srt_latency: latency,
+		relay_protocol: relayProtocolSchema.catch("srtla").parse(account.protocol),
+		srtla_addr: account.host,
+		srtla_port: account.port,
+		srt_streamid: account.key,
+		selected_ingest_endpoint: account.endpointId,
+	});
+}

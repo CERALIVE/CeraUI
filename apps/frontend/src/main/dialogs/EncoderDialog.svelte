@@ -57,7 +57,7 @@ import { BITRATE_DEFAULT_MIN, type Pipeline } from '@ceraui/rpc/schemas';
 import AppliesNextStart from '$lib/components/custom/AppliesNextStart.svelte';
 import FieldSyncIndicator from '$lib/components/custom/FieldSyncIndicator.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
-import StatusBadge from '$lib/components/custom/StatusBadge.svelte';
+import Badge from '$lib/components/custom/Badge.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 import {
@@ -662,7 +662,7 @@ function handleSave() {
 											: codec.mediaType}
 								</span>
 								{#if codec.hardwareAccelerated}
-									<StatusBadge
+									<Badge
 										variant="success"
 										size="micro"
 										data-testid={`codec-accel-${codec.value}`}
@@ -671,9 +671,9 @@ function handleSave() {
 											<Cpu aria-hidden={true} class="size-3 shrink-0" />
 										{/snippet}
 										{$LL.live.encoder.accelerated()}
-									</StatusBadge>
+									</Badge>
 								{:else}
-									<StatusBadge
+									<Badge
 										variant="warning"
 										size="micro"
 										data-testid={`codec-accel-${codec.value}`}
@@ -682,10 +682,10 @@ function handleSave() {
 											<TriangleAlert aria-hidden={true} class="size-3 shrink-0" />
 										{/snippet}
 										{$LL.live.encoder.software()}
-									</StatusBadge>
+									</Badge>
 								{/if}
 								{#if codec.softwareWarning}
-									<StatusBadge
+									<Badge
 										variant="warning"
 										size="micro"
 										data-testid="h265-software-warning"
@@ -694,7 +694,7 @@ function handleSave() {
 											<TriangleAlert aria-hidden={true} class="size-3 shrink-0" />
 										{/snippet}
 										{$LL.settings.softwareEncodeWarning()}
-									</StatusBadge>
+									</Badge>
 								{/if}
 							</span>
 						{/each}

@@ -753,7 +753,8 @@ const es = {
 			pairedBody:
 				"Este dispositivo ahora está vinculado a tu cuenta en la nube.",
 			deviceLabel: "ID del dispositivo",
-			scanToPair: "O escanea este código QR con tu teléfono para vincular al instante.",
+			scanToPair:
+				"O escanea este código QR con tu teléfono para vincular al instante.",
 			subscriptionLabel: "Suscripción",
 			statusActive: "Activa",
 			statusFree: "Gratis",
@@ -820,6 +821,10 @@ const es = {
 		relayProvider: "Proveedor",
 		autoEndpoint: "Punto de conexión del servidor (autoseleccionado)",
 		manualOverride: "Anulación manual",
+		ingestSlot: "Instancia en la nube",
+		ingestSlotHint: "Elige qué instancia en la nube recibe tu transmisión.",
+		ingestSlotPrompt: "Selecciona una instancia en la nube para continuar.",
+		ingestSlotDefault: "Predeterminada",
 		relaySecret: "Secreto / frase de contraseña",
 		relaySecretPlaceholder: "Frase de contraseña opcional",
 		streamId: "ID de transmisión",
@@ -1065,7 +1070,8 @@ const es = {
 				"¿Estás seguro de que deseas encender el modo punto de acceso? Esto permitirá compartir internet pero desconectará todas las conexiones WiFi.",
 		},
 		os: {
-			deviceBusy: "El dispositivo está ocupado, inténtalo de nuevo en un momento",
+			deviceBusy:
+				"El dispositivo está ocupado, inténtalo de nuevo en un momento",
 			operationFailed: "No se pudo completar la acción",
 			retry: "Reintentar",
 			stillWorking: "Aún trabajando — tardando más de lo esperado",

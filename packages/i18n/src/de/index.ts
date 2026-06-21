@@ -742,7 +742,8 @@ const de = {
 			regenerating: "Code wird aktualisiert…",
 			pairedBody: "Dieses Gerät ist jetzt mit deinem Cloud-Konto verknüpft.",
 			deviceLabel: "Geräte-ID",
-			scanToPair: "Oder scannen Sie diesen QR-Code mit Ihrem Telefon, um sofort zu koppeln.",
+			scanToPair:
+				"Oder scannen Sie diesen QR-Code mit Ihrem Telefon, um sofort zu koppeln.",
 			subscriptionLabel: "Abonnement",
 			statusActive: "Aktiv",
 			statusFree: "Kostenlos",
@@ -807,6 +808,10 @@ const de = {
 		relayProvider: "Anbieter",
 		autoEndpoint: "Server-Endpunkt (automatisch gewählt)",
 		manualOverride: "Manuell überschreiben",
+		ingestSlot: "Cloud-Instanz",
+		ingestSlotHint: "Wählen Sie, welche Cloud-Instanz Ihren Stream empfängt.",
+		ingestSlotPrompt: "Wählen Sie eine Cloud-Instanz, um fortzufahren.",
+		ingestSlotDefault: "Standard",
 		relaySecret: "Geheimnis / Passphrase",
 		relaySecretPlaceholder: "Optionale Passphrase",
 		streamId: "Stream-ID",
@@ -1052,7 +1057,8 @@ const de = {
 				"Sind Sie sicher, dass Sie den Hotspot-Modus einschalten möchten? Dadurch wird das Teilen Ihres Internets ermöglicht, aber alle WLAN-Verbindungen werden getrennt.",
 		},
 		os: {
-			deviceBusy: "Gerät ist beschäftigt, bitte in einem Moment erneut versuchen",
+			deviceBusy:
+				"Gerät ist beschäftigt, bitte in einem Moment erneut versuchen",
 			operationFailed: "Aktion konnte nicht abgeschlossen werden",
 			retry: "Wiederholen",
 			stillWorking: "Noch in Bearbeitung — dauert länger als erwartet",

@@ -15,13 +15,23 @@ interface Props {
 	kind: ReceiverKind | undefined;
 	/** Resolved managed-provider label (e.g. "CeraLive Cloud"); managed only. */
 	providerName: string | undefined;
+	/** Active managed ingest-slot label (T19); takes precedence when set. */
+	slotLabel: string | undefined;
 	/** Custom endpoint "addr:port"; custom destination only. */
 	endpoint: string | undefined;
 	onEditServer: () => void;
 }
 
-const { isStreaming, hasServer, destination, kind, providerName, endpoint, onEditServer }: Props =
-	$props();
+const {
+	isStreaming,
+	hasServer,
+	destination,
+	kind,
+	providerName,
+	slotLabel,
+	endpoint,
+	onEditServer,
+}: Props = $props();
 
 // i18n key resolver (mirrors LiveView) — dot-path through the typed $LL proxy
 // with safe key-passthrough on a miss, so kindBadgeLabelKey() results render.
@@ -44,6 +54,9 @@ const t = (key: string): string => {
 const kindBadge = $derived(kind ? t(kindBadgeLabelKey(kind)) : '');
 const chip = $derived.by(() => {
 	if (!hasServer || !kind) return $LL.general.notConfigured();
+	// An active managed ingest slot (T19) names the instance ahead of the
+	// provider/endpoint, so the operator sees which cloud slot is in use.
+	if (slotLabel) return `${slotLabel} · ${kindBadge}`;
 	if (destination === 'managed') {
 		return providerName ? `${providerName} · ${kindBadge}` : kindBadge;
 	}

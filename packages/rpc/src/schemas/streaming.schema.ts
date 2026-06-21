@@ -67,6 +67,10 @@ export const streamingConfigInputSchema = z.object({
 	srtla_addr: z.string().optional(),
 	srtla_port: z.number().int().min(PORT_MIN).max(PORT_MAX).optional(),
 	srt_streamid: z.string().optional(),
+	// endpointId of the operator-selected platform-pushed ingest slot (T18/T19).
+	// Identity is the endpointId, never host+port — the selection follows the
+	// stable id across re-pushes that move the slot to a new host/port.
+	selected_ingest_endpoint: z.string().optional(),
 	asrc: z.string().optional(),
 	bitrate_overlay: z.boolean().optional(),
 	max_br: z.number().int().min(BITRATE_MIN).max(BITRATE_MAX).optional(),
@@ -263,6 +267,9 @@ export const configMessageSchema = z.object({
 	relay_server: z.string().optional(),
 	relay_streamid_override: z.string().optional(),
 	relay_protocol: relayProtocolSchema.optional(),
+	// endpointId of the selected platform-pushed ingest slot (T18/T19), echoed
+	// back so the UI can resolve the active slot's label and last-used selection.
+	selected_ingest_endpoint: z.string().optional(),
 	detectionMethod: detectionMethodSchema.optional(),
 	resolution: resolutionSchema.optional(),
 	framerate: framerateSchema.optional(),
@@ -312,8 +319,19 @@ export type StreamingStartOutputExtended = z.infer<typeof streamingStartOutputSc
 export const healthStateSchema = z.enum(['healthy', 'degraded', 'dead']);
 export type HealthState = z.infer<typeof healthStateSchema>;
 
+// The single most-actionable cause behind a non-healthy state — `component`
+// names the failing subsystem (`process` | `frames` | `links`), `detail` is a
+// short operator-facing sentence (e.g. "1 of 3 links down"). Present only when
+// the stream is degraded or dead; a healthy stream carries no reason.
+export const streamHealthReasonSchema = z.object({
+	component: z.string(),
+	detail: z.string(),
+});
+export type StreamHealthReason = z.infer<typeof streamHealthReasonSchema>;
+
 export const streamHealthOutputSchema = z.object({
 	state: healthStateSchema,
+	reason: streamHealthReasonSchema.optional(),
 	process: z.object({
 		alive: z.boolean(),
 	}),

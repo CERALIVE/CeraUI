@@ -6,8 +6,7 @@ import { ChevronRight, Network as NetworkIcon } from '@lucide/svelte';
 import * as AlertDialog from '$lib/components/ui/alert-dialog';
 import { Button } from '$lib/components/ui/button';
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
-import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
-import StaleBadge from '$lib/components/custom/StaleBadge.svelte';
+import Badge from '$lib/components/custom/Badge.svelte';
 import { convertBytesToKbids } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
 import { cn } from '$lib/utils';
@@ -23,7 +22,7 @@ interface Props {
 
 const { wiredEntries, isFullyStale, staleInterfaces, onConfigure }: Props = $props();
 
-// Per-interface throughput → kbps for SpeedBadge. A missing reading renders the
+// Per-interface throughput → kbps for the speed Badge. A missing reading renders the
 // muted placeholder rather than a misleading 0.
 function throughputKbps(iface: NetifEntry): number | null {
 	return iface.tp == null ? null : convertBytesToKbids(iface.tp);
@@ -94,9 +93,9 @@ function settle(proceed: boolean) {
 						</div>
 						<div class="flex shrink-0 items-center gap-2.5">
 							{#if showStale}
-								<StaleBadge data-stale-interface={name} />
+								<Badge variant="stale" data-stale-interface={name} />
 							{/if}
-							<SpeedBadge kbps={throughputKbps(iface)} stale={throughputStale(iface)} />
+							<Badge variant="speed" kbps={throughputKbps(iface)} stale={throughputStale(iface)} />
 						</div>
 					</div>
 

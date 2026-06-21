@@ -8,7 +8,7 @@
 
   Three states mirror the feed:
     • populated — fresh values per link, totals summed
-    • stale     — a link's `stale` flag dims its row + earns a StaleBadge
+    • stale     — a link's `stale` flag dims its row + earns a stale Badge
     • waiting   — no links yet (feed null/empty): a calm "waiting" line, panel kept
 
   rtt_ms=0 and weight_percent=100 are valid sender constants, rendered as-is.
@@ -19,7 +19,7 @@ import type { LinkTelemetryEntry, LinkTelemetryMessage } from '@ceraui/rpc/schem
 import { Activity, AlertTriangle, Download, TrendingUp } from '@lucide/svelte';
 import { untrack } from 'svelte';
 
-import StaleBadge from '$lib/components/custom/StaleBadge.svelte';
+import Badge from '$lib/components/custom/Badge.svelte';
 import {
 	createLinkViewCache,
 	type LinkViewComputed,
@@ -403,7 +403,7 @@ function exportCsv(): void {
 							></span>
 							<span class="truncate font-medium">{link.iface}</span>
 							{#if link.stale}
-								<StaleBadge data-stale-interface={link.iface} />
+								<Badge variant="stale" data-stale-interface={link.iface} />
 							{/if}
 						</div>
 						<span data-testid="ingest-rtt" class="text-foreground text-end font-mono tabular-nums">

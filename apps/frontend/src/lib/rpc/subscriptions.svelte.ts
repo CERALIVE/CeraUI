@@ -37,6 +37,7 @@ import {
 	push as pushNotification,
 } from "$lib/stores/notifications.svelte";
 import { ingestStreamHealth } from "$lib/stores/stream-health.svelte";
+import type { ManagedIngestAccount } from "$lib/streaming/receiver-experience";
 
 import {
 	confirmOperation,
@@ -113,6 +114,11 @@ let activeInputState = $state<string | undefined>(undefined);
 
 // Relay state
 let relaysState = $state<RelayMessage | undefined>(undefined);
+
+// Managed ingest slots (T18/T19): platform-pushed ingest endpoints mapped to
+// selectable managed accounts, delivered via the `ingest.slots` broadcast. The
+// operator's selection is persisted as `config.selected_ingest_endpoint`.
+let managedIngestState = $state<ManagedIngestAccount[]>([]);
 
 // Notifications state
 let notificationsState = $state<NotificationsMessage | undefined>(undefined);
@@ -219,6 +225,14 @@ export function getActiveInput() {
 
 export function getRelays() {
 	return relaysState;
+}
+
+export function getManagedIngestAccounts(): readonly ManagedIngestAccount[] {
+	return managedIngestState;
+}
+
+export function getSelectedIngestEndpoint(): string | undefined {
+	return configState?.selected_ingest_endpoint;
 }
 
 export function getNotifications() {
@@ -413,7 +427,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 
 			// Boolean connect result (saved network). The array ack (connect:
 			// string[]) is a dispatch echo and is intentionally ignored.
-			if (typeof wifiData.connect === "boolean" && wifiData.device !== undefined) {
+			if (
+				typeof wifiData.connect === "boolean" &&
+				wifiData.device !== undefined
+			) {
 				const key = `wifi:${wifiData.device}`;
 				if (wifiData.connect) {
 					confirmOperation(key);
@@ -506,6 +523,16 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 		case "relays":
 			relaysState = data as RelayMessage;
 			break;
+
+		case "ingest.slots": {
+			// Each push carries the complete, authoritative account list (T18/T19);
+			// a non-array payload is ignored so the store is never clobbered.
+			const accounts = (data as { slots?: unknown })?.slots ?? data;
+			if (Array.isArray(accounts)) {
+				managedIngestState = accounts as ManagedIngestAccount[];
+			}
+			break;
+		}
 
 		case "notifications": {
 			// `show` adds/updates; `remove` (backend `notificationRemove`, or
@@ -724,6 +751,7 @@ export function resetState(): void {
 	capabilitiesState = undefined;
 	audioCodecsState = undefined;
 	relaysState = undefined;
+	managedIngestState = [];
 	notificationsState = undefined;
 	kioskState = undefined;
 	addonsState = {};

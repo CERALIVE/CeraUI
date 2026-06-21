@@ -17,7 +17,7 @@ import ZapIcon from '@lucide/svelte/icons/zap';
 
 import BondConstellation from '$lib/components/custom/BondConstellation.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
-import SpeedBadge from '$lib/components/custom/SpeedBadge.svelte';
+import Badge from '$lib/components/custom/Badge.svelte';
 import * as Sheet from '$lib/components/ui/sheet';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import { type StalenessState, getStalenessState } from '$lib/helpers/staleness';
@@ -98,6 +98,11 @@ const rollupLabel = $derived(
 				? $LL.hud.healthDead()
 				: $LL.hud.healthUnknown(),
 );
+
+// Top reason behind a non-healthy rollup (Task 16): the backend names the
+// failing subsystem and a short detail (e.g. "1 of 3 links down"). Surfaced as a
+// secondary label so an operator sees WHY at a glance, not just the dot.
+const healthReason = $derived(rollup && rollup.state !== 'healthy' ? rollup.reason : undefined);
 
 // SoC telemetry — temp / voltage / current, already parsed by the store
 // (parseSensorNumber / parseVolts / parseCurrentAmps). Each value routes
@@ -225,6 +230,16 @@ $effect(() => {
 					<span class="text-[0.7rem] font-semibold">{healthLabel}</span>
 					<span class="sr-only">{$LL.hud.streamHealth()}</span>
 				</span>
+
+				{#if healthReason}
+					<span
+						data-testid="stream-health-reason"
+						class="text-muted-foreground hidden min-w-0 truncate text-[0.7rem] font-medium sm:inline"
+						title={healthReason.detail}
+					>
+						{healthReason.detail}
+					</span>
+				{/if}
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
 
@@ -364,6 +379,10 @@ $effect(() => {
 						</span>
 					</div>
 
+					{#if healthReason}
+						<p class="text-status-warning text-xs" data-testid="stream-health-reason-detail">{healthReason.detail}</p>
+					{/if}
+
 					{#if rollup}
 						<dl class="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs" data-testid="stream-health-rollup">
 							{@render rollupRow(
@@ -441,7 +460,7 @@ $effect(() => {
 								<span class="truncate font-medium">{link.label}</span>
 							</span>
 							<span class="flex shrink-0 items-center gap-3">
-								<SpeedBadge kbps={link.throughputKbps} stale={link.isStale} />
+								<Badge variant="speed" kbps={link.throughputKbps} stale={link.isStale} />
 								{#if link.type !== 'ethernet'}
 									{#if link.signal != null}
 										<span class="font-mono text-xs tabular-nums" style:color={linkColor(link)}>
