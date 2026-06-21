@@ -39,10 +39,33 @@ export const ROLES = ["owner", "copilot", "viewer"] as const;
 export type Role = (typeof ROLES)[number];
 
 /**
- * The closed, explicit list of every remote-invokable command type in v2.0
- * (spec §5 + §7 `self_fencing.confirm`). A `command` frame's `type` MUST be one
- * of these. This is the exact set advertised in the device `device.hello`
- * `supportedTypes` (spec §4 / §14.2).
+ * INTERNAL commands (spec §5) — platform-originated, DOWNSTREAM-only (hub→device).
+ * NOT operator-invocable, but IN the registry so the device's `result` /
+ * `delivery.ack` echo validates platform-side (§6 / §6.1). Distinct from
+ * {@link NEVER_REMOTE}: a never-remote command is local-only and MUST NEVER cross
+ * the wire; an internal command IS relayed downstream — it is simply not something
+ * an operator may originate. The platform additionally WITHHOLDS it from any device
+ * whose `device.hello` `supportedTypes` (§4.1) does not advertise the type, so a
+ * not-yet-updated device never receives a frame it cannot parse (additive,
+ * safe-rollout, §13). Advertising it here is exactly what opts this device in.
+ *
+ * Mirrors the hub's `INTERNAL_COMMANDS` (ceralive-platform
+ * `apps/api/lib/remote-control/protocol.ts`) — kept in sync by the spec, not a
+ * shared package (Rule D).
+ *
+ * `ingest.slots` (T17/T18): the platform pushes the account-resolved ingest slots
+ * to the device so the on-device UI can render + select them. Payload =
+ * {@link IngestSlotsPayloadSchema}.
+ */
+export const INTERNAL_COMMANDS = ["ingest.slots"] as const;
+export type InternalCommandType = (typeof INTERNAL_COMMANDS)[number];
+
+/**
+ * The closed, explicit list of every command type the device services in v2.0
+ * (spec §5 + §7 `self_fencing.confirm` + {@link INTERNAL_COMMANDS}). A `command`
+ * frame's `type` MUST be one of these. This is the exact set advertised in the
+ * device `device.hello` `supportedTypes` (spec §4 / §14.2) — operator-invocable
+ * commands and platform-internal downstream pushes alike.
  */
 export const COMMAND_REGISTRY = [
 	"streaming.start",
@@ -57,6 +80,7 @@ export const COMMAND_REGISTRY = [
 	"system.reboot",
 	"device.factoryReset",
 	"self_fencing.confirm",
+	...INTERNAL_COMMANDS,
 ] as const;
 export type CommandType = (typeof COMMAND_REGISTRY)[number];
 
@@ -142,6 +166,40 @@ export const CommandSchema = EnvelopeSchema.extend({
 	payload: payloadSchema.optional(),
 });
 export type Command = z.infer<typeof CommandSchema>;
+
+/**
+ * `ingest.slots` internal-command payload (T18) — the device's OWN, deliberately
+ * LENIENT validator (Rule D: each repo writes its own Zod from the spec; there is
+ * no shared schema package across the device/hub boundary).
+ *
+ * The platform emits a STRICTER shape (ceralive-platform `protocol.ts`
+ * `IngestSlotPayloadSchema`: `obsInstanceId` non-null, every descriptive field
+ * required). The device tolerates more so a future platform that drops or nulls a
+ * purely descriptive field never trips this schema: `obsInstanceId` may be `null`
+ * and the descriptive fields (`instanceLabel`, `region`, `state`, `default`) may be
+ * absent. The fields the device actually routes on — `endpointId` (slot identity),
+ * `host`, `port`, `protocol`, `streamId` — stay required. Unknown keys are stripped
+ * (forward compatibility, §3).
+ */
+export const IngestSlotSchema = z.object({
+	endpointId: z.string(),
+	obsInstanceId: z.string().nullable(),
+	instanceLabel: z.string().optional(),
+	region: z.string().optional(),
+	state: z.string().optional(),
+	host: z.string(),
+	port: z.number(),
+	protocol: z.string(),
+	streamId: z.string(),
+	default: z.boolean().optional(),
+});
+export type IngestSlot = z.infer<typeof IngestSlotSchema>;
+
+/** Body of an `ingest.slots` command frame (spec §5 internal command). */
+export const IngestSlotsPayloadSchema = z.object({
+	slots: z.array(IngestSlotSchema),
+});
+export type IngestSlotsPayload = z.infer<typeof IngestSlotsPayloadSchema>;
 
 /**
  * Result payload (spec §6). `applied` is the post-validation, post-clamp state
@@ -252,3 +310,10 @@ export const FrameSchema = z.discriminatedUnion("kind", [
 	DeliveryAckSchema,
 ]);
 export type Frame = z.infer<typeof FrameSchema>;
+
+const INTERNAL_COMMANDS_SET: ReadonlySet<string> = new Set(INTERNAL_COMMANDS);
+
+/** True when `type` is a platform-originated, downstream-only INTERNAL command (§5). */
+export function isInternalCommand(type: string): boolean {
+	return INTERNAL_COMMANDS_SET.has(type);
+}

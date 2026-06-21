@@ -40,10 +40,12 @@ import {
 	getSharedSeenCidStore,
 	type SeenCidStore,
 } from "./command-idempotency.ts";
+import { handleIngestSlots } from "./ingest-slots.ts";
 import {
 	COMMAND_REGISTRY,
 	type Command,
 	type DeliveryAck,
+	isInternalCommand,
 	NEVER_REMOTE,
 	PROTOCOL_VERSION,
 	type Result,
@@ -265,7 +267,28 @@ export async function routeCommand(
 	//    even when an earlier `result` never confirmed.
 	deps.sendDeliveryAck(buildDeliveryAck(frame));
 
-	// 4. Authority derives from the hub-stamped role (spec §12). v2.0 is
+	// 4. INTERNAL commands (spec §5) are platform-originated downstream data pushes
+	//    (e.g. ingest.slots, T18), NOT operator control actions — so they apply
+	//    BEFORE the owner-only gate (no human operator originates them) and need no
+	//    idempotency guard (each push replaces the full set). A malformed payload is
+	//    ignored (store unchanged) and surfaced as an ok:false result, never a crash.
+	if (isInternalCommand(frame.type)) {
+		if (frame.type === "ingest.slots") {
+			const accounts = handleIngestSlots(frame.payload);
+			emit(
+				deps,
+				frame,
+				accounts === null
+					? { ok: false, applied: null, error: "invalid_ingest_slots" }
+					: { ok: true, applied: accounts },
+			);
+		} else {
+			emit(deps, frame, { ok: false, applied: null, error: "unknown_command" });
+		}
+		return;
+	}
+
+	// 5. Authority derives from the hub-stamped role (spec §12). v2.0 is
 	//    owner-only: only `owner` frames execute.
 	if (frame.role !== "owner") {
 		emit(deps, frame, { ok: false, applied: null, error: "unauthorized" });
