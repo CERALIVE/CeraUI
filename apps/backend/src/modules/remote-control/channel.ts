@@ -52,6 +52,7 @@ import {
 	type ControlChannelEndpoint,
 	resolveControlChannelEndpoint,
 } from "../remote/control-endpoint.ts";
+import { isRealDevice } from "../system/device-detection.ts";
 import {
 	COMMAND_REGISTRY,
 	CommandSchema,
@@ -141,13 +142,14 @@ function defaultCreateSocket(url: string, authToken?: string): ControlSocket {
 	};
 }
 
-function defaultDeps(): ControlChannelDeps {
+function defaultDeps(isReal: boolean): ControlChannelDeps {
 	return {
 		canDial: canDialControlChannel,
 		resolveEndpoint: () => resolveControlChannelEndpoint(),
 		createSocket: defaultCreateSocket,
 		getControlToken: () => undefined,
-		verifyToken: (token) => verifyDeviceControlToken(token),
+		verifyToken: (token) =>
+			verifyDeviceControlToken(token, undefined, { isRealDevice: isReal }),
 		logger,
 		random: Math.random,
 		setTimer: (fn, ms) => setTimeout(fn, ms),
@@ -391,7 +393,8 @@ export function isConnected(): boolean {
 export async function initControlChannel(
 	overrides: Partial<ControlChannelDeps> = {},
 ): Promise<void> {
-	const deps: ControlChannelDeps = { ...defaultDeps(), ...overrides };
+	const isReal = await isRealDevice();
+	const deps: ControlChannelDeps = { ...defaultDeps(isReal), ...overrides };
 
 	teardown();
 	state = {
