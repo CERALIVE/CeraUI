@@ -85,8 +85,31 @@ New procedures: add to `@ceraui/rpc` schemas first, then extend `TypedRPC` in `c
 
 ```bash
 bun run dev / build / check / test       # Vite :5173 / dist/ / svelte-check / vitest
+bun run build:federation                  # Vite lib-mode → dist/federation/<ceraui-version>/{encoder,audio,server}.js
 # Linting is Biome-only, run from the workspace root: `biome check .` (or `bun run lint`)
 ```
+
+## FEDERATION LIB BUILD (Task 39) [EXISTS]
+
+`vite.federation.config.ts` is a SEPARATE Vite lib-mode build (not the SPA `vite.config.ts`)
+that emits the Encoder/Audio/Server config dialogs as standalone ES-module bundles for the
+version-federation hosting/signing contract (root `AGENTS.md` → version-federation). It runs
+via `bun run build:federation` from the CeraUI root (delegates to the frontend
+`build:federation` script).
+
+- **Entries**: `src/main/dialogs/{EncoderDialog,AudioDialog,ServerDialog}.svelte` →
+  `dist/federation/<ceraui-version>/{encoder,audio,server}.js` (`formats: ["es"]`,
+  per-entry `fileName`). Shared graph (rpc, subscriptions, i18n) is code-split into sibling
+  chunks co-located at the same versioned path — they upload + resolve together under the
+  platform CSP.
+- **`<ceraui-version>`** is read at build time from the workspace-root `package.json` `version`
+  (CalVer, `2026.6.2` at time of writing) — the single source of truth, matching the platform's
+  `ceraui-version` claim.
+- **Isolation**: this build NEVER touches the SPA `dist/public` output, runs no
+  PWA/service-worker plugin, and emits no `index.html`. The SPA `vite.config.ts` is unmodified.
+- **CI ordering caveat**: the backend `build` script does `rm -rf ../../dist/`, so
+  `build:federation` MUST run AFTER `bun run build` (the full SPA/backend build) — never before,
+  or its output is wiped.
 
 ## CONVENTIONS
 

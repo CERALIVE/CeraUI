@@ -9,6 +9,7 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "vite build",
+		"build:federation": "vite build --config vite.federation.config.ts",
 		"preview": "vite preview",
 		"check": "svelte-check --tsconfig ./tsconfig.app.json",
 		"lint": "echo 'Frontend linting handled by root Biome'",
