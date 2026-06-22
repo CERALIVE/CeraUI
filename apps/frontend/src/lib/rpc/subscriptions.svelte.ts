@@ -28,6 +28,7 @@ import type {
 
 import { downloadLog } from "$lib/helpers/SystemHelper";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
+import { ingestBuffering } from "$lib/stores/buffering.svelte";
 import {
 	markSessionExpired,
 	wasAuthenticated,
@@ -365,6 +366,9 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			if (statusData.linkTelemetry !== undefined) {
 				linkTelemetryState = statusData.linkTelemetry;
 			}
+			// Store-and-forward buffering rides the engine `status` event bus (NOT
+			// device-stats). undefined = no buffering field this frame (no-op).
+			ingestBuffering(statusData.buffering);
 
 			// Update aggregated status
 			statusState = {

@@ -124,7 +124,7 @@ build_backend_only() {
         echo "🔄 Backend changes detected for $arch - rebuilding..."
 
         # Build backend for specific architecture
-        BUILD_ARCH=$arch pnpm --filter backend run build:backend-only
+        BUILD_ARCH=$arch bun run --filter backend build:backend-only
 
         # Cache the binary
         cp dist/ceralive "$cache_path/"

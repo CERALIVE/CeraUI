@@ -14,7 +14,7 @@
 		"@ceraui/rpc": "workspace:*",
 		"@orpc/server": "^1.14.6",
 		"finalhandler": "^2.1.1",
-		"zod": "^4.4.3",
+		"zod": "catalog:",
 		"http-proxy": "^1.18.1",
 		"serve-static": "^2.2.1",
 		"winston": "^3.19.0",
@@ -28,14 +28,14 @@
 		"@types/ws": "^8.18.1",
 		"@types/xml2js": "^0.4.14",
 		"npm-run-all2": "^9.0.2",
-		"typescript": "^6.0.3"
+		"typescript": "catalog:"
 	},
 	"scripts": {
 		"dev": "NODE_ENV=development bun --watch run src/main.ts",
 		"dev:e2e": "NODE_ENV=development bun run src/main.ts",
 		"dev:single-modem": "NODE_ENV=development MOCK_SCENARIO=single-modem bun --watch run src/main.ts",
 		"dev:streaming": "NODE_ENV=development MOCK_SCENARIO=streaming-active bun --watch run src/main.ts",
-		"build": "rm -rf ../../dist/ && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; bun build --compile --minify --sourcemap --target=$BUN_TARGET src/main.ts --outfile ../../dist/ceralive' && cd ../.. && pnpm run build:frontend",
+		"build": "rm -rf ../../dist/ && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; bun build --compile --minify --sourcemap --target=$BUN_TARGET src/main.ts --outfile ../../dist/ceralive' && cd ../.. && bun run build:frontend",
 		"build:backend-only": "rm -rf ../../dist/ceralive ../../dist/deployment && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; bun build --compile --minify --sourcemap --target=$BUN_TARGET src/main.ts --outfile ../../dist/ceralive'",
 		"test": "bun test",
 		"check": "bun tsc --noEmit && bash scripts/check-exec-guard.sh",

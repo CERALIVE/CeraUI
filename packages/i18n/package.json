@@ -34,7 +34,7 @@
 		"typesafe-i18n": "^5.27.1"
 	},
 	"devDependencies": {
-		"typescript": "^6.0.3"
+		"typescript": "catalog:"
 	},
 	"keywords": [
 		"i18n",

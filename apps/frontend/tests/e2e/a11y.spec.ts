@@ -15,7 +15,7 @@ import { expect, test } from './fixtures/index.js';
  * build; pre-existing ones are reported but tolerated.
  *
  * Capture/refresh the baseline allowlist (and the baseline evidence doc) with:
- *   UPDATE_A11Y_BASELINE=1 pnpm --filter frontend exec playwright test \
+ *   UPDATE_A11Y_BASELINE=1 bun run --filter frontend test:e2e -- \
  *     a11y.spec.ts --project=desktop -g "axe gate"
  *
  * Evidence lands in the repo-root `test-results/` (gitignored) per Task 7:

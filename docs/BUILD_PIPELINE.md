@@ -96,10 +96,7 @@ The build pipeline runs manually via workflow dispatch.
 # Node.js 24
 node --version
 
-# pnpm
-pnpm --version
-
-# Bun (for backend compilation)
+# Bun (package manager + backend compilation)
 bun --version
 
 # Ruby + FPM (for Debian packages)

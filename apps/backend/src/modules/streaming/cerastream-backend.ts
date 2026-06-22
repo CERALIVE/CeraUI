@@ -65,6 +65,7 @@ import {
 	switchAudioResultSchema,
 	writeCerastreamConfig,
 } from "@ceralive/cerastream";
+import type { BufferingStatus } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { logger as defaultLogger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
@@ -98,6 +99,7 @@ export interface CerastreamBridge {
 	): void;
 	notificationExists(name: string): boolean;
 	broadcastStatus(): void;
+	broadcastBuffering(payload: BufferingStatus): void;
 }
 
 /** Minimal logger surface (winston satisfies it; tests pass a silent stub). */
@@ -139,6 +141,47 @@ function defaultBridge(): CerastreamBridge {
 				}
 			})();
 		},
+		broadcastBuffering: (payload) => {
+			void (async () => {
+				try {
+					const { broadcastMsg } = await import("../ui/websocket-server.ts");
+					broadcastMsg("status", { buffering: payload });
+				} catch (err) {
+					defaultLogger.debug("cerastream: buffering broadcast skipped", {
+						err,
+					});
+				}
+			})();
+		},
+	};
+}
+
+/**
+ * Read the additive store-and-forward fields off a cerastream `status` event
+ * (cerastream Task 32). Returns `null` when the engine does not advertise
+ * buffering (`buffering` absent) — the capability gate the UI honors so an older
+ * engine renders no indicator. Numeric counters are read defensively so a partial
+ * frame can never throw.
+ */
+export function extractBufferingStatus(event: unknown): BufferingStatus | null {
+	if (event === null || typeof event !== "object") return null;
+	const e = event as Record<string, unknown>;
+	if (typeof e.buffering !== "boolean") return null;
+	const spooled = e.spooled_bytes;
+	const headroom = e.data_headroom_bytes;
+	return {
+		active: e.buffering,
+		...(typeof spooled === "number" && Number.isFinite(spooled) && spooled >= 0
+			? { spooled_bytes: spooled }
+			: {}),
+		...(typeof headroom === "number" &&
+		Number.isFinite(headroom) &&
+		headroom >= 0
+			? { data_headroom_bytes: headroom }
+			: {}),
+		...(typeof e.disk_warning === "boolean"
+			? { disk_warning: e.disk_warning }
+			: {}),
 	};
 }
 
@@ -438,15 +481,19 @@ export class CerastreamBackend implements StreamingBackend {
 				};
 				this.deps.bridge.broadcastStatus();
 				break;
-			case "status":
+			case "status": {
+				const buffering = extractBufferingStatus(event);
 				this.telemetry = {
 					...this.telemetry,
 					state: event.state,
 					streaming: event.streaming,
 					...(event.active_input ? { active_input: event.active_input } : {}),
+					...(buffering ? { buffering } : {}),
 				};
 				this.deps.bridge.broadcastStatus();
+				if (buffering) this.deps.bridge.broadcastBuffering(buffering);
 				break;
+			}
 			case "switch":
 				this.telemetry = {
 					...this.telemetry,

@@ -944,6 +944,10 @@ const ptBR = {
 			"Transmitindo, mas os quadros estão travados ou alguns links agregados estão fora do ar.",
 		healthExplainDead:
 			"O processo do codificador não está em execução. A transmissão está fora do ar.",
+		buffering: "Armazenando em buffer",
+		bufferingStoreForward: "Armazenar e encaminhar ativo",
+		bufferingHint:
+			"Os links estão fora do ar — salvando no disco e encaminhando quando se recuperarem.",
 		link: "Link",
 	},
 	live: {

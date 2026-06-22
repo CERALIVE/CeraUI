@@ -15,6 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import type { BufferingStatus } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
 import { getConfig } from "../config.ts";
 import { buildModemsMessage } from "../modems/modem-status.ts";
@@ -50,6 +51,7 @@ export type StatusResponseMessage = {
 	set_password?: boolean;
 	remote?: true | { error: string };
 	linkTelemetry?: LinkTelemetryMessage | null;
+	buffering?: BufferingStatus | null;
 };
 
 export function sendStatus(conn: WebSocket) {

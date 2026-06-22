@@ -177,6 +177,52 @@ describe("device-control token — unsigned dev path (no key provisioned)", () =
 	});
 });
 
+describe("device-control token — real-device fail-closed (Task 20)", () => {
+	test("a real device with no provisioned key REFUSES the token (no opaque acceptance)", () => {
+		const token = mintStubDeviceControlToken({
+			deviceId: "7a03d468-3c9e-4b7a-8483-1f2a3b4c5d6e",
+			tenantId: "ten_8b14e579",
+			serial: "CERA-RK3588-000123",
+			jti: "8b14e579-4d0f-4c8b-9594-2a3b4c5d6e7f",
+			now: NOW,
+		});
+
+		expect(
+			verifyDeviceControlToken(token, NOW, { isRealDevice: true }),
+		).toBeNull();
+	});
+
+	test("a dev/mock host with no provisioned key still accepts the opaque token", () => {
+		const token = mintStubDeviceControlToken({
+			deviceId: "dev-device",
+			tenantId: "dev-tenant",
+			serial: "DEVSERIAL01",
+			jti: "dev-jti-0001",
+			now: NOW,
+		});
+
+		const claims = verifyDeviceControlToken(token, NOW, {
+			isRealDevice: false,
+		});
+		expect(claims?.purpose).toBe(DEVICE_CONTROL_PURPOSE);
+
+		expect(verifyDeviceControlToken(token, NOW)?.purpose).toBe(
+			DEVICE_CONTROL_PURPOSE,
+		);
+	});
+
+	test("a real device with a provisioned key still verifies a signed token", () => {
+		process.env[DEVICE_TOKEN_PUBLIC_KEY_ENV] = platformPublicKeyB64;
+		const token = signControlToken(controlClaims());
+
+		const claims = verifyDeviceControlToken(token, NOW, {
+			isRealDevice: true,
+		});
+		expect(claims?.purpose).toBe(DEVICE_CONTROL_PURPOSE);
+		expect(claims?.device_id).toBe("7a03d468-3c9e-4b7a-8483-1f2a3b4c5d6e");
+	});
+});
+
 describe("relay-config token — real verification when key provisioned", () => {
 	test("a validly signed relay-config token is accepted", () => {
 		process.env[DEVICE_TOKEN_PUBLIC_KEY_ENV] = platformPublicKeyB64;

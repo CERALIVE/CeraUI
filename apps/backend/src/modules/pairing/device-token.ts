@@ -353,12 +353,24 @@ function decodeUnsignedPayload(token: string): string | null {
 // relay-config latch so each surfaces its own notice exactly once per process).
 let warnedControlUnverified = false;
 
+/** Options for {@link verifyDeviceControlToken}. */
+export interface VerifyDeviceControlTokenOptions {
+	/**
+	 * Whether this is a real hardware device (`isRealDevice()` resolved by the
+	 * caller). On a real device with no provisioned key the unsigned opaque path
+	 * is REFUSED (fail-closed) — only dev/mock hosts accept it. Defaults to
+	 * `false` so the key-less dev/test path is unaffected.
+	 */
+	isRealDevice?: boolean;
+}
+
 /**
  * Verify a DEVICE-CONTROL token (spec §10), gated on key provisioning.
  *
  * 1. format gate (`v4.public.` header);
- * 2. key present → REAL Ed25519 verification; key absent → MVP unsigned dev
- *    path with a warn-once (the key-less fleet still resolves identity locally);
+ * 2. key present → REAL Ed25519 verification; key absent → on a real device the
+ *    token is REFUSED (fail-closed), else the MVP unsigned dev path with a
+ *    warn-once (the key-less dev/mock host still resolves identity locally);
  * 3. PURPOSE GATE: reject unless `purpose === "device-control"` BEFORE any other
  *    claim is trusted — a relay-config token cannot cross audiences;
  * 4. validate the full control claim shape;
@@ -369,6 +381,7 @@ let warnedControlUnverified = false;
 export function verifyDeviceControlToken(
 	token: string,
 	now: number = Date.now(),
+	opts: VerifyDeviceControlTokenOptions = {},
 ): DeviceControlTokenClaims | null {
 	// (1) Basic format gate.
 	if (!token.startsWith(DEVICE_TOKEN_HEADER)) return null;
@@ -378,6 +391,14 @@ export function verifyDeviceControlToken(
 	let payloadJson: string | null;
 	if (publicKey) {
 		payloadJson = verifyRealPayload(token, publicKey);
+	} else if (opts.isRealDevice === true) {
+		// FAIL-CLOSED: a real device with no provisioned key cannot verify a
+		// signature, and must NEVER accept an unverified control token. The
+		// unsigned opaque path is dev/mock-only.
+		logger.error(
+			`${DEVICE_TOKEN_PUBLIC_KEY_ENV} is not set on a real device: refusing the device-control token (fail-closed). Provision an Ed25519 public key.`,
+		);
+		return null;
 	} else {
 		if (!warnedControlUnverified) {
 			warnedControlUnverified = true;

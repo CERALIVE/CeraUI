@@ -27,7 +27,7 @@ const BRAND_CONFIG = {
 // the Bun backend upgrades WS on ANY path off the `Upgrade` header. There is no
 // separate "/rpc" or "/ws" route, so the proxy is keyed on `/` and bypass()
 // forwards only the WS upgrade — plain HTTP stays local so the app + HMR keep
-// serving. Inert unless VITE_DEVICE_HOST is set: default `pnpm dev` is unchanged.
+// serving. Inert unless VITE_DEVICE_HOST is set: default `bun run dev` is unchanged.
 function buildDeviceServer(env: Record<string, string>) {
 	const deviceHost = env.VITE_DEVICE_HOST;
 	if (!deviceHost) {

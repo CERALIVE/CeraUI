@@ -18,7 +18,7 @@ const VALID_OPEN_ENTRY = [
 	'title: Live-audio switch UI gated, engine path stubbed',
 	'track: 1',
 	'status: open',
-	'exit_criteria: `pnpm --filter backend run test -- audio-live-switch.test.ts`',
+	'exit_criteria: `bun run --filter backend test -- audio-live-switch.test.ts`',
 	'owner: andrescera',
 	'registered_at: 2026-06-17',
 	'resolved_at: null',
@@ -121,7 +121,7 @@ test('malformed entry (bad track value) fails', () => {
 
 test('prose exit_criteria (not executable) fails', () => {
 	const prose = VALID_OPEN_ENTRY.replace(
-		'exit_criteria: `pnpm --filter backend run test -- audio-live-switch.test.ts`',
+		'exit_criteria: `bun run --filter backend test -- audio-live-switch.test.ts`',
 		'exit_criteria: when the backend eventually wires the live switch',
 	);
 	const root = makeFixture(prose);
@@ -133,7 +133,7 @@ test('prose exit_criteria (not executable) fails', () => {
 test('exit_criteria as capability: or PR # reference passes', () => {
 	for (const crit of ['capability:audio_live_switch', 'PR #123']) {
 		const entry = VALID_OPEN_ENTRY.replace(
-			'exit_criteria: `pnpm --filter backend run test -- audio-live-switch.test.ts`',
+			'exit_criteria: `bun run --filter backend test -- audio-live-switch.test.ts`',
 			`exit_criteria: ${crit}`,
 		);
 		const root = makeFixture(entry);

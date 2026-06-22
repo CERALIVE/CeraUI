@@ -278,6 +278,10 @@ const de = {
 			"Streaming läuft, aber Frames stocken oder einige gebündelte Verbindungen sind ausgefallen.",
 		healthExplainDead:
 			"Encoder-Prozess läuft nicht. Der Stream ist ausgefallen.",
+		buffering: "Pufferung",
+		bufferingStoreForward: "Speichern & Weiterleiten aktiv",
+		bufferingHint:
+			"Verbindungen ausgefallen — wird auf Festplatte gespeichert und nach Wiederherstellung weitergeleitet.",
 		link: "Verbindung",
 	},
 	live: {

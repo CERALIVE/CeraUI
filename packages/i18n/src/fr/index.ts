@@ -968,6 +968,10 @@ const fr = {
 			"Diffusion en cours, mais images bloquées ou certaines liaisons agrégées hors service.",
 		healthExplainDead:
 			"Le processus d'encodage ne tourne pas. Le flux est hors service.",
+		buffering: "Mise en mémoire tampon",
+		bufferingStoreForward: "Stockage et transfert actif",
+		bufferingHint:
+			"Les liaisons sont hors service — enregistrement sur disque et transfert au rétablissement.",
 		link: "Liaison",
 	},
 	live: {

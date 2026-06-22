@@ -37,7 +37,7 @@ nine fields, one `key: value` per line, in any order:
 | `title` | One-line human summary (non-empty). |
 | `track` | Owning workstream: `1` (CeraUI overhaul) or `2` (cerastream engine). |
 | `status` | `open` or `resolved`. |
-| `exit_criteria` | An **executable** command in backticks (e.g. `` `pnpm --filter frontend run test -- foo.test.ts` ``) **or** a capability/PR reference (`capability:<flag>`, `PR #<n>`). Never prose. |
+| `exit_criteria` | An **executable** command in backticks (e.g. `` `bun run --filter frontend test -- foo.test.ts` ``) **or** a capability/PR reference (`capability:<flag>`, `PR #<n>`). Never prose. |
 | `owner` | GitHub handle or name of the accountable owner (non-empty). |
 | `registered_at` | ISO date `YYYY-MM-DD` the debt was registered. |
 | `resolved_at` | ISO date `YYYY-MM-DD` when resolved, or `null` while `open`. A `resolved` entry MUST carry a real date; an `open` entry MUST be `null`. |
@@ -71,7 +71,7 @@ id: TD-001
 title: Live-audio source switch UI is gated but the engine control path is stubbed
 track: 1
 status: open
-exit_criteria: `pnpm --filter backend run test -- audio-live-switch.test.ts`
+exit_criteria: `bun run --filter backend test -- audio-live-switch.test.ts`
 owner: andrescera
 registered_at: 2026-06-17
 resolved_at: null

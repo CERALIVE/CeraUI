@@ -4,7 +4,7 @@
 		{
 			"label": "Install Dependencies",
 			"type": "shell",
-			"command": "pnpm install",
+			"command": "bun install",
 			"group": "build",
 			"presentation": {
 				"echo": true,
@@ -17,7 +17,7 @@
 		{
 			"label": "Dev Server",
 			"type": "shell",
-			"command": "pnpm run dev",
+			"command": "bun run dev",
 			"group": "build",
 			"presentation": {
 				"echo": true,
@@ -30,7 +30,7 @@
 		{
 			"label": "Lint All",
 			"type": "shell",
-			"command": "pnpm run lint",
+			"command": "bun run lint",
 			"group": "test",
 			"presentation": {
 				"echo": true,
@@ -43,7 +43,7 @@
 		{
 			"label": "Lint Fix All",
 			"type": "shell",
-			"command": "pnpm run lint:fix",
+			"command": "bun run lint:fix",
 			"group": "test",
 			"presentation": {
 				"echo": true,
@@ -56,7 +56,7 @@
 		{
 			"label": "Frontend: Type Check",
 			"type": "shell",
-			"command": "pnpm run check",
+			"command": "bun run check",
 			"options": {
 				"cwd": "./apps/frontend"
 			},

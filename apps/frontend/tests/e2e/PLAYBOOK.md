@@ -1,7 +1,7 @@
 # E2E Playwright Testing Playbook
 
 > **REQUIRED reading before writing any E2E test in this repo.**
-> Playwright version: 1.60.0. Test runner: `pnpm --filter frontend run test:e2e`.
+> Playwright version: 1.60.0. Test runner: `bun run --filter frontend test:e2e`.
 
 ---
 
@@ -70,7 +70,7 @@ const password = process.env.E2E_PASSWORD ?? '12345678';
 
 ```bash
 # Option 1: dedicated script
-pnpm --filter frontend run test:e2e:reset
+bun run --filter frontend test:e2e:reset
 
 # Option 2: direct file removal
 rm -f apps/backend/auth_tokens.json
@@ -132,13 +132,13 @@ Files must be tagged `@visual` and use `toHaveScreenshot()` with committed basel
 
 ```bash
 # Update baselines after an intentional visual change
-pnpm --filter frontend run test:e2e:visual -- --update-snapshots
+bun run --filter frontend test:e2e:visual -- --update-snapshots
 
 # Run the visual suite
-pnpm --filter frontend run test:e2e:visual
+bun run --filter frontend test:e2e:visual
 
 # From the workspace root
-pnpm run test:e2e:visual
+bun run test:e2e:visual
 ```
 
 Baseline images are committed to the repo. A PR that changes them requires a deliberate `--update-snapshots` run and a reviewer sign-off that the visual change was intentional.
@@ -223,7 +223,7 @@ Do not modify `field-lock.spec.ts`. It is a deterministic integration proof and 
 
 - Runs serial + desktop-only (one worker owns the shared evidence/allowlist files).
 - Helper: `helpers/axe.ts` `runAxe(page)` returns only the gated (critical/serious) violations.
-- Refresh the baseline after an intentional change: `UPDATE_A11Y_BASELINE=1 pnpm --filter frontend exec playwright test a11y.spec.ts --project=desktop -g "axe gate"`. Capture mode rewrites the allowlist and `test-results/task-7-a11y-baseline.json` and never fails. A normal run writes `test-results/task-7-a11y-gate.json` and enforces.
+- Refresh the baseline after an intentional change: `UPDATE_A11Y_BASELINE=1 bun run --filter frontend test:e2e -- a11y.spec.ts --project=desktop -g "axe gate"`. Capture mode rewrites the allowlist and `test-results/task-7-a11y-baseline.json` and never fails. A normal run writes `test-results/task-7-a11y-gate.json` and enforces.
 - All three tests are tagged `@a11y`; the dedicated CI step runs them and the broad Functional E2E step grep-inverts `@a11y` to avoid a duplicate dev-server boot.
 - To prove the gate works, seed a violation with a rule id NOT already baselined (e.g. an `<img>` without `alt` → `image-alt`). Seeding more `color-contrast` will be tolerated — it is the baselined rule.
 

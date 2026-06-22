@@ -152,7 +152,7 @@ fi
 # ── Tech-debt gate ────────────────────────────────────────────────────────────
 echo "=== Running tech-debt gate ==="
 cd "${ROOT}"
-pnpm check:tech-debt
-pnpm test:tech-debt
+bun run check:tech-debt
+bun run test:tech-debt
 echo ""
 echo "=== All checks passed ==="

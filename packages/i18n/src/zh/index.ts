@@ -752,6 +752,9 @@ const zh = {
 			"进程运行中，帧持续推进，所有绑定链路均处于活动状态。",
 		healthExplainDegraded: "正在推流，但帧已停滞或部分绑定链路已断开。",
 		healthExplainDead: "编码器进程未运行。推流已中断。",
+		buffering: "缓冲中",
+		bufferingStoreForward: "存储转发已启用",
+		bufferingHint: "链路已中断 — 正在保存到磁盘，恢复后转发。",
 		link: "链路",
 	},
 	live: {

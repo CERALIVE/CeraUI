@@ -33,7 +33,7 @@ URL="https://github.com/CERALIVE/CeraUI"
 # bindings speak, so apt refuses a cross-protocol-major skew on-device and mkosi
 # fails a mismatched pair at image-build time. Derived from the installed
 # @ceralive/cerastream package (the single source of truth for what's compiled
-# in) — never hardcoded. Requires `pnpm install` to have run first.
+# in) — never hardcoded. Requires `bun install` to have run first.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CERASTREAM_CONSTANTS="$SCRIPT_DIR/../../apps/backend/node_modules/@ceralive/cerastream/dist/constants.js"
 IPC_PROTOCOL="$(grep -oE 'cerastream-ipc/[0-9]+' "$CERASTREAM_CONSTANTS" 2>/dev/null | head -1)"

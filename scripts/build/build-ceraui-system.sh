@@ -186,7 +186,7 @@ cat > "$TEMP_DIR/build-info.json" << EOF
   "commit": "${COMMIT}",
   "buildDate": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "nodeVersion": "$(node --version)",
-  "pnpmVersion": "$(pnpm --version)",
+  "bunVersion": "$(bun --version)",
   "architecture": "linux-${ARCHITECTURE}",
   "compatibility": "ceralive replacement compatible",
   "buildOptimizations": {

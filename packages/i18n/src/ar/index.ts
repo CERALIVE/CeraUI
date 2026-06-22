@@ -924,6 +924,9 @@ const ar = {
 		healthExplainDegraded:
 			"يجري البث، لكن الإطارات متعثرة أو بعض روابط التجميع معطلة.",
 		healthExplainDead: "عملية المُرمِّز لا تعمل. البث متوقف.",
+		buffering: "التخزين المؤقت",
+		bufferingStoreForward: "التخزين والإرسال نشط",
+		bufferingHint: "الوصلات متوقفة — يتم الحفظ على القرص وإعادة الإرسال عند استعادتها.",
 		link: "رابط",
 	},
 	live: {
