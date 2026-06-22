@@ -20,6 +20,7 @@
 		"postbuild": "cp -r ./deployment/* ./dist/",
 		"build:frontend": "bun run --filter frontend build",
 		"build:federation": "bun run --filter frontend build:federation",
+		"sign:federation": "bun run scripts/sign-federation.ts",
 		"build:backend": "bun run --filter backend build:backend-only",
 		"preview": "bun run --filter frontend preview",
 		"test": "bun run --filter @ceraui/rpc test && bun run --filter frontend test && bun run --filter backend test",
