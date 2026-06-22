@@ -217,6 +217,20 @@ High-frequency sensor ticks (1 s) are coalesced before broadcast — only the la
 
 All RPC setters return `{ success: boolean, applied: <fields> }`. The `applied` object reflects post-clamp, post-validation values actually written to config — not the raw client input. Clients must lock fields to `applied`, not to their intended value.
 
+### Store-and-forward buffering (`status.buffering`)
+
+`CerastreamBackend.handleEvent` (`cerastream-backend.ts`) reads the additive
+store-and-forward fields off the cerastream `status` event (cerastream Task 32:
+`buffering` / `spooled_bytes` / `data_headroom_bytes` / `disk_warning`) via the
+pure `extractBufferingStatus()` and re-broadcasts them on the EXISTING `status`
+event bus through `bridge.broadcastBuffering()` — it rides the engine event bus,
+NOT the 5-signal `device-stats` channel (S1 lock untouched). `extractBufferingStatus`
+returns `null` when the engine does not advertise `buffering` (the capability gate
+the HUD honors), so an older engine surfaces no indicator. The wire shape lives in
+`@ceraui/rpc/schemas` (`bufferingStatusSchema`, `buffering` on `statusResponseSchema`);
+fields are read defensively so a partial frame never throws. Coverage:
+`tests/buffering-status.test.ts`.
+
 ### srtla link telemetry (`status.linkTelemetry`)
 
 `modules/streaming/link-telemetry.ts` folds `srtla_send`'s per-uplink telemetry

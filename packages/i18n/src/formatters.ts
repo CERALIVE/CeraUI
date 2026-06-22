@@ -82,6 +82,28 @@ export const formatCurrent =
 	};
 
 /**
+ * Binary data size from a byte count. Scales to B/KB/MB/GB/TB (1024-based);
+ * sub-KB renders whole bytes, larger units keep one fractional digit.
+ * @example formatBytes('en')(1536) // "1.5 KB"
+ */
+export const formatBytes =
+	(locale: LocaleArg): ValueFormatter<number> =>
+	(bytes: number): string => {
+		if (!Number.isFinite(bytes)) return "—";
+		const units = ["B", "KB", "MB", "GB", "TB"] as const;
+		let value = Math.abs(bytes);
+		let unit = 0;
+		while (value >= 1024 && unit < units.length - 1) {
+			value /= 1024;
+			unit += 1;
+		}
+		const formatted = value.toLocaleString(locale, {
+			maximumFractionDigits: unit === 0 ? 0 : 1,
+		});
+		return `${bytes < 0 ? "-" : ""}${formatted} ${units[unit]}`;
+	};
+
+/**
  * Percentage. Input is a whole-number percent (e.g. `87` → `"87%"`), not a
  * 0–1 ratio.
  * @example formatPercent('en')(87) // "87%"
@@ -121,6 +143,7 @@ export const formatRelativeTime =
 /** The full set of value formatters bound to a single locale. */
 export interface AppFormatters {
 	bitrate: ValueFormatter<number>;
+	bytes: ValueFormatter<number>;
 	temp: ValueFormatter<number>;
 	voltage: ValueFormatter<number>;
 	current: ValueFormatter<number>;
@@ -134,6 +157,7 @@ export interface AppFormatters {
  */
 export const createFormatters = (locale: LocaleArg): AppFormatters => ({
 	bitrate: formatBitrate(locale),
+	bytes: formatBytes(locale),
 	temp: formatTemp(locale),
 	voltage: formatVoltage(locale),
 	current: formatCurrent(locale),

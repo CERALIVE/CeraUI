@@ -269,6 +269,9 @@ const en = {
 		healthExplainDegraded:
 			"Streaming, but frames stalled or some bonded links are down.",
 		healthExplainDead: "Encoder process not running. The stream is down.",
+		buffering: "Buffering",
+		bufferingStoreForward: "Store & forward active",
+		bufferingHint: "Links are down — saving to disk and forwarding when they recover.",
 	},
 	live: {
 		server: {

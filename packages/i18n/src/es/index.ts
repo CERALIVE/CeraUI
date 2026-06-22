@@ -278,6 +278,10 @@ const es = {
 			"Transmitiendo, pero los fotogramas están estancados o algunos enlaces agregados están caídos.",
 		healthExplainDead:
 			"El proceso del codificador no está en ejecución. La transmisión está caída.",
+		buffering: "Almacenando",
+		bufferingStoreForward: "Almacenar y reenviar activo",
+		bufferingHint:
+			"Los enlaces están caídos — guardando en disco y reenviando cuando se recuperen.",
 		link: "Enlace",
 	},
 	live: {

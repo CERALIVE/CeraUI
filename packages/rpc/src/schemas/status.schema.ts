@@ -54,6 +54,19 @@ export const linkTelemetryMessageSchema = z.object({
 });
 export type LinkTelemetryMessage = z.infer<typeof linkTelemetryMessageSchema>;
 
+// Engine store-and-forward (egress-spool) telemetry. Additive cerastream Status
+// fields (cerastream Task 32): present only when the engine advertises buffering.
+// `active` toggles the calm "buffering — store & forward" HUD indicator; the byte
+// counters are informational. snake_case mirrors the engine wire shape so the
+// backend passes it through untransformed.
+export const bufferingStatusSchema = z.object({
+	active: z.boolean(),
+	spooled_bytes: z.number().nonnegative().optional(),
+	data_headroom_bytes: z.number().nonnegative().optional(),
+	disk_warning: z.boolean().optional(),
+});
+export type BufferingStatus = z.infer<typeof bufferingStatusSchema>;
+
 // Status response message schema (what server sends)
 export const statusResponseSchema = z.object({
 	is_streaming: z.boolean().optional(),
@@ -66,5 +79,6 @@ export const statusResponseSchema = z.object({
 	set_password: z.boolean().optional(),
 	remote: remoteStatusSchema.optional(),
 	linkTelemetry: linkTelemetryMessageSchema.nullable().optional(),
+	buffering: bufferingStatusSchema.nullable().optional(),
 });
 export type StatusResponse = z.infer<typeof statusResponseSchema>;

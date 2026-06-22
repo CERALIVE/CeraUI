@@ -16,11 +16,13 @@ import WifiIcon from '@lucide/svelte/icons/wifi';
 import ZapIcon from '@lucide/svelte/icons/zap';
 
 import BondConstellation from '$lib/components/custom/BondConstellation.svelte';
+import BufferingIndicator from '$lib/components/custom/BufferingIndicator.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import * as Sheet from '$lib/components/ui/sheet';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import { type StalenessState, getStalenessState } from '$lib/helpers/staleness';
+import { getBufferingState } from '$lib/stores/buffering.svelte';
 import { getDisplayProfile, getDisplayRefreshNonce, prefersEinkTheme } from '$lib/stores/display-profile.svelte';
 import { getHudState, getSocTelemetry } from '$lib/stores/hud.svelte';
 import { getStreamHealthRollup, getStreamHealthState, type HealthIndicator, type HealthRollup } from '$lib/stores/stream-health.svelte';
@@ -54,6 +56,9 @@ const loc = $derived($locale);
 // Connection / streaming state machine for the lead badge.
 const isOffline = $derived(hud.isFullyStale);
 const isLive = $derived(hud.isStreaming && !isOffline);
+
+// Store-and-forward buffering (Task 34): null until the engine advertises it.
+const buffering = $derived(getBufferingState());
 
 // Stream-health rollup (Task 13/14): tri-state liveness surfaced as a dot.
 const health = $derived(getStreamHealthState());
@@ -290,6 +295,9 @@ $effect(() => {
 						{healthReason.detail}
 					</span>
 				{/if}
+
+				<!-- Store-and-forward buffering indicator (capability-gated, calm) -->
+				<BufferingIndicator state={buffering} />
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
 
