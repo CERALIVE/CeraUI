@@ -233,6 +233,149 @@ jobs:
           name: ceraui-debian-${{ matrix.architecture }}
           path: CeraUI/dist/debian/*.deb
 
+  publish-federation:
+    name: Publish Federation Bundles to R2
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v7
+        with:
+          path: CeraUI
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Cache Bun install
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-store-
+
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: bun install --frozen-lockfile
+
+      # Vite lib-mode federation build (separate from the SPA/backend build, which
+      # rm -rf's dist/). Run standalone so nothing wipes dist/federation/<version>.
+      - name: Build federation bundles
+        working-directory: CeraUI
+        run: bun run build:federation
+
+      # build+sign+verify gate: sign-federation.ts signs every bundle (GPG + SRI)
+      # and the manifest (Ed25519), then self-verifies. It fail-closes when a
+      # signing key is absent, so a missing secret blocks publish — by design.
+      - name: Sign + verify federation bundles
+        working-directory: CeraUI
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.FEDERATION_GPG_SIGNING_KEY }}
+          GPG_SIGNING_KEY_ID: ${{ secrets.FEDERATION_GPG_SIGNING_KEY_ID }}
+          GPG_SIGNING_KEY_PASSPHRASE: ${{ secrets.FEDERATION_GPG_SIGNING_KEY_PASSPHRASE }}
+          FEDERATION_MANIFEST_PRIVATE_KEY: ${{ secrets.FEDERATION_MANIFEST_PRIVATE_KEY }}
+          FEDERATION_MANIFEST_PUBLIC_KEY: ${{ secrets.FEDERATION_MANIFEST_PUBLIC_KEY }}
+        run: bun run sign:federation
+
+      # Independent re-verification of the on-disk artifacts as the final gate
+      # before any R2 write — a tampered or partial artifact never reaches R2.
+      - name: Re-verify signed artifacts (gate before upload)
+        working-directory: CeraUI
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.FEDERATION_GPG_SIGNING_KEY }}
+          GPG_SIGNING_KEY_ID: ${{ secrets.FEDERATION_GPG_SIGNING_KEY_ID }}
+          GPG_SIGNING_KEY_PASSPHRASE: ${{ secrets.FEDERATION_GPG_SIGNING_KEY_PASSPHRASE }}
+          FEDERATION_MANIFEST_PRIVATE_KEY: ${{ secrets.FEDERATION_MANIFEST_PRIVATE_KEY }}
+          FEDERATION_MANIFEST_PUBLIC_KEY: ${{ secrets.FEDERATION_MANIFEST_PUBLIC_KEY }}
+        run: bun run sign:federation -- --verify-only
+
+      - name: Upload federation bundles to R2
+        working-directory: CeraUI
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+
+          # <ceraui-version> is the workspace package.json version (CalVer) — the
+          # same source build:federation + sign-federation.ts use, so the upload
+          # path matches dist/federation/<version> and the manifest's ceraUiVersion.
+          VERSION="$(node -p "require('./package.json').version")"
+          FED_DIR="dist/federation/${VERSION}"
+          DEST_PREFIX="ui-bundle/${VERSION}"
+
+          test -d "$FED_DIR" || { echo "::error::no federation output at ${FED_DIR}"; exit 1; }
+          test -f "${FED_DIR}/manifest.json" || { echo "::error::manifest.json missing — sign step did not run"; exit 1; }
+          test -f "${FED_DIR}/manifest.json.sig" || { echo "::error::manifest.json.sig missing"; exit 1; }
+
+          export AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}"
+          export AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}"
+          # R2 rejects aws-cli >= 2.23 default trailing checksums; request when_required only.
+          export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
+          export AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
+          # Canonicalize endpoint to scheme://host — a stray path/bucket suffix
+          # silently corrupts path-style addressing (writes to a doubled prefix).
+          R2_ENDPOINT="$(printf '%s' "$R2_ENDPOINT" | sed -E 's#^([a-zA-Z][a-zA-Z0-9+.-]*://[^/]+).*#\1#')"
+
+          # Content-type pinned per file (matches the apt-worker route contract):
+          # .js loads via dynamic import() under a strict CSP so MUST be
+          # application/javascript; manifest.json.sig ends with .sig (a signature).
+          content_type_for() {
+            case "$1" in
+              *.sri) echo "text/plain; charset=utf-8" ;;
+              manifest.json) echo "application/json; charset=utf-8" ;;
+              *.sig) echo "application/octet-stream" ;;
+              *.js) echo "application/javascript; charset=utf-8" ;;
+              *) echo "application/octet-stream" ;;
+            esac
+          }
+
+          shopt -s nullglob
+          uploaded=0
+          # *.sig covers manifest.json.sig; manifest.json is matched explicitly.
+          for f in "$FED_DIR"/*.js "$FED_DIR"/*.sri "$FED_DIR"/*.sig "$FED_DIR"/manifest.json; do
+            name="$(basename "$f")"
+            ct="$(content_type_for "$name")"
+            key="${DEST_PREFIX}/${name}"
+            echo "↑ ${key}  (${ct})"
+            aws s3 cp "$f" "s3://${R2_BUCKET}/${key}" \
+              --endpoint-url "$R2_ENDPOINT" \
+              --content-type "$ct" \
+              --no-progress
+            # Self-check: confirm the object landed at the intended key — a bad
+            # endpoint can make cp "succeed" while writing to the wrong key.
+            aws s3api head-object --bucket "$R2_BUCKET" --key "$key" \
+              --endpoint-url "$R2_ENDPOINT" >/dev/null \
+              || { echo "::error::upload self-check failed for ${key}"; exit 1; }
+            uploaded=$((uploaded + 1))
+          done
+
+          [ "$uploaded" -gt 0 ] || { echo "::error::no federation artifacts found to upload"; exit 1; }
+          echo "✅ uploaded ${uploaded} artifact(s) to s3://${R2_BUCKET}/${DEST_PREFIX}/"
+
+      - name: Federation Publish Summary
+        if: success()
+        working-directory: CeraUI
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          {
+            echo "## 📦 Federation Bundles Published"
+            echo ""
+            echo "**CeraUI version:** \`${VERSION}\`"
+            echo "**R2 prefix:** \`ui-bundle/${VERSION}/\`"
+            echo "**Served at:** https://apt.ceralive.tv/ui-bundle/${VERSION}/"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest

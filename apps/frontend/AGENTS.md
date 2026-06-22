@@ -143,6 +143,30 @@ consumes.
   against the manifest + `.sri` file, and Ed25519-verifies `manifest.json.sig`. `--verify-only`
   re-runs just the verification pass against existing artifacts (CI gate seam).
 
+## FEDERATION PUBLISH (Task 41) [EXISTS]
+
+The `publish-federation` job in `.github/workflows/publish-release.yml` is the release-triggered
+CI job that uploads the signed bundles to R2. Pipeline (each step gates the next):
+`bun run build:federation` → `bun run sign:federation` (sign + self-verify) →
+`bun run sign:federation -- --verify-only` (independent re-verify before any write) →
+`aws s3 cp` per file to `s3://$R2_BUCKET/ui-bundle/<ceraui-version>/`.
+
+- **Fail-closed**: `sign-federation.ts` errors when a signing key is absent, so a missing GPG /
+  Ed25519 secret blocks publish — bundles are never uploaded unsigned/unverified.
+- **Version**: `<ceraui-version>` is read from `package.json` (`node -p`) — the same source
+  `build:federation` + `sign-federation.ts` use, so the R2 path matches `dist/federation/<version>`
+  and the manifest's `ceraUiVersion`.
+- **Content-types pinned per file** (must match the apt-worker route, see `apt-worker/AGENTS.md`):
+  `.js` → `application/javascript`, `.sri` → `text/plain`, `.sig`/`manifest.json.sig` →
+  `application/octet-stream`, `manifest.json` → `application/json`. The `*.js` glob includes the
+  code-split shared chunks (rpc, subscriptions, input) — they must upload alongside the dialog
+  bundles so dynamic `import()` resolves under the platform CSP.
+- **Secrets**: `FEDERATION_GPG_SIGNING_KEY` (+ optional `_ID`/`_PASSPHRASE`),
+  `FEDERATION_MANIFEST_PRIVATE_KEY` (+ optional `FEDERATION_MANIFEST_PUBLIC_KEY`),
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`, `R2_BUCKET`. The job runs with
+  `permissions: contents: read`; the workflow's `cancel-in-progress: false` applies (never cancel
+  a mid-publish run).
+
 ## CONVENTIONS
 
 - Stores: Svelte 5 runes only (`$state`, `$derived`, `$effect`) — files named `*.svelte.ts`.
