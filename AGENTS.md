@@ -310,6 +310,31 @@ The streaming mock provider exposes a `MockHealthState` slot that drives the
 `ingest-health` signal in dev. Tests can set `health.score` and `health.degraded`
 via `updateMockState` to exercise the health-alert rendering path.
 
+**Scenario-seeded capability profiles (T5):**
+
+Three scenario-seeded `MOCK_SCENARIO` values drive the engine-capability state that
+`getCapabilities()` serves to the frontend. The mock fetcher drives the fallback
+ladder by what it returns or throws — no direct flag mutation:
+
+- `caps-full` — full engine profile: H265 + hardware accel, audio-capable HDMI
+  source, `audio_live_switch` enabled, `transports: ["srtla","srt"]`. Use this to
+  exercise the full Live destination UI (all controls enabled, RIST/SRT transport
+  selector visible).
+- `engine-starting` — mock fetcher throws `CerastreamConnectionError` with an empty
+  cache, so `getCapabilities()` returns the minimal safe floor with
+  `engineStarting: true`. Simulates the device booting before cerastream is ready.
+- `engine-unavailable` — mock fetcher throws after seeding a last-known-good
+  snapshot, so `getCapabilities()` returns the cached snapshot with
+  `engineUnavailable: true`. Simulates a cerastream crash after a successful start.
+
+**`setMockEngineCapabilities(partial)` — test-only capability override seam (T5):**
+`setMockEngineCapabilities(partial)` (exported from `mocks/providers/streaming.ts`)
+merges a `Partial<ScenarioCapabilities>` onto the active scenario's profile, then
+immediately re-broadcasts the resolved `capabilities` event. Gated by
+`shouldUseMocks()` — a no-op in production. Use in tests that need a specific
+capability combination without switching the full scenario. Call only while the
+stream is idle; the override is cleared by `resetMockState()`.
+
 **Scenarios:**
 
 | `MOCK_SCENARIO` | Description |
@@ -317,6 +342,9 @@ via `updateMockState` to exercise the health-alert rendering path.
 | `multi-modem-wifi` | Default: 3 modems + WiFi (multi-modem-wifi) |
 | `single-modem` | 1 modem, no WiFi |
 | `streaming-active` | Active streaming simulation with live telemetry |
+| `caps-full` | Full engine caps: H265 + hw accel, audio-capable source, live audio switch, SRT transport (idle) |
+| `engine-starting` | Engine still booting — minimal safe floor + `engineStarting` flag |
+| `engine-unavailable` | Engine unreachable — cached/minimal snapshot + `engineUnavailable` flag |
 
 ## DEVICE STATS [EXISTS]
 
@@ -346,9 +374,63 @@ Detection contract (fail-safe, defaults to `false`):
 4. probe throws (file absent/unreadable) → false (never propagates)
 5. unrecognised model → false
 
+**`isDevelopment()` power-gate (T1):** `isDevelopment()` (defined in
+`apps/backend/src/mocks/mock-config.ts`, `NODE_ENV==="development" ||
+MOCK_MODE==="true"`) is the gate for all dev-only side-effects. The
+`system.poweroff` and `system.reboot` RPC handlers skip the real OS spawn when
+`isDevelopment()` is true — they return `{success:true}` without calling
+`poweroff`/`reboot`. The post-update reboot in `software-updates.ts` is gated the
+same way via `rebootAfterUpdate()`. DI runner seams (`setPowerCommandRunner`,
+`setRebootRunner`) let tests assert the exact command without touching the host.
+**Never use `isDevelopment()` to gate mock-hardware paths** — use `shouldUseMocks()`
+for that (the mock subsystem requires both `isDevelopment()` AND
+`mockState.initialized`).
+
+**Dev reboot-disconnect helper (T2):** `simulateDevReboot()` (exported from
+`apps/backend/src/rpc/events.ts`) reproduces the real-device reboot effect in dev:
+it snapshots `getAuthenticatedClients()` and closes each socket after a macrotask
+delay (`setTimeout(..., 0)`). The delay is critical — it lets the in-flight
+`system.reboot` reply (`{success:true}`) flush to the client before the socket
+drops, matching the real-device sequence where systemd takes the host down after
+the reply is sent. The frontend's `DisconnectedBanner` then shows the "rebooting"
+state and reconnects normally. Gated by `isDevelopment()` — the early return means
+no production call site can schedule socket teardown through this helper.
+
 **Kiosk RPC handlers are emulated-safe.** The 4 action handlers (`kioskStart`, `kioskStop`, `kioskConfigure`, `kioskOsk`) in `apps/backend/src/rpc/procedures/system.procedure.ts` gate on `await isRealDevice()` at entry. In dev/emulated mode they return `{ success: false, error: "kiosk_unavailable_in_emulated_mode" }` without invoking `systemctl`. `kioskStatus` is NOT gated (read-only config; the settings UI needs it to render).
 
 The error constant `KIOSK_UNAVAILABLE_ERROR` is the single source of truth in `packages/rpc/src/schemas/system.schema.ts`. The frontend (`OnDeviceDisplaySection.svelte`) renders a calm `role="status"` banner (`data-testid="kiosk-unavailable"`, i18n key `onDeviceDisplay.unavailable`) when the gate fires — not an error toast.
+
+**Kiosk dev-seam gate (T6):** `resolveActiveKioskDeps()` (exported from
+`apps/backend/src/modules/system/kiosk.ts`) returns the mock kiosk harness when
+`shouldUseMocks()` is true, otherwise the production `activeDeps`. The kiosk RPC
+handlers call `kioskStart(resolveActiveKioskDeps())` etc. so dev exercises the full
+state machine against in-memory fakes without touching `systemctl`. The gate in
+`system.procedure.ts` was widened to `if (!shouldUseMocks() && !(await
+isRealDevice())) return UNAVAILABLE` so dev bypasses the emulated-mode guard.
+`peekMockKioskHarness()` returns the singleton without building it — use in prod
+tests to assert the mock double was never constructed.
+
+**Add-on dev-seam gate (T7):** `resolveActiveAddonManagerDeps()` (exported from
+`apps/backend/src/modules/addons/manager.ts`) returns a lazily-built mock
+`AddonManagerDeps` singleton under `shouldUseMocks()`, else the production
+`activeDeps`. `resolveReconcilerDeps()` (exported from
+`apps/backend/src/modules/addons/reconciler.ts`) mirrors the same pattern for the
+post-boot reconciler. Both are the default-parameter values for their respective
+public functions, so existing tests that pass deps explicitly are unaffected.
+
+**Software-update + SSH dev mock seams (T8):**
+- `simulateMockSoftwareUpdate()` (internal, called by `startSoftwareUpdate()` under
+  `shouldUseMocks()`) broadcasts a realistic sequence of `{updating: SoftUpdateStatus}`
+  frames — initial zero totals, then downloading/unpacking/setting-up counts, then
+  completion — without spawning `apt-get`. The in-flight promise is accessible via
+  `getMockSoftwareUpdatePromise()` for test awaiting.
+- `setSoftwareUpdateRunner(runner)` (exported from `software-updates.ts`) replaces
+  the default apt spawn with an injected function. Use in prod tests to assert the
+  runner was called with the expected arguments without running a real update.
+- `setSshServiceRunner(runner)` (exported from `ssh.ts`) replaces the default
+  `systemctl start/stop ssh` spawn. The `shouldUseMocks()` branch in
+  `startStopSsh()` flips `mockSshActive` and broadcasts `{ssh}` without touching
+  `systemctl` or `passwd`.
 
 **SIM PIN boot auto-unlock is another `isRealDevice()`-gated boot action.** `maybeAutoUnlockSimPins()` (`apps/backend/src/modules/modems/sim-autounlock.ts`, wired into `initModemUpdateLoop`) no-ops on a dev/emulated host. It submits the opt-in PIN — stored in the chmod-600 tmpfs file `/run/ceralive/sim-pin.secret` (`sim-secrets.ts`), never in `config.json` — at most once per locked modem, then clears the PIN and stops on any failure (no PUK-lockout loop). See `apps/backend/AGENTS.md` → SIM PIN AUTO-UNLOCK.
 
@@ -671,6 +753,19 @@ carrying `{ procedure, cid, latency_ms, ok }`. Gated on `isRpcTraceEnabled()` (d
 `LOG_LEVEL=debug`) so a shipped device never pays the per-call cost. Auth procedures
 (`auth.*`) have their args omitted entirely — not even redacted-partial. All other
 procedure args pass through `logRedact()` before logging.
+
+**Adapter diagnostics (T3):**
+`extractValidationDetails(error)` (exported from `apps/backend/src/rpc/error-enrichment.ts`)
+turns an opaque oRPC/Zod validation failure into a structured `ValidationDetails` shape:
+`{ phase: "input" | "output" | "unknown", issues: ValidationIssueDetail[] }`. The WS
+adapter calls it in its catch block and attaches the result as a `validation` field on
+the `RpcCallTrace` log record. These adapter diagnostics let you see exactly which
+schema field failed and whether it was an input or output validation error. Phase is
+classified from the oRPC wrapper message ("Input/Output validation failed") then the
+error code as a fallback. Issue paths are schema field names (safe); messages are
+scrubbed through `logRedact` before logging. Returns `undefined` when the error has no
+issue list, so callers omit the field rather than log an empty record. See
+`apps/backend/AGENTS.md` → DEV MOCK SEAMS for the full contract.
 
 **Boot banner + per-phase markers (`helpers/boot-banner.ts`):**
 `buildBootBanner(info)` emits a one-line startup banner: `🎬 CeraUI vX · env=… · scenario=…`.

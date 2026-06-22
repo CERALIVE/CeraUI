@@ -25,6 +25,8 @@ import type WebSocket from "ws";
 import { z } from "zod";
 
 import { logger } from "../../helpers/logger.ts";
+import { isDevelopment } from "../../mocks/mock-config.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import {
 	getCloudProviders,
 	setRemoteConfig,
@@ -38,6 +40,7 @@ import {
 	kioskOsk,
 	kioskStart,
 	kioskStop,
+	resolveActiveKioskDeps,
 } from "../../modules/system/kiosk.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
@@ -46,6 +49,7 @@ import {
 	startSoftwareUpdate,
 } from "../../modules/system/software-updates.ts";
 import { resetSshPassword, startStopSsh } from "../../modules/system/ssh.ts";
+import { simulateDevReboot } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
@@ -94,31 +98,65 @@ export const getSyslogProcedure = authedProcedure
 		return { log: "" };
 	});
 
-/**
- * Power off procedure
- */
+// Host-power runner DI seam (mirrors setKioskDeps): the default issues the real
+// Bun.spawnSync([command]) so the production path is unchanged; tests inject a
+// spy to assert the spawn without powering off the host.
+type PowerCommand = "poweroff" | "reboot";
+type PowerCommandRunner = (command: PowerCommand) => void;
+
+const defaultPowerCommandRunner: PowerCommandRunner = (command) => {
+	Bun.spawnSync([command]);
+};
+
+let powerCommandRunner: PowerCommandRunner = defaultPowerCommandRunner;
+
+export function setPowerCommandRunner(runner: PowerCommandRunner): void {
+	powerCommandRunner = runner;
+}
+
+export function resetPowerCommandRunner(): void {
+	powerCommandRunner = defaultPowerCommandRunner;
+}
+
+// Gate on isDevelopment() — NOT isRealDevice(), which is false for an
+// unrecognised board and would make a real device silently skip poweroff.
 export const poweroffProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(() => {
+		if (isDevelopment()) {
+			logger.info("dev: skipping spawn", {
+				module: "system.power",
+				action: "poweroff",
+				dev: true,
+			});
+			simulateDevReboot(); // close authed sockets → frontend reconnect banner
+			return { success: true };
+		}
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
 		logger.info("System: poweroff requested");
-		Bun.spawnSync(["poweroff"]);
+		powerCommandRunner("poweroff");
 		return { success: true };
 	});
 
-/**
- * Reboot procedure
- */
 export const rebootProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(() => {
+		if (isDevelopment()) {
+			logger.info("dev: skipping spawn", {
+				module: "system.power",
+				action: "reboot",
+				dev: true,
+			});
+			simulateDevReboot(); // close authed sockets → frontend reconnect banner
+			return { success: true };
+		}
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
 		logger.info("System: reboot requested");
-		Bun.spawnSync(["reboot"]);
+		powerCommandRunner("reboot");
 		return { success: true };
 	});
 
@@ -234,10 +272,10 @@ export const kioskStatusProcedure = authedProcedure
 export const kioskStartProcedure = authedProcedure
 	.output(kioskToggleOutputSchema)
 	.handler(async () => {
-		if (!(await isRealDevice())) {
+		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		void kioskStart();
+		void kioskStart(resolveActiveKioskDeps());
 		const status = getKioskStatus();
 		return {
 			success: true,
@@ -252,10 +290,10 @@ export const kioskStartProcedure = authedProcedure
 export const kioskStopProcedure = authedProcedure
 	.output(kioskToggleOutputSchema)
 	.handler(async () => {
-		if (!(await isRealDevice())) {
+		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		void kioskStop();
+		void kioskStop(resolveActiveKioskDeps());
 		const status = getKioskStatus();
 		return {
 			success: true,
@@ -270,10 +308,10 @@ export const kioskConfigureProcedure = authedProcedure
 	.input(kioskConfigureInputSchema)
 	.output(kioskConfigureOutputSchema)
 	.handler(async ({ input }) => {
-		if (!(await isRealDevice())) {
+		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		const applied = kioskConfigure(input);
+		const applied = kioskConfigure(input, resolveActiveKioskDeps());
 		return { success: true, applied };
 	});
 
@@ -284,9 +322,9 @@ export const kioskOskProcedure = authedProcedure
 	.input(kioskOskInputSchema)
 	.output(successResponseSchema)
 	.handler(async ({ input }) => {
-		if (!(await isRealDevice())) {
+		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		await kioskOsk(input.visible);
+		await kioskOsk(input.visible, resolveActiveKioskDeps());
 		return { success: true };
 	});

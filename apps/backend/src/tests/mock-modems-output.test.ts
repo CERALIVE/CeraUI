@@ -1,6 +1,18 @@
-import { describe, test } from "bun:test";
-import { initMockService } from "../mocks/mock-service.ts";
+import { afterAll, describe, test } from "bun:test";
+import { initMockService, stopMockService } from "../mocks/mock-service.ts";
 import { handleMmcliCommand } from "../mocks/providers/modems.ts";
+
+const ORIGINAL_MOCK_MODE = process.env.MOCK_MODE;
+
+// This evidence-capture test enables global mock mode (MOCK_MODE + an
+// initialised mock service). Without teardown it leaks shouldUseMocks()===true
+// into every later file in the same `bun test` process — harmless until a
+// consumer gates on shouldUseMocks() (e.g. the kiosk RPC handlers, T6). Restore.
+afterAll(() => {
+	stopMockService();
+	if (ORIGINAL_MOCK_MODE === undefined) delete process.env.MOCK_MODE;
+	else process.env.MOCK_MODE = ORIGINAL_MOCK_MODE;
+});
 
 describe("Mock Modems Output — Task 8 Evidence", () => {
 	test("capture modem info for all 3 modems in multi-modem-wifi scenario", () => {

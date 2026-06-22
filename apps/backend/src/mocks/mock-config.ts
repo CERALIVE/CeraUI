@@ -17,13 +17,34 @@ export type { MockModemConfig, MockWifiNetwork, MockWifiRadio };
 export type MockScenario =
 	| "single-modem"
 	| "multi-modem-wifi"
-	| "streaming-active";
+	| "streaming-active"
+	| "caps-full"
+	| "engine-starting"
+	| "engine-unavailable";
+
+// Per-scenario engine-capability profile read by getMockEngineCapabilities().
+// Absent → provider keeps the default snapshot (MINIMAL_SAFE + ["srtla","rist"]).
+export interface ScenarioCapabilities {
+	// throws on fetch → getCapabilities() minimal floor + engineStarting flag
+	engineStarting?: boolean;
+	// throws on fetch → getCapabilities() serves cached/minimal + engineUnavailable
+	engineUnavailable?: boolean;
+	// sole gate for live-audio UI
+	audioLiveSwitch?: boolean;
+	// H265 + hw accel + audio-capable HDMI source, vs the TestPattern-only floor
+	fullProfile?: boolean;
+	// relay transports advertised (merged onto the srtla base)
+	transports?: readonly string[];
+	// forces a schema_version skew → schemaVersionMismatch flag (test seam only)
+	schemaVersionMismatch?: boolean;
+}
 
 export interface ScenarioConfig {
 	modems: number;
 	wifi: boolean;
 	streaming: boolean;
 	description: string;
+	capabilities?: ScenarioCapabilities;
 }
 
 export const scenarios: Record<MockScenario, ScenarioConfig> = {
@@ -44,6 +65,33 @@ export const scenarios: Record<MockScenario, ScenarioConfig> = {
 		wifi: true,
 		streaming: true,
 		description: "2 modems bonding, active stream with real-time stats",
+	},
+	"caps-full": {
+		modems: 2,
+		wifi: true,
+		streaming: false,
+		description:
+			"Full engine caps: H265 + hardware accel, audio-capable source, live audio switch, SRT transport (idle)",
+		capabilities: {
+			fullProfile: true,
+			audioLiveSwitch: true,
+			transports: ["srtla", "srt"],
+		},
+	},
+	"engine-starting": {
+		modems: 1,
+		wifi: false,
+		streaming: false,
+		description: "Engine still booting — minimal safe floor + engineStarting",
+		capabilities: { engineStarting: true },
+	},
+	"engine-unavailable": {
+		modems: 1,
+		wifi: false,
+		streaming: false,
+		description:
+			"Engine unreachable — cached/minimal snapshot + engineUnavailable",
+		capabilities: { engineUnavailable: true },
 	},
 };
 

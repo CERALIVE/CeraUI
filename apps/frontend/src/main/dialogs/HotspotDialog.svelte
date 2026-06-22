@@ -105,6 +105,16 @@ const passwordValid = $derived(
 );
 const isFormValid = $derived(nameValid && passwordValid);
 
+// Reason surfaced on the start/stop control while it is disabled, so the operator
+// is never left guessing (busy op vs an incomplete form).
+const toggleDisabledReason = $derived(
+	toggling
+		? $LL.hotspotConfigurator.toggleReason.busy()
+		: !isActive && !isFormValid
+			? $LL.hotspotConfigurator.toggleReason.formInvalid()
+			: undefined,
+);
+
 const nameError = $derived(
 	name.length === 0 || nameValid
 		? ''
@@ -385,6 +395,7 @@ async function copyPassword() {
 			class="sm:min-w-28"
 			disabled={toggling || (!isActive && !isFormValid)}
 			onclick={handleToggle}
+			title={toggleDisabledReason}
 			variant="outline"
 		>
 			{#if toggling}

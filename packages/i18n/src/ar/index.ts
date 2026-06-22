@@ -216,6 +216,10 @@ const ar = {
 		signingIn: "جاري تسجيل الدخول...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "أوقف البث لتغيير ترميز الصوت",
+			noSource: "اختر مصدر الصوت أولاً",
+		},
 		destination: "الوجهة",
 		destinationManaged: "حسابي السحابي",
 		destinationCustom: "مستقبِل مخصّص",
@@ -339,6 +343,7 @@ const ar = {
 			enableInterface: "تفعيل الواجهة",
 			enableInterfaceDesc: "استخدم هذه الواجهة للبث المجمّع.",
 			staticIp: "عنوان IP ثابت",
+			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "اتركه فارغاً لاستخدام DHCP (العنونة التلقائية).",
 			ipInvalid: "أدخل عنوان IPv4 أو IPv6 صالحاً.",
 			confirmPassword: "تأكيد كلمة المرور",
@@ -350,6 +355,14 @@ const ar = {
 			powerOffConfirm:
 				"سيتوقف الجهاز عن العمل تماماً. ستحتاج إلى وصول فعلي لإعادة تشغيله.",
 			blockedStreaming: "أوقف البث قبل إعادة التشغيل.",
+			rebootCountdownTitle: "جارٍ إعادة التشغيل…",
+			rebootCountdownDescription: "الجهاز يُعيد التشغيل وسيُعيد الاتصال تلقائيًا.",
+			rebootCountdownRemaining: "يعود خلال {seconds} ثانية",
+			rebootRecoveryTitle: "قد لا تكون إعادة التشغيل قد بدأت",
+			rebootRecoveryDescription:
+				"لا يزال الجهاز يستجيب بعد نافذة إعادة التشغيل. قد لا يكون قد أُعيد تشغيله — أعد المحاولة أو تجاهل للاستمرار في استخدامه.",
+			rebootRecoveryRetry: "إعادة التشغيل مرة أخرى",
+			rebootRecoveryDismiss: "تجاهل",
 			blockedUpdating: "التحديث قيد التقدم. انتظر قبل إعادة التشغيل.",
 		},
 		pairing: {
@@ -589,9 +602,11 @@ const ar = {
 			security: "الأمان",
 		},
 		modem: {
+			scanningForNetworks: "جارٍ البحث عن المشغّلين…",
 			save: "حفظ",
 			autoapn: "APN تلقائي",
 			apn: "APN",
+			apnPlaceholder: "internet.provider.com",
 			username: "اسم المستخدم",
 			password: "كلمة المرور",
 			enableRoaming: "السماح بالتجوال",
@@ -693,6 +708,10 @@ const ar = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "جارٍ تنفيذ إجراء نقطة الاتصال",
+			formInvalid: "أدخل اسمًا وكلمة مرور صالحين لبدء نقطة الاتصال",
+		},
 		dialog: {
 			save: "حفظ",
 			configHotspot: "إعداد نقطة الاتصال",
@@ -735,6 +754,13 @@ const ar = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "جارٍ البحث",
+		},
+		scanningState: {
+			title: "جارٍ البحث عن الشبكات…",
+			description: "يتم البحث عن شبكات WiFi المتاحة القريبة.",
+		},
 		dialog: {
 			close: "إغلاق",
 			searchWifi: "البحث عن شبكات WiFi",
@@ -932,8 +958,46 @@ const ar = {
 		stopToChange: "أوقف البث للتغيير",
 		cannotStartNoPipeline: "اختر مصدر فيديو قبل بدء البث",
 		cannotStartNoServer: "قم بتكوين خادم قبل بدء البث",
-		startFailed: "فشل بدء البث",
+		startFailed: {
+			generic: "فشل بدء البث",
+			srt_connect_failed:
+				"تعذّر الوصول إلى خادم SRT. تحقّق من الوجهة واتصالك ثم حاول مرة أخرى.",
+			srt_connection_lost:
+				"انقطع اتصال SRT قبل بدء البث. قد تساعد إعادة المحاولة.",
+			srtla_initial_connect_failed:
+				"تعذّر الاتصال بخادم SRTLA. تحقّق من الوجهة واتصالك.",
+			srtla_no_connections:
+				"لا توجد اتصالات مجمّعة متاحة. تأكّد من أن روابط الشبكة لديك نشطة.",
+			capture_audio_error:
+				"أبلغ جهاز الالتقاط عن خطأ في الصوت. أعد توصيله وحاول مرة أخرى.",
+			capture_video_error:
+				"أبلغ جهاز الالتقاط عن خطأ في الفيديو. أعد توصيله وحاول مرة أخرى.",
+			pipeline_stall:
+				"توقّف مصدر الإدخال أثناء البدء. تحقّق من المصدر وحاول مرة أخرى.",
+		},
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "ابدأ الإعداد",
+			subtitle: "ثلاث خطوات نحو أول بث مجمّع لك.",
+			dismiss: "إخفاء دليل الإعداد",
+			done: "تم",
+			steps: {
+				network: {
+					title: "وصّل روابطك",
+					hint: "أضف شبكة خلوية أو Wi-Fi أو Ethernet ليتمكّن البث من تجميعها.",
+					action: "إعداد الشبكة",
+				},
+				server: {
+					title: "اختر وجهة",
+					hint: "وجّه المُرمّز إلى خادم ترحيل أو إلى المستقبِل الخاص بك.",
+					action: "اختر وجهة",
+				},
+				start: {
+					title: "ابدأ البث المباشر",
+					hint: "بمجرد جاهزية الروابط والوجهة، ابدأ بثّك.",
+				},
+			},
+		},
 		ingest: {
 			title: "إحصائيات الإدخال",
 			link: "الرابط",
@@ -1189,7 +1253,9 @@ const ar = {
 		cloudRemoteKey: "المفتاح البعيد",
 		cloudRemoteKeyTooltip: "أدخل المفتاح البعيد من مزود السحابة الخاص بك.",
 		providerName: "اسم المزود",
+		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "مضيف WebSocket",
+		providerHostPlaceholder: "remote.example.com",
 		providerHostHint: "أدخل اسم مضيف خادم WebSocket (بدون البروتوكول)",
 		useSecureConnection: "استخدام اتصال آمن (wss)",
 		remoteConfigSaved: "تم حفظ التكوين البعيد",

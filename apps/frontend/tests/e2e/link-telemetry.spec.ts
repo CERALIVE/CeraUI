@@ -216,8 +216,15 @@ test.describe("Task 22 — link telemetry", () => {
 		await expect(card.getByTestId("link-rtt")).toHaveText("42 ms");
 		const dl = card.getByTestId("link-telemetry");
 		await expect(dl).toHaveAttribute("data-stale", "true");
+		// `opacity-50` fades in via `transition-opacity`, so a single computed-style
+		// read can catch the pre-paint frame at exactly 1. Poll until it settles
+		// below 1 — the dim must apply, we just must not read mid-transition.
+		await expect
+			.poll(async () =>
+				Number(await dl.evaluate((el) => getComputedStyle(el).opacity)),
+			)
+			.toBeLessThan(1);
 		const opacity = await dl.evaluate((el) => getComputedStyle(el).opacity);
-		expect(Number(opacity)).toBeLessThan(1);
 		await expect(card.locator(`[data-stale-interface="${iface}"]`)).toBeVisible();
 		record(`stale row: opacity=${opacity}, stale marker present for ${iface} ✓`);
 

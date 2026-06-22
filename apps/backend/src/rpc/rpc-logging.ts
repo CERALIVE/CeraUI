@@ -17,6 +17,10 @@
  */
 
 import { logger, logRedact } from "../helpers/logger.ts";
+import {
+	extractValidationDetails,
+	type ValidationDetails,
+} from "./error-enrichment.ts";
 import type { RPCContext } from "./types.ts";
 
 /**
@@ -52,6 +56,7 @@ export interface RpcCallTrace {
 	latencyMs: number;
 	cid: string;
 	client?: string;
+	validation?: ValidationDetails;
 }
 
 /**
@@ -138,6 +143,9 @@ export function logRpcCall(
 	if (trace.client !== undefined) {
 		meta.client = trace.client;
 	}
+	if (trace.validation !== undefined) {
+		meta.validation = trace.validation;
+	}
 	// Auth procedures: args omitted entirely. Everything else: redacted.
 	if (!isSensitiveProcedure(trace.path) && trace.input !== undefined) {
 		meta.args = logRedact(trace.input);
@@ -169,13 +177,17 @@ export async function instrumentRpcCall<T>(
 	const client = clientLabel(context);
 	const start = deps.now();
 
-	const trace = (ok: boolean): RpcCallTrace => ({
+	const trace = (
+		ok: boolean,
+		validation?: ValidationDetails,
+	): RpcCallTrace => ({
 		path,
 		input,
 		ok,
 		latencyMs: deps.now() - start,
 		cid,
 		...(client !== undefined ? { client } : {}),
+		...(validation !== undefined ? { validation } : {}),
 	});
 
 	try {
@@ -183,7 +195,7 @@ export async function instrumentRpcCall<T>(
 		logRpcCall(trace(true), deps);
 		return result;
 	} catch (error) {
-		logRpcCall(trace(false), deps);
+		logRpcCall(trace(false, extractValidationDetails(error)), deps);
 		throw error;
 	}
 }

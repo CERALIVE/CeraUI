@@ -232,6 +232,10 @@ const fr = {
 		signingIn: "Connexion en cours...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "Arrêtez le flux pour changer le codec audio",
+			noSource: "Sélectionnez d'abord une source audio",
+		},
 		destination: "Destination",
 		destinationManaged: "Mon compte cloud",
 		destinationCustom: "Récepteur personnalisé",
@@ -364,6 +368,7 @@ const fr = {
 			enableInterfaceDesc:
 				"Utiliser cette interface pour la diffusion agrégée.",
 			staticIp: "Adresse IP statique",
+			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "Laissez vide pour utiliser DHCP (adressage automatique).",
 			ipInvalid: "Saisissez une adresse IPv4 ou IPv6 valide.",
 			confirmPassword: "Confirmer le mot de passe",
@@ -375,6 +380,15 @@ const fr = {
 			powerOffConfirm:
 				"L'appareil s'éteindra complètement. Vous aurez besoin d'un accès physique pour le rallumer.",
 			blockedStreaming: "Arrêtez la diffusion avant de redémarrer.",
+			rebootCountdownTitle: "Redémarrage…",
+			rebootCountdownDescription:
+				"L'appareil redémarre et se reconnectera automatiquement.",
+			rebootCountdownRemaining: "De retour dans {seconds}s",
+			rebootRecoveryTitle: "Le redémarrage n'a peut-être pas commencé",
+			rebootRecoveryDescription:
+				"L'appareil répond toujours après la fenêtre de redémarrage. Il n'a peut-être pas redémarré : réessayez ou fermez pour continuer à l'utiliser.",
+			rebootRecoveryRetry: "Redémarrer à nouveau",
+			rebootRecoveryDismiss: "Ignorer",
 			blockedUpdating: "Mise à jour en cours. Attendez avant de redémarrer.",
 		},
 		pairing: {
@@ -634,9 +648,11 @@ const fr = {
 			security: "Sécurité",
 		},
 		modem: {
+			scanningForNetworks: "Recherche d'opérateurs…",
 			save: "Enregistrer",
 			autoapn: "APN Automatique",
 			apn: "APN",
+			apnPlaceholder: "internet.provider.com",
 			username: "Nom d'utilisateur",
 			password: "Mot de passe",
 			enableRoaming: "Autoriser l'itinérance",
@@ -728,6 +744,11 @@ const fr = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "Action du point d'accès en cours",
+			formInvalid:
+				"Saisissez un nom et un mot de passe valides pour démarrer le point d'accès",
+		},
 		dialog: {
 			save: "Enregistrer",
 			saving: "Enregistrement...",
@@ -775,6 +796,13 @@ const fr = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "Recherche en cours",
+		},
+		scanningState: {
+			title: "Recherche de réseaux…",
+			description: "Recherche des réseaux WiFi disponibles à proximité.",
+		},
 		dialog: {
 			close: "Fermer",
 			searchWifi: "Rechercher des réseaux WiFi",
@@ -976,8 +1004,46 @@ const fr = {
 		cannotStartNoPipeline:
 			"Sélectionnez une source vidéo avant de démarrer la diffusion",
 		cannotStartNoServer: "Configurez un serveur avant de démarrer la diffusion",
-		startFailed: "Échec du démarrage de la diffusion",
+		startFailed: {
+			generic: "Échec du démarrage de la diffusion",
+			srt_connect_failed:
+				"Impossible de joindre le serveur SRT. Vérifiez la destination et votre connexion, puis réessayez.",
+			srt_connection_lost:
+				"La connexion SRT a été perdue avant le démarrage. Réessayer peut aider.",
+			srtla_initial_connect_failed:
+				"Impossible de se connecter au serveur SRTLA. Vérifiez la destination et votre connexion.",
+			srtla_no_connections:
+				"Aucune connexion agrégée disponible. Vérifiez que vos liens réseau sont actifs.",
+			capture_audio_error:
+				"Le périphérique de capture a signalé une erreur audio. Reconnectez-le et réessayez.",
+			capture_video_error:
+				"Le périphérique de capture a signalé une erreur vidéo. Reconnectez-le et réessayez.",
+			pipeline_stall:
+				"La source d'entrée s'est bloquée au démarrage. Vérifiez la source et réessayez.",
+		},
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "Lancer la configuration",
+			subtitle: "Trois étapes vers votre premier flux agrégé.",
+			dismiss: "Masquer le guide de configuration",
+			done: "Terminé",
+			steps: {
+				network: {
+					title: "Connectez vos liaisons",
+					hint: "Ajoutez de la cellulaire, du Wi-Fi ou de l'Ethernet pour que le flux puisse les agréger.",
+					action: "Configurer le réseau",
+				},
+				server: {
+					title: "Choisissez une destination",
+					hint: "Dirigez l'encodeur vers un serveur relais ou votre propre récepteur.",
+					action: "Choisir une destination",
+				},
+				start: {
+					title: "Passer en direct",
+					hint: "Une fois les liaisons et une destination prêtes, démarrez votre flux.",
+				},
+			},
+		},
 		ingest: {
 			title: "Statistiques d'ingestion",
 			link: "Liaison",
@@ -1240,7 +1306,9 @@ const fr = {
 		cloudRemoteKeyTooltip:
 			"Saisissez la clé distante de votre fournisseur cloud.",
 		providerName: "Nom du Fournisseur",
+		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "Hôte WebSocket",
+		providerHostPlaceholder: "remote.example.com",
 		providerHostHint:
 			"Saisissez le nom d'hôte du serveur WebSocket (sans protocole)",
 		useSecureConnection: "Utiliser une connexion sécurisée (wss)",

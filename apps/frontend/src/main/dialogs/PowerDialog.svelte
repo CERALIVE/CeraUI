@@ -21,18 +21,35 @@ import type { UpdateProgress } from '@ceraui/rpc/schemas';
 import { AlertTriangle, Power, PowerOff, RotateCcw } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
+import { onDestroy } from 'svelte';
+
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import { rpc } from '$lib/rpc/client';
-import { getIsStreaming, getUpdating } from '$lib/rpc/subscriptions.svelte';
-import { markRebooting } from '$lib/stores/connection-ux.svelte';
+import { getIsConnected, getIsStreaming, getUpdating } from '$lib/rpc/subscriptions.svelte';
+import { clearRebooting, getIsRebooting, markRebooting } from '$lib/stores/connection-ux.svelte';
 import { cn } from '$lib/utils';
 
 interface Props {
 	open?: boolean;
+	/** Seconds the reboot reconnect window runs before offering recovery. */
+	countdownSeconds?: number;
 }
 
-let { open = $bindable(false) }: Props = $props();
+let { open = $bindable(false), countdownSeconds }: Props = $props();
+
+// Explicit prop wins (unit tests); else an optional window override lets e2e
+// shrink the reconnect window without waiting a real hardware reboot; else the
+// hardware default. The override is never set in production.
+function resolveCountdownSeconds(): number {
+	if (typeof countdownSeconds === 'number') return countdownSeconds;
+	const override =
+		typeof window !== 'undefined'
+			? (window as unknown as { __ceraRebootCountdownSeconds?: number })
+					.__ceraRebootCountdownSeconds
+			: undefined;
+	return typeof override === 'number' && override > 0 ? override : 45;
+}
 
 // --- Backend guard, reflected in the UI ------------------------------------
 const streaming = $derived(getIsStreaming());
@@ -90,11 +107,16 @@ async function confirmAction() {
 			return; // do NOT mark rebooting / close on a refused op
 		}
 		if (action === 'reboot') {
-			// Hand the reconnect UX to the Task-16 banner; it auto-clears on
-			// reconnect. Closing this dialog lets the banner own the screen.
+			// Hand the reconnect UX to the Task-16 banner (it auto-clears on
+			// reconnect) AND run an in-dialog countdown so the operator sees the
+			// reconnect window progress and gets a recovery path if it overruns.
 			markRebooting();
+			startRebootCountdown();
+		} else {
+			// Power off: the device never returns, so the honest treatment is to
+			// close and let the normal reconnecting/failed banner take over.
+			open = false;
 		}
-		open = false;
 	} catch (error) {
 		console.error(`Failed to ${action}:`, error);
 		toast.error($LL.network.os.operationFailed());
@@ -102,6 +124,83 @@ async function confirmAction() {
 		busy = false;
 		pending = null;
 	}
+}
+
+// --- Reboot countdown + failure recovery -----------------------------------
+// A reboot that succeeds at the RPC level can still fail to take the device
+// down (a blocked systemd job, a dev no-op). Then the socket never drops, the
+// banner stays latched on "rebooting" forever, and the operator is stranded.
+// So after the reconnect window elapses we check whether we are STILL reachable:
+// if so the reboot never happened — clear the misleading banner and offer a calm
+// retry; if the socket has dropped, the device is genuinely down and the banner
+// owns the screen.
+type RebootPhase = 'idle' | 'counting' | 'recovery';
+
+let rebootPhase = $state<RebootPhase>('idle');
+let remaining = $state(0);
+let countdownTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopCountdown() {
+	if (countdownTimer !== null) {
+		clearInterval(countdownTimer);
+		countdownTimer = null;
+	}
+}
+
+function resetReboot() {
+	stopCountdown();
+	rebootPhase = 'idle';
+	remaining = 0;
+}
+
+function startRebootCountdown() {
+	stopCountdown();
+	remaining = Math.max(1, Math.round(resolveCountdownSeconds()));
+	rebootPhase = 'counting';
+	countdownTimer = setInterval(() => {
+		if (!open) {
+			resetReboot();
+			return;
+		}
+		remaining -= 1;
+		if (remaining > 0) return;
+		stopCountdown();
+		if (getIsConnected()) {
+			rebootPhase = 'recovery';
+			clearRebooting();
+		} else {
+			open = false;
+		}
+	}, 1000);
+}
+
+// Success signal: a reconnect during the countdown clears the rebooting latch
+// (reduceConnection on the fresh "connected"). The device is back — close and
+// let the re-authenticated surface return; the banner has already cleared.
+$effect(() => {
+	if (rebootPhase === 'counting' && !getIsRebooting()) {
+		resetReboot();
+		open = false;
+	}
+});
+
+// Closing the dialog (esc / overlay / X) mid-countdown must stop the timer.
+$effect(() => {
+	if (!open && rebootPhase !== 'idle') resetReboot();
+});
+
+onDestroy(stopCountdown);
+
+function retryReboot() {
+	if (blocked) return;
+	resetReboot();
+	pending = 'reboot';
+	void confirmAction();
+}
+
+function dismissRecovery() {
+	clearRebooting();
+	open = false;
 }
 </script>
 
@@ -114,6 +213,48 @@ async function confirmAction() {
 	title={$LL.settings.index.power()}
 >
 	<div class="space-y-5">
+		{#if rebootPhase === 'counting'}
+			<div
+				aria-live="polite"
+				class="flex flex-col items-center gap-4 py-6 text-center"
+				data-reboot-phase="counting"
+				role="status"
+			>
+				<span class="bg-secondary text-foreground grid size-12 shrink-0 place-items-center rounded-xl">
+					<RotateCcw class="size-6 motion-safe:animate-spin" />
+				</span>
+				<div class="space-y-1">
+					<h3 class="text-sm font-semibold">{$LL.settings.dialogs.rebootCountdownTitle()}</h3>
+					<p class="text-muted-foreground text-xs">{$LL.settings.dialogs.rebootCountdownDescription()}</p>
+				</div>
+				<p class="font-mono text-2xl tabular-nums" data-reboot-countdown>
+					{$LL.settings.dialogs.rebootCountdownRemaining({ seconds: remaining })}
+				</p>
+			</div>
+		{:else if rebootPhase === 'recovery'}
+			<div class="space-y-4" data-reboot-phase="recovery">
+				<div
+					aria-live="polite"
+					class="border-status-warning/30 bg-status-warning/10 text-foreground flex items-start gap-3 rounded-lg border px-4 py-3"
+					role="status"
+				>
+					<AlertTriangle class="text-status-warning mt-0.5 size-4 shrink-0" />
+					<div class="space-y-1">
+						<p class="text-sm font-medium">{$LL.settings.dialogs.rebootRecoveryTitle()}</p>
+						<p class="text-muted-foreground text-xs">{$LL.settings.dialogs.rebootRecoveryDescription()}</p>
+					</div>
+				</div>
+				<div class="flex flex-col gap-2 sm:flex-row">
+					<Button class="min-h-11 w-full gap-2" onclick={retryReboot} variant="outline">
+						<RotateCcw class="size-4" />
+						{$LL.settings.dialogs.rebootRecoveryRetry()}
+					</Button>
+					<Button class="min-h-11 w-full" onclick={dismissRecovery} variant="ghost">
+						{$LL.settings.dialogs.rebootRecoveryDismiss()}
+					</Button>
+				</div>
+			</div>
+		{:else}
 		{#if blocked}
 			<!-- Why the actions are unavailable right now. -->
 			<div
@@ -173,6 +314,7 @@ async function confirmAction() {
 				</Button>
 			</div>
 		</div>
+		{/if}
 	</div>
 </AppDialog>
 

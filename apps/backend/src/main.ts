@@ -109,7 +109,7 @@ if (isDevelopment()) {
 	initMockService(scenario);
 	logger.info(`🎭 Development mode active with scenario: ${scenario}`);
 	logger.info(
-		"   Available scenarios: single-modem, multi-modem-wifi, streaming-active",
+		"   Available scenarios: single-modem, multi-modem-wifi, streaming-active, caps-full, engine-starting, engine-unavailable",
 	);
 	logger.info("   Set MOCK_SCENARIO env var to change scenario");
 }

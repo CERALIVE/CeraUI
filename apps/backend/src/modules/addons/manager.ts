@@ -59,6 +59,11 @@ import {
 } from "../../helpers/addon-helper.ts";
 import { type ExecResult, execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import {
+	createMockAddonManagerDeps,
+	type MockAddonManagerHarness,
+} from "../../mocks/providers/addons.ts";
 import { getAddons, removeAddonState, setAddonState } from "../config.ts";
 import { getEffectiveHardware as getEffectiveHardwareImpl } from "../streaming/pipelines.ts";
 import { isRealDevice } from "../system/device-detection.ts";
@@ -484,9 +489,40 @@ export function setAddonManagerDeps(deps: Partial<AddonManagerDeps>): void {
 	activeDeps = { ...defaultAddonManagerDeps, ...deps };
 }
 
-/** Restore the real-device primitives. */
+/** Restore the real-device primitives and drop any dev mock harness. */
 export function resetAddonManagerDeps(): void {
 	activeDeps = defaultAddonManagerDeps;
+	mockManagerHarness = null;
+}
+
+// ─── dev mock harness (shouldUseMocks) ───────────────────────────────────────
+
+/**
+ * The dev in-memory harness, lazily built on the first dev-mode op and reused so
+ * the faked store + recorded ops persist across enable/disable/poll within a
+ * session (a single enable→disable pair must mutate the same store). Never
+ * constructed on a production path — {@link resolveActiveAddonManagerDeps} only
+ * builds it under {@link shouldUseMocks}.
+ */
+let mockManagerHarness: MockAddonManagerHarness | null = null;
+
+/** The current dev harness WITHOUT building one (null until the first dev op). */
+export function peekMockAddonManagerHarness(): MockAddonManagerHarness | null {
+	return mockManagerHarness;
+}
+
+/**
+ * Resolve the deps a public manager op runs against when no explicit deps are
+ * passed: the dev in-memory harness under {@link shouldUseMocks} (so add-on
+ * enable/disable/crash-loop flows are exercisable on a dev box), else the real
+ * device primitives. The real-path branch NEVER constructs a mock double.
+ */
+export function resolveActiveAddonManagerDeps(): AddonManagerDeps {
+	if (shouldUseMocks()) {
+		mockManagerHarness ??= createMockAddonManagerDeps();
+		return mockManagerHarness.deps;
+	}
+	return activeDeps;
 }
 
 // ─── live state map ──────────────────────────────────────────────────────────
@@ -577,7 +613,7 @@ async function autoDisableAddon(
  */
 export async function enableAddon(
 	descriptor: AddonDescriptor,
-	deps: AddonManagerDeps = activeDeps,
+	deps: AddonManagerDeps = resolveActiveAddonManagerDeps(),
 ): Promise<AddonOpResult> {
 	const id = descriptor.id;
 
@@ -661,7 +697,7 @@ export async function enableAddon(
  */
 export async function disableAddon(
 	descriptor: AddonDescriptor,
-	deps: AddonManagerDeps = activeDeps,
+	deps: AddonManagerDeps = resolveActiveAddonManagerDeps(),
 ): Promise<AddonOpResult> {
 	const id = descriptor.id;
 
@@ -703,7 +739,7 @@ export async function disableAddon(
  */
 export async function pollAddonCrashLoop(
 	descriptor: AddonDescriptor,
-	deps: AddonManagerDeps = activeDeps,
+	deps: AddonManagerDeps = resolveActiveAddonManagerDeps(),
 ): Promise<AddonManagerPhase> {
 	const id = descriptor.id;
 

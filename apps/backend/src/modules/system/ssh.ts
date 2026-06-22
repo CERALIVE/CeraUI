@@ -22,6 +22,7 @@ import { randomBase64 } from "../../helpers/crypto.ts";
 import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
 import { runWithStdin } from "../../helpers/run.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import { notificationSend } from "../ui/notifications.ts";
@@ -184,23 +185,66 @@ export function getCachedSshStatus(): SshStatus | undefined {
 	return sshStatus ?? undefined;
 }
 
+// systemctl ssh control seam (T8): default toggles the real ssh unit; tests spy
+// it to assert it fired (prod) or never fired (dev mock).
+type SshServiceRunner = (action: "start" | "stop") => Promise<void>;
+
+const defaultSshServiceRunner: SshServiceRunner = async (action) => {
+	await execFileP("systemctl", [action, "ssh"]);
+};
+
+let sshServiceRunner: SshServiceRunner = defaultSshServiceRunner;
+
+export function setSshServiceRunner(runner: SshServiceRunner): void {
+	sshServiceRunner = runner;
+}
+
+export function resetSshServiceRunner(): void {
+	sshServiceRunner = defaultSshServiceRunner;
+}
+
+// Dev-mock SSH active flag, flipped by startStopSsh under shouldUseMocks()
+// without spawning systemctl. resetMockSshState() clears it for test isolation.
+let mockSshActive = false;
+
+export function resetMockSshState(): void {
+	mockSshActive = false;
+	sshStatus = null;
+}
+
 export async function startStopSsh(
 	conn: WebSocket,
 	cmd: "start_ssh" | "stop_ssh",
+	statusDeps: Partial<SshStatusDeps> = {},
 ) {
 	if (!setup.ssh_user) return;
 
 	const action = cmd === "start_ssh" ? "start" : "stop";
+
+	// Dev/mock seam: flip the SSH active state and broadcast it without spawning
+	// systemctl (or resetting a real password), so the toggle works on a dev box.
+	if (shouldUseMocks()) {
+		mockSshActive = action === "start";
+		const status: SshStatus = {
+			user: setup.ssh_user,
+			active: mockSshActive,
+			user_pass: getConfig().ssh_pass !== undefined,
+		};
+		sshStatus = status;
+		broadcastMsg("status", { ssh: status });
+		return;
+	}
+
 	if (action === "start" && getConfig().ssh_pass === undefined) {
 		await resetSshPassword(conn);
 	}
 
 	try {
-		await execFileP("systemctl", [action, "ssh"]);
+		await sshServiceRunner(action);
 	} catch (err) {
 		logger.error(`Error running systemctl ${action} ssh: ${err}`);
 	}
-	await getSshStatus();
+	await getSshStatus(statusDeps);
 }
 
 export async function resetSshPassword(conn: WebSocket) {

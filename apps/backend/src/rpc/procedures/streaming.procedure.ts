@@ -36,7 +36,12 @@ import {
 	setStreamingState,
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
+import {
+	clearMockStreamError,
+	getInjectedMockStreamError,
+} from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
+import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
 import { validatePersistedPipeline } from "../../modules/streaming/config-migration.ts";
 import { deviceRegistry } from "../../modules/streaming/devices.ts";
 import { clampBitrate } from "../../modules/streaming/encoder.ts";
@@ -104,6 +109,18 @@ export const streamingStartProcedure = authedProcedure
 
 		try {
 			if (shouldUseMocks()) {
+				// A test-injected Tier-2 error stands in for the engine refusing the
+				// start on device: consume it once and surface the structured reason,
+				// the same shape the real catch below returns.
+				const injected = getInjectedMockStreamError();
+				if (injected) {
+					clearMockStreamError();
+					return {
+						success: false,
+						is_streaming: false,
+						reason: mapCerastreamError(injected),
+					};
+				}
 				// Dev has no srtla_send/cerastream binaries: the real start() flips
 				// is_streaming on then immediately errors and flips it off. Simulate
 				// a sustained stream so getIsStreaming() drives the UI as on device.
@@ -123,8 +140,12 @@ export const streamingStartProcedure = authedProcedure
 			// state we report back.
 			await startStream(context.ws as unknown as import("ws").default, applied);
 			return { success: true, is_streaming: getIsStreaming(), applied };
-		} catch (_error) {
-			return { success: false, is_streaming: false };
+		} catch (error) {
+			return {
+				success: false,
+				is_streaming: false,
+				reason: mapCerastreamError(error),
+			};
 		}
 	});
 

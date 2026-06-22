@@ -30,7 +30,7 @@ import {
 	SignalZero,
 	Zap,
 } from '@lucide/svelte';
-import { slide } from 'svelte/transition';
+import { einkGatedSlide as slide } from '$lib/transitions';
 
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
@@ -383,7 +383,11 @@ const selectedNetworkLabel = $derived(
 						<p class="text-status-error text-xs" data-testid="modem-scan-error" role="alert">
 							{$LL.network.modem.scanFailed()}
 						</p>
-					{:else if availableNetworks.length === 0 && !scanning}
+					{:else if scanning}
+						<p class="text-muted-foreground text-xs" data-testid="modem-scanning-state">
+							{$LL.network.modem.scanningForNetworks()}
+						</p>
+					{:else if availableNetworks.length === 0}
 						<p class="text-muted-foreground text-xs">{$LL.network.modem.noNetworksFound()}</p>
 					{/if}
 				</div>
@@ -424,8 +428,8 @@ const selectedNetworkLabel = $derived(
 							id="modem-apn"
 							aria-invalid={apnError}
 							class={cn('h-10 text-sm', apnError && 'border-status-error focus-visible:ring-status-error')}
-							disabled={noSim}
-							placeholder="internet.provider.com"
+						disabled={noSim}
+						placeholder={$LL.network.modem.apnPlaceholder()}
 							bind:value={formData.apn}
 						/>
 						{#if apnError}

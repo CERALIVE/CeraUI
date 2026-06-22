@@ -77,6 +77,10 @@ const zh = {
 		signingIn: "登录中...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "停止推流后才能更改音频编解码器",
+			noSource: "请先选择音频源",
+		},
 		destination: "目标",
 		destinationManaged: "我的云账户",
 		destinationCustom: "自定义接收器",
@@ -199,6 +203,7 @@ const zh = {
 			enableInterface: "启用接口",
 			enableInterfaceDesc: "将此接口用于绑定流媒体传输。",
 			staticIp: "静态 IP 地址",
+			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "留空以使用 DHCP（自动分配地址）。",
 			ipInvalid: "请输入有效的 IPv4 或 IPv6 地址。",
 			confirmPassword: "确认密码",
@@ -208,6 +213,14 @@ const zh = {
 			rebootConfirm: "重启时设备将断开连接约 30 秒。",
 			powerOffConfirm: "设备将完全关闭。您需要物理访问才能重新开启它。",
 			blockedStreaming: "重启前请停止直播。",
+			rebootCountdownTitle: "正在重启…",
+			rebootCountdownDescription: "设备正在重启，将自动重新连接。",
+			rebootCountdownRemaining: "{seconds}秒后恢复",
+			rebootRecoveryTitle: "重启可能未开始",
+			rebootRecoveryDescription:
+				"重启时间结束后设备仍有响应。它可能没有重启——请重试，或关闭以继续使用。",
+			rebootRecoveryRetry: "再次重启",
+			rebootRecoveryDismiss: "关闭",
 			blockedUpdating: "更新正在进行中。请等待后再重启。",
 		},
 		pairing: {
@@ -443,9 +456,11 @@ const zh = {
 			security: "安全性",
 		},
 		modem: {
+			scanningForNetworks: "正在搜索运营商…",
 			save: "保存",
 			autoapn: "自动 APN",
 			apn: "APN",
+			apnPlaceholder: "internet.provider.com",
 			username: "用户名",
 			password: "密码",
 			enableRoaming: "允许漫游",
@@ -545,6 +560,10 @@ const zh = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "热点操作正在进行",
+			formInvalid: "请输入有效的名称和密码以启动热点",
+		},
 		dialog: {
 			save: "保存",
 			saving: "保存中...",
@@ -586,6 +605,13 @@ const zh = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "正在扫描",
+		},
+		scanningState: {
+			title: "正在搜索网络…",
+			description: "正在搜索附近可用的 WiFi 网络。",
+		},
 		dialog: {
 			close: "关闭",
 			searchWifi: "搜索 WiFi 网络",
@@ -759,8 +785,41 @@ const zh = {
 		stopToChange: "停止直播以更改",
 		cannotStartNoPipeline: "开始直播前请选择视频源",
 		cannotStartNoServer: "开始直播前请配置服务器",
-		startFailed: "启动直播失败",
+		startFailed: {
+			generic: "启动直播失败",
+			srt_connect_failed:
+				"无法连接到 SRT 服务器。请检查目标地址和网络连接后重试。",
+			srt_connection_lost: "直播开始前 SRT 连接已断开。重试可能会有帮助。",
+			srtla_initial_connect_failed:
+				"无法连接到 SRTLA 服务器。请检查目标地址和网络连接。",
+			srtla_no_connections: "没有可用的聚合连接。请检查网络链路是否已启用。",
+			capture_audio_error: "采集设备报告音频错误。请重新连接后重试。",
+			capture_video_error: "采集设备报告视频错误。请重新连接后重试。",
+			pipeline_stall: "启动时输入源停滞。请检查输入源后重试。",
+		},
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "开始设置",
+			subtitle: "三步开启你的首个聚合推流。",
+			dismiss: "隐藏设置向导",
+			done: "完成",
+			steps: {
+				network: {
+					title: "连接你的链路",
+					hint: "添加蜂窝、Wi-Fi 或以太网，让推流可以在它们之间聚合。",
+					action: "设置网络",
+				},
+				server: {
+					title: "选择目标",
+					hint: "将编码器指向中继服务器或你自己的接收端。",
+					action: "选择目标",
+				},
+				start: {
+					title: "开始直播",
+					hint: "链路和目标准备就绪后，启动你的推流。",
+				},
+			},
+		},
 		ingest: {
 			title: "采集统计",
 			link: "链路",
@@ -1014,7 +1073,9 @@ const zh = {
 		cloudRemoteKey: "远程密钥",
 		cloudRemoteKeyTooltip: "输入云服务提供商的远程密钥。",
 		providerName: "提供商名称",
+		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "WebSocket 主机",
+		providerHostPlaceholder: "remote.example.com",
 		providerHostHint: "输入 WebSocket 服务器主机名（不含协议）",
 		useSecureConnection: "使用安全连接 (wss)",
 		remoteConfigSaved: "远程配置已保存",

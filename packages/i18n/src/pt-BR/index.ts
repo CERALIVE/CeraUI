@@ -231,6 +231,10 @@ const ptBR = {
 		signingIn: "Fazendo login...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "Pare a transmissão para alterar o codec de áudio",
+			noSource: "Selecione primeiro uma fonte de áudio",
+		},
 		destination: "Destino",
 		destinationManaged: "Minha conta na nuvem",
 		destinationCustom: "Receptor personalizado",
@@ -360,6 +364,7 @@ const ptBR = {
 			enableInterface: "Ativar interface",
 			enableInterfaceDesc: "Use esta interface para transmissão agregada.",
 			staticIp: "Endereço IP estático",
+			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "Deixe em branco para usar DHCP (endereçamento automático).",
 			ipInvalid: "Insira um endereço IPv4 ou IPv6 válido.",
 			confirmPassword: "Confirmar senha",
@@ -371,6 +376,15 @@ const ptBR = {
 			powerOffConfirm:
 				"O dispositivo será desligado completamente. Você precisará de acesso físico para ligá-lo novamente.",
 			blockedStreaming: "Pare a transmissão antes de reiniciar.",
+			rebootCountdownTitle: "Reiniciando…",
+			rebootCountdownDescription:
+				"O dispositivo está reiniciando e se reconectará automaticamente.",
+			rebootCountdownRemaining: "De volta em {seconds}s",
+			rebootRecoveryTitle: "A reinicialização pode não ter começado",
+			rebootRecoveryDescription:
+				"O dispositivo ainda responde após a janela de reinicialização. Talvez não tenha reiniciado — tente novamente ou dispense para continuar usando.",
+			rebootRecoveryRetry: "Reiniciar novamente",
+			rebootRecoveryDismiss: "Dispensar",
 			blockedUpdating: "Atualização em andamento. Aguarde antes de reiniciar.",
 		},
 		pairing: {
@@ -627,9 +641,11 @@ const ptBR = {
 			security: "Segurança",
 		},
 		modem: {
+			scanningForNetworks: "Procurando operadoras…",
 			save: "Salvar",
 			autoapn: "APN Automático",
 			apn: "APN",
+			apnPlaceholder: "internet.provider.com",
 			username: "Nome de usuário",
 			password: "Senha",
 			enableRoaming: "Permitir Roaming",
@@ -726,6 +742,11 @@ const ptBR = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "Ação do ponto de acesso em andamento",
+			formInvalid:
+				"Insira um nome e uma senha válidos para iniciar o ponto de acesso",
+		},
 		dialog: {
 			save: "Salvar",
 			saving: "Salvando...",
@@ -771,6 +792,13 @@ const ptBR = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "Busca em andamento",
+		},
+		scanningState: {
+			title: "Procurando redes…",
+			description: "Procurando redes WiFi disponíveis por perto.",
+		},
 		dialog: {
 			close: "Fechar",
 			searchWifi: "Buscar redes WiFi",
@@ -952,8 +980,46 @@ const ptBR = {
 		cannotStartNoPipeline:
 			"Selecione uma fonte de vídeo antes de iniciar a transmissão",
 		cannotStartNoServer: "Configure um servidor antes de iniciar a transmissão",
-		startFailed: "Falha ao iniciar a transmissão",
+		startFailed: {
+			generic: "Falha ao iniciar a transmissão",
+			srt_connect_failed:
+				"Não foi possível acessar o servidor SRT. Verifique o destino e sua conexão e tente novamente.",
+			srt_connection_lost:
+				"A conexão SRT caiu antes do início da transmissão. Tentar novamente pode ajudar.",
+			srtla_initial_connect_failed:
+				"Não foi possível conectar ao servidor SRTLA. Verifique o destino e sua conexão.",
+			srtla_no_connections:
+				"Nenhuma conexão agregada disponível. Verifique se seus links de rede estão ativos.",
+			capture_audio_error:
+				"O dispositivo de captura relatou um erro de áudio. Reconecte-o e tente novamente.",
+			capture_video_error:
+				"O dispositivo de captura relatou um erro de vídeo. Reconecte-o e tente novamente.",
+			pipeline_stall:
+				"A fonte de entrada travou ao iniciar. Verifique a fonte e tente novamente.",
+		},
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "Comece a configuração",
+			subtitle: "Três passos até seu primeiro stream combinado.",
+			dismiss: "Ocultar o guia de configuração",
+			done: "Concluído",
+			steps: {
+				network: {
+					title: "Conecte seus enlaces",
+					hint: "Adicione celular, Wi-Fi ou Ethernet para que o stream possa combiná-los.",
+					action: "Configurar rede",
+				},
+				server: {
+					title: "Escolha um destino",
+					hint: "Aponte o encoder para um servidor relay ou seu próprio receptor.",
+					action: "Escolher destino",
+				},
+				start: {
+					title: "Entre ao vivo",
+					hint: "Quando os enlaces e um destino estiverem prontos, inicie seu stream.",
+				},
+			},
+		},
 		ingest: {
 			title: "Estatísticas de ingestão",
 			link: "Link",
@@ -1213,7 +1279,9 @@ const ptBR = {
 		cloudRemoteKey: "Chave Remota",
 		cloudRemoteKeyTooltip: "Digite a chave remota do seu provedor de nuvem.",
 		providerName: "Nome do Provedor",
+		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "Host WebSocket",
+		providerHostPlaceholder: "remote.example.com",
 		providerHostHint:
 			"Digite o nome do host do servidor WebSocket (sem protocolo)",
 		useSecureConnection: "Usar conexão segura (wss)",

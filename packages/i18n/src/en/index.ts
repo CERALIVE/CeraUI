@@ -302,8 +302,46 @@ const en = {
 		stopToChange: "Stop stream to change",
 		cannotStartNoPipeline: "Select a video source before starting the stream",
 		cannotStartNoServer: "Configure a server before starting the stream",
-		startFailed: "Failed to start stream",
+		startFailed: {
+			generic: "Failed to start stream",
+			srt_connect_failed:
+				"Couldn't reach the SRT server. Check the destination and your connection, then try again.",
+			srt_connection_lost:
+				"The SRT connection dropped before the stream could start. Trying again may help.",
+			srtla_initial_connect_failed:
+				"Couldn't connect to the SRTLA server. Check the destination and your connection.",
+			srtla_no_connections:
+				"No bonded connections are available. Check that your network links are up.",
+			capture_audio_error:
+				"The capture device reported an audio error. Reconnect it and try again.",
+			capture_video_error:
+				"The capture device reported a video error. Reconnect it and try again.",
+			pipeline_stall:
+				"The input source stalled while starting. Check the source and try again.",
+		},
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "Get set up",
+			subtitle: "Three steps to your first bonded stream.",
+			dismiss: "Dismiss setup guide",
+			done: "Done",
+			steps: {
+				network: {
+					title: "Connect your links",
+					hint: "Add cellular, Wi-Fi, or Ethernet so the stream can bond across them.",
+					action: "Set up Network",
+				},
+				server: {
+					title: "Choose a destination",
+					hint: "Point the encoder at a relay server or your own receiver.",
+					action: "Choose destination",
+				},
+				start: {
+					title: "Go live",
+					hint: "Once links and a destination are ready, start your stream.",
+				},
+			},
+		},
 		ingest: {
 			title: "Ingest Stats",
 			link: "Link",
@@ -587,6 +625,10 @@ const en = {
 		selectLanguage: "Select Language",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "Stop the stream to change the audio codec",
+			noSource: "Select an audio source first",
+		},
 		destination: "Destination",
 		destinationManaged: "My cloud account",
 		destinationCustom: "Custom receiver",
@@ -710,6 +752,7 @@ const en = {
 			enableInterface: "Enable interface",
 			enableInterfaceDesc: "Use this interface for bonded streaming.",
 			staticIp: "Static IP address",
+			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "Leave blank to use DHCP (automatic addressing).",
 			ipInvalid: "Enter a valid IPv4 or IPv6 address.",
 			confirmPassword: "Confirm password",
@@ -722,6 +765,15 @@ const en = {
 				"The device will shut down completely. You'll need physical access to turn it back on.",
 			blockedStreaming: "Stop streaming before rebooting.",
 			blockedUpdating: "Update in progress. Wait before rebooting.",
+			rebootCountdownTitle: "Rebooting\u2026",
+			rebootCountdownDescription:
+				"The device is restarting and will reconnect automatically.",
+			rebootCountdownRemaining: "Back in {seconds:number}s",
+			rebootRecoveryTitle: "Reboot may not have started",
+			rebootRecoveryDescription:
+				"The device is still responding after the restart window. It may not have rebooted \u2014 try again, or dismiss to keep using it.",
+			rebootRecoveryRetry: "Reboot again",
+			rebootRecoveryDismiss: "Dismiss",
 		},
 		pairing: {
 			title: "Device Pairing",
@@ -980,9 +1032,11 @@ const en = {
 			security: "Security",
 		},
 		modem: {
+			scanningForNetworks: "Searching for operators…",
 			save: "Save",
 			autoapn: "Automatic APN",
 			apn: "APN",
+			apnPlaceholder: "internet.provider.com",
 			username: "Username",
 			password: "Password",
 			enableRoaming: "Allow Roaming",
@@ -1073,6 +1127,10 @@ const en = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "Hotspot action in progress",
+			formInvalid: "Enter a valid name and password to start the hotspot",
+		},
 		dialog: {
 			save: "Save",
 			saving: "Saving...",
@@ -1115,6 +1173,13 @@ const en = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "Scanning in progress",
+		},
+		scanningState: {
+			title: "Searching for networks…",
+			description: "Looking for available WiFi networks nearby.",
+		},
 		dialog: {
 			close: "Close",
 			searchWifi: "View Available Networks",
@@ -1230,7 +1295,9 @@ const en = {
 		cloudRemoteKey: "Remote Key",
 		cloudRemoteKeyTooltip: "Enter the remote key from your cloud provider.",
 		providerName: "Provider Name",
+		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "WebSocket Host",
+		providerHostPlaceholder: "remote.example.com",
 		providerHostHint: "Enter the WebSocket server hostname (without protocol)",
 		useSecureConnection: "Use secure connection (wss)",
 		remoteConfigSaved: "Remote configuration saved",

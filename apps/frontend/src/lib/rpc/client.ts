@@ -42,7 +42,7 @@ import type {
 	SimUnlockInput,
 	SimUnlockOutput,
 	StreamingConfigInput,
-	StreamingStartOutput,
+	StreamingStartOutputExtended,
 	StreamingStopOutput,
 	SuccessResponse,
 	SwitchAudioInput,
@@ -478,7 +478,9 @@ export interface TypedRPC {
 		logout: () => Promise<LogoutOutput>;
 	};
 	streaming: {
-		start: (input: StreamingConfigInput) => Promise<StreamingStartOutput>;
+		start: (
+			input: StreamingConfigInput,
+		) => Promise<StreamingStartOutputExtended>;
 		stop: () => Promise<StreamingStopOutput>;
 		setBitrate: (input: BitrateInput) => Promise<BitrateOutput>;
 		getPipelines: () => Promise<unknown>;

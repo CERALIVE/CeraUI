@@ -79,6 +79,11 @@ const ja = {
 		signingIn: "サインイン中...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming:
+				"オーディオコーデックを変更するにはストリームを停止してください",
+			noSource: "先にオーディオソースを選択してください",
+		},
 		destination: "配信先",
 		destinationManaged: "マイクラウドアカウント",
 		destinationCustom: "カスタムレシーバー",
@@ -207,6 +212,7 @@ const ja = {
 			enableInterfaceDesc:
 				"このインターフェースをボンディングストリーミングに使用します。",
 			staticIp: "静的IPアドレス",
+			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "DHCP（自動アドレス割り当て）を使用する場合は空欄にします。",
 			ipInvalid: "有効なIPv4またはIPv6アドレスを入力してください。",
 			confirmPassword: "パスワードを確認",
@@ -217,6 +223,15 @@ const ja = {
 			powerOffConfirm:
 				"デバイスは完全にシャットダウンします。再び電源を入れるには物理的なアクセスが必要です。",
 			blockedStreaming: "再起動する前にストリーミングを停止してください。",
+			rebootCountdownTitle: "再起動中…",
+			rebootCountdownDescription:
+				"デバイスは再起動中で、自動的に再接続します。",
+			rebootCountdownRemaining: "あと{seconds}秒",
+			rebootRecoveryTitle: "再起動が開始されなかった可能性があります",
+			rebootRecoveryDescription:
+				"再起動の待機時間が過ぎてもデバイスが応答しています。再起動されていない可能性があります。もう一度試すか、閉じて使用を続けてください。",
+			rebootRecoveryRetry: "もう一度再起動",
+			rebootRecoveryDismiss: "閉じる",
 			blockedUpdating: "更新中です。再起動する前にお待ちください。",
 		},
 		pairing: {
@@ -466,9 +481,11 @@ const ja = {
 			security: "セキュリティ",
 		},
 		modem: {
+			scanningForNetworks: "事業者を検索中…",
 			save: "保存",
 			autoapn: "自動APN",
 			apn: "APN",
+			apnPlaceholder: "internet.provider.com",
 			username: "ユーザー名",
 			password: "パスワード",
 			enableRoaming: "ローミングを許可",
@@ -573,6 +590,11 @@ const ja = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "ホットスポットの操作を実行中",
+			formInvalid:
+				"ホットスポットを開始するには有効な名前とパスワードを入力してください",
+		},
 		dialog: {
 			save: "保存",
 			saving: "保存中...",
@@ -616,6 +638,13 @@ const ja = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "スキャン中",
+		},
+		scanningState: {
+			title: "ネットワークを検索中…",
+			description: "近くの利用可能なWiFiネットワークを検索しています。",
+		},
 		dialog: {
 			close: "閉じる",
 			searchWifi: "WiFiネットワークを検索",
@@ -818,8 +847,46 @@ const ja = {
 		cannotStartNoPipeline:
 			"ストリームを開始する前にビデオソースを選択してください",
 		cannotStartNoServer: "ストリームを開始する前にサーバーを設定してください",
-		startFailed: "ストリームの開始に失敗しました",
+		startFailed: {
+			generic: "ストリームの開始に失敗しました",
+			srt_connect_failed:
+				"SRTサーバーに接続できませんでした。宛先と接続を確認して、もう一度お試しください。",
+			srt_connection_lost:
+				"開始前にSRT接続が切断されました。再試行すると解決する場合があります。",
+			srtla_initial_connect_failed:
+				"SRTLAサーバーに接続できませんでした。宛先と接続を確認してください。",
+			srtla_no_connections:
+				"利用可能なボンディング接続がありません。ネットワークリンクが有効か確認してください。",
+			capture_audio_error:
+				"キャプチャデバイスで音声エラーが発生しました。再接続してもう一度お試しください。",
+			capture_video_error:
+				"キャプチャデバイスで映像エラーが発生しました。再接続してもう一度お試しください。",
+			pipeline_stall:
+				"開始時に入力ソースが停止しました。ソースを確認してもう一度お試しください。",
+		},
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "セットアップを始める",
+			subtitle: "最初のボンディング配信までの3ステップ。",
+			dismiss: "セットアップガイドを閉じる",
+			done: "完了",
+			steps: {
+				network: {
+					title: "回線を接続する",
+					hint: "セルラー、Wi-Fi、イーサネットを追加して、配信をボンディングできるようにします。",
+					action: "ネットワークを設定",
+				},
+				server: {
+					title: "配信先を選択する",
+					hint: "エンコーダーをリレーサーバーまたは自分の受信先に向けます。",
+					action: "配信先を選択",
+				},
+				start: {
+					title: "ライブを開始する",
+					hint: "回線と配信先が準備できたら、配信を開始します。",
+				},
+			},
+		},
 		ingest: {
 			title: "インジェスト統計",
 			link: "リンク",
@@ -1081,7 +1148,9 @@ const ja = {
 		cloudRemoteKeyTooltip:
 			"クラウドプロバイダーからリモートキーを入力してください。",
 		providerName: "プロバイダー名",
+		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "WebSocketホスト",
+		providerHostPlaceholder: "remote.example.com",
 		providerHostHint: "WebSocketサーバーのホスト名を入力（プロトコルなし）",
 		useSecureConnection: "セキュア接続を使用 (wss)",
 		remoteConfigSaved: "リモート設定を保存しました",

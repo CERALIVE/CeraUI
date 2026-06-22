@@ -78,6 +78,10 @@ const hi = {
 		signingIn: "साइन इन हो रहे हैं...",
 	},
 	settings: {
+		codecDisabledReason: {
+			streaming: "ऑडियो कोडेक बदलने के लिए स्ट्रीम रोकें",
+			noSource: "पहले एक ऑडियो स्रोत चुनें",
+		},
 		destination: "गंतव्य",
 		destinationManaged: "मेरा क्लाउड खाता",
 		destinationCustom: "कस्टम रिसीवर",
@@ -201,6 +205,7 @@ const hi = {
 			enableInterface: "इंटरफेस सक्षम करें",
 			enableInterfaceDesc: "बॉन्डेड स्ट्रीमिंग के लिए इस इंटरफेस का उपयोग करें।",
 			staticIp: "स्टैटिक IP पता",
+			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "DHCP (स्वचालित एड्रेसिंग) का उपयोग करने के लिए खाली छोड़ें।",
 			ipInvalid: "एक मान्य IPv4 या IPv6 पता दर्ज करें।",
 			confirmPassword: "पासवर्ड की पुष्टि करें",
@@ -212,6 +217,15 @@ const hi = {
 			powerOffConfirm:
 				"डिवाइस पूरी तरह बंद हो जाएगा। इसे वापस चालू करने के लिए आपको भौतिक पहुंच की आवश्यकता होगी।",
 			blockedStreaming: "रीबूट करने से पहले स्ट्रीमिंग बंद करें।",
+			rebootCountdownTitle: "रीबूट हो रहा है…",
+			rebootCountdownDescription:
+				"डिवाइस पुनः आरंभ हो रहा है और स्वचालित रूप से पुनः कनेक्ट हो जाएगा।",
+			rebootCountdownRemaining: "{seconds} सेकंड में वापस",
+			rebootRecoveryTitle: "रीबूट शायद शुरू नहीं हुआ",
+			rebootRecoveryDescription:
+				"रीस्टार्ट विंडो के बाद भी डिवाइस प्रतिक्रिया दे रहा है। शायद यह रीबूट नहीं हुआ — फिर से प्रयास करें, या उपयोग जारी रखने के लिए खारिज करें।",
+			rebootRecoveryRetry: "फिर से रीबूट करें",
+			rebootRecoveryDismiss: "खारिज करें",
 			blockedUpdating: "अपडेट प्रगति पर है। रीबूट करने से पहले प्रतीक्षा करें।",
 		},
 		pairing: {
@@ -450,9 +464,11 @@ const hi = {
 			security: "सुरक्षा",
 		},
 		modem: {
+			scanningForNetworks: "ऑपरेटर खोजे जा रहे हैं…",
 			save: "सहेजें",
 			autoapn: "स्वचालित APN",
 			apn: "APN",
+			apnPlaceholder: "internet.provider.com",
 			username: "उपयोगकर्ता नाम",
 			password: "पासवर्ड",
 			enableRoaming: "रोमिंग की अनुमति दें",
@@ -554,6 +570,10 @@ const hi = {
 		},
 	},
 	hotspotConfigurator: {
+		toggleReason: {
+			busy: "हॉटस्पॉट कार्रवाई जारी है",
+			formInvalid: "हॉटस्पॉट शुरू करने के लिए मान्य नाम और पासवर्ड दर्ज करें",
+		},
 		dialog: {
 			save: "सहेजें",
 			configHotspot: "हॉटस्पॉट कॉन्फ़िगर करें",
@@ -596,6 +616,13 @@ const hi = {
 		},
 	},
 	wifiSelector: {
+		scanReason: {
+			scanning: "खोज जारी है",
+		},
+		scanningState: {
+			title: "नेटवर्क खोजे जा रहे हैं…",
+			description: "आस-पास उपलब्ध WiFi नेटवर्क खोजे जा रहे हैं।",
+		},
 		dialog: {
 			close: "बंद करें",
 			searchWifi: "वाई-फाई नेटवर्क खोजें",
@@ -792,8 +819,46 @@ const hi = {
 		stopToChange: "बदलने के लिए स्ट्रीम रोकें",
 		cannotStartNoPipeline: "स्ट्रीम शुरू करने से पहले एक वीडियो स्रोत चुनें",
 		cannotStartNoServer: "स्ट्रीम शुरू करने से पहले एक सर्वर कॉन्फ़िगर करें",
-		startFailed: "स्ट्रीम शुरू करने में विफल",
+		startFailed: {
+			generic: "स्ट्रीम शुरू करने में विफल",
+			srt_connect_failed:
+				"SRT सर्वर तक नहीं पहुँच सके। गंतव्य और अपना कनेक्शन जाँचें, फिर पुनः प्रयास करें।",
+			srt_connection_lost:
+				"स्ट्रीम शुरू होने से पहले SRT कनेक्शन टूट गया। दोबारा प्रयास करने से मदद मिल सकती है।",
+			srtla_initial_connect_failed:
+				"SRTLA सर्वर से कनेक्ट नहीं हो सके। गंतव्य और अपना कनेक्शन जाँचें।",
+			srtla_no_connections:
+				"कोई बॉन्डेड कनेक्शन उपलब्ध नहीं है। जाँचें कि आपके नेटवर्क लिंक सक्रिय हैं।",
+			capture_audio_error:
+				"कैप्चर डिवाइस ने ऑडियो त्रुटि बताई। इसे पुनः कनेक्ट करें और दोबारा प्रयास करें।",
+			capture_video_error:
+				"कैप्चर डिवाइस ने वीडियो त्रुटि बताई। इसे पुनः कनेक्ट करें और दोबारा प्रयास करें।",
+			pipeline_stall:
+				"शुरू होते समय इनपुट स्रोत रुक गया। स्रोत जाँचें और दोबारा प्रयास करें।",
+		},
 		reconfigureRequired: "Reconfigure required",
+		onboarding: {
+			title: "सेटअप शुरू करें",
+			subtitle: "आपके पहले बॉन्डेड स्ट्रीम तक तीन चरण।",
+			dismiss: "सेटअप गाइड छिपाएँ",
+			done: "पूर्ण",
+			steps: {
+				network: {
+					title: "अपने लिंक जोड़ें",
+					hint: "सेल्युलर, वाई-फ़ाई या ईथरनेट जोड़ें ताकि स्ट्रीम उन्हें बॉन्ड कर सके।",
+					action: "नेटवर्क सेट करें",
+				},
+				server: {
+					title: "गंतव्य चुनें",
+					hint: "एन्कोडर को रिले सर्वर या अपने रिसीवर की ओर इंगित करें।",
+					action: "गंतव्य चुनें",
+				},
+				start: {
+					title: "लाइव जाएँ",
+					hint: "जब लिंक और गंतव्य तैयार हों, तो अपनी स्ट्रीम शुरू करें।",
+				},
+			},
+		},
 		ingest: {
 			title: "इन्जेस्ट आँकड़े",
 			link: "लिंक",
@@ -1049,7 +1114,9 @@ const hi = {
 		cloudRemoteKey: "रिमोट की",
 		cloudRemoteKeyTooltip: "अपने क्लाउड प्रदाता से रिमोट की दर्ज करें।",
 		providerName: "प्रदाता का नाम",
+		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "WebSocket होस्ट",
+		providerHostPlaceholder: "remote.example.com",
 		providerHostHint: "WebSocket सर्वर होस्टनेम दर्ज करें (प्रोटोकॉल के बिना)",
 		useSecureConnection: "सुरक्षित कनेक्शन का उपयोग करें (wss)",
 		remoteConfigSaved: "रिमोट कॉन्फ़िगरेशन सहेजा गया",
