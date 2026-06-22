@@ -33,7 +33,7 @@ import type { Locales, Translation } from '@ceraui/i18n';      // types only
 10 locales: `en` (base), `ar`, `de`, `es`, `fr`, `hi`, `ja`, `ko`, `pt-BR`, `zh`. Add one: create `src/{locale}/index.ts` satisfying `Translation`, then run codegen.
 
 ```bash
-pnpm --filter @ceraui/i18n run typesafe-i18n   # regenerate; also runs via postinstall
+bun run --filter @ceraui/i18n typesafe-i18n   # regenerate; also runs via postinstall
 ```
 
 Generated: `i18n-types.ts`, `i18n-util*.ts` — overwritten on next run, don't edit.

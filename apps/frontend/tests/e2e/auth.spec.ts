@@ -2,7 +2,7 @@
  * Auth functional spec — set-password → login determinism.
  * Password: 12345678 (standardized, see PLAYBOOK.md).
  * For the set-password test to reach the set-password form, auth_tokens.json
- * must be cleared first via: pnpm --filter frontend run test:e2e:reset
+ * must be cleared first via: bun run --filter frontend test:e2e:reset
  *
  * This spec handles both modes gracefully — if already authenticated (stale
  * token from a prior run without reset), it skips directly to asserting the

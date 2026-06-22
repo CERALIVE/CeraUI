@@ -57,7 +57,7 @@ show_info() {
     echo
     log_info "Environment:"
     log_info "  Node.js: $(node --version 2>/dev/null || echo 'Not installed')"
-    log_info "  pnpm: $(pnpm --version 2>/dev/null || echo 'Not installed')"
+    log_info "  bun: $(bun --version 2>/dev/null || echo 'Not installed')"
     log_info "  Git: $(git --version 2>/dev/null | cut -d' ' -f3 || echo 'Not installed')"
     log_info "  FPM: $(fpm --version 2>/dev/null || echo 'Not installed (Debian packages unavailable)')"
     echo

@@ -17,12 +17,12 @@ The branding is configured in the following files:
 
 ```bash
 # Development
-pnpm dev              # Start development server
+bun run dev           # Start development server
 
 # Production builds
-pnpm build            # Build for production
-pnpm build:backend    # Build backend only
-pnpm build:frontend   # Build frontend only
+bun run build         # Build for production
+bun run build:backend # Build backend only
+bun run build:frontend # Build frontend only
 ```
 
 ## i18n Integration

@@ -8,8 +8,8 @@ Web-based control interface for live video streaming with cellular bonding. Buil
 ## Quick Start
 
 ```bash
-pnpm install
-pnpm dev
+bun install
+bun run dev
 ```
 
 Opens at `http://localhost:5173`. Backend runs on port 3001.
@@ -52,10 +52,10 @@ A dev-only DevTools destination is available in development builds.
 
 | Command | Description |
 |---------|-------------|
-| `pnpm dev` | Start frontend + backend with mprocs TUI |
-| `pnpm build` | Build for production |
-| `pnpm frontend:dev` | Frontend only |
-| `pnpm frontend:build` | Build frontend only |
+| `bun run dev` | Start frontend + backend with mprocs TUI |
+| `bun run build` | Build for production |
+| `bun run --filter frontend dev` | Frontend only |
+| `bun run build:frontend` | Build frontend only |
 
 ### Mock Scenarios
 
@@ -63,10 +63,10 @@ Development mode includes hardware mocking. All mock state is Zod-validated at s
 and can be reset between tests via `resetMockState()`.
 
 ```bash
-pnpm dev                           # Default: 3 modems + WiFi (multi-modem-wifi)
-pnpm dev:single-modem              # 1 modem, no WiFi
-pnpm dev:streaming                 # Active streaming simulation
-MOCK_SCENARIO=streaming-active pnpm dev  # Override inline
+bun run dev                        # Default: 3 modems + WiFi (multi-modem-wifi)
+bun run dev:single-modem           # 1 modem, no WiFi
+bun run dev:streaming              # Active streaming simulation
+MOCK_SCENARIO=streaming-active bun run dev  # Override inline
 ```
 
 | Scenario | Modems | WiFi | Streaming |
@@ -92,7 +92,7 @@ and the `VITE_SOCKET_*` variables are ignored. The variables below apply to
 origins; all are optional.
 
 These dev-only values live in the tracked **`.env.development`** file, which Vite
-loads only in `mode === "development"` and the `pnpm dev` scripts load via
+loads only in `mode === "development"` and the `bun run dev` scripts load via
 `dotenv -e .env.development`. A production build never reads `.env.development`, so
 none of these can reach the shipped bundle. The gitignored root `.env` is loaded in
 **every** Vite mode, so it must stay absent — a CI guard fails the build if a stray
@@ -140,16 +140,16 @@ See [BUILD_PIPELINE.md](docs/BUILD_PIPELINE.md) for full build documentation.
 ## Workspace Commands
 
 ```bash
-pnpm --filter frontend add [package]  # Add dependency to frontend
-pnpm add -w [package]                 # Add shared dependency
-pnpm clean                            # Clean all build artifacts
+bun add [package] --cwd apps/frontend  # Add dependency to frontend
+bun add [package]                      # Add shared dependency (root)
+bun run clean                          # Clean all build artifacts
 ```
 
 ## Tech Stack
 
 - **Frontend**: Svelte 5, TailwindCSS v4, shadcn-svelte (bits-ui v2), Vite
 - **Backend**: Bun, TypeScript, WebSocket RPC (oRPC)
-- **Build**: pnpm workspaces, mprocs
+- **Build**: Bun workspaces, mprocs
 
 ## Support the Project
 

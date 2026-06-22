@@ -43,12 +43,12 @@ src/
 [Bun](https://bun.sh/docs/installation) v1.3.0 or newer. Install dependencies from the workspace root:
 
 ```bash
-pnpm install
+bun install
 ```
 
 ### Run in development
 
-From the workspace root, `pnpm dev` starts both frontend and backend together via mprocs. To run the backend alone:
+From the workspace root, `bun run dev` starts both frontend and backend together via mprocs. To run the backend alone:
 
 ```bash
 bun run dev

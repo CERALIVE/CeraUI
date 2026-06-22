@@ -126,13 +126,13 @@ CeraUI/
 ## COMMANDS
 
 ```bash
-pnpm install          # installs all workspaces; resolves registry deps (no sibling checkout required)
-pnpm dev              # frontend + backend via mprocs TUI (port 5173 + 3001)
-pnpm build            # compile backend binary + frontend static
+bun install           # installs all workspaces; resolves registry deps (no sibling checkout required)
+bun run dev           # frontend + backend via mprocs TUI (port 5173 + 3001)
+bun run build         # compile backend binary + frontend static
 BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh   # .deb for ARM64
 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh   # .deb for AMD64
 bun tsc --noEmit      # type-check backend (run from apps/backend/)
-pnpm --filter frontend run test   # vitest frontend unit tests
+bun run --filter frontend test   # vitest frontend unit tests
 ```
 
 ## ADD-ON SUBSYSTEM [EXISTS]
@@ -460,7 +460,7 @@ Both are unset by default, so the control channel stays gated until provisioned.
 
 ## CONVENTIONS
 
-- Linting/formatting: Biome 2.5 via `@ceralive/biome-config` — ESLint and Prettier are fully removed. The root `biome.json` extends `@ceralive/biome-config` (`"extends": ["@ceralive/biome-config"]`). Run `biome check .` (or `pnpm lint`) from the workspace root. Nested non-root configs live in `apps/frontend/`, `apps/backend/`, `packages/i18n/`.
+- Linting/formatting: Biome 2.5 via `@ceralive/biome-config` — ESLint and Prettier are fully removed. The root `biome.json` extends `@ceralive/biome-config` (`"extends": ["@ceralive/biome-config"]`). Run `biome check .` (or `bun run lint`) from the workspace root. Nested non-root configs live in `apps/frontend/`, `apps/backend/`, `packages/i18n/`.
 - Svelte+TS: Biome's experimental HTML/Svelte support is enabled via the shared config (`html.experimentalFullSupportEnabled: true` + `html.formatter.enabled: true`). `.svelte` files are linted by Biome; their formatter is disabled in `apps/frontend/biome.json` (`overrides`) because Biome's experimental HTML formatter rewrites the `<script>` block to double quotes and cannot parse Svelte control-flow — so `.svelte` markup is still formatted by the Svelte VS Code extension. The same override silences false-positive `noUnusedVariables`/`noUnusedImports`/`useImportType`/`useConst` that Biome's partial template analysis emits for script vars used in markup.
 - Strict TS: `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` are enabled in `tsconfig.json` (root), `apps/backend`, and `packages/rpc`. The frontend app (`apps/frontend/tsconfig.app.json`) and `tsconfig.node.json` enable `strict` + `noUncheckedIndexedAccess`; `exactOptionalPropertyTypes` is intentionally omitted there because it is incompatible with bits-ui v2 / shadcn-svelte and vite-plugin-pwa types (unfixable "union too complex" errors in CLI-managed components). The e2e tsconfig stays at baseline `strict` (ungated Playwright test code).
 - Mock hardware in dev via `MOCK_SCENARIO` env var (`multi-modem-wifi` default). Use `shouldUseMocks()` — never raw `isDevelopment()` — to gate mock paths.
@@ -840,7 +840,7 @@ at exactly 60.
 
 ## ANTI-PATTERNS
 
-- Don't run `npm install` or `yarn` — use `pnpm` (current) or `bun` (after Todo 13 migration PR lands). Until Todo 13 merges, `bun install` will produce a mismatched lockfile; stay on `pnpm install`.
+- Don't run `npm install`, `yarn`, or `pnpm` — CeraUI migrated to **Bun** (Todo 13). `bun.lock` is the authoritative lockfile; `pnpm-lock.yaml`/`pnpm-workspace.yaml`/`.pnpmrc` are gone and catalogs live in `package.json` `workspaces.catalog`. Use `bun install`.
 - Don't add `@ceralive/srtla` to `package.json` — that package is retired from CeraUI. The sender binding is `@ceralive/srtla-send` (public-npm registry dep, `@ceralive` scope). **`@ceralive/cerastream` is a public-npm registry dep** (`@ceralive` scope, pinned to a CalVer version; ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:` or vendored `.tgz`.
 - Don't edit `.impeccable.md` for code changes — it's a design reference, not config.
 - Don't touch `@ceralive/srtla-send` call sites without checking `../srtla-send-rs/AGENTS.md` first (binding API).

@@ -2,7 +2,7 @@
 
 Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming hardware. Talks to the `backend` app exclusively via WebSocket RPC (`@ceraui/rpc`). No REST, no direct hardware access.
 
-**Status**: [EXISTS] — active development, part of the `ceralive-workspace` pnpm monorepo.
+**Status**: [EXISTS] — active development, part of the `ceralive-workspace` Bun monorepo.
 
 ## Stack
 
@@ -35,14 +35,14 @@ ceralive/
 
 ### Prerequisites
 
-- **pnpm** (workspace manager — do not use npm or yarn)
+- **Bun** (workspace manager — do not use npm, yarn, or pnpm)
 
 ### Install
 
 Run from the `CeraUI/` workspace root:
 
 ```sh
-pnpm install
+bun install
 ```
 
 This installs all workspaces and resolves all registry deps (no sibling checkout required).
@@ -50,7 +50,7 @@ This installs all workspaces and resolves all registry deps (no sibling checkout
 ### Dev Server
 
 ```sh
-pnpm dev
+bun run dev
 ```
 
 Starts the frontend (Vite, port 5173) and backend together via mprocs. Run from the workspace root.
@@ -58,19 +58,19 @@ Starts the frontend (Vite, port 5173) and backend together via mprocs. Run from 
 To run the frontend alone:
 
 ```sh
-pnpm --filter frontend run dev
+bun run --filter frontend dev
 ```
 
 ### Build
 
 ```sh
-pnpm build
+bun run build
 ```
 
 Or frontend only:
 
 ```sh
-pnpm --filter frontend run build
+bun run --filter frontend build
 ```
 
 Output goes to `dist/`.
@@ -79,20 +79,20 @@ Output goes to `dist/`.
 
 | Command | Description |
 |---------|-------------|
-| `pnpm --filter frontend run check` | Type-check via `svelte-check` |
-| `pnpm --filter frontend run test` | Run vitest unit tests |
-| `pnpm --filter frontend run test:e2e` | Run Playwright E2E tests |
+| `bun run --filter frontend check` | Type-check via `svelte-check` |
+| `bun run --filter frontend test` | Run vitest unit tests |
+| `bun run --filter frontend test:e2e` | Run Playwright E2E tests |
 | `biome check .` (from workspace root) | Lint/format via Biome (single toolchain) |
-| `pnpm --filter frontend run preview` | Preview production build locally |
+| `bun run --filter frontend preview` | Preview production build locally |
 
 ### Mock Scenarios
 
 Development mode mocks hardware. Set `MOCK_SCENARIO` to switch scenarios:
 
 ```sh
-pnpm dev                                      # default: multi-modem + WiFi
-MOCK_SCENARIO=single-modem pnpm dev           # 1 modem, no WiFi
-MOCK_SCENARIO=streaming-active pnpm dev       # active streaming simulation
+bun run dev                                   # default: multi-modem + WiFi
+MOCK_SCENARIO=single-modem bun run dev        # 1 modem, no WiFi
+MOCK_SCENARIO=streaming-active bun run dev    # active streaming simulation
 ```
 
 ## Structure
@@ -123,7 +123,7 @@ src/
 - **RPC only**: all backend calls go through `rpc.*` or `rpcClient.onMessage`. No direct hardware access.
 - **Validation bounds**: import from `ValidationAdapter.ts` (which sources from `@ceraui/rpc/schemas`). No inline numeric literals in dialog components.
 - **Stores**: Svelte 5 runes only. Files named `*.svelte.ts`.
-- **UI primitives**: add via `pnpm dlx shadcn-svelte@latest add <component>`, not by hand.
+- **UI primitives**: add via `bunx shadcn-svelte@latest add <component>`, not by hand.
 - **Custom components**: go in `lib/components/custom/`, not `lib/components/ui/`.
 - **i18n**: all user-visible strings via `LL.*` from `@ceraui/i18n`.
 - **Design tokens**: Ground Control identity (phosphor lime primary, warm graphite background) defined in `app.css`. Read `../../.impeccable.md` before touching visuals.

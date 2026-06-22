@@ -57,22 +57,23 @@ jobs:
         with:
           path: CeraUI
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          package_json_file: CeraUI/package.json
-
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-          cache-dependency-path: CeraUI/pnpm-lock.yaml
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
+
+      - name: Cache Bun install
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-store-
 
       - name: Install Ruby and FPM
         run: |
@@ -86,7 +87,7 @@ jobs:
       # aborts — the major is NEVER hardcoded.
       - name: Install dependencies
         working-directory: CeraUI
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       # arm64 and amd64 are both produced on this amd64 runner: the backend is a
       # bun --compile cross-target (build:backend-only maps BUILD_ARCH→bun target,

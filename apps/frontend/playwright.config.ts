@@ -76,7 +76,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'pnpm --filter frontend run dev',
+      command: 'bun run --filter frontend dev',
       port: DEV_PORT,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
@@ -84,7 +84,7 @@ export default defineConfig({
     {
       // No --watch: tests write config.json/auth_tokens.json, which would
       // otherwise restart the backend mid-run and drop live WS connections.
-      command: 'pnpm --filter backend run dev:e2e',
+      command: 'bun run --filter backend dev:e2e',
       port: 3002,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

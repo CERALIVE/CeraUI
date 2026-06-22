@@ -36,7 +36,7 @@
 	// BIOME CONFIGURATION (single linter/formatter for the workspace)
 	// ============================================================================
 	"biome.enabled": true,
-	"biome.lsp.bin": "pnpm exec biome",
+	"biome.lsp.bin": "bunx biome",
 	"biome.rename": true,
 	"biome.requireConfigFile": false,
 

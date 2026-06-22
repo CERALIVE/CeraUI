@@ -229,7 +229,7 @@ main() {
     
     # Check if dist folder exists
     if [[ ! -d "$DIST_PATH" ]]; then
-      echo "Error: $DIST_PATH folder not found. Please build the project first with 'pnpm build'"
+      echo "Error: $DIST_PATH folder not found. Please build the project first with 'bun run build'"
       exit 1
     fi
 

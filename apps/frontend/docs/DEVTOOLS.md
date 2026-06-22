@@ -121,7 +121,7 @@ console.table({
 
 > **📍 IMPORTANT**: You must be running CeraUI in **development mode** to see this tab.
 
-1. **Start development server**: `pnpm run dev`
+1. **Start development server**: `bun run dev`
 2. **Navigate to DevTools**: Look for the 🛠️ **DevTools** tab in the main navigation
 3. **Immediate access**: All tools are ready to use without additional setup
 
@@ -193,8 +193,8 @@ The DevTools tab automatically detects:
    > **This is the #1 issue**: DevTools is **ONLY** available in development mode!
    
    **Solution**:
-   - ✅ Run `pnpm run dev` (development server)
-   - ❌ NOT `pnpm run build` + `pnpm run preview` (production build)
+   - ✅ Run `bun run dev` (development server)
+   - ❌ NOT `bun run build` + `bun run preview` (production build)
    - ❌ NOT deployed/production environments
    
    **Quick Check**: Look for `BUILD_INFO.IS_DEV = true` in your environment
@@ -229,9 +229,9 @@ When reporting issues, include:
 > **🔐 FINAL REMINDER**  
 > **DevTools is DEVELOPMENT-ONLY**: This entire tab and all its functionality are automatically removed from production builds. You will never see DevTools in:
 > - Production deployments
-> - Built applications (`pnpm run build`)
-> - Preview mode (`pnpm run preview`)
+> - Built applications (`bun run build`)
+> - Preview mode (`bun run preview`)
 > 
-> **To access DevTools**: Always use `pnpm run dev`
+> **To access DevTools**: Always use `bun run dev`
 
 *This documentation is for development purposes only. The DevTools tab and its functionality are not available in production builds.*

@@ -1,23 +1,23 @@
 # CeraUI Development Process Manager
 # Environment variables are loaded from root .env via dotenv-cli
-# Run with: pnpm dev
+# Run with: bun run dev
 
 procs:
   frontend:
     cwd: "./apps/frontend"
-    cmd: ["pnpm", "dev"]
+    cmd: ["bun", "run", "dev"]
 
   backend:
     cwd: "./apps/backend"
-    cmd: ["pnpm", "dev"]
+    cmd: ["bun", "run", "dev"]
 
   i18n:
     cwd: "./packages/i18n"
-    cmd: ["pnpm", "dev"]
+    cmd: ["bun", "run", "dev"]
 
   # database:
   #   cwd: "./apps/backend"
-  #   cmd: ["pnpm", "db:dev"]
+  #   cmd: ["bun", "run", "db:dev"]
 
 # Global settings
 shell: false
