@@ -838,6 +838,88 @@ NOT module-global. Verified: fill → unmount → remount starts at 1 sample, no
 Per-`conn_id` rings bound independently: two `conn_id`s fed 99 frames each both cap
 at exactly 60.
 
+## FEDERATION PRODUCER PIPELINE [EXISTS]
+
+CeraUI is the **producer** of the version-federation dialog bundles consumed by
+`ceralive-platform`'s web dashboard. The full contract lives in root
+[`AGENTS.md`](../AGENTS.md) → "Version-federation hosting/signing contract". This
+section documents the build, sign, and upload steps that CeraUI owns.
+
+### What gets built
+
+Three Vite lib-mode ES-module bundles — one per config dialog:
+
+| Bundle | Entry point |
+|--------|-------------|
+| `encoder.js` | `apps/frontend/src/main/dialogs/EncoderDialog.svelte` |
+| `audio.js` | `apps/frontend/src/main/dialogs/AudioDialog.svelte` |
+| `server.js` | `apps/frontend/src/main/dialogs/ServerDialog.svelte` |
+
+Each bundle is a self-contained ES module. It imports nothing from the host page
+and exports a single `mount(target, props)` function that `ceralive-platform` calls
+after dynamic `import()`.
+
+### Build step: `bun run build:federation`
+
+Runs Vite in lib mode with a dedicated config
+(`apps/frontend/vite.federation.config.ts`). Output lands in:
+
+```
+dist/federation/<ceraui-version>/
+  encoder.js
+  audio.js
+  server.js
+```
+
+The version is read from `package.json` at build time. The output directory is
+gitignored and never committed.
+
+### Sign step: `bun run sign:federation`
+
+Runs `scripts/build/sign-federation.sh`. For each `.js` file in
+`dist/federation/<ceraui-version>/`:
+
+1. Computes a `sha384-` SRI hash → writes `<file>.js.sri`
+2. GPG-signs the bundle (detached, armored) → writes `<file>.js.sig`
+3. Writes `manifest.json` listing every bundle with its SRI hash and version
+4. GPG-signs `manifest.json` → writes `manifest.json.sig`
+
+The GPG key is the same CeraLive release key used for `.deb` signing (managed in
+`cert-work/`). The Ed25519 key used for PASETO tokens is NOT used here.
+
+### CI publish job: `publish-federation` (in `publish-release.yml`)
+
+Runs after the `.deb` publish job succeeds. Steps:
+
+1. `bun run build:federation` — produces `dist/federation/<version>/`
+2. `bun run sign:federation` — produces `.sri` + `.sig` + `manifest.json`
+3. Uploads the entire `dist/federation/<version>/` tree to R2 at
+   `ui-bundle/<ceraui-version>/` via `wrangler r2 object put` (or `aws s3 sync`
+   against the R2 S3-compat endpoint)
+4. The upload is idempotent — re-running a release does not corrupt existing bundles
+
+The `apt-worker` serves these files at
+`https://apt.ceralive.tv/ui-bundle/<ceraui-version>/<file>`. See
+[`../apt-worker/AGENTS.md`](../apt-worker/AGENTS.md) for the serving contract.
+
+### Support window
+
+Bundles are served for 6 months after their release date. Devices running a CeraUI
+version older than 6 months receive a read-only gate in the platform dashboard. The
+platform checks `ceraui-version` at session start; out-of-window devices get
+`{ gated: true, reason: "ceraui_version_unsupported" }` from `/api/device/session`.
+
+### Where to look
+
+| Task | Location |
+|------|----------|
+| Vite federation build config | `apps/frontend/vite.federation.config.ts` |
+| Sign + SRI script | `scripts/build/sign-federation.sh` |
+| CI publish workflow | `.github/workflows/publish-release.yml` (`publish-federation` job) |
+| Bundle output (gitignored) | `dist/federation/<version>/` |
+| Full hosting/signing contract | root `AGENTS.md` → "Version-federation hosting/signing contract" |
+| Serving route (apt-worker) | [`../apt-worker/AGENTS.md`](../apt-worker/AGENTS.md) |
+
 ## ANTI-PATTERNS
 
 - Don't run `npm install`, `yarn`, or `pnpm install` — this workspace runs **Bun** exclusively. `bun.lock` is the authoritative lockfile; `pnpm-lock.yaml`/`pnpm-workspace.yaml`/`.pnpmrc` are gone and catalogs live in `package.json` `workspaces.catalog`. Use `bun install`.
