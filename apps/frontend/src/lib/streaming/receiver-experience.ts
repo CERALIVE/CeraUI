@@ -23,6 +23,7 @@
 
 import {
 	deriveReceiverKind,
+	RELAY_PROVIDER_KINDS,
 	type ReceiverKind,
 	type RelayProtocol,
 	type RelayProviderKind,
@@ -125,6 +126,97 @@ export function countRelayServersForProvider(
 	return entries.filter(([, server]) =>
 		relayServerBelongsToProvider(server, provider),
 	).length;
+}
+
+/**
+ * Resolve a relay-provider id to its taxonomy. A predefined relay provider id
+ * (`ceralive`, `belabox`, `custom`, + any future entry in `RELAY_PROVIDER_KINDS`)
+ * maps to itself; anything else reads as `"unknown"`. Used to give untagged
+ * (legacy) servers — grouped under the device's configured provider — a real
+ * taxonomy so the managed-provider picker can decide if that provider is managed.
+ */
+function relayProviderKindForId(id: string): RelayProviderKind | "unknown" {
+	return (RELAY_PROVIDER_KINDS as readonly string[]).includes(id)
+		? (id as RelayProviderKind)
+		: "unknown";
+}
+
+/**
+ * One offerable managed cloud provider for the destination picker (T12). `custom`
+ * is the self-hosted escape hatch and is NEVER a managed provider, so it never
+ * appears here — the ServerDialog renders it through the always-available custom
+ * destination path instead.
+ */
+export interface ManagedProviderOption {
+	/** Provider id used as the picker value + the per-provider catalog filter key. */
+	id: string;
+	/** Provider display name when the catalog tagged it; else the consumer labels it. */
+	name?: string;
+	/** Provider taxonomy (always a managed kind — `custom`/`unknown` are excluded). */
+	kind: RelayProviderKind;
+	/** Number of catalog servers offered by this provider. */
+	serverCount: number;
+}
+
+/**
+ * Derive the MANAGED cloud providers a relay catalog actually offers (T12), in
+ * first-seen order. This is the multi-cloud, select-not-fill source of truth for
+ * the provider picker: the list is computed from the catalog the paired cloud(s)
+ * pushed — never a hardcoded `['ceralive','belabox']` literal — so a new managed
+ * cloud appears automatically once its servers arrive, and a cloud the device is
+ * NOT paired to (no servers in the catalog) is simply absent.
+ *
+ * Rules:
+ * - Servers are grouped by their tagged provider; untagged (legacy) servers fall
+ *   to `fallbackProviderId` (the device's configured provider) for DISPLAY only.
+ * - A group is offered only when its provider is a MANAGED cloud (its kind is in
+ *   `RELAY_PROVIDER_KINDS` and is not `custom`) AND it has at least one server.
+ *   The self-hosted `custom` provider and unknown ids are excluded — the custom
+ *   receiver is reached through the destination radiogroup, never this picker.
+ */
+export function availableManagedProviders(
+	entries: ReadonlyArray<[string, RelayServer]>,
+	fallbackProviderId: string,
+): ManagedProviderOption[] {
+	const options: ManagedProviderOption[] = [];
+	for (const group of groupRelayServersByProvider(
+		entries,
+		fallbackProviderId,
+	)) {
+		if (group.servers.length === 0) continue;
+		const kind =
+			group.kind === "unknown"
+				? relayProviderKindForId(group.providerId)
+				: group.kind;
+		if (kind === "unknown" || kind === "custom") continue;
+		options.push({
+			id: group.providerId,
+			name: group.providerName,
+			kind,
+			serverCount: group.servers.length,
+		});
+	}
+	return options;
+}
+
+/**
+ * Choose the ACTIVE managed provider for the picker (T12), the auto-select-if-one
+ * rule for providers: an explicit operator pick (`draftProvider`) always wins;
+ * otherwise the device's configured provider when it offers servers; otherwise
+ * the first available provider (so a single offered provider — or a catalog that
+ * only carries a non-configured cloud — auto-selects without a manual pick). Falls
+ * back to `configProvider` when the catalog is empty so the value is never blank.
+ */
+export function resolveActiveManagedProvider(
+	options: ReadonlyArray<ManagedProviderOption>,
+	configProvider: string,
+	draftProvider: string | undefined,
+): string {
+	if (draftProvider !== undefined) return draftProvider;
+	if (options.some((option) => option.id === configProvider)) {
+		return configProvider;
+	}
+	return options[0]?.id ?? configProvider;
 }
 
 /**

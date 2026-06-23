@@ -28,7 +28,11 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import { Server } from '@lucide/svelte';
-import { type RelayProtocol, serverSupportedProtocols } from '@ceraui/rpc/schemas';
+import {
+	CLOUD_PROVIDERS,
+	type RelayProtocol,
+	serverSupportedProtocols,
+} from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
@@ -61,9 +65,11 @@ import {
 	autoSelectIngestSlot,
 	autoSelectManagedRelay,
 	autoSelectManagedTransport,
+	availableManagedProviders,
 	buildManagedSlotConfig,
 	buildServerSetConfig,
 	deriveDestination,
+	resolveActiveManagedProvider,
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
 import CustomEndpointForm from './server/CustomEndpointForm.svelte';
@@ -81,14 +87,6 @@ const PORT = streamingConstraints.port;
 const LAT = streamingConstraints.srtLatency;
 const LATENCY_FALLBACK = Math.min(Math.max(2000, LAT.min), LAT.max);
 const LATENCY_STEP = 50;
-
-// Managed cloud providers the relay catalog can be grouped under. Brand names
-// are not translated (per the i18n branding convention), so they stay literal.
-const MANAGED_PROVIDERS = ['ceralive', 'belabox'] as const;
-const PROVIDER_LABELS: Record<string, string> = {
-	ceralive: 'CeraLive Cloud',
-	belabox: 'BELABOX Cloud',
-};
 
 const config = $derived(getConfig());
 const relays = $derived(getRelays());
@@ -171,7 +169,27 @@ const configProvider = $derived(
 		? config.remote_provider
 		: 'ceralive',
 );
-const selectedProvider = $derived(draft.relay_provider ?? configProvider);
+
+// Multi-cloud provider picker (T12): the offerable managed providers are DERIVED
+// from the catalog the paired cloud(s) pushed — never a hardcoded list — so a
+// device paired only to BELABOX offers only BELABOX, and a future managed cloud
+// appears as soon as its servers arrive. Custom/self-hosted is never here; it is
+// the always-available destination radiogroup escape hatch. The picker is shown
+// only when more than one managed provider is offered; a single provider
+// auto-selects (select-not-fill), and its single server/transport seed via T10.
+const managedProviderOptions = $derived(availableManagedProviders(serverEntries, configProvider));
+const showProviderPicker = $derived(managedProviderOptions.length > 1);
+const providerLabels = $derived.by(() => {
+	const labels: Record<string, string> = {};
+	for (const option of managedProviderOptions) {
+		labels[option.id] =
+			option.name ?? CLOUD_PROVIDERS.find((p) => p.id === option.id)?.name ?? option.id;
+	}
+	return labels;
+});
+const selectedProvider = $derived(
+	resolveActiveManagedProvider(managedProviderOptions, configProvider, draft.relay_provider),
+);
 const filteredServerEntries = $derived(
 	serverEntries.filter(([, info]) => (info.provider?.kind ?? configProvider) === selectedProvider),
 );
@@ -395,7 +413,7 @@ async function handleSave() {
 				{accountEntries}
 				{filteredServerEntries}
 				{isStreaming}
-				managedProviders={MANAGED_PROVIDERS}
+				managedProviders={managedProviderOptions}
 				onAccount={(value) => (draft.relay_account = value)}
 				onOverrideAddr={(value) => (draft.relay_override_addr = value)}
 				onOverridePort={(value) => (draft.relay_override_port = value)}
@@ -408,7 +426,7 @@ async function handleSave() {
 				{overridePortError}
 				{overridePortStr}
 				port={PORT}
-				providerLabels={PROVIDER_LABELS}
+				{providerLabels}
 				{relayAccount}
 				{relayAccountName}
 				{relayOverride}
@@ -421,6 +439,7 @@ async function handleSave() {
 				{relayStreamId}
 				serverProtocols={relayServerProtocols}
 				{selectedProvider}
+				{showProviderPicker}
 			/>
 		{:else}
 			<CustomEndpointForm

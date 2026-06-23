@@ -6,6 +6,7 @@ import {
 	autoSelectIngestSlot,
 	autoSelectManagedRelay,
 	autoSelectManagedTransport,
+	availableManagedProviders,
 	buildManagedSlotConfig,
 	buildServerSetConfig,
 	buildServerSummary,
@@ -17,7 +18,9 @@ import {
 	groupRelayServersByProvider,
 	kindBadgeLabelKey,
 	type ManagedIngestAccount,
+	type ManagedProviderOption,
 	managedSlotLabel,
+	resolveActiveManagedProvider,
 	resolveReceiverKind,
 	type ServerSetDerived,
 	type ServerSetDraft,
@@ -603,8 +606,16 @@ describe("buildManagedSlotConfig — persisted slot selection", () => {
 });
 
 describe("groupRelayServersByProvider (T9)", () => {
-	const ceralive = { id: "ceralive", name: "CeraLive Cloud", kind: "ceralive" } as const;
-	const belabox = { id: "belabox", name: "BELABOX Cloud", kind: "belabox" } as const;
+	const ceralive = {
+		id: "ceralive",
+		name: "CeraLive Cloud",
+		kind: "ceralive",
+	} as const;
+	const belabox = {
+		id: "belabox",
+		name: "BELABOX Cloud",
+		kind: "belabox",
+	} as const;
 
 	const taggedEntries: [string, RelayServer][] = [
 		["eu", relayServer({ name: "EU-West", provider: ceralive })],
@@ -622,8 +633,14 @@ describe("groupRelayServersByProvider (T9)", () => {
 	it("places each server in its tagged provider group", () => {
 		const groups = groupRelayServersByProvider(taggedEntries, "ceralive");
 		const byId = new Map(groups.map((g) => [g.providerId, g]));
-		expect(byId.get("ceralive")?.servers.map(([id]) => id)).toEqual(["eu", "us"]);
-		expect(byId.get("belabox")?.servers.map(([id]) => id)).toEqual(["asia", "west"]);
+		expect(byId.get("ceralive")?.servers.map(([id]) => id)).toEqual([
+			"eu",
+			"us",
+		]);
+		expect(byId.get("belabox")?.servers.map(([id]) => id)).toEqual([
+			"asia",
+			"west",
+		]);
 		expect(byId.get("belabox")?.kind).toBe("belabox");
 		expect(byId.get("belabox")?.providerName).toBe("BELABOX Cloud");
 	});
@@ -641,8 +658,16 @@ describe("groupRelayServersByProvider (T9)", () => {
 	});
 });
 
-const CERALIVE = { id: "ceralive", name: "CeraLive Cloud", kind: "ceralive" } as const;
-const BELABOX = { id: "belabox", name: "BELABOX Cloud", kind: "belabox" } as const;
+const CERALIVE = {
+	id: "ceralive",
+	name: "CeraLive Cloud",
+	kind: "ceralive",
+} as const;
+const BELABOX = {
+	id: "belabox",
+	name: "BELABOX Cloud",
+	kind: "belabox",
+} as const;
 
 describe("countRelayServersForProvider — per-provider D6 gate (T10)", () => {
 	it("counts every untagged (legacy) server for the active provider", () => {
@@ -785,10 +810,120 @@ describe("autoSelectManagedTransport — single + multi transport seed (T10)", (
 	});
 
 	it("multi transport, current already advertised → no change", () => {
-		expect(autoSelectManagedTransport(["srtla", "rist"], "rist")).toBeUndefined();
+		expect(
+			autoSelectManagedTransport(["srtla", "rist"], "rist"),
+		).toBeUndefined();
 	});
 
 	it("no advertised transports → no change", () => {
 		expect(autoSelectManagedTransport([], "srtla")).toBeUndefined();
+	});
+});
+
+describe("availableManagedProviders — multi-cloud provider list (T12)", () => {
+	it("offers a single managed provider for a single-provider catalog", () => {
+		const entries: [string, RelayServer][] = [
+			["eu", relayServer({ provider: CERALIVE })],
+			["us", relayServer({ provider: CERALIVE })],
+		];
+		expect(availableManagedProviders(entries, "ceralive")).toEqual([
+			{
+				id: "ceralive",
+				name: "CeraLive Cloud",
+				kind: "ceralive",
+				serverCount: 2,
+			},
+		]);
+	});
+
+	it("offers every managed provider in a multi-provider catalog, first-seen order", () => {
+		const entries: [string, RelayServer][] = [
+			["eu", relayServer({ provider: CERALIVE })],
+			["asia", relayServer({ provider: BELABOX })],
+			["us", relayServer({ provider: CERALIVE })],
+		];
+		expect(availableManagedProviders(entries, "ceralive")).toEqual([
+			{
+				id: "ceralive",
+				name: "CeraLive Cloud",
+				kind: "ceralive",
+				serverCount: 2,
+			},
+			{ id: "belabox", name: "BELABOX Cloud", kind: "belabox", serverCount: 1 },
+		]);
+	});
+
+	it("offers only BELABOX when the catalog carries only BELABOX servers", () => {
+		const entries: [string, RelayServer][] = [
+			["asia", relayServer({ provider: BELABOX })],
+			["west", relayServer({ provider: BELABOX })],
+		];
+		const options = availableManagedProviders(entries, "ceralive");
+		expect(options.map((o) => o.id)).toEqual(["belabox"]);
+	});
+
+	it("treats untagged (legacy) servers as the fallback managed provider", () => {
+		const legacy: [string, RelayServer][] = [
+			["a", relayServer()],
+			["b", relayServer()],
+		];
+		expect(availableManagedProviders(legacy, "ceralive")).toEqual([
+			{ id: "ceralive", kind: "ceralive", serverCount: 2 },
+		]);
+	});
+
+	it("never offers the self-hosted custom provider or an empty catalog", () => {
+		expect(availableManagedProviders([], "ceralive")).toEqual([]);
+		const customTagged: [string, RelayServer][] = [
+			[
+				"self",
+				relayServer({
+					provider: { id: "self", name: "My Box", kind: "custom" },
+				}),
+			],
+		];
+		expect(availableManagedProviders(customTagged, "ceralive")).toEqual([]);
+	});
+
+	it("does not offer a managed provider when the fallback id is custom and servers are untagged", () => {
+		const legacy: [string, RelayServer][] = [["a", relayServer()]];
+		expect(availableManagedProviders(legacy, "custom")).toEqual([]);
+	});
+});
+
+describe("resolveActiveManagedProvider — auto-select-if-one (T12)", () => {
+	const ceralive: ManagedProviderOption = {
+		id: "ceralive",
+		kind: "ceralive",
+		serverCount: 1,
+	};
+	const belabox: ManagedProviderOption = {
+		id: "belabox",
+		kind: "belabox",
+		serverCount: 1,
+	};
+
+	it("an explicit draft pick always wins", () => {
+		expect(
+			resolveActiveManagedProvider([ceralive, belabox], "ceralive", "belabox"),
+		).toBe("belabox");
+	});
+
+	it("prefers the configured provider when it offers servers", () => {
+		expect(
+			resolveActiveManagedProvider([ceralive, belabox], "belabox", undefined),
+		).toBe("belabox");
+	});
+
+	it("auto-selects the only/first provider when the configured one has none", () => {
+		expect(resolveActiveManagedProvider([belabox], "ceralive", undefined)).toBe(
+			"belabox",
+		);
+	});
+
+	it("falls back to the configured provider for an empty catalog", () => {
+		expect(resolveActiveManagedProvider([], "ceralive", undefined)).toBe(
+			"ceralive",
+		);
 	});
 });

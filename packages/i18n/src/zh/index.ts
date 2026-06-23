@@ -313,6 +313,7 @@ const zh = {
 		changeBitrateNotice: "即使在直播过程中，您也可以更改比特率。",
 		optional: "可选",
 		relayProvider: "提供商",
+		relayProviderHint: "选择由哪个云中继您的推流。",
 		autoEndpoint: "服务器端点（自动选择）",
 		manualOverride: "手动覆盖",
 		ingestSlot: "云实例",

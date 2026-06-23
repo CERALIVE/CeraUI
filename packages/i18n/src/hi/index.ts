@@ -320,6 +320,7 @@ const hi = {
 		changeBitrateNotice: "आप स्ट्रीमिंग करते समय भी बिटरेट बदल सकते हैं।",
 		optional: "वैकल्पिक",
 		relayProvider: "प्रदाता",
+		relayProviderHint: "चुनें कि कौन सा क्लाउड आपकी स्ट्रीम रिले करता है।",
 		autoEndpoint: "सर्वर एंडपॉइंट (स्वतः चयनित)",
 		manualOverride: "मैन्युअल ओवरराइड",
 		ingestSlot: "क्लाउड इंस्टेंस",

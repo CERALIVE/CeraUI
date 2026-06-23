@@ -482,6 +482,7 @@ const ptBR = {
 			"Você pode mudar a taxa de bits mesmo enquanto está transmitindo.",
 		optional: "opcional",
 		relayProvider: "Provedor",
+		relayProviderHint: "Escolha qual nuvem retransmite sua transmissão.",
 		autoEndpoint: "Endpoint do servidor (selecionado automaticamente)",
 		manualOverride: "Substituição manual",
 		ingestSlot: "Instância na nuvem",

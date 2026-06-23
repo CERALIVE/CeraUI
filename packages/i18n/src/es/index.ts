@@ -896,6 +896,7 @@ const es = {
 			"Puedes cambiar el bitrate incluso si estás transmitiendo.",
 		optional: "opcional",
 		relayProvider: "Proveedor",
+		relayProviderHint: "Elige qué nube retransmite tu transmisión.",
 		autoEndpoint: "Punto de conexión del servidor (autoseleccionado)",
 		manualOverride: "Anulación manual",
 		ingestSlot: "Instancia en la nube",

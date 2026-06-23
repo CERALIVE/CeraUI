@@ -321,6 +321,7 @@ const ko = {
 		changeBitrateNotice: "스트리밍 중에도 비트레이트를 변경할 수 있습니다.",
 		optional: "선택사항",
 		relayProvider: "공급자",
+		relayProviderHint: "어떤 클라우드가 스트림을 중계할지 선택하세요.",
 		autoEndpoint: "서버 엔드포인트(자동 선택)",
 		manualOverride: "수동 재정의",
 		ingestSlot: "클라우드 인스턴스",

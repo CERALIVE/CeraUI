@@ -884,6 +884,7 @@ const en = {
 		changeBitrateNotice:
 			"You can change the bitrate even if you are streaming.",
 		relayProvider: "Provider",
+		relayProviderHint: "Choose which cloud relays your stream.",
 		autoEndpoint: "Server endpoint (auto-selected)",
 		manualOverride: "Manual override",
 		ingestSlot: "Cloud instance",

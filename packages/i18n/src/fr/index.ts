@@ -485,6 +485,7 @@ const fr = {
 			"Vous pouvez changer le débit binaire même si vous diffusez.",
 		optional: "optionnel",
 		relayProvider: "Fournisseur",
+		relayProviderHint: "Choisissez quel cloud relaie votre flux.",
 		autoEndpoint: "Point de terminaison du serveur (sélection auto)",
 		manualOverride: "Remplacement manuel",
 		ingestSlot: "Instance cloud",

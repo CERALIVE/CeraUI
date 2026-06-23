@@ -330,6 +330,7 @@ const ja = {
 		changeBitrateNotice: "ストリーミング中でもビットレートを変更できます。",
 		optional: "オプション",
 		relayProvider: "プロバイダー",
+		relayProviderHint: "どのクラウドがストリームを中継するかを選択します。",
 		autoEndpoint: "サーバーエンドポイント（自動選択）",
 		manualOverride: "手動で上書き",
 		ingestSlot: "クラウドインスタンス",

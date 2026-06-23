@@ -456,6 +456,7 @@ const ar = {
 		changeBitrateNotice: "يمكنك تغيير معدل البت حتى أثناء البث.",
 		optional: "اختياري",
 		relayProvider: "المزود",
+		relayProviderHint: "اختر السحابة التي تنقل بثك.",
 		autoEndpoint: "نقطة نهاية الخادم (محددة تلقائيًا)",
 		manualOverride: "تجاوز يدوي",
 		ingestSlot: "مثيل السحابة",

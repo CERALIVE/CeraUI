@@ -883,6 +883,7 @@ const de = {
 			"Sie können die Bitrate auch während des Streamings ändern.",
 		optional: "optional",
 		relayProvider: "Anbieter",
+		relayProviderHint: "Wählen Sie, welche Cloud Ihren Stream weiterleitet.",
 		autoEndpoint: "Server-Endpunkt (automatisch gewählt)",
 		manualOverride: "Manuell überschreiben",
 		ingestSlot: "Cloud-Instanz",
