@@ -19,7 +19,7 @@
       "version": "2026.6.2",
       "dependencies": {
         "@ceralive/cerastream": "2026.6.2",
-        "@ceralive/srtla-send": "2026.6.1",
+        "@ceralive/srtla-send": "2026.6.2",
         "@ceraui/rpc": "workspace:*",
         "@orpc/server": "^1.14.6",
         "finalhandler": "^2.1.1",
@@ -345,7 +345,7 @@
 
     "@ceralive/design-tokens": ["@ceralive/design-tokens@2026.6.1", "", {}, "sha512-u0Ja75p7rcJY9anvU+Ke/0PKLWrK6Y8bNO1RnrbNDuQduiKLXK0bgWnsOIMtuv3mxDgp2Kvshpc7cog20znOzw=="],
 
-    "@ceralive/srtla-send": ["@ceralive/srtla-send@2026.6.1", "", { "dependencies": { "zod": "^4.3.5" } }, "sha512-HpYpLsQNwE1MdWdOEuADG7DBuelRdldDETqOMLTXGY149vrHX0jwOKJ7fviR2fV6ee+I6rnCy1MGhwjLkzHvWQ=="],
+    "@ceralive/srtla-send": ["@ceralive/srtla-send@2026.6.2", "", { "dependencies": { "zod": "^4.3.5" } }, "sha512-uywRvQaTJvT2lADiwS3702lJsZv9CIG7JnQlLhabANeVPk8s2jXCpc7rTWCKoTjFxEGJd2DwiPJLKpiqiNgagg=="],
 
     "@ceraui/i18n": ["@ceraui/i18n@workspace:packages/i18n"],
 

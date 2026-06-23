@@ -43,6 +43,10 @@
 */
 
 import {
+	createControlClient,
+	supportsStatsSubscription,
+} from "@ceralive/srtla-send/control";
+import {
 	senderTelemetryPath,
 	type Telemetry,
 	type WatchTelemetryHandle,
@@ -53,6 +57,7 @@ import { broadcastMsg } from "../ui/websocket-server.ts";
 import {
 	IFACE_RESOLVER_MAX_RETRIES,
 	IFACE_RESOLVER_RETRY_DELAY_MS,
+	SRTLA_CONTROL_CONNECT_TIMEOUT_MS,
 	SRTLA_LISTEN_PORT,
 } from "./constants.ts";
 
@@ -268,6 +273,26 @@ export interface StartLinkTelemetryOptions {
 	intervalMs?: number;
 	/** Test seam: inject a fake watch implementation. */
 	watch?: typeof watchTelemetry;
+	/**
+	 * srtla_send JSON-RPC control-socket path. When set, the telemetry source
+	 * attempts to cut over from the --stats-file poll to the control-socket
+	 * stats subscription; any failure leaves the file-poll running untouched.
+	 */
+	controlSocket?: string;
+}
+
+// Cleanup for the active stats subscription (control-socket cutover). Non-null
+// only while telemetry is sourced from the subscription rather than the poll.
+let subscriptionCleanup: (() => void) | null = null;
+
+type ControlClientFactory = typeof createControlClient;
+let controlClientFactoryOverride: ControlClientFactory | null = null;
+
+/** Test seam: inject a fake control-client factory (null restores the real one). */
+export function setControlClientFactoryForTest(
+	fn: ControlClientFactory | null,
+): void {
+	controlClientFactoryOverride = fn;
 }
 
 /**
@@ -300,6 +325,10 @@ export function startLinkTelemetry(
 	initialIps: Array<string>,
 	opts: StartLinkTelemetryOptions = {},
 ): void {
+	if (subscriptionCleanup) {
+		subscriptionCleanup();
+		subscriptionCleanup = null;
+	}
 	if (handle) {
 		handle.stop();
 		handle = null;
@@ -323,6 +352,23 @@ export function startLinkTelemetry(
 	const watch = opts.watch ?? watchTelemetry;
 	const watchOpts =
 		opts.intervalMs !== undefined ? { intervalMs: opts.intervalMs } : {};
+	// File-poll is the always-on baseline; the subscription cutover (below) only
+	// ever replaces it once the sender confirms the capability, and any failure
+	// leaves this watcher running — the airtight fallback.
+	startFilePollWatcher(watch, statsFile, watchOpts);
+
+	if (opts.controlSocket) {
+		void attemptSubscriptionCutover(opts.controlSocket, watch, statsFile, watchOpts);
+	}
+}
+
+type WatchOpts = { intervalMs?: number };
+
+function startFilePollWatcher(
+	watch: typeof watchTelemetry,
+	statsFile: string,
+	watchOpts: WatchOpts,
+): void {
 	// watchTelemetry's callback gets a TelemetryUpdate ({ data, stale }), not a raw
 	// snapshot — collapse stale ticks to null so ingestTelemetry caches correctly.
 	handle = watch(
@@ -332,8 +378,65 @@ export function startLinkTelemetry(
 	);
 }
 
-/** Stop consuming the stats file and clear the conn_id registry (process reset). */
+/**
+ * Best-effort cutover from file-poll to the control-socket stats subscription.
+ *
+ * Every exit that is not a confirmed, live subscription leaves the file-poll
+ * watcher running (connect failure, hello timeout, capability absent, subscribe
+ * error). Only once the sender advertises `stats-subscription` AND the stream is
+ * open do we stop the poll and source telemetry from pushed `event` frames. A
+ * mid-stream null (parse failure / disconnect) re-arms the file-poll.
+ */
+async function attemptSubscriptionCutover(
+	socketPath: string,
+	watch: typeof watchTelemetry,
+	statsFile: string,
+	watchOpts: WatchOpts,
+): Promise<void> {
+	try {
+		const factory = controlClientFactoryOverride ?? createControlClient;
+		const client = await factory({
+			socketPath,
+			timeoutMs: SRTLA_CONTROL_CONNECT_TIMEOUT_MS,
+		});
+		if (!client) return;
+
+		const hello = await client.hello().catch(() => null);
+		if (!hello || !supportsStatsSubscription(hello)) {
+			client.close();
+			return;
+		}
+
+		subscriptionCleanup = client.subscribeStats((snapshot) => {
+			if (snapshot === null && !handle) {
+				logger.warn(
+					"link-telemetry: subscription disconnected, falling back to file-poll",
+				);
+				startFilePollWatcher(watch, statsFile, watchOpts);
+			}
+			ingestTelemetry(snapshot);
+		});
+
+		// Subscription confirmed live — retire the redundant file-poll.
+		if (handle) {
+			handle.stop();
+			handle = null;
+		}
+		logger.debug("link-telemetry: switched to JSON-RPC subscription path");
+	} catch (err) {
+		logger.debug(
+			"link-telemetry: subscription cutover failed, staying on file-poll",
+			{ err },
+		);
+	}
+}
+
+/** Stop consuming telemetry (poll + subscription) and clear the conn_id registry. */
 export function stopLinkTelemetry(): void {
+	if (subscriptionCleanup) {
+		subscriptionCleanup();
+		subscriptionCleanup = null;
+	}
 	if (handle) {
 		handle.stop();
 		handle = null;
@@ -344,8 +447,14 @@ export function stopLinkTelemetry(): void {
 	resetConnIdRegistry();
 }
 
+// Telemetry is live while EITHER source feeds it: the file-poll watcher or the
+// control-socket subscription (which retires the watcher on cutover).
+function hasActiveTelemetrySource(): boolean {
+	return handle !== null || subscriptionCleanup !== null;
+}
+
 export function isLinkTelemetryActive(): boolean {
-	return handle !== null;
+	return hasActiveTelemetrySource();
 }
 
 /**
@@ -357,7 +466,7 @@ export function isLinkTelemetryActive(): boolean {
  *   - watching, fresh snapshot                    -> live links, stale: false
  */
 export function buildLinkTelemetry(): LinkTelemetryMessage | null {
-	if (!handle) return null;
+	if (!hasActiveTelemetrySource()) return null;
 	if (lastSnapshot === null) return null;
 
 	const stale = !lastTickFresh;

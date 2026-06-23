@@ -91,3 +91,7 @@ export const IFACE_RESOLVER_MAX_RETRIES = 3;
 
 /** Delay (ms) between iface resolver load attempts. */
 export const IFACE_RESOLVER_RETRY_DELAY_MS = 1_000;
+
+/** Connect/hello timeout (ms) for the srtla_send JSON-RPC control socket before
+ *  the link-telemetry cutover gives up and stays on the --stats-file poll. */
+export const SRTLA_CONTROL_CONNECT_TIMEOUT_MS = 5_000;
