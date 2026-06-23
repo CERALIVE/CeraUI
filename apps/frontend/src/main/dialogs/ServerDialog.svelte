@@ -59,6 +59,8 @@ import {
 	type ServerSetDerived,
 	type ServerSetDraft,
 	autoSelectIngestSlot,
+	autoSelectManagedRelay,
+	autoSelectManagedTransport,
 	buildManagedSlotConfig,
 	buildServerSetConfig,
 	deriveDestination,
@@ -194,15 +196,31 @@ const relayServerProtocols = $derived(
 // effective transport is constrained to what that server actually advertises.
 const kind = $derived(resolveReceiverKind({ protocol, destination, server: relayServerInfo }));
 
-// Default best = bonded SRTLA: when a multi-transport server is selected whose
-// advertised set excludes the current protocol, snap the persisted protocol to
-// SRTLA (bonded) when offered, else the first advertised transport. The chooser
-// stays the single user-facing writer; this only seeds a valid default.
+// Seed the persisted transport from the selected managed server's advertised set
+// (T10): SRTLA when offered, else its first transport. Now fires for a SINGLE
+// advertised transport too — previously only multi-transport servers re-seeded,
+// so a single-transport server whose only transport differed from the draft left
+// a stale relay_protocol. The per-server chooser stays the single user-facing
+// writer; this only seeds a valid default when the draft protocol is unsupported.
 $effect(() => {
-	if (destination !== 'managed' || relayServerProtocols.length <= 1) return;
-	if (relayServerProtocols.includes(protocol)) return;
-	const best = relayServerProtocols.includes('srtla') ? 'srtla' : relayServerProtocols[0];
+	if (destination !== 'managed') return;
+	const best = autoSelectManagedTransport(relayServerProtocols, protocol);
 	if (best && draft.relay_protocol !== best) draft.relay_protocol = best;
+});
+
+// Auto-select the managed relay server for the active provider (T10), the catalog
+// mirror of the ingest-slot rule: exactly one offered → silent; many → default,
+// else last-used; many with neither → leave the operator to pick. Only the
+// selected provider's servers are considered, so this never silently jumps
+// clouds. Respects an existing/persisted selection and stands down when platform
+// ingest slots own the managed path; the custom fallback is always reachable.
+$effect(() => {
+	if (destination !== 'managed' || hasManagedSlots) return;
+	if (draft.relay_server !== undefined || relayServer !== '') return;
+	const selection = autoSelectManagedRelay(serverEntries, config?.relay_server, selectedProvider);
+	if (selection && selection.kind !== 'prompt') {
+		draft.relay_server = selection.serverId;
+	}
 });
 
 const relayOverride = $derived(draft.relay_override ?? false);

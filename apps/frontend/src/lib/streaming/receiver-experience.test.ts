@@ -4,9 +4,12 @@ import { describe, expect, it } from "vitest";
 
 import {
 	autoSelectIngestSlot,
+	autoSelectManagedRelay,
+	autoSelectManagedTransport,
 	buildManagedSlotConfig,
 	buildServerSetConfig,
 	buildServerSummary,
+	countRelayServersForProvider,
 	type Destination,
 	deriveDestination,
 	deriveServerReadiness,
@@ -635,5 +638,157 @@ describe("groupRelayServersByProvider (T9)", () => {
 		expect(groups[0]?.providerId).toBe("ceralive");
 		expect(groups[0]?.kind).toBe("unknown");
 		expect(groups[0]?.servers).toHaveLength(2);
+	});
+});
+
+const CERALIVE = { id: "ceralive", name: "CeraLive Cloud", kind: "ceralive" } as const;
+const BELABOX = { id: "belabox", name: "BELABOX Cloud", kind: "belabox" } as const;
+
+describe("countRelayServersForProvider — per-provider D6 gate (T10)", () => {
+	it("counts every untagged (legacy) server for the active provider", () => {
+		const legacy: [string, RelayServer][] = [
+			["a", relayServer()],
+			["b", relayServer()],
+		];
+		expect(countRelayServersForProvider(legacy, "ceralive")).toBe(2);
+		expect(countRelayServersForProvider(legacy, "belabox")).toBe(2);
+	});
+
+	it("counts only the tagged servers that belong to the selected provider", () => {
+		const tagged: [string, RelayServer][] = [
+			["eu", relayServer({ provider: CERALIVE })],
+			["us", relayServer({ provider: CERALIVE })],
+			["asia", relayServer({ provider: BELABOX })],
+		];
+		expect(countRelayServersForProvider(tagged, "ceralive")).toBe(2);
+		expect(countRelayServersForProvider(tagged, "belabox")).toBe(1);
+	});
+
+	it("returns 0 when the selected provider has no servers", () => {
+		const onlyBelabox: [string, RelayServer][] = [
+			["asia", relayServer({ provider: BELABOX })],
+		];
+		expect(countRelayServersForProvider(onlyBelabox, "ceralive")).toBe(0);
+		expect(countRelayServersForProvider([], "ceralive")).toBe(0);
+	});
+});
+
+describe("autoSelectManagedRelay — managed relay auto-detection (T10)", () => {
+	it("no servers for the provider → undefined (custom fallback)", () => {
+		expect(autoSelectManagedRelay([], undefined, "ceralive")).toBeUndefined();
+		const onlyBelabox: [string, RelayServer][] = [
+			["asia", relayServer({ provider: BELABOX })],
+		];
+		expect(
+			autoSelectManagedRelay(onlyBelabox, undefined, "ceralive"),
+		).toBeUndefined();
+	});
+
+	it("exactly one server → silent single auto-select", () => {
+		const entries: [string, RelayServer][] = [["fra", relayServer()]];
+		expect(autoSelectManagedRelay(entries, undefined, "ceralive")).toEqual({
+			kind: "single",
+			serverId: "fra",
+			server: entries[0]?.[1],
+		});
+	});
+
+	it("many servers → picks the default-flagged one", () => {
+		const entries: [string, RelayServer][] = [
+			["eu", relayServer({ name: "EU" })],
+			["us", relayServer({ name: "US", default: true })],
+			["asia", relayServer({ name: "Asia" })],
+		];
+		expect(autoSelectManagedRelay(entries, undefined, "ceralive")).toEqual({
+			kind: "default",
+			serverId: "us",
+			server: entries[1]?.[1],
+		});
+	});
+
+	it("many servers, no default → picks the last-used (persisted relay_server)", () => {
+		const entries: [string, RelayServer][] = [
+			["eu", relayServer({ name: "EU" })],
+			["us", relayServer({ name: "US" })],
+		];
+		expect(autoSelectManagedRelay(entries, "us", "ceralive")).toEqual({
+			kind: "lastUsed",
+			serverId: "us",
+			server: entries[1]?.[1],
+		});
+	});
+
+	it("default wins over last-used when both are present", () => {
+		const entries: [string, RelayServer][] = [
+			["eu", relayServer({ name: "EU", default: true })],
+			["us", relayServer({ name: "US" })],
+		];
+		expect(autoSelectManagedRelay(entries, "us", "ceralive")).toEqual({
+			kind: "default",
+			serverId: "eu",
+			server: entries[0]?.[1],
+		});
+	});
+
+	it("many servers, no default and no last-used → prompt (never silent)", () => {
+		const entries: [string, RelayServer][] = [
+			["eu", relayServer({ name: "EU" })],
+			["us", relayServer({ name: "US" })],
+		];
+		expect(autoSelectManagedRelay(entries, undefined, "ceralive")).toEqual({
+			kind: "prompt",
+			servers: entries,
+		});
+		// A stale/unknown last-used id also falls through to prompt.
+		expect(autoSelectManagedRelay(entries, "gone", "ceralive")).toEqual({
+			kind: "prompt",
+			servers: entries,
+		});
+	});
+
+	it("never auto-picks across providers — scopes to the selected provider only", () => {
+		// One server per provider: selecting a provider auto-picks ITS single
+		// server, never the other provider's, so no silent cross-cloud jump.
+		const entries: [string, RelayServer][] = [
+			["eu", relayServer({ name: "EU", provider: CERALIVE })],
+			["asia", relayServer({ name: "Asia", provider: BELABOX })],
+		];
+		expect(autoSelectManagedRelay(entries, undefined, "ceralive")).toEqual({
+			kind: "single",
+			serverId: "eu",
+			server: entries[0]?.[1],
+		});
+		expect(autoSelectManagedRelay(entries, undefined, "belabox")).toEqual({
+			kind: "single",
+			serverId: "asia",
+			server: entries[1]?.[1],
+		});
+	});
+});
+
+describe("autoSelectManagedTransport — single + multi transport seed (T10)", () => {
+	it("single advertised transport, not the current → seeds it (single transport→auto)", () => {
+		expect(autoSelectManagedTransport(["rist"], "srtla")).toBe("rist");
+	});
+
+	it("single advertised transport already current → no change", () => {
+		expect(autoSelectManagedTransport(["srtla"], "srtla")).toBeUndefined();
+		expect(autoSelectManagedTransport(["rist"], "rist")).toBeUndefined();
+	});
+
+	it("multi transport, current unsupported → prefers bonded SRTLA when offered", () => {
+		expect(autoSelectManagedTransport(["srtla", "rist"], "srt")).toBe("srtla");
+	});
+
+	it("multi transport, current unsupported and no SRTLA → first advertised", () => {
+		expect(autoSelectManagedTransport(["rist", "srt"], "srtla")).toBe("rist");
+	});
+
+	it("multi transport, current already advertised → no change", () => {
+		expect(autoSelectManagedTransport(["srtla", "rist"], "rist")).toBeUndefined();
+	});
+
+	it("no advertised transports → no change", () => {
+		expect(autoSelectManagedTransport([], "srtla")).toBeUndefined();
 	});
 });

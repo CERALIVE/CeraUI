@@ -20,6 +20,7 @@ import { Cloud, Plug } from '@lucide/svelte';
 import type { ProviderSelection, RelayMessage } from '@ceraui/rpc/schemas';
 
 import { Label } from '$lib/components/ui/label';
+import { countRelayServersForProvider } from '$lib/streaming/receiver-experience';
 
 type Destination = 'managed' | 'custom';
 
@@ -67,7 +68,19 @@ const managedLabel = $derived(
 // D6 relay gate: managed is unavailable while the catalog is missing (waiting)
 // or present-but-empty (none). `getRelays()` is `undefined` until the cloud
 // provider's cache populates (never in mock/dev), and may arrive empty.
-const serverCount = $derived(Object.keys(relays?.servers ?? {}).length);
+//
+// Per-provider (T10): the count is scoped to the SELECTED (configured) provider,
+// so a multi-provider catalog only enables managed when THIS provider has
+// servers. Untagged legacy servers belong to the active provider, so a
+// single-provider catalog still counts in full (no behaviour change).
+const providerForGate = $derived(
+	remoteProvider && remoteProvider !== 'custom' ? remoteProvider : 'ceralive',
+);
+const serverCount = $derived(
+	relays === undefined
+		? 0
+		: countRelayServersForProvider(Object.entries(relays.servers), providerForGate),
+);
 const managedUnavailable = $derived(relays === undefined || serverCount === 0);
 const managedGateHint = $derived(
 	relays === undefined ? $LL.notifications.relayWaiting() : $LL.notifications.relayNone(),
