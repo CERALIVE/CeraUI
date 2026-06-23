@@ -29,6 +29,8 @@ import {
 	runtimeConfigSchema,
 } from "../helpers/config-schemas.ts";
 import { logger } from "../helpers/logger.ts";
+import { MOCK_CONFIG_PAIRING_DEFAULTS } from "../mocks/mock-config.ts";
+import { shouldUseMocks } from "../mocks/mock-service.ts";
 import { getPasswordHash, setPasswordHash } from "../rpc/state/password.ts";
 import { setup } from "./setup.ts";
 import { getSshPasswordHash, setSshPasswordHash } from "./system/ssh.ts";
@@ -53,6 +55,12 @@ export async function loadConfig() {
 				? "HDMI"
 				: "USB audio";
 			break;
+	}
+
+	// Seed mock pairing state so the managed-cloud gate (isPairedToManagedCloud)
+	// reads paired in dev/e2e; shouldUseMocks() is false on real devices.
+	if (shouldUseMocks()) {
+		Object.assign(platformDefaults, MOCK_CONFIG_PAIRING_DEFAULTS);
 	}
 
 	const result = await loadJsonConfig(
