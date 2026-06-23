@@ -20,7 +20,10 @@
 // wires srtla per-uplink telemetry, then starts the engine session over the
 // StreamingBackend seam.
 
-import { buildSrtlaSendArgs } from "@ceralive/srtla-send/sender";
+import {
+	buildSrtlaSendArgs,
+	controlSocketPath,
+} from "@ceralive/srtla-send/sender";
 import { getConfig } from "../../config.ts";
 import { setup } from "../../setup.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
@@ -58,6 +61,9 @@ export async function startStream(
 		}
 	}
 	const statsFile = srtlaStatsFile();
+	// ADR-001 control socket: telemetry rides the JSON-RPC subscription when the
+	// sender advertises it, with --stats-file as the airtight fallback poll.
+	const controlSocket = controlSocketPath(SRTLA_LISTEN_PORT);
 	spawnStreamingLoop(
 		srtlaSendExec,
 		buildSrtlaSendArgs({
@@ -66,8 +72,9 @@ export async function startStream(
 			srtlaPort,
 			ipsFile: setup.ips_file,
 			statsFile,
+			controlSocket,
 			execPath: setup.srtla_path,
-		}).args,
+		}),
 		(err) => {
 			const resolved = resolveProcessError("srtla", err);
 			if (resolved) {
@@ -89,7 +96,7 @@ export async function startStream(
 	const ipsContent = await Bun.file(setup.ips_file)
 		.text()
 		.catch(() => "");
-	startLinkTelemetry(statsFile, ipsContent.split("\n"));
+	startLinkTelemetry(statsFile, ipsContent.split("\n"), { controlSocket });
 
 	// Engine launch (session start over structured IPC) is behind the seam.
 	getStreamingBackend().start(config, {
