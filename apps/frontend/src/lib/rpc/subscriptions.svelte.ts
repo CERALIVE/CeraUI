@@ -37,6 +37,10 @@ import {
 	dismiss as dismissNotification,
 	push as pushNotification,
 } from "$lib/stores/notifications.svelte";
+import {
+	resetPairingState,
+	setControlChannelConnected,
+} from "$lib/stores/pairing.svelte";
 import { ingestStreamHealth } from "$lib/stores/stream-health.svelte";
 import type { ManagedIngestAccount } from "$lib/streaming/receiver-experience";
 
@@ -573,6 +577,17 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			}
 			break;
 
+		case "remote-control":
+			// Device-control channel up/down (the second outbound WS to the cloud
+			// hub). Pairing comes from `config.remote_key`, never this frame; read
+			// defensively so a partial frame can't throw.
+			if (data && typeof data === "object") {
+				setControlChannelConnected(
+					(data as { connected?: unknown }).connected === true,
+				);
+			}
+			break;
+
 		case "health":
 			// Tri-state stream-liveness rollup (Task 13). Read-only: feeds the HUD
 			// indicator + raises a transition toast; never drives restart logic.
@@ -762,6 +777,7 @@ export function resetState(): void {
 	devicesState = [];
 	activeInputState = undefined;
 	connectionReadyState = false;
+	resetPairingState();
 
 	if (lockExpiryTick !== undefined) {
 		clearInterval(lockExpiryTick);

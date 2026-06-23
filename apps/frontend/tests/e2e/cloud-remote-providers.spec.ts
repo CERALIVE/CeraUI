@@ -148,6 +148,51 @@ test.describe("Cloud-provider selector (Task 18)", () => {
 		await navigateTo(page, "settings");
 	});
 
+	test.afterEach(async ({ page }) => {
+		// Restore remote_provider to 'ceralive' after each test to prevent
+		// subsequent tests from seeing a stale 'custom' provider in the config.
+		// The custom provider test persists provider: 'custom' to the backend;
+		// this cleanup ensures the next test starts with a clean state.
+		await page.evaluate(async () => {
+			const w = window as any;
+			if (w.__cera?.socket) {
+				return new Promise<void>((resolve) => {
+					const id = Math.random();
+					const msg = {
+						id,
+						path: ["system", "setRemoteConfig"],
+						input: {
+							remote_key: "mock-pairing-key",
+							provider: "ceralive",
+						},
+					};
+
+					// Listen for the response to this specific RPC call.
+					const originalOnMessage = w.__cera.socket.onmessage;
+					w.__cera.socket.onmessage = (event: MessageEvent) => {
+						try {
+							const response = JSON.parse(event.data);
+							if (response.id === id) {
+								// Got the response to our cleanup RPC; restore the original handler.
+								w.__cera.socket.onmessage = originalOnMessage;
+								resolve();
+								return;
+							}
+						} catch {
+							/* not JSON */
+						}
+						// Pass through to the original handler.
+						if (originalOnMessage) {
+							originalOnMessage(event);
+						}
+					};
+
+					w.__cera.socket.send(JSON.stringify(msg));
+				});
+			}
+		});
+	});
+
 	test("selector is populated from getCloudProviders(); pick CeraLive → saved (applied)", async ({
 		page,
 	}) => {

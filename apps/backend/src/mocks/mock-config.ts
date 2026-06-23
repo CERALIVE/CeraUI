@@ -244,6 +244,17 @@ export const mockWifiNetworks = [
 	},
 ] satisfies MockWifiNetwork[];
 
+// Pairing fields seeded into the device config under shouldUseMocks() (wired in
+// modules/config.ts loadConfig) so isPairedToManagedCloud() reads "paired" in
+// dev/e2e and the managed destination enables — matching the `ceralive`
+// provider metadata the mock relay catalog (providers/relays.ts) already
+// carries. Never applied in production (shouldUseMocks() is false on real
+// devices).
+export const MOCK_CONFIG_PAIRING_DEFAULTS = {
+	remote_key: "mock-pairing-key",
+	remote_provider: "ceralive",
+} as const;
+
 // Active scenario state
 let activeScenario: MockScenario = "multi-modem-wifi";
 

@@ -3,8 +3,15 @@
 	Static RelaysCache with 3-5 multi-region servers and 2 accounts
 */
 
+import { relayProviderMetaForId } from "@ceraui/rpc/schemas";
+
 import type { RelaysCache } from "../../helpers/config-schemas.ts";
 import { buildMockRelay } from "../fixture-factory.ts";
+
+// Provider tags for the mock catalog. Both ids are predefined CLOUD_PROVIDERS,
+// so these resolve to defined `{ id, name, kind }` metadata (never undefined).
+const CERALIVE_PROVIDER = relayProviderMetaForId("ceralive");
+const BELABOX_PROVIDER = relayProviderMetaForId("belabox");
 
 // ─── Stable server IDs for T5 (RTT generator) and T7 (rebroadcast) ──────────
 
@@ -40,29 +47,35 @@ export function getMockRelaysCache(): RelaysCache {
 				addr: "relay-eu-west.example.com",
 				default: true,
 				bcrp_port: "2002",
+				provider: CERALIVE_PROVIDER,
 			}),
 			[MOCK_RELAY_SERVER_IDS.US_EAST]: buildMockRelay({
 				name: "US-East",
 				addr: "relay-us-east.example.com",
+				provider: CERALIVE_PROVIDER,
 			}),
 			[MOCK_RELAY_SERVER_IDS.ASIA_SE]: buildMockRelay({
 				name: "Asia-SE",
 				addr: "relay-asia-se.example.com",
+				provider: BELABOX_PROVIDER,
 			}),
 			[MOCK_RELAY_SERVER_IDS.US_WEST]: buildMockRelay({
 				name: "US-West",
 				addr: "relay-us-west.example.com",
+				provider: BELABOX_PROVIDER,
 			}),
 		},
 		accounts: {
 			[MOCK_RELAY_ACCOUNT_IDS.PRIMARY]: {
 				name: "Primary Account",
 				ingest_key: "primary-ingest-key-abc123def456",
+				provider: CERALIVE_PROVIDER,
 			},
 			[MOCK_RELAY_ACCOUNT_IDS.SECONDARY]: {
 				name: "Secondary Account",
 				ingest_key: "secondary-ingest-key-xyz789uvw012",
 				disabled: true,
+				provider: BELABOX_PROVIDER,
 			},
 		},
 	};

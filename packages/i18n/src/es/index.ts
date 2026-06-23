@@ -651,6 +651,17 @@ const es = {
 		destinationCustomHint:
 			"Introduce la dirección y el puerto de tu propio receptor.",
 		transportKind: "Transporte",
+		remoteControl: {
+			title: "Control remoto",
+			notPaired: "Sin emparejar",
+			notPairedHint:
+				"Empareja este dispositivo para gestionarlo desde tu cuenta en la nube.",
+			disconnected: "Emparejado \u00b7 sin conexión",
+			disconnectedHint:
+				"Emparejado, pero el canal de control está sin conexión. Reconectando\u2026",
+			connected: "Conectado",
+			connectedHint: "Canal de control activo con tu cuenta en la nube.",
+		},
 		transportKindBadge: {
 			srtlaBonded: "SRTLA · Combinado",
 			srtlaSingle: "SRTLA · Enlace único",
@@ -885,6 +896,7 @@ const es = {
 			"Puedes cambiar el bitrate incluso si estás transmitiendo.",
 		optional: "opcional",
 		relayProvider: "Proveedor",
+		relayProviderHint: "Elige qué nube retransmite tu transmisión.",
 		autoEndpoint: "Punto de conexión del servidor (autoseleccionado)",
 		manualOverride: "Anulación manual",
 		ingestSlot: "Instancia en la nube",

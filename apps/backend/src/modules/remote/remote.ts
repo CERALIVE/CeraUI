@@ -57,6 +57,7 @@ import {
 	verifyStubDeviceToken,
 } from "../pairing/device-token.ts";
 import { setup } from "../setup.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { addAuthedSocket } from "../ui/auth.ts";
 import { type StatusResponseMessage, sendInitialStatus } from "../ui/status.ts";
 import {
@@ -311,8 +312,17 @@ function remoteClose(conn: WebSocket) {
  * the device drops to the unpaired floor and surfaces re-pairing locally, then
  * push the re-pair status. `remoteStatusHandled` is latched first so the
  * follow-on socket close does not also broadcast a spurious network error.
+ *
+ * In mock/dev mode, skip the repair — the control channel won't connect (no real
+ * platform), but the pairing state must stay intact for e2e tests that exercise
+ * the managed-cloud destination surface.
  */
 export function forceRepairMigration(reason: RemoteRepairReason): void {
+	// In mock/dev mode, never clear the mock pairing key — the control channel
+	// won't connect (no real platform), but the pairing state must stay intact
+	// for e2e tests that exercise the managed-cloud destination surface.
+	if (shouldUseMocks()) return;
+
 	logger.warn(
 		`remote: paired device holds no valid PASETO token (${reason}); forcing re-pair (ADR-0006 D3)`,
 	);

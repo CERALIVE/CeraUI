@@ -28,7 +28,11 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import { Server } from '@lucide/svelte';
-import { type RelayProtocol, serverSupportedProtocols } from '@ceraui/rpc/schemas';
+import {
+	CLOUD_PROVIDERS,
+	type RelayProtocol,
+	serverSupportedProtocols,
+} from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
@@ -53,14 +57,19 @@ import {
 } from '$lib/rpc/subscriptions.svelte';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
+import { isPairedToManagedCloud } from '$lib/stores/pairing.svelte';
 import {
 	type Destination,
 	type ServerSetDerived,
 	type ServerSetDraft,
 	autoSelectIngestSlot,
+	autoSelectManagedRelay,
+	autoSelectManagedTransport,
+	availableManagedProviders,
 	buildManagedSlotConfig,
 	buildServerSetConfig,
 	deriveDestination,
+	resolveActiveManagedProvider,
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
 import CustomEndpointForm from './server/CustomEndpointForm.svelte';
@@ -79,17 +88,14 @@ const LAT = streamingConstraints.srtLatency;
 const LATENCY_FALLBACK = Math.min(Math.max(2000, LAT.min), LAT.max);
 const LATENCY_STEP = 50;
 
-// Managed cloud providers the relay catalog can be grouped under. Brand names
-// are not translated (per the i18n branding convention), so they stay literal.
-const MANAGED_PROVIDERS = ['ceralive', 'belabox'] as const;
-const PROVIDER_LABELS: Record<string, string> = {
-	ceralive: 'CeraLive Cloud',
-	belabox: 'BELABOX Cloud',
-};
-
 const config = $derived(getConfig());
 const relays = $derived(getRelays());
 const isStreaming = $derived(Boolean(getIsStreaming()));
+
+// Managed-cloud surfaces (managed destination + ingest slots) require pairing to
+// a managed provider — multi-cloud safe (never a single-provider literal). The
+// custom/self-hosted receiver path stays available regardless.
+const pairedToManaged = $derived(isPairedToManagedCloud());
 
 type Draft = {
 	destination?: Destination;
@@ -163,7 +169,27 @@ const configProvider = $derived(
 		? config.remote_provider
 		: 'ceralive',
 );
-const selectedProvider = $derived(draft.relay_provider ?? configProvider);
+
+// Multi-cloud provider picker (T12): the offerable managed providers are DERIVED
+// from the catalog the paired cloud(s) pushed — never a hardcoded list — so a
+// device paired only to BELABOX offers only BELABOX, and a future managed cloud
+// appears as soon as its servers arrive. Custom/self-hosted is never here; it is
+// the always-available destination radiogroup escape hatch. The picker is shown
+// only when more than one managed provider is offered; a single provider
+// auto-selects (select-not-fill), and its single server/transport seed via T10.
+const managedProviderOptions = $derived(availableManagedProviders(serverEntries, configProvider));
+const showProviderPicker = $derived(managedProviderOptions.length > 1);
+const providerLabels = $derived.by(() => {
+	const labels: Record<string, string> = {};
+	for (const option of managedProviderOptions) {
+		labels[option.id] =
+			option.name ?? CLOUD_PROVIDERS.find((p) => p.id === option.id)?.name ?? option.id;
+	}
+	return labels;
+});
+const selectedProvider = $derived(
+	resolveActiveManagedProvider(managedProviderOptions, configProvider, draft.relay_provider),
+);
 const filteredServerEntries = $derived(
 	serverEntries.filter(([, info]) => (info.provider?.kind ?? configProvider) === selectedProvider),
 );
@@ -188,15 +214,31 @@ const relayServerProtocols = $derived(
 // effective transport is constrained to what that server actually advertises.
 const kind = $derived(resolveReceiverKind({ protocol, destination, server: relayServerInfo }));
 
-// Default best = bonded SRTLA: when a multi-transport server is selected whose
-// advertised set excludes the current protocol, snap the persisted protocol to
-// SRTLA (bonded) when offered, else the first advertised transport. The chooser
-// stays the single user-facing writer; this only seeds a valid default.
+// Seed the persisted transport from the selected managed server's advertised set
+// (T10): SRTLA when offered, else its first transport. Now fires for a SINGLE
+// advertised transport too — previously only multi-transport servers re-seeded,
+// so a single-transport server whose only transport differed from the draft left
+// a stale relay_protocol. The per-server chooser stays the single user-facing
+// writer; this only seeds a valid default when the draft protocol is unsupported.
 $effect(() => {
-	if (destination !== 'managed' || relayServerProtocols.length <= 1) return;
-	if (relayServerProtocols.includes(protocol)) return;
-	const best = relayServerProtocols.includes('srtla') ? 'srtla' : relayServerProtocols[0];
+	if (destination !== 'managed') return;
+	const best = autoSelectManagedTransport(relayServerProtocols, protocol);
 	if (best && draft.relay_protocol !== best) draft.relay_protocol = best;
+});
+
+// Auto-select the managed relay server for the active provider (T10), the catalog
+// mirror of the ingest-slot rule: exactly one offered → silent; many → default,
+// else last-used; many with neither → leave the operator to pick. Only the
+// selected provider's servers are considered, so this never silently jumps
+// clouds. Respects an existing/persisted selection and stands down when platform
+// ingest slots own the managed path; the custom fallback is always reachable.
+$effect(() => {
+	if (destination !== 'managed' || hasManagedSlots) return;
+	if (draft.relay_server !== undefined || relayServer !== '') return;
+	const selection = autoSelectManagedRelay(serverEntries, config?.relay_server, selectedProvider);
+	if (selection && selection.kind !== 'prompt') {
+		draft.relay_server = selection.serverId;
+	}
 });
 
 const relayOverride = $derived(draft.relay_override ?? false);
@@ -351,13 +393,14 @@ async function handleSave() {
 		<DestinationSection
 			{isStreaming}
 			onDestination={(value) => (draft.destination = value)}
+			pairedToManagedCloud={pairedToManaged}
 			{relays}
 			remoteProvider={config?.remote_provider}
 			selected={destination}
 		/>
 
 		<!-- Endpoint config, immediately under the destination pick. -->
-		{#if destination === 'managed' && hasManagedSlots}
+		{#if destination === 'managed' && pairedToManaged && hasManagedSlots}
 			<ServerIngestSlots
 				accounts={managedAccounts}
 				activeEndpointId={activeSlotId}
@@ -370,7 +413,7 @@ async function handleSave() {
 				{accountEntries}
 				{filteredServerEntries}
 				{isStreaming}
-				managedProviders={MANAGED_PROVIDERS}
+				managedProviders={managedProviderOptions}
 				onAccount={(value) => (draft.relay_account = value)}
 				onOverrideAddr={(value) => (draft.relay_override_addr = value)}
 				onOverridePort={(value) => (draft.relay_override_port = value)}
@@ -383,7 +426,7 @@ async function handleSave() {
 				{overridePortError}
 				{overridePortStr}
 				port={PORT}
-				providerLabels={PROVIDER_LABELS}
+				{providerLabels}
 				{relayAccount}
 				{relayAccountName}
 				{relayOverride}
@@ -396,6 +439,7 @@ async function handleSave() {
 				{relayStreamId}
 				serverProtocols={relayServerProtocols}
 				{selectedProvider}
+				{showProviderPicker}
 			/>
 		{:else}
 			<CustomEndpointForm

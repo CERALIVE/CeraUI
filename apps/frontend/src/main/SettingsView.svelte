@@ -47,6 +47,7 @@ import PowerDialog from './dialogs/PowerDialog.svelte';
 import AddonsSection from './settings/AddonsSection.svelte';
 import DeviceStatsSection from './settings/DeviceStatsSection.svelte';
 import OnDeviceDisplaySection from './settings/OnDeviceDisplaySection.svelte';
+import RemoteControlStatus from './settings/RemoteControlStatus.svelte';
 import SshDialog from './dialogs/SshDialog.svelte';
 import UpdatesDialog from './dialogs/UpdatesDialog.svelte';
 import VersionsDialog from './dialogs/VersionsDialog.svelte';
@@ -294,6 +295,7 @@ const ActiveIcon = $derived(active?.icon);
 					<h2 class="text-muted-foreground px-1 text-sm font-medium">{group.label}</h2>
 					<div class="divide-border bg-card divide-y overflow-hidden rounded-xl border">
 						{#if group.id === 'streaming'}
+							<RemoteControlStatus />
 							<div class="flex w-full items-center gap-4 px-4 py-3.5" data-testid="settings-autostart">
 								<span class="bg-secondary text-foreground grid size-9 shrink-0 place-items-center rounded-lg">
 									<Rocket class="size-[18px]" />

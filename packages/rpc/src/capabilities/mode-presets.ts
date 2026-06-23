@@ -38,21 +38,26 @@ export interface ModePreset {
 /**
  * Canonical preset catalog.
  *
- * Five presets covering common streaming scenarios:
- * - 1080p60-h264: Full HD, 60fps, universal H.264 codec
+ * Five presets covering common streaming scenarios. Insertion order IS the
+ * render order — `MODE_PRESETS`/`presetViews` iterate `Object.values` in this
+ * exact sequence, and the EncoderDialog card grid renders them top-to-bottom.
+ * The order is canonical ASCENDING QUALITY: it climbs from the lightest,
+ * most-universal preset to the heaviest, hardware-gated one, so an operator
+ * scanning the grid moves from "safe everywhere" toward "best but demanding":
+ * - 720p60-h264:  HD, 60fps, universal H.264 codec (lightest, most portable)
  * - 1080p30-h264: Full HD, 30fps, universal H.264 codec
- * - 4k30-h265: 4K, 30fps, modern H.265 codec (requires hardware support)
- * - 720p60-h264: HD, 60fps, universal H.264 codec
+ * - 1080p60-h264: Full HD, 60fps, universal H.264 codec
  * - 1080p30-h265: Full HD, 30fps, modern H.265 codec (requires hardware support)
+ * - 4k30-h265:    4K, 30fps, modern H.265 codec (heaviest, requires hardware support)
  */
 export const CANONICAL_PRESETS: Record<string, ModePreset> = {
-	'1080p60-h264': {
-		id: '1080p60-h264',
-		labelKey: 'presets.1080p60h264',
-		resolution: '1080p',
+	'720p60-h264': {
+		id: '720p60-h264',
+		labelKey: 'presets.720p60h264',
+		resolution: '720p',
 		framerate: 60,
 		codec: MEDIA_TYPE_H264,
-		bitrateDefault: 6000,
+		bitrateDefault: 4000,
 	},
 	'1080p30-h264': {
 		id: '1080p30-h264',
@@ -62,21 +67,13 @@ export const CANONICAL_PRESETS: Record<string, ModePreset> = {
 		codec: MEDIA_TYPE_H264,
 		bitrateDefault: 4000,
 	},
-	'4k30-h265': {
-		id: '4k30-h265',
-		labelKey: 'presets.4k30h265',
-		resolution: '2160p',
-		framerate: 30,
-		codec: MEDIA_TYPE_H265,
-		bitrateDefault: 8000,
-	},
-	'720p60-h264': {
-		id: '720p60-h264',
-		labelKey: 'presets.720p60h264',
-		resolution: '720p',
+	'1080p60-h264': {
+		id: '1080p60-h264',
+		labelKey: 'presets.1080p60h264',
+		resolution: '1080p',
 		framerate: 60,
 		codec: MEDIA_TYPE_H264,
-		bitrateDefault: 4000,
+		bitrateDefault: 6000,
 	},
 	'1080p30-h265': {
 		id: '1080p30-h265',
@@ -85,6 +82,14 @@ export const CANONICAL_PRESETS: Record<string, ModePreset> = {
 		framerate: 30,
 		codec: MEDIA_TYPE_H265,
 		bitrateDefault: 3000,
+	},
+	'4k30-h265': {
+		id: '4k30-h265',
+		labelKey: 'presets.4k30h265',
+		resolution: '2160p',
+		framerate: 30,
+		codec: MEDIA_TYPE_H265,
+		bitrateDefault: 8000,
 	},
 };
 

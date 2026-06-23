@@ -642,6 +642,17 @@ const de = {
 		destinationCustomHint:
 			"Gib Adresse und Port deines eigenen Empfängers ein.",
 		transportKind: "Transport",
+		remoteControl: {
+			title: "Fernsteuerung",
+			notPaired: "Nicht gekoppelt",
+			notPairedHint:
+				"Koppele dieses Gerät, um es über dein Cloud-Konto zu verwalten.",
+			disconnected: "Gekoppelt \u00b7 offline",
+			disconnectedHint:
+				"Gekoppelt, aber der Steuerkanal ist offline. Verbinde erneut\u2026",
+			connected: "Verbunden",
+			connectedHint: "Aktiver Steuerkanal zu deinem Cloud-Konto.",
+		},
 		transportKindBadge: {
 			srtlaBonded: "SRTLA · Gebündelt",
 			srtlaSingle: "SRTLA · Einzelne Verbindung",
@@ -872,6 +883,7 @@ const de = {
 			"Sie können die Bitrate auch während des Streamings ändern.",
 		optional: "optional",
 		relayProvider: "Anbieter",
+		relayProviderHint: "Wählen Sie, welche Cloud Ihren Stream weiterleitet.",
 		autoEndpoint: "Server-Endpunkt (automatisch gewählt)",
 		manualOverride: "Manuell überschreiben",
 		ingestSlot: "Cloud-Instanz",

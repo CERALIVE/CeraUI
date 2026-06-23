@@ -226,6 +226,16 @@ const ar = {
 		destinationManagedHint: "ابثّ عبر مُرحِّل مرتبط بحسابك السحابي.",
 		destinationCustomHint: "أدخل عنوان ومنفذ المستقبِل الخاص بك.",
 		transportKind: "النقل",
+		remoteControl: {
+			title: "التحكم عن بُعد",
+			notPaired: "غير مقترن",
+			notPairedHint: "اقترن هذا الجهاز لإدارته من حساب السحابة الخاص بك.",
+			disconnected: "مقترن \u00b7 غير متصل",
+			disconnectedHint:
+				"مقترن، لكن قناة التحكم غير متصلة. جارٍ إعادة الاتصال\u2026",
+			connected: "متصل",
+			connectedHint: "قناة تحكم نشطة مع حساب السحابة الخاص بك.",
+		},
 		transportKindBadge: {
 			srtlaBonded: "SRTLA · مجمّع",
 			srtlaSingle: "SRTLA · رابط واحد",
@@ -446,6 +456,7 @@ const ar = {
 		changeBitrateNotice: "يمكنك تغيير معدل البت حتى أثناء البث.",
 		optional: "اختياري",
 		relayProvider: "المزود",
+		relayProviderHint: "اختر السحابة التي تنقل بثك.",
 		autoEndpoint: "نقطة نهاية الخادم (محددة تلقائيًا)",
 		manualOverride: "تجاوز يدوي",
 		ingestSlot: "مثيل السحابة",

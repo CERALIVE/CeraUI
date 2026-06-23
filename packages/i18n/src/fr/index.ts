@@ -243,6 +243,17 @@ const fr = {
 		destinationCustomHint:
 			"Saisissez l'adresse et le port de votre propre récepteur.",
 		transportKind: "Transport",
+		remoteControl: {
+			title: "Contrôle à distance",
+			notPaired: "Non associé",
+			notPairedHint:
+				"Associez cet appareil pour le gérer depuis votre compte cloud.",
+			disconnected: "Associé \u00b7 hors ligne",
+			disconnectedHint:
+				"Associé, mais le canal de contrôle est hors ligne. Reconnexion\u2026",
+			connected: "Connecté",
+			connectedHint: "Canal de contrôle actif vers votre compte cloud.",
+		},
 		transportKindBadge: {
 			srtlaBonded: "SRTLA · Agrégé",
 			srtlaSingle: "SRTLA · Lien unique",
@@ -474,6 +485,7 @@ const fr = {
 			"Vous pouvez changer le débit binaire même si vous diffusez.",
 		optional: "optionnel",
 		relayProvider: "Fournisseur",
+		relayProviderHint: "Choisissez quel cloud relaie votre flux.",
 		autoEndpoint: "Point de terminaison du serveur (sélection auto)",
 		manualOverride: "Remplacement manuel",
 		ingestSlot: "Instance cloud",

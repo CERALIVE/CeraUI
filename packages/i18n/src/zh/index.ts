@@ -87,6 +87,15 @@ const zh = {
 		destinationManagedHint: "通过与您的云账户关联的中继进行推流。",
 		destinationCustomHint: "输入您自己的接收器地址和端口。",
 		transportKind: "传输",
+		remoteControl: {
+			title: "远程控制",
+			notPaired: "未配对",
+			notPairedHint: "配对此设备以通过您的云账户进行管理。",
+			disconnected: "已配对 \u00b7 离线",
+			disconnectedHint: "已配对，但控制通道处于离线状态。正在重新连接\u2026",
+			connected: "已连接",
+			connectedHint: "与您的云账户的控制通道处于活动状态。",
+		},
 		transportKindBadge: {
 			srtlaBonded: "SRTLA · 绑定",
 			srtlaSingle: "SRTLA · 单链路",
@@ -304,6 +313,7 @@ const zh = {
 		changeBitrateNotice: "即使在直播过程中，您也可以更改比特率。",
 		optional: "可选",
 		relayProvider: "提供商",
+		relayProviderHint: "选择由哪个云中继您的推流。",
 		autoEndpoint: "服务器端点（自动选择）",
 		manualOverride: "手动覆盖",
 		ingestSlot: "云实例",

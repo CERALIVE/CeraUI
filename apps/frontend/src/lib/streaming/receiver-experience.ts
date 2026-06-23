@@ -23,8 +23,10 @@
 
 import {
 	deriveReceiverKind,
+	RELAY_PROVIDER_KINDS,
 	type ReceiverKind,
 	type RelayProtocol,
+	type RelayProviderKind,
 	type RelayServer,
 	relayProtocolSchema,
 	type StreamingConfigInput,
@@ -54,6 +56,249 @@ export function deriveDestination(
 	config: DestinationConfig | undefined,
 ): Destination {
 	return config?.relay_server ? "managed" : "custom";
+}
+
+/** A relay-catalog grouping keyed by the server's provider origin (T9). */
+export interface RelayProviderGroup {
+	/** Provider id the servers are grouped under (the namespacing key). */
+	providerId: string;
+	/** Provider display name, when the servers carry tagged metadata. */
+	providerName?: string;
+	/** Provider taxonomy, or `"unknown"` for untagged (legacy) servers. */
+	kind: RelayProviderKind | "unknown";
+	servers: Array<[string, RelayServer]>;
+}
+
+/**
+ * Group relay-catalog server entries by their tagged provider origin (T9), so
+ * the server dialog can present multi-provider catalogs grouped by cloud.
+ * Untagged (legacy) servers fall back to `fallbackProviderId` for DISPLAY only —
+ * grouping never gates a server out. First-seen provider order is preserved.
+ */
+export function groupRelayServersByProvider(
+	entries: ReadonlyArray<[string, RelayServer]>,
+	fallbackProviderId: string,
+): RelayProviderGroup[] {
+	const groups = new Map<string, RelayProviderGroup>();
+	for (const [id, server] of entries) {
+		const providerId = server.provider?.id ?? fallbackProviderId;
+		let group = groups.get(providerId);
+		if (!group) {
+			group = {
+				providerId,
+				providerName: server.provider?.name,
+				kind: server.provider?.kind ?? "unknown",
+				servers: [],
+			};
+			groups.set(providerId, group);
+		}
+		group.servers.push([id, server]);
+	}
+	return [...groups.values()];
+}
+
+/**
+ * Match rule for "does this catalog server belong to `provider`?". Mirrors the
+ * ServerDialog provider filter: a tagged server matches on its `provider.kind`,
+ * and an UNTAGGED (legacy) server falls back to the active provider — so a
+ * single-provider legacy catalog behaves exactly as before. Shared by the
+ * per-provider D6 gate count and the managed-relay auto-selection.
+ */
+function relayServerBelongsToProvider(
+	server: RelayServer,
+	provider: string,
+): boolean {
+	return (server.provider?.kind ?? provider) === provider;
+}
+
+/**
+ * Count the relay-catalog servers that belong to `provider` (T10). The
+ * destination D6 gate uses this so "managed is available" reflects the SELECTED
+ * provider's servers, not the whole multi-provider catalog: a provider with no
+ * servers gates managed off even when another provider has some. Untagged legacy
+ * servers belong to the active provider, so a single-provider catalog counts in
+ * full (no behaviour change).
+ */
+export function countRelayServersForProvider(
+	entries: ReadonlyArray<[string, RelayServer]>,
+	provider: string,
+): number {
+	return entries.filter(([, server]) =>
+		relayServerBelongsToProvider(server, provider),
+	).length;
+}
+
+/**
+ * Resolve a relay-provider id to its taxonomy. A predefined relay provider id
+ * (`ceralive`, `belabox`, `custom`, + any future entry in `RELAY_PROVIDER_KINDS`)
+ * maps to itself; anything else reads as `"unknown"`. Used to give untagged
+ * (legacy) servers — grouped under the device's configured provider — a real
+ * taxonomy so the managed-provider picker can decide if that provider is managed.
+ */
+function relayProviderKindForId(id: string): RelayProviderKind | "unknown" {
+	return (RELAY_PROVIDER_KINDS as readonly string[]).includes(id)
+		? (id as RelayProviderKind)
+		: "unknown";
+}
+
+/**
+ * One offerable managed cloud provider for the destination picker (T12). `custom`
+ * is the self-hosted escape hatch and is NEVER a managed provider, so it never
+ * appears here — the ServerDialog renders it through the always-available custom
+ * destination path instead.
+ */
+export interface ManagedProviderOption {
+	/** Provider id used as the picker value + the per-provider catalog filter key. */
+	id: string;
+	/** Provider display name when the catalog tagged it; else the consumer labels it. */
+	name?: string;
+	/** Provider taxonomy (always a managed kind — `custom`/`unknown` are excluded). */
+	kind: RelayProviderKind;
+	/** Number of catalog servers offered by this provider. */
+	serverCount: number;
+}
+
+/**
+ * Derive the MANAGED cloud providers a relay catalog actually offers (T12), in
+ * first-seen order. This is the multi-cloud, select-not-fill source of truth for
+ * the provider picker: the list is computed from the catalog the paired cloud(s)
+ * pushed — never a hardcoded `['ceralive','belabox']` literal — so a new managed
+ * cloud appears automatically once its servers arrive, and a cloud the device is
+ * NOT paired to (no servers in the catalog) is simply absent.
+ *
+ * Rules:
+ * - Servers are grouped by their tagged provider; untagged (legacy) servers fall
+ *   to `fallbackProviderId` (the device's configured provider) for DISPLAY only.
+ * - A group is offered only when its provider is a MANAGED cloud (its kind is in
+ *   `RELAY_PROVIDER_KINDS` and is not `custom`) AND it has at least one server.
+ *   The self-hosted `custom` provider and unknown ids are excluded — the custom
+ *   receiver is reached through the destination radiogroup, never this picker.
+ */
+export function availableManagedProviders(
+	entries: ReadonlyArray<[string, RelayServer]>,
+	fallbackProviderId: string,
+): ManagedProviderOption[] {
+	const options: ManagedProviderOption[] = [];
+	for (const group of groupRelayServersByProvider(
+		entries,
+		fallbackProviderId,
+	)) {
+		if (group.servers.length === 0) continue;
+		const kind =
+			group.kind === "unknown"
+				? relayProviderKindForId(group.providerId)
+				: group.kind;
+		if (kind === "unknown" || kind === "custom") continue;
+		options.push({
+			id: group.providerId,
+			name: group.providerName,
+			kind,
+			serverCount: group.servers.length,
+		});
+	}
+	return options;
+}
+
+/**
+ * Choose the ACTIVE managed provider for the picker (T12), the auto-select-if-one
+ * rule for providers: an explicit operator pick (`draftProvider`) always wins;
+ * otherwise the device's configured provider when it offers servers; otherwise
+ * the first available provider (so a single offered provider — or a catalog that
+ * only carries a non-configured cloud — auto-selects without a manual pick). Falls
+ * back to `configProvider` when the catalog is empty so the value is never blank.
+ */
+export function resolveActiveManagedProvider(
+	options: ReadonlyArray<ManagedProviderOption>,
+	configProvider: string,
+	draftProvider: string | undefined,
+): string {
+	if (draftProvider !== undefined) return draftProvider;
+	if (options.some((option) => option.id === configProvider)) {
+		return configProvider;
+	}
+	return options[0]?.id ?? configProvider;
+}
+
+/**
+ * The outcome of auto-selecting a managed relay server for the active provider
+ * (T10) — the relay-catalog mirror of {@link autoSelectIngestSlot}:
+ * - `single`   — exactly one server for the provider → silent auto-select.
+ * - `default`  — many servers, one carries the `default` flag → silent.
+ * - `lastUsed` — many servers, none default, the persisted `relay_server` (the
+ *   last-used id) still resolves → silent.
+ * - `prompt`   — many servers, none default and no last-used: the operator must
+ *   pick one (NEVER auto-selected silently).
+ *
+ * `undefined` (no servers for the provider) maps to the custom fallback, which
+ * the destination radiogroup keeps reachable in every branch.
+ */
+export type ManagedRelaySelection =
+	| {
+			kind: "single" | "default" | "lastUsed";
+			serverId: string;
+			server: RelayServer;
+	  }
+	| { kind: "prompt"; servers: ReadonlyArray<[string, RelayServer]> }
+	| undefined;
+
+/**
+ * Auto-select a managed relay server for `provider` from the relay catalog + the
+ * persisted last-used `relay_server` id (T10). Rule (mirrors
+ * {@link autoSelectIngestSlot}): exactly one server for the provider → that
+ * server (silent); many → the `default` server, else the last-used server, else
+ * prompt; none → `undefined` (custom fallback). Only the SELECTED provider's
+ * servers are considered, so a single-server auto-pick is never made across
+ * providers — a multi-provider catalog never silently jumps clouds.
+ */
+export function autoSelectManagedRelay(
+	servers: ReadonlyArray<[string, RelayServer]>,
+	selectedId: string | undefined,
+	provider: string,
+): ManagedRelaySelection {
+	const own = servers.filter(([, server]) =>
+		relayServerBelongsToProvider(server, provider),
+	);
+	if (own.length === 0) return undefined;
+	const only = own[0];
+	if (own.length === 1 && only) {
+		return { kind: "single", serverId: only[0], server: only[1] };
+	}
+	const defaultServer = own.find(([, server]) => server.default);
+	if (defaultServer) {
+		return {
+			kind: "default",
+			serverId: defaultServer[0],
+			server: defaultServer[1],
+		};
+	}
+	const lastUsed = selectedId
+		? own.find(([id]) => id === selectedId)
+		: undefined;
+	if (lastUsed) {
+		return { kind: "lastUsed", serverId: lastUsed[0], server: lastUsed[1] };
+	}
+	return { kind: "prompt", servers: own };
+}
+
+/**
+ * The relay transport to seed for a selected managed server (T10): the transport
+ * to persist as `relay_protocol`, or `undefined` when no change is needed (no
+ * advertised transports, or the current protocol is already advertised). Prefers
+ * bonded SRTLA when offered, else the server's first advertised transport.
+ *
+ * This now fires for a SINGLE advertised transport too — previously only
+ * multi-transport servers re-seeded the protocol, so a single-transport server
+ * whose only transport differed from the draft left a stale `relay_protocol`
+ * persisted. The per-server chooser stays the single user-facing writer; this
+ * only computes a valid default.
+ */
+export function autoSelectManagedTransport(
+	serverProtocols: readonly RelayProtocol[],
+	currentProtocol: RelayProtocol,
+): RelayProtocol | undefined {
+	if (serverProtocols.length === 0) return undefined;
+	if (serverProtocols.includes(currentProtocol)) return undefined;
+	return serverProtocols.includes("srtla") ? "srtla" : serverProtocols[0];
 }
 
 export interface ResolveReceiverKindInput {

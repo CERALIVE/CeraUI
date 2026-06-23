@@ -10,6 +10,7 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { RelayAccount, RelayProtocol, RelayServer } from '@ceraui/rpc/schemas';
+import type { ManagedProviderOption } from '$lib/streaming/receiver-experience';
 
 import RelayRttIndicator from '$lib/components/streaming/RelayRttIndicator.svelte';
 import { Input } from '$lib/components/ui/input';
@@ -20,7 +21,10 @@ interface Props {
 	isStreaming: boolean;
 	relaysUnavailable: boolean;
 	selectedProvider: string;
-	managedProviders: readonly string[];
+	/** Managed cloud providers offered by the catalog (multi-cloud, T12). */
+	managedProviders: readonly ManagedProviderOption[];
+	/** Show the provider picker only when more than one provider is offered. */
+	showProviderPicker: boolean;
 	providerLabels: Record<string, string>;
 	relayServer: string;
 	relayServerName?: string;
@@ -59,6 +63,7 @@ let {
 	relaysUnavailable,
 	selectedProvider,
 	managedProviders,
+	showProviderPicker,
 	providerLabels,
 	relayServer,
 	relayServerName,
@@ -97,26 +102,35 @@ function protocolBadge(protocol: RelayProtocol): string {
 }
 </script>
 
-<div class="space-y-2">
-	<Label class="text-sm font-medium" for="relay-provider">{$LL.settings.relayProvider()}</Label>
-	<Select.Root
-		disabled={relaysUnavailable || isStreaming}
-		onValueChange={onProvider}
-		type="single"
-		value={selectedProvider}
-	>
-		<Select.Trigger id="relay-provider" class="w-full">
-			{providerLabels[selectedProvider] ?? selectedProvider}
-		</Select.Trigger>
-		<Select.Content>
-			<Select.Group>
-				{#each managedProviders as providerId (providerId)}
-					<Select.Item value={providerId}>{providerLabels[providerId]}</Select.Item>
-				{/each}
-			</Select.Group>
-		</Select.Content>
-	</Select.Root>
-</div>
+<!-- Provider picker: shown only for a multi-cloud catalog (T12). A single offered
+     provider auto-selects, so no picker is rendered — the operator never chooses
+     from a list of one. Brand product names stay literal (i18n branding rule);
+     the picker's purpose is carried by the translated hint. -->
+{#if showProviderPicker}
+	<div class="space-y-2">
+		<Label class="text-sm font-medium" for="relay-provider">{$LL.settings.relayProvider()}</Label>
+		<Select.Root
+			disabled={relaysUnavailable || isStreaming}
+			onValueChange={onProvider}
+			type="single"
+			value={selectedProvider}
+		>
+			<Select.Trigger id="relay-provider" class="w-full" data-testid="relay-provider">
+				{providerLabels[selectedProvider] ?? selectedProvider}
+			</Select.Trigger>
+			<Select.Content>
+				<Select.Group>
+					{#each managedProviders as provider (provider.id)}
+						<Select.Item value={provider.id}>
+							{providerLabels[provider.id] ?? provider.id}
+						</Select.Item>
+					{/each}
+				</Select.Group>
+			</Select.Content>
+		</Select.Root>
+		<p class="text-muted-foreground text-xs leading-snug">{$LL.settings.relayProviderHint()}</p>
+	</div>
+{/if}
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="relay-server">{$LL.settings.relayServer()}</Label>

@@ -89,6 +89,16 @@ const ko = {
 			"클라우드 계정에 연결된 릴레이를 통해 스트리밍합니다.",
 		destinationCustomHint: "사용자 수신기의 주소와 포트를 입력하세요.",
 		transportKind: "전송",
+		remoteControl: {
+			title: "원격 제어",
+			notPaired: "페어링 안 됨",
+			notPairedHint: "클라우드 계정에서 관리하려면 이 기기를 페어링하세요.",
+			disconnected: "페어링됨 \u00b7 오프라인",
+			disconnectedHint:
+				"페어링되었지만 제어 채널이 오프라인입니다. 다시 연결 중\u2026",
+			connected: "연결됨",
+			connectedHint: "클라우드 계정과의 제어 채널이 활성 상태입니다.",
+		},
 		transportKindBadge: {
 			srtlaBonded: "SRTLA · 본딩",
 			srtlaSingle: "SRTLA · 단일 링크",
@@ -311,6 +321,7 @@ const ko = {
 		changeBitrateNotice: "스트리밍 중에도 비트레이트를 변경할 수 있습니다.",
 		optional: "선택사항",
 		relayProvider: "공급자",
+		relayProviderHint: "어떤 클라우드가 스트림을 중계할지 선택하세요.",
 		autoEndpoint: "서버 엔드포인트(자동 선택)",
 		manualOverride: "수동 재정의",
 		ingestSlot: "클라우드 인스턴스",

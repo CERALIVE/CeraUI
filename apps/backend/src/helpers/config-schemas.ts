@@ -52,6 +52,7 @@ import {
 	parseNamespacedRelayId,
 	type RelayProtocol,
 	relayProtocolSchema,
+	relayProviderMetaSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 import { logger } from "./logger.ts";
@@ -321,6 +322,9 @@ export const relayServerSchema = z.object({
 	port: z.number().int().min(1).max(65535),
 	default: z.literal(true).optional(),
 	bcrp_port: z.string().optional(),
+	// Provider origin; optional so legacy untagged caches round-trip. Shape
+	// frozen in @ceraui/rpc relay.schema.ts — reused here, never redefined.
+	provider: relayProviderMetaSchema.optional(),
 });
 
 export type RelayServer = z.infer<typeof relayServerSchema>;
@@ -333,6 +337,9 @@ export const relayAccountSchema = z.object({
 	name: z.string(),
 	ingest_key: z.string(),
 	disabled: z.literal(true).optional(),
+	// Provider origin; optional so legacy untagged caches round-trip. Shape
+	// frozen in @ceraui/rpc relay.schema.ts — reused here, never redefined.
+	provider: relayProviderMetaSchema.optional(),
 });
 
 export type RelayAccount = z.infer<typeof relayAccountSchema>;

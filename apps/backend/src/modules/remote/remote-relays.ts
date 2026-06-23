@@ -17,6 +17,11 @@
 
 import assert from "node:assert";
 
+import {
+	type RelayProviderMeta,
+	relayProviderMetaForId,
+} from "@ceraui/rpc/schemas";
+
 import { loadJsonConfig } from "../../helpers/config-loader.ts";
 import {
 	DEFAULT_RELAY_PROVIDER_ID,
@@ -47,6 +52,7 @@ type RelaysResponseMessage = {
 			default?: true;
 			addr?: string;
 			port?: number;
+			provider?: RelayProviderMeta;
 		}
 	>;
 	accounts: Record<
@@ -54,6 +60,7 @@ type RelaysResponseMessage = {
 		{
 			name: string;
 			disabled?: true;
+			provider?: RelayProviderMeta;
 		}
 	>;
 };
@@ -119,6 +126,7 @@ export function buildRelaysMsg(): RelaysResponseMessage {
 			default: srv.default,
 			addr: srv.addr,
 			port: srv.port,
+			provider: srv.provider,
 		};
 	});
 
@@ -126,7 +134,11 @@ export function buildRelaysMsg(): RelaysResponseMessage {
 	Object.entries(relaysCache.accounts).forEach(([id, relayAccount]) => {
 		if (!relayAccount) return;
 		const displayName = `${relayAccount.name}${relayAccount.disabled ? " [disabled]" : ""}`;
-		msg.accounts[id] = { name: displayName, disabled: relayAccount.disabled };
+		msg.accounts[id] = {
+			name: displayName,
+			disabled: relayAccount.disabled,
+			provider: relayAccount.provider,
+		};
 	});
 
 	return msg;
@@ -143,7 +155,10 @@ export async function updateCachedRelays(relays: RelaysCache | undefined) {
 	}
 }
 
-function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
+export function validateRemoteRelays(
+	msg: ValidateRemoteRelaysMessage["relays"],
+	providerMeta?: RelayProviderMeta,
+) {
 	try {
 		const out: RelaysCache = { servers: {}, accounts: {} };
 		for (const r_id in msg.servers) {
@@ -171,6 +186,7 @@ function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 				out.servers[r_id].bcrp_port = r.bcrp_port;
 			}
 			if (r.default) out.servers[r_id].default = true;
+			if (providerMeta) out.servers[r_id].provider = providerMeta;
 		}
 
 		for (const a_id in msg.accounts) {
@@ -180,6 +196,7 @@ function validateRemoteRelays(msg: ValidateRemoteRelaysMessage["relays"]) {
 
 			out.accounts[a_id] = { name: a.name, ingest_key: a.ingest_key };
 			if (a.disabled) out.accounts[a_id].disabled = true;
+			if (providerMeta) out.accounts[a_id].provider = providerMeta;
 		}
 
 		if (msg.bcrp_key !== undefined) {
@@ -315,7 +332,11 @@ export function autoPreloadSubscriptionRelays(): boolean {
 export async function handleRemoteRelays(
 	msg: ValidateRemoteRelaysMessage["relays"],
 ) {
-	const validatedUpdate = validateRemoteRelays(msg);
+	const providerId = getConfig().remote_provider ?? DEFAULT_RELAY_PROVIDER_ID;
+	const validatedUpdate = validateRemoteRelays(
+		msg,
+		relayProviderMetaForId(providerId),
+	);
 	if (!validatedUpdate) return;
 
 	const hasUpdated = await updateCachedRelays(validatedUpdate);

@@ -29,6 +29,8 @@ import {
 	runtimeConfigSchema,
 } from "../helpers/config-schemas.ts";
 import { logger } from "../helpers/logger.ts";
+import { MOCK_CONFIG_PAIRING_DEFAULTS } from "../mocks/mock-config.ts";
+import { shouldUseMocks } from "../mocks/mock-service.ts";
 import { getPasswordHash, setPasswordHash } from "../rpc/state/password.ts";
 import { setup } from "./setup.ts";
 import { getSshPasswordHash, setSshPasswordHash } from "./system/ssh.ts";
@@ -61,6 +63,12 @@ export async function loadConfig() {
 		platformDefaults,
 	);
 	config = result.data;
+
+	// Apply mock pairing AFTER file load so it overrides any absent/undefined remote_key in config.json
+	// shouldUseMocks() is false on real devices.
+	if (shouldUseMocks()) {
+		Object.assign(config, MOCK_CONFIG_PAIRING_DEFAULTS);
+	}
 
 	logger.debug("config loaded", config);
 

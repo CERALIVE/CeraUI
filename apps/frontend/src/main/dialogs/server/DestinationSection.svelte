@@ -20,6 +20,7 @@ import { Cloud, Plug } from '@lucide/svelte';
 import type { ProviderSelection, RelayMessage } from '@ceraui/rpc/schemas';
 
 import { Label } from '$lib/components/ui/label';
+import { countRelayServersForProvider } from '$lib/streaming/receiver-experience';
 
 type Destination = 'managed' | 'custom';
 
@@ -32,10 +33,24 @@ interface Props {
 	relays: RelayMessage | undefined;
 	/** Device's configured cloud provider — drives the provider-aware label. */
 	remoteProvider?: ProviderSelection;
+	/**
+	 * Whether the device is paired to a MANAGED cloud provider (multi-cloud safe:
+	 * never a single-provider check). Gates the managed choice in addition to D6;
+	 * the custom receiver stays available regardless. Defaults to `true` so the
+	 * D6 gate is unchanged unless the container threads the real pairing state.
+	 */
+	pairedToManagedCloud?: boolean;
 	onDestination: (kind: Destination) => void;
 }
 
-let { selected, isStreaming, relays, remoteProvider, onDestination }: Props = $props();
+let {
+	selected,
+	isStreaming,
+	relays,
+	remoteProvider,
+	pairedToManagedCloud = true,
+	onDestination,
+}: Props = $props();
 
 // Brand product names are not translated (i18n branding convention), so the
 // provider-aware managed label is a brand literal; it falls back to the generic
@@ -53,18 +68,36 @@ const managedLabel = $derived(
 // D6 relay gate: managed is unavailable while the catalog is missing (waiting)
 // or present-but-empty (none). `getRelays()` is `undefined` until the cloud
 // provider's cache populates (never in mock/dev), and may arrive empty.
-const serverCount = $derived(Object.keys(relays?.servers ?? {}).length);
+//
+// Per-provider (T10): the count is scoped to the SELECTED (configured) provider,
+// so a multi-provider catalog only enables managed when THIS provider has
+// servers. Untagged legacy servers belong to the active provider, so a
+// single-provider catalog still counts in full (no behaviour change).
+const providerForGate = $derived(
+	remoteProvider && remoteProvider !== 'custom' ? remoteProvider : 'ceralive',
+);
+const serverCount = $derived(
+	relays === undefined
+		? 0
+		: countRelayServersForProvider(Object.entries(relays.servers), providerForGate),
+);
 const managedUnavailable = $derived(relays === undefined || serverCount === 0);
 const managedGateHint = $derived(
 	relays === undefined ? $LL.notifications.relayWaiting() : $LL.notifications.relayNone(),
 );
 
-const managedDisabled = $derived(isStreaming || managedUnavailable);
+const managedDisabled = $derived(isStreaming || managedUnavailable || !pairedToManagedCloud);
 const customDisabled = $derived(isStreaming);
 
-// The managed hint reflects the gate: explain why it is off, else describe it.
+// The managed hint reflects the gate, in priority order: the D6 relay gate
+// (waiting / none) first, then the pairing gate (pair to a managed cloud first),
+// else the plain description. The custom receiver is never gated by either.
 const managedHint = $derived(
-	managedUnavailable ? managedGateHint : $LL.settings.destinationManagedHint(),
+	managedUnavailable
+		? managedGateHint
+		: !pairedToManagedCloud
+			? $LL.settings.index.pairingDesc()
+			: $LL.settings.destinationManagedHint(),
 );
 
 const choiceBase =
