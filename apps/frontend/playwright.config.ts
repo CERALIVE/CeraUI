@@ -33,6 +33,8 @@ if (process.env.CI || !fs.existsSync(configPath)) {
 			srtla_port: 5000,
 			srt_streamid: 'e2e',
 			max_br: 5000,
+			remote_key: 'mock-pairing-key',
+			remote_provider: 'ceralive',
 		}),
 		'utf8',
 	);
