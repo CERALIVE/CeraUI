@@ -7,7 +7,7 @@
  *
  * MULTI-CLOUD SAFETY (open-source contract)
  * -----------------------------------------
- * Pairing is `remote_key` PRESENCE — never `remote_provider === 'ceralive'`.
+ * Pairing is `remote_key` PRESENCE — never a single-provider literal gate.
  * `remote_provider` only IDENTIFIES which managed cloud a paired device belongs
  * to; gating on a single provider literal would break self-hosted, BELABOX, and
  * any future managed cloud. `getRemoteProvider()` therefore NEVER defaults to
