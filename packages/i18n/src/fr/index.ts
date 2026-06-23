@@ -243,6 +243,17 @@ const fr = {
 		destinationCustomHint:
 			"Saisissez l'adresse et le port de votre propre récepteur.",
 		transportKind: "Transport",
+		remoteControl: {
+			title: "Contrôle à distance",
+			notPaired: "Non associé",
+			notPairedHint:
+				"Associez cet appareil pour le gérer depuis votre compte cloud.",
+			disconnected: "Associé \u00b7 hors ligne",
+			disconnectedHint:
+				"Associé, mais le canal de contrôle est hors ligne. Reconnexion\u2026",
+			connected: "Connecté",
+			connectedHint: "Canal de contrôle actif vers votre compte cloud.",
+		},
 		transportKindBadge: {
 			srtlaBonded: "SRTLA · Agrégé",
 			srtlaSingle: "SRTLA · Lien unique",

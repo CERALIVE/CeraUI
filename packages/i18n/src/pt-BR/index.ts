@@ -243,6 +243,17 @@ const ptBR = {
 		destinationCustomHint:
 			"Informe o endereço e a porta do seu próprio receptor.",
 		transportKind: "Transporte",
+		remoteControl: {
+			title: "Controle remoto",
+			notPaired: "Não pareado",
+			notPairedHint:
+				"Pareie este dispositivo para gerenciá-lo pela sua conta na nuvem.",
+			disconnected: "Pareado \u00b7 offline",
+			disconnectedHint:
+				"Pareado, mas o canal de controle está offline. Reconectando\u2026",
+			connected: "Conectado",
+			connectedHint: "Canal de controle ativo com sua conta na nuvem.",
+		},
 		transportKindBadge: {
 			srtlaBonded: "SRTLA · Agregado",
 			srtlaSingle: "SRTLA · Link único",

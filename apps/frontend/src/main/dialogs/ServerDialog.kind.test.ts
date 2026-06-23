@@ -79,6 +79,12 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getSelectedIngestEndpoint: () => undefined,
 }));
 
+// Kind/save behaviour is tested with a paired managed device; the pairing gate
+// itself lives in pairing.svelte.test.ts.
+vi.mock("$lib/stores/pairing.svelte", () => ({
+	isPairedToManagedCloud: () => true,
+}));
+
 vi.mock("$lib/rpc", () => ({
 	rpc: { streaming: { setConfig }, relay: { validate: relayValidate } },
 }));

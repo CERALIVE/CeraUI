@@ -88,6 +88,17 @@ const hi = {
 		destinationManagedHint: "अपने क्लाउड खाते से जुड़े रिले के माध्यम से स्ट्रीम करें।",
 		destinationCustomHint: "अपने रिसीवर का पता और पोर्ट दर्ज करें।",
 		transportKind: "ट्रांसपोर्ट",
+		remoteControl: {
+			title: "रिमोट नियंत्रण",
+			notPaired: "युग्मित नहीं",
+			notPairedHint:
+				"इस डिवाइस को अपने क्लाउड खाते से प्रबंधित करने के लिए युग्मित करें।",
+			disconnected: "युग्मित \u00b7 ऑफ़लाइन",
+			disconnectedHint:
+				"युग्मित है, पर नियंत्रण चैनल ऑफ़लाइन है। पुनः कनेक्ट हो रहा है\u2026",
+			connected: "कनेक्टेड",
+			connectedHint: "आपके क्लाउड खाते से सक्रिय नियंत्रण चैनल।",
+		},
 		transportKindBadge: {
 			srtlaBonded: "SRTLA · बॉन्डेड",
 			srtlaSingle: "SRTLA · एकल लिंक",

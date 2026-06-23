@@ -59,6 +59,13 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getSelectedIngestEndpoint: () => undefined,
 }));
 
+// D6 here is the relays gate; a populated catalog only exists for a paired
+// managed device, so pairing is held true. The pairing gate is tested in
+// pairing.svelte.test.ts.
+vi.mock("$lib/stores/pairing.svelte", () => ({
+	isPairedToManagedCloud: () => true,
+}));
+
 vi.mock("$lib/rpc", () => ({
 	rpc: { streaming: { setConfig: vi.fn() }, relay: { validate: vi.fn() } },
 }));

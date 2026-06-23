@@ -91,6 +91,17 @@ const ja = {
 			"クラウドアカウントに紐づくリレー経由で配信します。",
 		destinationCustomHint: "ご自身のレシーバーのアドレスとポートを入力します。",
 		transportKind: "トランスポート",
+		remoteControl: {
+			title: "リモート制御",
+			notPaired: "未ペアリング",
+			notPairedHint:
+				"クラウドアカウントから管理するには、このデバイスをペアリングします。",
+			disconnected: "ペアリング済み \u00b7 オフライン",
+			disconnectedHint:
+				"ペアリング済みですが、制御チャネルがオフラインです。再接続しています\u2026",
+			connected: "接続済み",
+			connectedHint: "クラウドアカウントへの制御チャネルが有効です。",
+		},
 		transportKindBadge: {
 			srtlaBonded: "SRTLA · ボンディング",
 			srtlaSingle: "SRTLA · シングルリンク",

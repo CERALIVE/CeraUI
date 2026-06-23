@@ -53,6 +53,7 @@ import {
 } from '$lib/rpc/subscriptions.svelte';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
+import { isPairedToManagedCloud } from '$lib/stores/pairing.svelte';
 import {
 	type Destination,
 	type ServerSetDerived,
@@ -90,6 +91,11 @@ const PROVIDER_LABELS: Record<string, string> = {
 const config = $derived(getConfig());
 const relays = $derived(getRelays());
 const isStreaming = $derived(Boolean(getIsStreaming()));
+
+// Managed-cloud surfaces (managed destination + ingest slots) require pairing to
+// a managed provider — multi-cloud safe (never a single-provider literal). The
+// custom/self-hosted receiver path stays available regardless.
+const pairedToManaged = $derived(isPairedToManagedCloud());
 
 type Draft = {
 	destination?: Destination;
@@ -351,13 +357,14 @@ async function handleSave() {
 		<DestinationSection
 			{isStreaming}
 			onDestination={(value) => (draft.destination = value)}
+			pairedToManagedCloud={pairedToManaged}
 			{relays}
 			remoteProvider={config?.remote_provider}
 			selected={destination}
 		/>
 
 		<!-- Endpoint config, immediately under the destination pick. -->
-		{#if destination === 'managed' && hasManagedSlots}
+		{#if destination === 'managed' && pairedToManaged && hasManagedSlots}
 			<ServerIngestSlots
 				accounts={managedAccounts}
 				activeEndpointId={activeSlotId}

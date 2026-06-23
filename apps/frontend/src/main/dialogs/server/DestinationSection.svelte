@@ -32,10 +32,24 @@ interface Props {
 	relays: RelayMessage | undefined;
 	/** Device's configured cloud provider — drives the provider-aware label. */
 	remoteProvider?: ProviderSelection;
+	/**
+	 * Whether the device is paired to a MANAGED cloud provider (multi-cloud safe:
+	 * never a single-provider check). Gates the managed choice in addition to D6;
+	 * the custom receiver stays available regardless. Defaults to `true` so the
+	 * D6 gate is unchanged unless the container threads the real pairing state.
+	 */
+	pairedToManagedCloud?: boolean;
 	onDestination: (kind: Destination) => void;
 }
 
-let { selected, isStreaming, relays, remoteProvider, onDestination }: Props = $props();
+let {
+	selected,
+	isStreaming,
+	relays,
+	remoteProvider,
+	pairedToManagedCloud = true,
+	onDestination,
+}: Props = $props();
 
 // Brand product names are not translated (i18n branding convention), so the
 // provider-aware managed label is a brand literal; it falls back to the generic
@@ -59,12 +73,18 @@ const managedGateHint = $derived(
 	relays === undefined ? $LL.notifications.relayWaiting() : $LL.notifications.relayNone(),
 );
 
-const managedDisabled = $derived(isStreaming || managedUnavailable);
+const managedDisabled = $derived(isStreaming || managedUnavailable || !pairedToManagedCloud);
 const customDisabled = $derived(isStreaming);
 
-// The managed hint reflects the gate: explain why it is off, else describe it.
+// The managed hint reflects the gate, in priority order: the D6 relay gate
+// (waiting / none) first, then the pairing gate (pair to a managed cloud first),
+// else the plain description. The custom receiver is never gated by either.
 const managedHint = $derived(
-	managedUnavailable ? managedGateHint : $LL.settings.destinationManagedHint(),
+	managedUnavailable
+		? managedGateHint
+		: !pairedToManagedCloud
+			? $LL.settings.index.pairingDesc()
+			: $LL.settings.destinationManagedHint(),
 );
 
 const choiceBase =

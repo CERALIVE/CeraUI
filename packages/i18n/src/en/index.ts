@@ -639,6 +639,16 @@ const en = {
 			"Stream through a relay tied to your cloud account.",
 		destinationCustomHint: "Enter your own receiver address and port.",
 		transportKind: "Transport",
+		remoteControl: {
+			title: "Remote control",
+			notPaired: "Not paired",
+			notPairedHint: "Pair this device to manage it from your cloud account.",
+			disconnected: "Paired \u00b7 offline",
+			disconnectedHint:
+				"Paired, but the control channel is offline. Reconnecting\u2026",
+			connected: "Connected",
+			connectedHint: "Live control channel to your cloud account.",
+		},
 		transportKindBadge: {
 			srtlaBonded: "SRTLA · Bonded",
 			srtlaSingle: "SRTLA · Single link",
