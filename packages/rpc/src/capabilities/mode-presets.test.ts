@@ -33,6 +33,19 @@ describe('mode-presets', () => {
 		it('includes 1080p30-h265', () => {
 			expect(CANONICAL_PRESETS['1080p30-h265']).toBeDefined();
 		});
+
+		it('renders presets in canonical ascending-quality order', () => {
+			// Insertion order IS render order (MODE_PRESETS iterates Object.values).
+			// Literal expected sequence — NOT derived from CANONICAL_PRESETS — so a
+			// reordering regression fails here loudly.
+			expect(Object.keys(CANONICAL_PRESETS)).toEqual([
+				'720p60-h264',
+				'1080p30-h264',
+				'1080p60-h264',
+				'1080p30-h265',
+				'4k30-h265',
+			]);
+		});
 	});
 
 	describe('preset shape', () => {
