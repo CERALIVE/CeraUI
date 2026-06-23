@@ -11,6 +11,7 @@ import {
 	deriveDestination,
 	deriveServerReadiness,
 	findActiveSlot,
+	groupRelayServersByProvider,
 	kindBadgeLabelKey,
 	type ManagedIngestAccount,
 	managedSlotLabel,
@@ -595,5 +596,44 @@ describe("buildManagedSlotConfig — persisted slot selection", () => {
 	it("coerces an unknown slot protocol to srtla (never undefined)", () => {
 		const result = buildManagedSlotConfig(slot({ protocol: "bogus" }), 2000);
 		expect(result.relay_protocol).toBe("srtla");
+	});
+});
+
+describe("groupRelayServersByProvider (T9)", () => {
+	const ceralive = { id: "ceralive", name: "CeraLive Cloud", kind: "ceralive" } as const;
+	const belabox = { id: "belabox", name: "BELABOX Cloud", kind: "belabox" } as const;
+
+	const taggedEntries: [string, RelayServer][] = [
+		["eu", relayServer({ name: "EU-West", provider: ceralive })],
+		["us", relayServer({ name: "US-East", provider: ceralive })],
+		["asia", relayServer({ name: "Asia-SE", provider: belabox })],
+		["west", relayServer({ name: "US-West", provider: belabox })],
+	];
+
+	it("sees at least two providers across a multi-provider catalog", () => {
+		const groups = groupRelayServersByProvider(taggedEntries, "ceralive");
+		expect(groups.length).toBeGreaterThanOrEqual(2);
+		expect(groups.map((g) => g.providerId)).toEqual(["ceralive", "belabox"]);
+	});
+
+	it("places each server in its tagged provider group", () => {
+		const groups = groupRelayServersByProvider(taggedEntries, "ceralive");
+		const byId = new Map(groups.map((g) => [g.providerId, g]));
+		expect(byId.get("ceralive")?.servers.map(([id]) => id)).toEqual(["eu", "us"]);
+		expect(byId.get("belabox")?.servers.map(([id]) => id)).toEqual(["asia", "west"]);
+		expect(byId.get("belabox")?.kind).toBe("belabox");
+		expect(byId.get("belabox")?.providerName).toBe("BELABOX Cloud");
+	});
+
+	it("falls back to the configured provider for untagged (legacy) servers", () => {
+		const legacy: [string, RelayServer][] = [
+			["a", relayServer({ name: "Legacy A" })],
+			["b", relayServer({ name: "Legacy B" })],
+		];
+		const groups = groupRelayServersByProvider(legacy, "ceralive");
+		expect(groups).toHaveLength(1);
+		expect(groups[0]?.providerId).toBe("ceralive");
+		expect(groups[0]?.kind).toBe("unknown");
+		expect(groups[0]?.servers).toHaveLength(2);
 	});
 });

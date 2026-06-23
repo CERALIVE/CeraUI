@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { AddonDescriptorSchema, AddonStateSchema } from "@ceraui/rpc/schemas";
+import {
+	AddonDescriptorSchema,
+	AddonStateSchema,
+	relayProviderMetaForId,
+} from "@ceraui/rpc/schemas";
 
 import { relayServerSchema } from "../helpers/config-schemas.ts";
 import {
@@ -132,9 +136,10 @@ describe("buildMockRelay", () => {
 		expect(relayServerSchema.safeParse(buildMockRelay()).success).toBe(true);
 	});
 
-	test("default matches the plain US-East server in the relay cache", () => {
+	test("the CeraLive-tagged US-East server reproduces from the builder", () => {
 		const usEast = getMockRelaysCache().servers[MOCK_RELAY_SERVER_IDS.US_EAST];
-		expect(buildMockRelay()).toEqual(usEast);
+		const built = buildMockRelay({ provider: relayProviderMetaForId("ceralive") });
+		expect(built).toEqual(usEast);
 	});
 
 	test("overrides reproduce the default-marked EU-West server", () => {
@@ -144,6 +149,7 @@ describe("buildMockRelay", () => {
 			addr: "relay-eu-west.example.com",
 			default: true,
 			bcrp_port: "2002",
+			provider: relayProviderMetaForId("ceralive"),
 		});
 		expect(built).toEqual(euWest);
 	});

@@ -25,6 +25,7 @@ import {
 	deriveReceiverKind,
 	type ReceiverKind,
 	type RelayProtocol,
+	type RelayProviderKind,
 	type RelayServer,
 	relayProtocolSchema,
 	type StreamingConfigInput,
@@ -54,6 +55,45 @@ export function deriveDestination(
 	config: DestinationConfig | undefined,
 ): Destination {
 	return config?.relay_server ? "managed" : "custom";
+}
+
+/** A relay-catalog grouping keyed by the server's provider origin (T9). */
+export interface RelayProviderGroup {
+	/** Provider id the servers are grouped under (the namespacing key). */
+	providerId: string;
+	/** Provider display name, when the servers carry tagged metadata. */
+	providerName?: string;
+	/** Provider taxonomy, or `"unknown"` for untagged (legacy) servers. */
+	kind: RelayProviderKind | "unknown";
+	servers: Array<[string, RelayServer]>;
+}
+
+/**
+ * Group relay-catalog server entries by their tagged provider origin (T9), so
+ * the server dialog can present multi-provider catalogs grouped by cloud.
+ * Untagged (legacy) servers fall back to `fallbackProviderId` for DISPLAY only —
+ * grouping never gates a server out. First-seen provider order is preserved.
+ */
+export function groupRelayServersByProvider(
+	entries: ReadonlyArray<[string, RelayServer]>,
+	fallbackProviderId: string,
+): RelayProviderGroup[] {
+	const groups = new Map<string, RelayProviderGroup>();
+	for (const [id, server] of entries) {
+		const providerId = server.provider?.id ?? fallbackProviderId;
+		let group = groups.get(providerId);
+		if (!group) {
+			group = {
+				providerId,
+				providerName: server.provider?.name,
+				kind: server.provider?.kind ?? "unknown",
+				servers: [],
+			};
+			groups.set(providerId, group);
+		}
+		group.servers.push([id, server]);
+	}
+	return [...groups.values()];
 }
 
 export interface ResolveReceiverKindInput {
