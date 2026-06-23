@@ -32,6 +32,7 @@ import { describe, expect, test } from "bun:test";
 import * as sender from "@ceralive/srtla-send/sender";
 import {
 	buildSrtlaSendArgs,
+	controlSocketPath,
 	getSrtlaSendExec,
 	isSrtlaSendRunning,
 	type SrtlaSendOptions,
@@ -87,26 +88,39 @@ describe("srtla-send bindings version-skew guard", () => {
 
 	test("buildSrtlaSendArgs honors the positional CLI contract streamloop relies on", () => {
 		// Shape: <listen_port> <srtla_host> <srtla_port> <ips_file> [--verbose]
-		// srtla-send's buildSrtlaSendArgs returns the argv array directly.
+		//        [--control-socket <path>]. The argv array is returned directly.
 		const args = buildSrtlaSendArgs({
 			listenPort: 9000,
 			srtlaHost: "relay.example.com",
 			srtlaPort: 8890,
 			ipsFile: "/tmp/srtla_ips",
 			verbose: true,
+			controlSocket: "/tmp/srtla-send-control-9000.sock",
 		});
 
 		expect(Array.isArray(args)).toBe(true);
 
-		// Positional ordering is load-bearing for srtla_send — a reordering or
-		// flag-shape change in the binding must fail here.
+		// Positional ordering is load-bearing for srtla_send — a reordering or a
+		// flag-shape change (incl. the ADR-001 --control-socket flag) must fail here.
 		expect(args).toEqual([
 			"9000",
 			"relay.example.com",
 			"8890",
 			"/tmp/srtla_ips",
 			"--verbose",
+			"--control-socket",
+			"/tmp/srtla-send-control-9000.sock",
 		]);
+	});
+
+	test("controlSocketPath derives the control-socket path from the listen port", () => {
+		// start-stream.ts pairs CeraUI with srtla_send by deriving the socket path
+		// from the listen port; a drift in this convention breaks the control plane.
+		expect(typeof sender.controlSocketPath).toBe("function");
+		expect(controlSocketPath).toBe(sender.controlSocketPath);
+		expect(controlSocketPath(SRTLA_LISTEN_PORT)).toBe(
+			`/tmp/srtla-send-control-${SRTLA_LISTEN_PORT}.sock`,
+		);
 	});
 
 	test("buildSrtlaSendArgs omits --verbose by default", () => {

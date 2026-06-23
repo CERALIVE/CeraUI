@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import type { ControlClient, HelloResult } from "@ceralive/srtla-send/control";
 import type {
 	Telemetry,
 	TelemetryUpdate,
@@ -13,6 +14,7 @@ import {
 	isLinkTelemetryActive,
 	registerSrtlaIpList,
 	resetLinkTelemetryBroadcastState,
+	setControlClientFactoryForTest,
 	setIfaceResolverForTest,
 	setTelemetryClockForTest,
 	startLinkTelemetry,
@@ -63,8 +65,63 @@ function captureWatch() {
 		get path() {
 			return calls.at(-1)?.path;
 		},
+		get count() {
+			return calls.length;
+		},
 	};
 }
+
+// A control-client double: drives the JSON-RPC stats-subscription cutover path.
+// `subscribed` resolves once subscribeStats is invoked (cutover confirmed live),
+// and `emit` pushes an `event` snapshot (or null for disconnect/parse-failure).
+function fakeControlClient(opts: {
+	capabilities: Array<string>;
+	helloThrows?: boolean;
+}) {
+	let onEventCb: ((s: Telemetry | null) => void) | null = null;
+	let closed = false;
+	let resolveSubscribed!: () => void;
+	const subscribed = new Promise<void>((r) => {
+		resolveSubscribed = r;
+	});
+	const client: ControlClient = {
+		hello: async (): Promise<HelloResult> => {
+			if (opts.helloThrows) throw new Error("hello failed");
+			return {
+				schema_version: 1,
+				engine: "srtla_send",
+				capabilities: opts.capabilities,
+			};
+		},
+		rawRequest: async () => null,
+		subscribeStats: (onEvent) => {
+			onEventCb = onEvent;
+			resolveSubscribed();
+			return () => {
+				closed = true;
+				onEventCb = null;
+			};
+		},
+		close: () => {
+			closed = true;
+		},
+	};
+	return {
+		client,
+		emit: (s: Telemetry | null) => onEventCb?.(s),
+		subscribed,
+		get closed() {
+			return closed;
+		},
+	};
+}
+
+// Drain pending microtasks/macrotasks so a fire-and-forget cutover that takes a
+// path with no `subscribed` signal (connect failure, capability absent) settles.
+const flushCutover = async (): Promise<void> => {
+	await Bun.sleep(0);
+	await Bun.sleep(0);
+};
 
 function captureClient(sink: string[]): AppWebSocket {
 	return {
@@ -80,6 +137,7 @@ beforeEach(() => {
 	stopLinkTelemetry();
 	setIfaceResolverForTest(null);
 	setTelemetryClockForTest(null);
+	setControlClientFactoryForTest(null);
 	resetLinkTelemetryBroadcastState();
 });
 
@@ -87,6 +145,7 @@ afterEach(() => {
 	stopLinkTelemetry();
 	setIfaceResolverForTest(null);
 	setTelemetryClockForTest(null);
+	setControlClientFactoryForTest(null);
 	resetLinkTelemetryBroadcastState();
 });
 
@@ -354,5 +413,103 @@ describe("broadcastLinkTelemetryIfChanged — status flow integration", () => {
 		} finally {
 			removeClient(client);
 		}
+	});
+});
+
+describe("control-socket subscription cutover + airtight file-poll fallback", () => {
+	test("subscription path broadcasts the same LinkTelemetryMessage shape as file-poll", async () => {
+		const w = captureWatch();
+		const fake = fakeControlClient({ capabilities: ["stats-subscription"] });
+		setControlClientFactoryForTest(async () => fake.client);
+		setIfaceResolverForTest(() => "usb0");
+
+		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1"], {
+			watch: w.watch,
+			controlSocket: "/tmp/srtla-send-control-9000.sock",
+		});
+		// Cutover confirmed live -> the redundant file-poll watcher is retired.
+		await fake.subscribed;
+		expect(w.stopped).toBe(1);
+		expect(isLinkTelemetryActive()).toBe(true);
+
+		fake.emit(snapshot([{ conn_id: "0", rtt_ms: 7, nak_count: 4 }]));
+		const payload = buildLinkTelemetry();
+		expect(payload?.links).toEqual([
+			{
+				conn_id: "0",
+				iface: "usb0",
+				rtt_ms: 7,
+				nak_count: 4,
+				weight_percent: 100,
+				stale: false,
+			},
+		]);
+		expect(typeof payload?.lastReadMs).toBe("number");
+	});
+
+	test("connect failure (factory returns null) leaves the file-poll running", async () => {
+		const w = captureWatch();
+		setControlClientFactoryForTest(async () => null);
+		setIfaceResolverForTest(() => "usb0");
+
+		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1"], {
+			watch: w.watch,
+			controlSocket: "/tmp/srtla-send-control-9000.sock",
+		});
+		await flushCutover();
+
+		// File-poll never stopped; telemetry still flows from the poll.
+		expect(w.stopped).toBe(0);
+		expect(isLinkTelemetryActive()).toBe(true);
+		w.emit(snapshot([{ conn_id: "0", nak_count: 1 }]));
+		expect(buildLinkTelemetry()?.links[0]?.nak_count).toBe(1);
+	});
+
+	test("capability absent (no stats-subscription) closes the client and stays on file-poll", async () => {
+		const w = captureWatch();
+		const fake = fakeControlClient({ capabilities: ["set-mode"] });
+		setControlClientFactoryForTest(async () => fake.client);
+		setIfaceResolverForTest(() => "usb0");
+
+		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1"], {
+			watch: w.watch,
+			controlSocket: "/tmp/srtla-send-control-9000.sock",
+		});
+		await flushCutover();
+
+		expect(fake.closed).toBe(true);
+		expect(w.stopped).toBe(0);
+		expect(isLinkTelemetryActive()).toBe(true);
+		w.emit(snapshot([{ conn_id: "0", nak_count: 2 }]));
+		expect(buildLinkTelemetry()?.links[0]?.nak_count).toBe(2);
+	});
+
+	test("mid-stream subscription disconnect (onEvent null) re-arms the file-poll", async () => {
+		const w = captureWatch();
+		const fake = fakeControlClient({ capabilities: ["stats-subscription"] });
+		setControlClientFactoryForTest(async () => fake.client);
+		setIfaceResolverForTest(() => "usb0");
+
+		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1"], {
+			watch: w.watch,
+			controlSocket: "/tmp/srtla-send-control-9000.sock",
+		});
+		await fake.subscribed;
+		expect(w.stopped).toBe(1);
+		expect(w.count).toBe(1);
+
+		fake.emit(snapshot([{ conn_id: "0", nak_count: 3 }]));
+		expect(buildLinkTelemetry()?.links[0]?.stale).toBe(false);
+
+		// Subscription drops -> a null event with no live watcher re-starts the poll.
+		fake.emit(null);
+		expect(w.count).toBe(2);
+		expect(buildLinkTelemetry()?.links[0]?.stale).toBe(true);
+
+		// The re-armed file-poll feeds fresh telemetry again.
+		w.emit(snapshot([{ conn_id: "0", nak_count: 5 }]));
+		const link = buildLinkTelemetry()?.links[0];
+		expect(link?.stale).toBe(false);
+		expect(link?.nak_count).toBe(5);
 	});
 });
