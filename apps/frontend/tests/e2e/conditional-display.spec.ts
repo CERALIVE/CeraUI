@@ -327,6 +327,8 @@ test.describe('conditional-display state lock (T11)', () => {
 		await page.goto('/');
 		await ensureAuthenticated(page);
 		const dialog = await openServerDialog(page);
+		// Seed remote_key so isPairedToManagedCloud() returns true and destination-managed is enabled.
+		ws.push({ config: { remote_key: 'test-key', remote_provider: 'ceralive' } });
 		ws.push({ 'ingest.slots': { slots: [SLOT_A, SLOT_B] } });
 
 		const managed = dialog.getByTestId('destination-managed');
@@ -353,6 +355,8 @@ test.describe('conditional-display state lock (T11)', () => {
 		await page.goto('/');
 		await ensureAuthenticated(page);
 		const dialog = await openServerDialog(page);
+		// Seed remote_key so isPairedToManagedCloud() returns true and destination-managed is enabled.
+		ws.push({ config: { remote_key: 'test-key', remote_provider: 'ceralive' } });
 		ws.push({ 'ingest.slots': { slots: [SLOT_A] } });
 
 		const managed = dialog.getByTestId('destination-managed');
