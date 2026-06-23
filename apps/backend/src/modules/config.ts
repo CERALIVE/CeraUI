@@ -57,18 +57,18 @@ export async function loadConfig() {
 			break;
 	}
 
-	// Seed mock pairing state so the managed-cloud gate (isPairedToManagedCloud)
-	// reads paired in dev/e2e; shouldUseMocks() is false on real devices.
-	if (shouldUseMocks()) {
-		Object.assign(platformDefaults, MOCK_CONFIG_PAIRING_DEFAULTS);
-	}
-
 	const result = await loadJsonConfig(
 		CONFIG_FILE,
 		runtimeConfigSchema,
 		platformDefaults,
 	);
 	config = result.data;
+
+	// Apply mock pairing AFTER file load so it overrides any absent/undefined remote_key in config.json
+	// shouldUseMocks() is false on real devices.
+	if (shouldUseMocks()) {
+		Object.assign(config, MOCK_CONFIG_PAIRING_DEFAULTS);
+	}
 
 	logger.debug("config loaded", config);
 
