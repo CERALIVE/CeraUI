@@ -5,8 +5,9 @@
  * (NEVER a `=== 'ceralive'` gate), the managed-cloud gate (custom/self-hosted
  * always reachable), and the presence of the new i18n keys in every locale.
  */
-import type { ProviderSelection } from "@ceraui/rpc/schemas";
+
 import { existingLocales, loadLocale } from "@ceraui/i18n";
+import type { ProviderSelection } from "@ceraui/rpc/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const subs = vi.hoisted(() => ({

@@ -271,7 +271,8 @@ const en = {
 		healthExplainDead: "Encoder process not running. The stream is down.",
 		buffering: "Buffering",
 		bufferingStoreForward: "Store & forward active",
-		bufferingHint: "Links are down — saving to disk and forwarding when they recover.",
+		bufferingHint:
+			"Links are down — saving to disk and forwarding when they recover.",
 	},
 	live: {
 		server: {

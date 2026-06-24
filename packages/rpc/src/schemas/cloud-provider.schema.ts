@@ -166,14 +166,10 @@ export function getAvailableProviders(): CloudProviderEndpoint[] {
  * (`{ id, name, kind }`). Returns `undefined` for an unknown id so callers
  * leave the optional provider field absent rather than fabricate a label.
  */
-export function relayProviderMetaForId(
-	providerId: string,
-): RelayProviderMeta | undefined {
+export function relayProviderMetaForId(providerId: string): RelayProviderMeta | undefined {
 	const provider = CLOUD_PROVIDERS.find((p) => p.id === providerId);
 	if (!provider) return undefined;
-	const kind: RelayProviderKind = (
-		RELAY_PROVIDER_KINDS as readonly string[]
-	).includes(provider.id)
+	const kind: RelayProviderKind = (RELAY_PROVIDER_KINDS as readonly string[]).includes(provider.id)
 		? (provider.id as RelayProviderKind)
 		: 'custom';
 	return { id: provider.id, name: provider.name, kind };

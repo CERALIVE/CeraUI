@@ -814,8 +814,7 @@ const ko = {
 			"인코더 프로세스가 실행되고 있지 않습니다. 스트림이 다운되었습니다.",
 		buffering: "버퍼링",
 		bufferingStoreForward: "저장 후 전송 활성화",
-		bufferingHint:
-			"링크가 끊겼습니다 — 디스크에 저장하고 복구되면 전송합니다.",
+		bufferingHint: "링크가 끊겼습니다 — 디스크에 저장하고 복구되면 전송합니다.",
 		link: "링크",
 	},
 	live: {

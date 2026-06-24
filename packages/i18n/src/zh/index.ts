@@ -314,7 +314,8 @@ const zh = {
 		optional: "可选",
 		relayProvider: "提供商",
 		relayProviderHint: "选择由哪个云中继您的推流。",
-		relayServerStale: "您保存的中继服务器属于其他提供商。请为当前提供商重新选择服务器。",
+		relayServerStale:
+			"您保存的中继服务器属于其他提供商。请为当前提供商重新选择服务器。",
 		relayProviderSwitchWarning:
 			"您保存的中继服务器属于上一个提供商。请打开接收端 / 服务器，为当前提供商选择服务器。",
 		relayOverrideClearsBinding: "保存此手动端点将替换您的托管中继服务器绑定。",
