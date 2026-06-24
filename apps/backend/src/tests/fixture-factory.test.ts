@@ -138,7 +138,9 @@ describe("buildMockRelay", () => {
 
 	test("the CeraLive-tagged US-East server reproduces from the builder", () => {
 		const usEast = getMockRelaysCache().servers[MOCK_RELAY_SERVER_IDS.US_EAST];
-		const built = buildMockRelay({ provider: relayProviderMetaForId("ceralive") });
+		const built = buildMockRelay({
+			provider: relayProviderMetaForId("ceralive"),
+		});
 		expect(built).toEqual(usEast);
 	});
 

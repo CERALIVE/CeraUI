@@ -42,7 +42,10 @@ import {
 	setControlChannelConnected,
 } from "$lib/stores/pairing.svelte";
 import { ingestStreamHealth } from "$lib/stores/stream-health.svelte";
-import type { ManagedIngestAccount } from "$lib/streaming/receiver-experience";
+import {
+	type ManagedIngestAccount,
+	parseIngestSlots,
+} from "$lib/streaming/receiver-experience";
 
 import {
 	confirmOperation,
@@ -533,11 +536,12 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			break;
 
 		case "ingest.slots": {
-			// Each push carries the complete, authoritative account list (T18/T19);
-			// a non-array payload is ignored so the store is never clobbered.
-			const accounts = (data as { slots?: unknown })?.slots ?? data;
-			if (Array.isArray(accounts)) {
-				managedIngestState = accounts as ManagedIngestAccount[];
+			// An authoritative array push (even empty) replaces the set; a non-array
+			// payload is ignored so the store is never clobbered. parseIngestSlots
+			// maps the wire payload, carrying the OBS-instance metadata (T17).
+			const rawSlots = (data as { slots?: unknown })?.slots ?? data;
+			if (Array.isArray(rawSlots)) {
+				managedIngestState = parseIngestSlots(data);
 			}
 			break;
 		}

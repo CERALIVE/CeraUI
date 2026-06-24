@@ -1,0 +1,16 @@
+{
+	"slots": [
+		{
+			"endpointId": "ep-studio-alpha",
+			"obsInstanceId": "obs-7c1f2a9e",
+			"instanceLabel": "Studio Alpha",
+			"region": "us-east",
+			"state": "active",
+			"host": "ingest-us-east.example",
+			"port": 5000,
+			"protocol": "srtla",
+			"streamId": "publish/studio-alpha",
+			"default": true
+		}
+	]
+}

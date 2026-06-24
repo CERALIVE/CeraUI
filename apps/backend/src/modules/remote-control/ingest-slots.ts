@@ -51,6 +51,10 @@ export interface ManagedIngestAccount {
 	region?: string;
 	state?: string;
 	default?: boolean;
+	/** Cloud OBS instance the platform bound this slot to, or `null` when unbound (T17). */
+	obsInstanceId: string | null;
+	/** Human label of the bound cloud OBS instance, when the platform pushed one (T17). */
+	instanceLabel?: string;
 }
 
 /** Injected config persistence so selection round-trips without disk in tests. */
@@ -94,6 +98,10 @@ function mapSlotToAccount(slot: IngestSlot): ManagedIngestAccount {
 		protocol: slot.protocol,
 		key: slot.streamId,
 		label: slot.instanceLabel ?? slot.endpointId,
+		obsInstanceId: slot.obsInstanceId,
+		...(slot.instanceLabel !== undefined
+			? { instanceLabel: slot.instanceLabel }
+			: {}),
 		...(slot.region !== undefined ? { region: slot.region } : {}),
 		...(slot.state !== undefined ? { state: slot.state } : {}),
 		...(slot.default !== undefined ? { default: slot.default } : {}),

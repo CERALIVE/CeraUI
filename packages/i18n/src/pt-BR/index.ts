@@ -483,12 +483,19 @@ const ptBR = {
 		optional: "opcional",
 		relayProvider: "Provedor",
 		relayProviderHint: "Escolha qual nuvem retransmite sua transmissão.",
+		relayServerStale:
+			"Seu servidor de retransmissão salvo pertence a outro provedor. Selecione novamente um servidor para este provedor.",
+		relayProviderSwitchWarning:
+			"Seu servidor de retransmissão salvo pertence ao provedor anterior. Abra Receptor / Servidor para escolher um servidor para este provedor.",
+		relayOverrideClearsBinding:
+			"Salvar este endpoint manual substituirá seu vínculo com o servidor de retransmissão gerenciado.",
 		autoEndpoint: "Endpoint do servidor (selecionado automaticamente)",
 		manualOverride: "Substituição manual",
 		ingestSlot: "Instância na nuvem",
 		ingestSlotHint: "Escolha qual instância na nuvem recebe sua transmissão.",
 		ingestSlotPrompt: "Selecione uma instância na nuvem para continuar.",
 		ingestSlotDefault: "Padrão",
+		feedsCloudObsInstance: "Alimenta a instância OBS na nuvem: {label}",
 		relaySecret: "Segredo / senha",
 		relaySecretPlaceholder: "Senha opcional",
 		streamId: "ID da transmissão",

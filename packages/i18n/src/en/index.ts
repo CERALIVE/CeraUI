@@ -271,7 +271,8 @@ const en = {
 		healthExplainDead: "Encoder process not running. The stream is down.",
 		buffering: "Buffering",
 		bufferingStoreForward: "Store & forward active",
-		bufferingHint: "Links are down — saving to disk and forwarding when they recover.",
+		bufferingHint:
+			"Links are down — saving to disk and forwarding when they recover.",
 	},
 	live: {
 		server: {
@@ -885,12 +886,19 @@ const en = {
 			"You can change the bitrate even if you are streaming.",
 		relayProvider: "Provider",
 		relayProviderHint: "Choose which cloud relays your stream.",
+		relayServerStale:
+			"Your saved relay server belongs to a different provider. Re-select a server for this provider.",
+		relayProviderSwitchWarning:
+			"Your saved relay server belongs to the previous provider. Open Receiver / Server to pick a server for this provider.",
+		relayOverrideClearsBinding:
+			"Saving this manual endpoint will replace your managed relay server binding.",
 		autoEndpoint: "Server endpoint (auto-selected)",
 		manualOverride: "Manual override",
 		ingestSlot: "Cloud instance",
 		ingestSlotHint: "Choose which cloud instance receives your stream.",
 		ingestSlotPrompt: "Select a cloud instance to continue.",
 		ingestSlotDefault: "Default",
+		feedsCloudObsInstance: "Feeds cloud OBS instance: {label:string}",
 		relaySecret: "Secret / passphrase",
 		relaySecretPlaceholder: "Optional passphrase",
 		streamId: "Stream ID",

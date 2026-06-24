@@ -322,12 +322,19 @@ const ko = {
 		optional: "선택사항",
 		relayProvider: "공급자",
 		relayProviderHint: "어떤 클라우드가 스트림을 중계할지 선택하세요.",
+		relayServerStale:
+			"저장된 릴레이 서버가 다른 제공업체에 속해 있습니다. 이 제공업체의 서버를 다시 선택하세요.",
+		relayProviderSwitchWarning:
+			"저장된 릴레이 서버가 이전 제공업체에 속해 있습니다. 수신기 / 서버를 열어 이 제공업체의 서버를 선택하세요.",
+		relayOverrideClearsBinding:
+			"이 수동 엔드포인트를 저장하면 관리형 릴레이 서버 연결이 대체됩니다.",
 		autoEndpoint: "서버 엔드포인트(자동 선택)",
 		manualOverride: "수동 재정의",
 		ingestSlot: "클라우드 인스턴스",
 		ingestSlotHint: "스트림을 수신할 클라우드 인스턴스를 선택하세요.",
 		ingestSlotPrompt: "계속하려면 클라우드 인스턴스를 선택하세요.",
 		ingestSlotDefault: "기본값",
+		feedsCloudObsInstance: "클라우드 OBS 인스턴스로 전송: {label}",
 		relaySecret: "시크릿 / 패스프레이즈",
 		relaySecretPlaceholder: "선택적 패스프레이즈",
 		streamId: "스트림 ID",
@@ -807,8 +814,7 @@ const ko = {
 			"인코더 프로세스가 실행되고 있지 않습니다. 스트림이 다운되었습니다.",
 		buffering: "버퍼링",
 		bufferingStoreForward: "저장 후 전송 활성화",
-		bufferingHint:
-			"링크가 끊겼습니다 — 디스크에 저장하고 복구되면 전송합니다.",
+		bufferingHint: "링크가 끊겼습니다 — 디스크에 저장하고 복구되면 전송합니다.",
 		link: "링크",
 	},
 	live: {

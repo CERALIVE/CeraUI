@@ -358,7 +358,12 @@ export function startLinkTelemetry(
 	startFilePollWatcher(watch, statsFile, watchOpts);
 
 	if (opts.controlSocket) {
-		void attemptSubscriptionCutover(opts.controlSocket, watch, statsFile, watchOpts);
+		void attemptSubscriptionCutover(
+			opts.controlSocket,
+			watch,
+			statsFile,
+			watchOpts,
+		);
 	}
 }
 

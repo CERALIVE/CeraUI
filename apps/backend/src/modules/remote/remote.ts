@@ -48,7 +48,7 @@ import { logger } from "../../helpers/logger.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
 import { extractMessage } from "../../helpers/types.ts";
-
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "../network/dns.ts";
 import { queueUpdateGw } from "../network/gateways.ts";
@@ -57,7 +57,6 @@ import {
 	verifyStubDeviceToken,
 } from "../pairing/device-token.ts";
 import { setup } from "../setup.ts";
-import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { addAuthedSocket } from "../ui/auth.ts";
 import { type StatusResponseMessage, sendInitialStatus } from "../ui/status.ts";
 import {

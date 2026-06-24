@@ -897,12 +897,19 @@ const es = {
 		optional: "opcional",
 		relayProvider: "Proveedor",
 		relayProviderHint: "Elige qué nube retransmite tu transmisión.",
+		relayServerStale:
+			"Tu servidor de relé guardado pertenece a otro proveedor. Vuelve a seleccionar un servidor para este proveedor.",
+		relayProviderSwitchWarning:
+			"Tu servidor de relé guardado pertenece al proveedor anterior. Abre Receptor / Servidor para elegir un servidor para este proveedor.",
+		relayOverrideClearsBinding:
+			"Guardar este punto de conexión manual reemplazará tu vínculo con el servidor de relé gestionado.",
 		autoEndpoint: "Punto de conexión del servidor (autoseleccionado)",
 		manualOverride: "Anulación manual",
 		ingestSlot: "Instancia en la nube",
 		ingestSlotHint: "Elige qué instancia en la nube recibe tu transmisión.",
 		ingestSlotPrompt: "Selecciona una instancia en la nube para continuar.",
 		ingestSlotDefault: "Predeterminada",
+		feedsCloudObsInstance: "Alimenta la instancia OBS en la nube: {label}",
 		relaySecret: "Secreto / frase de contraseña",
 		relaySecretPlaceholder: "Frase de contraseña opcional",
 		streamId: "ID de transmisión",

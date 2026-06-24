@@ -331,6 +331,12 @@ const ja = {
 		optional: "オプション",
 		relayProvider: "プロバイダー",
 		relayProviderHint: "どのクラウドがストリームを中継するかを選択します。",
+		relayServerStale:
+			"保存されたリレーサーバーは別のプロバイダーのものです。このプロバイダー用のサーバーを選び直してください。",
+		relayProviderSwitchWarning:
+			"保存されたリレーサーバーは以前のプロバイダーのものです。レシーバー / サーバーを開いて、このプロバイダー用のサーバーを選択してください。",
+		relayOverrideClearsBinding:
+			"この手動エンドポイントを保存すると、管理対象リレーサーバーの割り当てが置き換えられます。",
 		autoEndpoint: "サーバーエンドポイント（自動選択）",
 		manualOverride: "手動で上書き",
 		ingestSlot: "クラウドインスタンス",
@@ -338,6 +344,7 @@ const ja = {
 			"ストリームを受信するクラウドインスタンスを選択してください。",
 		ingestSlotPrompt: "続行するにはクラウドインスタンスを選択してください。",
 		ingestSlotDefault: "デフォルト",
+		feedsCloudObsInstance: "クラウドOBSインスタンスに配信: {label}",
 		relaySecret: "シークレット / パスフレーズ",
 		relaySecretPlaceholder: "任意のパスフレーズ",
 		streamId: "ストリームID",

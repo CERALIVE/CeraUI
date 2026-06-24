@@ -884,12 +884,19 @@ const de = {
 		optional: "optional",
 		relayProvider: "Anbieter",
 		relayProviderHint: "Wählen Sie, welche Cloud Ihren Stream weiterleitet.",
+		relayServerStale:
+			"Ihr gespeicherter Relay-Server gehört zu einem anderen Anbieter. Wählen Sie einen Server für diesen Anbieter erneut aus.",
+		relayProviderSwitchWarning:
+			"Ihr gespeicherter Relay-Server gehört zum vorherigen Anbieter. Öffnen Sie Empfänger / Server, um einen Server für diesen Anbieter auszuwählen.",
+		relayOverrideClearsBinding:
+			"Das Speichern dieses manuellen Endpunkts ersetzt Ihre verwaltete Relay-Server-Bindung.",
 		autoEndpoint: "Server-Endpunkt (automatisch gewählt)",
 		manualOverride: "Manuell überschreiben",
 		ingestSlot: "Cloud-Instanz",
 		ingestSlotHint: "Wählen Sie, welche Cloud-Instanz Ihren Stream empfängt.",
 		ingestSlotPrompt: "Wählen Sie eine Cloud-Instanz, um fortzufahren.",
 		ingestSlotDefault: "Standard",
+		feedsCloudObsInstance: "Speist Cloud-OBS-Instanz: {label}",
 		relaySecret: "Geheimnis / Passphrase",
 		relaySecretPlaceholder: "Optionale Passphrase",
 		streamId: "Stream-ID",

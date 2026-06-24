@@ -27,7 +27,7 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { Server } from '@lucide/svelte';
+import { Server, TriangleAlert } from '@lucide/svelte';
 import {
 	CLOUD_PROVIDERS,
 	type RelayProtocol,
@@ -69,6 +69,8 @@ import {
 	buildManagedSlotConfig,
 	buildServerSetConfig,
 	deriveDestination,
+	isRelayServerStaleForProvider,
+	overrideClearsManagedBinding,
 	resolveActiveManagedProvider,
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
@@ -247,6 +249,22 @@ const overridePortStr = $derived(
 	draft.relay_override_port ?? (relayServerInfo?.port?.toString() ?? ''),
 );
 
+// T18 Fix 3: a relay_server saved under a PREVIOUS provider (the operator switched
+// cloud in CloudRemoteDialog without re-selecting) is otherwise invisible here.
+// Guard on a loaded catalog so a still-loading relay list never false-warns.
+const relayServerStale = $derived(
+	destination === 'managed' &&
+		relays !== undefined &&
+		isRelayServerStaleForProvider(relayServer, serverEntries, selectedProvider),
+);
+
+// T18 Fix 2: a manual endpoint override on a bound managed server drops the
+// relay_server binding on save (buildServerSetConfig's override branch persists
+// srtla_addr/port, no relay_server) — surface it before the operator saves.
+const overrideClearsBinding = $derived(
+	overrideClearsManagedBinding({ destination, relayOverride, relayServer }),
+);
+
 const portNum = $derived(parsePort(portStr));
 const portError = $derived.by(() => {
 	if (destination !== 'custom' || portStr.trim() === '') return undefined;
@@ -409,6 +427,16 @@ async function handleSave() {
 				prompting={slotPrompting}
 			/>
 		{:else if destination === 'managed'}
+			{#if relayServerStale}
+				<p
+					class="border-status-warning/30 bg-status-warning/10 text-status-warning flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
+					data-testid="relay-stale-warning"
+					role="status"
+				>
+					<TriangleAlert class="mt-0.5 size-4 shrink-0" />
+					<span>{$LL.settings.relayServerStale()}</span>
+				</p>
+			{/if}
 			<RelayServerSelector
 				{accountEntries}
 				{filteredServerEntries}
@@ -441,6 +469,16 @@ async function handleSave() {
 				{selectedProvider}
 				{showProviderPicker}
 			/>
+			{#if overrideClearsBinding}
+				<p
+					class="border-status-warning/30 bg-status-warning/10 text-status-warning flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
+					data-testid="relay-override-warning"
+					role="status"
+				>
+					<TriangleAlert class="mt-0.5 size-4 shrink-0" />
+					<span>{$LL.settings.relayOverrideClearsBinding()}</span>
+				</p>
+			{/if}
 		{:else}
 			<CustomEndpointForm
 				{addr}

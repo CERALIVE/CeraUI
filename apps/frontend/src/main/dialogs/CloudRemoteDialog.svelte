@@ -12,7 +12,17 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { CloudProviderEndpoint, ProviderSelection } from '@ceraui/rpc/schemas';
-import { Check, Cloud, ExternalLink, Eye, EyeOff, Link2, Loader2, RefreshCw } from '@lucide/svelte';
+import {
+	Check,
+	Cloud,
+	ExternalLink,
+	Eye,
+	EyeOff,
+	Link2,
+	Loader2,
+	RefreshCw,
+	TriangleAlert,
+} from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
@@ -24,7 +34,8 @@ import * as Select from '$lib/components/ui/select';
 import { saveRemoteConfig } from '$lib/helpers/SystemHelper';
 import { PairingController } from '$lib/pairing/pairing.svelte';
 import { rpc } from '$lib/rpc/client';
-import { getConfig } from '$lib/rpc/subscriptions.svelte';
+import { getConfig, getRelays } from '$lib/rpc/subscriptions.svelte';
+import { isRelayServerStaleForProvider } from '$lib/streaming/receiver-experience';
 
 interface Props {
 	open?: boolean;
@@ -110,6 +121,17 @@ const selected = $derived(providerOptions.find((p) => p.id === provider));
 const cloudUrl = $derived(provider === 'custom' ? undefined : selected?.cloudUrl);
 const customIncomplete = $derived(provider === 'custom' && customHost.trim() === '');
 const canSave = $derived(!customIncomplete && !saving);
+
+// T18 Fix 1: switching provider here leaves the persisted relay_server pointing at
+// the PREVIOUS provider's relay. Surface that (rather than silently re-binding) so
+// the operator knows to re-pick a server. Guarded on a loaded catalog so a not-yet-
+// arrived relay list never false-warns; naturally true only once `provider` diverges
+// from the saved server's provider (i.e. exactly after a switch).
+const relays = $derived(getRelays());
+const relayServerStale = $derived(
+	relays !== undefined &&
+		isRelayServerStaleForProvider(config?.relay_server, Object.entries(relays.servers), provider),
+);
 
 // Claim-code pairing. The mock-platform "simulate" affordance is dev-only; in
 // production the real cloud dashboard completes the claim and the device polls.
@@ -291,6 +313,16 @@ async function save() {
 					{/each}
 				</Select.Content>
 			</Select.Root>
+			{#if relayServerStale}
+				<p
+					class="border-status-warning/30 bg-status-warning/10 text-status-warning flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
+					data-testid="relay-provider-stale-warning"
+					role="status"
+				>
+					<TriangleAlert class="mt-0.5 size-4 shrink-0" />
+					<span>{$LL.settings.relayProviderSwitchWarning()}</span>
+				</p>
+			{/if}
 		</div>
 
 		<!-- Custom provider fields -->

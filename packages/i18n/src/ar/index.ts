@@ -457,12 +457,19 @@ const ar = {
 		optional: "اختياري",
 		relayProvider: "المزود",
 		relayProviderHint: "اختر السحابة التي تنقل بثك.",
+		relayServerStale:
+			"خادم الترحيل المحفوظ يتبع مزودًا آخر. اختر خادمًا لهذا المزود من جديد.",
+		relayProviderSwitchWarning:
+			"خادم الترحيل المحفوظ يتبع المزود السابق. افتح المستقبل / الخادم لاختيار خادم لهذا المزود.",
+		relayOverrideClearsBinding:
+			"حفظ هذه الوجهة اليدوية سيستبدل ارتباط خادم الترحيل المُدار.",
 		autoEndpoint: "نقطة نهاية الخادم (محددة تلقائيًا)",
 		manualOverride: "تجاوز يدوي",
 		ingestSlot: "مثيل السحابة",
 		ingestSlotHint: "اختر مثيل السحابة الذي يستقبل بثك.",
 		ingestSlotPrompt: "حدد مثيل سحابة للمتابعة.",
 		ingestSlotDefault: "افتراضي",
+		feedsCloudObsInstance: "يغذّي مثيل OBS السحابي: {label}",
 		relaySecret: "سر / عبارة مرور",
 		relaySecretPlaceholder: "عبارة مرور اختيارية",
 		streamId: "معرّف البث",
@@ -937,7 +944,8 @@ const ar = {
 		healthExplainDead: "عملية المُرمِّز لا تعمل. البث متوقف.",
 		buffering: "التخزين المؤقت",
 		bufferingStoreForward: "التخزين والإرسال نشط",
-		bufferingHint: "الوصلات متوقفة — يتم الحفظ على القرص وإعادة الإرسال عند استعادتها.",
+		bufferingHint:
+			"الوصلات متوقفة — يتم الحفظ على القرص وإعادة الإرسال عند استعادتها.",
 		link: "رابط",
 	},
 	live: {

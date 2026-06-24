@@ -16,10 +16,12 @@ import {
 	deriveServerReadiness,
 	findActiveSlot,
 	groupRelayServersByProvider,
+	isRelayServerStaleForProvider,
 	kindBadgeLabelKey,
 	type ManagedIngestAccount,
 	type ManagedProviderOption,
 	managedSlotLabel,
+	overrideClearsManagedBinding,
 	resolveActiveManagedProvider,
 	resolveReceiverKind,
 	type ServerSetDerived,
@@ -925,5 +927,92 @@ describe("resolveActiveManagedProvider — auto-select-if-one (T12)", () => {
 		expect(resolveActiveManagedProvider([], "ceralive", undefined)).toBe(
 			"ceralive",
 		);
+	});
+});
+
+describe("isRelayServerStaleForProvider — provider-switch staleness (T18)", () => {
+	const tagged: [string, RelayServer][] = [
+		["eu", relayServer({ provider: CERALIVE })],
+		["asia", relayServer({ provider: BELABOX })],
+	];
+
+	it("an empty/absent relay_server is never stale", () => {
+		expect(isRelayServerStaleForProvider(undefined, tagged, "ceralive")).toBe(
+			false,
+		);
+		expect(isRelayServerStaleForProvider("", tagged, "ceralive")).toBe(false);
+	});
+
+	it("a server tagged to a DIFFERENT provider reads as stale", () => {
+		// `eu` belongs to CeraLive; switching the active provider to belabox leaves
+		// it stale (the classic CloudRemoteDialog provider-switch case).
+		expect(isRelayServerStaleForProvider("eu", tagged, "belabox")).toBe(true);
+		expect(isRelayServerStaleForProvider("asia", tagged, "ceralive")).toBe(
+			true,
+		);
+	});
+
+	it("a server tagged to the active provider is NOT stale", () => {
+		expect(isRelayServerStaleForProvider("eu", tagged, "ceralive")).toBe(false);
+		expect(isRelayServerStaleForProvider("asia", tagged, "belabox")).toBe(
+			false,
+		);
+	});
+
+	it("a relay_server absent from the catalog reads as stale (id dropped)", () => {
+		expect(isRelayServerStaleForProvider("gone", tagged, "ceralive")).toBe(
+			true,
+		);
+	});
+
+	it("an untagged (legacy) server is never stale — single-provider catalog safe", () => {
+		const legacy: [string, RelayServer][] = [
+			["a", relayServer()],
+			["b", relayServer()],
+		];
+		expect(isRelayServerStaleForProvider("a", legacy, "ceralive")).toBe(false);
+		expect(isRelayServerStaleForProvider("a", legacy, "belabox")).toBe(false);
+	});
+});
+
+describe("overrideClearsManagedBinding — override-drops-binding warning (T18)", () => {
+	it("warns when a managed destination overrides a bound relay server", () => {
+		expect(
+			overrideClearsManagedBinding({
+				destination: "managed",
+				relayOverride: true,
+				relayServer: "eu",
+			}),
+		).toBe(true);
+	});
+
+	it("does NOT warn when no server is bound (nothing to clear)", () => {
+		expect(
+			overrideClearsManagedBinding({
+				destination: "managed",
+				relayOverride: true,
+				relayServer: "",
+			}),
+		).toBe(false);
+	});
+
+	it("does NOT warn when the override is off", () => {
+		expect(
+			overrideClearsManagedBinding({
+				destination: "managed",
+				relayOverride: false,
+				relayServer: "eu",
+			}),
+		).toBe(false);
+	});
+
+	it("does NOT warn on a custom destination (no managed binding exists)", () => {
+		expect(
+			overrideClearsManagedBinding({
+				destination: "custom",
+				relayOverride: true,
+				relayServer: "eu",
+			}),
+		).toBe(false);
 	});
 });

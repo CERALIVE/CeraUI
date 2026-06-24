@@ -514,14 +514,21 @@ const audioSummary = $derived.by(() => {
 // and the live `linkCount` (null while idle → 0, so a disconnected receiver
 // shows no fresh bonding clause).
 const serverSummary = $derived(
-	buildServerSummary(config, receiverKind, linkCount ?? 0, {
-		notConfigured: $LL.general.notConfigured(),
-		kindLabel: (k) => t(kindBadgeLabelKey(k)),
-		bondedAcross: (count) => $LL.live.server.bondedAcross({ count }),
-		singleLink: $LL.live.server.singleLink(),
-		providerLabel: (provider) =>
-			provider && provider !== 'custom' ? PROVIDER_LABELS[provider] : undefined,
-	}),
+	buildServerSummary(
+		config,
+		receiverKind,
+		linkCount ?? 0,
+		{
+			notConfigured: $LL.general.notConfigured(),
+			kindLabel: (k) => t(kindBadgeLabelKey(k)),
+			bondedAcross: (count) => $LL.live.server.bondedAcross({ count }),
+			singleLink: $LL.live.server.singleLink(),
+			providerLabel: (provider) =>
+				provider && provider !== 'custom' ? PROVIDER_LABELS[provider] : undefined,
+			feedsCloudObsInstance: (label) => $LL.settings.feedsCloudObsInstance({ label }),
+		},
+		activeSlot,
+	),
 );
 
 // Start: assemble the full ConfigMessage from the SAVED backend config (the

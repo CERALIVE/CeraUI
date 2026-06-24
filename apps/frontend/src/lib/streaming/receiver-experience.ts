@@ -129,6 +129,27 @@ export function countRelayServersForProvider(
 }
 
 /**
+ * Is a persisted `relay_server` stale for `provider`? (T18.) Stale = the saved id
+ * is absent from the catalog, OR present but tagged to a DIFFERENT managed cloud
+ * than `provider` — the state left behind when the operator switches provider in
+ * `CloudRemoteDialog` without re-selecting a server. Empty/absent is never stale;
+ * an untagged (legacy) server falls back to the active provider via
+ * {@link relayServerBelongsToProvider}, so a single-provider legacy catalog never
+ * reads as stale. The caller MUST guard on a loaded catalog (`relays !== undefined`)
+ * — an empty `entries` while relays load is not staleness.
+ */
+export function isRelayServerStaleForProvider(
+	relayServer: string | undefined,
+	entries: ReadonlyArray<[string, RelayServer]>,
+	provider: string,
+): boolean {
+	if (!relayServer) return false;
+	const match = entries.find(([id]) => id === relayServer);
+	if (!match) return true;
+	return !relayServerBelongsToProvider(match[1], provider);
+}
+
+/**
  * Resolve a relay-provider id to its taxonomy. A predefined relay provider id
  * (`ceralive`, `belabox`, `custom`, + any future entry in `RELAY_PROVIDER_KINDS`)
  * maps to itself; anything else reads as `"unknown"`. Used to give untagged
@@ -437,6 +458,29 @@ export interface ServerSetDerived {
 	relayOverride: boolean;
 }
 
+/** The managed-destination state {@link overrideClearsManagedBinding} reads. */
+export interface ManagedBindingContext {
+	destination: Destination;
+	relayOverride: boolean;
+	relayServer: string;
+}
+
+/**
+ * True when saving would silently drop a managed relay-server binding (T18): a
+ * managed destination, with the manual-endpoint override on, while a server is
+ * still bound. {@link buildServerSetConfig}'s override branch persists
+ * `srtla_addr/port` with NO `relay_server`, so the managed binding is replaced by
+ * a manual endpoint — the dialog surfaces this before save instead of clearing it
+ * silently.
+ */
+export function overrideClearsManagedBinding(
+	ctx: ManagedBindingContext,
+): boolean {
+	return (
+		ctx.destination === "managed" && ctx.relayOverride && ctx.relayServer !== ""
+	);
+}
+
 /**
  * Drop every key whose value is `undefined`, so the persisted payload only
  * carries fields that will actually be sent. Mirrors the save handler's
@@ -524,6 +568,8 @@ export interface ServerSummaryLabels {
 	bondedAcross: (count: number) => string;
 	singleLink: string;
 	providerLabel: (provider: string | undefined) => string | undefined;
+	/** Resolves the "feeds cloud OBS instance: <label>" line (T17); optional so existing call sites stay byte-identical. */
+	feedsCloudObsInstance?: (label: string) => string;
 }
 
 const SUMMARY_SEPARATOR = " · ";
@@ -541,10 +587,26 @@ export function buildServerSummary(
 	kind: ReceiverKind | undefined,
 	linkCount: number,
 	labels: ServerSummaryLabels,
+	activeSlot?: ManagedIngestAccount | undefined,
 ): string {
 	const hasServer = Boolean(config?.srtla_addr || config?.relay_server);
 	if (!hasServer || !kind) return labels.notConfigured;
 
+	const base = buildConfiguredSummary(config, kind, linkCount, labels);
+
+	const association = obsInstanceAssociation(activeSlot);
+	if (association && labels.feedsCloudObsInstance) {
+		return `${base}${SUMMARY_SEPARATOR}${labels.feedsCloudObsInstance(association.label)}`;
+	}
+	return base;
+}
+
+function buildConfiguredSummary(
+	config: ServerSummaryConfig | undefined,
+	kind: ReceiverKind,
+	linkCount: number,
+	labels: ServerSummaryLabels,
+): string {
 	if (deriveDestination(config) === "managed") {
 		const parts: string[] = [];
 		const provider = labels.providerLabel(config?.remote_provider);
@@ -582,6 +644,90 @@ export interface ManagedIngestAccount {
 	region?: string;
 	state?: string;
 	default?: boolean;
+	/** Cloud OBS instance the platform bound this slot to, or `null`/absent when unbound (T17). */
+	obsInstanceId?: string | null;
+	/** Human label of the bound cloud OBS instance, when the platform pushed one (T17). */
+	instanceLabel?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function optionalString(value: unknown): string | undefined {
+	return typeof value === "string" ? value : undefined;
+}
+
+function toManagedIngestAccount(
+	row: unknown,
+): ManagedIngestAccount | undefined {
+	if (!isRecord(row)) return undefined;
+	const endpointId = optionalString(row.endpointId);
+	const host = optionalString(row.host);
+	const protocol = optionalString(row.protocol);
+	const key = optionalString(row.key) ?? optionalString(row.streamId);
+	const port = typeof row.port === "number" ? row.port : undefined;
+	if (
+		endpointId === undefined ||
+		host === undefined ||
+		protocol === undefined ||
+		key === undefined ||
+		port === undefined
+	) {
+		return undefined;
+	}
+	const instanceLabel = optionalString(row.instanceLabel);
+	const region = optionalString(row.region);
+	const state = optionalString(row.state);
+	return {
+		endpointId,
+		host,
+		port,
+		protocol,
+		key,
+		label: optionalString(row.label) ?? instanceLabel ?? endpointId,
+		obsInstanceId:
+			typeof row.obsInstanceId === "string" ? row.obsInstanceId : null,
+		...(instanceLabel !== undefined ? { instanceLabel } : {}),
+		...(region !== undefined ? { region } : {}),
+		...(state !== undefined ? { state } : {}),
+		...(typeof row.default === "boolean" ? { default: row.default } : {}),
+	};
+}
+
+/**
+ * Parse an inbound `ingest.slots` payload into managed accounts. Accepts a
+ * `{ slots: [...] }` envelope or a bare array, tolerates BOTH the raw slot shape
+ * (`streamId`/`instanceLabel`) and the mapped account shape (`key`/`label`), and
+ * carries the OBS-instance metadata through. Malformed entries are dropped.
+ */
+export function parseIngestSlots(payload: unknown): ManagedIngestAccount[] {
+	const rows = Array.isArray(payload)
+		? payload
+		: isRecord(payload) && Array.isArray(payload.slots)
+			? payload.slots
+			: [];
+	const accounts: ManagedIngestAccount[] = [];
+	for (const row of rows) {
+		const account = toManagedIngestAccount(row);
+		if (account) accounts.push(account);
+	}
+	return accounts;
+}
+
+/**
+ * The cloud OBS instance a managed slot feeds, or `undefined` when unbound (T17).
+ * Bound requires BOTH a non-null `obsInstanceId` AND a non-empty `instanceLabel`,
+ * so an unbound slot yields `undefined` and the read-only line is simply absent
+ * (never "undefined"). Read-only: the device observes, it never controls OBS.
+ */
+export function obsInstanceAssociation(
+	account: ManagedIngestAccount | undefined,
+): { label: string } | undefined {
+	if (!account?.obsInstanceId) return undefined;
+	const label = account.instanceLabel?.trim();
+	if (!label) return undefined;
+	return { label };
 }
 
 /**
