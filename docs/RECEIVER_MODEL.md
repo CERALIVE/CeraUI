@@ -149,6 +149,45 @@ prose. The `data-debt-id="TD-plain-srt-egress"` marker is added to the
 
 ---
 
+## 6. Device ↔ Cloud-OBS Association (T17)
+
+When the device feeds a platform-managed ingest slot (T18 managed accounts), the
+cloud may bind that slot to a specific cloud OBS instance. The platform reports the
+binding on each pushed slot via two optional fields — `obsInstanceId` (the bound
+instance, or `null`/absent when unbound) and `instanceLabel` (its human name).
+
+The device surfaces this as a **read-only** line: `obsInstanceAssociation(account)`
+(`lib/streaming/receiver-experience.ts`) returns `{ label }` only when BOTH a
+non-null `obsInstanceId` AND a non-empty `instanceLabel` are present, so an unbound
+slot yields `undefined` and the line is simply absent (never "undefined"). The line
+renders in two places:
+
+- `ServerIngestSlots.svelte` — under each managed slot in the picker
+  (`data-testid="obs-instance-association"`).
+- The Live server summary — `buildServerSummary(...)` appends
+  ` · feeds cloud OBS instance: <label>` when the active slot is bound.
+
+Copy is the i18n key `settings.feedsCloudObsInstance`
+(`"Feeds cloud OBS instance: {label}"`, 10 locales).
+
+**Read-only by contract.** The device only *observes* the association the platform
+pushes; it has **no device-side OBS control** — it never starts, stops, switches
+scenes on, or otherwise commands a cloud OBS instance. OBS lifecycle and scene
+control live entirely in `ceralive-platform`.
+
+### Platform `sourceKind` taxonomy
+
+On the cloud side, every ingest endpoint carries a `sourceKind`
+(`IngestSourceKind` enum in `ceralive-platform`) that records **who publishes** to
+it — orthogonal to the slot's role (`purpose`) and to which instance consumes it
+(`obsInstanceId`). A CeraUI device that feeds an endpoint is classified `DEVICE`;
+other producers use values such as `EXTERNAL_OBS` / `EXTERNAL_ENCODER`. CeraUI does
+not set or read `sourceKind` — it is a platform-owned classification of the device's
+own feed. It is documented here only so device-side readers understand how the cloud
+labels the stream this UI configures.
+
+---
+
 ## Related Documents
 
 | Document | Scope |

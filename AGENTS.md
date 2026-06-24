@@ -656,6 +656,17 @@ endpoint fields. Key concepts:
   relay list never false-warns. A related T18 warning, `relay-override-warning`
   (`overrideClearsManagedBinding`), fires before save when a manual-endpoint override
   on a bound managed server would drop the `relay_server` binding.
+- **Device ↔ cloud-OBS association is read-only (T17).** A platform-managed ingest
+  slot may carry an `obsInstanceId` + `instanceLabel` naming the cloud OBS instance it
+  feeds. `obsInstanceAssociation(account)` (`receiver-experience.ts`) surfaces a calm
+  read-only line — under each slot in `ServerIngestSlots.svelte`
+  (`data-testid="obs-instance-association"`) and appended to the Live server summary by
+  `buildServerSummary` — copy `settings.feedsCloudObsInstance` (10 locales). It renders
+  only when BOTH `obsInstanceId` is non-null AND `instanceLabel` is non-empty; an
+  unbound slot shows nothing. The device only OBSERVES the binding the platform pushes —
+  there is **NO device-side OBS control** (no start/stop, no scene switch). On the cloud
+  side each endpoint also carries a `sourceKind` (a device feed = `DEVICE`); CeraUI
+  neither sets nor reads it. Full model: [`docs/RECEIVER_MODEL.md`](docs/RECEIVER_MODEL.md) §6.
 
 **Plain-SRT / RIST roadmap.** Plain-SRT egress requires three layers to land together
 (capability advertisement, real `srtAdapter`, and a `startStream` protocol branch).
