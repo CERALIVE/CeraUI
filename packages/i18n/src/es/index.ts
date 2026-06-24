@@ -909,6 +909,7 @@ const es = {
 		ingestSlotHint: "Elige qué instancia en la nube recibe tu transmisión.",
 		ingestSlotPrompt: "Selecciona una instancia en la nube para continuar.",
 		ingestSlotDefault: "Predeterminada",
+		feedsCloudObsInstance: "Alimenta la instancia OBS en la nube: {label}",
 		relaySecret: "Secreto / frase de contraseña",
 		relaySecretPlaceholder: "Frase de contraseña opcional",
 		streamId: "ID de transmisión",

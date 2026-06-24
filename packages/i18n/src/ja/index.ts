@@ -344,6 +344,7 @@ const ja = {
 			"ストリームを受信するクラウドインスタンスを選択してください。",
 		ingestSlotPrompt: "続行するにはクラウドインスタンスを選択してください。",
 		ingestSlotDefault: "デフォルト",
+		feedsCloudObsInstance: "クラウドOBSインスタンスに配信: {label}",
 		relaySecret: "シークレット / パスフレーズ",
 		relaySecretPlaceholder: "任意のパスフレーズ",
 		streamId: "ストリームID",

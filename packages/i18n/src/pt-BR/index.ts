@@ -495,6 +495,7 @@ const ptBR = {
 		ingestSlotHint: "Escolha qual instância na nuvem recebe sua transmissão.",
 		ingestSlotPrompt: "Selecione uma instância na nuvem para continuar.",
 		ingestSlotDefault: "Padrão",
+		feedsCloudObsInstance: "Alimenta a instância OBS na nuvem: {label}",
 		relaySecret: "Segredo / senha",
 		relaySecretPlaceholder: "Senha opcional",
 		streamId: "ID da transmissão",

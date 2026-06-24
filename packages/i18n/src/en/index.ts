@@ -897,6 +897,7 @@ const en = {
 		ingestSlotHint: "Choose which cloud instance receives your stream.",
 		ingestSlotPrompt: "Select a cloud instance to continue.",
 		ingestSlotDefault: "Default",
+		feedsCloudObsInstance: "Feeds cloud OBS instance: {label:string}",
 		relaySecret: "Secret / passphrase",
 		relaySecretPlaceholder: "Optional passphrase",
 		streamId: "Stream ID",

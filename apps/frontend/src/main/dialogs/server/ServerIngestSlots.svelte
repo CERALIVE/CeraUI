@@ -12,7 +12,7 @@ import { LL } from '@ceraui/i18n/svelte';
 import { Cloud } from '@lucide/svelte';
 
 import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
-import { managedSlotLabel } from '$lib/streaming/receiver-experience';
+import { managedSlotLabel, obsInstanceAssociation } from '$lib/streaming/receiver-experience';
 import { Label } from '$lib/components/ui/label';
 
 interface Props {
@@ -68,6 +68,17 @@ const idleChoice = 'border-border text-muted-foreground hover:text-foreground';
 					</span>
 					{#if account.region}
 						<span class="text-muted-foreground text-xs leading-snug">{account.region}</span>
+					{/if}
+					{#if obsInstanceAssociation(account)}
+						<span
+							class="text-muted-foreground text-xs leading-snug"
+							data-testid="obs-instance-association"
+							data-endpoint-id={account.endpointId}
+						>
+							{$LL.settings.feedsCloudObsInstance({
+								label: obsInstanceAssociation(account)?.label ?? '',
+							})}
+						</span>
 					{/if}
 				</span>
 			</button>

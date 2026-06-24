@@ -469,6 +469,7 @@ const ar = {
 		ingestSlotHint: "اختر مثيل السحابة الذي يستقبل بثك.",
 		ingestSlotPrompt: "حدد مثيل سحابة للمتابعة.",
 		ingestSlotDefault: "افتراضي",
+		feedsCloudObsInstance: "يغذّي مثيل OBS السحابي: {label}",
 		relaySecret: "سر / عبارة مرور",
 		relaySecretPlaceholder: "عبارة مرور اختيارية",
 		streamId: "معرّف البث",

@@ -896,6 +896,7 @@ const de = {
 		ingestSlotHint: "Wählen Sie, welche Cloud-Instanz Ihren Stream empfängt.",
 		ingestSlotPrompt: "Wählen Sie eine Cloud-Instanz, um fortzufahren.",
 		ingestSlotDefault: "Standard",
+		feedsCloudObsInstance: "Speist Cloud-OBS-Instanz: {label}",
 		relaySecret: "Geheimnis / Passphrase",
 		relaySecretPlaceholder: "Optionale Passphrase",
 		streamId: "Stream-ID",

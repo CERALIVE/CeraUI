@@ -163,6 +163,8 @@ describe("ingest.slots — slot → managed account mapping", () => {
 			protocol: "srtla",
 			key: "stream-key-1",
 			label: "Main",
+			obsInstanceId: "obs-1",
+			instanceLabel: "Main",
 			region: "eu-west",
 			state: "active",
 			default: true,

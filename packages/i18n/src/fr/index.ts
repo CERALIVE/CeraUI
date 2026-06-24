@@ -498,6 +498,7 @@ const fr = {
 		ingestSlotHint: "Choisissez quelle instance cloud reçoit votre flux.",
 		ingestSlotPrompt: "Sélectionnez une instance cloud pour continuer.",
 		ingestSlotDefault: "Par défaut",
+		feedsCloudObsInstance: "Alimente l'instance OBS cloud : {label}",
 		relaySecret: "Secret / phrase secrète",
 		relaySecretPlaceholder: "Phrase secrète facultative",
 		streamId: "ID de flux",

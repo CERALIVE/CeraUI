@@ -324,6 +324,7 @@ const zh = {
 		ingestSlotHint: "选择接收您直播流的云实例。",
 		ingestSlotPrompt: "选择一个云实例以继续。",
 		ingestSlotDefault: "默认",
+		feedsCloudObsInstance: "馈送云 OBS 实例：{label}",
 		relaySecret: "密钥 / 口令",
 		relaySecretPlaceholder: "可选口令",
 		streamId: "流 ID",

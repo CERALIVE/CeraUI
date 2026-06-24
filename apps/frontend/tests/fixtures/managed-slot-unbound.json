@@ -1,0 +1,14 @@
+{
+	"slots": [
+		{
+			"endpointId": "ep-unbound-1",
+			"obsInstanceId": null,
+			"region": "eu-west",
+			"state": "active",
+			"host": "ingest-eu-west.example",
+			"port": 5000,
+			"protocol": "srtla",
+			"streamId": "publish/unbound-1"
+		}
+	]
+}

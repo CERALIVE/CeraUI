@@ -334,6 +334,7 @@ const ko = {
 		ingestSlotHint: "스트림을 수신할 클라우드 인스턴스를 선택하세요.",
 		ingestSlotPrompt: "계속하려면 클라우드 인스턴스를 선택하세요.",
 		ingestSlotDefault: "기본값",
+		feedsCloudObsInstance: "클라우드 OBS 인스턴스로 전송: {label}",
 		relaySecret: "시크릿 / 패스프레이즈",
 		relaySecretPlaceholder: "선택적 패스프레이즈",
 		streamId: "스트림 ID",
