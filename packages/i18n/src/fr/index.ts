@@ -486,6 +486,12 @@ const fr = {
 		optional: "optionnel",
 		relayProvider: "Fournisseur",
 		relayProviderHint: "Choisissez quel cloud relaie votre flux.",
+		relayServerStale:
+			"Votre serveur relais enregistré appartient à un autre fournisseur. Sélectionnez à nouveau un serveur pour ce fournisseur.",
+		relayProviderSwitchWarning:
+			"Votre serveur relais enregistré appartient au fournisseur précédent. Ouvrez Récepteur / Serveur pour choisir un serveur pour ce fournisseur.",
+		relayOverrideClearsBinding:
+			"Enregistrer ce point de terminaison manuel remplacera votre liaison au serveur relais géré.",
 		autoEndpoint: "Point de terminaison du serveur (sélection auto)",
 		manualOverride: "Remplacement manuel",
 		ingestSlot: "Instance cloud",

@@ -885,6 +885,12 @@ const en = {
 			"You can change the bitrate even if you are streaming.",
 		relayProvider: "Provider",
 		relayProviderHint: "Choose which cloud relays your stream.",
+		relayServerStale:
+			"Your saved relay server belongs to a different provider. Re-select a server for this provider.",
+		relayProviderSwitchWarning:
+			"Your saved relay server belongs to the previous provider. Open Receiver / Server to pick a server for this provider.",
+		relayOverrideClearsBinding:
+			"Saving this manual endpoint will replace your managed relay server binding.",
 		autoEndpoint: "Server endpoint (auto-selected)",
 		manualOverride: "Manual override",
 		ingestSlot: "Cloud instance",

@@ -322,6 +322,12 @@ const ko = {
 		optional: "선택사항",
 		relayProvider: "공급자",
 		relayProviderHint: "어떤 클라우드가 스트림을 중계할지 선택하세요.",
+		relayServerStale:
+			"저장된 릴레이 서버가 다른 제공업체에 속해 있습니다. 이 제공업체의 서버를 다시 선택하세요.",
+		relayProviderSwitchWarning:
+			"저장된 릴레이 서버가 이전 제공업체에 속해 있습니다. 수신기 / 서버를 열어 이 제공업체의 서버를 선택하세요.",
+		relayOverrideClearsBinding:
+			"이 수동 엔드포인트를 저장하면 관리형 릴레이 서버 연결이 대체됩니다.",
 		autoEndpoint: "서버 엔드포인트(자동 선택)",
 		manualOverride: "수동 재정의",
 		ingestSlot: "클라우드 인스턴스",

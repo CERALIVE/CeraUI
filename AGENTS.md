@@ -640,13 +640,22 @@ endpoint fields. Key concepts:
   (`main/live/LiveHeader.svelte`) and the Live destination summary row own the
   server-target display. Adding server-target to the HUD is explicitly out of scope
   and would duplicate the Live header.
-- **Provider-switch stale-`relay_server` (known limitation).** `DestinationSection`
+- **Provider-switch stale-`relay_server` (surfaced, T18).** `DestinationSection`
   labels the managed option using `config.remote_provider` (set by `CloudRemoteDialog`).
   If the operator switches provider in `CloudRemoteDialog` without clearing the server
   selection in `ServerDialog`, the persisted `relay_server` may reference a server from
-  the previous provider's relay list. The dialog does not auto-clear `relay_server` on
-  provider change. This is a known limitation: the operator must re-open `ServerDialog`
-  and re-select a server after switching provider.
+  the previous provider's relay list. The dialogs DELIBERATELY do not auto-clear
+  `relay_server` (no silent mutation of the operator's config) — instead the staleness
+  is now made VISIBLE on both surfaces (T18): `CloudRemoteDialog` shows a
+  `relay-provider-stale-warning` band when the chosen provider no longer owns the saved
+  server, and `ServerDialog` shows a `relay-stale-warning` band in the managed branch.
+  The staleness rule is the pure `isRelayServerStaleForProvider(relay_server, entries,
+  provider)` in `receiver-experience.ts` (a saved id absent from the catalog, or tagged
+  to a different managed cloud, is stale; empty/untagged-legacy never is). Both call
+  sites MUST guard on a loaded catalog (`getRelays() !== undefined`) so a still-loading
+  relay list never false-warns. A related T18 warning, `relay-override-warning`
+  (`overrideClearsManagedBinding`), fires before save when a manual-endpoint override
+  on a bound managed server would drop the `relay_server` binding.
 
 **Plain-SRT / RIST roadmap.** Plain-SRT egress requires three layers to land together
 (capability advertisement, real `srtAdapter`, and a `startStream` protocol branch).

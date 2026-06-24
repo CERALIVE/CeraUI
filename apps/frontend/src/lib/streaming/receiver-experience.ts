@@ -129,6 +129,27 @@ export function countRelayServersForProvider(
 }
 
 /**
+ * Is a persisted `relay_server` stale for `provider`? (T18.) Stale = the saved id
+ * is absent from the catalog, OR present but tagged to a DIFFERENT managed cloud
+ * than `provider` — the state left behind when the operator switches provider in
+ * `CloudRemoteDialog` without re-selecting a server. Empty/absent is never stale;
+ * an untagged (legacy) server falls back to the active provider via
+ * {@link relayServerBelongsToProvider}, so a single-provider legacy catalog never
+ * reads as stale. The caller MUST guard on a loaded catalog (`relays !== undefined`)
+ * — an empty `entries` while relays load is not staleness.
+ */
+export function isRelayServerStaleForProvider(
+	relayServer: string | undefined,
+	entries: ReadonlyArray<[string, RelayServer]>,
+	provider: string,
+): boolean {
+	if (!relayServer) return false;
+	const match = entries.find(([id]) => id === relayServer);
+	if (!match) return true;
+	return !relayServerBelongsToProvider(match[1], provider);
+}
+
+/**
  * Resolve a relay-provider id to its taxonomy. A predefined relay provider id
  * (`ceralive`, `belabox`, `custom`, + any future entry in `RELAY_PROVIDER_KINDS`)
  * maps to itself; anything else reads as `"unknown"`. Used to give untagged
@@ -435,6 +456,29 @@ export interface ServerSetDerived {
 	destination: Destination;
 	/** True when a managed server is using a manual endpoint override. */
 	relayOverride: boolean;
+}
+
+/** The managed-destination state {@link overrideClearsManagedBinding} reads. */
+export interface ManagedBindingContext {
+	destination: Destination;
+	relayOverride: boolean;
+	relayServer: string;
+}
+
+/**
+ * True when saving would silently drop a managed relay-server binding (T18): a
+ * managed destination, with the manual-endpoint override on, while a server is
+ * still bound. {@link buildServerSetConfig}'s override branch persists
+ * `srtla_addr/port` with NO `relay_server`, so the managed binding is replaced by
+ * a manual endpoint — the dialog surfaces this before save instead of clearing it
+ * silently.
+ */
+export function overrideClearsManagedBinding(
+	ctx: ManagedBindingContext,
+): boolean {
+	return (
+		ctx.destination === "managed" && ctx.relayOverride && ctx.relayServer !== ""
+	);
 }
 
 /**

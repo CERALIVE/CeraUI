@@ -457,6 +457,12 @@ const ar = {
 		optional: "اختياري",
 		relayProvider: "المزود",
 		relayProviderHint: "اختر السحابة التي تنقل بثك.",
+		relayServerStale:
+			"خادم الترحيل المحفوظ يتبع مزودًا آخر. اختر خادمًا لهذا المزود من جديد.",
+		relayProviderSwitchWarning:
+			"خادم الترحيل المحفوظ يتبع المزود السابق. افتح المستقبل / الخادم لاختيار خادم لهذا المزود.",
+		relayOverrideClearsBinding:
+			"حفظ هذه الوجهة اليدوية سيستبدل ارتباط خادم الترحيل المُدار.",
 		autoEndpoint: "نقطة نهاية الخادم (محددة تلقائيًا)",
 		manualOverride: "تجاوز يدوي",
 		ingestSlot: "مثيل السحابة",
