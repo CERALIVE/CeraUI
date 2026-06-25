@@ -341,4 +341,102 @@ test.describe('Stream Tuning card — receiver-capability gating', () => {
 		await expect(drift).toBeVisible();
 		await expect(drift).toHaveAttribute('role', 'status');
 	});
+
+	// ── Task 23: impeccable visual pass + full-coverage rounding ──────────────
+	// These exercise the remaining receiver-capability surfaces the Tasks 16-22
+	// specs left implicit: the Custom chip's full lifecycle, the Advanced
+	// recovery disclosure, the CeraLive-path summary reactivity, and the help
+	// affordance — so every interactive state of the card is asserted, not just
+	// the two top-level kinds.
+
+	test('Custom chip lifecycle: disabled while a named preset is active, enabled once an off-preset edit selects it', async ({
+		authedPage: page,
+	}) => {
+		const dialog = await openServerDialog(page);
+		const managed = dialog.getByTestId('destination-managed');
+		await expect(managed).toBeEnabled({ timeout: 15_000 });
+		await managed.click();
+		await expect(dialog.getByTestId('stream-tuning')).toHaveAttribute(
+			'data-receiver-kind',
+			'ceralive',
+		);
+
+		const custom = dialog.getByTestId('stream-tuning-preset-custom');
+		const classic = dialog.getByTestId('stream-tuning-preset-classic');
+
+		// Snap to a named preset (Classic is the one advertised in dev): Custom is
+		// not the active state, so it is shown DISABLED (you can't pick it directly).
+		await classic.click();
+		await expect(classic).toHaveAttribute('aria-pressed', 'true');
+		await expect(custom).toHaveAttribute('aria-pressed', 'false');
+		await expect(custom).toBeDisabled();
+
+		// Editing any control off every preset makes Custom the active state — now
+		// it is pressed AND enabled (it reflects the live, unnamed combination).
+		await dialog.getByTestId('stream-tuning-latency-slider').fill('1350');
+		await expect(custom).toHaveAttribute('aria-pressed', 'true');
+		await expect(custom).toBeEnabled();
+		await expect(classic).toHaveAttribute('aria-pressed', 'false');
+
+		// Re-selecting the named preset returns Custom to its disabled resting state.
+		await classic.click();
+		await expect(classic).toHaveAttribute('aria-pressed', 'true');
+		await expect(custom).toBeDisabled();
+	});
+
+	test('Advanced recovery disclosure opens and collapses on demand', async ({
+		authedPage: page,
+	}) => {
+		const dialog = await openServerDialog(page);
+		await dialog.getByTestId('destination-custom').click();
+
+		const advanced = dialog.getByTestId('stream-tuning-advanced');
+		const summary = dialog.locator('[data-testid="stream-tuning-advanced"] > summary');
+
+		// Collapsed by default — the recovery segments are not yet in view.
+		await expect(advanced).not.toHaveAttribute('open', /.*/);
+		await expect(dialog.getByTestId('stream-tuning-recovery')).toBeHidden();
+
+		await summary.click();
+		await expect(advanced).toHaveAttribute('open', /.*/);
+		await expect(dialog.getByTestId('stream-tuning-recovery')).toBeVisible();
+
+		await summary.click();
+		await expect(advanced).not.toHaveAttribute('open', /.*/);
+	});
+
+	test('CeraLive summary re-translates the recovery clause when the segment changes', async ({
+		authedPage: page,
+	}) => {
+		const dialog = await openServerDialog(page);
+		const managed = dialog.getByTestId('destination-managed');
+		await expect(managed).toBeEnabled({ timeout: 15_000 });
+		await managed.click();
+		await expect(dialog.getByTestId('stream-tuning')).toHaveAttribute(
+			'data-receiver-kind',
+			'ceralive',
+		);
+
+		await dialog.locator('[data-testid="stream-tuning-advanced"] > summary').click();
+		const summary = dialog.getByTestId('stream-tuning-summary');
+
+		await dialog.getByTestId('stream-tuning-recovery-standard').click();
+		await expect(summary).toContainText('automatic loss recovery');
+
+		await dialog.getByTestId('stream-tuning-recovery-bandwidth-saver').click();
+		await expect(summary).toContainText('bandwidth-saver recovery');
+	});
+
+	test('the help affordance is reachable on both receiver kinds', async ({
+		authedPage: page,
+	}) => {
+		const dialog = await openServerDialog(page);
+		await dialog.getByTestId('destination-custom').click();
+		await expect(dialog.getByTestId('stream-tuning-info')).toBeVisible();
+
+		const managed = dialog.getByTestId('destination-managed');
+		await expect(managed).toBeEnabled({ timeout: 15_000 });
+		await managed.click();
+		await expect(dialog.getByTestId('stream-tuning-info')).toBeVisible();
+	});
 });

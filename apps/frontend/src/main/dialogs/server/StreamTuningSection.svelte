@@ -280,7 +280,7 @@ const focusRing =
 			</Label>
 			<span class="flex items-center gap-1.5">
 				{#if showingNegotiated}
-					<span class="text-muted-foreground text-[10px] uppercase tracking-wide">
+					<span class="text-muted-foreground text-micro uppercase tracking-wide">
 						{$LL.settings.streamTuning.latencyNegotiated()}
 					</span>
 				{/if}
@@ -293,7 +293,7 @@ const focusRing =
 			</span>
 		</div>
 		<div class="relative h-10 w-full">
-			<div class="bg-background absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full"></div>
+			<div class="bg-muted absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full"></div>
 			<div
 				class="bg-primary absolute top-1/2 h-2 -translate-y-1/2 rounded-full transition-all duration-150"
 				style={`inset-inline-start: 0; width: ${latencyPercent}%;`}
@@ -437,7 +437,7 @@ const focusRing =
 					type="button"
 				>
 					{$LL.settings.streamTuning.recoveryStandard()}
-					<span class="text-muted-foreground ms-1 text-[10px]">
+					<span class="text-muted-foreground ms-1 text-micro">
 						{$LL.settings.streamTuning.recoveryStandardHint()}
 					</span>
 				</button>
@@ -456,7 +456,7 @@ const focusRing =
 					type="button"
 				>
 					{$LL.settings.streamTuning.recoveryBandwidthSaver()}
-					<span class="text-muted-foreground ms-1 text-[10px]">
+					<span class="text-muted-foreground ms-1 text-micro">
 						{$LL.settings.streamTuning.recoveryBandwidthSaverHint()}
 					</span>
 				</button>

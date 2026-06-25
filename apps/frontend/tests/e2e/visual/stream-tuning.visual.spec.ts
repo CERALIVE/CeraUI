@@ -19,6 +19,7 @@ import { expect, test } from '../fixtures/index.js';
 import { ensureAuthenticated, EVIDENCE_DIR, navigateTo } from '../helpers/index.js';
 
 const VISUAL_DIR = path.join(EVIDENCE_DIR, 'task-16-visual');
+const TASK23_DIR = path.join(EVIDENCE_DIR, 'task-23-srt-receive-profiles');
 
 async function openServerDialog(page: Page) {
 	await navigateTo(page, 'live');
@@ -104,6 +105,89 @@ test.describe('@visual Stream Tuning card', () => {
 		await card.screenshot({
 			path: path.join(VISUAL_DIR, 'task-21-summary-drift.png'),
 		});
+	});
+
+	test('task-23 — every receiver-capability state', { tag: '@visual' }, async ({ page }) => {
+		await page.setViewportSize({ width: 1280, height: 900 });
+		await page.goto('/');
+		await ensureAuthenticated(page);
+
+		const dialog = await openServerDialog(page);
+		const card = dialog.getByTestId('stream-tuning');
+
+		await dialog.getByTestId('destination-custom').click();
+		await expect(card).toHaveAttribute('data-receiver-kind', 'non-ceralive');
+		await expect(dialog.getByTestId('stream-tuning-belabox-banner')).toBeVisible();
+		await card.screenshot({ path: path.join(TASK23_DIR, 'non-ceralive.png') });
+
+		const managed = dialog.getByTestId('destination-managed');
+		await expect(managed).toBeEnabled({ timeout: 15_000 });
+		await managed.click();
+		await expect(card).toHaveAttribute('data-receiver-kind', 'ceralive');
+		await expect(dialog.getByTestId('stream-tuning-ceralive-badge')).toBeVisible();
+		await card.screenshot({ path: path.join(TASK23_DIR, 'ceralive-full-controls.png') });
+
+		await dialog.getByTestId('stream-tuning-preset-classic').click();
+		await expect(dialog.getByTestId('stream-tuning-latency-value')).toContainText('2 s');
+		await card.screenshot({ path: path.join(TASK23_DIR, 'preset-classic-active.png') });
+
+		await dialog.getByTestId('stream-tuning-latency-slider').fill('1350');
+		await expect(dialog.getByTestId('stream-tuning-preset-custom')).toHaveAttribute(
+			'aria-pressed',
+			'true',
+		);
+		await card.screenshot({ path: path.join(TASK23_DIR, 'custom-chip-active.png') });
+
+		await dialog.locator('[data-testid="stream-tuning-advanced"] > summary').click();
+		await expect(dialog.getByTestId('stream-tuning-recovery-standard')).toBeVisible();
+		await card.screenshot({ path: path.join(TASK23_DIR, 'recovery-advanced-expanded.png') });
+
+		await dialog.getByTestId('destination-custom').click();
+		await dialog.getByTestId('stream-tuning-latency-slider').fill('1500');
+		await expect(dialog.getByTestId('stream-tuning-summary')).toContainText('1.5 s delay');
+		await expect(dialog.getByTestId('stream-tuning-drift')).toBeVisible();
+		await card.screenshot({ path: path.join(TASK23_DIR, 'summary-and-drift.png') });
+	});
+
+	test('task-23 — cloud-override affordance', { tag: '@visual' }, async ({ page }) => {
+		await page.setViewportSize({ width: 1280, height: 900 });
+		await page.goto('/');
+		await ensureAuthenticated(page);
+		await navigateTo(page, 'live');
+		await page.evaluate(() => {
+			(window as Window & { __ceraProfileDecidedBy?: string }).__ceraProfileDecidedBy =
+				'operator';
+		});
+
+		const byTestId = page.getByTestId('open-server-dialog');
+		if ((await byTestId.count()) > 0) {
+			await byTestId.first().click();
+		} else {
+			await page.getByRole('button', { name: 'Edit Settings' }).first().click();
+		}
+		const dialog = page.getByRole('dialog', { name: 'Receiver Server' });
+		await expect(dialog).toBeVisible();
+		await dialog.getByTestId('destination-custom').click();
+
+		const card = dialog.getByTestId('stream-tuning');
+		await expect(dialog.getByTestId('stream-tuning-cloud-override')).toBeVisible();
+		await card.screenshot({ path: path.join(TASK23_DIR, 'cloud-override.png') });
+	});
+
+	test('task-23 — responsive widths', { tag: '@visual' }, async ({ page }) => {
+		await page.goto('/');
+		await ensureAuthenticated(page);
+
+		for (const width of [375, 768, 1280]) {
+			await page.setViewportSize({ width, height: 900 });
+			const dialog = await openServerDialog(page);
+			await dialog.getByTestId('destination-custom').click();
+			const card = dialog.getByTestId('stream-tuning');
+			await expect(card).toBeVisible();
+			await card.screenshot({ path: path.join(TASK23_DIR, `responsive-${width}.png`) });
+			await page.keyboard.press('Escape');
+			await expect(card).toHaveCount(0);
+		}
 	});
 
 	test('stream-tuning card — cloud override affordance', { tag: '@visual' }, async ({ page }) => {
