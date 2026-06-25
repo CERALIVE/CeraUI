@@ -13,7 +13,10 @@ import {
 	countRelayServersForProvider,
 	type Destination,
 	deriveDestination,
+	deriveReceiverCaps,
+	deriveReceiverProfileKind,
 	deriveServerReadiness,
+	deriveStreamTuningExperience,
 	findActiveSlot,
 	groupRelayServersByProvider,
 	isRelayServerStaleForProvider,
@@ -1014,5 +1017,141 @@ describe("overrideClearsManagedBinding — override-drops-binding warning (T18)"
 				relayServer: "eu",
 			}),
 		).toBe(false);
+	});
+});
+
+describe("deriveReceiverProfileKind (Task 16)", () => {
+	it("maps a managed CeraLive cloud to the ceralive kind", () => {
+		expect(deriveReceiverProfileKind("ceralive")).toBe("ceralive");
+	});
+
+	it("maps belabox and custom to their own kinds", () => {
+		expect(deriveReceiverProfileKind("belabox")).toBe("belabox");
+		expect(deriveReceiverProfileKind("custom")).toBe("custom");
+	});
+
+	it("maps an absent/unrecognised provider to unknown", () => {
+		expect(deriveReceiverProfileKind(undefined)).toBe("unknown");
+		expect(deriveReceiverProfileKind("acme-cloud")).toBe("unknown");
+	});
+});
+
+describe("deriveReceiverCaps (Task 16)", () => {
+	it("projects the engine snapshot for a CeraLive receiver (full set + FEC)", () => {
+		const caps = deriveReceiverCaps("ceralive", {
+			supportedProfiles: [
+				"balanced",
+				"low-latency",
+				"resilient",
+				"classic",
+				"low-latency-fec",
+			],
+			fecCapable: true,
+			latencyRange: { min: 100, default: 1500, max: 5000 },
+		});
+		expect(caps).toEqual({
+			kind: "ceralive",
+			supportsFec: true,
+			supportedProfiles: [
+				"balanced",
+				"low-latency",
+				"resilient",
+				"classic",
+				"low-latency-fec",
+			],
+			latencyRange: { min: 100, default: 1500, max: 5000 },
+			recoveryMode: "reorderfreeze",
+		});
+	});
+
+	it("keeps FEC off for a CeraLive receiver on a stock libsrt build (classic-only)", () => {
+		const caps = deriveReceiverCaps("ceralive", {
+			supportedProfiles: ["classic"],
+			fecCapable: false,
+			latencyRange: { min: 100, default: 1500, max: 2000 },
+		});
+		expect(caps.supportsFec).toBe(false);
+		expect(caps.supportedProfiles).toEqual(["classic"]);
+		expect(caps.recoveryMode).toBe("stock");
+	});
+
+	it("falls back to the CeraLive latency window when the engine advertised none", () => {
+		const caps = deriveReceiverCaps("ceralive", undefined);
+		expect(caps.latencyRange).toEqual({ min: 100, default: 1500, max: 5000 });
+		expect(caps.supportedProfiles).toEqual(["classic"]);
+	});
+
+	it("never trusts forged caps for a non-CeraLive receiver — clamps to Classic baseline", () => {
+		const caps = deriveReceiverCaps("custom", {
+			supportedProfiles: ["balanced", "low-latency-fec"],
+			fecCapable: true,
+			latencyRange: { min: 100, default: 1500, max: 9000 },
+		});
+		expect(caps).toEqual({
+			kind: "custom",
+			supportsFec: false,
+			supportedProfiles: ["classic"],
+			latencyRange: { min: 100, default: 1500, max: 2000 },
+			recoveryMode: "stock",
+		});
+	});
+});
+
+describe("deriveStreamTuningExperience (Task 16)", () => {
+	it("offers full controls for a CeraLive receiver with FEC", () => {
+		const experience = deriveStreamTuningExperience({
+			kind: "ceralive",
+			supportsFec: true,
+			supportedProfiles: ["balanced", "classic", "low-latency-fec"],
+			latencyRange: { min: 100, default: 1500, max: 5000 },
+			recoveryMode: "reorderfreeze",
+		});
+		expect(experience.isCeraLiveReceiver).toBe(true);
+		expect(experience.latencyEnabled).toBe(true);
+		expect(experience.fecEnabled).toBe(true);
+		expect(experience.fecDisabledReasonKey).toBeUndefined();
+		expect(experience.recoveryModeEnabled).toBe(true);
+		expect(experience.presetsEnabled).toBe(true);
+		expect(experience.showBelaboxBanner).toBe(false);
+		expect(experience.defaultProfile).toBe("balanced");
+	});
+
+	it("disables FEC with a reason for a CeraLive receiver whose build lacks FEC", () => {
+		const experience = deriveStreamTuningExperience({
+			kind: "ceralive",
+			supportsFec: false,
+			supportedProfiles: ["balanced", "classic"],
+			latencyRange: { min: 100, default: 1500, max: 5000 },
+			recoveryMode: "reorderfreeze",
+		});
+		expect(experience.isCeraLiveReceiver).toBe(true);
+		expect(experience.fecEnabled).toBe(false);
+		expect(experience.fecDisabledReasonKey).toBe(
+			"settings.streamTuning.reasonFecUnsupported",
+		);
+		expect(experience.recoveryModeEnabled).toBe(true);
+		expect(experience.presetsEnabled).toBe(true);
+		expect(experience.showBelaboxBanner).toBe(false);
+	});
+
+	it("offers latency only + the BELABOX banner for a non-CeraLive receiver", () => {
+		const experience = deriveStreamTuningExperience({
+			kind: "belabox",
+			supportsFec: false,
+			supportedProfiles: ["classic"],
+			latencyRange: { min: 100, default: 1500, max: 2000 },
+			recoveryMode: "stock",
+		});
+		expect(experience.isCeraLiveReceiver).toBe(false);
+		expect(experience.latencyEnabled).toBe(true);
+		expect(experience.fecEnabled).toBe(false);
+		expect(experience.recoveryModeEnabled).toBe(false);
+		expect(experience.presetsEnabled).toBe(false);
+		expect(experience.showBelaboxBanner).toBe(true);
+		expect(experience.defaultProfile).toBe("classic");
+		const reason = "settings.streamTuning.reasonNonCeraLive";
+		expect(experience.fecDisabledReasonKey).toBe(reason);
+		expect(experience.recoveryModeDisabledReasonKey).toBe(reason);
+		expect(experience.presetsDisabledReasonKey).toBe(reason);
 	});
 });

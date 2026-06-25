@@ -263,6 +263,28 @@ const fr = {
 		transportAdvanced: "Avancé",
 		transportKindHint:
 			"Comment votre flux atteint le récepteur. SRTLA agrège plusieurs liens réseau ; RIST et SRT utilisent un seul lien.",
+		streamTuning: {
+			title: "Réglage du flux",
+			hint: "Réglez la façon dont votre flux est délivré. Un récepteur CeraLive débloque les profils, le FEC et le réglage de récupération ; les autres récepteurs utilisent les valeurs compatibles BELABOX.",
+			ceraliveReceiver: "Récepteur CeraLive",
+			latency: "Latence",
+			presets: "Profils prédéfinis",
+			fec: "Correction d'erreurs sans voie de retour",
+			recoveryMode: "Mode de récupération",
+			belaboxBannerTitle: "Standard (valeurs compatibles BELABOX)",
+			belaboxBannerBody:
+				"Ce récepteur n'est pas un récepteur CeraLive, seule la latence est donc réglable. Le réglage avancé nécessite un récepteur CeraLive.",
+			reasonNonCeraLive: "Disponible uniquement avec un récepteur CeraLive.",
+			reasonFecUnsupported:
+				"La version de libsrt de ce récepteur CeraLive ne prend pas en charge le FEC.",
+			profileNames: {
+				balanced: "Équilibré",
+				lowLatency: "Faible latence",
+				resilient: "Résilient",
+				classic: "Classique",
+				lowLatencyFec: "Faible latence + FEC",
+			},
+		},
 		deviceStats: {
 			title: "État de l'appareil",
 			description: "Télémétrie matérielle en direct de cet appareil.",

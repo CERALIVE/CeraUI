@@ -659,6 +659,28 @@ const en = {
 		transportAdvanced: "Advanced",
 		transportKindHint:
 			"How your stream reaches the receiver. SRTLA bonds multiple network links; RIST and SRT use a single link.",
+		streamTuning: {
+			title: "Stream tuning",
+			hint: "Tune how your stream is delivered. A CeraLive receiver unlocks profiles, FEC, and recovery tuning; other receivers use BELABOX-compatible defaults.",
+			ceraliveReceiver: "CeraLive receiver",
+			latency: "Latency",
+			presets: "Profile presets",
+			fec: "Forward error correction",
+			recoveryMode: "Recovery mode",
+			belaboxBannerTitle: "Standard (BELABOX-compatible defaults)",
+			belaboxBannerBody:
+				"This receiver isn't a CeraLive receiver, so only latency is adjustable. Advanced tuning needs a CeraLive receiver.",
+			reasonNonCeraLive: "Available only with a CeraLive receiver.",
+			reasonFecUnsupported:
+				"This CeraLive receiver's libsrt build doesn't support FEC.",
+			profileNames: {
+				balanced: "Balanced",
+				lowLatency: "Low latency",
+				resilient: "Resilient",
+				classic: "Classic",
+				lowLatencyFec: "Low latency + FEC",
+			},
+		},
 		appearance: {
 			title: "Appearance",
 			language: "Language",

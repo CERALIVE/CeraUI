@@ -49,6 +49,7 @@ import {
 	reduceValidateResult,
 } from '$lib/components/streaming/relay-validation';
 import {
+	getCapabilities,
 	getConfig,
 	getIsStreaming,
 	getManagedIngestAccounts,
@@ -69,6 +70,9 @@ import {
 	buildManagedSlotConfig,
 	buildServerSetConfig,
 	deriveDestination,
+	deriveReceiverCaps,
+	deriveReceiverProfileKind,
+	deriveStreamTuningExperience,
 	isRelayServerStaleForProvider,
 	overrideClearsManagedBinding,
 	resolveActiveManagedProvider,
@@ -78,6 +82,7 @@ import CustomEndpointForm from './server/CustomEndpointForm.svelte';
 import DestinationSection from './server/DestinationSection.svelte';
 import RelayServerSelector from './server/RelayServerSelector.svelte';
 import ServerIngestSlots from './server/ServerIngestSlots.svelte';
+import StreamTuningSection from './server/StreamTuningSection.svelte';
 import TransportBadge from './server/TransportBadge.svelte';
 
 interface Props {
@@ -215,6 +220,25 @@ const relayServerProtocols = $derived(
 // Receiver kind = transport × destination (T5). For a managed server the
 // effective transport is constrained to what that server actually advertises.
 const kind = $derived(resolveReceiverKind({ protocol, destination, server: relayServerInfo }));
+
+// Stream-tuning (Task 16): a managed CeraLive cloud is the only proven CeraLive
+// receiver — a custom/self-hosted endpoint is conservatively non-CeraLive. The
+// capability descriptor projects the engine's advertised profiles/FEC/latency
+// onto the receiver kind; the experience decides which tuning controls the card
+// offers and the disabled reason for the rest.
+const receiverProfileKind = $derived(
+	destination === 'managed' ? deriveReceiverProfileKind(config?.remote_provider) : 'unknown',
+);
+const engineCaps = $derived(getCapabilities());
+const streamTuning = $derived(
+	deriveStreamTuningExperience(
+		deriveReceiverCaps(receiverProfileKind, {
+			supportedProfiles: engineCaps?.supported_profiles,
+			fecCapable: engineCaps?.fec_capable,
+			latencyRange: engineCaps?.latency_range,
+		}),
+	),
+);
 
 // Seed the persisted transport from the selected managed server's advertised set
 // (T10): SRTLA when offered, else its first transport. Now fires for a SINGLE
@@ -520,6 +544,11 @@ async function handleSave() {
 			onProtocol={(value) => (draft.relay_protocol = value)}
 			{protocol}
 		/>
+
+		<!-- Stream Tuning (Task 16): receiver-capability-gated profile controls.
+		     CeraLive receiver → full controls; non-CeraLive → latency only +
+		     disabled-with-reason advanced controls + BELABOX-compatible banner. -->
+		<StreamTuningSection experience={streamTuning} {isStreaming} latencyMs={latency} />
 
 		<!-- SRT latency: bounds come from streamingConstraints.srtLatency -->
 		<div class="space-y-3">

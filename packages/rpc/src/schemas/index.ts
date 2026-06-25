@@ -15,6 +15,7 @@ export * from './notifications.schema';
 export * from './pairing.schema';
 export * from './relay.schema';
 export * from './status.schema';
+export * from './stream-profile.schema';
 export * from './streaming.schema';
 export * from './system.schema';
 export * from './wifi.schema';

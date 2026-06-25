@@ -221,6 +221,21 @@ export const capabilitiesMessageSchema = z.object({
 	// the consumer treats it as false (back-compat). Only the engine advertises
 	// this; the backend never synthesizes it.
 	audio_live_switch: z.boolean().optional(),
+	// SRT receive-profile capability advertised by the engine (cerastream Todo
+	// 10). All ADDITIVE + OPTIONAL — absent on legacy snapshots, in which case
+	// the Stream Tuning card treats the receiver as the Classic-only
+	// (BELABOX-compatible) baseline. Field names are snake_case to match the
+	// engine wire contract; the values are forwarded verbatim by the backend.
+	supported_profiles: z.array(z.string()).optional(),
+	profile_catalog_version: z.string().optional(),
+	fec_capable: z.boolean().optional(),
+	latency_range: z
+		.object({
+			min: z.number(),
+			default: z.number(),
+			max: z.number(),
+		})
+		.optional(),
 });
 export type CapabilitiesMessage = z.infer<typeof capabilitiesMessageSchema>;
 

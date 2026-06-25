@@ -22,15 +22,22 @@
  */
 
 import {
+	DEFAULT_NON_CERALIVE_PROFILE,
 	deriveReceiverKind,
+	type LatencyRange,
 	RELAY_PROVIDER_KINDS,
+	type ReceiverCaps,
 	type ReceiverKind,
+	type ReceiverProfileKind,
 	type RelayProtocol,
 	type RelayProviderKind,
 	type RelayServer,
 	relayProtocolSchema,
 	type StreamingConfigInput,
+	type StreamProfilePreset,
+	type StreamRecoveryMode,
 	serverSupportedProtocols,
+	streamProfilePresetSchema,
 } from "@ceraui/rpc/schemas";
 import { parsePort } from "$lib/components/streaming/ValidationAdapter";
 
@@ -810,4 +817,178 @@ export function buildManagedSlotConfig(
 		srt_streamid: account.key,
 		selected_ingest_endpoint: account.endpointId,
 	});
+}
+
+// =============================================================================
+// Stream-tuning (SRT receive profiles) — Task 16
+// =============================================================================
+
+// The conservative SRT latency window every receiver can honour (ms). A
+// non-CeraLive receiver is held to the BELABOX-compatible safe ceiling
+// regardless of any caps it forges (mirrors the cloud descriptor's
+// SAFE_LATENCY_MAX_MS = 2000).
+const SAFE_LATENCY_RANGE: LatencyRange = { min: 100, default: 1500, max: 2000 };
+
+// The latency window a CeraLive receiver gets when the engine has not yet
+// advertised its own range (mirrors the cloud descriptor's L1_LATENCY_MAX_MS).
+const CERALIVE_FALLBACK_LATENCY_RANGE: LatencyRange = {
+	min: 100,
+	default: 1500,
+	max: 5000,
+};
+
+// i18n dot-path keys for the disabled-with-reason tooltips. The consumer
+// resolves them through the `$LL` proxy — this module stays `$LL`-free.
+const REASON_NON_CERALIVE = "settings.streamTuning.reasonNonCeraLive";
+const REASON_FEC_UNSUPPORTED = "settings.streamTuning.reasonFecUnsupported";
+
+/**
+ * Map a configured relay/remote provider to the Stream Tuning receiver kind.
+ * Only a managed CeraLive cloud is treated as a CeraLive receiver; every other
+ * provider (BELABOX, a custom/self-hosted receiver, or none) is conservatively
+ * non-CeraLive, so the card never assumes capabilities for an unproven receiver.
+ */
+export function deriveReceiverProfileKind(
+	provider: string | undefined,
+): ReceiverProfileKind {
+	if (provider === "ceralive") return "ceralive";
+	if (provider === "belabox") return "belabox";
+	if (provider === "custom") return "custom";
+	return "unknown";
+}
+
+/** The engine-advertised profile facts {@link deriveReceiverCaps} projects from. */
+export interface ReceiverCapsSource {
+	/** `supported_profiles` from the capability snapshot (cerastream Todo 10). */
+	supportedProfiles?: readonly string[] | undefined;
+	/** `fec_capable` from the capability snapshot. */
+	fecCapable?: boolean | undefined;
+	/** `latency_range` from the capability snapshot. */
+	latencyRange?: LatencyRange | undefined;
+}
+
+/**
+ * Build the {@link ReceiverCaps} descriptor that drives the card from the
+ * receiver kind + the engine capability snapshot.
+ *
+ * A CeraLive receiver trusts the engine: its advertised profiles, FEC flag, and
+ * latency window flow through (with sane fallbacks when the snapshot is absent).
+ * Any other receiver is clamped to the BELABOX-compatible Classic baseline —
+ * latency-only, no FEC — and never inherits forged engine caps.
+ */
+export function deriveReceiverCaps(
+	kind: ReceiverProfileKind,
+	source: ReceiverCapsSource | undefined,
+): ReceiverCaps {
+	if (kind !== "ceralive") {
+		return {
+			kind,
+			supportsFec: false,
+			supportedProfiles: [DEFAULT_NON_CERALIVE_PROFILE],
+			latencyRange: SAFE_LATENCY_RANGE,
+			recoveryMode: "stock",
+		};
+	}
+
+	const advertised: StreamProfilePreset[] = [];
+	for (const profile of source?.supportedProfiles ?? []) {
+		const parsed = streamProfilePresetSchema.safeParse(profile);
+		if (parsed.success) advertised.push(parsed.data);
+	}
+	const supportedProfiles: StreamProfilePreset[] =
+		advertised.length > 0 ? advertised : [DEFAULT_NON_CERALIVE_PROFILE];
+	const supportsFec =
+		source?.fecCapable === true &&
+		supportedProfiles.includes("low-latency-fec");
+	const hasFullProfileSet = supportedProfiles.length > 1;
+	const recoveryMode: StreamRecoveryMode =
+		supportsFec || hasFullProfileSet ? "reorderfreeze" : "stock";
+
+	return {
+		kind,
+		supportsFec,
+		supportedProfiles,
+		latencyRange: source?.latencyRange ?? CERALIVE_FALLBACK_LATENCY_RANGE,
+		recoveryMode,
+	};
+}
+
+/**
+ * The resolved control state for the Stream Tuning card. Latency is always
+ * available; FEC, recovery mode, and the preset chips are gated. Each gated
+ * control carries the i18n REASON key for its disabled tooltip when it is off,
+ * so the card shows WHY a control is unavailable — never hides it.
+ */
+export interface StreamTuningExperience {
+	/** True for a CeraLive receiver — the full-controls branch. */
+	isCeraLiveReceiver: boolean;
+	/** Latency is honoured by every receiver, so its control is always enabled. */
+	latencyEnabled: boolean;
+	/** The latency slider window. */
+	latencyRange: LatencyRange;
+	/** FEC toggle availability. */
+	fecEnabled: boolean;
+	/** Disabled-tooltip reason key for FEC, present only when `fecEnabled` is false. */
+	fecDisabledReasonKey?: string;
+	/** Recovery-mode control availability (CeraLive only). */
+	recoveryModeEnabled: boolean;
+	recoveryModeDisabledReasonKey?: string;
+	/** Profile-preset chips availability (CeraLive only). */
+	presetsEnabled: boolean;
+	presetsDisabledReasonKey?: string;
+	/** Profiles offered as preset chips (Classic-only for non-CeraLive). */
+	availableProfiles: readonly StreamProfilePreset[];
+	/** The default/seed profile (Classic for non-CeraLive). */
+	defaultProfile: StreamProfilePreset;
+	/** Show the "Standard (BELABOX-compatible defaults)" banner. */
+	showBelaboxBanner: boolean;
+}
+
+/**
+ * Derive the Stream Tuning card's control state from the receiver capabilities.
+ *
+ * Two top-level branches:
+ * - CeraLive receiver → full controls; FEC is enabled only when the receiver's
+ *   libsrt build advertises it (else disabled-with-reason, never hidden).
+ * - any other receiver → latency-only; FEC / recovery / presets are
+ *   disabled-with-reason and the BELABOX-compatible banner is shown.
+ */
+export function deriveStreamTuningExperience(
+	caps: ReceiverCaps,
+): StreamTuningExperience {
+	if (caps.kind !== "ceralive") {
+		return {
+			isCeraLiveReceiver: false,
+			latencyEnabled: true,
+			latencyRange: caps.latencyRange,
+			fecEnabled: false,
+			fecDisabledReasonKey: REASON_NON_CERALIVE,
+			recoveryModeEnabled: false,
+			recoveryModeDisabledReasonKey: REASON_NON_CERALIVE,
+			presetsEnabled: false,
+			presetsDisabledReasonKey: REASON_NON_CERALIVE,
+			availableProfiles: caps.supportedProfiles,
+			defaultProfile: DEFAULT_NON_CERALIVE_PROFILE,
+			showBelaboxBanner: true,
+		};
+	}
+
+	const defaultProfile = caps.supportedProfiles.includes("balanced")
+		? "balanced"
+		: (caps.supportedProfiles[0] ?? DEFAULT_NON_CERALIVE_PROFILE);
+
+	return {
+		isCeraLiveReceiver: true,
+		latencyEnabled: true,
+		latencyRange: caps.latencyRange,
+		fecEnabled: caps.supportsFec,
+		...(caps.supportsFec
+			? {}
+			: { fecDisabledReasonKey: REASON_FEC_UNSUPPORTED }),
+		recoveryModeEnabled: true,
+		presetsEnabled: true,
+		availableProfiles: caps.supportedProfiles,
+		defaultProfile,
+		showBelaboxBanner: false,
+	};
 }

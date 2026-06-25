@@ -107,6 +107,28 @@ const hi = {
 		transportAdvanced: "उन्नत",
 		transportKindHint:
 			"आपकी स्ट्रीम रिसीवर तक कैसे पहुँचती है। SRTLA कई नेटवर्क लिंक को जोड़ता है; RIST और SRT एकल लिंक का उपयोग करते हैं।",
+		streamTuning: {
+			title: "स्ट्रीम ट्यूनिंग",
+			hint: "अपनी स्ट्रीम के वितरण के तरीके को समायोजित करें। एक CeraLive रिसीवर प्रोफ़ाइल, FEC और रिकवरी ट्यूनिंग को अनलॉक करता है; अन्य रिसीवर BELABOX-संगत डिफ़ॉल्ट का उपयोग करते हैं।",
+			ceraliveReceiver: "CeraLive रिसीवर",
+			latency: "विलंबता",
+			presets: "प्रोफ़ाइल प्रीसेट",
+			fec: "फ़ॉरवर्ड एरर करेक्शन",
+			recoveryMode: "रिकवरी मोड",
+			belaboxBannerTitle: "मानक (BELABOX-संगत डिफ़ॉल्ट)",
+			belaboxBannerBody:
+				"यह रिसीवर CeraLive रिसीवर नहीं है, इसलिए केवल विलंबता समायोज्य है। उन्नत ट्यूनिंग के लिए CeraLive रिसीवर आवश्यक है।",
+			reasonNonCeraLive: "केवल CeraLive रिसीवर के साथ उपलब्ध।",
+			reasonFecUnsupported:
+				"इस CeraLive रिसीवर का libsrt बिल्ड FEC का समर्थन नहीं करता।",
+			profileNames: {
+				balanced: "संतुलित",
+				lowLatency: "कम विलंबता",
+				resilient: "लचीला",
+				classic: "क्लासिक",
+				lowLatencyFec: "कम विलंबता + FEC",
+			},
+		},
 		deviceStats: {
 			title: "डिवाइस आँकड़े",
 			description: "इस डिवाइस से लाइव हार्डवेयर टेलीमेट्री।",

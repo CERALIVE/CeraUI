@@ -662,6 +662,28 @@ const de = {
 		transportAdvanced: "Erweitert",
 		transportKindHint:
 			"Wie dein Stream den Empfänger erreicht. SRTLA bündelt mehrere Netzwerkverbindungen; RIST und SRT nutzen eine einzelne Verbindung.",
+		streamTuning: {
+			title: "Stream-Feinabstimmung",
+			hint: "Stelle ein, wie dein Stream zugestellt wird. Ein CeraLive-Empfänger schaltet Profile, FEC und Wiederherstellungs-Feinabstimmung frei; andere Empfänger nutzen die BELABOX-kompatiblen Standardwerte.",
+			ceraliveReceiver: "CeraLive-Empfänger",
+			latency: "Latenz",
+			presets: "Profilvorlagen",
+			fec: "Vorwärtsfehlerkorrektur",
+			recoveryMode: "Wiederherstellungsmodus",
+			belaboxBannerTitle: "Standard (BELABOX-kompatible Werte)",
+			belaboxBannerBody:
+				"Dieser Empfänger ist kein CeraLive-Empfänger, daher lässt sich nur die Latenz anpassen. Die erweiterte Feinabstimmung erfordert einen CeraLive-Empfänger.",
+			reasonNonCeraLive: "Nur mit einem CeraLive-Empfänger verfügbar.",
+			reasonFecUnsupported:
+				"Der libsrt-Build dieses CeraLive-Empfängers unterstützt kein FEC.",
+			profileNames: {
+				balanced: "Ausgewogen",
+				lowLatency: "Niedrige Latenz",
+				resilient: "Robust",
+				classic: "Klassisch",
+				lowLatencyFec: "Niedrige Latenz + FEC",
+			},
+		},
 		deviceStats: {
 			title: "Gerätestatistik",
 			description: "Live-Hardware-Telemetrie dieses Geräts.",

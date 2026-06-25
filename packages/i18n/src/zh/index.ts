@@ -105,6 +105,27 @@ const zh = {
 		transportAdvanced: "高级",
 		transportKindHint:
 			"您的推流如何到达接收端。SRTLA 聚合多条网络链路；RIST 和 SRT 使用单条链路。",
+		streamTuning: {
+			title: "推流调优",
+			hint: "调整推流的传输方式。CeraLive 接收端可解锁配置档、FEC 和恢复调优；其他接收端使用与 BELABOX 兼容的默认值。",
+			ceraliveReceiver: "CeraLive 接收端",
+			latency: "延迟",
+			presets: "配置档预设",
+			fec: "前向纠错",
+			recoveryMode: "恢复模式",
+			belaboxBannerTitle: "标准（与 BELABOX 兼容的默认值）",
+			belaboxBannerBody:
+				"此接收端不是 CeraLive 接收端，因此只能调整延迟。高级调优需要 CeraLive 接收端。",
+			reasonNonCeraLive: "仅 CeraLive 接收端可用。",
+			reasonFecUnsupported: "此 CeraLive 接收端的 libsrt 版本不支持 FEC。",
+			profileNames: {
+				balanced: "均衡",
+				lowLatency: "低延迟",
+				resilient: "高韧性",
+				classic: "经典",
+				lowLatencyFec: "低延迟 + FEC",
+			},
+		},
 		deviceStats: {
 			title: "设备统计",
 			description: "本设备的实时硬件遥测。",

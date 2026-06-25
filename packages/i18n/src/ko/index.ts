@@ -108,6 +108,28 @@ const ko = {
 		transportAdvanced: "고급",
 		transportKindHint:
 			"스트림이 수신기에 도달하는 방식입니다. SRTLA는 여러 네트워크 링크를 묶고, RIST와 SRT는 단일 링크를 사용합니다.",
+		streamTuning: {
+			title: "스트림 튜닝",
+			hint: "스트림 전달 방식을 조정합니다. CeraLive 수신기는 프로필, FEC, 복구 튜닝을 사용할 수 있고, 다른 수신기는 BELABOX 호환 기본값을 사용합니다.",
+			ceraliveReceiver: "CeraLive 수신기",
+			latency: "지연 시간",
+			presets: "프로필 프리셋",
+			fec: "전방 오류 정정",
+			recoveryMode: "복구 모드",
+			belaboxBannerTitle: "표준(BELABOX 호환 기본값)",
+			belaboxBannerBody:
+				"이 수신기는 CeraLive 수신기가 아니므로 지연 시간만 조정할 수 있습니다. 고급 튜닝에는 CeraLive 수신기가 필요합니다.",
+			reasonNonCeraLive: "CeraLive 수신기에서만 사용할 수 있습니다.",
+			reasonFecUnsupported:
+				"이 CeraLive 수신기의 libsrt 빌드는 FEC를 지원하지 않습니다.",
+			profileNames: {
+				balanced: "균형",
+				lowLatency: "저지연",
+				resilient: "복원력",
+				classic: "클래식",
+				lowLatencyFec: "저지연 + FEC",
+			},
+		},
 		deviceStats: {
 			title: "장치 통계",
 			description: "이 장치의 실시간 하드웨어 텔레메트리.",

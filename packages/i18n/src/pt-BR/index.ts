@@ -263,6 +263,28 @@ const ptBR = {
 		transportAdvanced: "Avançado",
 		transportKindHint:
 			"Como sua transmissão chega ao receptor. O SRTLA agrega vários links de rede; RIST e SRT usam um único link.",
+		streamTuning: {
+			title: "Ajuste da transmissão",
+			hint: "Ajuste como sua transmissão é entregue. Um receptor CeraLive libera perfis, FEC e ajuste de recuperação; outros receptores usam os padrões compatíveis com BELABOX.",
+			ceraliveReceiver: "Receptor CeraLive",
+			latency: "Latência",
+			presets: "Perfis predefinidos",
+			fec: "Correção de erros para frente",
+			recoveryMode: "Modo de recuperação",
+			belaboxBannerTitle: "Padrão (valores compatíveis com BELABOX)",
+			belaboxBannerBody:
+				"Este receptor não é um receptor CeraLive, então apenas a latência é ajustável. O ajuste avançado requer um receptor CeraLive.",
+			reasonNonCeraLive: "Disponível apenas com um receptor CeraLive.",
+			reasonFecUnsupported:
+				"A build do libsrt deste receptor CeraLive não oferece suporte a FEC.",
+			profileNames: {
+				balanced: "Equilibrado",
+				lowLatency: "Baixa latência",
+				resilient: "Resiliente",
+				classic: "Clássico",
+				lowLatencyFec: "Baixa latência + FEC",
+			},
+		},
 		deviceStats: {
 			title: "Status do dispositivo",
 			description: "Telemetria de hardware ao vivo deste dispositivo.",

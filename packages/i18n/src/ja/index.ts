@@ -111,6 +111,28 @@ const ja = {
 		transportAdvanced: "詳細設定",
 		transportKindHint:
 			"ストリームがレシーバーに届く方法です。SRTLA は複数のネットワーク回線を束ね、RIST と SRT は単一回線を使用します。",
+		streamTuning: {
+			title: "ストリーム調整",
+			hint: "ストリームの配信方法を調整します。CeraLive レシーバーではプロファイル、FEC、復元調整が利用できます。その他のレシーバーは BELABOX 互換の既定値を使用します。",
+			ceraliveReceiver: "CeraLive レシーバー",
+			latency: "レイテンシ",
+			presets: "プロファイルプリセット",
+			fec: "前方誤り訂正",
+			recoveryMode: "復元モード",
+			belaboxBannerTitle: "標準（BELABOX 互換の既定値）",
+			belaboxBannerBody:
+				"このレシーバーは CeraLive レシーバーではないため、調整できるのはレイテンシのみです。高度な調整には CeraLive レシーバーが必要です。",
+			reasonNonCeraLive: "CeraLive レシーバーでのみ利用できます。",
+			reasonFecUnsupported:
+				"この CeraLive レシーバーの libsrt ビルドは FEC に対応していません。",
+			profileNames: {
+				balanced: "バランス",
+				lowLatency: "低レイテンシ",
+				resilient: "高耐性",
+				classic: "クラシック",
+				lowLatencyFec: "低レイテンシ + FEC",
+			},
+		},
 		deviceStats: {
 			title: "デバイス統計",
 			description: "このデバイスのライブハードウェアテレメトリ。",

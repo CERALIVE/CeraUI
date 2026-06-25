@@ -245,6 +245,27 @@ const ar = {
 		transportAdvanced: "متقدّم",
 		transportKindHint:
 			"كيفية وصول بثّك إلى المستقبِل. يجمع SRTLA عدّة روابط شبكة؛ بينما يستخدم RIST وSRT رابطًا واحدًا.",
+		streamTuning: {
+			title: "ضبط البث",
+			hint: "اضبط طريقة تسليم بثّك. يتيح مستقبِل CeraLive ملفّات التعريف وFEC وضبط الاستعادة؛ بينما تستخدم المستقبِلات الأخرى الإعدادات المتوافقة مع BELABOX.",
+			ceraliveReceiver: "مستقبِل CeraLive",
+			latency: "زمن الوصول",
+			presets: "إعدادات ملفّات التعريف",
+			fec: "تصحيح الأخطاء الأمامي",
+			recoveryMode: "وضع الاستعادة",
+			belaboxBannerTitle: "قياسي (إعدادات متوافقة مع BELABOX)",
+			belaboxBannerBody:
+				"هذا المستقبِل ليس مستقبِل CeraLive، لذا يمكن ضبط زمن الوصول فقط. يتطلّب الضبط المتقدّم مستقبِل CeraLive.",
+			reasonNonCeraLive: "متاح فقط مع مستقبِل CeraLive.",
+			reasonFecUnsupported: "إصدار libsrt لهذا المستقبِل CeraLive لا يدعم FEC.",
+			profileNames: {
+				balanced: "متوازن",
+				lowLatency: "زمن وصول منخفض",
+				resilient: "مرن",
+				classic: "كلاسيكي",
+				lowLatencyFec: "زمن وصول منخفض + FEC",
+			},
+		},
 		deviceStats: {
 			title: "إحصاءات الجهاز",
 			description: "قياس مباشر لأجهزة هذا الجهاز.",
