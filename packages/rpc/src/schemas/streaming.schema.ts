@@ -81,6 +81,12 @@ export const streamingConfigInputSchema = z.object({
 	// first). Governs operator-initiated switching only — the engine's
 	// auto-failover is sticky and does NOT consult this list (Task 11).
 	source_preference: z.array(z.string()).optional(),
+	// SRT receive-profile tuning (Tasks 18/19). FEC is device-side
+	// SRTO_PACKETFILTER, only ever enabled against a FEC-capable CeraLive
+	// receiver; recovery preference routes to the L1 (standard) vs L2/Classic
+	// (bandwidth-saver) receiver listener. Both additive-optional.
+	fec_enabled: z.boolean().optional(),
+	recovery_mode: streamRecoveryPreferenceSchema.optional(),
 });
 export type StreamingConfigInput = z.infer<typeof streamingConfigInputSchema>;
 
@@ -260,6 +266,7 @@ import {
 	providerSelectionSchema,
 } from './cloud-provider.schema';
 import { relayProtocolSchema } from './relay.schema';
+import { streamRecoveryPreferenceSchema } from './stream-profile.schema';
 
 // Config message schema (what the server sends to clients)
 export const configMessageSchema = z.object({
@@ -291,6 +298,10 @@ export const configMessageSchema = z.object({
 	// Operator-ordered video-source preference (input_id list, most-preferred
 	// first) — echoed back so the UI can render the saved order (Task 11).
 	source_preference: z.array(z.string()).optional(),
+	// SRT receive-profile tuning, echoed back so the card reflects the saved
+	// values on reload (Tasks 18/19).
+	fec_enabled: z.boolean().optional(),
+	recovery_mode: streamRecoveryPreferenceSchema.optional(),
 });
 export type ConfigMessage = z.infer<typeof configMessageSchema>;
 

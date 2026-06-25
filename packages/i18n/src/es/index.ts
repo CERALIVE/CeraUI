@@ -676,13 +676,25 @@ const es = {
 			hint: "Ajusta cómo se entrega tu transmisión. Un receptor CeraLive habilita perfiles, FEC y ajuste de recuperación; otros receptores usan los valores compatibles con BELABOX.",
 			ceraliveReceiver: "Receptor CeraLive",
 			latency: "Latencia",
+			latencyNegotiated: "Negociada",
 			presets: "Perfiles predefinidos",
 			fec: "Corrección de errores hacia adelante",
+			fecHelper:
+				"Añade redundancia para que el receptor reconstruya los paquetes perdidos. Usa más ancho de banda y añade algo de latencia \u2014 mejor en conexiones con pérdidas.",
 			recoveryMode: "Modo de recuperación",
+			advanced: "Avanzado",
+			recovery: "Recuperación",
+			recoveryStandard: "Estándar",
+			recoveryStandardHint: "Recomendado",
+			recoveryBandwidthSaver: "Ahorro de ancho de banda",
+			recoveryBandwidthSaverHint: "Experto",
+			recoveryHelper:
+				"Estándar mantiene la transmisión fluida y fiable. El ahorro de ancho de banda reduce el tráfico de recuperación para usar menos datos en conexiones limitadas.",
 			belaboxBannerTitle: "Estándar (valores compatibles con BELABOX)",
 			belaboxBannerBody:
 				"Este receptor no es un receptor CeraLive, por lo que solo se puede ajustar la latencia. El ajuste avanzado requiere un receptor CeraLive.",
 			reasonNonCeraLive: "Disponible solo con un receptor CeraLive.",
+			reasonReceiverManaged: "Gestionado por el receptor.",
 			reasonFecUnsupported:
 				"La compilación de libsrt de este receptor CeraLive no admite FEC.",
 			profileNames: {

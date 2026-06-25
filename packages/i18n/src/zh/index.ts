@@ -110,13 +110,25 @@ const zh = {
 			hint: "调整推流的传输方式。CeraLive 接收端可解锁配置档、FEC 和恢复调优；其他接收端使用与 BELABOX 兼容的默认值。",
 			ceraliveReceiver: "CeraLive 接收端",
 			latency: "延迟",
+			latencyNegotiated: "已协商",
 			presets: "配置档预设",
 			fec: "前向纠错",
+			fecHelper:
+				"添加冗余，使接收端能够重建丢失的数据包。会占用额外带宽并略微增加延迟 \u2014 最适合丢包链路。",
 			recoveryMode: "恢复模式",
+			advanced: "高级",
+			recovery: "恢复",
+			recoveryStandard: "标准",
+			recoveryStandardHint: "推荐",
+			recoveryBandwidthSaver: "节省带宽",
+			recoveryBandwidthSaverHint: "专家",
+			recoveryHelper:
+				"标准模式保持推流流畅可靠。节省带宽会削减恢复流量，在受限连接上使用更少的数据。",
 			belaboxBannerTitle: "标准（与 BELABOX 兼容的默认值）",
 			belaboxBannerBody:
 				"此接收端不是 CeraLive 接收端，因此只能调整延迟。高级调优需要 CeraLive 接收端。",
 			reasonNonCeraLive: "仅 CeraLive 接收端可用。",
+			reasonReceiverManaged: "由接收端管理。",
 			reasonFecUnsupported: "此 CeraLive 接收端的 libsrt 版本不支持 FEC。",
 			profileNames: {
 				balanced: "均衡",

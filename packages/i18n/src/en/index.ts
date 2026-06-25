@@ -664,13 +664,25 @@ const en = {
 			hint: "Tune how your stream is delivered. A CeraLive receiver unlocks profiles, FEC, and recovery tuning; other receivers use BELABOX-compatible defaults.",
 			ceraliveReceiver: "CeraLive receiver",
 			latency: "Latency",
+			latencyNegotiated: "Negotiated",
 			presets: "Profile presets",
 			fec: "Forward error correction",
+			fecHelper:
+				"Adds redundancy so the receiver can rebuild lost packets. Uses extra bandwidth and adds a little latency \u2014 best on lossy connections.",
 			recoveryMode: "Recovery mode",
+			advanced: "Advanced",
+			recovery: "Recovery",
+			recoveryStandard: "Standard",
+			recoveryStandardHint: "Recommended",
+			recoveryBandwidthSaver: "Bandwidth Saver",
+			recoveryBandwidthSaverHint: "Expert",
+			recoveryHelper:
+				"Standard keeps the stream smooth and reliable. Bandwidth Saver trims recovery traffic to use less data on capped connections.",
 			belaboxBannerTitle: "Standard (BELABOX-compatible defaults)",
 			belaboxBannerBody:
 				"This receiver isn't a CeraLive receiver, so only latency is adjustable. Advanced tuning needs a CeraLive receiver.",
 			reasonNonCeraLive: "Available only with a CeraLive receiver.",
+			reasonReceiverManaged: "Receiver-managed.",
 			reasonFecUnsupported:
 				"This CeraLive receiver's libsrt build doesn't support FEC.",
 			profileNames: {

@@ -36,6 +36,7 @@ import {
 	type StreamingConfigInput,
 	type StreamProfilePreset,
 	type StreamRecoveryMode,
+	type StreamRecoveryPreference,
 	serverSupportedProtocols,
 	streamProfilePresetSchema,
 } from "@ceraui/rpc/schemas";
@@ -456,6 +457,10 @@ export interface ServerSetDraft {
 	relayServer: string;
 	/** Selected managed relay account id (persisted only when non-empty). */
 	relayAccount: string;
+	/** FEC toggle (Task 18); persisted only when defined — undefined omits the key. */
+	fecEnabled?: boolean;
+	/** Recovery preference (Task 19); persisted only when defined. */
+	recoveryMode?: StreamRecoveryPreference;
 }
 
 /** The derived branch selectors the save handler keys off. */
@@ -528,6 +533,12 @@ export function buildServerSetConfig(
 	const base: StreamingConfigInput = {
 		srt_latency: draft.latency,
 		relay_protocol: relayProtocolSchema.parse(draft.protocol),
+		...(draft.fecEnabled !== undefined
+			? { fec_enabled: draft.fecEnabled }
+			: {}),
+		...(draft.recoveryMode !== undefined
+			? { recovery_mode: draft.recoveryMode }
+			: {}),
 	};
 
 	if (derived.destination === "custom") {
@@ -841,6 +852,7 @@ const CERALIVE_FALLBACK_LATENCY_RANGE: LatencyRange = {
 // resolves them through the `$LL` proxy — this module stays `$LL`-free.
 const REASON_NON_CERALIVE = "settings.streamTuning.reasonNonCeraLive";
 const REASON_FEC_UNSUPPORTED = "settings.streamTuning.reasonFecUnsupported";
+const REASON_RECEIVER_MANAGED = "settings.streamTuning.reasonReceiverManaged";
 
 /**
  * Map a configured relay/remote provider to the Stream Tuning receiver kind.
@@ -933,6 +945,8 @@ export interface StreamTuningExperience {
 	/** Recovery-mode control availability (CeraLive only). */
 	recoveryModeEnabled: boolean;
 	recoveryModeDisabledReasonKey?: string;
+	/** The recommended default recovery preference (always `standard`). */
+	defaultRecoveryMode: StreamRecoveryPreference;
 	/** Profile-preset chips availability (CeraLive only). */
 	presetsEnabled: boolean;
 	presetsDisabledReasonKey?: string;
@@ -964,7 +978,8 @@ export function deriveStreamTuningExperience(
 			fecEnabled: false,
 			fecDisabledReasonKey: REASON_NON_CERALIVE,
 			recoveryModeEnabled: false,
-			recoveryModeDisabledReasonKey: REASON_NON_CERALIVE,
+			recoveryModeDisabledReasonKey: REASON_RECEIVER_MANAGED,
+			defaultRecoveryMode: "standard",
 			presetsEnabled: false,
 			presetsDisabledReasonKey: REASON_NON_CERALIVE,
 			availableProfiles: caps.supportedProfiles,
@@ -986,6 +1001,7 @@ export function deriveStreamTuningExperience(
 			? {}
 			: { fecDisabledReasonKey: REASON_FEC_UNSUPPORTED }),
 		recoveryModeEnabled: true,
+		defaultRecoveryMode: "standard",
 		presetsEnabled: true,
 		availableProfiles: caps.supportedProfiles,
 		defaultProfile,

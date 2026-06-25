@@ -116,13 +116,25 @@ const ja = {
 			hint: "ストリームの配信方法を調整します。CeraLive レシーバーではプロファイル、FEC、復元調整が利用できます。その他のレシーバーは BELABOX 互換の既定値を使用します。",
 			ceraliveReceiver: "CeraLive レシーバー",
 			latency: "レイテンシ",
+			latencyNegotiated: "ネゴシエート済み",
 			presets: "プロファイルプリセット",
 			fec: "前方誤り訂正",
+			fecHelper:
+				"冗長性を加え、失われたパケットをレシーバーが再構築できるようにします。帯域を多く消費し、レイテンシがわずかに増えます \u2014 損失の多い回線に最適です。",
 			recoveryMode: "復元モード",
+			advanced: "詳細設定",
+			recovery: "復元",
+			recoveryStandard: "標準",
+			recoveryStandardHint: "推奨",
+			recoveryBandwidthSaver: "帯域節約",
+			recoveryBandwidthSaverHint: "上級者向け",
+			recoveryHelper:
+				"標準はストリームをスムーズで安定した状態に保ちます。帯域節約は復元トラフィックを抑え、制限のある回線でデータ使用量を減らします。",
 			belaboxBannerTitle: "標準（BELABOX 互換の既定値）",
 			belaboxBannerBody:
 				"このレシーバーは CeraLive レシーバーではないため、調整できるのはレイテンシのみです。高度な調整には CeraLive レシーバーが必要です。",
 			reasonNonCeraLive: "CeraLive レシーバーでのみ利用できます。",
+			reasonReceiverManaged: "レシーバー側で管理されます。",
 			reasonFecUnsupported:
 				"この CeraLive レシーバーの libsrt ビルドは FEC に対応していません。",
 			profileNames: {

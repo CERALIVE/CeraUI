@@ -113,13 +113,25 @@ const ko = {
 			hint: "스트림 전달 방식을 조정합니다. CeraLive 수신기는 프로필, FEC, 복구 튜닝을 사용할 수 있고, 다른 수신기는 BELABOX 호환 기본값을 사용합니다.",
 			ceraliveReceiver: "CeraLive 수신기",
 			latency: "지연 시간",
+			latencyNegotiated: "협상됨",
 			presets: "프로필 프리셋",
 			fec: "전방 오류 정정",
+			fecHelper:
+				"수신기가 손실된 패킷을 복원할 수 있도록 중복성을 추가합니다. 추가 대역폭을 사용하고 지연 시간이 약간 늘어납니다 \u2014 손실이 많은 연결에 가장 적합합니다.",
 			recoveryMode: "복구 모드",
+			advanced: "고급",
+			recovery: "복구",
+			recoveryStandard: "표준",
+			recoveryStandardHint: "권장",
+			recoveryBandwidthSaver: "대역폭 절약",
+			recoveryBandwidthSaverHint: "전문가",
+			recoveryHelper:
+				"표준은 스트림을 부드럽고 안정적으로 유지합니다. 대역폭 절약은 복구 트래픽을 줄여 제한된 연결에서 데이터 사용량을 낮춥니다.",
 			belaboxBannerTitle: "표준(BELABOX 호환 기본값)",
 			belaboxBannerBody:
 				"이 수신기는 CeraLive 수신기가 아니므로 지연 시간만 조정할 수 있습니다. 고급 튜닝에는 CeraLive 수신기가 필요합니다.",
 			reasonNonCeraLive: "CeraLive 수신기에서만 사용할 수 있습니다.",
+			reasonReceiverManaged: "수신기에서 관리됩니다.",
 			reasonFecUnsupported:
 				"이 CeraLive 수신기의 libsrt 빌드는 FEC를 지원하지 않습니다.",
 			profileNames: {

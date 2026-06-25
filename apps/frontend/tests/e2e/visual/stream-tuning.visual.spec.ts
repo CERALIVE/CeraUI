@@ -63,5 +63,25 @@ test.describe('@visual Stream Tuning card', () => {
 		await expect(card).toHaveAttribute('data-receiver-kind', 'ceralive');
 		await expect(dialog.getByTestId('stream-tuning-ceralive-badge')).toBeVisible();
 		await card.screenshot({ path: path.join(VISUAL_DIR, 'ceralive.png') });
+
+		// Task 17 evidence — the continuous latency slider + live value pill.
+		await dialog.getByTestId('stream-tuning-latency-slider').fill('1500');
+		await expect(dialog.getByTestId('stream-tuning-latency-value')).toContainText('1.5 s');
+		await card.screenshot({
+			path: path.join(VISUAL_DIR, 'task-17-srt-receive-profiles.png'),
+		});
+
+		// Task 18 evidence — the FEC switch + helper text on a CeraLive receiver.
+		await expect(dialog.getByTestId('stream-tuning-fec')).toBeVisible();
+		await card.screenshot({
+			path: path.join(VISUAL_DIR, 'task-18-srt-receive-profiles.png'),
+		});
+
+		// Task 19 evidence — the Advanced recovery segmented control, expanded.
+		await dialog.locator('[data-testid="stream-tuning-advanced"] > summary').click();
+		await expect(dialog.getByTestId('stream-tuning-recovery-standard')).toBeVisible();
+		await card.screenshot({
+			path: path.join(VISUAL_DIR, 'task-19-srt-receive-profiles.png'),
+		});
 	});
 });

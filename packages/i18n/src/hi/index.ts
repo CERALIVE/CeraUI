@@ -112,13 +112,25 @@ const hi = {
 			hint: "अपनी स्ट्रीम के वितरण के तरीके को समायोजित करें। एक CeraLive रिसीवर प्रोफ़ाइल, FEC और रिकवरी ट्यूनिंग को अनलॉक करता है; अन्य रिसीवर BELABOX-संगत डिफ़ॉल्ट का उपयोग करते हैं।",
 			ceraliveReceiver: "CeraLive रिसीवर",
 			latency: "विलंबता",
+			latencyNegotiated: "बातचीत की गई",
 			presets: "प्रोफ़ाइल प्रीसेट",
 			fec: "फ़ॉरवर्ड एरर करेक्शन",
+			fecHelper:
+				"अतिरेक जोड़ता है ताकि रिसीवर खोए हुए पैकेट फिर से बना सके। अतिरिक्त बैंडविड्थ लेता है और थोड़ी विलंबता जोड़ता है \u2014 हानि वाले कनेक्शनों पर सर्वोत्तम।",
 			recoveryMode: "रिकवरी मोड",
+			advanced: "उन्नत",
+			recovery: "रिकवरी",
+			recoveryStandard: "मानक",
+			recoveryStandardHint: "अनुशंसित",
+			recoveryBandwidthSaver: "बैंडविड्थ बचत",
+			recoveryBandwidthSaverHint: "विशेषज्ञ",
+			recoveryHelper:
+				"मानक स्ट्रीम को सहज और विश्वसनीय रखता है। बैंडविड्थ बचत रिकवरी ट्रैफ़िक को कम करती है ताकि सीमित कनेक्शनों पर कम डेटा का उपयोग हो।",
 			belaboxBannerTitle: "मानक (BELABOX-संगत डिफ़ॉल्ट)",
 			belaboxBannerBody:
 				"यह रिसीवर CeraLive रिसीवर नहीं है, इसलिए केवल विलंबता समायोज्य है। उन्नत ट्यूनिंग के लिए CeraLive रिसीवर आवश्यक है।",
 			reasonNonCeraLive: "केवल CeraLive रिसीवर के साथ उपलब्ध।",
+			reasonReceiverManaged: "रिसीवर द्वारा प्रबंधित।",
 			reasonFecUnsupported:
 				"इस CeraLive रिसीवर का libsrt बिल्ड FEC का समर्थन नहीं करता।",
 			profileNames: {

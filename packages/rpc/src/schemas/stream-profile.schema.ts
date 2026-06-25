@@ -63,6 +63,21 @@ export const STREAM_RECOVERY_MODES = ['reorderfreeze', 'srtlapatches', 'stock'] 
 export const streamRecoveryModeSchema = z.enum(STREAM_RECOVERY_MODES);
 export type StreamRecoveryMode = (typeof STREAM_RECOVERY_MODES)[number];
 
+/**
+ * The OPERATOR-facing recovery choice (Stream Tuning "Advanced" disclosure),
+ * deliberately distinct from the internal {@link StreamRecoveryMode} freeze
+ * taxonomy — "freeze" is never exposed as a user concept. `standard` routes to
+ * the L1 (full-recovery) listener; `bandwidth-saver` routes to L2/Classic, which
+ * trims recovery traffic on capped connections. Only a CeraLive receiver honours
+ * it; other receivers are receiver-managed (control disabled-with-reason).
+ */
+export const STREAM_RECOVERY_PREFERENCES = ['standard', 'bandwidth-saver'] as const;
+export const streamRecoveryPreferenceSchema = z.enum(STREAM_RECOVERY_PREFERENCES);
+export type StreamRecoveryPreference = (typeof STREAM_RECOVERY_PREFERENCES)[number];
+
+/** The recommended default recovery preference (routes to the L1 listener). */
+export const DEFAULT_RECOVERY_PREFERENCE = 'standard' satisfies StreamRecoveryPreference;
+
 // =============================================================================
 // Receiver kind (Stream Tuning taxonomy)
 // =============================================================================

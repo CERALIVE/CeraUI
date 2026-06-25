@@ -31,12 +31,12 @@ import { Server, TriangleAlert } from '@lucide/svelte';
 import {
 	CLOUD_PROVIDERS,
 	type RelayProtocol,
+	type StreamRecoveryPreference,
 	serverSupportedProtocols,
 } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
-import { Label } from '$lib/components/ui/label';
 import {
 	isPortValid,
 	parsePort,
@@ -91,9 +91,6 @@ interface Props {
 let { open = $bindable(false) }: Props = $props();
 
 const PORT = streamingConstraints.port;
-const LAT = streamingConstraints.srtLatency;
-const LATENCY_FALLBACK = Math.min(Math.max(2000, LAT.min), LAT.max);
-const LATENCY_STEP = 50;
 
 const config = $derived(getConfig());
 const relays = $derived(getRelays());
@@ -111,6 +108,8 @@ type Draft = {
 	srtla_port?: string;
 	srt_streamid?: string;
 	srt_latency?: number;
+	fec_enabled?: boolean;
+	recovery_mode?: StreamRecoveryPreference;
 	relay_provider?: string;
 	relay_server?: string;
 	relay_account?: string;
@@ -161,7 +160,6 @@ const addr = $derived(draft.srtla_addr ?? config?.srtla_addr ?? '');
 const portStr = $derived(draft.srtla_port ?? (config?.srtla_port?.toString() ?? ''));
 const streamId = $derived(draft.srt_streamid ?? config?.srt_streamid ?? '');
 const passphrase = $derived(draft.passphrase ?? '');
-const latency = $derived(draft.srt_latency ?? config?.srt_latency ?? LATENCY_FALLBACK);
 const relayServer = $derived(draft.relay_server ?? config?.relay_server ?? '');
 const relayAccount = $derived(draft.relay_account ?? config?.relay_account ?? '');
 const relayStreamId = $derived(draft.relay_streamid ?? config?.relay_streamid_override ?? '');
@@ -238,6 +236,22 @@ const streamTuning = $derived(
 			latencyRange: engineCaps?.latency_range,
 		}),
 	),
+);
+
+// Stream-tuning draft values (Tasks 17/18/19). Latency persists via the existing
+// srt_latency path, clamped to the receiver's advertised window; FEC + recovery
+// persist via the additive setConfig fields. The save handler only persists FEC
+// (and recovery) when the receiver actually offers them — an unproven receiver
+// never gets FEC enabled, and recovery stays receiver-managed.
+const latencyRange = $derived(streamTuning.latencyRange);
+const latency = $derived(draft.srt_latency ?? config?.srt_latency ?? latencyRange.default);
+const clampedLatency = $derived(
+	Math.min(Math.max(latency, latencyRange.min), latencyRange.max),
+);
+const effectiveLatencyMs = $derived(isStreaming ? config?.srt_latency : undefined);
+const fecEnabled = $derived(draft.fec_enabled ?? config?.fec_enabled ?? false);
+const recoveryMode = $derived<StreamRecoveryPreference>(
+	draft.recovery_mode ?? config?.recovery_mode ?? streamTuning.defaultRecoveryMode,
 );
 
 // Seed the persisted transport from the selected managed server's advertised set
@@ -343,16 +357,6 @@ const canSave = $derived.by(() => {
 	return relayServer !== '';
 });
 
-const latencyPercent = $derived(
-	Math.max(0, Math.min(100, ((latency - LAT.min) / (LAT.max - LAT.min)) * 100)),
-);
-
-function clampLatency(value: number): number {
-	const safe = Number.isFinite(value) ? value : LATENCY_FALLBACK;
-	const stepped = Math.round(safe / LATENCY_STEP) * LATENCY_STEP;
-	return Math.max(LAT.min, Math.min(LAT.max, stepped));
-}
-
 function resetValidation() {
 	if (validation.state !== 'idle') validation = { state: 'idle' };
 }
@@ -378,10 +382,10 @@ async function handleSave() {
 	// selected_ingest_endpoint identity; every other path keeps today's field set.
 	const input =
 		destination === 'managed' && hasManagedSlots && activeSlot
-			? buildManagedSlotConfig(activeSlot, clampLatency(latency))
+			? buildManagedSlotConfig(activeSlot, clampedLatency)
 			: buildServerSetConfig(
 					{
-						latency: clampLatency(latency),
+						latency: clampedLatency,
 						protocol,
 						addr,
 						portStr,
@@ -391,6 +395,11 @@ async function handleSave() {
 						relayStreamId,
 						relayServer,
 						relayAccount,
+						// FEC only when the receiver advertises it — an unproven receiver
+						// is persisted false, never silently left enabled. Recovery is
+						// persisted only when the CeraLive receiver honours it.
+						fecEnabled: streamTuning.fecEnabled ? fecEnabled : false,
+						...(streamTuning.recoveryModeEnabled ? { recoveryMode } : {}),
 					} satisfies ServerSetDraft,
 					{ destination, relayOverride } satisfies ServerSetDerived,
 				);
@@ -545,46 +554,20 @@ async function handleSave() {
 			{protocol}
 		/>
 
-		<!-- Stream Tuning (Task 16): receiver-capability-gated profile controls.
-		     CeraLive receiver → full controls; non-CeraLive → latency only +
-		     disabled-with-reason advanced controls + BELABOX-compatible banner. -->
-		<StreamTuningSection experience={streamTuning} {isStreaming} latencyMs={latency} />
-
-		<!-- SRT latency: bounds come from streamingConstraints.srtLatency -->
-		<div class="space-y-3">
-			<div class="flex items-center justify-between">
-				<Label class="text-sm font-medium" for="srt-latency">{$LL.settings.srtLatency()}</Label>
-				<span class="bg-primary/10 text-primary rounded-md px-2 py-1 font-mono text-xs">
-					{latency} {$LL.units.ms()}
-				</span>
-			</div>
-			<div class="relative h-6 w-full">
-				<div
-					class="bg-background absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full"
-				></div>
-				<div
-					style={`inset-inline-start: 0; width: ${latencyPercent}%;`}
-					class="bg-primary absolute top-1/2 h-2 -translate-y-1/2 rounded-full transition-all duration-150"
-				></div>
-				<input
-					id="srt-latency"
-					aria-valuemax={LAT.max}
-					aria-valuemin={LAT.min}
-					aria-valuenow={latency}
-					class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-					disabled={isStreaming}
-					max={LAT.max}
-					min={LAT.min}
-					oninput={(e) => (draft.srt_latency = Number.parseInt(e.currentTarget.value, 10))}
-					step={LATENCY_STEP}
-					type="range"
-					value={latency}
-				/>
-			</div>
-			<div class="text-muted-foreground flex justify-between text-xs">
-				<span>{LAT.min} {$LL.units.ms()} · {$LL.settings.lowerLatency()}</span>
-				<span>{$LL.settings.higherLatency()} · {LAT.max} {$LL.units.ms()}</span>
-			</div>
-		</div>
+		<!-- Stream Tuning (Tasks 16-19): receiver-capability-gated tuning. Owns the
+		     latency slider, FEC toggle, and the Advanced recovery control. CeraLive
+		     receiver → full controls; non-CeraLive → latency only + disabled-with-
+		     reason advanced controls + BELABOX-compatible banner. -->
+		<StreamTuningSection
+			{effectiveLatencyMs}
+			experience={streamTuning}
+			{fecEnabled}
+			{isStreaming}
+			latencyMs={clampedLatency}
+			onFecChange={(value) => (draft.fec_enabled = value)}
+			onLatencyChange={(value) => (draft.srt_latency = value)}
+			onRecoveryChange={(value) => (draft.recovery_mode = value)}
+			{recoveryMode}
+		/>
 	</div>
 </AppDialog>

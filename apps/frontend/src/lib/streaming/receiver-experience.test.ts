@@ -368,6 +368,40 @@ describe("buildServerSetConfig — byte-identical to today's handleSave branches
 	});
 });
 
+describe("buildServerSetConfig — FEC + recovery tuning (Tasks 18/19)", () => {
+	it("omits fec_enabled and recovery_mode when the draft leaves them undefined", () => {
+		// The existing call sites (and the byte-identical guard above) never set
+		// them, so they must not appear — additive-only, no behaviour change.
+		const result = buildServerSetConfig(draft(), CUSTOM);
+		expect(result).not.toHaveProperty("fec_enabled");
+		expect(result).not.toHaveProperty("recovery_mode");
+	});
+
+	it("persists fec_enabled false (clearing a stale enable) without recovery_mode", () => {
+		const result = buildServerSetConfig(draft({ fecEnabled: false }), CUSTOM);
+		expect(result.fec_enabled).toBe(false);
+		expect(result).not.toHaveProperty("recovery_mode");
+	});
+
+	it("persists an enabled FEC + recovery preference", () => {
+		const result = buildServerSetConfig(
+			draft({ fecEnabled: true, recoveryMode: "bandwidth-saver" }),
+			MANAGED,
+		);
+		expect(result.fec_enabled).toBe(true);
+		expect(result.recovery_mode).toBe("bandwidth-saver");
+		expect(result.relay_server).toBe("fra");
+	});
+
+	it("carries recovery_mode standard through the managed branch", () => {
+		const result = buildServerSetConfig(
+			draft({ recoveryMode: "standard" }),
+			MANAGED,
+		);
+		expect(result.recovery_mode).toBe("standard");
+	});
+});
+
 function summaryLabels(
 	overrides: Partial<ServerSummaryLabels> = {},
 ): ServerSummaryLabels {
@@ -1111,6 +1145,7 @@ describe("deriveStreamTuningExperience (Task 16)", () => {
 		expect(experience.fecEnabled).toBe(true);
 		expect(experience.fecDisabledReasonKey).toBeUndefined();
 		expect(experience.recoveryModeEnabled).toBe(true);
+		expect(experience.defaultRecoveryMode).toBe("standard");
 		expect(experience.presetsEnabled).toBe(true);
 		expect(experience.showBelaboxBanner).toBe(false);
 		expect(experience.defaultProfile).toBe("balanced");
@@ -1149,9 +1184,13 @@ describe("deriveStreamTuningExperience (Task 16)", () => {
 		expect(experience.presetsEnabled).toBe(false);
 		expect(experience.showBelaboxBanner).toBe(true);
 		expect(experience.defaultProfile).toBe("classic");
+		expect(experience.defaultRecoveryMode).toBe("standard");
 		const reason = "settings.streamTuning.reasonNonCeraLive";
 		expect(experience.fecDisabledReasonKey).toBe(reason);
-		expect(experience.recoveryModeDisabledReasonKey).toBe(reason);
+		// Recovery is receiver-managed for an unproven receiver — its own reason.
+		expect(experience.recoveryModeDisabledReasonKey).toBe(
+			"settings.streamTuning.reasonReceiverManaged",
+		);
 		expect(experience.presetsDisabledReasonKey).toBe(reason);
 	});
 });

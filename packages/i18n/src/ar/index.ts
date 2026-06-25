@@ -250,13 +250,25 @@ const ar = {
 			hint: "اضبط طريقة تسليم بثّك. يتيح مستقبِل CeraLive ملفّات التعريف وFEC وضبط الاستعادة؛ بينما تستخدم المستقبِلات الأخرى الإعدادات المتوافقة مع BELABOX.",
 			ceraliveReceiver: "مستقبِل CeraLive",
 			latency: "زمن الوصول",
+			latencyNegotiated: "متفاوَض عليه",
 			presets: "إعدادات ملفّات التعريف",
 			fec: "تصحيح الأخطاء الأمامي",
+			fecHelper:
+				"يضيف تكرارًا ليتمكّن المستقبِل من إعادة بناء الحزم المفقودة. يستهلك عرض نطاق إضافيًّا ويضيف بعض زمن الوصول \u2014 الأفضل على الوصلات ذات الفقد.",
 			recoveryMode: "وضع الاستعادة",
+			advanced: "متقدّم",
+			recovery: "الاستعادة",
+			recoveryStandard: "قياسي",
+			recoveryStandardHint: "موصى به",
+			recoveryBandwidthSaver: "توفير عرض النطاق",
+			recoveryBandwidthSaverHint: "خبير",
+			recoveryHelper:
+				"يحافظ الوضع القياسي على بثّ سلس وموثوق. يقلّل توفير عرض النطاق حركة الاستعادة لاستهلاك بيانات أقلّ على الاتصالات المحدودة.",
 			belaboxBannerTitle: "قياسي (إعدادات متوافقة مع BELABOX)",
 			belaboxBannerBody:
 				"هذا المستقبِل ليس مستقبِل CeraLive، لذا يمكن ضبط زمن الوصول فقط. يتطلّب الضبط المتقدّم مستقبِل CeraLive.",
 			reasonNonCeraLive: "متاح فقط مع مستقبِل CeraLive.",
+			reasonReceiverManaged: "تُدار بواسطة المستقبِل.",
 			reasonFecUnsupported: "إصدار libsrt لهذا المستقبِل CeraLive لا يدعم FEC.",
 			profileNames: {
 				balanced: "متوازن",

@@ -268,13 +268,25 @@ const fr = {
 			hint: "Réglez la façon dont votre flux est délivré. Un récepteur CeraLive débloque les profils, le FEC et le réglage de récupération ; les autres récepteurs utilisent les valeurs compatibles BELABOX.",
 			ceraliveReceiver: "Récepteur CeraLive",
 			latency: "Latence",
+			latencyNegotiated: "Négociée",
 			presets: "Profils prédéfinis",
 			fec: "Correction d'erreurs sans voie de retour",
+			fecHelper:
+				"Ajoute de la redondance pour que le récepteur reconstitue les paquets perdus. Consomme plus de bande passante et ajoute un peu de latence \u2014 idéal sur les liaisons instables.",
 			recoveryMode: "Mode de récupération",
+			advanced: "Avancé",
+			recovery: "Récupération",
+			recoveryStandard: "Standard",
+			recoveryStandardHint: "Recommandé",
+			recoveryBandwidthSaver: "Économie de bande passante",
+			recoveryBandwidthSaverHint: "Expert",
+			recoveryHelper:
+				"Standard garde le flux fluide et fiable. L'économie de bande passante réduit le trafic de récupération pour consommer moins de données sur les connexions limitées.",
 			belaboxBannerTitle: "Standard (valeurs compatibles BELABOX)",
 			belaboxBannerBody:
 				"Ce récepteur n'est pas un récepteur CeraLive, seule la latence est donc réglable. Le réglage avancé nécessite un récepteur CeraLive.",
 			reasonNonCeraLive: "Disponible uniquement avec un récepteur CeraLive.",
+			reasonReceiverManaged: "Géré par le récepteur.",
 			reasonFecUnsupported:
 				"La version de libsrt de ce récepteur CeraLive ne prend pas en charge le FEC.",
 			profileNames: {

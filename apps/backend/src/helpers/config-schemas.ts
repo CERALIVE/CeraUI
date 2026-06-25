@@ -53,6 +53,7 @@ import {
 	type RelayProtocol,
 	relayProtocolSchema,
 	relayProviderMetaSchema,
+	streamRecoveryPreferenceSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 import { logger } from "./logger.ts";
@@ -137,6 +138,10 @@ export const runtimeConfigSchema = z.object({
 	relay_protocol: relayProtocolSchema.optional(),
 	srt_streamid: z.string().optional(),
 	srt_latency: z.number().int().min(100).max(10000).optional(),
+	// SRT receive-profile tuning (Tasks 18/19): FEC toggle + operator recovery
+	// preference. Persisted device-side; only honoured by a CeraLive receiver.
+	fec_enabled: z.boolean().optional(),
+	recovery_mode: streamRecoveryPreferenceSchema.optional(),
 	srtla_addr: z.string().optional(),
 	srtla_port: z.number().int().min(1).max(65535).optional(),
 	// endpointId of the selected platform-pushed ingest slot (T18). The slot

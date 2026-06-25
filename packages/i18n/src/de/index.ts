@@ -667,13 +667,25 @@ const de = {
 			hint: "Stelle ein, wie dein Stream zugestellt wird. Ein CeraLive-Empfänger schaltet Profile, FEC und Wiederherstellungs-Feinabstimmung frei; andere Empfänger nutzen die BELABOX-kompatiblen Standardwerte.",
 			ceraliveReceiver: "CeraLive-Empfänger",
 			latency: "Latenz",
+			latencyNegotiated: "Ausgehandelt",
 			presets: "Profilvorlagen",
 			fec: "Vorwärtsfehlerkorrektur",
+			fecHelper:
+				"Fügt Redundanz hinzu, damit der Empfänger verlorene Pakete wiederherstellen kann. Verbraucht mehr Bandbreite und erhöht die Latenz leicht \u2014 am besten bei verlustbehafteten Verbindungen.",
 			recoveryMode: "Wiederherstellungsmodus",
+			advanced: "Erweitert",
+			recovery: "Wiederherstellung",
+			recoveryStandard: "Standard",
+			recoveryStandardHint: "Empfohlen",
+			recoveryBandwidthSaver: "Bandbreitensparer",
+			recoveryBandwidthSaverHint: "Experte",
+			recoveryHelper:
+				"Standard hält den Stream flüssig und zuverlässig. Der Bandbreitensparer reduziert den Wiederherstellungsverkehr, um bei begrenzten Verbindungen weniger Daten zu verbrauchen.",
 			belaboxBannerTitle: "Standard (BELABOX-kompatible Werte)",
 			belaboxBannerBody:
 				"Dieser Empfänger ist kein CeraLive-Empfänger, daher lässt sich nur die Latenz anpassen. Die erweiterte Feinabstimmung erfordert einen CeraLive-Empfänger.",
 			reasonNonCeraLive: "Nur mit einem CeraLive-Empfänger verfügbar.",
+			reasonReceiverManaged: "Vom Empfänger verwaltet.",
 			reasonFecUnsupported:
 				"Der libsrt-Build dieses CeraLive-Empfängers unterstützt kein FEC.",
 			profileNames: {
