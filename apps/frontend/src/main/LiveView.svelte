@@ -32,6 +32,11 @@ import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
 import {
+	confirmOperation,
+	failOperation,
+	osCommand,
+} from '$lib/rpc/async-operation.svelte';
+import {
 	markPending,
 	onRpcAppliedReactive,
 	onRpcResolved,
@@ -201,16 +206,31 @@ async function handleSwitchInput(inputId: string) {
 	}
 	switchingInput = inputId;
 	try {
-		const res = await rpc.streaming.switchInput({ input_id: inputId });
+		// The live input switch routes through the keyed async-operation machine
+		// (key 'switch-input') for the re-entry guard + in-flight `pending` phase.
+		// `classify` keeps every resolved verdict `ok` so osCommand never emits its
+		// generic toast — the picker keeps its nuanced switched/source-lost/failed
+		// feedback below — and we drive the confirmed/failed phase by hand. Only a
+		// thrown RPC toasts (via `failMessage`).
+		const res = await osCommand({
+			key: 'switch-input',
+			target: inputId,
+			rpc: () => rpc.streaming.switchInput({ input_id: inputId }),
+			classify: () => ({ ok: true }),
+			failMessage: () => $LL.live.inputPicker.switchFailed(),
+		});
+		if (!res) return; // re-entry no-op or a thrown RPC (osCommand already toasted)
 		if (res.success) {
+			confirmOperation('switch-input');
 			toast.success($LL.live.inputPicker.switched({ ms: res.gap_ms ?? 0 }));
-		} else if (res.error === SWITCH_INPUT_ERRORS.SOURCE_LOST) {
-			toast.error($LL.live.inputPicker.sourceLost());
 		} else {
-			toast.error($LL.live.inputPicker.switchFailed());
+			failOperation('switch-input', res.error ?? 'failed');
+			toast.error(
+				res.error === SWITCH_INPUT_ERRORS.SOURCE_LOST
+					? $LL.live.inputPicker.sourceLost()
+					: $LL.live.inputPicker.switchFailed(),
+			);
 		}
-	} catch {
-		toast.error($LL.live.inputPicker.switchFailed());
 	} finally {
 		switchingInput = undefined;
 	}

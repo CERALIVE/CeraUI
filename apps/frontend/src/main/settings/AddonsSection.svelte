@@ -22,6 +22,7 @@ import { toast } from 'svelte-sonner';
 import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import * as Tooltip from '$lib/components/ui/tooltip';
+import { clearOperation, osCommand } from '$lib/rpc/async-operation.svelte';
 import { type AddonManagerPhase, rpc } from '$lib/rpc/client';
 import { getAddons } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
@@ -143,12 +144,6 @@ function humanBytes(n: number): string {
 	return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-function errorMessage(error: unknown): string | undefined {
-	if (error instanceof Error && error.message) return error.message;
-	if (typeof error === 'string' && error) return error;
-	return undefined;
-}
-
 const ERROR_COPY: Record<string, string> = {
 	addon_insufficient_space: 'Not enough free space on the device to install this add-on.',
 	addon_enable_failed: "The add-on couldn't be installed. Check the device logs for details.",
@@ -204,17 +199,30 @@ function clearActionError(id: string) {
 	}
 }
 
+// Each add-on enable/disable routes through the keyed async-operation machine
+// (key `addon:<id>`, so add-ons toggle independently) for the re-entry guard +
+// in-flight `pending` phase. `classify` keeps every resolved verdict `ok` so
+// osCommand never emits its generic toast — this surface owns all feedback (calm
+// emulated-mode banner, pinned compat warning, or a humanised toast) — and only a
+// thrown RPC toasts (via `failMessage`). Every non-applied outcome rejects so the
+// pessimistic AsyncSwitch reverts to the prior value.
 async function handleToggle(id: string, next: boolean) {
 	// A fresh attempt clears any pinned warning from the previous one.
 	clearActionError(id);
-	let result: Awaited<ReturnType<typeof rpc.addons.install>>;
-	try {
-		result = next ? await rpc.addons.install({ id }) : await rpc.addons.uninstall({ id });
-	} catch (error) {
-		toast.error(errorMessage(error) ?? 'Add-on action failed.');
-		throw error;
-	}
+	const result = await osCommand({
+		key: `addon:${id}`,
+		target: next,
+		rpc: () => (next ? rpc.addons.install({ id }) : rpc.addons.uninstall({ id })),
+		confirmOnResolve: true,
+		classify: () => ({ ok: true }),
+		failMessage: () => 'Add-on action failed.',
+	});
+	// undefined → re-entry no-op or a thrown RPC (osCommand already toasted).
+	if (!result) throw new Error('addon_action_failed');
 	if (!result.success) {
+		// The op did not apply — drop the optimistically-confirmed async-op entry
+		// so it never reads as a real success.
+		clearOperation(`addon:${id}`);
 		if (result.error === ADDON_UNAVAILABLE_ERROR) {
 			unavailable = true;
 			// Reject so AsyncSwitch reverts to the prior value without a toast.

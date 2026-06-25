@@ -28,13 +28,13 @@ import {
 } from '@lucide/svelte';
 import type { Component } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
-import { toast } from 'svelte-sonner';
 
 import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import LowDiskBanner from '$lib/components/custom/LowDiskBanner.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { AppDialog } from '$lib/components/dialogs';
+import { osCommand } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import { getConfig, getKiosk } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
@@ -104,20 +104,24 @@ $effect(() => {
 	}
 });
 
-function errorMessage(error: unknown): string | undefined {
-	if (error instanceof Error && error.message) return error.message;
-	if (typeof error === 'string' && error) return error;
-	return undefined;
-}
-
+// Autostart routes through the keyed async-operation machine (key 'autostart'),
+// which owns the re-entry guard + in-flight `pending` phase + the single failure
+// toast (the default `{success}` classifier flags a refused write; a thrown RPC
+// uses `failMessage`). On any non-applied outcome we reject so the pessimistic
+// AsyncSwitch reverts to the prior position; otherwise we adopt the persisted
+// `applied` value.
 async function handleAutostartChange(next: boolean) {
-	try {
-		const result = await rpc.system.setAutostart({ autostart: next });
-		autostart = result.applied.autostart;
-	} catch (error) {
-		toast.error(errorMessage(error) ?? t.autostartError());
-		throw error;
-	}
+	const result = await osCommand({
+		key: 'autostart',
+		target: next,
+		rpc: () => rpc.system.setAutostart({ autostart: next }),
+		confirmOnResolve: true,
+		failMessage: () => t.autostartError(),
+	});
+	// undefined → re-entry no-op, a thrown RPC, or a refused write (osCommand
+	// already toasted). Reject so AsyncSwitch reverts to the prior value.
+	if (!result?.success) throw new Error('autostart_failed');
+	autostart = result.applied.autostart;
 }
 
 // Language + theme live in the header toolbar on desktop (lg+). On mobile the
