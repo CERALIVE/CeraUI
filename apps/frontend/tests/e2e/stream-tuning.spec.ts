@@ -15,6 +15,7 @@
  * screenshots (the evidence PNGs live in stream-tuning.visual.spec.ts); no
  * fixed-delay waits — every async wait is a web-first assertion.
  */
+import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 
 import { expect, test } from './fixtures/index.js';
@@ -73,10 +74,23 @@ test.describe('Stream Tuning card — receiver-capability gating', () => {
 			dialog.getByTestId('stream-tuning-recovery-bandwidth-saver'),
 		).toBeDisabled();
 
-		// The BELABOX-compatible banner is shown; CeraLive-only profiles are not.
+		// The BELABOX-compatible badge AND banner are shown (a visible state, not
+		// just a tooltip); CeraLive-only profiles and the CeraLive badge are not.
+		const badge = dialog.getByTestId('stream-tuning-belabox-badge');
+		await expect(badge).toBeVisible();
+		await expect(badge).toContainText('Standard (BELABOX-compatible)');
 		await expect(dialog.getByTestId('stream-tuning-belabox-banner')).toBeVisible();
-		await expect(dialog.getByTestId('stream-tuning-preset-balanced')).toHaveCount(0);
 		await expect(dialog.getByTestId('stream-tuning-ceralive-badge')).toHaveCount(0);
+
+		// Task 20: preset chips are DISABLED-with-reason, never hidden — Balanced is
+		// present (disabled) on a non-CeraLive receiver, not removed.
+		const balancedChip = dialog.getByTestId('stream-tuning-preset-balanced');
+		await expect(balancedChip).toBeVisible();
+		await expect(balancedChip).toBeDisabled();
+		await expect(balancedChip).toHaveAttribute(
+			'title',
+			'Available only with a CeraLive receiver.',
+		);
 	});
 
 	test('CeraLive (managed cloud): latency slider, FEC switch, and recovery segments enabled', async ({
@@ -131,5 +145,127 @@ test.describe('Stream Tuning card — receiver-capability gating', () => {
 
 		// No BELABOX-compatible banner in the full-controls state.
 		await expect(dialog.getByTestId('stream-tuning-belabox-banner')).toHaveCount(0);
+	});
+
+	test('preset snap-chips: Classic applies its combination; unavailable presets disabled-with-reason; editing flips to Custom', async ({
+		authedPage: page,
+	}) => {
+		const dialog = await openServerDialog(page);
+		const managed = dialog.getByTestId('destination-managed');
+		await expect(managed).toBeEnabled({ timeout: 15_000 });
+		await managed.click();
+		await expect(dialog.getByTestId('stream-tuning')).toHaveAttribute(
+			'data-receiver-kind',
+			'ceralive',
+		);
+
+		// The dev capability snapshot advertises only Classic and no FEC, so the
+		// other chips render DISABLED-with-reason (never hidden): the FEC preset
+		// carries the FEC reason, an unadvertised profile carries its own reason.
+		const fecPreset = dialog.getByTestId('stream-tuning-preset-low-latency-fec');
+		await expect(fecPreset).toBeDisabled();
+		await expect(fecPreset).toHaveAttribute(
+			'title',
+			"This CeraLive receiver's libsrt build doesn't support FEC.",
+		);
+		const balanced = dialog.getByTestId('stream-tuning-preset-balanced');
+		await expect(balanced).toBeDisabled();
+		await expect(balanced).toHaveAttribute(
+			'title',
+			"This receiver doesn't offer this profile.",
+		);
+
+		// Classic is the one advertised preset — clicking it snaps the full
+		// combination (~2 s latency + Bandwidth Saver recovery) and marks it active.
+		const value = dialog.getByTestId('stream-tuning-latency-value');
+		const classic = dialog.getByTestId('stream-tuning-preset-classic');
+		const custom = dialog.getByTestId('stream-tuning-preset-custom');
+		await expect(classic).toBeEnabled();
+		await classic.click();
+		await expect(value).toContainText('2 s');
+		await expect(classic).toHaveAttribute('aria-pressed', 'true');
+
+		// Editing the slider off every preset flips the active chip to Custom.
+		await dialog.getByTestId('stream-tuning-latency-slider').fill('1250');
+		await expect(custom).toHaveAttribute('aria-pressed', 'true');
+		await expect(classic).toHaveAttribute('aria-pressed', 'false');
+	});
+
+	test('latency slider is keyboard-navigable (arrow keys change the value)', async ({
+		authedPage: page,
+	}) => {
+		const dialog = await openServerDialog(page);
+		await dialog.getByTestId('destination-custom').click();
+
+		const slider = dialog.getByTestId('stream-tuning-latency-slider');
+		// Stage a mid-range value so an arrow step never clamps at a bound.
+		await slider.fill('500');
+		await expect(slider).toHaveAttribute('aria-valuenow', '500');
+
+		await slider.focus();
+		await slider.press('ArrowRight');
+		await expect
+			.poll(async () => Number(await slider.getAttribute('aria-valuenow')))
+			.toBeGreaterThan(500);
+
+		const afterRight = Number(await slider.getAttribute('aria-valuenow'));
+		await slider.press('ArrowLeft');
+		await expect
+			.poll(async () => Number(await slider.getAttribute('aria-valuenow')))
+			.toBeLessThan(afterRight);
+
+		// The slider carries a human-readable value text, not just the raw number.
+		await expect(slider).toHaveAttribute('aria-valuetext', /\d\s?s/);
+		await expect(slider).toHaveAttribute('aria-label', 'Latency');
+	});
+
+	test('non-CeraLive card has zero critical axe violations', async ({ authedPage: page }) => {
+		const dialog = await openServerDialog(page);
+		await dialog.getByTestId('destination-custom').click();
+		await expect(dialog.getByTestId('stream-tuning')).toBeVisible();
+		// Expand the Advanced disclosure so axe also audits the recovery controls.
+		await dialog.locator('[data-testid="stream-tuning-advanced"] > summary').click();
+		await expect(dialog.getByTestId('stream-tuning-recovery')).toBeVisible();
+
+		const results = await new AxeBuilder({ page })
+			.include('[data-testid="stream-tuning"]')
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+			.analyze();
+		const critical = results.violations.filter((v) => v.impact === 'critical');
+		expect(critical, JSON.stringify(critical, null, 2)).toEqual([]);
+	});
+
+	test('card has no horizontal overflow at phone / tablet / desktop widths', async ({
+		authedPage: page,
+	}) => {
+		for (const width of [375, 768, 1280]) {
+			await test.step(`viewport ${width}px`, async () => {
+				await page.setViewportSize({ width, height: 800 });
+				const dialog = await openServerDialog(page);
+				await dialog.getByTestId('destination-custom').click();
+
+				const card = dialog.getByTestId('stream-tuning');
+				await expect(card).toBeVisible();
+				await expect(dialog.getByTestId('stream-tuning-latency-slider')).toBeVisible();
+				await expect(dialog.getByTestId('stream-tuning-belabox-badge')).toBeVisible();
+
+				const overflow = await card.evaluate((el) => el.scrollWidth - el.clientWidth);
+				expect(overflow, `card overflows at ${width}px`).toBeLessThanOrEqual(1);
+
+				await page.keyboard.press('Escape');
+				await expect(card).toHaveCount(0);
+			});
+		}
+	});
+
+	test('prefers-reduced-motion collapses the card transitions', async ({ authedPage: page }) => {
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		const dialog = await openServerDialog(page);
+		await dialog.getByTestId('destination-custom').click();
+
+		const duration = await dialog
+			.getByTestId('stream-tuning-fec')
+			.evaluate((el) => getComputedStyle(el).transitionDuration);
+		expect(Number.parseFloat(duration)).toBeLessThanOrEqual(0.001);
 	});
 });

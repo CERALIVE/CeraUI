@@ -130,6 +130,7 @@ const ja = {
 			recoveryBandwidthSaverHint: "上級者向け",
 			recoveryHelper:
 				"標準はストリームをスムーズで安定した状態に保ちます。帯域節約は復元トラフィックを抑え、制限のある回線でデータ使用量を減らします。",
+			belaboxBadge: "標準（BELABOX 互換）",
 			belaboxBannerTitle: "標準（BELABOX 互換の既定値）",
 			belaboxBannerBody:
 				"このレシーバーは CeraLive レシーバーではないため、調整できるのはレイテンシのみです。高度な調整には CeraLive レシーバーが必要です。",
@@ -137,12 +138,15 @@ const ja = {
 			reasonReceiverManaged: "レシーバー側で管理されます。",
 			reasonFecUnsupported:
 				"この CeraLive レシーバーの libsrt ビルドは FEC に対応していません。",
+			reasonProfileUnsupported:
+				"このレシーバーはこのプロファイルを提供していません。",
 			profileNames: {
 				balanced: "バランス",
 				lowLatency: "低レイテンシ",
 				resilient: "高耐性",
 				classic: "クラシック",
 				lowLatencyFec: "低レイテンシ + FEC",
+				custom: "カスタム",
 			},
 		},
 		deviceStats: {

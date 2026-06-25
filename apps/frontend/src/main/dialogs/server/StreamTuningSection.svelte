@@ -23,16 +23,17 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import { ChevronDown, Radio, ShieldCheck } from '@lucide/svelte';
-import type {
-	StreamProfileId,
-	StreamProfilePreset,
-	StreamRecoveryPreference,
-} from '@ceraui/rpc/schemas';
+import { PRESET_CONFIGS } from '@ceraui/rpc/schemas';
+import type { StreamProfileId, StreamRecoveryPreference } from '@ceraui/rpc/schemas';
 
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { Label } from '$lib/components/ui/label';
 import { Switch } from '$lib/components/ui/switch';
-import type { StreamTuningExperience } from '$lib/streaming/receiver-experience';
+import {
+	getPresetChips,
+	matchActivePreset,
+	type StreamTuningExperience,
+} from '$lib/streaming/receiver-experience';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -48,8 +49,6 @@ interface Props {
 	recoveryMode?: StreamRecoveryPreference;
 	/** A live stream freezes tuning — every control is additionally locked. */
 	isStreaming?: boolean;
-	/** Active profile id; defaults to the experience's seed profile. */
-	activeProfile?: StreamProfileId;
 	/** Continuous-latency change (ms). */
 	onLatencyChange?: (value: number) => void;
 	/** FEC toggle change. */
@@ -65,7 +64,6 @@ let {
 	fecEnabled = false,
 	recoveryMode,
 	isStreaming = false,
-	activeProfile,
 	onLatencyChange,
 	onFecChange,
 	onRecoveryChange,
@@ -90,16 +88,6 @@ const t = (key: string): string => {
 	return typeof result === 'function' ? (result as () => string)() : key;
 };
 
-const PROFILE_LABEL_KEYS: Record<StreamProfilePreset, string> = {
-	balanced: 'settings.streamTuning.profileNames.balanced',
-	'low-latency': 'settings.streamTuning.profileNames.lowLatency',
-	resilient: 'settings.streamTuning.profileNames.resilient',
-	classic: 'settings.streamTuning.profileNames.classic',
-	'low-latency-fec': 'settings.streamTuning.profileNames.lowLatencyFec',
-};
-
-const selectedProfile = $derived<StreamProfileId>(activeProfile ?? experience.defaultProfile);
-
 // A control is interactive only when its capability gate is open AND no stream
 // is live. The gate (reason key) comes from the experience; streaming adds a
 // blanket lock on top, explained by the dialog's stop-to-change banner.
@@ -114,9 +102,6 @@ const recoveryReason = $derived(
 	experience.recoveryModeDisabledReasonKey
 		? t(experience.recoveryModeDisabledReasonKey)
 		: undefined,
-);
-const presetsReason = $derived(
-	experience.presetsDisabledReasonKey ? t(experience.presetsDisabledReasonKey) : undefined,
 );
 
 // Latency is honoured by every receiver, so the slider is locked only while a
@@ -143,22 +128,47 @@ const activeRecovery = $derived<StreamRecoveryPreference>(
 	recoveryMode ?? experience.defaultRecoveryMode,
 );
 
+// Preset snap-chips: a named combination of the three controls above. Clicking a
+// chip sets all three; the active chip is DERIVED from the live values, so any
+// control edit drops the row to "Custom" with no extra wiring.
+const presetChips = $derived(getPresetChips(experience));
+const activeChip = $derived(
+	matchActivePreset({
+		latencyMs: sliderLatency,
+		fecEnabled: fecChecked,
+		recoveryMode: activeRecovery,
+	}),
+);
+
+function selectPreset(presetId: StreamProfileId): void {
+	if (presetId === 'custom') return;
+	const preset = PRESET_CONFIGS[presetId];
+	onLatencyChange?.(Math.min(Math.max(preset.latencyMs, range.min), range.max));
+	onFecChange?.(preset.fecEnabled);
+	onRecoveryChange?.(preset.recoveryMode);
+}
+
 const rowBase =
 	'flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors';
 const rowIdle = 'border-border';
 const rowDisabled = 'border-border opacity-60';
 const segmentBase =
-	'flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50';
+	'flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50';
+const focusRing =
+	'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 </script>
 
 <section
 	class="space-y-3 rounded-xl border p-3.5"
+	aria-labelledby="stream-tuning-title"
 	data-receiver-kind={experience.isCeraLiveReceiver ? 'ceralive' : 'non-ceralive'}
 	data-testid="stream-tuning"
 >
-	<div class="flex items-center justify-between gap-2">
+	<div class="flex flex-wrap items-center justify-between gap-2">
 		<div class="flex items-center gap-1">
-			<span class="text-sm font-medium">{$LL.settings.streamTuning.title()}</span>
+			<span class="text-sm font-medium" id="stream-tuning-title"
+				>{$LL.settings.streamTuning.title()}</span
+			>
 			<InfoPopover
 				body={$LL.settings.streamTuning.hint()}
 				testId="stream-tuning-info"
@@ -172,6 +182,14 @@ const segmentBase =
 			>
 				<ShieldCheck aria-hidden={true} class="text-primary size-3.5" />
 				{$LL.settings.streamTuning.ceraliveReceiver()}
+			</span>
+		{:else}
+			<span
+				class="border-status-warning/30 bg-status-warning/10 text-foreground inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium"
+				data-testid="stream-tuning-belabox-badge"
+			>
+				<Radio aria-hidden={true} class="text-status-warning size-3.5" />
+				{$LL.settings.streamTuning.belaboxBadge()}
 			</span>
 		{/if}
 	</div>
@@ -206,10 +224,12 @@ const segmentBase =
 			></div>
 			<input
 				id="stream-tuning-latency-slider"
+				aria-label={$LL.settings.streamTuning.latency()}
 				aria-valuemax={range.max}
 				aria-valuemin={range.min}
 				aria-valuenow={sliderLatency}
-				class="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+				aria-valuetext={formatSeconds(displayLatencyMs)}
+				class="peer absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
 				data-testid="stream-tuning-latency-slider"
 				disabled={isStreaming}
 				max={range.max}
@@ -219,6 +239,9 @@ const segmentBase =
 				type="range"
 				value={sliderLatency}
 			/>
+			<div
+				class="ring-ring/70 ring-offset-background pointer-events-none absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full peer-focus-visible:ring-2 peer-focus-visible:ring-offset-2"
+			></div>
 		</div>
 		<div class="text-muted-foreground flex justify-between text-xs">
 			<span>{formatSeconds(range.min)} · {$LL.settings.lowerLatency()}</span>
@@ -226,8 +249,10 @@ const segmentBase =
 		</div>
 	</div>
 
-	<!-- Profile presets — chips. CeraLive: the advertised set, enabled. Other
-	     receivers: Classic only, disabled-with-reason (never hidden). -->
+	<!-- Preset snap-chips — named saved combinations of latency + FEC + recovery.
+	     Clicking a chip sets all three; editing any control drops the active chip
+	     to Custom. Capability-unavailable chips are disabled-with-reason, never
+	     hidden (e.g. the FEC preset on a non-FEC receiver). -->
 	<div class="space-y-1.5">
 		<div class="flex items-center gap-1">
 			<Label class="text-sm font-medium" id="stream-tuning-presets-label">
@@ -241,22 +266,28 @@ const segmentBase =
 			data-disabled={presetsDisabled}
 			role="group"
 		>
-			{#each experience.availableProfiles as profile (profile)}
+			{#each presetChips as chip (chip.presetId)}
+				{@const pressed = chip.presetId === activeChip}
+				{@const isCustom = chip.presetId === 'custom'}
+				{@const disabled = chip.disabled || isStreaming || (isCustom && !pressed)}
+				{@const reason = chip.reasonKey ? t(chip.reasonKey) : undefined}
 				<button
-					aria-pressed={profile === selectedProfile}
+					aria-pressed={pressed}
 					class={cn(
 						'rounded-md border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-						profile === selectedProfile
+						focusRing,
+						pressed
 							? 'border-primary bg-primary/10 text-foreground'
 							: 'border-border text-muted-foreground hover:text-foreground',
 					)}
-					data-profile={profile}
-					data-testid={`stream-tuning-preset-${profile}`}
-					disabled={presetsDisabled}
-					title={presetsReason}
+					data-profile={chip.presetId}
+					data-testid={`stream-tuning-preset-${chip.presetId}`}
+					{disabled}
+					onclick={() => selectPreset(chip.presetId)}
+					title={reason}
 					type="button"
 				>
-					{t(PROFILE_LABEL_KEYS[profile])}
+					{t(chip.labelKey)}
 				</button>
 			{/each}
 		</div>
@@ -288,7 +319,10 @@ const segmentBase =
 	     other receivers it stays present but disabled-with-reason (never hidden). -->
 	<details class="border-border group rounded-lg border px-3 py-2" data-testid="stream-tuning-advanced">
 		<summary
-			class="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium"
+			class={cn(
+				'flex cursor-pointer list-none items-center justify-between gap-2 rounded-md text-sm font-medium',
+				focusRing,
+			)}
 		>
 			{$LL.settings.streamTuning.advanced()}
 			<ChevronDown
@@ -303,7 +337,7 @@ const segmentBase =
 			<div
 				aria-labelledby="stream-tuning-recovery-label"
 				class={cn(
-					'border-border flex gap-1 rounded-lg border p-1',
+					'border-border flex flex-col gap-1 rounded-lg border p-1 sm:flex-row',
 					recoveryDisabled && 'opacity-60',
 				)}
 				data-disabled={recoveryDisabled}

@@ -79,6 +79,43 @@ export type StreamRecoveryPreference = (typeof STREAM_RECOVERY_PREFERENCES)[numb
 export const DEFAULT_RECOVERY_PREFERENCE = 'standard' satisfies StreamRecoveryPreference;
 
 // =============================================================================
+// Preset → expanded-settings table (named saved combinations)
+// =============================================================================
+
+/**
+ * The expanded control values a named preset saves. A preset is just a named
+ * combination of the three operator-facing controls — latency + FEC + recovery
+ * preference — NOT a separate profile mechanism. Selecting a preset chip sets all
+ * three; editing any one control drops the active chip to `'custom'`.
+ *
+ * `recoveryMode` is the OPERATOR-facing {@link StreamRecoveryPreference}
+ * (`standard` / `bandwidth-saver`), the same axis the recovery segmented control
+ * writes — never the internal {@link StreamRecoveryMode} freeze taxonomy.
+ */
+export interface PresetConfig {
+	/** SRT latency the preset seeds (ms); clamped to the receiver window at apply. */
+	latencyMs: number;
+	/** Whether the preset turns FEC on (only `low-latency-fec` does). */
+	fecEnabled: boolean;
+	/** Recovery preference the preset selects. */
+	recoveryMode: StreamRecoveryPreference;
+}
+
+/**
+ * The v1 preset table: each named preset → its expanded {latency, FEC, recovery}
+ * combination. The single source of truth for the Stream Tuning preset chips —
+ * the card never inlines these latency/FEC/recovery values. `low-latency-fec` is
+ * the only FEC-on preset; `classic` is the only `bandwidth-saver` (L2) preset.
+ */
+export const PRESET_CONFIGS: Record<StreamProfilePreset, PresetConfig> = {
+	balanced: { latencyMs: 1500, fecEnabled: false, recoveryMode: 'standard' },
+	'low-latency': { latencyMs: 500, fecEnabled: false, recoveryMode: 'standard' },
+	resilient: { latencyMs: 3500, fecEnabled: false, recoveryMode: 'standard' },
+	classic: { latencyMs: 2000, fecEnabled: false, recoveryMode: 'bandwidth-saver' },
+	'low-latency-fec': { latencyMs: 800, fecEnabled: true, recoveryMode: 'standard' },
+};
+
+// =============================================================================
 // Receiver kind (Stream Tuning taxonomy)
 // =============================================================================
 

@@ -55,6 +55,10 @@ test.describe('@visual Stream Tuning card', () => {
 		await card.screenshot({
 			path: path.join(VISUAL_DIR, 'task-16-srt-receive-profiles.png'),
 		});
+		// Task 20 evidence — preset snap-chips disabled-with-reason (never hidden).
+		await card.screenshot({
+			path: path.join(VISUAL_DIR, 'task-20-non-ceralive.png'),
+		});
 
 		// CeraLive: managed cloud → full controls + receiver badge.
 		const managed = dialog.getByTestId('destination-managed');
@@ -63,6 +67,13 @@ test.describe('@visual Stream Tuning card', () => {
 		await expect(card).toHaveAttribute('data-receiver-kind', 'ceralive');
 		await expect(dialog.getByTestId('stream-tuning-ceralive-badge')).toBeVisible();
 		await card.screenshot({ path: path.join(VISUAL_DIR, 'ceralive.png') });
+		// Task 20 evidence — the preset snap-chip row on a CeraLive receiver. The
+		// dev caps advertise only Classic, so the other chips show disabled-with-
+		// reason (never hidden) — the row is the evidence, no click needed.
+		await expect(dialog.getByTestId('stream-tuning-presets')).toBeVisible();
+		await card.screenshot({
+			path: path.join(VISUAL_DIR, 'task-20-srt-receive-profiles.png'),
+		});
 
 		// Task 17 evidence — the continuous latency slider + live value pill.
 		await dialog.getByTestId('stream-tuning-latency-slider').fill('1500');

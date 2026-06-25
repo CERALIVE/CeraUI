@@ -126,6 +126,7 @@ const hi = {
 			recoveryBandwidthSaverHint: "विशेषज्ञ",
 			recoveryHelper:
 				"मानक स्ट्रीम को सहज और विश्वसनीय रखता है। बैंडविड्थ बचत रिकवरी ट्रैफ़िक को कम करती है ताकि सीमित कनेक्शनों पर कम डेटा का उपयोग हो।",
+			belaboxBadge: "मानक (BELABOX-संगत)",
 			belaboxBannerTitle: "मानक (BELABOX-संगत डिफ़ॉल्ट)",
 			belaboxBannerBody:
 				"यह रिसीवर CeraLive रिसीवर नहीं है, इसलिए केवल विलंबता समायोज्य है। उन्नत ट्यूनिंग के लिए CeraLive रिसीवर आवश्यक है।",
@@ -133,12 +134,14 @@ const hi = {
 			reasonReceiverManaged: "रिसीवर द्वारा प्रबंधित।",
 			reasonFecUnsupported:
 				"इस CeraLive रिसीवर का libsrt बिल्ड FEC का समर्थन नहीं करता।",
+			reasonProfileUnsupported: "यह रिसीवर यह प्रोफ़ाइल प्रदान नहीं करता।",
 			profileNames: {
 				balanced: "संतुलित",
 				lowLatency: "कम विलंबता",
 				resilient: "लचीला",
 				classic: "क्लासिक",
 				lowLatencyFec: "कम विलंबता + FEC",
+				custom: "कस्टम",
 			},
 		},
 		deviceStats: {

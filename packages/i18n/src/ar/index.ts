@@ -264,18 +264,21 @@ const ar = {
 			recoveryBandwidthSaverHint: "خبير",
 			recoveryHelper:
 				"يحافظ الوضع القياسي على بثّ سلس وموثوق. يقلّل توفير عرض النطاق حركة الاستعادة لاستهلاك بيانات أقلّ على الاتصالات المحدودة.",
+			belaboxBadge: "قياسي (متوافق مع BELABOX)",
 			belaboxBannerTitle: "قياسي (إعدادات متوافقة مع BELABOX)",
 			belaboxBannerBody:
 				"هذا المستقبِل ليس مستقبِل CeraLive، لذا يمكن ضبط زمن الوصول فقط. يتطلّب الضبط المتقدّم مستقبِل CeraLive.",
 			reasonNonCeraLive: "متاح فقط مع مستقبِل CeraLive.",
 			reasonReceiverManaged: "تُدار بواسطة المستقبِل.",
 			reasonFecUnsupported: "إصدار libsrt لهذا المستقبِل CeraLive لا يدعم FEC.",
+			reasonProfileUnsupported: "هذا المستقبِل لا يوفّر هذا الملف الشخصي.",
 			profileNames: {
 				balanced: "متوازن",
 				lowLatency: "زمن وصول منخفض",
 				resilient: "مرن",
 				classic: "كلاسيكي",
 				lowLatencyFec: "زمن وصول منخفض + FEC",
+				custom: "مخصّص",
 			},
 		},
 		deviceStats: {

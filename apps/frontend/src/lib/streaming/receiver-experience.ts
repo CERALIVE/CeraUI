@@ -25,6 +25,7 @@ import {
 	DEFAULT_NON_CERALIVE_PROFILE,
 	deriveReceiverKind,
 	type LatencyRange,
+	PRESET_CONFIGS,
 	RELAY_PROVIDER_KINDS,
 	type ReceiverCaps,
 	type ReceiverKind,
@@ -34,6 +35,7 @@ import {
 	type RelayServer,
 	relayProtocolSchema,
 	type StreamingConfigInput,
+	type StreamProfileId,
 	type StreamProfilePreset,
 	type StreamRecoveryMode,
 	type StreamRecoveryPreference,
@@ -853,6 +855,8 @@ const CERALIVE_FALLBACK_LATENCY_RANGE: LatencyRange = {
 const REASON_NON_CERALIVE = "settings.streamTuning.reasonNonCeraLive";
 const REASON_FEC_UNSUPPORTED = "settings.streamTuning.reasonFecUnsupported";
 const REASON_RECEIVER_MANAGED = "settings.streamTuning.reasonReceiverManaged";
+const REASON_PROFILE_UNSUPPORTED =
+	"settings.streamTuning.reasonProfileUnsupported";
 
 /**
  * Map a configured relay/remote provider to the Stream Tuning receiver kind.
@@ -1007,4 +1011,123 @@ export function deriveStreamTuningExperience(
 		defaultProfile,
 		showBelaboxBanner: false,
 	};
+}
+
+// =============================================================================
+// Preset snap-chips (named saved combinations) — Task 20
+// =============================================================================
+
+/** Chip display order (the task's row order); `custom` always trails. */
+const PRESET_CHIP_ORDER: readonly StreamProfilePreset[] = [
+	"low-latency",
+	"balanced",
+	"resilient",
+	"low-latency-fec",
+	"classic",
+];
+
+/** i18n dot-path label key per profile id (incl. the derived `custom`). */
+const PRESET_LABEL_KEYS: Record<StreamProfileId, string> = {
+	balanced: "settings.streamTuning.profileNames.balanced",
+	"low-latency": "settings.streamTuning.profileNames.lowLatency",
+	resilient: "settings.streamTuning.profileNames.resilient",
+	classic: "settings.streamTuning.profileNames.classic",
+	"low-latency-fec": "settings.streamTuning.profileNames.lowLatencyFec",
+	custom: "settings.streamTuning.profileNames.custom",
+};
+
+/**
+ * One preset snap-chip's render state. The component resolves `labelKey` /
+ * `reasonKey` through the `$LL` proxy (this module stays `$LL`-free) and renders
+ * a disabled chip with `reasonKey` as its tooltip — capability-unavailable
+ * presets are DISABLED-with-reason, never hidden.
+ */
+export interface PresetChip {
+	presetId: StreamProfileId;
+	labelKey: string;
+	disabled: boolean;
+	/** i18n reason key for the disabled tooltip; present only when `disabled`. */
+	reasonKey?: string;
+}
+
+/**
+ * Build the preset snap-chip row from the resolved Stream Tuning experience: the
+ * 5 named presets in display order plus the derived `custom` chip. A chip is
+ * disabled-with-reason (never hidden) when the receiver can't honour it:
+ * - presets gated off entirely (non-CeraLive) → every chip carries the gate reason;
+ * - a FEC preset on a receiver whose build lacks FEC → the FEC reason;
+ * - a preset the receiver doesn't advertise → the profile-unsupported reason.
+ * `custom` is the manual-tuning state, reachable only by editing a control, so it
+ * is gated off exactly when presets are.
+ */
+export function getPresetChips(
+	experience: StreamTuningExperience,
+): PresetChip[] {
+	const chips = PRESET_CHIP_ORDER.map((presetId): PresetChip => {
+		const labelKey = PRESET_LABEL_KEYS[presetId];
+		if (!experience.presetsEnabled) {
+			return {
+				presetId,
+				labelKey,
+				disabled: true,
+				...(experience.presetsDisabledReasonKey
+					? { reasonKey: experience.presetsDisabledReasonKey }
+					: {}),
+			};
+		}
+		if (PRESET_CONFIGS[presetId].fecEnabled && !experience.fecEnabled) {
+			return {
+				presetId,
+				labelKey,
+				disabled: true,
+				reasonKey: experience.fecDisabledReasonKey ?? REASON_FEC_UNSUPPORTED,
+			};
+		}
+		if (!experience.availableProfiles.includes(presetId)) {
+			return {
+				presetId,
+				labelKey,
+				disabled: true,
+				reasonKey: REASON_PROFILE_UNSUPPORTED,
+			};
+		}
+		return { presetId, labelKey, disabled: false };
+	});
+
+	chips.push({
+		presetId: "custom",
+		labelKey: PRESET_LABEL_KEYS.custom,
+		disabled: !experience.presetsEnabled,
+		...(experience.presetsEnabled || !experience.presetsDisabledReasonKey
+			? {}
+			: { reasonKey: experience.presetsDisabledReasonKey }),
+	});
+	return chips;
+}
+
+/** The live control values a preset is matched against. */
+export interface PresetMatchValues {
+	latencyMs: number;
+	fecEnabled: boolean;
+	recoveryMode: StreamRecoveryPreference;
+}
+
+/**
+ * Resolve which chip is active from the live control values: the preset whose
+ * expanded {latency, FEC, recovery} combination matches exactly, else `custom`.
+ * Editing any one control therefore drops the active chip to `custom` for free —
+ * no preset matches a bespoke combination.
+ */
+export function matchActivePreset(values: PresetMatchValues): StreamProfileId {
+	for (const presetId of PRESET_CHIP_ORDER) {
+		const config = PRESET_CONFIGS[presetId];
+		if (
+			config.latencyMs === values.latencyMs &&
+			config.fecEnabled === values.fecEnabled &&
+			config.recoveryMode === values.recoveryMode
+		) {
+			return presetId;
+		}
+	}
+	return "custom";
 }

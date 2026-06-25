@@ -127,6 +127,7 @@ const ko = {
 			recoveryBandwidthSaverHint: "전문가",
 			recoveryHelper:
 				"표준은 스트림을 부드럽고 안정적으로 유지합니다. 대역폭 절약은 복구 트래픽을 줄여 제한된 연결에서 데이터 사용량을 낮춥니다.",
+			belaboxBadge: "표준(BELABOX 호환)",
 			belaboxBannerTitle: "표준(BELABOX 호환 기본값)",
 			belaboxBannerBody:
 				"이 수신기는 CeraLive 수신기가 아니므로 지연 시간만 조정할 수 있습니다. 고급 튜닝에는 CeraLive 수신기가 필요합니다.",
@@ -134,12 +135,14 @@ const ko = {
 			reasonReceiverManaged: "수신기에서 관리됩니다.",
 			reasonFecUnsupported:
 				"이 CeraLive 수신기의 libsrt 빌드는 FEC를 지원하지 않습니다.",
+			reasonProfileUnsupported: "이 수신기는 이 프로필을 제공하지 않습니다.",
 			profileNames: {
 				balanced: "균형",
 				lowLatency: "저지연",
 				resilient: "복원력",
 				classic: "클래식",
 				lowLatencyFec: "저지연 + FEC",
+				custom: "사용자 지정",
 			},
 		},
 		deviceStats: {

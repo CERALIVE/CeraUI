@@ -124,18 +124,21 @@ const zh = {
 			recoveryBandwidthSaverHint: "专家",
 			recoveryHelper:
 				"标准模式保持推流流畅可靠。节省带宽会削减恢复流量，在受限连接上使用更少的数据。",
+			belaboxBadge: "标准（兼容 BELABOX）",
 			belaboxBannerTitle: "标准（与 BELABOX 兼容的默认值）",
 			belaboxBannerBody:
 				"此接收端不是 CeraLive 接收端，因此只能调整延迟。高级调优需要 CeraLive 接收端。",
 			reasonNonCeraLive: "仅 CeraLive 接收端可用。",
 			reasonReceiverManaged: "由接收端管理。",
 			reasonFecUnsupported: "此 CeraLive 接收端的 libsrt 版本不支持 FEC。",
+			reasonProfileUnsupported: "此接收端不提供此配置文件。",
 			profileNames: {
 				balanced: "均衡",
 				lowLatency: "低延迟",
 				resilient: "高韧性",
 				classic: "经典",
 				lowLatencyFec: "低延迟 + FEC",
+				custom: "自定义",
 			},
 		},
 		deviceStats: {

@@ -681,6 +681,7 @@ const de = {
 			recoveryBandwidthSaverHint: "Experte",
 			recoveryHelper:
 				"Standard hält den Stream flüssig und zuverlässig. Der Bandbreitensparer reduziert den Wiederherstellungsverkehr, um bei begrenzten Verbindungen weniger Daten zu verbrauchen.",
+			belaboxBadge: "Standard (BELABOX-kompatibel)",
 			belaboxBannerTitle: "Standard (BELABOX-kompatible Werte)",
 			belaboxBannerBody:
 				"Dieser Empfänger ist kein CeraLive-Empfänger, daher lässt sich nur die Latenz anpassen. Die erweiterte Feinabstimmung erfordert einen CeraLive-Empfänger.",
@@ -688,12 +689,15 @@ const de = {
 			reasonReceiverManaged: "Vom Empfänger verwaltet.",
 			reasonFecUnsupported:
 				"Der libsrt-Build dieses CeraLive-Empfängers unterstützt kein FEC.",
+			reasonProfileUnsupported:
+				"Dieser Empfänger bietet dieses Profil nicht an.",
 			profileNames: {
 				balanced: "Ausgewogen",
 				lowLatency: "Niedrige Latenz",
 				resilient: "Robust",
 				classic: "Klassisch",
 				lowLatencyFec: "Niedrige Latenz + FEC",
+				custom: "Benutzerdefiniert",
 			},
 		},
 		deviceStats: {

@@ -282,6 +282,7 @@ const ptBR = {
 			recoveryBandwidthSaverHint: "Especialista",
 			recoveryHelper:
 				"O padrão mantém a transmissão fluida e confiável. A economia de banda reduz o tráfego de recuperação para usar menos dados em conexões limitadas.",
+			belaboxBadge: "Padrão (compatível com BELABOX)",
 			belaboxBannerTitle: "Padrão (valores compatíveis com BELABOX)",
 			belaboxBannerBody:
 				"Este receptor não é um receptor CeraLive, então apenas a latência é ajustável. O ajuste avançado requer um receptor CeraLive.",
@@ -289,12 +290,14 @@ const ptBR = {
 			reasonReceiverManaged: "Gerenciado pelo receptor.",
 			reasonFecUnsupported:
 				"A build do libsrt deste receptor CeraLive não oferece suporte a FEC.",
+			reasonProfileUnsupported: "Este receptor não oferece este perfil.",
 			profileNames: {
 				balanced: "Equilibrado",
 				lowLatency: "Baixa latência",
 				resilient: "Resiliente",
 				classic: "Clássico",
 				lowLatencyFec: "Baixa latência + FEC",
+				custom: "Personalizado",
 			},
 		},
 		deviceStats: {

@@ -678,6 +678,7 @@ const en = {
 			recoveryBandwidthSaverHint: "Expert",
 			recoveryHelper:
 				"Standard keeps the stream smooth and reliable. Bandwidth Saver trims recovery traffic to use less data on capped connections.",
+			belaboxBadge: "Standard (BELABOX-compatible)",
 			belaboxBannerTitle: "Standard (BELABOX-compatible defaults)",
 			belaboxBannerBody:
 				"This receiver isn't a CeraLive receiver, so only latency is adjustable. Advanced tuning needs a CeraLive receiver.",
@@ -685,12 +686,14 @@ const en = {
 			reasonReceiverManaged: "Receiver-managed.",
 			reasonFecUnsupported:
 				"This CeraLive receiver's libsrt build doesn't support FEC.",
+			reasonProfileUnsupported: "This receiver doesn't offer this profile.",
 			profileNames: {
 				balanced: "Balanced",
 				lowLatency: "Low latency",
 				resilient: "Resilient",
 				classic: "Classic",
 				lowLatencyFec: "Low latency + FEC",
+				custom: "Custom",
 			},
 		},
 		appearance: {

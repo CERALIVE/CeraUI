@@ -282,6 +282,7 @@ const fr = {
 			recoveryBandwidthSaverHint: "Expert",
 			recoveryHelper:
 				"Standard garde le flux fluide et fiable. L'économie de bande passante réduit le trafic de récupération pour consommer moins de données sur les connexions limitées.",
+			belaboxBadge: "Standard (compatible BELABOX)",
 			belaboxBannerTitle: "Standard (valeurs compatibles BELABOX)",
 			belaboxBannerBody:
 				"Ce récepteur n'est pas un récepteur CeraLive, seule la latence est donc réglable. Le réglage avancé nécessite un récepteur CeraLive.",
@@ -289,12 +290,14 @@ const fr = {
 			reasonReceiverManaged: "Géré par le récepteur.",
 			reasonFecUnsupported:
 				"La version de libsrt de ce récepteur CeraLive ne prend pas en charge le FEC.",
+			reasonProfileUnsupported: "Ce récepteur ne propose pas ce profil.",
 			profileNames: {
 				balanced: "Équilibré",
 				lowLatency: "Faible latence",
 				resilient: "Résilient",
 				classic: "Classique",
 				lowLatencyFec: "Faible latence + FEC",
+				custom: "Personnalisé",
 			},
 		},
 		deviceStats: {

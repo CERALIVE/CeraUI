@@ -87,6 +87,7 @@ describe("StreamTuningSection — CeraLive receiver", () => {
 		expect(btn("stream-tuning-preset-balanced").disabled).toBe(false);
 		expect(btn("stream-tuning-preset-low-latency-fec").disabled).toBe(false);
 		expect(screen.queryByTestId("stream-tuning-belabox-banner")).toBeNull();
+		expect(screen.queryByTestId("stream-tuning-belabox-badge")).toBeNull();
 	});
 
 	it("locks every control while a stream is live", () => {
@@ -130,7 +131,16 @@ describe("StreamTuningSection — non-CeraLive receiver", () => {
 		).toBe("Receiver-managed.");
 
 		expect(screen.getByTestId("stream-tuning-belabox-banner")).toBeTruthy();
-		expect(screen.queryByTestId("stream-tuning-preset-balanced")).toBeNull();
+		expect(
+			screen.getByTestId("stream-tuning-belabox-badge").textContent,
+		).toContain("Standard (BELABOX-compatible)");
+		// Task 20: capability-unavailable preset chips are disabled-with-reason,
+		// NEVER hidden — so balanced renders (disabled) on a non-CeraLive receiver.
+		const balancedChip = btn("stream-tuning-preset-balanced");
+		expect(balancedChip.disabled).toBe(true);
+		expect(balancedChip.getAttribute("title")).toBe(
+			"Available only with a CeraLive receiver.",
+		);
 		expect(screen.queryByTestId("stream-tuning-ceralive-badge")).toBeNull();
 	});
 
@@ -241,5 +251,157 @@ describe("StreamTuningSection — recovery segmented control (Task 19)", () => {
 		expect(
 			btn("stream-tuning-recovery-standard").getAttribute("aria-pressed"),
 		).toBe("false");
+	});
+});
+
+describe("StreamTuningSection — accessibility (Task 22)", () => {
+	it("names the card region and gives the slider an accessible name + value text", () => {
+		render(StreamTuningSection, {
+			props: { experience: CERALIVE, latencyMs: 1500 },
+		});
+
+		const card = screen.getByTestId("stream-tuning");
+		expect(card.getAttribute("aria-labelledby")).toBe("stream-tuning-title");
+		expect(card.querySelector("#stream-tuning-title")?.textContent).toContain(
+			"Stream tuning",
+		);
+
+		const slider = screen.getByTestId(
+			"stream-tuning-latency-slider",
+		) as HTMLInputElement;
+		expect(slider.getAttribute("aria-label")).toBe("Latency");
+		expect(slider.getAttribute("aria-valuetext")).toContain("1.5 s");
+	});
+
+	it("keeps every disabled control labelled and reasoned for a non-CeraLive receiver", () => {
+		render(StreamTuningSection, {
+			props: { experience: NON_CERALIVE, latencyMs: 1500 },
+		});
+
+		const fec = btn("stream-tuning-fec");
+		expect(fec.getAttribute("aria-label")).toBe("Forward error correction");
+		expect(fec.getAttribute("title")).toBe(
+			"Available only with a CeraLive receiver.",
+		);
+		for (const id of [
+			"stream-tuning-recovery-standard",
+			"stream-tuning-recovery-bandwidth-saver",
+		]) {
+			expect(btn(id).getAttribute("title")).toBe("Receiver-managed.");
+		}
+		expect(btn("stream-tuning-preset-classic").getAttribute("title")).toBe(
+			"Available only with a CeraLive receiver.",
+		);
+	});
+});
+
+describe("StreamTuningSection — preset snap-chips (Task 20)", () => {
+	const CERALIVE_NO_FEC: StreamTuningExperience = {
+		...CERALIVE,
+		fecEnabled: false,
+		fecDisabledReasonKey: "settings.streamTuning.reasonFecUnsupported",
+	};
+
+	it("pre-selects Balanced at the default 1500 ms / FEC off / Standard state", () => {
+		render(StreamTuningSection, {
+			props: { experience: CERALIVE, latencyMs: 1500 },
+		});
+		expect(
+			btn("stream-tuning-preset-balanced").getAttribute("aria-pressed"),
+		).toBe("true");
+		expect(
+			btn("stream-tuning-preset-custom").getAttribute("aria-pressed"),
+		).toBe("false");
+	});
+
+	it("clicking Low Latency sets ~500 ms + FEC off + Standard via the callbacks", async () => {
+		const onLatencyChange = vi.fn();
+		const onFecChange = vi.fn();
+		const onRecoveryChange = vi.fn();
+		render(StreamTuningSection, {
+			props: {
+				experience: CERALIVE,
+				latencyMs: 1500,
+				onLatencyChange,
+				onFecChange,
+				onRecoveryChange,
+			},
+		});
+		await fireEvent.click(btn("stream-tuning-preset-low-latency"));
+		expect(onLatencyChange).toHaveBeenCalledWith(500);
+		expect(onFecChange).toHaveBeenCalledWith(false);
+		expect(onRecoveryChange).toHaveBeenCalledWith("standard");
+	});
+
+	it("clicking Classic sets ~2000 ms + Bandwidth Saver recovery", async () => {
+		const onLatencyChange = vi.fn();
+		const onRecoveryChange = vi.fn();
+		render(StreamTuningSection, {
+			props: {
+				experience: CERALIVE,
+				latencyMs: 1500,
+				onLatencyChange,
+				onRecoveryChange,
+			},
+		});
+		await fireEvent.click(btn("stream-tuning-preset-classic"));
+		expect(onLatencyChange).toHaveBeenCalledWith(2000);
+		expect(onRecoveryChange).toHaveBeenCalledWith("bandwidth-saver");
+	});
+
+	it("clicking Low Latency + FEC turns FEC on and sets ~800 ms", async () => {
+		const onLatencyChange = vi.fn();
+		const onFecChange = vi.fn();
+		render(StreamTuningSection, {
+			props: {
+				experience: CERALIVE,
+				latencyMs: 1500,
+				onLatencyChange,
+				onFecChange,
+			},
+		});
+		await fireEvent.click(btn("stream-tuning-preset-low-latency-fec"));
+		expect(onFecChange).toHaveBeenCalledWith(true);
+		expect(onLatencyChange).toHaveBeenCalledWith(800);
+	});
+
+	it("flips the active chip to Custom when a control diverges from every preset", () => {
+		render(StreamTuningSection, {
+			props: { experience: CERALIVE, latencyMs: 1234 },
+		});
+		const custom = btn("stream-tuning-preset-custom");
+		expect(custom.getAttribute("aria-pressed")).toBe("true");
+		expect(custom.disabled).toBe(false);
+		expect(
+			btn("stream-tuning-preset-balanced").getAttribute("aria-pressed"),
+		).toBe("false");
+	});
+
+	it("disables the FEC preset with the FEC reason on a non-FEC CeraLive build", () => {
+		render(StreamTuningSection, {
+			props: { experience: CERALIVE_NO_FEC, latencyMs: 1500 },
+		});
+		const fecChip = btn("stream-tuning-preset-low-latency-fec");
+		expect(fecChip.disabled).toBe(true);
+		expect(fecChip.getAttribute("title")).toBe(
+			"This CeraLive receiver's libsrt build doesn't support FEC.",
+		);
+		// A non-FEC preset stays interactive on the same receiver.
+		expect(btn("stream-tuning-preset-balanced").disabled).toBe(false);
+	});
+
+	it("locks every preset chip while a stream is live", () => {
+		render(StreamTuningSection, {
+			props: { experience: CERALIVE, latencyMs: 1500, isStreaming: true },
+		});
+		for (const id of [
+			"low-latency",
+			"balanced",
+			"resilient",
+			"low-latency-fec",
+			"classic",
+		]) {
+			expect(btn(`stream-tuning-preset-${id}`).disabled).toBe(true);
+		}
 	});
 });
