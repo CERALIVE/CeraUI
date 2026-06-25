@@ -165,6 +165,10 @@ function draftOf(overrides: Partial<ServerSetDraft> = {}): ServerSetDraft {
 		relayStreamId: "",
 		relayServer: "",
 		relayAccount: "",
+		// The dialog always persists the FEC value (false when the receiver can't
+		// do FEC, as in these non-CeraLive test scenarios). recovery_mode is only
+		// sent for a CeraLive receiver, so it stays absent here.
+		fecEnabled: false,
 		...overrides,
 	};
 }

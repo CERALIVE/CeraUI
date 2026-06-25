@@ -10,17 +10,26 @@ import {
 	buildManagedSlotConfig,
 	buildServerSetConfig,
 	buildServerSummary,
+	buildSummaryText,
+	type CloudOverrideState,
 	countRelayServersForProvider,
 	type Destination,
 	deriveDestination,
+	deriveReceiverCaps,
+	deriveReceiverProfileKind,
 	deriveServerReadiness,
+	deriveStreamTuningExperience,
 	findActiveSlot,
+	getPresetChips,
 	groupRelayServersByProvider,
+	hasProfileDrift,
+	isCloudOverride,
 	isRelayServerStaleForProvider,
 	kindBadgeLabelKey,
 	type ManagedIngestAccount,
 	type ManagedProviderOption,
 	managedSlotLabel,
+	matchActivePreset,
 	overrideClearsManagedBinding,
 	resolveActiveManagedProvider,
 	resolveReceiverKind,
@@ -362,6 +371,40 @@ describe("buildServerSetConfig — byte-identical to today's handleSave branches
 				srt_streamid: "publish/abc",
 			});
 		});
+	});
+});
+
+describe("buildServerSetConfig — FEC + recovery tuning (Tasks 18/19)", () => {
+	it("omits fec_enabled and recovery_mode when the draft leaves them undefined", () => {
+		// The existing call sites (and the byte-identical guard above) never set
+		// them, so they must not appear — additive-only, no behaviour change.
+		const result = buildServerSetConfig(draft(), CUSTOM);
+		expect(result).not.toHaveProperty("fec_enabled");
+		expect(result).not.toHaveProperty("recovery_mode");
+	});
+
+	it("persists fec_enabled false (clearing a stale enable) without recovery_mode", () => {
+		const result = buildServerSetConfig(draft({ fecEnabled: false }), CUSTOM);
+		expect(result.fec_enabled).toBe(false);
+		expect(result).not.toHaveProperty("recovery_mode");
+	});
+
+	it("persists an enabled FEC + recovery preference", () => {
+		const result = buildServerSetConfig(
+			draft({ fecEnabled: true, recoveryMode: "bandwidth-saver" }),
+			MANAGED,
+		);
+		expect(result.fec_enabled).toBe(true);
+		expect(result.recovery_mode).toBe("bandwidth-saver");
+		expect(result.relay_server).toBe("fra");
+	});
+
+	it("carries recovery_mode standard through the managed branch", () => {
+		const result = buildServerSetConfig(
+			draft({ recoveryMode: "standard" }),
+			MANAGED,
+		);
+		expect(result.recovery_mode).toBe("standard");
 	});
 });
 
@@ -1014,5 +1057,411 @@ describe("overrideClearsManagedBinding — override-drops-binding warning (T18)"
 				relayServer: "eu",
 			}),
 		).toBe(false);
+	});
+});
+
+describe("deriveReceiverProfileKind (Task 16)", () => {
+	it("maps a managed CeraLive cloud to the ceralive kind", () => {
+		expect(deriveReceiverProfileKind("ceralive")).toBe("ceralive");
+	});
+
+	it("maps belabox and custom to their own kinds", () => {
+		expect(deriveReceiverProfileKind("belabox")).toBe("belabox");
+		expect(deriveReceiverProfileKind("custom")).toBe("custom");
+	});
+
+	it("maps an absent/unrecognised provider to unknown", () => {
+		expect(deriveReceiverProfileKind(undefined)).toBe("unknown");
+		expect(deriveReceiverProfileKind("acme-cloud")).toBe("unknown");
+	});
+});
+
+describe("deriveReceiverCaps (Task 16)", () => {
+	it("projects the engine snapshot for a CeraLive receiver (full set + FEC)", () => {
+		const caps = deriveReceiverCaps("ceralive", {
+			supportedProfiles: [
+				"balanced",
+				"low-latency",
+				"resilient",
+				"classic",
+				"low-latency-fec",
+			],
+			fecCapable: true,
+			latencyRange: { min: 100, default: 1500, max: 5000 },
+		});
+		expect(caps).toEqual({
+			kind: "ceralive",
+			supportsFec: true,
+			supportedProfiles: [
+				"balanced",
+				"low-latency",
+				"resilient",
+				"classic",
+				"low-latency-fec",
+			],
+			latencyRange: { min: 100, default: 1500, max: 5000 },
+			recoveryMode: "reorderfreeze",
+		});
+	});
+
+	it("keeps FEC off for a CeraLive receiver on a stock libsrt build (classic-only)", () => {
+		const caps = deriveReceiverCaps("ceralive", {
+			supportedProfiles: ["classic"],
+			fecCapable: false,
+			latencyRange: { min: 100, default: 1500, max: 2000 },
+		});
+		expect(caps.supportsFec).toBe(false);
+		expect(caps.supportedProfiles).toEqual(["classic"]);
+		expect(caps.recoveryMode).toBe("stock");
+	});
+
+	it("falls back to the CeraLive latency window when the engine advertised none", () => {
+		const caps = deriveReceiverCaps("ceralive", undefined);
+		expect(caps.latencyRange).toEqual({ min: 100, default: 1500, max: 5000 });
+		expect(caps.supportedProfiles).toEqual(["classic"]);
+	});
+
+	it("never trusts forged caps for a non-CeraLive receiver — clamps to Classic baseline", () => {
+		const caps = deriveReceiverCaps("custom", {
+			supportedProfiles: ["balanced", "low-latency-fec"],
+			fecCapable: true,
+			latencyRange: { min: 100, default: 1500, max: 9000 },
+		});
+		expect(caps).toEqual({
+			kind: "custom",
+			supportsFec: false,
+			supportedProfiles: ["classic"],
+			latencyRange: { min: 100, default: 1500, max: 2000 },
+			recoveryMode: "stock",
+		});
+	});
+});
+
+describe("deriveStreamTuningExperience (Task 16)", () => {
+	it("offers full controls for a CeraLive receiver with FEC", () => {
+		const experience = deriveStreamTuningExperience({
+			kind: "ceralive",
+			supportsFec: true,
+			supportedProfiles: ["balanced", "classic", "low-latency-fec"],
+			latencyRange: { min: 100, default: 1500, max: 5000 },
+			recoveryMode: "reorderfreeze",
+		});
+		expect(experience.isCeraLiveReceiver).toBe(true);
+		expect(experience.latencyEnabled).toBe(true);
+		expect(experience.fecEnabled).toBe(true);
+		expect(experience.fecDisabledReasonKey).toBeUndefined();
+		expect(experience.recoveryModeEnabled).toBe(true);
+		expect(experience.defaultRecoveryMode).toBe("standard");
+		expect(experience.presetsEnabled).toBe(true);
+		expect(experience.showBelaboxBanner).toBe(false);
+		expect(experience.defaultProfile).toBe("balanced");
+	});
+
+	it("disables FEC with a reason for a CeraLive receiver whose build lacks FEC", () => {
+		const experience = deriveStreamTuningExperience({
+			kind: "ceralive",
+			supportsFec: false,
+			supportedProfiles: ["balanced", "classic"],
+			latencyRange: { min: 100, default: 1500, max: 5000 },
+			recoveryMode: "reorderfreeze",
+		});
+		expect(experience.isCeraLiveReceiver).toBe(true);
+		expect(experience.fecEnabled).toBe(false);
+		expect(experience.fecDisabledReasonKey).toBe(
+			"settings.streamTuning.reasonFecUnsupported",
+		);
+		expect(experience.recoveryModeEnabled).toBe(true);
+		expect(experience.presetsEnabled).toBe(true);
+		expect(experience.showBelaboxBanner).toBe(false);
+	});
+
+	it("offers latency only + the BELABOX banner for a non-CeraLive receiver", () => {
+		const experience = deriveStreamTuningExperience({
+			kind: "belabox",
+			supportsFec: false,
+			supportedProfiles: ["classic"],
+			latencyRange: { min: 100, default: 1500, max: 2000 },
+			recoveryMode: "stock",
+		});
+		expect(experience.isCeraLiveReceiver).toBe(false);
+		expect(experience.latencyEnabled).toBe(true);
+		expect(experience.fecEnabled).toBe(false);
+		expect(experience.recoveryModeEnabled).toBe(false);
+		expect(experience.presetsEnabled).toBe(false);
+		expect(experience.showBelaboxBanner).toBe(true);
+		expect(experience.defaultProfile).toBe("classic");
+		expect(experience.defaultRecoveryMode).toBe("standard");
+		const reason = "settings.streamTuning.reasonNonCeraLive";
+		expect(experience.fecDisabledReasonKey).toBe(reason);
+		// Recovery is receiver-managed for an unproven receiver — its own reason.
+		expect(experience.recoveryModeDisabledReasonKey).toBe(
+			"settings.streamTuning.reasonReceiverManaged",
+		);
+		expect(experience.presetsDisabledReasonKey).toBe(reason);
+	});
+});
+
+describe("getPresetChips — preset snap-chip row (Task 20)", () => {
+	const FULL_FEC = deriveStreamTuningExperience({
+		kind: "ceralive",
+		supportsFec: true,
+		supportedProfiles: [
+			"balanced",
+			"low-latency",
+			"resilient",
+			"classic",
+			"low-latency-fec",
+		],
+		latencyRange: { min: 100, default: 1500, max: 5000 },
+		recoveryMode: "reorderfreeze",
+	});
+	const NO_FEC = deriveStreamTuningExperience({
+		kind: "ceralive",
+		supportsFec: false,
+		supportedProfiles: [
+			"balanced",
+			"low-latency",
+			"resilient",
+			"classic",
+			"low-latency-fec",
+		],
+		latencyRange: { min: 100, default: 1500, max: 5000 },
+		recoveryMode: "reorderfreeze",
+	});
+	const CLASSIC_ONLY = deriveStreamTuningExperience({
+		kind: "ceralive",
+		supportsFec: false,
+		supportedProfiles: ["classic"],
+		latencyRange: { min: 100, default: 1500, max: 2000 },
+		recoveryMode: "stock",
+	});
+	const NON_CERALIVE = deriveStreamTuningExperience({
+		kind: "belabox",
+		supportsFec: false,
+		supportedProfiles: ["classic"],
+		latencyRange: { min: 100, default: 1500, max: 2000 },
+		recoveryMode: "stock",
+	});
+
+	const byId = (chips: ReturnType<typeof getPresetChips>) =>
+		new Map(chips.map((chip) => [chip.presetId, chip]));
+
+	it("renders all 5 presets + custom in the task's display order", () => {
+		expect(getPresetChips(FULL_FEC).map((c) => c.presetId)).toEqual([
+			"low-latency",
+			"balanced",
+			"resilient",
+			"low-latency-fec",
+			"classic",
+			"custom",
+		]);
+	});
+
+	it("enables every chip on a full FEC-capable CeraLive receiver", () => {
+		for (const chip of getPresetChips(FULL_FEC)) {
+			expect(chip.disabled).toBe(false);
+			expect(chip.reasonKey).toBeUndefined();
+		}
+	});
+
+	it("disables ONLY the FEC preset (with the FEC reason) on a non-FEC build", () => {
+		const chips = byId(getPresetChips(NO_FEC));
+		expect(chips.get("low-latency-fec")?.disabled).toBe(true);
+		expect(chips.get("low-latency-fec")?.reasonKey).toBe(
+			"settings.streamTuning.reasonFecUnsupported",
+		);
+		for (const id of ["low-latency", "balanced", "resilient", "classic"]) {
+			expect(chips.get(id)?.disabled).toBe(false);
+		}
+	});
+
+	it("disables unadvertised presets with the profile-unsupported reason (classic-only)", () => {
+		const chips = byId(getPresetChips(CLASSIC_ONLY));
+		for (const id of ["low-latency", "balanced", "resilient"]) {
+			expect(chips.get(id)?.disabled).toBe(true);
+			expect(chips.get(id)?.reasonKey).toBe(
+				"settings.streamTuning.reasonProfileUnsupported",
+			);
+		}
+		// The FEC preset is gated by the FEC reason, not profile-unsupported.
+		expect(chips.get("low-latency-fec")?.reasonKey).toBe(
+			"settings.streamTuning.reasonFecUnsupported",
+		);
+		expect(chips.get("classic")?.disabled).toBe(false);
+	});
+
+	it("disables every chip (incl. custom) with the gate reason on a non-CeraLive receiver", () => {
+		for (const chip of getPresetChips(NON_CERALIVE)) {
+			expect(chip.disabled).toBe(true);
+			expect(chip.reasonKey).toBe("settings.streamTuning.reasonNonCeraLive");
+		}
+	});
+});
+
+describe("matchActivePreset — active-chip derivation (Task 20)", () => {
+	it("matches each preset's exact expanded combination", () => {
+		expect(
+			matchActivePreset({
+				latencyMs: 1500,
+				fecEnabled: false,
+				recoveryMode: "standard",
+			}),
+		).toBe("balanced");
+		expect(
+			matchActivePreset({
+				latencyMs: 500,
+				fecEnabled: false,
+				recoveryMode: "standard",
+			}),
+		).toBe("low-latency");
+		expect(
+			matchActivePreset({
+				latencyMs: 3500,
+				fecEnabled: false,
+				recoveryMode: "standard",
+			}),
+		).toBe("resilient");
+		expect(
+			matchActivePreset({
+				latencyMs: 2000,
+				fecEnabled: false,
+				recoveryMode: "bandwidth-saver",
+			}),
+		).toBe("classic");
+		expect(
+			matchActivePreset({
+				latencyMs: 800,
+				fecEnabled: true,
+				recoveryMode: "standard",
+			}),
+		).toBe("low-latency-fec");
+	});
+
+	it("falls to custom when any single control diverges from every preset", () => {
+		// Latency off-grid.
+		expect(
+			matchActivePreset({
+				latencyMs: 1234,
+				fecEnabled: false,
+				recoveryMode: "standard",
+			}),
+		).toBe("custom");
+		// FEC toggled on for a non-FEC preset combination.
+		expect(
+			matchActivePreset({
+				latencyMs: 1500,
+				fecEnabled: true,
+				recoveryMode: "standard",
+			}),
+		).toBe("custom");
+		// Recovery switched to bandwidth-saver at a non-classic latency.
+		expect(
+			matchActivePreset({
+				latencyMs: 2000,
+				fecEnabled: false,
+				recoveryMode: "standard",
+			}),
+		).toBe("custom");
+	});
+});
+
+describe("isCloudOverride (Task 21)", () => {
+	it("treats operator and auto as cloud overrides", () => {
+		expect(isCloudOverride({ decidedBy: "operator" })).toBe(true);
+		expect(isCloudOverride({ decidedBy: "auto" })).toBe(true);
+	});
+
+	it("treats device/cohort/global as baseline defaults, not overrides", () => {
+		for (const decidedBy of ["device", "cohort", "global"] as const) {
+			expect(isCloudOverride({ decidedBy })).toBe(false);
+		}
+	});
+
+	it("treats undefined as no override", () => {
+		expect(isCloudOverride(undefined)).toBe(false);
+	});
+
+	it("carries the cloud-pushed preset id when known", () => {
+		const state: CloudOverrideState = {
+			decidedBy: "operator",
+			presetId: "low-latency",
+		};
+		expect(state.presetId).toBe("low-latency");
+		expect(isCloudOverride(state)).toBe(true);
+	});
+});
+
+describe("hasProfileDrift (Task 21)", () => {
+	const base = {
+		latencyMs: 1500,
+		fecEnabled: false,
+		recoveryMode: "standard",
+	} as const;
+
+	it("reports no drift when selected equals active", () => {
+		expect(hasProfileDrift({ ...base }, { ...base })).toBe(false);
+	});
+
+	it("reports drift on a latency difference", () => {
+		expect(hasProfileDrift({ ...base, latencyMs: 2000 }, { ...base })).toBe(
+			true,
+		);
+	});
+
+	it("reports drift on an FEC difference", () => {
+		expect(hasProfileDrift({ ...base, fecEnabled: true }, { ...base })).toBe(
+			true,
+		);
+	});
+
+	it("reports drift on a recovery-mode difference", () => {
+		expect(
+			hasProfileDrift(
+				{ ...base, recoveryMode: "bandwidth-saver" },
+				{ ...base },
+			),
+		).toBe(true);
+	});
+});
+
+describe("buildSummaryText (Task 21)", () => {
+	const labels = {
+		delay: (ms: number) => `~${ms / 1000}s`,
+		recovery: (mode: "standard" | "bandwidth-saver") =>
+			mode === "bandwidth-saver" ? "saver" : "auto",
+		fec: (on: boolean) => (on ? "FEC on" : "FEC off"),
+	};
+
+	it("joins delay, recovery, and FEC segments in order with a middot", () => {
+		expect(
+			buildSummaryText(
+				{ latencyMs: 1500, fecEnabled: false, recoveryMode: "standard" },
+				labels,
+			),
+		).toBe("~1.5s · auto · FEC off");
+	});
+
+	it("reflects bandwidth-saver recovery and FEC on", () => {
+		expect(
+			buildSummaryText(
+				{ latencyMs: 2000, fecEnabled: true, recoveryMode: "bandwidth-saver" },
+				labels,
+			),
+		).toBe("~2s · saver · FEC on");
+	});
+
+	it("uses the latency it is given (the caller passes the effective value)", () => {
+		const spy: number[] = [];
+		buildSummaryText(
+			{ latencyMs: 3000, fecEnabled: false, recoveryMode: "standard" },
+			{
+				...labels,
+				delay: (ms) => {
+					spy.push(ms);
+					return `~${ms}`;
+				},
+			},
+		);
+		expect(spy).toEqual([3000]);
 	});
 });

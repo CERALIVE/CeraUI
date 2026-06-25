@@ -56,8 +56,13 @@ export type Role = (typeof ROLES)[number];
  * `ingest.slots` (T17/T18): the platform pushes the account-resolved ingest slots
  * to the device so the on-device UI can render + select them. Payload =
  * {@link IngestSlotsPayloadSchema}.
+ *
+ * `device.setProfile` (Todo 28): the platform pushes the resolved SRT receive
+ * profile (a `StreamConfig` + `commandId`) so the device persists + applies it on
+ * (re)connect and acks the effective active profile. The payload + ack live in
+ * `@ceraui/rpc/schemas` (`setProfilePayloadSchema` / `setProfileAckSchema`).
  */
-export const INTERNAL_COMMANDS = ["ingest.slots"] as const;
+export const INTERNAL_COMMANDS = ["ingest.slots", "device.setProfile"] as const;
 export type InternalCommandType = (typeof INTERNAL_COMMANDS)[number];
 
 /**

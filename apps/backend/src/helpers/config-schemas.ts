@@ -53,6 +53,9 @@ import {
 	type RelayProtocol,
 	relayProtocolSchema,
 	relayProviderMetaSchema,
+	resolverDecidedBySchema,
+	streamProfileIdSchema,
+	streamRecoveryPreferenceSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 import { logger } from "./logger.ts";
@@ -137,6 +140,18 @@ export const runtimeConfigSchema = z.object({
 	relay_protocol: relayProtocolSchema.optional(),
 	srt_streamid: z.string().optional(),
 	srt_latency: z.number().int().min(100).max(10000).optional(),
+	// SRT receive-profile tuning (Tasks 18/19): FEC toggle + operator recovery
+	// preference. Persisted device-side; only honoured by a CeraLive receiver.
+	fec_enabled: z.boolean().optional(),
+	recovery_mode: streamRecoveryPreferenceSchema.optional(),
+	// Active SRT receive-profile preset id (or 'custom'). Persisted when the
+	// platform pushes a profile via device.setProfile so the device can report
+	// the effective active profile back and seed the Stream Tuning card.
+	stream_profile: streamProfileIdSchema.optional(),
+	// Who decided the active profile (device.setProfile `decidedBy`). Persisted so
+	// the Stream Tuning card can surface a cloud-override affordance when the
+	// cloud (operator/auto) pinned the profile (Task 21).
+	profile_decided_by: resolverDecidedBySchema.optional(),
 	srtla_addr: z.string().optional(),
 	srtla_port: z.number().int().min(1).max(65535).optional(),
 	// endpointId of the selected platform-pushed ingest slot (T18). The slot

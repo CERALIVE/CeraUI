@@ -31,12 +31,12 @@ import { Server, TriangleAlert } from '@lucide/svelte';
 import {
 	CLOUD_PROVIDERS,
 	type RelayProtocol,
+	type StreamRecoveryPreference,
 	serverSupportedProtocols,
 } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
-import { Label } from '$lib/components/ui/label';
 import {
 	isPortValid,
 	parsePort,
@@ -49,6 +49,7 @@ import {
 	reduceValidateResult,
 } from '$lib/components/streaming/relay-validation';
 import {
+	getCapabilities,
 	getConfig,
 	getIsStreaming,
 	getManagedIngestAccounts,
@@ -59,6 +60,7 @@ import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import { isPairedToManagedCloud } from '$lib/stores/pairing.svelte';
 import {
+	type CloudOverrideState,
 	type Destination,
 	type ServerSetDerived,
 	type ServerSetDraft,
@@ -69,6 +71,10 @@ import {
 	buildManagedSlotConfig,
 	buildServerSetConfig,
 	deriveDestination,
+	deriveReceiverCaps,
+	deriveReceiverProfileKind,
+	deriveStreamTuningExperience,
+	hasProfileDrift,
 	isRelayServerStaleForProvider,
 	overrideClearsManagedBinding,
 	resolveActiveManagedProvider,
@@ -78,6 +84,7 @@ import CustomEndpointForm from './server/CustomEndpointForm.svelte';
 import DestinationSection from './server/DestinationSection.svelte';
 import RelayServerSelector from './server/RelayServerSelector.svelte';
 import ServerIngestSlots from './server/ServerIngestSlots.svelte';
+import StreamTuningSection from './server/StreamTuningSection.svelte';
 import TransportBadge from './server/TransportBadge.svelte';
 
 interface Props {
@@ -86,9 +93,6 @@ interface Props {
 let { open = $bindable(false) }: Props = $props();
 
 const PORT = streamingConstraints.port;
-const LAT = streamingConstraints.srtLatency;
-const LATENCY_FALLBACK = Math.min(Math.max(2000, LAT.min), LAT.max);
-const LATENCY_STEP = 50;
 
 const config = $derived(getConfig());
 const relays = $derived(getRelays());
@@ -106,6 +110,8 @@ type Draft = {
 	srtla_port?: string;
 	srt_streamid?: string;
 	srt_latency?: number;
+	fec_enabled?: boolean;
+	recovery_mode?: StreamRecoveryPreference;
 	relay_provider?: string;
 	relay_server?: string;
 	relay_account?: string;
@@ -115,6 +121,7 @@ type Draft = {
 	relay_override_port?: string;
 	passphrase?: string;
 	selected_slot?: string;
+	cloud_override_cleared?: boolean;
 };
 let draft = $state<Draft>({});
 
@@ -156,7 +163,6 @@ const addr = $derived(draft.srtla_addr ?? config?.srtla_addr ?? '');
 const portStr = $derived(draft.srtla_port ?? (config?.srtla_port?.toString() ?? ''));
 const streamId = $derived(draft.srt_streamid ?? config?.srt_streamid ?? '');
 const passphrase = $derived(draft.passphrase ?? '');
-const latency = $derived(draft.srt_latency ?? config?.srt_latency ?? LATENCY_FALLBACK);
 const relayServer = $derived(draft.relay_server ?? config?.relay_server ?? '');
 const relayAccount = $derived(draft.relay_account ?? config?.relay_account ?? '');
 const relayStreamId = $derived(draft.relay_streamid ?? config?.relay_streamid_override ?? '');
@@ -215,6 +221,77 @@ const relayServerProtocols = $derived(
 // Receiver kind = transport × destination (T5). For a managed server the
 // effective transport is constrained to what that server actually advertises.
 const kind = $derived(resolveReceiverKind({ protocol, destination, server: relayServerInfo }));
+
+// Stream-tuning (Task 16): a managed CeraLive cloud is the only proven CeraLive
+// receiver — a custom/self-hosted endpoint is conservatively non-CeraLive. The
+// capability descriptor projects the engine's advertised profiles/FEC/latency
+// onto the receiver kind; the experience decides which tuning controls the card
+// offers and the disabled reason for the rest.
+const receiverProfileKind = $derived(
+	destination === 'managed' ? deriveReceiverProfileKind(config?.remote_provider) : 'unknown',
+);
+const engineCaps = $derived(getCapabilities());
+const streamTuning = $derived(
+	deriveStreamTuningExperience(
+		deriveReceiverCaps(receiverProfileKind, {
+			supportedProfiles: engineCaps?.supported_profiles,
+			fecCapable: engineCaps?.fec_capable,
+			latencyRange: engineCaps?.latency_range,
+		}),
+	),
+);
+
+// Stream-tuning draft values (Tasks 17/18/19). Latency persists via the existing
+// srt_latency path, clamped to the receiver's advertised window; FEC + recovery
+// persist via the additive setConfig fields. The save handler only persists FEC
+// (and recovery) when the receiver actually offers them — an unproven receiver
+// never gets FEC enabled, and recovery stays receiver-managed.
+const latencyRange = $derived(streamTuning.latencyRange);
+const latency = $derived(draft.srt_latency ?? config?.srt_latency ?? latencyRange.default);
+const clampedLatency = $derived(
+	Math.min(Math.max(latency, latencyRange.min), latencyRange.max),
+);
+const effectiveLatencyMs = $derived(isStreaming ? config?.srt_latency : undefined);
+const fecEnabled = $derived(draft.fec_enabled ?? config?.fec_enabled ?? false);
+const recoveryMode = $derived<StreamRecoveryPreference>(
+	draft.recovery_mode ?? config?.recovery_mode ?? streamTuning.defaultRecoveryMode,
+);
+
+// Cloud-override + reconciliation drift (Task 21). The active profile + its
+// provenance arrive over the config echo (`profile_decided_by`); a prod-inert
+// `__ceraProfileDecidedBy` window seam lets e2e drive the affordance
+// deterministically. Tapping "tap to override" sets `cloud_override_cleared` so
+// the binding releases and local edits persist.
+let devCloudDecidedBy = $state<string | undefined>(undefined);
+$effect(() => {
+	if (!open) {
+		devCloudDecidedBy = undefined;
+		return;
+	}
+	devCloudDecidedBy = (globalThis as { __ceraProfileDecidedBy?: string })
+		.__ceraProfileDecidedBy;
+});
+const cloudOverride = $derived.by<CloudOverrideState | undefined>(() => {
+	if (draft.cloud_override_cleared) return undefined;
+	const decidedBy = config?.profile_decided_by ?? devCloudDecidedBy;
+	if (decidedBy === undefined) return undefined;
+	return {
+		decidedBy: decidedBy as CloudOverrideState['decidedBy'],
+		...(config?.stream_profile ? { presetId: config.stream_profile } : {}),
+	};
+});
+
+// Drift: the persisted (device-active) profile vs the selected control values.
+const driftActive = $derived(
+	hasProfileDrift(
+		{ latencyMs: clampedLatency, fecEnabled, recoveryMode },
+		{
+			latencyMs: config?.srt_latency ?? latencyRange.default,
+			fecEnabled: config?.fec_enabled ?? false,
+			recoveryMode: config?.recovery_mode ?? streamTuning.defaultRecoveryMode,
+		},
+	),
+);
 
 // Seed the persisted transport from the selected managed server's advertised set
 // (T10): SRTLA when offered, else its first transport. Now fires for a SINGLE
@@ -319,16 +396,6 @@ const canSave = $derived.by(() => {
 	return relayServer !== '';
 });
 
-const latencyPercent = $derived(
-	Math.max(0, Math.min(100, ((latency - LAT.min) / (LAT.max - LAT.min)) * 100)),
-);
-
-function clampLatency(value: number): number {
-	const safe = Number.isFinite(value) ? value : LATENCY_FALLBACK;
-	const stepped = Math.round(safe / LATENCY_STEP) * LATENCY_STEP;
-	return Math.max(LAT.min, Math.min(LAT.max, stepped));
-}
-
 function resetValidation() {
 	if (validation.state !== 'idle') validation = { state: 'idle' };
 }
@@ -354,10 +421,10 @@ async function handleSave() {
 	// selected_ingest_endpoint identity; every other path keeps today's field set.
 	const input =
 		destination === 'managed' && hasManagedSlots && activeSlot
-			? buildManagedSlotConfig(activeSlot, clampLatency(latency))
+			? buildManagedSlotConfig(activeSlot, clampedLatency)
 			: buildServerSetConfig(
 					{
-						latency: clampLatency(latency),
+						latency: clampedLatency,
 						protocol,
 						addr,
 						portStr,
@@ -367,6 +434,11 @@ async function handleSave() {
 						relayStreamId,
 						relayServer,
 						relayAccount,
+						// FEC only when the receiver advertises it — an unproven receiver
+						// is persisted false, never silently left enabled. Recovery is
+						// persisted only when the CeraLive receiver honours it.
+						fecEnabled: streamTuning.fecEnabled ? fecEnabled : false,
+						...(streamTuning.recoveryModeEnabled ? { recoveryMode } : {}),
 					} satisfies ServerSetDraft,
 					{ destination, relayOverride } satisfies ServerSetDerived,
 				);
@@ -521,41 +593,23 @@ async function handleSave() {
 			{protocol}
 		/>
 
-		<!-- SRT latency: bounds come from streamingConstraints.srtLatency -->
-		<div class="space-y-3">
-			<div class="flex items-center justify-between">
-				<Label class="text-sm font-medium" for="srt-latency">{$LL.settings.srtLatency()}</Label>
-				<span class="bg-primary/10 text-primary rounded-md px-2 py-1 font-mono text-xs">
-					{latency} {$LL.units.ms()}
-				</span>
-			</div>
-			<div class="relative h-6 w-full">
-				<div
-					class="bg-background absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full"
-				></div>
-				<div
-					style={`inset-inline-start: 0; width: ${latencyPercent}%;`}
-					class="bg-primary absolute top-1/2 h-2 -translate-y-1/2 rounded-full transition-all duration-150"
-				></div>
-				<input
-					id="srt-latency"
-					aria-valuemax={LAT.max}
-					aria-valuemin={LAT.min}
-					aria-valuenow={latency}
-					class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-					disabled={isStreaming}
-					max={LAT.max}
-					min={LAT.min}
-					oninput={(e) => (draft.srt_latency = Number.parseInt(e.currentTarget.value, 10))}
-					step={LATENCY_STEP}
-					type="range"
-					value={latency}
-				/>
-			</div>
-			<div class="text-muted-foreground flex justify-between text-xs">
-				<span>{LAT.min} {$LL.units.ms()} · {$LL.settings.lowerLatency()}</span>
-				<span>{$LL.settings.higherLatency()} · {LAT.max} {$LL.units.ms()}</span>
-			</div>
-		</div>
+		<!-- Stream Tuning (Tasks 16-19): receiver-capability-gated tuning. Owns the
+		     latency slider, FEC toggle, and the Advanced recovery control. CeraLive
+		     receiver → full controls; non-CeraLive → latency only + disabled-with-
+		     reason advanced controls + BELABOX-compatible banner. -->
+		<StreamTuningSection
+			{cloudOverride}
+			{driftActive}
+			{effectiveLatencyMs}
+			experience={streamTuning}
+			{fecEnabled}
+			{isStreaming}
+			latencyMs={clampedLatency}
+			onClearCloudOverride={() => (draft.cloud_override_cleared = true)}
+			onFecChange={(value) => (draft.fec_enabled = value)}
+			onLatencyChange={(value) => (draft.srt_latency = value)}
+			onRecoveryChange={(value) => (draft.recovery_mode = value)}
+			{recoveryMode}
+		/>
 	</div>
 </AppDialog>

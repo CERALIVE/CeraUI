@@ -83,6 +83,20 @@ describe("streaming.setConfig — applied (post-clamp) state", () => {
 		}
 	});
 
+	test("persists + echoes fec_enabled and recovery_mode (Tasks 18/19)", async () => {
+		const result = await call(
+			setConfigProcedure,
+			{ fec_enabled: true, recovery_mode: "bandwidth-saver" },
+			{ context: makeContext() },
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.applied?.fec_enabled).toBe(true);
+		expect(result.applied?.recovery_mode).toBe("bandwidth-saver");
+		expect(getConfig().fec_enabled).toBe(true);
+		expect(getConfig().recovery_mode).toBe("bandwidth-saver");
+	});
+
 	test("rejects invalid input without a partial write", async () => {
 		await call(
 			setConfigProcedure,

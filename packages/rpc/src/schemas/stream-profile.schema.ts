@@ -1,0 +1,250 @@
+/**
+ * Stream-tuning profile + receiver-capability Zod schemas (SRT receive profiles).
+ *
+ * The "Stream Tuning" card lets the operator pick an SRT receive PROFILE — a
+ * named preset that expands to latency + FEC + recovery settings — and tune it.
+ * Which controls are offered depends on the RECEIVER:
+ *
+ *   • A CeraLive receiver (CERALIVE/srt lineage) advertises the full profile set
+ *     + FEC + a wide latency window → full controls.
+ *   • Any other receiver collapses to the conservative BELABOX-compatible
+ *     Classic baseline → latency-only, no FEC, no recovery-mode control.
+ *
+ * This is the SCHEMA layer only — pure Zod types + constants, no runtime logic.
+ * The card's derivation (which controls are enabled, the disabled reasons, the
+ * BELABOX-compatible banner) lives in the frontend `receiver-experience.ts`.
+ *
+ * The receiver taxonomy mirrors the cloud-side `ReceiverKind`
+ * (`ceralive-platform apps/api/lib/receiver/capabilities.ts`) but is defined
+ * here independently — CeraUI is a self-contained repo (Rule D: no cross-repo
+ * import). It is aligned with the lowercase relay-provider taxonomy
+ * (`config.remote_provider`), not the platform's capitalised `'CeraLive'`.
+ */
+import { z } from 'zod';
+
+// =============================================================================
+// SRT receive profiles (named presets)
+// =============================================================================
+
+/** The 5 v1 SRT receive profiles. Array order is the display order. */
+export const STREAM_PROFILE_PRESETS = [
+	'balanced',
+	'low-latency',
+	'resilient',
+	'classic',
+	'low-latency-fec',
+] as const;
+export const streamProfilePresetSchema = z.enum(STREAM_PROFILE_PRESETS);
+export type StreamProfilePreset = (typeof STREAM_PROFILE_PRESETS)[number];
+
+/**
+ * A profile id is one of the named presets OR `'custom'` (the operator tuned a
+ * setting away from every preset). `'custom'` is never RECEIVER-advertised — it
+ * is a UI-only state derived from the live control values.
+ */
+export const STREAM_PROFILE_IDS = [...STREAM_PROFILE_PRESETS, 'custom'] as const;
+export const streamProfileIdSchema = z.enum(STREAM_PROFILE_IDS);
+export type StreamProfileId = (typeof STREAM_PROFILE_IDS)[number];
+
+/** The BELABOX-compatible baseline every receiver can serve. */
+export const DEFAULT_NON_CERALIVE_PROFILE = 'classic' satisfies StreamProfilePreset;
+
+// =============================================================================
+// Recovery mode (SRT loss-recovery behaviour)
+// =============================================================================
+
+/**
+ * The SRT loss-recovery behaviour the receiver runs. Mirrors the cloud
+ * descriptor's `freezeMode` taxonomy (ceralive-platform receiver capabilities):
+ * `reorderfreeze` is the CERALIVE/srt opt-in decay freeze, `srtlapatches` the
+ * legacy BELABOX-fork fusion, `stock` plain libsrt.
+ */
+export const STREAM_RECOVERY_MODES = ['reorderfreeze', 'srtlapatches', 'stock'] as const;
+export const streamRecoveryModeSchema = z.enum(STREAM_RECOVERY_MODES);
+export type StreamRecoveryMode = (typeof STREAM_RECOVERY_MODES)[number];
+
+/**
+ * The OPERATOR-facing recovery choice (Stream Tuning "Advanced" disclosure),
+ * deliberately distinct from the internal {@link StreamRecoveryMode} freeze
+ * taxonomy — "freeze" is never exposed as a user concept. `standard` routes to
+ * the L1 (full-recovery) listener; `bandwidth-saver` routes to L2/Classic, which
+ * trims recovery traffic on capped connections. Only a CeraLive receiver honours
+ * it; other receivers are receiver-managed (control disabled-with-reason).
+ */
+export const STREAM_RECOVERY_PREFERENCES = ['standard', 'bandwidth-saver'] as const;
+export const streamRecoveryPreferenceSchema = z.enum(STREAM_RECOVERY_PREFERENCES);
+export type StreamRecoveryPreference = (typeof STREAM_RECOVERY_PREFERENCES)[number];
+
+/** The recommended default recovery preference (routes to the L1 listener). */
+export const DEFAULT_RECOVERY_PREFERENCE = 'standard' satisfies StreamRecoveryPreference;
+
+// =============================================================================
+// Resolver provenance (who decided the active profile)
+// =============================================================================
+
+/**
+ * Who decided the device's active SRT receive profile. Mirrors the platform
+ * resolver's `ResolverDecidedBy` (ceralive-platform `apps/api/lib/profiles/
+ * resolver.ts`) — kept in sync by the spec, never a cross-repo import (Rule D).
+ * `operator` / `auto` are the CLOUD-OVERRIDE provenances (an operator pin, or an
+ * automatic safety substitution): the Stream Tuning card surfaces a
+ * "set by cloud · tap to override" affordance for those. `device` / `cohort` /
+ * `global` are non-override defaults and never raise the affordance.
+ */
+export const RESOLVER_DECIDED_BY = ['operator', 'device', 'auto', 'cohort', 'global'] as const;
+export const resolverDecidedBySchema = z.enum(RESOLVER_DECIDED_BY);
+export type ResolverDecidedBy = (typeof RESOLVER_DECIDED_BY)[number];
+
+// =============================================================================
+// Preset → expanded-settings table (named saved combinations)
+// =============================================================================
+
+/**
+ * The expanded control values a named preset saves. A preset is just a named
+ * combination of the three operator-facing controls — latency + FEC + recovery
+ * preference — NOT a separate profile mechanism. Selecting a preset chip sets all
+ * three; editing any one control drops the active chip to `'custom'`.
+ *
+ * `recoveryMode` is the OPERATOR-facing {@link StreamRecoveryPreference}
+ * (`standard` / `bandwidth-saver`), the same axis the recovery segmented control
+ * writes — never the internal {@link StreamRecoveryMode} freeze taxonomy.
+ */
+export interface PresetConfig {
+	/** SRT latency the preset seeds (ms); clamped to the receiver window at apply. */
+	latencyMs: number;
+	/** Whether the preset turns FEC on (only `low-latency-fec` does). */
+	fecEnabled: boolean;
+	/** Recovery preference the preset selects. */
+	recoveryMode: StreamRecoveryPreference;
+}
+
+/**
+ * The v1 preset table: each named preset → its expanded {latency, FEC, recovery}
+ * combination. The single source of truth for the Stream Tuning preset chips —
+ * the card never inlines these latency/FEC/recovery values. `low-latency-fec` is
+ * the only FEC-on preset; `classic` is the only `bandwidth-saver` (L2) preset.
+ */
+export const PRESET_CONFIGS: Record<StreamProfilePreset, PresetConfig> = {
+	balanced: { latencyMs: 1500, fecEnabled: false, recoveryMode: 'standard' },
+	'low-latency': { latencyMs: 500, fecEnabled: false, recoveryMode: 'standard' },
+	resilient: { latencyMs: 3500, fecEnabled: false, recoveryMode: 'standard' },
+	classic: { latencyMs: 2000, fecEnabled: false, recoveryMode: 'bandwidth-saver' },
+	'low-latency-fec': { latencyMs: 800, fecEnabled: true, recoveryMode: 'standard' },
+};
+
+// =============================================================================
+// Receiver kind (Stream Tuning taxonomy)
+// =============================================================================
+
+/**
+ * Receiver taxonomy for the Stream Tuning card. Only `ceralive` advertises the
+ * full profile set; `belabox` / `custom` / `unknown` collapse to the Classic
+ * baseline ("don't assume capabilities for an unproven receiver").
+ */
+export const RECEIVER_PROFILE_KINDS = ['ceralive', 'belabox', 'custom', 'unknown'] as const;
+export const receiverProfileKindSchema = z.enum(RECEIVER_PROFILE_KINDS);
+export type ReceiverProfileKind = (typeof RECEIVER_PROFILE_KINDS)[number];
+
+// =============================================================================
+// Latency window + receiver-capability descriptor
+// =============================================================================
+
+/** A receiver-advertised SRT latency window (ms). */
+export const latencyRangeSchema = z.object({
+	min: z.number().int().nonnegative(),
+	default: z.number().int().nonnegative(),
+	max: z.number().int().nonnegative(),
+});
+export type LatencyRange = z.infer<typeof latencyRangeSchema>;
+
+/**
+ * Per-receiver capability descriptor that drives the Stream Tuning card. A pure
+ * projection of the engine capability snapshot + the resolved receiver kind; it
+ * is NOT persisted. The card reads it to decide which controls are offered (and,
+ * for the ones that are not, why).
+ */
+export const receiverCapsSchema = z.object({
+	kind: receiverProfileKindSchema,
+	supportsFec: z.boolean(),
+	supportedProfiles: z.array(streamProfilePresetSchema),
+	latencyRange: latencyRangeSchema,
+	recoveryMode: streamRecoveryModeSchema,
+});
+export type ReceiverCaps = z.infer<typeof receiverCapsSchema>;
+
+// =============================================================================
+// Selected stream profile
+// =============================================================================
+
+/**
+ * The operator's selected SRT receive profile. `presetId` names the active
+ * preset (or `'custom'`); the three fields are the expanded settings. This
+ * scaffold does not yet persist it — the per-control `setConfig` wiring lands
+ * with the latency / FEC / recovery / preset tasks.
+ */
+export const streamProfileSchema = z.object({
+	presetId: streamProfileIdSchema,
+	latencyMs: z.number().int().nonnegative(),
+	fecEnabled: z.boolean(),
+	recoveryMode: streamRecoveryModeSchema,
+});
+export type StreamProfile = z.infer<typeof streamProfileSchema>;
+
+// =============================================================================
+// device.setProfile control-channel frame + ack (platform → device → ack)
+// =============================================================================
+
+/**
+ * The `StreamConfig` the platform pushes down the device-control channel inside a
+ * `device.setProfile` command (cloud Todo 14). It mirrors the platform's
+ * `StreamConfigSchema` (ceralive-platform `apps/api/lib/remote-control/protocol.ts`)
+ * — kept in sync by the spec, never a cross-repo import (Rule D). `recoveryMode`
+ * is the OPERATOR-facing {@link StreamRecoveryPreference} (`standard` /
+ * `bandwidth-saver`), the same axis the Stream Tuning recovery control writes —
+ * NOT the internal freeze taxonomy. `presetId` is a plain string here (the device
+ * intersects it against its own caps before applying — an unknown preset is a
+ * device-side rejection, not a parse failure).
+ */
+export const setProfileConfigSchema = z.object({
+	presetId: z.string().min(1),
+	latencyMs: z.number().int().nonnegative(),
+	fecEnabled: z.boolean(),
+	recoveryMode: streamRecoveryPreferenceSchema,
+});
+export type SetProfileConfig = z.infer<typeof setProfileConfigSchema>;
+
+/**
+ * Body of a `device.setProfile` command frame (control-channel INTERNAL command,
+ * spec §5). `commandId` correlates the device's ack; the envelope `cid` equals it.
+ * `decidedBy` / `reason` are advisory provenance the resolver attached upstream —
+ * the device tolerates them but does not act on them.
+ */
+export const setProfilePayloadSchema = z.object({
+	commandId: z.string().min(1),
+	config: setProfileConfigSchema,
+	decidedBy: z.string().optional(),
+	reason: z.string().optional(),
+});
+export type SetProfilePayload = z.infer<typeof setProfilePayloadSchema>;
+
+/** Whether the device applied the pushed profile or rejected it (caps mismatch). */
+export const SET_PROFILE_ACK_STATUSES = ['applied', 'rejected'] as const;
+export const setProfileAckStatusSchema = z.enum(SET_PROFILE_ACK_STATUSES);
+export type SetProfileAckStatus = (typeof SET_PROFILE_ACK_STATUSES)[number];
+
+/**
+ * The ack the device emits back up the control channel after a `device.setProfile`
+ * push. `effectiveActiveProfile` is the preset the device actually runs under (or
+ * `'custom'`); `effectiveLatencyMs` is the device-applied SRT latency read back
+ * after the (re)connect — `max(device, listener)` is not separately observable, so
+ * this is the clamped device value the engine was (re)started with. `reason` names
+ * the rejection cause or a non-blocking adjustment (e.g. `latency_clamped`).
+ */
+export const setProfileAckSchema = z.object({
+	commandId: z.string().min(1),
+	status: setProfileAckStatusSchema,
+	reason: z.string().optional(),
+	effectiveActiveProfile: streamProfileIdSchema,
+	effectiveLatencyMs: z.number().int().nonnegative(),
+});
+export type SetProfileAck = z.infer<typeof setProfileAckSchema>;

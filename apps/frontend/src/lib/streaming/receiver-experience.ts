@@ -22,15 +22,26 @@
  */
 
 import {
+	DEFAULT_NON_CERALIVE_PROFILE,
 	deriveReceiverKind,
+	type LatencyRange,
+	PRESET_CONFIGS,
 	RELAY_PROVIDER_KINDS,
+	type ReceiverCaps,
 	type ReceiverKind,
+	type ReceiverProfileKind,
 	type RelayProtocol,
 	type RelayProviderKind,
 	type RelayServer,
+	type ResolverDecidedBy,
 	relayProtocolSchema,
 	type StreamingConfigInput,
+	type StreamProfileId,
+	type StreamProfilePreset,
+	type StreamRecoveryMode,
+	type StreamRecoveryPreference,
 	serverSupportedProtocols,
+	streamProfilePresetSchema,
 } from "@ceraui/rpc/schemas";
 import { parsePort } from "$lib/components/streaming/ValidationAdapter";
 
@@ -449,6 +460,10 @@ export interface ServerSetDraft {
 	relayServer: string;
 	/** Selected managed relay account id (persisted only when non-empty). */
 	relayAccount: string;
+	/** FEC toggle (Task 18); persisted only when defined — undefined omits the key. */
+	fecEnabled?: boolean;
+	/** Recovery preference (Task 19); persisted only when defined. */
+	recoveryMode?: StreamRecoveryPreference;
 }
 
 /** The derived branch selectors the save handler keys off. */
@@ -521,6 +536,12 @@ export function buildServerSetConfig(
 	const base: StreamingConfigInput = {
 		srt_latency: draft.latency,
 		relay_protocol: relayProtocolSchema.parse(draft.protocol),
+		...(draft.fecEnabled !== undefined
+			? { fec_enabled: draft.fecEnabled }
+			: {}),
+		...(draft.recoveryMode !== undefined
+			? { recovery_mode: draft.recoveryMode }
+			: {}),
 	};
 
 	if (derived.destination === "custom") {
@@ -810,4 +831,382 @@ export function buildManagedSlotConfig(
 		srt_streamid: account.key,
 		selected_ingest_endpoint: account.endpointId,
 	});
+}
+
+// =============================================================================
+// Stream-tuning (SRT receive profiles) — Task 16
+// =============================================================================
+
+// The conservative SRT latency window every receiver can honour (ms). A
+// non-CeraLive receiver is held to the BELABOX-compatible safe ceiling
+// regardless of any caps it forges (mirrors the cloud descriptor's
+// SAFE_LATENCY_MAX_MS = 2000).
+const SAFE_LATENCY_RANGE: LatencyRange = { min: 100, default: 1500, max: 2000 };
+
+// The latency window a CeraLive receiver gets when the engine has not yet
+// advertised its own range (mirrors the cloud descriptor's L1_LATENCY_MAX_MS).
+const CERALIVE_FALLBACK_LATENCY_RANGE: LatencyRange = {
+	min: 100,
+	default: 1500,
+	max: 5000,
+};
+
+// i18n dot-path keys for the disabled-with-reason tooltips. The consumer
+// resolves them through the `$LL` proxy — this module stays `$LL`-free.
+const REASON_NON_CERALIVE = "settings.streamTuning.reasonNonCeraLive";
+const REASON_FEC_UNSUPPORTED = "settings.streamTuning.reasonFecUnsupported";
+const REASON_RECEIVER_MANAGED = "settings.streamTuning.reasonReceiverManaged";
+const REASON_PROFILE_UNSUPPORTED =
+	"settings.streamTuning.reasonProfileUnsupported";
+
+/**
+ * Map a configured relay/remote provider to the Stream Tuning receiver kind.
+ * Only a managed CeraLive cloud is treated as a CeraLive receiver; every other
+ * provider (BELABOX, a custom/self-hosted receiver, or none) is conservatively
+ * non-CeraLive, so the card never assumes capabilities for an unproven receiver.
+ */
+export function deriveReceiverProfileKind(
+	provider: string | undefined,
+): ReceiverProfileKind {
+	if (provider === "ceralive") return "ceralive";
+	if (provider === "belabox") return "belabox";
+	if (provider === "custom") return "custom";
+	return "unknown";
+}
+
+/** The engine-advertised profile facts {@link deriveReceiverCaps} projects from. */
+export interface ReceiverCapsSource {
+	/** `supported_profiles` from the capability snapshot (cerastream Todo 10). */
+	supportedProfiles?: readonly string[] | undefined;
+	/** `fec_capable` from the capability snapshot. */
+	fecCapable?: boolean | undefined;
+	/** `latency_range` from the capability snapshot. */
+	latencyRange?: LatencyRange | undefined;
+}
+
+/**
+ * Build the {@link ReceiverCaps} descriptor that drives the card from the
+ * receiver kind + the engine capability snapshot.
+ *
+ * A CeraLive receiver trusts the engine: its advertised profiles, FEC flag, and
+ * latency window flow through (with sane fallbacks when the snapshot is absent).
+ * Any other receiver is clamped to the BELABOX-compatible Classic baseline —
+ * latency-only, no FEC — and never inherits forged engine caps.
+ */
+export function deriveReceiverCaps(
+	kind: ReceiverProfileKind,
+	source: ReceiverCapsSource | undefined,
+): ReceiverCaps {
+	if (kind !== "ceralive") {
+		return {
+			kind,
+			supportsFec: false,
+			supportedProfiles: [DEFAULT_NON_CERALIVE_PROFILE],
+			latencyRange: SAFE_LATENCY_RANGE,
+			recoveryMode: "stock",
+		};
+	}
+
+	const advertised: StreamProfilePreset[] = [];
+	for (const profile of source?.supportedProfiles ?? []) {
+		const parsed = streamProfilePresetSchema.safeParse(profile);
+		if (parsed.success) advertised.push(parsed.data);
+	}
+	const supportedProfiles: StreamProfilePreset[] =
+		advertised.length > 0 ? advertised : [DEFAULT_NON_CERALIVE_PROFILE];
+	const supportsFec =
+		source?.fecCapable === true &&
+		supportedProfiles.includes("low-latency-fec");
+	const hasFullProfileSet = supportedProfiles.length > 1;
+	const recoveryMode: StreamRecoveryMode =
+		supportsFec || hasFullProfileSet ? "reorderfreeze" : "stock";
+
+	return {
+		kind,
+		supportsFec,
+		supportedProfiles,
+		latencyRange: source?.latencyRange ?? CERALIVE_FALLBACK_LATENCY_RANGE,
+		recoveryMode,
+	};
+}
+
+/**
+ * The resolved control state for the Stream Tuning card. Latency is always
+ * available; FEC, recovery mode, and the preset chips are gated. Each gated
+ * control carries the i18n REASON key for its disabled tooltip when it is off,
+ * so the card shows WHY a control is unavailable — never hides it.
+ */
+export interface StreamTuningExperience {
+	/** True for a CeraLive receiver — the full-controls branch. */
+	isCeraLiveReceiver: boolean;
+	/** Latency is honoured by every receiver, so its control is always enabled. */
+	latencyEnabled: boolean;
+	/** The latency slider window. */
+	latencyRange: LatencyRange;
+	/** FEC toggle availability. */
+	fecEnabled: boolean;
+	/** Disabled-tooltip reason key for FEC, present only when `fecEnabled` is false. */
+	fecDisabledReasonKey?: string;
+	/** Recovery-mode control availability (CeraLive only). */
+	recoveryModeEnabled: boolean;
+	recoveryModeDisabledReasonKey?: string;
+	/** The recommended default recovery preference (always `standard`). */
+	defaultRecoveryMode: StreamRecoveryPreference;
+	/** Profile-preset chips availability (CeraLive only). */
+	presetsEnabled: boolean;
+	presetsDisabledReasonKey?: string;
+	/** Profiles offered as preset chips (Classic-only for non-CeraLive). */
+	availableProfiles: readonly StreamProfilePreset[];
+	/** The default/seed profile (Classic for non-CeraLive). */
+	defaultProfile: StreamProfilePreset;
+	/** Show the "Standard (BELABOX-compatible defaults)" banner. */
+	showBelaboxBanner: boolean;
+}
+
+/**
+ * Derive the Stream Tuning card's control state from the receiver capabilities.
+ *
+ * Two top-level branches:
+ * - CeraLive receiver → full controls; FEC is enabled only when the receiver's
+ *   libsrt build advertises it (else disabled-with-reason, never hidden).
+ * - any other receiver → latency-only; FEC / recovery / presets are
+ *   disabled-with-reason and the BELABOX-compatible banner is shown.
+ */
+export function deriveStreamTuningExperience(
+	caps: ReceiverCaps,
+): StreamTuningExperience {
+	if (caps.kind !== "ceralive") {
+		return {
+			isCeraLiveReceiver: false,
+			latencyEnabled: true,
+			latencyRange: caps.latencyRange,
+			fecEnabled: false,
+			fecDisabledReasonKey: REASON_NON_CERALIVE,
+			recoveryModeEnabled: false,
+			recoveryModeDisabledReasonKey: REASON_RECEIVER_MANAGED,
+			defaultRecoveryMode: "standard",
+			presetsEnabled: false,
+			presetsDisabledReasonKey: REASON_NON_CERALIVE,
+			availableProfiles: caps.supportedProfiles,
+			defaultProfile: DEFAULT_NON_CERALIVE_PROFILE,
+			showBelaboxBanner: true,
+		};
+	}
+
+	const defaultProfile = caps.supportedProfiles.includes("balanced")
+		? "balanced"
+		: (caps.supportedProfiles[0] ?? DEFAULT_NON_CERALIVE_PROFILE);
+
+	return {
+		isCeraLiveReceiver: true,
+		latencyEnabled: true,
+		latencyRange: caps.latencyRange,
+		fecEnabled: caps.supportsFec,
+		...(caps.supportsFec
+			? {}
+			: { fecDisabledReasonKey: REASON_FEC_UNSUPPORTED }),
+		recoveryModeEnabled: true,
+		defaultRecoveryMode: "standard",
+		presetsEnabled: true,
+		availableProfiles: caps.supportedProfiles,
+		defaultProfile,
+		showBelaboxBanner: false,
+	};
+}
+
+// =============================================================================
+// Preset snap-chips (named saved combinations) — Task 20
+// =============================================================================
+
+/** Chip display order (the task's row order); `custom` always trails. */
+const PRESET_CHIP_ORDER: readonly StreamProfilePreset[] = [
+	"low-latency",
+	"balanced",
+	"resilient",
+	"low-latency-fec",
+	"classic",
+];
+
+/** i18n dot-path label key per profile id (incl. the derived `custom`). */
+const PRESET_LABEL_KEYS: Record<StreamProfileId, string> = {
+	balanced: "settings.streamTuning.profileNames.balanced",
+	"low-latency": "settings.streamTuning.profileNames.lowLatency",
+	resilient: "settings.streamTuning.profileNames.resilient",
+	classic: "settings.streamTuning.profileNames.classic",
+	"low-latency-fec": "settings.streamTuning.profileNames.lowLatencyFec",
+	custom: "settings.streamTuning.profileNames.custom",
+};
+
+/**
+ * One preset snap-chip's render state. The component resolves `labelKey` /
+ * `reasonKey` through the `$LL` proxy (this module stays `$LL`-free) and renders
+ * a disabled chip with `reasonKey` as its tooltip — capability-unavailable
+ * presets are DISABLED-with-reason, never hidden.
+ */
+export interface PresetChip {
+	presetId: StreamProfileId;
+	labelKey: string;
+	disabled: boolean;
+	/** i18n reason key for the disabled tooltip; present only when `disabled`. */
+	reasonKey?: string;
+}
+
+/**
+ * Build the preset snap-chip row from the resolved Stream Tuning experience: the
+ * 5 named presets in display order plus the derived `custom` chip. A chip is
+ * disabled-with-reason (never hidden) when the receiver can't honour it:
+ * - presets gated off entirely (non-CeraLive) → every chip carries the gate reason;
+ * - a FEC preset on a receiver whose build lacks FEC → the FEC reason;
+ * - a preset the receiver doesn't advertise → the profile-unsupported reason.
+ * `custom` is the manual-tuning state, reachable only by editing a control, so it
+ * is gated off exactly when presets are.
+ */
+export function getPresetChips(
+	experience: StreamTuningExperience,
+): PresetChip[] {
+	const chips = PRESET_CHIP_ORDER.map((presetId): PresetChip => {
+		const labelKey = PRESET_LABEL_KEYS[presetId];
+		if (!experience.presetsEnabled) {
+			return {
+				presetId,
+				labelKey,
+				disabled: true,
+				...(experience.presetsDisabledReasonKey
+					? { reasonKey: experience.presetsDisabledReasonKey }
+					: {}),
+			};
+		}
+		if (PRESET_CONFIGS[presetId].fecEnabled && !experience.fecEnabled) {
+			return {
+				presetId,
+				labelKey,
+				disabled: true,
+				reasonKey: experience.fecDisabledReasonKey ?? REASON_FEC_UNSUPPORTED,
+			};
+		}
+		if (!experience.availableProfiles.includes(presetId)) {
+			return {
+				presetId,
+				labelKey,
+				disabled: true,
+				reasonKey: REASON_PROFILE_UNSUPPORTED,
+			};
+		}
+		return { presetId, labelKey, disabled: false };
+	});
+
+	chips.push({
+		presetId: "custom",
+		labelKey: PRESET_LABEL_KEYS.custom,
+		disabled: !experience.presetsEnabled,
+		...(experience.presetsEnabled || !experience.presetsDisabledReasonKey
+			? {}
+			: { reasonKey: experience.presetsDisabledReasonKey }),
+	});
+	return chips;
+}
+
+/** The live control values a preset is matched against. */
+export interface PresetMatchValues {
+	latencyMs: number;
+	fecEnabled: boolean;
+	recoveryMode: StreamRecoveryPreference;
+}
+
+/**
+ * Resolve which chip is active from the live control values: the preset whose
+ * expanded {latency, FEC, recovery} combination matches exactly, else `custom`.
+ * Editing any one control therefore drops the active chip to `custom` for free —
+ * no preset matches a bespoke combination.
+ */
+export function matchActivePreset(values: PresetMatchValues): StreamProfileId {
+	for (const presetId of PRESET_CHIP_ORDER) {
+		const config = PRESET_CONFIGS[presetId];
+		if (
+			config.latencyMs === values.latencyMs &&
+			config.fecEnabled === values.fecEnabled &&
+			config.recoveryMode === values.recoveryMode
+		) {
+			return presetId;
+		}
+	}
+	return "custom";
+}
+
+// =============================================================================
+// Plain-language summary, cloud-override + reconciliation drift — Task 21
+// =============================================================================
+
+/**
+ * The cloud's provenance for the active profile, surfaced to the Stream Tuning
+ * card. `decidedBy` is the platform resolver's verdict (mirrored over the wire as
+ * `config.profile_decided_by`); `presetId` is the cloud-pushed preset, when known.
+ */
+export interface CloudOverrideState {
+	decidedBy: ResolverDecidedBy;
+	presetId?: StreamProfileId;
+}
+
+/**
+ * True when the cloud OVERRODE the profile — an operator pin (`operator`) or an
+ * automatic safety substitution (`auto`). `device` / `cohort` / `global` are
+ * baseline defaults, not overrides, and never raise the override affordance.
+ */
+export function isCloudOverride(
+	state: CloudOverrideState | undefined,
+): boolean {
+	return state?.decidedBy === "operator" || state?.decidedBy === "auto";
+}
+
+/** The three operator-facing profile fields drift is reconciled across. */
+export interface ProfileSnapshot {
+	latencyMs: number;
+	fecEnabled: boolean;
+	recoveryMode: StreamRecoveryPreference;
+}
+
+/**
+ * True when the device-active profile differs from the selected config — the
+ * reconciliation drift the card surfaces (subtle, informational). Compares the
+ * three operator-facing fields; any difference is drift.
+ */
+export function hasProfileDrift(
+	selected: ProfileSnapshot,
+	active: ProfileSnapshot,
+): boolean {
+	return (
+		selected.latencyMs !== active.latencyMs ||
+		selected.fecEnabled !== active.fecEnabled ||
+		selected.recoveryMode !== active.recoveryMode
+	);
+}
+
+/**
+ * i18n resolvers the summary composes, keeping {@link buildSummaryText} `$LL`-free
+ * (mirrors the {@link buildServerSummary} labels pattern). `delay` receives the
+ * raw latency ms so the caller owns the seconds formatting + locale.
+ */
+export interface ProfileSummaryLabels {
+	delay: (latencyMs: number) => string;
+	recovery: (mode: StreamRecoveryPreference) => string;
+	fec: (enabled: boolean) => string;
+}
+
+const SUMMARY_DELIMITER = " · ";
+
+/**
+ * Distil the active profile combination into one plain-language line, e.g.
+ * "≈ 1.5 s delay · automatic loss recovery · FEC off". Pure — all copy + the
+ * seconds formatting arrive via {@link ProfileSummaryLabels}. `latencyMs` should
+ * be the EFFECTIVE (negotiated) latency while streaming, not the raw slider value.
+ */
+export function buildSummaryText(
+	snapshot: ProfileSnapshot,
+	labels: ProfileSummaryLabels,
+): string {
+	return [
+		labels.delay(snapshot.latencyMs),
+		labels.recovery(snapshot.recoveryMode),
+		labels.fec(snapshot.fecEnabled),
+	].join(SUMMARY_DELIMITER);
 }

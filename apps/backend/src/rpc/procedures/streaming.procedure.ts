@@ -240,6 +240,10 @@ export const getConfigProcedure = authedProcedure
 			delay: config.delay,
 			pipeline,
 			srt_latency: config.srt_latency,
+			fec_enabled: config.fec_enabled,
+			recovery_mode: config.recovery_mode,
+			stream_profile: config.stream_profile,
+			profile_decided_by: config.profile_decided_by,
 			bitrate_overlay,
 			resolution,
 			framerate,
@@ -297,6 +301,9 @@ export const setConfigProcedure = authedProcedure
 		}
 
 		if (input.srt_latency !== undefined) config.srt_latency = input.srt_latency;
+		if (input.fec_enabled !== undefined) config.fec_enabled = input.fec_enabled;
+		if (input.recovery_mode !== undefined)
+			config.recovery_mode = input.recovery_mode;
 		if (input.delay !== undefined) config.delay = input.delay;
 		if (input.pipeline !== undefined) config.pipeline = input.pipeline;
 		if (input.acodec !== undefined) config.acodec = input.acodec;
@@ -335,6 +342,10 @@ export const setConfigProcedure = authedProcedure
 		const applied: StreamingConfigInput = {};
 		if (input.srt_latency !== undefined)
 			applied.srt_latency = config.srt_latency;
+		if (input.fec_enabled !== undefined)
+			applied.fec_enabled = config.fec_enabled;
+		if (input.recovery_mode !== undefined)
+			applied.recovery_mode = config.recovery_mode;
 		if (input.delay !== undefined) applied.delay = config.delay;
 		if (input.pipeline !== undefined) applied.pipeline = config.pipeline;
 		if (input.acodec !== undefined) applied.acodec = config.acodec;
