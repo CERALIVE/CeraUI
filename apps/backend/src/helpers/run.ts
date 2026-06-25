@@ -37,6 +37,7 @@
  *    child's stdin only.
  */
 
+import { execFileP } from "./exec.ts";
 import { logger } from "./logger.ts";
 
 /** Default stdout/stderr ceiling for buffered (execFile) commands: 10 MiB. */
@@ -310,24 +311,43 @@ export async function run(
 	const redacted = `${bin} ${redactArgs(args)}`.trim();
 	logger.debug(`run: ${redacted}`);
 
-	const { stdout, stderr, code } = await spawnCollect(
-		redacted,
-		[bin, ...args],
-		{
-			maxBuffer: opts?.maxBuffer ?? DEFAULT_MAX_BUFFER,
-			timeout: opts?.timeout ?? DEFAULT_TIMEOUT_MS,
-			...(opts?.signal ? { signal: opts.signal } : {}),
-		},
-	);
-
-	if (code !== 0) {
-		const err = new Error(`Command failed: ${redacted}`) as RunFailureError;
-		err.stdout = stdout;
-		err.stderr = stderr;
-		err.code = code;
-		throw err;
+	if (opts?.signal?.aborted) {
+		throw new RunAbortError(redacted);
 	}
-	return stdout;
+
+	// Timeout + cancellation are owned here and enforced through execFileP's
+	// `signal`: a fired timer or the caller's signal aborts the controller,
+	// execFileP kills the child, and the partial output on the rejection is
+	// reclassified into the typed timeout/abort error below.
+	const controller = new AbortController();
+	let timedOut = false;
+	const timer = setTimeout(() => {
+		timedOut = true;
+		controller.abort();
+	}, opts?.timeout ?? DEFAULT_TIMEOUT_MS);
+	const onCallerAbort = () => controller.abort();
+	opts?.signal?.addEventListener("abort", onCallerAbort, { once: true });
+
+	try {
+		const { stdout } = await execFileP(bin, [...args], {
+			maxBuffer: opts?.maxBuffer ?? DEFAULT_MAX_BUFFER,
+			signal: controller.signal,
+		});
+		return stdout;
+	} catch (err) {
+		if (controller.signal.aborted) {
+			const partial = err as Partial<RunFailureError>;
+			const partialStdout = partial.stdout ?? "";
+			const partialStderr = partial.stderr ?? "";
+			throw timedOut
+				? new RunTimeoutError(redacted, partialStdout, partialStderr)
+				: new RunAbortError(redacted, partialStdout, partialStderr);
+		}
+		throw err;
+	} finally {
+		clearTimeout(timer);
+		opts?.signal?.removeEventListener("abort", onCallerAbort);
+	}
 }
 
 /**
