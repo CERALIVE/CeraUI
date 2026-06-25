@@ -88,14 +88,29 @@ describe('Applied-state output schemas', () => {
 	});
 
 	describe('bitrateOutputSchema', () => {
-		it('should return applied max_br after clamp', () => {
+		it('should carry success + the applied bitrate after clamp', () => {
 			const output = {
-				max_br: 5000,
+				success: true,
+				applied: 5000,
 			};
 			const result = bitrateOutputSchema.safeParse(output);
 			expect(result.success).toBe(true);
 			if (result.success) {
-				expect(result.data.max_br).toBe(5000);
+				expect(result.data.success).toBe(true);
+				expect(result.data.applied).toBe(5000);
+			}
+		});
+
+		it('should carry a structured error on failure', () => {
+			const output = {
+				success: false,
+				error: { message: 'Engine rejected the bitrate change' },
+			};
+			const result = bitrateOutputSchema.safeParse(output);
+			expect(result.success).toBe(true);
+			if (result.success) {
+				expect(result.data.success).toBe(false);
+				expect(result.data.error?.message).toBeDefined();
 			}
 		});
 	});

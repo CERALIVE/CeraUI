@@ -118,15 +118,16 @@ describe("streaming.setConfig — applied (post-clamp) state", () => {
 });
 
 describe("streaming.setBitrate — applied (post-clamp) state", () => {
-	test("resolves with the clamped max_br when not streaming", async () => {
+	test("resolves with success + the clamped applied bitrate when not streaming", async () => {
 		const result = await call(
 			setBitrateProcedure,
 			{ max_br: OVER_HARDWARE_BITRATE },
 			{ context: makeContext() },
 		);
 
-		expect(result.max_br).toBe(clampBitrate(OVER_HARDWARE_BITRATE));
-		expect(result.max_br).toBeLessThan(OVER_HARDWARE_BITRATE);
+		expect(result.success).toBe(true);
+		expect(result.applied).toBe(clampBitrate(OVER_HARDWARE_BITRATE));
+		expect(result.applied).toBeLessThan(OVER_HARDWARE_BITRATE);
 	});
 });
 

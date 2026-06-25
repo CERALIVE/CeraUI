@@ -40,7 +40,7 @@ function makeContext(): RPCContext {
 	};
 }
 
-describe("streaming.start — structured failure reason (Task 16)", () => {
+describe("streaming.start — structured failure error code (Task 16)", () => {
 	let priorPipeline: string | undefined;
 	const savedMockMode = process.env.MOCK_MODE;
 	const savedNodeEnv = process.env.NODE_ENV;
@@ -73,7 +73,7 @@ describe("streaming.start — structured failure reason (Task 16)", () => {
 		else process.env.NODE_ENV = savedNodeEnv;
 	});
 
-	test("an injected Tier-2 error makes start fail with its structured reason", async () => {
+	test("an injected Tier-2 error makes start fail with its structured error code", async () => {
 		injectMockStreamError("srt_connect_failed");
 
 		const result = await call(
@@ -85,11 +85,11 @@ describe("streaming.start — structured failure reason (Task 16)", () => {
 		expect(result).toEqual({
 			success: false,
 			is_streaming: false,
-			reason: "srt_connect_failed",
+			error: "srt_connect_failed",
 		});
 	});
 
-	test("the success path is unchanged — no reason field on a clean start", async () => {
+	test("the success path is unchanged — no error field on a clean start", async () => {
 		const result = await call(
 			streamingStartProcedure,
 			{},
@@ -97,7 +97,7 @@ describe("streaming.start — structured failure reason (Task 16)", () => {
 		);
 
 		expect(result.success).toBe(true);
-		expect(result).not.toHaveProperty("reason");
+		expect(result).not.toHaveProperty("error");
 		expect(result.applied).toBeDefined();
 	});
 
@@ -112,7 +112,7 @@ describe("streaming.start — structured failure reason (Task 16)", () => {
 		expect(failed).toEqual({
 			success: false,
 			is_streaming: false,
-			reason: "srtla_no_connections",
+			error: "srtla_no_connections",
 		});
 
 		const retried = await call(
@@ -121,7 +121,7 @@ describe("streaming.start — structured failure reason (Task 16)", () => {
 			{ context: makeContext() },
 		);
 		expect(retried.success).toBe(true);
-		expect(retried).not.toHaveProperty("reason");
+		expect(retried).not.toHaveProperty("error");
 	});
 });
 

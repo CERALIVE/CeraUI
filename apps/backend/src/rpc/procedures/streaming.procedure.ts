@@ -81,6 +81,14 @@ const baseProcedure = os.$context<RPCContext>();
 // Authenticated procedure
 const authedProcedure = baseProcedure.use(authMiddleware);
 
+// A second streaming.start arriving while the first is still launching is
+// rejected with this stable code (not treated as a hard failure). The launch
+// spawns srtla_send AND issues the engine IPC start, so running it twice would
+// double-spawn the sender and double-start the engine.
+const START_IN_PROGRESS = "START_IN_PROGRESS";
+
+let startInFlight = false;
+
 /**
  * Start streaming procedure
  */
@@ -88,64 +96,79 @@ export const streamingStartProcedure = authedProcedure
 	.input(streamingConfigInputSchema)
 	.output(streamingStartOutputSchemaExtended)
 	.handler(async ({ input, context }) => {
-		const applied: StreamingConfigInput =
-			input.max_br !== undefined
-				? { ...input, max_br: clampBitrate(input.max_br) }
-				: input;
-
-		// Block start when the effective pipeline is not in the offered set — a
-		// persisted pipeline the current hardware no longer offers. No silent
-		// reset; the client surfaces the structured code so the operator re-picks.
-		const effectivePipeline = applied.pipeline ?? getConfig().pipeline;
-		if (effectivePipeline !== undefined) {
-			const check = validatePersistedPipeline(
-				effectivePipeline,
-				Object.keys(getPipelineList()),
-			);
-			if (!check.valid) {
-				return { success: false, is_streaming: false, error: check.error };
-			}
-		}
-
-		try {
-			if (shouldUseMocks()) {
-				// A test-injected Tier-2 error stands in for the engine refusing the
-				// start on device: consume it once and surface the structured reason,
-				// the same shape the real catch below returns.
-				const injected = getInjectedMockStreamError();
-				if (injected) {
-					clearMockStreamError();
-					return {
-						success: false,
-						is_streaming: false,
-						reason: mapCerastreamError(injected),
-					};
-				}
-				// Dev has no srtla_send/cerastream binaries: the real start() flips
-				// is_streaming on then immediately errors and flips it off. Simulate
-				// a sustained stream so getIsStreaming() drives the UI as on device.
-				setMockEncoderConfig({
-					pipeline: applied.pipeline,
-					bitrate_overlay: applied.bitrate_overlay,
-					resolution: applied.resolution,
-					framerate: applied.framerate,
-					max_br: applied.max_br,
-				});
-				setStreamingState(true);
-				updateStatus(true);
-				return { success: true, is_streaming: getIsStreaming(), applied };
-			}
-			// The existing start function handles validation and config saving.
-			// Pass the clamped copy so the persisted config matches the applied
-			// state we report back.
-			await startStream(context.ws as unknown as import("ws").default, applied);
-			return { success: true, is_streaming: getIsStreaming(), applied };
-		} catch (error) {
+		if (startInFlight) {
 			return {
 				success: false,
-				is_streaming: false,
-				reason: mapCerastreamError(error),
+				is_streaming: getIsStreaming(),
+				error: START_IN_PROGRESS,
 			};
+		}
+		startInFlight = true;
+		try {
+			const applied: StreamingConfigInput =
+				input.max_br !== undefined
+					? { ...input, max_br: clampBitrate(input.max_br) }
+					: input;
+
+			// Block start when the effective pipeline is not in the offered set — a
+			// persisted pipeline the current hardware no longer offers. No silent
+			// reset; the client surfaces the structured code so the operator re-picks.
+			const effectivePipeline = applied.pipeline ?? getConfig().pipeline;
+			if (effectivePipeline !== undefined) {
+				const check = validatePersistedPipeline(
+					effectivePipeline,
+					Object.keys(getPipelineList()),
+				);
+				if (!check.valid) {
+					return { success: false, is_streaming: false, error: check.error };
+				}
+			}
+
+			try {
+				if (shouldUseMocks()) {
+					// A test-injected Tier-2 error stands in for the engine refusing the
+					// start on device: consume it once and surface the structured reason,
+					// the same shape the real catch below returns.
+					const injected = getInjectedMockStreamError();
+					if (injected) {
+						clearMockStreamError();
+						return {
+							success: false,
+							is_streaming: false,
+							error: mapCerastreamError(injected),
+						};
+					}
+					// Dev has no srtla_send/cerastream binaries: the real start() flips
+					// is_streaming on then immediately errors and flips it off. Simulate
+					// a sustained stream so getIsStreaming() drives the UI as on device.
+					setMockEncoderConfig({
+						pipeline: applied.pipeline,
+						bitrate_overlay: applied.bitrate_overlay,
+						resolution: applied.resolution,
+						framerate: applied.framerate,
+						max_br: applied.max_br,
+					});
+					setStreamingState(true);
+					updateStatus(true);
+					return { success: true, is_streaming: getIsStreaming(), applied };
+				}
+				// The existing start function handles validation and config saving.
+				// Pass the clamped copy so the persisted config matches the applied
+				// state we report back.
+				await startStream(
+					context.ws as unknown as import("ws").default,
+					applied,
+				);
+				return { success: true, is_streaming: getIsStreaming(), applied };
+			} catch (error) {
+				return {
+					success: false,
+					is_streaming: false,
+					error: mapCerastreamError(error),
+				};
+			}
+		} finally {
+			startInFlight = false;
 		}
 	});
 
@@ -178,13 +201,20 @@ export const setBitrateProcedure = authedProcedure
 				if (shouldUseMocks()) {
 					setMockEncoderConfig({ max_br: newBitrate });
 				}
-				return { max_br: newBitrate };
+				return { success: true, applied: newBitrate };
 			}
+			// Streaming, but the engine refused the change — report a failure so the
+			// client keeps its field lock instead of releasing to a bitrate the
+			// engine never applied.
+			return {
+				success: false,
+				error: { message: "Engine rejected the bitrate change" },
+			};
 		}
 		if (shouldUseMocks()) {
 			setMockEncoderConfig({ max_br: applied });
 		}
-		return { max_br: applied };
+		return { success: true, applied };
 	});
 
 /**
