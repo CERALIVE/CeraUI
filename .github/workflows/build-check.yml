@@ -52,6 +52,10 @@ jobs:
         working-directory: CeraUI
         run: bunx biome check .
 
+      - name: Exec-guard gate (S1/S2 — bare-exec + spawn-policy contract + registration)
+        working-directory: CeraUI
+        run: bun run --filter backend check:exec-guard
+
       - name: Install Playwright browsers
         working-directory: CeraUI
         run: bun run --filter frontend test:e2e:install
