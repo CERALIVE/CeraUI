@@ -335,26 +335,31 @@ export const hotspotStopProcedure = authedProcedure
 export const hotspotConfigureProcedure = authedProcedure
 	.input(hotspotConfigInputSchema)
 	.output(successResponseSchema)
-	.handler(({ input, context }) => {
-		handleWifi(context.ws as unknown as WebSocket, {
-			hotspot: {
-				config: {
-					device: input.device,
-					name: input.name,
-					password: input.password,
-					channel: input.channel,
+	.handler(async ({ input, context }): Promise<MutationResult> => {
+		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
+		const ws = context.ws as unknown as WebSocket;
+		const busy = await runGuarded(macForDeviceId(input.device), () => {
+			handleWifi(ws, {
+				hotspot: {
+					config: {
+						device: input.device,
+						name: input.name,
+						password: input.password,
+						channel: input.channel,
+					},
 				},
-			},
-		});
-		if (shouldUseMocks()) {
-			const device = resolveMockWifiDevice(input.device);
-			if (device) {
-				setMockHotspotConfig(device, {
-					name: input.name,
-					password: input.password,
-					channel: input.channel,
-				});
+			});
+			if (shouldUseMocks()) {
+				const device = resolveMockWifiDevice(input.device);
+				if (device) {
+					setMockHotspotConfig(device, {
+						name: input.name,
+						password: input.password,
+						channel: input.channel,
+					});
+				}
 			}
-		}
+		});
+		if (busy) return { success: false, error: "DEVICE_BUSY" };
 		return { success: true };
 	});
