@@ -43,6 +43,7 @@ import {
 } from "./modules/network/network-interfaces.ts";
 import { initRemote } from "./modules/remote/remote.ts";
 import { initControlChannel } from "./modules/remote-control/channel.ts";
+import { wireSetProfile } from "./modules/remote-control/set-profile-wiring.ts";
 import {
 	recordTelemetryTick,
 	startTelemetryRecorder,
@@ -130,6 +131,9 @@ await initIdentity();
 // relay socket above — its own endpoint, token audience, and lifecycle. Fail-soft,
 // never blocks boot.
 await initControlChannel();
+// Bind the device.setProfile handler to the real config/caps/streaming session
+// (the platform pushes the resolved SRT receive profile over the control channel).
+wireSetProfile();
 await initPipelines(
 	shouldUseMocks()
 		? { fetchEngineCapabilities: async () => getMockEngineCapabilities() }

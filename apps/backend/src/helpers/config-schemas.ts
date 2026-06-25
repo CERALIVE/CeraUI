@@ -53,6 +53,7 @@ import {
 	type RelayProtocol,
 	relayProtocolSchema,
 	relayProviderMetaSchema,
+	streamProfileIdSchema,
 	streamRecoveryPreferenceSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
@@ -142,6 +143,10 @@ export const runtimeConfigSchema = z.object({
 	// preference. Persisted device-side; only honoured by a CeraLive receiver.
 	fec_enabled: z.boolean().optional(),
 	recovery_mode: streamRecoveryPreferenceSchema.optional(),
+	// Active SRT receive-profile preset id (or 'custom'). Persisted when the
+	// platform pushes a profile via device.setProfile so the device can report
+	// the effective active profile back and seed the Stream Tuning card.
+	stream_profile: streamProfileIdSchema.optional(),
 	srtla_addr: z.string().optional(),
 	srtla_port: z.number().int().min(1).max(65535).optional(),
 	// endpointId of the selected platform-pushed ingest slot (T18). The slot

@@ -172,3 +172,62 @@ export const streamProfileSchema = z.object({
 	recoveryMode: streamRecoveryModeSchema,
 });
 export type StreamProfile = z.infer<typeof streamProfileSchema>;
+
+// =============================================================================
+// device.setProfile control-channel frame + ack (platform → device → ack)
+// =============================================================================
+
+/**
+ * The `StreamConfig` the platform pushes down the device-control channel inside a
+ * `device.setProfile` command (cloud Todo 14). It mirrors the platform's
+ * `StreamConfigSchema` (ceralive-platform `apps/api/lib/remote-control/protocol.ts`)
+ * — kept in sync by the spec, never a cross-repo import (Rule D). `recoveryMode`
+ * is the OPERATOR-facing {@link StreamRecoveryPreference} (`standard` /
+ * `bandwidth-saver`), the same axis the Stream Tuning recovery control writes —
+ * NOT the internal freeze taxonomy. `presetId` is a plain string here (the device
+ * intersects it against its own caps before applying — an unknown preset is a
+ * device-side rejection, not a parse failure).
+ */
+export const setProfileConfigSchema = z.object({
+	presetId: z.string().min(1),
+	latencyMs: z.number().int().nonnegative(),
+	fecEnabled: z.boolean(),
+	recoveryMode: streamRecoveryPreferenceSchema,
+});
+export type SetProfileConfig = z.infer<typeof setProfileConfigSchema>;
+
+/**
+ * Body of a `device.setProfile` command frame (control-channel INTERNAL command,
+ * spec §5). `commandId` correlates the device's ack; the envelope `cid` equals it.
+ * `decidedBy` / `reason` are advisory provenance the resolver attached upstream —
+ * the device tolerates them but does not act on them.
+ */
+export const setProfilePayloadSchema = z.object({
+	commandId: z.string().min(1),
+	config: setProfileConfigSchema,
+	decidedBy: z.string().optional(),
+	reason: z.string().optional(),
+});
+export type SetProfilePayload = z.infer<typeof setProfilePayloadSchema>;
+
+/** Whether the device applied the pushed profile or rejected it (caps mismatch). */
+export const SET_PROFILE_ACK_STATUSES = ['applied', 'rejected'] as const;
+export const setProfileAckStatusSchema = z.enum(SET_PROFILE_ACK_STATUSES);
+export type SetProfileAckStatus = (typeof SET_PROFILE_ACK_STATUSES)[number];
+
+/**
+ * The ack the device emits back up the control channel after a `device.setProfile`
+ * push. `effectiveActiveProfile` is the preset the device actually runs under (or
+ * `'custom'`); `effectiveLatencyMs` is the device-applied SRT latency read back
+ * after the (re)connect — `max(device, listener)` is not separately observable, so
+ * this is the clamped device value the engine was (re)started with. `reason` names
+ * the rejection cause or a non-blocking adjustment (e.g. `latency_clamped`).
+ */
+export const setProfileAckSchema = z.object({
+	commandId: z.string().min(1),
+	status: setProfileAckStatusSchema,
+	reason: z.string().optional(),
+	effectiveActiveProfile: streamProfileIdSchema,
+	effectiveLatencyMs: z.number().int().nonnegative(),
+});
+export type SetProfileAck = z.infer<typeof setProfileAckSchema>;

@@ -57,6 +57,7 @@ import {
 	handleSelfFencingOp,
 	type SelfFencingDeps,
 } from "./self-fencing.ts";
+import { handleSetProfile } from "./set-profile.ts";
 
 /**
  * Invokes the oRPC procedure backing a single command, given the inbound frame
@@ -282,6 +283,26 @@ export async function routeCommand(
 					? { ok: false, applied: null, error: "invalid_ingest_slots" }
 					: { ok: true, applied: accounts },
 			);
+		} else if (frame.type === "device.setProfile") {
+			// Idempotent on commandId (a re-send returns the cached ack). The full
+			// ack (effectiveActiveProfile/effectiveLatencyMs) rides the result's
+			// `applied`; a rejected profile carries its reason on `error` too.
+			const ack = await handleSetProfile(frame.payload);
+			if (ack === null) {
+				emit(deps, frame, {
+					ok: false,
+					applied: null,
+					error: "invalid_set_profile",
+				});
+			} else {
+				emit(deps, frame, {
+					ok: ack.status === "applied",
+					applied: ack,
+					...(ack.status === "rejected" && ack.reason !== undefined
+						? { error: ack.reason }
+						: {}),
+				});
+			}
 		} else {
 			emit(deps, frame, { ok: false, applied: null, error: "unknown_command" });
 		}
