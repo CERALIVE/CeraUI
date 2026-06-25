@@ -687,6 +687,14 @@ const en = {
 			reasonFecUnsupported:
 				"This CeraLive receiver's libsrt build doesn't support FEC.",
 			reasonProfileUnsupported: "This receiver doesn't offer this profile.",
+			summaryDelay: "\u2248 {seconds:string} s delay",
+			summaryRecoveryStandard: "automatic loss recovery",
+			summaryRecoveryBandwidthSaver: "bandwidth-saver recovery",
+			summaryFecOn: "FEC on",
+			summaryFecOff: "FEC off",
+			cloudSetTitle: "Set by cloud",
+			cloudSetHint: "Tap to override on this device",
+			driftHint: "Device is running a different profile",
 			profileNames: {
 				balanced: "Balanced",
 				lowLatency: "Low latency",

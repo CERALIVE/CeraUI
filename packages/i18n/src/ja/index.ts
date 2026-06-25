@@ -140,6 +140,14 @@ const ja = {
 				"この CeraLive レシーバーの libsrt ビルドは FEC に対応していません。",
 			reasonProfileUnsupported:
 				"このレシーバーはこのプロファイルを提供していません。",
+			summaryDelay: "\u2248 {seconds} 秒の遅延",
+			summaryRecoveryStandard: "自動ロスリカバリ",
+			summaryRecoveryBandwidthSaver: "帯域節約リカバリ",
+			summaryFecOn: "FEC オン",
+			summaryFecOff: "FEC オフ",
+			cloudSetTitle: "クラウドにより設定",
+			cloudSetHint: "この端末で上書きするにはタップ",
+			driftHint: "端末は別のプロファイルで動作中",
 			profileNames: {
 				balanced: "バランス",
 				lowLatency: "低レイテンシ",

@@ -699,6 +699,14 @@ const es = {
 			reasonFecUnsupported:
 				"La compilación de libsrt de este receptor CeraLive no admite FEC.",
 			reasonProfileUnsupported: "Este receptor no ofrece este perfil.",
+			summaryDelay: "\u2248 {seconds} s de retardo",
+			summaryRecoveryStandard: "recuperación automática de pérdidas",
+			summaryRecoveryBandwidthSaver: "recuperación con ahorro de ancho de banda",
+			summaryFecOn: "FEC activado",
+			summaryFecOff: "FEC desactivado",
+			cloudSetTitle: "Definido por la nube",
+			cloudSetHint: "Toca para anular en este dispositivo",
+			driftHint: "El dispositivo usa un perfil diferente",
 			profileNames: {
 				balanced: "Equilibrado",
 				lowLatency: "Baja latencia",

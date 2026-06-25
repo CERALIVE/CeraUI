@@ -53,6 +53,7 @@ import {
 	type RelayProtocol,
 	relayProtocolSchema,
 	relayProviderMetaSchema,
+	resolverDecidedBySchema,
 	streamProfileIdSchema,
 	streamRecoveryPreferenceSchema,
 } from "@ceraui/rpc/schemas";
@@ -147,6 +148,10 @@ export const runtimeConfigSchema = z.object({
 	// platform pushes a profile via device.setProfile so the device can report
 	// the effective active profile back and seed the Stream Tuning card.
 	stream_profile: streamProfileIdSchema.optional(),
+	// Who decided the active profile (device.setProfile `decidedBy`). Persisted so
+	// the Stream Tuning card can surface a cloud-override affordance when the
+	// cloud (operator/auto) pinned the profile (Task 21).
+	profile_decided_by: resolverDecidedBySchema.optional(),
 	srtla_addr: z.string().optional(),
 	srtla_port: z.number().int().min(1).max(65535).optional(),
 	// endpointId of the selected platform-pushed ingest slot (T18). The slot

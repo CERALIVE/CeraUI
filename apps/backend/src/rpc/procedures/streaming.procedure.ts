@@ -242,6 +242,8 @@ export const getConfigProcedure = authedProcedure
 			srt_latency: config.srt_latency,
 			fec_enabled: config.fec_enabled,
 			recovery_mode: config.recovery_mode,
+			stream_profile: config.stream_profile,
+			profile_decided_by: config.profile_decided_by,
 			bitrate_overlay,
 			resolution,
 			framerate,

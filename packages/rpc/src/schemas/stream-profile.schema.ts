@@ -79,6 +79,23 @@ export type StreamRecoveryPreference = (typeof STREAM_RECOVERY_PREFERENCES)[numb
 export const DEFAULT_RECOVERY_PREFERENCE = 'standard' satisfies StreamRecoveryPreference;
 
 // =============================================================================
+// Resolver provenance (who decided the active profile)
+// =============================================================================
+
+/**
+ * Who decided the device's active SRT receive profile. Mirrors the platform
+ * resolver's `ResolverDecidedBy` (ceralive-platform `apps/api/lib/profiles/
+ * resolver.ts`) — kept in sync by the spec, never a cross-repo import (Rule D).
+ * `operator` / `auto` are the CLOUD-OVERRIDE provenances (an operator pin, or an
+ * automatic safety substitution): the Stream Tuning card surfaces a
+ * "set by cloud · tap to override" affordance for those. `device` / `cohort` /
+ * `global` are non-override defaults and never raise the affordance.
+ */
+export const RESOLVER_DECIDED_BY = ['operator', 'device', 'auto', 'cohort', 'global'] as const;
+export const resolverDecidedBySchema = z.enum(RESOLVER_DECIDED_BY);
+export type ResolverDecidedBy = (typeof RESOLVER_DECIDED_BY)[number];
+
+// =============================================================================
 // Preset → expanded-settings table (named saved combinations)
 // =============================================================================
 

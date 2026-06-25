@@ -60,6 +60,7 @@ import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import { isPairedToManagedCloud } from '$lib/stores/pairing.svelte';
 import {
+	type CloudOverrideState,
 	type Destination,
 	type ServerSetDerived,
 	type ServerSetDraft,
@@ -73,6 +74,7 @@ import {
 	deriveReceiverCaps,
 	deriveReceiverProfileKind,
 	deriveStreamTuningExperience,
+	hasProfileDrift,
 	isRelayServerStaleForProvider,
 	overrideClearsManagedBinding,
 	resolveActiveManagedProvider,
@@ -119,6 +121,7 @@ type Draft = {
 	relay_override_port?: string;
 	passphrase?: string;
 	selected_slot?: string;
+	cloud_override_cleared?: boolean;
 };
 let draft = $state<Draft>({});
 
@@ -252,6 +255,42 @@ const effectiveLatencyMs = $derived(isStreaming ? config?.srt_latency : undefine
 const fecEnabled = $derived(draft.fec_enabled ?? config?.fec_enabled ?? false);
 const recoveryMode = $derived<StreamRecoveryPreference>(
 	draft.recovery_mode ?? config?.recovery_mode ?? streamTuning.defaultRecoveryMode,
+);
+
+// Cloud-override + reconciliation drift (Task 21). The active profile + its
+// provenance arrive over the config echo (`profile_decided_by`); a prod-inert
+// `__ceraProfileDecidedBy` window seam lets e2e drive the affordance
+// deterministically. Tapping "tap to override" sets `cloud_override_cleared` so
+// the binding releases and local edits persist.
+let devCloudDecidedBy = $state<string | undefined>(undefined);
+$effect(() => {
+	if (!open) {
+		devCloudDecidedBy = undefined;
+		return;
+	}
+	devCloudDecidedBy = (globalThis as { __ceraProfileDecidedBy?: string })
+		.__ceraProfileDecidedBy;
+});
+const cloudOverride = $derived.by<CloudOverrideState | undefined>(() => {
+	if (draft.cloud_override_cleared) return undefined;
+	const decidedBy = config?.profile_decided_by ?? devCloudDecidedBy;
+	if (decidedBy === undefined) return undefined;
+	return {
+		decidedBy: decidedBy as CloudOverrideState['decidedBy'],
+		...(config?.stream_profile ? { presetId: config.stream_profile } : {}),
+	};
+});
+
+// Drift: the persisted (device-active) profile vs the selected control values.
+const driftActive = $derived(
+	hasProfileDrift(
+		{ latencyMs: clampedLatency, fecEnabled, recoveryMode },
+		{
+			latencyMs: config?.srt_latency ?? latencyRange.default,
+			fecEnabled: config?.fec_enabled ?? false,
+			recoveryMode: config?.recovery_mode ?? streamTuning.defaultRecoveryMode,
+		},
+	),
 );
 
 // Seed the persisted transport from the selected managed server's advertised set
@@ -559,11 +598,14 @@ async function handleSave() {
 		     receiver → full controls; non-CeraLive → latency only + disabled-with-
 		     reason advanced controls + BELABOX-compatible banner. -->
 		<StreamTuningSection
+			{cloudOverride}
+			{driftActive}
 			{effectiveLatencyMs}
 			experience={streamTuning}
 			{fecEnabled}
 			{isStreaming}
 			latencyMs={clampedLatency}
+			onClearCloudOverride={() => (draft.cloud_override_cleared = true)}
 			onFecChange={(value) => (draft.fec_enabled = value)}
 			onLatencyChange={(value) => (draft.srt_latency = value)}
 			onRecoveryChange={(value) => (draft.recovery_mode = value)}

@@ -69,6 +69,8 @@ export interface ResolvedProfileConfig {
 	latencyMs: number;
 	fecEnabled: boolean;
 	recoveryMode: StreamRecoveryPreference;
+	/** Resolver provenance the push carried (operator/auto = cloud override). */
+	decidedBy?: string;
 }
 
 /** Injected collaborators so the apply pipeline runs without disk/engine in tests. */
@@ -185,6 +187,9 @@ export async function handleSetProfile(
 		latencyMs,
 		fecEnabled: config.fecEnabled,
 		recoveryMode: config.recoveryMode,
+		...(parsed.data.decidedBy !== undefined
+			? { decidedBy: parsed.data.decidedBy }
+			: {}),
 	});
 
 	if (state.deps.isStreaming()) {

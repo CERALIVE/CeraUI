@@ -10,6 +10,8 @@ import {
 	buildManagedSlotConfig,
 	buildServerSetConfig,
 	buildServerSummary,
+	buildSummaryText,
+	type CloudOverrideState,
 	countRelayServersForProvider,
 	type Destination,
 	deriveDestination,
@@ -20,6 +22,8 @@ import {
 	findActiveSlot,
 	getPresetChips,
 	groupRelayServersByProvider,
+	hasProfileDrift,
+	isCloudOverride,
 	isRelayServerStaleForProvider,
 	kindBadgeLabelKey,
 	type ManagedIngestAccount,
@@ -1358,5 +1362,106 @@ describe("matchActivePreset — active-chip derivation (Task 20)", () => {
 				recoveryMode: "standard",
 			}),
 		).toBe("custom");
+	});
+});
+
+describe("isCloudOverride (Task 21)", () => {
+	it("treats operator and auto as cloud overrides", () => {
+		expect(isCloudOverride({ decidedBy: "operator" })).toBe(true);
+		expect(isCloudOverride({ decidedBy: "auto" })).toBe(true);
+	});
+
+	it("treats device/cohort/global as baseline defaults, not overrides", () => {
+		for (const decidedBy of ["device", "cohort", "global"] as const) {
+			expect(isCloudOverride({ decidedBy })).toBe(false);
+		}
+	});
+
+	it("treats undefined as no override", () => {
+		expect(isCloudOverride(undefined)).toBe(false);
+	});
+
+	it("carries the cloud-pushed preset id when known", () => {
+		const state: CloudOverrideState = {
+			decidedBy: "operator",
+			presetId: "low-latency",
+		};
+		expect(state.presetId).toBe("low-latency");
+		expect(isCloudOverride(state)).toBe(true);
+	});
+});
+
+describe("hasProfileDrift (Task 21)", () => {
+	const base = {
+		latencyMs: 1500,
+		fecEnabled: false,
+		recoveryMode: "standard",
+	} as const;
+
+	it("reports no drift when selected equals active", () => {
+		expect(hasProfileDrift({ ...base }, { ...base })).toBe(false);
+	});
+
+	it("reports drift on a latency difference", () => {
+		expect(hasProfileDrift({ ...base, latencyMs: 2000 }, { ...base })).toBe(
+			true,
+		);
+	});
+
+	it("reports drift on an FEC difference", () => {
+		expect(hasProfileDrift({ ...base, fecEnabled: true }, { ...base })).toBe(
+			true,
+		);
+	});
+
+	it("reports drift on a recovery-mode difference", () => {
+		expect(
+			hasProfileDrift(
+				{ ...base, recoveryMode: "bandwidth-saver" },
+				{ ...base },
+			),
+		).toBe(true);
+	});
+});
+
+describe("buildSummaryText (Task 21)", () => {
+	const labels = {
+		delay: (ms: number) => `~${ms / 1000}s`,
+		recovery: (mode: "standard" | "bandwidth-saver") =>
+			mode === "bandwidth-saver" ? "saver" : "auto",
+		fec: (on: boolean) => (on ? "FEC on" : "FEC off"),
+	};
+
+	it("joins delay, recovery, and FEC segments in order with a middot", () => {
+		expect(
+			buildSummaryText(
+				{ latencyMs: 1500, fecEnabled: false, recoveryMode: "standard" },
+				labels,
+			),
+		).toBe("~1.5s · auto · FEC off");
+	});
+
+	it("reflects bandwidth-saver recovery and FEC on", () => {
+		expect(
+			buildSummaryText(
+				{ latencyMs: 2000, fecEnabled: true, recoveryMode: "bandwidth-saver" },
+				labels,
+			),
+		).toBe("~2s · saver · FEC on");
+	});
+
+	it("uses the latency it is given (the caller passes the effective value)", () => {
+		const spy: number[] = [];
+		buildSummaryText(
+			{ latencyMs: 3000, fecEnabled: false, recoveryMode: "standard" },
+			{
+				...labels,
+				delay: (ms) => {
+					spy.push(ms);
+					return `~${ms}`;
+				},
+			},
+		);
+		expect(spy).toEqual([3000]);
 	});
 });

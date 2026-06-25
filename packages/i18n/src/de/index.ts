@@ -691,6 +691,14 @@ const de = {
 				"Der libsrt-Build dieses CeraLive-Empfängers unterstützt kein FEC.",
 			reasonProfileUnsupported:
 				"Dieser Empfänger bietet dieses Profil nicht an.",
+			summaryDelay: "\u2248 {seconds} s Verzögerung",
+			summaryRecoveryStandard: "automatische Verlustwiederherstellung",
+			summaryRecoveryBandwidthSaver: "bandbreitensparende Wiederherstellung",
+			summaryFecOn: "FEC ein",
+			summaryFecOff: "FEC aus",
+			cloudSetTitle: "Von der Cloud festgelegt",
+			cloudSetHint: "Zum Überschreiben auf diesem Gerät tippen",
+			driftHint: "Gerät verwendet ein anderes Profil",
 			profileNames: {
 				balanced: "Ausgewogen",
 				lowLatency: "Niedrige Latenz",

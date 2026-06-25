@@ -405,3 +405,127 @@ describe("StreamTuningSection — preset snap-chips (Task 20)", () => {
 		}
 	});
 });
+
+describe("StreamTuningSection — live summary (Task 21)", () => {
+	it("renders a plain-language summary of the current combination", () => {
+		render(StreamTuningSection, {
+			props: { experience: CERALIVE, latencyMs: 1500 },
+		});
+		const summary =
+			screen.getByTestId("stream-tuning-summary").textContent ?? "";
+		expect(summary).toContain("1.5 s delay");
+		expect(summary).toContain("automatic loss recovery");
+		expect(summary).toContain("FEC off");
+	});
+
+	it("reflects the negotiated latency in the summary while streaming", () => {
+		render(StreamTuningSection, {
+			props: {
+				experience: CERALIVE,
+				latencyMs: 1500,
+				effectiveLatencyMs: 3000,
+				isStreaming: true,
+			},
+		});
+		expect(screen.getByTestId("stream-tuning-summary").textContent).toContain(
+			"3 s delay",
+		);
+	});
+
+	it("reflects a bandwidth-saver + FEC-on selection in the summary", () => {
+		render(StreamTuningSection, {
+			props: {
+				experience: CERALIVE,
+				latencyMs: 2000,
+				fecEnabled: true,
+				recoveryMode: "bandwidth-saver",
+			},
+		});
+		const summary =
+			screen.getByTestId("stream-tuning-summary").textContent ?? "";
+		expect(summary).toContain("bandwidth-saver recovery");
+		expect(summary).toContain("FEC on");
+	});
+});
+
+describe("StreamTuningSection — cloud override (Task 21)", () => {
+	it("shows the override affordance and locks controls when the cloud (operator) set the profile", () => {
+		render(StreamTuningSection, {
+			props: {
+				experience: CERALIVE,
+				latencyMs: 1500,
+				cloudOverride: { decidedBy: "operator" },
+			},
+		});
+		const affordance = btn("stream-tuning-cloud-override");
+		expect(affordance.textContent).toContain("Set by cloud");
+		expect(affordance.textContent).toContain("Tap to override");
+		expect(
+			(screen.getByTestId("stream-tuning-latency-slider") as HTMLInputElement)
+				.disabled,
+		).toBe(true);
+		expect(btn("stream-tuning-recovery-standard").disabled).toBe(true);
+		expect(btn("stream-tuning-preset-balanced").disabled).toBe(true);
+	});
+
+	it("does NOT show the affordance for a non-override decidedBy", () => {
+		render(StreamTuningSection, {
+			props: {
+				experience: CERALIVE,
+				latencyMs: 1500,
+				cloudOverride: { decidedBy: "global" },
+			},
+		});
+		expect(screen.queryByTestId("stream-tuning-cloud-override")).toBeNull();
+		expect(
+			(screen.getByTestId("stream-tuning-latency-slider") as HTMLInputElement)
+				.disabled,
+		).toBe(false);
+	});
+
+	it("tapping the affordance unlocks controls and fires onClearCloudOverride", async () => {
+		const onClearCloudOverride = vi.fn();
+		render(StreamTuningSection, {
+			props: {
+				experience: CERALIVE,
+				latencyMs: 1500,
+				cloudOverride: { decidedBy: "auto" },
+				onClearCloudOverride,
+			},
+		});
+		await fireEvent.click(btn("stream-tuning-cloud-override"));
+		expect(onClearCloudOverride).toHaveBeenCalledOnce();
+		expect(screen.queryByTestId("stream-tuning-cloud-override")).toBeNull();
+		expect(btn("stream-tuning-recovery-standard").disabled).toBe(false);
+	});
+});
+
+describe("StreamTuningSection — drift indicator (Task 21)", () => {
+	it("shows a subtle drift note when the device-active profile differs", () => {
+		render(StreamTuningSection, {
+			props: { experience: CERALIVE, latencyMs: 1500, driftActive: true },
+		});
+		const drift = screen.getByTestId("stream-tuning-drift");
+		expect(drift.textContent).toContain("different profile");
+		expect(drift.getAttribute("role")).toBe("status");
+	});
+
+	it("hides the drift note when there is no drift", () => {
+		render(StreamTuningSection, {
+			props: { experience: CERALIVE, latencyMs: 1500, driftActive: false },
+		});
+		expect(screen.queryByTestId("stream-tuning-drift")).toBeNull();
+	});
+
+	it("suppresses drift while the cloud lock owns the controls", () => {
+		render(StreamTuningSection, {
+			props: {
+				experience: CERALIVE,
+				latencyMs: 1500,
+				driftActive: true,
+				cloudOverride: { decidedBy: "operator" },
+			},
+		});
+		expect(screen.queryByTestId("stream-tuning-drift")).toBeNull();
+	});
+});

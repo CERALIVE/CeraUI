@@ -266,7 +266,11 @@ import {
 	providerSelectionSchema,
 } from './cloud-provider.schema';
 import { relayProtocolSchema } from './relay.schema';
-import { streamRecoveryPreferenceSchema } from './stream-profile.schema';
+import {
+	resolverDecidedBySchema,
+	streamProfileIdSchema,
+	streamRecoveryPreferenceSchema,
+} from './stream-profile.schema';
 
 // Config message schema (what the server sends to clients)
 export const configMessageSchema = z.object({
@@ -302,6 +306,11 @@ export const configMessageSchema = z.object({
 	// values on reload (Tasks 18/19).
 	fec_enabled: z.boolean().optional(),
 	recovery_mode: streamRecoveryPreferenceSchema.optional(),
+	// Active receive-profile preset id + who decided it, echoed so the card can
+	// show the reconciled active profile and a "set by cloud · tap to override"
+	// affordance when the cloud (operator/auto) pushed the profile (Task 21).
+	stream_profile: streamProfileIdSchema.optional(),
+	profile_decided_by: resolverDecidedBySchema.optional(),
 });
 export type ConfigMessage = z.infer<typeof configMessageSchema>;
 

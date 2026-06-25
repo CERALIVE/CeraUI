@@ -291,6 +291,14 @@ const fr = {
 			reasonFecUnsupported:
 				"La version de libsrt de ce récepteur CeraLive ne prend pas en charge le FEC.",
 			reasonProfileUnsupported: "Ce récepteur ne propose pas ce profil.",
+			summaryDelay: "\u2248 {seconds} s de délai",
+			summaryRecoveryStandard: "récupération automatique des pertes",
+			summaryRecoveryBandwidthSaver: "récupération économe en bande passante",
+			summaryFecOn: "FEC activé",
+			summaryFecOff: "FEC désactivé",
+			cloudSetTitle: "Défini par le cloud",
+			cloudSetHint: "Appuyez pour remplacer sur cet appareil",
+			driftHint: "L'appareil utilise un profil différent",
 			profileNames: {
 				balanced: "Équilibré",
 				lowLatency: "Faible latence",

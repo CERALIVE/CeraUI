@@ -135,6 +135,14 @@ const hi = {
 			reasonFecUnsupported:
 				"इस CeraLive रिसीवर का libsrt बिल्ड FEC का समर्थन नहीं करता।",
 			reasonProfileUnsupported: "यह रिसीवर यह प्रोफ़ाइल प्रदान नहीं करता।",
+			summaryDelay: "\u2248 {seconds} s विलंब",
+			summaryRecoveryStandard: "स्वचालित हानि रिकवरी",
+			summaryRecoveryBandwidthSaver: "बैंडविड्थ-सेवर रिकवरी",
+			summaryFecOn: "FEC चालू",
+			summaryFecOff: "FEC बंद",
+			cloudSetTitle: "क्लाउड द्वारा सेट",
+			cloudSetHint: "इस डिवाइस पर ओवरराइड करने के लिए टैप करें",
+			driftHint: "डिवाइस एक अलग प्रोफ़ाइल चला रहा है",
 			profileNames: {
 				balanced: "संतुलित",
 				lowLatency: "कम विलंबता",

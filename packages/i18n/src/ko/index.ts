@@ -136,6 +136,14 @@ const ko = {
 			reasonFecUnsupported:
 				"이 CeraLive 수신기의 libsrt 빌드는 FEC를 지원하지 않습니다.",
 			reasonProfileUnsupported: "이 수신기는 이 프로필을 제공하지 않습니다.",
+			summaryDelay: "\u2248 {seconds}초 지연",
+			summaryRecoveryStandard: "자동 손실 복구",
+			summaryRecoveryBandwidthSaver: "대역폭 절약 복구",
+			summaryFecOn: "FEC 켜짐",
+			summaryFecOff: "FEC 꺼짐",
+			cloudSetTitle: "클라우드에서 설정됨",
+			cloudSetHint: "이 기기에서 재정의하려면 탭하세요",
+			driftHint: "기기가 다른 프로필로 실행 중",
 			profileNames: {
 				balanced: "균형",
 				lowLatency: "저지연",

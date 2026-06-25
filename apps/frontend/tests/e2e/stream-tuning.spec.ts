@@ -268,4 +268,77 @@ test.describe('Stream Tuning card — receiver-capability gating', () => {
 			.evaluate((el) => getComputedStyle(el).transitionDuration);
 		expect(Number.parseFloat(duration)).toBeLessThanOrEqual(0.001);
 	});
+
+	test('live summary translates the current combination into plain language', async ({
+		authedPage: page,
+	}) => {
+		const dialog = await openServerDialog(page);
+		await dialog.getByTestId('destination-custom').click();
+
+		const summary = dialog.getByTestId('stream-tuning-summary');
+		await expect(summary).toBeVisible();
+		// Plain language only — a delay clause, a recovery clause, and an FEC clause.
+		await expect(summary).toContainText(/s delay/);
+		await expect(summary).toContainText(/FEC (on|off)/);
+
+		// The summary tracks the slider live (no save needed).
+		await dialog.getByTestId('stream-tuning-latency-slider').fill('1500');
+		await expect(summary).toContainText('1.5 s delay');
+	});
+
+	test('cloud-override: "set by cloud" affordance locks controls until tapped', async ({
+		authedPage: page,
+	}) => {
+		await navigateTo(page, 'live');
+		// Prod-inert e2e seam: drive the resolver provenance the device would
+		// normally receive over the config echo (operator = a cloud override).
+		await page.evaluate(() => {
+			(window as Window & { __ceraProfileDecidedBy?: string }).__ceraProfileDecidedBy =
+				'operator';
+		});
+
+		const byTestId = page.getByTestId('open-server-dialog');
+		if ((await byTestId.count()) > 0) {
+			await byTestId.first().click();
+		} else {
+			await page.getByRole('button', { name: 'Edit Settings' }).first().click();
+		}
+		const dialog = page.getByRole('dialog', { name: 'Receiver Server' });
+		await expect(dialog).toBeVisible();
+		await dialog.getByTestId('destination-custom').click();
+
+		const affordance = dialog.getByTestId('stream-tuning-cloud-override');
+		await expect(affordance).toBeVisible();
+		await expect(affordance).toContainText('Set by cloud');
+		await expect(affordance).toContainText('Tap to override');
+
+		// While the cloud binding holds, tuning is locked.
+		await expect(dialog.getByTestId('stream-tuning-latency-slider')).toBeDisabled();
+
+		// Tapping the affordance hands control back to the operator.
+		await affordance.click();
+		await expect(affordance).toHaveCount(0);
+		await expect(dialog.getByTestId('stream-tuning-latency-slider')).toBeEnabled();
+
+		await page.evaluate(() => {
+			(window as Window & { __ceraProfileDecidedBy?: string }).__ceraProfileDecidedBy =
+				undefined;
+		});
+	});
+
+	test('drift indicator appears when a control diverges from the device-active profile', async ({
+		authedPage: page,
+	}) => {
+		const dialog = await openServerDialog(page);
+		await dialog.getByTestId('destination-custom').click();
+
+		// No drift on open (selected equals the persisted/active profile).
+		await expect(dialog.getByTestId('stream-tuning-drift')).toHaveCount(0);
+
+		// Editing the latency makes the selection diverge from device-active.
+		await dialog.getByTestId('stream-tuning-latency-slider').fill('1500');
+		const drift = dialog.getByTestId('stream-tuning-drift');
+		await expect(drift).toBeVisible();
+		await expect(drift).toHaveAttribute('role', 'status');
+	});
 });

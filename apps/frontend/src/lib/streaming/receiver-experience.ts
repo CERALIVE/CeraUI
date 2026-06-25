@@ -33,6 +33,7 @@ import {
 	type RelayProtocol,
 	type RelayProviderKind,
 	type RelayServer,
+	type ResolverDecidedBy,
 	relayProtocolSchema,
 	type StreamingConfigInput,
 	type StreamProfileId,
@@ -1130,4 +1131,82 @@ export function matchActivePreset(values: PresetMatchValues): StreamProfileId {
 		}
 	}
 	return "custom";
+}
+
+// =============================================================================
+// Plain-language summary, cloud-override + reconciliation drift — Task 21
+// =============================================================================
+
+/**
+ * The cloud's provenance for the active profile, surfaced to the Stream Tuning
+ * card. `decidedBy` is the platform resolver's verdict (mirrored over the wire as
+ * `config.profile_decided_by`); `presetId` is the cloud-pushed preset, when known.
+ */
+export interface CloudOverrideState {
+	decidedBy: ResolverDecidedBy;
+	presetId?: StreamProfileId;
+}
+
+/**
+ * True when the cloud OVERRODE the profile — an operator pin (`operator`) or an
+ * automatic safety substitution (`auto`). `device` / `cohort` / `global` are
+ * baseline defaults, not overrides, and never raise the override affordance.
+ */
+export function isCloudOverride(
+	state: CloudOverrideState | undefined,
+): boolean {
+	return state?.decidedBy === "operator" || state?.decidedBy === "auto";
+}
+
+/** The three operator-facing profile fields drift is reconciled across. */
+export interface ProfileSnapshot {
+	latencyMs: number;
+	fecEnabled: boolean;
+	recoveryMode: StreamRecoveryPreference;
+}
+
+/**
+ * True when the device-active profile differs from the selected config — the
+ * reconciliation drift the card surfaces (subtle, informational). Compares the
+ * three operator-facing fields; any difference is drift.
+ */
+export function hasProfileDrift(
+	selected: ProfileSnapshot,
+	active: ProfileSnapshot,
+): boolean {
+	return (
+		selected.latencyMs !== active.latencyMs ||
+		selected.fecEnabled !== active.fecEnabled ||
+		selected.recoveryMode !== active.recoveryMode
+	);
+}
+
+/**
+ * i18n resolvers the summary composes, keeping {@link buildSummaryText} `$LL`-free
+ * (mirrors the {@link buildServerSummary} labels pattern). `delay` receives the
+ * raw latency ms so the caller owns the seconds formatting + locale.
+ */
+export interface ProfileSummaryLabels {
+	delay: (latencyMs: number) => string;
+	recovery: (mode: StreamRecoveryPreference) => string;
+	fec: (enabled: boolean) => string;
+}
+
+const SUMMARY_DELIMITER = " · ";
+
+/**
+ * Distil the active profile combination into one plain-language line, e.g.
+ * "≈ 1.5 s delay · automatic loss recovery · FEC off". Pure — all copy + the
+ * seconds formatting arrive via {@link ProfileSummaryLabels}. `latencyMs` should
+ * be the EFFECTIVE (negotiated) latency while streaming, not the raw slider value.
+ */
+export function buildSummaryText(
+	snapshot: ProfileSnapshot,
+	labels: ProfileSummaryLabels,
+): string {
+	return [
+		labels.delay(snapshot.latencyMs),
+		labels.recovery(snapshot.recoveryMode),
+		labels.fec(snapshot.fecEnabled),
+	].join(SUMMARY_DELIMITER);
 }

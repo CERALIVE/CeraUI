@@ -94,5 +94,42 @@ test.describe('@visual Stream Tuning card', () => {
 		await card.screenshot({
 			path: path.join(VISUAL_DIR, 'task-19-srt-receive-profiles.png'),
 		});
+
+		// Task 21 evidence — the plain-language summary line + the drift note after
+		// an edit diverges the selection from the device-active profile.
+		await dialog.getByTestId('destination-custom').click();
+		await dialog.getByTestId('stream-tuning-latency-slider').fill('1500');
+		await expect(dialog.getByTestId('stream-tuning-summary')).toContainText('1.5 s delay');
+		await expect(dialog.getByTestId('stream-tuning-drift')).toBeVisible();
+		await card.screenshot({
+			path: path.join(VISUAL_DIR, 'task-21-summary-drift.png'),
+		});
+	});
+
+	test('stream-tuning card — cloud override affordance', { tag: '@visual' }, async ({ page }) => {
+		await page.setViewportSize({ width: 1280, height: 900 });
+		await page.goto('/');
+		await ensureAuthenticated(page);
+		await navigateTo(page, 'live');
+		await page.evaluate(() => {
+			(window as Window & { __ceraProfileDecidedBy?: string }).__ceraProfileDecidedBy =
+				'operator';
+		});
+
+		const byTestId = page.getByTestId('open-server-dialog');
+		if ((await byTestId.count()) > 0) {
+			await byTestId.first().click();
+		} else {
+			await page.getByRole('button', { name: 'Edit Settings' }).first().click();
+		}
+		const dialog = page.getByRole('dialog', { name: 'Receiver Server' });
+		await expect(dialog).toBeVisible();
+		await dialog.getByTestId('destination-custom').click();
+
+		const card = dialog.getByTestId('stream-tuning');
+		await expect(dialog.getByTestId('stream-tuning-cloud-override')).toBeVisible();
+		await card.screenshot({
+			path: path.join(VISUAL_DIR, 'task-21-srt-receive-profiles.png'),
+		});
 	});
 });

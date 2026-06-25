@@ -22,7 +22,7 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { ChevronDown, Radio, ShieldCheck } from '@lucide/svelte';
+import { ChevronDown, CloudCog, GitCompareArrows, Radio, ShieldCheck } from '@lucide/svelte';
 import { PRESET_CONFIGS } from '@ceraui/rpc/schemas';
 import type { StreamProfileId, StreamRecoveryPreference } from '@ceraui/rpc/schemas';
 
@@ -30,7 +30,10 @@ import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { Label } from '$lib/components/ui/label';
 import { Switch } from '$lib/components/ui/switch';
 import {
+	buildSummaryText,
+	type CloudOverrideState,
 	getPresetChips,
+	isCloudOverride,
 	matchActivePreset,
 	type StreamTuningExperience,
 } from '$lib/streaming/receiver-experience';
@@ -49,12 +52,18 @@ interface Props {
 	recoveryMode?: StreamRecoveryPreference;
 	/** A live stream freezes tuning — every control is additionally locked. */
 	isStreaming?: boolean;
+	/** Cloud-resolved profile provenance; raises the override affordance when set by the cloud. */
+	cloudOverride?: CloudOverrideState | undefined;
+	/** True when the device-active profile differs from the selected config (reconciliation drift). */
+	driftActive?: boolean;
 	/** Continuous-latency change (ms). */
 	onLatencyChange?: (value: number) => void;
 	/** FEC toggle change. */
 	onFecChange?: (value: boolean) => void;
 	/** Recovery-preference change. */
 	onRecoveryChange?: (value: StreamRecoveryPreference) => void;
+	/** Operator tapped "tap to override" — clears the cloud binding for local edits. */
+	onClearCloudOverride?: () => void;
 }
 
 let {
@@ -64,10 +73,25 @@ let {
 	fecEnabled = false,
 	recoveryMode,
 	isStreaming = false,
+	cloudOverride,
+	driftActive = false,
 	onLatencyChange,
 	onFecChange,
 	onRecoveryChange,
+	onClearCloudOverride,
 }: Props = $props();
+
+// Cloud override: when the cloud (operator/auto) pinned the profile, the card
+// locks tuning behind a calm "tap to override" affordance. Tapping unlocks the
+// controls locally and clears the binding so local edits persist.
+let cloudOverrideCleared = $state(false);
+const cloudActive = $derived(isCloudOverride(cloudOverride));
+const cloudLocked = $derived(cloudActive && !cloudOverrideCleared);
+
+function clearCloudOverride(): void {
+	cloudOverrideCleared = true;
+	onClearCloudOverride?.();
+}
 
 // Slider granularity — a UI step, not a validation bound (those come from
 // `experience.latencyRange`). Fine enough to read as continuous, not bucketed.
@@ -91,9 +115,11 @@ const t = (key: string): string => {
 // A control is interactive only when its capability gate is open AND no stream
 // is live. The gate (reason key) comes from the experience; streaming adds a
 // blanket lock on top, explained by the dialog's stop-to-change banner.
-const fecDisabled = $derived(!experience.fecEnabled || isStreaming);
-const recoveryDisabled = $derived(!experience.recoveryModeEnabled || isStreaming);
-const presetsDisabled = $derived(!experience.presetsEnabled || isStreaming);
+const fecDisabled = $derived(!experience.fecEnabled || isStreaming || cloudLocked);
+const recoveryDisabled = $derived(
+	!experience.recoveryModeEnabled || isStreaming || cloudLocked,
+);
+const presetsDisabled = $derived(!experience.presetsEnabled || isStreaming || cloudLocked);
 
 const fecReason = $derived(
 	experience.fecDisabledReasonKey ? t(experience.fecDisabledReasonKey) : undefined,
@@ -127,6 +153,34 @@ const fecChecked = $derived(fecDisabled ? false : fecEnabled);
 const activeRecovery = $derived<StreamRecoveryPreference>(
 	recoveryMode ?? experience.defaultRecoveryMode,
 );
+
+// Plain-language summary of the current combination — reads the EFFECTIVE
+// (negotiated) latency while streaming, not the staged slider value.
+const formatSecondsValue = (ms: number): string => {
+	const seconds = ms / 1000;
+	return Number.isInteger(seconds) ? `${seconds}` : seconds.toFixed(1);
+};
+const summaryText = $derived(
+	buildSummaryText(
+		{ latencyMs: displayLatencyMs, fecEnabled: fecChecked, recoveryMode: activeRecovery },
+		{
+			delay: (ms) =>
+				$LL.settings.streamTuning.summaryDelay({ seconds: formatSecondsValue(ms) }),
+			recovery: (mode) =>
+				mode === 'bandwidth-saver'
+					? $LL.settings.streamTuning.summaryRecoveryBandwidthSaver()
+					: $LL.settings.streamTuning.summaryRecoveryStandard(),
+			fec: (on) =>
+				on
+					? $LL.settings.streamTuning.summaryFecOn()
+					: $LL.settings.streamTuning.summaryFecOff(),
+		},
+	),
+);
+
+// Drift is informational; suppress it while the cloud lock owns the controls
+// (the override affordance is the actionable signal there).
+const showDrift = $derived(driftActive && !cloudLocked);
 
 // Preset snap-chips: a named combination of the three controls above. Clicking a
 // chip sets all three; the active chip is DERIVED from the live values, so any
@@ -194,6 +248,28 @@ const focusRing =
 		{/if}
 	</div>
 
+	{#if cloudActive && !cloudOverrideCleared}
+		<button
+			class={cn(
+				'border-primary/30 bg-primary/10 flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-primary/15',
+				focusRing,
+			)}
+			data-testid="stream-tuning-cloud-override"
+			onclick={clearCloudOverride}
+			type="button"
+		>
+			<CloudCog aria-hidden={true} class="text-primary size-4 shrink-0" />
+			<span class="flex min-w-0 flex-col gap-0.5">
+				<span class="text-foreground text-sm font-medium"
+					>{$LL.settings.streamTuning.cloudSetTitle()}</span
+				>
+				<span class="text-muted-foreground text-xs leading-snug"
+					>{$LL.settings.streamTuning.cloudSetHint()}</span
+				>
+			</span>
+		</button>
+	{/if}
+
 	<!-- Latency — honoured by every receiver, so the slider is enabled for all;
 	     a live stream locks it (apply-on-reconnect). The pill reads back the
 	     negotiated value while streaming, not the staged slider value. -->
@@ -231,7 +307,7 @@ const focusRing =
 				aria-valuetext={formatSeconds(displayLatencyMs)}
 				class="peer absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
 				data-testid="stream-tuning-latency-slider"
-				disabled={isStreaming}
+				disabled={isStreaming || cloudLocked}
 				max={range.max}
 				min={range.min}
 				oninput={(e) => onLatencyChange?.(Number.parseInt(e.currentTarget.value, 10))}
@@ -269,7 +345,8 @@ const focusRing =
 			{#each presetChips as chip (chip.presetId)}
 				{@const pressed = chip.presetId === activeChip}
 				{@const isCustom = chip.presetId === 'custom'}
-				{@const disabled = chip.disabled || isStreaming || (isCustom && !pressed)}
+				{@const disabled =
+					chip.disabled || isStreaming || cloudLocked || (isCustom && !pressed)}
 				{@const reason = chip.reasonKey ? t(chip.reasonKey) : undefined}
 				<button
 					aria-pressed={pressed}
@@ -389,6 +466,24 @@ const focusRing =
 			</span>
 		</div>
 	</details>
+
+	<!-- Plain-language summary of the current combination + a subtle drift note
+	     when the device-active profile differs from the selected config. -->
+	<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+		<span class="text-muted-foreground text-xs leading-snug" data-testid="stream-tuning-summary">
+			{summaryText}
+		</span>
+		{#if showDrift}
+			<span
+				class="text-muted-foreground inline-flex items-center gap-1 text-xs"
+				data-testid="stream-tuning-drift"
+				role="status"
+			>
+				<GitCompareArrows aria-hidden={true} class="size-3.5" />
+				{$LL.settings.streamTuning.driftHint()}
+			</span>
+		{/if}
+	</div>
 
 	{#if experience.showBelaboxBanner}
 		<div

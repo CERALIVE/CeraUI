@@ -30,6 +30,7 @@
  * config is applied on the next start instead.
  */
 
+import { resolverDecidedBySchema } from "@ceraui/rpc/schemas";
 import { RUNTIME_CONFIG_DEFAULTS } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
@@ -103,6 +104,8 @@ export function wireSetProfile(): void {
 			config.srt_latency = resolved.latencyMs;
 			config.fec_enabled = resolved.fecEnabled;
 			config.recovery_mode = resolved.recoveryMode;
+			const decidedBy = resolverDecidedBySchema.safeParse(resolved.decidedBy);
+			if (decidedBy.success) config.profile_decided_by = decidedBy.data;
 			saveConfig();
 			broadcastMsg("config", config);
 		},

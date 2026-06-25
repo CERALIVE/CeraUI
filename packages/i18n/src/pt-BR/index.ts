@@ -291,6 +291,14 @@ const ptBR = {
 			reasonFecUnsupported:
 				"A build do libsrt deste receptor CeraLive não oferece suporte a FEC.",
 			reasonProfileUnsupported: "Este receptor não oferece este perfil.",
+			summaryDelay: "\u2248 {seconds} s de atraso",
+			summaryRecoveryStandard: "recuperação automática de perdas",
+			summaryRecoveryBandwidthSaver: "recuperação econômica de banda",
+			summaryFecOn: "FEC ligado",
+			summaryFecOff: "FEC desligado",
+			cloudSetTitle: "Definido pela nuvem",
+			cloudSetHint: "Toque para substituir neste dispositivo",
+			driftHint: "O dispositivo está usando um perfil diferente",
 			profileNames: {
 				balanced: "Equilibrado",
 				lowLatency: "Baixa latência",
