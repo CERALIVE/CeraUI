@@ -27,6 +27,7 @@ import { getConfig, saveConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import { notificationSend } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { describeCliError } from "./cli-parse.ts";
 
 type SshStatus = {
 	user?: string;
@@ -88,18 +89,23 @@ const defaultSshStatusDeps: SshStatusDeps = {
 	broadcast: (status) => broadcastMsg("status", { ssh: status }),
 };
 
+/** True only when `systemctl is-active ssh` printed exactly `active`. */
+export function parseSystemctlIsActive(stdout: string): boolean {
+	return stdout.trim() === "active";
+}
+
 /** Resolve whether the ssh service is active, swallowing the non-zero exit. */
 async function probeSshActive(
 	systemctlIsActive: SshStatusDeps["systemctlIsActive"],
 ): Promise<boolean> {
 	try {
 		const { stdout } = await systemctlIsActive();
-		return stdout.trim() === "active";
+		return parseSystemctlIsActive(stdout);
 	} catch (err) {
 		// `is-active` exits non-zero for inactive/failed/unknown; the unit is
 		// simply not active. Treat ANY failure as not-active (never "missing").
 		const stdout = (err as { stdout?: string } | null)?.stdout ?? "";
-		return stdout.trim() === "active";
+		return parseSystemctlIsActive(stdout);
 	}
 }
 
@@ -242,7 +248,9 @@ export async function startStopSsh(
 	try {
 		await sshServiceRunner(action);
 	} catch (err) {
-		logger.error(`Error running systemctl ${action} ssh: ${err}`);
+		logger.error(
+			`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
+		);
 	}
 	await getSshStatus(statusDeps);
 }

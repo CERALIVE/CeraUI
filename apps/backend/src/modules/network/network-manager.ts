@@ -24,6 +24,13 @@ import {
 	handleNmcliCommand,
 	shouldMockWifi,
 } from "../../mocks/providers/wifi.ts";
+import {
+	describeCliError,
+	logParseError,
+	type ParseResult,
+	parseFail,
+	parseOk,
+} from "../system/cli-parse.ts";
 
 export type ConnectionUUID = string;
 export type MacAddress = string;
@@ -68,12 +75,12 @@ export async function nmConnAdd(connection: NetworkManagerConnection) {
 			args.push(String(value));
 		}
 		const stdout = await run("nmcli", args);
-		const success = stdout.match(
-			/Connection '.+' \((.+)\) successfully added./,
-		);
-
-		if (success) return success[1];
+		const parsed = parseNmConnAddUuid(stdout);
+		if (parsed.ok) return parsed.value;
+		logParseError(parsed);
 	} catch (err) {
+		// argv carries gsm.password — keep the redacted-by-logger message, never
+		// surface stderr/argv which could echo the secret.
 		if (err instanceof Error) {
 			logger.error(`nmConnNew err: ${err.message}`);
 		}
@@ -105,9 +112,7 @@ export async function nmConnsGet(fields: string) {
 		]);
 		return stdout.split("\n");
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`nmConnsGet err: ${err.message}`);
-		}
+		logger.error(`nmConnsGet err: ${describeCliError(err)}`);
 	}
 }
 
@@ -151,9 +156,7 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 			[K in keyof Tupel]: string;
 		};
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`nmConnGetFields err: ${err.message}`);
-		}
+		logger.error(`nmConnGetFields err: ${describeCliError(err)}`);
 	}
 }
 
@@ -213,11 +216,9 @@ export async function nmConnDelete(uuid: ConnectionUUID) {
 		}
 
 		const stdout = await run("nmcli", ["conn", "del", argMatch(ID_RE, uuid)]);
-		return stdout.match("successfully deleted");
+		return parseNmConnDeleted(stdout);
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`nmConnDelete err: ${err.message}`);
-		}
+		logger.error(`nmConnDelete err: ${describeCliError(err)}`);
 	}
 	return false;
 }
@@ -235,11 +236,9 @@ export async function nmConnect(uuid: ConnectionUUID, timeout?: number) {
 			"nmcli",
 			timeoutArgs.concat(["conn", "up", argMatch(ID_RE, uuid)]),
 		);
-		return stdout.match("^Connection successfully activated");
+		return parseNmConnActivated(stdout);
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`nmConnect err: ${err.message}`);
-		}
+		logger.error(`nmConnect err: ${describeCliError(err)}`);
 	}
 	return false;
 }
@@ -253,11 +252,9 @@ export async function nmDisconnect(uuid: ConnectionUUID) {
 		}
 
 		const stdout = await run("nmcli", ["conn", "down", argMatch(ID_RE, uuid)]);
-		return stdout.match("successfully deactivated");
+		return parseNmConnDeactivated(stdout);
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`nmDisconnect err: ${err.message}`);
-		}
+		logger.error(`nmDisconnect err: ${describeCliError(err)}`);
 	}
 	return false;
 }
@@ -287,9 +284,7 @@ export async function nmDevices(fields: string) {
 		]);
 		return stdout.split("\n");
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`nmDevices err: ${err.message}`);
-		}
+		logger.error(`nmDevices err: ${describeCliError(err)}`);
 	}
 }
 
@@ -324,9 +319,7 @@ export async function nmDeviceProp(device: string, fields: string) {
 		]);
 		return stdout.split("\n");
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`nmDeviceProp err: ${err.message}`);
-		}
+		logger.error(`nmDeviceProp err: ${describeCliError(err)}`);
 	}
 }
 
@@ -349,9 +342,7 @@ export async function nmRescan(device?: string) {
 		const stdout = await run("nmcli", args);
 		return stdout === "";
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`nmDevices err: ${err.message}`);
-		}
+		logger.error(`nmRescan err: ${describeCliError(err)}`);
 	}
 	return false;
 }
@@ -387,9 +378,7 @@ export async function nmScanResults(fields: string) {
 		]);
 		return stdout.split("\n");
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`nmScanResults err: ${err.message}`);
-		}
+		logger.error(`nmScanResults err: ${describeCliError(err)}`);
 	}
 }
 
@@ -425,9 +414,13 @@ export async function nmHotspot(
 			]),
 		);
 
-		const uuid = stdout.match(/successfully activated with '(.+)'/);
-		return uuid?.[1] ?? null;
+		const parsed = parseNmHotspotUuid(stdout);
+		if (parsed.ok) return parsed.value;
+		logParseError(parsed);
+		return null;
 	} catch (err) {
+		// argv carries the hotspot password — keep the redacted-by-logger
+		// message, never surface stderr/argv which could echo the secret.
 		if (err instanceof Error) {
 			logger.error(`nmHotspot err: ${err.message}`);
 		}
@@ -437,4 +430,56 @@ export async function nmHotspot(
 // parses : separated values, with automatic \ escape detection and stripping
 export function nmcliParseSep(value: string) {
 	return value.split(/(?<!\\):/).map((a) => a.replace(/\\:/g, ":"));
+}
+
+// ─── named result parsers (fail-loud on nmcli output drift) ──────────────────
+
+// Regex: nmcli's "Connection '<name>' (<uuid>) successfully added." line.
+const NM_CONN_ADD_RE = /Connection '.+' \((.+)\) successfully added\./;
+// Regex: nmcli's "...successfully activated with '<uuid>'" hotspot line.
+const NM_HOTSPOT_UUID_RE = /successfully activated with '(.+)'/;
+
+/**
+ * Extract the new connection UUID from `nmcli connection add` output. A missing
+ * "successfully added" line is drift — the caller treats it as a failed add
+ * rather than returning a bogus/empty UUID.
+ */
+export function parseNmConnAddUuid(stdout: string): ParseResult<string> {
+	const m = stdout.match(NM_CONN_ADD_RE);
+	if (m?.[1] === undefined) {
+		return parseFail(
+			"parseNmConnAddUuid",
+			"no 'successfully added' confirmation line",
+			stdout,
+		);
+	}
+	return parseOk(m[1]);
+}
+
+/** Extract the hotspot connection UUID from `nmcli device wifi hotspot` output. */
+export function parseNmHotspotUuid(stdout: string): ParseResult<string> {
+	const m = stdout.match(NM_HOTSPOT_UUID_RE);
+	if (m?.[1] === undefined) {
+		return parseFail(
+			"parseNmHotspotUuid",
+			"no 'successfully activated with' confirmation line",
+			stdout,
+		);
+	}
+	return parseOk(m[1]);
+}
+
+/** True when nmcli confirmed a connection deletion. */
+export function parseNmConnDeleted(stdout: string): boolean {
+	return /successfully deleted/.test(stdout);
+}
+
+/** True when nmcli confirmed a connection activation. */
+export function parseNmConnActivated(stdout: string): boolean {
+	return /^Connection successfully activated/.test(stdout);
+}
+
+/** True when nmcli confirmed a connection deactivation. */
+export function parseNmConnDeactivated(stdout: string): boolean {
+	return /successfully deactivated/.test(stdout);
 }

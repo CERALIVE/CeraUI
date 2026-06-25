@@ -19,6 +19,12 @@ import { logger } from "../../helpers/logger.ts";
 import { argMatch, ID_RE, run } from "../../helpers/run.ts";
 import { getms } from "../../helpers/time.ts";
 import {
+	logParseError,
+	type ParseResult,
+	parseFail,
+	parseOk,
+} from "../system/cli-parse.ts";
+import {
 	notificationBroadcast,
 	notificationRemove,
 } from "../ui/notifications.ts";
@@ -59,6 +65,35 @@ export function buildRouteAddArgv(gw: string): string[] {
 	return ["route", "add", ...tokens];
 }
 
+/**
+ * Validate the line from `ip route show … default` before turning it into an
+ * `ip route add` argv. An empty/garbled line (no leading `default`, or neither
+ * a `via` nor `dev` clause) is drift: it fails loud instead of building a
+ * meaningless `ip route add` that would clear the default route and install
+ * nothing.
+ */
+export function parseDefaultRouteLine(gw: string): ParseResult<string[]> {
+	const tokens = gw
+		.trim()
+		.split(/\s+/)
+		.filter((t) => t.length > 0);
+	if (tokens[0] !== "default") {
+		return parseFail(
+			"parseDefaultRouteLine",
+			"route line does not start with 'default'",
+			gw,
+		);
+	}
+	if (!tokens.includes("via") && !tokens.includes("dev")) {
+		return parseFail(
+			"parseDefaultRouteLine",
+			"route line has neither a 'via' nor a 'dev' clause",
+			gw,
+		);
+	}
+	return parseOk(buildRouteAddArgv(gw));
+}
+
 export type GwDeps = {
 	runner: typeof run;
 	clearDefaultGws: () => Promise<void>;
@@ -81,10 +116,14 @@ export async function setDefaultRoute(
 
 	await clearGws();
 
-	const argv = buildRouteAddArgv(gw);
-	await runner("ip", argv);
+	const parsed = parseDefaultRouteLine(gw);
+	if (!parsed.ok) {
+		logParseError(parsed);
+		throw new Error(`setDefaultRoute: ${parsed.reason}`);
+	}
+	await runner("ip", parsed.value);
 
-	logger.info(`Set default route: ip ${argv.join(" ")}`);
+	logger.info(`Set default route: ip ${parsed.value.join(" ")}`);
 }
 
 export function queueUpdateGw() {
