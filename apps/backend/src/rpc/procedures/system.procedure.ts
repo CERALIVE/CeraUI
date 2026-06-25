@@ -42,6 +42,7 @@ import {
 	kioskStop,
 	resolveActiveKioskDeps,
 } from "../../modules/system/kiosk.ts";
+import { getLog } from "../../modules/system/logs.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
@@ -78,24 +79,32 @@ export const getSensorsProcedure = authedProcedure
 	});
 
 /**
- * Get application log procedure
+ * Get application (CeraLive) log procedure.
+ *
+ * The device log defaults to the `ceralive.service` unit journal; an explicit
+ * `service` overrides it. getLog ALSO pushes a `log` event the frontend turns
+ * into a file download, and we return the contents so the RPC is a real data
+ * source rather than the previous empty stub.
  */
 export const getLogProcedure = authedProcedure
 	.input(logInputSchema)
 	.output(logOutputSchema)
-	.handler(async () => {
-		// getLog sends directly to socket, we need to adapt it
-		// For now, return empty - this will be handled via subscription
-		return { log: "" };
+	.handler(async ({ input, context }) => {
+		const result = await getLog(
+			context.ws as unknown as WebSocket,
+			input?.service ?? "ceralive.service",
+		);
+		return { log: result?.contents ?? "" };
 	});
 
 /**
- * Get system log procedure
+ * Get system log procedure — the full boot journal (no unit filter).
  */
 export const getSyslogProcedure = authedProcedure
 	.output(logOutputSchema)
-	.handler(async () => {
-		return { log: "" };
+	.handler(async ({ context }) => {
+		const result = await getLog(context.ws as unknown as WebSocket);
+		return { log: result?.contents ?? "" };
 	});
 
 // Host-power runner DI seam (mirrors setKioskDeps): the default issues the real

@@ -44,6 +44,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | SIM PIN secrets store (opt-in "remember PIN", chmod-600 tmpfs) | `modules/modems/sim-secrets.ts` |
 | Boot SIM PIN auto-unlock hook (bounded, single attempt) | `modules/modems/sim-autounlock.ts` |
 | Kiosk DC-2 state machine (toggle runs the `cog-display` add-on via the manager) | `modules/system/kiosk.ts` |
+| Observable logs (getLog/getSyslog → `log` push → LogsDialog download) | `modules/system/logs.ts` + `rpc/procedures/system.procedure.ts` |
+| In-memory log ring buffer (dev/CI journal substitute) | `helpers/logger.ts` — `getRecentLogLines` |
 | Add-on enable/disable state machine (T28) | `modules/addons/manager.ts` |
 | Post-boot add-on reconciler (T29, non-blocking; never gates rollback) | `modules/addons/reconciler.ts` |
 | Mock hardware data | `mocks/providers/` |
@@ -200,7 +202,28 @@ The backend pushes typed events to all connected clients via `rpc/events.ts`. Ea
 | `pipelines` | on-change | pipeline list changes |
 | `capabilities` | post-login snapshot | engine capability contract; carries `transports` (relay transports the engine can honor) |
 | `notifications` | on-demand | user-facing toast events |
+| `log` | on-demand | `system.getLog` / `system.getSyslog` — diagnostic journal for download |
 | `ping` | 5 s | heartbeat emitter |
+
+### Observable logs (`getLog` / `getSyslog`) [EXISTS]
+
+`system.getLog` (device/application log, defaults to the `ceralive.service` unit)
+and `system.getSyslog` (full boot journal) both invoke `modules/system/logs.ts`
+`getLog(conn, service?)`, which `journalctl`s the journal, pushes it as a `log`
+event the frontend `LogsDialog` turns into a file download, AND returns
+`{ name, contents }` so the RPC is a real data source (NOT the former
+`{ log: "" }` stub that fired no push). On a dev/CI host there is no systemd
+journal, so under `shouldUseMocks()` `getLog` serves the in-memory log ring
+buffer (`helpers/logger.ts` `getRecentLogLines`) — a bounded mirror of the same
+backend records fed by a Winston `Stream` transport after `redact()` — so the
+whole getLog → `log` push → download path is exercisable end-to-end without
+hardware (`tests/observable-logs.test.ts`, e2e `logs-dialog.spec.ts`).
+
+`notifications.getPersistent` returns the live persistent set via
+`getPersistentNotifications(true)` (not an empty stub). The frontend
+NotificationsPanel reads the live `notification` push cache; this RPC is the
+pull-equivalent (same data) for any consumer asking for the snapshot directly —
+keep it even though the panel does not call it.
 
 ### Post-login initial-state push
 

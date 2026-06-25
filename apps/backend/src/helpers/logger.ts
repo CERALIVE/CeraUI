@@ -1,3 +1,4 @@
+import { Writable } from "node:stream";
 import winston from "winston";
 
 import { isDevelopment } from "../mocks/mock-config.ts";
@@ -292,10 +293,59 @@ export function resolveLogLevel(defaultLevel: string): string {
 	return defaultLevel;
 }
 
+/**
+ * In-memory log ring buffer (observable-logs substrate).
+ *
+ * A real device surfaces the backend's journal via `journalctl -u
+ * ceralive.service`; a dev/CI host has no systemd journal, so the same backend
+ * log records are mirrored into this bounded ring. `modules/system/logs.ts`
+ * serves the ring (under `shouldUseMocks()`) so the getLog/getSyslog → `log`
+ * push → LogsDialog download path is exercisable end-to-end without hardware.
+ * The capture is fed by a Winston `Stream` transport at `debug` level, after
+ * `redact()` has already scrubbed secrets, so nothing sensitive is retained.
+ */
+export const LOG_RING_CAPACITY = 1000;
+
+const logRing: string[] = [];
+
+const logRingStream = new Writable({
+	write(chunk: Buffer | string, _encoding, callback) {
+		const line = chunk.toString("utf8").replace(/\n+$/, "");
+		if (line.length > 0) {
+			logRing.push(line);
+			if (logRing.length > LOG_RING_CAPACITY) {
+				logRing.shift();
+			}
+		}
+		callback();
+	},
+});
+
+/** Most-recent backend log lines (oldest first), capped at {@link LOG_RING_CAPACITY}. */
+export function getRecentLogLines(): string[] {
+	return [...logRing];
+}
+
+/** Drop every captured line — used by tests for a deterministic baseline. */
+export function clearRecentLogLines(): void {
+	logRing.length = 0;
+}
+
 export const logger = winston.createLogger({
 	format: structuredBase,
 	defaultMeta: {},
 	transports: [
+		new winston.transports.Stream({
+			stream: logRingStream,
+			level: resolveLogLevel("debug"),
+			eol: "\n",
+			format: winston.format.combine(
+				structuredBase,
+				winston.format.printf((info) =>
+					formatProdEntry(info as StructuredLogInfo),
+				),
+			),
+		}),
 		new winston.transports.Console({
 			level: resolveLogLevel(isDev ? "info" : "warn"),
 			format: winston.format.combine(

@@ -11,6 +11,7 @@ import { os } from "@orpc/server";
 import { z } from "zod";
 
 import {
+	getPersistentNotifications,
 	notificationExists,
 	notificationRemove,
 } from "../../modules/ui/notifications.ts";
@@ -29,10 +30,11 @@ const authedProcedure = baseProcedure.use(authMiddleware);
 export const getPersistentNotificationsProcedure = authedProcedure
 	.output(notificationsMessageSchema)
 	.handler(() => {
-		// Note: This returns an empty array since persistent notifications
-		// are typically sent as part of the initial status on connection.
-		// For now, we return an empty show array.
-		return { show: [] };
+		// authedProcedure guarantees an authenticated socket, so authed-only
+		// persistent notifications are included. The frontend NotificationsPanel
+		// reads the live `notification` push cache; this RPC is the pull-equivalent
+		// (same data) for any consumer that asks for the snapshot directly.
+		return getPersistentNotifications(true);
 	});
 
 /**

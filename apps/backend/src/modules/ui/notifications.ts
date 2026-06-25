@@ -193,7 +193,7 @@ export function notificationExists(name: string) {
 	if (_notificationIsLive(pn) !== false) return pn;
 }
 
-export function notificationSendPersistent(conn: WebSocket, isAuthed = false) {
+export function getPersistentNotifications(isAuthed = false) {
 	const notifications = [];
 	for (const n of persistentNotifications) {
 		if (!isAuthed && n[1].authedOnly) continue;
@@ -204,6 +204,9 @@ export function notificationSendPersistent(conn: WebSocket, isAuthed = false) {
 		}
 	}
 
-	const msg = { show: notifications };
-	conn.send(buildMsg("notification", msg));
+	return { show: notifications };
+}
+
+export function notificationSendPersistent(conn: WebSocket, isAuthed = false) {
+	conn.send(buildMsg("notification", getPersistentNotifications(isAuthed)));
 }
