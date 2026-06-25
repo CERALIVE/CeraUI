@@ -226,6 +226,50 @@ function handleDeviceStateEvent(device: string, state: string): void {
 
 // ─── scan-result polling (RETAINED — scan + signal strength) ─────────────────
 
+type ParsedWifiScanRow = {
+	active: boolean;
+	ssid: string;
+	signal: number;
+	security: string;
+	freq: number;
+	device: string;
+};
+
+// Parse one nmcli `device wifi list` terse row. A malformed row would otherwise
+// store NaN signal/freq — a wrong value silently broadcast to the UI; instead we
+// log the raw row and return null (a typed "no result") so callers skip it.
+export function parseWifiScanRow(raw: string): ParsedWifiScanRow | null {
+	const [active, ssid, signal, security, freq, device] = nmcliParseSep(raw) as [
+		string,
+		string,
+		string,
+		string,
+		string,
+		string,
+	];
+
+	// An empty SSID is a hidden network, not a parse failure — skip it quietly.
+	if (ssid == null || ssid === "") return null;
+
+	const signalValue = Number.parseInt(signal ?? "", 10);
+	const freqValue = Number.parseInt(freq ?? "", 10);
+	if (Number.isNaN(signalValue) || Number.isNaN(freqValue)) {
+		logger.warn(
+			`wifiUpdateScanResult: skipping unparseable nmcli scan row: ${JSON.stringify(raw)}`,
+		);
+		return null;
+	}
+
+	return {
+		active: active === "yes",
+		ssid,
+		signal: signalValue,
+		security: security ?? "",
+		freq: freqValue,
+		device: device ?? "",
+	};
+}
+
 export async function wifiUpdateScanResult() {
 	// Retry transient nmcli scan/list failures with exponential backoff (T7).
 	const wifiNetworks = await pollWithBackoff(
@@ -246,28 +290,23 @@ export async function wifiUpdateScanResult() {
 	}
 
 	for (const wifiNetwork of wifiNetworks) {
-		const [active, ssid, signal, security, freq, device] = nmcliParseSep(
-			wifiNetwork,
-		) as [string, string, string, string, string, string];
-
-		if (ssid == null || ssid === "") continue;
+		const parsed = parseWifiScanRow(wifiNetwork);
+		if (!parsed) continue;
+		const { active, ssid, signal, security, freq, device } = parsed;
 
 		const macAddress = wifiDeviceListGetMacAddress(device);
 		if (!macAddress) continue;
 
 		const wifiInterface = wifiInterfacesByMacAddress[macAddress];
-		if (
-			!wifiInterface ||
-			(active !== "yes" && wifiInterface.available.has(ssid))
-		)
+		if (!wifiInterface || (!active && wifiInterface.available.has(ssid)))
 			continue;
 
 		wifiInterface.available.set(ssid, {
-			active: active === "yes",
+			active,
 			ssid,
-			signal: Number.parseInt(signal, 10),
+			signal,
 			security,
-			freq: Number.parseInt(freq, 10),
+			freq,
 		} satisfies WifiNetwork);
 	}
 

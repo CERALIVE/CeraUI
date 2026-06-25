@@ -94,8 +94,21 @@ export async function execPNR(cmd: string) {
 	try {
 		const res = await execP(cmd);
 		return { stdout: res.stdout, stderr: res.stderr, code: 0 };
-	} catch (_err) {
-		return { stdout: "", stderr: "", code: 1 };
+	} catch (err) {
+		// Bun.$ throws on non-zero exit but the ShellError still carries the
+		// captured streams + real exit code: preserve them rather than blanking
+		// the output, and log so the failure is never silently swallowed.
+		const shellErr = err as {
+			stdout?: unknown;
+			stderr?: unknown;
+			exitCode?: unknown;
+		};
+		const stdout = shellErr.stdout != null ? String(shellErr.stdout) : "";
+		const stderr = shellErr.stderr != null ? String(shellErr.stderr) : "";
+		const code =
+			typeof shellErr.exitCode === "number" ? shellErr.exitCode : 1;
+		logger.debug(`execPNR: command exited non-zero: ${cmd}`, { code, stderr });
+		return { stdout, stderr, code };
 	}
 }
 
