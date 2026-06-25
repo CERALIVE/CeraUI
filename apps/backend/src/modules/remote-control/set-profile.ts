@@ -100,9 +100,13 @@ function defaultDeps(): SetProfileDeps {
 			latencyRange: undefined,
 		}),
 		readActive: () => ({ profile: "custom", latencyMs: 0 }),
-		persist: () => {},
+		persist: () => {
+			/* no-op default; real deps injected by wireSetProfile() */
+		},
 		isStreaming: () => false,
-		reconnect: () => {},
+		reconnect: () => {
+			/* no-op default; real deps injected by wireSetProfile() */
+		},
 	};
 }
 

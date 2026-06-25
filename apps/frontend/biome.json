@@ -21,11 +21,27 @@
 	"linter": {
 		"rules": {
 			"suspicious": {
-				"noDebugger": "warn"
+				"noDebugger": "warn",
+				"noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } },
+				"noEmptyBlockStatements": "error"
+			},
+			"nursery": {
+				"noFloatingPromises": "warn"
 			}
 		}
 	},
 	"overrides": [
+		{
+			"includes": ["**/*.test.ts", "**/*.spec.ts"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConsole": "off",
+						"noEmptyBlockStatements": "off"
+					}
+				}
+			}
+		},
 		{
 			"includes": ["**/*.svelte"],
 			"formatter": { "enabled": false },

@@ -408,7 +408,9 @@ async function runWifiNew(
 	const killTimer = setTimeout(() => {
 		try {
 			proc.kill();
-		} catch {}
+		} catch {
+			// best-effort: the process may have already exited
+		}
 	}, DEFAULT_SPAWN_TIMEOUT_MS);
 	const [stdout, stderr] = await Promise.all([
 		new Response(proc.stdout).text(),

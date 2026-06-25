@@ -512,7 +512,9 @@ export async function spawnWithTimeout(
 	const kill = () => {
 		try {
 			child.kill();
-		} catch {}
+		} catch {
+			// best-effort: the process may have already exited
+		}
 	};
 
 	const acc = { stdout: "", stderr: "" };
@@ -643,7 +645,9 @@ export function superviseWorker(
 	});
 	// A rejected readiness must not surface as an unhandled rejection if the
 	// caller only ever calls shutdown().
-	ready.catch(() => {});
+	ready.catch(() => {
+		// readiness errors surface to the caller via shutdown(), not here
+	});
 
 	const alive = () => proc.exitCode === null && proc.signalCode === null;
 	let shutdownPromise: Promise<void> | undefined;
@@ -662,7 +666,9 @@ export function superviseWorker(
 						);
 						try {
 							proc.kill("SIGKILL");
-						} catch {}
+						} catch {
+							// best-effort: the process may have already exited
+						}
 					}
 					resolve();
 				}, grace);

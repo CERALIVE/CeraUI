@@ -63,7 +63,11 @@ export function reconcileSwitchingInput(
 	next: ConnectionState,
 	switchingInput: string | undefined,
 ): string | undefined {
-	return shouldReconcileOnReconnect(previous, next, switchingInput !== undefined)
+	return shouldReconcileOnReconnect(
+		previous,
+		next,
+		switchingInput !== undefined,
+	)
 		? undefined
 		: switchingInput;
 }

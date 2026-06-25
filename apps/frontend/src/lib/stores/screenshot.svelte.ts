@@ -39,14 +39,10 @@ export function setCaptureProgress(value: string): void {
 // Helper functions
 export function addScreenshot(image: ScreenshotImage): void {
 	screenshotImagesState = [...screenshotImagesState, image];
-	console.log(
-		`📸 Added ${image.type} ${image.theme} ${image.filename}, total: ${screenshotImagesState.length}`,
-	);
 }
 
 export function clearScreenshots(): void {
 	screenshotImagesState = [];
-	console.log("🗑️ Screenshots cleared");
 }
 
 export function getScreenshotCount(): number {
@@ -56,7 +52,6 @@ export function getScreenshotCount(): number {
 // ZIP download function
 export async function downloadScreenshotsZip(): Promise<boolean> {
 	const images = screenshotImagesState;
-	console.log("🔽 Download requested, images available:", images.length);
 
 	if (images.length === 0) {
 		toast.error("No screenshots to download");
@@ -64,7 +59,6 @@ export async function downloadScreenshotsZip(): Promise<boolean> {
 	}
 
 	try {
-		console.log("📦 Creating ZIP...");
 		const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
 
 		for (const img of images) {
@@ -75,7 +69,6 @@ export async function downloadScreenshotsZip(): Promise<boolean> {
 
 			const fullPath = `screenshots/${folder}${img.filename}`;
 			await zipWriter.add(fullPath, new BlobReader(img.blob));
-			console.log(`✅ Added: ${fullPath}`);
 		}
 
 		const zipBlob = await zipWriter.close();
@@ -93,7 +86,6 @@ export async function downloadScreenshotsZip(): Promise<boolean> {
 		URL.revokeObjectURL(url);
 
 		toast.success(`Downloaded ${filename}!`);
-		console.log("🚀 ZIP downloaded:", filename, zipBlob.size, "bytes");
 		return true;
 	} catch (error) {
 		console.error("❌ Download failed:", error);
@@ -112,7 +104,9 @@ export const screenshotImages = {
 		$effect(() => {
 			callback(screenshotImagesState);
 		});
-		return () => {};
+		return () => {
+			/* no-op unsubscribe */
+		};
 	},
 };
 

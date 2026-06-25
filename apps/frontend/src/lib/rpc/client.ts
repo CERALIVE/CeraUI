@@ -219,7 +219,7 @@ class RPCClient {
 		this.reconnectAttempts++;
 
 		setTimeout(() => {
-			console.log(`Reconnecting... attempt ${this.reconnectAttempts}`);
+			console.warn(`Reconnecting... attempt ${this.reconnectAttempts}`);
 			this.connect();
 		}, delay);
 	}
@@ -439,7 +439,9 @@ function createRPCProxy<T extends object>(
 
 	// Use a function as the proxy target so it can be called
 	// biome-ignore lint/complexity/useArrowFunction: needs to be function for proxy apply
-	const target = function () {} as unknown as T;
+	const target = function () {
+		/* proxy target only; never invoked directly */
+	} as unknown as T;
 	return new Proxy(target, handler as unknown as ProxyHandler<T>);
 }
 

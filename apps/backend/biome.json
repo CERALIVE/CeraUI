@@ -19,7 +19,27 @@
 		"rules": {
 			"correctness": {
 				"noUndeclaredVariables": "off"
+			},
+			"suspicious": {
+				"noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } },
+				"noEmptyBlockStatements": "error"
+			},
+			"nursery": {
+				"noFloatingPromises": "warn"
 			}
 		}
-	}
+	},
+	"overrides": [
+		{
+			"includes": ["**/*.test.ts", "**/*.spec.ts"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConsole": "off",
+						"noEmptyBlockStatements": "off"
+					}
+				}
+			}
+		}
+	]
 }

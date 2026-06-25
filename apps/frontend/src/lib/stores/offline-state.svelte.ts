@@ -274,6 +274,8 @@ export const shouldShowOfflinePage = {
 		// Simple subscription - call immediately with current value
 		callback(shouldShowOfflinePageState);
 		// Return unsubscribe (no-op for now, Svelte 5 components don't need this)
-		return () => {};
+		return () => {
+			/* no-op unsubscribe */
+		};
 	},
 };

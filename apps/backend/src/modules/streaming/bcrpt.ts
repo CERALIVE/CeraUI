@@ -69,7 +69,10 @@ export function getAllRelaysRtt(): Record<string, number> {
 }
 
 // BCRPT down = bonded relay path down: operator-relevant, so notify, not log-only.
-export function notifyBcrptPermanentFailure(detail: string, err?: unknown): void {
+export function notifyBcrptPermanentFailure(
+	detail: string,
+	err?: unknown,
+): void {
 	logger.error(`BCRPT permanently unavailable: ${detail}`, { err });
 	notificationBroadcast(
 		"bcrpt_failed",

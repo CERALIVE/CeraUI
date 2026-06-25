@@ -57,3 +57,38 @@ add to that file.
 Resolving a debt item means **removing every source marker** that referenced it,
 then flipping its entry to `status: resolved` with a real `resolved_at` date. The
 gate then confirms there are no orphan markers left pointing at it.
+
+---
+
+## Biome reliability rules (S4)
+
+CeraUI layers three reliability rules on top of the shared `@ceralive/biome-config`
+(`extends`). They are enforced by `bunx biome check .`, wired into the `test` job of
+`build-check.yml`. The shared config is **never** edited for these — they live only
+in CeraUI's local configs.
+
+| Rule | Level | Notes |
+|------|-------|-------|
+| `suspicious/noEmptyBlockStatements` | **error** | No silent catches. Mark an intentional empty block with an inline comment inside it (Biome's prescribed form). |
+| `suspicious/noConsole` | **error** | `console.warn` / `console.error` allowed; `console.log`/`debug`/`info` rejected. |
+| `nursery/noFloatingPromises` | **warn** | Staged / report-only — see rationale below. |
+
+**These rules live in all FOUR local configs**, not just the root `biome.json`. A
+nested config (`apps/backend`, `apps/frontend`, `packages/i18n`) has `"root": false`
+and **no** `"extends"`, so it inherits only Biome `recommended` — NOT the root's
+custom rules. Putting these rules only in the root would leave the device control
+plane ungated. Test files (`**/*.test.ts`, `**/*.spec.ts`) relax the two error rules
+via an `overrides` entry (empty mock stubs and test console output are legitimate).
+
+**`noFloatingPromises` is staged at `warn`, not `error`, on purpose.** With the rule
+actually applied the report-only count is **55 (> the ~50 promotion threshold)**, and
+the signal itself is unreliable: Biome's cross-module type inference cannot see that an
+imported `async` function returns a Promise, so it under-reports (the T1 audit measured
+0). The codebase already carries 462 `void ` suppressions guarding this class.
+Promotion to `error` is deferred until Biome resolves imported-async returns or a typed
+`tsc` pass is wired.
+
+> **Never put `//` or `/* */` comments in any CeraUI `biome.json`.** Biome 2.5.0
+> silently drops the entire `linter.rules` block when the config contains a comment
+> (only the formatter keeps running, with no parse error). Document rule rationale
+> here, not inline in the config.

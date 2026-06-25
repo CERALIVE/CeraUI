@@ -616,7 +616,7 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			break;
 
 		default:
-			console.debug("Unhandled message type:", type, data);
+			console.warn("Unhandled message type:", type, data);
 	}
 
 	// Advance lastSeen after applying so the next stale/duplicate is dropped.

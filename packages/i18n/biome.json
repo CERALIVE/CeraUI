@@ -20,7 +20,12 @@
 				"noBannedTypes": "off"
 			},
 			"suspicious": {
-				"noExplicitAny": "off"
+				"noExplicitAny": "off",
+				"noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } },
+				"noEmptyBlockStatements": "error"
+			},
+			"nursery": {
+				"noFloatingPromises": "warn"
 			}
 		}
 	}

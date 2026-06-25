@@ -446,7 +446,9 @@ async function runValidateCmd(
 		const timer = setTimeout(() => {
 			try {
 				proc.kill();
-			} catch {}
+			} catch {
+				// best-effort: the process may have already exited
+			}
 		}, timeoutMs);
 		const code = await proc.exited;
 		clearTimeout(timer);

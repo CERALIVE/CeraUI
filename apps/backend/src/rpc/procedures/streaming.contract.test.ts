@@ -25,6 +25,8 @@ import {
 import { injectMockStreamError } from "../../mocks/providers/streaming.ts";
 import { getConfig } from "../../modules/config.ts";
 import { updateStatus } from "../../modules/streaming/streaming.ts";
+import { appRouter } from "../router.ts";
+import type { AppWebSocket, RPCContext } from "../types.ts";
 import {
 	reloadAudioDelayProcedure,
 	setBitrateProcedure,
@@ -35,8 +37,6 @@ import {
 	switchAudioProcedure,
 	switchInputProcedure,
 } from "./streaming.procedure.ts";
-import { appRouter } from "../router.ts";
-import type { AppWebSocket, RPCContext } from "../types.ts";
 
 function makeContext(): RPCContext {
 	const ws = {
@@ -84,7 +84,11 @@ const MUTATIONS: ReadonlyArray<{
 }> = [
 	{ name: "start", procedure: streamingStartProcedure, args: {} },
 	{ name: "stop", procedure: streamingStopProcedure, args: undefined },
-	{ name: "setBitrate", procedure: setBitrateProcedure, args: { max_br: 5000 } },
+	{
+		name: "setBitrate",
+		procedure: setBitrateProcedure,
+		args: { max_br: 5000 },
+	},
 	{ name: "setConfig", procedure: setConfigProcedure, args: { max_br: 5000 } },
 	{
 		name: "switchInput",

@@ -12,12 +12,12 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+	assertSpawnPolicyConsistent,
+	getSpawnSite,
 	type ManagedProcess,
 	SPAWN_POLICY,
 	SpawnTimeoutError,
 	StartupTimeoutError,
-	assertSpawnPolicyConsistent,
-	getSpawnSite,
 	spawnWatcher,
 	spawnWithTimeout,
 	superviseWorker,

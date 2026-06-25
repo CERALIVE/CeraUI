@@ -54,7 +54,9 @@ export type ParseError = {
 };
 
 /** Discriminated result of a named CLI-output parser. */
-export type ParseResult<T> = { readonly ok: true; readonly value: T } | ParseError;
+export type ParseResult<T> =
+	| { readonly ok: true; readonly value: T }
+	| ParseError;
 
 /** Wrap a successfully parsed value. */
 export function parseOk<T>(value: T): { readonly ok: true; readonly value: T } {

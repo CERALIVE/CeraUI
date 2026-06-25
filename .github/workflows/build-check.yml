@@ -48,6 +48,10 @@ jobs:
         working-directory: CeraUI
         run: bun install --frozen-lockfile
 
+      - name: Biome check (lint + format gate — S4 reliability rules)
+        working-directory: CeraUI
+        run: bunx biome check .
+
       - name: Install Playwright browsers
         working-directory: CeraUI
         run: bun run --filter frontend test:e2e:install

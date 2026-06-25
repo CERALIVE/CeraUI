@@ -218,7 +218,9 @@ async function spawnCollect(
 	const kill = () => {
 		try {
 			child.kill();
-		} catch {}
+		} catch {
+			// best-effort: the process may have already exited
+		}
 	};
 
 	let overflow: Error | undefined;
@@ -277,7 +279,11 @@ async function spawnCollect(
 
 		await Promise.allSettled([stdoutDone, stderrDone]);
 		if (overflow) throw overflow;
-		return { stdout: acc.stdout, stderr: acc.stderr, code: child.exitCode ?? 0 };
+		return {
+			stdout: acc.stdout,
+			stderr: acc.stderr,
+			code: child.exitCode ?? 0,
+		};
 	} finally {
 		if (timer) clearTimeout(timer);
 		if (signal && onAbort) signal.removeEventListener("abort", onAbort);
@@ -304,11 +310,15 @@ export async function run(
 	const redacted = `${bin} ${redactArgs(args)}`.trim();
 	logger.debug(`run: ${redacted}`);
 
-	const { stdout, stderr, code } = await spawnCollect(redacted, [bin, ...args], {
-		maxBuffer: opts?.maxBuffer ?? DEFAULT_MAX_BUFFER,
-		timeout: opts?.timeout ?? DEFAULT_TIMEOUT_MS,
-		...(opts?.signal ? { signal: opts.signal } : {}),
-	});
+	const { stdout, stderr, code } = await spawnCollect(
+		redacted,
+		[bin, ...args],
+		{
+			maxBuffer: opts?.maxBuffer ?? DEFAULT_MAX_BUFFER,
+			timeout: opts?.timeout ?? DEFAULT_TIMEOUT_MS,
+			...(opts?.signal ? { signal: opts.signal } : {}),
+		},
+	);
 
 	if (code !== 0) {
 		const err = new Error(`Command failed: ${redacted}`) as RunFailureError;
@@ -343,12 +353,16 @@ export async function runWithStdin(
 	const redacted = `${bin} ${redactArgs(args)}`.trim();
 	logger.debug(`runWithStdin: ${redacted} <stdin redacted>`);
 
-	const { stdout, stderr, code } = await spawnCollect(redacted, [bin, ...args], {
-		maxBuffer: opts?.maxBuffer ?? DEFAULT_MAX_BUFFER,
-		timeout: opts?.timeout ?? DEFAULT_TIMEOUT_MS,
-		input,
-		...(opts?.signal ? { signal: opts.signal } : {}),
-	});
+	const { stdout, stderr, code } = await spawnCollect(
+		redacted,
+		[bin, ...args],
+		{
+			maxBuffer: opts?.maxBuffer ?? DEFAULT_MAX_BUFFER,
+			timeout: opts?.timeout ?? DEFAULT_TIMEOUT_MS,
+			input,
+			...(opts?.signal ? { signal: opts.signal } : {}),
+		},
+	);
 
 	if (code === 0) {
 		return stdout;

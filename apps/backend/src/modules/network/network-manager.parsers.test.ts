@@ -44,16 +44,18 @@ describe("parseNmHotspotUuid", () => {
 	});
 
 	it("fails loud when no activation line is present (drift)", () => {
-		const r = parseNmHotspotUuid("Error: Failed to add/activate new connection");
+		const r = parseNmHotspotUuid(
+			"Error: Failed to add/activate new connection",
+		);
 		expect(isParseError(r)).toBe(true);
 	});
 });
 
 describe("nmcli boolean result parsers", () => {
 	it("parseNmConnDeleted matches the deletion confirmation", () => {
-		expect(parseNmConnDeleted("Connection 'x' (uuid) successfully deleted.")).toBe(
-			true,
-		);
+		expect(
+			parseNmConnDeleted("Connection 'x' (uuid) successfully deleted."),
+		).toBe(true);
 		expect(parseNmConnDeleted("Error: unknown connection")).toBe(false);
 	});
 

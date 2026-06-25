@@ -47,7 +47,10 @@ describe("resolveAppliedBitrate (Task 15)", () => {
 	});
 
 	it("on success:false reconciles to the last known server value, never the optimistic value", () => {
-		const res: BitrateOutput = { success: false, error: { message: "rejected" } };
+		const res: BitrateOutput = {
+			success: false,
+			error: { message: "rejected" },
+		};
 		expect(resolveAppliedBitrate(res, 12000, 6000)).toBe(6000);
 	});
 
@@ -133,19 +136,27 @@ describe("setBitrate field-lock composition (Task 15)", () => {
 
 describe("reconcileSwitchingInput — switchInput reconnect reconciliation (Task 15)", () => {
 	it("clears the stuck latch on the reconnect edge so the picker reconciles to server truth", () => {
-		expect(reconcileSwitchingInput("disconnected", "connected", "hdmi:1")).toBeUndefined();
+		expect(
+			reconcileSwitchingInput("disconnected", "connected", "hdmi:1"),
+		).toBeUndefined();
 	});
 
 	it("does not clear on a steady connected tick (no false reconcile)", () => {
-		expect(reconcileSwitchingInput("connected", "connected", "hdmi:1")).toBe("hdmi:1");
+		expect(reconcileSwitchingInput("connected", "connected", "hdmi:1")).toBe(
+			"hdmi:1",
+		);
 	});
 
 	it("does not clear on the disconnect edge — only on the reconnect edge", () => {
-		expect(reconcileSwitchingInput("connected", "disconnected", "hdmi:1")).toBe("hdmi:1");
+		expect(reconcileSwitchingInput("connected", "disconnected", "hdmi:1")).toBe(
+			"hdmi:1",
+		);
 	});
 
 	it("is a no-op when nothing is switching", () => {
-		expect(reconcileSwitchingInput("disconnected", "connected", undefined)).toBeUndefined();
+		expect(
+			reconcileSwitchingInput("disconnected", "connected", undefined),
+		).toBeUndefined();
 	});
 
 	// ----------------------------------------------------------------------
@@ -159,7 +170,11 @@ describe("reconcileSwitchingInput — switchInput reconnect reconciliation (Task
 		let prev: ConnectionState = "connected";
 
 		// WS drops mid-switch — no reconcile (not a → connected edge).
-		switchingInput = reconcileSwitchingInput(prev, "disconnected", switchingInput);
+		switchingInput = reconcileSwitchingInput(
+			prev,
+			"disconnected",
+			switchingInput,
+		);
 		prev = "disconnected";
 		expect(switchingInput).toBe("hdmi:1");
 

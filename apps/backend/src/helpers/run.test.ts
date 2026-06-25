@@ -3,9 +3,9 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
 	ALLOWED,
 	DEFAULT_TIMEOUT_MS,
-	run,
 	RunAbortError,
 	RunTimeoutError,
+	run,
 	runWithStdin,
 } from "./run.ts";
 

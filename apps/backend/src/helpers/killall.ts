@@ -19,5 +19,7 @@ export default async function killall(
 
 	// Custom, non-allowlisted setup.killall_binary path: argv-only (NO shell).
 	// bounded-probe (spawn-policy): a hung killall is capped by a wall-clock timeout.
-	Bun.spawnSync([killallBinary, ...args], { timeout: DEFAULT_SPAWN_TIMEOUT_MS });
+	Bun.spawnSync([killallBinary, ...args], {
+		timeout: DEFAULT_SPAWN_TIMEOUT_MS,
+	});
 }

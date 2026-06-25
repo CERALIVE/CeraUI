@@ -34,7 +34,9 @@ export const execFileP = async (
 	const kill = () => {
 		try {
 			proc.kill();
-		} catch {}
+		} catch {
+			// best-effort: the process may have already exited
+		}
 	};
 
 	// bounded-command (spawn-policy): a hung one-shot is killed at the wall-clock
@@ -112,8 +114,7 @@ export async function execPNR(cmd: string) {
 		};
 		const stdout = shellErr.stdout != null ? String(shellErr.stdout) : "";
 		const stderr = shellErr.stderr != null ? String(shellErr.stderr) : "";
-		const code =
-			typeof shellErr.exitCode === "number" ? shellErr.exitCode : 1;
+		const code = typeof shellErr.exitCode === "number" ? shellErr.exitCode : 1;
 		logger.debug(`execPNR: command exited non-zero: ${cmd}`, { code, stderr });
 		return { stdout, stderr, code };
 	}

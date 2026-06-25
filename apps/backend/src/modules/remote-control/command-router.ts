@@ -143,20 +143,32 @@ export interface CommandRouterDeps {
  */
 function buildControlContext(): RPCContext {
 	const ws = {
-		send: () => {},
+		send: () => {
+			/* no-op: no local client on the control channel */
+		},
 		data: { isAuthenticated: true, lastActive: Date.now() },
 	} as unknown as AppWebSocket;
 
 	return {
 		ws,
 		isAuthenticated: () => true,
-		authenticate: () => {},
-		deauthenticate: () => {},
-		markActive: () => {},
+		authenticate: () => {
+			/* no-op stub */
+		},
+		deauthenticate: () => {
+			/* no-op stub */
+		},
+		markActive: () => {
+			/* no-op stub */
+		},
 		getLastActive: () => Date.now(),
-		setSenderId: () => {},
+		setSenderId: () => {
+			/* no-op stub */
+		},
 		getSenderId: () => undefined,
-		clearSenderId: () => {},
+		clearSenderId: () => {
+			/* no-op stub */
+		},
 	};
 }
 
