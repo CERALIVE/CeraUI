@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 import { logger } from "./logger.ts";
+import { DEFAULT_SPAWN_TIMEOUT_MS } from "./spawn-policy.ts";
 
 export type ExecResult = { stdout: string; stderr: string };
 
@@ -19,9 +20,10 @@ export const execP = async (cmd: string): Promise<ExecResult> => {
 export const execFileP = async (
 	file: string,
 	args: readonly string[] = [],
-	opts?: { maxBuffer?: number },
+	opts?: { maxBuffer?: number; timeout?: number },
 ): Promise<ExecResult> => {
 	const maxBuffer = opts?.maxBuffer ?? 1024 * 1024;
+	const timeout = opts?.timeout ?? DEFAULT_SPAWN_TIMEOUT_MS;
 
 	const proc = Bun.spawn([file, ...args], {
 		stdin: "ignore",
@@ -35,11 +37,16 @@ export const execFileP = async (
 		} catch {}
 	};
 
+	// bounded-command (spawn-policy): a hung one-shot is killed at the wall-clock
+	// budget so a stuck host binary can never wedge the call forever.
+	const timer = setTimeout(kill, timeout);
+
 	const [stdout, stderr, code] = await Promise.all([
 		readCapped(proc.stdout, maxBuffer, kill),
 		readCapped(proc.stderr, maxBuffer, kill),
 		proc.exited,
 	]);
+	clearTimeout(timer);
 
 	if (code !== 0) {
 		const err = new Error(

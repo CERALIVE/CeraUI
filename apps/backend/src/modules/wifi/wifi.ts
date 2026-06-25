@@ -21,6 +21,7 @@ import type WebSocket from "ws";
 
 import { logger } from "../../helpers/logger.ts";
 import { pollWithBackoff } from "../../helpers/retry.ts";
+import { DEFAULT_SPAWN_TIMEOUT_MS } from "../../helpers/spawn-policy.ts";
 import { extractMessage } from "../../helpers/types.ts";
 import {
 	getMockState,
@@ -402,11 +403,19 @@ async function runWifiNew(
 		stdout: "pipe",
 		stderr: "pipe",
 	});
+	// bounded-command (spawn-policy): cap a hung nmcli connect at the wall-clock
+	// budget so a stuck join never leaves the request pending forever.
+	const killTimer = setTimeout(() => {
+		try {
+			proc.kill();
+		} catch {}
+	}, DEFAULT_SPAWN_TIMEOUT_MS);
 	const [stdout, stderr] = await Promise.all([
 		new Response(proc.stdout).text(),
 		new Response(proc.stderr).text(),
 	]);
 	const exitCode = await proc.exited;
+	clearTimeout(killTimer);
 	const error = exitCode !== 0;
 
 	if (error || stdout.match("^Error:")) {
