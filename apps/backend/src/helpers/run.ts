@@ -43,9 +43,67 @@ import { logger } from "./logger.ts";
 /** Default stdout/stderr ceiling for buffered (execFile) commands: 10 MiB. */
 export const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024;
 
+/**
+ * Default wall-clock budget for a single OS command: 30 s. Sane for the one-shot
+ * host queries this runner is built for (nmcli/mmcli/systemctl/ip/…). Long-lived
+ * or streaming work (apt-get progress, bcrpt relay) deliberately does NOT go
+ * through run()/runWithStdin() — see modules' direct-spawn sites.
+ */
+export const DEFAULT_TIMEOUT_MS = 30_000;
+
 export type RunOpts = {
 	/** Max bytes captured from stdout/stderr before the child is killed. */
 	maxBuffer?: number;
+	/**
+	 * Wall-clock budget in ms before the child is killed and the call rejects
+	 * with {@link RunTimeoutError}. Defaults to {@link DEFAULT_TIMEOUT_MS} (30 s).
+	 * Every side-effect child process MUST carry a bounded timeout (Standard S1).
+	 */
+	timeout?: number;
+	/**
+	 * Optional cancellation signal. Aborting it kills the child and rejects the
+	 * call with {@link RunAbortError}. An already-aborted signal rejects before
+	 * the child is ever spawned.
+	 */
+	signal?: AbortSignal;
+};
+
+/**
+ * Rejection raised when a command exceeds its {@link RunOpts.timeout} budget.
+ * The child is killed; whatever stdout/stderr was captured before the kill is
+ * preserved on the error so callers can surface a partial diagnostic.
+ */
+export class RunTimeoutError extends Error {
+	constructor(
+		public readonly cmd: string,
+		public readonly partialStdout: string,
+		public readonly partialStderr: string,
+	) {
+		super(`Command timed out: ${cmd}`);
+		this.name = "RunTimeoutError";
+	}
+}
+
+/**
+ * Rejection raised when a command is cancelled via {@link RunOpts.signal}. The
+ * child is killed; partial stdout/stderr captured before the kill is preserved.
+ */
+export class RunAbortError extends Error {
+	constructor(
+		public readonly cmd: string,
+		public readonly partialStdout: string = "",
+		public readonly partialStderr: string = "",
+	) {
+		super(`Command aborted: ${cmd}`);
+		this.name = "RunAbortError";
+	}
+}
+
+/** Error shape carried on a non-zero exit — parity with exec.ts execFileP. */
+type RunFailureError = Error & {
+	stdout: string;
+	stderr: string;
+	code: number;
 };
 
 /**
@@ -119,11 +177,127 @@ function redactArgs(args: string[]): string {
 	return out.join(" ");
 }
 
+type CollectResult = { stdout: string; stderr: string; code: number };
+
+/**
+ * Spawn a child argv-only and collect stdout/stderr INCREMENTALLY into mutable
+ * accumulators, so a timeout/abort kill still leaves whatever arrived so far
+ * readable. Races the natural exit against the timeout timer and the abort
+ * signal; the loser is killed and the accumulated output is handed back to the
+ * caller for the typed-error path. Also enforces the `maxBuffer` ceiling
+ * (parity with exec.ts readCapped) by killing the child on overflow.
+ */
+async function spawnCollect(
+	cmd: string,
+	argv: string[],
+	opts: {
+		maxBuffer: number;
+		timeout: number;
+		signal?: AbortSignal;
+		input?: string;
+	},
+): Promise<CollectResult> {
+	const { maxBuffer, timeout, signal, input } = opts;
+	const acc = { stdout: "", stderr: "" };
+
+	if (signal?.aborted) {
+		throw new RunAbortError(cmd);
+	}
+
+	const child = Bun.spawn(argv, {
+		stdin: input === undefined ? "ignore" : "pipe",
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+
+	if (input !== undefined) {
+		// Secret goes to stdin ONLY — never to argv.
+		child.stdin.write(input);
+		child.stdin.end();
+	}
+
+	const kill = () => {
+		try {
+			child.kill();
+		} catch {
+			// best-effort: the process may have already exited
+		}
+	};
+
+	let overflow: Error | undefined;
+	const drain = async (
+		stream: ReadableStream<Uint8Array> | undefined,
+		key: "stdout" | "stderr",
+	): Promise<void> => {
+		if (!stream) return;
+		const reader = stream.getReader();
+		const decoder = new TextDecoder();
+		let total = 0;
+		try {
+			for (;;) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				if (!value) continue;
+				total += value.byteLength;
+				if (total > maxBuffer) {
+					overflow = new Error(`${key} maxBuffer length exceeded`);
+					kill();
+					break;
+				}
+				acc[key] += decoder.decode(value, { stream: true });
+			}
+			acc[key] += decoder.decode();
+		} finally {
+			reader.releaseLock();
+		}
+	};
+
+	const stdoutDone = drain(child.stdout, "stdout");
+	const stderrDone = drain(child.stderr, "stderr");
+
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	let onAbort: (() => void) | undefined;
+	try {
+		const outcome = await new Promise<"exit" | "timeout" | "abort">(
+			(resolve) => {
+				void child.exited.then(() => resolve("exit"));
+				timer = setTimeout(() => resolve("timeout"), timeout);
+				if (signal) {
+					onAbort = () => resolve("abort");
+					signal.addEventListener("abort", onAbort, { once: true });
+				}
+			},
+		);
+
+		if (outcome !== "exit") {
+			kill();
+			await Promise.allSettled([stdoutDone, stderrDone, child.exited]);
+			if (outcome === "timeout") {
+				throw new RunTimeoutError(cmd, acc.stdout, acc.stderr);
+			}
+			throw new RunAbortError(cmd, acc.stdout, acc.stderr);
+		}
+
+		await Promise.allSettled([stdoutDone, stderrDone]);
+		if (overflow) throw overflow;
+		return {
+			stdout: acc.stdout,
+			stderr: acc.stderr,
+			code: child.exitCode ?? 0,
+		};
+	} finally {
+		if (timer) clearTimeout(timer);
+		if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+	}
+}
+
 /**
  * Run an allowlisted binary argv-only (NO shell) and resolve with its stdout.
  *
  * @throws if `bin` is not in {@link ALLOWED}.
- * @throws (via execFileP) if the process exits non-zero or exceeds maxBuffer.
+ * @throws {@link RunTimeoutError} if the command exceeds its timeout budget.
+ * @throws {@link RunAbortError} if `opts.signal` is aborted.
+ * @throws on non-zero exit (error carries `stdout`/`stderr`/`code`) or maxBuffer overflow.
  */
 export async function run(
 	bin: string,
@@ -134,13 +308,46 @@ export async function run(
 		throw new Error(`binary not allowlisted: ${bin}`);
 	}
 
-	const maxBuffer = opts?.maxBuffer ?? DEFAULT_MAX_BUFFER;
-	logger.debug(`run: ${bin} ${redactArgs(args)}`);
+	const redacted = `${bin} ${redactArgs(args)}`.trim();
+	logger.debug(`run: ${redacted}`);
 
-	const { stdout } = await execFileP(bin, args, { maxBuffer });
-	// String() handles both the default string stdout and a Buffer (if a future
-	// caller sets an encoding) without a `never`-narrowed branch.
-	return String(stdout);
+	if (opts?.signal?.aborted) {
+		throw new RunAbortError(redacted);
+	}
+
+	// Timeout + cancellation are owned here and enforced through execFileP's
+	// `signal`: a fired timer or the caller's signal aborts the controller,
+	// execFileP kills the child, and the partial output on the rejection is
+	// reclassified into the typed timeout/abort error below.
+	const controller = new AbortController();
+	let timedOut = false;
+	const timer = setTimeout(() => {
+		timedOut = true;
+		controller.abort();
+	}, opts?.timeout ?? DEFAULT_TIMEOUT_MS);
+	const onCallerAbort = () => controller.abort();
+	opts?.signal?.addEventListener("abort", onCallerAbort, { once: true });
+
+	try {
+		const { stdout } = await execFileP(bin, [...args], {
+			maxBuffer: opts?.maxBuffer ?? DEFAULT_MAX_BUFFER,
+			signal: controller.signal,
+		});
+		return stdout;
+	} catch (err) {
+		if (controller.signal.aborted) {
+			const partial = err as Partial<RunFailureError>;
+			const partialStdout = partial.stdout ?? "";
+			const partialStderr = partial.stderr ?? "";
+			throw timedOut
+				? new RunTimeoutError(redacted, partialStdout, partialStderr)
+				: new RunAbortError(redacted, partialStdout, partialStderr);
+		}
+		throw err;
+	} finally {
+		clearTimeout(timer);
+		opts?.signal?.removeEventListener("abort", onCallerAbort);
+	}
 }
 
 /**
@@ -151,33 +358,31 @@ export async function run(
  * when the child exits 0; rejects with stderr (or the spawn error) otherwise.
  *
  * @throws if `bin` is not in {@link ALLOWED}.
+ * @throws {@link RunTimeoutError} / {@link RunAbortError} on timeout / abort.
  */
 export async function runWithStdin(
 	bin: string,
 	args: string[],
 	input: string,
+	opts?: RunOpts,
 ): Promise<string> {
 	if (!ALLOWED.has(bin)) {
 		throw new Error(`binary not allowlisted: ${bin}`);
 	}
 
-	logger.debug(`runWithStdin: ${bin} ${redactArgs(args)} <stdin redacted>`);
+	const redacted = `${bin} ${redactArgs(args)}`.trim();
+	logger.debug(`runWithStdin: ${redacted} <stdin redacted>`);
 
-	const child = Bun.spawn([bin, ...args], {
-		stdin: "pipe",
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-
-	// Secret goes to stdin ONLY — never to argv.
-	child.stdin.write(input);
-	child.stdin.end();
-
-	const [stdout, stderr, code] = await Promise.all([
-		new Response(child.stdout).text(),
-		new Response(child.stderr).text(),
-		child.exited,
-	]);
+	const { stdout, stderr, code } = await spawnCollect(
+		redacted,
+		[bin, ...args],
+		{
+			maxBuffer: opts?.maxBuffer ?? DEFAULT_MAX_BUFFER,
+			timeout: opts?.timeout ?? DEFAULT_TIMEOUT_MS,
+			input,
+			...(opts?.signal ? { signal: opts.signal } : {}),
+		},
+	);
 
 	if (code === 0) {
 		return stdout;

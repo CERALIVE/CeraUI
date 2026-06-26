@@ -8,16 +8,40 @@
 import { test as base, type Page } from '@playwright/test';
 
 import { ensureAuthenticated } from '../helpers/index.js';
+import { startWorkerBackend, type WorkerBackend } from './backend.js';
 
 export { expect } from '@playwright/test';
+export type { Download, Locator, Page } from '@playwright/test';
+
+type WorkerFixtures = {
+	workerBackend: WorkerBackend;
+};
 
 type Fixtures = {
 	authedPage: Page;
 };
 
-export const test = base.extend<Fixtures>({
-	// Override page to add screenshot guard in non-@visual tests.
-	page: async ({ page }, use, testInfo) => {
+export const test = base.extend<Fixtures, WorkerFixtures>({
+	// One isolated mock backend per worker (own port + own CWD state dir), so
+	// config.json mutation and dev.emit broadcasts never bleed across workers.
+	workerBackend: [
+		async ({}, use) => {
+			const backend = await startWorkerBackend();
+			await use(backend);
+			await backend.stop();
+		},
+		{ scope: 'worker' },
+	],
+
+	// Override page to (1) route this worker's browser to its own backend and
+	// (2) add the screenshot guard in non-@visual tests.
+	page: async ({ page, workerBackend }, use, testInfo) => {
+		// Inject BEFORE app boot so getSocketUrl() dials the worker's backend; any
+		// spec WS harness (addInitScript) registers after this and wraps that URL.
+		await page.addInitScript((port: number) => {
+			(window as { __ceraSocketPort?: number }).__ceraSocketPort = port;
+		}, workerBackend.port);
+
 		const isVisual =
 			testInfo.tags.includes('@visual') || testInfo.title.includes('@visual');
 		if (!isVisual) {

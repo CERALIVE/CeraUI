@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures/index.js";
 
 import { evidencePath, navigateTo } from "./helpers";
 
@@ -207,7 +207,6 @@ function widthSpread(measures: LinkMeasure[]): number {
 	return Math.max(...widths) - Math.min(...widths);
 }
 
-test.describe.configure({ mode: "serial" });
 
 test.use({ viewport: { width: 1024, height: 600 } });
 

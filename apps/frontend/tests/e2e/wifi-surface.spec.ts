@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures/index.js";
 
 import { evidencePath, navigateTo } from "./helpers";
 
@@ -169,6 +169,19 @@ function armWifiFake(page: Page, path: string, result: unknown): Promise<void> {
 	);
 }
 
+/**
+ * Collapse the async-op pending TTL via the production seam
+ * (`window.__ceraAsyncOpTtlMs`, resolved live by the async-operation sweep) so the
+ * never-confirming scenario reaches `timed_out` on the next ~1s sweep tick instead
+ * of burning the real 15s ASYNC_OP_TTL_MS. Armed only AFTER the pending state is
+ * observed, so the "Connecting" assertion still runs at the production default.
+ */
+function armShortAsyncOpTtl(page: Page, ttlMs: number): Promise<void> {
+	return page.evaluate((ms) => {
+		(window as any).__ceraAsyncOpTtlMs = ms;
+	}, ttlMs);
+}
+
 /** Re-broadcast the last captured wifi snapshot as a `status` tick (the clobber). */
 async function pumpStatusTicks(page: Page, count: number): Promise<void> {
 	await expect
@@ -201,7 +214,6 @@ function dialog(page: Page) {
 	return page.getByRole("dialog", { name: DIALOG });
 }
 
-test.describe.configure({ mode: "serial" });
 
 test.describe(
 	"wifi selector surface — clobber regressions",
@@ -319,7 +331,6 @@ test.describe(
 	test("a never-confirming connect times out to an inline Retry without closing the dialog", async ({
 		page,
 	}) => {
-		test.setTimeout(40_000); // ASYNC_OP_TTL_MS (15s) + headroom
 		record("── never-confirming connect → timed_out ──");
 		await armWifiFake(page, "wifi.connect", { success: true });
 
@@ -329,10 +340,14 @@ test.describe(
 		await expect(dialog(page).getByText(/Connecting/).first()).toBeVisible();
 		record(`Connect ${SAVED_SSID} dispatched; no confirm will ever arrive`);
 
+		// Pending observed at the production default; collapse the TTL via the seam
+		// so the timed_out valve fires on the next ~1s sweep tick instead of 15s.
+		await armShortAsyncOpTtl(page, 200);
+
 		// After the TTL valve fires, the row shows the calm "still working" + Retry
 		// affordance — the dialog must NOT have auto-closed mid-flight.
 		await expect(dialog(page).getByText(/Still working/)).toBeVisible({
-			timeout: 22_000,
+			timeout: 8_000,
 		});
 		await expect(
 			dialog(page).getByRole("button", { name: `Retry ${SAVED_SSID}` }),

@@ -82,6 +82,23 @@ export interface AsyncOpRegistry {
 export const ASYNC_OP_TTL_MS = 15_000;
 
 /**
+ * The active pending TTL: {@link ASYNC_OP_TTL_MS}, unless a positive
+ * `window.__ceraAsyncOpTtlMs` overrides it. Read live by the reactive sweep only
+ * — an e2e TTL-boundary test seam (mirrors `__ceraRebootCountdownSeconds`), never
+ * set in production. The pure core keeps the constant as its default arg.
+ */
+export function resolveAsyncOpTtlMs(): number {
+	const override =
+		typeof window !== "undefined"
+			? (window as unknown as { __ceraAsyncOpTtlMs?: number })
+					.__ceraAsyncOpTtlMs
+			: undefined;
+	return typeof override === "number" && override > 0
+		? override
+		: ASYNC_OP_TTL_MS;
+}
+
+/**
  * How long a terminal phase (`confirmed` / `failed` / `timed_out`) lingers before
  * the sweep decays it back to `idle` (deletes the entry). Long enough for the
  * inline affordance to register, short enough that a settled op carries no stale
@@ -222,14 +239,18 @@ export function clear(reg: AsyncOpRegistry, key: string): void {
  *  - **Terminal decay**: a `confirmed` / `failed` / `timed_out` op older than
  *    {@link ASYNC_OP_TERMINAL_LINGER_MS} is deleted (decays to `idle`).
  */
-export function sweep(reg: AsyncOpRegistry, now: number): string[] {
+export function sweep(
+	reg: AsyncOpRegistry,
+	now: number,
+	ttlMs: number = ASYNC_OP_TTL_MS,
+): string[] {
 	const changed: string[] = [];
 	for (const key of Object.keys(reg.ops)) {
 		const entry = reg.ops[key];
 		if (!entry) continue;
 		const age = now - entry.ts;
 		if (entry.phase === "pending") {
-			if (age > ASYNC_OP_TTL_MS) {
+			if (age > ttlMs) {
 				entry.phase = "timed_out";
 				entry.ts = now;
 				changed.push(key);
@@ -301,7 +322,7 @@ function createAsyncOpStore(): AsyncOpStore {
 	const stopRoot = $effect.root(() => {
 		$effect(() => {
 			const tick = setInterval(() => {
-				sweep(registry, Date.now());
+				sweep(registry, Date.now(), resolveAsyncOpTtlMs());
 			}, TICK_INTERVAL_MS);
 			return () => clearInterval(tick);
 		});
@@ -339,7 +360,7 @@ function createAsyncOpStore(): AsyncOpStore {
 				}
 			}
 		},
-		sweep: (now = Date.now()) => sweep(registry, now),
+		sweep: (now = Date.now()) => sweep(registry, now, resolveAsyncOpTtlMs()),
 		destroy: () => {
 			stopRoot();
 		},

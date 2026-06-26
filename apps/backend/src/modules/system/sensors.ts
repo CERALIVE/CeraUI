@@ -51,7 +51,9 @@ async function updateSensorThermal(id: number, name: string) {
 		).text();
 		const socTemp = Number.parseInt(socTempStr, 10) / 1000.0;
 		sensors[name] = `${socTemp.toFixed(1)} °C`;
-	} catch (_err) {}
+	} catch (_err) {
+		// missing /sys thermal path → leave the signal unset rather than crash
+	}
 }
 
 async function updateSensorsJetson() {
@@ -61,7 +63,9 @@ async function updateSensorsJetson() {
 		).text();
 		const socVoltage = Number.parseInt(socVoltageStr, 10) / 1000.0;
 		sensors["SoC voltage"] = `${socVoltage.toFixed(3)} V`;
-	} catch (_err) {}
+	} catch (_err) {
+		// absent ina3221x rail → skip this signal rather than crash sampling
+	}
 
 	try {
 		const socCurrentStr = await Bun.file(
@@ -69,7 +73,9 @@ async function updateSensorsJetson() {
 		).text();
 		const socCurrent = Number.parseInt(socCurrentStr, 10) / 1000.0;
 		sensors["SoC current"] = `${socCurrent.toFixed(3)} A`;
-	} catch (_err) {}
+	} catch (_err) {
+		// absent ina3221x rail → skip this signal rather than crash sampling
+	}
 
 	await updateSensorThermal(0, "SoC temperature");
 }
@@ -177,7 +183,7 @@ export function initHardwareMonitoring() {
 			broadcastMsg("sensors", data, getms() - ACTIVE_TO);
 		};
 
-		updateSensors();
+		void updateSensors();
 		setInterval(updateSensors, 1000);
 	}
 
@@ -213,7 +219,7 @@ export function initHardwareMonitoring() {
 			})(); // dmesg
 
 			/* Show an alert while ceralive-firstboot-bootconfig is active */
-			monitorBootconfig();
+			void monitorBootconfig();
 			break;
 		}
 

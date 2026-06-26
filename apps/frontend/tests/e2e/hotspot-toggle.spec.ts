@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures/index.js";
 
 import { evidencePath, navigateTo } from "./helpers";
 
@@ -242,7 +242,6 @@ async function fillValidForm(page: Page): Promise<void> {
 	await expect(page.locator("#hotspot-password")).toHaveValue(FORM_PASS);
 }
 
-test.describe.configure({ mode: "serial" });
 
 test.describe(
 	"hotspot surface — clobber regressions",

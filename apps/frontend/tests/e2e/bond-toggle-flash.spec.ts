@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "./fixtures/index.js";
 
 import { EVIDENCE_DIR, navigateTo } from "./helpers";
 
@@ -262,6 +262,19 @@ function armOrphan(page: Page): Promise<void> {
 }
 
 /**
+ * Collapse the field-lock TTL self-sweep window via the production seam
+ * (`window.__ceraFieldLockTtlMs`, resolved live by the dirty-registry sweep) so a
+ * TTL-boundary scenario proves the self-sweep in ~1s instead of burning the real
+ * 10s FIELD_LOCK_TTL_MS. Armed only AFTER the lock is held, so the held-lock
+ * assertions earlier in the scenario still run against the production default.
+ */
+function armShortFieldLockTtl(page: Page, ttlMs: number): Promise<void> {
+	return page.evaluate((ms) => {
+		(window as any).__ceraFieldLockTtlMs = ms;
+	}, ttlMs);
+}
+
+/**
  * Drive the app's connection-state machine deterministically by invoking the
  * client's own `onclose` / `onopen` handlers on the live socket — WITHOUT
  * actually closing the transport (readyState stays OPEN, so the transport's
@@ -379,7 +392,6 @@ async function dropFakeToggleOff(page: Page, toggle: Locator): Promise<string> {
 	return (await lastConfigureName(page)) as string;
 }
 
-test.describe.configure({ mode: "serial" });
 
 test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 	test.skip(
@@ -558,15 +570,18 @@ test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 		const ifname = await dropFakeToggleOff(page, toggle);
 
 		// Hold the lock (intended=false, rpcResolved=true) WITHOUT ever sending a
-		// confirming echo, so the only possible release path is the TTL sweep.
+		// confirming echo, so the only possible release path is the TTL sweep. The
+		// lock is now held — collapse the TTL via the seam so the self-sweep fires
+		// on the next ~1s sweep tick instead of burning the real 10s.
+		await armShortFieldLockTtl(page, 200);
 		const start = Date.now();
 		await expect
 			.poll(() => Date.now() - start, {
-				timeout: 13000,
-				intervals: [500],
-				message: "wait past FIELD_LOCK_TTL_MS (10s) for the self-sweep",
+				timeout: 6000,
+				intervals: [250],
+				message: "wait for the self-sweep past the collapsed FIELD_LOCK_TTL_MS",
 			})
-			.toBeGreaterThan(11000);
+			.toBeGreaterThan(2500);
 
 		// Post-TTL the field reconciles freely again: an injected OFF then ON
 		// both apply, proving no permanent lock survived.
@@ -579,7 +594,7 @@ test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 			"Scenario E — TTL self-sweep",
 			`Interface: ${ifname}`,
 			"Lock held post-resolve with NO confirming echo (TTL is the only valve).",
-			"Waited > FIELD_LOCK_TTL_MS (10s); lock force-released by expire().",
+			"TTL collapsed via window.__ceraFieldLockTtlMs seam; lock force-released by expire().",
 			"Post-TTL netif{enabled:false}→OFF then {enabled:true}→ON applied freely.",
 			"Result: PASS",
 		]);
@@ -892,13 +907,17 @@ test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 		await inject(page, "netif", { [ifname]: { enabled: true, tp: 1 } });
 		await expect(toggle).toHaveAttribute("aria-checked", "false");
 
+		// Pre-TTL stale-echo was just proven BLOCKED at the production default;
+		// now collapse the TTL via the seam so the self-sweep fires on the next
+		// ~1s tick instead of burning the real 10s FIELD_LOCK_TTL_MS.
+		await armShortFieldLockTtl(page, 200);
 		await expect
 			.poll(() => Date.now() - start, {
-				timeout: 14000,
-				intervals: [500],
-				message: "wait past FIELD_LOCK_TTL_MS (10s) for the self-sweep",
+				timeout: 6000,
+				intervals: [250],
+				message: "wait for the self-sweep past the collapsed FIELD_LOCK_TTL_MS",
 			})
-			.toBeGreaterThan(12000);
+			.toBeGreaterThan(2500);
 
 		await inject(page, "netif", { [ifname]: { enabled: true, tp: 2 } });
 		await expect(toggle).toHaveAttribute("aria-checked", "true");
@@ -909,8 +928,8 @@ test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 			"Scenario K — TTL self-sweep (no echo ever arrives)",
 			`Interface: ${ifname}`,
 			"Lock held post-resolve with NO confirming echo (TTL is the only valve).",
-			"Pre-TTL stale netif{enabled:true} → BLOCKED (held OFF).",
-			"Waited > FIELD_LOCK_TTL_MS (10s); lock force-released by expire().",
+			"Pre-TTL stale netif{enabled:true} → BLOCKED (held OFF, production default).",
+			"TTL collapsed via window.__ceraFieldLockTtlMs seam; lock force-released by expire().",
 			"Post-TTL netif{enabled:true}→ON then {enabled:false}→OFF flowed freely.",
 			"Result: PASS (TTL released the lock)",
 		]);

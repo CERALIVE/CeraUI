@@ -18,6 +18,7 @@
 
 /* Read the revision numbers */
 import { logger } from "../../helpers/logger.ts";
+import { DEFAULT_SPAWN_TIMEOUT_MS } from "../../helpers/spawn-policy.ts";
 
 import { srtlaSendExec } from "../streaming/streamloop.ts";
 
@@ -25,7 +26,10 @@ const revisions: Record<string, string> = {};
 
 function readRevision(cmd: string) {
 	try {
-		const result = Bun.spawnSync(cmd.split(" "), { stdout: "pipe" });
+		const result = Bun.spawnSync(cmd.split(" "), {
+			stdout: "pipe",
+			timeout: DEFAULT_SPAWN_TIMEOUT_MS,
+		});
 		if (result.exitCode !== 0) {
 			return "unknown revision";
 		}

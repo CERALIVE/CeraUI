@@ -41,16 +41,12 @@ registerSW({
 		});
 	},
 	onOfflineReady() {
-		console.log("PWA: Ready for offline use");
+		/* no-op: offline readiness is surfaced via the PWA UI, not logged */
 	},
 	onRegistered(registration) {
 		if (registration) {
-			console.log("PWA: Service worker registered", registration);
 			// Update stored version when PWA registers successfully
 			setStoredVersion(__APP_VERSION__);
-		} else {
-			// PWA disabled (e.g., dev mode)
-			console.log("PWA: Disabled");
 		}
 	},
 	onRegisterError(error: Error) {

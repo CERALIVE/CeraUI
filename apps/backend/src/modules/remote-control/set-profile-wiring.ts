@@ -84,7 +84,9 @@ async function reconnect(): Promise<void> {
 	// The control channel has no UI socket; a no-op stub satisfies the session's
 	// status/error sends. Empty params → the start reads the just-persisted config.
 	const stubConn = {
-		send: () => {},
+		send: () => {
+			/* no-op: control channel has no UI socket */
+		},
 		data: { isAuthenticated: true, lastActive: Date.now() },
 	} as unknown as import("ws").default;
 	await startStream(stubConn, {});

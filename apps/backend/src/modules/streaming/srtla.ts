@@ -46,7 +46,7 @@ export async function resolveSrtla(addr: string) {
 		/* At the moment we don't check that the SRTLA connection was established before
        validating the DNS result. The caching DNS resolver checks for invalid
        results from captive portals, etc, so all results *should* be good already */
-		dnsCacheValidate(addr);
+		void dnsCacheValidate(addr);
 	}
 
 	return srtlaAddr;
@@ -61,7 +61,7 @@ export async function setSrtlaIpList(addresses: string[]) {
 }
 
 export function restartSrtla() {
-	killall(["-HUP", "srtla_send"]);
+	void killall(["-HUP", "srtla_send"]);
 }
 
 export function genSrtlaIpList() {

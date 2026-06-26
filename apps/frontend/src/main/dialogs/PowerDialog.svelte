@@ -19,12 +19,12 @@
 import { LL } from '@ceraui/i18n/svelte';
 import type { UpdateProgress } from '@ceraui/rpc/schemas';
 import { AlertTriangle, Power, PowerOff, RotateCcw } from '@lucide/svelte';
-import { toast } from 'svelte-sonner';
 
 import { onDestroy } from 'svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
+import { getOperationPhase, osCommand } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import { getIsConnected, getIsStreaming, getUpdating } from '$lib/rpc/subscriptions.svelte';
 import { clearRebooting, getIsRebooting, markRebooting } from '$lib/stores/connection-ux.svelte';
@@ -73,7 +73,13 @@ type PendingAction = 'reboot' | 'poweroff';
 
 let confirmOpen = $state(false);
 let pending = $state<PendingAction | null>(null);
-let busy = $state(false);
+// Re-entry protection + in-flight state: reboot/poweroff each run through the
+// keyed async-operation machine (osCommand), so `busy` is derived from whichever
+// op is `pending` rather than a hand-rolled boolean. osCommand's own re-entry
+// guard blocks a second dispatch while a key is in flight.
+const busy = $derived(
+	getOperationPhase('reboot') === 'pending' || getOperationPhase('poweroff') === 'pending',
+);
 
 const confirmLabel = $derived(
 	pending === 'poweroff' ? $LL.advanced.powerOff() : $LL.advanced.reboot(),
@@ -90,39 +96,40 @@ function request(action: PendingAction) {
 	confirmOpen = true;
 }
 
-// Power/reboot deliberately stay OUT of the pending→confirm machine: the device
-// going down IS the success signal (the DisconnectedBanner owns that UX). But the
-// dispatch calls `rpc.system.*` DIRECTLY — not the SystemHelper wrappers, which
-// discard the `{ success: false }` body — so a backend-refused op (streaming /
-// updating guard) surfaces a calm toast and never advances to "rebooting"/close.
+// Power/reboot deliberately stay OUT of the field-sync (config-write) machine:
+// the device going down IS the success signal (the DisconnectedBanner owns that
+// UX). They DO route through the keyed async-operation machine via `osCommand`,
+// which owns the re-entry guard + in-flight `pending` phase + the single
+// failure-feedback toast. `confirmOnResolve` settles the op to `confirmed` the
+// moment the `{ success: true }` reply flushes (the reply always returns before
+// systemd takes the host down). A backend-refused op (streaming / updating guard)
+// returns `{ success: false }`, which osCommand classifies as a failure — it
+// toasts and we never advance to "rebooting"/close.
 async function confirmAction() {
 	const action = pending;
-	if (!action || busy) return;
-	busy = true;
-	try {
-		const result =
-			action === 'reboot' ? await rpc.system.reboot() : await rpc.system.poweroff();
-		if (!result.success) {
-			toast.error($LL.network.os.operationFailed());
-			return; // do NOT mark rebooting / close on a refused op
-		}
-		if (action === 'reboot') {
-			// Hand the reconnect UX to the Task-16 banner (it auto-clears on
-			// reconnect) AND run an in-dialog countdown so the operator sees the
-			// reconnect window progress and gets a recovery path if it overruns.
-			markRebooting();
-			startRebootCountdown();
-		} else {
-			// Power off: the device never returns, so the honest treatment is to
-			// close and let the normal reconnecting/failed banner take over.
-			open = false;
-		}
-	} catch (error) {
-		console.error(`Failed to ${action}:`, error);
-		toast.error($LL.network.os.operationFailed());
-	} finally {
-		busy = false;
-		pending = null;
+	if (!action) return;
+	const result = await osCommand({
+		key: action,
+		target: action,
+		rpc: () => (action === 'reboot' ? rpc.system.reboot() : rpc.system.poweroff()),
+		confirmOnResolve: true,
+		failMessage: () => $LL.network.os.operationFailed(),
+	});
+	pending = null;
+	// undefined → re-entry no-op or a thrown RPC (osCommand already toasted);
+	// success:false → refused op (osCommand already toasted). Either way, do NOT
+	// mark rebooting or close.
+	if (!result?.success) return;
+	if (action === 'reboot') {
+		// Hand the reconnect UX to the Task-16 banner (it auto-clears on
+		// reconnect) AND run an in-dialog countdown so the operator sees the
+		// reconnect window progress and gets a recovery path if it overruns.
+		markRebooting();
+		startRebootCountdown();
+	} else {
+		// Power off: the device never returns, so the honest treatment is to
+		// close and let the normal reconnecting/failed banner take over.
+		open = false;
 	}
 }
 

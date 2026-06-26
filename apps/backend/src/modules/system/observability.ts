@@ -14,6 +14,7 @@
 import type { StreamHealthOutput } from "@ceraui/rpc/schemas";
 
 import { getStreamHealth } from "../streaming/health.ts";
+import { type BootReadiness, getBootReadiness } from "./readiness.ts";
 
 export interface LocalObservabilitySurface {
 	process: { alive: boolean; uptime: number };
@@ -21,17 +22,27 @@ export interface LocalObservabilitySurface {
 	srt: { reconnecting: boolean; reconnectCount: number };
 	bond: { linkCount: number; activeLinks: number };
 	timestamp: string;
+	/**
+	 * Boot-readiness rollup (S6): present when supplied. `degraded` flips true
+	 * when any non-critical boot init failed, so an operator polling
+	 * `/api/health` sees a readiness-reduced device even though the WS control
+	 * server bound and the stream may be healthy.
+	 */
+	readiness?: BootReadiness;
 }
 
 /**
  * Pure mapper: project a Task 13 health rollup onto the local surface shape,
  * decorated with the supplied uptime and timestamp. Side-effect-free and fully
- * deterministic for unit testing — all ambient inputs are injected.
+ * deterministic for unit testing — all ambient inputs are injected. `readiness`
+ * is optional so existing callers/tests are unaffected; it is only attached when
+ * a snapshot is passed.
  */
 export function buildLocalObservabilitySurface(
 	health: StreamHealthOutput,
 	uptimeSeconds: number,
 	now: Date = new Date(),
+	readiness?: BootReadiness,
 ): LocalObservabilitySurface {
 	return {
 		process: { alive: health.process.alive, uptime: uptimeSeconds },
@@ -45,17 +56,20 @@ export function buildLocalObservabilitySurface(
 			activeLinks: health.bond.activeLinks,
 		},
 		timestamp: now.toISOString(),
+		...(readiness ? { readiness } : {}),
 	};
 }
 
 /**
  * Collect the live local observability surface. Reuses `getStreamHealth()` (the
- * canonical liveness source) and reads process uptime from the runtime — no
- * duplicated liveness logic, no network access.
+ * canonical liveness source), reads process uptime from the runtime, and folds
+ * in the boot-readiness rollup — no duplicated liveness logic, no network access.
  */
 export function getLocalObservability(): LocalObservabilitySurface {
 	return buildLocalObservabilitySurface(
 		getStreamHealth(),
 		Math.floor(process.uptime()),
+		new Date(),
+		getBootReadiness(),
 	);
 }

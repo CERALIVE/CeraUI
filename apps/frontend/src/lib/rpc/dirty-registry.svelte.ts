@@ -35,6 +35,23 @@ export const FIELD_LOCK_TTL_MS = 10_000;
 /** How often the reactive store sweeps for expired locks (ms). */
 const TICK_INTERVAL_MS = 1000;
 
+/**
+ * The active field-lock TTL: {@link FIELD_LOCK_TTL_MS}, unless a positive
+ * `window.__ceraFieldLockTtlMs` overrides it. Read live by the reactive sweep
+ * only — an e2e TTL-boundary test seam (mirrors `__ceraRebootCountdownSeconds`),
+ * never set in production. The pure core keeps the constant as its default arg.
+ */
+export function resolveFieldLockTtlMs(): number {
+	const override =
+		typeof window !== "undefined"
+			? (window as unknown as { __ceraFieldLockTtlMs?: number })
+					.__ceraFieldLockTtlMs
+			: undefined;
+	return typeof override === "number" && override > 0
+		? override
+		: FIELD_LOCK_TTL_MS;
+}
+
 // ============================================
 // Pure core (rune-free, unit-testable)
 //
@@ -218,11 +235,15 @@ export function onRpcApplied(
  * the fields that were released (empty when nothing expired). This is the safety
  * valve guaranteeing a field can never stay locked forever.
  */
-export function expire(registry: DirtyRegistry, now: number): string[] {
+export function expire(
+	registry: DirtyRegistry,
+	now: number,
+	ttlMs: number = FIELD_LOCK_TTL_MS,
+): string[] {
 	const released: string[] = [];
 	for (const field of Object.keys(registry.locks)) {
 		const lock = registry.locks[field];
-		if (lock && now - lock.ts > FIELD_LOCK_TTL_MS) {
+		if (lock && now - lock.ts > ttlMs) {
 			delete registry.locks[field];
 			released.push(field);
 		}
@@ -288,7 +309,7 @@ function createDirtyStore(): DirtyStore {
 	const stopRoot = $effect.root(() => {
 		$effect(() => {
 			const tick = setInterval(() => {
-				expire(registry, Date.now());
+				expire(registry, Date.now(), resolveFieldLockTtlMs());
 			}, TICK_INTERVAL_MS);
 			return () => clearInterval(tick);
 		});
@@ -315,7 +336,8 @@ function createDirtyStore(): DirtyStore {
 			),
 		onRpcApplied: (field, appliedValue, now = Date.now()) =>
 			onRpcApplied(registry, field, appliedValue, now),
-		expire: (now = Date.now()) => expire(registry, now),
+		expire: (now = Date.now()) =>
+			expire(registry, now, resolveFieldLockTtlMs()),
 		getRegistry: () => registry,
 		destroy: () => {
 			stopRoot();

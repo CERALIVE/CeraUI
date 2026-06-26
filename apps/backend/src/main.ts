@@ -22,6 +22,7 @@ import {
 	createBootTimer,
 	formatReadyLine,
 } from "./helpers/boot-banner.ts";
+import { guardNonCritical, runCritical } from "./helpers/boot-guard.ts";
 import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
@@ -118,26 +119,47 @@ if (isDevelopment()) {
 checkExecPath(srtlaSendExec);
 checkExecPath(bcrptExec);
 
-await loadConfig();
+// CRITICAL boot phase. A failure here is genuinely fatal: the device cannot
+// serve correct state without its config, so runCritical() logs loudly and
+// re-throws to abort (systemd restarts cleanly) rather than limp along.
+await runCritical("config", loadConfig);
 logger.info(bootTimer.phase("🔧", "config"));
 
-initRemote();
+void initRemote();
+
+// CRITICAL: bind the WS control server FIRST — before any non-critical init that
+// could fail OR hang. It is the operator's only lifeline to the device, so it
+// must come up even when identity, the cloud channel, or the engine never do
+// (S6 — a top-level-await failure here previously bricked boot in the field).
+await runCritical("ws-control-server", initServer);
+const boundPort = Number(getServer()?.url.port) || null;
+logger.info(bootTimer.phase("🚀", "server"));
+
+// --- NON-CRITICAL boot phase. Each init is wrapped in guardNonCritical(): a
+//     failure is logged, flags the device readiness-reduced (surfaced on
+//     /api/health via the boot-readiness rollup), and is swallowed so boot never
+//     crashes and the WS server (bound above) stays reachable. ---
+
 // Resolve device_id + paired state before anything that gates the control
-// channel (spec §9: it MUST NOT dial until identity is resolved). Fail-soft —
-// never blocks boot.
-await initIdentity();
+// channel (spec §9: it MUST NOT dial until identity is resolved).
+await guardNonCritical("identity", initIdentity);
 // Second, independent outbound control channel (spec §9): dials the pinned
 // device-gateway hub once identity is resolved + paired. Distinct from the BCRPT
-// relay socket above — its own endpoint, token audience, and lifecycle. Fail-soft,
-// never blocks boot.
-await initControlChannel();
+// relay socket — its own endpoint, token audience, and lifecycle. Cloud-only, so
+// a failure costs remote control but never the local operator UI.
+await guardNonCritical("control-channel", initControlChannel);
 // Bind the device.setProfile handler to the real config/caps/streaming session
 // (the platform pushes the resolved SRT receive profile over the control channel).
 wireSetProfile();
-await initPipelines(
-	shouldUseMocks()
-		? { fetchEngineCapabilities: async () => getMockEngineCapabilities() }
-		: {},
+// Built from the engine's get-capabilities IPC — the engine may be starting or
+// unreachable, so this is the likeliest awaited init to throw/hang. On failure
+// the pipeline registry stays empty (stream-start gated) but the UI is reachable.
+await guardNonCritical("pipelines", () =>
+	initPipelines(
+		shouldUseMocks()
+			? { fetchEngineCapabilities: async () => getMockEngineCapabilities() }
+			: {},
+	),
 );
 
 // Migrate persisted config vs the offered set: a `pipeline` the current hardware
@@ -150,15 +172,14 @@ reconcilePersistedPipeline(
 logger.info(bootTimer.phase("🔌", "pipelines"));
 
 void initRevisions();
-// WebSocket server is now integrated with HTTP server via Bun.serve()
 initHardwareMonitoring();
 initDeviceStats();
-await initRTMPIngestStats();
+await guardNonCritical("rtmp-ingest", initRTMPIngestStats);
 initSRTIngest();
 void getSshStatus();
 logger.info(bootTimer.phase("🖥️", "hardware"));
 
-updateGwWrapper();
+void updateGwWrapper();
 setInterval(updateGwWrapper, UPDATE_GW_INT);
 
 if (setup.apt_update_enabled) {
@@ -183,16 +204,16 @@ void initModemUpdateLoop({ monitor: networkMonitor });
 logger.info(bootTimer.phase("🌐", "network"));
 
 // check for Cam Links on USB2 at startup
-checkCamlinkUsb2();
+void checkCamlinkUsb2();
 
-updateAudioDevices();
+void updateAudioDevices();
 // Live device list: inotify on the sound dir (+ debounce), polling fallback only
 // while streaming. The SIGUSR2 udev hook below stays as a belt-and-suspenders path.
 startAudioDeviceWatcher(() => getStreamingProcesses().length > 0);
 // Hotplug input discovery (Task 34): v4l2 + unified audio scan, broadcasts the
 // `devices` payload that feeds the cerastream picker + live switch-input RPC.
 startDeviceDiscovery();
-startBcrpt();
+void startBcrpt();
 logger.info(bootTimer.phase("🎵", "audio & devices"));
 
 // Don't autostart when restarting CeraLive after a software update or after a crash
@@ -204,18 +225,13 @@ logger.info(bootTimer.phase("🎵", "audio & devices"));
 */
 process.on("SIGUSR2", function udevDeviceUpdate() {
 	logger.error("SIGUSR2");
-	checkCamlinkUsb2();
-	updateAudioDevices();
+	void checkCamlinkUsb2();
+	void updateAudioDevices();
 });
 
 // make sure we didn't inherit orphan processes (cerastream is systemd-owned and
 // never spawned by CeraUI, so only srtla_send needs the orphan sweep)
-killall(["srtla_send"]);
-
-// Initialize Bun native HTTP/WebSocket server
-initServer();
-const boundPort = Number(getServer()?.url.port) || null;
-logger.info(bootTimer.phase("🚀", "server"));
+void killall(["srtla_send"]);
 
 // Server→client heartbeat: periodic app-level ping for half-open detection
 startHeartbeat();
@@ -232,7 +248,7 @@ onHeartbeatTick(broadcastLinkTelemetryIfChanged);
 startTelemetryRecorder();
 onHeartbeatTick(recordTelemetryTick);
 
-checkAutoStartStream();
+void checkAutoStartStream();
 
 // Engine protocol-compatibility probe (T-skew): fire-and-forget. A protocol-major
 // mismatch (e.g. a newer engine .deb against older baked-in bindings) raises a

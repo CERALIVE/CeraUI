@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures/index.js";
 
 import { evidencePath, navigateTo } from "./helpers";
 
@@ -27,7 +27,7 @@ import { evidencePath, navigateTo } from "./helpers";
  * MOCK_SCENARIO. Frontend (Vite :6173) is started by playwright.config.
  */
 
-const FAKE_ERR = "drop+fake: simulated setAutostart failure";
+const FAKE_ERR = "Couldn't change autostart. Please try again.";
 
 const TOKEN: string = (() => {
 	const tokensPath = path.resolve(
@@ -160,7 +160,6 @@ function writeEvidence(fileName: string, lines: string[]): void {
 	);
 }
 
-test.describe.configure({ mode: "serial" });
 
 test.describe("autostart toggle (applied-state)", () => {
 	test.skip(

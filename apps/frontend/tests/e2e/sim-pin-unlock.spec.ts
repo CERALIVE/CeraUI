@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures/index.js";
 
 import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers";
 
@@ -137,7 +137,6 @@ async function clearModemLock(page: Page, key: string): Promise<void> {
 	}, key);
 }
 
-test.describe.configure({ mode: "serial" });
 
 test.describe("SIM PIN unlock UI (Task 23, dev.emit driven)", () => {
 	test.skip(

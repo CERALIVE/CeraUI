@@ -49,7 +49,7 @@ let pageWs: WebSocketRoute | null = null;
 
 /** Proxy the backend WS, force is_streaming:false on status frames. */
 async function routeBackend(page: Page): Promise<void> {
-	await page.routeWebSocket(/:3002/, (ws) => {
+	await page.routeWebSocket(/:(3002|31\d\d)/, (ws) => {
 		pageWs = ws;
 		const server = ws.connectToServer();
 		ws.onMessage((m) => server.send(m));

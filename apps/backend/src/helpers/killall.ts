@@ -1,5 +1,6 @@
 import { setup } from "../modules/setup.ts";
 import { ALLOWED, run } from "./run.ts";
+import { DEFAULT_SPAWN_TIMEOUT_MS } from "./spawn-policy.ts";
 
 const killallBinary = setup.killall_binary ?? "killall";
 
@@ -17,5 +18,8 @@ export default async function killall(
 	}
 
 	// Custom, non-allowlisted setup.killall_binary path: argv-only (NO shell).
-	Bun.spawnSync([killallBinary, ...args]);
+	// bounded-probe (spawn-policy): a hung killall is capped by a wall-clock timeout.
+	Bun.spawnSync([killallBinary, ...args], {
+		timeout: DEFAULT_SPAWN_TIMEOUT_MS,
+	});
 }

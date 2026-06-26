@@ -26,7 +26,6 @@ import {
 } from '@ceraui/rpc/schemas';
 import { Keyboard, KeyboardOff, LoaderCircle, Monitor } from '@lucide/svelte';
 import { onMount } from 'svelte';
-import { toast } from 'svelte-sonner';
 
 import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
@@ -34,6 +33,11 @@ import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
+import {
+	clearOperation,
+	getOperationPhase,
+	osCommand,
+} from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import { getKiosk } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
@@ -59,7 +63,10 @@ let touch = $state(true);
 let motion = $state(true);
 let performance = $state<KioskPerformance>('balanced');
 let loaded = $state(false);
-let oskBusy = $state(false);
+
+// In-flight + re-entry state for the on-screen-keyboard signal, derived from the
+// keyed async-operation machine (osCommand) rather than a hand-rolled boolean.
+const oskBusy = $derived(getOperationPhase('kiosk-osk') === 'pending');
 
 // Set when the backend reports the kiosk is unavailable in emulated mode (T13):
 // surfaces a calm banner instead of an error toast, and the toggle reverts.
@@ -95,22 +102,29 @@ onMount(async () => {
 	}
 });
 
-function errorMessage(error: unknown): string | undefined {
-	if (error instanceof Error && error.message) return error.message;
-	if (typeof error === 'string' && error) return error;
-	return undefined;
-}
-
+// The enable/disable toggle is a G4 status op — it routes through the keyed
+// async-operation machine (osCommand), which owns the re-entry guard + in-flight
+// `pending` phase. `classify` keeps EVERY resolved verdict `ok` so osCommand never
+// toasts here: the emulated-mode "unavailable" outcome is surfaced as a calm
+// banner (not an error toast), and a genuine RPC throw is the only case that
+// toasts (via `failMessage`). On any non-applied outcome we reject so the
+// pessimistic AsyncSwitch reverts to the prior value.
 async function handleEnableChange(next: boolean) {
-	let result: Awaited<ReturnType<typeof rpc.system.kioskStart>>;
-	try {
-		result = next ? await rpc.system.kioskStart() : await rpc.system.kioskStop();
-	} catch (error) {
-		toast.error(errorMessage(error) ?? t.toggleError());
-		throw error;
-	}
+	const result = await osCommand({
+		key: 'kiosk',
+		target: next,
+		rpc: () => (next ? rpc.system.kioskStart() : rpc.system.kioskStop()),
+		confirmOnResolve: true,
+		classify: () => ({ ok: true }),
+		failMessage: () => t.toggleError(),
+	});
+	// undefined → re-entry no-op or a thrown RPC (osCommand already toasted).
+	if (!result) throw new Error('kiosk_toggle_failed');
 	if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.applied) {
 		unavailable = true;
+		// The op did not actually apply — drop the (optimistically confirmed)
+		// async-op entry so it never reads as a real success.
+		clearOperation('kiosk');
 		// Reject so AsyncSwitch reverts to the prior value without an error toast.
 		throw new Error(KIOSK_UNAVAILABLE_ERROR);
 	}
@@ -119,39 +133,54 @@ async function handleEnableChange(next: boolean) {
 	liveState = result.applied.state;
 }
 
+// kioskConfigure routes through the keyed async-operation machine (key
+// 'kiosk-configure') for the re-entry guard + in-flight phase. As with the
+// toggle, `classify` keeps every resolved verdict `ok` so the calm emulated-mode
+// banner — not an error toast — is the feedback; only a thrown RPC toasts
+// (via `failMessage`).
 async function configure(patch: Partial<KioskConfigureInput>) {
 	const next: KioskConfigureInput = { display, touch, motion, performance, ...patch };
-	try {
-		const result = await rpc.system.kioskConfigure(next);
-		if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.applied) {
-			unavailable = true;
-			return;
-		}
-		unavailable = false;
-		display = result.applied.display;
-		touch = result.applied.touch;
-		motion = result.applied.motion;
-		performance = result.applied.performance;
-	} catch (error) {
-		toast.error(errorMessage(error) ?? t.configureError());
+	const result = await osCommand({
+		key: 'kiosk-configure',
+		target: next,
+		rpc: () => rpc.system.kioskConfigure(next),
+		confirmOnResolve: true,
+		classify: () => ({ ok: true }),
+		failMessage: () => t.configureError(),
+	});
+	if (!result) return; // re-entry no-op or a thrown RPC (osCommand already toasted)
+	if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.applied) {
+		unavailable = true;
+		clearOperation('kiosk-configure');
+		return;
 	}
+	unavailable = false;
+	display = result.applied.display;
+	touch = result.applied.touch;
+	motion = result.applied.motion;
+	performance = result.applied.performance;
 }
 
+// On-screen-keyboard signal routes through the keyed async-operation machine (key
+// 'kiosk-osk'); `oskBusy` (derived from its `pending` phase) drives the button
+// disabled state, and osCommand's own re-entry guard blocks a second signal while
+// one is in flight.
 async function signalOsk(visible: boolean) {
-	if (oskBusy) return;
-	oskBusy = true;
-	try {
-		const result = await rpc.system.kioskOsk({ visible });
-		if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.success) {
-			unavailable = true;
-			return;
-		}
-		unavailable = false;
-	} catch (error) {
-		toast.error(errorMessage(error) ?? t.keyboardError());
-	} finally {
-		oskBusy = false;
+	const result = await osCommand({
+		key: 'kiosk-osk',
+		target: visible,
+		rpc: () => rpc.system.kioskOsk({ visible }),
+		confirmOnResolve: true,
+		classify: () => ({ ok: true }),
+		failMessage: () => t.keyboardError(),
+	});
+	if (!result) return; // re-entry no-op or a thrown RPC (osCommand already toasted)
+	if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.success) {
+		unavailable = true;
+		clearOperation('kiosk-osk');
+		return;
 	}
+	unavailable = false;
 }
 
 // DC-2 state → i18n label + hint + visual tone. The single mapping that keeps

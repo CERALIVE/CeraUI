@@ -192,7 +192,7 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 				return;
 			}
 
-			handleORPCMessage(ws, message);
+			void handleORPCMessage(ws, message);
 		},
 
 		close(ws: AppWebSocket, code: number, reason: string) {

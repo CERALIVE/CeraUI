@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures/index.js";
 
 import { evidencePath, navigateTo } from "./helpers";
 
@@ -168,7 +168,6 @@ async function openSettingsDialog(page: Page, name: RegExp): Promise<void> {
 	await page.getByRole("button", { name }).first().click();
 }
 
-test.describe.configure({ mode: "serial" });
 
 test.describe(
 	"ssh / power / update surface — clobber + blocked-result regressions",

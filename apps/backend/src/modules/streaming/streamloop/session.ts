@@ -103,7 +103,7 @@ export async function start(
 		}
 	};
 
-	handleSrtlaIpAddresses();
+	void handleSrtlaIpAddresses();
 	removeNetworkInterfacesChangeListener = onNetworkInterfacesChange(
 		handleSrtlaIpAddresses,
 	);

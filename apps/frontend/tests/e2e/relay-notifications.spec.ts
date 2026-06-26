@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page, test } from './fixtures/index.js';
 
 import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
 
@@ -67,7 +67,11 @@ const NOTIF_DURATION_S = 5;
 // guarded page.screenshot path).
 test.use({ video: 'on' });
 
+// The notification-store assertions ('exactly one toast') depend on the store
+// being reset between tests on one backend; kept serial so a same-worker
+// predecessor never leaves a residual toast in the shared store.
 test.describe.configure({ mode: 'serial' });
+
 
 const evidence: string[] = [];
 function record(line: string): void {

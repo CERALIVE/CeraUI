@@ -45,7 +45,7 @@ export function setAutostart(value: boolean): boolean {
 export async function checkAutoStartStream() {
 	// Don't autostart when restarting CeraLive after a software update or after a crash
 	if (getConfig().autostart && !fs.existsSync(AUTOSTART_CHECK_FILE)) {
-		autoStartStream();
+		void autoStartStream();
 	}
 	fs.writeFileSync(AUTOSTART_CHECK_FILE, "");
 }

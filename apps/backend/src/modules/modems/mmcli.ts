@@ -26,6 +26,13 @@ import {
 } from "../../mocks/providers/modems.ts";
 
 import { setup } from "../setup.ts";
+import {
+	describeCliError,
+	logParseError,
+	type ParseResult,
+	parseFail,
+	parseOk,
+} from "../system/cli-parse.ts";
 
 export type ModemId = number;
 
@@ -263,43 +270,68 @@ export function mmConvertAccessTech(accessTechs?: Array<string>): string {
 	return gen;
 }
 
+// Regex: a ModemManager modem object path `…/Modem/<index>`.
+const MODEM_PATH_INDEX_RE = /\/org\/freedesktop\/ModemManager1\/Modem\/(\d+)/;
+
+/**
+ * Extract modem indices from a parsed `mmcli -K -L` record. A MISSING
+ * `modem-list` key is drift (mmcli always emits it, empty when no modems); a
+ * non-empty list matching NO path is drift (path grammar changed). Both fail
+ * loud instead of returning a silently-empty list that hides every modem.
+ */
+export function parseModemList(
+	parsed: Record<string, string | Array<string>>,
+): ParseResult<ModemId[]> {
+	const raw = parsed["modem-list"];
+	if (raw === undefined) {
+		return parseFail(
+			"parseModemList",
+			"missing modem-list key",
+			Object.keys(parsed).join(", "),
+		);
+	}
+	const entries = Array.isArray(raw) ? raw : [raw];
+	const list: ModemId[] = [];
+	for (const m of entries) {
+		const id = m.match(MODEM_PATH_INDEX_RE);
+		if (id?.[1] !== undefined) {
+			list.push(Number.parseInt(id[1], 10));
+		}
+	}
+	if (entries.length > 0 && list.length === 0) {
+		return parseFail(
+			"parseModemList",
+			"no modem indices matched the ModemManager path grammar",
+			entries.join("; "),
+		);
+	}
+	return parseOk(list);
+}
+
 export async function mmList() {
 	try {
 		// Check for mock mode
 		if (shouldMockModems()) {
 			const mockOutput = handleMmcliCommand(["-K", "-L"]);
 			if (mockOutput) {
-				const modems = mmcliParseSep(mockOutput)["modem-list"] ?? [];
-				const list = [];
-				for (const m of modems) {
-					const id = m.match(
-						/\/org\/freedesktop\/ModemManager1\/Modem\/(\d+)/,
-					) as [string, string] | null;
-					if (id) {
-						list.push(Number.parseInt(id[1], 10));
-					}
+				const parsed = parseModemList(mmcliParseSep(mockOutput));
+				if (!parsed.ok) {
+					logParseError(parsed);
+					return;
 				}
-				return list;
+				return parsed.value;
 			}
 		}
 
 		const stdout = await run(mmcliBinary, ["-K", "-L"]);
-		const modems = mmcliParseSep(stdout)["modem-list"] ?? [];
-
-		const list = [];
-		for (const m of modems) {
-			const id = m.match(/\/org\/freedesktop\/ModemManager1\/Modem\/(\d+)/) as
-				| [string, string]
-				| null;
-			if (id) {
-				list.push(Number.parseInt(id[1], 10));
-			}
+		const parsed = parseModemList(mmcliParseSep(stdout));
+		if (!parsed.ok) {
+			logParseError(parsed);
+			return;
 		}
-		return list;
+		return parsed.value;
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`mmList err: ${err.message}`);
-		}
+		logger.error(`mmList err: ${describeCliError(err)}`);
 	}
 }
 
@@ -316,9 +348,7 @@ export async function mmGetModem(id: ModemId) {
 		const stdout = await run(mmcliBinary, ["-K", "-m", String(id)]);
 		return mmcliParseSep(stdout) as unknown as ModemInfo;
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`mmGetModem err: ${err.message}`);
-		}
+		logger.error(`mmGetModem err: ${describeCliError(err)}`);
 	}
 }
 
@@ -335,10 +365,16 @@ export async function mmGetSim(id: number) {
 		const stdout = await run(mmcliBinary, ["-K", "-i", String(id)]);
 		return mmcliParseSep(stdout) as unknown as SimInfo;
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`mmGetSim err: ${err.message}`);
-		}
+		logger.error(`mmGetSim err: ${describeCliError(err)}`);
 	}
+}
+
+// Regex: mmcli's confirmation line for `--set-allowed-modes` / `--set-preferred-mode`.
+const SET_MODES_OK_RE = /successfully set current modes in the modem/;
+
+/** True when mmcli confirmed the mode change; false on any other output. */
+export function parseSetModesSuccess(stdout: string): boolean {
+	return SET_MODES_OK_RE.test(stdout);
 }
 
 export async function mmSetNetworkTypes(
@@ -354,11 +390,9 @@ export async function mmSetNetworkTypes(
 			args.push(`--set-preferred-mode=${preferred}`);
 		}
 		const stdout = await run(mmcliBinary, args);
-		return stdout.match(/successfully set current modes in the modem/);
+		return parseSetModesSuccess(stdout);
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`mmSetNetworkTypes err: ${err.message}`);
-		}
+		logger.error(`mmSetNetworkTypes err: ${describeCliError(err)}`);
 	}
 }
 
@@ -457,9 +491,7 @@ export async function mmGetModemUnlockInfo(
 		const stdout = await run(mmcliBinary, ["-K", "-m", modemPath]);
 		return parseModemUnlockInfo(mmcliParseSep(stdout));
 	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`mmGetModemUnlockInfo err: ${err.message}`);
-		}
+		logger.error(`mmGetModemUnlockInfo err: ${describeCliError(err)}`);
 		return undefined;
 	}
 }
@@ -655,6 +687,42 @@ export async function unlockSimPuk(
 	}
 }
 
+/**
+ * Parse the `modem.3gpp.scan-networks` entries of a parsed `--3gpp-scan` record
+ * into {@link NetworkScanResult}s. A missing key means "no networks found" (a
+ * valid empty scan). An entry that carries neither operator field is drift in
+ * the `key: value, …` grammar and fails loud rather than yielding a junk row.
+ */
+export function parseNetworkScanResults(
+	parsed: Record<string, string | Array<string>>,
+): ParseResult<NetworkScanResult[]> {
+	const raw = parsed["modem.3gpp.scan-networks"];
+	if (raw === undefined) return parseOk([]);
+
+	const entries = Array.isArray(raw) ? raw : [raw];
+	const results: NetworkScanResult[] = [];
+	for (const n of entries) {
+		const fields: Record<string, string> = {};
+		for (const entry of n.split(/, */)) {
+			const kv = entry.split(/: */);
+			const key = kv[0]?.trim();
+			if (key) fields[key] = kv[1]?.trim() ?? "";
+		}
+		if (
+			fields["operator-code"] === undefined &&
+			fields["operator-name"] === undefined
+		) {
+			return parseFail(
+				"parseNetworkScanResults",
+				"scan entry missing both operator-code and operator-name",
+				n,
+			);
+		}
+		results.push(fields as NetworkScanResult);
+	}
+	return parseOk(results);
+}
+
 export async function mmNetworkScan(id: ModemId, timeout = 240) {
 	try {
 		// Check for mock mode
@@ -666,18 +734,12 @@ export async function mmNetworkScan(id: ModemId, timeout = 240) {
 				"--3gpp-scan",
 			]);
 			if (mockOutput) {
-				const networks = (mmcliParseSep(mockOutput)[
-					"modem.3gpp.scan-networks"
-				] ?? []) as Array<string>;
-				return networks.map((n) => {
-					const info = n.split(/, */);
-					const output: Record<string, string> = {};
-					for (const entry of info) {
-						const kv = entry.split(/: */) as [string, string];
-						output[kv[0]] = kv[1];
-					}
-					return output as NetworkScanResult;
-				});
+				const parsed = parseNetworkScanResults(mmcliParseSep(mockOutput));
+				if (!parsed.ok) {
+					logParseError(parsed);
+					return;
+				}
+				return parsed.value;
 			}
 		}
 
@@ -688,20 +750,13 @@ export async function mmNetworkScan(id: ModemId, timeout = 240) {
 			String(id),
 			"--3gpp-scan",
 		]);
-		const networks = (mmcliParseSep(stdout)["modem.3gpp.scan-networks"] ??
-			[]) as Array<string>;
-		return networks.map((n) => {
-			const info = n.split(/, */);
-			const output: Record<string, string> = {};
-			for (const entry of info) {
-				const kv = entry.split(/: */) as [string, string];
-				output[kv[0]] = kv[1];
-			}
-			return output as NetworkScanResult;
-		});
-	} catch (err) {
-		if (err instanceof Error) {
-			logger.error(`mmNetworkScan err: ${err.message}`);
+		const parsed = parseNetworkScanResults(mmcliParseSep(stdout));
+		if (!parsed.ok) {
+			logParseError(parsed);
+			return;
 		}
+		return parsed.value;
+	} catch (err) {
+		logger.error(`mmNetworkScan err: ${describeCliError(err)}`);
 	}
 }

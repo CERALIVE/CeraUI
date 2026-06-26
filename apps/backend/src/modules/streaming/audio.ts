@@ -208,7 +208,7 @@ export async function asrcProbe(asrc: string): Promise<string> {
 			clearTimeout(timeoutHandle);
 		};
 
-		poll();
+		void poll();
 	});
 }
 

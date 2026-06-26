@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures/index.js";
 
 import { evidencePath, navigateTo } from "./helpers";
 
@@ -140,10 +140,9 @@ async function openDisplayDialog(page: Page): Promise<void> {
 	).toBeVisible();
 }
 
-// Serial: `dev.emit('kiosk', …)` broadcasts to ALL connected clients, so two
-// pages running in parallel would cross-contaminate each other's injected
-// state. Serial mode opens/closes one page at a time against a clean backend.
-test.describe.configure({ mode: "serial" });
+// `dev.emit('kiosk', …)` broadcasts to all clients on ONE backend; each worker
+// now owns its own backend with a single page, so parallel tests cannot
+// cross-contaminate each other's injected state.
 
 test.describe("On-Device Display settings surface (DC-2)", () => {
 	test.skip(

@@ -55,7 +55,6 @@ export const resetSSHPasword = async () => {
 };
 
 export const getSystemLog = async () => {
-	console.log("🔽 Requesting system log download...");
 	try {
 		await rpc.system.getSyslog();
 	} catch (error) {
@@ -65,7 +64,6 @@ export const getSystemLog = async () => {
 };
 
 export const getDeviceLog = async () => {
-	console.log("🔽 Requesting device log download...");
 	try {
 		await rpc.system.getLog();
 	} catch (error) {
@@ -134,7 +132,6 @@ export const stopStreaming = async () => {
 };
 
 export const startStreaming = async (config: ConfigMessage) => {
-	console.log("Starting streaming with config:", config);
 	try {
 		// Map ConfigMessage to StreamingConfigInput
 		const input: StreamingConfigInput = {
@@ -181,8 +178,6 @@ export const downloadLog = ({
 	name: string;
 	contents: string;
 }) => {
-	console.log("💾 Downloading log:", { name, contentLength: contents.length });
-
 	const parsedContent = contents
 		.split("\n")
 		.map((line) => line.trim()) // Trim whitespace
@@ -198,6 +193,4 @@ export const downloadLog = ({
 	a.click();
 	document.body.removeChild(a);
 	URL.revokeObjectURL(url);
-
-	console.log("✅ Log download triggered successfully");
 };

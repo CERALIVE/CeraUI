@@ -18,13 +18,32 @@
 
 import type WebSocket from "ws";
 
-import { logger } from "../../helpers/logger.ts";
+import { getRecentLogLines, logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
 
 import { notificationSend } from "../ui/notifications.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
 
-export async function getLog(conn: WebSocket, service?: string) {
+export interface LogResult {
+	name: string;
+	contents: string;
+}
+
+// Dev/CI hosts have no systemd journal: serve the in-memory ring buffer (the
+// same backend records `journalctl -u ceralive.service` surfaces on a real
+// device) so the observable-logs path works without hardware.
+function buildMockJournal(service?: string): string {
+	const header = service
+		? `-- Logs begin for unit ${service} (CeraUI mock journal) --`
+		: "-- Logs begin, full CeraUI system journal (mock) --";
+	return [header, ...getRecentLogLines()].join("\n");
+}
+
+export async function getLog(
+	conn: WebSocket,
+	service?: string,
+): Promise<LogResult | undefined> {
 	const senderId = getSocketSenderId(conn);
 	// Argv-only: each token is a discrete element, so a `service` value can never
 	// be re-parsed as shell syntax (no `sh -c`, so `;`/spaces/`$()` are inert).
@@ -37,13 +56,17 @@ export async function getLog(conn: WebSocket, service?: string) {
 	}
 
 	try {
-		const stdout = await run("journalctl", args, {
-			maxBuffer: 10 * 1024 * 1024,
-		});
-		conn.send(buildMsg("log", { name, contents: stdout }, senderId));
+		const contents = shouldUseMocks()
+			? buildMockJournal(service)
+			: await run("journalctl", args, { maxBuffer: 10 * 1024 * 1024 });
+		// Pushed as a `log` event the frontend turns into a file download; also
+		// returned so the getLog/getSyslog RPC is itself a real data source.
+		conn.send(buildMsg("log", { name, contents }, senderId));
+		return { name, contents };
 	} catch (err) {
 		const msg = `Failed to fetch the log: ${err}`;
 		notificationSend(conn, "log_error", "error", msg, 10);
 		logger.error(msg);
+		return undefined;
 	}
 }

@@ -21,6 +21,7 @@ import type WebSocket from "ws";
 
 import { logger } from "../../helpers/logger.ts";
 import { pollWithBackoff } from "../../helpers/retry.ts";
+import { DEFAULT_SPAWN_TIMEOUT_MS } from "../../helpers/spawn-policy.ts";
 import { extractMessage } from "../../helpers/types.ts";
 import {
 	getMockState,
@@ -285,7 +286,7 @@ export async function wifiUpdateSavedConns() {
 
 			const macAddress = macTmp.toLowerCase();
 			if (mode === "ap") {
-				handleHotspotConn(macAddress, uuid);
+				void handleHotspotConn(macAddress, uuid);
 			} else if (mode === "infrastructure") {
 				if (macAddress && wifiInterfacesByMacAddress[macAddress]) {
 					wifiInterfacesByMacAddress[macAddress].saved[ssid] = uuid;
@@ -402,11 +403,21 @@ async function runWifiNew(
 		stdout: "pipe",
 		stderr: "pipe",
 	});
+	// bounded-command (spawn-policy): cap a hung nmcli connect at the wall-clock
+	// budget so a stuck join never leaves the request pending forever.
+	const killTimer = setTimeout(() => {
+		try {
+			proc.kill();
+		} catch {
+			// best-effort: the process may have already exited
+		}
+	}, DEFAULT_SPAWN_TIMEOUT_MS);
 	const [stdout, stderr] = await Promise.all([
 		new Response(proc.stdout).text(),
 		new Response(proc.stderr).text(),
 	]);
 	const exitCode = await proc.exited;
+	clearTimeout(killTimer);
 	const error = exitCode !== 0;
 
 	if (error || stdout.match("^Error:")) {
@@ -471,20 +482,20 @@ export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
 	for (const type in msg) {
 		switch (type) {
 			case "connect":
-				wifiConnect(
+				void wifiConnect(
 					conn,
 					extractMessage<WifiConnectMessage, typeof type>(msg, type),
 				);
 				break;
 
 			case "disconnect":
-				wifiDisconnect(
+				void wifiDisconnect(
 					extractMessage<WifiDisconnectMessage, typeof type>(msg, type),
 				);
 				break;
 
 			case "scan":
-				wifiRescan();
+				void wifiRescan();
 				break;
 
 			case "new":
@@ -492,7 +503,9 @@ export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
 				break;
 
 			case "forget":
-				wifiForget(extractMessage<WifiForgetMessage, typeof type>(msg, type));
+				void wifiForget(
+					extractMessage<WifiForgetMessage, typeof type>(msg, type),
+				);
 				break;
 
 			case "hotspot": {
@@ -501,11 +514,11 @@ export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
 					type,
 				);
 				if ("start" in hotspotMessage && hotspotMessage.start) {
-					wifiHotspotStart(hotspotMessage.start);
+					void wifiHotspotStart(hotspotMessage.start);
 				} else if ("stop" in hotspotMessage && hotspotMessage.stop) {
-					wifiHotspotStop(hotspotMessage.stop);
+					void wifiHotspotStop(hotspotMessage.stop);
 				} else if ("config" in hotspotMessage && hotspotMessage.config) {
-					wifiHotspotConfig(conn, hotspotMessage.config);
+					void wifiHotspotConfig(conn, hotspotMessage.config);
 				}
 				break;
 			}

@@ -86,7 +86,8 @@
 				"noDuplicateClassMembers": "error",
 				"noDuplicateObjectKeys": "error",
 				"noDuplicateParameters": "error",
-				"noEmptyBlockStatements": "off",
+				"noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } },
+				"noEmptyBlockStatements": "error",
 				"noExplicitAny": "warn",
 				"noExtraNonNullAssertion": "error",
 				"noFallthroughSwitchClause": "error",
@@ -101,6 +102,10 @@
 				"useGetterReturn": "error",
 				"noVar": "error",
 				"noWith": "error"
+			},
+
+			"nursery": {
+				"noFloatingPromises": "warn"
 			}
 		}
 	}

@@ -13,8 +13,17 @@
  */
 import type { AddonDescriptor, AddonState } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vitest";
 
+import { destroyAsyncOperations } from "$lib/rpc/async-operation.svelte";
 import type { AddonOpResult } from "$lib/rpc/client";
 import AddonsSection from "./AddonsSection.svelte";
 
@@ -104,6 +113,12 @@ function seedList(descriptors: AddonDescriptor[], board = "n100"): void {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+});
+
+afterEach(() => {
+	// Reset the keyed async-operation singleton so a lingering per-add-on phase
+	// never bleeds re-entry state into the next test.
+	destroyAsyncOperations();
 });
 
 describe("AddonsSection — board gating", () => {
@@ -200,5 +215,64 @@ describe("AddonsSection — docs panel", () => {
 
 		await screen.findByTestId("addon-card-bare");
 		expect(screen.queryByTestId("addon-docs-toggle-bare")).toBeNull();
+	});
+});
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((res) => {
+		resolve = res;
+	});
+	return { promise, resolve };
+}
+
+describe("AddonsSection — async state (osCommand)", () => {
+	it("shows in-flight (switch disabled), blocks re-entry, then settles on success", async () => {
+		const descriptor = makeDescriptor({ id: "media-pack" });
+		seedList([descriptor], "n100");
+		const d = deferred<AddonOpResult>();
+		rpcMocks.install.mockReturnValueOnce(d.promise);
+
+		render(AddonsSection, { props: { open: true } });
+		const sw = (await screen.findByTestId(
+			"addon-switch-media-pack",
+		)) as HTMLButtonElement;
+		expect(sw.disabled).toBe(false);
+
+		await fireEvent.click(sw); // dispatch 1 → in flight
+		await Promise.resolve();
+		expect(rpcMocks.install).toHaveBeenCalledOnce();
+		await waitFor(() => expect(sw.disabled).toBe(true));
+
+		// A re-entrant toggle while pending must not dispatch a second install.
+		await fireEvent.click(sw);
+		await Promise.resolve();
+		expect(rpcMocks.install).toHaveBeenCalledOnce();
+
+		d.resolve({ success: true } satisfies AddonOpResult);
+		await waitFor(() => expect(sw.disabled).toBe(false));
+		expect(screen.queryByTestId("addons-unavailable")).toBeNull();
+	});
+
+	it("surfaces the calm unavailable banner, reverts, and releases re-entry in emulated mode", async () => {
+		const descriptor = makeDescriptor({ id: "emu" });
+		seedList([descriptor], "n100");
+		rpcMocks.install.mockResolvedValue({
+			success: false,
+			error: "addon_unavailable_in_emulated_mode",
+		} satisfies AddonOpResult);
+
+		render(AddonsSection, { props: { open: true } });
+		const sw = (await screen.findByTestId(
+			"addon-switch-emu",
+		)) as HTMLButtonElement;
+
+		await fireEvent.click(sw);
+		await screen.findByTestId("addons-unavailable");
+		await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("false"));
+
+		// Re-entry released → a second toggle dispatches again.
+		await fireEvent.click(sw);
+		await waitFor(() => expect(rpcMocks.install).toHaveBeenCalledTimes(2));
 	});
 });

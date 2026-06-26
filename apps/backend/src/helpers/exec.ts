@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 import { logger } from "./logger.ts";
+import { DEFAULT_SPAWN_TIMEOUT_MS } from "./spawn-policy.ts";
 
 export type ExecResult = { stdout: string; stderr: string };
 
@@ -15,13 +16,16 @@ export const execP = async (cmd: string): Promise<ExecResult> => {
 
 // util.promisify(execFile) replacement: argv-only (NO shell) via Bun.spawn.
 // REJECTS on non-zero exit with an error carrying stdout/stderr/code, the shape
-// ssh.ts probeSshActive reads off the rejection.
+// ssh.ts probeSshActive reads off the rejection. Aborting `signal` kills the
+// child (run() maps that rejection to RunTimeoutError/RunAbortError).
 export const execFileP = async (
 	file: string,
 	args: readonly string[] = [],
-	opts?: { maxBuffer?: number },
+	opts?: { maxBuffer?: number; timeout?: number; signal?: AbortSignal },
 ): Promise<ExecResult> => {
 	const maxBuffer = opts?.maxBuffer ?? 1024 * 1024;
+	const timeout = opts?.timeout ?? DEFAULT_SPAWN_TIMEOUT_MS;
+	const signal = opts?.signal;
 
 	const proc = Bun.spawn([file, ...args], {
 		stdin: "ignore",
@@ -32,14 +36,39 @@ export const execFileP = async (
 	const kill = () => {
 		try {
 			proc.kill();
-		} catch {}
+		} catch {
+			// best-effort: the process may have already exited
+		}
 	};
 
-	const [stdout, stderr, code] = await Promise.all([
-		readCapped(proc.stdout, maxBuffer, kill),
-		readCapped(proc.stderr, maxBuffer, kill),
-		proc.exited,
-	]);
+	// bounded-command (spawn-policy): a hung one-shot is killed at the wall-clock
+	// budget so a stuck host binary can never wedge the call forever.
+	const timer = setTimeout(kill, timeout);
+
+	// An aborted signal kills the child (run()'s timeout/cancellation seam).
+	let onAbort: (() => void) | undefined;
+	if (signal) {
+		if (signal.aborted) {
+			kill();
+		} else {
+			onAbort = kill;
+			signal.addEventListener("abort", onAbort, { once: true });
+		}
+	}
+
+	let stdout: string;
+	let stderr: string;
+	let code: number;
+	try {
+		[stdout, stderr, code] = await Promise.all([
+			readCapped(proc.stdout, maxBuffer, kill),
+			readCapped(proc.stderr, maxBuffer, kill),
+			proc.exited,
+		]);
+	} finally {
+		clearTimeout(timer);
+		if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+	}
 
 	if (code !== 0) {
 		const err = new Error(
@@ -94,8 +123,20 @@ export async function execPNR(cmd: string) {
 	try {
 		const res = await execP(cmd);
 		return { stdout: res.stdout, stderr: res.stderr, code: 0 };
-	} catch (_err) {
-		return { stdout: "", stderr: "", code: 1 };
+	} catch (err) {
+		// Bun.$ throws on non-zero exit but the ShellError still carries the
+		// captured streams + real exit code: preserve them rather than blanking
+		// the output, and log so the failure is never silently swallowed.
+		const shellErr = err as {
+			stdout?: unknown;
+			stderr?: unknown;
+			exitCode?: unknown;
+		};
+		const stdout = shellErr.stdout != null ? String(shellErr.stdout) : "";
+		const stderr = shellErr.stderr != null ? String(shellErr.stderr) : "";
+		const code = typeof shellErr.exitCode === "number" ? shellErr.exitCode : 1;
+		logger.debug(`execPNR: command exited non-zero: ${cmd}`, { code, stderr });
+		return { stdout, stderr, code };
 	}
 }
 

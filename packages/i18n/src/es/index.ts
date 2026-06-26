@@ -701,7 +701,8 @@ const es = {
 			reasonProfileUnsupported: "Este receptor no ofrece este perfil.",
 			summaryDelay: "\u2248 {seconds} s de retardo",
 			summaryRecoveryStandard: "recuperación automática de pérdidas",
-			summaryRecoveryBandwidthSaver: "recuperación con ahorro de ancho de banda",
+			summaryRecoveryBandwidthSaver:
+				"recuperación con ahorro de ancho de banda",
 			summaryFecOn: "FEC activado",
 			summaryFecOff: "FEC desactivado",
 			cloudSetTitle: "Definido por la nube",

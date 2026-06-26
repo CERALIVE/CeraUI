@@ -226,19 +226,65 @@ function handleDeviceStateEvent(device: string, state: string): void {
 
 // ─── scan-result polling (RETAINED — scan + signal strength) ─────────────────
 
+type ParsedWifiScanRow = {
+	active: boolean;
+	bssid: string;
+	ssid: string;
+	signal: number;
+	security: string;
+	chan: number;
+};
+
+// Parse one nmcli `device wifi list` terse row. A malformed row would otherwise
+// store NaN signal/chan — a wrong value silently broadcast to the UI; instead we
+// log the raw row and return null (a typed "no result") so callers skip it.
+// Format: IN-USE:BSSID:SSID:MODE:CHAN:RATE:SIGNAL:BARS:SECURITY
+export function parseWifiScanRow(raw: string): ParsedWifiScanRow | null {
+	const [active, bssid, ssid, _mode, chan, _rate, signal, _bars, security] =
+		nmcliParseSep(raw) as [
+			string,
+			string,
+			string,
+			string,
+			string,
+			string,
+			string,
+			string,
+			string,
+		];
+
+	// An empty SSID is a hidden network, not a parse failure — skip it quietly.
+	if (ssid == null || ssid === "") return null;
+
+	const signalValue = Number.parseInt(signal ?? "", 10);
+	const chanValue = Number.parseInt(chan ?? "", 10);
+	if (Number.isNaN(signalValue) || Number.isNaN(chanValue)) {
+		logger.warn(
+			`wifiUpdateScanResult: skipping unparseable nmcli scan row: ${JSON.stringify(raw)}`,
+		);
+		return null;
+	}
+
+	return {
+		active: active === "*",
+		bssid: bssid ?? "",
+		ssid,
+		signal: signalValue,
+		security: security ?? "",
+		chan: chanValue,
+	};
+}
+
 export async function wifiUpdateScanResult() {
 	// Retry transient nmcli scan/list failures with exponential backoff (T7).
-	const wifiNetworks = await pollWithBackoff(
-		() => nmScanResults("active,ssid,signal,security,freq,device"),
-		{
-			maxAttempts: 3,
-			baseDelayMs: 200,
-			maxDelayMs: 1000,
-			emptyResultError: () => new Error("nmcli wifi list returned no results"),
-			onExhausted: (err) =>
-				logger.debug(`wifiUpdateScanResult: scan failed after retries: ${err}`),
-		},
-	);
+	const wifiNetworks = await pollWithBackoff(() => nmScanResults(), {
+		maxAttempts: 3,
+		baseDelayMs: 200,
+		maxDelayMs: 1000,
+		emptyResultError: () => new Error("nmcli wifi list returned no results"),
+		onExhausted: (err) =>
+			logger.debug(`wifiUpdateScanResult: scan failed after retries: ${err}`),
+	});
 	if (!wifiNetworks) return;
 
 	for (const wifiInterface of Object.values(wifiInterfacesByMacAddress)) {
@@ -246,29 +292,24 @@ export async function wifiUpdateScanResult() {
 	}
 
 	for (const wifiNetwork of wifiNetworks) {
-		const [active, ssid, signal, security, freq, device] = nmcliParseSep(
-			wifiNetwork,
-		) as [string, string, string, string, string, string];
+		const parsed = parseWifiScanRow(wifiNetwork);
+		if (!parsed) continue;
+		const { active, ssid, signal, security, chan } = parsed;
 
-		if (ssid == null || ssid === "") continue;
+		// All wifi interfaces see the same scan results. Add this network to every
+		// interface; the active flag indicates which interface is connected.
+		for (const wifiInterface of Object.values(wifiInterfacesByMacAddress)) {
+			if (!wifiInterface || (!active && wifiInterface.available.has(ssid)))
+				continue;
 
-		const macAddress = wifiDeviceListGetMacAddress(device);
-		if (!macAddress) continue;
-
-		const wifiInterface = wifiInterfacesByMacAddress[macAddress];
-		if (
-			!wifiInterface ||
-			(active !== "yes" && wifiInterface.available.has(ssid))
-		)
-			continue;
-
-		wifiInterface.available.set(ssid, {
-			active: active === "yes",
-			ssid,
-			signal: Number.parseInt(signal, 10),
-			security,
-			freq: Number.parseInt(freq, 10),
-		} satisfies WifiNetwork);
+			wifiInterface.available.set(ssid, {
+				active,
+				ssid,
+				signal,
+				security,
+				freq: chan,
+			} satisfies WifiNetwork);
+		}
 	}
 
 	// Update the cache and broadcast from the diff. Signal-only fluctuations do

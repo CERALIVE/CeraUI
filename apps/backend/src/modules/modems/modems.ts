@@ -142,7 +142,7 @@ async function handleModemConfig(
 		msg.network !== "" &&
 		modem.available_networks?.[msg.network];
 	if (newNetwork) {
-		setGsmOperatorName(msg.network, newNetwork.name);
+		void setGsmOperatorName(msg.network, newNetwork.name);
 	}
 
 	// Temporary config that we'll attempt to write
@@ -199,13 +199,13 @@ export function handleModems(conn: WebSocket, msg: ModemsMessage["modems"]) {
 	for (const type in msg) {
 		switch (type) {
 			case "config":
-				handleModemConfig(
+				void handleModemConfig(
 					conn,
 					extractMessage<ModemConfigMessage, typeof type>(msg, type),
 				);
 				break;
 			case "scan":
-				handleModemScan(
+				void handleModemScan(
 					conn,
 					extractMessage<ModemScanMessage, typeof type>(msg, type),
 				);

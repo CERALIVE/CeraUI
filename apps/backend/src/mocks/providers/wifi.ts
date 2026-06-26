@@ -283,12 +283,14 @@ function getMockWifiList(): string {
 		const signal = Math.round(getWifiSignal(network.ssid));
 		const active = network.active ? "*" : "";
 		// Format: IN-USE:BSSID:SSID:MODE:CHAN:RATE:SIGNAL:BARS:SECURITY
+		// BSSID colons are escaped to preserve field boundaries
 		const chan =
 			network.frequency > 5000
 				? Math.floor((network.frequency - 5000) / 5) + 36
 				: Math.floor((network.frequency - 2407) / 5);
+		const escapedBssid = network.bssid.replace(/:/g, "\\:");
 		networks.push(
-			`${active}:${network.bssid}:${network.ssid}:Infra:${chan}:540 Mbit/s:${signal}:▂▄▆█:${network.security}`,
+			`${active}:${escapedBssid}:${network.ssid}:Infra:${chan}:540 Mbit/s:${signal}:▂▄▆█:${network.security}`,
 		);
 	}
 

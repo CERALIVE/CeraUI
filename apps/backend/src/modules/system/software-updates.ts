@@ -26,7 +26,10 @@ import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { queueUpdateGw } from "../network/gateways.ts";
 import { setup } from "../setup.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
-import { notificationBroadcast } from "../ui/notifications.ts";
+import {
+	notificationBroadcast,
+	notificationRemove,
+} from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 /* Software updates */
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
@@ -201,11 +204,40 @@ function parseAptUpgradeSummary(stdout: string) {
 	return { upgradeCount, downloadSize, ceralivePackages };
 }
 
+// `apt-get dist-upgrade --assume-no` exits non-zero by design (it answers "no"),
+// so a non-zero code alone is not a failure — but a non-zero code WITH no stdout
+// means apt itself could not run (lock held, no network, missing binary). That is
+// operator-relevant: silently reporting "0 updates" would hide a broken updater.
+export function reportUpdateCheckFailure(upgrade: {
+	code: number;
+	stdout: string;
+	stderr: string;
+}): boolean {
+	if (upgrade.code !== 0 && upgrade.stdout.trim() === "") {
+		logger.error(
+			`Software update check failed: apt-get dist-upgrade exited ${upgrade.code}`,
+			{ stderr: upgrade.stderr },
+		);
+		notificationBroadcast(
+			"software_update_check_failed",
+			"warning",
+			"Couldn't check for software updates. The device will retry automatically.",
+			60,
+			false,
+			true,
+		);
+		return true;
+	}
+	notificationRemove("software_update_check_failed");
+	return false;
+}
+
 async function getSoftwareUpdateSize() {
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return "busy";
 
 	// First see if any packages can be upgraded by dist-upgrade
 	const upgrade = await execPNR("apt-get dist-upgrade --assume-no");
+	if (reportUpdateCheckFailure(upgrade)) return null;
 	let res = parseAptUpgradeSummary(upgrade.stdout);
 
 	// Otherwise, check if any packages have been held back (e.g. by dependencies changing)

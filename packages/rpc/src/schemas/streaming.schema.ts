@@ -96,9 +96,13 @@ export const bitrateInputSchema = z.object({
 });
 export type BitrateInput = z.infer<typeof bitrateInputSchema>;
 
-// Bitrate output schema — returns applied max_br after hardware clamp
+// Bitrate output schema — contains-envelope (S3): { success } plus the applied
+// bitrate (post hardware clamp) on success, or a structured error on failure.
+// Clients lock the slider to `applied`, never to the value they sent.
 export const bitrateOutputSchema = z.object({
-	max_br: z.number(),
+	success: z.boolean(),
+	applied: z.number().optional(),
+	error: z.object({ message: z.string() }).optional(),
 });
 export type BitrateOutput = z.infer<typeof bitrateOutputSchema>;
 

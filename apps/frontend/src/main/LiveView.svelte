@@ -31,13 +31,26 @@ import * as Card from '$lib/components/ui/card';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
-import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
+import {
+	confirmOperation,
+	failOperation,
+	osCommand,
+} from '$lib/rpc/async-operation.svelte';
+import {
+	markPending,
+	onRpcAppliedReactive,
+	onRpcResolved,
+} from '$lib/rpc/dirty-registry.svelte';
 import {
 	beginFieldSync,
 	markFieldApplied,
 	markFieldApplying,
 	markFieldFailed,
 } from '$lib/rpc/field-sync-state.svelte';
+import {
+	reconcileSwitchingInput,
+	resolveAppliedBitrate,
+} from '$lib/rpc/live-apply-reconcile';
 import {
 	buildServerSummary,
 	type Destination,
@@ -57,6 +70,7 @@ import {
 	getActiveInput,
 	getCapabilities,
 	getConfig,
+	getConnectionState,
 	getDevices,
 	getIsStreaming,
 	getLinkTelemetry,
@@ -154,6 +168,19 @@ const activeInput = $derived(getActiveInput());
 let selectedInput = $state<string | undefined>(undefined);
 let switchingInput = $state<string | undefined>(undefined);
 
+// Reconnect-aware reconciliation (Task 15): a live `switchInput` restarts the
+// pipeline, which can drop and replace the WebSocket — orphaning the in-flight
+// RPC so its `finally` never clears `switchingInput`. Watch the authoritative
+// connection state and, on the reconnect edge (→ connected), drop a stuck latch
+// so the picker reconciles to the server-reported `activeInput` instead of a
+// stale optimistic "switching" state.
+let prevConnection = $state(getConnectionState());
+$effect(() => {
+	const next = getConnectionState();
+	switchingInput = reconcileSwitchingInput(prevConnection, next, switchingInput);
+	prevConnection = next;
+});
+
 // Sole gate for the live audio-switch affordance (G2): the engine capability
 // flag, never a version string. False in Track 1, so audio sources render a
 // disabled "coming soon" affordance and can never be live-switched.
@@ -179,16 +206,31 @@ async function handleSwitchInput(inputId: string) {
 	}
 	switchingInput = inputId;
 	try {
-		const res = await rpc.streaming.switchInput({ input_id: inputId });
+		// The live input switch routes through the keyed async-operation machine
+		// (key 'switch-input') for the re-entry guard + in-flight `pending` phase.
+		// `classify` keeps every resolved verdict `ok` so osCommand never emits its
+		// generic toast — the picker keeps its nuanced switched/source-lost/failed
+		// feedback below — and we drive the confirmed/failed phase by hand. Only a
+		// thrown RPC toasts (via `failMessage`).
+		const res = await osCommand({
+			key: 'switch-input',
+			target: inputId,
+			rpc: () => rpc.streaming.switchInput({ input_id: inputId }),
+			classify: () => ({ ok: true }),
+			failMessage: () => $LL.live.inputPicker.switchFailed(),
+		});
+		if (!res) return; // re-entry no-op or a thrown RPC (osCommand already toasted)
 		if (res.success) {
+			confirmOperation('switch-input');
 			toast.success($LL.live.inputPicker.switched({ ms: res.gap_ms ?? 0 }));
-		} else if (res.error === SWITCH_INPUT_ERRORS.SOURCE_LOST) {
-			toast.error($LL.live.inputPicker.sourceLost());
 		} else {
-			toast.error($LL.live.inputPicker.switchFailed());
+			failOperation('switch-input', res.error ?? 'failed');
+			toast.error(
+				res.error === SWITCH_INPUT_ERRORS.SOURCE_LOST
+					? $LL.live.inputPicker.sourceLost()
+					: $LL.live.inputPicker.switchFailed(),
+			);
 		}
-	} catch {
-		toast.error($LL.live.inputPicker.switchFailed());
 	} finally {
 		switchingInput = undefined;
 	}
@@ -476,11 +518,23 @@ async function commitBitrate(kbps: number) {
 	// of the prior bitrate can't flicker the slider back; release after settle.
 	markPending('max_br', clamped);
 	try {
-		await rpc.streaming.setBitrate({ max_br: clamped });
-	} catch {
-		toast.error($LL.notifications.saveFailed());
-	} finally {
+		const res = await rpc.streaming.setBitrate({ max_br: clamped });
 		onRpcResolved('max_br');
+		// Release the field-lock to the SERVER-APPLIED value (T9 envelope), never
+		// the optimistic value we sent. On success:false reconcile to the last
+		// known server value so a rejected write never sticks on the slider.
+		const applied = resolveAppliedBitrate(res, clamped, config?.max_br);
+		onRpcAppliedReactive('max_br', applied);
+		bitrateDraft = applied;
+		if (!res.success) toast.error($LL.notifications.saveFailed());
+	} catch {
+		// RPC rejected: clear the optimistic lock and reconcile to server truth so
+		// the slider is never stuck on the unconfirmed optimistic value.
+		onRpcResolved('max_br');
+		const authoritative = config?.max_br ?? clamped;
+		onRpcAppliedReactive('max_br', authoritative);
+		bitrateDraft = authoritative;
+		toast.error($LL.notifications.saveFailed());
 	}
 }
 

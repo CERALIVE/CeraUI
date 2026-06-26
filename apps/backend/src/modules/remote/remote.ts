@@ -251,7 +251,7 @@ function handleRemote(conn: WebSocket, msg: RemoteMessage) {
 				break;
 			}
 			case "relays":
-				handleRemoteRelays(
+				void handleRemoteRelays(
 					extractMessage<ValidateRemoteRelaysMessage, typeof type>(msg, type),
 				);
 				break;
@@ -398,7 +398,7 @@ async function remoteConnect() {
 	});
 	remoteWs.on("open", function () {
 		if (!fromCache) {
-			dnsCacheValidate(endpointHost);
+			void dnsCacheValidate(endpointHost);
 		}
 
 		const config = getConfig();

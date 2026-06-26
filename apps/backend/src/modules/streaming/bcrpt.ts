@@ -31,6 +31,7 @@ import { dnsCacheResolve, dnsCacheValidate } from "../network/dns.ts";
 import { getNetworkInterfaces } from "../network/network-interfaces.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
 import { setup } from "../setup.ts";
+import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { getIsStreaming } from "./streaming.ts";
 import { bcrptExec } from "./streamloop.ts";
@@ -65,6 +66,22 @@ export function getAllRelaysRtt(): Record<string, number> {
 	}
 	// generate a copy to prevent external code modification
 	return { ...bcrptRelaysRtt };
+}
+
+// BCRPT down = bonded relay path down: operator-relevant, so notify, not log-only.
+export function notifyBcrptPermanentFailure(
+	detail: string,
+	err?: unknown,
+): void {
+	logger.error(`BCRPT permanently unavailable: ${detail}`, { err });
+	notificationBroadcast(
+		"bcrpt_failed",
+		"error",
+		"Bonded relay (BCRPT) is unavailable. Bonded relay streaming won't work until the device recovers or restarts.",
+		0,
+		true,
+		true,
+	);
 }
 
 export async function updateBcrptSourceIps() {
@@ -111,7 +128,7 @@ async function generateBcrptServerIpsFile() {
 				contents += `${addr}\n`;
 			}
 			if (!fromCache) {
-				dnsCacheValidate(server.addr);
+				void dnsCacheValidate(server.addr);
 			}
 		}
 	}
@@ -160,10 +177,11 @@ export async function startBcrpt() {
 
 		// Reset retry counter on successful config generation
 		bcrptRetryCount = 0;
-	} catch (_err) {
+	} catch (err) {
 		if (bcrptRetryCount >= MAX_BCRPT_RETRIES) {
-			logger.error(
-				`Failed to generate BCRPT config after ${MAX_BCRPT_RETRIES} attempts. Giving up.`,
+			notifyBcrptPermanentFailure(
+				`config generation failed after ${MAX_BCRPT_RETRIES} attempts`,
+				err,
 			);
 			return;
 		}
@@ -172,6 +190,7 @@ export async function startBcrpt() {
 		const delay = INITIAL_RETRY_DELAY * 2 ** (bcrptRetryCount - 1); // Exponential backoff
 		logger.warn(
 			`BCRPT config generation failed (attempt ${bcrptRetryCount}/${MAX_BCRPT_RETRIES}). Retrying in ${delay}ms...`,
+			{ err },
 		);
 		setTimeout(startBcrpt, delay);
 		return;
@@ -193,7 +212,7 @@ export async function startBcrpt() {
 			stderr: "pipe",
 		});
 	} catch (err) {
-		logger.error("bcrpt process error", { err });
+		notifyBcrptPermanentFailure("failed to spawn the BCRPT process", err);
 		return;
 	}
 
@@ -262,8 +281,8 @@ async function handleBcrptExit(proc: Bun.Subprocess<"ignore", "pipe", "pipe">) {
 		reason = `because of signal ${signal}`;
 	}
 	if (bcrptRetryCount >= MAX_BCRPT_RETRIES) {
-		logger.error(
-			`BCRPT process failed ${MAX_BCRPT_RETRIES} times. Stopping restart attempts.`,
+		notifyBcrptPermanentFailure(
+			`process exited ${reason} and failed ${MAX_BCRPT_RETRIES} times; not restarting`,
 		);
 		return;
 	}

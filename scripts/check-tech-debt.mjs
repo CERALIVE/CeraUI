@@ -240,6 +240,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
 	const rootArg = process.argv[2];
 	const result = checkTechDebt(rootArg ? { rootDir: rootArg } : {});
 	if (result.ok) {
+		// biome-ignore lint/suspicious/noConsole: CLI tool stdout is its result output
 		console.log(
 			`tech-debt OK — ${result.entryCount} register entr${result.entryCount === 1 ? 'y' : 'ies'}, ${result.openIds.size} open, no orphan markers.`,
 		);

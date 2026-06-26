@@ -59,7 +59,7 @@ test.describe('F3 manual QA — modem toggles, hotspot gate, staleness', () => {
 
 		// Proxy the app WS to the real backend. Record outgoing RPC paths and
 		// gate the server→client stream behind `frozen` (the staleness switch).
-		await page.routeWebSocket(/:(3002|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
 			const server = ws.connectToServer();
 			ws.onMessage((message) => {
 				try {

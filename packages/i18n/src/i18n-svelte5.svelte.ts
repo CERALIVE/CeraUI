@@ -321,7 +321,6 @@ async function updateTranslations(newLocale: Locales): Promise<void> {
 						[],
 					);
 					notifyLLSubscribers();
-					console.log("✅ Fallback to English successful");
 				}
 			}
 		} catch (fallbackError) {
@@ -371,7 +370,6 @@ export async function setLocale(newLocale: Locales): Promise<boolean> {
 
 		// Update translations
 		await updateTranslations(newLocale);
-		console.log(`✅ Locale changed to: ${newLocale}`);
 		return true;
 	} catch (error) {
 		const errorMessage =

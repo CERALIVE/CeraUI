@@ -49,6 +49,7 @@ import {
 	markPending,
 	onRpcAppliedReactive,
 	onRpcResolved,
+	resolveFieldLockTtlMs,
 } from "./dirty-registry.svelte";
 
 // ============================================
@@ -232,13 +233,17 @@ export function clearField(registry: SyncRegistry, field: string): void {
  *    {@link TERMINAL_LINGER_MS} so its confirmation/error affordance registers,
  *    then clears.
  */
-export function sweepSync(registry: SyncRegistry, now: number): string[] {
+export function sweepSync(
+	registry: SyncRegistry,
+	now: number,
+	ttlMs: number = FIELD_LOCK_TTL_MS,
+): string[] {
 	const released: string[] = [];
 	for (const field of Object.keys(registry.fields)) {
 		const entry = registry.fields[field];
 		if (!entry) continue;
 		const age = now - entry.ts;
-		const stuck = IN_FLIGHT.has(entry.state) && age > FIELD_LOCK_TTL_MS;
+		const stuck = IN_FLIGHT.has(entry.state) && age > ttlMs;
 		const decayed = TERMINAL.has(entry.state) && age > TERMINAL_LINGER_MS;
 		if (stuck || decayed) {
 			delete registry.fields[field];
@@ -310,7 +315,7 @@ function createSyncStore(): SyncStore {
 	const stopRoot = $effect.root(() => {
 		$effect(() => {
 			const tick = setInterval(() => {
-				sweepSync(registry, Date.now());
+				sweepSync(registry, Date.now(), resolveFieldLockTtlMs());
 			}, TICK_INTERVAL_MS);
 			return () => clearInterval(tick);
 		});
@@ -342,7 +347,8 @@ function createSyncStore(): SyncStore {
 			onRpcAppliedReactive(field, authoritativeValue, now);
 			markFailed(registry, field, now);
 		},
-		sweep: (now = Date.now()) => sweepSync(registry, now),
+		sweep: (now = Date.now()) =>
+			sweepSync(registry, now, resolveFieldLockTtlMs()),
 		destroy: () => {
 			stopRoot();
 		},

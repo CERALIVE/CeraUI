@@ -20,7 +20,7 @@ test.describe("@visual source education affordances", () => {
 		pageWs = null;
 		// Proxy the WS so the spec can inject snapshots (config to clear the Live
 		// empty state; a capabilities tier flag) on top of the live mock stream.
-		await page.routeWebSocket(/:(3002|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));

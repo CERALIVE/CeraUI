@@ -82,7 +82,7 @@ export function updateStatus(status: boolean) {
 		broadcastMsg("status", { is_streaming: isStreaming });
 
 		// Clear out the BCRP server list on start, and re-populate it on stop
-		updateBcrptServerIps();
+		void updateBcrptServerIps();
 
 		return true;
 	}
