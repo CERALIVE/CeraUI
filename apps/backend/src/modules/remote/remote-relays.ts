@@ -348,6 +348,6 @@ export async function handleRemoteRelays(
 			saveConfig();
 			broadcastMsg("config", getConfig());
 		}
-		updateBcrptServerConfig();
+		void updateBcrptServerConfig();
 	}
 }

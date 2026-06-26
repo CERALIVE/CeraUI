@@ -284,10 +284,10 @@ export async function wifiUpdateSavedConns() {
 				continue;
 			}
 
-			const macAddress = macTmp.toLowerCase();
-			if (mode === "ap") {
-				handleHotspotConn(macAddress, uuid);
-			} else if (mode === "infrastructure") {
+		const macAddress = macTmp.toLowerCase();
+		if (mode === "ap") {
+			void handleHotspotConn(macAddress, uuid);
+		} else if (mode === "infrastructure") {
 				if (macAddress && wifiInterfacesByMacAddress[macAddress]) {
 					wifiInterfacesByMacAddress[macAddress].saved[ssid] = uuid;
 				}
@@ -482,20 +482,20 @@ export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
 	for (const type in msg) {
 		switch (type) {
 			case "connect":
-				wifiConnect(
+				void wifiConnect(
 					conn,
 					extractMessage<WifiConnectMessage, typeof type>(msg, type),
 				);
 				break;
 
 			case "disconnect":
-				wifiDisconnect(
+				void wifiDisconnect(
 					extractMessage<WifiDisconnectMessage, typeof type>(msg, type),
 				);
 				break;
 
 			case "scan":
-				wifiRescan();
+				void wifiRescan();
 				break;
 
 			case "new":
@@ -503,7 +503,7 @@ export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
 				break;
 
 			case "forget":
-				wifiForget(extractMessage<WifiForgetMessage, typeof type>(msg, type));
+				void wifiForget(extractMessage<WifiForgetMessage, typeof type>(msg, type));
 				break;
 
 			case "hotspot": {
@@ -511,13 +511,13 @@ export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
 					msg,
 					type,
 				);
-				if ("start" in hotspotMessage && hotspotMessage.start) {
-					wifiHotspotStart(hotspotMessage.start);
-				} else if ("stop" in hotspotMessage && hotspotMessage.stop) {
-					wifiHotspotStop(hotspotMessage.stop);
-				} else if ("config" in hotspotMessage && hotspotMessage.config) {
-					wifiHotspotConfig(conn, hotspotMessage.config);
-				}
+			if ("start" in hotspotMessage && hotspotMessage.start) {
+				void wifiHotspotStart(hotspotMessage.start);
+			} else if ("stop" in hotspotMessage && hotspotMessage.stop) {
+				void wifiHotspotStop(hotspotMessage.stop);
+			} else if ("config" in hotspotMessage && hotspotMessage.config) {
+				void wifiHotspotConfig(conn, hotspotMessage.config);
+			}
 				break;
 			}
 		}

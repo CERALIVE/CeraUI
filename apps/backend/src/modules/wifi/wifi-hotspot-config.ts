@@ -94,7 +94,7 @@ async function stopHotspotLocked(
 	setNetifDupIpSuppression(wifiInterface.ifname, false);
 	broadcastWifiState();
 	syncWifiStateCache(macAddress, wifiInterface);
-	wifiRescan();
+	void wifiRescan();
 }
 
 // ─── config ──────────────────────────────────────────────────────────────────

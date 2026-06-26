@@ -127,9 +127,9 @@ async function generateBcrptServerIpsFile() {
 				bcrptIpsToRelays[addr] = s;
 				contents += `${addr}\n`;
 			}
-			if (!fromCache) {
-				dnsCacheValidate(server.addr);
-			}
+		if (!fromCache) {
+			void dnsCacheValidate(server.addr);
+		}
 		}
 	}
 
