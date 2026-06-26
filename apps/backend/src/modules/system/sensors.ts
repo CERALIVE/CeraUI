@@ -180,11 +180,11 @@ export function initHardwareMonitoring() {
 			const rtmpIngestStats = getRTMPIngestStats();
 			Object.assign(data, rtmpIngestStats);
 
-		broadcastMsg("sensors", data, getms() - ACTIVE_TO);
-	};
+			broadcastMsg("sensors", data, getms() - ACTIVE_TO);
+		};
 
-	void updateSensors();
-	setInterval(updateSensors, 1000);
+		void updateSensors();
+		setInterval(updateSensors, 1000);
 	}
 
 	/* Hardware-specific monitoring */
@@ -216,11 +216,11 @@ export function initHardwareMonitoring() {
 						);
 					}
 				}
-		})(); // dmesg
+			})(); // dmesg
 
-		/* Show an alert while ceralive-firstboot-bootconfig is active */
-		void monitorBootconfig();
-		break;
+			/* Show an alert while ceralive-firstboot-bootconfig is active */
+			void monitorBootconfig();
+			break;
 		}
 
 		case "rk3588": {

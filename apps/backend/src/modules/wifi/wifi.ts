@@ -284,10 +284,10 @@ export async function wifiUpdateSavedConns() {
 				continue;
 			}
 
-		const macAddress = macTmp.toLowerCase();
-		if (mode === "ap") {
-			void handleHotspotConn(macAddress, uuid);
-		} else if (mode === "infrastructure") {
+			const macAddress = macTmp.toLowerCase();
+			if (mode === "ap") {
+				void handleHotspotConn(macAddress, uuid);
+			} else if (mode === "infrastructure") {
 				if (macAddress && wifiInterfacesByMacAddress[macAddress]) {
 					wifiInterfacesByMacAddress[macAddress].saved[ssid] = uuid;
 				}
@@ -503,7 +503,9 @@ export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
 				break;
 
 			case "forget":
-				void wifiForget(extractMessage<WifiForgetMessage, typeof type>(msg, type));
+				void wifiForget(
+					extractMessage<WifiForgetMessage, typeof type>(msg, type),
+				);
 				break;
 
 			case "hotspot": {
@@ -511,13 +513,13 @@ export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
 					msg,
 					type,
 				);
-			if ("start" in hotspotMessage && hotspotMessage.start) {
-				void wifiHotspotStart(hotspotMessage.start);
-			} else if ("stop" in hotspotMessage && hotspotMessage.stop) {
-				void wifiHotspotStop(hotspotMessage.stop);
-			} else if ("config" in hotspotMessage && hotspotMessage.config) {
-				void wifiHotspotConfig(conn, hotspotMessage.config);
-			}
+				if ("start" in hotspotMessage && hotspotMessage.start) {
+					void wifiHotspotStart(hotspotMessage.start);
+				} else if ("stop" in hotspotMessage && hotspotMessage.stop) {
+					void wifiHotspotStop(hotspotMessage.stop);
+				} else if ("config" in hotspotMessage && hotspotMessage.config) {
+					void wifiHotspotConfig(conn, hotspotMessage.config);
+				}
 				break;
 			}
 		}

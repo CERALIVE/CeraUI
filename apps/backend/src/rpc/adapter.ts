@@ -187,12 +187,12 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 			const messageStr = typeof data === "string" ? data : data.toString();
 			const message = parseMessage(messageStr, ws);
 
-		if (!message) {
-			// Keepalive messages return null, which is expected
-			return;
-		}
+			if (!message) {
+				// Keepalive messages return null, which is expected
+				return;
+			}
 
-		void handleORPCMessage(ws, message);
+			void handleORPCMessage(ws, message);
 		},
 
 		close(ws: AppWebSocket, code: number, reason: string) {

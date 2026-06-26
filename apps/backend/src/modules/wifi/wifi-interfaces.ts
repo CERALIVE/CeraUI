@@ -228,11 +228,11 @@ export async function wifiUpdateDevices() {
 			}
 		}
 
-	if (hotspotCount) {
-		triggerNetworkInterfacesChange();
-		// Remove hotspot IPs from the source IP address list for BCRPT
-		void updateBcrptSourceIps();
-	}
+		if (hotspotCount) {
+			triggerNetworkInterfacesChange();
+			// Remove hotspot IPs from the source IP address list for BCRPT
+			void updateBcrptSourceIps();
+		}
 	}
 	logger.debug("Wifi interfaces", wifiInterfacesByMacAddress);
 
