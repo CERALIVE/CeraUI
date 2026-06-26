@@ -27,7 +27,7 @@ import { evidencePath, navigateTo } from "./helpers";
  * MOCK_SCENARIO. Frontend (Vite :6173) is started by playwright.config.
  */
 
-const FAKE_ERR = "drop+fake: simulated setAutostart failure";
+const FAKE_ERR = "Couldn't change autostart. Please try again.";
 
 const TOKEN: string = (() => {
 	const tokensPath = path.resolve(

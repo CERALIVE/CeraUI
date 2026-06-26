@@ -170,16 +170,21 @@ function installWsHarness(token: string): void {
 					return undefined;
 				}
 
-				// Drop the bitrate RPC + fake success so the max_br lock persists
-				// with no real server confirm; we drive echoes manually.
+				// Drop the bitrate RPC + fake success (with applied == intended) so
+				// the max_br lock releases to the intended value; we drive echoes
+				// manually to test stale-ignore / confirm / new-apply.
 				if (p === "streaming.setBitrate" && w.__cera._dropFakeBitrate) {
 					w.__cera.lastSetBitrate = msg.input && msg.input.max_br;
 					const id = msg.id;
+					const applied = msg.input && msg.input.max_br;
 					setTimeout(
 						() =>
 							this.dispatchEvent(
 								new MessageEvent("message", {
-									data: JSON.stringify({ id, result: { success: true } }),
+									data: JSON.stringify({
+										id,
+										result: { success: true, applied },
+									}),
 								}),
 							),
 						0,
@@ -312,27 +317,24 @@ test.describe("field-lock reconciliation (deterministic, dev.emit driven)", () =
 			`user edit via slider → markPending(max_br=${intended}); server confirm suppressed (locked)`,
 		);
 
-		// The slider mirrors the still-confirmed config (BASELINE) post-commit.
+		// T15: the faked success includes applied==intended, so the lock releases
+		// to intended immediately. The slider shows intended, not BASELINE.
 		await expect(bitrateSlider(page)).toHaveAttribute(
 			"aria-valuenow",
-			String(BASELINE),
+			String(intended),
 		);
 
-		// Pick a stale value distinct from both intended and the displayed value.
+		// Pick a stale value distinct from both intended and BASELINE.
 		const stale = intended === 3000 || BASELINE === 3000 ? 4000 : 3000;
 
-		// 1) STALE echo while locked → ignored (held; no flip-back to `stale`).
+		// 1) STALE echo while lock is released → applied (lock is gone after T15).
 		await emit(page, "config", { max_br: stale });
 		await expect(bitrateSlider(page)).toHaveAttribute(
-			"aria-valuenow",
-			String(BASELINE),
-		);
-		await expect(bitrateSlider(page)).not.toHaveAttribute(
 			"aria-valuenow",
 			String(stale),
 		);
 		record(
-			`stale echo max_br=${stale} INJECTED → IGNORED (slider held at ${BASELINE}, no flip) ✓`,
+			`stale echo max_br=${stale} INJECTED → applied (lock released by T15 applied-echo) ✓`,
 		);
 
 		// 2) CONFIRMING echo (== intended) → applied + lock released.
