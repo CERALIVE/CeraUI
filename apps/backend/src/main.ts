@@ -125,7 +125,7 @@ checkExecPath(bcrptExec);
 await runCritical("config", loadConfig);
 logger.info(bootTimer.phase("🔧", "config"));
 
-initRemote();
+void initRemote();
 
 // CRITICAL: bind the WS control server FIRST — before any non-critical init that
 // could fail OR hang. It is the operator's only lifeline to the device, so it
@@ -179,7 +179,7 @@ initSRTIngest();
 void getSshStatus();
 logger.info(bootTimer.phase("🖥️", "hardware"));
 
-updateGwWrapper();
+void updateGwWrapper();
 setInterval(updateGwWrapper, UPDATE_GW_INT);
 
 if (setup.apt_update_enabled) {
@@ -204,16 +204,16 @@ void initModemUpdateLoop({ monitor: networkMonitor });
 logger.info(bootTimer.phase("🌐", "network"));
 
 // check for Cam Links on USB2 at startup
-checkCamlinkUsb2();
+void checkCamlinkUsb2();
 
-updateAudioDevices();
+void updateAudioDevices();
 // Live device list: inotify on the sound dir (+ debounce), polling fallback only
 // while streaming. The SIGUSR2 udev hook below stays as a belt-and-suspenders path.
 startAudioDeviceWatcher(() => getStreamingProcesses().length > 0);
 // Hotplug input discovery (Task 34): v4l2 + unified audio scan, broadcasts the
 // `devices` payload that feeds the cerastream picker + live switch-input RPC.
 startDeviceDiscovery();
-startBcrpt();
+void startBcrpt();
 logger.info(bootTimer.phase("🎵", "audio & devices"));
 
 // Don't autostart when restarting CeraLive after a software update or after a crash
@@ -225,13 +225,13 @@ logger.info(bootTimer.phase("🎵", "audio & devices"));
 */
 process.on("SIGUSR2", function udevDeviceUpdate() {
 	logger.error("SIGUSR2");
-	checkCamlinkUsb2();
-	updateAudioDevices();
+	void checkCamlinkUsb2();
+	void updateAudioDevices();
 });
 
 // make sure we didn't inherit orphan processes (cerastream is systemd-owned and
 // never spawned by CeraUI, so only srtla_send needs the orphan sweep)
-killall(["srtla_send"]);
+void killall(["srtla_send"]);
 
 // Server→client heartbeat: periodic app-level ping for half-open detection
 startHeartbeat();
@@ -248,7 +248,7 @@ onHeartbeatTick(broadcastLinkTelemetryIfChanged);
 startTelemetryRecorder();
 onHeartbeatTick(recordTelemetryTick);
 
-checkAutoStartStream();
+void checkAutoStartStream();
 
 // Engine protocol-compatibility probe (T-skew): fire-and-forget. A protocol-major
 // mismatch (e.g. a newer engine .deb against older baked-in bindings) raises a

@@ -324,7 +324,7 @@ export function processIfconfigOutput(stdout: string) {
 
 	if (intsChanged) {
 		triggerNetworkInterfacesChange();
-		updateBcrptSourceIps();
+		void updateBcrptSourceIps();
 	}
 
 	// Reconcile + broadcast (covers throughput-only deltas too); no-op when the

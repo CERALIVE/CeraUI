@@ -128,7 +128,7 @@ export async function setDefaultRoute(
 
 export function queueUpdateGw() {
 	updateGwQueue = true;
-	updateGwWrapper();
+	void updateGwWrapper();
 }
 
 async function updateGw() {
@@ -145,7 +145,7 @@ async function updateGw() {
 
 	for (const addr of addrs) {
 		if (await checkConnectivity(addr)) {
-			if (!fromCache) dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
+			if (!fromCache) void dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
 
 			logger.info("Internet reachable via the default route");
 			notificationRemove("no_internet");
@@ -183,7 +183,7 @@ async function updateGw() {
 			);
 			if (await checkConnectivity(addr, networkInterface.ip)) {
 				logger.info(`Internet reachable via ${i} (${networkInterface.ip})`);
-				if (!fromCache) dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
+				if (!fromCache) void dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
 
 				goodIf = i;
 				break;

@@ -189,6 +189,6 @@ describe('isAudioLiveSwitchEnabled selector', () => {
 
 	test('returns false when caps is null or undefined', () => {
 		expect(isAudioLiveSwitchEnabled(undefined)).toBe(false);
-		expect(isAudioLiveSwitchEnabled(null as any)).toBe(false);
+		expect(isAudioLiveSwitchEnabled(null as unknown)).toBe(false);
 	});
 });

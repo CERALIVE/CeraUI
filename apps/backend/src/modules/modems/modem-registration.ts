@@ -148,7 +148,7 @@ async function connectModemIfNeededAndPossible(modem: Modem, modemId: number) {
 			logger.info(
 				`Trying to bring up connection ${modem.config.conn} for modem ${modemId}...`,
 			);
-			nmConnect(modem.config.conn);
+			void nmConnect(modem.config.conn);
 		}
 	}
 }

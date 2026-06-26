@@ -130,7 +130,6 @@ test('LogsDialog downloads a real, observable backend journal', async ({ page })
 	expect(systemLog.length).toBeGreaterThan(0);
 
 	fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
-	await page.screenshot({ path: path.join(EVIDENCE_DIR, 'task-13-logs-dialog.png') });
 	fs.writeFileSync(
 		path.join(EVIDENCE_DIR, 'task-13-logs-dialog.txt'),
 		[
