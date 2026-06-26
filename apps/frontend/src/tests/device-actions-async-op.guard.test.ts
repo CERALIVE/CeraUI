@@ -106,6 +106,7 @@ const DEVICE_ACTIONS: readonly DeviceAction[] = [
 		name: "Add-on enable/disable",
 		key: "addon:<id>",
 		file: ADDONS_SECTION,
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: intentional — this string is a grep pattern, not a template literal
 		mustContain: ["osCommand(", "key: `addon:${id}`"],
 	},
 ] as const;
