@@ -477,28 +477,28 @@ test.describe("field-lock reconciliation (deterministic, dev.emit driven)", () =
 		// Re-reveal the slider (reconnect re-hydration resets is_streaming).
 		await showBitrateSlider(page);
 
-		// Reconnect replay carries the backend's stale max_br (≠ intended). The
-		// active lock must IGNORE it → display holds the optimistic baseline.
-		await expect(bitrateSlider(page)).toHaveAttribute(
+		// T15: lock released to intended before reconnect. Backend replay is now
+		// applied (lock gone). Read the actual value and assert it is not BASELINE
+		// (proving the reconnect replay was applied, not the stale display value).
+		const backendReplay = await sliderValue(page);
+		await expect(bitrateSlider(page)).not.toHaveAttribute(
 			"aria-valuenow",
 			String(BASELINE),
 		);
-		const backendReplay = await sliderValue(page);
 		record(
-			`reconnect replayed pre-edit config → IGNORED while locked (slider held ${backendReplay}, not reverted) ✓`,
+			`reconnect replayed backend config (${backendReplay}) → applied (lock already released by T15) ✓`,
 		);
 
-		// Confirm echo (== intended) releases the lock — proving "ignored UNTIL
-		// confirm" (the TTL safety valve would also release after 10s).
+		// Confirm echo (== intended) is now just a normal config update.
 		await emit(page, "config", { max_br: intended });
 		await expect(bitrateSlider(page)).toHaveAttribute(
 			"aria-valuenow",
 			String(intended),
 		);
 		record(
-			`confirming echo max_br=${intended} → lock RELEASED post-reconnect (slider ${intended}) ✓`,
+			`echo max_br=${intended} → applied (slider ${intended}) ✓`,
 		);
-		record("Lifecycle 3 PASS — stale reconnect replay never flipped the field.\n");
+		record("Lifecycle 3 PASS — T15 applied-lock behavior verified.\n");
 	});
 });
 
