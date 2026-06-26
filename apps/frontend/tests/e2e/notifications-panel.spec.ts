@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page, test } from './fixtures/index.js';
 
 import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
 
@@ -37,7 +37,6 @@ const TOKEN: string = (() => {
 	return tokens[0];
 })();
 
-test.describe.configure({ mode: 'serial' });
 
 const evidence = new Map<string, string[]>();
 function record(file: string, line: string): void {

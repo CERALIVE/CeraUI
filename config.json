@@ -1,11 +1,1 @@
-{
-	"kiosk_enabled": false,
-	"kiosk_last_state": "disabled",
-	"kiosk_display": "lcd",
-	"kiosk_touch": true,
-	"kiosk_motion": true,
-	"kiosk_performance": "balanced",
-	"pairing_secret": "hi0i1xdKX6UkdwI9x1rG5HkKUfJLSDQXCLels9gORME=",
-	"max_br": 3000,
-	"relay_protocol": "srtla"
-}
+{"kiosk_enabled":true,"kiosk_last_state":"enabled-stopped","kiosk_display":"lcd","kiosk_touch":true,"kiosk_motion":true,"kiosk_performance":"balanced","pairing_secret":"y0gk2t2qU6MZsaT4nu0iN/ew6MkZkmnMqyLcHo83P+8=","max_br":3000,"relay_protocol":"srtla","fec_enabled":true,"recovery_mode":"bandwidth-saver"}

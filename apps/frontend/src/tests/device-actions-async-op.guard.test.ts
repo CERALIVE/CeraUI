@@ -140,19 +140,22 @@ describe("S7 device-mutation async-op guard", () => {
 		);
 	});
 
-	it.each(DEVICE_ACTIONS)(
-		"$name ($key) registers an async-op via osCommand in $file",
-		({ key, file, mustContain }) => {
-			const src = readSource(file);
-			for (const token of mustContain) {
-				expect(
-					src.includes(token),
-					`Device-mutation action "${key}" must register an async-op in ${file} ` +
-						`(missing token: ${token}). S7 (docs/STANDARDS-CHARTER.md) requires every ` +
-						`device-mutation action to dispatch through osCommand so the operator gets ` +
-						`the in-flight pending phase, the re-entry guard, and the single failure toast.`,
-				).toBe(true);
-			}
-		},
-	);
+	it.each(
+		DEVICE_ACTIONS,
+	)("$name ($key) registers an async-op via osCommand in $file", ({
+		key,
+		file,
+		mustContain,
+	}) => {
+		const src = readSource(file);
+		for (const token of mustContain) {
+			expect(
+				src.includes(token),
+				`Device-mutation action "${key}" must register an async-op in ${file} ` +
+					`(missing token: ${token}). S7 (docs/STANDARDS-CHARTER.md) requires every ` +
+					`device-mutation action to dispatch through osCommand so the operator gets ` +
+					`the in-flight pending phase, the re-entry guard, and the single failure toast.`,
+			).toBe(true);
+		}
+	});
 });

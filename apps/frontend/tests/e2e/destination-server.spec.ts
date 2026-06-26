@@ -58,9 +58,8 @@ function writeEvidence(fileName: string, lines: string[]): void {
 }
 
 test.describe('destination-first ServerDialog — desktop flows', () => {
-	// These tests persist config to the shared mock backend; serialise them so
-	// they never race each other on the single config.json.
-	test.describe.configure({ mode: 'serial' });
+	// These tests persist config, but each Playwright worker now owns an isolated
+	// mock backend (own config.json), so they run in parallel without racing.
 
 	test.beforeEach(({ browserName }, testInfo) => {
 		test.skip(browserName !== 'chromium', 'single-browser integration proof');
@@ -168,7 +167,7 @@ test.describe('destination-first ServerDialog — desktop flows', () => {
 		//    managed→custom limitation), and the shared mock backend is mutated by
 		//    sibling specs, so without this the chip could read a stale relay_server.
 		let forceFail = false;
-		await page.routeWebSocket(/:(3002|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
 			const server = ws.connectToServer();
 			ws.onMessage((m) => {
 				const text = typeof m === 'string' ? m : m.toString();

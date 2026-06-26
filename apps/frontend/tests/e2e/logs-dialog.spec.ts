@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures/index.js';
 
 import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
 
@@ -68,7 +68,7 @@ function installWsHarness(opts: { token: string }): void {
 }
 
 /** Fire a backend `system.getLog` request the backend rejects + traces as err. */
-function triggerRejectedLogRequest(page: import('@playwright/test').Page, service: string) {
+function triggerRejectedLogRequest(page: import('./fixtures/index.js').Page, service: string) {
 	return page.evaluate(async (svc) => {
 		const mod = await import(/* @vite-ignore */ '/src/lib/rpc/client.ts');
 		try {
@@ -79,7 +79,7 @@ function triggerRejectedLogRequest(page: import('@playwright/test').Page, servic
 	}, service);
 }
 
-async function readDownload(download: import('@playwright/test').Download): Promise<string> {
+async function readDownload(download: import('./fixtures/index.js').Download): Promise<string> {
 	const file = await download.path();
 	if (!file) throw new Error('download produced no file');
 	return fs.readFileSync(file, 'utf8');

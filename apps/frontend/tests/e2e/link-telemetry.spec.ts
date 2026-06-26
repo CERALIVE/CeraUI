@@ -74,7 +74,7 @@ test.describe("Task 22 — link telemetry", () => {
 
 		// Proxy the WS: forward everything, but drop the backend's own
 		// `linkTelemetry` (always null under the mock) so injected frames win.
-		await page.routeWebSocket(/:(3002|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));

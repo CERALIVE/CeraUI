@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures/index.js";
 
 import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers";
 
@@ -160,7 +160,6 @@ function reBroadcastLocked(
 	);
 }
 
-test.describe.configure({ mode: "serial" });
 
 test.describe(
 	"sim unlock surface — inline error persists across a modems re-broadcast",

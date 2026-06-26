@@ -37,7 +37,7 @@ test.describe('data-previsualization sweep', () => {
 		// the server→client stream so the view stays mounted while frames stop
 		// (drives the staleness path without an auth-resetting socket close).
 		let frozen = false;
-		await page.routeWebSocket(/:(3002|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));
 			server.onMessage((m) => {

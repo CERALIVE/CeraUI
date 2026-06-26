@@ -48,7 +48,7 @@ interface WsHandle {
 async function attachWs(page: Page, hooks: WsHooks): Promise<WsHandle> {
 	let route: WebSocketRoute | null = null;
 
-	await page.routeWebSocket(/:(3002|8090|8091)\//, (ws) => {
+	await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
 		route = ws;
 		const server = ws.connectToServer();
 

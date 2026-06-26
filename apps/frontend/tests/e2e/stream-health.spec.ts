@@ -66,7 +66,6 @@ async function driveHealth(page: Page, state: string): Promise<void> {
 		.toBe(state);
 }
 
-test.describe.configure({ mode: "serial" });
 
 test.describe("stream-health HUD surfacing (dev.emit driven)", () => {
 	test.skip(({ browserName }) => browserName !== "chromium", "single-browser integration proof");

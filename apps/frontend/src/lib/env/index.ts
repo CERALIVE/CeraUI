@@ -105,6 +105,37 @@ function browserLocation(): SocketLocation | undefined {
 }
 
 /**
+ * E2E per-worker backend routing seam (dev-only). The Playwright harness spawns
+ * ONE mock backend per worker on a unique port and sets `window.__ceraSocketPort`
+ * via an `addInitScript` BEFORE the app boots, so each worker's browser dials its
+ * OWN isolated backend instead of a single shared instance. Returns the port as
+ * the string shape `resolveSocketUrl` expects, or `undefined` when unset/invalid.
+ *
+ * This is consulted ONLY inside the `import.meta.env.DEV` branch of
+ * `getSocketUrl`, so a production build folds it out entirely — the global is
+ * never read on a device. Pure (window-like injected) so it is unit-testable.
+ */
+export function resolveRuntimePortOverride(
+	win: { __ceraSocketPort?: unknown } | undefined,
+): string | undefined {
+	const raw = win?.__ceraSocketPort;
+	if (typeof raw === "number" && Number.isInteger(raw) && raw > 0) {
+		return String(raw);
+	}
+	if (typeof raw === "string" && /^\d+$/.test(raw)) {
+		return raw;
+	}
+	return undefined;
+}
+
+function runtimePortOverride(): string | undefined {
+	if (typeof window === "undefined") {
+		return undefined;
+	}
+	return resolveRuntimePortOverride(window as { __ceraSocketPort?: unknown });
+}
+
+/**
  * The RPC WebSocket URL for the current environment. Single source of truth —
  * every WebSocket consumer (rpc/client, websocket-store) routes through this.
  */
@@ -119,7 +150,7 @@ export function getSocketUrl(): string {
 			? import.meta.env.VITE_SOCKET_ENDPOINT
 			: undefined,
 		portOverride: import.meta.env.DEV
-			? import.meta.env.VITE_SOCKET_PORT
+			? (runtimePortOverride() ?? import.meta.env.VITE_SOCKET_PORT)
 			: undefined,
 	});
 }

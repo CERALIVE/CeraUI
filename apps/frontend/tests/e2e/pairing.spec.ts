@@ -18,9 +18,9 @@
  */
 import fs from 'node:fs';
 
-import { expect, type Page, test as base } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
-import { test } from './fixtures/index.js';
+import { expect, test } from './fixtures/index.js';
 import { evidencePath } from './helpers/index.js';
 import { SettingsPage } from './pages/settings.js';
 
@@ -163,11 +163,11 @@ function installPairingHarness(token: string): void {
 	}
 }
 
-base.describe('Device pairing fail paths (WS harness)', () => {
-	base.skip(({ browserName }) => browserName !== 'chromium', 'single-browser harness proof');
+test.describe('Device pairing fail paths (WS harness)', () => {
+	test.skip(({ browserName }) => browserName !== 'chromium', 'single-browser harness proof');
 
-	base.beforeEach(async ({ page }, testInfo) => {
-		base.skip(testInfo.project.name !== 'desktop', 'desktop layout drives the pairing dialog');
+	test.beforeEach(async ({ page }, testInfo) => {
+		test.skip(testInfo.project.name !== 'desktop', 'desktop layout drives the pairing dialog');
 		await page.addInitScript(installPairingHarness, TOKEN);
 		await page.goto('/');
 	});
@@ -178,7 +178,7 @@ base.describe('Device pairing fail paths (WS harness)', () => {
 		await settings.openPairing();
 	}
 
-	base('expired code auto-regenerates a fresh code', async ({ page }) => {
+	test('expired code auto-regenerates a fresh code', async ({ page }) => {
 		await page.evaluate(() => {
 			(window as any).__cera._pairExpireFirst = true;
 		});
@@ -211,7 +211,7 @@ base.describe('Device pairing fail paths (WS harness)', () => {
 		);
 	});
 
-	base('invalid code surfaces the error state', async ({ page }) => {
+	test('invalid code surfaces the error state', async ({ page }) => {
 		await page.evaluate(() => {
 			(window as any).__cera._pairReject = true;
 		});

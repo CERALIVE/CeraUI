@@ -139,11 +139,11 @@ describe("notifyBcrptPermanentFailure — surfaces a down bonded relay", () => {
 });
 
 describe("parseWifiScanRow — surfaces a malformed scan row", () => {
-	it("returns null and logs the raw row when signal/freq do not parse", () => {
+	it("returns null and logs the raw row when signal/chan do not parse", () => {
 		const warnSpy = spyOn(logger, "warn").mockImplementation(noop);
 		try {
 			expect(
-				parseWifiScanRow("yes:MyNet:not-a-number:WPA2:bogus:wlan0"),
+				parseWifiScanRow("*:AA\\:BB\\:CC\\:DD\\:EE\\:01:MyNet:Infra:bogus:540 Mbit/s:not-a-number:▂▄▆█:WPA2"),
 			).toBeNull();
 			expect(warnSpy).toHaveBeenCalled();
 		} finally {
@@ -152,20 +152,20 @@ describe("parseWifiScanRow — surfaces a malformed scan row", () => {
 	});
 
 	it("parses a well-formed row into typed fields", () => {
-		expect(parseWifiScanRow("yes:MyNet:72:WPA2:2412:wlan0")).toEqual({
+		expect(parseWifiScanRow("*:AA\\:BB\\:CC\\:DD\\:EE\\:01:MyNet:Infra:72:540 Mbit/s:96:▂▄▆█:WPA2")).toEqual({
 			active: true,
+			bssid: "AA:BB:CC:DD:EE:01",
 			ssid: "MyNet",
-			signal: 72,
+			signal: 96,
 			security: "WPA2",
-			freq: 2412,
-			device: "wlan0",
+			chan: 72,
 		});
 	});
 
 	it("returns null without warning for a hidden (empty-SSID) row", () => {
 		const warnSpy = spyOn(logger, "warn").mockImplementation(noop);
 		try {
-			expect(parseWifiScanRow("no::50:WPA2:2412:wlan0")).toBeNull();
+			expect(parseWifiScanRow(":AA\\:BB\\:CC\\:DD\\:EE\\:02::Infra:72:540 Mbit/s:50:▂▄▆█:WPA2")).toBeNull();
 			expect(warnSpy).not.toHaveBeenCalled();
 		} finally {
 			warnSpy.mockRestore();

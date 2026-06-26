@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures/index.js";
 
 import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers";
 
@@ -152,7 +152,6 @@ function availableOperatorCount(page: Page): Promise<number> {
 	});
 }
 
-test.describe.configure({ mode: "serial" });
 
 test.describe("Modem network scan (Task 19)", () => {
 	test.skip(

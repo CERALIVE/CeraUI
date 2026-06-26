@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	NON_BROWSER_SOCKET_URL,
+	resolveRuntimePortOverride,
 	resolveSocketUrl,
 	type SocketLocation,
 } from "./index";
@@ -92,6 +93,45 @@ describe("resolveSocketUrl — development (overrides honored)", () => {
 				portOverride: "1234",
 			}),
 		).toBe("ws://customhost:1234");
+	});
+});
+
+describe("resolveRuntimePortOverride — dev-only per-worker routing seam", () => {
+	it("returns the port string for a positive integer", () => {
+		expect(resolveRuntimePortOverride({ __ceraSocketPort: 3105 })).toBe("3105");
+	});
+
+	it("accepts an all-digit string", () => {
+		expect(resolveRuntimePortOverride({ __ceraSocketPort: "3107" })).toBe(
+			"3107",
+		);
+	});
+
+	it("ignores an unset, non-numeric, or non-positive value", () => {
+		expect(resolveRuntimePortOverride(undefined)).toBeUndefined();
+		expect(resolveRuntimePortOverride({})).toBeUndefined();
+		expect(
+			resolveRuntimePortOverride({ __ceraSocketPort: "ws://evil" }),
+		).toBeUndefined();
+		expect(resolveRuntimePortOverride({ __ceraSocketPort: 0 })).toBeUndefined();
+		expect(
+			resolveRuntimePortOverride({ __ceraSocketPort: -5 }),
+		).toBeUndefined();
+		expect(
+			resolveRuntimePortOverride({ __ceraSocketPort: 1.5 }),
+		).toBeUndefined();
+	});
+
+	it("takes precedence over VITE_SOCKET_PORT when resolved as the dev portOverride", () => {
+		const port = resolveRuntimePortOverride({ __ceraSocketPort: 3110 });
+		expect(
+			resolveSocketUrl({
+				location: loc("http://localhost:6173/"),
+				isProd: false,
+				endpointOverride: undefined,
+				portOverride: port ?? "3002",
+			}),
+		).toBe("ws://localhost:3110");
 	});
 });
 

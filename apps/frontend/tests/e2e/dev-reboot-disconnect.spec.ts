@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures/index.js";
 
 import { evidencePath, navigateTo } from "./helpers";
 

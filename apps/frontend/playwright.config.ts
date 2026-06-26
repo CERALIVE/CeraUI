@@ -56,11 +56,12 @@ export default defineConfig({
   globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  // Cap CI parallelism: every worker shares ONE single-threaded mock backend, so
-  // over-parallelism on a many-core runner amplifies shared-backend contention.
-  // Two workers matches GitHub's default core count; retry covers residual
-  // timing flakiness. (Serializing to 1 was tried and gave no benefit.)
-  workers: process.env.CI ? 2 : undefined,
+  // Each worker spawns its OWN mock backend (own port + own CWD state dir, see
+  // tests/e2e/fixtures/backend.ts), so config.json mutation and dev.emit
+  // broadcasts no longer bleed across workers. That removes the shared-backend
+  // contention that pinned this to 2; 4 workers gives cross-file parallelism
+  // without the bleed (retry still covers residual cold-start timing flakiness).
+  workers: process.env.CI ? 4 : undefined,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['line']] : [['list']],
   expect: {

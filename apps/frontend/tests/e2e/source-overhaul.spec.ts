@@ -201,7 +201,7 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		heldSwitchAudioId = null;
 		heldSwitchAudioInput = null;
 
-		await page.routeWebSocket(/:(3002|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 

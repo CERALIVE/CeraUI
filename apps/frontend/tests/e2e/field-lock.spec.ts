@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures/index.js";
 
 import { evidencePath, navigateTo } from "./helpers";
 
@@ -237,6 +237,10 @@ async function showBitrateSlider(page: Page): Promise<void> {
 		.toBe(true);
 }
 
+
+// Stateful lifecycle sequence: each test builds on the prior dev.emit/config
+// state on the SAME page, so this file stays serial even with per-worker
+// backend isolation (PLAYBOOK: do not modify — deterministic integration proof).
 test.describe.configure({ mode: "serial" });
 
 test.describe("field-lock reconciliation (deterministic, dev.emit driven)", () => {

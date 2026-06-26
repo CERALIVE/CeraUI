@@ -76,7 +76,6 @@ function record(line: string): void {
 	evidence.push(line);
 }
 
-test.describe.configure({ mode: "serial" });
 
 test.describe("stream-health rollup + tooltip (dev.emit driven)", () => {
 	test.skip(({ browserName }) => browserName !== "chromium", "single-browser integration proof");

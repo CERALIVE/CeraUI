@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "./fixtures/index.js";
 
 import { EVIDENCE_DIR, navigateTo } from "./helpers";
 
@@ -392,7 +392,6 @@ async function dropFakeToggleOff(page: Page, toggle: Locator): Promise<string> {
 	return (await lastConfigureName(page)) as string;
 }
 
-test.describe.configure({ mode: "serial" });
 
 test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 	test.skip(

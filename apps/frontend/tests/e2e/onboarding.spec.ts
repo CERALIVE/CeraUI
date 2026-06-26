@@ -38,7 +38,7 @@ interface WsHooks {
  * survives a page reload, so a persisted-dismissal check sees the same state.
  */
 async function attachWs(page: Page, hooks: WsHooks): Promise<void> {
-	await page.routeWebSocket(/:(3002|8090|8091)\//, (ws: WebSocketRoute) => {
+	await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws: WebSocketRoute) => {
 		const server = ws.connectToServer();
 		ws.onMessage((message) => server.send(message));
 		server.onMessage((message) => {
