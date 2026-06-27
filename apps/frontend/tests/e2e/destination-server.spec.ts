@@ -3,8 +3,9 @@
  *
  * The receiver-experience overhaul (T9) rebuilt ServerDialog to lead with WHERE
  * the stream is sent (a destination radiogroup: managed cloud account vs. custom
- * receiver) and demoted the transport-protocol radio behind an Advanced
- * disclosure (T8). This spec drives the REAL dev backend
+ * receiver). T21 then promoted the transport-protocol radiogroup to an
+ * always-visible primary control ABOVE the endpoint section (no Advanced
+ * disclosure). This spec drives the REAL dev backend
  * (MOCK_SCENARIO=multi-modem-wifi) through both destination paths and locks the
  * destination-first contract:
  *
@@ -13,10 +14,10 @@
  *   • custom  — pick "Custom receiver", fill addr/port/streamid, Validate (now
  *     deterministic via the T4 mock seam — assert a PASS and a forced FAIL), save;
  *     the Live header chip reflects the custom endpoint + transport.
- *   • destination-first DOM lock — `[data-testid=transport-protocol]` has count 0
- *     before Advanced is expanded and count 1 after (NOT a visibility check).
- *   • RIST behind Advanced — capability-enabled, selectable, persists across a
- *     reload (ported from the retired transport-protocol.spec).
+ *   • transport-first DOM order — `[data-testid=transport-protocol]` is present on
+ *     open and precedes #srtla-addr (the promoted-above-endpoint contract).
+ *   • RIST — capability-enabled, selectable from the always-visible radiogroup,
+ *     persists across a reload (ported from the retired transport-protocol.spec).
  *   • mobile Sheet — both cards visible + ≥44px touch targets + Save reachable.
  *
  * The forced-fail is produced by a WS route that rewrites ONLY the
@@ -129,7 +130,7 @@ test.describe('destination-first ServerDialog — desktop flows', () => {
 		]);
 	});
 
-	test('destination-first: transport-protocol absent from DOM until Advanced (count 0 → 1)', async ({
+	test('transport-first: transport-protocol radiogroup is present on open and precedes #srtla-addr', async ({
 		authedPage: page,
 	}) => {
 		const dialog = await openServerDialog(page);
@@ -137,22 +138,100 @@ test.describe('destination-first ServerDialog — desktop flows', () => {
 		// shared backend's persisted destination.
 		await dialog.getByTestId('destination-custom').click();
 
+		// T21: the radiogroup is promoted above the endpoint — present on open,
+		// with no Advanced disclosure to expand.
 		const group = page.locator('[data-testid=transport-protocol]');
-		const before = await group.count();
-		expect(before).toBe(0);
-		await expect(group).toHaveCount(0);
-
-		await dialog.getByRole('button', { name: 'Advanced' }).click();
 		await expect(group).toHaveCount(1);
-		const after = await group.count();
-		expect(after).toBe(1);
+		await expect(dialog.getByRole('button', { name: 'Advanced' })).toHaveCount(0);
 
-		writeEvidence('destination-first-count.txt', [
-			'Task 15 — destination-first DOM lock',
+		// DOM order: the radiogroup precedes the custom endpoint address field.
+		const order = await page.evaluate(() => {
+			const grp = document.querySelector('[data-testid=transport-protocol]');
+			const addr = document.getElementById('srtla-addr');
+			if (!grp || !addr) return null;
+			return Boolean(
+				grp.compareDocumentPosition(addr) & Node.DOCUMENT_POSITION_FOLLOWING,
+			);
+		});
+		expect(order).toBe(true);
+
+		writeEvidence('transport-first-order.txt', [
+			'Task 15 / T21 — transport-first DOM order',
 			'',
-			'Endpoint fields are reachable without choosing a transport.',
-			`[data-testid=transport-protocol] count before Advanced = ${before} (expect 0)`,
-			`[data-testid=transport-protocol] count after  Advanced = ${after} (expect 1)`,
+			'[data-testid=transport-protocol] present on open (count 1), no Advanced trigger.',
+			`Radiogroup precedes #srtla-addr in DOM order = ${order} (expect true)`,
+		]);
+	});
+
+	test('reserved plain-SRT renders as an inert coming-soon cell, never an enabled radio (T23)', async ({
+		authedPage: page,
+	}) => {
+		const dialog = await openServerDialog(page);
+		await dialog.getByTestId('destination-custom').click();
+
+		// Reserved plain-SRT must be inert: not a radio, not a <button>. The two
+		// real protocols ARE radios — the contrast is the contract.
+		const srt = dialog.getByTestId('protocol-srt');
+		await expect(srt).toHaveCount(1);
+		await expect(srt).not.toHaveRole('radio');
+		const srtTag = await srt.evaluate((el) => el.tagName);
+		expect(srtTag).not.toBe('BUTTON');
+		await expect(dialog.getByTestId('protocol-srtla')).toHaveRole('radio');
+		await expect(dialog.getByTestId('protocol-rist')).toHaveRole('radio');
+
+		// Bound to the open tech-debt entry, with no clickable control inside.
+		await expect(srt.locator('[data-debt-id="TD-plain-srt-egress"]')).toHaveCount(1);
+		await expect(srt.locator('button')).toHaveCount(0);
+
+		writeEvidence('reserved-srt-coming-soon.txt', [
+			'Task 23 — reserved plain-SRT is an inert coming-soon cell',
+			'',
+			`protocol-srt tagName = ${srtTag} (expect not BUTTON), role != radio.`,
+			'SRTLA + RIST cells ARE role=radio for contrast.',
+			'Carries data-debt-id="TD-plain-srt-egress"; no <button> inside (non-interactive).',
+		]);
+	});
+
+	test('RIST↔SRTLA switching reshapes the custom endpoint fields reactively (T23)', async ({
+		authedPage: page,
+	}) => {
+		const dialog = await openServerDialog(page);
+		await dialog.getByTestId('destination-custom').click();
+
+		const passphrase = dialog.locator('#srtla-passphrase');
+		const evenPortHint = dialog.getByTestId('rist-even-port-hint');
+		const addressLabel = dialog.locator('label[for="srtla-addr"]');
+
+		// SRTLA (default custom kind): SRT-family secret present, no even-port hint.
+		await expect(passphrase).toBeVisible();
+		await expect(evenPortHint).toHaveCount(0);
+		const srtlaAddressLabel = (await addressLabel.textContent())?.trim() ?? '';
+
+		// RIST simple-profile has no passphrase, requires an even port, and uses
+		// point-to-point receiver naming — the form must re-derive from the kind.
+		const rist = dialog.getByTestId('protocol-rist');
+		await expect(rist).toBeEnabled({ timeout: 15_000 });
+		await rist.click();
+		await expect(rist).toHaveAttribute('aria-checked', 'true');
+		await expect(passphrase).toHaveCount(0);
+		await expect(evenPortHint).toBeVisible();
+		const ristAddressLabel = (await addressLabel.textContent())?.trim() ?? '';
+		expect(ristAddressLabel).not.toBe(srtlaAddressLabel);
+
+		// Reverting the protocol reverts the field set in lock-step.
+		const srtla = dialog.getByTestId('protocol-srtla');
+		await srtla.click();
+		await expect(srtla).toHaveAttribute('aria-checked', 'true');
+		await expect(passphrase).toBeVisible();
+		await expect(evenPortHint).toHaveCount(0);
+		await expect(addressLabel).toHaveText(srtlaAddressLabel);
+
+		writeEvidence('protocol-field-reshape.txt', [
+			'Task 23 — RIST↔SRTLA reactive field reshape (custom endpoint)',
+			'',
+			`SRTLA: #srtla-passphrase visible, no even-port hint, address label "${srtlaAddressLabel}".`,
+			`RIST:  #srtla-passphrase gone, even-port hint visible, address label "${ristAddressLabel}".`,
+			'Back to SRTLA: secret returns, hint gone, label reverts — fields track the protocol.',
 		]);
 	});
 
@@ -266,12 +345,11 @@ test.describe('destination-first ServerDialog — desktop flows', () => {
 		]);
 	});
 
-	test('RIST is selectable behind Advanced (capability-enabled) and persists across a reload', async ({
+	test('RIST is selectable from the always-visible radiogroup (capability-enabled) and persists across a reload', async ({
 		authedPage: page,
 	}) => {
 		let dialog = await openServerDialog(page);
 		await dialog.getByTestId('destination-custom').click();
-		await dialog.getByRole('button', { name: 'Advanced' }).click();
 
 		const rist = dialog.getByTestId('protocol-rist');
 		await expect(rist).toBeEnabled({ timeout: 15_000 });
@@ -295,7 +373,6 @@ test.describe('destination-first ServerDialog — desktop flows', () => {
 		await ensureAuthenticated(page);
 
 		dialog = await openServerDialog(page);
-		await dialog.getByRole('button', { name: 'Advanced' }).click();
 		await expect(dialog.getByTestId('protocol-rist')).toHaveAttribute('aria-checked', 'true');
 	});
 });

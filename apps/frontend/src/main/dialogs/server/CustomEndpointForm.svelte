@@ -7,9 +7,15 @@
   multi-stage validation result (input→protocol→endpoint→dns→probe→ok) with an
   in-flight spinner.
 
-  Field set is driven by the kind manifest (T1 `receiverKindManifest`):
+  Field set AND labels reshape top-down from the protocol chosen above. The
+  ProtocolSelector (T21, promoted above this section) writes the transport;
+  ServerDialog resolves it to a receiver `kind` via `resolveReceiverKind` and
+  passes it here, so flipping the protocol reactively re-derives this form
+  (T22). The per-kind shape comes from `receiverKindManifest(kind)`:
    • srtla_custom / srt_custom → addr + port + stream id + secret
    • rist_custom               → addr + (even) port + stream id, even-port hint
+  Labels track the kind too: RIST is a point-to-point receiver (receiver-address
+  / receiver-port naming); SRTLA/SRT use the srtla-server naming.
   RIST simple-profile (librist) has no SRT-style passphrase — the backend RIST
   adapter ignores it — so the secret field is shown only for the passphrase-
   capable transports. Stream id never gates Save (`requiresStreamId` is advisory).
@@ -74,6 +80,16 @@ const showStreamId = $derived(manifest.fields.includes('streamid'));
 const showSecret = $derived(kind === 'srtla_custom' || kind === 'srt_custom');
 const evenPortRequired = $derived(manifest.requiresEvenPort);
 
+// Labels follow the selected kind top-down: RIST is a point-to-point receiver,
+// SRTLA/SRT use the srtla-server naming. These re-derive when the protocol above
+// changes, so the field labels switch in lock-step with the field set.
+const addressLabel = $derived(
+	kind === 'rist_custom' ? $LL.settings.receiverAddress() : $LL.settings.srtlaServerAddress(),
+);
+const portLabel = $derived(
+	kind === 'rist_custom' ? $LL.settings.receiverPort() : $LL.settings.srtlaServerPort(),
+);
+
 const stageViews = $derived(deriveStageViews(validation));
 
 function stageLabel(stage: RelayValidateStage): string {
@@ -83,7 +99,7 @@ function stageLabel(stage: RelayValidateStage): string {
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="srtla-addr">
-		{kind === 'rist_custom' ? $LL.settings.receiverAddress() : $LL.settings.srtlaServerAddress()}
+		{addressLabel}
 	</Label>
 	<Input
 		id="srtla-addr"
@@ -101,7 +117,7 @@ function stageLabel(stage: RelayValidateStage): string {
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="srtla-port">
-		{kind === 'rist_custom' ? $LL.settings.receiverPort() : $LL.settings.srtlaServerPort()}
+		{portLabel}
 	</Label>
 	<Input
 		id="srtla-port"

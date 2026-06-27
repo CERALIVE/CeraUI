@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
 /**
- * ServerDialog — transport-protocol selector behind the Advanced disclosure.
+ * ServerDialog — always-visible transport-protocol selector (T21).
  *
- * The destination-first rewrite (T9) demotes the transport-protocol radiogroup
- * out of the always-visible top level: it now lives inside the TransportBadge
- * (T8) "Advanced" disclosure and is mounted only while expanded ({#if expanded},
- * not CSS-hidden). On open there is therefore NO transport radiogroup in the DOM
- * at all — only the destination radiogroup. Expanding Advanced mounts it.
+ * T21 promotes the transport-protocol radiogroup to a primary control ABOVE the
+ * endpoint section (ProtocolSelector), reversing the T8/T9 "Advanced disclosure"
+ * demotion. On open the radiogroup is present in the DOM with no interaction
+ * required — there is no Advanced trigger to expand.
  *
  * Inside that group: SRTLA is always selectable; RIST is capability-gated
  * (disabled-with-reason until the engine advertises the `rist` transport); and
@@ -14,13 +13,14 @@
  * radio (the old reserved disabled-button treatment is replaced).
  *
  * Coverage:
- *  1. (Requirement i) On open the transport radiogroup is absent — by testid AND
- *     by a role-agnostic named-role backstop — and present after expanding.
- *  2. The Advanced trigger toggles aria-expanded false→true on open.
- *  3. SRTLA always enabled; SRT is an inert ComingSoon cell (not a button/radio).
- *  4. RIST disabled-with-reason without the rist transport; enabled with it.
- *  5. Protocol persistence: picking RIST persists relay_protocol=rist; the
+ *  1. On open the transport radiogroup is present — by testid AND by a
+ *     role-agnostic named-role backstop — alongside the destination radiogroup.
+ *  2. SRTLA always enabled; SRT is an inert ComingSoon cell (not a button/radio).
+ *  3. RIST disabled-with-reason without the rist transport; enabled with it.
+ *  4. Protocol persistence: picking RIST persists relay_protocol=rist; the
  *     untouched SRTLA default persists relay_protocol=srtla.
+ *  5. DOM order: the radiogroup precedes #srtla-addr (custom endpoint) so the
+ *     transport choice is promoted above the endpoint fields.
  */
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -84,24 +84,11 @@ beforeAll(() => {
 	}
 });
 
-// The transport radiogroup's accessible name (aria-label) — distinct from the
-// destination radiogroup, so a named-role query targets ONLY the transport one
-// without depending on its data-testid (the role-agnostic backstop).
+// The transport radiogroup's accessible name (aria-labelledby → visible heading)
+// — distinct from the destination radiogroup, so a named-role query targets ONLY
+// the transport one without depending on its data-testid (the role-agnostic
+// backstop).
 const TRANSPORT_GROUP = "Transport Protocol";
-
-// The Advanced disclosure trigger drives the radiogroup mount; target it by the
-// aria-controls relationship so the test never depends on its label copy.
-const advancedTrigger = () =>
-	document.querySelector(
-		'[aria-controls="transport-protocol"]',
-	) as HTMLButtonElement;
-
-async function expandAdvanced() {
-	await fireEvent.click(advancedTrigger());
-	await waitFor(() =>
-		expect(screen.getByTestId("transport-protocol")).toBeTruthy(),
-	);
-}
 
 const ristButton = () =>
 	screen.getByTestId("protocol-rist") as HTMLButtonElement;
@@ -117,37 +104,36 @@ beforeEach(() => {
 	setConfig.mockResolvedValue({ success: true, applied: {} });
 });
 
-describe("ServerDialog — transport protocol behind Advanced (T10)", () => {
-	it("hides the transport radiogroup on open and mounts it only after expanding Advanced", async () => {
+describe("ServerDialog — always-visible transport protocol (T21)", () => {
+	it("renders the transport radiogroup on open, above #srtla-addr, with no Advanced trigger", () => {
 		render(ServerDialog, { props: { open: true } });
 
-		// Requirement (i): the transport radiogroup is absent on open — proven by
-		// its testid AND by a role-agnostic named-role backstop. The destination
-		// radiogroup is the only radiogroup present (sanity).
-		expect(screen.queryByTestId("transport-protocol")).toBeNull();
-		expect(
-			screen.queryByRole("radiogroup", { name: TRANSPORT_GROUP }),
-		).toBeNull();
-		expect(
-			screen.getByRole("radiogroup", { name: "Destination" }),
-		).toBeTruthy();
-
-		// The Advanced trigger starts collapsed.
-		expect(advancedTrigger().getAttribute("aria-expanded")).toBe("false");
-
-		await expandAdvanced();
-
-		// Expanding mounts the group — visible by both testid and role.
-		expect(screen.getByTestId("transport-protocol")).toBeTruthy();
+		// Promoted (T21): the radiogroup is present on open — proven by its testid
+		// AND a role-agnostic named-role backstop — alongside the destination
+		// radiogroup, with no Advanced disclosure to expand.
+		const group = screen.getByTestId("transport-protocol");
+		expect(group).toBeTruthy();
 		expect(
 			screen.getByRole("radiogroup", { name: TRANSPORT_GROUP }),
 		).toBeTruthy();
-		expect(advancedTrigger().getAttribute("aria-expanded")).toBe("true");
+		expect(
+			screen.getByRole("radiogroup", { name: "Destination" }),
+		).toBeTruthy();
+		expect(
+			document.querySelector('[aria-controls="transport-protocol"]'),
+		).toBeNull();
+
+		// DOM order: the promoted radiogroup precedes the custom endpoint address.
+		const addr = document.getElementById("srtla-addr");
+		expect(addr).not.toBeNull();
+		expect(
+			group.compareDocumentPosition(addr as Node) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
 	});
 
-	it("renders SRTLA enabled and SRT as an inert ComingSoon affordance (not a radio)", async () => {
+	it("renders SRTLA enabled and SRT as an inert ComingSoon affordance (not a radio)", () => {
 		render(ServerDialog, { props: { open: true } });
-		await expandAdvanced();
 
 		// SRTLA is always selectable.
 		expect(srtlaButton().disabled).toBe(false);
@@ -165,11 +151,10 @@ describe("ServerDialog — transport protocol behind Advanced (T10)", () => {
 		).not.toBeNull();
 	});
 
-	it("disables RIST with a reason when the engine advertises no rist transport", async () => {
+	it("disables RIST with a reason when the engine advertises no rist transport", () => {
 		state.capabilities = { transports: ["srtla"] };
 
 		render(ServerDialog, { props: { open: true } });
-		await expandAdvanced();
 
 		expect(ristButton().disabled).toBe(true);
 		expect(ristButton().getAttribute("title")).toBe(
@@ -177,11 +162,10 @@ describe("ServerDialog — transport protocol behind Advanced (T10)", () => {
 		);
 	});
 
-	it("enables RIST when the engine advertises the rist transport", async () => {
+	it("enables RIST when the engine advertises the rist transport", () => {
 		state.capabilities = { transports: ["srtla", "rist"] };
 
 		render(ServerDialog, { props: { open: true } });
-		await expandAdvanced();
 
 		expect(ristButton().disabled).toBe(false);
 		expect(ristButton().getAttribute("title")).toBeNull();
@@ -192,7 +176,6 @@ describe("ServerDialog — transport protocol behind Advanced (T10)", () => {
 		state.config = { relay_protocol: "srtla" };
 
 		render(ServerDialog, { props: { open: true } });
-		await expandAdvanced();
 
 		await fireEvent.click(ristButton());
 		expect(ristButton().getAttribute("aria-checked")).toBe("true");
@@ -218,7 +201,6 @@ describe("ServerDialog — transport protocol behind Advanced (T10)", () => {
 		state.capabilities = { transports: ["srtla", "rist"] };
 
 		render(ServerDialog, { props: { open: true } });
-		await expandAdvanced();
 
 		expect(srtlaButton().getAttribute("aria-checked")).toBe("true");
 
