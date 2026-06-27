@@ -612,7 +612,9 @@ second decision after destination. Key concepts:
   for the full model and the Scope-B plain-SRT contract.
 - **Transport × destination model**: the two axes are independent. Destination
   (`managed` relay vs `custom` endpoint) is chosen first; transport (SRTLA / RIST /
-  SRT) is chosen second inside `TransportBadge`. A managed relay may advertise
+  SRT) is chosen second via the always-visible `ProtocolSelector` rendered ABOVE the
+  endpoint fields (protocol-first reorder, T21-T23) — no longer inside `TransportBadge`,
+  which is now a read-only summary chip. A managed relay may advertise
   multiple protocols via `server.protocols`; the dialog seeds the best available
   default when the selected server's protocol set excludes the current draft.
 - **`relay.validate` mock seam (T4)**: `apps/backend/src/rpc/procedures/relay.procedure.ts`
