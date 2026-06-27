@@ -7,14 +7,17 @@
    1. Streaming-lock banner — config changes need a stop first.
    2. DestinationSection (T6) — managed cloud relay vs. custom receiver, with the
       D6 relay-availability gate baked into the managed choice.
-   3. Endpoint config, immediately under the destination pick:
+   3. Transport (T21), promoted above the endpoint as a primary control:
+        • TransportBadge (T8) — the calm derived "how it reaches the receiver"
+          read-only summary chip.
+        • ProtocolSelector — the always-visible transport-protocol radiogroup
+          (SRTLA / RIST / reserved plain-SRT); no Advanced disclosure.
+   4. Endpoint config, immediately under the transport pick:
         • managed → RelayServerSelector (provider/server/endpoint/account/streamid,
           plus the per-server transport chooser for multi-transport endpoints).
         • custom  → CustomEndpointForm (kind-driven address/port/streamid/secret +
           the relay.validate action and its multi-stage result).
-   4. TransportBadge (T8) — the calm derived "how it reaches the receiver" badge
-      with an Advanced disclosure that mounts the transport-protocol radiogroup.
-   5. SRT latency slider.
+   5. StreamTuningSection — receiver-capability-gated latency / FEC / recovery.
 
   This stays the logic container: it owns the `draft` dirty-field guard, every
   derived value (destination/protocol/kind via the pure T5
@@ -82,6 +85,7 @@ import {
 } from '$lib/streaming/receiver-experience';
 import CustomEndpointForm from './server/CustomEndpointForm.svelte';
 import DestinationSection from './server/DestinationSection.svelte';
+import ProtocolSelector from './server/ProtocolSelector.svelte';
 import RelayServerSelector from './server/RelayServerSelector.svelte';
 import ServerIngestSlots from './server/ServerIngestSlots.svelte';
 import StreamTuningSection from './server/StreamTuningSection.svelte';
@@ -489,7 +493,16 @@ async function handleSave() {
 			selected={destination}
 		/>
 
-		<!-- Endpoint config, immediately under the destination pick. -->
+		<!-- Transport promoted above the endpoint (T21): calm derived summary chip,
+		     then the always-visible protocol radiogroup (no Advanced disclosure). -->
+		<TransportBadge hasRelayServer={destination === 'managed'} {protocol} />
+		<ProtocolSelector
+			{isStreaming}
+			onProtocol={(value) => (draft.relay_protocol = value)}
+			{protocol}
+		/>
+
+		<!-- Endpoint config, immediately under the transport pick. -->
 		{#if destination === 'managed' && pairedToManaged && hasManagedSlots}
 			<ServerIngestSlots
 				accounts={managedAccounts}
@@ -583,15 +596,6 @@ async function handleSave() {
 				{validation}
 			/>
 		{/if}
-
-		<!-- Transport badge + Advanced disclosure (T8): the derived "how it
-		     reaches the receiver" kind, with the protocol radiogroup behind it. -->
-		<TransportBadge
-			hasRelayServer={destination === 'managed'}
-			{isStreaming}
-			onProtocol={(value) => (draft.relay_protocol = value)}
-			{protocol}
-		/>
 
 		<!-- Stream Tuning (Tasks 16-19): receiver-capability-gated tuning. Owns the
 		     latency slider, FEC toggle, and the Advanced recovery control. CeraLive

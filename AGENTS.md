@@ -35,7 +35,7 @@ CeraUI/
 │   │       │   ├── HudRegion.svelte       # Responsive HUD mount (desktop top / mobile bottom)
 │   │       │   ├── DisconnectedBanner.svelte  # Reconnect/reboot/failed banner
 │   │       │   ├── dialogs/               # 14 focused config dialogs (AppDialog-based)
-│   │       │   │   └── server/            # ServerDialog sub-components: DestinationSection, CustomEndpointForm, TransportBadge
+│   │   │   │   └── server/            # ServerDialog sub-components: DestinationSection, ProtocolSelector, CustomEndpointForm, TransportBadge
 │   │       │   └── tabs/                  # Legacy tab views (Streaming, Network, General, Advanced, DevTools)
 │   │       └── lib/
 │   │           ├── components/
@@ -116,8 +116,8 @@ CeraUI/
 | **Ingest visual/UX + @visual spec** | `apps/frontend/src/lib/components/custom/IngestStats.svelte` + `tests/e2e/visual/ingest-states.visual.spec.ts` |
 | Design rules | `.impeccable.md` |
 | **Receiver-kind model + Scope-B plain-SRT contract** | `docs/RECEIVER_MODEL.md` |
-| **ServerDialog destination-first container** | `apps/frontend/src/main/dialogs/ServerDialog.svelte` |
-| **ServerDialog sub-components (DestinationSection, CustomEndpointForm, TransportBadge)** | `apps/frontend/src/main/dialogs/server/` |
+| **ServerDialog protocol-first container** | `apps/frontend/src/main/dialogs/ServerDialog.svelte` |
+| **ServerDialog sub-components (DestinationSection, ProtocolSelector, CustomEndpointForm, TransportBadge)** | `apps/frontend/src/main/dialogs/server/` |
 | **Receiver-experience pure logic (deriveDestination, resolveReceiverKind, buildServerSetConfig)** | `apps/frontend/src/lib/streaming/receiver-experience.ts` |
 | **relay.validate procedure + mock seam** | `apps/backend/src/rpc/procedures/relay.procedure.ts` + `apps/backend/src/mocks/providers/relay.ts` |
 | **Live server readiness hint (SRTLA bonded/single)** | `apps/frontend/src/main/live/ServerReadiness.svelte` |
@@ -591,14 +591,18 @@ transport resolver promotes `rist` from a reserved placeholder to an active prot
 even data port) gated on `ristAvailable` in `resolveStreamEndpoint`; `srt` stays
 reserved. The shared selectability rule lives in `@ceraui/rpc/schemas`
 (`relayProtocolAvailability`). `ServerDialog` renders the SRTLA/SRT/RIST selector
-inside the `TransportBadge` Advanced disclosure: RIST is shown **disabled with a
-reason** until the engine advertises the `rist` transport, SRT is always reserved
-(`data-debt-id="TD-plain-srt-egress"`) — never hidden.
+via `ProtocolSelector.svelte` (always-visible radiogroup, **above** the endpoint
+section — protocol-first reorder, T21-T23): RIST is shown **disabled with a reason**
+until the engine advertises the `rist` transport, SRT is always reserved
+(`data-debt-id="TD-plain-srt-egress"`, calmed styling, CI-enforced) — never hidden.
+`TransportBadge` is now a read-only summary chip that reflects the active protocol;
+it is no longer the protocol entry point and no longer hosts an Advanced disclosure.
 
-**Destination-first receiver-experience overhaul [EXISTS].** `ServerDialog` was
+**Protocol-first receiver-experience overhaul [EXISTS].** `ServerDialog` was
 rewritten as a destination-first container (ceraui-receiver-experience track, Tasks
-1–14). The dialog now leads with a destination choice before exposing transport or
-endpoint fields. Key concepts:
+1–14) and subsequently updated to a protocol-first layout (T21-T23): the protocol
+selector is now promoted above the endpoint fields, making transport choice the
+second decision after destination. Key concepts:
 
 - **Receiver-kind model** (`packages/rpc/src/schemas/relay.schema.ts`): every stream
   destination is one of `srtla_relay`, `srtla_custom`, `rist_relay`, `rist_custom`,
@@ -608,7 +612,9 @@ endpoint fields. Key concepts:
   for the full model and the Scope-B plain-SRT contract.
 - **Transport × destination model**: the two axes are independent. Destination
   (`managed` relay vs `custom` endpoint) is chosen first; transport (SRTLA / RIST /
-  SRT) is chosen second inside `TransportBadge`. A managed relay may advertise
+  SRT) is chosen second via the always-visible `ProtocolSelector` rendered ABOVE the
+  endpoint fields (protocol-first reorder, T21-T23) — no longer inside `TransportBadge`,
+  which is now a read-only summary chip. A managed relay may advertise
   multiple protocols via `server.protocols`; the dialog seeds the best available
   default when the selected server's protocol set excludes the current draft.
 - **`relay.validate` mock seam (T4)**: `apps/backend/src/rpc/procedures/relay.procedure.ts`
@@ -624,14 +630,20 @@ endpoint fields. Key concepts:
   radiogroup (managed vs custom); provider-aware label driven by `config.remote_provider`
   (set in `CloudRemoteDialog`); D6-gated (managed disabled when no relay servers are
   configured or while streaming).
+- `apps/frontend/src/main/dialogs/server/ProtocolSelector.svelte` — always-visible
+  radiogroup for protocol selection (SRTLA / RIST / SRT); rendered **above** the
+  endpoint section in `ServerDialog.svelte` (protocol-first reorder, T21-T23). Reads
+  `getCapabilities()` itself. RIST is disabled-with-reason until the engine advertises
+  the `rist` transport; SRT carries `data-debt-id="TD-plain-srt-egress"` (calmed
+  styling, CI-enforced via `check:tech-debt`) and is never hidden.
 - `apps/frontend/src/main/dialogs/server/CustomEndpointForm.svelte` — field set for
   custom/manual endpoints; fields driven by `receiverKindManifest(kind)` (addr, port,
   optional stream ID, optional secret for SRTLA/SRT custom).
-- `apps/frontend/src/main/dialogs/server/TransportBadge.svelte` — transport summary
-  chip + Advanced disclosure; renders the active receiver kind via `kindBadgeLabelKey`
-  (from `lib/streaming/receiver-experience.ts`), a bonding readiness line for SRTLA,
-  and an expandable radiogroup for protocol selection. Reads `getCapabilities()` itself
-  so the container does not need to thread capability state.
+- `apps/frontend/src/main/dialogs/server/TransportBadge.svelte` — read-only summary
+  chip showing the active receiver kind via `kindBadgeLabelKey` (from
+  `lib/streaming/receiver-experience.ts`) and a bonding readiness line for SRTLA.
+  Demoted to a summary chip in T21-T23: it is no longer the protocol entry point and
+  no longer hosts an Advanced disclosure for protocol selection.
 
 **Scope decisions (record for future agents):**
 
@@ -878,6 +890,10 @@ Three Vite lib-mode ES-module bundles — one per config dialog:
 Each bundle is a self-contained ES module. It imports nothing from the host page
 and exports a single `mount(target, props)` function that `ceralive-platform` calls
 after dynamic `import()`.
+
+`server.js` includes `ProtocolSelector.svelte` (the always-visible protocol radiogroup
+added in T21-T23). The `mount(target, props)` export contract is unchanged — the
+protocol-first reorder is an internal layout change only.
 
 ### Build step: `bun run build:federation`
 

@@ -16,9 +16,9 @@
  *  - Kind behaviour — `srt_custom` blocks Save; SRTLA saves without a stream id;
  *    a managed RIST endpoint badges as `rist_relay`; a multi-transport server's
  *    `protocols[]` round-trips the chosen protocol; per-kind field visibility.
- *  - Completeness (a–f) — override-reload config, a11y roles + Advanced
- *    aria-expanded, save-failure lock release, engine-offline neutrality, and
- *    legacy (no `relay_protocol`) configs.
+ *  - Completeness (a–f) — override-reload config, a11y roles + the always-visible
+ *    transport radiogroup (T21, no Advanced disclosure), save-failure lock
+ *    release, engine-offline neutrality, and legacy (no `relay_protocol`) configs.
  */
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -132,18 +132,6 @@ const lockedFields = (fn: ReturnType<typeof vi.fn>): string[] =>
 
 const saveButton = () =>
 	screen.getByRole("button", { name: "Save" }) as HTMLButtonElement;
-
-const advancedTrigger = () =>
-	document.querySelector(
-		'[aria-controls="transport-protocol"]',
-	) as HTMLButtonElement;
-
-async function expandAdvanced() {
-	await fireEvent.click(advancedTrigger());
-	await waitFor(() =>
-		expect(screen.getByTestId("transport-protocol")).toBeTruthy(),
-	);
-}
 
 async function typeInto(id: string, value: string) {
 	const el = document.getElementById(id) as HTMLInputElement;
@@ -499,7 +487,7 @@ describe("ServerDialog — completeness (T10 a–f)", () => {
 		expect(document.getElementById("relay-server")).toBeNull();
 	});
 
-	it("(b) exposes radio/radiogroup roles and toggles the Advanced trigger aria-expanded", async () => {
+	it("(b) exposes the destination and the always-visible transport radiogroups", () => {
 		render(ServerDialog, { props: { open: true } });
 
 		expect(
@@ -512,9 +500,14 @@ describe("ServerDialog — completeness (T10 a–f)", () => {
 			"radio",
 		);
 
-		expect(advancedTrigger().getAttribute("aria-expanded")).toBe("false");
-		await expandAdvanced();
-		expect(advancedTrigger().getAttribute("aria-expanded")).toBe("true");
+		// The transport-protocol radiogroup is promoted (T21): present on open,
+		// no Advanced disclosure to expand.
+		expect(
+			screen.getByRole("radiogroup", { name: "Transport Protocol" }),
+		).toBeTruthy();
+		expect(
+			document.querySelector('[aria-controls="transport-protocol"]'),
+		).toBeNull();
 	});
 
 	it("(c) shows relayNone (empty catalog) — distinct from relayWaiting (undefined)", () => {
@@ -551,7 +544,7 @@ describe("ServerDialog — completeness (T10 a–f)", () => {
 		expect(toast.success).not.toHaveBeenCalled();
 	});
 
-	it("(e) drops to a neutral badge and disables RIST-with-reason while the engine is offline", async () => {
+	it("(e) drops to a neutral badge and disables RIST-with-reason while the engine is offline", () => {
 		state.capabilities = undefined;
 
 		render(ServerDialog, { props: { open: true } });
@@ -562,7 +555,6 @@ describe("ServerDialog — completeness (T10 a–f)", () => {
 		expect(badge.textContent).toContain("SRTLA");
 		expect(badge.textContent).not.toContain("\u00b7");
 
-		await expandAdvanced();
 		const rist = screen.getByTestId("protocol-rist") as HTMLButtonElement;
 		expect(rist.disabled).toBe(true);
 		expect(rist.getAttribute("title")).toBe(

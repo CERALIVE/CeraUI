@@ -3,7 +3,7 @@
  *
  * One PNG per state so a reviewer can eyeball the receiver-experience overhaul
  * without running the app:
- *   1. destination chooser      4. RIST advanced
+ *   1. destination chooser      4. RIST selected
  *   2. managed configured       5. plain-SRT coming-soon
  *   3. custom SRTLA             6. kind-aware Live summary (header chip)
  *
@@ -57,24 +57,22 @@ async function captureStates(page: Page, prefix: string): Promise<void> {
 	await expect(dialog.getByTestId('destination')).toBeVisible();
 	await shot('1-chooser', dialog);
 
-	// 3. Custom SRTLA — the custom receiver form (srtla is the default kind).
+	// 3. Custom SRTLA — the custom receiver form (srtla is the default kind). The
+	// transport-protocol radiogroup is promoted above it (T21), so this frame also
+	// captures the always-visible selector.
 	await dialog.getByTestId('destination-custom').click();
 	await dialog.locator('#srtla-addr').fill('10.20.30.40');
 	await dialog.locator('#srtla-port').fill('7777');
 	await shot('3-custom-srtla', dialog);
 
-	// 4 + 5. Advanced disclosure — RIST selected, plus the plain-SRT ComingSoon.
-	await dialog.getByRole('button', { name: 'Advanced' }).click();
+	// 4 + 5. Transport-protocol radiogroup (always visible) — RIST selected, plus
+	// the plain-SRT ComingSoon cell.
 	const rist = dialog.getByTestId('protocol-rist');
 	await expect(rist).toBeEnabled({ timeout: 15_000 });
 	await rist.click();
 	await expect(rist).toHaveAttribute('aria-checked', 'true');
-	await shot('4-rist-advanced', dialog);
+	await shot('4-rist-selected', dialog);
 	await shot('5-plain-srt-coming-soon', dialog.getByTestId('protocol-srt'));
-
-	// Collapse Advanced before the managed capture for a clean frame.
-	await dialog.getByRole('button', { name: 'Advanced' }).click();
-	await expect(page.locator('[data-testid=transport-protocol]')).toHaveCount(0);
 
 	// 2. Managed configured — pick the cloud account + a seeded server.
 	const managed = dialog.getByTestId('destination-managed');
