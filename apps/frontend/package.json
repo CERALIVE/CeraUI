@@ -55,7 +55,7 @@
 		"@testing-library/dom": "^10.4.1",
 		"@testing-library/svelte": "^5.3.1",
 		"@tsconfig/svelte": "^5.0.8",
-		"@types/node": "^25.9.3",
+		"@types/node": "^26.0.1",
 		"@types/qrcode": "^1.5.6",
 		"jsdom": "^29.1.1",
 		"madge": "^8.0.0",
