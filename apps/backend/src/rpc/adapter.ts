@@ -184,11 +184,18 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 		},
 
 		message(ws: AppWebSocket, data: string | Buffer) {
+			// Any inbound frame proves the link is alive. pruneStaleClients() drops
+			// sockets with no inbound activity for HEARTBEAT_STALE_THRESHOLD_MS, so
+			// the client's keepalive/pong (which parseMessage discards) MUST refresh
+			// lastActive here — otherwise an idle authed client making no RPC calls
+			// is pruned every ~15s and reconnect-loops.
+			ws.data.lastActive = Date.now();
+
 			const messageStr = typeof data === "string" ? data : data.toString();
 			const message = parseMessage(messageStr, ws);
 
 			if (!message) {
-				// Keepalive messages return null, which is expected
+				// Keepalive / pong frames return null, which is expected.
 				return;
 			}
 

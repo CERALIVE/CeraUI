@@ -15,11 +15,21 @@ export const audioSourcesSchema = z.tuple([
 ]);
 export type AudioSources = z.infer<typeof audioSourcesSchema>;
 
+// Wire shape of `available_updates`: the package summary when updates exist, else
+// a falsy sentinel — `false` (apt-update disabled) or `null` (enabled, not yet
+// checked). `getStatus` is output-validated, so the sentinels MUST be modelled or
+// reconnect re-auth hydration fails with "Output validation failed".
+export const availableUpdatesFieldSchema = z.union([
+	availableUpdatesSchema,
+	z.literal(false),
+	z.null(),
+]);
+
 // Full status message schema
 export const statusMessageSchema = z.object({
 	set_password: z.boolean().optional(),
 	is_streaming: z.boolean(),
-	available_updates: availableUpdatesSchema,
+	available_updates: availableUpdatesFieldSchema,
 	updating: updatingStatusSchema,
 	ssh: sshStatusSchema,
 	wifi: wifiStatusSchema,
@@ -70,7 +80,7 @@ export type BufferingStatus = z.infer<typeof bufferingStatusSchema>;
 // Status response message schema (what server sends)
 export const statusResponseSchema = z.object({
 	is_streaming: z.boolean().optional(),
-	available_updates: availableUpdatesSchema.optional(),
+	available_updates: availableUpdatesFieldSchema.optional(),
 	updating: updatingStatusSchema.optional(),
 	ssh: sshStatusSchema.optional(),
 	wifi: wifiStatusSchema.optional(),

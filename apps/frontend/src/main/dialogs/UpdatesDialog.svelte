@@ -28,9 +28,14 @@ interface Props {
 
 let { open = $bindable(false) }: Props = $props();
 
+// `available_updates` is `false`/`null` (no updates / not yet checked) or the
+// package summary object; narrow to the object so falsy sentinels read as zero.
 const updates = $derived(getAvailableUpdates());
-const count = $derived(updates?.package_count ?? 0);
-const size = $derived(updates?.download_size ?? '');
+const updateInfo = $derived(
+	updates && typeof updates === 'object' ? updates : undefined,
+);
+const count = $derived(updateInfo?.package_count ?? 0);
+const size = $derived(updateInfo?.download_size ?? '');
 
 const updating = $derived(getUpdating());
 // In progress = literal true OR a progress object that hasn't resolved (result !== 0).
