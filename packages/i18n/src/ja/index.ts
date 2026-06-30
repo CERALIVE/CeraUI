@@ -90,6 +90,12 @@ const ja = {
 		destinationManagedHint:
 			"クラウドアカウントに紐づくリレー経由で配信します。",
 		destinationCustomHint: "ご自身のレシーバーのアドレスとポートを入力します。",
+		destinationNeedsKey:
+			"このクラウドに配信するには {cloud} のキーを追加してください。",
+		destinationAddKey: "キーを追加",
+		latency: "レイテンシ",
+		latencyNegotiated: "ネゴシエート済み",
+		transportActive: "有効",
 		transportKind: "トランスポート",
 		remoteControl: {
 			title: "リモート制御",

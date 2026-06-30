@@ -35,7 +35,7 @@ CeraUI/
 │   │       │   ├── HudRegion.svelte       # Responsive HUD mount (desktop top / mobile bottom)
 │   │       │   ├── DisconnectedBanner.svelte  # Reconnect/reboot/failed banner
 │   │       │   ├── dialogs/               # 14 focused config dialogs (AppDialog-based)
-│   │   │   │   └── server/            # ServerDialog sub-components: DestinationSection, ProtocolSelector, CustomEndpointForm, TransportBadge
+│   │   │   │   └── server/            # ServerDialog sub-components: DestinationSection, TransportRow, LatencySection, RelayServerSelector, CustomEndpointForm, ServerIngestSlots
 │   │       │   └── tabs/                  # Legacy tab views (Streaming, Network, General, Advanced, DevTools)
 │   │       └── lib/
 │   │           ├── components/
@@ -117,7 +117,7 @@ CeraUI/
 | Design rules | `.impeccable.md` |
 | **Receiver-kind model + Scope-B plain-SRT contract** | `docs/RECEIVER_MODEL.md` |
 | **ServerDialog protocol-first container** | `apps/frontend/src/main/dialogs/ServerDialog.svelte` |
-| **ServerDialog sub-components (DestinationSection, ProtocolSelector, CustomEndpointForm, TransportBadge)** | `apps/frontend/src/main/dialogs/server/` |
+| **ServerDialog sub-components (DestinationSection, TransportRow, LatencySection, RelayServerSelector, CustomEndpointForm, ServerIngestSlots)** | `apps/frontend/src/main/dialogs/server/` |
 | **Receiver-experience pure logic (deriveDestination, resolveReceiverKind, buildServerSetConfig)** | `apps/frontend/src/lib/streaming/receiver-experience.ts` |
 | **relay.validate procedure + mock seam** | `apps/backend/src/rpc/procedures/relay.procedure.ts` + `apps/backend/src/mocks/providers/relay.ts` |
 | **Live server readiness hint (SRTLA bonded/single)** | `apps/frontend/src/main/live/ServerReadiness.svelte` |
@@ -956,9 +956,40 @@ platform checks `ceraui-version` at session start; out-of-window devices get
 | Full hosting/signing contract | root `AGENTS.md` → "Version-federation hosting/signing contract" |
 | Serving route (apt-worker) | [`../apt-worker/AGENTS.md`](../apt-worker/AGENTS.md) |
 
-## STREAM TUNING CARD [EXISTS]
+## RECEIVER COHERENCE — v2 destination/transport/latency model [EXISTS]
 
-The Stream Tuning card is a section inside `ServerDialog.svelte` (after `TransportBadge`) that exposes per-profile SRT controls gated on receiver capability.
+The Live → Receiver/Server dialog is **destination-as-provider, latency-only**.
+Full model: [`docs/RECEIVER_MODEL.md`](docs/RECEIVER_MODEL.md) → "Device UI v2".
+
+- **Destination IS the provider.** `DestinationSection` renders three tiles —
+  CeraLive Cloud / BELABOX Cloud / Custom — driven by
+  `deriveDestinationChoice(config)` (`receiver-experience.ts`,
+  `ReceiverDestinationChoice = 'ceralive' | 'belabox' | 'custom'`,
+  `MANAGED_DESTINATION_CHOICES` from `CLOUD_PROVIDERS`). A managed cloud the device
+  has no key for shows an add-key prompt (`data-testid="destination-needs-key"`)
+  that opens `CloudRemoteDialog` with the `provider` prop preselected. No provider
+  dropdown, no manual-endpoint override, no provider-switch stale warning.
+- **One transport.** `TransportRow` shows SRTLA active; RIST (`TD-rist-egress`) +
+  SRT (`TD-plain-srt-egress`) are calm coming-soon pills. `ProtocolSelector` and
+  `TransportBadge` are removed; there is no protocol radiogroup.
+- **One knob.** `LatencySection` (replaces `StreamTuningSection`) is a single
+  latency slider; window from `deriveLatencyRange(getCapabilities())`. The
+  device-side FEC / recovery / presets / cloud-override controls are removed.
+- **Schema/handlers kept.** `device.setProfile` + its wiring and the
+  `fec_enabled` / `recovery_mode` / `stream_profile` / `profile_decided_by` schema
+  fields are intact (the cloud may still push a profile; the device applies latency
+  and tolerates the rest). `buildServerSetConfig` is latency-only and clears a stale
+  `selected_ingest_endpoint` on every non-slot save (round-3); the backend
+  `streaming.setConfig`/`getConfig` persist + echo `selected_ingest_endpoint`.
+
+### Stream Tuning card — SUPERSEDED (historical)
+
+The notes below describe the removed Stream Tuning card (Task 16). The card,
+`StreamTuningSection.svelte`, and the device-side tuning derivations are gone; the
+`@ceraui/rpc` `stream-profile.schema.ts` exports and the `device.setProfile`
+backend path are retained for the cloud control-channel.
+
+The Stream Tuning card was a section inside `ServerDialog.svelte` that exposed per-profile SRT controls gated on receiver capability.
 
 ### Schema layer
 
@@ -1041,6 +1072,32 @@ The duplicate bottom SRT-latency slider that previously lived in `ServerDialog.s
 | Tests (handler + routing) | `apps/backend/src/tests/control-set-profile.test.ts` |
 | Tests (receiver-experience + StreamTuningSection) | `apps/frontend/src/lib/streaming/receiver-experience.test.ts` + `apps/frontend/src/tests/StreamTuningSection.test.ts` |
 | E2E tests | `apps/frontend/tests/e2e/stream-tuning.spec.ts` + `tests/e2e/visual/stream-tuning.visual.spec.ts` |
+
+## RECEIVER CAPABILITY RECONCILIATION
+
+Canonical decision record: [`docs/RECEIVER-RECONCILIATION.md`](https://github.com/CERALIVE/ceralive/blob/master/docs/RECEIVER-RECONCILIATION.md)
+
+**Receiver kind in `device.hello` (Task 12, pending).** Extend `buildDeviceHello` in
+`apps/backend/src/modules/remote-control/channel.ts` to carry the device's configured
+receiver kind in `deviceCaps.receiverKind`. Derive from config:
+
+- `relay_server` or `selected_ingest_endpoint` present → managed provider
+  (`config.remote_provider` ∈ `{ceralive, belabox}`); emit that value.
+- `srtla_addr` present (manual custom endpoint) → emit `custom`.
+- Neither → omit the field (platform treats absent as `unknown` → baseline).
+
+This is additive/optional on both sides: the platform (`ceralive-platform` Tasks 5/6)
+tolerates its absence (defaults to `unknown` → baseline). CeraUI Task 12 and platform
+Tasks 5/6 ship independently (R2-safe).
+
+**Important:** derive from the MEDIA DESTINATION, not `config.remote_provider` alone.
+A CeraLive-paired (control) device can stream its media to a Custom receiver while
+`remote_provider` stays `ceralive`; reporting `ceralive` would wrongly get it pushed
+FEC/L1. The derivation logic above handles this correctly.
+
+**QA gate (Task 12):** a CeraLive-paired device with a manual custom endpoint reports
+`custom` → platform resolves baseline-only (not FEC/L1). Unset `remote_provider` →
+field omitted.
 
 ## ANTI-PATTERNS
 

@@ -87,6 +87,11 @@ const hi = {
 		destinationCustom: "कस्टम रिसीवर",
 		destinationManagedHint: "अपने क्लाउड खाते से जुड़े रिले के माध्यम से स्ट्रीम करें।",
 		destinationCustomHint: "अपने रिसीवर का पता और पोर्ट दर्ज करें।",
+		destinationNeedsKey: "इस क्लाउड पर स्ट्रीम करने के लिए अपनी {cloud} कुंजी जोड़ें।",
+		destinationAddKey: "कुंजी जोड़ें",
+		latency: "विलंबता",
+		latencyNegotiated: "तय की गई",
+		transportActive: "सक्रिय",
 		transportKind: "ट्रांसपोर्ट",
 		remoteControl: {
 			title: "रिमोट नियंत्रण",

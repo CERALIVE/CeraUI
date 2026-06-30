@@ -45,7 +45,9 @@
 
 import WebSocket, { type RawData } from "ws";
 
+import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
+import { getConfig } from "../config.ts";
 import { canDialControlChannel } from "../identity/index.ts";
 import { verifyDeviceControlToken } from "../pairing/device-token.ts";
 import {
@@ -114,6 +116,11 @@ export interface ControlChannelDeps {
 	getControlToken: () => string | undefined;
 	/** Local token verification (spec §10): never present a token we know is bad. */
 	verifyToken: (token: string) => unknown;
+	/**
+	 * Current runtime config snapshot — read at `device.hello` time to derive the
+	 * device's media-destination receiver kind (`deviceCaps.receiverKind`).
+	 */
+	getConfig: () => RuntimeConfig;
 	logger: ControlChannelLogger;
 	random: () => number;
 	setTimer: (fn: () => void, ms: number) => TimerHandle;
@@ -150,6 +157,7 @@ function defaultDeps(isReal: boolean): ControlChannelDeps {
 		getControlToken: () => undefined,
 		verifyToken: (token) =>
 			verifyDeviceControlToken(token, undefined, { isRealDevice: isReal }),
+		getConfig,
 		logger,
 		random: Math.random,
 		setTimer: (fn, ms) => setTimeout(fn, ms),
@@ -184,11 +192,44 @@ export function backoffDelay(attempt: number, random: () => number): number {
 }
 
 /**
+ * Derive the device's media-DESTINATION receiver kind for `deviceCaps.receiverKind`.
+ *
+ * The kind follows where media actually egresses, NOT `remote_provider` alone: a
+ * managed destination (`relay_server` or a selected platform ingest slot) reports the
+ * provider, but a manual `srtla_addr` override reports `'custom'` even on a
+ * CeraLive-paired device — otherwise the platform would wrongly push it FEC/L1 for a
+ * receiver that is in fact custom. Returns `undefined` (field omitted) when not derivable.
+ */
+export function deriveReceiverKind(
+	config: Pick<
+		RuntimeConfig,
+		| "relay_server"
+		| "selected_ingest_endpoint"
+		| "srtla_addr"
+		| "remote_provider"
+	>,
+): string | undefined {
+	if (
+		config.relay_server !== undefined ||
+		config.selected_ingest_endpoint !== undefined
+	) {
+		return config.remote_provider;
+	}
+	if (config.srtla_addr !== undefined) {
+		return "custom";
+	}
+	return undefined;
+}
+
+/**
  * Build the `device.hello` handshake frame (spec §4 / §14.2). The hello body
  * (`v`, `supportedTypes`, `deviceCaps`) rides in `payload` per the envelope
  * contract — the hub validates `payload` against its `HandshakeDeviceSchema`.
  */
 function buildDeviceHello(deps: ControlChannelDeps): Handshake {
+	const receiverKind = deriveReceiverKind(deps.getConfig());
+	const deviceCaps: Record<string, unknown> =
+		receiverKind !== undefined ? { receiverKind } : {};
 	return {
 		v: PROTOCOL_VERSION,
 		kind: "handshake",
@@ -197,7 +238,7 @@ function buildDeviceHello(deps: ControlChannelDeps): Handshake {
 		payload: {
 			v: PROTOCOL_VERSION,
 			supportedTypes: [...COMMAND_REGISTRY],
-			deviceCaps: {},
+			deviceCaps,
 		},
 	};
 }

@@ -546,7 +546,8 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			break;
 		}
 
-		case "notifications": {
+		// SINGULAR: the backend broadcasts `buildMsg("notification", …)`; the plural never hits the wire.
+		case "notification": {
 			// `show` adds/updates; `remove` (backend `notificationRemove`, or
 			// another client dismissing a persistent item) drops it live. The
 			// remove-only frame carries no `show`, so both arrays are optional.

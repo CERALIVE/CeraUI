@@ -86,6 +86,11 @@ const zh = {
 		destinationCustom: "自定义接收器",
 		destinationManagedHint: "通过与您的云账户关联的中继进行推流。",
 		destinationCustomHint: "输入您自己的接收器地址和端口。",
+		destinationNeedsKey: "添加你的 {cloud} 密钥以推流到此云。",
+		destinationAddKey: "添加密钥",
+		latency: "延迟",
+		latencyNegotiated: "已协商",
+		transportActive: "活跃",
 		transportKind: "传输",
 		remoteControl: {
 			title: "远程控制",

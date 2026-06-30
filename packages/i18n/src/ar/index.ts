@@ -225,6 +225,11 @@ const ar = {
 		destinationCustom: "مستقبِل مخصّص",
 		destinationManagedHint: "ابثّ عبر مُرحِّل مرتبط بحسابك السحابي.",
 		destinationCustomHint: "أدخل عنوان ومنفذ المستقبِل الخاص بك.",
+		destinationNeedsKey: "أضف مفتاح {cloud} للبثّ إلى هذه السحابة.",
+		destinationAddKey: "إضافة مفتاح",
+		latency: "زمن الوصول",
+		latencyNegotiated: "تم التفاوض",
+		transportActive: "نشط",
 		transportKind: "النقل",
 		remoteControl: {
 			title: "التحكم عن بُعد",

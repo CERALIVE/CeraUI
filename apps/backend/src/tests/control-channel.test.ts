@@ -5,6 +5,7 @@ import {
 	type ControlChannelDeps,
 	type ControlChannelLogger,
 	type ControlSocket,
+	deriveReceiverKind,
 	initControlChannel,
 	isConnected,
 	RECONNECT_BASE_MS,
@@ -94,6 +95,7 @@ function harness(overrides: Partial<ControlChannelDeps> = {}): Harness {
 		},
 		getControlToken: () => undefined,
 		verifyToken: () => null,
+		getConfig: () => ({}),
 		logger: silent,
 		// random=1 makes the equal-jitter backoff land at its upper bound (= cap)
 		// so the per-attempt delay is deterministic for assertions.
@@ -199,6 +201,78 @@ describe("control channel when paired", () => {
 
 		h.sockets[0]?.fireClose();
 		expect(sendFrame(frame)).toBe(false);
+	});
+});
+
+describe("deriveReceiverKind (media-destination derivation)", () => {
+	test("relay_server present + remote_provider=ceralive → 'ceralive'", () => {
+		expect(
+			deriveReceiverKind({
+				remote_provider: "ceralive",
+				relay_server: "ceralive:0",
+			}),
+		).toBe("ceralive");
+	});
+
+	test("selected_ingest_endpoint present + remote_provider=belabox → 'belabox'", () => {
+		expect(
+			deriveReceiverKind({
+				remote_provider: "belabox",
+				selected_ingest_endpoint: "ep-123",
+			}),
+		).toBe("belabox");
+	});
+
+	test("srtla_addr present (no relay/ingest) → 'custom'", () => {
+		expect(deriveReceiverKind({ srtla_addr: "203.0.113.7" })).toBe("custom");
+	});
+
+	test("nothing set → undefined (omitted)", () => {
+		expect(deriveReceiverKind({})).toBeUndefined();
+	});
+
+	// Round-3 fix: a CeraLive-paired device streaming media to a manual custom
+	// endpoint must report 'custom', not 'ceralive', or the platform would push
+	// it FEC/L1 for a receiver that is actually custom.
+	test("remote_provider=ceralive + srtla_addr only → 'custom'", () => {
+		expect(
+			deriveReceiverKind({
+				remote_provider: "ceralive",
+				srtla_addr: "203.0.113.7",
+			}),
+		).toBe("custom");
+	});
+});
+
+describe("device.hello receiverKind emission", () => {
+	test("emits deviceCaps.receiverKind from the media destination", async () => {
+		const h = harness({
+			getConfig: () => ({
+				remote_provider: "ceralive",
+				relay_server: "ceralive:0",
+			}),
+		});
+		await initControlChannel(h.deps);
+		h.sockets[0]?.fireOpen();
+
+		const frame = HandshakeSchema.parse(
+			JSON.parse(h.sockets[0]?.sent[0] ?? "{}"),
+		);
+		const hello = HandshakeDeviceSchema.parse(frame.payload);
+		expect(hello.deviceCaps.receiverKind).toBe("ceralive");
+	});
+
+	test("omits receiverKind when not derivable", async () => {
+		const h = harness({ getConfig: () => ({}) });
+		await initControlChannel(h.deps);
+		h.sockets[0]?.fireOpen();
+
+		const frame = HandshakeSchema.parse(
+			JSON.parse(h.sockets[0]?.sent[0] ?? "{}"),
+		);
+		const hello = HandshakeDeviceSchema.parse(frame.payload);
+		expect(hello.deviceCaps).toEqual({});
+		expect("receiverKind" in hello.deviceCaps).toBe(false);
 	});
 });
 

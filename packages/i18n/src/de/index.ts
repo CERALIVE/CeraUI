@@ -639,6 +639,12 @@ const de = {
 		destinationCustom: "Eigener Empfänger",
 		destinationManagedHint:
 			"Streame über ein Relay, das mit deinem Cloud-Konto verknüpft ist.",
+		destinationNeedsKey:
+			"Füge deinen {cloud}-Schlüssel hinzu, um zu dieser Cloud zu streamen.",
+		destinationAddKey: "Schlüssel hinzufügen",
+		latency: "Latenz",
+		latencyNegotiated: "Ausgehandelt",
+		transportActive: "Aktiv",
 		destinationCustomHint:
 			"Gib Adresse und Port deines eigenen Empfängers ein.",
 		transportKind: "Transport",

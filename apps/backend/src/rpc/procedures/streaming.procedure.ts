@@ -285,6 +285,7 @@ export const getConfigProcedure = authedProcedure
 			relay_server: config.relay_server,
 			relay_streamid_override: config.relay_streamid_override,
 			relay_protocol: config.relay_protocol,
+			selected_ingest_endpoint: config.selected_ingest_endpoint,
 			detectionMethod: config.detectionMethod,
 		};
 	});
@@ -367,6 +368,19 @@ export const setConfigProcedure = authedProcedure
 		if (input.relay_protocol !== undefined)
 			config.relay_protocol = input.relay_protocol;
 
+		// Managed ingest-slot identity (Task 18). The slot path persists the slot's
+		// endpointId; any other relay/manual save clears a stale slot (sent as '')
+		// so deriveDestinationChoice re-derives correctly (round-3 mutual exclusion).
+		if (input.selected_ingest_endpoint !== undefined) {
+			config.selected_ingest_endpoint =
+				input.selected_ingest_endpoint || undefined;
+		} else if (
+			input.relay_server !== undefined ||
+			input.srtla_addr !== undefined
+		) {
+			config.selected_ingest_endpoint = undefined;
+		}
+
 		// Reflect the post-clamp config values back for every field the input
 		// touched, so the FE field-lock releases on what the server actually wrote.
 		const applied: StreamingConfigInput = {};
@@ -397,6 +411,8 @@ export const setConfigProcedure = authedProcedure
 			applied.relay_streamid_override = config.relay_streamid_override;
 		if (input.relay_protocol !== undefined)
 			applied.relay_protocol = config.relay_protocol;
+		if (input.selected_ingest_endpoint !== undefined)
+			applied.selected_ingest_endpoint = config.selected_ingest_endpoint ?? "";
 
 		if (shouldUseMocks()) {
 			setMockEncoderConfig({

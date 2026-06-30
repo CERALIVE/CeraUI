@@ -147,6 +147,8 @@ export const startStreaming = async (config: ConfigMessage) => {
 			asrc: config.asrc,
 			relay_server: config.relay_server,
 			relay_account: config.relay_account,
+			relay_streamid_override: config.relay_streamid_override,
+			relay_protocol: config.relay_protocol,
 		};
 		return await rpc.streaming.start(input);
 	} catch (error) {

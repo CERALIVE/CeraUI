@@ -1,45 +1,36 @@
 <!--
   ServerDialog.svelte — receiver/server configuration, surfaced from Live.
 
-  Destination-first orchestration (Task 9). The dialog leads with WHERE the
-  stream is sent and only then HOW it gets there:
+  Destination-as-provider model (receiver-coherence). The destination IS the
+  provider choice and leads the dialog:
 
    1. Streaming-lock banner — config changes need a stop first.
-   2. DestinationSection (T6) — managed cloud relay vs. custom receiver, with the
-      D6 relay-availability gate baked into the managed choice.
-   3. Transport (T21), promoted above the endpoint as a primary control:
-        • TransportBadge (T8) — the calm derived "how it reaches the receiver"
-          read-only summary chip.
-        • ProtocolSelector — the always-visible transport-protocol radiogroup
-          (SRTLA / RIST / reserved plain-SRT); no Advanced disclosure.
-   4. Endpoint config, immediately under the transport pick:
-        • managed → RelayServerSelector (provider/server/endpoint/account/streamid,
-          plus the per-server transport chooser for multi-transport endpoints).
-        • custom  → CustomEndpointForm (kind-driven address/port/streamid/secret +
-          the relay.validate action and its multi-stage result).
-   5. StreamTuningSection — receiver-capability-gated latency / FEC / recovery.
+   2. DestinationSection — three tiles: CeraLive Cloud · BELABOX Cloud · Custom
+      receiver. Picking the managed cloud the device holds a key for shows its
+      servers; picking another managed cloud shows a calm "add your key" prompt
+      that opens CloudRemoteDialog preselecting it.
+   3. TransportRow — honest transport row: SRTLA active, RIST/SRT coming soon.
+   4. Endpoint config:
+        • managed (keyed) → ServerIngestSlots or RelayServerSelector (fetched
+          servers, prefilled; no provider picker, no override).
+        • managed (unkeyed) → "add your key" prompt.
+        • custom → CustomEndpointForm (SRTLA address/port/streamid/secret +
+          relay.validate).
+   5. LatencySection — the single honest tuning control (ARQ retransmit budget).
 
-  This stays the logic container: it owns the `draft` dirty-field guard, every
-  derived value (destination/protocol/kind via the pure T5
-  `receiver-experience` helpers), the relay-validation gate, and the validate +
-  save handlers. Live config (`getConfig`) and the relay catalog (`getRelays`)
-  are read directly and overlaid only with the operator's edits. The save handler
-  delegates the persisted-field selection to `buildServerSetConfig` (T5) and locks
-  every field of that SAME object before the RPC (field-lock-before-RPC). Bounds
-  and port parsing come from `ValidationAdapter` (RPC schema consts).
+  Reliability is automatic (SRT ARQ over SRTLA bonding, always on) so latency is
+  the only knob — no FEC, recovery, presets, or cloud-override controls. The save
+  handler delegates the persisted-field set to `buildServerSetConfig` /
+  `buildManagedSlotConfig` and locks every field before the RPC.
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { Server, TriangleAlert } from '@lucide/svelte';
-import {
-	CLOUD_PROVIDERS,
-	type RelayProtocol,
-	type StreamRecoveryPreference,
-	serverSupportedProtocols,
-} from '@ceraui/rpc/schemas';
+import { KeyRound, Server } from '@lucide/svelte';
+import type { RelayProtocol } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
+import { Button } from '$lib/components/ui/button';
 import {
 	isPortValid,
 	parsePort,
@@ -61,35 +52,27 @@ import {
 } from '$lib/rpc/subscriptions.svelte';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
-import { isPairedToManagedCloud } from '$lib/stores/pairing.svelte';
 import {
-	type CloudOverrideState,
-	type Destination,
+	type ReceiverDestinationChoice,
 	type ServerSetDerived,
 	type ServerSetDraft,
 	autoSelectIngestSlot,
 	autoSelectManagedRelay,
-	autoSelectManagedTransport,
-	availableManagedProviders,
 	buildManagedSlotConfig,
 	buildServerSetConfig,
-	deriveDestination,
-	deriveReceiverCaps,
-	deriveReceiverProfileKind,
-	deriveStreamTuningExperience,
-	hasProfileDrift,
-	isRelayServerStaleForProvider,
-	overrideClearsManagedBinding,
-	resolveActiveManagedProvider,
-	resolveReceiverKind,
+	choiceToDestination,
+	deriveDestinationChoice,
+	deriveLatencyRange,
+	isManagedChoice,
+	managedCloudLabel,
 } from '$lib/streaming/receiver-experience';
+import CloudRemoteDialog from './CloudRemoteDialog.svelte';
 import CustomEndpointForm from './server/CustomEndpointForm.svelte';
 import DestinationSection from './server/DestinationSection.svelte';
-import ProtocolSelector from './server/ProtocolSelector.svelte';
+import LatencySection from './server/LatencySection.svelte';
 import RelayServerSelector from './server/RelayServerSelector.svelte';
 import ServerIngestSlots from './server/ServerIngestSlots.svelte';
-import StreamTuningSection from './server/StreamTuningSection.svelte';
-import TransportBadge from './server/TransportBadge.svelte';
+import TransportRow from './server/TransportRow.svelte';
 
 interface Props {
 	open?: boolean;
@@ -97,43 +80,47 @@ interface Props {
 let { open = $bindable(false) }: Props = $props();
 
 const PORT = streamingConstraints.port;
+const PROTOCOL: RelayProtocol = 'srtla';
 
 const config = $derived(getConfig());
 const relays = $derived(getRelays());
 const isStreaming = $derived(Boolean(getIsStreaming()));
 
-// Managed-cloud surfaces (managed destination + ingest slots) require pairing to
-// a managed provider — multi-cloud safe (never a single-provider literal). The
-// custom/self-hosted receiver path stays available regardless.
-const pairedToManaged = $derived(isPairedToManagedCloud());
-
 type Draft = {
-	destination?: Destination;
-	relay_protocol?: RelayProtocol;
+	destination_choice?: ReceiverDestinationChoice;
 	srtla_addr?: string;
 	srtla_port?: string;
 	srt_streamid?: string;
 	srt_latency?: number;
-	fec_enabled?: boolean;
-	recovery_mode?: StreamRecoveryPreference;
-	relay_provider?: string;
 	relay_server?: string;
 	relay_account?: string;
 	relay_streamid?: string;
-	relay_override?: boolean;
-	relay_override_addr?: string;
-	relay_override_port?: string;
 	passphrase?: string;
 	selected_slot?: string;
-	cloud_override_cleared?: boolean;
 };
 let draft = $state<Draft>({});
 
-// Platform-managed ingest slots (T19). When present they supersede the relay
-// catalog selector inside the managed destination: the slot auto-resolves (one
-// slot → silent; many → default/last-used else prompt) and the operator can
-// one-tap switch. The manual custom endpoint remains the always-available
-// fallback via the destination radiogroup.
+let cloudRemoteOpen = $state(false);
+let cloudRemoteProvider = $state<ReceiverDestinationChoice | undefined>(undefined);
+let validation = $state<Validation>({ state: 'idle' });
+
+$effect(() => {
+	if (open) {
+		draft = {};
+		validation = { state: 'idle' };
+	}
+});
+
+const destinationChoice = $derived<ReceiverDestinationChoice>(
+	draft.destination_choice ?? deriveDestinationChoice(config),
+);
+const destination = $derived(choiceToDestination(destinationChoice));
+const activeProvider = $derived(config?.remote_provider);
+const selectedManagedActive = $derived(
+	isManagedChoice(destinationChoice) && destinationChoice === activeProvider,
+);
+const selectedProvider = $derived(isManagedChoice(destinationChoice) ? destinationChoice : 'ceralive');
+
 const managedAccounts = $derived(getManagedIngestAccounts());
 const hasManagedSlots = $derived(managedAccounts.length > 0);
 const slotSelection = $derived(
@@ -148,21 +135,6 @@ const activeSlot = $derived(
 );
 const slotPrompting = $derived(hasManagedSlots && activeSlot === undefined);
 
-let validation = $state<Validation>({ state: 'idle' });
-
-$effect(() => {
-	if (open) {
-		draft = {};
-		validation = { state: 'idle' };
-	}
-});
-
-// Destination + transport: the destination defaults to the persisted config
-// (a non-empty `relay_server` = managed), the protocol to the persisted protocol
-// (legacy configs with none coerce to SRTLA downstream).
-const destination = $derived<Destination>(draft.destination ?? deriveDestination(config));
-const protocol = $derived<RelayProtocol>(draft.relay_protocol ?? config?.relay_protocol ?? 'srtla');
-
 const addr = $derived(draft.srtla_addr ?? config?.srtla_addr ?? '');
 const portStr = $derived(draft.srtla_port ?? (config?.srtla_port?.toString() ?? ''));
 const streamId = $derived(draft.srt_streamid ?? config?.srt_streamid ?? '');
@@ -171,39 +143,22 @@ const relayServer = $derived(draft.relay_server ?? config?.relay_server ?? '');
 const relayAccount = $derived(draft.relay_account ?? config?.relay_account ?? '');
 const relayStreamId = $derived(draft.relay_streamid ?? config?.relay_streamid_override ?? '');
 
-const serverEntries = $derived(Object.entries(relays?.servers ?? {}));
-const accountEntries = $derived(Object.entries(relays?.accounts ?? {}));
+const allServerEntries = $derived(Object.entries(relays?.servers ?? {}));
+const allAccountEntries = $derived(Object.entries(relays?.accounts ?? {}));
 
-// Provider grouping: untagged catalog servers belong to the device's configured
-// provider, so the selector defaults to it and lists only that provider's relays.
-const configProvider = $derived(
-	config?.remote_provider && config.remote_provider !== 'custom'
-		? config.remote_provider
-		: 'ceralive',
-);
-
-// Multi-cloud provider picker (T12): the offerable managed providers are DERIVED
-// from the catalog the paired cloud(s) pushed — never a hardcoded list — so a
-// device paired only to BELABOX offers only BELABOX, and a future managed cloud
-// appears as soon as its servers arrive. Custom/self-hosted is never here; it is
-// the always-available destination radiogroup escape hatch. The picker is shown
-// only when more than one managed provider is offered; a single provider
-// auto-selects (select-not-fill), and its single server/transport seed via T10.
-const managedProviderOptions = $derived(availableManagedProviders(serverEntries, configProvider));
-const showProviderPicker = $derived(managedProviderOptions.length > 1);
-const providerLabels = $derived.by(() => {
-	const labels: Record<string, string> = {};
-	for (const option of managedProviderOptions) {
-		labels[option.id] =
-			option.name ?? CLOUD_PROVIDERS.find((p) => p.id === option.id)?.name ?? option.id;
-	}
-	return labels;
-});
-const selectedProvider = $derived(
-	resolveActiveManagedProvider(managedProviderOptions, configProvider, draft.relay_provider),
-);
+// Provider-filtered catalog (R-4): only the selected cloud's servers/accounts are
+// offered; untagged legacy entries belong to the selected provider.
 const filteredServerEntries = $derived(
-	serverEntries.filter(([, info]) => (info.provider?.kind ?? configProvider) === selectedProvider),
+	allServerEntries.filter(([, info]) => (info.provider?.kind ?? selectedProvider) === selectedProvider),
+);
+const filteredAccountEntries = $derived(
+	allAccountEntries.filter(
+		([, info]) => (info.provider?.kind ?? selectedProvider) === selectedProvider,
+	),
+);
+// A persisted account tagged to a different provider is dropped (re-pick).
+const effectiveRelayAccount = $derived(
+	filteredAccountEntries.some(([id]) => id === relayAccount) ? relayAccount : '',
 );
 
 const relayServerInfo = $derived(relays?.servers?.[relayServer]);
@@ -214,137 +169,28 @@ const relayServerEndpoint = $derived(
 		? `${relayServerInfo.addr}:${relayServerInfo.port}`
 		: undefined,
 );
-const relayAccountName = $derived(relays?.accounts?.[relayAccount]?.name);
+const relayAccountName = $derived(relays?.accounts?.[effectiveRelayAccount]?.name);
 
-// Transports the selected managed server advertises (T1). A length > 1 reveals
-// the per-server transport chooser inside RelayServerSelector.
-const relayServerProtocols = $derived(
-	relayServerInfo ? serverSupportedProtocols(relayServerInfo) : [],
-);
-
-// Receiver kind = transport × destination (T5). For a managed server the
-// effective transport is constrained to what that server actually advertises.
-const kind = $derived(resolveReceiverKind({ protocol, destination, server: relayServerInfo }));
-
-// Stream-tuning (Task 16): a managed CeraLive cloud is the only proven CeraLive
-// receiver — a custom/self-hosted endpoint is conservatively non-CeraLive. The
-// capability descriptor projects the engine's advertised profiles/FEC/latency
-// onto the receiver kind; the experience decides which tuning controls the card
-// offers and the disabled reason for the rest.
-const receiverProfileKind = $derived(
-	destination === 'managed' ? deriveReceiverProfileKind(config?.remote_provider) : 'unknown',
-);
 const engineCaps = $derived(getCapabilities());
-const streamTuning = $derived(
-	deriveStreamTuningExperience(
-		deriveReceiverCaps(receiverProfileKind, {
-			supportedProfiles: engineCaps?.supported_profiles,
-			fecCapable: engineCaps?.fec_capable,
-			latencyRange: engineCaps?.latency_range,
-		}),
-	),
-);
-
-// Stream-tuning draft values (Tasks 17/18/19). Latency persists via the existing
-// srt_latency path, clamped to the receiver's advertised window; FEC + recovery
-// persist via the additive setConfig fields. The save handler only persists FEC
-// (and recovery) when the receiver actually offers them — an unproven receiver
-// never gets FEC enabled, and recovery stays receiver-managed.
-const latencyRange = $derived(streamTuning.latencyRange);
+const latencyRange = $derived(deriveLatencyRange({ latency_range: engineCaps?.latency_range }));
 const latency = $derived(draft.srt_latency ?? config?.srt_latency ?? latencyRange.default);
 const clampedLatency = $derived(
 	Math.min(Math.max(latency, latencyRange.min), latencyRange.max),
 );
 const effectiveLatencyMs = $derived(isStreaming ? config?.srt_latency : undefined);
-const fecEnabled = $derived(draft.fec_enabled ?? config?.fec_enabled ?? false);
-const recoveryMode = $derived<StreamRecoveryPreference>(
-	draft.recovery_mode ?? config?.recovery_mode ?? streamTuning.defaultRecoveryMode,
-);
 
-// Cloud-override + reconciliation drift (Task 21). The active profile + its
-// provenance arrive over the config echo (`profile_decided_by`); a prod-inert
-// `__ceraProfileDecidedBy` window seam lets e2e drive the affordance
-// deterministically. Tapping "tap to override" sets `cloud_override_cleared` so
-// the binding releases and local edits persist.
-let devCloudDecidedBy = $state<string | undefined>(undefined);
+// Auto-select the managed relay server for the active cloud (catalog mirror of
+// the ingest-slot rule): exactly one offered → silent; many → default else
+// last-used; many with neither → leave the operator to pick. Stands down when
+// platform ingest slots own the managed path.
 $effect(() => {
-	if (!open) {
-		devCloudDecidedBy = undefined;
-		return;
-	}
-	devCloudDecidedBy = (globalThis as { __ceraProfileDecidedBy?: string })
-		.__ceraProfileDecidedBy;
-});
-const cloudOverride = $derived.by<CloudOverrideState | undefined>(() => {
-	if (draft.cloud_override_cleared) return undefined;
-	const decidedBy = config?.profile_decided_by ?? devCloudDecidedBy;
-	if (decidedBy === undefined) return undefined;
-	return {
-		decidedBy: decidedBy as CloudOverrideState['decidedBy'],
-		...(config?.stream_profile ? { presetId: config.stream_profile } : {}),
-	};
-});
-
-// Drift: the persisted (device-active) profile vs the selected control values.
-const driftActive = $derived(
-	hasProfileDrift(
-		{ latencyMs: clampedLatency, fecEnabled, recoveryMode },
-		{
-			latencyMs: config?.srt_latency ?? latencyRange.default,
-			fecEnabled: config?.fec_enabled ?? false,
-			recoveryMode: config?.recovery_mode ?? streamTuning.defaultRecoveryMode,
-		},
-	),
-);
-
-// Seed the persisted transport from the selected managed server's advertised set
-// (T10): SRTLA when offered, else its first transport. Now fires for a SINGLE
-// advertised transport too — previously only multi-transport servers re-seeded,
-// so a single-transport server whose only transport differed from the draft left
-// a stale relay_protocol. The per-server chooser stays the single user-facing
-// writer; this only seeds a valid default when the draft protocol is unsupported.
-$effect(() => {
-	if (destination !== 'managed') return;
-	const best = autoSelectManagedTransport(relayServerProtocols, protocol);
-	if (best && draft.relay_protocol !== best) draft.relay_protocol = best;
-});
-
-// Auto-select the managed relay server for the active provider (T10), the catalog
-// mirror of the ingest-slot rule: exactly one offered → silent; many → default,
-// else last-used; many with neither → leave the operator to pick. Only the
-// selected provider's servers are considered, so this never silently jumps
-// clouds. Respects an existing/persisted selection and stands down when platform
-// ingest slots own the managed path; the custom fallback is always reachable.
-$effect(() => {
-	if (destination !== 'managed' || hasManagedSlots) return;
+	if (destination !== 'managed' || !selectedManagedActive || hasManagedSlots) return;
 	if (draft.relay_server !== undefined || relayServer !== '') return;
-	const selection = autoSelectManagedRelay(serverEntries, config?.relay_server, selectedProvider);
+	const selection = autoSelectManagedRelay(allServerEntries, config?.relay_server, selectedProvider);
 	if (selection && selection.kind !== 'prompt') {
 		draft.relay_server = selection.serverId;
 	}
 });
-
-const relayOverride = $derived(draft.relay_override ?? false);
-const overrideAddr = $derived(draft.relay_override_addr ?? relayServerInfo?.addr ?? '');
-const overridePortStr = $derived(
-	draft.relay_override_port ?? (relayServerInfo?.port?.toString() ?? ''),
-);
-
-// T18 Fix 3: a relay_server saved under a PREVIOUS provider (the operator switched
-// cloud in CloudRemoteDialog without re-selecting) is otherwise invisible here.
-// Guard on a loaded catalog so a still-loading relay list never false-warns.
-const relayServerStale = $derived(
-	destination === 'managed' &&
-		relays !== undefined &&
-		isRelayServerStaleForProvider(relayServer, serverEntries, selectedProvider),
-);
-
-// T18 Fix 2: a manual endpoint override on a bound managed server drops the
-// relay_server binding on save (buildServerSetConfig's override branch persists
-// srtla_addr/port, no relay_server) — surface it before the operator saves.
-const overrideClearsBinding = $derived(
-	overrideClearsManagedBinding({ destination, relayOverride, relayServer }),
-);
 
 const portNum = $derived(parsePort(portStr));
 const portError = $derived.by(() => {
@@ -352,17 +198,9 @@ const portError = $derived.by(() => {
 	if (!isPortValid(portNum)) return $LL.validation.portRange();
 	return undefined;
 });
-const overridePortNum = $derived(parsePort(overridePortStr));
-const overridePortError = $derived.by(() => {
-	if (!relayOverride || overridePortStr.trim() === '') return undefined;
-	if (!isPortValid(overridePortNum)) return $LL.validation.portRange();
-	return undefined;
-});
 const addrError = $derived(
 	destination === 'custom' && draft.srtla_addr !== undefined && draft.srtla_addr.trim() === ''
-		? kind === 'rist_custom'
-			? $LL.settings.errors.receiverAddressRequired()
-			: $LL.settings.errors.srtlaServerAddressRequired()
+		? $LL.settings.errors.srtlaServerAddressRequired()
 		: undefined,
 );
 
@@ -375,9 +213,6 @@ const canValidate = $derived(
 );
 
 const canSave = $derived.by(() => {
-	// The reserved plain-SRT kind can never be saved (mirrors the old
-	// `!protocolSelectable` reserved-protocol gate).
-	if (kind === 'srt_custom') return false;
 	if (destination === 'custom') {
 		return manualSaveEnabled({
 			isStreaming,
@@ -388,20 +223,18 @@ const canSave = $derived.by(() => {
 		});
 	}
 	if (isStreaming) return false;
-	// Managed ingest slots: saveable once a slot is resolved/picked.
+	if (!selectedManagedActive) return false;
 	if (hasManagedSlots) return activeSlot !== undefined;
-	if (relayOverride) {
-		return (
-			overrideAddr.trim() !== '' &&
-			overridePortStr.trim() !== '' &&
-			overridePortError === undefined
-		);
-	}
 	return relayServer !== '';
 });
 
 function resetValidation() {
 	if (validation.state !== 'idle') validation = { state: 'idle' };
+}
+
+function openCloudRemote(provider: ReceiverDestinationChoice) {
+	cloudRemoteProvider = provider;
+	cloudRemoteOpen = true;
 }
 
 async function handleValidate() {
@@ -412,7 +245,7 @@ async function handleValidate() {
 			port: portNum ?? 0,
 			streamid: streamId.trim() === '' ? undefined : streamId.trim(),
 			passphrase: passphrase.trim() === '' ? undefined : passphrase.trim(),
-			protocol,
+			protocol: PROTOCOL,
 		});
 		validation = reduceValidateResult(result);
 	} catch (error) {
@@ -421,35 +254,23 @@ async function handleValidate() {
 }
 
 async function handleSave() {
-	// A resolved managed slot persists its endpoint + the stable
-	// selected_ingest_endpoint identity; every other path keeps today's field set.
 	const input =
-		destination === 'managed' && hasManagedSlots && activeSlot
+		destination === 'managed' && selectedManagedActive && hasManagedSlots && activeSlot
 			? buildManagedSlotConfig(activeSlot, clampedLatency)
 			: buildServerSetConfig(
 					{
 						latency: clampedLatency,
-						protocol,
+						protocol: PROTOCOL,
 						addr,
 						portStr,
 						streamId,
-						overrideAddr,
-						overridePortStr,
 						relayStreamId,
 						relayServer,
-						relayAccount,
-						// FEC only when the receiver advertises it — an unproven receiver
-						// is persisted false, never silently left enabled. Recovery is
-						// persisted only when the CeraLive receiver honours it.
-						fecEnabled: streamTuning.fecEnabled ? fecEnabled : false,
-						...(streamTuning.recoveryModeEnabled ? { recoveryMode } : {}),
+						relayAccount: effectiveRelayAccount,
 					} satisfies ServerSetDraft,
-					{ destination, relayOverride } satisfies ServerSetDerived,
+					{ destination } satisfies ServerSetDerived,
 				);
 	const fields = Object.entries(input);
-	// Lock each field this save changes BEFORE the RPC so a stale server echo of
-	// the old value can't revert the edit; release after it settles (resolve or
-	// reject) to avoid a permanent lock.
 	for (const [field, value] of fields) markPending(field, value);
 	try {
 		await rpc.streaming.setConfig(input);
@@ -482,28 +303,17 @@ async function handleSave() {
 			</p>
 		{/if}
 
-		<!-- Destination first (T6): WHERE the stream is sent. The managed choice
-		     carries the D6 relay-availability gate (waiting / none hint). -->
 		<DestinationSection
+			{activeProvider}
 			{isStreaming}
-			onDestination={(value) => (draft.destination = value)}
-			pairedToManagedCloud={pairedToManaged}
+			onSelect={(value) => (draft.destination_choice = value)}
 			{relays}
-			remoteProvider={config?.remote_provider}
-			selected={destination}
+			selected={destinationChoice}
 		/>
 
-		<!-- Transport promoted above the endpoint (T21): calm derived summary chip,
-		     then the always-visible protocol radiogroup (no Advanced disclosure). -->
-		<TransportBadge hasRelayServer={destination === 'managed'} {protocol} />
-		<ProtocolSelector
-			{isStreaming}
-			onProtocol={(value) => (draft.relay_protocol = value)}
-			{protocol}
-		/>
+		<TransportRow />
 
-		<!-- Endpoint config, immediately under the transport pick. -->
-		{#if destination === 'managed' && pairedToManaged && hasManagedSlots}
+		{#if destination === 'managed' && selectedManagedActive && hasManagedSlots}
 			<ServerIngestSlots
 				accounts={managedAccounts}
 				activeEndpointId={activeSlotId}
@@ -511,66 +321,50 @@ async function handleSave() {
 				onSelectSlot={(value) => (draft.selected_slot = value)}
 				prompting={slotPrompting}
 			/>
-		{:else if destination === 'managed'}
-			{#if relayServerStale}
-				<p
-					class="border-status-warning/30 bg-status-warning/10 text-status-warning flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
-					data-testid="relay-stale-warning"
-					role="status"
-				>
-					<TriangleAlert class="mt-0.5 size-4 shrink-0" />
-					<span>{$LL.settings.relayServerStale()}</span>
-				</p>
-			{/if}
+		{:else if destination === 'managed' && selectedManagedActive}
 			<RelayServerSelector
-				{accountEntries}
-				{filteredServerEntries}
+				accountEntries={filteredAccountEntries}
 				{isStreaming}
-				managedProviders={managedProviderOptions}
 				onAccount={(value) => (draft.relay_account = value)}
-				onOverrideAddr={(value) => (draft.relay_override_addr = value)}
-				onOverridePort={(value) => (draft.relay_override_port = value)}
-				onProtocol={(value) => (draft.relay_protocol = value)}
-				onProvider={(value) => (draft.relay_provider = value)}
 				onRelayStreamId={(value) => (draft.relay_streamid = value)}
 				onServer={(value) => (draft.relay_server = value)}
-				onToggleOverride={() => (draft.relay_override = !relayOverride)}
-				{overrideAddr}
-				{overridePortError}
-				{overridePortStr}
-				port={PORT}
-				{providerLabels}
-				{relayAccount}
+				relayAccount={effectiveRelayAccount}
 				{relayAccountName}
-				{relayOverride}
-				relayProtocol={protocol}
+				relaysUnavailable={relays === undefined}
 				{relayServer}
 				{relayServerEndpoint}
 				{relayServerName}
 				{relayServerRtt}
-				relaysUnavailable={relays === undefined}
 				{relayStreamId}
-				serverProtocols={relayServerProtocols}
-				{selectedProvider}
-				{showProviderPicker}
+				serverEntries={filteredServerEntries}
 			/>
-			{#if overrideClearsBinding}
-				<p
-					class="border-status-warning/30 bg-status-warning/10 text-status-warning flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
-					data-testid="relay-override-warning"
-					role="status"
+		{:else if destination === 'managed'}
+			<div
+				class="border-border bg-muted/40 flex flex-col gap-3 rounded-lg border px-3 py-3"
+				data-testid="destination-needs-key"
+				role="status"
+			>
+				<div class="flex items-start gap-2">
+					<KeyRound class="text-primary mt-0.5 size-4 shrink-0" />
+					<span class="text-muted-foreground text-sm leading-snug">
+						{$LL.settings.destinationNeedsKey({ cloud: managedCloudLabel(destinationChoice) })}
+					</span>
+				</div>
+				<Button
+					class="w-full"
+					data-testid="destination-add-key"
+					onclick={() => openCloudRemote(destinationChoice)}
+					variant="outline"
 				>
-					<TriangleAlert class="mt-0.5 size-4 shrink-0" />
-					<span>{$LL.settings.relayOverrideClearsBinding()}</span>
-				</p>
-			{/if}
+					{$LL.settings.destinationAddKey()}
+				</Button>
+			</div>
 		{:else}
 			<CustomEndpointForm
 				{addr}
 				{addrError}
 				{canValidate}
 				{isStreaming}
-				{kind}
 				onAddr={(value) => {
 					draft.srtla_addr = value;
 					resetValidation();
@@ -597,23 +391,14 @@ async function handleSave() {
 			/>
 		{/if}
 
-		<!-- Stream Tuning (Tasks 16-19): receiver-capability-gated tuning. Owns the
-		     latency slider, FEC toggle, and the Advanced recovery control. CeraLive
-		     receiver → full controls; non-CeraLive → latency only + disabled-with-
-		     reason advanced controls + BELABOX-compatible banner. -->
-		<StreamTuningSection
-			{cloudOverride}
-			{driftActive}
+		<LatencySection
 			{effectiveLatencyMs}
-			experience={streamTuning}
-			{fecEnabled}
 			{isStreaming}
 			latencyMs={clampedLatency}
-			onClearCloudOverride={() => (draft.cloud_override_cleared = true)}
-			onFecChange={(value) => (draft.fec_enabled = value)}
 			onLatencyChange={(value) => (draft.srt_latency = value)}
-			onRecoveryChange={(value) => (draft.recovery_mode = value)}
-			{recoveryMode}
+			range={latencyRange}
 		/>
 	</div>
 </AppDialog>
+
+<CloudRemoteDialog bind:open={cloudRemoteOpen} provider={cloudRemoteProvider} />

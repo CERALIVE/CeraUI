@@ -1,30 +1,15 @@
 <!--
-  CustomEndpointForm.svelte — the custom-receiver path of ServerDialog.
+  CustomEndpointForm.svelte — the custom-receiver (SRTLA) endpoint surface.
 
-  Presentational + per-kind: ServerDialog owns the draft/derived state and the
-  validate + save handlers; this component renders the address / port / stream-id
-  / secret inputs the receiver `kind` calls for, the Validate action, and the
-  multi-stage validation result (input→protocol→endpoint→dns→probe→ok) with an
-  in-flight spinner.
-
-  Field set AND labels reshape top-down from the protocol chosen above. The
-  ProtocolSelector (T21, promoted above this section) writes the transport;
-  ServerDialog resolves it to a receiver `kind` via `resolveReceiverKind` and
-  passes it here, so flipping the protocol reactively re-derives this form
-  (T22). The per-kind shape comes from `receiverKindManifest(kind)`:
-   • srtla_custom / srt_custom → addr + port + stream id + secret
-   • rist_custom               → addr + (even) port + stream id, even-port hint
-  Labels track the kind too: RIST is a point-to-point receiver (receiver-address
-  / receiver-port naming); SRTLA/SRT use the srtla-server naming.
-  RIST simple-profile (librist) has no SRT-style passphrase — the backend RIST
-  adapter ignores it — so the secret field is shown only for the passphrase-
-  capable transports. Stream id never gates Save (`requiresStreamId` is advisory).
-  Stage projection comes from the pure `deriveStageViews` reducer so the chips
-  stay in lock-step with the Save gate.
+  SRTLA is the only egress transport, so the custom receiver is always an SRTLA
+  endpoint: address + port + optional stream id + optional secret, plus the
+  relay.validate action and its multi-stage result. The RIST even-port / label
+  switching is gone (RIST is a future transport, never selectable here).
+  Presentational: the container owns the validate + save handlers.
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { type ReceiverKind, receiverKindManifest, type RelayValidateStage } from '@ceraui/rpc/schemas';
+import type { RelayValidateStage } from '@ceraui/rpc/schemas';
 import Check from '@lucide/svelte/icons/check';
 import Circle from '@lucide/svelte/icons/circle';
 import Loader2 from '@lucide/svelte/icons/loader-2';
@@ -36,7 +21,6 @@ import { Label } from '$lib/components/ui/label';
 import { type Validation, deriveStageViews } from '$lib/components/streaming/relay-validation';
 
 interface Props {
-	kind: ReceiverKind;
 	isStreaming: boolean;
 	addr: string;
 	portStr: string;
@@ -55,7 +39,6 @@ interface Props {
 }
 
 let {
-	kind,
 	isStreaming,
 	addr,
 	portStr,
@@ -73,23 +56,6 @@ let {
 	onValidate,
 }: Props = $props();
 
-const manifest = $derived(receiverKindManifest(kind));
-const showStreamId = $derived(manifest.fields.includes('streamid'));
-// RIST simple-profile carries no passphrase; the secret input is for the
-// SRT-family transports only.
-const showSecret = $derived(kind === 'srtla_custom' || kind === 'srt_custom');
-const evenPortRequired = $derived(manifest.requiresEvenPort);
-
-// Labels follow the selected kind top-down: RIST is a point-to-point receiver,
-// SRTLA/SRT use the srtla-server naming. These re-derive when the protocol above
-// changes, so the field labels switch in lock-step with the field set.
-const addressLabel = $derived(
-	kind === 'rist_custom' ? $LL.settings.receiverAddress() : $LL.settings.srtlaServerAddress(),
-);
-const portLabel = $derived(
-	kind === 'rist_custom' ? $LL.settings.receiverPort() : $LL.settings.srtlaServerPort(),
-);
-
 const stageViews = $derived(deriveStageViews(validation));
 
 function stageLabel(stage: RelayValidateStage): string {
@@ -99,7 +65,7 @@ function stageLabel(stage: RelayValidateStage): string {
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="srtla-addr">
-		{addressLabel}
+		{$LL.settings.srtlaServerAddress()}
 	</Label>
 	<Input
 		id="srtla-addr"
@@ -117,7 +83,7 @@ function stageLabel(stage: RelayValidateStage): string {
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="srtla-port">
-		{portLabel}
+		{$LL.settings.srtlaServerPort()}
 	</Label>
 	<Input
 		id="srtla-port"
@@ -132,52 +98,42 @@ function stageLabel(stage: RelayValidateStage): string {
 		type="number"
 		value={portStr}
 	/>
-	{#if evenPortRequired}
-		<p class="text-muted-foreground text-xs" data-testid="rist-even-port-hint">
-			{$LL.settings.ristEvenPortHint()}
-		</p>
-	{/if}
 	{#if portError}
 		<p class="text-destructive text-sm">{portError}</p>
 	{/if}
 </div>
 
-{#if showStreamId}
-	<div class="space-y-2">
-		<Label class="text-sm font-medium" for="srt-streamid">
-			{$LL.settings.srtStreamId()}
-			<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
-		</Label>
-		<Input
-			id="srt-streamid"
-			class="font-mono"
-			disabled={isStreaming}
-			oninput={(e) => onStreamId(e.currentTarget.value)}
-			placeholder={$LL.settings.placeholders.srtStreamId()}
-			value={streamId}
-		/>
-	</div>
-{/if}
+<div class="space-y-2">
+	<Label class="text-sm font-medium" for="srt-streamid">
+		{$LL.settings.srtStreamId()}
+		<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
+	</Label>
+	<Input
+		id="srt-streamid"
+		class="font-mono"
+		disabled={isStreaming}
+		oninput={(e) => onStreamId(e.currentTarget.value)}
+		placeholder={$LL.settings.placeholders.srtStreamId()}
+		value={streamId}
+	/>
+</div>
 
-{#if showSecret}
-	<div class="space-y-2">
-		<Label class="text-sm font-medium" for="srtla-passphrase">
-			{$LL.settings.relaySecret()}
-			<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
-		</Label>
-		<Input
-			id="srtla-passphrase"
-			class="font-mono"
-			disabled={isStreaming}
-			oninput={(e) => onPassphrase(e.currentTarget.value)}
-			placeholder={$LL.settings.relaySecretPlaceholder()}
-			type="password"
-			value={passphrase}
-		/>
-	</div>
-{/if}
+<div class="space-y-2">
+	<Label class="text-sm font-medium" for="srtla-passphrase">
+		{$LL.settings.relaySecret()}
+		<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
+	</Label>
+	<Input
+		id="srtla-passphrase"
+		class="font-mono"
+		disabled={isStreaming}
+		oninput={(e) => onPassphrase(e.currentTarget.value)}
+		placeholder={$LL.settings.relaySecretPlaceholder()}
+		type="password"
+		value={passphrase}
+	/>
+</div>
 
-<!-- Validate the custom relay endpoint via relay.validate (Task 8/14). -->
 <div class="space-y-3">
 	<Button
 		id="relay-validate"
@@ -195,7 +151,6 @@ function stageLabel(stage: RelayValidateStage): string {
 	</Button>
 
 	{#if validation.state !== 'idle'}
-		<!-- Multi-stage result: each stage chip reflects its derived status. -->
 		<ol class="flex flex-wrap gap-1.5" data-testid="validate-stages">
 			{#each stageViews as { stage, status } (stage)}
 				<li

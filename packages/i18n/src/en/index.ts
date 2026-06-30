@@ -639,6 +639,11 @@ const en = {
 		destinationManagedHint:
 			"Stream through a relay tied to your cloud account.",
 		destinationCustomHint: "Enter your own receiver address and port.",
+		destinationNeedsKey: "Add your {cloud:string} key to stream to this cloud.",
+		destinationAddKey: "Add key",
+		latency: "Latency",
+		latencyNegotiated: "Negotiated",
+		transportActive: "Active",
 		transportKind: "Transport",
 		remoteControl: {
 			title: "Remote control",
