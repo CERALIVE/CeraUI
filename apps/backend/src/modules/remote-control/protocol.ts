@@ -266,15 +266,24 @@ export type Handshake = z.infer<typeof HandshakeSchema>;
 
 /**
  * Device capability object carried in `device.hello` (spec §4.1). Open for forward
- * compatibility (`catchall` keeps unknown keys), but pins the two normative keys the
- * hub's version-support gate reads: `ceraui_version` (CalVer `YYYY.MINOR.PATCH`) and
- * `config_schema_version` (monotonic int). Both are OPTIONAL for safe rollout — a hub
- * tolerates a hello that omits them (a not-yet-updated device → "version unknown" gate).
+ * compatibility (`catchall` keeps unknown keys), but pins the normative keys the
+ * hub reads: `ceraui_version` (CalVer `YYYY.MINOR.PATCH`) and `config_schema_version`
+ * (monotonic int) for the version-support gate, and `receiverKind` for the platform's
+ * receiver-capability reconciliation. All are OPTIONAL for safe rollout — a hub
+ * tolerates a hello that omits them (a not-yet-updated device → "version unknown" /
+ * "receiver unknown → baseline" gate).
+ *
+ * `receiverKind` is the device's configured MEDIA-DESTINATION receiver kind
+ * (`'ceralive' | 'belabox' | 'custom'`). It is derived from where the media actually
+ * goes, NOT from `remote_provider` alone: a CeraLive-paired (control) device can still
+ * stream its media to a custom receiver, in which case it reports `'custom'` so the
+ * platform never wrongly pushes it FEC/L1. Omitted when not derivable.
  */
 export const DeviceCapsSchema = z
 	.object({
 		ceraui_version: z.string().optional(),
 		config_schema_version: z.number().int().optional(),
+		receiverKind: z.string().optional(),
 	})
 	.catchall(z.unknown());
 export type DeviceCaps = z.infer<typeof DeviceCapsSchema>;
