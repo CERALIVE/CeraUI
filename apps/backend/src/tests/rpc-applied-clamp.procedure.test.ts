@@ -6,6 +6,7 @@ import { clampBitrate } from "../modules/streaming/encoder.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
 import {
+	getConfigProcedure,
 	setBitrateProcedure,
 	setConfigProcedure,
 } from "../rpc/procedures/streaming.procedure.ts";
@@ -95,6 +96,51 @@ describe("streaming.setConfig — applied (post-clamp) state", () => {
 		expect(result.applied?.recovery_mode).toBe("bandwidth-saver");
 		expect(getConfig().fec_enabled).toBe(true);
 		expect(getConfig().recovery_mode).toBe("bandwidth-saver");
+	});
+
+	test("persists + echoes selected_ingest_endpoint, and getConfig echoes it (Task 18)", async () => {
+		const result = await call(
+			setConfigProcedure,
+			{
+				selected_ingest_endpoint: "ep-1",
+				srtla_addr: "ingest1.example",
+				srtla_port: 5000,
+			},
+			{ context: makeContext() },
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.applied?.selected_ingest_endpoint).toBe("ep-1");
+		expect(getConfig().selected_ingest_endpoint).toBe("ep-1");
+
+		const echoed = await call(
+			getConfigProcedure,
+			{},
+			{ context: makeContext() },
+		);
+		expect(echoed.selected_ingest_endpoint).toBe("ep-1");
+	});
+
+	test("clears a stale ingest slot on a non-slot save (round-3 mutual exclusion)", async () => {
+		await call(
+			setConfigProcedure,
+			{
+				selected_ingest_endpoint: "ep-1",
+				srtla_addr: "ingest1.example",
+				srtla_port: 5000,
+			},
+			{ context: makeContext() },
+		);
+		expect(getConfig().selected_ingest_endpoint).toBe("ep-1");
+
+		// A managed-relay save sends selected_ingest_endpoint: "" → clears it.
+		const result = await call(
+			setConfigProcedure,
+			{ relay_server: "srv-eu", selected_ingest_endpoint: "" },
+			{ context: makeContext() },
+		);
+		expect(result.applied?.selected_ingest_endpoint).toBe("");
+		expect(getConfig().selected_ingest_endpoint).toBeUndefined();
 	});
 
 	test("rejects invalid input without a partial write", async () => {
