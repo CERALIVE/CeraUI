@@ -35,7 +35,7 @@ CeraUI/
 │   │       │   ├── HudRegion.svelte       # Responsive HUD mount (desktop top / mobile bottom)
 │   │       │   ├── DisconnectedBanner.svelte  # Reconnect/reboot/failed banner
 │   │       │   ├── dialogs/               # 14 focused config dialogs (AppDialog-based)
-│   │   │   │   └── server/            # ServerDialog sub-components: DestinationSection, ProtocolSelector, CustomEndpointForm, TransportBadge
+│   │   │   │   └── server/            # ServerDialog sub-components: DestinationSection, TransportRow, LatencySection, RelayServerSelector, CustomEndpointForm, ServerIngestSlots
 │   │       │   └── tabs/                  # Legacy tab views (Streaming, Network, General, Advanced, DevTools)
 │   │       └── lib/
 │   │           ├── components/
@@ -117,7 +117,7 @@ CeraUI/
 | Design rules | `.impeccable.md` |
 | **Receiver-kind model + Scope-B plain-SRT contract** | `docs/RECEIVER_MODEL.md` |
 | **ServerDialog protocol-first container** | `apps/frontend/src/main/dialogs/ServerDialog.svelte` |
-| **ServerDialog sub-components (DestinationSection, ProtocolSelector, CustomEndpointForm, TransportBadge)** | `apps/frontend/src/main/dialogs/server/` |
+| **ServerDialog sub-components (DestinationSection, TransportRow, LatencySection, RelayServerSelector, CustomEndpointForm, ServerIngestSlots)** | `apps/frontend/src/main/dialogs/server/` |
 | **Receiver-experience pure logic (deriveDestination, resolveReceiverKind, buildServerSetConfig)** | `apps/frontend/src/lib/streaming/receiver-experience.ts` |
 | **relay.validate procedure + mock seam** | `apps/backend/src/rpc/procedures/relay.procedure.ts` + `apps/backend/src/mocks/providers/relay.ts` |
 | **Live server readiness hint (SRTLA bonded/single)** | `apps/frontend/src/main/live/ServerReadiness.svelte` |
@@ -956,9 +956,40 @@ platform checks `ceraui-version` at session start; out-of-window devices get
 | Full hosting/signing contract | root `AGENTS.md` → "Version-federation hosting/signing contract" |
 | Serving route (apt-worker) | [`../apt-worker/AGENTS.md`](../apt-worker/AGENTS.md) |
 
-## STREAM TUNING CARD [EXISTS]
+## RECEIVER COHERENCE — v2 destination/transport/latency model [EXISTS]
 
-The Stream Tuning card is a section inside `ServerDialog.svelte` (after `TransportBadge`) that exposes per-profile SRT controls gated on receiver capability.
+The Live → Receiver/Server dialog is **destination-as-provider, latency-only**.
+Full model: [`docs/RECEIVER_MODEL.md`](docs/RECEIVER_MODEL.md) → "Device UI v2".
+
+- **Destination IS the provider.** `DestinationSection` renders three tiles —
+  CeraLive Cloud / BELABOX Cloud / Custom — driven by
+  `deriveDestinationChoice(config)` (`receiver-experience.ts`,
+  `ReceiverDestinationChoice = 'ceralive' | 'belabox' | 'custom'`,
+  `MANAGED_DESTINATION_CHOICES` from `CLOUD_PROVIDERS`). A managed cloud the device
+  has no key for shows an add-key prompt (`data-testid="destination-needs-key"`)
+  that opens `CloudRemoteDialog` with the `provider` prop preselected. No provider
+  dropdown, no manual-endpoint override, no provider-switch stale warning.
+- **One transport.** `TransportRow` shows SRTLA active; RIST (`TD-rist-egress`) +
+  SRT (`TD-plain-srt-egress`) are calm coming-soon pills. `ProtocolSelector` and
+  `TransportBadge` are removed; there is no protocol radiogroup.
+- **One knob.** `LatencySection` (replaces `StreamTuningSection`) is a single
+  latency slider; window from `deriveLatencyRange(getCapabilities())`. The
+  device-side FEC / recovery / presets / cloud-override controls are removed.
+- **Schema/handlers kept.** `device.setProfile` + its wiring and the
+  `fec_enabled` / `recovery_mode` / `stream_profile` / `profile_decided_by` schema
+  fields are intact (the cloud may still push a profile; the device applies latency
+  and tolerates the rest). `buildServerSetConfig` is latency-only and clears a stale
+  `selected_ingest_endpoint` on every non-slot save (round-3); the backend
+  `streaming.setConfig`/`getConfig` persist + echo `selected_ingest_endpoint`.
+
+### Stream Tuning card — SUPERSEDED (historical)
+
+The notes below describe the removed Stream Tuning card (Task 16). The card,
+`StreamTuningSection.svelte`, and the device-side tuning derivations are gone; the
+`@ceraui/rpc` `stream-profile.schema.ts` exports and the `device.setProfile`
+backend path are retained for the cloud control-channel.
+
+The Stream Tuning card was a section inside `ServerDialog.svelte` that exposed per-profile SRT controls gated on receiver capability.
 
 ### Schema layer
 

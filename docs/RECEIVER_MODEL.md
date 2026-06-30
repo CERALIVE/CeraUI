@@ -7,6 +7,32 @@ This document describes the T1 receiver-kind model introduced by the
 plain-SRT egress. It is the authoritative reference for how CeraUI selects,
 validates, and routes a stream to a receiver endpoint.
 
+> **Device UI v2 — receiver-coherence (latency-first).** The backend transport
+> model below (resolver, registry, kinds) is unchanged. The Live → Receiver/Server
+> **dialog** was made honest:
+>
+> - **Destination IS the provider.** Three tiles — **CeraLive Cloud**, **BELABOX
+>   Cloud**, **Custom receiver** (`ReceiverDestinationChoice = 'ceralive' |
+>   'belabox' | 'custom'`, derived from `CLOUD_PROVIDERS` via
+>   `deriveDestinationChoice`). A managed cloud the device has no key for shows an
+>   "add your key" prompt that deep-links `CloudRemoteDialog` preselecting it
+>   (`provider` prop). No nested provider dropdown, no manual-endpoint override.
+> - **One transport.** SRTLA is the only egress; `TransportRow` shows it active and
+>   renders **RIST** (`TD-rist-egress`) + **SRT** (`TD-plain-srt-egress`) as calm
+>   coming-soon pills. There is no protocol radiogroup.
+> - **One knob.** Reliability is automatic (SRT ARQ over SRTLA bonding, always on);
+>   **latency is the ARQ retransmit budget** — the single `LatencySection` slider,
+>   window from `deriveLatencyRange(getCapabilities())`. FEC / recovery / presets /
+>   cloud-override controls are removed from the device UI (the
+>   `device.setProfile` wire contract + `fec_enabled`/`recovery_mode`/
+>   `stream_profile` schema fields are kept — only the device-side controls go).
+>
+> The pure logic lives in `apps/frontend/src/lib/streaming/receiver-experience.ts`;
+> the components in `apps/frontend/src/main/dialogs/server/` (`DestinationSection`,
+> `TransportRow`, `LatencySection`, `RelayServerSelector`, `CustomEndpointForm`,
+> `ServerIngestSlots`). Removed: `ProtocolSelector`, `TransportBadge`,
+> `StreamTuningSection`.
+
 ---
 
 ## 1. T1 Receiver-Kind Model
