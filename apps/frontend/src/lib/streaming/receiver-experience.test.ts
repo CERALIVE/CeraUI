@@ -10,8 +10,6 @@ import {
 	buildManagedSlotConfig,
 	buildServerSetConfig,
 	buildServerSummary,
-	buildSummaryText,
-	type CloudOverrideState,
 	choiceToDestination,
 	countRelayServersForProvider,
 	DEFAULT_LATENCY_RANGE,
@@ -19,15 +17,9 @@ import {
 	deriveDestination,
 	deriveDestinationChoice,
 	deriveLatencyRange,
-	deriveReceiverCaps,
-	deriveReceiverProfileKind,
 	deriveServerReadiness,
-	deriveStreamTuningExperience,
 	findActiveSlot,
-	getPresetChips,
 	groupRelayServersByProvider,
-	hasProfileDrift,
-	isCloudOverride,
 	isManagedChoice,
 	isRelayServerStaleForProvider,
 	kindBadgeLabelKey,
@@ -36,7 +28,6 @@ import {
 	type ManagedProviderOption,
 	managedCloudLabel,
 	managedSlotLabel,
-	matchActivePreset,
 	overrideClearsManagedBinding,
 	resolveActiveManagedProvider,
 	resolveReceiverKind,
@@ -77,8 +68,6 @@ function draft(overrides: Partial<ServerSetDraft> = {}): ServerSetDraft {
 		addr: "custom.example",
 		portStr: "5000",
 		streamId: "publish/abc",
-		overrideAddr: "override.example",
-		overridePortStr: "6000",
 		relayStreamId: "stream-id",
 		relayServer: "fra",
 		relayAccount: "acct-1",
@@ -86,18 +75,8 @@ function draft(overrides: Partial<ServerSetDraft> = {}): ServerSetDraft {
 	};
 }
 
-const CUSTOM: ServerSetDerived = {
-	destination: "custom",
-	relayOverride: false,
-};
-const MANAGED: ServerSetDerived = {
-	destination: "managed",
-	relayOverride: false,
-};
-const OVERRIDE: ServerSetDerived = {
-	destination: "managed",
-	relayOverride: true,
-};
+const CUSTOM: ServerSetDerived = { destination: "custom" };
+const MANAGED: ServerSetDerived = { destination: "managed" };
 
 describe("deriveDestination", () => {
 	it("maps a non-empty relay_server to managed", () => {
@@ -336,22 +315,22 @@ describe("deriveServerReadiness — SRTLA-only bonding claim (T13)", () => {
 	});
 });
 
-describe("buildServerSetConfig — byte-identical to today's handleSave branches", () => {
-	it("manual (custom) emits exactly the manual field set", () => {
+describe("buildServerSetConfig — latency-only setConfig branches", () => {
+	it("manual (custom) emits the manual field set + the ingest-slot clear", () => {
 		const result = buildServerSetConfig(draft(), CUSTOM);
-		// Mirrors ServerDialog.svelte:264-271 (manual branch).
 		expect(result).toEqual<StreamingConfigInput>({
 			srt_latency: 2000,
 			relay_protocol: "srtla",
+			selected_ingest_endpoint: "",
 			srtla_addr: "custom.example",
 			srtla_port: 5000,
 			srt_streamid: "publish/abc",
 		});
-		// Exact key set (no relay_server, no relay_streamid_override).
 		expect(new Set(Object.keys(result))).toEqual(
 			new Set([
 				"srt_latency",
 				"relay_protocol",
+				"selected_ingest_endpoint",
 				"srtla_addr",
 				"srtla_port",
 				"srt_streamid",
@@ -359,12 +338,12 @@ describe("buildServerSetConfig — byte-identical to today's handleSave branches
 		);
 	});
 
-	it("managed relay emits relay fields incl. always-set relay_streamid_override", () => {
+	it("managed relay emits relay fields + always-set relay_streamid_override + clear", () => {
 		const result = buildServerSetConfig(draft(), MANAGED);
-		// Mirrors ServerDialog.svelte:276-279 (relay branch).
 		expect(result).toEqual<StreamingConfigInput>({
 			srt_latency: 2000,
 			relay_protocol: "srtla",
+			selected_ingest_endpoint: "",
 			relay_server: "fra",
 			relay_account: "acct-1",
 			relay_streamid_override: "stream-id",
@@ -372,40 +351,45 @@ describe("buildServerSetConfig — byte-identical to today's handleSave branches
 		expect(result).not.toHaveProperty("srtla_addr");
 	});
 
-	it("omits relay_account when empty (today's `if (relayAccount)` guard)", () => {
+	it("omits relay_account when empty (the `if (relayAccount)` guard)", () => {
 		const result = buildServerSetConfig(draft({ relayAccount: "" }), MANAGED);
 		expect(result).not.toHaveProperty("relay_account");
 		expect(result).toEqual<StreamingConfigInput>({
 			srt_latency: 2000,
 			relay_protocol: "srtla",
+			selected_ingest_endpoint: "",
 			relay_server: "fra",
 			relay_streamid_override: "stream-id",
 		});
 	});
 
-	it("override emits srtla_addr/port + relay_streamid_override (no relay_server)", () => {
-		const result = buildServerSetConfig(draft(), OVERRIDE);
-		// Mirrors ServerDialog.svelte:272-275 (relayOverride branch).
-		expect(result).toEqual<StreamingConfigInput>({
-			srt_latency: 2000,
-			relay_protocol: "srtla",
-			srtla_addr: "override.example",
-			srtla_port: 6000,
-			relay_streamid_override: "stream-id",
-		});
-		expect(result).not.toHaveProperty("relay_server");
-		expect(result).not.toHaveProperty("srt_streamid");
+	it("never carries fec_enabled or recovery_mode (latency-only)", () => {
+		expect(buildServerSetConfig(draft(), CUSTOM)).not.toHaveProperty(
+			"fec_enabled",
+		);
+		expect(buildServerSetConfig(draft(), MANAGED)).not.toHaveProperty(
+			"recovery_mode",
+		);
+	});
+
+	it("clears a stale ingest slot so a non-slot save re-derives correctly (round-3)", () => {
+		// slot → Custom: the custom save clears selected_ingest_endpoint, so the
+		// destination no longer reads as the managed-ingest path.
+		const custom = buildServerSetConfig(draft(), CUSTOM);
+		expect(custom.selected_ingest_endpoint).toBe("");
+		expect(deriveDestinationChoice(custom)).toBe("custom");
+
+		// slot → managed relay: same clear; re-derives to the managed provider.
+		const managed = buildServerSetConfig(draft(), MANAGED);
+		expect(managed.selected_ingest_endpoint).toBe("");
+		expect(
+			deriveDestinationChoice({ ...managed, remote_provider: "belabox" }),
+		).toBe("belabox");
 	});
 
 	it("keeps relay_streamid_override present even when empty ('')", () => {
 		const managed = buildServerSetConfig(draft({ relayStreamId: "" }), MANAGED);
 		expect(managed).toHaveProperty("relay_streamid_override", "");
-
-		const override = buildServerSetConfig(
-			draft({ relayStreamId: "" }),
-			OVERRIDE,
-		);
-		expect(override).toHaveProperty("relay_streamid_override", "");
 	});
 
 	it("trims address and stream-id inputs", () => {
@@ -418,9 +402,6 @@ describe("buildServerSetConfig — byte-identical to today's handleSave branches
 	});
 
 	it("never emits a key with an undefined value (lock-loop safe)", () => {
-		// An unparsable port yields `undefined` from parsePort; it MUST be pruned,
-		// not emitted as `srtla_port: undefined` (which would slip past the
-		// dirty-registry's `value !== undefined` lock filter).
 		const result = buildServerSetConfig(draft({ portStr: "" }), CUSTOM);
 		expect(result).not.toHaveProperty("srtla_port");
 		for (const value of Object.values(result)) {
@@ -429,8 +410,6 @@ describe("buildServerSetConfig — byte-identical to today's handleSave branches
 	});
 
 	describe("LEGACY config (no relay_protocol)", () => {
-		// A legacy persisted config carries only { srtla_addr, srtla_port } and no
-		// relay_protocol field.
 		const legacyConfig = { srtla_addr: "legacy.example", srtla_port: 4000 };
 
 		it("derives a custom destination and a srtla_custom kind", () => {
@@ -451,45 +430,12 @@ describe("buildServerSetConfig — byte-identical to today's handleSave branches
 			expect(result).toEqual<StreamingConfigInput>({
 				srt_latency: 2000,
 				relay_protocol: "srtla",
+				selected_ingest_endpoint: "",
 				srtla_addr: "legacy.example",
 				srtla_port: 4000,
 				srt_streamid: "publish/abc",
 			});
 		});
-	});
-});
-
-describe("buildServerSetConfig — FEC + recovery tuning (Tasks 18/19)", () => {
-	it("omits fec_enabled and recovery_mode when the draft leaves them undefined", () => {
-		// The existing call sites (and the byte-identical guard above) never set
-		// them, so they must not appear — additive-only, no behaviour change.
-		const result = buildServerSetConfig(draft(), CUSTOM);
-		expect(result).not.toHaveProperty("fec_enabled");
-		expect(result).not.toHaveProperty("recovery_mode");
-	});
-
-	it("persists fec_enabled false (clearing a stale enable) without recovery_mode", () => {
-		const result = buildServerSetConfig(draft({ fecEnabled: false }), CUSTOM);
-		expect(result.fec_enabled).toBe(false);
-		expect(result).not.toHaveProperty("recovery_mode");
-	});
-
-	it("persists an enabled FEC + recovery preference", () => {
-		const result = buildServerSetConfig(
-			draft({ fecEnabled: true, recoveryMode: "bandwidth-saver" }),
-			MANAGED,
-		);
-		expect(result.fec_enabled).toBe(true);
-		expect(result.recovery_mode).toBe("bandwidth-saver");
-		expect(result.relay_server).toBe("fra");
-	});
-
-	it("carries recovery_mode standard through the managed branch", () => {
-		const result = buildServerSetConfig(
-			draft({ recoveryMode: "standard" }),
-			MANAGED,
-		);
-		expect(result.recovery_mode).toBe("standard");
 	});
 });
 
@@ -1142,411 +1088,5 @@ describe("overrideClearsManagedBinding — override-drops-binding warning (T18)"
 				relayServer: "eu",
 			}),
 		).toBe(false);
-	});
-});
-
-describe("deriveReceiverProfileKind (Task 16)", () => {
-	it("maps a managed CeraLive cloud to the ceralive kind", () => {
-		expect(deriveReceiverProfileKind("ceralive")).toBe("ceralive");
-	});
-
-	it("maps belabox and custom to their own kinds", () => {
-		expect(deriveReceiverProfileKind("belabox")).toBe("belabox");
-		expect(deriveReceiverProfileKind("custom")).toBe("custom");
-	});
-
-	it("maps an absent/unrecognised provider to unknown", () => {
-		expect(deriveReceiverProfileKind(undefined)).toBe("unknown");
-		expect(deriveReceiverProfileKind("acme-cloud")).toBe("unknown");
-	});
-});
-
-describe("deriveReceiverCaps (Task 16)", () => {
-	it("projects the engine snapshot for a CeraLive receiver (full set + FEC)", () => {
-		const caps = deriveReceiverCaps("ceralive", {
-			supportedProfiles: [
-				"balanced",
-				"low-latency",
-				"resilient",
-				"classic",
-				"low-latency-fec",
-			],
-			fecCapable: true,
-			latencyRange: { min: 100, default: 1500, max: 5000 },
-		});
-		expect(caps).toEqual({
-			kind: "ceralive",
-			supportsFec: true,
-			supportedProfiles: [
-				"balanced",
-				"low-latency",
-				"resilient",
-				"classic",
-				"low-latency-fec",
-			],
-			latencyRange: { min: 100, default: 1500, max: 5000 },
-			recoveryMode: "reorderfreeze",
-		});
-	});
-
-	it("keeps FEC off for a CeraLive receiver on a stock libsrt build (classic-only)", () => {
-		const caps = deriveReceiverCaps("ceralive", {
-			supportedProfiles: ["classic"],
-			fecCapable: false,
-			latencyRange: { min: 100, default: 1500, max: 2000 },
-		});
-		expect(caps.supportsFec).toBe(false);
-		expect(caps.supportedProfiles).toEqual(["classic"]);
-		expect(caps.recoveryMode).toBe("stock");
-	});
-
-	it("falls back to the CeraLive latency window when the engine advertised none", () => {
-		const caps = deriveReceiverCaps("ceralive", undefined);
-		expect(caps.latencyRange).toEqual({ min: 100, default: 1500, max: 5000 });
-		expect(caps.supportedProfiles).toEqual(["classic"]);
-	});
-
-	it("never trusts forged caps for a non-CeraLive receiver — clamps to Classic baseline", () => {
-		const caps = deriveReceiverCaps("custom", {
-			supportedProfiles: ["balanced", "low-latency-fec"],
-			fecCapable: true,
-			latencyRange: { min: 100, default: 1500, max: 9000 },
-		});
-		expect(caps).toEqual({
-			kind: "custom",
-			supportsFec: false,
-			supportedProfiles: ["classic"],
-			latencyRange: { min: 100, default: 1500, max: 2000 },
-			recoveryMode: "stock",
-		});
-	});
-});
-
-describe("deriveStreamTuningExperience (Task 16)", () => {
-	it("offers full controls for a CeraLive receiver with FEC", () => {
-		const experience = deriveStreamTuningExperience({
-			kind: "ceralive",
-			supportsFec: true,
-			supportedProfiles: ["balanced", "classic", "low-latency-fec"],
-			latencyRange: { min: 100, default: 1500, max: 5000 },
-			recoveryMode: "reorderfreeze",
-		});
-		expect(experience.isCeraLiveReceiver).toBe(true);
-		expect(experience.latencyEnabled).toBe(true);
-		expect(experience.fecEnabled).toBe(true);
-		expect(experience.fecDisabledReasonKey).toBeUndefined();
-		expect(experience.recoveryModeEnabled).toBe(true);
-		expect(experience.defaultRecoveryMode).toBe("standard");
-		expect(experience.presetsEnabled).toBe(true);
-		expect(experience.showBelaboxBanner).toBe(false);
-		expect(experience.defaultProfile).toBe("balanced");
-	});
-
-	it("disables FEC with a reason for a CeraLive receiver whose build lacks FEC", () => {
-		const experience = deriveStreamTuningExperience({
-			kind: "ceralive",
-			supportsFec: false,
-			supportedProfiles: ["balanced", "classic"],
-			latencyRange: { min: 100, default: 1500, max: 5000 },
-			recoveryMode: "reorderfreeze",
-		});
-		expect(experience.isCeraLiveReceiver).toBe(true);
-		expect(experience.fecEnabled).toBe(false);
-		expect(experience.fecDisabledReasonKey).toBe(
-			"settings.streamTuning.reasonFecUnsupported",
-		);
-		expect(experience.recoveryModeEnabled).toBe(true);
-		expect(experience.presetsEnabled).toBe(true);
-		expect(experience.showBelaboxBanner).toBe(false);
-	});
-
-	it("offers latency only + the BELABOX banner for a non-CeraLive receiver", () => {
-		const experience = deriveStreamTuningExperience({
-			kind: "belabox",
-			supportsFec: false,
-			supportedProfiles: ["classic"],
-			latencyRange: { min: 100, default: 1500, max: 2000 },
-			recoveryMode: "stock",
-		});
-		expect(experience.isCeraLiveReceiver).toBe(false);
-		expect(experience.latencyEnabled).toBe(true);
-		expect(experience.fecEnabled).toBe(false);
-		expect(experience.recoveryModeEnabled).toBe(false);
-		expect(experience.presetsEnabled).toBe(false);
-		expect(experience.showBelaboxBanner).toBe(true);
-		expect(experience.defaultProfile).toBe("classic");
-		expect(experience.defaultRecoveryMode).toBe("standard");
-		const reason = "settings.streamTuning.reasonNonCeraLive";
-		expect(experience.fecDisabledReasonKey).toBe(reason);
-		// Recovery is receiver-managed for an unproven receiver — its own reason.
-		expect(experience.recoveryModeDisabledReasonKey).toBe(
-			"settings.streamTuning.reasonReceiverManaged",
-		);
-		expect(experience.presetsDisabledReasonKey).toBe(reason);
-	});
-});
-
-describe("getPresetChips — preset snap-chip row (Task 20)", () => {
-	const FULL_FEC = deriveStreamTuningExperience({
-		kind: "ceralive",
-		supportsFec: true,
-		supportedProfiles: [
-			"balanced",
-			"low-latency",
-			"resilient",
-			"classic",
-			"low-latency-fec",
-		],
-		latencyRange: { min: 100, default: 1500, max: 5000 },
-		recoveryMode: "reorderfreeze",
-	});
-	const NO_FEC = deriveStreamTuningExperience({
-		kind: "ceralive",
-		supportsFec: false,
-		supportedProfiles: [
-			"balanced",
-			"low-latency",
-			"resilient",
-			"classic",
-			"low-latency-fec",
-		],
-		latencyRange: { min: 100, default: 1500, max: 5000 },
-		recoveryMode: "reorderfreeze",
-	});
-	const CLASSIC_ONLY = deriveStreamTuningExperience({
-		kind: "ceralive",
-		supportsFec: false,
-		supportedProfiles: ["classic"],
-		latencyRange: { min: 100, default: 1500, max: 2000 },
-		recoveryMode: "stock",
-	});
-	const NON_CERALIVE = deriveStreamTuningExperience({
-		kind: "belabox",
-		supportsFec: false,
-		supportedProfiles: ["classic"],
-		latencyRange: { min: 100, default: 1500, max: 2000 },
-		recoveryMode: "stock",
-	});
-
-	const byId = (chips: ReturnType<typeof getPresetChips>) =>
-		new Map(chips.map((chip) => [chip.presetId, chip]));
-
-	it("renders all 5 presets + custom in the task's display order", () => {
-		expect(getPresetChips(FULL_FEC).map((c) => c.presetId)).toEqual([
-			"low-latency",
-			"balanced",
-			"resilient",
-			"low-latency-fec",
-			"classic",
-			"custom",
-		]);
-	});
-
-	it("enables every chip on a full FEC-capable CeraLive receiver", () => {
-		for (const chip of getPresetChips(FULL_FEC)) {
-			expect(chip.disabled).toBe(false);
-			expect(chip.reasonKey).toBeUndefined();
-		}
-	});
-
-	it("disables ONLY the FEC preset (with the FEC reason) on a non-FEC build", () => {
-		const chips = byId(getPresetChips(NO_FEC));
-		expect(chips.get("low-latency-fec")?.disabled).toBe(true);
-		expect(chips.get("low-latency-fec")?.reasonKey).toBe(
-			"settings.streamTuning.reasonFecUnsupported",
-		);
-		for (const id of ["low-latency", "balanced", "resilient", "classic"]) {
-			expect(chips.get(id)?.disabled).toBe(false);
-		}
-	});
-
-	it("disables unadvertised presets with the profile-unsupported reason (classic-only)", () => {
-		const chips = byId(getPresetChips(CLASSIC_ONLY));
-		for (const id of ["low-latency", "balanced", "resilient"]) {
-			expect(chips.get(id)?.disabled).toBe(true);
-			expect(chips.get(id)?.reasonKey).toBe(
-				"settings.streamTuning.reasonProfileUnsupported",
-			);
-		}
-		// The FEC preset is gated by the FEC reason, not profile-unsupported.
-		expect(chips.get("low-latency-fec")?.reasonKey).toBe(
-			"settings.streamTuning.reasonFecUnsupported",
-		);
-		expect(chips.get("classic")?.disabled).toBe(false);
-	});
-
-	it("disables every chip (incl. custom) with the gate reason on a non-CeraLive receiver", () => {
-		for (const chip of getPresetChips(NON_CERALIVE)) {
-			expect(chip.disabled).toBe(true);
-			expect(chip.reasonKey).toBe("settings.streamTuning.reasonNonCeraLive");
-		}
-	});
-});
-
-describe("matchActivePreset — active-chip derivation (Task 20)", () => {
-	it("matches each preset's exact expanded combination", () => {
-		expect(
-			matchActivePreset({
-				latencyMs: 1500,
-				fecEnabled: false,
-				recoveryMode: "standard",
-			}),
-		).toBe("balanced");
-		expect(
-			matchActivePreset({
-				latencyMs: 500,
-				fecEnabled: false,
-				recoveryMode: "standard",
-			}),
-		).toBe("low-latency");
-		expect(
-			matchActivePreset({
-				latencyMs: 3500,
-				fecEnabled: false,
-				recoveryMode: "standard",
-			}),
-		).toBe("resilient");
-		expect(
-			matchActivePreset({
-				latencyMs: 2000,
-				fecEnabled: false,
-				recoveryMode: "bandwidth-saver",
-			}),
-		).toBe("classic");
-		expect(
-			matchActivePreset({
-				latencyMs: 800,
-				fecEnabled: true,
-				recoveryMode: "standard",
-			}),
-		).toBe("low-latency-fec");
-	});
-
-	it("falls to custom when any single control diverges from every preset", () => {
-		// Latency off-grid.
-		expect(
-			matchActivePreset({
-				latencyMs: 1234,
-				fecEnabled: false,
-				recoveryMode: "standard",
-			}),
-		).toBe("custom");
-		// FEC toggled on for a non-FEC preset combination.
-		expect(
-			matchActivePreset({
-				latencyMs: 1500,
-				fecEnabled: true,
-				recoveryMode: "standard",
-			}),
-		).toBe("custom");
-		// Recovery switched to bandwidth-saver at a non-classic latency.
-		expect(
-			matchActivePreset({
-				latencyMs: 2000,
-				fecEnabled: false,
-				recoveryMode: "standard",
-			}),
-		).toBe("custom");
-	});
-});
-
-describe("isCloudOverride (Task 21)", () => {
-	it("treats operator and auto as cloud overrides", () => {
-		expect(isCloudOverride({ decidedBy: "operator" })).toBe(true);
-		expect(isCloudOverride({ decidedBy: "auto" })).toBe(true);
-	});
-
-	it("treats device/cohort/global as baseline defaults, not overrides", () => {
-		for (const decidedBy of ["device", "cohort", "global"] as const) {
-			expect(isCloudOverride({ decidedBy })).toBe(false);
-		}
-	});
-
-	it("treats undefined as no override", () => {
-		expect(isCloudOverride(undefined)).toBe(false);
-	});
-
-	it("carries the cloud-pushed preset id when known", () => {
-		const state: CloudOverrideState = {
-			decidedBy: "operator",
-			presetId: "low-latency",
-		};
-		expect(state.presetId).toBe("low-latency");
-		expect(isCloudOverride(state)).toBe(true);
-	});
-});
-
-describe("hasProfileDrift (Task 21)", () => {
-	const base = {
-		latencyMs: 1500,
-		fecEnabled: false,
-		recoveryMode: "standard",
-	} as const;
-
-	it("reports no drift when selected equals active", () => {
-		expect(hasProfileDrift({ ...base }, { ...base })).toBe(false);
-	});
-
-	it("reports drift on a latency difference", () => {
-		expect(hasProfileDrift({ ...base, latencyMs: 2000 }, { ...base })).toBe(
-			true,
-		);
-	});
-
-	it("reports drift on an FEC difference", () => {
-		expect(hasProfileDrift({ ...base, fecEnabled: true }, { ...base })).toBe(
-			true,
-		);
-	});
-
-	it("reports drift on a recovery-mode difference", () => {
-		expect(
-			hasProfileDrift(
-				{ ...base, recoveryMode: "bandwidth-saver" },
-				{ ...base },
-			),
-		).toBe(true);
-	});
-});
-
-describe("buildSummaryText (Task 21)", () => {
-	const labels = {
-		delay: (ms: number) => `~${ms / 1000}s`,
-		recovery: (mode: "standard" | "bandwidth-saver") =>
-			mode === "bandwidth-saver" ? "saver" : "auto",
-		fec: (on: boolean) => (on ? "FEC on" : "FEC off"),
-	};
-
-	it("joins delay, recovery, and FEC segments in order with a middot", () => {
-		expect(
-			buildSummaryText(
-				{ latencyMs: 1500, fecEnabled: false, recoveryMode: "standard" },
-				labels,
-			),
-		).toBe("~1.5s · auto · FEC off");
-	});
-
-	it("reflects bandwidth-saver recovery and FEC on", () => {
-		expect(
-			buildSummaryText(
-				{ latencyMs: 2000, fecEnabled: true, recoveryMode: "bandwidth-saver" },
-				labels,
-			),
-		).toBe("~2s · saver · FEC on");
-	});
-
-	it("uses the latency it is given (the caller passes the effective value)", () => {
-		const spy: number[] = [];
-		buildSummaryText(
-			{ latencyMs: 3000, fecEnabled: false, recoveryMode: "standard" },
-			{
-				...labels,
-				delay: (ms) => {
-					spy.push(ms);
-					return `~${ms}`;
-				},
-			},
-		);
-		expect(spy).toEqual([3000]);
 	});
 });

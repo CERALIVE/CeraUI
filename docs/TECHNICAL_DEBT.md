@@ -152,6 +152,18 @@ unblock: Three layers must land together before plain-SRT egress is live. (1) ce
 
 ---
 
+```debt
+id: TD-rist-egress
+title: RIST receiver egress
+track: 2
+status: open
+exit_criteria: capability:rist
+owner: ceraui-team
+registered_at: 2026-06-30
+resolved_at: null
+unblock: RIST egress is resolver-only today — the shared startStream protocol branch (RECEIVER_MODEL §3 Layer 3) does not yet pass a remote RIST target to the engine, so RIST is not a selectable egress transport. The receiver dialog surfaces RIST as a calm coming-soon affordance (data-debt-id="TD-rist-egress") in TransportRow. When cerastream advertises a usable "rist" egress transport AND the startStream protocol branch routes a RIST target to the engine, replace the coming-soon affordance with a real selectable transport and flip this entry to resolved.
+```
+
 ## Resolved Debt
 
 ```debt
