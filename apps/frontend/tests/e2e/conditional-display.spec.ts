@@ -263,7 +263,7 @@ test.describe('conditional-display state lock (T11)', () => {
 		await ensureAuthenticated(page);
 		const dialog = await openServerDialog(page);
 
-		const managed = dialog.getByTestId('destination-managed');
+		const managed = dialog.getByTestId('destination-ceralive');
 		await expect(managed).toBeDisabled();
 		await expect(managed).toContainText('Waiting for relay servers');
 		// The "none" gate hint must NOT be the one shown while waiting.
@@ -287,7 +287,7 @@ test.describe('conditional-display state lock (T11)', () => {
 		await ensureAuthenticated(page);
 		const dialog = await openServerDialog(page);
 
-		const managed = dialog.getByTestId('destination-managed');
+		const managed = dialog.getByTestId('destination-ceralive');
 		await expect(managed).toBeDisabled();
 		// The empty catalog arrives within the same window destination-server waits on.
 		await expect(managed).toContainText('No relay servers available', { timeout: 15_000 });
@@ -327,11 +327,11 @@ test.describe('conditional-display state lock (T11)', () => {
 		await page.goto('/');
 		await ensureAuthenticated(page);
 		const dialog = await openServerDialog(page);
-		// Seed remote_key so isPairedToManagedCloud() returns true and destination-managed is enabled.
+		// Seed remote_key so isPairedToManagedCloud() returns true and destination-ceralive is enabled.
 		ws.push({ config: { remote_key: 'test-key', remote_provider: 'ceralive' } });
 		ws.push({ 'ingest.slots': { slots: [SLOT_A, SLOT_B] } });
 
-		const managed = dialog.getByTestId('destination-managed');
+		const managed = dialog.getByTestId('destination-ceralive');
 		await expect(managed).toBeEnabled({ timeout: 15_000 });
 		await managed.click();
 
@@ -355,11 +355,11 @@ test.describe('conditional-display state lock (T11)', () => {
 		await page.goto('/');
 		await ensureAuthenticated(page);
 		const dialog = await openServerDialog(page);
-		// Seed remote_key so isPairedToManagedCloud() returns true and destination-managed is enabled.
+		// Seed remote_key so isPairedToManagedCloud() returns true and destination-ceralive is enabled.
 		ws.push({ config: { remote_key: 'test-key', remote_provider: 'ceralive' } });
 		ws.push({ 'ingest.slots': { slots: [SLOT_A] } });
 
-		const managed = dialog.getByTestId('destination-managed');
+		const managed = dialog.getByTestId('destination-ceralive');
 		await expect(managed).toBeEnabled({ timeout: 15_000 });
 		await managed.click();
 

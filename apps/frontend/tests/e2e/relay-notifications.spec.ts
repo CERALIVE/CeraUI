@@ -259,7 +259,7 @@ test.describe('relay catalog + notifications (live mock backend)', () => {
 
 		// Destination-first (T9): pick the managed cloud account instead of the
 		// retired "Relay Server" method tab; it enables once the catalog populates.
-		const managed = dialog.getByTestId('destination-managed');
+		const managed = dialog.getByTestId('destination-ceralive');
 		await expect(managed).toBeEnabled();
 		await managed.click();
 		record('Scenario 2: catalog populated → managed destination ENABLED ✓');
@@ -388,7 +388,7 @@ test.describe('relay gate + manual fallback (catalog absent)', () => {
 		const dialog = await openServerDialog(page);
 
 		// D6 gate: managed destination disabled + waiting hint.
-		await expect(dialog.getByTestId('destination-managed')).toBeDisabled();
+		await expect(dialog.getByTestId('destination-ceralive')).toBeDisabled();
 		await expect(page.getByText('Waiting for relay servers')).toBeVisible();
 		record('Scenario 5: catalog absent → managed destination DISABLED + waiting hint shown ✓');
 
