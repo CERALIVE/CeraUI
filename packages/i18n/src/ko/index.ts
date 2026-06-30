@@ -88,6 +88,11 @@ const ko = {
 		destinationManagedHint:
 			"클라우드 계정에 연결된 릴레이를 통해 스트리밍합니다.",
 		destinationCustomHint: "사용자 수신기의 주소와 포트를 입력하세요.",
+		destinationNeedsKey: "이 클라우드로 송출하려면 {cloud} 키를 추가하세요.",
+		destinationAddKey: "키 추가",
+		latency: "지연 시간",
+		latencyNegotiated: "협상됨",
+		transportActive: "활성",
 		transportKind: "전송",
 		remoteControl: {
 			title: "원격 제어",

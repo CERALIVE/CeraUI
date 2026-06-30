@@ -648,6 +648,12 @@ const es = {
 		destinationCustom: "Receptor personalizado",
 		destinationManagedHint:
 			"Transmite a través de un relé vinculado a tu cuenta en la nube.",
+		destinationNeedsKey:
+			"Añade tu clave de {cloud} para transmitir a esta nube.",
+		destinationAddKey: "Añadir clave",
+		latency: "Latencia",
+		latencyNegotiated: "Negociada",
+		transportActive: "Activo",
 		destinationCustomHint:
 			"Introduce la dirección y el puerto de tu propio receptor.",
 		transportKind: "Transporte",

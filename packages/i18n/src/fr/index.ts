@@ -240,6 +240,12 @@ const fr = {
 		destinationManaged: "Mon compte cloud",
 		destinationCustom: "Récepteur personnalisé",
 		destinationManagedHint: "Diffusez via un relais lié à votre compte cloud.",
+		destinationNeedsKey:
+			"Ajoutez votre clé {cloud} pour diffuser vers ce cloud.",
+		destinationAddKey: "Ajouter une clé",
+		latency: "Latence",
+		latencyNegotiated: "Négociée",
+		transportActive: "Actif",
 		destinationCustomHint:
 			"Saisissez l'adresse et le port de votre propre récepteur.",
 		transportKind: "Transport",

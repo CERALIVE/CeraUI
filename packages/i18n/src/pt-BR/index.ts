@@ -240,6 +240,12 @@ const ptBR = {
 		destinationCustom: "Receptor personalizado",
 		destinationManagedHint:
 			"Transmita por um relé vinculado à sua conta na nuvem.",
+		destinationNeedsKey:
+			"Adicione sua chave do {cloud} para transmitir para esta nuvem.",
+		destinationAddKey: "Adicionar chave",
+		latency: "Latência",
+		latencyNegotiated: "Negociada",
+		transportActive: "Ativo",
 		destinationCustomHint:
 			"Informe o endereço e a porta do seu próprio receptor.",
 		transportKind: "Transporte",
