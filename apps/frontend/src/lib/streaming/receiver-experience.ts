@@ -22,10 +22,12 @@
  */
 
 import {
+	CLOUD_PROVIDERS,
 	DEFAULT_NON_CERALIVE_PROFILE,
 	deriveReceiverKind,
 	type LatencyRange,
 	PRESET_CONFIGS,
+	type ProviderSelection,
 	RELAY_PROVIDER_KINDS,
 	type ReceiverCaps,
 	type ReceiverKind,
@@ -67,6 +69,133 @@ export function deriveDestination(
 	config: DestinationConfig | undefined,
 ): Destination {
 	return config?.relay_server ? "managed" : "custom";
+}
+
+// =============================================================================
+// Destination-as-provider model (receiver-coherence) — latency-first redesign
+// =============================================================================
+
+/**
+ * The top-level receiver destination IS the provider choice: a managed cloud
+ * (CeraLive Cloud / BELABOX Cloud) or a self-hosted custom receiver. Mirrors
+ * `ProviderSelection` so the destination radiogroup and the cloud-remote config
+ * share one taxonomy — picking a managed cloud here selects that provider.
+ */
+export type ReceiverDestinationChoice = ProviderSelection;
+
+/**
+ * The managed cloud destinations, DERIVED from `CLOUD_PROVIDERS` (filtered to the
+ * managed clouds — `id !== 'custom'`), never a hardcoded `['ceralive','belabox']`
+ * literal. A new managed cloud added to `CLOUD_PROVIDERS` appears automatically.
+ */
+export const MANAGED_DESTINATION_CHOICES: readonly ReceiverDestinationChoice[] =
+	CLOUD_PROVIDERS.filter((provider) => provider.id !== "custom").map(
+		(provider) => provider.id as ReceiverDestinationChoice,
+	);
+
+/** The default managed cloud when none is configured (first managed provider). */
+const DEFAULT_MANAGED_CHOICE: ReceiverDestinationChoice =
+	MANAGED_DESTINATION_CHOICES[0] ?? "ceralive";
+
+/** The persisted-config subset {@link deriveDestinationChoice} reads. */
+export interface DestinationChoiceConfig {
+	relay_server?: string | undefined;
+	srtla_addr?: string | undefined;
+	remote_provider?: string | undefined;
+	selected_ingest_endpoint?: string | undefined;
+}
+
+/** Is this destination choice a managed cloud (not the custom escape hatch)? */
+export function isManagedChoice(choice: ReceiverDestinationChoice): boolean {
+	return choice !== "custom";
+}
+
+/** Map a destination choice back to the binary managed/custom destination. */
+export function choiceToDestination(
+	choice: ReceiverDestinationChoice,
+): Destination {
+	return isManagedChoice(choice) ? "managed" : "custom";
+}
+
+/**
+ * Resolve a configured `remote_provider` to a managed destination choice,
+ * defaulting to the first managed cloud when absent / `custom` / unknown.
+ */
+function managedChoiceFromProvider(
+	provider: string | undefined,
+): ReceiverDestinationChoice {
+	if (
+		provider &&
+		(MANAGED_DESTINATION_CHOICES as readonly string[]).includes(provider)
+	) {
+		return provider as ReceiverDestinationChoice;
+	}
+	return DEFAULT_MANAGED_CHOICE;
+}
+
+/**
+ * Derive the destination-as-provider choice from the persisted config.
+ *
+ * Priority (R-2): a non-empty `selected_ingest_endpoint` is the platform-managed
+ * (CeraLive) ingest-slot path and wins BEFORE the `srtla_addr`→custom fallback —
+ * `buildManagedSlotConfig` persists `selected_ingest_endpoint` + `srtla_addr`
+ * with NO `relay_server`, so without this guard a slot would misclassify as
+ * Custom. Then a non-empty `relay_server` resolves to its managed provider (from
+ * `remote_provider`); then a bare `srtla_addr` is a custom manual endpoint; else
+ * the managed default.
+ */
+export function deriveDestinationChoice(
+	config: DestinationChoiceConfig | undefined,
+): ReceiverDestinationChoice {
+	if (config?.selected_ingest_endpoint) {
+		return managedChoiceFromProvider(config.remote_provider);
+	}
+	if (config?.relay_server) {
+		return managedChoiceFromProvider(config.remote_provider);
+	}
+	if (config?.srtla_addr) return "custom";
+	return managedChoiceFromProvider(config?.remote_provider);
+}
+
+/**
+ * Brand label for a managed destination choice (e.g. "CeraLive Cloud"). Brand
+ * product names are literal (i18n branding rule); sourced from `CLOUD_PROVIDERS`.
+ */
+export function managedCloudLabel(choice: ReceiverDestinationChoice): string {
+	return (
+		CLOUD_PROVIDERS.find((provider) => provider.id === choice)?.name ?? choice
+	);
+}
+
+// =============================================================================
+// Latency window (latency-only tuning)
+// =============================================================================
+
+/**
+ * The single latency window every receiver gets when the engine has not
+ * advertised its own range. Latency is the ARQ retransmit budget — the one real
+ * knob — so the window is generous (100 ms … 5 s, default 2 s).
+ */
+export const DEFAULT_LATENCY_RANGE: LatencyRange = {
+	min: 100,
+	default: 2000,
+	max: 5000,
+};
+
+/** The capability subset {@link deriveLatencyRange} reads. */
+export interface LatencyRangeSource {
+	latency_range?: LatencyRange | undefined;
+}
+
+/**
+ * The latency slider window: the engine-advertised `latency_range` when present,
+ * else {@link DEFAULT_LATENCY_RANGE}. The ONLY latency-window source the
+ * LatencySection consumes — no inline literals in the component.
+ */
+export function deriveLatencyRange(
+	caps: LatencyRangeSource | undefined,
+): LatencyRange {
+	return caps?.latency_range ?? DEFAULT_LATENCY_RANGE;
 }
 
 /** A relay-catalog grouping keyed by the server's provider origin (T9). */

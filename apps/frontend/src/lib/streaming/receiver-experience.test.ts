@@ -12,9 +12,13 @@ import {
 	buildServerSummary,
 	buildSummaryText,
 	type CloudOverrideState,
+	choiceToDestination,
 	countRelayServersForProvider,
+	DEFAULT_LATENCY_RANGE,
 	type Destination,
 	deriveDestination,
+	deriveDestinationChoice,
+	deriveLatencyRange,
 	deriveReceiverCaps,
 	deriveReceiverProfileKind,
 	deriveServerReadiness,
@@ -24,10 +28,13 @@ import {
 	groupRelayServersByProvider,
 	hasProfileDrift,
 	isCloudOverride,
+	isManagedChoice,
 	isRelayServerStaleForProvider,
 	kindBadgeLabelKey,
+	MANAGED_DESTINATION_CHOICES,
 	type ManagedIngestAccount,
 	type ManagedProviderOption,
+	managedCloudLabel,
 	managedSlotLabel,
 	matchActivePreset,
 	overrideClearsManagedBinding,
@@ -104,6 +111,84 @@ describe("deriveDestination", () => {
 
 	it("maps an empty relay_server to custom", () => {
 		expect(deriveDestination({ relay_server: "" })).toBe("custom");
+	});
+});
+
+describe("deriveDestinationChoice — destination-as-provider model", () => {
+	it("offers exactly the managed clouds from CLOUD_PROVIDERS (no custom)", () => {
+		expect(MANAGED_DESTINATION_CHOICES).toEqual(["ceralive", "belabox"]);
+	});
+
+	it("maps a managed relay to its remote_provider", () => {
+		expect(
+			deriveDestinationChoice({
+				relay_server: "fra",
+				remote_provider: "belabox",
+			}),
+		).toBe("belabox");
+		expect(
+			deriveDestinationChoice({
+				relay_server: "fra",
+				remote_provider: "ceralive",
+			}),
+		).toBe("ceralive");
+	});
+
+	it("defaults a managed relay with no provider to the first managed cloud", () => {
+		expect(deriveDestinationChoice({ relay_server: "fra" })).toBe("ceralive");
+	});
+
+	it("maps a bare custom srtla_addr to custom (never a managed id)", () => {
+		expect(deriveDestinationChoice({ srtla_addr: "custom.example" })).toBe(
+			"custom",
+		);
+	});
+
+	it("treats a platform ingest-slot (selected_ingest_endpoint) as managed, not custom (R-2)", () => {
+		expect(
+			deriveDestinationChoice({
+				srtla_addr: "ingest1.example",
+				selected_ingest_endpoint: "ep-1",
+			}),
+		).toBe("ceralive");
+	});
+
+	it("defaults an empty config to the managed default", () => {
+		expect(deriveDestinationChoice({})).toBe("ceralive");
+		expect(deriveDestinationChoice(undefined)).toBe("ceralive");
+	});
+
+	it("isManagedChoice + choiceToDestination map the choice to the destination", () => {
+		expect(isManagedChoice("ceralive")).toBe(true);
+		expect(isManagedChoice("belabox")).toBe(true);
+		expect(isManagedChoice("custom")).toBe(false);
+		expect(choiceToDestination("belabox")).toBe("managed");
+		expect(choiceToDestination("custom")).toBe("custom");
+	});
+
+	it("managedCloudLabel returns the brand literal", () => {
+		expect(managedCloudLabel("ceralive")).toBe("CeraLive Cloud");
+		expect(managedCloudLabel("belabox")).toBe("BELABOX Cloud");
+	});
+});
+
+describe("deriveLatencyRange — single latency window", () => {
+	it("uses the engine-advertised range when present", () => {
+		expect(
+			deriveLatencyRange({
+				latency_range: { min: 100, default: 1500, max: 3000 },
+			}),
+		).toEqual({ min: 100, default: 1500, max: 3000 });
+	});
+
+	it("falls back to the default window otherwise", () => {
+		expect(deriveLatencyRange(undefined)).toEqual(DEFAULT_LATENCY_RANGE);
+		expect(deriveLatencyRange({})).toEqual(DEFAULT_LATENCY_RANGE);
+		expect(DEFAULT_LATENCY_RANGE).toEqual({
+			min: 100,
+			default: 2000,
+			max: 5000,
+		});
 	});
 });
 
