@@ -17,7 +17,7 @@
 */
 
 /* Stream starting, stopping, management and monitoring */
-import { RIST_TRANSPORT } from "@ceraui/rpc/schemas";
+import { RIST_TRANSPORT, SRTLA_MIN_LATENCY_MS } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
 import {
 	type Framerate,
@@ -167,10 +167,11 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 	if (!validateBitrate(params))
 		throw new Error(`Invalid max bitrate: '${params.max_br}'`);
 
-	// SRT latency (schema already validates range 100-10000)
+	// SRT latency (schema validates range 100-10000; floored to the SRTLA
+	// minimum here so a sub-2s persisted/pushed value never reaches the engine).
 	if (validated.srt_latency === undefined)
 		throw new Error("Invalid SRT latency");
-	params.srt_latency = validated.srt_latency;
+	params.srt_latency = Math.max(validated.srt_latency, SRTLA_MIN_LATENCY_MS);
 
 	const { srtlaAddr, srtlaPort, streamid } = resolveStreamEndpoint(
 		{

@@ -42,6 +42,7 @@
 
 import {
 	PRESET_CONFIGS,
+	SRTLA_MIN_LATENCY_MS,
 	type SetProfileAck,
 	type StreamProfileId,
 	type StreamProfilePreset,
@@ -120,8 +121,15 @@ function clampLatency(
 	latencyMs: number,
 	range: { min: number; max: number } | undefined,
 ): { value: number; clamped: boolean } {
-	if (range === undefined) return { value: latencyMs, clamped: false };
-	const value = Math.min(Math.max(latencyMs, range.min), range.max);
+	// Effective floor is the SRTLA minimum (T2), or the engine's own min when it
+	// advertises a higher one. A pushed low-latency preset can never drop the
+	// SRTLA path below 2 s.
+	const min =
+		range === undefined
+			? SRTLA_MIN_LATENCY_MS
+			: Math.max(range.min, SRTLA_MIN_LATENCY_MS);
+	let value = Math.max(latencyMs, min);
+	if (range !== undefined) value = Math.min(value, Math.max(range.max, min));
 	return { value, clamped: value !== latencyMs };
 }
 

@@ -140,7 +140,7 @@ describe("corrupt config.json handling", () => {
 			JSON.stringify({
 				max_br: "not-a-number",
 				balancer: "bogus-algorithm",
-				srt_latency: 1234,
+				srt_latency: 2345,
 				pipeline: "h264_hdmi_1080p",
 			}),
 		));
@@ -153,11 +153,48 @@ describe("corrupt config.json handling", () => {
 
 		expect(result.invalidFields).toContain("max_br");
 		expect(result.invalidFields).toContain("balancer");
-		// Valid fields survive:
-		expect(result.data.srt_latency).toBe(1234);
+		// Valid fields survive (2345 is above the SRTLA floor, so untouched):
+		expect(result.data.srt_latency).toBe(2345);
 		expect(result.data.pipeline).toBe("h264_hdmi_1080p");
 		// Garbage values are replaced by defaults, never persisted:
 		expect(result.data.max_br).toBe(RUNTIME_CONFIG_DEFAULTS.max_br);
 		expect(result.data.balancer).toBe(RUNTIME_CONFIG_DEFAULTS.balancer);
+	});
+});
+
+describe("SRTLA latency floor on load (T2)", () => {
+	let dir: string;
+	let file: string;
+
+	afterEach(() => {
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	it("floors a persisted sub-2s srt_latency up to the SRTLA minimum on load", async () => {
+		({ dir, file } = withTempConfig(JSON.stringify({ srt_latency: 100 })));
+
+		const result = await loadJsonConfig(
+			file,
+			runtimeConfigSchema,
+			RUNTIME_CONFIG_DEFAULTS,
+		);
+
+		expect(result.loaded).toBe(true);
+		expect(result.data.srt_latency).toBe(2000);
+	});
+
+	it("parses (never rejects) a legacy value below the 100 validation min's floor", () => {
+		expect(runtimeConfigSchema.safeParse({ srt_latency: 100 }).success).toBe(
+			true,
+		);
+		expect(runtimeConfigSchema.parse({ srt_latency: 100 }).srt_latency).toBe(
+			2000,
+		);
+		expect(runtimeConfigSchema.parse({ srt_latency: 1999 }).srt_latency).toBe(
+			2000,
+		);
+		expect(runtimeConfigSchema.parse({ srt_latency: 4000 }).srt_latency).toBe(
+			4000,
+		);
 	});
 });

@@ -25,6 +25,12 @@ export const BITRATE_DEFAULT_MAX = 12000;
 export const SRT_LATENCY_MIN = 100;
 export const SRT_LATENCY_MAX = 10000;
 
+// SRTLA egress latency FLOOR (T2). The schema VALIDATION min stays at
+// SRT_LATENCY_MIN (100) so a legacy sub-2s config still parses on boot — do NOT
+// raise it — but the effective latency is floored to this value at every layer
+// (FE slider, backend setConfig/start clamps, device.setProfile, config load).
+export const SRTLA_MIN_LATENCY_MS = 2000;
+
 export const AUDIO_DELAY_MIN = -2000;
 export const AUDIO_DELAY_MAX = 2000;
 

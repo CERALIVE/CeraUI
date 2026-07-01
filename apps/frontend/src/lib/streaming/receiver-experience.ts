@@ -32,6 +32,7 @@ import {
 	type RelayProviderKind,
 	type RelayServer,
 	relayProtocolSchema,
+	SRTLA_MIN_LATENCY_MS,
 	type StreamingConfigInput,
 	serverSupportedProtocols,
 } from "@ceraui/rpc/schemas";
@@ -164,11 +165,11 @@ export function managedCloudLabel(choice: ReceiverDestinationChoice): string {
 /**
  * The single latency window every receiver gets when the engine has not
  * advertised its own range. Latency is the ARQ retransmit budget — the one real
- * knob — so the window is generous (100 ms … 5 s, default 2 s).
+ * knob. The floor is the SRTLA minimum (2 s), so the window is 2 s … 5 s (T2).
  */
 export const DEFAULT_LATENCY_RANGE: LatencyRange = {
-	min: 100,
-	default: 2000,
+	min: SRTLA_MIN_LATENCY_MS,
+	default: SRTLA_MIN_LATENCY_MS,
 	max: 5000,
 };
 
@@ -180,12 +181,23 @@ export interface LatencyRangeSource {
 /**
  * The latency slider window: the engine-advertised `latency_range` when present,
  * else {@link DEFAULT_LATENCY_RANGE}. The ONLY latency-window source the
- * LatencySection consumes — no inline literals in the component.
+ * LatencySection consumes — no inline literals in the component. The advertised
+ * min is floored to {@link SRTLA_MIN_LATENCY_MS} (T2) and the default clamped
+ * into the resulting window; an advertised range whose max sits below the floor
+ * is incoherent, so it is discarded for the default window.
  */
 export function deriveLatencyRange(
 	caps: LatencyRangeSource | undefined,
 ): LatencyRange {
-	return caps?.latency_range ?? DEFAULT_LATENCY_RANGE;
+	const advertised = caps?.latency_range;
+	if (advertised === undefined) return DEFAULT_LATENCY_RANGE;
+	const min = Math.max(advertised.min, SRTLA_MIN_LATENCY_MS);
+	if (advertised.max < min) return DEFAULT_LATENCY_RANGE;
+	const clampedDefault = Math.min(
+		Math.max(advertised.default, min),
+		advertised.max,
+	);
+	return { min, default: clampedDefault, max: advertised.max };
 }
 
 /** A relay-catalog grouping keyed by the server's provider origin (T9). */
