@@ -143,19 +143,29 @@ function draftOf(overrides: Partial<ServerSetDraft> = {}): ServerSetDraft {
 }
 
 describe("ServerDialog — destination tiles + transport row", () => {
-	it("hides the transport row for managed clouds, shows it on Custom", async () => {
+	it("shows the transport row per-provider: CeraLive + Custom yes, BeLABOX no", async () => {
 		render(ServerDialog, { props: { open: true } });
 		expect(screen.getByTestId("destination-ceralive")).toBeTruthy();
 		expect(screen.getByTestId("destination-belabox")).toBeTruthy();
 		expect(screen.getByTestId("destination-custom")).toBeTruthy();
 
-		// Managed default (ceralive): SRTLA is implicit — no transport row/chooser.
-		expect(screen.queryByTestId("transport-row")).toBeNull();
+		// Managed default (ceralive): the honest transport row IS shown — CeraLive
+		// has a RIST/SRT roadmap (SRTLA active + RIST/SRT coming-soon pills).
+		expect(screen.queryByTestId("transport-row")).not.toBeNull();
+		expect(screen.getByTestId("transport-srtla")).toBeTruthy();
+		expect(screen.getByTestId("transport-rist")).toBeTruthy();
+		expect(screen.getByTestId("transport-srt")).toBeTruthy();
+
+		// BeLABOX: SRTLA-only receiver, no RIST/SRT roadmap → the row is hidden.
+		await fireEvent.click(screen.getByTestId("destination-belabox"));
+		await waitFor(() =>
+			expect(screen.queryByTestId("transport-row")).toBeNull(),
+		);
 		expect(screen.queryByTestId("transport-srtla")).toBeNull();
 		expect(screen.queryByTestId("transport-rist")).toBeNull();
 		expect(screen.queryByTestId("transport-srt")).toBeNull();
 
-		// Custom: the honest transport row appears (SRTLA active + RIST/SRT pills).
+		// Custom: the honest transport row appears again (SRTLA active + RIST/SRT pills).
 		await fireEvent.click(screen.getByTestId("destination-custom"));
 		await waitFor(() =>
 			expect(screen.queryByTestId("transport-row")).not.toBeNull(),

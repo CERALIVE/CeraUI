@@ -10,6 +10,8 @@
       servers; picking another managed cloud shows a calm "add your key" prompt
       that opens CloudRemoteDialog preselecting it.
    3. TransportRow — honest transport row: SRTLA active, RIST/SRT coming soon.
+      Hidden ONLY for BeLABOX (SRTLA-only receiver, no RIST/SRT roadmap); shown
+      for CeraLive and Custom.
    4. Endpoint config:
         • managed (keyed) → ServerIngestSlots or RelayServerSelector (fetched
           servers, prefilled; no provider picker, no override).
@@ -311,7 +313,7 @@ async function handleSave() {
 			selected={destinationChoice}
 		/>
 
-		{#if destination === 'custom'}
+		{#if destinationChoice !== 'belabox'}
 			<TransportRow />
 		{/if}
 

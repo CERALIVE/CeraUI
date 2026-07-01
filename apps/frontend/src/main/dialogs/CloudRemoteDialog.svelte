@@ -3,12 +3,17 @@
 
   Consolidates the two former Streaming-group entries into one surface:
 
-    1. Device pairing (claim code). Generate / regenerate a claim code, show the
-       live validity countdown + a QR deep-link for phone scanning, and complete
-       pairing. The PRODUCTION `complete-pairing` action (`pairing.complete()`)
-       and the DEV-ONLY `simulate-pairing` action coexist, gated on
-       `import.meta.env.DEV` — production shows Complete, dev shows Simulate.
-       When paired, the subscription-standing badge + bound device id are shown.
+    1. Device pairing (claim code) — CERALIVE ONLY. BeLABOX has no platform
+       pairing/claim-code support; Custom has no platform pairing either. The
+       section is hidden when a non-CeraLive provider is selected. Generate /
+       regenerate a claim code, show the live validity countdown + a QR deep-link
+       for phone scanning, and complete pairing. The PRODUCTION `complete-pairing`
+       action (`pairing.complete()`) and the DEV-ONLY `simulate-pairing` action
+       coexist, gated on `import.meta.env.DEV` — production shows Complete, dev
+       shows Simulate. When paired, the subscription-standing badge + bound device
+       id are shown. The PairingController state is preserved across a provider
+       switch (only reset on dialog close), so switching away from and back to
+       CeraLive resumes the still-valid code with its remaining time.
 
     2. Provider / relay config. Provider select (CeraLive / BELABOX / Custom),
        optional custom host, and the remote key. Saves through the system RPC via
@@ -192,11 +197,15 @@ const pairing = new PairingController();
 const isDev = import.meta.env.DEV;
 
 $effect(() => {
-	if (open) {
+	if (open && provider === 'ceralive') {
 		pairing.startCountdown();
-	} else {
+	} else if (!open) {
+		// Dialog close is the ONLY reset: a mere provider switch away preserves the
+		// in-flight claim code + countdown so switching back resumes it.
 		pairing.stopCountdown();
 		pairing.reset();
+	} else {
+		pairing.stopCountdown();
 	}
 });
 
@@ -204,6 +213,7 @@ $effect(() => {
 // for a live `active` code whose window has elapsed; generate() then flips the
 // state back to `active` with a fresh window, so this effect cannot loop.
 $effect(() => {
+	if (provider !== 'ceralive') return;
 	if (shouldAutoRegenerate(pairing.status, pairing.expired)) {
 		void generateCode();
 	}
@@ -215,6 +225,10 @@ $effect(() => {
 let qrDataUrl = $state<string | null>(null);
 
 $effect(() => {
+	if (provider !== 'ceralive') {
+		qrDataUrl = null;
+		return;
+	}
 	const code = pairing.code;
 	const serial = pairing.serial;
 	if (!code || !serial) {
@@ -323,7 +337,8 @@ async function save() {
 	title={$LL.settings.index.cloudRemote()}
 >
 	<div class="space-y-5">
-		<!-- Device pairing (claim code) -->
+		<!-- Device pairing (claim code) — CeraLive only; no BeLABOX/Custom platform pairing. -->
+		{#if provider === 'ceralive'}
 		<section class="bg-muted/40 space-y-3 rounded-lg border p-4" data-testid="device-pairing">
 			<div class="flex items-start gap-3">
 				<span
@@ -492,6 +507,7 @@ async function save() {
 				</Button>
 			{/if}
 		</section>
+		{/if}
 
 		<!-- Provider select -->
 		<div class="space-y-2">

@@ -59,6 +59,8 @@ const saveRemoteConfigMock = vi.hoisted(() =>
 	vi.fn(async () => ({ success: true })),
 );
 
+const pairingResetSpy = vi.hoisted(() => vi.fn());
+
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConfig: () => state.config,
 }));
@@ -116,7 +118,9 @@ vi.mock("$lib/pairing/pairing.svelte", () => ({
 		}
 		startCountdown() {}
 		stopCountdown() {}
-		reset() {}
+		reset() {
+			pairingResetSpy();
+		}
 		async generate() {}
 		async complete() {
 			return { paired: false };
@@ -172,6 +176,7 @@ beforeEach(() => {
 		subStatus: null,
 	};
 	saveRemoteConfigMock.mockClear();
+	pairingResetSpy.mockClear();
 });
 
 afterEach(() => {
@@ -220,6 +225,44 @@ describe("CloudRemoteDialog — pairing surface (T9)", () => {
 		expect(screen.getByTestId("pairing-device-id").textContent).toContain(
 			"device-abc-123",
 		);
+	});
+});
+
+describe("CloudRemoteDialog — pairing section is CeraLive-only (F1)", () => {
+	it("shows device-pairing when CeraLive is selected (default)", () => {
+		render(CloudRemoteDialog, { props: { open: true } });
+		expect(screen.getByTestId("device-pairing")).toBeTruthy();
+	});
+
+	it("hides device-pairing when BeLABOX is selected", async () => {
+		render(CloudRemoteDialog, { props: { open: true, provider: "belabox" } });
+		const trigger = document.getElementById("cloud-provider") as HTMLElement;
+		await waitFor(() => expect(trigger.textContent).toContain("BELABOX Cloud"));
+		expect(screen.queryByTestId("device-pairing")).toBeNull();
+	});
+
+	it("hides device-pairing when Custom is selected", () => {
+		render(CloudRemoteDialog, { props: { open: true, provider: "custom" } });
+		expect(screen.queryByTestId("device-pairing")).toBeNull();
+	});
+
+	it("selecting a non-CeraLive provider hides pairing WITHOUT resetting the controller", () => {
+		activeCode();
+		render(CloudRemoteDialog, { props: { open: true, provider: "belabox" } });
+		expect(screen.queryByTestId("device-pairing")).toBeNull();
+		// A provider switch away from CeraLive preserves the in-flight code — no reset.
+		expect(pairingResetSpy).not.toHaveBeenCalled();
+	});
+
+	it("resets the pairing controller only on dialog close (so a switch-back resumes it)", async () => {
+		activeCode();
+		const { rerender } = render(CloudRemoteDialog, { props: { open: true } });
+		expect(screen.getByTestId("device-pairing")).toBeTruthy();
+		expect(screen.getByTestId("claim-code").textContent).toContain("482913");
+		expect(pairingResetSpy).not.toHaveBeenCalled();
+
+		await rerender({ open: false });
+		await waitFor(() => expect(pairingResetSpy).toHaveBeenCalled());
 	});
 });
 
