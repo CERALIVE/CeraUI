@@ -37,6 +37,10 @@ import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
+import {
+	getMockDeviceStatsDeps,
+	shouldMockDeviceStats,
+} from "../../mocks/providers/device-stats.ts";
 import { DEVICE_STATS_EVENT } from "../../rpc/events.ts";
 import { DEVICE_STATS_COLLECTOR_TIMEOUT_MS } from "../streaming/constants.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
@@ -478,6 +482,26 @@ export const defaultDeviceStatsDeps: DeviceStatsDeps = {
 
 const deviceStatsState = createDeviceStatsState();
 
+// The mock deps are STATEFUL (a private rx/tx clock), so they are built once and
+// reused across ticks rather than rebuilt each tick — a fresh instance would
+// reset the clock and keep ifaceRxTx permanently at its baseline null.
+let mockDeviceStatsDeps: DeviceStatsDeps | undefined;
+
+/**
+ * Select the collector deps for a tick. Under `shouldMockDeviceStats()` (the
+ * dev/mock path) it returns the memoized mock deps so all five signals report
+ * plausible fixture values; otherwise the real hardware deps. Resolved per tick
+ * (not once at init) so it is robust to `initDeviceStats` running before the
+ * mock service has initialized.
+ */
+export function resolveDeviceStatsDeps(): DeviceStatsDeps {
+	if (shouldMockDeviceStats()) {
+		mockDeviceStatsDeps ??= getMockDeviceStatsDeps();
+		return mockDeviceStatsDeps;
+	}
+	return defaultDeviceStatsDeps;
+}
+
 /**
  * Start the 5s `device-stats` broadcast loop. Mirrors the sensors/netif
  * pattern: an immediate first tick (after the baseline rx/tx sample lands)
@@ -487,7 +511,7 @@ export function initDeviceStats(): void {
 	const tick = async () => {
 		try {
 			const payload = await collectDeviceStats(
-				defaultDeviceStatsDeps,
+				resolveDeviceStatsDeps(),
 				deviceStatsState,
 			);
 			broadcastMsg(DEVICE_STATS_EVENT, payload, getms() - ACTIVE_TO);
