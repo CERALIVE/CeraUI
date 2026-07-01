@@ -1352,6 +1352,8 @@ const ptBR = {
 		customProvider: "Provedor Personalizado",
 		cloudRemoteKey: "Chave Remota",
 		cloudRemoteKeyTooltip: "Digite a chave remota do seu provedor de nuvem.",
+		remoteKeyManagedByCloud:
+			"Gerenciado pela sua nuvem {provider} — os endpoints vêm do catálogo.",
 		providerName: "Nome do Provedor",
 		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "Host WebSocket",

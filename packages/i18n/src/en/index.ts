@@ -1366,6 +1366,8 @@ const en = {
 		customProvider: "Custom Provider",
 		cloudRemoteKey: "Remote Key",
 		cloudRemoteKeyTooltip: "Enter the remote key from your cloud provider.",
+		remoteKeyManagedByCloud:
+			"Managed by your {provider:string} cloud — endpoints come from the catalog.",
 		providerName: "Provider Name",
 		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "WebSocket Host",

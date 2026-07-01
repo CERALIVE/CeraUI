@@ -1222,6 +1222,8 @@ const ja = {
 		cloudRemoteKey: "リモートキー",
 		cloudRemoteKeyTooltip:
 			"クラウドプロバイダーからリモートキーを入力してください。",
+		remoteKeyManagedByCloud:
+			"{provider} クラウドによって管理されています — エンドポイントはカタログから取得されます。",
 		providerName: "プロバイダー名",
 		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "WebSocketホスト",

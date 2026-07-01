@@ -1395,6 +1395,8 @@ const es = {
 		customProvider: "Proveedor Personalizado",
 		cloudRemoteKey: "Clave Remota",
 		cloudRemoteKeyTooltip: "Ingrese la clave remota de su proveedor de nube.",
+		remoteKeyManagedByCloud:
+			"Gestionado por tu nube {provider} — los puntos de conexión provienen del catálogo.",
 		providerName: "Nombre del Proveedor",
 		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "Host WebSocket",

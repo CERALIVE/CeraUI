@@ -44,6 +44,13 @@ vi.mock("$lib/helpers/SystemHelper", () => ({
 	saveRemoteConfig: vi.fn(async () => ({ success: true })),
 }));
 
+// CloudRemoteDialog now imports generateDeviceAccessQr from NetworkHelper (folded
+// in from the retired PairingDialog, T9); mock it so this suite does not pull the
+// websocket-store module graph (which needs the full rpcClient mock).
+vi.mock("$lib/helpers/NetworkHelper", () => ({
+	generateDeviceAccessQr: vi.fn(async () => "data:image/png;base64,QR"),
+}));
+
 vi.mock("$lib/pairing/pairing.svelte", () => ({
 	PairingController: class {
 		code: string | null = null;
