@@ -182,12 +182,15 @@ function readActiveNotifications(page: Page): Promise<ActiveLite[]> {
 	});
 }
 
-/** Inject a backend `notifications` broadcast via the dev-only `dev.emit`. */
-async function emitNotification(page: Page, notification: Record<string, unknown>): Promise<void> {
-	await page.evaluate(async (n) => {
+// Inject a backend `notification` broadcast via the dev-only `dev.emit`. Wire
+// type is SINGULAR `notification` — the type the backend actually broadcasts and
+// the only one subscriptions.svelte.ts folds into the store; plural `notifications`
+// lands nowhere since fa7f0277 renamed the handler to the singular case.
+function emitNotification(page: Page, notification: Record<string, unknown>): Promise<void> {
+	return page.evaluate(async (n) => {
 		const specPath = '/src/lib/rpc/client.ts';
 		const mod = await import(/* @vite-ignore */ specPath);
-		await mod.rpc.dev.emit({ type: 'notifications', payload: { show: [n] } });
+		await mod.rpc.dev.emit({ type: 'notification', payload: { show: [n] } });
 	}, notification);
 }
 
