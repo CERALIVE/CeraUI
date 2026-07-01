@@ -107,6 +107,7 @@ CeraUI/
 | **Add-on manager (enable/disable state machine, T28)** | `apps/backend/src/modules/addons/manager.ts` |
 | **Device stats (5-signal broadcast)** | `apps/backend/src/modules/system/device-stats.ts` |
 | **Config atomicity (E3)** | `apps/backend/src/helpers/config-loader.ts` — `writeFileAtomicSync` |
+| **Config persistence placement map + storage-engine decision** | `docs/CONFIG_PERSISTENCE.md` |
 | **Runtime config schema (addons key)** | `apps/backend/src/helpers/config-schemas.ts` — `runtimeConfigSchema` |
 | **Logger (dev pretty + prod JSON + redaction + boot banner)** | `apps/backend/src/helpers/logger.ts` + `helpers/boot-banner.ts` |
 | **Per-RPC call tracing** | `apps/backend/src/rpc/rpc-logging.ts` |
