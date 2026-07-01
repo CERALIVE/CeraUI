@@ -69,6 +69,10 @@ export function buildLinks(
 		// may key the record by a radio/device id that differs from ifname, which
 		// is what netif and the WiFi view both join on (mirrors the modem path).
 		const id = iface.ifname || key;
+		// Skip a link the operator has toggled out of the bond (netif.enabled ===
+		// false), mirroring the ethernet loop. Only an explicit disable excludes; a
+		// link with no netif entry yet defaults to enabled and still shows.
+		if (!enabledFor(id)) continue;
 		const active = iface.available?.find((network) => network.active);
 		const isConnected = Boolean(active);
 		links.push({
@@ -87,6 +91,9 @@ export function buildLinks(
 
 	for (const [key, modem] of Object.entries(modems ?? {})) {
 		const id = modem.ifname || key;
+		// Skip a modem toggled out of the bond (netif.enabled === false); see the
+		// wifi loop above for the default-enabled fallback rationale.
+		if (!enabledFor(id)) continue;
 		const connectionState = modemConnectionState(modem);
 		links.push({
 			id,

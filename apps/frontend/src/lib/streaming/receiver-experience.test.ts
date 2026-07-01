@@ -152,19 +152,35 @@ describe("deriveDestinationChoice — destination-as-provider model", () => {
 });
 
 describe("deriveLatencyRange — single latency window", () => {
-	it("uses the engine-advertised range when present", () => {
+	it("floors an advertised sub-2s min up to the SRTLA floor (T2)", () => {
 		expect(
 			deriveLatencyRange({
 				latency_range: { min: 100, default: 1500, max: 3000 },
 			}),
-		).toEqual({ min: 100, default: 1500, max: 3000 });
+		).toEqual({ min: 2000, default: 2000, max: 3000 });
+	});
+
+	it("keeps an engine min already above the floor", () => {
+		expect(
+			deriveLatencyRange({
+				latency_range: { min: 3000, default: 3500, max: 5000 },
+			}),
+		).toEqual({ min: 3000, default: 3500, max: 5000 });
+	});
+
+	it("discards an incoherent advertised range and falls back to the default", () => {
+		expect(
+			deriveLatencyRange({
+				latency_range: { min: 100, default: 500, max: 1000 },
+			}),
+		).toEqual(DEFAULT_LATENCY_RANGE);
 	});
 
 	it("falls back to the default window otherwise", () => {
 		expect(deriveLatencyRange(undefined)).toEqual(DEFAULT_LATENCY_RANGE);
 		expect(deriveLatencyRange({})).toEqual(DEFAULT_LATENCY_RANGE);
 		expect(DEFAULT_LATENCY_RANGE).toEqual({
-			min: 100,
+			min: 2000,
 			default: 2000,
 			max: 5000,
 		});

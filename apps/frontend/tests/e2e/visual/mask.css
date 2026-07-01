@@ -31,3 +31,19 @@
 [data-sonner-toaster] {
 	visibility: hidden !important;
 }
+
+/*
+ * Device Stats value column (DeviceStatsSection.svelte) — the same class of live
+ * device telemetry the HUD block above masks (disk / CPU load / SoC temp /
+ * network rate / boot slot), surfaced in the Settings destination. The value
+ * cell is populated by the async `device-stats` broadcast, so whether it shows a
+ * real fixture value ("52.0 °C") or the "—" placeholder is a push-vs-capture
+ * timing race — and on a real device these values fluctuate every 5 s. Hiding
+ * only the value cells keeps the stable section chrome (labels, icons, layout)
+ * in the baseline while neutralising the live churn. visibility:hidden (not
+ * display:none) preserves each right-aligned shrink-0 cell's box so the rows
+ * never reflow between baseline and comparison runs.
+ */
+[data-testid^='device-stat-'][data-testid$='-value'] {
+	visibility: hidden !important;
+}

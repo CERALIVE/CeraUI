@@ -1379,6 +1379,8 @@ const fr = {
 		cloudRemoteKey: "Clé Distante",
 		cloudRemoteKeyTooltip:
 			"Saisissez la clé distante de votre fournisseur cloud.",
+		remoteKeyManagedByCloud:
+			"Géré par votre cloud {provider} — les points de terminaison proviennent du catalogue.",
 		providerName: "Nom du Fournisseur",
 		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "Hôte WebSocket",

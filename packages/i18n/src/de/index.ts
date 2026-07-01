@@ -1384,6 +1384,8 @@ const de = {
 		cloudRemoteKey: "Remote-Schlüssel",
 		cloudRemoteKeyTooltip:
 			"Geben Sie den Remote-Schlüssel von Ihrem Cloud-Anbieter ein.",
+		remoteKeyManagedByCloud:
+			"Verwaltet von Ihrer {provider}-Cloud — Endpunkte stammen aus dem Katalog.",
 		providerName: "Anbietername",
 		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "WebSocket-Host",

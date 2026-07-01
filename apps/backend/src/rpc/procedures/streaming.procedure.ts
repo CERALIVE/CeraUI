@@ -15,6 +15,7 @@ import {
 	pipelinesMessageSchema,
 	reloadAudioDelayInputSchema,
 	reloadAudioDelayOutputSchema,
+	SRTLA_MIN_LATENCY_MS,
 	type StreamingConfigInput,
 	SWITCH_AUDIO_ERRORS,
 	setMockHardwareInputSchema,
@@ -105,10 +106,15 @@ export const streamingStartProcedure = authedProcedure
 		}
 		startInFlight = true;
 		try {
-			const applied: StreamingConfigInput =
-				input.max_br !== undefined
-					? { ...input, max_br: clampBitrate(input.max_br) }
-					: input;
+			const applied: StreamingConfigInput = {
+				...input,
+				...(input.max_br !== undefined
+					? { max_br: clampBitrate(input.max_br) }
+					: {}),
+				...(input.srt_latency !== undefined
+					? { srt_latency: Math.max(input.srt_latency, SRTLA_MIN_LATENCY_MS) }
+					: {}),
+			};
 
 			// Block start when the effective pipeline is not in the offered set — a
 			// persisted pipeline the current hardware no longer offers. No silent
@@ -331,7 +337,8 @@ export const setConfigProcedure = authedProcedure
 			}
 		}
 
-		if (input.srt_latency !== undefined) config.srt_latency = input.srt_latency;
+		if (input.srt_latency !== undefined)
+			config.srt_latency = Math.max(input.srt_latency, SRTLA_MIN_LATENCY_MS);
 		if (input.fec_enabled !== undefined) config.fec_enabled = input.fec_enabled;
 		if (input.recovery_mode !== undefined)
 			config.recovery_mode = input.recovery_mode;

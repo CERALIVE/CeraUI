@@ -52,16 +52,15 @@ export class SettingsPage {
 	}
 
 	// ── Device pairing (claim code) ───────────────────────────────────────────
-	// Pairing has its own dedicated Settings entry/dialog ("Device Pairing").
+	// T9/T10 consolidated the former standalone "Device Pairing" dialog INTO the
+	// single "Cloud Remote Server" entry — the claim-code pairing section (all
+	// pairing-* testids) now lives inside CloudRemoteDialog. Opening pairing is
+	// therefore opening the one Cloud Remote Server dialog.
 	async openPairing(): Promise<void> {
-		await openDialog(
-			this.page,
-			this.page.getByRole('button', { name: 'Device Pairing' }),
-			'Device Pairing',
-		);
+		await this.openCloudRemote();
 	}
 	async closePairing(): Promise<void> {
-		await this.dismiss('Device Pairing');
+		await this.closeCloudRemote();
 	}
 
 	/** Generate a claim code and return its trimmed text once rendered. */
@@ -73,9 +72,18 @@ export class SettingsPage {
 		return ((await code.textContent()) ?? '').trim();
 	}
 
-	/** Submit the claim code and assert the paired state surfaces. */
+	/**
+	 * Submit the claim code and assert the paired state surfaces.
+	 *
+	 * BEHAVIOR CHANGE (T11): the consolidated CloudRemoteDialog gates the prod
+	 * `complete-pairing` action behind `!import.meta.env.DEV` and renders the
+	 * dev-only `simulate-pairing` action instead (both call the same
+	 * `pairing.complete()` → `pairing.completePairing` RPC). The e2e frontend
+	 * runs `vite dev` (DEV === true), so `simulate-pairing` is the button that
+	 * exists here — `complete-pairing` is never rendered in this environment.
+	 */
 	async completePairing(): Promise<void> {
-		await this.page.getByTestId('complete-pairing').click();
+		await this.page.getByTestId('simulate-pairing').click();
 		await expect(this.page.getByTestId('pairing-status')).toBeVisible();
 	}
 

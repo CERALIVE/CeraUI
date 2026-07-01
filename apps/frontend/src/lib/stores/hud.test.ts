@@ -549,9 +549,12 @@ describe("buildLinks — throughput join from netif.tp", () => {
 });
 
 describe("buildLinks — enabled propagation from netif", () => {
-	it("carries enabled from the matching netif entry", () => {
+	// The enabled:false case is now covered by the exclusion block below: a
+	// bond-excluded modem/wifi link is DROPPED, not carried with enabled:false. So
+	// every included link carries enabled:true — this only checks the join reads it.
+	it("carries enabled:true from the matching netif entry onto an included link", () => {
 		const netif: NetifMessage = {
-			wwan0: { tp: 0, enabled: false, ip: "10.0.0.2" },
+			wwan0: { tp: 0, enabled: true, ip: "10.0.0.2" },
 			wlan0: { tp: 0, enabled: true, ip: "10.0.0.3" },
 		};
 		const links = buildLinks(
@@ -562,7 +565,7 @@ describe("buildLinks — enabled propagation from netif", () => {
 			false,
 			false,
 		);
-		expect(links.find((l) => l.type === "modem")?.enabled).toBe(false);
+		expect(links.find((l) => l.type === "modem")?.enabled).toBe(true);
 		expect(links.find((l) => l.type === "wifi")?.enabled).toBe(true);
 	});
 
@@ -579,8 +582,81 @@ describe("buildLinks — enabled propagation from netif", () => {
 	});
 });
 
-describe("buildLinks — linkIndex stability", () => {
-	it("keeps linkIndex stable for remaining links when one link is disabled", () => {
+describe("buildLinks — excludes bond-excluded wifi/modem links", () => {
+	// PRE-EXISTING BUG FIX: a link toggled to "Excluded" (bond-membership off,
+	// wired via BondToggle -> network.configure({enabled:false}) -> netif.enabled)
+	// must be DROPPED from the bonded-link list — not merely carry enabled:false
+	// while still rendering full signal/telemetry. The ethernet loop already skips a
+	// disabled interface; the wifi and modem loops did not. Only an EXPLICIT
+	// enabled:false excludes; a link with no netif entry yet stays (default-enabled).
+	it("excludes a modem link when its netif entry is explicitly disabled", () => {
+		const netif: NetifMessage = {
+			wwan0: { tp: 0, enabled: false, ip: "10.0.0.2" },
+		};
+		const links = buildLinks(
+			{ modem1: makeModem({ ifname: "wwan0" }) } as ModemList,
+			undefined,
+			netif,
+			false,
+			false,
+			false,
+		);
+		expect(links.filter((l) => l.type === "modem")).toHaveLength(0);
+	});
+
+	it("excludes a wifi link when its netif entry is explicitly disabled", () => {
+		const netif: NetifMessage = {
+			wlan0: { tp: 0, enabled: false, ip: "10.0.0.3" },
+		};
+		const links = buildLinks(
+			undefined,
+			wifiFixture,
+			netif,
+			false,
+			false,
+			false,
+		);
+		expect(links.filter((l) => l.type === "wifi")).toHaveLength(0);
+	});
+
+	it("still includes a modem/wifi link with no netif entry yet (default-enabled fallback must not regress)", () => {
+		// Before the first netif snapshot lands, modems/wifi have no netif entry, so
+		// enabledFor defaults to true (`?? true`). Such links MUST still show — only
+		// an explicit enabled:false excludes.
+		const links = buildLinks(
+			{ modem1: makeModem({ ifname: "wwan0" }) } as ModemList,
+			wifiFixture,
+			undefined,
+			false,
+			false,
+			false,
+		);
+		expect(links.filter((l) => l.type === "modem")).toHaveLength(1);
+		expect(links.filter((l) => l.type === "wifi")).toHaveLength(1);
+	});
+
+	it("keeps the enabled sibling while excluding a disabled modem of the same type", () => {
+		const modems = {
+			modem1: makeModem({ ifname: "wwan0", name: "CarrierA" }),
+			modem2: makeModem({ ifname: "wwan1", name: "CarrierB" }),
+		} as ModemList;
+		const netif: NetifMessage = {
+			wwan0: { tp: 0, enabled: false, ip: "10.0.0.4" },
+			wwan1: { tp: 0, enabled: true, ip: "10.0.0.5" },
+		};
+		const links = buildLinks(modems, undefined, netif, false, false, false);
+		expect(links.filter((l) => l.type === "modem").map((l) => l.id)).toEqual([
+			"wwan1",
+		]);
+	});
+});
+
+describe("buildLinks — linkIndex re-indexing when a link is excluded", () => {
+	// PRE-EXISTING BUG FIX: this previously asserted a disabled link REMAINED with
+	// a stable linkIndex, which pinned the bug (a bond-excluded modem kept showing
+	// as an active bonded link). Correct behavior: an explicitly disabled link is
+	// dropped and the survivors are re-indexed contiguously.
+	it("drops the disabled link and re-indexes the remaining links contiguously", () => {
 		const modems = {
 			modem1: makeModem({ ifname: "wwan0", name: "CarrierA" }),
 			modem2: makeModem({ ifname: "wwan1", name: "CarrierB" }),
@@ -614,19 +690,10 @@ describe("buildLinks — linkIndex stability", () => {
 			false,
 		);
 
-		expect(after).toHaveLength(before.length);
-		expect(after.map((l) => l.linkIndex)).toEqual(
-			before.map((l) => l.linkIndex),
-		);
-		expect(after.map((l) => l.id)).toEqual(before.map((l) => l.id));
-		const disabled = after.find((l) => l.id === "wwan0");
-		expect(disabled).toBeDefined();
-		if (disabled) {
-			expect(disabled.enabled).toBe(false);
-			expect(disabled.linkIndex).toBe(
-				before.find((l) => l.id === "wwan0")?.linkIndex,
-			);
-		}
+		expect(before.map((l) => l.id)).toEqual(["wlan0", "wwan0", "wwan1"]);
+		expect(after.map((l) => l.id)).toEqual(["wlan0", "wwan1"]);
+		expect(after.map((l) => l.linkIndex)).toEqual([0, 1]);
+		expect(after.find((l) => l.id === "wwan0")).toBeUndefined();
 	});
 });
 

@@ -18,6 +18,7 @@ import {
 	handleNetif,
 	netIfBuildMsg,
 } from "../../modules/network/network-interfaces.ts";
+import { broadcastMsg } from "../compat.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
@@ -53,6 +54,12 @@ export const configureNetworkInterfaceProcedure = authedProcedure
 				dhcp: input.ip === undefined,
 				ip: input.ip,
 			});
+			// handleNetif's own netif broadcast is skipped in mock mode: its raw
+			// netif-map IP differs from the mock-overlaid IP the client echoes, so
+			// the IP-match guard early-returns before broadcasting. Emit the
+			// overlaid state here so bonded-link cards react to the toggle
+			// immediately instead of on the next 5s poll.
+			broadcastMsg("netif", netIfBuildMsg());
 		}
 
 		handleNetif(context.ws as unknown as import("ws").default, {

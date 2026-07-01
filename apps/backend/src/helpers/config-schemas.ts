@@ -54,6 +54,7 @@ import {
 	relayProtocolSchema,
 	relayProviderMetaSchema,
 	resolverDecidedBySchema,
+	SRTLA_MIN_LATENCY_MS,
 	streamProfileIdSchema,
 	streamRecoveryPreferenceSchema,
 } from "@ceraui/rpc/schemas";
@@ -139,7 +140,16 @@ export const runtimeConfigSchema = z.object({
 	relay_streamid_override: z.string().optional(),
 	relay_protocol: relayProtocolSchema.optional(),
 	srt_streamid: z.string().optional(),
-	srt_latency: z.number().int().min(100).max(10000).optional(),
+	// Keep the VALIDATION min at 100 so a legacy sub-2s config still PARSES on
+	// boot (raising it would reject the whole config); the transform floors the
+	// value to the SRTLA minimum on load instead (T2 load-time normalization).
+	srt_latency: z
+		.number()
+		.int()
+		.min(100)
+		.max(10000)
+		.transform((v) => Math.max(v, SRTLA_MIN_LATENCY_MS))
+		.optional(),
 	// SRT receive-profile tuning (Tasks 18/19): FEC toggle + operator recovery
 	// preference. Persisted device-side; only honoured by a CeraLive receiver.
 	fec_enabled: z.boolean().optional(),

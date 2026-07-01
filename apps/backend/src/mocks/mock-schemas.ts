@@ -30,6 +30,7 @@ import {
 import { z } from "zod";
 import { mockModems, mockWifiNetworks, mockWifiRadios } from "./mock-config.ts";
 import { MockAddonDescriptor, MockAddonState } from "./providers/addons.ts";
+import { MOCK_DEVICE_STATS } from "./providers/device-stats.ts";
 import {
 	MOCK_COG_DISPLAY_DESCRIPTOR,
 	MOCK_KIOSK_STATUS,
@@ -226,6 +227,30 @@ export const mockKioskTokenSchema = z
 	.regex(/^[a-f0-9]{64}$/, "Kiosk token must be 64 lowercase hex characters");
 export type MockKioskToken = z.infer<typeof mockKioskTokenSchema>;
 
+/**
+ * Device-stats mock fixture shape (T3). Mirrors the NON-null variant of the
+ * 5-signal `DeviceStatsPayload` (device-stats.ts) — every collector's mock value
+ * populated (disk/cpuLoad1/socTemp/ifaceRxTx/raucSlot). The disk-type enum is
+ * kept in lock-step with `DiskType`; a drift there is a compile error at the
+ * fixture's `satisfies MockDeviceStats` site.
+ */
+export const mockDeviceStatsSchema = z.object({
+	disk: z.object({
+		used: z.number().int().nonnegative(),
+		total: z.number().int().positive(),
+		type: z.enum(["SSD", "HDD", "eMMC", "unknown"]),
+	}),
+	cpuLoad1: z.number().nonnegative(),
+	socTemp: z.number(),
+	ifaceRxTx: z.object({
+		iface: z.string().min(1),
+		rxBytesPerSec: z.number().int().nonnegative(),
+		txBytesPerSec: z.number().int().nonnegative(),
+	}),
+	raucSlot: z.string().min(1),
+});
+export type MockDeviceStats = z.infer<typeof mockDeviceStatsSchema>;
+
 // ─── Fixture validation ──────────────────────────────────────────────────────
 
 function formatIssues(label: string, error: z.ZodError): string[] {
@@ -295,6 +320,11 @@ export function validateMockFixtures(): void {
 		errors.push(
 			...formatIssues("MOCK_COG_DISPLAY_DESCRIPTOR", cogDescriptorResult.error),
 		);
+	}
+
+	const deviceStatsResult = mockDeviceStatsSchema.safeParse(MOCK_DEVICE_STATS);
+	if (!deviceStatsResult.success) {
+		errors.push(...formatIssues("MOCK_DEVICE_STATS", deviceStatsResult.error));
 	}
 
 	if (errors.length > 0) {

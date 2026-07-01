@@ -1185,6 +1185,8 @@ const hi = {
 		customProvider: "कस्टम प्रदाता",
 		cloudRemoteKey: "रिमोट की",
 		cloudRemoteKeyTooltip: "अपने क्लाउड प्रदाता से रिमोट की दर्ज करें।",
+		remoteKeyManagedByCloud:
+			"आपके {provider} क्लाउड द्वारा प्रबंधित — एंडपॉइंट कैटलॉग से आते हैं।",
 		providerName: "प्रदाता का नाम",
 		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "WebSocket होस्ट",

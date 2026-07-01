@@ -34,7 +34,7 @@ import {
 } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { validatePortNo } from "../../helpers/number.ts";
-import { writeTextFile } from "../../helpers/text-files.ts";
+import { writeTextFileAtomic } from "../../helpers/text-files.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
@@ -150,7 +150,7 @@ export async function updateCachedRelays(relays: RelaysCache | undefined) {
 	} catch (_err) {
 		logger.debug("updated the relays cache", relays);
 		relaysCache = relays;
-		await writeTextFile(RELAYS_CACHE_FILE, JSON.stringify(relays));
+		writeTextFileAtomic(RELAYS_CACHE_FILE, JSON.stringify(relays));
 		return true;
 	}
 }

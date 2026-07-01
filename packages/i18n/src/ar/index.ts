@@ -1323,6 +1323,8 @@ const ar = {
 		customProvider: "مزود مخصص",
 		cloudRemoteKey: "المفتاح البعيد",
 		cloudRemoteKeyTooltip: "أدخل المفتاح البعيد من مزود السحابة الخاص بك.",
+		remoteKeyManagedByCloud:
+			"تتم الإدارة بواسطة سحابة {provider} — تأتي نقاط النهاية من الكتالوج.",
 		providerName: "اسم المزود",
 		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "مضيف WebSocket",

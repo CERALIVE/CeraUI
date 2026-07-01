@@ -1,8 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import { wifiMessageSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
+import { initMockService, stopMockService } from "../mocks/mock-service.ts";
+import { updateNetif } from "../modules/network/network-interfaces.ts";
 import { withDeviceLock } from "../modules/network/state/device-lock.ts";
 import {
 	addWifiInterface,
@@ -11,6 +13,7 @@ import {
 import type { WifiInterface } from "../modules/wifi/wifi-interfaces.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import { configureModemProcedure } from "../rpc/procedures/modems.procedure.ts";
+import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
 import {
 	hotspotStartProcedure,
 	wifiConnectProcedure,
@@ -87,6 +90,60 @@ describe("modems.configure — invalid input", () => {
 		await expect(promise).rejects.toThrow();
 
 		expect(typeof process.pid).toBe("number");
+	});
+});
+
+describe("network.configure — mock immediate netif broadcast (Issue 2)", () => {
+	let priorMockMode: string | undefined;
+
+	beforeAll(() => {
+		priorMockMode = process.env.MOCK_MODE;
+		process.env.MOCK_MODE = "true";
+		initMockService("multi-modem-wifi");
+		// Seed the legacy netif map from the mock ifconfig so netIfBuildMsg has
+		// eth0 to overlay the mock enabled flag onto.
+		updateNetif();
+	});
+
+	afterAll(() => {
+		stopMockService();
+		if (priorMockMode === undefined) {
+			delete process.env.MOCK_MODE;
+		} else {
+			process.env.MOCK_MODE = priorMockMode;
+		}
+	});
+
+	test("disabling a netif interface broadcasts the overlaid state at once, not on the 5s poll", async () => {
+		const received: string[] = [];
+		const client = captureClient(received);
+		addClient(client);
+
+		try {
+			await call(
+				configureNetworkInterfaceProcedure,
+				{ name: "eth0", enabled: false },
+				{ context: makeContext() },
+			);
+
+			const netifPayloads = received
+				.map((raw) => JSON.parse(raw))
+				.filter(
+					(obj): obj is { netif: Record<string, { enabled?: boolean }> } =>
+						!!obj && typeof obj === "object" && "netif" in obj,
+				)
+				.map((obj) => obj.netif);
+
+			// Without the fix, handleNetif's IP-match guard early-returns in mock
+			// mode and no netif frame fires during the call — the toggle would only
+			// surface on the next poll.
+			expect(netifPayloads.length).toBeGreaterThan(0);
+			expect(netifPayloads[netifPayloads.length - 1]?.eth0?.enabled).toBe(
+				false,
+			);
+		} finally {
+			removeClient(client);
+		}
 	});
 });
 

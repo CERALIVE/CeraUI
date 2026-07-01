@@ -1195,6 +1195,8 @@ const ko = {
 		customProvider: "사용자 지정 공급자",
 		cloudRemoteKey: "원격 키",
 		cloudRemoteKeyTooltip: "클라우드 제공업체의 원격 키를 입력하세요.",
+		remoteKeyManagedByCloud:
+			"{provider} 클라우드에서 관리됩니다 — 엔드포인트는 카탈로그에서 제공됩니다.",
 		providerName: "제공업체 이름",
 		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "WebSocket 호스트",

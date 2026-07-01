@@ -32,7 +32,8 @@ const PLACEHOLDER = '--';
 const hasData = $derived(entry != null);
 const stale = $derived(entry?.stale === true);
 
-// rtt_ms=0 and weight_percent=100 are valid sender constants — render as-is.
+// weight_percent is a normalized share (0-100; 100 only for a lone link), and
+// rtt_ms=0 is valid — render every real value as-is, never coerce to "--".
 const rtt = $derived(hasData ? `${entry?.rtt_ms} ${$LL.units.ms()}` : PLACEHOLDER);
 const nak = $derived(hasData ? String(entry?.nak_count) : PLACEHOLDER);
 const weight = $derived(hasData ? `${entry?.weight_percent}%` : PLACEHOLDER);

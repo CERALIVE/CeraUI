@@ -91,6 +91,21 @@ export interface LinkTelemetryMessage {
 	lastReadMs: number;
 }
 
+// Dev/e2e seam: with no real srtla_send process the real sources never activate,
+// so a registered mock provider surfaces plausible per-link telemetry through the
+// EXISTING status flow while the mock stream is active (it owns the mock gate and
+// the active/idle decision; a non-null return short-circuits the real path).
+type MockLinkTelemetryProvider = () => LinkTelemetryMessage | null;
+
+let mockLinkTelemetryProvider: MockLinkTelemetryProvider | null = null;
+
+/** Register (or clear with null) the dev/e2e mock link-telemetry provider. */
+export function setMockLinkTelemetryProvider(
+	fn: MockLinkTelemetryProvider | null,
+): void {
+	mockLinkTelemetryProvider = fn;
+}
+
 // ---------------------------------------------------------------------------
 // conn_id <-> interface mapping
 // ---------------------------------------------------------------------------
@@ -471,6 +486,9 @@ export function isLinkTelemetryActive(): boolean {
  *   - watching, fresh snapshot                    -> live links, stale: false
  */
 export function buildLinkTelemetry(): LinkTelemetryMessage | null {
+	const mock = mockLinkTelemetryProvider?.();
+	if (mock) return mock;
+
 	if (!hasActiveTelemetrySource()) return null;
 	if (lastSnapshot === null) return null;
 

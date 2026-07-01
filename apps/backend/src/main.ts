@@ -22,13 +22,17 @@ import {
 	createBootTimer,
 	formatReadyLine,
 } from "./helpers/boot-banner.ts";
+import { cleanupOrphanedTempFiles } from "./helpers/boot-cleanup.ts";
 import { guardNonCritical, runCritical } from "./helpers/boot-guard.ts";
 import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
 import { isDevelopment } from "./mocks/mock-config.ts";
 import { initMockService, shouldUseMocks } from "./mocks/mock-service.ts";
-import { getMockEngineCapabilities } from "./mocks/providers/streaming.ts";
+import {
+	buildMockLinkTelemetry,
+	getMockEngineCapabilities,
+} from "./mocks/providers/streaming.ts";
 import { runAddonReconciler } from "./modules/addons/reconciler.ts";
 import { getConfig, loadConfig } from "./modules/config.ts";
 import { initIdentity } from "./modules/identity/index.ts";
@@ -60,7 +64,10 @@ import { checkEngineCompatibilityOnStartup } from "./modules/streaming/cerastrea
 import { reconcilePersistedPipeline } from "./modules/streaming/config-migration.ts";
 import { startDeviceDiscovery } from "./modules/streaming/devices.ts";
 import { broadcastHealthIfChanged } from "./modules/streaming/health.ts";
-import { broadcastLinkTelemetryIfChanged } from "./modules/streaming/link-telemetry.ts";
+import {
+	broadcastLinkTelemetryIfChanged,
+	setMockLinkTelemetryProvider,
+} from "./modules/streaming/link-telemetry.ts";
 import {
 	getPipelineList,
 	initPipelines,
@@ -109,6 +116,7 @@ logger.info(
 if (isDevelopment()) {
 	const scenario = process.env.MOCK_SCENARIO || "multi-modem-wifi";
 	initMockService(scenario);
+	setMockLinkTelemetryProvider(buildMockLinkTelemetry);
 	logger.info(`🎭 Development mode active with scenario: ${scenario}`);
 	logger.info(
 		"   Available scenarios: single-modem, multi-modem-wifi, streaming-active, caps-full, engine-starting, engine-unavailable",
@@ -124,6 +132,10 @@ checkExecPath(bcrptExec);
 // re-throws to abort (systemd restarts cleanly) rather than limp along.
 await runCritical("config", loadConfig);
 logger.info(bootTimer.phase("🔧", "config"));
+
+// Clean up orphaned atomic-write temp files from a prior crash (fail-soft).
+// This must run after config load so we know the config dir exists.
+cleanupOrphanedTempFiles(process.cwd());
 
 void initRemote();
 

@@ -101,6 +101,28 @@ describe("streaming.start — structured failure error code (Task 16)", () => {
 		expect(result.applied).toBeDefined();
 	});
 
+	test("floors a sub-2s srt_latency in the applied echo (T2)", async () => {
+		const result = await call(
+			streamingStartProcedure,
+			{ srt_latency: 100 },
+			{ context: makeContext() },
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.applied?.srt_latency).toBe(2000);
+	});
+
+	test("leaves an at/above-floor srt_latency untouched in the applied echo", async () => {
+		const result = await call(
+			streamingStartProcedure,
+			{ srt_latency: 3000 },
+			{ context: makeContext() },
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.applied?.srt_latency).toBe(3000);
+	});
+
 	test("the injected error is one-shot — a retried start succeeds", async () => {
 		injectMockStreamError("srtla_no_connections");
 

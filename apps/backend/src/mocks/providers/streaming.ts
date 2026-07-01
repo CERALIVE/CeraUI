@@ -17,8 +17,9 @@ import {
 	getLastCapabilities,
 	MINIMAL_SAFE_CAPABILITIES,
 } from "../../modules/streaming/capabilities.ts";
+import type { LinkTelemetryMessage } from "../../modules/streaming/link-telemetry.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
-import type { ScenarioCapabilities } from "../mock-config.ts";
+import { mockWifiRadios, type ScenarioCapabilities } from "../mock-config.ts";
 import {
 	getMockState,
 	getScenarioConfig,
@@ -132,6 +133,68 @@ export async function setMockEngineCapabilities(
 		fetchEngineCapabilities: async () => getMockEngineCapabilities(),
 	});
 	broadcastMsg("capabilities", getLastCapabilities());
+}
+
+/**
+ * Mock per-link srtla_send telemetry for the status flow. Emits one row per
+ * active bonded iface (eth0 + usbN modems + wifi radios) ONLY while the mock
+ * stream is active — idle returns null, matching real srtla_send behavior. The
+ * `iface` values EXACTLY equal the FE-derived `link.id` set so every bonded-link
+ * card joins a real RTT/NAK/weight instead of a "--" placeholder.
+ */
+export function buildMockLinkTelemetry(): LinkTelemetryMessage | null {
+	if (!shouldUseMocks()) {
+		return null;
+	}
+	if (!getStreamingStats().isActive) {
+		return null;
+	}
+
+	const config = getScenarioConfig();
+	const ifaces: string[] = ["eth0"];
+	for (let i = 0; i < config.modems; i++) {
+		ifaces.push(`usb${i}`);
+	}
+	if (config.wifi) {
+		for (const radio of mockWifiRadios) {
+			ifaces.push(radio.ifname);
+		}
+	}
+
+	const now = Date.now();
+
+	// `weight_percent` is each active link's NORMALIZED share of the total
+	// selection weight (base_score × quality), summing to ~100 across links — NOT
+	// a per-link constant. Source of truth: srtla-send-rs
+	// `src/telemetry_file.rs` `conns_from_stats` + `weight_share_percent`
+	// (a lone link → 100, two equal → 50/50). Varied per-index bases + a gentle
+	// drift simulate a rebalancing bond; strictly positive so the total is never 0.
+	const rawLinks = ifaces.map((iface, index) => {
+		// Deterministic per-link base plus a gentle bounded drift so the HUD shows
+		// live movement across ticks, kept inside the 20-60 ms plausible window.
+		const rttBase = 25 + index * 6;
+		const rttDrift = Math.round(8 * Math.sin(now / 4000 + index));
+		const rawWeight = Math.max(
+			1,
+			40 + index * 18 + 8 * Math.sin(now / 5000 + index),
+		);
+		return {
+			conn_id: String(index),
+			iface,
+			rtt_ms: Math.min(60, Math.max(20, rttBase + rttDrift)),
+			nak_count: index % 3,
+			rawWeight,
+			stale: false,
+		};
+	});
+	const totalWeight = rawLinks.reduce((sum, link) => sum + link.rawWeight, 0);
+
+	const links = rawLinks.map(({ rawWeight, ...entry }) => ({
+		...entry,
+		weight_percent: Math.round((rawWeight / totalWeight) * 100),
+	}));
+
+	return { links, lastReadMs: now };
 }
 
 /**

@@ -3,7 +3,6 @@
  * Wraps existing auth logic from modules/ui/auth.ts
  */
 
-import fs from "node:fs";
 import {
 	loginInputSchema,
 	loginOutputSchema,
@@ -12,7 +11,10 @@ import {
 	successResponseSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-import { loadCacheFile } from "../../helpers/config-loader.ts";
+import {
+	loadCacheFile,
+	writeFileAtomicSync,
+} from "../../helpers/config-loader.ts";
 import {
 	type AuthTokens,
 	authTokensSchema,
@@ -36,7 +38,7 @@ const persistentTokens: AuthTokens = await loadCacheFile(
 export { getPasswordHash, setPasswordHash };
 
 function savePersistentTokens() {
-	fs.writeFileSync(AUTH_TOKENS_FILE, JSON.stringify(persistentTokens));
+	writeFileAtomicSync(AUTH_TOKENS_FILE, JSON.stringify(persistentTokens));
 }
 
 function genAuthToken(isPersistent: boolean): string {

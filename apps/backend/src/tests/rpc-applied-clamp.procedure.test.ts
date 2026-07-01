@@ -84,6 +84,29 @@ describe("streaming.setConfig — applied (post-clamp) state", () => {
 		}
 	});
 
+	test("floors a sub-2s srt_latency to the SRTLA minimum, persisting + echoing 2000 (T2)", async () => {
+		const result = await call(
+			setConfigProcedure,
+			{ srt_latency: 100 },
+			{ context: makeContext() },
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.applied?.srt_latency).toBe(2000);
+		expect(getConfig().srt_latency).toBe(2000);
+	});
+
+	test("leaves an at/above-floor srt_latency untouched", async () => {
+		const result = await call(
+			setConfigProcedure,
+			{ srt_latency: 3000 },
+			{ context: makeContext() },
+		);
+
+		expect(result.applied?.srt_latency).toBe(3000);
+		expect(getConfig().srt_latency).toBe(3000);
+	});
+
 	test("persists + echoes fec_enabled and recovery_mode (Tasks 18/19)", async () => {
 		const result = await call(
 			setConfigProcedure,

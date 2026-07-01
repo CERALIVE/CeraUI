@@ -79,7 +79,7 @@ function makeConfig(
 ): Record<string, unknown> {
 	return {
 		presetId: "balanced",
-		latencyMs: 1500,
+		latencyMs: 2000,
 		fecEnabled: false,
 		recoveryMode: "standard",
 		...overrides,
@@ -157,12 +157,12 @@ describe("handleSetProfile — apply path", () => {
 		expect(ack?.status).toBe("applied");
 		expect(ack?.commandId).toBe(FIXED_CID);
 		expect(ack?.effectiveActiveProfile).toBe("balanced");
-		expect(ack?.effectiveLatencyMs).toBe(1500);
+		expect(ack?.effectiveLatencyMs).toBe(2000);
 		expect(ack?.reason).toBeUndefined();
 		expect(h.persisted).toEqual([
 			{
 				presetId: "balanced",
-				latencyMs: 1500,
+				latencyMs: 2000,
 				fecEnabled: false,
 				recoveryMode: "standard",
 			},
@@ -246,6 +246,50 @@ describe("handleSetProfile — caps intersection (reject, never apply)", () => {
 	});
 });
 
+describe("handleSetProfile — SRTLA latency floor (T2)", () => {
+	test("floors a sub-2s pushed latency to the SRTLA floor even when the engine min is lower", async () => {
+		const h = wireHarness();
+		const ack = await handleSetProfile(
+			makePayload({ config: makeConfig({ latencyMs: 100 }) }),
+		);
+
+		expect(ack?.status).toBe("applied");
+		expect(ack?.reason).toBe("latency_clamped");
+		expect(ack?.effectiveLatencyMs).toBe(2000);
+		expect(h.persisted[0]?.latencyMs).toBe(2000);
+	});
+
+	test("honours a higher engine min above the SRTLA floor", async () => {
+		const h = wireHarness({
+			caps: { ...FULL_CAPS, latencyRange: { min: 3000, max: 5000 } },
+		});
+		const ack = await handleSetProfile(
+			makePayload({ config: makeConfig({ latencyMs: 100 }) }),
+		);
+
+		expect(ack?.status).toBe("applied");
+		expect(ack?.effectiveLatencyMs).toBe(3000);
+		expect(h.persisted[0]?.latencyMs).toBe(3000);
+	});
+
+	test("floors to 2s even when the engine advertises no latency range", async () => {
+		const h = wireHarness({
+			caps: {
+				supportedProfiles: undefined,
+				supportsFec: true,
+				latencyRange: undefined,
+			},
+		});
+		const ack = await handleSetProfile(
+			makePayload({ config: makeConfig({ latencyMs: 500 }) }),
+		);
+
+		expect(ack?.status).toBe("applied");
+		expect(ack?.effectiveLatencyMs).toBe(2000);
+		expect(h.persisted[0]?.latencyMs).toBe(2000);
+	});
+});
+
 describe("handleSetProfile — idempotency", () => {
 	test("re-applying the same commandId is a no-op returning the cached ack", async () => {
 		const h = wireHarness();
@@ -303,7 +347,7 @@ describe("routeCommand — device.setProfile result frame", () => {
 		expect(results[0]?.payload.applied).toMatchObject({
 			status: "applied",
 			effectiveActiveProfile: "balanced",
-			effectiveLatencyMs: 1500,
+			effectiveLatencyMs: 2000,
 		});
 	});
 

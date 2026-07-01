@@ -20,7 +20,7 @@ import {
 	type GsmOperatorCache,
 	gsmOperatorCacheSchema,
 } from "../../helpers/config-schemas.ts";
-import { writeTextFile } from "../../helpers/text-files.ts";
+import { writeTextFileAtomic } from "../../helpers/text-files.ts";
 
 const GSM_OPERATORS_CACHE_FILE = "gsm_operator_cache.json";
 
@@ -32,8 +32,8 @@ const gsmOperatorsCache: GsmOperatorCache = await loadCacheFile(
 	gsmOperatorCacheSchema,
 );
 
-async function writeGsmOperatorsCache() {
-	await writeTextFile(
+function writeGsmOperatorsCache() {
+	writeTextFileAtomic(
 		GSM_OPERATORS_CACHE_FILE,
 		JSON.stringify(gsmOperatorsCache),
 	);
@@ -44,7 +44,7 @@ export async function setGsmOperatorName(id: OperatorId, name: OperatorName) {
 
 	if (!cachedOperator || cachedOperator !== name) {
 		gsmOperatorsCache[id] = name;
-		await writeGsmOperatorsCache();
+		writeGsmOperatorsCache();
 	}
 }
 
