@@ -275,11 +275,20 @@ test.describe("Cloud-provider selector (Task 18)", () => {
 		await expect(dialog.locator("#custom-name")).toBeVisible();
 		await expect(host).toBeVisible();
 
-		// Validation: Save is disabled until a host is entered.
+		// Validation: the consolidated CloudRemoteDialog (T9) requires BOTH a host
+		// AND a freshly-entered remote key here. Its cross-provider clobber guard
+		// seeds the key EMPTY when switching to a provider other than the active
+		// one (config.remote_provider is 'ceralive'; selecting 'custom' differs),
+		// so — unlike the standalone Task-18 dialog — a host alone no longer
+		// enables Save.
 		const save = dialog.getByRole("button", { name: "Save" });
 		await expect(save).toBeDisabled();
 
 		await host.fill("remote.example.com");
+		// Host filled but the key is still empty → Save stays disabled (clobber guard).
+		await expect(save).toBeDisabled();
+
+		await dialog.locator("#remote-key").fill("custom-remote-key");
 		await expect(save).toBeEnabled();
 
 		// Persist → setRemoteConfig carries the custom provider host.
@@ -302,12 +311,14 @@ test.describe("Cloud-provider selector (Task 18)", () => {
 
 		writeEvidence("task-18-custom.txt", [
 			"Scenario: custom-provider escape hatch + manual-endpoint validation",
+			"(ported to the consolidated CloudRemoteDialog, T11)",
 			"",
 			"1. Selected 'Custom Provider' from the selector.",
 			"2. Manual endpoint fields revealed (#custom-name, #custom-host) —",
 			"   shown ONLY for the custom provider.",
-			"3. VALIDATION: Save disabled while host empty; enabled after entering",
-			"   'remote.example.com'.",
+			"3. VALIDATION (T9 clobber guard): Save disabled while host empty; still",
+			"   disabled after the host is filled because switching ceralive→custom",
+			"   seeds the key empty; enabled only after a fresh #remote-key is entered.",
 			`4. Save → system.setRemoteConfig input: ${JSON.stringify(sent)}`,
 			"   provider === 'custom', custom_provider.host === 'remote.example.com'.",
 			"Result: PASS",

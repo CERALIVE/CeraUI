@@ -1,11 +1,19 @@
 /**
- * Device pairing (claim code) — end-to-end, Task 20.
+ * Device pairing (claim code) — end-to-end, Task 20 (ported to the consolidated
+ * Cloud dialog in T11).
+ *
+ * T9/T10 merged the former standalone "Device Pairing" dialog into the single
+ * "Cloud Remote Server" entry (CloudRemoteDialog). The pairing flow — and every
+ * pairing-* testid — now lives inside that one dialog; `SettingsPage.openPairing`
+ * opens it. In the e2e (`vite dev`, `import.meta.env.DEV === true`) the dialog
+ * renders the dev-only `simulate-pairing` action rather than the prod
+ * `complete-pairing` one — both drive the same `pairing.completePairing` RPC.
  *
  * Two layers:
- *   1. Happy path against the REAL dev backend (mock platform): open the
- *      dedicated Device Pairing dialog, generate a code, watch the countdown
- *      tick, complete pairing, and assert the paired state surfaces the
- *      subscription standing. Evidence → task-20-pairing-ok.txt.
+ *   1. Happy path against the REAL dev backend (mock platform): open the Cloud
+ *      Remote Server dialog, generate a code, watch the countdown tick, complete
+ *      pairing, and assert the paired state surfaces the subscription standing.
+ *      Evidence → task-20-pairing-ok.txt.
  *   2. Fail paths via the field-lock WebSocket harness (addInitScript + token
  *      rewrite, see PLAYBOOK.md "Model Spec"):
  *        • expired code → the validity window elapses and the dialog
@@ -220,7 +228,9 @@ test.describe('Device pairing fail paths (WS harness)', () => {
 		const code = await new SettingsPage(page).generateClaimCode();
 		expect(code).toMatch(CLAIM_CODE_PATTERN);
 
-		await page.getByTestId('complete-pairing').click();
+		// Dev renders `simulate-pairing` (not the prod `complete-pairing`); both
+		// call the same `pairing.completePairing` RPC the harness faked to reject.
+		await page.getByTestId('simulate-pairing').click();
 		await expect(page.getByTestId('pairing-error')).toBeVisible();
 
 		fs.appendFileSync(

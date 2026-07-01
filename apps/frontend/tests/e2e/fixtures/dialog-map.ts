@@ -145,22 +145,13 @@ export const DIALOG_MAP: DialogEntry[] = [
 			'Settings view, System group. Trigger <button> shows the entry title text (visible at all breakpoints) → reachable by role+name alone, no testid needed.',
 	},
 	{
-		key: 'devicePairing',
-		destination: 'settings',
-		triggerRole: 'button',
-		triggerName: 'Device Pairing', // entry.title = $LL.settings.index.pairing()
-		dialogName: 'Device Pairing', // title=$LL.settings.index.pairing()
-		notes:
-			'Settings view, Streaming group. Dedicated claim-code pairing dialog (Task 20). Trigger text equals dialog title → reachable by role+name alone. Inner state uses data-testids: generate-claim-code, claim-code, claim-code-expiry, complete-pairing, pairing-status, pairing-sub-status, pairing-device-id, pairing-error.',
-	},
-	{
 		key: 'cloudRemote',
 		destination: 'settings',
 		triggerRole: 'button',
 		triggerName: 'Cloud Remote Server', // entry.title = $LL.settings.index.cloudRemote()
 		dialogName: 'Cloud Remote Server', // title=$LL.settings.index.cloudRemote()
 		notes:
-			'Settings view, Streaming group. Provider/key config only — claim-code pairing moved to its own Device Pairing dialog (Task 20). Trigger text equals dialog title → reachable by role+name alone, no testid needed.',
+			'Settings view, Streaming group. T9/T10 CONSOLIDATED the former standalone "Device Pairing" entry into this single Cloud entry: claim-code pairing + provider/key config share one CloudRemoteDialog. Trigger text equals dialog title → reachable by role+name alone, no testid needed. Inner state uses data-testids: device-pairing, generate-claim-code, claim-code, claim-code-expiry, regenerate-claim-code, complete-pairing (prod) / simulate-pairing (dev), pairing-status, pairing-sub-status, pairing-device-id, pairing-qr, pairing-error, plus remote-key / remote-key-managed and the #cloud-provider selector.',
 	},
 	{
 		key: 'ssh',
