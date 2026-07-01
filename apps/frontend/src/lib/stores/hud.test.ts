@@ -608,7 +608,14 @@ describe("buildLinks — excludes bond-excluded wifi/modem links", () => {
 		const netif: NetifMessage = {
 			wlan0: { tp: 0, enabled: false, ip: "10.0.0.3" },
 		};
-		const links = buildLinks(undefined, wifiFixture, netif, false, false, false);
+		const links = buildLinks(
+			undefined,
+			wifiFixture,
+			netif,
+			false,
+			false,
+			false,
+		);
 		expect(links.filter((l) => l.type === "wifi")).toHaveLength(0);
 	});
 

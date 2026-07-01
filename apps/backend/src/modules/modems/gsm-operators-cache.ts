@@ -33,7 +33,10 @@ const gsmOperatorsCache: GsmOperatorCache = await loadCacheFile(
 );
 
 function writeGsmOperatorsCache() {
-	writeTextFileAtomic(GSM_OPERATORS_CACHE_FILE, JSON.stringify(gsmOperatorsCache));
+	writeTextFileAtomic(
+		GSM_OPERATORS_CACHE_FILE,
+		JSON.stringify(gsmOperatorsCache),
+	);
 }
 
 export async function setGsmOperatorName(id: OperatorId, name: OperatorName) {

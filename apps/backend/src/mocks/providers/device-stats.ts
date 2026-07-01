@@ -47,7 +47,11 @@ export const MOCK_DEVICE_STATS = {
 	disk: { used: 40 * GIB, total: 128 * GIB, type: "SSD" },
 	cpuLoad1: 0.42,
 	socTemp: 52.0,
-	ifaceRxTx: { iface: "eth0", rxBytesPerSec: 1_250_000, txBytesPerSec: 640_000 },
+	ifaceRxTx: {
+		iface: "eth0",
+		rxBytesPerSec: 1_250_000,
+		txBytesPerSec: 640_000,
+	},
 	raucSlot: "A",
 } satisfies MockDeviceStats;
 

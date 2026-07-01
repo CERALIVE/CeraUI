@@ -10,18 +10,17 @@
  * returns the real `defaultDeviceStatsDeps`.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-
-import {
-	getMockDeviceStatsDeps,
-	MOCK_DEVICE_STATS,
-	shouldMockDeviceStats,
-} from "../mocks/providers/device-stats.ts";
 import { mockDeviceStatsSchema } from "../mocks/mock-schemas.ts";
 import {
 	initMockService,
 	shouldUseMocks,
 	stopMockService,
 } from "../mocks/mock-service.ts";
+import {
+	getMockDeviceStatsDeps,
+	MOCK_DEVICE_STATS,
+	shouldMockDeviceStats,
+} from "../mocks/providers/device-stats.ts";
 import {
 	collectDeviceStats,
 	createDeviceStatsState,

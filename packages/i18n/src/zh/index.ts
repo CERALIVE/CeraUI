@@ -1140,8 +1140,7 @@ const zh = {
 		customProvider: "自定义提供商",
 		cloudRemoteKey: "远程密钥",
 		cloudRemoteKeyTooltip: "输入云服务提供商的远程密钥。",
-		remoteKeyManagedByCloud:
-			"由您的 {provider} 云管理 — 端点来自目录。",
+		remoteKeyManagedByCloud: "由您的 {provider} 云管理 — 端点来自目录。",
 		providerName: "提供商名称",
 		providerNamePlaceholder: "My Custom Cloud",
 		providerHost: "WebSocket 主机",

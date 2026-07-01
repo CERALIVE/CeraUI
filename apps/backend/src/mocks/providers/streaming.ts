@@ -174,7 +174,10 @@ export function buildMockLinkTelemetry(): LinkTelemetryMessage | null {
 		// live movement across ticks, kept inside the 20-60 ms plausible window.
 		const rttBase = 25 + index * 6;
 		const rttDrift = Math.round(8 * Math.sin(now / 4000 + index));
-		const rawWeight = Math.max(1, 40 + index * 18 + 8 * Math.sin(now / 5000 + index));
+		const rawWeight = Math.max(
+			1,
+			40 + index * 18 + 8 * Math.sin(now / 5000 + index),
+		);
 		return {
 			conn_id: String(index),
 			iface,

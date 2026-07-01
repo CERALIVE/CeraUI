@@ -4,8 +4,8 @@ import { wifiMessageSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
 import { initMockService, stopMockService } from "../mocks/mock-service.ts";
-import { withDeviceLock } from "../modules/network/state/device-lock.ts";
 import { updateNetif } from "../modules/network/network-interfaces.ts";
+import { withDeviceLock } from "../modules/network/state/device-lock.ts";
 import {
 	addWifiInterface,
 	removeWifiInterface,
@@ -138,7 +138,9 @@ describe("network.configure — mock immediate netif broadcast (Issue 2)", () =>
 			// mode and no netif frame fires during the call — the toggle would only
 			// surface on the next poll.
 			expect(netifPayloads.length).toBeGreaterThan(0);
-			expect(netifPayloads[netifPayloads.length - 1]?.eth0?.enabled).toBe(false);
+			expect(netifPayloads[netifPayloads.length - 1]?.eth0?.enabled).toBe(
+				false,
+			);
 		} finally {
 			removeClient(client);
 		}

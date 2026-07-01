@@ -71,15 +71,21 @@ describe("BondedLinksSection — mock link-telemetry join (T5)", () => {
 	it("renders a REAL RTT (not '--') on every card for the streaming-active set", () => {
 		const links = STREAMING_ACTIVE_IFACES.map(linkFor);
 		const { container } = render(BondedLinksSection, {
-			props: { links, modemEntries: [], linkTelemetry: streamingActiveTelemetry() },
+			props: {
+				links,
+				modemEntries: [],
+				linkTelemetry: streamingActiveTelemetry(),
+			},
 		});
 
 		for (const iface of STREAMING_ACTIVE_IFACES) {
 			const card = cardFor(container, iface);
-			const rtt = within(card).getByTestId("link-rtt").textContent?.trim() ?? "";
-			expect(rtt, `${iface} must show a real RTT, not the placeholder`).not.toBe(
-				PLACEHOLDER,
-			);
+			const rtt =
+				within(card).getByTestId("link-rtt").textContent?.trim() ?? "";
+			expect(
+				rtt,
+				`${iface} must show a real RTT, not the placeholder`,
+			).not.toBe(PLACEHOLDER);
 			expect(rtt).toMatch(/^\d+\s/);
 			expect(within(card).getByTestId("link-weight").textContent?.trim()).toBe(
 				"100%",

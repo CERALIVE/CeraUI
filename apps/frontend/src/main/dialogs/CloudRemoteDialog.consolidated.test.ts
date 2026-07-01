@@ -330,7 +330,10 @@ describe("CloudRemoteDialog — save routing (T9)", () => {
 
 		await waitFor(() => expect(saveRemoteConfigMock).toHaveBeenCalledTimes(1));
 		expect(saveRemoteConfigMock).toHaveBeenCalledWith(
-			expect.objectContaining({ remote_key: "live-token", provider: "ceralive" }),
+			expect.objectContaining({
+				remote_key: "live-token",
+				provider: "ceralive",
+			}),
 		);
 	});
 });

@@ -1,15 +1,21 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-
 import {
-	buildLinkTelemetry,
-	setMockLinkTelemetryProvider,
-} from "../modules/streaming/link-telemetry.ts";
+	afterAll,
+	afterEach,
+	beforeAll,
+	describe,
+	expect,
+	test,
+} from "bun:test";
 import {
 	initMockService,
 	setStreamingState,
 	stopMockService,
 } from "../mocks/mock-service.ts";
 import { buildMockLinkTelemetry } from "../mocks/providers/streaming.ts";
+import {
+	buildLinkTelemetry,
+	setMockLinkTelemetryProvider,
+} from "../modules/streaming/link-telemetry.ts";
 
 let priorMockMode: string | undefined;
 

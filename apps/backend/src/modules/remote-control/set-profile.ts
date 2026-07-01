@@ -42,8 +42,8 @@
 
 import {
 	PRESET_CONFIGS,
-	SRTLA_MIN_LATENCY_MS,
 	type SetProfileAck,
+	SRTLA_MIN_LATENCY_MS,
 	type StreamProfileId,
 	type StreamProfilePreset,
 	type StreamRecoveryPreference,
