@@ -57,7 +57,7 @@ describe("buildMockLinkTelemetry — active-only per-link emission", () => {
 		}
 	});
 
-	test("streaming-active -> plausible sender values (rtt 20-60, weight 100, small nak, fresh)", () => {
+	test("streaming-active -> plausible sender values (rtt 20-60, small nak, fresh)", () => {
 		initMockService("streaming-active");
 
 		const links = buildMockLinkTelemetry()?.links ?? [];
@@ -65,12 +65,35 @@ describe("buildMockLinkTelemetry — active-only per-link emission", () => {
 		for (const link of links) {
 			expect(link.rtt_ms).toBeGreaterThanOrEqual(20);
 			expect(link.rtt_ms).toBeLessThanOrEqual(60);
-			expect(link.weight_percent).toBe(100);
 			expect(link.nak_count).toBeGreaterThanOrEqual(0);
 			expect(link.nak_count).toBeLessThanOrEqual(3);
 			expect(link.stale).toBe(false);
 			expect(typeof link.conn_id).toBe("string");
 		}
+	});
+
+	// weight_percent is each active link's NORMALIZED share of total selection
+	// weight, summing to ~100 across active links — NOT a per-link constant 100.
+	// Contract source: srtla-send-rs src/telemetry_file.rs `conns_from_stats` /
+	// `weight_share_percent` (round(w/total×100); two equal links → 50/50). The
+	// independent per-link rounding lets the sum drift by up to ±(link count).
+	test("streaming-active -> weight_percent is a normalized share summing to ~100, not all 100", () => {
+		initMockService("streaming-active");
+
+		const links = buildMockLinkTelemetry()?.links ?? [];
+		expect(links.length).toBe(STREAMING_ACTIVE_IFACES.length);
+
+		for (const link of links) {
+			expect(link.weight_percent).toBeGreaterThanOrEqual(0);
+			expect(link.weight_percent).toBeLessThanOrEqual(100);
+		}
+
+		const sum = links.reduce((acc, l) => acc + l.weight_percent, 0);
+		expect(Math.abs(sum - 100)).toBeLessThanOrEqual(links.length);
+
+		// The reported bug: every link pinned to 100. With >1 active link a
+		// normalized share can never leave them all at 100.
+		expect(links.every((l) => l.weight_percent === 100)).toBe(false);
 	});
 
 	test("single-modem (no wifi) -> only eth0 + usb0", () => {

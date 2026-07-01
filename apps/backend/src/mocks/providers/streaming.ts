@@ -162,20 +162,34 @@ export function buildMockLinkTelemetry(): LinkTelemetryMessage | null {
 	}
 
 	const now = Date.now();
-	const links = ifaces.map((iface, index) => {
+
+	// `weight_percent` is each active link's NORMALIZED share of the total
+	// selection weight (base_score × quality), summing to ~100 across links — NOT
+	// a per-link constant. Source of truth: srtla-send-rs
+	// `src/telemetry_file.rs` `conns_from_stats` + `weight_share_percent`
+	// (a lone link → 100, two equal → 50/50). Varied per-index bases + a gentle
+	// drift simulate a rebalancing bond; strictly positive so the total is never 0.
+	const rawLinks = ifaces.map((iface, index) => {
 		// Deterministic per-link base plus a gentle bounded drift so the HUD shows
 		// live movement across ticks, kept inside the 20-60 ms plausible window.
-		const base = 25 + index * 6;
-		const drift = Math.round(8 * Math.sin(now / 4000 + index));
+		const rttBase = 25 + index * 6;
+		const rttDrift = Math.round(8 * Math.sin(now / 4000 + index));
+		const rawWeight = Math.max(1, 40 + index * 18 + 8 * Math.sin(now / 5000 + index));
 		return {
 			conn_id: String(index),
 			iface,
-			rtt_ms: Math.min(60, Math.max(20, base + drift)),
+			rtt_ms: Math.min(60, Math.max(20, rttBase + rttDrift)),
 			nak_count: index % 3,
-			weight_percent: 100,
+			rawWeight,
 			stale: false,
 		};
 	});
+	const totalWeight = rawLinks.reduce((sum, link) => sum + link.rawWeight, 0);
+
+	const links = rawLinks.map(({ rawWeight, ...entry }) => ({
+		...entry,
+		weight_percent: Math.round((rawWeight / totalWeight) * 100),
+	}));
 
 	return { links, lastReadMs: now };
 }

@@ -274,7 +274,7 @@ linkTelemetry: {
     iface: string;         // human name from the backend-owned IP list
     rtt_ms: number;        // sender reports 0 (RTT is receiver-side)
     nak_count: number;
-    weight_percent: number; // sender reports a constant 100
+    weight_percent: number; // link's normalized share of total selection weight (0-100, active links sum to ~100; lone link = 100). Source: srtla-send-rs src/telemetry_file.rs weight_share_percent
     stale: boolean;
   }>;
 } | null
