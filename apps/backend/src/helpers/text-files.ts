@@ -15,6 +15,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { writeFileAtomicSync } from "./config-loader.ts";
+
 export async function readTextFile(file: string) {
 	return await Bun.file(file)
 		.text()
@@ -24,6 +26,23 @@ export async function readTextFile(file: string) {
 export async function writeTextFile(file: string, contents: string) {
 	try {
 		await Bun.write(file, contents);
+		return true;
+	} catch (_) {
+		return false;
+	}
+}
+
+/**
+ * Crash-safe variant of {@link writeTextFile} for durable named caches
+ * (auth_tokens / relays_cache / dns_cache / gsm_operator_cache). Delegates to the
+ * single canonical `writeFileAtomicSync` (sibling `.<basename>.<pid>.tmp` + fsync
+ * + rename) and swallows write errors like `writeTextFile` does. Deliberately not
+ * folded into `writeTextFile`: the ephemeral tmpfs writers (bcrpt/srtla IP + key
+ * files) must stay non-atomic and emit no `.tmp` sidecars.
+ */
+export function writeTextFileAtomic(file: string, contents: string): boolean {
+	try {
+		writeFileAtomicSync(file, contents);
 		return true;
 	} catch (_) {
 		return false;

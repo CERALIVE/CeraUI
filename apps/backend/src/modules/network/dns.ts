@@ -24,7 +24,7 @@ import { Resolver } from "node:dns";
 import { loadCacheFile } from "../../helpers/config-loader.ts";
 import { type DnsCache, dnsCacheSchema } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
-import { writeTextFile } from "../../helpers/text-files.ts";
+import { writeTextFileAtomic } from "../../helpers/text-files.ts";
 
 const DNS_CACHE_FILE = "dns_cache.json";
 /* Minimum age of an updated record to trigger a persistent DNS cache update (in ms)
@@ -227,7 +227,7 @@ export async function dnsCacheValidate(name: string) {
 
 		if (writeFile) {
 			dnsCache[name].ts = Date.now();
-			await writeTextFile(DNS_CACHE_FILE, JSON.stringify(dnsCache));
+			writeTextFileAtomic(DNS_CACHE_FILE, JSON.stringify(dnsCache));
 		}
 	}
 }
