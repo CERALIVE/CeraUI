@@ -126,12 +126,14 @@ function clearStore(page: Page): Promise<void> {
 	});
 }
 
-/** Inject a persistent notification through the real `notifications` broadcast. */
+// Wire type is SINGULAR `notification` — the type the backend actually
+// broadcasts and the only one subscriptions.svelte.ts folds into the store.
+// (Plural `notifications` lands nowhere since fa7f0277 renamed the handler.)
 function emitPersistent(page: Page, notification: Record<string, unknown>): Promise<void> {
 	return page.evaluate(async (n) => {
 		const specPath = '/src/lib/rpc/client.ts';
 		const mod = await import(/* @vite-ignore */ specPath);
-		await mod.rpc.dev.emit({ type: 'notifications', payload: { show: [n] } });
+		await mod.rpc.dev.emit({ type: 'notification', payload: { show: [n] } });
 	}, notification);
 }
 
