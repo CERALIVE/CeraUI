@@ -311,7 +311,9 @@ async function handleSave() {
 			selected={destinationChoice}
 		/>
 
-		<TransportRow />
+		{#if destination === 'custom'}
+			<TransportRow />
+		{/if}
 
 		{#if destination === 'managed' && selectedManagedActive && hasManagedSlots}
 			<ServerIngestSlots

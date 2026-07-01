@@ -143,23 +143,42 @@ function draftOf(overrides: Partial<ServerSetDraft> = {}): ServerSetDraft {
 }
 
 describe("ServerDialog — destination tiles + transport row", () => {
-	it("renders the three destination tiles and the honest transport row", () => {
+	it("hides the transport row for managed clouds, shows it on Custom", async () => {
 		render(ServerDialog, { props: { open: true } });
 		expect(screen.getByTestId("destination-ceralive")).toBeTruthy();
 		expect(screen.getByTestId("destination-belabox")).toBeTruthy();
 		expect(screen.getByTestId("destination-custom")).toBeTruthy();
-		expect(screen.getByTestId("transport-row")).toBeTruthy();
+
+		// Managed default (ceralive): SRTLA is implicit — no transport row/chooser.
+		expect(screen.queryByTestId("transport-row")).toBeNull();
+		expect(screen.queryByTestId("transport-srtla")).toBeNull();
+		expect(screen.queryByTestId("transport-rist")).toBeNull();
+		expect(screen.queryByTestId("transport-srt")).toBeNull();
+
+		// Custom: the honest transport row appears (SRTLA active + RIST/SRT pills).
+		await fireEvent.click(screen.getByTestId("destination-custom"));
+		await waitFor(() =>
+			expect(screen.queryByTestId("transport-row")).not.toBeNull(),
+		);
 		expect(screen.getByTestId("transport-srtla")).toBeTruthy();
 		expect(screen.getByTestId("transport-rist")).toBeTruthy();
 		expect(screen.getByTestId("transport-srt")).toBeTruthy();
 	});
 
-	it("has no protocol radiogroup and no stream-tuning card", () => {
+	it("has no protocol radiogroup and no stream-tuning card", async () => {
 		render(ServerDialog, { props: { open: true } });
 		expect(screen.queryByTestId("transport-protocol")).toBeNull();
 		expect(screen.queryByTestId("stream-tuning")).toBeNull();
 		expect(document.querySelector('[role="radio"][data-protocol]')).toBeNull();
 		expect(screen.getByTestId("latency-section")).toBeTruthy();
+
+		// Even with the row visible on Custom, there is no protocol radiogroup.
+		await fireEvent.click(screen.getByTestId("destination-custom"));
+		await waitFor(() =>
+			expect(screen.queryByTestId("transport-row")).not.toBeNull(),
+		);
+		expect(screen.queryByTestId("transport-protocol")).toBeNull();
+		expect(document.querySelector('[role="radio"][data-protocol]')).toBeNull();
 	});
 
 	it("shows the add-key prompt when picking a cloud the device has no key for", async () => {
