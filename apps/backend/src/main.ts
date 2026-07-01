@@ -22,6 +22,7 @@ import {
 	createBootTimer,
 	formatReadyLine,
 } from "./helpers/boot-banner.ts";
+import { cleanupOrphanedTempFiles } from "./helpers/boot-cleanup.ts";
 import { guardNonCritical, runCritical } from "./helpers/boot-guard.ts";
 import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
@@ -124,6 +125,10 @@ checkExecPath(bcrptExec);
 // re-throws to abort (systemd restarts cleanly) rather than limp along.
 await runCritical("config", loadConfig);
 logger.info(bootTimer.phase("🔧", "config"));
+
+// Clean up orphaned atomic-write temp files from a prior crash (fail-soft).
+// This must run after config load so we know the config dir exists.
+cleanupOrphanedTempFiles(process.cwd());
 
 void initRemote();
 
