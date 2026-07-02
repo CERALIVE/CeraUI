@@ -219,6 +219,18 @@ export type MockRelayValidateFault = {
 	reason: string;
 } | null;
 
+/**
+ * Forced policy-route self-check fault (DEV/TEST-INFRA ONLY — never spawns `ip`).
+ *
+ * Drives the deterministic mock seam in `policy-route-check.ts`: when set, the
+ * dev/mock path reports the named interfaces as `policy_route_missing` instead of
+ * spawning `ip rule`/`ip route`, so dev/e2e can simulate a missing source rule or
+ * an absent default route without a real device. `null` (default) yields no flags.
+ */
+export type MockPolicyRouteFault = {
+	missingIfaces: string[];
+} | null;
+
 // Mock kiosk loopback token (DC-3): 64 lowercase hex chars — the 32-byte → hex
 // shape `mintKioskToken()` (modules/ui/kiosk-token.ts) emits. `generateMockKioskToken`
 // is validated against this so the mock never emits a malformed token.
