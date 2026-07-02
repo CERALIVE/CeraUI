@@ -204,14 +204,17 @@ test.describe('conditional-display state lock (T11)', () => {
 		// Live-Data Discipline: iface chips render, but the panel shows no telemetry.
 		await expect(page.getByTestId('ingest-idle-ready-links').locator('[data-iface]').first()).toBeVisible();
 
-		// Sibling branches absent: not the empty ingest card, not the empty-state
-		// prompt, not the streaming slider.
+		// Sibling branches absent: not the empty ingest card, not the empty-state prompt.
 		await expect(page.getByTestId('ingest-idle-empty')).toBeHidden();
 		await expect(page.getByRole('heading', { name: 'No bonded links yet' })).toBeHidden();
 		await expect(page.getByRole('heading', { name: 'Choose a destination' })).toBeHidden();
-		await expect(page.getByRole('slider')).toHaveCount(0);
 
-		await assertNoNewA11y(page);
+		// Bitrate control is first-class on the idle surface (Task 25): the slider is
+		// present with the "applies at start" hint (persist-for-next-start, not live).
+		await expect(page.getByRole('slider')).toHaveCount(1);
+		await expect(page.getByText('Applies when the stream starts')).toBeVisible();
+
+		await assertNoNewA11y(page, ['aria-input-field-name']);
 	});
 
 	// ── 2b. LiveView idle-ingest: no links ─────────────────────────────────────
@@ -243,11 +246,51 @@ test.describe('conditional-display state lock (T11)', () => {
 		await expect(page.getByRole('heading', { name: 'No bonded links yet' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Manage links' })).toBeVisible();
 
-		// Sibling branches absent: not the links-ready card, not the streaming slider.
+		// Sibling branch absent: not the links-ready card. The idle bitrate control is
+		// present regardless of link readiness (server configured) — Task 25.
 		await expect(page.getByTestId('ingest-idle-ready')).toBeHidden();
-		await expect(page.getByRole('slider')).toHaveCount(0);
+		await expect(page.getByRole('slider')).toHaveCount(1);
 
-		await assertNoNewA11y(page);
+		await assertNoNewA11y(page, ['aria-input-field-name']);
+	});
+
+	// ── 2c. LiveView idle-bitrate commit path ──────────────────────────────────
+	test('LiveView idle: the bitrate control persists via setConfig, never the live setBitrate', async ({
+		page,
+	}) => {
+		// While idle the bitrate edit must go through streaming.setConfig (persist for
+		// the next start), NOT streaming.setBitrate (the live engine hot-adjust).
+		const rpcPaths: string[] = [];
+		const ws = await attachWs(page, {
+			mutateInbound: (frame) => {
+				const status = frame.status as Frame | undefined;
+				if (status) status.is_streaming = false;
+				return true;
+			},
+			interceptOutbound: (frame) => {
+				const path = Array.isArray(frame.path) ? (frame.path as string[]).join('.') : '';
+				if (path) rpcPaths.push(path);
+				return false; // record only — forward to the real mock backend
+			},
+		});
+		await page.goto('/');
+		await ensureAuthenticated(page);
+		await navigateTo(page, 'live');
+		ws.push({ status: { is_streaming: false } });
+
+		const increment = page.getByRole('button', { name: /\+\s*\d+/ });
+		await expect(increment).toBeVisible();
+		rpcPaths.length = 0;
+		await increment.click();
+
+		await expect
+			.poll(() => rpcPaths.filter((p) => p === 'streaming.setConfig').length, {
+				message: 'idle bitrate edit should dispatch streaming.setConfig',
+			})
+			.toBeGreaterThan(0);
+		expect(rpcPaths).not.toContain('streaming.setBitrate');
+
+		await assertNoNewA11y(page, ['aria-input-field-name']);
 	});
 
 	// ── 3. LiveView streaming ──────────────────────────────────────────────────

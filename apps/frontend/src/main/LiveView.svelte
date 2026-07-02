@@ -548,31 +548,54 @@ function clampBitrate(kbps: number): number {
 	return Math.round(Math.max(BITRATE_MIN, Math.min(BITRATE_MAX, kbps)));
 }
 
-// setBitrate applies live via the engine — NO stream stop required.
+// Commit a bitrate edit. Both paths write the SAME `max_br` field through the
+// SAME dirty-registry lock (markPending → onRpcResolved → onRpcAppliedReactive),
+// so the idle-vs-live edit is last-write-wins with no second source of truth vs
+// EncoderDialog — the server echo reconciles either way. Only the RPC differs:
+//  • streaming → setBitrate (engine hot-adjust, applies immediately, no stop),
+//  • idle      → setConfig  (persist only; applies at the next stream start).
 async function commitBitrate(kbps: number) {
 	const clamped = clampBitrate(kbps);
 	bitrateDraft = clamped;
-	// Live edit (no gating): lock max_br before the RPC so a stale config echo
-	// of the prior bitrate can't flicker the slider back; release after settle.
+	// Lock max_br before the RPC so a stale config echo of the prior bitrate can't
+	// flicker the slider back; release after settle.
 	markPending('max_br', clamped);
-	try {
-		const res = await rpc.streaming.setBitrate({ max_br: clamped });
-		onRpcResolved('max_br');
-		// Release the field-lock to the SERVER-APPLIED value (T9 envelope), never
-		// the optimistic value we sent. On success:false reconcile to the last
-		// known server value so a rejected write never sticks on the slider.
-		const applied = resolveAppliedBitrate(res, clamped, config?.max_br);
-		onRpcAppliedReactive('max_br', applied);
-		bitrateDraft = applied;
-		if (!res.success) toast.error($LL.notifications.saveFailed());
-	} catch {
-		// RPC rejected: clear the optimistic lock and reconcile to server truth so
-		// the slider is never stuck on the unconfirmed optimistic value.
-		onRpcResolved('max_br');
-		const authoritative = config?.max_br ?? clamped;
-		onRpcAppliedReactive('max_br', authoritative);
-		bitrateDraft = authoritative;
-		toast.error($LL.notifications.saveFailed());
+	if (isStreaming) {
+		try {
+			const res = await rpc.streaming.setBitrate({ max_br: clamped });
+			onRpcResolved('max_br');
+			// Release the field-lock to the SERVER-APPLIED value (T9 envelope), never
+			// the optimistic value we sent. On success:false reconcile to the last
+			// known server value so a rejected write never sticks on the slider.
+			const applied = resolveAppliedBitrate(res, clamped, config?.max_br);
+			onRpcAppliedReactive('max_br', applied);
+			bitrateDraft = applied;
+			if (!res.success) toast.error($LL.notifications.saveFailed());
+		} catch {
+			// RPC rejected: clear the optimistic lock and reconcile to server truth so
+			// the slider is never stuck on the unconfirmed optimistic value.
+			onRpcResolved('max_br');
+			const authoritative = config?.max_br ?? clamped;
+			onRpcAppliedReactive('max_br', authoritative);
+			bitrateDraft = authoritative;
+			toast.error($LL.notifications.saveFailed());
+		}
+	} else {
+		// Idle: persist without starting the stream. setConfig has no applied
+		// envelope, so release to the clamped intent and let the config echo
+		// reconcile any server-side clamp through the same lock.
+		try {
+			await rpc.streaming.setConfig({ max_br: clamped });
+			onRpcResolved('max_br');
+			onRpcAppliedReactive('max_br', clamped);
+			bitrateDraft = clamped;
+		} catch {
+			onRpcResolved('max_br');
+			const authoritative = config?.max_br ?? clamped;
+			onRpcAppliedReactive('max_br', authoritative);
+			bitrateDraft = authoritative;
+			toast.error($LL.notifications.saveFailed());
+		}
 	}
 }
 
@@ -797,34 +820,38 @@ const configRows = $derived<ConfigRow[]>([
 			</Card.Content>
 		</Card.Root>
 	{:else}
-		<!-- Live telemetry strip + bitrate hot-adjust — only meaningful while streaming -->
+		<!-- Live telemetry strip — only meaningful while streaming. -->
 		{#if isStreaming}
 			<StreamTelemetryStrip
 				bitrate={formatBitrate(config?.max_br)}
 				{tempSensor}
 				{uptimeSensor}
 			/>
-
-			<BitrateAdjuster
-				bitrateDraft={bitrateDraft}
-				bitrateLabel={formatBitrate(bitrateDraft)}
-				bitrateMax={BITRATE_MAX}
-				bitrateMin={BITRATE_MIN}
-				onSliderChange={(v) => {
-					interacting = true;
-					bitrateDraft = v;
-				}}
-				onSliderCommit={(v) => {
-					interacting = false;
-					commitBitrate(v);
-				}}
-				onStep={stepBitrate}
-				sliderMax={BITRATE_DEFAULT_MAX}
-				sliderMin={BITRATE_DEFAULT_MIN}
-				step={BITRATE_STEP}
-			/>
-
 		{/if}
+
+		<!-- Bitrate control — first-class on the idle surface too (Task 25). While
+		     streaming it hot-adjusts live (setBitrate); while idle it persists for
+		     the next start (setConfig), signalled by the `hint` footnote. -->
+		<BitrateAdjuster
+			bitrateDraft={bitrateDraft}
+			bitrateLabel={formatBitrate(bitrateDraft)}
+			bitrateMax={BITRATE_MAX}
+			bitrateMin={BITRATE_MIN}
+			hint={isStreaming ? undefined : $LL.live.bitrateAppliesAtStart()}
+			onSliderChange={(v) => {
+				interacting = true;
+				bitrateDraft = v;
+			}}
+			onSliderCommit={(v) => {
+				interacting = false;
+				commitBitrate(v);
+			}}
+			onStep={stepBitrate}
+			sliderMax={BITRATE_DEFAULT_MAX}
+			sliderMin={BITRATE_DEFAULT_MIN}
+			step={BITRATE_STEP}
+		/>
+
 
 		<!-- Bonded-ingest telemetry + per-session summary/export (#21). Kept mounted
 		     across the streaming→idle edge so the rollup survives stream stop. -->

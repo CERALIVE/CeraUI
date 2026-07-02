@@ -314,6 +314,7 @@ const de = {
 		chooseDestination: "Ziel auswählen",
 		streamSettings: "Stream-Einstellungen",
 		adjustBitrate: "Bitrate anpassen",
+		bitrateAppliesAtStart: "Wird beim Streamstart übernommen",
 		stopToChange: "Stream stoppen, um zu ändern",
 		cannotStartNoPipeline:
 			"Wähle eine Videoquelle, bevor du den Stream startest",

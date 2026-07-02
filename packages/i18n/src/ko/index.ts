@@ -896,6 +896,7 @@ const ko = {
 		chooseDestination: "대상 선택",
 		streamSettings: "스트림 설정",
 		adjustBitrate: "비트레이트 조정",
+		bitrateAppliesAtStart: "스트림 시작 시 적용됩니다",
 		stopToChange: "변경하려면 스트림을 중지하세요",
 		cannotStartNoPipeline: "스트림을 시작하기 전에 비디오 소스를 선택하세요",
 		cannotStartNoServer: "스트림을 시작하기 전에 서버를 구성하세요",

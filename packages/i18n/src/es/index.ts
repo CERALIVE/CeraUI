@@ -314,6 +314,7 @@ const es = {
 		chooseDestination: "Elige un destino",
 		streamSettings: "Configuración de transmisión",
 		adjustBitrate: "Ajustar bitrate",
+		bitrateAppliesAtStart: "Se aplica al iniciar la transmisión",
 		stopToChange: "Detén la transmisión para cambiar",
 		cannotStartNoPipeline:
 			"Selecciona una fuente de video antes de iniciar la transmisión",

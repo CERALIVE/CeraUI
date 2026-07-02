@@ -1026,6 +1026,7 @@ const ar = {
 		chooseDestination: "اختر وجهة",
 		streamSettings: "إعدادات البث",
 		adjustBitrate: "ضبط معدل البت",
+		bitrateAppliesAtStart: "يُطبَّق عند بدء البث",
 		stopToChange: "أوقف البث للتغيير",
 		cannotStartNoPipeline: "اختر مصدر فيديو قبل بدء البث",
 		cannotStartNoServer: "قم بتكوين خادم قبل بدء البث",

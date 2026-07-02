@@ -1050,6 +1050,7 @@ const ptBR = {
 		chooseDestination: "Escolha um destino",
 		streamSettings: "Configurações de transmissão",
 		adjustBitrate: "Ajustar bitrate",
+		bitrateAppliesAtStart: "Aplicado quando a transmissão inicia",
 		stopToChange: "Pare a transmissão para alterar",
 		cannotStartNoPipeline:
 			"Selecione uma fonte de vídeo antes de iniciar a transmissão",

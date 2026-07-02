@@ -918,6 +918,7 @@ const ja = {
 		chooseDestination: "配信先を選択",
 		streamSettings: "ストリーム設定",
 		adjustBitrate: "ビットレートを調整",
+		bitrateAppliesAtStart: "配信開始時に適用されます",
 		stopToChange: "変更するにはストリームを停止してください",
 		cannotStartNoPipeline:
 			"ストリームを開始する前にビデオソースを選択してください",

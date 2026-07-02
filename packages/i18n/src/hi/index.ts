@@ -888,6 +888,7 @@ const hi = {
 		chooseDestination: "गंतव्य चुनें",
 		streamSettings: "स्ट्रीम सेटिंग्स",
 		adjustBitrate: "बिटरेट समायोजित करें",
+		bitrateAppliesAtStart: "स्ट्रीम शुरू होने पर लागू होता है",
 		stopToChange: "बदलने के लिए स्ट्रीम रोकें",
 		cannotStartNoPipeline: "स्ट्रीम शुरू करने से पहले एक वीडियो स्रोत चुनें",
 		cannotStartNoServer: "स्ट्रीम शुरू करने से पहले एक सर्वर कॉन्फ़िगर करें",

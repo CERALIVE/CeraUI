@@ -850,6 +850,7 @@ const zh = {
 		chooseDestination: "选择目标",
 		streamSettings: "直播设置",
 		adjustBitrate: "调整比特率",
+		bitrateAppliesAtStart: "将在直播开始时生效",
 		stopToChange: "停止直播以更改",
 		cannotStartNoPipeline: "开始直播前请选择视频源",
 		cannotStartNoServer: "开始直播前请配置服务器",

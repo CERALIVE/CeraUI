@@ -1074,6 +1074,7 @@ const fr = {
 		chooseDestination: "Choisir une destination",
 		streamSettings: "Paramètres de diffusion",
 		adjustBitrate: "Ajuster le débit",
+		bitrateAppliesAtStart: "Appliqué au démarrage du direct",
 		stopToChange: "Arrêtez la diffusion pour modifier",
 		cannotStartNoPipeline:
 			"Sélectionnez une source vidéo avant de démarrer la diffusion",
