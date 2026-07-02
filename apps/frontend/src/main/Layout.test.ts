@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Layout.svelte — auth-check timeout lifecycle (Todo 3).
+ * Layout.svelte — auth-check timeout lifecycle (Todo 3) + typed rpc.auth dispatch (Todo 9).
  *
  * The stored-token auth check is guarded by two timers that used to be bare
  * `setTimeout`s: they mutated `isCheckingAuthStatus` with no cleanup and silently
@@ -11,8 +11,9 @@
  *
  * These tests drive the REAL Layout with the heavy child views/dialogs replaced
  * by inert Noop stubs and the store graph mocked, so only the timer/timeout UI is
- * exercised. `sendAuthMessage` is mocked to NEVER resolve (simulating an offline
- * device / dropped socket), so the check stalls and the timeout path runs.
+ * exercised. `authenticate` (auth-status.svelte, the single auth-state mutation
+ * path via ingestAuth) is mocked to NEVER resolve, so the check stalls and the
+ * timeout path runs.
  */
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
@@ -49,13 +50,14 @@ vi.mock("$lib/components/custom/pwa", async () => {
 	return { OfflinePage: Noop, PWAStatus: Noop };
 });
 
-const sendAuthMessage = vi.hoisted(() => vi.fn());
-const authState = vi.hoisted(() => ({ auth: undefined as unknown, status: false as unknown }));
+const authenticate = vi.hoisted(() => vi.fn(() => new Promise<void>(() => {})));
+const authState = vi.hoisted(() => ({
+	auth: undefined as unknown,
+	status: false as unknown,
+}));
 
-vi.mock("$lib/stores/websocket-store.svelte", () => ({
-	getAuth: () => authState.auth,
+vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getStatus: () => authState.status,
-	sendAuthMessage,
 }));
 
 vi.mock("$lib/stores/offline-state.svelte", () => ({
@@ -71,6 +73,8 @@ vi.mock("$lib/stores/connection-ux.svelte", () => ({
 }));
 
 vi.mock("$lib/stores/auth-status.svelte", () => ({
+	authenticate,
+	getAuthMessage: () => authState.auth,
 	authStatusStore: {
 		get value() {
 			return false;
@@ -100,11 +104,13 @@ beforeAll(() => {
 
 beforeEach(() => {
 	vi.useFakeTimers();
-	sendAuthMessage.mockReset();
+	// Reset with a promise that never resolves — the mocked authenticate() will
+	// stall so the check never completes, letting the auth-timeout timer fire.
+	authenticate.mockReset();
+	authenticate.mockImplementation(() => new Promise<void>(() => {}));
 	authState.auth = undefined;
 	authState.status = false;
-	// A stored token makes the component run the auth-check branch; the mocked
-	// sendAuthMessage never invokes its callback, so the check stalls.
+	// A stored token makes the component run the auth-check branch.
 	localStorage.setItem("auth", "token-abc");
 });
 
@@ -118,7 +124,7 @@ describe("Layout — auth-check timeout surface", () => {
 		render(Layout);
 
 		// Kicked off the stalled check; still loading, no timeout band yet.
-		expect(sendAuthMessage).toHaveBeenCalledTimes(1);
+		expect(authenticate).toHaveBeenCalledTimes(1);
 		expect(screen.queryByTestId("auth-timeout")).toBeNull();
 
 		// Primary auth timeout (3000ms) elapses → explicit timed-out state.
@@ -133,7 +139,7 @@ describe("Layout — auth-check timeout surface", () => {
 		// Retry re-runs the auth check and dismisses the timed-out surface.
 		await fireEvent.click(retry as HTMLButtonElement);
 		await tick();
-		expect(sendAuthMessage).toHaveBeenCalledTimes(2);
+		expect(authenticate).toHaveBeenCalledTimes(2);
 		await waitFor(() =>
 			expect(screen.queryByTestId("auth-timeout")).toBeNull(),
 		);

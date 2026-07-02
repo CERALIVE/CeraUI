@@ -8,7 +8,12 @@ import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
 import { Button } from '$lib/components/ui/button';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
-import { authStatusStore } from '$lib/stores/auth-status.svelte';
+import { getStatus } from '$lib/rpc/subscriptions.svelte';
+import {
+	authenticate,
+	authStatusStore,
+	getAuthMessage,
+} from '$lib/stores/auth-status.svelte';
 import {
 	clearSessionExpired,
 	markAuthenticated,
@@ -17,7 +22,6 @@ import {
 	wasAuthenticated,
 } from '$lib/stores/connection-ux.svelte';
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
-import { getAuth, getStatus, sendAuthMessage } from '$lib/stores/websocket-store.svelte';
 
 import Auth from './Auth.svelte';
 import DisconnectedBanner from './DisconnectedBanner.svelte';
@@ -58,17 +62,17 @@ const authTimeout = isPWA ? 500 : isMobile ? 1500 : 3000;
 
 /**
  * Kick off (or re-run) the stored-token auth check. Called once on mount and
- * again from the timed-out retry surface. Does NOT change the auth RPC flow —
- * it re-reads the same stored token and dispatches the same `sendAuthMessage`.
+ * again from the timed-out retry surface. Dispatches a typed `rpc.auth.login`
+ * via the auth-status store's `authenticate()` — the SINGLE auth-state mutation
+ * path (ingestAuth). The `$effect` block below observes the resulting
+ * `getAuthMessage()` snapshot to complete/reject the check.
  */
 function runAuthCheck() {
 	authTimedOut = false;
 	const auth = localStorage.getItem('auth');
 	if (auth) {
 		isCheckingAuthStatus = true;
-		sendAuthMessage(auth, true, () => {
-			isCheckingAuthStatus = false;
-		});
+		void authenticate(auth, true);
 	} else {
 		isCheckingAuthStatus = false;
 	}
@@ -97,7 +101,7 @@ $effect(() => {
 });
 
 $effect(() => {
-	const message = getAuth();
+	const message = getAuthMessage();
 	if (message?.success) {
 		isCheckingAuthStatus = false;
 		markAuthenticated();
