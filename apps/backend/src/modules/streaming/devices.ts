@@ -233,7 +233,9 @@ async function defaultGetEngineDevices(): Promise<CaptureDevice[] | null> {
 			}),
 		);
 	} catch (err) {
-		defaultLogger.debug("device discovery: engine device fetch failed", { err });
+		defaultLogger.debug("device discovery: engine device fetch failed", {
+			err,
+		});
 		return null;
 	}
 }
