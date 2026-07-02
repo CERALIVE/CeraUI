@@ -1,12 +1,7 @@
 // Offline state detection using pure Svelte 5 runes
 // Simplified version without legacy store compatibility
+import { rpcClient, type ConnectionState } from "$lib/rpc/client";
 import { getIsOnline } from "./pwa.svelte";
-import { socket } from "./websocket-store.svelte";
-
-// ============================================
-// Types
-// ============================================
-type ConnectionState = "connected" | "connecting" | "disconnected" | "error";
 
 // ============================================
 // Reactive State (Svelte 5 runes)
@@ -93,7 +88,7 @@ function startPeriodicCheck() {
 				window.matchMedia("(display-mode: standalone)").matches ||
 				(window.navigator as unknown as { standalone?: boolean }).standalone;
 
-			if (isPWA || socket.readyState !== WebSocket.OPEN) {
+			if (isPWA || rpcClient.getConnectionState() !== "connected") {
 				window.location.reload();
 			}
 		}
@@ -135,24 +130,16 @@ function setConnectionState(state: ConnectionState) {
 }
 
 // ============================================
-// Socket Event Handlers
+// Connection State Ingestion
 // ============================================
-function updateFromSocket() {
-	if (!socket) {
-		setConnectionState("disconnected");
-		return;
-	}
+// Pre-auth strip source (Auth.svelte): tracks the client's transport-level signal,
+// not a captured socket, so it survives socket replacement on reconnect.
+// onConnectionChange never replays current state, so seed before subscribing.
+let unsubscribeConnection: (() => void) | null = null;
 
-	switch (socket.readyState) {
-		case WebSocket.OPEN:
-			setConnectionState("connected");
-			break;
-		case WebSocket.CONNECTING:
-			setConnectionState("connecting");
-			break;
-		default:
-			setConnectionState("disconnected");
-	}
+function initConnectionTracking() {
+	setConnectionState(rpcClient.getConnectionState());
+	unsubscribeConnection = rpcClient.onConnectionChange(setConnectionState);
 }
 
 // ============================================
@@ -199,11 +186,9 @@ async function checkInitialConnectivity() {
 // ============================================
 // Initialize
 // ============================================
+initConnectionTracking();
+
 if (typeof window !== "undefined") {
-	updateFromSocket();
-	socket.addEventListener("open", updateFromSocket);
-	socket.addEventListener("close", updateFromSocket);
-	socket.addEventListener("error", () => setConnectionState("error"));
 	window.addEventListener("offline", handleOffline);
 	window.addEventListener("online", () => void handleOnline());
 	void checkInitialConnectivity();
@@ -246,9 +231,8 @@ export async function manualConnectionCheck(): Promise<boolean> {
 }
 
 export function cleanup() {
-	socket.removeEventListener("open", updateFromSocket);
-	socket.removeEventListener("close", updateFromSocket);
-	socket.removeEventListener("error", () => setConnectionState("error"));
+	unsubscribeConnection?.();
+	unsubscribeConnection = null;
 	window.removeEventListener("offline", handleOffline);
 	window.removeEventListener("online", () => void handleOnline());
 
