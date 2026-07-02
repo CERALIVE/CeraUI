@@ -14,6 +14,7 @@ src/
 ├── main/
 │   ├── LiveView.svelte        # Live destination: stream control, encoder/audio/server config, bitrate hot-adjust
 │   ├── NetworkView.svelte     # Network destination: bonded links, WiFi, modems, Ethernet, hotspot
+│   │   └── network/CollisionBands.svelte  # same-subnet info band + policy-route warning band [EXISTS]
 │   ├── SettingsView.svelte    # Settings destination: grouped config entry points (all via dialogs)
 │   ├── HudBar.svelte          # Persistent HUD bar — bitrate, per-link signals, SoC telemetry, tap-to-expand Sheet
 │   ├── HudRegion.svelte       # Responsive HUD mount (desktop top / mobile bottom dock)
@@ -49,6 +50,8 @@ src/
 │   │   │                          #   · staleness (freshness+gated clock) · derive (deriveHudState)
 │   │   │                          #   · store.svelte.ts (lazy runes store + selectors)
 │   │   ├── connection-ux.svelte.ts # Reconnect/reboot/session-expiry UX (eager-init in browser)
+│   │   ├── auth-status.svelte.ts  # SOLE auth-mutation path (ingestAuth/authenticate/createPassword) —
+│   │   │                          #   websocket-store.svelte.ts is DELETED; do not re-add it
 │   │   ├── notifications.svelte.ts # Active notifications (toast + persistent); getActive() feeds
 │   │   │                          #   the toast host, getPersistent() feeds NotificationsPanel
 │   │   └── layout-mode.svelte.ts  # Touch/kiosk layout flag ($persist "layout-mode")
@@ -60,7 +63,8 @@ src/
 │   │   │                      #   ComingSoon.svelte [EXISTS] (calm roadmap pill + tooltip, data-debt-id bound),
 │   │   │                      #   SourceSection.svelte [EXISTS] (live input picker section),
 │   │   │                      #   SourcePreference.svelte [EXISTS] (pre-start source preference selector),
-│   │   │                      #   InfoPopover.svelte [EXISTS] (lightweight info popover, question-mark trigger)
+│   │   │                      #   InfoPopover.svelte [EXISTS] (lightweight info popover, question-mark trigger),
+│   │   │                      #   NetworkIngestSection.svelte [EXISTS] (LAN RTMP/SRT ingest sources card)
 │   │   ├── streaming/         # ValidationAdapter.ts — FE constraint adapter (imports from @ceraui/rpc/schemas)
 │   │   └── ui/                # shadcn-svelte primitives (bits-ui v2.18.1) — CLI-managed, do not hand-edit
 │   └── env/ lib/helpers/ lib/config/ lib/types/
@@ -170,6 +174,7 @@ CI job that uploads the signed bundles to R2. Pipeline (each step gates the next
 ## CONVENTIONS
 
 - Stores: Svelte 5 runes only (`$state`, `$derived`, `$effect`) — files named `*.svelte.ts`.
+- **Store ownership (single owner rule) [EXISTS]:** `lib/rpc/subscriptions.svelte.ts` is the SOLE `rpcClient.onMessage` consumer and owns every non-auth reactive/connection getter (`getConfig`, `getStatus`, `getIsConnected`, `getConnectionState`, …). `lib/stores/auth-status.svelte.ts` is the SOLE auth-mutation path (`ingestAuth`/`getAuthMessage`/`authenticate`/`createPassword`/`authStatusStore`). The legacy `websocket-store.svelte.ts` wrapper (528 LOC) is FULLY DELETED — do not re-add it or a second `onMessage`/auth-mutation owner. A CI grep gate (`src/tests/deprecated-ws-store-gate.test.ts`) fails the build if the literal module name reappears anywhere in `apps/frontend/src`. `offline-state.svelte.ts`/`pwa-status.svelte` are the one deliberate exception — they read connection state straight off `$lib/rpc/client` (not `subscriptions.svelte`) to stay pre-auth-pure.
 - UI primitives: extend via shadcn-svelte CLI (`bunx shadcn-svelte@latest add <component>`), not by hand.
 - Custom components (not shadcn-managed) live in `lib/components/custom/`, not `lib/components/ui/`.
 - Mock scenarios: `MOCK_SCENARIO` env var. Runtime switching via `rpc.streaming.setMockHardware`.
@@ -246,3 +251,5 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - Don't release field locks to the client's intended value — always use `result.applied` from the RPC response.
 - Don't add custom endpoint fields inline in `ServerDialog` — use `CustomEndpointForm.svelte` in `main/dialogs/server/` (fields driven by `receiverKindManifest(kind)`).
 - Don't derive receiver kind or build the `setConfig` field set inline in `ServerDialog` — use `resolveReceiverKind` and `buildServerSetConfig` from `lib/streaming/receiver-experience.ts`.
+- Don't re-add a `websocket-store` wrapper, a second `rpcClient.onMessage` owner, or a parallel auth-mutation path — `subscriptions.svelte.ts` and `auth-status.svelte.ts` are the only two allowed owners; the CI grep gate blocks the module name from reappearing.
+- Don't re-derive the "gateway inactive" (rtmp/srt requires-gateway) disabled-with-reason rule inline on a new surface — route through `lib/streaming/pipelineAvailability.ts`.
