@@ -1124,6 +1124,10 @@ const ko = {
 			bitrateRangeHint: "지원 범위",
 			bitrateClamped: "지원 범위로 조정됨",
 			probedCaps: "감지된 기능",
+			codecAuto: "Auto (recommended)",
+			codecAutoResolvedH265: "Auto — H.265 on this device",
+			codecAutoResolvedH264: "Auto — H.264 on this device",
+			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 		},
 	},
 	dialogs: {

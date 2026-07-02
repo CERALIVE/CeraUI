@@ -547,6 +547,10 @@ const es = {
 			bitrateRangeHint: "Rango admitido",
 			bitrateClamped: "Ajustado al rango admitido",
 			probedCaps: "Capacidades detectadas",
+			codecAuto: "Auto (recommended)",
+			codecAutoResolvedH265: "Auto — H.265 on this device",
+			codecAutoResolvedH264: "Auto — H.264 on this device",
+			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 		},
 	},
 	dialogs: {

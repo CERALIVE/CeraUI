@@ -14,6 +14,7 @@ import {
 	MODE_PRESETS,
 	presetToDraft,
 	presetViews,
+	videoCodecFromMediaType,
 } from "./modePresets";
 
 // The board's real bitrate window — presets clamp their default into it.
@@ -96,7 +97,7 @@ describe("presetToDraft — preset → draft field mapping", () => {
 		expect(next.bitrate).toBe(5000);
 	});
 
-	it("preserves the operator-owned source and overlay (codec is not a draft field)", () => {
+	it("preserves the operator-owned source and overlay", () => {
 		const next = presetToDraft(
 			CANONICAL_PRESETS["4k30-h265"],
 			makeDraft({ source: "uvc_h265", bitrateOverlay: false }),
@@ -104,7 +105,17 @@ describe("presetToDraft — preset → draft field mapping", () => {
 		);
 		expect(next.source).toBe("uvc_h265");
 		expect(next.bitrateOverlay).toBe(false);
-		expect("codec" in next).toBe(false);
+	});
+
+	it("carries the preset codec as a wire VideoCodec (truly applies it)", () => {
+		expect(
+			presetToDraft(CANONICAL_PRESETS["4k30-h265"], makeDraft(), wideBounds)
+				.codec,
+		).toBe("h265");
+		expect(
+			presetToDraft(CANONICAL_PRESETS["1080p60-h264"], makeDraft(), wideBounds)
+				.codec,
+		).toBe("h264");
 	});
 
 	it("does not mutate the input draft", () => {
@@ -130,17 +141,22 @@ describe("findMatchingPresetId — active-preset detection on seed", () => {
 
 	it("is codec-aware: same res/fps, different codec disambiguates", () => {
 		expect(
-			findMatchingPresetId(
-				{ resolution: "1080p", framerate: 30 },
-				MEDIA_TYPE_H265,
-			),
+			findMatchingPresetId({ resolution: "1080p", framerate: 30 }, "h265"),
 		).toBe("1080p30-h265");
 		expect(
-			findMatchingPresetId(
-				{ resolution: "1080p", framerate: 30 },
-				MEDIA_TYPE_H264,
-			),
+			findMatchingPresetId({ resolution: "1080p", framerate: 30 }, "h264"),
 		).toBe("1080p30-h264");
+	});
+});
+
+describe("videoCodecFromMediaType — media-type → wire VideoCodec", () => {
+	it("maps the H.264 / H.265 media types to their wire codec", () => {
+		expect(videoCodecFromMediaType(MEDIA_TYPE_H264)).toBe("h264");
+		expect(videoCodecFromMediaType(MEDIA_TYPE_H265)).toBe("h265");
+	});
+
+	it("returns undefined for an unrecognised media type", () => {
+		expect(videoCodecFromMediaType("video/x-vp9")).toBeUndefined();
 	});
 });
 

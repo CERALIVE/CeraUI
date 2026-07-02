@@ -1115,6 +1115,10 @@ const hi = {
 			bitrateRangeHint: "समर्थित सीमा",
 			bitrateClamped: "समर्थित सीमा में समायोजित",
 			probedCaps: "पहचानी गई क्षमताएँ",
+			codecAuto: "Auto (recommended)",
+			codecAutoResolvedH265: "Auto — H.265 on this device",
+			codecAutoResolvedH264: "Auto — H.264 on this device",
+			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 		},
 	},
 	dialogs: {
