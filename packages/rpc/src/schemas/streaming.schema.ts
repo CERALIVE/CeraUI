@@ -330,6 +330,14 @@ export const capabilitiesMessageSchema = z.object({
 			bound: z.boolean(),
 		})
 		.optional(),
+	// Picture-in-picture / compositing capability flag. Additive + optional —
+	// absent on every engine snapshot today, since the engine currently drives a
+	// single active input (`fallbackswitch`, no compositor element). This is a
+	// pure reservation: no procedure or UI reads this field yet. See TD-pip in
+	// `docs/TECHNICAL_DEBT.md` (stays open) and the full evaluation record in
+	// `docs/PIP_EVALUATION.md` for the delivery contract this flag is the first
+	// layer of.
+	pip_supported: z.boolean().optional(),
 });
 export type CapabilitiesMessage = z.infer<typeof capabilitiesMessageSchema>;
 
