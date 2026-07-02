@@ -79,6 +79,7 @@ export {
 	clearMockStreamError,
 	formatMockStreamingStats,
 	getInjectedMockStreamError,
+	getMockActiveEncode,
 	getMockBcrpStatus,
 	getMockBitrateData,
 	getMockEncoderInfo,
