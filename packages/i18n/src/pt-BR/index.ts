@@ -869,6 +869,11 @@ const ptBR = {
 			title: "Procurando redes…",
 			description: "Procurando redes WiFi disponíveis por perto.",
 		},
+		scanError: {
+			title: "Falha na busca",
+			description:
+				"Não foi possível atualizar as redes WiFi por perto. Tentando novamente automaticamente.",
+		},
 		dialog: {
 			close: "Fechar",
 			searchWifi: "Buscar redes WiFi",
@@ -1182,6 +1187,8 @@ const ptBR = {
 			audioSwitched: "Áudio trocado em {ms}ms",
 			audioSwitchFailed: "Falha ao trocar a fonte de áudio",
 			audioSourceLost: "Fonte de áudio indisponível",
+			audioSwitchUnavailable:
+				"A troca de áudio ao vivo não é suportada pelo mecanismo atual",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1331,6 +1338,8 @@ const ptBR = {
 		error: "Erro",
 		saved: "Salvo",
 		saveFailed: "Falha ao salvar",
+		validationFailed: "Verifique estes campos: {fields}",
+		requestFailed: "Algo deu errado. Tente novamente.",
 		updateInProgress: "Atualização em andamento",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1482,6 +1491,7 @@ const ptBR = {
 		rebootingDescription:
 			"O dispositivo está reiniciando. Esta página se reconectará automaticamente.",
 		sessionExpired: "Sessão expirada. Por favor, autentique-se novamente.",
+		authTimedOut: "Não foi possível verificar sua sessão. Verifique a conexão e tente novamente.",
 	},
 	offline: {
 		title: "Você está offline",

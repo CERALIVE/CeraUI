@@ -61,6 +61,7 @@ import { getSocketUrl } from "../env";
 import { nextBackoffDelay } from "./backoff";
 import { parseServerPing, shouldForceCloseHalfOpen } from "./half-open";
 import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
+import { RpcError } from "./rpc-error";
 
 /**
  * WebSocket connection state
@@ -82,6 +83,7 @@ interface RPCResponse {
 	error?: {
 		message: string;
 		code: string;
+		fields?: string[];
 	};
 }
 
@@ -315,7 +317,7 @@ class RPCClient {
 		this.pendingRequests.delete(response.id);
 
 		if (response.error) {
-			pending.reject(new Error(response.error.message));
+			pending.reject(new RpcError(response.error));
 		} else {
 			pending.resolve(response.result);
 		}

@@ -90,6 +90,21 @@ const scanKey = $derived(`wifi-scan:${deviceId}`);
 // re-entry guard enforces a single WiFi mutation in flight at a time.
 const wifiOpKey = $derived(`wifi:${deviceId}`);
 
+// Periodic (silent) rescan key — DISTINCT from the manual `scanKey` so the
+// background poll never drives the manual-scan spinner. Routed through
+// `osCommand` purely so a failing tick is caught + surfaced (no unhandled
+// rejection, calm error state) instead of a bare fire-and-forget.
+const periodicScanKey = $derived(`wifi-scan-auto:${deviceId}`);
+
+// A scan-error surface flag: true when EITHER the manual or the periodic scan op
+// left the machine in `failed`. Extends the list's scanning-vs-empty distinction
+// with a calm failure state. A subsequent successful scan re-arms the op and
+// clears it.
+const scanError = $derived(
+	getOperationPhase(scanKey) === 'failed' ||
+		getOperationPhase(periodicScanKey) === 'failed',
+);
+
 // Inline interaction state.
 // `connecting` is the local intent for the third op sharing `wifiOpKey`: the SSID
 // this surface is connecting to. Kept set through `timed_out` so the row can
@@ -279,14 +294,27 @@ $effect(() => {
 	}
 });
 
-// Initial + periodic silent rescan while the dialog is open. This is a passive
-// query-style refresh (no spinner, no toast) — it deliberately does NOT route
-// through `osCommand`, which is reserved for the user-initiated scan (`handleScan`,
-// keyed on `scanKey`). A fire-and-forget raw `rpc.wifi.scan` keeps the two apart.
+// Initial + periodic silent rescan while the dialog is open. Still a passive
+// query-style refresh keyed on `periodicScanKey` — DISTINCT from the manual
+// `scanKey`, so it never drives the manual-scan spinner. It routes through
+// `osCommand` (not a raw fire-and-forget) SO A FAILING TICK IS CAUGHT: no
+// unhandled promise rejection, one calm failure toast per failing tick, and the
+// list renders the `wifi-scan-error` state via `scanError`. `confirmOnResolve`
+// resolves the ok path immediately (scan RPC has no completion marker) which
+// also re-arms + clears a prior failure on the next successful tick. The 22s
+// interval and its cleanup are unchanged.
 $effect(() => {
 	if (!open) return;
-	void rpc.wifi.scan({ device: deviceId });
-	const id = setInterval(() => void rpc.wifi.scan({ device: deviceId }), 22000);
+	const runSilentScan = () =>
+		void osCommand({
+			key: periodicScanKey,
+			rpc: () => rpc.wifi.scan({ device: deviceId }),
+			confirmOnResolve: true,
+			failMessage: () => $LL.network.os.operationFailed(),
+			busyMessage: () => $LL.network.os.deviceBusy(),
+		});
+	runSilentScan();
+	const id = setInterval(runSilentScan, 22000);
 	return () => clearInterval(id);
 });
 
@@ -328,6 +356,7 @@ $effect(() => {
 		onSubmitNew={submitNew}
 		passwordMin={PASSWORD_MIN}
 		{pendingNew}
+		{scanError}
 		scanning={getOperationPhase(scanKey) === 'pending'}
 		bind:password
 		bind:showPassword

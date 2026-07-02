@@ -1,9 +1,11 @@
 <script lang="ts">
 import { rtlLanguages } from '@ceraui/i18n';
-import { locale } from '@ceraui/i18n/svelte';
+import { LL, locale } from '@ceraui/i18n/svelte';
 import type { StatusMessage } from '@ceraui/rpc/schemas';
+import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 
 import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
+import { Button } from '$lib/components/ui/button';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { authStatusStore } from '$lib/stores/auth-status.svelte';
@@ -25,6 +27,10 @@ import Main from './MainView.svelte';
 
 let authStatus = $state(false);
 let isCheckingAuthStatus = $state(true);
+// Explicit terminal state for a stalled auth check: instead of silently
+// blanking to the auth/loading screen when the check never resolves (offline
+// device, dropped socket), we surface a calm role="status" retry surface.
+let authTimedOut = $state(false);
 let updatingStatus: StatusMessage['updating'] = $state(false);
 
 // Derived offline state for reactivity
@@ -39,32 +45,56 @@ $effect(() => {
 		updatingStatus = false;
 	}
 });
-const auth = localStorage.getItem('auth');
-if (auth) {
-	sendAuthMessage(auth, true, () => {
-		isCheckingAuthStatus = false;
-	});
+// Environment probes computed once (used to size the auth-check timeout).
+const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
+const isPWA =
+	window.matchMedia('(display-mode: standalone)').matches ||
+	(typeof (window.navigator as unknown as { standalone?: boolean }).standalone === 'boolean' &&
+		(window.navigator as unknown as { standalone?: boolean }).standalone) ||
+	document.referrer.includes('android-app://');
 
-	// Add timeout for auth check in case we're offline (shorter for mobile/iOS)
-	const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
-	const isPWA =
-		window.matchMedia('(display-mode: standalone)').matches ||
-		(typeof (window.navigator as unknown as { standalone?: boolean }).standalone === 'boolean' &&
-			(window.navigator as unknown as { standalone?: boolean }).standalone) ||
-		document.referrer.includes('android-app://');
+// Very aggressive timeout for PWA launches to prevent blank screens.
+const authTimeout = isPWA ? 500 : isMobile ? 1500 : 3000;
 
-	// Very aggressive timeout for PWA launches to prevent blank screens
-	const authTimeout = isPWA ? 500 : isMobile ? 1500 : 3000;
-
-	setTimeout(() => {
-		if (isCheckingAuthStatus) {
-			// If still checking after timeout, assume we're offline and stop checking
+/**
+ * Kick off (or re-run) the stored-token auth check. Called once on mount and
+ * again from the timed-out retry surface. Does NOT change the auth RPC flow —
+ * it re-reads the same stored token and dispatches the same `sendAuthMessage`.
+ */
+function runAuthCheck() {
+	authTimedOut = false;
+	const auth = localStorage.getItem('auth');
+	if (auth) {
+		isCheckingAuthStatus = true;
+		sendAuthMessage(auth, true, () => {
 			isCheckingAuthStatus = false;
+		});
+	} else {
+		isCheckingAuthStatus = false;
+	}
+}
+
+/** Retry the auth check from the timed-out surface. */
+function retryAuthCheck() {
+	runAuthCheck();
+}
+
+runAuthCheck();
+
+// Timeout for the auth check in case we're offline: wrapped in $effect so the
+// timer is cleared on unmount (no post-unmount state mutation, no leaked timer)
+// and re-armed whenever a retry flips isCheckingAuthStatus back to true. On
+// expiry we surface an explicit authTimedOut state instead of silently blanking.
+$effect(() => {
+	if (!isCheckingAuthStatus) return;
+	const id = setTimeout(() => {
+		if (isCheckingAuthStatus) {
+			isCheckingAuthStatus = false;
+			authTimedOut = true;
 		}
 	}, authTimeout);
-} else {
-	isCheckingAuthStatus = false;
-}
+	return () => clearTimeout(id);
+});
 
 $effect(() => {
 	const message = getAuth();
@@ -101,17 +131,22 @@ const isPWAApp =
 		!!(window.navigator && (window.navigator as unknown as { standalone?: boolean }).standalone)) ||
 	(document.referrer?.includes('android-app://'));
 
-if (isMobileDevice || isPWAApp) {
+// Aggressive fallback for mobile/PWA to prevent blank screens: wrapped in
+// $effect so the timer is cleared on unmount and re-armed on retry. On expiry
+// we surface the explicit authTimedOut state rather than silently blanking.
+$effect(() => {
+	if (!(isMobileDevice || isPWAApp)) return;
+	if (!isCheckingAuthStatus || authStatus || showOfflinePage) return;
 	const fallbackTimeout = isPWAApp ? 300 : 1000; // Even more aggressive for PWA
-
-	setTimeout(() => {
-		// If we're still in a loading state and no offline page is shown, force offline
+	const id = setTimeout(() => {
+		// If we're still in a loading state and no offline page is shown, time out.
 		if (isCheckingAuthStatus && !authStatus && !showOfflinePage) {
 			isCheckingAuthStatus = false;
-			// This will trigger the auth screen, but offline detection should kick in soon
+			authTimedOut = true;
 		}
 	}, fallbackTimeout);
-}
+	return () => clearTimeout(id);
+});
 
 // Apply <html lang> and dir using runes-style effect
 $effect(() => {
@@ -131,6 +166,27 @@ $effect(() => {
 		<UpdateBanner />
 		<DisconnectedBanner />
 		<Main></Main>
+	{:else if authTimedOut}
+		<!-- Auth check stalled (offline device / dropped socket): a calm retry
+		     surface instead of a blank screen, mirroring DisconnectedBanner. -->
+		<div class="flex min-h-screen items-center justify-center p-4">
+			<div
+				class="bg-status-warning/10 border-status-warning/30 text-foreground flex max-w-sm flex-col items-center gap-3 rounded-lg border px-6 py-5 text-center text-sm backdrop-blur-sm"
+				data-testid="auth-timeout"
+				role="status"
+			>
+				<WifiOffIcon class="text-status-warning size-6 shrink-0" />
+				<span class="font-medium">{$LL.connection.authTimedOut()}</span>
+				<Button
+					class="border-status-warning/40 text-status-warning hover:bg-status-warning/10"
+					onclick={retryAuthCheck}
+					size="sm"
+					variant="outline"
+				>
+					{$LL.connection.retry()}
+				</Button>
+			</div>
+		</div>
 	{:else if !isCheckingAuthStatus}
 		<Auth></Auth>
 	{:else}

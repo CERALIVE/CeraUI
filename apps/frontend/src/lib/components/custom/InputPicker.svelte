@@ -118,6 +118,7 @@ function capsLabel(device: CaptureDevice): string {
 							{@const isSelected = device.input_id === selectedInput}
 						{@const isSwitching = device.input_id === switchingInput}
 						{@const caps = capsLabel(device)}
+						{@const audioBlocked = device.kind === 'audio' && !audioLiveSwitchEnabled}
 						<li
 								class={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors ${
 									device.lost
@@ -169,9 +170,10 @@ function capsLabel(device: CaptureDevice): string {
 										<Button
 											aria-label={`${$LL.live.inputPicker.switch()} \u2013 ${device.display_name}`}
 											data-switch-input={device.input_id}
-											disabled={isActive || isSwitching}
+											disabled={isActive || isSwitching || audioBlocked}
 											onclick={() => onSwitch?.(device.input_id)}
 											size="sm"
+											title={audioBlocked ? $LL.live.inputPicker.audioSwitchUnavailable() : undefined}
 											variant={isActive ? 'secondary' : 'default'}
 										>
 											{#if isSwitching}

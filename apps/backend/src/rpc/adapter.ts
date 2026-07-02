@@ -119,20 +119,40 @@ export async function handleORPCMessage(
 			sendInitialStatusToClient(ws);
 		}
 	} catch (error) {
+		const validation = extractValidationDetails(error);
 		logger.error("rpc: handler error", {
 			module: "rpc.adapter",
 			procedure: message.path?.join("."),
 			messageId: message.id,
 			clientId,
 			senderId,
-			validation: extractValidationDetails(error),
+			validation,
 		});
+
+		// A `phase: "unknown"` (raw ZodError, no oRPC input/output signal) is
+		// deliberately NOT claimed as a validation failure — it stays internal.
+		const isValidation =
+			validation?.phase === "input" || validation?.phase === "output";
+		const fields = isValidation
+			? [
+					...new Set(
+						validation.issues
+							.map((issue) => issue.path)
+							.filter((path) => path.length > 0),
+					),
+				]
+			: [];
+
+		const rawMessage =
+			error instanceof Error ? error.message : "Unknown error";
 		ws.send(
 			JSON.stringify({
 				id: message.id,
 				error: {
-					message: error instanceof Error ? error.message : "Unknown error",
-					code: "INTERNAL_ERROR",
+					// logRedact keeps a secret-shaped message from leaking to the client.
+					message: String(logRedact(rawMessage)),
+					code: isValidation ? "VALIDATION_ERROR" : "INTERNAL_ERROR",
+					...(fields.length > 0 ? { fields } : {}),
 				},
 			}),
 		);

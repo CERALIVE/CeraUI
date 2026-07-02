@@ -873,6 +873,11 @@ const fr = {
 			title: "Recherche de réseaux…",
 			description: "Recherche des réseaux WiFi disponibles à proximité.",
 		},
+		scanError: {
+			title: "Échec de l'analyse",
+			description:
+				"Impossible d'actualiser les réseaux WiFi à proximité. Nouvelle tentative automatique.",
+		},
 		dialog: {
 			close: "Fermer",
 			searchWifi: "Rechercher des réseaux WiFi",
@@ -1208,6 +1213,8 @@ const fr = {
 			audioSwitched: "Audio changé en {ms}ms",
 			audioSwitchFailed: "Échec du changement de source audio",
 			audioSourceLost: "Source audio indisponible",
+			audioSwitchUnavailable:
+				"Le changement audio en direct n'est pas pris en charge par le moteur actuel",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1357,6 +1364,8 @@ const fr = {
 		error: "Erreur",
 		saved: "Enregistré",
 		saveFailed: "Échec de l'enregistrement",
+		validationFailed: "Veuillez vérifier ces champs : {fields}",
+		requestFailed: "Une erreur s'est produite. Veuillez réessayer.",
 		updateInProgress: "Mise à jour en cours",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1510,6 +1519,7 @@ const fr = {
 		rebootingDescription:
 			"L'appareil redémarre. Cette page se reconnectera automatiquement.",
 		sessionExpired: "Session expirée. Veuillez vous authentifier à nouveau.",
+		authTimedOut: "Impossible de vérifier votre session. Vérifiez la connexion et réessayez.",
 	},
 	offline: {
 		title: "Vous êtes hors ligne",

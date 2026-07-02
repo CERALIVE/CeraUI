@@ -206,13 +206,13 @@ const audioLiveSwitchEnabled = $derived(isAudioLiveSwitchEnabled(getCapabilities
 const AUDIO_SWITCH_FIELD = 'audio_switch';
 
 async function handleSwitchInput(inputId: string) {
-	// Defense-in-depth: even if a UI path offered an audio switch, refuse to
-	// dispatch a live switch for an audio:* id while the capability is off — the
-	// engine would reject it with DeviceNotFound (TD-live-audio-switch).
+	// Defense-in-depth: the audio Switch button in InputPicker is already
+	// disabled-with-reason when the capability is off, so this path is normally
+	// unreachable. If it is somehow reached, surface a calm, user-visible reason
+	// via a toast and refuse to dispatch — the engine would otherwise reject the
+	// live audio:* switch with DeviceNotFound.
 	if (!canLiveSwitchInput(inputId, audioLiveSwitchEnabled)) {
-		console.warn(
-			`[CeraUI] Blocked live switch for audio source "${inputId}": live audio switching is not available (audio_live_switch capability is off).`,
-		);
+		toast.warning($LL.live.inputPicker.audioSwitchUnavailable());
 		return;
 	}
 	if (isAudioInputId(inputId)) {

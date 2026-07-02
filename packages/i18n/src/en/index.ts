@@ -432,6 +432,8 @@ const en = {
 			audioSwitched: "Audio switched in {ms:number}ms",
 			audioSwitchFailed: "Failed to switch audio source",
 			audioSourceLost: "Audio source unavailable",
+			audioSwitchUnavailable:
+				"Live audio switching isn't supported by the current engine",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -580,6 +582,8 @@ const en = {
 		error: "Error",
 		saved: "Saved",
 		saveFailed: "Failed to save",
+		validationFailed: "Please check these fields: {fields:string}",
+		requestFailed: "Something went wrong. Please try again.",
 		updateInProgress: "Update in progress",
 		// Hardware
 		bootconfigUpdating:
@@ -1283,6 +1287,11 @@ const en = {
 			title: "Searching for networks…",
 			description: "Looking for available WiFi networks nearby.",
 		},
+		scanError: {
+			title: "Scan failed",
+			description:
+				"Couldn't refresh nearby WiFi networks. Retrying automatically.",
+		},
 		dialog: {
 			close: "Close",
 			searchWifi: "View Available Networks",
@@ -1491,6 +1500,7 @@ const en = {
 		rebootingDescription:
 			"The device is restarting. This page will reconnect automatically.",
 		sessionExpired: "Session expired. Please authenticate again.",
+		authTimedOut: "Couldn't verify your session. Check the connection and try again.",
 	},
 	offline: {
 		title: "You're Offline",

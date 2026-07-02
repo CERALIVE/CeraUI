@@ -448,6 +448,8 @@ const de = {
 			audioSwitched: "Audio in {ms}ms umgeschaltet",
 			audioSwitchFailed: "Audioquelle konnte nicht umgeschaltet werden",
 			audioSourceLost: "Audioquelle nicht verfügbar",
+			audioSwitchUnavailable:
+				"Live-Audioumschaltung wird von der aktuellen Engine nicht unterstützt",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -597,6 +599,8 @@ const de = {
 		error: "Fehler",
 		saved: "Gespeichert",
 		saveFailed: "Speichern fehlgeschlagen",
+		validationFailed: "Bitte überprüfe diese Felder: {fields}",
+		requestFailed: "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
 		updateInProgress: "Update läuft",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1303,6 +1307,11 @@ const de = {
 			description:
 				"Es wird nach verfügbaren WLAN-Netzwerken in der Nähe gesucht.",
 		},
+		scanError: {
+			title: "Suche fehlgeschlagen",
+			description:
+				"WLAN-Netzwerke in der Nähe konnten nicht aktualisiert werden. Automatischer erneuter Versuch.",
+		},
 		dialog: {
 			close: "Schließen",
 			searchWifi: "WLAN-Netzwerke suchen",
@@ -1515,6 +1524,8 @@ const de = {
 			"Das Gerät wird neu gestartet. Diese Seite stellt die Verbindung automatisch wieder her.",
 		sessionExpired:
 			"Sitzung abgelaufen. Bitte authentifizieren Sie sich erneut.",
+		authTimedOut:
+			"Sitzung konnte nicht überprüft werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
 	},
 	offline: {
 		title: "Sie sind offline",

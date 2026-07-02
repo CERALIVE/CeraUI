@@ -828,6 +828,10 @@ const ar = {
 			title: "جارٍ البحث عن الشبكات…",
 			description: "يتم البحث عن شبكات WiFi المتاحة القريبة.",
 		},
+		scanError: {
+			title: "فشل الفحص",
+			description: "تعذّر تحديث شبكات WiFi القريبة. جارٍ إعادة المحاولة تلقائيًا.",
+		},
 		dialog: {
 			close: "إغلاق",
 			searchWifi: "البحث عن شبكات WiFi",
@@ -1155,6 +1159,7 @@ const ar = {
 			audioSwitched: "تم تبديل الصوت خلال {ms}م.ث",
 			audioSwitchFailed: "فشل تبديل مصدر الصوت",
 			audioSourceLost: "مصدر الصوت غير متوفر",
+			audioSwitchUnavailable: "لا يدعم المحرك الحالي تبديل الصوت المباشر",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1301,6 +1306,8 @@ const ar = {
 		error: "خطأ",
 		saved: "تم الحفظ",
 		saveFailed: "فشل الحفظ",
+		validationFailed: "يرجى التحقق من هذه الحقول: {fields}",
+		requestFailed: "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
 		updateInProgress: "التحديث قيد التقدم",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1445,6 +1452,7 @@ const ar = {
 		rebootingDescription:
 			"الجهاز قيد إعادة التشغيل. ستُعيد هذه الصفحة الاتصال تلقائياً.",
 		sessionExpired: "انتهت الجلسة. يرجى المصادقة مرة أخرى.",
+		authTimedOut: "تعذّر التحقق من جلستك. تحقق من الاتصال وحاول مرة أخرى.",
 	},
 	offline: {
 		title: "أنت غير متصل",

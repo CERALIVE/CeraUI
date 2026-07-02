@@ -716,6 +716,10 @@ const ja = {
 			title: "ネットワークを検索中…",
 			description: "近くの利用可能なWiFiネットワークを検索しています。",
 		},
+		scanError: {
+			title: "スキャンに失敗しました",
+			description: "近くのWiFiネットワークを更新できませんでした。自動的に再試行します。",
+		},
 		dialog: {
 			close: "閉じる",
 			searchWifi: "WiFiネットワークを検索",
@@ -1050,6 +1054,7 @@ const ja = {
 			audioSwitched: "{ms}msでオーディオを切り替えました",
 			audioSwitchFailed: "オーディオソースの切り替えに失敗しました",
 			audioSourceLost: "オーディオソースを利用できません",
+			audioSwitchUnavailable: "現在のエンジンはライブ音声切り替えに対応していません",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1199,6 +1204,8 @@ const ja = {
 		error: "エラー",
 		saved: "保存しました",
 		saveFailed: "保存に失敗しました",
+		validationFailed: "次の項目を確認してください: {fields}",
+		requestFailed: "問題が発生しました。もう一度お試しください。",
 		updateInProgress: "更新が進行中です",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1348,6 +1355,8 @@ const ja = {
 			"デバイスは再起動中です。このページは自動的に再接続されます。",
 		sessionExpired:
 			"セッションの有効期限が切れました。もう一度認証してください。",
+		authTimedOut:
+			"セッションを確認できませんでした。接続を確認してもう一度お試しください。",
 	},
 	offline: {
 		title: "オフラインです",

@@ -448,6 +448,8 @@ const es = {
 			audioSwitched: "Audio cambiado en {ms}ms",
 			audioSwitchFailed: "No se pudo cambiar la fuente de audio",
 			audioSourceLost: "Fuente de audio no disponible",
+			audioSwitchUnavailable:
+				"El motor actual no admite el cambio de audio en vivo",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -597,6 +599,8 @@ const es = {
 		error: "Error",
 		saved: "Guardado",
 		saveFailed: "Error al guardar",
+		validationFailed: "Revisa estos campos: {fields}",
+		requestFailed: "Algo salió mal. Inténtalo de nuevo.",
 		updateInProgress: "Actualización en curso",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1317,6 +1321,11 @@ const es = {
 			title: "Buscando redes…",
 			description: "Buscando redes WiFi disponibles cercanas.",
 		},
+		scanError: {
+			title: "Error de búsqueda",
+			description:
+				"No se pudieron actualizar las redes WiFi cercanas. Reintentando automáticamente.",
+		},
 		dialog: {
 			close: "Cerrar",
 			searchWifi: "Ver redes disponibles",
@@ -1525,6 +1534,7 @@ const es = {
 		rebootingDescription:
 			"El dispositivo se está reiniciando. Esta página se reconectará automáticamente.",
 		sessionExpired: "La sesión expiró. Por favor, autentícate de nuevo.",
+		authTimedOut: "No se pudo verificar tu sesión. Comprueba la conexión e inténtalo de nuevo.",
 	},
 	offline: {
 		title: "Estás desconectado",

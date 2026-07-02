@@ -698,6 +698,10 @@ const ko = {
 			title: "네트워크 검색 중…",
 			description: "주변에서 사용 가능한 WiFi 네트워크를 검색하고 있습니다.",
 		},
+		scanError: {
+			title: "검색 실패",
+			description: "주변 WiFi 네트워크를 새로 고치지 못했습니다. 자동으로 다시 시도합니다.",
+		},
 		dialog: {
 			close: "닫기",
 			searchWifi: "WiFi 네트워크 검색",
@@ -1025,6 +1029,7 @@ const ko = {
 			audioSwitched: "{ms}ms 만에 오디오 전환됨",
 			audioSwitchFailed: "오디오 소스 전환 실패",
 			audioSourceLost: "오디오 소스를 사용할 수 없음",
+			audioSwitchUnavailable: "현재 엔진은 실시간 오디오 전환을 지원하지 않습니다",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1173,6 +1178,8 @@ const ko = {
 		error: "오류",
 		saved: "저장됨",
 		saveFailed: "저장하지 못했습니다",
+		validationFailed: "다음 항목을 확인하세요: {fields}",
+		requestFailed: "문제가 발생했습니다. 다시 시도해 주세요.",
 		updateInProgress: "업데이트가 진행 중입니다",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1316,6 +1323,7 @@ const ko = {
 		rebootingDescription:
 			"기기가 재시작 중입니다. 이 페이지는 자동으로 다시 연결됩니다.",
 		sessionExpired: "세션이 만료되었습니다. 다시 인증해 주세요.",
+		authTimedOut: "세션을 확인할 수 없습니다. 연결을 확인하고 다시 시도해 주세요.",
 	},
 	offline: {
 		title: "오프라인입니다",

@@ -691,6 +691,11 @@ const hi = {
 			title: "नेटवर्क खोजे जा रहे हैं…",
 			description: "आस-पास उपलब्ध WiFi नेटवर्क खोजे जा रहे हैं।",
 		},
+		scanError: {
+			title: "स्कैन विफल",
+			description:
+				"आस-पास के WiFi नेटवर्क ताज़ा नहीं हो सके। स्वचालित रूप से पुनः प्रयास किया जा रहा है।",
+		},
 		dialog: {
 			close: "बंद करें",
 			searchWifi: "वाई-फाई नेटवर्क खोजें",
@@ -1017,6 +1022,7 @@ const hi = {
 			audioSwitched: "{ms}ms में ऑडियो बदला गया",
 			audioSwitchFailed: "ऑडियो स्रोत बदलने में विफल",
 			audioSourceLost: "ऑडियो स्रोत अनुपलब्ध",
+			audioSwitchUnavailable: "मौजूदा इंजन लाइव ऑडियो स्विचिंग का समर्थन नहीं करता",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1164,6 +1170,8 @@ const hi = {
 		error: "त्रुटि",
 		saved: "सहेजा गया",
 		saveFailed: "सहेजने में विफल",
+		validationFailed: "कृपया इन फ़ील्ड की जाँच करें: {fields}",
+		requestFailed: "कुछ गलत हो गया। कृपया पुनः प्रयास करें।",
 		updateInProgress: "अपडेट प्रगति पर है",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1307,6 +1315,7 @@ const hi = {
 		rebootingDescription:
 			"डिवाइस पुनः आरंभ हो रहा है। यह पेज स्वचालित रूप से पुनः कनेक्ट होगा।",
 		sessionExpired: "सत्र समाप्त हो गया। कृपया पुनः प्रमाणित करें।",
+		authTimedOut: "आपका सत्र सत्यापित नहीं हो सका। कनेक्शन जाँचें और पुनः प्रयास करें।",
 	},
 	offline: {
 		title: "आप ऑफ़लाइन हैं",

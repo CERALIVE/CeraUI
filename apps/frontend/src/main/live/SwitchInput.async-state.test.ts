@@ -19,13 +19,14 @@ import SwitchInputHarness from "../../tests/fixtures/SwitchInputHarness.svelte";
 const switchInput = vi.hoisted(() => vi.fn());
 const toastSuccess = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
+const toastWarning = vi.hoisted(() => vi.fn());
 
 vi.mock("$lib/rpc", () => ({
 	rpc: { streaming: { switchInput } },
 }));
 
 vi.mock("svelte-sonner", () => ({
-	toast: { success: toastSuccess, error: toastError },
+	toast: { success: toastSuccess, error: toastError, warning: toastWarning },
 }));
 
 const DEVICES: CaptureDevice[] = [
@@ -57,6 +58,7 @@ beforeEach(() => {
 	switchInput.mockReset();
 	toastSuccess.mockClear();
 	toastError.mockClear();
+	toastWarning.mockClear();
 });
 
 afterEach(() => {
@@ -114,5 +116,50 @@ describe("LiveView switchInput — async state", () => {
 		await waitFor(() => expect(btn()?.disabled).toBe(false));
 		await fireEvent.click(btn() as HTMLButtonElement);
 		await waitFor(() => expect(switchInput).toHaveBeenCalledTimes(2));
+	});
+});
+
+const AUDIO_DEVICES: CaptureDevice[] = [
+	...DEVICES,
+	{
+		input_id: "audio:usbaudio",
+		device_path: "alsa:usbaudio",
+		display_name: "USB audio",
+		media_class: "audio",
+		kind: "audio",
+	},
+];
+
+describe("LiveView switchInput — audio capability guard", () => {
+	it("warns via toast (never console.warn) and skips dispatch when the capability is off", async () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const { getByTestId } = render(SwitchInputHarness, {
+			props: {
+				devices: AUDIO_DEVICES,
+				activeInput: "video0",
+				audioLiveSwitchEnabled: false,
+			},
+		});
+
+		await fireEvent.click(getByTestId("force-audio-switch"));
+		await waitFor(() => expect(toastWarning).toHaveBeenCalledTimes(1));
+		expect(switchInput).not.toHaveBeenCalled();
+		expect(warnSpy).not.toHaveBeenCalled();
+		warnSpy.mockRestore();
+	});
+
+	it("dispatches the audio switch once the capability is on", async () => {
+		switchInput.mockResolvedValue({ success: true, gap_ms: 8 });
+		const { getByTestId } = render(SwitchInputHarness, {
+			props: {
+				devices: AUDIO_DEVICES,
+				activeInput: "video0",
+				audioLiveSwitchEnabled: true,
+			},
+		});
+
+		await fireEvent.click(getByTestId("force-audio-switch"));
+		await waitFor(() => expect(switchInput).toHaveBeenCalledOnce());
+		expect(toastWarning).not.toHaveBeenCalled();
 	});
 });

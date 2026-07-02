@@ -677,6 +677,10 @@ const zh = {
 			title: "正在搜索网络…",
 			description: "正在搜索附近可用的 WiFi 网络。",
 		},
+		scanError: {
+			title: "扫描失败",
+			description: "无法刷新附近的 WiFi 网络。正在自动重试。",
+		},
 		dialog: {
 			close: "关闭",
 			searchWifi: "搜索 WiFi 网络",
@@ -974,6 +978,7 @@ const zh = {
 			audioSwitched: "已在 {ms}ms 内切换音频",
 			audioSwitchFailed: "切换音频源失败",
 			audioSourceLost: "音频源不可用",
+			audioSwitchUnavailable: "当前引擎不支持实时音频切换",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1119,6 +1124,8 @@ const zh = {
 		error: "错误",
 		saved: "已保存",
 		saveFailed: "保存失败",
+		validationFailed: "请检查这些字段：{fields}",
+		requestFailed: "出了点问题，请重试。",
 		updateInProgress: "更新进行中",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1255,6 +1262,7 @@ const zh = {
 		rebooting: "正在重启设备…",
 		rebootingDescription: "设备正在重新启动。此页面将自动重新连接。",
 		sessionExpired: "会话已过期。请重新进行身份验证。",
+		authTimedOut: "无法验证您的会话。请检查连接并重试。",
 	},
 	offline: {
 		title: "您已离线",
