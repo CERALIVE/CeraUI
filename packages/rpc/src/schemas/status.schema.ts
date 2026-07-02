@@ -92,14 +92,27 @@ export const activeEncodeSchema = z.object({
 });
 export type ActiveEncode = z.infer<typeof activeEncodeSchema>;
 
-// Network-ingest gateway status surface (Task 16). Per protocol: whether the
-// baked-in gateway unit (rtmp → ceralive-rtmp-gateway.service, srt →
-// ceralive-srt-gateway.service) is active, plus the LAN publish URL. A protocol
-// is `null` when the board's capability source kinds exclude it. Additive +
-// nullable+optional so an older backend that never emits it surfaces nothing.
+// The `unavailable_reason` value carried by a protocol whose gateway is running
+// but has no reachable LAN/hotspot address to advertise (e.g. modem-only
+// connectivity). A modem/WWAN IP is NEVER advertised — the ingress firewall drops
+// those paths, so publishing one would be a lie.
+export const NETWORK_INGEST_NO_ADDRESS_REASON = 'no_lan_or_hotspot_address';
+
+// Network-ingest gateway status surface (Task 16). Four per-protocol states:
+//   1. the whole protocol is `null` — the board's capability source kinds exclude
+//      it (an N100 profile without `srt` → `srt: null`);
+//   2. `{ service_active: false, url }` — the baked-in gateway unit is down;
+//   3. `{ service_active: true, url }` — fully reachable at the LAN/hotspot url;
+//   4. `{ service_active, url: null, unavailable_reason: "no_lan_or_hotspot_address" }`
+//      — the protocol is offered but NO LAN/hotspot address exists (modem-only),
+//      so there is no url to publish to — surfaced disabled-with-reason, never
+//      hidden and never a modem IP.
+// `url` is nullable + `unavailable_reason` optional; both are additive so a legacy
+// client that ignores them still parses the object.
 export const networkIngestProtocolSchema = z.object({
 	service_active: z.boolean(),
-	url: z.string(),
+	url: z.string().nullable(),
+	unavailable_reason: z.literal(NETWORK_INGEST_NO_ADDRESS_REASON).optional(),
 });
 export type NetworkIngestProtocol = z.infer<typeof networkIngestProtocolSchema>;
 

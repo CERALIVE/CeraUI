@@ -114,14 +114,129 @@ describe("network-ingest — capability filtering (pure)", () => {
 		expect(info.srt).toBeNull();
 	});
 
-	test("no resolvable LAN IP → both null (no advertisable url)", () => {
+	test("gateway active but no LAN/hotspot IP → url null + unavailable_reason (state 4)", () => {
 		const info = deriveNetworkIngestInfo({
 			lanIp: undefined,
 			rtmpActive: true,
 			srtActive: true,
 			sourceKinds: new Set(["rtmp", "srt"]),
 		});
-		expect(info).toEqual({ rtmp: null, srt: null });
+		expect(info).toEqual({
+			rtmp: {
+				service_active: true,
+				url: null,
+				unavailable_reason: "no_lan_or_hotspot_address",
+			},
+			srt: {
+				service_active: true,
+				url: null,
+				unavailable_reason: "no_lan_or_hotspot_address",
+			},
+		});
+	});
+
+	test("no LAN/hotspot IP still keeps a capability-excluded protocol null", () => {
+		const info = deriveNetworkIngestInfo({
+			lanIp: undefined,
+			rtmpActive: true,
+			srtActive: false,
+			sourceKinds: new Set(["rtmp"]),
+		});
+		expect(info.rtmp).toEqual({
+			service_active: true,
+			url: null,
+			unavailable_reason: "no_lan_or_hotspot_address",
+		});
+		// srt is not in the board caps → null (hidden), NOT the addressless state.
+		expect(info.srt).toBeNull();
+	});
+
+	test("an inactive gateway with no address is addressless (state 4), not hidden", () => {
+		const info = deriveNetworkIngestInfo({
+			lanIp: undefined,
+			rtmpActive: false,
+			srtActive: false,
+			sourceKinds: new Set(["rtmp", "srt"]),
+		});
+		expect(info.rtmp).toEqual({
+			service_active: false,
+			url: null,
+			unavailable_reason: "no_lan_or_hotspot_address",
+		});
+		expect(info.srt).toEqual({
+			service_active: false,
+			url: null,
+			unavailable_reason: "no_lan_or_hotspot_address",
+		});
+	});
+});
+
+describe("network-ingest — LAN/hotspot-ONLY address (never a modem/WWAN IP)", () => {
+	test("a modem-only fixture resolves NO address (no wwan/usb IP leaks)", () => {
+		expect(
+			resolvePrimaryLanIp({
+				wwan0: { ip: "10.64.0.5", enabled: true },
+				usb0: { ip: "192.168.42.2", enabled: true },
+				wwx001122334455: { ip: "10.128.0.9", enabled: true },
+			}),
+		).toBeUndefined();
+	});
+
+	test("modem-only connectivity → gateway active, url null, NEVER a modem IP", async () => {
+		const MODEM_IPS = ["10.64.0.5", "192.168.42.2", "10.128.0.9"];
+		const info = await refreshNetworkIngestInfo(
+			deps({
+				isRealDevice: async () => true,
+				shouldUseMocks: () => false,
+				probeServiceActive: async () => true,
+				getNetif: () => ({
+					wwan0: { ip: "10.64.0.5", enabled: true },
+					usb0: { ip: "192.168.42.2", enabled: true },
+					wwx001122334455: { ip: "10.128.0.9", enabled: true },
+				}),
+				getSourceKinds: () => new Set(["rtmp", "srt"]),
+			}),
+		);
+		expect(info.rtmp).toEqual({
+			service_active: true,
+			url: null,
+			unavailable_reason: "no_lan_or_hotspot_address",
+		});
+		expect(info.srt).toEqual({
+			service_active: true,
+			url: null,
+			unavailable_reason: "no_lan_or_hotspot_address",
+		});
+		// The hard guarantee: no modem IP appears in ANY url the surface advertises.
+		const serialized = JSON.stringify(info);
+		for (const ip of MODEM_IPS) {
+			expect(serialized).not.toContain(ip);
+		}
+	});
+
+	test("the device's own hotspot/AP interface IS a valid publish address", () => {
+		// NM's shared-connection AP address (10.42.0.1) on a wlan iface flagged as a
+		// hotspot (NETIF_ERR_HOTSPOT = 0x02) — reachable by joined clients.
+		const ip = resolvePrimaryLanIp({
+			wwan0: { ip: "10.64.0.5", enabled: true },
+			wlan0: { ip: "10.42.0.1", enabled: true, error: 0x02 },
+		});
+		expect(ip).toBe("10.42.0.1");
+	});
+
+	test("a wifi STATION link (no hotspot flag) is NOT advertised", () => {
+		const ip = resolvePrimaryLanIp({
+			wlan0: { ip: "192.168.2.100", enabled: true, error: 0 },
+		});
+		expect(ip).toBeUndefined();
+	});
+
+	test("wired ethernet outranks the hotspot address", () => {
+		const ip = resolvePrimaryLanIp({
+			wlan0: { ip: "10.42.0.1", enabled: true, error: 0x02 },
+			eth0: { ip: "192.168.1.100", enabled: true },
+		});
+		expect(ip).toBe("192.168.1.100");
 	});
 });
 

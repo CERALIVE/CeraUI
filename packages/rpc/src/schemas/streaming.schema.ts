@@ -233,7 +233,7 @@ export type RequiresGateway = z.infer<typeof requiresGatewaySchema>;
 // Stable structured code returned by streaming.start when an rtmp/srt pipeline is
 // started while its network-ingest gateway is inactive. The frontend maps it to a
 // disabled-with-reason / start-blocked message (never a raw string).
-export const GATEWAY_INACTIVE_ERROR = 'gateway_inactive';
+export const GATEWAY_INACTIVE_ERROR = 'network_ingest_gateway_inactive';
 
 // Pipeline schema - now based on video sources with structured metadata
 export const pipelineSchema = z.object({

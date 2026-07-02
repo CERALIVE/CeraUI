@@ -127,6 +127,23 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 		else process.env.NODE_ENV = savedNodeEnv;
 	});
 
+	test("the rejection code is the stable literal network_ingest_gateway_inactive", () => {
+		expect(GATEWAY_INACTIVE_ERROR).toBe("network_ingest_gateway_inactive");
+	});
+
+	test("the gateway check precedes the mock early-success branch (fires under shouldUseMocks)", async () => {
+		const result = await call(
+			streamingStartProcedure,
+			{ pipeline: "rtmp" },
+			{ context: makeContext() },
+		);
+		expect(result).toEqual({
+			success: false,
+			is_streaming: false,
+			error: "network_ingest_gateway_inactive",
+		});
+	});
+
 	test("the derived registry keeps rtmp/srt and carries requires_gateway on exactly those", () => {
 		const message = getPipelinesMessage();
 		expect(pipelinesMessageSchema.safeParse(message).success).toBe(true);

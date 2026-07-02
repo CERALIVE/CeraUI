@@ -39,7 +39,11 @@
  * heartbeat cadence — so the stream-start gate never blocks on a spawn.
  */
 
-import type { NetworkIngest, RequiresGateway } from "@ceraui/rpc/schemas";
+import {
+	NETWORK_INGEST_NO_ADDRESS_REASON,
+	type NetworkIngest,
+	type RequiresGateway,
+} from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
 import { shouldUseMocks as defaultShouldUseMocks } from "../../mocks/mock-service.ts";
 import { resolveMockNetworkIngestActive } from "../../mocks/providers/network-ingest.ts";
@@ -47,7 +51,10 @@ import { getLastCapabilities } from "../streaming/capabilities.ts";
 import type { GatewayProbe } from "../streaming/gateway-availability.ts";
 import { isRealDevice as defaultIsRealDevice } from "../system/device-detection.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
-import { getNetworkInterfaces } from "./network-interfaces.ts";
+import {
+	getNetworkInterfaces,
+	NETIF_ERR_HOTSPOT,
+} from "./network-interfaces.ts";
 
 export const RTMP_GATEWAY_UNIT = "ceralive-rtmp-gateway.service";
 export const SRT_GATEWAY_UNIT = "ceralive-srt-gateway.service";
@@ -75,21 +82,34 @@ export function capabilitySourceKinds(
 
 type NetifLike = Record<
 	string,
-	{ ip?: string; enabled: boolean } | undefined
+	{ ip?: string; enabled: boolean; error?: number } | undefined
 >;
 
 const LAN_PREFERRED_RE = /^(?:eth|en)/;
-const LAN_EXCLUDE_RE = /^(?:usb|ww|wlan|lo$|docker|veth|l4tbr|tun|tap)/;
+// Cellular/WWAN (usb-tethered + wwan/wwx) + virtual/loopback links are NEVER a
+// valid publish target: the ingress firewall drops WAN/modem paths, so
+// advertising one would be a lie. WiFi is handled separately (AP-mode included,
+// station excluded) so `wl` is deliberately absent here.
+const LAN_EXCLUDE_RE = /^(?:usb|ww|lo$|docker|veth|l4tbr|tun|tap)/;
+const WIFI_RE = /^wl/;
+
+function isHotspotIface(entry: { error?: number }): boolean {
+	return ((entry.error ?? 0) & NETIF_ERR_HOTSPOT) !== 0;
+}
 
 /**
- * Resolve the primary LAN IP an on-network encoder reaches the gateways at:
- * prefer a wired ethernet interface, else the first enabled IP-bearing interface
- * that is not a cellular modem, WiFi, or a virtual/loopback link. Cellular and
- * WiFi-station links are excluded because a carrier-NAT'd or roaming client
- * cannot reach the device there.
+ * Resolve the address a same-network encoder reaches the gateways at, from
+ * LAN/hotspot interfaces ONLY — NEVER a cellular/WWAN IP. Ranking:
+ *   1. a wired ethernet link (`eth*`/`en*`);
+ *   2. the device's own WiFi hotspot/AP (a `wl*` iface flagged NETIF_ERR_HOTSPOT,
+ *      reachable by joined clients);
+ *   3. any other non-cellular, non-virtual LAN link (e.g. a bridge).
+ * A WiFi STATION link is skipped (a roaming/carrier-NAT'd client cannot reliably
+ * reach the device there); cellular/WWAN/virtual links are excluded outright.
  */
 export function resolvePrimaryLanIp(netif: NetifLike): string | undefined {
 	let preferred: string | undefined;
+	let hotspot: string | undefined;
 	let fallback: string | undefined;
 	for (const name in netif) {
 		const entry = netif[name];
@@ -99,9 +119,13 @@ export function resolvePrimaryLanIp(netif: NetifLike): string | undefined {
 			continue;
 		}
 		if (LAN_EXCLUDE_RE.test(name)) continue;
+		if (WIFI_RE.test(name)) {
+			if (isHotspotIface(entry)) hotspot ??= entry.ip;
+			continue;
+		}
 		fallback ??= entry.ip;
 	}
-	return preferred ?? fallback;
+	return preferred ?? hotspot ?? fallback;
 }
 
 function buildProtocolInfo(
@@ -110,7 +134,14 @@ function buildProtocolInfo(
 	active: boolean,
 	sourceKinds: Set<string>,
 ): NetworkIngest["rtmp"] {
-	if (!sourceKinds.has(kind) || lanIp === undefined) return null;
+	if (!sourceKinds.has(kind)) return null;
+	if (lanIp === undefined) {
+		return {
+			service_active: active,
+			url: null,
+			unavailable_reason: NETWORK_INGEST_NO_ADDRESS_REASON,
+		};
+	}
 	return {
 		service_active: active,
 		url: kind === "rtmp" ? buildRtmpUrl(lanIp) : buildSrtUrl(lanIp),
