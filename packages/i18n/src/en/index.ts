@@ -382,8 +382,10 @@ const en = {
 			toggleAria: "Toggle live preview",
 			connecting: "Connecting\u2026",
 			reconnecting: "Reconnecting\u2026",
+			reconnectingAttempt: "Reconnecting\u2026 (attempt {attempt:string})",
 			waiting: "Waiting for video\u2026",
 			noSignal: "No signal",
+			off: "Preview off \u2014 start to view the incoming signal",
 			unsupported: "Live preview isn't supported in this browser",
 			error: "Preview unavailable",
 			compatBadge: "Compatibility mode",
@@ -391,6 +393,20 @@ const en = {
 			audioLabel: "Audio levels",
 			audioSilent: "Silent",
 			channelAria: "Channel {n:number} level",
+			unavailable: {
+				engineStarting: {
+					title: "Engine starting",
+					body: "The streaming engine is still starting. Preview will appear once it's ready.",
+				},
+				engineOffline: {
+					title: "Engine offline",
+					body: "The streaming engine is offline. Preview is unavailable until it's back.",
+				},
+				previewUnavailable: {
+					title: "Preview unavailable",
+					body: "This engine doesn't provide a preview feed on this device.",
+				},
+			},
 		},
 		inputPicker: {
 			title: "Input Sources",
