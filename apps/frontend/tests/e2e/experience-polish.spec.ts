@@ -62,14 +62,17 @@ const test = base.extend({
 });
 
 test.describe('Experience polish', () => {
-	test('Live shows the idle ingest empty-state when not streaming', async ({
+	test('Live shows the idle ingest state when not streaming', async ({
 		authedPage: page,
 	}) => {
 		await new ShellPage(page).navigate('live');
 
-		// Idle, server configured, no bonded link: the calm informational card is
-		// shown (it points operators to Network) instead of a live ingest table.
-		const idle = page.getByTestId('ingest-idle-empty');
+		// Idle, server configured: the calm informational idle card is shown
+		// instead of a live ingest table. The default multi-modem-wifi scenario has
+		// ready bonded links, so the link-aware idle panel (Todo 22) shows the
+		// links-ready card; the empty variant (no links) is covered by
+		// conditional-display.spec.ts state 2b.
+		const idle = page.getByTestId('ingest-idle-ready');
 		await expect(idle).toBeVisible();
 		// No live telemetry table while idle (Live-Data Discipline — no stale values).
 		await expect(page.getByTestId('ingest-row')).toHaveCount(0);

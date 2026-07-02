@@ -473,9 +473,9 @@ test.describe('conditional-display state lock (T11)', () => {
 		await ensureAuthenticated(page);
 		const dialog = await openAudioDialog(page);
 
-		// Target branch: the gated "select a pipeline first" notice.
+		// Target branch: the gated "select a video source first" notice.
 		await expect(
-			dialog.getByText('Please select an encoder pipeline first to configure audio settings'),
+			dialog.getByText('Please select a video source first to configure audio settings'),
 		).toBeVisible();
 		// Sibling branches absent: no other gate notice, no audio source control.
 		await expect(dialog.getByText('No audio settings supported')).toBeHidden();
