@@ -647,9 +647,9 @@ test.describe("Capability truthfulness (functional)", () => {
 		// NETWORK + SETTINGS — navigation is itself a primary-control click-walk;
 		// each asserts its own `aria-current="page"` before returning.
 		await navigateTo(page, "network");
-		await expect(page.getByRole("main")).toBeVisible();
+		await expect(page.getByRole("main").first()).toBeVisible();
 		await navigateTo(page, "settings");
-		await expect(page.getByRole("main")).toBeVisible();
+		await expect(page.getByRole("main").first()).toBeVisible();
 		await navigateTo(page, "live");
 
 		expect(pageErrors, `uncaught exceptions: ${pageErrors.join(" | ")}`).toEqual(
