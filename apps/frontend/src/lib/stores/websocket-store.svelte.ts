@@ -430,21 +430,22 @@ const assignMessage = (data: string) => {
 };
 
 // ============================================
-// Initialize Connection
+// Legacy Handler Registration
 // ============================================
+// Invariant: this module MUST NOT open the socket. The single socket is owned by
+// initSubscriptions() in main.ts; re-adding rpcClient.connect() here recreates a
+// second concurrent owner. This only bridges frames into the deprecated getters.
 let isInitialized = false;
 
-function initializeConnection() {
+function registerLegacyHandlers() {
 	if (isInitialized) return;
 	isInitialized = true;
 
-	// Set up message handler
 	rpcClient.onMessage((type, data) => {
 		const message = JSON.stringify({ [type]: data });
 		assignMessage(message);
 	});
 
-	// Set up connection handlers
 	rpcClient.onConnectionChange((state) => {
 		if (state === "connected") {
 			toast.success("Connection", {
@@ -458,13 +459,9 @@ function initializeConnection() {
 			});
 		}
 	});
-
-	// Connect
-	rpcClient.connect();
 }
 
-// Initialize on module load
-initializeConnection();
+registerLegacyHandlers();
 
 // ============================================
 // Send Message Utilities

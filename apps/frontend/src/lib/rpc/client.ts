@@ -118,6 +118,10 @@ class RPCClient {
 	/** Hard ceiling (ms ≈ 30s) for the exponential term before jitter. */
 	private reconnectCap = 30000;
 	private keepAliveInterval: ReturnType<typeof setInterval> | null = null;
+	/** Pending auto-reconnect timer; cancelled by connect()/disconnect() so a manual
+	 *  retry winning the backoff race supersedes the scheduled reconnect (a stale
+	 *  timer firing against an already-open socket would falsely trip the invariant). */
+	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	/** Tracks last inbound frame time; drives half-open force-close (Task 14). */
 	private heartbeatTracker = createHeartbeatTracker();
 
@@ -139,10 +143,15 @@ class RPCClient {
 	 * Connect to WebSocket server
 	 */
 	connect(): void {
+		// A connect() supersedes any scheduled auto-reconnect: cancel it first so a
+		// stale backoff timer can't later fire against the socket this call opens.
+		this.clearReconnectTimer();
+
 		if (
 			this.socket?.readyState === WebSocket.OPEN ||
 			this.socket?.readyState === WebSocket.CONNECTING
 		) {
+			this.assertSingleSocketInvariant();
 			return;
 		}
 
@@ -185,9 +194,25 @@ class RPCClient {
 	}
 
 	/**
+	 * Dev-only single-socket invariant guard. connect() reaching this point means a
+	 * socket is already OPEN/CONNECTING, so a second caller is attempting a
+	 * concurrent socket. Exactly one owner (initSubscriptions) may open the socket;
+	 * a second owner is the websocket-store migration bug this catches loudly. Inert
+	 * in production — the folded-out branch keeps the idempotent early-return.
+	 */
+	private assertSingleSocketInvariant(): void {
+		if (!import.meta.env.DEV) return;
+		const message =
+			"RPCClient single-socket invariant violated: connect() called while a socket is already open/connecting. Only initSubscriptions() may open the socket.";
+		console.error(message);
+		throw new Error(message);
+	}
+
+	/**
 	 * Disconnect from WebSocket server
 	 */
 	disconnect(): void {
+		this.clearReconnectTimer();
 		this.stopKeepAlive();
 		this.socket?.close();
 		this.socket = null;
@@ -220,10 +245,21 @@ class RPCClient {
 		);
 		this.reconnectAttempts++;
 
-		setTimeout(() => {
+		this.reconnectTimer = setTimeout(() => {
+			this.reconnectTimer = null;
 			console.warn(`Reconnecting... attempt ${this.reconnectAttempts}`);
 			this.connect();
 		}, delay);
+	}
+
+	/**
+	 * Cancel a pending auto-reconnect timer, if any. Idempotent.
+	 */
+	private clearReconnectTimer(): void {
+		if (this.reconnectTimer !== null) {
+			clearTimeout(this.reconnectTimer);
+			this.reconnectTimer = null;
+		}
 	}
 
 	/**
