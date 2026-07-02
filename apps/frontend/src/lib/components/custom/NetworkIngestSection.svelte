@@ -51,6 +51,7 @@ import {
 	markFieldApplying,
 	markFieldFailed,
 } from '$lib/rpc/field-sync-state.svelte';
+import { pipelineAvailability } from '$lib/streaming/pipelineAvailability';
 
 interface Props {
 	/** `status.network_ingest` — a `null`/absent protocol renders nothing. */
@@ -112,8 +113,16 @@ const rows = $derived.by<IngestRow[]>(() => {
 		if (!entry) continue;
 		const pipelineId = pipelineIdFor(protocol);
 		const serviceActive = entry.service_active;
-		const disabled = !serviceActive || isStreaming;
-		const reason = !serviceActive
+		// Gateway-availability is the ONE shared rule (Todo 19): route it through
+		// pipelineAvailability instead of re-deriving `!service_active` inline. The
+		// row is definitionally a gateway source (rtmp/srt), so fall back to a
+		// synthetic gateway pipeline if the registry hasn't loaded — fail-safe.
+		const gatewayBlocked = !pipelineAvailability(
+			pipelines?.[pipelineId] ?? { requires_gateway: protocol },
+			networkIngest,
+		).available;
+		const disabled = gatewayBlocked || isStreaming;
+		const reason = gatewayBlocked
 			? $LL.live.networkIngest.serviceInactive({
 					protocol: VIDEO_SOURCE_LABELS[protocol] ?? protocol,
 				})

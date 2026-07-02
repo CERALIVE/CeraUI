@@ -392,18 +392,28 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			// Lock-aware ingestion for the `enabled` field only.
 			// BondToggle registers per-interface locks as `enabled_${name}` via
 			// markPending/onRpcResolved. Guard only `enabled` — all other fields
-			// (tp, ip, error, mac) flow through live without registry interaction.
+			// (tp, ip, error, mac, same_subnet_group, policy_route_missing) flow
+			// through live without registry interaction.
 			const incoming = data as NetifMessage;
 			const merged: NetifMessage = { ...netifState };
 			for (const [ifname, entry] of Object.entries(incoming)) {
 				if (!entry) continue;
 				const existing = merged[ifname] ?? ({} as NetifEntry);
-				// Live fields — always apply.
+				// Each optional field is spread ONLY when present so a tick that omits
+				// it keeps the prior value via `...existing` (same as ip/error/mac).
+				// same_subnet_group/policy_route_missing MUST be here or CollisionBands
+				// never sees live data.
 				const live: Partial<NetifEntry> = {
 					tp: entry.tp,
 					...(entry.ip !== undefined ? { ip: entry.ip } : {}),
 					...(entry.error !== undefined ? { error: entry.error } : {}),
 					...(entry.mac !== undefined ? { mac: entry.mac } : {}),
+					...(entry.same_subnet_group !== undefined
+						? { same_subnet_group: entry.same_subnet_group }
+						: {}),
+					...(entry.policy_route_missing !== undefined
+						? { policy_route_missing: entry.policy_route_missing }
+						: {}),
 				};
 				// Guard the `enabled` field through the dirty-field registry.
 				const field = `enabled_${ifname}`;
