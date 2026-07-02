@@ -374,6 +374,9 @@ const es = {
 			idleTitle: "Aún no hay enlaces agrupados",
 			idleHint:
 				"Añade enlaces de móvil, Wi-Fi o Ethernet en Red para empezar a agrupar. La telemetría de ingesta aparece aquí cuando el directo está activo.",
+			linksReadyTitle: "Enlaces listos",
+			linksReadyCount: "{count} {{enlace listo|enlaces listos}} para agrupar",
+			linksReadyHint: "La telemetría de agrupación aparece cuando está en directo.",
 			healthy: "Estable",
 			degraded: "Degradando",
 			alert: "Latencia en aumento en uno o más enlaces",

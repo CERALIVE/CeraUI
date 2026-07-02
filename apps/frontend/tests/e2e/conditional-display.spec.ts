@@ -9,7 +9,8 @@
  *
  * States locked:
  *   1. LiveView empty       — no server + idle → choose-destination onboarding.
- *   2. LiveView idle-ingest — server set, not streaming → idle bonded-links card.
+ *   2. LiveView idle-ingest — server set, not streaming → link-aware idle card:
+ *                             links-ready (enabled+IP'd links) vs empty (no links).
  *   3. LiveView streaming   — active stream → bitrate HUD visible.
  *   4. DestinationSection   — managed gate: waiting (loading) vs none (empty).
  *   5. ServerIngestSlots    — prompt hint vs steady hint.
@@ -179,10 +180,12 @@ test.describe('conditional-display state lock (T11)', () => {
 		await assertNoNewA11y(page);
 	});
 
-	// ── 2. LiveView idle-ingest ────────────────────────────────────────────────
-	test('LiveView idle: server configured but not streaming shows the idle card, hides empty + streaming', async ({
+	// ── 2a. LiveView idle-ingest: links ready ──────────────────────────────────
+	test('LiveView idle: server configured + bonded links up shows the links-ready card, hides empty + streaming', async ({
 		page,
 	}) => {
+		// Default mock scenario (multi-modem-wifi) brings up eth0 + 3 modems + WiFi,
+		// all enabled with IPs → the link-aware idle panel resolves to links-ready.
 		const ws = await attachWs(page, {
 			mutateInbound: (frame) => {
 				const status = frame.status as Frame | undefined;
@@ -195,13 +198,53 @@ test.describe('conditional-display state lock (T11)', () => {
 		await navigateTo(page, 'live');
 		ws.push({ status: { is_streaming: false } });
 
-		// Target branch: idle bonded-ingest card.
+		// Target branch: idle links-ready card (real links standing by, no telemetry).
+		await expect(page.getByTestId('ingest-idle-ready')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Links ready' })).toBeVisible();
+		// Live-Data Discipline: iface chips render, but the panel shows no telemetry.
+		await expect(page.getByTestId('ingest-idle-ready-links').locator('[data-iface]').first()).toBeVisible();
+
+		// Sibling branches absent: not the empty ingest card, not the empty-state
+		// prompt, not the streaming slider.
+		await expect(page.getByTestId('ingest-idle-empty')).toBeHidden();
+		await expect(page.getByRole('heading', { name: 'No bonded links yet' })).toBeHidden();
+		await expect(page.getByRole('heading', { name: 'Choose a destination' })).toBeHidden();
+		await expect(page.getByRole('slider')).toHaveCount(0);
+
+		await assertNoNewA11y(page);
+	});
+
+	// ── 2b. LiveView idle-ingest: no links ─────────────────────────────────────
+	test('LiveView idle: server configured but no bonded links shows the empty card, hides links-ready + streaming', async ({
+		page,
+	}) => {
+		// Force every interface disabled so no link is enabled+IP'd → the link-aware
+		// idle panel resolves to the empty state (points to Network).
+		const ws = await attachWs(page, {
+			mutateInbound: (frame) => {
+				const status = frame.status as Frame | undefined;
+				if (status) status.is_streaming = false;
+				const netif = frame.netif as Record<string, Frame> | undefined;
+				if (netif) {
+					for (const entry of Object.values(netif)) {
+						if (entry && typeof entry === 'object') entry.enabled = false;
+					}
+				}
+				return true;
+			},
+		});
+		await page.goto('/');
+		await ensureAuthenticated(page);
+		await navigateTo(page, 'live');
+		ws.push({ status: { is_streaming: false } });
+
+		// Target branch: the empty idle-ingest card.
 		await expect(page.getByTestId('ingest-idle-empty')).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'No bonded links yet' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Manage links' })).toBeVisible();
 
-		// Sibling branches absent: not the empty state, not the streaming slider.
-		await expect(page.getByRole('heading', { name: 'Choose a destination' })).toBeHidden();
+		// Sibling branches absent: not the links-ready card, not the streaming slider.
+		await expect(page.getByTestId('ingest-idle-ready')).toBeHidden();
 		await expect(page.getByRole('slider')).toHaveCount(0);
 
 		await assertNoNewA11y(page);

@@ -361,6 +361,9 @@ const en = {
 			idleTitle: "No bonded links yet",
 			idleHint:
 				"Add cellular, Wi-Fi, or Ethernet links in Network to start bonding. Ingest telemetry appears here once the stream is live.",
+			linksReadyTitle: "Links ready",
+			linksReadyCount: "{count:number} {{link|links}} ready to bond",
+			linksReadyHint: "Bonding telemetry appears when live.",
 			healthy: "Stable",
 			degraded: "Degrading",
 			alert: "Rising latency on one or more links",

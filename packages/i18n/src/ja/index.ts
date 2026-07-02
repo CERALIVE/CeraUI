@@ -977,6 +977,9 @@ const ja = {
 			idleTitle: "ボンディングされたリンクがまだありません",
 			idleHint:
 				"ネットワークでセルラー・Wi-Fi・イーサネットのリンクを追加してボンディングを開始します。配信が始まるとインジェストのテレメトリがここに表示されます。",
+			linksReadyTitle: "リンク準備完了",
+			linksReadyCount: "{count} 個のリンクがボンディング可能",
+			linksReadyHint: "配信中にボンディングのテレメトリが表示されます。",
 			healthy: "安定",
 			degraded: "悪化中",
 			alert: "1つ以上のリンクでレイテンシが上昇しています",

@@ -60,6 +60,7 @@ import {
 	managedSlotLabel,
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
+import { deriveIngestReadiness } from '$lib/streaming/ingestReadiness';
 import {
 	deriveFailover,
 	normalizeOrder,
@@ -340,6 +341,9 @@ const netif = $derived(getNetif());
 const hasNetwork = $derived(
 	Object.values(netif ?? {}).some((entry) => Boolean(entry?.enabled) && Boolean(entry?.ip)),
 );
+// Idle ingest panel: link-aware readiness from the SAME netif feed (Task 22). No
+// new subscription, no telemetry values shown idle (Live-Data Discipline).
+const ingestReadiness = $derived(deriveIngestReadiness(netif));
 const onboardingStartDone = $derived(isStreaming || hadSession);
 const onboardingComplete = $derived(hasNetwork && hasServer);
 const showOnboarding = $derived(!isOnboardingDismissed() && !onboardingComplete);
@@ -826,6 +830,35 @@ const configRows = $derived<ConfigRow[]>([
 		     across the streaming→idle edge so the rollup survives stream stop. -->
 		{#if isStreaming || hadSession}
 			<IngestStats telemetry={linkTelemetry} {isStreaming} bitrateKbps={config?.max_br} />
+		{:else if ingestReadiness.state === 'links-ready'}
+			<!-- Idle ingest area, links ready: enabled+IP'd interfaces are standing by
+			     to bond. Names the ready links (iface names only — NO telemetry values,
+			     there is no live bond yet, so RTT/NAK/weight would be stale-looking
+			     fabrications; Live-Data Discipline). -->
+			<Card.Root>
+				<Card.Content class="flex flex-col items-center gap-4 px-6 py-10 text-center" data-testid="ingest-idle-ready">
+					<div class="bg-secondary grid size-12 place-items-center rounded-xl">
+						<Radio aria-hidden={true} class="text-muted-foreground h-6 w-6" />
+					</div>
+					<div class="space-y-1.5">
+						<h2 class="text-base font-semibold">{$LL.live.ingest.linksReadyTitle()}</h2>
+						<p class="text-muted-foreground mx-auto max-w-sm text-sm">
+							{$LL.live.ingest.linksReadyCount({ count: ingestReadiness.count })}
+						</p>
+					</div>
+					<div class="flex flex-wrap items-center justify-center gap-2" data-testid="ingest-idle-ready-links">
+						{#each ingestReadiness.ifaces as iface (iface)}
+							<span
+								class="bg-secondary text-secondary-foreground rounded-md px-2.5 py-1 font-mono text-xs"
+								data-iface={iface}
+							>
+								{iface}
+							</span>
+						{/each}
+					</div>
+					<p class="text-muted-foreground text-xs">{$LL.live.ingest.linksReadyHint()}</p>
+				</Card.Content>
+			</Card.Root>
 		{:else}
 			<!-- Idle ingest area: no live bond yet. Calm, informational (no telemetry
 			     values shown, so no fresh-looking stale data) — points to Network. -->

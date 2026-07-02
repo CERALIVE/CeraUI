@@ -903,6 +903,9 @@ const zh = {
 			idleTitle: "尚无绑定链路",
 			idleHint:
 				"在“网络”中添加蜂窝、Wi-Fi 或以太网链路以开始绑定。直播开始后，接入遥测将在此显示。",
+			linksReadyTitle: "链路就绪",
+			linksReadyCount: "{count} 条链路可用于绑定",
+			linksReadyHint: "直播开始后将显示绑定遥测。",
 			healthy: "稳定",
 			degraded: "正在劣化",
 			alert: "一个或多个链路的延迟正在上升",

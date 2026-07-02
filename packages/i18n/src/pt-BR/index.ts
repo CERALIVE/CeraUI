@@ -1109,6 +1109,9 @@ const ptBR = {
 			idleTitle: "Ainda sem links agrupados",
 			idleHint:
 				"Adicione links de celular, Wi-Fi ou Ethernet em Rede para iniciar o agrupamento. A telemetria de ingestão aparece aqui quando a transmissão está ao vivo.",
+			linksReadyTitle: "Links prontos",
+			linksReadyCount: "{count} {{link pronto|links prontos}} para agrupar",
+			linksReadyHint: "A telemetria de agrupamento aparece quando está ao vivo.",
 			healthy: "Estável",
 			degraded: "Degradando",
 			alert: "Latência crescente em um ou mais links",

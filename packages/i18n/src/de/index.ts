@@ -374,6 +374,9 @@ const de = {
 			idleTitle: "Noch keine gebündelten Links",
 			idleHint:
 				"Fügen Sie in Netzwerk Mobilfunk-, WLAN- oder Ethernet-Links hinzu, um die Bündelung zu starten. Ingest-Telemetrie erscheint hier, sobald der Stream läuft.",
+			linksReadyTitle: "Links bereit",
+			linksReadyCount: "{count} {{Link|Links}} bereit zum Bündeln",
+			linksReadyHint: "Bündelungs-Telemetrie erscheint, sobald der Stream läuft.",
 			healthy: "Stabil",
 			degraded: "Verschlechtert sich",
 			alert: "Steigende Latenz auf einer oder mehreren Verbindungen",

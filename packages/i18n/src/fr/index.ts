@@ -1133,6 +1133,9 @@ const fr = {
 			idleTitle: "Aucun lien agrégé pour l'instant",
 			idleHint:
 				"Ajoutez des liens cellulaire, Wi-Fi ou Ethernet dans Réseau pour démarrer l'agrégation. La télémétrie d'ingestion apparaît ici dès que le direct est actif.",
+			linksReadyTitle: "Liens prêts",
+			linksReadyCount: "{count} {{lien prêt|liens prêts}} à agréger",
+			linksReadyHint: "La télémétrie d'agrégation apparaît une fois le direct actif.",
 			healthy: "Stable",
 			degraded: "Se dégrade",
 			alert: "Latence croissante sur une ou plusieurs liaisons",

@@ -954,6 +954,9 @@ const ko = {
 			idleTitle: "아직 본딩된 링크가 없습니다",
 			idleHint:
 				"네트워크에서 셀룰러, Wi-Fi 또는 이더넷 링크를 추가하여 본딩을 시작하세요. 스트림이 시작되면 인제스트 텔레메트리가 여기에 표시됩니다.",
+			linksReadyTitle: "링크 준비됨",
+			linksReadyCount: "본딩할 링크 {count}개 준비됨",
+			linksReadyHint: "스트림이 시작되면 본딩 텔레메트리가 표시됩니다.",
 			healthy: "안정",
 			degraded: "저하 중",
 			alert: "하나 이상의 링크에서 지연 시간이 증가하고 있습니다",
