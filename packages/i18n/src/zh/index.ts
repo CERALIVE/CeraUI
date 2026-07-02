@@ -928,8 +928,10 @@ const zh = {
 			toggleAria: "切换实时预览",
 			connecting: "连接中\u2026",
 			reconnecting: "重新连接中\u2026",
+			reconnectingAttempt: "重新连接中\u2026（第 {attempt} 次尝试）",
 			waiting: "等待视频\u2026",
 			noSignal: "无信号",
+			off: "预览已关闭 \u2014 开始后即可查看输入信号",
 			unsupported: "此浏览器不支持实时预览",
 			error: "预览不可用",
 			compatBadge: "兼容模式",
@@ -937,6 +939,20 @@ const zh = {
 			audioLabel: "音频电平",
 			audioSilent: "静音",
 			channelAria: "频道 {n} 电平",
+			unavailable: {
+				engineStarting: {
+					title: "引擎启动中",
+					body: "推流引擎仍在启动。准备就绪后将显示预览。",
+				},
+				engineOffline: {
+					title: "引擎离线",
+					body: "推流引擎已离线。恢复前预览不可用。",
+				},
+				previewUnavailable: {
+					title: "预览不可用",
+					body: "此引擎在本设备上不提供预览画面。",
+				},
+			},
 		},
 		inputPicker: {
 			title: "输入来源",
@@ -965,6 +981,10 @@ const zh = {
 				test: "测试",
 				audio: "音频",
 				other: "其他",
+				uvc_h264: "UVC H.264",
+				uvc_h265: "UVC H.265",
+				mjpeg: "MJPEG",
+				camlink: "Cam Link",
 			},
 		},
 		sourcePreference: {
@@ -1000,6 +1020,9 @@ const zh = {
 			none: "未选择来源",
 			select: "选择来源",
 			capabilities: "能力",
+			deviceMax: "设备上限",
+			activeLive: "直播中",
+			activeConfigured: "已配置",
 			lostTitle: "设备已断开",
 			lostBody: "重新连接设备以从此来源恢复推流。",
 			audioNone: "未检测到音频源",

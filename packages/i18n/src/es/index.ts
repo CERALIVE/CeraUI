@@ -377,7 +377,8 @@ const es = {
 				"Añade enlaces de móvil, Wi-Fi o Ethernet en Red para empezar a agrupar. La telemetría de ingesta aparece aquí cuando el directo está activo.",
 			linksReadyTitle: "Enlaces listos",
 			linksReadyCount: "{count} {{enlace listo|enlaces listos}} para agrupar",
-			linksReadyHint: "La telemetría de agrupación aparece cuando está en directo.",
+			linksReadyHint:
+				"La telemetría de agrupación aparece cuando está en directo.",
 			healthy: "Estable",
 			degraded: "Degradando",
 			alert: "Latencia en aumento en uno o más enlaces",
@@ -400,8 +401,10 @@ const es = {
 			toggleAria: "Alternar vista previa en vivo",
 			connecting: "Conectando\u2026",
 			reconnecting: "Reconectando\u2026",
+			reconnectingAttempt: "Reconectando\u2026 (intento {attempt})",
 			waiting: "Esperando vídeo\u2026",
 			noSignal: "Sin señal",
+			off: "Vista previa desactivada \u2014 inicia la transmisión para ver la señal entrante",
 			unsupported:
 				"La vista previa en vivo no es compatible con este navegador",
 			error: "Vista previa no disponible",
@@ -410,6 +413,20 @@ const es = {
 			audioLabel: "Niveles de audio",
 			audioSilent: "Silencio",
 			channelAria: "Nivel del canal {n}",
+			unavailable: {
+				engineStarting: {
+					title: "El motor se está iniciando",
+					body: "El motor de transmisión todavía se está iniciando. La vista previa aparecerá en cuanto esté listo.",
+				},
+				engineOffline: {
+					title: "Motor desconectado",
+					body: "El motor de transmisión está desconectado. La vista previa no estará disponible hasta que vuelva.",
+				},
+				previewUnavailable: {
+					title: "Vista previa no disponible",
+					body: "Este motor no ofrece una señal de vista previa en este dispositivo.",
+				},
+			},
 		},
 		inputPicker: {
 			title: "Fuentes de entrada",
@@ -438,6 +455,10 @@ const es = {
 				test: "Prueba",
 				audio: "Audio",
 				other: "Otro",
+				uvc_h264: "UVC H.264",
+				uvc_h265: "UVC H.265",
+				mjpeg: "MJPEG",
+				camlink: "Cam Link",
 			},
 		},
 		sourcePreference: {
@@ -476,6 +497,9 @@ const es = {
 			none: "Ninguna fuente seleccionada",
 			select: "Seleccionar una fuente",
 			capabilities: "Capacidades",
+			deviceMax: "Máximo del dispositivo",
+			activeLive: "En vivo",
+			activeConfigured: "Configurado",
 			lostTitle: "Dispositivo desconectado",
 			lostBody:
 				"Vuelve a conectar el dispositivo para reanudar la transmisión desde esta fuente.",

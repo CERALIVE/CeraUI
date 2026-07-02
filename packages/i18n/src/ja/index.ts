@@ -1003,8 +1003,10 @@ const ja = {
 			toggleAria: "ライブプレビューを切り替え",
 			connecting: "接続中\u2026",
 			reconnecting: "再接続中\u2026",
+			reconnectingAttempt: "再接続中\u2026（試行 {attempt}）",
 			waiting: "映像を待機中\u2026",
 			noSignal: "信号なし",
+			off: "プレビューはオフです \u2014 開始すると入力信号を確認できます",
 			unsupported: "このブラウザではライブプレビューはサポートされていません",
 			error: "プレビュー利用不可",
 			compatBadge: "互換モード",
@@ -1012,6 +1014,20 @@ const ja = {
 			audioLabel: "音声レベル",
 			audioSilent: "無音",
 			channelAria: "チャンネル {n} レベル",
+			unavailable: {
+				engineStarting: {
+					title: "エンジン起動中",
+					body: "配信エンジンはまだ起動中です。準備が整うとプレビューが表示されます。",
+				},
+				engineOffline: {
+					title: "エンジンオフライン",
+					body: "配信エンジンがオフラインです。復帰するまでプレビューは利用できません。",
+				},
+				previewUnavailable: {
+					title: "プレビュー利用不可",
+					body: "このエンジンはこのデバイスでプレビュー映像を提供しません。",
+				},
+			},
 		},
 		inputPicker: {
 			title: "入力ソース",
@@ -1041,6 +1057,10 @@ const ja = {
 				test: "テスト",
 				audio: "オーディオ",
 				other: "その他",
+				uvc_h264: "UVC H.264",
+				uvc_h265: "UVC H.265",
+				mjpeg: "MJPEG",
+				camlink: "Cam Link",
 			},
 		},
 		sourcePreference: {
@@ -1079,6 +1099,9 @@ const ja = {
 			none: "ソースが選択されていません",
 			select: "ソースを選択",
 			capabilities: "対応機能",
+			deviceMax: "デバイスの上限",
+			activeLive: "ライブ",
+			activeConfigured: "設定済み",
 			lostTitle: "デバイスが切断されました",
 			lostBody:
 				"デバイスを再接続して、このソースからの配信を再開してください。",

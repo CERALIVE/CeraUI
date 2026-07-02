@@ -1109,8 +1109,10 @@ const ar = {
 			toggleAria: "تبديل المعاينة المباشرة",
 			connecting: "جارٍ الاتصال\u2026",
 			reconnecting: "جارٍ إعادة الاتصال\u2026",
+			reconnectingAttempt: "جارٍ إعادة الاتصال\u2026 (المحاولة {attempt})",
 			waiting: "في انتظار الفيديو\u2026",
 			noSignal: "لا توجد إشارة",
+			off: "المعاينة متوقفة \u2014 ابدأ لعرض الإشارة الواردة",
 			unsupported: "المعاينة المباشرة غير مدعومة في هذا المتصفح",
 			error: "المعاينة غير متاحة",
 			compatBadge: "وضع التوافق",
@@ -1118,6 +1120,20 @@ const ar = {
 			audioLabel: "مستويات الصوت",
 			audioSilent: "صامت",
 			channelAria: "مستوى القناة {n}",
+			unavailable: {
+				engineStarting: {
+					title: "المحرك قيد التشغيل",
+					body: "لا يزال محرك البث قيد بدء التشغيل. ستظهر المعاينة بمجرد أن يصبح جاهزاً.",
+				},
+				engineOffline: {
+					title: "المحرك غير متصل",
+					body: "محرك البث غير متصل حالياً. لن تتوفر المعاينة حتى يعود.",
+				},
+				previewUnavailable: {
+					title: "المعاينة غير متاحة",
+					body: "لا يوفر هذا المحرك بث معاينة على هذا الجهاز.",
+				},
+			},
 		},
 		inputPicker: {
 			title: "مصادر الإدخال",
@@ -1146,6 +1162,10 @@ const ar = {
 				test: "اختبار",
 				audio: "صوت",
 				other: "أخرى",
+				uvc_h264: "UVC H.264",
+				uvc_h265: "UVC H.265",
+				mjpeg: "MJPEG",
+				camlink: "Cam Link",
 			},
 		},
 		sourcePreference: {
@@ -1182,6 +1202,9 @@ const ar = {
 			none: "لم يتم اختيار مصدر",
 			select: "اختر مصدراً",
 			capabilities: "القدرات",
+			deviceMax: "الحد الأقصى للجهاز",
+			activeLive: "مباشر",
+			activeConfigured: "مُهيأ",
 			lostTitle: "الجهاز غير متصل",
 			lostBody: "أعد توصيل الجهاز لاستئناف البث من هذا المصدر.",
 			audioNone: "لم يتم اكتشاف مصدر صوت",

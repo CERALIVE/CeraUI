@@ -1136,7 +1136,8 @@ const fr = {
 				"Ajoutez des liens cellulaire, Wi-Fi ou Ethernet dans Réseau pour démarrer l'agrégation. La télémétrie d'ingestion apparaît ici dès que le direct est actif.",
 			linksReadyTitle: "Liens prêts",
 			linksReadyCount: "{count} {{lien prêt|liens prêts}} à agréger",
-			linksReadyHint: "La télémétrie d'agrégation apparaît une fois le direct actif.",
+			linksReadyHint:
+				"La télémétrie d'agrégation apparaît une fois le direct actif.",
 			healthy: "Stable",
 			degraded: "Se dégrade",
 			alert: "Latence croissante sur une ou plusieurs liaisons",
@@ -1159,8 +1160,10 @@ const fr = {
 			toggleAria: "Basculer l'aperçu en direct",
 			connecting: "Connexion\u2026",
 			reconnecting: "Reconnexion\u2026",
+			reconnectingAttempt: "Reconnexion\u2026 (tentative {attempt})",
 			waiting: "En attente de la vidéo\u2026",
 			noSignal: "Pas de signal",
+			off: "Aperçu désactivé \u2014 démarrez pour voir le signal entrant",
 			unsupported:
 				"L'aperçu en direct n'est pas pris en charge par ce navigateur",
 			error: "Aperçu indisponible",
@@ -1169,6 +1172,20 @@ const fr = {
 			audioLabel: "Niveaux audio",
 			audioSilent: "Silence",
 			channelAria: "Niveau du canal {n}",
+			unavailable: {
+				engineStarting: {
+					title: "Démarrage du moteur",
+					body: "Le moteur de diffusion est encore en cours de démarrage. L'aperçu apparaîtra une fois prêt.",
+				},
+				engineOffline: {
+					title: "Moteur hors ligne",
+					body: "Le moteur de diffusion est hors ligne. L'aperçu est indisponible jusqu'à son retour.",
+				},
+				previewUnavailable: {
+					title: "Aperçu indisponible",
+					body: "Ce moteur ne fournit pas de flux d'aperçu sur cet appareil.",
+				},
+			},
 		},
 		inputPicker: {
 			title: "Sources d'entrée",
@@ -1198,6 +1215,10 @@ const fr = {
 				test: "Test",
 				audio: "Audio",
 				other: "Autre",
+				uvc_h264: "UVC H.264",
+				uvc_h265: "UVC H.265",
+				mjpeg: "MJPEG",
+				camlink: "Cam Link",
 			},
 		},
 		sourcePreference: {
@@ -1236,6 +1257,9 @@ const fr = {
 			none: "Aucune source sélectionnée",
 			select: "Sélectionner une source",
 			capabilities: "Capacités",
+			deviceMax: "Maximum de l'appareil",
+			activeLive: "En direct",
+			activeConfigured: "Configuré",
 			lostTitle: "Appareil déconnecté",
 			lostBody:
 				"Reconnectez l'appareil pour reprendre la diffusion depuis cette source.",

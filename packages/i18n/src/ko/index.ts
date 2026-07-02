@@ -979,8 +979,10 @@ const ko = {
 			toggleAria: "라이브 미리보기 전환",
 			connecting: "연결 중\u2026",
 			reconnecting: "재연결 중\u2026",
+			reconnectingAttempt: "재연결 중\u2026 (시도 {attempt})",
 			waiting: "영상 대기 중\u2026",
 			noSignal: "신호 없음",
+			off: "미리보기 꺼짐 \u2014 시작하면 들어오는 신호를 볼 수 있습니다",
 			unsupported: "이 브라우저에서는 라이브 미리보기가 지원되지 않습니다",
 			error: "미리보기 사용 불가",
 			compatBadge: "호환 모드",
@@ -988,6 +990,20 @@ const ko = {
 			audioLabel: "오디오 레벨",
 			audioSilent: "무음",
 			channelAria: "채널 {n} 레벨",
+			unavailable: {
+				engineStarting: {
+					title: "엔진 시작 중",
+					body: "스트리밍 엔진이 아직 시작 중입니다. 준비되면 미리보기가 표시됩니다.",
+				},
+				engineOffline: {
+					title: "엔진 오프라인",
+					body: "스트리밍 엔진이 오프라인입니다. 복구될 때까지 미리보기를 사용할 수 없습니다.",
+				},
+				previewUnavailable: {
+					title: "미리보기 사용 불가",
+					body: "이 엔진은 이 장치에서 미리보기 피드를 제공하지 않습니다.",
+				},
+			},
 		},
 		inputPicker: {
 			title: "입력 소스",
@@ -1016,6 +1032,10 @@ const ko = {
 				test: "테스트",
 				audio: "오디오",
 				other: "기타",
+				uvc_h264: "UVC H.264",
+				uvc_h265: "UVC H.265",
+				mjpeg: "MJPEG",
+				camlink: "Cam Link",
 			},
 		},
 		sourcePreference: {
@@ -1054,6 +1074,9 @@ const ko = {
 			none: "선택된 소스 없음",
 			select: "소스 선택",
 			capabilities: "지원 기능",
+			deviceMax: "장치 최대값",
+			activeLive: "라이브",
+			activeConfigured: "구성됨",
 			lostTitle: "장치 연결 끊김",
 			lostBody: "장치를 다시 연결하여 이 소스에서 스트리밍을 재개하세요.",
 			audioNone: "오디오 소스가 감지되지 않음",

@@ -971,8 +971,10 @@ const hi = {
 			toggleAria: "लाइव पूर्वावलोकन टॉगल करें",
 			connecting: "कनेक्ट हो रहा है\u2026",
 			reconnecting: "पुनः कनेक्ट हो रहा है\u2026",
+			reconnectingAttempt: "पुनः कनेक्ट हो रहा है\u2026 (प्रयास {attempt})",
 			waiting: "वीडियो की प्रतीक्षा\u2026",
 			noSignal: "कोई सिग्नल नहीं",
+			off: "पूर्वावलोकन बंद है \u2014 आने वाला सिग्नल देखने के लिए शुरू करें",
 			unsupported: "इस ब्राउज़र में लाइव पूर्वावलोकन समर्थित नहीं है",
 			error: "पूर्वावलोकन अनुपलब्ध",
 			compatBadge: "संगतता मोड",
@@ -980,6 +982,20 @@ const hi = {
 			audioLabel: "ऑडियो स्तर",
 			audioSilent: "मौन",
 			channelAria: "चैनल {n} स्तर",
+			unavailable: {
+				engineStarting: {
+					title: "इंजन शुरू हो रहा है",
+					body: "स्ट्रीमिंग इंजन अभी भी शुरू हो रहा है। तैयार होते ही पूर्वावलोकन दिखाई देगा।",
+				},
+				engineOffline: {
+					title: "इंजन ऑफ़लाइन",
+					body: "स्ट्रीमिंग इंजन ऑफ़लाइन है। वापस आने तक पूर्वावलोकन उपलब्ध नहीं होगा।",
+				},
+				previewUnavailable: {
+					title: "पूर्वावलोकन अनुपलब्ध",
+					body: "यह इंजन इस डिवाइस पर पूर्वावलोकन फ़ीड प्रदान नहीं करता।",
+				},
+			},
 		},
 		inputPicker: {
 			title: "इनपुट स्रोत",
@@ -1008,6 +1024,10 @@ const hi = {
 				test: "परीक्षण",
 				audio: "ऑडियो",
 				other: "अन्य",
+				uvc_h264: "UVC H.264",
+				uvc_h265: "UVC H.265",
+				mjpeg: "MJPEG",
+				camlink: "Cam Link",
 			},
 		},
 		sourcePreference: {
@@ -1045,6 +1065,9 @@ const hi = {
 			none: "कोई स्रोत नहीं चुना गया",
 			select: "स्रोत चुनें",
 			capabilities: "क्षमताएँ",
+			deviceMax: "डिवाइस अधिकतम",
+			activeLive: "लाइव",
+			activeConfigured: "कॉन्फ़िगर किया गया",
 			lostTitle: "डिवाइस डिस्कनेक्ट हो गया",
 			lostBody: "इस स्रोत से स्ट्रीमिंग फिर से शुरू करने के लिए डिवाइस को फिर से कनेक्ट करें।",
 			audioNone: "कोई ऑडियो स्रोत नहीं मिला",
