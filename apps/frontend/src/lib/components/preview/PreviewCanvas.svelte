@@ -16,11 +16,16 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { Eye, EyeOff, Loader } from '@lucide/svelte';
+import { Eye, EyeOff, Loader, LoaderCircle, ServerOff } from '@lucide/svelte';
 
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
+import {
+	cappedAttemptText,
+	derivePreviewAvailability,
+} from '$lib/components/preview/preview-availability';
 import { Button } from '$lib/components/ui/button';
-import { getPreviewSocketUrl } from '$lib/env';
+import { BUILD_INFO, getPreviewSocketUrl } from '$lib/env';
+import { getCapabilities } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -66,7 +71,7 @@ let videoEl = $state<HTMLVideoElement | null>(null);
 
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let reconnectAttempt = 0;
+let reconnectAttempt = $state(0);
 
 let decoder: VideoDecoder | null = null;
 let sawKeyframe = false;
@@ -318,10 +323,40 @@ function toggle(): void {
 	enabled = !enabled;
 }
 
+// Engine-aware availability: the preview socket is dialed only when the engine
+// snapshot says there is something to dial. A mock-backed dev build always
+// dials the mock preview server (BUILD_INFO.IS_DEV — the frontend equivalent of
+// the backend `shouldUseMocks()` gate). See `preview-availability.ts`.
+const availability = $derived(derivePreviewAvailability(getCapabilities(), BUILD_INFO.IS_DEV));
+const previewUnavailable = $derived(availability !== 'available');
+const reconnectAttemptText = $derived(cappedAttemptText(reconnectAttempt));
+
 $effect(() => {
-	if (!enabled) return;
+	// Never dial while the engine reports the preview unavailable — render the
+	// calm band instead of reconnecting forever.
+	if (!enabled || previewUnavailable) return;
 	start();
 	return () => stop();
+});
+
+const unavailableBand = $derived.by(() => {
+	switch (availability) {
+		case 'engineStarting':
+			return {
+				title: $LL.live.preview.unavailable.engineStarting.title(),
+				body: $LL.live.preview.unavailable.engineStarting.body(),
+			};
+		case 'engineOffline':
+			return {
+				title: $LL.live.preview.unavailable.engineOffline.title(),
+				body: $LL.live.preview.unavailable.engineOffline.body(),
+			};
+		default:
+			return {
+				title: $LL.live.preview.unavailable.previewUnavailable.title(),
+				body: $LL.live.preview.unavailable.previewUnavailable.body(),
+			};
+	}
 });
 
 const overlayText = $derived.by(() => {
@@ -372,60 +407,89 @@ const overlayText = $derived.by(() => {
 	</div>
 
 	{#if enabled}
-		<div class="bg-muted/40 relative aspect-video w-full overflow-hidden rounded-lg">
-			{#if tier === 'webcodecs'}
-				<canvas
-					bind:this={canvasEl}
-					data-testid="preview-canvas"
-					aria-label={$LL.live.preview.canvasAria()}
-					class="h-full w-full object-contain"
-				></canvas>
-			{:else if tier === 'mse'}
-				<!-- svelte-ignore a11y_media_has_caption -->
-				<video
-					bind:this={videoEl}
-					data-testid="preview-video"
-					class="h-full w-full object-contain"
-					autoplay
-					muted
-					playsinline
-				></video>
-			{/if}
-
-			{#if status === 'reconnecting'}
-				<div
-					data-testid="preview-reconnecting"
-					role="status"
-					class="bg-status-standby/15 text-status-standby absolute top-2 left-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium backdrop-blur-sm"
-				>
-					<Loader aria-hidden="true" class="size-3 animate-spin" />
-					{$LL.live.preview.reconnecting()}
+		{#if previewUnavailable}
+			<!-- Calm engine-aware band (never an error toast); nothing to dial. -->
+			<div
+				data-testid="preview-unavailable"
+				data-reason={availability}
+				role="status"
+				class="border-border bg-muted/40 flex items-start gap-3 rounded-lg border px-4 py-3"
+			>
+				{#if availability === 'engineStarting'}
+					<LoaderCircle
+						aria-hidden="true"
+						class="text-primary mt-0.5 size-5 shrink-0 animate-spin motion-reduce:animate-none"
+					/>
+				{:else}
+					<ServerOff aria-hidden="true" class="text-muted-foreground mt-0.5 size-5 shrink-0" />
+				{/if}
+				<div class="min-w-0 flex-1 space-y-1">
+					<p class="text-sm font-semibold">{unavailableBand.title}</p>
+					<p class="text-muted-foreground text-sm">{unavailableBand.body}</p>
 				</div>
-			{/if}
+			</div>
+		{:else}
+			<div class="bg-muted/40 relative aspect-video w-full overflow-hidden rounded-lg">
+				{#if tier === 'webcodecs'}
+					<canvas
+						bind:this={canvasEl}
+						data-testid="preview-canvas"
+						aria-label={$LL.live.preview.canvasAria()}
+						class="h-full w-full object-contain"
+					></canvas>
+				{:else if tier === 'mse'}
+					<!-- svelte-ignore a11y_media_has_caption -->
+					<video
+						bind:this={videoEl}
+						data-testid="preview-video"
+						class="h-full w-full object-contain"
+						autoplay
+						muted
+						playsinline
+					></video>
+				{/if}
 
-			{#if tier === 'mse'}
-				<span
-					data-testid="preview-compat"
-					class="bg-background/70 text-muted-foreground absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
-				>
-					{$LL.live.preview.compatBadge()}
-				</span>
-			{/if}
+				{#if status === 'reconnecting'}
+					<div
+						data-testid="preview-reconnecting"
+						role="status"
+						class="bg-status-standby/15 text-status-standby absolute top-2 left-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium backdrop-blur-sm"
+					>
+						<Loader aria-hidden="true" class="size-3 animate-spin motion-reduce:animate-none" />
+						{#if reconnectAttemptText}
+							{$LL.live.preview.reconnectingAttempt({ attempt: reconnectAttemptText })}
+						{:else}
+							{$LL.live.preview.reconnecting()}
+						{/if}
+					</div>
+				{/if}
 
-			{#if status !== 'live' && status !== 'reconnecting' && overlayText}
-				<div
-					class="text-muted-foreground absolute inset-0 grid place-items-center p-4 text-center text-sm"
-					role="status"
-				>
-					{overlayText}
-				</div>
-			{/if}
-		</div>
+				{#if tier === 'mse'}
+					<span
+						data-testid="preview-compat"
+						class="bg-background/70 text-muted-foreground absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+					>
+						{$LL.live.preview.compatBadge()}
+					</span>
+				{/if}
 
-		<div class="mt-3">
-			<AudioLevelMeter {rmsDb} {peakDb} />
-		</div>
+				{#if status !== 'live' && status !== 'reconnecting' && overlayText}
+					<div
+						class="text-muted-foreground absolute inset-0 grid place-items-center p-4 text-center text-sm"
+						role="status"
+					>
+						{overlayText}
+					</div>
+				{/if}
+			</div>
+
+			<div class="mt-3">
+				<AudioLevelMeter {rmsDb} {peakDb} />
+			</div>
+		{/if}
 	{:else}
-		<p class="text-muted-foreground text-sm">{$LL.live.preview.noSignal()}</p>
+		<p data-testid="preview-off" class="text-muted-foreground text-sm">
+			{$LL.live.preview.off()}
+		</p>
 	{/if}
 </section>

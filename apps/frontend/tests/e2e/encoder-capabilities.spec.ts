@@ -192,10 +192,13 @@ test.describe("encoder capability wiring", () => {
 			),
 		);
 
-		// Codec badges live under the Advanced / Custom expander (Task 7) — open it.
+		// Codec selector lives under the Advanced / Custom expander (Task 7) — open it.
 		await page.getByTestId("encoder-advanced-summary").click();
 
-		const badge = page.getByTestId("h265-software-warning").first();
+		// The software-encode caveat surfaces once H.265 (offered but hw-unaccelerated)
+		// is the selected codec.
+		await page.getByTestId("codec-h265").click();
+		const badge = page.getByTestId("codec-h265-software").first();
 		await expect(badge).toBeVisible();
 		await expect(badge).toContainText(/software/i);
 	});

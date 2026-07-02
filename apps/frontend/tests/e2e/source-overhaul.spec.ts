@@ -193,7 +193,13 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		pageWs = null;
 		controlStreaming = false;
 		streamingFlag = false;
-		dropServerDevices = false;
+		// Injected device lists are authoritative for every test in this file (see
+		// the header contract): the backend's multi-modem-wifi profile now reports
+		// its own capture device on connect, which the beforeEach navigation would
+		// otherwise fold into the store as a retained-lost extra source before a
+		// test sets this flag. Drop backend `devices` echoes from the start so only
+		// the test-injected list ever populates the source surface.
+		dropServerDevices = true;
 		holdSetConfig = false;
 		heldSetConfigId = null;
 		dropStreamStart = false;

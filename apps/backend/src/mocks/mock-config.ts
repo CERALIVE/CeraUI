@@ -59,12 +59,19 @@ export const scenarios: Record<MockScenario, ScenarioConfig> = {
 		wifi: true,
 		streaming: false,
 		description: "3 modems (4G/5G mix), WiFi with hotspot capability",
+		// Dev default resolves the FULL engine profile (H265 + hw accel +
+		// audio-capable HDMI source) so the Live UI exercises every capability-gated
+		// control out of the box. engine-starting / engine-unavailable keep the floor.
+		capabilities: { fullProfile: true },
 	},
 	"streaming-active": {
 		modems: 2,
 		wifi: true,
 		streaming: true,
 		description: "2 modems bonding, active stream with real-time stats",
+		// Active-stream dev scenario also runs the full engine profile; the resolved
+		// runtime encode is surfaced via getMockActiveEncode() (providers/streaming.ts).
+		capabilities: { fullProfile: true },
 	},
 	"caps-full": {
 		modems: 2,

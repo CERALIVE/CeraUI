@@ -208,7 +208,12 @@
 
     <div id="app"></div>
 
-    <!-- Debug: Show if JavaScript fails to load -->
+    <!--
+      Pre-boot failure screen. Renders PRE-CSS/pre-bundle, so it uses inline
+      styles with literal Ground Control hex (graphite #080d09, phosphor-lime
+      #abe841) — app.css tokens and the i18n runtime are unavailable here, hence
+      the deliberate English-only copy and no external asset requests.
+    -->
     <div
       id="js-failed"
       style="
@@ -218,19 +223,36 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: #f5f7fa;
+        background: #080d09;
+        color: #eff3f0;
         z-index: 20000;
         justify-content: center;
         align-items: center;
         flex-direction: column;
-        font-family: system-ui;
+        padding: 24px;
+        text-align: center;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
       "
     >
-      <h1 style="color: #dc2626; margin-bottom: 16px">Debug: JavaScript Failed</h1>
-      <p style="color: #374151; margin-bottom: 24px">This appears when JavaScript doesn't load within 5 seconds</p>
+      <h1 style="color: #eff3f0; font-size: 22px; font-weight: 600; margin: 0 0 12px; letter-spacing: -0.01em">
+        CeraUI didn't load
+      </h1>
+      <p style="color: #a0a6a1; font-size: 15px; line-height: 1.5; margin: 0 0 24px; max-width: 30rem">
+        Check the device connection and reload.
+      </p>
       <button
         onclick="window.location.reload()"
-        style="background: #11C4D4; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer"
+        style="
+          background: #abe841;
+          color: #080d09;
+          border: none;
+          padding: 12px 28px;
+          border-radius: 8px;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          font-family: inherit;
+        "
       >
         Reload
       </button>

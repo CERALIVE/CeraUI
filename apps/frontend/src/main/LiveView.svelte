@@ -60,6 +60,7 @@ import {
 	managedSlotLabel,
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
+import { deriveIngestReadiness } from '$lib/streaming/ingestReadiness';
 import {
 	deriveFailover,
 	normalizeOrder,
@@ -166,6 +167,20 @@ $effect(() => {
 const devices = $derived(getDevices());
 const activeInput = $derived(getActiveInput());
 let selectedInput = $state<string | undefined>(undefined);
+// Seed the pre-start input pick from the persisted config (Todo 26). Reconcile
+// ONLY when the persisted value genuinely changes so an unrelated `config`
+// broadcast — or a stale echo during an in-flight optimistic pick — can never
+// clobber the just-selected value. `lastPersistedInput` is intentionally NOT a
+// rune: writing it inside the effect tracks only `config?.selected_video_input`,
+// never `selectedInput`, so the optimistic assignment below is preserved.
+let lastPersistedInput: string | undefined;
+$effect(() => {
+	const persisted = config?.selected_video_input;
+	if (persisted !== lastPersistedInput) {
+		lastPersistedInput = persisted;
+		selectedInput = persisted;
+	}
+});
 let switchingInput = $state<string | undefined>(undefined);
 
 // Reconnect-aware reconciliation (Task 15): a live `switchInput` restarts the
@@ -264,8 +279,28 @@ async function handleSwitchAudio(inputId: string) {
 	}
 }
 
-function handleSelectInput(inputId: string) {
-	selectedInput = inputId;
+// Pre-start input pick is a REAL persisted config write (Todo 26): the operator's
+// idle selection rides `selected_video_input` through the same per-field-sync
+// lock contract as the other config edits (handleReorderSource/handleSwitchAudio),
+// so it survives a reload and is forwarded to the engine at stream start (Todo 18).
+// This is the IDLE pick path only — live input switching stays handleSwitchInput.
+const SELECTED_INPUT_FIELD = 'selected_video_input';
+
+async function handleSelectInput(inputId: string) {
+	if (inputId === selectedInput) return;
+	selectedInput = inputId; // optimistic — the field-sync lock guards the echo
+	beginFieldSync(SELECTED_INPUT_FIELD, inputId);
+	markFieldApplying(SELECTED_INPUT_FIELD);
+	try {
+		await rpc.streaming.setConfig({ selected_video_input: inputId });
+		markFieldApplied(SELECTED_INPUT_FIELD, inputId);
+	} catch {
+		// Rejected — release the lock to the authoritative value and revert the
+		// optimistic pick to whatever the server actually holds.
+		markFieldFailed(SELECTED_INPUT_FIELD, config?.selected_video_input);
+		selectedInput = config?.selected_video_input;
+		toast.error($LL.notifications.saveFailed());
+	}
 }
 
 // Operator-ordered source preference (Task 11). Display order is the persisted
@@ -306,6 +341,9 @@ const netif = $derived(getNetif());
 const hasNetwork = $derived(
 	Object.values(netif ?? {}).some((entry) => Boolean(entry?.enabled) && Boolean(entry?.ip)),
 );
+// Idle ingest panel: link-aware readiness from the SAME netif feed (Task 22). No
+// new subscription, no telemetry values shown idle (Live-Data Discipline).
+const ingestReadiness = $derived(deriveIngestReadiness(netif));
 const onboardingStartDone = $derived(isStreaming || hadSession);
 const onboardingComplete = $derived(hasNetwork && hasServer);
 const showOnboarding = $derived(!isOnboardingDismissed() && !onboardingComplete);
@@ -510,31 +548,54 @@ function clampBitrate(kbps: number): number {
 	return Math.round(Math.max(BITRATE_MIN, Math.min(BITRATE_MAX, kbps)));
 }
 
-// setBitrate applies live via the engine — NO stream stop required.
+// Commit a bitrate edit. Both paths write the SAME `max_br` field through the
+// SAME dirty-registry lock (markPending → onRpcResolved → onRpcAppliedReactive),
+// so the idle-vs-live edit is last-write-wins with no second source of truth vs
+// EncoderDialog — the server echo reconciles either way. Only the RPC differs:
+//  • streaming → setBitrate (engine hot-adjust, applies immediately, no stop),
+//  • idle      → setConfig  (persist only; applies at the next stream start).
 async function commitBitrate(kbps: number) {
 	const clamped = clampBitrate(kbps);
 	bitrateDraft = clamped;
-	// Live edit (no gating): lock max_br before the RPC so a stale config echo
-	// of the prior bitrate can't flicker the slider back; release after settle.
+	// Lock max_br before the RPC so a stale config echo of the prior bitrate can't
+	// flicker the slider back; release after settle.
 	markPending('max_br', clamped);
-	try {
-		const res = await rpc.streaming.setBitrate({ max_br: clamped });
-		onRpcResolved('max_br');
-		// Release the field-lock to the SERVER-APPLIED value (T9 envelope), never
-		// the optimistic value we sent. On success:false reconcile to the last
-		// known server value so a rejected write never sticks on the slider.
-		const applied = resolveAppliedBitrate(res, clamped, config?.max_br);
-		onRpcAppliedReactive('max_br', applied);
-		bitrateDraft = applied;
-		if (!res.success) toast.error($LL.notifications.saveFailed());
-	} catch {
-		// RPC rejected: clear the optimistic lock and reconcile to server truth so
-		// the slider is never stuck on the unconfirmed optimistic value.
-		onRpcResolved('max_br');
-		const authoritative = config?.max_br ?? clamped;
-		onRpcAppliedReactive('max_br', authoritative);
-		bitrateDraft = authoritative;
-		toast.error($LL.notifications.saveFailed());
+	if (isStreaming) {
+		try {
+			const res = await rpc.streaming.setBitrate({ max_br: clamped });
+			onRpcResolved('max_br');
+			// Release the field-lock to the SERVER-APPLIED value (T9 envelope), never
+			// the optimistic value we sent. On success:false reconcile to the last
+			// known server value so a rejected write never sticks on the slider.
+			const applied = resolveAppliedBitrate(res, clamped, config?.max_br);
+			onRpcAppliedReactive('max_br', applied);
+			bitrateDraft = applied;
+			if (!res.success) toast.error($LL.notifications.saveFailed());
+		} catch {
+			// RPC rejected: clear the optimistic lock and reconcile to server truth so
+			// the slider is never stuck on the unconfirmed optimistic value.
+			onRpcResolved('max_br');
+			const authoritative = config?.max_br ?? clamped;
+			onRpcAppliedReactive('max_br', authoritative);
+			bitrateDraft = authoritative;
+			toast.error($LL.notifications.saveFailed());
+		}
+	} else {
+		// Idle: persist without starting the stream. setConfig has no applied
+		// envelope, so release to the clamped intent and let the config echo
+		// reconcile any server-side clamp through the same lock.
+		try {
+			await rpc.streaming.setConfig({ max_br: clamped });
+			onRpcResolved('max_br');
+			onRpcAppliedReactive('max_br', clamped);
+			bitrateDraft = clamped;
+		} catch {
+			onRpcResolved('max_br');
+			const authoritative = config?.max_br ?? clamped;
+			onRpcAppliedReactive('max_br', authoritative);
+			bitrateDraft = authoritative;
+			toast.error($LL.notifications.saveFailed());
+		}
 	}
 }
 
@@ -556,7 +617,12 @@ const encoderSummary = $derived.by(() => {
 		);
 	}
 	if (bitrate) parts.push(formatBitrate(bitrate));
-	return parts.length ? parts.join(' · ') : $LL.general.notConfigured();
+	if (parts.length === 0) return $LL.general.notConfigured();
+	// Transport token (Todo 23): the active relay transport. SRTLA is the only
+	// wired bonded path; RIST/SRT surface once selected.
+	const protocol = config?.relay_protocol;
+	parts.push(protocol === 'rist' ? 'RIST' : protocol === 'srt' ? 'SRT' : 'SRTLA');
+	return parts.join(' · ');
 });
 const audioSummary = $derived.by(() => {
 	const parts: string[] = [];
@@ -754,39 +820,72 @@ const configRows = $derived<ConfigRow[]>([
 			</Card.Content>
 		</Card.Root>
 	{:else}
-		<!-- Live telemetry strip + bitrate hot-adjust — only meaningful while streaming -->
+		<!-- Live telemetry strip — only meaningful while streaming. -->
 		{#if isStreaming}
 			<StreamTelemetryStrip
 				bitrate={formatBitrate(config?.max_br)}
 				{tempSensor}
 				{uptimeSensor}
 			/>
-
-			<BitrateAdjuster
-				bitrateDraft={bitrateDraft}
-				bitrateLabel={formatBitrate(bitrateDraft)}
-				bitrateMax={BITRATE_MAX}
-				bitrateMin={BITRATE_MIN}
-				onSliderChange={(v) => {
-					interacting = true;
-					bitrateDraft = v;
-				}}
-				onSliderCommit={(v) => {
-					interacting = false;
-					commitBitrate(v);
-				}}
-				onStep={stepBitrate}
-				sliderMax={BITRATE_DEFAULT_MAX}
-				sliderMin={BITRATE_DEFAULT_MIN}
-				step={BITRATE_STEP}
-			/>
-
 		{/if}
+
+		<!-- Bitrate control — first-class on the idle surface too (Task 25). While
+		     streaming it hot-adjusts live (setBitrate); while idle it persists for
+		     the next start (setConfig), signalled by the `hint` footnote. -->
+		<BitrateAdjuster
+			bitrateDraft={bitrateDraft}
+			bitrateLabel={formatBitrate(bitrateDraft)}
+			bitrateMax={BITRATE_MAX}
+			bitrateMin={BITRATE_MIN}
+			hint={isStreaming ? undefined : $LL.live.bitrateAppliesAtStart()}
+			onSliderChange={(v) => {
+				interacting = true;
+				bitrateDraft = v;
+			}}
+			onSliderCommit={(v) => {
+				interacting = false;
+				commitBitrate(v);
+			}}
+			onStep={stepBitrate}
+			sliderMax={BITRATE_DEFAULT_MAX}
+			sliderMin={BITRATE_DEFAULT_MIN}
+			step={BITRATE_STEP}
+		/>
+
 
 		<!-- Bonded-ingest telemetry + per-session summary/export (#21). Kept mounted
 		     across the streaming→idle edge so the rollup survives stream stop. -->
 		{#if isStreaming || hadSession}
 			<IngestStats telemetry={linkTelemetry} {isStreaming} bitrateKbps={config?.max_br} />
+		{:else if ingestReadiness.state === 'links-ready'}
+			<!-- Idle ingest area, links ready: enabled+IP'd interfaces are standing by
+			     to bond. Names the ready links (iface names only — NO telemetry values,
+			     there is no live bond yet, so RTT/NAK/weight would be stale-looking
+			     fabrications; Live-Data Discipline). -->
+			<Card.Root>
+				<Card.Content class="flex flex-col items-center gap-4 px-6 py-10 text-center" data-testid="ingest-idle-ready">
+					<div class="bg-secondary grid size-12 place-items-center rounded-xl">
+						<Radio aria-hidden={true} class="text-muted-foreground h-6 w-6" />
+					</div>
+					<div class="space-y-1.5">
+						<h2 class="text-base font-semibold">{$LL.live.ingest.linksReadyTitle()}</h2>
+						<p class="text-muted-foreground mx-auto max-w-sm text-sm">
+							{$LL.live.ingest.linksReadyCount({ count: ingestReadiness.count })}
+						</p>
+					</div>
+					<div class="flex flex-wrap items-center justify-center gap-2" data-testid="ingest-idle-ready-links">
+						{#each ingestReadiness.ifaces as iface (iface)}
+							<span
+								class="bg-secondary text-secondary-foreground rounded-md px-2.5 py-1 font-mono text-xs"
+								data-iface={iface}
+							>
+								{iface}
+							</span>
+						{/each}
+					</div>
+					<p class="text-muted-foreground text-xs">{$LL.live.ingest.linksReadyHint()}</p>
+				</Card.Content>
+			</Card.Root>
 		{:else}
 			<!-- Idle ingest area: no live bond yet. Calm, informational (no telemetry
 			     values shown, so no fresh-looking stale data) — points to Network. -->
@@ -810,10 +909,12 @@ const configRows = $derived<ConfigRow[]>([
 
 	<SourceSection
 		{activeInput}
+		activeEncode={getStatus()?.active_encode ?? null}
 		audioLiveSwitchField={AUDIO_SWITCH_FIELD}
 		{audioLiveSwitchEnabled}
 		{audioSources}
 		capabilities={getCapabilities()}
+		{config}
 		{devices}
 		{isStreaming}
 			onReorderSource={handleReorderSource}
@@ -888,6 +989,7 @@ const configRows = $derived<ConfigRow[]>([
 	audioDelay={effectiveAudioDelay}
 	audioSource={effectiveAudioSource}
 	effectivePipeline={effectivePipeline}
+	onOpenEncoder={() => (encoderOpen = true)}
 	onSave={handleAudioSave}
 />
 

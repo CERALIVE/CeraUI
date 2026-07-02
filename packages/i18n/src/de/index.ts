@@ -314,6 +314,7 @@ const de = {
 		chooseDestination: "Ziel auswählen",
 		streamSettings: "Stream-Einstellungen",
 		adjustBitrate: "Bitrate anpassen",
+		bitrateAppliesAtStart: "Wird beim Streamstart übernommen",
 		stopToChange: "Stream stoppen, um zu ändern",
 		cannotStartNoPipeline:
 			"Wähle eine Videoquelle, bevor du den Stream startest",
@@ -374,6 +375,10 @@ const de = {
 			idleTitle: "Noch keine gebündelten Links",
 			idleHint:
 				"Fügen Sie in Netzwerk Mobilfunk-, WLAN- oder Ethernet-Links hinzu, um die Bündelung zu starten. Ingest-Telemetrie erscheint hier, sobald der Stream läuft.",
+			linksReadyTitle: "Links bereit",
+			linksReadyCount: "{count} {{Link|Links}} bereit zum Bündeln",
+			linksReadyHint:
+				"Bündelungs-Telemetrie erscheint, sobald der Stream läuft.",
 			healthy: "Stabil",
 			degraded: "Verschlechtert sich",
 			alert: "Steigende Latenz auf einer oder mehreren Verbindungen",
@@ -396,8 +401,10 @@ const de = {
 			toggleAria: "Live-Vorschau umschalten",
 			connecting: "Verbinde\u2026",
 			reconnecting: "Verbinde erneut\u2026",
+			reconnectingAttempt: "Verbinde erneut\u2026 (Versuch {attempt})",
 			waiting: "Warte auf Video\u2026",
 			noSignal: "Kein Signal",
+			off: "Vorschau aus \u2014 starten, um das Eingangssignal zu sehen",
 			unsupported: "Live-Vorschau wird in diesem Browser nicht unterstützt",
 			error: "Vorschau nicht verfügbar",
 			compatBadge: "Kompatibilitätsmodus",
@@ -405,6 +412,20 @@ const de = {
 			audioLabel: "Audiopegel",
 			audioSilent: "Stille",
 			channelAria: "Pegel Kanal {n}",
+			unavailable: {
+				engineStarting: {
+					title: "Engine startet",
+					body: "Die Streaming-Engine startet noch. Die Vorschau erscheint, sobald sie bereit ist.",
+				},
+				engineOffline: {
+					title: "Engine offline",
+					body: "Die Streaming-Engine ist offline. Die Vorschau ist nicht verfügbar, bis sie wieder erreichbar ist.",
+				},
+				previewUnavailable: {
+					title: "Vorschau nicht verfügbar",
+					body: "Diese Engine stellt auf diesem Gerät keinen Vorschau-Feed bereit.",
+				},
+			},
 		},
 		inputPicker: {
 			title: "Eingangsquellen",
@@ -434,6 +455,10 @@ const de = {
 				test: "Test",
 				audio: "Audio",
 				other: "Sonstiges",
+				uvc_h264: "UVC H.264",
+				uvc_h265: "UVC H.265",
+				mjpeg: "MJPEG",
+				camlink: "Cam Link",
 			},
 		},
 		sourcePreference: {
@@ -472,6 +497,9 @@ const de = {
 			none: "Keine Quelle ausgewählt",
 			select: "Quelle auswählen",
 			capabilities: "Fähigkeiten",
+			deviceMax: "Geräte-Maximum",
+			activeLive: "Live",
+			activeConfigured: "Konfiguriert",
 			lostTitle: "Gerät getrennt",
 			lostBody:
 				"Schließen Sie das Gerät wieder an, um das Streaming von dieser Quelle fortzusetzen.",
@@ -547,6 +575,10 @@ const de = {
 			bitrateRangeHint: "Unterstützter Bereich",
 			bitrateClamped: "An den unterstützten Bereich angepasst",
 			probedCaps: "Erkannte Fähigkeiten",
+			codecAuto: "Auto (recommended)",
+			codecAutoResolvedH265: "Auto — H.265 on this device",
+			codecAutoResolvedH264: "Auto — H.264 on this device",
+			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 		},
 	},
 	dialogs: {

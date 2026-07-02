@@ -7,7 +7,12 @@
  * single-vs-multiple audio rendering decision and the capability summary can be
  * unit-tested in isolation, and the component stays presentational.
  */
-import type { CapabilitiesMessage } from "@ceraui/rpc/schemas";
+import type {
+	ActiveEncode,
+	CapabilitiesMessage,
+	ConfigMessage,
+} from "@ceraui/rpc/schemas";
+import { fromEngineResolution } from "@ceraui/rpc/schemas";
 
 /**
  * How the audio-source control should render:
@@ -95,4 +100,95 @@ export function formatCodec(codec: string): string {
 		default:
 			return codec.toUpperCase();
 	}
+}
+
+/** SRTLA is the only wired bonded path — the transport-token floor. */
+const SRTLA_TRANSPORT = "SRTLA";
+
+/** Relay transport → display token. */
+const TRANSPORT_TOKENS: Record<string, string> = {
+	srtla: SRTLA_TRANSPORT,
+	srt: "SRT",
+	rist: "RIST",
+};
+
+/**
+ * The active relay transport token for the configured destination. The selected
+ * protocol wins only when the engine actually offers it (`caps.transports`);
+ * otherwise we fall back to SRTLA — the sole always-wired bonded transport — so
+ * the summary never claims a transport the engine can't honor. Pure; tolerates a
+ * missing config or capability snapshot.
+ */
+export function resolveTransportToken(
+	config: ConfigMessage | undefined,
+	caps: CapabilitiesMessage | undefined,
+): string {
+	const protocol = config?.relay_protocol;
+	const offered = caps?.transports;
+	if (protocol && (!offered || offered.includes(protocol))) {
+		return TRANSPORT_TOKENS[protocol] ?? protocol.toUpperCase();
+	}
+	return SRTLA_TRANSPORT;
+}
+
+/**
+ * The ACTIVE encode configuration — what the device is actually doing (streaming)
+ * or the saved config it will start with (idle). Distinct from the platform
+ * CAPABILITY summary: these are settings, never the hardware ceiling.
+ */
+export interface ActiveSummary {
+	/**
+	 * `true` when the values are engine truth (`active_encode`, i.e. streaming);
+	 * `false` when they are the saved config (idle). Engine truth WINS while
+	 * streaming so a stale requested value is never shown as if it were active.
+	 */
+	live: boolean;
+	/** Resolved source/input label (engine `active_input`, else saved input/pipeline). */
+	source: string | undefined;
+	/** Display resolution — a token (`1080p`) when resolvable, else the raw `WxH`. */
+	resolution: string | undefined;
+	framerate: number | undefined;
+	/** Human codec label (`H.265`); undefined when neither engine nor config set one. */
+	codec: string | undefined;
+	/** Relay transport token (`SRTLA`). */
+	transport: string;
+}
+
+/**
+ * Derive the active-encode summary, preferring engine truth (`activeEncode`,
+ * present only while streaming) over the saved `config` (idle). Pure and
+ * defensive: a missing config, active_encode, or capability snapshot degrades to
+ * `undefined` fields (never a fabricated or capability-derived value), except the
+ * transport token which always resolves (SRTLA floor).
+ */
+export function deriveActiveSummary(
+	config: ConfigMessage | undefined,
+	activeEncode: ActiveEncode | null | undefined,
+	caps: CapabilitiesMessage | undefined,
+): ActiveSummary {
+	const live = Boolean(activeEncode);
+
+	const source = live
+		? (activeEncode?.active_input ??
+			config?.selected_video_input ??
+			config?.pipeline)
+		: (config?.selected_video_input ?? config?.pipeline);
+
+	const resolution = live
+		? (fromEngineResolution(activeEncode?.resolution ?? "") ??
+			activeEncode?.resolution)
+		: config?.resolution;
+
+	const framerate = live ? activeEncode?.framerate : config?.framerate;
+
+	const codecToken = live ? activeEncode?.codec : config?.video_codec;
+
+	return {
+		live,
+		source: source || undefined,
+		resolution: resolution || undefined,
+		framerate: typeof framerate === "number" ? framerate : undefined,
+		codec: codecToken ? formatCodec(codecToken) : undefined,
+		transport: resolveTransportToken(config, caps),
+	};
 }

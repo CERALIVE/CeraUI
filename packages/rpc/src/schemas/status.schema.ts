@@ -77,6 +77,21 @@ export const bufferingStatusSchema = z.object({
 });
 export type BufferingStatus = z.infer<typeof bufferingStatusSchema>;
 
+// Realized runtime encode reported by the engine on the `status` event
+// (cerastream `ActiveEncode`, cerastream Todo 10). Reflects the RESOLVED graph
+// (post platform-default/override), NOT the requested StartParams. Additive +
+// nullable+optional on the status response — an older engine that never emits it
+// surfaces no field (same capability-gate pattern as `buffering` above).
+// snake_case mirrors the engine wire shape so the backend passes it through.
+export const activeEncodeSchema = z.object({
+	codec: z.string(),
+	resolution: z.string(),
+	framerate: z.number(),
+	active_input: z.string().optional(),
+	decoder: z.string().optional(),
+});
+export type ActiveEncode = z.infer<typeof activeEncodeSchema>;
+
 // Status response message schema (what server sends)
 export const statusResponseSchema = z.object({
 	is_streaming: z.boolean().optional(),
@@ -90,5 +105,6 @@ export const statusResponseSchema = z.object({
 	remote: remoteStatusSchema.optional(),
 	linkTelemetry: linkTelemetryMessageSchema.nullable().optional(),
 	buffering: bufferingStatusSchema.nullable().optional(),
+	active_encode: activeEncodeSchema.nullable().optional(),
 });
 export type StatusResponse = z.infer<typeof statusResponseSchema>;
