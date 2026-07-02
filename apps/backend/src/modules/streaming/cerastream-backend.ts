@@ -495,6 +495,26 @@ export class CerastreamBackend implements StreamingBackend {
 		return this.requireClient().listDevices(params);
 	}
 
+	/**
+	 * Device snapshot for the device registry (Todo 17). Returns the engine's
+	 * `list-devices` result ONLY while a control client is live (a stream session
+	 * holds the connection); returns `null` when idle so the registry falls back
+	 * to its local v4l2 scan. Never opens a connection of its own — no per-poll
+	 * connect churn — and never throws (a failed call degrades to `null`).
+	 */
+	async listDevicesIfActive(): Promise<ListDevicesResult | null> {
+		const client = this.client;
+		if (!client) return null;
+		try {
+			return await client.listDevices();
+		} catch (err) {
+			this.deps.logger.debug("cerastream: registry listDevices failed", {
+				err,
+			});
+			return null;
+		}
+	}
+
 	// `switch-audio` is an additive Phase-1.5 method kept OUT of the binding's
 	// frozen V1 `requestSchemas`, so the typed client exposes no `switchAudio()`.
 	// Dispatch it through the client's raw JSON-RPC primitive, validating both
@@ -657,11 +677,15 @@ export class CerastreamBackend implements StreamingBackend {
 		};
 		return {
 			...(inputId !== undefined ? { input_id: inputId } : {}),
-			...(config.video_codec !== undefined ? { codec: config.video_codec } : {}),
+			...(config.video_codec !== undefined
+				? { codec: config.video_codec }
+				: {}),
 			...(config.resolution !== undefined
 				? { resolution: toEngineResolution(config.resolution) }
 				: {}),
-			...(config.framerate !== undefined ? { framerate: config.framerate } : {}),
+			...(config.framerate !== undefined
+				? { framerate: config.framerate }
+				: {}),
 			...(Object.keys(audio).length > 0 ? { audio } : {}),
 		};
 	}
