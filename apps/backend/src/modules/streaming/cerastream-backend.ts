@@ -65,7 +65,7 @@ import {
 	switchAudioResultSchema,
 	writeCerastreamConfig,
 } from "@ceralive/cerastream";
-import type { BufferingStatus } from "@ceraui/rpc/schemas";
+import type { ActiveEncode, BufferingStatus } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { logger as defaultLogger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
@@ -182,6 +182,39 @@ export function extractBufferingStatus(event: unknown): BufferingStatus | null {
 		...(typeof e.disk_warning === "boolean"
 			? { disk_warning: e.disk_warning }
 			: {}),
+	};
+}
+
+/**
+ * Read the additive `active_encode` field off a cerastream `status` event
+ * (cerastream Todo 10 `ActiveEncode`) — the RESOLVED runtime encode, not the
+ * requested StartParams. Returns `null` when the engine does not report it
+ * (`active_encode` absent/partial), so an older engine surfaces no field — the
+ * same capability gate `extractBufferingStatus` applies. `codec`/`resolution`/
+ * `framerate` are all required for a usable payload; `active_input`/`decoder` are
+ * optional. Read defensively so a malformed frame can never throw.
+ */
+export function extractActiveEncode(event: unknown): ActiveEncode | null {
+	if (event === null || typeof event !== "object") return null;
+	const ae = (event as Record<string, unknown>).active_encode;
+	if (ae === null || typeof ae !== "object") return null;
+	const a = ae as Record<string, unknown>;
+	if (
+		typeof a.codec !== "string" ||
+		typeof a.resolution !== "string" ||
+		typeof a.framerate !== "number" ||
+		!Number.isFinite(a.framerate)
+	) {
+		return null;
+	}
+	return {
+		codec: a.codec,
+		resolution: a.resolution,
+		framerate: a.framerate,
+		...(typeof a.active_input === "string"
+			? { active_input: a.active_input }
+			: {}),
+		...(typeof a.decoder === "string" ? { decoder: a.decoder } : {}),
 	};
 }
 
@@ -483,12 +516,14 @@ export class CerastreamBackend implements StreamingBackend {
 				break;
 			case "status": {
 				const buffering = extractBufferingStatus(event);
+				const activeEncode = extractActiveEncode(event);
 				this.telemetry = {
 					...this.telemetry,
 					state: event.state,
 					streaming: event.streaming,
 					...(event.active_input ? { active_input: event.active_input } : {}),
 					...(buffering ? { buffering } : {}),
+					...(activeEncode ? { active_encode: activeEncode } : {}),
 				};
 				this.deps.bridge.broadcastStatus();
 				if (buffering) this.deps.bridge.broadcastBuffering(buffering);

@@ -283,6 +283,8 @@ export const getConfigProcedure = authedProcedure
 			bitrate_overlay,
 			resolution,
 			framerate,
+			video_codec: config.video_codec,
+			selected_video_input: config.selected_video_input,
 			srtla_addr: config.srtla_addr,
 			srtla_port: config.srtla_port,
 			srt_streamid: config.srt_streamid,
@@ -349,6 +351,10 @@ export const setConfigProcedure = authedProcedure
 		if (input.max_br !== undefined) config.max_br = clampBitrate(input.max_br);
 		if (input.resolution !== undefined) config.resolution = input.resolution;
 		if (input.framerate !== undefined) config.framerate = input.framerate;
+		if (input.video_codec !== undefined)
+			config.video_codec = input.video_codec;
+		if (input.selected_video_input !== undefined)
+			config.selected_video_input = input.selected_video_input;
 		if (input.bitrate_overlay !== undefined)
 			config.bitrate_overlay = input.bitrate_overlay;
 
@@ -404,6 +410,10 @@ export const setConfigProcedure = authedProcedure
 		if (input.max_br !== undefined) applied.max_br = config.max_br;
 		if (input.resolution !== undefined) applied.resolution = config.resolution;
 		if (input.framerate !== undefined) applied.framerate = config.framerate;
+		if (input.video_codec !== undefined)
+			applied.video_codec = config.video_codec;
+		if (input.selected_video_input !== undefined)
+			applied.selected_video_input = config.selected_video_input;
 		if (input.bitrate_overlay !== undefined)
 			applied.bitrate_overlay = config.bitrate_overlay;
 		if (input.relay_server !== undefined)
