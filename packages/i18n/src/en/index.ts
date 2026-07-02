@@ -390,6 +390,9 @@ const en = {
 			inactive: "Service not running",
 			selected: "Selected",
 			serviceInactive: "The {protocol:string} ingest service isn't running yet.",
+			noAddress:
+				"The {protocol:string} gateway is running, but this device has no LAN or hotspot address to publish to. Join a Wi-Fi or Ethernet network, or enable the device hotspot.",
+			noAddressStatus: "No reachable address",
 			streamingLocked: "Stop the stream to change the video source.",
 			instructionsToggle: "How to publish",
 			instructions:
@@ -520,6 +523,7 @@ const en = {
 				unsupportedPlatform: "Not supported on this platform",
 				fixedBySource: "Fixed by the selected source",
 				gatewayInactive: "Network ingest gateway is not running",
+				gatewayNoAddress: "No reachable LAN or hotspot address",
 			},
 			info: "About {field:string}",
 			close: "Got it",

@@ -943,6 +943,9 @@ const zh = {
 			inactive: "服务未运行",
 			selected: "已选择",
 			serviceInactive: "{protocol} 接入服务尚未运行。",
+			noAddress:
+				"{protocol} 网关正在运行，但此设备没有可用于发布的局域网或热点地址。请连接 Wi-Fi 或以太网网络，或启用设备热点。",
+			noAddressStatus: "无可达地址",
 			streamingLocked: "停止直播后才能更改视频源。",
 			instructionsToggle: "如何推流",
 			instructions: "将手机或编码器指向此地址，然后开始推流。",
@@ -1068,6 +1071,7 @@ const zh = {
 				unsupportedPlatform: "此平台不支持",
 				fixedBySource: "由所选来源固定",
 				gatewayInactive: "网络接入网关未运行",
+				gatewayNoAddress: "无可达的局域网或热点地址",
 			},
 			info: "关于{field}",
 			close: "知道了",

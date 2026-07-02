@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
 	isPipelineAvailable,
 	PIPELINE_GATEWAY_INACTIVE,
+	PIPELINE_GATEWAY_NO_ADDRESS,
 	pipelineAvailability,
 	pipelineViews,
 } from "./pipelineAvailability";
@@ -85,6 +86,40 @@ describe("pipelineAvailability — gateway-inactive case", () => {
 		if (!verdict.available) {
 			expect(verdict.reason).toBe(PIPELINE_GATEWAY_INACTIVE);
 		}
+	});
+});
+
+describe("pipelineAvailability — addressless case (gateway up, url null)", () => {
+	// The gateway service is running but no reachable LAN/hotspot address exists
+	// (modem-only). This is a DISTINCT verdict from gateway-inactive.
+	const addressless: NetworkIngest = {
+		rtmp: {
+			service_active: true,
+			url: null,
+			unavailable_reason: "no_lan_or_hotspot_address",
+		},
+		srt: { service_active: true, url: "srt://192.168.1.100:4001" },
+	};
+
+	it("blocks an rtmp pipeline with the DISTINCT no-address reason when url is null", () => {
+		const verdict = pipelineAvailability(
+			makePipeline({ requires_gateway: "rtmp" }),
+			addressless,
+		);
+		expect(verdict.available).toBe(false);
+		if (!verdict.available) {
+			expect(verdict.reason).toBe(PIPELINE_GATEWAY_NO_ADDRESS);
+			expect(verdict.reason).not.toBe(PIPELINE_GATEWAY_INACTIVE);
+			expect(verdict.reason.length).toBeGreaterThan(0);
+		}
+	});
+
+	it("keeps the sibling srt pipeline (which still has a url) available", () => {
+		const verdict = pipelineAvailability(
+			makePipeline({ requires_gateway: "srt" }),
+			addressless,
+		);
+		expect(verdict.available).toBe(true);
 	});
 });
 

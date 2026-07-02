@@ -1177,6 +1177,9 @@ const fr = {
 			inactive: "Service inactif",
 			selected: "Sélectionné",
 			serviceInactive: "Le service d'entrée {protocol} n'est pas encore actif.",
+			noAddress:
+				"La passerelle {protocol} fonctionne, mais cet appareil n'a aucune adresse LAN ou point d'accès pour la publication. Connectez-vous à un réseau Wi-Fi ou Ethernet, ou activez le point d'accès de l'appareil.",
+			noAddressStatus: "Aucune adresse joignable",
 			streamingLocked: "Arrêtez la diffusion pour changer la source vidéo.",
 			instructionsToggle: "Comment publier",
 			instructions:
@@ -1310,6 +1313,7 @@ const fr = {
 				unsupportedPlatform: "Non pris en charge sur cette plateforme",
 				fixedBySource: "Fixé par la source sélectionnée",
 				gatewayInactive: "La passerelle d'ingestion réseau n'est pas active",
+				gatewayNoAddress: "Aucune adresse LAN ou point d'accès joignable",
 			},
 			info: "À propos de {field}",
 			close: "Compris",

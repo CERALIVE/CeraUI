@@ -1124,6 +1124,9 @@ const ar = {
 			inactive: "الخدمة لا تعمل",
 			selected: "محدَّد",
 			serviceInactive: "خدمة استقبال {protocol} لا تعمل بعد.",
+			noAddress:
+				"بوابة {protocol} قيد التشغيل، لكن هذا الجهاز لا يملك عنوان شبكة محلية أو نقطة اتصال للنشر. اتصل بشبكة Wi-Fi أو إيثرنت، أو فعّل نقطة اتصال الجهاز.",
+			noAddressStatus: "لا يوجد عنوان يمكن الوصول إليه",
 			streamingLocked: "أوقف البث لتغيير مصدر الفيديو.",
 			instructionsToggle: "كيفية النشر",
 			instructions: "وجِّه هاتفك أو المُشفِّر إلى هذا العنوان ثم ابدأ النشر.",
@@ -1250,6 +1253,7 @@ const ar = {
 				unsupportedPlatform: "غير مدعوم على هذه المنصة",
 				fixedBySource: "محدد بواسطة المصدر المختار",
 				gatewayInactive: "بوابة استقبال الشبكة غير قيد التشغيل",
+				gatewayNoAddress: "لا يوجد عنوان شبكة محلية أو نقطة اتصال يمكن الوصول إليه",
 			},
 			info: "حول {field}",
 			close: "فهمت",

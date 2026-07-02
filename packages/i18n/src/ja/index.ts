@@ -1019,6 +1019,9 @@ const ja = {
 			inactive: "サービス停止中",
 			selected: "選択済み",
 			serviceInactive: "{protocol} 受信サービスはまだ稼働していません。",
+			noAddress:
+				"{protocol} ゲートウェイは稼働していますが、このデバイスには公開できる LAN またはホットスポットのアドレスがありません。Wi-Fi または Ethernet ネットワークに接続するか、デバイスのホットスポットを有効にしてください。",
+			noAddressStatus: "到達可能なアドレスがありません",
 			streamingLocked: "映像ソースを変更するにはストリームを停止してください。",
 			instructionsToggle: "配信方法",
 			instructions:
@@ -1150,6 +1153,7 @@ const ja = {
 				unsupportedPlatform: "このプラットフォームではサポートされていません",
 				fixedBySource: "選択したソースによって固定されています",
 				gatewayInactive: "ネットワーク受信ゲートウェイが実行されていません",
+				gatewayNoAddress: "到達可能な LAN またはホットスポットのアドレスがありません",
 			},
 			info: "{field}について",
 			close: "了解",

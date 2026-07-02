@@ -32,6 +32,21 @@ export const PIPELINE_GATEWAY_INACTIVE =
 	"live.education.reason.gatewayInactive" as const;
 
 /**
+ * i18n key for the disabled-reason tooltip shown on an rtmp/srt pipeline whose
+ * gateway IS running but has no reachable LAN/hotspot address to advertise (the
+ * `service_active: true, url: null, unavailable_reason: "no_lan_or_hotspot_address"`
+ * state — e.g. modem-only connectivity, where a WWAN IP is never published).
+ *
+ * This is DISTINCT from {@link PIPELINE_GATEWAY_INACTIVE}: the gateway is up, so
+ * the fix is "join a LAN or enable the device hotspot", not "start the service".
+ * Keeping the two reasons separate lets every surface show the RIGHT copy for the
+ * RIGHT problem. The English text lives in `packages/i18n/src/en/index.ts` under
+ * `live.education.reason.gatewayNoAddress`.
+ */
+export const PIPELINE_GATEWAY_NO_ADDRESS =
+	"live.education.reason.gatewayNoAddress" as const;
+
+/**
  * The availability verdict for a single pipeline. `available: true` ⇒ selectable
  * / startable; `available: false` carries the disabled-reason i18n key so the
  * caller renders it disabled-with-reason (a non-empty title/reason — never a bare
@@ -48,12 +63,19 @@ const AVAILABLE: PipelineAvailability = { available: true };
  *
  * - A pipeline with no `requires_gateway` (every direct-capture source: hdmi,
  *   uvc, test, …) is ALWAYS available — no gateway dependency.
- * - An rtmp/srt pipeline is available only when its gateway reports
- *   `service_active === true`. It is blocked (disabled-with-reason) when the
- *   gateway is inactive, when the protocol slot is `null` (board caps exclude it)
- *   or when the whole `network_ingest` surface is absent/`null` (an older backend
- *   that never emits it, or the status snapshot has not arrived yet) — fail-safe:
- *   no proof the gateway is up ⇒ do not offer a start that would fail.
+ * - An rtmp/srt pipeline has THREE outcomes:
+ *   1. `service_active === true` AND a non-null `url` ⇒ AVAILABLE (a reachable
+ *      LAN/hotspot publish address exists).
+ *   2. `service_active === true` but `url === null` (the addressless
+ *      `no_lan_or_hotspot_address` state — gateway up, no reachable LAN/hotspot
+ *      address, e.g. modem-only) ⇒ blocked with {@link PIPELINE_GATEWAY_NO_ADDRESS}
+ *      (a DISTINCT reason: the fix is "join a LAN / enable the hotspot", not
+ *      "start the service").
+ *   3. gateway inactive, the protocol slot `null` (board caps exclude it), or the
+ *      whole `network_ingest` surface absent/`null` (an older backend that never
+ *      emits it, or the status snapshot has not arrived yet) ⇒ blocked with
+ *      {@link PIPELINE_GATEWAY_INACTIVE} — fail-safe: no proof the gateway is up ⇒
+ *      do not offer a start that would fail.
  *
  * @param pipeline the pipeline entry (only its `requires_gateway` is read), or
  *   `undefined` when no source is selected — treated as available (nothing to gate).
@@ -66,7 +88,14 @@ export function pipelineAvailability(
 	const kind = pipeline?.requires_gateway;
 	if (kind === undefined) return AVAILABLE;
 	const status = networkIngest?.[kind];
-	if (status?.service_active === true) return AVAILABLE;
+	if (status?.service_active === true) {
+		// Gateway running: available only when a reachable publish address exists.
+		// A `null` url is the addressless state (modem-only) — a DISTINCT reason.
+		if (status.url === null) {
+			return { available: false, reason: PIPELINE_GATEWAY_NO_ADDRESS };
+		}
+		return AVAILABLE;
+	}
 	return { available: false, reason: PIPELINE_GATEWAY_INACTIVE };
 }
 

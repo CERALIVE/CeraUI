@@ -994,6 +994,9 @@ const ko = {
 			inactive: "서비스 중지됨",
 			selected: "선택됨",
 			serviceInactive: "{protocol} 인제스트 서비스가 아직 실행되지 않았습니다.",
+			noAddress:
+				"{protocol} 게이트웨이는 실행 중이지만 이 장치에 게시할 LAN 또는 핫스팟 주소가 없습니다. Wi-Fi 또는 이더넷 네트워크에 연결하거나 장치 핫스팟을 활성화하세요.",
+			noAddressStatus: "연결 가능한 주소 없음",
 			streamingLocked: "영상 소스를 변경하려면 스트림을 중지하세요.",
 			instructionsToggle: "송출 방법",
 			instructions: "휴대폰이나 인코더를 이 주소로 지정한 다음 송출을 시작하세요.",
@@ -1122,6 +1125,7 @@ const ko = {
 				unsupportedPlatform: "이 플랫폼에서 지원되지 않음",
 				fixedBySource: "선택한 소스에 의해 고정됨",
 				gatewayInactive: "네트워크 인제스트 게이트웨이가 실행 중이 아닙니다",
+				gatewayNoAddress: "연결 가능한 LAN 또는 핫스팟 주소 없음",
 			},
 			info: "{field} 정보",
 			close: "확인",

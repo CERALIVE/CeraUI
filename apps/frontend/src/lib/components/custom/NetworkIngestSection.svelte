@@ -51,7 +51,10 @@ import {
 	markFieldApplying,
 	markFieldFailed,
 } from '$lib/rpc/field-sync-state.svelte';
-import { pipelineAvailability } from '$lib/streaming/pipelineAvailability';
+import {
+	PIPELINE_GATEWAY_NO_ADDRESS,
+	pipelineAvailability,
+} from '$lib/streaming/pipelineAvailability';
 
 interface Props {
 	/** `status.network_ingest` — a `null`/absent protocol renders nothing. */
@@ -95,13 +98,20 @@ interface IngestRow {
 	protocol: RequiresGateway;
 	pipelineId: string;
 	label: string;
-	url: string;
+	/** Publish URL, or `null` in the addressless (`no_lan_or_hotspot_address`) state. */
+	url: string | null;
 	serviceActive: boolean;
 	selected: boolean;
-	/** Disabled when the gateway service is down OR while streaming. */
+	/** Disabled when the gateway is blocked (down OR addressless) OR while streaming. */
 	disabled: boolean;
 	/** Human reason for the `title` tooltip when disabled (empty when actionable). */
 	reason: string;
+	/** Short status sub-label under the row label. */
+	statusLabel: string;
+	/** Whether the status sub-label uses the warning treatment. */
+	statusWarn: boolean;
+	/** Publish instructions (URL + copy + QR) render only when a url exists. */
+	showInstructions: boolean;
 }
 
 const rows = $derived.by<IngestRow[]>(() => {
@@ -113,31 +123,47 @@ const rows = $derived.by<IngestRow[]>(() => {
 		if (!entry) continue;
 		const pipelineId = pipelineIdFor(protocol);
 		const serviceActive = entry.service_active;
+		const label = VIDEO_SOURCE_LABELS[protocol] ?? protocol;
 		// Gateway-availability is the ONE shared rule (Todo 19): route it through
-		// pipelineAvailability instead of re-deriving `!service_active` inline. The
-		// row is definitionally a gateway source (rtmp/srt), so fall back to a
+		// pipelineAvailability instead of re-deriving `!service_active`/`url` inline.
+		// The row is definitionally a gateway source (rtmp/srt), so fall back to a
 		// synthetic gateway pipeline if the registry hasn't loaded — fail-safe.
-		const gatewayBlocked = !pipelineAvailability(
+		const availability = pipelineAvailability(
 			pipelines?.[pipelineId] ?? { requires_gateway: protocol },
 			networkIngest,
-		).available;
+		);
+		const gatewayBlocked = !availability.available;
+		// The addressless state (gateway up, no LAN/hotspot address) carries a
+		// DISTINCT reason so the operator gets "join a LAN / enable hotspot", not
+		// "start the service".
+		const addressless =
+			gatewayBlocked && availability.reason === PIPELINE_GATEWAY_NO_ADDRESS;
 		const disabled = gatewayBlocked || isStreaming;
-		const reason = gatewayBlocked
-			? $LL.live.networkIngest.serviceInactive({
-					protocol: VIDEO_SOURCE_LABELS[protocol] ?? protocol,
-				})
-			: isStreaming
-				? $LL.live.networkIngest.streamingLocked()
-				: '';
+		let reason = '';
+		if (addressless) {
+			reason = $LL.live.networkIngest.noAddress({ protocol: label });
+		} else if (gatewayBlocked) {
+			reason = $LL.live.networkIngest.serviceInactive({ protocol: label });
+		} else if (isStreaming) {
+			reason = $LL.live.networkIngest.streamingLocked();
+		}
 		out.push({
 			protocol,
 			pipelineId,
-			label: VIDEO_SOURCE_LABELS[protocol] ?? protocol,
+			label,
 			url: entry.url,
 			serviceActive,
 			selected: selectedPipeline === pipelineId,
 			disabled,
 			reason,
+			statusLabel: addressless
+				? $LL.live.networkIngest.noAddressStatus()
+				: serviceActive
+					? $LL.live.networkIngest.active()
+					: $LL.live.networkIngest.inactive(),
+			statusWarn: addressless || !serviceActive,
+			// No url ⇒ nothing to encode into a QR or copy: suppress the panel.
+			showInstructions: entry.url !== null,
 		});
 	}
 	return out;
@@ -184,7 +210,8 @@ $effect(() => {
 	};
 });
 
-async function copyUrl(url: string): Promise<void> {
+async function copyUrl(url: string | null): Promise<void> {
+	if (!url) return;
 	try {
 		await navigator.clipboard.writeText(url);
 		toast.success($LL.live.networkIngest.copied());
@@ -227,14 +254,12 @@ async function copyUrl(url: string): Promise<void> {
 							<span class="flex min-w-0 flex-col">
 								<span class="truncate text-sm font-medium">{row.label}</span>
 								<span
-									class="text-xs {row.serviceActive
-										? 'text-muted-foreground'
-										: 'text-status-warning'}"
+									class="text-xs {row.statusWarn
+										? 'text-status-warning'
+										: 'text-muted-foreground'}"
 									data-testid={`network-ingest-status-${row.protocol}`}
 								>
-									{row.serviceActive
-										? $LL.live.networkIngest.active()
-										: $LL.live.networkIngest.inactive()}
+									{row.statusLabel}
 								</span>
 							</span>
 							{#if row.selected}
@@ -247,7 +272,9 @@ async function copyUrl(url: string): Promise<void> {
 							{/if}
 						</button>
 
-						<!-- Expandable "how to publish" panel (URL + copy + QR + info). -->
+						<!-- Expandable "how to publish" panel (URL + copy + QR + info).
+						     Suppressed in the addressless state — there is no url to publish to. -->
+						{#if row.showInstructions && row.url}
 						<details class="group mt-1.5">
 							<summary
 								class="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 text-xs font-medium select-none"
@@ -295,6 +322,7 @@ async function copyUrl(url: string): Promise<void> {
 								</div>
 							</div>
 						</details>
+						{/if}
 					</li>
 				{/each}
 			</ul>

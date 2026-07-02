@@ -1153,6 +1153,9 @@ const ptBR = {
 			inactive: "Serviço parado",
 			selected: "Selecionado",
 			serviceInactive: "O serviço de entrada {protocol} ainda não está em execução.",
+			noAddress:
+				"O gateway {protocol} está em execução, mas este dispositivo não tem nenhum endereço de LAN ou ponto de acesso para publicar. Conecte-se a uma rede Wi-Fi ou Ethernet, ou ative o ponto de acesso do dispositivo.",
+			noAddressStatus: "Nenhum endereço acessível",
 			streamingLocked: "Pare a transmissão para alterar a fonte de vídeo.",
 			instructionsToggle: "Como publicar",
 			instructions:
@@ -1284,6 +1287,7 @@ const ptBR = {
 				unsupportedPlatform: "Não suportado nesta plataforma",
 				fixedBySource: "Fixado pela fonte selecionada",
 				gatewayInactive: "O gateway de ingestão de rede não está em execução",
+				gatewayNoAddress: "Nenhum endereço de LAN ou ponto de acesso acessível",
 			},
 			info: "Sobre {field}",
 			close: "Entendi",

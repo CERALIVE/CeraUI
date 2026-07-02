@@ -405,6 +405,9 @@ const de = {
 			inactive: "Dienst läuft nicht",
 			selected: "Ausgewählt",
 			serviceInactive: "Der {protocol}-Eingangsdienst läuft noch nicht.",
+			noAddress:
+				"Das {protocol}-Gateway läuft, aber dieses Gerät hat keine LAN- oder Hotspot-Adresse zum Veröffentlichen. Verbinde dich mit einem WLAN- oder Ethernet-Netzwerk oder aktiviere den Geräte-Hotspot.",
+			noAddressStatus: "Keine erreichbare Adresse",
 			streamingLocked: "Beende den Stream, um die Videoquelle zu ändern.",
 			instructionsToggle: "So sendest du",
 			instructions:
@@ -537,6 +540,7 @@ const de = {
 				unsupportedPlatform: "Auf dieser Plattform nicht unterstützt",
 				fixedBySource: "Durch die gewählte Quelle festgelegt",
 				gatewayInactive: "Netzwerk-Ingest-Gateway läuft nicht",
+				gatewayNoAddress: "Keine erreichbare LAN- oder Hotspot-Adresse",
 			},
 			info: "Über {field}",
 			close: "Verstanden",

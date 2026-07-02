@@ -405,6 +405,9 @@ const es = {
 			inactive: "Servicio detenido",
 			selected: "Seleccionado",
 			serviceInactive: "El servicio de entrada {protocol} aún no está en ejecución.",
+			noAddress:
+				"La puerta de enlace {protocol} está en ejecución, pero este dispositivo no tiene ninguna dirección de LAN o punto de acceso para publicar. Conéctate a una red Wi-Fi o Ethernet, o activa el punto de acceso del dispositivo.",
+			noAddressStatus: "Sin dirección accesible",
 			streamingLocked: "Detén la transmisión para cambiar la fuente de vídeo.",
 			instructionsToggle: "Cómo publicar",
 			instructions:
@@ -537,6 +540,7 @@ const es = {
 				unsupportedPlatform: "No compatible con esta plataforma",
 				fixedBySource: "Fijado por la fuente seleccionada",
 				gatewayInactive: "La puerta de enlace de ingesta de red no está en ejecución",
+				gatewayNoAddress: "Sin dirección de LAN o punto de acceso accesible",
 			},
 			info: "Acerca de {field}",
 			close: "Entendido",

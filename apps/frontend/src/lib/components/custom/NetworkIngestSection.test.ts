@@ -156,6 +156,36 @@ describe("NetworkIngestSection — inactive gateway is disabled-with-reason", ()
 	});
 });
 
+describe("NetworkIngestSection — addressless gateway is disabled-with-reason, no panel", () => {
+	it("renders the row visible + disabled with the join-LAN/hotspot reason and NO QR/copy panel", () => {
+		const ingest: NetworkIngest = {
+			rtmp: {
+				service_active: true,
+				url: null,
+				unavailable_reason: "no_lan_or_hotspot_address",
+			},
+			srt: { service_active: true, url: SRT_URL },
+		};
+		const { getByTestId, queryByTestId } = render(NetworkIngestSection, {
+			props: { networkIngest: ingest, pipelines: PIPELINES, isStreaming: false },
+		});
+
+		const row = getByTestId("network-ingest-select-rtmp") as HTMLButtonElement;
+		expect(row).toBeTruthy();
+		expect(row.disabled).toBe(true);
+		expect(row.getAttribute("title")).toBeTruthy();
+
+		expect(queryByTestId("network-ingest-instructions-rtmp")).toBeNull();
+		expect(queryByTestId("network-ingest-url-rtmp")).toBeNull();
+		expect(queryByTestId("network-ingest-copy-rtmp")).toBeNull();
+		expect(queryByTestId("network-ingest-qr-rtmp")).toBeNull();
+
+		expect(getByTestId("network-ingest-select-srt").hasAttribute("disabled")).toBe(
+			false,
+		);
+	});
+});
+
 describe("NetworkIngestSection — absent protocol renders nothing", () => {
 	it("omits the srt row entirely when status.network_ingest.srt is null", () => {
 		const ingest: NetworkIngest = {
