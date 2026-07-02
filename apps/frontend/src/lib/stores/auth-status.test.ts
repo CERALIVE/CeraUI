@@ -1,7 +1,7 @@
 /**
  * auth-status.svelte.ts — single-auth-mutation-path contract (Todo 9).
  *
- * The old flow had TWO writers for the auth message: websocket-store's
+ * The old flow had TWO writers for the auth message: the deprecated WS store's
  * `AuthStore._set` (fired both by the RPC path AND by the module-level onMessage
  * handler on any "auth" push) plus auth-status's own state. Layout/Auth reading
  * either was subject to a race depending on load order. This module is now the

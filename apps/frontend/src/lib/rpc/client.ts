@@ -197,7 +197,7 @@ class RPCClient {
 	 * Dev-only single-socket invariant guard. connect() reaching this point means a
 	 * socket is already OPEN/CONNECTING, so a second caller is attempting a
 	 * concurrent socket. Exactly one owner (initSubscriptions) may open the socket;
-	 * a second owner is the websocket-store migration bug this catches loudly. Inert
+	 * a second owner is a connection-ownership bug this catches loudly. Inert
 	 * in production — the folded-out branch keeps the idempotent early-return.
 	 */
 	private assertSingleSocketInvariant(): void {

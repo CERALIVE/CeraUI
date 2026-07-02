@@ -25,8 +25,8 @@
  * tests.
  *
  * IMPORTANT: the store reads getters from `$lib/rpc/subscriptions.svelte`
- * directly — the richer, non-deprecated surface. Never import from
- * `$lib/stores/websocket-store.svelte` (deprecated wrapper).
+ * directly — the richer, non-deprecated surface. That is the only sanctioned
+ * getter surface for HUD state.
  */
 
 export type {

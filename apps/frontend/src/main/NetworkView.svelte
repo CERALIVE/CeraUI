@@ -26,7 +26,7 @@ import EthernetSection from './network/EthernetSection.svelte';
 import HotspotSection from './network/HotspotSection.svelte';
 import WifiSection from './network/WifiSection.svelte';
 
-// Getters — always from the non-deprecated subscriptions surface (never websocket-store).
+// Getters — always from the non-deprecated subscriptions surface.
 const wifi = $derived<WifiStatus | undefined>(getWifi());
 const modems = $derived(getModems());
 const netif = $derived<NetifMessage | undefined>(getNetif());

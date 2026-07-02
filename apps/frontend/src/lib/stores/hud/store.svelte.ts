@@ -7,7 +7,7 @@
  * no-SIM / null / sentinel signals. The reactive layer ({@link createHudStore})
  * is created lazily on first selector access and is never executed by the unit
  * tests. Getters come from `$lib/rpc/subscriptions.svelte` directly (the richer,
- * non-deprecated surface) — never the deprecated `websocket-store.svelte` wrapper.
+ * non-deprecated surface).
  */
 
 import {

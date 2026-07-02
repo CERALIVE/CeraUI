@@ -137,7 +137,7 @@ function runtimePortOverride(): string | undefined {
 
 /**
  * The RPC WebSocket URL for the current environment. Single source of truth —
- * every WebSocket consumer (rpc/client, websocket-store) routes through this.
+ * every WebSocket consumer (rpc/client) routes through this.
  */
 export function getSocketUrl(): string {
 	// DEV-gate the override reads so prod statically folds them to `undefined`: a
