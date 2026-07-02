@@ -1075,6 +1075,14 @@ const de = {
 			weight: "Gewicht",
 			telemetry: "Verbindungstelemetrie",
 		},
+		collision: {
+			sameSubnetTitle: "Gemeinsames Subnetz über Verbindungen",
+			sameSubnetBody:
+				"Zwei oder mehr Verbindungen teilen sich ein identisches Subnetz. Das ist zu erwarten \u2014 das Gerät routet jede Verbindung unabhängig, sodass das Bonding weiterhin normal funktioniert.",
+			policyRouteTitle: "Verbindungs-Routing erfordert Aufmerksamkeit",
+			policyRouteBody:
+				"Eine gebündelte Verbindung wird möglicherweise über das falsche Modem geroutet. Starten Sie das Gerät neu oder stecken Sie die Verbindung neu ein \u2014 die Routing-Regeln werden automatisch neu installiert, sobald die Verbindung wieder aktiv ist.",
+		},
 		pageTitle: "Netzwerkkonfiguration",
 		pageDescription:
 			"Verwalten Sie Ihre WiFi-Verbindungen, Hotspots, Mobilfunkmodems und Netzwerkschnittstellen",

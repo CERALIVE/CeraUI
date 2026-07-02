@@ -475,6 +475,14 @@ const ko = {
 			weight: "가중치",
 			telemetry: "링크 텔레메트리",
 		},
+		collision: {
+			sameSubnetTitle: "링크 간 공유된 서브넷",
+			sameSubnetBody:
+				"둘 이상의 링크가 동일한 서브넷을 공유합니다. 이는 정상입니다 \u2014 기기가 각 링크를 독립적으로 라우팅하므로 본딩은 계속 정상적으로 작동합니다.",
+			policyRouteTitle: "링크 라우팅에 주의가 필요합니다",
+			policyRouteBody:
+				"본딩된 링크가 잘못된 모뎀을 통해 라우팅되고 있을 수 있습니다. 기기를 재부팅하거나 링크를 다시 연결하세요 \u2014 링크가 복구되면 라우팅 규칙이 자동으로 다시 설치됩니다.",
+		},
 		pageTitle: "네트워크 설정",
 		pageDescription:
 			"WiFi 연결, 핫스팟, 셀룰러 모뎀 및 네트워크 인터페이스를 관리하세요",

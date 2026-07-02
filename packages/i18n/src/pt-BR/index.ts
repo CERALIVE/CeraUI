@@ -640,6 +640,14 @@ const ptBR = {
 			weight: "Peso",
 			telemetry: "Telemetria do link",
 		},
+		collision: {
+			sameSubnetTitle: "Sub-rede compartilhada entre links",
+			sameSubnetBody:
+				"Dois ou mais links compartilham uma sub-rede idêntica. Isso é esperado \u2014 o dispositivo roteia cada link de forma independente, então o bonding continua funcionando normalmente.",
+			policyRouteTitle: "O roteamento do link precisa de atenção",
+			policyRouteBody:
+				"Um link agregado pode estar roteando pelo modem errado. Reinicie o dispositivo ou reconecte o link \u2014 as regras de roteamento são reinstaladas automaticamente quando o link volta a ativar.",
+		},
 		pageTitle: "Configuração de Rede",
 		pageDescription:
 			"Gerencie suas conexões WiFi, hotspots, modems celulares e interfaces de rede",

@@ -1089,6 +1089,14 @@ const es = {
 			weight: "Peso",
 			telemetry: "Telemetría de enlace",
 		},
+		collision: {
+			sameSubnetTitle: "Subred compartida entre enlaces",
+			sameSubnetBody:
+				"Dos o más enlaces comparten una subred idéntica. Esto es normal \u2014 el dispositivo enruta cada enlace de forma independiente, por lo que el bonding sigue funcionando con normalidad.",
+			policyRouteTitle: "El enrutamiento del enlace requiere atención",
+			policyRouteBody:
+				"Un enlace agrupado podría estar enrutando a través del módem equivocado. Reinicia el dispositivo o vuelve a conectar el enlace \u2014 las reglas de enrutamiento se reinstalan automáticamente cuando el enlace vuelve a activarse.",
+		},
 		pageTitle: "Configuración de Red",
 		pageDescription:
 			"Administra tus conexiones WiFi, hotspots, módems celulares e interfaces de red",

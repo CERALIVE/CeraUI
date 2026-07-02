@@ -642,6 +642,14 @@ const fr = {
 			weight: "Poids",
 			telemetry: "Télémétrie de liaison",
 		},
+		collision: {
+			sameSubnetTitle: "Sous-réseau partagé entre les liens",
+			sameSubnetBody:
+				"Deux liens ou plus partagent un sous-réseau identique. C'est normal \u2014 l'appareil route chaque lien indépendamment, le bonding continue donc de fonctionner normalement.",
+			policyRouteTitle: "Le routage du lien nécessite votre attention",
+			policyRouteBody:
+				"Un lien agrégé pourrait être routé via le mauvais modem. Redémarrez l'appareil ou rebranchez le lien \u2014 les règles de routage sont réinstallées automatiquement lorsque le lien revient.",
+		},
 		pageTitle: "Configuration Réseau",
 		pageDescription:
 			"Gérez vos connexions WiFi, hotspots, modems cellulaires et interfaces réseau",

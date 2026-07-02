@@ -22,6 +22,7 @@ import WifiSelectorDialog from './dialogs/WifiSelectorDialog.svelte';
 
 import BondedLinksSection from './network/BondedLinksSection.svelte';
 import CellularSection from './network/CellularSection.svelte';
+import CollisionBands from './network/CollisionBands.svelte';
 import EthernetSection from './network/EthernetSection.svelte';
 import HotspotSection from './network/HotspotSection.svelte';
 import WifiSection from './network/WifiSection.svelte';
@@ -149,6 +150,7 @@ $effect(() => {
 		</div>
 	{:else}
 		<BondedLinksSection {links} {modemEntries} {linkTelemetry} />
+		<CollisionBands {netif} />
 		<WifiSection
 			wifiRadios={wifiEntries}
 			{netif}

@@ -462,6 +462,14 @@ const zh = {
 			weight: "权重",
 			telemetry: "链路遥测",
 		},
+		collision: {
+			sameSubnetTitle: "链路间共享子网",
+			sameSubnetBody:
+				"两条或更多链路共享相同的子网。这是正常现象 \u2014 设备会独立路由每条链路，因此绑定仍可正常工作。",
+			policyRouteTitle: "链路路由需要注意",
+			policyRouteBody:
+				"某条绑定链路可能通过了错误的调制解调器进行路由。请重启设备或重新插拔该链路 \u2014 链路恢复后，路由规则会自动重新安装。",
+		},
 		pageTitle: "网络配置",
 		pageDescription: "管理您的WiFi连接、热点、蜂窝调制解调器和网络接口",
 		sections: {

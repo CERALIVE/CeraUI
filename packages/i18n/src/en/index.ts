@@ -1064,6 +1064,14 @@ const en = {
 			weight: "Weight",
 			telemetry: "Link telemetry",
 		},
+		collision: {
+			sameSubnetTitle: "Shared subnet across links",
+			sameSubnetBody:
+				"Two or more links share an identical subnet. This is expected \u2014 the device routes each link independently, so bonding keeps working normally.",
+			policyRouteTitle: "Link routing needs attention",
+			policyRouteBody:
+				"A bonded link may be routing through the wrong modem. Reboot the device or re-plug the link \u2014 routing rules are reinstalled automatically when the link comes back up.",
+		},
 		pageTitle: "Network Configuration",
 		pageDescription:
 			"Manage your WiFi connections, hotspots, cellular modems, and network interfaces",
