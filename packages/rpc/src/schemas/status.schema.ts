@@ -92,6 +92,23 @@ export const activeEncodeSchema = z.object({
 });
 export type ActiveEncode = z.infer<typeof activeEncodeSchema>;
 
+// Network-ingest gateway status surface (Task 16). Per protocol: whether the
+// baked-in gateway unit (rtmp → ceralive-rtmp-gateway.service, srt →
+// ceralive-srt-gateway.service) is active, plus the LAN publish URL. A protocol
+// is `null` when the board's capability source kinds exclude it. Additive +
+// nullable+optional so an older backend that never emits it surfaces nothing.
+export const networkIngestProtocolSchema = z.object({
+	service_active: z.boolean(),
+	url: z.string(),
+});
+export type NetworkIngestProtocol = z.infer<typeof networkIngestProtocolSchema>;
+
+export const networkIngestSchema = z.object({
+	rtmp: networkIngestProtocolSchema.nullable(),
+	srt: networkIngestProtocolSchema.nullable(),
+});
+export type NetworkIngest = z.infer<typeof networkIngestSchema>;
+
 // Status response message schema (what server sends)
 export const statusResponseSchema = z.object({
 	is_streaming: z.boolean().optional(),
@@ -106,5 +123,6 @@ export const statusResponseSchema = z.object({
 	linkTelemetry: linkTelemetryMessageSchema.nullable().optional(),
 	buffering: bufferingStatusSchema.nullable().optional(),
 	active_encode: activeEncodeSchema.nullable().optional(),
+	network_ingest: networkIngestSchema.nullable().optional(),
 });
 export type StatusResponse = z.infer<typeof statusResponseSchema>;

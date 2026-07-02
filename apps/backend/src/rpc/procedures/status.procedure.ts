@@ -7,6 +7,7 @@ import { relayMessageSchema, statusResponseSchema } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import { getConfig } from "../../modules/config.ts";
 import { buildModemsMessage } from "../../modules/modems/modem-status.ts";
+import { getNetworkIngestInfo } from "../../modules/network/network-ingest.ts";
 import { netIfBuildMsg } from "../../modules/network/network-interfaces.ts";
 import {
 	buildRelaysMsg,
@@ -57,6 +58,7 @@ export const getStatusProcedure = authedProcedure
 			wifi: wifiBuildMsg(),
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),
+			network_ingest: getNetworkIngestInfo(),
 		};
 	});
 
@@ -91,6 +93,7 @@ export function buildInitialStatus() {
 			wifi: wifiBuildMsg(),
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),
+			network_ingest: getNetworkIngestInfo(),
 		},
 		netif: netIfBuildMsg(),
 		sensors: getSensors(),

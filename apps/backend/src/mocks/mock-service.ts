@@ -141,6 +141,11 @@ export interface MockState {
 	// Per-kind network-ingest gateway active state for the dev/mock start gate
 	// (Task 17); absent kind = inactive. Resets with the scenario.
 	gatewayActive: Partial<Record<RequiresGateway, boolean>>;
+	// Per-kind network-ingest gateway service-active state for the status surface
+	// (Task 16); seeded active so dev scenarios expose live gateways. Independent
+	// of gatewayActive (the stream-start gate stays fail-safe). Resets with the
+	// scenario.
+	networkIngestActive: Record<RequiresGateway, boolean>;
 }
 
 const mockState: MockState = {
@@ -176,6 +181,7 @@ const mockState: MockState = {
 	mockAddons: {},
 	capabilityOverride: null,
 	gatewayActive: {},
+	networkIngestActive: { rtmp: true, srt: true },
 };
 
 // Deep snapshot of `mockState` captured at the end of initMockService — the
@@ -235,6 +241,7 @@ export function initMockService(scenarioName?: string): void {
 	mockState.policyRouteFault = null;
 	mockState.capabilityOverride = null;
 	mockState.gatewayActive = {};
+	mockState.networkIngestActive = { rtmp: true, srt: true };
 	mockState.interfaceThroughput = {};
 	mockState.wifiModes = {};
 
