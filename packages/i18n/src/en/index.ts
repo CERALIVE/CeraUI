@@ -908,7 +908,7 @@ const en = {
 		selectedPipelineNoAudio:
 			"The selected pipeline doesn't support audio configuration",
 		selectPipelineFirst:
-			"Please select an encoder pipeline first to configure audio settings",
+			"Please select a video source first to configure audio settings",
 		audioDelayEarly: "Early (-)",
 		audioDelayLate: "Late (+)",
 		perfectSync: "Sync",

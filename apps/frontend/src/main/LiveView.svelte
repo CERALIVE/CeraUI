@@ -166,6 +166,20 @@ $effect(() => {
 const devices = $derived(getDevices());
 const activeInput = $derived(getActiveInput());
 let selectedInput = $state<string | undefined>(undefined);
+// Seed the pre-start input pick from the persisted config (Todo 26). Reconcile
+// ONLY when the persisted value genuinely changes so an unrelated `config`
+// broadcast — or a stale echo during an in-flight optimistic pick — can never
+// clobber the just-selected value. `lastPersistedInput` is intentionally NOT a
+// rune: writing it inside the effect tracks only `config?.selected_video_input`,
+// never `selectedInput`, so the optimistic assignment below is preserved.
+let lastPersistedInput: string | undefined;
+$effect(() => {
+	const persisted = config?.selected_video_input;
+	if (persisted !== lastPersistedInput) {
+		lastPersistedInput = persisted;
+		selectedInput = persisted;
+	}
+});
 let switchingInput = $state<string | undefined>(undefined);
 
 // Reconnect-aware reconciliation (Task 15): a live `switchInput` restarts the
@@ -264,8 +278,28 @@ async function handleSwitchAudio(inputId: string) {
 	}
 }
 
-function handleSelectInput(inputId: string) {
-	selectedInput = inputId;
+// Pre-start input pick is a REAL persisted config write (Todo 26): the operator's
+// idle selection rides `selected_video_input` through the same per-field-sync
+// lock contract as the other config edits (handleReorderSource/handleSwitchAudio),
+// so it survives a reload and is forwarded to the engine at stream start (Todo 18).
+// This is the IDLE pick path only — live input switching stays handleSwitchInput.
+const SELECTED_INPUT_FIELD = 'selected_video_input';
+
+async function handleSelectInput(inputId: string) {
+	if (inputId === selectedInput) return;
+	selectedInput = inputId; // optimistic — the field-sync lock guards the echo
+	beginFieldSync(SELECTED_INPUT_FIELD, inputId);
+	markFieldApplying(SELECTED_INPUT_FIELD);
+	try {
+		await rpc.streaming.setConfig({ selected_video_input: inputId });
+		markFieldApplied(SELECTED_INPUT_FIELD, inputId);
+	} catch {
+		// Rejected — release the lock to the authoritative value and revert the
+		// optimistic pick to whatever the server actually holds.
+		markFieldFailed(SELECTED_INPUT_FIELD, config?.selected_video_input);
+		selectedInput = config?.selected_video_input;
+		toast.error($LL.notifications.saveFailed());
+	}
 }
 
 // Operator-ordered source preference (Task 11). Display order is the persisted
@@ -888,6 +922,7 @@ const configRows = $derived<ConfigRow[]>([
 	audioDelay={effectiveAudioDelay}
 	audioSource={effectiveAudioSource}
 	effectivePipeline={effectivePipeline}
+	onOpenEncoder={() => (encoderOpen = true)}
 	onSave={handleAudioSave}
 />
 
