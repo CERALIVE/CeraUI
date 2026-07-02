@@ -228,9 +228,7 @@ describe('video_codec + selected_video_input (Todo 19)', () => {
 	});
 
 	test('video_codec rejects a non-enum value', () => {
-		expect(
-			streamingConfigInputSchema.safeParse({ video_codec: 'av1' }).success,
-		).toBe(false);
+		expect(streamingConfigInputSchema.safeParse({ video_codec: 'av1' }).success).toBe(false);
 	});
 });
 

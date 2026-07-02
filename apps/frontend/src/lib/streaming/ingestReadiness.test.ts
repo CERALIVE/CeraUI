@@ -1,14 +1,10 @@
-import { describe, expect, it } from "vitest";
-
 import type { NetifMessage } from "@ceraui/rpc/schemas";
+import { describe, expect, it } from "vitest";
 
 import { deriveIngestReadiness } from "./ingestReadiness";
 
 /** Build a netif entry with the required `tp` and `enabled` fields. */
-function entry(
-	enabled: boolean,
-	ip?: string,
-): NetifMessage[string] {
+function entry(enabled: boolean, ip?: string): NetifMessage[string] {
 	return { enabled, tp: 0, ...(ip !== undefined ? { ip } : {}) };
 }
 

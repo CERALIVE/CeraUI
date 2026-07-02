@@ -31,9 +31,7 @@ describe('activeEncodeSchema (Todo 19 — realized runtime encode)', () => {
 	});
 
 	test('rejects a payload missing a required field', () => {
-		expect(
-			activeEncodeSchema.safeParse({ codec: 'h264', framerate: 30 }).success,
-		).toBe(false);
+		expect(activeEncodeSchema.safeParse({ codec: 'h264', framerate: 30 }).success).toBe(false);
 	});
 });
 

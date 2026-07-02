@@ -351,8 +351,7 @@ export const setConfigProcedure = authedProcedure
 		if (input.max_br !== undefined) config.max_br = clampBitrate(input.max_br);
 		if (input.resolution !== undefined) config.resolution = input.resolution;
 		if (input.framerate !== undefined) config.framerate = input.framerate;
-		if (input.video_codec !== undefined)
-			config.video_codec = input.video_codec;
+		if (input.video_codec !== undefined) config.video_codec = input.video_codec;
 		if (input.selected_video_input !== undefined)
 			config.selected_video_input = input.selected_video_input;
 		if (input.bitrate_overlay !== undefined)

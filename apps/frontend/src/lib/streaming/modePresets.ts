@@ -98,7 +98,10 @@ export function findMatchingPresetId(
 	for (const preset of MODE_PRESETS) {
 		if (preset.resolution !== draft.resolution) continue;
 		if (preset.framerate !== draft.framerate) continue;
-		if (codec !== undefined && videoCodecFromMediaType(preset.codec) !== codec) {
+		if (
+			codec !== undefined &&
+			videoCodecFromMediaType(preset.codec) !== codec
+		) {
 			continue;
 		}
 		return preset.id;

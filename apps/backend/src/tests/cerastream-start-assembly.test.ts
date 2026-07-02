@@ -37,9 +37,9 @@ const silentLogger: CerastreamBackendDeps["logger"] = {
 	error() {},
 };
 
-interface RecordingLogger extends CerastreamBackendDeps["logger"] {
+type RecordingLogger = CerastreamBackendDeps["logger"] & {
 	infos: Array<{ message: string; meta?: unknown }>;
-}
+};
 
 function recordingLogger(): RecordingLogger {
 	const infos: Array<{ message: string; meta?: unknown }> = [];
