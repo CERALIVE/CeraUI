@@ -66,6 +66,7 @@ import {
 	writeCerastreamConfig,
 } from "@ceralive/cerastream";
 import type { ActiveEncode, BufferingStatus } from "@ceraui/rpc/schemas";
+import { toEngineResolution } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { logger as defaultLogger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
@@ -74,8 +75,10 @@ import {
 	notificationBroadcast,
 	notificationExists,
 } from "../ui/notifications.ts";
+import { getAudioSrcId } from "./audio.ts";
 import { resolveCerastreamError } from "./cerastream-error-mapping.ts";
 import { SRTLA_LISTEN_PORT } from "./constants.ts";
+import { deviceRegistry } from "./devices.ts";
 import { validateBitrate } from "./encoder.ts";
 import type {
 	BackendErrorListener,
@@ -120,6 +123,10 @@ export interface CerastreamBackendDeps {
 	execPath: string;
 	configPath: string;
 	logger: CerastreamLogger;
+	// Interim fallback for the active video input when the persisted
+	// `config.selected_video_input` is absent; injected (not read from the
+	// registry singleton directly) so the start assembly stays unit-testable.
+	getActiveInput: () => string | undefined;
 }
 
 function defaultBridge(): CerastreamBridge {
@@ -218,6 +225,22 @@ export function extractActiveEncode(event: unknown): ActiveEncode | null {
 	};
 }
 
+/**
+ * The engine's `reload-config` `audio.delay_ms_signed` field is a 0.4.0 addition
+ * — a ≥0.4.0 engine takes the SIGNED value verbatim; an older engine only
+ * understands the legacy unsigned `delay_ms`. Parses "MAJOR.MINOR[.PATCH]"; an
+ * absent/unparseable version is fail-safe `false` (route to the legacy path).
+ */
+export function supportsSignedReloadDelay(
+	schemaVersion: string | undefined,
+): boolean {
+	if (!schemaVersion) return false;
+	const [major, minor] = schemaVersion.split(".").map(Number);
+	if (major === undefined || Number.isNaN(major) || Number.isNaN(minor))
+		return false;
+	return major > 0 || (major === 0 && (minor ?? 0) >= 4);
+}
+
 function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 	return {
 		connect,
@@ -230,6 +253,7 @@ function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 		execPath: setup.cerastream_path ?? CERASTREAM_BIN,
 		configPath: DEFAULT_CONFIG_PATH,
 		logger: defaultLogger,
+		getActiveInput: () => deviceRegistry.getActiveInput(),
 	};
 }
 
@@ -408,7 +432,10 @@ export class CerastreamBackend implements StreamingBackend {
 	reloadConfig(): void {
 		const client = this.client;
 		if (!client) return;
-		const params = this.toReloadParams(this.deps.getConfig());
+		const params = this.toReloadParams(
+			this.deps.getConfig(),
+			client.hello.schema_version,
+		);
 		this.enqueue(
 			() => client.reloadConfig(params).then(() => undefined),
 			"reload-config",
@@ -482,7 +509,20 @@ export class CerastreamBackend implements StreamingBackend {
 	}
 
 	async reloadAudioDelay(delayMs: number): Promise<ReloadConfigResult> {
-		return this.requireClient().reloadConfig({ audio: { delay_ms: delayMs } });
+		const client = this.requireClient();
+		if (supportsSignedReloadDelay(client.hello.schema_version)) {
+			return client.reloadConfig({ audio: { delay_ms_signed: delayMs } });
+		}
+		const applied = Math.max(0, delayMs);
+		this.deps.logger.info(
+			"cerastream: engine schema_version < 0.4.0 — sending legacy unsigned audio.delay_ms (clamped to >= 0)",
+			{
+				schemaVersion: client.hello.schema_version,
+				requested: delayMs,
+				applied,
+			},
+		);
+		return client.reloadConfig({ audio: { delay_ms: applied } });
 	}
 
 	/** Test seam: resolve once every queued IPC op has settled. */
@@ -593,6 +633,39 @@ export class CerastreamBackend implements StreamingBackend {
 		}
 	}
 
+	/**
+	 * Encode/input/audio fields forwarded identically to `start` and the
+	 * persisted engine config. The spread idiom OMITS absent fields (never sends
+	 * `{ key: undefined }`); resolution is mapped to the engine's "WxH" pixel
+	 * form (a UI token is never sent); `config.delay` rides `audio.delay_ms`
+	 * signed-verbatim (clamping is engine-side only, never on this path).
+	 */
+	private encodeInputAudioFields(config: RuntimeConfig): {
+		input_id?: string;
+		codec?: "h264" | "h265";
+		resolution?: string;
+		framerate?: number;
+		audio?: { device?: string; codec?: string; delay_ms?: number };
+	} {
+		const inputId = config.selected_video_input ?? this.deps.getActiveInput();
+		const audioDevice =
+			config.asrc !== undefined ? getAudioSrcId(config.asrc) : undefined;
+		const audio = {
+			...(audioDevice !== undefined ? { device: audioDevice } : {}),
+			...(config.acodec !== undefined ? { codec: config.acodec } : {}),
+			...(config.delay !== undefined ? { delay_ms: config.delay } : {}),
+		};
+		return {
+			...(inputId !== undefined ? { input_id: inputId } : {}),
+			...(config.video_codec !== undefined ? { codec: config.video_codec } : {}),
+			...(config.resolution !== undefined
+				? { resolution: toEngineResolution(config.resolution) }
+				: {}),
+			...(config.framerate !== undefined ? { framerate: config.framerate } : {}),
+			...(Object.keys(audio).length > 0 ? { audio } : {}),
+		};
+	}
+
 	private buildStartParams(
 		config: RuntimeConfig,
 		opts: StreamRunOptions,
@@ -619,6 +692,7 @@ export class CerastreamBackend implements StreamingBackend {
 				max_bitrate: config.max_br ?? DEFAULT_MAX_BITRATE,
 				balancer: config.balancer ?? DEFAULT_BALANCER,
 			},
+			...this.encodeInputAudioFields(config),
 		});
 	}
 
@@ -635,11 +709,15 @@ export class CerastreamBackend implements StreamingBackend {
 				max_bitrate: config.max_br ?? DEFAULT_MAX_BITRATE,
 				balancer: config.balancer ?? DEFAULT_BALANCER,
 			},
+			...this.encodeInputAudioFields(config),
 		};
 	}
 
-	private toReloadParams(config: RuntimeConfig): ReloadConfigParams {
-		return {
+	private toReloadParams(
+		config: RuntimeConfig,
+		schemaVersion: string | undefined,
+	): ReloadConfigParams {
+		const params: ReloadConfigParams = {
 			bitrate: {
 				min_bitrate: DEFAULT_MIN_BITRATE,
 				max_bitrate: config.max_br ?? DEFAULT_MAX_BITRATE,
@@ -647,6 +725,12 @@ export class CerastreamBackend implements StreamingBackend {
 			},
 			srt: { latency_ms: config.srt_latency ?? DEFAULT_SRT_LATENCY },
 		};
+		if (config.delay !== undefined) {
+			params.audio = supportsSignedReloadDelay(schemaVersion)
+				? { delay_ms_signed: config.delay }
+				: { delay_ms: Math.max(0, config.delay) };
+		}
+		return params;
 	}
 
 	private requireClient(): CerastreamClient {
