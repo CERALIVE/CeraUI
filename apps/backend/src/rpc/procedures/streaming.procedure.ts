@@ -9,6 +9,7 @@ import {
 	bitrateInputSchema,
 	bitrateOutputSchema,
 	configMessageSchema,
+	GATEWAY_INACTIVE_ERROR,
 	getEngineOutputSchema,
 	getMockHardwareOutputSchema,
 	listDevicesOutputSchema,
@@ -40,11 +41,13 @@ import {
 import {
 	clearMockStreamError,
 	getInjectedMockStreamError,
+	isMockGatewayActive,
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
 import { validatePersistedPipeline } from "../../modules/streaming/config-migration.ts";
 import { deviceRegistry } from "../../modules/streaming/devices.ts";
+import { isGatewayActive } from "../../modules/streaming/gateway-availability.ts";
 import { clampBitrate } from "../../modules/streaming/encoder.ts";
 import { getStreamHealth } from "../../modules/streaming/health.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
@@ -127,6 +130,26 @@ export const streamingStartProcedure = authedProcedure
 				);
 				if (!check.valid) {
 					return { success: false, is_streaming: false, error: check.error };
+				}
+
+				// Network-ingest pipelines (rtmp/srt) can only encode once their
+				// local ingest gateway is up. The entry stays visible in the
+				// registry (disabled-with-reason); block the start with a structured
+				// code when the gateway is inactive. Mock honors a test-set flag;
+				// real devices consult the gateway probe (Todo 16 seam).
+				const requiresGateway =
+					searchPipelines(effectivePipeline)?.requires_gateway;
+				if (requiresGateway !== undefined) {
+					const gatewayUp = shouldUseMocks()
+						? isMockGatewayActive(requiresGateway)
+						: isGatewayActive(requiresGateway);
+					if (!gatewayUp) {
+						return {
+							success: false,
+							is_streaming: false,
+							error: GATEWAY_INACTIVE_ERROR,
+						};
+					}
 				}
 			}
 

@@ -12,6 +12,7 @@ import {
 	type RuntimeErrorEvent,
 	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
+import type { RequiresGateway } from "@ceraui/rpc/schemas";
 import {
 	type EngineCapabilitiesSnapshot,
 	getCapabilities,
@@ -470,4 +471,31 @@ export function clearMockStreamError(): void {
 		return;
 	}
 	setMockStreamError(null);
+}
+
+// ─── Network-ingest gateway active state (Task 17) ────────────────────────────
+
+/**
+ * Drive the dev/mock active state of a network-ingest gateway (rtmp/srt) so a
+ * test can exercise both sides of the streaming.start gateway gate without a real
+ * ingest server. No-op unless the mock service is active.
+ */
+export function setMockGatewayActive(
+	kind: RequiresGateway,
+	active: boolean,
+): void {
+	if (!shouldUseMocks()) {
+		return;
+	}
+	updateMockState({
+		gatewayActive: { ...getMockState().gatewayActive, [kind]: active },
+	});
+}
+
+/** Whether the given network-ingest gateway is active in dev/mock (false when mocks inactive). */
+export function isMockGatewayActive(kind: RequiresGateway): boolean {
+	if (!shouldUseMocks()) {
+		return false;
+	}
+	return getMockState().gatewayActive[kind] === true;
 }

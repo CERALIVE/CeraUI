@@ -17,6 +17,7 @@
 */
 
 import type { GetCapabilitiesResult } from "@ceralive/cerastream";
+import type { RequiresGateway } from "@ceraui/rpc/schemas";
 import {
 	framerateSchema,
 	resolutionSchema,
@@ -45,6 +46,16 @@ export type Pipeline = {
 	supportsAudio: boolean;
 	supportsResolutionOverride: boolean;
 	supportsFramerateOverride: boolean;
+	requires_gateway?: RequiresGateway;
+};
+
+// Source ids that ingest over a local network gateway rather than a directly
+// attached capture device — each maps to the gateway kind that must be up before
+// the pipeline can start (Task 17). Kept VISIBLE in the registry so the UI can
+// show them disabled-with-reason; never filtered out.
+const GATEWAY_SOURCES: Record<string, RequiresGateway> = {
+	rtmp: "rtmp",
+	srt: "srt",
 };
 
 // Valid hardware types
@@ -153,6 +164,9 @@ function buildPipelineRegistry(
 		if (resolution !== undefined) pipeline.defaultResolution = resolution;
 		const framerate = toFramerate(cap.default_framerate);
 		if (framerate !== undefined) pipeline.defaultFramerate = framerate;
+		const requiresGateway = GATEWAY_SOURCES[cap.id];
+		if (requiresGateway !== undefined)
+			pipeline.requires_gateway = requiresGateway;
 		ps[cap.id] = pipeline;
 	}
 	return ps;
@@ -186,6 +200,7 @@ type PipelineResponseEntry = Pick<
 	| "supportsFramerateOverride"
 	| "defaultResolution"
 	| "defaultFramerate"
+	| "requires_gateway"
 >;
 
 export function getPipelineList() {
@@ -202,6 +217,7 @@ export function getPipelineList() {
 			supportsFramerateOverride: pipeline.supportsFramerateOverride,
 			defaultResolution: pipeline.defaultResolution,
 			defaultFramerate: pipeline.defaultFramerate,
+			requires_gateway: pipeline.requires_gateway,
 		};
 	}
 	return list;

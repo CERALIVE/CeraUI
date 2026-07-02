@@ -223,6 +223,18 @@ export const VIDEO_SOURCE_LABELS: Record<string, string> = {
 	decklink: 'Decklink SDI',
 };
 
+// Network-ingest gateway kinds (Task 17). A pipeline whose source is a local
+// ingest server (rtmp/srt) only encodes once its corresponding gateway is up, so
+// the entry carries the gateway kind it depends on. Additive/optional everywhere:
+// absent means "no gateway dependency" (a direct-capture source like hdmi).
+export const requiresGatewaySchema = z.enum(['rtmp', 'srt']);
+export type RequiresGateway = z.infer<typeof requiresGatewaySchema>;
+
+// Stable structured code returned by streaming.start when an rtmp/srt pipeline is
+// started while its network-ingest gateway is inactive. The frontend maps it to a
+// disabled-with-reason / start-blocked message (never a raw string).
+export const GATEWAY_INACTIVE_ERROR = 'gateway_inactive';
+
 // Pipeline schema - now based on video sources with structured metadata
 export const pipelineSchema = z.object({
 	name: z.string(),
@@ -232,6 +244,9 @@ export const pipelineSchema = z.object({
 	supportsFramerateOverride: z.boolean(),
 	defaultResolution: resolutionSchema.optional(),
 	defaultFramerate: framerateSchema.optional(),
+	// Network-ingest gateway dependency (Task 17). Present only on rtmp/srt
+	// pipelines; the gateway kind must be up before starting the pipeline.
+	requires_gateway: requiresGatewaySchema.optional(),
 });
 export type Pipeline = z.infer<typeof pipelineSchema>;
 

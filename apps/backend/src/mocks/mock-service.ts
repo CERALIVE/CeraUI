@@ -16,7 +16,11 @@
 //           timer — side-effect-clean, so each test starts from the scenario's
 //           seeded state with no leaked intervals or cross-test bleed.
 
-import type { AddonConfig, AddonState } from "@ceraui/rpc/schemas";
+import type {
+	AddonConfig,
+	AddonState,
+	RequiresGateway,
+} from "@ceraui/rpc/schemas";
 import { logger } from "../helpers/logger.ts";
 import {
 	buildRelaysMsg,
@@ -134,6 +138,9 @@ export interface MockState {
 	// capabilities sub-config by setMockEngineCapabilities(); null = scenario
 	// default. Resets with the scenario like every other session slot.
 	capabilityOverride: ScenarioCapabilities | null;
+	// Per-kind network-ingest gateway active state for the dev/mock start gate
+	// (Task 17); absent kind = inactive. Resets with the scenario.
+	gatewayActive: Partial<Record<RequiresGateway, boolean>>;
 }
 
 const mockState: MockState = {
@@ -168,6 +175,7 @@ const mockState: MockState = {
 	simPinSecret: null,
 	mockAddons: {},
 	capabilityOverride: null,
+	gatewayActive: {},
 };
 
 // Deep snapshot of `mockState` captured at the end of initMockService — the
@@ -226,6 +234,7 @@ export function initMockService(scenarioName?: string): void {
 	mockState.relayValidateFault = null;
 	mockState.policyRouteFault = null;
 	mockState.capabilityOverride = null;
+	mockState.gatewayActive = {};
 	mockState.interfaceThroughput = {};
 	mockState.wifiModes = {};
 
