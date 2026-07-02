@@ -34,7 +34,9 @@ vi.mock("$lib/rpc/client", () => ({
 // QR generation is stubbed so the unit never touches the real `qrcode` canvas
 // path; it returns a deterministic data URL the render can assert against.
 vi.mock("$lib/helpers/NetworkHelper", () => ({
-	generateDeviceAccessQr: vi.fn(async (url: string) => `data:image/png;qr(${url})`),
+	generateDeviceAccessQr: vi.fn(
+		async (url: string) => `data:image/png;qr(${url})`,
+	),
 }));
 
 const toastSuccess = vi.hoisted(() => vi.fn());
@@ -136,7 +138,11 @@ describe("NetworkIngestSection — inactive gateway is disabled-with-reason", ()
 			srt: { service_active: true, url: SRT_URL },
 		};
 		const { getByTestId } = render(NetworkIngestSection, {
-			props: { networkIngest: ingest, pipelines: PIPELINES, isStreaming: false },
+			props: {
+				networkIngest: ingest,
+				pipelines: PIPELINES,
+				isStreaming: false,
+			},
 		});
 
 		const row = getByTestId("network-ingest-select-rtmp") as HTMLButtonElement;
@@ -148,7 +154,11 @@ describe("NetworkIngestSection — inactive gateway is disabled-with-reason", ()
 
 	it("disables every row while streaming with a title reason", () => {
 		const { getByTestId } = render(NetworkIngestSection, {
-			props: { networkIngest: bothActive(), pipelines: PIPELINES, isStreaming: true },
+			props: {
+				networkIngest: bothActive(),
+				pipelines: PIPELINES,
+				isStreaming: true,
+			},
 		});
 		const rtmp = getByTestId("network-ingest-select-rtmp") as HTMLButtonElement;
 		expect(rtmp.disabled).toBe(true);
@@ -167,7 +177,11 @@ describe("NetworkIngestSection — addressless gateway is disabled-with-reason, 
 			srt: { service_active: true, url: SRT_URL },
 		};
 		const { getByTestId, queryByTestId } = render(NetworkIngestSection, {
-			props: { networkIngest: ingest, pipelines: PIPELINES, isStreaming: false },
+			props: {
+				networkIngest: ingest,
+				pipelines: PIPELINES,
+				isStreaming: false,
+			},
 		});
 
 		const row = getByTestId("network-ingest-select-rtmp") as HTMLButtonElement;
@@ -180,9 +194,9 @@ describe("NetworkIngestSection — addressless gateway is disabled-with-reason, 
 		expect(queryByTestId("network-ingest-copy-rtmp")).toBeNull();
 		expect(queryByTestId("network-ingest-qr-rtmp")).toBeNull();
 
-		expect(getByTestId("network-ingest-select-srt").hasAttribute("disabled")).toBe(
-			false,
-		);
+		expect(
+			getByTestId("network-ingest-select-srt").hasAttribute("disabled"),
+		).toBe(false);
 	});
 });
 
@@ -193,7 +207,11 @@ describe("NetworkIngestSection — absent protocol renders nothing", () => {
 			srt: null,
 		};
 		const { queryByTestId } = render(NetworkIngestSection, {
-			props: { networkIngest: ingest, pipelines: PIPELINES, isStreaming: false },
+			props: {
+				networkIngest: ingest,
+				pipelines: PIPELINES,
+				isStreaming: false,
+			},
 		});
 		expect(queryByTestId("network-ingest-row-rtmp")).not.toBeNull();
 		expect(queryByTestId("network-ingest-row-srt")).toBeNull();
@@ -213,7 +231,11 @@ describe("NetworkIngestSection — publish instructions (URL + copy + QR)", () =
 		Object.assign(navigator, { clipboard: { writeText } });
 
 		const { getByTestId } = render(NetworkIngestSection, {
-			props: { networkIngest: bothActive(), pipelines: PIPELINES, isStreaming: false },
+			props: {
+				networkIngest: bothActive(),
+				pipelines: PIPELINES,
+				isStreaming: false,
+			},
 		});
 
 		// Exact publish URL is rendered verbatim.

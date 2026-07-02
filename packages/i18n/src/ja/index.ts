@@ -726,7 +726,8 @@ const ja = {
 		},
 		scanError: {
 			title: "スキャンに失敗しました",
-			description: "近くのWiFiネットワークを更新できませんでした。自動的に再試行します。",
+			description:
+				"近くのWiFiネットワークを更新できませんでした。自動的に再試行します。",
 		},
 		dialog: {
 			close: "閉じる",
@@ -1085,7 +1086,8 @@ const ja = {
 			audioSwitched: "{ms}msでオーディオを切り替えました",
 			audioSwitchFailed: "オーディオソースの切り替えに失敗しました",
 			audioSourceLost: "オーディオソースを利用できません",
-			audioSwitchUnavailable: "現在のエンジンはライブ音声切り替えに対応していません",
+			audioSwitchUnavailable:
+				"現在のエンジンはライブ音声切り替えに対応していません",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1153,7 +1155,8 @@ const ja = {
 				unsupportedPlatform: "このプラットフォームではサポートされていません",
 				fixedBySource: "選択したソースによって固定されています",
 				gatewayInactive: "ネットワーク受信ゲートウェイが実行されていません",
-				gatewayNoAddress: "到達可能な LAN またはホットスポットのアドレスがありません",
+				gatewayNoAddress:
+					"到達可能な LAN またはホットスポットのアドレスがありません",
 			},
 			info: "{field}について",
 			close: "了解",

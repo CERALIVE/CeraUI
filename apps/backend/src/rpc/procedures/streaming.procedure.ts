@@ -47,8 +47,8 @@ import { getConfig, saveConfig } from "../../modules/config.ts";
 import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
 import { validatePersistedPipeline } from "../../modules/streaming/config-migration.ts";
 import { deviceRegistry } from "../../modules/streaming/devices.ts";
-import { isGatewayActive } from "../../modules/streaming/gateway-availability.ts";
 import { clampBitrate } from "../../modules/streaming/encoder.ts";
+import { isGatewayActive } from "../../modules/streaming/gateway-availability.ts";
 import { getStreamHealth } from "../../modules/streaming/health.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import {

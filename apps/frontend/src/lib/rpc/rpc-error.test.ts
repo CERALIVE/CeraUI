@@ -18,13 +18,15 @@ import {
 
 /** Walk a dotted i18n key into the raw `en` tree and interpolate params. */
 function resolveEn(key: string, params: Record<string, string>): string {
-	const template = key.split(".").reduce<unknown>(
-		(node, segment) =>
-			node && typeof node === "object"
-				? (node as Record<string, unknown>)[segment]
-				: undefined,
-		en,
-	);
+	const template = key
+		.split(".")
+		.reduce<unknown>(
+			(node, segment) =>
+				node && typeof node === "object"
+					? (node as Record<string, unknown>)[segment]
+					: undefined,
+			en,
+		);
 	if (typeof template !== "string") {
 		throw new Error(`missing i18n key: ${key}`);
 	}

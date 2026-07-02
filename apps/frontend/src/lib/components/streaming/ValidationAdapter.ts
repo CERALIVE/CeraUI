@@ -92,8 +92,8 @@ export {
 	isPipelineAvailable,
 	PIPELINE_GATEWAY_INACTIVE,
 	type PipelineAvailability,
-	pipelineAvailability,
 	type PipelineView,
+	pipelineAvailability,
 	pipelineViews,
 } from "$lib/streaming/pipelineAvailability";
 

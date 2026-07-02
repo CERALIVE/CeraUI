@@ -1,6 +1,6 @@
 // Offline state detection using pure Svelte 5 runes
 // Simplified version without legacy store compatibility
-import { rpcClient, type ConnectionState } from "$lib/rpc/client";
+import { type ConnectionState, rpcClient } from "$lib/rpc/client";
 import { getIsOnline } from "./pwa.svelte";
 
 // ============================================

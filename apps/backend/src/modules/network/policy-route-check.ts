@@ -233,8 +233,10 @@ async function runRealPolicyRouteCheck(
 		tableHasDefault.set(table, parseHasDefaultRoute(routeOut));
 	}
 
-	return derivePolicyRouteMissing(candidates, rules, (table) =>
-		tableHasDefault.get(table) ?? false,
+	return derivePolicyRouteMissing(
+		candidates,
+		rules,
+		(table) => tableHasDefault.get(table) ?? false,
 	);
 }
 

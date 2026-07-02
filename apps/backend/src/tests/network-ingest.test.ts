@@ -6,7 +6,6 @@ import {
 	stopMockService,
 } from "../mocks/mock-service.ts";
 import { setMockNetworkIngestActive } from "../mocks/providers/network-ingest.ts";
-import { withDeviceType } from "../modules/system/device-detection.ts";
 import {
 	buildGatewayProbe,
 	buildRtmpUrl,
@@ -16,12 +15,13 @@ import {
 	deriveNetworkIngestInfo,
 	getNetworkIngestInfo,
 	type NetworkIngestDeps,
+	RTMP_GATEWAY_UNIT,
 	refreshNetworkIngestInfo,
 	resetNetworkIngestState,
 	resolvePrimaryLanIp,
-	RTMP_GATEWAY_UNIT,
 	SRT_GATEWAY_UNIT,
 } from "../modules/network/network-ingest.ts";
+import { withDeviceType } from "../modules/system/device-detection.ts";
 
 const LAN = "192.168.1.100";
 
@@ -95,7 +95,10 @@ describe("network-ingest — capability filtering (pure)", () => {
 			sourceKinds: new Set(["hdmi", "rtmp", "srt"]),
 		});
 		expect(info).toEqual({
-			rtmp: { service_active: true, url: "rtmp://192.168.1.100:1935/publish/live" },
+			rtmp: {
+				service_active: true,
+				url: "rtmp://192.168.1.100:1935/publish/live",
+			},
 			srt: { service_active: true, url: "srt://192.168.1.100:4001" },
 		});
 	});
@@ -256,9 +259,7 @@ describe("network-ingest — refresh gate (isRealDevice-gated probe)", () => {
 				getSourceKinds: () => new Set(["rtmp", "srt"]),
 			}),
 		);
-		expect(probed.sort()).toEqual(
-			[RTMP_GATEWAY_UNIT, SRT_GATEWAY_UNIT].sort(),
-		);
+		expect(probed.sort()).toEqual([RTMP_GATEWAY_UNIT, SRT_GATEWAY_UNIT].sort());
 		expect(info.rtmp?.service_active).toBe(true);
 		expect(info.srt?.service_active).toBe(false);
 		expect(getNetworkIngestInfo()).toEqual(info);

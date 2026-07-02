@@ -44,7 +44,10 @@ function collectSourceFiles(dir: string): string[] {
 		const full = path.join(dir, entry.name);
 		if (entry.isDirectory()) {
 			out.push(...collectSourceFiles(full));
-		} else if (entry.isFile() && SCANNED_EXTENSIONS.has(path.extname(entry.name))) {
+		} else if (
+			entry.isFile() &&
+			SCANNED_EXTENSIONS.has(path.extname(entry.name))
+		) {
 			out.push(full);
 		}
 	}
@@ -65,8 +68,9 @@ describe("deprecated WS store deletion gate", () => {
 			const text = readFileSync(file, "utf8");
 			if (text.includes(FORBIDDEN)) {
 				const lineNo =
-					text.split("\n").findIndex((line: string) => line.includes(FORBIDDEN)) +
-					1;
+					text
+						.split("\n")
+						.findIndex((line: string) => line.includes(FORBIDDEN)) + 1;
 				offenders.push(`${path.relative(SRC_ROOT, file)}:${lineNo}`);
 			}
 		}

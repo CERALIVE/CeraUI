@@ -404,7 +404,8 @@ const es = {
 			active: "Servicio en ejecución",
 			inactive: "Servicio detenido",
 			selected: "Seleccionado",
-			serviceInactive: "El servicio de entrada {protocol} aún no está en ejecución.",
+			serviceInactive:
+				"El servicio de entrada {protocol} aún no está en ejecución.",
 			noAddress:
 				"La puerta de enlace {protocol} está en ejecución, pero este dispositivo no tiene ninguna dirección de LAN o punto de acceso para publicar. Conéctate a una red Wi-Fi o Ethernet, o activa el punto de acceso del dispositivo.",
 			noAddressStatus: "Sin dirección accesible",
@@ -539,7 +540,8 @@ const es = {
 			reason: {
 				unsupportedPlatform: "No compatible con esta plataforma",
 				fixedBySource: "Fijado por la fuente seleccionada",
-				gatewayInactive: "La puerta de enlace de ingesta de red no está en ejecución",
+				gatewayInactive:
+					"La puerta de enlace de ingesta de red no está en ejecución",
 				gatewayNoAddress: "Sin dirección de LAN o punto de acceso accesible",
 			},
 			info: "Acerca de {field}",
@@ -1567,7 +1569,8 @@ const es = {
 		rebootingDescription:
 			"El dispositivo se está reiniciando. Esta página se reconectará automáticamente.",
 		sessionExpired: "La sesión expiró. Por favor, autentícate de nuevo.",
-		authTimedOut: "No se pudo verificar tu sesión. Comprueba la conexión e inténtalo de nuevo.",
+		authTimedOut:
+			"No se pudo verificar tu sesión. Comprueba la conexión e inténtalo de nuevo.",
 	},
 	offline: {
 		title: "Estás desconectado",

@@ -17,9 +17,7 @@ const login = vi.fn();
 const setPassword = vi.fn();
 
 let seedConnectionState: ConnectionState = "connected";
-let onConnectionChangeHandler:
-	| ((state: ConnectionState) => void)
-	| undefined;
+let onConnectionChangeHandler: ((state: ConnectionState) => void) | undefined;
 
 vi.mock("$lib/rpc/client", () => ({
 	rpc: {

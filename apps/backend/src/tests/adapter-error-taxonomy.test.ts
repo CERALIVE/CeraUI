@@ -87,7 +87,11 @@ describe("rpc adapter error taxonomy", () => {
 		const ws = fakeWs();
 		await handleORPCMessage(
 			ws,
-			{ id: "m1", path: ["probe", "inputFail"], input: { count: KNOWN_SECRET } },
+			{
+				id: "m1",
+				path: ["probe", "inputFail"],
+				input: { count: KNOWN_SECRET },
+			},
 			testRouter,
 		);
 

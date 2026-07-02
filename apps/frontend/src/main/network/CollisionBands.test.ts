@@ -72,8 +72,16 @@ describe("CollisionBands — subnet collision + policy-route surfacing (Task 13)
 		// surfaced via a `netif_dup_ip` notification, NOT by this component. With
 		// no same_subnet_group and no policy_route_missing, no new band renders.
 		const netif: NetifMessage = {
-			usb0: entry({ ip: "192.168.1.5", enabled: false, error: "duplicate IPv4 addr" }),
-			usb1: entry({ ip: "192.168.1.5", enabled: false, error: "duplicate IPv4 addr" }),
+			usb0: entry({
+				ip: "192.168.1.5",
+				enabled: false,
+				error: "duplicate IPv4 addr",
+			}),
+			usb1: entry({
+				ip: "192.168.1.5",
+				enabled: false,
+				error: "duplicate IPv4 addr",
+			}),
 		};
 		const { queryByTestId } = render(CollisionBands, { props: { netif } });
 
@@ -84,8 +92,16 @@ describe("CollisionBands — subnet collision + policy-route surfacing (Task 13)
 	it("(c') a dup-IP `error` alongside a distinct same-subnet group shows only same-subnet (dup-IP entry ignored)", () => {
 		const netif: NetifMessage = {
 			// dup-IP pair — flagged by the backend, NOT tagged same_subnet_group.
-			eth0: entry({ ip: "192.168.1.5", enabled: false, error: "duplicate IPv4 addr" }),
-			eth1: entry({ ip: "192.168.1.5", enabled: false, error: "duplicate IPv4 addr" }),
+			eth0: entry({
+				ip: "192.168.1.5",
+				enabled: false,
+				error: "duplicate IPv4 addr",
+			}),
+			eth1: entry({
+				ip: "192.168.1.5",
+				enabled: false,
+				error: "duplicate IPv4 addr",
+			}),
 			// A separate, healthy shared-subnet modem pair.
 			usb0: entry({ ip: "192.168.9.2", same_subnet_group: "192.168.9.0/24" }),
 			usb1: entry({ ip: "192.168.9.3", same_subnet_group: "192.168.9.0/24" }),

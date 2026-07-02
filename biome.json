@@ -18,7 +18,8 @@
 			"!**/build",
 			"!**/node_modules",
 			"!**/.build-cache",
-			"!**/test-results"
+			"!**/test-results",
+			"!**/.omo"
 		]
 	},
 	"linter": {

@@ -37,7 +37,11 @@ vi.mock("$lib/rpc/client", () => ({
 
 import type { NetifMessage } from "@ceraui/rpc/schemas";
 
-import { getNetif, initSubscriptions, resetState } from "./subscriptions.svelte";
+import {
+	getNetif,
+	initSubscriptions,
+	resetState,
+} from "./subscriptions.svelte";
 
 /** Feed a `netif` frame through the exact handler the transport calls. */
 function pushNetif(msg: NetifMessage): void {

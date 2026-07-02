@@ -46,8 +46,8 @@ import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
  * injects a controlled orphan `data-debt-id` node and proves the SAME check
  * that powers assertion (b) flags it — so (b) is not vacuous.
  *
- * PLAYBOOK.md compliance: role / testid / web-first assertions only; no
- * `page.screenshot()`, no `waitForTimeout`, no hardcoded `#nav-tab-*` selectors.
+ * PLAYBOOK.md compliance: role / testid / web-first assertions only — no
+ * pixel-screenshot capture, no fixed-delay waits, no hardcoded nav-tab selectors.
  */
 
 // ── docs/TECHNICAL_DEBT.md register location ─────────────────────────────────

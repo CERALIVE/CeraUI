@@ -389,7 +389,8 @@ const en = {
 			active: "Service running",
 			inactive: "Service not running",
 			selected: "Selected",
-			serviceInactive: "The {protocol:string} ingest service isn't running yet.",
+			serviceInactive:
+				"The {protocol:string} ingest service isn't running yet.",
 			noAddress:
 				"The {protocol:string} gateway is running, but this device has no LAN or hotspot address to publish to. Join a Wi-Fi or Ethernet network, or enable the device hotspot.",
 			noAddressStatus: "No reachable address",
@@ -1533,7 +1534,8 @@ const en = {
 		rebootingDescription:
 			"The device is restarting. This page will reconnect automatically.",
 		sessionExpired: "Session expired. Please authenticate again.",
-		authTimedOut: "Couldn't verify your session. Check the connection and try again.",
+		authTimedOut:
+			"Couldn't verify your session. Check the connection and try again.",
 	},
 	offline: {
 		title: "You're Offline",

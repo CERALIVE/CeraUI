@@ -1253,7 +1253,8 @@ const ar = {
 				unsupportedPlatform: "غير مدعوم على هذه المنصة",
 				fixedBySource: "محدد بواسطة المصدر المختار",
 				gatewayInactive: "بوابة استقبال الشبكة غير قيد التشغيل",
-				gatewayNoAddress: "لا يوجد عنوان شبكة محلية أو نقطة اتصال يمكن الوصول إليه",
+				gatewayNoAddress:
+					"لا يوجد عنوان شبكة محلية أو نقطة اتصال يمكن الوصول إليه",
 			},
 			info: "حول {field}",
 			close: "فهمت",

@@ -63,7 +63,10 @@ export function buildStreamingConfig(
 		return null;
 	}
 
-	const availability = pipelineAvailability(pipelineData, options.networkIngest);
+	const availability = pipelineAvailability(
+		pipelineData,
+		options.networkIngest,
+	);
 	if (!availability.available) {
 		console.warn(
 			"Cannot build streaming config: network-ingest gateway inactive for",

@@ -68,8 +68,8 @@ import { startBcrpt } from "./modules/streaming/bcrpt.ts";
 import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
 import { checkEngineCompatibilityOnStartup } from "./modules/streaming/cerastream-backend.ts";
 import { reconcilePersistedPipeline } from "./modules/streaming/config-migration.ts";
-import { setGatewayProbe } from "./modules/streaming/gateway-availability.ts";
 import { startDeviceDiscovery } from "./modules/streaming/devices.ts";
+import { setGatewayProbe } from "./modules/streaming/gateway-availability.ts";
 import { broadcastHealthIfChanged } from "./modules/streaming/health.ts";
 import {
 	broadcastLinkTelemetryIfChanged,

@@ -143,8 +143,7 @@ export async function handleORPCMessage(
 				]
 			: [];
 
-		const rawMessage =
-			error instanceof Error ? error.message : "Unknown error";
+		const rawMessage = error instanceof Error ? error.message : "Unknown error";
 		ws.send(
 			JSON.stringify({
 				id: message.id,

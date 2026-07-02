@@ -10,7 +10,11 @@
 */
 
 import type { RequiresGateway } from "@ceraui/rpc/schemas";
-import { getMockState, shouldUseMocks, updateMockState } from "../mock-service.ts";
+import {
+	getMockState,
+	shouldUseMocks,
+	updateMockState,
+} from "../mock-service.ts";
 
 /** The dev/mock service-active state per gateway kind (both active by default). */
 export function resolveMockNetworkIngestActive(): Record<

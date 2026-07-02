@@ -19,8 +19,6 @@
  */
 
 import { afterEach, describe, expect, it, mock } from "bun:test";
-
-import { withDeviceType } from "../modules/system/device-detection.ts";
 import {
 	checkPolicyRoutes,
 	collectPolicyRouteCandidates,
@@ -28,12 +26,13 @@ import {
 	derivePolicyRouteMissing,
 	isBondedModemOrWifiIface,
 	isPolicyRouteMissing,
+	type PolicyRouteCheckDeps,
 	parseHasDefaultRoute,
 	parseIpRules,
-	type PolicyRouteCheckDeps,
 	refreshPolicyRouteFlags,
 	resetPolicyRouteFlags,
 } from "../modules/network/policy-route-check.ts";
+import { withDeviceType } from "../modules/system/device-detection.ts";
 
 // ─── Captured fixtures ──────────────────────────────────────────────────────
 

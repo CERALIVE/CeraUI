@@ -30,7 +30,10 @@ function makeNetworkIngest(
 		rtmp:
 			rtmpActive === null
 				? null
-				: { service_active: rtmpActive, url: "rtmp://192.168.1.100:1935/publish/live" },
+				: {
+						service_active: rtmpActive,
+						url: "rtmp://192.168.1.100:1935/publish/live",
+					},
 		srt:
 			srtActive === null
 				? null
@@ -130,7 +133,8 @@ describe("pipelineAvailability — protocol/network_ingest absent (null) case", 
 			null,
 		);
 		expect(verdict.available).toBe(false);
-		if (!verdict.available) expect(verdict.reason).toBe(PIPELINE_GATEWAY_INACTIVE);
+		if (!verdict.available)
+			expect(verdict.reason).toBe(PIPELINE_GATEWAY_INACTIVE);
 	});
 
 	it("blocks an srt pipeline when network_ingest is undefined", () => {
@@ -143,7 +147,9 @@ describe("pipelineAvailability — protocol/network_ingest absent (null) case", 
 
 	it("keeps a non-gateway pipeline available even when network_ingest is absent", () => {
 		expect(pipelineAvailability(makePipeline(), null).available).toBe(true);
-		expect(pipelineAvailability(makePipeline(), undefined).available).toBe(true);
+		expect(pipelineAvailability(makePipeline(), undefined).available).toBe(
+			true,
+		);
 	});
 
 	it("treats an undefined pipeline (no source selected) as available", () => {
@@ -193,9 +199,15 @@ describe("pipelineViews — per-pipeline verdict tagging (never hides)", () => {
 
 	it("blocks all gateway pipelines when network_ingest is absent, keeps direct-capture available", () => {
 		const views = pipelineViews(pipelines, null);
-		expect(views.find((v) => v.id === "hdmi")?.availability.available).toBe(true);
-		expect(views.find((v) => v.id === "rtmp")?.availability.available).toBe(false);
-		expect(views.find((v) => v.id === "srt")?.availability.available).toBe(false);
+		expect(views.find((v) => v.id === "hdmi")?.availability.available).toBe(
+			true,
+		);
+		expect(views.find((v) => v.id === "rtmp")?.availability.available).toBe(
+			false,
+		);
+		expect(views.find((v) => v.id === "srt")?.availability.available).toBe(
+			false,
+		);
 	});
 
 	it("returns [] for an absent pipeline map (still loading)", () => {

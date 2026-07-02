@@ -708,7 +708,8 @@ const ko = {
 		},
 		scanError: {
 			title: "검색 실패",
-			description: "주변 WiFi 네트워크를 새로 고치지 못했습니다. 자동으로 다시 시도합니다.",
+			description:
+				"주변 WiFi 네트워크를 새로 고치지 못했습니다. 자동으로 다시 시도합니다.",
 		},
 		dialog: {
 			close: "닫기",
@@ -986,7 +987,8 @@ const ko = {
 		},
 		networkIngest: {
 			title: "네트워크 인제스트",
-			subtitle: "같은 네트워크의 다른 인코더나 휴대폰에서 이 기기로 송출하세요.",
+			subtitle:
+				"같은 네트워크의 다른 인코더나 휴대폰에서 이 기기로 송출하세요.",
 			infoTitle: "네트워크 인제스트",
 			infoBody:
 				"휴대폰이나 하드웨어 인코더(OBS 등)에서 이 주소로 송출하세요. 기기가 로컬 네트워크로 수신하여 스트리밍용으로 인코딩합니다.",
@@ -999,7 +1001,8 @@ const ko = {
 			noAddressStatus: "연결 가능한 주소 없음",
 			streamingLocked: "영상 소스를 변경하려면 스트림을 중지하세요.",
 			instructionsToggle: "송출 방법",
-			instructions: "휴대폰이나 인코더를 이 주소로 지정한 다음 송출을 시작하세요.",
+			instructions:
+				"휴대폰이나 인코더를 이 주소로 지정한 다음 송출을 시작하세요.",
 			qrLabel: "스캔하여 송출 주소 가져오기",
 			copy: "주소 복사",
 			copied: "주소가 복사됨",
@@ -1058,7 +1061,8 @@ const ko = {
 			audioSwitched: "{ms}ms 만에 오디오 전환됨",
 			audioSwitchFailed: "오디오 소스 전환 실패",
 			audioSourceLost: "오디오 소스를 사용할 수 없음",
-			audioSwitchUnavailable: "현재 엔진은 실시간 오디오 전환을 지원하지 않습니다",
+			audioSwitchUnavailable:
+				"현재 엔진은 실시간 오디오 전환을 지원하지 않습니다",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1354,7 +1358,8 @@ const ko = {
 		rebootingDescription:
 			"기기가 재시작 중입니다. 이 페이지는 자동으로 다시 연결됩니다.",
 		sessionExpired: "세션이 만료되었습니다. 다시 인증해 주세요.",
-		authTimedOut: "세션을 확인할 수 없습니다. 연결을 확인하고 다시 시도해 주세요.",
+		authTimedOut:
+			"세션을 확인할 수 없습니다. 연결을 확인하고 다시 시도해 주세요.",
 	},
 	offline: {
 		title: "오프라인입니다",

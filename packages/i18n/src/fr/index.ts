@@ -1552,7 +1552,8 @@ const fr = {
 		rebootingDescription:
 			"L'appareil redémarre. Cette page se reconnectera automatiquement.",
 		sessionExpired: "Session expirée. Veuillez vous authentifier à nouveau.",
-		authTimedOut: "Impossible de vérifier votre session. Vérifiez la connexion et réessayez.",
+		authTimedOut:
+			"Impossible de vérifier votre session. Vérifiez la connexion et réessayez.",
 	},
 	offline: {
 		title: "Vous êtes hors ligne",

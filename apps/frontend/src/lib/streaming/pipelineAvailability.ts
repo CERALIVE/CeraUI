@@ -16,8 +16,7 @@
  *
  * Pure + rune-free: unit-testable without mounting Svelte.
  */
-import type { NetworkIngest } from "@ceraui/rpc/schemas";
-import type { Pipeline, Pipelines } from "@ceraui/rpc/schemas";
+import type { NetworkIngest, Pipeline, Pipelines } from "@ceraui/rpc/schemas";
 
 /**
  * i18n key for the disabled-reason tooltip shown on an rtmp/srt pipeline whose

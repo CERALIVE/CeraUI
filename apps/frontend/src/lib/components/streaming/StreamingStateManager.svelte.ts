@@ -64,7 +64,9 @@ class StreamingStateManager {
 	 * Kept for API compatibility with the pre-migration `.subscribe()` shape.
 	 * `$derived` fields tear down with the instance — no manual disposers.
 	 */
-	cleanup(): void {}
+	cleanup(): void {
+		// Intentionally empty — $derived fields tear down with the instance.
+	}
 
 	getState(): StreamingState {
 		return {

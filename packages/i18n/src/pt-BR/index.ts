@@ -1152,7 +1152,8 @@ const ptBR = {
 			active: "Serviço em execução",
 			inactive: "Serviço parado",
 			selected: "Selecionado",
-			serviceInactive: "O serviço de entrada {protocol} ainda não está em execução.",
+			serviceInactive:
+				"O serviço de entrada {protocol} ainda não está em execução.",
 			noAddress:
 				"O gateway {protocol} está em execução, mas este dispositivo não tem nenhum endereço de LAN ou ponto de acesso para publicar. Conecte-se a uma rede Wi-Fi ou Ethernet, ou ative o ponto de acesso do dispositivo.",
 			noAddressStatus: "Nenhum endereço acessível",
@@ -1524,7 +1525,8 @@ const ptBR = {
 		rebootingDescription:
 			"O dispositivo está reiniciando. Esta página se reconectará automaticamente.",
 		sessionExpired: "Sessão expirada. Por favor, autentique-se novamente.",
-		authTimedOut: "Não foi possível verificar sua sessão. Verifique a conexão e tente novamente.",
+		authTimedOut:
+			"Não foi possível verificar sua sessão. Verifique a conexão e tente novamente.",
 	},
 	offline: {
 		title: "Você está offline",

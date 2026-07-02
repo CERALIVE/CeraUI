@@ -12,12 +12,14 @@ let seedState: ConnectionState = "connecting";
 let onlineFlag = true;
 let capturedHandler: ((state: ConnectionState) => void) | null = null;
 
-const onConnectionChange = vi.fn((handler: (state: ConnectionState) => void) => {
-	capturedHandler = handler;
-	return () => {
-		capturedHandler = null;
-	};
-});
+const onConnectionChange = vi.fn(
+	(handler: (state: ConnectionState) => void) => {
+		capturedHandler = handler;
+		return () => {
+			capturedHandler = null;
+		};
+	},
+);
 const getConnectionState = vi.fn((): ConnectionState => seedState);
 
 vi.mock("$lib/rpc/client", () => ({
