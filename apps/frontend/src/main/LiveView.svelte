@@ -25,6 +25,7 @@ import { toast } from 'svelte-sonner';
 import { Button } from '$lib/components/ui/button';
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import IngestStats from '$lib/components/custom/IngestStats.svelte';
+import NetworkIngestSection from '$lib/components/custom/NetworkIngestSection.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 import * as Card from '$lib/components/ui/card';
@@ -927,6 +928,16 @@ const configRows = $derived<ConfigRow[]>([
 			sourceOrder={sourceOrder}
 			sourcePreferenceField={SOURCE_PREFERENCE_FIELD}
 			{switchingInput}
+		/>
+
+		<!-- LAN network-ingest sources (RTMP / SRT gateways) — publish from a phone
+		     or hardware encoder on the same network. Renders only the board-offered
+		     protocols; selecting one sets config.pipeline. -->
+		<NetworkIngestSection
+			{isStreaming}
+			networkIngest={getStatus()?.network_ingest ?? null}
+			pipelines={getPipelines()?.pipelines}
+			selectedPipeline={config?.pipeline}
 		/>
 
 		<!--

@@ -34,6 +34,7 @@ import {
 	clampBitrateToBounds,
 	OPTION_UNSUPPORTED_ON_PLATFORM,
 } from "$lib/components/streaming/ValidationAdapter";
+import type { PipelineAvailability } from "$lib/streaming/pipelineAvailability";
 import type { EncoderConfig } from "$main/dialogs/EncoderDialog.svelte";
 
 export type { ModePreset };
@@ -124,8 +125,25 @@ export interface PresetView {
  * Tag every catalog preset with whether `offered` supports it. An unsupported
  * preset is returned (not dropped) with the platform-unsupported reason key, so
  * the dialog shows it disabled-with-reason rather than hiding it.
+ *
+ * When `sourceAvailability` is supplied and reports the selected source blocked
+ * (its network-ingest gateway is inactive — see `pipelineAvailability`), EVERY
+ * preset is disabled with THAT reason: a profile cannot meaningfully apply to a
+ * source that cannot start. This routes the gateway gate through the single
+ * shared rule instead of re-deriving it. Omitting the argument keeps the original
+ * platform-only behaviour.
  */
-export function presetViews(offered: OfferedSet): PresetView[] {
+export function presetViews(
+	offered: OfferedSet,
+	sourceAvailability?: PipelineAvailability,
+): PresetView[] {
+	if (sourceAvailability && !sourceAvailability.available) {
+		return MODE_PRESETS.map((preset) => ({
+			preset,
+			supported: false,
+			reason: sourceAvailability.reason,
+		}));
+	}
 	return MODE_PRESETS.map((preset) => {
 		const supported = presetMatchesOffered(preset, offered);
 		return {

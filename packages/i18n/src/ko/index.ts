@@ -984,6 +984,24 @@ const ko = {
 			exportAria: "세션 요약 내보내기",
 			exportError: "세션 요약을 내보낼 수 없습니다. 다시 시도해 주세요.",
 		},
+		networkIngest: {
+			title: "네트워크 인제스트",
+			subtitle: "같은 네트워크의 다른 인코더나 휴대폰에서 이 기기로 송출하세요.",
+			infoTitle: "네트워크 인제스트",
+			infoBody:
+				"휴대폰이나 하드웨어 인코더(OBS 등)에서 이 주소로 송출하세요. 기기가 로컬 네트워크로 수신하여 스트리밍용으로 인코딩합니다.",
+			active: "서비스 실행 중",
+			inactive: "서비스 중지됨",
+			selected: "선택됨",
+			serviceInactive: "{protocol} 인제스트 서비스가 아직 실행되지 않았습니다.",
+			streamingLocked: "영상 소스를 변경하려면 스트림을 중지하세요.",
+			instructionsToggle: "송출 방법",
+			instructions: "휴대폰이나 인코더를 이 주소로 지정한 다음 송출을 시작하세요.",
+			qrLabel: "스캔하여 송출 주소 가져오기",
+			copy: "주소 복사",
+			copied: "주소가 복사됨",
+			copyFailed: "주소를 복사할 수 없습니다.",
+		},
 		preview: {
 			title: "미리보기",
 			start: "미리보기 시작",
@@ -1103,6 +1121,7 @@ const ko = {
 			reason: {
 				unsupportedPlatform: "이 플랫폼에서 지원되지 않음",
 				fixedBySource: "선택한 소스에 의해 고정됨",
+				gatewayInactive: "네트워크 인제스트 게이트웨이가 실행 중이 아닙니다",
 			},
 			info: "{field} 정보",
 			close: "확인",

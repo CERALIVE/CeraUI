@@ -379,6 +379,26 @@ const en = {
 			exportAria: "Export session summary",
 			exportError: "Couldn't export the session summary. Please try again.",
 		},
+		networkIngest: {
+			title: "Network ingest",
+			subtitle:
+				"Publish to this device from another encoder or a phone on the same network.",
+			infoTitle: "Network ingest",
+			infoBody:
+				"Publish from your phone or a hardware encoder (like OBS) to this address. The device receives it over your local network and encodes it for streaming.",
+			active: "Service running",
+			inactive: "Service not running",
+			selected: "Selected",
+			serviceInactive: "The {protocol:string} ingest service isn't running yet.",
+			streamingLocked: "Stop the stream to change the video source.",
+			instructionsToggle: "How to publish",
+			instructions:
+				"Point your phone or encoder at this address, then start publishing.",
+			qrLabel: "Scan to get the publish address",
+			copy: "Copy address",
+			copied: "Address copied",
+			copyFailed: "Couldn't copy the address.",
+		},
 		preview: {
 			title: "Preview",
 			start: "Start preview",
@@ -499,6 +519,7 @@ const en = {
 			reason: {
 				unsupportedPlatform: "Not supported on this platform",
 				fixedBySource: "Fixed by the selected source",
+				gatewayInactive: "Network ingest gateway is not running",
 			},
 			info: "About {field:string}",
 			close: "Got it",

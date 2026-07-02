@@ -1142,6 +1142,26 @@ const ptBR = {
 			exportError:
 				"Não foi possível exportar o resumo da sessão. Tente novamente.",
 		},
+		networkIngest: {
+			title: "Entrada de rede",
+			subtitle:
+				"Publique neste dispositivo a partir de outro codificador ou celular na mesma rede.",
+			infoTitle: "Entrada de rede",
+			infoBody:
+				"Publique do seu celular ou de um codificador de hardware (como o OBS) para este endereço. O dispositivo o recebe pela sua rede local e o codifica para transmitir.",
+			active: "Serviço em execução",
+			inactive: "Serviço parado",
+			selected: "Selecionado",
+			serviceInactive: "O serviço de entrada {protocol} ainda não está em execução.",
+			streamingLocked: "Pare a transmissão para alterar a fonte de vídeo.",
+			instructionsToggle: "Como publicar",
+			instructions:
+				"Aponte seu celular ou codificador para este endereço e comece a publicar.",
+			qrLabel: "Escaneie para obter o endereço de publicação",
+			copy: "Copiar endereço",
+			copied: "Endereço copiado",
+			copyFailed: "Não foi possível copiar o endereço.",
+		},
 		preview: {
 			title: "Pré-visualização",
 			start: "Iniciar pré-visualização",
@@ -1263,6 +1283,7 @@ const ptBR = {
 			reason: {
 				unsupportedPlatform: "Não suportado nesta plataforma",
 				fixedBySource: "Fixado pela fonte selecionada",
+				gatewayInactive: "O gateway de ingestão de rede não está em execução",
 			},
 			info: "Sobre {field}",
 			close: "Entendi",

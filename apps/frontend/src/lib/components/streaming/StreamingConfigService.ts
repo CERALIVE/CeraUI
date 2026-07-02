@@ -2,10 +2,13 @@ import type {
 	AudioCodecs,
 	ConfigMessage,
 	Framerate,
+	NetworkIngest,
 	Pipelines,
 	Resolution,
 } from "@ceraui/rpc/schemas";
 import { toast } from "svelte-sonner";
+
+import { pipelineAvailability } from "$lib/streaming/pipelineAvailability";
 
 type Properties = {
 	source?: string;
@@ -27,6 +30,9 @@ type Properties = {
 
 export interface ConfigServiceOptions {
 	pipelines: Pipelines | undefined;
+	// `status.network_ingest` — gates an rtmp/srt pipeline via the shared
+	// `pipelineAvailability` rule; null/absent blocks the build (fail-safe).
+	networkIngest?: NetworkIngest | null;
 }
 
 export function buildStreamingConfig(
@@ -52,6 +58,15 @@ export function buildStreamingConfig(
 	if (!pipelineData) {
 		console.warn(
 			"Cannot build streaming config: pipeline data not found for",
+			properties.pipeline,
+		);
+		return null;
+	}
+
+	const availability = pipelineAvailability(pipelineData, options.networkIngest);
+	if (!availability.available) {
+		console.warn(
+			"Cannot build streaming config: network-ingest gateway inactive for",
 			properties.pipeline,
 		);
 		return null;

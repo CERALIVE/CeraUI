@@ -933,6 +933,24 @@ const zh = {
 			exportAria: "导出会话摘要",
 			exportError: "无法导出会话摘要，请重试。",
 		},
+		networkIngest: {
+			title: "网络接入",
+			subtitle: "从同一网络中的其他编码器或手机推流到本设备。",
+			infoTitle: "网络接入",
+			infoBody:
+				"从手机或硬件编码器（如 OBS）推流到此地址。设备通过本地网络接收并编码以供直播。",
+			active: "服务运行中",
+			inactive: "服务未运行",
+			selected: "已选择",
+			serviceInactive: "{protocol} 接入服务尚未运行。",
+			streamingLocked: "停止直播后才能更改视频源。",
+			instructionsToggle: "如何推流",
+			instructions: "将手机或编码器指向此地址，然后开始推流。",
+			qrLabel: "扫描获取推流地址",
+			copy: "复制地址",
+			copied: "地址已复制",
+			copyFailed: "无法复制地址。",
+		},
 		preview: {
 			title: "预览",
 			start: "开始预览",
@@ -1049,6 +1067,7 @@ const zh = {
 			reason: {
 				unsupportedPlatform: "此平台不支持",
 				fixedBySource: "由所选来源固定",
+				gatewayInactive: "网络接入网关未运行",
 			},
 			info: "关于{field}",
 			close: "知道了",

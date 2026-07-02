@@ -1008,6 +1008,26 @@ const ja = {
 			exportError:
 				"セッションサマリーをエクスポートできませんでした。もう一度お試しください。",
 		},
+		networkIngest: {
+			title: "ネットワーク受信",
+			subtitle:
+				"同じネットワーク上の別のエンコーダーやスマートフォンからこのデバイスに配信します。",
+			infoTitle: "ネットワーク受信",
+			infoBody:
+				"スマートフォンやハードウェアエンコーダー（OBS など）からこのアドレスに配信します。デバイスはローカルネットワーク経由で受信し、ストリーミング用にエンコードします。",
+			active: "サービス稼働中",
+			inactive: "サービス停止中",
+			selected: "選択済み",
+			serviceInactive: "{protocol} 受信サービスはまだ稼働していません。",
+			streamingLocked: "映像ソースを変更するにはストリームを停止してください。",
+			instructionsToggle: "配信方法",
+			instructions:
+				"スマートフォンまたはエンコーダーをこのアドレスに向けて、配信を開始します。",
+			qrLabel: "スキャンして配信アドレスを取得",
+			copy: "アドレスをコピー",
+			copied: "アドレスをコピーしました",
+			copyFailed: "アドレスをコピーできませんでした。",
+		},
 		preview: {
 			title: "プレビュー",
 			start: "プレビューを開始",
@@ -1129,6 +1149,7 @@ const ja = {
 			reason: {
 				unsupportedPlatform: "このプラットフォームではサポートされていません",
 				fixedBySource: "選択したソースによって固定されています",
+				gatewayInactive: "ネットワーク受信ゲートウェイが実行されていません",
 			},
 			info: "{field}について",
 			close: "了解",

@@ -394,6 +394,26 @@ const de = {
 			exportError:
 				"Sitzungsübersicht konnte nicht exportiert werden. Bitte erneut versuchen.",
 		},
+		networkIngest: {
+			title: "Netzwerk-Eingang",
+			subtitle:
+				"Sende an dieses Gerät von einem anderen Encoder oder Telefon im selben Netzwerk.",
+			infoTitle: "Netzwerk-Eingang",
+			infoBody:
+				"Sende von deinem Telefon oder einem Hardware-Encoder (wie OBS) an diese Adresse. Das Gerät empfängt es über dein lokales Netzwerk und kodiert es zum Streamen.",
+			active: "Dienst läuft",
+			inactive: "Dienst läuft nicht",
+			selected: "Ausgewählt",
+			serviceInactive: "Der {protocol}-Eingangsdienst läuft noch nicht.",
+			streamingLocked: "Beende den Stream, um die Videoquelle zu ändern.",
+			instructionsToggle: "So sendest du",
+			instructions:
+				"Richte dein Telefon oder deinen Encoder auf diese Adresse und beginne mit dem Senden.",
+			qrLabel: "Scannen, um die Sendeadresse zu erhalten",
+			copy: "Adresse kopieren",
+			copied: "Adresse kopiert",
+			copyFailed: "Adresse konnte nicht kopiert werden.",
+		},
 		preview: {
 			title: "Vorschau",
 			start: "Vorschau starten",
@@ -516,6 +536,7 @@ const de = {
 			reason: {
 				unsupportedPlatform: "Auf dieser Plattform nicht unterstützt",
 				fixedBySource: "Durch die gewählte Quelle festgelegt",
+				gatewayInactive: "Netzwerk-Ingest-Gateway läuft nicht",
 			},
 			info: "Über {field}",
 			close: "Verstanden",

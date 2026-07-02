@@ -38,6 +38,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getDevices: () => undefined,
 	getIsStreaming: () => false,
 	getConfig: () => undefined,
+	getStatus: () => undefined,
 }));
 
 // Save-path only — never invoked by a render/toggle test. Mocking it keeps the

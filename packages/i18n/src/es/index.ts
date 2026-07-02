@@ -394,6 +394,26 @@ const es = {
 			exportError:
 				"No se pudo exportar el resumen de sesión. Inténtalo de nuevo.",
 		},
+		networkIngest: {
+			title: "Entrada de red",
+			subtitle:
+				"Publica en este dispositivo desde otro codificador o teléfono en la misma red.",
+			infoTitle: "Entrada de red",
+			infoBody:
+				"Publica desde tu teléfono o un codificador de hardware (como OBS) a esta dirección. El dispositivo la recibe por tu red local y la codifica para transmitir.",
+			active: "Servicio en ejecución",
+			inactive: "Servicio detenido",
+			selected: "Seleccionado",
+			serviceInactive: "El servicio de entrada {protocol} aún no está en ejecución.",
+			streamingLocked: "Detén la transmisión para cambiar la fuente de vídeo.",
+			instructionsToggle: "Cómo publicar",
+			instructions:
+				"Apunta tu teléfono o codificador a esta dirección y comienza a publicar.",
+			qrLabel: "Escanea para obtener la dirección de publicación",
+			copy: "Copiar dirección",
+			copied: "Dirección copiada",
+			copyFailed: "No se pudo copiar la dirección.",
+		},
 		preview: {
 			title: "Vista previa",
 			start: "Iniciar vista previa",
@@ -516,6 +536,7 @@ const es = {
 			reason: {
 				unsupportedPlatform: "No compatible con esta plataforma",
 				fixedBySource: "Fijado por la fuente seleccionada",
+				gatewayInactive: "La puerta de enlace de ingesta de red no está en ejecución",
 			},
 			info: "Acerca de {field}",
 			close: "Entendido",

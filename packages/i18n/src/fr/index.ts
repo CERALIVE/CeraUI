@@ -1166,6 +1166,26 @@ const fr = {
 			exportError:
 				"Impossible d'exporter le résumé de session. Veuillez réessayer.",
 		},
+		networkIngest: {
+			title: "Entrée réseau",
+			subtitle:
+				"Publiez vers cet appareil depuis un autre encodeur ou téléphone sur le même réseau.",
+			infoTitle: "Entrée réseau",
+			infoBody:
+				"Publiez depuis votre téléphone ou un encodeur matériel (comme OBS) vers cette adresse. L'appareil la reçoit via votre réseau local et l'encode pour la diffusion.",
+			active: "Service actif",
+			inactive: "Service inactif",
+			selected: "Sélectionné",
+			serviceInactive: "Le service d'entrée {protocol} n'est pas encore actif.",
+			streamingLocked: "Arrêtez la diffusion pour changer la source vidéo.",
+			instructionsToggle: "Comment publier",
+			instructions:
+				"Pointez votre téléphone ou encodeur vers cette adresse, puis commencez à publier.",
+			qrLabel: "Scannez pour obtenir l'adresse de publication",
+			copy: "Copier l'adresse",
+			copied: "Adresse copiée",
+			copyFailed: "Impossible de copier l'adresse.",
+		},
 		preview: {
 			title: "Aperçu",
 			start: "Démarrer l'aperçu",
@@ -1289,6 +1309,7 @@ const fr = {
 			reason: {
 				unsupportedPlatform: "Non pris en charge sur cette plateforme",
 				fixedBySource: "Fixé par la source sélectionnée",
+				gatewayInactive: "La passerelle d'ingestion réseau n'est pas active",
 			},
 			info: "À propos de {field}",
 			close: "Compris",
