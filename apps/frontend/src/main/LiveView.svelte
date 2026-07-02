@@ -590,7 +590,12 @@ const encoderSummary = $derived.by(() => {
 		);
 	}
 	if (bitrate) parts.push(formatBitrate(bitrate));
-	return parts.length ? parts.join(' · ') : $LL.general.notConfigured();
+	if (parts.length === 0) return $LL.general.notConfigured();
+	// Transport token (Todo 23): the active relay transport. SRTLA is the only
+	// wired bonded path; RIST/SRT surface once selected.
+	const protocol = config?.relay_protocol;
+	parts.push(protocol === 'rist' ? 'RIST' : protocol === 'srt' ? 'SRT' : 'SRTLA');
+	return parts.join(' · ');
 });
 const audioSummary = $derived.by(() => {
 	const parts: string[] = [];
@@ -844,10 +849,12 @@ const configRows = $derived<ConfigRow[]>([
 
 	<SourceSection
 		{activeInput}
+		activeEncode={getStatus()?.active_encode ?? null}
 		audioLiveSwitchField={AUDIO_SWITCH_FIELD}
 		{audioLiveSwitchEnabled}
 		{audioSources}
 		capabilities={getCapabilities()}
+		{config}
 		{devices}
 		{isStreaming}
 			onReorderSource={handleReorderSource}

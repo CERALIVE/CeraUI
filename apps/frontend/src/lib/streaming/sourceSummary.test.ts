@@ -1,12 +1,18 @@
-import type { CapabilitiesMessage } from "@ceraui/rpc/schemas";
+import type {
+	ActiveEncode,
+	CapabilitiesMessage,
+	ConfigMessage,
+} from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
 	type CapabilitySummary,
+	deriveActiveSummary,
 	deriveCapabilitySummary,
 	formatCodec,
 	resolveAudioSourceMode,
 	resolveDisplayedAudioSource,
+	resolveTransportToken,
 } from "./sourceSummary";
 
 const CAPS: CapabilitiesMessage = {
@@ -127,5 +133,116 @@ describe("formatCodec", () => {
 
 	it("uppercases unknown tokens as a safe fallback", () => {
 		expect(formatCodec("foo")).toBe("FOO");
+	});
+});
+
+describe("resolveTransportToken (Todo 23)", () => {
+	it("defaults to SRTLA with no config or caps", () => {
+		expect(resolveTransportToken(undefined, undefined)).toBe("SRTLA");
+	});
+
+	it("maps the configured protocol to its display token", () => {
+		expect(resolveTransportToken({ relay_protocol: "srtla" }, undefined)).toBe(
+			"SRTLA",
+		);
+		expect(resolveTransportToken({ relay_protocol: "rist" }, undefined)).toBe(
+			"RIST",
+		);
+		expect(resolveTransportToken({ relay_protocol: "srt" }, undefined)).toBe(
+			"SRT",
+		);
+	});
+
+	it("falls back to SRTLA when the engine does not offer the selected protocol", () => {
+		expect(
+			resolveTransportToken(
+				{ relay_protocol: "rist" },
+				{ ...CAPS, transports: ["srtla"] },
+			),
+		).toBe("SRTLA");
+	});
+
+	it("honors the selected protocol when the engine offers it", () => {
+		expect(
+			resolveTransportToken(
+				{ relay_protocol: "rist" },
+				{ ...CAPS, transports: ["srtla", "rist"] },
+			),
+		).toBe("RIST");
+	});
+});
+
+describe("deriveActiveSummary — capability vs active-config split (Todo 23)", () => {
+	it("idle: derives from saved config incl. video_codec, not streaming", () => {
+		const config: ConfigMessage = {
+			selected_video_input: "hdmi",
+			resolution: "1080p",
+			framerate: 60,
+			video_codec: "h264",
+			relay_protocol: "srtla",
+		};
+		expect(deriveActiveSummary(config, null, CAPS)).toEqual({
+			live: false,
+			source: "hdmi",
+			resolution: "1080p",
+			framerate: 60,
+			codec: "H.264",
+			transport: "SRTLA",
+		});
+	});
+
+	it("streaming: engine active_encode WINS over the requested config", () => {
+		const config: ConfigMessage = {
+			selected_video_input: "hdmi",
+			resolution: "720p",
+			framerate: 30,
+			video_codec: "h264",
+			relay_protocol: "srtla",
+		};
+		const activeEncode: ActiveEncode = {
+			codec: "h265",
+			resolution: "1920x1080",
+			framerate: 60,
+			active_input: "uvc_h265",
+		};
+		expect(deriveActiveSummary(config, activeEncode, CAPS)).toEqual({
+			live: true,
+			source: "uvc_h265",
+			resolution: "1080p",
+			framerate: 60,
+			codec: "H.265",
+			transport: "SRTLA",
+		});
+	});
+
+	it("streaming: falls back to config source when active_input is absent", () => {
+		const config: ConfigMessage = { selected_video_input: "hdmi" };
+		const activeEncode: ActiveEncode = {
+			codec: "h264",
+			resolution: "1234x567",
+			framerate: 30,
+		};
+		const summary = deriveActiveSummary(config, activeEncode, CAPS);
+		expect(summary.live).toBe(true);
+		expect(summary.source).toBe("hdmi");
+		// Non-standard dimensions have no canonical token → show the raw WxH.
+		expect(summary.resolution).toBe("1234x567");
+	});
+
+	it("missing caps + empty config → graceful fallback (no fabricated values)", () => {
+		const summary = deriveActiveSummary(undefined, null, undefined);
+		expect(summary).toEqual({
+			live: false,
+			source: undefined,
+			resolution: undefined,
+			framerate: undefined,
+			codec: undefined,
+			transport: "SRTLA",
+		});
+	});
+
+	it("idle without a codec never invents one from capabilities", () => {
+		const config: ConfigMessage = { selected_video_input: "hdmi" };
+		expect(deriveActiveSummary(config, null, CAPS).codec).toBeUndefined();
 	});
 });
