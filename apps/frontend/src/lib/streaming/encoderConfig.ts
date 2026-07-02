@@ -9,8 +9,14 @@
  *   draft.source         → pipeline
  *   draft.bitrateOverlay → bitrate_overlay
  *   draft.bitrate        → max_br
+ *   draft.codec          → video_codec  (only when explicitly chosen — Auto omits it)
  *   draft.resolution     → resolution  (CAPABILITY-GATED)
  *   draft.framerate      → framerate   (CAPABILITY-GATED)
+ *
+ * `codec` is the operator's explicit codec choice (`h264`/`h265`). It is
+ * `undefined` for the "Auto (recommended)" selection, in which case
+ * `video_codec` is OMITTED so the engine applies its own platform default —
+ * the FE never guesses the engine default onto the wire.
  *
  * Resolution/framerate are only forwarded when the selected pipeline advertises
  * the matching override support (`supportsResolutionOverride` /
@@ -67,6 +73,10 @@ export function buildEncoderSetConfig(
 		input.bitrate_overlay = draft.bitrateOverlay;
 	}
 	if (draft.bitrate !== undefined) input.max_br = draft.bitrate;
+	// Egress video codec: forwarded ONLY when the operator explicitly picked
+	// H.264/H.265. "Auto" leaves `draft.codec` undefined → `video_codec` omitted
+	// → the engine resolves its own platform default.
+	if (draft.codec !== undefined) input.video_codec = draft.codec;
 
 	// Capability-gated overrides: only forward when the pipeline supports them.
 	const gate = getOverrideGate(pipeline);

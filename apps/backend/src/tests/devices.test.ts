@@ -26,6 +26,11 @@ function makeDeps(
 		getEngine: () => "cerastream",
 		isStreaming: () => false,
 		engineSwitch: async () => undefined,
+		// Force the v4l2 fallback path for these scans (engine unreachable).
+		getEngineDevices: async () => null,
+		getSelectedVideoInput: () => undefined,
+		clearSelectedVideoInput: () => undefined,
+		notify: () => undefined,
 		broadcast: () => undefined,
 		now: () => 0,
 		logger: { debug() {}, warn() {}, error() {} },
@@ -56,7 +61,7 @@ describe("buildDeviceList", () => {
 		);
 		const video = list.filter((d) => d.media_class === "video");
 		expect(video.map((d) => d.display_name)).toEqual(["RØDE HDMI", "QA-Cam"]);
-		expect(video[0]?.input_id).toBe("video0");
+		expect(video[0]?.input_id).toBe("/dev/video0");
 	});
 
 	test("includes audio sources but skips pipeline pseudo-sources", () => {
@@ -120,12 +125,12 @@ describe("device registry", () => {
 				},
 			}),
 		);
-		const result = await registry.switchInput("video63");
+		const result = await registry.switchInput("/dev/video63");
 		expect(result.success).toBe(true);
-		expect(result.active_input).toBe("video63");
+		expect(result.active_input).toBe("/dev/video63");
 		expect(result.gap_ms).toBeGreaterThanOrEqual(0);
 		expect(result.gap_ms).toBeLessThanOrEqual(67);
-		expect(registry.getActiveInput()).toBe("video63");
+		expect(registry.getActiveInput()).toBe("/dev/video63");
 	});
 
 	test("switchInput to a missing device returns SOURCE_LOST", async () => {
@@ -153,7 +158,7 @@ describe("device registry", () => {
 				readCardName: async () => "QA-Cam",
 			}),
 		);
-		await registry.switchInput("video63");
+		await registry.switchInput("/dev/video63");
 		expect(engineSwitch).toHaveBeenCalledTimes(1);
 	});
 });

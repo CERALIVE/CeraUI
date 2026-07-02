@@ -144,6 +144,28 @@ describe("streaming.setConfig — applied (post-clamp) state", () => {
 		expect(echoed.selected_ingest_endpoint).toBe("ep-1");
 	});
 
+	test("persists + echoes video_codec and selected_video_input, and getConfig echoes them (Todo 19)", async () => {
+		const result = await call(
+			setConfigProcedure,
+			{ video_codec: "h265", selected_video_input: "cam-0" },
+			{ context: makeContext() },
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.applied?.video_codec).toBe("h265");
+		expect(result.applied?.selected_video_input).toBe("cam-0");
+		expect(getConfig().video_codec).toBe("h265");
+		expect(getConfig().selected_video_input).toBe("cam-0");
+
+		const echoed = await call(
+			getConfigProcedure,
+			{},
+			{ context: makeContext() },
+		);
+		expect(echoed.video_codec).toBe("h265");
+		expect(echoed.selected_video_input).toBe("cam-0");
+	});
+
 	test("clears a stale ingest slot on a non-slot save (round-3 mutual exclusion)", async () => {
 		await call(
 			setConfigProcedure,

@@ -129,6 +129,49 @@ describe("buildEncoderSetConfig", () => {
 		});
 	});
 
+	describe("video codec (Auto omits, explicit forwards)", () => {
+		it("omits video_codec when codec is undefined (Auto)", () => {
+			const out = buildEncoderSetConfig(
+				makeDraft({ codec: undefined }),
+				bothOverrides,
+			);
+			expect("video_codec" in out).toBe(false);
+		});
+
+		it("omits video_codec when codec is absent from the draft entirely", () => {
+			const out = buildEncoderSetConfig(makeDraft(), bothOverrides);
+			expect("video_codec" in out).toBe(false);
+		});
+
+		it("forwards video_codec = h264 when explicitly chosen", () => {
+			const out = buildEncoderSetConfig(
+				makeDraft({ codec: "h264" }),
+				bothOverrides,
+			);
+			expect(out.video_codec).toBe("h264");
+		});
+
+		it("forwards video_codec = h265 when explicitly chosen", () => {
+			const out = buildEncoderSetConfig(
+				makeDraft({ codec: "h265" }),
+				bothOverrides,
+			);
+			expect(out.video_codec).toBe("h265");
+		});
+
+		it("forwards codec independently of pipeline override gating", () => {
+			// codec is platform-derived, NOT pipeline-gated — a no-override pipeline
+			// still forwards an explicit codec.
+			const out = buildEncoderSetConfig(
+				makeDraft({ codec: "h265" }),
+				noOverrides,
+			);
+			expect(out.video_codec).toBe("h265");
+			expect("resolution" in out).toBe(false);
+			expect("framerate" in out).toBe(false);
+		});
+	});
+
 	describe("end-to-end shape", () => {
 		it("a fully-supported pipeline forwards all five fields", () => {
 			const out = buildEncoderSetConfig(makeDraft(), bothOverrides);

@@ -29,6 +29,7 @@ import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
 import { isDevelopment } from "./mocks/mock-config.ts";
 import { initMockService, shouldUseMocks } from "./mocks/mock-service.ts";
+import { startMockPreviewServer } from "./mocks/providers/preview.ts";
 import {
 	buildMockLinkTelemetry,
 	getMockEngineCapabilities,
@@ -182,6 +183,13 @@ reconcilePersistedPipeline(
 	Object.keys(getPipelineList()),
 );
 logger.info(bootTimer.phase("🔌", "pipelines"));
+
+// DEV-ONLY preview WebSocket server: `startMockPreviewServer` gates on
+// `shouldUseMocks()`, so it is a hard no-op (no port bind, no listener) in
+// production — safe to wire unconditionally.
+await guardNonCritical("mock-preview", () => {
+	startMockPreviewServer();
+});
 
 void initRevisions();
 initHardwareMonitoring();

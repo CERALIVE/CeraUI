@@ -118,8 +118,14 @@ export const framerateSchema = z.union([
 	z.literal(60),
 ]);
 
+// Egress video codec — defined locally (like resolution/framerate above) to keep
+// this schema free of an engine-binding dependency. Mirrors the @ceraui/rpc
+// videoCodecSchema so persisted config round-trips cleanly.
+export const videoCodecSchema = z.enum(["h264", "h265"]);
+
 export type Resolution = z.infer<typeof resolutionSchema>;
 export type Framerate = z.infer<typeof framerateSchema>;
+export type VideoCodec = z.infer<typeof videoCodecSchema>;
 
 // Bitrate balancer algorithm, defined locally — like resolution/framerate above
 // — to keep this schema free of an engine-binding dependency.
@@ -181,6 +187,10 @@ export const runtimeConfigSchema = z.object({
 	pipeline: z.string().optional(),
 	resolution: resolutionSchema.optional(),
 	framerate: framerateSchema.optional(),
+	// Egress video codec + operator-selected video input_id (Todo 19). Additive
+	// optional, same style as resolution/framerate above; absent = engine default.
+	video_codec: videoCodecSchema.optional(),
+	selected_video_input: z.string().optional(),
 	autostart: z.boolean().optional(),
 
 	// Remote/cloud settings

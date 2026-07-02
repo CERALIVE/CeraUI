@@ -918,6 +918,7 @@ const ja = {
 		chooseDestination: "配信先を選択",
 		streamSettings: "ストリーム設定",
 		adjustBitrate: "ビットレートを調整",
+		bitrateAppliesAtStart: "配信開始時に適用されます",
 		stopToChange: "変更するにはストリームを停止してください",
 		cannotStartNoPipeline:
 			"ストリームを開始する前にビデオソースを選択してください",
@@ -977,6 +978,9 @@ const ja = {
 			idleTitle: "ボンディングされたリンクがまだありません",
 			idleHint:
 				"ネットワークでセルラー・Wi-Fi・イーサネットのリンクを追加してボンディングを開始します。配信が始まるとインジェストのテレメトリがここに表示されます。",
+			linksReadyTitle: "リンク準備完了",
+			linksReadyCount: "{count} 個のリンクがボンディング可能",
+			linksReadyHint: "配信中にボンディングのテレメトリが表示されます。",
 			healthy: "安定",
 			degraded: "悪化中",
 			alert: "1つ以上のリンクでレイテンシが上昇しています",
@@ -999,8 +1003,10 @@ const ja = {
 			toggleAria: "ライブプレビューを切り替え",
 			connecting: "接続中\u2026",
 			reconnecting: "再接続中\u2026",
+			reconnectingAttempt: "再接続中\u2026（試行 {attempt}）",
 			waiting: "映像を待機中\u2026",
 			noSignal: "信号なし",
+			off: "プレビューはオフです \u2014 開始すると入力信号を確認できます",
 			unsupported: "このブラウザではライブプレビューはサポートされていません",
 			error: "プレビュー利用不可",
 			compatBadge: "互換モード",
@@ -1008,6 +1014,20 @@ const ja = {
 			audioLabel: "音声レベル",
 			audioSilent: "無音",
 			channelAria: "チャンネル {n} レベル",
+			unavailable: {
+				engineStarting: {
+					title: "エンジン起動中",
+					body: "配信エンジンはまだ起動中です。準備が整うとプレビューが表示されます。",
+				},
+				engineOffline: {
+					title: "エンジンオフライン",
+					body: "配信エンジンがオフラインです。復帰するまでプレビューは利用できません。",
+				},
+				previewUnavailable: {
+					title: "プレビュー利用不可",
+					body: "このエンジンはこのデバイスでプレビュー映像を提供しません。",
+				},
+			},
 		},
 		inputPicker: {
 			title: "入力ソース",
@@ -1037,6 +1057,10 @@ const ja = {
 				test: "テスト",
 				audio: "オーディオ",
 				other: "その他",
+				uvc_h264: "UVC H.264",
+				uvc_h265: "UVC H.265",
+				mjpeg: "MJPEG",
+				camlink: "Cam Link",
 			},
 		},
 		sourcePreference: {
@@ -1075,6 +1099,9 @@ const ja = {
 			none: "ソースが選択されていません",
 			select: "ソースを選択",
 			capabilities: "対応機能",
+			deviceMax: "デバイスの上限",
+			activeLive: "ライブ",
+			activeConfigured: "設定済み",
 			lostTitle: "デバイスが切断されました",
 			lostBody:
 				"デバイスを再接続して、このソースからの配信を再開してください。",
@@ -1150,6 +1177,10 @@ const ja = {
 			bitrateRangeHint: "対応範囲",
 			bitrateClamped: "対応範囲に調整しました",
 			probedCaps: "検出された機能",
+			codecAuto: "Auto (recommended)",
+			codecAutoResolvedH265: "Auto — H.265 on this device",
+			codecAutoResolvedH264: "Auto — H.264 on this device",
+			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 		},
 	},
 	dialogs: {

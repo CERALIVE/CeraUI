@@ -1050,6 +1050,7 @@ const ptBR = {
 		chooseDestination: "Escolha um destino",
 		streamSettings: "Configurações de transmissão",
 		adjustBitrate: "Ajustar bitrate",
+		bitrateAppliesAtStart: "Aplicado quando a transmissão inicia",
 		stopToChange: "Pare a transmissão para alterar",
 		cannotStartNoPipeline:
 			"Selecione uma fonte de vídeo antes de iniciar a transmissão",
@@ -1109,6 +1110,10 @@ const ptBR = {
 			idleTitle: "Ainda sem links agrupados",
 			idleHint:
 				"Adicione links de celular, Wi-Fi ou Ethernet em Rede para iniciar o agrupamento. A telemetria de ingestão aparece aqui quando a transmissão está ao vivo.",
+			linksReadyTitle: "Links prontos",
+			linksReadyCount: "{count} {{link pronto|links prontos}} para agrupar",
+			linksReadyHint:
+				"A telemetria de agrupamento aparece quando está ao vivo.",
 			healthy: "Estável",
 			degraded: "Degradando",
 			alert: "Latência crescente em um ou mais links",
@@ -1131,8 +1136,10 @@ const ptBR = {
 			toggleAria: "Alternar pré-visualização ao vivo",
 			connecting: "Conectando\u2026",
 			reconnecting: "Reconectando\u2026",
+			reconnectingAttempt: "Reconectando\u2026 (tentativa {attempt})",
 			waiting: "Aguardando vídeo\u2026",
 			noSignal: "Sem sinal",
+			off: "Pré-visualização desativada \u2014 inicie para ver o sinal recebido",
 			unsupported: "A pré-visualização ao vivo não é suportada neste navegador",
 			error: "Pré-visualização indisponível",
 			compatBadge: "Modo de compatibilidade",
@@ -1140,6 +1147,20 @@ const ptBR = {
 			audioLabel: "Níveis de áudio",
 			audioSilent: "Silêncio",
 			channelAria: "Nível do canal {n}",
+			unavailable: {
+				engineStarting: {
+					title: "Motor iniciando",
+					body: "O motor de transmissão ainda está iniciando. A pré-visualização aparecerá assim que estiver pronto.",
+				},
+				engineOffline: {
+					title: "Motor offline",
+					body: "O motor de transmissão está offline. A pré-visualização ficará indisponível até que ele volte.",
+				},
+				previewUnavailable: {
+					title: "Pré-visualização indisponível",
+					body: "Este motor não fornece um feed de pré-visualização neste dispositivo.",
+				},
+			},
 		},
 		inputPicker: {
 			title: "Fontes de entrada",
@@ -1168,6 +1189,10 @@ const ptBR = {
 				test: "Teste",
 				audio: "Áudio",
 				other: "Outro",
+				uvc_h264: "UVC H.264",
+				uvc_h265: "UVC H.265",
+				mjpeg: "MJPEG",
+				camlink: "Cam Link",
 			},
 		},
 		sourcePreference: {
@@ -1206,6 +1231,9 @@ const ptBR = {
 			none: "Nenhuma fonte selecionada",
 			select: "Selecionar uma fonte",
 			capabilities: "Recursos",
+			deviceMax: "Máximo do dispositivo",
+			activeLive: "Ao vivo",
+			activeConfigured: "Configurado",
 			lostTitle: "Dispositivo desconectado",
 			lostBody:
 				"Reconecte o dispositivo para retomar a transmissão desta fonte.",
@@ -1281,6 +1309,10 @@ const ptBR = {
 			bitrateRangeHint: "Faixa suportada",
 			bitrateClamped: "Ajustado para a faixa suportada",
 			probedCaps: "Capacidades detectadas",
+			codecAuto: "Auto (recommended)",
+			codecAutoResolvedH265: "Auto — H.265 on this device",
+			codecAutoResolvedH264: "Auto — H.264 on this device",
+			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 		},
 	},
 	dialogs: {

@@ -31,7 +31,7 @@
     the breakpoint switches Dialog ⇄ Sheet.
 -->
 <script module lang="ts">
-import type { Framerate, Resolution } from '@ceraui/rpc/schemas';
+import type { Framerate, Resolution, VideoCodec } from '@ceraui/rpc/schemas';
 
 export interface EncoderConfig {
 	source: string | undefined;
@@ -39,6 +39,11 @@ export interface EncoderConfig {
 	framerate: Framerate | undefined;
 	bitrate: number | undefined;
 	bitrateOverlay: boolean | undefined;
+	// Egress video codec. `undefined` = "Auto (recommended)" → the engine's
+	// platform default (never written to `video_codec`); `h264`/`h265` = the
+	// operator's explicit choice. Optional so callers that don't set it (LiveView
+	// seed) stay valid.
+	codec?: VideoCodec;
 }
 </script>
 
@@ -57,7 +62,6 @@ import { BITRATE_DEFAULT_MIN, type Pipeline } from '@ceraui/rpc/schemas';
 import AppliesNextStart from '$lib/components/custom/AppliesNextStart.svelte';
 import FieldSyncIndicator from '$lib/components/custom/FieldSyncIndicator.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
-import Badge from '$lib/components/custom/Badge.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 import {
@@ -96,7 +100,12 @@ import {
 	getPipelines,
 } from '$lib/rpc/subscriptions.svelte';
 import { appliesOnNextStart } from '$lib/streaming/appliesNextStart';
-import { findMatchingPresetId, presetToDraft, presetViews } from '$lib/streaming/modePresets';
+import {
+	findMatchingPresetId,
+	presetToDraft,
+	presetViews,
+	videoCodecFromMediaType,
+} from '$lib/streaming/modePresets';
 
 interface Props {
 	open?: boolean;
@@ -134,6 +143,15 @@ const platformCaps = $derived(capabilities?.platform ?? platformCapsForHardware(
 // back to the schema-wide range only until the contract arrives.
 const BITRATE = $derived(bitrateBoundsFromCaps(capabilities));
 const codecOptions = $derived(deriveCodecOptions(platformCaps));
+// Resolved engine default for "Auto": H.265 only when the platform both
+// supports it AND has a hardware encoder; otherwise H.264.
+const resolvedAutoCodec = $derived<VideoCodec>(
+	platformCaps.supports_h265 && platformCaps.hardware_accelerated ? 'h265' : 'h264',
+);
+// H.265 availability (from the offered set) + its software-encode caveat.
+const h265Option = $derived(codecOptions.find((codec) => codec.value === 'h265'));
+const h265Supported = $derived(h265Option !== undefined);
+const h265SoftwareOnly = $derived(h265Option?.softwareWarning ?? false);
 const uvcH265Sources = $derived(deriveUvcH265Sources(devices));
 // Probed hardware formats (resolution/framerate/media-type) surfaced inline.
 const probedCaps = $derived(summarizeProbedCaps(devices));
@@ -164,10 +182,17 @@ let localResolution = $state<Resolution>('1080p');
 let localFramerate = $state<Framerate>(30);
 let localBitrate = $state<number>(BITRATE_DEFAULT_MIN);
 let localOverlay = $state(false);
-// Display-only: which codec the active preset selected. Not a persisted draft
-// field (the setConfig contract has no video-codec key — codec is platform
-// derived), so it only drives the active-codec highlight + preset matching.
-let localCodec = $state<string | undefined>(undefined);
+// Operator's egress codec choice: `undefined` = "Auto (recommended)" (engine
+// resolves the platform default), `h264`/`h265` = explicit. Persisted to the
+// draft's `codec` → `video_codec`, and drives the segmented selector + preset
+// matching.
+let localCodec = $state<VideoCodec | undefined>(undefined);
+// The codec the current selection resolves to (explicit choice, else Auto), plus
+// the segmented-selector active-state (Auto = undefined selection).
+const effectiveCodec = $derived<VideoCodec>(localCodec ?? resolvedAutoCodec);
+const codecIsAuto = $derived(localCodec === undefined);
+const codecIsH264 = $derived(localCodec === 'h264');
+const codecIsH265 = $derived(localCodec === 'h265');
 // The preset the operator last applied (or that matched on seed). The visible
 // active state is the derived `activePresetId`, which clears this to "Custom" the
 // moment any preset-defined field diverges or the preset becomes unsupported.
@@ -195,14 +220,15 @@ $effect(() => {
 		const seedBitrate = config?.bitrate ?? savedConfig?.max_br ?? BITRATE.defaultMin;
 		localBitrate = Number.isFinite(seedBitrate) ? seedBitrate : BITRATE.defaultMin;
 		localOverlay = config?.bitrateOverlay ?? savedConfig?.bitrate_overlay ?? false;
-		// Highlight a preset that matches the seeded resolution/framerate; otherwise
-		// the surface opens in "Custom" with the Advanced section expanded.
-		const matchId = findMatchingPresetId({
-			resolution: localResolution,
-			framerate: localFramerate,
-		});
+		localCodec = config?.codec;
+		// Highlight a preset that matches the seeded resolution/framerate/codec
+		// (Auto resolves to the platform default for matching); otherwise the
+		// surface opens in "Custom" with the Advanced section expanded.
+		const matchId = findMatchingPresetId(
+			{ resolution: localResolution, framerate: localFramerate },
+			localCodec ?? resolvedAutoCodec,
+		);
 		selectedPresetId = matchId;
-		localCodec = matchId ? CANONICAL_PRESETS[matchId]?.codec : undefined;
 		advancedOpen = matchId === null;
 		seededSource = localSource;
 		seededResolution = localResolution;
@@ -252,7 +278,7 @@ const activePresetId = $derived.by<string | null>(() => {
 	if (!preset) return null;
 	if (preset.resolution !== localResolution) return null;
 	if (preset.framerate !== localFramerate) return null;
-	if (localCodec !== undefined && preset.codec !== localCodec) return null;
+	if (videoCodecFromMediaType(preset.codec) !== effectiveCodec) return null;
 	if (
 		preset.bitrateDefault !== undefined &&
 		clampBitrateToBounds(preset.bitrateDefault, BITRATE) !== localBitrate
@@ -292,6 +318,7 @@ function currentDraft(): EncoderConfig {
 		framerate: localFramerate,
 		bitrate: localBitrate,
 		bitrateOverlay: localOverlay,
+		codec: localCodec,
 	};
 }
 
@@ -312,7 +339,9 @@ function applyPreset(preset: ModePreset) {
 	if (next.resolution) localResolution = next.resolution;
 	if (next.framerate) localFramerate = next.framerate;
 	if (next.bitrate !== undefined) localBitrate = next.bitrate;
-	localCodec = preset.codec;
+	// The preset TRULY applies its codec: an explicit choice, so the preset stays
+	// active (not reset to Auto) and `video_codec` is written on save.
+	localCodec = next.codec;
 	selectedPresetId = preset.id;
 	markFieldApplied(PRESET_FIELD, preset.id);
 }
@@ -340,6 +369,7 @@ function handleSave() {
 		framerate: selectedPipeline?.supportsFramerateOverride ? localFramerate : undefined,
 		bitrate: normalized,
 		bitrateOverlay: localOverlay,
+		codec: localCodec,
 	};
 	config = next;
 
@@ -529,6 +559,127 @@ function handleSave() {
 			</div>
 		</div>
 
+		<!-- Encoder codec: a first-class, capability-gated selector (replaces the
+		     old display-only chips). Auto resolves the engine default; H.265 is
+		     disabled-with-reason when the platform can't encode it — never hidden. -->
+		<div class="space-y-2">
+			<Label class="text-sm font-medium">{$LL.settings.videoCodec()}</Label>
+			<div
+				class="bg-card/40 grid grid-cols-3 gap-1.5 rounded-lg border p-1"
+				aria-label={$LL.settings.videoCodec()}
+				data-testid="encoder-codec-selector"
+				role="radiogroup"
+			>
+				<button
+					type="button"
+					aria-checked={codecIsAuto}
+					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 text-xs font-medium transition-colors {codecIsAuto
+						? 'bg-primary/10 text-primary ring-primary ring-1'
+						: 'text-muted-foreground hover:bg-primary/5'}"
+					data-active={codecIsAuto}
+					data-testid="codec-auto"
+					onclick={() => (localCodec = undefined)}
+					role="radio"
+				>
+					{$LL.live.encoder.codecAuto()}
+				</button>
+				<button
+					type="button"
+					aria-checked={codecIsH264}
+					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 font-mono text-xs font-medium transition-colors {codecIsH264
+						? 'bg-primary/10 text-primary ring-primary ring-1'
+						: 'text-muted-foreground hover:bg-primary/5'}"
+					data-active={codecIsH264}
+					data-testid="codec-h264"
+					onclick={() => (localCodec = 'h264')}
+					role="radio"
+				>
+					H.264
+				</button>
+				<button
+					type="button"
+					aria-checked={codecIsH265}
+					aria-disabled={h265Supported ? undefined : 'true'}
+					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 font-mono text-xs font-medium transition-colors {codecIsH265
+						? 'bg-primary/10 text-primary ring-primary ring-1'
+						: h265Supported
+							? 'text-muted-foreground hover:bg-primary/5'
+							: 'text-muted-foreground/50 cursor-not-allowed'}"
+					data-active={codecIsH265}
+					data-supported={h265Supported}
+					data-testid="codec-h265"
+					disabled={!h265Supported}
+					onclick={() => (localCodec = 'h265')}
+					role="radio"
+					title={h265Supported ? undefined : $LL.live.encoder.codecH265Unavailable()}
+				>
+					H.265
+				</button>
+			</div>
+			{#if codecIsAuto}
+				<p class="text-muted-foreground text-xs" data-testid="codec-auto-resolved">
+					{resolvedAutoCodec === 'h265'
+						? $LL.live.encoder.codecAutoResolvedH265()
+						: $LL.live.encoder.codecAutoResolvedH264()}
+				</p>
+			{/if}
+			{#if codecIsH265 && h265SoftwareOnly}
+				<p class="text-status-warning text-xs" data-testid="codec-h265-software">
+					{$LL.settings.softwareEncodeWarning()}
+				</p>
+			{/if}
+		</div>
+
+		<!-- Bitrate LEADS (first-class, out of Advanced): slider + number input share
+		     ONE board window (BITRATE.min‥max) and ONE clamp, so the two controls can
+		     never diverge. -->
+		<div class="bg-muted/40 space-y-3 rounded-lg border p-4" data-testid="encoder-bitrate-control">
+			<div class="flex items-center justify-between gap-2">
+				<Label class="text-sm font-medium" for="encoder-bitrate">{$LL.settings.bitrate()}</Label>
+				<span class="bg-primary/10 text-primary rounded-md px-2 py-1 font-mono text-xs">
+					{Number.isFinite(localBitrate) ? localBitrate : BITRATE.defaultMin}
+				</span>
+			</div>
+			<Slider
+				aria-label={$LL.settings.bitrate()}
+				max={BITRATE.max}
+				min={BITRATE.min}
+				onValueChange={(value) => commitBitrate(value as number)}
+				step={BITRATE_STEP}
+				type="single"
+				value={sliderValue}
+			/>
+			<Input
+				id="encoder-bitrate"
+				aria-describedby={errors.bitrate ? 'encoder-bitrate-error' : undefined}
+				aria-invalid={Boolean(errors.bitrate)}
+				class="text-center font-mono"
+				max={BITRATE.max}
+				min={BITRATE.min}
+				oninput={(e) => commitBitrate(parseInt(e.currentTarget.value, 10))}
+				step={BITRATE_STEP}
+				type="number"
+				value={Number.isFinite(localBitrate) ? localBitrate : BITRATE.defaultMin}
+			/>
+			<p class="text-muted-foreground text-xs" data-testid="bitrate-range-hint">
+				{$LL.live.encoder.bitrateRangeHint()}: {BITRATE.min}–{BITRATE.max}
+				{$LL.units.kbps()}
+			</p>
+			{#if bitrateClamped}
+				<p class="text-status-warning text-xs" data-testid="bitrate-clamped">
+					{$LL.live.encoder.bitrateClamped()}
+				</p>
+			{/if}
+			{#if errors.bitrate}
+				<p class="text-destructive text-sm" id="encoder-bitrate-error">{errors.bitrate}</p>
+			{/if}
+			{#if isStreaming}
+				<p class="text-muted-foreground bg-muted rounded-md p-2 text-xs">
+					{$LL.settings.changeBitrateNotice()}
+				</p>
+			{/if}
+		</div>
+
 		<!-- Advanced / Custom: the full granular controls. Editing any preset-defined
 		     field here drops the active preset to "Custom" (via activePresetId). -->
 		<details bind:open={advancedOpen} class="bg-card/40 rounded-lg border">
@@ -638,117 +789,6 @@ function handleSave() {
 						</Select.Root>
 					</div>
 				{/if}
-
-				<!-- Encoder codec: capability-derived. EVERY codec carries the uniform
-				     hardware/software acceleration label (not just an H.265 warning).
-				     H.265 on software keeps its extra high-CPU caveat. -->
-				<div class="space-y-2">
-					<Label class="text-sm font-medium">{$LL.settings.videoCodec()}</Label>
-					<div class="flex flex-wrap items-center gap-2" data-testid="encoder-codecs">
-						{#each codecOptions as codec (codec.value)}
-							{@const codecActive = localCodec === codec.mediaType}
-							<span
-								class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs {codecActive
-									? 'border-primary bg-primary/10 text-primary'
-									: 'bg-muted'}"
-								data-active={codecActive}
-								data-testid={`codec-${codec.value}`}
-							>
-								<span class="font-mono">
-									{codec.value === 'h265'
-										? 'H.265'
-										: codec.value === 'h264'
-											? 'H.264'
-											: codec.mediaType}
-								</span>
-								{#if codec.hardwareAccelerated}
-									<Badge
-										variant="success"
-										size="micro"
-										data-testid={`codec-accel-${codec.value}`}
-									>
-										{#snippet icon()}
-											<Cpu aria-hidden={true} class="size-3 shrink-0" />
-										{/snippet}
-										{$LL.live.encoder.accelerated()}
-									</Badge>
-								{:else}
-									<Badge
-										variant="warning"
-										size="micro"
-										data-testid={`codec-accel-${codec.value}`}
-									>
-										{#snippet icon()}
-											<TriangleAlert aria-hidden={true} class="size-3 shrink-0" />
-										{/snippet}
-										{$LL.live.encoder.software()}
-									</Badge>
-								{/if}
-								{#if codec.softwareWarning}
-									<Badge
-										variant="warning"
-										size="micro"
-										data-testid="h265-software-warning"
-									>
-										{#snippet icon()}
-											<TriangleAlert aria-hidden={true} class="size-3 shrink-0" />
-										{/snippet}
-										{$LL.settings.softwareEncodeWarning()}
-									</Badge>
-								{/if}
-							</span>
-						{/each}
-					</div>
-				</div>
-
-				<!-- Bitrate: slider + number input share ONE board window (BITRATE.min‥max)
-				     and ONE clamp, so the two controls can never diverge. -->
-				<div class="bg-muted/40 space-y-3 rounded-lg border p-4" data-testid="encoder-bitrate-control">
-					<div class="flex items-center justify-between gap-2">
-						<Label class="text-sm font-medium" for="encoder-bitrate">{$LL.settings.bitrate()}</Label>
-						<span class="bg-primary/10 text-primary rounded-md px-2 py-1 font-mono text-xs">
-							{Number.isFinite(localBitrate) ? localBitrate : BITRATE.defaultMin}
-						</span>
-					</div>
-					<Slider
-						aria-label={$LL.settings.bitrate()}
-						max={BITRATE.max}
-						min={BITRATE.min}
-						onValueChange={(value) => commitBitrate(value as number)}
-						step={BITRATE_STEP}
-						type="single"
-						value={sliderValue}
-					/>
-					<Input
-						id="encoder-bitrate"
-						aria-describedby={errors.bitrate ? 'encoder-bitrate-error' : undefined}
-						aria-invalid={Boolean(errors.bitrate)}
-						class="text-center font-mono"
-						max={BITRATE.max}
-						min={BITRATE.min}
-						oninput={(e) => commitBitrate(parseInt(e.currentTarget.value, 10))}
-						step={BITRATE_STEP}
-						type="number"
-						value={Number.isFinite(localBitrate) ? localBitrate : BITRATE.defaultMin}
-					/>
-					<p class="text-muted-foreground text-xs" data-testid="bitrate-range-hint">
-						{$LL.live.encoder.bitrateRangeHint()}: {BITRATE.min}–{BITRATE.max}
-						{$LL.units.kbps()}
-					</p>
-					{#if bitrateClamped}
-						<p class="text-status-warning text-xs" data-testid="bitrate-clamped">
-							{$LL.live.encoder.bitrateClamped()}
-						</p>
-					{/if}
-					{#if errors.bitrate}
-						<p class="text-destructive text-sm" id="encoder-bitrate-error">{errors.bitrate}</p>
-					{/if}
-					{#if isStreaming}
-						<p class="text-muted-foreground bg-muted rounded-md p-2 text-xs">
-							{$LL.settings.changeBitrateNotice()}
-						</p>
-					{/if}
-				</div>
 
 				<!-- Bitrate overlay toggle -->
 				<div class="flex items-center justify-between gap-3 rounded-lg border p-3">

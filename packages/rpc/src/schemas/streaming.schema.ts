@@ -60,6 +60,53 @@ export const framerateSchema = z.union([
 ]);
 export type Framerate = z.infer<typeof framerateSchema>;
 
+// Egress video codec selection (Todo 19). Mirrors the cerastream StartParams
+// `codec` wire enum (h264|h265). Additive/optional everywhere it is used — absent
+// means "let the engine pick the platform default codec".
+export const videoCodecSchema = z.enum(['h264', 'h265']);
+export type VideoCodec = z.infer<typeof videoCodecSchema>;
+
+// Resolution token ↔ engine "WxH" pixel-pair map (Todo 19). These dimensions MUST
+// match cerastream's `Resolution::dims()` table EXACTLY
+// (crates/cerastream-core/src/graph/spec.rs) so the device round-trips bijectively
+// with the engine's realized encode dimensions (Todo 18 depends on this):
+//   480p→852x480, 720p→1280x720, 1080p→1920x1080, 1440p→2560x1440, 2160p→3840x2160.
+// '4k' is an ALIAS for '2160p': both map to "3840x2160" on toEngineResolution, but
+// fromEngineResolution("3840x2160") returns ONLY the canonical '2160p' — never
+// '4k'. This asymmetry is deliberate: canonical tokens are bijective; '4k' is a
+// convenience alias that collapses onto '2160p' on the reverse mapping.
+export const RESOLUTION_ENGINE_DIMS: Record<Resolution, string> = {
+	'480p': '852x480',
+	'720p': '1280x720',
+	'1080p': '1920x1080',
+	'1440p': '2560x1440',
+	'2160p': '3840x2160',
+	'4k': '3840x2160',
+};
+
+// Canonical reverse map — one canonical token per "WxH". '4k' is intentionally
+// omitted so "3840x2160" resolves to the canonical '2160p' (documented asymmetry).
+const ENGINE_DIMS_TO_RESOLUTION: Record<string, Resolution> = {
+	'852x480': '480p',
+	'1280x720': '720p',
+	'1920x1080': '1080p',
+	'2560x1440': '1440p',
+	'3840x2160': '2160p',
+};
+
+/** Map a resolution token to the engine's "WxH" pixel form. Total on Resolution. */
+export function toEngineResolution(token: Resolution): string {
+	return RESOLUTION_ENGINE_DIMS[token];
+}
+
+/**
+ * Map an engine "WxH" pixel form back to the canonical resolution token, or
+ * `undefined` for an unknown dimension. Never returns '4k' (see the map comment).
+ */
+export function fromEngineResolution(wxh: string): Resolution | undefined {
+	return ENGINE_DIMS_TO_RESOLUTION[wxh];
+}
+
 // Streaming configuration input schema
 export const streamingConfigInputSchema = z.object({
 	delay: z.number().int().min(AUDIO_DELAY_MIN).max(AUDIO_DELAY_MAX).optional(),
@@ -87,6 +134,11 @@ export const streamingConfigInputSchema = z.object({
 	// first). Governs operator-initiated switching only — the engine's
 	// auto-failover is sticky and does NOT consult this list (Task 11).
 	source_preference: z.array(z.string()).optional(),
+	// Egress video codec + operator-selected video input_id (Todo 19). Both
+	// additive/optional: absent codec → engine platform default; absent input →
+	// engine default source. `selected_video_input` is a capture-device input_id.
+	video_codec: videoCodecSchema.optional(),
+	selected_video_input: z.string().optional(),
 	// SRT receive-profile tuning (Tasks 18/19). FEC is device-side
 	// SRTO_PACKETFILTER, only ever enabled against a FEC-capable CeraLive
 	// receiver; recovery preference routes to the L1 (standard) vs L2/Classic
@@ -252,6 +304,17 @@ export const capabilitiesMessageSchema = z.object({
 			max: z.number(),
 		})
 		.optional(),
+	// Preview WebSocket availability (cerastream `PreviewAvailability`, Todo
+	// 13-15). Additive + optional — absent on a legacy engine, in which case the
+	// frontend treats preview as unavailable. Mirrors the additive-optional
+	// pattern used by `latency_range` above; snake_case matches the engine wire.
+	preview: z
+		.object({
+			enabled: z.boolean(),
+			port: z.number().int().min(PORT_MIN).max(PORT_MAX).optional(),
+			bound: z.boolean(),
+		})
+		.optional(),
 });
 export type CapabilitiesMessage = z.infer<typeof capabilitiesMessageSchema>;
 
@@ -312,6 +375,10 @@ export const configMessageSchema = z.object({
 	// Operator-ordered video-source preference (input_id list, most-preferred
 	// first) — echoed back so the UI can render the saved order (Task 11).
 	source_preference: z.array(z.string()).optional(),
+	// Egress video codec + operator-selected video input_id (Todo 19), echoed
+	// back so the Live UI reflects the saved selection on reload.
+	video_codec: videoCodecSchema.optional(),
+	selected_video_input: z.string().optional(),
 	// SRT receive-profile tuning, echoed back so the card reflects the saved
 	// values on reload (Tasks 18/19).
 	fec_enabled: z.boolean().optional(),
@@ -408,7 +475,21 @@ export type StreamHealthOutput = z.infer<typeof streamHealthOutputSchema>;
 export const streamingEngineSchema = z.enum(['cerastream']);
 export type StreamingEngineKind = z.infer<typeof streamingEngineSchema>;
 
-export const deviceKindSchema = z.enum(['hdmi', 'usb', 'network', 'test', 'audio', 'other']);
+// Existing values are UNCHANGED and in their original order; the engine-typed
+// capture kinds (uvc_h264/uvc_h265/mjpeg/camlink) are APPENDED (Todo 19) so a
+// legacy device list still parses. Todo 17 (devices.ts) consumes the new members.
+export const deviceKindSchema = z.enum([
+	'hdmi',
+	'usb',
+	'network',
+	'test',
+	'audio',
+	'other',
+	'uvc_h264',
+	'uvc_h265',
+	'mjpeg',
+	'camlink',
+]);
 export type DeviceKind = z.infer<typeof deviceKindSchema>;
 
 export const deviceMediaClassSchema = z.enum(['video', 'audio']);

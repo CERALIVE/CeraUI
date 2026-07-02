@@ -303,6 +303,7 @@ const en = {
 		chooseDestination: "Choose a destination",
 		streamSettings: "Stream Settings",
 		adjustBitrate: "Adjust Bitrate",
+		bitrateAppliesAtStart: "Applies when the stream starts",
 		stopToChange: "Stop stream to change",
 		cannotStartNoPipeline: "Select a video source before starting the stream",
 		cannotStartNoServer: "Configure a server before starting the stream",
@@ -361,6 +362,9 @@ const en = {
 			idleTitle: "No bonded links yet",
 			idleHint:
 				"Add cellular, Wi-Fi, or Ethernet links in Network to start bonding. Ingest telemetry appears here once the stream is live.",
+			linksReadyTitle: "Links ready",
+			linksReadyCount: "{count:number} {{link|links}} ready to bond",
+			linksReadyHint: "Bonding telemetry appears when live.",
 			healthy: "Stable",
 			degraded: "Degrading",
 			alert: "Rising latency on one or more links",
@@ -382,8 +386,10 @@ const en = {
 			toggleAria: "Toggle live preview",
 			connecting: "Connecting\u2026",
 			reconnecting: "Reconnecting\u2026",
+			reconnectingAttempt: "Reconnecting\u2026 (attempt {attempt:string})",
 			waiting: "Waiting for video\u2026",
 			noSignal: "No signal",
+			off: "Preview off \u2014 start to view the incoming signal",
 			unsupported: "Live preview isn't supported in this browser",
 			error: "Preview unavailable",
 			compatBadge: "Compatibility mode",
@@ -391,6 +397,20 @@ const en = {
 			audioLabel: "Audio levels",
 			audioSilent: "Silent",
 			channelAria: "Channel {n:number} level",
+			unavailable: {
+				engineStarting: {
+					title: "Engine starting",
+					body: "The streaming engine is still starting. Preview will appear once it's ready.",
+				},
+				engineOffline: {
+					title: "Engine offline",
+					body: "The streaming engine is offline. Preview is unavailable until it's back.",
+				},
+				previewUnavailable: {
+					title: "Preview unavailable",
+					body: "This engine doesn't provide a preview feed on this device.",
+				},
+			},
 		},
 		inputPicker: {
 			title: "Input Sources",
@@ -419,6 +439,10 @@ const en = {
 				test: "Test",
 				audio: "Audio",
 				other: "Other",
+				uvc_h264: "UVC H.264",
+				uvc_h265: "UVC H.265",
+				mjpeg: "MJPEG",
+				camlink: "Cam Link",
 			},
 		},
 		sourcePreference: {
@@ -457,6 +481,9 @@ const en = {
 			none: "No source selected",
 			select: "Select a source",
 			capabilities: "Capabilities",
+			deviceMax: "Device max",
+			activeLive: "Live",
+			activeConfigured: "Configured",
 			lostTitle: "Device disconnected",
 			lostBody: "Reconnect the device to resume streaming from this source.",
 			audioNone: "No audio source detected",
@@ -531,6 +558,10 @@ const en = {
 			bitrateRangeHint: "Supported range",
 			bitrateClamped: "Adjusted to the supported range",
 			probedCaps: "Detected capabilities",
+			codecAuto: "Auto (recommended)",
+			codecAutoResolvedH265: "Auto — H.265 on this device",
+			codecAutoResolvedH264: "Auto — H.264 on this device",
+			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 		},
 	},
 	dialogs: {
@@ -908,7 +939,7 @@ const en = {
 		selectedPipelineNoAudio:
 			"The selected pipeline doesn't support audio configuration",
 		selectPipelineFirst:
-			"Please select an encoder pipeline first to configure audio settings",
+			"Please select a video source first to configure audio settings",
 		audioDelayEarly: "Early (-)",
 		audioDelayLate: "Late (+)",
 		perfectSync: "Sync",

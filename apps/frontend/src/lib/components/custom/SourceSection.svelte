@@ -17,7 +17,12 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import type { CaptureDevice, CapabilitiesMessage } from '@ceraui/rpc/schemas';
+import type {
+	ActiveEncode,
+	CaptureDevice,
+	CapabilitiesMessage,
+	ConfigMessage,
+} from '@ceraui/rpc/schemas';
 import { TriangleAlert, Video, Volume2 } from '@lucide/svelte';
 
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
@@ -27,6 +32,7 @@ import * as Card from '$lib/components/ui/card';
 import * as Select from '$lib/components/ui/select';
 import type { FailoverEvent } from '$lib/streaming/source-preference';
 import {
+	deriveActiveSummary,
 	deriveCapabilitySummary,
 	formatCodec,
 	resolveAudioSourceMode,
@@ -52,6 +58,11 @@ interface Props {
 	onSelectAudioSource?: (id: string) => void;
 	// ── Capability summary ──
 	capabilities?: CapabilitiesMessage | undefined;
+	// ── Active-config truth (Todo 23) ──
+	/** Saved config — the IDLE source of res/fps/codec/transport. */
+	config?: ConfigMessage | undefined;
+	/** Engine `active_encode` — WINS while streaming (engine truth over requested). */
+	activeEncode?: ActiveEncode | null | undefined;
 	// ── Source preference + fallback state (Task 11) ──
 	sourceOrder?: string[];
 	sourceFailover?: FailoverEvent | null;
@@ -73,6 +84,8 @@ let {
 	selectedAudioSource,
 	onSelectAudioSource,
 	capabilities,
+	config,
+	activeEncode,
 	sourceOrder = [],
 	sourceFailover = null,
 	sourcePreferenceField = 'source_preference',
@@ -89,6 +102,23 @@ const capChips = $derived.by(() => {
 	for (const codec of summary.codecs) chips.push(formatCodec(codec));
 	return chips;
 });
+
+// Active-config truth (Todo 23): engine `active_encode` while streaming, else the
+// saved config. Distinct from the capability chips above — these are settings.
+const activeSummary = $derived(deriveActiveSummary(config, activeEncode, capabilities));
+const activeParts = $derived.by(() => {
+	const parts: string[] = [];
+	if (activeSummary.source) parts.push(activeSummary.source);
+	if (activeSummary.resolution) parts.push(activeSummary.resolution);
+	if (typeof activeSummary.framerate === 'number') parts.push(`${activeSummary.framerate}fps`);
+	if (activeSummary.codec) parts.push(activeSummary.codec);
+	parts.push(activeSummary.transport);
+	return parts;
+});
+const hasActiveConfig = $derived(
+	activeSummary.live ||
+		Boolean(activeSummary.source || activeSummary.resolution || activeSummary.codec),
+);
 
 // Audio source: single → read-only, multiple → selectable (pre-start only).
 const audioMode = $derived(resolveAudioSourceMode(audioSources));
@@ -125,6 +155,12 @@ const hasLostDevice = $derived(lostDevices.length > 0);
 					data-testid="source-capabilities"
 					aria-label={$LL.live.source.capabilities()}
 				>
+					<span
+						class="text-muted-foreground text-[0.65rem] font-semibold tracking-wide uppercase"
+						data-testid="cap-device-max"
+					>
+						{$LL.live.source.deviceMax()}
+					</span>
 					<InfoPopover
 						body={$LL.live.education.field.mode.body()}
 						testId="info-mode"
@@ -149,6 +185,30 @@ const hasLostDevice = $derived(lostDevices.length > 0);
 				</div>
 			{/if}
 		</div>
+
+		<!-- Active-config line (Todo 23): what the device is DOING (engine truth while
+		     streaming) or the saved config it will start with — visually distinct from
+		     the capability chips above, which are the hardware ceiling, not settings. -->
+		{#if hasActiveConfig}
+			<div
+				class="bg-muted/30 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-3 py-2"
+				data-testid="source-active-config"
+			>
+				<span
+					class={`inline-flex items-center gap-1 text-xs font-semibold ${
+						activeSummary.live ? 'text-primary' : 'text-muted-foreground'
+					}`}
+				>
+					{#if activeSummary.live}
+						<span aria-hidden={true} class="bg-primary size-1.5 rounded-full"></span>
+					{/if}
+					{activeSummary.live ? $LL.live.source.activeLive() : $LL.live.source.activeConfigured()}
+				</span>
+				<span class="text-foreground truncate font-mono text-sm" data-testid="active-config-value">
+					{activeParts.join(' \u00b7 ')}
+				</span>
+			</div>
+		{/if}
 
 		<!-- Lost-device explanation: explicit badge + body + recovery hint -->
 		{#if hasLostDevice}

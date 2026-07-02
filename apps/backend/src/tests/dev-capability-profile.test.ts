@@ -6,6 +6,7 @@ import {
 	stopMockService,
 } from "../mocks/mock-service.ts";
 import {
+	getMockActiveEncode,
 	getMockEngineCapabilities,
 	setMockEngineCapabilities,
 } from "../mocks/providers/streaming.ts";
@@ -128,6 +129,42 @@ describe("MOCK_SCENARIO=engine-unavailable", () => {
 		expect(result.engineUnavailable).toBe(true);
 		// served from cache, NOT the cold minimal floor — distinct from engine-starting.
 		expect(result.engineStarting).toBeUndefined();
+	});
+});
+
+describe("MOCK_SCENARIO=multi-modem-wifi (dev default)", () => {
+	test("the default scenario resolves the FULL engine profile, not the floor", async () => {
+		bootMockScenario("multi-modem-wifi");
+
+		const snapshot = getMockEngineCapabilities();
+		expect(snapshot.caps.encoder.codecs).toEqual(["H264", "H265"]);
+		expect(snapshot.caps.platform.hardware_accelerated).toBe(true);
+		expect(snapshot.caps.platform.supports_h265).toBe(true);
+
+		const result = await resolveLikeBoot();
+		expect(result.platform.supports_h265).toBe(true);
+		expect(result.platform.hardware_accelerated).toBe(true);
+		expect(
+			result.sources.some((s) => s.id === "hdmi" && s.supports_audio),
+		).toBe(true);
+	});
+});
+
+describe("MOCK_SCENARIO=streaming-active", () => {
+	test("resolves the full profile and reports a resolved active_encode", async () => {
+		bootMockScenario("streaming-active");
+
+		const snapshot = getMockEngineCapabilities();
+		expect(snapshot.caps.encoder.codecs).toEqual(["H264", "H265"]);
+		expect(snapshot.caps.platform.hardware_accelerated).toBe(true);
+
+		const encode = getMockActiveEncode();
+		expect(encode).toEqual({
+			codec: "h265",
+			resolution: "1920x1080",
+			framerate: 30,
+			active_input: "hdmi",
+		});
 	});
 });
 

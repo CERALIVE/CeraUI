@@ -29,6 +29,7 @@ import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { AppDialog } from '$lib/components/dialogs';
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import { getAudioSourceLabel } from '$lib/helpers/AudioHelper';
+import { Button } from '$lib/components/ui/button';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
@@ -66,6 +67,12 @@ interface Props {
 	effectivePipeline?: string;
 	/** Commit handler — receives the validated draft when Save is pressed. */
 	onSave?: (values: AudioConfigValues) => void;
+	/**
+	 * Opens the Encoder dialog from the no-video-source gate (Todo 26): audio can
+	 * only be configured once the encoder has a video source, so the gate offers a
+	 * direct jump instead of leaving the operator to hunt for it.
+	 */
+	onOpenEncoder?: () => void;
 }
 
 let {
@@ -75,6 +82,7 @@ let {
 	audioDelay,
 	effectivePipeline,
 	onSave,
+	onOpenEncoder,
 }: Props = $props();
 
 // Schema-driven slider bounds — single source of truth, zero literals.
@@ -212,9 +220,23 @@ async function handleSave() {
 	title={$LL.general.audioSettings()}
 >
 	{#if gateState === 'no-pipeline'}
-		<!-- No pipeline drafted or saved yet — audio cannot be configured. -->
-		<div class="bg-muted/50 rounded-lg px-4 py-3 text-center">
+		<!-- No video source drafted or saved yet — audio cannot be configured until
+		     the encoder has a source. Offer a direct jump to the Encoder dialog. -->
+		<div class="bg-muted/50 flex flex-col items-center gap-3 rounded-lg px-4 py-5 text-center">
 			<p class="text-muted-foreground text-sm">{$LL.settings.selectPipelineFirst()}</p>
+			{#if onOpenEncoder}
+				<Button
+					data-testid="audio-gate-open-encoder"
+					onclick={() => {
+						open = false;
+						onOpenEncoder?.();
+					}}
+					size="sm"
+					variant="outline"
+				>
+					{$LL.settings.encoderSettings()}
+				</Button>
+			{/if}
 		</div>
 	{:else if gateState === 'no-audio-support'}
 		<!-- Selected pipeline has no audio support. -->

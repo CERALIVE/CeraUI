@@ -4,6 +4,7 @@ Simulates cerastream/srtla streaming statistics for development mode
 */
 
 import {
+	type ActiveEncode,
 	CerastreamConnectionError,
 	type GetCapabilitiesResult,
 	type ProcessErrorCode,
@@ -65,6 +66,17 @@ const FULL_PROFILE_CAPABILITIES: GetCapabilitiesResult = {
 };
 
 const DEFAULT_MOCK_TRANSPORTS = ["srtla", "rist"] as const;
+
+// The full-profile scenario's RESOLVED runtime encode, mirroring the engine's
+// active_encode status field (cerastream 0.4.0): H265 egress off the audio-capable
+// HDMI source. Reported only while the mock stream is active — an idle engine emits
+// no active_encode, so the mock returns null when not streaming.
+const FULL_PROFILE_ACTIVE_ENCODE: ActiveEncode = {
+	codec: "h265",
+	resolution: "1920x1080",
+	framerate: 30,
+	active_input: "hdmi",
+};
 
 // Active scenario's capabilities sub-config with any TEST-ONLY override
 // (setMockEngineCapabilities) layered on top. Pure read of seeded state.
@@ -357,6 +369,22 @@ export function getMockEncoderInfo() {
 		bitrate: stats.bitrate,
 		keyframeInterval: 2,
 	};
+}
+
+/**
+ * Mock RESOLVED runtime encode (cerastream `active_encode` status field). Returns
+ * the full-profile encode while the mock stream is active, null when idle — the
+ * same present-while-streaming / absent-on-heartbeat contract the real engine
+ * follows. No-op (null) unless the mock service is active.
+ */
+export function getMockActiveEncode(): ActiveEncode | null {
+	if (!shouldUseMocks()) {
+		return null;
+	}
+	if (!getStreamingStats().isActive) {
+		return null;
+	}
+	return { ...FULL_PROFILE_ACTIVE_ENCODE };
 }
 
 /**

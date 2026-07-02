@@ -47,14 +47,28 @@ let {
 	onSwitch,
 }: Props = $props();
 
-const GROUP_ORDER: DeviceKind[] = ['hdmi', 'usb', 'network', 'test', 'audio', 'other'];
+const GROUP_ORDER: DeviceKind[] = [
+	'hdmi',
+	'uvc_h264',
+	'uvc_h265',
+	'mjpeg',
+	'camlink',
+	'usb',
+	'network',
+	'test',
+	'audio',
+	'other',
+];
 
 const grouped = $derived.by(() => {
 	const map = new Map<DeviceKind, CaptureDevice[]>();
 	for (const device of devices) {
-		const list = map.get(device.kind) ?? [];
+		// Any kind outside GROUP_ORDER buckets into `other` — an unrecognized kind
+		// is never dropped and never rendered as its own group.
+		const kind: DeviceKind = GROUP_ORDER.includes(device.kind) ? device.kind : 'other';
+		const list = map.get(kind) ?? [];
 		list.push(device);
-		map.set(device.kind, list);
+		map.set(kind, list);
 	}
 	return GROUP_ORDER.filter((kind) => map.has(kind)).map((kind) => ({
 		kind,
