@@ -9,6 +9,8 @@ import type { DeviceMode } from '../schemas/streaming.schema';
 import {
 	type CaptureFormatCap,
 	captureCapResolution,
+	DEVICE_KIND_TO_PIPELINE_ID,
+	deviceKindToPipelineId,
 	intersectCaps,
 	MEDIA_TYPE_H264,
 	MEDIA_TYPE_H265,
@@ -241,5 +243,31 @@ describe('intersectCaps — unknown max_resolution fails CLOSED (Task 4 behavior
 			'streaming',
 		);
 		expect(offered.resolutions).toEqual(['480p', '720p', '1080p']);
+	});
+});
+
+describe('deviceKindToPipelineId (single-source kind → pipeline bridge)', () => {
+	it('maps the cerastream device kinds to their pipeline ids', () => {
+		expect(deviceKindToPipelineId('hdmi')).toBe('hdmi');
+		expect(deviceKindToPipelineId('uvc_h264')).toBe('libuvch264');
+		expect(deviceKindToPipelineId('uvc_h265')).toBe('libuvch264');
+		expect(deviceKindToPipelineId('mjpeg')).toBe('usb_mjpeg');
+		expect(deviceKindToPipelineId('camlink')).toBe('camlink');
+		expect(deviceKindToPipelineId('test')).toBe('test');
+	});
+
+	it('maps ambiguous / non-video kinds to undefined (coarse fallback)', () => {
+		expect(deviceKindToPipelineId('network')).toBeUndefined();
+		expect(deviceKindToPipelineId('audio')).toBeUndefined();
+	});
+
+	it('returns undefined for an absent or unrecognised kind', () => {
+		expect(deviceKindToPipelineId(undefined)).toBeUndefined();
+		expect(deviceKindToPipelineId('mystery-kind')).toBeUndefined();
+	});
+
+	it('exposes the same table the backend re-exports', () => {
+		expect(DEVICE_KIND_TO_PIPELINE_ID.hdmi).toBe('hdmi');
+		expect(DEVICE_KIND_TO_PIPELINE_ID.network).toBeUndefined();
 	});
 });

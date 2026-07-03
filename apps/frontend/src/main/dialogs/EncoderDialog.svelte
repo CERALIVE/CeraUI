@@ -3,15 +3,15 @@
 
   Capability-first (no presets): the dialog exposes independent
   source / codec / bitrate / resolution / framerate selectors directly. There is
-  no mode-preset catalog — every control is capability-gated on its own. (Todo 10
-  rebuilds this body into the refined capability-first selector surface.)
+  no mode-preset catalog — every control is capability-gated on its own.
 
   Capability discipline
   ---------------------
-  • Every resolution / framerate rung outside the offered set
-    (`intersectCaps` → `offeredEncoderCaps`) renders DISABLED with a reason
-    tooltip — never hidden. H.265 is disabled-with-reason when the platform
-    can't encode it.
+  • Resolution / Framerate come from `offeredAxes` (platform ∩ selected source ∩
+    Tier-2 device modes). Framerate is gated PER selected resolution, so a rate the
+    device can't drive at that resolution renders disabled-with-reason. Every rung
+    outside the offered set renders DISABLED with a reason tooltip — never hidden.
+    H.265 is disabled-with-reason when the platform can't encode it.
   • All numeric bounds come from `streamingConstraints` / `bitrateBoundsFromCaps`
     (ValidationAdapter) — no inline literals.
   • The operator's codec choice (`localCodec`) is written to the draft's `codec`
@@ -56,12 +56,13 @@ import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 import {
+	axisCeiling,
 	bitrateBoundsFromCaps,
 	clampBitrateToBounds,
 	deriveCodecOptions,
 	deriveUvcH265Sources,
-	framerateOptions,
-	offeredEncoderCaps,
+	framerateOptionsForResolution,
+	offeredAxes,
 	platformCapsForHardware,
 	resolutionOptions,
 	summarizeProbedCaps,
@@ -217,14 +218,33 @@ const framerateAppliesNextStart = $derived(
 	appliesOnNextStart('framerate', isStreaming, localFramerate !== seededFramerate),
 );
 
-// Capability-driven offered set (platform ∩ selected source) from intersectCaps.
-// Drives per-option enable/disable so an incompatible resolution/framerate/preset
-// is shown disabled with a reason rather than hidden or all-or-nothing gated.
-const offered = $derived(offeredEncoderCaps(hardware, localSource || undefined, selectedPipeline));
+// Capability-gated axes: platform ∩ selected source ∩ Tier-2 device modes. When
+// the engine broadcasts per-device modes, Resolution/Framerate reflect the active
+// (or kind-matched) capture hardware; otherwise this is the coarse offering. Every
+// incompatible rung is shown disabled with a reason — never hidden (house rule).
+const deviceModes = $derived(capabilities?.device_modes);
+const selectedVideoInput = $derived(savedConfig?.selected_video_input);
+const axes = $derived(
+	offeredAxes(
+		hardware,
+		localSource || undefined,
+		selectedPipeline,
+		deviceModes,
+		selectedVideoInput,
+	),
+);
+const offered = $derived(axes.offered);
 const resolutionChoices = $derived(resolutionOptions(offered));
-const framerateChoices = $derived(framerateOptions(offered));
+// Framerate options are gated per selected resolution: a rate the device+mode
+// can't drive at localResolution renders disabled-with-reason, never hidden.
+const framerateChoices = $derived(framerateOptionsForResolution(axes, localResolution));
 const resolutionSupported = $derived(offered.resolutions.includes(localResolution));
-const framerateSupported = $derived(offered.framerates.includes(localFramerate));
+const framerateSupported = $derived(
+	framerateChoices.find((option) => option.value === localFramerate)?.supported ?? false,
+);
+// Current-vs-device-max summary (replaces preset highlighting): the active source's
+// real ceiling given platform ∩ source ∩ device modes.
+const ceiling = $derived(axisCeiling(axes));
 
 // Single coherent bitrate range: slider AND number input share the SAME board
 // window (BITRATE.min‥max). The slider is rendered controlled + clamped so an
@@ -545,9 +565,29 @@ function handleSave() {
 			{/if}
 		</div>
 
-		<!-- Granular capability-gated controls, rendered directly (no preset layer).
-		     Todo 10 rebuilds this region into the refined capability-first surface. -->
+		<!-- Capability-gated Resolution + Framerate axes (offeredAxes): platform ∩
+		     source ∩ Tier-2 device modes. A single current-vs-device-max summary line
+		     replaces the old preset highlighting. -->
 		<div class="space-y-5">
+				{#if localSource}
+					<div
+						class="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+						data-testid="axis-summary"
+					>
+						<span class="font-medium">{$LL.live.encoder.axisSelected()}:</span>
+						<span class="text-foreground font-mono" data-testid="axis-current">
+							{getResolutionLabel(localResolution)} · {getFramerateLabel(localFramerate)}
+						</span>
+						<span aria-hidden={true}>·</span>
+						<span>{$LL.live.encoder.axisDeviceMax()}:</span>
+						<span class="text-foreground font-mono" data-testid="axis-device-max">
+							{ceiling.resolution ? getResolutionLabel(ceiling.resolution) : '\u2014'} · {ceiling.framerate
+								? getFramerateLabel(ceiling.framerate)
+								: '\u2014'}
+						</span>
+					</div>
+				{/if}
+
 				<!-- Resolution: every rung is shown; rungs outside the capability-offered
 				     set render disabled (aria-disabled + reason title), never hidden. -->
 				{#if localSource}
@@ -584,7 +624,7 @@ function handleSave() {
 											data-testid="resolution-option"
 											disabled={!option.supported}
 											label={getResolutionLabel(option.value)}
-											title={option.reason}
+											title={option.reason ? t(option.reason) : undefined}
 											value={option.value}
 										></Select.Item>
 									{/each}
@@ -628,7 +668,7 @@ function handleSave() {
 											data-testid="framerate-option"
 											disabled={!option.supported}
 											label={getFramerateLabel(option.value)}
-											title={option.reason}
+											title={option.reason ? t(option.reason) : undefined}
 											value={String(option.value)}
 										></Select.Item>
 									{/each}

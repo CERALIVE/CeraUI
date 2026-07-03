@@ -1154,6 +1154,7 @@ const ja = {
 			reason: {
 				unsupportedPlatform: "このプラットフォームではサポートされていません",
 				fixedBySource: "選択したソースによって固定されています",
+				unsupportedAtResolution: "この解像度では利用できません",
 				gatewayInactive: "ネットワーク受信ゲートウェイが実行されていません",
 				gatewayNoAddress:
 					"到達可能な LAN またはホットスポットのアドレスがありません",
@@ -1215,6 +1216,8 @@ const ja = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "選択中",
+			axisDeviceMax: "デバイス最大",
 		},
 	},
 	dialogs: {

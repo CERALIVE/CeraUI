@@ -1,4 +1,5 @@
 import {
+	deviceKindToPipelineId,
 	intersectCaps,
 	MEDIA_TYPE_H264,
 	MEDIA_TYPE_H265,
@@ -19,12 +20,16 @@ import {
 	type CapabilitiesMessage,
 	type CaptureCap,
 	type CaptureDevice,
+	type DeviceMode,
+	type DeviceModeGroup,
 	type Framerate,
 	type HardwareType,
 	HOTSPOT_NAME_MAX,
 	HOTSPOT_NAME_MIN,
 	HOTSPOT_PASSWORD_MAX,
 	HOTSPOT_PASSWORD_MIN,
+	normalizeFramerateToRung,
+	normalizeResolutionToRung,
 	type Pipeline,
 	PORT_MAX,
 	PORT_MIN,
@@ -84,6 +89,11 @@ export const OPTION_UNSUPPORTED_ON_PLATFORM =
 	"live.education.reason.unsupportedPlatform" as const;
 export const OPTION_FIXED_BY_SOURCE =
 	"live.education.reason.fixedBySource" as const;
+// A framerate the device offers at SOME resolution, but not at the currently
+// selected one — a per-resolution device-mode limit (offeredAxes), distinct from
+// a platform/source ceiling.
+export const OPTION_UNSUPPORTED_AT_RESOLUTION =
+	"live.education.reason.unsupportedAtResolution" as const;
 
 // Network-ingest gateway availability — re-surfaced from the single-source-of-
 // truth helper (`$lib/streaming/pipelineAvailability`) so the disabled-reason key
@@ -234,6 +244,180 @@ export function framerateOptions(
 				: reasonFor(offered.supportsFramerateOverride),
 		};
 	});
+}
+
+// ── Capability-gated axes (platform ∩ source ∩ Tier-2 device modes) ───────────
+//
+// `offeredAxes` layers the per-device capture modes the engine broadcasts on
+// `capabilities.device_modes` on top of the coarse `offeredEncoderCaps`
+// intersection, so Resolution/Framerate options reflect what the SELECTED (or
+// kind-matched) capture hardware can actually drive — not just the platform
+// ceiling. When the engine emits no `device_modes`, the result is byte-identical
+// to the coarse offering.
+
+/**
+ * The effective offered set plus the device modes that narrowed it. `deviceModes`
+ * is `undefined` when nothing narrowed the coarse offering (no engine caps, a
+ * non-device pipeline, or zero kind-matched devices) — the per-resolution
+ * framerate refinement then falls back to the coarse framerate list.
+ */
+export interface OfferedAxes {
+	offered: OfferedSet;
+	deviceModes: readonly DeviceMode[] | undefined;
+}
+
+/**
+ * Resolve which device modes narrow the axes for the current selection.
+ *
+ *   1. An explicitly selected capture device (`selectedVideoInput`, a list-devices
+ *      input_id) narrows to THAT device's modes.
+ *   2. No device selected → the UNION of modes across every device whose `kind`
+ *      maps to the selected pipeline via {@link deviceKindToPipelineId}.
+ *   3. Non-device pipelines (rtmp/srt/test) or zero kind-matched devices → coarse
+ *      (`undefined`): an empty device match must NEVER collapse an axis to nothing.
+ *
+ * `deviceModes` absent entirely → `undefined` (byte-identical to today's coarse
+ * offering).
+ */
+export function resolveDeviceModes(
+	deviceModes: Record<string, DeviceModeGroup> | undefined,
+	pipelineId: string | undefined,
+	selectedVideoInput: string | undefined,
+): readonly DeviceMode[] | undefined {
+	if (!deviceModes) return undefined;
+
+	if (selectedVideoInput) {
+		const group = deviceModes[selectedVideoInput];
+		return group && group.modes.length > 0 ? group.modes : undefined;
+	}
+
+	if (!pipelineId) return undefined;
+
+	const union: DeviceMode[] = [];
+	for (const group of Object.values(deviceModes)) {
+		if (deviceKindToPipelineId(group.kind) === pipelineId) {
+			union.push(...group.modes);
+		}
+	}
+	return union.length > 0 ? union : undefined;
+}
+
+/**
+ * The offered capability set for the current platform ∩ selected source ∩ Tier-2
+ * device modes. Base is {@link offeredEncoderCaps}; the resolved device modes (see
+ * {@link resolveDeviceModes}) are threaded into `intersectCaps` for the union-level
+ * resolution/framerate narrowing. Per-resolution framerate refinement is
+ * {@link framerateOptionsForResolution}'s job.
+ */
+export function offeredAxes(
+	hardware: HardwareType | undefined,
+	pipelineId: string | undefined,
+	pipeline: Pipeline | undefined,
+	deviceModes: Record<string, DeviceModeGroup> | undefined,
+	selectedVideoInput: string | undefined,
+	mode: string = STREAMING_MODE,
+): OfferedAxes {
+	const platform = platformCapsForHardware(hardware);
+	const source =
+		pipelineId && pipeline
+			? videoSourceCapFromPipeline(pipelineId, pipeline)
+			: undefined;
+	const resolvedModes = resolveDeviceModes(
+		deviceModes,
+		pipelineId,
+		selectedVideoInput,
+	);
+	return {
+		offered: intersectCaps(platform, source, mode, resolvedModes),
+		deviceModes: resolvedModes,
+	};
+}
+
+/** The framerate rungs the device modes can drive at one specific resolution. */
+function deviceModeFrameratesAtResolution(
+	modes: readonly DeviceMode[],
+	resolution: Resolution,
+): Set<number> {
+	const framerates = new Set<number>();
+	for (const mode of modes) {
+		if (
+			normalizeResolutionToRung(`${mode.width}x${mode.height}`) !== resolution
+		) {
+			continue;
+		}
+		for (const framerate of mode.framerates) {
+			const rung = normalizeFramerateToRung(framerate);
+			if (rung !== undefined) framerates.add(rung);
+		}
+	}
+	return framerates;
+}
+
+/**
+ * The framerate candidate universe gated by BOTH the offered set and the selected
+ * resolution: a rate the device can't drive at `resolution` renders disabled with
+ * {@link OPTION_UNSUPPORTED_AT_RESOLUTION}, never hidden. With no device modes this
+ * is identical to {@link framerateOptions} (coarse gating).
+ */
+export function framerateOptionsForResolution(
+	axes: OfferedAxes,
+	resolution: Resolution,
+): EncoderOption<Framerate>[] {
+	const { offered, deviceModes } = axes;
+	if (!deviceModes || deviceModes.length === 0) {
+		return framerateOptions(offered);
+	}
+	const offeredSet = new Set(offered.framerates);
+	const atResolution = deviceModeFrameratesAtResolution(
+		deviceModes,
+		resolution,
+	);
+	return AVAILABLE_FRAMERATES.map((value) => {
+		const inOffered = offeredSet.has(value);
+		const supported = inOffered && atResolution.has(value);
+		return {
+			value,
+			supported,
+			reason: supported
+				? undefined
+				: inOffered
+					? OPTION_UNSUPPORTED_AT_RESOLUTION
+					: reasonFor(offered.supportsFramerateOverride),
+		};
+	});
+}
+
+/** The highest resolution rung present in an offered list (ladder order). */
+function highestResolutionRung(
+	resolutions: readonly string[],
+): Resolution | undefined {
+	let best: Resolution | undefined;
+	for (const rung of AVAILABLE_RESOLUTIONS) {
+		if (resolutions.includes(rung)) best = rung;
+	}
+	return best;
+}
+
+/** The resolution/framerate ceiling of an offered-axes set, for the summary line. */
+export interface AxisCeiling {
+	resolution: Resolution | undefined;
+	framerate: Framerate | undefined;
+}
+
+/**
+ * The device/platform ceiling for the current axes — the "up to X" side of the
+ * current-vs-device-max summary. Derived from the already-intersected offered set,
+ * so it reflects the active source's real ceiling when device modes are present.
+ */
+export function axisCeiling(axes: OfferedAxes): AxisCeiling {
+	const { framerates } = axes.offered;
+	return {
+		resolution: highestResolutionRung(axes.offered.resolutions),
+		framerate:
+			framerates.length > 0
+				? (Math.max(...framerates) as Framerate)
+				: undefined,
+	};
 }
 
 // Bitrate slider/input clamp to the board's real `encoder.bitrate_range`, not

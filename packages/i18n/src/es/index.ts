@@ -540,6 +540,7 @@ const es = {
 			reason: {
 				unsupportedPlatform: "No compatible con esta plataforma",
 				fixedBySource: "Fijado por la fuente seleccionada",
+				unsupportedAtResolution: "No disponible en esta resolución",
 				gatewayInactive:
 					"La puerta de enlace de ingesta de red no está en ejecución",
 				gatewayNoAddress: "Sin dirección de LAN o punto de acceso accesible",
@@ -601,6 +602,8 @@ const es = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "Seleccionado",
+			axisDeviceMax: "Máximo del dispositivo",
 		},
 	},
 	dialogs: {

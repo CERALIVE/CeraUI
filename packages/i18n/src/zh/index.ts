@@ -1070,6 +1070,7 @@ const zh = {
 			reason: {
 				unsupportedPlatform: "此平台不支持",
 				fixedBySource: "由所选来源固定",
+				unsupportedAtResolution: "此分辨率下不可用",
 				gatewayInactive: "网络接入网关未运行",
 				gatewayNoAddress: "无可达的局域网或热点地址",
 			},
@@ -1130,6 +1131,8 @@ const zh = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "已选",
+			axisDeviceMax: "设备上限",
 		},
 	},
 	dialogs: {

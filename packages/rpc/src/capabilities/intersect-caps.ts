@@ -124,6 +124,47 @@ export function mediaTypeToSourceKind(
 }
 
 /**
+ * The SINGLE source of truth bridging a list-devices device `kind` to the
+ * capability `sources[]` pipeline id — two DISTINCT namespaces (device input_ids
+ * vs pipeline/source-kind ids). Both the frontend axis intersection (`offeredAxes`)
+ * and the backend pipeline registry consume THIS table and never re-derive it.
+ *
+ * A kind with no direct video pipeline (`audio`) or an ambiguous multi-pipeline
+ * kind (`network` → rtmp|srt) maps to `undefined`; the consumer then falls back to
+ * the coarse source/platform offering. The `uvc_h264→libuvch264` / `mjpeg→usb_mjpeg`
+ * mappings are the cerastream contract (todo 8); `uvc_h265` has no dedicated engine
+ * source id, so it rides `libuvch264`.
+ *
+ * Kept `as const satisfies` (not a bare `Record<string, …>`) so the backend
+ * re-export (`Record<CaptureDeviceKind, string | undefined>`, pipelines.ts) is a
+ * compile-time exhaustiveness gate: a new engine device kind fails to type-check
+ * until it has an entry here.
+ */
+export const DEVICE_KIND_TO_PIPELINE_ID = {
+	hdmi: 'hdmi',
+	uvc_h264: 'libuvch264',
+	uvc_h265: 'libuvch264',
+	mjpeg: 'usb_mjpeg',
+	camlink: 'camlink',
+	test: 'test',
+	network: undefined,
+	audio: undefined,
+} as const satisfies Record<string, string | undefined>;
+
+/**
+ * Resolve a list-devices device `kind` (carried on `device_modes[input_id].kind`)
+ * to its pipeline/source-kind id via {@link DEVICE_KIND_TO_PIPELINE_ID}. Returns
+ * `undefined` for an absent kind, an unrecognised kind, or a kind with no direct
+ * video pipeline — the caller then treats the device as unbridged (coarse offering).
+ */
+export function deviceKindToPipelineId(kind: string | undefined): string | undefined {
+	if (kind === undefined) {
+		return undefined;
+	}
+	return (DEVICE_KIND_TO_PIPELINE_ID as Record<string, string | undefined>)[kind];
+}
+
+/**
  * Resolve a concrete capture format to the `Resolution` rung it advertises.
  *
  * None-cap (permissive) policy: when `width` or `height` is absent the format

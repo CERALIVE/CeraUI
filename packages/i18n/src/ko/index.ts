@@ -1128,6 +1128,7 @@ const ko = {
 			reason: {
 				unsupportedPlatform: "이 플랫폼에서 지원되지 않음",
 				fixedBySource: "선택한 소스에 의해 고정됨",
+				unsupportedAtResolution: "이 해상도에서는 사용할 수 없음",
 				gatewayInactive: "네트워크 인제스트 게이트웨이가 실행 중이 아닙니다",
 				gatewayNoAddress: "연결 가능한 LAN 또는 핫스팟 주소 없음",
 			},
@@ -1188,6 +1189,8 @@ const ko = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "선택됨",
+			axisDeviceMax: "장치 최대",
 		},
 	},
 	dialogs: {

@@ -1312,6 +1312,7 @@ const fr = {
 			reason: {
 				unsupportedPlatform: "Non pris en charge sur cette plateforme",
 				fixedBySource: "Fixé par la source sélectionnée",
+				unsupportedAtResolution: "Indisponible à cette résolution",
 				gatewayInactive: "La passerelle d'ingestion réseau n'est pas active",
 				gatewayNoAddress: "Aucune adresse LAN ou point d'accès joignable",
 			},
@@ -1372,6 +1373,8 @@ const fr = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "Sélectionné",
+			axisDeviceMax: "Maximum de l'appareil",
 		},
 	},
 	dialogs: {

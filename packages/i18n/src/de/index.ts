@@ -539,6 +539,7 @@ const de = {
 			reason: {
 				unsupportedPlatform: "Auf dieser Plattform nicht unterstützt",
 				fixedBySource: "Durch die gewählte Quelle festgelegt",
+				unsupportedAtResolution: "Bei dieser Auflösung nicht verfügbar",
 				gatewayInactive: "Netzwerk-Ingest-Gateway läuft nicht",
 				gatewayNoAddress: "Keine erreichbare LAN- oder Hotspot-Adresse",
 			},
@@ -599,6 +600,8 @@ const de = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "Ausgewählt",
+			axisDeviceMax: "Geräte-Maximum",
 		},
 	},
 	dialogs: {

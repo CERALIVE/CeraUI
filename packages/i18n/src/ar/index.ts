@@ -1252,6 +1252,7 @@ const ar = {
 			reason: {
 				unsupportedPlatform: "غير مدعوم على هذه المنصة",
 				fixedBySource: "محدد بواسطة المصدر المختار",
+				unsupportedAtResolution: "غير متاح بهذه الدقة",
 				gatewayInactive: "بوابة استقبال الشبكة غير قيد التشغيل",
 				gatewayNoAddress:
 					"لا يوجد عنوان شبكة محلية أو نقطة اتصال يمكن الوصول إليه",
@@ -1313,6 +1314,8 @@ const ar = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "المحدد",
+			axisDeviceMax: "الحد الأقصى للجهاز",
 		},
 	},
 	dialogs: {

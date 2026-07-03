@@ -1118,6 +1118,7 @@ const hi = {
 			reason: {
 				unsupportedPlatform: "इस प्लेटफ़ॉर्म पर समर्थित नहीं",
 				fixedBySource: "चयनित स्रोत द्वारा निर्धारित",
+				unsupportedAtResolution: "इस रिज़ॉल्यूशन पर उपलब्ध नहीं",
 				gatewayInactive: "नेटवर्क इंजेस्ट गेटवे नहीं चल रहा है",
 				gatewayNoAddress: "कोई पहुँच योग्य LAN या हॉटस्पॉट पता नहीं",
 			},
@@ -1178,6 +1179,8 @@ const hi = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "चयनित",
+			axisDeviceMax: "डिवाइस अधिकतम",
 		},
 	},
 	dialogs: {
