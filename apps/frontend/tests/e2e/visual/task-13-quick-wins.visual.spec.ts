@@ -156,7 +156,7 @@ test.describe("@visual Task 13 quick wins", () => {
 			.toBe(true);
 	});
 
-	test("unified bitrate clamp + uniform codec labels @visual", async ({
+	test("unified bitrate clamp + codec selector @visual", async ({
 		page,
 	}) => {
 		await page.getByTestId("open-encoder-dialog").click();
@@ -166,14 +166,10 @@ test.describe("@visual Task 13 quick wins", () => {
 		await page.locator("#encoder-source").click();
 		await page.locator('[role="option"][data-value="hdmi"]').click();
 
-		const summary = page.getByTestId("encoder-advanced-summary");
-		if (await summary.isVisible()) {
-			await summary.click();
-		}
-
-		// Both H.264 and H.265 carry the uniform software acceleration label.
-		await expect(page.getByTestId("codec-accel-h264")).toBeVisible();
-		await expect(page.getByTestId("codec-accel-h265")).toBeVisible();
+		// The codec section is now an always-visible segmented selector.
+		// Verify both H.264 and H.265 buttons are present and visible.
+		await expect(page.getByTestId("codec-h264")).toBeVisible();
+		await expect(page.getByTestId("codec-h265")).toBeVisible();
 
 		// An over-max entry snaps to the shared board ceiling (6000) and surfaces
 		// the clamp notice — the number input and slider can never diverge.
