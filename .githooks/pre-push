@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# CI-LOCAL-HOOK-SENTINEL — managed by scripts/install-git-hooks.sh
+# Local CI gate (scripts/ci-local.py --changed). UNTRACKED git plumbing; never committed.
+# Bypass once with:  git push --no-verify
+# Remove with:       bash scripts/install-git-hooks.sh --uninstall
+set -euo pipefail
+
+_self="${BASH_SOURCE[0]}"
+_git_dir="$(git rev-parse --git-dir 2>/dev/null || echo ".git")"
+
+# Chain a pre-existing foreign hook that we preserved, before our own gate.
+_orig="${_self}.ci-local-orig"
+if [[ -x "$_orig" ]]; then
+  "$_orig" "$@"
+fi
+
+# Walk up from the repo toplevel looking for scripts/ci-local.py — no hardcoded path.
+_dir="$(git rev-parse --show-toplevel 2>/dev/null || echo "$(cd "$(dirname "$_git_dir")" && pwd)")"
+_ci_local=""
+while [[ "$_dir" != "/" && -n "$_dir" ]]; do
+  if [[ -f "$_dir/scripts/ci-local.py" ]]; then
+    _ci_local="$_dir/scripts/ci-local.py"
+    break
+  fi
+  _dir="$(dirname "$_dir")"
+done
+
+if [[ -z "$_ci_local" ]]; then
+  echo "ci-local not found — skipping local gate (push not blocked)" >&2
+  exit 0
+fi
+
+# Repo name = the manifest `dir`; the workspace-root repo reports basename '.' via toplevel.
+_repo_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+_ws_root="$(cd "$(dirname "$_ci_local")/.." && pwd)"
+if [[ "$_repo_dir" == "$_ws_root" ]]; then
+  _repo_name="."
+else
+  _repo_name="$(basename "$_repo_dir")"
+fi
+
+exec python3 "$_ci_local" --changed --repo "$_repo_name" ${CI_LOCAL_HOOK_TIER:+--tier "$CI_LOCAL_HOOK_TIER"}

@@ -60,24 +60,42 @@ export function transitionToStopping(
 
 /**
  * Reconcile the optimistic state to the authoritative `is_streaming` broadcast.
- * - If `is_streaming` is true and we're in `starting`, move to `idle` (success).
- * - If `is_streaming` is false and we're in `stopping`, move to `idle` (success).
- * - Otherwise, move to `idle` (reconciled to truth).
+ *
+ * A transient state is cleared ONLY by a push that CONFIRMS the pending
+ * intent; a push that contradicts it is a stale mid-transition frame and is
+ * ignored so the Live destination never flickers back through `idle`.
+ *
+ * | state    | is_streaming | result                              |
+ * |----------|--------------|-------------------------------------|
+ * | starting | true         | idle (start confirmed)              |
+ * | starting | false        | starting (ignore contradicting push)|
+ * | stopping | false        | idle (stop confirmed)               |
+ * | stopping | true         | stopping (ignore contradicting push)|
+ * | idle     | any          | idle (no-op)                        |
+ *
+ * `idle + true` (autostart / remote start) is owned by the authoritative
+ * `getIsStreaming()` store, NOT this optimism overlay — the overlay only
+ * bridges a user-initiated start/stop, so it stays a no-op here.
+ *
+ * On a confirmed transition `stopReason` is cleared; while a transient state
+ * is kept the store is returned untouched, preserving `stopReason`.
  */
 export function reconcileToAuthority(
 	store: StreamingOptimismStore,
 	isStreaming: boolean,
 ): StreamingOptimismStore {
-	// Already at truth — no-op.
-	if (
-		(isStreaming && store.state === "idle") ||
-		(!isStreaming && store.state === "idle")
-	) {
-		return store;
+	switch (store.state) {
+		case "starting":
+			return isStreaming
+				? { ...store, state: "idle", stopReason: undefined }
+				: store;
+		case "stopping":
+			return isStreaming
+				? store
+				: { ...store, state: "idle", stopReason: undefined };
+		default:
+			return store;
 	}
-
-	// Reconcile to truth.
-	return { ...store, state: "idle", stopReason: undefined };
 }
 
 /**

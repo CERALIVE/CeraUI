@@ -394,6 +394,29 @@ const de = {
 			exportError:
 				"Sitzungsübersicht konnte nicht exportiert werden. Bitte erneut versuchen.",
 		},
+		networkIngest: {
+			title: "Netzwerk-Eingang",
+			subtitle:
+				"Sende an dieses Gerät von einem anderen Encoder oder Telefon im selben Netzwerk.",
+			infoTitle: "Netzwerk-Eingang",
+			infoBody:
+				"Sende von deinem Telefon oder einem Hardware-Encoder (wie OBS) an diese Adresse. Das Gerät empfängt es über dein lokales Netzwerk und kodiert es zum Streamen.",
+			active: "Dienst läuft",
+			inactive: "Dienst läuft nicht",
+			selected: "Ausgewählt",
+			serviceInactive: "Der {protocol}-Eingangsdienst läuft noch nicht.",
+			noAddress:
+				"Das {protocol}-Gateway läuft, aber dieses Gerät hat keine LAN- oder Hotspot-Adresse zum Veröffentlichen. Verbinde dich mit einem WLAN- oder Ethernet-Netzwerk oder aktiviere den Geräte-Hotspot.",
+			noAddressStatus: "Keine erreichbare Adresse",
+			streamingLocked: "Beende den Stream, um die Videoquelle zu ändern.",
+			instructionsToggle: "So sendest du",
+			instructions:
+				"Richte dein Telefon oder deinen Encoder auf diese Adresse und beginne mit dem Senden.",
+			qrLabel: "Scannen, um die Sendeadresse zu erhalten",
+			copy: "Adresse kopieren",
+			copied: "Adresse kopiert",
+			copyFailed: "Adresse konnte nicht kopiert werden.",
+		},
 		preview: {
 			title: "Vorschau",
 			start: "Vorschau starten",
@@ -448,6 +471,8 @@ const de = {
 			audioSwitched: "Audio in {ms}ms umgeschaltet",
 			audioSwitchFailed: "Audioquelle konnte nicht umgeschaltet werden",
 			audioSourceLost: "Audioquelle nicht verfügbar",
+			audioSwitchUnavailable:
+				"Live-Audioumschaltung wird von der aktuellen Engine nicht unterstützt",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -514,6 +539,8 @@ const de = {
 			reason: {
 				unsupportedPlatform: "Auf dieser Plattform nicht unterstützt",
 				fixedBySource: "Durch die gewählte Quelle festgelegt",
+				gatewayInactive: "Netzwerk-Ingest-Gateway läuft nicht",
+				gatewayNoAddress: "Keine erreichbare LAN- oder Hotspot-Adresse",
 			},
 			info: "Über {field}",
 			close: "Verstanden",
@@ -597,6 +624,8 @@ const de = {
 		error: "Fehler",
 		saved: "Gespeichert",
 		saveFailed: "Speichern fehlgeschlagen",
+		validationFailed: "Bitte überprüfe diese Felder: {fields}",
+		requestFailed: "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
 		updateInProgress: "Update läuft",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1071,6 +1100,14 @@ const de = {
 			weight: "Gewicht",
 			telemetry: "Verbindungstelemetrie",
 		},
+		collision: {
+			sameSubnetTitle: "Gemeinsames Subnetz über Verbindungen",
+			sameSubnetBody:
+				"Zwei oder mehr Verbindungen teilen sich ein identisches Subnetz. Das ist zu erwarten \u2014 das Gerät routet jede Verbindung unabhängig, sodass das Bonding weiterhin normal funktioniert.",
+			policyRouteTitle: "Verbindungs-Routing erfordert Aufmerksamkeit",
+			policyRouteBody:
+				"Eine gebündelte Verbindung wird möglicherweise über das falsche Modem geroutet. Starten Sie das Gerät neu oder stecken Sie die Verbindung neu ein \u2014 die Routing-Regeln werden automatisch neu installiert, sobald die Verbindung wieder aktiv ist.",
+		},
 		pageTitle: "Netzwerkkonfiguration",
 		pageDescription:
 			"Verwalten Sie Ihre WiFi-Verbindungen, Hotspots, Mobilfunkmodems und Netzwerkschnittstellen",
@@ -1303,6 +1340,11 @@ const de = {
 			description:
 				"Es wird nach verfügbaren WLAN-Netzwerken in der Nähe gesucht.",
 		},
+		scanError: {
+			title: "Suche fehlgeschlagen",
+			description:
+				"WLAN-Netzwerke in der Nähe konnten nicht aktualisiert werden. Automatischer erneuter Versuch.",
+		},
 		dialog: {
 			close: "Schließen",
 			searchWifi: "WLAN-Netzwerke suchen",
@@ -1515,6 +1557,8 @@ const de = {
 			"Das Gerät wird neu gestartet. Diese Seite stellt die Verbindung automatisch wieder her.",
 		sessionExpired:
 			"Sitzung abgelaufen. Bitte authentifizieren Sie sich erneut.",
+		authTimedOut:
+			"Sitzung konnte nicht überprüft werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
 	},
 	offline: {
 		title: "Sie sind offline",

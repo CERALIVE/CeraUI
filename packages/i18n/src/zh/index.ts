@@ -462,6 +462,14 @@ const zh = {
 			weight: "权重",
 			telemetry: "链路遥测",
 		},
+		collision: {
+			sameSubnetTitle: "链路间共享子网",
+			sameSubnetBody:
+				"两条或更多链路共享相同的子网。这是正常现象 \u2014 设备会独立路由每条链路，因此绑定仍可正常工作。",
+			policyRouteTitle: "链路路由需要注意",
+			policyRouteBody:
+				"某条绑定链路可能通过了错误的调制解调器进行路由。请重启设备或重新插拔该链路 \u2014 链路恢复后，路由规则会自动重新安装。",
+		},
 		pageTitle: "网络配置",
 		pageDescription: "管理您的WiFi连接、热点、蜂窝调制解调器和网络接口",
 		sections: {
@@ -676,6 +684,10 @@ const zh = {
 		scanningState: {
 			title: "正在搜索网络…",
 			description: "正在搜索附近可用的 WiFi 网络。",
+		},
+		scanError: {
+			title: "扫描失败",
+			description: "无法刷新附近的 WiFi 网络。正在自动重试。",
 		},
 		dialog: {
 			close: "关闭",
@@ -921,6 +933,27 @@ const zh = {
 			exportAria: "导出会话摘要",
 			exportError: "无法导出会话摘要，请重试。",
 		},
+		networkIngest: {
+			title: "网络接入",
+			subtitle: "从同一网络中的其他编码器或手机推流到本设备。",
+			infoTitle: "网络接入",
+			infoBody:
+				"从手机或硬件编码器（如 OBS）推流到此地址。设备通过本地网络接收并编码以供直播。",
+			active: "服务运行中",
+			inactive: "服务未运行",
+			selected: "已选择",
+			serviceInactive: "{protocol} 接入服务尚未运行。",
+			noAddress:
+				"{protocol} 网关正在运行，但此设备没有可用于发布的局域网或热点地址。请连接 Wi-Fi 或以太网网络，或启用设备热点。",
+			noAddressStatus: "无可达地址",
+			streamingLocked: "停止直播后才能更改视频源。",
+			instructionsToggle: "如何推流",
+			instructions: "将手机或编码器指向此地址，然后开始推流。",
+			qrLabel: "扫描获取推流地址",
+			copy: "复制地址",
+			copied: "地址已复制",
+			copyFailed: "无法复制地址。",
+		},
 		preview: {
 			title: "预览",
 			start: "开始预览",
@@ -974,6 +1007,7 @@ const zh = {
 			audioSwitched: "已在 {ms}ms 内切换音频",
 			audioSwitchFailed: "切换音频源失败",
 			audioSourceLost: "音频源不可用",
+			audioSwitchUnavailable: "当前引擎不支持实时音频切换",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1036,6 +1070,8 @@ const zh = {
 			reason: {
 				unsupportedPlatform: "此平台不支持",
 				fixedBySource: "由所选来源固定",
+				gatewayInactive: "网络接入网关未运行",
+				gatewayNoAddress: "无可达的局域网或热点地址",
 			},
 			info: "关于{field}",
 			close: "知道了",
@@ -1119,6 +1155,8 @@ const zh = {
 		error: "错误",
 		saved: "已保存",
 		saveFailed: "保存失败",
+		validationFailed: "请检查这些字段：{fields}",
+		requestFailed: "出了点问题，请重试。",
 		updateInProgress: "更新进行中",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1255,6 +1293,7 @@ const zh = {
 		rebooting: "正在重启设备…",
 		rebootingDescription: "设备正在重新启动。此页面将自动重新连接。",
 		sessionExpired: "会话已过期。请重新进行身份验证。",
+		authTimedOut: "无法验证您的会话。请检查连接并重试。",
 	},
 	offline: {
 		title: "您已离线",

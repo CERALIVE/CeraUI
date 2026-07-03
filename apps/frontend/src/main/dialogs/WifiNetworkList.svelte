@@ -19,6 +19,7 @@ import {
 	Plug,
 	RefreshCw,
 	Trash2,
+	TriangleAlert,
 	Unlock,
 	WifiOff,
 } from '@lucide/svelte';
@@ -42,6 +43,8 @@ interface Props {
 	ifaceBusy: boolean;
 	/** Manual-scan spinner flag. */
 	scanning: boolean;
+	/** True when the last scan (manual or periodic) failed — drives the calm error state. */
+	scanError?: boolean;
 	/** WifiStatus key (interface device id) — drives the connect op phase reads. */
 	deviceId: string;
 	/** SSID of the network currently being connected, if any (local intent). */
@@ -75,6 +78,7 @@ let {
 	networks,
 	ifaceBusy,
 	scanning,
+	scanError = false,
 	deviceId,
 	connecting,
 	disconnecting,
@@ -310,6 +314,27 @@ let {
 							{$LL.wifiSelector.scanningState.description()}
 						</p>
 					</div>
+				</div>
+			{:else if scanError}
+				<!-- Scan-error state — a failing scan (manual or periodic), distinct
+				     from the scanning + settled-empty states above. -->
+				<div
+					class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center"
+					data-testid="wifi-scan-error"
+				>
+					<div class="bg-status-warning/10 grid size-14 place-items-center rounded-2xl">
+						<TriangleAlert class="text-status-warning size-7" />
+					</div>
+					<div>
+						<p class="text-sm font-semibold">{$LL.wifiSelector.scanError.title()}</p>
+						<p class="text-muted-foreground mt-1 max-w-xs text-xs">
+							{$LL.wifiSelector.scanError.description()}
+						</p>
+					</div>
+					<Button class="gap-2" disabled={scanning} onclick={onScan} size="sm" variant="outline">
+						<RefreshCw class="size-4" />
+						{$LL.wifiSelector.button.scan()}
+					</Button>
 				</div>
 			{:else}
 				<!-- Empty state -->

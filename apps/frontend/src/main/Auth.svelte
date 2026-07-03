@@ -9,15 +9,14 @@ import { Label } from '$lib/components/ui/label';
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { deviceName, siteName } from '$lib/config';
+import { getNotifications, getStatus } from '$lib/rpc/subscriptions.svelte';
+import {
+	authenticate,
+	createPassword,
+	getAuthMessage,
+} from '$lib/stores/auth-status.svelte';
 import { getSessionExpired } from '$lib/stores/connection-ux.svelte';
 import { getConnectionState } from '$lib/stores/offline-state.svelte';
-import {
-	getAuth,
-	getNotifications,
-	getStatus,
-	sendAuthMessage,
-	sendCreatePasswordMessage,
-} from '$lib/stores/websocket-store.svelte';
 import { cn } from '$lib/utils.js';
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -93,7 +92,7 @@ $effect(() => {
  * storage is a deliberate tradeoff for simple device UX—avoid on shared or hostile networks.
  */
 $effect(() => {
-	const message = getAuth();
+	const message = getAuthMessage();
 	if (message?.success === true && remember && password) {
 		localStorage.setItem('auth', password);
 	}
@@ -121,10 +120,15 @@ $effect(() => {
 function login(password: string, remember: boolean) {
 	isLoading = true;
 	if (setPassword) {
-		sendCreatePasswordMessage(password);
+		void createPassword(password).catch((err) => {
+			console.error('Failed to set password:', err);
+		});
 	}
 	setPassword = false;
-	sendAuthMessage(password, remember, () => (isLoading = false));
+	// authenticate() drives the SINGLE auth-state mutation path (ingestAuth on
+	// the login result). The $effect above observes getAuthMessage() and clears
+	// isLoading on success:false; on success:true the component unmounts.
+	void authenticate(password, remember);
 }
 
 async function onSubmit(event: SubmitEvent) {

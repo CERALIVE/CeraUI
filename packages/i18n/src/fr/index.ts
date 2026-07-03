@@ -642,6 +642,14 @@ const fr = {
 			weight: "Poids",
 			telemetry: "Télémétrie de liaison",
 		},
+		collision: {
+			sameSubnetTitle: "Sous-réseau partagé entre les liens",
+			sameSubnetBody:
+				"Deux liens ou plus partagent un sous-réseau identique. C'est normal \u2014 l'appareil route chaque lien indépendamment, le bonding continue donc de fonctionner normalement.",
+			policyRouteTitle: "Le routage du lien nécessite votre attention",
+			policyRouteBody:
+				"Un lien agrégé pourrait être routé via le mauvais modem. Redémarrez l'appareil ou rebranchez le lien \u2014 les règles de routage sont réinstallées automatiquement lorsque le lien revient.",
+		},
 		pageTitle: "Configuration Réseau",
 		pageDescription:
 			"Gérez vos connexions WiFi, hotspots, modems cellulaires et interfaces réseau",
@@ -872,6 +880,11 @@ const fr = {
 		scanningState: {
 			title: "Recherche de réseaux…",
 			description: "Recherche des réseaux WiFi disponibles à proximité.",
+		},
+		scanError: {
+			title: "Échec de l'analyse",
+			description:
+				"Impossible d'actualiser les réseaux WiFi à proximité. Nouvelle tentative automatique.",
 		},
 		dialog: {
 			close: "Fermer",
@@ -1153,6 +1166,29 @@ const fr = {
 			exportError:
 				"Impossible d'exporter le résumé de session. Veuillez réessayer.",
 		},
+		networkIngest: {
+			title: "Entrée réseau",
+			subtitle:
+				"Publiez vers cet appareil depuis un autre encodeur ou téléphone sur le même réseau.",
+			infoTitle: "Entrée réseau",
+			infoBody:
+				"Publiez depuis votre téléphone ou un encodeur matériel (comme OBS) vers cette adresse. L'appareil la reçoit via votre réseau local et l'encode pour la diffusion.",
+			active: "Service actif",
+			inactive: "Service inactif",
+			selected: "Sélectionné",
+			serviceInactive: "Le service d'entrée {protocol} n'est pas encore actif.",
+			noAddress:
+				"La passerelle {protocol} fonctionne, mais cet appareil n'a aucune adresse LAN ou point d'accès pour la publication. Connectez-vous à un réseau Wi-Fi ou Ethernet, ou activez le point d'accès de l'appareil.",
+			noAddressStatus: "Aucune adresse joignable",
+			streamingLocked: "Arrêtez la diffusion pour changer la source vidéo.",
+			instructionsToggle: "Comment publier",
+			instructions:
+				"Pointez votre téléphone ou encodeur vers cette adresse, puis commencez à publier.",
+			qrLabel: "Scannez pour obtenir l'adresse de publication",
+			copy: "Copier l'adresse",
+			copied: "Adresse copiée",
+			copyFailed: "Impossible de copier l'adresse.",
+		},
 		preview: {
 			title: "Aperçu",
 			start: "Démarrer l'aperçu",
@@ -1208,6 +1244,8 @@ const fr = {
 			audioSwitched: "Audio changé en {ms}ms",
 			audioSwitchFailed: "Échec du changement de source audio",
 			audioSourceLost: "Source audio indisponible",
+			audioSwitchUnavailable:
+				"Le changement audio en direct n'est pas pris en charge par le moteur actuel",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1274,6 +1312,8 @@ const fr = {
 			reason: {
 				unsupportedPlatform: "Non pris en charge sur cette plateforme",
 				fixedBySource: "Fixé par la source sélectionnée",
+				gatewayInactive: "La passerelle d'ingestion réseau n'est pas active",
+				gatewayNoAddress: "Aucune adresse LAN ou point d'accès joignable",
 			},
 			info: "À propos de {field}",
 			close: "Compris",
@@ -1357,6 +1397,8 @@ const fr = {
 		error: "Erreur",
 		saved: "Enregistré",
 		saveFailed: "Échec de l'enregistrement",
+		validationFailed: "Veuillez vérifier ces champs : {fields}",
+		requestFailed: "Une erreur s'est produite. Veuillez réessayer.",
 		updateInProgress: "Mise à jour en cours",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1510,6 +1552,8 @@ const fr = {
 		rebootingDescription:
 			"L'appareil redémarre. Cette page se reconnectera automatiquement.",
 		sessionExpired: "Session expirée. Veuillez vous authentifier à nouveau.",
+		authTimedOut:
+			"Impossible de vérifier votre session. Vérifiez la connexion et réessayez.",
 	},
 	offline: {
 		title: "Vous êtes hors ligne",

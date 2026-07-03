@@ -98,6 +98,7 @@ import {
 	getDevices,
 	getIsStreaming,
 	getPipelines,
+	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
 import { appliesOnNextStart } from '$lib/streaming/appliesNextStart';
 import {
@@ -106,6 +107,7 @@ import {
 	presetViews,
 	videoCodecFromMediaType,
 } from '$lib/streaming/modePresets';
+import { pipelineAvailability, pipelineViews } from '$lib/streaming/pipelineAvailability';
 
 interface Props {
 	open?: boolean;
@@ -130,10 +132,13 @@ const PRESET_FIELD = 'encoderPreset';
 
 // ── Live data from the non-deprecated subscriptions surface ────────────────────
 const pipelinesMessage = $derived(getPipelines());
-const pipelines = $derived(pipelinesMessage?.pipelines);
-const hardware = $derived(pipelinesMessage?.hardware);
-const isStreaming = $derived(getIsStreaming());
-const savedConfig = $derived(getConfig());
+	const pipelines = $derived(pipelinesMessage?.pipelines);
+	const hardware = $derived(pipelinesMessage?.hardware);
+	const isStreaming = $derived(getIsStreaming());
+	const savedConfig = $derived(getConfig());
+	// Network-ingest gateway status: gates rtmp/srt sources disabled-with-reason
+	// through the shared pipelineAvailability rule (never a second inline check).
+	const networkIngest = $derived(getStatus()?.network_ingest);
 
 // ── Capability contract: per-board bitrate window, codec offers, UVC H.265 ─────
 const capabilities = $derived(getCapabilities());
@@ -240,9 +245,14 @@ $effect(() => {
 	}
 });
 
-const selectedPipeline = $derived<Pipeline | undefined>(
-	localSource && pipelines ? pipelines[localSource] : undefined,
-);
+	const selectedPipeline = $derived<Pipeline | undefined>(
+		localSource && pipelines ? pipelines[localSource] : undefined,
+	);
+
+	// Per-source gateway verdict (shared rule): tags the selected source and every
+	// picker option available / disabled-with-reason when its rtmp/srt gateway is down.
+	const selectedAvailability = $derived(pipelineAvailability(selectedPipeline, networkIngest));
+	const sourceViews = $derived(pipelineViews(pipelines, networkIngest));
 
 // Restart-required edits made mid-stream → "applies on next start" badges. The
 // edit test is against the open-time seed so an untouched field stays quiet.
@@ -265,8 +275,9 @@ const framerateChoices = $derived(framerateOptions(offered));
 const resolutionSupported = $derived(offered.resolutions.includes(localResolution));
 const framerateSupported = $derived(offered.framerates.includes(localFramerate));
 
-// Preset cards tagged with their capability verdict (supported / disabled+reason).
-const presetCards = $derived(presetViews(offered));
+	// Preset cards tagged with their capability verdict (supported / disabled+reason).
+	// A gateway-blocked source disables every preset with the gateway reason.
+	const presetCards = $derived(presetViews(offered, selectedAvailability));
 
 // The VISIBLE active preset: the last selection, but only while it still matches
 // every preset-defined field AND is still offered. Any Advanced edit that diverges
@@ -388,7 +399,7 @@ function handleSave() {
 	closeOnPrimary={false}
 	icon={Binary}
 	onPrimary={handleSave}
-	primaryDisabled={!isValid}
+	primaryDisabled={!isValid || !selectedAvailability.available}
 	primaryLabel={$LL.dialogs.save()}
 	title={$LL.settings.encoderSettings()}
 >
@@ -424,16 +435,33 @@ function handleSave() {
 				</Select.Trigger>
 				<Select.Content>
 					<Select.Group>
-						{#if pipelines}
-							{#each Object.entries(pipelines) as [sourceId, pipeline] (sourceId)}
-								<Select.Item value={sourceId}>
-									<div class="flex flex-col py-1">
-										<span class="font-medium">{getSourceLabel(sourceId, t)}</span>
-										<span class="text-muted-foreground text-xs">{pipeline.description}</span>
-									</div>
-								</Select.Item>
-							{/each}
-						{/if}
+						{#each sourceViews as view (view.id)}
+							<Select.Item
+								value={view.id}
+								data-source-id={view.id}
+								data-available={view.availability.available}
+								disabled={!view.availability.available}
+								title={view.availability.available ? undefined : t(view.availability.reason)}
+							>
+								<div class="flex flex-col py-1">
+									<span class="flex items-center gap-1.5 font-medium">
+										{getSourceLabel(view.id, t)}
+										{#if !view.availability.available}
+											<TriangleAlert
+												aria-hidden={true}
+												class="text-status-warning size-3.5 shrink-0"
+											/>
+										{/if}
+									</span>
+									<span class="text-muted-foreground text-xs">{view.pipeline.description}</span>
+									{#if !view.availability.available}
+										<span class="text-status-warning text-xs" data-testid="source-gateway-reason">
+											{t(view.availability.reason)}
+										</span>
+									{/if}
+								</div>
+							</Select.Item>
+						{/each}
 						{#each uvcH265Sources as uvc (uvc.inputId)}
 							<Select.Item value={uvc.sourceKind}>
 								<div class="flex flex-col py-1">
@@ -447,6 +475,19 @@ function handleSave() {
 			</Select.Root>
 			{#if errors.source}
 				<p class="text-destructive text-sm">{errors.source}</p>
+			{/if}
+			{#if !selectedAvailability.available}
+				<div
+					class="border-status-warning/40 bg-status-warning/10 flex items-start gap-2 rounded-md border p-2.5"
+					data-testid="source-gateway-blocked"
+					role="status"
+				>
+					<TriangleAlert
+						aria-hidden={true}
+						class="text-status-warning mt-0.5 size-4 shrink-0"
+					/>
+					<span class="text-status-warning text-xs">{t(selectedAvailability.reason)}</span>
+				</div>
 			{/if}
 			{#if uvcH265Sources.length > 0}
 				<div class="flex flex-wrap items-center gap-1.5">

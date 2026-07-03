@@ -88,49 +88,27 @@ describe("InputPicker — hotplug behaviour", () => {
 		expect(onSwitch).toHaveBeenCalledWith("video63");
 	});
 
-	it("shows an enabled Switch for audio even when audioLiveSwitchEnabled is false (TD-live-audio-switch resolved)", () => {
-		// TD-live-audio-switch is resolved: the coming-soon affordance is gone.
-		// The dispatch guard (canLiveSwitchInput) lives in LiveView, not here.
-		// InputPicker always renders a Switch button for audio while streaming.
+	it("disables the audio Switch with a title reason when audioLiveSwitchEnabled is false", () => {
 		const { container } = render(InputPicker, {
 			props: {
 				devices: DEVICES,
 				activeInput: "video0",
 				isStreaming: true,
 				audioLiveSwitchEnabled: false,
-			},
-		});
-		expect(
-			container.querySelector('[data-audio-switch-deferred="audio:usbaudio"]'),
-		).toBeNull();
-		const switchBtn = container.querySelector<HTMLButtonElement>(
-			'[data-switch-input="audio:usbaudio"]',
-		);
-		expect(switchBtn).not.toBeNull();
-		expect(
-			container.querySelector('[data-switch-input="video63"]'),
-		).not.toBeNull();
-	});
-
-	it("dispatches onSwitch for the audio source regardless of audioLiveSwitchEnabled (TD-live-audio-switch resolved)", async () => {
-		// TD-live-audio-switch is resolved: the picker no longer blocks audio switch.
-		// The parent (LiveView) guards the dispatch via canLiveSwitchInput.
-		const onSwitch = vi.fn();
-		const { container } = render(InputPicker, {
-			props: {
-				devices: DEVICES,
-				activeInput: "video0",
-				isStreaming: true,
-				audioLiveSwitchEnabled: false,
-				onSwitch,
 			},
 		});
 		const switchBtn = container.querySelector<HTMLButtonElement>(
 			'[data-switch-input="audio:usbaudio"]',
 		);
 		if (!switchBtn) throw new Error("audio switch button not rendered");
-		await fireEvent.click(switchBtn);
-		expect(onSwitch).toHaveBeenCalledWith("audio:usbaudio");
+		expect(switchBtn.disabled).toBe(true);
+		expect(switchBtn.getAttribute("title")).toMatch(/live audio switching/i);
+		// A non-audio source stays switchable — the gate is audio-only.
+		const videoBtn = container.querySelector<HTMLButtonElement>(
+			'[data-switch-input="video63"]',
+		);
+		expect(videoBtn?.disabled).toBe(false);
+		expect(videoBtn?.getAttribute("title")).toBeNull();
 	});
 
 	it("offers an enabled audio Switch once the capability flag is true", async () => {

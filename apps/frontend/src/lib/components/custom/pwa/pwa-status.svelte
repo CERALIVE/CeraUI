@@ -46,43 +46,17 @@ import {
 	installApp,
 	setShowIOSInstallPrompt,
 } from '$lib/stores/pwa.svelte';
-// Create a simple connection state based on socket readiness
-import { socket } from '$lib/stores/websocket-store.svelte';
+import { rpcClient, type ConnectionState } from '$lib/rpc/client';
 
-// Svelte 5 runes: Use $state instead of writable store
-let connectionState = $state<'connected' | 'connecting' | 'disconnected' | 'error'>('connecting');
+// Seed from the client's transport-level signal, then track via onConnectionChange
+// (survives socket replacement on reconnect — no captured socket reference).
+let connectionState = $state<ConnectionState>(rpcClient.getConnectionState());
 
-// Monitor socket state with event listeners (more efficient than polling)
-const updateConnectionState = () => {
-	if (socket.readyState === WebSocket.OPEN) {
-		connectionState = 'connected';
-	} else if (socket.readyState === WebSocket.CONNECTING) {
-		connectionState = 'connecting';
-	} else {
-		connectionState = 'disconnected'; // CLOSING, CLOSED, or any other state
-	}
-};
+const unsubscribeConnection = rpcClient.onConnectionChange((state) => {
+	connectionState = state;
+});
 
-// Handle specific error events to set proper error state
-const handleSocketError = () => {
-	connectionState = 'error';
-};
-
-// Set initial state and add event listeners for efficient monitoring
-updateConnectionState();
-socket.addEventListener('open', updateConnectionState);
-socket.addEventListener('close', updateConnectionState);
-socket.addEventListener('error', handleSocketError);
-
-// Cleanup function to prevent memory leaks
-const cleanup = () => {
-	socket.removeEventListener('open', updateConnectionState);
-	socket.removeEventListener('close', updateConnectionState);
-	socket.removeEventListener('error', handleSocketError);
-};
-
-// Call cleanup when component is destroyed
-onDestroy(cleanup);
+onDestroy(unsubscribeConnection);
 
 let showOfflineBanner = $state(false);
 

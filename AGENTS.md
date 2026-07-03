@@ -123,6 +123,16 @@ CeraUI/
 | **relay.validate procedure + mock seam** | `apps/backend/src/rpc/procedures/relay.procedure.ts` + `apps/backend/src/mocks/providers/relay.ts` |
 | **Live server readiness hint (SRTLA bonded/single)** | `apps/frontend/src/main/live/ServerReadiness.svelte` |
 | **Live header server chip (destination + kind)** | `apps/frontend/src/main/live/LiveHeader.svelte` |
+| **Network-ingest gateway status (probes rtmp/srt systemd units, LAN URLs)** | `apps/backend/src/modules/network/network-ingest.ts` |
+| **Gateway-active probe seam (blocks rtmp/srt stream start until the gateway is up)** | `apps/backend/src/modules/streaming/gateway-availability.ts` |
+| **Network Ingest card (LAN RTMP/SRT publish sources, frontend)** | `apps/frontend/src/lib/components/custom/NetworkIngestSection.svelte` |
+| **Gateway-availability truthfulness rule (single shared helper, no duplication)** | `apps/frontend/src/lib/streaming/pipelineAvailability.ts` |
+| **Same-subnet / policy-route netif schema fields (`same_subnet_group`, `policy_route_missing`)** | `packages/rpc/src/schemas/network.schema.ts` (`netifEntrySchema`) |
+| **Policy-route self-check for bonded wifi/modem interfaces** | `apps/backend/src/modules/network/policy-route-check.ts` |
+| **Subnet-collision + policy-route info/warning bands (frontend)** | `apps/frontend/src/main/network/CollisionBands.svelte` |
+| **Connection/subscriptions store (sole `rpcClient.onMessage` owner — `websocket-store` fully deleted)** | `apps/frontend/src/lib/rpc/subscriptions.svelte.ts` |
+| **Auth-state single-mutation-path store (`ingestAuth`/`authenticate`/`createPassword`)** | `apps/frontend/src/lib/stores/auth-status.svelte.ts` |
+| **Capability-truthfulness regression e2e gate** | `apps/frontend/tests/e2e/truthfulness.spec.ts` |
 
 ## COMMANDS
 
@@ -1100,6 +1110,163 @@ FEC/L1. The derivation logic above handles this correctly.
 `custom` → platform resolves baseline-only (not FEC/L1). Unset `remote_provider` →
 field omitted.
 
+## NETWORK-INGEST GATEWAY (LAN RTMP/SRT) [EXISTS]
+
+Two image-baked LAN ingest gateways (image-building-pipeline `feat/network-ingest-gateway`
+branch, Todos 14–15) let a phone or OBS on the same LAN publish directly into cerastream
+without going through the cloud relay. CeraUI is the runtime-verification + UI layer; the
+gateways themselves are baked into the device image. See image-building-pipeline
+`v2/docs/DEFERRED.md` item 7 for the LAN-scoped-in-v1 posture and the on-device QA checklist.
+
+**Baked units (image-building-pipeline, NOT this repo):**
+- `ceralive-rtmp-gateway.service` — pinned MediaMTX `v1.19.2` (`moq: false`), config
+  `/etc/mediamtx.yml`, binary `/usr/local/bin/mediamtx`. The publish path is HARDCODED
+  (`rtmp://<device>:1935/publish/live`, matches cerastream's `InputKind::RtmpLocalhost`).
+- `ceralive-srt-gateway.service` — `srt-live-transmit "srt://:4001?mode=listener"
+  "udp://127.0.0.1:4000"` (from the `srt-tools` apt package), rewraps the stream to
+  UDP-TS onto cerastream's `InputKind::SrtIngest` loopback ingest. **No SRT passphrase
+  in v1** — see the DEFERRED.md item 7 follow-up.
+
+**Backend status surface** (`apps/backend/src/modules/network/network-ingest.ts`, NEW):
+- `getNetworkIngestInfo(): NetworkIngest` — sync read of a cached snapshot probing both
+  systemd units via `systemctl is-active` (`Bun.spawn`, gated on `isRealDevice()`), a
+  reused LAN IP (`resolvePrimaryLanIp` — eth/en preferred, cellular/wifi excluded), and
+  the board's capability source kinds.
+- Rides the EXISTING `status` broadcast as additive-optional `network_ingest` (NOT a new
+  endpoint): `{ rtmp: {service_active, url} | null, srt: {service_active, url} | null }`.
+  Per-protocol `null` when the board's capabilities exclude that source, or no LAN IP is
+  resolvable.
+- `buildGatewayProbe()` wires the real `GatewayProbe` into
+  `apps/backend/src/modules/streaming/gateway-availability.ts` (`setGatewayProbe`) — the
+  seam that gates an rtmp/srt stream start.
+
+**Streaming-start gate** (`gateway-availability.ts` + `streaming.procedure.ts`): an rtmp/srt
+pipeline carries `requires_gateway: 'rtmp' | 'srt'` on `pipelineSchema` (additive-optional,
+present only on those two entries). `streamingStartProcedure` blocks the start and returns
+`{success:false, error: GATEWAY_INACTIVE_ERROR}` when `isGatewayActive(kind)` is false. The
+default probe is FAIL-SAFE (`isActive: () => false`) until `setGatewayProbe()` runs at boot —
+rtmp/srt starts are blocked-by-default, never silently pass the gate. rtmp/srt stay VISIBLE
+in the pipeline registry at all times (disabled-with-reason house rule) — never filtered out.
+
+**Frontend card** (`apps/frontend/src/lib/components/custom/NetworkIngestSection.svelte`,
+mounted in `LiveView.svelte` directly after `SourceSection`): shows each protocol's LAN
+publish URL (copy button + QR via `generateDeviceAccessQr`), selects the matching pipeline
+via `config.pipeline` through the standard field-sync lock, and disables-with-reason when
+the service is inactive or the stream is already running. Renders nothing when
+`status.network_ingest` is null/absent or both protocols are null.
+
+**Single gateway-availability truth (Todo 19):**
+`apps/frontend/src/lib/streaming/pipelineAvailability.ts` (pure, rune-free) is the ONE
+shared rule every frontend surface routes through — `pipelineAvailability(pipeline,
+networkIngest)` returns `{available:true}` or `{available:false, reason}` (i18n key
+`live.education.reason.gatewayInactive`). Routed surfaces: `EncoderDialog.svelte` (source
+list + Save gate), `lib/streaming/modePresets.ts` (`presetViews`), `ValidationAdapter.ts`
+(re-export, single import surface), `StreamingConfigService.ts` (`buildStreamingConfig`
+guard). FAIL-SAFE: a null/absent `network_ingest` (older backend, or the snapshot hasn't
+arrived yet) blocks the pipeline — never silently permits it. Do NOT re-derive this rule
+inline anywhere else.
+
+## NETWORK COLLISION SURFACING + POLICY-ROUTE SELF-CHECK [EXISTS]
+
+Two informational/warning netif signals surface interface-topology issues WITHOUT ever
+gating a stream or an interface — both ride the existing 5 s `netif` broadcast.
+
+**`same_subnet_group`** (additive-optional `string`,
+`packages/rpc/src/schemas/network.schema.ts` `netifEntrySchema`): the CIDR (e.g.
+`"192.168.0.0/24"`) shared by two-or-more DIFFERENT-IP interfaces on the SAME subnet
+(computed synchronously in `apps/backend/src/modules/network/network-interfaces.ts`
+`netIfBuildMsg()`). This is NOT an error — bonded links commonly share a subnet via policy
+routing. The AP/hotspot interface is excluded via the existing `dupIpSuppressedIfaces`
+transition marker + `NETIF_ERR_HOTSPOT` confirmed-state marker (no new hotspot-detection
+code). Distinct from — and computed AFTER, so excluded from — the existing dup-IP detection
+(`NETIF_ERR_DUPIPV4`).
+
+**`policy_route_missing`** (additive-optional `boolean`, same schema, present ONLY when
+`true`): flags a bonded wifi/modem interface (`/^(?:wlan|usb|ww)/`) whose `ip rule`/
+`ip route` tables are missing a default route — the policy-routing self-check
+(`apps/backend/src/modules/network/policy-route-check.ts`, NEW) found the interface is
+enabled + IP-bearing but its source-routing table has no default route. Computed via an
+async `ip rule show` / `ip route show table <t>` spawn (`isRealDevice()`-gated, degrades
+to `null` on any parse/spawn failure), cached and polled on the netif interval, attached
+synchronously in `netIfBuildMsg()` via a `Set<string>` cache
+(`refreshPolicyRouteFlags`/`isPolicyRouteMissing`) — mirror this cache+poll+sync-getter
+split for any future async-derived netif flag; a purely-sync-derivable flag should instead
+compute in place like `same_subnet_group`. Table numbers are NEVER hardcoded — derived
+from `ip rule show` / `ip route show`, matching image-building-pipeline's
+`dispatcher.d/90-srtla-wifi-routing` convention.
+
+**Frontend surfacing** (`apps/frontend/src/main/network/CollisionBands.svelte`, mounted in
+`NetworkView.svelte` right after `BondedLinksSection`): a CALM info band
+(`bg-status-info/10`, `data-testid="same-subnet-info"`) lists the shared CIDR(s); an AMBER
+warning band (`bg-status-warning/10`, `data-testid="policy-route-warning"`) fires when any
+interface carries `policy_route_missing`. Both are static/CSS-only (e-ink-freeze safe).
+i18n: `network.collision.*` (10 locales). **NEVER gate an interface or a stream on either
+signal** — both are informational/warning only.
+
+## AUTH-STATE + CONNECTION STORE CONSOLIDATION [EXISTS]
+
+`apps/frontend/src/lib/stores/websocket-store.svelte.ts` (528 LOC, the legacy monolithic
+`getAuth`/`getStatus`/`sendAuthMessage`/`socket`/etc. wrapper) is FULLY DELETED. Its
+consumers were migrated across a 4-step sequence (Wave 2) to the two stores that now
+exclusively own connection and auth-mutation state:
+
+**`apps/frontend/src/lib/rpc/subscriptions.svelte.ts`** — the SOLE `rpcClient.onMessage`
+consumer (`initSubscriptions()`, called once from `main.ts`). Owns every non-auth reactive
+getter (`getConfig`, `getStatus`, `getModems`, `getWifi`, `getIsStreaming`, `getNetif`, …)
+plus connection-state getters (`getIsConnected`, `getConnectionState` — survive socket
+replacement on reconnect; prefer these over `offline-state.svelte` in any authed
+component).
+
+**`apps/frontend/src/lib/stores/auth-status.svelte.ts`** — the SOLE auth-mutation path:
+
+```ts
+export function ingestAuth(message: LoginOutput | undefined): void;   // THE writer
+export function getAuthMessage(): LoginOutput | undefined;             // THE reader
+export async function authenticate(password: string, persistentToken: boolean): Promise<void>;
+export async function createPassword(password: string): Promise<void>;
+export const authStatusStore: { value: boolean; set(b): void; subscribe(cb) };
+```
+
+`Layout.svelte`/`Auth.svelte` call `authenticate`/`createPassword`/`getAuthMessage` —
+never `sendAuthMessage`/`sendCreatePasswordMessage`/`getAuth` (those no longer exist).
+
+**The rule for all future frontend work:** ONLY `subscriptions.svelte.ts` (non-auth
+reactive state + connection state) and `auth-status.svelte.ts` (auth mutation state) own
+connection/auth state. Do not add a second `rpcClient.onMessage` owner or a parallel
+auth-mutation path. A CI grep gate
+(`apps/frontend/src/tests/deprecated-ws-store-gate.test.ts`) fails the build if the literal
+`websocket-store` module name reappears anywhere in `apps/frontend/src` — re-introducing a
+legacy WS bridge is therefore a deliberate, visible decision, never a silent import.
+
+**`offline-state.svelte.ts` / `pwa-status.svelte` read connection state from `$lib/rpc/client`
+directly** (`rpcClient.getConnectionState()` + `onConnectionChange`) — NOT from
+`subscriptions.svelte` — to stay pre-auth-pure (no subscription graph pulled before login).
+This is the one deliberate exception to "read connection state from subscriptions.svelte",
+not drift.
+
+## CAPABILITY-TRUTHFULNESS REGRESSION GATE [EXISTS]
+
+`apps/frontend/tests/e2e/truthfulness.spec.ts` is the capstone rendered-DOM proof that the
+UI never lies about a capability. It injects three capability snapshots (full /
+engine-starting / engine-unavailable) over the page WebSocket against ONE mock backend
+(`MOCK_SCENARIO=multi-modem-wifi`, fixed per worker) using the same `routeWebSocket` proxy
+pattern as `source-overhaul.spec.ts`, and asserts three things:
+
+1. **Real DOM flips**, not just internal state — the H.265 codec button, the latency-slider
+   `aria-valuemin`/`aria-valuemax`, the audio live-switch control, the capability-tier
+   banner, and the `network-ingest-select-rtmp` row all genuinely enable/disable/change
+   bounds across the three snapshots (RIST/SRT transport pills are asserted honest
+   coming-soon — `role="note"`, never fake-interactive — since they never flip).
+2. **No orphan `data-debt-id`** — every rendered `[data-debt-id]` (from `ComingSoon.svelte`)
+   is cross-checked against the `open` entries in `docs/TECHNICAL_DEBT.md`, reusing the SAME
+   parser (`DEBT_ID_RE`) as `scripts/check-tech-debt.mjs`.
+3. **No undefined-RPC crash** on a full dialog click-walk (encoder/audio/server open+close,
+   destination navigation) — `page.on('pageerror')` plus filtered console-error assertions.
+
+This is the terminal regression gate for every truthfulness contract landed across this
+plan (gateway-availability, capability-vs-active split, disabled-with-reason everywhere) —
+extend it, don't duplicate it, when a new capability-gated control ships.
+
 ## ANTI-PATTERNS
 
 - Don't run `npm install`, `yarn`, or `pnpm install` — this workspace runs **Bun** exclusively. `bun.lock` is the authoritative lockfile; `pnpm-lock.yaml`/`pnpm-workspace.yaml`/`.pnpmrc` are gone and catalogs live in `package.json` `workspaces.catalog`. Use `bun install`.
@@ -1110,3 +1277,5 @@ field omitted.
 - Don't hardcode validation bounds (min/max lengths, bitrate limits, port ranges) in dialog components — import from `ValidationAdapter.ts` which sources from `packages/rpc/src/schemas/`.
 - Don't hardcode timeout/retry values in streaming modules — import from `timing-constants.ts`.
 - Don't add new exports to the streamloop barrel without updating the locked-API surface test in `tests/streamloop-modules.test.ts`.
+- Don't re-add a `websocket-store` wrapper or a second `rpcClient.onMessage` owner — `subscriptions.svelte.ts` (connection/non-auth state) and `auth-status.svelte.ts` (auth mutation state) are the only two stores allowed to own this state; a CI grep gate blocks the literal module name from reappearing in `apps/frontend/src`.
+- Don't re-derive the "gateway inactive" disabled-with-reason rule inline on a new surface — route through `pipelineAvailability.ts`.

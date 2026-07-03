@@ -85,6 +85,18 @@ export const OPTION_UNSUPPORTED_ON_PLATFORM =
 export const OPTION_FIXED_BY_SOURCE =
 	"live.education.reason.fixedBySource" as const;
 
+// Network-ingest gateway availability — re-surfaced from the single-source-of-
+// truth helper (`$lib/streaming/pipelineAvailability`) so the disabled-reason key
+// family stays together. The rule itself is NEVER re-implemented here.
+export {
+	isPipelineAvailable,
+	PIPELINE_GATEWAY_INACTIVE,
+	type PipelineAvailability,
+	type PipelineView,
+	pipelineAvailability,
+	pipelineViews,
+} from "$lib/streaming/pipelineAvailability";
+
 /**
  * Bridge the `HardwareType` the pipelines broadcast already carries to the
  * {@link PlatformCaps} `intersectCaps()` consumes. This is a deliberately thin

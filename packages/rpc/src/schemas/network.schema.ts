@@ -13,6 +13,12 @@ export const netifEntrySchema = z.object({
 	enabled: z.boolean(),
 	error: z.string().optional(),
 	mac: z.string().optional(),
+	// Informational CIDR shared with other enabled interfaces; not an error (the
+	// AP/hotspot and lone interfaces are absent). Additive-optional.
+	same_subnet_group: z.string().optional(),
+	// True when a bonded (modem/wifi) interface is missing its SRTLA source-routing
+	// policy rule or its table's default route. Real-device diagnostic; additive-optional.
+	policy_route_missing: z.boolean().optional(),
 });
 export type NetifEntry = z.infer<typeof netifEntrySchema>;
 

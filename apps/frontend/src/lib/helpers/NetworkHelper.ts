@@ -10,7 +10,7 @@ import type {
 import QRCode from "qrcode";
 
 import { rpc } from "$lib/rpc/client";
-import { getStatus } from "$lib/stores/websocket-store.svelte";
+import { getStatus } from "$lib/rpc/subscriptions.svelte";
 import type { ValueOf } from "$lib/types";
 
 // Re-export type

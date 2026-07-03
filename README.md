@@ -33,8 +33,8 @@ CeraUI/
 
 The app is organized into three primary destinations:
 
-- **Live** — streaming control and configuration. Start/stop the stream, adjust encoder settings, audio, server target, and bitrate. A persistent HUD bar shows live bitrate, per-link signal strength, and SoC telemetry across all destinations.
-- **Network** — connectivity overview. Bonded link status, WiFi networks (connect/disconnect/forget), cellular modems (APN, roaming, network type), Ethernet interfaces, and hotspot configuration.
+- **Live** — streaming control and configuration. Start/stop the stream, adjust encoder settings, audio, server target, and bitrate. A persistent HUD bar shows live bitrate, per-link signal strength, and SoC telemetry across all destinations. A **Network Ingest** card lets a phone or OBS on the same LAN publish directly into the device over RTMP or SRT, without going through the cloud relay — the card shows each protocol's publish URL (with copy/QR) and disables itself with a reason when the underlying gateway service isn't running.
+- **Network** — connectivity overview. Bonded link status, WiFi networks (connect/disconnect/forget), cellular modems (APN, roaming, network type), Ethernet interfaces, and hotspot configuration. Calm info/warning bands surface interface-topology issues without ever blocking a connection: a same-subnet notice when two bonded links deliberately share a subnet (normal for policy-routed bonding), and a policy-route warning if a bonded WiFi/modem link is missing its expected routing table.
 - **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, and version info.
 
 A dev-only DevTools destination is available in development builds.

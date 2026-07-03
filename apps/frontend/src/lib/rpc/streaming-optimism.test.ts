@@ -70,46 +70,62 @@ describe("streaming-optimism", () => {
 		});
 	});
 
-	describe("reconcileToAuthority", () => {
-		it("reconciles starting to idle when is_streaming becomes true", () => {
+	describe("reconcileToAuthority (truth table)", () => {
+		it("starting + true → idle (confirmed)", () => {
 			const store: StreamingOptimismStore = { state: "starting" };
 			const next = reconcileToAuthority(store, true);
 			expect(next.state).toBe("idle");
 			expect(next.stopReason).toBeUndefined();
 		});
 
-		it("reconciles stopping to idle when is_streaming becomes false", () => {
+		it("starting + false → KEEP starting (ignores contradicting push)", () => {
+			const store: StreamingOptimismStore = { state: "starting" };
+			const next = reconcileToAuthority(store, false);
+			expect(next.state).toBe("starting");
+		});
+
+		it("stopping + false → idle (confirmed)", () => {
 			const store: StreamingOptimismStore = { state: "stopping" };
 			const next = reconcileToAuthority(store, false);
 			expect(next.state).toBe("idle");
 			expect(next.stopReason).toBeUndefined();
 		});
 
-		it("reconciles starting to idle when is_streaming is false (start failed)", () => {
-			const store: StreamingOptimismStore = { state: "starting" };
-			const next = reconcileToAuthority(store, false);
-			expect(next.state).toBe("idle");
-		});
-
-		it("reconciles stopping to idle when is_streaming is true (stop failed)", () => {
+		it("stopping + true → KEEP stopping (ignores contradicting push)", () => {
 			const store: StreamingOptimismStore = { state: "stopping" };
 			const next = reconcileToAuthority(store, true);
-			expect(next.state).toBe("idle");
+			expect(next.state).toBe("stopping");
 		});
 
-		it("is idempotent when already at truth", () => {
+		it("idle + false → no-op (already at truth)", () => {
 			const store: StreamingOptimismStore = { state: "idle" };
 			const next = reconcileToAuthority(store, false);
 			expect(next.state).toBe("idle");
 		});
 
-		it("clears stop reason on reconcile", () => {
+		it("idle + true → no-op (autostart owned by authoritative store)", () => {
+			const store: StreamingOptimismStore = { state: "idle" };
+			const next = reconcileToAuthority(store, true);
+			expect(next.state).toBe("idle");
+		});
+
+		it("clears stop reason on confirmed reconcile", () => {
 			const store: StreamingOptimismStore = {
 				state: "starting",
 				stopReason: "old_error",
 			};
 			const next = reconcileToAuthority(store, true);
 			expect(next.stopReason).toBeUndefined();
+		});
+
+		it("preserves stop reason when keeping the transient state", () => {
+			const store: StreamingOptimismStore = {
+				state: "starting",
+				stopReason: "old_error",
+			};
+			const next = reconcileToAuthority(store, false);
+			expect(next.state).toBe("starting");
+			expect(next.stopReason).toBe("old_error");
 		});
 	});
 
@@ -223,19 +239,30 @@ describe("streaming-optimism", () => {
 		});
 	});
 
-	describe("integration: optimistic transient → broadcast failure", () => {
-		it("flows: idle → starting → broadcast is_streaming=false (start failed)", () => {
+	describe("integration: optimistic transient → contradicting broadcast", () => {
+		it("flows: idle → starting → stale is_streaming=false ignored → is_streaming=true confirms", () => {
 			let store = createOptimismStore();
 
-			// User clicks Start
 			store = transitionToStarting(store);
 			expect(store.state).toBe("starting");
 
-			// Backend broadcasts is_streaming=false (start failed)
 			store = reconcileToAuthority(store, false);
+			expect(store.state).toBe("starting");
+
+			store = reconcileToAuthority(store, true);
 			expect(store.state).toBe("idle");
-			// Note: no stop reason here — the broadcast alone doesn't carry the reason.
-			// The reason comes from the start RPC rejection or a separate error broadcast.
+			expect(store.stopReason).toBeUndefined();
+		});
+
+		it("flows: idle → starting → revert with reason (RPC rejection, not a broadcast)", () => {
+			let store = createOptimismStore();
+
+			store = transitionToStarting(store);
+			expect(store.state).toBe("starting");
+
+			store = revertWithReason(store, "no_server_configured");
+			expect(store.state).toBe("idle");
+			expect(store.stopReason).toBe("no_server_configured");
 		});
 	});
 });

@@ -379,6 +379,30 @@ const en = {
 			exportAria: "Export session summary",
 			exportError: "Couldn't export the session summary. Please try again.",
 		},
+		networkIngest: {
+			title: "Network ingest",
+			subtitle:
+				"Publish to this device from another encoder or a phone on the same network.",
+			infoTitle: "Network ingest",
+			infoBody:
+				"Publish from your phone or a hardware encoder (like OBS) to this address. The device receives it over your local network and encodes it for streaming.",
+			active: "Service running",
+			inactive: "Service not running",
+			selected: "Selected",
+			serviceInactive:
+				"The {protocol:string} ingest service isn't running yet.",
+			noAddress:
+				"The {protocol:string} gateway is running, but this device has no LAN or hotspot address to publish to. Join a Wi-Fi or Ethernet network, or enable the device hotspot.",
+			noAddressStatus: "No reachable address",
+			streamingLocked: "Stop the stream to change the video source.",
+			instructionsToggle: "How to publish",
+			instructions:
+				"Point your phone or encoder at this address, then start publishing.",
+			qrLabel: "Scan to get the publish address",
+			copy: "Copy address",
+			copied: "Address copied",
+			copyFailed: "Couldn't copy the address.",
+		},
 		preview: {
 			title: "Preview",
 			start: "Start preview",
@@ -432,6 +456,8 @@ const en = {
 			audioSwitched: "Audio switched in {ms:number}ms",
 			audioSwitchFailed: "Failed to switch audio source",
 			audioSourceLost: "Audio source unavailable",
+			audioSwitchUnavailable:
+				"Live audio switching isn't supported by the current engine",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -497,6 +523,8 @@ const en = {
 			reason: {
 				unsupportedPlatform: "Not supported on this platform",
 				fixedBySource: "Fixed by the selected source",
+				gatewayInactive: "Network ingest gateway is not running",
+				gatewayNoAddress: "No reachable LAN or hotspot address",
 			},
 			info: "About {field:string}",
 			close: "Got it",
@@ -580,6 +608,8 @@ const en = {
 		error: "Error",
 		saved: "Saved",
 		saveFailed: "Failed to save",
+		validationFailed: "Please check these fields: {fields:string}",
+		requestFailed: "Something went wrong. Please try again.",
 		updateInProgress: "Update in progress",
 		// Hardware
 		bootconfigUpdating:
@@ -1060,6 +1090,14 @@ const en = {
 			weight: "Weight",
 			telemetry: "Link telemetry",
 		},
+		collision: {
+			sameSubnetTitle: "Shared subnet across links",
+			sameSubnetBody:
+				"Two or more links share an identical subnet. This is expected \u2014 the device routes each link independently, so bonding keeps working normally.",
+			policyRouteTitle: "Link routing needs attention",
+			policyRouteBody:
+				"A bonded link may be routing through the wrong modem. Reboot the device or re-plug the link \u2014 routing rules are reinstalled automatically when the link comes back up.",
+		},
 		pageTitle: "Network Configuration",
 		pageDescription:
 			"Manage your WiFi connections, hotspots, cellular modems, and network interfaces",
@@ -1283,6 +1321,11 @@ const en = {
 			title: "Searching for networks…",
 			description: "Looking for available WiFi networks nearby.",
 		},
+		scanError: {
+			title: "Scan failed",
+			description:
+				"Couldn't refresh nearby WiFi networks. Retrying automatically.",
+		},
 		dialog: {
 			close: "Close",
 			searchWifi: "View Available Networks",
@@ -1491,6 +1534,8 @@ const en = {
 		rebootingDescription:
 			"The device is restarting. This page will reconnect automatically.",
 		sessionExpired: "Session expired. Please authenticate again.",
+		authTimedOut:
+			"Couldn't verify your session. Check the connection and try again.",
 	},
 	offline: {
 		title: "You're Offline",

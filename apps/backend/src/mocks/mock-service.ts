@@ -16,7 +16,11 @@
 //           timer — side-effect-clean, so each test starts from the scenario's
 //           seeded state with no leaked intervals or cross-test bleed.
 
-import type { AddonConfig, AddonState } from "@ceraui/rpc/schemas";
+import type {
+	AddonConfig,
+	AddonState,
+	RequiresGateway,
+} from "@ceraui/rpc/schemas";
 import { logger } from "../helpers/logger.ts";
 import {
 	buildRelaysMsg,
@@ -59,6 +63,7 @@ import type {
 	MockHealthState,
 	MockModemConfigState,
 	MockNetifConfigState,
+	MockPolicyRouteFault,
 	MockRelayValidateFault,
 	MockSimState,
 	MockStreamErrorState,
@@ -77,6 +82,7 @@ export type {
 	MockHealthState,
 	MockModemConfigState,
 	MockNetifConfigState,
+	MockPolicyRouteFault,
 	MockRelayValidateFault,
 	MockSimState,
 	MockStreamErrorState,
@@ -118,6 +124,9 @@ export interface MockState {
 	// Forced relay.validate network-stage fault for the deterministic mock seam in
 	// relay.procedure.ts (test-infra only); null = default successful probe.
 	relayValidateFault: MockRelayValidateFault;
+	// Forced policy-route self-check fault for the dev/mock seam in
+	// policy-route-check.ts (never spawns `ip`); null = no flags.
+	policyRouteFault: MockPolicyRouteFault;
 	// Per-modem SIM lock state (keyed by modem id string) + the in-memory stand-in
 	// for the chmod-600 tmpfs PIN secret read; both reset with the scenario.
 	simStates: Map<string, MockSimState>;
@@ -129,6 +138,14 @@ export interface MockState {
 	// capabilities sub-config by setMockEngineCapabilities(); null = scenario
 	// default. Resets with the scenario like every other session slot.
 	capabilityOverride: ScenarioCapabilities | null;
+	// Per-kind network-ingest gateway active state for the dev/mock start gate
+	// (Task 17); absent kind = inactive. Resets with the scenario.
+	gatewayActive: Partial<Record<RequiresGateway, boolean>>;
+	// Per-kind network-ingest gateway service-active state for the status surface
+	// (Task 16); seeded active so dev scenarios expose live gateways. Independent
+	// of gatewayActive (the stream-start gate stays fail-safe). Resets with the
+	// scenario.
+	networkIngestActive: Record<RequiresGateway, boolean>;
 }
 
 const mockState: MockState = {
@@ -158,10 +175,13 @@ const mockState: MockState = {
 	mockHealthOverride: null,
 	injectedStreamError: null,
 	relayValidateFault: null,
+	policyRouteFault: null,
 	simStates: new Map(),
 	simPinSecret: null,
 	mockAddons: {},
 	capabilityOverride: null,
+	gatewayActive: {},
+	networkIngestActive: { rtmp: true, srt: true },
 };
 
 // Deep snapshot of `mockState` captured at the end of initMockService — the
@@ -218,7 +238,10 @@ export function initMockService(scenarioName?: string): void {
 	mockState.mockHealthOverride = null;
 	mockState.injectedStreamError = null;
 	mockState.relayValidateFault = null;
+	mockState.policyRouteFault = null;
 	mockState.capabilityOverride = null;
+	mockState.gatewayActive = {};
+	mockState.networkIngestActive = { rtmp: true, srt: true };
 	mockState.interfaceThroughput = {};
 	mockState.wifiModes = {};
 
@@ -529,6 +552,10 @@ export function setMockStreamError(event: MockStreamErrorState): void {
 
 export function setMockRelayValidateFault(fault: MockRelayValidateFault): void {
 	updateMockState({ relayValidateFault: fault });
+}
+
+export function setMockPolicyRouteFault(fault: MockPolicyRouteFault): void {
+	updateMockState({ policyRouteFault: fault });
 }
 
 function clearMockTimers(): void {

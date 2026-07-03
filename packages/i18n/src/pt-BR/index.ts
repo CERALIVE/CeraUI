@@ -640,6 +640,14 @@ const ptBR = {
 			weight: "Peso",
 			telemetry: "Telemetria do link",
 		},
+		collision: {
+			sameSubnetTitle: "Sub-rede compartilhada entre links",
+			sameSubnetBody:
+				"Dois ou mais links compartilham uma sub-rede idêntica. Isso é esperado \u2014 o dispositivo roteia cada link de forma independente, então o bonding continua funcionando normalmente.",
+			policyRouteTitle: "O roteamento do link precisa de atenção",
+			policyRouteBody:
+				"Um link agregado pode estar roteando pelo modem errado. Reinicie o dispositivo ou reconecte o link \u2014 as regras de roteamento são reinstaladas automaticamente quando o link volta a ativar.",
+		},
 		pageTitle: "Configuração de Rede",
 		pageDescription:
 			"Gerencie suas conexões WiFi, hotspots, modems celulares e interfaces de rede",
@@ -868,6 +876,11 @@ const ptBR = {
 		scanningState: {
 			title: "Procurando redes…",
 			description: "Procurando redes WiFi disponíveis por perto.",
+		},
+		scanError: {
+			title: "Falha na busca",
+			description:
+				"Não foi possível atualizar as redes WiFi por perto. Tentando novamente automaticamente.",
 		},
 		dialog: {
 			close: "Fechar",
@@ -1129,6 +1142,30 @@ const ptBR = {
 			exportError:
 				"Não foi possível exportar o resumo da sessão. Tente novamente.",
 		},
+		networkIngest: {
+			title: "Entrada de rede",
+			subtitle:
+				"Publique neste dispositivo a partir de outro codificador ou celular na mesma rede.",
+			infoTitle: "Entrada de rede",
+			infoBody:
+				"Publique do seu celular ou de um codificador de hardware (como o OBS) para este endereço. O dispositivo o recebe pela sua rede local e o codifica para transmitir.",
+			active: "Serviço em execução",
+			inactive: "Serviço parado",
+			selected: "Selecionado",
+			serviceInactive:
+				"O serviço de entrada {protocol} ainda não está em execução.",
+			noAddress:
+				"O gateway {protocol} está em execução, mas este dispositivo não tem nenhum endereço de LAN ou ponto de acesso para publicar. Conecte-se a uma rede Wi-Fi ou Ethernet, ou ative o ponto de acesso do dispositivo.",
+			noAddressStatus: "Nenhum endereço acessível",
+			streamingLocked: "Pare a transmissão para alterar a fonte de vídeo.",
+			instructionsToggle: "Como publicar",
+			instructions:
+				"Aponte seu celular ou codificador para este endereço e comece a publicar.",
+			qrLabel: "Escaneie para obter o endereço de publicação",
+			copy: "Copiar endereço",
+			copied: "Endereço copiado",
+			copyFailed: "Não foi possível copiar o endereço.",
+		},
 		preview: {
 			title: "Pré-visualização",
 			start: "Iniciar pré-visualização",
@@ -1182,6 +1219,8 @@ const ptBR = {
 			audioSwitched: "Áudio trocado em {ms}ms",
 			audioSwitchFailed: "Falha ao trocar a fonte de áudio",
 			audioSourceLost: "Fonte de áudio indisponível",
+			audioSwitchUnavailable:
+				"A troca de áudio ao vivo não é suportada pelo mecanismo atual",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1248,6 +1287,8 @@ const ptBR = {
 			reason: {
 				unsupportedPlatform: "Não suportado nesta plataforma",
 				fixedBySource: "Fixado pela fonte selecionada",
+				gatewayInactive: "O gateway de ingestão de rede não está em execução",
+				gatewayNoAddress: "Nenhum endereço de LAN ou ponto de acesso acessível",
 			},
 			info: "Sobre {field}",
 			close: "Entendi",
@@ -1331,6 +1372,8 @@ const ptBR = {
 		error: "Erro",
 		saved: "Salvo",
 		saveFailed: "Falha ao salvar",
+		validationFailed: "Verifique estes campos: {fields}",
+		requestFailed: "Algo deu errado. Tente novamente.",
 		updateInProgress: "Atualização em andamento",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1482,6 +1525,8 @@ const ptBR = {
 		rebootingDescription:
 			"O dispositivo está reiniciando. Esta página se reconectará automaticamente.",
 		sessionExpired: "Sessão expirada. Por favor, autentique-se novamente.",
+		authTimedOut:
+			"Não foi possível verificar sua sessão. Verifique a conexão e tente novamente.",
 	},
 	offline: {
 		title: "Você está offline",

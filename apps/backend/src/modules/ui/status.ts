@@ -15,10 +15,11 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import type { BufferingStatus } from "@ceraui/rpc/schemas";
+import type { BufferingStatus, NetworkIngest } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
 import { getConfig } from "../config.ts";
 import { buildModemsMessage } from "../modems/modem-status.ts";
+import { getNetworkIngestInfo } from "../network/network-ingest.ts";
 import { netIfBuildMsg } from "../network/network-interfaces.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
 import { getAudioDevices } from "../streaming/audio.ts";
@@ -52,6 +53,7 @@ export type StatusResponseMessage = {
 	remote?: true | { error: string };
 	linkTelemetry?: LinkTelemetryMessage | null;
 	buffering?: BufferingStatus | null;
+	network_ingest?: NetworkIngest | null;
 };
 
 export function sendStatus(conn: WebSocket) {
@@ -67,6 +69,7 @@ export function sendStatus(conn: WebSocket) {
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),
 			linkTelemetry: buildLinkTelemetry(),
+			network_ingest: getNetworkIngestInfo(),
 		} satisfies StatusResponseMessage),
 	);
 }

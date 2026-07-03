@@ -15,6 +15,8 @@
   capped, jittered exponential backoff while the toggle stays on.
 -->
 <script lang="ts">
+import { onDestroy } from 'svelte';
+
 import { LL } from '@ceraui/i18n/svelte';
 import { Eye, EyeOff, Loader, LoaderCircle, ServerOff } from '@lucide/svelte';
 
@@ -72,6 +74,9 @@ let videoEl = $state<HTMLVideoElement | null>(null);
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = $state(0);
+// Latched true once the component is torn down (onDestroy). A reconnect timer
+// that fires after unmount must not touch reactive state or dial a new socket.
+let destroyed = false;
 
 let decoder: VideoDecoder | null = null;
 let sawKeyframe = false;
@@ -263,7 +268,8 @@ function scheduleReconnect(): void {
 	const delay = backoffDelay(reconnectAttempt);
 	reconnectAttempt += 1;
 	reconnectTimer = setTimeout(() => {
-		if (enabled) connect();
+		if (destroyed || !enabled) return;
+		connect();
 	}, delay);
 }
 
@@ -297,7 +303,10 @@ function start(): void {
 	connect();
 }
 
-function stop(): void {
+// Single owner of connection cleanup: the ONLY place that clears the reconnect
+// timer and nulls the socket. Invoked from every close path (`stop`) and from
+// `onDestroy`, so no cleanup logic is duplicated across call sites.
+function teardown(): void {
 	if (reconnectTimer) {
 		clearTimeout(reconnectTimer);
 		reconnectTimer = null;
@@ -314,6 +323,10 @@ function stop(): void {
 		}
 		socket = null;
 	}
+}
+
+function stop(): void {
+	teardown();
 	resetMedia();
 	reconnectAttempt = 0;
 	if (status !== 'unsupported') status = 'idle';
@@ -337,6 +350,13 @@ $effect(() => {
 	if (!enabled || previewUnavailable) return;
 	start();
 	return () => stop();
+});
+
+// Final unmount guard: latch `destroyed` so any in-flight reconnect timer is
+// inert, then route the connection cleanup through the single `teardown` owner.
+onDestroy(() => {
+	destroyed = true;
+	teardown();
 });
 
 const unavailableBand = $derived.by(() => {

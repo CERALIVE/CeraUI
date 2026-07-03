@@ -20,6 +20,7 @@
 import { EventEmitter } from "node:events";
 import type WebSocket from "ws";
 
+import { ipToInt, isSameSubnet } from "../../helpers/ip-addresses.ts";
 import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
@@ -43,6 +44,10 @@ import {
 	wifiDeviceListStartUpdate,
 } from "../wifi/wifi-device-list.ts";
 import { wifiUpdateDevices } from "../wifi/wifi-interfaces.ts";
+import {
+	isPolicyRouteMissing,
+	refreshPolicyRouteFlags,
+} from "./policy-route-check.ts";
 import { onNetifChange, setNetifState } from "./state/netif-state.ts";
 import type { MonitorEvent, NetifState } from "./state-types.ts";
 
@@ -53,6 +58,7 @@ export type NetworkInterface = {
 	txb: number;
 	enabled: boolean;
 	error: number;
+	same_subnet_group?: string;
 };
 
 export type NetworkInterfaceMessage = {
@@ -181,6 +187,13 @@ export function initNetworkInterfaceMonitoring() {
 	onNetifChange(broadcastNetif);
 	updateNetif();
 	setInterval(updateNetif, NETIF_POLL_INTERVAL_MS);
+	// Policy-route self-check on the netif cadence: real-device only, cached, and
+	// degrade-to-null internally — it never spawns in dev/mock, never blocks, and
+	// never throws into this loop.
+	void refreshPolicyRouteFlags(netif);
+	setInterval(() => {
+		void refreshPolicyRouteFlags(netif);
+	}, NETIF_POLL_INTERVAL_MS);
 }
 
 export function updateNetif() {
@@ -312,6 +325,11 @@ export function processIfconfigOutput(stdout: string) {
 		} else {
 			notificationBroadcast("netif_dup_ip", "error", msg, 0, true, true);
 		}
+
+		// Same-subnet detection (informational). Runs AFTER dup-IP so a hard
+		// dup-IP pair (now flagged NETIF_ERR_DUPIPV4 → enabled=false) is skipped
+		// and never also tagged as a same-subnet group.
+		computeSameSubnetGroups(newInterfaces);
 	}
 
 	if (wifiDeviceListEndUpdate()) {
@@ -330,6 +348,81 @@ export function processIfconfigOutput(stdout: string) {
 	// Reconcile + broadcast (covers throughput-only deltas too); no-op when the
 	// snapshot is unchanged, replacing the old unconditional per-tick broadcast.
 	syncNetifState();
+}
+
+function intToIp(int: number): string {
+	return [
+		(int >>> 24) & 0xff,
+		(int >>> 16) & 0xff,
+		(int >>> 8) & 0xff,
+		int & 0xff,
+	].join(".");
+}
+
+function netmaskToPrefix(netmask: string): number {
+	let bits = ipToInt(netmask);
+	let count = 0;
+	while (bits) {
+		count += bits & 1;
+		bits >>>= 1;
+	}
+	return count;
+}
+
+function subnetCidr(ip: string, netmask: string): string {
+	const network = intToIp(ipToInt(ip) & ipToInt(netmask));
+	return `${network}/${netmaskToPrefix(netmask)}`;
+}
+
+// The AP/hotspot interface is intentionally same-subnet with its DHCP clients,
+// so it must never be grouped. It is identified by the existing hotspot markers:
+// dup-IP suppression during the station→hotspot transition
+// (wifi-hotspot-activation.ts) and the persistent NETIF_ERR_HOTSPOT flag once NM
+// confirms hotspot mode (wifi-interfaces.ts).
+function isApInterface(name: string, int: NetworkInterface): boolean {
+	return (
+		dupIpSuppressedIfaces.has(name) || (int.error & NETIF_ERR_HOTSPOT) !== 0
+	);
+}
+
+// Tag every enabled interface that shares a subnet (same netmask, same network
+// address) with another enabled interface on a DIFFERENT IP. Distinct from
+// dup-IP: it is not an error (policy routing handles a bonded shared subnet).
+// The AP/hotspot and dup-IP-flagged interfaces are excluded. n is tiny, so the
+// O(n^2) pairwise scan is fine.
+function computeSameSubnetGroups(
+	interfaces: Record<string, NetworkInterface>,
+): void {
+	const candidates: Array<[string, NetworkInterface]> = [];
+	for (const name in interfaces) {
+		const int = interfaces[name];
+		if (!int?.ip || !int.netmask) continue;
+		if (!int.enabled) continue;
+		if (int.error & NETIF_ERR_DUPIPV4) continue;
+		if (isApInterface(name, int)) continue;
+		candidates.push([name, int]);
+	}
+
+	for (let a = 0; a < candidates.length; a++) {
+		const entryA = candidates[a];
+		if (!entryA) continue;
+		const [, intA] = entryA;
+		const ipA = intA.ip;
+		const maskA = intA.netmask;
+		if (!ipA || !maskA) continue;
+		for (let b = a + 1; b < candidates.length; b++) {
+			const entryB = candidates[b];
+			if (!entryB) continue;
+			const [, intB] = entryB;
+			const ipB = intB.ip;
+			if (!ipB || intB.netmask !== maskA || ipA === ipB) continue;
+			if (isSameSubnet(ipA, ipB, maskA)) {
+				const cidr = subnetCidr(ipA, maskA);
+				intA.same_subnet_group = cidr;
+				intB.same_subnet_group = cidr;
+			}
+		}
+	}
 }
 
 // The order is deliberate, we want *hotspot* to have higher priority
@@ -379,6 +472,8 @@ export function getNetifErrorMsg(i: NetworkInterface) {
 type NetworkInterfaceResponseMessage = {
 	[key: string]: Pick<NetworkInterface, "ip" | "tp" | "enabled"> & {
 		error?: string;
+		same_subnet_group?: string;
+		policy_route_missing?: boolean;
 	};
 };
 
@@ -408,6 +503,14 @@ export function netIfBuildMsg() {
 		const error = getNetifErrorMsg(networkInterface);
 		if (error) {
 			m[i].error = error;
+		}
+
+		if (networkInterface.same_subnet_group) {
+			m[i].same_subnet_group = networkInterface.same_subnet_group;
+		}
+
+		if (isPolicyRouteMissing(i)) {
+			m[i].policy_route_missing = true;
 		}
 	}
 	return m;

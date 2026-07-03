@@ -25,6 +25,7 @@ import { toast } from 'svelte-sonner';
 import { Button } from '$lib/components/ui/button';
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import IngestStats from '$lib/components/custom/IngestStats.svelte';
+import NetworkIngestSection from '$lib/components/custom/NetworkIngestSection.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 import * as Card from '$lib/components/ui/card';
@@ -206,13 +207,13 @@ const audioLiveSwitchEnabled = $derived(isAudioLiveSwitchEnabled(getCapabilities
 const AUDIO_SWITCH_FIELD = 'audio_switch';
 
 async function handleSwitchInput(inputId: string) {
-	// Defense-in-depth: even if a UI path offered an audio switch, refuse to
-	// dispatch a live switch for an audio:* id while the capability is off — the
-	// engine would reject it with DeviceNotFound (TD-live-audio-switch).
+	// Defense-in-depth: the audio Switch button in InputPicker is already
+	// disabled-with-reason when the capability is off, so this path is normally
+	// unreachable. If it is somehow reached, surface a calm, user-visible reason
+	// via a toast and refuse to dispatch — the engine would otherwise reject the
+	// live audio:* switch with DeviceNotFound.
 	if (!canLiveSwitchInput(inputId, audioLiveSwitchEnabled)) {
-		console.warn(
-			`[CeraUI] Blocked live switch for audio source "${inputId}": live audio switching is not available (audio_live_switch capability is off).`,
-		);
+		toast.warning($LL.live.inputPicker.audioSwitchUnavailable());
 		return;
 	}
 	if (isAudioInputId(inputId)) {
@@ -927,6 +928,16 @@ const configRows = $derived<ConfigRow[]>([
 			sourceOrder={sourceOrder}
 			sourcePreferenceField={SOURCE_PREFERENCE_FIELD}
 			{switchingInput}
+		/>
+
+		<!-- LAN network-ingest sources (RTMP / SRT gateways) — publish from a phone
+		     or hardware encoder on the same network. Renders only the board-offered
+		     protocols; selecting one sets config.pipeline. -->
+		<NetworkIngestSection
+			{isStreaming}
+			networkIngest={getStatus()?.network_ingest ?? null}
+			pipelines={getPipelines()?.pipelines}
+			selectedPipeline={config?.pipeline}
 		/>
 
 		<!--

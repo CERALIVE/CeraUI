@@ -43,6 +43,11 @@ import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
 import { createMonitorManager } from "./modules/network/monitor/monitor-manager.ts";
 import {
+	buildGatewayProbe,
+	refreshAndBroadcastNetworkIngest,
+	refreshNetworkIngestInfo,
+} from "./modules/network/network-ingest.ts";
+import {
 	handleNetifMonitorEvent,
 	initNetworkInterfaceMonitoring,
 	updateNetif,
@@ -64,6 +69,7 @@ import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
 import { checkEngineCompatibilityOnStartup } from "./modules/streaming/cerastream-backend.ts";
 import { reconcilePersistedPipeline } from "./modules/streaming/config-migration.ts";
 import { startDeviceDiscovery } from "./modules/streaming/devices.ts";
+import { setGatewayProbe } from "./modules/streaming/gateway-availability.ts";
 import { broadcastHealthIfChanged } from "./modules/streaming/health.ts";
 import {
 	broadcastLinkTelemetryIfChanged,
@@ -261,6 +267,17 @@ onHeartbeatTick(broadcastHealthIfChanged);
 
 // srtla link telemetry: fold into the status flow on the same tick, on-change
 onHeartbeatTick(broadcastLinkTelemetryIfChanged);
+
+// Network-ingest gateway status (Todo 16): probe the rtmp/srt ingest gateways on
+// the heartbeat cadence and fold the result into the `status` flow on change. The
+// cached snapshot also backs the streaming.start GatewayProbe (Todo 17 seam) — a
+// synchronous read updated asynchronously here, so the gate never blocks on a
+// systemctl spawn. Seed the cache once, then keep it fresh on each tick.
+void refreshNetworkIngestInfo();
+setGatewayProbe(buildGatewayProbe());
+onHeartbeatTick(() => {
+	void refreshAndBroadcastNetworkIngest();
+});
 
 // Telemetry recorder (spec §8.1): batch per-link samples and emit `telemetry`
 // status frames to the hub for durable persistence. Non-blocking — each tick is

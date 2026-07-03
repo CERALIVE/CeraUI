@@ -53,3 +53,32 @@ describe("WifiNetworkList — scan progress", () => {
 		expect(screen.queryByTestId("wifi-scan-status")).toBeNull();
 	});
 });
+
+describe("WifiNetworkList — scan error state", () => {
+	it("renders the scan-error state (not the empty state) when a scan failed", () => {
+		render(WifiNetworkList, {
+			props: { ...baseProps, scanning: false, scanError: true },
+		});
+
+		expect(screen.getByTestId("wifi-scan-error")).toBeTruthy();
+		expect(screen.queryByTestId("wifi-empty-state")).toBeNull();
+	});
+
+	it("shows the settled empty state when there is no scan error", () => {
+		render(WifiNetworkList, {
+			props: { ...baseProps, scanning: false, scanError: false },
+		});
+
+		expect(screen.getByTestId("wifi-empty-state")).toBeTruthy();
+		expect(screen.queryByTestId("wifi-scan-error")).toBeNull();
+	});
+
+	it("prefers the scanning state over the error state while a scan is in flight", () => {
+		render(WifiNetworkList, {
+			props: { ...baseProps, scanning: true, scanError: true },
+		});
+
+		expect(screen.getByTestId("wifi-scanning-state")).toBeTruthy();
+		expect(screen.queryByTestId("wifi-scan-error")).toBeNull();
+	});
+});

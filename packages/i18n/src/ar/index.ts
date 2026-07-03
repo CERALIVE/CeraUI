@@ -607,6 +607,14 @@ const ar = {
 			weight: "الوزن",
 			telemetry: "قياس عن بعد للرابط",
 		},
+		collision: {
+			sameSubnetTitle: "شبكة فرعية مشتركة بين الروابط",
+			sameSubnetBody:
+				"يشترك رابطان أو أكثر في نفس الشبكة الفرعية. هذا أمر متوقع \u2014 يوجّه الجهاز كل رابط بشكل مستقل، لذا يستمر الدمج في العمل بشكل طبيعي.",
+			policyRouteTitle: "توجيه الرابط يحتاج إلى انتباه",
+			policyRouteBody:
+				"قد يكون أحد الروابط المدمجة يوجّه عبر مودم خاطئ. أعد تشغيل الجهاز أو أعد توصيل الرابط \u2014 تُعاد قواعد التوجيه تلقائياً عند عودة الرابط.",
+		},
 		pageTitle: "إعدادات الشبكة",
 		pageDescription:
 			"إدارة اتصالات WiFi والنقاط الساخنة ومودمات الخلوية وواجهات الشبكة",
@@ -827,6 +835,10 @@ const ar = {
 		scanningState: {
 			title: "جارٍ البحث عن الشبكات…",
 			description: "يتم البحث عن شبكات WiFi المتاحة القريبة.",
+		},
+		scanError: {
+			title: "فشل الفحص",
+			description: "تعذّر تحديث شبكات WiFi القريبة. جارٍ إعادة المحاولة تلقائيًا.",
 		},
 		dialog: {
 			close: "إغلاق",
@@ -1102,6 +1114,27 @@ const ar = {
 			exportAria: "تصدير ملخص الجلسة",
 			exportError: "تعذّر تصدير ملخص الجلسة. يرجى المحاولة مرة أخرى.",
 		},
+		networkIngest: {
+			title: "استقبال الشبكة",
+			subtitle: "انشر إلى هذا الجهاز من مُشفِّر آخر أو هاتف على نفس الشبكة.",
+			infoTitle: "استقبال الشبكة",
+			infoBody:
+				"انشر من هاتفك أو من مُشفِّر عتادي (مثل OBS) إلى هذا العنوان. يستقبله الجهاز عبر شبكتك المحلية ويُشفِّره للبث.",
+			active: "الخدمة تعمل",
+			inactive: "الخدمة لا تعمل",
+			selected: "محدَّد",
+			serviceInactive: "خدمة استقبال {protocol} لا تعمل بعد.",
+			noAddress:
+				"بوابة {protocol} قيد التشغيل، لكن هذا الجهاز لا يملك عنوان شبكة محلية أو نقطة اتصال للنشر. اتصل بشبكة Wi-Fi أو إيثرنت، أو فعّل نقطة اتصال الجهاز.",
+			noAddressStatus: "لا يوجد عنوان يمكن الوصول إليه",
+			streamingLocked: "أوقف البث لتغيير مصدر الفيديو.",
+			instructionsToggle: "كيفية النشر",
+			instructions: "وجِّه هاتفك أو المُشفِّر إلى هذا العنوان ثم ابدأ النشر.",
+			qrLabel: "امسح للحصول على عنوان النشر",
+			copy: "نسخ العنوان",
+			copied: "تم نسخ العنوان",
+			copyFailed: "تعذّر نسخ العنوان.",
+		},
 		preview: {
 			title: "معاينة",
 			start: "بدء المعاينة",
@@ -1155,6 +1188,7 @@ const ar = {
 			audioSwitched: "تم تبديل الصوت خلال {ms}م.ث",
 			audioSwitchFailed: "فشل تبديل مصدر الصوت",
 			audioSourceLost: "مصدر الصوت غير متوفر",
+			audioSwitchUnavailable: "لا يدعم المحرك الحالي تبديل الصوت المباشر",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1218,6 +1252,9 @@ const ar = {
 			reason: {
 				unsupportedPlatform: "غير مدعوم على هذه المنصة",
 				fixedBySource: "محدد بواسطة المصدر المختار",
+				gatewayInactive: "بوابة استقبال الشبكة غير قيد التشغيل",
+				gatewayNoAddress:
+					"لا يوجد عنوان شبكة محلية أو نقطة اتصال يمكن الوصول إليه",
 			},
 			info: "حول {field}",
 			close: "فهمت",
@@ -1301,6 +1338,8 @@ const ar = {
 		error: "خطأ",
 		saved: "تم الحفظ",
 		saveFailed: "فشل الحفظ",
+		validationFailed: "يرجى التحقق من هذه الحقول: {fields}",
+		requestFailed: "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
 		updateInProgress: "التحديث قيد التقدم",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1445,6 +1484,7 @@ const ar = {
 		rebootingDescription:
 			"الجهاز قيد إعادة التشغيل. ستُعيد هذه الصفحة الاتصال تلقائياً.",
 		sessionExpired: "انتهت الجلسة. يرجى المصادقة مرة أخرى.",
+		authTimedOut: "تعذّر التحقق من جلستك. تحقق من الاتصال وحاول مرة أخرى.",
 	},
 	offline: {
 		title: "أنت غير متصل",

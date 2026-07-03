@@ -22,15 +22,28 @@ import {
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc';
+import { canLiveSwitchInput } from '$lib/streaming/liveAudioSwitch';
 
 let {
 	devices = [],
 	activeInput = undefined,
-}: { devices?: CaptureDevice[]; activeInput?: string | undefined } = $props();
+	audioLiveSwitchEnabled = false,
+}: {
+	devices?: CaptureDevice[];
+	activeInput?: string | undefined;
+	audioLiveSwitchEnabled?: boolean;
+} = $props();
 
 let switchingInput = $state<string | undefined>(undefined);
 
 async function handleSwitchInput(inputId: string) {
+	// Mirrors LiveView's defensive guard: the disabled-with-reason audio Switch
+	// button normally makes this unreachable, but if the dispatch somehow fires
+	// with the capability off, surface a calm toast instead of a silent warning.
+	if (!canLiveSwitchInput(inputId, audioLiveSwitchEnabled)) {
+		toast.warning($LL.live.inputPicker.audioSwitchUnavailable());
+		return;
+	}
 	switchingInput = inputId;
 	try {
 		const res = await osCommand({
@@ -60,8 +73,19 @@ async function handleSwitchInput(inputId: string) {
 
 <InputPicker
 	{activeInput}
+	{audioLiveSwitchEnabled}
 	{devices}
 	isStreaming={true}
 	onSwitch={handleSwitchInput}
 	{switchingInput}
 />
+
+<!--
+  Force-invoke seam for the defensive-guard test: the audio Switch button is
+  disabled-with-reason when the capability is off, so a normal click can never
+  reach `handleSwitchInput`. This hidden button lets the test simulate "the
+  dispatch somehow fired anyway" and assert the calm toast fallback.
+-->
+<button data-testid="force-audio-switch" type="button" onclick={() => handleSwitchInput('audio:usbaudio')}
+	>force audio switch</button
+>

@@ -475,6 +475,14 @@ const ko = {
 			weight: "가중치",
 			telemetry: "링크 텔레메트리",
 		},
+		collision: {
+			sameSubnetTitle: "링크 간 공유된 서브넷",
+			sameSubnetBody:
+				"둘 이상의 링크가 동일한 서브넷을 공유합니다. 이는 정상입니다 \u2014 기기가 각 링크를 독립적으로 라우팅하므로 본딩은 계속 정상적으로 작동합니다.",
+			policyRouteTitle: "링크 라우팅에 주의가 필요합니다",
+			policyRouteBody:
+				"본딩된 링크가 잘못된 모뎀을 통해 라우팅되고 있을 수 있습니다. 기기를 재부팅하거나 링크를 다시 연결하세요 \u2014 링크가 복구되면 라우팅 규칙이 자동으로 다시 설치됩니다.",
+		},
 		pageTitle: "네트워크 설정",
 		pageDescription:
 			"WiFi 연결, 핫스팟, 셀룰러 모뎀 및 네트워크 인터페이스를 관리하세요",
@@ -697,6 +705,11 @@ const ko = {
 		scanningState: {
 			title: "네트워크 검색 중…",
 			description: "주변에서 사용 가능한 WiFi 네트워크를 검색하고 있습니다.",
+		},
+		scanError: {
+			title: "검색 실패",
+			description:
+				"주변 WiFi 네트워크를 새로 고치지 못했습니다. 자동으로 다시 시도합니다.",
 		},
 		dialog: {
 			close: "닫기",
@@ -972,6 +985,29 @@ const ko = {
 			exportAria: "세션 요약 내보내기",
 			exportError: "세션 요약을 내보낼 수 없습니다. 다시 시도해 주세요.",
 		},
+		networkIngest: {
+			title: "네트워크 인제스트",
+			subtitle:
+				"같은 네트워크의 다른 인코더나 휴대폰에서 이 기기로 송출하세요.",
+			infoTitle: "네트워크 인제스트",
+			infoBody:
+				"휴대폰이나 하드웨어 인코더(OBS 등)에서 이 주소로 송출하세요. 기기가 로컬 네트워크로 수신하여 스트리밍용으로 인코딩합니다.",
+			active: "서비스 실행 중",
+			inactive: "서비스 중지됨",
+			selected: "선택됨",
+			serviceInactive: "{protocol} 인제스트 서비스가 아직 실행되지 않았습니다.",
+			noAddress:
+				"{protocol} 게이트웨이는 실행 중이지만 이 장치에 게시할 LAN 또는 핫스팟 주소가 없습니다. Wi-Fi 또는 이더넷 네트워크에 연결하거나 장치 핫스팟을 활성화하세요.",
+			noAddressStatus: "연결 가능한 주소 없음",
+			streamingLocked: "영상 소스를 변경하려면 스트림을 중지하세요.",
+			instructionsToggle: "송출 방법",
+			instructions:
+				"휴대폰이나 인코더를 이 주소로 지정한 다음 송출을 시작하세요.",
+			qrLabel: "스캔하여 송출 주소 가져오기",
+			copy: "주소 복사",
+			copied: "주소가 복사됨",
+			copyFailed: "주소를 복사할 수 없습니다.",
+		},
 		preview: {
 			title: "미리보기",
 			start: "미리보기 시작",
@@ -1025,6 +1061,8 @@ const ko = {
 			audioSwitched: "{ms}ms 만에 오디오 전환됨",
 			audioSwitchFailed: "오디오 소스 전환 실패",
 			audioSourceLost: "오디오 소스를 사용할 수 없음",
+			audioSwitchUnavailable:
+				"현재 엔진은 실시간 오디오 전환을 지원하지 않습니다",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1090,6 +1128,8 @@ const ko = {
 			reason: {
 				unsupportedPlatform: "이 플랫폼에서 지원되지 않음",
 				fixedBySource: "선택한 소스에 의해 고정됨",
+				gatewayInactive: "네트워크 인제스트 게이트웨이가 실행 중이 아닙니다",
+				gatewayNoAddress: "연결 가능한 LAN 또는 핫스팟 주소 없음",
 			},
 			info: "{field} 정보",
 			close: "확인",
@@ -1173,6 +1213,8 @@ const ko = {
 		error: "오류",
 		saved: "저장됨",
 		saveFailed: "저장하지 못했습니다",
+		validationFailed: "다음 항목을 확인하세요: {fields}",
+		requestFailed: "문제가 발생했습니다. 다시 시도해 주세요.",
 		updateInProgress: "업데이트가 진행 중입니다",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1316,6 +1358,8 @@ const ko = {
 		rebootingDescription:
 			"기기가 재시작 중입니다. 이 페이지는 자동으로 다시 연결됩니다.",
 		sessionExpired: "세션이 만료되었습니다. 다시 인증해 주세요.",
+		authTimedOut:
+			"세션을 확인할 수 없습니다. 연결을 확인하고 다시 시도해 주세요.",
 	},
 	offline: {
 		title: "오프라인입니다",

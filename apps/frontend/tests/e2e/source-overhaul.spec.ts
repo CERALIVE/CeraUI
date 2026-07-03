@@ -331,17 +331,21 @@ test.describe("Track-1 source overhaul (functional)", () => {
 			picker.locator('[data-audio-switch-deferred="audio:mic0"]'),
 		).toHaveCount(0);
 
-		// Capability absent → the frontend gate (canLiveSwitchInput) blocks the
-		// dispatch: clicking raises NO applying indicator and the switchAudio RPC
-		// is never sent (the proxy never captures it). The blocked path returns
-		// synchronously before any await, so this read is race-free post-click.
-		await audioSwitch.click();
-		await expect(page.getByText(/switching audio/i)).toHaveCount(0);
+		// Capability absent → the control is genuinely disabled-with-reason (not
+		// just internally gated), per the codebase's disabled-with-reason house
+		// rule (Wave 1, ceraui-trustworthy-experience). It is not clickable, so
+		// we assert the honest disabled state instead of attempting a click.
+		await expect(audioSwitch).toBeDisabled();
+		await expect(audioSwitch).toHaveAttribute(
+			"title",
+			/live audio switching/i,
+		);
 		expect(heldSwitchAudioId).toBeNull();
 
 		// Engine now advertises the capability → the SAME control becomes live: a
 		// click dispatches switchAudio and surfaces the per-field applying glyph.
 		sendCapabilities({ audio_live_switch: true });
+		await expect(audioSwitch).toBeEnabled();
 		await audioSwitch.click();
 		await expect(page.getByText(/switching audio/i)).toBeVisible();
 		expect(heldSwitchAudioId).not.toBeNull();

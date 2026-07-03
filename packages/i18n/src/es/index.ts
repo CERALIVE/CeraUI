@@ -394,6 +394,30 @@ const es = {
 			exportError:
 				"No se pudo exportar el resumen de sesión. Inténtalo de nuevo.",
 		},
+		networkIngest: {
+			title: "Entrada de red",
+			subtitle:
+				"Publica en este dispositivo desde otro codificador o teléfono en la misma red.",
+			infoTitle: "Entrada de red",
+			infoBody:
+				"Publica desde tu teléfono o un codificador de hardware (como OBS) a esta dirección. El dispositivo la recibe por tu red local y la codifica para transmitir.",
+			active: "Servicio en ejecución",
+			inactive: "Servicio detenido",
+			selected: "Seleccionado",
+			serviceInactive:
+				"El servicio de entrada {protocol} aún no está en ejecución.",
+			noAddress:
+				"La puerta de enlace {protocol} está en ejecución, pero este dispositivo no tiene ninguna dirección de LAN o punto de acceso para publicar. Conéctate a una red Wi-Fi o Ethernet, o activa el punto de acceso del dispositivo.",
+			noAddressStatus: "Sin dirección accesible",
+			streamingLocked: "Detén la transmisión para cambiar la fuente de vídeo.",
+			instructionsToggle: "Cómo publicar",
+			instructions:
+				"Apunta tu teléfono o codificador a esta dirección y comienza a publicar.",
+			qrLabel: "Escanea para obtener la dirección de publicación",
+			copy: "Copiar dirección",
+			copied: "Dirección copiada",
+			copyFailed: "No se pudo copiar la dirección.",
+		},
 		preview: {
 			title: "Vista previa",
 			start: "Iniciar vista previa",
@@ -448,6 +472,8 @@ const es = {
 			audioSwitched: "Audio cambiado en {ms}ms",
 			audioSwitchFailed: "No se pudo cambiar la fuente de audio",
 			audioSourceLost: "Fuente de audio no disponible",
+			audioSwitchUnavailable:
+				"El motor actual no admite el cambio de audio en vivo",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -514,6 +540,9 @@ const es = {
 			reason: {
 				unsupportedPlatform: "No compatible con esta plataforma",
 				fixedBySource: "Fijado por la fuente seleccionada",
+				gatewayInactive:
+					"La puerta de enlace de ingesta de red no está en ejecución",
+				gatewayNoAddress: "Sin dirección de LAN o punto de acceso accesible",
 			},
 			info: "Acerca de {field}",
 			close: "Entendido",
@@ -597,6 +626,8 @@ const es = {
 		error: "Error",
 		saved: "Guardado",
 		saveFailed: "Error al guardar",
+		validationFailed: "Revisa estos campos: {fields}",
+		requestFailed: "Algo salió mal. Inténtalo de nuevo.",
 		updateInProgress: "Actualización en curso",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1085,6 +1116,14 @@ const es = {
 			weight: "Peso",
 			telemetry: "Telemetría de enlace",
 		},
+		collision: {
+			sameSubnetTitle: "Subred compartida entre enlaces",
+			sameSubnetBody:
+				"Dos o más enlaces comparten una subred idéntica. Esto es normal \u2014 el dispositivo enruta cada enlace de forma independiente, por lo que el bonding sigue funcionando con normalidad.",
+			policyRouteTitle: "El enrutamiento del enlace requiere atención",
+			policyRouteBody:
+				"Un enlace agrupado podría estar enrutando a través del módem equivocado. Reinicia el dispositivo o vuelve a conectar el enlace \u2014 las reglas de enrutamiento se reinstalan automáticamente cuando el enlace vuelve a activarse.",
+		},
 		pageTitle: "Configuración de Red",
 		pageDescription:
 			"Administra tus conexiones WiFi, hotspots, módems celulares e interfaces de red",
@@ -1317,6 +1356,11 @@ const es = {
 			title: "Buscando redes…",
 			description: "Buscando redes WiFi disponibles cercanas.",
 		},
+		scanError: {
+			title: "Error de búsqueda",
+			description:
+				"No se pudieron actualizar las redes WiFi cercanas. Reintentando automáticamente.",
+		},
 		dialog: {
 			close: "Cerrar",
 			searchWifi: "Ver redes disponibles",
@@ -1525,6 +1569,8 @@ const es = {
 		rebootingDescription:
 			"El dispositivo se está reiniciando. Esta página se reconectará automáticamente.",
 		sessionExpired: "La sesión expiró. Por favor, autentícate de nuevo.",
+		authTimedOut:
+			"No se pudo verificar tu sesión. Comprueba la conexión e inténtalo de nuevo.",
 	},
 	offline: {
 		title: "Estás desconectado",

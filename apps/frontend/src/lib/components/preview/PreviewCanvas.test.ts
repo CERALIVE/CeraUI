@@ -211,6 +211,76 @@ describe("PreviewCanvas", () => {
 		);
 		expect(FakeWebSocket.instances).toHaveLength(0);
 	});
+
+	it("reconnects while mounted when the socket drops (timer fires)", async () => {
+		vi.useFakeTimers();
+		try {
+			vi.stubGlobal(
+				"VideoDecoder",
+				class {
+					state = "configured";
+					configure(): void {}
+					decode(): void {}
+					close(): void {}
+				},
+			);
+			vi.stubGlobal("WebSocket", FakeWebSocket);
+
+			const { getByTestId } = render(PreviewCanvas);
+			await fireEvent.click(getByTestId("preview-toggle"));
+			await tick();
+			expect(FakeWebSocket.instances).toHaveLength(1);
+
+			// A dropped socket while the toggle is on schedules a reconnect.
+			FakeWebSocket.instances.at(-1)?.onclose?.({});
+			await tick();
+
+			// Advancing past the capped+jittered backoff (<=650ms for attempt 0)
+			// fires the timer and dials a fresh socket while still mounted.
+			vi.advanceTimersByTime(2000);
+			await tick();
+
+			expect(FakeWebSocket.instances.length).toBeGreaterThan(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("leaves a scheduled reconnect timer inert after unmount", async () => {
+		vi.useFakeTimers();
+		try {
+			vi.stubGlobal(
+				"VideoDecoder",
+				class {
+					state = "configured";
+					configure(): void {}
+					decode(): void {}
+					close(): void {}
+				},
+			);
+			vi.stubGlobal("WebSocket", FakeWebSocket);
+
+			const { getByTestId, unmount } = render(PreviewCanvas);
+			await fireEvent.click(getByTestId("preview-toggle"));
+			await tick();
+
+			// Drop the socket to schedule a reconnect timer, then unmount.
+			FakeWebSocket.instances.at(-1)?.onclose?.({});
+			await tick();
+			const beforeUnmount = FakeWebSocket.instances.length;
+
+			unmount();
+
+			// The unmounted timer must be inert: no new socket construction,
+			// no state mutation after teardown.
+			vi.advanceTimersByTime(2000);
+			await tick();
+
+			expect(FakeWebSocket.instances.length).toBe(beforeUnmount);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });
 
 describe("derivePreviewAvailability", () => {

@@ -487,6 +487,14 @@ const ja = {
 			weight: "重み",
 			telemetry: "リンクテレメトリ",
 		},
+		collision: {
+			sameSubnetTitle: "リンク間で共有されたサブネット",
+			sameSubnetBody:
+				"2つ以上のリンクが同一のサブネットを共有しています。これは想定内です \u2014 デバイスは各リンクを独立してルーティングするため、ボンディングは正常に機能し続けます。",
+			policyRouteTitle: "リンクのルーティングに注意が必要です",
+			policyRouteBody:
+				"ボンディングされたリンクが誤ったモデム経由でルーティングされている可能性があります。デバイスを再起動するか、リンクを接続し直してください \u2014 リンクが復帰すると、ルーティングルールは自動的に再設定されます。",
+		},
 		pageTitle: "ネットワーク設定",
 		pageDescription:
 			"WiFi接続、ホットスポット、セルラーモデム、ネットワークインターフェースを管理",
@@ -715,6 +723,11 @@ const ja = {
 		scanningState: {
 			title: "ネットワークを検索中…",
 			description: "近くの利用可能なWiFiネットワークを検索しています。",
+		},
+		scanError: {
+			title: "スキャンに失敗しました",
+			description:
+				"近くのWiFiネットワークを更新できませんでした。自動的に再試行します。",
 		},
 		dialog: {
 			close: "閉じる",
@@ -996,6 +1009,29 @@ const ja = {
 			exportError:
 				"セッションサマリーをエクスポートできませんでした。もう一度お試しください。",
 		},
+		networkIngest: {
+			title: "ネットワーク受信",
+			subtitle:
+				"同じネットワーク上の別のエンコーダーやスマートフォンからこのデバイスに配信します。",
+			infoTitle: "ネットワーク受信",
+			infoBody:
+				"スマートフォンやハードウェアエンコーダー（OBS など）からこのアドレスに配信します。デバイスはローカルネットワーク経由で受信し、ストリーミング用にエンコードします。",
+			active: "サービス稼働中",
+			inactive: "サービス停止中",
+			selected: "選択済み",
+			serviceInactive: "{protocol} 受信サービスはまだ稼働していません。",
+			noAddress:
+				"{protocol} ゲートウェイは稼働していますが、このデバイスには公開できる LAN またはホットスポットのアドレスがありません。Wi-Fi または Ethernet ネットワークに接続するか、デバイスのホットスポットを有効にしてください。",
+			noAddressStatus: "到達可能なアドレスがありません",
+			streamingLocked: "映像ソースを変更するにはストリームを停止してください。",
+			instructionsToggle: "配信方法",
+			instructions:
+				"スマートフォンまたはエンコーダーをこのアドレスに向けて、配信を開始します。",
+			qrLabel: "スキャンして配信アドレスを取得",
+			copy: "アドレスをコピー",
+			copied: "アドレスをコピーしました",
+			copyFailed: "アドレスをコピーできませんでした。",
+		},
 		preview: {
 			title: "プレビュー",
 			start: "プレビューを開始",
@@ -1050,6 +1086,8 @@ const ja = {
 			audioSwitched: "{ms}msでオーディオを切り替えました",
 			audioSwitchFailed: "オーディオソースの切り替えに失敗しました",
 			audioSourceLost: "オーディオソースを利用できません",
+			audioSwitchUnavailable:
+				"現在のエンジンはライブ音声切り替えに対応していません",
 			groups: {
 				hdmi: "HDMI",
 				usb: "USB",
@@ -1116,6 +1154,9 @@ const ja = {
 			reason: {
 				unsupportedPlatform: "このプラットフォームではサポートされていません",
 				fixedBySource: "選択したソースによって固定されています",
+				gatewayInactive: "ネットワーク受信ゲートウェイが実行されていません",
+				gatewayNoAddress:
+					"到達可能な LAN またはホットスポットのアドレスがありません",
 			},
 			info: "{field}について",
 			close: "了解",
@@ -1199,6 +1240,8 @@ const ja = {
 		error: "エラー",
 		saved: "保存しました",
 		saveFailed: "保存に失敗しました",
+		validationFailed: "次の項目を確認してください: {fields}",
+		requestFailed: "問題が発生しました。もう一度お試しください。",
 		updateInProgress: "更新が進行中です",
 		bootconfigUpdating:
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...",
@@ -1348,6 +1391,8 @@ const ja = {
 			"デバイスは再起動中です。このページは自動的に再接続されます。",
 		sessionExpired:
 			"セッションの有効期限が切れました。もう一度認証してください。",
+		authTimedOut:
+			"セッションを確認できませんでした。接続を確認してもう一度お試しください。",
 	},
 	offline: {
 		title: "オフラインです",
