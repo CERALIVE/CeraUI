@@ -12,11 +12,17 @@ import { describe, expect, test } from 'bun:test';
 
 import { isAudioLiveSwitchEnabled } from '../capabilities/audio';
 import {
+	audioSourceSchema,
 	type CapabilitiesMessage,
 	capabilitiesMessageSchema,
 	configMessageSchema,
 	deviceKindSchema,
+	deviceModeSchema,
 	fromEngineResolution,
+	normalizeBitrateRangeToKbps,
+	normalizeFramerateToRung,
+	normalizeResolutionToRung,
+	pipelineSchema,
 	type Resolution,
 	streamingConfigInputSchema,
 	toEngineResolution,
@@ -309,5 +315,188 @@ describe('capabilitiesMessageSchema — preview passthrough (Todo 13-15)', () =>
 			preview: { enabled: true, bound: false },
 		});
 		expect(parsed.preview).toEqual({ enabled: true, bound: false });
+	});
+});
+
+describe('normalizeFramerateToRung (Task 4)', () => {
+	test('maps the engine string fractions onto the legal rungs', () => {
+		expect(normalizeFramerateToRung('30/1')).toBe(30);
+		expect(normalizeFramerateToRung('30000/1001')).toBe(29.97);
+		expect(normalizeFramerateToRung('60000/1001')).toBe(59.94);
+		expect(normalizeFramerateToRung('25/1')).toBe(25);
+		expect(normalizeFramerateToRung('50/1')).toBe(50);
+		expect(normalizeFramerateToRung('60/1')).toBe(60);
+	});
+
+	test('passes a numeric value through when it is already a legal rung', () => {
+		expect(normalizeFramerateToRung(30)).toBe(30);
+		expect(normalizeFramerateToRung(29.97)).toBe(29.97);
+		expect(normalizeFramerateToRung(59.94)).toBe(59.94);
+		expect(normalizeFramerateToRung(25)).toBe(25);
+	});
+
+	test('does NOT confuse the adjacent 29.97 / 30 rungs (0.03 apart)', () => {
+		expect(normalizeFramerateToRung(30)).toBe(30);
+		expect(normalizeFramerateToRung('30/1')).toBe(30);
+	});
+
+	test('returns undefined for a fraction that snaps to no rung (fail-closed)', () => {
+		expect(normalizeFramerateToRung('7/3')).toBeUndefined();
+		expect(normalizeFramerateToRung('24000/1001')).toBeUndefined();
+		expect(normalizeFramerateToRung(24)).toBeUndefined();
+		expect(normalizeFramerateToRung('garbage')).toBeUndefined();
+		expect(normalizeFramerateToRung('30/0')).toBeUndefined();
+		expect(normalizeFramerateToRung('')).toBeUndefined();
+	});
+});
+
+describe('normalizeResolutionToRung (Task 4)', () => {
+	test('maps pixel forms onto the canonical rungs', () => {
+		expect(normalizeResolutionToRung('3840x2160')).toBe('2160p');
+		expect(normalizeResolutionToRung('1920x1080')).toBe('1080p');
+		expect(normalizeResolutionToRung('1280x720')).toBe('720p');
+		expect(normalizeResolutionToRung('852x480')).toBe('480p');
+		expect(normalizeResolutionToRung('2560x1440')).toBe('1440p');
+	});
+
+	test('snaps an in-between pixel form DOWN to the nearest lower rung (never up)', () => {
+		expect(normalizeResolutionToRung('2000x1100')).toBe('1080p');
+		expect(normalizeResolutionToRung('4096x2160')).toBe('2160p');
+		expect(normalizeResolutionToRung('1920x1200')).toBe('1080p');
+	});
+
+	test('accepts rung forms, collapsing 4k onto the canonical 2160p', () => {
+		expect(normalizeResolutionToRung('2160p')).toBe('2160p');
+		expect(normalizeResolutionToRung('1080p')).toBe('1080p');
+		expect(normalizeResolutionToRung('4k')).toBe('2160p');
+	});
+
+	test('returns undefined for garbage or a sub-480p pixel form (fail-closed)', () => {
+		expect(normalizeResolutionToRung('garbage')).toBeUndefined();
+		expect(normalizeResolutionToRung('320x240')).toBeUndefined();
+		expect(normalizeResolutionToRung('')).toBeUndefined();
+		expect(normalizeResolutionToRung('1080')).toBeUndefined();
+	});
+});
+
+describe('normalizeBitrateRangeToKbps (Task 4)', () => {
+	test('converts an engine bps range to kbps', () => {
+		expect(normalizeBitrateRangeToKbps({ min: 500_000, max: 20_000_000, unit: 'bps' })).toEqual({
+			min: 500,
+			max: 20000,
+			unit: 'kbps',
+		});
+	});
+
+	test('passes a kbps range through unchanged (only re-tags the unit)', () => {
+		expect(normalizeBitrateRangeToKbps({ min: 500, max: 50000, unit: 'kbps' })).toEqual({
+			min: 500,
+			max: 50000,
+			unit: 'kbps',
+		});
+	});
+
+	test('treats an unknown unit as already-kbps (fail-safe passthrough)', () => {
+		expect(normalizeBitrateRangeToKbps({ min: 2000, max: 12000, unit: '' })).toEqual({
+			min: 2000,
+			max: 12000,
+			unit: 'kbps',
+		});
+	});
+});
+
+describe('deviceModeSchema + capabilitiesMessageSchema device_modes (Task 4)', () => {
+	const base = {
+		platform: { supports_h265: true, hardware_accelerated: true, max_resolution: '2160p' },
+		encoder: { codecs: ['h264', 'h265'], bitrate_range: { min: 500, max: 50000, unit: 'kbps' } },
+		sources: [],
+	};
+
+	test('parses a device mode with optional media_type', () => {
+		const parsed = deviceModeSchema.parse({
+			width: 1920,
+			height: 1080,
+			framerates: [30, 60],
+			media_type: 'video/x-h264',
+		});
+		expect(parsed).toEqual({
+			width: 1920,
+			height: 1080,
+			framerates: [30, 60],
+			media_type: 'video/x-h264',
+		});
+	});
+
+	test('rejects a device mode with a negative width (field-named issue)', () => {
+		const result = deviceModeSchema.safeParse({ width: -1, height: 1080, framerates: [30] });
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues[0]?.path).toEqual(['width']);
+		}
+	});
+
+	test('a caps-full snapshot with device_modes parses', () => {
+		const parsed = capabilitiesMessageSchema.parse({
+			...base,
+			network_embedded_audio: true,
+			device_modes: {
+				'hdmi-0': {
+					kind: 'hdmi',
+					modes: [
+						{ width: 1920, height: 1080, framerates: [30, 60] },
+						{ width: 3840, height: 2160, framerates: [30] },
+					],
+				},
+				'usb-0': {
+					kind: 'uvc_h264',
+					modes: [{ width: 1280, height: 720, framerates: [30, 60] }],
+				},
+			},
+		});
+		expect(parsed.network_embedded_audio).toBe(true);
+		expect(parsed.device_modes?.['hdmi-0']?.kind).toBe('hdmi');
+		expect(parsed.device_modes?.['hdmi-0']?.modes).toHaveLength(2);
+		expect(parsed.device_modes?.['usb-0']?.modes?.[0]?.framerates).toEqual([30, 60]);
+	});
+
+	test('an old capability payload without device_modes / network_embedded_audio still parses', () => {
+		const parsed = capabilitiesMessageSchema.parse(base);
+		expect(parsed.device_modes).toBeUndefined();
+		expect(parsed.network_embedded_audio).toBeUndefined();
+	});
+});
+
+describe('pipelineSchema audio_kind + audioSourceSchema (Task 4)', () => {
+	const basePipeline = {
+		name: 'HDMI',
+		description: 'HDMI capture',
+		supportsAudio: true,
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+	};
+
+	test('audio_kind is additive-optional and accepts the three kinds', () => {
+		expect(pipelineSchema.parse(basePipeline).audio_kind).toBeUndefined();
+		for (const kind of ['selectable', 'embedded', 'none']) {
+			expect(pipelineSchema.parse({ ...basePipeline, audio_kind: kind }).audio_kind).toBe(kind);
+		}
+	});
+
+	test('pipelineSchema rejects an unknown audio_kind', () => {
+		expect(pipelineSchema.safeParse({ ...basePipeline, audio_kind: 'muxed' }).success).toBe(false);
+	});
+
+	test('audioSourceSchema parses device + pseudo sources; labelKey is optional', () => {
+		expect(audioSourceSchema.parse({ id: 'USB audio', kind: 'device' })).toEqual({
+			id: 'USB audio',
+			kind: 'device',
+		});
+		expect(
+			audioSourceSchema.parse({ id: 'No audio', kind: 'none', labelKey: 'audio.sources.noAudio' }),
+		).toEqual({ id: 'No audio', kind: 'none', labelKey: 'audio.sources.noAudio' });
+	});
+
+	test('audioSourceSchema rejects an unknown kind', () => {
+		expect(audioSourceSchema.safeParse({ id: 'x', kind: 'analog' }).success).toBe(false);
 	});
 });

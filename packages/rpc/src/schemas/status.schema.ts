@@ -4,6 +4,7 @@
 import { z } from 'zod';
 
 import { modemListSchema } from './modems.schema';
+import { audioSourceSchema } from './streaming.schema';
 import { availableUpdatesSchema, sshStatusSchema, updatingStatusSchema } from './system.schema';
 import { wifiStatusSchema } from './wifi.schema';
 
@@ -34,6 +35,9 @@ export const statusMessageSchema = z.object({
 	ssh: sshStatusSchema,
 	wifi: wifiStatusSchema,
 	asrcs: z.array(z.string()),
+	// Typed audio-source model (Task 4/6). Additive + optional beside the legacy
+	// `asrcs: string[]`, which REMAINS for back-compat.
+	audio_sources: z.array(audioSourceSchema).optional(),
 	modems: modemListSchema,
 });
 export type StatusMessage = z.infer<typeof statusMessageSchema>;
@@ -131,6 +135,9 @@ export const statusResponseSchema = z.object({
 	wifi: wifiStatusSchema.optional(),
 	modems: modemListSchema.optional(),
 	asrcs: z.array(z.string()).optional(),
+	// Typed audio-source model (Task 4/6). Additive + optional beside the legacy
+	// `asrcs: string[]`, which REMAINS for back-compat.
+	audio_sources: z.array(audioSourceSchema).optional(),
 	set_password: z.boolean().optional(),
 	remote: remoteStatusSchema.optional(),
 	linkTelemetry: linkTelemetryMessageSchema.nullable().optional(),
