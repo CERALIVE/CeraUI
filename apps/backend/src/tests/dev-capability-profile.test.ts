@@ -8,6 +8,7 @@ import {
 import {
 	getMockActiveEncode,
 	getMockEngineCapabilities,
+	getMockEngineDevices,
 	setMockEngineCapabilities,
 } from "../mocks/providers/streaming.ts";
 import {
@@ -71,6 +72,7 @@ function bootMockScenario(scenario: string): void {
 async function resolveLikeBoot() {
 	return getCapabilities({
 		fetchEngineCapabilities: async () => getMockEngineCapabilities(),
+		fetchEngineDevices: async () => getMockEngineDevices(),
 	});
 }
 
@@ -122,6 +124,7 @@ describe("MOCK_SCENARIO=engine-unavailable", () => {
 				caps: structuredClone(MINIMAL_SAFE_CAPABILITIES),
 				schemaVersion: SCHEMA_VERSION,
 			}),
+			fetchEngineDevices: async () => ({ devices: [] }),
 		});
 		// ...then it drops: the scenario fetch throws and the cache is served.
 		const result = await resolveLikeBoot();

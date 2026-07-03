@@ -16,7 +16,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import type { GetCapabilitiesResult } from "@ceralive/cerastream";
+import type {
+	CaptureDeviceKind,
+	GetCapabilitiesResult,
+} from "@ceralive/cerastream";
 import type { RequiresGateway } from "@ceraui/rpc/schemas";
 import {
 	framerateSchema,
@@ -140,6 +143,29 @@ function toFramerate(value: number): Framerate | undefined {
 	const parsed = framerateSchema.safeParse(value);
 	return parsed.success ? parsed.data : undefined;
 }
+
+// The SINGLE source of truth bridging a list-devices device `kind` to the
+// capability `sources[]` pipeline id — two DISTINCT namespaces (device input_ids
+// vs pipeline/source-kind ids). Consumers (frontend axis intersection, backend)
+// map a device's `device_modes[input_id].kind` to a pipeline via THIS table and
+// never re-derive it. A kind with no direct video pipeline (`audio`) or an
+// ambiguous multi-pipeline kind (`network` → rtmp|srt) maps to `undefined`; the
+// consumer then falls back to the coarse source/platform offering. The
+// uvc_h264→libuvch264 / mjpeg→usb_mjpeg mappings are the cerastream contract
+// (todo 8); uvc_h265 has no dedicated engine source id, so it rides libuvch264.
+export const DEVICE_KIND_TO_PIPELINE_ID: Record<
+	CaptureDeviceKind,
+	string | undefined
+> = {
+	hdmi: "hdmi",
+	uvc_h264: "libuvch264",
+	uvc_h265: "libuvch264",
+	mjpeg: "usb_mjpeg",
+	camlink: "camlink",
+	test: "test",
+	network: undefined,
+	audio: undefined,
+};
 
 // The registry builds from the engine's get-capabilities response via
 // getCapabilities(). In tests, the capability service is injected with a mock

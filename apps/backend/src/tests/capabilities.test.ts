@@ -86,6 +86,7 @@ describe("getCapabilities — live", () => {
 				caps,
 				schemaVersion: SCHEMA_VERSION,
 			}),
+			fetchEngineDevices: async () => ({ devices: [] }),
 			logger: silent,
 		});
 
@@ -109,6 +110,7 @@ describe("getCapabilities — cached fallback", () => {
 				caps,
 				schemaVersion: SCHEMA_VERSION,
 			}),
+			fetchEngineDevices: async () => ({ devices: [] }),
 			logger: silent,
 		});
 
@@ -185,6 +187,7 @@ describe("getCapabilities — schema_version skew", () => {
 				caps,
 				schemaVersion: "0.0.1-older",
 			}),
+			fetchEngineDevices: async () => ({ devices: [] }),
 			bindingsSchemaVersion: SCHEMA_VERSION,
 			logger: spy.logger,
 		});
@@ -205,6 +208,7 @@ describe("getCapabilities — schema_version skew", () => {
 				caps,
 				schemaVersion: SCHEMA_VERSION,
 			}),
+			fetchEngineDevices: async () => ({ devices: [] }),
 			bindingsSchemaVersion: SCHEMA_VERSION,
 			logger: spy.logger,
 		});

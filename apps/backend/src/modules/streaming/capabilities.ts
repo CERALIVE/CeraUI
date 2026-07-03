@@ -37,13 +37,21 @@
 // never throws.
 
 import {
+	type CaptureCap,
 	type CerastreamClient,
 	type ConnectOptions,
 	connect,
 	type GetCapabilitiesResult,
 	getCapabilitiesResultSchema,
+	type ListDevicesResult,
 	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
+import {
+	type DeviceMode,
+	type DeviceModeGroup,
+	normalizeBitrateRangeToKbps,
+	normalizeFramerateToRung,
+} from "@ceraui/rpc/schemas";
 
 import { logger as defaultLogger } from "../../helpers/logger.ts";
 
@@ -61,6 +69,9 @@ export type CapabilitiesResult = GetCapabilitiesResult & {
 	schemaVersionMismatch?: boolean;
 	/** Relay transports the engine can honor; always includes "srtla". */
 	transports: string[];
+	/** Per-device capture modes (keyed by `list-devices` input_id); present only
+	 *  on a LIVE snapshot with non-empty caps, absent on every fallback rung. */
+	device_modes?: Record<string, DeviceModeGroup>;
 };
 
 /** A live engine snapshot plus the `schema_version` it was negotiated under. */
@@ -111,6 +122,10 @@ export interface CapabilitiesLogger {
 export interface CapabilitiesServiceDeps {
 	/** Fetch a live snapshot from the engine. Throws when the engine is down. */
 	fetchEngineCapabilities: () => Promise<EngineCapabilitiesSnapshot>;
+	/** Fetch the engine's `list-devices` result over a short-lived probe (never
+	 *  the streaming backend's active-stream connection). A failure never blocks
+	 *  the capability broadcast — the caller logs and omits `device_modes`. */
+	fetchEngineDevices: () => Promise<ListDevicesResult>;
 	/** The bindings' compiled-in `schema_version`, compared against the engine. */
 	bindingsSchemaVersion: string;
 	logger: CapabilitiesLogger;
@@ -196,12 +211,113 @@ async function defaultFetchEngineCapabilities(): Promise<EngineCapabilitiesSnaps
 	}
 }
 
+/**
+ * Default device fetch: open the SAME kind of short-lived probe connection the
+ * capability fetch uses, call `list-devices`, and disconnect. This deliberately
+ * does NOT route through `getStreamingBackend()` — the frozen `StreamingBackend`
+ * seam has no `listDevices`, and the concrete backend's passthrough throws when
+ * no stream is active, so a fresh probe is the only idle-safe path.
+ */
+async function defaultFetchEngineDevices(): Promise<ListDevicesResult> {
+	const { setup } = await import("../setup.ts");
+	const connectOptions: ConnectOptions = setup.cerastream_socket
+		? { socketPath: setup.cerastream_socket }
+		: {};
+
+	let client: CerastreamClient | undefined;
+	try {
+		client = await connect(connectOptions);
+		return await client.listDevices();
+	} finally {
+		try {
+			await client?.close();
+		} catch {
+			// Best-effort disconnect of a probe connection; never respawns the engine.
+		}
+	}
+}
+
 function defaultDeps(): CapabilitiesServiceDeps {
 	return {
 		fetchEngineCapabilities: defaultFetchEngineCapabilities,
+		fetchEngineDevices: defaultFetchEngineDevices,
 		bindingsSchemaVersion: SCHEMA_VERSION,
 		logger: defaultLogger,
 	};
+}
+
+/**
+ * Group one device's raw `caps[]` into `{width,height,framerates[]}` modes,
+ * collapsing the engine's per-mode framerate cross-product. Keyed by
+ * (width, height, media_type) so a resolution offered under two media types
+ * stays distinct; framerates are normalized to legal rungs (non-rungs dropped,
+ * fail-closed) and de-duplicated in first-seen order.
+ */
+function groupDeviceCaps(caps: readonly CaptureCap[]): DeviceMode[] {
+	const modes: DeviceMode[] = [];
+	const byKey = new Map<string, DeviceMode>();
+	for (const cap of caps) {
+		if (cap.width === undefined || cap.height === undefined) continue;
+		const key = `${cap.width}x${cap.height}|${cap.media_type ?? ""}`;
+		let mode = byKey.get(key);
+		if (mode === undefined) {
+			mode = {
+				width: cap.width,
+				height: cap.height,
+				framerates: [],
+				...(cap.media_type !== undefined ? { media_type: cap.media_type } : {}),
+			};
+			byKey.set(key, mode);
+			modes.push(mode);
+		}
+		if (cap.framerate !== undefined) {
+			const rung = normalizeFramerateToRung(cap.framerate);
+			if (rung !== undefined && !mode.framerates.includes(rung)) {
+				mode.framerates.push(rung);
+			}
+		}
+	}
+	return modes;
+}
+
+/**
+ * Fold a `list-devices` result into the broadcast `device_modes` map keyed by
+ * device `input_id`, carrying each device `kind` (the bridge to a pipeline id).
+ * Devices with no/empty caps are skipped; returns `undefined` when nothing folds
+ * so the caller omits the field entirely (the UI then falls back to coarse caps).
+ */
+function foldDeviceModes(
+	result: ListDevicesResult,
+): Record<string, DeviceModeGroup> | undefined {
+	const out: Record<string, DeviceModeGroup> = {};
+	for (const device of result.devices) {
+		if (device.caps === undefined || device.caps.length === 0) continue;
+		const modes = groupDeviceCaps(device.caps);
+		if (modes.length === 0) continue;
+		out[device.input_id] = {
+			...(device.kind !== undefined ? { kind: device.kind } : {}),
+			modes,
+		};
+	}
+	return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Best-effort `device_modes` resolution: a failed/throwing `list-devices` NEVER
+ * blocks the capability broadcast — it is logged and `device_modes` is omitted.
+ */
+async function resolveDeviceModes(
+	deps: CapabilitiesServiceDeps,
+): Promise<Record<string, DeviceModeGroup> | undefined> {
+	try {
+		return foldDeviceModes(await deps.fetchEngineDevices());
+	} catch (err) {
+		deps.logger.warn(
+			"capabilities: list-devices failed; broadcasting capabilities without device_modes",
+			{ err },
+		);
+		return undefined;
+	}
 }
 
 // In-memory last-known-good snapshot. Populated on every successful live fetch;
@@ -232,8 +348,11 @@ export async function getCapabilities(
 	const deps: CapabilitiesServiceDeps = { ...defaultDeps(), ...overrides };
 
 	try {
-		const { caps, schemaVersion, transports } =
-			await deps.fetchEngineCapabilities();
+		const {
+			caps: rawCaps,
+			schemaVersion,
+			transports,
+		} = await deps.fetchEngineCapabilities();
 		const mismatch = schemaVersion !== deps.bindingsSchemaVersion;
 		if (mismatch) {
 			// Additive-only within the protocol major (ADR-0002): warn + flag, but
@@ -243,12 +362,25 @@ export async function getCapabilities(
 				{ engine: schemaVersion, bindings: deps.bindingsSchemaVersion },
 			);
 		}
+		// Speak kbps everywhere downstream: the engine may report the bitrate range
+		// in bps, so normalize it once here — the single unit-conversion seam.
+		const caps: GetCapabilitiesResult = {
+			...rawCaps,
+			encoder: {
+				...rawCaps.encoder,
+				bitrate_range: normalizeBitrateRangeToKbps(
+					rawCaps.encoder.bitrate_range,
+				),
+			},
+		};
+		const deviceModes = await resolveDeviceModes(deps);
 		lastKnownGood = caps;
 		lastTransports = deriveTransports(transports);
 		lastCapabilities = {
 			...caps,
 			engineUnavailable: false,
 			...(mismatch ? { schemaVersionMismatch: true } : {}),
+			...(deviceModes ? { device_modes: deviceModes } : {}),
 			transports: [...lastTransports],
 		};
 		return lastCapabilities;

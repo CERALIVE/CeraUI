@@ -7,6 +7,7 @@ import {
 	type ActiveEncode,
 	CerastreamConnectionError,
 	type GetCapabilitiesResult,
+	type ListDevicesResult,
 	type ProcessErrorCode,
 	type ProcessErrorSource,
 	type RuntimeErrorEvent,
@@ -69,6 +70,78 @@ const FULL_PROFILE_CAPABILITIES: GetCapabilitiesResult = {
 	],
 };
 
+// caps-full advertises its bitrate range in the engine's native bps units so the
+// getCapabilities() normalizer converts 500_000-20_000_000 bps → 500-20000 kbps.
+const FULL_PROFILE_BITRATE_BPS = {
+	min: 500_000,
+	max: 20_000_000,
+	unit: "bps",
+} as const;
+
+// caps-full per-device modes exercised by the device_modes fold (todo 5): an HDMI
+// capture device (1080p@[30,60] + 2160p@[30]) and a UVC/USB device (720p@[30,60]
+// + 1080p@[30]). Framerates are the engine's string fractions so the fold runs
+// them through normalizeFramerateToRung. Other scenarios emit no devices, so
+// device_modes is omitted and the UI falls back to the coarse offering.
+const FULL_PROFILE_DEVICES: ListDevicesResult = {
+	devices: [
+		{
+			input_id: "hdmi",
+			device_path: "/dev/video0",
+			display_name: "HDMI Capture",
+			media_class: "video",
+			kind: "hdmi",
+			caps: [
+				{
+					width: 1920,
+					height: 1080,
+					framerate: "30/1",
+					media_type: "video/x-raw",
+				},
+				{
+					width: 1920,
+					height: 1080,
+					framerate: "60/1",
+					media_type: "video/x-raw",
+				},
+				{
+					width: 3840,
+					height: 2160,
+					framerate: "30/1",
+					media_type: "video/x-raw",
+				},
+			],
+		},
+		{
+			input_id: "usb",
+			device_path: "/dev/video1",
+			display_name: "USB Capture",
+			media_class: "video",
+			kind: "uvc_h264",
+			caps: [
+				{
+					width: 1280,
+					height: 720,
+					framerate: "30/1",
+					media_type: "video/x-h264",
+				},
+				{
+					width: 1280,
+					height: 720,
+					framerate: "60/1",
+					media_type: "video/x-h264",
+				},
+				{
+					width: 1920,
+					height: 1080,
+					framerate: "30/1",
+					media_type: "video/x-h264",
+				},
+			],
+		},
+	],
+};
+
 const DEFAULT_MOCK_TRANSPORTS = ["srtla", "rist"] as const;
 
 // The full-profile scenario's RESOLVED runtime encode, mirroring the engine's
@@ -117,12 +190,36 @@ export function getMockEngineCapabilities(): EngineCapabilitiesSnapshot {
 	if (profile.audioLiveSwitch) {
 		caps.audio_live_switch = true;
 	}
+	if (getActiveScenario() === "caps-full") {
+		// The engine's native bps units — routed through normalizeBitrateRangeToKbps
+		// in getCapabilities() so caps-full exercises the bps→kbps conversion seam.
+		caps.encoder = { ...caps.encoder, bitrate_range: FULL_PROFILE_BITRATE_BPS };
+	}
 	const transports = [...(profile.transports ?? DEFAULT_MOCK_TRANSPORTS)];
 	const schemaVersion = profile.schemaVersionMismatch
 		? `${SCHEMA_VERSION}-mock-skew`
 		: SCHEMA_VERSION;
 
 	return { caps, schemaVersion, transports };
+}
+
+/**
+ * Mock `list-devices` result for dev/e2e, wired into `getCapabilities()` as the
+ * `fetchEngineDevices` collaborator at boot. Only the caps-full scenario emits
+ * per-device caps (folded into `device_modes`); every other scenario returns no
+ * devices so `device_modes` is omitted and the UI falls back to coarse caps.
+ * Empty in production (`shouldUseMocks()` false).
+ */
+export function getMockEngineDevices(): ListDevicesResult {
+	if (!shouldUseMocks()) {
+		return { devices: [] };
+	}
+	switch (getActiveScenario()) {
+		case "caps-full":
+			return structuredClone(FULL_PROFILE_DEVICES);
+		default:
+			return { devices: [] };
+	}
 }
 
 /**
@@ -170,6 +267,7 @@ export async function setMockEngineCapabilities(
 	updateMockState({ capabilityOverride: { ...current, ...partial } });
 	await getCapabilities({
 		fetchEngineCapabilities: async () => getMockEngineCapabilities(),
+		fetchEngineDevices: async () => getMockEngineDevices(),
 	});
 	broadcastMsg("capabilities", getLastCapabilities());
 }

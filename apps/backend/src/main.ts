@@ -34,6 +34,7 @@ import {
 	buildMockLinkTelemetry,
 	getMockAudioDevices,
 	getMockEngineCapabilities,
+	getMockEngineDevices,
 } from "./mocks/providers/streaming.ts";
 import { runAddonReconciler } from "./modules/addons/reconciler.ts";
 import { getConfig, loadConfig } from "./modules/config.ts";
@@ -179,7 +180,10 @@ wireSetProfile();
 await guardNonCritical("pipelines", () =>
 	initPipelines(
 		shouldUseMocks()
-			? { fetchEngineCapabilities: async () => getMockEngineCapabilities() }
+			? {
+					fetchEngineCapabilities: async () => getMockEngineCapabilities(),
+					fetchEngineDevices: async () => getMockEngineDevices(),
+				}
 			: {},
 	),
 );
