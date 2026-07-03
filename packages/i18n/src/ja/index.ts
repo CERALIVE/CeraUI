@@ -1145,6 +1145,7 @@ const ja = {
 			lostBody:
 				"デバイスを再接続して、このソースからの配信を再開してください。",
 			audioNone: "オーディオソースが検出されません",
+			audioEmbedded: "埋め込みオーディオ（受信ストリームから）",
 		},
 		modes: {
 			label: "モード",
@@ -1201,6 +1202,7 @@ const ja = {
 			hint: "この機能は将来のアップデートで利用可能になります。",
 			pip: "ピクチャー・イン・ピクチャー",
 			modeFallback: "自動切り替え",
+			embeddedAudio: "埋め込みオーディオ",
 		},
 		fallback: {
 			unavailable: "利用不可",

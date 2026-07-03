@@ -19,6 +19,7 @@
 import { LL } from '@ceraui/i18n/svelte';
 import type {
 	ActiveEncode,
+	AudioSource,
 	CaptureDevice,
 	CapabilitiesMessage,
 	ConfigMessage,
@@ -29,6 +30,7 @@ import { VIDEO_SOURCE_LABELS } from '@ceraui/rpc/schemas';
 import { Check, Copy, QrCode, Radio, TriangleAlert, Video, Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
+import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import InputPicker from '$lib/components/custom/InputPicker.svelte';
 import SourcePreference from '$lib/components/custom/SourcePreference.svelte';
@@ -39,9 +41,12 @@ import { generateDeviceAccessQr } from '$lib/helpers/NetworkHelper';
 import { deriveNetworkIngestRows } from '$lib/streaming/networkIngestRows';
 import type { FailoverEvent } from '$lib/streaming/source-preference';
 import {
+	audioSourceLabel,
 	deriveActiveSummary,
 	deriveCapabilitySummary,
 	formatCodec,
+	groupAudioSources,
+	resolveAudioSourceList,
 	resolveAudioSourceMode,
 	resolveDisplayedAudioSource,
 } from '$lib/streaming/sourceSummary';
@@ -61,6 +66,8 @@ interface Props {
 	onSwitch?: (id: string) => void;
 	// ── Audio ──
 	audioSources?: string[];
+	/** Typed audio-source model (status.audio_sources); falls back to `audioSources`. */
+	audioSourceList?: AudioSource[] | undefined;
 	selectedAudioSource?: string | undefined;
 	onSelectAudioSource?: (id: string) => void;
 	// ── Network-ingest gateways as first-class sources (Task 12) ──
@@ -97,6 +104,7 @@ let {
 	onSelect,
 	onSwitch,
 	audioSources = [],
+	audioSourceList,
 	selectedAudioSource,
 	onSelectAudioSource,
 	networkIngest,
@@ -145,16 +153,56 @@ const audioMode = $derived(resolveAudioSourceMode(audioSources));
 const displayedAudioSource = $derived(
 	resolveDisplayedAudioSource(selectedAudioSource, audioSources),
 );
+
+// Typed audio-source model (Task 13): the backend `audio_sources` when present,
+// else derived from the legacy `asrcs`. Pseudo-sources render translated + grouped
+// at the END; device entries keep their untranslated hardware name + order.
+const audioSourceEntries = $derived(resolveAudioSourceList(audioSourceList, audioSources));
+const groupedAudio = $derived(groupAudioSources(audioSourceEntries));
+const displayedAudioLabel = $derived.by(() => {
+	const entry = audioSourceEntries.find((e) => e.id === displayedAudioSource);
+	return entry ? audioSourceLabel(entry, t) : displayedAudioSource;
+});
 // Configured source the pipeline no longer reports: always keep it a VISIBLE
 // (marked-unavailable) entry so the control never shows an orphan value.
 const notAvailableAudioSource = $derived(
-	displayedAudioSource && !audioSources.includes(displayedAudioSource)
+	displayedAudioSource && !audioSourceEntries.some((e) => e.id === displayedAudioSource)
 		? displayedAudioSource
 		: undefined,
 );
 // Live audio switch is gated (Task 10): force read-only while streaming.
 const audioReadOnly = $derived(audioMode === 'single' || isStreaming);
 const audioComingSoon = $derived(isStreaming && audioMode === 'multiple');
+
+// Embedded network-ingest audio (Task 13): an rtmp/srt pipeline carries its audio
+// muxed into the incoming stream. The engine only ROUTES it with the
+// `network_embedded_audio` capability — with it, the audio source is read-only
+// "Embedded audio"; without it the legacy ALSA picker stays and we surface a calm
+// ComingSoon pill (TD-embedded-audio).
+const selectedPipelineAudioKind = $derived(
+	selectedPipeline ? pipelines?.[selectedPipeline]?.audio_kind : undefined,
+);
+const audioEmbeddedActive = $derived(
+	selectedPipelineAudioKind === 'embedded' && capabilities?.network_embedded_audio === true,
+);
+const audioEmbeddedComingSoon = $derived(
+	selectedPipelineAudioKind === 'embedded' && capabilities?.network_embedded_audio !== true,
+);
+
+// i18n key resolver (mirrors AudioDialog) — lets the pure audio-source label
+// helper resolve a locale string from a dotted labelKey without a store dep.
+const t = (key: string): string => {
+	const parts = key.split('.');
+	let result: unknown = $LL;
+	for (const part of parts) {
+		if (result && typeof result === 'object' && part in result) {
+			result = (result as Record<string, unknown>)[part];
+		} else {
+			return key;
+		}
+	}
+	return typeof result === 'function' ? (result as () => string)() : key;
+};
 
 // Lost-device explanation: any reported device that vanished mid-session. The
 // active source being lost is the critical case but any lost device warrants
@@ -502,7 +550,10 @@ async function copyNetworkIngestUrl(url: string | null): Promise<void> {
 					testId="info-audio"
 					title={$LL.live.education.field.audio.title()}
 				/>
-				{#if audioComingSoon}
+				{#if audioEmbeddedComingSoon}
+					<!-- CI gate static marker (component renders data-debt-id dynamically): data-debt-id="TD-embedded-audio" -->
+					<ComingSoon debtId="TD-embedded-audio" label={$LL.live.comingSoon.embeddedAudio()} />
+				{:else if audioComingSoon}
 					<span
 						class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
 						title={$LL.live.comingSoon.hint()}
@@ -512,7 +563,16 @@ async function copyNetworkIngestUrl(url: string | null): Promise<void> {
 				{/if}
 			</div>
 
-			{#if audioMode === 'none'}
+			{#if audioEmbeddedActive}
+				<!-- Engine routes the incoming stream's embedded audio — no ALSA pick. -->
+				<div
+					class="bg-muted/40 flex min-h-11 flex-wrap items-center gap-2 rounded-lg border px-3 py-2"
+					data-testid="audio-source-embedded"
+				>
+					<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
+					<span class="text-sm">{$LL.live.source.audioEmbedded()}</span>
+				</div>
+			{:else if audioMode === 'none'}
 				<p class="text-muted-foreground text-sm" data-testid="audio-source-none">
 					{$LL.live.source.audioNone()}
 				</p>
@@ -523,7 +583,7 @@ async function copyNetworkIngestUrl(url: string | null): Promise<void> {
 					data-testid="audio-source-readonly"
 				>
 					<span class="truncate font-mono text-sm">
-						{displayedAudioSource ?? $LL.live.source.audioNone()}
+						{displayedAudioLabel ?? $LL.live.source.audioNone()}
 					</span>
 					{#if notAvailableAudioSource}
 						<span
@@ -551,13 +611,13 @@ async function copyNetworkIngestUrl(url: string | null): Promise<void> {
 								{`${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
 							</span>
 						{:else}
-							{displayedAudioSource ?? $LL.settings.selectAudioSource()}
+							{displayedAudioLabel ?? $LL.settings.selectAudioSource()}
 						{/if}
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
-							{#each audioSources as source (source)}
-								<Select.Item label={source} value={source}></Select.Item>
+							{#each groupedAudio.devices as entry (entry.id)}
+								<Select.Item label={audioSourceLabel(entry, t)} value={entry.id}></Select.Item>
 							{/each}
 							{#if notAvailableAudioSource}
 								<Select.Item
@@ -566,6 +626,18 @@ async function copyNetworkIngestUrl(url: string | null): Promise<void> {
 								></Select.Item>
 							{/if}
 						</Select.Group>
+						{#if groupedAudio.pseudo.length > 0}
+							<Select.Separator />
+							<Select.Group>
+								{#each groupedAudio.pseudo as entry (entry.id)}
+									<Select.Item
+										class="text-muted-foreground"
+										label={audioSourceLabel(entry, t)}
+										value={entry.id}
+									></Select.Item>
+								{/each}
+							</Select.Group>
+						{/if}
 					</Select.Content>
 				</Select.Root>
 			{/if}

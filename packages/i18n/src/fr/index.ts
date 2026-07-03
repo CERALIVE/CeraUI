@@ -1303,6 +1303,7 @@ const fr = {
 			lostBody:
 				"Reconnectez l'appareil pour reprendre la diffusion depuis cette source.",
 			audioNone: "Aucune source audio détectée",
+			audioEmbedded: "Audio intégré (du flux entrant)",
 		},
 		modes: {
 			label: "Mode",
@@ -1358,6 +1359,7 @@ const fr = {
 			hint: "Cette fonctionnalité sera disponible dans une prochaine mise à jour.",
 			pip: "Incrustation d'image",
 			modeFallback: "Bascule automatique",
+			embeddedAudio: "Audio intégré",
 		},
 		fallback: {
 			unavailable: "Indisponible",

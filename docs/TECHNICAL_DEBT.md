@@ -164,6 +164,18 @@ resolved_at: null
 unblock: RIST egress is resolver-only today — the shared startStream protocol branch (RECEIVER_MODEL §3 Layer 3) does not yet pass a remote RIST target to the engine, so RIST is not a selectable egress transport. The receiver dialog surfaces RIST as a calm coming-soon affordance (data-debt-id="TD-rist-egress") in TransportRow. When cerastream advertises a usable "rist" egress transport AND the startStream protocol branch routes a RIST target to the engine, replace the coming-soon affordance with a real selectable transport and flip this entry to resolved.
 ```
 
+```debt
+id: TD-embedded-audio
+title: Embedded network-ingest audio routing
+track: 2
+status: open
+exit_criteria: capability:network_embedded_audio
+owner: ceraui-team
+registered_at: 2026-07-03
+resolved_at: null
+unblock: A network-ingest (rtmp/srt) publish carries its own muxed audio, but the engine can only route that embedded audio when it advertises the network_embedded_audio capability (cerastream Task 21). Until an engine advertising it is deployed, the Live audio picker keeps the legacy selectable-ALSA path for rtmp/srt pipelines and surfaces a calm coming-soon affordance (data-debt-id="TD-embedded-audio") next to the audio source. When the deployed engine advertises network_embedded_audio=true, the backend skips asrcProbe + omits audio.device and the frontend renders the read-only "Embedded audio" state; remove the coming-soon affordance and flip this entry to resolved.
+```
+
 ## Resolved Debt
 
 ```debt

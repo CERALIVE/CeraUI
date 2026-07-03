@@ -10,6 +10,7 @@
 import { intersectCaps, type VideoSourceCap } from "@ceraui/rpc";
 import type {
 	ActiveEncode,
+	AudioSource,
 	CapabilitiesMessage,
 	ConfigMessage,
 } from "@ceraui/rpc/schemas";
@@ -48,6 +49,67 @@ export function resolveDisplayedAudioSource(
 	if (selected && sources.includes(selected)) return selected;
 	if (sources.length === 1) return sources[0];
 	return selected || undefined;
+}
+
+// The two pseudo-source wire ids (byte-equal to the backend `config.asrc`
+// sentinels). Used to derive the typed model from a legacy `asrcs` string list
+// when the backend does not carry `audio_sources`.
+const AUDIO_SOURCE_NO_AUDIO = "No audio";
+const AUDIO_SOURCE_PIPELINE_DEFAULT = "Pipeline default";
+
+/**
+ * The typed audio-source list, from the backend `audio_sources` when present, or
+ * derived from the legacy `asrcs` string list (older backend) — mirroring the
+ * backend `deriveAudioSources` mapping so the frontend model is identical either
+ * way. `id` stays byte-equal to the `asrcs` entry, so `config.asrc` is unchanged.
+ */
+export function resolveAudioSourceList(
+	audioSources: readonly AudioSource[] | undefined,
+	asrcs: readonly string[],
+): AudioSource[] {
+	if (audioSources && audioSources.length > 0) return [...audioSources];
+	return asrcs.map((id): AudioSource => {
+		if (id === AUDIO_SOURCE_NO_AUDIO) {
+			return { id, kind: "none", labelKey: "audio.sources.noAudio" };
+		}
+		if (id === AUDIO_SOURCE_PIPELINE_DEFAULT) {
+			return {
+				id,
+				kind: "pipeline_default",
+				labelKey: "audio.sources.pipelineDefault",
+			};
+		}
+		return { id, kind: "device" };
+	});
+}
+
+/**
+ * Split the typed list into device entries (kept in backend priority order —
+ * meaningful, never reordered) and the pseudo-sources, which the picker groups at
+ * the END of the list, visually muted.
+ */
+export function groupAudioSources(list: readonly AudioSource[]): {
+	devices: AudioSource[];
+	pseudo: AudioSource[];
+} {
+	const devices: AudioSource[] = [];
+	const pseudo: AudioSource[] = [];
+	for (const entry of list) {
+		if (entry.kind === "device") devices.push(entry);
+		else pseudo.push(entry);
+	}
+	return { devices, pseudo };
+}
+
+/**
+ * Display label for an audio-source entry: pseudo-sources render their translated
+ * `labelKey`; hardware device names are NEVER translated (rendered verbatim).
+ */
+export function audioSourceLabel(
+	entry: AudioSource,
+	t: (key: string) => string,
+): string {
+	return entry.labelKey ? t(entry.labelKey) : entry.id;
 }
 
 /** Compact, structured capability summary for the ACTIVE source (Todo 11). */

@@ -1243,6 +1243,7 @@ const ar = {
 			lostTitle: "الجهاز غير متصل",
 			lostBody: "أعد توصيل الجهاز لاستئناف البث من هذا المصدر.",
 			audioNone: "لم يتم اكتشاف مصدر صوت",
+			audioEmbedded: "صوت مضمّن (من البث الوارد)",
 		},
 		modes: {
 			label: "الوضع",
@@ -1299,6 +1300,7 @@ const ar = {
 			hint: "ستتوفر هذه الميزة في تحديث مستقبلي.",
 			pip: "صورة داخل صورة",
 			modeFallback: "التبديل التلقائي",
+			embeddedAudio: "صوت مضمّن",
 		},
 		fallback: {
 			unavailable: "غير متاح",

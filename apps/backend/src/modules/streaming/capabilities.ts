@@ -72,6 +72,10 @@ export type CapabilitiesResult = GetCapabilitiesResult & {
 	/** Per-device capture modes (keyed by `list-devices` input_id); present only
 	 *  on a LIVE snapshot with non-empty caps, absent on every fallback rung. */
 	device_modes?: Record<string, DeviceModeGroup>;
+	/** Engine can route embedded (muxed) network-ingest audio (Task 21/13). Read
+	 *  from the raw response before the frozen schema strips it, like `transports`.
+	 *  Absent/false on a legacy engine → the selectable-ALSA path (Task 13 gate). */
+	network_embedded_audio?: boolean;
 };
 
 /** A live engine snapshot plus the `schema_version` it was negotiated under. */
@@ -80,6 +84,8 @@ export interface EngineCapabilitiesSnapshot {
 	schemaVersion: string;
 	/** Relay transports advertised by the engine (additive; "srtla" implied). */
 	transports?: string[];
+	/** Embedded network-ingest audio capability (additive; read before the strip). */
+	network_embedded_audio?: boolean;
 }
 
 /** SRTLA is always available; promoted transports (e.g. "rist") are additive. */
@@ -96,6 +102,10 @@ function deriveTransports(advertised: string[] | undefined): string[] {
 
 /** Last-known transport set; sync source for the streaming resolver gate. */
 let lastTransports: string[] = [...BASE_TRANSPORTS];
+
+/** Last-known embedded-audio capability, persisted across a transient outage
+ *  like `lastTransports` (it is a static build capability, Task 21). */
+let lastNetworkEmbeddedAudio: boolean | undefined;
 
 /** The transports the engine last advertised (always includes "srtla"). */
 export function getSupportedTransports(): string[] {
@@ -201,7 +211,11 @@ async function defaultFetchEngineCapabilities(): Promise<EngineCapabilitiesSnaps
 		const transports = Array.isArray(rawTransports)
 			? rawTransports.filter((t): t is string => typeof t === "string")
 			: undefined;
-		return { caps, schemaVersion, transports };
+		const rawEmbeddedAudio = (raw as { network_embedded_audio?: unknown })
+			.network_embedded_audio;
+		const network_embedded_audio =
+			typeof rawEmbeddedAudio === "boolean" ? rawEmbeddedAudio : undefined;
+		return { caps, schemaVersion, transports, network_embedded_audio };
 	} finally {
 		try {
 			await client?.close();
@@ -328,6 +342,7 @@ let lastKnownGood: GetCapabilitiesResult | undefined;
 export function clearCapabilitiesCache(): void {
 	lastKnownGood = undefined;
 	lastTransports = [...BASE_TRANSPORTS];
+	lastNetworkEmbeddedAudio = undefined;
 	lastCapabilities = undefined;
 }
 
@@ -352,6 +367,7 @@ export async function getCapabilities(
 			caps: rawCaps,
 			schemaVersion,
 			transports,
+			network_embedded_audio: networkEmbeddedAudio,
 		} = await deps.fetchEngineCapabilities();
 		const mismatch = schemaVersion !== deps.bindingsSchemaVersion;
 		if (mismatch) {
@@ -376,12 +392,16 @@ export async function getCapabilities(
 		const deviceModes = await resolveDeviceModes(deps);
 		lastKnownGood = caps;
 		lastTransports = deriveTransports(transports);
+		lastNetworkEmbeddedAudio = networkEmbeddedAudio;
 		lastCapabilities = {
 			...caps,
 			engineUnavailable: false,
 			...(mismatch ? { schemaVersionMismatch: true } : {}),
 			...(deviceModes ? { device_modes: deviceModes } : {}),
 			transports: [...lastTransports],
+			...(lastNetworkEmbeddedAudio !== undefined
+				? { network_embedded_audio: lastNetworkEmbeddedAudio }
+				: {}),
 		};
 		return lastCapabilities;
 	} catch (err) {
@@ -394,6 +414,9 @@ export async function getCapabilities(
 				...lastKnownGood,
 				engineUnavailable: true,
 				transports: [...lastTransports],
+				...(lastNetworkEmbeddedAudio !== undefined
+					? { network_embedded_audio: lastNetworkEmbeddedAudio }
+					: {}),
 			};
 			return lastCapabilities;
 		}
@@ -402,6 +425,7 @@ export async function getCapabilities(
 			{ err },
 		);
 		lastTransports = [...BASE_TRANSPORTS];
+		lastNetworkEmbeddedAudio = undefined;
 		lastCapabilities = {
 			...structuredClone(MINIMAL_SAFE_CAPABILITIES),
 			engineUnavailable: true,

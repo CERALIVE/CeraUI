@@ -21,7 +21,7 @@ import type {
 	GetCapabilitiesResult,
 } from "@ceralive/cerastream";
 import { DEVICE_KIND_TO_PIPELINE_ID as SHARED_DEVICE_KIND_TO_PIPELINE_ID } from "@ceraui/rpc";
-import type { RequiresGateway } from "@ceraui/rpc/schemas";
+import type { PipelineAudioKind, RequiresGateway } from "@ceraui/rpc/schemas";
 import {
 	framerateSchema,
 	resolutionSchema,
@@ -51,6 +51,10 @@ export type Pipeline = {
 	supportsResolutionOverride: boolean;
 	supportsFramerateOverride: boolean;
 	requires_gateway?: RequiresGateway;
+	// Audio provenance (Task 13): rtmp/srt carry embedded (muxed) audio, direct
+	// capture is operator-selectable ALSA, no-audio pipelines are 'none'. This
+	// registry is the single source of the values.
+	audio_kind: PipelineAudioKind;
 };
 
 // Source ids that ingest over a local network gateway rather than a directly
@@ -131,6 +135,14 @@ function describeSource(id: string): string {
 	return SOURCE_DESCRIPTIONS[id] ?? id;
 }
 
+function deriveAudioKind(
+	id: string,
+	supportsAudio: boolean,
+): PipelineAudioKind {
+	if (GATEWAY_SOURCES[id] !== undefined) return "embedded";
+	return supportsAudio ? "selectable" : "none";
+}
+
 // The capability contract types resolution/framerate as free-form string/number;
 // only adopt the (enum-typed) Pipeline default when the value is a member of the
 // frozen preset set, so the engine's minimal-floor "1920x1080" is dropped rather
@@ -172,6 +184,7 @@ function buildPipelineRegistry(
 			supportsAudio: cap.supports_audio,
 			supportsResolutionOverride: cap.supports_resolution_override,
 			supportsFramerateOverride: cap.supports_framerate_override,
+			audio_kind: deriveAudioKind(cap.id, cap.supports_audio),
 		};
 		const resolution = toResolution(cap.default_resolution);
 		if (resolution !== undefined) pipeline.defaultResolution = resolution;
@@ -214,6 +227,7 @@ type PipelineResponseEntry = Pick<
 	| "defaultResolution"
 	| "defaultFramerate"
 	| "requires_gateway"
+	| "audio_kind"
 >;
 
 export function getPipelineList() {
@@ -231,6 +245,7 @@ export function getPipelineList() {
 			defaultResolution: pipeline.defaultResolution,
 			defaultFramerate: pipeline.defaultFramerate,
 			requires_gateway: pipeline.requires_gateway,
+			audio_kind: pipeline.audio_kind,
 		};
 	}
 	return list;

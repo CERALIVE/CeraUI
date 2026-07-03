@@ -37,10 +37,16 @@ import {
 	resolveAudioGateState,
 	resolveAudioPipelineKey,
 } from '$lib/streaming/audioGate';
+import {
+	audioSourceLabel,
+	groupAudioSources,
+	resolveAudioSourceList,
+} from '$lib/streaming/sourceSummary';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import {
 	getAudioCodecs,
+	getCapabilities,
 	getConfig,
 	getIsStreaming,
 	getPipelines,
@@ -95,6 +101,8 @@ const config = $derived(getConfig());
 const pipelines = $derived(getPipelines()?.pipelines);
 const audioCodecs = $derived(getAudioCodecs());
 const audioSources = $derived(getStatus()?.asrcs ?? []);
+const audioSourceList = $derived(getStatus()?.audio_sources);
+const capabilities = $derived(getCapabilities());
 const isStreaming = $derived(getIsStreaming());
 
 // Gate follows the DRAFTED encoder pipeline first, the saved config second —
@@ -105,6 +113,24 @@ const pipelineKey = $derived(
 );
 const gateState = $derived(resolveAudioGateState(pipelineKey, pipelines));
 const hasAudioSupport = $derived(gateState === 'enabled');
+
+// Typed audio-source model (Task 13): pseudo-sources translated + grouped last,
+// device entries keep their hardware name + backend order.
+const audioSourceEntries = $derived(resolveAudioSourceList(audioSourceList, audioSources));
+const groupedAudio = $derived(groupAudioSources(audioSourceEntries));
+
+// Embedded network-ingest audio (Task 13): with the `network_embedded_audio`
+// capability, an rtmp/srt pipeline routes its muxed audio and the source is
+// read-only; without it the ALSA picker stays and we show a ComingSoon pill.
+const selectedPipelineAudioKind = $derived(
+	pipelineKey ? pipelines?.[pipelineKey]?.audio_kind : undefined,
+);
+const audioEmbeddedActive = $derived(
+	selectedPipelineAudioKind === 'embedded' && capabilities?.network_embedded_audio === true,
+);
+const audioEmbeddedComingSoon = $derived(
+	selectedPipelineAudioKind === 'embedded' && capabilities?.network_embedded_audio !== true,
+);
 
 // ---- Draft state (seeded from props each time the dialog opens) ----
 let draftSource = $state<string | undefined>(undefined);
@@ -127,16 +153,18 @@ const notAvailableAudioSource = $derived(
 	draftSource && !audioSources.includes(draftSource) ? draftSource : undefined,
 );
 
-// EXPLICIT required-source validation (visible, never silently hidden).
-const sourceMissing = $derived(hasAudioSupport && !draftSource);
+// EXPLICIT required-source validation (visible, never silently hidden). An
+// embedded-audio pipeline needs no ALSA source, so it never counts as missing.
+const sourceMissing = $derived(hasAudioSupport && !audioEmbeddedActive && !draftSource);
 const saveDisabled = $derived(!hasAudioSupport || sourceMissing || isStreaming);
 
 // Reason for the locked codec select: streaming (cannot apply without a restart)
 // or no source chosen yet. Mirrors the Select.Root `disabled` condition.
+const codecHasSource = $derived(audioEmbeddedActive || Boolean(draftSource));
 const codecDisabledReason = $derived(
 	isStreaming
 		? $LL.settings.codecDisabledReason.streaming()
-		: !draftSource
+		: !codecHasSource
 			? $LL.settings.codecDisabledReason.noSource()
 			: undefined,
 );
@@ -172,14 +200,16 @@ const t = (key: string): string => {
 	return typeof result === 'function' ? (result as () => string)() : key;
 };
 
-const sourceTriggerLabel = $derived(
-	getAudioSourceLabel(draftSource, {
+const sourceTriggerLabel = $derived.by(() => {
+	const entry = audioSourceEntries.find((e) => e.id === draftSource);
+	if (entry?.labelKey) return audioSourceLabel(entry, t);
+	return getAudioSourceLabel(draftSource, {
 		available: audioSources,
 		notAvailableSentinel: notAvailableAudioSource ?? '',
 		selectPlaceholder: $LL.settings.selectAudioSource(),
 		t,
-	}),
-);
+	});
+});
 const codecTriggerLabel = $derived(
 	draftCodec && audioCodecs
 		? (audioCodecs[draftCodec]?.name ?? $LL.settings.selectAudioCodec())
@@ -189,7 +219,7 @@ const codecTriggerLabel = $derived(
 async function handleSave() {
 	if (saveDisabled) return;
 	const values: AudioConfigValues = {
-		asrc: draftSource,
+		asrc: audioEmbeddedActive ? undefined : draftSource,
 		acodec: draftCodec ?? 'aac',
 		delay: draftDelay,
 	};
@@ -269,39 +299,65 @@ async function handleSave() {
 						testId="info-audio-source"
 						title={$LL.live.education.field.audio.title()}
 					/>
+					{#if audioEmbeddedComingSoon}
+						<!-- CI gate static marker (component renders data-debt-id dynamically): data-debt-id="TD-embedded-audio" -->
+						<ComingSoon debtId="TD-embedded-audio" label={$LL.live.comingSoon.embeddedAudio()} />
+					{/if}
 				</div>
-				<Select.Root
-					disabled={isStreaming}
-					onValueChange={(value) => (draftSource = value)}
-					type="single"
-					value={draftSource}
-				>
-					<Select.Trigger
-						id="audioSource"
-						aria-invalid={sourceMissing}
-						class="w-full {sourceMissing ? 'border-destructive' : ''}"
+				{#if audioEmbeddedActive}
+					<div
+						class="bg-muted/40 flex min-h-11 flex-wrap items-center gap-2 rounded-lg border px-3 py-2"
+						data-testid="audio-source-embedded"
 					>
-						{sourceTriggerLabel}
-					</Select.Trigger>
-					<Select.Content>
-						<Select.Group>
-							{#each audioSources as source (source)}
-								<Select.Item label={source} value={source}></Select.Item>
-							{/each}
-							{#if notAvailableAudioSource}
-								<Select.Item
-									label={`${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
-									value={notAvailableAudioSource}
-								></Select.Item>
+						<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
+						<span class="text-sm">{$LL.live.source.audioEmbedded()}</span>
+					</div>
+				{:else}
+					<Select.Root
+						disabled={isStreaming}
+						onValueChange={(value) => (draftSource = value)}
+						type="single"
+						value={draftSource}
+					>
+						<Select.Trigger
+							id="audioSource"
+							aria-invalid={sourceMissing}
+							class="w-full {sourceMissing ? 'border-destructive' : ''}"
+						>
+							{sourceTriggerLabel}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Group>
+								{#each groupedAudio.devices as entry (entry.id)}
+									<Select.Item label={audioSourceLabel(entry, t)} value={entry.id}></Select.Item>
+								{/each}
+								{#if notAvailableAudioSource}
+									<Select.Item
+										label={`${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
+										value={notAvailableAudioSource}
+									></Select.Item>
+								{/if}
+							</Select.Group>
+							{#if groupedAudio.pseudo.length > 0}
+								<Select.Separator />
+								<Select.Group>
+									{#each groupedAudio.pseudo as entry (entry.id)}
+										<Select.Item
+											class="text-muted-foreground"
+											label={audioSourceLabel(entry, t)}
+											value={entry.id}
+										></Select.Item>
+									{/each}
+								</Select.Group>
 							{/if}
-						</Select.Group>
-					</Select.Content>
-				</Select.Root>
-				{#if sourceMissing}
-					<!-- EXPLICIT inline error: audio supported but no source chosen. -->
-					<p class="text-destructive flex items-center gap-1.5 text-sm" role="alert">
-						{$LL.settings.errors.audioSourceRequired()}
-					</p>
+						</Select.Content>
+					</Select.Root>
+					{#if sourceMissing}
+						<!-- EXPLICIT inline error: audio supported but no source chosen. -->
+						<p class="text-destructive flex items-center gap-1.5 text-sm" role="alert">
+							{$LL.settings.errors.audioSourceRequired()}
+						</p>
+					{/if}
 				{/if}
 			</div>
 
@@ -324,7 +380,7 @@ async function handleSave() {
 					{/if}
 				</div>
 				<Select.Root
-					disabled={isStreaming || !draftSource}
+					disabled={isStreaming || !codecHasSource}
 					onValueChange={(value) => (draftCodec = value as AudioCodec)}
 					type="single"
 					value={draftCodec}

@@ -1,15 +1,19 @@
 import type {
 	ActiveEncode,
+	AudioSource,
 	CapabilitiesMessage,
 	ConfigMessage,
 } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
+	audioSourceLabel,
 	type CapabilitySummary,
 	deriveActiveSummary,
 	deriveCapabilitySummary,
 	formatCodec,
+	groupAudioSources,
+	resolveAudioSourceList,
 	resolveAudioSourceMode,
 	resolveDisplayedAudioSource,
 	resolveTransportToken,
@@ -309,5 +313,76 @@ describe("deriveActiveSummary — capability vs active-config split (Todo 23)", 
 	it("idle without a codec never invents one from capabilities", () => {
 		const config: ConfigMessage = { selected_video_input: "hdmi" };
 		expect(deriveActiveSummary(config, null, CAPS).codec).toBeUndefined();
+	});
+});
+
+describe("resolveAudioSourceList — typed model with legacy asrcs fallback (Task 13)", () => {
+	it("passes the typed audio_sources through verbatim when present", () => {
+		const typed: AudioSource[] = [
+			{ id: "USB audio", kind: "device" },
+			{ id: "No audio", kind: "none", labelKey: "audio.sources.noAudio" },
+		];
+		expect(resolveAudioSourceList(typed, ["ignored"])).toEqual(typed);
+	});
+
+	it("derives the typed model from a legacy asrcs list (older backend)", () => {
+		const derived = resolveAudioSourceList(undefined, [
+			"USB audio",
+			"No audio",
+			"Pipeline default",
+		]);
+		expect(derived).toEqual([
+			{ id: "USB audio", kind: "device" },
+			{ id: "No audio", kind: "none", labelKey: "audio.sources.noAudio" },
+			{
+				id: "Pipeline default",
+				kind: "pipeline_default",
+				labelKey: "audio.sources.pipelineDefault",
+			},
+		]);
+	});
+
+	it("falls back to asrcs when audio_sources is an empty array", () => {
+		expect(resolveAudioSourceList([], ["USB audio"])).toEqual([
+			{ id: "USB audio", kind: "device" },
+		]);
+	});
+});
+
+describe("groupAudioSources — devices first (order kept), pseudo grouped last (Task 13)", () => {
+	it("keeps device order and moves the pseudo-sources to the end", () => {
+		const list: AudioSource[] = [
+			{ id: "No audio", kind: "none", labelKey: "audio.sources.noAudio" },
+			{ id: "USB audio", kind: "device" },
+			{
+				id: "Pipeline default",
+				kind: "pipeline_default",
+				labelKey: "audio.sources.pipelineDefault",
+			},
+			{ id: "HDMI", kind: "device" },
+		];
+		const { devices, pseudo } = groupAudioSources(list);
+		expect(devices.map((e) => e.id)).toEqual(["USB audio", "HDMI"]);
+		expect(pseudo.map((e) => e.id)).toEqual(["No audio", "Pipeline default"]);
+	});
+});
+
+describe("audioSourceLabel — translate pseudo, never translate hardware (Task 13)", () => {
+	const t = (key: string) =>
+		key === "audio.sources.noAudio" ? "Ninguno" : key;
+
+	it("resolves the labelKey for a pseudo-source", () => {
+		expect(
+			audioSourceLabel(
+				{ id: "No audio", kind: "none", labelKey: "audio.sources.noAudio" },
+				t,
+			),
+		).toBe("Ninguno");
+	});
+
+	it("renders a hardware device name verbatim (never translated)", () => {
+		expect(audioSourceLabel({ id: "USB audio", kind: "device" }, t)).toBe(
+			"USB audio",
+		);
 	});
 });

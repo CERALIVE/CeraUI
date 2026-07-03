@@ -530,6 +530,7 @@ const de = {
 			lostBody:
 				"Schließen Sie das Gerät wieder an, um das Streaming von dieser Quelle fortzusetzen.",
 			audioNone: "Keine Audioquelle erkannt",
+			audioEmbedded: "Eingebetteter Ton (aus dem eingehenden Stream)",
 		},
 		modes: {
 			label: "Modus",
@@ -585,6 +586,7 @@ const de = {
 			hint: "Diese Funktion wird in einem zukünftigen Update verfügbar sein.",
 			pip: "Bild-in-Bild",
 			modeFallback: "Automatische Umschaltung",
+			embeddedAudio: "Eingebetteter Ton",
 		},
 		fallback: {
 			unavailable: "Nicht verfügbar",

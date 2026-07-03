@@ -1061,6 +1061,7 @@ const zh = {
 			lostTitle: "设备已断开",
 			lostBody: "重新连接设备以从此来源恢复推流。",
 			audioNone: "未检测到音频源",
+			audioEmbedded: "嵌入式音频（来自传入流）",
 		},
 		modes: {
 			label: "模式",
@@ -1116,6 +1117,7 @@ const zh = {
 			hint: "此功能将在未来的更新中提供。",
 			pip: "画中画",
 			modeFallback: "自动切换",
+			embeddedAudio: "嵌入式音频",
 		},
 		fallback: {
 			unavailable: "不可用",

@@ -8,6 +8,7 @@ import {
 	type CapabilitiesLogger,
 	clearCapabilitiesCache,
 	getCapabilities,
+	getLastCapabilities,
 } from "../modules/streaming/capabilities.ts";
 
 const silent: CapabilitiesLogger = {
@@ -269,5 +270,58 @@ describe("getCapabilities — bitrate unit normalization", () => {
 			max: 12000,
 			unit: "kbps",
 		});
+	});
+});
+
+describe("getCapabilities — network_embedded_audio threading (Task 13)", () => {
+	test("carries an advertised network_embedded_audio onto the live snapshot", async () => {
+		const result = await getCapabilities({
+			fetchEngineCapabilities: async () => ({
+				caps: makeCaps(),
+				schemaVersion: SCHEMA_VERSION,
+				network_embedded_audio: true,
+			}),
+			fetchEngineDevices: noDevices,
+			logger: silent,
+		});
+
+		expect(result.network_embedded_audio).toBe(true);
+		expect(getLastCapabilities()?.network_embedded_audio).toBe(true);
+	});
+
+	test("omits the field when the engine does not advertise it (legacy engine)", async () => {
+		const result = await getCapabilities({
+			fetchEngineCapabilities: async () => ({
+				caps: makeCaps(),
+				schemaVersion: SCHEMA_VERSION,
+			}),
+			fetchEngineDevices: noDevices,
+			logger: silent,
+		});
+
+		expect(result.network_embedded_audio).toBeUndefined();
+	});
+
+	test("a cached fallback retains the last-known network_embedded_audio", async () => {
+		await getCapabilities({
+			fetchEngineCapabilities: async () => ({
+				caps: makeCaps(),
+				schemaVersion: SCHEMA_VERSION,
+				network_embedded_audio: true,
+			}),
+			fetchEngineDevices: noDevices,
+			logger: silent,
+		});
+
+		const cached = await getCapabilities({
+			fetchEngineCapabilities: async () => {
+				throw new Error("engine unavailable");
+			},
+			fetchEngineDevices: noDevices,
+			logger: silent,
+		});
+
+		expect(cached.engineUnavailable).toBe(true);
+		expect(cached.network_embedded_audio).toBe(true);
 	});
 });

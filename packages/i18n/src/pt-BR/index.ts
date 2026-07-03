@@ -1278,6 +1278,7 @@ const ptBR = {
 			lostBody:
 				"Reconecte o dispositivo para retomar a transmissão desta fonte.",
 			audioNone: "Nenhuma fonte de áudio detectada",
+			audioEmbedded: "Áudio incorporado (do fluxo recebido)",
 		},
 		modes: {
 			label: "Modo",
@@ -1333,6 +1334,7 @@ const ptBR = {
 			hint: "Este recurso estará disponível em uma atualização futura.",
 			pip: "Picture-in-picture",
 			modeFallback: "Substituição automática",
+			embeddedAudio: "Áudio incorporado",
 		},
 		fallback: {
 			unavailable: "Indisponível",

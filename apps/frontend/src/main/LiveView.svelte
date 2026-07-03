@@ -505,6 +505,9 @@ const effectiveAudioDelay = $derived(audioOverride?.delay ?? config?.delay ?? 0)
 // Pipeline-reported audio sources (status.asrcs) — the pre-start asrc selection
 // surfaced inline in the unified Source section, identical feed to AudioDialog.
 const audioSources = $derived(getStatus()?.asrcs ?? []);
+// Typed audio-source model (status.audio_sources) beside the legacy asrcs — drives
+// the humanized picker; falls back to `audioSources` on an older backend.
+const audioSourceList = $derived(getStatus()?.audio_sources);
 
 function handleAudioSave(values: AudioConfigValues) {
 	audioOverride = values;
@@ -933,6 +936,7 @@ const configRows = $derived<ConfigRow[]>([
 		activeEncode={getStatus()?.active_encode ?? null}
 		audioLiveSwitchField={AUDIO_SWITCH_FIELD}
 		{audioLiveSwitchEnabled}
+		{audioSourceList}
 		{audioSources}
 		capabilities={getCapabilities()}
 		{config}

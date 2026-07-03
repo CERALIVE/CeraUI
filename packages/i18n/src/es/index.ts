@@ -531,6 +531,7 @@ const es = {
 			lostBody:
 				"Vuelve a conectar el dispositivo para reanudar la transmisión desde esta fuente.",
 			audioNone: "No se detectó ninguna fuente de audio",
+			audioEmbedded: "Audio incorporado (del flujo entrante)",
 		},
 		modes: {
 			label: "Modo",
@@ -587,6 +588,7 @@ const es = {
 			hint: "Esta función estará disponible en una actualización futura.",
 			pip: "Imagen en imagen",
 			modeFallback: "Conmutación automática",
+			embeddedAudio: "Audio incorporado",
 		},
 		fallback: {
 			unavailable: "No disponible",

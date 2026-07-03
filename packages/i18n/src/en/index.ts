@@ -514,6 +514,7 @@ const en = {
 			lostTitle: "Device disconnected",
 			lostBody: "Reconnect the device to resume streaming from this source.",
 			audioNone: "No audio source detected",
+			audioEmbedded: "Embedded audio (from the incoming stream)",
 		},
 		modes: {
 			label: "Mode",
@@ -569,6 +570,7 @@ const en = {
 			hint: "This feature will be available in a future update.",
 			pip: "Picture-in-picture",
 			modeFallback: "Automatic fallback",
+			embeddedAudio: "Embedded audio",
 		},
 		fallback: {
 			unavailable: "Unavailable",

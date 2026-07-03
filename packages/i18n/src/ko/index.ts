@@ -1119,6 +1119,7 @@ const ko = {
 			lostTitle: "장치 연결 끊김",
 			lostBody: "장치를 다시 연결하여 이 소스에서 스트리밍을 재개하세요.",
 			audioNone: "오디오 소스가 감지되지 않음",
+			audioEmbedded: "임베디드 오디오 (수신 스트림에서)",
 		},
 		modes: {
 			label: "모드",
@@ -1174,6 +1175,7 @@ const ko = {
 			hint: "이 기능은 향후 업데이트에서 제공될 예정입니다.",
 			pip: "화면 속 화면",
 			modeFallback: "자동 전환",
+			embeddedAudio: "임베디드 오디오",
 		},
 		fallback: {
 			unavailable: "사용 불가",

@@ -395,6 +395,94 @@ describe("SourceSection — network-ingest gateways as first-class sources (Task
 	});
 });
 
+const CAPS_EMBEDDED_ON: CapabilitiesMessage = {
+	...CAPS_AUDIO_RTMP,
+	network_embedded_audio: true,
+};
+
+describe("SourceSection — embedded network-ingest audio (Task 13)", () => {
+	it("renders the read-only embedded state (no ALSA picker) WITH the capability", () => {
+		const { container } = mount({
+			audioSources: ["USB audio", "Pipeline default"],
+			selectedPipeline: "srt",
+			pipelines: {
+				srt: pipeline({ requires_gateway: "srt", audio_kind: "embedded" }),
+			},
+			capabilities: CAPS_EMBEDDED_ON,
+		});
+		expect(
+			container.querySelector('[data-testid="audio-source-embedded"]'),
+		).not.toBeNull();
+		// The ALSA source controls are absent when the engine routes embedded audio.
+		expect(
+			container.querySelector('[data-testid="audio-source-select"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-source-readonly"]'),
+		).toBeNull();
+	});
+
+	it("keeps the ALSA picker + shows a TD-embedded-audio coming-soon pill WITHOUT the capability", () => {
+		const { container } = mount({
+			audioSources: ["USB audio", "Pipeline default"],
+			selectedPipeline: "srt",
+			pipelines: {
+				srt: pipeline({ requires_gateway: "srt", audio_kind: "embedded" }),
+			},
+			capabilities: CAPS_AUDIO_RTMP,
+		});
+		// Legacy ALSA path preserved — the picker still renders…
+		expect(
+			container.querySelector('[data-testid="audio-source-select"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-source-embedded"]'),
+		).toBeNull();
+		// …plus a calm coming-soon affordance bound to the open register entry.
+		expect(
+			container.querySelector('[data-debt-id="TD-embedded-audio"]'),
+		).not.toBeNull();
+	});
+
+	it("does not treat a selectable pipeline as embedded even with the capability on", () => {
+		const { container } = mount({
+			audioSources: ["USB audio", "Pipeline default"],
+			selectedPipeline: "hdmi",
+			pipelines: { hdmi: pipeline({ audio_kind: "selectable" }) },
+			capabilities: CAPS_EMBEDDED_ON,
+		});
+		expect(
+			container.querySelector('[data-testid="audio-source-embedded"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-debt-id="TD-embedded-audio"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-source-select"]'),
+		).not.toBeNull();
+	});
+});
+
+describe("SourceSection — typed audio-source model (Task 13)", () => {
+	it("consumes the typed audio_sources list (pseudo read-only label)", () => {
+		const { container } = mount({
+			audioSources: ["Pipeline default"],
+			audioSourceList: [
+				{
+					id: "Pipeline default",
+					kind: "pipeline_default",
+					labelKey: "audio.sources.pipelineDefault",
+				},
+			] as AudioSource[],
+		});
+		const readonly = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-readonly"]',
+		);
+		expect(readonly).not.toBeNull();
+		expect(readonly?.textContent).toContain("Pipeline default");
+	});
+});
+
 describe("SourceSection — audio selection callback", () => {
 	it("fires onSelectAudioSource when a multi-source selection is made", async () => {
 		const onSelectAudioSource = vi.fn();
