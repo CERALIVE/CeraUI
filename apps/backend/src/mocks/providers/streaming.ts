@@ -5,6 +5,7 @@ Simulates cerastream/srtla streaming statistics for development mode
 
 import {
 	type ActiveEncode,
+	type CaptureDeviceKind,
 	CerastreamConnectionError,
 	type GetCapabilitiesResult,
 	type ListDevicesResult,
@@ -22,9 +23,12 @@ import {
 } from "../../modules/streaming/capabilities.ts";
 import type { LinkTelemetryMessage } from "../../modules/streaming/link-telemetry.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
-import { buildMockAudioDevices } from "../fixture-factory.ts";
+import {
+	buildMockAudioDevices,
+	buildMockDeviceModes,
+} from "../fixture-factory.ts";
 import { mockWifiRadios, type ScenarioCapabilities } from "../mock-config.ts";
-import type { MockAudioDevices } from "../mock-schemas.ts";
+import type { MockAudioDevices, MockDeviceModes } from "../mock-schemas.ts";
 import {
 	getActiveScenario,
 	getMockState,
@@ -77,70 +81,6 @@ const FULL_PROFILE_BITRATE_BPS = {
 	max: 20_000_000,
 	unit: "bps",
 } as const;
-
-// caps-full per-device modes exercised by the device_modes fold (todo 5): an HDMI
-// capture device (1080p@[30,60] + 2160p@[30]) and a UVC/USB device (720p@[30,60]
-// + 1080p@[30]). Framerates are the engine's string fractions so the fold runs
-// them through normalizeFramerateToRung. Other scenarios emit no devices, so
-// device_modes is omitted and the UI falls back to the coarse offering.
-const FULL_PROFILE_DEVICES: ListDevicesResult = {
-	devices: [
-		{
-			input_id: "hdmi",
-			device_path: "/dev/video0",
-			display_name: "HDMI Capture",
-			media_class: "video",
-			kind: "hdmi",
-			caps: [
-				{
-					width: 1920,
-					height: 1080,
-					framerate: "30/1",
-					media_type: "video/x-raw",
-				},
-				{
-					width: 1920,
-					height: 1080,
-					framerate: "60/1",
-					media_type: "video/x-raw",
-				},
-				{
-					width: 3840,
-					height: 2160,
-					framerate: "30/1",
-					media_type: "video/x-raw",
-				},
-			],
-		},
-		{
-			input_id: "usb",
-			device_path: "/dev/video1",
-			display_name: "USB Capture",
-			media_class: "video",
-			kind: "uvc_h264",
-			caps: [
-				{
-					width: 1280,
-					height: 720,
-					framerate: "30/1",
-					media_type: "video/x-h264",
-				},
-				{
-					width: 1280,
-					height: 720,
-					framerate: "60/1",
-					media_type: "video/x-h264",
-				},
-				{
-					width: 1920,
-					height: 1080,
-					framerate: "30/1",
-					media_type: "video/x-h264",
-				},
-			],
-		},
-	],
-};
 
 const DEFAULT_MOCK_TRANSPORTS = ["srtla", "rist"] as const;
 
@@ -203,23 +143,68 @@ export function getMockEngineCapabilities(): EngineCapabilitiesSnapshot {
 	return { caps, schemaVersion, transports };
 }
 
+// A normalized rung fps back to the engine's string fraction, so a fixture built
+// from folded (numeric) framerates round-trips through the getCapabilities() fold.
+const NTSC_FRACTIONS: Record<number, string> = {
+	23.976: "24000/1001",
+	29.97: "30000/1001",
+	59.94: "60000/1001",
+};
+
+function framerateToFraction(fps: number): string {
+	return NTSC_FRACTIONS[fps] ?? `${fps}/1`;
+}
+
+// Expand a folded `device_modes` map back into a `list-devices` result: each mode's
+// {width,height} × its rung framerates becomes the CaptureCap cross-product the
+// engine emits, so the capability service's fold reproduces the exact source map.
+function expandDeviceModes(modes: MockDeviceModes): ListDevicesResult {
+	const devices = Object.entries(modes).map(([inputId, group], index) => ({
+		input_id: inputId,
+		device_path: `/dev/video${index}`,
+		display_name: `${inputId} capture`,
+		media_class: "video" as const,
+		...(group.kind !== undefined
+			? { kind: group.kind as CaptureDeviceKind }
+			: {}),
+		caps: group.modes.flatMap((mode) =>
+			mode.framerates.map((fps) => ({
+				width: mode.width,
+				height: mode.height,
+				framerate: framerateToFraction(fps),
+				...(mode.media_type !== undefined
+					? { media_type: mode.media_type }
+					: {}),
+			})),
+		),
+	}));
+	return { devices };
+}
+
+// Per-scenario device modes: a setMockEngineCapabilities({ deviceModes }) override
+// wins; otherwise a full-engine-profile scenario advertises the default fixture and
+// every other scenario reports none (coarse caps).
+function resolveScenarioDeviceModes(): MockDeviceModes {
+	const profile = resolveScenarioCapabilities();
+	if (profile.deviceModes) {
+		return profile.deviceModes;
+	}
+	return profile.fullProfile ? buildMockDeviceModes() : {};
+}
+
 /**
  * Mock `list-devices` result for dev/e2e, wired into `getCapabilities()` as the
- * `fetchEngineDevices` collaborator at boot. Only the caps-full scenario emits
- * per-device caps (folded into `device_modes`); every other scenario returns no
- * devices so `device_modes` is omitted and the UI falls back to coarse caps.
- * Empty in production (`shouldUseMocks()` false).
+ * `fetchEngineDevices` collaborator at boot. Full-engine-profile scenarios
+ * (caps-full / multi-modem-wifi / streaming-active) expand their seeded
+ * `device_modes` into per-device caps (folded back into `device_modes`); every
+ * other scenario returns no devices so `device_modes` is omitted and the UI falls
+ * back to coarse caps. Empty in production (`shouldUseMocks()` false).
  */
 export function getMockEngineDevices(): ListDevicesResult {
 	if (!shouldUseMocks()) {
 		return { devices: [] };
 	}
-	switch (getActiveScenario()) {
-		case "caps-full":
-			return structuredClone(FULL_PROFILE_DEVICES);
-		default:
-			return { devices: [] };
-	}
+	return expandDeviceModes(resolveScenarioDeviceModes());
 }
 
 /**

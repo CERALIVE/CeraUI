@@ -22,6 +22,8 @@ import type { RuntimeErrorEvent } from "@ceralive/cerastream";
 import {
 	AddonDescriptorSchema,
 	AddonStateSchema,
+	type DeviceModeGroup,
+	deviceModeGroupSchema,
 	framerateSchema,
 	kioskStatusSchema,
 	type RelayValidateStage,
@@ -124,6 +126,13 @@ export const mockAudioDevicesSchema = z.record(
 	z.string().min(1),
 );
 export type MockAudioDevices = z.infer<typeof mockAudioDevicesSchema>;
+
+/** Mirrors the broadcast `device_modes` map — `input_id → DeviceModeGroup`. Reuses the `@ceraui/rpc` `deviceModeGroupSchema` (single source of truth) so a mock fixture can't drift from the wire shape. */
+export const mockDeviceModesSchema = z.record(
+	z.string().min(1),
+	deviceModeGroupSchema,
+);
+export type MockDeviceModes = Record<string, DeviceModeGroup>;
 
 // ─── Runtime mock-state schemas ──────────────────────────────────────────────
 // These describe the mutable session-state slots seeded by `initMockService`.

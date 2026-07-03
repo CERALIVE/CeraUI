@@ -9,6 +9,7 @@ import { relayServerSchema } from "../helpers/config-schemas.ts";
 import {
 	buildMockAddonDescriptor,
 	buildMockAddonState,
+	buildMockDeviceModes,
 	buildMockKioskToken,
 	buildMockModem,
 	buildMockRelay,
@@ -26,6 +27,7 @@ import {
 	MOCK_SIM_PUK_RETRIES,
 } from "../mocks/mock-constants.ts";
 import {
+	mockDeviceModesSchema,
 	mockKioskTokenSchema,
 	mockModemConfigSchema,
 	mockSimStateSchema,
@@ -206,6 +208,59 @@ describe("buildMockAddonState", () => {
 
 	test("throws on an invalid phase", () => {
 		expect(() => buildMockAddonState({ phase: "bogus" as never })).toThrow();
+	});
+});
+
+describe("buildMockDeviceModes", () => {
+	test("default is schema-valid with the HDMI + USB groups", () => {
+		const modes = buildMockDeviceModes();
+		expect(mockDeviceModesSchema.safeParse(modes).success).toBe(true);
+		expect(Object.keys(modes)).toEqual(["hdmi", "usb"]);
+		expect(modes.hdmi).toEqual({
+			kind: "hdmi",
+			modes: [
+				{
+					width: 1920,
+					height: 1080,
+					framerates: [30, 60],
+					media_type: "video/x-raw",
+				},
+				{
+					width: 3840,
+					height: 2160,
+					framerates: [30],
+					media_type: "video/x-raw",
+				},
+			],
+		});
+	});
+
+	test("overrides replace a group by input_id and add new ones", () => {
+		const modes = buildMockDeviceModes({
+			usb: {
+				kind: "mjpeg",
+				modes: [{ width: 640, height: 480, framerates: [30] }],
+			},
+		});
+		expect(modes.usb).toEqual({
+			kind: "mjpeg",
+			modes: [{ width: 640, height: 480, framerates: [30] }],
+		});
+		expect(modes.hdmi?.kind).toBe("hdmi");
+	});
+
+	test("returns an independent clone of the default fixture", () => {
+		const built = buildMockDeviceModes();
+		built.hdmi?.modes.push({ width: 1, height: 1, framerates: [1] });
+		expect(buildMockDeviceModes().hdmi?.modes).toHaveLength(2);
+	});
+
+	test("throws on an out-of-range width at the build site", () => {
+		expect(() =>
+			buildMockDeviceModes({
+				bad: { modes: [{ width: -1, height: 1080, framerates: [30] }] },
+			}),
+		).toThrow();
 	});
 });
 

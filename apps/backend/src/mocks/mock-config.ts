@@ -6,6 +6,7 @@
 // Type-only import on purpose: mock-schemas imports these fixtures at runtime,
 // so a value import here would create a module cycle. `satisfies` below turns
 // fixture/schema drift into a compile error.
+import type { DeviceModeGroup } from "@ceraui/rpc/schemas";
 import type {
 	MockModemConfig,
 	MockWifiNetwork,
@@ -37,6 +38,10 @@ export interface ScenarioCapabilities {
 	transports?: readonly string[];
 	// forces a schema_version skew → schemaVersionMismatch flag (test seam only)
 	schemaVersionMismatch?: boolean;
+	// Per-device capture modes advertised (device_modes). Only ever set via the
+	// setMockEngineCapabilities({ deviceModes }) override — the per-scenario
+	// default is derived from `fullProfile` in getMockEngineDevices().
+	deviceModes?: Record<string, DeviceModeGroup>;
 }
 
 export interface ScenarioConfig {
