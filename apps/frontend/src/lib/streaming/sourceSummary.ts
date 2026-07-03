@@ -7,12 +7,19 @@
  * single-vs-multiple audio rendering decision and the capability summary can be
  * unit-tested in isolation, and the component stays presentational.
  */
+import { intersectCaps, type VideoSourceCap } from "@ceraui/rpc";
 import type {
 	ActiveEncode,
 	CapabilitiesMessage,
 	ConfigMessage,
 } from "@ceraui/rpc/schemas";
 import { fromEngineResolution } from "@ceraui/rpc/schemas";
+
+import {
+	axisCeiling,
+	resolveDeviceModes,
+	STREAMING_MODE,
+} from "$lib/components/streaming/ValidationAdapter";
 
 /**
  * How the audio-source control should render:
@@ -43,31 +50,96 @@ export function resolveDisplayedAudioSource(
 	return selected || undefined;
 }
 
-/** Compact, structured capability summary for the active source's platform. */
+/** Compact, structured capability summary for the ACTIVE source (Todo 11). */
 export interface CapabilitySummary {
-	/** Platform max resolution token (e.g. `1080p`, `4k`) — already display-ready. */
+	/**
+	 * Max resolution token (e.g. `1080p`, `2160p`) — the ACTIVE source's real
+	 * ceiling (its device modes when present, else its platform-intersected
+	 * override ceiling), falling back to the platform maximum only when no source
+	 * resolves. Already display-ready.
+	 */
 	maxResolution: string | undefined;
-	/** Highest default framerate advertised across the reported sources. */
+	/** Highest framerate the ACTIVE source can drive (platform max on fallback). */
 	maxFramerate: number | undefined;
-	/** Engine encoder codecs (raw tokens, e.g. `h264`, `h265`). */
+	/** Engine encoder codecs (raw tokens, e.g. `h264`, `h265`) — encoder-level. */
 	codecs: string[];
 	/** Whether the encode path is hardware-accelerated on this board. */
 	hardwareAccelerated: boolean;
-	/** Whether at least one reported source exposes audio capture. */
+	/** Whether the ACTIVE source exposes audio capture (any source on fallback). */
 	audioSupported: boolean;
 }
 
 /**
- * Derive the compact capability summary from the engine capability broadcast.
- * Returns `undefined` when no capabilities have been received yet, so the
- * caller can omit the summary rather than render misleading empty values.
+ * Resolve the ACTIVE source's `VideoSourceCap` from the saved config. The
+ * explicitly selected input wins (matched against the capability `sources[]` ids),
+ * then the configured pipeline. Returns `undefined` when neither resolves to a
+ * reported source — the summary then falls back to platform maxima.
+ */
+function resolveActiveSourceCap(
+	sources: readonly VideoSourceCap[],
+	config: ConfigMessage | undefined,
+): VideoSourceCap | undefined {
+	if (config?.selected_video_input) {
+		const bySelected = sources.find(
+			(s) => s.id === config.selected_video_input,
+		);
+		if (bySelected) return bySelected;
+	}
+	if (config?.pipeline) {
+		return sources.find((s) => s.id === config.pipeline);
+	}
+	return undefined;
+}
+
+/**
+ * Derive the compact capability summary from the engine capability broadcast and
+ * the saved config. Returns `undefined` when no capabilities have been received
+ * yet, so the caller can omit the summary rather than render misleading empty
+ * values.
+ *
+ * Todo 11 — the chip ceiling is ACTIVE-SOURCE-truthful: when the configured
+ * source resolves, `maxResolution`/`maxFramerate` reflect THAT source's real
+ * ceiling (its `device_modes` intersected with the platform via the same
+ * {@link intersectCaps}/{@link axisCeiling} path the EncoderDialog uses), and
+ * `audioSupported` reflects THAT source's `supports_audio` — never "any source".
+ * When no source resolves, it preserves the original platform-maxima behavior as
+ * the fallback branch. Codecs stay encoder-level in both branches.
  */
 export function deriveCapabilitySummary(
 	caps: CapabilitiesMessage | undefined,
+	config?: ConfigMessage | undefined,
 ): CapabilitySummary | undefined {
 	if (!caps) return undefined;
 
 	const sources = caps.sources ?? [];
+	const codecs = caps.encoder?.codecs ?? [];
+	const hardwareAccelerated = caps.platform?.hardware_accelerated ?? false;
+
+	const activeSource = resolveActiveSourceCap(sources, config);
+
+	if (activeSource) {
+		const deviceModes = resolveDeviceModes(
+			caps.device_modes,
+			config?.pipeline,
+			config?.selected_video_input,
+		);
+		const offered = intersectCaps(
+			caps.platform,
+			activeSource,
+			STREAMING_MODE,
+			deviceModes,
+		);
+		const ceiling = axisCeiling({ offered, deviceModes });
+		return {
+			maxResolution:
+				ceiling.resolution ?? (activeSource.default_resolution || undefined),
+			maxFramerate: ceiling.framerate ?? (activeSource.default_framerate || undefined),
+			codecs,
+			hardwareAccelerated,
+			audioSupported: activeSource.supports_audio,
+		};
+	}
+
 	const framerates = sources
 		.map((s) => s.default_framerate)
 		.filter(
@@ -77,8 +149,8 @@ export function deriveCapabilitySummary(
 	return {
 		maxResolution: caps.platform?.max_resolution || undefined,
 		maxFramerate: framerates.length ? Math.max(...framerates) : undefined,
-		codecs: caps.encoder?.codecs ?? [],
-		hardwareAccelerated: caps.platform?.hardware_accelerated ?? false,
+		codecs,
+		hardwareAccelerated,
 		audioSupported: sources.some((s) => s.supports_audio),
 	};
 }

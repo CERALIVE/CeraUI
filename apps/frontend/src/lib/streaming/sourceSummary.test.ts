@@ -118,6 +118,71 @@ describe("deriveCapabilitySummary — res/fps/codec/audio (Task 8)", () => {
 	});
 });
 
+describe("deriveCapabilitySummary — active-source truthfulness (Todo 11)", () => {
+	const CAPS_4K_USB: CapabilitiesMessage = {
+		platform: {
+			supports_h265: true,
+			hardware_accelerated: true,
+			max_resolution: "4k",
+		},
+		encoder: {
+			codecs: ["h264", "h265"],
+			bitrate_range: { min: 500, max: 50000, unit: "kbps" },
+		},
+		sources: [
+			{
+				id: "usb",
+				supports_audio: false,
+				supports_resolution_override: true,
+				supports_framerate_override: true,
+				default_resolution: "1080p",
+				default_framerate: 60,
+			},
+		],
+		device_modes: {
+			"/dev/video0": {
+				kind: "uvc_h264",
+				modes: [{ width: 1920, height: 1080, framerates: [30, 60] }],
+			},
+		},
+	};
+
+	it("shows the ACTIVE source's real ceiling (usb 1080p@60 on a 4K platform → 1080p/60, not 2160p)", () => {
+		const config: ConfigMessage = {
+			pipeline: "usb",
+			selected_video_input: "/dev/video0",
+		};
+		const summary = deriveCapabilitySummary(CAPS_4K_USB, config);
+		expect(summary?.maxResolution).toBe("1080p");
+		expect(summary?.maxFramerate).toBe(60);
+		expect(summary?.audioSupported).toBe(false);
+	});
+
+	it("normalizes an override-capable active source to the platform ceiling (hdmi on 4K → 2160p)", () => {
+		const config: ConfigMessage = { selected_video_input: "hdmi" };
+		const summary = deriveCapabilitySummary(CAPS, config);
+		expect(summary?.maxResolution).toBe("2160p");
+		expect(summary?.maxFramerate).toBe(60);
+		expect(summary?.audioSupported).toBe(true);
+	});
+
+	it("audioSupported reflects the ACTIVE source (uvc_h264 no-audio), never 'any source' (hdmi has audio)", () => {
+		const config: ConfigMessage = { selected_video_input: "uvc_h264" };
+		const summary = deriveCapabilitySummary(CAPS, config);
+		expect(summary?.audioSupported).toBe(false);
+		expect(summary?.maxResolution).toBe("720p");
+		expect(summary?.maxFramerate).toBe(30);
+	});
+
+	it("falls back to platform maxima when the config resolves no reported source", () => {
+		const config: ConfigMessage = { selected_video_input: "not-a-source" };
+		const summary = deriveCapabilitySummary(CAPS, config);
+		expect(summary?.maxResolution).toBe("4k");
+		expect(summary?.maxFramerate).toBe(60);
+		expect(summary?.audioSupported).toBe(true);
+	});
+});
+
 describe("formatCodec", () => {
 	it("maps known codec tokens to human labels", () => {
 		expect(formatCodec("h264")).toBe("H.264");

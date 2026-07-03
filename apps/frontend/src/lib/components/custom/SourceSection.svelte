@@ -93,7 +93,7 @@ let {
 }: Props = $props();
 
 // Capability summary (res / fps / codec / audio) — compact, telemetry-style.
-const summary = $derived(deriveCapabilitySummary(capabilities));
+const summary = $derived(deriveCapabilitySummary(capabilities, config));
 const capChips = $derived.by(() => {
 	if (!summary) return [] as string[];
 	const chips: string[] = [];
@@ -164,9 +164,9 @@ const hasLostDevice = $derived(lostDevices.length > 0);
 				>
 					<span
 						class="text-muted-foreground text-[0.65rem] font-semibold tracking-wide uppercase"
-						data-testid="cap-device-max"
-					>
-						{$LL.live.source.deviceMax()}
+					data-testid="cap-device-max"
+				>
+					{$LL.live.source.sourceMax()}
 					</span>
 					<InfoPopover
 						body={$LL.live.education.field.mode.body()}

@@ -507,7 +507,7 @@ const en = {
 			none: "No source selected",
 			select: "Select a source",
 			capabilities: "Capabilities",
-			deviceMax: "Device max",
+			sourceMax: "Source max",
 			activeLive: "Live",
 			activeConfigured: "Configured",
 			lostTitle: "Device disconnected",

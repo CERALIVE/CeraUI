@@ -1112,7 +1112,7 @@ const ko = {
 			none: "선택된 소스 없음",
 			select: "소스 선택",
 			capabilities: "지원 기능",
-			deviceMax: "장치 최대값",
+			sourceMax: "소스 최대값",
 			activeLive: "라이브",
 			activeConfigured: "구성됨",
 			lostTitle: "장치 연결 끊김",

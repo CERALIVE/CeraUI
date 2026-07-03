@@ -523,7 +523,7 @@ const es = {
 			none: "Ninguna fuente seleccionada",
 			select: "Seleccionar una fuente",
 			capabilities: "Capacidades",
-			deviceMax: "Máximo del dispositivo",
+			sourceMax: "Máximo de la fuente",
 			activeLive: "En vivo",
 			activeConfigured: "Configurado",
 			lostTitle: "Dispositivo desconectado",

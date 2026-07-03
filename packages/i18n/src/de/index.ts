@@ -522,7 +522,7 @@ const de = {
 			none: "Keine Quelle ausgewählt",
 			select: "Quelle auswählen",
 			capabilities: "Fähigkeiten",
-			deviceMax: "Geräte-Maximum",
+			sourceMax: "Quellen-Maximum",
 			activeLive: "Live",
 			activeConfigured: "Konfiguriert",
 			lostTitle: "Gerät getrennt",

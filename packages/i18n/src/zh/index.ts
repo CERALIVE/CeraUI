@@ -1054,7 +1054,7 @@ const zh = {
 			none: "未选择来源",
 			select: "选择来源",
 			capabilities: "能力",
-			deviceMax: "设备上限",
+			sourceMax: "源上限",
 			activeLive: "直播中",
 			activeConfigured: "已配置",
 			lostTitle: "设备已断开",

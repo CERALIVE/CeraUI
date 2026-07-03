@@ -1270,7 +1270,7 @@ const ptBR = {
 			none: "Nenhuma fonte selecionada",
 			select: "Selecionar uma fonte",
 			capabilities: "Recursos",
-			deviceMax: "Máximo do dispositivo",
+			sourceMax: "Máximo da fonte",
 			activeLive: "Ao vivo",
 			activeConfigured: "Configurado",
 			lostTitle: "Dispositivo desconectado",

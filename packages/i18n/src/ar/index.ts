@@ -1236,7 +1236,7 @@ const ar = {
 			none: "لم يتم اختيار مصدر",
 			select: "اختر مصدراً",
 			capabilities: "القدرات",
-			deviceMax: "الحد الأقصى للجهاز",
+			sourceMax: "الحد الأقصى للمصدر",
 			activeLive: "مباشر",
 			activeConfigured: "مُهيأ",
 			lostTitle: "الجهاز غير متصل",

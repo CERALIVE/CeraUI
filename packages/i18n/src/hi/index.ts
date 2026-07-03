@@ -1102,7 +1102,7 @@ const hi = {
 			none: "कोई स्रोत नहीं चुना गया",
 			select: "स्रोत चुनें",
 			capabilities: "क्षमताएँ",
-			deviceMax: "डिवाइस अधिकतम",
+			sourceMax: "स्रोत अधिकतम",
 			activeLive: "लाइव",
 			activeConfigured: "कॉन्फ़िगर किया गया",
 			lostTitle: "डिवाइस डिस्कनेक्ट हो गया",

@@ -1295,7 +1295,7 @@ const fr = {
 			none: "Aucune source sélectionnée",
 			select: "Sélectionner une source",
 			capabilities: "Capacités",
-			deviceMax: "Maximum de l'appareil",
+			sourceMax: "Maximum de la source",
 			activeLive: "En direct",
 			activeConfigured: "Configuré",
 			lostTitle: "Appareil déconnecté",

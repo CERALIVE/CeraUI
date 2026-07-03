@@ -1137,7 +1137,7 @@ const ja = {
 			none: "ソースが選択されていません",
 			select: "ソースを選択",
 			capabilities: "対応機能",
-			deviceMax: "デバイスの上限",
+			sourceMax: "ソースの上限",
 			activeLive: "ライブ",
 			activeConfigured: "設定済み",
 			lostTitle: "デバイスが切断されました",
