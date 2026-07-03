@@ -1177,13 +1177,6 @@ const ko = {
 			unavailable: "사용 불가",
 			notConfigured: "구성되지 않음",
 		},
-		presets: {
-			heading: "모드 프리셋",
-			advanced: "고급 / 사용자 지정",
-			applying: "프리셋 적용 중\u2026",
-			applied: "프리셋 적용됨",
-			failed: "프리셋을 적용할 수 없습니다",
-		},
 		encoder: {
 			appliesNextStart: "다음 시작 시 적용",
 			accelerated: "하드웨어",

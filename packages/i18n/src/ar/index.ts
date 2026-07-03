@@ -1302,13 +1302,6 @@ const ar = {
 			unavailable: "غير متاح",
 			notConfigured: "غير مُهيأ",
 		},
-		presets: {
-			heading: "أوضاع جاهزة",
-			advanced: "متقدّم / مخصّص",
-			applying: "جارٍ تطبيق الإعداد\u2026",
-			applied: "تم تطبيق الإعداد",
-			failed: "تعذّر تطبيق الإعداد",
-		},
 		encoder: {
 			appliesNextStart: "يُطبَّق عند البدء التالي",
 			accelerated: "عتاد",

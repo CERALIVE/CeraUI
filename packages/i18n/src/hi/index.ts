@@ -1167,13 +1167,6 @@ const hi = {
 			unavailable: "अनुपलब्ध",
 			notConfigured: "कॉन्फ़िगर नहीं किया गया",
 		},
-		presets: {
-			heading: "मोड प्रीसेट",
-			advanced: "उन्नत / कस्टम",
-			applying: "प्रीसेट लागू हो रहा है\u2026",
-			applied: "प्रीसेट लागू किया गया",
-			failed: "प्रीसेट लागू नहीं किया जा सका",
-		},
 		encoder: {
 			appliesNextStart: "अगली बार शुरू होने पर लागू होगा",
 			accelerated: "हार्डवेयर",

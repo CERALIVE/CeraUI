@@ -1204,13 +1204,6 @@ const ja = {
 			unavailable: "利用不可",
 			notConfigured: "未設定",
 		},
-		presets: {
-			heading: "モードプリセット",
-			advanced: "詳細 / カスタム",
-			applying: "プリセットを適用中\u2026",
-			applied: "プリセットを適用しました",
-			failed: "プリセットを適用できませんでした",
-		},
 		encoder: {
 			appliesNextStart: "次回の開始時に適用",
 			accelerated: "ハードウェア",

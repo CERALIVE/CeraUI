@@ -572,13 +572,6 @@ const en = {
 			unavailable: "Unavailable",
 			notConfigured: "Not configured",
 		},
-		presets: {
-			heading: "Mode presets",
-			advanced: "Advanced / Custom",
-			applying: "Applying preset\u2026",
-			applied: "Preset applied",
-			failed: "Couldn't apply preset",
-		},
 		encoder: {
 			appliesNextStart: "Applies on next start",
 			accelerated: "Hardware",

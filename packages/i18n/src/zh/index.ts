@@ -1119,13 +1119,6 @@ const zh = {
 			unavailable: "不可用",
 			notConfigured: "未配置",
 		},
-		presets: {
-			heading: "模式预设",
-			advanced: "高级 / 自定义",
-			applying: "正在应用预设\u2026",
-			applied: "已应用预设",
-			failed: "无法应用预设",
-		},
 		encoder: {
 			appliesNextStart: "将在下次启动时应用",
 			accelerated: "硬件",

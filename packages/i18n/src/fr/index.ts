@@ -1361,13 +1361,6 @@ const fr = {
 			unavailable: "Indisponible",
 			notConfigured: "Non configuré",
 		},
-		presets: {
-			heading: "Préréglages de mode",
-			advanced: "Avancé / Personnalisé",
-			applying: "Application du préréglage\u2026",
-			applied: "Préréglage appliqué",
-			failed: "Impossible d'appliquer le préréglage",
-		},
 		encoder: {
 			appliesNextStart: "Appliqué au prochain démarrage",
 			accelerated: "Matériel",

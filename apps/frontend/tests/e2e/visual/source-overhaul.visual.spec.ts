@@ -8,7 +8,7 @@ import { ensureAuthenticated, navigateTo, setLocale } from "../helpers/index.js"
 /**
  * @visual evidence for the Track-1 source-experience overhaul (Task 15).
  *
- * Captures the three overhauled surfaces — the mode-preset-led encoder dialog,
+ * Captures the three overhauled surfaces — the capability-first encoder dialog,
  * the unified Source section, and the calm coming-soon affordances — across the
  * four conditions the overhaul must hold up in: desktop, mobile, the kiosk
  * 1024×600 panel, and a RTL (Arabic) locale. One PNG per surface per condition,
@@ -149,19 +149,19 @@ for (const condition of CONDITIONS) {
 			);
 		});
 
-		test("preset surface", { tag: "@visual" }, async ({ page }) => {
+		test("encoder surface", { tag: "@visual" }, async ({ page }) => {
 			const trigger = page.getByTestId("open-encoder-dialog");
 			await expect(trigger).toBeVisible({ timeout: 20_000 });
 			await trigger.click();
 
 			// Locate the open dialog by role (NOT the title — it is localized, so an
-			// English name fails under the RTL/ar profile); the mode-preset grid is
-			// the lead surface, so wait on it before capturing.
+			// English name fails under the RTL/ar profile); the capability-gated
+			// bitrate control always renders, so wait on it before capturing.
 			const dialog = page.getByRole("dialog").first();
 			await expect(dialog).toBeVisible();
-			await expect(dialog.getByTestId("mode-presets")).toBeVisible();
+			await expect(dialog.getByTestId("encoder-bitrate-control")).toBeVisible();
 
-			await dialog.screenshot({ path: evidence("preset") });
+			await dialog.screenshot({ path: evidence("encoder") });
 		});
 
 		test("unified source surface", { tag: "@visual" }, async ({ page }) => {

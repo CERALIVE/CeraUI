@@ -588,13 +588,6 @@ const de = {
 			unavailable: "Nicht verfügbar",
 			notConfigured: "Nicht konfiguriert",
 		},
-		presets: {
-			heading: "Modus-Voreinstellungen",
-			advanced: "Erweitert / Benutzerdefiniert",
-			applying: "Voreinstellung wird angewendet\u2026",
-			applied: "Voreinstellung angewendet",
-			failed: "Voreinstellung konnte nicht angewendet werden",
-		},
 		encoder: {
 			appliesNextStart: "Wird beim nächsten Start übernommen",
 			accelerated: "Hardware",

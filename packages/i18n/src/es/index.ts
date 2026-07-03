@@ -590,13 +590,6 @@ const es = {
 			unavailable: "No disponible",
 			notConfigured: "No configurado",
 		},
-		presets: {
-			heading: "Modos predefinidos",
-			advanced: "Avanzado / Personalizado",
-			applying: "Aplicando preajuste\u2026",
-			applied: "Preajuste aplicado",
-			failed: "No se pudo aplicar el preajuste",
-		},
 		encoder: {
 			appliesNextStart: "Se aplica al próximo inicio",
 			accelerated: "Hardware",

@@ -1336,13 +1336,6 @@ const ptBR = {
 			unavailable: "Indisponível",
 			notConfigured: "Não configurado",
 		},
-		presets: {
-			heading: "Predefinições de modo",
-			advanced: "Avançado / Personalizado",
-			applying: "Aplicando predefinição\u2026",
-			applied: "Predefinição aplicada",
-			failed: "Não foi possível aplicar a predefinição",
-		},
 		encoder: {
 			appliesNextStart: "Aplica-se no próximo início",
 			accelerated: "Hardware",
