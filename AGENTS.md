@@ -532,6 +532,29 @@ capability tables that previously lived in `pipeline-sources.ts` are removed. Al
 capability data is now derived from the `get-capabilities` response at runtime. Do not
 re-add static board tables; the contract is the single source of truth.
 
+**Capability-first live experience [EXISTS].** The capability-first-live-experience
+track deepened the contract to Tier-2 per-device modes and dropped the preset shortcut:
+
+- The `capabilities` broadcast now carries per-device `device_modes` (folded from the
+  engine `list-devices` `caps[]` in `capabilities.ts`, keyed by `input_id`, framerates
+  normalized to rungs and bitrate normalized to kbps at ONE seam) plus
+  `network_embedded_audio`. The offered set is now `platform ∩ active-source ∩ Tier-2
+  device modes`; with `device_modes` absent it degrades to the coarse offering
+  (old-engine fallback), never a fully-disabled axis set.
+- The `status` broadcast carries a typed `audio_sources` list (`deriveAudioSources`)
+  beside the legacy `asrcs` — pseudo-sources (`No audio`/`Pipeline default`) carry a
+  `labelKey`; device entries stay untranslated. `config.asrc` wire value is unchanged.
+- The mode-preset catalog is fully removed (`CANONICAL_PRESETS`/`modePresets.ts`/the
+  `data-testid="mode-presets"` grid/`live.presets.*` keys are gone). `EncoderDialog` is
+  now capability-first with independent, disabled-with-reason axes; `SourceSection`
+  surfaces rtmp/srt LAN ingest as first-class source rows (`source-network-ingest-*`,
+  with `NetworkIngestSection` the detailed QR/instructions card), and an rtmp/srt
+  pipeline's embedded audio (`network_embedded_audio` + pipeline `audio_kind:
+  'embedded'`) renders the read-only "Embedded audio" state, else a `TD-embedded-audio`
+  coming-soon pill.
+- The rendered-DOM truth of all of the above is locked by the capability-truthfulness
+  e2e gate (`apps/frontend/tests/e2e/truthfulness.spec.ts`) — extend it, don't fork it.
+
 **Source-experience overhaul [EXISTS].** The Live destination's source-selection,
 encoder-configuration, and server-destination surfaces were overhauled as part of the
 ceraui-source-experience / ceraui-receiver-experience tracks (Tasks 1–16). New

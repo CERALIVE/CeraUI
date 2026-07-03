@@ -176,6 +176,27 @@ resolved_at: null
 unblock: A network-ingest (rtmp/srt) publish carries its own muxed audio, but the engine can only route that embedded audio when it advertises the network_embedded_audio capability (cerastream Task 21). Until an engine advertising it is deployed, the Live audio picker keeps the legacy selectable-ALSA path for rtmp/srt pipelines and surfaces a calm coming-soon affordance (data-debt-id="TD-embedded-audio") next to the audio source. When the deployed engine advertises network_embedded_audio=true, the backend skips asrcProbe + omits audio.device and the frontend renders the read-only "Embedded audio" state; remove the coming-soon affordance and flip this entry to resolved.
 ```
 
+```debt
+id: TD-gateway-b2-fleet-window
+title: Dual-topology SRT gateway probe (B2 fleet-transition tolerance)
+track: 1
+status: open
+exit_criteria: `bun run --filter backend test -- network-ingest.test.ts`
+owner: ceraui-team
+registered_at: 2026-07-03
+resolved_at: null
+unblock: The B2 gateway consolidation (image-building-pipeline: MediaMTX terminates RTMP :1935 + SRT :4001; srt-live-transmit removed) transitions the fleet across two SRT topologies. resolveSrtTopology (apps/backend/src/modules/network/network-ingest.ts) therefore tolerates BOTH the OLD standalone ceralive-srt-gateway.service and the NEW MediaMTX-terminated SRT (parsed from /etc/mediamtx.yml). Once every fleet device has run the B2 image for the full 6-month support window (no device still on the srt-live-transmit topology), remove the OLD-topology branch (srtUnitActive) from resolveSrtTopology plus its network-ingest.test.ts cases, then flip this entry to resolved. This is a backend-only probe simplification and carries no source data-debt-id marker.
+```
+
+> **Cross-repo follow-up (not CeraUI debt): RTMP-ingest unification.** The B2 SRT
+> ingest is now a loopback `srtsrc`-caller pull; RTMP ingest deliberately STAYS on
+> the existing `rtmpsrc` loopback in this plan. A possible future unification
+> (MediaMTX remuxes RTMP→TS so cerastream pulls a single SRT code path, trading
+> enhanced-RTMP codec coverage for one ingest path) is documented — not
+> implemented — in the cerastream repo at `docs/notes/rtmp-srt-pull.md`. It is a
+> cerastream (track-2) follow-up with no CeraUI marker, so it is recorded here as a
+> cross-reference only, NOT a `debt` register entry.
+
 ## Resolved Debt
 
 ```debt

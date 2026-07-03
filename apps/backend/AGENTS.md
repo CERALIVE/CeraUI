@@ -246,13 +246,13 @@ The backend pushes typed events to all connected clients via `rpc/events.ts`. Ea
 | `sensors` | 1 s | `modules/system/sensors.ts` |
 | `gateways` | 2 s | `modules/network/gateways.ts` |
 | `modems` | 30 s | `modules/modems/modem-update-loop.ts` |
-| `status` | on-change + 5 s | streaming state transitions; carries `linkTelemetry` |
+| `status` | on-change + 5 s | streaming state transitions; carries `linkTelemetry`, `network_ingest`, and the typed `audio_sources` beside legacy `asrcs` |
 | `config` | on-change | `setConfig` / `start` / `stop` |
 | `wifi` | on-change | WiFi scan / connect / disconnect |
 | `relays` | on-change | relay list mutations |
 | `acodecs` | on-change | audio codec list changes |
-| `pipelines` | on-change | pipeline list changes |
-| `capabilities` | post-login snapshot | engine capability contract; carries `transports` (relay transports the engine can honor) |
+| `pipelines` | on-change | pipeline list changes; each entry carries `requires_gateway` (rtmp/srt) + `audio_kind` (`selectable`/`embedded`/`none`) |
+| `capabilities` | post-login snapshot | engine capability contract; carries `transports`, per-device `device_modes` (Tier-2 caps folded from `list-devices`, kbps-normalized bitrate), and `network_embedded_audio` |
 | `notifications` | on-demand | user-facing toast events |
 | `log` | on-demand | `system.getLog` / `system.getSyslog` — diagnostic journal for download |
 | `ping` | 5 s | heartbeat emitter |
