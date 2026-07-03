@@ -140,6 +140,51 @@ describe("SourceSection — audio source single vs multiple (Task 8)", () => {
 	});
 });
 
+describe("SourceSection — configured-but-unavailable audio source (Todo 2)", () => {
+	it("renders the configured value as a visible unavailable entry (no orphan)", () => {
+		const { container } = mount({
+			audioSources: ["No audio", "Pipeline default"],
+			selectedAudioSource: "USB audio",
+		});
+		// Multiple reported sources → selectable; the configured "USB audio" is not
+		// among them but must still be shown, marked unavailable (never an orphan).
+		const select = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-select"]',
+		);
+		expect(select).not.toBeNull();
+		const marker = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-unavailable"]',
+		);
+		expect(marker).not.toBeNull();
+		expect(marker?.textContent).toContain("USB audio");
+	});
+
+	it("shows no unavailable marker when the configured source is reported", () => {
+		const { container } = mount({
+			audioSources: ["USB audio", "Pipeline default"],
+			selectedAudioSource: "USB audio",
+		});
+		expect(
+			container.querySelector('[data-testid="audio-source-unavailable"]'),
+		).toBeNull();
+	});
+
+	it("marks an absent configured source unavailable in the read-only (streaming) branch", () => {
+		const { container } = mount({
+			audioSources: ["No audio", "Pipeline default"],
+			selectedAudioSource: "USB audio",
+			isStreaming: true,
+		});
+		const readonly = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-readonly"]',
+		);
+		expect(readonly?.textContent).toContain("USB audio");
+		expect(
+			container.querySelector('[data-testid="audio-source-unavailable"]'),
+		).not.toBeNull();
+	});
+});
+
 describe("SourceSection — lost device explanation (Task 8)", () => {
 	it("shows an explicit lost-device banner (badge + body) when a device is lost", () => {
 		const lost = DEVICES.map((d) =>

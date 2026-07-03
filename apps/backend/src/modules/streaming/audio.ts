@@ -56,8 +56,36 @@ let audioDevices: Record<string, string> = {};
 addAudioCardById(audioDevices, NO_AUDIO_ID);
 addAudioCardById(audioDevices, DEFAULT_AUDIO_ID);
 
+// Dev/e2e seam merged into the list WITHOUT touching the real /sys/class/sound
+// scan; injected at boot under shouldUseMocks(), unset (no-op) in production.
+let mockAudioDevicesProvider: (() => Record<string, string>) | undefined;
+
+export function setMockAudioDevicesProvider(
+	provider: (() => Record<string, string>) | undefined,
+): void {
+	mockAudioDevicesProvider = provider;
+}
+
 export function getAudioDevices() {
+	const mock = mockAudioDevicesProvider?.();
+	if (mock && Object.keys(mock).length > 0) {
+		return { ...mock, ...audioDevices };
+	}
 	return audioDevices;
+}
+
+// Warn-only (NEVER mutate): a real device may hotplug the named asrc later
+// (see `asrcProbe`), so the operator's selection is preserved verbatim.
+export function warnIfConfiguredAudioSourceUnavailable(
+	asrc: string | undefined,
+): void {
+	if (!asrc) return;
+	const devices = getAudioDevices();
+	if (asrc in devices) return;
+	logger.warn(
+		`Configured audio source '${asrc}' is not in the current device list; leaving config.asrc unchanged (a real device may hotplug it later).`,
+		{ asrc, available: Object.keys(devices) },
+	);
 }
 
 function getAudioSrcName(id: string) {

@@ -125,6 +125,13 @@ const audioMode = $derived(resolveAudioSourceMode(audioSources));
 const displayedAudioSource = $derived(
 	resolveDisplayedAudioSource(selectedAudioSource, audioSources),
 );
+// Configured source the pipeline no longer reports: always keep it a VISIBLE
+// (marked-unavailable) entry so the control never shows an orphan value.
+const notAvailableAudioSource = $derived(
+	displayedAudioSource && !audioSources.includes(displayedAudioSource)
+		? displayedAudioSource
+		: undefined,
+);
 // Live audio switch is gated (Task 10): force read-only while streaming.
 const audioReadOnly = $derived(audioMode === 'single' || isStreaming);
 const audioComingSoon = $derived(isStreaming && audioMode === 'multiple');
@@ -279,12 +286,20 @@ const hasLostDevice = $derived(lostDevices.length > 0);
 			{:else if audioReadOnly}
 				<!-- Single source, or streaming (live switch gated) → read-only. -->
 				<div
-					class="bg-muted/40 flex min-h-11 items-center rounded-lg border px-3 py-2"
+					class="bg-muted/40 flex min-h-11 flex-wrap items-center gap-x-2 rounded-lg border px-3 py-2"
 					data-testid="audio-source-readonly"
 				>
 					<span class="truncate font-mono text-sm">
 						{displayedAudioSource ?? $LL.live.source.audioNone()}
 					</span>
+					{#if notAvailableAudioSource}
+						<span
+							class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
+							data-testid="audio-source-unavailable"
+						>
+							{$LL.settings.notAvailableAudioSource()}
+						</span>
+					{/if}
 				</div>
 			{:else}
 				<!-- Multiple sources, pre-start → selectable. -->
@@ -298,13 +313,25 @@ const hasLostDevice = $derived(lostDevices.length > 0);
 						data-testid="audio-source-select"
 						id="sourceAudioSelect"
 					>
-						{displayedAudioSource ?? $LL.settings.selectAudioSource()}
+						{#if notAvailableAudioSource}
+							<span data-testid="audio-source-unavailable">
+								{`${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
+							</span>
+						{:else}
+							{displayedAudioSource ?? $LL.settings.selectAudioSource()}
+						{/if}
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
 							{#each audioSources as source (source)}
 								<Select.Item label={source} value={source}></Select.Item>
 							{/each}
+							{#if notAvailableAudioSource}
+								<Select.Item
+									label={`${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
+									value={notAvailableAudioSource}
+								></Select.Item>
+							{/if}
 						</Select.Group>
 					</Select.Content>
 				</Select.Root>

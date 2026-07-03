@@ -72,6 +72,12 @@ export async function loadConfig() {
 
 	logger.debug("config loaded", config);
 
+	// Lazy import breaks the config↔audio cycle (audio.ts imports getConfig).
+	const { warnIfConfiguredAudioSourceUnavailable } = await import(
+		"./streaming/audio.ts"
+	);
+	warnIfConfiguredAudioSourceUnavailable(config.asrc);
+
 	// Extract and set password hashes (they're stored separately for security)
 	setPasswordHash(config.password_hash);
 	setSshPasswordHash(config.ssh_pass_hash);

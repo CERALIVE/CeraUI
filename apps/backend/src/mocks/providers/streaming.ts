@@ -21,8 +21,11 @@ import {
 } from "../../modules/streaming/capabilities.ts";
 import type { LinkTelemetryMessage } from "../../modules/streaming/link-telemetry.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
+import { buildMockAudioDevices } from "../fixture-factory.ts";
 import { mockWifiRadios, type ScenarioCapabilities } from "../mock-config.ts";
+import type { MockAudioDevices } from "../mock-schemas.ts";
 import {
+	getActiveScenario,
 	getMockState,
 	getScenarioConfig,
 	getStreamingStats,
@@ -120,6 +123,29 @@ export function getMockEngineCapabilities(): EngineCapabilitiesSnapshot {
 		: SCHEMA_VERSION;
 
 	return { caps, schemaVersion, transports };
+}
+
+/**
+ * Scenario-seeded ALSA audio devices for dev/e2e, wired into `getAudioDevices()`
+ * (audio.ts) via `setMockAudioDevicesProvider` at boot. Seeds a coherent
+ * `{ "USB audio": "usbaudio" }` (plus HDMI on caps-full) IN ADDITION to the two
+ * pseudo-sources, so `status.asrcs` contains the configured `asrc` without a real
+ * `/sys/class/sound` scan. Empty (no seed) for the minimal/engine-down scenarios
+ * and in production (`shouldUseMocks()` false).
+ */
+export function getMockAudioDevices(): MockAudioDevices {
+	if (!shouldUseMocks()) {
+		return {};
+	}
+	switch (getActiveScenario()) {
+		case "caps-full":
+			return buildMockAudioDevices({ HDMI: "rockchiphdmiin" });
+		case "multi-modem-wifi":
+		case "streaming-active":
+			return buildMockAudioDevices();
+		default:
+			return {};
+	}
 }
 
 /**

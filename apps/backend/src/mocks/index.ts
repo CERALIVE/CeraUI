@@ -7,6 +7,7 @@
 export {
 	buildMockAddonDescriptor,
 	buildMockAddonState,
+	buildMockAudioDevices,
 	buildMockKioskToken,
 	buildMockModem,
 	buildMockRelay,
@@ -80,6 +81,7 @@ export {
 	formatMockStreamingStats,
 	getInjectedMockStreamError,
 	getMockActiveEncode,
+	getMockAudioDevices,
 	getMockBcrpStatus,
 	getMockBitrateData,
 	getMockEncoderInfo,

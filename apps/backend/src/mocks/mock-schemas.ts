@@ -118,6 +118,13 @@ export const mockWifiNetworkSchema = z.object({
 });
 export type MockWifiNetwork = z.infer<typeof mockWifiNetworkSchema>;
 
+/** Mirrors the `getAudioDevices()` map — `displayName → alsaId` (e.g. `{ "USB audio": "usbaudio" }`). */
+export const mockAudioDevicesSchema = z.record(
+	z.string().min(1),
+	z.string().min(1),
+);
+export type MockAudioDevices = z.infer<typeof mockAudioDevicesSchema>;
+
 // ─── Runtime mock-state schemas ──────────────────────────────────────────────
 // These describe the mutable session-state slots seeded by `initMockService`.
 

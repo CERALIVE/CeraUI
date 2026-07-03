@@ -38,11 +38,13 @@ import {
 	MOCK_SIM_PUK_RETRIES,
 } from "./mock-constants.ts";
 import {
+	type MockAudioDevices,
 	type MockKioskToken,
 	type MockModemConfig,
 	type MockSimState,
 	type MockWifiNetwork,
 	type MockWifiRadio,
+	mockAudioDevicesSchema,
 	mockKioskTokenSchema,
 	mockModemConfigSchema,
 	mockSimStateSchema,
@@ -97,6 +99,10 @@ const DEFAULT_SIM_STATE = {
 	pinRetries: MOCK_SIM_PIN_RETRIES,
 	pukRetries: MOCK_SIM_PUK_RETRIES,
 } satisfies MockSimState;
+
+const DEFAULT_AUDIO_DEVICES = {
+	"USB audio": "usbaudio",
+} satisfies MockAudioDevices;
 
 // ─── Builders ────────────────────────────────────────────────────────────────
 
@@ -162,4 +168,14 @@ export function buildMockSimState(
 	overrides: Partial<MockSimState> = {},
 ): MockSimState {
 	return mockSimStateSchema.parse({ ...DEFAULT_SIM_STATE, ...overrides });
+}
+
+/** Build a schema-valid mock audio-device map (defaults = the USB-audio seed). */
+export function buildMockAudioDevices(
+	overrides: MockAudioDevices = {},
+): MockAudioDevices {
+	return mockAudioDevicesSchema.parse({
+		...DEFAULT_AUDIO_DEVICES,
+		...overrides,
+	});
 }
