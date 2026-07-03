@@ -195,7 +195,8 @@ export function deriveCapabilitySummary(
 		return {
 			maxResolution:
 				ceiling.resolution ?? (activeSource.default_resolution || undefined),
-			maxFramerate: ceiling.framerate ?? (activeSource.default_framerate || undefined),
+			maxFramerate:
+				ceiling.framerate ?? (activeSource.default_framerate || undefined),
 			codecs,
 			hardwareAccelerated,
 			audioSupported: activeSource.supports_audio,
