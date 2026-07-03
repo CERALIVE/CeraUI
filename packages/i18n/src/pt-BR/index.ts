@@ -1587,6 +1587,12 @@ const ptBR = {
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
 	},
+	audio: {
+		sources: {
+			noAudio: "Sem áudio",
+			pipelineDefault: "Padrão do pipeline",
+		},
+	},
 } satisfies Translation;
 
 export default ptBR;

@@ -1528,6 +1528,12 @@ const hi = {
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
 	},
+	audio: {
+		sources: {
+			noAudio: "कोई ऑडियो नहीं",
+			pipelineDefault: "पाइपलाइन डिफ़ॉल्ट",
+		},
+	},
 } satisfies Translation;
 
 export default hi;

@@ -1566,6 +1566,12 @@ const en = {
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
 	},
+	audio: {
+		sources: {
+			noAudio: "No audio",
+			pipelineDefault: "Pipeline default",
+		},
+	},
 } satisfies BaseTranslation;
 
 export default en;

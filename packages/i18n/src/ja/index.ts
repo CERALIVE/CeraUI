@@ -1578,6 +1578,12 @@ const ja = {
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
 	},
+	audio: {
+		sources: {
+			noAudio: "音声なし",
+			pipelineDefault: "パイプラインの既定値",
+		},
+	},
 } satisfies Translation;
 
 export default ja;

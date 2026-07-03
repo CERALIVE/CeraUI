@@ -1541,6 +1541,12 @@ const ko = {
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
 	},
+	audio: {
+		sources: {
+			noAudio: "오디오 없음",
+			pipelineDefault: "파이프라인 기본값",
+		},
+	},
 } satisfies Translation;
 
 export default ko;

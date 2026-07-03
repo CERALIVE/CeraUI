@@ -16,6 +16,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import type { AudioSource } from "@ceraui/rpc/schemas";
 import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";
@@ -88,6 +89,27 @@ export function warnIfConfiguredAudioSourceUnavailable(
 	);
 }
 
+// `id` MUST equal the device-map key (the asrc wire string) so it stays byte-equal
+// to the matching `asrcs` entry and `config.asrc` semantics are unchanged. Only the
+// two pseudo-sources carry a `labelKey`; hardware device names are never translated.
+export function deriveAudioSources(
+	devices: Record<string, string> = getAudioDevices(),
+): AudioSource[] {
+	return Object.keys(devices).map((name): AudioSource => {
+		if (name === NO_AUDIO_ID) {
+			return { id: name, kind: "none", labelKey: "audio.sources.noAudio" };
+		}
+		if (name === DEFAULT_AUDIO_ID) {
+			return {
+				id: name,
+				kind: "pipeline_default",
+				labelKey: "audio.sources.pipelineDefault",
+			};
+		}
+		return { id: name, kind: "device" };
+	});
+}
+
 function getAudioSrcName(id: string) {
 	const name = audioSrcAliases[id];
 	if (name) return name;
@@ -158,7 +180,10 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 	audioDevices = sortedList;
 	logger.debug("audio devices:", audioDevices);
 
-	broadcastMsg("status", { asrcs: Object.keys(audioDevices) });
+	broadcastMsg("status", {
+		asrcs: Object.keys(audioDevices),
+		audio_sources: deriveAudioSources(audioDevices),
+	});
 
 	// A hotplug re-enumeration may have brought in the device a stream start is
 	// waiting on — wake the pending probe so it re-checks now instead of after

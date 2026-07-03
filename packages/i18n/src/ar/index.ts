@@ -1524,6 +1524,12 @@ const ar = {
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
 	},
+	audio: {
+		sources: {
+			noAudio: "بدون صوت",
+			pipelineDefault: "الإعداد الافتراضي للمسار",
+		},
+	},
 } satisfies Translation;
 
 export default ar;
