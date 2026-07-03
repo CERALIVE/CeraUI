@@ -1,18 +1,18 @@
 /**
  * Pure, rune-free preview-availability derivation for `PreviewCanvas.svelte`.
  *
- * The preview socket is served DIRECTLY by the cerastream engine (ADR-0002
- * preview-ws addendum). Before dialing it forever, the component consults the
- * engine-capability snapshot: a starting/offline engine, or an engine that
- * reports its preview endpoint as unbound/disabled, means there is nothing to
- * dial — the component renders a calm, honest band instead.
+ * The preview socket is PROXIED through the CeraUI backend origin (`/preview`,
+ * Task 20): the frontend dials ONLY the backend — never the cerastream engine
+ * directly — and the backend forwards frames from the engine's loopback preview
+ * socket. Dev and prod therefore dial the identical URL/token flow (dev's backend
+ * proxies to the mock preview server under `shouldUseMocks()`), so there is no
+ * mock-dev dial-target exception here.
  *
- * DEV EXCEPTION: in a mock-backed dev build the preview WS is served by the
- * `startMockPreviewServer()` mock (port 9997) regardless of what the mock
- * capability snapshot advertises for `preview`, so dev must NEVER block the
- * dial on the snapshot — it always dials the mock. `isMockBackedDev` is the
- * frontend equivalent of the backend `shouldUseMocks()` gate (it is
- * `import.meta.env.DEV` / `BUILD_INFO.IS_DEV` at the call site).
+ * This is the PRE-dial gate: it consults the engine-capability snapshot so a
+ * starting/offline engine, or one that reports its preview endpoint as
+ * unbound/disabled, renders a calm band instead of dialing. The POST-dial states
+ * come from the proxy close codes (`PreviewCanvas` maps 4502/4503/4401 onto the
+ * same {@link PreviewAvailability} band set).
  */
 import type { CapabilitiesMessage } from "@ceraui/rpc/schemas";
 
@@ -41,11 +41,7 @@ export type PreviewAvailability =
  */
 export function derivePreviewAvailability(
 	caps: CapabilitiesMessage | undefined,
-	isMockBackedDev: boolean,
 ): PreviewAvailability {
-	// Dev is always backed by the mock preview WS server (port 9997) — the mock
-	// capability snapshot's `preview` field must never suppress the dev dial.
-	if (isMockBackedDev) return "available";
 	if (!caps) return "available";
 	if (caps.engineStarting) return "engineStarting";
 	if (caps.engineUnavailable) return "engineOffline";

@@ -15,6 +15,7 @@ import {
 	kioskToggleOutputSchema,
 	logInputSchema,
 	logOutputSchema,
+	previewTokenOutputSchema,
 	remoteConfigInputSchema,
 	revisionsSchema,
 	sensorsStatusSchema,
@@ -50,6 +51,7 @@ import {
 	startSoftwareUpdate,
 } from "../../modules/system/software-updates.ts";
 import { resetSshPassword, startStopSsh } from "../../modules/system/ssh.ts";
+import { mintPreviewToken } from "../../modules/ui/preview-token.ts";
 import { simulateDevReboot } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -336,4 +338,16 @@ export const kioskOskProcedure = authedProcedure
 		}
 		await kioskOsk(input.visible, resolveActiveKioskDeps());
 		return { success: true };
+	});
+
+/**
+ * Mint a single-use, short-lived token for the backend `/preview` WebSocket
+ * proxy. Authed-only: a fresh preview upgrade starts unauthenticated, so
+ * `PreviewCanvas` calls this over its already-authenticated RPC socket and dials
+ * `/preview?token=<t>` — the stored password/RPC credential never rides the URL.
+ */
+export const mintPreviewTokenProcedure = authedProcedure
+	.output(previewTokenOutputSchema)
+	.handler(() => {
+		return mintPreviewToken();
 	});

@@ -14,18 +14,14 @@
  * hostname + the backend dev port.
  */
 
+import { PREVIEW_TOKEN_PARAM, PREVIEW_WS_PATH } from "@ceraui/rpc/schemas";
+
 interface BuildInfo {
 	MODE: string;
 	NODE_ENV: string;
 	IS_DEV: boolean;
 	IS_PROD: boolean;
 	IS_SSR: boolean;
-}
-
-/** Loopback/LAN port where the cerastream engine serves the preview WebSocket
- * directly (ADR-0002 preview-ws addendum) — NOT the CeraUI backend port. */
-interface EnvVariables {
-	PREVIEW_PORT: string;
 }
 
 /**
@@ -56,8 +52,6 @@ export const NON_BROWSER_SOCKET_URL = "";
 
 /** CeraUI backend dev port — see `apps/backend/src/rpc/server.ts` getListenPorts. */
 const DEV_DEFAULT_SOCKET_PORT = "3002";
-
-const DEFAULT_PREVIEW_PORT = "9997";
 
 function wsScheme(protocol: string): "ws" | "wss" {
 	return protocol === "https:" ? "wss" : "ws";
@@ -155,16 +149,20 @@ export function getSocketUrl(): string {
 	});
 }
 
-export const ENV_VARIABLES: EnvVariables = {
-	PREVIEW_PORT: import.meta.env.VITE_PREVIEW_PORT || DEFAULT_PREVIEW_PORT,
-};
-
-export function getPreviewSocketUrl(): string {
-	const location = browserLocation();
-	if (!location) {
+/**
+ * The preview WebSocket URL. Single-origin (Task 20): the browser dials the
+ * CeraUI backend at `PREVIEW_WS_PATH`, NOT the cerastream engine's loopback port
+ * — the backend proxies frames from the engine. The dial reuses `getSocketUrl()`
+ * (the RPC origin), so dev and prod share one URL shape, and carries a single-use
+ * `token` minted over the authenticated RPC socket (the RPC credential never
+ * appears in this URL).
+ */
+export function getPreviewSocketUrl(token: string): string {
+	const base = getSocketUrl();
+	if (!base) {
 		return NON_BROWSER_SOCKET_URL;
 	}
-	return `${wsScheme(location.protocol)}://${location.hostname}:${ENV_VARIABLES.PREVIEW_PORT}`;
+	return `${base}${PREVIEW_WS_PATH}?${PREVIEW_TOKEN_PARAM}=${encodeURIComponent(token)}`;
 }
 
 export const BUILD_INFO: BuildInfo = {

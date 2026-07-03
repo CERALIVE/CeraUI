@@ -16,17 +16,18 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getCapabilities: () => capsMock.value,
 }));
 
-// Force the prod-like branch (IS_DEV=false) so the engine-aware unavailability
-// logic is active; a dev build always dials the mock preview server instead.
+// Single-use token minted over the authenticated RPC socket before every dial.
+const mintMock = vi.hoisted(() =>
+	vi.fn(async () => ({ token: "tok-1", ttlMs: 30000 })),
+);
+vi.mock("$lib/rpc", () => ({
+	rpc: { system: { mintPreviewToken: mintMock } },
+}));
+
+// The preview URL is now the backend origin `/preview` — never the engine port.
 vi.mock("$lib/env", () => ({
-	BUILD_INFO: {
-		IS_DEV: false,
-		IS_PROD: true,
-		IS_SSR: false,
-		MODE: "test",
-		NODE_ENV: "test",
-	},
-	getPreviewSocketUrl: () => "ws://localhost:9997",
+	getPreviewSocketUrl: (token: string) =>
+		`ws://localhost/preview?token=${token}`,
 }));
 
 class FakeWebSocket {
@@ -35,7 +36,7 @@ class FakeWebSocket {
 	onopen: ((e: unknown) => void) | null = null;
 	onmessage: ((e: unknown) => void) | null = null;
 	onerror: ((e: unknown) => void) | null = null;
-	onclose: ((e: unknown) => void) | null = null;
+	onclose: ((e: { code?: number }) => void) | null = null;
 	readyState = 0;
 	sent: unknown[] = [];
 	constructor(public url: string) {
@@ -49,9 +50,22 @@ class FakeWebSocket {
 	}
 }
 
+// Flush the async mint→dial chain (a couple microtask turns) plus Svelte ticks.
+async function flush(): Promise<void> {
+	await tick();
+	for (let i = 0; i < 6; i++) await Promise.resolve();
+	await tick();
+}
+
+async function turnOn(getByTestId: (id: string) => HTMLElement): Promise<void> {
+	await fireEvent.click(getByTestId("preview-toggle"));
+	await flush();
+}
+
 afterEach(() => {
 	FakeWebSocket.instances = [];
 	capsMock.value = undefined;
+	mintMock.mockClear();
 	vi.unstubAllGlobals();
 });
 
@@ -75,7 +89,7 @@ describe("PreviewCanvas", () => {
 		expect(off.textContent).toMatch(/preview off/i);
 	});
 
-	it("opens a WebCodecs canvas + audio meter on toggle when VideoDecoder exists", async () => {
+	it("mints a token then opens a WebCodecs canvas dialing the backend /preview", async () => {
 		vi.stubGlobal(
 			"VideoDecoder",
 			class {
@@ -89,8 +103,7 @@ describe("PreviewCanvas", () => {
 
 		const { container, getByTestId } = render(PreviewCanvas);
 
-		await fireEvent.click(getByTestId("preview-toggle"));
-		await tick();
+		await turnOn(getByTestId);
 
 		const section = getByTestId("preview");
 		expect(section.getAttribute("data-tier")).toBe("webcodecs");
@@ -101,9 +114,13 @@ describe("PreviewCanvas", () => {
 			container.querySelector('[data-testid="audio-level-meter"]'),
 		).not.toBeNull();
 
-		// The session handshake is sent on open.
+		// A token was minted and the dial URL is the backend origin + token.
+		expect(mintMock).toHaveBeenCalledTimes(1);
 		const ws = FakeWebSocket.instances.at(-1);
 		expect(ws).toBeDefined();
+		expect(ws?.url).toBe("ws://localhost/preview?token=tok-1");
+
+		// The session handshake is sent on open.
 		ws?.onopen?.({});
 		expect(ws?.sent).toContain(
 			JSON.stringify({ action: "start", tier: "webcodecs" }),
@@ -124,6 +141,8 @@ describe("PreviewCanvas", () => {
 		expect(getByTestId("preview").getAttribute("data-status")).toBe(
 			"unsupported",
 		);
+		// No token is minted when the browser cannot decode anything.
+		expect(mintMock).not.toHaveBeenCalled();
 		expect(
 			container.querySelector('[data-testid="preview-canvas"]'),
 		).toBeNull();
@@ -143,8 +162,7 @@ describe("PreviewCanvas", () => {
 
 		const { container, getByTestId } = render(PreviewCanvas);
 
-		await fireEvent.click(getByTestId("preview-toggle"));
-		await tick();
+		await turnOn(getByTestId);
 		const ws = FakeWebSocket.instances.at(-1);
 		const closeSpy = vi.spyOn(ws as FakeWebSocket, "close");
 
@@ -171,13 +189,13 @@ describe("PreviewCanvas", () => {
 		vi.stubGlobal("WebSocket", FakeWebSocket);
 
 		const { container, getByTestId } = render(PreviewCanvas);
-		await fireEvent.click(getByTestId("preview-toggle"));
-		await tick();
+		await turnOn(getByTestId);
 
 		const band = getByTestId("preview-unavailable");
 		expect(band.getAttribute("data-reason")).toBe("engineOffline");
 		expect(band.getAttribute("role")).toBe("status");
-		// No socket dial — the band replaces the media surface entirely.
+		// No token minted, no socket dial — the band replaces the media surface.
+		expect(mintMock).not.toHaveBeenCalled();
 		expect(FakeWebSocket.instances).toHaveLength(0);
 		expect(
 			container.querySelector('[data-testid="preview-canvas"]'),
@@ -189,8 +207,7 @@ describe("PreviewCanvas", () => {
 		vi.stubGlobal("WebSocket", FakeWebSocket);
 
 		const { getByTestId } = render(PreviewCanvas);
-		await fireEvent.click(getByTestId("preview-toggle"));
-		await tick();
+		await turnOn(getByTestId);
 
 		expect(getByTestId("preview-unavailable").getAttribute("data-reason")).toBe(
 			"engineStarting",
@@ -203,13 +220,90 @@ describe("PreviewCanvas", () => {
 		vi.stubGlobal("WebSocket", FakeWebSocket);
 
 		const { getByTestId } = render(PreviewCanvas);
-		await fireEvent.click(getByTestId("preview-toggle"));
-		await tick();
+		await turnOn(getByTestId);
 
 		expect(getByTestId("preview-unavailable").getAttribute("data-reason")).toBe(
 			"previewUnavailable",
 		);
 		expect(FakeWebSocket.instances).toHaveLength(0);
+	});
+
+	it("maps close code 4502 to the engine-offline band", async () => {
+		vi.stubGlobal(
+			"VideoDecoder",
+			class {
+				state = "configured";
+				configure(): void {}
+				decode(): void {}
+				close(): void {}
+			},
+		);
+		vi.stubGlobal("WebSocket", FakeWebSocket);
+
+		const { getByTestId } = render(PreviewCanvas);
+		await turnOn(getByTestId);
+
+		FakeWebSocket.instances.at(-1)?.onclose?.({ code: 4502 });
+		await tick();
+
+		expect(getByTestId("preview-unavailable").getAttribute("data-reason")).toBe(
+			"engineOffline",
+		);
+	});
+
+	it("maps close code 4503 to the preview-unavailable band", async () => {
+		vi.stubGlobal(
+			"VideoDecoder",
+			class {
+				state = "configured";
+				configure(): void {}
+				decode(): void {}
+				close(): void {}
+			},
+		);
+		vi.stubGlobal("WebSocket", FakeWebSocket);
+
+		const { getByTestId } = render(PreviewCanvas);
+		await turnOn(getByTestId);
+
+		FakeWebSocket.instances.at(-1)?.onclose?.({ code: 4503 });
+		await tick();
+
+		expect(getByTestId("preview-unavailable").getAttribute("data-reason")).toBe(
+			"previewUnavailable",
+		);
+	});
+
+	it("re-mints once on 4401, then surfaces the offline band on a second 4401", async () => {
+		vi.stubGlobal(
+			"VideoDecoder",
+			class {
+				state = "configured";
+				configure(): void {}
+				decode(): void {}
+				close(): void {}
+			},
+		);
+		vi.stubGlobal("WebSocket", FakeWebSocket);
+
+		const { getByTestId } = render(PreviewCanvas);
+		await turnOn(getByTestId);
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		expect(mintMock).toHaveBeenCalledTimes(1);
+
+		// First 4401 → one silent re-mint + re-dial (no band yet).
+		FakeWebSocket.instances.at(-1)?.onclose?.({ code: 4401 });
+		await flush();
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		expect(mintMock).toHaveBeenCalledTimes(2);
+
+		// Second 4401 → surface the offline band, no further re-mint.
+		FakeWebSocket.instances.at(-1)?.onclose?.({ code: 4401 });
+		await tick();
+		expect(getByTestId("preview-unavailable").getAttribute("data-reason")).toBe(
+			"engineOffline",
+		);
+		expect(FakeWebSocket.instances).toHaveLength(2);
 	});
 
 	it("reconnects while mounted when the socket drops (timer fires)", async () => {
@@ -229,15 +323,18 @@ describe("PreviewCanvas", () => {
 			const { getByTestId } = render(PreviewCanvas);
 			await fireEvent.click(getByTestId("preview-toggle"));
 			await tick();
+			for (let i = 0; i < 6; i++) await Promise.resolve();
+			await tick();
 			expect(FakeWebSocket.instances).toHaveLength(1);
 
-			// A dropped socket while the toggle is on schedules a reconnect.
+			// A dropped socket with no code while the toggle is on → bounded reconnect.
 			FakeWebSocket.instances.at(-1)?.onclose?.({});
 			await tick();
 
 			// Advancing past the capped+jittered backoff (<=650ms for attempt 0)
 			// fires the timer and dials a fresh socket while still mounted.
 			vi.advanceTimersByTime(2000);
+			for (let i = 0; i < 6; i++) await Promise.resolve();
 			await tick();
 
 			expect(FakeWebSocket.instances.length).toBeGreaterThan(1);
@@ -263,6 +360,8 @@ describe("PreviewCanvas", () => {
 			const { getByTestId, unmount } = render(PreviewCanvas);
 			await fireEvent.click(getByTestId("preview-toggle"));
 			await tick();
+			for (let i = 0; i < 6; i++) await Promise.resolve();
+			await tick();
 
 			// Drop the socket to schedule a reconnect timer, then unmount.
 			FakeWebSocket.instances.at(-1)?.onclose?.({});
@@ -274,6 +373,7 @@ describe("PreviewCanvas", () => {
 			// The unmounted timer must be inert: no new socket construction,
 			// no state mutation after teardown.
 			vi.advanceTimersByTime(2000);
+			for (let i = 0; i < 6; i++) await Promise.resolve();
 			await tick();
 
 			expect(FakeWebSocket.instances.length).toBe(beforeUnmount);
@@ -284,56 +384,41 @@ describe("PreviewCanvas", () => {
 });
 
 describe("derivePreviewAvailability", () => {
-	it("always dials in a mock-backed dev build, ignoring the snapshot", () => {
-		expect(
-			derivePreviewAvailability({ engineUnavailable: true } as never, true),
-		).toBe("available");
-		expect(
-			derivePreviewAvailability(
-				{ preview: { enabled: false, bound: false } } as never,
-				true,
-			),
-		).toBe("available");
-	});
-
 	it("treats an absent snapshot and an absent preview field as available", () => {
-		expect(derivePreviewAvailability(undefined, false)).toBe("available");
-		expect(derivePreviewAvailability({} as never, false)).toBe("available");
+		expect(derivePreviewAvailability(undefined)).toBe("available");
+		expect(derivePreviewAvailability({} as never)).toBe("available");
 	});
 
 	it("maps engine flags to their own conditions (starting wins over offline)", () => {
+		expect(derivePreviewAvailability({ engineStarting: true } as never)).toBe(
+			"engineStarting",
+		);
 		expect(
-			derivePreviewAvailability({ engineStarting: true } as never, false),
-		).toBe("engineStarting");
-		expect(
-			derivePreviewAvailability({ engineUnavailable: true } as never, false),
+			derivePreviewAvailability({ engineUnavailable: true } as never),
 		).toBe("engineOffline");
 		expect(
-			derivePreviewAvailability(
-				{ engineStarting: true, engineUnavailable: true } as never,
-				false,
-			),
+			derivePreviewAvailability({
+				engineStarting: true,
+				engineUnavailable: true,
+			} as never),
 		).toBe("engineStarting");
 	});
 
 	it("flags preview unavailable when the engine reports it unbound or disabled", () => {
 		expect(
-			derivePreviewAvailability(
-				{ preview: { enabled: true, bound: false } } as never,
-				false,
-			),
+			derivePreviewAvailability({
+				preview: { enabled: true, bound: false },
+			} as never),
 		).toBe("previewUnavailable");
 		expect(
-			derivePreviewAvailability(
-				{ preview: { enabled: false, bound: true } } as never,
-				false,
-			),
+			derivePreviewAvailability({
+				preview: { enabled: false, bound: true },
+			} as never),
 		).toBe("previewUnavailable");
 		expect(
-			derivePreviewAvailability(
-				{ preview: { enabled: true, bound: true } } as never,
-				false,
-			),
+			derivePreviewAvailability({
+				preview: { enabled: true, bound: true },
+			} as never),
 		).toBe("available");
 	});
 });

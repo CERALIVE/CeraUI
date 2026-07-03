@@ -404,6 +404,46 @@ export const capabilitiesMessageSchema = z.object({
 });
 export type CapabilitiesMessage = z.infer<typeof capabilitiesMessageSchema>;
 
+// ─── Preview WebSocket proxy — single-origin contract (Task 20) ──────────────
+//
+// The preview WebSocket is served by the cerastream engine on a loopback port,
+// but the browser NEVER dials the engine directly. The CeraUI backend proxies it
+// through its OWN origin at `PREVIEW_WS_PATH`, so the preview travels the same
+// authenticated, single-origin path as the RPC socket (remote-access safe: no
+// second port to expose, no CORS/mixed-origin concerns). Auth is a short-lived,
+// single-use token minted over the authenticated RPC socket
+// (`system.mintPreviewToken`) and passed as a query parameter — the stored
+// password/RPC credentials never appear in the URL.
+//
+// The route ALWAYS upgrades on a pathname match and validates+consumes the token
+// AFTER the upgrade (on open), closing with `PREVIEW_CLOSE_UNAUTHORIZED` when the
+// token is invalid/expired/consumed — never a pre-upgrade HTTP refusal (a browser
+// WebSocket cannot distinguish a pre-upgrade HTTP error from a network failure).
+
+/** Dedicated upgrade path the backend forks BEFORE the oRPC WebSocket handler. */
+export const PREVIEW_WS_PATH = '/preview';
+
+/** Query-parameter name carrying the single-use preview token on the dial URL. */
+export const PREVIEW_TOKEN_PARAM = 'token';
+
+/**
+ * Preview WebSocket close codes (application range 4000-4999, pinned here so the
+ * backend proxy and the frontend `PreviewCanvas` agree on one contract).
+ *  • `4401` — token invalid / expired / already consumed (auth failure on open).
+ *  • `4502` — the engine's loopback preview socket is unreachable (engine down).
+ *  • `4503` — the engine reports its preview endpoint unbound/disabled.
+ */
+export const PREVIEW_CLOSE_UNAUTHORIZED = 4401;
+export const PREVIEW_CLOSE_UPSTREAM_DOWN = 4502;
+export const PREVIEW_CLOSE_UPSTREAM_UNAVAILABLE = 4503;
+
+/** Output of `system.mintPreviewToken` — a single-use token + its TTL (ms). */
+export const previewTokenOutputSchema = z.object({
+	token: z.string(),
+	ttlMs: z.number().int().positive(),
+});
+export type PreviewTokenOutput = z.infer<typeof previewTokenOutputSchema>;
+
 // Available resolutions for UI
 export const AVAILABLE_RESOLUTIONS: Resolution[] = ['480p', '720p', '1080p', '1440p', '2160p'];
 

@@ -260,6 +260,19 @@ export function getMockPreviewServer(): PreviewServer | null {
 	return previewServer;
 }
 
+/**
+ * The port the mock preview upstream is reachable on. The backend `/preview`
+ * proxy dials this under `shouldUseMocks()` so dev shares the prod URL/token flow.
+ * Prefers the actually-bound port (handles the ephemeral test-seam port), falling
+ * back to the configured `PREVIEW_PORT` / the 9997 default before the server binds.
+ */
+export function getMockPreviewPort(): number {
+	return (
+		previewServer?.port ??
+		(Number(process.env.PREVIEW_PORT) || DEFAULT_PREVIEW_PORT)
+	);
+}
+
 /** Test seam: count of connections still streaming (0 == all timers cleared). */
 export function getActivePreviewConnCount(): number {
 	return activeStreamingConns;

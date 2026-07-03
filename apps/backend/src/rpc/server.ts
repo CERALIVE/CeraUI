@@ -5,6 +5,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { PREVIEW_TOKEN_PARAM, PREVIEW_WS_PATH } from "@ceraui/rpc/schemas";
 import type { Server } from "bun";
 
 import { logger } from "../helpers/logger.ts";
@@ -16,9 +17,10 @@ import {
 	KIOSK_TOKEN_PARAM,
 	mintKioskToken,
 } from "../modules/ui/kiosk-token.ts";
-import { createWebSocketHandler, initSocketData } from "./adapter.ts";
+import { initPreviewSocketData } from "../modules/ui/preview-proxy.ts";
+import { createServerWebSocketHandler, initSocketData } from "./adapter.ts";
 import { issueKioskSessionToken } from "./procedures/auth.procedure.ts";
-import type { SocketData } from "./types.ts";
+import type { ServerSocketData } from "./types.ts";
 
 const isDevelopment =
 	process.env.NODE_ENV === "development" && !fs.existsSync("public");
@@ -117,7 +119,10 @@ async function proxyToDevServer(req: Request): Promise<Response> {
 /**
  * HTTP request handler
  */
-async function handleRequest(req: Request, server: Server): Promise<Response> {
+async function handleRequest(
+	req: Request,
+	server: Server<ServerSocketData>,
+): Promise<Response> {
 	const url = new URL(req.url);
 
 	// Single-use loopback kiosk-token exchange (DC-3): swap the tmpfs token for a
@@ -180,7 +185,7 @@ const getListenPorts = (): number[] => {
 };
 
 // Server instance
-let server: ReturnType<typeof Bun.serve<SocketData>> | null = null;
+let server: ReturnType<typeof Bun.serve<ServerSocketData>> | null = null;
 const listenPorts = getListenPorts();
 let currentPortIndex = 0;
 
@@ -198,13 +203,31 @@ function startServer(): void {
 	logger.info(`HTTP server: trying to start on port ${port}...`);
 
 	try {
-		server = Bun.serve<SocketData>({
+		server = Bun.serve<ServerSocketData>({
 			port,
 
 			fetch(req, server) {
 				// Handle WebSocket upgrade
 				const upgradeHeader = req.headers.get("upgrade");
 				if (upgradeHeader?.toLowerCase() === "websocket") {
+					// Preview proxy fork — MUST branch on pathname BEFORE the oRPC
+					// upgrade, so `/preview` sockets carry a token (validated on open)
+					// instead of the RPC auth flags. The route ALWAYS upgrades on a
+					// pathname match; the proxy closes with 4401 after the upgrade when
+					// the token is invalid — never a pre-upgrade HTTP refusal.
+					const pathname = new URL(req.url).pathname;
+					if (pathname === PREVIEW_WS_PATH) {
+						const token =
+							new URL(req.url).searchParams.get(PREVIEW_TOKEN_PARAM) ?? "";
+						const previewOk = server.upgrade(req, {
+							data: initPreviewSocketData(token),
+						});
+						if (previewOk) {
+							return undefined as unknown as Response;
+						}
+						return new Response("WebSocket upgrade failed", { status: 500 });
+					}
+
 					const success = server.upgrade(req, {
 						data: initSocketData(),
 					});
@@ -219,7 +242,7 @@ function startServer(): void {
 				return handleRequest(req, server);
 			},
 
-			websocket: createWebSocketHandler(),
+			websocket: createServerWebSocketHandler(),
 
 			error(error) {
 				logger.error(`Server error: ${error}`);

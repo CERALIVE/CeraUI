@@ -31,6 +31,7 @@ import type {
 	ModemScanOutput,
 	NetifConfigInput,
 	NetifConfigOutput,
+	PreviewTokenOutput,
 	RelayValidateInput,
 	RelayValidateOutput,
 	ReloadAudioDelayInput,
@@ -592,6 +593,7 @@ export interface TypedRPC {
 			input: KioskConfigureInput,
 		) => Promise<KioskConfigureOutput>;
 		kioskOsk: (input: KioskOskInput) => Promise<SuccessResponse>;
+		mintPreviewToken: () => Promise<PreviewTokenOutput>;
 	};
 	status: {
 		getStatus: () => Promise<unknown>;
