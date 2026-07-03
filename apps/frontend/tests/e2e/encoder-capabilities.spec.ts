@@ -163,9 +163,7 @@ test.describe("encoder capability wiring", () => {
 			),
 		);
 
-		// Bitrate lives under the Advanced / Custom expander (Task 7) — open it.
-		await page.getByTestId("encoder-advanced-summary").click();
-
+		// Bitrate control is now always visible (no Advanced expander after todo 9 flattening).
 		const input = page.locator("#encoder-bitrate");
 		await input.fill("50000");
 		await expect(input).toHaveValue("15000");
@@ -192,9 +190,7 @@ test.describe("encoder capability wiring", () => {
 			),
 		);
 
-		// Codec selector lives under the Advanced / Custom expander (Task 7) — open it.
-		await page.getByTestId("encoder-advanced-summary").click();
-
+		// Codec selector is now always visible (no Advanced expander after todo 9 flattening).
 		// The software-encode caveat surfaces once H.265 (offered but hw-unaccelerated)
 		// is the selected codec.
 		await page.getByTestId("codec-h265").click();

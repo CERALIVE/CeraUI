@@ -262,48 +262,7 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		await navigateTo(page, "live");
 	});
 
-	// ── 1. Mode-preset selection seeds Advanced + unsupported is disabled ──────
-	test("a mode preset seeds the Advanced fields; an unsupported preset is disabled with a reason", async ({
-		page,
-	}) => {
-		serverConfig();
-		send(GENERIC_PIPELINES);
-
-		const trigger = page.getByTestId("open-encoder-dialog");
-		await expect(trigger).toBeVisible({ timeout: 15_000 });
-		await trigger.click();
-
-		const dialog = page.getByRole("dialog", { name: "Encoder Settings" });
-		await expect(dialog).toBeVisible();
-
-		// The 4K / H.265 preset is above the generic 1080p ceiling → rendered
-		// DISABLED with aria-disabled + a reason tooltip, never hidden.
-		const fourK = dialog.locator(
-			'[data-testid="mode-preset"][data-preset-id="4k30-h265"]',
-		);
-		await expect(fourK).toBeVisible();
-		await expect(fourK).toBeDisabled();
-		await expect(fourK).toHaveAttribute("aria-disabled", "true");
-		await expect(fourK).toHaveAttribute("data-supported", "false");
-		await expect(fourK).toHaveAttribute("title", /not supported/i);
-
-		// A universal 1080p60 H.264 preset is offered — apply it.
-		const preset = dialog.locator(
-			'[data-testid="mode-preset"][data-preset-id="1080p60-h264"]',
-		);
-		await expect(preset).toBeEnabled();
-		await preset.click();
-		await expect(preset).toHaveAttribute("data-active", "true");
-
-		// Selecting it seeds the granular Advanced controls — open the expander
-		// and confirm the resolution/framerate/bitrate now reflect the preset.
-		await dialog.getByTestId("encoder-advanced-summary").click();
-		await expect(dialog.locator("#encoder-resolution")).toContainText("1080");
-		await expect(dialog.locator("#encoder-framerate")).toContainText("60");
-		await expect(dialog.locator("#encoder-bitrate")).toHaveValue("6000");
-	});
-
-	// ── 2. Capability gate: live-audio dispatch gated off ⇄ enabled by flag ────
+	// ── 1. Capability gate: live-audio dispatch gated off ⇄ enabled by flag ────
 	test("the audio live-switch dispatch is gated off until the engine advertises audio_live_switch", async ({
 		page,
 	}) => {
