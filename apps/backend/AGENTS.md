@@ -50,7 +50,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | In-memory log ring buffer (dev/CI journal substitute) | `helpers/logger.ts` — `getRecentLogLines` |
 | Add-on enable/disable state machine (T28) | `modules/addons/manager.ts` |
 | Post-boot add-on reconciler (T29, non-blocking; never gates rollback) | `modules/addons/reconciler.ts` |
-| Network-ingest gateway status (probes `ceralive-rtmp-gateway.service`/`ceralive-srt-gateway.service`, LAN URLs, `status.network_ingest`) | `modules/network/network-ingest.ts` |
+| Network-ingest gateway status (fail-closed dual-topology SRT probe: OLD `ceralive-srt-gateway.service` OR NEW MediaMTX `/etc/mediamtx.yml` `srt: yes`+`srtAddress: :4001`; LAN URLs, additive `srt.gateway`, `status.network_ingest`) | `modules/network/network-ingest.ts` |
 | Gateway-active probe seam (blocks rtmp/srt `streaming.start` until the gateway is up; fail-safe default) | `modules/streaming/gateway-availability.ts` |
 | Same-subnet detection (`same_subnet_group`, informational, AP-excluded) | `modules/network/network-interfaces.ts` (`netIfBuildMsg`) |
 | Policy-route self-check for bonded wifi/modem interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |

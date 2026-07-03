@@ -18,17 +18,23 @@
 /*
  * Network-ingest gateway status surface (Task 16).
  *
- * The device image bakes in two local ingest gateways — MediaMTX for RTMP
- * (`ceralive-rtmp-gateway.service`, listening on :1935 path `publish/live`,
- * Task 14) and srt-live-transmit for SRT (`ceralive-srt-gateway.service`,
- * listening on :4001, Task 15). This module probes whether each unit is active
- * via `systemctl is-active`, resolves the device's primary LAN IP so an encoder
- * or phone on the same network knows where to publish, and folds the result into
- * the existing `status` broadcast as the additive `network_ingest` field.
+ * The device image bakes in local ingest gateways. RTMP is always MediaMTX
+ * (`ceralive-rtmp-gateway.service`, listening on :1935 path `publish/live`).
+ * SRT is served by ONE of two topologies during the B2 fleet transition:
+ *   - OLD: a standalone `ceralive-srt-gateway.service` (srt-live-transmit) on
+ *     :4001;
+ *   - NEW: the SAME MediaMTX unit terminating SRT too (proved by `/etc/mediamtx.yml`
+ *     top-level keys `srt: yes` + `srtAddress: :4001`, the marker Task 14 ships).
+ *
+ * SRT availability is a FAIL-CLOSED merge (see {@link resolveSrtTopology}): the OLD
+ * unit active, OR MediaMTX active AND its config proves SRT is bound. "rtmp active"
+ * alone NEVER implies SRT — an old image whose srt unit died must not false-positive.
+ * A parse failure or absent config → NOT srt-capable. The serving topology is
+ * recorded on `srt.gateway` (additive).
  *
  * Safety contract (mirrors policy-route-check.ts):
- *   - The systemctl spawn is gated on `isRealDevice()`. On a dev/emulated host it
- *     NEVER spawns; the mock provider drives service_active instead.
+ *   - The systemctl spawn + config read are gated on `isRealDevice()`. On a
+ *     dev/emulated host they NEVER run; the mock provider drives the signals.
  *   - A protocol the board's capability source kinds exclude is reported `null`
  *     (an N100 profile without the `srt` source → `srt: null`).
  *   - Every failure degrades to the last cached snapshot; the refresh never
@@ -43,10 +49,11 @@ import {
 	NETWORK_INGEST_NO_ADDRESS_REASON,
 	type NetworkIngest,
 	type RequiresGateway,
+	type SrtGatewayTopology,
 } from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
 import { shouldUseMocks as defaultShouldUseMocks } from "../../mocks/mock-service.ts";
-import { resolveMockNetworkIngestActive } from "../../mocks/providers/network-ingest.ts";
+import { resolveMockNetworkIngestSignals } from "../../mocks/providers/network-ingest.ts";
 import { getLastCapabilities } from "../streaming/capabilities.ts";
 import type { GatewayProbe } from "../streaming/gateway-availability.ts";
 import { isRealDevice as defaultIsRealDevice } from "../system/device-detection.ts";
@@ -63,6 +70,8 @@ export const RTMP_INGEST_PORT = 1935;
 export const RTMP_INGEST_PATH = "publish/live";
 export const SRT_INGEST_PORT = 4001;
 
+export const MEDIAMTX_CONFIG_PATH = "/etc/mediamtx.yml";
+
 /** The RTMP publish URL a same-LAN encoder targets (cerastream `RtmpLocalhost`). */
 export function buildRtmpUrl(lanIp: string): string {
 	return `rtmp://${lanIp}:${RTMP_INGEST_PORT}/${RTMP_INGEST_PATH}`;
@@ -78,6 +87,77 @@ export function capabilitySourceKinds(
 	caps: { sources?: ReadonlyArray<{ id: string }> } | undefined,
 ): Set<string> {
 	return new Set((caps?.sources ?? []).map((s) => s.id));
+}
+
+/** Raw per-refresh gateway signals feeding the fail-closed SRT merge. */
+export type NetworkIngestGatewaySignals = {
+	rtmpUnitActive: boolean;
+	srtUnitActive: boolean;
+	mediamtxSrt: boolean;
+};
+
+/**
+ * Parse whether MediaMTX binds SRT on the pinned :4001 port from its top-level
+ * YAML keys `srt: yes` + `srtAddress: :4001` (the marker Task 14 ships). A
+ * targeted line-parse, not a YAML lib: only column-0 keys count, so a nested
+ * `srt:` under another block never satisfies it. Fail-closed — any missing/false
+ * key or wrong port returns false.
+ */
+export function parseMediamtxSrtEnabled(yaml: string): boolean {
+	let srtEnabled = false;
+	let srtAddressBound = false;
+	for (const raw of yaml.split(/\r?\n/)) {
+		if (raw.length === 0 || /^[\s#]/.test(raw)) continue;
+		const match = /^([A-Za-z0-9_]+)\s*:\s*(.*)$/.exec(raw);
+		if (!match) continue;
+		const key = match[1];
+		const value = (match[2] ?? "")
+			.replace(/\s+#.*$/, "")
+			.trim()
+			.replace(/^["']|["']$/g, "")
+			.trim();
+		if (key === "srt") {
+			srtEnabled = /^(?:yes|true|on)$/i.test(value);
+		} else if (key === "srtAddress") {
+			srtAddressBound = value.endsWith(`:${SRT_INGEST_PORT}`);
+		}
+	}
+	return srtEnabled && srtAddressBound;
+}
+
+/**
+ * Read + parse `/etc/mediamtx.yml` for the NEW-topology SRT marker. Bounded and
+ * fail-closed: a missing/unreadable file or parse error → false (NOT srt-capable).
+ */
+async function readMediamtxSrtEnabled(
+	path = MEDIAMTX_CONFIG_PATH,
+): Promise<boolean> {
+	try {
+		const file = Bun.file(path);
+		if (!(await file.exists())) return false;
+		return parseMediamtxSrtEnabled(await file.text());
+	} catch (err) {
+		logger.debug("network-ingest: mediamtx.yml read failed", { err });
+		return false;
+	}
+}
+
+/**
+ * Fail-closed dual-topology SRT merge: available iff the OLD standalone unit is
+ * active, OR MediaMTX is active AND its config proves SRT is bound. "rtmp active"
+ * alone NEVER implies SRT. Records which topology is serving it.
+ */
+export function resolveSrtTopology(signals: NetworkIngestGatewaySignals): {
+	active: boolean;
+	gateway?: SrtGatewayTopology;
+} {
+	if (signals.srtUnitActive) {
+		return { active: true, gateway: "srt-live-transmit" };
+	}
+	if (signals.rtmpUnitActive && signals.mediamtxSrt) {
+		return { active: true, gateway: "mediamtx" };
+	}
+	return { active: false };
 }
 
 type NetifLike = Record<
@@ -133,18 +213,22 @@ function buildProtocolInfo(
 	lanIp: string | undefined,
 	active: boolean,
 	sourceKinds: Set<string>,
+	gateway?: SrtGatewayTopology,
 ): NetworkIngest["rtmp"] {
 	if (!sourceKinds.has(kind)) return null;
+	const gatewayField = gateway ? { gateway } : {};
 	if (lanIp === undefined) {
 		return {
 			service_active: active,
 			url: null,
 			unavailable_reason: NETWORK_INGEST_NO_ADDRESS_REASON,
+			...gatewayField,
 		};
 	}
 	return {
 		service_active: active,
 		url: kind === "rtmp" ? buildRtmpUrl(lanIp) : buildSrtUrl(lanIp),
+		...gatewayField,
 	};
 }
 
@@ -153,12 +237,13 @@ export function deriveNetworkIngestInfo(params: {
 	lanIp: string | undefined;
 	rtmpActive: boolean;
 	srtActive: boolean;
+	srtGateway?: SrtGatewayTopology;
 	sourceKinds: Set<string>;
 }): NetworkIngest {
-	const { lanIp, rtmpActive, srtActive, sourceKinds } = params;
+	const { lanIp, rtmpActive, srtActive, srtGateway, sourceKinds } = params;
 	return {
 		rtmp: buildProtocolInfo("rtmp", lanIp, rtmpActive, sourceKinds),
-		srt: buildProtocolInfo("srt", lanIp, srtActive, sourceKinds),
+		srt: buildProtocolInfo("srt", lanIp, srtActive, sourceKinds, srtGateway),
 	};
 }
 
@@ -169,8 +254,9 @@ export function deriveNetworkIngestInfo(params: {
 export type NetworkIngestDeps = {
 	isRealDevice: () => Promise<boolean>;
 	shouldUseMocks: () => boolean;
-	resolveMockActive: () => Record<RequiresGateway, boolean>;
+	resolveMockSignals: () => NetworkIngestGatewaySignals;
 	probeServiceActive: (unit: string) => Promise<boolean>;
+	probeMediamtxSrt: () => Promise<boolean>;
 	getNetif: () => NetifLike;
 	getSourceKinds: () => Set<string>;
 };
@@ -198,8 +284,9 @@ function defaultSourceKinds(): Set<string> {
 export const defaultNetworkIngestDeps: NetworkIngestDeps = {
 	isRealDevice: () => defaultIsRealDevice(),
 	shouldUseMocks: defaultShouldUseMocks,
-	resolveMockActive: resolveMockNetworkIngestActive,
+	resolveMockSignals: resolveMockNetworkIngestSignals,
 	probeServiceActive: systemctlIsActive,
+	probeMediamtxSrt: () => readMediamtxSrtEnabled(),
 	getNetif: getNetworkInterfaces,
 	getSourceKinds: defaultSourceKinds,
 };
@@ -218,12 +305,14 @@ async function computeNetworkIngestInfo(
 	const lanIp = resolvePrimaryLanIp(deps.getNetif());
 
 	if (deps.shouldUseMocks()) {
-		const active = deps.resolveMockActive();
+		const signals = deps.resolveMockSignals();
+		const srt = resolveSrtTopology(signals);
 		return deriveNetworkIngestInfo({
 			lanIp,
-			rtmpActive: active.rtmp,
-			srtActive: active.srt,
+			rtmpActive: signals.rtmpUnitActive,
+			srtActive: srt.active,
 			sourceKinds,
+			...(srt.gateway ? { srtGateway: srt.gateway } : {}),
 		});
 	}
 
@@ -231,15 +320,22 @@ async function computeNetworkIngestInfo(
 		return { rtmp: null, srt: null };
 	}
 
-	const [rtmpActive, srtActive] = await Promise.all([
+	const [rtmpUnitActive, srtUnitActive, mediamtxSrt] = await Promise.all([
 		deps.probeServiceActive(RTMP_GATEWAY_UNIT),
 		deps.probeServiceActive(SRT_GATEWAY_UNIT),
+		deps.probeMediamtxSrt(),
 	]);
+	const srt = resolveSrtTopology({
+		rtmpUnitActive,
+		srtUnitActive,
+		mediamtxSrt,
+	});
 	return deriveNetworkIngestInfo({
 		lanIp,
-		rtmpActive,
-		srtActive,
+		rtmpActive: rtmpUnitActive,
+		srtActive: srt.active,
 		sourceKinds,
+		...(srt.gateway ? { srtGateway: srt.gateway } : {}),
 	});
 }
 

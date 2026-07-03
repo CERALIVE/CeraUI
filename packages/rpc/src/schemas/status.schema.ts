@@ -102,6 +102,12 @@ export type ActiveEncode = z.infer<typeof activeEncodeSchema>;
 // those paths, so publishing one would be a lie.
 export const NETWORK_INGEST_NO_ADDRESS_REASON = 'no_lan_or_hotspot_address';
 
+// Which gateway topology currently serves SRT (Task 16, B2 fleet transition):
+// the standalone `srt-live-transmit` unit (OLD) or MediaMTX terminating both
+// RTMP and SRT (NEW). Recorded so a consumer distinguishes them without probing.
+export const SRT_GATEWAY_TOPOLOGIES = ['mediamtx', 'srt-live-transmit'] as const;
+export type SrtGatewayTopology = (typeof SRT_GATEWAY_TOPOLOGIES)[number];
+
 // Network-ingest gateway status surface (Task 16). Four per-protocol states:
 //   1. the whole protocol is `null` — the board's capability source kinds exclude
 //      it (an N100 profile without `srt` → `srt: null`);
@@ -111,12 +117,14 @@ export const NETWORK_INGEST_NO_ADDRESS_REASON = 'no_lan_or_hotspot_address';
 //      — the protocol is offered but NO LAN/hotspot address exists (modem-only),
 //      so there is no url to publish to — surfaced disabled-with-reason, never
 //      hidden and never a modem IP.
-// `url` is nullable + `unavailable_reason` optional; both are additive so a legacy
-// client that ignores them still parses the object.
+// `url` is nullable + `unavailable_reason`/`gateway` optional; all additive, so a
+// legacy client still parses the object. `gateway` is the SRT serving topology
+// (set only on SRT, only when available); RTMP never sets it.
 export const networkIngestProtocolSchema = z.object({
 	service_active: z.boolean(),
 	url: z.string().nullable(),
 	unavailable_reason: z.literal(NETWORK_INGEST_NO_ADDRESS_REASON).optional(),
+	gateway: z.enum(SRT_GATEWAY_TOPOLOGIES).optional(),
 });
 export type NetworkIngestProtocol = z.infer<typeof networkIngestProtocolSchema>;
 

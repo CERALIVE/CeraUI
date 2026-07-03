@@ -1119,26 +1119,35 @@ gateways themselves are baked into the device image. See image-building-pipeline
 `v2/docs/DEFERRED.md` item 7 for the LAN-scoped-in-v1 posture and the on-device QA checklist.
 
 **Baked units (image-building-pipeline, NOT this repo):**
-- `ceralive-rtmp-gateway.service` — pinned MediaMTX `v1.19.2` (`moq: false`), config
+- `ceralive-rtmp-gateway.service` — pinned MediaMTX (`moq: false`), config
   `/etc/mediamtx.yml`, binary `/usr/local/bin/mediamtx`. The publish path is HARDCODED
   (`rtmp://<device>:1935/publish/live`, matches cerastream's `InputKind::RtmpLocalhost`).
-- `ceralive-srt-gateway.service` — `srt-live-transmit "srt://:4001?mode=listener"
-  "udp://127.0.0.1:4000"` (from the `srt-tools` apt package), rewraps the stream to
-  UDP-TS onto cerastream's `InputKind::SrtIngest` loopback ingest. **No SRT passphrase
-  in v1** — see the DEFERRED.md item 7 follow-up.
+- SRT has **two topologies during the B2 fleet transition** (Task 16 makes CeraUI tolerate
+  both): **OLD** — a standalone `ceralive-srt-gateway.service` (srt-live-transmit) on :4001;
+  **NEW** — the SAME MediaMTX unit terminating SRT too (Task 14), proved by `/etc/mediamtx.yml`
+  top-level keys `srt: yes` + `srtAddress: :4001`. The published SRT URL stays `srt://<lan>:4001`
+  in BOTH. **No SRT passphrase in v1** — see the DEFERRED.md item 7 follow-up.
 
-**Backend status surface** (`apps/backend/src/modules/network/network-ingest.ts`, NEW):
-- `getNetworkIngestInfo(): NetworkIngest` — sync read of a cached snapshot probing both
-  systemd units via `systemctl is-active` (`Bun.spawn`, gated on `isRealDevice()`), a
+**Backend status surface** (`apps/backend/src/modules/network/network-ingest.ts`):
+- `getNetworkIngestInfo(): NetworkIngest` — sync read of a cached snapshot probing the
+  systemd unit(s) via `systemctl is-active` (`Bun.spawn`, gated on `isRealDevice()`), a
   reused LAN IP (`resolvePrimaryLanIp` — eth/en preferred, cellular/wifi excluded), and
   the board's capability source kinds.
+- **FAIL-CLOSED dual-topology SRT probe (Task 16, B2):** SRT is available iff (OLD)
+  `ceralive-srt-gateway.service` is active, OR (NEW) `ceralive-rtmp-gateway.service` is
+  active AND `parseMediamtxSrtEnabled(/etc/mediamtx.yml)` proves top-level `srt: yes` +
+  `srtAddress: :4001` (a targeted line-parse; only column-0 keys count). "rtmp active"
+  alone NEVER implies SRT — an old image whose srt unit died must not false-positive; a
+  parse failure/absent config → NOT srt-capable. The merge is the pure `resolveSrtTopology`;
+  the serving topology is recorded on the additive `srt.gateway: 'mediamtx' |
+  'srt-live-transmit'` field.
 - Rides the EXISTING `status` broadcast as additive-optional `network_ingest` (NOT a new
-  endpoint): `{ rtmp: {service_active, url} | null, srt: {service_active, url} | null }`.
-  Per-protocol `null` when the board's capabilities exclude that source, or no LAN IP is
-  resolvable.
+  endpoint): `{ rtmp: {service_active, url} | null, srt: {service_active, url, gateway?} | null }`.
+  Per-protocol `null` when the board's capabilities exclude that source; `gateway` is set only
+  on SRT, only when available. Shape is additive-only — legacy consumers still parse.
 - `buildGatewayProbe()` wires the real `GatewayProbe` into
   `apps/backend/src/modules/streaming/gateway-availability.ts` (`setGatewayProbe`) — the
-  seam that gates an rtmp/srt stream start.
+  seam that gates an rtmp/srt stream start, keyed off the merged fail-closed `service_active`.
 
 **Streaming-start gate** (`gateway-availability.ts` + `streaming.procedure.ts`): an rtmp/srt
 pipeline carries `requires_gateway: 'rtmp' | 'srt'` on `pipelineSchema` (additive-optional,

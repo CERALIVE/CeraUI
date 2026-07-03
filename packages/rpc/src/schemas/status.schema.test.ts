@@ -92,6 +92,32 @@ describe('networkIngestSchema (Task 16 — network-ingest gateway status)', () =
 			}).success,
 		).toBe(false);
 	});
+
+	test('srt carries the additive gateway topology marker (mediamtx | srt-live-transmit)', () => {
+		const parsed = networkIngestSchema.parse({
+			rtmp: { service_active: true, url: 'rtmp://192.168.1.100:1935/publish/live' },
+			srt: {
+				service_active: true,
+				url: 'srt://192.168.1.100:4001',
+				gateway: 'mediamtx',
+			},
+		});
+		expect(parsed.srt?.gateway).toBe('mediamtx');
+		expect(parsed.rtmp?.gateway).toBeUndefined();
+	});
+
+	test('rejects an unknown gateway topology value', () => {
+		expect(
+			networkIngestSchema.safeParse({
+				rtmp: null,
+				srt: {
+					service_active: true,
+					url: 'srt://192.168.1.100:4001',
+					gateway: 'not-a-topology',
+				},
+			}).success,
+		).toBe(false);
+	});
 });
 
 describe('audio_sources field (Task 4 — typed audio sources beside legacy asrcs)', () => {
