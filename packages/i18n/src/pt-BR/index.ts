@@ -1165,6 +1165,7 @@ const ptBR = {
 			copy: "Copiar endereço",
 			copied: "Endereço copiado",
 			copyFailed: "Não foi possível copiar o endereço.",
+			includesAudio: "Inclui áudio",
 		},
 		preview: {
 			title: "Pré-visualização",

@@ -1031,6 +1031,7 @@ const ja = {
 			copy: "アドレスをコピー",
 			copied: "アドレスをコピーしました",
 			copyFailed: "アドレスをコピーできませんでした。",
+			includesAudio: "音声を含む",
 		},
 		preview: {
 			title: "プレビュー",

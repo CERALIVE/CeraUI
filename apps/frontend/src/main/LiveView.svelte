@@ -304,6 +304,26 @@ async function handleSelectInput(inputId: string) {
 	}
 }
 
+// Selecting a network-ingest source (rtmp/srt) sets config.pipeline through the
+// same per-field-sync lock NetworkIngestSection uses, so both surfaces dispatch
+// identically and release the lock to the SERVER-applied value.
+const PIPELINE_FIELD = 'pipeline';
+
+async function handleSelectNetworkIngest(pipelineId: string) {
+	if (pipelineId === config?.pipeline) return;
+	beginFieldSync(PIPELINE_FIELD, pipelineId);
+	markFieldApplying(PIPELINE_FIELD);
+	try {
+		const result = await rpc.streaming.setConfig({ pipeline: pipelineId });
+		const applied =
+			(result as { applied?: { pipeline?: string } }).applied?.pipeline ?? pipelineId;
+		markFieldApplied(PIPELINE_FIELD, applied);
+	} catch {
+		markFieldFailed(PIPELINE_FIELD, config?.pipeline);
+		toast.error($LL.notifications.saveFailed());
+	}
+}
+
 // Operator-ordered source preference (Task 11). Display order is the persisted
 // preference reconciled against the live device list; the engine's auto-failover
 // is sticky and does NOT consult this order.
@@ -918,11 +938,15 @@ const configRows = $derived<ConfigRow[]>([
 		{config}
 		{devices}
 		{isStreaming}
+			networkIngest={getStatus()?.network_ingest ?? null}
 			onReorderSource={handleReorderSource}
 			onSelect={handleSelectInput}
 			onSelectAudioSource={handleSelectAudioSource}
+			onSelectNetworkIngest={handleSelectNetworkIngest}
 			onSwitch={handleSwitchInput}
+			pipelines={getPipelines()?.pipelines}
 			selectedAudioSource={effectiveAudioSource}
+			selectedPipeline={config?.pipeline}
 			{selectedInput}
 			sourceFailover={sourceFailover}
 			sourceOrder={sourceOrder}

@@ -1188,6 +1188,7 @@ const fr = {
 			copy: "Copier l'adresse",
 			copied: "Adresse copiée",
 			copyFailed: "Impossible de copier l'adresse.",
+			includesAudio: "Audio inclus",
 		},
 		preview: {
 			title: "Aperçu",

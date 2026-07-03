@@ -1007,6 +1007,7 @@ const ko = {
 			copy: "주소 복사",
 			copied: "주소가 복사됨",
 			copyFailed: "주소를 복사할 수 없습니다.",
+			includesAudio: "오디오 포함",
 		},
 		preview: {
 			title: "미리보기",

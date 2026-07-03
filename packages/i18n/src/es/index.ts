@@ -417,6 +417,7 @@ const es = {
 			copy: "Copiar dirección",
 			copied: "Dirección copiada",
 			copyFailed: "No se pudo copiar la dirección.",
+			includesAudio: "Incluye audio",
 		},
 		preview: {
 			title: "Vista previa",

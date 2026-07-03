@@ -999,6 +999,7 @@ const hi = {
 			copy: "पता कॉपी करें",
 			copied: "पता कॉपी हो गया",
 			copyFailed: "पता कॉपी नहीं हो सका।",
+			includesAudio: "ऑडियो शामिल है",
 		},
 		preview: {
 			title: "पूर्वावलोकन",

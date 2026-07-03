@@ -416,6 +416,7 @@ const de = {
 			copy: "Adresse kopieren",
 			copied: "Adresse kopiert",
 			copyFailed: "Adresse konnte nicht kopiert werden.",
+			includesAudio: "Enthält Audio",
 		},
 		preview: {
 			title: "Vorschau",

@@ -402,6 +402,7 @@ const en = {
 			copy: "Copy address",
 			copied: "Address copied",
 			copyFailed: "Couldn't copy the address.",
+			includesAudio: "Includes audio",
 		},
 		preview: {
 			title: "Preview",

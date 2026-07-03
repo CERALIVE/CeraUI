@@ -1134,6 +1134,7 @@ const ar = {
 			copy: "نسخ العنوان",
 			copied: "تم نسخ العنوان",
 			copyFailed: "تعذّر نسخ العنوان.",
+			includesAudio: "يتضمّن الصوت",
 		},
 		preview: {
 			title: "معاينة",

@@ -953,6 +953,7 @@ const zh = {
 			copy: "复制地址",
 			copied: "地址已复制",
 			copyFailed: "无法复制地址。",
+			includesAudio: "包含音频",
 		},
 		preview: {
 			title: "预览",
