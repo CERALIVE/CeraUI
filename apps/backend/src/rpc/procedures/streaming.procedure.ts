@@ -335,6 +335,8 @@ export const getConfigProcedure = authedProcedure
 			framerate,
 			video_codec: config.video_codec,
 			selected_video_input: config.selected_video_input,
+			source: config.source,
+			source_preference: config.source_preference,
 			srtla_addr: config.srtla_addr,
 			srtla_port: config.srtla_port,
 			srt_streamid: config.srt_streamid,
@@ -422,6 +424,8 @@ export const setConfigProcedure = authedProcedure
 		if (input.resolution !== undefined) config.resolution = input.resolution;
 		if (input.framerate !== undefined) config.framerate = input.framerate;
 		if (input.video_codec !== undefined) config.video_codec = input.video_codec;
+		if (input.source_preference !== undefined)
+			config.source_preference = input.source_preference;
 		if (input.selected_video_input !== undefined)
 			config.selected_video_input = input.selected_video_input;
 		// A resolved source overwrites selected_video_input verbatim (undefined
@@ -487,6 +491,8 @@ export const setConfigProcedure = authedProcedure
 		if (input.framerate !== undefined) applied.framerate = config.framerate;
 		if (input.video_codec !== undefined)
 			applied.video_codec = config.video_codec;
+		if (input.source_preference !== undefined)
+			applied.source_preference = config.source_preference;
 		if (input.selected_video_input !== undefined)
 			applied.selected_video_input = config.selected_video_input;
 		if (input.bitrate_overlay !== undefined)

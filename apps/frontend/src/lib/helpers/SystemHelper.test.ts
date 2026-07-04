@@ -9,7 +9,9 @@
 import type { ConfigMessage } from "@ceraui/rpc/schemas";
 import { describe, expect, it, vi } from "vitest";
 
-const start = vi.hoisted(() => vi.fn(async () => ({ success: true })));
+const start = vi.hoisted(() =>
+	vi.fn(async (_input: unknown) => ({ success: true })),
+);
 vi.mock("$lib/rpc/client", () => ({
 	rpc: { streaming: { start } },
 }));
@@ -33,5 +35,53 @@ describe("startStreaming — relay field forwarding (Task 19)", () => {
 		expect(input.relay_streamid_override).toBe("publish/abc");
 		expect(input.relay_protocol).toBe("srtla");
 		expect(input.relay_server).toBe("srv-eu");
+	});
+});
+
+describe("startStreaming — device-first source forwarding", () => {
+	it("carries the implicit sole-camera source into the start input", async () => {
+		start.mockClear();
+		const config = {
+			pipeline: "hdmi",
+			relay_server: "srv-eu",
+			source: "video0",
+		} as unknown as ConfigMessage;
+
+		await startStreaming(config);
+
+		const input = start.mock.calls[0]?.[0] as Record<string, unknown>;
+		expect(input.source).toBe("video0");
+	});
+
+	it("forwards every persisted encoder/tuning/source field so a Start preserves the full config", async () => {
+		start.mockClear();
+		const config = {
+			pipeline: "hdmi",
+			relay_server: "srv-eu",
+			source: "video0",
+			source_preference: ["video0", "usb0"],
+			selected_video_input: "video0",
+			video_codec: "h265",
+			resolution: "1080p",
+			framerate: 30,
+			fec_enabled: true,
+			recovery_mode: "bandwidth-saver",
+			selected_ingest_endpoint: "ep-1",
+			autostart: true,
+		} as unknown as ConfigMessage;
+
+		await startStreaming(config);
+
+		const input = start.mock.calls[0]?.[0] as Record<string, unknown>;
+		expect(input.source).toBe("video0");
+		expect(input.source_preference).toEqual(["video0", "usb0"]);
+		expect(input.selected_video_input).toBe("video0");
+		expect(input.video_codec).toBe("h265");
+		expect(input.resolution).toBe("1080p");
+		expect(input.framerate).toBe(30);
+		expect(input.fec_enabled).toBe(true);
+		expect(input.recovery_mode).toBe("bandwidth-saver");
+		expect(input.selected_ingest_endpoint).toBe("ep-1");
+		expect(input.autostart).toBe(true);
 	});
 });

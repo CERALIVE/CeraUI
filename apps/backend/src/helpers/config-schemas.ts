@@ -201,6 +201,10 @@ export const runtimeConfigSchema = z.object({
 	// at the procedure layer (T3). A legacy config without it back-derives `source`
 	// via `coerceLegacySource` at load time.
 	source: z.string().optional(),
+	// Operator-ordered video-source preference (input_id list, most-preferred
+	// first). Persisted so a device-first reorder survives reload; setConfig
+	// writes it, getConfig echoes it. Additive-optional.
+	source_preference: z.array(z.string()).optional(),
 	autostart: z.boolean().optional(),
 
 	// Remote/cloud settings

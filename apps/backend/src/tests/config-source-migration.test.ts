@@ -556,4 +556,35 @@ describe("streaming procedures — device-first source resolution", () => {
 		expect(dispatched.source).toBe("test");
 		expect(dispatched.selected_video_input).toBeUndefined();
 	});
+
+	// F2 Bug 1: with no persisted config.source, asserting dispatched.source (the
+	// value updateConfig persists as config.source) — not merely dispatched.pipeline
+	// — is the point; the pre-fix stream still got the right pipeline yet never
+	// persisted the source.
+	test("a sole-camera Start ({source:'video0'}, no persisted source) dispatches source→pipeline→input to session.start", async () => {
+		const config = getConfig();
+		config.source = undefined;
+		config.pipeline = undefined;
+		config.selected_video_input = undefined;
+
+		const result = await call(
+			streamingStartProcedure,
+			{ source: "video0" },
+			{ context: makeContext() },
+		);
+
+		expect(result.success).toBe(true);
+		expect(startSpy).toHaveBeenCalledTimes(1);
+		const dispatched = startSpy.mock.calls[0]?.[1] as {
+			pipeline?: string;
+			source?: string;
+			selected_video_input?: string;
+		};
+		expect(dispatched.source).toBe("video0");
+		expect(dispatched.pipeline).toBe("hdmi");
+		expect(dispatched.selected_video_input).toBe("video0");
+		expect(result.applied?.source).toBe("video0");
+		expect(result.applied?.pipeline).toBe("hdmi");
+		expect(result.applied?.selected_video_input).toBe("video0");
+	});
 });

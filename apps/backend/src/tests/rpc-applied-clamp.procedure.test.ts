@@ -166,6 +166,35 @@ describe("streaming.setConfig — applied (post-clamp) state", () => {
 		expect(echoed.selected_video_input).toBe("cam-0");
 	});
 
+	test("persists + echoes source_preference, and getConfig echoes it (config hydration on reload)", async () => {
+		const order = ["cam-b", "cam-a"];
+		const result = await call(
+			setConfigProcedure,
+			{ source_preference: order },
+			{ context: makeContext() },
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.applied?.source_preference).toEqual(order);
+		expect(getConfig().source_preference).toEqual(order);
+
+		const echoed = await call(getConfigProcedure, {}, { context: makeContext() });
+		expect(echoed.source_preference).toEqual(order);
+	});
+
+	test("getConfig echoes a persisted source + source_preference (F2 Bug 2)", async () => {
+		const config = getConfig();
+		config.source = "video0";
+		config.source_preference = ["video0", "usb0"];
+
+		const echoed = await call(getConfigProcedure, {}, { context: makeContext() });
+		expect(echoed.source).toBe("video0");
+		expect(echoed.source_preference).toEqual(["video0", "usb0"]);
+
+		config.source = undefined;
+		config.source_preference = undefined;
+	});
+
 	test("clears a stale ingest slot on a non-slot save (round-3 mutual exclusion)", async () => {
 		await call(
 			setConfigProcedure,

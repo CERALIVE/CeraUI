@@ -133,7 +133,10 @@ export const stopStreaming = async () => {
 
 export const startStreaming = async (config: ConfigMessage) => {
 	try {
-		// Map ConfigMessage to StreamingConfigInput
+		// Forward EVERY field present in both ConfigMessage and
+		// StreamingConfigInput: an incomplete allowlist silently drops persisted
+		// state at Start (dropping `source` is what stopped the implicit
+		// sole-camera source from ever persisting via the backend start path).
 		const input: StreamingConfigInput = {
 			pipeline: config.pipeline,
 			acodec: config.acodec,
@@ -149,6 +152,16 @@ export const startStreaming = async (config: ConfigMessage) => {
 			relay_account: config.relay_account,
 			relay_streamid_override: config.relay_streamid_override,
 			relay_protocol: config.relay_protocol,
+			source: config.source,
+			source_preference: config.source_preference,
+			selected_video_input: config.selected_video_input,
+			video_codec: config.video_codec,
+			resolution: config.resolution,
+			framerate: config.framerate,
+			fec_enabled: config.fec_enabled,
+			recovery_mode: config.recovery_mode,
+			selected_ingest_endpoint: config.selected_ingest_endpoint,
+			autostart: config.autostart,
 		};
 		return await rpc.streaming.start(input);
 	} catch (error) {
