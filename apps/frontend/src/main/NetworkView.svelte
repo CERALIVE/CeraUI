@@ -154,7 +154,6 @@ $effect(() => {
 		<WifiSection
 			wifiRadios={wifiEntries}
 			{netif}
-			{links}
 			{isFullyStale}
 			{staleInterfaces}
 			{primaryWifiDevice}
@@ -163,7 +162,6 @@ $effect(() => {
 		<CellularSection
 			{modemEntries}
 			{netif}
-			{links}
 			{isFullyStale}
 			{staleInterfaces}
 			onConfigure={openModemConfig}
