@@ -138,7 +138,8 @@ The backend pushes typed events to all connected clients over the WebSocket chan
 | `wifi` | on-change | WiFi scan / connect / disconnect |
 | `relays` | on-change | relay list mutations |
 | `acodecs` | on-change | audio codec list changes |
-| `pipelines` | on-change | pipeline list changes |
+| `pipelines` | on-change | pipeline list changes — deprecation shim, see "Device-First Source Model" below |
+| `sources` | on-change (post-login snapshot + hardware swap) | unified device-first source list, see below |
 | `notifications` | on-demand | user-facing toast events |
 | `ping` | 5 s | heartbeat emitter (server → client) |
 
@@ -157,6 +158,53 @@ Immediately after a client authenticates, the backend pushes a full snapshot of 
 ### Applied-state returns
 
 RPC setters (`setConfig`, `setBitrate`, etc.) return `{ success: boolean, applied: <fields> }` where `applied` reflects the post-clamp, post-validation values the backend actually wrote. The frontend releases field locks to the `applied` value, not the client's intended value.
+
+## Device-First Source Model
+
+The Live destination is organized around ONE device-first source list rather than
+a separate pipeline picker, device list, and per-device capability broadcast. The
+backend folds `pipelines` + `devices` + the coarse `capabilities.device_modes` map
+into a single `sources` broadcast (`apps/backend/src/modules/streaming/sources.ts`,
+`getSourcesMessage()`/`buildSources()`): every capture device, coarse pipeline
+(hdmi/camlink/…), virtual pipeline (test pattern), and network-ingest slot
+(rtmp/srt) appears as one `StreamSource` row in ONE ordered list, each carrying its
+own `modes` (Tier-2 device modes, when known), `audioKind`, and availability.
+
+- **`config.source`** is the persisted selection (a `StreamSource` id — an
+  `input_id` for a capture device, a pipeline id for coarse/virtual, `rtmp`/`srt`
+  for network). `deriveEngineRouting(sourceId, sources)` resolves it to the wire
+  pair the engine actually needs (`{pipeline, selected_video_input}`); a capture id
+  routes to its bridged pipeline + input_id, everything else routes to its
+  pipeline id with `selected_video_input` cleared. The backend procedure seam is
+  `resolveSourceRouting()`, invoked at `streaming.setConfig` and
+  `streaming.start` — an unknown source id is rejected before any config mutation
+  or engine dispatch.
+- **Frontend**: `SourceSection.svelte` renders the single `getSources()` list
+  (row per `StreamSource`, ordered by operator preference for capture devices) and
+  owns the write itself (`rpc.streaming.setConfig({ source })`) — it is no longer
+  a purely presentational component. `GoLiveCard.svelte` (mounted at the top of
+  `IdleCockpit.svelte`) is the one adaptive readiness + config + start surface: it
+  derives Start-gating from the pure `deriveGoLiveReadiness()` module
+  (`lib/streaming/go-live-readiness.ts`) against the current source, network,
+  destination, and engine state, and collapses to a thin ready-bar once every gate
+  is green. `LiveView.svelte` switches between `IdleCockpit` (pre-stream: GoLiveCard
+  + a Preview disclosure + SourceSection) and `LiveCockpit` (streaming: telemetry
+  strip + bitrate adjuster + ingest stats + Stop) on the optimistic streaming edge.
+- **`pipelines`/`devices`/the `device_modes` field on `capabilities`** are kept
+  running, byte-for-byte unchanged, as one-release deprecation shims — see
+  `docs/TECHNICAL_DEBT.md` (`TD-legacy-source-broadcasts`). No shipped frontend
+  surface reads them anymore.
+- **Telemetry lifecycle**: `getLinkTelemetry()` is guaranteed `null` (not just
+  absent) on the transition edge from streaming to stopped — both a backend
+  heartbeat null-broadcast and a belt-and-braces frontend clear on the
+  `is_streaming: true → false` edge. The HUD bitrate and per-interface throughput
+  numbers are likewise cleared to "—"/0 outside an active stream — no stale value
+  survives a stop. The persistent HUD strip surfaces exactly four facts
+  (lifecycle/state badge, health verdict, bitrate, one temperature chip); anything
+  else (voltage/current, per-link RTT/NAK/weight) lives only in the expanded sheet.
+  `network/BondedLinksSection.svelte` on the Network destination is the documented
+  SOLE owner of live per-link telemetry numbers — the per-interface WiFi/Cellular/
+  Ethernet section rows do NOT duplicate them.
 
 ## Connection Topology
 

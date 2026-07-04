@@ -95,14 +95,16 @@ exit_criteria: capability:pip_supported
 owner: ceraui-team
 registered_at: 2026-06-17
 resolved_at: null
-unblock: cerastream advertises pip_supported=true and exposes a compositing/PiP control path; replace the Live "coming soon" affordance (data-debt-id="TD-pip") with the real overlay control and flip this entry to resolved.
+unblock: cerastream advertises pip_supported=true and exposes a compositing/PiP control path; replace the Live "coming soon" affordance (data-debt-id="TD-pip"), now rendered inside the IdleCockpit Roadmap disclosure (apps/frontend/src/main/live/IdleCockpit.svelte, moved there by Task 12), with the real overlay control and flip this entry to resolved.
 ```
 
 Compositing a second source as a picture-in-picture overlay is not yet possible:
 the engine drives a single active input. The Live destination surfaces a calm
-"coming soon" affordance (`data-debt-id="TD-pip"`) next to the input picker — purely
-informational, never an actionable control — until the engine advertises
-`pip_supported`.
+"coming soon" affordance (`data-debt-id="TD-pip"`) inside the collapsed Roadmap
+`<details>` disclosure at the bottom of the idle Live cockpit
+(`IdleCockpit.svelte`, Task 12 — it lived beside the input picker before the
+cockpit split) — purely informational, never an actionable control — until the
+engine advertises `pip_supported`.
 
 ```debt
 id: TD-live-audio-codec
@@ -130,13 +132,15 @@ exit_criteria: capability:mode_fallback
 owner: ceraui-team
 registered_at: 2026-06-17
 resolved_at: null
-unblock: cerastream advertises mode_fallback=true and exposes an auto-fallback source policy; replace the Live "coming soon" affordance (data-debt-id="TD-mode-fallback") with the real fallback control and flip this entry to resolved.
+unblock: cerastream advertises mode_fallback=true and exposes an auto-fallback source policy; replace the Live "coming soon" affordance (data-debt-id="TD-mode-fallback"), now rendered inside the IdleCockpit Roadmap disclosure (apps/frontend/src/main/live/IdleCockpit.svelte, moved there by Task 12), with the real fallback control and flip this entry to resolved.
 ```
 
 When the active source drops, the engine does not yet auto-fall-back to a backup
-input — recovery is operator-driven via the input picker. The Live destination
-surfaces a calm "coming soon" affordance (`data-debt-id="TD-mode-fallback"`) until
-the engine advertises `mode_fallback`.
+input — recovery is operator-driven via the unified source list
+(`SourceSection.svelte`). The Live destination surfaces a calm "coming soon"
+affordance (`data-debt-id="TD-mode-fallback"`) inside the collapsed Roadmap
+`<details>` disclosure at the bottom of the idle Live cockpit (`IdleCockpit.svelte`,
+Task 12) until the engine advertises `mode_fallback`.
 
 ```debt
 id: TD-plain-srt-egress
@@ -173,7 +177,7 @@ exit_criteria: capability:network_embedded_audio
 owner: ceraui-team
 registered_at: 2026-07-03
 resolved_at: null
-unblock: A network-ingest (rtmp/srt) publish carries its own muxed audio, but the engine can only route that embedded audio when it advertises the network_embedded_audio capability (cerastream Task 21). Until an engine advertising it is deployed, the Live audio picker keeps the legacy selectable-ALSA path for rtmp/srt pipelines and surfaces a calm coming-soon affordance (data-debt-id="TD-embedded-audio") next to the audio source. When the deployed engine advertises network_embedded_audio=true, the backend skips asrcProbe + omits audio.device and the frontend renders the read-only "Embedded audio" state; remove the coming-soon affordance and flip this entry to resolved.
+unblock: A network-ingest (rtmp/srt) publish carries its own muxed audio, but the engine can only route that embedded audio when it advertises the network_embedded_audio capability (cerastream Task 21). Until an engine advertising it is deployed, the Live audio picker keeps the legacy selectable-ALSA path for rtmp/srt pipelines and surfaces a calm coming-soon affordance (data-debt-id="TD-embedded-audio") in TWO places (both post-Task-12/15): conditionally inside the IdleCockpit Roadmap disclosure (apps/frontend/src/main/live/IdleCockpit.svelte) and next to the read-only active-audio-source label in AudioDialog.svelte. When the deployed engine advertises network_embedded_audio=true, the backend skips asrcProbe + omits audio.device and the frontend renders the read-only "Embedded audio" state; remove both coming-soon affordances and flip this entry to resolved.
 ```
 
 ```debt
@@ -187,6 +191,41 @@ registered_at: 2026-07-03
 resolved_at: null
 unblock: The B2 gateway consolidation (image-building-pipeline: MediaMTX terminates RTMP :1935 + SRT :4001; srt-live-transmit removed) transitions the fleet across two SRT topologies. resolveSrtTopology (apps/backend/src/modules/network/network-ingest.ts) therefore tolerates BOTH the OLD standalone ceralive-srt-gateway.service and the NEW MediaMTX-terminated SRT (parsed from /etc/mediamtx.yml). Once every fleet device has run the B2 image for the full 6-month support window (no device still on the srt-live-transmit topology), remove the OLD-topology branch (srtUnitActive) from resolveSrtTopology plus its network-ingest.test.ts cases, then flip this entry to resolved. This is a backend-only probe simplification and carries no source data-debt-id marker.
 ```
+
+```debt
+id: TD-legacy-source-broadcasts
+title: Legacy pipelines/devices/device_modes broadcasts kept as deprecation shims behind the unified sources broadcast
+track: 1
+status: open
+exit_criteria: `bun run --filter backend test -- sources.test.ts`
+owner: ceraui-team
+registered_at: 2026-07-04
+resolved_at: null
+unblock: remove after one release with the sources broadcast as the sole consumer path. The device-first source model (experience-simplification Tasks 1-16) folds pipelines/devices/device_modes into ONE unified sources broadcast (modules/streaming/sources.ts, getSourcesMessage/buildSources), but the three legacy producers are deliberately left running byte-for-byte unchanged for one release as a rollback safety net: the `devices` broadcast (modules/streaming/devices.ts `deps.broadcast("devices", …)` + its post-login dispatch in rpc/adapter.ts), the `pipelines` broadcast (rpc/procedures/streaming.procedure.ts `broadcastMsg("pipelines", …)`), and the `device_modes` field folded onto the `capabilities` broadcast (modules/streaming/capabilities.ts). No shipped frontend surface reads any of the three anymore — SourceSection/EncoderDialog/GoLiveCard all read `getSources()` exclusively (Tasks 13-16). Once one full release has shipped with `sources` as the sole consumer path and no rollback has been needed, delete the three legacy producers/fields (and the now-unused `getPipelines`/`devices`/`device_modes` schema surface, if nothing else depends on it), then flip this entry to resolved.
+```
+
+This entry carries no source `data-debt-id` marker — the shim is a backend
+broadcast-retention decision, not a UI affordance. It is registered here purely
+so the "kept for one release, then delete" decision has a durable, dated record
+future agents can find instead of re-litigating whether the legacy broadcasts are
+safe to remove.
+
+```debt
+id: TD-unmounted-source-shims
+title: StreamSettingsCard/OnboardingChecklist/ServerReadiness/NetworkIngestSection kept as unmounted GoLiveCard-migration shims
+track: 1
+status: open
+exit_criteria: `bun run --filter frontend check`
+owner: ceraui-team
+registered_at: 2026-07-04
+resolved_at: null
+unblock: remove after one release with the sources broadcast. GoLiveCard + IdleCockpit (experience-simplification Tasks 10-12) absorbed every responsibility these four components used to own in LiveView — the onboarding/empty-state guidance, the destination readiness hint, the migrated config rows, and the LAN network-ingest picker are all now rendered by GoLiveCard/IdleCockpit/SourceSection — so none of the four is mounted anywhere in the app today. They are kept as unmounted files (only StreamSettingsCard's `ConfigRow` type is still imported, by GoLiveCard and IdleCockpit) as a one-release rollback safety net in case the cockpit split needs to be reverted. Once one full release has shipped on the device-first Live cockpit with no rollback, delete apps/frontend/src/main/live/StreamSettingsCard.svelte, main/live/OnboardingChecklist.svelte, main/live/ServerReadiness.svelte, and lib/components/custom/NetworkIngestSection.svelte (plus their test files and the now-orphaned `onboarding.svelte.ts` store), re-point the `ConfigRow` type onto GoLiveCard directly, then flip this entry to resolved.
+```
+
+This entry also carries no source `data-debt-id` marker — the four files are
+inert (never imported by anything the router mounts, `StreamSettingsCard`'s type
+export excepted), so there is no live UI affordance to bind a marker to. The
+register entry is the durable record of the "kept but dead" decision instead.
 
 > **Cross-repo follow-up (not CeraUI debt): RTMP-ingest unification.** The B2 SRT
 > ingest is now a loopback `srtsrc`-caller pull; RTMP ingest deliberately STAYS on
