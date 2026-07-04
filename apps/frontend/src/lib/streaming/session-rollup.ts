@@ -15,12 +15,27 @@
  */
 import type { LinkTelemetryEntry } from "@ceraui/rpc/schemas";
 
+/** One sampled link inside a {@link SessionSample}. */
+export interface SessionSampleLink {
+	iface: string;
+	/** A stale link counts as down for uptime/drop purposes. */
+	stale: boolean;
+	/** Round-trip time at sample time, ms. */
+	rtt: number;
+	/** Cumulative NAK counter at sample time (monotonic per link). */
+	nak: number;
+	/** Bond weight share at sample time, percent. */
+	weight: number;
+}
+
 /** One sampled instant of a streaming session. */
 export interface SessionSample {
 	/** Configured bitrate at sample time, in kbps. */
 	bitrateKbps: number;
-	/** Per-link liveness at sample time (a stale link counts as down). */
-	links: ReadonlyArray<{ iface: string; stale: boolean }>;
+	/** Wall-clock instant the sample was taken, ms epoch (drives duration). */
+	capturedAt: number;
+	/** Per-link telemetry at sample time. */
+	links: ReadonlyArray<SessionSampleLink>;
 }
 
 /** Per-link rollup entry: the share of the session the link was carrying. */
@@ -28,6 +43,12 @@ export interface SessionLinkRollup {
 	iface: string;
 	/** Percent of samples the link was present and fresh (0–100, integer). */
 	uptimePercent: number;
+	/** Mean bond weight share while the link was present (0–100, integer). */
+	contribution: number;
+	/** Total NAKs observed (peak of the monotonic cumulative counter). */
+	nakTotal: number;
+	/** Mean RTT while the link was present, ms (rounded). */
+	avgRtt: number;
 }
 
 /** The end-of-session summary surfaced after the stream stops. */
@@ -43,7 +64,9 @@ export interface SessionRollup {
 	 * to down (absent or stale) between consecutive samples. Summed across links.
 	 */
 	dropCount: number;
-	/** Per-link uptime, in first-seen interface order. */
+	/** Session wall-clock span (last − first sample instant), ms (≥ 0). */
+	durationMs: number;
+	/** Per-link uptime + diagnostics, in first-seen interface order. */
 	links: SessionLinkRollup[];
 }
 
@@ -61,13 +84,25 @@ function asCount(value: unknown): number {
  */
 export function createSample(
 	bitrateKbps: number | undefined,
-	links: ReadonlyArray<Pick<LinkTelemetryEntry, "iface" | "stale">> | undefined,
+	links:
+		| ReadonlyArray<
+				Pick<
+					LinkTelemetryEntry,
+					"iface" | "stale" | "rtt_ms" | "nak_count" | "weight_percent"
+				>
+		  >
+		| undefined,
+	capturedAt: number = Date.now(),
 ): SessionSample {
 	return {
 		bitrateKbps: asCount(bitrateKbps),
+		capturedAt,
 		links: (links ?? []).map((l) => ({
 			iface: l.iface,
 			stale: l.stale === true,
+			rtt: asCount(l.rtt_ms),
+			nak: asCount(l.nak_count),
+			weight: asCount(l.weight_percent),
 		})),
 	};
 }
@@ -94,6 +129,7 @@ export function computeSessionRollup(
 			peakBitrateKbps: 0,
 			avgBitrateKbps: 0,
 			dropCount: 0,
+			durationMs: 0,
 			links: [],
 		};
 	}
@@ -105,6 +141,13 @@ export function computeSessionRollup(
 		if (br > peak) peak = br;
 		sum += br;
 	}
+
+	const first = samples[0];
+	const last = samples[sampleCount - 1];
+	const durationMs =
+		first !== undefined && last !== undefined
+			? Math.max(0, last.capturedAt - first.capturedAt)
+			: 0;
 
 	// Interfaces in first-seen order across the whole session.
 	const order: string[] = [];
@@ -122,6 +165,10 @@ export function computeSessionRollup(
 	const links: SessionLinkRollup[] = order.map((iface) => {
 		let upSamples = 0;
 		let wasUp = false;
+		let presentSamples = 0;
+		let weightSum = 0;
+		let rttSum = 0;
+		let nakTotal = 0;
 		for (let i = 0; i < samples.length; i++) {
 			const sample = samples[i];
 			if (sample === undefined) continue;
@@ -130,10 +177,22 @@ export function computeSessionRollup(
 			// Count a drop only on a real up→down edge (not the initial sample).
 			if (i > 0 && wasUp && !up) dropCount++;
 			wasUp = up;
+
+			const link = sample.links.find((l) => l.iface === iface);
+			if (link !== undefined) {
+				presentSamples++;
+				weightSum += asCount(link.weight);
+				rttSum += asCount(link.rtt);
+				if (link.nak > nakTotal) nakTotal = asCount(link.nak);
+			}
 		}
 		return {
 			iface,
 			uptimePercent: Math.round((upSamples / sampleCount) * 100),
+			contribution:
+				presentSamples > 0 ? Math.round(weightSum / presentSamples) : 0,
+			nakTotal,
+			avgRtt: presentSamples > 0 ? Math.round(rttSum / presentSamples) : 0,
 		};
 	});
 
@@ -142,6 +201,7 @@ export function computeSessionRollup(
 		peakBitrateKbps: peak,
 		avgBitrateKbps: Math.round(sum / sampleCount),
 		dropCount,
+		durationMs,
 		links,
 	};
 }
@@ -169,10 +229,12 @@ export function rollupToCsv(rollup: SessionRollup): string {
 		`avg_bitrate_kbps,${csvField(rollup.avgBitrateKbps)}`,
 		`drop_count,${csvField(rollup.dropCount)}`,
 		`sample_count,${csvField(rollup.sampleCount)}`,
+		`duration_ms,${csvField(rollup.durationMs)}`,
 		"",
-		"iface,uptime_percent",
+		"iface,uptime_percent,contribution_percent,nak_total,avg_rtt_ms",
 		...rollup.links.map(
-			(l) => `${csvField(l.iface)},${csvField(l.uptimePercent)}`,
+			(l) =>
+				`${csvField(l.iface)},${csvField(l.uptimePercent)},${csvField(l.contribution)},${csvField(l.nakTotal)},${csvField(l.avgRtt)}`,
 		),
 	];
 	return lines.join("\n");

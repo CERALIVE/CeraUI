@@ -585,7 +585,7 @@ describe("IngestStats — session summary + export (device-local)", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("renders the rollup after the stream stops", () => {
+	it("renders the historical rollup with 4 tiles + per-link diagnostics after stop", () => {
 		const panel = runMockSession();
 
 		expect(
@@ -595,6 +595,10 @@ describe("IngestStats — session summary + export (device-local)", () => {
 		expect(panel.querySelectorAll('[data-testid="ingest-row"]')).toHaveLength(
 			0,
 		);
+		// Historical framing: the header reads "Session ended · {duration}".
+		expect(
+			panel.querySelector("h2")?.textContent?.trim().startsWith("Session ended"),
+		).toBe(true);
 
 		expect(
 			panel
@@ -611,23 +615,79 @@ describe("IngestStats — session summary + export (device-local)", () => {
 				.querySelector('[data-testid="ingest-summary-drops"]')
 				?.textContent?.trim(),
 		).toBe("1");
+		// The fourth tile is the session duration (a `<seconds>s`/`<m>m…` string).
+		const duration = panel.querySelector('[data-testid="ingest-summary-duration"]');
+		expect(duration, "duration tile must render").not.toBeNull();
+		expect(duration?.textContent?.trim()).toMatch(/\d+\s*(s|m|h)/);
+
+		// The uptime-bars block is gone; per-link rows are now contribution rows
+		// carrying NAK total + avg RTT.
+		expect(
+			panel.querySelectorAll('[data-testid="ingest-uptime-row"]'),
+		).toHaveLength(0);
+		expect(panel.querySelector('[data-testid="ingest-uptime"]')).toBeNull();
 
 		const eth0 = panel.querySelector<HTMLElement>(
-			'[data-testid="ingest-uptime-row"][data-iface="eth0"]',
+			'[data-testid="ingest-contribution-row"][data-iface="eth0"]',
 		);
 		const wlan0 = panel.querySelector<HTMLElement>(
-			'[data-testid="ingest-uptime-row"][data-iface="wlan0"]',
+			'[data-testid="ingest-contribution-row"][data-iface="wlan0"]',
 		);
+		expect(eth0, "eth0 contribution row").not.toBeNull();
+		expect(wlan0, "wlan0 contribution row").not.toBeNull();
+
 		expect(
 			within(eth0 as HTMLElement)
-				.getByTestId("ingest-uptime")
+				.getByTestId("ingest-link-nak")
 				.textContent?.trim(),
-		).toBe("100%");
+		).toBe("0");
+		expect(
+			within(eth0 as HTMLElement)
+				.getByTestId("ingest-link-rtt")
+				.textContent?.trim(),
+		).toBe("18 ms");
 		expect(
 			within(wlan0 as HTMLElement)
-				.getByTestId("ingest-uptime")
+				.getByTestId("ingest-link-rtt")
 				.textContent?.trim(),
-		).toBe("50%");
+		).toBe("30 ms");
+	});
+
+	it("clears the live sparkline ring on stop so a new session starts fresh (remount-free)", async () => {
+		const { container, rerender } = render(IngestStats, {
+			props: { telemetry: oneLink(10), isStreaming: true, bitrateKbps: 4000 },
+		});
+		flushSync();
+		for (let i = 1; i < 30; i++) {
+			await rerender({
+				telemetry: oneLink(10 + i),
+				isStreaming: true,
+				bitrateKbps: 4000,
+			});
+			flushSync();
+		}
+		expect(Number(sparklineOf(container).getAttribute("data-samples"))).toBe(30);
+
+		// Stop: the summary renders and the ring is cleared without a remount.
+		await rerender({
+			telemetry: { links: [] },
+			isStreaming: false,
+			bitrateKbps: 4000,
+		});
+		flushSync();
+		expect(
+			panelOf(container).querySelector('[data-testid="ingest-summary"]'),
+		).not.toBeNull();
+
+		// Restart with a single frame — the sparkline reads 1, not 31: the ring was
+		// cleared on the stop edge, not carried over into the next session.
+		await rerender({
+			telemetry: oneLink(99),
+			isStreaming: true,
+			bitrateKbps: 4000,
+		});
+		flushSync();
+		expect(Number(sparklineOf(container).getAttribute("data-samples"))).toBe(1);
 	});
 
 	it("exports a JSON file carrying the rollup fields", async () => {
@@ -654,9 +714,10 @@ describe("IngestStats — session summary + export (device-local)", () => {
 		expect(parsed.peakBitrateKbps).toBe(8000);
 		expect(parsed.avgBitrateKbps).toBe(6000);
 		expect(parsed.dropCount).toBe(1);
+		expect(typeof parsed.durationMs).toBe("number");
 		expect(parsed.links).toEqual([
-			{ iface: "eth0", uptimePercent: 100 },
-			{ iface: "wlan0", uptimePercent: 50 },
+			{ iface: "eth0", uptimePercent: 100, contribution: 50, nakTotal: 0, avgRtt: 18 },
+			{ iface: "wlan0", uptimePercent: 50, contribution: 50, nakTotal: 0, avgRtt: 30 },
 		]);
 	});
 

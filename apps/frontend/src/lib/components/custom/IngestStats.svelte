@@ -16,7 +16,7 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { LinkTelemetryEntry, LinkTelemetryMessage } from '@ceraui/rpc/schemas';
-import { Activity, AlertTriangle, Download, TrendingUp } from '@lucide/svelte';
+import { Activity, AlertTriangle, Clock, Download, TrendingUp } from '@lucide/svelte';
 import { untrack } from 'svelte';
 
 import Badge from '$lib/components/custom/Badge.svelte';
@@ -132,9 +132,22 @@ $effect(() => {
 	}
 	if (!streaming && wasStreaming) {
 		rollup = sessionSamples.length > 0 ? computeSessionRollup(sessionSamples) : null;
+		// Clear the live sparkline ring so the next session starts fresh without a
+		// remount; the folded rollup above is what the summary renders from now on.
+		history = {};
 	}
 	wasStreaming = streaming;
 });
+
+function formatDuration(ms: number): string {
+	const totalSeconds = Math.max(0, Math.round(ms / 1000));
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	if (hours > 0) return `${hours}h ${minutes}m`;
+	if (minutes > 0) return `${minutes}m ${seconds}s`;
+	return `${seconds}s`;
+}
 
 // The completed-session summary wins over a lingering stale telemetry frame once
 // the stream has stopped; while streaming, rollup is null so the live table shows.
@@ -199,7 +212,9 @@ function exportCsv(): void {
 			<Activity class="size-4" />
 		</span>
 		<h2 class="text-sm font-semibold tracking-tight">
-			{showSummary ? $LL.live.ingest.summary() : $LL.live.ingest.title()}
+			{showSummary && rollup
+				? $LL.live.ingest.sessionEnded({ duration: formatDuration(rollup.durationMs) })
+				: $LL.live.ingest.title()}
 		</h2>
 		{#if showSummary && rollup}
 			<span
@@ -231,7 +246,7 @@ function exportCsv(): void {
 	{#if showSummary && rollup}
 		<!-- Per-session summary: peak/avg bitrate, drops, then per-link uptime. -->
 		<div data-testid="ingest-summary">
-			<div class="grid grid-cols-3 gap-3">
+			<div class="grid grid-cols-4 gap-3">
 				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
 					<div
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
@@ -279,6 +294,20 @@ function exportCsv(): void {
 						{rollup.dropCount}
 					</div>
 				</div>
+				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
+					<div
+						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
+					>
+						<Clock aria-hidden="true" class="size-3 shrink-0" />
+						<span class="truncate">{$LL.live.ingest.duration()}</span>
+					</div>
+					<div
+						data-testid="ingest-summary-duration"
+						class="text-foreground font-mono text-sm font-semibold tabular-nums"
+					>
+						{formatDuration(rollup.durationMs)}
+					</div>
+				</div>
 			</div>
 
 			{#if rollup.links.length > 0}
@@ -288,33 +317,48 @@ function exportCsv(): void {
 						'text-[10px] font-medium uppercase tracking-wide',
 					)}
 				>
-					<span class="w-20 shrink-0">{$LL.live.ingest.link()}</span>
-					<span class="flex-1">{$LL.live.ingest.uptime()}</span>
-					<span class="w-10 text-end">%</span>
+					<span class="w-24 shrink-0 ps-4">{$LL.live.ingest.link()}</span>
+					<span class="flex-1">{$LL.live.ingest.contribution()}</span>
+					<span class="w-12 text-end">{$LL.live.ingest.nak()}</span>
+					<span class="w-14 text-end">{$LL.live.ingest.rtt()}</span>
 				</div>
 				<div role="list">
-					{#each rollup.links as link (link.iface)}
+					{#each rollup.links as link, i (link.iface)}
 						<div
 							role="listitem"
-							data-testid="ingest-uptime-row"
+							data-testid="ingest-contribution-row"
 							data-iface={link.iface}
 							class="flex items-center gap-3 border-b py-2 text-xs last:border-b-0"
 						>
-							<span class="w-20 shrink-0 truncate font-medium">{link.iface}</span>
+							<div class="flex w-24 shrink-0 items-center gap-2">
+								<!-- Spectral per-link identity dot (--link-1..6 ramp). -->
+								<span
+									aria-hidden="true"
+									class="size-2 shrink-0 rounded-full"
+									style={`background-color: var(--link-${(i % 6) + 1})`}
+								></span>
+								<span class="truncate font-medium">{link.iface}</span>
+							</div>
 							<div
 								aria-hidden="true"
 								class="bg-secondary/60 relative h-1.5 flex-1 overflow-hidden rounded-full"
 							>
 								<div
 									class="bg-primary h-full rounded-full"
-									style={`width:${link.uptimePercent}%`}
+									style={`width:${link.contribution}%`}
 								></div>
 							</div>
 							<span
-								data-testid="ingest-uptime"
-								class="text-foreground w-10 text-end font-mono tabular-nums"
+								data-testid="ingest-link-nak"
+								class="text-foreground w-12 text-end font-mono tabular-nums"
 							>
-								{link.uptimePercent}%
+								{link.nakTotal}
+							</span>
+							<span
+								data-testid="ingest-link-rtt"
+								class="text-foreground w-14 text-end font-mono tabular-nums"
+							>
+								{`${link.avgRtt} ${$LL.units.ms()}`}
 							</span>
 						</div>
 					{/each}
