@@ -109,7 +109,12 @@ export const resolutionSchema = z.enum([
 	"4k",
 ]);
 
+// SECOND copy of the @ceraui/rpc framerate rung ladder (known duplication — kept
+// engine-binding-free on purpose). MUST stay in parity: 23.98 (24000/1001,
+// NTSC-film) + 24 (cine) are mirrored here so a persisted film-rate config parses.
 export const framerateSchema = z.union([
+	z.literal(23.98),
+	z.literal(24),
 	z.literal(25),
 	z.literal(29.97),
 	z.literal(30),
