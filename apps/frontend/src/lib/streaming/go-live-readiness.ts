@@ -100,13 +100,11 @@ export interface GoLiveReadinessInput {
  * render it without adding a string. Defined once, imported nowhere else.
  */
 /** No source chosen / a stale-unresolvable id — the legacy `cannotStartNoPipeline` block. */
-export const READINESS_SOURCE_REASON =
-	"live.cannotStartNoPipeline" as const;
+export const READINESS_SOURCE_REASON = "live.cannotStartNoPipeline" as const;
 /** No enabled interface with an IP, or the control channel is down. */
 export const READINESS_NETWORK_REASON = "network.view.noLinks" as const;
 /** No usable server target — the legacy `cannotStartNoServer` block. */
-export const READINESS_DESTINATION_REASON =
-	"live.cannotStartNoServer" as const;
+export const READINESS_DESTINATION_REASON = "live.cannotStartNoServer" as const;
 /** Engine offline / control channel down — the `engineUnavailable` calm-blocked tone. */
 export const READINESS_ENGINE_UNAVAILABLE_REASON =
 	"live.education.tier.engineUnavailable.title" as const;

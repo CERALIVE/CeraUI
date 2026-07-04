@@ -121,8 +121,20 @@ describe("computeSessionRollup — mock session", () => {
 
 		expect(rollup.durationMs).toBe(9000);
 		expect(rollup.links).toEqual([
-			{ iface: "eth0", uptimePercent: 100, contribution: 80, nakTotal: 7, avgRtt: 25 },
-			{ iface: "wlan0", uptimePercent: 67, contribution: 20, nakTotal: 4, avgRtt: 51 },
+			{
+				iface: "eth0",
+				uptimePercent: 100,
+				contribution: 80,
+				nakTotal: 7,
+				avgRtt: 25,
+			},
+			{
+				iface: "wlan0",
+				uptimePercent: 67,
+				contribution: 20,
+				nakTotal: 4,
+				avgRtt: 51,
+			},
 		]);
 		// wlan0 up (s0) → down/absent (s1) → up (s2): one up→down edge.
 		expect(rollup.dropCount).toBe(1);
@@ -152,8 +164,20 @@ describe("computeSessionRollup — mock session", () => {
 		const rollup = computeSessionRollup(flap);
 		expect(rollup.dropCount).toBe(2);
 		expect(rollup.links).toEqual([
-			{ iface: "wlan0", uptimePercent: 50, contribution: 60, nakTotal: 0, avgRtt: 30 },
-			{ iface: "lte0", uptimePercent: 0, contribution: 40, nakTotal: 0, avgRtt: 60 },
+			{
+				iface: "wlan0",
+				uptimePercent: 50,
+				contribution: 60,
+				nakTotal: 0,
+				avgRtt: 30,
+			},
+			{
+				iface: "lte0",
+				uptimePercent: 0,
+				contribution: 40,
+				nakTotal: 0,
+				avgRtt: 60,
+			},
 		]);
 	});
 
@@ -171,7 +195,15 @@ describe("computeSessionRollup — mock session", () => {
 	it("coerces a missing/invalid bitrate to 0 via createSample", () => {
 		const s = createSample(
 			undefined,
-			[{ iface: "eth0", stale: false, rtt_ms: 12, nak_count: 3, weight_percent: 40 }],
+			[
+				{
+					iface: "eth0",
+					stale: false,
+					rtt_ms: 12,
+					nak_count: 3,
+					weight_percent: 40,
+				},
+			],
 			1234,
 		);
 		expect(s.bitrateKbps).toBe(0);
@@ -182,7 +214,15 @@ describe("computeSessionRollup — mock session", () => {
 		// A full telemetry entry maps every diagnostic field onto the sample link.
 		const fromEntry = createSample(
 			7000,
-			[{ iface: "wlan0", stale: true, rtt_ms: 47, nak_count: 5, weight_percent: 60 }],
+			[
+				{
+					iface: "wlan0",
+					stale: true,
+					rtt_ms: 47,
+					nak_count: 5,
+					weight_percent: 60,
+				},
+			],
 			9000,
 		);
 		expect(fromEntry).toEqual({
@@ -209,8 +249,20 @@ describe("computeSessionRollup — edge cases", () => {
 		expect(rollup.dropCount).toBe(0);
 		expect(rollup.durationMs).toBe(0);
 		expect(rollup.links).toEqual([
-			{ iface: "eth0", uptimePercent: 100, contribution: 50, nakTotal: 0, avgRtt: 10 },
-			{ iface: "wlan0", uptimePercent: 0, contribution: 50, nakTotal: 3, avgRtt: 20 },
+			{
+				iface: "eth0",
+				uptimePercent: 100,
+				contribution: 50,
+				nakTotal: 0,
+				avgRtt: 10,
+			},
+			{
+				iface: "wlan0",
+				uptimePercent: 0,
+				contribution: 50,
+				nakTotal: 3,
+				avgRtt: 20,
+			},
 		]);
 	});
 
@@ -238,8 +290,20 @@ describe("computeSessionRollup — edge cases", () => {
 		expect(rollup.avgBitrateKbps).toBe(3000);
 		expect(rollup.durationMs).toBe(10000);
 		expect(rollup.links).toEqual([
-			{ iface: "eth0", uptimePercent: 0, contribution: 50, nakTotal: 0, avgRtt: 5 },
-			{ iface: "wlan0", uptimePercent: 0, contribution: 50, nakTotal: 0, avgRtt: 5 },
+			{
+				iface: "eth0",
+				uptimePercent: 0,
+				contribution: 50,
+				nakTotal: 0,
+				avgRtt: 5,
+			},
+			{
+				iface: "wlan0",
+				uptimePercent: 0,
+				contribution: 50,
+				nakTotal: 0,
+				avgRtt: 5,
+			},
 		]);
 	});
 
@@ -254,7 +318,13 @@ describe("computeSessionRollup — edge cases", () => {
 		expect(rollup.peakBitrateKbps).toBe(0);
 		expect(rollup.avgBitrateKbps).toBe(0);
 		expect(rollup.links).toEqual([
-			{ iface: "eth0", uptimePercent: 100, contribution: 100, nakTotal: 0, avgRtt: 10 },
+			{
+				iface: "eth0",
+				uptimePercent: 100,
+				contribution: 100,
+				nakTotal: 0,
+				avgRtt: 10,
+			},
 		]);
 	});
 
@@ -277,8 +347,20 @@ describe("computeSessionRollup — edge cases", () => {
 		];
 		const rollup = computeSessionRollup(thirds);
 		expect(rollup.links).toEqual([
-			{ iface: "eth0", uptimePercent: 33, contribution: 50, nakTotal: 0, avgRtt: 20 },
-			{ iface: "wlan0", uptimePercent: 67, contribution: 50, nakTotal: 0, avgRtt: 50 },
+			{
+				iface: "eth0",
+				uptimePercent: 33,
+				contribution: 50,
+				nakTotal: 0,
+				avgRtt: 20,
+			},
+			{
+				iface: "wlan0",
+				uptimePercent: 67,
+				contribution: 50,
+				nakTotal: 0,
+				avgRtt: 50,
+			},
 		]);
 	});
 });
@@ -308,7 +390,11 @@ describe("rollup export — empty session", () => {
 		expect(csv).toContain("duration_ms,0");
 		// The link block header is the final line — no iface rows follow it.
 		expect(
-			csv.trimEnd().endsWith("iface,uptime_percent,contribution_percent,nak_total,avg_rtt_ms"),
+			csv
+				.trimEnd()
+				.endsWith(
+					"iface,uptime_percent,contribution_percent,nak_total,avg_rtt_ms",
+				),
 		).toBe(true);
 	});
 });
@@ -325,8 +411,20 @@ describe("rollup export — JSON and CSV", () => {
 			dropCount: 1,
 			durationMs: 15000,
 			links: [
-				{ iface: "eth0", uptimePercent: 100, contribution: 75, nakTotal: 1, avgRtt: 13 },
-				{ iface: "wlan0", uptimePercent: 50, contribution: 25, nakTotal: 5, avgRtt: 34 },
+				{
+					iface: "eth0",
+					uptimePercent: 100,
+					contribution: 75,
+					nakTotal: 1,
+					avgRtt: 13,
+				},
+				{
+					iface: "wlan0",
+					uptimePercent: 50,
+					contribution: 25,
+					nakTotal: 5,
+					avgRtt: 34,
+				},
 			],
 		});
 	});

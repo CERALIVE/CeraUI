@@ -61,8 +61,8 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { framerateSchema, resolutionSchema } from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
-import { getNetworkIngestInfo } from "../network/network-ingest.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
+import { getNetworkIngestInfo } from "../network/network-ingest.ts";
 import {
 	defaultFetchEngineDevices,
 	getLastCapabilities,
@@ -108,7 +108,10 @@ function toFramerate(value: number): Framerate | undefined {
  * carry muxed `embedded` audio, an audio-capable capture source is `selectable`,
  * everything else is `none`.
  */
-function deriveAudioKind(id: string, supportsAudio: boolean): PipelineAudioKind {
+function deriveAudioKind(
+	id: string,
+	supportsAudio: boolean,
+): PipelineAudioKind {
 	if (NETWORK_SOURCE_IDS[id] !== undefined) return "embedded";
 	return supportsAudio ? "selectable" : "none";
 }
@@ -222,7 +225,9 @@ export interface BuildSourcesInput {
  */
 export function buildSources(input: BuildSourcesInput): StreamSource[] {
 	// (a) BASE — one entry per capability source, in contract order.
-	const base = input.sources.map((cap) => buildBaseEntry(cap, input.networkIngest));
+	const base = input.sources.map((cap) =>
+		buildBaseEntry(cap, input.networkIngest),
+	);
 
 	// (b) OVERLAY — group bridgeable VIDEO devices by their target pipeline id. A
 	// device only bridges when its kind maps to a pipeline id AND that id names a
@@ -231,7 +236,8 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 	// is left untouched — the test pattern stays exactly once).
 	const coarseByPipeline = new Map<string, StreamSource>();
 	for (const entry of base) {
-		if (entry.origin === "coarse") coarseByPipeline.set(entry.pipelineId, entry);
+		if (entry.origin === "coarse")
+			coarseByPipeline.set(entry.pipelineId, entry);
 	}
 
 	const capturesByPipeline = new Map<string, StreamSource[]>();

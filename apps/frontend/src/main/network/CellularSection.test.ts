@@ -17,7 +17,9 @@ import CellularSection from "./CellularSection.svelte";
 vi.mock("$lib/rpc/client", () => ({
 	rpc: { network: { configure: vi.fn() } },
 }));
-vi.mock("svelte-sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock("svelte-sonner", () => ({
+	toast: { error: vi.fn(), success: vi.fn() },
+}));
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConnectionState: () => "connected",
 }));
@@ -40,11 +42,13 @@ function modem(overrides: Partial<Modem> = {}): Modem {
 	} as Modem;
 }
 
-function renderSection(opts: {
-	modem?: Partial<Modem>;
-	netif?: NetifMessage;
-	stale?: Set<string>;
-} = {}) {
+function renderSection(
+	opts: {
+		modem?: Partial<Modem>;
+		netif?: NetifMessage;
+		stale?: Set<string>;
+	} = {},
+) {
 	return render(CellularSection, {
 		props: {
 			modemEntries: [["modem0", modem(opts.modem)]],
@@ -77,17 +81,23 @@ describe("CellularSection — T20 single-line rows + touch targets", () => {
 	it("configure button carries the 44px touch-min class under data-layout-mode=touch", () => {
 		document.documentElement.dataset.layoutMode = "touch";
 		const { getByTestId } = renderSection();
-		expect(getByTestId("open-modem-config-dialog").className).toContain(TOUCH_MIN_CLASS);
+		expect(getByTestId("open-modem-config-dialog").className).toContain(
+			TOUCH_MIN_CLASS,
+		);
 	});
 
 	it("KEEPS the stale Badge for an aged modem with a SIM", () => {
 		const { container } = renderSection({ stale: new Set(["usb0"]) });
-		expect(container.querySelector('[data-stale-interface="usb0"]')).not.toBeNull();
+		expect(
+			container.querySelector('[data-stale-interface="usb0"]'),
+		).not.toBeNull();
 	});
 
 	it("KEEPS the noSimBond disabledReason bond toggle for a no-SIM modem", () => {
 		const { container } = renderSection({ modem: { no_sim: true } });
-		expect(container.querySelector('[data-testid="bond-toggle-usb0"]')).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="bond-toggle-usb0"]'),
+		).not.toBeNull();
 		// No SIM → no stale badge either (showStale gated on !noSim).
 		expect(container.querySelector('[data-stale-interface="usb0"]')).toBeNull();
 	});

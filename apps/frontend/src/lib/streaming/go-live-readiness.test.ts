@@ -6,9 +6,6 @@ import type {
 	StreamSource,
 } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
-
-import type { PipelineAvailability } from "./pipelineAvailability";
-
 import {
 	deriveGoLiveReadiness,
 	GATE_FIX_ORDER,
@@ -21,6 +18,7 @@ import {
 	READINESS_NETWORK_REASON,
 	READINESS_SOURCE_REASON,
 } from "./go-live-readiness";
+import type { PipelineAvailability } from "./pipelineAvailability";
 
 // The gateway-inactive reason the sources builder (T2) and pipelineAvailability
 // both emit — the exact string the QA failure scenario asserts.
@@ -39,7 +37,9 @@ function cfg(overrides: Partial<ConfigMessage> = {}): ConfigMessage {
 	return overrides as ConfigMessage;
 }
 
-function caps(overrides: Partial<CapabilitiesMessage> = {}): CapabilitiesMessage {
+function caps(
+	overrides: Partial<CapabilitiesMessage> = {},
+): CapabilitiesMessage {
 	return overrides as CapabilitiesMessage;
 }
 
@@ -457,9 +457,10 @@ describe("blocking === (any gate blocked) — full truth table", () => {
 						expect(readiness.blocking).toBe(anyBlocked);
 
 						// primaryFixGate is the first blocked gate in fix order, or absent.
-						const expectedPrimary: GoLiveGateKey | undefined = GATE_FIX_ORDER.find(
-							(key) => readiness.gates[key].state === "blocked",
-						);
+						const expectedPrimary: GoLiveGateKey | undefined =
+							GATE_FIX_ORDER.find(
+								(key) => readiness.gates[key].state === "blocked",
+							);
 						expect(readiness.primaryFixGate).toBe(expectedPrimary);
 					});
 				}

@@ -137,7 +137,7 @@ describe("BondedLinksSection — mock link-telemetry join (T5)", () => {
 			expect(within(card).getByTestId("link-nak")).toBeTruthy();
 			expect(within(card).getByTestId("link-weight")).toBeTruthy();
 			expect(
-				card.querySelector('[data-live-value]'),
+				card.querySelector("[data-live-value]"),
 				`${iface} speed badge shares the row`,
 			).not.toBeNull();
 		}

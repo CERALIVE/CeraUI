@@ -8,10 +8,9 @@
  */
 
 import { render } from "@testing-library/svelte";
+import { gsap } from "gsap";
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { gsap } from "gsap";
 
 import type { LinkSignal } from "$lib/types/hud";
 
@@ -43,7 +42,9 @@ function sameTopology(links: LinkSignal[]): LinkSignal[] {
 }
 
 function root(container: HTMLElement): HTMLElement {
-	const el = container.querySelector<HTMLElement>('[data-testid="bond-constellation"]');
+	const el = container.querySelector<HTMLElement>(
+		'[data-testid="bond-constellation"]',
+	);
 	expect(el).not.toBeNull();
 	return el as HTMLElement;
 }
@@ -125,7 +126,11 @@ describe("BondConstellation — stable animation lifecycle (T17)", () => {
 		expect(buildCount()).toBe(1);
 
 		// usb1 drops (isConnected flips) → the fingerprint changes → one rebuild.
-		rerender({ links: [link("usb0", 0), link("usb1", 1, false)], live: true, frozen: false });
+		rerender({
+			links: [link("usb0", 0), link("usb1", 1, false)],
+			live: true,
+			frozen: false,
+		});
 		flushSync();
 
 		expect(buildCount()).toBe(2);
@@ -140,7 +145,9 @@ describe("BondConstellation — stable animation lifecycle (T17)", () => {
 
 		expect(root(container).getAttribute("data-animated")).toBe("false");
 		expect(fromToSpy).not.toHaveBeenCalled();
-		const packet = container.querySelector<SVGCircleElement>('[data-testid="bond-packet"]');
+		const packet = container.querySelector<SVGCircleElement>(
+			'[data-testid="bond-packet"]',
+		);
 		expect(packet).not.toBeNull();
 		expect(packet?.getAttribute("opacity")).toBe("0");
 	});

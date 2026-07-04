@@ -367,7 +367,9 @@ export const setConfigProcedure = authedProcedure
 		// its derived pipeline into `input` so the override-validation + merge below
 		// see it. selected_video_input is recomputed on EVERY source write (persisted
 		// further down) — the capture input_id, or cleared for a non-capture source.
-		let sourceRouting: Extract<ResolveSourceRoutingResult, { ok: true }> | undefined;
+		let sourceRouting:
+			| Extract<ResolveSourceRoutingResult, { ok: true }>
+			| undefined;
 		if (input.source !== undefined) {
 			const routed = resolveSourceRouting(
 				input.source,

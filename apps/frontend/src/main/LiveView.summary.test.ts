@@ -126,7 +126,9 @@ describe("LiveView — post-stream summary window", () => {
 		streamingFlag.value = true;
 		flushSync();
 		expect(liveCockpit(container)).not.toBeNull();
-		expect(liveCockpit(container)?.getAttribute("data-summary-mode")).toBe("false");
+		expect(liveCockpit(container)?.getAttribute("data-summary-mode")).toBe(
+			"false",
+		);
 		expect(idleCockpit(container)).toBeNull();
 
 		// Stop: LiveCockpit STAYS mounted, now in summaryMode (the historical
@@ -137,7 +139,9 @@ describe("LiveView — post-stream summary window", () => {
 			liveCockpit(container),
 			"LiveCockpit stays mounted through the post-stream summary window",
 		).not.toBeNull();
-		expect(liveCockpit(container)?.getAttribute("data-summary-mode")).toBe("true");
+		expect(liveCockpit(container)?.getAttribute("data-summary-mode")).toBe(
+			"true",
+		);
 		expect(idleCockpit(container)).toBeNull();
 
 		// The window is bounded: after the timeout it reverts to IdleCockpit.
@@ -167,14 +171,18 @@ describe("LiveView — post-stream summary window", () => {
 		flushSync();
 		streamingFlag.value = false;
 		flushSync();
-		expect(liveCockpit(container)?.getAttribute("data-summary-mode")).toBe("true");
+		expect(liveCockpit(container)?.getAttribute("data-summary-mode")).toBe(
+			"true",
+		);
 
 		// Start again mid-window: the cockpit is live again (summaryMode cleared),
 		// not lingering in the historical summary.
 		streamingFlag.value = true;
 		flushSync();
 		expect(liveCockpit(container)).not.toBeNull();
-		expect(liveCockpit(container)?.getAttribute("data-summary-mode")).toBe("false");
+		expect(liveCockpit(container)?.getAttribute("data-summary-mode")).toBe(
+			"false",
+		);
 		expect(idleCockpit(container)).toBeNull();
 
 		// And the previous window's timer no longer fires a spurious revert.
@@ -184,6 +192,8 @@ describe("LiveView — post-stream summary window", () => {
 			liveCockpit(container),
 			"a restart cancels the prior window timer — still live",
 		).not.toBeNull();
-		expect(liveCockpit(container)?.getAttribute("data-summary-mode")).toBe("false");
+		expect(liveCockpit(container)?.getAttribute("data-summary-mode")).toBe(
+			"false",
+		);
 	});
 });

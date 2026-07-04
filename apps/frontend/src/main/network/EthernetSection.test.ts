@@ -22,7 +22,9 @@ import EthernetSection from "./EthernetSection.svelte";
 vi.mock("$lib/rpc/client", () => ({
 	rpc: { network: { configure: vi.fn() } },
 }));
-vi.mock("svelte-sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock("svelte-sonner", () => ({
+	toast: { error: vi.fn(), success: vi.fn() },
+}));
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConnectionState: () => "connected",
 }));
@@ -34,7 +36,9 @@ function entry(partial: Partial<NetifEntry> = {}): NetifEntry {
 	return { tp: 1000, enabled: true, ip: "192.168.1.2", ...partial };
 }
 
-function renderSection(opts: { entry?: Partial<NetifEntry>; stale?: Set<string> } = {}) {
+function renderSection(
+	opts: { entry?: Partial<NetifEntry>; stale?: Set<string> } = {},
+) {
 	return render(EthernetSection, {
 		props: {
 			wiredEntries: [["eth0", entry(opts.entry)]],
@@ -66,12 +70,16 @@ describe("EthernetSection — T20 single-line rows + touch targets", () => {
 	it("configure button carries the 44px touch-min class under data-layout-mode=touch", () => {
 		document.documentElement.dataset.layoutMode = "touch";
 		const { getByTestId } = renderSection();
-		expect(getByTestId("open-netif-dialog").className).toContain(TOUCH_MIN_CLASS);
+		expect(getByTestId("open-netif-dialog").className).toContain(
+			TOUCH_MIN_CLASS,
+		);
 	});
 
 	it("KEEPS the stale Badge for an aged enabled wired link", () => {
 		const { container } = renderSection({ stale: new Set(["eth0"]) });
-		expect(container.querySelector('[data-stale-interface="eth0"]')).not.toBeNull();
+		expect(
+			container.querySelector('[data-stale-interface="eth0"]'),
+		).not.toBeNull();
 	});
 
 	it("disabling the bond toggle triggers the confirm dialog BEFORE any RPC dispatch", async () => {

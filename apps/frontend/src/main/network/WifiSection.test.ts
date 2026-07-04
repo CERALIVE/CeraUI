@@ -25,7 +25,9 @@ vi.mock("$lib/rpc/client", () => ({
 		wifi: { hotspotStart: vi.fn(), hotspotStop: vi.fn() },
 	},
 }));
-vi.mock("svelte-sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock("svelte-sonner", () => ({
+	toast: { error: vi.fn(), success: vi.fn() },
+}));
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConnectionState: () => "connected",
 }));
@@ -37,23 +39,29 @@ function wifiIface(overrides: Partial<WifiInterface> = {}): WifiInterface {
 		ifname: "wlan0",
 		conn: "MyNet",
 		hw: "hw0",
-		available: [{ active: true, ssid: "MyNet", signal: 72, security: "WPA2", freq: 5200 }],
+		available: [
+			{ active: true, ssid: "MyNet", signal: 72, security: "WPA2", freq: 5200 },
+		],
 		saved: {},
 		supports_hotspot: false,
 		...overrides,
 	} as WifiInterface;
 }
 
-function renderSection(opts: {
-	iface?: Partial<WifiInterface>;
-	netif?: NetifMessage;
-	stale?: Set<string>;
-} = {}) {
+function renderSection(
+	opts: {
+		iface?: Partial<WifiInterface>;
+		netif?: NetifMessage;
+		stale?: Set<string>;
+	} = {},
+) {
 	const iface = wifiIface(opts.iface);
 	return render(WifiSection, {
 		props: {
 			wifiRadios: [["wifi0", iface]],
-			netif: opts.netif ?? { wlan0: { tp: 1000, enabled: true, ip: "192.168.1.5" } },
+			netif: opts.netif ?? {
+				wlan0: { tp: 1000, enabled: true, ip: "192.168.1.5" },
+			},
 			isFullyStale: false,
 			staleInterfaces: opts.stale ?? new Set<string>(),
 			primaryWifiDevice: "wifi0",
@@ -87,7 +95,9 @@ describe("WifiSection — T20 single-line rows + touch targets", () => {
 	it("row action buttons carry the 44px touch-min class under data-layout-mode=touch", () => {
 		document.documentElement.dataset.layoutMode = "touch";
 		const { getByTestId } = renderSection();
-		expect(getByTestId("open-wifi-selector-dialog").className).toContain(TOUCH_MIN_CLASS);
+		expect(getByTestId("open-wifi-selector-dialog").className).toContain(
+			TOUCH_MIN_CLASS,
+		);
 	});
 
 	it("KEEPS the stale Badge for an aged connected station", () => {
@@ -108,6 +118,8 @@ describe("WifiSection — T20 single-line rows + touch targets", () => {
 		const { container } = renderSection({
 			iface: { hotspot, supports_hotspot: true },
 		});
-		expect(container.querySelector('[data-testid="bond-toggle-wlan0"]')).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="bond-toggle-wlan0"]'),
+		).not.toBeNull();
 	});
 });

@@ -364,7 +364,9 @@ describe("SourceSection — network-ingest rows folded into the list (Task 12)",
 	it("renders no network rows when the list carries none", () => {
 		const { container } = mount({ sources: sourcesMsg([RODE]) });
 		expect(
-			container.querySelector('[data-testid="source-network-ingest-select-rtmp"]'),
+			container.querySelector(
+				'[data-testid="source-network-ingest-select-rtmp"]',
+			),
 		).toBeNull();
 	});
 
@@ -420,7 +422,10 @@ describe("SourceSection — network-ingest rows folded into the list (Task 12)",
 
 describe("SourceSection — capability summary (kept)", () => {
 	it("derives a compact capability summary (res/fps/codec) from capabilities", () => {
-		const { container } = mount({ sources: sourcesMsg([RODE]), capabilities: CAPS });
+		const { container } = mount({
+			sources: sourcesMsg([RODE]),
+			capabilities: CAPS,
+		});
 		const caps = container.querySelector<HTMLElement>(
 			'[data-testid="source-capabilities"]',
 		);

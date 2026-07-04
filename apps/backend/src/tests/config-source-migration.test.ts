@@ -1,9 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
-
-import type { CerastreamClient, StartParams } from "@ceralive/cerastream";
-import type { StreamSource } from "@ceraui/rpc/schemas";
-import { call } from "@orpc/server";
 import {
 	afterAll,
 	afterEach,
@@ -14,6 +8,11 @@ import {
 	mock,
 	test,
 } from "bun:test";
+import fs from "node:fs";
+import path from "node:path";
+import type { CerastreamClient, StartParams } from "@ceralive/cerastream";
+import type { StreamSource } from "@ceraui/rpc/schemas";
+import { call } from "@orpc/server";
 
 import { writeFileAtomicSync } from "../helpers/config-loader.ts";
 import {
@@ -24,11 +23,11 @@ import {
 import { getConfig } from "../modules/config.ts";
 import { CerastreamBackend } from "../modules/streaming/cerastream-backend.ts";
 import * as configMigration from "../modules/streaming/config-migration.ts";
+import * as sourcesModule from "../modules/streaming/sources.ts";
 import {
 	deriveEngineRouting,
 	resolveSourceRouting,
 } from "../modules/streaming/sources.ts";
-import * as sourcesModule from "../modules/streaming/sources.ts";
 import * as streamloop from "../modules/streaming/streamloop.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
@@ -229,7 +228,9 @@ function makeStartParamsSpy(): {
 	return { client, get: () => captured };
 }
 
-async function dispatchStartParams(config: RuntimeConfig): Promise<StartParams> {
+async function dispatchStartParams(
+	config: RuntimeConfig,
+): Promise<StartParams> {
 	const spy = makeStartParamsSpy();
 	const backend = new CerastreamBackend({
 		connect: async () => spy.client,
@@ -262,7 +263,8 @@ async function dispatchStartParams(config: RuntimeConfig): Promise<StartParams> 
 	});
 	await backend.settle();
 	const params = spy.get();
-	if (params === undefined) throw new Error("engine start was never dispatched");
+	if (params === undefined)
+		throw new Error("engine start was never dispatched");
 	return params;
 }
 
@@ -342,7 +344,10 @@ describe("cerastream-backend.ts is untouched by this todo", () => {
 	}
 
 	test("has no diff against the pre-migration-test baseline (start choke point unmodified)", () => {
-		const repoRoot = git(["rev-parse", "--show-toplevel"], process.cwd()).trim();
+		const repoRoot = git(
+			["rev-parse", "--show-toplevel"],
+			process.cwd(),
+		).trim();
 		expect(repoRoot.length).toBeGreaterThan(0);
 
 		const TEST_REL = "apps/backend/src/tests/config-source-migration.test.ts";

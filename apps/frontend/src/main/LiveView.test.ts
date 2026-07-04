@@ -124,8 +124,6 @@ describe("LiveView — idle/live cockpit split", () => {
 		expect(
 			container.querySelector('[data-testid="live-cockpit"]'),
 		).not.toBeNull();
-		expect(
-			container.querySelector('[data-testid="idle-cockpit"]'),
-		).toBeNull();
+		expect(container.querySelector('[data-testid="idle-cockpit"]')).toBeNull();
 	});
 });

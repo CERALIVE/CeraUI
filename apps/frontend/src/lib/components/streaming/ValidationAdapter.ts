@@ -328,7 +328,10 @@ export function resolveDeviceModes(
 	selectedVideoInput: string | undefined,
 ): readonly DeviceMode[] | undefined;
 export function resolveDeviceModes(
-	sourceOrDeviceModes: StreamSource | Record<string, DeviceModeGroup> | undefined,
+	sourceOrDeviceModes:
+		| StreamSource
+		| Record<string, DeviceModeGroup>
+		| undefined,
 	pipelineId?: string,
 	selectedVideoInput?: string,
 ): readonly DeviceMode[] | undefined {

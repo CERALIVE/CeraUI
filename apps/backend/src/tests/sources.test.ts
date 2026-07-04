@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from "bun:test";
 import type {
 	GetCapabilitiesResult,
 	ListDevicesResult,
@@ -9,7 +10,6 @@ import type {
 	StreamSource,
 } from "@ceraui/rpc/schemas";
 import { streamSourceSchema } from "@ceraui/rpc/schemas";
-import { beforeEach, describe, expect, it } from "bun:test";
 import {
 	buildSources,
 	deriveEngineRouting,
@@ -27,7 +27,8 @@ function capSource(
 	return {
 		id,
 		supports_audio: overrides.supports_audio ?? false,
-		supports_resolution_override: overrides.supports_resolution_override ?? true,
+		supports_resolution_override:
+			overrides.supports_resolution_override ?? true,
 		supports_framerate_override: overrides.supports_framerate_override ?? true,
 		default_resolution: overrides.default_resolution ?? "1080p",
 		default_framerate: overrides.default_framerate ?? 30,
@@ -144,10 +145,7 @@ describe("buildSources — caps-first base + device overlay", () => {
 		const names = captures.map((s) =>
 			s.origin === "capture" ? s.displayName : "",
 		);
-		expect(names).toEqual([
-			"Elgato Cam Link 4K",
-			"Magewell USB Capture HDMI",
-		]);
+		expect(names).toEqual(["Elgato Cam Link 4K", "Magewell USB Capture HDMI"]);
 		// each capture bridges to the hdmi pipeline and carries grouped modes.
 		for (const capture of captures) {
 			expect(capture.pipelineId).toBe("hdmi");
@@ -429,7 +427,10 @@ describe("cerastream-backend.ts is untouched by this todo", () => {
 	}
 
 	it("has no diff against the pre-sources.ts baseline (start choke point unmodified)", () => {
-		const repoRoot = git(["rev-parse", "--show-toplevel"], process.cwd()).trim();
+		const repoRoot = git(
+			["rev-parse", "--show-toplevel"],
+			process.cwd(),
+		).trim();
 		expect(repoRoot.length).toBeGreaterThan(0);
 
 		const SOURCES_REL = "apps/backend/src/modules/streaming/sources.ts";
@@ -451,10 +452,7 @@ describe("cerastream-backend.ts is untouched by this todo", () => {
 
 	it("the start choke point still reads config.pipeline / selected_video_input and never imports the sources builder", async () => {
 		const backend = await Bun.file(
-			new URL(
-				"../modules/streaming/cerastream-backend.ts",
-				import.meta.url,
-			),
+			new URL("../modules/streaming/cerastream-backend.ts", import.meta.url),
 		).text();
 		expect(backend).toContain("config.pipeline ?? opts.pipeline");
 		expect(backend).toContain(

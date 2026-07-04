@@ -219,9 +219,11 @@ describe("GoLiveCard — collapse / expand", () => {
 		expect(
 			container.querySelector('[data-testid="open-encoder-dialog"]'),
 		).toBeNull();
-		expect(container.querySelector('[data-testid="go-live-card"]')?.getAttribute(
-			"data-collapsed",
-		)).toBe("true");
+		expect(
+			container
+				.querySelector('[data-testid="go-live-card"]')
+				?.getAttribute("data-collapsed"),
+		).toBe("true");
 
 		// Expand reveals the rows.
 		await fireEvent.click(
@@ -239,9 +241,11 @@ describe("GoLiveCard — collapse / expand", () => {
 		expect(
 			container.querySelector('[data-testid="go-live-ready-bar"]'),
 		).toBeNull();
-		expect(container.querySelector('[data-testid="go-live-card"]')?.getAttribute(
-			"data-ready",
-		)).toBe("false");
+		expect(
+			container
+				.querySelector('[data-testid="go-live-card"]')
+				?.getAttribute("data-ready"),
+		).toBe("false");
 	});
 });
 
@@ -272,9 +276,7 @@ describe("GoLiveCard — sole-camera contract", () => {
 			config: {} as ConfigMessage,
 			sources: makeSources(capture("cam-1", "RØDE HDMI to USB-C")),
 		});
-		const auto = container.querySelector(
-			'[data-testid="sole-camera-auto"]',
-		);
+		const auto = container.querySelector('[data-testid="sole-camera-auto"]');
 		expect(auto, "auto row renders").not.toBeNull();
 		expect(auto?.textContent).toContain("RØDE HDMI to USB-C");
 		// The implicit source resolves the source gate to ok.

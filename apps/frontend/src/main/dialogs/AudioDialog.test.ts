@@ -66,12 +66,14 @@ const AUDIO_PIPELINE: Pipeline = {
 	defaultFramerate: 30,
 };
 
-function seed(overrides: {
-	config?: Partial<ConfigMessage>;
-	audioSources?: string[];
-	isStreaming?: boolean;
-	capabilities?: Partial<CapabilitiesMessage>;
-} = {}) {
+function seed(
+	overrides: {
+		config?: Partial<ConfigMessage>;
+		audioSources?: string[];
+		isStreaming?: boolean;
+		capabilities?: Partial<CapabilitiesMessage>;
+	} = {},
+) {
 	state.pipelines = { hardware: "rk3588", pipelines: { hdmi: AUDIO_PIPELINE } };
 	state.audioCodecs = { aac: { name: "AAC" }, opus: { name: "Opus" } };
 	state.capabilities = (overrides.capabilities ?? {}) as CapabilitiesMessage;

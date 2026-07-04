@@ -8,21 +8,40 @@
  * status-wording node (the consolidated verdict line), never the deleted
  * standalone Status row or the old lifecycle wording in the sheet description.
  */
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { HealthIndicator, HealthRollup } from "$lib/stores/stream-health.svelte";
+import type {
+	HealthIndicator,
+	HealthRollup,
+} from "$lib/stores/stream-health.svelte";
 import type { HudState } from "$lib/types/hud";
 
 import HudBar from "./HudBar.svelte";
 
-type SocTelemetry = { temp: number | null; voltage: number | null; current: number | null; isStale: boolean };
+type SocTelemetry = {
+	temp: number | null;
+	voltage: number | null;
+	current: number | null;
+	isStale: boolean;
+};
 
 const state = vi.hoisted(() => ({
 	hud: undefined as HudState | undefined,
 	health: "unknown" as HealthIndicator,
 	rollup: null as HealthRollup | null,
-	soc: { temp: null, voltage: null, current: null, isStale: false } as SocTelemetry,
+	soc: {
+		temp: null,
+		voltage: null,
+		current: null,
+		isStale: false,
+	} as SocTelemetry,
 }));
 
 vi.mock("$lib/stores/hud.svelte", () => ({
@@ -35,7 +54,9 @@ vi.mock("$lib/stores/stream-health.svelte", () => ({
 	getStreamHealthRollup: () => state.rollup,
 }));
 
-vi.mock("$lib/stores/buffering.svelte", () => ({ getBufferingState: () => null }));
+vi.mock("$lib/stores/buffering.svelte", () => ({
+	getBufferingState: () => null,
+}));
 
 vi.mock("$lib/stores/display-profile.svelte", () => ({
 	getDisplayProfile: () => ({ theme: "lcd" }),
@@ -43,9 +64,9 @@ vi.mock("$lib/stores/display-profile.svelte", () => ({
 	prefersEinkTheme: () => false,
 }));
 
-const noop = vi.hoisted(
-	() => async () => ({ default: (await import("../tests/fixtures/Noop.svelte")).default }),
-);
+const noop = vi.hoisted(() => async () => ({
+	default: (await import("../tests/fixtures/Noop.svelte")).default,
+}));
 vi.mock("$lib/components/custom/BondConstellation.svelte", noop);
 vi.mock("$lib/components/custom/BufferingIndicator.svelte", noop);
 vi.mock("$lib/components/custom/LinkIndicator.svelte", noop);
@@ -66,7 +87,11 @@ function makeHud(overrides: Partial<HudState> = {}): HudState {
 		isConnected: true,
 		isFullyStale: false,
 		isUpdating: false,
-		lastUpdatedAt: { streaming: Date.now() - 60_000, sensors: Date.now() - 60_000, modems: null },
+		lastUpdatedAt: {
+			streaming: Date.now() - 60_000,
+			sensors: Date.now() - 60_000,
+			modems: null,
+		},
 		...overrides,
 	};
 }
@@ -138,7 +163,9 @@ describe("HudBar sheet — three explicit lifecycle states", () => {
 		render(HudBar);
 		const dialog = await openSheet();
 
-		expect(screen.getByTestId("hud-sheet-subtitle").getAttribute("data-state")).toBe("idle");
+		expect(
+			screen.getByTestId("hud-sheet-subtitle").getAttribute("data-state"),
+		).toBe("idle");
 
 		const verdict = within(dialog).getByTestId("stream-health-state");
 		expect(verdict.textContent).toContain("Idle");
@@ -160,7 +187,9 @@ describe("HudBar sheet — three explicit lifecycle states", () => {
 		render(HudBar);
 		const dialog = await openSheet();
 
-		expect(screen.getByTestId("hud-sheet-subtitle").getAttribute("data-state")).toBe("offline");
+		expect(
+			screen.getByTestId("hud-sheet-subtitle").getAttribute("data-state"),
+		).toBe("offline");
 
 		const verdict = within(dialog).getByTestId("stream-health-state");
 		expect(verdict.textContent).toContain("No signal");
@@ -179,7 +208,9 @@ describe("HudBar sheet — three explicit lifecycle states", () => {
 		render(HudBar);
 		const dialog = await openSheet();
 
-		expect(screen.getByTestId("hud-sheet-subtitle").getAttribute("data-state")).toBe("live");
+		expect(
+			screen.getByTestId("hud-sheet-subtitle").getAttribute("data-state"),
+		).toBe("live");
 
 		const verdict = within(dialog).getByTestId("stream-health-state");
 		expect(verdict.textContent).toContain("Healthy");
@@ -193,13 +224,17 @@ describe("HudBar sheet — three explicit lifecycle states", () => {
 		state.hud = makeHud({ isStreaming: false });
 		const first = render(HudBar);
 		await openSheet();
-		const idleState = screen.getByTestId("hud-sheet-subtitle").getAttribute("data-state");
+		const idleState = screen
+			.getByTestId("hud-sheet-subtitle")
+			.getAttribute("data-state");
 		first.unmount();
 
 		state.hud = makeHud({ isStreaming: true, isFullyStale: true });
 		render(HudBar);
 		await openSheet();
-		const offlineState = screen.getByTestId("hud-sheet-subtitle").getAttribute("data-state");
+		const offlineState = screen
+			.getByTestId("hud-sheet-subtitle")
+			.getAttribute("data-state");
 
 		expect(idleState).toBe("idle");
 		expect(offlineState).toBe("offline");
@@ -215,9 +250,9 @@ describe("HudBar sheet — three explicit lifecycle states", () => {
 		});
 		render(HudBar);
 		const dialog = await openSheet();
-		const dimmedWithNumber = Array.from(dialog.querySelectorAll<HTMLElement>(".opacity-50")).filter(
-			(el) => /\d/.test(el.textContent ?? ""),
-		);
+		const dimmedWithNumber = Array.from(
+			dialog.querySelectorAll<HTMLElement>(".opacity-50"),
+		).filter((el) => /\d/.test(el.textContent ?? ""));
 		expect(dimmedWithNumber).toHaveLength(0);
 	});
 });

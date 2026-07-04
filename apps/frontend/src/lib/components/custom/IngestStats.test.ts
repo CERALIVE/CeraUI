@@ -597,7 +597,10 @@ describe("IngestStats — session summary + export (device-local)", () => {
 		);
 		// Historical framing: the header reads "Session ended · {duration}".
 		expect(
-			panel.querySelector("h2")?.textContent?.trim().startsWith("Session ended"),
+			panel
+				.querySelector("h2")
+				?.textContent?.trim()
+				.startsWith("Session ended"),
 		).toBe(true);
 
 		expect(
@@ -616,7 +619,9 @@ describe("IngestStats — session summary + export (device-local)", () => {
 				?.textContent?.trim(),
 		).toBe("1");
 		// The fourth tile is the session duration (a `<seconds>s`/`<m>m…` string).
-		const duration = panel.querySelector('[data-testid="ingest-summary-duration"]');
+		const duration = panel.querySelector(
+			'[data-testid="ingest-summary-duration"]',
+		);
 		expect(duration, "duration tile must render").not.toBeNull();
 		expect(duration?.textContent?.trim()).toMatch(/\d+\s*(s|m|h)/);
 
@@ -666,7 +671,9 @@ describe("IngestStats — session summary + export (device-local)", () => {
 			});
 			flushSync();
 		}
-		expect(Number(sparklineOf(container).getAttribute("data-samples"))).toBe(30);
+		expect(Number(sparklineOf(container).getAttribute("data-samples"))).toBe(
+			30,
+		);
 
 		// Stop: the summary renders and the ring is cleared without a remount.
 		await rerender({
@@ -716,8 +723,20 @@ describe("IngestStats — session summary + export (device-local)", () => {
 		expect(parsed.dropCount).toBe(1);
 		expect(typeof parsed.durationMs).toBe("number");
 		expect(parsed.links).toEqual([
-			{ iface: "eth0", uptimePercent: 100, contribution: 50, nakTotal: 0, avgRtt: 18 },
-			{ iface: "wlan0", uptimePercent: 50, contribution: 50, nakTotal: 0, avgRtt: 30 },
+			{
+				iface: "eth0",
+				uptimePercent: 100,
+				contribution: 50,
+				nakTotal: 0,
+				avgRtt: 18,
+			},
+			{
+				iface: "wlan0",
+				uptimePercent: 50,
+				contribution: 50,
+				nakTotal: 0,
+				avgRtt: 30,
+			},
 		]);
 	});
 

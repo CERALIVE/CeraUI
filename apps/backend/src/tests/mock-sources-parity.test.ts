@@ -3,8 +3,8 @@ import type { StreamSource } from "@ceraui/rpc/schemas";
 import { streamSourceSchema } from "@ceraui/rpc/schemas";
 import { buildMockStreamSource } from "../mocks/fixture-factory.ts";
 import {
-	initMockService,
 	getMockState,
+	initMockService,
 	resetMockState,
 	stopMockService,
 } from "../mocks/mock-service.ts";
@@ -26,7 +26,10 @@ import {
 	clearCapabilitiesCache,
 	getLastCapabilities,
 } from "../modules/streaming/capabilities.ts";
-import { initPipelines, setMockHardware } from "../modules/streaming/pipelines.ts";
+import {
+	initPipelines,
+	setMockHardware,
+} from "../modules/streaming/pipelines.ts";
 import {
 	getSourcesMessage,
 	refreshEngineDeviceCache,

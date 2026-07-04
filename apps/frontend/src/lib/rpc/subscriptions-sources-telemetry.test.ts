@@ -106,7 +106,10 @@ describe("sources broadcast ingestion (T6)", () => {
 });
 
 describe("link telemetry clears on stream stop (T6 belt-and-braces)", () => {
-	function pushStreaming(is_streaming: boolean, extra?: Partial<StatusResponse>) {
+	function pushStreaming(
+		is_streaming: boolean,
+		extra?: Partial<StatusResponse>,
+	) {
 		push("status", { is_streaming, ...extra } as StatusResponse);
 	}
 
