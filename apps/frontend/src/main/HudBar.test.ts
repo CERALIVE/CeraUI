@@ -16,15 +16,18 @@ import type { HudState } from "$lib/types/hud";
 
 import HudBar from "./HudBar.svelte";
 
+type SocTelemetry = { temp: number | null; voltage: number | null; current: number | null; isStale: boolean };
+
 const state = vi.hoisted(() => ({
 	hud: undefined as HudState | undefined,
 	health: "unknown" as HealthIndicator,
 	rollup: null as HealthRollup | null,
+	soc: { temp: null, voltage: null, current: null, isStale: false } as SocTelemetry,
 }));
 
 vi.mock("$lib/stores/hud.svelte", () => ({
 	getHudState: () => state.hud,
-	getSocTelemetry: () => ({ temp: null, voltage: null, current: null, isStale: false }),
+	getSocTelemetry: () => state.soc,
 }));
 
 vi.mock("$lib/stores/stream-health.svelte", () => ({
@@ -96,6 +99,7 @@ beforeEach(() => {
 	state.hud = makeHud();
 	state.health = "unknown";
 	state.rollup = null;
+	state.soc = { temp: null, voltage: null, current: null, isStale: false };
 });
 
 describe("HudBar bitrate honesty — absence renders as absence", () => {
@@ -215,5 +219,39 @@ describe("HudBar sheet — three explicit lifecycle states", () => {
 			(el) => /\d/.test(el.textContent ?? ""),
 		);
 		expect(dimmedWithNumber).toHaveLength(0);
+	});
+});
+
+describe("HudBar sheet reflow (Task 18) — one-glance order + trimmed compact strip", () => {
+	it("bond constellation is ABSENT when idle, PRESENT when live", async () => {
+		state.hud = makeHud({ isStreaming: false });
+		const first = render(HudBar);
+		const idleDialog = await openSheet();
+		expect(within(idleDialog).queryByTestId("hud-constellation")).toBeNull();
+		first.unmount();
+
+		state.hud = makeHud({ isStreaming: true, bitrateKbps: 6000 });
+		render(HudBar);
+		const liveDialog = await openSheet();
+		expect(within(liveDialog).getByTestId("hud-constellation")).toBeTruthy();
+	});
+
+	it("sheet exposes EXACTLY ONE inline sensors line (not three bordered rows)", async () => {
+		state.hud = makeHud({ temperature: 42.5, voltage: 5.1, current: 1.5 });
+		render(HudBar);
+		const dialog = await openSheet();
+		expect(within(dialog).getAllByTestId("hud-sensors-line")).toHaveLength(1);
+	});
+
+	it("voltage/current live in the SHEET only — the compact strip carries neither", () => {
+		state.soc = { temp: 42, voltage: 5, current: 1, isStale: false };
+		state.hud = makeHud({ temperature: 42, voltage: 5, current: 1 });
+		render(HudBar);
+
+		const strip = document.querySelector<HTMLElement>("[data-hud-region]");
+		if (!strip) throw new Error("HUD strip not rendered");
+		expect(strip.querySelector('[title="Voltage"]')).toBeNull();
+		expect(strip.querySelector('[title="Current"]')).toBeNull();
+		expect(strip.querySelector('[title="Temperature"]')).not.toBeNull();
 	});
 });
