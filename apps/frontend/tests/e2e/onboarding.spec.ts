@@ -1,17 +1,22 @@
 /**
- * T13 — first-run onboarding guidance (Live).
+ * First-run onboarding guidance (Live) — migrated to the GoLiveCard readiness model.
  *
- * A calm, dismissible "get set up" checklist that guides Network → Server → Start
- * and checks each step off from existing config/state. It complements — never
- * duplicates — the empty-state hero: the hero is the focused "choose a
- * destination" CTA, this is the multi-step orientation a first-run operator sees.
+ * The standalone multi-step checklist (`OnboardingChecklist.svelte`, testid
+ * `live-onboarding`, with `onboarding-step-network/-server/-start` sub-steps and a
+ * "Dismiss setup guide" button) was UNMOUNTED by the Wave 3 T10/T11 restructure and
+ * its Network → Server → Start orientation ABSORBED into `GoLiveCard`'s readiness
+ * gates (source / network / destination / engine, each `ok`/`warn`/`blocked` with a
+ * one-tap `go-live-gate-fix` button). The file is kept-not-deleted as a rollback
+ * shim (`TD-unmounted-source-shims`) but is never rendered, so `live-onboarding` no
+ * longer appears in the DOM. These tests assert the equivalent behavior on the
+ * readiness gates instead.
  *
- * The checklist is derived state only:
- *   • Network — at least one enabled bonded interface that has an IP (getNetif()).
- *   • Server  — config.srtla_addr || config.relay_server (the existing hasServer).
- *   • Start   — the stream is or has been live (is_streaming / hadSession).
- * It auto-hides once both config steps (Network + Server) are satisfied, and can
- * be dismissed at any time; the dismissal persists in localStorage across reloads.
+ * The gates are derived state only:
+ *   • network     — at least one enabled bonded interface that has an IP (getNetif()).
+ *   • destination — config.srtla_addr || config.relay_server (the existing hasServer).
+ * A blocked config gate exposes a fix button (`data-fix="goNetwork"` /
+ * `data-fix="openServer"`); both config gates satisfied is the new-model equivalent
+ * of the old checklist auto-hiding.
  *
  * Conventions (PLAYBOOK.md): role/test-id/ARIA assertions only — never
  * screenshots, never fixed-delay waits, never raw tab-id selectors. A page-local
@@ -72,13 +77,13 @@ function firstRunMutator(frame: Frame): boolean {
 	return !('netif' in frame);
 }
 
-test.describe('T13 — first-run onboarding (Live)', () => {
+test.describe('first-run onboarding (Live) — GoLiveCard readiness gates', () => {
 	test.beforeEach(({ browserName }, testInfo) => {
 		test.skip(browserName !== 'chromium', 'single-browser onboarding proof');
-		test.skip(testInfo.project.name !== 'desktop', 'desktop layout drives the checklist');
+		test.skip(testInfo.project.name !== 'desktop', 'desktop layout drives the gates');
 	});
 
-	test('first run: no server + no network shows the checklist with actionable steps', async ({
+	test('first run: no server + no network blocks the network and destination gates', async ({
 		page,
 	}) => {
 		await attachWs(page, { mutateInbound: firstRunMutator });
@@ -86,74 +91,104 @@ test.describe('T13 — first-run onboarding (Live)', () => {
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
 
-		const panel = page.getByTestId('live-onboarding');
-		await expect(panel).toBeVisible();
+		const card = page.getByTestId('go-live-card');
+		await expect(card).toBeVisible();
 
-		// Network + Server are the two incomplete CONFIG steps, each actionable.
-		const networkStep = panel.getByTestId('onboarding-step-network');
-		const serverStep = panel.getByTestId('onboarding-step-server');
-		await expect(networkStep).toHaveAttribute('data-complete', 'false');
-		await expect(serverStep).toHaveAttribute('data-complete', 'false');
-		await expect(networkStep.getByRole('button', { name: 'Set up Network' })).toBeVisible();
-		await expect(serverStep.getByRole('button', { name: 'Choose destination' })).toBeVisible();
-
-		// Start is the final, not-yet-reached step.
-		await expect(panel.getByTestId('onboarding-step-start')).toHaveAttribute(
-			'data-complete',
-			'false',
+		// Network + destination are the two incomplete CONFIG gates, each blocked
+		// with a one-tap fix (the old onboarding-step-network / -server steps).
+		const networkGate = card.locator('[data-testid="go-live-gate"][data-gate="network"]');
+		await expect(networkGate).toHaveAttribute('data-state', 'blocked');
+		await expect(networkGate.getByTestId('go-live-gate-fix')).toHaveAttribute(
+			'data-fix',
+			'goNetwork',
 		);
 
-		// Touch-safe: the dismiss control meets the 44px minimum tap target.
-		const dismiss = panel.getByRole('button', { name: 'Dismiss setup guide' });
-		const box = await dismiss.boundingBox();
-		expect(box, 'dismiss control should have a layout box').not.toBeNull();
-		expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
-		expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+		const destinationGate = card.locator(
+			'[data-testid="go-live-gate"][data-gate="destination"]',
+		);
+		await expect(destinationGate).toHaveAttribute('data-state', 'blocked');
+		await expect(destinationGate.getByTestId('go-live-gate-fix')).toHaveAttribute(
+			'data-fix',
+			'openServer',
+		);
 	});
 
-	test('the server step opens the receiver dialog', async ({ page }) => {
+	test('the destination-gate fix opens the receiver dialog', async ({ page }) => {
 		await attachWs(page, { mutateInbound: firstRunMutator });
 		await page.goto('/');
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
 
-		const panel = page.getByTestId('live-onboarding');
-		await expect(panel).toBeVisible();
-		await panel
-			.getByTestId('onboarding-step-server')
-			.getByRole('button', { name: 'Choose destination' })
+		const card = page.getByTestId('go-live-card');
+		await expect(card).toBeVisible();
+
+		// The destination gate's fix button (the old "Choose destination" step) opens
+		// the receiver/server dialog.
+		await card
+			.locator('[data-testid="go-live-gate"][data-gate="destination"]')
+			.getByTestId('go-live-gate-fix')
 			.click();
 
 		await expect(page.getByRole('dialog', { name: 'Receiver Server' })).toBeVisible();
 	});
 
-	test('dismissal persists across a reload', async ({ page }) => {
+	test('the readiness gates re-render the same blocked state after a reload', async ({
+		page,
+	}) => {
+		// There is no reachable dismiss/persisted-hide path anymore: the
+		// OnboardingChecklist "Dismiss setup guide" affordance persisted via
+		// onboarding.svelte.ts ($persist("live-onboarding-dismissed")), but that
+		// component is unmounted (TD-unmounted-source-shims). GoLiveCard only
+		// auto-collapses when every gate goes green — a DERIVED state, not a user
+		// dismissal. So this locks the config-driven behavior that is actually
+		// reachable: the same first-run state re-renders the same blocked gates
+		// after a reload (no persisted dismissal can hide them).
 		await attachWs(page, { mutateInbound: firstRunMutator });
 		await page.goto('/');
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
 
-		const panel = page.getByTestId('live-onboarding');
-		await expect(panel).toBeVisible();
+		const card = page.getByTestId('go-live-card');
+		await expect(card).toBeVisible();
+		await expect(
+			card.locator('[data-testid="go-live-gate"][data-gate="destination"]'),
+		).toHaveAttribute('data-state', 'blocked');
 
-		await panel.getByRole('button', { name: 'Dismiss setup guide' }).click();
-		await expect(panel).toBeHidden();
-
-		// Reload with the SAME first-run state — the checklist would re-show were the
-		// dismissal not persisted. localStorage must keep it gone.
 		await page.reload();
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
-		await expect(page.getByTestId('live-onboarding')).toBeHidden();
+
+		const reloadedCard = page.getByTestId('go-live-card');
+		await expect(reloadedCard).toBeVisible();
+		await expect(
+			reloadedCard.locator('[data-testid="go-live-gate"][data-gate="destination"]'),
+		).toHaveAttribute('data-state', 'blocked');
+		await expect(
+			reloadedCard.locator('[data-testid="go-live-gate"][data-gate="network"]'),
+		).toHaveAttribute('data-state', 'blocked');
 	});
 
-	test('fully-configured device: the checklist is hidden', async ({ page }) => {
+	test('fully-configured device: the network + destination gates are satisfied', async ({
+		page,
+	}) => {
 		// No mutation — the default mock seeds a server target and bonded links, so
-		// both config steps are satisfied and the checklist must never show.
+		// both config gates resolve satisfied. New-model equivalent of the old
+		// "checklist auto-hides once both config steps are complete": neither gate is
+		// blocked (absent whether the card is expanded with ok gates or collapsed to
+		// the ready bar).
 		await page.goto('/');
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
 
-		await expect(page.getByTestId('live-onboarding')).toBeHidden();
+		const card = page.getByTestId('go-live-card');
+		await expect(card).toBeVisible();
+		await expect(
+			card.locator('[data-testid="go-live-gate"][data-gate="network"][data-state="blocked"]'),
+		).toHaveCount(0);
+		await expect(
+			card.locator(
+				'[data-testid="go-live-gate"][data-gate="destination"][data-state="blocked"]',
+			),
+		).toHaveCount(0);
 	});
 });

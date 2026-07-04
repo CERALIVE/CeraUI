@@ -49,38 +49,59 @@ test.describe('data-previsualization sweep', () => {
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'network');
 
-		// ── 2. HUD telemetry: temp °C, voltage V, current A all present ──
-		// Desktop + mobile HUD both mount; one is CSS-hidden — target the visible.
+		// ── 2. HUD telemetry: temp °C in the compact strip; V/A in the sheet ──
+		// T18 trimmed the strip to a single temp chip (voltage/current moved to the
+		// sheet sensors line, asserted below). The chip wraps its value span in an
+		// outer title="Temperature" span: `.first()` = wrapper (shows °C), `.last()`
+		// = the value span that carries the opacity-50 staleness dim.
 		const temp = page.locator('[title="Temperature"]:visible').first();
-		const volt = page.locator('[title="Voltage"]:visible').first();
-		const curr = page.locator('[title="Current"]:visible').first();
+		const tempValue = page.locator('[title="Temperature"]:visible').last();
 		await expect(temp).toBeVisible();
 		await expect(temp).toContainText('°C');
-		await expect(volt).toContainText('V');
-		await expect(curr).toContainText('A');
 
 		// ── 1. Every connected cellular modem shows a signal % ──
-		// Scope to the Cellular section; correlate connected modem cards with
-		// signal-% tokens so a card that says "Connected" but lacks a % fails.
+		// The Cellular section counts connected modems. Signal % now lives in
+		// BondedLinksSection (T19/T20 made it the sole live-telemetry owner — the
+		// per-interface Cellular cards no longer render their own signal% cluster).
 		const cellular = await page.evaluate(() => {
 			const heads = Array.from(document.querySelectorAll('h2'));
 			const head = heads.find((h) => h.textContent?.trim() === 'Cellular');
 			const section = head?.closest('section') ?? head?.parentElement ?? null;
 			const text = section?.textContent ?? '';
 			const connected = (text.match(/Connected/g) ?? []).length;
-			const signals = (text.match(/\b\d{1,3}%/g) ?? []).length;
 			const noSim = /No SIM cards detected/.test(text);
-			return { connected, signals, noSim };
+			return { connected, noSim };
 		});
-		// At least one connected modem, and no connected modem is missing a %.
 		expect(cellular.noSim).toBe(false);
 		expect(cellular.connected).toBeGreaterThanOrEqual(1);
-		expect(cellular.signals).toBeGreaterThanOrEqual(cellular.connected);
+
+		// Signal % is previsualized once per bonded link in BondedLinksSection. Count
+		// the bonded-link cards that surface a signal % — at least one per connected
+		// cellular modem (bonded rows also cover WiFi, so the count is >= connected).
+		await expect(page.getByTestId('bonded-link-card').first()).toBeVisible();
+		await expect
+			.poll(
+				async () =>
+					page.evaluate(
+						() =>
+							Array.from(
+								document.querySelectorAll('[data-testid="bonded-link-card"]'),
+							).filter((card) => /\b\d{1,3}%/.test(card.textContent ?? '')).length,
+					),
+				{ message: 'every connected bonded link should previsualize a signal %' },
+			)
+			.toBeGreaterThanOrEqual(cellular.connected);
 
 		// Signal % is ALSO mirrored in the HUD detail sheet (not just the cards).
 		await page.locator('[data-hud-region]:visible').click();
 		const statusDialog = page.getByRole('dialog', { name: 'Status' });
 		await expect(statusDialog).toBeVisible();
+
+		// Voltage (V) + current (A) now live in the sheet's sensors line (T18 moved
+		// them off the compact strip) — complete the SoC telemetry proof here.
+		await expect(statusDialog.locator('[title="Voltage"]')).toContainText('V');
+		await expect(statusDialog.locator('[title="Current"]')).toContainText('A');
+
 		const hudSignals = await statusDialog.evaluate(
 			(el) => (el.textContent?.match(/\b\d{1,3}%/g) ?? []).length,
 		);
@@ -110,15 +131,15 @@ test.describe('data-previsualization sweep', () => {
 		).toBeVisible();
 
 		// ── 4. Universal staleness: freeze frames → live values dim ──
-		await expect(temp).not.toHaveClass(/opacity-50/);
+		await expect(tempValue).not.toHaveClass(/opacity-50/);
 		frozen = true;
 		// Past STALE_THRESHOLD_MS (5000ms) the mounted view dims live values.
-		await expect(temp).toHaveClass(/opacity-50/, { timeout: 12_000 });
+		await expect(tempValue).toHaveClass(/opacity-50/, { timeout: 12_000 });
 		// Still authenticated/mounted — not booted to the login/offline screen.
 		await expect(page.locator('header').first()).toBeVisible();
 
 		// Recovery: resume frames → dimming clears, values refresh.
 		frozen = false;
-		await expect(temp).not.toHaveClass(/opacity-50/, { timeout: 12_000 });
+		await expect(tempValue).not.toHaveClass(/opacity-50/, { timeout: 12_000 });
 	});
 });

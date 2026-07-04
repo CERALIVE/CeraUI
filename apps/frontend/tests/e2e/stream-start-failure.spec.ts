@@ -76,6 +76,25 @@ function rpcPath(frame: Frame): string {
 const GENERIC_TEXT = 'Failed to start stream';
 const SRT_CONNECT_TEXT = /Couldn.t reach the SRT server/;
 const KNOWN_PIPELINE = 'e2e-start-pipeline';
+const KNOWN_SOURCE = 'e2e-start-source';
+
+// A schema-valid capture StreamSource for the unified device-first list. The
+// GoLiveCard source gate resolves `config.source` against this list (T13); a
+// single available capture source with a matching id makes that gate pass.
+const START_SOURCE = {
+	origin: 'capture',
+	id: KNOWN_SOURCE,
+	pipelineId: KNOWN_PIPELINE,
+	kind: 'hdmi',
+	displayName: 'E2E Start Camera',
+	devicePath: '/dev/video0',
+	modes: [{ width: 1920, height: 1080, framerates: [30, 60] }],
+	supportsAudio: false,
+	supportsResolutionOverride: false,
+	supportsFramerateOverride: false,
+	audioKind: 'none',
+	available: true,
+};
 
 /**
  * Drive the Live "Start Stream" control into a failed start whose RPC reply is
@@ -90,9 +109,12 @@ async function startWithReply(page: Page, result: Frame): Promise<void> {
 			const status = frame.status as Frame | undefined;
 			if (status && 'is_streaming' in status) status.is_streaming = false;
 			const config = frame.config as Frame | undefined;
-			if (config) config.pipeline = KNOWN_PIPELINE;
-			// Drop the real pipelines registry; we push our own authoritative one.
-			return !('pipelines' in frame);
+			if (config) {
+				config.pipeline = KNOWN_PIPELINE;
+				config.source = KNOWN_SOURCE;
+			}
+			// Drop the real pipelines + sources registries; we push authoritative ones.
+			return !('pipelines' in frame) && !('sources' in frame);
 		},
 		interceptOutbound: (frame, reply) => {
 			if (rpcPath(frame) === 'streaming.start') {
@@ -118,7 +140,8 @@ async function startWithReply(page: Page, result: Frame): Promise<void> {
 			},
 		},
 	});
-	ws.push({ config: { pipeline: KNOWN_PIPELINE } });
+	ws.push({ sources: { hardware: 'generic', sources: [START_SOURCE] } });
+	ws.push({ config: { pipeline: KNOWN_PIPELINE, source: KNOWN_SOURCE } });
 
 	const start = page.getByRole('button', { name: 'Start Stream' });
 	await expect(start).toBeVisible();

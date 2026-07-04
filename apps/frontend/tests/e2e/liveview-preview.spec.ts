@@ -10,9 +10,12 @@ import { ensureAuthenticated, navigateTo } from './helpers/index.js';
  *
  * Proves the already-shipped local preview meets the issue's intent against the
  * real frontend in a browser:
- *   1. <PreviewCanvas> (data-testid="preview") renders under the <SourceSection>
- *      (data-testid="source-section"), which wraps the <InputPicker> device
- *      selector (data-testid="input-picker"), in the same Live column.
+ *   1. <PreviewCanvas> (data-testid="preview") renders in the same idle-cockpit
+ *      column as the unified <SourceSection> (data-testid="source-section", which
+ *      wraps the device-first `source-list` <ul> that replaced the removed
+ *      <InputPicker>). Since T11 the preview lives inside a collapsed-by-default
+ *      "Preview" <details> disclosure (data-testid="preview-disclosure") — every
+ *      test opens it (see openPreviewDisclosure) before asserting preview visibility.
  *   2. The preview toggle is operable (aria-pressed flips, canvas mounts).
  *   3. The audio level meter mounts when the preview is on.
  *   4. With no active encode the preview reaches the `waiting` state and shows
@@ -104,6 +107,21 @@ function injectServerConfig(): void {
 	pageWs?.send(JSON.stringify({ config: SERVER_CONFIG }));
 }
 
+/**
+ * Open the collapsed "Preview" <details> disclosure (T11) so <PreviewCanvas>
+ * (data-testid="preview") becomes visible. IdleCockpit ships the preview inside a
+ * closed-by-default disclosure — it never dials the engine until opened — so every
+ * preview assertion must reveal it first. Opening the disclosure does NOT start the
+ * preview (that stays off until `preview-toggle` is clicked). Mirrors the
+ * roadmap-disclosure fix in source-overhaul.visual.spec.ts (commit dfffa2db).
+ */
+async function openPreviewDisclosure(page: Page): Promise<void> {
+	const disclosure = page.getByTestId('preview-disclosure');
+	await expect(disclosure).toBeVisible();
+	await disclosure.locator('summary').click();
+	await expect(page.getByTestId('preview')).toBeVisible();
+}
+
 test.describe('LiveView preview placement (#72)', () => {
 	test.beforeEach(async ({ page }) => {
 		pageWs = null;
@@ -112,34 +130,39 @@ test.describe('LiveView preview placement (#72)', () => {
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
 		injectServerConfig();
+		await openPreviewDisclosure(page);
 	});
 
 	test('PreviewCanvas renders under the source section, toggle + meter operable', async ({
 		page,
 	}) => {
-		const picker = page.getByTestId('input-picker');
+		const sourceList = page.getByTestId('source-list');
 		const preview = page.getByTestId('preview');
-		await expect(picker).toBeVisible();
+		await expect(sourceList).toBeVisible();
 		await expect(preview).toBeVisible();
 
-		// DOM proof for the overhauled Live column (Task 4–16): the bare
-		// <InputPicker> is now wrapped by <SourceSection> and the roadmap pills sit
-		// between it and the preview, so the preview is no longer the picker's
-		// immediate sibling. The invariant is that the preview is a same-column
-		// sibling that FOLLOWS the source section which contains the input picker.
+		// DOM proof for the device-first idle cockpit (Tasks 11–13): T13 replaced the
+		// bare <InputPicker> with the unified <SourceSection> `source-list` <ul>, and
+		// T11 moved <PreviewCanvas> into the "Preview" <details> disclosure (opened in
+		// beforeEach). The invariant is that the preview disclosure and the source
+		// section are same-column siblings inside the idle cockpit, and the source
+		// section wraps the unified source list.
 		const placement = await page.evaluate(() => {
+			const cockpit = document.querySelector('[data-testid="idle-cockpit"]');
+			const disclosure = document.querySelector('[data-testid="preview-disclosure"]');
 			const section = document.querySelector('[data-testid="source-section"]');
-			const picker = document.querySelector('[data-testid="input-picker"]');
+			const list = document.querySelector('[data-testid="source-list"]');
 			const preview = document.querySelector('[data-testid="preview"]');
-			if (!section || !picker || !preview) return 'missing';
-			const wrapsPicker = section.contains(picker);
-			const followsSection = !!(
-				section.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING
-			);
-			const sameColumn = section.parentElement === preview.parentElement;
-			return wrapsPicker && followsSection && sameColumn
+			if (!cockpit || !disclosure || !section || !list || !preview) return 'missing';
+			const wrapsList = section.contains(list);
+			const previewInDisclosure = disclosure.contains(preview);
+			const sameColumn =
+				disclosure.parentElement === section.parentElement &&
+				cockpit.contains(disclosure) &&
+				cockpit.contains(section);
+			return wrapsList && previewInDisclosure && sameColumn
 				? 'ok'
-				: `wraps=${wrapsPicker} follows=${followsSection} sameColumn=${sameColumn}`;
+				: `wrapsList=${wrapsList} previewInDisclosure=${previewInDisclosure} sameColumn=${sameColumn}`;
 		});
 		expect(placement).toBe('ok');
 
@@ -173,7 +196,7 @@ test.describe('LiveView preview placement (#72)', () => {
 	}, async ({ page }, testInfo) => {
 		test.skip(testInfo.project.name !== 'desktop', 'desktop viewport owns evidence');
 
-		await expect(page.getByTestId('input-picker')).toBeVisible();
+		await expect(page.getByTestId('source-list')).toBeVisible();
 		await page.getByTestId('preview-toggle').click();
 		await expect(page.getByTestId('preview-canvas')).toBeVisible();
 		await expect(page.getByTestId('audio-level-meter')).toBeVisible();

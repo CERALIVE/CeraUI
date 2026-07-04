@@ -19,27 +19,32 @@ import ar from "../../../../packages/i18n/src/ar/index.js";
  *
  * Mechanism: the page socket is proxied (routeWebSocket, the established
  * source-overhaul/truthfulness pattern) so this spec injects a deterministic
- * config + pipelines + capabilities snapshot that satisfies the embedded-audio
- * gate (`selectedPipelineAudioKind === 'embedded' && capabilities.network_embedded_audio
- * === true`, SourceSection.svelte) without depending on mock-backend churn.
+ * config + sources + capabilities snapshot that satisfies the embedded-audio gate.
+ * Since the experience-simplification restructure (T13), SourceSection resolves the
+ * active source from the unified `sources` broadcast, not `pipelines`: the gate is
+ * `activeSource.audioKind === 'embedded' && capabilities.network_embedded_audio ===
+ * true`, where `activeSource = sources.find(s => s.id === config.source)`.
  */
 
-const EMBEDDED_PIPELINES = {
-	pipelines: {
+const EMBEDDED_SOURCES = {
+	sources: {
 		hardware: "generic",
-		pipelines: {
-			srt: {
-				name: "SRT Ingest",
-				description: "LAN SRT ingest gateway",
+		sources: [
+			{
+				origin: "network",
+				id: "srt",
+				pipelineId: "srt",
+				labelKey: "settings.sources.srt",
+				requiresGateway: "srt",
+				url: "srt://192.168.1.100:4001",
+				modes: [],
 				supportsAudio: true,
 				supportsResolutionOverride: false,
 				supportsFramerateOverride: false,
-				defaultResolution: "1080p",
-				defaultFramerate: 30,
-				requires_gateway: "srt",
-				audio_kind: "embedded",
+				audioKind: "embedded",
+				available: true,
 			},
-		},
+		],
 	},
 };
 
@@ -71,8 +76,10 @@ test.describe("Locale parity — Arabic RTL + embedded-audio exact-match (todo 1
 		pageWs = null;
 
 		// Same proxy shape as source-overhaul/truthfulness: drop the backend's own
-		// `devices`/`capabilities`/`pipelines` echoes so the injected snapshot below
-		// is authoritative regardless of the worker's mock scenario.
+		// `devices`/`capabilities`/`pipelines`/`sources` echoes so the injected
+		// snapshot below is authoritative regardless of the worker's mock scenario.
+		// `sources` MUST be dropped (T22 pattern): SourceSection reads the folded
+		// `sources` broadcast, so the backend's own echo would override our fixture.
 		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
@@ -84,7 +91,10 @@ test.describe("Locale parity — Arabic RTL + embedded-audio exact-match (todo 1
 					if (
 						frame &&
 						typeof frame === "object" &&
-						("devices" in frame || "capabilities" in frame || "pipelines" in frame)
+						("devices" in frame ||
+							"capabilities" in frame ||
+							"pipelines" in frame ||
+							"sources" in frame)
 					) {
 						return;
 					}
@@ -131,10 +141,11 @@ test.describe("Locale parity — Arabic RTL + embedded-audio exact-match (todo 1
 					srt_streamid: "e2e",
 					max_br: 6000,
 					pipeline: "srt",
+					source: "srt",
 				},
 			}),
 		);
-		pageWs?.send(JSON.stringify(EMBEDDED_PIPELINES));
+		pageWs?.send(JSON.stringify(EMBEDDED_SOURCES));
 		pageWs?.send(JSON.stringify(EMBEDDED_CAPABILITIES));
 
 		const embedded = page.getByTestId("audio-source-embedded");

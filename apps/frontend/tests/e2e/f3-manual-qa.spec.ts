@@ -160,22 +160,25 @@ test.describe('F3 manual QA — modem toggles, hotspot gate, staleness', () => {
 		await network.open();
 
 		// Desktop + mobile HUD both mount; one is CSS-hidden — target the visible.
+		// T18's temp chip wraps its value span in an outer title="Temperature" span:
+		// `.first()` = wrapper (shows °C), `.last()` = the value span carrying the dim.
 		const temp = page.locator('[title="Temperature"]:visible').first();
+		const tempValue = page.locator('[title="Temperature"]:visible').last();
 		await expect(temp).toBeVisible();
 		await expect(temp).toContainText('°C');
 		// Baseline: fresh data flowing → telemetry not dimmed.
-		await expect(temp).not.toHaveClass(/opacity-50/);
+		await expect(tempValue).not.toHaveClass(/opacity-50/);
 
 		// Freeze the server→client stream: timestamps stop advancing.
 		frozen = true;
 		// Past STALE_THRESHOLD_MS (5000ms) the staleness latch dims live values.
-		await expect(temp).toHaveClass(/opacity-50/, { timeout: 12_000 });
+		await expect(tempValue).toHaveClass(/opacity-50/, { timeout: 12_000 });
 		// Still authenticated/mounted — not booted to the login/offline screen.
 		await expect(page.locator('header').first()).toBeVisible();
 
 		// Resume: unfreeze → the backend's periodic frames refresh the timestamp
 		// and the stale latch clears.
 		frozen = false;
-		await expect(temp).not.toHaveClass(/opacity-50/, { timeout: 12_000 });
+		await expect(tempValue).not.toHaveClass(/opacity-50/, { timeout: 12_000 });
 	});
 });
