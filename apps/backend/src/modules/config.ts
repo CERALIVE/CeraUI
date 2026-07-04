@@ -15,8 +15,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import fs from "node:fs";
-
 import type { AddonConfig, AddonState } from "@ceraui/rpc/schemas";
 
 import {
@@ -33,7 +31,6 @@ import { logger } from "../helpers/logger.ts";
 import { MOCK_CONFIG_PAIRING_DEFAULTS } from "../mocks/mock-config.ts";
 import { shouldUseMocks } from "../mocks/mock-service.ts";
 import { getPasswordHash, setPasswordHash } from "../rpc/state/password.ts";
-import { setup } from "./setup.ts";
 import { getSshPasswordHash, setSshPasswordHash } from "./system/ssh.ts";
 
 const CONFIG_FILE = "config.json";
@@ -41,27 +38,13 @@ const CONFIG_FILE = "config.json";
 let config: RuntimeConfig = {};
 
 export async function loadConfig() {
-	// Build defaults based on platform
-	const platformDefaults = { ...RUNTIME_CONFIG_DEFAULTS };
-
-	// Configure the default audio source depending on the platform
-	switch (setup.hw) {
-		case "jetson":
-			platformDefaults.asrc = fs.existsSync("/dev/hdmi_capture")
-				? "HDMI"
-				: "C4K";
-			break;
-		case "rk3588":
-			platformDefaults.asrc = fs.existsSync("/dev/hdmirx")
-				? "HDMI"
-				: "USB audio";
-			break;
-	}
-
+	// The default audio source is the "Auto" sentinel (RUNTIME_CONFIG_DEFAULTS):
+	// the audio follows the video source, resolved at start/idle-preview. This
+	// subsumes the former static per-board asrc guess.
 	const result = await loadJsonConfig(
 		CONFIG_FILE,
 		runtimeConfigSchema,
-		platformDefaults,
+		RUNTIME_CONFIG_DEFAULTS,
 	);
 	config = coerceLegacySource(result.data);
 

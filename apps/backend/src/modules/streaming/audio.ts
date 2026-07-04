@@ -17,6 +17,7 @@
 */
 
 import type { AudioSource } from "@ceraui/rpc/schemas";
+import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";
@@ -32,6 +33,7 @@ import {
 	type AudioDeviceWatcher,
 	createAudioDeviceWatcher,
 } from "./audio-watcher.ts";
+import { refreshResolvedAsrcPreview } from "./auto-audio.ts";
 import { AUDIO_PROBE_TIMEOUT_MS } from "./constants.ts";
 import { getEngineAudioDevices } from "./sources.ts";
 
@@ -85,6 +87,8 @@ export function warnIfConfiguredAudioSourceUnavailable(
 	asrc: string | undefined,
 ): void {
 	if (!asrc) return;
+	// The "Auto" sentinel is not a device — it resolves at start (auto-audio.ts).
+	if (asrc === AUDIO_SOURCE_AUTO) return;
 	const devices = getAudioDevices();
 	if (asrc in devices) return;
 	logger.warn(
@@ -209,6 +213,10 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 		asrcs: Object.keys(audioDevices),
 		audio_sources: deriveAudioSources(audioDevices, labels),
 	});
+
+	// A re-enumeration may change what "Auto" resolves to; refresh the idle
+	// preview (a no-op while streaming — the live value stays frozen).
+	refreshResolvedAsrcPreview();
 
 	// A hotplug re-enumeration may have brought in the device a stream start is
 	// waiting on — wake the pending probe so it re-checks now instead of after

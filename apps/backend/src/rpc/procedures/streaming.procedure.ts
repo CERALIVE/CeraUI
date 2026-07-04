@@ -44,6 +44,7 @@ import {
 	isMockGatewayActive,
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
+import { refreshResolvedAsrcPreview } from "../../modules/streaming/auto-audio.ts";
 import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
 import { validatePersistedPipeline } from "../../modules/streaming/config-migration.ts";
 import { deviceRegistry } from "../../modules/streaming/devices.ts";
@@ -529,6 +530,12 @@ export const setConfigProcedure = authedProcedure
 
 		saveConfig();
 		broadcastMsg("config", config);
+
+		// A source/asrc change re-resolves the idle "Auto" preview (no-op unless
+		// config.asrc is the sentinel; frozen while streaming).
+		if (input.source !== undefined || input.asrc !== undefined) {
+			refreshResolvedAsrcPreview();
+		}
 		return { success: true, applied };
 	});
 

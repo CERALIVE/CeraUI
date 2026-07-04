@@ -42,6 +42,7 @@
 
 import {
 	AddonConfigSchema,
+	AUDIO_SOURCE_AUTO,
 	type DetectionMethod,
 	detectionMethodSchema,
 	isNamespacedRelayId,
@@ -241,6 +242,11 @@ export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
 
 // Default values for runtime config (used when fields are missing)
 export const RUNTIME_CONFIG_DEFAULTS: Partial<RuntimeConfig> = {
+	// A MISSING asrc now defaults to the "Auto" sentinel: the audio source follows
+	// the video source, resolved at start/idle-preview (auto-audio.ts). This covers
+	// n100/generic (previously undefined → engine test-tone) and subsumes the
+	// former static per-board guess in config.ts. A PRESENT asrc is untouched.
+	asrc: AUDIO_SOURCE_AUTO,
 	srt_latency: 2000,
 	max_br: 5000,
 	delay: 0,

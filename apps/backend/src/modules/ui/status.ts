@@ -19,6 +19,7 @@ import type {
 	AudioSource,
 	BufferingStatus,
 	NetworkIngest,
+	ResolvedAsrcReason,
 } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
 import { getConfig } from "../config.ts";
@@ -27,6 +28,11 @@ import { getNetworkIngestInfo } from "../network/network-ingest.ts";
 import { netIfBuildMsg } from "../network/network-interfaces.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
 import { deriveAudioSources, getAudioDevices } from "../streaming/audio.ts";
+import {
+	getPendingAudioFollowAsrc,
+	getResolvedAsrc,
+	getResolvedAsrcReason,
+} from "../streaming/auto-audio.ts";
 import {
 	buildLinkTelemetry,
 	type LinkTelemetryMessage,
@@ -55,6 +61,9 @@ export type StatusResponseMessage = {
 	modems?: ReturnType<typeof buildModemsMessage>;
 	asrcs?: Array<keyof ReturnType<typeof getAudioDevices>>;
 	audio_sources?: AudioSource[];
+	resolved_asrc?: string | null;
+	resolved_asrc_reason?: ResolvedAsrcReason | null;
+	pending_audio_follow_asrc?: string | null;
 	set_password?: boolean;
 	remote?: true | { error: string };
 	linkTelemetry?: LinkTelemetryMessage | null;
@@ -75,6 +84,9 @@ export function sendStatus(conn: WebSocket) {
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
+			resolved_asrc: getResolvedAsrc(),
+			resolved_asrc_reason: getResolvedAsrcReason(),
+			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			linkTelemetry: buildLinkTelemetry(),
 			network_ingest: getNetworkIngestInfo(),
 		} satisfies StatusResponseMessage),

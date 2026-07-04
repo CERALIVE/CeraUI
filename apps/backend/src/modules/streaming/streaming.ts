@@ -17,7 +17,11 @@
 */
 
 /* Stream starting, stopping, management and monitoring */
-import { RIST_TRANSPORT, SRTLA_MIN_LATENCY_MS } from "@ceraui/rpc/schemas";
+import {
+	AUDIO_SOURCE_AUTO,
+	RIST_TRANSPORT,
+	SRTLA_MIN_LATENCY_MS,
+} from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
 import {
 	type Framerate,
@@ -161,7 +165,13 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 	if (pipeline.supportsAudio) {
 		if (typeof validated.asrc !== "string")
 			throw new Error("Invalid audio source");
-		if (validated.asrc !== config.asrc && !audioDevicesMap[validated.asrc])
+		// The "Auto" sentinel is always valid — it resolves to a concrete card at
+		// launch (auto-audio.ts), so it is NOT required to be in getAudioDevices().
+		if (
+			validated.asrc !== AUDIO_SOURCE_AUTO &&
+			validated.asrc !== config.asrc &&
+			!audioDevicesMap[validated.asrc]
+		)
 			throw new Error("Selected audio source not found");
 	}
 

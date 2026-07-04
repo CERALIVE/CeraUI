@@ -17,6 +17,11 @@ import {
 	deriveAudioSources,
 	getAudioDevices,
 } from "../../modules/streaming/audio.ts";
+import {
+	getPendingAudioFollowAsrc,
+	getResolvedAsrc,
+	getResolvedAsrcReason,
+} from "../../modules/streaming/auto-audio.ts";
 import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { getDevicesMessage } from "../../modules/streaming/devices.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
@@ -63,6 +68,9 @@ export const getStatusProcedure = authedProcedure
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
+			resolved_asrc: getResolvedAsrc(),
+			resolved_asrc_reason: getResolvedAsrcReason(),
+			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			network_ingest: getNetworkIngestInfo(),
 		};
 	});
@@ -99,6 +107,9 @@ export function buildInitialStatus() {
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
+			resolved_asrc: getResolvedAsrc(),
+			resolved_asrc_reason: getResolvedAsrcReason(),
+			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			network_ingest: getNetworkIngestInfo(),
 		},
 		netif: netIfBuildMsg(),
