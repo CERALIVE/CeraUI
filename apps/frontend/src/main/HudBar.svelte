@@ -4,6 +4,7 @@ import { LL, locale } from '@ceraui/i18n/svelte';
 import { formatBitrate, formatCurrent, formatRelativeTime, formatTemp, formatVoltage } from '@ceraui/i18n/formatters';
 import ActivityIcon from '@lucide/svelte/icons/activity';
 import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+import CircleDotIcon from '@lucide/svelte/icons/circle-dot';
 import CircleHelpIcon from '@lucide/svelte/icons/circle-help';
 import CircleXIcon from '@lucide/svelte/icons/circle-x';
 import ClockIcon from '@lucide/svelte/icons/clock';
@@ -56,6 +57,20 @@ const loc = $derived($locale);
 // Connection / streaming state machine for the lead badge.
 const isOffline = $derived(hud.isFullyStale);
 const isLive = $derived(hud.isStreaming && !isOffline);
+
+// The three explicit HUD lifecycle states (Task 8, Live-Data Discipline). The
+// sheet renders exactly ONE status-wording node keyed off this, and every
+// live-only metric renders as absence ("—") outside `live` — never a dimmed
+// stale number.
+type HudLifecycle = 'live' | 'idle' | 'offline';
+const lifecycle = $derived<HudLifecycle>(isOffline ? 'offline' : isLive ? 'live' : 'idle');
+
+// Bitrate honesty: it is a LIVE streaming value, so it is shown ONLY while
+// genuinely live. Idle/offline render "—" (absence rendered as absence).
+// Dimming is reserved for aging-while-streaming (live + stale) and NEVER
+// applies to an idle/offline absence.
+const bitrateDimmed = $derived(isLive && hud.isBitrateStale);
+const bitrateText = $derived(isLive && hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—');
 
 // Store-and-forward buffering (Task 34): null until the engine advertises it.
 const buffering = $derived(getBufferingState());
@@ -129,6 +144,10 @@ function lastSeen(ts: number | null): string | null {
 	return formatRelativeTime(loc)(new Date(ts));
 }
 
+// Relative "last seen" for the streaming signal — reused by the offline verdict
+// ("No signal · last seen …") and the live/idle subtitle ("Last updated …").
+const streamingLastSeen = $derived(lastSeen(hud.lastUpdatedAt.streaming));
+
 // Polite live-region announcement of the HUD telemetry. The raw values change
 // every tick; announcing each one would flood a screen reader, so a single
 // concise summary (state · bitrate · link count) is DEBOUNCED — only the value
@@ -138,7 +157,7 @@ const TELEMETRY_ANNOUNCE_DEBOUNCE_MS = 1500;
 const telemetrySummary = $derived(
 	[
 		isOffline ? $LL.hud.offline() : isLive ? $LL.hud.live() : $LL.hud.idle(),
-		`${$LL.hud.bitrate()}: ${hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—'}`,
+		`${$LL.hud.bitrate()}: ${bitrateText}`,
 		`${$LL.hud.network()}: ${hud.links.length}`,
 	].join(' · '),
 );
@@ -156,7 +175,7 @@ $effect(() => {
 // dimming conveys — never a fresh-sounding value for an aged reading.
 const staleSuffix = (isStale: boolean) => (isStale ? `, ${$LL.hud.stale()}` : '');
 const bitrateLabel = $derived(
-	`${$LL.hud.bitrate()}: ${hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : $LL.hud.noData()}${staleSuffix(hud.isBitrateStale)}`,
+	`${$LL.hud.bitrate()}: ${isLive && hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : $LL.hud.noData()}${staleSuffix(bitrateDimmed)}`,
 );
 const socLabel = $derived(
 	`${$LL.hud.sensors()}: ${$LL.hud.temperature()} ${tempState === 'nodata' ? '—' : tempText}, ${$LL.hud.voltage()} ${voltageState === 'nodata' ? '—' : voltageText}, ${$LL.hud.current()} ${currentState === 'nodata' ? '—' : currentText}${staleSuffix(soc.isStale)}`,
@@ -301,17 +320,17 @@ $effect(() => {
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
 
-				<!-- Bitrate -->
+				<!-- Bitrate — live-only; renders "—" when idle/offline (never a dimmed stale number) -->
 				<span
-					class={cn('inline-flex shrink-0 items-center gap-1 font-mono tabular-nums', hud.isBitrateStale && 'opacity-50')}
+					class={cn('inline-flex shrink-0 items-center gap-1 font-mono tabular-nums', bitrateDimmed && 'opacity-50')}
 					role="img"
 					aria-label={bitrateLabel}
 					title={$LL.hud.bitrate()}
 				>
-					{#if hud.isBitrateStale}
+					{#if bitrateDimmed}
 						<ClockIcon class="size-3 shrink-0" aria-hidden="true" />
 					{/if}
-					{hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—'}
+					{bitrateText}
 				</span>
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
@@ -362,16 +381,11 @@ $effect(() => {
 		<Sheet.Header class="gap-1">
 			<Sheet.Title>{$LL.hud.status()}</Sheet.Title>
 			<Sheet.Description>
-				{#if isOffline}
-					{$LL.hud.offline()}
-				{:else if isLive}
-					{$LL.hud.live()}
-				{:else}
-					{$LL.hud.idle()}
-				{/if}
-				{#if lastSeen(hud.lastUpdatedAt.streaming)}
-					· {$LL.hud.lastUpdated()} {lastSeen(hud.lastUpdatedAt.streaming)}
-				{/if}
+				<span data-testid="hud-sheet-subtitle" data-state={lifecycle}>
+					{#if lifecycle !== 'offline' && streamingLastSeen}
+						{$LL.hud.lastUpdated()} {streamingLastSeen}
+					{/if}
+				</span>
 			</Sheet.Description>
 		</Sheet.Header>
 
@@ -385,22 +399,7 @@ $effect(() => {
 					<BondConstellation links={hud.links} live={isLive} frozen={isEink} />
 				</div>
 
-				<div class="flex items-center justify-between gap-3 border-b py-2">
-					<span class="text-muted-foreground flex items-center gap-2">
-						<span
-							class={cn(
-								'size-2 rounded-full',
-								isOffline ? 'bg-muted-foreground' : isLive ? 'bg-status-live' : 'bg-status-idle',
-							)}
-						></span>
-						{$LL.hud.status()}
-					</span>
-					<span class="font-medium">
-						{isOffline ? $LL.hud.offline() : isLive ? $LL.hud.live() : $LL.hud.idle()}
-					</span>
-				</div>
-
-				<!-- Stream-health rollup: state + process/frames/SRT/bond breakdown (Task 15) -->
+				<!-- Single verdict line: lifecycle status + health rollup + bond breakdown (Task 8/15) -->
 				<div class="flex flex-col gap-2 border-b py-2" data-testid="stream-health-detail" data-state={rollupState}>
 					<div class="flex items-center justify-between gap-3">
 						<span class="text-muted-foreground flex items-center gap-1.5">
@@ -440,16 +439,27 @@ $effect(() => {
 							</Tooltip.Provider>
 						</span>
 						<span class="inline-flex items-center gap-1.5 font-medium" data-testid="stream-health-state">
-							<RollupIcon class={cn('size-4 shrink-0', rollupIconColor)} aria-hidden="true" />
-							{rollupLabel}
+							{#if lifecycle === 'offline'}
+								<ClockIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+								{$LL.hud.noSignal()}
+							{:else if rollup}
+								<RollupIcon class={cn('size-4 shrink-0', rollupIconColor)} aria-hidden="true" />
+								{rollupLabel}
+							{:else}
+								<CircleDotIcon class="text-status-neutral size-4 shrink-0" aria-hidden="true" />
+								{$LL.hud.idle()}
+							{/if}
 						</span>
 					</div>
 
-					{#if healthReason}
-						<p class="text-status-warning text-xs" data-testid="stream-health-reason-detail">{healthReason.detail}</p>
-					{/if}
-
-					{#if rollup}
+					{#if lifecycle === 'offline'}
+						{#if streamingLastSeen}
+							<p class="text-muted-foreground text-xs" data-testid="hud-last-seen">{$LL.hud.lastSeen()} {streamingLastSeen}</p>
+						{/if}
+					{:else if rollup}
+						{#if healthReason}
+							<p class="text-status-warning text-xs" data-testid="stream-health-reason-detail">{healthReason.detail}</p>
+						{/if}
 						<dl class="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs" data-testid="stream-health-rollup">
 							{@render rollupRow(
 								'health-process',
@@ -495,13 +505,13 @@ $effect(() => {
 					{/if}
 				</div>
 
-				<div class={cn('flex items-center justify-between gap-3 border-b py-2', hud.isBitrateStale && 'opacity-50')}>
+				<div class={cn('flex items-center justify-between gap-3 border-b py-2', bitrateDimmed && 'opacity-50')}>
 					<span class="text-muted-foreground flex items-center gap-2">
-						{#if hud.isBitrateStale}<ClockIcon class="size-3.5" aria-hidden="true" />{/if}
+						{#if bitrateDimmed}<ClockIcon class="size-3.5" aria-hidden="true" />{/if}
 						{$LL.hud.bitrate()}
 					</span>
 					<span class="font-mono tabular-nums">
-						{hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—'}
+						{bitrateText}
 					</span>
 				</div>
 			</section>
