@@ -178,7 +178,11 @@ describe("streaming.setConfig — applied (post-clamp) state", () => {
 		expect(result.applied?.source_preference).toEqual(order);
 		expect(getConfig().source_preference).toEqual(order);
 
-		const echoed = await call(getConfigProcedure, {}, { context: makeContext() });
+		const echoed = await call(
+			getConfigProcedure,
+			{},
+			{ context: makeContext() },
+		);
 		expect(echoed.source_preference).toEqual(order);
 	});
 
@@ -187,7 +191,11 @@ describe("streaming.setConfig — applied (post-clamp) state", () => {
 		config.source = "video0";
 		config.source_preference = ["video0", "usb0"];
 
-		const echoed = await call(getConfigProcedure, {}, { context: makeContext() });
+		const echoed = await call(
+			getConfigProcedure,
+			{},
+			{ context: makeContext() },
+		);
 		expect(echoed.source).toBe("video0");
 		expect(echoed.source_preference).toEqual(["video0", "usb0"]);
 
