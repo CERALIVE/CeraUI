@@ -26,6 +26,21 @@ export const availableUpdatesFieldSchema = z.union([
 	z.null(),
 ]);
 
+// Discriminator token for how the T5 resolver picked the concrete device behind
+// an "Auto" audio selection. Without it, `resolved_asrc: null` conflates "embedded
+// audio" with "genuinely unresolved / old backend", so the UI can't render the
+// embedded state truthfully. The exact literals are a T4/T5/T6/T7 contract.
+export const resolvedAsrcReasonSchema = z.enum([
+	'embedded',
+	'hdmi',
+	'camlink',
+	'usb-same-device',
+	'usb-alias',
+	'first-device',
+	'pipeline-default',
+]);
+export type ResolvedAsrcReason = z.infer<typeof resolvedAsrcReasonSchema>;
+
 // Full status message schema
 export const statusMessageSchema = z.object({
 	set_password: z.boolean().optional(),
@@ -38,6 +53,13 @@ export const statusMessageSchema = z.object({
 	// Typed audio-source model (Task 4/6). Additive + optional beside the legacy
 	// `asrcs: string[]`, which REMAINS for back-compat.
 	audio_sources: z.array(audioSourceSchema).optional(),
+	// Currently-applied / idle-preview resolution of an "Auto" audio selection
+	// (T5): the concrete device id chosen, its `reason` discriminator, and the
+	// target a deferred live follow will apply at next start. All additive +
+	// nullable + optional — null/absent = no Auto resolution / old backend.
+	resolved_asrc: z.string().nullable().optional(),
+	resolved_asrc_reason: resolvedAsrcReasonSchema.nullable().optional(),
+	pending_audio_follow_asrc: z.string().nullable().optional(),
 	modems: modemListSchema,
 });
 export type StatusMessage = z.infer<typeof statusMessageSchema>;
@@ -93,6 +115,9 @@ export const activeEncodeSchema = z.object({
 	framerate: z.number(),
 	active_input: z.string().optional(),
 	decoder: z.string().optional(),
+	// Codec of the incoming/decoded source before re-encode (e.g. "h264"), when
+	// the engine reports it. Additive + optional — absent on a legacy engine.
+	input_codec: z.string().optional(),
 });
 export type ActiveEncode = z.infer<typeof activeEncodeSchema>;
 
@@ -146,6 +171,11 @@ export const statusResponseSchema = z.object({
 	// Typed audio-source model (Task 4/6). Additive + optional beside the legacy
 	// `asrcs: string[]`, which REMAINS for back-compat.
 	audio_sources: z.array(audioSourceSchema).optional(),
+	// "Auto" audio resolution mirror (T5) — same additive/nullable/optional
+	// contract as on statusMessageSchema above.
+	resolved_asrc: z.string().nullable().optional(),
+	resolved_asrc_reason: resolvedAsrcReasonSchema.nullable().optional(),
+	pending_audio_follow_asrc: z.string().nullable().optional(),
 	set_password: z.boolean().optional(),
 	remote: remoteStatusSchema.optional(),
 	linkTelemetry: linkTelemetryMessageSchema.nullable().optional(),

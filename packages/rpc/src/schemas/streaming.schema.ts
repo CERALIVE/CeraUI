@@ -52,13 +52,26 @@ export type AudioCodecs = 'aac' | 'opus';
 // the pseudo-sources only (device entries carry no key — hardware names are never
 // translated). Broadcast beside the legacy `asrcs: string[]`, which REMAINS for
 // back-compat. Additive + optional everywhere it is carried.
-export const audioSourceKindSchema = z.enum(['device', 'none', 'pipeline_default']);
+// Sentinel `asrc` wire value selecting the "Auto" audio source — the T5 resolver
+// picks the concrete device at start/idle-preview (embedded → HDMI → Cam Link →
+// USB → first-device → pipeline-default). Additive: the constant is the EXACT wire
+// string, so `config.asrc === AUDIO_SOURCE_AUTO` opts into auto resolution.
+export const AUDIO_SOURCE_AUTO = 'Auto';
+
+// The `auto` kind (T5) is APPENDED to the existing variants: it tags the "Auto"
+// pseudo-source. Existing variants (device/none/pipeline_default) are unchanged and
+// in their original order, so a legacy audio-source list still parses.
+export const audioSourceKindSchema = z.enum(['device', 'none', 'pipeline_default', 'auto']);
 export type AudioSourceKind = z.infer<typeof audioSourceKindSchema>;
 
 export const audioSourceSchema = z.object({
 	id: z.string(),
 	kind: audioSourceKindSchema,
 	labelKey: z.string().optional(),
+	// Verbatim hardware name for a device source (never translated). Additive +
+	// optional: pseudo-sources (none/pipeline_default/auto) carry `labelKey`
+	// instead; a legacy device entry with no label still parses.
+	label: z.string().optional(),
 });
 export type AudioSource = z.infer<typeof audioSourceSchema>;
 
@@ -832,6 +845,10 @@ export const switchInputOutputSchema = z.object({
 	active_input: z.string().optional(),
 	gap_ms: z.number().int().nonnegative().optional(),
 	error: switchInputErrorSchema.optional(),
+	// Deferred-follow hint (T7): true when the audio source is following the video
+	// input in Auto mode but the live follow could not be applied now and will be
+	// applied at the next stream start. Additive + optional; absent = no deferral.
+	audio_follow_pending: z.boolean().optional(),
 });
 export type SwitchInputOutput = z.infer<typeof switchInputOutputSchema>;
 

@@ -12,6 +12,8 @@ import { describe, expect, test } from 'bun:test';
 
 import { isAudioLiveSwitchEnabled } from '../capabilities/audio';
 import {
+	AUDIO_SOURCE_AUTO,
+	audioSourceKindSchema,
 	audioSourceSchema,
 	type CapabilitiesMessage,
 	capabilitiesMessageSchema,
@@ -25,6 +27,7 @@ import {
 	pipelineSchema,
 	type Resolution,
 	streamingConfigInputSchema,
+	switchInputOutputSchema,
 	toEngineResolution,
 } from './streaming.schema';
 
@@ -498,5 +501,57 @@ describe('pipelineSchema audio_kind + audioSourceSchema (Task 4)', () => {
 
 	test('audioSourceSchema rejects an unknown kind', () => {
 		expect(audioSourceSchema.safeParse({ id: 'x', kind: 'analog' }).success).toBe(false);
+	});
+});
+
+describe('audio Auto source additions (T1 — additive)', () => {
+	test('AUDIO_SOURCE_AUTO is the "Auto" wire sentinel', () => {
+		expect(AUDIO_SOURCE_AUTO).toBe('Auto');
+	});
+
+	test("audioSourceKindSchema accepts the appended 'auto' variant", () => {
+		expect(audioSourceKindSchema.parse('auto')).toBe('auto');
+		for (const kind of ['device', 'none', 'pipeline_default']) {
+			expect(audioSourceKindSchema.parse(kind)).toBe(kind);
+		}
+	});
+
+	test('audioSourceSchema carries an optional verbatim label', () => {
+		expect(
+			audioSourceSchema.parse({ id: 'USB audio', kind: 'device', label: 'Scarlett Solo USB' }),
+		).toEqual({ id: 'USB audio', kind: 'device', label: 'Scarlett Solo USB' });
+		expect(audioSourceSchema.parse({ id: 'USB audio', kind: 'device' }).label).toBeUndefined();
+	});
+
+	test('audioSourceSchema parses the Auto pseudo-source', () => {
+		expect(
+			audioSourceSchema.parse({ id: 'Auto', kind: 'auto', labelKey: 'audio.sources.auto' }),
+		).toEqual({ id: 'Auto', kind: 'auto', labelKey: 'audio.sources.auto' });
+	});
+
+	test('audioSourceSchema rejects a bogus kind (QA failure case)', () => {
+		expect(audioSourceSchema.safeParse({ id: 'x', kind: 'bogus' }).success).toBe(false);
+	});
+});
+
+describe('switchInputOutputSchema — audio_follow_pending (T1/T7 — additive)', () => {
+	test('parses WITHOUT audio_follow_pending (legacy)', () => {
+		const parsed = switchInputOutputSchema.parse({ success: true, active_input: 'cam-0' });
+		expect(parsed.audio_follow_pending).toBeUndefined();
+	});
+
+	test('parses WITH audio_follow_pending: true', () => {
+		const parsed = switchInputOutputSchema.parse({
+			success: true,
+			active_input: 'cam-0',
+			audio_follow_pending: true,
+		});
+		expect(parsed.audio_follow_pending).toBe(true);
+	});
+
+	test('rejects a non-boolean audio_follow_pending', () => {
+		expect(
+			switchInputOutputSchema.safeParse({ success: true, audio_follow_pending: 'yes' }).success,
+		).toBe(false);
 	});
 });
