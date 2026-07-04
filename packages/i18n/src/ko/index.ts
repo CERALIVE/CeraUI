@@ -1203,6 +1203,7 @@ const ko = {
 			pip: "화면 속 화면",
 			modeFallback: "자동 전환",
 			embeddedAudio: "임베디드 오디오",
+			roadmap: "로드맵",
 		},
 		fallback: {
 			unavailable: "사용 불가",

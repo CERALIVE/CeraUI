@@ -1145,6 +1145,7 @@ const zh = {
 			pip: "画中画",
 			modeFallback: "自动切换",
 			embeddedAudio: "嵌入式音频",
+			roadmap: "路线图",
 		},
 		fallback: {
 			unavailable: "不可用",

@@ -422,7 +422,7 @@ describe("SourceSection — embedded network-ingest audio (Task 13)", () => {
 		).toBeNull();
 	});
 
-	it("keeps the ALSA picker + shows a TD-embedded-audio coming-soon pill WITHOUT the capability", () => {
+	it("keeps the ALSA picker WITHOUT the capability (TD-embedded-audio pill relocated to IdleCockpit roadmap, T12)", () => {
 		const { container } = mount({
 			audioSources: ["USB audio", "Pipeline default"],
 			selectedPipeline: "srt",
@@ -438,10 +438,11 @@ describe("SourceSection — embedded network-ingest audio (Task 13)", () => {
 		expect(
 			container.querySelector('[data-testid="audio-source-embedded"]'),
 		).toBeNull();
-		// …plus a calm coming-soon affordance bound to the open register entry.
+		// …but the TD-embedded-audio coming-soon pill no longer lives inline here —
+		// it moved to IdleCockpit's collapsed "Roadmap" disclosure (T12).
 		expect(
 			container.querySelector('[data-debt-id="TD-embedded-audio"]'),
-		).not.toBeNull();
+		).toBeNull();
 	});
 
 	it("does not treat a selectable pipeline as embedded even with the capability on", () => {

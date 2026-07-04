@@ -1387,6 +1387,7 @@ const fr = {
 			pip: "Incrustation d'image",
 			modeFallback: "Bascule automatique",
 			embeddedAudio: "Audio intégré",
+			roadmap: "Feuille de route",
 		},
 		fallback: {
 			unavailable: "Indisponible",

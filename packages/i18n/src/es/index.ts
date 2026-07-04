@@ -616,6 +616,7 @@ const es = {
 			pip: "Imagen en imagen",
 			modeFallback: "Conmutación automática",
 			embeddedAudio: "Audio incorporado",
+			roadmap: "Hoja de ruta",
 		},
 		fallback: {
 			unavailable: "No disponible",

@@ -1193,6 +1193,7 @@ const hi = {
 			pip: "पिक्चर-इन-पिक्चर",
 			modeFallback: "स्वचालित स्विचिंग",
 			embeddedAudio: "एम्बेडेड ऑडियो",
+			roadmap: "रोडमैप",
 		},
 		fallback: {
 			unavailable: "अनुपलब्ध",

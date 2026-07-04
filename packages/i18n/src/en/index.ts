@@ -598,6 +598,7 @@ const en = {
 			pip: "Picture-in-picture",
 			modeFallback: "Automatic fallback",
 			embeddedAudio: "Embedded audio",
+			roadmap: "Roadmap",
 		},
 		fallback: {
 			unavailable: "Unavailable",

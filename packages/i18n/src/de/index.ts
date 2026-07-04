@@ -614,6 +614,7 @@ const de = {
 			pip: "Bild-in-Bild",
 			modeFallback: "Automatische Umschaltung",
 			embeddedAudio: "Eingebetteter Ton",
+			roadmap: "Roadmap",
 		},
 		fallback: {
 			unavailable: "Nicht verfügbar",

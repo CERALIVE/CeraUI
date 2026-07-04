@@ -1328,6 +1328,7 @@ const ar = {
 			pip: "صورة داخل صورة",
 			modeFallback: "التبديل التلقائي",
 			embeddedAudio: "صوت مضمّن",
+			roadmap: "خارطة الطريق",
 		},
 		fallback: {
 			unavailable: "غير متاح",

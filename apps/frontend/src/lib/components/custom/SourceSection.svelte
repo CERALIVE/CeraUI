@@ -30,7 +30,6 @@ import { VIDEO_SOURCE_LABELS } from '@ceraui/rpc/schemas';
 import { Check, Copy, QrCode, Radio, TriangleAlert, Video, Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
-import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import InputPicker from '$lib/components/custom/InputPicker.svelte';
 import SourcePreference from '$lib/components/custom/SourcePreference.svelte';
@@ -177,16 +176,14 @@ const audioComingSoon = $derived(isStreaming && audioMode === 'multiple');
 // Embedded network-ingest audio (Task 13): an rtmp/srt pipeline carries its audio
 // muxed into the incoming stream. The engine only ROUTES it with the
 // `network_embedded_audio` capability — with it, the audio source is read-only
-// "Embedded audio"; without it the legacy ALSA picker stays and we surface a calm
-// ComingSoon pill (TD-embedded-audio).
+// "Embedded audio". Without it, the legacy ALSA picker stays and the calm
+// ComingSoon pill (TD-embedded-audio) now lives in IdleCockpit's roadmap
+// disclosure (T12), not inline here.
 const selectedPipelineAudioKind = $derived(
 	selectedPipeline ? pipelines?.[selectedPipeline]?.audio_kind : undefined,
 );
 const audioEmbeddedActive = $derived(
 	selectedPipelineAudioKind === 'embedded' && capabilities?.network_embedded_audio === true,
-);
-const audioEmbeddedComingSoon = $derived(
-	selectedPipelineAudioKind === 'embedded' && capabilities?.network_embedded_audio !== true,
 );
 
 // i18n key resolver (mirrors AudioDialog) — lets the pure audio-source label
@@ -550,10 +547,7 @@ async function copyNetworkIngestUrl(url: string | null): Promise<void> {
 					testId="info-audio"
 					title={$LL.live.education.field.audio.title()}
 				/>
-				{#if audioEmbeddedComingSoon}
-					<!-- CI gate static marker (component renders data-debt-id dynamically): data-debt-id="TD-embedded-audio" -->
-					<ComingSoon debtId="TD-embedded-audio" label={$LL.live.comingSoon.embeddedAudio()} />
-				{:else if audioComingSoon}
+				{#if audioComingSoon}
 					<span
 						class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
 						title={$LL.live.comingSoon.hint()}

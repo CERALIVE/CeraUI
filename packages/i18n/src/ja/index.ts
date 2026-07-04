@@ -1230,6 +1230,7 @@ const ja = {
 			pip: "ピクチャー・イン・ピクチャー",
 			modeFallback: "自動切り替え",
 			embeddedAudio: "埋め込みオーディオ",
+			roadmap: "ロードマップ",
 		},
 		fallback: {
 			unavailable: "利用不可",

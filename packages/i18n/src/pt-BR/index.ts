@@ -1362,6 +1362,7 @@ const ptBR = {
 			pip: "Picture-in-picture",
 			modeFallback: "Substituição automática",
 			embeddedAudio: "Áudio incorporado",
+			roadmap: "Roteiro",
 		},
 		fallback: {
 			unavailable: "Indisponível",

@@ -10,10 +10,9 @@ import {
 	SWITCH_AUDIO_ERRORS,
 	SWITCH_INPUT_ERRORS,
 } from '@ceraui/rpc/schemas';
-import { Cpu, PictureInPicture2, Server, Shuffle, Volume2 } from '@lucide/svelte';
+import { Cpu, Server, Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
-import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
@@ -43,7 +42,6 @@ import {
 	deriveDestination,
 	findActiveSlot,
 	kindBadgeLabelKey,
-	managedSlotLabel,
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
 import {
@@ -357,20 +355,11 @@ const receiverKind = $derived(
 			})
 		: undefined,
 );
-const providerName = $derived(
-	PROVIDER_LABELS[config?.remote_provider ?? ''] ?? relayServerInfo?.name ?? 'CeraLive Cloud',
-);
-const receiverEndpoint = $derived.by(() => {
-	if (!config?.srtla_addr) return undefined;
-	return config?.srtla_port ? `${config.srtla_addr}:${config.srtla_port}` : config.srtla_addr;
-});
-
 // Active managed ingest slot (T19): when the persisted selection resolves to a
-// known platform slot, its label names the instance in the header chip.
+// known platform slot, its label names the instance in the server summary row.
 const activeSlot = $derived(
 	findActiveSlot(getManagedIngestAccounts(), config?.selected_ingest_endpoint),
 );
-const slotLabel = $derived(activeSlot ? managedSlotLabel(activeSlot) : undefined);
 
 // Live active-link count drives the kind-aware server summary (T11). Null while
 // idle (`getLinkTelemetry()` is null) so SRTLA degrades to label-only — never a
@@ -536,53 +525,35 @@ function clampBitrate(kbps: number): number {
 	return Math.round(Math.max(BITRATE_MIN, Math.min(BITRATE_MAX, kbps)));
 }
 
-// Commit a bitrate edit. While streaming this is the live hot-adjust path
-// (setBitrate — applies immediately, no stop). The idle ceiling edit now lives
-// in EncoderDialog (T12: BitrateAdjuster renders only in LiveCockpit), so this
-// only runs while streaming — but the idle branch is kept as a defensive
-// fallback (last-write-wins with EncoderDialog through the SAME max_br lock).
+// Commit a bitrate edit — the live hot-adjust path (setBitrate, applies
+// immediately with no stop). BitrateAdjuster renders ONLY in LiveCockpit (T12),
+// so this only ever runs while streaming; the idle max_br ceiling is now the sole
+// responsibility of EncoderDialog (setConfig), never this path. Single bitrate
+// owner per mode: live → setBitrate here, idle → EncoderDialog.
 async function commitBitrate(kbps: number) {
 	const clamped = clampBitrate(kbps);
 	bitrateDraft = clamped;
 	// Lock max_br before the RPC so a stale config echo of the prior bitrate can't
 	// flicker the slider back; release after settle.
 	markPending('max_br', clamped);
-	if (isStreaming) {
-		try {
-			const res = await rpc.streaming.setBitrate({ max_br: clamped });
-			onRpcResolved('max_br');
-			// Release the field-lock to the SERVER-APPLIED value (T9 envelope), never
-			// the optimistic value we sent. On success:false reconcile to the last
-			// known server value so a rejected write never sticks on the slider.
-			const applied = resolveAppliedBitrate(res, clamped, config?.max_br);
-			onRpcAppliedReactive('max_br', applied);
-			bitrateDraft = applied;
-			if (!res.success) toast.error($LL.notifications.saveFailed());
-		} catch {
-			// RPC rejected: clear the optimistic lock and reconcile to server truth so
-			// the slider is never stuck on the unconfirmed optimistic value.
-			onRpcResolved('max_br');
-			const authoritative = config?.max_br ?? clamped;
-			onRpcAppliedReactive('max_br', authoritative);
-			bitrateDraft = authoritative;
-			toast.error($LL.notifications.saveFailed());
-		}
-	} else {
-		// Idle fallback: persist without starting the stream. setConfig has no
-		// applied envelope, so release to the clamped intent and let the config echo
-		// reconcile any server-side clamp through the same lock.
-		try {
-			await rpc.streaming.setConfig({ max_br: clamped });
-			onRpcResolved('max_br');
-			onRpcAppliedReactive('max_br', clamped);
-			bitrateDraft = clamped;
-		} catch {
-			onRpcResolved('max_br');
-			const authoritative = config?.max_br ?? clamped;
-			onRpcAppliedReactive('max_br', authoritative);
-			bitrateDraft = authoritative;
-			toast.error($LL.notifications.saveFailed());
-		}
+	try {
+		const res = await rpc.streaming.setBitrate({ max_br: clamped });
+		onRpcResolved('max_br');
+		// Release the field-lock to the SERVER-APPLIED value (T9 envelope), never
+		// the optimistic value we sent. On success:false reconcile to the last
+		// known server value so a rejected write never sticks on the slider.
+		const applied = resolveAppliedBitrate(res, clamped, config?.max_br);
+		onRpcAppliedReactive('max_br', applied);
+		bitrateDraft = applied;
+		if (!res.success) toast.error($LL.notifications.saveFailed());
+	} catch {
+		// RPC rejected: clear the optimistic lock and reconcile to server truth so
+		// the slider is never stuck on the unconfirmed optimistic value.
+		onRpcResolved('max_br');
+		const authoritative = config?.max_br ?? clamped;
+		onRpcAppliedReactive('max_br', authoritative);
+		bitrateDraft = authoritative;
+		toast.error($LL.notifications.saveFailed());
 	}
 }
 
@@ -743,16 +714,7 @@ const configRows = $derived<ConfigRow[]>([
 </script>
 
 <div class="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6">
-	<LiveHeader
-		{hasServer}
-		{isStreaming}
-		{destination}
-		kind={receiverKind}
-		{providerName}
-		{slotLabel}
-		endpoint={receiverEndpoint}
-		onEditServer={() => (serverDialogOpen = true)}
-	/>
+	<LiveHeader {isStreaming} />
 
 	<!-- Capability-tier state: calm banner when the engine is offline/starting or
 	     reports a schema mismatch. Renders nothing in the normal tier. -->
@@ -831,34 +793,6 @@ const configRows = $derived<ConfigRow[]>([
 			sourcePreferenceField={SOURCE_PREFERENCE_FIELD}
 			onReorderSource={handleReorderSource}
 		/>
-
-		<!--
-			Roadmap affordances — genuine future features surfaced as calm, purely
-			informational pills (NOT the disabled-with-reason warning treatment). Each
-			ComingSoon renders a dynamic data-debt-id into the DOM for tests; the static
-			binding the CI gate (scripts/check-tech-debt.mjs) verifies lives in the literal
-			ids on the next line.
-			roadmap: data-debt-id="TD-pip" data-debt-id="TD-mode-fallback"
-		-->
-		<div
-			class="bg-muted/30 flex flex-col gap-2.5 rounded-lg border px-4 py-3"
-			data-testid="live-roadmap"
-		>
-			<div class="flex items-center justify-between gap-3">
-				<span class="text-muted-foreground flex items-center gap-2 text-sm">
-					<PictureInPicture2 aria-hidden={true} class="size-4 shrink-0" />
-					{$LL.live.comingSoon.pip()}
-				</span>
-				<ComingSoon debtId="TD-pip" />
-			</div>
-			<div class="flex items-center justify-between gap-3">
-				<span class="text-muted-foreground flex items-center gap-2 text-sm">
-					<Shuffle aria-hidden={true} class="size-4 shrink-0" />
-					{$LL.live.comingSoon.modeFallback()}
-				</span>
-				<ComingSoon debtId="TD-mode-fallback" />
-			</div>
-		</div>
 	{/if}
 </div>
 
