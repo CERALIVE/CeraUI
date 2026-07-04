@@ -264,9 +264,17 @@ async function handleSelectSource(source: StreamSource): Promise<void> {
 	markFieldApplying(SOURCE_FIELD);
 	try {
 		const result = await rpc.streaming.setConfig({ source: source.id });
-		const applied =
-			(result as { applied?: { source?: string } }).applied?.source ?? source.id;
-		markFieldApplied(SOURCE_FIELD, applied);
+		// Release the lock to the SERVER-APPLIED value (`result.applied.source`),
+		// never the optimistic id we sent. A rejected setConfig (`success:false`,
+		// e.g. `{error:'unknown_source'}` — which carries no `applied.source`) or a
+		// success that omits the field is NOT a confirmed apply: revert the lock to
+		// the prior config value and surface the same calm error the catch path does.
+		if (result.success && result.applied?.source !== undefined) {
+			markFieldApplied(SOURCE_FIELD, result.applied.source);
+		} else {
+			markFieldFailed(SOURCE_FIELD, config?.source);
+			toast.error($LL.notifications.saveFailed());
+		}
 	} catch {
 		markFieldFailed(SOURCE_FIELD, config?.source);
 		toast.error($LL.notifications.saveFailed());

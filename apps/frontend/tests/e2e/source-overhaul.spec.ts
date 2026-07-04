@@ -49,10 +49,14 @@ let dropServerDevices = false;
 // Drop the backend's own `sources` echo so the INJECTED unified source list is the
 // sole authority for SourceSection (it reads the folded `sources` broadcast).
 let dropServerSources = false;
-// Hold the next `streaming.setConfig` RPC in-flight (captures its id) so the
+// Hold the next `streaming.setConfig` RPC in-flight (captures its id + input) so the
 // optimistic `applying` window is observable; cleared once released.
 let holdSetConfig = false;
 let heldSetConfigId: string | number | null = null;
+// Echoed back as `result.applied` on release — the frontend releases each field lock
+// to `result.applied`, never the optimistic value, so the fake resolution must carry
+// it (matches the T3 backend contract: setConfig echoes the applied config fields).
+let heldSetConfigInput: Record<string, unknown> | null = null;
 // Fake a successful `streaming.start` client-side so the optimism transient is
 // exercised WITHOUT mutating the shared mock backend (a real start would broadcast
 // is_streaming=true to every parallel worker and corrupt their layout).
@@ -62,11 +66,17 @@ function send(payload: unknown): void {
 	pageWs?.send(JSON.stringify(payload));
 }
 
-/** Fake-resolve a previously-held setConfig RPC ({success:true}, no clamp). */
+/** Fake-resolve a previously-held setConfig RPC, echoing its input as `applied`. */
 function resolveHeldSetConfig(): void {
 	if (heldSetConfigId !== null) {
-		pageWs?.send(JSON.stringify({ id: heldSetConfigId, result: { success: true } }));
+		pageWs?.send(
+			JSON.stringify({
+				id: heldSetConfigId,
+				result: { success: true, applied: heldSetConfigInput ?? {} },
+			}),
+		);
 		heldSetConfigId = null;
+		heldSetConfigInput = null;
 	}
 }
 
@@ -211,6 +221,7 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		dropServerSources = true;
 		holdSetConfig = false;
 		heldSetConfigId = null;
+		heldSetConfigInput = null;
 		dropStreamStart = false;
 
 		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
@@ -224,10 +235,12 @@ test.describe("Track-1 source overhaul (functional)", () => {
 						const frame = JSON.parse(text) as {
 							id?: string | number;
 							path?: unknown;
+							input?: Record<string, unknown>;
 						};
 						const rpc = Array.isArray(frame.path) ? frame.path.join(".") : null;
 						if (holdSetConfig && rpc === "streaming.setConfig") {
 							heldSetConfigId = frame.id ?? null;
+							heldSetConfigInput = frame.input ?? null;
 							return; // hold in-flight: don't forward to the backend
 						}
 						if (dropStreamStart && rpc === "streaming.start") {

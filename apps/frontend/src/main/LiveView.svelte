@@ -296,8 +296,18 @@ async function handleReorderSource(inputId: string, direction: 'up' | 'down') {
 	beginFieldSync(SOURCE_PREFERENCE_FIELD, next);
 	markFieldApplying(SOURCE_PREFERENCE_FIELD);
 	try {
-		await rpc.streaming.setConfig({ source_preference: next });
-		markFieldApplied(SOURCE_PREFERENCE_FIELD, next);
+		const result = await rpc.streaming.setConfig({ source_preference: next });
+		// Release the lock to the SERVER-APPLIED order (`result.applied.
+		// source_preference`), never the optimistic array we sent. A rejected
+		// setConfig (`success:false`) or a success that omits the field is NOT a
+		// confirmed apply: revert the lock to the prior order and surface the same
+		// calm error the catch path does.
+		if (result.success && result.applied?.source_preference !== undefined) {
+			markFieldApplied(SOURCE_PREFERENCE_FIELD, result.applied.source_preference);
+		} else {
+			markFieldFailed(SOURCE_PREFERENCE_FIELD, current);
+			toast.error($LL.live.sourcePreference.sync.failed());
+		}
 	} catch {
 		markFieldFailed(SOURCE_PREFERENCE_FIELD, current);
 		toast.error($LL.live.sourcePreference.sync.failed());
