@@ -1,23 +1,26 @@
 <!--
   AudioDialog.svelte — focused audio-configuration dialog for the Live destination.
 
-  Rebuild of the old `main/shared/AudioCard.svelte` audio block as a self-contained
-  dialog composed on the shared `AppDialog` chrome (Task 18). Three controls:
-    • Audio source  — Select over the pipeline-reported sources (status.asrcs).
-    • Audio codec   — Select (opus / aac / pcm) over the device-supported codecs.
-    • Audio delay   — center-zero slider, bounds driven by
-                      `streamingConstraints.audioDelay.{min,max}` (no literals).
+  Scoped to ENCODING knobs only (Task 15): the audio-source SELECTION now lives
+  exclusively in the unified Source section (`SourceSection.svelte`, the sole
+  `asrc` writer). This dialog is a read-only CONSUMER of the active audio source
+  and owns just two controls:
+    • Audio codec  — Select (opus / aac / pcm) over the device-supported codecs.
+    • Audio delay  — center-zero slider, bounds driven by
+                     `streamingConstraints.audioDelay.{min,max}` (no literals).
 
-  Validation is now EXPLICIT, not implicit: when the selected pipeline supports
-  audio but no source is chosen, a visible inline error is rendered AND the Save
-  action is disabled — the field is never silently hidden or bypassed.
+  Above them a READ-ONLY line surfaces the active audio source (device label or
+  the embedded-stream state) with a "change it in the Source section" hint — the
+  operator changes the source there, not here. The `hasAudioSupport` gate (from
+  `resolveAudioGateState`) is preserved verbatim.
 
   Persistence: Save persists the audio fields via `rpc.streaming.setConfig`
   (no stream restart) and also commits them optimistically to the caller via
-  `onSave` so the Live summary updates immediately. Audio is locked while
-  streaming (matching the original card's `disabled` behaviour); the Live row's
-  lock policy hides the Edit trigger mid-stream, so Save only runs while idle.
-  The codec RPC itself is untouched.
+  `onSave` so the Live summary updates immediately. `handleSave` writes ONLY
+  `acodec`/`delay` — `asrc` is never in its payload. Audio is locked while
+  streaming (the Live row's lock policy hides the Edit trigger mid-stream, so
+  Save only runs while idle). Federation tolerance: the dialog mounts and saves
+  with `asrc` absent from config.
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
@@ -28,7 +31,6 @@ import { toast } from 'svelte-sonner';
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { AppDialog } from '$lib/components/dialogs';
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
-import { getAudioSourceLabel } from '$lib/helpers/AudioHelper';
 import { Button } from '$lib/components/ui/button';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
@@ -37,11 +39,7 @@ import {
 	resolveAudioGateState,
 	resolveAudioPipelineKey,
 } from '$lib/streaming/audioGate';
-import {
-	audioSourceLabel,
-	groupAudioSources,
-	resolveAudioSourceList,
-} from '$lib/streaming/sourceSummary';
+import { audioSourceLabel, resolveAudioSourceList } from '$lib/streaming/sourceSummary';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import {
@@ -54,7 +52,12 @@ import {
 } from '$lib/rpc/subscriptions.svelte';
 
 export interface AudioConfigValues {
-	asrc: string | undefined;
+	/**
+	 * Optional (Task 15): this dialog NEVER writes `asrc` — the Source section is
+	 * the sole `asrc` writer. Kept optional so the shared override type used by
+	 * LiveView's inline source-pick still carries it.
+	 */
+	asrc?: string;
 	acodec: AudioCodec;
 	delay: number;
 }
@@ -115,9 +118,9 @@ const gateState = $derived(resolveAudioGateState(pipelineKey, pipelines));
 const hasAudioSupport = $derived(gateState === 'enabled');
 
 // Typed audio-source model (Task 13): pseudo-sources translated + grouped last,
-// device entries keep their hardware name + backend order.
+// device entries keep their hardware name + backend order. Used ONLY to resolve
+// the READ-ONLY active-source label — the selection itself lives in SourceSection.
 const audioSourceEntries = $derived(resolveAudioSourceList(audioSourceList, audioSources));
-const groupedAudio = $derived(groupAudioSources(audioSourceEntries));
 
 // Embedded network-ingest audio (Task 13): with the `network_embedded_audio`
 // capability, an rtmp/srt pipeline routes its muxed audio and the source is
@@ -133,7 +136,7 @@ const audioEmbeddedComingSoon = $derived(
 );
 
 // ---- Draft state (seeded from props each time the dialog opens) ----
-let draftSource = $state<string | undefined>(undefined);
+// `asrc` is NO LONGER drafted here — the Source section owns it.
 let draftCodec = $state<AudioCodec | undefined>(undefined);
 let draftDelay = $state(0);
 let wasOpen = $state(false);
@@ -141,26 +144,23 @@ let wasOpen = $state(false);
 $effect(() => {
 	if (open && !wasOpen) {
 		// Opening: seed the draft from the effective current values.
-		draftSource = audioSource;
 		draftCodec = audioCodec ?? 'aac';
 		draftDelay = clampDelay(audioDelay ?? 0);
 	}
 	wasOpen = open;
 });
 
-// A source the saved config references but the pipeline no longer reports.
-const notAvailableAudioSource = $derived(
-	draftSource && !audioSources.includes(draftSource) ? draftSource : undefined,
-);
+// The ACTIVE audio source (effective override-or-config value from the caller).
+// Federation-tolerant: `undefined` when `asrc` is absent from config.
+const activeAudioSource = $derived(audioSource);
 
-// EXPLICIT required-source validation (visible, never silently hidden). An
-// embedded-audio pipeline needs no ALSA source, so it never counts as missing.
-const sourceMissing = $derived(hasAudioSupport && !audioEmbeddedActive && !draftSource);
-const saveDisabled = $derived(!hasAudioSupport || sourceMissing || isStreaming);
+// Save gate: the audio-support gate + streaming lock. Source selection is no
+// longer validated here (the Source section owns it), so no source-missing block.
+const saveDisabled = $derived(!hasAudioSupport || isStreaming);
 
 // Reason for the locked codec select: streaming (cannot apply without a restart)
-// or no source chosen yet. Mirrors the Select.Root `disabled` condition.
-const codecHasSource = $derived(audioEmbeddedActive || Boolean(draftSource));
+// or no active source yet. Mirrors the Select.Root `disabled` condition.
+const codecHasSource = $derived(audioEmbeddedActive || Boolean(activeAudioSource));
 const codecDisabledReason = $derived(
 	isStreaming
 		? $LL.settings.codecDisabledReason.streaming()
@@ -186,7 +186,7 @@ const fillLeft = $derived(Math.min(zeroPct, thumbPct));
 const fillWidth = $derived(Math.abs(thumbPct - zeroPct));
 
 // i18n key resolver (mirrors the EncoderDialog helper) — lets the pure
-// AudioHelper resolve localized keys without a store/rune dependency.
+// sourceSummary helpers resolve localized keys without a store/rune dependency.
 const t = (key: string): string => {
 	const parts = key.split('.');
 	let result: unknown = $LL;
@@ -200,15 +200,14 @@ const t = (key: string): string => {
 	return typeof result === 'function' ? (result as () => string)() : key;
 };
 
-const sourceTriggerLabel = $derived.by(() => {
-	const entry = audioSourceEntries.find((e) => e.id === draftSource);
-	if (entry?.labelKey) return audioSourceLabel(entry, t);
-	return getAudioSourceLabel(draftSource, {
-		available: audioSources,
-		notAvailableSentinel: notAvailableAudioSource ?? '',
-		selectPlaceholder: $LL.settings.selectAudioSource(),
-		t,
-	});
+// READ-ONLY label for the active audio source: the embedded-stream state, the
+// resolved device/pseudo-source label, or a calm "none" fallback when `asrc` is
+// absent (federation tolerance).
+const activeAudioSourceLabel = $derived.by(() => {
+	if (audioEmbeddedActive) return $LL.live.source.audioEmbedded();
+	if (!activeAudioSource) return $LL.settings.noAudioSourceSelected();
+	const entry = audioSourceEntries.find((e) => e.id === activeAudioSource);
+	return entry ? audioSourceLabel(entry, t) : activeAudioSource;
 });
 const codecTriggerLabel = $derived(
 	draftCodec && audioCodecs
@@ -218,8 +217,9 @@ const codecTriggerLabel = $derived(
 
 async function handleSave() {
 	if (saveDisabled) return;
+	// Codec + delay ONLY — `asrc` is NEVER in this payload (the Source section
+	// is the sole `asrc` writer).
 	const values: AudioConfigValues = {
-		asrc: audioEmbeddedActive ? undefined : draftSource,
 		acodec: draftCodec ?? 'aac',
 		delay: draftDelay,
 	};
@@ -228,7 +228,7 @@ async function handleSave() {
 	// …then persist via the dedicated config RPC (no stream restart). Lock each
 	// changed field BEFORE the RPC so a stale echo can't revert the edit, and
 	// release after it settles (resolve or reject) to avoid a permanent lock.
-	const input = { asrc: values.asrc, acodec: values.acodec, delay: values.delay };
+	const input = { acodec: values.acodec, delay: values.delay };
 	const fields = Object.entries(input).filter(([, value]) => value !== undefined);
 	for (const [field, value] of fields) markPending(field, value);
 	try {
@@ -287,15 +287,12 @@ async function handleSave() {
 				</div>
 			{/if}
 
-			<!-- Audio Source -->
+			<!-- Active audio source (READ-ONLY — the Source section owns the selection) -->
 			<div class="space-y-2">
 				<div class="flex items-center gap-1">
-					<Label class="text-sm font-medium" for="audioSource">
-						{$LL.settings.audioSource()}
-					</Label>
+					<Label class="text-sm font-medium">{$LL.settings.activeAudioSource()}</Label>
 					<InfoPopover
 						body={$LL.live.education.field.audio.body()}
-						reason={notAvailableAudioSource ? $LL.settings.notAvailableAudioSource() : undefined}
 						testId="info-audio-source"
 						title={$LL.live.education.field.audio.title()}
 					/>
@@ -304,64 +301,21 @@ async function handleSave() {
 						<ComingSoon debtId="TD-embedded-audio" label={$LL.live.comingSoon.embeddedAudio()} />
 					{/if}
 				</div>
-				{#if audioEmbeddedActive}
-					<div
-						class="bg-muted/40 flex min-h-11 flex-wrap items-center gap-2 rounded-lg border px-3 py-2"
-						data-testid="audio-source-embedded"
-					>
+				<div
+					class="bg-muted/40 flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
+					data-testid="audio-source-active"
+				>
+					<span class="flex items-center gap-2">
 						<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
-						<span class="text-sm">{$LL.live.source.audioEmbedded()}</span>
-					</div>
-				{:else}
-					<Select.Root
-						disabled={isStreaming}
-						onValueChange={(value) => (draftSource = value)}
-						type="single"
-						value={draftSource}
-					>
-						<Select.Trigger
-							id="audioSource"
-							aria-invalid={sourceMissing}
-							class="w-full {sourceMissing ? 'border-destructive' : ''}"
-						>
-							{sourceTriggerLabel}
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Group>
-								{#each groupedAudio.devices as entry (entry.id)}
-									<Select.Item label={audioSourceLabel(entry, t)} value={entry.id}></Select.Item>
-								{/each}
-								{#if notAvailableAudioSource}
-									<Select.Item
-										label={`${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
-										value={notAvailableAudioSource}
-									></Select.Item>
-								{/if}
-							</Select.Group>
-							{#if groupedAudio.pseudo.length > 0}
-								<Select.Separator />
-								<Select.Group>
-									{#each groupedAudio.pseudo as entry (entry.id)}
-										<Select.Item
-											class="text-muted-foreground"
-											label={audioSourceLabel(entry, t)}
-											value={entry.id}
-										></Select.Item>
-									{/each}
-								</Select.Group>
-							{/if}
-						</Select.Content>
-					</Select.Root>
-					{#if sourceMissing}
-						<!-- EXPLICIT inline error: audio supported but no source chosen. -->
-						<p class="text-destructive flex items-center gap-1.5 text-sm" role="alert">
-							{$LL.settings.errors.audioSourceRequired()}
-						</p>
-					{/if}
-				{/if}
+						<span class="text-sm">{activeAudioSourceLabel}</span>
+					</span>
+					<span class="text-muted-foreground shrink-0 text-xs">
+						{$LL.settings.changeAudioSourceHint()}
+					</span>
+				</div>
 			</div>
 
-			<!-- Audio Codec (depends on a chosen source) -->
+			<!-- Audio Codec (depends on the active source) -->
 			<div class="space-y-2">
 				<div class="flex items-center justify-between gap-2">
 					<div class="flex items-center gap-1">
