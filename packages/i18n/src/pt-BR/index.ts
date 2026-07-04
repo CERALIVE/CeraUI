@@ -1036,6 +1036,28 @@ const ptBR = {
 		link: "Link",
 	},
 	live: {
+		goLive: {
+			readyTitle: "Ready to go live",
+			readyHint: "All checks passed.",
+			showChecks: "Show setup",
+			hideChecks: "Hide setup",
+			autoSelected: "Auto-selected: {name}",
+			change: "Change",
+			validated: "Validated",
+			notChecked: "Not checked",
+			maxBitrate: "Max bitrate",
+			gate: {
+				source: "Video source",
+				network: "Network",
+				destination: "Destination",
+				engine: "Encoder",
+			},
+			fix: {
+				openSource: "Choose source",
+				goNetwork: "Set up network",
+				openServer: "Choose destination",
+			},
+		},
 		server: {
 			bondedAcross: "Agregado em {count} {{link|links}}",
 			singleLink: "Link único",
