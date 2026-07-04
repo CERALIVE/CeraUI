@@ -108,6 +108,55 @@ $effect(() => {
 	reconcileStreamingOptimism(isStreaming);
 });
 
+// ── Post-stream summary window ─────────────────────────────────────────────
+// IngestStats' historical "Session ended · {duration}" summary lives inside
+// LiveCockpit and only renders while `isStreaming !== true` — but LiveCockpit
+// unmounts the instant `isStreaming` flips false (`optimisticIsStreaming` drops
+// in the same tick), so the summary never got a chance to paint. Keep LiveCockpit
+// mounted for a bounded window after a REAL stop (authoritative `isStreaming`
+// true→false — the SAME edge IngestStats folds its rollup on, so a failed
+// `starting` revert with no live session never opens it). During the window
+// LiveCockpit switches to `summaryMode`: the still-mounted IngestStats shows the
+// historical summary, and its live chrome (telemetry strip / bitrate adjuster /
+// stop control) is hidden so the UI is not trapped in a stale "live" mode. The
+// window is bounded — a fixed timeout closes it, and the next stream start resets
+// it — so it always resolves back to IdleCockpit.
+const SUMMARY_WINDOW_MS = 30_000;
+let showingSummary = $state(false);
+let summaryTimer: ReturnType<typeof setTimeout> | undefined;
+let lastStreamingState = false;
+
+// `$effect.pre` (not `$effect`): the window flag must flip BEFORE the cockpit
+// gate renders. A post-render `$effect` lags one tick, so on the stop edge the
+// template would render once with `showLiveCockpit` false (unmounting LiveCockpit)
+// before the flag flips it back true — remounting a fresh IngestStats and wiping
+// the session rollup the summary reads.
+$effect.pre(() => {
+	const streamingNow = isStreaming;
+	if (streamingNow === lastStreamingState) return;
+	lastStreamingState = streamingNow;
+	clearTimeout(summaryTimer);
+	if (streamingNow) {
+		// A (re)start closes any lingering summary window immediately.
+		showingSummary = false;
+	} else {
+		// A real stream just stopped: open the bounded post-stream summary window.
+		showingSummary = true;
+		summaryTimer = setTimeout(() => {
+			showingSummary = false;
+		}, SUMMARY_WINDOW_MS);
+	}
+});
+
+// Clear a pending window timer if the view unmounts mid-window.
+$effect(() => () => clearTimeout(summaryTimer));
+
+// LiveCockpit stays mounted while streaming/starting OR through the bounded
+// post-stream summary window; `summaryMode` collapses it to summary-only chrome
+// once the stream has actually stopped (never during the optimistic start edge).
+const showLiveCockpit = $derived(optimisticIsStreaming || showingSummary);
+const summaryMode = $derived(showingSummary && !optimisticIsStreaming);
+
 // The cerastream Tier-2 reason codes that carry a SPECIFIC start-failure
 // message; any other reason (or an unstructured throw) shows the generic copy.
 const STREAM_START_REASON_KEYS = [
@@ -652,10 +701,12 @@ const configRows = $derived<ConfigRow[]>([
 	     reports a schema mismatch. Renders nothing in the normal tier. -->
 	<CapabilityTierBanner caps={getCapabilities()} />
 
-	{#if optimisticIsStreaming}
+	{#if showLiveCockpit}
 		<!-- Live cockpit: telemetry strip + live bitrate hot-adjust + ingest stats
 		     + Stop. Shown optimistically the moment Start is pressed so the start
-		     transition never flickers back through idle. -->
+		     transition never flickers back through idle, and kept mounted through
+		     the bounded post-stream summary window (summaryMode) so IngestStats can
+		     render the historical "Session ended" summary before reverting to idle. -->
 		<LiveCockpit
 			bitrate={formatBitrate(config?.max_br)}
 			{tempSensor}
@@ -680,6 +731,7 @@ const configRows = $derived<ConfigRow[]>([
 			bitrateKbps={config?.max_br}
 			{isStreaming}
 			optimismState={streamingOptimismState}
+			{summaryMode}
 			onStop={handleStop}
 		/>
 	{:else}

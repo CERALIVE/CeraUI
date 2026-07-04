@@ -9,10 +9,19 @@
  *   3. {@link IngestStats} — per-link srtla ingest telemetry + session summary.
  *   4. {@link StreamControlButton} — in Stop mode.
  *
- * Mounted by LiveView while `getOptimisticIsStreaming()` is true, so the start
- * transition shows this cockpit without flicker. State ownership stays in
- * LiveView: EVERY datum and handler here is a prop — this component owns NO
- * `$state`, NO RPC, and writes NO config.
+ * Mounted by LiveView while `optimisticIsStreaming` is true, so the start
+ * transition shows this cockpit without flicker. LiveView ALSO keeps this cockpit
+ * mounted for a bounded window AFTER the stream stops (`summaryMode`) so the
+ * still-mounted {@link IngestStats} can render its historical "Session ended"
+ * summary before the view reverts to IdleCockpit — without that window the panel
+ * would unmount the instant `isStreaming` flips false, the same tick its summary
+ * would have painted. In `summaryMode` the live-only chrome (telemetry strip,
+ * bitrate adjuster, stop control) is hidden and ONLY the historical summary shows;
+ * {@link IngestStats} is rendered UNCONDITIONALLY so its device-local session
+ * rollup survives the streaming→stopped flip (its instance is never remounted).
+ *
+ * State ownership stays in LiveView: EVERY datum and handler here is a prop — this
+ * component owns NO `$state`, NO RPC, and writes NO config.
  */
 import type { LinkTelemetryMessage } from '@ceraui/rpc/schemas';
 
@@ -46,6 +55,10 @@ interface Props {
 	isStreaming: boolean;
 	optimismState: StreamingOptimismState;
 	onStop: () => void;
+	// ── Post-stream summary window ─────────────────────────────────────────────
+	// When true the stream has stopped but LiveView is holding this cockpit mounted
+	// so IngestStats can show its historical summary; collapse to summary-only.
+	summaryMode?: boolean;
 }
 
 const {
@@ -67,34 +80,38 @@ const {
 	isStreaming,
 	optimismState,
 	onStop,
+	summaryMode = false,
 }: Props = $props();
 </script>
 
-<div class="space-y-6" data-testid="live-cockpit">
-	<StreamTelemetryStrip {bitrate} {tempSensor} {uptimeSensor} />
+<div class="space-y-6" data-testid="live-cockpit" data-summary-mode={summaryMode ? 'true' : 'false'}>
+	{#if !summaryMode}
+		<StreamTelemetryStrip {bitrate} {tempSensor} {uptimeSensor} />
 
-	<!-- Bitrate hot-adjust — the only field changeable mid-stream (setBitrate). -->
-	<BitrateAdjuster
-		{bitrateDraft}
-		{bitrateLabel}
-		{bitrateMax}
-		{bitrateMin}
-		onSliderChange={onSliderChange}
-		onSliderCommit={onSliderCommit}
-		onStep={onStep}
-		{sliderMax}
-		{sliderMin}
-		{step}
-	/>
+		<!-- Bitrate hot-adjust — the only field changeable mid-stream (setBitrate). -->
+		<BitrateAdjuster
+			{bitrateDraft}
+			{bitrateLabel}
+			{bitrateMax}
+			{bitrateMin}
+			onSliderChange={onSliderChange}
+			onSliderCommit={onSliderCommit}
+			onStep={onStep}
+			{sliderMax}
+			{sliderMin}
+			{step}
+		/>
+	{/if}
 
-	<!-- Bonded-ingest telemetry + per-session summary/export. -->
 	<IngestStats {telemetry} {isStreaming} {bitrateKbps} />
 
-	<StreamControlButton
-		canStart={false}
-		{isStreaming}
-		{optimismState}
-		onStart={() => {}}
-		{onStop}
-	/>
+	{#if !summaryMode}
+		<StreamControlButton
+			canStart={false}
+			{isStreaming}
+			{optimismState}
+			onStart={() => {}}
+			{onStop}
+		/>
+	{/if}
 </div>

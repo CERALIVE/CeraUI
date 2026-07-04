@@ -134,22 +134,14 @@ test.describe("@visual ingest polished states", () => {
 		await panel.screenshot({ path: path.join(EVIDENCE_DIR, "ingest-health-alert.png") });
 	});
 
-	// The next two captures assert the T7-reshaped post-stream summary (4-tile stat
-	// grid + per-link contribution rows) and its export-failure notice. Both are
-	// BLOCKED in-app by the Task-11 cockpit split: IngestStats now lives ONLY inside
-	// LiveCockpit, which LiveView unmounts the instant `is_streaming` goes false
-	// (`optimisticIsStreaming = isStreaming || optimismState === 'starting'`), and
-	// the optimism store cannot bridge the gap — LiveView's reconcile `$effect`
-	// reactively depends on the optimism store, so forcing `starting` while
-	// streaming immediately re-runs it and collapses `starting → idle`. The summary
-	// is therefore unreachable end-to-end without re-introducing a `hadSession`
-	// mount gate in LiveCockpit/LiveView — a component-source change, out of this
-	// test-only todo's scope (see the T11 notepad note). The 4-tile + contribution
-	// reshape is meanwhile locked by the component test IngestStats.test.ts (T7).
-	// These bodies are correct-as-written: flip `test.fixme` → `test` once the
-	// mount gate lands and they capture without further edits.
-	test.fixme(
+	// The next two captures assert the post-stream summary (4-tile stat grid +
+	// per-link contribution rows) and its export-failure notice. Reaching them
+	// depends on LiveView's bounded post-stream summary window: after `is_streaming`
+	// goes false it holds LiveCockpit mounted in summaryMode so the still-mounted
+	// IngestStats paints its historical summary before the view reverts to idle.
+	test(
 		"post-stream summary: 4 tiles + contribution rows",
+		{ tag: "@visual" },
 		async ({ page }) => {
 			pageWs?.send(
 				JSON.stringify({ config: { srtla_addr: "127.0.0.1", srtla_port: 5000, max_br: 5000 } }),
@@ -181,8 +173,9 @@ test.describe("@visual ingest polished states", () => {
 		},
 	);
 
-	test.fixme(
+	test(
 		"export-error: calm notice when a download throws",
+		{ tag: "@visual" },
 		async ({ page }) => {
 			pageWs?.send(
 				JSON.stringify({ config: { srtla_addr: "127.0.0.1", srtla_port: 5000, max_br: 5000 } }),
