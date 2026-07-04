@@ -1081,6 +1081,10 @@ const ptBR = {
 		stopStream: "Parar transmissão",
 		starting: "Iniciando...",
 		stopping: "Parando...",
+		stopStuck: {
+			message: "A parada está demorando mais do que o esperado",
+			retry: "Tentar novamente",
+		},
 		overview: "Visão geral",
 		streamingActive: "Transmitindo",
 		notStreaming: "Sem transmissão",

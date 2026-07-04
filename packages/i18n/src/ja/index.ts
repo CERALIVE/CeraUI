@@ -949,6 +949,10 @@ const ja = {
 		stopStream: "ストリーム停止",
 		starting: "開始中...",
 		stopping: "停止中...",
+		stopStuck: {
+			message: "停止に予想以上の時間がかかっています",
+			retry: "再試行",
+		},
 		overview: "概要",
 		streamingActive: "ストリーミング中",
 		notStreaming: "ストリーミングしていません",

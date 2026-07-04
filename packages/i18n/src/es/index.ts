@@ -329,6 +329,10 @@ const es = {
 		stopStream: "Detener transmisión",
 		starting: "Iniciando...",
 		stopping: "Deteniendo...",
+		stopStuck: {
+			message: "Detener está tardando más de lo esperado",
+			retry: "Reintentar",
+		},
 		overview: "Resumen",
 		streamingActive: "Transmitiendo",
 		notStreaming: "Sin transmitir",

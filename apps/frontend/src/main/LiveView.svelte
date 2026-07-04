@@ -64,8 +64,10 @@ import {
 	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
 import {
+	getStopStuckBannerVisible,
 	getStreamingOptimismState,
 	getStreamingStopReason,
+	retryStopStreaming,
 	startStreamingOptimism,
 	stopStreamingOptimism,
 	reconcileStreamingOptimism,
@@ -94,6 +96,9 @@ const linkTelemetry = $derived(getLinkTelemetry());
 // Streaming optimism state (Task 6): reflects user intent immediately on click.
 const streamingOptimismState = $derived(getStreamingOptimismState());
 const streamingStopReason = $derived(getStreamingStopReason());
+// Truthful stop-stuck banner (T0): shown only while the authoritative flag still
+// says streaming after the bounded stopping watchdog pulled + re-dispatched.
+const stopStuckBanner = $derived(getStopStuckBannerVisible());
 
 // Idle vs Live cockpit gate (Task 11): the optimistic view of streaming so the
 // start transition shows LiveCockpit immediately (no flicker back to idle mid-
@@ -122,6 +127,14 @@ $effect(() => {
 // window is bounded — a fixed timeout closes it, and the next stream start resets
 // it — so it always resolves back to IdleCockpit.
 const SUMMARY_WINDOW_MS = 30_000;
+// Prod-inert e2e seam: shrink the summary window (mirrors `__ceraRebootCountdownSeconds`).
+function resolveSummaryWindowMs(): number {
+	const override =
+		typeof window !== 'undefined'
+			? (window as unknown as { __ceraSummaryWindowMs?: number }).__ceraSummaryWindowMs
+			: undefined;
+	return typeof override === 'number' && override >= 0 ? override : SUMMARY_WINDOW_MS;
+}
 let showingSummary = $state(false);
 let summaryTimer: ReturnType<typeof setTimeout> | undefined;
 let lastStreamingState = false;
@@ -144,7 +157,7 @@ $effect.pre(() => {
 		showingSummary = true;
 		summaryTimer = setTimeout(() => {
 			showingSummary = false;
-		}, SUMMARY_WINDOW_MS);
+		}, resolveSummaryWindowMs());
 	}
 });
 
@@ -682,6 +695,12 @@ function handleStop() {
 	}
 }
 
+// Stop-stuck banner Retry: re-run the bounded watchdog (pull→stop→pull) via the
+// direct rpc path — never the window global (backend stop is idempotent).
+function handleRetryStop() {
+	retryStopStreaming();
+}
+
 const configRows = $derived<ConfigRow[]>([
 	{
 		icon: Cpu,
@@ -717,6 +736,27 @@ const configRows = $derived<ConfigRow[]>([
 	<!-- Capability-tier state: calm banner when the engine is offline/starting or
 	     reports a schema mismatch. Renders nothing in the normal tier. -->
 	<CapabilityTierBanner caps={getCapabilities()} />
+
+	{#if stopStuckBanner}
+		<!-- Truthful bounded stop-stuck banner (T0): the stopping watchdog pulled +
+		     re-dispatched but the authoritative flag still says streaming. The view
+		     stays truthfully live (never fake-idle); Retry re-runs pull→stop→pull. -->
+		<div
+			role="alert"
+			data-testid="stop-stuck-banner"
+			class="flex items-center justify-between gap-3 rounded-lg border border-status-warning/40 bg-status-warning/10 px-4 py-3 text-sm text-status-warning"
+		>
+			<span>{$LL.live.stopStuck.message()}</span>
+			<button
+				type="button"
+				data-testid="stop-stuck-retry"
+				class="shrink-0 rounded-md border border-status-warning/50 px-3 py-1 font-medium transition-colors hover:bg-status-warning/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-warning/60"
+				onclick={handleRetryStop}
+			>
+				{$LL.live.stopStuck.retry()}
+			</button>
+		</div>
+	{/if}
 
 	{#if showLiveCockpit}
 		<!-- Live cockpit: telemetry strip + live bitrate hot-adjust + ingest stats

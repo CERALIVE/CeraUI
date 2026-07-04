@@ -16,6 +16,16 @@
  * on first selector access.
  */
 
+import { stopStreaming as directStopStreaming } from "$lib/helpers/SystemHelper";
+
+import { rpc } from "./client";
+import {
+	runStopWatchdog,
+	STOP_WATCHDOG_REPULL_DELAY_MS,
+	STOP_WATCHDOG_TIMEOUT_MS,
+	type StopWatchdogDeps,
+} from "./streaming-stop-watchdog";
+
 // ============================================
 // Types
 // ============================================
@@ -130,33 +140,130 @@ interface ReactiveOptimismStore {
 	reconcileToAuthority: (isStreaming: boolean) => void;
 	revertWithReason: (reason: string) => void;
 	clearStopReason: () => void;
+	retryStop: () => void;
+	destroy: () => void;
 	getStore: () => StreamingOptimismStore;
 }
 
+/** Prod-inert e2e seam: shrink the watchdog fire window (mirrors `__ceraRebootCountdownSeconds`). */
+function resolveWatchdogMs(): number {
+	const override =
+		typeof window !== "undefined"
+			? (window as unknown as { __ceraStopWatchdogMs?: number })
+					.__ceraStopWatchdogMs
+			: undefined;
+	return typeof override === "number" && override >= 0
+		? override
+		: STOP_WATCHDOG_TIMEOUT_MS;
+}
+
+// Module-level so an ASYNC watchdog write propagates to LiveView's `$derived`
+// (a closure-scoped `$state` mutated off the event loop does not reliably notify
+// a cross-module reader; module-level state — as in subscriptions.svelte.ts — does).
+let stopStuckBannerState = $state(false);
+
 /**
- * Create the reactive optimism store. Uses runes, so this only runs inside
- * the Svelte app — never in the rune-free unit tests.
+ * Create the reactive optimism store (runes — never run by unit tests). Also owns
+ * the bounded stopping WATCHDOG: a timer armed on `transitionToStopping`, cleared
+ * once the stop confirms (`stopping`→`idle`); if it persists it pull-reconciles
+ * authoritative status — the guarantee against the stuck-after-stop bug (see
+ * streaming-stop-watchdog.ts).
  */
 function createReactiveOptimismStore(): ReactiveOptimismStore {
 	let store = $state<StreamingOptimismStore>(createOptimismStore());
+	let watchdogTimer: ReturnType<typeof setTimeout> | undefined;
+	let watchdogRunning = false;
+
+	function clearWatchdogTimer(): void {
+		if (watchdogTimer !== undefined) {
+			clearTimeout(watchdogTimer);
+			watchdogTimer = undefined;
+		}
+	}
+
+	function armWatchdog(): void {
+		clearWatchdogTimer();
+		watchdogTimer = setTimeout(() => {
+			watchdogTimer = undefined;
+			if (store.state === "stopping") void runWatchdogOnce();
+		}, resolveWatchdogMs());
+	}
+
+	async function runWatchdogOnce(): Promise<void> {
+		if (watchdogRunning) return;
+		watchdogRunning = true;
+		try {
+			await runStopWatchdog(buildWatchdogDeps());
+		} finally {
+			watchdogRunning = false;
+		}
+	}
+
+	// A confirmed stop (`stopping`→`idle`, push OR pull) ends the watchdog + banner.
+	function applyReconcile(isStreaming: boolean): void {
+		const prev = store.state;
+		store = reconcileToAuthority(store, isStreaming);
+		if (prev === "stopping" && store.state === "idle") {
+			clearWatchdogTimer();
+			stopStuckBannerState = false;
+		}
+	}
+
+	function buildWatchdogDeps(): StopWatchdogDeps {
+		return {
+			pullStatus: async () => {
+				const status = await rpc.status.getStatus();
+				const { ingestPulledStatus } = await import("./subscriptions.svelte");
+				ingestPulledStatus(status);
+				return Boolean(
+					(status as { is_streaming?: unknown } | null | undefined)
+						?.is_streaming,
+				);
+			},
+			reconcile: (isStreaming: boolean) => applyReconcile(isStreaming),
+			redispatchStop: () => {
+				void directStopStreaming();
+			},
+			delay: () =>
+				new Promise((resolve) =>
+					setTimeout(resolve, STOP_WATCHDOG_REPULL_DELAY_MS),
+				),
+			setBannerVisible: (visible: boolean) => {
+				stopStuckBannerState = visible;
+			},
+		};
+	}
 
 	return {
 		getState: () => store.state,
 		getStopReason: () => store.stopReason,
 		transitionToStarting: () => {
+			clearWatchdogTimer();
+			stopStuckBannerState = false;
 			store = transitionToStarting(store);
 		},
 		transitionToStopping: () => {
+			stopStuckBannerState = false;
 			store = transitionToStopping(store);
+			armWatchdog();
 		},
 		reconcileToAuthority: (isStreaming: boolean) => {
-			store = reconcileToAuthority(store, isStreaming);
+			applyReconcile(isStreaming);
 		},
 		revertWithReason: (reason: string) => {
+			clearWatchdogTimer();
+			stopStuckBannerState = false;
 			store = revertWithReason(store, reason);
 		},
 		clearStopReason: () => {
 			store = clearStopReason(store);
+		},
+		retryStop: () => {
+			void runWatchdogOnce();
+		},
+		destroy: () => {
+			clearWatchdogTimer();
+			stopStuckBannerState = false;
 		},
 		getStore: () => store,
 	};
@@ -223,8 +330,26 @@ export function clearStreamingStopReason(): void {
 }
 
 /**
- * Tear down the reactive store. For tests/HMR.
+ * Whether the truthful "stop is taking longer than expected" banner is showing —
+ * exposed only while the authoritative flag still says streaming after the
+ * watchdog has pulled and re-dispatched.
+ */
+export function getStopStuckBannerVisible(): boolean {
+	return stopStuckBannerState;
+}
+
+/**
+ * Retry the bounded stopping watchdog (pull→stop→pull). Wired to the stop-stuck
+ * banner's Retry button.
+ */
+export function retryStopStreaming(): void {
+	store().retryStop();
+}
+
+/**
+ * Tear down the reactive store (clearing the watchdog timer). For tests/HMR.
  */
 export function destroyStreamingOptimism(): void {
+	singleton?.destroy();
 	singleton = null;
 }

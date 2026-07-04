@@ -920,6 +920,10 @@ const hi = {
 		stopStream: "स्ट्रीम रोकें",
 		starting: "शुरू हो रहा है…",
 		stopping: "रुक रहा है…",
+		stopStuck: {
+			message: "रोकने में अपेक्षा से अधिक समय लग रहा है",
+			retry: "पुनः प्रयास करें",
+		},
 		overview: "अवलोकन",
 		streamingActive: "स्ट्रीमिंग",
 		notStreaming: "स्ट्रीमिंग नहीं हो रही",

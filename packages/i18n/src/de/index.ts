@@ -329,6 +329,10 @@ const de = {
 		stopStream: "Stream stoppen",
 		starting: "Wird gestartet...",
 		stopping: "Wird gestoppt...",
+		stopStuck: {
+			message: "Das Stoppen dauert länger als erwartet",
+			retry: "Erneut versuchen",
+		},
 		overview: "Übersicht",
 		streamingActive: "Streaming",
 		notStreaming: "Kein Streaming",

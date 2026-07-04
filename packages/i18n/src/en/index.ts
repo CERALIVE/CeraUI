@@ -319,6 +319,10 @@ const en = {
 		stopStream: "Stop Stream",
 		starting: "Starting...",
 		stopping: "Stopping...",
+		stopStuck: {
+			message: "Stop is taking longer than expected",
+			retry: "Retry",
+		},
 		overview: "Overview",
 		streamingActive: "Streaming",
 		notStreaming: "Not streaming",

@@ -1105,6 +1105,10 @@ const fr = {
 		stopStream: "Arrêter la diffusion",
 		starting: "Démarrage...",
 		stopping: "Arrêt...",
+		stopStuck: {
+			message: "L'arrêt prend plus de temps que prévu",
+			retry: "Réessayer",
+		},
 		overview: "Aperçu",
 		streamingActive: "Diffusion",
 		notStreaming: "Pas de diffusion",

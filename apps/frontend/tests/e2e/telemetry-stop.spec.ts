@@ -1,7 +1,9 @@
-import type { WebSocketRoute } from "@playwright/test";
+import fs from "node:fs";
+
+import type { Page, WebSocketRoute } from "@playwright/test";
 
 import { expect, test } from "./fixtures/index.js";
-import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
+import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.js";
 
 /**
  * Telemetry lifecycle end-to-end gate (ceraui-experience-simplification, Todo 22).
@@ -62,6 +64,13 @@ let desiredStreaming = false;
 // injection a genuine drop-stale case.
 const SEQ_BASE = 9_000_000;
 let seqCounter = SEQ_BASE;
+// When non-null, the proxy rewrites every `status.getStatus` RPC RESPONSE's
+// is_streaming to this value — simulating a backend that reports still-streaming
+// (genuinely stuck) or finally-stopped (recovery) to the stopping watchdog's
+// authoritative PULL, which the push-frame rewrite (desiredStreaming) cannot reach.
+let forcePullStreaming: boolean | null = null;
+// Tracks in-flight RPC request id → dotted path so a response can be matched.
+const pendingRpc = new Map<string, string>();
 
 /** Inject an authoritative `status` frame with the next monotonic seq. */
 function pushStatus(payload: Record<string, unknown>): void {
@@ -90,6 +99,41 @@ function sendConfig(extra: Record<string, unknown> = {}): void {
 	);
 }
 
+/** Set a prod-inert numeric window seam (watchdog / summary-window shrink). */
+function setWindowNumber(page: Page, key: string, value: number): Promise<void> {
+	return page.evaluate(
+		({ key: k, value: v }) => {
+			(window as unknown as Record<string, number>)[k] = v;
+		},
+		{ key, value },
+	);
+}
+
+/** The real Stop control inside the Live cockpit (arms the stopping watchdog). */
+function stopButton(page: Page) {
+	return page
+		.getByTestId("live-cockpit")
+		.getByRole("button", { name: /stop stream/i });
+}
+
+/** A window marker that would vanish on a full reload — proves in-app recovery. */
+async function markNoReload(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		(window as unknown as { __ceraNoReload?: string }).__ceraNoReload = "alive";
+	});
+}
+
+async function stillNotReloaded(page: Page): Promise<boolean> {
+	return page.evaluate(
+		() =>
+			(window as unknown as { __ceraNoReload?: string }).__ceraNoReload ===
+			"alive",
+	);
+}
+
+// Human-readable evidence for the T0 QA gate (apps/frontend/test-results).
+const t0Evidence: Array<Record<string, unknown>> = [];
+
 test.describe("Telemetry lifecycle (clears on stop)", () => {
 	test.beforeEach(async ({ page }, testInfo) => {
 		test.skip(
@@ -100,19 +144,54 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 		pageWs = null;
 		desiredStreaming = false;
 		seqCounter = SEQ_BASE;
+		forcePullStreaming = null;
+		pendingRpc.clear();
 
 		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 
-			ws.onMessage((m) => server.send(m));
+			ws.onMessage((m) => {
+				const text = typeof m === "string" ? m : m.toString();
+				try {
+					const req = JSON.parse(text) as { id?: string; path?: string[] };
+					if (req?.id && Array.isArray(req.path)) {
+						pendingRpc.set(req.id, req.path.join("."));
+					}
+				} catch {
+					/* non-JSON / binary frame */
+				}
+				server.send(m);
+			});
 
 			server.onMessage((m) => {
 				const text = typeof m === "string" ? m : m.toString();
 				try {
-					const frame = JSON.parse(text) as { status?: Record<string, unknown> };
+					const frame = JSON.parse(text) as {
+						id?: string;
+						result?: Record<string, unknown>;
+						status?: Record<string, unknown>;
+					};
+					// (a) RPC RESPONSE interception: force the watchdog's authoritative
+					//     status.getStatus PULL to a test-owned is_streaming, bypassing the
+					//     push-frame rewrite entirely (the real pull is seq-less too).
+					if (frame?.id && pendingRpc.has(frame.id)) {
+						const path = pendingRpc.get(frame.id);
+						pendingRpc.delete(frame.id);
+						if (
+							path === "status.getStatus" &&
+							forcePullStreaming !== null &&
+							frame.result &&
+							typeof frame.result === "object"
+						) {
+							frame.result.is_streaming = forcePullStreaming;
+							ws.send(JSON.stringify(frame));
+							return;
+						}
+					}
+					// (b) Broadcast status rewrite: keep streaming state test-owned and
+					//     telemetry injected-only (unchanged existing behavior).
 					if (frame?.status && typeof frame.status === "object") {
-						// Keep streaming state test-owned and telemetry injected-only.
 						frame.status.is_streaming = desiredStreaming;
 						delete frame.status.linkTelemetry;
 						ws.send(JSON.stringify(frame));
@@ -210,5 +289,145 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 		await expect(panel.getByTestId("ingest-row")).toHaveCount(0);
 		await expect(panel.getByTestId("ingest-summary")).toBeVisible();
 		await expect(hudBitrate(page)).toContainText("—");
+	});
+
+	// ── T0: stop-edge stuck-state recovery ──────────────────────────────────────
+
+	test("SLOW PATH: a normal stop opens the bounded summary window, then returns to IdleCockpit with no reload once it elapses", async ({
+		page,
+	}) => {
+		// Shrink the post-stream summary window via the prod-inert seam so the SLOW
+		// path (30s in prod) resolves within the test — this is NOT the stuck bug.
+		await setWindowNumber(page, "__ceraSummaryWindowMs", 400);
+		await markNoReload(page);
+
+		sendConfig();
+		desiredStreaming = true;
+		pushStatus({ is_streaming: true, linkTelemetry: { links: TWO_LINKS } });
+
+		await expect(page.getByTestId("live-cockpit")).toBeVisible({ timeout: 15_000 });
+
+		// Real stop: the authoritative is_streaming:false push IS delivered.
+		desiredStreaming = false;
+		pushStatus({ is_streaming: false, linkTelemetry: null });
+
+		// The summary window keeps the cockpit mounted (summary shown)…
+		await expect(page.getByTestId("ingest-summary")).toBeVisible();
+
+		// …then the bounded window elapses → back to IdleCockpit, NO reload.
+		await expect(page.getByTestId("idle-cockpit")).toBeVisible();
+		await expect(page.getByTestId("live-cockpit")).toHaveCount(0);
+		expect(await stillNotReloaded(page)).toBe(true);
+
+		t0Evidence.push({
+			case: "slow-path",
+			result: "summary→idle within the shrunk window, no reload",
+		});
+	});
+
+	test("NO-REBROADCAST TRAP: a lost stop push after the server already stopped is recovered by the watchdog PULL alone — no reload", async ({
+		page,
+	}) => {
+		await setWindowNumber(page, "__ceraStopWatchdogMs", 600);
+		await setWindowNumber(page, "__ceraSummaryWindowMs", 400);
+		await markNoReload(page);
+
+		sendConfig();
+		desiredStreaming = true;
+		pushStatus({ is_streaming: true, linkTelemetry: { links: TWO_LINKS } });
+
+		const live = page.getByTestId("live-cockpit");
+		await expect(live).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId("ingest-row")).toHaveCount(2);
+
+		// Click the REAL Stop button (arms the stopping watchdog). The mock backend is
+		// NOT actually streaming, so its stop emits NO is_streaming:false broadcast; and
+		// we KEEP desiredStreaming=true so any stop push is rewritten back to true — the
+		// single authoritative false PUSH is LOST client-side (the field bug). A retry
+		// stop would generate no new change-broadcast either (no-rebroadcast trap).
+		await stopButton(page).click();
+
+		// The watchdog's authoritative status PULL (real backend is_streaming:false,
+		// which the push-rewrite cannot touch) reconciles the store → summary → Idle,
+		// within the watchdog+summary bound, with NO reload.
+		await expect(page.getByTestId("idle-cockpit")).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId("live-cockpit")).toHaveCount(0);
+		expect(await stillNotReloaded(page)).toBe(true);
+
+		t0Evidence.push({
+			case: "no-rebroadcast-trap",
+			result: "watchdog PULL alone recovered to idle, no reload",
+		});
+	});
+
+	test("GENUINELY STUCK: a backend that cannot stop shows the stop-stuck banner and stays truthfully live; Retry after recovery resolves it", async ({
+		page,
+	}) => {
+		await setWindowNumber(page, "__ceraStopWatchdogMs", 500);
+		await setWindowNumber(page, "__ceraSummaryWindowMs", 300);
+
+		sendConfig();
+		desiredStreaming = true;
+		pushStatus({ is_streaming: true, linkTelemetry: { links: TWO_LINKS } });
+
+		await expect(page.getByTestId("live-cockpit")).toBeVisible({ timeout: 15_000 });
+
+		// The backend genuinely cannot stop: force the watchdog's authoritative PULL to
+		// keep reporting is_streaming:true (and keep the push rewritten to true too).
+		forcePullStreaming = true;
+		await stopButton(page).click();
+
+		// The watchdog pulls (still streaming) → re-dispatches → pulls (still streaming)
+		// → exposes the truthful banner with Retry. The view stays TRUTHFULLY live
+		// (LiveCockpit still shown) — never fake-idle.
+		const banner = page.getByTestId("stop-stuck-banner");
+		await expect(banner).toBeVisible({ timeout: 15_000 });
+		await expect(banner.getByTestId("stop-stuck-retry")).toBeVisible();
+		await expect(page.getByTestId("live-cockpit")).toBeVisible();
+		await expect(page.getByTestId("idle-cockpit")).toHaveCount(0);
+
+		// Recovery: the backend finally stops. Retry re-runs pull→stop→pull; the pull
+		// now returns is_streaming:false → reconcile → summary → IdleCockpit, banner gone.
+		forcePullStreaming = false;
+		await banner.getByTestId("stop-stuck-retry").click();
+
+		await expect(page.getByTestId("stop-stuck-banner")).toHaveCount(0, {
+			timeout: 15_000,
+		});
+		await expect(page.getByTestId("idle-cockpit")).toBeVisible();
+
+		t0Evidence.push({
+			case: "genuinely-stuck-with-retry",
+			result: "stop-stuck banner + Retry; recovered to idle after backend stopped",
+		});
+	});
+
+	test.afterAll(() => {
+		// Merge with any cases a sibling parallel worker already wrote so the single
+		// named evidence file accumulates every T0 case (best-effort, last-write-wins).
+		const file = evidencePath("ler-t0-stop-edge.json");
+		const merged = new Map<string, Record<string, unknown>>();
+		try {
+			const prior = JSON.parse(fs.readFileSync(file, "utf8")) as {
+				cases?: Array<Record<string, unknown>>;
+			};
+			for (const c of prior.cases ?? []) merged.set(String(c.case), c);
+		} catch {
+			/* no prior file */
+		}
+		for (const c of t0Evidence) merged.set(String(c.case), c);
+		fs.writeFileSync(
+			file,
+			JSON.stringify(
+				{
+					task: "T0 — stop-edge stuck state + bounded stopping watchdog",
+					generated: new Date().toISOString(),
+					cases: [...merged.values()],
+				},
+				null,
+				2,
+			),
+			"utf8",
+		);
 	});
 });

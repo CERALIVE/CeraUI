@@ -1057,6 +1057,10 @@ const ar = {
 		stopStream: "إيقاف البث",
 		starting: "جارٍ البدء…",
 		stopping: "جارٍ الإيقاف…",
+		stopStuck: {
+			message: "يستغرق الإيقاف وقتًا أطول من المتوقع",
+			retry: "إعادة المحاولة",
+		},
 		overview: "نظرة عامة",
 		streamingActive: "البث",
 		notStreaming: "لا يوجد بث",

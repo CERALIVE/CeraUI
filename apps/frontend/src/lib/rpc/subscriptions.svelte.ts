@@ -659,6 +659,16 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 	}
 }
 
+/**
+ * Apply a PULLED status snapshot (`rpc.status.getStatus()`) seq-less, so it
+ * bypasses the per-type drop-stale guard. INVARIANT: a pull is authoritative and
+ * must never be gated by push seq bookkeeping. Recovery seam for the stopping
+ * watchdog (mirrors the reconnect-hydrate dispatch).
+ */
+export function ingestPulledStatus(status: unknown): void {
+	handleMessage("status", status, undefined);
+}
+
 const AUTH_STORAGE_KEY = "auth";
 
 let reauthInFlight = false;

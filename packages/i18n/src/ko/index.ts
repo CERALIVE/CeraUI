@@ -928,6 +928,10 @@ const ko = {
 		stopStream: "스트림 중지",
 		starting: "시작 중...",
 		stopping: "중지 중...",
+		stopStuck: {
+			message: "중지에 예상보다 시간이 오래 걸리고 있습니다",
+			retry: "다시 시도",
+		},
 		overview: "개요",
 		streamingActive: "스트리밍 중",
 		notStreaming: "스트리밍하지 않음",

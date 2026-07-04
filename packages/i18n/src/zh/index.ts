@@ -881,6 +881,10 @@ const zh = {
 		stopStream: "停止直播",
 		starting: "正在开始...",
 		stopping: "正在停止...",
+		stopStuck: {
+			message: "停止所需时间超出预期",
+			retry: "重试",
+		},
 		overview: "概览",
 		streamingActive: "直播中",
 		notStreaming: "未在直播",
