@@ -196,6 +196,11 @@ export const runtimeConfigSchema = z.object({
 	// optional, same style as resolution/framerate above; absent = engine default.
 	video_codec: videoCodecSchema.optional(),
 	selected_video_input: z.string().optional(),
+	// Device-first operator source selection (StreamSource id). Additive-optional;
+	// `pipeline`/`selected_video_input` stay the engine-wire fields DERIVED from it
+	// at the procedure layer (T3). A legacy config without it back-derives `source`
+	// via `coerceLegacySource` at load time.
+	source: z.string().optional(),
 	autostart: z.boolean().optional(),
 
 	// Remote/cloud settings
@@ -263,6 +268,40 @@ export function normalizeRelayIds(config: RuntimeConfig): RuntimeConfig {
 	}
 
 	return next;
+}
+
+// Back-derive the device-first `source` id from legacy config fields when it is
+// absent (pre-source configs persisted only pipeline/selected_video_input). Pure,
+// idempotent, and NEVER throws — mirrors the legacy `engine` coercion's
+// boot-tolerant contract (one warning line, never a parse failure). A present
+// `source` passes through untouched. Derivation ladder:
+//   selected_video_input present → that input_id (a capture source)
+//   pipeline in {rtmp, srt}       → that pipeline id (a network source)
+//   pipeline === 'test'           → 'test' (the virtual source)
+//   pipeline present              → that pipeline id (a coarse source)
+//   otherwise                     → left unset
+export function coerceLegacySource(config: RuntimeConfig): RuntimeConfig {
+	if (config.source !== undefined) return config;
+
+	let derived: string | undefined;
+	if (config.selected_video_input !== undefined) {
+		derived = config.selected_video_input;
+	} else if (config.pipeline === "rtmp" || config.pipeline === "srt") {
+		derived = config.pipeline;
+	} else if (config.pipeline === "test") {
+		derived = "test";
+	} else if (config.pipeline !== undefined) {
+		derived = config.pipeline;
+	}
+
+	if (derived === undefined) return config;
+
+	logger.warn(
+		`config.json: no 'source' field — derived source ${JSON.stringify(
+			derived,
+		)} from legacy pipeline/selected_video_input for the device-first source model`,
+	);
+	return { ...config, source: derived };
 }
 
 // =============================================================================

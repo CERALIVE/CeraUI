@@ -63,7 +63,12 @@ import {
 	VALID_HARDWARE_TYPES,
 	validatePipelineOverrides,
 } from "../../modules/streaming/pipelines.ts";
-import { broadcastSources } from "../../modules/streaming/sources.ts";
+import {
+	broadcastSources,
+	getSourcesMessage,
+	type ResolveSourceRoutingResult,
+	resolveSourceRouting,
+} from "../../modules/streaming/sources.ts";
 import {
 	getIsStreaming,
 	updateStatus,
@@ -119,6 +124,27 @@ export const streamingStartProcedure = authedProcedure
 					? { srt_latency: Math.max(input.srt_latency, SRTLA_MIN_LATENCY_MS) }
 					: {}),
 			};
+
+			// Device-first source pre-validation (T3). Resolve the EFFECTIVE source
+			// (this start's input, else the persisted post-coercion config.source)
+			// HERE, before delegating: an unknown source rejects WITHOUT calling
+			// session.start (session.ts swallows updateConfig errors, so the reject
+			// must happen at this layer). A known source folds its derived pipeline +
+			// recomputed selected_video_input into `applied` so the launch dispatches
+			// the resolved pipeline through the existing offered-set gate below.
+			const effectiveSource = input.source ?? getConfig().source;
+			if (effectiveSource !== undefined) {
+				const routed = resolveSourceRouting(
+					effectiveSource,
+					getSourcesMessage().sources,
+				);
+				if (!routed.ok) {
+					return { success: false, is_streaming: false, error: routed.error };
+				}
+				applied.pipeline = routed.pipeline;
+				applied.selected_video_input = routed.selected_video_input;
+				applied.source = effectiveSource;
+			}
 
 			// Block start when the effective pipeline is not in the offered set — a
 			// persisted pipeline the current hardware no longer offers. No silent
@@ -336,6 +362,24 @@ export const setConfigProcedure = authedProcedure
 	.handler(({ input }) => {
 		const config = getConfig();
 
+		// Device-first source selection (T3). Resolve at the PROCEDURE, BEFORE any
+		// merge: an unknown source rejects with disk unchanged; a known source folds
+		// its derived pipeline into `input` so the override-validation + merge below
+		// see it. selected_video_input is recomputed on EVERY source write (persisted
+		// further down) — the capture input_id, or cleared for a non-capture source.
+		let sourceRouting: Extract<ResolveSourceRoutingResult, { ok: true }> | undefined;
+		if (input.source !== undefined) {
+			const routed = resolveSourceRouting(
+				input.source,
+				getSourcesMessage().sources,
+			);
+			if (!routed.ok) {
+				return { success: false, error: routed.error, applied: {} };
+			}
+			sourceRouting = routed;
+			input.pipeline = routed.pipeline;
+		}
+
 		// Validate pipeline overrides at save time (QW-I)
 		if (
 			input.pipeline !== undefined ||
@@ -378,6 +422,12 @@ export const setConfigProcedure = authedProcedure
 		if (input.video_codec !== undefined) config.video_codec = input.video_codec;
 		if (input.selected_video_input !== undefined)
 			config.selected_video_input = input.selected_video_input;
+		// A resolved source overwrites selected_video_input verbatim (undefined
+		// clears a stale capture input) and persists the operator's source id.
+		if (sourceRouting !== undefined) {
+			config.source = input.source;
+			config.selected_video_input = sourceRouting.selected_video_input;
+		}
 		if (input.bitrate_overlay !== undefined)
 			config.bitrate_overlay = input.bitrate_overlay;
 
@@ -453,6 +503,11 @@ export const setConfigProcedure = authedProcedure
 			applied.relay_protocol = config.relay_protocol;
 		if (input.selected_ingest_endpoint !== undefined)
 			applied.selected_ingest_endpoint = config.selected_ingest_endpoint ?? "";
+		if (sourceRouting !== undefined) {
+			applied.source = input.source;
+			applied.pipeline = config.pipeline;
+			applied.selected_video_input = config.selected_video_input;
+		}
 
 		if (shouldUseMocks()) {
 			setMockEncoderConfig({

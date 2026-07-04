@@ -289,6 +289,32 @@ export function deriveEngineRouting(
 	return { pipeline: source.pipelineId, selected_video_input: undefined };
 }
 
+export const UNKNOWN_SOURCE_ERROR = "unknown_source";
+
+export type ResolveSourceRoutingResult =
+	| { ok: true; pipeline: string; selected_video_input: string | undefined }
+	| { ok: false; error: typeof UNKNOWN_SOURCE_ERROR };
+
+// Procedure-layer wrapper over deriveEngineRouting. Unknown id → `unknown_source`
+// so the procedure rejects with disk unchanged (session.start swallows
+// updateConfig errors, so this must be enforced here, never deeper). Known id →
+// routing whose `selected_video_input` is the capture input_id, or `undefined`
+// (config-clear) for coarse/virtual/network — clearing a stale capture input.
+export function resolveSourceRouting(
+	sourceId: string,
+	sources: readonly StreamSource[],
+): ResolveSourceRoutingResult {
+	const routing = deriveEngineRouting(sourceId, sources);
+	if (routing === undefined) {
+		return { ok: false, error: UNKNOWN_SOURCE_ERROR };
+	}
+	return {
+		ok: true,
+		pipeline: routing.pipeline,
+		selected_video_input: routing.selected_video_input,
+	};
+}
+
 // ─── Engine-device cache ────────────────────────────────────────────────────
 //
 // The last-known concrete `list-devices` result, retained across a transient
