@@ -5,6 +5,7 @@ import {
 	type Pipeline,
 	type Pipelines,
 	type Resolution,
+	type StreamSource,
 	VIDEO_SOURCE_LABELS,
 } from "@ceraui/rpc/schemas";
 
@@ -30,8 +31,10 @@ export type { HardwareType, VideoSource };
 export { HARDWARE_LABELS, VIDEO_SOURCE_LABELS };
 
 /**
- * Get a human-readable label for a video source
- * Falls back to the shared VIDEO_SOURCE_LABELS if no translation function provided
+ * Get a human-readable label for a video source id (virtual / network /
+ * legacy-coarse entries). Capture sources carry a real hardware `displayName` and
+ * resolve through {@link sourceLabel} instead — never through this id→label lookup.
+ * Falls back to the shared VIDEO_SOURCE_LABELS if no translation function provided.
  */
 export function getSourceLabel(
 	source: string,
@@ -67,6 +70,20 @@ export function getPipelineDisplayName(
 	if (pipeline?.name) return pipeline.name;
 	if (pipeline?.description) return pipeline.description;
 	return resolveUnknownSourceLabel(t);
+}
+
+/**
+ * Label a device-first {@link StreamSource}: a capture source shows its REAL
+ * hardware `displayName` verbatim (never translated — this is what kills the
+ * USB-as-HDMI mislabel); every other origin (coarse / virtual / network) shows its
+ * translated `labelKey`. This is the SAME rule SourceSection applies to its own
+ * rows, so both label surfaces agree.
+ */
+export function sourceLabel(
+	source: StreamSource,
+	t: (key: string) => string,
+): string {
+	return source.origin === "capture" ? source.displayName : t(source.labelKey);
 }
 
 /**

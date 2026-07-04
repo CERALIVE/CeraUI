@@ -140,7 +140,9 @@ const capChips = $derived.by(() => {
 
 // Active-config truth (Todo 23): engine `active_encode` while streaming, else the
 // saved config. Distinct from the capability chips above — these are settings.
-const activeSummary = $derived(deriveActiveSummary(config, activeEncode, capabilities));
+const activeSummary = $derived(
+	deriveActiveSummary(config, activeEncode, capabilities, sources?.sources),
+);
 const activeParts = $derived.by(() => {
 	const parts: string[] = [];
 	if (activeSummary.source) parts.push(activeSummary.source);
