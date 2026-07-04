@@ -1,44 +1,72 @@
 <!--
-  SourceSection.svelte — unified Source surface for the Live destination (Task 8).
+  SourceSection.svelte — unified device-first source list (Task 13).
 
-  Brings the hotplug VIDEO input picker and the pipeline-reported AUDIO source
-  into one coherent section, fronted by a compact capability summary
-  (res / fps / codec / audio) derived from the engine `get-capabilities`
-  broadcast, and an explicit lost-device explanation (badge + body + recovery
-  hint) instead of a silent "Lost" label.
+  ONE list rendering all four StreamSource origins from `getSources()`:
+    • capture — a concrete engine device, shown by its REAL displayName under a
+                kind icon (a RØDE UVC dongle shows "RØDE …" + a USB glyph, never the
+                coarse "HDMI Capture" label — this is what kills the mislabel).
+    • coarse  — a legacy / no-device-yet capability source: its labelKey-translated
+                label, FULLY selectable (the old pipeline-picker behavior surfaced
+                through the unified list).
+    • virtual — the single Test-pattern row (exactly once).
+    • network — an rtmp/srt LAN ingest source with URL + QR/copy affordances,
+                disabled-with-reason from `source.available` / `source.unavailableReason`
+                (T2 routed that verdict through pipelineAvailability — NEVER re-derived
+                here).
 
-  Composition, not a new subsystem: the video block is the existing InputPicker;
-  the audio block reuses the pipeline source list. Audio selection is PRE-START
-  only — live audio switching is gated (Task 10), so while streaming (or with a
-  single source) the audio source renders READ-ONLY, never a misleading dropdown.
+  Selecting any row writes `config.source` through the standard per-field-sync lock
+  (beginFieldSync → setConfig → markFieldApplied with `result.applied`); the backend
+  (T3) resolves the source id to the engine pipeline / input. Source PRIORITY is an
+  inline reorder affordance rendered on capture rows only, and only when two or more
+  capture sources exist (SourcePreference folded in — the separate card is gone). A
+  lost capture device renders its state from `source.lost`.
 
-  Presentational: every datum + handler is a prop, so it renders deterministically
-  under vitest with no subscription/runtime dependency.
+  The audio selector block (embedded / read-only / selectable / none) stays exactly
+  as before — audio devices are filtered out of `sources` by the backend, so this is
+  the ONLY audio surface here.
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type {
 	ActiveEncode,
 	AudioSource,
-	CaptureDevice,
 	CapabilitiesMessage,
+	CaptureStreamSource,
 	ConfigMessage,
-	NetworkIngest,
-	Pipelines,
+	DeviceKind,
+	NetworkStreamSource,
+	SourcesMessage,
+	StreamSource,
 } from '@ceraui/rpc/schemas';
-import { VIDEO_SOURCE_LABELS } from '@ceraui/rpc/schemas';
-import { Check, Copy, QrCode, Radio, TriangleAlert, Video, Volume2 } from '@lucide/svelte';
+import {
+	Cable,
+	Check,
+	ChevronDown,
+	ChevronUp,
+	Copy,
+	QrCode,
+	Radio,
+	SquareDashed,
+	TriangleAlert,
+	Usb,
+	Video,
+	Volume2,
+} from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
+import FieldSyncIndicator from '$lib/components/custom/FieldSyncIndicator.svelte';
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
-import InputPicker from '$lib/components/custom/InputPicker.svelte';
-import SourcePreference from '$lib/components/custom/SourcePreference.svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import * as Select from '$lib/components/ui/select';
 import { generateDeviceAccessQr } from '$lib/helpers/NetworkHelper';
-import { deriveNetworkIngestRows } from '$lib/streaming/networkIngestRows';
-import type { FailoverEvent } from '$lib/streaming/source-preference';
+import { rpc } from '$lib/rpc';
+import {
+	beginFieldSync,
+	markFieldApplied,
+	markFieldApplying,
+	markFieldFailed,
+} from '$lib/rpc/field-sync-state.svelte';
 import {
 	audioSourceLabel,
 	deriveActiveSummary,
@@ -51,72 +79,52 @@ import {
 } from '$lib/streaming/sourceSummary';
 
 interface Props {
-	// ── Video (forwarded to InputPicker) ──
-	devices?: CaptureDevice[];
-	activeInput?: string | undefined;
-	selectedInput?: string | undefined;
+	// ── Unified device-first source list (T6 getSources()) ──
+	sources?: SourcesMessage | undefined;
+	// ── Active-config truth — `config.source` is the selected source id ──
+	config?: ConfigMessage | undefined;
+	/** Engine `active_encode` — WINS while streaming (engine truth over requested). */
+	activeEncode?: ActiveEncode | null | undefined;
+	// ── Capability summary ──
+	capabilities?: CapabilitiesMessage | undefined;
 	isStreaming?: boolean;
+	// ── Source PRIORITY (capture rows only) — LiveView owns the source_preference write ──
+	/** Persisted preference order of capture input_ids (reconciled by LiveView). */
+	sourceOrder?: string[];
+	/** Field-sync key driving the reorder "saving" glyph. */
+	sourcePreferenceField?: string;
+	onReorderSource?: (id: string, direction: 'up' | 'down') => void;
+	// ── Live input switch (capture rows, streaming only) — LiveView owns the RPC ──
+	/** Engine `active_input` — the capture source the engine is currently running. */
+	activeInput?: string | undefined;
+	/** The capture source with an in-flight live switch (optimistic latch). */
 	switchingInput?: string | undefined;
-	/** Forwarded to InputPicker: gates the live audio-switch affordance (G2). */
-	audioLiveSwitchEnabled?: boolean;
-	/** Forwarded to InputPicker: field-sync key driving the audio-switch glyph. */
-	audioLiveSwitchField?: string;
-	onSelect?: (id: string) => void;
+	/** Dispatch a live input switch (streaming-only capture-row affordance). */
 	onSwitch?: (id: string) => void;
-	// ── Audio ──
+	// ── Audio (selection write owned by LiveView) ──
 	audioSources?: string[];
 	/** Typed audio-source model (status.audio_sources); falls back to `audioSources`. */
 	audioSourceList?: AudioSource[] | undefined;
 	selectedAudioSource?: string | undefined;
 	onSelectAudioSource?: (id: string) => void;
-	// ── Network-ingest gateways as first-class sources (Task 12) ──
-	/** `status.network_ingest` — a `null`/absent protocol renders no row. */
-	networkIngest?: NetworkIngest | null | undefined;
-	/** `getPipelines()?.pipelines` — resolves the pipeline id per protocol. */
-	pipelines?: Pipelines | undefined;
-	/** The currently-selected `config.pipeline` (drives the "selected" state). */
-	selectedPipeline?: string | undefined;
-	/** Selecting a network-ingest source sets `config.pipeline` (owned by LiveView). */
-	onSelectNetworkIngest?: (pipelineId: string) => void;
-	// ── Capability summary ──
-	capabilities?: CapabilitiesMessage | undefined;
-	// ── Active-config truth (Todo 23) ──
-	/** Saved config — the IDLE source of res/fps/codec/transport. */
-	config?: ConfigMessage | undefined;
-	/** Engine `active_encode` — WINS while streaming (engine truth over requested). */
-	activeEncode?: ActiveEncode | null | undefined;
-	// ── Source preference + fallback state (Task 11) ──
-	sourceOrder?: string[];
-	sourceFailover?: FailoverEvent | null;
-	sourcePreferenceField?: string;
-	onReorderSource?: (id: string, direction: 'up' | 'down') => void;
 }
 
 let {
-	devices = [],
-	activeInput,
-	selectedInput,
+	sources,
+	config,
+	activeEncode,
+	capabilities,
 	isStreaming = false,
+	sourceOrder = [],
+	sourcePreferenceField = 'source_preference',
+	onReorderSource,
+	activeInput,
 	switchingInput,
-	audioLiveSwitchEnabled = false,
-	audioLiveSwitchField,
-	onSelect,
 	onSwitch,
 	audioSources = [],
 	audioSourceList,
 	selectedAudioSource,
 	onSelectAudioSource,
-	networkIngest,
-	pipelines,
-	selectedPipeline,
-	onSelectNetworkIngest,
-	capabilities,
-	config,
-	activeEncode,
-	sourceOrder = [],
-	sourceFailover = null,
-	sourcePreferenceField = 'source_preference',
-	onReorderSource,
 }: Props = $props();
 
 // Capability summary (res / fps / codec / audio) — compact, telemetry-style.
@@ -147,47 +155,8 @@ const hasActiveConfig = $derived(
 		Boolean(activeSummary.source || activeSummary.resolution || activeSummary.codec),
 );
 
-// Audio source: single → read-only, multiple → selectable (pre-start only).
-const audioMode = $derived(resolveAudioSourceMode(audioSources));
-const displayedAudioSource = $derived(
-	resolveDisplayedAudioSource(selectedAudioSource, audioSources),
-);
-
-// Typed audio-source model (Task 13): the backend `audio_sources` when present,
-// else derived from the legacy `asrcs`. Pseudo-sources render translated + grouped
-// at the END; device entries keep their untranslated hardware name + order.
-const audioSourceEntries = $derived(resolveAudioSourceList(audioSourceList, audioSources));
-const groupedAudio = $derived(groupAudioSources(audioSourceEntries));
-const displayedAudioLabel = $derived.by(() => {
-	const entry = audioSourceEntries.find((e) => e.id === displayedAudioSource);
-	return entry ? audioSourceLabel(entry, t) : displayedAudioSource;
-});
-// Configured source the pipeline no longer reports: always keep it a VISIBLE
-// (marked-unavailable) entry so the control never shows an orphan value.
-const notAvailableAudioSource = $derived(
-	displayedAudioSource && !audioSourceEntries.some((e) => e.id === displayedAudioSource)
-		? displayedAudioSource
-		: undefined,
-);
-// Live audio switch is gated (Task 10): force read-only while streaming.
-const audioReadOnly = $derived(audioMode === 'single' || isStreaming);
-const audioComingSoon = $derived(isStreaming && audioMode === 'multiple');
-
-// Embedded network-ingest audio (Task 13): an rtmp/srt pipeline carries its audio
-// muxed into the incoming stream. The engine only ROUTES it with the
-// `network_embedded_audio` capability — with it, the audio source is read-only
-// "Embedded audio". Without it, the legacy ALSA picker stays and the calm
-// ComingSoon pill (TD-embedded-audio) now lives in IdleCockpit's roadmap
-// disclosure (T12), not inline here.
-const selectedPipelineAudioKind = $derived(
-	selectedPipeline ? pipelines?.[selectedPipeline]?.audio_kind : undefined,
-);
-const audioEmbeddedActive = $derived(
-	selectedPipelineAudioKind === 'embedded' && capabilities?.network_embedded_audio === true,
-);
-
-// i18n key resolver (mirrors AudioDialog) — lets the pure audio-source label
-// helper resolve a locale string from a dotted labelKey without a store dep.
+// i18n key resolver (mirrors AudioDialog) — resolves a dotted labelKey to a locale
+// string without a store dep, with safe key-passthrough on a miss.
 const t = (key: string): string => {
 	const parts = key.split('.');
 	let result: unknown = $LL;
@@ -201,63 +170,121 @@ const t = (key: string): string => {
 	return typeof result === 'function' ? (result as () => string)() : key;
 };
 
-// Lost-device explanation: any reported device that vanished mid-session. The
-// active source being lost is the critical case but any lost device warrants
-// the explicit explanation + recovery hint (not just the per-row "Lost" badge).
-const lostDevices = $derived(devices.filter((d) => d.lost));
-const hasLostDevice = $derived(lostDevices.length > 0);
-
-// ── Network-ingest gateways as first-class sources (Task 12) ──
-// The rtmp/srt LAN ingest gateways are surfaced as selectable source rows carrying
-// their live gateway data. The structural derivation (availability verdict via the
-// shared pipelineAvailability rule, addressless state, embedded-audio flag) comes
-// from `deriveNetworkIngestRows` — the SAME truth NetworkIngestSection reads — so
-// neither surface re-derives the gateway rule inline. This block only maps the
-// structural row onto i18n copy.
-const networkIngestRows = $derived.by(() =>
-	deriveNetworkIngestRows({
-		networkIngest,
-		pipelines,
-		capabilities,
-		selectedPipeline,
-		isStreaming,
-	}).map((row) => {
-		const label = VIDEO_SOURCE_LABELS[row.protocol] ?? row.protocol;
-		let reason = '';
-		if (row.addressless) {
-			reason = $LL.live.networkIngest.noAddress({ protocol: label });
-		} else if (row.gatewayBlocked) {
-			reason = $LL.live.networkIngest.serviceInactive({ protocol: label });
-		} else if (row.streamingLocked) {
-			reason = $LL.live.networkIngest.streamingLocked();
-		}
-		return {
-			...row,
-			label,
-			reason,
-			statusLabel: row.addressless
-				? $LL.live.networkIngest.noAddressStatus()
-				: row.serviceActive
-					? $LL.live.networkIngest.active()
-					: $LL.live.networkIngest.inactive(),
-			statusWarn: row.addressless || !row.serviceActive,
-			// No url ⇒ nothing to encode into a QR or copy: suppress the panel.
-			showInstructions: row.url !== null,
-		};
-	}),
+// ── Unified source list (Task 13) ──────────────────────────────────────────
+// Every source in backend (`caps.sources`) order, with the capture slots refilled
+// in the operator's preference order so a capture row never jumps past a
+// coarse/network row. The reorder affordance touches ONLY the capture ordering.
+const captureSources = $derived(
+	(sources?.sources ?? []).filter(
+		(s): s is CaptureStreamSource => s.origin === 'capture',
+	),
 );
+const canReorder = $derived(captureSources.length >= 2);
+const orderedCaptures = $derived.by(() => {
+	const rank = new Map(sourceOrder.map((id, i) => [id, i] as const));
+	return [...captureSources].sort(
+		(a, b) =>
+			(rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+			(rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+	);
+});
+const captureRank = $derived(
+	new Map(orderedCaptures.map((s, i) => [s.id, i] as const)),
+);
+const orderedSources = $derived.by(() => {
+	const all = sources?.sources ?? [];
+	let ci = 0;
+	return all.map((s) => (s.origin === 'capture' ? (orderedCaptures[ci++] ?? s) : s));
+});
+const hasSources = $derived(orderedSources.length > 0);
 
-// Per-protocol publish-instruction QR data URLs (URL only, never a secret) —
+// Lost-device explanation: any reported capture device that vanished mid-session.
+const lostCaptures = $derived(captureSources.filter((s) => s.lost === true));
+const hasLostDevice = $derived(lostCaptures.length > 0);
+
+// A row is unselectable when a network gateway is down (consume source.available —
+// never re-derive it) or a capture device was unplugged (lost).
+function rowDisabled(source: StreamSource): boolean {
+	if (source.available === false) return true;
+	return source.origin === 'capture' && source.lost === true;
+}
+
+// The disabled reason surfaced as the row `title` (i18n dot-path from the source).
+function rowReason(source: StreamSource): string | undefined {
+	if (source.origin === 'capture' && source.lost === true) {
+		return $LL.live.source.lostBody();
+	}
+	return source.unavailableReason ? t(source.unavailableReason) : undefined;
+}
+
+// Row label: capture shows its REAL hardware name; every other origin shows its
+// translated labelKey (the pipeline-picker copy surfaced through the unified list).
+function rowLabel(source: StreamSource): string {
+	return source.origin === 'capture' ? source.displayName : t(source.labelKey);
+}
+
+// Capture kind → coarse device family (drives the icon + the kind badge). A UVC
+// dongle (`uvc_h264`) is USB family, so its badge reads "USB" — never "HDMI".
+type KindFamily = 'hdmi' | 'usb' | 'network' | 'other';
+function kindFamily(kind: DeviceKind): KindFamily {
+	if (kind === 'hdmi') return 'hdmi';
+	if (kind === 'network') return 'network';
+	if (
+		kind === 'usb' ||
+		kind === 'uvc_h264' ||
+		kind === 'uvc_h265' ||
+		kind === 'mjpeg' ||
+		kind === 'camlink'
+	) {
+		return 'usb';
+	}
+	return 'other';
+}
+const KIND_ICON = { hdmi: Cable, usb: Usb, network: Radio, other: Video } as const;
+function kindLabel(kind: DeviceKind): string {
+	return t(`live.inputPicker.groups.${kindFamily(kind)}`);
+}
+function rowIcon(source: StreamSource) {
+	if (source.origin === 'capture') return KIND_ICON[kindFamily(source.kind)];
+	if (source.origin === 'virtual') return SquareDashed;
+	if (source.origin === 'network') return Radio;
+	return Video;
+}
+
+// ── Source selection: the ONE write, via the standard per-field-sync lock ────
+// Selecting any row persists `config.source`; the backend (T3) resolves the id to
+// the engine pipeline / selected_video_input. The lock releases to the SERVER-
+// applied value (result.applied), never the optimistic id.
+const SOURCE_FIELD = 'source';
+async function handleSelectSource(source: StreamSource): Promise<void> {
+	if (rowDisabled(source) || source.id === config?.source) return;
+	beginFieldSync(SOURCE_FIELD, source.id);
+	markFieldApplying(SOURCE_FIELD);
+	try {
+		const result = await rpc.streaming.setConfig({ source: source.id });
+		const applied =
+			(result as { applied?: { source?: string } }).applied?.source ?? source.id;
+		markFieldApplied(SOURCE_FIELD, applied);
+	} catch {
+		markFieldFailed(SOURCE_FIELD, config?.source);
+		toast.error($LL.notifications.saveFailed());
+	}
+}
+
+// Per-network-source publish-instruction QR data URLs (URL only, never a secret) —
 // mirrors NetworkIngestSection's effect so both render an identical QR.
+const networkSources = $derived(
+	orderedSources.filter((s): s is NetworkStreamSource => s.origin === 'network'),
+);
 let networkQrDataUrls = $state<Record<string, string>>({});
 $effect(() => {
 	let cancelled = false;
 	const next: Record<string, string> = {};
 	Promise.all(
-		networkIngestRows.map(async (row) => {
-			if (!row.url) return;
+		networkSources.map(async (source) => {
+			if (!source.url) return;
 			try {
-				next[row.protocol] = await generateDeviceAccessQr(row.url);
+				next[source.id] = await generateDeviceAccessQr(source.url);
 			} catch {
 				// A QR failure just omits the image — the URL + copy still work.
 			}
@@ -270,11 +297,6 @@ $effect(() => {
 	};
 });
 
-function selectNetworkIngest(row: { disabled: boolean; selected: boolean; pipelineId: string }): void {
-	if (row.disabled || row.selected) return;
-	onSelectNetworkIngest?.(row.pipelineId);
-}
-
 async function copyNetworkIngestUrl(url: string | null): Promise<void> {
 	if (!url) return;
 	try {
@@ -284,6 +306,38 @@ async function copyNetworkIngestUrl(url: string | null): Promise<void> {
 		toast.error($LL.live.networkIngest.copyFailed());
 	}
 }
+
+// ── Audio source (unchanged states) ──────────────────────────────────────────
+const audioMode = $derived(resolveAudioSourceMode(audioSources));
+const displayedAudioSource = $derived(
+	resolveDisplayedAudioSource(selectedAudioSource, audioSources),
+);
+const audioSourceEntries = $derived(resolveAudioSourceList(audioSourceList, audioSources));
+const groupedAudio = $derived(groupAudioSources(audioSourceEntries));
+const displayedAudioLabel = $derived.by(() => {
+	const entry = audioSourceEntries.find((e) => e.id === displayedAudioSource);
+	return entry ? audioSourceLabel(entry, t) : displayedAudioSource;
+});
+const notAvailableAudioSource = $derived(
+	displayedAudioSource && !audioSourceEntries.some((e) => e.id === displayedAudioSource)
+		? displayedAudioSource
+		: undefined,
+);
+// Live audio switch is gated (Task 10): force read-only while streaming.
+const audioReadOnly = $derived(audioMode === 'single' || isStreaming);
+const audioComingSoon = $derived(isStreaming && audioMode === 'multiple');
+
+// Embedded network-ingest audio (Task 13): the ACTIVE source's `audioKind` is
+// `embedded` (an rtmp/srt pipeline carries its audio muxed into the incoming
+// stream). The engine only ROUTES it with the `network_embedded_audio` capability —
+// with it, the audio source is read-only "Embedded audio"; without it, the legacy
+// ALSA picker stays (the calm ComingSoon pill lives in IdleCockpit's roadmap, T12).
+const activeSource = $derived(
+	config?.source ? sources?.sources.find((s) => s.id === config.source) : undefined,
+);
+const audioEmbeddedActive = $derived(
+	activeSource?.audioKind === 'embedded' && capabilities?.network_embedded_audio === true,
+);
 </script>
 
 <Card.Root data-testid="source-section">
@@ -375,152 +429,198 @@ async function copyNetworkIngestUrl(url: string | null): Promise<void> {
 			</div>
 		{/if}
 
-		<!-- Video input (hotplug picker, unchanged) -->
-		<InputPicker
-			{activeInput}
-			{audioLiveSwitchEnabled}
-			{audioLiveSwitchField}
-			{devices}
-			{isStreaming}
-			{onSelect}
-			{onSwitch}
-			{selectedInput}
-			{switchingInput}
-		/>
-
-		<!-- Operator-ordered source preference + fallback state (Task 11) -->
-		{#if sourceOrder.length > 0}
-			<div class="border-t pt-5">
-				<SourcePreference
-					{activeInput}
-					{devices}
-					failover={sourceFailover}
-					onReorder={onReorderSource}
-					order={sourceOrder}
-					syncField={sourcePreferenceField}
-				/>
-			</div>
-		{/if}
-
-		<!-- Network-ingest gateways as first-class sources (Task 12): rtmp/srt LAN
-		     ingest surfaced as selectable rows; availability routed through the shared
-		     pipelineAvailability rule (never hidden). NetworkIngestSection stays the
-		     detailed QR/instructions home; both read the SAME network_ingest truth. -->
-		{#if networkIngestRows.length > 0}
-			<div class="space-y-3 border-t pt-5" data-testid="source-network-ingest">
-				<div class="flex items-center gap-1">
-					<Radio aria-hidden={true} class="text-primary size-4 shrink-0" />
-					<span class="text-sm font-medium">{$LL.live.networkIngest.title()}</span>
-					<InfoPopover
-						body={$LL.live.networkIngest.infoBody()}
-						testId="info-source-network-ingest"
-						title={$LL.live.networkIngest.infoTitle()}
-					/>
-				</div>
-				<p class="text-muted-foreground text-xs">{$LL.live.networkIngest.subtitle()}</p>
-
-				<ul class="space-y-3">
-					{#each networkIngestRows as row (row.protocol)}
+		<!-- Unified device-first source list: capture / coarse / virtual / network rows.
+		     Selecting a row persists config.source through the field-sync lock; a capture
+		     row carries an inline reorder affordance when ≥2 capture sources exist. -->
+		{#if hasSources}
+			<div class="space-y-2" data-testid="source-list">
+				{#if canReorder}
+					<div class="flex items-center justify-end">
+						<FieldSyncIndicator
+							appliedLabel={$LL.live.sourcePreference.sync.applied()}
+							applyingLabel={$LL.live.sourcePreference.sync.applying()}
+							failedLabel={$LL.live.sourcePreference.sync.failed()}
+							field={sourcePreferenceField}
+						/>
+					</div>
+				{/if}
+				<ul class="space-y-2">
+					{#each orderedSources as source (source.id)}
+						{@const selected = config?.source === source.id}
+						{@const disabled = rowDisabled(source)}
+						{@const RowIcon = rowIcon(source)}
+						{@const capRank = captureRank.get(source.id) ?? -1}
 						<li
-							data-protocol={row.protocol}
-							data-testid={`source-network-ingest-row-${row.protocol}`}
+							data-testid={`source-row-${source.id}`}
+							data-origin={source.origin}
+							data-selected={selected}
 						>
-							<button
-								class="flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition-colors {row.selected
-									? 'border-primary bg-primary/10'
-									: 'border-border hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
-								data-selected={row.selected}
-								data-testid={`source-network-ingest-select-${row.protocol}`}
-								disabled={row.disabled}
-								onclick={() => selectNetworkIngest(row)}
-								title={row.reason || undefined}
-								type="button"
-							>
-								<span class="flex min-w-0 items-center gap-2.5">
-									<span
-										aria-hidden={true}
-										class="size-2 shrink-0 rounded-full {row.gatewayBlocked
-											? 'bg-status-warning'
-											: 'bg-primary'}"
-										data-testid={`source-network-ingest-dot-${row.protocol}`}
-										data-blocked={row.gatewayBlocked}
-									></span>
-									<span class="flex min-w-0 flex-col">
-										<span class="truncate text-sm font-medium">{row.label}</span>
-										<span
-											class="text-xs {row.statusWarn
-												? 'text-status-warning'
-												: 'text-muted-foreground'}"
-											data-testid={`source-network-ingest-status-${row.protocol}`}
-										>
-											{row.statusLabel}
+							<div class="flex items-center gap-2">
+								<button
+									class="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition-colors {selected
+										? 'border-primary bg-primary/10'
+										: 'border-border hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+									data-selected={selected}
+									data-testid={source.origin === 'network'
+										? `source-network-ingest-select-${source.requiresGateway}`
+										: `source-select-${source.id}`}
+									disabled={disabled || isStreaming}
+									onclick={() => handleSelectSource(source)}
+									title={disabled ? rowReason(source) : undefined}
+									type="button"
+								>
+									<span class="flex min-w-0 items-center gap-2.5">
+										<RowIcon
+											aria-hidden={true}
+											class="size-4 shrink-0 {selected ? 'text-primary' : 'text-muted-foreground'}"
+										/>
+										<span class="flex min-w-0 flex-col">
+											<span class="truncate text-sm font-medium" data-testid={`source-row-name-${source.id}`}>
+												{rowLabel(source)}
+											</span>
+											{#if source.origin === 'network'}
+												<span
+													class="text-xs {source.available ? 'text-muted-foreground' : 'text-status-warning'}"
+													data-testid={`source-network-ingest-status-${source.requiresGateway}`}
+												>
+													{source.available
+														? $LL.live.networkIngest.active()
+														: $LL.live.networkIngest.inactive()}
+												</span>
+											{/if}
 										</span>
 									</span>
-								</span>
-								<span class="flex shrink-0 items-center gap-1.5">
-									{#if row.supportsAudio}
-										<span
-											class="bg-primary/10 text-primary inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
-											data-testid={`source-network-audio-${row.protocol}`}
-										>
-											<Volume2 aria-hidden={true} class="size-3" />
-											{$LL.live.networkIngest.includesAudio()}
-										</span>
-									{/if}
-									{#if row.selected}
-										<span
-											class="text-primary inline-flex items-center gap-1 text-xs font-semibold"
-										>
-											<Check aria-hidden={true} class="size-4" />
-											{$LL.live.networkIngest.selected()}
-										</span>
-									{/if}
-								</span>
-							</button>
+									<span class="flex shrink-0 items-center gap-1.5">
+										{#if source.origin === 'capture'}
+											<span
+												class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-xs font-medium"
+												data-source-kind={source.kind}
+												data-testid={`source-kind-${source.id}`}
+											>
+												{kindLabel(source.kind)}
+											</span>
+											{#if source.lost}
+												<span
+													class="bg-destructive/15 text-destructive inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+												>
+													<TriangleAlert aria-hidden={true} class="size-3" />
+													{$LL.live.inputPicker.lost()}
+												</span>
+											{/if}
+										{/if}
+										{#if source.origin === 'network' && source.supportsAudio}
+											<span
+												class="bg-primary/10 text-primary inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
+												data-testid={`source-network-audio-${source.requiresGateway}`}
+											>
+												<Volume2 aria-hidden={true} class="size-3" />
+												{$LL.live.networkIngest.includesAudio()}
+											</span>
+										{/if}
+										{#if selected}
+											<span class="text-primary inline-flex items-center gap-1 text-xs font-semibold">
+												<Check aria-hidden={true} class="size-4" />
+												{$LL.live.inputPicker.selected()}
+											</span>
+										{/if}
+									</span>
+								</button>
 
-							{#if row.reason}
+								<!-- Capture-row trailing action. While STREAMING the row is a live
+								     input switch (onSwitch → LiveView switchInput); while IDLE it is
+								     the source-priority reorder affordance (≥2 capture sources). -->
+								{#if source.origin === 'capture'}
+									{#if isStreaming}
+										<Button
+											aria-label={`${$LL.live.inputPicker.switch()} \u2013 ${source.displayName}`}
+											data-switch-input={source.id}
+											disabled={source.id === activeInput ||
+												source.id === switchingInput ||
+												source.lost === true}
+											onclick={() => onSwitch?.(source.id)}
+											size="sm"
+											variant={source.id === activeInput ? 'secondary' : 'default'}
+										>
+											{#if source.id === switchingInput}
+												{$LL.live.inputPicker.switching()}
+											{:else if source.id === activeInput}
+												{$LL.live.inputPicker.active()}
+											{:else}
+												{$LL.live.inputPicker.switch()}
+											{/if}
+										</Button>
+									{:else if canReorder}
+										<div class="flex shrink-0 flex-col gap-1" data-testid={`source-reorder-${source.id}`}>
+											<Button
+												aria-label={$LL.live.sourcePreference.moveUp({ name: source.displayName })}
+												class="size-9"
+												data-move-up={source.id}
+												disabled={capRank <= 0}
+												onclick={() => onReorderSource?.(source.id, 'up')}
+												size="icon"
+												variant="outline"
+											>
+												<ChevronUp aria-hidden={true} class="size-4" />
+											</Button>
+											<Button
+												aria-label={$LL.live.sourcePreference.moveDown({ name: source.displayName })}
+												class="size-9"
+												data-move-down={source.id}
+												disabled={capRank === orderedCaptures.length - 1}
+												onclick={() => onReorderSource?.(source.id, 'down')}
+												size="icon"
+												variant="outline"
+											>
+												<ChevronDown aria-hidden={true} class="size-4" />
+											</Button>
+										</div>
+									{/if}
+								{/if}
+							</div>
+
+							{#if source.origin === 'network' && !source.available}
 								<p
 									class="text-status-warning mt-1 text-xs"
-									data-testid={`source-network-ingest-reason-${row.protocol}`}
+									data-testid={`source-network-ingest-reason-${source.requiresGateway}`}
 								>
-									{row.reason}
+									{rowReason(source)}
 								</p>
 							{/if}
 
-							{#if row.showInstructions && row.url}
+							{#if source.origin === 'network' && source.url}
 								<details class="group mt-1.5">
 									<summary
 										class="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 text-xs font-medium select-none"
-										data-testid={`source-network-ingest-instructions-toggle-${row.protocol}`}
+										data-testid={`source-network-ingest-instructions-toggle-${source.requiresGateway}`}
 									>
 										<QrCode aria-hidden={true} class="size-3.5" />
 										{$LL.live.networkIngest.instructionsToggle()}
 									</summary>
 									<div
 										class="bg-muted/40 mt-2 flex flex-col items-center gap-3 rounded-lg border p-4"
-										data-testid={`source-network-ingest-instructions-${row.protocol}`}
+										data-testid={`source-network-ingest-instructions-${source.requiresGateway}`}
 									>
-										{#if networkQrDataUrls[row.protocol]}
+										{#if networkQrDataUrls[source.id]}
 											<img
 												class="size-40 rounded-md bg-white p-2"
 												alt={$LL.live.networkIngest.qrLabel()}
-												data-testid={`source-network-ingest-qr-${row.protocol}`}
-												src={networkQrDataUrls[row.protocol]}
+												data-testid={`source-network-ingest-qr-${source.requiresGateway}`}
+												src={networkQrDataUrls[source.id]}
 											/>
 										{/if}
 										<div class="flex w-full items-center gap-2">
 											<!-- dir="ltr": the URL is always Latin/ASCII; never mirror it. -->
 											<code
 												class="bg-background min-w-0 flex-1 truncate rounded-md border px-2.5 py-2 font-mono text-xs"
-												data-testid={`source-network-ingest-url-${row.protocol}`}
+												data-testid={`source-network-ingest-url-${source.requiresGateway}`}
 												dir="ltr"
 											>
-												{row.url}
+												{source.url}
 											</code>
 											<Button
 												aria-label={$LL.live.networkIngest.copy()}
-												data-testid={`source-network-ingest-copy-${row.protocol}`}
-												onclick={() => copyNetworkIngestUrl(row.url)}
+												data-testid={`source-network-ingest-copy-${source.requiresGateway}`}
+												onclick={() => copyNetworkIngestUrl(source.url)}
 												size="icon"
 												title={$LL.live.networkIngest.copy()}
 												variant="outline"

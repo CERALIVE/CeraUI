@@ -19,7 +19,6 @@ import type {
 	ActiveEncode,
 	AudioSource,
 	CapabilitiesMessage,
-	CaptureDevice,
 	ConfigMessage,
 	NetifMessage,
 	NetworkIngest,
@@ -31,7 +30,6 @@ import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
-import type { FailoverEvent } from '$lib/streaming/source-preference';
 import { LL } from '@ceraui/i18n/svelte';
 import { PictureInPicture2, Shuffle, Volume2 } from '@lucide/svelte';
 
@@ -59,28 +57,21 @@ interface Props {
 	onGoNetwork: () => void;
 	onOpenServer: () => void;
 	onOpenEncoder: () => void;
-	// ── SourceSection: video ───────────────────────────────────────────────────
-	devices: CaptureDevice[];
+	// ── SourceSection: unified device-first source list + audio (Task 13) ──────
+	// The live input switch (streaming-only capture-row affordance) still routes
+	// through LiveView; SourceSection forwards it on its capture rows.
 	activeInput: string | undefined;
-	selectedInput: string | undefined;
 	switchingInput: string | undefined;
-	audioLiveSwitchEnabled: boolean;
-	audioLiveSwitchField: string;
-	onSelect: (id: string) => void;
 	onSwitch: (id: string) => void;
-	// ── SourceSection: audio ───────────────────────────────────────────────────
 	audioSources: string[];
 	audioSourceList: AudioSource[] | undefined;
 	selectedAudioSource: string | undefined;
 	onSelectAudioSource: (id: string) => void;
-	// ── SourceSection: network-ingest + capability + active-config ─────────────
+	// `selectedPipeline` still drives the roadmap's embedded-audio pill below.
 	selectedPipeline: string | undefined;
-	onSelectNetworkIngest: (pipelineId: string) => void;
 	capabilities: CapabilitiesMessage | undefined;
 	activeEncode: ActiveEncode | null;
-	// ── SourceSection: source preference + fallback ────────────────────────────
 	sourceOrder: string[];
-	sourceFailover: FailoverEvent | null;
 	sourcePreferenceField: string;
 	onReorderSource: (id: string, direction: 'up' | 'down') => void;
 }
@@ -104,24 +95,17 @@ const {
 	onGoNetwork,
 	onOpenServer,
 	onOpenEncoder,
-	devices,
 	activeInput,
-	selectedInput,
 	switchingInput,
-	audioLiveSwitchEnabled,
-	audioLiveSwitchField,
-	onSelect,
 	onSwitch,
 	audioSources,
 	audioSourceList,
 	selectedAudioSource,
 	onSelectAudioSource,
 	selectedPipeline,
-	onSelectNetworkIngest,
 	capabilities,
 	activeEncode,
 	sourceOrder,
-	sourceFailover,
 	sourcePreferenceField,
 	onReorderSource,
 }: Props = $props();
@@ -175,29 +159,20 @@ const audioEmbeddedComingSoon = $derived(
 	</details>
 
 	<SourceSection
-		{activeInput}
 		{activeEncode}
-		{audioLiveSwitchField}
-		{audioLiveSwitchEnabled}
+		{activeInput}
 		{audioSourceList}
 		{audioSources}
 		{capabilities}
 		{config}
-		{devices}
 		{isStreaming}
-		{networkIngest}
 		onReorderSource={onReorderSource}
-		onSelect={onSelect}
 		onSelectAudioSource={onSelectAudioSource}
-		onSelectNetworkIngest={onSelectNetworkIngest}
 		onSwitch={onSwitch}
-		{pipelines}
 		{selectedAudioSource}
-		{selectedPipeline}
-		{selectedInput}
-		{sourceFailover}
 		{sourceOrder}
 		{sourcePreferenceField}
+		{sources}
 		{switchingInput}
 	/>
 

@@ -44,11 +44,7 @@ import {
 	kindBadgeLabelKey,
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
-import {
-	deriveFailover,
-	normalizeOrder,
-	reorderSource,
-} from '$lib/streaming/source-preference';
+import { normalizeOrder, reorderSource } from '$lib/streaming/source-preference';
 import { navElements } from '$lib/config';
 import {
 	getActiveInput,
@@ -138,33 +134,17 @@ $effect(() => {
 	}
 });
 
-// Hotplug input picker (Task 34). The pipeline picker (EncoderDialog) is
-// untouched.
+// Live capture devices (Task 34) — the source-preference order is reconciled
+// against this list; the unified source picker (SourceSection) reads the folded
+// `getSources()` broadcast and owns config.source selection itself (Task 13).
 const devices = $derived(getDevices());
 const activeInput = $derived(getActiveInput());
-let selectedInput = $state<string | undefined>(undefined);
-// Seed the pre-start input pick from the persisted config (Todo 26). Reconcile
-// ONLY when the persisted value genuinely changes so an unrelated `config`
-// broadcast — or a stale echo during an in-flight optimistic pick — can never
-// clobber the just-selected value. `lastPersistedInput` is intentionally NOT a
-// rune: writing it inside the effect tracks only `config?.selected_video_input`,
-// never `selectedInput`, so the optimistic assignment below is preserved.
-let lastPersistedInput: string | undefined;
-$effect(() => {
-	const persisted = config?.selected_video_input;
-	if (persisted !== lastPersistedInput) {
-		lastPersistedInput = persisted;
-		selectedInput = persisted;
-	}
-});
 let switchingInput = $state<string | undefined>(undefined);
 
 // Reconnect-aware reconciliation (Task 15): a live `switchInput` restarts the
 // pipeline, which can drop and replace the WebSocket — orphaning the in-flight
-// RPC so its `finally` never clears `switchingInput`. Watch the authoritative
-// connection state and, on the reconnect edge (→ connected), drop a stuck latch
-// so the picker reconciles to the server-reported `activeInput` instead of a
-// stale optimistic "switching" state.
+// RPC so its `finally` never clears `switchingInput`. On the reconnect edge drop
+// a stuck latch so the picker reconciles to the server-reported `activeInput`.
 let prevConnection = $state(getConnectionState());
 $effect(() => {
 	const next = getConnectionState();
@@ -173,20 +153,22 @@ $effect(() => {
 });
 
 // Sole gate for the live audio-switch affordance (G2): the engine capability
-// flag, never a version string. False in Track 1, so audio sources render a
-// disabled "coming soon" affordance and can never be live-switched.
+// flag, never a version string. Guards handleSwitchInput/handleSwitchAudio so a
+// live audio source switch can never be dispatched when the engine can't honor it.
 const audioLiveSwitchEnabled = $derived(isAudioLiveSwitchEnabled(getCapabilities()));
 
 // One per-field sync key drives the audio-switch applying/applied/failed glyph
-// in the picker (Task 5 machine), regardless of which audio source is targeted.
+// (Task 5 machine), regardless of which audio source is targeted.
 const AUDIO_SWITCH_FIELD = 'audio_switch';
 
+// Live input switch (Task 34/25): dispatched from the unified source list's
+// capture rows WHILE streaming (SourceSection `onSwitch`). Routes through the
+// keyed async-operation machine for the in-flight phase + re-entry guard; an
+// `audio:*` id is delegated to the gated switchAudio path.
 async function handleSwitchInput(inputId: string) {
-	// Defense-in-depth: the audio Switch button in InputPicker is already
-	// disabled-with-reason when the capability is off, so this path is normally
-	// unreachable. If it is somehow reached, surface a calm, user-visible reason
-	// via a toast and refuse to dispatch — the engine would otherwise reject the
-	// live audio:* switch with DeviceNotFound.
+	// Defense-in-depth: the live-switch affordance is disabled-with-reason when
+	// the capability is off. If it is somehow reached, surface a calm reason and
+	// refuse — the engine would otherwise reject the live audio:* switch.
 	if (!canLiveSwitchInput(inputId, audioLiveSwitchEnabled)) {
 		toast.warning($LL.live.inputPicker.audioSwitchUnavailable());
 		return;
@@ -197,12 +179,6 @@ async function handleSwitchInput(inputId: string) {
 	}
 	switchingInput = inputId;
 	try {
-		// The live input switch routes through the keyed async-operation machine
-		// (key 'switch-input') for the re-entry guard + in-flight `pending` phase.
-		// `classify` keeps every resolved verdict `ok` so osCommand never emits its
-		// generic toast — the picker keeps its nuanced switched/source-lost/failed
-		// feedback below — and we drive the confirmed/failed phase by hand. Only a
-		// thrown RPC toasts (via `failMessage`).
 		const res = await osCommand({
 			key: 'switch-input',
 			target: inputId,
@@ -255,56 +231,12 @@ async function handleSwitchAudio(inputId: string) {
 	}
 }
 
-// Pre-start input pick is a REAL persisted config write (Todo 26): the operator's
-// idle selection rides `selected_video_input` through the same per-field-sync
-// lock contract as the other config edits (handleReorderSource/handleSwitchAudio),
-// so it survives a reload and is forwarded to the engine at stream start (Todo 18).
-// This is the IDLE pick path only — live input switching stays handleSwitchInput.
-const SELECTED_INPUT_FIELD = 'selected_video_input';
-
-async function handleSelectInput(inputId: string) {
-	if (inputId === selectedInput) return;
-	selectedInput = inputId; // optimistic — the field-sync lock guards the echo
-	beginFieldSync(SELECTED_INPUT_FIELD, inputId);
-	markFieldApplying(SELECTED_INPUT_FIELD);
-	try {
-		await rpc.streaming.setConfig({ selected_video_input: inputId });
-		markFieldApplied(SELECTED_INPUT_FIELD, inputId);
-	} catch {
-		// Rejected — release the lock to the authoritative value and revert the
-		// optimistic pick to whatever the server actually holds.
-		markFieldFailed(SELECTED_INPUT_FIELD, config?.selected_video_input);
-		selectedInput = config?.selected_video_input;
-		toast.error($LL.notifications.saveFailed());
-	}
-}
-
-// Selecting a network-ingest source (rtmp/srt) sets config.pipeline through the
-// same per-field-sync lock NetworkIngestSection uses, so both surfaces dispatch
-// identically and release the lock to the SERVER-applied value.
-const PIPELINE_FIELD = 'pipeline';
-
-async function handleSelectNetworkIngest(pipelineId: string) {
-	if (pipelineId === config?.pipeline) return;
-	beginFieldSync(PIPELINE_FIELD, pipelineId);
-	markFieldApplying(PIPELINE_FIELD);
-	try {
-		const result = await rpc.streaming.setConfig({ pipeline: pipelineId });
-		const applied =
-			(result as { applied?: { pipeline?: string } }).applied?.pipeline ?? pipelineId;
-		markFieldApplied(PIPELINE_FIELD, applied);
-	} catch {
-		markFieldFailed(PIPELINE_FIELD, config?.pipeline);
-		toast.error($LL.notifications.saveFailed());
-	}
-}
-
-// Operator-ordered source preference (Task 11). Display order is the persisted
-// preference reconciled against the live device list; the engine's auto-failover
-// is sticky and does NOT consult this order.
+// Operator-ordered source preference (Task 11): the reorder affordance is now
+// rendered inline on the capture rows of SourceSection (Task 13), but the write
+// stays here. Display order is the persisted preference reconciled against the
+// live device list; the engine's auto-failover is sticky and ignores this order.
 const SOURCE_PREFERENCE_FIELD = 'source_preference';
 const sourceOrder = $derived(normalizeOrder(devices, config?.source_preference));
-const sourceFailover = $derived(deriveFailover(sourceOrder, devices, activeInput));
 
 async function handleReorderSource(inputId: string, direction: 'up' | 'down') {
 	const current = normalizeOrder(devices, config?.source_preference);
@@ -772,24 +704,17 @@ const configRows = $derived<ConfigRow[]>([
 			onGoNetwork={handleManageLinks}
 			onOpenServer={() => (serverDialogOpen = true)}
 			onOpenEncoder={() => (encoderOpen = true)}
-			{devices}
 			{activeInput}
-			{selectedInput}
 			{switchingInput}
-			{audioLiveSwitchEnabled}
-			audioLiveSwitchField={AUDIO_SWITCH_FIELD}
-			onSelect={handleSelectInput}
 			onSwitch={handleSwitchInput}
 			{audioSources}
 			{audioSourceList}
 			selectedAudioSource={effectiveAudioSource}
 			onSelectAudioSource={handleSelectAudioSource}
 			selectedPipeline={config?.pipeline}
-			onSelectNetworkIngest={handleSelectNetworkIngest}
 			capabilities={getCapabilities()}
 			activeEncode={getStatus()?.active_encode ?? null}
 			{sourceOrder}
-			{sourceFailover}
 			sourcePreferenceField={SOURCE_PREFERENCE_FIELD}
 			onReorderSource={handleReorderSource}
 		/>
