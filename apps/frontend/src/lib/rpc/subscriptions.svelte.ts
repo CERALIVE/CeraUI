@@ -22,6 +22,7 @@ import type {
 	RelayMessage,
 	Revisions,
 	SensorsStatus,
+	SourcesMessage,
 	StatusResponse,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
@@ -111,6 +112,9 @@ let sensorsState = $state<SensorsStatus | undefined>(undefined);
 let revisionsState = $state<Revisions | undefined>(undefined);
 let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
 let capabilitiesState = $state<CapabilitiesMessage | undefined>(undefined);
+// Device-first unified source list (Wave 2, T6). Fed by the `sources` broadcast
+// (backend T2) — the SAME seq/post-login-snapshot machinery as `pipelines`.
+let sourcesState = $state<SourcesMessage | undefined>(undefined);
 let audioCodecsState = $state<Record<string, { name: string }> | undefined>(
 	undefined,
 );
@@ -217,6 +221,10 @@ export function getPipelines() {
 
 export function getCapabilities() {
 	return capabilitiesState;
+}
+
+export function getSources(): SourcesMessage | undefined {
+	return sourcesState;
 }
 
 export function getAudioCodecs() {
@@ -350,6 +358,7 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			// Status-owned toggles (BondToggle / AsyncSwitch) register their own
 			// fields in T14, so this merge is left untouched to avoid double-guarding.
 			const statusData = data as StatusResponse;
+			const wasStreaming = isStreamingState;
 
 			// Update individual states
 			if (statusData.is_streaming !== undefined) {
@@ -372,6 +381,14 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			}
 			if (statusData.linkTelemetry !== undefined) {
 				linkTelemetryState = statusData.linkTelemetry;
+			}
+			// Belt-and-braces telemetry clear on a true→false streaming transition.
+			// The T5 backend contract already null-broadcasts linkTelemetry on the
+			// next heartbeat after stop, but a `{is_streaming:false}` frame that omits
+			// linkTelemetry would otherwise leave a stale bond on the HUD/IngestStats
+			// until that tick. Clearing here defensively closes that gap.
+			if (wasStreaming && isStreamingState === false) {
+				linkTelemetryState = null;
 			}
 			// Store-and-forward buffering rides the engine `status` event bus (NOT
 			// device-stats). undefined = no buffering field this frame (no-op).
@@ -519,6 +536,12 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 		case "capabilities":
 			if (data && typeof data === "object") {
 				capabilitiesState = data as CapabilitiesMessage;
+			}
+			break;
+
+		case "sources":
+			if (data && typeof data === "object") {
+				sourcesState = data as SourcesMessage;
 			}
 			break;
 
@@ -783,6 +806,7 @@ export function resetState(): void {
 	revisionsState = undefined;
 	pipelinesState = undefined;
 	capabilitiesState = undefined;
+	sourcesState = undefined;
 	audioCodecsState = undefined;
 	relaysState = undefined;
 	managedIngestState = [];

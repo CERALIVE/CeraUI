@@ -63,7 +63,9 @@ export function deriveHudState(
 	return {
 		isStreaming: sources.isStreaming,
 		isStreamingStale: streamingStale,
-		bitrateKbps: sources.config?.max_br ?? null,
+		// Live-Data Discipline (T6): bitrate is a live streaming value, so it must
+		// not persist a stale number from the last session once the stream stops.
+		bitrateKbps: sources.isStreaming ? (sources.config?.max_br ?? null) : null,
 		isBitrateStale: streamingStale,
 
 		links: buildLinks(
@@ -74,6 +76,7 @@ export function deriveHudState(
 			wifiStale,
 			isFullyStale,
 			staleInterfaces,
+			sources.isStreaming,
 		),
 
 		staleInterfaces,
