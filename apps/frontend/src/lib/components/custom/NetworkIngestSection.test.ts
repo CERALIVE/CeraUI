@@ -129,6 +129,88 @@ describe("NetworkIngestSection — active gateway is selectable + locks via fiel
 			getByTestId("network-ingest-select-srt").getAttribute("data-selected"),
 		).toBe("true");
 	});
+
+	it("releases the field lock to result.applied.pipeline, not the optimistic value", async () => {
+		// The backend applies a DIFFERENT pipeline than the one we sent (e.g., due to
+		// clamping or validation). The lock must release to the applied value.
+		setConfig.mockResolvedValue({
+			success: true,
+			is_streaming: false,
+			applied: { pipeline: "srt" }, // Different from the requested "rtmp"
+		} as never);
+
+		const { getByTestId } = render(NetworkIngestSection, {
+			props: {
+				networkIngest: bothActive(),
+				pipelines: PIPELINES,
+				selectedPipeline: undefined,
+				isStreaming: false,
+			},
+		});
+
+		const row = getByTestId("network-ingest-select-rtmp") as HTMLButtonElement;
+		await fireEvent.click(row);
+
+		await waitFor(() =>
+			expect(setConfig).toHaveBeenCalledWith({ pipeline: "rtmp" }),
+		);
+		// The lock releases to the SERVER-applied value ("srt"), not the optimistic "rtmp".
+		await waitFor(() => expect(getFieldState("pipeline")).toBe("applied"));
+	});
+
+	it("marks field failed when setConfig rejects (success:false)", async () => {
+		setConfig.mockResolvedValue({
+			success: false,
+			error: "unknown_pipeline",
+			is_streaming: false,
+		} as never);
+
+		const { getByTestId } = render(NetworkIngestSection, {
+			props: {
+				networkIngest: bothActive(),
+				pipelines: PIPELINES,
+				selectedPipeline: "hdmi", // Prior value
+				isStreaming: false,
+			},
+		});
+
+		const row = getByTestId("network-ingest-select-rtmp") as HTMLButtonElement;
+		await fireEvent.click(row);
+
+		await waitFor(() =>
+			expect(setConfig).toHaveBeenCalledWith({ pipeline: "rtmp" }),
+		);
+		// Rejected response → field lock reverts to the prior value and marks failed.
+		await waitFor(() => expect(getFieldState("pipeline")).toBe("failed"));
+		expect(toastError).toHaveBeenCalled();
+	});
+
+	it("marks field failed when setConfig succeeds but omits applied.pipeline", async () => {
+		setConfig.mockResolvedValue({
+			success: true,
+			is_streaming: false,
+			applied: {}, // Missing the pipeline field
+		} as never);
+
+		const { getByTestId } = render(NetworkIngestSection, {
+			props: {
+				networkIngest: bothActive(),
+				pipelines: PIPELINES,
+				selectedPipeline: "hdmi", // Prior value
+				isStreaming: false,
+			},
+		});
+
+		const row = getByTestId("network-ingest-select-rtmp") as HTMLButtonElement;
+		await fireEvent.click(row);
+
+		await waitFor(() =>
+			expect(setConfig).toHaveBeenCalledWith({ pipeline: "rtmp" }),
+		);
+		// Success but missing applied field → treat as failure, revert to prior value.
+		await waitFor(() => expect(getFieldState("pipeline")).toBe("failed"));
+		expect(toastError).toHaveBeenCalled();
+	});
 });
 
 describe("NetworkIngestSection — inactive gateway is disabled-with-reason", () => {

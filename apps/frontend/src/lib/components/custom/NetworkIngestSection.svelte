@@ -142,13 +142,17 @@ async function handleSelect(row: IngestRow): Promise<void> {
 	markFieldApplying(PIPELINE_FIELD);
 	try {
 		const result = await rpc.streaming.setConfig({ pipeline: row.pipelineId });
-		// Release the lock to the SERVER-APPLIED value, never the intended one.
-		const applied =
-			(result as Partial<StreamingSetConfigOutput>).applied?.pipeline ??
-			row.pipelineId;
-		markFieldApplied(PIPELINE_FIELD, applied);
+		// Release the lock to the SERVER-APPLIED value (`result.applied.pipeline`),
+		// never the optimistic id we sent. A rejected setConfig (`success:false`) or a
+		// success that omits the field is NOT a confirmed apply: revert the lock to
+		// the prior config value and surface the same calm error the catch path does.
+		if (result.success && result.applied?.pipeline !== undefined) {
+			markFieldApplied(PIPELINE_FIELD, result.applied.pipeline);
+		} else {
+			markFieldFailed(PIPELINE_FIELD, selectedPipeline);
+			toast.error($LL.notifications.saveFailed());
+		}
 	} catch {
-		// Rejected — release the lock back to the authoritative (prior) value.
 		markFieldFailed(PIPELINE_FIELD, selectedPipeline);
 		toast.error($LL.notifications.saveFailed());
 	}
