@@ -25,7 +25,10 @@ import type { LinkTelemetryMessage } from "../../modules/streaming/link-telemetr
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
 import {
 	buildMockAudioDevices,
+	buildMockCapsFullDeviceModes,
 	buildMockDeviceModes,
+	CAPS_FULL_DEVICE_DISPLAY_NAMES,
+	DEFAULT_DEVICE_DISPLAY_NAMES,
 } from "../fixture-factory.ts";
 import { mockWifiRadios, type ScenarioCapabilities } from "../mock-config.ts";
 import type { MockAudioDevices, MockDeviceModes } from "../mock-schemas.ts";
@@ -54,6 +57,11 @@ const FULL_PROFILE_CAPABILITIES: GetCapabilitiesResult = {
 		codecs: ["H264", "H265"],
 		bitrate_range: { min: 1000, max: 12000, unit: "kbps" },
 	},
+	// Production-realistic offering (mirrors the on-device pipeline registry): an
+	// HDMI-RX + a UVC/USB (libuvch264) capture source, the two LAN network-ingest
+	// sources (rtmp/srt), and the test pattern. libuvch264 is required so a uvc_h264
+	// device bridges to a coarse entry (else buildSources drops it); rtmp/srt are the
+	// source-kind advertisement network-ingest.ts reads to emit non-null LAN slots.
 	sources: [
 		{
 			id: "hdmi",
@@ -62,6 +70,30 @@ const FULL_PROFILE_CAPABILITIES: GetCapabilitiesResult = {
 			supports_framerate_override: true,
 			default_resolution: "1920x1080",
 			default_framerate: 60,
+		},
+		{
+			id: "libuvch264",
+			supports_audio: true,
+			supports_resolution_override: true,
+			supports_framerate_override: true,
+			default_resolution: "1920x1080",
+			default_framerate: 30,
+		},
+		{
+			id: "rtmp",
+			supports_audio: true,
+			supports_resolution_override: false,
+			supports_framerate_override: false,
+			default_resolution: "1920x1080",
+			default_framerate: 30,
+		},
+		{
+			id: "srt",
+			supports_audio: true,
+			supports_resolution_override: false,
+			supports_framerate_override: false,
+			default_resolution: "1920x1080",
+			default_framerate: 30,
 		},
 		{
 			id: "test",
@@ -158,11 +190,14 @@ function framerateToFraction(fps: number): string {
 // Expand a folded `device_modes` map back into a `list-devices` result: each mode's
 // {width,height} × its rung framerates becomes the CaptureCap cross-product the
 // engine emits, so the capability service's fold reproduces the exact source map.
-function expandDeviceModes(modes: MockDeviceModes): ListDevicesResult {
+function expandDeviceModes(
+	modes: MockDeviceModes,
+	displayNames: Record<string, string> = {},
+): ListDevicesResult {
 	const devices = Object.entries(modes).map(([inputId, group], index) => ({
 		input_id: inputId,
 		device_path: `/dev/video${index}`,
-		display_name: `${inputId} capture`,
+		display_name: displayNames[inputId] ?? `${inputId} capture`,
 		media_class: "video" as const,
 		...(group.kind !== undefined
 			? { kind: group.kind as CaptureDeviceKind }
@@ -181,15 +216,34 @@ function expandDeviceModes(modes: MockDeviceModes): ListDevicesResult {
 	return { devices };
 }
 
-// Per-scenario device modes: a setMockEngineCapabilities({ deviceModes }) override
-// wins; otherwise a full-engine-profile scenario advertises the default fixture and
-// every other scenario reports none (coarse caps).
-function resolveScenarioDeviceModes(): MockDeviceModes {
+interface ScenarioDeviceFixtures {
+	modes: MockDeviceModes;
+	displayNames: Record<string, string>;
+}
+
+// Per-scenario device fixtures: a setMockEngineCapabilities({ deviceModes }) override
+// wins (auto-generated names — no realistic labels supplied); otherwise caps-full
+// advertises the two-dongle disambiguation set, every other full-engine-profile
+// scenario advertises the default HDMI + RØDE fixture, and every non-full scenario
+// reports none (coarse caps).
+function resolveScenarioDeviceFixtures(): ScenarioDeviceFixtures {
 	const profile = resolveScenarioCapabilities();
 	if (profile.deviceModes) {
-		return profile.deviceModes;
+		return { modes: profile.deviceModes, displayNames: {} };
 	}
-	return profile.fullProfile ? buildMockDeviceModes() : {};
+	if (!profile.fullProfile) {
+		return { modes: {}, displayNames: {} };
+	}
+	if (getActiveScenario() === "caps-full") {
+		return {
+			modes: buildMockCapsFullDeviceModes(),
+			displayNames: CAPS_FULL_DEVICE_DISPLAY_NAMES,
+		};
+	}
+	return {
+		modes: buildMockDeviceModes(),
+		displayNames: DEFAULT_DEVICE_DISPLAY_NAMES,
+	};
 }
 
 /**
@@ -204,7 +258,8 @@ export function getMockEngineDevices(): ListDevicesResult {
 	if (!shouldUseMocks()) {
 		return { devices: [] };
 	}
-	return expandDeviceModes(resolveScenarioDeviceModes());
+	const { modes, displayNames } = resolveScenarioDeviceFixtures();
+	return expandDeviceModes(modes, displayNames);
 }
 
 /**

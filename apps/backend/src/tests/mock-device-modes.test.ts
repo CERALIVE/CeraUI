@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { buildMockDeviceModes } from "../mocks/fixture-factory.ts";
+import {
+	buildMockCapsFullDeviceModes,
+	buildMockDeviceModes,
+} from "../mocks/fixture-factory.ts";
 import {
 	getMockState,
 	initMockService,
@@ -55,10 +58,10 @@ async function resolveLikeBoot() {
 }
 
 describe("mock device_modes — scenario seeding through the real fold", () => {
-	test("caps-full seeds the default HDMI + USB device_modes", async () => {
+	test("caps-full seeds the two-dongle HDMI + dual-uvc device_modes", async () => {
 		bootMockScenario("caps-full");
 		const result = await resolveLikeBoot();
-		expect(result.device_modes).toEqual(buildMockDeviceModes());
+		expect(result.device_modes).toEqual(buildMockCapsFullDeviceModes());
 	});
 
 	test("multi-modem-wifi (dev default) also seeds device_modes", async () => {
@@ -85,7 +88,7 @@ describe("mock device_modes — getMockEngineDevices expansion", () => {
 	test("expands the seeded modes into a foldable list-devices result", () => {
 		bootMockScenario("caps-full");
 		const { devices } = getMockEngineDevices();
-		expect(devices.map((d) => d.input_id)).toEqual(["hdmi", "usb"]);
+		expect(devices.map((d) => d.input_id)).toEqual(["hdmi", "usb", "usb2"]);
 		const hdmi = devices[0];
 		expect(hdmi?.kind).toBe("hdmi");
 		expect(hdmi?.media_class).toBe("video");
