@@ -47,6 +47,11 @@ export function modemConnectionState(
  * Ordering is stable: wifi interfaces first (so wifi takes `linkIndex` 0 when
  * present), then modems, then ethernet in record order. The list is capped at
  * {@link MAX_LINKS} and `linkIndex` is the 0-based position.
+ *
+ * `isStreaming` gates live throughput: identity, signal, and connectivity are
+ * always derived, but per-link `throughputKbps` is zeroed when not streaming so
+ * the HUD never persists a stale bitrate from the last session (Live-Data
+ * Discipline, T6).
  */
 export function buildLinks(
 	modems: ModemList | undefined,
@@ -56,12 +61,13 @@ export function buildLinks(
 	wifiStale: boolean,
 	fullyStale: boolean,
 	staleIds: Set<string> = new Set(),
+	isStreaming = true,
 ): LinkSignal[] {
 	const links: LinkSignal[] = [];
 	const netifEntries = netif ?? {};
 
 	const throughputFor = (id: string): number =>
-		convertBytesToKbids(netifEntries[id]?.tp ?? 0);
+		isStreaming ? convertBytesToKbids(netifEntries[id]?.tp ?? 0) : 0;
 	const enabledFor = (id: string): boolean => netifEntries[id]?.enabled ?? true;
 
 	for (const [key, iface] of Object.entries(wifi ?? {})) {
@@ -120,7 +126,7 @@ export function buildLinks(
 			label: ifname,
 			isConnected: true,
 			isStale: fullyStale || staleIds.has(ifname),
-			throughputKbps: convertBytesToKbids(entry.tp ?? 0),
+			throughputKbps: throughputFor(ifname),
 			enabled: entry.enabled,
 			connectionState: "connected",
 		});

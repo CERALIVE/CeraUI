@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 /**
- * EncoderDialog — capability-first independent axes (Todo 10).
+ * EncoderDialog — pure-encoding, source-tolerant axes (Todo 14).
  *
- * Proves the Resolution/Framerate axes are gated through `offeredAxes`
- * (platform ∩ selected source ∩ Tier-2 device modes), the current-vs-device-max
- * summary reflects the active source's real ceiling, and the no-caps path is
- * byte-compatible with an old engine that emits no `device_modes`.
+ * The dialog no longer selects a source: it reads the ACTIVE source from
+ * `getSources()` (keyed by the persisted `config.source`) and keys its
+ * Resolution/Framerate axes off that StreamSource's own `modes` through the
+ * source-keyed `offeredAxes(hardware, source)` (T16). With no active source
+ * (config lacking `source`/`pipeline` — a federated mount) the axes degrade to
+ * the platform-coarse offering. These tests prove the ceiling reflects the active
+ * source's modes, the source is a READ-ONLY context line (never a combobox), and
+ * the no-source path renders + saves without throwing.
  *
  * jsdom note: bits-ui Select items only mount when the Select is open, so the
  * primary axis-gating assertions read ALWAYS-rendered surfaces — the summary line
@@ -15,8 +19,10 @@
  */
 import type {
 	CapabilitiesMessage,
+	CaptureStreamSource,
+	CoarseStreamSource,
 	ConfigMessage,
-	Pipeline,
+	SourcesMessage,
 } from "@ceraui/rpc/schemas";
 import { fireEvent, render } from "@testing-library/svelte";
 import { tick } from "svelte";
@@ -39,7 +45,7 @@ const state = vi.hoisted(() => ({
 	capabilities: undefined as unknown,
 	config: undefined as unknown,
 	devices: undefined as unknown,
-	status: undefined as unknown,
+	sources: undefined as unknown,
 	isStreaming: false,
 }));
 
@@ -49,7 +55,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getDevices: () => state.devices,
 	getIsStreaming: () => state.isStreaming,
 	getConfig: () => state.config,
-	getStatus: () => state.status,
+	getSources: () => state.sources,
 }));
 
 vi.mock("$lib/components/streaming/StreamingUtils", () => ({
@@ -65,18 +71,54 @@ vi.mock("$lib/rpc", () => ({
 	},
 }));
 
-const HDMI_PIPELINE: Pipeline = {
-	name: "HDMI Capture",
-	description: "HDMI capture",
+// HDMI capture device driving 1080p@[30,60] + 2160p@[30]. The per-device modes
+// now live on the StreamSource itself (T16), not on `capabilities.device_modes`.
+const HDMI_SOURCE: CaptureStreamSource = {
+	id: "hdmi-0",
+	origin: "capture",
+	pipelineId: "hdmi",
+	kind: "hdmi",
+	displayName: "HDMI Capture",
+	devicePath: "/dev/video0",
+	modes: [
+		{ width: 1920, height: 1080, framerates: [30, 60] },
+		{ width: 3840, height: 2160, framerates: [30] },
+	],
 	supportsAudio: true,
 	supportsResolutionOverride: true,
 	supportsFramerateOverride: true,
 	defaultResolution: "1080p",
 	defaultFramerate: 30,
+	audioKind: "selectable",
+	available: true,
+};
+
+// A legacy/no-device-yet coarse source: empty modes → axes fall back to the
+// platform-coarse offering (byte-identical to an old engine with no device modes).
+const COARSE_HDMI: CoarseStreamSource = {
+	id: "hdmi",
+	origin: "coarse",
+	pipelineId: "hdmi",
+	labelKey: "settings.sources.hdmi",
+	modes: [],
+	supportsAudio: true,
+	supportsResolutionOverride: true,
+	supportsFramerateOverride: true,
+	defaultResolution: "1080p",
+	defaultFramerate: 30,
+	audioKind: "selectable",
+	available: true,
 };
 
 function pipelinesMessage(hardware: string) {
-	return { hardware, pipelines: { hdmi: HDMI_PIPELINE } };
+	return { hardware, pipelines: {} };
+}
+
+function sourcesMessage(
+	hardware: string,
+	sources: SourcesMessage["sources"],
+): SourcesMessage {
+	return { hardware, sources } as SourcesMessage;
 }
 
 function capsWith(
@@ -97,24 +139,12 @@ function capsWith(
 	};
 }
 
-// HDMI device driving 1080p@[30,60] + 2160p@[30].
-const HDMI_DEVICE_MODES = {
-	"/dev/video0": {
-		kind: "hdmi",
-		modes: [
-			{ width: 1920, height: 1080, framerates: [30, 60] },
-			{ width: 3840, height: 2160, framerates: [30] },
-		],
-	},
-};
-
 function seedConfig(partial: Partial<ConfigMessage> = {}): void {
-	state.config = { pipeline: "hdmi", ...partial } as ConfigMessage;
+	state.config = partial as ConfigMessage;
 }
 
 function encoderConfig(partial: Partial<EncoderConfig> = {}): EncoderConfig {
 	return {
-		source: "hdmi",
 		resolution: "1080p",
 		framerate: 30,
 		bitrate: 6000,
@@ -158,7 +188,7 @@ beforeEach(() => {
 	state.capabilities = undefined;
 	state.config = undefined;
 	state.devices = undefined;
-	state.status = undefined;
+	state.sources = undefined;
 	state.isStreaming = false;
 	vi.stubGlobal(
 		"VideoDecoder",
@@ -176,17 +206,18 @@ afterEach(() => {
 	document.body.innerHTML = "";
 });
 
-describe("EncoderDialog — capability-first axes", () => {
+describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 	it("caps-full: reaches the 4K/60 ceiling and enables H.265", () => {
 		state.pipelines = pipelinesMessage("rk3588");
-		state.capabilities = capsWith({ device_modes: HDMI_DEVICE_MODES });
-		seedConfig();
+		state.capabilities = capsWith();
+		state.sources = sourcesMessage("rk3588", [HDMI_SOURCE]);
+		seedConfig({ source: "hdmi-0", pipeline: "hdmi" });
 
 		render(EncoderDialog, {
 			props: { open: true, config: encoderConfig() },
 		});
 
-		// The current-vs-device-max summary reflects the device union ceiling.
+		// The current-vs-device-max summary reflects the active source's mode union.
 		expect(summaryText()).toContain("4K");
 		expect(summaryText()).toContain("60 fps");
 
@@ -197,8 +228,8 @@ describe("EncoderDialog — capability-first axes", () => {
 	});
 
 	it("engine-starting minimal floor: only 1080p + H.264", () => {
-		// Software floor board + an H.264-only, 1080p-capped capability snapshot,
-		// with NO device_modes — the minimal safe floor an engine emits while booting.
+		// Software floor board + an H.264-only, 1080p-capped capability snapshot; the
+		// active source is a coarse entry with empty modes — the minimal safe floor.
 		state.pipelines = pipelinesMessage("generic");
 		state.capabilities = capsWith({
 			platform: {
@@ -208,7 +239,8 @@ describe("EncoderDialog — capability-first axes", () => {
 			},
 			engineStarting: true,
 		});
-		seedConfig();
+		state.sources = sourcesMessage("generic", [COARSE_HDMI]);
+		seedConfig({ source: "hdmi", pipeline: "hdmi" });
 
 		render(EncoderDialog, {
 			props: { open: true, config: encoderConfig() },
@@ -228,9 +260,10 @@ describe("EncoderDialog — capability-first axes", () => {
 
 	it("device modes limit the selected resolution: 60 fps disabled at 4K with a reason title", async () => {
 		state.pipelines = pipelinesMessage("rk3588");
-		state.capabilities = capsWith({ device_modes: HDMI_DEVICE_MODES });
+		state.capabilities = capsWith();
+		state.sources = sourcesMessage("rk3588", [HDMI_SOURCE]);
 		// Select 4K (device drives it at 30 only) with 60 fps — an unsupported combo.
-		seedConfig({ resolution: "2160p", framerate: 60 });
+		seedConfig({ source: "hdmi-0", pipeline: "hdmi" });
 
 		render(EncoderDialog, {
 			props: {
@@ -263,11 +296,41 @@ describe("EncoderDialog — capability-first axes", () => {
 		}
 	});
 
-	it("no-caps fallback: every axis renders, gates coarsely, and saves (old-engine compatible)", () => {
-		// No capabilities snapshot at all (device_modes absent by construction) — the
-		// exact state an old engine leaves the dialog in.
+	it("renders the active source as a read-only context line, never a selector", () => {
+		state.pipelines = pipelinesMessage("rk3588");
+		state.capabilities = capsWith();
+		state.sources = sourcesMessage("rk3588", [HDMI_SOURCE]);
+		seedConfig({ source: "hdmi-0", pipeline: "hdmi" });
+
+		render(EncoderDialog, {
+			props: { open: true, config: encoderConfig() },
+		});
+
+		// The source is a read-only context line showing its real name + kind…
+		const active = document.body.querySelector(
+			'[data-testid="encoder-active-source"]',
+		);
+		expect(active).not.toBeNull();
+		expect(active?.getAttribute("data-source-id")).toBe("hdmi-0");
+		expect(active?.textContent).toContain("HDMI Capture");
+		expect(
+			document.body.querySelector('[data-testid="encoder-active-source-kind"]')
+				?.textContent,
+		).toContain("HDMI");
+
+		// …and NOT a combobox/select for the source.
+		expect(document.body.querySelector("#encoder-source")).toBeNull();
+		expect(
+			document.body.querySelector('[data-testid="source-applies-next-start"]'),
+		).toBeNull();
+	});
+
+	it("no source in config: axes degrade to platform-coarse, no source selector, and save succeeds", () => {
+		// A federated mount — the config carries no source/pipeline and no sources
+		// broadcast has arrived. The dialog must render + save without throwing.
 		state.pipelines = pipelinesMessage("generic");
 		state.capabilities = undefined;
+		state.sources = undefined;
 		seedConfig();
 
 		const onSave = vi.fn();
@@ -284,8 +347,13 @@ describe("EncoderDialog — capability-first axes", () => {
 		// Coarse ceiling for a software board: 1080p / 60 fps.
 		expect(summaryText()).toContain("1080p");
 		expect(summaryText()).toContain("60 fps");
+		// No active-source line (nothing to reflect) and no source selector.
+		expect(
+			document.body.querySelector('[data-testid="encoder-active-source"]'),
+		).toBeNull();
+		expect(document.body.querySelector("#encoder-source")).toBeNull();
 
-		// Save round-trips the coarse selection.
+		// Save round-trips the encoding selection WITHOUT a source/pipeline.
 		const saveButton = Array.from(
 			document.body.querySelectorAll("button"),
 		).find((b) => b.textContent?.trim() === "Save");
@@ -293,8 +361,9 @@ describe("EncoderDialog — capability-first axes", () => {
 		fireEvent.click(saveButton as HTMLButtonElement);
 		expect(onSave).toHaveBeenCalledTimes(1);
 		const saved = onSave.mock.calls[0]?.[0] as EncoderConfig;
-		expect(saved.source).toBe("hdmi");
+		expect(saved.source).toBeUndefined();
 		expect(saved.resolution).toBe("1080p");
 		expect(saved.framerate).toBe(30);
+		expect(saved.bitrate).toBe(6000);
 	});
 });

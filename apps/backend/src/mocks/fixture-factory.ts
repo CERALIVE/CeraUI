@@ -27,6 +27,8 @@ import {
 	AddonDescriptorSchema,
 	type AddonState,
 	AddonStateSchema,
+	type StreamSource,
+	streamSourceSchema,
 } from "@ceraui/rpc/schemas";
 
 import {
@@ -148,6 +150,43 @@ const DEFAULT_DEVICE_MODES = {
 	},
 } satisfies MockDeviceModes;
 
+// The caps-full TWO-DONGLE disambiguation fixture: the default HDMI + RØDE devices
+// PLUS a SECOND same-kind (uvc_h264) USB dongle. Two devices bridging to the SAME
+// pipeline id (libuvch264) is the case the source list must disambiguate by real
+// display name, so caps-full exercises it out of the box.
+const CAPS_FULL_DEVICE_MODES = {
+	...DEFAULT_DEVICE_MODES,
+	usb2: {
+		kind: "uvc_h264",
+		modes: [
+			{
+				width: 1920,
+				height: 1080,
+				framerates: [30, 60],
+				media_type: "video/x-h264",
+			},
+		],
+	},
+} satisfies MockDeviceModes;
+
+// Realistic per-device display names keyed by list-devices input_id. Consumed ONLY
+// by the streaming provider's expandDeviceModes() to name the list-devices result
+// (the device_modes fold drops display_name entirely — a group is {kind, modes}).
+// The RØDE name is VERBATIM the regression fixture for the USB-as-HDMI mislabel: a
+// uvc_h264 USB dongle whose product name contains "HDMI" must NEVER be relabeled
+// `hdmi` (the engine's typed kind is authoritative — mapEngineDeviceKind).
+export const MOCK_RODE_DISPLAY_NAME = "RØDE HDMI to USB-C: RØDE HDMI";
+
+export const DEFAULT_DEVICE_DISPLAY_NAMES: Record<string, string> = {
+	hdmi: "Rockchip HDMI-RX",
+	usb: MOCK_RODE_DISPLAY_NAME,
+};
+
+export const CAPS_FULL_DEVICE_DISPLAY_NAMES: Record<string, string> = {
+	...DEFAULT_DEVICE_DISPLAY_NAMES,
+	usb2: "Magewell USB Capture HDMI 4K+",
+};
+
 // ─── Builders ────────────────────────────────────────────────────────────────
 
 /** Build a schema-valid mock modem config (defaults = `mockModems[0]`). */
@@ -232,4 +271,36 @@ export function buildMockDeviceModes(
 		...structuredClone(DEFAULT_DEVICE_MODES),
 		...overrides,
 	});
+}
+
+/** Build the caps-full two-dongle `device_modes` map (HDMI + two same-kind uvc_h264). */
+export function buildMockCapsFullDeviceModes(
+	overrides: MockDeviceModes = {},
+): MockDeviceModes {
+	return mockDeviceModesSchema.parse({
+		...structuredClone(CAPS_FULL_DEVICE_MODES),
+		...overrides,
+	});
+}
+
+const DEFAULT_STREAM_SOURCE = {
+	origin: "capture",
+	id: "usb",
+	pipelineId: "libuvch264",
+	kind: "uvc_h264",
+	displayName: MOCK_RODE_DISPLAY_NAME,
+	devicePath: "/dev/video1",
+	modes: [],
+	supportsAudio: true,
+	supportsResolutionOverride: true,
+	supportsFramerateOverride: true,
+	audioKind: "selectable",
+	available: true,
+} satisfies StreamSource;
+
+/** Build a schema-valid {@link StreamSource} (defaults = the RØDE capture entry). */
+export function buildMockStreamSource(
+	overrides: Partial<StreamSource> = {},
+): StreamSource {
+	return streamSourceSchema.parse({ ...DEFAULT_STREAM_SOURCE, ...overrides });
 }

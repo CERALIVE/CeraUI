@@ -1,5 +1,6 @@
 <script lang="ts">
 import { gsap } from 'gsap';
+import { untrack } from 'svelte';
 
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
@@ -55,6 +56,9 @@ const PARK = 0.62;
 const PULSE_COUNT = 2;
 
 interface NodeGeo {
+	/** Stable identifier carried from `link.id` — keys the {#each} blocks and the
+	 *  topology fingerprint so animation state is never rebuilt on index churn. */
+	id: string;
 	x: number;
 	y: number;
 	parkX: number;
@@ -70,6 +74,7 @@ const nodes = $derived<NodeGeo[]>(
 		const dx = BOND_X - LINK_X;
 		const dy = BOND_Y - y;
 		return {
+			id: link.id,
 			x: LINK_X,
 			y,
 			parkX: LINK_X + dx * PARK,
@@ -80,6 +85,13 @@ const nodes = $derived<NodeGeo[]>(
 	}),
 );
 
+// Topology fingerprint — the ONLY signal that should rebuild the timelines.
+// A plain status push (signal/throughput ticks) mutates `links`/`nodes` identity
+// every 5s but leaves this string identical, so the keyed $effect below does NOT
+// re-run and the in-flight tweens keep playing (no mid-flight restart / "weird
+// movement"). It changes only when a link is added/removed or (dis)connects.
+const fingerprint = $derived(links.map((l) => `${l.id}:${l.isConnected}`).join('|'));
+
 // Refs populated by bind:this — plain arrays (intentionally NOT $state: GSAP
 // owns these nodes' transforms and Svelte must not re-touch them per tick).
 let packetEls: (SVGCircleElement | null)[] = [];
@@ -89,13 +101,28 @@ let pulseEls: (SVGCircleElement | null)[] = [];
 // data-animated for the static-fallback assertions.
 let animated = $state(false);
 
-$effect(() => {
-	// Re-evaluate when liveness, freeze, or topology changes.
-	const isLive = live;
-	const isFrozen = frozen;
-	const geo = nodes;
+// The gsap.matchMedia context for the CURRENT build, plus the key it was built
+// for. The effect below re-runs on every status push (Svelte can't skip it on a
+// value-equal derived), so the key guards against a mid-flight rebuild.
+let activeContext: gsap.MatchMedia | undefined;
+let activeKey: string | undefined;
 
+function teardownTimeline(): void {
+	// Kill the repeat:-1 tweens FIRST — `revert()` reverts inline styles but does
+	// not stop an infinitely-repeating tween, so without this the packet / pulse
+	// rAF loops survive teardown and the next build stacks a second loop.
+	const targets = [...packetEls, ...pulseEls].filter(
+		(el): el is SVGCircleElement => el != null,
+	);
+	if (targets.length > 0) gsap.killTweensOf(targets);
+	activeContext?.revert();
+	activeContext = undefined;
+	animated = false;
+}
+
+function buildTimeline(isLive: boolean, isFrozen: boolean, geo: NodeGeo[]): void {
 	const mm = gsap.matchMedia();
+	activeContext = mm;
 	mm.add('(prefers-reduced-motion: no-preference)', () => {
 		// E-ink frozen or idle → render the static parked topology, no rAF loop.
 		if (isFrozen || !isLive || geo.length === 0) return;
@@ -143,16 +170,29 @@ $effect(() => {
 		});
 
 		animated = true;
-		return () => {
-			animated = false;
-		};
 	});
+}
 
-	return () => {
-		mm.revert();
-		animated = false;
-	};
+$effect(() => {
+	// Depend ONLY on liveness, freeze, and the topology fingerprint. A per-tick
+	// signal/throughput push churns `links`/`nodes` identity but leaves the key
+	// identical, so the guard early-returns and the in-flight timeline is NEVER
+	// restarted mid-flight (the reported "weird movement"). Geometry is read
+	// untracked. Cleanup is manual (NOT a return callback) because Svelte runs a
+	// return-cleanup before EVERY re-run — which would tear a live timeline down
+	// on an unchanged-topology tick.
+	const isLive = live;
+	const isFrozen = frozen;
+	const key = `${isLive}|${isFrozen}|${fingerprint}`;
+	if (key === activeKey) return;
+	activeKey = key;
+
+	teardownTimeline();
+	buildTimeline(isLive, isFrozen, untrack(() => nodes));
 });
+
+// Unmount-only teardown: no tracked reads, so this cleanup runs solely on destroy.
+$effect(() => () => teardownTimeline());
 
 const activeCount = $derived(links.filter((l) => l.isConnected).length);
 </script>
@@ -173,7 +213,7 @@ const activeCount = $derived(links.filter((l) => l.isConnected).length);
 		preserveAspectRatio="xMidYMid meet"
 	>
 		<!-- Bond paths (static) -->
-		{#each nodes as node, i (i)}
+		{#each nodes as node (node.id)}
 			<line
 				x1={node.x}
 				y1={node.y}
@@ -203,7 +243,7 @@ const activeCount = $derived(links.filter((l) => l.isConnected).length);
 		{/each}
 
 		<!-- Link nodes (static) -->
-		{#each nodes as node, i (i)}
+		{#each nodes as node, i (node.id)}
 			<circle
 				data-testid="bond-link-node"
 				data-link-index={i}
@@ -215,8 +255,10 @@ const activeCount = $derived(links.filter((l) => l.isConnected).length);
 			/>
 		{/each}
 
-		<!-- Packets (parked static via SVG transform attr; GSAP drives CSS transform) -->
-		{#each nodes as node, i (i)}
+		<!-- Packets: hidden when !live (idle/dead honesty — a parked packet would
+		     imply an active bond that isn't flowing); parked static when live-but-
+		     static (reduced-motion / e-ink); GSAP drives the CSS transform when live. -->
+		{#each nodes as node, i (node.id)}
 			<circle
 				bind:this={packetEls[i]}
 				data-testid="bond-packet"
@@ -224,7 +266,7 @@ const activeCount = $derived(links.filter((l) => l.isConnected).length);
 				cy="0"
 				r={PACKET_R}
 				fill={node.color}
-				opacity={node.connected ? 0.9 : 0}
+				opacity={live && node.connected ? 0.9 : 0}
 				transform="translate({node.parkX} {node.parkY})"
 			/>
 		{/each}

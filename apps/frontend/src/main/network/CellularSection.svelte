@@ -4,21 +4,14 @@ import type { Modem, NetifMessage } from '@ceraui/rpc/schemas';
 import { ChevronRight, Radio } from '@lucide/svelte';
 
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
-import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import { Button } from '$lib/components/ui/button';
-import { convertBytesToKbids } from '$lib/helpers/network-speed';
-import { modemSignal } from '$lib/helpers/signal';
-import { getStalenessState } from '$lib/helpers/staleness';
-import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
 
 interface Props {
 	modemEntries: [string, Modem][];
-	/** Live per-interface telemetry; supplies bond state (`enabled`/`ip`) and throughput (`tp`). */
+	/** Live per-interface telemetry; supplies bond state (`enabled`/`ip`). */
 	netif: NetifMessage | undefined;
-	/** HUD bonded-link signals — single source for per-link throughput + staleness. */
-	links: LinkSignal[];
 	/** Whole-app staleness latch: the WS has been down past the global threshold. */
 	isFullyStale: boolean;
 	/** ifnames whose own telemetry aged out while siblings stayed fresh (Task 22). */
@@ -26,8 +19,7 @@ interface Props {
 	onConfigure: (id: string) => void;
 }
 
-const { modemEntries, netif, links, isFullyStale, staleInterfaces, onConfigure }: Props =
-	$props();
+const { modemEntries, netif, isFullyStale, staleInterfaces, onConfigure }: Props = $props();
 </script>
 
 <!-- ───────────── Cellular ───────────── -->
@@ -43,84 +35,44 @@ const { modemEntries, netif, links, isFullyStale, staleInterfaces, onConfigure }
 			</p>
 		{:else}
 			{#each modemEntries as [id, modem], _i (modem.ifname || id + '-' + _i)}
-			{@const sig = modemSignal(modem)}
 				{@const noSim = modem.no_sim === true}
 				{@const connected = modem.status?.connection === 'connected'}
 				{@const scanning = modem.status?.connection === 'scanning'}
-				{@const connectionState = noSim
-					? 'no_sim'
-					: scanning
-						? 'scanning'
-						: connected
-							? 'connected'
-							: 'disconnected'}
 				{@const operator = modem.status?.network || modem.sim_network || modem.name}
 				{@const entry = netif?.[modem.ifname]}
-				{@const link = links.find((l) => l.id === (modem.ifname || id))}
-				{@const kbps = link
-					? link.throughputKbps
-					: noSim || !entry
-						? null
-						: convertBytesToKbids(entry.tp)}
 				{@const ifaceStale = staleInterfaces.has(modem.ifname) || isFullyStale}
-				{@const rawStale = link?.isStale ?? ifaceStale}
-				{@const tpStale = getStalenessState(kbps, null, rawStale) === 'stale'}
-				{@const sigStale = getStalenessState(sig, null, rawStale) === 'stale'}
 				{@const showStale = ifaceStale && !noSim}
-				{@const sigColor = link ? `var(--link-${link.linkIndex + 1})` : 'var(--muted-foreground)'}
-				<div class="px-4 py-4">
-					<!-- Identity row: status dot · name/status · signal · speed -->
-					<div class="flex items-center gap-3">
-						<span
-							class={cn('size-2 shrink-0 rounded-full', connected ? 'bg-primary' : 'bg-muted-foreground/40')}
-							aria-hidden="true"
-						></span>
-						<div class="min-w-0 flex-1">
-							<p class="truncate text-sm font-medium">{modem.name}</p>
-							<p
-								class={cn(
-									'text-muted-foreground truncate text-xs transition-opacity',
-									rawStale && 'opacity-50',
-								)}
-							>
-								{#if noSim}
-									{$LL.network.view.noModems()}
+				<!-- Single-line row: identity (dot · name · status) left; bond + configure right. -->
+				<div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
+					<span
+						class={cn('size-2 shrink-0 rounded-full', connected ? 'bg-primary' : 'bg-muted-foreground/40')}
+						aria-hidden="true"
+					></span>
+					<div class="min-w-0 flex-1">
+						<p class="truncate text-sm font-medium">{modem.name}</p>
+						<p
+							class={cn(
+								'text-muted-foreground truncate text-xs transition-opacity',
+								ifaceStale && 'opacity-50',
+							)}
+						>
+							{#if noSim}
+								{$LL.network.view.noModems()}
+							{:else}
+								{operator}{#if modem.status?.network_type}
+									· {modem.status.network_type}{/if} ·
+								{#if scanning}
+									{$LL.network.modem.scanning()}
 								{:else}
-									{operator}{#if modem.status?.network_type}
-										· {modem.status.network_type}{/if} ·
-									{#if scanning}
-										{$LL.network.modem.scanning()}
-									{:else}
-										{connected ? $LL.network.view.connected() : $LL.network.view.disconnected()}
-									{/if}
+									{connected ? $LL.network.view.connected() : $LL.network.view.disconnected()}
 								{/if}
-							</p>
-						</div>
-						<div class="flex shrink-0 items-center gap-2.5">
-							{#if showStale}
-								<Badge variant="stale" data-stale-interface={modem.ifname} />
 							{/if}
-							<div class={cn('flex items-center gap-1.5 transition-opacity', sigStale && 'opacity-50')}>
-								<LinkIndicator
-									shape="bars"
-									size="md"
-									type="modem"
-									signal={sig}
-									{connectionState}
-									linkIndex={link?.linkIndex}
-								/>
-								{#if sig !== null}
-									<span data-live-value class="font-mono text-xs tabular-nums" style:color={sigColor}>
-										{sig}%
-									</span>
-								{/if}
-							</div>
-							<Badge variant="speed" {kbps} stale={tpStale} />
-						</div>
+						</p>
 					</div>
-
-					<!-- Control row: bond membership · configure -->
-					<div class="mt-2.5 flex flex-wrap items-center gap-2 ps-5">
+					<div class="ms-auto flex shrink-0 items-center gap-2">
+						{#if showStale}
+							<Badge variant="stale" data-stale-interface={modem.ifname} />
+						{/if}
 						{#if noSim}
 							<BondToggle
 								name={modem.ifname}
@@ -131,7 +83,7 @@ const { modemEntries, netif, links, isFullyStale, staleInterfaces, onConfigure }
 							<BondToggle name={modem.ifname} enabled={entry.enabled} ip={entry.ip} />
 						{/if}
 						<Button
-							class="ms-auto h-8 gap-1 px-2.5"
+							class="h-8 min-h-[var(--touch-target-min)] gap-1 px-2.5"
 							data-testid="open-modem-config-dialog"
 							size="sm"
 							variant="ghost"

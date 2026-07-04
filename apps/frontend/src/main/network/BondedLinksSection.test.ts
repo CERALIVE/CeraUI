@@ -96,6 +96,69 @@ describe("BondedLinksSection — mock link-telemetry join (T5)", () => {
 		}
 	});
 
+	it("renders exactly one compact single-line row per link (row-height class changed)", () => {
+		const links = STREAMING_ACTIVE_IFACES.map(linkFor);
+		const { container } = render(BondedLinksSection, {
+			props: {
+				links,
+				modemEntries: [],
+				linkTelemetry: streamingActiveTelemetry(),
+			},
+		});
+
+		const rows = container.querySelectorAll<HTMLElement>(
+			'[data-testid="bonded-link-card"]',
+		);
+		expect(rows.length).toBe(STREAMING_ACTIVE_IFACES.length);
+
+		for (const row of rows) {
+			// Single-line row: horizontal flex, vertically centered, compact height.
+			expect(row.className).toContain("items-center");
+			expect(row.className).toContain("py-1.5");
+			// The old two-row layout (flex-col) is gone.
+			expect(row.className).not.toContain("flex-col");
+		}
+	});
+
+	it("carries all three telemetry cells inline on the SAME row as identity + speed", () => {
+		const links = STREAMING_ACTIVE_IFACES.map(linkFor);
+		const { container } = render(BondedLinksSection, {
+			props: {
+				links,
+				modemEntries: [],
+				linkTelemetry: streamingActiveTelemetry(),
+			},
+		});
+
+		for (const iface of STREAMING_ACTIVE_IFACES) {
+			const card = cardFor(container, iface);
+			// identity + speed + all three telemetry cells share ONE row element.
+			expect(within(card).getByTestId("link-rtt")).toBeTruthy();
+			expect(within(card).getByTestId("link-nak")).toBeTruthy();
+			expect(within(card).getByTestId("link-weight")).toBeTruthy();
+			expect(
+				card.querySelector("[data-live-value]"),
+				`${iface} speed badge shares the row`,
+			).not.toBeNull();
+		}
+	});
+
+	it("renders Skeletons in-place (not '--') while the telemetry feed has not arrived", () => {
+		const links = [linkFor("eth0", 0)];
+		const { container } = render(BondedLinksSection, {
+			// linkTelemetry omitted → undefined → telemetryLoading = true.
+			props: { links, modemEntries: [] },
+		});
+
+		const card = cardFor(container, "eth0");
+		expect(
+			within(card).getByTestId("link-telemetry-skeleton"),
+			"loading feed shows a Skeleton",
+		).toBeTruthy();
+		// No "--" flicker: the value cells are not mounted while loading.
+		expect(within(card).queryByTestId("link-rtt")).toBeNull();
+	});
+
 	it("shows '--' when a card's id has no matching telemetry iface (join miss)", () => {
 		// A telemetry iface NOT in the derived link-id set proves the negative:
 		// the mismatched card falls back to the placeholder.

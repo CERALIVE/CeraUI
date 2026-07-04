@@ -46,48 +46,37 @@ let controlStreaming = false;
 let streamingFlag = false;
 // Drop the backend's `devices` echoes so an injected device list wins.
 let dropServerDevices = false;
-// Hold the next `streaming.setConfig` RPC in-flight (captures its id) so the
+// Drop the backend's own `sources` echo so the INJECTED unified source list is the
+// sole authority for SourceSection (it reads the folded `sources` broadcast).
+let dropServerSources = false;
+// Hold the next `streaming.setConfig` RPC in-flight (captures its id + input) so the
 // optimistic `applying` window is observable; cleared once released.
 let holdSetConfig = false;
 let heldSetConfigId: string | number | null = null;
-// Drop `streaming.start` client-side so the optimism transient is exercised
-// WITHOUT mutating the shared mock backend (a real start would broadcast
+// Echoed back as `result.applied` on release — the frontend releases each field lock
+// to `result.applied`, never the optimistic value, so the fake resolution must carry
+// it (matches the T3 backend contract: setConfig echoes the applied config fields).
+let heldSetConfigInput: Record<string, unknown> | null = null;
+// Fake a successful `streaming.start` client-side so the optimism transient is
+// exercised WITHOUT mutating the shared mock backend (a real start would broadcast
 // is_streaming=true to every parallel worker and corrupt their layout).
 let dropStreamStart = false;
-// Hold the next `streaming.switchAudio` RPC in-flight (captures its id) so the
-// per-field `applying` window is observable; cleared once released. The audio
-// switch never reaches the shared mock backend — the proxy owns its result.
-let holdSwitchAudio = false;
-let heldSwitchAudioId: string | number | null = null;
-let heldSwitchAudioInput: string | null = null;
 
 function send(payload: unknown): void {
 	pageWs?.send(JSON.stringify(payload));
 }
 
-/** Fake-resolve a previously-held setConfig RPC ({success:true}, no clamp). */
+/** Fake-resolve a previously-held setConfig RPC, echoing its input as `applied`. */
 function resolveHeldSetConfig(): void {
 	if (heldSetConfigId !== null) {
-		pageWs?.send(JSON.stringify({ id: heldSetConfigId, result: { success: true } }));
-		heldSetConfigId = null;
-	}
-}
-
-/** Fake-resolve a held switchAudio RPC as a successful gapless switch. */
-function resolveHeldSwitchAudio(gapMs: number): void {
-	if (heldSwitchAudioId !== null) {
 		pageWs?.send(
 			JSON.stringify({
-				id: heldSwitchAudioId,
-				result: {
-					success: true,
-					active_audio_input: heldSwitchAudioInput ?? "audio:mic0",
-					gap_ms: gapMs,
-				},
+				id: heldSetConfigId,
+				result: { success: true, applied: heldSetConfigInput ?? {} },
 			}),
 		);
-		heldSwitchAudioId = null;
-		heldSwitchAudioInput = null;
+		heldSetConfigId = null;
+		heldSetConfigInput = null;
 	}
 }
 
@@ -148,13 +137,6 @@ const USB: Device = {
 	media_class: "video",
 	kind: "usb",
 };
-const MIC: Device = {
-	input_id: "audio:mic0",
-	device_path: "hw:1,0",
-	display_name: "USB Microphone",
-	media_class: "audio",
-	kind: "audio",
-};
 
 function sendDevices(activeInput: string, devices: Device[]): void {
 	send({ devices: { engine: "cerastream", active_input: activeInput, devices } });
@@ -183,6 +165,42 @@ function sendStatus(isStreaming: boolean): void {
 	send({ status: { is_streaming: isStreaming } });
 }
 
+// A capture StreamSource for the unified device-first list. `id` MUST equal the
+// matching device input_id so LiveView's reorder (normalizeOrder(devices, …)) and
+// SourceSection's capture ranking align on the same ids.
+function captureSource(
+	id: string,
+	kind: string,
+	pipelineId: string,
+	displayName: string,
+): Record<string, unknown> {
+	return {
+		origin: "capture",
+		id,
+		pipelineId,
+		kind,
+		displayName,
+		devicePath: `/dev/${id}`,
+		modes: [{ width: 1920, height: 1080, framerates: [30, 60] }],
+		supportsAudio: kind === "hdmi",
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+		defaultResolution: "1080p",
+		defaultFramerate: 30,
+		audioKind: kind === "hdmi" ? "selectable" : "none",
+		available: true,
+	};
+}
+
+// Capture sources aligned to the HDMI (video0) / USB (video1) device fixtures.
+const CAP_HDMI = captureSource("video0", "hdmi", "hdmi", "HDMI Camera");
+const CAP_USB = captureSource("video1", "usb", "libuvch264", "USB Capture");
+
+// Inject the folded `sources` broadcast (drops the backend's own — see beforeEach).
+function sendSources(sources: Record<string, unknown>[]): void {
+	send({ sources: { hardware: "rk3588", sources } });
+}
+
 test.describe("Track-1 source overhaul (functional)", () => {
 	test.beforeEach(async ({ page }, testInfo) => {
 		test.skip(
@@ -200,38 +218,40 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		// test sets this flag. Drop backend `devices` echoes from the start so only
 		// the test-injected list ever populates the source surface.
 		dropServerDevices = true;
+		dropServerSources = true;
 		holdSetConfig = false;
 		heldSetConfigId = null;
+		heldSetConfigInput = null;
 		dropStreamStart = false;
-		holdSwitchAudio = false;
-		heldSwitchAudioId = null;
-		heldSwitchAudioInput = null;
 
 		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 
 			ws.onMessage((m) => {
-				if (holdSetConfig || dropStreamStart || holdSwitchAudio) {
+				if (holdSetConfig || dropStreamStart) {
 					const text = typeof m === "string" ? m : m.toString();
 					try {
 						const frame = JSON.parse(text) as {
 							id?: string | number;
 							path?: unknown;
-							input?: { audio_input_id?: string };
+							input?: Record<string, unknown>;
 						};
 						const rpc = Array.isArray(frame.path) ? frame.path.join(".") : null;
 						if (holdSetConfig && rpc === "streaming.setConfig") {
 							heldSetConfigId = frame.id ?? null;
+							heldSetConfigInput = frame.input ?? null;
 							return; // hold in-flight: don't forward to the backend
 						}
-						if (holdSwitchAudio && rpc === "streaming.switchAudio") {
-							heldSwitchAudioId = frame.id ?? null;
-							heldSwitchAudioInput = frame.input?.audio_input_id ?? null;
-							return; // hold in-flight: the proxy owns the audio-switch result
-						}
 						if (dropStreamStart && rpc === "streaming.start") {
-							return; // never mutate the shared backend's stream state
+							// Never mutate the shared backend's stream state, but fake a
+							// successful start so the optimism `starting` transient persists
+							// (the injected is_streaming broadcast settles it) instead of the
+							// unanswered RPC rejecting and reverting straight back to idle.
+							if (frame.id !== undefined) {
+								ws.send(JSON.stringify({ id: frame.id, result: { success: true } }));
+							}
+							return;
 						}
 					} catch {
 						/* non-RPC frame */
@@ -245,6 +265,7 @@ test.describe("Track-1 source overhaul (functional)", () => {
 				try {
 					const frame = JSON.parse(text) as { status?: Record<string, unknown> };
 					if (dropServerDevices && "devices" in (frame as object)) return;
+					if (dropServerSources && "sources" in (frame as object)) return;
 					if (controlStreaming && frame?.status && typeof frame.status === "object") {
 						frame.status.is_streaming = streamingFlag;
 						ws.send(JSON.stringify(frame));
@@ -262,165 +283,137 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		await navigateTo(page, "live");
 	});
 
-	// ── 1. Capability gate: live-audio dispatch gated off ⇄ enabled by flag ────
-	test("the audio live-switch dispatch is gated off until the engine advertises audio_live_switch", async ({
+	// ── 1. Unified source list: selection persists config.source via field-lock ──
+	// Selecting a row in the unified device-first SourceSection list writes
+	// config.source through the per-field-sync lock and reconciles to the server
+	// echo — the unified-list selection + field-lock echo flow.
+	test("the unified source list persists a selection through the per-field-sync lock and reconciles to the server echo", async ({
 		page,
 	}) => {
-		controlStreaming = true;
-		streamingFlag = true;
-		dropServerDevices = true;
-		// Capture any dispatched switchAudio so we can prove NONE escapes the
-		// frontend gate while the capability is absent.
-		holdSwitchAudio = true;
+		holdSetConfig = true;
+		serverConfig({ source: "video0" });
+		sendDevices("video0", [HDMI, USB]);
+		sendSources([CAP_HDMI, CAP_USB]);
 
-		serverConfig();
-		sendCapabilities(); // no audio_live_switch → gate off
-		sendStatus(true);
-		sendDevices("video0", [HDMI, MIC]);
-
-		const picker = page.getByTestId("input-picker");
-		await expect(picker).toBeVisible({ timeout: 15_000 });
-
-		// TD-live-audio-switch is resolved (Task 26): the coming-soon affordance is
-		// gone — the audio source always renders a real Switch control while
-		// streaming, never a `data-audio-switch-deferred` pill.
-		const audioSwitch = picker.locator('[data-switch-input="audio:mic0"]');
-		await expect(audioSwitch).toBeVisible();
-		await expect(
-			picker.locator('[data-audio-switch-deferred="audio:mic0"]'),
-		).toHaveCount(0);
-
-		// Capability absent → the control is genuinely disabled-with-reason (not
-		// just internally gated), per the codebase's disabled-with-reason house
-		// rule (Wave 1, ceraui-trustworthy-experience). It is not clickable, so
-		// we assert the honest disabled state instead of attempting a click.
-		await expect(audioSwitch).toBeDisabled();
-		await expect(audioSwitch).toHaveAttribute(
-			"title",
-			/live audio switching/i,
+		await expect(page.getByTestId("source-row-video0")).toHaveAttribute(
+			"data-selected",
+			"true",
+			{ timeout: 15_000 },
 		);
-		expect(heldSwitchAudioId).toBeNull();
+		await expect(page.getByTestId("source-row-video1")).toHaveAttribute(
+			"data-selected",
+			"false",
+		);
 
-		// Engine now advertises the capability → the SAME control becomes live: a
-		// click dispatches switchAudio and surfaces the per-field applying glyph.
-		sendCapabilities({ audio_live_switch: true });
-		await expect(audioSwitch).toBeEnabled();
-		await audioSwitch.click();
-		await expect(page.getByText(/switching audio/i)).toBeVisible();
-		expect(heldSwitchAudioId).not.toBeNull();
+		// Selecting the USB source dispatches setConfig({source:'video1'}); the row
+		// follows config.source (never the optimistic local id), so while the echo is
+		// held the selection stays put — no premature flip.
+		await page.getByTestId("source-select-video1").click();
+		await expect.poll(() => heldSetConfigId !== null, { timeout: 5_000 }).toBe(true);
+		await expect(page.getByTestId("source-row-video0")).toHaveAttribute(
+			"data-selected",
+			"true",
+		);
 
-		// Release the held RPC as a successful gapless switch → applied + gap toast.
-		holdSwitchAudio = false;
-		resolveHeldSwitchAudio(12);
-		await expect(page.getByText(/audio switched/i).first()).toBeVisible();
+		// Release + inject the authoritative echo → the selection settles to the
+		// server-applied source id.
+		holdSetConfig = false;
+		resolveHeldSetConfig();
+		serverConfig({ source: "video1" });
+		await expect(page.getByTestId("source-row-video1")).toHaveAttribute(
+			"data-selected",
+			"true",
+		);
+		await expect(page.getByTestId("source-row-video0")).toHaveAttribute(
+			"data-selected",
+			"false",
+		);
 	});
 
-	// ── 3. Native-feel optimism: applying indicator holds through a delayed echo ─
-	test("the per-field applying indicator holds through a delayed WS echo with no flicker", async ({
+	// ── 2. Inline source-priority reorder: applying indicator holds through echo ─
+	test("the inline source-priority reorder holds its applying indicator through a delayed WS echo with no flicker", async ({
 		page,
 	}) => {
-		dropServerDevices = true;
-		serverConfig({ source_preference: ["video0", "video1"] });
+		serverConfig({ source: "video0", source_preference: ["video0", "video1"] });
 		sendDevices("video0", [HDMI, USB]);
+		sendSources([CAP_HDMI, CAP_USB]);
 
-		const panel = page.getByTestId("source-preference");
-		await expect(panel).toBeVisible({ timeout: 15_000 });
-		await expect(panel.locator('[data-input-id="video0"]')).toHaveAttribute(
-			"data-state",
-			"active",
-		);
+		const list = page.getByTestId("source-list");
+		await expect(list).toBeVisible({ timeout: 15_000 });
+		const rows = list.locator('[data-testid^="source-row-video"]');
+		await expect(rows.first()).toHaveAttribute("data-testid", "source-row-video0");
 
 		// Hold the reorder's setConfig in-flight so the `applying` phase is stable.
 		holdSetConfig = true;
-		await panel.locator('[data-move-down="video0"]').click();
+		await page.locator('[data-move-down="video0"]').click();
 
 		// The per-field sync indicator shows the in-flight `applying` state and the
 		// list does NOT flicker its order while the echo is outstanding.
 		await expect(page.getByText(/saving order/i)).toBeVisible();
-		await expect(panel.locator('[data-input-id="video0"]')).toHaveAttribute(
-			"data-state",
-			"active",
-		);
+		await expect(rows.first()).toHaveAttribute("data-testid", "source-row-video0");
 
 		// Release: fake-resolve the RPC, then inject the authoritative echo with the
 		// new order. The list settles to the new order — no revert/flicker.
 		holdSetConfig = false;
 		resolveHeldSetConfig();
-		serverConfig({ source_preference: ["video1", "video0"] });
-
-		const rows = panel.locator("[data-input-id]");
-		await expect(rows.first()).toHaveAttribute("data-input-id", "video1");
+		serverConfig({ source: "video0", source_preference: ["video1", "video0"] });
+		await expect(rows.first()).toHaveAttribute("data-testid", "source-row-video1");
 		await expect(page.getByText(/saving order/i)).toHaveCount(0);
 	});
 
-	// ── 4. is_streaming optimism: Start → starting → settles on broadcast ──────
-	test("Start shows the transient starting state and settles to streaming on the broadcast", async ({
+	// ── 3. Go-Live start settles the cockpit to streaming on the broadcast ─────
+	test("Start dispatches from the all-green Go Live card and settles the cockpit to streaming on the broadcast", async ({
 		page,
 	}) => {
 		controlStreaming = true;
 		streamingFlag = false; // suppress the mock's own is_streaming until we flip it
-		dropStreamStart = true; // hermetic: the click drives optimism, not the backend
-		serverConfig();
+		dropStreamStart = true; // hermetic: the fake-success start never touches the backend
+		// A valid selected source (+ server + backend network + normal engine) makes
+		// the GoLiveCard readiness all-green, so Start is enabled and dispatchable.
+		serverConfig({ source: "video0" });
 		send(GENERIC_PIPELINES);
+		sendSources([CAP_HDMI]);
 
 		const start = page.getByRole("button", { name: /start stream/i });
 		await expect(start).toBeEnabled({ timeout: 15_000 });
 		await start.click();
 
-		// Optimistic transient: the control disables itself the instant intent is
-		// registered (the `starting` spinner), before any authoritative broadcast.
-		await expect(start).toBeDisabled();
-
-		// Authoritative is_streaming=true → the control settles to Stop.
+		// The authoritative is_streaming=true broadcast settles the Live view to the
+		// streaming cockpit (Stop control + ingest stats) — never a flicker back to idle.
 		streamingFlag = true;
 		sendStatus(true);
+		await expect(page.getByTestId("live-cockpit")).toBeVisible();
 		await expect(page.getByRole("button", { name: /stop stream/i })).toBeVisible();
+		await expect(page.getByTestId("idle-cockpit")).toHaveCount(0);
 	});
 
-	// ── 5. Source-priority reorder + sticky auto-failover toast ────────────────
-	test("source priority reorders via up/down and a sticky failover raises a non-blocking toast", async ({
+	// ── 4. Source-priority reorder result + lost-capture surfacing ─────────────
+	// A lost capture device (source.lost) renders as a calm lost banner + a disabled
+	// (unselectable) row — the honest lost surface on the unified list.
+	test("source priority reorders via up/down and a lost capture surfaces a calm non-blocking banner", async ({
 		page,
 	}) => {
-		dropServerDevices = true;
-		// Hold every reorder setConfig so the backend never persists; the injected
-		// config echo is the sole authority on the displayed order.
 		holdSetConfig = true;
-		serverConfig({ source_preference: ["video0", "video1"] });
+		serverConfig({ source: "video0", source_preference: ["video0", "video1"] });
 		sendDevices("video0", [HDMI, USB]);
+		sendSources([CAP_HDMI, CAP_USB]);
 
-		const panel = page.getByTestId("source-preference");
-		await expect(panel).toBeVisible({ timeout: 15_000 });
-		await expect(panel.locator("[data-input-id]")).toHaveCount(2);
+		const list = page.getByTestId("source-list");
+		await expect(list).toBeVisible({ timeout: 15_000 });
+		const rows = list.locator('[data-testid^="source-row-video"]');
+		await expect(rows).toHaveCount(2);
 
-		// Reorder via the keyboard/touch-safe up/down controls (no drag): moving
-		// USB up persists [video1, video0]; fake-resolve + inject the echo.
-		await panel.locator('[data-move-up="video1"]').click();
+		// Moving USB up persists [video1, video0]; fake-resolve + inject the echo.
+		await page.locator('[data-move-up="video1"]').click();
 		resolveHeldSetConfig();
-		serverConfig({ source_preference: ["video1", "video0"] });
-		await expect(panel.locator("[data-input-id]").first()).toHaveAttribute(
-			"data-input-id",
-			"video1",
-		);
+		serverConfig({ source: "video0", source_preference: ["video1", "video0"] });
+		await expect(rows.first()).toHaveAttribute("data-testid", "source-row-video1");
 
-		// Restore the preferred-first order, then drop the preferred source: the
-		// engine sticks on the fallback → lost + failed-over states + a calm toast.
-		serverConfig({ source_preference: ["video0", "video1"] });
-		await expect(panel.locator("[data-input-id]").first()).toHaveAttribute(
-			"data-input-id",
-			"video0",
-		);
-		sendDevices("video1", [{ ...HDMI, lost: true }, USB]);
-
-		await expect(panel.locator('[data-input-id="video0"]')).toHaveAttribute(
-			"data-state",
-			"lost",
-		);
-		await expect(panel.locator('[data-input-id="video1"]')).toHaveAttribute(
-			"data-state",
-			"failed-over",
-		);
-		// Non-blocking toast names the lost source — it is informational, not modal.
-		await expect(page.getByText(/HDMI Camera/).first()).toBeVisible();
+		// The preferred capture drops out (unplugged): a calm, non-blocking lost
+		// banner appears and its row is no longer selectable (informational, not modal).
+		sendSources([{ ...CAP_HDMI, lost: true }, CAP_USB]);
+		await expect(page.getByTestId("source-lost-banner")).toBeVisible();
+		await expect(page.getByTestId("source-select-video0")).toBeDisabled();
 	});
 
 	// ── 6. Education popovers + calm capability-tier banners ───────────────────
@@ -447,78 +440,72 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		await expect(page.getByTestId("capability-engine-starting")).toHaveCount(0);
 	});
 
-	// ── 7. Live audio switch (Task 25): applying → applied + gap toast ─────────
-	test("a live audio source switch succeeds, shows applying then applied, and raises a gap toast", async ({
+	// ── 6. Unified list surfaces all source origins as one picker ──────────────
+	test("the unified source list surfaces capture, test-pattern, and network-ingest origins as one picker", async ({
 		page,
 	}) => {
-		controlStreaming = true;
-		streamingFlag = true;
-		dropServerDevices = true;
-		// Hold the switchAudio RPC so the per-field `applying` glyph is observable;
-		// the proxy resolves it as a successful gapless switch (no DeviceNotFound).
-		holdSwitchAudio = true;
+		serverConfig({ source: "video0" });
+		sendDevices("video0", [HDMI]);
+		sendSources([
+			CAP_HDMI,
+			{
+				origin: "virtual",
+				id: "test",
+				pipelineId: "test",
+				labelKey: "settings.sources.test",
+				modes: [],
+				supportsAudio: false,
+				supportsResolutionOverride: false,
+				supportsFramerateOverride: false,
+				audioKind: "none",
+				available: true,
+			},
+			{
+				origin: "network",
+				id: "rtmp",
+				pipelineId: "rtmp",
+				labelKey: "settings.sources.rtmp",
+				requiresGateway: "rtmp",
+				url: "rtmp://192.168.1.100/publish/live",
+				modes: [],
+				supportsAudio: true,
+				supportsResolutionOverride: false,
+				supportsFramerateOverride: false,
+				audioKind: "embedded",
+				available: true,
+			},
+		]);
 
-		serverConfig();
-		sendCapabilities({ audio_live_switch: true });
-		sendStatus(true);
-		sendDevices("video0", [HDMI, MIC]);
-
-		const picker = page.getByTestId("input-picker");
-		await expect(picker).toBeVisible({ timeout: 15_000 });
-
-		// With the capability advertised the audio source is a real, enabled live
-		// Switch control — never the coming-soon affordance.
-		const audioSwitch = picker.locator('[data-switch-input="audio:mic0"]');
-		await expect(audioSwitch).toBeVisible();
+		const list = page.getByTestId("source-list");
+		await expect(list).toBeVisible({ timeout: 15_000 });
+		// A capture row shows the real device, the virtual test-pattern is a virtual
+		// origin, and the rtmp LAN-ingest is a selectable network row — all one list.
+		await expect(page.getByTestId("source-select-video0")).toBeVisible();
+		await expect(page.getByTestId("source-row-test")).toHaveAttribute(
+			"data-origin",
+			"virtual",
+		);
 		await expect(
-			picker.locator('[data-audio-switch-deferred="audio:mic0"]'),
-		).toHaveCount(0);
-
-		await audioSwitch.click();
-
-		// The Task-5 field-sync indicator shows the in-flight `applying` phase.
-		await expect(page.getByText(/switching audio/i)).toBeVisible();
-
-		// Release the held RPC as a successful 18 ms gapless switch.
-		holdSwitchAudio = false;
-		resolveHeldSwitchAudio(18);
-
-		// applied phase glyph + the non-blocking informational gap toast.
-		await expect(page.getByText(/audio switched/i).first()).toBeVisible();
-		// No DeviceNotFound / failure surface appeared.
-		await expect(page.getByText(/audio switch failed/i)).toHaveCount(0);
-		await expect(page.getByText(/audio source unavailable/i)).toHaveCount(0);
+			page.getByTestId("source-network-ingest-select-rtmp"),
+		).toBeEnabled();
 	});
 
-	// ── 8. Still-deferred roadmap items remain coming-soon ─────────────────────
-	test("a still-deferred capability keeps its coming-soon affordance even when audio live-switch is on", async ({
+	// ── 7. Still-deferred roadmap items remain calm coming-soon pills ──────────
+	test("still-deferred capabilities keep their calm coming-soon pills in the idle roadmap", async ({
 		page,
 	}) => {
-		controlStreaming = true;
-		streamingFlag = true;
-		dropServerDevices = true;
-
 		serverConfig();
-		// Audio live-switch is advertised, but the mode-fallback / PiP roadmap
-		// items have no capability flag → they MUST stay coming-soon (G2).
 		sendCapabilities({ audio_live_switch: true });
-		sendStatus(true);
-		sendDevices("video0", [HDMI, MIC]);
 
+		// The roadmap disclosure lives in the idle cockpit; expand it to reveal the
+		// deferred affordances — calm informational pills bound to their OPEN debt
+		// ids (never a fake-interactive control, never a disabled-with-reason warning).
 		const roadmap = page.getByTestId("live-roadmap");
 		await expect(roadmap).toBeVisible({ timeout: 15_000 });
-
-		// The deferred roadmap affordances are still bound to their OPEN debt ids.
+		await roadmap.locator("summary").click();
 		await expect(roadmap.locator('[data-comingsoon="TD-pip"]')).toBeVisible();
 		await expect(
 			roadmap.locator('[data-comingsoon="TD-mode-fallback"]'),
 		).toBeVisible();
-
-		// And the audio source is NOT coming-soon — it is a live Switch control.
-		const picker = page.getByTestId("input-picker");
-		await expect(picker.locator('[data-switch-input="audio:mic0"]')).toBeVisible();
-		await expect(
-			picker.locator('[data-audio-switch-deferred="audio:mic0"]'),
-		).toHaveCount(0);
 	});
 });

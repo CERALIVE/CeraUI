@@ -66,7 +66,15 @@ export type AudioSource = z.infer<typeof audioSourceSchema>;
 export const resolutionSchema = z.enum(['480p', '720p', '1080p', '1440p', '2160p', '4k']);
 export type Resolution = z.infer<typeof resolutionSchema>;
 
+// Legal framerate rungs (VALIDATION / persistence ladder). 23.98 (24000/1001,
+// NTSC-film) + 24 (cine) added so a device advertising film rates validates.
+// `AVAILABLE_FRAMERATES` (the UI-offered + normalizer SNAP ladder below) is
+// DELIBERATELY left at the pre-existing 6 rungs: adding the film rungs there would
+// flip normalizeFramerateToRung('24000/1001')/(24) from the documented fail-closed
+// `undefined` to a snapped value. Expanding that ladder is a downstream concern.
 export const framerateSchema = z.union([
+	z.literal(23.98),
+	z.literal(24),
 	z.literal(25),
 	z.literal(29.97),
 	z.literal(30),
@@ -155,6 +163,12 @@ export const streamingConfigInputSchema = z.object({
 	// engine default source. `selected_video_input` is a capture-device input_id.
 	video_codec: videoCodecSchema.optional(),
 	selected_video_input: z.string().optional(),
+	// Device-first operator source selection (StreamSource id, see
+	// sources.schema.ts). The backend derives `pipeline` + `selected_video_input`
+	// from it (T3). Additive-optional; absent = the legacy
+	// pipeline/selected_video_input path. Carried here so oRPC input validation
+	// accepts `setConfig({ source })` (T13) — the contract consumes this schema.
+	source: z.string().optional(),
 	// SRT receive-profile tuning (Tasks 18/19). FEC is device-side
 	// SRTO_PACKETFILTER, only ever enabled against a FEC-capable CeraLive
 	// receiver; recovery preference routes to the L1 (standard) vs L2/Classic
@@ -331,12 +345,31 @@ export const deviceModeSchema = z.object({
 });
 export type DeviceMode = z.infer<typeof deviceModeSchema>;
 
+// Capture-device kind namespace. Existing values are UNCHANGED and in their
+// original order; the engine-typed capture kinds (uvc_h264/uvc_h265/mjpeg/camlink)
+// are APPENDED (Todo 19) so a legacy device list still parses. Defined here (ahead
+// of `deviceModeGroupSchema` + `captureDeviceSchema`) because both reference it.
+export const deviceKindSchema = z.enum([
+	'hdmi',
+	'usb',
+	'network',
+	'test',
+	'audio',
+	'other',
+	'uvc_h264',
+	'uvc_h265',
+	'mjpeg',
+	'camlink',
+]);
+export type DeviceKind = z.infer<typeof deviceKindSchema>;
+
 // One device's mode group, keyed in `device_modes` by its list-devices input_id (the
 // DEVICE id namespace, engine.rs:515-525 — DISTINCT from pipeline/source-kind ids).
 // `kind` is the captureDeviceSchema kind that bridges the device id to a pipeline id
-// (Oracle issue 4) — REQUIRED context because the two id namespaces differ.
+// (Oracle issue 4) — REQUIRED context because the two id namespaces differ. Typed as
+// `deviceKindSchema` (C6) so the bridge value is a real device kind, not a raw string.
 export const deviceModeGroupSchema = z.object({
-	kind: z.string().optional(),
+	kind: deviceKindSchema.optional(),
 	modes: z.array(deviceModeSchema),
 });
 export type DeviceModeGroup = z.infer<typeof deviceModeGroupSchema>;
@@ -634,6 +667,9 @@ export const configMessageSchema = z.object({
 	// back so the Live UI reflects the saved selection on reload.
 	video_codec: videoCodecSchema.optional(),
 	selected_video_input: z.string().optional(),
+	// Device-first operator source selection, echoed back so the UI reflects the
+	// saved source on reload (T3/T13). Additive-optional.
+	source: z.string().optional(),
 	// SRT receive-profile tuning, echoed back so the card reflects the saved
 	// values on reload (Tasks 18/19).
 	fec_enabled: z.boolean().optional(),
@@ -659,10 +695,13 @@ export const streamingStopOutputSchema = z.object({
 });
 export type StreamingStopOutput = z.infer<typeof streamingStopOutputSchema>;
 
-// Streaming setConfig output — includes applied config fields post-clamp
+// Streaming setConfig output — includes applied config fields post-clamp, plus a
+// stable structured `error` code (e.g. "unknown_source") returned when a setConfig
+// carrying an unresolvable `source` is rejected (T3). Absent on success.
 export const streamingSetConfigOutputSchema = z.object({
 	success: z.boolean(),
 	applied: streamingConfigInputSchema.partial().optional(),
+	error: z.string().optional(),
 });
 export type StreamingSetConfigOutput = z.infer<typeof streamingSetConfigOutputSchema>;
 
@@ -730,22 +769,8 @@ export type StreamHealthOutput = z.infer<typeof streamHealthOutputSchema>;
 export const streamingEngineSchema = z.enum(['cerastream']);
 export type StreamingEngineKind = z.infer<typeof streamingEngineSchema>;
 
-// Existing values are UNCHANGED and in their original order; the engine-typed
-// capture kinds (uvc_h264/uvc_h265/mjpeg/camlink) are APPENDED (Todo 19) so a
-// legacy device list still parses. Todo 17 (devices.ts) consumes the new members.
-export const deviceKindSchema = z.enum([
-	'hdmi',
-	'usb',
-	'network',
-	'test',
-	'audio',
-	'other',
-	'uvc_h264',
-	'uvc_h265',
-	'mjpeg',
-	'camlink',
-]);
-export type DeviceKind = z.infer<typeof deviceKindSchema>;
+// `deviceKindSchema` / `DeviceKind` are defined earlier in this file (ahead of
+// `deviceModeGroupSchema`, which references the kind) — see that definition.
 
 export const deviceMediaClassSchema = z.enum(['video', 'audio']);
 export type DeviceMediaClass = z.infer<typeof deviceMediaClassSchema>;

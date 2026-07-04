@@ -68,6 +68,8 @@ export type ConfigParameters = {
 	resolution?: Resolution;
 	framerate?: Framerate;
 	autostart?: boolean;
+	source?: string;
+	selected_video_input?: string;
 };
 
 let isStreaming = false;
@@ -210,6 +212,14 @@ export async function updateConfig(_conn: WebSocket, params: ConfigParameters) {
 
 	if (params.resolution !== undefined) config.resolution = params.resolution;
 	if (params.framerate !== undefined) config.framerate = params.framerate;
+
+	// Device-first source: the procedure pre-resolved it to pipeline (persisted
+	// above) + selected_video_input, which follows the source verbatim here —
+	// undefined deliberately CLEARS a stale capture input for a non-capture source.
+	if (params.source !== undefined) {
+		config.source = params.source;
+		config.selected_video_input = params.selected_video_input;
+	}
 
 	if (pipeline.supportsAudio && params.acodec) {
 		config.acodec = params.acodec;

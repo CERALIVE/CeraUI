@@ -2,7 +2,10 @@ import type {
 	ActiveEncode,
 	AudioSource,
 	CapabilitiesMessage,
+	CaptureStreamSource,
+	CoarseStreamSource,
 	ConfigMessage,
+	StreamSource,
 } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
@@ -313,6 +316,76 @@ describe("deriveActiveSummary — capability vs active-config split (Todo 23)", 
 	it("idle without a codec never invents one from capabilities", () => {
 		const config: ConfigMessage = { selected_video_input: "hdmi" };
 		expect(deriveActiveSummary(config, null, CAPS).codec).toBeUndefined();
+	});
+});
+
+describe("deriveActiveSummary — source name resolved from the sources list (Todo 16)", () => {
+	const base = {
+		modes: [],
+		supportsAudio: true,
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+		audioKind: "selectable" as const,
+		available: true,
+	};
+
+	const RODE_CAPTURE: CaptureStreamSource = {
+		...base,
+		origin: "capture",
+		id: "usb",
+		pipelineId: "libuvch264",
+		kind: "uvc_h264",
+		displayName: "RØDE HDMI to USB-C: RØDE HDMI",
+		devicePath: "/dev/video1",
+	};
+
+	const HDMI_COARSE: CoarseStreamSource = {
+		...base,
+		origin: "coarse",
+		id: "hdmi",
+		pipelineId: "hdmi",
+		labelKey: "settings.sources.hdmi",
+	};
+
+	const SOURCES: StreamSource[] = [RODE_CAPTURE, HDMI_COARSE];
+
+	it("idle: resolves the selected capture id to its REAL device name", () => {
+		const config: ConfigMessage = { selected_video_input: "usb" };
+		expect(deriveActiveSummary(config, null, CAPS, SOURCES).source).toBe(
+			"RØDE HDMI to USB-C: RØDE HDMI",
+		);
+	});
+
+	it("streaming: resolves the engine active_input to the capture device name", () => {
+		const config: ConfigMessage = { selected_video_input: "hdmi" };
+		const activeEncode: ActiveEncode = {
+			codec: "h264",
+			resolution: "1920x1080",
+			framerate: 30,
+			active_input: "usb",
+		};
+		expect(
+			deriveActiveSummary(config, activeEncode, CAPS, SOURCES).source,
+		).toBe("RØDE HDMI to USB-C: RØDE HDMI");
+	});
+
+	it("keeps the raw id for a non-capture (coarse) source — no translator here", () => {
+		const config: ConfigMessage = { pipeline: "hdmi" };
+		expect(deriveActiveSummary(config, null, CAPS, SOURCES).source).toBe(
+			"hdmi",
+		);
+	});
+
+	it("keeps the raw id when the id is absent from the sources list", () => {
+		const config: ConfigMessage = { selected_video_input: "unknown-input" };
+		expect(deriveActiveSummary(config, null, CAPS, SOURCES).source).toBe(
+			"unknown-input",
+		);
+	});
+
+	it("byte-identical fallback: with no sources list the raw id passes through", () => {
+		const config: ConfigMessage = { selected_video_input: "usb" };
+		expect(deriveActiveSummary(config, null, CAPS).source).toBe("usb");
 	});
 });
 

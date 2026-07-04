@@ -24,6 +24,7 @@ import {
 	writeFileAtomicSync,
 } from "../helpers/config-loader.ts";
 import {
+	coerceLegacySource,
 	RUNTIME_CONFIG_DEFAULTS,
 	type RuntimeConfig,
 	runtimeConfigSchema,
@@ -62,7 +63,7 @@ export async function loadConfig() {
 		runtimeConfigSchema,
 		platformDefaults,
 	);
-	config = result.data;
+	config = coerceLegacySource(result.data);
 
 	// Apply mock pairing AFTER file load so it overrides any absent/undefined remote_key in config.json
 	// shouldUseMocks() is false on real devices.

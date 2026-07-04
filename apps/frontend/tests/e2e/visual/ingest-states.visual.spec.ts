@@ -134,54 +134,76 @@ test.describe("@visual ingest polished states", () => {
 		await panel.screenshot({ path: path.join(EVIDENCE_DIR, "ingest-health-alert.png") });
 	});
 
-	test("post-stream summary surfaces after stop", { tag: "@visual" }, async ({ page }) => {
-		pageWs?.send(
-			JSON.stringify({ config: { srtla_addr: "127.0.0.1", srtla_port: 5000, max_br: 5000 } }),
-		);
+	// The next two captures assert the post-stream summary (4-tile stat grid +
+	// per-link contribution rows) and its export-failure notice. Reaching them
+	// depends on LiveView's bounded post-stream summary window: after `is_streaming`
+	// goes false it holds LiveCockpit mounted in summaryMode so the still-mounted
+	// IngestStats paints its historical summary before the view reverts to idle.
+	test(
+		"post-stream summary: 4 tiles + contribution rows",
+		{ tag: "@visual" },
+		async ({ page }) => {
+			pageWs?.send(
+				JSON.stringify({ config: { srtla_addr: "127.0.0.1", srtla_port: 5000, max_br: 5000 } }),
+			);
 
-		const panel = page.getByTestId("ingest-stats");
-		await expect(panel).toBeVisible({ timeout: 15_000 });
+			const panel = page.getByTestId("ingest-stats");
+			await expect(panel).toBeVisible({ timeout: 15_000 });
 
-		for (let i = 0; i < 6; i++) {
-			await feed(page, 18 + i, i);
-		}
+			for (let i = 0; i < 6; i++) {
+				await feed(page, 18 + i, i);
+			}
 
-		streaming = false;
-		pageWs?.send(JSON.stringify({ status: { is_streaming: false, linkTelemetry: null } }));
+			streaming = false;
+			pageWs?.send(JSON.stringify({ status: { is_streaming: false, linkTelemetry: null } }));
 
-		await expect(panel.getByTestId("ingest-summary")).toBeVisible({ timeout: 15_000 });
-		await expect(panel.getByTestId("ingest-export-json")).toBeVisible();
+			const summary = panel.getByTestId("ingest-summary");
+			await expect(summary).toBeVisible({ timeout: 15_000 });
 
-		await panel.screenshot({ path: path.join(EVIDENCE_DIR, "ingest-summary.png") });
-	});
+			await expect(summary.getByTestId("ingest-summary-peak")).toBeVisible();
+			await expect(summary.getByTestId("ingest-summary-avg")).toBeVisible();
+			await expect(summary.getByTestId("ingest-summary-drops")).toBeVisible();
+			await expect(summary.getByTestId("ingest-summary-duration")).toBeVisible();
+			await expect(summary.getByTestId("ingest-contribution-row").first()).toBeVisible();
+			await expect(summary.getByTestId("ingest-uptime-row")).toHaveCount(0);
+			await expect(summary.getByTestId("ingest-export-json")).toBeVisible();
+			await expect(summary.getByTestId("ingest-export-csv")).toBeVisible();
 
-	test("export-error: calm notice when a download throws", { tag: "@visual" }, async ({ page }) => {
-		pageWs?.send(
-			JSON.stringify({ config: { srtla_addr: "127.0.0.1", srtla_port: 5000, max_br: 5000 } }),
-		);
+			await panel.screenshot({ path: path.join(EVIDENCE_DIR, "ingest-summary.png") });
+		},
+	);
 
-		const panel = page.getByTestId("ingest-stats");
-		await expect(panel).toBeVisible({ timeout: 15_000 });
+	test(
+		"export-error: calm notice when a download throws",
+		{ tag: "@visual" },
+		async ({ page }) => {
+			pageWs?.send(
+				JSON.stringify({ config: { srtla_addr: "127.0.0.1", srtla_port: 5000, max_br: 5000 } }),
+			);
 
-		for (let i = 0; i < 6; i++) {
-			await feed(page, 18 + i, i);
-		}
+			const panel = page.getByTestId("ingest-stats");
+			await expect(panel).toBeVisible({ timeout: 15_000 });
 
-		streaming = false;
-		pageWs?.send(JSON.stringify({ status: { is_streaming: false, linkTelemetry: null } }));
+			for (let i = 0; i < 6; i++) {
+				await feed(page, 18 + i, i);
+			}
 
-		await expect(panel.getByTestId("ingest-summary")).toBeVisible({ timeout: 15_000 });
+			streaming = false;
+			pageWs?.send(JSON.stringify({ status: { is_streaming: false, linkTelemetry: null } }));
 
-		// Force the client-side export to throw so the inline notice renders.
-		await page.evaluate(() => {
-			URL.createObjectURL = () => {
-				throw new Error("forced export failure");
-			};
-		});
-		await panel.getByTestId("ingest-export-json").click();
+			await expect(panel.getByTestId("ingest-summary")).toBeVisible({ timeout: 15_000 });
 
-		await expect(panel.getByTestId("ingest-export-error")).toBeVisible({ timeout: 10_000 });
+			// Force the client-side export to throw so the inline notice renders.
+			await page.evaluate(() => {
+				URL.createObjectURL = () => {
+					throw new Error("forced export failure");
+				};
+			});
+			await panel.getByTestId("ingest-export-json").click();
 
-		await panel.screenshot({ path: path.join(EVIDENCE_DIR, "ingest-export-error.png") });
-	});
+			await expect(panel.getByTestId("ingest-export-error")).toBeVisible({ timeout: 10_000 });
+
+			await panel.screenshot({ path: path.join(EVIDENCE_DIR, "ingest-export-error.png") });
+		},
+	);
 });

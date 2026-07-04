@@ -1,4 +1,9 @@
-import type { DeviceModeGroup, Pipeline } from "@ceraui/rpc/schemas";
+import type {
+	CaptureStreamSource,
+	CoarseStreamSource,
+	DeviceModeGroup,
+	Pipeline,
+} from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -312,5 +317,107 @@ describe("axisCeiling — current-vs-device-max summary source", () => {
 				deviceModes: undefined,
 			}),
 		).toEqual({ resolution: undefined, framerate: undefined });
+	});
+});
+
+// A coarse StreamSource whose facets mirror the makePipeline() fixture but with an
+// EMPTY modes list — the modes-absent (coarse) path the golden test locks.
+const COARSE_HDMI_SOURCE: CoarseStreamSource = {
+	origin: "coarse",
+	id: "hdmi",
+	pipelineId: "hdmi",
+	labelKey: "settings.sources.hdmi",
+	modes: [],
+	supportsAudio: true,
+	supportsResolutionOverride: true,
+	supportsFramerateOverride: true,
+	defaultResolution: "1080p",
+	defaultFramerate: 30,
+	audioKind: "selectable",
+	available: true,
+};
+
+// The RØDE capture source with its OWN enumerated modes (720p@[30,60] + 1080p@[30]),
+// so the source-keyed lookup narrows the axes to exactly these — no union hack.
+const RODE_CAPTURE_SOURCE: CaptureStreamSource = {
+	origin: "capture",
+	id: "usb",
+	pipelineId: "libuvch264",
+	kind: "uvc_h264",
+	displayName: "RØDE HDMI to USB-C: RØDE HDMI",
+	devicePath: "/dev/video1",
+	modes: [
+		{ width: 1280, height: 720, framerates: [30, 60] },
+		{ width: 1920, height: 1080, framerates: [30] },
+	],
+	supportsAudio: true,
+	supportsResolutionOverride: true,
+	supportsFramerateOverride: true,
+	defaultResolution: "1080p",
+	defaultFramerate: 30,
+	audioKind: "selectable",
+	available: true,
+};
+
+// GOLDEN fixture: the pre-change coarse OfferedSet for rk3588 ∩ an override-capable
+// hdmi source. A frozen literal so any drift (in intersectCaps OR the source→cap
+// projection) fails BYTE-IDENTITY, not merely structural equality.
+const FROZEN_COARSE_OFFERED = {
+	resolutions: ["480p", "720p", "1080p", "1440p", "2160p"],
+	framerates: [25, 29.97, 30, 50, 59.94, 60],
+	codecs: ["video/x-h264", "video/x-h265"],
+	bitrateRange: { min: 500, max: 50000, unit: "kbps" },
+	supportsAudio: true,
+	supportsResolutionOverride: true,
+	supportsFramerateOverride: true,
+};
+
+describe("offeredAxes — source-keyed (StreamSource) form", () => {
+	it("GOLDEN: a modes-absent source yields axes byte-identical to the coarse snapshot", () => {
+		// The unchanged legacy coarse path still equals the frozen snapshot ...
+		expect(offeredEncoderCaps("rk3588", "hdmi", makePipeline())).toEqual(
+			FROZEN_COARSE_OFFERED,
+		);
+		// ... and the refactored source-keyed offeredAxes reproduces it identically.
+		const axes = offeredAxes("rk3588", COARSE_HDMI_SOURCE);
+		expect(axes.offered).toEqual(FROZEN_COARSE_OFFERED);
+		expect(axes.deviceModes).toBeUndefined();
+	});
+
+	it("narrows the axes to the source's OWN modes (single lookup, no union hack)", () => {
+		const axes = offeredAxes("rk3588", RODE_CAPTURE_SOURCE);
+		expect(axes.offered.resolutions).toEqual(["720p", "1080p"]);
+		expect(axes.offered.framerates).toEqual([30, 60]);
+		expect(axes.deviceModes).toBe(RODE_CAPTURE_SOURCE.modes);
+	});
+
+	it("an empty modes list falls back to coarse (never collapses an axis to nothing)", () => {
+		const axes = offeredAxes("rk3588", COARSE_HDMI_SOURCE);
+		expect(axes.offered.resolutions.length).toBeGreaterThan(0);
+		expect(axes.deviceModes).toBeUndefined();
+	});
+
+	it("an undefined source is permissive — identical to the coarse no-source offering", () => {
+		const axes = offeredAxes("rk3588", undefined);
+		expect(axes.offered).toEqual(
+			offeredEncoderCaps("rk3588", undefined, undefined),
+		);
+		expect(axes.deviceModes).toBeUndefined();
+	});
+});
+
+describe("resolveDeviceModes — source-keyed (StreamSource) form", () => {
+	it("reads the source's own modes directly (the single lookup)", () => {
+		expect(resolveDeviceModes(RODE_CAPTURE_SOURCE)).toBe(
+			RODE_CAPTURE_SOURCE.modes,
+		);
+	});
+
+	it("returns undefined for an empty modes list (coarse fallback)", () => {
+		expect(resolveDeviceModes(COARSE_HDMI_SOURCE)).toBeUndefined();
+	});
+
+	it("returns undefined for an undefined source", () => {
+		expect(resolveDeviceModes(undefined)).toBeUndefined();
 	});
 });

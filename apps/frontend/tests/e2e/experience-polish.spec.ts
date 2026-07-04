@@ -1,11 +1,13 @@
 /**
  * Experience-polish spec (Wave 10) — @functional.
  *
- * Covers the Live destination's idle ingest empty-state (Todo 29): when a server
- * is configured but the stream is idle with no bonded links, the ingest area
- * shows a calm, informational card pointing to Network — with NO live telemetry
- * values (Live-Data Discipline). The HUD accessibility checks (Todo 30) live in
- * a11y.spec.ts, where the dedicated axe/a11y CI gate runs.
+ * Covers the Live destination's idle surface: when the stream is idle the view
+ * renders the Go-Live idle cockpit (GoLiveCard readiness + config) and NOT the
+ * live cockpit / live ingest table — no live telemetry values leak while idle
+ * (Live-Data Discipline). The standalone idle-ingest card (`ingest-idle-ready`)
+ * was absorbed into GoLiveCard's readiness gates by the Wave 3 T10/T11
+ * restructure. The HUD accessibility checks (Todo 30) live in a11y.spec.ts,
+ * where the dedicated axe/a11y CI gate runs.
  */
 import { expect, test as base } from './fixtures/index.js';
 import { ShellPage } from './pages/shell.js';
@@ -67,13 +69,17 @@ test.describe('Experience polish', () => {
 	}) => {
 		await new ShellPage(page).navigate('live');
 
-		// Idle, server configured: the calm informational idle card is shown
-		// instead of a live ingest table. The default multi-modem-wifi scenario has
-		// ready bonded links, so the link-aware idle panel (Todo 22) shows the
-		// links-ready card; the empty variant (no links) is covered by
-		// conditional-display.spec.ts state 2b.
-		const idle = page.getByTestId('ingest-idle-ready');
-		await expect(idle).toBeVisible();
+		// Idle, server configured: the Go-Live idle cockpit renders the GoLiveCard
+		// readiness gates instead of a live ingest table. The standalone
+		// `ingest-idle-ready` card was absorbed into GoLiveCard's readiness gates by
+		// the Wave 3 T10/T11 restructure. The default multi-modem-wifi scenario has
+		// ready bonded links, so the network gate resolves ok (mirrors
+		// conditional-display.spec.ts state 2a); the no-links blocked variant is
+		// covered by conditional-display.spec.ts state 2b.
+		const card = page.getByTestId('go-live-card');
+		await expect(card).toBeVisible();
+		const networkGate = card.locator('[data-testid="go-live-gate"][data-gate="network"]');
+		await expect(networkGate).toHaveAttribute('data-state', 'ok');
 		// No live telemetry table while idle (Live-Data Discipline — no stale values).
 		await expect(page.getByTestId('ingest-row')).toHaveCount(0);
 	});

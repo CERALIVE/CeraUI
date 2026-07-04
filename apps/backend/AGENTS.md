@@ -54,6 +54,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Gateway-active probe seam (blocks rtmp/srt `streaming.start` until the gateway is up; fail-safe default) | `modules/streaming/gateway-availability.ts` |
 | Same-subnet detection (`same_subnet_group`, informational, AP-excluded) | `modules/network/network-interfaces.ts` (`netIfBuildMsg`) |
 | Policy-route self-check for bonded wifi/modem interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
+| **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
+| **`config.source` legacy coercion (pipeline/selected_video_input → source, idempotent)** | `helpers/config-schemas.ts` (`coerceLegacySource`) |
 | Mock hardware data | `mocks/providers/` |
 | Shared RPC schema types | `../../../packages/rpc/` (`@ceraui/rpc`) |
 
@@ -251,8 +253,9 @@ The backend pushes typed events to all connected clients via `rpc/events.ts`. Ea
 | `wifi` | on-change | WiFi scan / connect / disconnect |
 | `relays` | on-change | relay list mutations |
 | `acodecs` | on-change | audio codec list changes |
-| `pipelines` | on-change | pipeline list changes; each entry carries `requires_gateway` (rtmp/srt) + `audio_kind` (`selectable`/`embedded`/`none`) |
-| `capabilities` | post-login snapshot | engine capability contract; carries `transports`, per-device `device_modes` (Tier-2 caps folded from `list-devices`, kbps-normalized bitrate), and `network_embedded_audio` |
+| `pipelines` | on-change | pipeline list changes; each entry carries `requires_gateway` (rtmp/srt) + `audio_kind` (`selectable`/`embedded`/`none`) — **deprecation shim**, see "Device-First Source Model" below |
+| `sources` | on-change + post-login snapshot | unified device-first source list (`modules/streaming/sources.ts`), folds pipelines+devices+device_modes into one `StreamSource[]` |
+| `capabilities` | post-login snapshot | engine capability contract; carries `transports`, per-device `device_modes` (Tier-2 caps folded from `list-devices`, kbps-normalized bitrate — **deprecation shim**, see below), and `network_embedded_audio` |
 | `notifications` | on-demand | user-facing toast events |
 | `log` | on-demand | `system.getLog` / `system.getSyslog` — diagnostic journal for download |
 | `ping` | 5 s | heartbeat emitter |
@@ -449,6 +452,51 @@ remote egress. Contract coverage: `src/main.test.ts`. Do NOT move a non-critical
 init ahead of the critical WS-server bind, and do NOT downgrade the config /
 WS-bind classifications to fail-soft.
 
+## DEVICE-FIRST SOURCE MODEL [EXISTS]
+
+`modules/streaming/sources.ts` is the single builder behind the `sources`
+broadcast (experience-simplification plan). It folds the coarse pipeline
+registry, the engine's `list-devices` result (cached via
+`refreshEngineDeviceCache`/`getEngineDeviceCache`), and the network-ingest
+gateway status into ONE ordered `StreamSource[]` list — `getSourcesMessage()` =
+`{hardware, sources}` (schema: `packages/rpc/src/schemas/sources.schema.ts`).
+Every row is one of four `origin` variants (`capture`/`coarse`/`virtual`/
+`network`); a bridged capture device REPLACES its coarse base entry in place
+(order-preserving) via `DEVICE_KIND_TO_PIPELINE_ID` (`@ceraui/rpc`
+`intersect-caps.ts`).
+
+- **`config.source`** persists the operator's pick as a single id. Legacy
+  configs (no `source` field) are coerced ONCE at load
+  (`coerceLegacySource`, `helpers/config-schemas.ts`) — a pure exported
+  function (not a schema `.transform`, so `runtimeConfigSchema` stays a
+  `ZodObject` and `validateConfig` can keep calling `.partial()`), never
+  throws, logs once.
+- **`deriveEngineRouting(sourceId, sources)`** resolves a source id to the wire
+  pair the engine needs (`{pipeline, selected_video_input}`) — capture routes
+  to its bridged pipeline + `input_id`; coarse/virtual/network route to their
+  pipeline id with `selected_video_input` explicitly `undefined` (clears a
+  stale capture selection; the engine's existing `config.selected_video_input
+  ?? getActiveInput()` fallback fills it). `resolveSourceRouting()` wraps this
+  with the `unknown_source` rejection and is the seam BOTH
+  `streaming.setConfig` and `streaming.start` call BEFORE any config mutation
+  or engine dispatch — `cerastream-backend.ts` is untouched by this entire
+  model (a `git diff`-based regression test proves it byte-for-byte).
+- **Shim policy**: the legacy `devices` broadcast (`modules/streaming/
+  devices.ts`), the `pipelines` broadcast (`rpc/procedures/
+  streaming.procedure.ts`), and the coarse `capabilities.device_modes` field
+  (`modules/streaming/capabilities.ts`) are kept running byte-for-byte
+  unchanged for one release as a rollback safety net — no shipped frontend
+  surface reads them anymore (SourceSection/EncoderDialog/GoLiveCard all read
+  `getSources()` exclusively). Tracked as `TD-legacy-source-broadcasts` in
+  `docs/TECHNICAL_DEBT.md`; do not delete the producers until that entry's
+  exit condition is met.
+- **`getLinkTelemetry` null-on-stop** is a backend-locked contract:
+  `stopLinkTelemetry()` clears the source state so the NEXT heartbeat tick's
+  `broadcastLinkTelemetryIfChanged()` emits `{linkTelemetry: null}` exactly
+  once (the dedupe cache is deliberately NOT reset in the stop path, so a
+  second consecutive `null` tick is suppressed). See `apps/frontend/AGENTS.md`
+  → "Telemetry-clears-on-stop" for the matching frontend-side guarantee.
+
 ## ANTI-PATTERNS
 
 - Don't import from `@ceralive/srtla` — that package is retired from CeraUI. Use `@ceralive/srtla-send` (the `srtla-send-rs` binding, registry dep). Check `../../../srtla-send-rs/AGENTS.md` before touching call sites.
@@ -464,3 +512,5 @@ WS-bind classifications to fail-soft.
   `package.json` to track the engine.
 - Don't multiplex the control channel onto the BCRPT relay socket — the two channels are independent by design (different token audiences, different endpoints, different authority models).
 - Don't add secret-bearing event types to `RELAYABLE_TYPES` — the no-secrets contract test will catch it.
+- Don't delete the `devices`/`pipelines` broadcasts or the `capabilities.device_modes` field yet — they're deprecation shims kept for one release (`TD-legacy-source-broadcasts`); route new consumers through `getSources()`/the `sources` broadcast instead.
+- Don't re-derive `pipeline`/`selected_video_input` resolution inline in a new procedure — route through `resolveSourceRouting()`/`deriveEngineRouting()` in `modules/streaming/sources.ts`.

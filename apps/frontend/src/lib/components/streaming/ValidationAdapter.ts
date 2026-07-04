@@ -39,6 +39,7 @@ import {
 	SIM_PUK_LENGTH,
 	SRT_LATENCY_MAX,
 	SRT_LATENCY_MIN,
+	type StreamSource,
 	WIFI_PASSWORD_MIN,
 } from "@ceraui/rpc/schemas";
 
@@ -171,6 +172,41 @@ export function videoSourceCapFromPipeline(
 }
 
 /**
+ * Project a device-first {@link StreamSource} onto the {@link VideoSourceCap}
+ * shape `intersectCaps()` expects — the source-keyed counterpart of
+ * {@link videoSourceCapFromPipeline}. The StreamSource facets already come from
+ * the backend `sources` builder (itself derived from the capability service), so
+ * this is a pure shape adapter, not a second source of truth.
+ */
+export function videoSourceCapFromStreamSource(
+	source: StreamSource,
+): VideoSourceCap {
+	return {
+		id: source.id,
+		supports_audio: source.supportsAudio,
+		supports_resolution_override: source.supportsResolutionOverride,
+		supports_framerate_override: source.supportsFramerateOverride,
+		default_resolution: source.defaultResolution ?? "1080p",
+		default_framerate: source.defaultFramerate ?? 30,
+	};
+}
+
+/**
+ * Discriminate a {@link StreamSource} from the legacy device-modes map at the
+ * overloaded {@link resolveDeviceModes} / {@link offeredAxes} entry points. A
+ * StreamSource always carries the `origin` discriminant and a `modes` array; the
+ * legacy `Record<inputId, DeviceModeGroup>` map carries neither at its top level.
+ */
+function isStreamSource(value: unknown): value is StreamSource {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		"origin" in value &&
+		"modes" in value
+	);
+}
+
+/**
  * The effective offered capability set for the current platform ∩ selected
  * source. An absent pipeline is permissive (the full platform ladder, all
  * overrides live) — exactly the None-cap policy `intersectCaps()` documents.
@@ -267,19 +303,54 @@ export interface OfferedAxes {
 }
 
 /**
- * Resolve which device modes narrow the axes for the current selection.
+ * The device modes that narrow the axes for the active {@link StreamSource}.
  *
- *   1. An explicitly selected capture device (`selectedVideoInput`, a list-devices
- *      input_id) narrows to THAT device's modes.
- *   2. No device selected → the UNION of modes across every device whose `kind`
- *      maps to the selected pipeline via {@link deviceKindToPipelineId}.
- *   3. Non-device pipelines (rtmp/srt/test) or zero kind-matched devices → coarse
- *      (`undefined`): an empty device match must NEVER collapse an axis to nothing.
- *
- * `deviceModes` absent entirely → `undefined` (byte-identical to today's coarse
- * offering).
+ * This is the SINGLE lookup that replaces the old pipelineId ∪ selectedVideoInput
+ * union hack: the backend `sources` builder already folded each device's modes
+ * onto its StreamSource, so the adapter just reads `source.modes`. A `[]` modes
+ * list (coarse/virtual/network, or a capture device whose modes the engine has
+ * not enumerated) falls back to the coarse offering (`undefined`) — an empty
+ * match must NEVER collapse an axis to nothing.
  */
 export function resolveDeviceModes(
+	source: StreamSource | undefined,
+): readonly DeviceMode[] | undefined;
+/**
+ * Legacy device-modes reconciliation keyed on the coarse capability broadcast
+ * (`capabilities.device_modes`) plus the pipeline/input selection. Retained for
+ * the pre-source callers still on that broadcast (`deriveCapabilitySummary`, and
+ * the EncoderDialog axes path via the legacy {@link offeredAxes} overload) until
+ * they migrate to the source-keyed form.
+ */
+export function resolveDeviceModes(
+	deviceModes: Record<string, DeviceModeGroup> | undefined,
+	pipelineId: string | undefined,
+	selectedVideoInput: string | undefined,
+): readonly DeviceMode[] | undefined;
+export function resolveDeviceModes(
+	sourceOrDeviceModes:
+		| StreamSource
+		| Record<string, DeviceModeGroup>
+		| undefined,
+	pipelineId?: string,
+	selectedVideoInput?: string,
+): readonly DeviceMode[] | undefined {
+	const isLegacyForm =
+		pipelineId !== undefined ||
+		selectedVideoInput !== undefined ||
+		(sourceOrDeviceModes !== undefined && !isStreamSource(sourceOrDeviceModes));
+	if (isLegacyForm) {
+		return resolveDeviceModesFromDeviceModes(
+			sourceOrDeviceModes as Record<string, DeviceModeGroup> | undefined,
+			pipelineId,
+			selectedVideoInput,
+		);
+	}
+	const source = sourceOrDeviceModes as StreamSource | undefined;
+	return source && source.modes.length > 0 ? source.modes : undefined;
+}
+
+function resolveDeviceModesFromDeviceModes(
 	deviceModes: Record<string, DeviceModeGroup> | undefined,
 	pipelineId: string | undefined,
 	selectedVideoInput: string | undefined,
@@ -303,11 +374,22 @@ export function resolveDeviceModes(
 }
 
 /**
- * The offered capability set for the current platform ∩ selected source ∩ Tier-2
- * device modes. Base is {@link offeredEncoderCaps}; the resolved device modes (see
- * {@link resolveDeviceModes}) are threaded into `intersectCaps` for the union-level
- * resolution/framerate narrowing. Per-resolution framerate refinement is
- * {@link framerateOptionsForResolution}'s job.
+ * The offered capability set for platform ∩ the active {@link StreamSource} ∩ its
+ * own Tier-2 device modes. The source's `modes` (see {@link resolveDeviceModes})
+ * are threaded into `intersectCaps` for the resolution/framerate narrowing;
+ * per-resolution framerate refinement is {@link framerateOptionsForResolution}'s
+ * job. With `source.modes` empty the result is byte-identical to the coarse
+ * {@link offeredEncoderCaps} offering.
+ */
+export function offeredAxes(
+	hardware: HardwareType | undefined,
+	source: StreamSource | undefined,
+	mode?: string,
+): OfferedAxes;
+/**
+ * Legacy pipeline-keyed axes resolution (coarse capability broadcast +
+ * pipeline/input selection). The EncoderDialog axes path until it migrates to the
+ * source-keyed overload above.
  */
 export function offeredAxes(
 	hardware: HardwareType | undefined,
@@ -315,7 +397,49 @@ export function offeredAxes(
 	pipeline: Pipeline | undefined,
 	deviceModes: Record<string, DeviceModeGroup> | undefined,
 	selectedVideoInput: string | undefined,
+	mode?: string,
+): OfferedAxes;
+export function offeredAxes(
+	hardware: HardwareType | undefined,
+	sourceOrPipelineId: StreamSource | string | undefined,
+	pipelineOrMode?: Pipeline | string,
+	deviceModes?: Record<string, DeviceModeGroup> | undefined,
+	selectedVideoInput?: string,
 	mode: string = STREAMING_MODE,
+): OfferedAxes {
+	const isLegacyForm =
+		typeof sourceOrPipelineId === "string" ||
+		(pipelineOrMode !== undefined && typeof pipelineOrMode === "object") ||
+		deviceModes !== undefined ||
+		selectedVideoInput !== undefined;
+	if (isLegacyForm) {
+		return offeredAxesFromPipeline(
+			hardware,
+			sourceOrPipelineId as string | undefined,
+			pipelineOrMode as Pipeline | undefined,
+			deviceModes,
+			selectedVideoInput,
+			mode,
+		);
+	}
+	const source = sourceOrPipelineId as StreamSource | undefined;
+	const sourceMode = typeof pipelineOrMode === "string" ? pipelineOrMode : mode;
+	const platform = platformCapsForHardware(hardware);
+	const cap = source ? videoSourceCapFromStreamSource(source) : undefined;
+	const resolvedModes = resolveDeviceModes(source);
+	return {
+		offered: intersectCaps(platform, cap, sourceMode, resolvedModes),
+		deviceModes: resolvedModes,
+	};
+}
+
+function offeredAxesFromPipeline(
+	hardware: HardwareType | undefined,
+	pipelineId: string | undefined,
+	pipeline: Pipeline | undefined,
+	deviceModes: Record<string, DeviceModeGroup> | undefined,
+	selectedVideoInput: string | undefined,
+	mode: string,
 ): OfferedAxes {
 	const platform = platformCapsForHardware(hardware);
 	const source =

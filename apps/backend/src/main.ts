@@ -82,6 +82,7 @@ import {
 	getPipelineList,
 	initPipelines,
 } from "./modules/streaming/pipelines.ts";
+import { refreshAndBroadcastSources } from "./modules/streaming/sources.ts";
 import {
 	getStreamingProcesses,
 	gracefulShutdown,
@@ -194,6 +195,16 @@ await guardNonCritical("pipelines", () =>
 reconcilePersistedPipeline(
 	getConfig().pipeline,
 	Object.keys(getPipelineList()),
+);
+
+// Seed the engine-device cache so a later engine outage never empties the
+// source list; rides the same broadcast bus as `pipelines`, no new endpoint.
+await guardNonCritical("sources", () =>
+	refreshAndBroadcastSources(
+		shouldUseMocks()
+			? { fetchEngineDevices: async () => getMockEngineDevices() }
+			: undefined,
+	),
 );
 logger.info(bootTimer.phase("🔌", "pipelines"));
 

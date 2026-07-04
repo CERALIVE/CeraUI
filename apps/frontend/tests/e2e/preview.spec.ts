@@ -89,6 +89,20 @@ function injectServerConfig(): void {
 	pageWs?.send(JSON.stringify({ config: SERVER_CONFIG }));
 }
 
+/**
+ * Open the collapsed "Preview" <details> disclosure (T11) so the preview section
+ * (data-testid="preview") is visible. IdleCockpit ships the preview inside a
+ * closed-by-default disclosure; opening it only REVEALS the surface — the preview
+ * stays off (data-status="idle") until `preview-toggle` is clicked, so the tier
+ * selection and honest off-copy are still observed exactly as before.
+ */
+async function openPreviewDisclosure(page: Page): Promise<void> {
+	const disclosure = page.getByTestId('preview-disclosure');
+	await expect(disclosure).toBeVisible();
+	await disclosure.locator('summary').click();
+	await expect(page.getByTestId('preview')).toBeVisible();
+}
+
 async function webcodecsH264Advertised(page: Page): Promise<boolean> {
 	return page.evaluate(async (codec) => {
 		const VD = (
@@ -136,6 +150,7 @@ test.describe('PreviewCanvas — WebCodecs tier + idle copy', () => {
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
 		injectServerConfig();
+		await openPreviewDisclosure(page);
 	});
 
 	test('idle toggle shows the honest "preview off" copy, not a stalled state', async ({
@@ -214,6 +229,7 @@ test.describe('PreviewCanvas — forced MSE tier', () => {
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
 		injectServerConfig();
+		await openPreviewDisclosure(page);
 	});
 
 	test('selects the <video> path, shows the compat badge, sends the mse handshake', async ({

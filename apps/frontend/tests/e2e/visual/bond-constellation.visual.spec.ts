@@ -22,6 +22,8 @@ import { ensureAuthenticated } from "../helpers/index.js";
  */
 
 const REPO_EVIDENCE = path.resolve(import.meta.dirname, "../../../../../test-results");
+// Task-24 captures land in apps/frontend/test-results (the todo's target dir).
+const TASK24_DIR = path.resolve(import.meta.dirname, "../../../test-results/task-24-visual");
 
 async function openLiveHud(page: Page): Promise<void> {
 	await ensureAuthenticated(page);
@@ -171,6 +173,58 @@ test.describe("@visual bond constellation reduced-motion", () => {
 
 		await constellation.screenshot({
 			path: path.join(REPO_EVIDENCE, "task-34-constellation-reduced-motion.png"),
+		});
+	});
+});
+
+/**
+ * Task-24 lifecycle captures for the reshaped HUD-sheet constellation.
+ *
+ *   • idle  (T17): the constellation is mounted `{#if isLive}` only, so an idle
+ *     HUD sheet carries ZERO bond-packet elements — the plan's QA-failure guard
+ *     ("idle sheet capture contains zero bond-packet elements") asserted directly.
+ *   • live  (T18): while live the constellation renders as a narrow strip
+ *     (`max-w-[16rem]`) inside the sheet, with animated packets flowing.
+ */
+test.describe("@visual bond constellation HUD-sheet lifecycle", () => {
+	test.beforeEach(async ({ page }, testInfo) => {
+		test.skip(testInfo.project.name !== "desktop", "desktop layout exposes the persistent HUD bar");
+	});
+
+	test("idle: HUD sheet shows zero bond packets", { tag: "@visual" }, async ({ page }) => {
+		// No forceStreaming — the default mock scenario is idle (is_streaming=false).
+		await page.goto("/");
+		await openLiveHud(page);
+
+		// T18: no constellation is mounted while idle …
+		await expect(page.getByTestId("hud-constellation")).toHaveCount(0);
+		// … so the whole sheet carries zero bond-packet elements (T17 idle honesty).
+		await expect(page.getByTestId("bond-packet")).toHaveCount(0);
+		await expect(page.getByTestId("bond-constellation")).toHaveCount(0);
+
+		await page.getByRole("dialog", { name: "Status" }).screenshot({
+			path: path.join(TASK24_DIR, "bond-constellation-idle-sheet.png"),
+		});
+	});
+
+	test("live: constellation strip form-factor inside the sheet", { tag: "@visual" }, async ({ page }) => {
+		await forceStreaming(page);
+		await page.goto("/");
+		await openLiveHud(page);
+
+		const strip = page.getByTestId("hud-constellation");
+		await expect(strip).toBeVisible();
+		// T18: the in-sheet constellation is a narrow strip.
+		await expect(strip).toHaveClass(/max-w-\[16rem\]/);
+
+		const constellation = strip.getByTestId("bond-constellation");
+		await expect(constellation).toHaveAttribute("data-live", "true");
+		await expect(constellation).toHaveAttribute("data-animated", "true");
+		// T17: packets are present + flowing while live (opacity > 0).
+		await expect(constellation.getByTestId("bond-packet").first()).toBeVisible();
+
+		await strip.screenshot({
+			path: path.join(TASK24_DIR, "bond-constellation-live-strip.png"),
 		});
 	});
 });

@@ -19,12 +19,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { rpc } from "$lib/rpc/client";
 import { destroyDirtyRegistry } from "$lib/rpc/dirty-registry.svelte";
-import {
-	destroyFieldSyncState,
-	getFieldState,
-} from "$lib/rpc/field-sync-state.svelte";
 
 import NetworkIngestSection from "./NetworkIngestSection.svelte";
+
+// Spy on field-sync calls to verify the EXACT released value (not just the phase).
+// Read-only selectors (getFieldState/isFieldApplying) are stubbed to keep the
+// component rendering, but the mutation spies capture the exact release-values.
+const beginFieldSync = vi.hoisted(() => vi.fn());
+const markFieldApplying = vi.hoisted(() => vi.fn());
+const markFieldApplied = vi.hoisted(() => vi.fn());
+const markFieldFailed = vi.hoisted(() => vi.fn());
+vi.mock("$lib/rpc/field-sync-state.svelte", () => ({
+	beginFieldSync,
+	markFieldApplying,
+	markFieldApplied,
+	markFieldFailed,
+	getFieldState: () => "idle",
+	isFieldApplying: () => false,
+}));
 
 // Hermetic RPC: `setConfig` is a spy driven per-test — no socket, no env.
 vi.mock("$lib/rpc/client", () => ({
@@ -75,14 +87,16 @@ function bothActive(): NetworkIngest {
 }
 
 beforeEach(() => {
-	getFieldState("__warmup__"); // eagerly create the field-sync store
 	setConfig.mockReset();
 	toastSuccess.mockReset();
 	toastError.mockReset();
+	beginFieldSync.mockReset();
+	markFieldApplying.mockReset();
+	markFieldApplied.mockReset();
+	markFieldFailed.mockReset();
 });
 
 afterEach(() => {
-	destroyFieldSyncState();
 	destroyDirtyRegistry();
 });
 
@@ -111,9 +125,10 @@ describe("NetworkIngestSection — active gateway is selectable + locks via fiel
 		await waitFor(() =>
 			expect(setConfig).toHaveBeenCalledWith({ pipeline: "rtmp" }),
 		);
-		// The per-field lock advanced through the machine to the applied phase,
-		// released to the SERVER-applied value (never the intended one).
-		await waitFor(() => expect(getFieldState("pipeline")).toBe("applied"));
+		// The per-field lock released to the SERVER-applied value.
+		await waitFor(() =>
+			expect(markFieldApplied).toHaveBeenCalledWith("pipeline", "rtmp"),
+		);
 	});
 
 	it("marks the row selected when config.pipeline already matches", () => {
@@ -128,6 +143,96 @@ describe("NetworkIngestSection — active gateway is selectable + locks via fiel
 		expect(
 			getByTestId("network-ingest-select-srt").getAttribute("data-selected"),
 		).toBe("true");
+	});
+
+	it("releases the field lock to result.applied.pipeline, not the optimistic value", async () => {
+		// The backend applies a DIFFERENT pipeline than the one we sent (e.g., due to
+		// clamping or validation). The lock must release to the applied value.
+		setConfig.mockResolvedValue({
+			success: true,
+			is_streaming: false,
+			applied: { pipeline: "srt" }, // Different from the requested "rtmp"
+		} as never);
+
+		const { getByTestId } = render(NetworkIngestSection, {
+			props: {
+				networkIngest: bothActive(),
+				pipelines: PIPELINES,
+				selectedPipeline: undefined,
+				isStreaming: false,
+			},
+		});
+
+		const row = getByTestId("network-ingest-select-rtmp") as HTMLButtonElement;
+		await fireEvent.click(row);
+
+		await waitFor(() =>
+			expect(setConfig).toHaveBeenCalledWith({ pipeline: "rtmp" }),
+		);
+		// Prove the ACTUAL released value is the applied "srt", not the requested "rtmp".
+		await waitFor(() =>
+			expect(markFieldApplied).toHaveBeenCalledWith("pipeline", "srt"),
+		);
+		// Verify the optimistic value was NOT released.
+		expect(markFieldApplied).not.toHaveBeenCalledWith("pipeline", "rtmp");
+	});
+
+	it("marks field failed when setConfig rejects (success:false)", async () => {
+		setConfig.mockResolvedValue({
+			success: false,
+			error: "unknown_pipeline",
+			is_streaming: false,
+		} as never);
+
+		const { getByTestId } = render(NetworkIngestSection, {
+			props: {
+				networkIngest: bothActive(),
+				pipelines: PIPELINES,
+				selectedPipeline: "hdmi", // Prior value
+				isStreaming: false,
+			},
+		});
+
+		const row = getByTestId("network-ingest-select-rtmp") as HTMLButtonElement;
+		await fireEvent.click(row);
+
+		await waitFor(() =>
+			expect(setConfig).toHaveBeenCalledWith({ pipeline: "rtmp" }),
+		);
+		// Rejected response → field lock reverts to the prior value and marks failed.
+		await waitFor(() =>
+			expect(markFieldFailed).toHaveBeenCalledWith("pipeline", "hdmi"),
+		);
+		expect(toastError).toHaveBeenCalled();
+	});
+
+	it("marks field failed when setConfig succeeds but omits applied.pipeline", async () => {
+		setConfig.mockResolvedValue({
+			success: true,
+			is_streaming: false,
+			applied: {}, // Missing the pipeline field
+		} as never);
+
+		const { getByTestId } = render(NetworkIngestSection, {
+			props: {
+				networkIngest: bothActive(),
+				pipelines: PIPELINES,
+				selectedPipeline: "hdmi", // Prior value
+				isStreaming: false,
+			},
+		});
+
+		const row = getByTestId("network-ingest-select-rtmp") as HTMLButtonElement;
+		await fireEvent.click(row);
+
+		await waitFor(() =>
+			expect(setConfig).toHaveBeenCalledWith({ pipeline: "rtmp" }),
+		);
+		// Success but missing applied field → treat as failure, revert to prior value.
+		await waitFor(() =>
+			expect(markFieldFailed).toHaveBeenCalledWith("pipeline", "hdmi"),
+		);
+		expect(toastError).toHaveBeenCalled();
 	});
 });
 

@@ -402,6 +402,79 @@ describe("deriveHudState — no-SIM / null signal handling", () => {
 	});
 });
 
+describe("deriveHudState — not-streaming clears live throughput/bitrate (T6)", () => {
+	it("nulls bitrateKbps when not streaming even with a configured max_br", () => {
+		const state = deriveHudState(
+			makeSources({ isStreaming: false }),
+			makeTimestamps(T0),
+			T0,
+		);
+		expect(state.isStreaming).toBe(false);
+		expect(state.bitrateKbps).toBeNull();
+	});
+
+	it("keeps bitrateKbps while streaming", () => {
+		const state = deriveHudState(
+			makeSources({ isStreaming: true }),
+			makeTimestamps(T0),
+			T0,
+		);
+		expect(state.bitrateKbps).toBe(6000);
+	});
+
+	it("drops per-link throughput to 0 when not streaming, keeping identity/connectivity", () => {
+		const state = deriveHudState(
+			makeSources({ isStreaming: false, netif: netifWithEthFixture }),
+			makeTimestamps(T0),
+			T0,
+		);
+		expect(state.links.length).toBeGreaterThan(0);
+		expect(state.links.every((l) => l.throughputKbps === 0)).toBe(true);
+		// Identity + connectivity survive — only the live throughput is dropped.
+		const wifi = state.links.find((l) => l.type === "wifi");
+		expect(wifi?.isConnected).toBe(true);
+		expect(wifi?.enabled).toBe(true);
+	});
+
+	it("retains per-link throughput while streaming", () => {
+		const state = deriveHudState(
+			makeSources({ isStreaming: true }),
+			makeTimestamps(T0),
+			T0,
+		);
+		expect(state.links.some((l) => l.throughputKbps > 0)).toBe(true);
+	});
+});
+
+describe("buildLinks — isStreaming throughput gate (T6)", () => {
+	it("zeroes throughput for every link kind when not streaming", () => {
+		const links = buildLinks(
+			{ modem1: makeModem() } as ModemList,
+			wifiFixture,
+			netifWithEthFixture,
+			false,
+			false,
+			false,
+			new Set(),
+			false,
+		);
+		expect(links.length).toBeGreaterThan(0);
+		expect(links.every((l) => l.throughputKbps === 0)).toBe(true);
+	});
+
+	it("defaults isStreaming=true (throughput shown) for existing callers", () => {
+		const links = buildLinks(
+			{ modem1: makeModem() } as ModemList,
+			wifiFixture,
+			netifFixture,
+			false,
+			false,
+			false,
+		);
+		expect(links.some((l) => l.throughputKbps > 0)).toBe(true);
+	});
+});
+
 // ============================================
 // Multiple links + index mapping
 // ============================================

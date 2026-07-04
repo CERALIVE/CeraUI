@@ -10,25 +10,9 @@ import {
 	SWITCH_AUDIO_ERRORS,
 	SWITCH_INPUT_ERRORS,
 } from '@ceraui/rpc/schemas';
-import {
-	ChevronRight,
-	Cpu,
-	PictureInPicture2,
-	Radio,
-	Server,
-	ServerOff,
-	Shuffle,
-	Volume2,
-} from '@lucide/svelte';
+import { Cpu, Server, Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
-import { Button } from '$lib/components/ui/button';
-import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
-import IngestStats from '$lib/components/custom/IngestStats.svelte';
-import NetworkIngestSection from '$lib/components/custom/NetworkIngestSection.svelte';
-import SourceSection from '$lib/components/custom/SourceSection.svelte';
-import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
-import * as Card from '$lib/components/ui/card';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
@@ -58,15 +42,9 @@ import {
 	deriveDestination,
 	findActiveSlot,
 	kindBadgeLabelKey,
-	managedSlotLabel,
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
-import { deriveIngestReadiness } from '$lib/streaming/ingestReadiness';
-import {
-	deriveFailover,
-	normalizeOrder,
-	reorderSource,
-} from '$lib/streaming/source-preference';
+import { normalizeOrder, reorderSource } from '$lib/streaming/source-preference';
 import { navElements } from '$lib/config';
 import {
 	getActiveInput,
@@ -74,6 +52,7 @@ import {
 	getConfig,
 	getConnectionState,
 	getDevices,
+	getIsConnected,
 	getIsStreaming,
 	getLinkTelemetry,
 	getManagedIngestAccounts,
@@ -81,12 +60,9 @@ import {
 	getPipelines,
 	getRelays,
 	getSensors,
+	getSources,
 	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
-import {
-	dismissOnboarding,
-	isOnboardingDismissed,
-} from '$lib/stores/onboarding.svelte';
 import {
 	getStreamingOptimismState,
 	getStreamingStopReason,
@@ -94,22 +70,18 @@ import {
 	stopStreamingOptimism,
 	reconcileStreamingOptimism,
 	revertStreamingOptimism,
-	clearStreamingStopReason,
 } from '$lib/rpc/streaming-optimism.svelte';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
 import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
-import { buildStartConfig, canStartStream } from '$lib/streaming/startStreaming';
+import { buildStartConfig } from '$lib/streaming/startStreaming';
 import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
 import EncoderDialog, { type EncoderConfig } from '$main/dialogs/EncoderDialog.svelte';
 import ServerDialog from '$main/dialogs/ServerDialog.svelte';
-import BitrateAdjuster from '$main/live/BitrateAdjuster.svelte';
 import CapabilityTierBanner from '$main/live/CapabilityTierBanner.svelte';
+import IdleCockpit from '$main/live/IdleCockpit.svelte';
+import LiveCockpit from '$main/live/LiveCockpit.svelte';
 import LiveHeader from '$main/live/LiveHeader.svelte';
-import OnboardingChecklist from '$main/live/OnboardingChecklist.svelte';
-import ServerReadiness from '$main/live/ServerReadiness.svelte';
-import StreamControlButton from '$main/live/StreamControlButton.svelte';
-import StreamSettingsCard, { type ConfigRow } from '$main/live/StreamSettingsCard.svelte';
-import StreamTelemetryStrip from '$main/live/StreamTelemetryStrip.svelte';
+import type { ConfigRow } from '$main/live/StreamSettingsCard.svelte';
 
 // Reactive state — non-deprecated subscriptions getters only.
 const config = $derived(getConfig());
@@ -123,10 +95,67 @@ const linkTelemetry = $derived(getLinkTelemetry());
 const streamingOptimismState = $derived(getStreamingOptimismState());
 const streamingStopReason = $derived(getStreamingStopReason());
 
+// Idle vs Live cockpit gate (Task 11): the optimistic view of streaming so the
+// start transition shows LiveCockpit immediately (no flicker back to idle mid-
+// start), and the stop transition keeps LiveCockpit until the authoritative
+// is_streaming=false arrives (isStreaming is still true while `stopping`).
+const optimisticIsStreaming = $derived(
+	isStreaming || streamingOptimismState === 'starting',
+);
+
 // Reconcile optimism to authoritative is_streaming broadcast.
 $effect(() => {
 	reconcileStreamingOptimism(isStreaming);
 });
+
+// ── Post-stream summary window ─────────────────────────────────────────────
+// IngestStats' historical "Session ended · {duration}" summary lives inside
+// LiveCockpit and only renders while `isStreaming !== true` — but LiveCockpit
+// unmounts the instant `isStreaming` flips false (`optimisticIsStreaming` drops
+// in the same tick), so the summary never got a chance to paint. Keep LiveCockpit
+// mounted for a bounded window after a REAL stop (authoritative `isStreaming`
+// true→false — the SAME edge IngestStats folds its rollup on, so a failed
+// `starting` revert with no live session never opens it). During the window
+// LiveCockpit switches to `summaryMode`: the still-mounted IngestStats shows the
+// historical summary, and its live chrome (telemetry strip / bitrate adjuster /
+// stop control) is hidden so the UI is not trapped in a stale "live" mode. The
+// window is bounded — a fixed timeout closes it, and the next stream start resets
+// it — so it always resolves back to IdleCockpit.
+const SUMMARY_WINDOW_MS = 30_000;
+let showingSummary = $state(false);
+let summaryTimer: ReturnType<typeof setTimeout> | undefined;
+let lastStreamingState = false;
+
+// `$effect.pre` (not `$effect`): the window flag must flip BEFORE the cockpit
+// gate renders. A post-render `$effect` lags one tick, so on the stop edge the
+// template would render once with `showLiveCockpit` false (unmounting LiveCockpit)
+// before the flag flips it back true — remounting a fresh IngestStats and wiping
+// the session rollup the summary reads.
+$effect.pre(() => {
+	const streamingNow = isStreaming;
+	if (streamingNow === lastStreamingState) return;
+	lastStreamingState = streamingNow;
+	clearTimeout(summaryTimer);
+	if (streamingNow) {
+		// A (re)start closes any lingering summary window immediately.
+		showingSummary = false;
+	} else {
+		// A real stream just stopped: open the bounded post-stream summary window.
+		showingSummary = true;
+		summaryTimer = setTimeout(() => {
+			showingSummary = false;
+		}, SUMMARY_WINDOW_MS);
+	}
+});
+
+// Clear a pending window timer if the view unmounts mid-window.
+$effect(() => () => clearTimeout(summaryTimer));
+
+// LiveCockpit stays mounted while streaming/starting OR through the bounded
+// post-stream summary window; `summaryMode` collapses it to summary-only chrome
+// once the stream has actually stopped (never during the optimistic start edge).
+const showLiveCockpit = $derived(optimisticIsStreaming || showingSummary);
+const summaryMode = $derived(showingSummary && !optimisticIsStreaming);
 
 // The cerastream Tier-2 reason codes that carry a SPECIFIC start-failure
 // message; any other reason (or an unstructured throw) shows the generic copy.
@@ -154,42 +183,17 @@ $effect(() => {
 	}
 });
 
-// Keep the ingest panel mounted across the streaming→idle edge so its end-of-
-// session summary (peak/avg bitrate, per-link uptime, drops) survives the stream
-// stopping — the live table unmounts with the streaming-only strip, but the
-// device-local summary must persist until the next session starts.
-let hadSession = $state(false);
-$effect(() => {
-	if (isStreaming) hadSession = true;
-});
-
-// Hotplug input picker (Task 34). The pipeline picker (EncoderDialog) is
-// untouched.
+// Live capture devices (Task 34) — the source-preference order is reconciled
+// against this list; the unified source picker (SourceSection) reads the folded
+// `getSources()` broadcast and owns config.source selection itself (Task 13).
 const devices = $derived(getDevices());
 const activeInput = $derived(getActiveInput());
-let selectedInput = $state<string | undefined>(undefined);
-// Seed the pre-start input pick from the persisted config (Todo 26). Reconcile
-// ONLY when the persisted value genuinely changes so an unrelated `config`
-// broadcast — or a stale echo during an in-flight optimistic pick — can never
-// clobber the just-selected value. `lastPersistedInput` is intentionally NOT a
-// rune: writing it inside the effect tracks only `config?.selected_video_input`,
-// never `selectedInput`, so the optimistic assignment below is preserved.
-let lastPersistedInput: string | undefined;
-$effect(() => {
-	const persisted = config?.selected_video_input;
-	if (persisted !== lastPersistedInput) {
-		lastPersistedInput = persisted;
-		selectedInput = persisted;
-	}
-});
 let switchingInput = $state<string | undefined>(undefined);
 
 // Reconnect-aware reconciliation (Task 15): a live `switchInput` restarts the
 // pipeline, which can drop and replace the WebSocket — orphaning the in-flight
-// RPC so its `finally` never clears `switchingInput`. Watch the authoritative
-// connection state and, on the reconnect edge (→ connected), drop a stuck latch
-// so the picker reconciles to the server-reported `activeInput` instead of a
-// stale optimistic "switching" state.
+// RPC so its `finally` never clears `switchingInput`. On the reconnect edge drop
+// a stuck latch so the picker reconciles to the server-reported `activeInput`.
 let prevConnection = $state(getConnectionState());
 $effect(() => {
 	const next = getConnectionState();
@@ -198,20 +202,22 @@ $effect(() => {
 });
 
 // Sole gate for the live audio-switch affordance (G2): the engine capability
-// flag, never a version string. False in Track 1, so audio sources render a
-// disabled "coming soon" affordance and can never be live-switched.
+// flag, never a version string. Guards handleSwitchInput/handleSwitchAudio so a
+// live audio source switch can never be dispatched when the engine can't honor it.
 const audioLiveSwitchEnabled = $derived(isAudioLiveSwitchEnabled(getCapabilities()));
 
 // One per-field sync key drives the audio-switch applying/applied/failed glyph
-// in the picker (Task 5 machine), regardless of which audio source is targeted.
+// (Task 5 machine), regardless of which audio source is targeted.
 const AUDIO_SWITCH_FIELD = 'audio_switch';
 
+// Live input switch (Task 34/25): dispatched from the unified source list's
+// capture rows WHILE streaming (SourceSection `onSwitch`). Routes through the
+// keyed async-operation machine for the in-flight phase + re-entry guard; an
+// `audio:*` id is delegated to the gated switchAudio path.
 async function handleSwitchInput(inputId: string) {
-	// Defense-in-depth: the audio Switch button in InputPicker is already
-	// disabled-with-reason when the capability is off, so this path is normally
-	// unreachable. If it is somehow reached, surface a calm, user-visible reason
-	// via a toast and refuse to dispatch — the engine would otherwise reject the
-	// live audio:* switch with DeviceNotFound.
+	// Defense-in-depth: the live-switch affordance is disabled-with-reason when
+	// the capability is off. If it is somehow reached, surface a calm reason and
+	// refuse — the engine would otherwise reject the live audio:* switch.
 	if (!canLiveSwitchInput(inputId, audioLiveSwitchEnabled)) {
 		toast.warning($LL.live.inputPicker.audioSwitchUnavailable());
 		return;
@@ -222,12 +228,6 @@ async function handleSwitchInput(inputId: string) {
 	}
 	switchingInput = inputId;
 	try {
-		// The live input switch routes through the keyed async-operation machine
-		// (key 'switch-input') for the re-entry guard + in-flight `pending` phase.
-		// `classify` keeps every resolved verdict `ok` so osCommand never emits its
-		// generic toast — the picker keeps its nuanced switched/source-lost/failed
-		// feedback below — and we drive the confirmed/failed phase by hand. Only a
-		// thrown RPC toasts (via `failMessage`).
 		const res = await osCommand({
 			key: 'switch-input',
 			target: inputId,
@@ -262,8 +262,15 @@ async function handleSwitchAudio(inputId: string) {
 	try {
 		const res = await rpc.streaming.switchAudio({ audio_input_id: inputId });
 		if (res.success) {
-			markFieldApplied(AUDIO_SWITCH_FIELD, res.active_audio_input ?? inputId);
-			toast.info($LL.live.inputPicker.audioSwitched({ ms: res.gap_ms ?? 0 }));
+			// Only release to the applied value when it is confirmed by the backend.
+			// If res.active_audio_input is absent, treat as unconfirmed (incomplete response).
+			if (res.active_audio_input !== undefined) {
+				markFieldApplied(AUDIO_SWITCH_FIELD, res.active_audio_input);
+				toast.info($LL.live.inputPicker.audioSwitched({ ms: res.gap_ms ?? 0 }));
+			} else {
+				// Success response without confirmed value: revert to prior state.
+				markFieldFailed(AUDIO_SWITCH_FIELD, activeInput ?? inputId);
+			}
 		} else {
 			markFieldFailed(AUDIO_SWITCH_FIELD, activeInput ?? inputId);
 			toast.error(
@@ -280,56 +287,12 @@ async function handleSwitchAudio(inputId: string) {
 	}
 }
 
-// Pre-start input pick is a REAL persisted config write (Todo 26): the operator's
-// idle selection rides `selected_video_input` through the same per-field-sync
-// lock contract as the other config edits (handleReorderSource/handleSwitchAudio),
-// so it survives a reload and is forwarded to the engine at stream start (Todo 18).
-// This is the IDLE pick path only — live input switching stays handleSwitchInput.
-const SELECTED_INPUT_FIELD = 'selected_video_input';
-
-async function handleSelectInput(inputId: string) {
-	if (inputId === selectedInput) return;
-	selectedInput = inputId; // optimistic — the field-sync lock guards the echo
-	beginFieldSync(SELECTED_INPUT_FIELD, inputId);
-	markFieldApplying(SELECTED_INPUT_FIELD);
-	try {
-		await rpc.streaming.setConfig({ selected_video_input: inputId });
-		markFieldApplied(SELECTED_INPUT_FIELD, inputId);
-	} catch {
-		// Rejected — release the lock to the authoritative value and revert the
-		// optimistic pick to whatever the server actually holds.
-		markFieldFailed(SELECTED_INPUT_FIELD, config?.selected_video_input);
-		selectedInput = config?.selected_video_input;
-		toast.error($LL.notifications.saveFailed());
-	}
-}
-
-// Selecting a network-ingest source (rtmp/srt) sets config.pipeline through the
-// same per-field-sync lock NetworkIngestSection uses, so both surfaces dispatch
-// identically and release the lock to the SERVER-applied value.
-const PIPELINE_FIELD = 'pipeline';
-
-async function handleSelectNetworkIngest(pipelineId: string) {
-	if (pipelineId === config?.pipeline) return;
-	beginFieldSync(PIPELINE_FIELD, pipelineId);
-	markFieldApplying(PIPELINE_FIELD);
-	try {
-		const result = await rpc.streaming.setConfig({ pipeline: pipelineId });
-		const applied =
-			(result as { applied?: { pipeline?: string } }).applied?.pipeline ?? pipelineId;
-		markFieldApplied(PIPELINE_FIELD, applied);
-	} catch {
-		markFieldFailed(PIPELINE_FIELD, config?.pipeline);
-		toast.error($LL.notifications.saveFailed());
-	}
-}
-
-// Operator-ordered source preference (Task 11). Display order is the persisted
-// preference reconciled against the live device list; the engine's auto-failover
-// is sticky and does NOT consult this order.
+// Operator-ordered source preference (Task 11): the reorder affordance is now
+// rendered inline on the capture rows of SourceSection (Task 13), but the write
+// stays here. Display order is the persisted preference reconciled against the
+// live device list; the engine's auto-failover is sticky and ignores this order.
 const SOURCE_PREFERENCE_FIELD = 'source_preference';
 const sourceOrder = $derived(normalizeOrder(devices, config?.source_preference));
-const sourceFailover = $derived(deriveFailover(sourceOrder, devices, activeInput));
 
 async function handleReorderSource(inputId: string, direction: 'up' | 'down') {
 	const current = normalizeOrder(devices, config?.source_preference);
@@ -340,8 +303,18 @@ async function handleReorderSource(inputId: string, direction: 'up' | 'down') {
 	beginFieldSync(SOURCE_PREFERENCE_FIELD, next);
 	markFieldApplying(SOURCE_PREFERENCE_FIELD);
 	try {
-		await rpc.streaming.setConfig({ source_preference: next });
-		markFieldApplied(SOURCE_PREFERENCE_FIELD, next);
+		const result = await rpc.streaming.setConfig({ source_preference: next });
+		// Release the lock to the SERVER-APPLIED order (`result.applied.
+		// source_preference`), never the optimistic array we sent. A rejected
+		// setConfig (`success:false`) or a success that omits the field is NOT a
+		// confirmed apply: revert the lock to the prior order and surface the same
+		// calm error the catch path does.
+		if (result.success && result.applied?.source_preference !== undefined) {
+			markFieldApplied(SOURCE_PREFERENCE_FIELD, result.applied.source_preference);
+		} else {
+			markFieldFailed(SOURCE_PREFERENCE_FIELD, current);
+			toast.error($LL.live.sourcePreference.sync.failed());
+		}
 	} catch {
 		markFieldFailed(SOURCE_PREFERENCE_FIELD, current);
 		toast.error($LL.live.sourcePreference.sync.failed());
@@ -351,23 +324,10 @@ async function handleReorderSource(inputId: string, direction: 'up' | 'down') {
 // Server target: direct SRTLA address, or a selected relay server.
 const serverTarget = $derived(config?.srtla_addr || config?.relay_server || '');
 const hasServer = $derived(Boolean(serverTarget));
-const showEmptyState = $derived(!hasServer && !isStreaming);
 
-// First-run onboarding (T13). Each step is checked off from existing state — no
-// new subscription. Network = at least one enabled bonded interface that has an
-// IP; Server = the existing `hasServer`; Start = the stream is or has been live.
-// The checklist auto-hides once both CONFIG steps (Network + Server) are done, so
-// a fully-configured device never sees it; it can also be dismissed (persisted).
+// Network readiness for the Network gate fix + the readiness card. Network = at
+// least one enabled bonded interface that has an IP.
 const netif = $derived(getNetif());
-const hasNetwork = $derived(
-	Object.values(netif ?? {}).some((entry) => Boolean(entry?.enabled) && Boolean(entry?.ip)),
-);
-// Idle ingest panel: link-aware readiness from the SAME netif feed (Task 22). No
-// new subscription, no telemetry values shown idle (Live-Data Discipline).
-const ingestReadiness = $derived(deriveIngestReadiness(netif));
-const onboardingStartDone = $derived(isStreaming || hadSession);
-const onboardingComplete = $derived(hasNetwork && hasServer);
-const showOnboarding = $derived(!isOnboardingDismissed() && !onboardingComplete);
 
 // Destination + receiver kind for the header chip (T5 helpers). Managed shows a
 // provider label, custom shows the endpoint; both append the transport badge.
@@ -393,24 +353,15 @@ const receiverKind = $derived(
 			})
 		: undefined,
 );
-const providerName = $derived(
-	PROVIDER_LABELS[config?.remote_provider ?? ''] ?? relayServerInfo?.name ?? 'CeraLive Cloud',
-);
-const receiverEndpoint = $derived.by(() => {
-	if (!config?.srtla_addr) return undefined;
-	return config?.srtla_port ? `${config.srtla_addr}:${config.srtla_port}` : config.srtla_addr;
-});
-
 // Active managed ingest slot (T19): when the persisted selection resolves to a
-// known platform slot, its label names the instance in the header chip.
+// known platform slot, its label names the instance in the server summary row.
 const activeSlot = $derived(
 	findActiveSlot(getManagedIngestAccounts(), config?.selected_ingest_endpoint),
 );
-const slotLabel = $derived(activeSlot ? managedSlotLabel(activeSlot) : undefined);
 
-// Live active-link count drives the bonded-links readiness hint (T13). Null
-// while idle (`getLinkTelemetry()` is null) so SRTLA degrades to label-only —
-// never a stale count. The readiness reuses the header's `receiverKind`.
+// Live active-link count drives the kind-aware server summary (T11). Null while
+// idle (`getLinkTelemetry()` is null) so SRTLA degrades to label-only — never a
+// stale count.
 const linkCount = $derived(linkTelemetry ? linkTelemetry.links.length : null);
 
 async function handleManageLinks() {
@@ -572,54 +523,35 @@ function clampBitrate(kbps: number): number {
 	return Math.round(Math.max(BITRATE_MIN, Math.min(BITRATE_MAX, kbps)));
 }
 
-// Commit a bitrate edit. Both paths write the SAME `max_br` field through the
-// SAME dirty-registry lock (markPending → onRpcResolved → onRpcAppliedReactive),
-// so the idle-vs-live edit is last-write-wins with no second source of truth vs
-// EncoderDialog — the server echo reconciles either way. Only the RPC differs:
-//  • streaming → setBitrate (engine hot-adjust, applies immediately, no stop),
-//  • idle      → setConfig  (persist only; applies at the next stream start).
+// Commit a bitrate edit — the live hot-adjust path (setBitrate, applies
+// immediately with no stop). BitrateAdjuster renders ONLY in LiveCockpit (T12),
+// so this only ever runs while streaming; the idle max_br ceiling is now the sole
+// responsibility of EncoderDialog (setConfig), never this path. Single bitrate
+// owner per mode: live → setBitrate here, idle → EncoderDialog.
 async function commitBitrate(kbps: number) {
 	const clamped = clampBitrate(kbps);
 	bitrateDraft = clamped;
 	// Lock max_br before the RPC so a stale config echo of the prior bitrate can't
 	// flicker the slider back; release after settle.
 	markPending('max_br', clamped);
-	if (isStreaming) {
-		try {
-			const res = await rpc.streaming.setBitrate({ max_br: clamped });
-			onRpcResolved('max_br');
-			// Release the field-lock to the SERVER-APPLIED value (T9 envelope), never
-			// the optimistic value we sent. On success:false reconcile to the last
-			// known server value so a rejected write never sticks on the slider.
-			const applied = resolveAppliedBitrate(res, clamped, config?.max_br);
-			onRpcAppliedReactive('max_br', applied);
-			bitrateDraft = applied;
-			if (!res.success) toast.error($LL.notifications.saveFailed());
-		} catch {
-			// RPC rejected: clear the optimistic lock and reconcile to server truth so
-			// the slider is never stuck on the unconfirmed optimistic value.
-			onRpcResolved('max_br');
-			const authoritative = config?.max_br ?? clamped;
-			onRpcAppliedReactive('max_br', authoritative);
-			bitrateDraft = authoritative;
-			toast.error($LL.notifications.saveFailed());
-		}
-	} else {
-		// Idle: persist without starting the stream. setConfig has no applied
-		// envelope, so release to the clamped intent and let the config echo
-		// reconcile any server-side clamp through the same lock.
-		try {
-			await rpc.streaming.setConfig({ max_br: clamped });
-			onRpcResolved('max_br');
-			onRpcAppliedReactive('max_br', clamped);
-			bitrateDraft = clamped;
-		} catch {
-			onRpcResolved('max_br');
-			const authoritative = config?.max_br ?? clamped;
-			onRpcAppliedReactive('max_br', authoritative);
-			bitrateDraft = authoritative;
-			toast.error($LL.notifications.saveFailed());
-		}
+	try {
+		const res = await rpc.streaming.setBitrate({ max_br: clamped });
+		onRpcResolved('max_br');
+		// Release the field-lock to the SERVER-APPLIED value (T9 envelope), never
+		// the optimistic value we sent. On success:false reconcile to the last
+		// known server value so a rejected write never sticks on the slider.
+		const applied = resolveAppliedBitrate(res, clamped, config?.max_br);
+		onRpcAppliedReactive('max_br', applied);
+		bitrateDraft = applied;
+		if (!res.success) toast.error($LL.notifications.saveFailed());
+	} catch {
+		// RPC rejected: clear the optimistic lock and reconcile to server truth so
+		// the slider is never stuck on the unconfirmed optimistic value.
+		onRpcResolved('max_br');
+		const authoritative = config?.max_br ?? clamped;
+		onRpcAppliedReactive('max_br', authoritative);
+		bitrateDraft = authoritative;
+		toast.error($LL.notifications.saveFailed());
 	}
 }
 
@@ -677,35 +609,28 @@ const serverSummary = $derived(
 
 // Start: assemble the full ConfigMessage from the SAVED backend config (the
 // encoder/server dialogs persist via setConfig), fold in the unpersisted audio
-// override, validate pipeline + server, then dispatch via SystemHelper →
-// rpc.streaming.start. The streaming/idle UI is driven by getIsStreaming(),
-// updated by the backend status push — never set locally here.
-// Optimistic transient: Start button shows `starting` immediately on click,
-// then reconciles to authoritative is_streaming broadcast (Task 6).
-const canStart = $derived(
-	canStartStream({
-		hasServer,
-		pipelineRecognized,
-		starting: streamingOptimismState === 'starting',
-	}),
-);
-
-// Reason the Start control is disabled, surfaced as a hover hint (reuses the
-// existing cannot-start copy; ordered to match canStartStream's predicate).
-const startDisabledReason = $derived(
-	streamingOptimismState === 'starting'
-		? $LL.live.starting()
-		: !pipelineRecognized
-			? $LL.live.cannotStartNoPipeline()
-			: !hasServer
-				? $LL.live.cannotStartNoServer()
-				: undefined,
-);
-
-async function handleStart() {
+// override + the implicit sole-camera source (T10/T11), validate pipeline +
+// server, then dispatch via SystemHelper → rpc.streaming.start. The streaming/
+// idle UI is driven by getIsStreaming(), updated by the backend status push —
+// never set locally here. Optimistic transient: Start button shows `starting`
+// immediately on click, then reconciles to authoritative is_streaming.
+async function handleStart(overrides: { source?: string } = {}) {
 	if (streamingOptimismState !== 'idle') return;
 
-	const result = buildStartConfig(config, audioOverride, getPipelines()?.pipelines);
+	// Fold the implicit sole-camera source (T10) into the start base so the FE
+	// pipeline gate passes and the backend re-resolves source → pipeline/input
+	// (T3 streamingStartProcedure reads `input.source ?? getConfig().source`).
+	let startBase = config;
+	if (overrides.source !== undefined) {
+		const entry = getSources()?.sources.find((s) => s.id === overrides.source);
+		startBase = {
+			...(config ?? {}),
+			source: overrides.source,
+			...(entry ? { pipeline: entry.pipelineId } : {}),
+		} as typeof config;
+	}
+
+	const result = buildStartConfig(startBase, audioOverride, getPipelines()?.pipelines);
 	if (!result.ok) {
 		toast.error(
 			result.error === 'missingServer'
@@ -787,81 +712,30 @@ const configRows = $derived<ConfigRow[]>([
 </script>
 
 <div class="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6">
-	<LiveHeader
-		{hasServer}
-		{isStreaming}
-		{destination}
-		kind={receiverKind}
-		{providerName}
-		{slotLabel}
-		endpoint={receiverEndpoint}
-		onEditServer={() => (serverDialogOpen = true)}
-	/>
+	<LiveHeader {isStreaming} />
 
 	<!-- Capability-tier state: calm banner when the engine is offline/starting or
 	     reports a schema mismatch. Renders nothing in the normal tier. -->
 	<CapabilityTierBanner caps={getCapabilities()} />
 
-	<!-- First-run guidance (T13): a calm Network → Server → Start checklist that
-	     complements (never replaces) the empty-state hero below. Auto-hides once
-	     Network + Server are configured; dismissible, with the dismissal persisted. -->
-	{#if showOnboarding}
-		<OnboardingChecklist
-			networkDone={hasNetwork}
-			serverDone={hasServer}
-			startDone={onboardingStartDone}
-			onConfigureNetwork={handleManageLinks}
-			onConfigureServer={() => (serverDialogOpen = true)}
-			onDismiss={dismissOnboarding}
-		/>
-	{/if}
-
-	{#if showEmptyState}
-		<!-- First-boot / empty state: no relay server, actionable prompt -->
-		<Card.Root>
-			<Card.Content
-				class="flex flex-col items-center gap-5 px-6 py-14 text-center"
-			>
-				<div
-					class="bg-secondary grid h-16 w-16 place-items-center rounded-2xl"
-				>
-					<ServerOff aria-hidden={true} class="text-muted-foreground h-8 w-8" />
-				</div>
-				<div class="space-y-2">
-					<h2 class="text-lg font-semibold">{$LL.live.chooseDestination()}</h2>
-					<p class="text-muted-foreground mx-auto max-w-sm text-sm">
-						{$LL.settings.destinationCustomHint()}
-					</p>
-				</div>
-				<Button
-					class="gap-2"
-					onclick={() => (serverDialogOpen = true)}
-				>
-					<Server aria-hidden={true} class="h-4 w-4" />
-					{$LL.live.editSettings()}
-					<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
-				</Button>
-			</Card.Content>
-		</Card.Root>
-	{:else}
-		<!-- Live telemetry strip — only meaningful while streaming. -->
-		{#if isStreaming}
-			<StreamTelemetryStrip
-				bitrate={formatBitrate(config?.max_br)}
-				{tempSensor}
-				{uptimeSensor}
-			/>
-		{/if}
-
-		<!-- Bitrate control — first-class on the idle surface too (Task 25). While
-		     streaming it hot-adjusts live (setBitrate); while idle it persists for
-		     the next start (setConfig), signalled by the `hint` footnote. -->
-		<BitrateAdjuster
-			bitrateDraft={bitrateDraft}
+	{#if showLiveCockpit}
+		<!-- Live cockpit: telemetry strip + live bitrate hot-adjust + ingest stats
+		     + Stop. Shown optimistically the moment Start is pressed so the start
+		     transition never flickers back through idle, and kept mounted through
+		     the bounded post-stream summary window (summaryMode) so IngestStats can
+		     render the historical "Session ended" summary before reverting to idle. -->
+		<LiveCockpit
+			bitrate={formatBitrate(config?.max_br)}
+			{tempSensor}
+			{uptimeSensor}
+			{bitrateDraft}
 			bitrateLabel={formatBitrate(bitrateDraft)}
 			bitrateMax={BITRATE_MAX}
 			bitrateMin={BITRATE_MIN}
-			hint={isStreaming ? undefined : $LL.live.bitrateAppliesAtStart()}
+			sliderMax={BITRATE_DEFAULT_MAX}
+			sliderMin={BITRATE_DEFAULT_MIN}
+			step={BITRATE_STEP}
+			onStep={stepBitrate}
 			onSliderChange={(v) => {
 				interacting = true;
 				bitrateDraft = v;
@@ -870,151 +744,48 @@ const configRows = $derived<ConfigRow[]>([
 				interacting = false;
 				commitBitrate(v);
 			}}
-			onStep={stepBitrate}
-			sliderMax={BITRATE_DEFAULT_MAX}
-			sliderMin={BITRATE_DEFAULT_MIN}
-			step={BITRATE_STEP}
-		/>
-
-
-		<!-- Bonded-ingest telemetry + per-session summary/export (#21). Kept mounted
-		     across the streaming→idle edge so the rollup survives stream stop. -->
-		{#if isStreaming || hadSession}
-			<IngestStats telemetry={linkTelemetry} {isStreaming} bitrateKbps={config?.max_br} />
-		{:else if ingestReadiness.state === 'links-ready'}
-			<!-- Idle ingest area, links ready: enabled+IP'd interfaces are standing by
-			     to bond. Names the ready links (iface names only — NO telemetry values,
-			     there is no live bond yet, so RTT/NAK/weight would be stale-looking
-			     fabrications; Live-Data Discipline). -->
-			<Card.Root>
-				<Card.Content class="flex flex-col items-center gap-4 px-6 py-10 text-center" data-testid="ingest-idle-ready">
-					<div class="bg-secondary grid size-12 place-items-center rounded-xl">
-						<Radio aria-hidden={true} class="text-muted-foreground h-6 w-6" />
-					</div>
-					<div class="space-y-1.5">
-						<h2 class="text-base font-semibold">{$LL.live.ingest.linksReadyTitle()}</h2>
-						<p class="text-muted-foreground mx-auto max-w-sm text-sm">
-							{$LL.live.ingest.linksReadyCount({ count: ingestReadiness.count })}
-						</p>
-					</div>
-					<div class="flex flex-wrap items-center justify-center gap-2" data-testid="ingest-idle-ready-links">
-						{#each ingestReadiness.ifaces as iface (iface)}
-							<span
-								class="bg-secondary text-secondary-foreground rounded-md px-2.5 py-1 font-mono text-xs"
-								data-iface={iface}
-							>
-								{iface}
-							</span>
-						{/each}
-					</div>
-					<p class="text-muted-foreground text-xs">{$LL.live.ingest.linksReadyHint()}</p>
-				</Card.Content>
-			</Card.Root>
-		{:else}
-			<!-- Idle ingest area: no live bond yet. Calm, informational (no telemetry
-			     values shown, so no fresh-looking stale data) — points to Network. -->
-			<Card.Root>
-				<Card.Content class="flex flex-col items-center gap-4 px-6 py-10 text-center" data-testid="ingest-idle-empty">
-					<div class="bg-secondary grid size-12 place-items-center rounded-xl">
-						<Radio aria-hidden={true} class="text-muted-foreground h-6 w-6" />
-					</div>
-					<div class="space-y-1.5">
-						<h2 class="text-base font-semibold">{$LL.live.ingest.idleTitle()}</h2>
-						<p class="text-muted-foreground mx-auto max-w-sm text-sm">{$LL.live.ingest.idleHint()}</p>
-					</div>
-					<Button class="gap-2" onclick={handleManageLinks} variant="outline">
-						<Radio aria-hidden={true} class="h-4 w-4" />
-						{$LL.live.server.manageLinks()}
-						<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
-					</Button>
-				</Card.Content>
-			</Card.Root>
-		{/if}
-
-	<SourceSection
-		{activeInput}
-		activeEncode={getStatus()?.active_encode ?? null}
-		audioLiveSwitchField={AUDIO_SWITCH_FIELD}
-		{audioLiveSwitchEnabled}
-		{audioSourceList}
-		{audioSources}
-		capabilities={getCapabilities()}
-		{config}
-		{devices}
-		{isStreaming}
-			networkIngest={getStatus()?.network_ingest ?? null}
-			onReorderSource={handleReorderSource}
-			onSelect={handleSelectInput}
-			onSelectAudioSource={handleSelectAudioSource}
-			onSelectNetworkIngest={handleSelectNetworkIngest}
-			onSwitch={handleSwitchInput}
-			pipelines={getPipelines()?.pipelines}
-			selectedAudioSource={effectiveAudioSource}
-			selectedPipeline={config?.pipeline}
-			{selectedInput}
-			sourceFailover={sourceFailover}
-			sourceOrder={sourceOrder}
-			sourcePreferenceField={SOURCE_PREFERENCE_FIELD}
-			{switchingInput}
-		/>
-
-		<!-- LAN network-ingest sources (RTMP / SRT gateways) — publish from a phone
-		     or hardware encoder on the same network. Renders only the board-offered
-		     protocols; selecting one sets config.pipeline. -->
-		<NetworkIngestSection
-			{isStreaming}
-			networkIngest={getStatus()?.network_ingest ?? null}
-			pipelines={getPipelines()?.pipelines}
-			selectedPipeline={config?.pipeline}
-		/>
-
-		<!--
-			Roadmap affordances — genuine future features surfaced as calm, purely
-			informational pills (NOT the disabled-with-reason warning treatment). Each
-			ComingSoon renders a dynamic data-debt-id into the DOM for tests; the static
-			binding the CI gate (scripts/check-tech-debt.mjs) verifies lives in the literal
-			ids on the next line.
-			roadmap: data-debt-id="TD-pip" data-debt-id="TD-mode-fallback"
-		-->
-		<div
-			class="bg-muted/30 flex flex-col gap-2.5 rounded-lg border px-4 py-3"
-			data-testid="live-roadmap"
-		>
-			<div class="flex items-center justify-between gap-3">
-				<span class="text-muted-foreground flex items-center gap-2 text-sm">
-					<PictureInPicture2 aria-hidden={true} class="size-4 shrink-0" />
-					{$LL.live.comingSoon.pip()}
-				</span>
-				<ComingSoon debtId="TD-pip" />
-			</div>
-			<div class="flex items-center justify-between gap-3">
-				<span class="text-muted-foreground flex items-center gap-2 text-sm">
-					<Shuffle aria-hidden={true} class="size-4 shrink-0" />
-					{$LL.live.comingSoon.modeFallback()}
-				</span>
-				<ComingSoon debtId="TD-mode-fallback" />
-			</div>
-		</div>
-
-		<PreviewCanvas />
-
-		{#if receiverKind}
-			<ServerReadiness
-				kind={receiverKind}
-				{linkCount}
-				onManageLinks={handleManageLinks}
-			/>
-		{/if}
-
-		<StreamSettingsCard {configRows} {isStreaming} />
-
-		<StreamControlButton
-			{canStart}
-			disabledReason={startDisabledReason}
+			telemetry={linkTelemetry}
+			bitrateKbps={config?.max_br}
 			{isStreaming}
 			optimismState={streamingOptimismState}
+			{summaryMode}
+			onStop={handleStop}
+		/>
+	{:else}
+		<!-- Idle cockpit: GoLiveCard (readiness + config + start) + Preview
+		     disclosure + SourceSection. Absorbs the old onboarding checklist,
+		     no-server empty-state, ServerReadiness and StreamSettingsCard. -->
+		<IdleCockpit
+			{config}
+			caps={getCapabilities()}
+			sources={getSources()}
+			{netif}
+			isConnected={getIsConnected()}
+			networkIngest={getStatus()?.network_ingest ?? null}
+			pipelines={getPipelines()?.pipelines}
+			{configRows}
+			{isStreaming}
+			optimismState={streamingOptimismState}
+			maxBitrate={config?.max_br}
 			onStart={handleStart}
 			onStop={handleStop}
+			onOpenSource={() => (encoderOpen = true)}
+			onGoNetwork={handleManageLinks}
+			onOpenServer={() => (serverDialogOpen = true)}
+			onOpenEncoder={() => (encoderOpen = true)}
+			{activeInput}
+			{switchingInput}
+			onSwitch={handleSwitchInput}
+			{audioSources}
+			{audioSourceList}
+			selectedAudioSource={effectiveAudioSource}
+			onSelectAudioSource={handleSelectAudioSource}
+			selectedPipeline={config?.pipeline}
+			capabilities={getCapabilities()}
+			activeEncode={getStatus()?.active_encode ?? null}
+			{sourceOrder}
+			sourcePreferenceField={SOURCE_PREFERENCE_FIELD}
+			onReorderSource={handleReorderSource}
 		/>
 	{/if}
 </div>

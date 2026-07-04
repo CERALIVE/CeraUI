@@ -150,6 +150,17 @@ for (const condition of CONDITIONS) {
 		});
 
 		test("encoder surface", { tag: "@visual" }, async ({ page }) => {
+			// The GoLiveCard (T10) collapses to a "Ready to go live" bar when every
+			// gate is green — the config rows (and their `open-encoder-dialog`
+			// trigger) only render in the EXPANDED state. Expand it first when the
+			// `go-live-expand` control is present (it renders only while collapsed).
+			const card = page.getByTestId("go-live-card");
+			await expect(card).toBeVisible({ timeout: 20_000 });
+			const expand = page.getByTestId("go-live-expand");
+			if ((await expand.count()) > 0) {
+				await expand.click();
+			}
+
 			const trigger = page.getByTestId("open-encoder-dialog");
 			await expect(trigger).toBeVisible({ timeout: 20_000 });
 			await trigger.click();
@@ -169,8 +180,10 @@ for (const condition of CONDITIONS) {
 			await expect(section).toBeVisible({ timeout: 20_000 });
 			await section.scrollIntoViewIfNeeded();
 
-			// Composes the video picker + the audio source in one coherent section.
-			await expect(section.getByTestId("input-picker")).toBeVisible();
+			// Composes the unified device-first source list (T13 replaced the old
+			// `input-picker` with a `source-list` <ul>) + the audio source in one
+			// coherent section.
+			await expect(section.getByTestId("source-list")).toBeVisible();
 			await expect(section.getByTestId("source-audio")).toBeVisible();
 
 			await section.screenshot({ path: evidence("source") });
@@ -180,6 +193,10 @@ for (const condition of CONDITIONS) {
 			const roadmap = page.getByTestId("live-roadmap");
 			await expect(roadmap).toBeVisible({ timeout: 20_000 });
 			await roadmap.scrollIntoViewIfNeeded();
+
+			// The roadmap pills live inside a `<details>` disclosure (T12), closed by
+			// default — open it (click its <summary>) before asserting pill visibility.
+			await roadmap.locator("summary").click();
 
 			// Calm informational pills (not the disabled-with-reason warning), each
 			// bound to an open tech-debt id.

@@ -7,10 +7,11 @@
  * hidden — so a future edit that breaks the condition flips at least one
  * assertion red. No component source is touched.
  *
- * States locked:
- *   1. LiveView empty       — no server + idle → choose-destination onboarding.
- *   2. LiveView idle-ingest — server set, not streaming → link-aware idle card:
- *                             links-ready (enabled+IP'd links) vs empty (no links).
+ * States locked (migrated to the GoLiveCard readiness model — Wave 3 T10/T11
+ * absorbed the standalone onboarding/idle-ingest cards into GoLiveCard's gates):
+ *   1. LiveView empty       — no server + idle → GoLiveCard destination gate blocked.
+ *   2. LiveView idle-ingest — server set, not streaming → GoLiveCard network gate:
+ *                             ready (enabled+IP'd links) vs blocked (no links).
  *   3. LiveView streaming   — active stream → bitrate HUD visible.
  *   4. DestinationSection   — managed gate: waiting (loading) vs none (empty).
  *   5. ServerIngestSlots    — prompt hint vs steady hint.
@@ -150,7 +151,7 @@ test.describe('conditional-display state lock (T11)', () => {
 	});
 
 	// ── 1. LiveView empty state ────────────────────────────────────────────────
-	test('LiveView empty: no server + idle renders the onboarding prompt, hides idle + streaming', async ({
+	test('LiveView empty: no server + idle blocks the GoLiveCard destination gate, hides the ready bar + streaming', async ({
 		page,
 	}) => {
 		await attachWs(page, {
@@ -169,27 +170,41 @@ test.describe('conditional-display state lock (T11)', () => {
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
 
-		// Target branch: the empty/onboarding state.
-		await expect(page.getByRole('heading', { name: 'Choose a destination' })).toBeVisible();
-		await expect(page.getByRole('button', { name: 'Edit Settings' })).toBeVisible();
+		// Target branch: no server → the GoLiveCard destination gate blocks with an
+		// open-server fix (the old "Choose a destination" onboarding hero was absorbed
+		// into this readiness gate by T10/T11).
+		const card = page.getByTestId('go-live-card');
+		await expect(card).toBeVisible();
+		const destGate = card.locator('[data-testid="go-live-gate"][data-gate="destination"]');
+		await expect(destGate).toHaveAttribute('data-state', 'blocked');
+		await expect(destGate.getByTestId('go-live-gate-fix')).toHaveAttribute('data-fix', 'openServer');
 
-		// Sibling branches must be absent: no idle-ingest card, no bitrate slider.
-		await expect(page.getByTestId('ingest-idle-empty')).toBeHidden();
+		// Start is blocked, and the disabled control surfaces a reason via `title`.
+		const start = page.getByRole('button', { name: /start stream/i });
+		await expect(start).toBeDisabled();
+		await expect(start).toHaveAttribute('title', /\S/);
+
+		// Sibling branches must be absent: not the all-green collapsed ready bar, and
+		// no bitrate slider (idle has no live slider — the ceiling is a chip, T12).
+		await expect(page.getByTestId('go-live-ready-bar')).toBeHidden();
 		await expect(page.getByRole('slider')).toHaveCount(0);
 
 		await assertNoNewA11y(page);
 	});
 
 	// ── 2a. LiveView idle-ingest: links ready ──────────────────────────────────
-	test('LiveView idle: server configured + bonded links up shows the links-ready card, hides empty + streaming', async ({
+	test('LiveView idle: server configured + bonded links up resolves the network gate ready, hides the blocked + streaming states', async ({
 		page,
 	}) => {
 		// Default mock scenario (multi-modem-wifi) brings up eth0 + 3 modems + WiFi,
-		// all enabled with IPs → the link-aware idle panel resolves to links-ready.
+		// all enabled with IPs → the GoLiveCard network gate resolves ok. Inject a
+		// server so the destination gate is satisfied too, isolating the network gate.
 		const ws = await attachWs(page, {
 			mutateInbound: (frame) => {
 				const status = frame.status as Frame | undefined;
 				if (status) status.is_streaming = false;
+				const config = frame.config as Frame | undefined;
+				if (config && !config.srtla_addr && !config.relay_server) config.srtla_addr = '127.0.0.1';
 				return true;
 			},
 		});
@@ -198,35 +213,41 @@ test.describe('conditional-display state lock (T11)', () => {
 		await navigateTo(page, 'live');
 		ws.push({ status: { is_streaming: false } });
 
-		// Target branch: idle links-ready card (real links standing by, no telemetry).
-		await expect(page.getByTestId('ingest-idle-ready')).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'Links ready' })).toBeVisible();
-		// Live-Data Discipline: iface chips render, but the panel shows no telemetry.
-		await expect(page.getByTestId('ingest-idle-ready-links').locator('[data-iface]').first()).toBeVisible();
+		// Target branch: the network gate is ok (enabled+IP'd links standing by) — the
+		// old links-ready idle card was absorbed into this readiness gate (T10/T11).
+		const card = page.getByTestId('go-live-card');
+		await expect(card).toBeVisible();
+		const networkGate = card.locator('[data-testid="go-live-gate"][data-gate="network"]');
+		await expect(networkGate).toHaveAttribute('data-state', 'ok');
 
-		// Sibling branches absent: not the empty ingest card, not the empty-state prompt.
-		await expect(page.getByTestId('ingest-idle-empty')).toBeHidden();
-		await expect(page.getByRole('heading', { name: 'No bonded links yet' })).toBeHidden();
-		await expect(page.getByRole('heading', { name: 'Choose a destination' })).toBeHidden();
+		// Sibling branches absent: the network gate is NOT blocked (no goNetwork fix on
+		// it) and the destination gate is not blocked either (server configured).
+		await expect(networkGate.getByTestId('go-live-gate-fix')).toHaveCount(0);
+		await expect(
+			card.locator('[data-testid="go-live-gate"][data-gate="destination"][data-state="blocked"]'),
+		).toHaveCount(0);
 
-		// Bitrate control is first-class on the idle surface (Task 25): the slider is
-		// present with the "applies at start" hint (persist-for-next-start, not live).
-		await expect(page.getByRole('slider')).toHaveCount(1);
-		await expect(page.getByText('Applies when the stream starts')).toBeVisible();
+		// Bitrate is first-class on the idle surface, but via the tap-to-edit ceiling
+		// chip that opens EncoderDialog (T12 one-owner) — NOT a live idle slider.
+		await expect(page.getByTestId('bitrate-ceiling-chip')).toBeVisible();
+		await expect(page.getByRole('slider')).toHaveCount(0);
 
-		await assertNoNewA11y(page, ['aria-input-field-name']);
+		await assertNoNewA11y(page);
 	});
 
 	// ── 2b. LiveView idle-ingest: no links ─────────────────────────────────────
-	test('LiveView idle: server configured but no bonded links shows the empty card, hides links-ready + streaming', async ({
+	test('LiveView idle: server configured but no bonded links blocks the network gate, hides the ready + streaming states', async ({
 		page,
 	}) => {
-		// Force every interface disabled so no link is enabled+IP'd → the link-aware
-		// idle panel resolves to the empty state (points to Network).
+		// Force every interface disabled so no link is enabled+IP'd → the GoLiveCard
+		// network gate resolves blocked (points to Network via the goNetwork fix).
+		// Inject a server so ONLY the network gate is the discriminator here.
 		const ws = await attachWs(page, {
 			mutateInbound: (frame) => {
 				const status = frame.status as Frame | undefined;
 				if (status) status.is_streaming = false;
+				const config = frame.config as Frame | undefined;
+				if (config && !config.srtla_addr && !config.relay_server) config.srtla_addr = '127.0.0.1';
 				const netif = frame.netif as Record<string, Frame> | undefined;
 				if (netif) {
 					for (const entry of Object.values(netif)) {
@@ -241,25 +262,29 @@ test.describe('conditional-display state lock (T11)', () => {
 		await navigateTo(page, 'live');
 		ws.push({ status: { is_streaming: false } });
 
-		// Target branch: the empty idle-ingest card.
-		await expect(page.getByTestId('ingest-idle-empty')).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'No bonded links yet' })).toBeVisible();
-		await expect(page.getByRole('button', { name: 'Manage links' })).toBeVisible();
+		// Target branch: the network gate blocks (no enabled+IP'd link) and offers the
+		// goNetwork fix — the old "No bonded links yet" empty card, now a readiness gate.
+		const card = page.getByTestId('go-live-card');
+		await expect(card).toBeVisible();
+		const networkGate = card.locator('[data-testid="go-live-gate"][data-gate="network"]');
+		await expect(networkGate).toHaveAttribute('data-state', 'blocked');
+		await expect(networkGate.getByTestId('go-live-gate-fix')).toHaveAttribute('data-fix', 'goNetwork');
 
-		// Sibling branch absent: not the links-ready card. The idle bitrate control is
-		// present regardless of link readiness (server configured) — Task 25.
-		await expect(page.getByTestId('ingest-idle-ready')).toBeHidden();
-		await expect(page.getByRole('slider')).toHaveCount(1);
+		// Sibling branch absent: the network gate is not ok. The idle bitrate ceiling
+		// chip is present regardless of link readiness (T12) — never a live slider.
+		await expect(page.getByTestId('bitrate-ceiling-chip')).toBeVisible();
+		await expect(page.getByRole('slider')).toHaveCount(0);
 
-		await assertNoNewA11y(page, ['aria-input-field-name']);
+		await assertNoNewA11y(page);
 	});
 
 	// ── 2c. LiveView idle-bitrate commit path ──────────────────────────────────
-	test('LiveView idle: the bitrate control persists via setConfig, never the live setBitrate', async ({
+	test('LiveView idle: the bitrate ceiling persists via setConfig, never the live setBitrate', async ({
 		page,
 	}) => {
-		// While idle the bitrate edit must go through streaming.setConfig (persist for
-		// the next start), NOT streaming.setBitrate (the live engine hot-adjust).
+		// While idle the bitrate ceiling is edited through the GoLiveCard chip →
+		// EncoderDialog, whose Save persists via streaming.setConfig (persist for the
+		// next start), NOT streaming.setBitrate (the live engine hot-adjust) — T12.
 		const rpcPaths: string[] = [];
 		const ws = await attachWs(page, {
 			mutateInbound: (frame) => {
@@ -278,10 +303,14 @@ test.describe('conditional-display state lock (T11)', () => {
 		await navigateTo(page, 'live');
 		ws.push({ status: { is_streaming: false } });
 
-		const increment = page.getByRole('button', { name: /\+\s*\d+/ });
-		await expect(increment).toBeVisible();
+		// Open EncoderDialog via the idle bitrate-ceiling chip, edit the ceiling, Save.
+		await page.getByTestId('bitrate-ceiling-chip').click();
+		const dialog = page.getByRole('dialog', { name: 'Encoder Settings' });
+		await expect(dialog).toBeVisible();
+		const bitrateInput = dialog.locator('#encoder-bitrate');
+		await bitrateInput.fill('7000');
 		rpcPaths.length = 0;
-		await increment.click();
+		await dialog.getByRole('button', { name: 'Save' }).click();
 
 		await expect
 			.poll(() => rpcPaths.filter((p) => p === 'streaming.setConfig').length, {
@@ -509,11 +538,14 @@ test.describe('conditional-display state lock (T11)', () => {
 
 		const dialog = await openAudioDialog(page);
 
-		// Target branch: the enabled audio controls (the audio source field).
-		await expect(dialog.getByText('Audio source', { exact: true })).toBeVisible();
+		// Target branch: the enabled audio controls. The source SELECTION moved to the
+		// Source section (T15), so the dialog now surfaces a read-only active-source
+		// line plus the codec control — both present only in the enabled branch.
+		await expect(dialog.getByTestId('audio-source-active')).toBeVisible();
+		await expect(dialog.locator('#audioCodec')).toBeVisible();
 		// Sibling branches absent: neither gate notice is shown when audio is supported.
 		await expect(
-			dialog.getByText('Please select an encoder pipeline first to configure audio settings'),
+			dialog.getByText('Please select a video source first to configure audio settings'),
 		).toBeHidden();
 		await expect(dialog.getByText('No audio settings supported')).toBeHidden();
 

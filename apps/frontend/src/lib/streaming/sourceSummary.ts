@@ -13,6 +13,7 @@ import type {
 	AudioSource,
 	CapabilitiesMessage,
 	ConfigMessage,
+	StreamSource,
 } from "@ceraui/rpc/schemas";
 import { fromEngineResolution } from "@ceraui/rpc/schemas";
 
@@ -278,7 +279,11 @@ export interface ActiveSummary {
 	 * streaming so a stale requested value is never shown as if it were active.
 	 */
 	live: boolean;
-	/** Resolved source/input label (engine `active_input`, else saved input/pipeline). */
+	/**
+	 * Resolved source label — the REAL capture device name from the sources list
+	 * when the active id resolves to a capture source, else the raw source/input id
+	 * (engine `active_input`, else saved input/pipeline).
+	 */
 	source: string | undefined;
 	/** Display resolution — a token (`1080p`) when resolvable, else the raw `WxH`. */
 	resolution: string | undefined;
@@ -290,20 +295,38 @@ export interface ActiveSummary {
 }
 
 /**
+ * Resolve a source/input id to its display label: the REAL hardware `displayName`
+ * when the id matches a capture source in the sources list, else the raw id
+ * (coarse/virtual/network keep their id — this pure module has no translator).
+ * With no sources list the id passes through unchanged (byte-identical fallback).
+ */
+function resolveSourceName(
+	sourceId: string | undefined,
+	sources: readonly StreamSource[] | undefined,
+): string | undefined {
+	if (!sourceId) return undefined;
+	const match = sources?.find((entry) => entry.id === sourceId);
+	if (match?.origin === "capture") return match.displayName;
+	return sourceId;
+}
+
+/**
  * Derive the active-encode summary, preferring engine truth (`activeEncode`,
  * present only while streaming) over the saved `config` (idle). Pure and
  * defensive: a missing config, active_encode, or capability snapshot degrades to
  * `undefined` fields (never a fabricated or capability-derived value), except the
- * transport token which always resolves (SRTLA floor).
+ * transport token which always resolves (SRTLA floor). The `source` label resolves
+ * to the REAL capture device name via the `sources` list when supplied.
  */
 export function deriveActiveSummary(
 	config: ConfigMessage | undefined,
 	activeEncode: ActiveEncode | null | undefined,
 	caps: CapabilitiesMessage | undefined,
+	sources?: readonly StreamSource[] | undefined,
 ): ActiveSummary {
 	const live = Boolean(activeEncode);
 
-	const source = live
+	const sourceId = live
 		? (activeEncode?.active_input ??
 			config?.selected_video_input ??
 			config?.pipeline)
@@ -320,7 +343,7 @@ export function deriveActiveSummary(
 
 	return {
 		live,
-		source: source || undefined,
+		source: resolveSourceName(sourceId || undefined, sources),
 		resolution: resolution || undefined,
 		framerate: typeof framerate === "number" ? framerate : undefined,
 		codec: codecToken ? formatCodec(codecToken) : undefined,

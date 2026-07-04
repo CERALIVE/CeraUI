@@ -21,11 +21,6 @@ interface Props {
 	onStep: (delta: number) => void;
 	onSliderChange: (value: number) => void;
 	onSliderCommit: (value: number) => void;
-	/**
-	 * Optional muted footnote. Set only in the idle variant to say the value is
-	 * persisted and takes effect at the next stream start (vs the live hot-adjust).
-	 */
-	hint?: string;
 }
 
 const {
@@ -39,13 +34,12 @@ const {
 	onStep,
 	onSliderChange,
 	onSliderCommit,
-	hint,
 }: Props = $props();
 </script>
 
-<!-- Bitrate control. The parent decides the commit target: live hot-adjust
-     (setBitrate) while streaming, or persist-for-next-start (setConfig) while idle
-     (surfaced via the `hint` footnote). -->
+<!-- Bitrate control — live hot-adjust only (T12). Mounted solely in LiveCockpit,
+     so the commit target is always the streaming setBitrate path; the idle max_br
+     ceiling is owned by EncoderDialog, never this control. -->
 
 <section
 	aria-label={$LL.live.adjustBitrate()}
@@ -93,7 +87,4 @@ const {
 			<Plus aria-hidden={true} class="h-4 w-4" />
 		</Button>
 	</div>
-	{#if hint}
-		<p class="text-muted-foreground text-xs">{hint}</p>
-	{/if}
 </section>

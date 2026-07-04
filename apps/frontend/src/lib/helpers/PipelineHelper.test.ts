@@ -1,7 +1,17 @@
-import type { Pipelines } from "@ceraui/rpc/schemas";
+import type {
+	CaptureStreamSource,
+	CoarseStreamSource,
+	NetworkStreamSource,
+	Pipelines,
+	VirtualStreamSource,
+} from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
-import { getPipelineDisplayName, getSourceLabel } from "./PipelineHelper";
+import {
+	getPipelineDisplayName,
+	getSourceLabel,
+	sourceLabel,
+} from "./PipelineHelper";
 
 // A realistic legacy pipeline id (opaque hash) that is NOT a known video source — this is
 // the value that used to leak through `source.toUpperCase()` (PipelineHelper.ts:33).
@@ -71,5 +81,68 @@ describe("getPipelineDisplayName", () => {
 	it("is pure and tolerates missing pipelines", () => {
 		expect(getPipelineDisplayName("libuvch264")).toBe("UVC H264 Camera");
 		expect(getPipelineDisplayName(HASH_ID)).toBe("Unknown source");
+	});
+});
+
+describe("sourceLabel", () => {
+	const passthroughT = (key: string): string => key;
+
+	const base = {
+		modes: [],
+		supportsAudio: true,
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+		audioKind: "selectable" as const,
+		available: true,
+	};
+
+	it("returns a capture source's REAL display name verbatim (never translated)", () => {
+		const rode: CaptureStreamSource = {
+			...base,
+			origin: "capture",
+			id: "usb",
+			pipelineId: "libuvch264",
+			kind: "uvc_h264",
+			displayName: "RØDE HDMI to USB-C: RØDE HDMI",
+			devicePath: "/dev/video1",
+		};
+		// A resolver that WOULD translate is ignored for a capture displayName.
+		expect(sourceLabel(rode, () => "should-not-be-used")).toBe(
+			"RØDE HDMI to USB-C: RØDE HDMI",
+		);
+	});
+
+	it("translates the labelKey for a coarse source", () => {
+		const coarse: CoarseStreamSource = {
+			...base,
+			origin: "coarse",
+			id: "hdmi",
+			pipelineId: "hdmi",
+			labelKey: "settings.sources.hdmi",
+		};
+		const t = (key: string) =>
+			key === "settings.sources.hdmi" ? "HDMI Capture" : key;
+		expect(sourceLabel(coarse, t)).toBe("HDMI Capture");
+	});
+
+	it("translates the labelKey for virtual and network sources", () => {
+		const virtual: VirtualStreamSource = {
+			...base,
+			origin: "virtual",
+			id: "test",
+			pipelineId: "test",
+			labelKey: "settings.sources.test",
+		};
+		const network: NetworkStreamSource = {
+			...base,
+			origin: "network",
+			id: "rtmp",
+			pipelineId: "rtmp",
+			labelKey: "settings.sources.rtmp",
+			requiresGateway: "rtmp",
+			url: null,
+		};
+		expect(sourceLabel(virtual, passthroughT)).toBe("settings.sources.test");
+		expect(sourceLabel(network, passthroughT)).toBe("settings.sources.rtmp");
 	});
 });

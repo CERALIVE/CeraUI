@@ -4,6 +4,7 @@ import { LL, locale } from '@ceraui/i18n/svelte';
 import { formatBitrate, formatCurrent, formatRelativeTime, formatTemp, formatVoltage } from '@ceraui/i18n/formatters';
 import ActivityIcon from '@lucide/svelte/icons/activity';
 import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+import CircleDotIcon from '@lucide/svelte/icons/circle-dot';
 import CircleHelpIcon from '@lucide/svelte/icons/circle-help';
 import CircleXIcon from '@lucide/svelte/icons/circle-x';
 import ClockIcon from '@lucide/svelte/icons/clock';
@@ -56,6 +57,20 @@ const loc = $derived($locale);
 // Connection / streaming state machine for the lead badge.
 const isOffline = $derived(hud.isFullyStale);
 const isLive = $derived(hud.isStreaming && !isOffline);
+
+// The three explicit HUD lifecycle states (Task 8, Live-Data Discipline). The
+// sheet renders exactly ONE status-wording node keyed off this, and every
+// live-only metric renders as absence ("—") outside `live` — never a dimmed
+// stale number.
+type HudLifecycle = 'live' | 'idle' | 'offline';
+const lifecycle = $derived<HudLifecycle>(isOffline ? 'offline' : isLive ? 'live' : 'idle');
+
+// Bitrate honesty: it is a LIVE streaming value, so it is shown ONLY while
+// genuinely live. Idle/offline render "—" (absence rendered as absence).
+// Dimming is reserved for aging-while-streaming (live + stale) and NEVER
+// applies to an idle/offline absence.
+const bitrateDimmed = $derived(isLive && hud.isBitrateStale);
+const bitrateText = $derived(isLive && hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—');
 
 // Store-and-forward buffering (Task 34): null until the engine advertises it.
 const buffering = $derived(getBufferingState());
@@ -113,14 +128,14 @@ const healthReason = $derived(rollup && rollup.state !== 'healthy' ? rollup.reas
 // (parseSensorNumber / parseVolts / parseCurrentAmps). Each value routes
 // through getStalenessState so the compact bar degrades honestly: 'stale'
 // dims, 'nodata' shows a dash — never a fresh-looking aged value.
+// SoC telemetry — the COMPACT strip surfaces temperature ONLY (one chip);
+// voltage / current live in the expandable sheet's sensors line. The temp value
+// routes through getStalenessState so the strip chip degrades honestly: 'stale'
+// dims, 'nodata' shows a dash — never a fresh-looking aged value.
 const soc = $derived(getSocTelemetry());
 const socUpdatedAt = $derived(hud.lastUpdatedAt.sensors);
 const tempState = $derived<StalenessState>(getStalenessState(soc.temp, socUpdatedAt, soc.isStale));
-const voltageState = $derived<StalenessState>(getStalenessState(soc.voltage, socUpdatedAt, soc.isStale));
-const currentState = $derived<StalenessState>(getStalenessState(soc.current, socUpdatedAt, soc.isStale));
 const tempText = $derived(soc.temp != null ? formatTemp(loc)(soc.temp) : '—');
-const voltageText = $derived(soc.voltage != null ? formatVoltage(loc)(soc.voltage) : '—');
-const currentText = $derived(soc.current != null ? formatCurrent(loc)(soc.current) : '—');
 
 const linkColor = (link: LinkSignal) => `var(--link-${link.linkIndex + 1})`;
 
@@ -128,6 +143,10 @@ function lastSeen(ts: number | null): string | null {
 	if (ts == null) return null;
 	return formatRelativeTime(loc)(new Date(ts));
 }
+
+// Relative "last seen" for the streaming signal — reused by the offline verdict
+// ("No signal · last seen …") and the live/idle subtitle ("Last updated …").
+const streamingLastSeen = $derived(lastSeen(hud.lastUpdatedAt.streaming));
 
 // Polite live-region announcement of the HUD telemetry. The raw values change
 // every tick; announcing each one would flood a screen reader, so a single
@@ -138,7 +157,7 @@ const TELEMETRY_ANNOUNCE_DEBOUNCE_MS = 1500;
 const telemetrySummary = $derived(
 	[
 		isOffline ? $LL.hud.offline() : isLive ? $LL.hud.live() : $LL.hud.idle(),
-		`${$LL.hud.bitrate()}: ${hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—'}`,
+		`${$LL.hud.bitrate()}: ${bitrateText}`,
 		`${$LL.hud.network()}: ${hud.links.length}`,
 	].join(' · '),
 );
@@ -156,10 +175,12 @@ $effect(() => {
 // dimming conveys — never a fresh-sounding value for an aged reading.
 const staleSuffix = (isStale: boolean) => (isStale ? `, ${$LL.hud.stale()}` : '');
 const bitrateLabel = $derived(
-	`${$LL.hud.bitrate()}: ${hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : $LL.hud.noData()}${staleSuffix(hud.isBitrateStale)}`,
+	`${$LL.hud.bitrate()}: ${isLive && hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : $LL.hud.noData()}${staleSuffix(bitrateDimmed)}`,
 );
-const socLabel = $derived(
-	`${$LL.hud.sensors()}: ${$LL.hud.temperature()} ${tempState === 'nodata' ? '—' : tempText}, ${$LL.hud.voltage()} ${voltageState === 'nodata' ? '—' : voltageText}, ${$LL.hud.current()} ${currentState === 'nodata' ? '—' : currentText}${staleSuffix(soc.isStale)}`,
+// The compact strip now shows a single temperature chip; the aria name carries
+// just that value + its staleness (voltage / current moved to the sheet).
+const socTempLabel = $derived(
+	`${$LL.hud.sensors()}: ${$LL.hud.temperature()} ${tempState === 'nodata' ? '—' : tempText}${staleSuffix(soc.isStale)}`,
 );
 function linkLabel(link: LinkSignal): string {
 	const sig = link.signal != null ? `${Math.round(link.signal)}%` : $LL.hud.noData();
@@ -218,9 +239,9 @@ $effect(() => {
 	</span>
 {/snippet}
 
-{#snippet rollupRow(testid: string, label: string, ok: boolean, okText: string, badText: string, okIcon: typeof CircleCheckIcon | null, badIcon: typeof CircleCheckIcon)}
-	<div class="flex items-center justify-between gap-2" data-testid={testid}>
-		<dt class="text-muted-foreground">{label}</dt>
+{#snippet rollupTile(testid: string, label: string, ok: boolean, okText: string, badText: string, okIcon: typeof CircleCheckIcon | null, badIcon: typeof CircleCheckIcon)}
+	<div class="bg-secondary/40 flex flex-col gap-1 rounded-lg p-2.5" data-testid={testid}>
+		<dt class="text-muted-foreground text-[0.7rem] font-medium">{label}</dt>
 		<dd class={cn('inline-flex items-center gap-1 font-medium', ok ? 'text-status-success' : 'text-status-warning')}>
 			{#if ok}
 				{#if okIcon}{@const OkIcon = okIcon}<OkIcon class="size-3.5 shrink-0" aria-hidden="true" />{/if}
@@ -301,17 +322,17 @@ $effect(() => {
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
 
-				<!-- Bitrate -->
+				<!-- Bitrate — live-only; renders "—" when idle/offline (never a dimmed stale number) -->
 				<span
-					class={cn('inline-flex shrink-0 items-center gap-1 font-mono tabular-nums', hud.isBitrateStale && 'opacity-50')}
+					class={cn('inline-flex shrink-0 items-center gap-1 font-mono tabular-nums', bitrateDimmed && 'opacity-50')}
 					role="img"
 					aria-label={bitrateLabel}
 					title={$LL.hud.bitrate()}
 				>
-					{#if hud.isBitrateStale}
+					{#if bitrateDimmed}
 						<ClockIcon class="size-3 shrink-0" aria-hidden="true" />
 					{/if}
-					{hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—'}
+					{bitrateText}
 				</span>
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
@@ -338,12 +359,12 @@ $effect(() => {
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
 
-				<!-- SoC telemetry: temperature · voltage · current (compact mono cluster) -->
+				<!-- SoC telemetry: single temperature chip (voltage/current live in the sheet) -->
 				<span
-					class="inline-flex shrink-0 items-center gap-2 font-mono tabular-nums"
+					class="inline-flex shrink-0 items-center gap-1.5 font-mono tabular-nums"
 					role="img"
-					aria-label={socLabel}
-					title={$LL.hud.sensors()}
+					aria-label={socTempLabel}
+					title={$LL.hud.temperature()}
 				>
 					{#if soc.isStale}
 						<ClockIcon class="size-3 shrink-0 opacity-50" aria-hidden="true" />
@@ -351,8 +372,6 @@ $effect(() => {
 						<ThermometerIcon class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
 					{/if}
 					{@render socValue(tempState, tempText, $LL.hud.temperature())}
-					{@render socValue(voltageState, voltageText, $LL.hud.voltage())}
-					{@render socValue(currentState, currentText, $LL.hud.current())}
 				</span>
 			</button>
 		{/snippet}
@@ -362,45 +381,20 @@ $effect(() => {
 		<Sheet.Header class="gap-1">
 			<Sheet.Title>{$LL.hud.status()}</Sheet.Title>
 			<Sheet.Description>
-				{#if isOffline}
-					{$LL.hud.offline()}
-				{:else if isLive}
-					{$LL.hud.live()}
-				{:else}
-					{$LL.hud.idle()}
-				{/if}
-				{#if lastSeen(hud.lastUpdatedAt.streaming)}
-					· {$LL.hud.lastUpdated()} {lastSeen(hud.lastUpdatedAt.streaming)}
-				{/if}
+				<span data-testid="hud-sheet-subtitle" data-state={lifecycle}>
+					{#if lifecycle !== 'offline' && streamingLastSeen}
+						{$LL.hud.lastUpdated()} {streamingLastSeen}
+					{/if}
+				</span>
 			</Sheet.Description>
 		</Sheet.Header>
 
-		<div class="flex flex-col gap-6 px-4 pb-6">
+		<div class="flex flex-col gap-4 px-4 pb-6">
 			<!-- Streaming -->
-			<section class="flex flex-col gap-1">
+			<section class="flex flex-col gap-2">
 				<h3 class="text-muted-foreground mb-1 text-xs font-medium">{$LL.hud.streaming()}</h3>
 
-				<!-- Bond constellation: visualizes the bond the rollup below states numerically -->
-				<div class="mx-auto mb-2 w-full max-w-[22rem]">
-					<BondConstellation links={hud.links} live={isLive} frozen={isEink} />
-				</div>
-
-				<div class="flex items-center justify-between gap-3 border-b py-2">
-					<span class="text-muted-foreground flex items-center gap-2">
-						<span
-							class={cn(
-								'size-2 rounded-full',
-								isOffline ? 'bg-muted-foreground' : isLive ? 'bg-status-live' : 'bg-status-idle',
-							)}
-						></span>
-						{$LL.hud.status()}
-					</span>
-					<span class="font-medium">
-						{isOffline ? $LL.hud.offline() : isLive ? $LL.hud.live() : $LL.hud.idle()}
-					</span>
-				</div>
-
-				<!-- Stream-health rollup: state + process/frames/SRT/bond breakdown (Task 15) -->
+				<!-- 1. ONE verdict line: lifecycle status + health rollup verdict (Task 8/15) -->
 				<div class="flex flex-col gap-2 border-b py-2" data-testid="stream-health-detail" data-state={rollupState}>
 					<div class="flex items-center justify-between gap-3">
 						<span class="text-muted-foreground flex items-center gap-1.5">
@@ -440,68 +434,89 @@ $effect(() => {
 							</Tooltip.Provider>
 						</span>
 						<span class="inline-flex items-center gap-1.5 font-medium" data-testid="stream-health-state">
-							<RollupIcon class={cn('size-4 shrink-0', rollupIconColor)} aria-hidden="true" />
-							{rollupLabel}
+							{#if lifecycle === 'offline'}
+								<ClockIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+								{$LL.hud.noSignal()}
+							{:else if rollup}
+								<RollupIcon class={cn('size-4 shrink-0', rollupIconColor)} aria-hidden="true" />
+								{rollupLabel}
+							{:else}
+								<CircleDotIcon class="text-status-neutral size-4 shrink-0" aria-hidden="true" />
+								{$LL.hud.idle()}
+							{/if}
 						</span>
 					</div>
 
-					{#if healthReason}
+					{#if lifecycle === 'offline'}
+						{#if streamingLastSeen}
+							<p class="text-muted-foreground text-xs" data-testid="hud-last-seen">{$LL.hud.lastSeen()} {streamingLastSeen}</p>
+						{/if}
+					{:else if rollup && healthReason}
 						<p class="text-status-warning text-xs" data-testid="stream-health-reason-detail">{healthReason.detail}</p>
-					{/if}
-
-					{#if rollup}
-						<dl class="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs" data-testid="stream-health-rollup">
-							{@render rollupRow(
-								'health-process',
-								$LL.hud.healthProcess(),
-								rollup.process.alive,
-								$LL.hud.healthRunning(),
-								$LL.hud.healthNotRunning(),
-								CircleCheckIcon,
-								CircleXIcon,
-							)}
-							{@render rollupRow(
-								'health-frames',
-								$LL.hud.healthFrames(),
-								rollup.frames.advancing,
-								$LL.hud.healthAdvancing(),
-								$LL.hud.healthStalled(),
-								null,
-								TriangleAlertIcon,
-							)}
-							{@render rollupRow(
-								'health-srt',
-								$LL.hud.healthSrt(),
-								!rollup.srt.reconnecting,
-								$LL.hud.healthStable(),
-								$LL.hud.healthReconnecting(),
-								null,
-								TriangleAlertIcon,
-							)}
-							<div class="flex items-center justify-between gap-2" data-testid="health-bond">
-								<dt class="text-muted-foreground">{$LL.hud.healthBond()}</dt>
-								<dd
-									class={cn(
-										'font-mono font-medium tabular-nums',
-										rollup.bond.activeLinks < rollup.bond.linkCount && 'text-status-warning',
-									)}
-								>
-									{rollup.bond.activeLinks}/{rollup.bond.linkCount}
-								</dd>
-							</div>
-						</dl>
-					{:else}
-						<p class="text-muted-foreground/70 text-xs" data-testid="stream-health-rollup-empty">{$LL.hud.noData()}</p>
 					{/if}
 				</div>
 
-				<div class={cn('flex items-center justify-between gap-3 border-b py-2', hud.isBitrateStale && 'opacity-50')}>
+				<!-- 2. Bond constellation: mounted ONLY while live (never implies an idle bond) -->
+				{#if isLive}
+					<div class="mx-auto w-full max-w-[16rem]" data-testid="hud-constellation">
+						<BondConstellation links={hud.links} live={isLive} frozen={isEink} />
+					</div>
+				{/if}
+
+				<!-- 3. Subsystem 2×2 tile grid: process / SRT / frames / bond (dl semantics kept) -->
+				{#if lifecycle !== 'offline' && rollup}
+					<dl class="grid grid-cols-2 gap-2 text-xs" data-testid="stream-health-rollup">
+						{@render rollupTile(
+							'health-process',
+							$LL.hud.healthProcess(),
+							rollup.process.alive,
+							$LL.hud.healthRunning(),
+							$LL.hud.healthNotRunning(),
+							CircleCheckIcon,
+							CircleXIcon,
+						)}
+						{@render rollupTile(
+							'health-srt',
+							$LL.hud.healthSrt(),
+							!rollup.srt.reconnecting,
+							$LL.hud.healthStable(),
+							$LL.hud.healthReconnecting(),
+							null,
+							TriangleAlertIcon,
+						)}
+						{@render rollupTile(
+							'health-frames',
+							$LL.hud.healthFrames(),
+							rollup.frames.advancing,
+							$LL.hud.healthAdvancing(),
+							$LL.hud.healthStalled(),
+							null,
+							TriangleAlertIcon,
+						)}
+						<div class="bg-secondary/40 flex flex-col gap-1 rounded-lg p-2.5" data-testid="health-bond">
+							<dt class="text-muted-foreground text-[0.7rem] font-medium">{$LL.hud.healthBond()}</dt>
+							<dd
+								class={cn(
+									'font-mono font-medium tabular-nums',
+									rollup.bond.activeLinks < rollup.bond.linkCount && 'text-status-warning',
+								)}
+							>
+								{rollup.bond.activeLinks}/{rollup.bond.linkCount}
+							</dd>
+						</div>
+					</dl>
+				{:else if lifecycle !== 'offline'}
+					<p class="text-muted-foreground/70 text-xs" data-testid="stream-health-rollup-empty">{$LL.hud.noData()}</p>
+				{/if}
+
+				<!-- 4. Single bitrate row (Task 8 behavior) -->
+				<div class={cn('flex items-center justify-between gap-3 border-b py-2', bitrateDimmed && 'opacity-50')}>
 					<span class="text-muted-foreground flex items-center gap-2">
-						{#if hud.isBitrateStale}<ClockIcon class="size-3.5" aria-hidden="true" />{/if}
+						{#if bitrateDimmed}<ClockIcon class="size-3.5" aria-hidden="true" />{/if}
 						{$LL.hud.bitrate()}
 					</span>
 					<span class="font-mono tabular-nums">
-						{hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—'}
+						{bitrateText}
 					</span>
 				</div>
 			</section>
@@ -513,7 +528,7 @@ $effect(() => {
 					<p class="text-muted-foreground/70 py-2 text-sm">{$LL.hud.noData()}</p>
 				{:else}
 					{#each hud.links as link (link.linkIndex)}
-						<div class={cn('flex items-center justify-between gap-3 border-b py-2.5', link.isStale && 'opacity-50')}>
+						<div class={cn('flex items-center justify-between gap-3 border-b py-2', link.isStale && 'opacity-50')}>
 							<span class="flex min-w-0 items-center gap-2.5">
 								<span class="size-2.5 shrink-0 rounded-full" style:background-color={linkColor(link)} style:opacity={link.isConnected ? '1' : '0.4'}></span>
 								{#if link.type === 'wifi'}
@@ -541,29 +556,27 @@ $effect(() => {
 				{/if}
 			</section>
 
-			<!-- Sensors -->
+			<!-- Sensors: collapsed to ONE inline mono line (temp · voltage · current) -->
 			<section class={cn('flex flex-col gap-1', hud.isSensorsStale && 'opacity-50')}>
 				<h3 class="text-muted-foreground mb-1 flex items-center gap-2 text-xs font-medium">
 					{$LL.hud.sensors()}
 					{#if hud.isSensorsStale}<ClockIcon class="size-3.5" aria-hidden="true" />{/if}
 				</h3>
-				<div class="flex items-center justify-between gap-3 border-b py-2">
-					<span class="text-muted-foreground flex items-center gap-2">
-						<ThermometerIcon class="size-4" aria-hidden="true" />{$LL.hud.temperature()}
+				<div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2 font-mono text-sm tabular-nums" data-testid="hud-sensors-line">
+					<span class="inline-flex items-center gap-1.5" title={$LL.hud.temperature()}>
+						<ThermometerIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+						{hud.temperature != null ? formatTemp(loc)(hud.temperature) : '—'}
 					</span>
-					<span class="font-mono tabular-nums">{hud.temperature != null ? formatTemp(loc)(hud.temperature) : '—'}</span>
-				</div>
-				<div class="flex items-center justify-between gap-3 border-b py-2">
-					<span class="text-muted-foreground flex items-center gap-2">
-						<ZapIcon class="size-4" aria-hidden="true" />{$LL.hud.voltage()}
+					<span class="text-muted-foreground/40" aria-hidden="true">·</span>
+					<span class="inline-flex items-center gap-1.5" title={$LL.hud.voltage()}>
+						<ZapIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+						{hud.voltage != null ? formatVoltage(loc)(hud.voltage) : '—'}
 					</span>
-					<span class="font-mono tabular-nums">{hud.voltage != null ? formatVoltage(loc)(hud.voltage) : '—'}</span>
-				</div>
-				<div class="flex items-center justify-between gap-3 border-b py-2">
-					<span class="text-muted-foreground flex items-center gap-2">
-						<ActivityIcon class="size-4" aria-hidden="true" />{$LL.hud.current()}
+					<span class="text-muted-foreground/40" aria-hidden="true">·</span>
+					<span class="inline-flex items-center gap-1.5" title={$LL.hud.current()}>
+						<ActivityIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+						{hud.current != null ? formatCurrent(loc)(hud.current) : '—'}
 					</span>
-					<span class="font-mono tabular-nums">{hud.current != null ? formatCurrent(loc)(hud.current) : '—'}</span>
 				</div>
 				{#if lastSeen(hud.lastUpdatedAt.sensors)}
 					<p class="text-muted-foreground/70 mt-1 text-xs">{$LL.hud.lastUpdated()} {lastSeen(hud.lastUpdatedAt.sensors)}</p>
