@@ -101,17 +101,28 @@ let pulseEls: (SVGCircleElement | null)[] = [];
 // data-animated for the static-fallback assertions.
 let animated = $state(false);
 
-$effect(() => {
-	// Re-run ONLY when liveness, freeze, or the topology fingerprint changes —
-	// NOT on the `nodes`/`links` array identity (which churns every status push).
-	// Geometry is read untracked so a per-tick signal/throughput update never
-	// restarts the in-flight timelines mid-flight.
-	const isLive = live;
-	const isFrozen = frozen;
-	void fingerprint;
-	const geo = untrack(() => nodes);
+// The gsap.matchMedia context for the CURRENT build, plus the key it was built
+// for. The effect below re-runs on every status push (Svelte can't skip it on a
+// value-equal derived), so the key guards against a mid-flight rebuild.
+let activeContext: gsap.MatchMedia | undefined;
+let activeKey: string | undefined;
 
+function teardownTimeline(): void {
+	// Kill the repeat:-1 tweens FIRST — `revert()` reverts inline styles but does
+	// not stop an infinitely-repeating tween, so without this the packet / pulse
+	// rAF loops survive teardown and the next build stacks a second loop.
+	const targets = [...packetEls, ...pulseEls].filter(
+		(el): el is SVGCircleElement => el != null,
+	);
+	if (targets.length > 0) gsap.killTweensOf(targets);
+	activeContext?.revert();
+	activeContext = undefined;
+	animated = false;
+}
+
+function buildTimeline(isLive: boolean, isFrozen: boolean, geo: NodeGeo[]): void {
 	const mm = gsap.matchMedia();
+	activeContext = mm;
 	mm.add('(prefers-reduced-motion: no-preference)', () => {
 		// E-ink frozen or idle → render the static parked topology, no rAF loop.
 		if (isFrozen || !isLive || geo.length === 0) return;
@@ -159,23 +170,29 @@ $effect(() => {
 		});
 
 		animated = true;
-		return () => {
-			animated = false;
-		};
 	});
+}
 
-	return () => {
-		// Kill the repeat:-1 tweens FIRST — `mm.revert()` reverts inline styles but
-		// does not stop an infinitely-repeating tween, so without this the packet /
-		// pulse rAF loops survive teardown and the next build stacks a second loop.
-		const targets = [...packetEls, ...pulseEls].filter(
-			(el): el is SVGCircleElement => el != null,
-		);
-		if (targets.length > 0) gsap.killTweensOf(targets);
-		mm.revert();
-		animated = false;
-	};
+$effect(() => {
+	// Depend ONLY on liveness, freeze, and the topology fingerprint. A per-tick
+	// signal/throughput push churns `links`/`nodes` identity but leaves the key
+	// identical, so the guard early-returns and the in-flight timeline is NEVER
+	// restarted mid-flight (the reported "weird movement"). Geometry is read
+	// untracked. Cleanup is manual (NOT a return callback) because Svelte runs a
+	// return-cleanup before EVERY re-run — which would tear a live timeline down
+	// on an unchanged-topology tick.
+	const isLive = live;
+	const isFrozen = frozen;
+	const key = `${isLive}|${isFrozen}|${fingerprint}`;
+	if (key === activeKey) return;
+	activeKey = key;
+
+	teardownTimeline();
+	buildTimeline(isLive, isFrozen, untrack(() => nodes));
 });
+
+// Unmount-only teardown: no tracked reads, so this cleanup runs solely on destroy.
+$effect(() => () => teardownTimeline());
 
 const activeCount = $derived(links.filter((l) => l.isConnected).length);
 </script>
