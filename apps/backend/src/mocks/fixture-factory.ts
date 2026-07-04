@@ -38,11 +38,15 @@ import {
 	MOCK_SIM_PUK_RETRIES,
 } from "./mock-constants.ts";
 import {
+	type MockAudioDevices,
+	type MockDeviceModes,
 	type MockKioskToken,
 	type MockModemConfig,
 	type MockSimState,
 	type MockWifiNetwork,
 	type MockWifiRadio,
+	mockAudioDevicesSchema,
+	mockDeviceModesSchema,
 	mockKioskTokenSchema,
 	mockModemConfigSchema,
 	mockSimStateSchema,
@@ -97,6 +101,52 @@ const DEFAULT_SIM_STATE = {
 	pinRetries: MOCK_SIM_PIN_RETRIES,
 	pukRetries: MOCK_SIM_PUK_RETRIES,
 } satisfies MockSimState;
+
+const DEFAULT_AUDIO_DEVICES = {
+	"USB audio": "usbaudio",
+} satisfies MockAudioDevices;
+
+// The full-engine-profile per-device modes: an HDMI capture device (1080p@[30,60]
+// + 2160p@[30]) and a UVC/USB device (720p@[30,60] + 1080p@[30]). These are the
+// FOLDED forms (numeric rung framerates) the getCapabilities() device_modes fold
+// produces; the streaming provider expands them back to a list-devices result so
+// the fold round-trips to exactly this map.
+const DEFAULT_DEVICE_MODES = {
+	hdmi: {
+		kind: "hdmi",
+		modes: [
+			{
+				width: 1920,
+				height: 1080,
+				framerates: [30, 60],
+				media_type: "video/x-raw",
+			},
+			{
+				width: 3840,
+				height: 2160,
+				framerates: [30],
+				media_type: "video/x-raw",
+			},
+		],
+	},
+	usb: {
+		kind: "uvc_h264",
+		modes: [
+			{
+				width: 1280,
+				height: 720,
+				framerates: [30, 60],
+				media_type: "video/x-h264",
+			},
+			{
+				width: 1920,
+				height: 1080,
+				framerates: [30],
+				media_type: "video/x-h264",
+			},
+		],
+	},
+} satisfies MockDeviceModes;
 
 // ─── Builders ────────────────────────────────────────────────────────────────
 
@@ -162,4 +212,24 @@ export function buildMockSimState(
 	overrides: Partial<MockSimState> = {},
 ): MockSimState {
 	return mockSimStateSchema.parse({ ...DEFAULT_SIM_STATE, ...overrides });
+}
+
+/** Build a schema-valid mock audio-device map (defaults = the USB-audio seed). */
+export function buildMockAudioDevices(
+	overrides: MockAudioDevices = {},
+): MockAudioDevices {
+	return mockAudioDevicesSchema.parse({
+		...DEFAULT_AUDIO_DEVICES,
+		...overrides,
+	});
+}
+
+/** Build a schema-valid mock `device_modes` map (defaults = the full-profile HDMI + USB groups). */
+export function buildMockDeviceModes(
+	overrides: MockDeviceModes = {},
+): MockDeviceModes {
+	return mockDeviceModesSchema.parse({
+		...structuredClone(DEFAULT_DEVICE_MODES),
+		...overrides,
+	});
 }

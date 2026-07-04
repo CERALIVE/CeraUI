@@ -41,6 +41,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **self_fencing watchdog (commit-confirm + auto-revert)** | `modules/remote-control/self-fencing.ts` — `handleSelfFencingOp`, `handleSelfFencingConfirm`; 30 s watchdog |
 | **Wire-envelope Zod schema + contract test** | `modules/remote-control/protocol.ts` — `FrameSchema`, `CommandSchema`, `StatusSchema`, `COMMAND_REGISTRY` (incl. `INTERNAL_COMMANDS`), `IngestSlotsPayloadSchema`, `NEVER_REMOTE` |
 | Kiosk loopback token (DC-3, single-use, tmpfs) | `modules/ui/kiosk-token.ts` + `rpc/server.ts` |
+| Preview WebSocket proxy (single-origin `/preview`; forks before oRPC upgrade; backpressure-aware) | `modules/ui/preview-proxy.ts` + `rpc/server.ts` + `rpc/adapter.ts` (`createServerWebSocketHandler`) |
+| Preview single-use token store (in-memory, TTL 30s) + `system.mintPreviewToken` | `modules/ui/preview-token.ts` + `rpc/procedures/system.procedure.ts` |
 | SIM PIN secrets store (opt-in "remember PIN", chmod-600 tmpfs) | `modules/modems/sim-secrets.ts` |
 | Boot SIM PIN auto-unlock hook (bounded, single attempt) | `modules/modems/sim-autounlock.ts` |
 | Kiosk DC-2 state machine (toggle runs the `cog-display` add-on via the manager) | `modules/system/kiosk.ts` |
@@ -48,7 +50,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | In-memory log ring buffer (dev/CI journal substitute) | `helpers/logger.ts` — `getRecentLogLines` |
 | Add-on enable/disable state machine (T28) | `modules/addons/manager.ts` |
 | Post-boot add-on reconciler (T29, non-blocking; never gates rollback) | `modules/addons/reconciler.ts` |
-| Network-ingest gateway status (probes `ceralive-rtmp-gateway.service`/`ceralive-srt-gateway.service`, LAN URLs, `status.network_ingest`) | `modules/network/network-ingest.ts` |
+| Network-ingest gateway status (fail-closed dual-topology SRT probe: OLD `ceralive-srt-gateway.service` OR NEW MediaMTX `/etc/mediamtx.yml` `srt: yes`+`srtAddress: :4001`; LAN URLs, additive `srt.gateway`, `status.network_ingest`) | `modules/network/network-ingest.ts` |
 | Gateway-active probe seam (blocks rtmp/srt `streaming.start` until the gateway is up; fail-safe default) | `modules/streaming/gateway-availability.ts` |
 | Same-subnet detection (`same_subnet_group`, informational, AP-excluded) | `modules/network/network-interfaces.ts` (`netIfBuildMsg`) |
 | Policy-route self-check for bonded wifi/modem interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
@@ -94,6 +96,51 @@ boot never resubmits a known-wrong PIN. The unlock flow is the intended caller
 (store on a successful unlock when the user chooses "remember"). Coverage:
 `tests/sim-autounlock.test.ts` (mode-600 + config-untouched, boot unlock, bounded
 wrong-PIN, and the no-op gates).
+
+## PREVIEW WEBSOCKET PROXY — single-origin (Task 20) [EXISTS]
+
+The cerastream engine serves its video preview over a WebSocket on a loopback
+port, but the browser NEVER dials the engine directly. The backend proxies the
+preview through its OWN origin at `/preview` (`modules/ui/preview-proxy.ts`), so
+the preview travels the same authenticated, single-origin path as the RPC socket.
+
+**Remote-access rationale (the decision):** a device reached through a reverse
+proxy / cloud tunnel exposes exactly one origin. A direct engine-port dial from
+the browser would require a second exposed port (and mixed-origin/CORS handling)
+that a remote operator does not have. Proxying through the backend keeps the
+preview reachable wherever the RPC socket is reachable — no extra port, no
+divergence between dev and prod dial targets.
+
+- **Fork order (`rpc/server.ts`):** the `fetch` handler branches on
+  `pathname === PREVIEW_WS_PATH` BEFORE the generic oRPC upgrade — the oRPC path
+  would otherwise adopt every WS into the RPC handler. Bun exposes ONE `websocket`
+  handler, so `rpc/adapter.ts` `createServerWebSocketHandler()` dispatches by the
+  `ServerSocketData` `kind` discriminant (`isPreviewSocket`).
+- **Auth AFTER upgrade (pinned):** a fresh WS upgrade starts unauthenticated, and
+  RPC auth is per-socket, so "same auth as RPC" is NOT reusable. The route ALWAYS
+  upgrades on a pathname match, then validates+consumes a single-use token on
+  `open`, closing `PREVIEW_CLOSE_UNAUTHORIZED = 4401` when it is
+  invalid/expired/consumed — NEVER a pre-upgrade HTTP refusal (a browser
+  WebSocket cannot distinguish a pre-upgrade HTTP error from a network failure).
+- **Token (`modules/ui/preview-token.ts`):** in-memory, single-use, TTL 30s,
+  minted by the authed `system.mintPreviewToken` RPC and passed as the `?token=`
+  query param — the RPC password/credential never appears in the URL. Mirrors the
+  kiosk single-use token pattern; raw entropy, never persisted, never logged.
+- **Upstream + close codes:** the proxy dials the engine loopback socket
+  (`ws://127.0.0.1:<preview.port>` from the capability snapshot
+  `preview {enabled, port, bound}`), or the mock preview server
+  (`getMockPreviewPort()`) under `shouldUseMocks()` — dev and prod dial the
+  identical URL/token flow. `PREVIEW_CLOSE_UPSTREAM_DOWN = 4502` (loopback
+  unreachable), `PREVIEW_CLOSE_UPSTREAM_UNAVAILABLE = 4503` (preview
+  unbound/disabled). Close-code constants live once in `@ceraui/rpc/schemas`.
+- **Backpressure:** frames are a transparent passthrough BOTH ways (text control
+  frames + binary access units). The downstream (browser) leg is
+  backpressure-aware — when the client's `getBufferedAmount()` exceeds
+  `PREVIEW_BACKPRESSURE_HWM_BYTES` (1 MiB) forwarding pauses and upstream frames
+  are held, resuming on `drain`. Pause/resume only — NEVER drop-oldest.
+
+Coverage: `tests/preview-token.test.ts` (mint/consume/expire/single-use) +
+`tests/preview-proxy.test.ts` (pipe, 4401/4502/4503, authed mint gate).
 
 ## DEV MOCK SEAMS [EXISTS]
 
@@ -199,13 +246,13 @@ The backend pushes typed events to all connected clients via `rpc/events.ts`. Ea
 | `sensors` | 1 s | `modules/system/sensors.ts` |
 | `gateways` | 2 s | `modules/network/gateways.ts` |
 | `modems` | 30 s | `modules/modems/modem-update-loop.ts` |
-| `status` | on-change + 5 s | streaming state transitions; carries `linkTelemetry` |
+| `status` | on-change + 5 s | streaming state transitions; carries `linkTelemetry`, `network_ingest`, and the typed `audio_sources` beside legacy `asrcs` |
 | `config` | on-change | `setConfig` / `start` / `stop` |
 | `wifi` | on-change | WiFi scan / connect / disconnect |
 | `relays` | on-change | relay list mutations |
 | `acodecs` | on-change | audio codec list changes |
-| `pipelines` | on-change | pipeline list changes |
-| `capabilities` | post-login snapshot | engine capability contract; carries `transports` (relay transports the engine can honor) |
+| `pipelines` | on-change | pipeline list changes; each entry carries `requires_gateway` (rtmp/srt) + `audio_kind` (`selectable`/`embedded`/`none`) |
+| `capabilities` | post-login snapshot | engine capability contract; carries `transports`, per-device `device_modes` (Tier-2 caps folded from `list-devices`, kbps-normalized bitrate), and `network_embedded_audio` |
 | `notifications` | on-demand | user-facing toast events |
 | `log` | on-demand | `system.getLog` / `system.getSyslog` — diagnostic journal for download |
 | `ping` | 5 s | heartbeat emitter |

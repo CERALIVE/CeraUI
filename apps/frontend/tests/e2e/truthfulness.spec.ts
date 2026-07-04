@@ -286,6 +286,98 @@ function sendEngineUnavailableCached(): void {
 	});
 }
 
+// ── Capability-first source / encoder / audio fixtures (Todos 9–13) ──────────
+// A capable HDMI source (override-capable, 2160p/60, embeds audio) and a fixed
+// UVC source (720p/30, no audio). Switching the active source flips the SOURCE
+// MAX chips (Todo 11). Field names are the snake_case VideoSourceCap wire shape.
+const SRC_HDMI_4K = {
+	id: "hdmi",
+	supports_audio: true,
+	supports_resolution_override: true,
+	supports_framerate_override: true,
+	default_resolution: "1080p",
+	default_framerate: 30,
+};
+const SRC_UVC_720 = {
+	id: "uvc",
+	supports_audio: false,
+	supports_resolution_override: false,
+	supports_framerate_override: false,
+	default_resolution: "720p",
+	default_framerate: 30,
+};
+
+// Per-device capture modes keyed by list-devices input_id (Todo 5/10). Phase 1
+// offers only 1080p@30; phase 2 adds 720p and 60fps — so the Encoder resolution
+// AND framerate options genuinely flip enabled ⇄ disabled-with-reason (Todo 10).
+const MODES_1080_30 = {
+	video0: {
+		kind: "hdmi",
+		modes: [{ width: 1920, height: 1080, framerates: [30] }],
+	},
+};
+const MODES_720_1080_30_60 = {
+	video0: {
+		kind: "hdmi",
+		modes: [
+			{ width: 1280, height: 720, framerates: [30, 60] },
+			{ width: 1920, height: 1080, framerates: [30, 60] },
+		],
+	},
+};
+
+// A software board (generic → 1080p platform ceiling) exposing an rtmp gateway
+// pipeline (embedded audio) beside the direct HDMI capture — the shape the
+// `pipelines` broadcast carries for the network-ingest source rows (Todo 12).
+const PIPELINES_WITH_RTMP = {
+	pipelines: {
+		hardware: "generic",
+		pipelines: {
+			hdmi: GENERIC_PIPELINES.pipelines.pipelines.hdmi,
+			rtmp: {
+				name: "RTMP Ingest",
+				description: "LAN RTMP publish source",
+				supportsAudio: true,
+				supportsResolutionOverride: false,
+				supportsFramerateOverride: false,
+				requires_gateway: "rtmp",
+				audio_kind: "embedded",
+			},
+		},
+	},
+};
+
+// A board exposing an SRT gateway pipeline whose audio is EMBEDDED in the
+// incoming stream (Todo 13) — with `network_embedded_audio` advertised, the audio
+// picker collapses to the read-only "Embedded audio" state.
+const PIPELINES_WITH_SRT = {
+	pipelines: {
+		hardware: "generic",
+		pipelines: {
+			hdmi: GENERIC_PIPELINES.pipelines.pipelines.hdmi,
+			srt: {
+				name: "SRT Ingest",
+				description: "LAN SRT publish source",
+				supportsAudio: true,
+				supportsResolutionOverride: false,
+				supportsFramerateOverride: false,
+				requires_gateway: "srt",
+				audio_kind: "embedded",
+			},
+		},
+	},
+};
+
+// Inject a full-caps snapshot carrying per-device modes (rides the capabilities
+// broadcast, Todo 5) so the Encoder axes narrow to the real device envelope.
+function sendCapsWithModes(deviceModes: Record<string, unknown>): void {
+	sendCapabilities({
+		audio_live_switch: true,
+		latency_range: { min: 2000, default: 4000, max: 8000 },
+		device_modes: deviceModes,
+	});
+}
+
 test.describe("Capability truthfulness (functional)", () => {
 	test.beforeEach(async ({ page }, testInfo) => {
 		test.skip(
@@ -659,5 +751,226 @@ test.describe("Capability truthfulness (functional)", () => {
 			rpcConsoleErrors,
 			`undefined-RPC console errors: ${rpcConsoleErrors.join(" | ")}`,
 		).toEqual([]);
+	});
+
+	// ── (Todo 10) Encoder resolution + framerate options flip with device_modes ──
+	test("encoder resolution and framerate options flip enabled ⇄ disabled-with-reason with injected device_modes", async ({
+		page,
+	}) => {
+		serverConfig({
+			pipeline: "hdmi",
+			selected_video_input: "video0",
+			resolution: "1080p",
+			framerate: 30,
+		});
+		send(GENERIC_PIPELINES);
+		sendCapsWithModes(MODES_1080_30);
+
+		await page.getByTestId("open-encoder-dialog").click();
+		const dialog = page.getByRole("dialog", { name: "Encoder Settings" });
+		await expect(dialog).toBeVisible({ timeout: 15_000 });
+
+		await page.locator("#encoder-source").click();
+		await page.locator('[role="option"][data-value="hdmi"]').click();
+
+		const res720 = page.locator(
+			'[data-testid="resolution-option"][data-value="720p"]',
+		);
+		const res1080 = page.locator(
+			'[data-testid="resolution-option"][data-value="1080p"]',
+		);
+		const fps60 = page.locator(
+			'[data-testid="framerate-option"][data-value="60"]',
+		);
+		const fps30 = page.locator(
+			'[data-testid="framerate-option"][data-value="30"]',
+		);
+
+		// PHASE 1 — the device advertises only 1080p@30: 720p is disabled-with-reason
+		// and 60fps at 1080p is disabled-with-reason (never hidden).
+		await page.locator("#encoder-resolution").click();
+		await expect(res1080).toBeVisible();
+		await expect(res720).toHaveAttribute("aria-disabled", "true");
+		await expect(res720).toHaveAttribute("title", /\S/);
+		await expect(res1080).not.toHaveAttribute("aria-disabled", "true");
+		await res1080.click();
+
+		await page.locator("#encoder-framerate").click();
+		await expect(fps30).toBeVisible();
+		await expect(fps60).toHaveAttribute("aria-disabled", "true");
+		await expect(fps60).toHaveAttribute("title", /\S/);
+		await expect(fps30).not.toHaveAttribute("aria-disabled", "true");
+		await page.keyboard.press("Escape");
+
+		// PHASE 2 — the device now advertises 720p AND 1080p at 30 AND 60fps: the
+		// SAME options genuinely re-enable, proving the DOM tracks the injected modes.
+		sendCapsWithModes(MODES_720_1080_30_60);
+
+		await page.locator("#encoder-resolution").click();
+		await expect(res720).not.toHaveAttribute("aria-disabled", "true");
+		await page.keyboard.press("Escape");
+
+		await page.locator("#encoder-framerate").click();
+		await expect(fps60).not.toHaveAttribute("aria-disabled", "true");
+		await page.keyboard.press("Escape");
+	});
+
+	// ── (Todo 11) SOURCE MAX chips reflect the ACTIVE source, not platform maxima ─
+	test("the SOURCE MAX capability chips change with the active source", async ({
+		page,
+	}) => {
+		send(GENERIC_PIPELINES);
+		serverConfig({ pipeline: "hdmi", selected_video_input: "hdmi" });
+		sendCapabilities({
+			audio_live_switch: true,
+			sources: [SRC_HDMI_4K, SRC_UVC_720],
+		});
+
+		const chips = page.getByTestId("source-capabilities");
+		await expect(chips).toBeVisible({ timeout: 15_000 });
+		await expect(chips).toContainText("2160p");
+		await expect(chips).toContainText("60fps");
+		await expect(page.getByTestId("cap-audio")).toBeVisible();
+
+		// Switch the active source to the fixed UVC input (720p / 30 / no audio):
+		// the SAME chips genuinely track the new source's real ceiling.
+		serverConfig({ pipeline: "hdmi", selected_video_input: "uvc" });
+		await expect(chips).toContainText("720p");
+		await expect(chips).toContainText("30fps");
+		await expect(chips).not.toContainText("2160p");
+		await expect(page.getByTestId("cap-audio")).toHaveCount(0);
+	});
+
+	// ── (Todo 12) Network-ingest rows honest across gateway + embedded-audio caps ─
+	test("network-ingest source rows stay honest across gateway states and the embedded-audio chip tracks the caps", async ({
+		page,
+	}) => {
+		serverConfig();
+		send(PIPELINES_WITH_RTMP);
+		sendCapabilities({
+			audio_live_switch: true,
+			sources: [
+				{
+					id: "rtmp",
+					supports_audio: true,
+					supports_resolution_override: false,
+					supports_framerate_override: false,
+					default_resolution: "1080p",
+					default_framerate: 30,
+				},
+			],
+		});
+		send({
+			status: {
+				network_ingest: {
+					rtmp: {
+						service_active: true,
+						url: "rtmp://192.168.1.100:1935/publish/live",
+					},
+					srt: null,
+				},
+			},
+		});
+
+		const container = page.getByTestId("source-network-ingest");
+		await expect(container).toBeVisible({ timeout: 15_000 });
+
+		const rtmpRow = page.getByTestId("source-network-ingest-select-rtmp");
+		await expect(rtmpRow).toBeEnabled();
+		await expect(page.getByTestId("source-network-audio-rtmp")).toBeVisible();
+		await expect(
+			page.getByTestId("source-network-ingest-row-srt"),
+		).toHaveCount(0);
+
+		// Caps stop advertising embedded audio → the chip HONESTLY disappears (it is
+		// caps-driven, never a decorative always-on badge).
+		sendCapabilities({
+			audio_live_switch: true,
+			sources: [
+				{
+					id: "rtmp",
+					supports_audio: false,
+					supports_resolution_override: false,
+					supports_framerate_override: false,
+					default_resolution: "1080p",
+					default_framerate: 30,
+				},
+			],
+		});
+		await expect(page.getByTestId("source-network-audio-rtmp")).toHaveCount(0);
+
+		// Gateway goes DOWN → the SAME row renders disabled WITH a non-empty reason
+		// (never hidden, never a coming-soon/debt treatment).
+		send({
+			status: {
+				network_ingest: {
+					rtmp: {
+						service_active: false,
+						url: "rtmp://192.168.1.100:1935/publish/live",
+					},
+					srt: null,
+				},
+			},
+		});
+		await expect(rtmpRow).toBeDisabled();
+		await expect(rtmpRow).toHaveAttribute("title", /\S/);
+		await expect(
+			page.getByTestId("source-network-ingest-reason-rtmp"),
+		).toBeVisible();
+	});
+
+	// ── (Todo 13) Audio pseudo-sources localized + embedded-audio read-only state ─
+	test("audio pseudo-sources render localized and an embedded network source switches to the read-only embedded state", async ({
+		page,
+	}) => {
+		serverConfig();
+		send(GENERIC_PIPELINES);
+		send({ status: { asrcs: ["USB audio", "No audio", "Pipeline default"] } });
+		sendFullCaps();
+
+		const audioSelect = page.getByTestId("audio-source-select");
+		await expect(audioSelect).toBeVisible({ timeout: 15_000 });
+		await audioSelect.click();
+		// Pseudo-sources render via their localized labelKey (grouped last), beside
+		// the untranslated hardware device name.
+		await expect(page.getByRole("option", { name: "No audio" })).toBeVisible();
+		await expect(
+			page.getByRole("option", { name: "Pipeline default" }),
+		).toBeVisible();
+		await expect(page.getByRole("option", { name: "USB audio" })).toBeVisible();
+		await page.keyboard.press("Escape");
+
+		// Switch to an SRT source whose audio is EMBEDDED in the incoming stream and
+		// advertise `network_embedded_audio`: the ALSA picker collapses to the
+		// read-only "Embedded audio" state (no misleading source dropdown).
+		send(PIPELINES_WITH_SRT);
+		serverConfig({ pipeline: "srt" });
+		sendCapabilities({ audio_live_switch: true, network_embedded_audio: true });
+
+		const embedded = page.getByTestId("audio-source-embedded");
+		await expect(embedded).toBeVisible();
+		await expect(embedded).toContainText(/embedded/i);
+		await expect(page.getByTestId("audio-source-select")).toHaveCount(0);
+	});
+
+	// ── (Todo 9) The mode-preset catalog is gone — no preset-grid testids remain ──
+	test("the removed mode-preset grid leaves no preset testids in the rebuilt encoder dialog", async ({
+		page,
+	}) => {
+		serverConfig();
+		send(GENERIC_PIPELINES);
+		sendFullCaps();
+
+		await page.getByTestId("open-encoder-dialog").click();
+		const dialog = page.getByRole("dialog", { name: "Encoder Settings" });
+		await expect(dialog).toBeVisible({ timeout: 15_000 });
+
+		// The rebuilt capability-first dialog rendered (so the 0-count below is a
+		// real absence, not a dialog that failed to open).
+		await expect(dialog.getByTestId("encoder-codec-selector")).toBeVisible();
+		await expect(dialog.getByTestId("encoder-bitrate-control")).toBeVisible();
+
+		await expect(page.locator('[data-testid="mode-presets"]')).toHaveCount(0);
+		await expect(page.locator('[data-testid="encoder-preset"]')).toHaveCount(0);
 	});
 });

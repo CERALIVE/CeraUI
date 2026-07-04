@@ -999,6 +999,7 @@ const hi = {
 			copy: "पता कॉपी करें",
 			copied: "पता कॉपी हो गया",
 			copyFailed: "पता कॉपी नहीं हो सका।",
+			includesAudio: "ऑडियो शामिल है",
 		},
 		preview: {
 			title: "पूर्वावलोकन",
@@ -1102,12 +1103,13 @@ const hi = {
 			none: "कोई स्रोत नहीं चुना गया",
 			select: "स्रोत चुनें",
 			capabilities: "क्षमताएँ",
-			deviceMax: "डिवाइस अधिकतम",
+			sourceMax: "स्रोत अधिकतम",
 			activeLive: "लाइव",
 			activeConfigured: "कॉन्फ़िगर किया गया",
 			lostTitle: "डिवाइस डिस्कनेक्ट हो गया",
 			lostBody: "इस स्रोत से स्ट्रीमिंग फिर से शुरू करने के लिए डिवाइस को फिर से कनेक्ट करें।",
 			audioNone: "कोई ऑडियो स्रोत नहीं मिला",
+			audioEmbedded: "एम्बेडेड ऑडियो (आने वाली स्ट्रीम से)",
 		},
 		modes: {
 			label: "मोड",
@@ -1118,6 +1120,7 @@ const hi = {
 			reason: {
 				unsupportedPlatform: "इस प्लेटफ़ॉर्म पर समर्थित नहीं",
 				fixedBySource: "चयनित स्रोत द्वारा निर्धारित",
+				unsupportedAtResolution: "इस रिज़ॉल्यूशन पर उपलब्ध नहीं",
 				gatewayInactive: "नेटवर्क इंजेस्ट गेटवे नहीं चल रहा है",
 				gatewayNoAddress: "कोई पहुँच योग्य LAN या हॉटस्पॉट पता नहीं",
 			},
@@ -1162,17 +1165,11 @@ const hi = {
 			hint: "यह सुविधा भविष्य के अपडेट में उपलब्ध होगी।",
 			pip: "पिक्चर-इन-पिक्चर",
 			modeFallback: "स्वचालित स्विचिंग",
+			embeddedAudio: "एम्बेडेड ऑडियो",
 		},
 		fallback: {
 			unavailable: "अनुपलब्ध",
 			notConfigured: "कॉन्फ़िगर नहीं किया गया",
-		},
-		presets: {
-			heading: "मोड प्रीसेट",
-			advanced: "उन्नत / कस्टम",
-			applying: "प्रीसेट लागू हो रहा है\u2026",
-			applied: "प्रीसेट लागू किया गया",
-			failed: "प्रीसेट लागू नहीं किया जा सका",
 		},
 		encoder: {
 			appliesNextStart: "अगली बार शुरू होने पर लागू होगा",
@@ -1185,6 +1182,8 @@ const hi = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "चयनित",
+			axisDeviceMax: "डिवाइस अधिकतम",
 		},
 	},
 	dialogs: {
@@ -1527,6 +1526,12 @@ const hi = {
 		sshToggleFailed: "Failed to change the SSH server. Please try again.",
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
+	},
+	audio: {
+		sources: {
+			noAudio: "कोई ऑडियो नहीं",
+			pipelineDefault: "पाइपलाइन डिफ़ॉल्ट",
+		},
 	},
 } satisfies Translation;
 

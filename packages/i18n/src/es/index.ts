@@ -417,6 +417,7 @@ const es = {
 			copy: "Copiar dirección",
 			copied: "Dirección copiada",
 			copyFailed: "No se pudo copiar la dirección.",
+			includesAudio: "Incluye audio",
 		},
 		preview: {
 			title: "Vista previa",
@@ -523,13 +524,14 @@ const es = {
 			none: "Ninguna fuente seleccionada",
 			select: "Seleccionar una fuente",
 			capabilities: "Capacidades",
-			deviceMax: "Máximo del dispositivo",
+			sourceMax: "Máximo de la fuente",
 			activeLive: "En vivo",
 			activeConfigured: "Configurado",
 			lostTitle: "Dispositivo desconectado",
 			lostBody:
 				"Vuelve a conectar el dispositivo para reanudar la transmisión desde esta fuente.",
 			audioNone: "No se detectó ninguna fuente de audio",
+			audioEmbedded: "Audio incorporado (del flujo entrante)",
 		},
 		modes: {
 			label: "Modo",
@@ -540,6 +542,7 @@ const es = {
 			reason: {
 				unsupportedPlatform: "No compatible con esta plataforma",
 				fixedBySource: "Fijado por la fuente seleccionada",
+				unsupportedAtResolution: "No disponible en esta resolución",
 				gatewayInactive:
 					"La puerta de enlace de ingesta de red no está en ejecución",
 				gatewayNoAddress: "Sin dirección de LAN o punto de acceso accesible",
@@ -585,17 +588,11 @@ const es = {
 			hint: "Esta función estará disponible en una actualización futura.",
 			pip: "Imagen en imagen",
 			modeFallback: "Conmutación automática",
+			embeddedAudio: "Audio incorporado",
 		},
 		fallback: {
 			unavailable: "No disponible",
 			notConfigured: "No configurado",
-		},
-		presets: {
-			heading: "Modos predefinidos",
-			advanced: "Avanzado / Personalizado",
-			applying: "Aplicando preajuste\u2026",
-			applied: "Preajuste aplicado",
-			failed: "No se pudo aplicar el preajuste",
 		},
 		encoder: {
 			appliesNextStart: "Se aplica al próximo inicio",
@@ -608,6 +605,8 @@ const es = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "Seleccionado",
+			axisDeviceMax: "Máximo del dispositivo",
 		},
 	},
 	dialogs: {
@@ -1600,6 +1599,12 @@ const es = {
 		sshToggleFailed: "Failed to change the SSH server. Please try again.",
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
+	},
+	audio: {
+		sources: {
+			noAudio: "Sin audio",
+			pipelineDefault: "Predeterminado de la canalización",
+		},
 	},
 } satisfies Translation;
 

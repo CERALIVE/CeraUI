@@ -16,6 +16,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import type { AudioSource } from "@ceraui/rpc/schemas";
 import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";
@@ -56,8 +57,57 @@ let audioDevices: Record<string, string> = {};
 addAudioCardById(audioDevices, NO_AUDIO_ID);
 addAudioCardById(audioDevices, DEFAULT_AUDIO_ID);
 
+// Dev/e2e seam merged into the list WITHOUT touching the real /sys/class/sound
+// scan; injected at boot under shouldUseMocks(), unset (no-op) in production.
+let mockAudioDevicesProvider: (() => Record<string, string>) | undefined;
+
+export function setMockAudioDevicesProvider(
+	provider: (() => Record<string, string>) | undefined,
+): void {
+	mockAudioDevicesProvider = provider;
+}
+
 export function getAudioDevices() {
+	const mock = mockAudioDevicesProvider?.();
+	if (mock && Object.keys(mock).length > 0) {
+		return { ...mock, ...audioDevices };
+	}
 	return audioDevices;
+}
+
+// Warn-only (NEVER mutate): a real device may hotplug the named asrc later
+// (see `asrcProbe`), so the operator's selection is preserved verbatim.
+export function warnIfConfiguredAudioSourceUnavailable(
+	asrc: string | undefined,
+): void {
+	if (!asrc) return;
+	const devices = getAudioDevices();
+	if (asrc in devices) return;
+	logger.warn(
+		`Configured audio source '${asrc}' is not in the current device list; leaving config.asrc unchanged (a real device may hotplug it later).`,
+		{ asrc, available: Object.keys(devices) },
+	);
+}
+
+// `id` MUST equal the device-map key (the asrc wire string) so it stays byte-equal
+// to the matching `asrcs` entry and `config.asrc` semantics are unchanged. Only the
+// two pseudo-sources carry a `labelKey`; hardware device names are never translated.
+export function deriveAudioSources(
+	devices: Record<string, string> = getAudioDevices(),
+): AudioSource[] {
+	return Object.keys(devices).map((name): AudioSource => {
+		if (name === NO_AUDIO_ID) {
+			return { id: name, kind: "none", labelKey: "audio.sources.noAudio" };
+		}
+		if (name === DEFAULT_AUDIO_ID) {
+			return {
+				id: name,
+				kind: "pipeline_default",
+				labelKey: "audio.sources.pipelineDefault",
+			};
+		}
+		return { id: name, kind: "device" };
+	});
 }
 
 function getAudioSrcName(id: string) {
@@ -130,7 +180,10 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 	audioDevices = sortedList;
 	logger.debug("audio devices:", audioDevices);
 
-	broadcastMsg("status", { asrcs: Object.keys(audioDevices) });
+	broadcastMsg("status", {
+		asrcs: Object.keys(audioDevices),
+		audio_sources: deriveAudioSources(audioDevices),
+	});
 
 	// A hotplug re-enumeration may have brought in the device a stream start is
 	// waiting on — wake the pending probe so it re-checks now instead of after

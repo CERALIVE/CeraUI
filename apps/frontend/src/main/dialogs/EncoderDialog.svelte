@@ -1,22 +1,21 @@
 <!--
   EncoderDialog.svelte — focused video-encoder configuration dialog.
 
-  Mode-presets lead (Task 7): the shared mode-preset catalog
-  (`@ceraui/rpc` CANONICAL_PRESETS) is the primary surface — a grid of tuned
-  resolution/framerate/codec profiles. Selecting one seeds the editable encoder
-  draft through the pure `modePresets` mapper and drives the Task-5 field-sync
-  state machine so the apply reads applying → applied (or failed). The granular
-  resolution / framerate / codec / bitrate controls remain, in full, under an
-  "Advanced / Custom" expander; editing any preset-defined field there returns
-  the surface to "Custom" (no active preset) automatically.
+  Capability-first (no presets): the dialog exposes independent
+  source / codec / bitrate / resolution / framerate selectors directly. There is
+  no mode-preset catalog — every control is capability-gated on its own.
 
   Capability discipline
   ---------------------
-  • A preset whose resolution/framerate/codec is NOT in the offered set
-    (`presetMatchesOffered`) renders DISABLED with a reason tooltip — never
-    hidden. Same rule the resolution/framerate option lists already follow.
+  • Resolution / Framerate come from `offeredAxes` (platform ∩ selected source ∩
+    Tier-2 device modes). Framerate is gated PER selected resolution, so a rate the
+    device can't drive at that resolution renders disabled-with-reason. Every rung
+    outside the offered set renders DISABLED with a reason tooltip — never hidden.
+    H.265 is disabled-with-reason when the platform can't encode it.
   • All numeric bounds come from `streamingConstraints` / `bitrateBoundsFromCaps`
     (ValidationAdapter) — no inline literals.
+  • The operator's codec choice (`localCodec`) is written to the draft's `codec`
+    field → persisted as `video_codec` on save.
 
   Behaviour
   ---------
@@ -49,28 +48,21 @@ export interface EncoderConfig {
 
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import {
-	CANONICAL_PRESETS,
-	MEDIA_TYPE_H264,
-	MEDIA_TYPE_H265,
-	type ModePreset,
-	presetMatchesOffered,
-} from '@ceraui/rpc';
-import { Binary, Check, ChevronDown, Cpu, SlidersHorizontal, TriangleAlert } from '@lucide/svelte';
+import { Binary, Cpu, TriangleAlert } from '@lucide/svelte';
 import { BITRATE_DEFAULT_MIN, type Pipeline } from '@ceraui/rpc/schemas';
 
 import AppliesNextStart from '$lib/components/custom/AppliesNextStart.svelte';
-import FieldSyncIndicator from '$lib/components/custom/FieldSyncIndicator.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 import {
+	axisCeiling,
 	bitrateBoundsFromCaps,
 	clampBitrateToBounds,
 	deriveCodecOptions,
 	deriveUvcH265Sources,
-	framerateOptions,
-	offeredEncoderCaps,
+	framerateOptionsForResolution,
+	offeredAxes,
 	platformCapsForHardware,
 	resolutionOptions,
 	summarizeProbedCaps,
@@ -87,12 +79,6 @@ import {
 	getSourceLabel,
 } from '$lib/helpers/PipelineHelper';
 import {
-	beginFieldSync,
-	markFieldApplied,
-	markFieldApplying,
-	markFieldFailed,
-} from '$lib/rpc/field-sync-state.svelte';
-import {
 	getCapabilities,
 	getConfig,
 	getDevices,
@@ -101,12 +87,6 @@ import {
 	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
 import { appliesOnNextStart } from '$lib/streaming/appliesNextStart';
-import {
-	findMatchingPresetId,
-	presetToDraft,
-	presetViews,
-	videoCodecFromMediaType,
-} from '$lib/streaming/modePresets';
 import { pipelineAvailability, pipelineViews } from '$lib/streaming/pipelineAvailability';
 
 interface Props {
@@ -123,12 +103,6 @@ interface Props {
 let { open = $bindable(false), config = $bindable(), onSave }: Props = $props();
 
 const BITRATE_STEP = 50;
-
-// Pseudo-field key for the preset apply's field-sync lifecycle. It is NOT a
-// persisted config field (the draft is committed on Save); it exists only so the
-// preset apply reads applying → applied/failed through the Task-5 machine and the
-// shared FieldSyncIndicator. Not a status field, so beginFieldSync accepts it.
-const PRESET_FIELD = 'encoderPreset';
 
 // ── Live data from the non-deprecated subscriptions surface ────────────────────
 const pipelinesMessage = $derived(getPipelines());
@@ -175,12 +149,6 @@ const t = (key: string): string => {
 	return typeof result === 'function' ? (result as () => string)() : key;
 };
 
-// Compact spec labels for the preset cards (JetBrains Mono spec values).
-const presetResLabel = (resolution: Resolution): string =>
-	resolution === '2160p' || resolution === '4k' ? '4K' : resolution;
-const codecShortLabel = (mediaType: string): string =>
-	mediaType === MEDIA_TYPE_H265 ? 'H.265' : mediaType === MEDIA_TYPE_H264 ? 'H.264' : mediaType;
-
 // ── Editable working copy (seeded when the dialog opens) ───────────────────────
 let localSource = $state('');
 let localResolution = $state<Resolution>('1080p');
@@ -192,17 +160,10 @@ let localOverlay = $state(false);
 // draft's `codec` → `video_codec`, and drives the segmented selector + preset
 // matching.
 let localCodec = $state<VideoCodec | undefined>(undefined);
-// The codec the current selection resolves to (explicit choice, else Auto), plus
-// the segmented-selector active-state (Auto = undefined selection).
-const effectiveCodec = $derived<VideoCodec>(localCodec ?? resolvedAutoCodec);
+// The segmented-selector active-state (Auto = undefined selection).
 const codecIsAuto = $derived(localCodec === undefined);
 const codecIsH264 = $derived(localCodec === 'h264');
 const codecIsH265 = $derived(localCodec === 'h265');
-// The preset the operator last applied (or that matched on seed). The visible
-// active state is the derived `activePresetId`, which clears this to "Custom" the
-// moment any preset-defined field diverges or the preset becomes unsupported.
-let selectedPresetId = $state<string | null>(null);
-let advancedOpen = $state(false);
 
 // Whether the last bitrate commit was snapped into the board window (drives the
 // inline "adjusted to the supported range" notice).
@@ -226,15 +187,6 @@ $effect(() => {
 		localBitrate = Number.isFinite(seedBitrate) ? seedBitrate : BITRATE.defaultMin;
 		localOverlay = config?.bitrateOverlay ?? savedConfig?.bitrate_overlay ?? false;
 		localCodec = config?.codec;
-		// Highlight a preset that matches the seeded resolution/framerate/codec
-		// (Auto resolves to the platform default for matching); otherwise the
-		// surface opens in "Custom" with the Advanced section expanded.
-		const matchId = findMatchingPresetId(
-			{ resolution: localResolution, framerate: localFramerate },
-			localCodec ?? resolvedAutoCodec,
-		);
-		selectedPresetId = matchId;
-		advancedOpen = matchId === null;
 		seededSource = localSource;
 		seededResolution = localResolution;
 		seededFramerate = localFramerate;
@@ -266,38 +218,33 @@ const framerateAppliesNextStart = $derived(
 	appliesOnNextStart('framerate', isStreaming, localFramerate !== seededFramerate),
 );
 
-// Capability-driven offered set (platform ∩ selected source) from intersectCaps.
-// Drives per-option enable/disable so an incompatible resolution/framerate/preset
-// is shown disabled with a reason rather than hidden or all-or-nothing gated.
-const offered = $derived(offeredEncoderCaps(hardware, localSource || undefined, selectedPipeline));
+// Capability-gated axes: platform ∩ selected source ∩ Tier-2 device modes. When
+// the engine broadcasts per-device modes, Resolution/Framerate reflect the active
+// (or kind-matched) capture hardware; otherwise this is the coarse offering. Every
+// incompatible rung is shown disabled with a reason — never hidden (house rule).
+const deviceModes = $derived(capabilities?.device_modes);
+const selectedVideoInput = $derived(savedConfig?.selected_video_input);
+const axes = $derived(
+	offeredAxes(
+		hardware,
+		localSource || undefined,
+		selectedPipeline,
+		deviceModes,
+		selectedVideoInput,
+	),
+);
+const offered = $derived(axes.offered);
 const resolutionChoices = $derived(resolutionOptions(offered));
-const framerateChoices = $derived(framerateOptions(offered));
+// Framerate options are gated per selected resolution: a rate the device+mode
+// can't drive at localResolution renders disabled-with-reason, never hidden.
+const framerateChoices = $derived(framerateOptionsForResolution(axes, localResolution));
 const resolutionSupported = $derived(offered.resolutions.includes(localResolution));
-const framerateSupported = $derived(offered.framerates.includes(localFramerate));
-
-	// Preset cards tagged with their capability verdict (supported / disabled+reason).
-	// A gateway-blocked source disables every preset with the gateway reason.
-	const presetCards = $derived(presetViews(offered, selectedAvailability));
-
-// The VISIBLE active preset: the last selection, but only while it still matches
-// every preset-defined field AND is still offered. Any Advanced edit that diverges
-// a field (or a source change that makes the preset unsupported) drops it to
-// "Custom" with no extra wiring — purely derived.
-const activePresetId = $derived.by<string | null>(() => {
-	if (selectedPresetId === null) return null;
-	const preset = CANONICAL_PRESETS[selectedPresetId];
-	if (!preset) return null;
-	if (preset.resolution !== localResolution) return null;
-	if (preset.framerate !== localFramerate) return null;
-	if (videoCodecFromMediaType(preset.codec) !== effectiveCodec) return null;
-	if (
-		preset.bitrateDefault !== undefined &&
-		clampBitrateToBounds(preset.bitrateDefault, BITRATE) !== localBitrate
-	) {
-		return null;
-	}
-	return presetMatchesOffered(preset, offered) ? selectedPresetId : null;
-});
+const framerateSupported = $derived(
+	framerateChoices.find((option) => option.value === localFramerate)?.supported ?? false,
+);
+// Current-vs-device-max summary (replaces preset highlighting): the active source's
+// real ceiling given platform ∩ source ∩ device modes.
+const ceiling = $derived(axisCeiling(axes));
 
 // Single coherent bitrate range: slider AND number input share the SAME board
 // window (BITRATE.min‥max). The slider is rendered controlled + clamped so an
@@ -320,42 +267,6 @@ const errors = $derived.by(() => {
 	return e;
 });
 const isValid = $derived(Object.keys(errors).length === 0);
-
-/** Build the current draft snapshot the preset mapper extends. */
-function currentDraft(): EncoderConfig {
-	return {
-		source: localSource || undefined,
-		resolution: localResolution,
-		framerate: localFramerate,
-		bitrate: localBitrate,
-		bitrateOverlay: localOverlay,
-		codec: localCodec,
-	};
-}
-
-/**
- * Apply a preset onto the draft, driving the field-sync lifecycle so the apply
- * reads applying → applied (or failed for an unsupported preset, which the UI
- * also blocks by disabling the card). Uses the pure `presetToDraft` mapper so the
- * preset→field mapping has one unit-tested source of truth.
- */
-function applyPreset(preset: ModePreset) {
-	beginFieldSync(PRESET_FIELD, preset.id);
-	markFieldApplying(PRESET_FIELD);
-	if (!presetMatchesOffered(preset, offered)) {
-		markFieldFailed(PRESET_FIELD, selectedPresetId);
-		return;
-	}
-	const next = presetToDraft(preset, currentDraft(), BITRATE);
-	if (next.resolution) localResolution = next.resolution;
-	if (next.framerate) localFramerate = next.framerate;
-	if (next.bitrate !== undefined) localBitrate = next.bitrate;
-	// The preset TRULY applies its codec: an explicit choice, so the preset stays
-	// active (not reset to Auto) and `video_codec` is written on save.
-	localCodec = next.codec;
-	selectedPresetId = preset.id;
-	markFieldApplied(PRESET_FIELD, preset.id);
-}
 
 function commitBitrate(raw: number) {
 	// Keep the current value while the field is mid-edit (empty input → NaN).
@@ -533,73 +444,6 @@ function handleSave() {
 		     + toggle and tears down on dialog close (unmount). -->
 		<PreviewCanvas compact />
 
-		<!-- Mode presets LEAD: tuned resolution/framerate/codec profiles. A preset
-		     outside the offered set renders disabled with a reason, never hidden. -->
-		<div class="space-y-2">
-			<div class="flex items-center justify-between gap-2">
-				<Label class="text-sm font-medium">{$LL.live.presets.heading()}</Label>
-				<FieldSyncIndicator
-					field={PRESET_FIELD}
-					applyingLabel={$LL.live.presets.applying()}
-					appliedLabel={$LL.live.presets.applied()}
-					failedLabel={$LL.live.presets.failed()}
-					data-testid="preset-sync"
-				/>
-			</div>
-			<div
-				class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr))]"
-				data-testid="mode-presets"
-			>
-				{#each presetCards as view (view.preset.id)}
-					{@const active = activePresetId === view.preset.id}
-					<button
-						type="button"
-						aria-disabled={view.supported ? undefined : 'true'}
-						aria-pressed={active}
-						class="group flex min-h-[44px] flex-col gap-0.5 rounded-lg border p-3 text-start transition-colors
-							{active
-							? 'border-primary bg-primary/10 ring-1 ring-primary'
-							: view.supported
-								? 'border-border bg-card/40 hover:border-primary/50 hover:bg-primary/5'
-								: 'border-border bg-muted/30 cursor-not-allowed opacity-50'}"
-						data-active={active}
-						data-preset-id={view.preset.id}
-						data-supported={view.supported}
-						data-testid="mode-preset"
-						disabled={!view.supported}
-						onclick={() => applyPreset(view.preset)}
-						title={view.supported ? undefined : t(view.reason ?? '')}
-					>
-						<span class="flex items-center justify-between gap-1">
-							<span
-								class="font-mono text-sm font-semibold {active
-									? 'text-primary'
-									: 'text-foreground'}"
-							>
-								{presetResLabel(view.preset.resolution)}
-							</span>
-							{#if active}
-								<Check aria-hidden={true} class="text-primary size-3.5 shrink-0" />
-							{:else if !view.supported}
-								<TriangleAlert
-									aria-hidden={true}
-									class="text-muted-foreground size-3.5 shrink-0"
-								/>
-							{/if}
-						</span>
-						<span class="text-muted-foreground font-mono text-xs">
-							{getFramerateLabel(view.preset.framerate)} · {codecShortLabel(view.preset.codec)}
-						</span>
-						{#if view.preset.bitrateDefault !== undefined}
-							<span class="text-muted-foreground/80 text-micro font-mono">
-								{view.preset.bitrateDefault} {$LL.units.kbps()}
-							</span>
-						{/if}
-					</button>
-				{/each}
-			</div>
-		</div>
-
 		<!-- Encoder codec: a first-class, capability-gated selector (replaces the
 		     old display-only chips). Auto resolves the engine default; H.265 is
 		     disabled-with-reason when the platform can't encode it — never hidden. -->
@@ -721,26 +565,29 @@ function handleSave() {
 			{/if}
 		</div>
 
-		<!-- Advanced / Custom: the full granular controls. Editing any preset-defined
-		     field here drops the active preset to "Custom" (via activePresetId). -->
-		<details bind:open={advancedOpen} class="bg-card/40 rounded-lg border">
-			<summary
-				class="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden"
-				data-testid="encoder-advanced-summary"
-			>
-				<span class="flex items-center gap-2">
-					<SlidersHorizontal aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
-					{$LL.live.presets.advanced()}
-				</span>
-				<ChevronDown
-					aria-hidden={true}
-					class="text-muted-foreground size-4 shrink-0 transition-transform {advancedOpen
-						? 'rotate-180'
-						: ''}"
-				/>
-			</summary>
+		<!-- Capability-gated Resolution + Framerate axes (offeredAxes): platform ∩
+		     source ∩ Tier-2 device modes. A single current-vs-device-max summary line
+		     replaces the old preset highlighting. -->
+		<div class="space-y-5">
+				{#if localSource}
+					<div
+						class="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+						data-testid="axis-summary"
+					>
+						<span class="font-medium">{$LL.live.encoder.axisSelected()}:</span>
+						<span class="text-foreground font-mono" data-testid="axis-current">
+							{getResolutionLabel(localResolution)} · {getFramerateLabel(localFramerate)}
+						</span>
+						<span aria-hidden={true}>·</span>
+						<span>{$LL.live.encoder.axisDeviceMax()}:</span>
+						<span class="text-foreground font-mono" data-testid="axis-device-max">
+							{ceiling.resolution ? getResolutionLabel(ceiling.resolution) : '\u2014'} · {ceiling.framerate
+								? getFramerateLabel(ceiling.framerate)
+								: '\u2014'}
+						</span>
+					</div>
+				{/if}
 
-			<div class="space-y-5 border-t px-4 py-4">
 				<!-- Resolution: every rung is shown; rungs outside the capability-offered
 				     set render disabled (aria-disabled + reason title), never hidden. -->
 				{#if localSource}
@@ -777,7 +624,7 @@ function handleSave() {
 											data-testid="resolution-option"
 											disabled={!option.supported}
 											label={getResolutionLabel(option.value)}
-											title={option.reason}
+											title={option.reason ? t(option.reason) : undefined}
 											value={option.value}
 										></Select.Item>
 									{/each}
@@ -821,7 +668,7 @@ function handleSave() {
 											data-testid="framerate-option"
 											disabled={!option.supported}
 											label={getFramerateLabel(option.value)}
-											title={option.reason}
+											title={option.reason ? t(option.reason) : undefined}
 											value={String(option.value)}
 										></Select.Item>
 									{/each}
@@ -842,7 +689,6 @@ function handleSave() {
 						onCheckedChange={(value) => (localOverlay = value)}
 					/>
 				</div>
-			</div>
-		</details>
+		</div>
 	</div>
 </AppDialog>

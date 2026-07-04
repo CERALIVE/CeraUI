@@ -29,8 +29,13 @@ describe("buildInitialStatus — network_ingest snapshot completeness", () => {
 		await refreshNetworkIngestInfo({
 			isRealDevice: async () => true,
 			shouldUseMocks: () => false,
-			resolveMockActive: () => ({ rtmp: true, srt: true }),
+			resolveMockSignals: () => ({
+				rtmpUnitActive: true,
+				srtUnitActive: true,
+				mediamtxSrt: false,
+			}),
 			probeServiceActive: async () => true,
+			probeMediamtxSrt: async () => false,
 			getNetif: () => ({ eth0: { ip: LAN, enabled: true } }),
 			getSourceKinds: () => new Set(["rtmp", "srt"]),
 		});
@@ -42,7 +47,11 @@ describe("buildInitialStatus — network_ingest snapshot completeness", () => {
 				service_active: true,
 				url: "rtmp://192.168.1.100:1935/publish/live",
 			},
-			srt: { service_active: true, url: "srt://192.168.1.100:4001" },
+			srt: {
+				service_active: true,
+				url: "srt://192.168.1.100:4001",
+				gateway: "srt-live-transmit",
+			},
 		});
 	});
 });

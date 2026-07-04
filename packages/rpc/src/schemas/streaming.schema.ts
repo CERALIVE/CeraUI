@@ -46,6 +46,22 @@ export type AudioCodec = z.infer<typeof audioCodecSchema>;
 // Alias for frontend compatibility
 export type AudioCodecs = 'aac' | 'opus';
 
+// Typed audio-source model (Task 4/6). `id` is the EXACT current `asrc` wire string
+// (e.g. "USB audio"), so `config.asrc` semantics are unchanged; `kind` distinguishes
+// a real capture device from the two pseudo-sources; `labelKey` is an i18n key for
+// the pseudo-sources only (device entries carry no key — hardware names are never
+// translated). Broadcast beside the legacy `asrcs: string[]`, which REMAINS for
+// back-compat. Additive + optional everywhere it is carried.
+export const audioSourceKindSchema = z.enum(['device', 'none', 'pipeline_default']);
+export type AudioSourceKind = z.infer<typeof audioSourceKindSchema>;
+
+export const audioSourceSchema = z.object({
+	id: z.string(),
+	kind: audioSourceKindSchema,
+	labelKey: z.string().optional(),
+});
+export type AudioSource = z.infer<typeof audioSourceSchema>;
+
 // Resolution and framerate types for pipeline overrides
 export const resolutionSchema = z.enum(['480p', '720p', '1080p', '1440p', '2160p', '4k']);
 export type Resolution = z.infer<typeof resolutionSchema>;
@@ -235,6 +251,13 @@ export type RequiresGateway = z.infer<typeof requiresGatewaySchema>;
 // disabled-with-reason / start-blocked message (never a raw string).
 export const GATEWAY_INACTIVE_ERROR = 'network_ingest_gateway_inactive';
 
+// Per-pipeline audio provenance (Task 4/13). `selectable` = ALSA/device audio the
+// operator picks (the legacy behavior); `embedded` = audio muxed into the incoming
+// network stream (rtmp/srt); `none` = the pipeline carries no audio. Additive +
+// optional: absent means the pipeline follows the legacy selectable-audio behavior.
+export const pipelineAudioKindSchema = z.enum(['selectable', 'embedded', 'none']);
+export type PipelineAudioKind = z.infer<typeof pipelineAudioKindSchema>;
+
 // Pipeline schema - now based on video sources with structured metadata
 export const pipelineSchema = z.object({
 	name: z.string(),
@@ -247,6 +270,10 @@ export const pipelineSchema = z.object({
 	// Network-ingest gateway dependency (Task 17). Present only on rtmp/srt
 	// pipelines; the gateway kind must be up before starting the pipeline.
 	requires_gateway: requiresGatewaySchema.optional(),
+	// Audio provenance for this pipeline (Task 4/13 registry field). Additive +
+	// optional; rtmp/srt pipelines are 'embedded', direct-capture pipelines
+	// 'selectable'. Absent → legacy selectable-audio behavior.
+	audio_kind: pipelineAudioKindSchema.optional(),
 });
 export type Pipeline = z.infer<typeof pipelineSchema>;
 
@@ -289,6 +316,30 @@ export const videoSourceCapSchema = z.object({
 	default_resolution: z.string(),
 	default_framerate: z.number(),
 });
+
+// Per-device capture mode (Task 4). Mirrors one grouped entry derived from
+// cerastream `captureDeviceSchema.caps[]` (docs/adr/schema.md:254-268): a concrete
+// {width,height} plus the framerate rungs that device drives at it. `framerates` are
+// NORMALIZED rung numbers (the engine emits string fractions like "30/1"; the backend
+// folds + normalizes via normalizeFramerateToRung before broadcast). Additive +
+// optional wherever it is carried.
+export const deviceModeSchema = z.object({
+	width: z.number().int().positive(),
+	height: z.number().int().positive(),
+	framerates: z.array(z.number()),
+	media_type: z.string().optional(),
+});
+export type DeviceMode = z.infer<typeof deviceModeSchema>;
+
+// One device's mode group, keyed in `device_modes` by its list-devices input_id (the
+// DEVICE id namespace, engine.rs:515-525 — DISTINCT from pipeline/source-kind ids).
+// `kind` is the captureDeviceSchema kind that bridges the device id to a pipeline id
+// (Oracle issue 4) — REQUIRED context because the two id namespaces differ.
+export const deviceModeGroupSchema = z.object({
+	kind: z.string().optional(),
+	modes: z.array(deviceModeSchema),
+});
+export type DeviceModeGroup = z.infer<typeof deviceModeGroupSchema>;
 
 export const capabilitiesMessageSchema = z.object({
 	platform: platformCapsSchema,
@@ -338,14 +389,195 @@ export const capabilitiesMessageSchema = z.object({
 	// `docs/PIP_EVALUATION.md` for the delivery contract this flag is the first
 	// layer of.
 	pip_supported: z.boolean().optional(),
+	// Per-device capture modes (Task 4), keyed by the device's list-devices
+	// input_id; each entry carries the device `kind` (the bridge to a pipeline id)
+	// and its concrete {width,height,framerates} modes. Additive + optional — an
+	// engine that emits no per-device caps omits this and the UI falls back to the
+	// coarse platform/source offering (byte-identical to today).
+	device_modes: z.record(z.string(), deviceModeGroupSchema).optional(),
+	// Embedded-audio routing capability (Task 4, mirrors todo 21's engine flag).
+	// When true the engine can route the audio muxed into an rtmp/srt publish to the
+	// encode leg; absent/false means it cannot (the current engine), so a
+	// network-ingest pipeline stays on the legacy selectable-ALSA path. Additive +
+	// optional.
+	network_embedded_audio: z.boolean().optional(),
 });
 export type CapabilitiesMessage = z.infer<typeof capabilitiesMessageSchema>;
+
+// ─── Preview WebSocket proxy — single-origin contract (Task 20) ──────────────
+//
+// The preview WebSocket is served by the cerastream engine on a loopback port,
+// but the browser NEVER dials the engine directly. The CeraUI backend proxies it
+// through its OWN origin at `PREVIEW_WS_PATH`, so the preview travels the same
+// authenticated, single-origin path as the RPC socket (remote-access safe: no
+// second port to expose, no CORS/mixed-origin concerns). Auth is a short-lived,
+// single-use token minted over the authenticated RPC socket
+// (`system.mintPreviewToken`) and passed as a query parameter — the stored
+// password/RPC credentials never appear in the URL.
+//
+// The route ALWAYS upgrades on a pathname match and validates+consumes the token
+// AFTER the upgrade (on open), closing with `PREVIEW_CLOSE_UNAUTHORIZED` when the
+// token is invalid/expired/consumed — never a pre-upgrade HTTP refusal (a browser
+// WebSocket cannot distinguish a pre-upgrade HTTP error from a network failure).
+
+/** Dedicated upgrade path the backend forks BEFORE the oRPC WebSocket handler. */
+export const PREVIEW_WS_PATH = '/preview';
+
+/** Query-parameter name carrying the single-use preview token on the dial URL. */
+export const PREVIEW_TOKEN_PARAM = 'token';
+
+/**
+ * Preview WebSocket close codes (application range 4000-4999, pinned here so the
+ * backend proxy and the frontend `PreviewCanvas` agree on one contract).
+ *  • `4401` — token invalid / expired / already consumed (auth failure on open).
+ *  • `4502` — the engine's loopback preview socket is unreachable (engine down).
+ *  • `4503` — the engine reports its preview endpoint unbound/disabled.
+ */
+export const PREVIEW_CLOSE_UNAUTHORIZED = 4401;
+export const PREVIEW_CLOSE_UPSTREAM_DOWN = 4502;
+export const PREVIEW_CLOSE_UPSTREAM_UNAVAILABLE = 4503;
+
+/** Output of `system.mintPreviewToken` — a single-use token + its TTL (ms). */
+export const previewTokenOutputSchema = z.object({
+	token: z.string(),
+	ttlMs: z.number().int().positive(),
+});
+export type PreviewTokenOutput = z.infer<typeof previewTokenOutputSchema>;
 
 // Available resolutions for UI
 export const AVAILABLE_RESOLUTIONS: Resolution[] = ['480p', '720p', '1080p', '1440p', '2160p'];
 
 // Available framerates for UI
 export const AVAILABLE_FRAMERATES: Framerate[] = [25, 29.97, 30, 50, 59.94, 60];
+
+// ─── Capability normalizers (Task 4) ────────────────────────────────────────
+//
+// Pure, browser-safe helpers mapping the engine's raw capability wire forms onto
+// CeraUI's schema enums. normalizeFramerateToRung / normalizeResolutionToRung are
+// FAIL-SAFE / fail-CLOSED: an unparseable or out-of-ladder value returns `undefined`
+// (never a widened/guessed-up value), so a noisy engine payload can never WIDEN the
+// offered set. normalizeBitrateRangeToKbps is the SINGLE unit-conversion seam.
+
+// A device-caps framerate within this many fps of a rung snaps to it. Tight enough to
+// separate 29.97 from 30 (0.03 apart) yet loose enough to absorb the NTSC rounding of
+// the exact engine fractions (30000/1001 = 29.97003, 60000/1001 = 59.94006).
+const FRAMERATE_MATCH_TOLERANCE = 0.01;
+
+/** Parse a "num/den" fraction (or a plain numeric string) to a decimal, else undefined. */
+function parseFramerateFraction(value: string): number | undefined {
+	const trimmed = value.trim();
+	if (trimmed === '') {
+		return undefined;
+	}
+	const fraction = trimmed.match(/^(\d+)\s*\/\s*(\d+)$/);
+	if (fraction) {
+		const numerator = Number(fraction[1]);
+		const denominator = Number(fraction[2]);
+		if (denominator === 0) {
+			return undefined;
+		}
+		return numerator / denominator;
+	}
+	const numeric = Number(trimmed);
+	return Number.isNaN(numeric) ? undefined : numeric;
+}
+
+/**
+ * Map an engine framerate to the legal `Framerate` rung, or `undefined`.
+ *
+ * The engine device caps emit STRING fraction framerates ("30/1", "30000/1001";
+ * docs/adr/schema.md:259-264); a plain number is also accepted (passthrough when it is
+ * already a legal rung). Maps "30/1"→30, "30000/1001"→29.97, "60000/1001"→59.94; a
+ * value that snaps to no rung within tolerance (e.g. "7/3", "24000/1001") → `undefined`
+ * (fail-closed — never guess a nearby rung).
+ */
+export function normalizeFramerateToRung(value: string | number): Framerate | undefined {
+	const decimal = typeof value === 'number' ? value : parseFramerateFraction(value);
+	if (decimal === undefined || !Number.isFinite(decimal)) {
+		return undefined;
+	}
+	let nearest: Framerate | undefined;
+	let nearestDistance = Number.POSITIVE_INFINITY;
+	for (const rung of AVAILABLE_FRAMERATES) {
+		const distance = Math.abs(rung - decimal);
+		if (distance < nearestDistance) {
+			nearest = rung;
+			nearestDistance = distance;
+		}
+	}
+	return nearestDistance <= FRAMERATE_MATCH_TOLERANCE ? nearest : undefined;
+}
+
+// Resolution rungs keyed by pixel HEIGHT, ascending — the ladder a pixel-form
+// resolution snaps DOWN to (never up).
+const RESOLUTION_RUNG_BY_HEIGHT: ReadonlyArray<{ height: number; rung: Resolution }> = [
+	{ height: 480, rung: '480p' },
+	{ height: 720, rung: '720p' },
+	{ height: 1080, rung: '1080p' },
+	{ height: 1440, rung: '1440p' },
+	{ height: 2160, rung: '2160p' },
+];
+
+/**
+ * Map an engine resolution to a canonical `Resolution` rung, or `undefined`.
+ *
+ * Accepts BOTH rung forms ("2160p", "1080p", "4k"→'2160p') and pixel forms
+ * ("3840x2160"→'2160p", "1920x1080"→'1080p'). An in-between pixel form snaps to the
+ * nearest LOWER rung ("2000x1100"→'1080p'); a pixel form below the smallest rung and
+ * any unparseable input → `undefined` (fail-closed — NEVER over-offers by rounding up).
+ */
+export function normalizeResolutionToRung(value: string): Resolution | undefined {
+	const trimmed = value.trim();
+	if (trimmed === '') {
+		return undefined;
+	}
+	const rung = resolutionSchema.safeParse(trimmed);
+	if (rung.success) {
+		return rung.data === '4k' ? '2160p' : rung.data;
+	}
+	const pixels = trimmed.match(/^(\d+)\s*[x×]\s*(\d+)$/i);
+	if (!pixels) {
+		return undefined;
+	}
+	const height = Number(pixels[2]);
+	if (!Number.isFinite(height)) {
+		return undefined;
+	}
+	let snapped: Resolution | undefined;
+	for (const candidate of RESOLUTION_RUNG_BY_HEIGHT) {
+		if (height >= candidate.height) {
+			snapped = candidate.rung;
+		}
+	}
+	return snapped;
+}
+
+/** A bitrate window with an explicit unit — the wire shape of `encoder.bitrate_range`. */
+export interface BitrateRange {
+	min: number;
+	max: number;
+	unit: string;
+}
+
+/**
+ * Normalize a wire bitrate range to kbps — the SINGLE conversion seam.
+ *
+ * The engine may emit `encoder.bitrate_range` in bps (500_000–20_000_000) or kbps;
+ * CeraUI speaks kbps everywhere (BITRATE_MIN/BITRATE_MAX), so every consumer routes the
+ * raw wire range through this helper. Only an explicit `unit: "bps"` is converted
+ * (÷1000, rounded); any other unit is treated as already-kbps values and passed
+ * through with the unit tagged `kbps`.
+ */
+export function normalizeBitrateRangeToKbps(range: BitrateRange): BitrateRange {
+	if (range.unit === 'bps') {
+		return {
+			min: Math.round(range.min / 1000),
+			max: Math.round(range.max / 1000),
+			unit: 'kbps',
+		};
+	}
+	return { min: range.min, max: range.max, unit: 'kbps' };
+}
 
 // Audio codecs message schema (objects with name field)
 export const audioCodecsMessageSchema = z.record(

@@ -108,6 +108,7 @@ function makeBackend(
 		activeInput?: string;
 		logger?: CerastreamBackendDeps["logger"];
 		configPath?: string;
+		isEmbeddedAudioActive?: CerastreamBackendDeps["isEmbeddedAudioActive"];
 	} = {},
 ): { backend: CerastreamBackend; fake: FakeHarness } {
 	const fake = makeFakeClient(opts.schemaVersion ?? "0.4.0");
@@ -126,6 +127,7 @@ function makeBackend(
 		configPath: opts.configPath ?? "/tmp/cerastream-assembly.json",
 		logger: opts.logger ?? silentLogger,
 		getActiveInput: () => opts.activeInput,
+		isEmbeddedAudioActive: opts.isEmbeddedAudioActive ?? (() => false),
 	});
 	return { backend, fake };
 }
@@ -209,6 +211,23 @@ describe("buildStartParams — absent fields are omitted (no undefined keys)", (
 		});
 		expect(params.resolution).toBe("1280x720");
 		expect(params).not.toHaveProperty("audio");
+	});
+});
+
+describe("buildStartParams — embedded network-ingest audio (Task 13)", () => {
+	test("OMITS audio.device when the embedded-audio gate is active", async () => {
+		const params = await startParamsFor(FULL_CONFIG, {
+			isEmbeddedAudioActive: () => true,
+		});
+		expect(params.audio).toEqual({ codec: "opus", delay_ms: -2000 });
+		expect(params.audio).not.toHaveProperty("device");
+	});
+
+	test("KEEPS audio.device when the gate is inactive (legacy ALSA path)", async () => {
+		const params = await startParamsFor(FULL_CONFIG, {
+			isEmbeddedAudioActive: () => false,
+		});
+		expect((params.audio as { device: string }).device).toBeTruthy();
 	});
 });
 

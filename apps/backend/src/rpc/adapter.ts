@@ -4,9 +4,13 @@
  */
 
 import { call } from "@orpc/server";
-import type { WebSocketHandler } from "bun";
+import type { ServerWebSocket, WebSocketHandler } from "bun";
 
 import { logger, logRedact } from "../helpers/logger.ts";
+import {
+	createPreviewWebSocketHandler,
+	isPreviewSocket,
+} from "../modules/ui/preview-proxy.ts";
 import { createContext, initSocketData } from "./context.ts";
 import { extractValidationDetails } from "./error-enrichment.ts";
 import { addClient, removeClient, sendToClient } from "./events.ts";
@@ -14,7 +18,7 @@ import { buildInitialStatus } from "./procedures/status.procedure.ts";
 import { appRouter } from "./router.ts";
 import { instrumentRpcCall } from "./rpc-logging.ts";
 import { getPasswordHash } from "./state/password.ts";
-import type { AppWebSocket, SocketData } from "./types.ts";
+import type { AppWebSocket, ServerSocketData, SocketData } from "./types.ts";
 
 /** Cap on the redacted frame preview so a stray giant payload never bloats a log. */
 const FRAME_PREVIEW_MAX_CHARS = 100;
@@ -228,6 +232,52 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 
 		drain(_ws: AppWebSocket) {
 			logger.debug("WebSocket backpressure relieved");
+		},
+	};
+}
+
+/**
+ * The single Bun `websocket` handler for the whole server. It routes each socket
+ * by its `kind` discriminant: `/preview` sockets (forked on pathname in the fetch
+ * handler BEFORE the oRPC upgrade) go to the preview proxy; every other socket is
+ * an oRPC socket handled as before. Bun.serve exposes exactly one websocket
+ * handler, so the dispatch lives here rather than at the upgrade site.
+ */
+export function createServerWebSocketHandler(): WebSocketHandler<ServerSocketData> {
+	const rpc = createWebSocketHandler();
+	const preview = createPreviewWebSocketHandler();
+
+	const asRpc = (ws: ServerWebSocket<ServerSocketData>): AppWebSocket =>
+		ws as unknown as AppWebSocket;
+
+	return {
+		open(ws) {
+			if (isPreviewSocket(ws)) {
+				preview.open(ws);
+			} else {
+				rpc.open(asRpc(ws));
+			}
+		},
+		message(ws, data) {
+			if (isPreviewSocket(ws)) {
+				preview.message(ws, data);
+			} else {
+				rpc.message(asRpc(ws), data);
+			}
+		},
+		close(ws, code, reason) {
+			if (isPreviewSocket(ws)) {
+				preview.close(ws);
+			} else {
+				rpc.close(asRpc(ws), code, reason);
+			}
+		},
+		drain(ws) {
+			if (isPreviewSocket(ws)) {
+				preview.drain(ws);
+			} else {
+				rpc.drain?.(asRpc(ws));
+			}
 		},
 	};
 }

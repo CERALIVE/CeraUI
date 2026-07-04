@@ -5,9 +5,12 @@
  * media_type → source-kind mapping, and the None-cap permissive policy.
  */
 import { describe, expect, it } from 'bun:test';
+import type { DeviceMode } from '../schemas/streaming.schema';
 import {
 	type CaptureFormatCap,
 	captureCapResolution,
+	DEVICE_KIND_TO_PIPELINE_ID,
+	deviceKindToPipelineId,
 	intersectCaps,
 	MEDIA_TYPE_H264,
 	MEDIA_TYPE_H265,
@@ -155,5 +158,116 @@ describe('intersectCaps', () => {
 			expect(offered.supportsResolutionOverride).toBe(true);
 			expect(offered.supportsFramerateOverride).toBe(true);
 		});
+	});
+});
+
+describe('intersectCaps — device-mode dimension (Task 4)', () => {
+	const platform4k: PlatformCaps = {
+		supports_h265: true,
+		hardware_accelerated: true,
+		max_resolution: '2160p',
+	};
+	const flexibleSource: VideoSourceCap = {
+		id: 'hdmi',
+		supports_audio: true,
+		supports_resolution_override: true,
+		supports_framerate_override: true,
+		default_resolution: '1920x1080',
+		default_framerate: 30,
+	};
+
+	it('WITHOUT deviceModes is byte-identical to the coarse platform/source offering', () => {
+		const withoutParam = intersectCaps(platform4k, flexibleSource, 'streaming');
+		const withUndefined = intersectCaps(platform4k, flexibleSource, 'streaming', undefined);
+		const withEmpty = intersectCaps(platform4k, flexibleSource, 'streaming', []);
+
+		expect(withoutParam.resolutions).toEqual(['480p', '720p', '1080p', '1440p', '2160p']);
+		expect(withoutParam.framerates).toEqual([25, 29.97, 30, 50, 59.94, 60]);
+		// `undefined` and an EMPTY list both mean "no device constraint" — permissive.
+		expect(withUndefined).toEqual(withoutParam);
+		expect(withEmpty).toEqual(withoutParam);
+	});
+
+	it('narrows resolutions/framerates to the union of the supplied device modes', () => {
+		const modes: DeviceMode[] = [
+			{ width: 1920, height: 1080, framerates: [30, 60] },
+			{ width: 1280, height: 720, framerates: [30] },
+		];
+
+		const offered = intersectCaps(platform4k, flexibleSource, 'streaming', modes);
+
+		// Only 720p + 1080p rungs are present in the modes → 2160p/1440p/480p dropped.
+		expect(offered.resolutions).toEqual(['720p', '1080p']);
+		// Union of the modes' framerates → {30, 60}; the other rungs are dropped.
+		expect(offered.framerates).toEqual([30, 60]);
+	});
+
+	it('accepts modes carrying engine string-fraction framerates via the normalizer', () => {
+		// A downstream that folds caps[] normally emits rung numbers, but modes with a
+		// stray non-rung framerate must be dropped, not offered.
+		const modes: DeviceMode[] = [{ width: 1920, height: 1080, framerates: [30, 24] }];
+
+		const offered = intersectCaps(platform4k, flexibleSource, 'streaming', modes);
+
+		expect(offered.resolutions).toEqual(['1080p']);
+		expect(offered.framerates).toEqual([30]);
+	});
+});
+
+describe('intersectCaps — unknown max_resolution fails CLOSED (Task 4 behavior change)', () => {
+	const source: VideoSourceCap = {
+		id: 'hdmi',
+		supports_audio: true,
+		supports_resolution_override: true,
+		supports_framerate_override: true,
+		default_resolution: '1920x1080',
+		default_framerate: 30,
+	};
+
+	it('collapses a garbage max_resolution to the 480p floor (was: full ladder)', () => {
+		// BEHAVIOR CHANGE: pre-Task-4 an unparseable max returned the FULL ladder
+		// (permissive over-offer). It now fails CLOSED to the universal 480p floor.
+		const offered = intersectCaps(
+			{ supports_h265: true, hardware_accelerated: true, max_resolution: 'garbage' },
+			source,
+			'streaming',
+		);
+		expect(offered.resolutions).toEqual(['480p']);
+	});
+
+	it('caps a pixel-form max_resolution to its rung instead of widening to the full ladder', () => {
+		// engine.rs may report a pixel-form max ("1920x1080"); it must cap, not widen.
+		const offered = intersectCaps(
+			{ supports_h265: true, hardware_accelerated: true, max_resolution: '1920x1080' },
+			source,
+			'streaming',
+		);
+		expect(offered.resolutions).toEqual(['480p', '720p', '1080p']);
+	});
+});
+
+describe('deviceKindToPipelineId (single-source kind → pipeline bridge)', () => {
+	it('maps the cerastream device kinds to their pipeline ids', () => {
+		expect(deviceKindToPipelineId('hdmi')).toBe('hdmi');
+		expect(deviceKindToPipelineId('uvc_h264')).toBe('libuvch264');
+		expect(deviceKindToPipelineId('uvc_h265')).toBe('libuvch264');
+		expect(deviceKindToPipelineId('mjpeg')).toBe('usb_mjpeg');
+		expect(deviceKindToPipelineId('camlink')).toBe('camlink');
+		expect(deviceKindToPipelineId('test')).toBe('test');
+	});
+
+	it('maps ambiguous / non-video kinds to undefined (coarse fallback)', () => {
+		expect(deviceKindToPipelineId('network')).toBeUndefined();
+		expect(deviceKindToPipelineId('audio')).toBeUndefined();
+	});
+
+	it('returns undefined for an absent or unrecognised kind', () => {
+		expect(deviceKindToPipelineId(undefined)).toBeUndefined();
+		expect(deviceKindToPipelineId('mystery-kind')).toBeUndefined();
+	});
+
+	it('exposes the same table the backend re-exports', () => {
+		expect(DEVICE_KIND_TO_PIPELINE_ID.hdmi).toBe('hdmi');
+		expect(DEVICE_KIND_TO_PIPELINE_ID.network).toBeUndefined();
 	});
 });

@@ -953,6 +953,7 @@ const zh = {
 			copy: "复制地址",
 			copied: "地址已复制",
 			copyFailed: "无法复制地址。",
+			includesAudio: "包含音频",
 		},
 		preview: {
 			title: "预览",
@@ -1054,12 +1055,13 @@ const zh = {
 			none: "未选择来源",
 			select: "选择来源",
 			capabilities: "能力",
-			deviceMax: "设备上限",
+			sourceMax: "源上限",
 			activeLive: "直播中",
 			activeConfigured: "已配置",
 			lostTitle: "设备已断开",
 			lostBody: "重新连接设备以从此来源恢复推流。",
 			audioNone: "未检测到音频源",
+			audioEmbedded: "嵌入式音频（来自传入流）",
 		},
 		modes: {
 			label: "模式",
@@ -1070,6 +1072,7 @@ const zh = {
 			reason: {
 				unsupportedPlatform: "此平台不支持",
 				fixedBySource: "由所选来源固定",
+				unsupportedAtResolution: "此分辨率下不可用",
 				gatewayInactive: "网络接入网关未运行",
 				gatewayNoAddress: "无可达的局域网或热点地址",
 			},
@@ -1114,17 +1117,11 @@ const zh = {
 			hint: "此功能将在未来的更新中提供。",
 			pip: "画中画",
 			modeFallback: "自动切换",
+			embeddedAudio: "嵌入式音频",
 		},
 		fallback: {
 			unavailable: "不可用",
 			notConfigured: "未配置",
-		},
-		presets: {
-			heading: "模式预设",
-			advanced: "高级 / 自定义",
-			applying: "正在应用预设\u2026",
-			applied: "已应用预设",
-			failed: "无法应用预设",
 		},
 		encoder: {
 			appliesNextStart: "将在下次启动时应用",
@@ -1137,6 +1134,8 @@ const zh = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "已选",
+			axisDeviceMax: "设备上限",
 		},
 	},
 	dialogs: {
@@ -1486,6 +1485,12 @@ const zh = {
 		sshToggleFailed: "Failed to change the SSH server. Please try again.",
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
+	},
+	audio: {
+		sources: {
+			noAudio: "无音频",
+			pipelineDefault: "管道默认",
+		},
 	},
 } satisfies Translation;
 

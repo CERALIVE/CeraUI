@@ -18,6 +18,20 @@ export interface SocketData {
 }
 
 /**
+ * Data attached to a `/preview` proxy WebSocket. The upgrade forks on pathname
+ * BEFORE the oRPC handler, so a preview socket carries the single-use token (the
+ * proxy validates+consumes it on open) instead of the RPC auth flags. The `kind`
+ * discriminant lets the shared Bun `websocket` handler route each socket.
+ */
+export interface PreviewSocketData {
+	kind: "preview";
+	token: string;
+}
+
+/** Every socket the single Bun server owns: an oRPC socket or a preview socket. */
+export type ServerSocketData = SocketData | PreviewSocketData;
+
+/**
  * Bun ServerWebSocket with our custom data
  */
 export type AppWebSocket = ServerWebSocket<SocketData>;

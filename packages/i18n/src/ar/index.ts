@@ -1134,6 +1134,7 @@ const ar = {
 			copy: "نسخ العنوان",
 			copied: "تم نسخ العنوان",
 			copyFailed: "تعذّر نسخ العنوان.",
+			includesAudio: "يتضمّن الصوت",
 		},
 		preview: {
 			title: "معاينة",
@@ -1236,12 +1237,13 @@ const ar = {
 			none: "لم يتم اختيار مصدر",
 			select: "اختر مصدراً",
 			capabilities: "القدرات",
-			deviceMax: "الحد الأقصى للجهاز",
+			sourceMax: "الحد الأقصى للمصدر",
 			activeLive: "مباشر",
 			activeConfigured: "مُهيأ",
 			lostTitle: "الجهاز غير متصل",
 			lostBody: "أعد توصيل الجهاز لاستئناف البث من هذا المصدر.",
 			audioNone: "لم يتم اكتشاف مصدر صوت",
+			audioEmbedded: "صوت مضمّن (من البث الوارد)",
 		},
 		modes: {
 			label: "الوضع",
@@ -1252,6 +1254,7 @@ const ar = {
 			reason: {
 				unsupportedPlatform: "غير مدعوم على هذه المنصة",
 				fixedBySource: "محدد بواسطة المصدر المختار",
+				unsupportedAtResolution: "غير متاح بهذه الدقة",
 				gatewayInactive: "بوابة استقبال الشبكة غير قيد التشغيل",
 				gatewayNoAddress:
 					"لا يوجد عنوان شبكة محلية أو نقطة اتصال يمكن الوصول إليه",
@@ -1297,17 +1300,11 @@ const ar = {
 			hint: "ستتوفر هذه الميزة في تحديث مستقبلي.",
 			pip: "صورة داخل صورة",
 			modeFallback: "التبديل التلقائي",
+			embeddedAudio: "صوت مضمّن",
 		},
 		fallback: {
 			unavailable: "غير متاح",
 			notConfigured: "غير مُهيأ",
-		},
-		presets: {
-			heading: "أوضاع جاهزة",
-			advanced: "متقدّم / مخصّص",
-			applying: "جارٍ تطبيق الإعداد\u2026",
-			applied: "تم تطبيق الإعداد",
-			failed: "تعذّر تطبيق الإعداد",
 		},
 		encoder: {
 			appliesNextStart: "يُطبَّق عند البدء التالي",
@@ -1320,6 +1317,8 @@ const ar = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "المحدد",
+			axisDeviceMax: "الحد الأقصى للجهاز",
 		},
 	},
 	dialogs: {
@@ -1523,6 +1522,12 @@ const ar = {
 		sshToggleFailed: "Failed to change the SSH server. Please try again.",
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
+	},
+	audio: {
+		sources: {
+			noAudio: "بدون صوت",
+			pipelineDefault: "الإعداد الافتراضي للمسار",
+		},
 	},
 } satisfies Translation;
 

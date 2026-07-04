@@ -18,15 +18,22 @@
 import { onDestroy } from 'svelte';
 
 import { LL } from '@ceraui/i18n/svelte';
+import {
+	PREVIEW_CLOSE_UNAUTHORIZED,
+	PREVIEW_CLOSE_UPSTREAM_DOWN,
+	PREVIEW_CLOSE_UPSTREAM_UNAVAILABLE,
+} from '@ceraui/rpc/schemas';
 import { Eye, EyeOff, Loader, LoaderCircle, ServerOff } from '@lucide/svelte';
 
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
 import {
 	cappedAttemptText,
 	derivePreviewAvailability,
+	type PreviewAvailability,
 } from '$lib/components/preview/preview-availability';
 import { Button } from '$lib/components/ui/button';
-import { BUILD_INFO, getPreviewSocketUrl } from '$lib/env';
+import { getPreviewSocketUrl } from '$lib/env';
+import { rpc } from '$lib/rpc';
 import { getCapabilities } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
 
@@ -74,6 +81,13 @@ let videoEl = $state<HTMLVideoElement | null>(null);
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = $state(0);
+// Post-dial availability set by a close code (4502→engineOffline,
+// 4503→previewUnavailable, second 4401→engineOffline). Overrides the pre-dial
+// snapshot gate and stops the reconnect loop until the operator re-toggles.
+let closeReason = $state<PreviewAvailability | null>(null);
+// The unauthorized (4401) close triggers exactly ONE silent token re-mint before
+// the offline band is surfaced; reset on a successful open.
+let remintAttempted = false;
 // Latched true once the component is torn down (onDestroy). A reconnect timer
 // that fires after unmount must not touch reactive state or dial a new socket.
 let destroyed = false;
@@ -235,13 +249,25 @@ function handleMessage(event: MessageEvent): void {
 	}
 }
 
-function connect(): void {
+async function connect(): Promise<void> {
 	if (typeof WebSocket === 'undefined') {
 		status = 'error';
 		return;
 	}
+	// Mint a fresh single-use token over the authenticated RPC socket, then dial
+	// the backend-origin `/preview` proxy. The RPC credential never rides the URL.
+	let token: string;
 	try {
-		socket = new WebSocket(getPreviewSocketUrl());
+		token = (await rpc.system.mintPreviewToken()).token;
+	} catch {
+		scheduleReconnect();
+		return;
+	}
+	// The toggle may have flipped (or the component torn down) while the mint was
+	// in flight — do not dial a socket the operator no longer wants.
+	if (destroyed || !enabled) return;
+	try {
+		socket = new WebSocket(getPreviewSocketUrl(token));
 	} catch {
 		scheduleReconnect();
 		return;
@@ -250,6 +276,8 @@ function connect(): void {
 	status = reconnectAttempt > 0 ? 'reconnecting' : 'connecting';
 	socket.onopen = () => {
 		reconnectAttempt = 0;
+		remintAttempted = false;
+		closeReason = null;
 		status = 'connecting';
 		socket?.send(JSON.stringify({ action: 'start', tier }));
 	};
@@ -257,9 +285,36 @@ function connect(): void {
 	socket.onerror = () => {
 		socket?.close();
 	};
-	socket.onclose = () => {
-		if (enabled) scheduleReconnect();
+	socket.onclose = (event) => {
+		handleSocketClose(event.code);
 	};
+}
+
+// Map a proxy close code to the calm availability band (or a bounded reconnect).
+// 4401 re-mints ONCE (the token expired between mint and dial); a second 4401
+// surfaces the offline band rather than looping.
+function handleSocketClose(code: number | undefined): void {
+	if (destroyed || !enabled) return;
+	switch (code) {
+		case PREVIEW_CLOSE_UPSTREAM_DOWN:
+			closeReason = 'engineOffline';
+			return;
+		case PREVIEW_CLOSE_UPSTREAM_UNAVAILABLE:
+			closeReason = 'previewUnavailable';
+			return;
+		case PREVIEW_CLOSE_UNAUTHORIZED:
+			if (!remintAttempted) {
+				remintAttempted = true;
+				resetMedia();
+				status = 'connecting';
+				void connect();
+				return;
+			}
+			closeReason = 'engineOffline';
+			return;
+		default:
+			scheduleReconnect();
+	}
 }
 
 function scheduleReconnect(): void {
@@ -269,7 +324,7 @@ function scheduleReconnect(): void {
 	reconnectAttempt += 1;
 	reconnectTimer = setTimeout(() => {
 		if (destroyed || !enabled) return;
-		connect();
+		void connect();
 	}, delay);
 }
 
@@ -300,7 +355,7 @@ function start(): void {
 		return;
 	}
 	reconnectAttempt = 0;
-	connect();
+	void connect();
 }
 
 // Single owner of connection cleanup: the ONLY place that clears the reconnect
@@ -334,13 +389,19 @@ function stop(): void {
 
 function toggle(): void {
 	enabled = !enabled;
+	// A fresh enable clears a prior close-code band so the dial is re-attempted.
+	if (enabled) {
+		closeReason = null;
+		remintAttempted = false;
+	}
 }
 
-// Engine-aware availability: the preview socket is dialed only when the engine
-// snapshot says there is something to dial. A mock-backed dev build always
-// dials the mock preview server (BUILD_INFO.IS_DEV — the frontend equivalent of
-// the backend `shouldUseMocks()` gate). See `preview-availability.ts`.
-const availability = $derived(derivePreviewAvailability(getCapabilities(), BUILD_INFO.IS_DEV));
+// Engine-aware availability: the pre-dial snapshot gate decides whether there is
+// anything to dial; a post-dial close code (`closeReason`) overrides it with the
+// state the backend proxy reported (engine offline / preview unbound). The
+// frontend dials only the backend `/preview` proxy, so dev and prod share one
+// path — no mock-dev exception. See `preview-availability.ts`.
+const availability = $derived(closeReason ?? derivePreviewAvailability(getCapabilities()));
 const previewUnavailable = $derived(availability !== 'available');
 const reconnectAttemptText = $derived(cappedAttemptText(reconnectAttempt));
 

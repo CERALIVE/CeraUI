@@ -15,14 +15,18 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import type { BufferingStatus, NetworkIngest } from "@ceraui/rpc/schemas";
+import type {
+	AudioSource,
+	BufferingStatus,
+	NetworkIngest,
+} from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
 import { getConfig } from "../config.ts";
 import { buildModemsMessage } from "../modems/modem-status.ts";
 import { getNetworkIngestInfo } from "../network/network-ingest.ts";
 import { netIfBuildMsg } from "../network/network-interfaces.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
-import { getAudioDevices } from "../streaming/audio.ts";
+import { deriveAudioSources, getAudioDevices } from "../streaming/audio.ts";
 import {
 	buildLinkTelemetry,
 	type LinkTelemetryMessage,
@@ -49,6 +53,7 @@ export type StatusResponseMessage = {
 	wifi?: ReturnType<typeof wifiBuildMsg>;
 	modems?: ReturnType<typeof buildModemsMessage>;
 	asrcs?: Array<keyof ReturnType<typeof getAudioDevices>>;
+	audio_sources?: AudioSource[];
 	set_password?: boolean;
 	remote?: true | { error: string };
 	linkTelemetry?: LinkTelemetryMessage | null;
@@ -68,6 +73,7 @@ export function sendStatus(conn: WebSocket) {
 			wifi: wifiBuildMsg(),
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),
+			audio_sources: deriveAudioSources(),
 			linkTelemetry: buildLinkTelemetry(),
 			network_ingest: getNetworkIngestInfo(),
 		} satisfies StatusResponseMessage),

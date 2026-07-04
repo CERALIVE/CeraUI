@@ -150,7 +150,7 @@ test.describe("@visual task-3 cohesion primitives", () => {
 			.toBe(true);
 	});
 
-	test("encoder dialog renders StatusBadge codec pills @visual", async ({
+	test("encoder dialog renders codec selector @visual", async ({
 		page,
 	}) => {
 		await page.getByTestId("open-encoder-dialog").click();
@@ -160,14 +160,11 @@ test.describe("@visual task-3 cohesion primitives", () => {
 		await page.locator("#encoder-source").click();
 		await page.locator('[role="option"][data-value="hdmi"]').click();
 
-		// Codec pills live under the Advanced / Custom expander (collapsed when a
-		// preset matches the seed) — open it so the StatusBadge cluster renders.
-		await page.getByTestId("encoder-advanced-summary").click();
-
-		// The codec section now composes StatusBadge — its stable hook is present.
-		await expect(dialog.locator("[data-status-badge]").first()).toBeVisible();
-		// The acceleration pill keeps its per-codec test id through StatusBadge.
-		await expect(page.getByTestId("codec-accel-h264")).toBeVisible();
+		// The codec section is now an always-visible segmented selector with three
+		// buttons: Auto, H.264, and H.265. Verify the selector and its buttons render.
+		await expect(dialog.getByTestId("encoder-codec-selector")).toBeVisible();
+		await expect(page.getByTestId("codec-h264")).toBeVisible();
+		await expect(page.getByTestId("codec-h265")).toBeVisible();
 
 		await dialog.screenshot({ path: COHESION_EVIDENCE });
 	});

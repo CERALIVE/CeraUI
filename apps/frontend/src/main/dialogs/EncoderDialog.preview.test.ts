@@ -48,6 +48,22 @@ vi.mock("$lib/components/streaming/StreamingUtils", () => ({
 	updateMaxBitrate: vi.fn(),
 }));
 
+// PreviewCanvas mints a single-use token over the RPC socket before every dial.
+vi.mock("$lib/rpc", () => ({
+	rpc: {
+		system: {
+			mintPreviewToken: vi.fn(async () => ({ token: "tok-1", ttlMs: 30000 })),
+		},
+	},
+}));
+
+// Flush the async mint→dial chain (a couple microtask turns) plus Svelte ticks.
+async function flushPreview(): Promise<void> {
+	await tick();
+	for (let i = 0; i < 6; i++) await Promise.resolve();
+	await tick();
+}
+
 // A minimal in-memory WebSocket so toggling the preview on never opens a real
 // socket; mirrors the PreviewCanvas unit test's fake.
 class FakeWebSocket {
@@ -143,7 +159,7 @@ describe("EncoderDialog — live preview (#72)", () => {
 		);
 		expect(toggle).not.toBeNull();
 		await fireEvent.click(toggle as HTMLElement);
-		await tick();
+		await flushPreview();
 
 		// Media surface + audio meter mount in-place…
 		expect(
@@ -173,7 +189,7 @@ describe("EncoderDialog — live preview (#72)", () => {
 				'[data-testid="preview-toggle"]',
 			) as HTMLElement,
 		);
-		await tick();
+		await flushPreview();
 		const ws = FakeWebSocket.instances.at(-1);
 		const closeSpy = vi.spyOn(ws as FakeWebSocket, "close");
 

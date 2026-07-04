@@ -87,7 +87,12 @@ test.describe("EncoderDialog live preview (#72)", () => {
 		await openEncoder(page);
 		await dialog(page).getByTestId("preview-toggle").click();
 		await expect(dialog(page).getByTestId("preview-canvas")).toBeVisible();
-		expect(await previewSocketCount(page)).toBe(1);
+		// The socket is created only after the async mint→dial (Task 20), so poll.
+		await expect
+			.poll(() => previewSocketCount(page), {
+				message: "the mint→dial flow should create exactly one preview socket",
+			})
+			.toBe(1);
 
 		// Close → the preview unmounts and tears its socket down.
 		await page.keyboard.press("Escape");
@@ -99,7 +104,11 @@ test.describe("EncoderDialog live preview (#72)", () => {
 		await expect(dialog(page)).toBeVisible();
 		await dialog(page).getByTestId("preview-toggle").click();
 		await expect(dialog(page).getByTestId("preview-canvas")).toBeVisible();
-		expect(await previewSocketCount(page)).toBe(2);
+		await expect
+			.poll(() => previewSocketCount(page), {
+				message: "reopening should create a second, non-leaked preview socket",
+			})
+			.toBe(2);
 
 		expect(consoleErrors, consoleErrors.join("\n")).toHaveLength(0);
 	});

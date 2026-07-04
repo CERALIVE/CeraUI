@@ -1165,6 +1165,7 @@ const ptBR = {
 			copy: "Copiar endereço",
 			copied: "Endereço copiado",
 			copyFailed: "Não foi possível copiar o endereço.",
+			includesAudio: "Inclui áudio",
 		},
 		preview: {
 			title: "Pré-visualização",
@@ -1270,13 +1271,14 @@ const ptBR = {
 			none: "Nenhuma fonte selecionada",
 			select: "Selecionar uma fonte",
 			capabilities: "Recursos",
-			deviceMax: "Máximo do dispositivo",
+			sourceMax: "Máximo da fonte",
 			activeLive: "Ao vivo",
 			activeConfigured: "Configurado",
 			lostTitle: "Dispositivo desconectado",
 			lostBody:
 				"Reconecte o dispositivo para retomar a transmissão desta fonte.",
 			audioNone: "Nenhuma fonte de áudio detectada",
+			audioEmbedded: "Áudio incorporado (do fluxo recebido)",
 		},
 		modes: {
 			label: "Modo",
@@ -1287,6 +1289,7 @@ const ptBR = {
 			reason: {
 				unsupportedPlatform: "Não suportado nesta plataforma",
 				fixedBySource: "Fixado pela fonte selecionada",
+				unsupportedAtResolution: "Indisponível nesta resolução",
 				gatewayInactive: "O gateway de ingestão de rede não está em execução",
 				gatewayNoAddress: "Nenhum endereço de LAN ou ponto de acesso acessível",
 			},
@@ -1331,17 +1334,11 @@ const ptBR = {
 			hint: "Este recurso estará disponível em uma atualização futura.",
 			pip: "Picture-in-picture",
 			modeFallback: "Substituição automática",
+			embeddedAudio: "Áudio incorporado",
 		},
 		fallback: {
 			unavailable: "Indisponível",
 			notConfigured: "Não configurado",
-		},
-		presets: {
-			heading: "Predefinições de modo",
-			advanced: "Avançado / Personalizado",
-			applying: "Aplicando predefinição\u2026",
-			applied: "Predefinição aplicada",
-			failed: "Não foi possível aplicar a predefinição",
 		},
 		encoder: {
 			appliesNextStart: "Aplica-se no próximo início",
@@ -1354,6 +1351,8 @@ const ptBR = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "Selecionado",
+			axisDeviceMax: "Máximo do dispositivo",
 		},
 	},
 	dialogs: {
@@ -1586,6 +1585,12 @@ const ptBR = {
 		sshToggleFailed: "Failed to change the SSH server. Please try again.",
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
+	},
+	audio: {
+		sources: {
+			noAudio: "Sem áudio",
+			pipelineDefault: "Padrão do pipeline",
+		},
 	},
 } satisfies Translation;
 

@@ -5,8 +5,10 @@ Simulates cerastream/srtla streaming statistics for development mode
 
 import {
 	type ActiveEncode,
+	type CaptureDeviceKind,
 	CerastreamConnectionError,
 	type GetCapabilitiesResult,
+	type ListDevicesResult,
 	type ProcessErrorCode,
 	type ProcessErrorSource,
 	type RuntimeErrorEvent,
@@ -21,8 +23,14 @@ import {
 } from "../../modules/streaming/capabilities.ts";
 import type { LinkTelemetryMessage } from "../../modules/streaming/link-telemetry.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
-import { mockWifiRadios, type ScenarioCapabilities } from "../mock-config.ts";
 import {
+	buildMockAudioDevices,
+	buildMockDeviceModes,
+} from "../fixture-factory.ts";
+import { mockWifiRadios, type ScenarioCapabilities } from "../mock-config.ts";
+import type { MockAudioDevices, MockDeviceModes } from "../mock-schemas.ts";
+import {
+	getActiveScenario,
 	getMockState,
 	getScenarioConfig,
 	getStreamingStats,
@@ -65,6 +73,14 @@ const FULL_PROFILE_CAPABILITIES: GetCapabilitiesResult = {
 		},
 	],
 };
+
+// caps-full advertises its bitrate range in the engine's native bps units so the
+// getCapabilities() normalizer converts 500_000-20_000_000 bps → 500-20000 kbps.
+const FULL_PROFILE_BITRATE_BPS = {
+	min: 500_000,
+	max: 20_000_000,
+	unit: "bps",
+} as const;
 
 const DEFAULT_MOCK_TRANSPORTS = ["srtla", "rist"] as const;
 
@@ -114,12 +130,104 @@ export function getMockEngineCapabilities(): EngineCapabilitiesSnapshot {
 	if (profile.audioLiveSwitch) {
 		caps.audio_live_switch = true;
 	}
+	if (getActiveScenario() === "caps-full") {
+		// The engine's native bps units — routed through normalizeBitrateRangeToKbps
+		// in getCapabilities() so caps-full exercises the bps→kbps conversion seam.
+		caps.encoder = { ...caps.encoder, bitrate_range: FULL_PROFILE_BITRATE_BPS };
+	}
 	const transports = [...(profile.transports ?? DEFAULT_MOCK_TRANSPORTS)];
 	const schemaVersion = profile.schemaVersionMismatch
 		? `${SCHEMA_VERSION}-mock-skew`
 		: SCHEMA_VERSION;
 
 	return { caps, schemaVersion, transports };
+}
+
+// A normalized rung fps back to the engine's string fraction, so a fixture built
+// from folded (numeric) framerates round-trips through the getCapabilities() fold.
+const NTSC_FRACTIONS: Record<number, string> = {
+	23.976: "24000/1001",
+	29.97: "30000/1001",
+	59.94: "60000/1001",
+};
+
+function framerateToFraction(fps: number): string {
+	return NTSC_FRACTIONS[fps] ?? `${fps}/1`;
+}
+
+// Expand a folded `device_modes` map back into a `list-devices` result: each mode's
+// {width,height} × its rung framerates becomes the CaptureCap cross-product the
+// engine emits, so the capability service's fold reproduces the exact source map.
+function expandDeviceModes(modes: MockDeviceModes): ListDevicesResult {
+	const devices = Object.entries(modes).map(([inputId, group], index) => ({
+		input_id: inputId,
+		device_path: `/dev/video${index}`,
+		display_name: `${inputId} capture`,
+		media_class: "video" as const,
+		...(group.kind !== undefined
+			? { kind: group.kind as CaptureDeviceKind }
+			: {}),
+		caps: group.modes.flatMap((mode) =>
+			mode.framerates.map((fps) => ({
+				width: mode.width,
+				height: mode.height,
+				framerate: framerateToFraction(fps),
+				...(mode.media_type !== undefined
+					? { media_type: mode.media_type }
+					: {}),
+			})),
+		),
+	}));
+	return { devices };
+}
+
+// Per-scenario device modes: a setMockEngineCapabilities({ deviceModes }) override
+// wins; otherwise a full-engine-profile scenario advertises the default fixture and
+// every other scenario reports none (coarse caps).
+function resolveScenarioDeviceModes(): MockDeviceModes {
+	const profile = resolveScenarioCapabilities();
+	if (profile.deviceModes) {
+		return profile.deviceModes;
+	}
+	return profile.fullProfile ? buildMockDeviceModes() : {};
+}
+
+/**
+ * Mock `list-devices` result for dev/e2e, wired into `getCapabilities()` as the
+ * `fetchEngineDevices` collaborator at boot. Full-engine-profile scenarios
+ * (caps-full / multi-modem-wifi / streaming-active) expand their seeded
+ * `device_modes` into per-device caps (folded back into `device_modes`); every
+ * other scenario returns no devices so `device_modes` is omitted and the UI falls
+ * back to coarse caps. Empty in production (`shouldUseMocks()` false).
+ */
+export function getMockEngineDevices(): ListDevicesResult {
+	if (!shouldUseMocks()) {
+		return { devices: [] };
+	}
+	return expandDeviceModes(resolveScenarioDeviceModes());
+}
+
+/**
+ * Scenario-seeded ALSA audio devices for dev/e2e, wired into `getAudioDevices()`
+ * (audio.ts) via `setMockAudioDevicesProvider` at boot. Seeds a coherent
+ * `{ "USB audio": "usbaudio" }` (plus HDMI on caps-full) IN ADDITION to the two
+ * pseudo-sources, so `status.asrcs` contains the configured `asrc` without a real
+ * `/sys/class/sound` scan. Empty (no seed) for the minimal/engine-down scenarios
+ * and in production (`shouldUseMocks()` false).
+ */
+export function getMockAudioDevices(): MockAudioDevices {
+	if (!shouldUseMocks()) {
+		return {};
+	}
+	switch (getActiveScenario()) {
+		case "caps-full":
+			return buildMockAudioDevices({ HDMI: "rockchiphdmiin" });
+		case "multi-modem-wifi":
+		case "streaming-active":
+			return buildMockAudioDevices();
+		default:
+			return {};
+	}
 }
 
 /**
@@ -144,6 +252,7 @@ export async function setMockEngineCapabilities(
 	updateMockState({ capabilityOverride: { ...current, ...partial } });
 	await getCapabilities({
 		fetchEngineCapabilities: async () => getMockEngineCapabilities(),
+		fetchEngineDevices: async () => getMockEngineDevices(),
 	});
 	broadcastMsg("capabilities", getLastCapabilities());
 }

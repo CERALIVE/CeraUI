@@ -5,7 +5,10 @@ import {
 	resetMockState,
 	stopMockService,
 } from "../mocks/mock-service.ts";
-import { setMockNetworkIngestActive } from "../mocks/providers/network-ingest.ts";
+import {
+	setMockNetworkIngestActive,
+	setMockNetworkIngestMediamtxSrt,
+} from "../mocks/providers/network-ingest.ts";
 import {
 	buildGatewayProbe,
 	buildRtmpUrl,
@@ -15,10 +18,12 @@ import {
 	deriveNetworkIngestInfo,
 	getNetworkIngestInfo,
 	type NetworkIngestDeps,
+	parseMediamtxSrtEnabled,
 	RTMP_GATEWAY_UNIT,
 	refreshNetworkIngestInfo,
 	resetNetworkIngestState,
 	resolvePrimaryLanIp,
+	resolveSrtTopology,
 	SRT_GATEWAY_UNIT,
 } from "../modules/network/network-ingest.ts";
 import { withDeviceType } from "../modules/system/device-detection.ts";
@@ -192,6 +197,7 @@ describe("network-ingest — LAN/hotspot-ONLY address (never a modem/WWAN IP)", 
 				isRealDevice: async () => true,
 				shouldUseMocks: () => false,
 				probeServiceActive: async () => true,
+				probeMediamtxSrt: async () => false,
 				getNetif: () => ({
 					wwan0: { ip: "10.64.0.5", enabled: true },
 					usb0: { ip: "192.168.42.2", enabled: true },
@@ -209,6 +215,7 @@ describe("network-ingest — LAN/hotspot-ONLY address (never a modem/WWAN IP)", 
 			service_active: true,
 			url: null,
 			unavailable_reason: "no_lan_or_hotspot_address",
+			gateway: "srt-live-transmit",
 		});
 		// The hard guarantee: no modem IP appears in ANY url the surface advertises.
 		const serialized = JSON.stringify(info);
@@ -255,6 +262,7 @@ describe("network-ingest — refresh gate (isRealDevice-gated probe)", () => {
 				isRealDevice: async () => true,
 				shouldUseMocks: () => false,
 				probeServiceActive: probe,
+				probeMediamtxSrt: async () => false,
 				getNetif: () => ({ eth0: { ip: LAN, enabled: true } }),
 				getSourceKinds: () => new Set(["rtmp", "srt"]),
 			}),
@@ -283,16 +291,23 @@ describe("network-ingest — refresh gate (isRealDevice-gated probe)", () => {
 
 	test("mock mode drives service_active from the mock provider (no probe spawn)", async () => {
 		const probe = mock(async () => true);
+		const mediamtx = mock(async () => true);
 		const info = await refreshNetworkIngestInfo(
 			deps({
 				shouldUseMocks: () => true,
-				resolveMockActive: () => ({ rtmp: true, srt: false }),
+				resolveMockSignals: () => ({
+					rtmpUnitActive: true,
+					srtUnitActive: false,
+					mediamtxSrt: false,
+				}),
 				probeServiceActive: probe,
+				probeMediamtxSrt: mediamtx,
 				getNetif: () => ({ eth0: { ip: LAN, enabled: true } }),
 				getSourceKinds: () => new Set(["rtmp", "srt"]),
 			}),
 		);
 		expect(probe).not.toHaveBeenCalled();
+		expect(mediamtx).not.toHaveBeenCalled();
 		expect(info.rtmp).toEqual({
 			service_active: true,
 			url: "rtmp://192.168.1.100:1935/publish/live",
@@ -311,6 +326,7 @@ describe("network-ingest — GatewayProbe (Todo 17 seam, synchronous)", () => {
 				isRealDevice: async () => true,
 				shouldUseMocks: () => false,
 				probeServiceActive: async (unit) => unit === RTMP_GATEWAY_UNIT,
+				probeMediamtxSrt: async () => false,
 				getNetif: () => ({ eth0: { ip: LAN, enabled: true } }),
 				getSourceKinds: () => new Set(["rtmp", "srt"]),
 			}),
@@ -326,6 +342,7 @@ describe("network-ingest — GatewayProbe (Todo 17 seam, synchronous)", () => {
 				isRealDevice: async () => true,
 				shouldUseMocks: () => false,
 				probeServiceActive: async () => true,
+				probeMediamtxSrt: async () => false,
 				getNetif: () => ({ eth0: { ip: LAN, enabled: true } }),
 				getSourceKinds: () => new Set(["rtmp"]),
 			}),
@@ -361,11 +378,237 @@ describe("network-ingest — live mock provider + state slot", () => {
 			service_active: true,
 			url: "rtmp://192.168.1.100:1935/publish/live",
 		});
-		expect(base.srt?.service_active).toBe(true);
+		// Dev default is OLD topology: the srt-live-transmit unit is seeded active.
+		expect(base.srt).toEqual({
+			service_active: true,
+			url: "srt://192.168.1.100:4001",
+			gateway: "srt-live-transmit",
+		});
 
 		setMockNetworkIngestActive("srt", false);
 		const flipped = await refreshNetworkIngestInfo(liveMockDeps);
 		expect(flipped.rtmp?.service_active).toBe(true);
 		expect(flipped.srt?.service_active).toBe(false);
+	});
+
+	test("mock simulates the NEW topology: srt unit off, rtmp + mediamtx srt on", async () => {
+		process.env.MOCK_MODE = "true";
+		initMockService("multi-modem-wifi");
+
+		const liveMockDeps = deps({
+			getNetif: () => ({ eth0: { ip: LAN, enabled: true } }),
+			getSourceKinds: () => new Set(["rtmp", "srt"]),
+		});
+
+		setMockNetworkIngestActive("srt", false);
+		setMockNetworkIngestMediamtxSrt(true);
+
+		const info = await refreshNetworkIngestInfo(liveMockDeps);
+		expect(info.srt).toEqual({
+			service_active: true,
+			url: "srt://192.168.1.100:4001",
+			gateway: "mediamtx",
+		});
+	});
+
+	test("mock simulates the FALSE-POSITIVE: rtmp on but mediamtx srt off → blocked", async () => {
+		process.env.MOCK_MODE = "true";
+		initMockService("multi-modem-wifi");
+
+		const liveMockDeps = deps({
+			getNetif: () => ({ eth0: { ip: LAN, enabled: true } }),
+			getSourceKinds: () => new Set(["rtmp", "srt"]),
+		});
+
+		// The old srt unit died; only MediaMTX (rtmp) is up, but its config does NOT
+		// bind srt. "rtmp active" must NEVER imply srt.
+		setMockNetworkIngestActive("srt", false);
+		setMockNetworkIngestMediamtxSrt(false);
+
+		const info = await refreshNetworkIngestInfo(liveMockDeps);
+		expect(info.rtmp?.service_active).toBe(true);
+		expect(info.srt?.service_active).toBe(false);
+		expect(info.srt?.gateway).toBeUndefined();
+	});
+});
+
+describe("network-ingest — mediamtx.yml SRT marker parse (pure, fail-closed)", () => {
+	test("srt: yes + srtAddress: :4001 → bound", () => {
+		expect(
+			parseMediamtxSrtEnabled("srt: yes\nsrtAddress: :4001\nrtmp: yes\n"),
+		).toBe(true);
+	});
+
+	test("srt: true + host-prefixed srtAddress on :4001 → bound", () => {
+		expect(
+			parseMediamtxSrtEnabled("srt: true\nsrtAddress: 0.0.0.0:4001\n"),
+		).toBe(true);
+	});
+
+	test("quoted address + inline comment still parse", () => {
+		expect(
+			parseMediamtxSrtEnabled('srt: yes # enable srt\nsrtAddress: ":4001"\n'),
+		).toBe(true);
+	});
+
+	test("srt: no → NOT bound (false-positive guard on a disabled config)", () => {
+		expect(parseMediamtxSrtEnabled("srt: no\nsrtAddress: :4001\n")).toBe(false);
+	});
+
+	test("srt key absent → NOT bound", () => {
+		expect(parseMediamtxSrtEnabled("rtmp: yes\nsrtAddress: :4001\n")).toBe(
+			false,
+		);
+	});
+
+	test("srtAddress absent → NOT bound", () => {
+		expect(parseMediamtxSrtEnabled("srt: yes\nrtmp: yes\n")).toBe(false);
+	});
+
+	test("wrong port → NOT bound (port is pinned to :4001)", () => {
+		expect(parseMediamtxSrtEnabled("srt: yes\nsrtAddress: :8890\n")).toBe(
+			false,
+		);
+	});
+
+	test("an indented (non-top-level) srt: key never satisfies the marker", () => {
+		expect(
+			parseMediamtxSrtEnabled("paths:\n  srt: yes\n  srtAddress: :4001\n"),
+		).toBe(false);
+	});
+
+	test("empty / whitespace config → NOT bound", () => {
+		expect(parseMediamtxSrtEnabled("")).toBe(false);
+		expect(parseMediamtxSrtEnabled("\n\n  \n")).toBe(false);
+	});
+});
+
+describe("network-ingest — resolveSrtTopology (fail-closed dual-topology merge)", () => {
+	test("OLD topology: the srt-live-transmit unit active wins", () => {
+		expect(
+			resolveSrtTopology({
+				srtUnitActive: true,
+				rtmpUnitActive: false,
+				mediamtxSrt: false,
+			}),
+		).toEqual({ active: true, gateway: "srt-live-transmit" });
+	});
+
+	test("OLD topology wins even when MediaMTX also proves srt", () => {
+		expect(
+			resolveSrtTopology({
+				srtUnitActive: true,
+				rtmpUnitActive: true,
+				mediamtxSrt: true,
+			}),
+		).toEqual({ active: true, gateway: "srt-live-transmit" });
+	});
+
+	test("NEW topology: MediaMTX active AND config proves srt", () => {
+		expect(
+			resolveSrtTopology({
+				srtUnitActive: false,
+				rtmpUnitActive: true,
+				mediamtxSrt: true,
+			}),
+		).toEqual({ active: true, gateway: "mediamtx" });
+	});
+
+	test("FALSE-POSITIVE guard: rtmp active but config does NOT prove srt → blocked", () => {
+		expect(
+			resolveSrtTopology({
+				srtUnitActive: false,
+				rtmpUnitActive: true,
+				mediamtxSrt: false,
+			}),
+		).toEqual({ active: false });
+	});
+
+	test("config proves srt but MediaMTX itself is down → blocked", () => {
+		expect(
+			resolveSrtTopology({
+				srtUnitActive: false,
+				rtmpUnitActive: false,
+				mediamtxSrt: true,
+			}),
+		).toEqual({ active: false });
+	});
+
+	test("neither topology → blocked, no gateway recorded", () => {
+		expect(
+			resolveSrtTopology({
+				srtUnitActive: false,
+				rtmpUnitActive: false,
+				mediamtxSrt: false,
+			}),
+		).toEqual({ active: false });
+	});
+});
+
+describe("network-ingest — real-path dual-topology probe (B2 fleet transition)", () => {
+	function realDeps(
+		overrides: Partial<NetworkIngestDeps> = {},
+	): NetworkIngestDeps {
+		return deps({
+			isRealDevice: async () => true,
+			shouldUseMocks: () => false,
+			getNetif: () => ({ eth0: { ip: LAN, enabled: true } }),
+			getSourceKinds: () => new Set(["rtmp", "srt"]),
+			...overrides,
+		});
+	}
+
+	test("OLD-topology fixture (srt unit active) → srt available via srt-live-transmit", async () => {
+		const info = await refreshNetworkIngestInfo(
+			realDeps({
+				probeServiceActive: async (unit) => unit === SRT_GATEWAY_UNIT,
+				probeMediamtxSrt: async () => false,
+			}),
+		);
+		expect(info.srt).toEqual({
+			service_active: true,
+			url: "srt://192.168.1.100:4001",
+			gateway: "srt-live-transmit",
+		});
+	});
+
+	test("NEW-topology fixture (rtmp unit + mediamtx srt) → srt available via mediamtx, URL unchanged", async () => {
+		const info = await refreshNetworkIngestInfo(
+			realDeps({
+				probeServiceActive: async (unit) => unit === RTMP_GATEWAY_UNIT,
+				probeMediamtxSrt: async () => true,
+			}),
+		);
+		expect(info.srt).toEqual({
+			service_active: true,
+			url: "srt://192.168.1.100:4001",
+			gateway: "mediamtx",
+		});
+	});
+
+	test("FALSE-POSITIVE guard: rtmp unit active, mediamtx srt off → srt BLOCKED", async () => {
+		const info = await refreshNetworkIngestInfo(
+			realDeps({
+				probeServiceActive: async (unit) => unit === RTMP_GATEWAY_UNIT,
+				probeMediamtxSrt: async () => false,
+			}),
+		);
+		expect(info.rtmp?.service_active).toBe(true);
+		expect(buildGatewayProbe().isActive("srt")).toBe(false);
+		expect(info.srt).toEqual({
+			service_active: false,
+			url: "srt://192.168.1.100:4001",
+		});
+	});
+
+	test("neither unit active → srt blocked", async () => {
+		const info = await refreshNetworkIngestInfo(
+			realDeps({
+				probeServiceActive: async () => false,
+				probeMediamtxSrt: async () => false,
+			}),
+		);
+		expect(info.srt?.service_active).toBe(false);
+		expect(info.srt?.gateway).toBeUndefined();
 	});
 });

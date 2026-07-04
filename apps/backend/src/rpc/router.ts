@@ -69,6 +69,7 @@ import {
 	kioskStartProcedure,
 	kioskStatusProcedure,
 	kioskStopProcedure,
+	mintPreviewTokenProcedure,
 	poweroffProcedure,
 	rebootProcedure,
 	setAutostartProcedure,
@@ -163,6 +164,7 @@ const stableRoutes = {
 		kioskStop: kioskStopProcedure,
 		kioskConfigure: kioskConfigureProcedure,
 		kioskOsk: kioskOskProcedure,
+		mintPreviewToken: mintPreviewTokenProcedure,
 	}),
 
 	status: os.router({

@@ -402,6 +402,7 @@ const en = {
 			copy: "Copy address",
 			copied: "Address copied",
 			copyFailed: "Couldn't copy the address.",
+			includesAudio: "Includes audio",
 		},
 		preview: {
 			title: "Preview",
@@ -507,12 +508,13 @@ const en = {
 			none: "No source selected",
 			select: "Select a source",
 			capabilities: "Capabilities",
-			deviceMax: "Device max",
+			sourceMax: "Source max",
 			activeLive: "Live",
 			activeConfigured: "Configured",
 			lostTitle: "Device disconnected",
 			lostBody: "Reconnect the device to resume streaming from this source.",
 			audioNone: "No audio source detected",
+			audioEmbedded: "Embedded audio (from the incoming stream)",
 		},
 		modes: {
 			label: "Mode",
@@ -523,6 +525,7 @@ const en = {
 			reason: {
 				unsupportedPlatform: "Not supported on this platform",
 				fixedBySource: "Fixed by the selected source",
+				unsupportedAtResolution: "Not available at this resolution",
 				gatewayInactive: "Network ingest gateway is not running",
 				gatewayNoAddress: "No reachable LAN or hotspot address",
 			},
@@ -567,17 +570,11 @@ const en = {
 			hint: "This feature will be available in a future update.",
 			pip: "Picture-in-picture",
 			modeFallback: "Automatic fallback",
+			embeddedAudio: "Embedded audio",
 		},
 		fallback: {
 			unavailable: "Unavailable",
 			notConfigured: "Not configured",
-		},
-		presets: {
-			heading: "Mode presets",
-			advanced: "Advanced / Custom",
-			applying: "Applying preset\u2026",
-			applied: "Preset applied",
-			failed: "Couldn't apply preset",
 		},
 		encoder: {
 			appliesNextStart: "Applies on next start",
@@ -590,6 +587,8 @@ const en = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "Selected",
+			axisDeviceMax: "Device max",
 		},
 	},
 	dialogs: {
@@ -1565,6 +1564,12 @@ const en = {
 		sshToggleFailed: "Failed to change the SSH server. Please try again.",
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
+	},
+	audio: {
+		sources: {
+			noAudio: "No audio",
+			pipelineDefault: "Pipeline default",
+		},
 	},
 } satisfies BaseTranslation;
 

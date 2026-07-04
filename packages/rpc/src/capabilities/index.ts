@@ -4,4 +4,3 @@
  */
 export * from './audio';
 export * from './intersect-caps';
-export * from './mode-presets';

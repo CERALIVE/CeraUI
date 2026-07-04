@@ -144,8 +144,11 @@ export interface MockState {
 	// Per-kind network-ingest gateway service-active state for the status surface
 	// (Task 16); seeded active so dev scenarios expose live gateways. Independent
 	// of gatewayActive (the stream-start gate stays fail-safe). Resets with the
-	// scenario.
+	// scenario. `networkIngestActive.srt` = the OLD-topology srt-live-transmit unit.
 	networkIngestActive: Record<RequiresGateway, boolean>;
+	// Whether the mock MediaMTX config proves SRT is bound (NEW topology). Seeded
+	// false — dev SRT is OLD-topology by default. Resets with the scenario.
+	networkIngestMediamtxSrt: boolean;
 }
 
 const mockState: MockState = {
@@ -182,6 +185,7 @@ const mockState: MockState = {
 	capabilityOverride: null,
 	gatewayActive: {},
 	networkIngestActive: { rtmp: true, srt: true },
+	networkIngestMediamtxSrt: false,
 };
 
 // Deep snapshot of `mockState` captured at the end of initMockService — the
@@ -242,6 +246,7 @@ export function initMockService(scenarioName?: string): void {
 	mockState.capabilityOverride = null;
 	mockState.gatewayActive = {};
 	mockState.networkIngestActive = { rtmp: true, srt: true };
+	mockState.networkIngestMediamtxSrt = false;
 	mockState.interfaceThroughput = {};
 	mockState.wifiModes = {};
 

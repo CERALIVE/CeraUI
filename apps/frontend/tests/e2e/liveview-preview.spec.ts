@@ -47,9 +47,38 @@ const SERVER_CONFIG = {
 
 let pageWs: WebSocketRoute | null = null;
 
-/** Proxy the backend WS, force is_streaming:false on status frames. */
+/** Mock the preview leg: codec-config + one audio-level frame, NO access units. */
+function mockPreviewSocket(ws: WebSocketRoute): void {
+	ws.onMessage((message) => {
+		const text = typeof message === 'string' ? message : message.toString();
+		let parsed: { action?: string };
+		try {
+			parsed = JSON.parse(text);
+		} catch {
+			return;
+		}
+		if (parsed?.action !== 'start') return;
+		ws.send(JSON.stringify({ type: 'codec-config', codec: 'avc1.42E01E' }));
+		ws.send(JSON.stringify({ type: 'audio-level', rms_db: [-18, -24], peak_db: [-6, -11] }));
+	});
+}
+
+/**
+ * Proxy the backend WS, force is_streaming:false on status frames.
+ *
+ * Single-origin preview proxy (Task 20): PreviewCanvas mints a token over the RPC
+ * socket, then dials the SAME backend origin at `/preview?token=…`, so the preview
+ * socket matches THIS route too. Fake that leg in-page (codec-config + audio-level,
+ * no access units → terminal `waiting`) rather than proxying to the real
+ * mock-preview upstream, whose real H.264 access units would drive the harness
+ * browser's `VideoDecoder` to `error` instead of `waiting`.
+ */
 async function routeBackend(page: Page): Promise<void> {
 	await page.routeWebSocket(/:(3002|31\d\d)/, (ws) => {
+		if (ws.url().includes('/preview')) {
+			mockPreviewSocket(ws);
+			return;
+		}
 		pageWs = ws;
 		const server = ws.connectToServer();
 		ws.onMessage((m) => server.send(m));
@@ -75,29 +104,10 @@ function injectServerConfig(): void {
 	pageWs?.send(JSON.stringify({ config: SERVER_CONFIG }));
 }
 
-/** Mock the cerastream preview WS: codec-config + one audio-level frame. */
-async function routePreview(page: Page): Promise<void> {
-	await page.routeWebSocket(/:9997/, (ws) => {
-		ws.onMessage((message) => {
-			const text = typeof message === 'string' ? message : message.toString();
-			let parsed: { action?: string };
-			try {
-				parsed = JSON.parse(text);
-			} catch {
-				return;
-			}
-			if (parsed?.action !== 'start') return;
-			ws.send(JSON.stringify({ type: 'codec-config', codec: 'avc1.42E01E' }));
-			ws.send(JSON.stringify({ type: 'audio-level', rms_db: [-18, -24], peak_db: [-6, -11] }));
-		});
-	});
-}
-
 test.describe('LiveView preview placement (#72)', () => {
 	test.beforeEach(async ({ page }) => {
 		pageWs = null;
 		await routeBackend(page);
-		await routePreview(page);
 		await page.goto('/');
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');

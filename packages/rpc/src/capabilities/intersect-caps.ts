@@ -19,6 +19,9 @@ import {
 	AVAILABLE_RESOLUTIONS,
 	BITRATE_MAX,
 	BITRATE_MIN,
+	type DeviceMode,
+	normalizeFramerateToRung,
+	normalizeResolutionToRung,
 	type Resolution,
 } from '../schemas/streaming.schema';
 
@@ -82,6 +85,9 @@ const BITRATE_UNIT = 'kbps';
 // aliased locally so the ladder math reads clearly. `4k` is an accepted alias of
 // the top rung (`2160p`) some platforms report.
 const RESOLUTION_LADDER: readonly Resolution[] = AVAILABLE_RESOLUTIONS;
+// The universal baseline rung — every platform can encode 480p. Used as the
+// fail-closed floor when `max_resolution` is unparseable (see platformResolutionLadder).
+const RESOLUTION_FLOOR: Resolution = '480p';
 const RESOLUTION_HEIGHT: Readonly<Record<number, Resolution>> = {
 	480: '480p',
 	720: '720p',
@@ -118,6 +124,47 @@ export function mediaTypeToSourceKind(
 }
 
 /**
+ * The SINGLE source of truth bridging a list-devices device `kind` to the
+ * capability `sources[]` pipeline id — two DISTINCT namespaces (device input_ids
+ * vs pipeline/source-kind ids). Both the frontend axis intersection (`offeredAxes`)
+ * and the backend pipeline registry consume THIS table and never re-derive it.
+ *
+ * A kind with no direct video pipeline (`audio`) or an ambiguous multi-pipeline
+ * kind (`network` → rtmp|srt) maps to `undefined`; the consumer then falls back to
+ * the coarse source/platform offering. The `uvc_h264→libuvch264` / `mjpeg→usb_mjpeg`
+ * mappings are the cerastream contract (todo 8); `uvc_h265` has no dedicated engine
+ * source id, so it rides `libuvch264`.
+ *
+ * Kept `as const satisfies` (not a bare `Record<string, …>`) so the backend
+ * re-export (`Record<CaptureDeviceKind, string | undefined>`, pipelines.ts) is a
+ * compile-time exhaustiveness gate: a new engine device kind fails to type-check
+ * until it has an entry here.
+ */
+export const DEVICE_KIND_TO_PIPELINE_ID = {
+	hdmi: 'hdmi',
+	uvc_h264: 'libuvch264',
+	uvc_h265: 'libuvch264',
+	mjpeg: 'usb_mjpeg',
+	camlink: 'camlink',
+	test: 'test',
+	network: undefined,
+	audio: undefined,
+} as const satisfies Record<string, string | undefined>;
+
+/**
+ * Resolve a list-devices device `kind` (carried on `device_modes[input_id].kind`)
+ * to its pipeline/source-kind id via {@link DEVICE_KIND_TO_PIPELINE_ID}. Returns
+ * `undefined` for an absent kind, an unrecognised kind, or a kind with no direct
+ * video pipeline — the caller then treats the device as unbridged (coarse offering).
+ */
+export function deviceKindToPipelineId(kind: string | undefined): string | undefined {
+	if (kind === undefined) {
+		return undefined;
+	}
+	return (DEVICE_KIND_TO_PIPELINE_ID as Record<string, string | undefined>)[kind];
+}
+
+/**
  * Resolve a concrete capture format to the `Resolution` rung it advertises.
  *
  * None-cap (permissive) policy: when `width` or `height` is absent the format
@@ -135,20 +182,50 @@ export function captureCapResolution(cap: CaptureFormatCap): Resolution | undefi
 
 /**
  * Platform resolution ladder: every rung up to and including `max_resolution`.
- * An unknown / unparseable max is treated permissively — the whole ladder is
- * offered rather than nothing.
+ *
+ * Routed through `normalizeResolutionToRung` (Task 4) so BOTH rung forms ("2160p",
+ * "4k") and pixel forms ("3840x2160") cap correctly — a pixel-form max can no longer
+ * WIDEN the offer. FAIL-CLOSED (behavior change): an unparseable max collapses to the
+ * 480p floor, NOT the full ladder as before, so a noisy engine value never over-offers.
  */
 function platformResolutionLadder(maxResolution: string): string[] {
-	const normalized = maxResolution === '4k' ? '2160p' : maxResolution;
-	const maxIndex = RESOLUTION_LADDER.indexOf(normalized as Resolution);
-	if (maxIndex === -1) {
-		return [...RESOLUTION_LADDER];
+	const normalized = normalizeResolutionToRung(maxResolution);
+	if (normalized === undefined) {
+		return [RESOLUTION_FLOOR];
 	}
+	const maxIndex = RESOLUTION_LADDER.indexOf(normalized);
 	return RESOLUTION_LADDER.slice(0, maxIndex + 1);
 }
 
+/** The set of resolution rungs any of the supplied device modes can drive. */
+function deviceModeResolutionRungs(modes: readonly DeviceMode[]): Set<Resolution> {
+	const rungs = new Set<Resolution>();
+	for (const mode of modes) {
+		const rung = normalizeResolutionToRung(`${mode.width}x${mode.height}`);
+		if (rung !== undefined) {
+			rungs.add(rung);
+		}
+	}
+	return rungs;
+}
+
+/** The set of framerate rungs any of the supplied device modes can drive. */
+function deviceModeFramerates(modes: readonly DeviceMode[]): Set<number> {
+	const framerates = new Set<number>();
+	for (const mode of modes) {
+		for (const framerate of mode.framerates) {
+			const rung = normalizeFramerateToRung(framerate);
+			if (rung !== undefined) {
+				framerates.add(rung);
+			}
+		}
+	}
+	return framerates;
+}
+
 /**
- * Compute the effective `OfferedSet` for a platform ∩ source ∩ mode combination.
+ * Compute the effective `OfferedSet` for a platform ∩ source ∩ mode combination,
+ * optionally narrowed by a selected device's advertised capture modes.
  *
  * Layered intersection (per ADR — platform ∩ capture-source ∩ current-mode):
  *   - resolutions: the platform ladder (≤ `max_resolution`); when the source
@@ -159,6 +236,13 @@ function platformResolutionLadder(maxResolution: string): string[] {
  *     platform advertises hardware support (`supports_h265`).
  *   - bitrateRange: the canonical hardware window (`BITRATE_MIN..BITRATE_MAX`).
  *
+ * Device-mode dimension (Task 4): when `deviceModes` is a NON-EMPTY mode list, the
+ * offered resolutions/framerates are further intersected against the rungs those
+ * modes can drive (per-resolution framerate refinement is a caller/ValidationAdapter
+ * concern). When `deviceModes` is `undefined` OR empty, the result is byte-identical
+ * to the pre-Task-4 offering — an empty list is treated permissively (no narrowing),
+ * never as "offer nothing".
+ *
  * None-cap (permissive) policy: a `source` of `undefined` means nothing is known
  * about the capture side, so nothing is narrowed — the full platform ladder is
  * offered and every override toggle reads live.
@@ -167,6 +251,7 @@ export function intersectCaps(
 	platform: PlatformCaps,
 	source: VideoSourceCap | undefined,
 	mode: string,
+	deviceModes?: readonly DeviceMode[],
 ): OfferedSet {
 	// `mode` is the third intersection layer (platform ∩ source ∩ mode). The v1
 	// capability contract surfaces a single streaming mode, so no mode currently
@@ -180,11 +265,21 @@ export function intersectCaps(
 	const supportsResolutionOverride = source?.supports_resolution_override ?? true;
 	const supportsFramerateOverride = source?.supports_framerate_override ?? true;
 
-	const resolutions =
+	let resolutions =
 		source && !supportsResolutionOverride ? [source.default_resolution] : platformResolutions;
 
-	const framerates: number[] =
+	let framerates: number[] =
 		source && !supportsFramerateOverride ? [source.default_framerate] : [...AVAILABLE_FRAMERATES];
+
+	if (deviceModes && deviceModes.length > 0) {
+		const modeRungs = deviceModeResolutionRungs(deviceModes);
+		const modeFramerates = deviceModeFramerates(deviceModes);
+		resolutions = resolutions.filter((resolution) => {
+			const rung = normalizeResolutionToRung(resolution);
+			return rung !== undefined && modeRungs.has(rung);
+		});
+		framerates = framerates.filter((framerate) => modeFramerates.has(framerate));
+	}
 
 	const codecs = platform.supports_h265 ? [MEDIA_TYPE_H264, MEDIA_TYPE_H265] : [MEDIA_TYPE_H264];
 

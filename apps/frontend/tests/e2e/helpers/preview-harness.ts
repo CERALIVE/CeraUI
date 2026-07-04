@@ -1,14 +1,14 @@
 /**
  * Preview WebSocket + WebCodecs harness for the EncoderDialog live-preview specs
- * (#72). cerastream serves the preview socket directly on its own port (9997),
- * which the e2e mock backend does NOT run — so the real PreviewCanvas would only
- * ever reach the transient `reconnecting` state. This harness lets a spec drive
- * the component through its real states deterministically, with NO network dial:
+ * (#72). Since Task 20 the preview is a single-origin proxy: PreviewCanvas mints a
+ * token over the RPC socket, then dials the SAME backend origin at `/preview`. This
+ * harness lets a spec drive the component through its real states deterministically,
+ * with NO real preview dial:
  *
  *   • `installPreviewHarness(token)` (an `addInitScript` payload) replaces
  *     `window.WebSocket` with a factory that hooks the RPC socket (auth-login
  *     token rewrite, exactly like the field-lock/capability harness) and returns
- *     a fully in-page fake for the preview socket (matched by the `:9997` port).
+ *     a fully in-page fake for the preview socket (matched by the `/preview` path).
  *   • It also installs a controllable `VideoDecoder` so the WebCodecs tier is
  *     selected and `configure()`/decode-error are deterministic.
  *   • Control surface on `window.__ceraPreview`: `config()` (codec-config →
@@ -45,13 +45,22 @@ export function installPreviewHarness(token: string): void {
 	const w = window as any;
 	if (w.__ceraPreview) return;
 	const Real = w.WebSocket;
-	const PREVIEW_PORT = "9997";
 
 	w.__ceraPreview = {
 		socket: null,
 		rpcSocket: null,
 		created: 0,
 		_errorCb: null,
+		// The preview socket is now dialed only AFTER an async
+		// `system.mintPreviewToken()` RPC round-trip (Task 20), so a spec driving a
+		// state right after the toggle click can run ahead of the socket. Queue
+		// control ops issued before the socket exists; the socket flushes them on
+		// creation so the drive stays deterministic regardless of mint timing.
+		_queue: [] as Array<() => void>,
+		_deliver(op: () => void) {
+			if (w.__ceraPreview.socket) op();
+			else w.__ceraPreview._queue.push(op);
+		},
 		open() {
 			w.__ceraPreview.socket?.onopen?.({});
 		},
@@ -73,22 +82,28 @@ export function installPreviewHarness(token: string): void {
 			);
 		},
 		config() {
-			w.__ceraPreview.socket?.onmessage?.({
-				data: JSON.stringify({
-					type: "codec-config",
-					codec: "avc1.42E01E",
-					coded_width: 1280,
-					coded_height: 720,
+			w.__ceraPreview._deliver(() =>
+				w.__ceraPreview.socket?.onmessage?.({
+					data: JSON.stringify({
+						type: "codec-config",
+						codec: "avc1.42E01E",
+						coded_width: 1280,
+						coded_height: 720,
+					}),
 				}),
-			});
+			);
 		},
 		audio(rms: number[], peak: number[]) {
-			w.__ceraPreview.socket?.onmessage?.({
-				data: JSON.stringify({ type: "audio-level", rms_db: rms, peak_db: peak }),
-			});
+			w.__ceraPreview._deliver(() =>
+				w.__ceraPreview.socket?.onmessage?.({
+					data: JSON.stringify({ type: "audio-level", rms_db: rms, peak_db: peak }),
+				}),
+			);
 		},
 		fail() {
-			w.__ceraPreview._errorCb?.(new Error("decode failed"));
+			w.__ceraPreview._deliver(() =>
+				w.__ceraPreview._errorCb?.(new Error("decode failed")),
+			);
 		},
 	};
 
@@ -121,8 +136,14 @@ export function installPreviewHarness(token: string): void {
 			this.url = url;
 			w.__ceraPreview.socket = this;
 			w.__ceraPreview.created += 1;
-			// Mirror a real socket: fire `open` after the caller wires its handlers.
-			queueMicrotask(() => this.onopen?.({}));
+			// Mirror a real socket: fire `open` after the caller wires its handlers,
+			// then flush any control ops queued while the async mint was in flight.
+			queueMicrotask(() => {
+				this.onopen?.({});
+				const queued = w.__ceraPreview._queue;
+				w.__ceraPreview._queue = [];
+				for (const op of queued) op();
+			});
 		}
 		send(data: unknown): void {
 			this.sent.push(data);
@@ -158,10 +179,11 @@ export function installPreviewHarness(token: string): void {
 	}
 
 	// A constructor that returns an object yields that object from `new`, so the
-	// preview port routes to the fake while everything else stays a real socket.
+	// single-origin `/preview` dial (Task 20) routes to the fake while the RPC
+	// socket (same origin, root path) stays a real, token-rewritten socket.
 	// biome-ignore lint/suspicious/noExplicitAny: native ctor signature.
 	function WSFactory(this: unknown, url: string, protocols?: any) {
-		if (typeof url === "string" && url.includes(`:${PREVIEW_PORT}`)) {
+		if (typeof url === "string" && url.includes("/preview")) {
 			return new FakePreviewSocket(url);
 		}
 		return new HookedRpcWS(url, protocols);

@@ -75,6 +75,7 @@ function provide(snapshot: GetCapabilitiesResult) {
 			caps: snapshot,
 			schemaVersion: SCHEMA_VERSION,
 		}),
+		fetchEngineDevices: async () => ({ devices: [] }),
 	};
 }
 

@@ -16,8 +16,12 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import type { GetCapabilitiesResult } from "@ceralive/cerastream";
-import type { RequiresGateway } from "@ceraui/rpc/schemas";
+import type {
+	CaptureDeviceKind,
+	GetCapabilitiesResult,
+} from "@ceralive/cerastream";
+import { DEVICE_KIND_TO_PIPELINE_ID as SHARED_DEVICE_KIND_TO_PIPELINE_ID } from "@ceraui/rpc";
+import type { PipelineAudioKind, RequiresGateway } from "@ceraui/rpc/schemas";
 import {
 	framerateSchema,
 	resolutionSchema,
@@ -47,6 +51,10 @@ export type Pipeline = {
 	supportsResolutionOverride: boolean;
 	supportsFramerateOverride: boolean;
 	requires_gateway?: RequiresGateway;
+	// Audio provenance (Task 13): rtmp/srt carry embedded (muxed) audio, direct
+	// capture is operator-selectable ALSA, no-audio pipelines are 'none'. This
+	// registry is the single source of the values.
+	audio_kind: PipelineAudioKind;
 };
 
 // Source ids that ingest over a local network gateway rather than a directly
@@ -127,6 +135,14 @@ function describeSource(id: string): string {
 	return SOURCE_DESCRIPTIONS[id] ?? id;
 }
 
+function deriveAudioKind(
+	id: string,
+	supportsAudio: boolean,
+): PipelineAudioKind {
+	if (GATEWAY_SOURCES[id] !== undefined) return "embedded";
+	return supportsAudio ? "selectable" : "none";
+}
+
 // The capability contract types resolution/framerate as free-form string/number;
 // only adopt the (enum-typed) Pipeline default when the value is a member of the
 // frozen preset set, so the engine's minimal-floor "1920x1080" is dropped rather
@@ -140,6 +156,15 @@ function toFramerate(value: number): Framerate | undefined {
 	const parsed = framerateSchema.safeParse(value);
 	return parsed.success ? parsed.data : undefined;
 }
+
+// Single source of truth for the device-kind → pipeline-id bridge now lives in
+// `@ceraui/rpc` so the frontend axis intersection and the backend share ONE table.
+// The typed re-export is a compile-time exhaustiveness gate: every engine
+// `CaptureDeviceKind` must have an entry, or this assignment fails to type-check.
+export const DEVICE_KIND_TO_PIPELINE_ID: Record<
+	CaptureDeviceKind,
+	string | undefined
+> = SHARED_DEVICE_KIND_TO_PIPELINE_ID;
 
 // The registry builds from the engine's get-capabilities response via
 // getCapabilities(). In tests, the capability service is injected with a mock
@@ -159,6 +184,7 @@ function buildPipelineRegistry(
 			supportsAudio: cap.supports_audio,
 			supportsResolutionOverride: cap.supports_resolution_override,
 			supportsFramerateOverride: cap.supports_framerate_override,
+			audio_kind: deriveAudioKind(cap.id, cap.supports_audio),
 		};
 		const resolution = toResolution(cap.default_resolution);
 		if (resolution !== undefined) pipeline.defaultResolution = resolution;
@@ -201,6 +227,7 @@ type PipelineResponseEntry = Pick<
 	| "defaultResolution"
 	| "defaultFramerate"
 	| "requires_gateway"
+	| "audio_kind"
 >;
 
 export function getPipelineList() {
@@ -218,6 +245,7 @@ export function getPipelineList() {
 			defaultResolution: pipeline.defaultResolution,
 			defaultFramerate: pipeline.defaultFramerate,
 			requires_gateway: pipeline.requires_gateway,
+			audio_kind: pipeline.audio_kind,
 		};
 	}
 	return list;

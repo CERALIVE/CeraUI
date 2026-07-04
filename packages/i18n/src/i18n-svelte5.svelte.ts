@@ -16,6 +16,7 @@ import en from "./en/index.js";
 import type { Locales, Translation } from "./i18n-types.js";
 import { loadLocaleAsync } from "./i18n-util.async.js";
 import { isLocale, loadedLocales } from "./i18n-util.js";
+import { interpolate } from "./plural-resolver.js";
 
 // 🎯 Enhanced translation function with key access
 export interface Svelte5TranslationFunction {
@@ -116,17 +117,14 @@ export const loadingError = {
 	},
 };
 
-// 🎯 Performance optimized string interpolation
+// 🎯 Resolves typesafe-i18n plural syntax before `{param}` substitution (see
+// plural-resolver.ts) so browser output matches the Node `i18nObject` oracle.
 function interpolateString(
 	template: string,
 	params: Record<string, string | number | boolean>,
+	locale: Locales,
 ): string {
-	if (!params || Object.keys(params).length === 0) return template;
-
-	return template.replace(/\{(\w+)(?::\w+)?\}/g, (match, key) => {
-		const value = params[key];
-		return value !== undefined ? String(value) : match;
-	});
+	return interpolate(template, params, locale);
 }
 
 // 🚀 Svelte 5 optimized translation proxy factory
@@ -165,7 +163,7 @@ function createSvelte5Proxy(
 				const translationFunction = ((
 					params: Record<string, string | number | boolean> = {},
 				) => {
-					return interpolateString(value, params);
+					return interpolateString(value, params, currentLocale);
 				}) as Svelte5TranslationFunction;
 
 				// 🔑 Add readonly key access properties

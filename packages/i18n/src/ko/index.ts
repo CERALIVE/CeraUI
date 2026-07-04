@@ -1007,6 +1007,7 @@ const ko = {
 			copy: "주소 복사",
 			copied: "주소가 복사됨",
 			copyFailed: "주소를 복사할 수 없습니다.",
+			includesAudio: "오디오 포함",
 		},
 		preview: {
 			title: "미리보기",
@@ -1112,12 +1113,13 @@ const ko = {
 			none: "선택된 소스 없음",
 			select: "소스 선택",
 			capabilities: "지원 기능",
-			deviceMax: "장치 최대값",
+			sourceMax: "소스 최대값",
 			activeLive: "라이브",
 			activeConfigured: "구성됨",
 			lostTitle: "장치 연결 끊김",
 			lostBody: "장치를 다시 연결하여 이 소스에서 스트리밍을 재개하세요.",
 			audioNone: "오디오 소스가 감지되지 않음",
+			audioEmbedded: "임베디드 오디오 (수신 스트림에서)",
 		},
 		modes: {
 			label: "모드",
@@ -1128,6 +1130,7 @@ const ko = {
 			reason: {
 				unsupportedPlatform: "이 플랫폼에서 지원되지 않음",
 				fixedBySource: "선택한 소스에 의해 고정됨",
+				unsupportedAtResolution: "이 해상도에서는 사용할 수 없음",
 				gatewayInactive: "네트워크 인제스트 게이트웨이가 실행 중이 아닙니다",
 				gatewayNoAddress: "연결 가능한 LAN 또는 핫스팟 주소 없음",
 			},
@@ -1172,17 +1175,11 @@ const ko = {
 			hint: "이 기능은 향후 업데이트에서 제공될 예정입니다.",
 			pip: "화면 속 화면",
 			modeFallback: "자동 전환",
+			embeddedAudio: "임베디드 오디오",
 		},
 		fallback: {
 			unavailable: "사용 불가",
 			notConfigured: "구성되지 않음",
-		},
-		presets: {
-			heading: "모드 프리셋",
-			advanced: "고급 / 사용자 지정",
-			applying: "프리셋 적용 중\u2026",
-			applied: "프리셋 적용됨",
-			failed: "프리셋을 적용할 수 없습니다",
 		},
 		encoder: {
 			appliesNextStart: "다음 시작 시 적용",
@@ -1195,6 +1192,8 @@ const ko = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "선택됨",
+			axisDeviceMax: "장치 최대",
 		},
 	},
 	dialogs: {
@@ -1540,6 +1539,12 @@ const ko = {
 		sshToggleFailed: "Failed to change the SSH server. Please try again.",
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
+	},
+	audio: {
+		sources: {
+			noAudio: "오디오 없음",
+			pipelineDefault: "파이프라인 기본값",
+		},
 	},
 } satisfies Translation;
 

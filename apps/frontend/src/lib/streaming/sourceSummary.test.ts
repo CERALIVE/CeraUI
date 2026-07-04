@@ -1,15 +1,19 @@
 import type {
 	ActiveEncode,
+	AudioSource,
 	CapabilitiesMessage,
 	ConfigMessage,
 } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
+	audioSourceLabel,
 	type CapabilitySummary,
 	deriveActiveSummary,
 	deriveCapabilitySummary,
 	formatCodec,
+	groupAudioSources,
+	resolveAudioSourceList,
 	resolveAudioSourceMode,
 	resolveDisplayedAudioSource,
 	resolveTransportToken,
@@ -115,6 +119,71 @@ describe("deriveCapabilitySummary — res/fps/codec/audio (Task 8)", () => {
 			platform: { ...CAPS.platform, max_resolution: "" },
 		};
 		expect(deriveCapabilitySummary(blank)?.maxResolution).toBeUndefined();
+	});
+});
+
+describe("deriveCapabilitySummary — active-source truthfulness (Todo 11)", () => {
+	const CAPS_4K_USB: CapabilitiesMessage = {
+		platform: {
+			supports_h265: true,
+			hardware_accelerated: true,
+			max_resolution: "4k",
+		},
+		encoder: {
+			codecs: ["h264", "h265"],
+			bitrate_range: { min: 500, max: 50000, unit: "kbps" },
+		},
+		sources: [
+			{
+				id: "usb",
+				supports_audio: false,
+				supports_resolution_override: true,
+				supports_framerate_override: true,
+				default_resolution: "1080p",
+				default_framerate: 60,
+			},
+		],
+		device_modes: {
+			"/dev/video0": {
+				kind: "uvc_h264",
+				modes: [{ width: 1920, height: 1080, framerates: [30, 60] }],
+			},
+		},
+	};
+
+	it("shows the ACTIVE source's real ceiling (usb 1080p@60 on a 4K platform → 1080p/60, not 2160p)", () => {
+		const config: ConfigMessage = {
+			pipeline: "usb",
+			selected_video_input: "/dev/video0",
+		};
+		const summary = deriveCapabilitySummary(CAPS_4K_USB, config);
+		expect(summary?.maxResolution).toBe("1080p");
+		expect(summary?.maxFramerate).toBe(60);
+		expect(summary?.audioSupported).toBe(false);
+	});
+
+	it("normalizes an override-capable active source to the platform ceiling (hdmi on 4K → 2160p)", () => {
+		const config: ConfigMessage = { selected_video_input: "hdmi" };
+		const summary = deriveCapabilitySummary(CAPS, config);
+		expect(summary?.maxResolution).toBe("2160p");
+		expect(summary?.maxFramerate).toBe(60);
+		expect(summary?.audioSupported).toBe(true);
+	});
+
+	it("audioSupported reflects the ACTIVE source (uvc_h264 no-audio), never 'any source' (hdmi has audio)", () => {
+		const config: ConfigMessage = { selected_video_input: "uvc_h264" };
+		const summary = deriveCapabilitySummary(CAPS, config);
+		expect(summary?.audioSupported).toBe(false);
+		expect(summary?.maxResolution).toBe("720p");
+		expect(summary?.maxFramerate).toBe(30);
+	});
+
+	it("falls back to platform maxima when the config resolves no reported source", () => {
+		const config: ConfigMessage = { selected_video_input: "not-a-source" };
+		const summary = deriveCapabilitySummary(CAPS, config);
+		expect(summary?.maxResolution).toBe("4k");
+		expect(summary?.maxFramerate).toBe(60);
+		expect(summary?.audioSupported).toBe(true);
 	});
 });
 
@@ -244,5 +313,76 @@ describe("deriveActiveSummary — capability vs active-config split (Todo 23)", 
 	it("idle without a codec never invents one from capabilities", () => {
 		const config: ConfigMessage = { selected_video_input: "hdmi" };
 		expect(deriveActiveSummary(config, null, CAPS).codec).toBeUndefined();
+	});
+});
+
+describe("resolveAudioSourceList — typed model with legacy asrcs fallback (Task 13)", () => {
+	it("passes the typed audio_sources through verbatim when present", () => {
+		const typed: AudioSource[] = [
+			{ id: "USB audio", kind: "device" },
+			{ id: "No audio", kind: "none", labelKey: "audio.sources.noAudio" },
+		];
+		expect(resolveAudioSourceList(typed, ["ignored"])).toEqual(typed);
+	});
+
+	it("derives the typed model from a legacy asrcs list (older backend)", () => {
+		const derived = resolveAudioSourceList(undefined, [
+			"USB audio",
+			"No audio",
+			"Pipeline default",
+		]);
+		expect(derived).toEqual([
+			{ id: "USB audio", kind: "device" },
+			{ id: "No audio", kind: "none", labelKey: "audio.sources.noAudio" },
+			{
+				id: "Pipeline default",
+				kind: "pipeline_default",
+				labelKey: "audio.sources.pipelineDefault",
+			},
+		]);
+	});
+
+	it("falls back to asrcs when audio_sources is an empty array", () => {
+		expect(resolveAudioSourceList([], ["USB audio"])).toEqual([
+			{ id: "USB audio", kind: "device" },
+		]);
+	});
+});
+
+describe("groupAudioSources — devices first (order kept), pseudo grouped last (Task 13)", () => {
+	it("keeps device order and moves the pseudo-sources to the end", () => {
+		const list: AudioSource[] = [
+			{ id: "No audio", kind: "none", labelKey: "audio.sources.noAudio" },
+			{ id: "USB audio", kind: "device" },
+			{
+				id: "Pipeline default",
+				kind: "pipeline_default",
+				labelKey: "audio.sources.pipelineDefault",
+			},
+			{ id: "HDMI", kind: "device" },
+		];
+		const { devices, pseudo } = groupAudioSources(list);
+		expect(devices.map((e) => e.id)).toEqual(["USB audio", "HDMI"]);
+		expect(pseudo.map((e) => e.id)).toEqual(["No audio", "Pipeline default"]);
+	});
+});
+
+describe("audioSourceLabel — translate pseudo, never translate hardware (Task 13)", () => {
+	const t = (key: string) =>
+		key === "audio.sources.noAudio" ? "Ninguno" : key;
+
+	it("resolves the labelKey for a pseudo-source", () => {
+		expect(
+			audioSourceLabel(
+				{ id: "No audio", kind: "none", labelKey: "audio.sources.noAudio" },
+				t,
+			),
+		).toBe("Ninguno");
+	});
+
+	it("renders a hardware device name verbatim (never translated)", () => {
+		expect(audioSourceLabel({ id: "USB audio", kind: "device" }, t)).toBe(
+			"USB audio",
+		);
 	});
 });

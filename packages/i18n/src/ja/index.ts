@@ -1031,6 +1031,7 @@ const ja = {
 			copy: "アドレスをコピー",
 			copied: "アドレスをコピーしました",
 			copyFailed: "アドレスをコピーできませんでした。",
+			includesAudio: "音声を含む",
 		},
 		preview: {
 			title: "プレビュー",
@@ -1137,13 +1138,14 @@ const ja = {
 			none: "ソースが選択されていません",
 			select: "ソースを選択",
 			capabilities: "対応機能",
-			deviceMax: "デバイスの上限",
+			sourceMax: "ソースの上限",
 			activeLive: "ライブ",
 			activeConfigured: "設定済み",
 			lostTitle: "デバイスが切断されました",
 			lostBody:
 				"デバイスを再接続して、このソースからの配信を再開してください。",
 			audioNone: "オーディオソースが検出されません",
+			audioEmbedded: "埋め込みオーディオ（受信ストリームから）",
 		},
 		modes: {
 			label: "モード",
@@ -1154,6 +1156,7 @@ const ja = {
 			reason: {
 				unsupportedPlatform: "このプラットフォームではサポートされていません",
 				fixedBySource: "選択したソースによって固定されています",
+				unsupportedAtResolution: "この解像度では利用できません",
 				gatewayInactive: "ネットワーク受信ゲートウェイが実行されていません",
 				gatewayNoAddress:
 					"到達可能な LAN またはホットスポットのアドレスがありません",
@@ -1199,17 +1202,11 @@ const ja = {
 			hint: "この機能は将来のアップデートで利用可能になります。",
 			pip: "ピクチャー・イン・ピクチャー",
 			modeFallback: "自動切り替え",
+			embeddedAudio: "埋め込みオーディオ",
 		},
 		fallback: {
 			unavailable: "利用不可",
 			notConfigured: "未設定",
-		},
-		presets: {
-			heading: "モードプリセット",
-			advanced: "詳細 / カスタム",
-			applying: "プリセットを適用中\u2026",
-			applied: "プリセットを適用しました",
-			failed: "プリセットを適用できませんでした",
 		},
 		encoder: {
 			appliesNextStart: "次回の開始時に適用",
@@ -1222,6 +1219,8 @@ const ja = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "選択中",
+			axisDeviceMax: "デバイス最大",
 		},
 	},
 	dialogs: {
@@ -1577,6 +1576,12 @@ const ja = {
 		sshToggleFailed: "Failed to change the SSH server. Please try again.",
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
+	},
+	audio: {
+		sources: {
+			noAudio: "音声なし",
+			pipelineDefault: "パイプラインの既定値",
+		},
 	},
 } satisfies Translation;
 

@@ -88,6 +88,7 @@ function provide(board: PipelineHardwareType) {
 			caps: mockCapabilitiesForBoard(board),
 			schemaVersion: SCHEMA_VERSION,
 		}),
+		fetchEngineDevices: async () => ({ devices: [] }),
 	};
 }
 

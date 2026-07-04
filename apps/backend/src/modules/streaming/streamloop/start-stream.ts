@@ -24,12 +24,15 @@ import {
 	buildSrtlaSendArgs,
 	controlSocketPath,
 } from "@ceralive/srtla-send/sender";
+import type { RuntimeConfig } from "../../../helpers/config-schemas.ts";
 import { getConfig } from "../../config.ts";
 import { setup } from "../../setup.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
 import { asrcProbe } from "../audio.ts";
 import { hasLowMtu } from "../bcrpt.ts";
+import { getLastCapabilities } from "../capabilities.ts";
 import { SRTLA_LISTEN_PORT } from "../constants.ts";
+import { embeddedAudioActive } from "../embedded-audio.ts";
 import { clearStreamProcessExit } from "../health.ts";
 import { srtlaStatsFile, startLinkTelemetry } from "../link-telemetry.ts";
 import type { Pipeline } from "../pipelines.ts";
@@ -37,6 +40,33 @@ import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
 import { resolveProcessError } from "./process-error-patterns.ts";
 import { spawnStreamingLoop } from "./process-runner.ts";
+
+export interface AudioProbeDeps {
+	probe?: (asrc: string) => Promise<string>;
+	networkEmbeddedAudio?: boolean;
+}
+
+export async function maybeProbeAudioSource(
+	pipeline: Pipeline,
+	config: RuntimeConfig,
+	deps: AudioProbeDeps = {},
+): Promise<boolean> {
+	if (!pipeline.supportsAudio || !config.asrc) return true;
+	const networkEmbeddedAudio =
+		deps.networkEmbeddedAudio ?? getLastCapabilities()?.network_embedded_audio;
+	if (embeddedAudioActive(pipeline.audio_kind, networkEmbeddedAudio)) {
+		return true;
+	}
+	const probe = deps.probe ?? asrcProbe;
+	try {
+		await probe(config.asrc);
+		return true;
+	} catch (_err) {
+		// asrcProbe rejects when the operator stops the stream before the audio
+		// interface is found; the stream is already stopped, so signal abort.
+		return false;
+	}
+}
 
 export async function startStream(
 	pipeline: Pipeline,
@@ -51,15 +81,7 @@ export async function startStream(
 	// health rollup tracks this new session (ADR-0005 observe-and-notify).
 	clearStreamProcessExit();
 
-	if (pipeline.supportsAudio && config.asrc) {
-		try {
-			await asrcProbe(config.asrc);
-		} catch (_err) {
-			/* asrcProbe will reject if the user presses Stop before the audio interface is found
-               at this point, the stream is already stopped, so we don't need to do anything here */
-			return;
-		}
-	}
+	if (!(await maybeProbeAudioSource(pipeline, config))) return;
 	const statsFile = srtlaStatsFile();
 	// ADR-001 control socket: telemetry rides the JSON-RPC subscription when the
 	// sender advertises it, with --stats-file as the airtight fallback poll.

@@ -1,7 +1,27 @@
 // @vitest-environment jsdom
-import type { CapabilitiesMessage, CaptureDevice } from "@ceraui/rpc/schemas";
-import { fireEvent, render, within } from "@testing-library/svelte";
+import type {
+	CapabilitiesMessage,
+	CaptureDevice,
+	NetworkIngest,
+	Pipeline,
+	Pipelines,
+} from "@ceraui/rpc/schemas";
+import { fireEvent, render, waitFor, within } from "@testing-library/svelte";
 import { describe, expect, it, vi } from "vitest";
+
+// QR generation is stubbed so the unit never touches the real `qrcode` canvas
+// path; it returns a deterministic data URL the render can assert against.
+vi.mock("$lib/helpers/NetworkHelper", () => ({
+	generateDeviceAccessQr: vi.fn(
+		async (url: string) => `data:image/png;qr(${url})`,
+	),
+}));
+
+const toastSuccess = vi.hoisted(() => vi.fn());
+const toastError = vi.hoisted(() => vi.fn());
+vi.mock("svelte-sonner", () => ({
+	toast: { success: toastSuccess, error: toastError },
+}));
 
 import SourceSection from "./SourceSection.svelte";
 
@@ -140,6 +160,51 @@ describe("SourceSection — audio source single vs multiple (Task 8)", () => {
 	});
 });
 
+describe("SourceSection — configured-but-unavailable audio source (Todo 2)", () => {
+	it("renders the configured value as a visible unavailable entry (no orphan)", () => {
+		const { container } = mount({
+			audioSources: ["No audio", "Pipeline default"],
+			selectedAudioSource: "USB audio",
+		});
+		// Multiple reported sources → selectable; the configured "USB audio" is not
+		// among them but must still be shown, marked unavailable (never an orphan).
+		const select = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-select"]',
+		);
+		expect(select).not.toBeNull();
+		const marker = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-unavailable"]',
+		);
+		expect(marker).not.toBeNull();
+		expect(marker?.textContent).toContain("USB audio");
+	});
+
+	it("shows no unavailable marker when the configured source is reported", () => {
+		const { container } = mount({
+			audioSources: ["USB audio", "Pipeline default"],
+			selectedAudioSource: "USB audio",
+		});
+		expect(
+			container.querySelector('[data-testid="audio-source-unavailable"]'),
+		).toBeNull();
+	});
+
+	it("marks an absent configured source unavailable in the read-only (streaming) branch", () => {
+		const { container } = mount({
+			audioSources: ["No audio", "Pipeline default"],
+			selectedAudioSource: "USB audio",
+			isStreaming: true,
+		});
+		const readonly = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-readonly"]',
+		);
+		expect(readonly?.textContent).toContain("USB audio");
+		expect(
+			container.querySelector('[data-testid="audio-source-unavailable"]'),
+		).not.toBeNull();
+	});
+});
+
 describe("SourceSection — lost device explanation (Task 8)", () => {
 	it("shows an explicit lost-device banner (badge + body) when a device is lost", () => {
 		const lost = DEVICES.map((d) =>
@@ -160,6 +225,261 @@ describe("SourceSection — lost device explanation (Task 8)", () => {
 		expect(
 			container.querySelector('[data-testid="source-lost-banner"]'),
 		).toBeNull();
+	});
+});
+
+function pipeline(overrides: Partial<Pipeline> = {}): Pipeline {
+	return {
+		name: "Pipeline",
+		description: "",
+		supportsAudio: true,
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+		...overrides,
+	};
+}
+
+const INGEST_PIPELINES: Pipelines = {
+	rtmp: pipeline({ name: "RTMP Ingest", requires_gateway: "rtmp" }),
+	srt: pipeline({ name: "SRT Ingest", requires_gateway: "srt" }),
+	hdmi: pipeline({ name: "HDMI" }),
+};
+
+const RTMP_URL = "rtmp://192.168.1.100:1935/publish/live";
+
+const CAPS_AUDIO_RTMP: CapabilitiesMessage = {
+	platform: {
+		supports_h265: true,
+		hardware_accelerated: true,
+		max_resolution: "1080p",
+	},
+	encoder: {
+		codecs: ["h264"],
+		bitrate_range: { min: 500, max: 20000, unit: "kbps" },
+	},
+	sources: [
+		{
+			id: "rtmp",
+			supports_audio: true,
+			supports_resolution_override: false,
+			supports_framerate_override: false,
+			default_resolution: "1080p",
+			default_framerate: 30,
+		},
+	],
+};
+
+describe("SourceSection — network-ingest gateways as first-class sources (Task 12)", () => {
+	it("renders nothing when network_ingest is null (no rows)", () => {
+		const { container } = mount({
+			networkIngest: null,
+			pipelines: INGEST_PIPELINES,
+		});
+		expect(
+			container.querySelector('[data-testid="source-network-ingest"]'),
+		).toBeNull();
+	});
+
+	it("disables a row with a gateway-inactive reason when the service is down", () => {
+		const ingest: NetworkIngest = {
+			rtmp: { service_active: false, url: RTMP_URL },
+			srt: null,
+		};
+		const { container } = mount({
+			networkIngest: ingest,
+			pipelines: INGEST_PIPELINES,
+		});
+		const row = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-network-ingest-select-rtmp"]',
+		);
+		expect(row).not.toBeNull();
+		expect(row?.disabled).toBe(true);
+		expect(row?.getAttribute("title")).toBeTruthy();
+		expect(
+			container.querySelector(
+				'[data-testid="source-network-ingest-reason-rtmp"]',
+			),
+		).not.toBeNull();
+		// SRT is board-absent → no row.
+		expect(
+			container.querySelector('[data-testid="source-network-ingest-row-srt"]'),
+		).toBeNull();
+	});
+
+	it("renders the publish URL + QR for an active gateway and copies it", async () => {
+		const writeText = vi.fn(async () => {});
+		Object.assign(navigator, { clipboard: { writeText } });
+		const ingest: NetworkIngest = {
+			rtmp: { service_active: true, url: RTMP_URL },
+			srt: null,
+		};
+		const { container } = mount({
+			networkIngest: ingest,
+			pipelines: INGEST_PIPELINES,
+			capabilities: CAPS_AUDIO_RTMP,
+		});
+
+		const row = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-network-ingest-select-rtmp"]',
+		);
+		expect(row?.disabled).toBe(false);
+
+		expect(
+			container
+				.querySelector('[data-testid="source-network-ingest-url-rtmp"]')
+				?.textContent?.trim(),
+		).toBe(RTMP_URL);
+
+		await waitFor(() =>
+			expect(
+				container.querySelector(
+					'[data-testid="source-network-ingest-qr-rtmp"]',
+				),
+			).not.toBeNull(),
+		);
+
+		const copy = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-network-ingest-copy-rtmp"]',
+		);
+		if (!copy) throw new Error("copy button not rendered");
+		await fireEvent.click(copy);
+		await waitFor(() => expect(writeText).toHaveBeenCalledWith(RTMP_URL));
+		expect(toastSuccess).toHaveBeenCalled();
+	});
+
+	it("shows an 'includes audio' chip only when caps advertise embedded audio", () => {
+		const ingest: NetworkIngest = {
+			rtmp: { service_active: true, url: RTMP_URL },
+			srt: null,
+		};
+		const withAudio = mount({
+			networkIngest: ingest,
+			pipelines: INGEST_PIPELINES,
+			capabilities: CAPS_AUDIO_RTMP,
+		});
+		expect(
+			withAudio.container.querySelector(
+				'[data-testid="source-network-audio-rtmp"]',
+			),
+		).not.toBeNull();
+
+		const noAudio = mount({
+			networkIngest: ingest,
+			pipelines: INGEST_PIPELINES,
+			capabilities: undefined,
+		});
+		expect(
+			noAudio.container.querySelector(
+				'[data-testid="source-network-audio-rtmp"]',
+			),
+		).toBeNull();
+	});
+
+	it("dispatches onSelectNetworkIngest with the pipeline id when a row is picked", async () => {
+		const onSelectNetworkIngest = vi.fn();
+		const ingest: NetworkIngest = {
+			rtmp: { service_active: true, url: RTMP_URL },
+			srt: null,
+		};
+		const { container } = mount({
+			networkIngest: ingest,
+			pipelines: INGEST_PIPELINES,
+			onSelectNetworkIngest,
+		});
+		const row = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-network-ingest-select-rtmp"]',
+		);
+		if (!row) throw new Error("network-ingest row not rendered");
+		await fireEvent.click(row);
+		expect(onSelectNetworkIngest).toHaveBeenCalledWith("rtmp");
+	});
+});
+
+const CAPS_EMBEDDED_ON: CapabilitiesMessage = {
+	...CAPS_AUDIO_RTMP,
+	network_embedded_audio: true,
+};
+
+describe("SourceSection — embedded network-ingest audio (Task 13)", () => {
+	it("renders the read-only embedded state (no ALSA picker) WITH the capability", () => {
+		const { container } = mount({
+			audioSources: ["USB audio", "Pipeline default"],
+			selectedPipeline: "srt",
+			pipelines: {
+				srt: pipeline({ requires_gateway: "srt", audio_kind: "embedded" }),
+			},
+			capabilities: CAPS_EMBEDDED_ON,
+		});
+		expect(
+			container.querySelector('[data-testid="audio-source-embedded"]'),
+		).not.toBeNull();
+		// The ALSA source controls are absent when the engine routes embedded audio.
+		expect(
+			container.querySelector('[data-testid="audio-source-select"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-source-readonly"]'),
+		).toBeNull();
+	});
+
+	it("keeps the ALSA picker + shows a TD-embedded-audio coming-soon pill WITHOUT the capability", () => {
+		const { container } = mount({
+			audioSources: ["USB audio", "Pipeline default"],
+			selectedPipeline: "srt",
+			pipelines: {
+				srt: pipeline({ requires_gateway: "srt", audio_kind: "embedded" }),
+			},
+			capabilities: CAPS_AUDIO_RTMP,
+		});
+		// Legacy ALSA path preserved — the picker still renders…
+		expect(
+			container.querySelector('[data-testid="audio-source-select"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-source-embedded"]'),
+		).toBeNull();
+		// …plus a calm coming-soon affordance bound to the open register entry.
+		expect(
+			container.querySelector('[data-debt-id="TD-embedded-audio"]'),
+		).not.toBeNull();
+	});
+
+	it("does not treat a selectable pipeline as embedded even with the capability on", () => {
+		const { container } = mount({
+			audioSources: ["USB audio", "Pipeline default"],
+			selectedPipeline: "hdmi",
+			pipelines: { hdmi: pipeline({ audio_kind: "selectable" }) },
+			capabilities: CAPS_EMBEDDED_ON,
+		});
+		expect(
+			container.querySelector('[data-testid="audio-source-embedded"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-debt-id="TD-embedded-audio"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-source-select"]'),
+		).not.toBeNull();
+	});
+});
+
+describe("SourceSection — typed audio-source model (Task 13)", () => {
+	it("consumes the typed audio_sources list (pseudo read-only label)", () => {
+		const { container } = mount({
+			audioSources: ["Pipeline default"],
+			audioSourceList: [
+				{
+					id: "Pipeline default",
+					kind: "pipeline_default",
+					labelKey: "audio.sources.pipelineDefault",
+				},
+			] as AudioSource[],
+		});
+		const readonly = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-readonly"]',
+		);
+		expect(readonly).not.toBeNull();
+		expect(readonly?.textContent).toContain("Pipeline default");
 	});
 });
 

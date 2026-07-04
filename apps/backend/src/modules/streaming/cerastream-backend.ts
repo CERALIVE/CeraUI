@@ -79,6 +79,7 @@ import { getAudioSrcId } from "./audio.ts";
 import { resolveCerastreamError } from "./cerastream-error-mapping.ts";
 import { SRTLA_LISTEN_PORT } from "./constants.ts";
 import { deviceRegistry } from "./devices.ts";
+import { isEmbeddedAudioPipeline } from "./embedded-audio.ts";
 import { validateBitrate } from "./encoder.ts";
 import type {
 	BackendErrorListener,
@@ -127,6 +128,11 @@ export interface CerastreamBackendDeps {
 	// `config.selected_video_input` is absent; injected (not read from the
 	// registry singleton directly) so the start assembly stays unit-testable.
 	getActiveInput: () => string | undefined;
+	// Task 13 embedded-audio gate: true when the pipeline routes embedded
+	// (muxed) network-ingest audio AND the engine advertises it, so the start
+	// assembly omits `audio.device` and the engine routes embedded audio.
+	// Injected so the assembly stays unit-testable without global state.
+	isEmbeddedAudioActive: (pipelineId: string | undefined) => boolean;
 }
 
 function defaultBridge(): CerastreamBridge {
@@ -254,6 +260,7 @@ function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 		configPath: DEFAULT_CONFIG_PATH,
 		logger: defaultLogger,
 		getActiveInput: () => deviceRegistry.getActiveInput(),
+		isEmbeddedAudioActive: isEmbeddedAudioPipeline,
 	};
 }
 
@@ -660,7 +667,10 @@ export class CerastreamBackend implements StreamingBackend {
 	 * form (a UI token is never sent); `config.delay` rides `audio.delay_ms`
 	 * signed-verbatim (clamping is engine-side only, never on this path).
 	 */
-	private encodeInputAudioFields(config: RuntimeConfig): {
+	private encodeInputAudioFields(
+		config: RuntimeConfig,
+		pipelineId: string | undefined,
+	): {
 		input_id?: string;
 		codec?: "h264" | "h265";
 		resolution?: string;
@@ -668,8 +678,13 @@ export class CerastreamBackend implements StreamingBackend {
 		audio?: { device?: string; codec?: string; delay_ms?: number };
 	} {
 		const inputId = config.selected_video_input ?? this.deps.getActiveInput();
+		// Embedded network-ingest audio: when the engine routes the incoming
+		// stream's muxed audio, no ALSA device is used — omit `audio.device` so the
+		// engine takes the embedded path instead of the (unused) selectable one.
 		const audioDevice =
-			config.asrc !== undefined ? getAudioSrcId(config.asrc) : undefined;
+			config.asrc !== undefined && !this.deps.isEmbeddedAudioActive(pipelineId)
+				? getAudioSrcId(config.asrc)
+				: undefined;
 		const audio = {
 			...(audioDevice !== undefined ? { device: audioDevice } : {}),
 			...(config.acodec !== undefined ? { codec: config.acodec } : {}),
@@ -716,7 +731,7 @@ export class CerastreamBackend implements StreamingBackend {
 				max_bitrate: config.max_br ?? DEFAULT_MAX_BITRATE,
 				balancer: config.balancer ?? DEFAULT_BALANCER,
 			},
-			...this.encodeInputAudioFields(config),
+			...this.encodeInputAudioFields(config, config.pipeline ?? opts.pipeline),
 		});
 	}
 
@@ -733,7 +748,7 @@ export class CerastreamBackend implements StreamingBackend {
 				max_bitrate: config.max_br ?? DEFAULT_MAX_BITRATE,
 				balancer: config.balancer ?? DEFAULT_BALANCER,
 			},
-			...this.encodeInputAudioFields(config),
+			...this.encodeInputAudioFields(config, config.pipeline),
 		};
 	}
 

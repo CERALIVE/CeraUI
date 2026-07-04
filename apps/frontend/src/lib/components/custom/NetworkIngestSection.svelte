@@ -51,10 +51,7 @@ import {
 	markFieldApplying,
 	markFieldFailed,
 } from '$lib/rpc/field-sync-state.svelte';
-import {
-	PIPELINE_GATEWAY_NO_ADDRESS,
-	pipelineAvailability,
-} from '$lib/streaming/pipelineAvailability';
+import { deriveNetworkIngestRows } from '$lib/streaming/networkIngestRows';
 
 interface Props {
 	/** `status.network_ingest` — a `null`/absent protocol renders nothing. */
@@ -77,23 +74,6 @@ let {
 /** The field key for the per-field-sync lock — a config field, not a status field. */
 const PIPELINE_FIELD = 'pipeline';
 
-/** Protocols in display order; each renders only when its status entry is non-null. */
-const PROTOCOL_ORDER: readonly RequiresGateway[] = ['rtmp', 'srt'];
-
-/**
- * Resolve the pipeline id that publishes via `protocol`: the registry entry whose
- * `requires_gateway === protocol` (the pipeline id equals the source id by
- * contract, so fall back to the protocol key when the registry hasn't loaded).
- */
-function pipelineIdFor(protocol: RequiresGateway): string {
-	if (pipelines) {
-		for (const [id, pipeline] of Object.entries(pipelines)) {
-			if (pipeline.requires_gateway === protocol) return id;
-		}
-	}
-	return protocol;
-}
-
 interface IngestRow {
 	protocol: RequiresGateway;
 	pipelineId: string;
@@ -114,60 +94,46 @@ interface IngestRow {
 	showInstructions: boolean;
 }
 
-const rows = $derived.by<IngestRow[]>(() => {
-	if (!networkIngest) return [];
-	const out: IngestRow[] = [];
-	for (const protocol of PROTOCOL_ORDER) {
-		const entry = networkIngest[protocol];
-		// Absent (null) ⇒ the board doesn't offer this source: render nothing.
-		if (!entry) continue;
-		const pipelineId = pipelineIdFor(protocol);
-		const serviceActive = entry.service_active;
-		const label = VIDEO_SOURCE_LABELS[protocol] ?? protocol;
-		// Gateway-availability is the ONE shared rule (Todo 19): route it through
-		// pipelineAvailability instead of re-deriving `!service_active`/`url` inline.
-		// The row is definitionally a gateway source (rtmp/srt), so fall back to a
-		// synthetic gateway pipeline if the registry hasn't loaded — fail-safe.
-		const availability = pipelineAvailability(
-			pipelines?.[pipelineId] ?? { requires_gateway: protocol },
-			networkIngest,
-		);
-		const gatewayBlocked = !availability.available;
-		// The addressless state (gateway up, no LAN/hotspot address) carries a
-		// DISTINCT reason so the operator gets "join a LAN / enable hotspot", not
-		// "start the service".
-		const addressless =
-			gatewayBlocked && availability.reason === PIPELINE_GATEWAY_NO_ADDRESS;
-		const disabled = gatewayBlocked || isStreaming;
+// The structural derivation (protocol order, pipeline id, availability verdict,
+// addressless) is SHARED with SourceSection via `deriveNetworkIngestRows` (Task 12)
+// so both surfaces read the SAME truth — routed through pipelineAvailability, never
+// re-derived inline. This component maps that structural row onto its own i18n copy.
+const rows = $derived.by<IngestRow[]>(() =>
+	deriveNetworkIngestRows({
+		networkIngest,
+		pipelines,
+		selectedPipeline,
+		isStreaming,
+	}).map((row) => {
+		const label = VIDEO_SOURCE_LABELS[row.protocol] ?? row.protocol;
 		let reason = '';
-		if (addressless) {
+		if (row.addressless) {
 			reason = $LL.live.networkIngest.noAddress({ protocol: label });
-		} else if (gatewayBlocked) {
+		} else if (row.gatewayBlocked) {
 			reason = $LL.live.networkIngest.serviceInactive({ protocol: label });
-		} else if (isStreaming) {
+		} else if (row.streamingLocked) {
 			reason = $LL.live.networkIngest.streamingLocked();
 		}
-		out.push({
-			protocol,
-			pipelineId,
+		return {
+			protocol: row.protocol,
+			pipelineId: row.pipelineId,
 			label,
-			url: entry.url,
-			serviceActive,
-			selected: selectedPipeline === pipelineId,
-			disabled,
+			url: row.url,
+			serviceActive: row.serviceActive,
+			selected: row.selected,
+			disabled: row.disabled,
 			reason,
-			statusLabel: addressless
+			statusLabel: row.addressless
 				? $LL.live.networkIngest.noAddressStatus()
-				: serviceActive
+				: row.serviceActive
 					? $LL.live.networkIngest.active()
 					: $LL.live.networkIngest.inactive(),
-			statusWarn: addressless || !serviceActive,
+			statusWarn: row.addressless || !row.serviceActive,
 			// No url ⇒ nothing to encode into a QR or copy: suppress the panel.
-			showInstructions: entry.url !== null,
-		});
-	}
-	return out;
-});
+			showInstructions: row.url !== null,
+		};
+	}),
+);
 
 // ── Selection dispatch (per-field-sync lock on the `pipeline` field) ──
 async function handleSelect(row: IngestRow): Promise<void> {

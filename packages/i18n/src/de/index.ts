@@ -416,6 +416,7 @@ const de = {
 			copy: "Adresse kopieren",
 			copied: "Adresse kopiert",
 			copyFailed: "Adresse konnte nicht kopiert werden.",
+			includesAudio: "Enthält Audio",
 		},
 		preview: {
 			title: "Vorschau",
@@ -522,13 +523,14 @@ const de = {
 			none: "Keine Quelle ausgewählt",
 			select: "Quelle auswählen",
 			capabilities: "Fähigkeiten",
-			deviceMax: "Geräte-Maximum",
+			sourceMax: "Quellen-Maximum",
 			activeLive: "Live",
 			activeConfigured: "Konfiguriert",
 			lostTitle: "Gerät getrennt",
 			lostBody:
 				"Schließen Sie das Gerät wieder an, um das Streaming von dieser Quelle fortzusetzen.",
 			audioNone: "Keine Audioquelle erkannt",
+			audioEmbedded: "Eingebetteter Ton (aus dem eingehenden Stream)",
 		},
 		modes: {
 			label: "Modus",
@@ -539,6 +541,7 @@ const de = {
 			reason: {
 				unsupportedPlatform: "Auf dieser Plattform nicht unterstützt",
 				fixedBySource: "Durch die gewählte Quelle festgelegt",
+				unsupportedAtResolution: "Bei dieser Auflösung nicht verfügbar",
 				gatewayInactive: "Netzwerk-Ingest-Gateway läuft nicht",
 				gatewayNoAddress: "Keine erreichbare LAN- oder Hotspot-Adresse",
 			},
@@ -583,17 +586,11 @@ const de = {
 			hint: "Diese Funktion wird in einem zukünftigen Update verfügbar sein.",
 			pip: "Bild-in-Bild",
 			modeFallback: "Automatische Umschaltung",
+			embeddedAudio: "Eingebetteter Ton",
 		},
 		fallback: {
 			unavailable: "Nicht verfügbar",
 			notConfigured: "Nicht konfiguriert",
-		},
-		presets: {
-			heading: "Modus-Voreinstellungen",
-			advanced: "Erweitert / Benutzerdefiniert",
-			applying: "Voreinstellung wird angewendet\u2026",
-			applied: "Voreinstellung angewendet",
-			failed: "Voreinstellung konnte nicht angewendet werden",
 		},
 		encoder: {
 			appliesNextStart: "Wird beim nächsten Start übernommen",
@@ -606,6 +603,8 @@ const de = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			axisSelected: "Ausgewählt",
+			axisDeviceMax: "Geräte-Maximum",
 		},
 	},
 	dialogs: {
@@ -1598,6 +1597,12 @@ const de = {
 		sshToggleFailed: "Failed to change the SSH server. Please try again.",
 		sshResetFailed: "Failed to reset the SSH password. Please try again.",
 		updateFailed: "Failed to start the software update. Please try again.",
+	},
+	audio: {
+		sources: {
+			noAudio: "Kein Audio",
+			pipelineDefault: "Pipeline-Standard",
+		},
 	},
 } satisfies Translation;
 

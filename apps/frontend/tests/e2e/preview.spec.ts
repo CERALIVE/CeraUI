@@ -45,9 +45,25 @@ const FIXTURE_CODEC = 'avc1.42c00d';
 
 let pageWs: WebSocketRoute | null = null;
 
-/** Proxy the backend WS, force is_streaming:false so the idle Live DOM is stable. */
-async function routeBackend(page: Page): Promise<void> {
+/**
+ * Proxy the backend WS, force is_streaming:false so the idle Live DOM is stable.
+ *
+ * Single-origin preview proxy (Task 20): PreviewCanvas mints a token over the RPC
+ * socket, then dials the SAME backend origin at `/preview?token=…`, so the preview
+ * socket matches THIS route too. With no `onPreview`, that leg proxies to the real
+ * mock-preview upstream (the WebCodecs-tier decode path). The MSE-tier block passes
+ * an `onPreview` to fake it in-page instead — the real upstream serves only
+ * WebCodecs framing.
+ */
+async function routeBackend(
+	page: Page,
+	onPreview?: (ws: WebSocketRoute) => void,
+): Promise<void> {
 	await page.routeWebSocket(/:(3002|31\d\d)/, (ws) => {
+		if (onPreview && ws.url().includes('/preview')) {
+			onPreview(ws);
+			return;
+		}
 		pageWs = ws;
 		const server = ws.connectToServer();
 		ws.onMessage((m) => server.send(m));
@@ -171,10 +187,10 @@ test.describe('PreviewCanvas — forced MSE tier', () => {
 			// biome-ignore lint/performance/noDelete: force the MSE fallback path.
 			delete (window as { VideoDecoder?: unknown }).VideoDecoder;
 		});
-		await routeBackend(page);
-		// The mock serves WebCodecs framing only, so a spec-level route supplies an
-		// MSE codec-config to prove the fallback path processes it.
-		await page.routeWebSocket(/:9997/, (ws) => {
+		// The real mock-preview upstream serves WebCodecs framing only, so fake the
+		// `/preview` leg here to supply an MSE codec-config and capture the client's
+		// start-handshake tier.
+		await routeBackend(page, (ws) => {
 			ws.onMessage((message) => {
 				const text = typeof message === 'string' ? message : message.toString();
 				let parsed: { action?: string; tier?: string };

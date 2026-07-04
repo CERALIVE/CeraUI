@@ -13,7 +13,10 @@ import {
 	buildRelaysMsg,
 	getRelays,
 } from "../../modules/remote/remote-relays.ts";
-import { getAudioDevices } from "../../modules/streaming/audio.ts";
+import {
+	deriveAudioSources,
+	getAudioDevices,
+} from "../../modules/streaming/audio.ts";
 import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { getDevicesMessage } from "../../modules/streaming/devices.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
@@ -58,6 +61,7 @@ export const getStatusProcedure = authedProcedure
 			wifi: wifiBuildMsg(),
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),
+			audio_sources: deriveAudioSources(),
 			network_ingest: getNetworkIngestInfo(),
 		};
 	});
@@ -93,6 +97,7 @@ export function buildInitialStatus() {
 			wifi: wifiBuildMsg(),
 			modems: buildModemsMessage(),
 			asrcs: Object.keys(getAudioDevices()),
+			audio_sources: deriveAudioSources(),
 			network_ingest: getNetworkIngestInfo(),
 		},
 		netif: netIfBuildMsg(),
