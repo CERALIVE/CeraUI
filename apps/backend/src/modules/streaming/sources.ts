@@ -63,6 +63,7 @@ import { framerateSchema, resolutionSchema } from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
 import { getNetworkIngestInfo } from "../network/network-ingest.ts";
+import type { EngineAudioDevice } from "./audio-naming.ts";
 import {
 	defaultFetchEngineDevices,
 	getLastCapabilities,
@@ -332,6 +333,15 @@ export function resolveSourceRouting(
 
 let engineDeviceCache: CaptureDevice[] = [];
 
+// The parallel AUDIO cache (T4). The video cache above overlays into
+// `buildSources`; audio devices are DELIBERATELY excluded from that video list,
+// so their `list-devices` entries would otherwise be discarded. This cache
+// RETAINS them (with the `alsa_card_id` join key) for the audio-naming join in
+// `audio.ts`. It uses the dedicated `EngineAudioDevice` type — NEVER the
+// `@ceraui/rpc` `CaptureDevice`, `fromEngineDevice()`, or the video whitelist
+// copy — because those all drop the join key. `buildSources` never reads it.
+let engineAudioDeviceCache: EngineAudioDevice[] = [];
+
 /** Injected fetcher so the cache is exercisable without a real engine. */
 export interface EngineDeviceCacheDeps {
 	fetchEngineDevices: () => Promise<ListDevicesResult>;
@@ -344,6 +354,11 @@ const defaultEngineDeviceCacheDeps: EngineDeviceCacheDeps = {
 /** The last-known engine device list (synchronous read; may be empty). */
 export function getEngineDeviceCache(): CaptureDevice[] {
 	return engineDeviceCache;
+}
+
+/** The last-known engine `list-devices` AUDIO entries (synchronous; may be empty). */
+export function getEngineAudioDevices(): EngineAudioDevice[] {
+	return engineAudioDeviceCache;
 }
 
 /**
@@ -368,6 +383,21 @@ export async function refreshEngineDeviceCache(
 				caps: d.caps,
 			}),
 		);
+		// Parallel AUDIO cache (T4): an EXPLICIT field copy of the audio entries
+		// that PRESERVES the `alsa_card_id` join key verbatim. It is read
+		// defensively (the pre-T18 binding schema strips it → `undefined`; the
+		// bumped schema retains it), and it is NOT routed through the video
+		// whitelist copy above or `fromEngineDevice()`, both of which drop it.
+		engineAudioDeviceCache = result.devices
+			.filter((d) => d.media_class === "audio")
+			.map((d) => {
+				const alsaCardId = (d as { alsa_card_id?: string }).alsa_card_id;
+				return {
+					input_id: d.input_id,
+					display_name: d.display_name,
+					...(alsaCardId !== undefined ? { alsa_card_id: alsaCardId } : {}),
+				};
+			});
 	} catch (err) {
 		logger.debug(
 			"sources: engine device fetch failed; retaining last-known device cache",
@@ -377,9 +407,10 @@ export async function refreshEngineDeviceCache(
 	return engineDeviceCache;
 }
 
-/** Drop the cached engine device list (test isolation). */
+/** Drop the cached engine device lists (video + audio) for test isolation. */
 export function resetEngineDeviceCache(): void {
 	engineDeviceCache = [];
+	engineAudioDeviceCache = [];
 }
 
 // ─── Broadcast wiring (rides the existing `sources` bus, no new endpoint) ─────
