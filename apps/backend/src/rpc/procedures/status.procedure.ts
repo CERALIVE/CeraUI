@@ -21,6 +21,7 @@ import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { getDevicesMessage } from "../../modules/streaming/devices.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import { getPipelinesMessage } from "../../modules/streaming/pipelines.ts";
+import { getSourcesMessage } from "../../modules/streaming/sources.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
@@ -105,6 +106,7 @@ export function buildInitialStatus() {
 		revisions: getRevisions(),
 		acodecs: AUDIO_CODECS,
 		devices: getDevicesMessage(),
+		sources: getSourcesMessage(),
 		capabilities: getLastCapabilities(),
 	};
 }

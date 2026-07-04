@@ -63,6 +63,7 @@ import {
 	VALID_HARDWARE_TYPES,
 	validatePipelineOverrides,
 } from "../../modules/streaming/pipelines.ts";
+import { broadcastSources } from "../../modules/streaming/sources.ts";
 import {
 	getIsStreaming,
 	updateStatus,
@@ -489,6 +490,7 @@ export const setMockHardwareProcedure = authedProcedure
 			// Reload pipelines and broadcast to all clients
 			await initPipelines();
 			broadcastMsg("pipelines", getPipelinesMessage());
+			broadcastSources();
 			return {
 				success: true,
 				hardware: input.hardware,

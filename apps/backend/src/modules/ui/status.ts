@@ -33,6 +33,7 @@ import {
 } from "../streaming/link-telemetry.ts";
 import { AUDIO_CODECS } from "../streaming/pipeline-sources.ts";
 import { getPipelinesMessage } from "../streaming/pipelines.ts";
+import { getSourcesMessage } from "../streaming/sources.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import { getRevisions } from "../system/revisions.ts";
 import { getSensors } from "../system/sensors.ts";
@@ -84,6 +85,7 @@ export function sendInitialStatus(conn: WebSocket) {
 	const config = getConfig();
 	conn.send(buildMsg("config", config));
 	conn.send(buildMsg("pipelines", getPipelinesMessage()));
+	conn.send(buildMsg("sources", getSourcesMessage()));
 	if (getRelays()) conn.send(buildMsg("relays", buildRelaysMsg()));
 	sendStatus(conn);
 	conn.send(buildMsg("netif", netIfBuildMsg()));

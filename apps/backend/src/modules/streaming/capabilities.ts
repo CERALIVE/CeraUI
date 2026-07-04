@@ -232,7 +232,7 @@ async function defaultFetchEngineCapabilities(): Promise<EngineCapabilitiesSnaps
  * seam has no `listDevices`, and the concrete backend's passthrough throws when
  * no stream is active, so a fresh probe is the only idle-safe path.
  */
-async function defaultFetchEngineDevices(): Promise<ListDevicesResult> {
+export async function defaultFetchEngineDevices(): Promise<ListDevicesResult> {
 	const { setup } = await import("../setup.ts");
 	const connectOptions: ConnectOptions = setup.cerastream_socket
 		? { socketPath: setup.cerastream_socket }
@@ -267,7 +267,7 @@ function defaultDeps(): CapabilitiesServiceDeps {
  * stays distinct; framerates are normalized to legal rungs (non-rungs dropped,
  * fail-closed) and de-duplicated in first-seen order.
  */
-function groupDeviceCaps(caps: readonly CaptureCap[]): DeviceMode[] {
+export function groupDeviceCaps(caps: readonly CaptureCap[]): DeviceMode[] {
 	const modes: DeviceMode[] = [];
 	const byKey = new Map<string, DeviceMode>();
 	for (const cap of caps) {
