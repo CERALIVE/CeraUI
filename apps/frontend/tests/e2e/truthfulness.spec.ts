@@ -124,38 +124,16 @@ function findOrphanDebtIds(
 
 // ── Test-owned proxy control state (reset per test in beforeEach) ────────────
 let pageWs: WebSocketRoute | null = null;
-// Rewrite every incoming `status` frame's is_streaming to `streamingFlag` so the
-// mock's own broadcast cannot settle the streaming state out from under a test.
-let controlStreaming = false;
-let streamingFlag = false;
-// Drop the backend's own `devices` / `capabilities` echoes so the INJECTED
-// snapshots are authoritative — the same rationale source-overhaul uses for
-// `devices` (the backend's multi-modem-wifi profile reports its own capture
-// device + a default caps snapshot on connect, which would otherwise race the
-// test-injected truth).
+// Drop the backend's own `devices` / `capabilities` / `sources` echoes so the
+// INJECTED snapshots are authoritative — the backend's multi-modem-wifi profile
+// reports its own capture device + a default caps/sources snapshot on connect,
+// which would otherwise race the test-injected truth.
 let dropServerDevices = false;
 let dropServerCapabilities = false;
-// Hold the next `streaming.switchAudio` RPC in-flight (captures its id) so the
-// per-field `applying` window is observable and the audio switch never mutates
-// the shared mock backend; the proxy owns its result.
-let holdSwitchAudio = false;
-let heldSwitchAudioId: string | number | null = null;
+let dropServerSources = false;
 
 function send(payload: unknown): void {
 	pageWs?.send(JSON.stringify(payload));
-}
-
-/** Fake-resolve a held switchAudio RPC as a successful gapless switch. */
-function resolveHeldSwitchAudio(gapMs: number, input: string): void {
-	if (heldSwitchAudioId !== null) {
-		pageWs?.send(
-			JSON.stringify({
-				id: heldSwitchAudioId,
-				result: { success: true, active_audio_input: input, gap_ms: gapMs },
-			}),
-		);
-		heldSwitchAudioId = null;
-	}
 }
 
 // A configured custom server keeps LiveView out of its empty state so the source
@@ -192,34 +170,6 @@ const GENERIC_PIPELINES = {
 		},
 	},
 };
-
-type Device = {
-	input_id: string;
-	device_path: string;
-	display_name: string;
-	media_class: "video" | "audio";
-	kind: string;
-	lost?: boolean;
-};
-
-const HDMI: Device = {
-	input_id: "video0",
-	device_path: "/dev/video0",
-	display_name: "HDMI Camera",
-	media_class: "video",
-	kind: "hdmi",
-};
-const MIC: Device = {
-	input_id: "audio:mic0",
-	device_path: "hw:1,0",
-	display_name: "USB Microphone",
-	media_class: "audio",
-	kind: "audio",
-};
-
-function sendDevices(activeInput: string, devices: Device[]): void {
-	send({ devices: { engine: "cerastream", active_input: activeInput, devices } });
-}
 
 /**
  * A schema-valid `capabilities` snapshot; `extra` shallow-overrides the base to
@@ -307,75 +257,97 @@ const SRC_UVC_720 = {
 	default_framerate: 30,
 };
 
-// Per-device capture modes keyed by list-devices input_id (Todo 5/10). Phase 1
-// offers only 1080p@30; phase 2 adds 720p and 60fps — so the Encoder resolution
-// AND framerate options genuinely flip enabled ⇄ disabled-with-reason (Todo 10).
-const MODES_1080_30 = {
-	video0: {
-		kind: "hdmi",
-		modes: [{ width: 1920, height: 1080, framerates: [30] }],
-	},
-};
-const MODES_720_1080_30_60 = {
-	video0: {
-		kind: "hdmi",
-		modes: [
-			{ width: 1280, height: 720, framerates: [30, 60] },
-			{ width: 1920, height: 1080, framerates: [30, 60] },
-		],
-	},
+// ── Unified device-first source fixtures (Wave 4 — the `sources` broadcast) ──
+// SourceSection renders `getSources()` (the folded `sources` broadcast), NOT the
+// legacy `devices`/`pipelines` broadcasts, so every source-list assertion injects
+// a StreamSource[] and the beforeEach drops the backend's own `sources` echo.
+type Mode = { width: number; height: number; framerates: number[] };
+
+// A UVC dongle whose REAL name contains "HDMI" but whose engine-reported `kind` is
+// `uvc_h264` — the exact T4 regression fixture. Its row must show the displayName
+// under a USB-family kind badge, NEVER the coarse "HDMI Capture" pipeline label.
+const RODE_DISPLAY_NAME = "RØDE HDMI to USB-C: RØDE HDMI";
+function captureSource(
+	id: string,
+	kind: string,
+	pipelineId: string,
+	displayName: string,
+	modes: Mode[] = [{ width: 1920, height: 1080, framerates: [30, 60] }],
+): Record<string, unknown> {
+	return {
+		origin: "capture",
+		id,
+		pipelineId,
+		kind,
+		displayName,
+		devicePath: `/dev/${id}`,
+		modes,
+		supportsAudio: kind === "hdmi",
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+		defaultResolution: "1080p",
+		defaultFramerate: 30,
+		audioKind: kind === "hdmi" ? "selectable" : "none",
+		available: true,
+	};
+}
+
+const SRC_RODE = captureSource("video-usb", "uvc_h264", "libuvch264", RODE_DISPLAY_NAME);
+const SRC_HDMI_CAP = captureSource("video-hdmi", "hdmi", "hdmi", "Rockchip HDMI-RX");
+
+const SRC_TEST: Record<string, unknown> = {
+	origin: "virtual",
+	id: "test",
+	pipelineId: "test",
+	labelKey: "settings.sources.test",
+	modes: [],
+	supportsAudio: false,
+	supportsResolutionOverride: false,
+	supportsFramerateOverride: false,
+	audioKind: "none",
+	available: true,
 };
 
-// A software board (generic → 1080p platform ceiling) exposing an rtmp gateway
-// pipeline (embedded audio) beside the direct HDMI capture — the shape the
-// `pipelines` broadcast carries for the network-ingest source rows (Todo 12).
-const PIPELINES_WITH_RTMP = {
-	pipelines: {
-		hardware: "generic",
-		pipelines: {
-			hdmi: GENERIC_PIPELINES.pipelines.pipelines.hdmi,
-			rtmp: {
-				name: "RTMP Ingest",
-				description: "LAN RTMP publish source",
-				supportsAudio: true,
-				supportsResolutionOverride: false,
-				supportsFramerateOverride: false,
-				requires_gateway: "rtmp",
-				audio_kind: "embedded",
-			},
-		},
-	},
-};
+// A network rtmp/srt ingest source: `available` follows the gateway; when it is
+// down the row is disabled-with-reason (never hidden, never a coming-soon pill).
+function networkSource(
+	proto: "rtmp" | "srt",
+	active: boolean,
+	embedded = true,
+): Record<string, unknown> {
+	return {
+		origin: "network",
+		id: proto,
+		pipelineId: proto,
+		labelKey: `settings.sources.${proto}`,
+		requiresGateway: proto,
+		url: active ? `${proto}://192.168.1.100/publish/live` : null,
+		modes: [],
+		supportsAudio: embedded,
+		supportsResolutionOverride: false,
+		supportsFramerateOverride: false,
+		audioKind: embedded ? "embedded" : "none",
+		available: active,
+		...(active ? {} : { unavailableReason: "live.education.reason.gatewayInactive" }),
+	};
+}
 
-// A board exposing an SRT gateway pipeline whose audio is EMBEDDED in the
-// incoming stream (Todo 13) — with `network_embedded_audio` advertised, the audio
-// picker collapses to the read-only "Embedded audio" state.
-const PIPELINES_WITH_SRT = {
-	pipelines: {
-		hardware: "generic",
-		pipelines: {
-			hdmi: GENERIC_PIPELINES.pipelines.pipelines.hdmi,
-			srt: {
-				name: "SRT Ingest",
-				description: "LAN SRT publish source",
-				supportsAudio: true,
-				supportsResolutionOverride: false,
-				supportsFramerateOverride: false,
-				requires_gateway: "srt",
-				audio_kind: "embedded",
-			},
-		},
-	},
-};
+// Inject the folded `sources` broadcast (drops the backend's own — see beforeEach).
+function sendSources(sources: Record<string, unknown>[]): void {
+	send({ sources: { hardware: "rk3588", sources } });
+}
 
-// Inject a full-caps snapshot carrying per-device modes (rides the capabilities
-// broadcast, Todo 5) so the Encoder axes narrow to the real device envelope.
-function sendCapsWithModes(deviceModes: Record<string, unknown>): void {
-	sendCapabilities({
-		audio_live_switch: true,
-		latency_range: { min: 2000, default: 4000, max: 8000 },
-		device_modes: deviceModes,
-	});
+// GoLiveCard collapses to a thin ready bar when every readiness gate is green,
+// hiding the migrated config rows behind a "show checks" button. Reveal them
+// (idempotent, race-safe) before opening a config dialog.
+async function openConfigDialog(page: Page, testId: string): Promise<void> {
+	const trigger = page.getByTestId(testId);
+	const expand = page.getByTestId("go-live-expand");
+	await expect(async () => {
+		if (await expand.isVisible().catch(() => false)) await expand.click();
+		await expect(trigger).toBeVisible({ timeout: 1_000 });
+	}).toPass({ timeout: 15_000 });
+	await trigger.click();
 }
 
 test.describe("Capability truthfulness (functional)", () => {
@@ -386,52 +358,26 @@ test.describe("Capability truthfulness (functional)", () => {
 		);
 
 		pageWs = null;
-		controlStreaming = false;
-		streamingFlag = false;
 		// Injected caps + device lists are authoritative for every test here (see
 		// header contract): drop the backend's own echoes so only the test-injected
 		// snapshots ever populate the capability-gated surfaces.
 		dropServerDevices = true;
 		dropServerCapabilities = true;
-		holdSwitchAudio = false;
-		heldSwitchAudioId = null;
+		dropServerSources = true;
 
 		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 
-			ws.onMessage((m) => {
-				if (holdSwitchAudio) {
-					const text = typeof m === "string" ? m : m.toString();
-					try {
-						const frame = JSON.parse(text) as {
-							id?: string | number;
-							path?: unknown;
-						};
-						const rpc = Array.isArray(frame.path) ? frame.path.join(".") : null;
-						if (rpc === "streaming.switchAudio") {
-							heldSwitchAudioId = frame.id ?? null;
-							return; // hold in-flight: the proxy owns the audio-switch result
-						}
-					} catch {
-						/* non-RPC frame */
-					}
-				}
-				server.send(m);
-			});
+			ws.onMessage((m) => server.send(m));
 
 			server.onMessage((m) => {
 				const text = typeof m === "string" ? m : m.toString();
 				try {
-					const frame = JSON.parse(text) as { status?: Record<string, unknown> };
-					if (dropServerDevices && "devices" in (frame as object)) return;
-					if (dropServerCapabilities && "capabilities" in (frame as object))
-						return;
-					if (controlStreaming && frame?.status && typeof frame.status === "object") {
-						frame.status.is_streaming = streamingFlag;
-						ws.send(JSON.stringify(frame));
-						return;
-					}
+					const frame = JSON.parse(text) as object;
+					if (dropServerDevices && "devices" in frame) return;
+					if (dropServerCapabilities && "capabilities" in frame) return;
+					if (dropServerSources && "sources" in frame) return;
 				} catch {
 					/* non-JSON / binary frame */
 				}
@@ -532,89 +478,61 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(srt).toHaveAttribute("role", "note");
 	});
 
-	// ── (a) Audio live-switch is gated off until the engine advertises it ───────
-	test("the audio live-switch flips disabled-with-reason ⇄ enabled with the engine capability", async ({
+	// ── (a) Capture-row label truth — a UVC dongle is never mislabeled HDMI ─────
+	// The Wave-3/4 restructure removed the streaming-only InputPicker (and with it
+	// the live-audio-switch surface — the capability is now unit-tested only). The
+	// truthfulness assertion this slot now carries is the T4 mislabel regression on
+	// the unified device-first Source list: a UVC dongle whose real name contains
+	// "HDMI" but whose engine kind is uvc_h264 must show its REAL name under a USB
+	// kind badge, never the coarse "HDMI Capture" pipeline label.
+	test("a capture source renders its real displayName under a USB kind badge, never the coarse HDMI Capture label", async ({
 		page,
 	}) => {
-		controlStreaming = true;
-		streamingFlag = true;
-		holdSwitchAudio = true;
-
 		serverConfig();
-		// Start WITHOUT audio_live_switch → the gate is off.
-		sendCapabilities();
-		send({ status: { is_streaming: true } });
-		sendDevices("video0", [HDMI, MIC]);
+		sendFullCaps();
+		sendSources([SRC_RODE]);
 
-		const picker = page.getByTestId("input-picker");
-		await expect(picker).toBeVisible({ timeout: 15_000 });
+		const row = page.getByTestId("source-row-video-usb");
+		await expect(row).toBeVisible({ timeout: 15_000 });
+		await expect(row).toHaveAttribute("data-origin", "capture");
 
-		const audioSwitch = picker.locator('[data-switch-input="audio:mic0"]');
-		await expect(audioSwitch).toBeVisible();
-
-		// Capability absent → the live audio Switch is disabled and MUST carry a
-		// non-empty reason (the frontend gate blocks any dispatch).
-		await expect(audioSwitch).toBeDisabled();
-		await expect(audioSwitch).toHaveAttribute("title", /\S/);
-
-		// Engine now advertises audio_live_switch → the SAME control becomes a real,
-		// enabled live switch with no disabled-reason tooltip.
-		sendCapabilities({ audio_live_switch: true });
-		await expect(audioSwitch).toBeEnabled();
-		await expect(audioSwitch).not.toHaveAttribute("title", /.+/);
-
-		// And it truly dispatches: a click sends switchAudio (the proxy captures it)
-		// and surfaces the per-field applying glyph — proving it is not a dead
-		// control that merely LOOKS enabled.
-		await audioSwitch.click();
-		await expect(page.getByText(/switching audio/i)).toBeVisible();
-		expect(heldSwitchAudioId).not.toBeNull();
-		holdSwitchAudio = false;
-		resolveHeldSwitchAudio(12, "audio:mic0");
-		await expect(page.getByText(/audio switched/i).first()).toBeVisible();
+		// The REAL hardware name is shown verbatim…
+		await expect(page.getByTestId("source-row-name-video-usb")).toHaveText(
+			RODE_DISPLAY_NAME,
+		);
+		// …classified by its engine kind (uvc_h264 → USB family), NOT hdmi…
+		const kindBadge = page.getByTestId("source-kind-video-usb");
+		await expect(kindBadge).toHaveAttribute("data-source-kind", "uvc_h264");
+		await expect(kindBadge).toHaveText("USB");
+		// …and the coarse "HDMI Capture" pipeline label never appears on the row.
+		await expect(row).not.toContainText("HDMI Capture");
 	});
 
-	// ── (a) Network-ingest rows: disabled-with-reason MUST carry a title ────────
-	test("a network-ingest source row flips disabled-with-reason ⇄ selectable with its gateway", async ({
+	// ── (c) Network-ingest rows: disabled-with-reason ⇄ selectable via gateway ──
+	test("an rtmp network-ingest source row flips disabled-with-reason ⇄ selectable with its gateway", async ({
 		page,
 	}) => {
 		serverConfig();
-		send(GENERIC_PIPELINES);
 		sendFullCaps();
-		// RTMP gateway present but its systemd service is DOWN → the row is a real
-		// source that is temporarily unavailable, so it renders disabled with a
-		// reason (never hidden, never a coming-soon/data-debt treatment).
-		send({
-			status: {
-				network_ingest: {
-					rtmp: {
-						service_active: false,
-						url: "rtmp://192.168.1.100:1935/publish/live",
-					},
-					srt: null,
-				},
-			},
-		});
+		// Gateway DOWN → available:false → the row is a real source rendered disabled
+		// with a non-empty reason (never hidden, never a coming-soon/debt treatment).
+		sendSources([SRC_HDMI_CAP, networkSource("rtmp", false)]);
 
-		const row = page.getByTestId("network-ingest-select-rtmp");
+		const row = page.getByTestId("source-network-ingest-select-rtmp");
 		await expect(row).toBeVisible({ timeout: 15_000 });
 		await expect(row).toBeDisabled();
 		await expect(row).toHaveAttribute("title", /\S/);
+		await expect(
+			page.getByTestId("source-network-ingest-reason-rtmp"),
+		).toBeVisible();
 
-		// Gateway comes up → the SAME row becomes selectable and drops its reason.
-		send({
-			status: {
-				network_ingest: {
-					rtmp: {
-						service_active: true,
-						url: "rtmp://192.168.1.100:1935/publish/live",
-					},
-					srt: null,
-				},
-			},
-		});
+		// Gateway UP → available:true → the SAME row becomes selectable, no reason.
+		sendSources([SRC_HDMI_CAP, networkSource("rtmp", true)]);
 		await expect(row).toBeEnabled();
 		await expect(row).not.toHaveAttribute("title", /.+/);
+		await expect(
+			page.getByTestId("source-network-ingest-reason-rtmp"),
+		).toHaveCount(0);
 	});
 
 	// ── (b) Every rendered data-debt-id maps to an OPEN register entry ──────────
@@ -757,21 +675,27 @@ test.describe("Capability truthfulness (functional)", () => {
 	test("encoder resolution and framerate options flip enabled ⇄ disabled-with-reason with injected device_modes", async ({
 		page,
 	}) => {
+		// EncoderDialog is now source-tolerant (T14): the axes come from the ACTIVE
+		// StreamSource's own `.modes` (keyed by config.source), NOT a `#encoder-source`
+		// picker (removed) or the coarse `capabilities.device_modes` broadcast. So the
+		// device envelope is injected on the capture source and switched via `sources`.
 		serverConfig({
 			pipeline: "hdmi",
-			selected_video_input: "video0",
+			source: "video-hdmi",
 			resolution: "1080p",
 			framerate: 30,
 		});
 		send(GENERIC_PIPELINES);
-		sendCapsWithModes(MODES_1080_30);
+		sendFullCaps();
+		sendSources([
+			captureSource("video-hdmi", "hdmi", "hdmi", "Rockchip HDMI-RX", [
+				{ width: 1920, height: 1080, framerates: [30] },
+			]),
+		]);
 
-		await page.getByTestId("open-encoder-dialog").click();
+		await openConfigDialog(page, "open-encoder-dialog");
 		const dialog = page.getByRole("dialog", { name: "Encoder Settings" });
 		await expect(dialog).toBeVisible({ timeout: 15_000 });
-
-		await page.locator("#encoder-source").click();
-		await page.locator('[role="option"][data-value="hdmi"]').click();
 
 		const res720 = page.locator(
 			'[data-testid="resolution-option"][data-value="720p"]',
@@ -802,9 +726,14 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(fps30).not.toHaveAttribute("aria-disabled", "true");
 		await page.keyboard.press("Escape");
 
-		// PHASE 2 — the device now advertises 720p AND 1080p at 30 AND 60fps: the
-		// SAME options genuinely re-enable, proving the DOM tracks the injected modes.
-		sendCapsWithModes(MODES_720_1080_30_60);
+		// PHASE 2 — the source now advertises 720p AND 1080p at 30 AND 60fps: the
+		// SAME options genuinely re-enable, proving the DOM tracks the source's modes.
+		sendSources([
+			captureSource("video-hdmi", "hdmi", "hdmi", "Rockchip HDMI-RX", [
+				{ width: 1280, height: 720, framerates: [30, 60] },
+				{ width: 1920, height: 1080, framerates: [30, 60] },
+			]),
+		]);
 
 		await page.locator("#encoder-resolution").click();
 		await expect(res720).not.toHaveAttribute("aria-disabled", "true");
@@ -841,77 +770,32 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(page.getByTestId("cap-audio")).toHaveCount(0);
 	});
 
-	// ── (Todo 12) Network-ingest rows honest across gateway + embedded-audio caps ─
-	test("network-ingest source rows stay honest across gateway states and the embedded-audio chip tracks the caps", async ({
+	// ── (Todo 12) Network-ingest rows honest — embedded-audio chip + srt absence ──
+	test("network-ingest source rows stay honest — the embedded-audio chip tracks the source and an unadvertised srt row is absent", async ({
 		page,
 	}) => {
 		serverConfig();
-		send(PIPELINES_WITH_RTMP);
-		sendCapabilities({
-			audio_live_switch: true,
-			sources: [
-				{
-					id: "rtmp",
-					supports_audio: true,
-					supports_resolution_override: false,
-					supports_framerate_override: false,
-					default_resolution: "1080p",
-					default_framerate: 30,
-				},
-			],
-		});
-		send({
-			status: {
-				network_ingest: {
-					rtmp: {
-						service_active: true,
-						url: "rtmp://192.168.1.100:1935/publish/live",
-					},
-					srt: null,
-				},
-			},
-		});
-
-		const container = page.getByTestId("source-network-ingest");
-		await expect(container).toBeVisible({ timeout: 15_000 });
+		sendFullCaps();
+		// rtmp advertised WITH embedded audio; srt NOT advertised at all.
+		sendSources([SRC_HDMI_CAP, networkSource("rtmp", true, true)]);
 
 		const rtmpRow = page.getByTestId("source-network-ingest-select-rtmp");
+		await expect(rtmpRow).toBeVisible({ timeout: 15_000 });
 		await expect(rtmpRow).toBeEnabled();
 		await expect(page.getByTestId("source-network-audio-rtmp")).toBeVisible();
+		// srt was never advertised → its row never appears (honest absence).
 		await expect(
-			page.getByTestId("source-network-ingest-row-srt"),
+			page.getByTestId("source-network-ingest-select-srt"),
 		).toHaveCount(0);
 
-		// Caps stop advertising embedded audio → the chip HONESTLY disappears (it is
-		// caps-driven, never a decorative always-on badge).
-		sendCapabilities({
-			audio_live_switch: true,
-			sources: [
-				{
-					id: "rtmp",
-					supports_audio: false,
-					supports_resolution_override: false,
-					supports_framerate_override: false,
-					default_resolution: "1080p",
-					default_framerate: 30,
-				},
-			],
-		});
+		// The source stops carrying audio → the chip HONESTLY disappears (it is
+		// source-driven, never a decorative always-on badge).
+		sendSources([SRC_HDMI_CAP, networkSource("rtmp", true, false)]);
 		await expect(page.getByTestId("source-network-audio-rtmp")).toHaveCount(0);
 
 		// Gateway goes DOWN → the SAME row renders disabled WITH a non-empty reason
 		// (never hidden, never a coming-soon/debt treatment).
-		send({
-			status: {
-				network_ingest: {
-					rtmp: {
-						service_active: false,
-						url: "rtmp://192.168.1.100:1935/publish/live",
-					},
-					srt: null,
-				},
-			},
-		});
+		sendSources([SRC_HDMI_CAP, networkSource("rtmp", false, false)]);
 		await expect(rtmpRow).toBeDisabled();
 		await expect(rtmpRow).toHaveAttribute("title", /\S/);
 		await expect(
@@ -924,9 +808,9 @@ test.describe("Capability truthfulness (functional)", () => {
 		page,
 	}) => {
 		serverConfig();
-		send(GENERIC_PIPELINES);
 		send({ status: { asrcs: ["USB audio", "No audio", "Pipeline default"] } });
 		sendFullCaps();
+		sendSources([SRC_HDMI_CAP]);
 
 		const audioSelect = page.getByTestId("audio-source-select");
 		await expect(audioSelect).toBeVisible({ timeout: 15_000 });
@@ -940,17 +824,103 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(page.getByRole("option", { name: "USB audio" })).toBeVisible();
 		await page.keyboard.press("Escape");
 
-		// Switch to an SRT source whose audio is EMBEDDED in the incoming stream and
-		// advertise `network_embedded_audio`: the ALSA picker collapses to the
-		// read-only "Embedded audio" state (no misleading source dropdown).
-		send(PIPELINES_WITH_SRT);
-		serverConfig({ pipeline: "srt" });
+		// Switch the ACTIVE source to an SRT ingest whose audio is EMBEDDED in the
+		// incoming stream and advertise `network_embedded_audio`: the ALSA picker
+		// collapses to the read-only "Embedded audio" state (no misleading dropdown).
+		serverConfig({ pipeline: "srt", source: "srt" });
+		sendSources([networkSource("srt", true, true)]);
 		sendCapabilities({ audio_live_switch: true, network_embedded_audio: true });
 
 		const embedded = page.getByTestId("audio-source-embedded");
 		await expect(embedded).toBeVisible();
 		await expect(embedded).toContainText(/embedded/i);
 		await expect(page.getByTestId("audio-source-select")).toHaveCount(0);
+	});
+
+	// ── (b) The test-pattern source appears once and resolves to pipeline 'test' ─
+	test("the test-pattern source appears exactly once and selecting it persists a config whose pipeline is 'test'", async ({
+		page,
+	}) => {
+		serverConfig();
+		sendFullCaps();
+		sendSources([SRC_HDMI_CAP, SRC_TEST]);
+
+		// Exactly one virtual test-pattern row.
+		await expect(page.getByTestId("source-row-test")).toHaveCount(1);
+		await expect(page.getByTestId("source-row-test")).toHaveAttribute(
+			"data-origin",
+			"virtual",
+		);
+		const select = page.getByTestId("source-select-test");
+		await expect(select).toBeVisible({ timeout: 15_000 });
+
+		// Selecting it dispatches setConfig({source:'test'}); the backend (T3)
+		// resolves the source id to pipeline='test' and persists it — asserted via
+		// the real getConfig() echo through the page WS proxy.
+		await select.click();
+		await expect
+			.poll(
+				async () =>
+					page.evaluate(async () => {
+						const clientPath = "/src/lib/rpc/client.ts";
+						const mod = await import(clientPath);
+						const cfg = await mod.rpc.streaming.getConfig();
+						return (cfg as { pipeline?: string } | undefined)?.pipeline;
+					}),
+				{
+					timeout: 15_000,
+					message: "backend should resolve source='test' → pipeline='test'",
+				},
+			)
+			.toBe("test");
+	});
+
+	// ── (d) GoLiveCard gates Start honestly and collapses to the ready bar ──────
+	test("the Go Live card blocks Start with a reason when a gate fails and collapses to a ready bar when every gate is green", async ({
+		page,
+	}) => {
+		send(GENERIC_PIPELINES);
+		sendFullCaps();
+		serverConfig();
+		// BLOCKED: TWO capture sources and NO config.source → no sole-camera auto →
+		// the source gate blocks, the card stays expanded, Start is disabled + reason.
+		sendSources([SRC_HDMI_CAP, SRC_RODE]);
+
+		const card = page.getByTestId("go-live-card");
+		await expect(card).toBeVisible({ timeout: 15_000 });
+		await expect(
+			card.locator('[data-testid="go-live-gate"][data-gate="source"]'),
+		).toHaveAttribute("data-state", "blocked");
+		const start = page.getByRole("button", { name: /start stream/i });
+		await expect(start).toBeDisabled();
+		await expect(start).toHaveAttribute("title", /\S/);
+
+		// ALL-GREEN: pick a source → every gate is green, the card collapses to the
+		// thin ready bar, and Start becomes enabled.
+		serverConfig({ source: "video-hdmi" });
+		await expect(card).toHaveAttribute("data-collapsed", "true");
+		await expect(page.getByTestId("go-live-ready-bar")).toBeVisible();
+		await expect(page.getByRole("button", { name: /start stream/i })).toBeEnabled();
+	});
+
+	// ── (e) The migrated config-row testids still open their dialogs ────────────
+	test("the migrated open-encoder / open-audio / open-server-dialog rows still open their dialogs", async ({
+		page,
+	}) => {
+		serverConfig();
+		send(GENERIC_PIPELINES);
+		sendFullCaps();
+
+		for (const testId of [
+			"open-encoder-dialog",
+			"open-audio-dialog",
+			"open-server-dialog",
+		]) {
+			await openConfigDialog(page, testId);
+			await expect(page.getByRole("dialog")).toBeVisible();
+			await page.keyboard.press("Escape");
+			await expect(page.getByRole("dialog")).toBeHidden();
+		}
 	});
 
 	// ── (Todo 9) The mode-preset catalog is gone — no preset-grid testids remain ──
