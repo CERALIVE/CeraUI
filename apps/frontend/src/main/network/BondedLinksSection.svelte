@@ -66,7 +66,9 @@ const totalStale = $derived(
 	{#if links.length === 0}
 		<p class="text-muted-foreground text-sm">{$LL.network.view.noLinks()}</p>
 	{:else}
-		<div class="flex flex-wrap gap-2.5">
+		<!-- SOLE home of live per-link numbers on the Network page (Task 19): the
+		     per-interface sections no longer duplicate them (Task 20). -->
+		<div class="flex flex-col gap-1.5">
 			{#each links as link (link.linkIndex)}
 				{@const color = `var(--link-${link.linkIndex + 1})`}
 				{@const hasSignal = link.signal !== null}
@@ -74,53 +76,59 @@ const totalStale = $derived(
 					data-testid="bonded-link-card"
 					data-link-id={link.id}
 					class={cn(
-						'flex min-w-[12rem] flex-1 flex-col gap-2 rounded-lg border px-3 py-2',
+						'flex items-center gap-2.5 rounded-lg border px-3 py-1.5',
 						link.isStale && 'opacity-50',
 					)}
 					style="border-color: color-mix(in oklab, {color} 35%, transparent); background-color: color-mix(in oklab, {color} 10%, transparent);"
 				>
-					<div class="flex items-center gap-2.5">
-						<span
-							class="text-xs font-bold tabular-nums"
-							style="color: {color};">L{link.linkIndex + 1}</span
+					<span class="shrink-0 text-xs font-bold tabular-nums" style="color: {color};"
+						>L{link.linkIndex + 1}</span
+					>
+					<LinkIndicator
+						shape="bars"
+						size="md"
+						type={link.type}
+						signal={link.signal}
+						connectionState={link.connectionState}
+						linkIndex={link.linkIndex}
+					/>
+					<div class="flex min-w-0 flex-1 flex-col leading-tight">
+						<span class="truncate text-xs font-medium">{link.label}</span>
+						<span class="text-muted-foreground text-[10px] uppercase tracking-wide"
+							>{linkTypeLabel(link)}</span
 						>
-						<LinkIndicator
-							shape="bars"
-							size="md"
-							type={link.type}
-							signal={link.signal}
-							connectionState={link.connectionState}
-							linkIndex={link.linkIndex}
-						/>
-						<div class="flex min-w-0 flex-col leading-tight">
-							<span class="truncate text-xs font-medium">{link.label}</span>
-							<span class="text-muted-foreground text-[10px] uppercase tracking-wide"
-								>{linkTypeLabel(link)}</span
-							>
-						</div>
-						{#if hasSignal}
-							<span data-live-value class="ms-1 font-mono text-xs tabular-nums" style="color: {color};">
-								{link.signal}%
-							</span>
-						{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
-							<span class="text-muted-foreground ms-1 text-[10px] uppercase tracking-wide">
-								{$LL.network.view.noSimLink()}
-							</span>
-						{:else if link.type === 'modem' && link.connectionState === 'scanning'}
-							<span class="text-muted-foreground ms-1 text-[10px] uppercase tracking-wide">
-								{$LL.network.modem.scanning()}
-							</span>
-						{/if}
-						<!-- per-link throughput (Task 18) -->
-						<Badge variant="speed" class="ms-1" kbps={link.throughputKbps} stale={link.isStale} />
 					</div>
+					{#if hasSignal}
+						<span
+							data-live-value
+							class="shrink-0 font-mono text-xs tabular-nums"
+							style="color: {color};"
+						>
+							{link.signal}%
+						</span>
+					{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
+						<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
+							{$LL.network.view.noSimLink()}
+						</span>
+					{:else if link.type === 'modem' && link.connectionState === 'scanning'}
+						<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
+							{$LL.network.modem.scanning()}
+						</span>
+					{/if}
+					<!-- per-link throughput (Task 18) -->
+					<Badge variant="speed" class="shrink-0" kbps={link.throughputKbps} stale={link.isStale} />
 
-					<!-- per-link srtla telemetry: RTT / NAK / weight (Task 22) -->
+					<!-- per-link srtla telemetry: RTT / NAK / weight (Task 22) — rides
+					     the same row via a left divider, at reduced size (Task 19). -->
 					<div
-						class="border-t pt-2"
+						class="shrink-0 border-s ps-2.5"
 						style="border-color: color-mix(in oklab, {color} 20%, transparent);"
 					>
-						<LinkTelemetry entry={telemetryByIface.get(link.id)} loading={telemetryLoading} />
+						<LinkTelemetry
+							class="gap-x-2.5"
+							entry={telemetryByIface.get(link.id)}
+							loading={telemetryLoading}
+						/>
 					</div>
 				</div>
 			{/each}
