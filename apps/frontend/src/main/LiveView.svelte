@@ -262,8 +262,15 @@ async function handleSwitchAudio(inputId: string) {
 	try {
 		const res = await rpc.streaming.switchAudio({ audio_input_id: inputId });
 		if (res.success) {
-			markFieldApplied(AUDIO_SWITCH_FIELD, res.active_audio_input ?? inputId);
-			toast.info($LL.live.inputPicker.audioSwitched({ ms: res.gap_ms ?? 0 }));
+			// Only release to the applied value when it is confirmed by the backend.
+			// If res.active_audio_input is absent, treat as unconfirmed (incomplete response).
+			if (res.active_audio_input !== undefined) {
+				markFieldApplied(AUDIO_SWITCH_FIELD, res.active_audio_input);
+				toast.info($LL.live.inputPicker.audioSwitched({ ms: res.gap_ms ?? 0 }));
+			} else {
+				// Success response without confirmed value: revert to prior state.
+				markFieldFailed(AUDIO_SWITCH_FIELD, activeInput ?? inputId);
+			}
 		} else {
 			markFieldFailed(AUDIO_SWITCH_FIELD, activeInput ?? inputId);
 			toast.error(
