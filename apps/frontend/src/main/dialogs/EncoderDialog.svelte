@@ -1,17 +1,21 @@
 <!--
   EncoderDialog.svelte — focused video-encoder configuration dialog.
 
-  Capability-first (no presets): the dialog exposes independent
-  source / codec / bitrate / resolution / framerate selectors directly. There is
-  no mode-preset catalog — every control is capability-gated on its own.
+  Pure encoding (no source selection): the dialog exposes independent
+  codec / bitrate / resolution / framerate selectors directly. There is no
+  mode-preset catalog — every control is capability-gated on its own. The active
+  source is chosen in the Source section and shown here as a READ-ONLY context
+  line (name + kind); this dialog never writes `source`/`pipeline`.
 
   Capability discipline
   ---------------------
-  • Resolution / Framerate come from `offeredAxes` (platform ∩ selected source ∩
-    Tier-2 device modes). Framerate is gated PER selected resolution, so a rate the
-    device can't drive at that resolution renders disabled-with-reason. Every rung
-    outside the offered set renders DISABLED with a reason tooltip — never hidden.
-    H.265 is disabled-with-reason when the platform can't encode it.
+  • Resolution / Framerate come from `offeredAxes` (platform ∩ active source ∩
+    that source's Tier-2 device modes). Framerate is gated PER selected resolution,
+    so a rate the device can't drive at that resolution renders
+    disabled-with-reason. Every rung outside the offered set renders DISABLED with a
+    reason tooltip — never hidden. H.265 is disabled-with-reason when the platform
+    can't encode it. With no active source (config lacking `source`/`pipeline`, e.g.
+    a federated mount) the axes degrade to the platform-coarse offering.
   • All numeric bounds come from `streamingConstraints` / `bitrateBoundsFromCaps`
     (ValidationAdapter) — no inline literals.
   • The operator's codec choice (`localCodec`) is written to the draft's `codec`
@@ -33,7 +37,11 @@
 import type { Framerate, Resolution, VideoCodec } from '@ceraui/rpc/schemas';
 
 export interface EncoderConfig {
-	source: string | undefined;
+	// Legacy field: the encoder dialog is pure encoding and no longer selects or
+	// emits a source — the active input is owned by the Source section and echoed
+	// on `config.source`. Kept optional so existing consumers (LiveView's draft)
+	// stay compile-compatible; the dialog never sets it.
+	source?: string;
 	resolution: Resolution | undefined;
 	framerate: Framerate | undefined;
 	bitrate: number | undefined;
@@ -48,8 +56,8 @@ export interface EncoderConfig {
 
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { Binary, Cpu, TriangleAlert } from '@lucide/svelte';
-import { BITRATE_DEFAULT_MIN, type Pipeline } from '@ceraui/rpc/schemas';
+import { Binary, Cable, Cpu, Radio, SquareDashed, Usb, Video } from '@lucide/svelte';
+import { BITRATE_DEFAULT_MIN, type DeviceKind, type StreamSource } from '@ceraui/rpc/schemas';
 
 import AppliesNextStart from '$lib/components/custom/AppliesNextStart.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
@@ -77,6 +85,7 @@ import {
 	getHardwareLabel,
 	getResolutionLabel,
 	getSourceLabel,
+	sourceLabel,
 } from '$lib/helpers/PipelineHelper';
 import {
 	getCapabilities,
@@ -84,10 +93,9 @@ import {
 	getDevices,
 	getIsStreaming,
 	getPipelines,
-	getStatus,
+	getSources,
 } from '$lib/rpc/subscriptions.svelte';
 import { appliesOnNextStart } from '$lib/streaming/appliesNextStart';
-import { pipelineAvailability, pipelineViews } from '$lib/streaming/pipelineAvailability';
 
 interface Props {
 	open?: boolean;
@@ -106,13 +114,9 @@ const BITRATE_STEP = 50;
 
 // ── Live data from the non-deprecated subscriptions surface ────────────────────
 const pipelinesMessage = $derived(getPipelines());
-	const pipelines = $derived(pipelinesMessage?.pipelines);
 	const hardware = $derived(pipelinesMessage?.hardware);
 	const isStreaming = $derived(getIsStreaming());
 	const savedConfig = $derived(getConfig());
-	// Network-ingest gateway status: gates rtmp/srt sources disabled-with-reason
-	// through the shared pipelineAvailability rule (never a second inline check).
-	const networkIngest = $derived(getStatus()?.network_ingest);
 
 // ── Capability contract: per-board bitrate window, codec offers, UVC H.265 ─────
 const capabilities = $derived(getCapabilities());
@@ -150,7 +154,6 @@ const t = (key: string): string => {
 };
 
 // ── Editable working copy (seeded when the dialog opens) ───────────────────────
-let localSource = $state('');
 let localResolution = $state<Resolution>('1080p');
 let localFramerate = $state<Framerate>(30);
 let localBitrate = $state<number>(BITRATE_DEFAULT_MIN);
@@ -171,7 +174,6 @@ let bitrateClamped = $state(false);
 
 // Seed snapshot captured on open: edits are measured against these so a
 // restart-required field changed mid-stream can be badged "applies on next start".
-let seededSource = $state('');
 let seededResolution = $state<Resolution>('1080p');
 let seededFramerate = $state<Framerate>(30);
 
@@ -180,14 +182,12 @@ let seededFramerate = $state<Framerate>(30);
 let seeded = $state(false);
 $effect(() => {
 	if (open && !seeded) {
-		localSource = config?.source ?? savedConfig?.pipeline ?? '';
 		localResolution = config?.resolution ?? '1080p';
 		localFramerate = config?.framerate ?? 30;
 		const seedBitrate = config?.bitrate ?? savedConfig?.max_br ?? BITRATE.defaultMin;
 		localBitrate = Number.isFinite(seedBitrate) ? seedBitrate : BITRATE.defaultMin;
 		localOverlay = config?.bitrateOverlay ?? savedConfig?.bitrate_overlay ?? false;
 		localCodec = config?.codec;
-		seededSource = localSource;
 		seededResolution = localResolution;
 		seededFramerate = localFramerate;
 		bitrateClamped = false;
@@ -197,20 +197,50 @@ $effect(() => {
 	}
 });
 
-	const selectedPipeline = $derived<Pipeline | undefined>(
-		localSource && pipelines ? pipelines[localSource] : undefined,
-	);
+// ── Active source (read-only context) ──────────────────────────────────────────
+// The source is chosen in the Source section; this dialog only reflects it. The
+// active StreamSource (from `getSources()`, keyed by the persisted `config.source`)
+// drives the read-only context line AND the capability axes below. When no source
+// is set (config lacking `source`/`pipeline`, e.g. a federated mount) it is
+// undefined and the axes fall back to the platform-coarse offering — no throw.
+const activeSource = $derived(
+	getSources()?.sources.find((source) => source.id === savedConfig?.source),
+);
 
-	// Per-source gateway verdict (shared rule): tags the selected source and every
-	// picker option available / disabled-with-reason when its rtmp/srt gateway is down.
-	const selectedAvailability = $derived(pipelineAvailability(selectedPipeline, networkIngest));
-	const sourceViews = $derived(pipelineViews(pipelines, networkIngest));
+// Capture kind → coarse device family (drives the context-line icon + kind label).
+// A UVC dongle (`uvc_h264`) is USB family, so its label reads "USB", never "HDMI" —
+// the same rule SourceSection applies to its rows.
+type SourceKindFamily = 'hdmi' | 'usb' | 'network' | 'other';
+function kindFamily(kind: DeviceKind): SourceKindFamily {
+	if (kind === 'hdmi') return 'hdmi';
+	if (kind === 'network') return 'network';
+	if (
+		kind === 'usb' ||
+		kind === 'uvc_h264' ||
+		kind === 'uvc_h265' ||
+		kind === 'mjpeg' ||
+		kind === 'camlink'
+	) {
+		return 'usb';
+	}
+	return 'other';
+}
+const SOURCE_KIND_ICON = { hdmi: Cable, usb: Usb, network: Radio, other: Video } as const;
+function sourceKindLabel(source: StreamSource): string {
+	if (source.origin === 'capture') return t(`live.inputPicker.groups.${kindFamily(source.kind)}`);
+	if (source.origin === 'network') return t('live.inputPicker.groups.network');
+	if (source.origin === 'virtual') return t('live.inputPicker.groups.test');
+	return t('live.inputPicker.groups.other');
+}
+function sourceIcon(source: StreamSource) {
+	if (source.origin === 'capture') return SOURCE_KIND_ICON[kindFamily(source.kind)];
+	if (source.origin === 'virtual') return SquareDashed;
+	if (source.origin === 'network') return Radio;
+	return Video;
+}
 
 // Restart-required edits made mid-stream → "applies on next start" badges. The
 // edit test is against the open-time seed so an untouched field stays quiet.
-const sourceAppliesNextStart = $derived(
-	appliesOnNextStart('pipeline', isStreaming, localSource !== seededSource),
-);
 const resolutionAppliesNextStart = $derived(
 	appliesOnNextStart('resolution', isStreaming, localResolution !== seededResolution),
 );
@@ -218,21 +248,12 @@ const framerateAppliesNextStart = $derived(
 	appliesOnNextStart('framerate', isStreaming, localFramerate !== seededFramerate),
 );
 
-// Capability-gated axes: platform ∩ selected source ∩ Tier-2 device modes. When
-// the engine broadcasts per-device modes, Resolution/Framerate reflect the active
-// (or kind-matched) capture hardware; otherwise this is the coarse offering. Every
+// Capability-gated axes: platform ∩ active source ∩ that source's Tier-2 device
+// modes (source-keyed — T16). The StreamSource carries its own `modes`, so a
+// selected/kind-matched capture device narrows Resolution/Framerate; a coarse /
+// modeless source (or no source at all) degrades to the platform offering. Every
 // incompatible rung is shown disabled with a reason — never hidden (house rule).
-const deviceModes = $derived(capabilities?.device_modes);
-const selectedVideoInput = $derived(savedConfig?.selected_video_input);
-const axes = $derived(
-	offeredAxes(
-		hardware,
-		localSource || undefined,
-		selectedPipeline,
-		deviceModes,
-		selectedVideoInput,
-	),
-);
+const axes = $derived(offeredAxes(hardware, activeSource));
 const offered = $derived(axes.offered);
 const resolutionChoices = $derived(resolutionOptions(offered));
 // Framerate options are gated per selected resolution: a rate the device+mode
@@ -254,9 +275,6 @@ const sliderValue = $derived(clampBitrateToBounds(localBitrate, BITRATE));
 // ── Inline validation (schema-derived bounds, no duplicated literals) ──────────
 const errors = $derived.by(() => {
 	const e: Record<string, string> = {};
-	if (!localSource) {
-		e.source = $LL.validation.required();
-	}
 	if (
 		!Number.isFinite(localBitrate) ||
 		localBitrate < BITRATE.min ||
@@ -283,12 +301,16 @@ function handleSave() {
 	const normalized = normalizeValue(localBitrate, BITRATE.min, BITRATE.max, BITRATE_STEP);
 	localBitrate = normalized;
 
-	// Persist the full encoder selection into the draft LiveView owns + feeds the
-	// start flow. Resolution/framerate stay capability-gated at the source.
+	// Persist the encoding selection into the draft LiveView owns + feeds the start
+	// flow. This dialog is pure encoding: it NEVER writes `source`/`pipeline` (the
+	// Source section owns the active input). Resolution/framerate stay capability-
+	// gated against the active source's override support; when no source is known
+	// (federated mount) they pass through and the consumer re-gates on the pipeline.
+	const allowResolution = activeSource?.supportsResolutionOverride ?? true;
+	const allowFramerate = activeSource?.supportsFramerateOverride ?? true;
 	const next: EncoderConfig = {
-		source: localSource || undefined,
-		resolution: selectedPipeline?.supportsResolutionOverride ? localResolution : undefined,
-		framerate: selectedPipeline?.supportsFramerateOverride ? localFramerate : undefined,
+		resolution: allowResolution ? localResolution : undefined,
+		framerate: allowFramerate ? localFramerate : undefined,
 		bitrate: normalized,
 		bitrateOverlay: localOverlay,
 		codec: localCodec,
@@ -310,7 +332,7 @@ function handleSave() {
 	closeOnPrimary={false}
 	icon={Binary}
 	onPrimary={handleSave}
-	primaryDisabled={!isValid || !selectedAvailability.available}
+	primaryDisabled={!isValid}
 	primaryLabel={$LL.dialogs.save()}
 	title={$LL.settings.encoderSettings()}
 >
@@ -322,82 +344,24 @@ function handleSave() {
 			</div>
 		{/if}
 
-		<!-- Video source -->
+		<!-- Active source (read-only, name + kind): chosen in the Source section, not
+		     here. Absent when the config carries no source (e.g. a federated mount). -->
 		<div class="space-y-2">
-			<div class="flex items-center justify-between gap-2">
-				<Label class="text-sm font-medium" for="encoder-source">{$LL.settings.inputMode()}</Label>
-				<AppliesNextStart
-					show={sourceAppliesNextStart}
-					label={$LL.live.encoder.appliesNextStart()}
-					data-testid="source-applies-next-start"
-				/>
-			</div>
-			<Select.Root
-				onValueChange={(value) => (localSource = value)}
-				type="single"
-				value={localSource}
-			>
-				<Select.Trigger
-					id="encoder-source"
-					aria-invalid={Boolean(errors.source)}
-					class="w-full"
-				>
-					{localSource ? getSourceLabel(localSource, t) : $LL.settings.selectInputMode()}
-				</Select.Trigger>
-				<Select.Content>
-					<Select.Group>
-						{#each sourceViews as view (view.id)}
-							<Select.Item
-								value={view.id}
-								data-source-id={view.id}
-								data-available={view.availability.available}
-								disabled={!view.availability.available}
-								title={view.availability.available ? undefined : t(view.availability.reason)}
-							>
-								<div class="flex flex-col py-1">
-									<span class="flex items-center gap-1.5 font-medium">
-										{getSourceLabel(view.id, t)}
-										{#if !view.availability.available}
-											<TriangleAlert
-												aria-hidden={true}
-												class="text-status-warning size-3.5 shrink-0"
-											/>
-										{/if}
-									</span>
-									<span class="text-muted-foreground text-xs">{view.pipeline.description}</span>
-									{#if !view.availability.available}
-										<span class="text-status-warning text-xs" data-testid="source-gateway-reason">
-											{t(view.availability.reason)}
-										</span>
-									{/if}
-								</div>
-							</Select.Item>
-						{/each}
-						{#each uvcH265Sources as uvc (uvc.inputId)}
-							<Select.Item value={uvc.sourceKind}>
-								<div class="flex flex-col py-1">
-									<span class="font-medium">{getSourceLabel(uvc.sourceKind, t)}</span>
-									<span class="text-muted-foreground text-xs">{uvc.displayName}</span>
-								</div>
-							</Select.Item>
-						{/each}
-					</Select.Group>
-				</Select.Content>
-			</Select.Root>
-			{#if errors.source}
-				<p class="text-destructive text-sm">{errors.source}</p>
-			{/if}
-			{#if !selectedAvailability.available}
+			{#if activeSource}
+				{@const SourceIcon = sourceIcon(activeSource)}
 				<div
-					class="border-status-warning/40 bg-status-warning/10 flex items-start gap-2 rounded-md border p-2.5"
-					data-testid="source-gateway-blocked"
-					role="status"
+					class="bg-muted/30 flex items-center gap-2.5 rounded-md border p-2.5"
+					data-testid="encoder-active-source"
+					data-origin={activeSource.origin}
+					data-source-id={activeSource.id}
 				>
-					<TriangleAlert
-						aria-hidden={true}
-						class="text-status-warning mt-0.5 size-4 shrink-0"
-					/>
-					<span class="text-status-warning text-xs">{t(selectedAvailability.reason)}</span>
+					<SourceIcon aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
+					<div class="flex min-w-0 flex-col">
+						<span class="truncate text-sm font-medium">{sourceLabel(activeSource, t)}</span>
+						<span class="text-muted-foreground text-xs" data-testid="encoder-active-source-kind">
+							{sourceKindLabel(activeSource)}
+						</span>
+					</div>
 				</div>
 			{/if}
 			{#if uvcH265Sources.length > 0}
@@ -569,126 +533,120 @@ function handleSave() {
 		     source ∩ Tier-2 device modes. A single current-vs-device-max summary line
 		     replaces the old preset highlighting. -->
 		<div class="space-y-5">
-				{#if localSource}
-					<div
-						class="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
-						data-testid="axis-summary"
-					>
-						<span class="font-medium">{$LL.live.encoder.axisSelected()}:</span>
-						<span class="text-foreground font-mono" data-testid="axis-current">
-							{getResolutionLabel(localResolution)} · {getFramerateLabel(localFramerate)}
-						</span>
-						<span aria-hidden={true}>·</span>
-						<span>{$LL.live.encoder.axisDeviceMax()}:</span>
-						<span class="text-foreground font-mono" data-testid="axis-device-max">
-							{ceiling.resolution ? getResolutionLabel(ceiling.resolution) : '\u2014'} · {ceiling.framerate
-								? getFramerateLabel(ceiling.framerate)
-								: '\u2014'}
-						</span>
-					</div>
-				{/if}
+			<div
+				class="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+				data-testid="axis-summary"
+			>
+				<span class="font-medium">{$LL.live.encoder.axisSelected()}:</span>
+				<span class="text-foreground font-mono" data-testid="axis-current">
+					{getResolutionLabel(localResolution)} · {getFramerateLabel(localFramerate)}
+				</span>
+				<span aria-hidden={true}>·</span>
+				<span>{$LL.live.encoder.axisDeviceMax()}:</span>
+				<span class="text-foreground font-mono" data-testid="axis-device-max">
+					{ceiling.resolution ? getResolutionLabel(ceiling.resolution) : '\u2014'} · {ceiling.framerate
+						? getFramerateLabel(ceiling.framerate)
+						: '\u2014'}
+				</span>
+			</div>
 
-				<!-- Resolution: every rung is shown; rungs outside the capability-offered
-				     set render disabled (aria-disabled + reason title), never hidden. -->
-				{#if localSource}
-					<div class="space-y-2">
-						<div class="flex items-center justify-between gap-2">
-							<Label class="text-sm font-medium" for="encoder-resolution">
-								{$LL.settings.encodingResolution()}
-							</Label>
-							<AppliesNextStart
-								show={resolutionAppliesNextStart}
-								label={$LL.live.encoder.appliesNextStart()}
-								data-testid="resolution-applies-next-start"
-							/>
-						</div>
-						<Select.Root
-							onValueChange={(value) => (localResolution = value as Resolution)}
-							type="single"
-							value={localResolution}
-						>
-							<Select.Trigger
-								id="encoder-resolution"
-								aria-invalid={!resolutionSupported}
-								class="w-full"
-							>
-								{localResolution
-									? getResolutionLabel(localResolution)
-									: $LL.settings.selectEncodingResolution()}
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Group>
-									{#each resolutionChoices as option (option.value)}
-										<Select.Item
-											aria-disabled={option.supported ? undefined : 'true'}
-											data-testid="resolution-option"
-											disabled={!option.supported}
-											label={getResolutionLabel(option.value)}
-											title={option.reason ? t(option.reason) : undefined}
-											value={option.value}
-										></Select.Item>
-									{/each}
-								</Select.Group>
-							</Select.Content>
-						</Select.Root>
-					</div>
-				{/if}
-
-				<!-- Framerate: same capability filtering as resolution — incompatible
-				     rates render disabled with a reason, never hidden. -->
-				{#if localSource}
-					<div class="space-y-2">
-						<div class="flex items-center justify-between gap-2">
-							<Label class="text-sm font-medium" for="encoder-framerate">
-								{$LL.settings.framerate()}
-							</Label>
-							<AppliesNextStart
-								show={framerateAppliesNextStart}
-								label={$LL.live.encoder.appliesNextStart()}
-								data-testid="framerate-applies-next-start"
-							/>
-						</div>
-						<Select.Root
-							onValueChange={(value) => (localFramerate = parseFloat(value) as Framerate)}
-							type="single"
-							value={String(localFramerate)}
-						>
-							<Select.Trigger
-								id="encoder-framerate"
-								aria-invalid={!framerateSupported}
-								class="w-full"
-							>
-								{localFramerate ? getFramerateLabel(localFramerate) : $LL.settings.selectFramerate()}
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Group>
-									{#each framerateChoices as option (option.value)}
-										<Select.Item
-											aria-disabled={option.supported ? undefined : 'true'}
-											data-testid="framerate-option"
-											disabled={!option.supported}
-											label={getFramerateLabel(option.value)}
-											title={option.reason ? t(option.reason) : undefined}
-											value={String(option.value)}
-										></Select.Item>
-									{/each}
-								</Select.Group>
-							</Select.Content>
-						</Select.Root>
-					</div>
-				{/if}
-
-				<!-- Bitrate overlay toggle -->
-				<div class="flex items-center justify-between gap-3 rounded-lg border p-3">
-					<Label class="flex-1 cursor-pointer text-sm" for="encoder-overlay">
-						{$LL.settings.enableBitrateOverlay()}
+			<!-- Resolution: every rung is shown; rungs outside the capability-offered
+			     set render disabled (aria-disabled + reason title), never hidden. -->
+			<div class="space-y-2">
+				<div class="flex items-center justify-between gap-2">
+					<Label class="text-sm font-medium" for="encoder-resolution">
+						{$LL.settings.encodingResolution()}
 					</Label>
-					<LabeledSwitch
-						checked={localOverlay}
-						label={$LL.settings.enableBitrateOverlay()}
-						onCheckedChange={(value) => (localOverlay = value)}
+					<AppliesNextStart
+						show={resolutionAppliesNextStart}
+						label={$LL.live.encoder.appliesNextStart()}
+						data-testid="resolution-applies-next-start"
 					/>
 				</div>
+				<Select.Root
+					onValueChange={(value) => (localResolution = value as Resolution)}
+					type="single"
+					value={localResolution}
+				>
+					<Select.Trigger
+						id="encoder-resolution"
+						aria-invalid={!resolutionSupported}
+						class="w-full"
+					>
+						{localResolution
+							? getResolutionLabel(localResolution)
+							: $LL.settings.selectEncodingResolution()}
+					</Select.Trigger>
+					<Select.Content>
+						<Select.Group>
+							{#each resolutionChoices as option (option.value)}
+								<Select.Item
+									aria-disabled={option.supported ? undefined : 'true'}
+									data-testid="resolution-option"
+									disabled={!option.supported}
+									label={getResolutionLabel(option.value)}
+									title={option.reason ? t(option.reason) : undefined}
+									value={option.value}
+								></Select.Item>
+							{/each}
+						</Select.Group>
+					</Select.Content>
+				</Select.Root>
+			</div>
+
+			<!-- Framerate: same capability filtering as resolution — incompatible
+			     rates render disabled with a reason, never hidden. -->
+			<div class="space-y-2">
+				<div class="flex items-center justify-between gap-2">
+					<Label class="text-sm font-medium" for="encoder-framerate">
+						{$LL.settings.framerate()}
+					</Label>
+					<AppliesNextStart
+						show={framerateAppliesNextStart}
+						label={$LL.live.encoder.appliesNextStart()}
+						data-testid="framerate-applies-next-start"
+					/>
+				</div>
+				<Select.Root
+					onValueChange={(value) => (localFramerate = parseFloat(value) as Framerate)}
+					type="single"
+					value={String(localFramerate)}
+				>
+					<Select.Trigger
+						id="encoder-framerate"
+						aria-invalid={!framerateSupported}
+						class="w-full"
+					>
+						{localFramerate ? getFramerateLabel(localFramerate) : $LL.settings.selectFramerate()}
+					</Select.Trigger>
+					<Select.Content>
+						<Select.Group>
+							{#each framerateChoices as option (option.value)}
+								<Select.Item
+									aria-disabled={option.supported ? undefined : 'true'}
+									data-testid="framerate-option"
+									disabled={!option.supported}
+									label={getFramerateLabel(option.value)}
+									title={option.reason ? t(option.reason) : undefined}
+									value={String(option.value)}
+								></Select.Item>
+							{/each}
+						</Select.Group>
+					</Select.Content>
+				</Select.Root>
+			</div>
+
+			<!-- Bitrate overlay toggle -->
+			<div class="flex items-center justify-between gap-3 rounded-lg border p-3">
+				<Label class="flex-1 cursor-pointer text-sm" for="encoder-overlay">
+					{$LL.settings.enableBitrateOverlay()}
+				</Label>
+				<LabeledSwitch
+					checked={localOverlay}
+					label={$LL.settings.enableBitrateOverlay()}
+					onCheckedChange={(value) => (localOverlay = value)}
+				/>
+			</div>
 		</div>
 	</div>
 </AppDialog>
