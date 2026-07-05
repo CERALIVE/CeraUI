@@ -246,6 +246,23 @@ inert (never imported by anything the router mounts, `StreamSettingsCard`'s type
 export excepted), so there is no live UI affordance to bind a marker to. The
 register entry is the durable record of the "kept but dead" decision instead.
 
+```debt
+id: TD-ler-engine-pin
+title: CeraUI @ceralive/cerastream pin not yet bumped to a release carrying alsa_card_id + input_codec
+track: 2
+status: open
+exit_criteria: `pin @ceralive/cerastream >= the cerastream release carrying alsa_card_id + input_codec`
+owner: ceraui-team
+registered_at: 2026-07-05
+resolved_at: null
+unblock: The live-experience-refinement plan's T2 (additive alsa_card_id on CaptureDevice audio entries) and T3 (additive input_codec on ActiveEncode) landed on the cerastream feat/audio-alsa-id-input-codec branch (commits b11da04 + 41674e7d) but were NOT merged to cerastream's canonical branch (origin/main does not contain b11da04) and NO npm release carrying them exists — the published @ceralive/cerastream latest is 2026.7.0 (the CeraUI pin at apps/backend/package.json), cut BEFORE T2/T3, whose dist contains neither field. The plan's T18 gate ("after T2/T3 merge to cerastream's canonical branch AND a version is published to npm, bump the CeraUI pin") is therefore unmet at plan close, so the pin stays at 2026.7.0 and the bump is deferred; per the plan this must NOT be worked around by vendoring a tarball or using a link:/file: dependency. The CeraUI-side fallback paths are the PERMANENT, working degradation for any device on the current pin and are kept, not removed: audio device naming falls back from the engine-join tier (alsa_card_id === cardId, T4 tier-1) to /proc/asound/cards longname naming (T4 tier-2), and the incoming-codec chip is simply absent because active_encode.input_codec is undefined on the current pin. This is graceful old-engine degradation by design, not a broken feature. To clear: once T2/T3 merge to cerastream canonical and a CalVer release publishing both fields lands on npm (@ceralive scope), bump apps/backend/package.json @ceralive/cerastream to >= that release, run bun install at the workspace root, re-run the skew guard (bun test cerastream-bindings-skew from apps/backend/), remove none of the fallback paths, then flip this entry to resolved.
+```
+
+This entry carries no source `data-debt-id` marker — the deferral is a backend
+dependency-pin decision (an external cerastream-release dependency), not a UI
+affordance, so there is no live element to bind a marker to. The register entry
+is the durable, dated record of the deferred pin bump instead.
+
 > **Cross-repo follow-up (not CeraUI debt): RTMP-ingest unification.** The B2 SRT
 > ingest is now a loopback `srtsrc`-caller pull; RTMP ingest deliberately STAYS on
 > the existing `rtmpsrc` loopback in this plan. A possible future unification
