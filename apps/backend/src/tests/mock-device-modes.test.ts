@@ -88,7 +88,13 @@ describe("mock device_modes — getMockEngineDevices expansion", () => {
 	test("expands the seeded modes into a foldable list-devices result", () => {
 		bootMockScenario("caps-full");
 		const { devices } = getMockEngineDevices();
-		expect(devices.map((d) => d.input_id)).toEqual(["hdmi", "usb", "usb2"]);
+		expect(devices.map((d) => d.input_id)).toEqual([
+			"hdmi",
+			"usb",
+			"usb2",
+			"audio_rode_ai_micro",
+			"audio_elgato_wave3",
+		]);
 		const hdmi = devices[0];
 		expect(hdmi?.kind).toBe("hdmi");
 		expect(hdmi?.media_class).toBe("video");
@@ -161,6 +167,7 @@ describe("resetMockState — restores device_modes override + topology flag", ()
 		expect(getMockEngineDevices().devices.map((d) => d.input_id)).toEqual([
 			"hdmi",
 			"usb",
+			"audio_usbaudio",
 		]);
 	});
 

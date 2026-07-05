@@ -27,6 +27,7 @@ import {
 	buildMockAudioDevices,
 	buildMockCapsFullDeviceModes,
 	buildMockDeviceModes,
+	buildMockDualUsbAudioDevices,
 	CAPS_FULL_DEVICE_DISPLAY_NAMES,
 	DEFAULT_DEVICE_DISPLAY_NAMES,
 } from "../fixture-factory.ts";
@@ -193,6 +194,7 @@ function framerateToFraction(fps: number): string {
 function expandDeviceModes(
 	modes: MockDeviceModes,
 	displayNames: Record<string, string> = {},
+	audioDevices: Record<string, string> = {},
 ): ListDevicesResult {
 	const devices = Object.entries(modes).map(([inputId, group], index) => ({
 		input_id: inputId,
@@ -213,7 +215,21 @@ function expandDeviceModes(
 			})),
 		),
 	}));
-	return { devices };
+
+	// Add audio entries for each ALSA card in the fixture. Each audio device
+	// carries alsa_card_id (the join key for T4's engine-join tier) and
+	// display_name (the human-readable label). This exercises the dedupe and
+	// auto-follow paths end-to-end in mock mode.
+	const audioEntries = Object.entries(audioDevices).map(([displayName, cardId]) => ({
+		input_id: `audio_${cardId}`,
+		device_path: `/dev/snd/pcmC${cardId}D0c`,
+		display_name: displayName,
+		media_class: "audio" as const,
+		alsa_card_id: cardId,
+		caps: [],
+	}));
+
+	return { devices: [...devices, ...audioEntries] };
 }
 
 interface ScenarioDeviceFixtures {
@@ -259,7 +275,8 @@ export function getMockEngineDevices(): ListDevicesResult {
 		return { devices: [] };
 	}
 	const { modes, displayNames } = resolveScenarioDeviceFixtures();
-	return expandDeviceModes(modes, displayNames);
+	const audioDevices = getMockAudioDevices();
+	return expandDeviceModes(modes, displayNames, audioDevices);
 }
 
 /**
@@ -269,6 +286,10 @@ export function getMockEngineDevices(): ListDevicesResult {
  * pseudo-sources, so `status.asrcs` contains the configured `asrc` without a real
  * `/sys/class/sound` scan. Empty (no seed) for the minimal/engine-down scenarios
  * and in production (`shouldUseMocks()` false).
+ *
+ * caps-full and streaming-active scenarios gain dual USB audio cards (RØDE AI-Micro
+ * + Elgato Wave:3) to exercise T4's engine-join tier (alsa_card_id match + human-name
+ * heuristic) and dedupe/auto-follow paths end-to-end in mock mode.
  */
 export function getMockAudioDevices(): MockAudioDevices {
 	if (!shouldUseMocks()) {
@@ -276,9 +297,9 @@ export function getMockAudioDevices(): MockAudioDevices {
 	}
 	switch (getActiveScenario()) {
 		case "caps-full":
-			return buildMockAudioDevices({ HDMI: "rockchiphdmiin" });
-		case "multi-modem-wifi":
 		case "streaming-active":
+			return buildMockDualUsbAudioDevices();
+		case "multi-modem-wifi":
 			return buildMockAudioDevices();
 		default:
 			return {};

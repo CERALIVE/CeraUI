@@ -108,6 +108,14 @@ const DEFAULT_AUDIO_DEVICES = {
 	"USB audio": "usbaudio",
 } satisfies MockAudioDevices;
 
+// Dual USB audio cards for caps-full/streaming-active scenarios: two distinct
+// ALSA card IDs with real display names. Exercises T4's engine-join tier
+// (alsa_card_id match + human-name heuristic) and dedupe/auto-follow paths.
+const DUAL_USB_AUDIO_DEVICES = {
+	"RØDE AI-Micro": "rode_ai_micro",
+	"Elgato Wave:3": "elgato_wave3",
+} satisfies MockAudioDevices;
+
 // The full-engine-profile per-device modes: an HDMI capture device (1080p@[30,60]
 // + 2160p@[30]) and a UVC/USB device (720p@[30,60] + 1080p@[30]). These are the
 // FOLDED forms (numeric rung framerates) the getCapabilities() device_modes fold
@@ -259,6 +267,16 @@ export function buildMockAudioDevices(
 ): MockAudioDevices {
 	return mockAudioDevicesSchema.parse({
 		...DEFAULT_AUDIO_DEVICES,
+		...overrides,
+	});
+}
+
+/** Build the caps-full dual USB audio fixture (RØDE AI-Micro + Elgato Wave:3). */
+export function buildMockDualUsbAudioDevices(
+	overrides: MockAudioDevices = {},
+): MockAudioDevices {
+	return mockAudioDevicesSchema.parse({
+		...DUAL_USB_AUDIO_DEVICES,
 		...overrides,
 	});
 }
