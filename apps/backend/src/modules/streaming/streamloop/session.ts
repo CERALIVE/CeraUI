@@ -28,6 +28,7 @@ import { isUpdating } from "../../system/software-updates.ts";
 import { sendStatus } from "../../ui/status.ts";
 import { getSocketSenderId } from "../../ui/websocket-server.ts";
 import { clearAsrcProbeReject, isAsrcProbeRejectResolved } from "../audio.ts";
+import { setPendingAudioFollowAsrc } from "../auto-audio.ts";
 import { stopLinkTelemetry } from "../link-telemetry.ts";
 import type { Pipeline } from "../pipelines.ts";
 import {
@@ -122,6 +123,10 @@ export async function start(
 }
 
 export function stop() {
+	// A deferred auto-audio follow (T7) only applies at the NEXT start; a stop
+	// cancels it so the picker never keeps a stale "follows on restart" hint.
+	setPendingAudioFollowAsrc(null);
+
 	if (isAsrcProbeRejectResolved()) {
 		clearAsrcProbeReject();
 

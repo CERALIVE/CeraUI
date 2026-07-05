@@ -57,6 +57,9 @@ async function handleSwitchInput(inputId: string) {
 		if (res.success) {
 			confirmOperation('switch-input');
 			toast.success($LL.live.inputPicker.switched({ ms: res.gap_ms ?? 0 }));
+			if (res.audio_follow_pending) {
+				toast.info($LL.live.inputPicker.audioFollowsOnRestart());
+			}
 		} else {
 			failOperation('switch-input', res.error ?? 'failed');
 			toast.error(

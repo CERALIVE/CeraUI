@@ -181,6 +181,25 @@ unblock: A network-ingest (rtmp/srt) publish carries its own muxed audio, but th
 ```
 
 ```debt
+id: TD-live-audio-follow
+title: Live device-keyed audio follow on a mid-stream input switch
+track: 2
+status: open
+exit_criteria: `capability: audio switch accepts list-devices audio input ids`
+owner: ceraui-team
+registered_at: 2026-07-04
+resolved_at: null
+unblock: cerastream's switch-audio drives ONLY the two pre-built audio-switch graph legs "a"/"b" (drive_audio_switch, engine.rs:2550 + AUDIO_LEG_A/B engine.rs:2695/2742) — it cannot accept an arbitrary list-devices audio input_id, so a live device-keyed audio follow is NOT implementable against the current engine. A live video switchInput therefore RE-RESOLVES the Auto audio target and applies it AT THE NEXT START (T5's launch-time resolution), broadcasting pending_audio_follow_asrc + a calm "audio follows on restart" hint (i18n live.inputPicker.audioFollowsOnRestart) rather than dispatching a mid-stream switchAudio. When cerastream's switch-audio accepts list-devices audio input ids (device-id-keyed legs), the backend switchInput follow path (apps/backend/src/rpc/procedures/streaming.procedure.ts applySwitchInputFollow) can dispatch a real live audio switch instead of setPendingAudioFollowAsrc, and this entry flips to resolved.
+```
+
+This entry carries no source `data-debt-id` marker — the deferred follow is a
+backend-only engine limitation surfaced via a calm restart hint (a toast on the
+switchInput RPC result + the existing `audio-follow-pending` line), never a
+fake-interactive disabled control, so there is no live UI affordance to bind a
+marker to. The register entry is the durable record of the deferred-apply
+decision instead.
+
+```debt
 id: TD-gateway-b2-fleet-window
 title: Dual-topology SRT gateway probe (B2 fleet-transition tolerance)
 track: 1

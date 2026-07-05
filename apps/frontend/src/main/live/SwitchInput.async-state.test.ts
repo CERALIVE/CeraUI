@@ -20,13 +20,19 @@ const switchInput = vi.hoisted(() => vi.fn());
 const toastSuccess = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
 const toastWarning = vi.hoisted(() => vi.fn());
+const toastInfo = vi.hoisted(() => vi.fn());
 
 vi.mock("$lib/rpc", () => ({
 	rpc: { streaming: { switchInput } },
 }));
 
 vi.mock("svelte-sonner", () => ({
-	toast: { success: toastSuccess, error: toastError, warning: toastWarning },
+	toast: {
+		success: toastSuccess,
+		error: toastError,
+		warning: toastWarning,
+		info: toastInfo,
+	},
 }));
 
 const DEVICES: CaptureDevice[] = [
@@ -59,6 +65,7 @@ beforeEach(() => {
 	toastSuccess.mockClear();
 	toastError.mockClear();
 	toastWarning.mockClear();
+	toastInfo.mockClear();
 });
 
 afterEach(() => {
@@ -116,6 +123,40 @@ describe("LiveView switchInput — async state", () => {
 		await waitFor(() => expect(btn()?.disabled).toBe(false));
 		await fireEvent.click(btn() as HTMLButtonElement);
 		await waitFor(() => expect(switchInput).toHaveBeenCalledTimes(2));
+	});
+
+	it("shows a calm info toast when the switch result carries audio_follow_pending (T7)", async () => {
+		switchInput.mockResolvedValue({
+			success: true,
+			gap_ms: 6,
+			audio_follow_pending: true,
+		});
+
+		const { container } = render(SwitchInputHarness, {
+			props: { devices: DEVICES, activeInput: "video0" },
+		});
+		const btn = container.querySelector<HTMLButtonElement>(
+			'[data-switch-input="video63"]',
+		);
+
+		await fireEvent.click(btn as HTMLButtonElement);
+		await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+		await waitFor(() => expect(toastInfo).toHaveBeenCalledTimes(1));
+	});
+
+	it("does NOT show the audio-follow info toast on an ordinary switch (no follow pending)", async () => {
+		switchInput.mockResolvedValue({ success: true, gap_ms: 6 });
+
+		const { container } = render(SwitchInputHarness, {
+			props: { devices: DEVICES, activeInput: "video0" },
+		});
+		const btn = container.querySelector<HTMLButtonElement>(
+			'[data-switch-input="video63"]',
+		);
+
+		await fireEvent.click(btn as HTMLButtonElement);
+		await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+		expect(toastInfo).not.toHaveBeenCalled();
 	});
 });
 

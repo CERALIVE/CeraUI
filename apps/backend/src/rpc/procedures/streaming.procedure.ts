@@ -5,6 +5,7 @@
 
 import { CerastreamRpcError } from "@ceralive/cerastream";
 import {
+	AUDIO_SOURCE_AUTO,
 	audioCodecsMessageSchema,
 	bitrateInputSchema,
 	bitrateOutputSchema,
@@ -19,6 +20,7 @@ import {
 	SRTLA_MIN_LATENCY_MS,
 	type StreamingConfigInput,
 	SWITCH_AUDIO_ERRORS,
+	type SwitchInputOutput,
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
 	streamHealthOutputSchema,
@@ -32,6 +34,7 @@ import {
 	switchInputOutputSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
+import { logger } from "../../helpers/logger.ts";
 import {
 	getMockState,
 	setMockEncoderConfig,
@@ -44,7 +47,12 @@ import {
 	isMockGatewayActive,
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
-import { refreshResolvedAsrcPreview } from "../../modules/streaming/auto-audio.ts";
+import {
+	getResolvedAsrc,
+	refreshResolvedAsrcPreview,
+	resolveAutoAsrcFromLiveState,
+	setPendingAudioFollowAsrc,
+} from "../../modules/streaming/auto-audio.ts";
 import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
 import { validatePersistedPipeline } from "../../modules/streaming/config-migration.ts";
 import { deviceRegistry } from "../../modules/streaming/devices.ts";
@@ -236,6 +244,10 @@ export const streamingStopProcedure = authedProcedure
 	.output(streamingStopOutputSchema)
 	.handler(() => {
 		if (shouldUseMocks()) {
+			// A deferred auto-audio follow only applies at the NEXT start; a stop
+			// cancels it (mirrors the real stop path in streamloop's stop handler)
+			// so the picker never keeps a stale "follows on restart" hint (T7).
+			setPendingAudioFollowAsrc(null);
 			setStreamingState(false);
 			updateStatus(false);
 			return { success: true };
@@ -614,14 +626,63 @@ export const listDevicesProcedure = authedProcedure
 	});
 
 /**
+ * After a SUCCESSFUL live video switchInput, make the switch DURABLE and surface a
+ * deferred auto-audio follow (T7).
+ *
+ * (1) Persist the switched source. The device registry updates its `activeInput`
+ * in memory only, so without this the next start would rehydrate the OLD source
+ * from `config.source` and any "applies on next start" claim would be false.
+ * `resolveSourceRouting` maps the switched id to its `{pipeline,
+ * selected_video_input}`; an id that is not a known source is skipped with one
+ * debug log (the live switch itself already succeeded).
+ *
+ * (2) Deferred auto-audio follow. cerastream's `switch-audio` drives only the two
+ * pre-built graph legs, so a live device-keyed audio follow is not possible today
+ * (TD-live-audio-follow) — the follow APPLIES AT NEXT START (T5's launch-time
+ * resolution). In "Auto" mode, when the re-resolved target differs from the audio
+ * the running stream is actually using (`resolved_asrc`, left untouched here), we
+ * only broadcast the pending target and hint the caller. NEVER a switchAudio call.
+ */
+export function applySwitchInputFollow(
+	inputId: string,
+	result: SwitchInputOutput,
+): SwitchInputOutput {
+	if (!result.success) return result;
+
+	const routed = resolveSourceRouting(inputId, getSourcesMessage().sources);
+	if (!routed.ok) {
+		logger.debug(
+			"switchInput: switched input is not a known source; skipping durable persistence + audio follow",
+			{ input_id: inputId, error: routed.error },
+		);
+		return result;
+	}
+
+	const config = getConfig();
+	config.source = inputId;
+	config.pipeline = routed.pipeline;
+	config.selected_video_input = routed.selected_video_input;
+	saveConfig();
+	broadcastMsg("config", config);
+
+	if (getConfig().asrc !== AUDIO_SOURCE_AUTO) return result;
+	const next = resolveAutoAsrcFromLiveState();
+	if (next.asrcKey === getResolvedAsrc()) return result;
+	setPendingAudioFollowAsrc(next.asrcKey);
+	return { ...result, audio_follow_pending: true };
+}
+
+/**
  * Live-switch the active input. Returns the glitch-free gap in ms, or a typed
- * error (SOURCE_LOST when the target was unplugged before the switch landed).
+ * error (SOURCE_LOST when the target was unplugged before the switch landed). A
+ * successful switch is persisted + re-resolves the deferred Auto audio follow.
  */
 export const switchInputProcedure = authedProcedure
 	.input(switchInputInputSchema)
 	.output(switchInputOutputSchema)
-	.handler(({ input }) => {
-		return deviceRegistry.switchInput(input.input_id);
+	.handler(async ({ input }) => {
+		const result = await deviceRegistry.switchInput(input.input_id);
+		return applySwitchInputFollow(input.input_id, result);
 	});
 
 /**
