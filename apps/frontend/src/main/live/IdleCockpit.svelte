@@ -1,15 +1,22 @@
 <script lang="ts">
 /**
- * IdleCockpit — the pre-stream surface (Task 11).
+ * IdleCockpit — the pre-stream surface (Task 11 / source-first reorder T10).
  *
- * A presentational wrapper composing the three idle-mode subtrees in order:
- *   1. {@link GoLiveCard} — the one adaptive readiness + config + start surface
- *      (absorbs the old OnboardingChecklist, no-server empty-state, ServerReadiness
- *      and StreamSettingsCard mounts).
- *   2. A collapsed "Preview" `<details>` disclosure hosting {@link PreviewCanvas}
+ * A presentational wrapper composing the idle-mode subtrees in SOURCE-FIRST order:
+ *   1. {@link SourceSection} — the unified source picker (leads the cockpit so the
+ *      operator picks WHAT to stream before tuning HOW).
+ *   2. {@link StreamSetupChain} — the merged "Stream setup" card (readiness rows +
+ *      config-row edit affordances + the Start control at its foot). Replaces the
+ *      old GoLiveCard mount (GoLiveCard stays an unmounted shim per T9).
+ *   3. A collapsed "Preview" `<details>` disclosure hosting {@link PreviewCanvas}
  *      (local, off-until-toggled — never dials the engine until the operator opens
  *      it and starts the preview).
- *   3. {@link SourceSection} — the unified source picker.
+ *   4. A collapsed "Roadmap" `<details>` disclosure of calm coming-soon pills.
+ *
+ * The Start control is mounted EXACTLY ONCE — inside {@link StreamSetupChain} at
+ * its foot (T9). Because StreamSetupChain sits between SourceSection and the
+ * disclosures, the rendered order is SourceSection → setup rows → Start → preview →
+ * roadmap. IdleCockpit does NOT mount its own StreamControlButton (no double-mount).
  *
  * State ownership stays in LiveView: EVERY datum and handler here is a prop
  * threaded down from LiveView's getters/handlers. This component owns NO `$state`,
@@ -34,11 +41,11 @@ import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte'
 import { LL } from '@ceraui/i18n/svelte';
 import { PictureInPicture2, Shuffle, Volume2 } from '@lucide/svelte';
 
-import GoLiveCard from './GoLiveCard.svelte';
 import type { ConfigRow } from './StreamSettingsCard.svelte';
+import StreamSetupChain from './StreamSetupChain.svelte';
 
 interface Props {
-	// ── GoLiveCard: readiness inputs (threaded from LiveView getters) ──────────
+	// ── StreamSetupChain: readiness inputs (threaded from LiveView getters) ─────
 	config: ConfigMessage | undefined;
 	caps: CapabilitiesMessage | undefined;
 	sources: SourcesMessage | undefined;
@@ -51,9 +58,10 @@ interface Props {
 	optimismState: StreamingOptimismState;
 	destinationValidated?: boolean;
 	maxBitrate?: number;
-	// ── GoLiveCard: actions (callbacks owned by LiveView) ──────────────────────
+	// ── StreamSetupChain: actions (callbacks owned by LiveView) ────────────────
 	onStart: (overrides: { source?: string }) => void;
 	onStop: () => void;
+	/** Source-gate fix + sole-camera "Change" — LiveView scrolls/focuses the list. */
 	onOpenSource: () => void;
 	onGoNetwork: () => void;
 	onOpenServer: () => void;
@@ -127,7 +135,29 @@ const audioEmbeddedComingSoon = $derived(
 </script>
 
 <div class="space-y-6" data-testid="idle-cockpit">
-	<GoLiveCard
+	<!-- Source-first (T10): pick WHAT to stream before tuning HOW. -->
+	<SourceSection
+		{activeEncode}
+		{activeInput}
+		{audioSourceList}
+		{audioSources}
+		{audioStatus}
+		{capabilities}
+		{config}
+		{isStreaming}
+		onReorderSource={onReorderSource}
+		onSelectAudioSource={onSelectAudioSource}
+		onSwitch={onSwitch}
+		{selectedAudioSource}
+		{sourceOrder}
+		{sourcePreferenceField}
+		{sources}
+		{switchingInput}
+	/>
+
+	<!-- Stream setup: readiness rows + config edits + the Start control at its foot
+	     (StreamControlButton is mounted ONCE here, never a second time — T10). -->
+	<StreamSetupChain
 		{config}
 		{caps}
 		{sources}
@@ -160,25 +190,6 @@ const audioEmbeddedComingSoon = $derived(
 			<PreviewCanvas />
 		</div>
 	</details>
-
-	<SourceSection
-		{activeEncode}
-		{activeInput}
-		{audioSourceList}
-		{audioSources}
-		{audioStatus}
-		{capabilities}
-		{config}
-		{isStreaming}
-		onReorderSource={onReorderSource}
-		onSelectAudioSource={onSelectAudioSource}
-		onSwitch={onSwitch}
-		{selectedAudioSource}
-		{sourceOrder}
-		{sourcePreferenceField}
-		{sources}
-		{switchingInput}
-	/>
 
 	<!--
 		Roadmap disclosure (T12) — genuine future features surfaced as calm, purely

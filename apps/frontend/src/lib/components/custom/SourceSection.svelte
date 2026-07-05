@@ -367,7 +367,7 @@ const audioEmbeddedActive = $derived(
 const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 </script>
 
-<Card.Root data-testid="source-section">
+<Card.Root data-testid="source-section" tabindex={-1}>
 	<Card.Content class="space-y-5 p-4 sm:p-6">
 		<!-- Section header + compact capability summary -->
 		<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -460,7 +460,8 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 		     Selecting a row persists config.source through the field-sync lock; a capture
 		     row carries an inline reorder affordance when ≥2 capture sources exist. -->
 		{#if hasSources}
-			<div class="space-y-2" data-testid="source-list">
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="space-y-2" data-testid="source-list" tabindex={-1}>
 				{#if canReorder}
 					<div class="flex items-center justify-end">
 						<FieldSyncIndicator

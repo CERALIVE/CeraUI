@@ -282,6 +282,7 @@ const networkSummary = $derived(
 	state: GateStatus,
 	reasonKey: string | undefined,
 	chip: 'bitrate' | 'traffic-light' | undefined,
+	onFix: (() => void) | undefined,
 )}
 	{@const locked = isSectionLocked(row.section, isStreaming)}
 	<div
@@ -318,6 +319,20 @@ const networkSummary = $derived(
 					>
 						{resolveReason(reasonKey)}
 					</p>
+					{#if onFix && state === 'blocked'}
+						<!-- Source-gate fix: retargets to the source list (LiveView scrolls/
+						     focuses it) — it does NOT open the encoder dialog. -->
+						<button
+							class="text-primary mt-1.5 inline-flex min-h-[44px] items-center gap-1 text-xs font-medium hover:underline focus-visible:underline focus-visible:outline-none"
+							data-testid="setup-row-fix"
+							data-fix="openSource"
+							onclick={onFix}
+							type="button"
+						>
+							{$LL.live.goLive.fix.openSource()}
+							<ChevronRight aria-hidden={true} class="h-3.5 w-3.5 rtl:-scale-x-100" />
+						</button>
+					{/if}
 				{/if}
 			</div>
 		</div>
@@ -415,10 +430,17 @@ const networkSummary = $derived(
 		<!-- Four setup rows in signal order — always fully rendered (no collapse). -->
 		<div class="divide-border divide-y">
 			{#if encoderRow}
-				{@render setupRow('encoder', encoderRow, encoderState, encoderReason, 'bitrate')}
+				{@render setupRow(
+					'encoder',
+					encoderRow,
+					encoderState,
+					encoderReason,
+					'bitrate',
+					onOpenSource,
+				)}
 			{/if}
 			{#if audioRow}
-				{@render setupRow('audio', audioRow, audioState, undefined, undefined)}
+				{@render setupRow('audio', audioRow, audioState, undefined, undefined, undefined)}
 			{/if}
 			{#if serverRow}
 				{@render setupRow(
@@ -427,6 +449,7 @@ const networkSummary = $derived(
 					destinationState,
 					destinationReason,
 					'traffic-light',
+					undefined,
 				)}
 			{/if}
 

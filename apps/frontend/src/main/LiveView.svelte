@@ -396,6 +396,18 @@ async function handleManageLinks() {
 	navigateTo({ network });
 }
 
+// Source-gate fix + sole-camera "Change" (T10): retarget to the unified source
+// list instead of opening EncoderDialog — a blocked/undesired source is fixed by
+// PICKING one, so scroll it into view and focus its list container.
+function handleOpenSource() {
+	if (typeof document === 'undefined') return;
+	const section = document.querySelector<HTMLElement>('[data-testid="source-section"]');
+	if (!section) return;
+	section.scrollIntoView({ behavior: 'smooth' });
+	const list = section.querySelector<HTMLElement>('[data-testid="source-list"]') ?? section;
+	list.focus();
+}
+
 // ── Dialog open state ──────────────────────────────────────────────────────
 let serverDialogOpen = $state(false);
 let audioDialogOpen = $state(false);
@@ -814,9 +826,10 @@ const configRows = $derived<ConfigRow[]>([
 			onStop={handleStop}
 		/>
 	{:else}
-		<!-- Idle cockpit: GoLiveCard (readiness + config + start) + Preview
-		     disclosure + SourceSection. Absorbs the old onboarding checklist,
-		     no-server empty-state, ServerReadiness and StreamSettingsCard. -->
+		<!-- Idle cockpit (source-first, T10): SourceSection → StreamSetupChain
+		     (readiness rows + config edits + Start at its foot) → Preview + Roadmap
+		     disclosures. Absorbs the old onboarding checklist, no-server empty-state,
+		     ServerReadiness and StreamSettingsCard. -->
 		<IdleCockpit
 			{config}
 			caps={getCapabilities()}
@@ -831,7 +844,7 @@ const configRows = $derived<ConfigRow[]>([
 			maxBitrate={config?.max_br}
 			onStart={handleStart}
 			onStop={handleStop}
-			onOpenSource={() => (encoderOpen = true)}
+			onOpenSource={handleOpenSource}
 			onGoNetwork={handleManageLinks}
 			onOpenServer={() => (serverDialogOpen = true)}
 			onOpenEncoder={() => (encoderOpen = true)}
