@@ -58,7 +58,7 @@ export function handleMmcliCommand(args: string[]): string | null {
 	// mmcli -K -m <id> (get modem info)
 	const modemIndex = args.indexOf("-m");
 	if (modemIndex !== -1 && args[modemIndex + 1]) {
-		const modemId = Number.parseInt(args[modemIndex + 1], 10);
+		const modemId = Number.parseInt(args[modemIndex + 1] as string, 10);
 
 		// Check for 3gpp-scan flag
 		if (args.includes("--3gpp-scan")) {
@@ -71,7 +71,7 @@ export function handleMmcliCommand(args: string[]): string | null {
 	// mmcli -K -i <id> (get SIM info)
 	const simIndex = args.indexOf("-i");
 	if (simIndex !== -1 && args[simIndex + 1]) {
-		const simId = Number.parseInt(args[simIndex + 1], 10);
+		const simId = Number.parseInt(args[simIndex + 1] as string, 10);
 		return getMockSimInfo(simId);
 	}
 

@@ -49,7 +49,9 @@ export interface MockHotspotConfig {
 	channel: WifiChannel;
 }
 
-const mockHotspotConfigs: Record<string, MockHotspotConfig> = {
+const mockHotspotConfigs: Record<string, MockHotspotConfig> & {
+	wlan0: MockHotspotConfig;
+} = {
 	wlan0: {
 		uuid: "hotspot-wlan0-5678-9012-abcdef123456",
 		name: "CeraLive-Hotspot",

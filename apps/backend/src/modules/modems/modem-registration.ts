@@ -174,7 +174,13 @@ function buildModemStatus(
 		? "scanning"
 		: modemInfo["modem.generic.state"];
 
-	return { connection, network, network_type, signal, roaming };
+	return {
+		connection,
+		...(network !== undefined ? { network } : {}),
+		network_type,
+		signal,
+		roaming,
+	};
 }
 
 function buildSimLock(modemInfo: Readonly<ModemInfo>): SimLock | undefined {
@@ -375,17 +381,18 @@ async function registerModem(id: number) {
 		ifname: ifname,
 		name: hwName,
 		sim_network: simNetwork,
-		model,
-		manufacturer,
+		...(model !== undefined ? { model } : {}),
+		...(manufacturer !== undefined ? { manufacturer } : {}),
 		network_type: {
 			supported: networkTypes,
 			active: networkType?.label ?? null,
 		},
-		config: config,
+		...(config !== undefined ? { config } : {}),
 	};
 
 	modem.status = buildModemStatus(modemInfo, modem);
-	modem.sim_lock = buildSimLock(modemInfo);
+	const simLock = buildSimLock(modemInfo);
+	if (simLock !== undefined) modem.sim_lock = simLock;
 
 	setModem(id, modem);
 }
@@ -423,11 +430,12 @@ export async function refreshModemStatus(id: ModemId): Promise<void> {
 	}
 
 	const status = buildModemStatus(modemInfo, modem);
+	const simLock = buildSimLock(modemInfo);
+	const { removed: _removed, ...modemRest } = modem;
 	const updated: Modem = {
-		...modem,
+		...modemRest,
 		status,
-		sim_lock: buildSimLock(modemInfo),
-		removed: undefined,
+		...(simLock !== undefined ? { sim_lock: simLock } : {}),
 	};
 	setModem(id, updated);
 

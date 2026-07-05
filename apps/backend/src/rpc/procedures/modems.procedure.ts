@@ -4,6 +4,7 @@
  */
 
 import {
+	type ModemList,
 	modemConfigInputSchema,
 	modemListSchema,
 	modemScanInputSchema,
@@ -48,7 +49,7 @@ const authedProcedure = baseProcedure.use(authMiddleware);
 export const getAllModemsProcedure = authedProcedure
 	.output(modemListSchema)
 	.handler(() => {
-		return buildModemsMessage();
+		return buildModemsMessage() as ModemList;
 	});
 
 /**
@@ -61,7 +62,7 @@ export const configureModemProcedure = authedProcedure
 		await withModemUpdateLock(async () => {
 			handleModems(context.ws as unknown as import("ws").default, {
 				config: {
-					device: input.device,
+					device: Number(input.device),
 					network_type: input.network_type,
 					roaming: input.roaming ?? false,
 					network: input.network ?? "",
@@ -109,7 +110,7 @@ export const scanModemProcedure = authedProcedure
 	.handler(async ({ input, context }) => {
 		await withModemUpdateLock(async () => {
 			handleModems(context.ws as unknown as import("ws").default, {
-				scan: { device: input.device },
+				scan: { device: String(input.device) },
 			});
 		});
 		return { success: true };
@@ -140,7 +141,10 @@ export const unlockSimProcedure = authedProcedure
 		// chmod-600 tmpfs secrets file (never config.json) so boot auto-unlock has
 		// it. `remember: false` opts back out and clears any stored PIN; an absent
 		// flag leaves the stored PIN untouched. Persistence never fails the unlock.
-		if (result.state === "success" && input.remember !== undefined) {
+		if (
+			(result as SimUnlockResult).state === "success" &&
+			input.remember !== undefined
+		) {
 			try {
 				if (input.remember) {
 					await storeSimPin(input.pin);

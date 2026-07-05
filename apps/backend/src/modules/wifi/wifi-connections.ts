@@ -277,14 +277,18 @@ export function parseWifiScanRow(raw: string): ParsedWifiScanRow | null {
 
 export async function wifiUpdateScanResult() {
 	// Retry transient nmcli scan/list failures with exponential backoff (T7).
-	const wifiNetworks = await pollWithBackoff(() => nmScanResults(), {
-		maxAttempts: 3,
-		baseDelayMs: 200,
-		maxDelayMs: 1000,
-		emptyResultError: () => new Error("nmcli wifi list returned no results"),
-		onExhausted: (err) =>
-			logger.debug(`wifiUpdateScanResult: scan failed after retries: ${err}`),
-	});
+	const wifiNetworks = await pollWithBackoff(
+		() =>
+			nmScanResults("IN-USE,BSSID,SSID,MODE,CHAN,RATE,SIGNAL,BARS,SECURITY"),
+		{
+			maxAttempts: 3,
+			baseDelayMs: 200,
+			maxDelayMs: 1000,
+			emptyResultError: () => new Error("nmcli wifi list returned no results"),
+			onExhausted: (err) =>
+				logger.debug(`wifiUpdateScanResult: scan failed after retries: ${err}`),
+		},
+	);
 	if (!wifiNetworks) return;
 
 	for (const wifiInterface of Object.values(wifiInterfacesByMacAddress)) {

@@ -56,7 +56,8 @@ if (setup.hw === "rk3588") {
 // Create reverse lookup for performance
 const audioSrcReverseAliases: Record<string, string> = {};
 for (const id in audioSrcAliases) {
-	audioSrcReverseAliases[audioSrcAliases[id]] = id;
+	const alias = audioSrcAliases[id];
+	if (alias !== undefined) audioSrcReverseAliases[alias] = id;
 }
 
 let audioDevices: Record<string, string> = {};
@@ -224,7 +225,7 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 	asrcProbeWake?.();
 }
 
-let asrcProbeReject: ((err: Error) => void) | undefined;
+let asrcProbeReject: (() => void) | undefined;
 let asrcProbeWake: (() => void) | undefined;
 
 export function isAsrcProbeRejectResolved() {

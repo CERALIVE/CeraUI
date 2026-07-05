@@ -55,25 +55,25 @@ import { resolveStreamEndpoint } from "./transport/resolve-endpoint.ts";
 export type StartMessage = { start: ConfigParameters };
 
 export type ConfigParameters = {
-	delay?: number;
-	srt_latency?: number;
-	pipeline?: string;
-	acodec?: string;
-	relay_server?: string;
-	relay_account?: string;
-	relay_streamid_override?: string;
-	relay_protocol?: RelayProtocol;
-	srtla_addr?: string;
-	srtla_port?: number;
-	srt_streamid?: string;
-	asrc?: string;
-	bitrate_overlay?: boolean;
-	max_br?: number;
-	resolution?: Resolution;
-	framerate?: Framerate;
-	autostart?: boolean;
-	source?: string;
-	selected_video_input?: string;
+	delay?: number | undefined;
+	srt_latency?: number | undefined;
+	pipeline?: string | undefined;
+	acodec?: string | undefined;
+	relay_server?: string | undefined;
+	relay_account?: string | undefined;
+	relay_streamid_override?: string | undefined;
+	relay_protocol?: RelayProtocol | undefined;
+	srtla_addr?: string | undefined;
+	srtla_port?: number | undefined;
+	srt_streamid?: string | undefined;
+	asrc?: string | undefined;
+	bitrate_overlay?: boolean | undefined;
+	max_br?: number | undefined;
+	resolution?: Resolution | undefined;
+	framerate?: Framerate | undefined;
+	autostart?: boolean | undefined;
+	source?: string | undefined;
+	selected_video_input?: string | undefined;
 };
 
 let isStreaming = false;
@@ -147,8 +147,12 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 	if (!pipeline) throw new Error("Pipeline not found");
 
 	validatePipelineOverrides(pipeline, {
-		resolution: validated.resolution,
-		framerate: validated.framerate,
+		...(validated.resolution !== undefined
+			? { resolution: validated.resolution }
+			: {}),
+		...(validated.framerate !== undefined
+			? { framerate: validated.framerate }
+			: {}),
 	});
 
 	// audio codec
@@ -187,13 +191,27 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 
 	const { srtlaAddr, srtlaPort, streamid } = resolveStreamEndpoint(
 		{
-			relay_server: params.relay_server,
-			relay_account: params.relay_account,
-			srtla_addr: params.srtla_addr,
-			srtla_port: params.srtla_port,
-			srt_streamid: params.srt_streamid,
-			relay_streamid_override: params.relay_streamid_override,
-			relay_protocol: params.relay_protocol,
+			...(params.relay_server !== undefined
+				? { relay_server: params.relay_server }
+				: {}),
+			...(params.relay_account !== undefined
+				? { relay_account: params.relay_account }
+				: {}),
+			...(params.srtla_addr !== undefined
+				? { srtla_addr: params.srtla_addr }
+				: {}),
+			...(params.srtla_port !== undefined
+				? { srtla_port: params.srtla_port }
+				: {}),
+			...(params.srt_streamid !== undefined
+				? { srt_streamid: params.srt_streamid }
+				: {}),
+			...(params.relay_streamid_override !== undefined
+				? { relay_streamid_override: params.relay_streamid_override }
+				: {}),
+			...(params.relay_protocol !== undefined
+				? { relay_protocol: params.relay_protocol }
+				: {}),
 		},
 		getRelays(),
 		config.relay_protocol,
@@ -232,7 +250,9 @@ export async function updateConfig(_conn: WebSocket, params: ConfigParameters) {
 	}
 
 	if (pipeline.supportsAudio && params.acodec) {
-		config.acodec = params.acodec;
+		// Validated against AUDIO_CODECS above, so the wider `string` param is a
+		// concrete codec here; narrow to the config's codec enum.
+		config.acodec = params.acodec as typeof config.acodec;
 	}
 	if (pipeline.supportsAudio && params.asrc) {
 		config.asrc = params.asrc;

@@ -133,7 +133,7 @@ export async function startStream(
 	// Begin ingesting srtla_send's per-uplink telemetry. Seed the conn_id->iface
 	// registry from the exact file srtla_send reads at spawn so tlm_id (file
 	// order) maps back to interface names.
-	const ipsContent = await Bun.file(setup.ips_file)
+	const ipsContent = await Bun.file(setup.ips_file ?? "")
 		.text()
 		.catch(() => "");
 	startLinkTelemetry(statsFile, ipsContent.split("\n"), { controlSocket });

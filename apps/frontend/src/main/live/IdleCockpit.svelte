@@ -11,7 +11,7 @@
  *   3. A collapsed "Preview" `<details>` disclosure hosting {@link PreviewCanvas}
  *      (local, off-until-toggled — never dials the engine until the operator opens
  *      it and starts the preview).
- *   4. A collapsed "Roadmap" `<details>` disclosure of calm coming-soon pills.
+ *   4. A collapsed "Roadmap" `<details>` disclosure of calm not-yet-available pills.
  *
  * The Start control is mounted EXACTLY ONCE — inside {@link StreamSetupChain} at
  * its foot (T9). Because StreamSetupChain sits between SourceSection and the
@@ -178,61 +178,59 @@ const audioEmbeddedComingSoon = $derived(
 		{onOpenEncoder}
 	/>
 
-	<div class="space-y-3">
-		<!-- Local preview — collapsed by default; PreviewCanvas stays off (no engine
-		     dial) until the operator opens this disclosure and starts the preview. -->
-		<details class="bg-card rounded-xl border" data-testid="preview-disclosure">
-			<summary
-				class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
-			>
-				{$LL.live.modes.preview()}
-			</summary>
-			<div class="px-4 pb-4">
-				<PreviewCanvas />
-			</div>
-		</details>
+	<!-- Local preview — collapsed by default; PreviewCanvas stays off (no engine
+	     dial) until the operator opens this disclosure and starts the preview. -->
+	<details class="bg-card rounded-xl border" data-testid="preview-disclosure">
+		<summary
+			class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
+		>
+			{$LL.live.modes.preview()}
+		</summary>
+		<div class="px-4 pb-4">
+			<PreviewCanvas />
+		</div>
+	</details>
 
-		<!--
-			Roadmap disclosure (T12) — genuine future features surfaced as calm, purely
-			informational pills (NOT the disabled-with-reason warning treatment),
-			collapsed by default at the very bottom of the idle cockpit. Each ComingSoon
-			renders a dynamic data-debt-id into the DOM for tests; the static bindings the
-			CI gate (scripts/check-tech-debt.mjs) verifies live in the literal ids in the
-			comments beside each call site.
-			roadmap: data-debt-id="TD-pip" data-debt-id="TD-mode-fallback"
-		-->
-		<details class="bg-muted/30 rounded-xl border" data-testid="live-roadmap">
-			<summary
-				class="text-muted-foreground cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
-			>
-				{$LL.live.comingSoon.roadmap()}
-			</summary>
-			<div class="flex flex-col gap-2.5 px-4 pb-4">
-				<div class="flex items-center justify-between gap-3">
-					<span class="text-muted-foreground flex items-center gap-2 text-sm">
-						<PictureInPicture2 aria-hidden={true} class="size-4 shrink-0" />
-						{$LL.live.comingSoon.pip()}
-					</span>
-					<ComingSoon debtId="TD-pip" />
-				</div>
-				<div class="flex items-center justify-between gap-3">
-					<span class="text-muted-foreground flex items-center gap-2 text-sm">
-						<Shuffle aria-hidden={true} class="size-4 shrink-0" />
-						{$LL.live.comingSoon.modeFallback()}
-					</span>
-					<ComingSoon debtId="TD-mode-fallback" />
-				</div>
-				{#if audioEmbeddedComingSoon}
-					<div class="flex items-center justify-between gap-3">
-						<span class="text-muted-foreground flex items-center gap-2 text-sm">
-							<Volume2 aria-hidden={true} class="size-4 shrink-0" />
-							{$LL.live.comingSoon.embeddedAudio()}
-						</span>
-						<!-- CI gate static marker (component renders data-debt-id dynamically): data-debt-id="TD-embedded-audio" -->
-						<ComingSoon debtId="TD-embedded-audio" label={$LL.live.comingSoon.embeddedAudio()} />
-					</div>
-				{/if}
+	<!--
+		Roadmap disclosure (T12) — genuine future features surfaced as calm, purely
+		informational pills (NOT the disabled-with-reason warning treatment),
+		collapsed by default at the very bottom of the idle cockpit. Each ComingSoon
+		renders a dynamic data-debt-id into the DOM for tests; the static bindings the
+		CI gate (scripts/check-tech-debt.mjs) verifies live in the literal ids in the
+		comments beside each call site.
+		roadmap: data-debt-id="TD-pip" data-debt-id="TD-mode-fallback"
+	-->
+	<details class="bg-muted/30 rounded-xl border" data-testid="live-roadmap">
+		<summary
+			class="text-muted-foreground cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
+		>
+			{$LL.live.comingSoon.roadmap()}
+		</summary>
+		<div class="flex flex-col gap-2.5 px-4 pb-4">
+			<div class="flex items-center justify-between gap-3">
+				<span class="text-muted-foreground flex items-center gap-2 text-sm">
+					<PictureInPicture2 aria-hidden={true} class="size-4 shrink-0" />
+					{$LL.live.comingSoon.pip()}
+				</span>
+				<ComingSoon debtId="TD-pip" />
 			</div>
-		</details>
-	</div>
+			<div class="flex items-center justify-between gap-3">
+				<span class="text-muted-foreground flex items-center gap-2 text-sm">
+					<Shuffle aria-hidden={true} class="size-4 shrink-0" />
+					{$LL.live.comingSoon.modeFallback()}
+				</span>
+				<ComingSoon debtId="TD-mode-fallback" />
+			</div>
+			{#if audioEmbeddedComingSoon}
+				<div class="flex items-center justify-between gap-3">
+					<span class="text-muted-foreground flex items-center gap-2 text-sm">
+						<Volume2 aria-hidden={true} class="size-4 shrink-0" />
+						{$LL.live.comingSoon.embeddedAudio()}
+					</span>
+					<!-- CI gate static marker (component renders data-debt-id dynamically): data-debt-id="TD-embedded-audio" -->
+					<ComingSoon debtId="TD-embedded-audio" label={$LL.live.comingSoon.embeddedAudio()} />
+				</div>
+			{/if}
+		</div>
+	</details>
 </div>

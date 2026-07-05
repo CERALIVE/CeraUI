@@ -93,11 +93,17 @@ type WifiForgetMessage = {
 	forget: ConnectionUUID;
 };
 
+type WifiScanMessage = {
+	scan: WifiInterfaceId;
+};
+
 export type WifiMessage = {
 	wifi:
 		| WifiConnectMessage
 		| WifiDisconnectMessage
 		| WifiNewMessage
+		| WifiForgetMessage
+		| WifiScanMessage
 		| WifiHotspotMessage;
 };
 
@@ -115,8 +121,11 @@ export type WifiNetwork = {
 /* Builds the WiFi status structure sent over the network from the <wd> structures */
 export type WifiInterfaceResponseMessage = Pick<
 	BaseWifiInterface,
-	"ifname" | "conn" | "hw" | "saved"
+	"ifname" | "hw" | "saved"
 > & {
+	// Empty string = no active connection (the wire convention every build path
+	// uses); the real path coerces BaseWifiInterface.conn's null to "" to match.
+	conn: string;
 	available?: Array<WifiNetwork>;
 	hotspot?: Pick<WifiHotspot, "name" | "password" | "channel"> & {
 		available_channels: Record<string, { name: string }>;
@@ -134,7 +143,7 @@ export function wifiBuildMsg() {
 		if (!config.wifi) return {};
 
 		const state = getMockState();
-		const ifs: Record<number, WifiInterfaceResponseMessage> = {};
+		const ifs: Record<string, WifiInterfaceResponseMessage> = {};
 
 		mockWifiRadios.forEach((radio, index) => {
 			if (state.wifiModes[radio.device] === "hotspot") {
@@ -190,7 +199,7 @@ export function wifiBuildMsg() {
 		return ifs;
 	}
 
-	const ifs: Record<number, WifiInterfaceResponseMessage> = {};
+	const ifs: Record<string, WifiInterfaceResponseMessage> = {};
 	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
 	for (const macAddress in wifiInterfacesByMacAddress) {
 		const wifiInterface = wifiInterfacesByMacAddress[macAddress];
@@ -198,38 +207,46 @@ export function wifiBuildMsg() {
 
 		const id = wifiInterface.id;
 
-		ifs[id] = {
+		const entry: WifiInterfaceResponseMessage = {
 			ifname: wifiInterface.ifname,
-			conn: wifiInterface.conn,
+			conn: wifiInterface.conn ?? "",
 			hw: wifiInterface.hw,
 			saved: {},
 		};
+		ifs[id] = entry;
 
 		if (isHotspot(wifiInterface)) {
-			ifs[id].hotspot = {
-				name: wifiInterface.hotspot.name,
-				password: wifiInterface.hotspot.password,
+			const hotspot: NonNullable<WifiInterfaceResponseMessage["hotspot"]> = {
+				...(wifiInterface.hotspot.name !== undefined
+					? { name: wifiInterface.hotspot.name }
+					: {}),
+				...(wifiInterface.hotspot.password !== undefined
+					? { password: wifiInterface.hotspot.password }
+					: {}),
 				available_channels: getWifiChannelMap(
 					wifiInterface.hotspot.availableChannels,
 				),
-				channel: wifiInterface.hotspot.channel,
+				...(wifiInterface.hotspot.channel !== undefined
+					? { channel: wifiInterface.hotspot.channel }
+					: {}),
 			};
 
 			const warnings = Object.keys(wifiInterface.hotspot.warnings);
 			if (warnings.length > 0) {
-				ifs[id].hotspot.warnings = warnings;
+				hotspot.warnings = warnings;
 			}
+			entry.hotspot = hotspot;
 		} else {
-			ifs[id].available = Array.from(wifiInterface.available.values());
-			ifs[id].saved = wifiInterface.saved;
+			entry.available = Array.from(wifiInterface.available.values());
+			entry.saved = wifiInterface.saved;
 			if (canHotspot(wifiInterface)) {
-				ifs[id].supports_hotspot = true;
+				entry.supports_hotspot = true;
 			}
 		}
 
-		ifs[id].mode = isHotspot(wifiInterface) ? "hotspot" : "station";
+		entry.mode = isHotspot(wifiInterface) ? "hotspot" : "station";
 		if (canHotspot(wifiInterface) && wifiInterface.hotspot.transition) {
-			ifs[id].transition = wifiInterface.hotspot.transition;
+			entry.transition = wifiInterface.hotspot.transition;
 		}
 	}
 

@@ -360,6 +360,14 @@ export const setupConfigSchema = z.object({
 	killall_binary: z.string().optional(),
 	bcrpt_path: z.string().optional(),
 	ips_file: z.string().optional(),
+	// Legacy belaUI setup.json fields read at runtime (opt-in overrides).
+	ssh_user: z.string().optional(),
+	apt_update_enabled: z.boolean().optional(),
+	has_gsm_autoconfig: z.boolean().optional(),
+	remote_protocol_version: z.number().optional(),
+	remote_endpoint_secure: z.boolean().optional(),
+	remote_endpoint_host: z.string().optional(),
+	remote_endpoint_path: z.string().optional(),
 });
 
 export type SetupConfig = z.infer<typeof setupConfigSchema>;

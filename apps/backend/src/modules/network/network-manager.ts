@@ -85,6 +85,7 @@ export async function nmConnAdd(connection: NetworkManagerConnection) {
 			logger.error(`nmConnNew err: ${err.message}`);
 		}
 	}
+	return undefined;
 }
 
 export async function nmConnsGet(fields: string) {
@@ -114,6 +115,7 @@ export async function nmConnsGet(fields: string) {
 	} catch (err) {
 		logger.error(`nmConnsGet err: ${describeCliError(err)}`);
 	}
+	return undefined;
 }
 
 export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
@@ -158,6 +160,7 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 	} catch (err) {
 		logger.error(`nmConnGetFields err: ${describeCliError(err)}`);
 	}
+	return undefined;
 }
 
 export async function nmConnSetFields(
@@ -286,6 +289,7 @@ export async function nmDevices(fields: string) {
 	} catch (err) {
 		logger.error(`nmDevices err: ${describeCliError(err)}`);
 	}
+	return undefined;
 }
 
 export async function nmDeviceProp(device: string, fields: string) {
@@ -321,6 +325,7 @@ export async function nmDeviceProp(device: string, fields: string) {
 	} catch (err) {
 		logger.error(`nmDeviceProp err: ${describeCliError(err)}`);
 	}
+	return undefined;
 }
 
 export async function nmRescan(device?: string) {
@@ -380,6 +385,7 @@ export async function nmScanResults(fields: string) {
 	} catch (err) {
 		logger.error(`nmScanResults err: ${describeCliError(err)}`);
 	}
+	return undefined;
 }
 
 export async function nmHotspot(
@@ -425,6 +431,7 @@ export async function nmHotspot(
 			logger.error(`nmHotspot err: ${err.message}`);
 		}
 	}
+	return undefined;
 }
 
 // parses : separated values, with automatic \ escape detection and stripping

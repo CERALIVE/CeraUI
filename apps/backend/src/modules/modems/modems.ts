@@ -179,7 +179,7 @@ async function handleModemConfig(
 			modem.network_type.active = msg.network_type;
 		}
 	}
-	modem.inhibit = undefined;
+	delete modem.inhibit;
 
 	// Send the updated settings to the clients
 	broadcastModems({ [msg.device]: true });

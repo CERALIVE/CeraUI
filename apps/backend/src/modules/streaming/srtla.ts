@@ -54,7 +54,7 @@ export async function resolveSrtla(addr: string) {
 
 export async function setSrtlaIpList(addresses: string[]) {
 	const list = addresses.join("\n");
-	await Bun.write(setup.ips_file, list);
+	await Bun.write(setup.ips_file ?? "", list);
 	// Keep the conn_id->iface registry in lockstep with what srtla_send reads on
 	// SIGHUP reload, mirroring its monotonic tlm_id assignment.
 	registerSrtlaIpList(addresses);

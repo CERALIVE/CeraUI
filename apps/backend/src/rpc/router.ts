@@ -93,14 +93,20 @@ import {
 } from "./procedures/wifi.procedure.ts";
 import type { RPCContext } from "./types.ts";
 
+// Context-typed builder: every procedure is built with `os.$context<RPCContext>()`,
+// so the routers that group them must carry the same initial context. A bare
+// `os.router()` (initial context `Record<never, never>`) rejects every RPCContext
+// procedure as not assignable to `Lazyable<Procedure<Record<never, never>, …>>`.
+const base = os.$context<RPCContext>();
+
 const stableRoutes = {
-	auth: os.router({
+	auth: base.router({
 		login: loginProcedure,
 		setPassword: setPasswordProcedure,
 		logout: logoutProcedure,
 	}),
 
-	streaming: os.router({
+	streaming: base.router({
 		start: streamingStartProcedure,
 		stop: streamingStopProcedure,
 		setBitrate: setBitrateProcedure,
@@ -119,7 +125,7 @@ const stableRoutes = {
 		getMockHardware: getMockHardwareProcedure,
 	}),
 
-	modems: os.router({
+	modems: base.router({
 		getAll: getAllModemsProcedure,
 		configure: configureModemProcedure,
 		scan: scanModemProcedure,
@@ -127,7 +133,7 @@ const stableRoutes = {
 		unlockSimPuk: unlockSimPukProcedure,
 	}),
 
-	wifi: os.router({
+	wifi: base.router({
 		getStatus: getWifiStatusProcedure,
 		hotspotInfo: hotspotInfoProcedure,
 		connect: wifiConnectProcedure,
@@ -140,12 +146,12 @@ const stableRoutes = {
 		hotspotConfigure: hotspotConfigureProcedure,
 	}),
 
-	network: os.router({
+	network: base.router({
 		getInterfaces: getNetworkInterfacesProcedure,
 		configure: configureNetworkInterfaceProcedure,
 	}),
 
-	system: os.router({
+	system: base.router({
 		getRevisions: getRevisionsProcedure,
 		getSensors: getSensorsProcedure,
 		getLog: getLogProcedure,
@@ -167,26 +173,26 @@ const stableRoutes = {
 		mintPreviewToken: mintPreviewTokenProcedure,
 	}),
 
-	status: os.router({
+	status: base.router({
 		getStatus: getStatusProcedure,
 		getRelays: getRelaysProcedure,
 	}),
 
-	relay: os.router({
+	relay: base.router({
 		validate: relayValidateProcedure,
 	}),
 
-	notifications: os.router({
+	notifications: base.router({
 		getPersistent: getPersistentNotificationsProcedure,
 		dismiss: dismissNotificationProcedure,
 	}),
 
-	pairing: os.router({
+	pairing: base.router({
 		generateClaimCode: generateClaimCodeProcedure,
 		completePairing: completePairingProcedure,
 	}),
 
-	addons: os.router({
+	addons: base.router({
 		list: listAddonsProcedure,
 		install: installAddonProcedure,
 		uninstall: uninstallAddonProcedure,
@@ -201,7 +207,7 @@ export const appRouter = os
 	.$context<RPCContext>()
 	.router(
 		process.env.NODE_ENV !== "production"
-			? { ...stableRoutes, dev: os.router({ emit: devEmitProcedure }) }
+			? { ...stableRoutes, dev: base.router({ emit: devEmitProcedure }) }
 			: stableRoutes,
 	);
 

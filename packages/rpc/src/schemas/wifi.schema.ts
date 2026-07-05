@@ -33,10 +33,12 @@ export type AvailableWifiNetwork = z.infer<typeof availableWifiNetworkSchema>;
 
 // Hotspot config schema
 export const hotspotConfigSchema = z.object({
-	name: z.string(),
-	password: z.string(),
+	// name/password/channel mirror the backend's optional WifiHotspot fields — the
+	// status builder omits any that are unset, so they can be absent on the wire.
+	name: z.string().optional(),
+	password: z.string().optional(),
 	available_channels: z.record(wifiBandSchema, z.object({ name: z.string() })),
-	channel: wifiBandSchema,
+	channel: wifiBandSchema.optional(),
 });
 export type HotspotConfig = z.infer<typeof hotspotConfigSchema>;
 
@@ -46,9 +48,11 @@ export const wifiInterfaceSchema = z.object({
 	conn: z.string(),
 	hw: z.string(),
 	hotspot: hotspotConfigSchema.optional(),
-	available: z.array(availableWifiNetworkSchema),
+	// Absent on a hotspot-mode interface (which carries `hotspot` instead) and on
+	// an interface that cannot host a hotspot — the backend omits both there.
+	available: z.array(availableWifiNetworkSchema).optional(),
 	saved: z.record(z.string(), z.string()),
-	supports_hotspot: z.boolean(),
+	supports_hotspot: z.boolean().optional(),
 	transition: z.enum(['activating', 'deactivating']).optional(),
 	mode: z.enum(['station', 'hotspot']).optional(),
 });

@@ -68,7 +68,7 @@ const authedProcedure = baseProcedure.use(authMiddleware);
 export const getRevisionsProcedure = authedProcedure
 	.output(revisionsSchema)
 	.handler(() => {
-		return getRevisions();
+		return getRevisions() as z.infer<typeof revisionsSchema>;
 	});
 
 /**
@@ -77,7 +77,7 @@ export const getRevisionsProcedure = authedProcedure
 export const getSensorsProcedure = authedProcedure
 	.output(sensorsStatusSchema)
 	.handler(() => {
-		return getSensors();
+		return sensorsStatusSchema.parse(getSensors());
 	});
 
 /**
@@ -248,10 +248,14 @@ export const setRemoteConfigProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(async ({ input }) => {
 		await setRemoteConfig({
-			remote_key: input.remote_key,
-			token: input.token,
+			...(input.remote_key !== undefined
+				? { remote_key: input.remote_key }
+				: {}),
+			...(input.token !== undefined ? { token: input.token } : {}),
 			provider: input.provider,
-			custom_provider: input.custom_provider,
+			...(input.custom_provider !== undefined
+				? { custom_provider: input.custom_provider }
+				: {}),
 		});
 		return { success: true };
 	});

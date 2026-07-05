@@ -162,7 +162,7 @@ export const unlockSimPuk = async (
 };
 
 export const getWifiUUID = (
-	wifiNetwork: ValueOf<StatusMessage["wifi"]>["available"][number],
+	wifiNetwork: NonNullable<ValueOf<StatusMessage["wifi"]>["available"]>[number],
 	saved: ValueOf<StatusMessage["wifi"]>["saved"],
 ) => {
 	const found = Object.keys(saved).find((value) => {

@@ -404,12 +404,16 @@ export const setConfigProcedure = authedProcedure
 			input.framerate !== undefined
 		) {
 			const pipelineId = input.pipeline ?? config.pipeline;
-			const pipeline = searchPipelines(pipelineId);
+			const pipeline = searchPipelines(pipelineId ?? "");
 			if (pipeline) {
 				try {
 					validatePipelineOverrides(pipeline, {
-						resolution: input.resolution,
-						framerate: input.framerate,
+						...(input.resolution !== undefined
+							? { resolution: input.resolution }
+							: {}),
+						...(input.framerate !== undefined
+							? { framerate: input.framerate }
+							: {}),
 					});
 				} catch (err) {
 					if (err instanceof PipelineOverrideError) {

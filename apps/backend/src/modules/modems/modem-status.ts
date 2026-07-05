@@ -74,9 +74,11 @@ function buildModemMessage(
 ) {
 	invariant(modem.status !== undefined, "Modem status is missing");
 
-	const status: ModemsResponseMessageEntry["status"] = {
+	const status: ModemsResponseModemStatus = {
 		connection: modem.status.connection,
-		network: modem.status.network,
+		...(modem.status.network !== undefined
+			? { network: modem.status.network }
+			: {}),
 		network_type: modem.status.network_type,
 		signal: modem.status.signal,
 		roaming: modem.status.roaming,
@@ -92,8 +94,10 @@ function buildModemMessage(
 		const fullState: ModemsResponseModemFull = {
 			ifname: modem.ifname,
 			name: modem.name,
-			model: modem.model,
-			manufacturer: modem.manufacturer,
+			...(modem.model !== undefined ? { model: modem.model } : {}),
+			...(modem.manufacturer !== undefined
+				? { manufacturer: modem.manufacturer }
+				: {}),
 			network_type: {
 				supported: Object.keys(modem.network_type.supported),
 				active: modem.network_type.active,
@@ -107,7 +111,7 @@ function buildModemMessage(
 				password: modem.config.password,
 				roaming: modem.config.roaming,
 				network: modem.config.network,
-				autoconfig: setup.has_gsm_autoconfig && modem.config.autoconfig,
+				autoconfig: !!setup.has_gsm_autoconfig && modem.config.autoconfig,
 			};
 		} else {
 			fullState.no_sim = true;

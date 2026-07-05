@@ -212,8 +212,8 @@ async function spawnCollect(
 
 	if (input !== undefined) {
 		// Secret goes to stdin ONLY — never to argv.
-		child.stdin.write(input);
-		child.stdin.end();
+		child.stdin?.write(input);
+		child.stdin?.end();
 	}
 
 	const kill = () => {

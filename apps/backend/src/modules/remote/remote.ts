@@ -266,12 +266,12 @@ function remoteHandleMsg(conn: WebSocket, msg: RawData) {
 		} & ({ remote?: RemoteMessage } | Message);
 		if ("remote" in parsedMessage && parsedMessage.remote) {
 			handleRemote(conn, parsedMessage.remote);
-			parsedMessage.remote = undefined;
+			delete parsedMessage.remote;
 		}
 
 		if (Object.keys(msg).length >= 1) {
 			setSocketSenderId(conn, parsedMessage.id);
-			handleMessage(conn, parsedMessage as unknown as Message, true);
+			handleMessage();
 			deleteSocketSenderId(conn);
 		}
 
@@ -454,7 +454,7 @@ export type SetRemoteConfigParams = {
 		host: string;
 		path?: string;
 		secure?: boolean;
-		cloudUrl?: string;
+		cloudUrl?: string | undefined;
 	};
 };
 

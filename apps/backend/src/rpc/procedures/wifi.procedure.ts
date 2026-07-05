@@ -13,6 +13,7 @@ import {
 	hotspotConfigInputSchema,
 	hotspotToggleInputSchema,
 	successResponseSchema,
+	type WifiStatus,
 	wifiConnectInputSchema,
 	wifiDisconnectInputSchema,
 	wifiForgetInputSchema,
@@ -58,7 +59,10 @@ const MOCK_WIFI_DEVICE_INDEX = String(
 	),
 );
 
-type MutationResult = { success: boolean; error?: string };
+type MutationResult = {
+	success: boolean;
+	error?: "auth" | "generic" | "DEVICE_BUSY";
+};
 
 // Mock-seam DEVICE_BUSY knob: in mock mode a forced-busy fault makes every
 // mutating WiFi op return the same contention signal the device-lock would, so
@@ -130,7 +134,7 @@ const authedProcedure = baseProcedure.use(authMiddleware);
 export const getWifiStatusProcedure = authedProcedure
 	.output(wifiStatusSchema)
 	.handler(() => {
-		return wifiBuildMsg();
+		return wifiBuildMsg() as WifiStatus;
 	});
 
 /**
@@ -204,7 +208,7 @@ export const wifiConnectNewProcedure = authedProcedure
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		handleWifi(context.ws as unknown as WebSocket, {
 			new: {
-				device: input.device,
+				device: Number(input.device),
 				ssid: input.ssid,
 				password: input.password,
 			},
@@ -274,7 +278,7 @@ export const wifiScanProcedure = authedProcedure
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws as unknown as WebSocket;
 		const busy = await runGuarded(macForDeviceId(input.device), () => {
-			handleWifi(ws, { scan: input.device });
+			handleWifi(ws, { scan: Number(input.device) });
 		});
 		if (busy) return { success: false, error: "DEVICE_BUSY" };
 		return { success: true };
@@ -291,7 +295,7 @@ export const hotspotStartProcedure = authedProcedure
 		const ws = context.ws as unknown as WebSocket;
 		const busy = await runGuarded(macForDeviceId(input.device), () => {
 			handleWifi(ws, {
-				hotspot: { start: { device: input.device } },
+				hotspot: { start: { device: Number(input.device) } },
 			});
 			if (shouldUseMocks() && !getMockWifiFaults().suppressConfirm) {
 				const device = resolveMockWifiDevice(input.device);
@@ -316,7 +320,7 @@ export const hotspotStopProcedure = authedProcedure
 		const ws = context.ws as unknown as WebSocket;
 		const busy = await runGuarded(macForDeviceId(input.device), () => {
 			handleWifi(ws, {
-				hotspot: { stop: { device: input.device } },
+				hotspot: { stop: { device: Number(input.device) } },
 			});
 			if (shouldUseMocks() && !getMockWifiFaults().suppressConfirm) {
 				const device = resolveMockWifiDevice(input.device);
@@ -342,7 +346,7 @@ export const hotspotConfigureProcedure = authedProcedure
 			handleWifi(ws, {
 				hotspot: {
 					config: {
-						device: input.device,
+						device: Number(input.device),
 						name: input.name,
 						password: input.password,
 						channel: input.channel,

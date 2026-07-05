@@ -22,7 +22,7 @@ export function createContext(ws: AppWebSocket): RPCContext {
 
 		deauthenticate: () => {
 			ws.data.isAuthenticated = false;
-			ws.data.authToken = undefined;
+			delete ws.data.authToken;
 		},
 
 		markActive: () => {
@@ -38,7 +38,7 @@ export function createContext(ws: AppWebSocket): RPCContext {
 		getSenderId: () => ws.data.senderId,
 
 		clearSenderId: () => {
-			ws.data.senderId = undefined;
+			delete ws.data.senderId;
 		},
 	};
 }
@@ -49,8 +49,6 @@ export function createContext(ws: AppWebSocket): RPCContext {
 export function initSocketData(): import("./types.ts").SocketData {
 	return {
 		isAuthenticated: false,
-		authToken: undefined,
 		lastActive: Date.now(),
-		senderId: undefined,
 	};
 }

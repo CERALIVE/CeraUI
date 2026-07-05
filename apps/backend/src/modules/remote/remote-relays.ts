@@ -122,11 +122,11 @@ export function buildRelaysMsg(): RelaysResponseMessage {
 		const rtt = getRelayRtt(id);
 		msg.servers[id] = {
 			name: srv.name,
-			rtt,
-			default: srv.default,
+			...(rtt !== undefined ? { rtt } : {}),
+			...(srv.default !== undefined ? { default: srv.default } : {}),
 			addr: srv.addr,
 			port: srv.port,
-			provider: srv.provider,
+			...(srv.provider !== undefined ? { provider: srv.provider } : {}),
 		};
 	});
 
@@ -136,8 +136,12 @@ export function buildRelaysMsg(): RelaysResponseMessage {
 		const displayName = `${relayAccount.name}${relayAccount.disabled ? " [disabled]" : ""}`;
 		msg.accounts[id] = {
 			name: displayName,
-			disabled: relayAccount.disabled,
-			provider: relayAccount.provider,
+			...(relayAccount.disabled !== undefined
+				? { disabled: relayAccount.disabled }
+				: {}),
+			...(relayAccount.provider !== undefined
+				? { provider: relayAccount.provider }
+				: {}),
 		};
 	});
 
@@ -153,6 +157,7 @@ export async function updateCachedRelays(relays: RelaysCache | undefined) {
 		writeTextFileAtomic(RELAYS_CACHE_FILE, JSON.stringify(relays));
 		return true;
 	}
+	return undefined;
 }
 
 export function validateRemoteRelays(

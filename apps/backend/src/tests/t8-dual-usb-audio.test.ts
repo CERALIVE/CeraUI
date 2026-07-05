@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { buildMockDualUsbAudioDevices } from "../mocks/fixture-factory.ts";
+import { mockAudioDevicesSchema } from "../mocks/mock-schemas.ts";
 import { initMockService, stopMockService } from "../mocks/mock-service.ts";
-import { getMockAudioDevices, getMockEngineDevices } from "../mocks/providers/streaming.ts";
+import {
+	getMockAudioDevices,
+	getMockEngineDevices,
+} from "../mocks/providers/streaming.ts";
 import {
 	getAudioDevices,
 	setMockAudioDevicesProvider,
 } from "../modules/streaming/audio.ts";
-import { mockAudioDevicesSchema } from "../mocks/mock-schemas.ts";
 
 const ENV_KEYS = ["MOCK_MODE", "MOCK_SCENARIO", "NODE_ENV"] as const;
 const savedEnv: Record<string, string | undefined> = {};

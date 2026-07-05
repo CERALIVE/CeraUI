@@ -169,7 +169,9 @@ logger.info(bootTimer.phase("🚀", "server"));
 
 // Resolve device_id + paired state before anything that gates the control
 // channel (spec §9: it MUST NOT dial until identity is resolved).
-await guardNonCritical("identity", initIdentity);
+await guardNonCritical("identity", async () => {
+	await initIdentity();
+});
 // Second, independent outbound control channel (spec §9): dials the pinned
 // device-gateway hub once identity is resolved + paired. Distinct from the BCRPT
 // relay socket — its own endpoint, token audience, and lifecycle. Cloud-only, so

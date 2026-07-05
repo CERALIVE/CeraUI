@@ -3,7 +3,11 @@
  * Provides aggregated status information
  */
 
-import { relayMessageSchema, statusResponseSchema } from "@ceraui/rpc/schemas";
+import {
+	type ModemList,
+	relayMessageSchema,
+	statusResponseSchema,
+} from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import { getConfig } from "../../modules/config.ts";
 import { buildModemsMessage } from "../../modules/modems/modem-status.ts";
@@ -66,7 +70,7 @@ export const getStatusProcedure = authedProcedure
 			updating: getSoftUpdateStatus(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
-			modems: buildModemsMessage(),
+			modems: buildModemsMessage() as ModemList,
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
 			resolved_asrc: getResolvedAsrc(),
@@ -106,7 +110,7 @@ export function buildInitialStatus() {
 			updating: getSoftUpdateStatus(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
-			modems: buildModemsMessage(),
+			modems: buildModemsMessage() as ModemList,
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
 			resolved_asrc: getResolvedAsrc(),

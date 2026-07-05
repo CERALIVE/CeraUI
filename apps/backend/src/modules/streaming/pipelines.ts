@@ -242,9 +242,15 @@ export function getPipelineList() {
 			supportsAudio: pipeline.supportsAudio,
 			supportsResolutionOverride: pipeline.supportsResolutionOverride,
 			supportsFramerateOverride: pipeline.supportsFramerateOverride,
-			defaultResolution: pipeline.defaultResolution,
-			defaultFramerate: pipeline.defaultFramerate,
-			requires_gateway: pipeline.requires_gateway,
+			...(pipeline.defaultResolution !== undefined
+				? { defaultResolution: pipeline.defaultResolution }
+				: {}),
+			...(pipeline.defaultFramerate !== undefined
+				? { defaultFramerate: pipeline.defaultFramerate }
+				: {}),
+			...(pipeline.requires_gateway !== undefined
+				? { requires_gateway: pipeline.requires_gateway }
+				: {}),
 			audio_kind: pipeline.audio_kind,
 		};
 	}

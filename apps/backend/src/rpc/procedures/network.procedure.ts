@@ -63,11 +63,9 @@ export const configureNetworkInterfaceProcedure = authedProcedure
 		}
 
 		handleNetif(context.ws as unknown as import("ws").default, {
-			netif: {
-				name: input.name,
-				ip: input.ip ?? "",
-				enabled: input.enabled,
-			},
+			name: input.name,
+			ip: input.ip ?? "",
+			enabled: input.enabled,
 		});
 
 		return {

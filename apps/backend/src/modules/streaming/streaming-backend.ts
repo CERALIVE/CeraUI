@@ -38,7 +38,7 @@
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 
 /** Per-field bitrate input — mirrors the RPC bitrate setter payload. */
-export type BitrateParams = { max_br?: number };
+export type BitrateParams = { max_br?: number | undefined };
 
 /**
  * Inputs for a single engine launch: the selected pipeline (video source) id

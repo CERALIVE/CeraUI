@@ -25,7 +25,10 @@ export type Revisions = z.infer<typeof revisionsSchema>;
 // SSH status schema
 export const sshStatusSchema = z.object({
 	user: z.string(),
-	user_pass: z.boolean(),
+	// Optional: the backend omits `user_pass` when the shadow hash is unreadable
+	// (it cannot prove whether the password differs), so the field can be absent
+	// on the wire. Consumers must treat an absent value as "unknown".
+	user_pass: z.boolean().optional(),
 	active: z.boolean(),
 });
 export type SshStatus = z.infer<typeof sshStatusSchema>;
@@ -43,7 +46,9 @@ export const updateProgressSchema = z.object({
 	unpacking: z.number(),
 	setting_up: z.number(),
 	total: z.number(),
-	result: z.number().optional(),
+	// `0` marks completion; a string carries the apt failure message the update
+	// loop broadcasts before clearing state.
+	result: z.union([z.number(), z.string()]).optional(),
 });
 export type UpdateProgress = z.infer<typeof updateProgressSchema>;
 

@@ -143,7 +143,10 @@ export async function loadJsonConfig<T extends z.ZodTypeAny>(
 
 	if (parseResult.success) {
 		// All valid - merge with defaults for any missing optional fields
-		result.data = { ...defaults, ...parseResult.data };
+		result.data = {
+			...defaults,
+			...(parseResult.data as object),
+		} as z.infer<T>;
 
 		// Check which defaults were applied
 		if (typeof rawData === "object" && rawData !== null) {
@@ -188,7 +191,7 @@ export async function loadJsonConfig<T extends z.ZodTypeAny>(
 
 			if (schemaShape) {
 				for (const [key, value] of Object.entries(rawObj)) {
-					const fieldSchema = schemaShape[key];
+					const fieldSchema = schemaShape[key] as z.ZodType | undefined;
 					if (fieldSchema && typeof fieldSchema.safeParse === "function") {
 						const fieldResult = fieldSchema.safeParse(value);
 						if (fieldResult.success) {

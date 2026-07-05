@@ -17,8 +17,7 @@ let previousBytesCounted: BytesCounter = {};
 
 async function updateRtmpStats(): Promise<void> {
 	const serverResponse = await httpGet({
-		host: "localhost",
-		port: 1936,
+		host: "localhost:1936",
 	});
 
 	// Exit if request failed
