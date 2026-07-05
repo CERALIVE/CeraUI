@@ -24,6 +24,10 @@ test.describe("@visual Task 12 — coming-soon affordances", () => {
 			await expect(roadmap).toBeVisible({ timeout: 20_000 });
 			await roadmap.scrollIntoViewIfNeeded();
 
+			// The roadmap pills live inside a `<details>` disclosure (T10/T12), closed
+			// by default — open it (click its <summary>) before asserting visibility.
+			await roadmap.locator("summary").click();
+
 			// Both roadmap items expose their OPEN register binding.
 			await expect(roadmap.locator('[data-debt-id="TD-pip"]')).toBeVisible();
 			await expect(

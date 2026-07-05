@@ -30,8 +30,9 @@ import { broadcastMsg } from "../ui/websocket-server.ts";
 import { describeCliError } from "./cli-parse.ts";
 
 type SshStatus = {
-	user?: string;
-	active?: boolean;
+	user: string;
+	active: boolean;
+	// Omitted when the shadow hash is unreadable (password state unknowable).
 	user_pass?: boolean;
 };
 
@@ -161,7 +162,7 @@ export async function getSshStatus(
 	const status: SshStatus = {
 		user: ssh_user,
 		active,
-		user_pass: hash !== undefined ? hash !== sshPasswordHash : undefined,
+		...(hash !== undefined ? { user_pass: hash !== sshPasswordHash } : {}),
 	};
 
 	// Broadcast exactly once, and only when the complete status changed.

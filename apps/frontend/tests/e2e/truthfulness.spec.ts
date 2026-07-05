@@ -337,16 +337,12 @@ function sendSources(sources: Record<string, unknown>[]): void {
 	send({ sources: { hardware: "rk3588", sources } });
 }
 
-// GoLiveCard collapses to a thin ready bar when every readiness gate is green,
-// hiding the migrated config rows behind a "show checks" button. Reveal them
-// (idempotent, race-safe) before opening a config dialog.
+// The StreamSetupChain renders all four setup rows ALWAYS (no collapse, no ready
+// bar), so every migrated config-row edit trigger is permanently visible — just
+// wait for the trigger and click it.
 async function openConfigDialog(page: Page, testId: string): Promise<void> {
 	const trigger = page.getByTestId(testId);
-	const expand = page.getByTestId("go-live-expand");
-	await expect(async () => {
-		if (await expand.isVisible().catch(() => false)) await expand.click();
-		await expect(trigger).toBeVisible({ timeout: 1_000 });
-	}).toPass({ timeout: 15_000 });
+	await expect(trigger).toBeVisible({ timeout: 15_000 });
 	await trigger.click();
 }
 
@@ -875,32 +871,35 @@ test.describe("Capability truthfulness (functional)", () => {
 			.toBe("test");
 	});
 
-	// ── (d) GoLiveCard gates Start honestly and collapses to the ready bar ──────
-	test("the Go Live card blocks Start with a reason when a gate fails and collapses to a ready bar when every gate is green", async ({
+	// ── (d) StreamSetupChain gates Start honestly; every row goes ok when green ──
+	test("the Stream setup chain blocks Start with a reason when a gate fails and every setup row goes ok when all gates are green", async ({
 		page,
 	}) => {
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
 		serverConfig();
 		// BLOCKED: TWO capture sources and NO config.source → no sole-camera auto →
-		// the source gate blocks, the card stays expanded, Start is disabled + reason.
+		// the source gate blocks; it projects onto the ENCODER row, so that row is
+		// blocked and Start is disabled + reason (rows are always rendered — no collapse).
 		sendSources([SRC_HDMI_CAP, SRC_RODE]);
 
-		const card = page.getByTestId("go-live-card");
-		await expect(card).toBeVisible({ timeout: 15_000 });
+		const chain = page.getByTestId("stream-setup-chain");
+		await expect(chain).toBeVisible({ timeout: 15_000 });
 		await expect(
-			card.locator('[data-testid="go-live-gate"][data-gate="source"]'),
+			chain.locator('[data-testid="setup-row"][data-row="encoder"]'),
 		).toHaveAttribute("data-state", "blocked");
 		const start = page.getByRole("button", { name: /start stream/i });
 		await expect(start).toBeDisabled();
 		await expect(start).toHaveAttribute("title", /\S/);
 
-		// ALL-GREEN: pick a source → every gate is green, the card collapses to the
-		// thin ready bar, and Start becomes enabled.
+		// ALL-GREEN: pick a source → every setup row resolves to data-state="ok" and
+		// Start becomes enabled (the chain always shows all four rows, never collapses).
 		serverConfig({ source: "video-hdmi" });
-		await expect(card).toHaveAttribute("data-collapsed", "true");
-		await expect(page.getByTestId("go-live-ready-bar")).toBeVisible();
 		await expect(page.getByRole("button", { name: /start stream/i })).toBeEnabled();
+		await expect(chain.locator('[data-testid="setup-row"]')).toHaveCount(4);
+		await expect(
+			chain.locator('[data-testid="setup-row"]:not([data-state="ok"])'),
+		).toHaveCount(0);
 	});
 
 	// ── (e) The migrated config-row testids still open their dialogs ────────────

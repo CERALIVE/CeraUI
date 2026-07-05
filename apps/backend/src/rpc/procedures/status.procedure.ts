@@ -3,7 +3,11 @@
  * Provides aggregated status information
  */
 
-import { relayMessageSchema, statusResponseSchema } from "@ceraui/rpc/schemas";
+import {
+	modemListSchema,
+	relayMessageSchema,
+	statusResponseSchema,
+} from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import { getConfig } from "../../modules/config.ts";
 import { buildModemsMessage } from "../../modules/modems/modem-status.ts";
@@ -13,10 +17,16 @@ import {
 	buildRelaysMsg,
 	getRelays,
 } from "../../modules/remote/remote-relays.ts";
+import { getActiveEncodeStatus } from "../../modules/streaming/active-encode-status.ts";
 import {
 	deriveAudioSources,
 	getAudioDevices,
 } from "../../modules/streaming/audio.ts";
+import {
+	getPendingAudioFollowAsrc,
+	getResolvedAsrc,
+	getResolvedAsrcReason,
+} from "../../modules/streaming/auto-audio.ts";
 import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { getDevicesMessage } from "../../modules/streaming/devices.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
@@ -60,10 +70,14 @@ export const getStatusProcedure = authedProcedure
 			updating: getSoftUpdateStatus(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
-			modems: buildModemsMessage(),
+			modems: modemListSchema.parse(buildModemsMessage()),
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
+			resolved_asrc: getResolvedAsrc(),
+			resolved_asrc_reason: getResolvedAsrcReason(),
+			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			network_ingest: getNetworkIngestInfo(),
+			active_encode: getActiveEncodeStatus(),
 		};
 	});
 
@@ -96,10 +110,14 @@ export function buildInitialStatus() {
 			updating: getSoftUpdateStatus(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
-			modems: buildModemsMessage(),
+			modems: modemListSchema.parse(buildModemsMessage()),
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
+			resolved_asrc: getResolvedAsrc(),
+			resolved_asrc_reason: getResolvedAsrcReason(),
+			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			network_ingest: getNetworkIngestInfo(),
+			active_encode: getActiveEncodeStatus(),
 		},
 		netif: netIfBuildMsg(),
 		sensors: getSensors(),

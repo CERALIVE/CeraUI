@@ -329,6 +329,10 @@ const de = {
 		stopStream: "Stream stoppen",
 		starting: "Wird gestartet...",
 		stopping: "Wird gestoppt...",
+		stopStuck: {
+			message: "Das Stoppen dauert länger als erwartet",
+			retry: "Erneut versuchen",
+		},
 		overview: "Übersicht",
 		streamingActive: "Streaming",
 		notStreaming: "Kein Streaming",
@@ -362,6 +366,11 @@ const de = {
 				"Die Eingangsquelle blockierte beim Start. Prüfe die Quelle und versuche es erneut.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "Stream-Setup",
+			linksReady: "{count} {{Verbindung|Verbindungen}} bereit",
+			noLinks: "Keine Verbindungen",
+		},
 		onboarding: {
 			title: "Einrichtung starten",
 			subtitle: "Drei Schritte bis zu deinem ersten gebündelten Stream.",
@@ -420,6 +429,7 @@ const de = {
 			exportAria: "Sitzungsübersicht exportieren",
 			exportError:
 				"Sitzungsübersicht konnte nicht exportiert werden. Bitte erneut versuchen.",
+			done: "Fertig",
 		},
 		networkIngest: {
 			title: "Netzwerk-Eingang",
@@ -444,6 +454,10 @@ const de = {
 			copied: "Adresse kopiert",
 			copyFailed: "Adresse konnte nicht kopiert werden.",
 			includesAudio: "Enthält Audio",
+			codecEducation: {
+				rtmp: "RTMP überträgt nur H.264-Video (mit AAC-Audio). Es wird immer in den konfigurierten Ausgabe-Codec umkodiert.",
+				srt: "SRT überträgt H.264- oder H.265-Video. Es wird immer in den konfigurierten Ausgabe-Codec umkodiert.",
+			},
 		},
 		preview: {
 			title: "Vorschau",
@@ -499,6 +513,7 @@ const de = {
 			audioSwitched: "Audio in {ms}ms umgeschaltet",
 			audioSwitchFailed: "Audioquelle konnte nicht umgeschaltet werden",
 			audioSourceLost: "Audioquelle nicht verfügbar",
+			audioFollowsOnRestart: "Der Ton folgt beim nächsten Stream-Start",
 			audioSwitchUnavailable:
 				"Live-Audioumschaltung wird von der aktuellen Engine nicht unterstützt",
 			groups: {
@@ -558,6 +573,17 @@ const de = {
 				"Schließen Sie das Gerät wieder an, um das Streaming von dieser Quelle fortzusetzen.",
 			audioNone: "Keine Audioquelle erkannt",
 			audioEmbedded: "Eingebetteter Ton (aus dem eingehenden Stream)",
+		},
+		summary: {
+			nowStreaming: "Jetzt live",
+			audioFollows: "Ton folgt {label} beim Neustart",
+			switchTitle: "Quelle wechseln",
+			autoPrefix: "Automatisch",
+		},
+		transcode: {
+			chip: "Eingang {input} \u2192 Ausgang {output}",
+			always:
+				"Die Engine kodiert den eingehenden Stream immer in den konfigurierten Ausgabe-Codec um \u2013 es gibt keine Durchleitung.",
 		},
 		modes: {
 			label: "Modus",
@@ -1632,6 +1658,7 @@ const de = {
 	audio: {
 		sources: {
 			noAudio: "Kein Audio",
+			auto: "Auto (folgt der Quelle)",
 			pipelineDefault: "Pipeline-Standard",
 		},
 	},

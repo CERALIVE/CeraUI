@@ -24,11 +24,17 @@ import {
 	buildSrtlaSendArgs,
 	controlSocketPath,
 } from "@ceralive/srtla-send/sender";
+import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../../helpers/config-schemas.ts";
 import { getConfig } from "../../config.ts";
 import { setup } from "../../setup.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
 import { asrcProbe } from "../audio.ts";
+import {
+	buildAutoLaunchConfig,
+	resolveAutoAsrcFromLiveState,
+	setResolvedAsrcFromStart,
+} from "../auto-audio.ts";
 import { hasLowMtu } from "../bcrpt.ts";
 import { getLastCapabilities } from "../capabilities.ts";
 import { SRTLA_LISTEN_PORT } from "../constants.ts";
@@ -68,6 +74,17 @@ export async function maybeProbeAudioSource(
 	}
 }
 
+// "Auto" resolves to a concrete card here, at launch, and NEVER touches the
+// persisted config: the resolved key rides a launch-only shallow copy while
+// config.json keeps the "Auto" sentinel. A pseudo resolution (embedded / pipeline
+// default) omits asrc so the probe is skipped and the engine takes its own path.
+function resolveLaunchConfig(config: RuntimeConfig): RuntimeConfig {
+	if (config.asrc !== AUDIO_SOURCE_AUTO) return config;
+	const resolution = resolveAutoAsrcFromLiveState();
+	setResolvedAsrcFromStart(resolution.asrcKey, resolution.reason);
+	return buildAutoLaunchConfig(config, resolution);
+}
+
 export async function startStream(
 	pipeline: Pipeline,
 	srtlaAddr: string,
@@ -75,13 +92,14 @@ export async function startStream(
 	streamid: string,
 ) {
 	const config = getConfig();
-	getStreamingBackend().setBitrate(config);
+	const launchConfig = resolveLaunchConfig(config);
+	getStreamingBackend().setBitrate(launchConfig);
 
 	// A fresh stream start clears any prior unexpected-exit health flag so the
 	// health rollup tracks this new session (ADR-0005 observe-and-notify).
 	clearStreamProcessExit();
 
-	if (!(await maybeProbeAudioSource(pipeline, config))) return;
+	if (!(await maybeProbeAudioSource(pipeline, launchConfig))) return;
 	const statsFile = srtlaStatsFile();
 	// ADR-001 control socket: telemetry rides the JSON-RPC subscription when the
 	// sender advertises it, with --stats-file as the airtight fallback poll.
@@ -115,13 +133,13 @@ export async function startStream(
 	// Begin ingesting srtla_send's per-uplink telemetry. Seed the conn_id->iface
 	// registry from the exact file srtla_send reads at spawn so tlm_id (file
 	// order) maps back to interface names.
-	const ipsContent = await Bun.file(setup.ips_file)
+	const ipsContent = await Bun.file(setup.ips_file ?? "")
 		.text()
 		.catch(() => "");
 	startLinkTelemetry(statsFile, ipsContent.split("\n"), { controlSocket });
 
 	// Engine launch (session start over structured IPC) is behind the seam.
-	getStreamingBackend().start(config, {
+	getStreamingBackend().start(launchConfig, {
 		pipeline: pipeline.source,
 		host: "127.0.0.1",
 		port: SRTLA_LISTEN_PORT,

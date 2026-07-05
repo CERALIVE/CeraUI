@@ -329,6 +329,10 @@ const es = {
 		stopStream: "Detener transmisión",
 		starting: "Iniciando...",
 		stopping: "Deteniendo...",
+		stopStuck: {
+			message: "Detener está tardando más de lo esperado",
+			retry: "Reintentar",
+		},
 		overview: "Resumen",
 		streamingActive: "Transmitiendo",
 		notStreaming: "Sin transmitir",
@@ -362,6 +366,11 @@ const es = {
 				"La fuente de entrada se detuvo al iniciar. Comprueba la fuente e inténtalo de nuevo.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "Preparar transmisión",
+			linksReady: "{count} {{enlace|enlaces}} listos",
+			noLinks: "Sin enlaces",
+		},
 		onboarding: {
 			title: "Comienza la configuración",
 			subtitle: "Tres pasos hasta tu primer stream combinado.",
@@ -420,6 +429,7 @@ const es = {
 			exportAria: "Exportar resumen de sesión",
 			exportError:
 				"No se pudo exportar el resumen de sesión. Inténtalo de nuevo.",
+			done: "Listo",
 		},
 		networkIngest: {
 			title: "Entrada de red",
@@ -445,6 +455,10 @@ const es = {
 			copied: "Dirección copiada",
 			copyFailed: "No se pudo copiar la dirección.",
 			includesAudio: "Incluye audio",
+			codecEducation: {
+				rtmp: "RTMP solo publica vídeo H.264 (con audio AAC). Siempre se vuelve a codificar al códec de salida configurado.",
+				srt: "SRT publica vídeo H.264 o H.265. Siempre se vuelve a codificar al códec de salida configurado.",
+			},
 		},
 		preview: {
 			title: "Vista previa",
@@ -500,6 +514,8 @@ const es = {
 			audioSwitched: "Audio cambiado en {ms}ms",
 			audioSwitchFailed: "No se pudo cambiar la fuente de audio",
 			audioSourceLost: "Fuente de audio no disponible",
+			audioFollowsOnRestart:
+				"El audio seguirá en el próximo inicio de la transmisión",
 			audioSwitchUnavailable:
 				"El motor actual no admite el cambio de audio en vivo",
 			groups: {
@@ -559,6 +575,17 @@ const es = {
 				"Vuelve a conectar el dispositivo para reanudar la transmisión desde esta fuente.",
 			audioNone: "No se detectó ninguna fuente de audio",
 			audioEmbedded: "Audio incorporado (del flujo entrante)",
+		},
+		summary: {
+			nowStreaming: "Transmitiendo ahora",
+			audioFollows: "El audio seguirá a {label} al reiniciar",
+			switchTitle: "Cambiar fuente",
+			autoPrefix: "Automático",
+		},
+		transcode: {
+			chip: "Entrada {input} \u2192 Salida {output}",
+			always:
+				"El motor siempre vuelve a codificar la señal entrante al códec de salida configurado; no hay paso directo.",
 		},
 		modes: {
 			label: "Modo",
@@ -1634,6 +1661,7 @@ const es = {
 	audio: {
 		sources: {
 			noAudio: "Sin audio",
+			auto: "Automático (sigue la fuente)",
 			pipelineDefault: "Predeterminado de la canalización",
 		},
 	},

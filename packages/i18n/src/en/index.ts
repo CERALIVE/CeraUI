@@ -319,6 +319,10 @@ const en = {
 		stopStream: "Stop Stream",
 		starting: "Starting...",
 		stopping: "Stopping...",
+		stopStuck: {
+			message: "Stop is taking longer than expected",
+			retry: "Retry",
+		},
 		overview: "Overview",
 		streamingActive: "Streaming",
 		notStreaming: "Not streaming",
@@ -349,6 +353,11 @@ const en = {
 				"The input source stalled while starting. Check the source and try again.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "Stream setup",
+			linksReady: "{count:number} {{link|links}} ready",
+			noLinks: "No links",
+		},
 		onboarding: {
 			title: "Get set up",
 			subtitle: "Three steps to your first bonded stream.",
@@ -405,6 +414,7 @@ const en = {
 			exportCsv: "Export CSV",
 			exportAria: "Export session summary",
 			exportError: "Couldn't export the session summary. Please try again.",
+			done: "Done",
 		},
 		networkIngest: {
 			title: "Network ingest",
@@ -430,6 +440,10 @@ const en = {
 			copied: "Address copied",
 			copyFailed: "Couldn't copy the address.",
 			includesAudio: "Includes audio",
+			codecEducation: {
+				rtmp: "RTMP publishes H.264 video (with AAC audio) only. It's always re-encoded to your configured output codec.",
+				srt: "SRT publishes H.264 or H.265 video. It's always re-encoded to your configured output codec.",
+			},
 		},
 		preview: {
 			title: "Preview",
@@ -484,6 +498,7 @@ const en = {
 			audioSwitched: "Audio switched in {ms:number}ms",
 			audioSwitchFailed: "Failed to switch audio source",
 			audioSourceLost: "Audio source unavailable",
+			audioFollowsOnRestart: "Audio will follow at the next stream start",
 			audioSwitchUnavailable:
 				"Live audio switching isn't supported by the current engine",
 			groups: {
@@ -542,6 +557,17 @@ const en = {
 			lostBody: "Reconnect the device to resume streaming from this source.",
 			audioNone: "No audio source detected",
 			audioEmbedded: "Embedded audio (from the incoming stream)",
+		},
+		summary: {
+			nowStreaming: "Now streaming",
+			audioFollows: "Audio follows {label:string} on restart",
+			switchTitle: "Switch source",
+			autoPrefix: "Auto",
+		},
+		transcode: {
+			chip: "In {input:string} \u2192 Out {output:string}",
+			always:
+				"The engine always re-encodes the incoming stream to your configured output codec \u2014 there's no passthrough.",
 		},
 		modes: {
 			label: "Mode",
@@ -1599,6 +1625,7 @@ const en = {
 	audio: {
 		sources: {
 			noAudio: "No audio",
+			auto: "Auto (follows source)",
 			pipelineDefault: "Pipeline default",
 		},
 	},

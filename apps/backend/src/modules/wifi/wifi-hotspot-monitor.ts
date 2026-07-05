@@ -115,7 +115,7 @@ export function registerPendingConfirmation(
 			// Reflect the NM-confirmed active connection so isHotspot() is true.
 			wifiInterface.conn = wifiInterface.hotspot.conn;
 		}
-		wifiInterface.hotspot.transition = undefined;
+		delete wifiInterface.hotspot.transition;
 		deps.setDupIpSuppression(ifname, false);
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface); // now mode: 'hotspot'
@@ -124,7 +124,7 @@ export function registerPendingConfirmation(
 	const giveUp = () => {
 		// Confirmation never arrived — clear the transition (soft rollback). The
 		// next NM poll will reconcile if the hotspot did in fact come up.
-		wifiInterface.hotspot.transition = undefined;
+		delete wifiInterface.hotspot.transition;
 		deps.setDupIpSuppression(ifname, false);
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface);

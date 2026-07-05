@@ -47,6 +47,9 @@ BUILD_SYSTEM_IMPROVEMENTS.md
 
 # Test artifacts (Playwright traces + E2E evidence) — never tracked
 test-results/
+# QA evidence artifacts (browser-state snapshots, manual screenshots) — never tracked
+.playwright-mcp/
+f3-qa/
 
 # Playwright visual baseline snapshots — mobile viewport variants (not part of tracked baselines)
 *-mobile-linux.png

@@ -61,10 +61,12 @@ vi.mock("$lib/rpc/subscriptions.svelte", async () => {
 vi.mock("$lib/rpc/streaming-optimism.svelte", () => ({
 	getStreamingOptimismState: () => "idle",
 	getStreamingStopReason: () => undefined,
+	getStopStuckBannerVisible: () => false,
 	startStreamingOptimism: vi.fn(),
 	stopStreamingOptimism: vi.fn(),
 	reconcileStreamingOptimism: vi.fn(),
 	revertStreamingOptimism: vi.fn(),
+	retryStopStreaming: vi.fn(),
 }));
 
 // Stub the two cockpits to their identifying testids; the LiveCockpit stub mirrors

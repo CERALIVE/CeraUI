@@ -215,7 +215,14 @@ async function defaultFetchEngineCapabilities(): Promise<EngineCapabilitiesSnaps
 			.network_embedded_audio;
 		const network_embedded_audio =
 			typeof rawEmbeddedAudio === "boolean" ? rawEmbeddedAudio : undefined;
-		return { caps, schemaVersion, transports, network_embedded_audio };
+		return {
+			caps,
+			schemaVersion,
+			...(transports !== undefined ? { transports } : {}),
+			...(network_embedded_audio !== undefined
+				? { network_embedded_audio }
+				: {}),
+		};
 	} finally {
 		try {
 			await client?.close();

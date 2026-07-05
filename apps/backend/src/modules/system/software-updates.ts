@@ -270,7 +270,9 @@ async function getSoftwareUpdateSize() {
 
 	availableUpdates = {
 		package_count: res.upgradeCount,
-		download_size: res.downloadSize,
+		...(res.downloadSize !== undefined
+			? { download_size: res.downloadSize }
+			: {}),
 	};
 	broadcastMsg("status", { available_updates: availableUpdates });
 
@@ -517,7 +519,7 @@ function doSoftwareUpdate() {
 		if (softUpdateStatus.downloading !== softUpdateStatus.total) {
 			const getMatch = data.match(/Get:(\d+)/);
 			if (getMatch) {
-				const i = Number.parseInt(getMatch[1], 10);
+				const i = Number.parseInt(getMatch[1] ?? "", 10);
 				if (i > softUpdateStatus.downloading) {
 					softUpdateStatus.downloading = Math.min(i, softUpdateStatus.total);
 					sendUpdate = true;

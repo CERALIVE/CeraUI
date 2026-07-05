@@ -38,6 +38,105 @@ describe('activeEncodeSchema (Todo 19 — realized runtime encode)', () => {
 	test('rejects a payload missing a required field', () => {
 		expect(activeEncodeSchema.safeParse({ codec: 'h264', framerate: 30 }).success).toBe(false);
 	});
+
+	test('input_codec is additive-optional (T1)', () => {
+		expect(
+			activeEncodeSchema.parse({ codec: 'h265', resolution: '1920x1080', framerate: 30 })
+				.input_codec,
+		).toBeUndefined();
+		const parsed = activeEncodeSchema.parse({
+			codec: 'h265',
+			resolution: '1920x1080',
+			framerate: 30,
+			input_codec: 'h264',
+		});
+		expect(parsed.input_codec).toBe('h264');
+	});
+
+	test('statusResponseSchema parses active_encode with input_codec (T1 acceptance)', () => {
+		const parsed = statusResponseSchema.parse({
+			active_encode: { codec: 'h265', resolution: '1920x1080', framerate: 30, input_codec: 'h264' },
+		});
+		expect(parsed.active_encode?.input_codec).toBe('h264');
+	});
+});
+
+describe('resolved_asrc Auto-resolution fields (T1 — additive)', () => {
+	const baseMessage = {
+		is_streaming: false,
+		available_updates: null,
+		updating: false,
+		ssh: { user: 'user', user_pass: false, active: false },
+		wifi: {},
+		asrcs: ['Auto', 'USB audio', 'No audio', 'Pipeline default'],
+		modems: {},
+	};
+
+	test('statusMessageSchema parses WITHOUT the resolved_asrc fields (legacy)', () => {
+		const parsed = statusMessageSchema.parse(baseMessage);
+		expect(parsed.resolved_asrc).toBeUndefined();
+		expect(parsed.resolved_asrc_reason).toBeUndefined();
+		expect(parsed.pending_audio_follow_asrc).toBeUndefined();
+	});
+
+	test('statusMessageSchema parses WITH resolved_asrc + reason + pending follow', () => {
+		const parsed = statusMessageSchema.parse({
+			...baseMessage,
+			resolved_asrc: 'HDMI audio',
+			resolved_asrc_reason: 'hdmi',
+			pending_audio_follow_asrc: 'USB audio',
+		});
+		expect(parsed.resolved_asrc).toBe('HDMI audio');
+		expect(parsed.resolved_asrc_reason).toBe('hdmi');
+		expect(parsed.pending_audio_follow_asrc).toBe('USB audio');
+	});
+
+	test('resolved_asrc + pending_audio_follow_asrc are nullable (embedded / no-follow)', () => {
+		const parsed = statusMessageSchema.parse({
+			...baseMessage,
+			resolved_asrc: null,
+			resolved_asrc_reason: 'embedded',
+			pending_audio_follow_asrc: null,
+		});
+		expect(parsed.resolved_asrc).toBeNull();
+		expect(parsed.resolved_asrc_reason).toBe('embedded');
+		expect(parsed.pending_audio_follow_asrc).toBeNull();
+	});
+
+	test('statusResponseSchema carries the fields additively (absent + present)', () => {
+		expect(statusResponseSchema.parse({ is_streaming: true }).resolved_asrc).toBeUndefined();
+		const parsed = statusResponseSchema.parse({
+			is_streaming: true,
+			resolved_asrc: 'USB audio',
+			resolved_asrc_reason: 'usb-same-device',
+			pending_audio_follow_asrc: null,
+		});
+		expect(parsed.resolved_asrc).toBe('USB audio');
+		expect(parsed.resolved_asrc_reason).toBe('usb-same-device');
+	});
+
+	test('accepts every reason enum literal exactly (T4/T5/T6/T7 contract)', () => {
+		for (const reason of [
+			'embedded',
+			'hdmi',
+			'camlink',
+			'usb-same-device',
+			'usb-alias',
+			'first-device',
+			'pipeline-default',
+		]) {
+			expect(
+				statusResponseSchema.parse({ is_streaming: true, resolved_asrc_reason: reason })
+					.resolved_asrc_reason,
+			).toBe(reason);
+		}
+	});
+
+	test('rejects a resolved_asrc_reason outside the enum', () => {
+		expect(
+			statusResponseSchema.safeParse({ is_streaming: true, resolved_asrc_reason: 'bogus' }).success,
+		).toBe(false);
+	});
 });
 
 describe('statusResponseSchema — active_encode field (additive)', () => {

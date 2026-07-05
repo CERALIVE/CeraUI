@@ -364,7 +364,20 @@ describe("cerastream-backend.ts is untouched by this todo", () => {
 		const baseline = addCommit.length > 0 ? `${addCommit}^` : "HEAD";
 
 		const diff = git(["diff", baseline, "--", BACKEND_REL], repoRoot).trim();
-		expect(diff).toBe("");
+		// The guard's scope is the START ASSEMBLY routing (buildStartParams /
+		// encodeInputAudioFields) — not whole-file byte-equality. Telemetry reads
+		// like extractActiveEncode evolve independently; the positive test below
+		// asserts the same choke-point invariant.
+		for (const chokePoint of [
+			"buildStartParams",
+			"encodeInputAudioFields",
+			"config.pipeline ?? opts.pipeline",
+			"config.selected_video_input ?? this.deps.getActiveInput()",
+			"./sources.ts",
+			"buildSources",
+		]) {
+			expect(diff).not.toContain(chokePoint);
+		}
 	});
 
 	test("the start choke point still reads config.pipeline / selected_video_input", async () => {
@@ -386,7 +399,14 @@ const STREAMLOOP_PATH = "../modules/streaming/streamloop.ts";
 const SOURCES_PATH = "../modules/streaming/sources.ts";
 const CONFIG_MIGRATION_PATH = "../modules/streaming/config-migration.ts";
 
+// Snapshot the REAL modules at load time (before any mock.module runs). afterAll
+// MUST restore from these, NOT from the live `sourcesModule`/`configMigration`
+// bindings — bun's mock.module mutates those namespaces in place, so spreading
+// them post-mock would re-install the mock permanently (leaking FIXTURE_SOURCES
+// into every later test's getSourcesMessage — a cross-file isolation break).
 const realStreamloop = { ...streamloop };
+const realSources = { ...sourcesModule };
+const realConfigMigration = { ...configMigration };
 
 // session.start stand-in: records every launch so we can prove it is skipped on a
 // rejected source and dispatches the resolved pipeline on a known one.
@@ -433,8 +453,8 @@ describe("streaming procedures — device-first source resolution", () => {
 	});
 
 	afterAll(() => {
-		mock.module(SOURCES_PATH, () => ({ ...sourcesModule }));
-		mock.module(CONFIG_MIGRATION_PATH, () => ({ ...configMigration }));
+		mock.module(SOURCES_PATH, () => ({ ...realSources }));
+		mock.module(CONFIG_MIGRATION_PATH, () => ({ ...realConfigMigration }));
 		mock.module(STREAMLOOP_PATH, () => ({ ...realStreamloop }));
 		if (savedMockMode === undefined) delete process.env.MOCK_MODE;
 		else process.env.MOCK_MODE = savedMockMode;

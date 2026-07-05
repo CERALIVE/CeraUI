@@ -1,15 +1,22 @@
 <script lang="ts">
 /**
- * IdleCockpit — the pre-stream surface (Task 11).
+ * IdleCockpit — the pre-stream surface (Task 11 / source-first reorder T10).
  *
- * A presentational wrapper composing the three idle-mode subtrees in order:
- *   1. {@link GoLiveCard} — the one adaptive readiness + config + start surface
- *      (absorbs the old OnboardingChecklist, no-server empty-state, ServerReadiness
- *      and StreamSettingsCard mounts).
- *   2. A collapsed "Preview" `<details>` disclosure hosting {@link PreviewCanvas}
+ * A presentational wrapper composing the idle-mode subtrees in SOURCE-FIRST order:
+ *   1. {@link SourceSection} — the unified source picker (leads the cockpit so the
+ *      operator picks WHAT to stream before tuning HOW).
+ *   2. {@link StreamSetupChain} — the merged "Stream setup" card (readiness rows +
+ *      config-row edit affordances + the Start control at its foot). Replaces the
+ *      old GoLiveCard mount (GoLiveCard stays an unmounted shim per T9).
+ *   3. A collapsed "Preview" `<details>` disclosure hosting {@link PreviewCanvas}
  *      (local, off-until-toggled — never dials the engine until the operator opens
  *      it and starts the preview).
- *   3. {@link SourceSection} — the unified source picker.
+ *   4. A collapsed "Roadmap" `<details>` disclosure of calm not-yet-available pills.
+ *
+ * The Start control is mounted EXACTLY ONCE — inside {@link StreamSetupChain} at
+ * its foot (T9). Because StreamSetupChain sits between SourceSection and the
+ * disclosures, the rendered order is SourceSection → setup rows → Start → preview →
+ * roadmap. IdleCockpit does NOT mount its own StreamControlButton (no double-mount).
  *
  * State ownership stays in LiveView: EVERY datum and handler here is a prop
  * threaded down from LiveView's getters/handlers. This component owns NO `$state`,
@@ -25,6 +32,7 @@ import type {
 	Pipelines,
 	SourcesMessage,
 } from '@ceraui/rpc/schemas';
+import type { ResolvedAudioStatus } from '$lib/streaming/sourceSummary';
 
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
@@ -33,11 +41,11 @@ import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte'
 import { LL } from '@ceraui/i18n/svelte';
 import { PictureInPicture2, Shuffle, Volume2 } from '@lucide/svelte';
 
-import GoLiveCard from './GoLiveCard.svelte';
 import type { ConfigRow } from './StreamSettingsCard.svelte';
+import StreamSetupChain from './StreamSetupChain.svelte';
 
 interface Props {
-	// ── GoLiveCard: readiness inputs (threaded from LiveView getters) ──────────
+	// ── StreamSetupChain: readiness inputs (threaded from LiveView getters) ─────
 	config: ConfigMessage | undefined;
 	caps: CapabilitiesMessage | undefined;
 	sources: SourcesMessage | undefined;
@@ -50,9 +58,10 @@ interface Props {
 	optimismState: StreamingOptimismState;
 	destinationValidated?: boolean;
 	maxBitrate?: number;
-	// ── GoLiveCard: actions (callbacks owned by LiveView) ──────────────────────
+	// ── StreamSetupChain: actions (callbacks owned by LiveView) ────────────────
 	onStart: (overrides: { source?: string }) => void;
 	onStop: () => void;
+	/** Source-gate fix + sole-camera "Change" — LiveView scrolls/focuses the list. */
 	onOpenSource: () => void;
 	onGoNetwork: () => void;
 	onOpenServer: () => void;
@@ -67,6 +76,7 @@ interface Props {
 	audioSourceList: AudioSource[] | undefined;
 	selectedAudioSource: string | undefined;
 	onSelectAudioSource: (id: string) => void;
+	audioStatus: ResolvedAudioStatus | undefined;
 	// `selectedPipeline` still drives the roadmap's embedded-audio pill below.
 	selectedPipeline: string | undefined;
 	capabilities: CapabilitiesMessage | undefined;
@@ -102,6 +112,7 @@ const {
 	audioSourceList,
 	selectedAudioSource,
 	onSelectAudioSource,
+	audioStatus,
 	selectedPipeline,
 	capabilities,
 	activeEncode,
@@ -124,7 +135,29 @@ const audioEmbeddedComingSoon = $derived(
 </script>
 
 <div class="space-y-6" data-testid="idle-cockpit">
-	<GoLiveCard
+	<!-- Source-first (T10): pick WHAT to stream before tuning HOW. -->
+	<SourceSection
+		{activeEncode}
+		{activeInput}
+		{audioSourceList}
+		{audioSources}
+		{audioStatus}
+		{capabilities}
+		{config}
+		{isStreaming}
+		onReorderSource={onReorderSource}
+		onSelectAudioSource={onSelectAudioSource}
+		onSwitch={onSwitch}
+		{selectedAudioSource}
+		{sourceOrder}
+		{sourcePreferenceField}
+		{sources}
+		{switchingInput}
+	/>
+
+	<!-- Stream setup: readiness rows + config edits + the Start control at its foot
+	     (StreamControlButton is mounted ONCE here, never a second time — T10). -->
+	<StreamSetupChain
 		{config}
 		{caps}
 		{sources}
@@ -149,32 +182,14 @@ const audioEmbeddedComingSoon = $derived(
 	     dial) until the operator opens this disclosure and starts the preview. -->
 	<details class="bg-card rounded-xl border" data-testid="preview-disclosure">
 		<summary
-			class="cursor-pointer list-none px-5 py-3 text-sm font-medium select-none"
+			class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
 		>
 			{$LL.live.modes.preview()}
 		</summary>
-		<div class="px-5 pb-5">
+		<div class="px-4 pb-4">
 			<PreviewCanvas />
 		</div>
 	</details>
-
-	<SourceSection
-		{activeEncode}
-		{activeInput}
-		{audioSourceList}
-		{audioSources}
-		{capabilities}
-		{config}
-		{isStreaming}
-		onReorderSource={onReorderSource}
-		onSelectAudioSource={onSelectAudioSource}
-		onSwitch={onSwitch}
-		{selectedAudioSource}
-		{sourceOrder}
-		{sourcePreferenceField}
-		{sources}
-		{switchingInput}
-	/>
 
 	<!--
 		Roadmap disclosure (T12) — genuine future features surfaced as calm, purely
@@ -185,13 +200,13 @@ const audioEmbeddedComingSoon = $derived(
 		comments beside each call site.
 		roadmap: data-debt-id="TD-pip" data-debt-id="TD-mode-fallback"
 	-->
-	<details class="bg-muted/30 rounded-lg border" data-testid="live-roadmap">
+	<details class="bg-muted/30 rounded-xl border" data-testid="live-roadmap">
 		<summary
 			class="text-muted-foreground cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
 		>
 			{$LL.live.comingSoon.roadmap()}
 		</summary>
-		<div class="flex flex-col gap-2.5 px-4 pb-3">
+		<div class="flex flex-col gap-2.5 px-4 pb-4">
 			<div class="flex items-center justify-between gap-3">
 				<span class="text-muted-foreground flex items-center gap-2 text-sm">
 					<PictureInPicture2 aria-hidden={true} class="size-4 shrink-0" />

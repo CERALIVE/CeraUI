@@ -204,8 +204,12 @@ export function extractBufferingStatus(event: unknown): BufferingStatus | null {
  * requested StartParams. Returns `null` when the engine does not report it
  * (`active_encode` absent/partial), so an older engine surfaces no field — the
  * same capability gate `extractBufferingStatus` applies. `codec`/`resolution`/
- * `framerate` are all required for a usable payload; `active_input`/`decoder` are
- * optional. Read defensively so a malformed frame can never throw.
+ * `framerate` are all required for a usable payload; `active_input`/`decoder`/
+ * `input_codec` are optional. `input_codec` (cerastream T3) is the incoming
+ * network-leg codec (`h264`/`h265`), present only for a network-ingest session on
+ * a new-enough engine — defensively copied only when a string so an older engine
+ * (field absent) simply omits it. Read defensively so a malformed frame can never
+ * throw.
  */
 export function extractActiveEncode(event: unknown): ActiveEncode | null {
 	if (event === null || typeof event !== "object") return null;
@@ -228,6 +232,9 @@ export function extractActiveEncode(event: unknown): ActiveEncode | null {
 			? { active_input: a.active_input }
 			: {}),
 		...(typeof a.decoder === "string" ? { decoder: a.decoder } : {}),
+		...(typeof a.input_codec === "string"
+			? { input_codec: a.input_codec }
+			: {}),
 	};
 }
 

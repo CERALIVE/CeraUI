@@ -17,6 +17,7 @@
 */
 
 import type { AudioSource } from "@ceraui/rpc/schemas";
+import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";
@@ -24,15 +25,20 @@ import { AUDIO_SOURCE_POLL_DELAY } from "../../helpers/timing-constants.ts";
 
 import { getConfig } from "../config.ts";
 import { setup } from "../setup.ts";
+import { isRealDevice } from "../system/device-detection.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { parseAsoundCards, resolveAudioLabels } from "./audio-naming.ts";
 import {
 	type AudioDeviceWatcher,
 	createAudioDeviceWatcher,
 } from "./audio-watcher.ts";
+import { refreshResolvedAsrcPreview } from "./auto-audio.ts";
 import { AUDIO_PROBE_TIMEOUT_MS } from "./constants.ts";
+import { getEngineAudioDevices } from "./sources.ts";
 
 const deviceDir = setup.sound_device_dir ?? "/sys/class/sound";
+const PROC_ASOUND_CARDS = "/proc/asound/cards";
 
 const NO_AUDIO_ID = "No audio";
 export const DEFAULT_AUDIO_ID = "Pipeline default";
@@ -50,7 +56,8 @@ if (setup.hw === "rk3588") {
 // Create reverse lookup for performance
 const audioSrcReverseAliases: Record<string, string> = {};
 for (const id in audioSrcAliases) {
-	audioSrcReverseAliases[audioSrcAliases[id]] = id;
+	const alias = audioSrcAliases[id];
+	if (alias !== undefined) audioSrcReverseAliases[alias] = id;
 }
 
 let audioDevices: Record<string, string> = {};
@@ -81,6 +88,8 @@ export function warnIfConfiguredAudioSourceUnavailable(
 	asrc: string | undefined,
 ): void {
 	if (!asrc) return;
+	// The "Auto" sentinel is not a device — it resolves at start (auto-audio.ts).
+	if (asrc === AUDIO_SOURCE_AUTO) return;
 	const devices = getAudioDevices();
 	if (asrc in devices) return;
 	logger.warn(
@@ -94,6 +103,7 @@ export function warnIfConfiguredAudioSourceUnavailable(
 // two pseudo-sources carry a `labelKey`; hardware device names are never translated.
 export function deriveAudioSources(
 	devices: Record<string, string> = getAudioDevices(),
+	labels?: Map<string, string>,
 ): AudioSource[] {
 	return Object.keys(devices).map((name): AudioSource => {
 		if (name === NO_AUDIO_ID) {
@@ -106,7 +116,12 @@ export function deriveAudioSources(
 				labelKey: "audio.sources.pipelineDefault",
 			};
 		}
-		return { id: name, kind: "device" };
+		const label = labels?.get(name);
+		return {
+			id: name,
+			kind: "device",
+			...(label !== undefined ? { label } : {}),
+		};
 	});
 }
 
@@ -123,6 +138,20 @@ export function getAudioSrcId(name: string) {
 function addAudioCardById(list: Record<string, string>, id: string) {
 	const name = getAudioSrcName(id);
 	list[name] = id;
+}
+
+// The `/proc/asound/cards` read is isRealDevice()-gated and degrades to an empty
+// longname map — `readTextFile` swallows read errors and `parseAsoundCards` never
+// throws, so a garbled/absent/unreadable file never breaks the audio broadcast.
+async function resolveAudioLabelsForTick(
+	devices: Record<string, string>,
+): Promise<Map<string, string>> {
+	let longnames = new Map<string, string>();
+	if (await isRealDevice()) {
+		const text = await readTextFile(PROC_ASOUND_CARDS);
+		if (text !== undefined) longnames = parseAsoundCards(text);
+	}
+	return resolveAudioLabels(devices, getEngineAudioDevices(), longnames);
 }
 
 export async function updateAudioDevices(dir: string = deviceDir) {
@@ -180,10 +209,15 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 	audioDevices = sortedList;
 	logger.debug("audio devices:", audioDevices);
 
+	const labels = await resolveAudioLabelsForTick(audioDevices);
 	broadcastMsg("status", {
 		asrcs: Object.keys(audioDevices),
-		audio_sources: deriveAudioSources(audioDevices),
+		audio_sources: deriveAudioSources(audioDevices, labels),
 	});
+
+	// A re-enumeration may change what "Auto" resolves to; refresh the idle
+	// preview (a no-op while streaming — the live value stays frozen).
+	refreshResolvedAsrcPreview();
 
 	// A hotplug re-enumeration may have brought in the device a stream start is
 	// waiting on — wake the pending probe so it re-checks now instead of after
@@ -191,7 +225,7 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 	asrcProbeWake?.();
 }
 
-let asrcProbeReject: ((err: Error) => void) | undefined;
+let asrcProbeReject: (() => void) | undefined;
 let asrcProbeWake: (() => void) | undefined;
 
 export function isAsrcProbeRejectResolved() {

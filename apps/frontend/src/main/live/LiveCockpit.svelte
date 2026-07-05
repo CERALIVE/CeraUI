@@ -23,16 +23,39 @@
  * State ownership stays in LiveView: EVERY datum and handler here is a prop — this
  * component owns NO `$state`, NO RPC, and writes NO config.
  */
-import type { LinkTelemetryMessage } from '@ceraui/rpc/schemas';
+import { LL } from '@ceraui/i18n/svelte';
+import type {
+	ActiveEncode,
+	ConfigMessage,
+	LinkTelemetryMessage,
+	SourcesMessage,
+} from '@ceraui/rpc/schemas';
 
 import IngestStats from '$lib/components/custom/IngestStats.svelte';
+import { Button } from '$lib/components/ui/button';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
+import type { ActiveSummary } from '$lib/streaming/sourceSummary';
 
 import BitrateAdjuster from './BitrateAdjuster.svelte';
+import LiveSourceSwitch from './LiveSourceSwitch.svelte';
+import LiveSummaryStrip from './LiveSummaryStrip.svelte';
 import StreamControlButton from './StreamControlButton.svelte';
 import StreamTelemetryStrip from './StreamTelemetryStrip.svelte';
 
 interface Props {
+	// ── LiveSummaryStrip ("Now streaming" summary) ─────────────────────────────
+	liveSummary: ActiveSummary;
+	destination?: string | undefined;
+	audioCurrent?: string | undefined;
+	audioPending?: string | undefined;
+	audioEmbedded?: boolean;
+	// ── LiveSourceSwitch (live capture-source switch card) ─────────────────────
+	sources?: SourcesMessage | undefined;
+	config?: ConfigMessage | undefined;
+	activeEncode?: ActiveEncode | null | undefined;
+	activeInput?: string | undefined;
+	switchingInput?: string | undefined;
+	onSwitch?: (id: string) => void;
 	// ── StreamTelemetryStrip ────────────────────────────────────────────────────
 	bitrate: string;
 	tempSensor?: string;
@@ -59,9 +82,24 @@ interface Props {
 	// When true the stream has stopped but LiveView is holding this cockpit mounted
 	// so IngestStats can show its historical summary; collapse to summary-only.
 	summaryMode?: boolean;
+	// Explicit "Done" escape from the post-stream summary window (T13): renders a
+	// footer button ONLY in summaryMode; clicking it closes the window immediately
+	// (LiveView clears the flag AND the fallback timer). Idempotent at the source.
+	onCloseSummary?: () => void;
 }
 
 const {
+	liveSummary,
+	destination = undefined,
+	audioCurrent = undefined,
+	audioPending = undefined,
+	audioEmbedded = false,
+	sources = undefined,
+	config = undefined,
+	activeEncode = undefined,
+	activeInput = undefined,
+	switchingInput = undefined,
+	onSwitch = undefined,
 	bitrate,
 	tempSensor,
 	uptimeSensor,
@@ -81,11 +119,35 @@ const {
 	optimismState,
 	onStop,
 	summaryMode = false,
+	onCloseSummary = undefined,
 }: Props = $props();
 </script>
 
 <div class="space-y-6" data-testid="live-cockpit" data-summary-mode={summaryMode ? 'true' : 'false'}>
 	{#if !summaryMode}
+		<!-- "Now streaming" summary strip: what the device is CURRENTLY streaming
+		     (source · mode · codec · transport → destination + audio line). -->
+		<LiveSummaryStrip
+			summary={liveSummary}
+			{destination}
+			{audioCurrent}
+			{audioPending}
+			{audioEmbedded}
+		/>
+
+		<!-- Live capture-source switch: the ONLY reachable surface for a live input
+		     switch while streaming (SourceSection's streaming branch never mounts
+		     here). Self-gates: renders nothing unless the running source is capture
+		     AND ≥2 capture sources exist. -->
+		<LiveSourceSwitch
+			{sources}
+			{config}
+			{activeEncode}
+			{activeInput}
+			{switchingInput}
+			{onSwitch}
+		/>
+
 		<StreamTelemetryStrip {bitrate} {tempSensor} {uptimeSensor} />
 
 		<!-- Bitrate hot-adjust — the only field changeable mid-stream (setBitrate). -->
@@ -105,7 +167,19 @@ const {
 
 	<IngestStats {telemetry} {isStreaming} {bitrateKbps} />
 
-	{#if !summaryMode}
+	{#if summaryMode}
+		<!-- Explicit close for the post-stream summary window (T13): dismisses the
+		     bounded fallback timer immediately and returns the view to IdleCockpit. -->
+		<Button
+			type="button"
+			variant="secondary"
+			class="w-full"
+			data-testid="summary-done"
+			onclick={() => onCloseSummary?.()}
+		>
+			{$LL.live.ingest.done()}
+		</Button>
+	{:else}
 		<StreamControlButton
 			canStart={false}
 			{isStreaming}

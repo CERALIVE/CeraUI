@@ -107,13 +107,17 @@ export function resolveStreamEndpoint(
 
 	// Strip the provider namespace before the flat relays-cache lookup. Flat ids
 	// (no separator) pass through unchanged, preserving golden parity.
+	const relay_server = flatRelayId(input.relay_server);
+	const relay_account = flatRelayId(input.relay_account);
 	const resolved = getAdapter(protocol).resolveEndpoint({
-		relay_server: flatRelayId(input.relay_server),
-		relay_account: flatRelayId(input.relay_account),
-		srtla_addr: input.srtla_addr,
-		srtla_port: input.srtla_port,
-		srt_streamid: input.srt_streamid,
-		relays,
+		...(relay_server !== undefined ? { relay_server } : {}),
+		...(relay_account !== undefined ? { relay_account } : {}),
+		...(input.srtla_addr !== undefined ? { srtla_addr: input.srtla_addr } : {}),
+		...(input.srtla_port !== undefined ? { srtla_port: input.srtla_port } : {}),
+		...(input.srt_streamid !== undefined
+			? { srt_streamid: input.srt_streamid }
+			: {}),
+		...(relays !== undefined ? { relays } : {}),
 	});
 
 	// Stream ID precedence: user-entered override (non-empty) wins over the

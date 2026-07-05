@@ -1081,6 +1081,10 @@ const ptBR = {
 		stopStream: "Parar transmissão",
 		starting: "Iniciando...",
 		stopping: "Parando...",
+		stopStuck: {
+			message: "A parada está demorando mais do que o esperado",
+			retry: "Tentar novamente",
+		},
 		overview: "Visão geral",
 		streamingActive: "Transmitindo",
 		notStreaming: "Sem transmissão",
@@ -1113,6 +1117,11 @@ const ptBR = {
 				"A fonte de entrada travou ao iniciar. Verifique a fonte e tente novamente.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "Preparar transmissão",
+			linksReady: "{count} {{link|links}} prontos",
+			noLinks: "Nenhum link",
+		},
 		onboarding: {
 			title: "Comece a configuração",
 			subtitle: "Três passos até seu primeiro stream combinado.",
@@ -1171,6 +1180,7 @@ const ptBR = {
 			exportAria: "Exportar resumo da sessão",
 			exportError:
 				"Não foi possível exportar o resumo da sessão. Tente novamente.",
+			done: "Concluído",
 		},
 		networkIngest: {
 			title: "Entrada de rede",
@@ -1196,6 +1206,10 @@ const ptBR = {
 			copied: "Endereço copiado",
 			copyFailed: "Não foi possível copiar o endereço.",
 			includesAudio: "Inclui áudio",
+			codecEducation: {
+				rtmp: "O RTMP publica apenas vídeo H.264 (com áudio AAC). Ele é sempre recodificado para o codec de saída configurado.",
+				srt: "O SRT publica vídeo H.264 ou H.265. Ele é sempre recodificado para o codec de saída configurado.",
+			},
 		},
 		preview: {
 			title: "Pré-visualização",
@@ -1250,6 +1264,7 @@ const ptBR = {
 			audioSwitched: "Áudio trocado em {ms}ms",
 			audioSwitchFailed: "Falha ao trocar a fonte de áudio",
 			audioSourceLost: "Fonte de áudio indisponível",
+			audioFollowsOnRestart: "O áudio seguirá no próximo início da transmissão",
 			audioSwitchUnavailable:
 				"A troca de áudio ao vivo não é suportada pelo mecanismo atual",
 			groups: {
@@ -1309,6 +1324,17 @@ const ptBR = {
 				"Reconecte o dispositivo para retomar a transmissão desta fonte.",
 			audioNone: "Nenhuma fonte de áudio detectada",
 			audioEmbedded: "Áudio incorporado (do fluxo recebido)",
+		},
+		summary: {
+			nowStreaming: "Transmitindo agora",
+			audioFollows: "O áudio seguirá {label} ao reiniciar",
+			switchTitle: "Trocar fonte",
+			autoPrefix: "Automático",
+		},
+		transcode: {
+			chip: "Entrada {input} \u2192 Saída {output}",
+			always:
+				"O motor sempre recodifica o stream recebido para o codec de saída configurado \u2014 não há passthrough.",
 		},
 		modes: {
 			label: "Modo",
@@ -1620,6 +1646,7 @@ const ptBR = {
 	audio: {
 		sources: {
 			noAudio: "Sem áudio",
+			auto: "Automático (segue a fonte)",
 			pipelineDefault: "Padrão do pipeline",
 		},
 	},

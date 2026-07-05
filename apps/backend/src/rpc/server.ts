@@ -204,7 +204,7 @@ function startServer(): void {
 
 	try {
 		server = Bun.serve<ServerSocketData>({
-			port,
+			...(port !== undefined ? { port } : {}),
 
 			fetch(req, server) {
 				// Handle WebSocket upgrade

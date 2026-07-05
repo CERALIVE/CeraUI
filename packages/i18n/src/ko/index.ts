@@ -928,6 +928,10 @@ const ko = {
 		stopStream: "스트림 중지",
 		starting: "시작 중...",
 		stopping: "중지 중...",
+		stopStuck: {
+			message: "중지에 예상보다 시간이 오래 걸리고 있습니다",
+			retry: "다시 시도",
+		},
 		overview: "개요",
 		streamingActive: "스트리밍 중",
 		notStreaming: "스트리밍하지 않음",
@@ -958,6 +962,11 @@ const ko = {
 				"시작 중 입력 소스가 멈췄습니다. 소스를 확인한 후 다시 시도하세요.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "스트림 설정",
+			linksReady: "{count}개 링크 준비됨",
+			noLinks: "링크 없음",
+		},
 		onboarding: {
 			title: "설정 시작하기",
 			subtitle: "첫 본딩 스트림까지 세 단계.",
@@ -1014,6 +1023,7 @@ const ko = {
 			exportCsv: "CSV 내보내기",
 			exportAria: "세션 요약 내보내기",
 			exportError: "세션 요약을 내보낼 수 없습니다. 다시 시도해 주세요.",
+			done: "완료",
 		},
 		networkIngest: {
 			title: "네트워크 인제스트",
@@ -1038,6 +1048,10 @@ const ko = {
 			copied: "주소가 복사됨",
 			copyFailed: "주소를 복사할 수 없습니다.",
 			includesAudio: "오디오 포함",
+			codecEducation: {
+				rtmp: "RTMP는 H.264 영상(AAC 오디오 포함)만 게시합니다. 항상 구성된 출력 코덱으로 다시 인코딩됩니다.",
+				srt: "SRT는 H.264 또는 H.265 영상을 게시합니다. 항상 구성된 출력 코덱으로 다시 인코딩됩니다.",
+			},
 		},
 		preview: {
 			title: "미리보기",
@@ -1092,6 +1106,7 @@ const ko = {
 			audioSwitched: "{ms}ms 만에 오디오 전환됨",
 			audioSwitchFailed: "오디오 소스 전환 실패",
 			audioSourceLost: "오디오 소스를 사용할 수 없음",
+			audioFollowsOnRestart: "오디오는 다음 스트림 시작 시 전환됩니다",
 			audioSwitchUnavailable:
 				"현재 엔진은 실시간 오디오 전환을 지원하지 않습니다",
 			groups: {
@@ -1150,6 +1165,17 @@ const ko = {
 			lostBody: "장치를 다시 연결하여 이 소스에서 스트리밍을 재개하세요.",
 			audioNone: "오디오 소스가 감지되지 않음",
 			audioEmbedded: "임베디드 오디오 (수신 스트림에서)",
+		},
+		summary: {
+			nowStreaming: "스트리밍 중",
+			audioFollows: "재시작 시 오디오가 {label}(으)로 전환됩니다",
+			switchTitle: "소스 전환",
+			autoPrefix: "자동",
+		},
+		transcode: {
+			chip: "입력 {input} \u2192 출력 {output}",
+			always:
+				"엔진은 들어오는 스트림을 항상 구성된 출력 코덱으로 다시 인코딩합니다. 패스스루는 없습니다.",
 		},
 		modes: {
 			label: "모드",
@@ -1574,6 +1600,7 @@ const ko = {
 	audio: {
 		sources: {
 			noAudio: "오디오 없음",
+			auto: "자동 (소스 따라가기)",
 			pipelineDefault: "파이프라인 기본값",
 		},
 	},

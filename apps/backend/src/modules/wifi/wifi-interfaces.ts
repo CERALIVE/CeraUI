@@ -128,7 +128,7 @@ export async function wifiUpdateDevices() {
 
 			if (wifiInterface) {
 				// the interface is still available
-				wifiInterface.removed = undefined;
+				delete wifiInterface.removed;
 
 				if (ifname !== wifiInterface.ifname) {
 					wifiInterface.ifname = ifname;

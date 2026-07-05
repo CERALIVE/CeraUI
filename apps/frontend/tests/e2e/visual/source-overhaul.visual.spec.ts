@@ -150,16 +150,12 @@ for (const condition of CONDITIONS) {
 		});
 
 		test("encoder surface", { tag: "@visual" }, async ({ page }) => {
-			// The GoLiveCard (T10) collapses to a "Ready to go live" bar when every
-			// gate is green — the config rows (and their `open-encoder-dialog`
-			// trigger) only render in the EXPANDED state. Expand it first when the
-			// `go-live-expand` control is present (it renders only while collapsed).
-			const card = page.getByTestId("go-live-card");
-			await expect(card).toBeVisible({ timeout: 20_000 });
-			const expand = page.getByTestId("go-live-expand");
-			if ((await expand.count()) > 0) {
-				await expand.click();
-			}
+			// The StreamSetupChain (T9/T10) always renders its four setup rows (no
+			// collapse), so the migrated `open-encoder-dialog` trigger is permanently
+			// visible — no expand step needed.
+			await expect(page.getByTestId("stream-setup-chain")).toBeVisible({
+				timeout: 20_000,
+			});
 
 			const trigger = page.getByTestId("open-encoder-dialog");
 			await expect(trigger).toBeVisible({ timeout: 20_000 });

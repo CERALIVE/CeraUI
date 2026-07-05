@@ -104,7 +104,10 @@ export async function handleORPCMessage(
 			message.path ?? [],
 			message.input,
 			context,
-			() => call(procedure, message.input, { context }),
+			() =>
+				call(procedure as Parameters<typeof call>[0], message.input, {
+					context,
+				}),
 		);
 
 		// Send response
@@ -256,7 +259,7 @@ export function createServerWebSocketHandler(): WebSocketHandler<ServerSocketDat
 			if (isPreviewSocket(ws)) {
 				preview.open(ws);
 			} else {
-				rpc.open(asRpc(ws));
+				rpc.open?.(asRpc(ws));
 			}
 		},
 		message(ws, data) {
@@ -270,7 +273,7 @@ export function createServerWebSocketHandler(): WebSocketHandler<ServerSocketDat
 			if (isPreviewSocket(ws)) {
 				preview.close(ws);
 			} else {
-				rpc.close(asRpc(ws), code, reason);
+				rpc.close?.(asRpc(ws), code, reason);
 			}
 		},
 		drain(ws) {

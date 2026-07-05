@@ -42,6 +42,7 @@
 
 import {
 	AddonConfigSchema,
+	AUDIO_SOURCE_AUTO,
 	type DetectionMethod,
 	detectionMethodSchema,
 	isNamespacedRelayId,
@@ -241,6 +242,11 @@ export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
 
 // Default values for runtime config (used when fields are missing)
 export const RUNTIME_CONFIG_DEFAULTS: Partial<RuntimeConfig> = {
+	// A MISSING asrc now defaults to the "Auto" sentinel: the audio source follows
+	// the video source, resolved at start/idle-preview (auto-audio.ts). This covers
+	// n100/generic (previously undefined → engine test-tone) and subsumes the
+	// former static per-board guess in config.ts. A PRESENT asrc is untouched.
+	asrc: AUDIO_SOURCE_AUTO,
 	srt_latency: 2000,
 	max_br: 5000,
 	delay: 0,
@@ -354,6 +360,14 @@ export const setupConfigSchema = z.object({
 	killall_binary: z.string().optional(),
 	bcrpt_path: z.string().optional(),
 	ips_file: z.string().optional(),
+	// Legacy belaUI setup.json fields read at runtime (opt-in overrides).
+	ssh_user: z.string().optional(),
+	apt_update_enabled: z.boolean().optional(),
+	has_gsm_autoconfig: z.boolean().optional(),
+	remote_protocol_version: z.number().optional(),
+	remote_endpoint_secure: z.boolean().optional(),
+	remote_endpoint_host: z.string().optional(),
+	remote_endpoint_path: z.string().optional(),
 });
 
 export type SetupConfig = z.infer<typeof setupConfigSchema>;

@@ -45,6 +45,12 @@ import {
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
 import { normalizeOrder, reorderSource } from '$lib/streaming/source-preference';
+import {
+	audioSourceLabel,
+	deriveActiveSummary,
+	resolveAudioSourceList,
+	resolvedAudioLabel,
+} from '$lib/streaming/sourceSummary';
 import { navElements } from '$lib/config';
 import {
 	getActiveInput,
@@ -64,8 +70,10 @@ import {
 	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
 import {
+	getStopStuckBannerVisible,
 	getStreamingOptimismState,
 	getStreamingStopReason,
+	retryStopStreaming,
 	startStreamingOptimism,
 	stopStreamingOptimism,
 	reconcileStreamingOptimism,
@@ -94,6 +102,9 @@ const linkTelemetry = $derived(getLinkTelemetry());
 // Streaming optimism state (Task 6): reflects user intent immediately on click.
 const streamingOptimismState = $derived(getStreamingOptimismState());
 const streamingStopReason = $derived(getStreamingStopReason());
+// Truthful stop-stuck banner (T0): shown only while the authoritative flag still
+// says streaming after the bounded stopping watchdog pulled + re-dispatched.
+const stopStuckBanner = $derived(getStopStuckBannerVisible());
 
 // Idle vs Live cockpit gate (Task 11): the optimistic view of streaming so the
 // start transition shows LiveCockpit immediately (no flicker back to idle mid-
@@ -122,6 +133,14 @@ $effect(() => {
 // window is bounded — a fixed timeout closes it, and the next stream start resets
 // it — so it always resolves back to IdleCockpit.
 const SUMMARY_WINDOW_MS = 30_000;
+// Prod-inert e2e seam: shrink the summary window (mirrors `__ceraRebootCountdownSeconds`).
+function resolveSummaryWindowMs(): number {
+	const override =
+		typeof window !== 'undefined'
+			? (window as unknown as { __ceraSummaryWindowMs?: number }).__ceraSummaryWindowMs
+			: undefined;
+	return typeof override === 'number' && override >= 0 ? override : SUMMARY_WINDOW_MS;
+}
 let showingSummary = $state(false);
 let summaryTimer: ReturnType<typeof setTimeout> | undefined;
 let lastStreamingState = false;
@@ -144,12 +163,23 @@ $effect.pre(() => {
 		showingSummary = true;
 		summaryTimer = setTimeout(() => {
 			showingSummary = false;
-		}, SUMMARY_WINDOW_MS);
+		}, resolveSummaryWindowMs());
 	}
 });
 
 // Clear a pending window timer if the view unmounts mid-window.
 $effect(() => () => clearTimeout(summaryTimer));
+
+// Explicit post-stream summary close (T13 "Done"): the Done button in
+// LiveCockpit's summaryMode escapes the bounded window immediately. Clear the
+// flag AND the fallback timer in the SAME synchronous call so no stale timer
+// fires after the click and flips the view back to summary. Idempotent — a
+// second click just re-clears an already-false flag / already-cleared timer.
+function closeSummary() {
+	clearTimeout(summaryTimer);
+	summaryTimer = undefined;
+	showingSummary = false;
+}
 
 // LiveCockpit stays mounted while streaming/starting OR through the bounded
 // post-stream summary window; `summaryMode` collapses it to summary-only chrome
@@ -239,6 +269,9 @@ async function handleSwitchInput(inputId: string) {
 		if (res.success) {
 			confirmOperation('switch-input');
 			toast.success($LL.live.inputPicker.switched({ ms: res.gap_ms ?? 0 }));
+			if (res.audio_follow_pending) {
+				toast.info($LL.live.inputPicker.audioFollowsOnRestart());
+			}
 		} else {
 			failOperation('switch-input', res.error ?? 'failed');
 			toast.error(
@@ -373,6 +406,18 @@ async function handleManageLinks() {
 	// LiveView before it is defined (TDZ at app mount). Resolved at click time.
 	const { navigateTo } = await import('$lib/stores/navigation.svelte');
 	navigateTo({ network });
+}
+
+// Source-gate fix + sole-camera "Change" (T10): retarget to the unified source
+// list instead of opening EncoderDialog — a blocked/undesired source is fixed by
+// PICKING one, so scroll it into view and focus its list container.
+function handleOpenSource() {
+	if (typeof document === 'undefined') return;
+	const section = document.querySelector<HTMLElement>('[data-testid="source-section"]');
+	if (!section) return;
+	section.scrollIntoView({ behavior: 'smooth' });
+	const list = section.querySelector<HTMLElement>('[data-testid="source-list"]') ?? section;
+	list.focus();
 }
 
 // ── Dialog open state ──────────────────────────────────────────────────────
@@ -583,7 +628,21 @@ const encoderSummary = $derived.by(() => {
 const audioSummary = $derived.by(() => {
 	const parts: string[] = [];
 	if (effectiveAudioCodec) parts.push(String(effectiveAudioCodec).toUpperCase());
-	if (effectiveAudioSource) parts.push(effectiveAudioSource);
+	// Route the source label through the single resolvedAudioLabel owner: an active
+	// Auto selection shows "Auto → device"; an explicit pick shows its own label.
+	const entries = resolveAudioSourceList(audioSourceList, audioSources);
+	const resolved = resolvedAudioLabel(
+		{ ...config, asrc: effectiveAudioSource },
+		getStatus(),
+		entries,
+		t,
+	);
+	if (resolved.current) {
+		parts.push(resolved.current);
+	} else if (effectiveAudioSource) {
+		const entry = entries.find((e) => e.id === effectiveAudioSource);
+		parts.push(entry ? audioSourceLabel(entry, t) : effectiveAudioSource);
+	}
 	return parts.length ? parts.join(' · ') : $LL.general.notConfigured();
 });
 // Kind-aware server config-row summary (T11): reuses the header's `receiverKind`
@@ -606,6 +665,49 @@ const serverSummary = $derived(
 		activeSlot,
 	),
 );
+
+// ── "Now streaming" summary strip + live source switch (T12) ────────────────
+// The active-encode summary (engine truth while streaming, else saved config)
+// feeds LiveCockpit's LiveSummaryStrip. `deriveActiveSummary` prefers config.source
+// via the sources list, then the legacy selected_video_input/pipeline fallbacks.
+const liveSummary = $derived(
+	deriveActiveSummary(
+		config,
+		getStatus()?.active_encode ?? null,
+		getCapabilities(),
+		getSources()?.sources,
+	),
+);
+// The CURRENT audio for the strip's second line — routed through the single
+// resolvedAudioLabel owner: an active Auto pick shows "Auto → device", an explicit
+// pick shows its own label, and a deferred follow (T7) rides the pending pill. This
+// shows what the stream is USING, never the future target as if it were live.
+const summaryAudio = $derived.by(() => {
+	const entries = resolveAudioSourceList(audioSourceList, audioSources);
+	const resolved = resolvedAudioLabel(
+		{ ...config, asrc: effectiveAudioSource },
+		getStatus(),
+		entries,
+		t,
+	);
+	const activeSrc = config?.source
+		? getSources()?.sources.find((s) => s.id === config.source)
+		: undefined;
+	const embeddedActive =
+		activeSrc?.audioKind === 'embedded' && getCapabilities()?.network_embedded_audio === true;
+	let current: string | undefined;
+	if (resolved.current) {
+		current = resolved.current;
+	} else if (effectiveAudioSource) {
+		const entry = entries.find((e) => e.id === effectiveAudioSource);
+		current = entry ? audioSourceLabel(entry, t) : effectiveAudioSource;
+	}
+	return {
+		current,
+		pending: resolved.pending,
+		embedded: resolved.embedded || embeddedActive,
+	};
+});
 
 // Start: assemble the full ConfigMessage from the SAVED backend config (the
 // encoder/server dialogs persist via setConfig), fold in the unpersisted audio
@@ -682,6 +784,12 @@ function handleStop() {
 	}
 }
 
+// Stop-stuck banner Retry: re-run the bounded watchdog (pull→stop→pull) via the
+// direct rpc path — never the window global (backend stop is idempotent).
+function handleRetryStop() {
+	retryStopStreaming();
+}
+
 const configRows = $derived<ConfigRow[]>([
 	{
 		icon: Cpu,
@@ -718,6 +826,27 @@ const configRows = $derived<ConfigRow[]>([
 	     reports a schema mismatch. Renders nothing in the normal tier. -->
 	<CapabilityTierBanner caps={getCapabilities()} />
 
+	{#if stopStuckBanner}
+		<!-- Truthful bounded stop-stuck banner (T0): the stopping watchdog pulled +
+		     re-dispatched but the authoritative flag still says streaming. The view
+		     stays truthfully live (never fake-idle); Retry re-runs pull→stop→pull. -->
+		<div
+			role="alert"
+			data-testid="stop-stuck-banner"
+			class="flex items-center justify-between gap-3 rounded-lg border border-status-warning/40 bg-status-warning/10 px-4 py-3 text-sm text-status-warning"
+		>
+			<span>{$LL.live.stopStuck.message()}</span>
+			<button
+				type="button"
+				data-testid="stop-stuck-retry"
+				class="shrink-0 rounded-md border border-status-warning/50 px-3 py-1 font-medium transition-colors hover:bg-status-warning/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-warning/60"
+				onclick={handleRetryStop}
+			>
+				{$LL.live.stopStuck.retry()}
+			</button>
+		</div>
+	{/if}
+
 	{#if showLiveCockpit}
 		<!-- Live cockpit: telemetry strip + live bitrate hot-adjust + ingest stats
 		     + Stop. Shown optimistically the moment Start is pressed so the start
@@ -725,6 +854,17 @@ const configRows = $derived<ConfigRow[]>([
 		     the bounded post-stream summary window (summaryMode) so IngestStats can
 		     render the historical "Session ended" summary before reverting to idle. -->
 		<LiveCockpit
+			{liveSummary}
+			destination={serverSummary}
+			audioCurrent={summaryAudio.current}
+			audioPending={summaryAudio.pending}
+			audioEmbedded={summaryAudio.embedded}
+			sources={getSources()}
+			{config}
+			activeEncode={getStatus()?.active_encode ?? null}
+			{activeInput}
+			{switchingInput}
+			onSwitch={handleSwitchInput}
 			bitrate={formatBitrate(config?.max_br)}
 			{tempSensor}
 			{uptimeSensor}
@@ -750,11 +890,13 @@ const configRows = $derived<ConfigRow[]>([
 			optimismState={streamingOptimismState}
 			{summaryMode}
 			onStop={handleStop}
+			onCloseSummary={closeSummary}
 		/>
 	{:else}
-		<!-- Idle cockpit: GoLiveCard (readiness + config + start) + Preview
-		     disclosure + SourceSection. Absorbs the old onboarding checklist,
-		     no-server empty-state, ServerReadiness and StreamSettingsCard. -->
+		<!-- Idle cockpit (source-first, T10): SourceSection → StreamSetupChain
+		     (readiness rows + config edits + Start at its foot) → Preview + Roadmap
+		     disclosures. Absorbs the old onboarding checklist, no-server empty-state,
+		     ServerReadiness and StreamSettingsCard. -->
 		<IdleCockpit
 			{config}
 			caps={getCapabilities()}
@@ -769,7 +911,7 @@ const configRows = $derived<ConfigRow[]>([
 			maxBitrate={config?.max_br}
 			onStart={handleStart}
 			onStop={handleStop}
-			onOpenSource={() => (encoderOpen = true)}
+			onOpenSource={handleOpenSource}
 			onGoNetwork={handleManageLinks}
 			onOpenServer={() => (serverDialogOpen = true)}
 			onOpenEncoder={() => (encoderOpen = true)}
@@ -778,6 +920,7 @@ const configRows = $derived<ConfigRow[]>([
 			onSwitch={handleSwitchInput}
 			{audioSources}
 			{audioSourceList}
+			audioStatus={getStatus()}
 			selectedAudioSource={effectiveAudioSource}
 			onSelectAudioSource={handleSelectAudioSource}
 			selectedPipeline={config?.pipeline}

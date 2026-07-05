@@ -86,7 +86,9 @@ async function readGsmConnections() {
 			password: connInfo[5],
 			roaming: connInfo[6] === "no",
 			network: connInfo[7],
-			autoconfig: setup.has_gsm_autoconfig ? connInfo[8] === "yes" : undefined,
+			...(setup.has_gsm_autoconfig
+				? { autoconfig: connInfo[8] === "yes" }
+				: {}),
 		};
 
 		byUuid[uuid] = conn;

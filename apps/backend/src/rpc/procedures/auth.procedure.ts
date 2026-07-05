@@ -145,7 +145,6 @@ export const setPasswordProcedure = baseProcedure
 			// Lazy import to avoid circular dependency
 			const { getConfig, saveConfig } = await import("../../modules/config.ts");
 			const config = getConfig();
-			// @ts-expect-error - password field exists on config type
 			config.password = undefined;
 			saveConfig();
 			logger.info("Auth: password updated");

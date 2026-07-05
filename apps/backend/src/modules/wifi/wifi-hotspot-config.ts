@@ -90,7 +90,7 @@ async function stopHotspotLocked(
 		wifiInterface.available.clear();
 	}
 
-	wifiInterface.hotspot.transition = undefined;
+	delete wifiInterface.hotspot.transition;
 	setNetifDupIpSuppression(wifiInterface.ifname, false);
 	broadcastWifiState();
 	syncWifiStateCache(macAddress, wifiInterface);
@@ -281,14 +281,14 @@ async function reconfigureHotspotLocked(
 
 		await nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO);
 
-		wifiInterface.hotspot.transition = undefined;
+		delete wifiInterface.hotspot.transition;
 		broadcastWifiState();
 		syncWifiStateCache(macAddress, wifiInterface);
 		return "activating";
 	}
 
 	// Successfully brought up the hotspot with the new settings, reload the conn.
-	wifiInterface.hotspot.transition = undefined;
+	delete wifiInterface.hotspot.transition;
 	await wifiUpdateSavedConns();
 	broadcastWifiState();
 	syncWifiStateCache(macAddress, wifiInterface);

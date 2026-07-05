@@ -181,6 +181,25 @@ unblock: A network-ingest (rtmp/srt) publish carries its own muxed audio, but th
 ```
 
 ```debt
+id: TD-live-audio-follow
+title: Live device-keyed audio follow on a mid-stream input switch
+track: 2
+status: open
+exit_criteria: `capability: audio switch accepts list-devices audio input ids`
+owner: ceraui-team
+registered_at: 2026-07-04
+resolved_at: null
+unblock: cerastream's switch-audio drives ONLY the two pre-built audio-switch graph legs "a"/"b" (drive_audio_switch, engine.rs:2550 + AUDIO_LEG_A/B engine.rs:2695/2742) — it cannot accept an arbitrary list-devices audio input_id, so a live device-keyed audio follow is NOT implementable against the current engine. A live video switchInput therefore RE-RESOLVES the Auto audio target and applies it AT THE NEXT START (T5's launch-time resolution), broadcasting pending_audio_follow_asrc + a calm "audio follows on restart" hint (i18n live.inputPicker.audioFollowsOnRestart) rather than dispatching a mid-stream switchAudio. When cerastream's switch-audio accepts list-devices audio input ids (device-id-keyed legs), the backend switchInput follow path (apps/backend/src/rpc/procedures/streaming.procedure.ts applySwitchInputFollow) can dispatch a real live audio switch instead of setPendingAudioFollowAsrc, and this entry flips to resolved.
+```
+
+This entry carries no source `data-debt-id` marker — the deferred follow is a
+backend-only engine limitation surfaced via a calm restart hint (a toast on the
+switchInput RPC result + the existing `audio-follow-pending` line), never a
+fake-interactive disabled control, so there is no live UI affordance to bind a
+marker to. The register entry is the durable record of the deferred-apply
+decision instead.
+
+```debt
 id: TD-gateway-b2-fleet-window
 title: Dual-topology SRT gateway probe (B2 fleet-transition tolerance)
 track: 1
@@ -212,20 +231,37 @@ safe to remove.
 
 ```debt
 id: TD-unmounted-source-shims
-title: StreamSettingsCard/OnboardingChecklist/ServerReadiness/NetworkIngestSection kept as unmounted GoLiveCard-migration shims
+title: StreamSettingsCard/OnboardingChecklist/ServerReadiness/NetworkIngestSection/GoLiveCard kept as unmounted Live-cockpit migration shims
 track: 1
 status: open
 exit_criteria: `bun run --filter frontend check`
 owner: ceraui-team
 registered_at: 2026-07-04
 resolved_at: null
-unblock: remove after one release with the sources broadcast. GoLiveCard + IdleCockpit (experience-simplification Tasks 10-12) absorbed every responsibility these four components used to own in LiveView — the onboarding/empty-state guidance, the destination readiness hint, the migrated config rows, and the LAN network-ingest picker are all now rendered by GoLiveCard/IdleCockpit/SourceSection — so none of the four is mounted anywhere in the app today. They are kept as unmounted files (only StreamSettingsCard's `ConfigRow` type is still imported, by GoLiveCard and IdleCockpit) as a one-release rollback safety net in case the cockpit split needs to be reverted. Once one full release has shipped on the device-first Live cockpit with no rollback, delete apps/frontend/src/main/live/StreamSettingsCard.svelte, main/live/OnboardingChecklist.svelte, main/live/ServerReadiness.svelte, and lib/components/custom/NetworkIngestSection.svelte (plus their test files and the now-orphaned `onboarding.svelte.ts` store), re-point the `ConfigRow` type onto GoLiveCard directly, then flip this entry to resolved.
+unblock: remove after one release with the sources broadcast. GoLiveCard + IdleCockpit (experience-simplification Tasks 10-12) absorbed every responsibility four of these components used to own in LiveView — the onboarding/empty-state guidance, the destination readiness hint, the migrated config rows, and the LAN network-ingest picker are all now rendered by GoLiveCard/IdleCockpit/SourceSection. The live-experience-refinement track (Task T9) then merged GoLiveCard's own gates+rows into StreamSetupChain.svelte (one "Stream setup" card of four always-visible rows, no collapse), so GoLiveCard.svelte itself is now ALSO an unmounted shim — kept-not-deleted as a one-release rollback safety net (only StreamSettingsCard's `ConfigRow` type is still imported, now by StreamSetupChain/IdleCockpit; GoLiveCard.svelte re-exports nothing anyone mounts). Once one full release has shipped on the device-first Live cockpit with StreamSetupChain and no rollback, delete apps/frontend/src/main/live/StreamSettingsCard.svelte, main/live/OnboardingChecklist.svelte, main/live/ServerReadiness.svelte, main/live/GoLiveCard.svelte, and lib/components/custom/NetworkIngestSection.svelte (plus their test files and the now-orphaned `onboarding.svelte.ts` store), re-point the `ConfigRow` type onto StreamSetupChain directly, then flip this entry to resolved.
 ```
 
-This entry also carries no source `data-debt-id` marker — the four files are
+This entry also carries no source `data-debt-id` marker — the five files are
 inert (never imported by anything the router mounts, `StreamSettingsCard`'s type
 export excepted), so there is no live UI affordance to bind a marker to. The
 register entry is the durable record of the "kept but dead" decision instead.
+
+```debt
+id: TD-ler-engine-pin
+title: CeraUI @ceralive/cerastream pin not yet bumped to a release carrying alsa_card_id + input_codec
+track: 2
+status: open
+exit_criteria: `pin @ceralive/cerastream >= the cerastream release carrying alsa_card_id + input_codec`
+owner: ceraui-team
+registered_at: 2026-07-05
+resolved_at: null
+unblock: The live-experience-refinement plan's T2 (additive alsa_card_id on CaptureDevice audio entries) and T3 (additive input_codec on ActiveEncode) landed on the cerastream feat/audio-alsa-id-input-codec branch (commits b11da04 + 41674e7d) but were NOT merged to cerastream's canonical branch (origin/main does not contain b11da04) and NO npm release carrying them exists — the published @ceralive/cerastream latest is 2026.7.0 (the CeraUI pin at apps/backend/package.json), cut BEFORE T2/T3, whose dist contains neither field. The plan's T18 gate ("after T2/T3 merge to cerastream's canonical branch AND a version is published to npm, bump the CeraUI pin") is therefore unmet at plan close, so the pin stays at 2026.7.0 and the bump is deferred; per the plan this must NOT be worked around by vendoring a tarball or using a link:/file: dependency. The CeraUI-side fallback paths are the PERMANENT, working degradation for any device on the current pin and are kept, not removed: audio device naming falls back from the engine-join tier (alsa_card_id === cardId, T4 tier-1) to /proc/asound/cards longname naming (T4 tier-2), and the incoming-codec chip is simply absent because active_encode.input_codec is undefined on the current pin. This is graceful old-engine degradation by design, not a broken feature. To clear: once T2/T3 merge to cerastream canonical and a CalVer release publishing both fields lands on npm (@ceralive scope), bump apps/backend/package.json @ceralive/cerastream to >= that release, run bun install at the workspace root, re-run the skew guard (bun test cerastream-bindings-skew from apps/backend/), remove none of the fallback paths, then flip this entry to resolved.
+```
+
+This entry carries no source `data-debt-id` marker — the deferral is a backend
+dependency-pin decision (an external cerastream-release dependency), not a UI
+affordance, so there is no live element to bind a marker to. The register entry
+is the durable, dated record of the deferred pin bump instead.
 
 > **Cross-repo follow-up (not CeraUI debt): RTMP-ingest unification.** The B2 SRT
 > ingest is now a loopback `srtsrc`-caller pull; RTMP ingest deliberately STAYS on

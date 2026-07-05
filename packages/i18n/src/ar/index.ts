@@ -1057,6 +1057,10 @@ const ar = {
 		stopStream: "إيقاف البث",
 		starting: "جارٍ البدء…",
 		stopping: "جارٍ الإيقاف…",
+		stopStuck: {
+			message: "يستغرق الإيقاف وقتًا أطول من المتوقع",
+			retry: "إعادة المحاولة",
+		},
 		overview: "نظرة عامة",
 		streamingActive: "البث",
 		notStreaming: "لا يوجد بث",
@@ -1087,6 +1091,11 @@ const ar = {
 				"توقّف مصدر الإدخال أثناء البدء. تحقّق من المصدر وحاول مرة أخرى.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "إعداد البث",
+			linksReady: "{count} {{روابط|رابط|رابطان|روابط|رابطًا|رابط}} جاهزة",
+			noLinks: "لا روابط",
+		},
 		onboarding: {
 			title: "ابدأ الإعداد",
 			subtitle: "ثلاث خطوات نحو أول بث مجمّع لك.",
@@ -1143,6 +1152,7 @@ const ar = {
 			exportCsv: "تصدير CSV",
 			exportAria: "تصدير ملخص الجلسة",
 			exportError: "تعذّر تصدير ملخص الجلسة. يرجى المحاولة مرة أخرى.",
+			done: "تم",
 		},
 		networkIngest: {
 			title: "استقبال الشبكة",
@@ -1165,6 +1175,10 @@ const ar = {
 			copied: "تم نسخ العنوان",
 			copyFailed: "تعذّر نسخ العنوان.",
 			includesAudio: "يتضمّن الصوت",
+			codecEducation: {
+				rtmp: "يبثّ RTMP فيديو H.264 (مع صوت AAC) فقط. تتم دائمًا إعادة ترميزه إلى برنامج ترميز الإخراج المُهيّأ.",
+				srt: "يبثّ SRT فيديو H.264 أو H.265. تتم دائمًا إعادة ترميزه إلى برنامج ترميز الإخراج المُهيّأ.",
+			},
 		},
 		preview: {
 			title: "معاينة",
@@ -1219,6 +1233,7 @@ const ar = {
 			audioSwitched: "تم تبديل الصوت خلال {ms}م.ث",
 			audioSwitchFailed: "فشل تبديل مصدر الصوت",
 			audioSourceLost: "مصدر الصوت غير متوفر",
+			audioFollowsOnRestart: "سيتبع الصوت عند بدء البث التالي",
 			audioSwitchUnavailable: "لا يدعم المحرك الحالي تبديل الصوت المباشر",
 			groups: {
 				hdmi: "HDMI",
@@ -1274,6 +1289,17 @@ const ar = {
 			lostBody: "أعد توصيل الجهاز لاستئناف البث من هذا المصدر.",
 			audioNone: "لم يتم اكتشاف مصدر صوت",
 			audioEmbedded: "صوت مضمّن (من البث الوارد)",
+		},
+		summary: {
+			nowStreaming: "يبث الآن",
+			audioFollows: "سيتبع الصوت {label} عند إعادة التشغيل",
+			switchTitle: "تغيير المصدر",
+			autoPrefix: "تلقائي",
+		},
+		transcode: {
+			chip: "الإدخال {input} \u2192 الإخراج {output}",
+			always:
+				"يعيد المحرك دائمًا ترميز البث الوارد إلى برنامج ترميز الإخراج المُهيّأ \u2014 لا يوجد تمرير مباشر.",
 		},
 		modes: {
 			label: "الوضع",
@@ -1557,6 +1583,7 @@ const ar = {
 	audio: {
 		sources: {
 			noAudio: "بدون صوت",
+			auto: "تلقائي (يتبع المصدر)",
 			pipelineDefault: "الإعداد الافتراضي للمسار",
 		},
 	},

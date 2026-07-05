@@ -1105,6 +1105,10 @@ const fr = {
 		stopStream: "Arrêter la diffusion",
 		starting: "Démarrage...",
 		stopping: "Arrêt...",
+		stopStuck: {
+			message: "L'arrêt prend plus de temps que prévu",
+			retry: "Réessayer",
+		},
 		overview: "Aperçu",
 		streamingActive: "Diffusion",
 		notStreaming: "Pas de diffusion",
@@ -1137,6 +1141,11 @@ const fr = {
 				"La source d'entrée s'est bloquée au démarrage. Vérifiez la source et réessayez.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "Préparation du direct",
+			linksReady: "{count} {{lien|liens}} prêts",
+			noLinks: "Aucun lien",
+		},
 		onboarding: {
 			title: "Lancer la configuration",
 			subtitle: "Trois étapes vers votre premier flux agrégé.",
@@ -1195,6 +1204,7 @@ const fr = {
 			exportAria: "Exporter le résumé de session",
 			exportError:
 				"Impossible d'exporter le résumé de session. Veuillez réessayer.",
+			done: "Terminé",
 		},
 		networkIngest: {
 			title: "Entrée réseau",
@@ -1219,6 +1229,10 @@ const fr = {
 			copied: "Adresse copiée",
 			copyFailed: "Impossible de copier l'adresse.",
 			includesAudio: "Audio inclus",
+			codecEducation: {
+				rtmp: "RTMP ne publie que de la vidéo H.264 (avec audio AAC). Elle est toujours ré-encodée dans le codec de sortie configuré.",
+				srt: "SRT publie de la vidéo H.264 ou H.265. Elle est toujours ré-encodée dans le codec de sortie configuré.",
+			},
 		},
 		preview: {
 			title: "Aperçu",
@@ -1275,6 +1289,7 @@ const fr = {
 			audioSwitched: "Audio changé en {ms}ms",
 			audioSwitchFailed: "Échec du changement de source audio",
 			audioSourceLost: "Source audio indisponible",
+			audioFollowsOnRestart: "L'audio suivra au prochain démarrage du flux",
 			audioSwitchUnavailable:
 				"Le changement audio en direct n'est pas pris en charge par le moteur actuel",
 			groups: {
@@ -1334,6 +1349,17 @@ const fr = {
 				"Reconnectez l'appareil pour reprendre la diffusion depuis cette source.",
 			audioNone: "Aucune source audio détectée",
 			audioEmbedded: "Audio intégré (du flux entrant)",
+		},
+		summary: {
+			nowStreaming: "En direct",
+			audioFollows: "L'audio suivra {label} au redémarrage",
+			switchTitle: "Changer de source",
+			autoPrefix: "Automatique",
+		},
+		transcode: {
+			chip: "Entrée {input} \u2192 Sortie {output}",
+			always:
+				"Le moteur ré-encode toujours le flux entrant dans le codec de sortie configuré \u2014 il n'y a pas de passthrough.",
 		},
 		modes: {
 			label: "Mode",
@@ -1627,6 +1653,7 @@ const fr = {
 	audio: {
 		sources: {
 			noAudio: "Aucun audio",
+			auto: "Auto (suit la source)",
 			pipelineDefault: "Valeur par défaut du pipeline",
 		},
 	},

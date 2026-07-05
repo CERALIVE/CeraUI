@@ -170,23 +170,26 @@ test.describe('conditional-display state lock (T11)', () => {
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
 
-		// Target branch: no server → the GoLiveCard destination gate blocks with an
-		// open-server fix (the old "Choose a destination" onboarding hero was absorbed
-		// into this readiness gate by T10/T11).
-		const card = page.getByTestId('go-live-card');
+		// Target branch: no server → the StreamSetupChain destination row blocks; its
+		// Edit button (open-server-dialog) is the fix affordance (the old "Choose a
+		// destination" onboarding hero was absorbed into this setup row by T10/T11).
+		const card = page.getByTestId('stream-setup-chain');
 		await expect(card).toBeVisible();
-		const destGate = card.locator('[data-testid="go-live-gate"][data-gate="destination"]');
-		await expect(destGate).toHaveAttribute('data-state', 'blocked');
-		await expect(destGate.getByTestId('go-live-gate-fix')).toHaveAttribute('data-fix', 'openServer');
+		const destRow = card.locator('[data-testid="setup-row"][data-row="destination"]');
+		await expect(destRow).toHaveAttribute('data-state', 'blocked');
+		await expect(card.getByTestId('open-server-dialog')).toBeVisible();
 
 		// Start is blocked, and the disabled control surfaces a reason via `title`.
 		const start = page.getByRole('button', { name: /start stream/i });
 		await expect(start).toBeDisabled();
 		await expect(start).toHaveAttribute('title', /\S/);
 
-		// Sibling branches must be absent: not the all-green collapsed ready bar, and
-		// no bitrate slider (idle has no live slider — the ceiling is a chip, T12).
-		await expect(page.getByTestId('go-live-ready-bar')).toBeHidden();
+		// Sibling branches must be absent: not all-green (a blocked row remains, so no
+		// collapsed/ready state), and no bitrate slider (idle has no live slider — the
+		// ceiling is a chip, T12).
+		await expect(
+			card.locator('[data-testid="setup-row"]:not([data-state="ok"])'),
+		).not.toHaveCount(0);
 		await expect(page.getByRole('slider')).toHaveCount(0);
 
 		await assertNoNewA11y(page);
@@ -213,18 +216,22 @@ test.describe('conditional-display state lock (T11)', () => {
 		await navigateTo(page, 'live');
 		ws.push({ status: { is_streaming: false } });
 
-		// Target branch: the network gate is ok (enabled+IP'd links standing by) — the
-		// old links-ready idle card was absorbed into this readiness gate (T10/T11).
-		const card = page.getByTestId('go-live-card');
+		// Target branch: the network row is ok (enabled+IP'd links standing by) — the
+		// old links-ready idle card was absorbed into this setup row (T10/T11).
+		const card = page.getByTestId('stream-setup-chain');
 		await expect(card).toBeVisible();
-		const networkGate = card.locator('[data-testid="go-live-gate"][data-gate="network"]');
-		await expect(networkGate).toHaveAttribute('data-state', 'ok');
+		const networkRow = card.locator('[data-testid="setup-row"][data-row="network"]');
+		await expect(networkRow).toHaveAttribute('data-state', 'ok');
 
-		// Sibling branches absent: the network gate is NOT blocked (no goNetwork fix on
-		// it) and the destination gate is not blocked either (server configured).
-		await expect(networkGate.getByTestId('go-live-gate-fix')).toHaveCount(0);
+		// Sibling branches absent: the network row is NOT blocked and the destination
+		// row is not blocked either (server configured). The network row always keeps
+		// its goNetwork navigation button regardless of state, so "not blocked" is
+		// asserted via the row's data-state, not the fix button's absence.
 		await expect(
-			card.locator('[data-testid="go-live-gate"][data-gate="destination"][data-state="blocked"]'),
+			card.locator('[data-testid="setup-row"][data-row="network"][data-state="blocked"]'),
+		).toHaveCount(0);
+		await expect(
+			card.locator('[data-testid="setup-row"][data-row="destination"][data-state="blocked"]'),
 		).toHaveCount(0);
 
 		// Bitrate is first-class on the idle surface, but via the tap-to-edit ceiling
@@ -262,13 +269,13 @@ test.describe('conditional-display state lock (T11)', () => {
 		await navigateTo(page, 'live');
 		ws.push({ status: { is_streaming: false } });
 
-		// Target branch: the network gate blocks (no enabled+IP'd link) and offers the
-		// goNetwork fix — the old "No bonded links yet" empty card, now a readiness gate.
-		const card = page.getByTestId('go-live-card');
+		// Target branch: the network row blocks (no enabled+IP'd link) and offers the
+		// goNetwork fix — the old "No bonded links yet" empty card, now a setup row.
+		const card = page.getByTestId('stream-setup-chain');
 		await expect(card).toBeVisible();
-		const networkGate = card.locator('[data-testid="go-live-gate"][data-gate="network"]');
-		await expect(networkGate).toHaveAttribute('data-state', 'blocked');
-		await expect(networkGate.getByTestId('go-live-gate-fix')).toHaveAttribute('data-fix', 'goNetwork');
+		const networkRow = card.locator('[data-testid="setup-row"][data-row="network"]');
+		await expect(networkRow).toHaveAttribute('data-state', 'blocked');
+		await expect(networkRow.getByTestId('setup-row-fix')).toHaveAttribute('data-fix', 'goNetwork');
 
 		// Sibling branch absent: the network gate is not ok. The idle bitrate ceiling
 		// chip is present regardless of link readiness (T12) — never a live slider.

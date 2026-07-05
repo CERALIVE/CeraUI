@@ -13,9 +13,10 @@ import type {
 	AudioSource,
 	CapabilitiesMessage,
 	ConfigMessage,
+	ResolvedAsrcReason,
 	StreamSource,
 } from "@ceraui/rpc/schemas";
-import { fromEngineResolution } from "@ceraui/rpc/schemas";
+import { AUDIO_SOURCE_AUTO, fromEngineResolution } from "@ceraui/rpc/schemas";
 
 import {
 	axisCeiling,
@@ -103,14 +104,118 @@ export function groupAudioSources(list: readonly AudioSource[]): {
 }
 
 /**
- * Display label for an audio-source entry: pseudo-sources render their translated
- * `labelKey`; hardware device names are NEVER translated (rendered verbatim).
+ * Display label for an audio-source entry. Preference order (T6):
+ *   1. `entry.label` — the verbatim hardware name resolved by the backend (T4);
+ *      wins when present, NEVER translated.
+ *   2. `entry.labelKey` — the translated pseudo-source label (Auto / No audio /
+ *      Pipeline default).
+ *   3. `entry.id` — the raw wire id, for a legacy device entry with no label.
  */
 export function audioSourceLabel(
 	entry: AudioSource,
 	t: (key: string) => string,
 ): string {
-	return entry.labelKey ? t(entry.labelKey) : entry.id;
+	return entry.label ?? (entry.labelKey ? t(entry.labelKey) : entry.id);
+}
+
+/**
+ * The FE-injected "Auto" audio-source entry (plan decision 2b). The backend NEVER
+ * emits an `auto`-kind entry — this is a frontend-only affordance that opts the
+ * device into the T5 auto-resolution path by writing `asrc = AUDIO_SOURCE_AUTO`.
+ * `id` is byte-equal to the wire sentinel so `config.asrc === AUDIO_SOURCE_AUTO`.
+ */
+export const AUTO_AUDIO_SOURCE_ENTRY: AudioSource = {
+	id: AUDIO_SOURCE_AUTO,
+	kind: "auto",
+	labelKey: "audio.sources.auto",
+};
+
+/**
+ * Prepend the FE-injected Auto entry so it renders FIRST in the picker, above the
+ * device entries. Deduped defensively: if a (future) backend ever emitted an Auto
+ * entry, the injected one still wins and there is never a duplicate.
+ */
+export function withAutoAudioEntry(
+	entries: readonly AudioSource[],
+): AudioSource[] {
+	return [
+		AUTO_AUDIO_SOURCE_ENTRY,
+		...entries.filter((entry) => entry.id !== AUDIO_SOURCE_AUTO),
+	];
+}
+
+/**
+ * The three T5 resolution fields carried on the `status` broadcast. Structural
+ * subset of `StatusResponse` so any status object satisfies it — the consumer
+ * passes `getStatus()` verbatim. All nullable/optional: null/absent = no Auto
+ * resolution yet, or an old backend that never broadcasts these fields.
+ */
+export interface ResolvedAudioStatus {
+	resolved_asrc?: string | null;
+	resolved_asrc_reason?: ResolvedAsrcReason | null;
+	pending_audio_follow_asrc?: string | null;
+}
+
+/** The single resolved-audio display model every consuming surface renders from. */
+export interface ResolvedAudioDisplay {
+	/**
+	 * `"Auto → {label}"` when Auto is the ACTIVE selection AND the backend has
+	 * resolved a concrete device (`resolved_asrc` non-null). `undefined` when Auto
+	 * is not active (stale-value gate) or Auto is active but genuinely unresolved
+	 * (null `resolved_asrc` WITHOUT the embedded reason — e.g. an old backend).
+	 */
+	current: string | undefined;
+	/** The deferred live-follow target label (T7's `pending_audio_follow_asrc`). */
+	pending: string | undefined;
+	/** `true` when the resolution reason is `embedded` (network-ingest muxed audio). */
+	embedded: boolean;
+}
+
+/**
+ * The ONE owner of the resolved-audio display (Metis F12 + Oracle R5-1/R9-1). Pure;
+ * every surface — SourceSection, LiveView `audioSummary`, AudioDialog's read-only
+ * line, (later) LiveSummaryStrip — routes through this rather than re-deriving it.
+ *
+ * STALE-VALUE GATE (Oracle R11): `current` is ALWAYS `undefined` when
+ * `config?.asrc !== AUDIO_SOURCE_AUTO`, REGARDLESS of what `status.resolved_asrc`
+ * currently holds — a leftover broadcast value from a prior Auto session must never
+ * render once the operator has picked an explicit device.
+ *
+ * The two null cases stay VISUALLY DISTINCT via `embedded`:
+ *   • `{resolved_asrc:null, resolved_asrc_reason:'embedded'}` → `embedded:true`
+ *     (surfaces the existing "Embedded audio" state).
+ *   • `{resolved_asrc:null, resolved_asrc_reason:null/absent}` → `embedded:false`,
+ *     `current:undefined` (the em-dash / old-backend state).
+ */
+export function resolvedAudioLabel(
+	config: ConfigMessage | undefined,
+	status: ResolvedAudioStatus | undefined,
+	audioSourceEntries: readonly AudioSource[],
+	t: (key: string) => string,
+): ResolvedAudioDisplay {
+	const embedded = status?.resolved_asrc_reason === "embedded";
+
+	// Resolve an asrc key/id to a display label via the typed entries (the T4
+	// hardware name wins through audioSourceLabel), else the raw id verbatim.
+	const labelFor = (id: string): string => {
+		const entry = audioSourceEntries.find((e) => e.id === id);
+		return entry ? audioSourceLabel(entry, t) : id;
+	};
+
+	// The deferred live-follow target is independent of the stale gate — it is a
+	// separate slot (T7's only writer; null until then, so this stays undefined).
+	const pendingId = status?.pending_audio_follow_asrc;
+	const pending = pendingId ? labelFor(pendingId) : undefined;
+
+	if (config?.asrc !== AUDIO_SOURCE_AUTO) {
+		return { current: undefined, pending, embedded };
+	}
+
+	const resolved = status?.resolved_asrc;
+	const current = resolved
+		? `${t("live.summary.autoPrefix")} \u2192 ${labelFor(resolved)}`
+		: undefined;
+	return { current, pending, embedded };
 }
 
 /** Compact, structured capability summary for the ACTIVE source (Todo 11). */
@@ -290,6 +395,8 @@ export interface ActiveSummary {
 	framerate: number | undefined;
 	/** Human codec label (`H.265`); undefined when neither engine nor config set one. */
 	codec: string | undefined;
+	/** Incoming-codec label (`H.264`) for the transcode chip; set ONLY for a network source with a reported `input_codec` (else undefined). */
+	inputCodec: string | undefined;
 	/** Relay transport token (`SRTLA`). */
 	transport: string;
 }
@@ -310,6 +417,15 @@ function resolveSourceName(
 	return sourceId;
 }
 
+/** The `origin` of the active source id in the sources list, or undefined. */
+function resolveSourceOrigin(
+	sourceId: string | undefined,
+	sources: readonly StreamSource[] | undefined,
+): StreamSource["origin"] | undefined {
+	if (!sourceId) return undefined;
+	return sources?.find((entry) => entry.id === sourceId)?.origin;
+}
+
 /**
  * Derive the active-encode summary, preferring engine truth (`activeEncode`,
  * present only while streaming) over the saved `config` (idle). Pure and
@@ -326,11 +442,15 @@ export function deriveActiveSummary(
 ): ActiveSummary {
 	const live = Boolean(activeEncode);
 
+	// Order: engine `active_input` (streaming) → device-first `config.source` →
+	// legacy `selected_video_input`/`pipeline`. A missing `source` falls through
+	// byte-identically to the prior behavior.
 	const sourceId = live
 		? (activeEncode?.active_input ??
+			config?.source ??
 			config?.selected_video_input ??
 			config?.pipeline)
-		: (config?.selected_video_input ?? config?.pipeline);
+		: (config?.source ?? config?.selected_video_input ?? config?.pipeline);
 
 	const resolution = live
 		? (fromEngineResolution(activeEncode?.resolution ?? "") ??
@@ -341,12 +461,20 @@ export function deriveActiveSummary(
 
 	const codecToken = live ? activeEncode?.codec : config?.video_codec;
 
+	const isNetworkSource =
+		resolveSourceOrigin(sourceId || undefined, sources) === "network";
+	const inputCodecToken = live ? activeEncode?.input_codec : undefined;
+
 	return {
 		live,
 		source: resolveSourceName(sourceId || undefined, sources),
 		resolution: resolution || undefined,
 		framerate: typeof framerate === "number" ? framerate : undefined,
 		codec: codecToken ? formatCodec(codecToken) : undefined,
+		inputCodec:
+			inputCodecToken && isNetworkSource
+				? formatCodec(inputCodecToken)
+				: undefined,
 		transport: resolveTransportToken(config, caps),
 	};
 }

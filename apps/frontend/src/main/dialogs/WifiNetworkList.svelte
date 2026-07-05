@@ -104,7 +104,7 @@ let {
 	<div class="bg-muted/50 flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5">
 		<div class="flex items-center gap-2 text-sm">
 			<span class="text-foreground font-semibold tabular-nums">
-				{iface?.available.length ?? 0}
+				{iface?.available?.length ?? 0}
 			</span>
 			<span class="text-muted-foreground">{$LL.wifiSelector.networks.found()}</span>
 			{#if scanning}

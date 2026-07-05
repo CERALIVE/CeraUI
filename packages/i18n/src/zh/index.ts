@@ -881,6 +881,10 @@ const zh = {
 		stopStream: "停止直播",
 		starting: "正在开始...",
 		stopping: "正在停止...",
+		stopStuck: {
+			message: "停止所需时间超出预期",
+			retry: "重试",
+		},
 		overview: "概览",
 		streamingActive: "直播中",
 		notStreaming: "未在直播",
@@ -906,6 +910,11 @@ const zh = {
 			pipeline_stall: "启动时输入源停滞。请检查输入源后重试。",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "直播设置",
+			linksReady: "{count} 条链路就绪",
+			noLinks: "无链路",
+		},
 		onboarding: {
 			title: "开始设置",
 			subtitle: "三步开启你的首个聚合推流。",
@@ -962,6 +971,7 @@ const zh = {
 			exportCsv: "导出 CSV",
 			exportAria: "导出会话摘要",
 			exportError: "无法导出会话摘要，请重试。",
+			done: "完成",
 		},
 		networkIngest: {
 			title: "网络接入",
@@ -984,6 +994,10 @@ const zh = {
 			copied: "地址已复制",
 			copyFailed: "无法复制地址。",
 			includesAudio: "包含音频",
+			codecEducation: {
+				rtmp: "RTMP 仅推送 H.264 视频（含 AAC 音频）。它始终会重新编码为你配置的输出编解码器。",
+				srt: "SRT 推送 H.264 或 H.265 视频。它始终会重新编码为你配置的输出编解码器。",
+			},
 		},
 		preview: {
 			title: "预览",
@@ -1038,6 +1052,7 @@ const zh = {
 			audioSwitched: "已在 {ms}ms 内切换音频",
 			audioSwitchFailed: "切换音频源失败",
 			audioSourceLost: "音频源不可用",
+			audioFollowsOnRestart: "音频将在下次推流开始时切换",
 			audioSwitchUnavailable: "当前引擎不支持实时音频切换",
 			groups: {
 				hdmi: "HDMI",
@@ -1092,6 +1107,17 @@ const zh = {
 			lostBody: "重新连接设备以从此来源恢复推流。",
 			audioNone: "未检测到音频源",
 			audioEmbedded: "嵌入式音频（来自传入流）",
+		},
+		summary: {
+			nowStreaming: "正在直播",
+			audioFollows: "重启后音频将切换到 {label}",
+			switchTitle: "切换源",
+			autoPrefix: "自动",
+		},
+		transcode: {
+			chip: "输入 {input} \u2192 输出 {output}",
+			always:
+				"引擎始终将传入流重新编码为你配置的输出编解码器 \u2014 没有直通。",
 		},
 		modes: {
 			label: "模式",
@@ -1520,6 +1546,7 @@ const zh = {
 	audio: {
 		sources: {
 			noAudio: "无音频",
+			auto: "自动（跟随信号源）",
 			pipelineDefault: "管道默认",
 		},
 	},

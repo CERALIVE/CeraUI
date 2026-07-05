@@ -122,7 +122,7 @@ async function startHotspotLocked(
 	syncWifiStateCache(macAddress, wifiInterface); // still station (isHotspot false)
 
 	const rollback = (): HotspotStartResult => {
-		wifiInterface.hotspot.transition = undefined;
+		delete wifiInterface.hotspot.transition;
 		wifiInterface.conn = priorConn;
 		deps.setDupIpSuppression(ifname, false);
 		// Restore the cached state so it is NEVER left in hotspot mode on failure.

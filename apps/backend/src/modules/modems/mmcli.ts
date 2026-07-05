@@ -199,8 +199,10 @@ export function parseMmcliModel(raw: string | object): {
 		if (block === null || typeof block !== "object") continue;
 		const fields = block as Record<string, unknown>;
 
-		result.model ??= pick(fields.model);
-		result.manufacturer ??= pick(fields.manufacturer);
+		const modelVal = pick(fields.model);
+		if (modelVal !== undefined) result.model ??= modelVal;
+		const manufacturerVal = pick(fields.manufacturer);
+		if (manufacturerVal !== undefined) result.manufacturer ??= manufacturerVal;
 	}
 
 	if (result.model === undefined) delete result.model;
@@ -333,6 +335,7 @@ export async function mmList() {
 	} catch (err) {
 		logger.error(`mmList err: ${describeCliError(err)}`);
 	}
+	return undefined;
 }
 
 export async function mmGetModem(id: ModemId) {
@@ -350,6 +353,7 @@ export async function mmGetModem(id: ModemId) {
 	} catch (err) {
 		logger.error(`mmGetModem err: ${describeCliError(err)}`);
 	}
+	return undefined;
 }
 
 export async function mmGetSim(id: number) {
@@ -367,6 +371,7 @@ export async function mmGetSim(id: number) {
 	} catch (err) {
 		logger.error(`mmGetSim err: ${describeCliError(err)}`);
 	}
+	return undefined;
 }
 
 // Regex: mmcli's confirmation line for `--set-allowed-modes` / `--set-preferred-mode`.
@@ -394,6 +399,7 @@ export async function mmSetNetworkTypes(
 	} catch (err) {
 		logger.error(`mmSetNetworkTypes err: ${describeCliError(err)}`);
 	}
+	return undefined;
 }
 
 export type NetworkScanResult = {
@@ -759,4 +765,5 @@ export async function mmNetworkScan(id: ModemId, timeout = 240) {
 	} catch (err) {
 		logger.error(`mmNetworkScan err: ${describeCliError(err)}`);
 	}
+	return undefined;
 }

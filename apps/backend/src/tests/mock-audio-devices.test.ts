@@ -50,14 +50,17 @@ describe("getMockAudioDevices — scenario seeding", () => {
 
 	test("seeds USB audio for streaming-active", () => {
 		initMockService("streaming-active");
-		expect(getMockAudioDevices()).toEqual({ "USB audio": "usbaudio" });
+		expect(getMockAudioDevices()).toEqual({
+			"RØDE AI-Micro": "rode_ai_micro",
+			"Elgato Wave:3": "elgato_wave3",
+		});
 	});
 
 	test("seeds USB audio + HDMI for caps-full", () => {
 		initMockService("caps-full");
 		expect(getMockAudioDevices()).toEqual({
-			"USB audio": "usbaudio",
-			HDMI: "rockchiphdmiin",
+			"RØDE AI-Micro": "rode_ai_micro",
+			"Elgato Wave:3": "elgato_wave3",
 		});
 	});
 
@@ -84,13 +87,16 @@ describe("getAudioDevices — status asrcs coherence", () => {
 		expect(asrcs).toContain("Pipeline default");
 	});
 
-	test("caps-full status asrcs also contains HDMI", () => {
+	test("caps-full status asrcs also contains RØDE AI-Micro and Elgato Wave:3", () => {
 		initMockService("caps-full");
 		setMockAudioDevicesProvider(getMockAudioDevices);
 
 		const asrcs = Object.keys(getAudioDevices());
-		expect(asrcs).toContain("USB audio");
-		expect(asrcs).toContain("HDMI");
+		expect(asrcs).toContain("RØDE AI-Micro");
+		expect(asrcs).toContain("Elgato Wave:3");
+		// The two pseudo-sources are never displaced by the seed.
+		expect(asrcs).toContain("No audio");
+		expect(asrcs).toContain("Pipeline default");
 	});
 
 	test("an empty seed leaves only the pseudo-sources", () => {

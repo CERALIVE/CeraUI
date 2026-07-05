@@ -949,6 +949,10 @@ const ja = {
 		stopStream: "ストリーム停止",
 		starting: "開始中...",
 		stopping: "停止中...",
+		stopStuck: {
+			message: "停止に予想以上の時間がかかっています",
+			retry: "再試行",
+		},
 		overview: "概要",
 		streamingActive: "ストリーミング中",
 		notStreaming: "ストリーミングしていません",
@@ -981,6 +985,11 @@ const ja = {
 				"開始時に入力ソースが停止しました。ソースを確認してもう一度お試しください。",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "配信のセットアップ",
+			linksReady: "{count} 本のリンクが準備完了",
+			noLinks: "リンクなし",
+		},
 		onboarding: {
 			title: "セットアップを始める",
 			subtitle: "最初のボンディング配信までの3ステップ。",
@@ -1038,6 +1047,7 @@ const ja = {
 			exportAria: "セッションサマリーをエクスポート",
 			exportError:
 				"セッションサマリーをエクスポートできませんでした。もう一度お試しください。",
+			done: "完了",
 		},
 		networkIngest: {
 			title: "ネットワーク受信",
@@ -1062,6 +1072,10 @@ const ja = {
 			copied: "アドレスをコピーしました",
 			copyFailed: "アドレスをコピーできませんでした。",
 			includesAudio: "音声を含む",
+			codecEducation: {
+				rtmp: "RTMP は H.264 映像（AAC 音声付き）のみを配信します。常に設定した出力コーデックに再エンコードされます。",
+				srt: "SRT は H.264 または H.265 映像を配信します。常に設定した出力コーデックに再エンコードされます。",
+			},
 		},
 		preview: {
 			title: "プレビュー",
@@ -1117,6 +1131,7 @@ const ja = {
 			audioSwitched: "{ms}msでオーディオを切り替えました",
 			audioSwitchFailed: "オーディオソースの切り替えに失敗しました",
 			audioSourceLost: "オーディオソースを利用できません",
+			audioFollowsOnRestart: "オーディオは次のストリーム開始時に切り替わります",
 			audioSwitchUnavailable:
 				"現在のエンジンはライブ音声切り替えに対応していません",
 			groups: {
@@ -1176,6 +1191,17 @@ const ja = {
 				"デバイスを再接続して、このソースからの配信を再開してください。",
 			audioNone: "オーディオソースが検出されません",
 			audioEmbedded: "埋め込みオーディオ（受信ストリームから）",
+		},
+		summary: {
+			nowStreaming: "配信中",
+			audioFollows: "再起動時にオーディオが{label}に切り替わります",
+			switchTitle: "ソースを切り替え",
+			autoPrefix: "自動",
+		},
+		transcode: {
+			chip: "入力 {input} \u2192 出力 {output}",
+			always:
+				"エンジンは受信ストリームを常に設定した出力コーデックに再エンコードします。パススルーはありません。",
 		},
 		modes: {
 			label: "モード",
@@ -1611,6 +1637,7 @@ const ja = {
 	audio: {
 		sources: {
 			noAudio: "音声なし",
+			auto: "自動（ソースに追従）",
 			pipelineDefault: "パイプラインの既定値",
 		},
 	},

@@ -92,8 +92,8 @@ export function notificationSend(
 		name,
 		type,
 		msg,
-		key,
-		params,
+		...(key !== undefined ? { key } : {}),
+		...(params !== undefined ? { params } : {}),
 		isDismissable,
 		isPersistent,
 		duration,
@@ -191,6 +191,7 @@ export function notificationExists(name: string) {
 	if (!pn) return;
 
 	if (_notificationIsLive(pn) !== false) return pn;
+	return undefined;
 }
 
 export function getPersistentNotifications(isAuthed = false) {

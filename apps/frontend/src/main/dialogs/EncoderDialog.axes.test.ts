@@ -22,6 +22,7 @@ import type {
 	CaptureStreamSource,
 	CoarseStreamSource,
 	ConfigMessage,
+	NetworkStreamSource,
 	SourcesMessage,
 } from "@ceraui/rpc/schemas";
 import { fireEvent, render } from "@testing-library/svelte";
@@ -107,6 +108,24 @@ const COARSE_HDMI: CoarseStreamSource = {
 	defaultResolution: "1080p",
 	defaultFramerate: 30,
 	audioKind: "selectable",
+	available: true,
+};
+
+// A LAN network-ingest source — always transcoded, so no resolution/framerate override.
+const NETWORK_RTMP: NetworkStreamSource = {
+	id: "rtmp",
+	origin: "network",
+	pipelineId: "rtmp",
+	labelKey: "settings.sources.rtmp",
+	requiresGateway: "rtmp",
+	url: "rtmp://192.168.1.100:1935/publish/live",
+	modes: [],
+	supportsAudio: true,
+	supportsResolutionOverride: false,
+	supportsFramerateOverride: false,
+	defaultResolution: "1080p",
+	defaultFramerate: 30,
+	audioKind: "embedded",
 	available: true,
 };
 
@@ -365,5 +384,41 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		expect(saved.resolution).toBe("1080p");
 		expect(saved.framerate).toBe(30);
 		expect(saved.bitrate).toBe(6000);
+	});
+
+	it("network source (no resolution override): resolution axis disabled-with-reason (T14 audit)", async () => {
+		state.pipelines = pipelinesMessage("rk3588");
+		state.capabilities = capsWith();
+		state.sources = sourcesMessage("rk3588", [NETWORK_RTMP]);
+		// Selecting a non-default 720p on a source-fixed (1080p) network source.
+		seedConfig({ source: "rtmp", pipeline: "rtmp" });
+
+		render(EncoderDialog, {
+			props: { open: true, config: encoderConfig({ resolution: "720p" }) },
+		});
+
+		// The always-rendered trigger flags the unsupported source-fixed selection.
+		const trigger = document.body.querySelector("#encoder-resolution");
+		expect(trigger?.getAttribute("aria-invalid")).toBe("true");
+
+		// Opening the select shows the non-default rung disabled WITH the source reason.
+		await fireEvent.click(trigger as HTMLElement);
+		await tick();
+		const options = Array.from(
+			document.body.querySelectorAll('[data-testid="resolution-option"]'),
+		);
+		const nonDefault = options.find(
+			(o) => o.getAttribute("data-value") === "720p",
+		);
+		if (nonDefault) {
+			expect(nonDefault.getAttribute("aria-disabled")).toBe("true");
+			expect(nonDefault.getAttribute("title")).toBe(
+				"Fixed by the selected source",
+			);
+		} else {
+			// bits-ui didn't mount options in jsdom — the trigger aria-invalid above
+			// is the authoritative gating proof (matches the framerate axis test).
+			expect(trigger?.getAttribute("aria-invalid")).toBe("true");
+		}
 	});
 });

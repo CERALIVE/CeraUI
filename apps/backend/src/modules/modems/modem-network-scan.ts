@@ -64,7 +64,7 @@ export async function modemNetworkScan(id: number) {
 	}
 	const results = await mmNetworkScan(id);
 
-	modem.is_scanning = undefined;
+	delete modem.is_scanning;
 
 	/* Even if no new results are returned, resend the old ones
      to inform the clients that the scan was completed */
@@ -86,7 +86,7 @@ export async function modemNetworkScan(id: number) {
 				r.availability = "available";
 				break;
 			case "unknown":
-				r.availability = undefined;
+				delete r.availability;
 				break;
 		}
 

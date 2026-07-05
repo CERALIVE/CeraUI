@@ -360,7 +360,7 @@ async function readOsVersionId(): Promise<string> {
 	const txt = await Bun.file(OS_RELEASE_PATH).text();
 	const m = txt.match(/^VERSION_ID=(.*)$/m);
 	if (!m) throw new Error("VERSION_ID missing from /etc/os-release");
-	return m[1].trim().replace(/^"(.*)"$/, "$1");
+	return (m[1] ?? "").trim().replace(/^"(.*)"$/, "$1");
 }
 
 async function readBakedDescriptor(id: string): Promise<AddonDescriptor> {

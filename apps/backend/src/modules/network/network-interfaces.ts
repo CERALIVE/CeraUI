@@ -102,7 +102,7 @@ function syncNetifState(): void {
 		const i = netif[name];
 		if (!i) continue;
 		next[name] = {
-			ip: i.ip,
+			...(i.ip !== undefined ? { ip: i.ip } : {}),
 			up: i.enabled,
 			tp: i.tp,
 			txb: i.txb,
@@ -260,8 +260,8 @@ export function processIfconfigOutput(stdout: string) {
 			const enabled = !netif[name] || netif[name].enabled;
 			const error = netif[name] ? netif[name].error : 0;
 			newInterfaces[name] = {
-				ip: inetAddr,
-				netmask,
+				...(inetAddr !== undefined ? { ip: inetAddr } : {}),
+				...(netmask !== undefined ? { netmask } : {}),
 				txb: txBytes,
 				tp,
 				enabled,
@@ -467,6 +467,7 @@ export function getNetifErrorMsg(i: NetworkInterface) {
 		if (i.error & errorCode && isValidNetworkInterfaceErrorCode(errorCode))
 			return netIfErrors[errorCode];
 	}
+	return undefined;
 }
 
 type NetworkInterfaceResponseMessage = {
@@ -488,29 +489,30 @@ export function netIfBuildMsg() {
 		const networkInterface = netif[i];
 		if (!networkInterface) continue;
 
-		m[i] = {
-			ip: networkInterface.ip,
+		const entry: NetworkInterfaceResponseMessage[string] = {
+			...(networkInterface.ip !== undefined ? { ip: networkInterface.ip } : {}),
 			tp: networkInterface.tp,
 			enabled: networkInterface.enabled,
 		};
+		m[i] = entry;
 
 		const mockConfig = mockConfigs?.get(i);
 		if (mockConfig) {
-			m[i].enabled = mockConfig.enabled;
-			if (mockConfig.ip !== undefined) m[i].ip = mockConfig.ip;
+			entry.enabled = mockConfig.enabled;
+			if (mockConfig.ip !== undefined) entry.ip = mockConfig.ip;
 		}
 
 		const error = getNetifErrorMsg(networkInterface);
 		if (error) {
-			m[i].error = error;
+			entry.error = error;
 		}
 
 		if (networkInterface.same_subnet_group) {
-			m[i].same_subnet_group = networkInterface.same_subnet_group;
+			entry.same_subnet_group = networkInterface.same_subnet_group;
 		}
 
 		if (isPolicyRouteMissing(i)) {
-			m[i].policy_route_missing = true;
+			entry.policy_route_missing = true;
 		}
 	}
 	return m;

@@ -36,7 +36,7 @@ export function broadcastMsgLocal(
 ): string {
 	const msg = buildMsg(type, data);
 	broadcast(type, data, {
-		except: except as AppWebSocket | undefined,
+		...(except !== undefined ? { except: except as AppWebSocket } : {}),
 		authedOnly,
 		minLastActive: activeMin,
 	});
@@ -174,6 +174,6 @@ export function setSocketSenderId(
 export function deleteSocketSenderId(conn: WebSocket | AppWebSocket): void {
 	const ws = conn as AppWebSocket;
 	if (ws.data) {
-		ws.data.senderId = undefined;
+		delete ws.data.senderId;
 	}
 }
