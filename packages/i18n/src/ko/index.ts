@@ -1170,6 +1170,7 @@ const ko = {
 			nowStreaming: "스트리밍 중",
 			audioFollows: "재시작 시 오디오가 {label}(으)로 전환됩니다",
 			switchTitle: "소스 전환",
+			autoPrefix: "자동",
 		},
 		transcode: {
 			chip: "입력 {input} \u2192 출력 {output}",

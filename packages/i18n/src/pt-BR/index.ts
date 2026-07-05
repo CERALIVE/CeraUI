@@ -1329,6 +1329,7 @@ const ptBR = {
 			nowStreaming: "Transmitindo agora",
 			audioFollows: "O áudio seguirá {label} ao reiniciar",
 			switchTitle: "Trocar fonte",
+			autoPrefix: "Automático",
 		},
 		transcode: {
 			chip: "Entrada {input} \u2192 Saída {output}",

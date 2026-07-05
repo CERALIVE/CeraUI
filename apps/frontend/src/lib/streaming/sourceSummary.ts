@@ -213,7 +213,7 @@ export function resolvedAudioLabel(
 
 	const resolved = status?.resolved_asrc;
 	const current = resolved
-		? `${AUDIO_SOURCE_AUTO} \u2192 ${labelFor(resolved)}`
+		? `${t("live.summary.autoPrefix")} \u2192 ${labelFor(resolved)}`
 		: undefined;
 	return { current, pending, embedded };
 }

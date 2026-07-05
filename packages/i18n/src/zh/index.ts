@@ -1112,6 +1112,7 @@ const zh = {
 			nowStreaming: "正在直播",
 			audioFollows: "重启后音频将切换到 {label}",
 			switchTitle: "切换源",
+			autoPrefix: "自动",
 		},
 		transcode: {
 			chip: "输入 {input} \u2192 输出 {output}",

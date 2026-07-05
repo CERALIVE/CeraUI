@@ -1294,6 +1294,7 @@ const ar = {
 			nowStreaming: "يبث الآن",
 			audioFollows: "سيتبع الصوت {label} عند إعادة التشغيل",
 			switchTitle: "تغيير المصدر",
+			autoPrefix: "تلقائي",
 		},
 		transcode: {
 			chip: "الإدخال {input} \u2192 الإخراج {output}",

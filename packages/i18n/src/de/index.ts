@@ -578,6 +578,7 @@ const de = {
 			nowStreaming: "Jetzt live",
 			audioFollows: "Ton folgt {label} beim Neustart",
 			switchTitle: "Quelle wechseln",
+			autoPrefix: "Automatisch",
 		},
 		transcode: {
 			chip: "Eingang {input} \u2192 Ausgang {output}",

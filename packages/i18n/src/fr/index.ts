@@ -1354,6 +1354,7 @@ const fr = {
 			nowStreaming: "En direct",
 			audioFollows: "L'audio suivra {label} au redémarrage",
 			switchTitle: "Changer de source",
+			autoPrefix: "Automatique",
 		},
 		transcode: {
 			chip: "Entrée {input} \u2192 Sortie {output}",

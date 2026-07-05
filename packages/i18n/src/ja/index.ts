@@ -1196,6 +1196,7 @@ const ja = {
 			nowStreaming: "配信中",
 			audioFollows: "再起動時にオーディオが{label}に切り替わります",
 			switchTitle: "ソースを切り替え",
+			autoPrefix: "自動",
 		},
 		transcode: {
 			chip: "入力 {input} \u2192 出力 {output}",

@@ -4,7 +4,6 @@
  */
 
 import {
-	type ModemList,
 	modemConfigInputSchema,
 	modemListSchema,
 	modemScanInputSchema,
@@ -49,7 +48,7 @@ const authedProcedure = baseProcedure.use(authMiddleware);
 export const getAllModemsProcedure = authedProcedure
 	.output(modemListSchema)
 	.handler(() => {
-		return buildModemsMessage() as ModemList;
+		return modemListSchema.parse(buildModemsMessage());
 	});
 
 /**

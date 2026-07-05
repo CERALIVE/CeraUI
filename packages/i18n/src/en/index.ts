@@ -562,6 +562,7 @@ const en = {
 			nowStreaming: "Now streaming",
 			audioFollows: "Audio follows {label:string} on restart",
 			switchTitle: "Switch source",
+			autoPrefix: "Auto",
 		},
 		transcode: {
 			chip: "In {input:string} \u2192 Out {output:string}",

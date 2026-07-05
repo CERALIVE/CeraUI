@@ -597,8 +597,11 @@ describe("withAutoAudioEntry — Auto injected FIRST (T6)", () => {
 });
 
 describe("resolvedAudioLabel — single-owner resolved-audio display (T6)", () => {
-	const t = (key: string) =>
-		key === "audio.sources.pipelineDefault" ? "Pipeline default" : key;
+	const t = (key: string) => {
+		if (key === "audio.sources.pipelineDefault") return "Pipeline default";
+		if (key === "live.summary.autoPrefix") return "Auto";
+		return key;
+	};
 	const ENTRIES: AudioSource[] = [
 		{ id: "USB audio", kind: "device" },
 		{ id: "HDMI", kind: "device", label: "Rockchip HDMI-in" },

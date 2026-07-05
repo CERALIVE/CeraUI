@@ -4,7 +4,7 @@
  */
 
 import {
-	type ModemList,
+	modemListSchema,
 	relayMessageSchema,
 	statusResponseSchema,
 } from "@ceraui/rpc/schemas";
@@ -70,7 +70,7 @@ export const getStatusProcedure = authedProcedure
 			updating: getSoftUpdateStatus(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
-			modems: buildModemsMessage() as ModemList,
+			modems: modemListSchema.parse(buildModemsMessage()),
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
 			resolved_asrc: getResolvedAsrc(),
@@ -110,7 +110,7 @@ export function buildInitialStatus() {
 			updating: getSoftUpdateStatus(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
-			modems: buildModemsMessage() as ModemList,
+			modems: modemListSchema.parse(buildModemsMessage()),
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
 			resolved_asrc: getResolvedAsrc(),

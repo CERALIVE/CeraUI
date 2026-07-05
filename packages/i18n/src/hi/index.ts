@@ -1160,6 +1160,7 @@ const hi = {
 			nowStreaming: "अभी लाइव",
 			audioFollows: "पुनः आरंभ पर ऑडियो {label} का अनुसरण करेगा",
 			switchTitle: "स्रोत बदलें",
+			autoPrefix: "स्वचालित",
 		},
 		transcode: {
 			chip: "इनपुट {input} \u2192 आउटपुट {output}",

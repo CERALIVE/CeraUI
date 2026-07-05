@@ -13,7 +13,6 @@ import {
 	hotspotConfigInputSchema,
 	hotspotToggleInputSchema,
 	successResponseSchema,
-	type WifiStatus,
 	wifiConnectInputSchema,
 	wifiDisconnectInputSchema,
 	wifiForgetInputSchema,
@@ -134,7 +133,7 @@ const authedProcedure = baseProcedure.use(authMiddleware);
 export const getWifiStatusProcedure = authedProcedure
 	.output(wifiStatusSchema)
 	.handler(() => {
-		return wifiBuildMsg() as WifiStatus;
+		return wifiStatusSchema.parse(wifiBuildMsg());
 	});
 
 /**

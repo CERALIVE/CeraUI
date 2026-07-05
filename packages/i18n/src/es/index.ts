@@ -580,6 +580,7 @@ const es = {
 			nowStreaming: "Transmitiendo ahora",
 			audioFollows: "El audio seguirá a {label} al reiniciar",
 			switchTitle: "Cambiar fuente",
+			autoPrefix: "Automático",
 		},
 		transcode: {
 			chip: "Entrada {input} \u2192 Salida {output}",

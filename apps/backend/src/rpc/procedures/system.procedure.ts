@@ -68,7 +68,7 @@ const authedProcedure = baseProcedure.use(authMiddleware);
 export const getRevisionsProcedure = authedProcedure
 	.output(revisionsSchema)
 	.handler(() => {
-		return getRevisions() as z.infer<typeof revisionsSchema>;
+		return revisionsSchema.parse(getRevisions());
 	});
 
 /**
