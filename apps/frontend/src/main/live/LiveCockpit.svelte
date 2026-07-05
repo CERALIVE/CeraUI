@@ -23,6 +23,7 @@
  * State ownership stays in LiveView: EVERY datum and handler here is a prop — this
  * component owns NO `$state`, NO RPC, and writes NO config.
  */
+import { LL } from '@ceraui/i18n/svelte';
 import type {
 	ActiveEncode,
 	ConfigMessage,
@@ -31,6 +32,7 @@ import type {
 } from '@ceraui/rpc/schemas';
 
 import IngestStats from '$lib/components/custom/IngestStats.svelte';
+import { Button } from '$lib/components/ui/button';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
 import type { ActiveSummary } from '$lib/streaming/sourceSummary';
 
@@ -80,6 +82,10 @@ interface Props {
 	// When true the stream has stopped but LiveView is holding this cockpit mounted
 	// so IngestStats can show its historical summary; collapse to summary-only.
 	summaryMode?: boolean;
+	// Explicit "Done" escape from the post-stream summary window (T13): renders a
+	// footer button ONLY in summaryMode; clicking it closes the window immediately
+	// (LiveView clears the flag AND the fallback timer). Idempotent at the source.
+	onCloseSummary?: () => void;
 }
 
 const {
@@ -113,6 +119,7 @@ const {
 	optimismState,
 	onStop,
 	summaryMode = false,
+	onCloseSummary = undefined,
 }: Props = $props();
 </script>
 
@@ -160,7 +167,19 @@ const {
 
 	<IngestStats {telemetry} {isStreaming} {bitrateKbps} />
 
-	{#if !summaryMode}
+	{#if summaryMode}
+		<!-- Explicit close for the post-stream summary window (T13): dismisses the
+		     bounded fallback timer immediately and returns the view to IdleCockpit. -->
+		<Button
+			type="button"
+			variant="secondary"
+			class="w-full"
+			data-testid="summary-done"
+			onclick={() => onCloseSummary?.()}
+		>
+			{$LL.live.ingest.done()}
+		</Button>
+	{:else}
 		<StreamControlButton
 			canStart={false}
 			{isStreaming}

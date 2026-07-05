@@ -414,6 +414,7 @@ const en = {
 			exportCsv: "Export CSV",
 			exportAria: "Export session summary",
 			exportError: "Couldn't export the session summary. Please try again.",
+			done: "Done",
 		},
 		networkIngest: {
 			title: "Network ingest",

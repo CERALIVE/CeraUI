@@ -1047,6 +1047,7 @@ const ja = {
 			exportAria: "セッションサマリーをエクスポート",
 			exportError:
 				"セッションサマリーをエクスポートできませんでした。もう一度お試しください。",
+			done: "完了",
 		},
 		networkIngest: {
 			title: "ネットワーク受信",

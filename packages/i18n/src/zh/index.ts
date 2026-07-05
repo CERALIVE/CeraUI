@@ -971,6 +971,7 @@ const zh = {
 			exportCsv: "导出 CSV",
 			exportAria: "导出会话摘要",
 			exportError: "无法导出会话摘要，请重试。",
+			done: "完成",
 		},
 		networkIngest: {
 			title: "网络接入",

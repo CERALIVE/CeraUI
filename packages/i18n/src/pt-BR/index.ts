@@ -1180,6 +1180,7 @@ const ptBR = {
 			exportAria: "Exportar resumo da sessão",
 			exportError:
 				"Não foi possível exportar o resumo da sessão. Tente novamente.",
+			done: "Concluído",
 		},
 		networkIngest: {
 			title: "Entrada de rede",

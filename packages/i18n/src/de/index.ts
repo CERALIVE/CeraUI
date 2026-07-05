@@ -429,6 +429,7 @@ const de = {
 			exportAria: "Sitzungsübersicht exportieren",
 			exportError:
 				"Sitzungsübersicht konnte nicht exportiert werden. Bitte erneut versuchen.",
+			done: "Fertig",
 		},
 		networkIngest: {
 			title: "Netzwerk-Eingang",

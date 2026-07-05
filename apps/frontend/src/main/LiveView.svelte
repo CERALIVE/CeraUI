@@ -170,6 +170,17 @@ $effect.pre(() => {
 // Clear a pending window timer if the view unmounts mid-window.
 $effect(() => () => clearTimeout(summaryTimer));
 
+// Explicit post-stream summary close (T13 "Done"): the Done button in
+// LiveCockpit's summaryMode escapes the bounded window immediately. Clear the
+// flag AND the fallback timer in the SAME synchronous call so no stale timer
+// fires after the click and flips the view back to summary. Idempotent — a
+// second click just re-clears an already-false flag / already-cleared timer.
+function closeSummary() {
+	clearTimeout(summaryTimer);
+	summaryTimer = undefined;
+	showingSummary = false;
+}
+
 // LiveCockpit stays mounted while streaming/starting OR through the bounded
 // post-stream summary window; `summaryMode` collapses it to summary-only chrome
 // once the stream has actually stopped (never during the optimistic start edge).
@@ -879,6 +890,7 @@ const configRows = $derived<ConfigRow[]>([
 			optimismState={streamingOptimismState}
 			{summaryMode}
 			onStop={handleStop}
+			onCloseSummary={closeSummary}
 		/>
 	{:else}
 		<!-- Idle cockpit (source-first, T10): SourceSection → StreamSetupChain

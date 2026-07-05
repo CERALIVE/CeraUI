@@ -1204,6 +1204,7 @@ const fr = {
 			exportAria: "Exporter le résumé de session",
 			exportError:
 				"Impossible d'exporter le résumé de session. Veuillez réessayer.",
+			done: "Terminé",
 		},
 		networkIngest: {
 			title: "Entrée réseau",

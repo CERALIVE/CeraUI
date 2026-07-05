@@ -1023,6 +1023,7 @@ const ko = {
 			exportCsv: "CSV 내보내기",
 			exportAria: "세션 요약 내보내기",
 			exportError: "세션 요약을 내보낼 수 없습니다. 다시 시도해 주세요.",
+			done: "완료",
 		},
 		networkIngest: {
 			title: "네트워크 인제스트",

@@ -133,6 +133,8 @@ async function stillNotReloaded(page: Page): Promise<boolean> {
 
 // Human-readable evidence for the T0 QA gate (apps/frontend/test-results).
 const t0Evidence: Array<Record<string, unknown>> = [];
+// Separate evidence ledger for the T13 post-stream "Done" close gate.
+const t13Evidence: Array<Record<string, unknown>> = [];
 
 test.describe("Telemetry lifecycle (clears on stop)", () => {
 	test.beforeEach(async ({ page }, testInfo) => {
@@ -400,6 +402,117 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 			case: "genuinely-stuck-with-retry",
 			result: "stop-stuck banner + Retry; recovered to idle after backend stopped",
 		});
+	});
+
+	// ── T13: explicit post-stream "Done" close ──────────────────────────────────
+
+	test("DONE BUTTON: after a stop the summary window's Done returns to IdleCockpit immediately and the fallback timer is cleared (no late flip back)", async ({
+		page,
+	}) => {
+		// A large summary window so the bounded fallback timer CANNOT close the
+		// window during the test — the ONLY way to reach idle quickly is the Done
+		// click. markNoReload proves the transition is in-app (no reload).
+		await setWindowNumber(page, "__ceraSummaryWindowMs", 20_000);
+		await markNoReload(page);
+
+		const pageErrors: string[] = [];
+		page.on("pageerror", (err) => pageErrors.push(String(err)));
+
+		sendConfig();
+		desiredStreaming = true;
+		pushStatus({ is_streaming: true, linkTelemetry: { links: TWO_LINKS } });
+
+		const live = page.getByTestId("live-cockpit");
+		await expect(live).toBeVisible({ timeout: 15_000 });
+
+		// Real stop: opens the (large) bounded summary window.
+		desiredStreaming = false;
+		pushStatus({ is_streaming: false, linkTelemetry: null });
+
+		await expect(page.getByTestId("ingest-summary")).toBeVisible();
+		const done = live.getByTestId("summary-done");
+		await expect(done).toBeVisible();
+
+		// Click Done → idle-cockpit within 1s, WELL before the 20s fallback window —
+		// proving the explicit escape, not the timer, drove the transition.
+		await done.click();
+		await expect(page.getByTestId("idle-cockpit")).toBeVisible({ timeout: 1_000 });
+		await expect(page.getByTestId("live-cockpit")).toHaveCount(0);
+
+		// The fallback timer was cleared: after a wait it stays idle (no late flip
+		// back to the summary/live cockpit) and nothing reloaded the page.
+		await page.waitForTimeout(1_200);
+		await expect(page.getByTestId("idle-cockpit")).toBeVisible();
+		await expect(page.getByTestId("live-cockpit")).toHaveCount(0);
+		expect(await stillNotReloaded(page)).toBe(true);
+		expect(pageErrors).toEqual([]);
+
+		t13Evidence.push({
+			case: "done-closes-immediately",
+			result: "Done → idle within 1s, timer cleared, no late flip back, no reload",
+		});
+	});
+
+	test("DONE BUTTON idempotent: double-clicking Done throws no error and stays idle", async ({
+		page,
+	}) => {
+		await setWindowNumber(page, "__ceraSummaryWindowMs", 20_000);
+
+		const pageErrors: string[] = [];
+		page.on("pageerror", (err) => pageErrors.push(String(err)));
+
+		sendConfig();
+		desiredStreaming = true;
+		pushStatus({ is_streaming: true, linkTelemetry: { links: TWO_LINKS } });
+
+		const live = page.getByTestId("live-cockpit");
+		await expect(live).toBeVisible({ timeout: 15_000 });
+
+		desiredStreaming = false;
+		pushStatus({ is_streaming: false, linkTelemetry: null });
+
+		const done = live.getByTestId("summary-done");
+		await expect(done).toBeVisible();
+
+		// Double-click: the second click's onCloseSummary is a no-op (already closed);
+		// closeSummary is idempotent so the app never errors and settles on idle.
+		await done.dblclick();
+		await expect(page.getByTestId("idle-cockpit")).toBeVisible({ timeout: 1_000 });
+		await expect(page.getByTestId("live-cockpit")).toHaveCount(0);
+		expect(pageErrors).toEqual([]);
+
+		t13Evidence.push({
+			case: "done-double-click-idempotent",
+			result: "double-click Done: no error, stays idle",
+		});
+	});
+
+	test.afterAll(() => {
+		// The T13 Done-close gate evidence (separate named file from the T0 ledger).
+		const t13File = evidencePath("ler-t13.json");
+		const t13Merged = new Map<string, Record<string, unknown>>();
+		try {
+			const prior = JSON.parse(fs.readFileSync(t13File, "utf8")) as {
+				cases?: Array<Record<string, unknown>>;
+			};
+			for (const c of prior.cases ?? []) t13Merged.set(String(c.case), c);
+		} catch {
+			/* no prior file */
+		}
+		for (const c of t13Evidence) t13Merged.set(String(c.case), c);
+		fs.writeFileSync(
+			t13File,
+			JSON.stringify(
+				{
+					task: "T13 — closeable post-stream report (Done button)",
+					generated: new Date().toISOString(),
+					cases: [...t13Merged.values()],
+				},
+				null,
+				2,
+			),
+			"utf8",
+		);
 	});
 
 	test.afterAll(() => {

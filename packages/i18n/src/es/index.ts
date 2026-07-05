@@ -429,6 +429,7 @@ const es = {
 			exportAria: "Exportar resumen de sesión",
 			exportError:
 				"No se pudo exportar el resumen de sesión. Inténtalo de nuevo.",
+			done: "Listo",
 		},
 		networkIngest: {
 			title: "Entrada de red",

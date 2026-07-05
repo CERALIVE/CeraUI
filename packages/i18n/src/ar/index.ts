@@ -1152,6 +1152,7 @@ const ar = {
 			exportCsv: "تصدير CSV",
 			exportAria: "تصدير ملخص الجلسة",
 			exportError: "تعذّر تصدير ملخص الجلسة. يرجى المحاولة مرة أخرى.",
+			done: "تم",
 		},
 		networkIngest: {
 			title: "استقبال الشبكة",
