@@ -99,9 +99,10 @@ const START_SOURCE = {
 /**
  * Drive the Live "Start Stream" control into a failed start whose RPC reply is
  * `result`, then return so the caller can assert the resulting toast. Pins the
- * config to a recognised pipeline (so Start is enabled) while keeping the seeded
- * server target intact (so the control renders at all), and replies to the
- * streaming.start RPC with the supplied structured result.
+ * config to a recognised pipeline + source AND a server target (the default dev
+ * backend ships without one, so all four StreamSetupChain gates — source /
+ * destination / network / engine — resolve green and Start is enabled), and
+ * replies to the streaming.start RPC with the supplied structured result.
  */
 async function startWithReply(page: Page, result: Frame): Promise<void> {
 	const ws = await attachWs(page, {
@@ -112,6 +113,7 @@ async function startWithReply(page: Page, result: Frame): Promise<void> {
 			if (config) {
 				config.pipeline = KNOWN_PIPELINE;
 				config.source = KNOWN_SOURCE;
+				if (!config.srtla_addr && !config.relay_server) config.srtla_addr = '127.0.0.1';
 			}
 			// Drop the real pipelines + sources registries; we push authoritative ones.
 			return !('pipelines' in frame) && !('sources' in frame);
@@ -141,7 +143,7 @@ async function startWithReply(page: Page, result: Frame): Promise<void> {
 		},
 	});
 	ws.push({ sources: { hardware: 'generic', sources: [START_SOURCE] } });
-	ws.push({ config: { pipeline: KNOWN_PIPELINE, source: KNOWN_SOURCE } });
+	ws.push({ config: { pipeline: KNOWN_PIPELINE, source: KNOWN_SOURCE, srtla_addr: '127.0.0.1' } });
 
 	const start = page.getByRole('button', { name: 'Start Stream' });
 	await expect(start).toBeVisible();

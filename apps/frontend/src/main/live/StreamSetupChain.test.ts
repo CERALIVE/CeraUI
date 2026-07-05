@@ -203,26 +203,17 @@ describe("StreamSetupChain — four rows in signal order", () => {
 		}
 	});
 
-	it("never renders a collapse / ready-bar / gate affordance (no collapse state)", () => {
-		// All gates green — GoLiveCard would have collapsed here; StreamSetupChain
-		// keeps every row fully rendered.
+	it("never collapses when every gate is green: all four rows stay rendered, one Start control", () => {
+		// All gates green — the retired GoLiveCard would have collapsed to a ready bar
+		// here; StreamSetupChain keeps every row fully rendered with a single Start
+		// control at the foot (no ready-bar / expand / collapse affordance exists).
 		const { container } = renderChain({
 			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
 		});
-		for (const id of [
-			"go-live-ready-bar",
-			"go-live-expand",
-			"go-live-collapse",
-			"go-live-gate",
-			"go-live-gate-fix",
-		]) {
-			expect(
-				container.querySelector(`[data-testid="${id}"]`),
-				`${id} must NOT exist`,
-			).toBeNull();
-		}
-		// The rows are still all present.
 		expect(rowKeys(container)).toHaveLength(4);
+		expect(
+			within(container).getAllByRole("button", { name: /start stream/i }),
+		).toHaveLength(1);
 	});
 });
 

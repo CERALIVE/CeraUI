@@ -69,17 +69,16 @@ test.describe('Experience polish', () => {
 	}) => {
 		await new ShellPage(page).navigate('live');
 
-		// Idle, server configured: the Go-Live idle cockpit renders the GoLiveCard
-		// readiness gates instead of a live ingest table. The standalone
-		// `ingest-idle-ready` card was absorbed into GoLiveCard's readiness gates by
-		// the Wave 3 T10/T11 restructure. The default multi-modem-wifi scenario has
-		// ready bonded links, so the network gate resolves ok (mirrors
-		// conditional-display.spec.ts state 2a); the no-links blocked variant is
-		// covered by conditional-display.spec.ts state 2b.
-		const card = page.getByTestId('go-live-card');
+		// Idle, server configured: the Go-Live idle cockpit renders the StreamSetupChain
+		// setup rows instead of a live ingest table. The standalone `ingest-idle-ready`
+		// card was absorbed into the setup rows by the Wave 3 T10/T11 restructure. The
+		// default multi-modem-wifi scenario has ready bonded links, so the network row
+		// resolves ok (mirrors conditional-display.spec.ts state 2a); the no-links
+		// blocked variant is covered by conditional-display.spec.ts state 2b.
+		const card = page.getByTestId('stream-setup-chain');
 		await expect(card).toBeVisible();
-		const networkGate = card.locator('[data-testid="go-live-gate"][data-gate="network"]');
-		await expect(networkGate).toHaveAttribute('data-state', 'ok');
+		const networkRow = card.locator('[data-testid="setup-row"][data-row="network"]');
+		await expect(networkRow).toHaveAttribute('data-state', 'ok');
 		// No live telemetry table while idle (Live-Data Discipline — no stale values).
 		await expect(page.getByTestId('ingest-row')).toHaveCount(0);
 	});
