@@ -962,6 +962,11 @@ const ko = {
 				"시작 중 입력 소스가 멈췄습니다. 소스를 확인한 후 다시 시도하세요.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "스트림 설정",
+			linksReady: "{count}개 링크 준비됨",
+			noLinks: "링크 없음",
+		},
 		onboarding: {
 			title: "설정 시작하기",
 			subtitle: "첫 본딩 스트림까지 세 단계.",

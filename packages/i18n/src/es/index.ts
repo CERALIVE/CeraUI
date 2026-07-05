@@ -366,6 +366,11 @@ const es = {
 				"La fuente de entrada se detuvo al iniciar. Comprueba la fuente e inténtalo de nuevo.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "Preparar transmisión",
+			linksReady: "{count} {{enlace|enlaces}} listos",
+			noLinks: "Sin enlaces",
+		},
 		onboarding: {
 			title: "Comienza la configuración",
 			subtitle: "Tres pasos hasta tu primer stream combinado.",

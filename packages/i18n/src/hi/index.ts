@@ -954,6 +954,11 @@ const hi = {
 				"शुरू होते समय इनपुट स्रोत रुक गया। स्रोत जाँचें और दोबारा प्रयास करें।",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "स्ट्रीम सेटअप",
+			linksReady: "{count} {{लिंक|लिंक}} तैयार",
+			noLinks: "कोई लिंक नहीं",
+		},
 		onboarding: {
 			title: "सेटअप शुरू करें",
 			subtitle: "आपके पहले बॉन्डेड स्ट्रीम तक तीन चरण।",

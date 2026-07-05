@@ -985,6 +985,11 @@ const ja = {
 				"開始時に入力ソースが停止しました。ソースを確認してもう一度お試しください。",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "配信のセットアップ",
+			linksReady: "{count} 本のリンクが準備完了",
+			noLinks: "リンクなし",
+		},
 		onboarding: {
 			title: "セットアップを始める",
 			subtitle: "最初のボンディング配信までの3ステップ。",

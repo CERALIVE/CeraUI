@@ -1091,6 +1091,11 @@ const ar = {
 				"توقّف مصدر الإدخال أثناء البدء. تحقّق من المصدر وحاول مرة أخرى.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "إعداد البث",
+			linksReady: "{count} {{روابط|رابط|رابطان|روابط|رابطًا|رابط}} جاهزة",
+			noLinks: "لا روابط",
+		},
 		onboarding: {
 			title: "ابدأ الإعداد",
 			subtitle: "ثلاث خطوات نحو أول بث مجمّع لك.",

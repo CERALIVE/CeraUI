@@ -910,6 +910,11 @@ const zh = {
 			pipeline_stall: "启动时输入源停滞。请检查输入源后重试。",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "直播设置",
+			linksReady: "{count} 条链路就绪",
+			noLinks: "无链路",
+		},
 		onboarding: {
 			title: "开始设置",
 			subtitle: "三步开启你的首个聚合推流。",

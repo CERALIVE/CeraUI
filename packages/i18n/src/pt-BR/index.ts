@@ -1117,6 +1117,11 @@ const ptBR = {
 				"A fonte de entrada travou ao iniciar. Verifique a fonte e tente novamente.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "Preparar transmissão",
+			linksReady: "{count} {{link|links}} prontos",
+			noLinks: "Nenhum link",
+		},
 		onboarding: {
 			title: "Comece a configuração",
 			subtitle: "Três passos até seu primeiro stream combinado.",

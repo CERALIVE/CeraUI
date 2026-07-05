@@ -231,17 +231,17 @@ safe to remove.
 
 ```debt
 id: TD-unmounted-source-shims
-title: StreamSettingsCard/OnboardingChecklist/ServerReadiness/NetworkIngestSection kept as unmounted GoLiveCard-migration shims
+title: StreamSettingsCard/OnboardingChecklist/ServerReadiness/NetworkIngestSection/GoLiveCard kept as unmounted Live-cockpit migration shims
 track: 1
 status: open
 exit_criteria: `bun run --filter frontend check`
 owner: ceraui-team
 registered_at: 2026-07-04
 resolved_at: null
-unblock: remove after one release with the sources broadcast. GoLiveCard + IdleCockpit (experience-simplification Tasks 10-12) absorbed every responsibility these four components used to own in LiveView — the onboarding/empty-state guidance, the destination readiness hint, the migrated config rows, and the LAN network-ingest picker are all now rendered by GoLiveCard/IdleCockpit/SourceSection — so none of the four is mounted anywhere in the app today. They are kept as unmounted files (only StreamSettingsCard's `ConfigRow` type is still imported, by GoLiveCard and IdleCockpit) as a one-release rollback safety net in case the cockpit split needs to be reverted. Once one full release has shipped on the device-first Live cockpit with no rollback, delete apps/frontend/src/main/live/StreamSettingsCard.svelte, main/live/OnboardingChecklist.svelte, main/live/ServerReadiness.svelte, and lib/components/custom/NetworkIngestSection.svelte (plus their test files and the now-orphaned `onboarding.svelte.ts` store), re-point the `ConfigRow` type onto GoLiveCard directly, then flip this entry to resolved.
+unblock: remove after one release with the sources broadcast. GoLiveCard + IdleCockpit (experience-simplification Tasks 10-12) absorbed every responsibility four of these components used to own in LiveView — the onboarding/empty-state guidance, the destination readiness hint, the migrated config rows, and the LAN network-ingest picker are all now rendered by GoLiveCard/IdleCockpit/SourceSection. The live-experience-refinement track (Task T9) then merged GoLiveCard's own gates+rows into StreamSetupChain.svelte (one "Stream setup" card of four always-visible rows, no collapse), so GoLiveCard.svelte itself is now ALSO an unmounted shim — kept-not-deleted as a one-release rollback safety net (only StreamSettingsCard's `ConfigRow` type is still imported, now by StreamSetupChain/IdleCockpit; GoLiveCard.svelte re-exports nothing anyone mounts). Once one full release has shipped on the device-first Live cockpit with StreamSetupChain and no rollback, delete apps/frontend/src/main/live/StreamSettingsCard.svelte, main/live/OnboardingChecklist.svelte, main/live/ServerReadiness.svelte, main/live/GoLiveCard.svelte, and lib/components/custom/NetworkIngestSection.svelte (plus their test files and the now-orphaned `onboarding.svelte.ts` store), re-point the `ConfigRow` type onto StreamSetupChain directly, then flip this entry to resolved.
 ```
 
-This entry also carries no source `data-debt-id` marker — the four files are
+This entry also carries no source `data-debt-id` marker — the five files are
 inert (never imported by anything the router mounts, `StreamSettingsCard`'s type
 export excepted), so there is no live UI affordance to bind a marker to. The
 register entry is the durable record of the "kept but dead" decision instead.

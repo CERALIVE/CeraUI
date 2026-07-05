@@ -353,6 +353,11 @@ const en = {
 				"The input source stalled while starting. Check the source and try again.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "Stream setup",
+			linksReady: "{count:number} {{link|links}} ready",
+			noLinks: "No links",
+		},
 		onboarding: {
 			title: "Get set up",
 			subtitle: "Three steps to your first bonded stream.",

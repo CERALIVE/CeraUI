@@ -366,6 +366,11 @@ const de = {
 				"Die Eingangsquelle blockierte beim Start. Prüfe die Quelle und versuche es erneut.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "Stream-Setup",
+			linksReady: "{count} {{Verbindung|Verbindungen}} bereit",
+			noLinks: "Keine Verbindungen",
+		},
 		onboarding: {
 			title: "Einrichtung starten",
 			subtitle: "Drei Schritte bis zu deinem ersten gebündelten Stream.",

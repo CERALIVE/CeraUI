@@ -1141,6 +1141,11 @@ const fr = {
 				"La source d'entrée s'est bloquée au démarrage. Vérifiez la source et réessayez.",
 		},
 		reconfigureRequired: "Reconfigure required",
+		setup: {
+			title: "Préparation du direct",
+			linksReady: "{count} {{lien|liens}} prêts",
+			noLinks: "Aucun lien",
+		},
 		onboarding: {
 			title: "Lancer la configuration",
 			subtitle: "Trois étapes vers votre premier flux agrégé.",
