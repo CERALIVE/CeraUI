@@ -454,6 +454,10 @@ const de = {
 			copied: "Adresse kopiert",
 			copyFailed: "Adresse konnte nicht kopiert werden.",
 			includesAudio: "Enthält Audio",
+			codecEducation: {
+				rtmp: "RTMP überträgt nur H.264-Video (mit AAC-Audio). Es wird immer in den konfigurierten Ausgabe-Codec umkodiert.",
+				srt: "SRT überträgt H.264- oder H.265-Video. Es wird immer in den konfigurierten Ausgabe-Codec umkodiert.",
+			},
 		},
 		preview: {
 			title: "Vorschau",
@@ -574,6 +578,11 @@ const de = {
 			nowStreaming: "Jetzt live",
 			audioFollows: "Ton folgt {label} beim Neustart",
 			switchTitle: "Quelle wechseln",
+		},
+		transcode: {
+			chip: "Eingang {input} \u2192 Ausgang {output}",
+			always:
+				"Die Engine kodiert den eingehenden Stream immer in den konfigurierten Ausgabe-Codec um \u2013 es gibt keine Durchleitung.",
 		},
 		modes: {
 			label: "Modus",

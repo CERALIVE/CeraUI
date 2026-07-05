@@ -455,6 +455,10 @@ const es = {
 			copied: "Dirección copiada",
 			copyFailed: "No se pudo copiar la dirección.",
 			includesAudio: "Incluye audio",
+			codecEducation: {
+				rtmp: "RTMP solo publica vídeo H.264 (con audio AAC). Siempre se vuelve a codificar al códec de salida configurado.",
+				srt: "SRT publica vídeo H.264 o H.265. Siempre se vuelve a codificar al códec de salida configurado.",
+			},
 		},
 		preview: {
 			title: "Vista previa",
@@ -575,6 +579,11 @@ const es = {
 			nowStreaming: "Transmitiendo ahora",
 			audioFollows: "El audio seguirá a {label} al reiniciar",
 			switchTitle: "Cambiar fuente",
+		},
+		transcode: {
+			chip: "Entrada {input} \u2192 Salida {output}",
+			always:
+				"El motor siempre vuelve a codificar la señal entrante al códec de salida configurado; no hay paso directo.",
 		},
 		modes: {
 			label: "Modo",

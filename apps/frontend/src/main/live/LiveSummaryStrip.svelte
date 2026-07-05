@@ -18,7 +18,7 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { Radio } from '@lucide/svelte';
+import { ArrowRightLeft, Radio } from '@lucide/svelte';
 
 import type { ActiveSummary } from '$lib/streaming/sourceSummary';
 
@@ -100,6 +100,16 @@ const hasAudioLine = $derived(audioEmbedded || Boolean(audioCurrent) || Boolean(
 		{#if destination}
 			<span aria-hidden={true} class="text-muted-foreground">&rarr;</span>
 			<span class="text-primary truncate" data-live-value="destination">{destination}</span>
+		{/if}
+		{#if summary.inputCodec && summary.codec}
+			<span
+				class="bg-primary/10 text-primary ml-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-medium"
+				data-testid="transcode-chip"
+				title={$LL.live.transcode.always()}
+			>
+				<ArrowRightLeft aria-hidden={true} class="size-3" />
+				{$LL.live.transcode.chip({ input: summary.inputCodec, output: summary.codec })}
+			</span>
 		{/if}
 	</p>
 

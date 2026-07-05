@@ -4,7 +4,6 @@ Simulates cerastream/srtla streaming statistics for development mode
 */
 
 import {
-	type ActiveEncode,
 	type CaptureDeviceKind,
 	CerastreamConnectionError,
 	type GetCapabilitiesResult,
@@ -14,7 +13,8 @@ import {
 	type RuntimeErrorEvent,
 	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
-import type { RequiresGateway } from "@ceraui/rpc/schemas";
+import type { ActiveEncode, RequiresGateway } from "@ceraui/rpc/schemas";
+import { getConfig } from "../../modules/config.ts";
 import {
 	type EngineCapabilitiesSnapshot,
 	getCapabilities,
@@ -22,6 +22,7 @@ import {
 	MINIMAL_SAFE_CAPABILITIES,
 } from "../../modules/streaming/capabilities.ts";
 import type { LinkTelemetryMessage } from "../../modules/streaming/link-telemetry.ts";
+import { getSourcesMessage } from "../../modules/streaming/sources.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
 import {
 	buildMockAudioDevices,
@@ -220,14 +221,16 @@ function expandDeviceModes(
 	// carries alsa_card_id (the join key for T4's engine-join tier) and
 	// display_name (the human-readable label). This exercises the dedupe and
 	// auto-follow paths end-to-end in mock mode.
-	const audioEntries = Object.entries(audioDevices).map(([displayName, cardId]) => ({
-		input_id: `audio_${cardId}`,
-		device_path: `/dev/snd/pcmC${cardId}D0c`,
-		display_name: displayName,
-		media_class: "audio" as const,
-		alsa_card_id: cardId,
-		caps: [],
-	}));
+	const audioEntries = Object.entries(audioDevices).map(
+		([displayName, cardId]) => ({
+			input_id: `audio_${cardId}`,
+			device_path: `/dev/snd/pcmC${cardId}D0c`,
+			display_name: displayName,
+			media_class: "audio" as const,
+			alsa_card_id: cardId,
+			caps: [],
+		}),
+	);
 
 	return { devices: [...devices, ...audioEntries] };
 }
@@ -558,10 +561,10 @@ export function getMockEncoderInfo() {
 }
 
 /**
- * Mock RESOLVED runtime encode (cerastream `active_encode` status field). Returns
- * the full-profile encode while the mock stream is active, null when idle — the
- * same present-while-streaming / absent-on-heartbeat contract the real engine
- * follows. No-op (null) unless the mock service is active.
+ * Mock RESOLVED runtime encode (cerastream `active_encode` status field), null
+ * when idle. A NETWORK-ingest source (rtmp/srt) reports `input_codec` (RTMP=h264,
+ * SRT=h265) since the engine always transcodes it — driving the Live transcode
+ * chip in dev; a capture source omits it (older-engine degradation, no chip).
  */
 export function getMockActiveEncode(): ActiveEncode | null {
 	if (!shouldUseMocks()) {
@@ -569,6 +572,19 @@ export function getMockActiveEncode(): ActiveEncode | null {
 	}
 	if (!getStreamingStats().isActive) {
 		return null;
+	}
+	const sourceId = getConfig().source;
+	const origin = sourceId
+		? getSourcesMessage().sources.find((s) => s.id === sourceId)?.origin
+		: undefined;
+	if (origin === "network") {
+		return {
+			codec: "h265",
+			resolution: "1920x1080",
+			framerate: 30,
+			active_input: sourceId,
+			input_codec: sourceId === "srt" ? "h265" : "h264",
+		};
 	}
 	return { ...FULL_PROFILE_ACTIVE_ENCODE };
 }

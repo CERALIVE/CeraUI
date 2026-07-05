@@ -5,6 +5,7 @@ import type {
 	CaptureStreamSource,
 	CoarseStreamSource,
 	ConfigMessage,
+	NetworkStreamSource,
 	StreamSource,
 } from "@ceraui/rpc/schemas";
 import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
@@ -263,6 +264,7 @@ describe("deriveActiveSummary — capability vs active-config split (Todo 23)", 
 			resolution: "1080p",
 			framerate: 60,
 			codec: "H.264",
+			inputCodec: undefined,
 			transport: "SRTLA",
 		});
 	});
@@ -287,6 +289,7 @@ describe("deriveActiveSummary — capability vs active-config split (Todo 23)", 
 			resolution: "1080p",
 			framerate: 60,
 			codec: "H.265",
+			inputCodec: undefined,
 			transport: "SRTLA",
 		});
 	});
@@ -313,6 +316,7 @@ describe("deriveActiveSummary — capability vs active-config split (Todo 23)", 
 			resolution: undefined,
 			framerate: undefined,
 			codec: undefined,
+			inputCodec: undefined,
 			transport: "SRTLA",
 		});
 	});
@@ -390,6 +394,98 @@ describe("deriveActiveSummary — source name resolved from the sources list (To
 	it("byte-identical fallback: with no sources list the raw id passes through", () => {
 		const config: ConfigMessage = { selected_video_input: "usb" };
 		expect(deriveActiveSummary(config, null, CAPS).source).toBe("usb");
+	});
+});
+
+describe("deriveActiveSummary — incoming-codec transcode field (T14)", () => {
+	const RTMP_SOURCE: NetworkStreamSource = {
+		origin: "network",
+		id: "rtmp",
+		pipelineId: "rtmp",
+		labelKey: "settings.sources.rtmp",
+		requiresGateway: "rtmp",
+		url: "rtmp://192.168.1.100:1935/publish/live",
+		modes: [],
+		supportsAudio: true,
+		supportsResolutionOverride: false,
+		supportsFramerateOverride: false,
+		audioKind: "embedded",
+		available: true,
+	};
+	const HDMI_CAPTURE: CaptureStreamSource = {
+		origin: "capture",
+		id: "hdmi-0",
+		pipelineId: "hdmi",
+		kind: "hdmi",
+		displayName: "HDMI Capture",
+		devicePath: "/dev/video0",
+		modes: [],
+		supportsAudio: true,
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+		audioKind: "selectable",
+		available: true,
+	};
+
+	it("network source + engine input_codec → formatted inputCodec (chip on)", () => {
+		const activeEncode: ActiveEncode = {
+			codec: "h265",
+			resolution: "1920x1080",
+			framerate: 30,
+			active_input: "rtmp",
+			input_codec: "h264",
+		};
+		expect(
+			deriveActiveSummary(
+				{ source: "rtmp" } as ConfigMessage,
+				activeEncode,
+				CAPS,
+				[RTMP_SOURCE],
+			).inputCodec,
+		).toBe("H.264");
+	});
+
+	it("capture source + engine input_codec → inputCodec undefined (never network)", () => {
+		const activeEncode: ActiveEncode = {
+			codec: "h265",
+			resolution: "1920x1080",
+			framerate: 30,
+			active_input: "hdmi-0",
+			input_codec: "h264",
+		};
+		expect(
+			deriveActiveSummary(
+				{ source: "hdmi-0" } as ConfigMessage,
+				activeEncode,
+				CAPS,
+				[HDMI_CAPTURE],
+			).inputCodec,
+		).toBeUndefined();
+	});
+
+	it("network source WITHOUT input_codec (older engine) → inputCodec undefined", () => {
+		const activeEncode: ActiveEncode = {
+			codec: "h265",
+			resolution: "1920x1080",
+			framerate: 30,
+			active_input: "rtmp",
+		};
+		expect(
+			deriveActiveSummary(
+				{ source: "rtmp" } as ConfigMessage,
+				activeEncode,
+				CAPS,
+				[RTMP_SOURCE],
+			).inputCodec,
+		).toBeUndefined();
+	});
+
+	it("idle (no active_encode) → inputCodec undefined even for a network config source", () => {
+		expect(
+			deriveActiveSummary({ source: "rtmp" } as ConfigMessage, null, CAPS, [
+				RTMP_SOURCE,
+			]).inputCodec,
+		).toBeUndefined();
 	});
 });
 

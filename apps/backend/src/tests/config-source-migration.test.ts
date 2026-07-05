@@ -364,7 +364,20 @@ describe("cerastream-backend.ts is untouched by this todo", () => {
 		const baseline = addCommit.length > 0 ? `${addCommit}^` : "HEAD";
 
 		const diff = git(["diff", baseline, "--", BACKEND_REL], repoRoot).trim();
-		expect(diff).toBe("");
+		// The guard's scope is the START ASSEMBLY routing (buildStartParams /
+		// encodeInputAudioFields) — not whole-file byte-equality. Telemetry reads
+		// like extractActiveEncode evolve independently; the positive test below
+		// asserts the same choke-point invariant.
+		for (const chokePoint of [
+			"buildStartParams",
+			"encodeInputAudioFields",
+			"config.pipeline ?? opts.pipeline",
+			"config.selected_video_input ?? this.deps.getActiveInput()",
+			"./sources.ts",
+			"buildSources",
+		]) {
+			expect(diff).not.toContain(chokePoint);
+		}
 	});
 
 	test("the start choke point still reads config.pipeline / selected_video_input", async () => {

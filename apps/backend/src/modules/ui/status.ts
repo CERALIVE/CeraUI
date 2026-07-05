@@ -16,6 +16,7 @@
 */
 
 import type {
+	ActiveEncode,
 	AudioSource,
 	BufferingStatus,
 	NetworkIngest,
@@ -27,6 +28,7 @@ import { buildModemsMessage } from "../modems/modem-status.ts";
 import { getNetworkIngestInfo } from "../network/network-ingest.ts";
 import { netIfBuildMsg } from "../network/network-interfaces.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
+import { getActiveEncodeStatus } from "../streaming/active-encode-status.ts";
 import { deriveAudioSources, getAudioDevices } from "../streaming/audio.ts";
 import {
 	getPendingAudioFollowAsrc,
@@ -69,6 +71,7 @@ export type StatusResponseMessage = {
 	linkTelemetry?: LinkTelemetryMessage | null;
 	buffering?: BufferingStatus | null;
 	network_ingest?: NetworkIngest | null;
+	active_encode?: ActiveEncode | null;
 };
 
 export function sendStatus(conn: WebSocket) {
@@ -89,6 +92,7 @@ export function sendStatus(conn: WebSocket) {
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			linkTelemetry: buildLinkTelemetry(),
 			network_ingest: getNetworkIngestInfo(),
+			active_encode: getActiveEncodeStatus(),
 		} satisfies StatusResponseMessage),
 	);
 }

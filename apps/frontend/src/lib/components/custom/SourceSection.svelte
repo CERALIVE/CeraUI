@@ -656,6 +656,14 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 												<Copy class="size-4" />
 											</Button>
 										</div>
+										<p
+											class="text-muted-foreground w-full text-xs leading-relaxed"
+											data-testid={`source-network-ingest-codec-education-${source.requiresGateway}`}
+										>
+											{source.requiresGateway === 'rtmp'
+												? $LL.live.networkIngest.codecEducation.rtmp()
+												: $LL.live.networkIngest.codecEducation.srt()}
+										</p>
 									</div>
 								</details>
 							{/if}

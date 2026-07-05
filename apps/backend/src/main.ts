@@ -32,6 +32,7 @@ import { initMockService, shouldUseMocks } from "./mocks/mock-service.ts";
 import { startMockPreviewServer } from "./mocks/providers/preview.ts";
 import {
 	buildMockLinkTelemetry,
+	getMockActiveEncode,
 	getMockAudioDevices,
 	getMockEngineCapabilities,
 	getMockEngineDevices,
@@ -62,6 +63,7 @@ import {
 	startTelemetryRecorder,
 } from "./modules/remote-control/telemetry-recorder.ts";
 import { setup } from "./modules/setup.ts";
+import { setMockActiveEncodeProvider } from "./modules/streaming/active-encode-status.ts";
 import {
 	setMockAudioDevicesProvider,
 	startAudioDeviceWatcher,
@@ -128,6 +130,7 @@ if (isDevelopment()) {
 	const scenario = process.env.MOCK_SCENARIO || "multi-modem-wifi";
 	initMockService(scenario);
 	setMockLinkTelemetryProvider(buildMockLinkTelemetry);
+	setMockActiveEncodeProvider(getMockActiveEncode);
 	setMockAudioDevicesProvider(getMockAudioDevices);
 	logger.info(`🎭 Development mode active with scenario: ${scenario}`);
 	logger.info(

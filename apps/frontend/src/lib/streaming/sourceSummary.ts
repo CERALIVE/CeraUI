@@ -395,6 +395,8 @@ export interface ActiveSummary {
 	framerate: number | undefined;
 	/** Human codec label (`H.265`); undefined when neither engine nor config set one. */
 	codec: string | undefined;
+	/** Incoming-codec label (`H.264`) for the transcode chip; set ONLY for a network source with a reported `input_codec` (else undefined). */
+	inputCodec: string | undefined;
 	/** Relay transport token (`SRTLA`). */
 	transport: string;
 }
@@ -413,6 +415,15 @@ function resolveSourceName(
 	const match = sources?.find((entry) => entry.id === sourceId);
 	if (match?.origin === "capture") return match.displayName;
 	return sourceId;
+}
+
+/** The `origin` of the active source id in the sources list, or undefined. */
+function resolveSourceOrigin(
+	sourceId: string | undefined,
+	sources: readonly StreamSource[] | undefined,
+): StreamSource["origin"] | undefined {
+	if (!sourceId) return undefined;
+	return sources?.find((entry) => entry.id === sourceId)?.origin;
 }
 
 /**
@@ -450,12 +461,20 @@ export function deriveActiveSummary(
 
 	const codecToken = live ? activeEncode?.codec : config?.video_codec;
 
+	const isNetworkSource =
+		resolveSourceOrigin(sourceId || undefined, sources) === "network";
+	const inputCodecToken = live ? activeEncode?.input_codec : undefined;
+
 	return {
 		live,
 		source: resolveSourceName(sourceId || undefined, sources),
 		resolution: resolution || undefined,
 		framerate: typeof framerate === "number" ? framerate : undefined,
 		codec: codecToken ? formatCodec(codecToken) : undefined,
+		inputCodec:
+			inputCodecToken && isNetworkSource
+				? formatCodec(inputCodecToken)
+				: undefined,
 		transport: resolveTransportToken(config, caps),
 	};
 }

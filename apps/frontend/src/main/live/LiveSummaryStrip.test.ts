@@ -68,6 +68,7 @@ function strip(
 		resolution: "1080p",
 		framerate: 60,
 		codec: "H.265",
+		inputCodec: undefined,
 		transport: "SRTLA",
 	};
 	return render(LiveSummaryStrip, {
@@ -207,5 +208,78 @@ describe("LiveSummaryStrip — R9-1: embedded audio", () => {
 			identity,
 		);
 		expect(resolved.embedded).toBe(true);
+	});
+});
+
+describe("LiveSummaryStrip — T14 transcode chip", () => {
+	function networkSource(id: "rtmp" | "srt"): StreamSource {
+		return {
+			id,
+			pipelineId: id,
+			labelKey: `settings.sources.${id}`,
+			requiresGateway: id,
+			url: `${id}://192.168.1.100:1935/publish/live`,
+			modes: [],
+			supportsAudio: true,
+			supportsResolutionOverride: false,
+			supportsFramerateOverride: false,
+			audioKind: "embedded",
+			available: true,
+			origin: "network",
+		};
+	}
+
+	it("renders In→Out when the network source reports input_codec", () => {
+		const summary = deriveActiveSummary(
+			{ source: "rtmp" } as ConfigMessage,
+			{
+				active_input: "rtmp",
+				resolution: "1920x1080",
+				framerate: 30,
+				codec: "h265",
+				input_codec: "h264",
+			} as ActiveEncode,
+			undefined,
+			[networkSource("rtmp")],
+		);
+		const { getByTestId } = strip({ summary });
+
+		const chip = getByTestId("transcode-chip");
+		expect(chip.textContent).toContain("H.264");
+		expect(chip.textContent).toContain("H.265");
+		expect(chip.getAttribute("title")?.length).toBeGreaterThan(0);
+	});
+
+	it("no chip for a capture source even with input_codec present", () => {
+		const summary = deriveActiveSummary(
+			{ source: "cam-1" } as ConfigMessage,
+			{
+				active_input: "cam-1",
+				resolution: "1920x1080",
+				framerate: 30,
+				codec: "h265",
+				input_codec: "h264",
+			} as ActiveEncode,
+			undefined,
+			[captureSource("cam-1", "HDMI Capture")],
+		);
+		const { queryByTestId } = strip({ summary });
+		expect(queryByTestId("transcode-chip")).toBeNull();
+	});
+
+	it("no chip when the engine omits input_codec (older-engine degradation)", () => {
+		const summary = deriveActiveSummary(
+			{ source: "rtmp" } as ConfigMessage,
+			{
+				active_input: "rtmp",
+				resolution: "1920x1080",
+				framerate: 30,
+				codec: "h265",
+			} as ActiveEncode,
+			undefined,
+			[networkSource("rtmp")],
+		);
+		const { queryByTestId } = strip({ summary });
+		expect(queryByTestId("transcode-chip")).toBeNull();
 	});
 });

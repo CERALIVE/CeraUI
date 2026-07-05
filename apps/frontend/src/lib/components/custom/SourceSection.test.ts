@@ -419,6 +419,32 @@ describe("SourceSection — network-ingest rows folded into the list (Task 12)",
 			),
 		).toBeNull();
 	});
+
+	it("renders per-protocol codec education under each network row disclosure (T14)", () => {
+		const netSrt: NetworkStreamSource = {
+			...netRtmp(true),
+			id: "srt",
+			pipelineId: "srt",
+			labelKey: "settings.sources.srt",
+			requiresGateway: "srt",
+			url: "srt://192.168.1.100:4001",
+		};
+		const { container } = mount({
+			sources: sourcesMsg([netRtmp(true), netSrt]),
+		});
+
+		const rtmp = container.querySelector(
+			'[data-testid="source-network-ingest-codec-education-rtmp"]',
+		);
+		const srt = container.querySelector(
+			'[data-testid="source-network-ingest-codec-education-srt"]',
+		);
+		expect(rtmp?.textContent).toContain("H.264");
+		expect(rtmp?.textContent).not.toContain("H.265");
+		expect(rtmp?.textContent).toContain("re-encoded");
+		expect(srt?.textContent).toContain("H.265");
+		expect(srt?.textContent).toContain("re-encoded");
+	});
 });
 
 describe("SourceSection — capability summary (kept)", () => {

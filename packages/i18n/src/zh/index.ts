@@ -994,6 +994,10 @@ const zh = {
 			copied: "地址已复制",
 			copyFailed: "无法复制地址。",
 			includesAudio: "包含音频",
+			codecEducation: {
+				rtmp: "RTMP 仅推送 H.264 视频（含 AAC 音频）。它始终会重新编码为你配置的输出编解码器。",
+				srt: "SRT 推送 H.264 或 H.265 视频。它始终会重新编码为你配置的输出编解码器。",
+			},
 		},
 		preview: {
 			title: "预览",
@@ -1108,6 +1112,11 @@ const zh = {
 			nowStreaming: "正在直播",
 			audioFollows: "重启后音频将切换到 {label}",
 			switchTitle: "切换源",
+		},
+		transcode: {
+			chip: "输入 {input} \u2192 输出 {output}",
+			always:
+				"引擎始终将传入流重新编码为你配置的输出编解码器 \u2014 没有直通。",
 		},
 		modes: {
 			label: "模式",

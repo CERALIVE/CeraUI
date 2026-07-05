@@ -1229,6 +1229,10 @@ const fr = {
 			copied: "Adresse copiée",
 			copyFailed: "Impossible de copier l'adresse.",
 			includesAudio: "Audio inclus",
+			codecEducation: {
+				rtmp: "RTMP ne publie que de la vidéo H.264 (avec audio AAC). Elle est toujours ré-encodée dans le codec de sortie configuré.",
+				srt: "SRT publie de la vidéo H.264 ou H.265. Elle est toujours ré-encodée dans le codec de sortie configuré.",
+			},
 		},
 		preview: {
 			title: "Aperçu",
@@ -1350,6 +1354,11 @@ const fr = {
 			nowStreaming: "En direct",
 			audioFollows: "L'audio suivra {label} au redémarrage",
 			switchTitle: "Changer de source",
+		},
+		transcode: {
+			chip: "Entrée {input} \u2192 Sortie {output}",
+			always:
+				"Le moteur ré-encode toujours le flux entrant dans le codec de sortie configuré \u2014 il n'y a pas de passthrough.",
 		},
 		modes: {
 			label: "Mode",

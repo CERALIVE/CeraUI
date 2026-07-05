@@ -1206,6 +1206,10 @@ const ptBR = {
 			copied: "Endereço copiado",
 			copyFailed: "Não foi possível copiar o endereço.",
 			includesAudio: "Inclui áudio",
+			codecEducation: {
+				rtmp: "O RTMP publica apenas vídeo H.264 (com áudio AAC). Ele é sempre recodificado para o codec de saída configurado.",
+				srt: "O SRT publica vídeo H.264 ou H.265. Ele é sempre recodificado para o codec de saída configurado.",
+			},
 		},
 		preview: {
 			title: "Pré-visualização",
@@ -1325,6 +1329,11 @@ const ptBR = {
 			nowStreaming: "Transmitindo agora",
 			audioFollows: "O áudio seguirá {label} ao reiniciar",
 			switchTitle: "Trocar fonte",
+		},
+		transcode: {
+			chip: "Entrada {input} \u2192 Saída {output}",
+			always:
+				"O motor sempre recodifica o stream recebido para o codec de saída configurado \u2014 não há passthrough.",
 		},
 		modes: {
 			label: "Modo",

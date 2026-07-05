@@ -1072,6 +1072,10 @@ const ja = {
 			copied: "アドレスをコピーしました",
 			copyFailed: "アドレスをコピーできませんでした。",
 			includesAudio: "音声を含む",
+			codecEducation: {
+				rtmp: "RTMP は H.264 映像（AAC 音声付き）のみを配信します。常に設定した出力コーデックに再エンコードされます。",
+				srt: "SRT は H.264 または H.265 映像を配信します。常に設定した出力コーデックに再エンコードされます。",
+			},
 		},
 		preview: {
 			title: "プレビュー",
@@ -1192,6 +1196,11 @@ const ja = {
 			nowStreaming: "配信中",
 			audioFollows: "再起動時にオーディオが{label}に切り替わります",
 			switchTitle: "ソースを切り替え",
+		},
+		transcode: {
+			chip: "入力 {input} \u2192 出力 {output}",
+			always:
+				"エンジンは受信ストリームを常に設定した出力コーデックに再エンコードします。パススルーはありません。",
 		},
 		modes: {
 			label: "モード",

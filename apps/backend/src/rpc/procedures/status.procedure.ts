@@ -13,6 +13,7 @@ import {
 	buildRelaysMsg,
 	getRelays,
 } from "../../modules/remote/remote-relays.ts";
+import { getActiveEncodeStatus } from "../../modules/streaming/active-encode-status.ts";
 import {
 	deriveAudioSources,
 	getAudioDevices,
@@ -72,6 +73,7 @@ export const getStatusProcedure = authedProcedure
 			resolved_asrc_reason: getResolvedAsrcReason(),
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			network_ingest: getNetworkIngestInfo(),
+			active_encode: getActiveEncodeStatus(),
 		};
 	});
 
@@ -111,6 +113,7 @@ export function buildInitialStatus() {
 			resolved_asrc_reason: getResolvedAsrcReason(),
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			network_ingest: getNetworkIngestInfo(),
+			active_encode: getActiveEncodeStatus(),
 		},
 		netif: netIfBuildMsg(),
 		sensors: getSensors(),

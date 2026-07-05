@@ -440,6 +440,10 @@ const en = {
 			copied: "Address copied",
 			copyFailed: "Couldn't copy the address.",
 			includesAudio: "Includes audio",
+			codecEducation: {
+				rtmp: "RTMP publishes H.264 video (with AAC audio) only. It's always re-encoded to your configured output codec.",
+				srt: "SRT publishes H.264 or H.265 video. It's always re-encoded to your configured output codec.",
+			},
 		},
 		preview: {
 			title: "Preview",
@@ -558,6 +562,11 @@ const en = {
 			nowStreaming: "Now streaming",
 			audioFollows: "Audio follows {label:string} on restart",
 			switchTitle: "Switch source",
+		},
+		transcode: {
+			chip: "In {input:string} \u2192 Out {output:string}",
+			always:
+				"The engine always re-encodes the incoming stream to your configured output codec \u2014 there's no passthrough.",
 		},
 		modes: {
 			label: "Mode",

@@ -1048,6 +1048,10 @@ const ko = {
 			copied: "주소가 복사됨",
 			copyFailed: "주소를 복사할 수 없습니다.",
 			includesAudio: "오디오 포함",
+			codecEducation: {
+				rtmp: "RTMP는 H.264 영상(AAC 오디오 포함)만 게시합니다. 항상 구성된 출력 코덱으로 다시 인코딩됩니다.",
+				srt: "SRT는 H.264 또는 H.265 영상을 게시합니다. 항상 구성된 출력 코덱으로 다시 인코딩됩니다.",
+			},
 		},
 		preview: {
 			title: "미리보기",
@@ -1166,6 +1170,11 @@ const ko = {
 			nowStreaming: "스트리밍 중",
 			audioFollows: "재시작 시 오디오가 {label}(으)로 전환됩니다",
 			switchTitle: "소스 전환",
+		},
+		transcode: {
+			chip: "입력 {input} \u2192 출력 {output}",
+			always:
+				"엔진은 들어오는 스트림을 항상 구성된 출력 코덱으로 다시 인코딩합니다. 패스스루는 없습니다.",
 		},
 		modes: {
 			label: "모드",
