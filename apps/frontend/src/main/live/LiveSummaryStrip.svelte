@@ -75,7 +75,7 @@ const hasAudioLine = $derived(audioEmbedded || Boolean(audioCurrent) || Boolean(
 </script>
 
 <div
-	class="border-primary/25 bg-primary/5 space-y-1.5 rounded-lg border px-3 py-2.5"
+	class="border-primary/25 bg-primary/5 space-y-2 rounded-xl border px-4 py-3"
 	data-testid="live-summary-strip"
 >
 	<div class="flex items-center gap-1.5">

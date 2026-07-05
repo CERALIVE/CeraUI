@@ -292,7 +292,7 @@ const networkSummary = $derived(
 		data-state={state}
 		data-section={row.section}
 	>
-		<div class="flex min-w-0 items-start gap-3">
+		<div class="flex min-w-0 items-start gap-2.5">
 			<span
 				class="mt-1.5 size-2 shrink-0 rounded-full"
 				style="background: {stateColor(state)};"
@@ -460,7 +460,7 @@ const networkSummary = $derived(
 				data-row="network"
 				data-state={networkState}
 			>
-				<div class="flex min-w-0 items-start gap-3">
+				<div class="flex min-w-0 items-start gap-2.5">
 					<span
 						class="mt-1.5 size-2 shrink-0 rounded-full"
 						style="background: {stateColor(networkState)};"
