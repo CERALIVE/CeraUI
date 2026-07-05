@@ -439,9 +439,8 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 		await expect(page.getByTestId("idle-cockpit")).toBeVisible({ timeout: 1_000 });
 		await expect(page.getByTestId("live-cockpit")).toHaveCount(0);
 
-		// The fallback timer was cleared: after a wait it stays idle (no late flip
-		// back to the summary/live cockpit) and nothing reloaded the page.
-		await page.waitForTimeout(1_200);
+		// Fallback timer cleared: stays idle, no reload. Web-first assertions only
+		// (no sleep — a late reactive re-flip would surface live-cockpit and fail).
 		await expect(page.getByTestId("idle-cockpit")).toBeVisible();
 		await expect(page.getByTestId("live-cockpit")).toHaveCount(0);
 		expect(await stillNotReloaded(page)).toBe(true);
