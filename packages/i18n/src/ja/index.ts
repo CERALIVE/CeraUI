@@ -1121,6 +1121,7 @@ const ja = {
 			audioSwitched: "{ms}msでオーディオを切り替えました",
 			audioSwitchFailed: "オーディオソースの切り替えに失敗しました",
 			audioSourceLost: "オーディオソースを利用できません",
+			audioFollowsOnRestart: "オーディオは次のストリーム開始時に切り替わります",
 			audioSwitchUnavailable:
 				"現在のエンジンはライブ音声切り替えに対応していません",
 			groups: {
@@ -1615,6 +1616,7 @@ const ja = {
 	audio: {
 		sources: {
 			noAudio: "音声なし",
+			auto: "自動（ソースに追従）",
 			pipelineDefault: "パイプラインの既定値",
 		},
 	},

@@ -1088,6 +1088,7 @@ const hi = {
 			audioSwitched: "{ms}ms में ऑडियो बदला गया",
 			audioSwitchFailed: "ऑडियो स्रोत बदलने में विफल",
 			audioSourceLost: "ऑडियो स्रोत अनुपलब्ध",
+			audioFollowsOnRestart: "अगली स्ट्रीम शुरू होने पर ऑडियो अनुसरण करेगा",
 			audioSwitchUnavailable: "मौजूदा इंजन लाइव ऑडियो स्विचिंग का समर्थन नहीं करता",
 			groups: {
 				hdmi: "HDMI",
@@ -1565,6 +1566,7 @@ const hi = {
 	audio: {
 		sources: {
 			noAudio: "कोई ऑडियो नहीं",
+			auto: "स्वतः (स्रोत का अनुसरण)",
 			pipelineDefault: "पाइपलाइन डिफ़ॉल्ट",
 		},
 	},

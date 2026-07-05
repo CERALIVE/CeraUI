@@ -1254,6 +1254,7 @@ const ptBR = {
 			audioSwitched: "Áudio trocado em {ms}ms",
 			audioSwitchFailed: "Falha ao trocar a fonte de áudio",
 			audioSourceLost: "Fonte de áudio indisponível",
+			audioFollowsOnRestart: "O áudio seguirá no próximo início da transmissão",
 			audioSwitchUnavailable:
 				"A troca de áudio ao vivo não é suportada pelo mecanismo atual",
 			groups: {
@@ -1624,6 +1625,7 @@ const ptBR = {
 	audio: {
 		sources: {
 			noAudio: "Sem áudio",
+			auto: "Automático (segue a fonte)",
 			pipelineDefault: "Padrão do pipeline",
 		},
 	},

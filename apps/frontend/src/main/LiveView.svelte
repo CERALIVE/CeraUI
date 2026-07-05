@@ -45,6 +45,11 @@ import {
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
 import { normalizeOrder, reorderSource } from '$lib/streaming/source-preference';
+import {
+	audioSourceLabel,
+	resolveAudioSourceList,
+	resolvedAudioLabel,
+} from '$lib/streaming/sourceSummary';
 import { navElements } from '$lib/config';
 import {
 	getActiveInput,
@@ -596,7 +601,21 @@ const encoderSummary = $derived.by(() => {
 const audioSummary = $derived.by(() => {
 	const parts: string[] = [];
 	if (effectiveAudioCodec) parts.push(String(effectiveAudioCodec).toUpperCase());
-	if (effectiveAudioSource) parts.push(effectiveAudioSource);
+	// Route the source label through the single resolvedAudioLabel owner: an active
+	// Auto selection shows "Auto → device"; an explicit pick shows its own label.
+	const entries = resolveAudioSourceList(audioSourceList, audioSources);
+	const resolved = resolvedAudioLabel(
+		{ ...config, asrc: effectiveAudioSource },
+		getStatus(),
+		entries,
+		t,
+	);
+	if (resolved.current) {
+		parts.push(resolved.current);
+	} else if (effectiveAudioSource) {
+		const entry = entries.find((e) => e.id === effectiveAudioSource);
+		parts.push(entry ? audioSourceLabel(entry, t) : effectiveAudioSource);
+	}
 	return parts.length ? parts.join(' · ') : $LL.general.notConfigured();
 });
 // Kind-aware server config-row summary (T11): reuses the header's `receiverKind`
@@ -818,6 +837,7 @@ const configRows = $derived<ConfigRow[]>([
 			onSwitch={handleSwitchInput}
 			{audioSources}
 			{audioSourceList}
+			audioStatus={getStatus()}
 			selectedAudioSource={effectiveAudioSource}
 			onSelectAudioSource={handleSelectAudioSource}
 			selectedPipeline={config?.pipeline}

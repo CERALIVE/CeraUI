@@ -1223,6 +1223,7 @@ const ar = {
 			audioSwitched: "تم تبديل الصوت خلال {ms}م.ث",
 			audioSwitchFailed: "فشل تبديل مصدر الصوت",
 			audioSourceLost: "مصدر الصوت غير متوفر",
+			audioFollowsOnRestart: "سيتبع الصوت عند بدء البث التالي",
 			audioSwitchUnavailable: "لا يدعم المحرك الحالي تبديل الصوت المباشر",
 			groups: {
 				hdmi: "HDMI",
@@ -1561,6 +1562,7 @@ const ar = {
 	audio: {
 		sources: {
 			noAudio: "بدون صوت",
+			auto: "تلقائي (يتبع المصدر)",
 			pipelineDefault: "الإعداد الافتراضي للمسار",
 		},
 	},

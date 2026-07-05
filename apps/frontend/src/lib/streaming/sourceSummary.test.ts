@@ -7,9 +7,11 @@ import type {
 	ConfigMessage,
 	StreamSource,
 } from "@ceraui/rpc/schemas";
+import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
+	AUTO_AUDIO_SOURCE_ENTRY,
 	audioSourceLabel,
 	type CapabilitySummary,
 	deriveActiveSummary,
@@ -19,7 +21,9 @@ import {
 	resolveAudioSourceList,
 	resolveAudioSourceMode,
 	resolveDisplayedAudioSource,
+	resolvedAudioLabel,
 	resolveTransportToken,
+	withAutoAudioEntry,
 } from "./sourceSummary";
 
 const CAPS: CapabilitiesMessage = {
@@ -457,5 +461,146 @@ describe("audioSourceLabel — translate pseudo, never translate hardware (Task 
 		expect(audioSourceLabel({ id: "USB audio", kind: "device" }, t)).toBe(
 			"USB audio",
 		);
+	});
+
+	it("prefers the verbatim hardware label over labelKey and id (T6/T4)", () => {
+		expect(
+			audioSourceLabel(
+				{ id: "hw:1", kind: "device", label: "Rockchip HDMI-in" },
+				t,
+			),
+		).toBe("Rockchip HDMI-in");
+	});
+});
+
+describe("withAutoAudioEntry — Auto injected FIRST (T6)", () => {
+	it("prepends the Auto entry above every device entry", () => {
+		const list: AudioSource[] = [{ id: "USB audio", kind: "device" }];
+		const out = withAutoAudioEntry(list);
+		expect(out[0]).toEqual(AUTO_AUDIO_SOURCE_ENTRY);
+		expect(out.map((e) => e.id)).toEqual([AUDIO_SOURCE_AUTO, "USB audio"]);
+	});
+
+	it("dedupes any pre-existing Auto entry (backend never emits one)", () => {
+		const list: AudioSource[] = [
+			{ id: AUDIO_SOURCE_AUTO, kind: "auto" },
+			{ id: "USB audio", kind: "device" },
+		];
+		const out = withAutoAudioEntry(list);
+		expect(out.filter((e) => e.id === AUDIO_SOURCE_AUTO)).toHaveLength(1);
+		expect(out[0]).toEqual(AUTO_AUDIO_SOURCE_ENTRY);
+	});
+
+	it("the injected Auto entry carries the auto kind + labelKey", () => {
+		expect(AUTO_AUDIO_SOURCE_ENTRY).toEqual({
+			id: AUDIO_SOURCE_AUTO,
+			kind: "auto",
+			labelKey: "audio.sources.auto",
+		});
+	});
+});
+
+describe("resolvedAudioLabel — single-owner resolved-audio display (T6)", () => {
+	const t = (key: string) =>
+		key === "audio.sources.pipelineDefault" ? "Pipeline default" : key;
+	const ENTRIES: AudioSource[] = [
+		{ id: "USB audio", kind: "device" },
+		{ id: "HDMI", kind: "device", label: "Rockchip HDMI-in" },
+	];
+
+	it("renders 'Auto → {label}' when Auto is active and resolved (T4 label wins)", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: AUDIO_SOURCE_AUTO },
+			{ resolved_asrc: "HDMI", resolved_asrc_reason: "hdmi" },
+			ENTRIES,
+			t,
+		);
+		expect(r.current).toBe("Auto \u2192 Rockchip HDMI-in");
+		expect(r.embedded).toBe(false);
+		expect(r.pending).toBeUndefined();
+	});
+
+	it("falls back to the raw asrc key when no entry matches the resolved id", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: AUDIO_SOURCE_AUTO },
+			{ resolved_asrc: "Analog in" },
+			ENTRIES,
+			t,
+		);
+		expect(r.current).toBe("Auto \u2192 Analog in");
+	});
+
+	it("STALE-VALUE GATE: an explicit pick never renders a leftover resolved_asrc", () => {
+		// config.asrc = explicit "USB audio"; status still carries a stale "HDMI".
+		const r = resolvedAudioLabel(
+			{ asrc: "USB audio" },
+			{ resolved_asrc: "HDMI", resolved_asrc_reason: "hdmi" },
+			ENTRIES,
+			t,
+		);
+		expect(r.current).toBeUndefined();
+	});
+
+	it("embedded null case: reason 'embedded' → embedded true, current undefined", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: AUDIO_SOURCE_AUTO },
+			{ resolved_asrc: null, resolved_asrc_reason: "embedded" },
+			ENTRIES,
+			t,
+		);
+		expect(r.embedded).toBe(true);
+		expect(r.current).toBeUndefined();
+	});
+
+	it("genuinely-unresolved null case (old backend): current undefined, embedded false", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: AUDIO_SOURCE_AUTO },
+			{ resolved_asrc: null, resolved_asrc_reason: null },
+			ENTRIES,
+			t,
+		);
+		expect(r.embedded).toBe(false);
+		expect(r.current).toBeUndefined();
+	});
+
+	it("old backend that omits the fields entirely → current undefined, embedded false", () => {
+		const r = resolvedAudioLabel({ asrc: AUDIO_SOURCE_AUTO }, {}, ENTRIES, t);
+		expect(r.current).toBeUndefined();
+		expect(r.embedded).toBe(false);
+	});
+
+	it("no status at all (undefined) → all-quiet (no throw)", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: AUDIO_SOURCE_AUTO },
+			undefined,
+			ENTRIES,
+			t,
+		);
+		expect(r).toEqual({
+			current: undefined,
+			pending: undefined,
+			embedded: false,
+		});
+	});
+
+	it("surfaces the pending live-follow label whenever present (T7 slot)", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: AUDIO_SOURCE_AUTO },
+			{ resolved_asrc: "USB audio", pending_audio_follow_asrc: "HDMI" },
+			ENTRIES,
+			t,
+		);
+		expect(r.pending).toBe("Rockchip HDMI-in");
+	});
+
+	it("pending is independent of the stale gate (renders on an explicit pick too)", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: "USB audio" },
+			{ pending_audio_follow_asrc: "USB audio" },
+			ENTRIES,
+			t,
+		);
+		expect(r.current).toBeUndefined();
+		expect(r.pending).toBe("USB audio");
 	});
 });

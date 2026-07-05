@@ -9,6 +9,7 @@ import type {
 	StreamSource,
 	VirtualStreamSource,
 } from "@ceraui/rpc/schemas";
+import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import { fireEvent, render, waitFor } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -623,5 +624,87 @@ describe("SourceSection — typed audio-source model (Task 13)", () => {
 		);
 		expect(readonly).not.toBeNull();
 		expect(readonly?.textContent).toContain("Pipeline default");
+	});
+});
+
+describe("SourceSection — Auto resolved preview (T6)", () => {
+	it("renders the 'Auto → device' resolved line when Auto is active and resolved", () => {
+		const { container } = mount({
+			config: { asrc: AUDIO_SOURCE_AUTO },
+			audioSources: ["USB audio", "HDMI"],
+			audioStatus: { resolved_asrc: "USB audio" },
+		});
+		const line = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-auto-resolved"]',
+		);
+		expect(line).not.toBeNull();
+		expect(line?.textContent).toContain("Auto \u2192 USB audio");
+	});
+
+	it("renders an em-dash when Auto is active but unresolved (old backend)", () => {
+		const { container } = mount({
+			config: { asrc: AUDIO_SOURCE_AUTO },
+			audioSources: ["USB audio", "HDMI"],
+			audioStatus: {},
+		});
+		const line = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-auto-resolved"]',
+		);
+		expect(line).not.toBeNull();
+		expect(line?.textContent?.trim()).toBe("\u2014");
+		// The two null cases are visually distinct: no embedded state here.
+		expect(
+			container.querySelector('[data-testid="audio-source-embedded"]'),
+		).toBeNull();
+	});
+
+	it("renders the embedded state (not the em-dash) for the embedded reason", () => {
+		const { container } = mount({
+			config: { asrc: AUDIO_SOURCE_AUTO },
+			audioSources: ["USB audio"],
+			audioStatus: { resolved_asrc: null, resolved_asrc_reason: "embedded" },
+		});
+		expect(
+			container.querySelector('[data-testid="audio-source-embedded"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-source-auto-resolved"]'),
+		).toBeNull();
+	});
+
+	it("STALE-VALUE GATE: an explicit pick shows NO Auto-resolved line despite a stale resolved_asrc", () => {
+		const { container } = mount({
+			config: { asrc: "USB audio" },
+			audioSources: ["USB audio", "HDMI"],
+			audioStatus: { resolved_asrc: "HDMI", resolved_asrc_reason: "hdmi" },
+		});
+		expect(
+			container.querySelector('[data-testid="audio-source-auto-resolved"]'),
+		).toBeNull();
+	});
+
+	it("renders the pending live-follow hint whenever pending is present (T7 slot)", () => {
+		const { container } = mount({
+			config: { asrc: AUDIO_SOURCE_AUTO },
+			audioSources: ["USB audio", "HDMI"],
+			audioStatus: {
+				resolved_asrc: "USB audio",
+				pending_audio_follow_asrc: "HDMI",
+			},
+		});
+		expect(
+			container.querySelector('[data-testid="audio-follow-pending"]'),
+		).not.toBeNull();
+	});
+
+	it("renders NO pending hint when the pending slot is null/absent", () => {
+		const { container } = mount({
+			config: { asrc: AUDIO_SOURCE_AUTO },
+			audioSources: ["USB audio", "HDMI"],
+			audioStatus: { resolved_asrc: "USB audio" },
+		});
+		expect(
+			container.querySelector('[data-testid="audio-follow-pending"]'),
+		).toBeNull();
 	});
 });

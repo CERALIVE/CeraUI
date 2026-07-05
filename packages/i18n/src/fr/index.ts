@@ -1279,6 +1279,7 @@ const fr = {
 			audioSwitched: "Audio changé en {ms}ms",
 			audioSwitchFailed: "Échec du changement de source audio",
 			audioSourceLost: "Source audio indisponible",
+			audioFollowsOnRestart: "L'audio suivra au prochain démarrage du flux",
 			audioSwitchUnavailable:
 				"Le changement audio en direct n'est pas pris en charge par le moteur actuel",
 			groups: {
@@ -1631,6 +1632,7 @@ const fr = {
 	audio: {
 		sources: {
 			noAudio: "Aucun audio",
+			auto: "Auto (suit la source)",
 			pipelineDefault: "Valeur par défaut du pipeline",
 		},
 	},

@@ -25,6 +25,7 @@ import type {
 	Pipelines,
 	SourcesMessage,
 } from '@ceraui/rpc/schemas';
+import type { ResolvedAudioStatus } from '$lib/streaming/sourceSummary';
 
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
@@ -67,6 +68,7 @@ interface Props {
 	audioSourceList: AudioSource[] | undefined;
 	selectedAudioSource: string | undefined;
 	onSelectAudioSource: (id: string) => void;
+	audioStatus: ResolvedAudioStatus | undefined;
 	// `selectedPipeline` still drives the roadmap's embedded-audio pill below.
 	selectedPipeline: string | undefined;
 	capabilities: CapabilitiesMessage | undefined;
@@ -102,6 +104,7 @@ const {
 	audioSourceList,
 	selectedAudioSource,
 	onSelectAudioSource,
+	audioStatus,
 	selectedPipeline,
 	capabilities,
 	activeEncode,
@@ -163,6 +166,7 @@ const audioEmbeddedComingSoon = $derived(
 		{activeInput}
 		{audioSourceList}
 		{audioSources}
+		{audioStatus}
 		{capabilities}
 		{config}
 		{isStreaming}

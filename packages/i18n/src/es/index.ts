@@ -504,6 +504,7 @@ const es = {
 			audioSwitched: "Audio cambiado en {ms}ms",
 			audioSwitchFailed: "No se pudo cambiar la fuente de audio",
 			audioSourceLost: "Fuente de audio no disponible",
+			audioFollowsOnRestart: "El audio seguirá en el próximo inicio de la transmisión",
 			audioSwitchUnavailable:
 				"El motor actual no admite el cambio de audio en vivo",
 			groups: {
@@ -1638,6 +1639,7 @@ const es = {
 	audio: {
 		sources: {
 			noAudio: "Sin audio",
+			auto: "Automático (sigue la fuente)",
 			pipelineDefault: "Predeterminado de la canalización",
 		},
 	},

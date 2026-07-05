@@ -488,6 +488,7 @@ const en = {
 			audioSwitched: "Audio switched in {ms:number}ms",
 			audioSwitchFailed: "Failed to switch audio source",
 			audioSourceLost: "Audio source unavailable",
+			audioFollowsOnRestart: "Audio will follow at the next stream start",
 			audioSwitchUnavailable:
 				"Live audio switching isn't supported by the current engine",
 			groups: {
@@ -1603,6 +1604,7 @@ const en = {
 	audio: {
 		sources: {
 			noAudio: "No audio",
+			auto: "Auto (follows source)",
 			pipelineDefault: "Pipeline default",
 		},
 	},

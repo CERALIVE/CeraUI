@@ -67,6 +67,7 @@ import {
 	markFieldApplying,
 	markFieldFailed,
 } from '$lib/rpc/field-sync-state.svelte';
+import { AUDIO_SOURCE_AUTO } from '@ceraui/rpc/schemas';
 import {
 	audioSourceLabel,
 	deriveActiveSummary,
@@ -76,6 +77,9 @@ import {
 	resolveAudioSourceList,
 	resolveAudioSourceMode,
 	resolveDisplayedAudioSource,
+	type ResolvedAudioStatus,
+	resolvedAudioLabel,
+	withAutoAudioEntry,
 } from '$lib/streaming/sourceSummary';
 
 interface Props {
@@ -107,6 +111,8 @@ interface Props {
 	audioSourceList?: AudioSource[] | undefined;
 	selectedAudioSource?: string | undefined;
 	onSelectAudioSource?: (id: string) => void;
+	/** T5 auto-resolution fields off the `status` broadcast (resolved/pending/embedded). */
+	audioStatus?: ResolvedAudioStatus | undefined;
 }
 
 let {
@@ -125,6 +131,7 @@ let {
 	audioSourceList,
 	selectedAudioSource,
 	onSelectAudioSource,
+	audioStatus,
 }: Props = $props();
 
 // Capability summary (res / fps / codec / audio) — compact, telemetry-style.
@@ -324,14 +331,21 @@ const displayedAudioSource = $derived(
 );
 const audioSourceEntries = $derived(resolveAudioSourceList(audioSourceList, audioSources));
 const groupedAudio = $derived(groupAudioSources(audioSourceEntries));
+// Picker entries carry the FE-injected Auto row FIRST (backend never emits it).
+const pickerEntries = $derived(withAutoAudioEntry(audioSourceEntries));
 const displayedAudioLabel = $derived.by(() => {
-	const entry = audioSourceEntries.find((e) => e.id === displayedAudioSource);
+	const entry = pickerEntries.find((e) => e.id === displayedAudioSource);
 	return entry ? audioSourceLabel(entry, t) : displayedAudioSource;
 });
 const notAvailableAudioSource = $derived(
-	displayedAudioSource && !audioSourceEntries.some((e) => e.id === displayedAudioSource)
+	displayedAudioSource && !pickerEntries.some((e) => e.id === displayedAudioSource)
 		? displayedAudioSource
 		: undefined,
+);
+// Resolved-audio display (single owner): "Auto → device", pending, embedded.
+const audioIsAuto = $derived(config?.asrc === AUDIO_SOURCE_AUTO);
+const resolvedAudio = $derived(
+	resolvedAudioLabel(config, audioStatus, audioSourceEntries, t),
 );
 // Live audio switch is gated (Task 10): force read-only while streaming.
 const audioReadOnly = $derived(audioMode === 'single' || isStreaming);
@@ -348,6 +362,9 @@ const activeSource = $derived(
 const audioEmbeddedActive = $derived(
 	activeSource?.audioKind === 'embedded' && capabilities?.network_embedded_audio === true,
 );
+// Embedded state renders when the active source routes embedded audio OR the T5
+// resolver reported the embedded reason (distinguishes the two null cases, R9-1).
+const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 </script>
 
 <Card.Root data-testid="source-section">
@@ -667,7 +684,24 @@ const audioEmbeddedActive = $derived(
 				{/if}
 			</div>
 
-			{#if audioEmbeddedActive}
+			<!-- Resolved-audio preview (T6): while Auto is the active selection and the
+			     source is NOT embedded, show what Auto resolved to ("Auto → device"),
+			     or an em-dash when genuinely unresolved (old backend). -->
+			{#if audioIsAuto && !showEmbedded}
+				<p
+					class="text-muted-foreground font-mono text-xs"
+					data-testid="audio-source-auto-resolved"
+				>
+					{resolvedAudio.current ?? '\u2014'}
+				</p>
+			{/if}
+			{#if resolvedAudio.pending !== undefined}
+				<p class="text-status-info text-xs" data-testid="audio-follow-pending">
+					{$LL.live.inputPicker.audioFollowsOnRestart()}
+				</p>
+			{/if}
+
+			{#if showEmbedded}
 				<!-- Engine routes the incoming stream's embedded audio — no ALSA pick. -->
 				<div
 					class="bg-muted/40 flex min-h-11 flex-wrap items-center gap-2 rounded-lg border px-3 py-2"
@@ -720,6 +754,12 @@ const audioEmbeddedActive = $derived(
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
+							<!-- Auto renders FIRST, above every device entry (FE-injected). -->
+							<Select.Item
+								data-testid="audio-source-auto-option"
+								label={t('audio.sources.auto')}
+								value={AUDIO_SOURCE_AUTO}
+							></Select.Item>
 							{#each groupedAudio.devices as entry (entry.id)}
 								<Select.Item label={audioSourceLabel(entry, t)} value={entry.id}></Select.Item>
 							{/each}

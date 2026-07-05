@@ -503,6 +503,7 @@ const de = {
 			audioSwitched: "Audio in {ms}ms umgeschaltet",
 			audioSwitchFailed: "Audioquelle konnte nicht umgeschaltet werden",
 			audioSourceLost: "Audioquelle nicht verfügbar",
+			audioFollowsOnRestart: "Der Ton folgt beim nächsten Stream-Start",
 			audioSwitchUnavailable:
 				"Live-Audioumschaltung wird von der aktuellen Engine nicht unterstützt",
 			groups: {
@@ -1636,6 +1637,7 @@ const de = {
 	audio: {
 		sources: {
 			noAudio: "Kein Audio",
+			auto: "Auto (folgt der Quelle)",
 			pipelineDefault: "Pipeline-Standard",
 		},
 	},

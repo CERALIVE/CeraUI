@@ -1096,6 +1096,7 @@ const ko = {
 			audioSwitched: "{ms}ms 만에 오디오 전환됨",
 			audioSwitchFailed: "오디오 소스 전환 실패",
 			audioSourceLost: "오디오 소스를 사용할 수 없음",
+			audioFollowsOnRestart: "오디오는 다음 스트림 시작 시 전환됩니다",
 			audioSwitchUnavailable:
 				"현재 엔진은 실시간 오디오 전환을 지원하지 않습니다",
 			groups: {
@@ -1578,6 +1579,7 @@ const ko = {
 	audio: {
 		sources: {
 			noAudio: "오디오 없음",
+			auto: "자동 (소스 따라가기)",
 			pipelineDefault: "파이프라인 기본값",
 		},
 	},

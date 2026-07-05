@@ -1042,6 +1042,7 @@ const zh = {
 			audioSwitched: "已在 {ms}ms 内切换音频",
 			audioSwitchFailed: "切换音频源失败",
 			audioSourceLost: "音频源不可用",
+			audioFollowsOnRestart: "音频将在下次推流开始时切换",
 			audioSwitchUnavailable: "当前引擎不支持实时音频切换",
 			groups: {
 				hdmi: "HDMI",
@@ -1524,6 +1525,7 @@ const zh = {
 	audio: {
 		sources: {
 			noAudio: "无音频",
+			auto: "自动（跟随信号源）",
 			pipelineDefault: "管道默认",
 		},
 	},

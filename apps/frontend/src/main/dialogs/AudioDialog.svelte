@@ -25,6 +25,7 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { AudioCodec } from '@ceraui/rpc/schemas';
+import { AUDIO_SOURCE_AUTO } from '@ceraui/rpc/schemas';
 import { Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
@@ -39,7 +40,11 @@ import {
 	resolveAudioGateState,
 	resolveAudioPipelineKey,
 } from '$lib/streaming/audioGate';
-import { audioSourceLabel, resolveAudioSourceList } from '$lib/streaming/sourceSummary';
+import {
+	audioSourceLabel,
+	resolveAudioSourceList,
+	resolvedAudioLabel,
+} from '$lib/streaming/sourceSummary';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import {
@@ -200,11 +205,20 @@ const t = (key: string): string => {
 	return typeof result === 'function' ? (result as () => string)() : key;
 };
 
+// Resolved-audio display (single owner): an active Auto selection surfaces
+// "Auto → device"; the embedded reason surfaces the embedded state.
+const resolvedAudio = $derived(
+	resolvedAudioLabel({ asrc: activeAudioSource }, getStatus(), audioSourceEntries, t),
+);
+
 // READ-ONLY label for the active audio source: the embedded-stream state, the
-// resolved device/pseudo-source label, or a calm "none" fallback when `asrc` is
-// absent (federation tolerance).
+// resolved "Auto → device" preview, an em-dash for an unresolved Auto (old
+// backend), the resolved device/pseudo-source label, or a calm "none" fallback
+// when `asrc` is absent (federation tolerance).
 const activeAudioSourceLabel = $derived.by(() => {
-	if (audioEmbeddedActive) return $LL.live.source.audioEmbedded();
+	if (audioEmbeddedActive || resolvedAudio.embedded) return $LL.live.source.audioEmbedded();
+	if (resolvedAudio.current) return resolvedAudio.current;
+	if (activeAudioSource === AUDIO_SOURCE_AUTO) return '\u2014';
 	if (!activeAudioSource) return $LL.settings.noAudioSourceSelected();
 	const entry = audioSourceEntries.find((e) => e.id === activeAudioSource);
 	return entry ? audioSourceLabel(entry, t) : activeAudioSource;

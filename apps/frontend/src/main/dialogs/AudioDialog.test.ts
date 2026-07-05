@@ -14,6 +14,7 @@ import type {
 	ConfigMessage,
 	Pipeline,
 } from "@ceraui/rpc/schemas";
+import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -164,5 +165,61 @@ describe("AudioDialog — codec + delay only (Task 15)", () => {
 		const codec = document.body.querySelector("#audioCodec");
 		expect(codec).not.toBeNull();
 		expect(codec?.getAttribute("title")).toBeTruthy();
+	});
+});
+
+describe("AudioDialog — resolved Auto preview in the read-only line (T6)", () => {
+	function activeText(): string {
+		return (
+			document.body
+				.querySelector('[data-testid="audio-source-active"] .text-sm')
+				?.textContent?.trim() ?? ""
+		);
+	}
+
+	it("shows 'Auto → device' when Auto is active and status carries resolved_asrc", () => {
+		seed({ config: { asrc: AUDIO_SOURCE_AUTO } });
+		state.status = { asrcs: ["Built-in Mic"], resolved_asrc: "Built-in Mic" };
+		render(AudioDialog, {
+			props: { open: true, audioSource: AUDIO_SOURCE_AUTO, audioCodec: "aac" },
+		});
+		expect(activeText()).toContain("Auto \u2192 Built-in Mic");
+	});
+
+	it("shows an em-dash when Auto is active but unresolved (old backend)", () => {
+		seed({ config: { asrc: AUDIO_SOURCE_AUTO } });
+		state.status = { asrcs: ["Built-in Mic"] };
+		render(AudioDialog, {
+			props: { open: true, audioSource: AUDIO_SOURCE_AUTO, audioCodec: "aac" },
+		});
+		expect(activeText()).toBe("\u2014");
+	});
+
+	it("shows the Embedded audio state for the embedded reason", () => {
+		seed({ config: { asrc: AUDIO_SOURCE_AUTO } });
+		state.status = {
+			asrcs: ["Built-in Mic"],
+			resolved_asrc: null,
+			resolved_asrc_reason: "embedded",
+		};
+		render(AudioDialog, {
+			props: { open: true, audioSource: AUDIO_SOURCE_AUTO, audioCodec: "aac" },
+		});
+		expect(activeText()).toContain("Embedded audio");
+	});
+
+	it("STALE-VALUE GATE: an explicit pick renders its own label, never a stale resolved_asrc", () => {
+		seed({ config: { asrc: "Built-in Mic" }, audioSources: ["Built-in Mic"] });
+		state.status = {
+			asrcs: ["Built-in Mic"],
+			resolved_asrc: "HDMI",
+			resolved_asrc_reason: "hdmi",
+		};
+		render(AudioDialog, {
+			props: { open: true, audioSource: "Built-in Mic", audioCodec: "aac" },
+		});
+		expect(activeText()).toContain("Built-in Mic");
+		expect(activeText()).not.toContain("Auto \u2192");
+		expect(activeText()).not.toContain("HDMI");
 	});
 });
