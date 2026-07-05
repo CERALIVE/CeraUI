@@ -1285,6 +1285,11 @@ const ar = {
 			audioNone: "لم يتم اكتشاف مصدر صوت",
 			audioEmbedded: "صوت مضمّن (من البث الوارد)",
 		},
+		summary: {
+			nowStreaming: "يبث الآن",
+			audioFollows: "سيتبع الصوت {label} عند إعادة التشغيل",
+			switchTitle: "تغيير المصدر",
+		},
 		modes: {
 			label: "الوضع",
 			streaming: "البث",

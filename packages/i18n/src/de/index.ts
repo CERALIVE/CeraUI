@@ -569,6 +569,11 @@ const de = {
 			audioNone: "Keine Audioquelle erkannt",
 			audioEmbedded: "Eingebetteter Ton (aus dem eingehenden Stream)",
 		},
+		summary: {
+			nowStreaming: "Jetzt live",
+			audioFollows: "Ton folgt {label} beim Neustart",
+			switchTitle: "Quelle wechseln",
+		},
 		modes: {
 			label: "Modus",
 			streaming: "Streaming",

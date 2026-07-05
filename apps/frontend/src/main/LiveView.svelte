@@ -47,6 +47,7 @@ import {
 import { normalizeOrder, reorderSource } from '$lib/streaming/source-preference';
 import {
 	audioSourceLabel,
+	deriveActiveSummary,
 	resolveAudioSourceList,
 	resolvedAudioLabel,
 } from '$lib/streaming/sourceSummary';
@@ -654,6 +655,49 @@ const serverSummary = $derived(
 	),
 );
 
+// ── "Now streaming" summary strip + live source switch (T12) ────────────────
+// The active-encode summary (engine truth while streaming, else saved config)
+// feeds LiveCockpit's LiveSummaryStrip. `deriveActiveSummary` prefers config.source
+// via the sources list, then the legacy selected_video_input/pipeline fallbacks.
+const liveSummary = $derived(
+	deriveActiveSummary(
+		config,
+		getStatus()?.active_encode ?? null,
+		getCapabilities(),
+		getSources()?.sources,
+	),
+);
+// The CURRENT audio for the strip's second line — routed through the single
+// resolvedAudioLabel owner: an active Auto pick shows "Auto → device", an explicit
+// pick shows its own label, and a deferred follow (T7) rides the pending pill. This
+// shows what the stream is USING, never the future target as if it were live.
+const summaryAudio = $derived.by(() => {
+	const entries = resolveAudioSourceList(audioSourceList, audioSources);
+	const resolved = resolvedAudioLabel(
+		{ ...config, asrc: effectiveAudioSource },
+		getStatus(),
+		entries,
+		t,
+	);
+	const activeSrc = config?.source
+		? getSources()?.sources.find((s) => s.id === config.source)
+		: undefined;
+	const embeddedActive =
+		activeSrc?.audioKind === 'embedded' && getCapabilities()?.network_embedded_audio === true;
+	let current: string | undefined;
+	if (resolved.current) {
+		current = resolved.current;
+	} else if (effectiveAudioSource) {
+		const entry = entries.find((e) => e.id === effectiveAudioSource);
+		current = entry ? audioSourceLabel(entry, t) : effectiveAudioSource;
+	}
+	return {
+		current,
+		pending: resolved.pending,
+		embedded: resolved.embedded || embeddedActive,
+	};
+});
+
 // Start: assemble the full ConfigMessage from the SAVED backend config (the
 // encoder/server dialogs persist via setConfig), fold in the unpersisted audio
 // override + the implicit sole-camera source (T10/T11), validate pipeline +
@@ -799,6 +843,17 @@ const configRows = $derived<ConfigRow[]>([
 		     the bounded post-stream summary window (summaryMode) so IngestStats can
 		     render the historical "Session ended" summary before reverting to idle. -->
 		<LiveCockpit
+			{liveSummary}
+			destination={serverSummary}
+			audioCurrent={summaryAudio.current}
+			audioPending={summaryAudio.pending}
+			audioEmbedded={summaryAudio.embedded}
+			sources={getSources()}
+			{config}
+			activeEncode={getStatus()?.active_encode ?? null}
+			{activeInput}
+			{switchingInput}
+			onSwitch={handleSwitchInput}
 			bitrate={formatBitrate(config?.max_br)}
 			{tempSensor}
 			{uptimeSensor}

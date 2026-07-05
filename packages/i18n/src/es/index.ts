@@ -570,6 +570,11 @@ const es = {
 			audioNone: "No se detectó ninguna fuente de audio",
 			audioEmbedded: "Audio incorporado (del flujo entrante)",
 		},
+		summary: {
+			nowStreaming: "Transmitiendo ahora",
+			audioFollows: "El audio seguirá a {label} al reiniciar",
+			switchTitle: "Cambiar fuente",
+		},
 		modes: {
 			label: "Modo",
 			streaming: "Transmisión",

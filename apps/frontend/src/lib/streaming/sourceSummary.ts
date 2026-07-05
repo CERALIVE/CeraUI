@@ -431,11 +431,15 @@ export function deriveActiveSummary(
 ): ActiveSummary {
 	const live = Boolean(activeEncode);
 
+	// Order: engine `active_input` (streaming) → device-first `config.source` →
+	// legacy `selected_video_input`/`pipeline`. A missing `source` falls through
+	// byte-identically to the prior behavior.
 	const sourceId = live
 		? (activeEncode?.active_input ??
+			config?.source ??
 			config?.selected_video_input ??
 			config?.pipeline)
-		: (config?.selected_video_input ?? config?.pipeline);
+		: (config?.source ?? config?.selected_video_input ?? config?.pipeline);
 
 	const resolution = live
 		? (fromEngineResolution(activeEncode?.resolution ?? "") ??

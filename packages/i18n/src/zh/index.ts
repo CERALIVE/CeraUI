@@ -1103,6 +1103,11 @@ const zh = {
 			audioNone: "未检测到音频源",
 			audioEmbedded: "嵌入式音频（来自传入流）",
 		},
+		summary: {
+			nowStreaming: "正在直播",
+			audioFollows: "重启后音频将切换到 {label}",
+			switchTitle: "切换源",
+		},
 		modes: {
 			label: "模式",
 			streaming: "直播",

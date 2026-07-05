@@ -1161,6 +1161,11 @@ const ko = {
 			audioNone: "오디오 소스가 감지되지 않음",
 			audioEmbedded: "임베디드 오디오 (수신 스트림에서)",
 		},
+		summary: {
+			nowStreaming: "스트리밍 중",
+			audioFollows: "재시작 시 오디오가 {label}(으)로 전환됩니다",
+			switchTitle: "소스 전환",
+		},
 		modes: {
 			label: "모드",
 			streaming: "스트리밍",

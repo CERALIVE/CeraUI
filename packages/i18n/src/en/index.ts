@@ -553,6 +553,11 @@ const en = {
 			audioNone: "No audio source detected",
 			audioEmbedded: "Embedded audio (from the incoming stream)",
 		},
+		summary: {
+			nowStreaming: "Now streaming",
+			audioFollows: "Audio follows {label:string} on restart",
+			switchTitle: "Switch source",
+		},
 		modes: {
 			label: "Mode",
 			streaming: "Streaming",

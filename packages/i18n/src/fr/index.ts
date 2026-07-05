@@ -1345,6 +1345,11 @@ const fr = {
 			audioNone: "Aucune source audio détectée",
 			audioEmbedded: "Audio intégré (du flux entrant)",
 		},
+		summary: {
+			nowStreaming: "En direct",
+			audioFollows: "L'audio suivra {label} au redémarrage",
+			switchTitle: "Changer de source",
+		},
 		modes: {
 			label: "Mode",
 			streaming: "Diffusion",

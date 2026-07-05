@@ -1151,6 +1151,11 @@ const hi = {
 			audioNone: "कोई ऑडियो स्रोत नहीं मिला",
 			audioEmbedded: "एम्बेडेड ऑडियो (आने वाली स्ट्रीम से)",
 		},
+		summary: {
+			nowStreaming: "अभी लाइव",
+			audioFollows: "पुनः आरंभ पर ऑडियो {label} का अनुसरण करेगा",
+			switchTitle: "स्रोत बदलें",
+		},
 		modes: {
 			label: "मोड",
 			streaming: "स्ट्रीमिंग",

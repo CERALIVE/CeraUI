@@ -1187,6 +1187,11 @@ const ja = {
 			audioNone: "オーディオソースが検出されません",
 			audioEmbedded: "埋め込みオーディオ（受信ストリームから）",
 		},
+		summary: {
+			nowStreaming: "配信中",
+			audioFollows: "再起動時にオーディオが{label}に切り替わります",
+			switchTitle: "ソースを切り替え",
+		},
 		modes: {
 			label: "モード",
 			streaming: "ストリーミング",

@@ -1320,6 +1320,11 @@ const ptBR = {
 			audioNone: "Nenhuma fonte de áudio detectada",
 			audioEmbedded: "Áudio incorporado (do fluxo recebido)",
 		},
+		summary: {
+			nowStreaming: "Transmitindo agora",
+			audioFollows: "O áudio seguirá {label} ao reiniciar",
+			switchTitle: "Trocar fonte",
+		},
 		modes: {
 			label: "Modo",
 			streaming: "Transmissão",
