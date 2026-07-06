@@ -43,10 +43,13 @@ export const modemStatusSchema = z.object({
 });
 export type ModemStatus = z.infer<typeof modemStatusSchema>;
 
-// Available network schema
+// Available network schema. `availability` is OPTIONAL: the backend legitimately
+// emits name-only entries (a saved-but-unscanned operator, and an "unknown"-
+// availability scan result whose availability is deliberately dropped). Do not
+// make it required — that reintroduces an order-dependent output-validation bug.
 export const availableNetworkSchema = z.object({
 	name: z.string(),
-	availability: z.enum(['available', 'unavailable']),
+	availability: z.enum(['available', 'unavailable']).optional(),
 });
 export type AvailableNetwork = z.infer<typeof availableNetworkSchema>;
 

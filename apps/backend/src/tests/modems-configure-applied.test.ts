@@ -4,6 +4,8 @@ import { modemConfigOutputSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
 import { initMockService, stopMockService } from "../mocks/mock-service.ts";
+import { getModemIds, removeModem } from "../modules/modems/modems-state.ts";
+import { setModemsState } from "../modules/modems/state/modems-state-cache.ts";
 import { configureModemProcedure } from "../rpc/procedures/modems.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
@@ -36,6 +38,12 @@ describe("modems.configure — applied echo", () => {
 
 	afterAll(() => {
 		stopMockService();
+		// configureModemProcedure mutates any pre-registered modem in the shared
+		// modemsState singleton; clear it so a mutated config doesn't leak.
+		for (const id of getModemIds()) {
+			removeModem(id);
+		}
+		setModemsState({});
 		if (priorMockMode === undefined) {
 			delete process.env.MOCK_MODE;
 		} else {

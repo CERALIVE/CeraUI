@@ -263,12 +263,15 @@ function getMockNetworkScan(modemId: number): string {
 		return "";
 	}
 
-	// Generate some available networks
+	// Generate some available networks. A 'current' (the registered network) and a
+	// 'forbidden' PLMN are included so the mmcli-availability normalisation
+	// (current→available, forbidden→unavailable) is exercised end-to-end.
 	const networks = [
 		{ code: modem.operatorCode, name: modem.carrier, status: "current" },
 		{ code: "310260", name: "T-Mobile", status: "available" },
 		{ code: "310410", name: "AT&T", status: "available" },
 		{ code: "311480", name: "Verizon", status: "available" },
+		{ code: "310120", name: "Sprint", status: "forbidden" },
 	];
 
 	const lines: string[] = [

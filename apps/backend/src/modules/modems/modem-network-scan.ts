@@ -78,12 +78,17 @@ export async function modemNetworkScan(id: number) {
 	const availableNetworks: Modem["available_networks"] = {};
 	for (const r of results) {
 		const code = r["operator-code"];
-		/* We rewrite 'current' to 'available' as these results are cached
-       and could be shown even after switching to a different network.
-       We remove the availability info if 'unknown' */
+		/* Normalise the raw mmcli availability onto the wire contract
+       (available | unavailable | absent): 'current' becomes 'available' as
+       these cached results may be shown after switching networks, a
+       'forbidden' PLMN is surfaced as 'unavailable', and 'unknown' drops the
+       field entirely. */
 		switch (r.availability) {
 			case "current":
 				r.availability = "available";
+				break;
+			case "forbidden":
+				r.availability = "unavailable";
 				break;
 			case "unknown":
 				delete r.availability;
