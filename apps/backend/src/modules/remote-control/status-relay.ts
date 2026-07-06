@@ -36,6 +36,13 @@ export interface ControlChannel {
  * The closed v2.0 set of relayable upstream status `type` values (spec §8).
  * This is exactly the broadcast set the hub fans out — it carries NO
  * secret-bearing or local-only types (see the no-secrets contract test).
+ *
+ * `device.activeProfile` (cloud Todo 15) rides this path: the device reports the
+ * SRT-receive `StreamConfig` it is actually streaming under so the platform can
+ * detect per-device profile drift. It carries only the four non-secret
+ * StreamConfig fields (presetId/latencyMs/fecEnabled/recoveryMode), never a key or
+ * token — unlike `telemetry`, which is emitted directly (not via `broadcastMsg`)
+ * and so is deliberately absent here.
  */
 export const RELAYABLE_TYPES = [
 	"status",
@@ -45,6 +52,7 @@ export const RELAYABLE_TYPES = [
 	"modems",
 	"device-stats",
 	"notifications",
+	"device.activeProfile",
 ] as const;
 export type RelayableType = (typeof RELAYABLE_TYPES)[number];
 

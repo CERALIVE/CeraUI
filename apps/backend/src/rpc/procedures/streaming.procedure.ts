@@ -47,6 +47,7 @@ import {
 	isMockGatewayActive,
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
+import { reportActiveProfile } from "../../modules/remote-control/active-profile-reporter.ts";
 import {
 	getResolvedAsrc,
 	refreshResolvedAsrcPreview,
@@ -546,6 +547,7 @@ export const setConfigProcedure = authedProcedure
 
 		saveConfig();
 		broadcastMsg("config", config);
+		reportActiveProfile();
 
 		// A source/asrc change re-resolves the idle "Auto" preview (no-op unless
 		// config.asrc is the sentinel; frozen while streaming).

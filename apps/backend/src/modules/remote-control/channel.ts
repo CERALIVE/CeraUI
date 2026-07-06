@@ -55,6 +55,7 @@ import {
 	resolveControlChannelEndpoint,
 } from "../remote/control-endpoint.ts";
 import { isRealDevice } from "../system/device-detection.ts";
+import { reportActiveProfile } from "./active-profile-reporter.ts";
 import {
 	COMMAND_REGISTRY,
 	CommandSchema,
@@ -282,6 +283,10 @@ function handleOpen(): void {
 
 	deps.logger.info("control-channel: connected, sending device.hello");
 	sendFrame(buildDeviceHello(deps));
+	// Re-seed the hub with the device's EFFECTIVE active profile on every
+	// (re)connect (cloud Todo 15): the hub loses the snapshot on disconnect, so
+	// force past the de-dup even when the config is unchanged.
+	reportActiveProfile({ force: true });
 	startKeepalive();
 }
 

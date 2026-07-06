@@ -56,6 +56,7 @@ import {
 	updateNetif,
 } from "./modules/network/network-interfaces.ts";
 import { initRemote } from "./modules/remote/remote.ts";
+import { wireActiveProfileReporter } from "./modules/remote-control/active-profile-wiring.ts";
 import { initControlChannel } from "./modules/remote-control/channel.ts";
 import { wireSetProfile } from "./modules/remote-control/set-profile-wiring.ts";
 import {
@@ -180,6 +181,10 @@ await guardNonCritical("control-channel", initControlChannel);
 // Bind the device.setProfile handler to the real config/caps/streaming session
 // (the platform pushes the resolved SRT receive profile over the control channel).
 wireSetProfile();
+// Bind the active-profile reporter to the persisted config + broadcast path, so
+// the device reports its EFFECTIVE SRT profile up the control channel (cloud
+// Todo 15) — the source the platform's drift detection compares against.
+wireActiveProfileReporter();
 // Built from the engine's get-capabilities IPC — the engine may be starting or
 // unreachable, so this is the likeliest awaited init to throw/hang. On failure
 // the pipeline registry stays empty (stream-start gated) but the UI is reachable.
