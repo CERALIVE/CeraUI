@@ -140,6 +140,7 @@ CeraUI/
 | **Unified device-first source list (unified `<ul>`, inline reorder, network-ingest rows)** | `apps/frontend/src/lib/components/custom/SourceSection.svelte` |
 | **BondedLinksSection — sole owner of live per-link telemetry (RTT/NAK/weight) on the Network view** | `apps/frontend/src/main/network/BondedLinksSection.svelte` |
 | **Deprecation-shim register entries (legacy broadcasts + unmounted GoLiveCard-migration files)** | `docs/TECHNICAL_DEBT.md` → `TD-legacy-source-broadcasts` / `TD-unmounted-source-shims` |
+| **`device.activeProfile` status-frame emitter (drift-detection loop)** | `apps/backend/src/modules/remote-control/active-profile-reporter.ts` (`reportActiveProfile({force?})` — reads the ACTUALLY-applied `StreamConfig` via injected `readActiveProfile`, de-dups on the 4 fields, emits `{config}` via injected `broadcast`) + `active-profile-wiring.ts` (`wireActiveProfileReporter()` — binds `readActiveProfile` to the persisted `stream_profile`/`srt_latency`/`fec_enabled`/`recovery_mode` config, `broadcast` to `broadcastMsg`; called from `main.ts` after `wireSetProfile()`). Three emit sites: `set-profile-wiring.ts` (after a successful `setProfile` apply), `rpc/procedures/streaming.procedure.ts` (after a UI Stream-Tuning config change), `modules/remote-control/channel.ts` `handleOpen()` (force re-emit on control-channel connect/reconnect — reseeds the hub, which loses its snapshot on disconnect). Frame type registered in `protocol.ts` `STATUS_TYPES` + `RELAYABLE_TYPES` (`status-relay.ts`) as `ACTIVE_PROFILE_STATUS = "device.activeProfile"`. Platform-side consumer: `ceralive-platform/apps/api/lib/remote-control/hub/internal-gate.ts` `applyActiveProfile` (see `ceralive-platform/AGENTS.md` → SRT-receive profile reconciliation) |
 
 ## COMMANDS
 
@@ -360,6 +361,7 @@ stream is idle; the override is cleared by `resetMockState()`.
 | `multi-modem-wifi` | Default: 3 modems + WiFi (multi-modem-wifi) |
 | `single-modem` | 1 modem, no WiFi |
 | `streaming-active` | Active streaming simulation with live telemetry |
+| `modem-pin-locked` | 2 modems, WiFi off, modem 0 SIM PIN-locked (fixture PIN `0000`) — drives the SIM unlock/PUK flow end-to-end in dev; the `unlockSim`/`unlockSimPuk` RPCs route to the mock SIM state machine |
 | `caps-full` | Full engine caps: H265 + hw accel, audio-capable source, live audio switch, SRT transport (idle) |
 | `engine-starting` | Engine still booting — minimal safe floor + `engineStarting` flag |
 | `engine-unavailable` | Engine unreachable — cached/minimal snapshot + `engineUnavailable` flag |
