@@ -118,6 +118,19 @@ export type NeverRemoteType = (typeof NEVER_REMOTE)[number];
  * secret. It is NOT a local broadcast event type, so it is intentionally NOT in
  * `status-relay.ts` `RELAYABLE_TYPES`; the device telemetry recorder emits it
  * directly over the control channel rather than through `broadcastMsg`.
+ *
+ * `device.activeProfile` (spec §8, cloud Todo 15) is the device reporting the
+ * SRT-receive `StreamConfig` it is ACTUALLY streaming under — its EFFECTIVE active
+ * profile, as opposed to the RESOLVED config the platform pushed via
+ * `device.setProfile`. The platform reconciles the two to surface per-device
+ * profile DRIFT (a device that did not apply the pushed profile). Additive +
+ * read-only (a status frame, no command, no secret); the payload nests the four
+ * StreamConfig fields under a `config` key —
+ * `{ config: { presetId, latencyMs, fecEnabled, recoveryMode } }`. Unlike
+ * `telemetry`, it IS in `status-relay.ts` `RELAYABLE_TYPES`: the emitter
+ * (`active-profile-reporter.ts`) reports it through the standard `broadcastMsg`
+ * path. Mirrors the hub's `STATUS_TYPES` entry (ceralive-platform
+ * `apps/api/lib/remote-control/protocol.ts`) — kept in sync by the spec (Rule D).
  */
 export const STATUS_TYPES = [
 	"status",
@@ -128,8 +141,16 @@ export const STATUS_TYPES = [
 	"device-stats",
 	"notifications",
 	"telemetry",
+	"device.activeProfile",
 ] as const;
 export type StatusType = (typeof STATUS_TYPES)[number];
+
+/**
+ * The `device.activeProfile` status `type` (spec §8, cloud Todo 15), named so the
+ * wire literal has a single source of truth for the emitter
+ * (`active-profile-reporter.ts`). Mirrors the platform's `ACTIVE_PROFILE_STATUS`.
+ */
+export const ACTIVE_PROFILE_STATUS = "device.activeProfile" as const;
 
 /** Default self_fencing watchdog window in milliseconds (spec §7 — NOT wire-negotiated). */
 export const SELF_FENCING_WATCHDOG_MS = 30_000;

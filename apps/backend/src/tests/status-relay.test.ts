@@ -172,6 +172,7 @@ describe("no-secrets contract", () => {
 			"modems",
 			"device-stats",
 			"notifications",
+			"device.activeProfile",
 		]);
 	});
 

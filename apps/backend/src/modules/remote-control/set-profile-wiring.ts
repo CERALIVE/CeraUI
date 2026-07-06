@@ -41,6 +41,7 @@ import {
 	stop as stopStream,
 } from "../streaming/streamloop.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { reportActiveProfile } from "./active-profile-reporter.ts";
 import { configureSetProfile, type SetProfileCaps } from "./set-profile.ts";
 
 const RECONNECT_SETTLE_TIMEOUT_MS = 5_000;
@@ -110,6 +111,7 @@ export function wireSetProfile(): void {
 			if (decidedBy.success) config.profile_decided_by = decidedBy.data;
 			saveConfig();
 			broadcastMsg("config", config);
+			reportActiveProfile();
 		},
 		isStreaming: getIsStreaming,
 		reconnect,
