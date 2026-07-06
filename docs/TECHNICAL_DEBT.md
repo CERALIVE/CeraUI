@@ -276,11 +276,11 @@ is the durable, dated record of the deferred pin bump instead.
 id: TD-active-profile-ui-fanout
 title: device.activeProfile status-relay frame fans out to UI clients with no subscriptions consumer case
 track: 1
-status: open
+status: resolved
 exit_criteria: `grep -q "device.activeProfile" apps/frontend/src/lib/rpc/subscriptions.svelte.ts`
 owner: ceraui-team
 registered_at: 2026-07-06
-resolved_at: null
+resolved_at: 2026-07-06
 unblock: Surfaced by the live-correctness-pass Todo #18 contract-parity audit (scripts/audit-contract-parity.mjs, report .omo/reports/live-correctness-audit-A4.md). The active-profile reporter (modules/remote-control/active-profile-reporter.ts, wired by active-profile-wiring.ts) emits the ACTIVE_PROFILE_STATUS frame ("device.activeProfile", protocol.ts) via broadcastMsg. That is the correct transport for the device→platform status relay (status-relay.ts RELAYABLE_TYPES), but broadcastMsg also fans every frame out to the authenticated UI WebSocket clients, where subscriptions.svelte.ts has no matching `case` and falls through to `default: console.warn("Unhandled message type:", ...)`. The frame is harmless to the UI (it drives nothing there) but produces a dev-console warning on every profile change and is a producer-without-consumer wire mismatch. To clear: EITHER add a no-op `case "device.activeProfile": break;` (with an explanatory comment) to subscriptions.svelte.ts so the UI explicitly ignores the relay frame, OR scope the reporter's emit so the device.activeProfile frame is relayed to the platform hub only and never reaches the UI broadcast fan-out; then flip this entry to resolved. This entry carries no source `data-debt-id` marker — it is a backend broadcast-fan-out decision, not a UI affordance.
 ```
 
