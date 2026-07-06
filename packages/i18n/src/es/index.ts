@@ -915,6 +915,14 @@ const es = {
 				"El dispositivo sigue respondiendo tras la ventana de reinicio. Puede que no se haya reiniciado: inténtalo de nuevo o descártalo para seguir usándolo.",
 			rebootRecoveryRetry: "Reiniciar de nuevo",
 			rebootRecoveryDismiss: "Descartar",
+			sources: {
+				title: "Fuentes",
+				description:
+					"Elige qué fuentes de vídeo aparecen en el selector de Live y permite que un teléfono o codificador de esta red publique en el dispositivo.",
+				testPatternToggle: "Mostrar patrón de prueba",
+				testPatternHint:
+					"Mantén el patrón de prueba integrado en el selector de fuentes como señal de reserva. Desactívalo para ocultarlo cuando haya una fuente real conectada.",
+			},
 			blockedUpdating: "Actualización en curso. Espera antes de reiniciar.",
 		},
 		pairing: {

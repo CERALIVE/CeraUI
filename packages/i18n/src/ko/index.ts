@@ -254,6 +254,14 @@ const ko = {
 				"재시작 시간이 지난 후에도 기기가 응답하고 있습니다. 재시작되지 않았을 수 있습니다. 다시 시도하거나 닫고 계속 사용하세요.",
 			rebootRecoveryRetry: "다시 재시작",
 			rebootRecoveryDismiss: "닫기",
+			sources: {
+				title: "소스",
+				description:
+					"라이브 선택기에 표시할 비디오 소스를 선택하고, 이 네트워크의 휴대폰이나 인코더가 기기로 게시하도록 허용합니다.",
+				testPatternToggle: "테스트 패턴 표시",
+				testPatternHint:
+					"소스 선택기에 내장 테스트 패턴을 대체 신호로 유지합니다. 실제 소스가 연결되면 꺼서 숨깁니다.",
+			},
 			blockedUpdating:
 				"업데이트가 진행 중입니다. 재시작하기 전에 기다려 주세요.",
 		},

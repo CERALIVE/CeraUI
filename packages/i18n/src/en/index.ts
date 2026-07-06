@@ -894,6 +894,14 @@ const en = {
 				"The device is still responding after the restart window. It may not have rebooted \u2014 try again, or dismiss to keep using it.",
 			rebootRecoveryRetry: "Reboot again",
 			rebootRecoveryDismiss: "Dismiss",
+			sources: {
+				title: "Sources",
+				description:
+					"Choose which video sources appear in the Live picker and let a phone or encoder on this network publish to the device.",
+				testPatternToggle: "Show test pattern",
+				testPatternHint:
+					"Keep the built-in test pattern in the source picker as a fallback signal. Turn it off to hide it once a real source is connected.",
+			},
 		},
 		pairing: {
 			title: "Device Pairing",

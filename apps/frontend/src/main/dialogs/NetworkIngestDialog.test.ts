@@ -33,11 +33,15 @@ const toastError = vi.hoisted(() => vi.fn());
 const state = vi.hoisted(() => ({ ingest: null }) as { ingest: unknown });
 
 vi.mock("$lib/rpc/client", () => ({
-	rpc: { network: { setIngestEnabled } },
+	rpc: {
+		network: { setIngestEnabled },
+		streaming: { setSourceVisibility: vi.fn() },
+	},
 }));
 
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getStatus: () => ({ network_ingest: state.ingest }),
+	getConfig: () => ({}),
 }));
 
 vi.mock("svelte-sonner", () => ({

@@ -415,6 +415,14 @@ const ptBR = {
 				"O dispositivo ainda responde após a janela de reinicialização. Talvez não tenha reiniciado — tente novamente ou dispense para continuar usando.",
 			rebootRecoveryRetry: "Reiniciar novamente",
 			rebootRecoveryDismiss: "Dispensar",
+			sources: {
+				title: "Fontes",
+				description:
+					"Escolha quais fontes de vídeo aparecem no seletor Live e permita que um telefone ou codificador nesta rede publique no dispositivo.",
+				testPatternToggle: "Mostrar padrão de teste",
+				testPatternHint:
+					"Mantenha o padrão de teste integrado no seletor de fontes como sinal reserva. Desative-o para ocultá-lo quando uma fonte real estiver conectada.",
+			},
 			blockedUpdating: "Atualização em andamento. Aguarde antes de reiniciar.",
 		},
 		pairing: {

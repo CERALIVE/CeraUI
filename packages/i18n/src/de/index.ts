@@ -902,6 +902,14 @@ const de = {
 				"Das Gerät antwortet nach dem Neustartfenster noch. Möglicherweise wurde es nicht neu gestartet – versuchen Sie es erneut oder schließen Sie, um es weiter zu verwenden.",
 			rebootRecoveryRetry: "Erneut neu starten",
 			rebootRecoveryDismiss: "Schließen",
+			sources: {
+				title: "Quellen",
+				description:
+					"Wählen Sie, welche Videoquellen im Live-Picker erscheinen, und lassen Sie ein Telefon oder einen Encoder in diesem Netzwerk an das Gerät senden.",
+				testPatternToggle: "Testbild anzeigen",
+				testPatternHint:
+					"Behalten Sie das integrierte Testbild im Quellenauswähler als Ersatzsignal. Schalten Sie es aus, um es auszublenden, sobald eine echte Quelle verbunden ist.",
+			},
 			blockedUpdating: "Update läuft. Warten Sie vor dem Neustart.",
 		},
 		pairing: {
