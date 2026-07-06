@@ -27,9 +27,9 @@ import {
  * injected frames omit `seq`, so they bypass the subscription drop-guard
  * (client.ts:332 / subscriptions.svelte.ts:325).
  *
- * PLAYBOOK.md compliance: role / testid / web-first assertions only. No
- * screenshots, no waitForTimeout. Destructive confirmations are opened but NEVER
- * confirmed — a real reboot/poweroff would tear the socket down mid-run.
+  * PLAYBOOK.md compliance: role / testid / web-first assertions only. No
+  * screenshots, no fixed-delay waits. Destructive confirmations are opened but NEVER
+  * confirmed — a real reboot/poweroff would tear the socket down mid-run.
  */
 
 let pageWs: WebSocketRoute | null = null;
