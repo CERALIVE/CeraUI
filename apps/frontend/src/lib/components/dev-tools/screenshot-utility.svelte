@@ -14,10 +14,12 @@ import { setIsOnline } from '$lib/stores/pwa.svelte';
 import {
 	addScreenshot,
 	clearScreenshots,
+	deriveCaptureKeys,
 	downloadScreenshotsZip,
 	getCaptureProgress,
 	getIsCapturing,
 	getScreenshotImages,
+	REQUIRED_CAPTURE_DESTINATIONS,
 	type ScreenshotImage,
 	setCaptureProgress,
 	setIsCapturing,
@@ -28,13 +30,16 @@ const imagesCount = $derived(getScreenshotImages().length);
 const currentlyCapturing = $derived(getIsCapturing());
 const progressText = $derived(getCaptureProgress());
 
-const tabs = [
-	{ key: 'general', name: 'general' },
-	{ key: 'network', name: 'network' },
-	{ key: 'streaming', name: 'streaming' },
-	{ key: 'advanced', name: 'advanced' },
-	{ key: 'devtools', name: 'devtools' },
-];
+// Capture list derived from the live 3-destination navigation, never a literal
+// array — see deriveCaptureKeys. A drift (missing destination) surfaces as a
+// disabled Capture button + error band instead of silently capturing less.
+let captureError = $state<string | null>(null);
+let tabs = $state<Array<{ key: string; name: string }>>([]);
+try {
+	tabs = deriveCaptureKeys(navElements).map((key) => ({ key, name: key }));
+} catch (error) {
+	captureError = error instanceof Error ? error.message : String(error);
+}
 
 // Wait for content to be fully rendered
 async function waitForContentReady(): Promise<void> {
@@ -220,12 +225,8 @@ async function captureTabScreenshots(
 				await enableMobileView();
 			}
 
-			// Additional wait for content stability - especially important for complex tabs
-			if (tab.key === 'streaming' || tab.key === 'advanced' || tab.key === 'devtools') {
-				await new Promise((resolve) => setTimeout(resolve, 800)); // Extra time for complex tabs
-			} else {
-				await new Promise((resolve) => setTimeout(resolve, 400)); // Standard wait
-			}
+			// Extra wait for content stability — every destination is dialog/telemetry-heavy
+			await new Promise((resolve) => setTimeout(resolve, 800));
 
 			// Final content readiness check
 			await waitForContentReady();
@@ -266,7 +267,7 @@ async function captureAll(): Promise<void> {
 		// Offline captures (2 images)
 		setCaptureProgress('Offline screenshots...');
 		setIsOnline(false);
-		await navigateToTab('general');
+		await navigateToTab(REQUIRED_CAPTURE_DESTINATIONS[0]);
 
 		// Extra wait for offline state to fully apply
 		await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -334,6 +335,13 @@ function clearImages(): void {
 	</Card.Header>
 
 	<Card.Content class="space-y-4 pb-6">
+		{#if captureError}
+			<div class="rounded-lg border border-destructive/30 bg-destructive/10 p-3" role="alert">
+				<div class="text-sm font-medium text-destructive">Screenshot capture unavailable</div>
+				<div class="text-muted-foreground mt-1 text-xs">{captureError}</div>
+			</div>
+		{/if}
+
 		{#if currentlyCapturing}
 			<div class="rounded-lg border border-status-info/30 bg-status-info/10 p-3" aria-live="polite" role="status">
 				<div class="text-sm font-medium text-status-info">
@@ -348,7 +356,7 @@ function clearImages(): void {
 		<div class="space-y-3">
 			<Button.Root
 				class="w-full"
-				disabled={currentlyCapturing}
+				disabled={currentlyCapturing || captureError !== null}
 				onclick={captureAll}
 				aria-label={currentlyCapturing
 					? 'Capturing screenshots...'

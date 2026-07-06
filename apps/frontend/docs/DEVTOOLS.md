@@ -39,15 +39,15 @@ The DevTools tab displays real-time information about the current development en
 ### 🔧 Component Testing Tools
 
 #### 📸 Screenshot Utility
-- **Purpose**: Automated capture for documentation and visual testing
+- **Purpose**: Automated in-app manual capture for documentation and visual testing
 - **Features**:
-  - **Complete Coverage**: Captures all 5 tabs (General, Network, Streaming, Advanced, DevTools)
+  - **3-Destination Coverage**: Captures the current navigation destinations — **Live, Network, Settings**. The capture list is derived at runtime from `navElements` (the same source `MainView`/`SettingsView` navigation uses, `src/lib/config/index.ts`), NOT a hardcoded array, so it can never drift from the real navigation. Dev-only entries (`devtools`, `identity`) are excluded via their `isDev` flag; if a required destination is ever missing the utility surfaces an error band and disables capture instead of silently capturing fewer destinations.
   - **Dual Themes**: Automatically captures both dark and light themes
-  - **Multi-Platform**: Desktop (1920×1080) and Mobile (430×932) viewports
+  - **Multi-Platform**: Desktop (1920×1080) and Mobile (430×932) viewports — these are in-app manual captures, a different purpose from the Playwright screenshot gallery (`docs/SCREENSHOTS.md`)
   - **PWA States**: Offline mode capture in both themes
   - **Enhanced Timing**: Content fully rendered before capture
-- **Usage**: Click "Capture All Screenshots" to generate 22 high-quality screenshots
-- **Output**: Auto-downloads ZIP file with organized folder structure
+- **Usage**: Click "Capture All Screenshots" to generate the screenshot set (3 destinations × 2 themes × desktop + mobile, plus 2 offline states)
+- **Output**: Auto-downloads a ZIP with `desktop/<theme>/`, `mobile/<theme>/`, and `features/` (offline) folders; per-destination files are named `live.png` / `network.png` / `settings.png`
 - **Quality**: 2x pixel ratio, theme-aware backgrounds, viewport optimization
 
 #### Demo Overlay Trigger

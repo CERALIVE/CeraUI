@@ -1,12 +1,46 @@
 import { BlobReader, BlobWriter, ZipWriter } from "@zip.js/zip.js";
 import { toast } from "svelte-sonner";
 
+import type { NavElements } from "$lib/config";
+
 // Screenshot data interface
 export interface ScreenshotImage {
 	filename: string;
 	blob: Blob;
 	theme: "dark" | "light";
 	type: "desktop" | "mobile" | "offline";
+}
+
+export const REQUIRED_CAPTURE_DESTINATIONS = [
+	"live",
+	"network",
+	"settings",
+] as const;
+
+export type CaptureDestination = (typeof REQUIRED_CAPTURE_DESTINATIONS)[number];
+
+// Derives the capture list from `navElements` (the source `MainView` navigation
+// uses) so it can never drift from the real 3-destination layout. Dev-only
+// entries (`devtools`/`identity`, `isDev: true`) are excluded; throws if any
+// required destination is absent rather than silently capturing fewer.
+export function deriveCaptureKeys(elements: NavElements): string[] {
+	const keys = Object.keys(elements).filter((key) => !elements[key]?.isDev);
+
+	for (const required of REQUIRED_CAPTURE_DESTINATIONS) {
+		if (!keys.includes(required)) {
+			throw new Error(
+				`Screenshot capture list drifted from navElements: missing "${required}" destination. Derived keys: [${keys.join(", ")}]`,
+			);
+		}
+	}
+
+	return keys;
+}
+
+export function zipFolderForImage(image: ScreenshotImage): string {
+	if (image.type === "desktop") return `desktop/${image.theme}/`;
+	if (image.type === "mobile") return `mobile/${image.theme}/`;
+	return "features/";
 }
 
 // Global screenshot state using Svelte 5 runes
@@ -62,12 +96,7 @@ export async function downloadScreenshotsZip(): Promise<boolean> {
 		const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
 
 		for (const img of images) {
-			let folder = "";
-			if (img.type === "desktop") folder = `desktop/${img.theme}/`;
-			else if (img.type === "mobile") folder = `mobile/${img.theme}/`;
-			else folder = "features/";
-
-			const fullPath = `screenshots/${folder}${img.filename}`;
+			const fullPath = `screenshots/${zipFolderForImage(img)}${img.filename}`;
 			await zipWriter.add(fullPath, new BlobReader(img.blob));
 		}
 
