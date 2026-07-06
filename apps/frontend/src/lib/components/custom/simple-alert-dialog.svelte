@@ -13,6 +13,8 @@ interface Props extends AlertDialogDefault.RootProps {
 	extraButtonClasses?: string;
 	buttonClasses?: string;
 	buttonText?: string;
+	/** Accessible name for an icon-only trigger (no visible `buttonText`). */
+	buttonAriaLabel?: string;
 	icon?: Snippet;
 	iconPosition?: 'right' | 'left';
 	hideCancelButton?: boolean;
@@ -53,6 +55,7 @@ let {
 	class: className,
 	children,
 	buttonText,
+	buttonAriaLabel,
 	contentProps,
 	title,
 	disabledConfirmButton = false,
@@ -159,12 +162,14 @@ const confirmButtonClasses = $derived(
 </script>
 
 <AlertDialog.Root {...restProps} bind:open>
-	<AlertDialog.Trigger class={triggerClasses} {title}>
+	<AlertDialog.Trigger class={triggerClasses} aria-label={buttonAriaLabel} {title}>
 		<span class="relative z-10 flex items-center gap-2">
 			{#if icon && iconPosition === 'left'}
 				{@render icon()}
 			{/if}
-			{buttonText ?? ''}
+			{#if buttonText}
+				{buttonText}
+			{/if}
 			{#if icon && iconPosition !== 'left'}
 				{@render icon()}
 			{/if}

@@ -211,24 +211,27 @@ $effect(() => {
 							{#if iface.supports_hotspot}
 								{#if isSwitching}
 									<!-- Switch confirmed at the click; hold a spinner until the
-									     authoritative snapshot flips the label to hotspot. -->
+									     authoritative snapshot flips the label to hotspot. Icon-only
+									     to match the row's action-button density (a11y name via
+									     aria-label since there is no visible text). -->
 									<Button
-										class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5 text-xs"
+										class="h-8 w-8 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] p-0 shadow-none"
+										aria-label={$LL.network.view.switchToHotspot()}
+										title={$LL.network.view.switchToHotspot()}
 										disabled
 										size="sm"
-										variant="secondary"
+										variant="ghost"
 									>
 										<Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-										{$LL.network.view.switchToHotspot()}
 									</Button>
 								{:else}
 									<SimpleAlertDialog
-										buttonText={$LL.network.view.switchToHotspot()}
+										buttonAriaLabel={$LL.network.view.switchToHotspot()}
 										confirmButtonText={$LL.network.view.hotspotSwitchConfirm()}
 										confirmVariant="destructive"
-										extraButtonClasses="h-8 min-h-[var(--touch-target-min)] px-2.5 text-xs shadow-none bg-secondary text-secondary-foreground hover:bg-secondary/80"
+										extraButtonClasses="h-8 w-8 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] p-0 shadow-none hover:shadow-none bg-transparent text-foreground hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
 										iconPosition="left"
-										title={$LL.network.view.hotspotSwitchTitle()}
+										title={$LL.network.view.switchToHotspot()}
 										onconfirm={() => switchToHotspot(id)}
 									>
 										{#snippet icon()}
