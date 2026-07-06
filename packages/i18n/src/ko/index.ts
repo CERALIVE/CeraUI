@@ -113,51 +113,6 @@ const ko = {
 		transportAdvanced: "고급",
 		transportKindHint:
 			"스트림이 수신기에 도달하는 방식입니다. SRTLA는 여러 네트워크 링크를 묶고, RIST와 SRT는 단일 링크를 사용합니다.",
-		streamTuning: {
-			title: "스트림 튜닝",
-			hint: "스트림 전달 방식을 조정합니다. CeraLive 수신기는 프로필, FEC, 복구 튜닝을 사용할 수 있고, 다른 수신기는 BELABOX 호환 기본값을 사용합니다.",
-			ceraliveReceiver: "CeraLive 수신기",
-			latency: "지연 시간",
-			latencyNegotiated: "협상됨",
-			presets: "프로필 프리셋",
-			fec: "전방 오류 정정",
-			fecHelper:
-				"수신기가 손실된 패킷을 복원할 수 있도록 중복성을 추가합니다. 추가 대역폭을 사용하고 지연 시간이 약간 늘어납니다 \u2014 손실이 많은 연결에 가장 적합합니다.",
-			recoveryMode: "복구 모드",
-			advanced: "고급",
-			recovery: "복구",
-			recoveryStandard: "표준",
-			recoveryStandardHint: "권장",
-			recoveryBandwidthSaver: "대역폭 절약",
-			recoveryBandwidthSaverHint: "전문가",
-			recoveryHelper:
-				"표준은 스트림을 부드럽고 안정적으로 유지합니다. 대역폭 절약은 복구 트래픽을 줄여 제한된 연결에서 데이터 사용량을 낮춥니다.",
-			belaboxBadge: "표준(BELABOX 호환)",
-			belaboxBannerTitle: "표준(BELABOX 호환 기본값)",
-			belaboxBannerBody:
-				"이 수신기는 CeraLive 수신기가 아니므로 지연 시간만 조정할 수 있습니다. 고급 튜닝에는 CeraLive 수신기가 필요합니다.",
-			reasonNonCeraLive: "CeraLive 수신기에서만 사용할 수 있습니다.",
-			reasonReceiverManaged: "수신기에서 관리됩니다.",
-			reasonFecUnsupported:
-				"이 CeraLive 수신기의 libsrt 빌드는 FEC를 지원하지 않습니다.",
-			reasonProfileUnsupported: "이 수신기는 이 프로필을 제공하지 않습니다.",
-			summaryDelay: "\u2248 {seconds}초 지연",
-			summaryRecoveryStandard: "자동 손실 복구",
-			summaryRecoveryBandwidthSaver: "대역폭 절약 복구",
-			summaryFecOn: "FEC 켜짐",
-			summaryFecOff: "FEC 꺼짐",
-			cloudSetTitle: "클라우드에서 설정됨",
-			cloudSetHint: "이 기기에서 재정의하려면 탭하세요",
-			driftHint: "기기가 다른 프로필로 실행 중",
-			profileNames: {
-				balanced: "균형",
-				lowLatency: "저지연",
-				resilient: "복원력",
-				classic: "클래식",
-				lowLatencyFec: "저지연 + FEC",
-				custom: "사용자 지정",
-			},
-		},
 		deviceStats: {
 			title: "장치 통계",
 			description: "이 장치의 실시간 하드웨어 텔레메트리.",
@@ -171,6 +126,19 @@ const ko = {
 			lowDiskBody:
 				"/data의 여유 공간이 512 MiB 미만입니다. 녹화, 로그, 업데이트가 계속 작동하도록 공간을 확보하세요.",
 			lowDiskAction: "로그 보기",
+		},
+		networkIngest: {
+			title: "네트워크 인제스트",
+			desc: "같은 네트워크의 휴대폰이나 인코더가 이 장치로 송출하도록 허용",
+			explanation:
+				"LAN 인제스트를 켜면 휴대폰이나 하드웨어 인코더(OBS 등)가 RTMP 또는 SRT를 클라우드 릴레이 없이 이 장치로 바로 송출할 수 있습니다 \u2014 송출 기기는 이 장치와 동일한 로컬 네트워크(Wi-Fi 또는 이더넷)에 있어야 합니다.",
+			toggleRtmp: "RTMP 인제스트",
+			toggleSrt: "SRT 인제스트",
+			statusRunning: "서비스 실행 중",
+			statusStopped: "서비스 중지됨",
+			statusDisabled: "비활성화됨",
+			unavailable:
+				"에뮬레이트 모드에서는 이 장치에서 네트워크 인제스트를 사용할 수 없습니다.",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -653,6 +621,7 @@ const ko = {
 			disabling: "비활성화 중…",
 			awaitingResult: "결과 대기 중…",
 			done: "완료",
+			saved: "저장됨",
 		},
 	},
 	hotspotConfigurator: {
@@ -1048,6 +1017,8 @@ const ko = {
 			copied: "주소가 복사됨",
 			copyFailed: "주소를 복사할 수 없습니다.",
 			includesAudio: "오디오 포함",
+			disabledInSettingsHint:
+				"설정 \u2192 네트워크 인제스트에서 다시 활성화하세요.",
 			codecEducation: {
 				rtmp: "RTMP는 H.264 영상(AAC 오디오 포함)만 게시합니다. 항상 구성된 출력 코덱으로 다시 인코딩됩니다.",
 				srt: "SRT는 H.264 또는 H.265 영상을 게시합니다. 항상 구성된 출력 코덱으로 다시 인코딩됩니다.",
@@ -1122,37 +1093,6 @@ const ko = {
 				camlink: "Cam Link",
 			},
 		},
-		sourcePreference: {
-			title: "소스 우선순위",
-			description:
-				"전환하는 소스의 순서를 설정합니다. 자동 페일오버는 이 목록을 무시합니다.",
-			empty: "비디오 소스가 감지되지 않음",
-			moveUp: "{name} 위로 이동",
-			moveDown: "{name} 아래로 이동",
-			rankLabel: "우선순위 {rank}",
-			stickyNote:
-				"자동 페일오버는 고정됩니다 \u2014 엔진이 자동으로 돌아오지 않습니다. 소스 목록을 사용하여 수동으로 돌아오세요.",
-			states: {
-				active: "활성",
-				lost: "손실됨",
-				failedOver: "페일오버됨",
-			},
-			lostHint: "이 소스는 오프라인입니다.",
-			failedOverHint:
-				"선호하는 소스가 오프라인이 된 후 엔진이 자동으로 여기로 전환했습니다.",
-			sync: {
-				applying: "순서 저장 중\u2026",
-				applied: "순서 저장됨",
-				failed: "순서를 저장할 수 없습니다",
-			},
-			failover: {
-				title: "자동 페일오버",
-				reasonSourceLost:
-					"{name}이(가) 오프라인이 되어 엔진이 {to}(으)로 전환했습니다.",
-				sticky:
-					"자동 페일오버는 고정됩니다 \u2014 자동으로 돌아오지 않습니다. 소스 목록을 사용하여 수동으로 돌아오세요.",
-			},
-		},
 		source: {
 			label: "소스",
 			none: "선택된 소스 없음",
@@ -1165,6 +1105,7 @@ const ko = {
 			lostBody: "장치를 다시 연결하여 이 소스에서 스트리밍을 재개하세요.",
 			audioNone: "오디오 소스가 감지되지 않음",
 			audioEmbedded: "임베디드 오디오 (수신 스트림에서)",
+			audioEdit: "코덱 및 지연",
 		},
 		summary: {
 			nowStreaming: "스트리밍 중",
@@ -1188,6 +1129,7 @@ const ko = {
 				fixedBySource: "선택한 소스에 의해 고정됨",
 				unsupportedAtResolution: "이 해상도에서는 사용할 수 없음",
 				gatewayInactive: "네트워크 인제스트 게이트웨이가 실행 중이 아닙니다",
+				disabledInSettings: "설정에서 비활성화됨",
 				gatewayNoAddress: "연결 가능한 LAN 또는 핫스팟 주소 없음",
 			},
 			info: "{field} 정보",
@@ -1251,6 +1193,7 @@ const ko = {
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 			axisSelected: "선택됨",
 			axisDeviceMax: "장치 최대",
+			fpsAvailableAt: "{fps} fps는 {resolution}에서 사용 가능",
 		},
 	},
 	dialogs: {
@@ -1416,6 +1359,7 @@ const ko = {
 		sessionExpired: "세션이 만료되었습니다. 다시 인증해 주세요.",
 		authTimedOut:
 			"세션을 확인할 수 없습니다. 연결을 확인하고 다시 시도해 주세요.",
+		clearSavedSession: "저장된 로그인 지우고 비밀번호 입력",
 	},
 	offline: {
 		title: "오프라인입니다",

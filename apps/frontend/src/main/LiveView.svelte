@@ -7,10 +7,11 @@ import {
 	BITRATE_DEFAULT_MIN,
 	BITRATE_MAX,
 	BITRATE_MIN,
+	type RelayProtocol,
 	SWITCH_AUDIO_ERRORS,
 	SWITCH_INPUT_ERRORS,
 } from '@ceraui/rpc/schemas';
-import { Cpu, Server, Volume2 } from '@lucide/svelte';
+import { Cpu, Server } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
@@ -37,6 +38,12 @@ import {
 	resolveAppliedBitrate,
 } from '$lib/rpc/live-apply-reconcile';
 import {
+	fingerprintForValidation,
+	getDestinationValidated,
+	recordValidation,
+	resolveValidationEndpoint,
+} from '$lib/streaming/destination-validation.svelte';
+import {
 	buildServerSummary,
 	type Destination,
 	deriveDestination,
@@ -44,7 +51,6 @@ import {
 	kindBadgeLabelKey,
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
-import { normalizeOrder, reorderSource } from '$lib/streaming/source-preference';
 import {
 	audioSourceLabel,
 	deriveActiveSummary,
@@ -57,7 +63,6 @@ import {
 	getCapabilities,
 	getConfig,
 	getConnectionState,
-	getDevices,
 	getIsConnected,
 	getIsStreaming,
 	getLinkTelemetry,
@@ -213,10 +218,6 @@ $effect(() => {
 	}
 });
 
-// Live capture devices (Task 34) — the source-preference order is reconciled
-// against this list; the unified source picker (SourceSection) reads the folded
-// `getSources()` broadcast and owns config.source selection itself (Task 13).
-const devices = $derived(getDevices());
 const activeInput = $derived(getActiveInput());
 let switchingInput = $state<string | undefined>(undefined);
 
@@ -320,40 +321,6 @@ async function handleSwitchAudio(inputId: string) {
 	}
 }
 
-// Operator-ordered source preference (Task 11): the reorder affordance is now
-// rendered inline on the capture rows of SourceSection (Task 13), but the write
-// stays here. Display order is the persisted preference reconciled against the
-// live device list; the engine's auto-failover is sticky and ignores this order.
-const SOURCE_PREFERENCE_FIELD = 'source_preference';
-const sourceOrder = $derived(normalizeOrder(devices, config?.source_preference));
-
-async function handleReorderSource(inputId: string, direction: 'up' | 'down') {
-	const current = normalizeOrder(devices, config?.source_preference);
-	const next = reorderSource(current, inputId, direction);
-	if (next.length === current.length && next.every((id, i) => id === current[i])) {
-		return;
-	}
-	beginFieldSync(SOURCE_PREFERENCE_FIELD, next);
-	markFieldApplying(SOURCE_PREFERENCE_FIELD);
-	try {
-		const result = await rpc.streaming.setConfig({ source_preference: next });
-		// Release the lock to the SERVER-APPLIED order (`result.applied.
-		// source_preference`), never the optimistic array we sent. A rejected
-		// setConfig (`success:false`) or a success that omits the field is NOT a
-		// confirmed apply: revert the lock to the prior order and surface the same
-		// calm error the catch path does.
-		if (result.success && result.applied?.source_preference !== undefined) {
-			markFieldApplied(SOURCE_PREFERENCE_FIELD, result.applied.source_preference);
-		} else {
-			markFieldFailed(SOURCE_PREFERENCE_FIELD, current);
-			toast.error($LL.live.sourcePreference.sync.failed());
-		}
-	} catch {
-		markFieldFailed(SOURCE_PREFERENCE_FIELD, current);
-		toast.error($LL.live.sourcePreference.sync.failed());
-	}
-}
-
 // Server target: direct SRTLA address, or a selected relay server.
 const serverTarget = $derived(config?.srtla_addr || config?.relay_server || '');
 const hasServer = $derived(Boolean(serverTarget));
@@ -391,6 +358,39 @@ const receiverKind = $derived(
 const activeSlot = $derived(
 	findActiveSlot(getManagedIngestAccounts(), config?.selected_ingest_endpoint),
 );
+
+// Destination "traffic light" verdict (Task 5): green only when the LAST passing
+// relay.validate fingerprint still matches the currently-resolved endpoint. Reads
+// the session-only store — informational, never a Start gate, never persisted.
+const destinationValidated = $derived(
+	getDestinationValidated(config, relays, getManagedIngestAccounts()),
+);
+
+// Post-save validation orchestrator (Task 5). Lives HERE (not in ServerDialog) so
+// the federated dialog bundle never depends on the relay.validate RPC. Fired by
+// ServerDialog's optional `onSaved` after a successful save; resolves the saved
+// endpoint EXACTLY the way the validate input is built, then records the verdict
+// keyed by the endpoint fingerprint. Best-effort: a throw records a failed verdict
+// (light stays neutral) and never disturbs save or Start.
+async function validateSavedDestination() {
+	const savedConfig = getConfig();
+	const savedRelays = getRelays();
+	const accounts = getManagedIngestAccounts();
+	const endpoint = resolveValidationEndpoint(savedConfig, savedRelays, accounts);
+	if (!endpoint) return;
+	const fingerprint = fingerprintForValidation(savedConfig, savedRelays, accounts);
+	try {
+		const result = await rpc.relay.validate({
+			addr: endpoint.addr,
+			port: endpoint.port,
+			streamid: endpoint.streamid,
+			protocol: endpoint.protocol as RelayProtocol | undefined,
+		});
+		recordValidation(fingerprint, result.valid);
+	} catch {
+		recordValidation(fingerprint, false);
+	}
+}
 
 // Live active-link count drives the kind-aware server summary (T11). Null while
 // idle (`getLinkTelemetry()` is null) so SRTLA degrades to label-only — never a
@@ -610,7 +610,17 @@ const encoderSummary = $derived.by(() => {
 	const parts: string[] = [];
 	const pipeline = encoderConfig.source ?? config?.pipeline;
 	const bitrate = encoderConfig.bitrate ?? config?.max_br;
-	if (pipeline) {
+	// Name the source by the SAME display name the source list (`getSources()`)
+	// shows: when `config.source` resolves to a capture source, use its REAL
+	// hardware `displayName`; else fall back to the pipeline display name /
+	// reconfigure-required copy. (Todo 12: no generic pipeline name for a
+	// concrete capture device.)
+	const activeSource = config?.source
+		? getSources()?.sources.find((s) => s.id === config.source)
+		: undefined;
+	if (activeSource?.origin === 'capture') {
+		parts.push(activeSource.displayName);
+	} else if (pipeline) {
 		parts.push(
 			pipelineRecognized
 				? getPipelineDisplayName(pipeline, getPipelines()?.pipelines, t)
@@ -619,10 +629,8 @@ const encoderSummary = $derived.by(() => {
 	}
 	if (bitrate) parts.push(formatBitrate(bitrate));
 	if (parts.length === 0) return $LL.general.notConfigured();
-	// Transport token (Todo 23): the active relay transport. SRTLA is the only
-	// wired bonded path; RIST/SRT surface once selected.
-	const protocol = config?.relay_protocol;
-	parts.push(protocol === 'rist' ? 'RIST' : protocol === 'srt' ? 'SRT' : 'SRTLA');
+	// Todo 12: transport token dropped here — the Destination/server row
+	// (`serverSummary`) is the ONE idle surface that names the transport.
 	return parts.join(' · ');
 });
 const audioSummary = $derived.by(() => {
@@ -801,14 +809,6 @@ const configRows = $derived<ConfigRow[]>([
 		warn: pipelineNeedsReconfigure,
 	},
 	{
-		icon: Volume2,
-		label: $LL.general.audioSettings(),
-		value: audioSummary,
-		section: 'audio',
-		onEdit: () => (audioDialogOpen = true),
-		testId: 'open-audio-dialog',
-	},
-	{
 		icon: Server,
 		label: $LL.general.serverSettings(),
 		value: serverSummary,
@@ -908,6 +908,7 @@ const configRows = $derived<ConfigRow[]>([
 			{configRows}
 			{isStreaming}
 			optimismState={streamingOptimismState}
+			{destinationValidated}
 			maxBitrate={config?.max_br}
 			onStart={handleStart}
 			onStop={handleStop}
@@ -923,17 +924,15 @@ const configRows = $derived<ConfigRow[]>([
 			audioStatus={getStatus()}
 			selectedAudioSource={effectiveAudioSource}
 			onSelectAudioSource={handleSelectAudioSource}
+			onOpenAudioDialog={() => (audioDialogOpen = true)}
 			selectedPipeline={config?.pipeline}
 			capabilities={getCapabilities()}
 			activeEncode={getStatus()?.active_encode ?? null}
-			{sourceOrder}
-			sourcePreferenceField={SOURCE_PREFERENCE_FIELD}
-			onReorderSource={handleReorderSource}
 		/>
 	{/if}
 </div>
 
-<ServerDialog bind:open={serverDialogOpen} />
+<ServerDialog bind:open={serverDialogOpen} onSaved={validateSavedDestination} />
 
 <!-- Audio configuration dialog (opened from the Audio "Edit" row). -->
 <AudioDialog

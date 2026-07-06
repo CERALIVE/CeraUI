@@ -21,7 +21,7 @@
 /** The stable subset of an available operator used to fingerprint a scan result. */
 export interface ModemScanSignatureNetwork {
 	name: string;
-	availability: string;
+	availability?: string;
 }
 
 /**
@@ -35,6 +35,6 @@ export function modemScanSignature(
 ): string {
 	return Object.entries(networks ?? {})
 		.sort(([a], [b]) => a.localeCompare(b))
-		.map(([code, net]) => `${code}|${net.name}|${net.availability}`)
+		.map(([code, net]) => `${code}|${net.name}|${net.availability ?? ""}`)
 		.join(",");
 }

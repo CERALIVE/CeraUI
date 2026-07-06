@@ -16,10 +16,8 @@
 
   Selecting any row writes `config.source` through the standard per-field-sync lock
   (beginFieldSync → setConfig → markFieldApplied with `result.applied`); the backend
-  (T3) resolves the source id to the engine pipeline / input. Source PRIORITY is an
-  inline reorder affordance rendered on capture rows only, and only when two or more
-  capture sources exist (SourcePreference folded in — the separate card is gone). A
-  lost capture device renders its state from `source.lost`.
+  (T3) resolves the source id to the engine pipeline / input. Capture rows render in
+  broadcast order. A lost capture device renders its state from `source.lost`.
 
   The audio selector block (embedded / read-only / selectable / none) stays exactly
   as before — audio devices are filtered out of `sources` by the backend, so this is
@@ -41,9 +39,9 @@ import type {
 import {
 	Cable,
 	Check,
-	ChevronDown,
-	ChevronUp,
+	ChevronRight,
 	Copy,
+	Pencil,
 	QrCode,
 	Radio,
 	SquareDashed,
@@ -54,7 +52,6 @@ import {
 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
-import FieldSyncIndicator from '$lib/components/custom/FieldSyncIndicator.svelte';
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
@@ -92,12 +89,6 @@ interface Props {
 	// ── Capability summary ──
 	capabilities?: CapabilitiesMessage | undefined;
 	isStreaming?: boolean;
-	// ── Source PRIORITY (capture rows only) — LiveView owns the source_preference write ──
-	/** Persisted preference order of capture input_ids (reconciled by LiveView). */
-	sourceOrder?: string[];
-	/** Field-sync key driving the reorder "saving" glyph. */
-	sourcePreferenceField?: string;
-	onReorderSource?: (id: string, direction: 'up' | 'down') => void;
 	// ── Live input switch (capture rows, streaming only) — LiveView owns the RPC ──
 	/** Engine `active_input` — the capture source the engine is currently running. */
 	activeInput?: string | undefined;
@@ -113,6 +104,13 @@ interface Props {
 	onSelectAudioSource?: (id: string) => void;
 	/** T5 auto-resolution fields off the `status` broadcast (resolved/pending/embedded). */
 	audioStatus?: ResolvedAudioStatus | undefined;
+	/**
+	 * Open the AudioDialog (codec + delay). The Source card is now the ONE audio
+	 * surface (T11): the inline picker owns source selection, and this compact
+	 * affordance opens the (unchanged) AudioDialog for the encoding knobs. Optional
+	 * so the component still renders standalone in tests / federation contexts.
+	 */
+	onOpenAudioDialog?: () => void;
 }
 
 let {
@@ -121,9 +119,6 @@ let {
 	activeEncode,
 	capabilities,
 	isStreaming = false,
-	sourceOrder = [],
-	sourcePreferenceField = 'source_preference',
-	onReorderSource,
 	activeInput,
 	switchingInput,
 	onSwitch,
@@ -132,6 +127,7 @@ let {
 	selectedAudioSource,
 	onSelectAudioSource,
 	audioStatus,
+	onOpenAudioDialog,
 }: Props = $props();
 
 // Capability summary (res / fps / codec / audio) — compact, telemetry-style.
@@ -156,7 +152,11 @@ const activeParts = $derived.by(() => {
 	if (activeSummary.resolution) parts.push(activeSummary.resolution);
 	if (typeof activeSummary.framerate === 'number') parts.push(`${activeSummary.framerate}fps`);
 	if (activeSummary.codec) parts.push(activeSummary.codec);
-	parts.push(activeSummary.transport);
+	// Todo 12: the transport token is dropped from the IDLE active-config line —
+	// the Destination/server row is the ONE idle surface that shows it.
+	// `deriveActiveSummary` still emits `transport` for LiveCockpit's LIVE strip;
+	// we filter it out only at this idle render call site, not in the shared
+	// derivation's return shape.
 	return parts;
 });
 const hasActiveConfig = $derived(
@@ -180,32 +180,38 @@ const t = (key: string): string => {
 };
 
 // ── Unified source list (Task 13) ──────────────────────────────────────────
-// Every source in backend (`caps.sources`) order, with the capture slots refilled
-// in the operator's preference order so a capture row never jumps past a
-// coarse/network row. The reorder affordance touches ONLY the capture ordering.
+// Every source in backend (`caps.sources`) broadcast order — capture rows render
+// exactly where the backend placed them.
 const captureSources = $derived(
 	(sources?.sources ?? []).filter(
 		(s): s is CaptureStreamSource => s.origin === 'capture',
 	),
 );
-const canReorder = $derived(captureSources.length >= 2);
-const orderedCaptures = $derived.by(() => {
-	const rank = new Map(sourceOrder.map((id, i) => [id, i] as const));
-	return [...captureSources].sort(
-		(a, b) =>
-			(rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
-			(rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+const orderedSources = $derived(sources?.sources ?? []);
+
+// ── Operator-disabled network rows: hidden, fail-VISIBLE when selected (Task 9) ──
+// A network source the operator switched OFF in Settings reports available:false
+// with the DISTINCT disabledInSettings reason (T6/T7 backend truth — NEVER the
+// gateway-inactive/lost reasons). Such a row is HIDDEN from the picker (an
+// off-in-Settings source is not an option) — EXCEPT when it IS the current
+// config.source, where it stays VISIBLE disabled-with-reason so the operator sees
+// why Start is blocked and how to fix it (a Settings hint below the reason). This
+// is the ONLY reason that hides a row; a gateway-inactive / lost / capability
+// available:false row STAYS visible disabled-with-reason.
+const DISABLED_IN_SETTINGS_REASON = 'live.education.reason.disabledInSettings';
+function isOperatorDisabled(source: StreamSource): boolean {
+	return (
+		source.origin === 'network' &&
+		source.available === false &&
+		source.unavailableReason === DISABLED_IN_SETTINGS_REASON
 	);
-});
-const captureRank = $derived(
-	new Map(orderedCaptures.map((s, i) => [s.id, i] as const)),
+}
+const visibleSources = $derived(
+	orderedSources.filter(
+		(source) => !isOperatorDisabled(source) || source.id === config?.source,
+	),
 );
-const orderedSources = $derived.by(() => {
-	const all = sources?.sources ?? [];
-	let ci = 0;
-	return all.map((s) => (s.origin === 'capture' ? (orderedCaptures[ci++] ?? s) : s));
-});
-const hasSources = $derived(orderedSources.length > 0);
+const hasSources = $derived(visibleSources.length > 0);
 
 // Lost-device explanation: any reported capture device that vanished mid-session.
 const lostCaptures = $derived(captureSources.filter((s) => s.lost === true));
@@ -289,9 +295,16 @@ async function handleSelectSource(source: StreamSource): Promise<void> {
 }
 
 // Per-network-source publish-instruction QR data URLs (URL only, never a secret) —
-// mirrors NetworkIngestSection's effect so both render an identical QR.
+// mirrors NetworkIngestSection's effect so both render an identical QR. Narrowed
+// (Task 13) to the SELECTED network source only: the "How to publish" QR/instructions
+// block renders solely on the currently-selected row, so an unselected enabled row
+// never pays for a QR generation. The `$derived` recomputes (and the effect below
+// reruns) only when `orderedSources` or `config.source` change — memo semantics
+// preserved, no per-render regeneration.
 const networkSources = $derived(
-	orderedSources.filter((s): s is NetworkStreamSource => s.origin === 'network'),
+	orderedSources.filter(
+		(s): s is NetworkStreamSource => s.origin === 'network' && s.id === config?.source,
+	),
 );
 let networkQrDataUrls = $state<Record<string, string>>({});
 $effect(() => {
@@ -457,27 +470,15 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 		{/if}
 
 		<!-- Unified device-first source list: capture / coarse / virtual / network rows.
-		     Selecting a row persists config.source through the field-sync lock; a capture
-		     row carries an inline reorder affordance when ≥2 capture sources exist. -->
+		     Selecting a row persists config.source through the field-sync lock. -->
 		{#if hasSources}
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div class="space-y-2" data-testid="source-list" tabindex={-1}>
-				{#if canReorder}
-					<div class="flex items-center justify-end">
-						<FieldSyncIndicator
-							appliedLabel={$LL.live.sourcePreference.sync.applied()}
-							applyingLabel={$LL.live.sourcePreference.sync.applying()}
-							failedLabel={$LL.live.sourcePreference.sync.failed()}
-							field={sourcePreferenceField}
-						/>
-					</div>
-				{/if}
 				<ul class="space-y-2">
-					{#each orderedSources as source (source.id)}
+					{#each visibleSources as source (source.id)}
 						{@const selected = config?.source === source.id}
 						{@const disabled = rowDisabled(source)}
 						{@const RowIcon = rowIcon(source)}
-						{@const capRank = captureRank.get(source.id) ?? -1}
 						<li
 							data-testid={`source-row-${source.id}`}
 							data-origin={source.origin}
@@ -554,55 +555,39 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									</span>
 								</button>
 
-								<!-- Capture-row trailing action. While STREAMING the row is a live
-								     input switch (onSwitch → LiveView switchInput); while IDLE it is
-								     the source-priority reorder affordance (≥2 capture sources). -->
-								{#if source.origin === 'capture'}
-									{#if isStreaming}
-										<Button
-											aria-label={`${$LL.live.inputPicker.switch()} \u2013 ${source.displayName}`}
-											data-switch-input={source.id}
-											disabled={source.id === activeInput ||
-												source.id === switchingInput ||
-												source.lost === true}
-											onclick={() => onSwitch?.(source.id)}
-											size="sm"
-											variant={source.id === activeInput ? 'secondary' : 'default'}
-										>
-											{#if source.id === switchingInput}
-												{$LL.live.inputPicker.switching()}
-											{:else if source.id === activeInput}
-												{$LL.live.inputPicker.active()}
-											{:else}
-												{$LL.live.inputPicker.switch()}
-											{/if}
-										</Button>
-									{:else if canReorder}
-										<div class="flex shrink-0 flex-col gap-1" data-testid={`source-reorder-${source.id}`}>
-											<Button
-												aria-label={$LL.live.sourcePreference.moveUp({ name: source.displayName })}
-												class="size-9"
-												data-move-up={source.id}
-												disabled={capRank <= 0}
-												onclick={() => onReorderSource?.(source.id, 'up')}
-												size="icon"
-												variant="outline"
-											>
-												<ChevronUp aria-hidden={true} class="size-4" />
-											</Button>
-											<Button
-												aria-label={$LL.live.sourcePreference.moveDown({ name: source.displayName })}
-												class="size-9"
-												data-move-down={source.id}
-												disabled={capRank === orderedCaptures.length - 1}
-												onclick={() => onReorderSource?.(source.id, 'down')}
-												size="icon"
-												variant="outline"
-											>
-												<ChevronDown aria-hidden={true} class="size-4" />
-											</Button>
-										</div>
-									{/if}
+								<!-- Capture-row trailing action: a live input switch while STREAMING
+								     (onSwitch → LiveView switchInput). -->
+								{#if source.origin === 'capture' && isStreaming}
+									<Button
+										aria-label={`${$LL.live.inputPicker.switch()} \u2013 ${source.displayName}`}
+										data-switch-input={source.id}
+										disabled={source.id === activeInput ||
+											source.id === switchingInput ||
+											source.lost === true}
+										onclick={() => onSwitch?.(source.id)}
+										size="sm"
+										variant={source.id === activeInput ? 'secondary' : 'default'}
+									>
+										{#if source.id === switchingInput}
+											{$LL.live.inputPicker.switching()}
+										{:else if source.id === activeInput}
+											{$LL.live.inputPicker.active()}
+										{:else}
+											{$LL.live.inputPicker.switch()}
+										{/if}
+									</Button>
+								{/if}
+
+								<!-- Same-LAN/WiFi education on ENABLED network rows: the "?" popover
+								     reuses the Network-ingest info copy (publish from a phone/encoder
+								     on the same local network). Sits OUTSIDE the select button so it is
+								     its own keyboard/touch target (never a nested interactive). -->
+								{#if source.origin === 'network' && source.available}
+									<InfoPopover
+										body={$LL.live.networkIngest.infoBody()}
+										testId={`source-network-ingest-info-${source.requiresGateway}`}
+										title={$LL.live.networkIngest.infoTitle()}
+									/>
 								{/if}
 							</div>
 
@@ -613,9 +598,20 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 								>
 									{rowReason(source)}
 								</p>
+								<!-- Fail-visible selected-but-disabled row: point the operator at the
+								     Settings toggle that re-enables it (SourceSection can't navigate —
+								     this is a text hint, not a link). -->
+								{#if isOperatorDisabled(source)}
+									<p
+										class="text-muted-foreground mt-0.5 text-xs"
+										data-testid={`source-network-ingest-settings-hint-${source.requiresGateway}`}
+									>
+										{$LL.live.networkIngest.disabledInSettingsHint()}
+									</p>
+								{/if}
 							{/if}
 
-							{#if source.origin === 'network' && source.url}
+							{#if source.origin === 'network' && source.url && selected}
 								<details class="group mt-1.5">
 									<summary
 										class="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 text-xs font-medium select-none"
@@ -673,7 +669,9 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 			</div>
 		{/if}
 
-		<!-- Audio source -->
+		<!-- Audio source — THE one audio surface (T11): inline picker + a "Codec &
+		     delay" affordance opening the AudioDialog, hidden while streaming so the
+		     surface stays read-only mid-stream (audioReadOnly gate unchanged). -->
 		<div class="space-y-2 border-t pt-5" data-testid="source-audio">
 			<div class="flex items-center gap-1">
 				<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
@@ -690,6 +688,19 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					>
 						{$LL.live.comingSoon.label()}
 					</span>
+				{/if}
+				{#if onOpenAudioDialog && !isStreaming}
+					<Button
+						class="ml-auto min-h-11 gap-1.5"
+						data-testid="open-audio-dialog"
+						onclick={() => onOpenAudioDialog?.()}
+						size="sm"
+						variant="ghost"
+					>
+						<Pencil aria-hidden={true} class="size-3.5" />
+						<span>{$LL.live.source.audioEdit()}</span>
+						<ChevronRight aria-hidden={true} class="size-4 rtl:-scale-x-100" />
+					</Button>
 				{/if}
 			</div>
 

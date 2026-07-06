@@ -269,51 +269,6 @@ const ptBR = {
 		transportAdvanced: "Avançado",
 		transportKindHint:
 			"Como sua transmissão chega ao receptor. O SRTLA agrega vários links de rede; RIST e SRT usam um único link.",
-		streamTuning: {
-			title: "Ajuste da transmissão",
-			hint: "Ajuste como sua transmissão é entregue. Um receptor CeraLive libera perfis, FEC e ajuste de recuperação; outros receptores usam os padrões compatíveis com BELABOX.",
-			ceraliveReceiver: "Receptor CeraLive",
-			latency: "Latência",
-			latencyNegotiated: "Negociada",
-			presets: "Perfis predefinidos",
-			fec: "Correção de erros para frente",
-			fecHelper:
-				"Adiciona redundância para o receptor reconstruir pacotes perdidos. Usa mais largura de banda e adiciona um pouco de latência \u2014 melhor em conexões com perdas.",
-			recoveryMode: "Modo de recuperação",
-			advanced: "Avançado",
-			recovery: "Recuperação",
-			recoveryStandard: "Padrão",
-			recoveryStandardHint: "Recomendado",
-			recoveryBandwidthSaver: "Economia de banda",
-			recoveryBandwidthSaverHint: "Especialista",
-			recoveryHelper:
-				"O padrão mantém a transmissão fluida e confiável. A economia de banda reduz o tráfego de recuperação para usar menos dados em conexões limitadas.",
-			belaboxBadge: "Padrão (compatível com BELABOX)",
-			belaboxBannerTitle: "Padrão (valores compatíveis com BELABOX)",
-			belaboxBannerBody:
-				"Este receptor não é um receptor CeraLive, então apenas a latência é ajustável. O ajuste avançado requer um receptor CeraLive.",
-			reasonNonCeraLive: "Disponível apenas com um receptor CeraLive.",
-			reasonReceiverManaged: "Gerenciado pelo receptor.",
-			reasonFecUnsupported:
-				"A build do libsrt deste receptor CeraLive não oferece suporte a FEC.",
-			reasonProfileUnsupported: "Este receptor não oferece este perfil.",
-			summaryDelay: "\u2248 {seconds} s de atraso",
-			summaryRecoveryStandard: "recuperação automática de perdas",
-			summaryRecoveryBandwidthSaver: "recuperação econômica de banda",
-			summaryFecOn: "FEC ligado",
-			summaryFecOff: "FEC desligado",
-			cloudSetTitle: "Definido pela nuvem",
-			cloudSetHint: "Toque para substituir neste dispositivo",
-			driftHint: "O dispositivo está usando um perfil diferente",
-			profileNames: {
-				balanced: "Equilibrado",
-				lowLatency: "Baixa latência",
-				resilient: "Resiliente",
-				classic: "Clássico",
-				lowLatencyFec: "Baixa latência + FEC",
-				custom: "Personalizado",
-			},
-		},
 		deviceStats: {
 			title: "Status do dispositivo",
 			description: "Telemetria de hardware ao vivo deste dispositivo.",
@@ -327,6 +282,19 @@ const ptBR = {
 			lowDiskBody:
 				"Menos de 512 MiB livres em /data. Libere espaço para que gravação, logs e atualizações continuem funcionando.",
 			lowDiskAction: "Ver logs",
+		},
+		networkIngest: {
+			title: "Ingestão de rede",
+			desc: "Permita que um telefone ou codificador desta rede publique no dispositivo",
+			explanation:
+				"Ative a ingestão LAN para que um telefone ou um codificador de hardware (como o OBS) publique RTMP ou SRT diretamente neste dispositivo \u2014 sem relé na nuvem. O publicador precisa estar na MESMA rede local (Wi-Fi ou Ethernet) que este dispositivo.",
+			toggleRtmp: "Ingestão RTMP",
+			toggleSrt: "Ingestão SRT",
+			statusRunning: "Serviço em execução",
+			statusStopped: "Serviço não está em execução",
+			statusDisabled: "Desativado",
+			unavailable:
+				"A ingestão de rede não está disponível neste dispositivo no modo emulado.",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -820,6 +788,7 @@ const ptBR = {
 			disabling: "Desativando…",
 			awaitingResult: "Aguardando resultado…",
 			done: "Concluído",
+			saved: "Salvo",
 		},
 	},
 	hotspotConfigurator: {
@@ -1206,6 +1175,8 @@ const ptBR = {
 			copied: "Endereço copiado",
 			copyFailed: "Não foi possível copiar o endereço.",
 			includesAudio: "Inclui áudio",
+			disabledInSettingsHint:
+				"Reative isto em Configurações \u2192 Ingestão de rede.",
 			codecEducation: {
 				rtmp: "O RTMP publica apenas vídeo H.264 (com áudio AAC). Ele é sempre recodificado para o codec de saída configurado.",
 				srt: "O SRT publica vídeo H.264 ou H.265. Ele é sempre recodificado para o codec de saída configurado.",
@@ -1280,37 +1251,6 @@ const ptBR = {
 				camlink: "Cam Link",
 			},
 		},
-		sourcePreference: {
-			title: "Prioridade de fonte",
-			description:
-				"Ordene as fontes entre as quais você alterna. O failover automático ignora esta lista.",
-			empty: "Nenhuma fonte de vídeo detectada",
-			moveUp: "Mover {name} para cima",
-			moveDown: "Mover {name} para baixo",
-			rankLabel: "Prioridade {rank}",
-			stickyNote:
-				"O failover automático é persistente \u2014 o motor não retorna automaticamente. Use a lista de fontes para voltar manualmente.",
-			states: {
-				active: "Ativa",
-				lost: "Perdida",
-				failedOver: "Com failover",
-			},
-			lostHint: "Esta fonte está offline.",
-			failedOverHint:
-				"O motor alternou aqui automaticamente após sua fonte preferida ficar offline.",
-			sync: {
-				applying: "Salvando ordem\u2026",
-				applied: "Ordem salva",
-				failed: "Não foi possível salvar a ordem",
-			},
-			failover: {
-				title: "Failover automático",
-				reasonSourceLost:
-					"{name} ficou offline, então o motor alternou para {to}.",
-				sticky:
-					"O failover automático é persistente \u2014 não voltará sozinho. Use a lista de fontes para retornar manualmente.",
-			},
-		},
 		source: {
 			label: "Fonte",
 			none: "Nenhuma fonte selecionada",
@@ -1324,6 +1264,7 @@ const ptBR = {
 				"Reconecte o dispositivo para retomar a transmissão desta fonte.",
 			audioNone: "Nenhuma fonte de áudio detectada",
 			audioEmbedded: "Áudio incorporado (do fluxo recebido)",
+			audioEdit: "Codec e atraso",
 		},
 		summary: {
 			nowStreaming: "Transmitindo agora",
@@ -1347,6 +1288,7 @@ const ptBR = {
 				fixedBySource: "Fixado pela fonte selecionada",
 				unsupportedAtResolution: "Indisponível nesta resolução",
 				gatewayInactive: "O gateway de ingestão de rede não está em execução",
+				disabledInSettings: "Desativado nas Configurações",
 				gatewayNoAddress: "Nenhum endereço de LAN ou ponto de acesso acessível",
 			},
 			info: "Sobre {field}",
@@ -1410,6 +1352,7 @@ const ptBR = {
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 			axisSelected: "Selecionado",
 			axisDeviceMax: "Máximo do dispositivo",
+			fpsAvailableAt: "{fps} fps disponível em {resolution}",
 		},
 	},
 	dialogs: {
@@ -1583,6 +1526,7 @@ const ptBR = {
 		sessionExpired: "Sessão expirada. Por favor, autentique-se novamente.",
 		authTimedOut:
 			"Não foi possível verificar sua sessão. Verifique a conexão e tente novamente.",
+		clearSavedSession: "Limpar o acesso salvo e inserir a senha",
 	},
 	offline: {
 		title: "Você está offline",

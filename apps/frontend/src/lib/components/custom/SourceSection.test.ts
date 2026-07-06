@@ -121,6 +121,16 @@ function netRtmp(available: boolean): NetworkStreamSource {
 	};
 }
 
+// Operator-disabled (the Settings toggle is OFF): available:false carrying the
+// DISTINCT disabledInSettings reason (T6/T7) — the ONLY verdict that HIDES a row
+// (Task 9), as opposed to gateway-inactive which stays visible disabled-with-reason.
+function netRtmpDisabledInSettings(): NetworkStreamSource {
+	return {
+		...netRtmp(false),
+		unavailableReason: "live.education.reason.disabledInSettings",
+	};
+}
+
 function sourcesMsg(list: StreamSource[]): SourcesMessage {
 	return { hardware: "rk3588", sources: list };
 }
@@ -250,30 +260,93 @@ describe("SourceSection — unified device-first source list (Task 13)", () => {
 	});
 });
 
-describe("SourceSection — source PRIORITY (capture rows only)", () => {
-	it("renders NO reorder affordance with a single capture source", () => {
-		const { container } = mount({ sources: sourcesMsg([RODE, COARSE_HDMI]) });
-		expect(container.querySelector("[data-move-up]")).toBeNull();
-	});
-
-	it("renders the inline reorder affordance when two capture sources exist", () => {
-		const { container } = mount({ sources: sourcesMsg([RODE, HDMI_CAPTURE]) });
-		expect(container.querySelector("[data-move-up]")).not.toBeNull();
-		expect(container.querySelector("[data-move-down]")).not.toBeNull();
-	});
-
-	it("dispatches onReorderSource when a capture row is moved", async () => {
-		const onReorderSource = vi.fn();
+describe("SourceSection — operator-disabled network rows hidden, fail-visible when selected (Task 9)", () => {
+	it("HIDES an operator-disabled network row that is NOT the selected source", () => {
 		const { container } = mount({
-			sources: sourcesMsg([RODE, HDMI_CAPTURE]),
-			sourceOrder: ["usb", "hdmi-rx"],
-			onReorderSource,
+			sources: sourcesMsg([RODE, netRtmpDisabledInSettings()]),
+			config: {},
 		});
-		const down = container.querySelector<HTMLButtonElement>(
-			'[data-move-down="usb"]',
+		expect(
+			container.querySelector(
+				'[data-testid="source-network-ingest-select-rtmp"]',
+			),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="source-row-rtmp"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="source-row-usb"]'),
+		).not.toBeNull();
+	});
+
+	it("KEEPS an operator-disabled network row visible disabled-with-reason when it IS the selected source", () => {
+		const { container } = mount({
+			sources: sourcesMsg([RODE, netRtmpDisabledInSettings()]),
+			config: { source: "rtmp" },
+		});
+		const btn = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-network-ingest-select-rtmp"]',
 		);
-		await fireEvent.click(down!);
-		expect(onReorderSource).toHaveBeenCalledWith("usb", "down");
+		expect(btn).not.toBeNull();
+		expect(btn?.disabled).toBe(true);
+		expect(btn?.getAttribute("title")).toBeTruthy();
+		expect(
+			container.querySelector(
+				'[data-testid="source-network-ingest-reason-rtmp"]',
+			),
+		).not.toBeNull();
+		expect(
+			container.querySelector(
+				'[data-testid="source-network-ingest-settings-hint-rtmp"]',
+			),
+		).not.toBeNull();
+	});
+
+	it("does NOT hide a gateway-inactive row — only operator-disable hides (regression)", () => {
+		const { container } = mount({
+			sources: sourcesMsg([RODE, netRtmp(false)]),
+			config: {},
+		});
+		const btn = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-network-ingest-select-rtmp"]',
+		);
+		expect(btn).not.toBeNull();
+		expect(btn?.disabled).toBe(true);
+		expect(
+			container.querySelector(
+				'[data-testid="source-network-ingest-settings-hint-rtmp"]',
+			),
+		).toBeNull();
+	});
+
+	it("renders the same-LAN InfoPopover on an ENABLED network row, and NOT on a disabled one", () => {
+		const enabled = mount({ sources: sourcesMsg([netRtmp(true)]), config: {} });
+		expect(
+			enabled.container.querySelector(
+				'[data-testid="source-network-ingest-info-rtmp"]',
+			),
+		).not.toBeNull();
+
+		const disabled = mount({
+			sources: sourcesMsg([netRtmpDisabledInSettings()]),
+			config: { source: "rtmp" },
+		});
+		expect(
+			disabled.container.querySelector(
+				'[data-testid="source-network-ingest-info-rtmp"]',
+			),
+		).toBeNull();
+	});
+});
+
+describe("SourceSection — capture rows render without reorder affordance", () => {
+	it("renders NO reorder chevrons even with two capture sources", () => {
+		const { container } = mount({ sources: sourcesMsg([RODE, HDMI_CAPTURE]) });
+		expect(container.querySelector("[data-move-up]")).toBeNull();
+		expect(container.querySelector("[data-move-down]")).toBeNull();
+		expect(
+			container.querySelector('[data-testid^="source-reorder-"]'),
+		).toBeNull();
 	});
 });
 
@@ -371,15 +444,20 @@ describe("SourceSection — network-ingest rows folded into the list (Task 12)",
 		).toBeNull();
 	});
 
-	it("renders the publish URL + QR for an active network source and copies it", async () => {
+	it("renders the publish URL + QR for the SELECTED active network source and copies it (Task 13)", async () => {
 		const writeText = vi.fn(async () => {});
 		Object.assign(navigator, { clipboard: { writeText } });
-		const { container } = mount({ sources: sourcesMsg([netRtmp(true)]) });
+		// The "How to publish" QR/instructions block renders ONLY on the SELECTED
+		// network row (Task 13) — select rtmp so the disclosure mounts.
+		const { container } = mount({
+			sources: sourcesMsg([netRtmp(true)]),
+			config: { source: "rtmp" },
+		});
 
 		const btn = container.querySelector<HTMLButtonElement>(
 			'[data-testid="source-network-ingest-select-rtmp"]',
 		);
-		expect(btn?.disabled).toBe(false);
+		expect(btn).not.toBeNull();
 		expect(
 			container
 				.querySelector('[data-testid="source-network-ingest-url-rtmp"]')
@@ -402,6 +480,56 @@ describe("SourceSection — network-ingest rows folded into the list (Task 12)",
 		expect(toastSuccess).toHaveBeenCalled();
 	});
 
+	it("renders the publish instructions ONLY on the selected network row, never an unselected enabled one (Task 13)", async () => {
+		// UNSELECTED enabled network row: the row + status + audio chip render, but
+		// the QR/instructions disclosure (toggle + details + QR) does NOT.
+		const unselected = mount({ sources: sourcesMsg([netRtmp(true)]) });
+		expect(
+			unselected.container.querySelector(
+				'[data-testid="source-network-ingest-select-rtmp"]',
+			),
+		).not.toBeNull();
+		expect(
+			unselected.container.querySelector(
+				'[data-testid="source-network-ingest-status-rtmp"]',
+			),
+		).not.toBeNull();
+		expect(
+			unselected.container.querySelector(
+				'[data-testid="source-network-ingest-instructions-toggle-rtmp"]',
+			),
+		).toBeNull();
+		expect(
+			unselected.container.querySelector(
+				'[data-testid="source-network-ingest-instructions-rtmp"]',
+			),
+		).toBeNull();
+		// No QR is generated for an unselected row (perf narrowing).
+		await waitFor(() =>
+			expect(
+				unselected.container.querySelector(
+					'[data-testid="source-network-ingest-qr-rtmp"]',
+				),
+			).toBeNull(),
+		);
+
+		// SELECTED: the disclosure toggle + details container appear.
+		const selected = mount({
+			sources: sourcesMsg([netRtmp(true)]),
+			config: { source: "rtmp" },
+		});
+		expect(
+			selected.container.querySelector(
+				'[data-testid="source-network-ingest-instructions-toggle-rtmp"]',
+			),
+		).not.toBeNull();
+		expect(
+			selected.container.querySelector(
+				'[data-testid="source-network-ingest-instructions-rtmp"]',
+			),
+		).not.toBeNull();
+	});
+
 	it("shows an 'includes audio' chip only when the network source advertises audio", () => {
 		const withAudio = mount({ sources: sourcesMsg([netRtmp(true)]) });
 		expect(
@@ -420,7 +548,7 @@ describe("SourceSection — network-ingest rows folded into the list (Task 12)",
 		).toBeNull();
 	});
 
-	it("renders per-protocol codec education under each network row disclosure (T14)", () => {
+	it("renders per-protocol codec education under the SELECTED network row disclosure (T14, scoped to selected by Task 13)", () => {
 		const netSrt: NetworkStreamSource = {
 			...netRtmp(true),
 			id: "srt",
@@ -429,21 +557,37 @@ describe("SourceSection — network-ingest rows folded into the list (Task 12)",
 			requiresGateway: "srt",
 			url: "srt://192.168.1.100:4001",
 		};
-		const { container } = mount({
-			sources: sourcesMsg([netRtmp(true), netSrt]),
-		});
 
-		const rtmp = container.querySelector(
+		const rtmpSelected = mount({
+			sources: sourcesMsg([netRtmp(true), netSrt]),
+			config: { source: "rtmp" },
+		});
+		const rtmp = rtmpSelected.container.querySelector(
 			'[data-testid="source-network-ingest-codec-education-rtmp"]',
-		);
-		const srt = container.querySelector(
-			'[data-testid="source-network-ingest-codec-education-srt"]',
 		);
 		expect(rtmp?.textContent).toContain("H.264");
 		expect(rtmp?.textContent).not.toContain("H.265");
 		expect(rtmp?.textContent).toContain("re-encoded");
+		expect(
+			rtmpSelected.container.querySelector(
+				'[data-testid="source-network-ingest-codec-education-srt"]',
+			),
+		).toBeNull();
+
+		const srtSelected = mount({
+			sources: sourcesMsg([netRtmp(true), netSrt]),
+			config: { source: "srt" },
+		});
+		const srt = srtSelected.container.querySelector(
+			'[data-testid="source-network-ingest-codec-education-srt"]',
+		);
 		expect(srt?.textContent).toContain("H.265");
 		expect(srt?.textContent).toContain("re-encoded");
+		expect(
+			srtSelected.container.querySelector(
+				'[data-testid="source-network-ingest-codec-education-rtmp"]',
+			),
+		).toBeNull();
 	});
 });
 
@@ -472,6 +616,54 @@ describe("SourceSection — capability summary (kept)", () => {
 		expect(
 			container.querySelector('[data-testid="source-capabilities"]'),
 		).toBeNull();
+	});
+
+	it("shows the ACHIEVABLE pair — 1080p + 30fps for a 1080p@30 + 720p@60 source, never the cross-mode 60fps (Todo 3)", () => {
+		const CAPS_CROSSMODE: CapabilitiesMessage = {
+			platform: {
+				supports_h265: true,
+				hardware_accelerated: true,
+				max_resolution: "4k",
+			},
+			encoder: {
+				codecs: ["h264"],
+				bitrate_range: { min: 500, max: 50000, unit: "kbps" },
+			},
+			sources: [
+				{
+					id: "usb",
+					supports_audio: false,
+					supports_resolution_override: true,
+					supports_framerate_override: true,
+					default_resolution: "1080p",
+					default_framerate: 60,
+				},
+			],
+			device_modes: {
+				"/dev/video1": {
+					kind: "uvc_h264",
+					modes: [
+						{ width: 1920, height: 1080, framerates: [30] },
+						{ width: 1280, height: 720, framerates: [30, 60] },
+					],
+				},
+			},
+		};
+		const { container } = mount({
+			sources: sourcesMsg([RODE]),
+			capabilities: CAPS_CROSSMODE,
+			config: { pipeline: "usb", selected_video_input: "/dev/video1" },
+		});
+		const caps = container.querySelector<HTMLElement>(
+			'[data-testid="source-capabilities"]',
+		);
+		if (!caps) throw new Error("capability summary not rendered");
+		expect(caps.textContent).toContain("1080p");
+		expect(caps.textContent).toContain("30fps");
+		expect(caps.textContent).not.toContain("60fps");
+		expect(
+			container.querySelector('[data-testid="cap-device-max"]'),
+		).not.toBeNull();
 	});
 });
 
@@ -560,6 +752,41 @@ describe("SourceSection — audio source single vs multiple (kept)", () => {
 				expect(onSelectAudioSource).toHaveBeenCalledWith("alsa:hdmi");
 			}
 		}
+	});
+});
+
+describe("SourceSection — Codec & delay affordance (one audio surface, T11)", () => {
+	it("renders open-audio-dialog exactly once and dispatches onOpenAudioDialog", async () => {
+		const onOpenAudioDialog = vi.fn();
+		const { container } = mount({
+			audioSources: ["alsa:usbaudio"],
+			onOpenAudioDialog,
+		});
+		const buttons = container.querySelectorAll(
+			'[data-testid="open-audio-dialog"]',
+		);
+		expect(buttons).toHaveLength(1);
+		await fireEvent.click(buttons[0] as HTMLElement);
+		expect(onOpenAudioDialog).toHaveBeenCalledTimes(1);
+	});
+
+	it("hides the affordance while streaming (audio surface read-only)", () => {
+		const onOpenAudioDialog = vi.fn();
+		const { container } = mount({
+			audioSources: ["alsa:usbaudio"],
+			isStreaming: true,
+			onOpenAudioDialog,
+		});
+		expect(
+			container.querySelector('[data-testid="open-audio-dialog"]'),
+		).toBeNull();
+	});
+
+	it("renders no affordance when onOpenAudioDialog is not provided", () => {
+		const { container } = mount({ audioSources: ["alsa:usbaudio"] });
+		expect(
+			container.querySelector('[data-testid="open-audio-dialog"]'),
+		).toBeNull();
 	});
 });
 
@@ -732,5 +959,81 @@ describe("SourceSection — Auto resolved preview (T6)", () => {
 		expect(
 			container.querySelector('[data-testid="audio-follow-pending"]'),
 		).toBeNull();
+	});
+});
+
+describe("SourceSection — source×audio mixture matrix (M1–M6)", () => {
+	it("M1: network + embedded cap → read-only embedded state, no ALSA picker", () => {
+		const { container } = mount({
+			audioSources: ["USB audio", "Pipeline default"],
+			config: { source: "rtmp" },
+			sources: sourcesMsg([netRtmp(true)]),
+			capabilities: CAPS_EMBEDDED_ON,
+		});
+		expect(
+			container.querySelector('[data-testid="audio-source-embedded"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-source-select"]'),
+		).toBeNull();
+	});
+
+	it("M2: network WITHOUT the cap → the ALSA picker REMAINS (legacy path)", () => {
+		const { container } = mount({
+			audioSources: ["USB audio", "Pipeline default"],
+			config: { source: "rtmp" },
+			sources: sourcesMsg([netRtmp(true)]),
+			capabilities: CAPS_AUDIO_RTMP,
+		});
+		expect(
+			container.querySelector('[data-testid="audio-source-select"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-source-embedded"]'),
+		).toBeNull();
+	});
+
+	it("M3: dual-USB Auto resolves to the cam's own audio → 'Auto → device'", () => {
+		const { container } = mount({
+			config: { asrc: AUDIO_SOURCE_AUTO },
+			audioSources: ["RØDE Streamer Mic", "Elgato Wave:3"],
+			audioStatus: { resolved_asrc: "RØDE Streamer Mic" },
+		});
+		const line = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-auto-resolved"]',
+		);
+		expect(line?.textContent).toContain("Auto \u2192 RØDE Streamer Mic");
+	});
+
+	it("M4: HDMI video → 'Auto → HDMI'", () => {
+		const { container } = mount({
+			config: { asrc: AUDIO_SOURCE_AUTO },
+			audioSources: ["HDMI"],
+			audioStatus: { resolved_asrc: "HDMI", resolved_asrc_reason: "hdmi" },
+		});
+		const line = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-auto-resolved"]',
+		);
+		expect(line?.textContent).toContain("Auto \u2192 HDMI");
+	});
+
+	it("M5: a disappeared selection renders the unavailable marker (config not mutated)", () => {
+		const { container } = mount({
+			audioSources: ["No audio", "Pipeline default"],
+			selectedAudioSource: "USB audio",
+		});
+		const marker = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-unavailable"]',
+		);
+		expect(marker?.textContent).toContain("USB audio");
+		expect(setConfig).not.toHaveBeenCalled();
+	});
+
+	it("M6: test-pattern/virtual → pipeline default read-only", () => {
+		const { container } = mount({ audioSources: ["Pipeline default"] });
+		const readonly = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-readonly"]',
+		);
+		expect(readonly?.textContent).toContain("Pipeline default");
 	});
 });

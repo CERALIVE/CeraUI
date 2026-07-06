@@ -515,7 +515,9 @@ function defaultClassify(r: unknown): OsCommandVerdict {
  *  - `opts.rpc` MUST be a raw `rpc.*` method call; `osCommand` only awaits it.
  *  - On a non-ok verdict it transitions `key → failed` and toasts the busy/fail
  *    message thunk (falling back to `wifiSelector.os.operationFailed`). This is
- *    the SINGLE failure-feedback path for the surface.
+ *    the SINGLE failure-feedback path for the surface. `silent` suppresses that
+ *    toast (still transitions `key → failed`, so a calm inline band driven by the
+ *    phase still surfaces) — for background/periodic ops that must not toast.
  *  - With `confirmOnResolve` (synchronous ops only — SIM PIN/PUK) an ok verdict
  *    transitions `key → confirmed`. Without it the op stays `pending`: the
  *    per-surface `$effect` confirms on the authoritative broadcast, or the TTL
@@ -529,6 +531,7 @@ export async function osCommand<T>(opts: {
 	rpc: () => Promise<T>;
 	classify?: (r: T) => OsCommandVerdict;
 	confirmOnResolve?: boolean;
+	silent?: boolean;
 	busyMessage?: () => string;
 	failMessage?: () => string;
 	onResult?: (r: T) => void;
@@ -542,10 +545,12 @@ export async function osCommand<T>(opts: {
 		const v = opts.classify?.(r) ?? defaultClassify(r);
 		if (!v.ok) {
 			failOperation(opts.key, v.reason ?? (v.busy ? "device_busy" : "failed"));
-			toast.error(
-				(v.busy ? opts.busyMessage : opts.failMessage)?.() ??
-					getLL().network.os.operationFailed(),
-			);
+			if (!opts.silent) {
+				toast.error(
+					(v.busy ? opts.busyMessage : opts.failMessage)?.() ??
+						getLL().network.os.operationFailed(),
+				);
+			}
 		} else if (opts.confirmOnResolve) {
 			confirmOperation(opts.key);
 		}
@@ -555,7 +560,9 @@ export async function osCommand<T>(opts: {
 		return r;
 	} catch (e) {
 		failOperation(opts.key, e instanceof Error ? e.message : "error");
-		toast.error(opts.failMessage?.() ?? getLL().network.os.operationFailed());
+		if (!opts.silent) {
+			toast.error(opts.failMessage?.() ?? getLL().network.os.operationFailed());
+		}
 		return undefined;
 	}
 }

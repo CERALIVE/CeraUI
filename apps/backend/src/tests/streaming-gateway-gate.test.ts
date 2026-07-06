@@ -31,7 +31,10 @@ import {
 	setMockHardware,
 } from "../modules/streaming/pipelines.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
-import { streamingStartProcedure } from "../rpc/procedures/streaming.procedure.ts";
+import {
+	setConfigProcedure,
+	streamingStartProcedure,
+} from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
 type SourceCap = GetCapabilitiesResult["sources"][number];
@@ -101,6 +104,8 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 	const savedMockMode = process.env.MOCK_MODE;
 	const savedNodeEnv = process.env.NODE_ENV;
 	let priorPipeline: string | undefined;
+	let priorSource: string | undefined;
+	let priorNetworkIngest: ReturnType<typeof getConfig>["network_ingest"];
 
 	beforeAll(async () => {
 		process.env.MOCK_MODE = "true";
@@ -110,10 +115,16 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 	});
 	beforeEach(() => {
 		priorPipeline = getConfig().pipeline;
+		priorSource = getConfig().source;
+		priorNetworkIngest = getConfig().network_ingest;
 		getConfig().pipeline = undefined;
+		getConfig().source = undefined;
+		getConfig().network_ingest = undefined;
 	});
 	afterEach(() => {
 		getConfig().pipeline = priorPipeline;
+		getConfig().source = priorSource;
+		getConfig().network_ingest = priorNetworkIngest;
 		setStreamingState(false);
 		updateStatus(false);
 		resetMockState();
@@ -228,5 +239,41 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 
 		expect(result.success).toBe(true);
 		expect(result).not.toHaveProperty("error");
+	});
+
+	describe("operator-disabled desired-state parity (Task 7)", () => {
+		test("config.source=rtmp + rtmp disabled-in-Settings → start returns the gateway error, NOT unknown_source (source stays visible)", async () => {
+			getConfig().source = "rtmp";
+			getConfig().network_ingest = { rtmp_enabled: false, srt_enabled: true };
+			// Flip the mock UNIT flag ON: desired-state must still override it, so the
+			// mock gate can never diverge from the real probe (buildGatewayProbe).
+			setMockGatewayActive("rtmp", true);
+
+			const result = await call(
+				streamingStartProcedure,
+				{},
+				{ context: makeContext() },
+			);
+
+			expect(result).toEqual({
+				success: false,
+				is_streaming: false,
+				error: GATEWAY_INACTIVE_ERROR,
+			});
+		});
+
+		test("setConfig({max_br}) succeeds while config.source is a disabled ingest (no source in input → no routing/gate)", async () => {
+			getConfig().source = "rtmp";
+			getConfig().network_ingest = { rtmp_enabled: false, srt_enabled: true };
+
+			const result = await call(
+				setConfigProcedure,
+				{ max_br: 5000 },
+				{ context: makeContext() },
+			);
+
+			expect(result.success).toBe(true);
+			expect(result.applied?.max_br).toBe(5000);
+		});
 	});
 });

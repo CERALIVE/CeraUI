@@ -195,6 +195,98 @@ describe("deriveCapabilitySummary — active-source truthfulness (Todo 11)", () 
 	});
 });
 
+describe("deriveCapabilitySummary — achievable resolution+fps pair (Todo 3)", () => {
+	// Cross-mode divergence: the top rung (1080p) runs ONLY at 30, while 60 lives
+	// exclusively at a LOWER rung (720p). The old independent-axes ceiling would
+	// have paired the highest resolution with the highest framerate and claimed a
+	// fictional 1080p/60. The chip must instead read the ACHIEVABLE pair 1080p/30
+	// — the SAME axisCeiling semantics Todo 2 landed in ValidationAdapter.
+	const CAPS_CROSSMODE: CapabilitiesMessage = {
+		platform: {
+			supports_h265: true,
+			hardware_accelerated: true,
+			max_resolution: "4k",
+		},
+		encoder: {
+			codecs: ["h264", "h265"],
+			bitrate_range: { min: 500, max: 50000, unit: "kbps" },
+		},
+		sources: [
+			{
+				id: "usb",
+				supports_audio: false,
+				supports_resolution_override: true,
+				supports_framerate_override: true,
+				default_resolution: "1080p",
+				default_framerate: 60,
+			},
+		],
+		device_modes: {
+			"/dev/video1": {
+				kind: "uvc_h264",
+				modes: [
+					{ width: 1920, height: 1080, framerates: [30] },
+					{ width: 1280, height: 720, framerates: [30, 60] },
+				],
+			},
+		},
+	};
+
+	it("pairs the top rung with ITS OWN max fps, not the cross-mode maximum (1080p@30 + 720p@60 → 1080p/30, NOT 60)", () => {
+		const config: ConfigMessage = {
+			pipeline: "usb",
+			selected_video_input: "/dev/video1",
+		};
+		const summary = deriveCapabilitySummary(CAPS_CROSSMODE, config);
+		expect(summary?.maxResolution).toBe("1080p");
+		expect(summary?.maxFramerate).toBe(30);
+		expect(summary?.maxFramerate).not.toBe(60);
+	});
+
+	it("REGRESSION GUARD: platform-fallback-only caps (no device modes) keep the OLD independent maxima (byte-identical)", () => {
+		// A source list with NO device_modes: the ceiling must stay the coarse
+		// independent-axes pair (platform max_resolution × max default_framerate),
+		// exactly as before Todo 3 — the truthful pairing must NEVER touch this path.
+		const CAPS_COARSE: CapabilitiesMessage = {
+			platform: {
+				supports_h265: true,
+				hardware_accelerated: true,
+				max_resolution: "4k",
+			},
+			encoder: {
+				codecs: ["h264"],
+				bitrate_range: { min: 500, max: 50000, unit: "kbps" },
+			},
+			sources: [
+				{
+					id: "hdmi",
+					supports_audio: true,
+					supports_resolution_override: true,
+					supports_framerate_override: true,
+					default_resolution: "1080p",
+					default_framerate: 30,
+				},
+				{
+					id: "sdi",
+					supports_audio: false,
+					supports_resolution_override: true,
+					supports_framerate_override: true,
+					default_resolution: "720p",
+					default_framerate: 60,
+				},
+			],
+		};
+		const summary = deriveCapabilitySummary(CAPS_COARSE);
+		expect(summary).toEqual<CapabilitySummary>({
+			maxResolution: "4k",
+			maxFramerate: 60,
+			codecs: ["h264"],
+			hardwareAccelerated: true,
+			audioSupported: true,
+		});
+	});
+});
+
 describe("formatCodec", () => {
 	it("maps known codec tokens to human labels", () => {
 		expect(formatCodec("h264")).toBe("H.264");
@@ -701,5 +793,93 @@ describe("resolvedAudioLabel — single-owner resolved-audio display (T6)", () =
 		);
 		expect(r.current).toBeUndefined();
 		expect(r.pending).toBe("USB audio");
+	});
+});
+
+describe("source×audio mixture matrix (M1–M6) — display derivation", () => {
+	const t = (key: string) => {
+		if (key === "audio.sources.pipelineDefault") return "Pipeline default";
+		if (key === "live.summary.autoPrefix") return "Auto";
+		return key;
+	};
+	const ENTRIES: AudioSource[] = [
+		{ id: "RØDE Streamer Mic", kind: "device" },
+		{ id: "Elgato Wave:3", kind: "device" },
+		{ id: "HDMI", kind: "device", label: "Rockchip HDMI-in" },
+		{ id: "USB audio", kind: "device" },
+		{
+			id: "Pipeline default",
+			kind: "pipeline_default",
+			labelKey: "audio.sources.pipelineDefault",
+		},
+	];
+
+	it("M1: network + embedded → embedded true, current undefined (no ALSA target)", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: AUDIO_SOURCE_AUTO },
+			{ resolved_asrc: null, resolved_asrc_reason: "embedded" },
+			ENTRIES,
+			t,
+		);
+		expect(r.embedded).toBe(true);
+		expect(r.current).toBeUndefined();
+	});
+
+	it("M2: network WITHOUT the cap → not embedded; a 2-entry picker stays 'multiple'", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: AUDIO_SOURCE_AUTO },
+			{ resolved_asrc: "Pipeline default" },
+			ENTRIES,
+			t,
+		);
+		expect(r.embedded).toBe(false);
+		expect(resolveAudioSourceMode(["USB audio", "Pipeline default"])).toBe(
+			"multiple",
+		);
+	});
+
+	it("M3: dual-USB Auto resolves to the cam's own audio → 'Auto → RØDE Streamer Mic'", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: AUDIO_SOURCE_AUTO },
+			{
+				resolved_asrc: "RØDE Streamer Mic",
+				resolved_asrc_reason: "usb-same-device",
+			},
+			ENTRIES,
+			t,
+		);
+		expect(r.current).toBe("Auto \u2192 RØDE Streamer Mic");
+	});
+
+	it("M4: HDMI video → 'Auto → {hardware label}' (T4 label wins)", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: AUDIO_SOURCE_AUTO },
+			{ resolved_asrc: "HDMI", resolved_asrc_reason: "hdmi" },
+			ENTRIES,
+			t,
+		);
+		expect(r.current).toBe("Auto \u2192 Rockchip HDMI-in");
+	});
+
+	it("M5: a disappeared selection is SURFACED, not hidden (notAvailable pill source)", () => {
+		expect(
+			resolveDisplayedAudioSource("USB audio", [
+				"No audio",
+				"Pipeline default",
+			]),
+		).toBe("USB audio");
+	});
+
+	it("M6: test-pattern/virtual → pipeline default → 'Auto → Pipeline default'", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: AUDIO_SOURCE_AUTO },
+			{
+				resolved_asrc: "Pipeline default",
+				resolved_asrc_reason: "pipeline-default",
+			},
+			ENTRIES,
+			t,
+		);
+		expect(r.current).toBe("Auto \u2192 Pipeline default");
 	});
 });

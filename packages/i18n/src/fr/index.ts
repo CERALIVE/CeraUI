@@ -269,51 +269,6 @@ const fr = {
 		transportAdvanced: "Avancé",
 		transportKindHint:
 			"Comment votre flux atteint le récepteur. SRTLA agrège plusieurs liens réseau ; RIST et SRT utilisent un seul lien.",
-		streamTuning: {
-			title: "Réglage du flux",
-			hint: "Réglez la façon dont votre flux est délivré. Un récepteur CeraLive débloque les profils, le FEC et le réglage de récupération ; les autres récepteurs utilisent les valeurs compatibles BELABOX.",
-			ceraliveReceiver: "Récepteur CeraLive",
-			latency: "Latence",
-			latencyNegotiated: "Négociée",
-			presets: "Profils prédéfinis",
-			fec: "Correction d'erreurs sans voie de retour",
-			fecHelper:
-				"Ajoute de la redondance pour que le récepteur reconstitue les paquets perdus. Consomme plus de bande passante et ajoute un peu de latence \u2014 idéal sur les liaisons instables.",
-			recoveryMode: "Mode de récupération",
-			advanced: "Avancé",
-			recovery: "Récupération",
-			recoveryStandard: "Standard",
-			recoveryStandardHint: "Recommandé",
-			recoveryBandwidthSaver: "Économie de bande passante",
-			recoveryBandwidthSaverHint: "Expert",
-			recoveryHelper:
-				"Standard garde le flux fluide et fiable. L'économie de bande passante réduit le trafic de récupération pour consommer moins de données sur les connexions limitées.",
-			belaboxBadge: "Standard (compatible BELABOX)",
-			belaboxBannerTitle: "Standard (valeurs compatibles BELABOX)",
-			belaboxBannerBody:
-				"Ce récepteur n'est pas un récepteur CeraLive, seule la latence est donc réglable. Le réglage avancé nécessite un récepteur CeraLive.",
-			reasonNonCeraLive: "Disponible uniquement avec un récepteur CeraLive.",
-			reasonReceiverManaged: "Géré par le récepteur.",
-			reasonFecUnsupported:
-				"La version de libsrt de ce récepteur CeraLive ne prend pas en charge le FEC.",
-			reasonProfileUnsupported: "Ce récepteur ne propose pas ce profil.",
-			summaryDelay: "\u2248 {seconds} s de délai",
-			summaryRecoveryStandard: "récupération automatique des pertes",
-			summaryRecoveryBandwidthSaver: "récupération économe en bande passante",
-			summaryFecOn: "FEC activé",
-			summaryFecOff: "FEC désactivé",
-			cloudSetTitle: "Défini par le cloud",
-			cloudSetHint: "Appuyez pour remplacer sur cet appareil",
-			driftHint: "L'appareil utilise un profil différent",
-			profileNames: {
-				balanced: "Équilibré",
-				lowLatency: "Faible latence",
-				resilient: "Résilient",
-				classic: "Classique",
-				lowLatencyFec: "Faible latence + FEC",
-				custom: "Personnalisé",
-			},
-		},
 		deviceStats: {
 			title: "État de l'appareil",
 			description: "Télémétrie matérielle en direct de cet appareil.",
@@ -327,6 +282,19 @@ const fr = {
 			lowDiskBody:
 				"Moins de 512 Mio libres sur /data. Libérez de l'espace pour que l'enregistrement, les journaux et les mises à jour continuent de fonctionner.",
 			lowDiskAction: "Voir les journaux",
+		},
+		networkIngest: {
+			title: "Ingestion réseau",
+			desc: "Autorisez un téléphone ou un encodeur de ce réseau à publier vers l'appareil",
+			explanation:
+				"Activez l'ingestion LAN pour qu'un téléphone ou un encodeur matériel (comme OBS) publie du RTMP ou du SRT directement vers cet appareil \u2014 sans relais cloud. L'émetteur doit être sur le MÊME réseau local (Wi-Fi ou Ethernet) que cet appareil.",
+			toggleRtmp: "Ingestion RTMP",
+			toggleSrt: "Ingestion SRT",
+			statusRunning: "Service en cours",
+			statusStopped: "Service arrêté",
+			statusDisabled: "Désactivé",
+			unavailable:
+				"L'ingestion réseau n'est pas disponible sur cet appareil en mode émulé.",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -822,6 +790,7 @@ const fr = {
 			disabling: "Désactivation…",
 			awaitingResult: "En attente du résultat…",
 			done: "Terminé",
+			saved: "Enregistré",
 		},
 	},
 	hotspotConfigurator: {
@@ -1229,6 +1198,8 @@ const fr = {
 			copied: "Adresse copiée",
 			copyFailed: "Impossible de copier l'adresse.",
 			includesAudio: "Audio inclus",
+			disabledInSettingsHint:
+				"Réactivez-le dans Paramètres \u2192 Ingestion réseau.",
 			codecEducation: {
 				rtmp: "RTMP ne publie que de la vidéo H.264 (avec audio AAC). Elle est toujours ré-encodée dans le codec de sortie configuré.",
 				srt: "SRT publie de la vidéo H.264 ou H.265. Elle est toujours ré-encodée dans le codec de sortie configuré.",
@@ -1305,37 +1276,6 @@ const fr = {
 				camlink: "Cam Link",
 			},
 		},
-		sourcePreference: {
-			title: "Priorité de source",
-			description:
-				"Ordonnez les sources entre lesquelles vous basculez. Le basculement automatique ignore cette liste.",
-			empty: "Aucune source vidéo détectée",
-			moveUp: "Monter {name}",
-			moveDown: "Descendre {name}",
-			rankLabel: "Priorité {rank}",
-			stickyNote:
-				"Le basculement automatique est persistant \u2014 le moteur ne revient pas automatiquement. Utilisez la liste des sources pour revenir manuellement.",
-			states: {
-				active: "Active",
-				lost: "Perdue",
-				failedOver: "Basculée",
-			},
-			lostHint: "Cette source est hors ligne.",
-			failedOverHint:
-				"Le moteur a basculé ici automatiquement après que votre source préférée est passée hors ligne.",
-			sync: {
-				applying: "Enregistrement de l'ordre\u2026",
-				applied: "Ordre enregistré",
-				failed: "Impossible d'enregistrer l'ordre",
-			},
-			failover: {
-				title: "Basculement automatique",
-				reasonSourceLost:
-					"{name} est passé hors ligne, le moteur a donc basculé vers {to}.",
-				sticky:
-					"Le basculement automatique est persistant \u2014 il ne reviendra pas seul. Utilisez la liste des sources pour revenir manuellement.",
-			},
-		},
 		source: {
 			label: "Source",
 			none: "Aucune source sélectionnée",
@@ -1349,6 +1289,7 @@ const fr = {
 				"Reconnectez l'appareil pour reprendre la diffusion depuis cette source.",
 			audioNone: "Aucune source audio détectée",
 			audioEmbedded: "Audio intégré (du flux entrant)",
+			audioEdit: "Codec et délai",
 		},
 		summary: {
 			nowStreaming: "En direct",
@@ -1372,6 +1313,7 @@ const fr = {
 				fixedBySource: "Fixé par la source sélectionnée",
 				unsupportedAtResolution: "Indisponible à cette résolution",
 				gatewayInactive: "La passerelle d'ingestion réseau n'est pas active",
+				disabledInSettings: "Désactivé dans les paramètres",
 				gatewayNoAddress: "Aucune adresse LAN ou point d'accès joignable",
 			},
 			info: "À propos de {field}",
@@ -1435,6 +1377,7 @@ const fr = {
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 			axisSelected: "Sélectionné",
 			axisDeviceMax: "Maximum de l'appareil",
+			fpsAvailableAt: "{fps} fps disponible en {resolution}",
 		},
 	},
 	dialogs: {
@@ -1610,6 +1553,8 @@ const fr = {
 		sessionExpired: "Session expirée. Veuillez vous authentifier à nouveau.",
 		authTimedOut:
 			"Impossible de vérifier votre session. Vérifiez la connexion et réessayez.",
+		clearSavedSession:
+			"Effacer la connexion enregistrée et saisir le mot de passe",
 	},
 	offline: {
 		title: "Vous êtes hors ligne",

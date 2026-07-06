@@ -83,6 +83,22 @@ function retryAuthCheck() {
 	runAuthCheck();
 }
 
+/**
+ * Escape hatch from the timed-out surface for a STALE saved credential (device
+ * password changed / storage carries a dead token): Retry alone would only
+ * re-loop. Mirrors the existing session-expiry credential-clear at :115 —
+ * removes the stored token and drops to the password screen. Only touches
+ * localStorage + local Layout state; the sole auth-mutation owner
+ * (auth-status.svelte) is untouched. `removeItem` is idempotent, so this is
+ * safe with no stored credential.
+ */
+function clearSavedSession() {
+	localStorage.removeItem('auth');
+	authTimedOut = false;
+	isCheckingAuthStatus = false;
+	authStatusStore.set(false);
+}
+
 runAuthCheck();
 
 // Timeout for the auth check in case we're offline: wrapped in $effect so the
@@ -181,14 +197,25 @@ $effect(() => {
 			>
 				<WifiOffIcon class="text-status-warning size-6 shrink-0" />
 				<span class="font-medium">{$LL.connection.authTimedOut()}</span>
-				<Button
-					class="border-status-warning/40 text-status-warning hover:bg-status-warning/10"
-					onclick={retryAuthCheck}
-					size="sm"
-					variant="outline"
-				>
-					{$LL.connection.retry()}
-				</Button>
+				<div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-center">
+					<Button
+						class="border-status-warning/40 text-status-warning hover:bg-status-warning/10 min-h-[44px]"
+						onclick={retryAuthCheck}
+						size="sm"
+						variant="outline"
+					>
+						{$LL.connection.retry()}
+					</Button>
+					<Button
+						class="text-muted-foreground hover:text-foreground min-h-[44px]"
+						data-testid="clear-saved-session"
+						onclick={clearSavedSession}
+						size="sm"
+						variant="ghost"
+					>
+						{$LL.connection.clearSavedSession()}
+					</Button>
+				</div>
 			</div>
 		</div>
 	{:else if !isCheckingAuthStatus}

@@ -440,6 +440,8 @@ const en = {
 			copied: "Address copied",
 			copyFailed: "Couldn't copy the address.",
 			includesAudio: "Includes audio",
+			disabledInSettingsHint:
+				"Re-enable this in Settings \u2192 Network ingest.",
 			codecEducation: {
 				rtmp: "RTMP publishes H.264 video (with AAC audio) only. It's always re-encoded to your configured output codec.",
 				srt: "SRT publishes H.264 or H.265 video. It's always re-encoded to your configured output codec.",
@@ -514,37 +516,6 @@ const en = {
 				camlink: "Cam Link",
 			},
 		},
-		sourcePreference: {
-			title: "Source Priority",
-			description:
-				"Order the sources you switch between. Auto-failover ignores this list.",
-			empty: "No video sources detected",
-			moveUp: "Move {name:string} up",
-			moveDown: "Move {name:string} down",
-			rankLabel: "Priority {rank:number}",
-			stickyNote:
-				"Auto-failover is sticky \u2014 the engine does not auto-return. Use the source list to switch back manually.",
-			states: {
-				active: "Active",
-				lost: "Lost",
-				failedOver: "Failed over",
-			},
-			lostHint: "This source is offline.",
-			failedOverHint:
-				"The engine switched here automatically after your preferred source went offline.",
-			sync: {
-				applying: "Saving order\u2026",
-				applied: "Order saved",
-				failed: "Couldn't save order",
-			},
-			failover: {
-				title: "Auto-failover",
-				reasonSourceLost:
-					"{name:string} went offline, so the engine switched to {to:string}.",
-				sticky:
-					"Auto-failover is sticky \u2014 it won't switch back on its own. Use the source list to return manually.",
-			},
-		},
 		source: {
 			label: "Source",
 			none: "No source selected",
@@ -557,6 +528,7 @@ const en = {
 			lostBody: "Reconnect the device to resume streaming from this source.",
 			audioNone: "No audio source detected",
 			audioEmbedded: "Embedded audio (from the incoming stream)",
+			audioEdit: "Codec & delay",
 		},
 		summary: {
 			nowStreaming: "Now streaming",
@@ -580,6 +552,7 @@ const en = {
 				fixedBySource: "Fixed by the selected source",
 				unsupportedAtResolution: "Not available at this resolution",
 				gatewayInactive: "Network ingest gateway is not running",
+				disabledInSettings: "Disabled in Settings",
 				gatewayNoAddress: "No reachable LAN or hotspot address",
 			},
 			info: "About {field:string}",
@@ -643,6 +616,7 @@ const en = {
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 			axisSelected: "Selected",
 			axisDeviceMax: "Device max",
+			fpsAvailableAt: "{fps:number} fps available at {resolution:string}",
 		},
 	},
 	dialogs: {
@@ -778,51 +752,6 @@ const en = {
 		transportAdvanced: "Advanced",
 		transportKindHint:
 			"How your stream reaches the receiver. SRTLA bonds multiple network links; RIST and SRT use a single link.",
-		streamTuning: {
-			title: "Stream tuning",
-			hint: "Tune how your stream is delivered. A CeraLive receiver unlocks profiles, FEC, and recovery tuning; other receivers use BELABOX-compatible defaults.",
-			ceraliveReceiver: "CeraLive receiver",
-			latency: "Latency",
-			latencyNegotiated: "Negotiated",
-			presets: "Profile presets",
-			fec: "Forward error correction",
-			fecHelper:
-				"Adds redundancy so the receiver can rebuild lost packets. Uses extra bandwidth and adds a little latency \u2014 best on lossy connections.",
-			recoveryMode: "Recovery mode",
-			advanced: "Advanced",
-			recovery: "Recovery",
-			recoveryStandard: "Standard",
-			recoveryStandardHint: "Recommended",
-			recoveryBandwidthSaver: "Bandwidth Saver",
-			recoveryBandwidthSaverHint: "Expert",
-			recoveryHelper:
-				"Standard keeps the stream smooth and reliable. Bandwidth Saver trims recovery traffic to use less data on capped connections.",
-			belaboxBadge: "Standard (BELABOX-compatible)",
-			belaboxBannerTitle: "Standard (BELABOX-compatible defaults)",
-			belaboxBannerBody:
-				"This receiver isn't a CeraLive receiver, so only latency is adjustable. Advanced tuning needs a CeraLive receiver.",
-			reasonNonCeraLive: "Available only with a CeraLive receiver.",
-			reasonReceiverManaged: "Receiver-managed.",
-			reasonFecUnsupported:
-				"This CeraLive receiver's libsrt build doesn't support FEC.",
-			reasonProfileUnsupported: "This receiver doesn't offer this profile.",
-			summaryDelay: "\u2248 {seconds:string} s delay",
-			summaryRecoveryStandard: "automatic loss recovery",
-			summaryRecoveryBandwidthSaver: "bandwidth-saver recovery",
-			summaryFecOn: "FEC on",
-			summaryFecOff: "FEC off",
-			cloudSetTitle: "Set by cloud",
-			cloudSetHint: "Tap to override on this device",
-			driftHint: "Device is running a different profile",
-			profileNames: {
-				balanced: "Balanced",
-				lowLatency: "Low latency",
-				resilient: "Resilient",
-				classic: "Classic",
-				lowLatencyFec: "Low latency + FEC",
-				custom: "Custom",
-			},
-		},
 		appearance: {
 			title: "Appearance",
 			language: "Language",
@@ -877,6 +806,19 @@ const en = {
 			lowDiskBody:
 				"Less than 512 MiB free on /data. Free up space so recording, logs, and updates keep working.",
 			lowDiskAction: "View logs",
+		},
+		networkIngest: {
+			title: "Network ingest",
+			desc: "Let a phone or encoder on this network publish to the device",
+			explanation:
+				"Turn on LAN ingest to let a phone or a hardware encoder (like OBS) publish RTMP or SRT straight into this device \u2014 no cloud relay. The publisher must be on the SAME local network (Wi-Fi or Ethernet) as this device.",
+			toggleRtmp: "RTMP ingest",
+			toggleSrt: "SRT ingest",
+			statusRunning: "Service running",
+			statusStopped: "Service not running",
+			statusDisabled: "Disabled",
+			unavailable:
+				"Network ingest isn't available on this device in emulated mode.",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -1321,6 +1263,7 @@ const en = {
 			disabling: "Disabling…",
 			awaitingResult: "Awaiting result…",
 			done: "Done",
+			saved: "Saved",
 		},
 	},
 	hotspotConfigurator: {
@@ -1592,6 +1535,7 @@ const en = {
 		sessionExpired: "Session expired. Please authenticate again.",
 		authTimedOut:
 			"Couldn't verify your session. Check the connection and try again.",
+		clearSavedSession: "Clear saved sign-in and enter password",
 	},
 	offline: {
 		title: "You're Offline",

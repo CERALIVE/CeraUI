@@ -54,7 +54,11 @@ const TOKEN: string = (() => {
 	return tokens[0];
 })();
 
-const FAKE_ERR = "drop+fake: simulated configure failure";
+// BondToggle routes its configure mutation through `osCommand`
+// (live-correctness-pass Todo #20), which owns the SINGLE failure toast and
+// surfaces the generic `network.os.operationFailed` copy — NOT the raw RPC error
+// string the drop+fake harness injects. So a failed toggle shows this string.
+const OP_FAILED_TOAST = "Couldn't complete the action";
 
 function writeEvidence(fileName: string, lines: string[]): void {
 	fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -493,7 +497,7 @@ test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 		await armDropFake(page, "failure");
 		await toggle.click();
 
-		await expect(page.getByText(FAKE_ERR)).toBeVisible();
+		await expect(page.getByText(OP_FAILED_TOAST)).toBeVisible();
 		// On failure the catch path releases the field-lock to the authoritative
 		// `enabled` prop, so `displayed` reverts immediately (no echo required).
 		await expect(toggle).toHaveAttribute("aria-checked", "true");
@@ -501,7 +505,7 @@ test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 		writeEvidence("task-1-rpc-failure-revert.txt", [
 			"Scenario C — RPC failure reverts optimistic",
 			"drop+fake FAILURE click → BondToggle catch path.",
-			`Error toast surfaced: "${FAKE_ERR}"`,
+			`Error toast surfaced: "${OP_FAILED_TOAST}" (osCommand single-toast, Todo #20)`,
 			"Field-lock released to authoritative prop → optimistic OFF reverted to ON.",
 			"Result: PASS",
 		]);
@@ -819,7 +823,7 @@ test.describe("bond-toggle no-flash (display hold + ingestion gate)", () => {
 		await armDropFake(page, "failure");
 		await toggle.click();
 
-		await expect(page.getByText(FAKE_ERR)).toBeVisible();
+		await expect(page.getByText(OP_FAILED_TOAST)).toBeVisible();
 		await expect(toggle).toHaveAttribute("aria-checked", "true");
 		await expect(toggle).toHaveAttribute("aria-busy", "false");
 		await expect(toggle).toBeEnabled();

@@ -23,7 +23,10 @@ import {
 	setMockAudioDevicesProvider,
 	updateAudioDevices,
 } from "../modules/streaming/audio.ts";
-import type { EngineAudioDevice } from "../modules/streaming/audio-naming.ts";
+import {
+	type EngineAudioDevice,
+	resolveAudioLabels,
+} from "../modules/streaming/audio-naming.ts";
 import {
 	type AutoAsrcResolution,
 	buildAutoLaunchConfig,
@@ -354,6 +357,116 @@ describe("resolveAutoAsrc — deterministic rules", () => {
 				audioDevices: USB_MAP,
 				engineAudio: [],
 				networkEmbeddedAudio: true,
+			}),
+		).toEqual({
+			asrcKey: "Pipeline default",
+			cardId: null,
+			reason: "pipeline-default",
+		});
+	});
+});
+
+// ─── Source×audio mixture matrix M1–M6 (Task 21) ─────────────────────────────
+
+const DUAL_USB_MAP: Record<string, string> = {
+	"RØDE Streamer Mic": "rode_card",
+	"Elgato Wave:3": "elgato_wave3",
+	"No audio": "No audio",
+	"Pipeline default": "Pipeline default",
+};
+
+describe("source×audio mixture matrix (M1–M6)", () => {
+	test("M1: network source + network_embedded_audio → embedded (no ALSA target)", () => {
+		expect(
+			resolveAutoAsrc({
+				source: networkSource(),
+				audioDevices: USB_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: true,
+			}),
+		).toEqual({ asrcKey: null, cardId: null, reason: "embedded" });
+	});
+
+	test("M2: network source WITHOUT the embedded cap → pipeline default (legacy ALSA path)", () => {
+		expect(
+			resolveAutoAsrc({
+				source: networkSource(),
+				audioDevices: USB_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: false,
+			}),
+		).toEqual({
+			asrcKey: "Pipeline default",
+			cardId: null,
+			reason: "pipeline-default",
+		});
+	});
+
+	test("M3: USB cam + second USB mic → Auto resolves to the cam's OWN audio (same-device prefix join); both offered with distinct real labels", () => {
+		const engine = [
+			engineAudio("RØDE Streamer Mic", "rode_card"),
+			engineAudio("Elgato Wave:3", "elgato_wave3"),
+		];
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("uvc_h264", "RØDE Streamer X"),
+				audioDevices: DUAL_USB_MAP,
+				engineAudio: engine,
+				networkEmbeddedAudio: undefined,
+			}),
+		).toEqual({
+			asrcKey: "RØDE Streamer Mic",
+			cardId: "rode_card",
+			reason: "usb-same-device",
+		});
+
+		const labels = resolveAudioLabels(DUAL_USB_MAP, engine, new Map());
+		expect(labels.get("RØDE Streamer Mic")).toBe("RØDE Streamer Mic");
+		expect(labels.get("Elgato Wave:3")).toBe("Elgato Wave:3");
+		expect(labels.get("RØDE Streamer Mic")).not.toBe(
+			labels.get("Elgato Wave:3"),
+		);
+	});
+
+	test("M4: HDMI video → Auto resolves to the HDMI card (rule 3)", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("hdmi", "HDMI capture"),
+				audioDevices: HDMI_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
+			}),
+		).toEqual({ asrcKey: "HDMI", cardId: "rockchiphdmiin", reason: "hdmi" });
+	});
+
+	test("M5: the resolved audio card disappears → Auto falls through to the next rule; the input map is NOT mutated", () => {
+		const afterUnplug: Record<string, string> = {
+			"Some Card": "somecard",
+			"No audio": "No audio",
+			"Pipeline default": "Pipeline default",
+		};
+		const snapshot = structuredClone(afterUnplug);
+		const r = resolveAutoAsrc({
+			source: captureSource("usb", "Generic USB Cam"),
+			audioDevices: afterUnplug,
+			engineAudio: [],
+			networkEmbeddedAudio: undefined,
+		});
+		expect(r).toEqual({
+			asrcKey: "Some Card",
+			cardId: "somecard",
+			reason: "first-device",
+		});
+		expect(afterUnplug).toEqual(snapshot);
+	});
+
+	test("M6: test-pattern / virtual source → pipeline default", () => {
+		expect(
+			resolveAutoAsrc({
+				source: virtualSource(),
+				audioDevices: HDMI_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
 			}),
 		).toEqual({
 			asrcKey: "Pipeline default",

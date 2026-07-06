@@ -228,3 +228,100 @@ test.describe("@visual bond constellation HUD-sheet lifecycle", () => {
 		});
 	});
 });
+
+/**
+ * Task-1 (live-correctness-pass): the pulse ring expands AROUND the bond core,
+ * never drifting off-center.
+ *
+ * The ring previously drifted toward the top-left as it scaled because BOTH GSAP
+ * and a CSS `transform-box`/`transform-origin` block set the SVG origin, so it was
+ * applied twice and compounded. The fix hands origin ownership solely to GSAP
+ * (`transformOrigin:"50% 50%"` on both fromTo ends) and deletes the CSS. Center
+ * stability across a full pulse cycle IS the regression signal — with the bug the
+ * center wandered by tens of px; fixed, it stays pinned on the core.
+ */
+const RING = '[data-testid="bond-pulse"][data-pulse-index="0"]';
+const CORE = '[data-testid="bond-core"]';
+
+type Box = { x: number; y: number; width: number; height: number };
+
+function centerOf(b: Box): { cx: number; cy: number } {
+	return { cx: b.x + b.width / 2, cy: b.y + b.height / 2 };
+}
+
+test.describe("@visual bond constellation pulse origin (Task 1)", () => {
+	test.beforeEach(async ({ page }, testInfo) => {
+		test.skip(testInfo.project.name !== "desktop", "desktop layout exposes the persistent HUD bar");
+		await forceStreaming(page);
+	});
+
+	test("the pulse ring grows around the bond core, never drifting off-center", { tag: "@visual" }, async ({ page }) => {
+		await page.goto("/");
+		await openLiveHud(page);
+
+		const constellation = page.getByTestId("bond-constellation");
+		await expect(constellation).toBeVisible();
+		await expect(constellation).toHaveAttribute("data-animated", "true");
+
+		const ring = page.locator(RING);
+		const core = page.locator(CORE);
+		await expect(ring).toBeVisible();
+		await expect(core).toBeVisible();
+
+		const coreBox = await core.boundingBox();
+		expect(coreBox, "bond-core must have a layout box").not.toBeNull();
+		const coreCenter = centerOf(coreBox as Box);
+
+		// Poll one ring's boundingBox every ~150 ms across a full 2.1 s pulse cycle.
+		// rAF-spaced samples are too close to see growth; this fixed cadence paces
+		// evenly-spread animation-frame captures (not a state race — the animation
+		// has no discrete DOM signal to web-first-await, so expect.poll cannot apply).
+		const widths: number[] = [];
+		const centerDrifts: number[] = [];
+		const SAMPLES = 16;
+		for (let i = 0; i < SAMPLES; i++) {
+			const box = await ring.boundingBox();
+			if (box) {
+				widths.push(box.width);
+				const c = centerOf(box);
+				centerDrifts.push(Math.hypot(c.cx - coreCenter.cx, c.cy - coreCenter.cy));
+			}
+			await page.waitForTimeout(150);
+		}
+
+		expect(widths.length, "should collect ≥8 ring samples").toBeGreaterThanOrEqual(8);
+
+		const maxDrift = Math.max(...centerDrifts);
+		expect(
+			maxDrift,
+			`max center drift ${maxDrift.toFixed(2)}px (drifts: ${centerDrifts.map((d) => d.toFixed(1)).join(", ")})`,
+		).toBeLessThanOrEqual(2);
+
+		const growth = Math.max(...widths) / Math.min(...widths);
+		expect(growth, `width growth ratio ${growth.toFixed(2)}`).toBeGreaterThanOrEqual(1.5);
+
+		await constellation.screenshot({
+			path: path.join(REPO_EVIDENCE, "task-1-bond-constellation.png"),
+		});
+	});
+
+	test("reduced-motion parks the ring — no animation, identical boxes 300 ms apart", { tag: "@visual" }, async ({ page }) => {
+		await page.emulateMedia({ reducedMotion: "reduce" });
+		await page.goto("/");
+		await openLiveHud(page);
+
+		const constellation = page.getByTestId("bond-constellation");
+		await expect(constellation).toBeVisible();
+		await expect(constellation).toHaveAttribute("data-animated", "false");
+
+		const ring = page.locator(RING);
+		await expect(ring).toBeVisible();
+
+		const first = await ring.boundingBox();
+		await page.waitForTimeout(300);
+		const second = await ring.boundingBox();
+		expect(first, "ring must have a layout box").not.toBeNull();
+		expect(second).not.toBeNull();
+		expect(second).toEqual(first);
+	});
+});

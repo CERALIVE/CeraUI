@@ -87,6 +87,9 @@ const VIRTUAL_SOURCE_ID = "test";
 /** The i18n reason surfaced when a network gateway is not running. */
 const GATEWAY_INACTIVE_REASON = "live.education.reason.gatewayInactive";
 
+/** The i18n reason surfaced when the operator disabled the protocol in Settings. */
+const DISABLED_IN_SETTINGS_REASON = "live.education.reason.disabledInSettings";
+
 /** The `settings.sources.<id>` i18n key family PipelineHelper already resolves. */
 function sourceLabelKey(id: string): string {
 	return `settings.sources.${id}`;
@@ -146,11 +149,20 @@ function networkAvailability(
 	ingest: NetworkIngest,
 ): { available: boolean; url: string | null; unavailableReason?: string } {
 	const slot = ingest[kind];
-	const active = slot?.service_active === true;
+	// Operator intent wins over unit truth: a NEW-topology shared unit may still
+	// report service_active for the sibling protocol, but a protocol the operator
+	// disabled must render unavailable with the disabled-in-settings reason.
+	const operatorDisabled = slot?.operator_disabled === true;
+	const active = slot?.service_active === true && !operatorDisabled;
+	const reason = operatorDisabled
+		? DISABLED_IN_SETTINGS_REASON
+		: active
+			? undefined
+			: GATEWAY_INACTIVE_REASON;
 	return {
 		available: active,
 		url: slot?.url ?? null,
-		...(active ? {} : { unavailableReason: GATEWAY_INACTIVE_REASON }),
+		...(reason !== undefined ? { unavailableReason: reason } : {}),
 	};
 }
 

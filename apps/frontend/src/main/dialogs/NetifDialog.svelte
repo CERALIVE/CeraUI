@@ -20,7 +20,8 @@ import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import { AppDialog } from '$lib/components/dialogs';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
-import { setNetif } from '$lib/helpers/NetworkHelper';
+import { rpc } from '$lib/rpc';
+import { isOperationPending, osCommand } from '$lib/rpc/async-operation.svelte';
 
 interface Props {
 	open?: boolean;
@@ -66,18 +67,40 @@ const trimmedIp = $derived(ip.trim());
 const ipValid = $derived(trimmedIp === '' || IP_ADDRESS_REGEX.test(trimmedIp));
 const ipInvalid = $derived(trimmedIp !== '' && !ipValid);
 
+// SHARED resource key with BondToggle (both mutate `rpc.network.configure` for
+// this interface), so a dialog save and a bond toggle on the same iface can never
+// race — the osCommand re-entry guard is also the cross-surface race guard.
+const netifKey = $derived(`netif:${name}`);
+
 async function save() {
 	if (!ipValid || saving) return;
+	// Cross-surface busy guard: a bond toggle (or another save) on THIS iface is
+	// in flight — refuse with the standard busy feedback, don't dispatch a second.
+	if (isOperationPending(netifKey)) {
+		toast.error($LL.network.os.deviceBusy());
+		return;
+	}
 	saving = true;
-	try {
-		// DHCP path must OMIT ip (undefined), never send "" (fails backend regex).
-		await setNetif(name, trimmedIp === '' ? undefined : trimmedIp, enabled);
+	// DHCP path must OMIT ip (undefined), never send "" (fails backend regex).
+	const result = await osCommand({
+		key: netifKey,
+		target: { name, enabled },
+		confirmOnResolve: true,
+		rpc: () =>
+			rpc.network.configure({
+				name,
+				ip: trimmedIp === '' ? undefined : trimmedIp,
+				enabled,
+			}),
+		busyMessage: () => $LL.network.os.deviceBusy(),
+		failMessage: () => $LL.network.os.operationFailed(),
+	});
+	saving = false;
+	// success:false / throw are already toasted by osCommand and keep the dialog
+	// open with the form value preserved. Only a confirmed success closes it.
+	if (result?.success) {
+		toast.success($LL.network.os.saved());
 		open = false;
-	} catch (error) {
-		console.error(`Failed to configure interface ${name}:`, error);
-		toast.error($LL.network.errors.toggleFailed());
-	} finally {
-		saving = false;
 	}
 }
 </script>

@@ -3,13 +3,13 @@
  * StreamSetupChain — the merged "Stream setup" card (Task T9).
  *
  * Locks the contracts the plan pins:
- *   • FOUR rows in signal order (encoder → audio → destination → network), each
+ *   • THREE rows in signal order (encoder → destination → network), each
  *     `data-testid="setup-row"` with `data-row` + `data-state`;
  *   • a blocked source gate renders the Encoder row `data-state="blocked"` + the
  *     reason text, and Start is disabled with the matching reason;
- *   • the three migrated dialog testids (open-encoder/audio/server) are present;
- *   • the Audio row is ADVISORY-ONLY — even a broken/unavailable audio source only
- *     shows `warn`, NEVER `blocked`, and NEVER blocks Start;
+ *   • the two migrated dialog testids (open-encoder/open-server) are present;
+ *   • Audio is NOT a setup-chain row (T11) — the Source card owns the audio
+ *     surface, so no `data-row="audio"` and no `open-audio-dialog` render here;
  *   • the sole-camera auto row renders ONLY when exactly one capture source exists
  *     AND config.source is unset — folding that id into the Start payload with NO
  *     premature setConfig (rpc spy stays at zero);
@@ -174,43 +174,39 @@ beforeEach(() => {
 	setConfig.mockReset();
 });
 
-describe("StreamSetupChain — four rows in signal order", () => {
-	it("renders exactly four rows: encoder → audio → destination → network", () => {
+describe("StreamSetupChain — three rows in signal order", () => {
+	it("renders exactly three rows: encoder → destination → network (no audio)", () => {
 		const { container } = renderChain({
 			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
 		});
-		expect(rowKeys(container)).toEqual([
-			"encoder",
-			"audio",
-			"destination",
-			"network",
-		]);
+		expect(rowKeys(container)).toEqual(["encoder", "destination", "network"]);
 	});
 
-	it("renders the three migrated dialog testids (all rows always visible)", () => {
+	it("renders the two migrated dialog testids; audio is NOT a setup row (T11)", () => {
 		const { container } = renderChain({
 			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
 		});
-		for (const id of [
-			"open-encoder-dialog",
-			"open-audio-dialog",
-			"open-server-dialog",
-		]) {
+		for (const id of ["open-encoder-dialog", "open-server-dialog"]) {
 			expect(
 				container.querySelector(`[data-testid="${id}"]`),
 				`${id} must render`,
 			).not.toBeNull();
 		}
+		// Source card is the ONE audio surface — no audio row/affordance here (T11).
+		expect(rowFor(container, "audio")).toBeNull();
+		expect(
+			container.querySelector('[data-testid="open-audio-dialog"]'),
+		).toBeNull();
 	});
 
-	it("never collapses when every gate is green: all four rows stay rendered, one Start control", () => {
+	it("never collapses when every gate is green: all three rows stay rendered, one Start control", () => {
 		// All gates green — the retired GoLiveCard would have collapsed to a ready bar
 		// here; StreamSetupChain keeps every row fully rendered with a single Start
 		// control at the foot (no ready-bar / expand / collapse affordance exists).
 		const { container } = renderChain({
 			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
 		});
-		expect(rowKeys(container)).toHaveLength(4);
+		expect(rowKeys(container)).toHaveLength(3);
 		expect(
 			within(container).getAllByRole("button", { name: /start stream/i }),
 		).toHaveLength(1);
@@ -269,31 +265,20 @@ describe("StreamSetupChain — encoder row (source gate)", () => {
 	});
 });
 
-describe("StreamSetupChain — audio row is advisory only", () => {
-	it("a broken/unavailable audio source only warns — NEVER blocks, NEVER disables Start", () => {
+describe("StreamSetupChain — audio is not a setup row (T11)", () => {
+	it("ignores a stray audio config row and never blocks Start on it", () => {
 		const { container } = renderChain({
-			// every readiness gate green so ONLY audio could conceivably block
+			// A warn-flagged audio config row is still passed in configRows; the
+			// setup chain must ignore it entirely (audio moved to the Source card).
 			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
 			rowOptions: { audioWarn: true },
 		});
-		const audio = rowFor(container, "audio");
-		// Advisory: warn, never blocked.
-		expect(audio?.getAttribute("data-state")).toBe("warn");
-		expect(audio?.getAttribute("data-state")).not.toBe("blocked");
-
-		// Start is NOT blocked by an advisory audio warning.
+		expect(rowFor(container, "audio")).toBeNull();
 		const start = within(container).getByRole("button", {
 			name: /start stream/i,
 		});
 		expect((start as HTMLButtonElement).disabled).toBe(false);
 		expect(start.getAttribute("title")).toBeNull();
-	});
-
-	it("a healthy audio row is ok", () => {
-		const { container } = renderChain({
-			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
-		});
-		expect(rowFor(container, "audio")?.getAttribute("data-state")).toBe("ok");
 	});
 });
 
@@ -372,11 +357,7 @@ describe("StreamSetupChain — streaming lock", () => {
 			isStreaming: true,
 		});
 		// Edit triggers are replaced by the lock badge for the lockable sections.
-		for (const id of [
-			"open-encoder-dialog",
-			"open-audio-dialog",
-			"open-server-dialog",
-		]) {
+		for (const id of ["open-encoder-dialog", "open-server-dialog"]) {
 			expect(
 				container.querySelector(`[data-testid="${id}"]`),
 				`${id} edit trigger is gone while streaming`,
@@ -384,8 +365,8 @@ describe("StreamSetupChain — streaming lock", () => {
 		}
 		const locks = container.querySelectorAll('[title="Stop stream to change"]');
 		expect(locks.length).toBeGreaterThan(0);
-		// All four rows are still rendered while streaming (no collapse).
-		expect(rowKeys(container)).toHaveLength(4);
+		// All three rows are still rendered while streaming (no collapse).
+		expect(rowKeys(container)).toHaveLength(3);
 		// Stop control is offered.
 		expect(
 			within(container).getByRole("button", { name: /stop stream/i }),

@@ -93,6 +93,7 @@ Development mode mocks hardware. Set `MOCK_SCENARIO` to switch scenarios:
 bun run dev                                   # default: multi-modem + WiFi
 MOCK_SCENARIO=single-modem bun run dev        # 1 modem, no WiFi
 MOCK_SCENARIO=streaming-active bun run dev    # active streaming simulation
+MOCK_SCENARIO=modem-pin-locked bun run dev    # 2 modems, modem 0 SIM PIN-locked (PIN 0000)
 ```
 
 ## Structure

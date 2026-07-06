@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	isPipelineAvailable,
+	PIPELINE_GATEWAY_DISABLED_IN_SETTINGS,
 	PIPELINE_GATEWAY_INACTIVE,
 	PIPELINE_GATEWAY_NO_ADDRESS,
 	pipelineAvailability,
@@ -123,6 +124,76 @@ describe("pipelineAvailability — addressless case (gateway up, url null)", () 
 			addressless,
 		);
 		expect(verdict.available).toBe(true);
+	});
+});
+
+describe("pipelineAvailability — operator-disabled (Settings) case", () => {
+	// The operator turned the protocol OFF in Settings. In the NEW topology the
+	// shared MediaMTX unit can still report service_active for the sibling, so
+	// operator intent must win over unit truth — with a DISTINCT reason.
+	const disabledActive: NetworkIngest = {
+		rtmp: {
+			service_active: true,
+			url: "rtmp://192.168.1.100:1935/publish/live",
+			operator_disabled: true,
+		},
+		srt: { service_active: true, url: "srt://192.168.1.100:4001" },
+	};
+
+	it("blocks a disabled rtmp pipeline with the DISTINCT disabledInSettings reason even when service_active", () => {
+		const verdict = pipelineAvailability(
+			makePipeline({ requires_gateway: "rtmp" }),
+			disabledActive,
+		);
+		expect(verdict.available).toBe(false);
+		if (!verdict.available) {
+			expect(verdict.reason).toBe(PIPELINE_GATEWAY_DISABLED_IN_SETTINGS);
+			expect(verdict.reason).not.toBe(PIPELINE_GATEWAY_INACTIVE);
+			expect(verdict.reason.length).toBeGreaterThan(0);
+		}
+	});
+
+	it("keeps the sibling srt pipeline (not disabled) available on the same shared unit", () => {
+		const verdict = pipelineAvailability(
+			makePipeline({ requires_gateway: "srt" }),
+			disabledActive,
+		);
+		expect(verdict.available).toBe(true);
+	});
+
+	it("operator_disabled takes precedence over the addressless (url null) state", () => {
+		const verdict = pipelineAvailability(
+			makePipeline({ requires_gateway: "rtmp" }),
+			{
+				rtmp: {
+					service_active: true,
+					url: null,
+					unavailable_reason: "no_lan_or_hotspot_address",
+					operator_disabled: true,
+				},
+				srt: null,
+			},
+		);
+		expect(verdict.available).toBe(false);
+		if (!verdict.available) {
+			expect(verdict.reason).toBe(PIPELINE_GATEWAY_DISABLED_IN_SETTINGS);
+			expect(verdict.reason).not.toBe(PIPELINE_GATEWAY_NO_ADDRESS);
+		}
+	});
+
+	it("surfaces disabledInSettings (not gatewayInactive) even when the unit is also inactive", () => {
+		const verdict = pipelineAvailability(
+			makePipeline({ requires_gateway: "rtmp" }),
+			{
+				rtmp: { service_active: false, url: null, operator_disabled: true },
+				srt: null,
+			},
+		);
+		expect(verdict.available).toBe(false);
+		if (!verdict.available) {
+			expect(verdict.reason).toBe(PIPELINE_GATEWAY_DISABLED_IN_SETTINGS);
+			expect(verdict.reason).not.toBe(PIPELINE_GATEWAY_INACTIVE);
+		}
 	});
 });
 

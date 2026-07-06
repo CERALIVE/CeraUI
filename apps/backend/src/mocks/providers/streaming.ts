@@ -15,6 +15,7 @@ import {
 } from "@ceralive/cerastream";
 import type { ActiveEncode, RequiresGateway } from "@ceraui/rpc/schemas";
 import { getConfig } from "../../modules/config.ts";
+import { readIngestDesired } from "../../modules/network/network-ingest-control.ts";
 import {
 	type EngineCapabilitiesSnapshot,
 	getCapabilities,
@@ -696,6 +697,12 @@ export function setMockGatewayActive(
 /** Whether the given network-ingest gateway is active in dev/mock (false when mocks inactive). */
 export function isMockGatewayActive(kind: RequiresGateway): boolean {
 	if (!shouldUseMocks()) {
+		return false;
+	}
+	// Operator desired-state wins over the mock unit flag, exactly as the real
+	// probe (buildGatewayProbe) ANDs service_active with !operator_disabled — so a
+	// protocol disabled in Settings can never pass the start-gate (Task 7).
+	if (!readIngestDesired(getConfig())[kind]) {
 		return false;
 	}
 	return getMockState().gatewayActive[kind] === true;

@@ -16,6 +16,7 @@
 		"dev:single-modem": "MOCK_SCENARIO=single-modem dotenv -e .env.development -- mprocs",
 		"dev:multi-modem": "MOCK_SCENARIO=multi-modem-wifi dotenv -e .env.development -- mprocs",
 		"dev:streaming": "MOCK_SCENARIO=streaming-active dotenv -e .env.development -- mprocs",
+		"dev:modem-pin-locked": "MOCK_SCENARIO=modem-pin-locked dotenv -e .env.development -- mprocs",
 		"build": "bun run --filter backend build",
 		"postbuild": "cp -r ./deployment/* ./dist/",
 		"build:frontend": "bun run --filter frontend build",

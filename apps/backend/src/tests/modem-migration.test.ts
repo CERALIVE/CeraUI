@@ -86,6 +86,12 @@ describe("modem migration — event-driven presence + retained status poll", () 
 	afterAll(() => {
 		stopModemUpdateLoop();
 		stopMockService();
+		// The final discoverModems test registers modems into the shared
+		// modemsState singleton; clear it so they don't leak into later files.
+		for (const id of getModemIds()) {
+			removeModem(id);
+		}
+		setModemsState({});
 	});
 
 	beforeEach(() => {

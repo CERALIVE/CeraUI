@@ -50,6 +50,7 @@ import {
 	refreshAndBroadcastNetworkIngest,
 	refreshNetworkIngestInfo,
 } from "./modules/network/network-ingest.ts";
+import { reconcileIngestDesiredState } from "./modules/network/network-ingest-control.ts";
 import {
 	handleNetifMonitorEvent,
 	initNetworkInterfaceMonitoring,
@@ -330,6 +331,11 @@ void runAddonReconciler();
 process.on("SIGUSR1", function reconcileAddons() {
 	void runAddonReconciler();
 });
+
+// Network-ingest desired-state reconcile (T6): fire-and-forget, never gates boot.
+// Reconciles the baked-in rtmp/srt gateway units to the operator's persisted
+// enable/disable choice; no-ops on a dev/emulated host and swallows all failures.
+void reconcileIngestDesiredState();
 
 // Graceful shutdown: drain streaming subprocesses (SIGTERM → SIGKILL after the
 // grace window) before exit so no orphaned srtla_send survives. Guarded so a

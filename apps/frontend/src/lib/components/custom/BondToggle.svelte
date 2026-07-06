@@ -1,9 +1,9 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { toast } from 'svelte-sonner';
 
 import { Switch } from '$lib/components/ui/switch';
 import * as Tooltip from '$lib/components/ui/tooltip';
+import { isOperationPending, osCommand } from '$lib/rpc/async-operation.svelte';
 import {
 	isPending,
 	markPending,
@@ -60,10 +60,17 @@ let { name, enabled, ip, disabledReason, onBeforeDisable, class: className }: Pr
 let pending = $state(false);
 let target = $state(false);
 
+// SHARED resource key with NetifDialog (both mutate `rpc.network.configure` for
+// this interface), so a bond toggle and a dialog save on the same iface can never
+// race — the osCommand re-entry guard is also the cross-surface race guard.
+const netifKey = $derived(`netif:${name}`);
+
 const displayed = $derived(
 	pending || isPending(`enabled_${name}`) ? target : enabled,
 );
-const isDisabled = $derived(pending || disabledReason !== undefined);
+const isDisabled = $derived(
+	pending || isOperationPending(netifKey) || disabledReason !== undefined,
+);
 
 const actionLabel = $derived(
 	displayed ? $LL.network.view.disableBond() : $LL.network.view.enableBond(),
@@ -73,16 +80,11 @@ const stateLabel = $derived(
 );
 const tooltipText = $derived(disabledReason ?? actionLabel);
 
-function errorMessage(error: unknown): string | undefined {
-	if (error instanceof Error && error.message) return error.message;
-	if (typeof error === 'string' && error) return error;
-	return undefined;
-}
-
 async function toggle(next: boolean) {
-	// Serialize concurrent toggles: ignore input while a request is in flight
-	// or the control is disabled.
-	if (pending || disabledReason !== undefined) return;
+	// Serialize concurrent toggles AND cross-surface saves: ignore input while a
+	// request is in flight (local or a NetifDialog save on this shared key) or the
+	// control is disabled.
+	if (pending || isOperationPending(netifKey) || disabledReason !== undefined) return;
 
 	// Guarded disable: run the caller's confirm before mutating. Aborting here
 	// leaves `displayed` following the (still-true) `enabled` prop, so the
@@ -94,36 +96,33 @@ async function toggle(next: boolean) {
 
 	target = next;
 	pending = true;
-	// Register this interface's bond-membership edit in the dirty-field registry
-	// (per-interface key, so it never collides with another control). Lock BEFORE
-	// the RPC, release after it settles (resolve or reject) to avoid a permanent
-	// lock. The local `pending`/`target` pair owns the optimistic visual; this
-	// registration only records ownership so the ingestion layer knows the field.
+	// Two composed layers: the dirty-registry field-lock owns the STALE-ECHO guard
+	// (keeps `displayed` on `target` until the confirming netif echo lands), while
+	// osCommand owns the IN-FLIGHT/FAILURE lifecycle (re-entry guard + single
+	// failure toast). They compose — no overlapping responsibilities.
 	const field = `enabled_${name}`;
 	markPending(field, next);
-	try {
-		const { applied } = await rpc.network.configure({ name, ip, enabled: next });
-		// Fast-path lock release wire-up: adopt the server-applied value the moment
-		// the RPC resolves. The lock is HELD (not released) until the matching netif
-		// echo lands, so `displayed` keeps following `target` across the window where
-		// `pending` has cleared but `enabled` is still stale — no flash-back. A
-		// server-clamped value is adopted here so the eventual echo releases cleanly.
-		if (applied?.enabled !== undefined) onRpcAppliedReactive(field, applied.enabled);
-	} catch (error) {
-		console.error(`Failed to toggle bond membership for ${name}:`, error);
-		toast.error(errorMessage(error) ?? $LL.network.view.lastActiveError());
-		// The optimistic write failed: no confirming echo is coming for it. Release
-		// the field-lock to the authoritative `enabled` prop so `displayed` reverts
-		// immediately instead of holding the failed `target`.
+	const result = await osCommand({
+		key: netifKey,
+		target: next,
+		confirmOnResolve: true,
+		rpc: () => rpc.network.configure({ name, ip, enabled: next }),
+	});
+	if (result?.success && result.applied?.enabled !== undefined) {
+		// Adopt the server-applied value; the lock is HELD until the matching netif
+		// echo lands, so `displayed` keeps following `target` (no flash-back).
+		onRpcAppliedReactive(field, result.applied.enabled);
+	} else {
+		// Failure/busy/throw: osCommand already surfaced the single failure toast, so
+		// do NOT toast again. No confirming echo is coming — release the field-lock to
+		// the authoritative prior `enabled` so `displayed` reverts immediately.
 		onRpcResolved(field);
 		onRpcAppliedReactive(field, enabled);
-	} finally {
-		onRpcResolved(field);
-		// Clear the in-flight flag. `displayed` now follows the field-lock: held →
-		// optimistic `target`; released (by the matching echo or the failure path
-		// above) → authoritative `enabled` prop.
-		pending = false;
 	}
+	onRpcResolved(field);
+	// A confirmed reply already resolved the async-op immediately (confirmOnResolve),
+	// so the re-entry guard never lingers to TTL. `displayed` now follows the lock.
+	pending = false;
 }
 
 // Reconnect-aware reconciliation (Task 29): if the WS drops mid-toggle, the

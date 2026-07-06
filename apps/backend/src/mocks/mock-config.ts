@@ -19,6 +19,7 @@ export type MockScenario =
 	| "single-modem"
 	| "multi-modem-wifi"
 	| "streaming-active"
+	| "modem-pin-locked"
 	| "caps-full"
 	| "engine-starting"
 	| "engine-unavailable";
@@ -77,6 +78,15 @@ export const scenarios: Record<MockScenario, ScenarioConfig> = {
 		// Active-stream dev scenario also runs the full engine profile; the resolved
 		// runtime encode is surfaced via getMockActiveEncode() (providers/streaming.ts).
 		capabilities: { fullProfile: true },
+	},
+	"modem-pin-locked": {
+		modems: 2,
+		wifi: false,
+		streaming: false,
+		description:
+			"2 modems, WiFi off — modem 0 SIM PIN-locked (fixture PIN 0000) to exercise the SIM unlock/PUK flow in dev",
+		// modem 0 seeded lock:"pin-locked" scenario-conditionally in initMockService
+		// (mock-service.ts); no other scenario seeds a locked SIM (would auto-open SimUnlockDialog).
 	},
 	"caps-full": {
 		modems: 2,

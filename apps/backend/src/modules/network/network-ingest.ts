@@ -54,6 +54,7 @@ import {
 import { logger } from "../../helpers/logger.ts";
 import { shouldUseMocks as defaultShouldUseMocks } from "../../mocks/mock-service.ts";
 import { resolveMockNetworkIngestSignals } from "../../mocks/providers/network-ingest.ts";
+import { getConfig } from "../config.ts";
 import { getLastCapabilities } from "../streaming/capabilities.ts";
 import type { GatewayProbe } from "../streaming/gateway-availability.ts";
 import { isRealDevice as defaultIsRealDevice } from "../system/device-detection.ts";
@@ -128,8 +129,10 @@ export function parseMediamtxSrtEnabled(yaml: string): boolean {
 /**
  * Read + parse `/etc/mediamtx.yml` for the NEW-topology SRT marker. Bounded and
  * fail-closed: a missing/unreadable file or parse error → false (NOT srt-capable).
+ * Exported so the desired-state control module reuses the SAME file-truth marker
+ * (valid even when the units are stopped) rather than duplicating the read.
  */
-async function readMediamtxSrtEnabled(
+export async function readMediamtxSrtEnabled(
 	path = MEDIAMTX_CONFIG_PATH,
 ): Promise<boolean> {
 	try {
@@ -214,23 +217,30 @@ function buildProtocolInfo(
 	active: boolean,
 	sourceKinds: Set<string>,
 	gateway?: SrtGatewayTopology,
+	operatorDisabled = false,
 ): NetworkIngest["rtmp"] {
 	if (!sourceKinds.has(kind)) return null;
 	const gatewayField = gateway ? { gateway } : {};
+	const operatorField = operatorDisabled ? { operator_disabled: true } : {};
 	if (lanIp === undefined) {
 		return {
 			service_active: active,
 			url: null,
 			unavailable_reason: NETWORK_INGEST_NO_ADDRESS_REASON,
 			...gatewayField,
+			...operatorField,
 		};
 	}
 	return {
 		service_active: active,
 		url: kind === "rtmp" ? buildRtmpUrl(lanIp) : buildSrtUrl(lanIp),
 		...gatewayField,
+		...operatorField,
 	};
 }
+
+/** Per-protocol operator desired-disabled flags (from config `network_ingest`). */
+export type OperatorDisabled = { rtmp: boolean; srt: boolean };
 
 /** Assemble the `network_ingest` payload from the resolved facts (pure). */
 export function deriveNetworkIngestInfo(params: {
@@ -239,11 +249,33 @@ export function deriveNetworkIngestInfo(params: {
 	srtActive: boolean;
 	srtGateway?: SrtGatewayTopology;
 	sourceKinds: Set<string>;
+	operatorDisabled?: OperatorDisabled;
 }): NetworkIngest {
-	const { lanIp, rtmpActive, srtActive, srtGateway, sourceKinds } = params;
+	const {
+		lanIp,
+		rtmpActive,
+		srtActive,
+		srtGateway,
+		sourceKinds,
+		operatorDisabled,
+	} = params;
 	return {
-		rtmp: buildProtocolInfo("rtmp", lanIp, rtmpActive, sourceKinds),
-		srt: buildProtocolInfo("srt", lanIp, srtActive, sourceKinds, srtGateway),
+		rtmp: buildProtocolInfo(
+			"rtmp",
+			lanIp,
+			rtmpActive,
+			sourceKinds,
+			undefined,
+			operatorDisabled?.rtmp ?? false,
+		),
+		srt: buildProtocolInfo(
+			"srt",
+			lanIp,
+			srtActive,
+			sourceKinds,
+			srtGateway,
+			operatorDisabled?.srt ?? false,
+		),
 	};
 }
 
@@ -259,6 +291,8 @@ export type NetworkIngestDeps = {
 	probeMediamtxSrt: () => Promise<boolean>;
 	getNetif: () => NetifLike;
 	getSourceKinds: () => Set<string>;
+	/** Operator desired-disabled flags; omitted deps default to "not disabled". */
+	getOperatorDisabled?: () => OperatorDisabled;
 };
 
 /** Argv-only `systemctl is-active <unit>` → true iff the unit reports "active". */
@@ -281,6 +315,12 @@ function defaultSourceKinds(): Set<string> {
 	return capabilitySourceKinds(getLastCapabilities());
 }
 
+/** Read the operator desired-disabled flags off the live config singleton. */
+function defaultOperatorDisabled(): OperatorDisabled {
+	const ni = getConfig().network_ingest;
+	return { rtmp: ni?.rtmp_enabled === false, srt: ni?.srt_enabled === false };
+}
+
 export const defaultNetworkIngestDeps: NetworkIngestDeps = {
 	isRealDevice: () => defaultIsRealDevice(),
 	shouldUseMocks: defaultShouldUseMocks,
@@ -289,6 +329,7 @@ export const defaultNetworkIngestDeps: NetworkIngestDeps = {
 	probeMediamtxSrt: () => readMediamtxSrtEnabled(),
 	getNetif: getNetworkInterfaces,
 	getSourceKinds: defaultSourceKinds,
+	getOperatorDisabled: defaultOperatorDisabled,
 };
 
 let cached: NetworkIngest = { rtmp: null, srt: null };
@@ -303,6 +344,10 @@ async function computeNetworkIngestInfo(
 ): Promise<NetworkIngest> {
 	const sourceKinds = deps.getSourceKinds();
 	const lanIp = resolvePrimaryLanIp(deps.getNetif());
+	const operatorDisabled = deps.getOperatorDisabled?.() ?? {
+		rtmp: false,
+		srt: false,
+	};
 
 	if (deps.shouldUseMocks()) {
 		const signals = deps.resolveMockSignals();
@@ -312,6 +357,7 @@ async function computeNetworkIngestInfo(
 			rtmpActive: signals.rtmpUnitActive,
 			srtActive: srt.active,
 			sourceKinds,
+			operatorDisabled,
 			...(srt.gateway ? { srtGateway: srt.gateway } : {}),
 		});
 	}
@@ -335,6 +381,7 @@ async function computeNetworkIngestInfo(
 		rtmpActive: rtmpUnitActive,
 		srtActive: srt.active,
 		sourceKinds,
+		operatorDisabled,
 		...(srt.gateway ? { srtGateway: srt.gateway } : {}),
 	});
 }
@@ -370,11 +417,16 @@ export async function refreshAndBroadcastNetworkIngest(
 	return info;
 }
 
-/** The synchronous streaming-gate probe (Task 17 seam) backed by the cache. */
+/**
+ * The synchronous streaming-gate probe (Task 17 seam) backed by the cache.
+ * Start-eligible = unit active AND operator has NOT disabled it (Task 7):
+ * `pipelineAvailability` and the mock `isMockGatewayActive` mirror this predicate.
+ */
 export function buildGatewayProbe(): GatewayProbe {
 	return {
 		isActive(kind: RequiresGateway): boolean {
-			return getNetworkIngestInfo()[kind]?.service_active ?? false;
+			const slot = getNetworkIngestInfo()[kind];
+			return slot?.service_active === true && slot.operator_disabled !== true;
 		},
 	};
 }

@@ -27,6 +27,7 @@ import {
 import {
 	configureNetworkInterfaceProcedure,
 	getNetworkInterfacesProcedure,
+	setNetworkIngestEnabledProcedure,
 } from "./procedures/network.procedure.ts";
 import {
 	dismissNotificationProcedure,
@@ -149,6 +150,7 @@ const stableRoutes = {
 	network: base.router({
 		getInterfaces: getNetworkInterfacesProcedure,
 		configure: configureNetworkInterfaceProcedure,
+		setIngestEnabled: setNetworkIngestEnabledProcedure,
 	}),
 
 	system: base.router({

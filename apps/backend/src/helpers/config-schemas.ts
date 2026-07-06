@@ -236,6 +236,16 @@ export const runtimeConfigSchema = z.object({
 	// Per-add-on runtime state (id -> AddonState): device-local metadata only,
 	// never the sysext `.raw` payload bytes.
 	addons: AddonConfigSchema.optional(),
+
+	// Operator enable/disable of the LAN RTMP/SRT network-ingest gateways (T6). A
+	// missing key (old config) defaults both protocols enabled via the inner
+	// defaults; kept `.optional()` so `let config: RuntimeConfig = {}` still parses.
+	network_ingest: z
+		.object({
+			rtmp_enabled: z.boolean().default(true),
+			srt_enabled: z.boolean().default(true),
+		})
+		.optional(),
 });
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;

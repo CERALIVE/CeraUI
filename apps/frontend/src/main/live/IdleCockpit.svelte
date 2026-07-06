@@ -77,13 +77,12 @@ interface Props {
 	selectedAudioSource: string | undefined;
 	onSelectAudioSource: (id: string) => void;
 	audioStatus: ResolvedAudioStatus | undefined;
+	/** Open the AudioDialog from the Source card's "Codec & delay" affordance. */
+	onOpenAudioDialog: () => void;
 	// `selectedPipeline` still drives the roadmap's embedded-audio pill below.
 	selectedPipeline: string | undefined;
 	capabilities: CapabilitiesMessage | undefined;
 	activeEncode: ActiveEncode | null;
-	sourceOrder: string[];
-	sourcePreferenceField: string;
-	onReorderSource: (id: string, direction: 'up' | 'down') => void;
 }
 
 const {
@@ -113,12 +112,10 @@ const {
 	selectedAudioSource,
 	onSelectAudioSource,
 	audioStatus,
+	onOpenAudioDialog,
 	selectedPipeline,
 	capabilities,
 	activeEncode,
-	sourceOrder,
-	sourcePreferenceField,
-	onReorderSource,
 }: Props = $props();
 
 // Embedded network-ingest audio roadmap pill (T12, relocated from SourceSection).
@@ -145,12 +142,10 @@ const audioEmbeddedComingSoon = $derived(
 		{capabilities}
 		{config}
 		{isStreaming}
-		onReorderSource={onReorderSource}
 		onSelectAudioSource={onSelectAudioSource}
+		{onOpenAudioDialog}
 		onSwitch={onSwitch}
 		{selectedAudioSource}
-		{sourceOrder}
-		{sourcePreferenceField}
 		{sources}
 		{switchingInput}
 	/>

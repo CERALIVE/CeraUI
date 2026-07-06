@@ -46,6 +46,18 @@ export const PIPELINE_GATEWAY_NO_ADDRESS =
 	"live.education.reason.gatewayNoAddress" as const;
 
 /**
+ * i18n key for an rtmp/srt pipeline the operator disabled in Settings
+ * (`operator_disabled: true` on the status snapshot). DISTINCT from
+ * {@link PIPELINE_GATEWAY_INACTIVE}: the shared unit may still run for the sibling
+ * protocol, so the fix is "re-enable it in Settings", not "start the service".
+ * Operator intent wins — it takes precedence over the inactive/no-address states,
+ * mirroring the backend `sources.ts` + `buildGatewayProbe`. English text under
+ * `live.education.reason.disabledInSettings`.
+ */
+export const PIPELINE_GATEWAY_DISABLED_IN_SETTINGS =
+	"live.education.reason.disabledInSettings" as const;
+
+/**
  * The availability verdict for a single pipeline. `available: true` ⇒ selectable
  * / startable; `available: false` carries the disabled-reason i18n key so the
  * caller renders it disabled-with-reason (a non-empty title/reason — never a bare
@@ -62,7 +74,10 @@ const AVAILABLE: PipelineAvailability = { available: true };
  *
  * - A pipeline with no `requires_gateway` (every direct-capture source: hdmi,
  *   uvc, test, …) is ALWAYS available — no gateway dependency.
- * - An rtmp/srt pipeline has THREE outcomes:
+ * - An rtmp/srt pipeline has FOUR outcomes (operator intent checked FIRST):
+ *   0. `operator_disabled === true` (turned off in Settings) ⇒ blocked with
+ *      {@link PIPELINE_GATEWAY_DISABLED_IN_SETTINGS}. Takes precedence over the
+ *      unit-truth states below — a NEW-topology shared unit may still be active.
  *   1. `service_active === true` AND a non-null `url` ⇒ AVAILABLE (a reachable
  *      LAN/hotspot publish address exists).
  *   2. `service_active === true` but `url === null` (the addressless
@@ -87,6 +102,9 @@ export function pipelineAvailability(
 	const kind = pipeline?.requires_gateway;
 	if (kind === undefined) return AVAILABLE;
 	const status = networkIngest?.[kind];
+	if (status?.operator_disabled === true) {
+		return { available: false, reason: PIPELINE_GATEWAY_DISABLED_IN_SETTINGS };
+	}
 	if (status?.service_active === true) {
 		// Gateway running: available only when a reachable publish address exists.
 		// A `null` url is the addressless state (modem-only) — a DISTINCT reason.

@@ -150,6 +150,11 @@ export const networkIngestProtocolSchema = z.object({
 	url: z.string().nullable(),
 	unavailable_reason: z.literal(NETWORK_INGEST_NO_ADDRESS_REASON).optional(),
 	gateway: z.enum(SRT_GATEWAY_TOPOLOGIES).optional(),
+	// The operator disabled this protocol in Settings (desired-state control). The
+	// unit is stopped by the desired-state reconciler; `service_active` stays the
+	// UNIT truth (a NEW-topology shared unit may still run for the sibling
+	// protocol). Additive-optional, present ONLY when true — like policy_route_missing.
+	operator_disabled: z.boolean().optional(),
 });
 export type NetworkIngestProtocol = z.infer<typeof networkIngestProtocolSchema>;
 

@@ -137,6 +137,30 @@ describe("BondConstellation — stable animation lifecycle (T17)", () => {
 		expect(root(container).getAttribute("data-animated")).toBe("true");
 	});
 
+	it("every pulse fromTo carries transformOrigin '50% 50%' on BOTH from-vars and to-vars (GSAP owns the SVG origin)", () => {
+		render(BondConstellation, {
+			props: {
+				links: [link("usb0", 0), link("usb1", 1)],
+				live: true,
+				frozen: false,
+			},
+		});
+		flushSync();
+
+		// With the CSS origin block deleted, GSAP is the SOLE origin owner; a missing
+		// transformOrigin on either end re-introduces the top-left scale drift.
+		const pulseCalls = fromToSpy.mock.calls.filter(
+			(call) => (call[2] as { scale?: number } | undefined)?.scale === 3,
+		);
+		expect(pulseCalls).toHaveLength(PULSE_COUNT);
+		for (const call of pulseCalls) {
+			const fromVars = call[1] as { transformOrigin?: string } | undefined;
+			const toVars = call[2] as { transformOrigin?: string } | undefined;
+			expect(fromVars?.transformOrigin).toBe("50% 50%");
+			expect(toVars?.transformOrigin).toBe("50% 50%");
+		}
+	});
+
 	it("idle (!live) hides packets — no parked topology implying an active bond", () => {
 		const { container } = render(BondConstellation, {
 			props: { links: [link("usb0", 0)], live: false, frozen: false },

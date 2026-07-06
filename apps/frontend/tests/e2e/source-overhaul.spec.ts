@@ -30,8 +30,7 @@ import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
  *      delayed WS echo with no flicker;
  *   4. `is_streaming` optimism — Start shows the transient `starting` state and
  *      settles to streaming on the authoritative broadcast;
- *   5. source-priority reorder (up/down) + the sticky auto-failover toast;
- *   6. education popovers + the calm capability-tier banners.
+  *   6. education popovers + the calm capability-tier banners.
  *
  * Assertions follow PLAYBOOK.md: role / testid / web-first only. No pixel
  * captures and no fixed sleeps — pixel evidence lives in the `*.visual.spec.ts`
@@ -166,8 +165,8 @@ function sendStatus(isStreaming: boolean): void {
 }
 
 // A capture StreamSource for the unified device-first list. `id` MUST equal the
-// matching device input_id so LiveView's reorder (normalizeOrder(devices, …)) and
-// SourceSection's capture ranking align on the same ids.
+// matching device input_id so the source list and the config.source selection
+// align on the same ids.
 function captureSource(
 	id: string,
 	kind: string,
@@ -330,37 +329,6 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		);
 	});
 
-	// ── 2. Inline source-priority reorder: applying indicator holds through echo ─
-	test("the inline source-priority reorder holds its applying indicator through a delayed WS echo with no flicker", async ({
-		page,
-	}) => {
-		serverConfig({ source: "video0", source_preference: ["video0", "video1"] });
-		sendDevices("video0", [HDMI, USB]);
-		sendSources([CAP_HDMI, CAP_USB]);
-
-		const list = page.getByTestId("source-list");
-		await expect(list).toBeVisible({ timeout: 15_000 });
-		const rows = list.locator('[data-testid^="source-row-video"]');
-		await expect(rows.first()).toHaveAttribute("data-testid", "source-row-video0");
-
-		// Hold the reorder's setConfig in-flight so the `applying` phase is stable.
-		holdSetConfig = true;
-		await page.locator('[data-move-down="video0"]').click();
-
-		// The per-field sync indicator shows the in-flight `applying` state and the
-		// list does NOT flicker its order while the echo is outstanding.
-		await expect(page.getByText(/saving order/i)).toBeVisible();
-		await expect(rows.first()).toHaveAttribute("data-testid", "source-row-video0");
-
-		// Release: fake-resolve the RPC, then inject the authoritative echo with the
-		// new order. The list settles to the new order — no revert/flicker.
-		holdSetConfig = false;
-		resolveHeldSetConfig();
-		serverConfig({ source: "video0", source_preference: ["video1", "video0"] });
-		await expect(rows.first()).toHaveAttribute("data-testid", "source-row-video1");
-		await expect(page.getByText(/saving order/i)).toHaveCount(0);
-	});
-
 	// ── 3. Go-Live start settles the cockpit to streaming on the broadcast ─────
 	test("Start dispatches from the all-green Go Live card and settles the cockpit to streaming on the broadcast", async ({
 		page,
@@ -387,14 +355,13 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		await expect(page.getByTestId("idle-cockpit")).toHaveCount(0);
 	});
 
-	// ── 4. Source-priority reorder result + lost-capture surfacing ─────────────
+	// ── 4. Lost-capture surfacing ──────────────────────────────────────────────
 	// A lost capture device (source.lost) renders as a calm lost banner + a disabled
 	// (unselectable) row — the honest lost surface on the unified list.
-	test("source priority reorders via up/down and a lost capture surfaces a calm non-blocking banner", async ({
+	test("a lost capture surfaces a calm non-blocking banner and disables its row", async ({
 		page,
 	}) => {
-		holdSetConfig = true;
-		serverConfig({ source: "video0", source_preference: ["video0", "video1"] });
+		serverConfig({ source: "video0" });
 		sendDevices("video0", [HDMI, USB]);
 		sendSources([CAP_HDMI, CAP_USB]);
 
@@ -402,12 +369,6 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		await expect(list).toBeVisible({ timeout: 15_000 });
 		const rows = list.locator('[data-testid^="source-row-video"]');
 		await expect(rows).toHaveCount(2);
-
-		// Moving USB up persists [video1, video0]; fake-resolve + inject the echo.
-		await page.locator('[data-move-up="video1"]').click();
-		resolveHeldSetConfig();
-		serverConfig({ source: "video0", source_preference: ["video1", "video0"] });
-		await expect(rows.first()).toHaveAttribute("data-testid", "source-row-video1");
 
 		// The preferred capture drops out (unplugged): a calm, non-blocking lost
 		// banner appears and its row is no longer selectable (informational, not modal).
@@ -507,5 +468,60 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		await expect(
 			roadmap.locator('[data-comingsoon="TD-mode-fallback"]'),
 		).toBeVisible();
+	});
+
+	// ── 8. Destination traffic light reflects the relay.validate verdict (Task 5) ─
+	// Saving a valid custom endpoint fires ServerDialog's optional `onSaved`, which
+	// LiveView turns into a relay.validate run (forwarded to the mock backend, which
+	// passes the dns/probe stages). The verdict is fingerprint-keyed, so the green
+	// light is honest: a subsequent endpoint edit re-keys the fingerprint and the
+	// light drops back to "Not checked". The save path never depends on the RPC
+	// (held here so the shared backend is untouched) — it only signals "saved".
+	test("the destination traffic light goes green after a validated save and resets when the endpoint changes", async ({
+		page,
+	}) => {
+		// Hold setConfig so the save never mutates the shared backend; relay.validate
+		// is read-only and IS forwarded (the mock returns a passing probe verdict).
+		holdSetConfig = true;
+		serverConfig({ relay_server: "", selected_ingest_endpoint: "" });
+
+		const trafficLight = page.getByTestId("destination-traffic-light");
+		await expect(trafficLight).toBeVisible({ timeout: 15_000 });
+		await expect(trafficLight).toHaveAttribute("data-validated", "false");
+
+		await page.getByTestId("open-server-dialog").click();
+		const dialog = page.getByRole("dialog", { name: "Receiver Server" });
+		await expect(dialog).toBeVisible();
+		const save = dialog.getByRole("button", { name: "Save" });
+		await expect(save).toBeEnabled();
+		await save.click();
+
+		// Release the held setConfig so handleSave resolves and fires onSaved →
+		// LiveView runs relay.validate against the saved endpoint.
+		await expect.poll(() => heldSetConfigId !== null, { timeout: 5_000 }).toBe(true);
+		resolveHeldSetConfig();
+
+		// The mock relay.validate passes → the fingerprint-keyed verdict goes green.
+		await expect(trafficLight).toHaveAttribute("data-validated", "true", {
+			timeout: 10_000,
+		});
+
+		// Complete the save round-trip the real backend would (holdSetConfig
+		// suppressed its confirming config broadcast): the save took a field-lock on
+		// srtla_addr via markPending, and the lock ignores ANY differing echo until a
+		// matching one releases it. Inject that matching echo so the NEXT endpoint
+		// edit is not swallowed as a stale echo of the just-saved value.
+		send({ config: { srtla_addr: "127.0.0.1" } });
+
+		// Editing the endpoint re-keys the fingerprint → the stale green light resets
+		// to "Not checked" (the verdict no longer matches the resolved endpoint).
+		serverConfig({
+			relay_server: "",
+			selected_ingest_endpoint: "",
+			srtla_addr: "10.0.0.99",
+		});
+		await expect(trafficLight).toHaveAttribute("data-validated", "false", {
+			timeout: 10_000,
+		});
 	});
 });

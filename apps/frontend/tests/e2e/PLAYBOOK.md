@@ -169,6 +169,31 @@ The `authedPage` fixture handles the full auth flow (first-run set-password or r
 
 ---
 
+## Per-Worker Backend Scenario Override
+
+By default every worker backend boots on `MOCK_SCENARIO=multi-modem-wifi` (see `fixtures/backend.ts`). A spec that needs a *different* backend state — a PIN-locked modem, an engine-unavailable snapshot, etc. — opts in with the worker-scoped `backendScenario` option, set at **file top level**:
+
+```typescript
+import { test, expect } from './fixtures/index.js';
+
+// MUST be top-level — a worker-scoped option applies to the whole file.
+test.use({ backendScenario: 'modem-pin-locked' });
+
+test('modem 0 is PIN-locked', async ({ page }) => {
+  // this worker's backend booted with MOCK_SCENARIO=modem-pin-locked
+});
+```
+
+- **`test.use({ backendScenario })` CANNOT go inside a `test.describe` block.** Because it is a *worker*-scoped option, Playwright forces a new worker and rejects a describe-level override (`"Cannot use({ backendScenario }) in a describe group"`). Put it at the top of the file (it then applies to every test in that file). A single file therefore hosts exactly ONE scenario — if you need a second scenario (e.g. a default-worker negative control), put it in a second file.
+- **The scenario is part of the worker key.** Because `backendScenario` is a worker-scoped option, Playwright allocates a *separate* worker for each distinct value — so a `modem-pin-locked` spec never shares a backend with a default-scenario spec running in parallel. Per-worker port + CWD-state isolation is unchanged.
+- **Use it when WS-proxy state injection can't help.** RPC-handler-owned state (e.g. the mock SIM lock state machine behind `unlockSim`/`unlockSimPuk`) cannot be faked by intercepting the page WebSocket — the real handler owns it. A genuinely-booted backend scenario is the only way to drive those paths end-to-end.
+- **Leave the reference-backend default untouched.** `playwright.config.ts`'s `MOCK_SCENARIO: 'multi-modem-wifi'` webServer env is for the shared `:3002` reference backend, not the per-worker backends — don't change it.
+- **Self-test:** `backend-scenario-fixture.spec.ts` (the positive: a `modem-pin-locked` worker reports `sim_lock.required === 'sim-pin'` in the modems broadcast) plus `backend-scenario-default.spec.ts` (the negative: a default worker does not) prove the override actually changes backend state. The two live in separate files by necessity (one scenario per file, per the rule above); shared page-WS capture is in `helpers/modem-capture.ts`. Extend that pattern rather than re-deriving the WS capture.
+
+Valid scenarios are the `MockScenario` union in `apps/backend/src/mocks/mock-config.ts`: `multi-modem-wifi`, `single-modem`, `streaming-active`, `modem-pin-locked`, `caps-full`, `engine-starting`, `engine-unavailable`.
+
+---
+
 ## Dialog Testing Pattern
 
 Use `openDialog` and `closeDialog` from `helpers/aria.js` to open and close dialogs by accessible name. Assert structure with `toMatchAriaSnapshot` — not screenshots.
