@@ -515,7 +515,11 @@ test.describe("network.configure drop+fake harness (Task 4)", () => {
 		"single-browser harness proof",
 	);
 
-	const FAKE_ERR = "drop+fake: simulated configure failure";
+	// BondToggle routes its configure mutation through `osCommand`
+	// (live-correctness-pass Todo #20): a failed toggle surfaces the SINGLE generic
+	// `network.os.operationFailed` toast, NOT the raw RPC error string the drop+fake
+	// harness injects.
+	const OP_FAILED_TOAST = "Couldn't complete the action";
 
 	test.beforeEach(async ({ page }, testInfo) => {
 		test.skip(
@@ -524,6 +528,11 @@ test.describe("network.configure drop+fake harness (Task 4)", () => {
 		);
 		await page.addInitScript(installWsHarness, TOKEN);
 		await page.goto("/");
+		// Auto-login (localStorage 'auth' → token rewrite) must land the authed
+		// shell before navigateTo, or its desktop/mobile rail probe can race the
+		// hydration and fall back to the hidden mobile dock (mirrors the sibling
+		// bond-toggle-flash beforeEach — the fix for this file's cold-start flake).
+		await expect(page.locator("header").first()).toBeVisible({ timeout: 15000 });
 		await navigateTo(page, "network");
 	});
 
@@ -604,7 +613,7 @@ test.describe("network.configure drop+fake harness (Task 4)", () => {
 			})
 			.toEqual(expect.arrayContaining(["true", "false"]));
 		await expect(toggle).toHaveAttribute("aria-checked", "true");
-		await expect(page.getByText(FAKE_ERR)).toBeHidden();
+		await expect(page.getByText(OP_FAILED_TOAST)).toBeHidden();
 
 		const disabledAfter = await disabledNetifKeys(page);
 		expect(disabledAfter).toEqual(disabledBefore);
@@ -639,7 +648,7 @@ test.describe("network.configure drop+fake harness (Task 4)", () => {
 		});
 		await toggle.click();
 
-		await expect(page.getByText(FAKE_ERR)).toBeVisible();
+		await expect(page.getByText(OP_FAILED_TOAST)).toBeVisible();
 		await expect(toggle).toHaveAttribute("aria-checked", "true");
 
 		const disabledAfter = await disabledNetifKeys(page);
@@ -652,7 +661,7 @@ test.describe("network.configure drop+fake harness (Task 4)", () => {
 		writeEvidence("task-4-dropfake-failure.txt", [
 			"Scenario: __cera._dropFakeNetcfg = 'failure'",
 			"Clicked an in-bond toggle → optimistic OFF; configure frame DROPPED.",
-			`Error toast surfaced: "${FAKE_ERR}"`,
+			`Error toast surfaced: "${OP_FAILED_TOAST}" (osCommand single-toast, Todo #20)`,
 			"BondToggle catch path → reverted to original ON state (aria-checked=true).",
 			`Bond-excluded interfaces unchanged (${JSON.stringify(disabledBefore)})`,
 			"  → no backend netif echo for the change → frame confirmed dropped.",

@@ -986,10 +986,13 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(start).toHaveAttribute("title", /\S/);
 
 		// ALL-GREEN: pick a source → every setup row resolves to data-state="ok" and
-		// Start becomes enabled (the chain always shows all four rows, never collapses).
+		// Start becomes enabled. The chain shows its THREE always-rendered rows
+		// (Encoder / Destination / Network) — the audio row was folded into the
+		// Source card in live-correctness-pass Todo #11, so the chain is 3 rows now,
+		// never collapses.
 		serverConfig({ source: "video-hdmi" });
 		await expect(page.getByRole("button", { name: /start stream/i })).toBeEnabled();
-		await expect(chain.locator('[data-testid="setup-row"]')).toHaveCount(4);
+		await expect(chain.locator('[data-testid="setup-row"]')).toHaveCount(3);
 		await expect(
 			chain.locator('[data-testid="setup-row"]:not([data-state="ok"])'),
 		).toHaveCount(0);

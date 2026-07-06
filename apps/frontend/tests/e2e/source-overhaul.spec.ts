@@ -506,6 +506,13 @@ test.describe("Track-1 source overhaul (functional)", () => {
 			timeout: 10_000,
 		});
 
+		// Complete the save round-trip the real backend would (holdSetConfig
+		// suppressed its confirming config broadcast): the save took a field-lock on
+		// srtla_addr via markPending, and the lock ignores ANY differing echo until a
+		// matching one releases it. Inject that matching echo so the NEXT endpoint
+		// edit is not swallowed as a stale echo of the just-saved value.
+		send({ config: { srtla_addr: "127.0.0.1" } });
+
 		// Editing the endpoint re-keys the fingerprint → the stale green light resets
 		// to "Not checked" (the verdict no longer matches the resolved endpoint).
 		serverConfig({

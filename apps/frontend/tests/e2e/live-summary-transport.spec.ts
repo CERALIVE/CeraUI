@@ -74,17 +74,39 @@ test.describe("Live summary transport coherence (Todo 12)", () => {
 		const idle = page.getByTestId("idle-cockpit");
 		await expect(idle).toBeVisible({ timeout: 15_000 });
 
-		// The Destination/server row is the single idle surface that names the
-		// transport (seeded config.json has a managed srtla relay).
+		// Establish a KNOWN idle config over the socket rather than depending on the
+		// backend's on-disk config.json (which the dev reference backend mutates, so it
+		// is non-deterministic locally). A custom SRTLA endpoint makes the server row
+		// render "SRTLA · Custom" (destination gate satisfied by srtla_addr), and a
+		// source makes the Source card's active-config line render at all (its
+		// `hasActiveConfig` gate needs a source/resolution/codec) — this test asserts
+		// SRTLA does NOT leak into that line, which is only meaningful when it renders.
+		// The frame merges field-by-field (config case); no field-lock is held on a
+		// fresh navigation, so the injected values win.
+		pageWs?.send(
+			JSON.stringify({
+				config: {
+					relay_server: "",
+					selected_ingest_endpoint: "",
+					srtla_addr: "127.0.0.1",
+					srtla_port: 5000,
+					srt_streamid: "e2e",
+					relay_protocol: "srtla",
+					source: "cam-0",
+				},
+			}),
+		);
+		const activeConfig = idle.getByTestId("active-config-value");
+		await expect(activeConfig).toBeVisible();
+
+		// The Destination/server row is the single idle surface that names the transport.
 		await expect(idle.locator('[data-section="server"]')).toContainText("SRTLA");
 
 		// The encoder row and the Source card's active-config line no longer carry it.
 		await expect(idle.locator('[data-section="encoder"]')).not.toContainText(
 			"SRTLA",
 		);
-		await expect(idle.getByTestId("active-config-value")).not.toContainText(
-			"SRTLA",
-		);
+		await expect(activeConfig).not.toContainText("SRTLA");
 
 		// QA: the innermost text-bearing element carrying SRTLA is exactly one — the
 		// server row's summary line. getByText returns the smallest matching element,

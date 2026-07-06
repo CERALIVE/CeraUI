@@ -193,7 +193,10 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 		// same-subnet info band is already present and reflects the real netif
 		// same_subnet_group flag (a CIDR). The amber policy-route warning is NOT —
 		// no interface carries policy_route_missing on a dev/mock host.
-		await expect(subnet).toBeVisible();
+		// The band renders only once the first netif broadcast lands, which can lag
+		// the default 5s on a cold-start worker — wait 15s (matches the sibling
+		// bonded-link-card wait above, same netif-driven content).
+		await expect(subnet).toBeVisible({ timeout: 15_000 });
 		await expect(subnet).toHaveAttribute("role", "status");
 		await expect(subnet).toContainText(/\d+\.\d+\.\d+\.\d+\/\d+/);
 		await expect(policy).toHaveCount(0);
