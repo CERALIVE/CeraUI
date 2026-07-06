@@ -1352,10 +1352,15 @@ existing bus, no new endpoint). Every row is one of four `origin` variants
   config mutation or engine dispatch — `cerastream-backend.ts` is untouched by
   this entire model (verified by a `git diff`-based regression test).
 - **Shim policy**: the legacy `pipelines`/`devices` broadcasts and the coarse
-  `capabilities.device_modes` field are kept running unmodified for one release
-  as a rollback safety net — no shipped frontend surface reads them anymore.
-  Tracked as `TD-legacy-source-broadcasts` in `docs/TECHNICAL_DEBT.md`; do not
-  delete the producers until that entry's exit condition is met.
+  `capabilities.device_modes` field are kept running unmodified as a rollback
+  safety net. `EncoderDialog.svelte`, `AudioDialog.svelte`, `LiveView.svelte`,
+  and `StreamingStateManager.svelte.ts` still call `getPipelines`/`getDevices`
+  directly today — only `SourceSection`/`StreamSetupChain` read `getSources()`
+  exclusively. The real exit condition is migrate those four consumers off the
+  legacy getters onto `getSources()`-derived data, THEN ship one release with
+  no rollback needed, THEN delete the producers. Tracked as
+  `TD-legacy-source-broadcasts` in `docs/TECHNICAL_DEBT.md`; do not delete the
+  producers until that entry's exit condition is met.
 
 ### StreamSetupChain / IdleCockpit / LiveCockpit
 
