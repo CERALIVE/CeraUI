@@ -45,6 +45,7 @@ import {
 import {
 	BITRATE_MAX_KBPS,
 	BITRATE_MIN_KBPS,
+	MOCK_FEEDBACK_BROADCAST_INTERVAL_MS,
 	MOCK_RELAY_POPULATE_DELAY_MS,
 	MOCK_RTT_INTERVAL_MS,
 	MODEM_SIGNAL_FLUCTUATION_PERCENT,
@@ -203,6 +204,16 @@ let relayPopulateTimeout: ReturnType<typeof setTimeout> | null = null;
 // and re-emit `relays` on this cadence so the UI sees live, changing RTT values.
 let rttBroadcastInterval: ReturnType<typeof setInterval> | null = null;
 
+// Coalesced (5s) feedback tick: surfaces the 1s signal fluctuations to clients.
+// applyPeriodicFluctuations() mutates state every 1s but never broadcast it — this
+// timer is what actually pushes those changes on-screen, at the 5s cadence.
+let feedbackBroadcastInterval: ReturnType<typeof setInterval> | null = null;
+
+// Dedupe caches: the last modem/wifi signal fingerprint actually emitted, so a
+// tick with no observable change broadcasts nothing.
+let lastEmittedModemFingerprint: string | null = null;
+let lastEmittedWifiFingerprint: string | null = null;
+
 /**
  * Initialize (or re-initialize) the mock service with a specific scenario.
  * Re-calling resets all session-scoped maps to seeded defaults.
@@ -250,6 +261,8 @@ export function initMockService(scenarioName?: string): void {
 	mockState.networkIngestMediamtxSrt = false;
 	mockState.interfaceThroughput = {};
 	mockState.wifiModes = {};
+	lastEmittedModemFingerprint = null;
+	lastEmittedWifiFingerprint = null;
 
 	for (let i = 0; i < config.modems; i++) {
 		mockState.modemSignals.set(i, 80 + Math.random() * 15);
@@ -363,6 +376,7 @@ export function initMockService(scenarioName?: string): void {
 	pristineSnapshot = structuredClone(mockState);
 	logger.info("🎭 Mock service initialized successfully");
 
+	startFeedbackBroadcast();
 	scheduleRelayPopulate();
 }
 
@@ -463,6 +477,96 @@ function applyPeriodicFluctuations(): void {
 		mockState.streaming.srtLatency = 180 + Math.random() * 80;
 		mockState.streaming.packetLoss = Math.random() * 0.5;
 	}
+}
+
+// Fingerprint the values that actually reach the wire (rounded, like the mmcli /
+// wifiBuildMsg serializers), so the tick emits only on an observable change.
+function computeModemSignalFingerprint(): string {
+	const parts: string[] = [];
+	for (const id of [...mockState.modemSignals.keys()].sort((a, b) => a - b)) {
+		const signal = Math.round(mockState.modemSignals.get(id) ?? 0);
+		const state = mockState.modemStates.get(id) ?? "searching";
+		parts.push(`${id}:${signal}:${state}`);
+	}
+	return parts.join("|");
+}
+
+function computeWifiSignalFingerprint(): string {
+	const parts: string[] = [];
+	for (const ssid of [...mockState.wifiSignals.keys()].sort()) {
+		parts.push(`${ssid}:${Math.round(mockState.wifiSignals.get(ssid) ?? 0)}`);
+	}
+	return parts.join("|");
+}
+
+// Refresh modem status so the fluctuated mock signal enters modemsState, THEN
+// broadcast (broadcastModems serializes the already-populated modemsState; the
+// mock signal is only pulled in when the mmcli provider rebuilds modem info).
+// Lazy-imported to avoid a static import cycle with modem-update-loop.
+async function refreshAndBroadcastModems(): Promise<void> {
+	const { runModemStatusPoll } = await import(
+		"../modules/modems/modem-update-loop.ts"
+	);
+	await runModemStatusPoll();
+}
+
+// wifiBuildMsg reads mock signal state directly, so wifi needs no refresh step.
+async function broadcastMockWifi(): Promise<void> {
+	const { wifiBuildMsg } = await import("../modules/wifi/wifi.ts");
+	broadcastMsg("status", { wifi: wifiBuildMsg() });
+}
+
+/**
+ * Coalesced feedback tick (5s): surface modem + wifi signal fluctuations to
+ * connected clients. Each surface emits ONLY when its rounded signal fingerprint
+ * changed since the last emit. No-op unless shouldUseMocks(). Exported for tests.
+ */
+export async function runMockFeedbackBroadcast(): Promise<void> {
+	if (!shouldUseMocks()) return;
+
+	const modemFingerprint = computeModemSignalFingerprint();
+	if (modemFingerprint !== lastEmittedModemFingerprint) {
+		lastEmittedModemFingerprint = modemFingerprint;
+		await refreshAndBroadcastModems();
+	}
+
+	const wifiFingerprint = computeWifiSignalFingerprint();
+	if (wifiFingerprint !== lastEmittedWifiFingerprint) {
+		lastEmittedWifiFingerprint = wifiFingerprint;
+		await broadcastMockWifi();
+	}
+}
+
+// Schedules the coalesced feedback tick. Guarded on shouldUseMocks() so a
+// production/real device (mocks off) never gets this interval.
+function startFeedbackBroadcast(): void {
+	if (feedbackBroadcastInterval) {
+		clearInterval(feedbackBroadcastInterval);
+		feedbackBroadcastInterval = null;
+	}
+	if (!shouldUseMocks()) return;
+	feedbackBroadcastInterval = setInterval(() => {
+		void runMockFeedbackBroadcast();
+	}, MOCK_FEEDBACK_BROADCAST_INTERVAL_MS);
+}
+
+/**
+ * Deterministic test/dev seam: set a modem's connection state, run the SAME
+ * modem-status refresh the feedback tick uses (so the new state enters
+ * modemsState), then emit one immediate modems broadcast. shouldUseMocks()-gated.
+ * This is the sanctioned way to move modem state — there are deliberately NO
+ * random modem-state transitions (screenshot/e2e determinism).
+ */
+export async function setMockModemState(
+	modemId: number,
+	state: "registered" | "connected" | "searching",
+): Promise<void> {
+	if (!shouldUseMocks()) return;
+	const modemStates = new Map(mockState.modemStates);
+	modemStates.set(modemId, state);
+	updateMockState({ modemStates });
+	await refreshAndBroadcastModems();
+	lastEmittedModemFingerprint = computeModemSignalFingerprint();
 }
 
 /**
@@ -583,6 +687,10 @@ function clearMockTimers(): void {
 		clearInterval(rttBroadcastInterval);
 		rttBroadcastInterval = null;
 	}
+	if (feedbackBroadcastInterval) {
+		clearInterval(feedbackBroadcastInterval);
+		feedbackBroadcastInterval = null;
+	}
 }
 
 /**
@@ -615,6 +723,8 @@ export function resetMockState(): void {
 	resetMockKioskState();
 	resetMockWifiFaults();
 	resetAudioNamingDiagnostics();
+	lastEmittedModemFingerprint = null;
+	lastEmittedWifiFingerprint = null;
 	if (!pristineSnapshot) return;
 	Object.assign(mockState, structuredClone(pristineSnapshot));
 }
