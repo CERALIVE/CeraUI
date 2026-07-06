@@ -64,7 +64,6 @@ function renderSection(
 			},
 			isFullyStale: false,
 			staleInterfaces: opts.stale ?? new Set<string>(),
-			primaryWifiDevice: "wifi0",
 			onConnect: vi.fn(),
 		},
 	});

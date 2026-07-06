@@ -53,7 +53,6 @@ const isLoading = $derived(
 // WiFi interfaces split so hotspot + station can be shown SIMULTANEOUSLY
 // (never one-or-the-other): a hotspot-mode interface carries a `hotspot` field.
 const wifiEntries = $derived(Object.entries(wifi ?? {}) as [string, WifiInterface][]);
-const wifiStations = $derived(wifiEntries.filter(([, iface]) => !iface.hotspot));
 const hotspotInterfaces = $derived(wifiEntries.filter(([, iface]) => Boolean(iface.hotspot)));
 
 // Hotspot target for the configurator dialog: prefer an already-active hotspot
@@ -89,12 +88,13 @@ function configureNetif(name: string) {
 	netifDialogOpen = true;
 }
 
-// WiFi network selector dialog — targets the primary WiFi station interface.
+// WiFi network selector dialog — scoped to the radio whose Connect was tapped.
 let wifiSelectorOpen = $state(false);
-const primaryWifiDevice = $derived(wifiStations[0]?.[0]);
+let wifiSelectorDeviceId = $state('');
 
-function openWifiSelector() {
-	if (primaryWifiDevice) wifiSelectorOpen = true;
+function openWifiSelector(deviceId: string) {
+	wifiSelectorDeviceId = deviceId;
+	wifiSelectorOpen = true;
 }
 
 // Per-modem configuration dialog — one instance, keyed by the selected modem id.
@@ -156,7 +156,6 @@ $effect(() => {
 			{netif}
 			{isFullyStale}
 			{staleInterfaces}
-			{primaryWifiDevice}
 			onConnect={openWifiSelector}
 		/>
 		<CellularSection
@@ -179,9 +178,9 @@ $effect(() => {
 <!-- Per-interface Ethernet configuration (Task 24) -->
 <NetifDialog bind:open={netifDialogOpen} name={selectedNetifName} iface={selectedNetif} />
 
-<!-- WiFi network selector — targets the primary WiFi station interface -->
-{#if primaryWifiDevice}
-	<WifiSelectorDialog bind:open={wifiSelectorOpen} deviceId={primaryWifiDevice} />
+<!-- WiFi network selector — scoped to the radio whose Connect was tapped -->
+{#if wifiSelectorDeviceId}
+	<WifiSelectorDialog bind:open={wifiSelectorOpen} deviceId={wifiSelectorDeviceId} />
 {/if}
 
 {#if hotspotTarget}
