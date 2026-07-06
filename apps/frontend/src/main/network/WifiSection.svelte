@@ -107,6 +107,7 @@ $effect(() => {
 			data-testid="open-wifi-selector-dialog"
 			disabled={!primaryWifiDevice}
 			size="sm"
+			title={primaryWifiDevice ? undefined : $LL.network.view.noWifi()}
 			variant="ghost"
 			onclick={onConnect}
 		>

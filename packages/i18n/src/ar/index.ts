@@ -250,50 +250,6 @@ const ar = {
 		transportAdvanced: "متقدّم",
 		transportKindHint:
 			"كيفية وصول بثّك إلى المستقبِل. يجمع SRTLA عدّة روابط شبكة؛ بينما يستخدم RIST وSRT رابطًا واحدًا.",
-		streamTuning: {
-			title: "ضبط البث",
-			hint: "اضبط طريقة تسليم بثّك. يتيح مستقبِل CeraLive ملفّات التعريف وFEC وضبط الاستعادة؛ بينما تستخدم المستقبِلات الأخرى الإعدادات المتوافقة مع BELABOX.",
-			ceraliveReceiver: "مستقبِل CeraLive",
-			latency: "زمن الوصول",
-			latencyNegotiated: "متفاوَض عليه",
-			presets: "إعدادات ملفّات التعريف",
-			fec: "تصحيح الأخطاء الأمامي",
-			fecHelper:
-				"يضيف تكرارًا ليتمكّن المستقبِل من إعادة بناء الحزم المفقودة. يستهلك عرض نطاق إضافيًّا ويضيف بعض زمن الوصول \u2014 الأفضل على الوصلات ذات الفقد.",
-			recoveryMode: "وضع الاستعادة",
-			advanced: "متقدّم",
-			recovery: "الاستعادة",
-			recoveryStandard: "قياسي",
-			recoveryStandardHint: "موصى به",
-			recoveryBandwidthSaver: "توفير عرض النطاق",
-			recoveryBandwidthSaverHint: "خبير",
-			recoveryHelper:
-				"يحافظ الوضع القياسي على بثّ سلس وموثوق. يقلّل توفير عرض النطاق حركة الاستعادة لاستهلاك بيانات أقلّ على الاتصالات المحدودة.",
-			belaboxBadge: "قياسي (متوافق مع BELABOX)",
-			belaboxBannerTitle: "قياسي (إعدادات متوافقة مع BELABOX)",
-			belaboxBannerBody:
-				"هذا المستقبِل ليس مستقبِل CeraLive، لذا يمكن ضبط زمن الوصول فقط. يتطلّب الضبط المتقدّم مستقبِل CeraLive.",
-			reasonNonCeraLive: "متاح فقط مع مستقبِل CeraLive.",
-			reasonReceiverManaged: "تُدار بواسطة المستقبِل.",
-			reasonFecUnsupported: "إصدار libsrt لهذا المستقبِل CeraLive لا يدعم FEC.",
-			reasonProfileUnsupported: "هذا المستقبِل لا يوفّر هذا الملف الشخصي.",
-			summaryDelay: "\u2248 {seconds} ث من التأخير",
-			summaryRecoveryStandard: "استرداد تلقائي للفقد",
-			summaryRecoveryBandwidthSaver: "استرداد موفّر لعرض النطاق",
-			summaryFecOn: "FEC مُفعّل",
-			summaryFecOff: "FEC مُعطّل",
-			cloudSetTitle: "مضبوط من السحابة",
-			cloudSetHint: "اضغط للتجاوز على هذا الجهاز",
-			driftHint: "الجهاز يشغّل ملفًا شخصيًا مختلفًا",
-			profileNames: {
-				balanced: "متوازن",
-				lowLatency: "زمن وصول منخفض",
-				resilient: "مرن",
-				classic: "كلاسيكي",
-				lowLatencyFec: "زمن وصول منخفض + FEC",
-				custom: "مخصّص",
-			},
-		},
 		deviceStats: {
 			title: "إحصاءات الجهاز",
 			description: "قياس مباشر لأجهزة هذا الجهاز.",
@@ -307,6 +263,18 @@ const ar = {
 			lowDiskBody:
 				"أقل من 512 ميبي‌بايت متاحة على /data. حرّر مساحة حتى يستمر التسجيل والسجلات والتحديثات في العمل.",
 			lowDiskAction: "عرض السجلات",
+		},
+		networkIngest: {
+			title: "استقبال الشبكة",
+			desc: "اسمح لهاتف أو مُشفِّر على هذه الشبكة بالنشر إلى الجهاز",
+			explanation:
+				"فعّل استقبال الشبكة المحلية للسماح لهاتف أو مُشفِّر أجهزة (مثل OBS) بنشر RTMP أو SRT مباشرةً إلى هذا الجهاز \u2014 دون مُرحّل سحابي. يجب أن يكون الناشر على نفس الشبكة المحلية (Wi-Fi أو إيثرنت) مثل هذا الجهاز.",
+			toggleRtmp: "استقبال RTMP",
+			toggleSrt: "استقبال SRT",
+			statusRunning: "الخدمة قيد التشغيل",
+			statusStopped: "الخدمة متوقفة",
+			statusDisabled: "معطّل",
+			unavailable: "استقبال الشبكة غير متاح على هذا الجهاز في وضع المحاكاة.",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -783,6 +751,7 @@ const ar = {
 			disabling: "جارٍ التعطيل…",
 			awaitingResult: "في انتظار النتيجة…",
 			done: "تم",
+			saved: "تم الحفظ",
 		},
 	},
 	hotspotConfigurator: {
@@ -1175,6 +1144,7 @@ const ar = {
 			copied: "تم نسخ العنوان",
 			copyFailed: "تعذّر نسخ العنوان.",
 			includesAudio: "يتضمّن الصوت",
+			disabledInSettingsHint: "أعد تفعيله من الإعدادات \u2192 استقبال الشبكة.",
 			codecEducation: {
 				rtmp: "يبثّ RTMP فيديو H.264 (مع صوت AAC) فقط. تتم دائمًا إعادة ترميزه إلى برنامج ترميز الإخراج المُهيّأ.",
 				srt: "يبثّ SRT فيديو H.264 أو H.265. تتم دائمًا إعادة ترميزه إلى برنامج ترميز الإخراج المُهيّأ.",
@@ -1248,35 +1218,6 @@ const ar = {
 				camlink: "Cam Link",
 			},
 		},
-		sourcePreference: {
-			title: "أولوية المصدر",
-			description:
-				"رتّب المصادر التي تتنقل بينها. التبديل التلقائي يتجاهل هذه القائمة.",
-			empty: "لم يتم اكتشاف مصادر فيديو",
-			moveUp: "تحريك {name} لأعلى",
-			moveDown: "تحريك {name} لأسفل",
-			rankLabel: "الأولوية {rank}",
-			stickyNote:
-				"التبديل التلقائي ثابت \u2014 المحرك لا يعود تلقائياً. استخدم قائمة المصادر للعودة يدوياً.",
-			states: {
-				active: "نشط",
-				lost: "مفقود",
-				failedOver: "تم التبديل إليه",
-			},
-			lostHint: "هذا المصدر غير متصل.",
-			failedOverHint: "انتقل المحرك هنا تلقائياً بعد أن انقطع مصدرك المفضل.",
-			sync: {
-				applying: "جارٍ حفظ الترتيب\u2026",
-				applied: "تم حفظ الترتيب",
-				failed: "تعذّر حفظ الترتيب",
-			},
-			failover: {
-				title: "التبديل التلقائي",
-				reasonSourceLost: "انقطع {name}، لذا انتقل المحرك إلى {to}.",
-				sticky:
-					"التبديل التلقائي ثابت \u2014 لن يعود من تلقاء نفسه. استخدم قائمة المصادر للعودة يدوياً.",
-			},
-		},
 		source: {
 			label: "المصدر",
 			none: "لم يتم اختيار مصدر",
@@ -1289,6 +1230,7 @@ const ar = {
 			lostBody: "أعد توصيل الجهاز لاستئناف البث من هذا المصدر.",
 			audioNone: "لم يتم اكتشاف مصدر صوت",
 			audioEmbedded: "صوت مضمّن (من البث الوارد)",
+			audioEdit: "الترميز والتأخير",
 		},
 		summary: {
 			nowStreaming: "يبث الآن",
@@ -1312,6 +1254,7 @@ const ar = {
 				fixedBySource: "محدد بواسطة المصدر المختار",
 				unsupportedAtResolution: "غير متاح بهذه الدقة",
 				gatewayInactive: "بوابة استقبال الشبكة غير قيد التشغيل",
+				disabledInSettings: "معطّل في الإعدادات",
 				gatewayNoAddress:
 					"لا يوجد عنوان شبكة محلية أو نقطة اتصال يمكن الوصول إليه",
 			},
@@ -1376,6 +1319,7 @@ const ar = {
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 			axisSelected: "المحدد",
 			axisDeviceMax: "الحد الأقصى للجهاز",
+			fpsAvailableAt: "{fps} إطار/ث متاح على {resolution}",
 		},
 	},
 	dialogs: {
@@ -1541,6 +1485,7 @@ const ar = {
 			"الجهاز قيد إعادة التشغيل. ستُعيد هذه الصفحة الاتصال تلقائياً.",
 		sessionExpired: "انتهت الجلسة. يرجى المصادقة مرة أخرى.",
 		authTimedOut: "تعذّر التحقق من جلستك. تحقق من الاتصال وحاول مرة أخرى.",
+		clearSavedSession: "مسح تسجيل الدخول المحفوظ وإدخال كلمة المرور",
 	},
 	offline: {
 		title: "أنت غير متصل",

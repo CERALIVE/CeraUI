@@ -112,51 +112,6 @@ const hi = {
 		transportAdvanced: "उन्नत",
 		transportKindHint:
 			"आपकी स्ट्रीम रिसीवर तक कैसे पहुँचती है। SRTLA कई नेटवर्क लिंक को जोड़ता है; RIST और SRT एकल लिंक का उपयोग करते हैं।",
-		streamTuning: {
-			title: "स्ट्रीम ट्यूनिंग",
-			hint: "अपनी स्ट्रीम के वितरण के तरीके को समायोजित करें। एक CeraLive रिसीवर प्रोफ़ाइल, FEC और रिकवरी ट्यूनिंग को अनलॉक करता है; अन्य रिसीवर BELABOX-संगत डिफ़ॉल्ट का उपयोग करते हैं।",
-			ceraliveReceiver: "CeraLive रिसीवर",
-			latency: "विलंबता",
-			latencyNegotiated: "बातचीत की गई",
-			presets: "प्रोफ़ाइल प्रीसेट",
-			fec: "फ़ॉरवर्ड एरर करेक्शन",
-			fecHelper:
-				"अतिरेक जोड़ता है ताकि रिसीवर खोए हुए पैकेट फिर से बना सके। अतिरिक्त बैंडविड्थ लेता है और थोड़ी विलंबता जोड़ता है \u2014 हानि वाले कनेक्शनों पर सर्वोत्तम।",
-			recoveryMode: "रिकवरी मोड",
-			advanced: "उन्नत",
-			recovery: "रिकवरी",
-			recoveryStandard: "मानक",
-			recoveryStandardHint: "अनुशंसित",
-			recoveryBandwidthSaver: "बैंडविड्थ बचत",
-			recoveryBandwidthSaverHint: "विशेषज्ञ",
-			recoveryHelper:
-				"मानक स्ट्रीम को सहज और विश्वसनीय रखता है। बैंडविड्थ बचत रिकवरी ट्रैफ़िक को कम करती है ताकि सीमित कनेक्शनों पर कम डेटा का उपयोग हो।",
-			belaboxBadge: "मानक (BELABOX-संगत)",
-			belaboxBannerTitle: "मानक (BELABOX-संगत डिफ़ॉल्ट)",
-			belaboxBannerBody:
-				"यह रिसीवर CeraLive रिसीवर नहीं है, इसलिए केवल विलंबता समायोज्य है। उन्नत ट्यूनिंग के लिए CeraLive रिसीवर आवश्यक है।",
-			reasonNonCeraLive: "केवल CeraLive रिसीवर के साथ उपलब्ध।",
-			reasonReceiverManaged: "रिसीवर द्वारा प्रबंधित।",
-			reasonFecUnsupported:
-				"इस CeraLive रिसीवर का libsrt बिल्ड FEC का समर्थन नहीं करता।",
-			reasonProfileUnsupported: "यह रिसीवर यह प्रोफ़ाइल प्रदान नहीं करता।",
-			summaryDelay: "\u2248 {seconds} s विलंब",
-			summaryRecoveryStandard: "स्वचालित हानि रिकवरी",
-			summaryRecoveryBandwidthSaver: "बैंडविड्थ-सेवर रिकवरी",
-			summaryFecOn: "FEC चालू",
-			summaryFecOff: "FEC बंद",
-			cloudSetTitle: "क्लाउड द्वारा सेट",
-			cloudSetHint: "इस डिवाइस पर ओवरराइड करने के लिए टैप करें",
-			driftHint: "डिवाइस एक अलग प्रोफ़ाइल चला रहा है",
-			profileNames: {
-				balanced: "संतुलित",
-				lowLatency: "कम विलंबता",
-				resilient: "लचीला",
-				classic: "क्लासिक",
-				lowLatencyFec: "कम विलंबता + FEC",
-				custom: "कस्टम",
-			},
-		},
 		deviceStats: {
 			title: "डिवाइस आँकड़े",
 			description: "इस डिवाइस से लाइव हार्डवेयर टेलीमेट्री।",
@@ -170,6 +125,18 @@ const hi = {
 			lowDiskBody:
 				"/data पर 512 MiB से कम खाली है। रिकॉर्डिंग, लॉग और अपडेट चलते रहें इसके लिए स्थान खाली करें।",
 			lowDiskAction: "लॉग देखें",
+		},
+		networkIngest: {
+			title: "नेटवर्क इनजेस्ट",
+			desc: "इस नेटवर्क के किसी फ़ोन या एन्कोडर को डिवाइस पर प्रकाशित करने दें",
+			explanation:
+				"LAN इनजेस्ट चालू करें ताकि कोई फ़ोन या हार्डवेयर एन्कोडर (जैसे OBS) RTMP या SRT को सीधे इस डिवाइस पर प्रकाशित कर सके \u2014 बिना क्लाउड रिले के। प्रकाशक इस डिवाइस के समान स्थानीय नेटवर्क (Wi-Fi या ईथरनेट) पर होना चाहिए।",
+			toggleRtmp: "RTMP इनजेस्ट",
+			toggleSrt: "SRT इनजेस्ट",
+			statusRunning: "सेवा चल रही है",
+			statusStopped: "सेवा नहीं चल रही",
+			statusDisabled: "अक्षम",
+			unavailable: "एमुलेटेड मोड में इस डिवाइस पर नेटवर्क इनजेस्ट उपलब्ध नहीं है।",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -646,6 +613,7 @@ const hi = {
 			disabling: "अक्षम हो रहा है…",
 			awaitingResult: "परिणाम की प्रतीक्षा…",
 			done: "हो गया",
+			saved: "सहेजा गया",
 		},
 	},
 	hotspotConfigurator: {
@@ -1040,6 +1008,7 @@ const hi = {
 			copied: "पता कॉपी हो गया",
 			copyFailed: "पता कॉपी नहीं हो सका।",
 			includesAudio: "ऑडियो शामिल है",
+			disabledInSettingsHint: "इसे सेटिंग्स \u2192 नेटवर्क इनजेस्ट में फिर से सक्षम करें।",
 			codecEducation: {
 				rtmp: "RTMP केवल H.264 वीडियो (AAC ऑडियो के साथ) प्रकाशित करता है। इसे हमेशा आपके कॉन्फ़िगर किए गए आउटपुट कोडेक में फिर से एन्कोड किया जाता है।",
 				srt: "SRT, H.264 या H.265 वीडियो प्रकाशित करता है। इसे हमेशा आपके कॉन्फ़िगर किए गए आउटपुट कोडेक में फिर से एन्कोड किया जाता है।",
@@ -1113,36 +1082,6 @@ const hi = {
 				camlink: "Cam Link",
 			},
 		},
-		sourcePreference: {
-			title: "स्रोत प्राथमिकता",
-			description:
-				"जिन स्रोतों के बीच आप स्विच करते हैं उन्हें क्रमबद्ध करें। ऑटो-फेलओवर इस सूची को अनदेखा करता है।",
-			empty: "कोई वीडियो स्रोत नहीं मिला",
-			moveUp: "{name} को ऊपर ले जाएं",
-			moveDown: "{name} को नीचे ले जाएं",
-			rankLabel: "प्राथमिकता {rank}",
-			stickyNote:
-				"ऑटो-फेलओवर स्थायी है \u2014 इंजन स्वचालित रूप से वापस नहीं आता। वापस स्विच करने के लिए स्रोत सूची का उपयोग करें।",
-			states: {
-				active: "सक्रिय",
-				lost: "खो गया",
-				failedOver: "फेलओवर हुआ",
-			},
-			lostHint: "यह स्रोत ऑफलाइन है।",
-			failedOverHint:
-				"आपका पसंदीदा स्रोत ऑफलाइन होने के बाद इंजन स्वचालित रूप से यहाँ आ गया।",
-			sync: {
-				applying: "क्रम सहेजा जा रहा है\u2026",
-				applied: "क्रम सहेजा गया",
-				failed: "क्रम सहेजा नहीं जा सका",
-			},
-			failover: {
-				title: "ऑटो-फेलओवर",
-				reasonSourceLost: "{name} ऑफलाइन हो गया, इसलिए इंजन {to} पर चला गया।",
-				sticky:
-					"ऑटो-फेलओवर स्थायी है \u2014 यह अपने आप वापस नहीं आएगा। वापस आने के लिए स्रोत सूची का उपयोग करें।",
-			},
-		},
 		source: {
 			label: "स्रोत",
 			none: "कोई स्रोत नहीं चुना गया",
@@ -1155,6 +1094,7 @@ const hi = {
 			lostBody: "इस स्रोत से स्ट्रीमिंग फिर से शुरू करने के लिए डिवाइस को फिर से कनेक्ट करें।",
 			audioNone: "कोई ऑडियो स्रोत नहीं मिला",
 			audioEmbedded: "एम्बेडेड ऑडियो (आने वाली स्ट्रीम से)",
+			audioEdit: "कोडेक और विलंब",
 		},
 		summary: {
 			nowStreaming: "अभी लाइव",
@@ -1178,6 +1118,7 @@ const hi = {
 				fixedBySource: "चयनित स्रोत द्वारा निर्धारित",
 				unsupportedAtResolution: "इस रिज़ॉल्यूशन पर उपलब्ध नहीं",
 				gatewayInactive: "नेटवर्क इंजेस्ट गेटवे नहीं चल रहा है",
+				disabledInSettings: "सेटिंग्स में अक्षम",
 				gatewayNoAddress: "कोई पहुँच योग्य LAN या हॉटस्पॉट पता नहीं",
 			},
 			info: "{field} के बारे में",
@@ -1241,6 +1182,7 @@ const hi = {
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 			axisSelected: "चयनित",
 			axisDeviceMax: "डिवाइस अधिकतम",
+			fpsAvailableAt: "{fps} fps {resolution} पर उपलब्ध",
 		},
 	},
 	dialogs: {
@@ -1405,6 +1347,7 @@ const hi = {
 			"डिवाइस पुनः आरंभ हो रहा है। यह पेज स्वचालित रूप से पुनः कनेक्ट होगा।",
 		sessionExpired: "सत्र समाप्त हो गया। कृपया पुनः प्रमाणित करें।",
 		authTimedOut: "आपका सत्र सत्यापित नहीं हो सका। कनेक्शन जाँचें और पुनः प्रयास करें।",
+		clearSavedSession: "सहेजा गया साइन-इन हटाएँ और पासवर्ड दर्ज करें",
 	},
 	offline: {
 		title: "आप ऑफ़लाइन हैं",

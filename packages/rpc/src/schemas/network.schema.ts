@@ -40,3 +40,24 @@ export const netifConfigOutputSchema = z.object({
 	applied: netifConfigInputSchema.partial().optional(),
 });
 export type NetifConfigOutput = z.infer<typeof netifConfigOutputSchema>;
+
+// Returned by network.setIngestEnabled on a dev/emulated (non-mock) host, where
+// the systemd gateway units do not exist so the toggle is a no-op.
+export const NETWORK_INGEST_UNAVAILABLE_ERROR = 'network_ingest_unavailable_in_emulated_mode';
+
+export const networkIngestProtocolInputSchema = z.enum(['rtmp', 'srt']);
+export type NetworkIngestProtocolInput = z.infer<typeof networkIngestProtocolInputSchema>;
+
+// Operator enable/disable of a LAN RTMP/SRT ingest gateway (desired state).
+export const setIngestEnabledInputSchema = z.object({
+	protocol: networkIngestProtocolInputSchema,
+	enabled: z.boolean(),
+});
+export type SetIngestEnabledInput = z.infer<typeof setIngestEnabledInputSchema>;
+
+export const setIngestEnabledOutputSchema = z.object({
+	success: z.boolean(),
+	applied: setIngestEnabledInputSchema.optional(),
+	error: z.string().optional(),
+});
+export type SetIngestEnabledOutput = z.infer<typeof setIngestEnabledOutputSchema>;

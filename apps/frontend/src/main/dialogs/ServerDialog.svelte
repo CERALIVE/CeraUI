@@ -78,8 +78,16 @@ import TransportRow from './server/TransportRow.svelte';
 
 interface Props {
 	open?: boolean;
+	/**
+	 * OPTIONAL "saved" signal (Task 5, federation-safe). Fired AFTER a successful
+	 * save so a host surface (LiveView) can run an informational `relay.validate`
+	 * check on the saved endpoint. Defaults to a no-op: the save path NEVER awaits
+	 * or depends on it, and the mount contract stays `{ open? }`-compatible so a
+	 * federated bundle that lacks the RPC still mounts + saves normally.
+	 */
+	onSaved?: () => void;
 }
-let { open = $bindable(false) }: Props = $props();
+let { open = $bindable(false), onSaved = () => undefined }: Props = $props();
 
 const PORT = streamingConstraints.port;
 const PROTOCOL: RelayProtocol = 'srtla';
@@ -278,6 +286,10 @@ async function handleSave() {
 		await rpc.streaming.setConfig(input);
 		toast.success($LL.notifications.saved());
 		open = false;
+		// Fire-and-forget "saved" signal (never awaited): a host may run an
+		// informational relay.validate on the saved endpoint. Save already
+		// succeeded above — this must not gate or throw into the save path.
+		onSaved();
 	} catch {
 		toast.error($LL.notifications.saveFailed());
 	} finally {

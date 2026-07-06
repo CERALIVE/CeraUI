@@ -30,6 +30,14 @@ const GATEWAY_INACTIVE: PipelineAvailability = {
 	reason: GATEWAY_INACTIVE_REASON,
 };
 
+// The operator-disabled reason (Task 7) — DISTINCT from both the gateway-inactive
+// reason and the generic no-source reason; the source gate must pass it through.
+const DISABLED_IN_SETTINGS_REASON = "live.education.reason.disabledInSettings";
+const GATEWAY_DISABLED_IN_SETTINGS: PipelineAvailability = {
+	available: false,
+	reason: DISABLED_IN_SETTINGS_REASON,
+};
+
 // ── Fixture builders ────────────────────────────────────────────────────────
 // The module reads only a handful of optional config fields; casting a partial
 // is the established pattern in this suite (see receiver-experience.test.ts).
@@ -173,6 +181,25 @@ describe("source gate", () => {
 		});
 		expect(gates.source.state).toBe("blocked");
 		expect(gates.source.reasonKey).toBe(GATEWAY_INACTIVE_REASON);
+		expect(gates.source.fix).toBe("openSource");
+	});
+
+	it("blocked — operator-disabled network source surfaces the disabledInSettings reason, distinct from the generic no-source reason (Task 7)", () => {
+		const { gates } = deriveGoLiveReadiness({
+			...greenInput(),
+			config: cfg({ source: "rtmp", relay_server: "srv-1" }),
+			sources: sources([
+				source("rtmp", {
+					available: false,
+					unavailableReason: DISABLED_IN_SETTINGS_REASON,
+				}),
+			]),
+			gatewayStatus: GATEWAY_DISABLED_IN_SETTINGS,
+		});
+		expect(gates.source.state).toBe("blocked");
+		expect(gates.source.reasonKey).toBe(DISABLED_IN_SETTINGS_REASON);
+		expect(gates.source.reasonKey).not.toBe(READINESS_SOURCE_REASON);
+		expect(gates.source.reasonKey).not.toBe(GATEWAY_INACTIVE_REASON);
 		expect(gates.source.fix).toBe("openSource");
 	});
 

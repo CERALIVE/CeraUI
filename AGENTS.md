@@ -134,10 +134,13 @@ CeraUI/
 | **Auth-state single-mutation-path store (`ingestAuth`/`authenticate`/`createPassword`)** | `apps/frontend/src/lib/stores/auth-status.svelte.ts` |
 | **Capability-truthfulness regression e2e gate** | `apps/frontend/tests/e2e/truthfulness.spec.ts` |
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `apps/backend/src/modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
-| **GoLiveCard (readiness + config rows + start, one adaptive surface)** | `apps/frontend/src/main/live/GoLiveCard.svelte` |
+| **StreamSetupChain (readiness + config rows + Start, one always-visible 3-row card — no collapse; mounted in `IdleCockpit`; `GoLiveCard.svelte` is now an unmounted migration shim, see `TD-unmounted-source-shims`)** | `apps/frontend/src/main/live/StreamSetupChain.svelte` |
 | **Idle/Live cockpit split (LiveView switches on the optimistic streaming edge)** | `apps/frontend/src/main/live/IdleCockpit.svelte` + `apps/frontend/src/main/live/LiveCockpit.svelte` |
-| **Pure Go-Live readiness derivation (source/network/destination/engine gates)** | `apps/frontend/src/lib/streaming/go-live-readiness.ts` (`deriveGoLiveReadiness`) |
-| **Unified device-first source list (unified `<ul>`, inline reorder, network-ingest rows)** | `apps/frontend/src/lib/components/custom/SourceSection.svelte` |
+| **Pure Go-Live readiness derivation (source/network/destination/engine gates — consumed byte-unchanged by StreamSetupChain)** | `apps/frontend/src/lib/streaming/go-live-readiness.ts` (`deriveGoLiveReadiness`) |
+| **Unified device-first source list (unified `<ul>`, single audio surface, selected-row-only network publish instructions, operator-disabled-row filtering)** | `apps/frontend/src/lib/components/custom/SourceSection.svelte` |
+| **Destination traffic-light validation store (session-only, fingerprint-keyed `relay.validate` verdict)** | `apps/frontend/src/lib/streaming/destination-validation.svelte.ts` |
+| **Network-ingest operator enable/disable (topology-aware desired-state + systemctl apply + boot reconcile)** | `apps/backend/src/modules/network/network-ingest-control.ts` |
+| **Settings "Network ingest" dialog (per-protocol enable/disable toggle)** | `apps/frontend/src/main/dialogs/NetworkIngestDialog.svelte` |
 | **BondedLinksSection — sole owner of live per-link telemetry (RTT/NAK/weight) on the Network view** | `apps/frontend/src/main/network/BondedLinksSection.svelte` |
 | **Deprecation-shim register entries (legacy broadcasts + unmounted GoLiveCard-migration files)** | `docs/TECHNICAL_DEBT.md` → `TD-legacy-source-broadcasts` / `TD-unmounted-source-shims` |
 | **`device.activeProfile` status-frame emitter (drift-detection loop)** | `apps/backend/src/modules/remote-control/active-profile-reporter.ts` (`reportActiveProfile({force?})` — reads the ACTUALLY-applied `StreamConfig` via injected `readActiveProfile`, de-dups on the 4 fields, emits `{config}` via injected `broadcast`) + `active-profile-wiring.ts` (`wireActiveProfileReporter()` — binds `readActiveProfile` to the persisted `stream_profile`/`srt_latency`/`fec_enabled`/`recovery_mode` config, `broadcast` to `broadcastMsg`; called from `main.ts` after `wireSetProfile()`). Three emit sites: `set-profile-wiring.ts` (after a successful `setProfile` apply), `rpc/procedures/streaming.procedure.ts` (after a UI Stream-Tuning config change), `modules/remote-control/channel.ts` `handleOpen()` (force re-emit on control-channel connect/reconnect — reseeds the hub, which loses its snapshot on disconnect). Frame type registered in `protocol.ts` `STATUS_TYPES` + `RELAYABLE_TYPES` (`status-relay.ts`) as `ACTIVE_PROFILE_STATUS = "device.activeProfile"`. Platform-side consumer: `ceralive-platform/apps/api/lib/remote-control/hub/internal-gate.ts` `applyActiveProfile` (see `ceralive-platform/AGENTS.md` → SRT-receive profile reconciliation) |
@@ -572,16 +575,12 @@ components and modules shipped:
 - `apps/frontend/src/lib/components/custom/SourceSection.svelte` — live input picker
   section; renders the active source, a live-switch affordance, and the PiP/fallback
   coming-soon pills.
-- `apps/frontend/src/lib/components/custom/SourcePreference.svelte` — pre-start source
-  preference selector (video + audio); drives `source-preference.ts`.
 - `apps/frontend/src/lib/components/custom/ComingSoon.svelte` — calm roadmap pill +
   tooltip; takes a `debtId` prop and renders `data-debt-id` into the DOM. Every
   instance MUST point at an `open` entry in `docs/TECHNICAL_DEBT.md`.
 - `apps/frontend/src/lib/components/custom/InfoPopover.svelte` — lightweight info
   popover (question-mark trigger + tooltip body); used by SourceSection and
   CapabilityTierBanner.
-- `apps/frontend/src/lib/streaming/source-preference.ts` — pure source-preference
-  logic (default selection, persistence key, validation).
 - `apps/frontend/src/lib/streaming/sourceSummary.ts` — derives a human-readable
   source summary string from the active config for the HUD and Live header.
 - `apps/frontend/src/lib/streaming/liveAudioSwitch.ts` — live audio switch gate;
@@ -607,6 +606,15 @@ components and modules shipped:
   readiness hint in the Live destination; driven by `deriveServerReadiness`.
 - `apps/frontend/src/main/live/LiveHeader.svelte` — Live header chip showing the
   active destination + kind badge; opens `ServerDialog` on tap.
+
+**Source-priority reorder UI removed (live-correctness-pass Todo #10).** The
+pre-start source-preference reorder affordance is GONE from the frontend:
+`lib/streaming/source-preference.ts`, `SourcePreference.svelte`, and their tests
+are deleted (every remaining importer was itself one of the deleted files). The
+backend `source_preference` config field is KEPT for wire compat (still
+persisted/echoed by `streaming.procedure.ts`) — an old client can still write it;
+nothing in CeraUI writes or reads it anymore. `SourceSection.svelte`'s unified
+`<ul>` renders sources in broadcast order — no rank sort, no drag handles.
 
 **Track-1 tech-debt register [EXISTS].** Items from this overhaul are tracked in
 `docs/TECHNICAL_DEBT.md` and enforced by `scripts/check-tech-debt.mjs`. Three remain
@@ -1349,21 +1357,35 @@ existing bus, no new endpoint). Every row is one of four `origin` variants
   Tracked as `TD-legacy-source-broadcasts` in `docs/TECHNICAL_DEBT.md`; do not
   delete the producers until that entry's exit condition is met.
 
-### GoLiveCard / IdleCockpit / LiveCockpit
+### StreamSetupChain / IdleCockpit / LiveCockpit
 
-`apps/frontend/src/main/live/` now holds the Live destination's cockpit split:
+`apps/frontend/src/main/live/` now holds the Live destination's cockpit split.
+**`GoLiveCard.svelte` no longer mounts anywhere** — a subsequent
+live-experience-refinement pass merged its gates + config rows into
+`StreamSetupChain.svelte`, which is the component actually rendered today (see
+`docs/TECHNICAL_DEBT.md` → `TD-unmounted-source-shims` for the up-to-date shim
+list, which already reflects this):
 
-- **`GoLiveCard.svelte`** — the one adaptive readiness + config + start surface.
-  It derives Start-gating from the pure `deriveGoLiveReadiness()`
-  (`apps/frontend/src/lib/streaming/go-live-readiness.ts`) against four gates
-  (source/network/destination/engine), collapses to a thin ready-bar once every
-  gate is green and no config row is dirty, and renders the migrated config rows
-  (same testids/lock semantics as the retired `StreamSettingsCard`), the
-  destination traffic-light, and the bitrate-ceiling chip. It detects a
-  sole-camera device with no `config.source` set and folds the implicit id into
-  the Start payload WITHOUT writing config — the row only shows a "Change" affordance.
-- **`IdleCockpit.svelte`** — pre-stream wrapper: `GoLiveCard` → a collapsed
-  Preview `<details>` disclosure → `SourceSection` → a collapsed Roadmap
+- **`StreamSetupChain.svelte`** — ONE "Stream setup" card of THREE
+  always-visible rows in signal order (Encoder → Destination → Network) — no
+  collapse state, no thin ready-bar; every row is rendered at all times. It is a
+  presentation-only remap of the pure `deriveGoLiveReadiness()`
+  (`apps/frontend/src/lib/streaming/go-live-readiness.ts`, four gates:
+  source/network/destination/engine) — the verdict is consumed byte-unchanged and
+  never re-derived here. Each row fuses a readiness-state dot with the migrated
+  config-row summary/edit affordance (same testids/lock semantics as the retired
+  `StreamSettingsCard`); the Destination row also carries the traffic-light chip
+  (fed by the destination-validation store, below) and the Encoder row a
+  bitrate-ceiling chip. Audio is deliberately NOT a row (live-correctness-pass
+  Todo #11 — see "LIVE-CORRECTNESS-PASS FIXES" below); the ENGINE gate is also not
+  a row (owned by the `CapabilityTierBanner` + the Start button's disabled
+  reason). It detects a sole-camera device with no `config.source` set and folds
+  the implicit id into the Start payload WITHOUT writing config — the row only
+  shows a "Change" affordance. It owns NO RPC and writes NO config itself; every
+  action is a callback prop from `LiveView`.
+- **`IdleCockpit.svelte`** — pre-stream wrapper, source-first order:
+  `SourceSection` → `StreamSetupChain` (readiness rows + Start, mounted exactly
+  once) → a collapsed Preview `<details>` disclosure → a collapsed Roadmap
   `<details>` disclosure (the relocated `TD-pip`/`TD-mode-fallback`/
   `TD-embedded-audio` "coming soon" pills). Pure prop pass-through — no `$state`,
   no RPC.
@@ -1373,19 +1395,22 @@ existing bus, no new endpoint). Every row is one of four `origin` variants
   (`isStreaming || streamingOptimismState === 'starting'`) — never on the raw
   `is_streaming` flag alone, so Start never flickers back to idle mid-launch.
 - **`SourceSection.svelte`** (`lib/components/custom/`) renders the single
-  `getSources()` list as one `<ul>` — every origin as a row, capture rows
-  refilled in operator-preference order, inline reorder on ≥2 capture devices.
-  It owns the `config.source` write itself (`rpc.streaming.setConfig({source})`)
-  — it is no longer a purely presentational component.
+  `getSources()` list as one `<ul>` (every origin as a row; broadcast order — the
+  Todo #10 reorder UI is removed, see below) filtered to `visibleSources` (an
+  operator-disabled network row hides UNLESS it is the currently-selected
+  source). It owns the `config.source` write itself
+  (`rpc.streaming.setConfig({source})`) and is the sole audio-configuration
+  surface (Todo #11) — it is no longer a purely presentational component.
 
 ### Deprecation shims kept-but-unmounted (registered, not deleted)
 
 `StreamSettingsCard.svelte`, `OnboardingChecklist.svelte`, `ServerReadiness.svelte`
-(all `main/live/`), and `NetworkIngestSection.svelte`
-(`lib/components/custom/`) are no longer mounted anywhere — GoLiveCard/IdleCockpit
-absorbed every responsibility they used to own in `LiveView`. The files are kept
-(not deleted) as a one-release rollback safety net; only `StreamSettingsCard`'s
-`ConfigRow` type is still imported (by `GoLiveCard`/`IdleCockpit`). Tracked as
+(all `main/live/`), `GoLiveCard.svelte` (`main/live/`), and
+`NetworkIngestSection.svelte` (`lib/components/custom/`) are no longer mounted
+anywhere — `StreamSetupChain`/`IdleCockpit`/`SourceSection` absorbed every
+responsibility they used to own in `LiveView`. The files are kept (not deleted) as
+a one-release rollback safety net; only `StreamSettingsCard`'s `ConfigRow` type is
+still imported (now by `StreamSetupChain`/`IdleCockpit`). Tracked as
 `TD-unmounted-source-shims` in `docs/TECHNICAL_DEBT.md` — do not delete these
 files until that entry's exit condition is met, and do not re-mount them either.
 
@@ -1421,6 +1446,131 @@ signal-%/speed-Badge telemetry clusters — that would duplicate numbers already
 shown once, correctly, in `BondedLinksSection`. Do not re-add per-link numbers to
 the per-interface sections.
 
+## LIVE-CORRECTNESS-PASS FIXES [EXISTS]
+
+A follow-up pass (`live-correctness-pass` plan) tightened the Live destination and
+a few surrounding surfaces after the device-first source model shipped. Full
+implementation notes: `.omo/notepads/live-correctness-pass/learnings.md`.
+
+**Truthful device-max pair (Todo #2/#3).** `axisCeiling({offered, deviceModes})`
+(`ValidationAdapter.ts`) now returns the ACHIEVABLE resolution×framerate pair when
+Tier-2 `deviceModes` are present — intersecting the top rung's own modes with the
+offered framerates — instead of the old independent-axes max (which could claim a
+fictional pairing, e.g. 1080p/60 when 60fps only actually exists at 720p). One
+implementation, two consumers: EncoderDialog's `axis-device-max` chip and
+SourceSection's "SOURCE MAX" capability chip both read this same ceiling.
+`framerateAvailableAt(axes, fps, excludeResolution)` drives the per-option
+"available at Nx" hint on a disabled framerate option, keyed on the candidate fps
+(never the resolution — a resolution-keyed hint would falsely stamp the same hint
+onto every disabled rate at that resolution). The modes-absent (coarse) branch is
+byte-identical to the pre-fix behavior (golden test).
+
+**Destination traffic-light validation (Todo #5).**
+`apps/frontend/src/lib/streaming/destination-validation.svelte.ts` is a
+session-only (never persisted to `config.json`) rune store that fingerprints the
+destination-defining config keys (`ENDPOINT_FINGERPRINT_KEYS`: `relay_server`,
+`relay_account`, `relay_streamid_override`, `relay_protocol`, `srtla_addr`,
+`srtla_port`, `srt_streamid`, `selected_ingest_endpoint` — `srt_latency` is
+excluded, tuning-only) plus the resolved endpoint address, and records the last
+`relay.validate` verdict against that fingerprint. `LiveView.validateSavedDestination()`
+orchestrates it via `ServerDialog`'s OPTIONAL `onSaved?` callback (fired
+fire-and-forget after a successful save — the dialog's mount contract and
+federation bundle are unaffected). `StreamSetupChain`'s destination row reads
+`getDestinationValidated()` for its traffic-light chip; any endpoint-key edit (or
+a catalog-side addr/port drift under the same `relay_server` id) invalidates the
+green light. The traffic light is purely informational — it never gates Start.
+
+**Network-ingest operator enable/disable (Todo #6–9).** A new enable/disable layer
+on top of the always-on gateway probe described in "NETWORK-INGEST GATEWAY" above:
+- Backend: `apps/backend/src/modules/network/network-ingest-control.ts` —
+  `readIngestDesired`/`persistIngestDesired`/`setIngestEnabled`/
+  `reconcileIngestDesiredState` (fire-and-forget, self-serialising boot reconcile,
+  never throws) + `planIngestUnitActions` (pure resolver, topology-aware: the NEW
+  shared `ceralive-rtmp-gateway.service` topology stops a unit only when BOTH
+  protocols are off and starts it when EITHER is on; the OLD `srtUnitPresent`
+  topology keeps rtmp↔rtmp / `ceralive-srt-gateway.service`↔srt independent).
+  `rpc.network.setIngestEnabled({protocol, enabled})` persists FIRST, then
+  systemctl-applies (isActive-gated — a no-op re-run issues zero spawns), then
+  re-broadcasts BOTH `status` and `sources`.
+- `status.network_ingest.{rtmp,srt}.operator_disabled?: boolean` — additive,
+  present only when `true`, DISTINCT from `service_active` (in the NEW topology a
+  shared unit can stay `service_active:true` while a sibling protocol is
+  `operator_disabled:true`).
+- **The fail-visible three-mirror predicate** — "start-eligible = unit-active AND
+  NOT operator-disabled" — is enforced identically in three places that MUST
+  agree: the backend gateway probe (`network-ingest.ts` `buildGatewayProbe()`),
+  the mock gate (`isMockGatewayActive()`, for dev/CI parity with the real probe),
+  and the frontend `pipelineAvailability()` (operator intent checked FIRST, ahead
+  of `service_active`/url-null/inactive, reason
+  `live.education.reason.disabledInSettings`).
+- Frontend: `apps/frontend/src/main/dialogs/NetworkIngestDialog.svelte` (Settings
+  → "Network ingest" entry) toggles each protocol via a pessimistic bits-ui
+  `Switch` composed with `osCommand` WITHOUT `confirmOnResolve` — the toggle
+  position only moves once the confirming `status.network_ingest` broadcast
+  lands; the spinner is the sole optimistic element. An emulated-mode refusal
+  (`NETWORK_INGEST_UNAVAILABLE_ERROR`) renders a calm inline band instead of a
+  toast. `SourceSection.svelte`'s `visibleSources` filter hides an
+  operator-disabled network row UNLESS it is the currently-selected source
+  (`config?.source === source.id`) — a selected-but-disabled row stays visible,
+  disabled, with a reason line AND a Settings-hint line, so the operator can
+  always see why their active source stopped working.
+
+**Single audio surface (Todo #11).** The Source card (`SourceSection.svelte`) is
+now the ONLY place that surfaces audio configuration. The `open-audio-dialog`
+testid moved from the old Stream-setup audio row into SourceSection's audio block
+(a "Codec & delay" ghost button, hidden while streaming — the audio surface stays
+read-only mid-stream, same lock semantics as before). `StreamSetupChain` no
+longer has an audio row (three rows only: Encoder/Destination/Network).
+
+**One transport token per idle surface (Todo #12).** The idle Encoder-row summary
+and SourceSection's active-config line no longer separately push a
+`SRTLA`/`SRT`/`RIST` transport token — the ONE place the transport still shows
+idle is the destination kind badge (e.g. "SRTLA · Bonded", via
+`buildServerSummary` → `kindBadgeLabelKey`). The Encoder row instead names the
+actual active source (capture device display name, or the pipeline name /
+`reconfigureRequired` fallback for coarse/virtual/network sources). The LIVE
+`LiveSummaryStrip` transport value is untouched — `deriveActiveSummary`
+(`sourceSummary.ts`) still returns `transport` for the live strip; this is an
+idle-only render-site fix, never a change to that shared derivation.
+
+**Selected-row-only publish instructions (Todo #13).** A network-ingest row's QR
+/ URL / copy / codec-education `<details>` disclosure now renders ONLY when that
+row IS the selected source (`config?.source === source.id`); an
+unselected-but-enabled network row still shows its select control, status line,
+audio-kind pill, and info popover — just not the publish instructions. The QR
+effect is narrowed the same way, so no QR is generated for an unselected row.
+
+**Clear-saved-sign-in escape hatch (Todo #19).** `Layout.svelte`'s pre-auth
+`authTimedOut` band ("Couldn't verify your session…") gained a second button
+(`data-testid="clear-saved-session"`, i18n `connection.clearSavedSession`) beside
+Retry. It clears the saved credential (`localStorage.removeItem('auth')` — the
+same key `subscriptions.svelte.ts` reads for session restore) and falls through
+to the password screen — breaking the retry loop a stale/dead saved token would
+otherwise trap the operator in. Retry's own behavior is unchanged.
+
+**Network mutation feedback completeness (Todo #20).** `NetifDialog.save()` and
+`BondToggle.toggle()` deliberately share ONE `osCommand` resource key
+(`` `netif:${name}` `` — never split into a separate key) so the two surfaces
+refuse each other's concurrent mutation as a cross-surface race guard.
+`osCommand` (`async-operation.svelte.ts`) gained a `silent?: boolean` option —
+suppresses the failure toast but still transitions the op to `failed`, so a calm
+inline band can still render off the phase — used by `WifiSelectorDialog`'s
+periodic background rescan (`{ silent: true, confirmOnResolve: true }`). New
+i18n key: `network.os.saved` (NetifDialog success toast; `deviceBusy`/
+`operationFailed` pre-existed).
+
+**Audio-naming tier-3 diagnostic (Todo #21).** The 3-tier audio-naming resolution
+(engine `display_name` join on `alsa_card_id` → `/proc/asound/cards` longname →
+`audioSrcAliases` generic alias) was already correct — Task 21 added
+DIAGNOSTICS ONLY, no resolver rewrite. `audio-naming.ts` gained ONE `logger.info`
+call (a deliberate, documented exception to the module's "pure, no side effects"
+header) that logs `engineEntriesWithoutJoinKey` whenever a card falls through to
+the generic `usbaudio*` tier-3 alias — the single most useful field for
+root-causing an on-device "generic USB audio for a named device" report (almost
+always a dropped `alsa_card_id` join key upstream of CeraUI). One-shot per
+`cardId` per boot (`resetAudioNamingDiagnostics()` wired into `resetMockState()`
+for test isolation).
+
 ## ANTI-PATTERNS
 
 - Don't run `npm install`, `yarn`, or `pnpm install` — this workspace runs **Bun** exclusively. `bun.lock` is the authoritative lockfile; `pnpm-lock.yaml`/`pnpm-workspace.yaml`/`.pnpmrc` are gone and catalogs live in `package.json` `workspaces.catalog`. Use `bun install`.
@@ -1433,6 +1583,6 @@ the per-interface sections.
 - Don't add new exports to the streamloop barrel without updating the locked-API surface test in `tests/streamloop-modules.test.ts`.
 - Don't re-add a `websocket-store` wrapper or a second `rpcClient.onMessage` owner — `subscriptions.svelte.ts` (connection/non-auth state) and `auth-status.svelte.ts` (auth mutation state) are the only two stores allowed to own this state; a CI grep gate blocks the literal module name from reappearing in `apps/frontend/src`.
 - Don't re-derive the "gateway inactive" disabled-with-reason rule inline on a new surface — route through `pipelineAvailability.ts`.
-- Don't delete `StreamSettingsCard.svelte`/`OnboardingChecklist.svelte`/`ServerReadiness.svelte`/`NetworkIngestSection.svelte` yet — they're unmounted-but-kept migration shims (`TD-unmounted-source-shims`); wait for the register entry's exit condition.
+- Don't delete `StreamSettingsCard.svelte`/`OnboardingChecklist.svelte`/`ServerReadiness.svelte`/`GoLiveCard.svelte`/`NetworkIngestSection.svelte` yet — they're unmounted-but-kept migration shims (`TD-unmounted-source-shims`); wait for the register entry's exit condition.
 - Don't re-add per-link RTT/NAK/weight numbers to the WiFi/Cellular/Ethernet per-interface sections — `BondedLinksSection.svelte` is the sole owner of that telemetry on the Network destination.
 - Don't add a fifth fact to the compact HUD strip — the 4-fact scope (lifecycle badge, health dot, bitrate, one temp chip) is deliberate; anything else belongs in the expanded Sheet.

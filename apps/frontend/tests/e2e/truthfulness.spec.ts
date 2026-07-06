@@ -131,6 +131,12 @@ let pageWs: WebSocketRoute | null = null;
 let dropServerDevices = false;
 let dropServerCapabilities = false;
 let dropServerSources = false;
+// Fake-resolve every `streaming.setConfig` client-side with success so a config
+// write is proven to succeed WITHOUT depending on the shared backend accepting the
+// injected (backend-unknown) source ids — the injected sources are the DOM truth
+// only; the real backend rejects unknown ids. Captured inputs are asserted on.
+let fakeSetConfig = false;
+const setConfigCalls: Record<string, unknown>[] = [];
 
 function send(payload: unknown): void {
 	pageWs?.send(JSON.stringify(payload));
@@ -332,6 +338,18 @@ function networkSource(
 	};
 }
 
+// An OPERATOR-DISABLED network source: the Settings toggle is OFF, so the backend
+// reports available:false with the DISTINCT disabledInSettings reason (T6/T7). This
+// is the ONLY verdict that HIDES the row (Task 9) — gateway-inactive stays visible.
+function networkSourceDisabledInSettings(
+	proto: "rtmp" | "srt",
+): Record<string, unknown> {
+	return {
+		...networkSource(proto, false),
+		unavailableReason: "live.education.reason.disabledInSettings",
+	};
+}
+
 // Inject the folded `sources` broadcast (drops the backend's own — see beforeEach).
 function sendSources(sources: Record<string, unknown>[]): void {
 	send({ sources: { hardware: "rk3588", sources } });
@@ -360,12 +378,41 @@ test.describe("Capability truthfulness (functional)", () => {
 		dropServerDevices = true;
 		dropServerCapabilities = true;
 		dropServerSources = true;
+		fakeSetConfig = false;
+		setConfigCalls.length = 0;
 
 		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 
-			ws.onMessage((m) => server.send(m));
+			ws.onMessage((m) => {
+				if (fakeSetConfig) {
+					const text = typeof m === "string" ? m : m.toString();
+					try {
+						const frame = JSON.parse(text) as {
+							id?: string | number;
+							path?: unknown;
+							input?: Record<string, unknown>;
+						};
+						const rpc = Array.isArray(frame.path) ? frame.path.join(".") : null;
+						if (rpc === "streaming.setConfig") {
+							setConfigCalls.push(frame.input ?? {});
+							if (frame.id !== undefined) {
+								ws.send(
+									JSON.stringify({
+										id: frame.id,
+										result: { success: true, applied: frame.input ?? {} },
+									}),
+								);
+							}
+							return;
+						}
+					} catch {
+						/* non-RPC frame */
+					}
+				}
+				server.send(m);
+			});
 
 			server.onMessage((m) => {
 				const text = typeof m === "string" ? m : m.toString();
@@ -529,6 +576,52 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(
 			page.getByTestId("source-network-ingest-reason-rtmp"),
 		).toHaveCount(0);
+	});
+
+	// ── (c) Operator-disabled ingest row HIDES; a config write still succeeds ────
+	// Distinct from the gateway-inactive row above (which stays VISIBLE
+	// disabled-with-reason): a source the operator switched OFF in Settings is HIDDEN
+	// from the picker (Task 9). Hiding it must NOT wedge the rest of the config — a
+	// setConfig of an unrelated field still succeeds while the ingest is disabled.
+	test("an operator-disabled network row disappears from the list while a config write still succeeds", async ({
+		page,
+	}) => {
+		fakeSetConfig = true;
+		// No source pre-selected, so the capture row is genuinely selectable (a click
+		// on the already-selected source is a no-op — handleSelectSource early-returns).
+		serverConfig();
+		sendFullCaps();
+		// rtmp operator-disabled (Settings toggle OFF) alongside a selectable capture
+		// source. The gateway-inactive row above proves available:false alone does NOT
+		// hide — only the disabledInSettings reason does.
+		sendSources([SRC_HDMI_CAP, networkSourceDisabledInSettings("rtmp")]);
+
+		const captureRow = page.getByTestId("source-select-video-hdmi");
+		await expect(captureRow).toBeVisible({ timeout: 15_000 });
+		// The operator-disabled rtmp row is HIDDEN (not merely disabled) — no select
+		// button, no reason line, no whole row.
+		await expect(
+			page.getByTestId("source-network-ingest-select-rtmp"),
+		).toHaveCount(0);
+		await expect(page.getByTestId("source-row-rtmp")).toHaveCount(0);
+
+		// A config write of an unrelated field still succeeds while rtmp is disabled:
+		// selecting the still-visible capture source dispatches streaming.setConfig,
+		// which the proxy fake-resolves with success (the injected sources are
+		// backend-unknown, so the write is proven client-side).
+		await captureRow.click();
+		await expect
+			.poll(() => setConfigCalls.some((c) => c.source === "video-hdmi"), {
+				timeout: 5_000,
+			})
+			.toBe(true);
+
+		// Re-enabling rtmp (Settings toggle back ON → available:true) brings the row
+		// back, selectable — the hide is purely the operator-disabled verdict.
+		sendSources([SRC_HDMI_CAP, networkSource("rtmp", true)]);
+		await expect(
+			page.getByTestId("source-network-ingest-select-rtmp"),
+		).toBeEnabled();
 	});
 
 	// ── (b) Every rendered data-debt-id maps to an OPEN register entry ──────────

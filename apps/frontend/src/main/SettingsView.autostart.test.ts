@@ -32,6 +32,7 @@ const noop = vi.hoisted(
 		},
 );
 vi.mock("./dialogs/CloudRemoteDialog.svelte", noop);
+vi.mock("./dialogs/NetworkIngestDialog.svelte", noop);
 vi.mock("./dialogs/LogsDialog.svelte", noop);
 vi.mock("./dialogs/PasswordDialog.svelte", noop);
 vi.mock("./dialogs/PowerDialog.svelte", noop);

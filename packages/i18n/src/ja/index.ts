@@ -117,52 +117,6 @@ const ja = {
 		transportAdvanced: "詳細設定",
 		transportKindHint:
 			"ストリームがレシーバーに届く方法です。SRTLA は複数のネットワーク回線を束ね、RIST と SRT は単一回線を使用します。",
-		streamTuning: {
-			title: "ストリーム調整",
-			hint: "ストリームの配信方法を調整します。CeraLive レシーバーではプロファイル、FEC、復元調整が利用できます。その他のレシーバーは BELABOX 互換の既定値を使用します。",
-			ceraliveReceiver: "CeraLive レシーバー",
-			latency: "レイテンシ",
-			latencyNegotiated: "ネゴシエート済み",
-			presets: "プロファイルプリセット",
-			fec: "前方誤り訂正",
-			fecHelper:
-				"冗長性を加え、失われたパケットをレシーバーが再構築できるようにします。帯域を多く消費し、レイテンシがわずかに増えます \u2014 損失の多い回線に最適です。",
-			recoveryMode: "復元モード",
-			advanced: "詳細設定",
-			recovery: "復元",
-			recoveryStandard: "標準",
-			recoveryStandardHint: "推奨",
-			recoveryBandwidthSaver: "帯域節約",
-			recoveryBandwidthSaverHint: "上級者向け",
-			recoveryHelper:
-				"標準はストリームをスムーズで安定した状態に保ちます。帯域節約は復元トラフィックを抑え、制限のある回線でデータ使用量を減らします。",
-			belaboxBadge: "標準（BELABOX 互換）",
-			belaboxBannerTitle: "標準（BELABOX 互換の既定値）",
-			belaboxBannerBody:
-				"このレシーバーは CeraLive レシーバーではないため、調整できるのはレイテンシのみです。高度な調整には CeraLive レシーバーが必要です。",
-			reasonNonCeraLive: "CeraLive レシーバーでのみ利用できます。",
-			reasonReceiverManaged: "レシーバー側で管理されます。",
-			reasonFecUnsupported:
-				"この CeraLive レシーバーの libsrt ビルドは FEC に対応していません。",
-			reasonProfileUnsupported:
-				"このレシーバーはこのプロファイルを提供していません。",
-			summaryDelay: "\u2248 {seconds} 秒の遅延",
-			summaryRecoveryStandard: "自動ロスリカバリ",
-			summaryRecoveryBandwidthSaver: "帯域節約リカバリ",
-			summaryFecOn: "FEC オン",
-			summaryFecOff: "FEC オフ",
-			cloudSetTitle: "クラウドにより設定",
-			cloudSetHint: "この端末で上書きするにはタップ",
-			driftHint: "端末は別のプロファイルで動作中",
-			profileNames: {
-				balanced: "バランス",
-				lowLatency: "低レイテンシ",
-				resilient: "高耐性",
-				classic: "クラシック",
-				lowLatencyFec: "低レイテンシ + FEC",
-				custom: "カスタム",
-			},
-		},
 		deviceStats: {
 			title: "デバイス統計",
 			description: "このデバイスのライブハードウェアテレメトリ。",
@@ -176,6 +130,19 @@ const ja = {
 			lowDiskBody:
 				"/data の空き容量が 512 MiB 未満です。録画・ログ・更新が動作し続けるよう空き容量を確保してください。",
 			lowDiskAction: "ログを表示",
+		},
+		networkIngest: {
+			title: "ネットワーク取り込み",
+			desc: "同じネットワーク上のスマホやエンコーダーからこのデバイスへ配信できるようにします",
+			explanation:
+				"LAN取り込みを有効にすると、スマホやハードウェアエンコーダー（OBSなど）がRTMPまたはSRTをこのデバイスへ直接配信できます \u2014 クラウドリレーは不要です。配信側はこのデバイスと同じローカルネットワーク（Wi-Fiまたはイーサネット）に接続している必要があります。",
+			toggleRtmp: "RTMP取り込み",
+			toggleSrt: "SRT取り込み",
+			statusRunning: "サービス稼働中",
+			statusStopped: "サービス停止中",
+			statusDisabled: "無効",
+			unavailable:
+				"エミュレートモードでは、このデバイスでネットワーク取り込みは利用できません。",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -669,6 +636,7 @@ const ja = {
 			disabling: "無効化中…",
 			awaitingResult: "結果を待っています…",
 			done: "完了",
+			saved: "保存しました",
 		},
 	},
 	hotspotConfigurator: {
@@ -1072,6 +1040,8 @@ const ja = {
 			copied: "アドレスをコピーしました",
 			copyFailed: "アドレスをコピーできませんでした。",
 			includesAudio: "音声を含む",
+			disabledInSettingsHint:
+				"設定 \u2192 ネットワーク受信で再度有効にしてください。",
 			codecEducation: {
 				rtmp: "RTMP は H.264 映像（AAC 音声付き）のみを配信します。常に設定した出力コーデックに再エンコードされます。",
 				srt: "SRT は H.264 または H.265 映像を配信します。常に設定した出力コーデックに再エンコードされます。",
@@ -1147,37 +1117,6 @@ const ja = {
 				camlink: "Cam Link",
 			},
 		},
-		sourcePreference: {
-			title: "ソース優先度",
-			description:
-				"切り替えるソースの順序を設定します。自動フェイルオーバーはこのリストを無視します。",
-			empty: "映像ソースが検出されません",
-			moveUp: "{name} を上へ",
-			moveDown: "{name} を下へ",
-			rankLabel: "優先度 {rank}",
-			stickyNote:
-				"自動フェイルオーバーは固定です \u2014 エンジンは自動的に戻りません。ソースリストを使って手動で戻してください。",
-			states: {
-				active: "アクティブ",
-				lost: "ロスト",
-				failedOver: "フェイルオーバー済み",
-			},
-			lostHint: "このソースはオフラインです。",
-			failedOverHint:
-				"優先ソースがオフラインになったため、エンジンが自動的にここに切り替えました。",
-			sync: {
-				applying: "順序を保存中\u2026",
-				applied: "順序を保存しました",
-				failed: "順序を保存できませんでした",
-			},
-			failover: {
-				title: "自動フェイルオーバー",
-				reasonSourceLost:
-					"{name} がオフラインになったため、エンジンが {to} に切り替えました。",
-				sticky:
-					"自動フェイルオーバーは固定です \u2014 自動的には戻りません。ソースリストを使って手動で戻してください。",
-			},
-		},
 		source: {
 			label: "ソース",
 			none: "ソースが選択されていません",
@@ -1191,6 +1130,7 @@ const ja = {
 				"デバイスを再接続して、このソースからの配信を再開してください。",
 			audioNone: "オーディオソースが検出されません",
 			audioEmbedded: "埋め込みオーディオ（受信ストリームから）",
+			audioEdit: "コーデックと遅延",
 		},
 		summary: {
 			nowStreaming: "配信中",
@@ -1214,6 +1154,7 @@ const ja = {
 				fixedBySource: "選択したソースによって固定されています",
 				unsupportedAtResolution: "この解像度では利用できません",
 				gatewayInactive: "ネットワーク受信ゲートウェイが実行されていません",
+				disabledInSettings: "設定で無効化されています",
 				gatewayNoAddress:
 					"到達可能な LAN またはホットスポットのアドレスがありません",
 			},
@@ -1278,6 +1219,7 @@ const ja = {
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 			axisSelected: "選択中",
 			axisDeviceMax: "デバイス最大",
+			fpsAvailableAt: "{fps} fps は {resolution} で利用可能",
 		},
 	},
 	dialogs: {
@@ -1449,6 +1391,7 @@ const ja = {
 			"セッションの有効期限が切れました。もう一度認証してください。",
 		authTimedOut:
 			"セッションを確認できませんでした。接続を確認してもう一度お試しください。",
+		clearSavedSession: "保存されたサインインを消去してパスワードを入力",
 	},
 	offline: {
 		title: "オフラインです",

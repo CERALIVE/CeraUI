@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	axisCeiling,
+	framerateAvailableAt,
 	framerateOptions,
 	framerateOptionsForResolution,
 	OPTION_FIXED_BY_SOURCE,
@@ -279,7 +280,10 @@ describe("framerateOptionsForResolution — per-resolution gating", () => {
 });
 
 describe("axisCeiling — current-vs-device-max summary source", () => {
-	it("reports the device union ceiling (2160p / 60) for the hdmi device", () => {
+	it("reports the ACHIEVABLE pair (2160p / 30) for the hdmi device — NOT 2160p/60", () => {
+		// hdmi drives 1080p@[30,60] + 2160p@[30]. The highest rung is 2160p and it
+		// runs at 30 ONLY, so the truthful device-max is 2160p/30 — never the
+		// independent-axes lie 2160p/60 (60 lives at 1080p, not at 4K).
 		const axes = offeredAxes(
 			"rk3588",
 			"hdmi",
@@ -287,7 +291,20 @@ describe("axisCeiling — current-vs-device-max summary source", () => {
 			DEVICE_MODES,
 			undefined,
 		);
-		expect(axisCeiling(axes)).toEqual({ resolution: "2160p", framerate: 60 });
+		expect(axisCeiling(axes)).toEqual({ resolution: "2160p", framerate: 30 });
+	});
+
+	it("reports the achievable pair (1080p / 30) for a 1080p@[30] + 720p@[30,60] device", () => {
+		// The multi-rate-divergence fixture (mirrors fixture-factory usb): the top
+		// rung 1080p runs at 30 only, so the device-max is 1080p/30 — not 1080p/60.
+		const axes = offeredAxes(
+			"rk3588",
+			"libuvch264",
+			makePipeline(),
+			DEVICE_MODES,
+			"/dev/video1",
+		);
+		expect(axisCeiling(axes)).toEqual({ resolution: "1080p", framerate: 30 });
 	});
 
 	it("reports the coarse platform ceiling when no device modes narrow it", () => {
@@ -317,6 +334,74 @@ describe("axisCeiling — current-vs-device-max summary source", () => {
 				deviceModes: undefined,
 			}),
 		).toEqual({ resolution: undefined, framerate: undefined });
+	});
+});
+
+describe("framerateAvailableAt — per-option available-elsewhere hint", () => {
+	// The 1080p@[30] + 720p@[30,60] fixture: 60 is offered ONLY at 720p, 50 nowhere.
+	const usbAxes = offeredAxes(
+		"rk3588",
+		"libuvch264",
+		makePipeline(),
+		DEVICE_MODES,
+		"/dev/video1",
+	);
+
+	it("finds the other rung that drives a rate disabled at the current one (60 → 720p)", () => {
+		expect(framerateAvailableAt(usbAxes, 60, "1080p")).toBe("720p");
+	});
+
+	it("returns undefined for a rate available nowhere in the fixture (50, no hint)", () => {
+		expect(framerateAvailableAt(usbAxes, 50, "1080p")).toBeUndefined();
+	});
+
+	it("returns undefined on the coarse path (no device modes to hint at)", () => {
+		const coarse = offeredAxes(
+			"rk3588",
+			"hdmi",
+			makePipeline(),
+			undefined,
+			undefined,
+		);
+		expect(framerateAvailableAt(coarse, 60, "1080p")).toBeUndefined();
+	});
+});
+
+describe("framerateOptionsForResolution — per-option hint attachment", () => {
+	// 1080p@[30] + 720p@[30,60]: at 1080p, 60 is disabled (offered elsewhere) and
+	// 50 is disabled (offered nowhere). Only 60 carries a hint.
+	const usbAxes = offeredAxes(
+		"rk3588",
+		"libuvch264",
+		makePipeline(),
+		DEVICE_MODES,
+		"/dev/video1",
+	);
+
+	it("attaches a 720p hint to 60 disabled at 1080p (offered elsewhere)", () => {
+		const sixty = framerateOptionsForResolution(usbAxes, "1080p").find(
+			(o) => o.value === 60,
+		);
+		expect(sixty?.supported).toBe(false);
+		expect(sixty?.reason).toBe(OPTION_UNSUPPORTED_AT_RESOLUTION);
+		expect(sixty?.hint).toEqual({ fps: 60, resolution: "720p" });
+	});
+
+	it("attaches NO hint to 50 disabled everywhere (plain platform reason)", () => {
+		const fifty = framerateOptionsForResolution(usbAxes, "1080p").find(
+			(o) => o.value === 50,
+		);
+		expect(fifty?.supported).toBe(false);
+		expect(fifty?.reason).toBe(OPTION_UNSUPPORTED_ON_PLATFORM);
+		expect(fifty?.hint).toBeUndefined();
+	});
+
+	it("attaches NO hint to a supported rate (30 at 1080p)", () => {
+		const thirty = framerateOptionsForResolution(usbAxes, "1080p").find(
+			(o) => o.value === 30,
+		);
+		expect(thirty?.supported).toBe(true);
+		expect(thirty?.hint).toBeUndefined();
 	});
 });
 

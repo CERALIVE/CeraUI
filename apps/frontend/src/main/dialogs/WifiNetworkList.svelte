@@ -321,6 +321,7 @@ let {
 				<div
 					class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center"
 					data-testid="wifi-scan-error"
+					role="status"
 				>
 					<div class="bg-status-warning/10 grid size-14 place-items-center rounded-2xl">
 						<TriangleAlert class="text-status-warning size-7" />

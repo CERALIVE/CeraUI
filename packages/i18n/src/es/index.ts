@@ -455,6 +455,8 @@ const es = {
 			copied: "Dirección copiada",
 			copyFailed: "No se pudo copiar la dirección.",
 			includesAudio: "Incluye audio",
+			disabledInSettingsHint:
+				"Vuelve a activarlo en Ajustes \u2192 Ingesta de red.",
 			codecEducation: {
 				rtmp: "RTMP solo publica vídeo H.264 (con audio AAC). Siempre se vuelve a codificar al códec de salida configurado.",
 				srt: "SRT publica vídeo H.264 o H.265. Siempre se vuelve a codificar al códec de salida configurado.",
@@ -531,37 +533,6 @@ const es = {
 				camlink: "Cam Link",
 			},
 		},
-		sourcePreference: {
-			title: "Prioridad de fuente",
-			description:
-				"Ordena las fuentes entre las que cambias. La conmutación automática ignora esta lista.",
-			empty: "No se detectaron fuentes de vídeo",
-			moveUp: "Subir {name}",
-			moveDown: "Bajar {name}",
-			rankLabel: "Prioridad {rank}",
-			stickyNote:
-				"La conmutación automática es persistente \u2014 el motor no vuelve automáticamente. Usa la lista de fuentes para volver manualmente.",
-			states: {
-				active: "Activa",
-				lost: "Perdida",
-				failedOver: "Conmutada",
-			},
-			lostHint: "Esta fuente está desconectada.",
-			failedOverHint:
-				"El motor cambió aquí automáticamente después de que tu fuente preferida se desconectó.",
-			sync: {
-				applying: "Guardando orden\u2026",
-				applied: "Orden guardado",
-				failed: "No se pudo guardar el orden",
-			},
-			failover: {
-				title: "Conmutación automática",
-				reasonSourceLost:
-					"{name} se desconectó, por lo que el motor cambió a {to}.",
-				sticky:
-					"La conmutación automática es persistente \u2014 no volverá sola. Usa la lista de fuentes para volver manualmente.",
-			},
-		},
 		source: {
 			label: "Fuente",
 			none: "Ninguna fuente seleccionada",
@@ -575,6 +546,7 @@ const es = {
 				"Vuelve a conectar el dispositivo para reanudar la transmisión desde esta fuente.",
 			audioNone: "No se detectó ninguna fuente de audio",
 			audioEmbedded: "Audio incorporado (del flujo entrante)",
+			audioEdit: "Códec y retardo",
 		},
 		summary: {
 			nowStreaming: "Transmitiendo ahora",
@@ -599,6 +571,7 @@ const es = {
 				unsupportedAtResolution: "No disponible en esta resolución",
 				gatewayInactive:
 					"La puerta de enlace de ingesta de red no está en ejecución",
+				disabledInSettings: "Desactivado en Ajustes",
 				gatewayNoAddress: "Sin dirección de LAN o punto de acceso accesible",
 			},
 			info: "Acerca de {field}",
@@ -662,6 +635,7 @@ const es = {
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 			axisSelected: "Seleccionado",
 			axisDeviceMax: "Máximo del dispositivo",
+			fpsAvailableAt: "{fps} fps disponible en {resolution}",
 		},
 	},
 	dialogs: {
@@ -794,52 +768,6 @@ const es = {
 		transportAdvanced: "Avanzado",
 		transportKindHint:
 			"Cómo llega tu transmisión al receptor. SRTLA combina varios enlaces de red; RIST y SRT usan un solo enlace.",
-		streamTuning: {
-			title: "Ajuste de transmisión",
-			hint: "Ajusta cómo se entrega tu transmisión. Un receptor CeraLive habilita perfiles, FEC y ajuste de recuperación; otros receptores usan los valores compatibles con BELABOX.",
-			ceraliveReceiver: "Receptor CeraLive",
-			latency: "Latencia",
-			latencyNegotiated: "Negociada",
-			presets: "Perfiles predefinidos",
-			fec: "Corrección de errores hacia adelante",
-			fecHelper:
-				"Añade redundancia para que el receptor reconstruya los paquetes perdidos. Usa más ancho de banda y añade algo de latencia \u2014 mejor en conexiones con pérdidas.",
-			recoveryMode: "Modo de recuperación",
-			advanced: "Avanzado",
-			recovery: "Recuperación",
-			recoveryStandard: "Estándar",
-			recoveryStandardHint: "Recomendado",
-			recoveryBandwidthSaver: "Ahorro de ancho de banda",
-			recoveryBandwidthSaverHint: "Experto",
-			recoveryHelper:
-				"Estándar mantiene la transmisión fluida y fiable. El ahorro de ancho de banda reduce el tráfico de recuperación para usar menos datos en conexiones limitadas.",
-			belaboxBadge: "Estándar (compatible con BELABOX)",
-			belaboxBannerTitle: "Estándar (valores compatibles con BELABOX)",
-			belaboxBannerBody:
-				"Este receptor no es un receptor CeraLive, por lo que solo se puede ajustar la latencia. El ajuste avanzado requiere un receptor CeraLive.",
-			reasonNonCeraLive: "Disponible solo con un receptor CeraLive.",
-			reasonReceiverManaged: "Gestionado por el receptor.",
-			reasonFecUnsupported:
-				"La compilación de libsrt de este receptor CeraLive no admite FEC.",
-			reasonProfileUnsupported: "Este receptor no ofrece este perfil.",
-			summaryDelay: "\u2248 {seconds} s de retardo",
-			summaryRecoveryStandard: "recuperación automática de pérdidas",
-			summaryRecoveryBandwidthSaver:
-				"recuperación con ahorro de ancho de banda",
-			summaryFecOn: "FEC activado",
-			summaryFecOff: "FEC desactivado",
-			cloudSetTitle: "Definido por la nube",
-			cloudSetHint: "Toca para anular en este dispositivo",
-			driftHint: "El dispositivo usa un perfil diferente",
-			profileNames: {
-				balanced: "Equilibrado",
-				lowLatency: "Baja latencia",
-				resilient: "Resistente",
-				classic: "Clásico",
-				lowLatencyFec: "Baja latencia + FEC",
-				custom: "Personalizado",
-			},
-		},
 		deviceStats: {
 			title: "Estado del dispositivo",
 			description: "Telemetría de hardware en vivo de este dispositivo.",
@@ -853,6 +781,19 @@ const es = {
 			lowDiskBody:
 				"Menos de 512 MiB libres en /data. Libera espacio para que la grabación, los registros y las actualizaciones sigan funcionando.",
 			lowDiskAction: "Ver registros",
+		},
+		networkIngest: {
+			title: "Ingesta de red",
+			desc: "Permite que un teléfono o codificador de esta red publique al dispositivo",
+			explanation:
+				"Activa la ingesta LAN para que un teléfono o un codificador por hardware (como OBS) publique RTMP o SRT directamente en este dispositivo \u2014 sin relé en la nube. El publicador debe estar en la MISMA red local (Wi-Fi o Ethernet) que este dispositivo.",
+			toggleRtmp: "Ingesta RTMP",
+			toggleSrt: "Ingesta SRT",
+			statusRunning: "Servicio en ejecución",
+			statusStopped: "Servicio detenido",
+			statusDisabled: "Desactivado",
+			unavailable:
+				"La ingesta de red no está disponible en este dispositivo en modo emulado.",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -1351,6 +1292,7 @@ const es = {
 			disabling: "Desactivando…",
 			awaitingResult: "Esperando resultado…",
 			done: "Listo",
+			saved: "Guardado",
 		},
 	},
 	hotspotConfigurator: {
@@ -1628,6 +1570,7 @@ const es = {
 		sessionExpired: "La sesión expiró. Por favor, autentícate de nuevo.",
 		authTimedOut:
 			"No se pudo verificar tu sesión. Comprueba la conexión e inténtalo de nuevo.",
+		clearSavedSession: "Borrar el acceso guardado e introducir la contraseña",
 	},
 	offline: {
 		title: "Estás desconectado",

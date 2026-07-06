@@ -1,10 +1,13 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { ListDevicesResult } from "@ceralive/cerastream";
+import { logger } from "../helpers/logger.ts";
+import { resetMockState } from "../mocks/mock-service.ts";
 import { deriveAudioSources } from "../modules/streaming/audio.ts";
 import {
 	type EngineAudioDevice,
 	isHumanAudioName,
 	parseAsoundCards,
+	resetAudioNamingDiagnostics,
 	resolveAudioLabels,
 } from "../modules/streaming/audio-naming.ts";
 import {
@@ -348,5 +351,164 @@ describe("deriveAudioSources — label attachment", () => {
 			id: "USB audio",
 			kind: "device",
 		});
+	});
+});
+
+// ─── Tier-3 alias-fallback diagnostic (Task 21) ──────────────────────────────
+
+const USB_CARD = { "USB audio": "usbaudio" } as const;
+
+describe("resolveAudioLabels — tier-3 alias-fallback diagnostic (one-shot per boot)", () => {
+	let infoSpy: ReturnType<typeof spyOn<typeof logger, "info">>;
+
+	beforeEach(() => {
+		resetAudioNamingDiagnostics();
+		infoSpy = spyOn(logger, "info").mockImplementation((() => logger) as never);
+	});
+	afterEach(() => {
+		infoSpy.mockRestore();
+		resetAudioNamingDiagnostics();
+	});
+
+	function diagnosticRecords(): Array<[string, Record<string, unknown>]> {
+		const calls = infoSpy.mock.calls as unknown as unknown[][];
+		return calls.filter(
+			(call) =>
+				(call[1] as { module?: string } | undefined)?.module === "audio-naming",
+		) as Array<[string, Record<string, unknown>]>;
+	}
+
+	test("emits exactly ONE diagnostic across two resolve ticks (dedup by cardId)", () => {
+		resolveAudioLabels({ ...USB_CARD }, [], new Map());
+		resolveAudioLabels({ ...USB_CARD }, [], new Map());
+
+		const records = diagnosticRecords();
+		expect(records).toHaveLength(1);
+		expect(records[0]?.[1]).toMatchObject({
+			module: "audio-naming",
+			cardId: "usbaudio",
+			engineEntryPresent: false,
+			longnamePresent: false,
+		});
+	});
+
+	test("resetAudioNamingDiagnostics re-arms the one-shot: 2 ticks → 1, reset, 1 tick → 1 NEW", () => {
+		resolveAudioLabels({ ...USB_CARD }, [], new Map());
+		resolveAudioLabels({ ...USB_CARD }, [], new Map());
+		expect(diagnosticRecords()).toHaveLength(1);
+
+		resetAudioNamingDiagnostics();
+		resolveAudioLabels({ ...USB_CARD }, [], new Map());
+		expect(diagnosticRecords()).toHaveLength(2);
+	});
+
+	test("resetMockState() clears the one-shot (wiring): 2 ticks → 1, resetMockState(), 1 tick → 1 NEW", () => {
+		resolveAudioLabels({ ...USB_CARD }, [], new Map());
+		resolveAudioLabels({ ...USB_CARD }, [], new Map());
+		expect(diagnosticRecords()).toHaveLength(1);
+
+		resetMockState();
+		resolveAudioLabels({ ...USB_CARD }, [], new Map());
+		expect(diagnosticRecords()).toHaveLength(2);
+	});
+
+	test("dongle-miss (engine entry ABSENT + no longname): alias renders AND the diagnostic fires", () => {
+		const labels = resolveAudioLabels({ ...USB_CARD }, [], new Map());
+		expect(labels.get("USB audio")).toBe("USB audio");
+
+		const records = diagnosticRecords();
+		expect(records).toHaveLength(1);
+		expect(records[0]?.[1]).toMatchObject({
+			cardId: "usbaudio",
+			engineEntryPresent: false,
+			heuristicRejectReason: null,
+			longnamePresent: false,
+			engineEntriesWithoutJoinKey: 0,
+		});
+	});
+
+	test("dongle-miss (engine entry FAILS isHumanAudioName + no longname): alias renders, reason named", () => {
+		const labels = resolveAudioLabels(
+			{ ...USB_CARD },
+			[engineAudio("usbaudio", "usbaudio")],
+			new Map(),
+		);
+		expect(labels.get("USB audio")).toBe("USB audio");
+
+		const records = diagnosticRecords();
+		expect(records).toHaveLength(1);
+		expect(records[0]?.[1]).toMatchObject({
+			cardId: "usbaudio",
+			engineEntryPresent: true,
+			heuristicRejectReason: "equals-card-id",
+			longnamePresent: false,
+		});
+	});
+
+	test("dongle-miss (RØDE named entry but alsa_card_id STRIPPED, pre-T18): surfaces engineEntriesWithoutJoinKey", () => {
+		const labels = resolveAudioLabels(
+			{ ...USB_CARD },
+			[{ input_id: "audio:usb", display_name: "RØDE AI-Micro" }],
+			new Map(),
+		);
+		expect(labels.get("USB audio")).toBe("USB audio");
+
+		const records = diagnosticRecords();
+		expect(records).toHaveLength(1);
+		expect(records[0]?.[1]).toMatchObject({
+			cardId: "usbaudio",
+			engineEntryPresent: false,
+			engineEntriesWithoutJoinKey: 1,
+		});
+	});
+
+	test("no diagnostic when tier 1 (engine join) resolves a usbaudio card", () => {
+		const labels = resolveAudioLabels(
+			{ ...USB_CARD },
+			[engineAudio("usbaudio", "RØDE AI-Micro")],
+			new Map(),
+		);
+		expect(labels.get("USB audio")).toBe("RØDE AI-Micro");
+		expect(diagnosticRecords()).toHaveLength(0);
+	});
+
+	test("no diagnostic when tier 2 (longname) resolves a usbaudio card", () => {
+		const labels = resolveAudioLabels(
+			{ ...USB_CARD },
+			[],
+			new Map([["usbaudio", "Generic USB Audio Device"]]),
+		);
+		expect(labels.get("USB audio")).toBe("Generic USB Audio Device");
+		expect(diagnosticRecords()).toHaveLength(0);
+	});
+
+	test("no diagnostic when a NON-usbaudio card hits tier 3 (nameless HDMI is a different story)", () => {
+		const labels = resolveAudioLabels(
+			{ HDMI: "rockchiphdmiin" },
+			[],
+			new Map(),
+		);
+		expect(labels.get("HDMI")).toBe("HDMI");
+		expect(diagnosticRecords()).toHaveLength(0);
+	});
+
+	test("DJI-style named device renders VERBATIM via tier 2 longname — no false diagnostic", () => {
+		const labels = resolveAudioLabels(
+			{ ...USB_CARD },
+			[],
+			new Map([["usbaudio", "DJI MIC MINI"]]),
+		);
+		expect(labels.get("USB audio")).toBe("DJI MIC MINI");
+		expect(diagnosticRecords()).toHaveLength(0);
+	});
+
+	test("DJI-style named device renders VERBATIM via tier 1 engine join", () => {
+		const labels = resolveAudioLabels(
+			{ "DJI Audio": "djireceiver" },
+			[engineAudio("djireceiver", "DJI MIC MINI")],
+			new Map(),
+		);
+		expect(labels.get("DJI Audio")).toBe("DJI MIC MINI");
+		expect(diagnosticRecords()).toHaveLength(0);
 	});
 });

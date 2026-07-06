@@ -27,6 +27,7 @@ import {
 	getRelays,
 	setRelaysCacheMock,
 } from "../modules/remote/remote-relays.ts";
+import { resetAudioNamingDiagnostics } from "../modules/streaming/audio-naming.ts";
 import { broadcastMsg } from "../modules/ui/websocket-server.ts";
 import { buildMockSimState } from "./fixture-factory.ts";
 import {
@@ -305,6 +306,7 @@ export function initMockService(scenarioName?: string): void {
 		});
 	}
 
+	const pinLockedScenario = getActiveScenario() === "modem-pin-locked";
 	for (let i = 0; i < config.modems; i++) {
 		const modem = mockModems[i];
 		if (!modem) continue;
@@ -313,7 +315,12 @@ export function initMockService(scenarioName?: string): void {
 			network_type_active: modem.network_type.active,
 			roaming: false,
 		});
-		mockState.simStates.set(String(i), buildMockSimState());
+		mockState.simStates.set(
+			String(i),
+			buildMockSimState(
+				pinLockedScenario && i === 0 ? { lock: "pin-locked" } : {},
+			),
+		);
 	}
 
 	mockState.netifConfigs.set("eth0", {
@@ -607,6 +614,7 @@ export function resetMockState(): void {
 	clearMockTimers();
 	resetMockKioskState();
 	resetMockWifiFaults();
+	resetAudioNamingDiagnostics();
 	if (!pristineSnapshot) return;
 	Object.assign(mockState, structuredClone(pristineSnapshot));
 }

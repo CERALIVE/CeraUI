@@ -146,16 +146,19 @@ export function handleNmcliCommand(args: string[]): string | null {
 		return null;
 	}
 
+	const argsStr = args.join(" ");
+
+	// `nmcli connection show` — deliberately ABOVE the wifi guard: modem GSM
+	// registration (nmConnsGet) needs the connection list even in a wifi-off
+	// scenario, else it falls through to a real `nmcli` and registration fails.
+	// getMockConnections already filters wifi entries on config.wifi internally.
+	if (argsStr.includes("connection") && argsStr.includes("show")) {
+		return getMockConnections(args);
+	}
+
 	const config = getScenarioConfig();
 	if (!config.wifi) {
 		return null;
-	}
-
-	const argsStr = args.join(" ");
-
-	// nmcli --terse --fields <fields> connection show
-	if (argsStr.includes("connection") && argsStr.includes("show")) {
-		return getMockConnections(args);
 	}
 
 	// nmcli --terse --fields <fields> device status

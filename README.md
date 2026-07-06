@@ -33,9 +33,9 @@ CeraUI/
 
 The app is organized into three primary destinations:
 
-- **Live** — one adaptive Go Live card leads the destination: a readiness checklist (source, network, destination, engine) collapses to a thin "ready" bar once everything is green, or expands with a one-tap fix for whatever's blocking a start. Below it, a unified device-first source list shows every capture device, built-in pipeline, test pattern, and LAN network-ingest (RTMP/SRT) slot as one picker — pick a source, adjust encoder/audio/server settings, and go live. While streaming, the view switches to a live cockpit: telemetry strip, bitrate hot-adjust, per-link ingest stats, and Stop. A persistent HUD bar shows four at-a-glance facts (live/idle/offline state, health verdict, bitrate, SoC temperature) across all destinations, with per-link signal detail and full telemetry available in an expanded sheet.
+- **Live** — a unified device-first source list leads the destination: every capture device, built-in pipeline, test pattern, and LAN network-ingest (RTMP/SRT) slot renders as one picker, with a single "Codec & delay" affordance owning all audio configuration. Below it, a "Stream setup" card shows three always-visible readiness rows (Encoder, Destination, Network — no collapse, no ready bar) each fusing a state dot with its config summary and a one-tap edit/fix affordance, plus the Start control. Pick a source, adjust encoder/server settings, and go live. While streaming, the view switches to a live cockpit: telemetry strip, bitrate hot-adjust, per-link ingest stats, and Stop. A persistent HUD bar shows four at-a-glance facts (live/idle/offline state, health verdict, bitrate, SoC temperature) across all destinations, with per-link signal detail and full telemetry available in an expanded sheet.
 - **Network** — connectivity overview. Bonded link status, WiFi networks (connect/disconnect/forget), cellular modems (APN, roaming, network type), Ethernet interfaces, and hotspot configuration. Calm info/warning bands surface interface-topology issues without ever blocking a connection: a same-subnet notice when two bonded links deliberately share a subnet (normal for policy-routed bonding), and a policy-route warning if a bonded WiFi/modem link is missing its expected routing table.
-- **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, and version info.
+- **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, version info, and per-protocol network-ingest (RTMP/SRT) enable/disable.
 
 A dev-only DevTools destination is available in development builds.
 
@@ -66,6 +66,7 @@ and can be reset between tests via `resetMockState()`.
 bun run dev                        # Default: 3 modems + WiFi (multi-modem-wifi)
 bun run dev:single-modem           # 1 modem, no WiFi
 bun run dev:streaming              # Active streaming simulation
+bun run dev:modem-pin-locked       # 2 modems, modem 0 SIM PIN-locked (PIN 0000)
 MOCK_SCENARIO=streaming-active bun run dev  # Override inline
 ```
 
@@ -74,6 +75,7 @@ MOCK_SCENARIO=streaming-active bun run dev  # Override inline
 | `multi-modem-wifi` | 3 (5G/4G/3G) | Yes | Idle |
 | `single-modem` | 1 | No | Idle |
 | `streaming-active` | 3 | Yes | Active (with live telemetry) |
+| `modem-pin-locked` | 2 | No | Idle — modem 0 SIM PIN-locked (fixture PIN `0000`); exercises the SIM unlock/PUK flow |
 | `caps-full` | 2 | Yes | Idle — full engine caps: H265 + hw accel, audio-capable source, live audio switch, SRT transport |
 | `engine-starting` | 1 | No | Idle — engine still booting, minimal safe floor + `engineStarting` flag |
 | `engine-unavailable` | 1 | No | Idle — engine unreachable, cached/minimal snapshot + `engineUnavailable` flag |

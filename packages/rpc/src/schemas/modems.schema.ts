@@ -116,6 +116,26 @@ export const modemConfigInputSchema = z
 	});
 export type ModemConfigInput = z.infer<typeof modemConfigInputSchema>;
 
+// Modem config applied-echo schema (persisted post-normalisation config subset)
+export const modemConfigAppliedSchema = z.object({
+	device: z.string(),
+	network_type: z.string(),
+	roaming: z.boolean(),
+	network: z.string(),
+	autoconfig: z.boolean(),
+	apn: z.string(),
+	username: z.string(),
+	password: z.string(),
+});
+export type ModemConfigApplied = z.infer<typeof modemConfigAppliedSchema>;
+
+// Modem config output schema
+export const modemConfigOutputSchema = z.object({
+	success: z.boolean(),
+	applied: modemConfigAppliedSchema.optional(),
+});
+export type ModemConfigOutput = z.infer<typeof modemConfigOutputSchema>;
+
 // Modem scan input schema
 export const modemScanInputSchema = z.object({
 	device: z.coerce.number(),

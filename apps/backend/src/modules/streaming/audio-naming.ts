@@ -17,9 +17,9 @@
 */
 
 /*
- * Real audio-device naming (T4). PURE module — no I/O, no side effects, no
- * imports of the effectful streaming graph. It turns the raw audio-card map into
- * a per-card human-readable label via a strict 3-tier fallback:
+ * Real audio-device naming (T4). Resolution is PURE — no I/O, no imports of the
+ * effectful streaming graph. It turns the raw audio-card map into a per-card
+ * human-readable label via a strict 3-tier fallback:
  *
  *   (1) the engine `list-devices` audio entry whose `alsa_card_id` join key
  *       matches the card AND whose `display_name` passes a human-name heuristic;
@@ -29,7 +29,16 @@
  * Identical resolved labels are deduped with " (2)", " (3)" in STABLE card order.
  * The `config.asrc` wire keys are NEVER touched — only the display `label` is
  * produced here; pseudo-sources (`No audio`, `Pipeline default`) are label-free.
+ *
+ * The ONE deliberate side effect (Task 21): when the tier-3 alias fallback fires
+ * for a `usbaudio`-family card — i.e. BOTH the engine join and the longname
+ * missed — a single `logger.info` diagnostic is emitted per card per boot (see
+ * `logAliasTierMiss`), so an on-device `LOG_LEVEL` capture can root-cause a
+ * generic "USB audio" fallback for a named dongle. It never logs per-tick (a
+ * module-level dedup Set) and never at warn/error (a nameless card is normal).
  */
+
+import { logger } from "../../helpers/logger.ts";
 
 /**
  * The engine-audio join record — a DEDICATED local type carrying ONLY the three
@@ -103,6 +112,67 @@ export function parseAsoundCards(text: string): Map<string, string> {
 	return longnames;
 }
 
+// Anchored on the `usbaudio` prefix so a kernel-suffixed duplicate (`usbaudio_1`)
+// is still caught; the generic USB audio-class card enumerates as `usbaudio`.
+const USB_AUDIO_FAMILY_RE = /^usbaudio/i;
+
+const loggedTierMissCardIds = new Set<string>();
+
+/**
+ * Clear the per-boot tier-miss diagnostic dedup set (public seam). Called from
+ * `resetMockState()` for per-test isolation and safe to call at boot.
+ */
+export function resetAudioNamingDiagnostics(): void {
+	loggedTierMissCardIds.clear();
+}
+
+// Mirrors the isHumanAudioName rejection checks to NAME the failing one for the
+// diagnostic; must stay in lock-step but never changes isHumanAudioName behavior.
+function humanAudioNameRejectReason(
+	displayName: string,
+	cardId: string,
+): string | null {
+	if (displayName.length === 0) return "empty";
+	if (!/\p{L}/u.test(displayName)) return "no-letter";
+	if (displayName.startsWith("/")) return "path-like";
+	if (/^hw:/i.test(displayName)) return "alsa-hw-form";
+	if (displayName === cardId) return "equals-card-id";
+	return null;
+}
+
+// One-shot tier-3 diagnostic (Task 21): ONE info line per usbaudio-family cardId
+// per boot when the alias fallback fires. info-level only — a nameless card is
+// normal. `engineEntriesWithoutJoinKey` surfaces the pre-T18 stripped-key cause.
+function logAliasTierMiss(
+	cardId: string,
+	engineAudio: readonly EngineAudioDevice[],
+	longnames: Map<string, string>,
+): void {
+	if (!USB_AUDIO_FAMILY_RE.test(cardId)) return;
+	if (loggedTierMissCardIds.has(cardId)) return;
+	loggedTierMissCardIds.add(cardId);
+
+	const engineEntry = engineAudio.find((d) => d.alsa_card_id === cardId);
+	const longname = longnames.get(cardId);
+
+	logger.info(
+		"audio-naming tier-3 alias fallback: engine join AND /proc/asound/cards longname both missed for a usbaudio-family card; rendering the generic alias",
+		{
+			module: "audio-naming",
+			cardId,
+			engineEntryPresent: engineEntry !== undefined,
+			heuristicRejectReason:
+				engineEntry !== undefined
+					? humanAudioNameRejectReason(engineEntry.display_name, cardId)
+					: null,
+			longnamePresent: longname !== undefined && longname.length > 0,
+			engineEntriesWithoutJoinKey: engineAudio.filter(
+				(d) => d.alsa_card_id === undefined,
+			).length,
+		},
+	);
+}
+
 /** Resolve the RAW (pre-dedupe) label for one card via the 3-tier fallback. */
 function resolveOneLabel(
 	asrcKey: string,
@@ -127,6 +197,7 @@ function resolveOneLabel(
 
 	// (3) the current alias/name (byte-identical fallback — the map key IS the
 	//     name currently shown, so `config.asrc` semantics are unchanged).
+	logAliasTierMiss(cardId, engineAudio, longnames);
 	return asrcKey;
 }
 

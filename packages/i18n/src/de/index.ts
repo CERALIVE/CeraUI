@@ -454,6 +454,8 @@ const de = {
 			copied: "Adresse kopiert",
 			copyFailed: "Adresse konnte nicht kopiert werden.",
 			includesAudio: "Enthält Audio",
+			disabledInSettingsHint:
+				"Aktiviere dies erneut unter Einstellungen \u2192 Netzwerk-Ingest.",
 			codecEducation: {
 				rtmp: "RTMP überträgt nur H.264-Video (mit AAC-Audio). Es wird immer in den konfigurierten Ausgabe-Codec umkodiert.",
 				srt: "SRT überträgt H.264- oder H.265-Video. Es wird immer in den konfigurierten Ausgabe-Codec umkodiert.",
@@ -529,37 +531,6 @@ const de = {
 				camlink: "Cam Link",
 			},
 		},
-		sourcePreference: {
-			title: "Quellenpriorität",
-			description:
-				"Ordne die Quellen, zwischen denen du wechselst. Auto-Failover ignoriert diese Liste.",
-			empty: "Keine Videoquellen erkannt",
-			moveUp: "{name} nach oben",
-			moveDown: "{name} nach unten",
-			rankLabel: "Priorität {rank}",
-			stickyNote:
-				"Auto-Failover ist persistent \u2014 der Motor kehrt nicht automatisch zurück. Nutze die Quellenliste, um manuell zurückzuwechseln.",
-			states: {
-				active: "Aktiv",
-				lost: "Verloren",
-				failedOver: "Umgeschaltet",
-			},
-			lostHint: "Diese Quelle ist offline.",
-			failedOverHint:
-				"Der Motor hat automatisch hierher gewechselt, nachdem deine bevorzugte Quelle offline ging.",
-			sync: {
-				applying: "Reihenfolge wird gespeichert\u2026",
-				applied: "Reihenfolge gespeichert",
-				failed: "Reihenfolge konnte nicht gespeichert werden",
-			},
-			failover: {
-				title: "Auto-Failover",
-				reasonSourceLost:
-					"{name} ging offline, daher wechselte der Motor zu {to}.",
-				sticky:
-					"Auto-Failover ist persistent \u2014 er kehrt nicht von selbst zurück. Nutze die Quellenliste, um manuell zurückzukehren.",
-			},
-		},
 		source: {
 			label: "Quelle",
 			none: "Keine Quelle ausgewählt",
@@ -573,6 +544,7 @@ const de = {
 				"Schließen Sie das Gerät wieder an, um das Streaming von dieser Quelle fortzusetzen.",
 			audioNone: "Keine Audioquelle erkannt",
 			audioEmbedded: "Eingebetteter Ton (aus dem eingehenden Stream)",
+			audioEdit: "Codec & Verzögerung",
 		},
 		summary: {
 			nowStreaming: "Jetzt live",
@@ -596,6 +568,7 @@ const de = {
 				fixedBySource: "Durch die gewählte Quelle festgelegt",
 				unsupportedAtResolution: "Bei dieser Auflösung nicht verfügbar",
 				gatewayInactive: "Netzwerk-Ingest-Gateway läuft nicht",
+				disabledInSettings: "In den Einstellungen deaktiviert",
 				gatewayNoAddress: "Keine erreichbare LAN- oder Hotspot-Adresse",
 			},
 			info: "Über {field}",
@@ -659,6 +632,7 @@ const de = {
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 			axisSelected: "Ausgewählt",
 			axisDeviceMax: "Geräte-Maximum",
+			fpsAvailableAt: "{fps} fps verfügbar bei {resolution}",
 		},
 	},
 	dialogs: {
@@ -782,52 +756,6 @@ const de = {
 		transportAdvanced: "Erweitert",
 		transportKindHint:
 			"Wie dein Stream den Empfänger erreicht. SRTLA bündelt mehrere Netzwerkverbindungen; RIST und SRT nutzen eine einzelne Verbindung.",
-		streamTuning: {
-			title: "Stream-Feinabstimmung",
-			hint: "Stelle ein, wie dein Stream zugestellt wird. Ein CeraLive-Empfänger schaltet Profile, FEC und Wiederherstellungs-Feinabstimmung frei; andere Empfänger nutzen die BELABOX-kompatiblen Standardwerte.",
-			ceraliveReceiver: "CeraLive-Empfänger",
-			latency: "Latenz",
-			latencyNegotiated: "Ausgehandelt",
-			presets: "Profilvorlagen",
-			fec: "Vorwärtsfehlerkorrektur",
-			fecHelper:
-				"Fügt Redundanz hinzu, damit der Empfänger verlorene Pakete wiederherstellen kann. Verbraucht mehr Bandbreite und erhöht die Latenz leicht \u2014 am besten bei verlustbehafteten Verbindungen.",
-			recoveryMode: "Wiederherstellungsmodus",
-			advanced: "Erweitert",
-			recovery: "Wiederherstellung",
-			recoveryStandard: "Standard",
-			recoveryStandardHint: "Empfohlen",
-			recoveryBandwidthSaver: "Bandbreitensparer",
-			recoveryBandwidthSaverHint: "Experte",
-			recoveryHelper:
-				"Standard hält den Stream flüssig und zuverlässig. Der Bandbreitensparer reduziert den Wiederherstellungsverkehr, um bei begrenzten Verbindungen weniger Daten zu verbrauchen.",
-			belaboxBadge: "Standard (BELABOX-kompatibel)",
-			belaboxBannerTitle: "Standard (BELABOX-kompatible Werte)",
-			belaboxBannerBody:
-				"Dieser Empfänger ist kein CeraLive-Empfänger, daher lässt sich nur die Latenz anpassen. Die erweiterte Feinabstimmung erfordert einen CeraLive-Empfänger.",
-			reasonNonCeraLive: "Nur mit einem CeraLive-Empfänger verfügbar.",
-			reasonReceiverManaged: "Vom Empfänger verwaltet.",
-			reasonFecUnsupported:
-				"Der libsrt-Build dieses CeraLive-Empfängers unterstützt kein FEC.",
-			reasonProfileUnsupported:
-				"Dieser Empfänger bietet dieses Profil nicht an.",
-			summaryDelay: "\u2248 {seconds} s Verzögerung",
-			summaryRecoveryStandard: "automatische Verlustwiederherstellung",
-			summaryRecoveryBandwidthSaver: "bandbreitensparende Wiederherstellung",
-			summaryFecOn: "FEC ein",
-			summaryFecOff: "FEC aus",
-			cloudSetTitle: "Von der Cloud festgelegt",
-			cloudSetHint: "Zum Überschreiben auf diesem Gerät tippen",
-			driftHint: "Gerät verwendet ein anderes Profil",
-			profileNames: {
-				balanced: "Ausgewogen",
-				lowLatency: "Niedrige Latenz",
-				resilient: "Robust",
-				classic: "Klassisch",
-				lowLatencyFec: "Niedrige Latenz + FEC",
-				custom: "Benutzerdefiniert",
-			},
-		},
 		deviceStats: {
 			title: "Gerätestatistik",
 			description: "Live-Hardware-Telemetrie dieses Geräts.",
@@ -841,6 +769,19 @@ const de = {
 			lowDiskBody:
 				"Weniger als 512 MiB frei auf /data. Geben Sie Speicher frei, damit Aufnahme, Protokolle und Updates weiter funktionieren.",
 			lowDiskAction: "Protokolle anzeigen",
+		},
+		networkIngest: {
+			title: "Netzwerk-Ingest",
+			desc: "Erlaube einem Telefon oder Encoder in diesem Netzwerk, an das Gerät zu senden",
+			explanation:
+				"Aktiviere LAN-Ingest, damit ein Telefon oder ein Hardware-Encoder (wie OBS) RTMP oder SRT direkt an dieses Gerät senden kann \u2014 ohne Cloud-Relay. Der Publisher muss im SELBEN lokalen Netzwerk (WLAN oder Ethernet) wie dieses Gerät sein.",
+			toggleRtmp: "RTMP-Ingest",
+			toggleSrt: "SRT-Ingest",
+			statusRunning: "Dienst läuft",
+			statusStopped: "Dienst läuft nicht",
+			statusDisabled: "Deaktiviert",
+			unavailable:
+				"Netzwerk-Ingest ist auf diesem Gerät im emulierten Modus nicht verfügbar.",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -1335,6 +1276,7 @@ const de = {
 			disabling: "Deaktiviere…",
 			awaitingResult: "Warte auf Ergebnis…",
 			done: "Fertig",
+			saved: "Gespeichert",
 		},
 	},
 	hotspotConfigurator: {
@@ -1615,6 +1557,7 @@ const de = {
 			"Sitzung abgelaufen. Bitte authentifizieren Sie sich erneut.",
 		authTimedOut:
 			"Sitzung konnte nicht überprüft werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
+		clearSavedSession: "Gespeicherte Anmeldung löschen und Passwort eingeben",
 	},
 	offline: {
 		title: "Sie sind offline",

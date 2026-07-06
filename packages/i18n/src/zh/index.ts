@@ -110,50 +110,6 @@ const zh = {
 		transportAdvanced: "高级",
 		transportKindHint:
 			"您的推流如何到达接收端。SRTLA 聚合多条网络链路；RIST 和 SRT 使用单条链路。",
-		streamTuning: {
-			title: "推流调优",
-			hint: "调整推流的传输方式。CeraLive 接收端可解锁配置档、FEC 和恢复调优；其他接收端使用与 BELABOX 兼容的默认值。",
-			ceraliveReceiver: "CeraLive 接收端",
-			latency: "延迟",
-			latencyNegotiated: "已协商",
-			presets: "配置档预设",
-			fec: "前向纠错",
-			fecHelper:
-				"添加冗余，使接收端能够重建丢失的数据包。会占用额外带宽并略微增加延迟 \u2014 最适合丢包链路。",
-			recoveryMode: "恢复模式",
-			advanced: "高级",
-			recovery: "恢复",
-			recoveryStandard: "标准",
-			recoveryStandardHint: "推荐",
-			recoveryBandwidthSaver: "节省带宽",
-			recoveryBandwidthSaverHint: "专家",
-			recoveryHelper:
-				"标准模式保持推流流畅可靠。节省带宽会削减恢复流量，在受限连接上使用更少的数据。",
-			belaboxBadge: "标准（兼容 BELABOX）",
-			belaboxBannerTitle: "标准（与 BELABOX 兼容的默认值）",
-			belaboxBannerBody:
-				"此接收端不是 CeraLive 接收端，因此只能调整延迟。高级调优需要 CeraLive 接收端。",
-			reasonNonCeraLive: "仅 CeraLive 接收端可用。",
-			reasonReceiverManaged: "由接收端管理。",
-			reasonFecUnsupported: "此 CeraLive 接收端的 libsrt 版本不支持 FEC。",
-			reasonProfileUnsupported: "此接收端不提供此配置文件。",
-			summaryDelay: "\u2248 {seconds} 秒延迟",
-			summaryRecoveryStandard: "自动丢包恢复",
-			summaryRecoveryBandwidthSaver: "带宽节省恢复",
-			summaryFecOn: "FEC 开",
-			summaryFecOff: "FEC 关",
-			cloudSetTitle: "由云端设置",
-			cloudSetHint: "点按以在本设备上覆盖",
-			driftHint: "设备正在运行其他配置文件",
-			profileNames: {
-				balanced: "均衡",
-				lowLatency: "低延迟",
-				resilient: "高韧性",
-				classic: "经典",
-				lowLatencyFec: "低延迟 + FEC",
-				custom: "自定义",
-			},
-		},
 		deviceStats: {
 			title: "设备统计",
 			description: "本设备的实时硬件遥测。",
@@ -167,6 +123,18 @@ const zh = {
 			lowDiskBody:
 				"/data 可用空间不足 512 MiB。请释放空间，以保证录制、日志和更新正常运行。",
 			lowDiskAction: "查看日志",
+		},
+		networkIngest: {
+			title: "网络接入",
+			desc: "允许同一网络中的手机或编码器向本设备推流",
+			explanation:
+				"启用局域网接入后，手机或硬件编码器（如 OBS）可将 RTMP 或 SRT 直接推流到本设备 \u2014 无需云中继。推流端必须与本设备处于同一本地网络（Wi-Fi 或以太网）。",
+			toggleRtmp: "RTMP 接入",
+			toggleSrt: "SRT 接入",
+			statusRunning: "服务运行中",
+			statusStopped: "服务未运行",
+			statusDisabled: "已禁用",
+			unavailable: "在模拟模式下，本设备不支持网络接入。",
 		},
 		onDeviceDisplay: {
 			title: "On-Device Display",
@@ -633,6 +601,7 @@ const zh = {
 			disabling: "禁用中…",
 			awaitingResult: "等待结果…",
 			done: "完成",
+			saved: "已保存",
 		},
 	},
 	hotspotConfigurator: {
@@ -994,6 +963,7 @@ const zh = {
 			copied: "地址已复制",
 			copyFailed: "无法复制地址。",
 			includesAudio: "包含音频",
+			disabledInSettingsHint: "在设置 \u2192 网络接入中重新启用。",
 			codecEducation: {
 				rtmp: "RTMP 仅推送 H.264 视频（含 AAC 音频）。它始终会重新编码为你配置的输出编解码器。",
 				srt: "SRT 推送 H.264 或 H.265 视频。它始终会重新编码为你配置的输出编解码器。",
@@ -1067,34 +1037,6 @@ const zh = {
 				camlink: "Cam Link",
 			},
 		},
-		sourcePreference: {
-			title: "来源优先级",
-			description: "排列您切换的来源顺序。自动故障转移忽略此列表。",
-			empty: "未检测到视频来源",
-			moveUp: "上移 {name}",
-			moveDown: "下移 {name}",
-			rankLabel: "优先级 {rank}",
-			stickyNote:
-				"自动故障转移是粘性的 \u2014 引擎不会自动返回。使用来源列表手动切换回来。",
-			states: {
-				active: "活跃",
-				lost: "丢失",
-				failedOver: "已故障转移",
-			},
-			lostHint: "此来源已离线。",
-			failedOverHint: "您的首选来源离线后，引擎自动切换到此处。",
-			sync: {
-				applying: "正在保存顺序\u2026",
-				applied: "顺序已保存",
-				failed: "无法保存顺序",
-			},
-			failover: {
-				title: "自动故障转移",
-				reasonSourceLost: "{name} 已离线，因此引擎切换到了 {to}。",
-				sticky:
-					"自动故障转移是粘性的 \u2014 不会自动切换回来。使用来源列表手动返回。",
-			},
-		},
 		source: {
 			label: "来源",
 			none: "未选择来源",
@@ -1107,6 +1049,7 @@ const zh = {
 			lostBody: "重新连接设备以从此来源恢复推流。",
 			audioNone: "未检测到音频源",
 			audioEmbedded: "嵌入式音频（来自传入流）",
+			audioEdit: "编解码器和延迟",
 		},
 		summary: {
 			nowStreaming: "正在直播",
@@ -1130,6 +1073,7 @@ const zh = {
 				fixedBySource: "由所选来源固定",
 				unsupportedAtResolution: "此分辨率下不可用",
 				gatewayInactive: "网络接入网关未运行",
+				disabledInSettings: "已在设置中禁用",
 				gatewayNoAddress: "无可达的局域网或热点地址",
 			},
 			info: "关于{field}",
@@ -1193,6 +1137,7 @@ const zh = {
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
 			axisSelected: "已选",
 			axisDeviceMax: "设备上限",
+			fpsAvailableAt: "{fps} fps 在 {resolution} 可用",
 		},
 	},
 	dialogs: {
@@ -1350,6 +1295,7 @@ const zh = {
 		rebootingDescription: "设备正在重新启动。此页面将自动重新连接。",
 		sessionExpired: "会话已过期。请重新进行身份验证。",
 		authTimedOut: "无法验证您的会话。请检查连接并重试。",
+		clearSavedSession: "清除已保存的登录并输入密码",
 	},
 	offline: {
 		title: "您已离线",

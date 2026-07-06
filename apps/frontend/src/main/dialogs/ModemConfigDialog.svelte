@@ -200,12 +200,36 @@ async function handleSave() {
 		username: input.username,
 		password: input.password,
 	};
-	await osCommand({
+	const result = await osCommand({
 		key: configKey,
 		rpc: () => rpc.modems.configure(input),
 		busyMessage: () => $LL.network.os.deviceBusy(),
 		failMessage: () => $LL.network.os.operationFailed(),
 	});
+	// Release the echo baseline to the server-APPLIED (post-clamp) config, never
+	// the intended draft, so the configure-echo confirm matches what the device
+	// stored (T9-envelope convention).
+	if (result?.applied) {
+		const a = result.applied;
+		saveExpected = {
+			network_type: a.network_type,
+			roaming: a.roaming,
+			network: a.network,
+			autoconfig: a.autoconfig,
+			apn: a.apn,
+			username: a.username,
+			password: a.password,
+		};
+		formData = {
+			selectedNetwork: a.network_type,
+			roaming: a.roaming,
+			autoconfig: a.autoconfig,
+			apn: a.apn,
+			username: a.username,
+			password: a.password,
+			network: a.network === '' ? '-1' : String(a.network),
+		};
+	}
 }
 
 async function handleScan() {

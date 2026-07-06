@@ -153,7 +153,6 @@ export const startStreaming = async (config: ConfigMessage) => {
 			relay_streamid_override: config.relay_streamid_override,
 			relay_protocol: config.relay_protocol,
 			source: config.source,
-			source_preference: config.source_preference,
 			selected_video_input: config.selected_video_input,
 			video_codec: config.video_codec,
 			resolution: config.resolution,

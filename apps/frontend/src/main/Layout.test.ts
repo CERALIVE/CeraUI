@@ -37,7 +37,12 @@ const noop = vi.hoisted(
 			default: unknown;
 		},
 );
-vi.mock("./Auth.svelte", noop);
+// Auth.svelte gets an IDENTIFIABLE stub (not the generic Noop) so a test can
+// assert the auth gate fell through to the password screen after clearing a
+// stale saved credential.
+vi.mock("./Auth.svelte", async () => ({
+	default: (await import("../tests/fixtures/AuthStub.svelte")).default,
+}));
 vi.mock("./DisconnectedBanner.svelte", noop);
 vi.mock("./MainView.svelte", noop);
 vi.mock("./layout/LayoutToastHost.svelte", noop);
@@ -143,6 +148,65 @@ describe("Layout — auth-check timeout surface", () => {
 		await waitFor(() =>
 			expect(screen.queryByTestId("auth-timeout")).toBeNull(),
 		);
+	});
+
+	it("renders BOTH retry and clear-saved-session on the timed-out band", async () => {
+		render(Layout);
+		await vi.advanceTimersByTimeAsync(3000);
+		await tick();
+
+		const band = await screen.findByTestId("auth-timeout");
+		expect(band.textContent).toContain("Retry");
+		expect(screen.getByTestId("clear-saved-session")).not.toBeNull();
+	});
+
+	it("clear-saved-session wipes the stored credential and drops to the password screen", async () => {
+		render(Layout);
+		await vi.advanceTimersByTimeAsync(3000);
+		await tick();
+		await screen.findByTestId("auth-timeout");
+		expect(localStorage.getItem("auth")).toBe("token-abc");
+
+		await fireEvent.click(screen.getByTestId("clear-saved-session"));
+		await tick();
+
+		expect(localStorage.getItem("auth")).toBeNull();
+		await waitFor(() =>
+			expect(screen.queryByTestId("auth-timeout")).toBeNull(),
+		);
+		expect(screen.getByTestId("auth-screen")).not.toBeNull();
+	});
+
+	it("retry does NOT remove the stored credential", async () => {
+		render(Layout);
+		await vi.advanceTimersByTimeAsync(3000);
+		await tick();
+		const band = await screen.findByTestId("auth-timeout");
+
+		const retry = band.querySelector("button");
+		await fireEvent.click(retry as HTMLButtonElement);
+		await tick();
+
+		expect(localStorage.getItem("auth")).toBe("token-abc");
+	});
+
+	it("clear-saved-session is idempotent when no credential is stored", async () => {
+		render(Layout);
+		await vi.advanceTimersByTimeAsync(3000);
+		await tick();
+		await screen.findByTestId("auth-timeout");
+
+		localStorage.removeItem("auth");
+		expect(localStorage.getItem("auth")).toBeNull();
+
+		await fireEvent.click(screen.getByTestId("clear-saved-session"));
+		await tick();
+
+		expect(localStorage.getItem("auth")).toBeNull();
+		await waitFor(() =>
+			expect(screen.queryByTestId("auth-timeout")).toBeNull(),
+		);
+		expect(screen.getByTestId("auth-screen")).not.toBeNull();
 	});
 
 	it("clears the pending timer on unmount — no post-unmount state mutation", async () => {

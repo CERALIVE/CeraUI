@@ -27,6 +27,7 @@ import type {
 	LoginOutput,
 	LogoutOutput,
 	ModemConfigInput,
+	ModemConfigOutput,
 	ModemScanInput,
 	ModemScanOutput,
 	NetifConfigInput,
@@ -37,6 +38,8 @@ import type {
 	ReloadAudioDelayInput,
 	ReloadAudioDelayOutput,
 	RemoteConfigInput,
+	SetIngestEnabledInput,
+	SetIngestEnabledOutput,
 	SetPasswordInput,
 	SimPukUnlockInput,
 	SimPukUnlockOutput,
@@ -554,7 +557,7 @@ export interface TypedRPC {
 	};
 	modems: {
 		getAll: () => Promise<unknown>;
-		configure: (input: ModemConfigInput) => Promise<SuccessResponse>;
+		configure: (input: ModemConfigInput) => Promise<ModemConfigOutput>;
 		scan: (input: ModemScanInput) => Promise<ModemScanOutput>;
 		unlockSim: (input: SimUnlockInput) => Promise<SimUnlockOutput>;
 		unlockSimPuk: (input: SimPukUnlockInput) => Promise<SimPukUnlockOutput>;
@@ -574,6 +577,9 @@ export interface TypedRPC {
 	network: {
 		getInterfaces: () => Promise<unknown>;
 		configure: (input: NetifConfigInput) => Promise<NetifConfigOutput>;
+		setIngestEnabled: (
+			input: SetIngestEnabledInput,
+		) => Promise<SetIngestEnabledOutput>;
 	};
 	system: {
 		getRevisions: () => Promise<unknown>;

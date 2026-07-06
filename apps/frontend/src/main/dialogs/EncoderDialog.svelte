@@ -69,6 +69,7 @@ import {
 	clampBitrateToBounds,
 	deriveCodecOptions,
 	deriveUvcH265Sources,
+	type FramerateOption,
 	framerateOptionsForResolution,
 	offeredAxes,
 	platformCapsForHardware,
@@ -152,6 +153,20 @@ const t = (key: string): string => {
 	}
 	return typeof result === 'function' ? (result as () => string)() : key;
 };
+
+// A disabled framerate option's title = its capability reason plus its OWN
+// "available elsewhere" hint (per-option: different rates disabled at the same
+// resolution get different hints). No hint → the plain reason; no new literals.
+function framerateOptionTitle(option: FramerateOption): string | undefined {
+	if (!option.reason) return undefined;
+	const reason = t(option.reason);
+	if (!option.hint) return reason;
+	const hint = $LL.live.encoder.fpsAvailableAt({
+		fps: option.hint.fps,
+		resolution: getResolutionLabel(option.hint.resolution),
+	});
+	return `${reason} \u2014 ${hint}`;
+}
 
 // ── Editable working copy (seeded when the dialog opens) ───────────────────────
 let localResolution = $state<Resolution>('1080p');
@@ -627,7 +642,7 @@ function handleSave() {
 									data-testid="framerate-option"
 									disabled={!option.supported}
 									label={getFramerateLabel(option.value)}
-									title={option.reason ? t(option.reason) : undefined}
+									title={framerateOptionTitle(option)}
 									value={String(option.value)}
 								></Select.Item>
 							{/each}

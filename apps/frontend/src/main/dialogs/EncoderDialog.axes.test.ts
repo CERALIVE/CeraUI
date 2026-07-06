@@ -129,6 +129,30 @@ const NETWORK_RTMP: NetworkStreamSource = {
 	available: true,
 };
 
+// USB capture device: 720p@[30,60] + 1080p@[30] — the multi-rate-divergence
+// fixture (mirrors fixture-factory usb). At 1080p the device runs 30 only, so the
+// device-max is 1080p/30 and the disabled 60 fps option carries a "…720p" hint
+// while the disabled 50 fps option (offered nowhere) carries none.
+const USB_SOURCE: CaptureStreamSource = {
+	id: "usb-0",
+	origin: "capture",
+	pipelineId: "libuvch264",
+	kind: "uvc_h264",
+	displayName: "USB Capture",
+	devicePath: "/dev/video1",
+	modes: [
+		{ width: 1280, height: 720, framerates: [30, 60] },
+		{ width: 1920, height: 1080, framerates: [30] },
+	],
+	supportsAudio: true,
+	supportsResolutionOverride: true,
+	supportsFramerateOverride: true,
+	defaultResolution: "1080p",
+	defaultFramerate: 30,
+	audioKind: "selectable",
+	available: true,
+};
+
 function pipelinesMessage(hardware: string) {
 	return { hardware, pipelines: {} };
 }
@@ -236,9 +260,11 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 			props: { open: true, config: encoderConfig() },
 		});
 
-		// The current-vs-device-max summary reflects the active source's mode union.
+		// The device-max is an ACHIEVABLE pair: HDMI drives 4K at 30 only (60 lives
+		// at 1080p), so the summary shows 4K/30 — never the fictional 4K/60.
 		expect(summaryText()).toContain("4K");
-		expect(summaryText()).toContain("60 fps");
+		expect(summaryText()).toContain("30 fps");
+		expect(summaryText()).not.toContain("60 fps");
 
 		// H.265 is a first-class enabled choice on this platform.
 		const h265 = document.body.querySelector('[data-testid="codec-h265"]');
@@ -304,9 +330,11 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		const sixty = options.find((o) => o.getAttribute("data-value") === "60");
 		if (sixty) {
 			expect(sixty.getAttribute("aria-disabled")).toBe("true");
-			expect(sixty.getAttribute("title")).toBe(
-				"Not available at this resolution",
-			);
+			// 60 is disabled at 4K but the device drives it at 1080p, so the option's
+			// own available-elsewhere hint is appended to the plain reason.
+			const title = sixty.getAttribute("title") ?? "";
+			expect(title).toContain("Not available at this resolution");
+			expect(title).toContain("1080p");
 		} else {
 			// bits-ui didn't mount the options in jsdom — the trigger aria-invalid
 			// above is the authoritative gating proof; the pure per-resolution
@@ -419,6 +447,46 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 			// bits-ui didn't mount options in jsdom — the trigger aria-invalid above
 			// is the authoritative gating proof (matches the framerate axis test).
 			expect(trigger?.getAttribute("aria-invalid")).toBe("true");
+		}
+	});
+
+	it("device-max shows the achievable pair (1080p/30) and per-option fps hints (usb 720p@60 + 1080p@30)", async () => {
+		state.pipelines = pipelinesMessage("rk3588");
+		state.capabilities = capsWith();
+		state.sources = sourcesMessage("rk3588", [USB_SOURCE]);
+		seedConfig({ source: "usb-0", pipeline: "libuvch264" });
+
+		render(EncoderDialog, {
+			props: {
+				open: true,
+				config: encoderConfig({ resolution: "1080p", framerate: 30 }),
+			},
+		});
+
+		// The device-max is the ACHIEVABLE pair 1080p/30 — never the fictional 1080p/60.
+		expect(summaryText()).toContain("30 fps");
+		expect(summaryText()).not.toContain("60 fps");
+
+		// Opening the framerate select: 60 (offered at 720p) carries the 720p hint;
+		// 50 (offered nowhere) carries none.
+		const trigger = document.body.querySelector("#encoder-framerate");
+		await fireEvent.click(trigger as HTMLElement);
+		await tick();
+		const options = Array.from(
+			document.body.querySelectorAll('[data-testid="framerate-option"]'),
+		);
+		const sixty = options.find((o) => o.getAttribute("data-value") === "60");
+		const fifty = options.find((o) => o.getAttribute("data-value") === "50");
+		if (sixty && fifty) {
+			expect(sixty.getAttribute("aria-disabled")).toBe("true");
+			expect(sixty.getAttribute("title")).toContain("720p");
+			expect(fifty.getAttribute("aria-disabled")).toBe("true");
+			expect(fifty.getAttribute("title")).not.toContain("available at");
+		} else {
+			// bits-ui didn't mount the options in jsdom — the always-rendered
+			// device-max above is the authoritative proof; the pure per-option hint
+			// attachment is covered exhaustively in ValidationAdapter.axes.test.ts.
+			expect(summaryText()).toContain("30 fps");
 		}
 	});
 });

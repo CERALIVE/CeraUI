@@ -59,7 +59,6 @@ describe("startStreaming — device-first source forwarding", () => {
 			pipeline: "hdmi",
 			relay_server: "srv-eu",
 			source: "video0",
-			source_preference: ["video0", "usb0"],
 			selected_video_input: "video0",
 			video_codec: "h265",
 			resolution: "1080p",
@@ -74,7 +73,6 @@ describe("startStreaming — device-first source forwarding", () => {
 
 		const input = start.mock.calls[0]?.[0] as Record<string, unknown>;
 		expect(input.source).toBe("video0");
-		expect(input.source_preference).toEqual(["video0", "usb0"]);
 		expect(input.selected_video_input).toBe("video0");
 		expect(input.video_codec).toBe("h265");
 		expect(input.resolution).toBe("1080p");

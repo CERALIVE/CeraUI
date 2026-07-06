@@ -16,6 +16,7 @@ import {
 	getEngineDeviceCache,
 	refreshEngineDeviceCache,
 	resetEngineDeviceCache,
+	resolveSourceRouting,
 } from "../modules/streaming/sources.ts";
 
 type CapabilitySource = GetCapabilitiesResult["sources"][number];
@@ -255,6 +256,43 @@ describe("buildSources — caps-first base + device overlay", () => {
 		expect(srt?.available).toBe(true);
 		if (srt?.origin === "network") {
 			expect(srt.url).toBe("srt://10.0.0.5:4001");
+		}
+	});
+
+	it("keeps an operator-disabled rtmp source VISIBLE with available:false + disabledInSettings reason (never dropped); routing still resolves (Task 7)", () => {
+		const sources = buildSources({
+			sources: goldenCapSources(),
+			devices: [],
+			networkIngest: {
+				// NEW-topology shared unit is still active for the sibling protocol,
+				// but the operator disabled rtmp in Settings — intent wins over the unit.
+				rtmp: {
+					service_active: true,
+					url: "rtmp://10.0.0.5:1935/publish/live",
+					operator_disabled: true,
+				},
+				srt: { service_active: true, url: "srt://10.0.0.5:4001" },
+			},
+		});
+
+		const rtmp = sources.find((s) => s.id === "rtmp");
+		expect(rtmp?.origin).toBe("network");
+		expect(rtmp?.available).toBe(false);
+		expect(rtmp?.unavailableReason).toBe(
+			"live.education.reason.disabledInSettings",
+		);
+
+		// The sibling srt (not disabled) stays available on the same shared unit.
+		const srt = sources.find((s) => s.id === "srt");
+		expect(srt?.available).toBe(true);
+
+		// The disabled source is NOT removed, so the routing seam still resolves its
+		// id — a start/setConfig with config.source='rtmp' rejects on the gateway
+		// gate, NEVER with unknown_source (Metis #7).
+		const routed = resolveSourceRouting("rtmp", sources);
+		expect(routed.ok).toBe(true);
+		if (routed.ok) {
+			expect(routed.pipeline).toBe("rtmp");
 		}
 	});
 

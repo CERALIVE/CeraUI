@@ -101,6 +101,7 @@ export const OPTION_UNSUPPORTED_AT_RESOLUTION =
 // family stays together. The rule itself is NEVER re-implemented here.
 export {
 	isPipelineAvailable,
+	PIPELINE_GATEWAY_DISABLED_IN_SETTINGS,
 	PIPELINE_GATEWAY_INACTIVE,
 	type PipelineAvailability,
 	type PipelineView,
@@ -478,15 +479,70 @@ function deviceModeFrameratesAtResolution(
 }
 
 /**
+ * A per-option "available elsewhere" hint: the framerate is disabled at the
+ * current resolution but the device CAN drive it at `resolution`. Drives the
+ * EncoderDialog option `title` (e.g. "… \u2014 60 fps available at 720p").
+ */
+export interface FramerateAvailabilityHint {
+	fps: Framerate;
+	resolution: Resolution;
+}
+
+/**
+ * A framerate option that additionally carries the optional
+ * {@link FramerateAvailabilityHint}. Only a rate disabled with
+ * {@link OPTION_UNSUPPORTED_AT_RESOLUTION} that the device offers at ANOTHER rung
+ * gets a hint; every other option leaves it undefined.
+ */
+export interface FramerateOption extends EncoderOption<Framerate> {
+	hint?: FramerateAvailabilityHint;
+}
+
+/**
+ * For ONE candidate framerate, the highest offered resolution rung OTHER than
+ * `excludeResolution` whose device modes can drive that framerate — the source of
+ * the "available elsewhere" hint. `undefined` when the device offers the rate at
+ * no other rung (that option then carries no hint), or when there are no device
+ * modes at all (the coarse path has nothing to hint at).
+ *
+ * Keyed on the candidate framerate (NOT just the resolution) so two options
+ * disabled at the same resolution get DIFFERENT hints — a 60 fps offered at 720p
+ * and a 50 fps offered nowhere must not share one resolution-keyed hint.
+ */
+export function framerateAvailableAt(
+	axes: OfferedAxes,
+	framerate: Framerate,
+	excludeResolution: Resolution,
+): Resolution | undefined {
+	const { offered, deviceModes } = axes;
+	if (!deviceModes || deviceModes.length === 0) return undefined;
+	if (!offered.framerates.includes(framerate)) return undefined;
+	let best: Resolution | undefined;
+	for (const rung of AVAILABLE_RESOLUTIONS) {
+		if (rung === excludeResolution) continue;
+		if (!offered.resolutions.includes(rung)) continue;
+		if (deviceModeFrameratesAtResolution(deviceModes, rung).has(framerate)) {
+			best = rung;
+		}
+	}
+	return best;
+}
+
+/**
  * The framerate candidate universe gated by BOTH the offered set and the selected
  * resolution: a rate the device can't drive at `resolution` renders disabled with
  * {@link OPTION_UNSUPPORTED_AT_RESOLUTION}, never hidden. With no device modes this
  * is identical to {@link framerateOptions} (coarse gating).
+ *
+ * The supported/disabled verdict is UNCHANGED from the pure per-resolution gate;
+ * the only addition is a per-option {@link FramerateAvailabilityHint} attached to a
+ * rate disabled at THIS resolution but offered at another rung (via
+ * {@link framerateAvailableAt}), so EncoderDialog can render "… available at Xp".
  */
 export function framerateOptionsForResolution(
 	axes: OfferedAxes,
 	resolution: Resolution,
-): EncoderOption<Framerate>[] {
+): FramerateOption[] {
 	const { offered, deviceModes } = axes;
 	if (!deviceModes || deviceModes.length === 0) {
 		return framerateOptions(offered);
@@ -499,14 +555,26 @@ export function framerateOptionsForResolution(
 	return AVAILABLE_FRAMERATES.map((value) => {
 		const inOffered = offeredSet.has(value);
 		const supported = inOffered && atResolution.has(value);
+		// Supported, or not offered at all (a coarse source/platform ceiling) — neither
+		// is a per-resolution limit, so neither carries an "available elsewhere" hint.
+		if (supported || !inOffered) {
+			return {
+				value,
+				supported,
+				reason: supported
+					? undefined
+					: reasonFor(offered.supportsFramerateOverride),
+			};
+		}
+		// Offered by the source/platform but not at THIS resolution: attach the option's
+		// OWN hint when the rate lives at another rung; a rate offered nowhere else keeps
+		// the plain per-resolution reason with no hint.
+		const availableAt = framerateAvailableAt(axes, value, resolution);
 		return {
 			value,
 			supported,
-			reason: supported
-				? undefined
-				: inOffered
-					? OPTION_UNSUPPORTED_AT_RESOLUTION
-					: reasonFor(offered.supportsFramerateOverride),
+			reason: OPTION_UNSUPPORTED_AT_RESOLUTION,
+			hint: availableAt ? { fps: value, resolution: availableAt } : undefined,
 		};
 	});
 }
@@ -534,9 +602,34 @@ export interface AxisCeiling {
  * so it reflects the active source's real ceiling when device modes are present.
  */
 export function axisCeiling(axes: OfferedAxes): AxisCeiling {
-	const { framerates } = axes.offered;
+	const { offered, deviceModes } = axes;
+	const resolution = highestResolutionRung(offered.resolutions);
+	// With device modes, the ceiling must be an ACHIEVABLE pair: the highest offered
+	// resolution rung and THAT rung's own max framerate (the device modes at that
+	// resolution ∩ the offered framerates), so the summary never claims a
+	// resolution+fps combo the hardware can't drive simultaneously (e.g. 4K/60 when
+	// 4K only runs at 30).
+	if (deviceModes && deviceModes.length > 0 && resolution !== undefined) {
+		const atResolution = deviceModeFrameratesAtResolution(
+			deviceModes,
+			resolution,
+		);
+		const achievable = offered.framerates.filter((fps) =>
+			atResolution.has(fps),
+		);
+		return {
+			resolution,
+			framerate:
+				achievable.length > 0
+					? (Math.max(...achievable) as Framerate)
+					: undefined,
+		};
+	}
+	// Coarse fallback (no device modes): the independent-axes ceiling, BYTE-IDENTICAL
+	// to the pre-change behaviour.
+	const { framerates } = offered;
 	return {
-		resolution: highestResolutionRung(axes.offered.resolutions),
+		resolution,
 		framerate:
 			framerates.length > 0
 				? (Math.max(...framerates) as Framerate)

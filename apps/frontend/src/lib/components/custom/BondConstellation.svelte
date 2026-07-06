@@ -151,16 +151,21 @@ function buildTimeline(isLive: boolean, isFrozen: boolean, geo: NodeGeo[]): void
 			);
 		});
 
-		// Outbound pulse: rings expand + fade from the bond core. transform-box
-		// fill-box (CSS) scales around each ring's own centre, not the SVG origin.
+		// Outbound pulse: rings expand + fade from the bond core. GSAP OWNS the
+		// origin: `transformOrigin: "50% 50%"` on BOTH ends makes GSAP compute each
+		// ring's SVG bbox centre and bake it into the transform matrix. No CSS rule
+		// may also set the origin — a second browser-applied origin compounds with
+		// GSAP's matrix and drifts the ring toward top-left as it scales (the
+		// reported pulse drift). One owner, no compounding.
 		pulseEls.forEach((el, i) => {
 			if (!el) return;
 			gsap.fromTo(
 				el,
-				{ scale: 0.4, opacity: 0.55 },
+				{ scale: 0.4, opacity: 0.55, transformOrigin: '50% 50%' },
 				{
 					scale: 3,
 					opacity: 0,
+					transformOrigin: '50% 50%',
 					duration: 2.1,
 					ease: 'power1.out',
 					repeat: -1,
@@ -230,8 +235,8 @@ const activeCount = $derived(links.filter((l) => l.isConnected).length);
 		{#each Array(PULSE_COUNT) as _, i (i)}
 			<circle
 				bind:this={pulseEls[i]}
-				class="bond-pulse"
 				data-testid="bond-pulse"
+				data-pulse-index={i}
 				cx={BOND_X}
 				cy={BOND_Y}
 				r={PULSE_BASE_R}
@@ -276,11 +281,3 @@ const activeCount = $derived(links.filter((l) => l.isConnected).length);
 		<circle data-testid="bond-core" cx={BOND_X} cy={BOND_Y} r="5" fill="var(--primary)" opacity={activeCount > 0 ? 1 : 0.5} />
 	</svg>
 </div>
-
-<style>
-	/* SVG scale tweens orbit each ring's own centre, not the SVG (0,0) origin. */
-	.bond-pulse {
-		transform-box: fill-box;
-		transform-origin: center;
-	}
-</style>

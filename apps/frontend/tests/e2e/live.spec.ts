@@ -67,6 +67,23 @@ test.describe('Live destination', () => {
 		await expect(page.getByRole('button', { name: /stream/i }).first()).toBeVisible();
 	});
 
+	test('the audio surface is the Source card only: one open-audio-dialog affordance opens AudioDialog', async ({
+		authedPage: page,
+	}) => {
+		const live = new LivePage(page);
+		await live.open();
+
+		// One audio surface (T11): exactly one affordance, inside the Source card.
+		const audioEdit = page.getByTestId('open-audio-dialog');
+		await expect(audioEdit).toHaveCount(1);
+		await expect(
+			page.getByTestId('source-audio').getByTestId('open-audio-dialog'),
+		).toHaveCount(1);
+
+		await audioEdit.click();
+		await expect(page.getByRole('dialog', { name: 'Audio Settings' })).toBeVisible();
+	});
+
 	for (const [label, openFn, closeFn, dialogName] of [
 		['Encoder', 'openEncoder', 'closeEncoder', 'Encoder Settings'],
 		['Audio', 'openAudio', 'closeAudio', 'Audio Settings'],

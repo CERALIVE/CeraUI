@@ -5,6 +5,7 @@ import { oc } from '@orpc/contract';
 
 import {
 	modemConfigInputSchema,
+	modemConfigOutputSchema,
 	modemListSchema,
 	modemScanInputSchema,
 	modemScanOutputSchema,
@@ -12,7 +13,6 @@ import {
 	simPukUnlockOutputSchema,
 	simUnlockInputSchema,
 	simUnlockOutputSchema,
-	successResponseSchema,
 } from '../schemas';
 
 export const modemsContract = oc.router({
@@ -24,7 +24,7 @@ export const modemsContract = oc.router({
 	/**
 	 * Configure a modem
 	 */
-	configure: oc.input(modemConfigInputSchema).output(successResponseSchema),
+	configure: oc.input(modemConfigInputSchema).output(modemConfigOutputSchema),
 
 	/**
 	 * Scan for available networks

@@ -1,30 +1,35 @@
 // @vitest-environment jsdom
 /**
- * BondToggle — confirm-gated pessimistic toggle (Task 26).
+ * BondToggle — confirm-gated pessimistic toggle (Task 26) + osCommand
+ * composition (Task 20, live-correctness-pass).
  *
  * BondToggle's disable action is gated behind an async `onBeforeDisable` confirm
  * (Ethernet surfaces a management-interruption AlertDialog). The control is
  * PESSIMISTIC: the switch stays visually ON while the confirm is pending, and
  * only flips OFF once the user confirms AND the RPC settles.
  *
- * The original bug (Task 7 RED repro, now GREEN): the shadcn `Switch` wraps
- * bits-ui with a `$bindable` checked, and bits-ui optimistically writes its own
- * `checked = !checked` on click BEFORE `onBeforeDisable()` resolves — flipping
- * `aria-checked` to "false" behind an open confirm dialog. Task 26 fixed this by
- * driving the Switch with a Svelte function binding
- * (`bind:checked={() => displayed, toggle}`): `displayed` is the only read
- * source so `aria-checked` cannot diverge from it, and every write is routed
- * through `toggle`, which awaits the confirm before mutating any state.
+ * Task 20 additionally COMPOSED the keyed `osCommand` lifecycle onto the toggle:
+ * the dirty-registry field-lock (`enabled_{name}`) is KEPT as the stale-echo
+ * guard, while `osCommand` (shared key `netif:{name}`, `confirmOnResolve: true`)
+ * owns the in-flight/failure lifecycle and the SINGLE failure toast. The two
+ * mechanisms compose — no double feedback, no lingering re-entry guard.
  *
  * Coverage:
  *  1. Pending confirm  — switch stays ON while `onBeforeDisable` is unresolved.
  *  2. Cancel path      — confirm resolves falsy: switch returns to ON, no RPC.
- *  3. RPC-failure path — confirm resolves truthy, RPC rejects: reverts to ON +
- *                        surfaces an error toast.
+ *  3. RPC-reject path  — confirm resolves truthy, RPC rejects: reverts to ON +
+ *                        exactly one (osCommand-owned) failure toast.
+ *  4. `success:false`  — reverts + exactly ONE toast (osCommand's).
+ *  5. Double-click     — re-entry guard: exactly ONE rpc dispatched.
+ *  6. Success releases — a confirmed reply resolves the async-op immediately
+ *                        (no TTL lingering): a subsequent toggle dispatches again.
  */
 import { fireEvent, render, waitFor } from "@testing-library/svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	destroyAsyncOperations,
+	isOperationPending,
+} from "$lib/rpc/async-operation.svelte";
 import { rpc } from "$lib/rpc/client";
 
 import BondToggle from "./BondToggle.svelte";
@@ -35,7 +40,8 @@ vi.mock("$lib/rpc/client", () => ({
 	rpc: { network: { configure: vi.fn() } },
 }));
 
-// Spy on the toast surface to assert the RPC-failure path notifies the operator.
+// Spy on the toast surface to assert the failure path notifies exactly once.
+// `osCommand` (real) imports `toast` from here, so this mock captures its toasts.
 vi.mock("svelte-sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn() },
 }));
@@ -52,9 +58,24 @@ import { toast } from "svelte-sonner";
 
 const configure = vi.mocked(rpc.network.configure);
 const toastError = vi.mocked(toast.error);
+const toastSuccess = vi.mocked(toast.success);
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((res) => {
+		resolve = res;
+	});
+	return { promise, resolve };
+}
 
 beforeEach(() => {
 	vi.clearAllMocks();
+});
+
+afterEach(() => {
+	// Reset the keyed async-operation singleton so a lingering `netif:{name}`
+	// phase never bleeds re-entry state into the next test.
+	destroyAsyncOperations();
 });
 
 describe("BondToggle — confirm-gated pessimistic toggle (Task 26)", () => {
@@ -102,7 +123,7 @@ describe("BondToggle — confirm-gated pessimistic toggle (Task 26)", () => {
 		expect(toastError).not.toHaveBeenCalled();
 	});
 
-	it("reverts to ON and shows an error toast when the RPC rejects post-confirm", async () => {
+	it("reverts to ON and shows exactly one failure toast when the RPC rejects post-confirm", async () => {
 		// Confirm proceeds, but the backend rejects the configure call.
 		const onBeforeDisable = vi.fn(() => Promise.resolve(true));
 		configure.mockRejectedValueOnce(new Error("link is last active"));
@@ -124,10 +145,76 @@ describe("BondToggle — confirm-gated pessimistic toggle (Task 26)", () => {
 			enabled: false,
 		});
 
-		// On rejection the operator is notified and the switch reverts to its
+		// osCommand owns the SINGLE failure toast (copy `network.os.operationFailed`);
+		// BondToggle must NOT toast a second time. The switch reverts to its
 		// authoritative ON state (the `enabled` prop).
 		await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
-		expect(toastError).toHaveBeenCalledWith("link is last active");
 		await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("true"));
+	});
+});
+
+describe("BondToggle — osCommand composition (Task 20)", () => {
+	it("reverts and shows exactly ONE toast on a structured success:false reply", async () => {
+		// Enable path (no onBeforeDisable gate): backend refuses with success:false.
+		configure.mockResolvedValueOnce({ success: false, error: "netif_failed" });
+
+		const { getByRole } = render(BondToggle, {
+			props: { name: "wlan0", enabled: false },
+		});
+
+		const sw = getByRole("switch");
+		expect(sw.getAttribute("aria-checked")).toBe("false");
+
+		await fireEvent.click(sw); // toggle → enable (target true)
+
+		await waitFor(() => expect(configure).toHaveBeenCalledTimes(1));
+		// Exactly ONE failure toast, owned by osCommand — not a second from BondToggle.
+		await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+		expect(toastSuccess).not.toHaveBeenCalled();
+		// No confirming echo is coming → the lock releases to the authoritative
+		// prior `enabled` (false), so the switch reverts to OFF.
+		await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("false"));
+	});
+
+	it("dispatches exactly ONE rpc on a rapid double-click (re-entry guard)", async () => {
+		// Never resolves: keeps the `netif:wlan0` op pending across both clicks.
+		const d = deferred<{ success: boolean; applied?: { enabled: boolean } }>();
+		configure.mockReturnValueOnce(d.promise);
+
+		const { getByRole } = render(BondToggle, {
+			props: { name: "wlan0", enabled: false },
+		});
+
+		const sw = getByRole("switch");
+		await fireEvent.click(sw); // dispatch 1 → in flight
+		await Promise.resolve();
+		expect(configure).toHaveBeenCalledTimes(1);
+
+		// Second click while the shared-key op is still pending → NO second dispatch.
+		await fireEvent.click(sw);
+		await Promise.resolve();
+		expect(configure).toHaveBeenCalledTimes(1);
+
+		// Settle so no promise dangles into teardown.
+		d.resolve({ success: true, applied: { enabled: true } });
+	});
+
+	it("releases the async-op immediately on a confirmed reply (no TTL lingering)", async () => {
+		configure.mockResolvedValue({ success: true, applied: { enabled: true } });
+
+		const { getByRole } = render(BondToggle, {
+			props: { name: "wlan0", enabled: false },
+		});
+
+		const sw = getByRole("switch");
+		await fireEvent.click(sw); // enable
+
+		await waitFor(() => expect(configure).toHaveBeenCalledTimes(1));
+		// `confirmOnResolve` transitions the key straight to `confirmed` — it never
+		// lingers `pending` to TTL. So a follow-up toggle dispatches again at once.
+		await waitFor(() => expect(isOperationPending("netif:wlan0")).toBe(false));
+
+		await fireEvent.click(sw); // toggle again (disable) — must not be blocked
+		await waitFor(() => expect(configure).toHaveBeenCalledTimes(2));
 	});
 });

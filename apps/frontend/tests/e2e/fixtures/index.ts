@@ -14,6 +14,7 @@ export { expect } from '@playwright/test';
 export type { Download, Locator, Page } from '@playwright/test';
 
 type WorkerFixtures = {
+	backendScenario: string;
 	workerBackend: WorkerBackend;
 };
 
@@ -22,11 +23,18 @@ type Fixtures = {
 };
 
 export const test = base.extend<Fixtures, WorkerFixtures>({
+	// Per-worker MOCK_SCENARIO override. A spec opts in with
+	// `test.use({ backendScenario: 'modem-pin-locked' })`; because it is a
+	// worker-scoped option, Playwright allocates a SEPARATE worker for that value,
+	// so the scenario is part of the worker key and parallel workers never share a
+	// mismatched backend. Default keeps every existing spec on multi-modem-wifi.
+	backendScenario: ['multi-modem-wifi', { scope: 'worker', option: true }],
+
 	// One isolated mock backend per worker (own port + own CWD state dir), so
 	// config.json mutation and dev.emit broadcasts never bleed across workers.
 	workerBackend: [
-		async ({}, use) => {
-			const backend = await startWorkerBackend();
+		async ({ backendScenario }, use) => {
+			const backend = await startWorkerBackend({ scenario: backendScenario });
 			await use(backend);
 			await backend.stop();
 		},

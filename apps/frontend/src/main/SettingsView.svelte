@@ -20,6 +20,7 @@ import {
 	Monitor,
 	Palette,
 	Power,
+	Radio,
 	RefreshCw,
 	Rocket,
 	ScrollText,
@@ -40,6 +41,7 @@ import { cn } from '$lib/utils';
 
 import CloudRemoteDialog from './dialogs/CloudRemoteDialog.svelte';
 import LogsDialog from './dialogs/LogsDialog.svelte';
+import NetworkIngestDialog from './dialogs/NetworkIngestDialog.svelte';
 import PasswordDialog from './dialogs/PasswordDialog.svelte';
 import PowerDialog from './dialogs/PowerDialog.svelte';
 import AddonsSection from './settings/AddonsSection.svelte';
@@ -67,6 +69,7 @@ interface Group {
 const t = $derived($LL.settings.index);
 const appearance = $derived($LL.settings.appearance);
 const odd = $derived($LL.settings.onDeviceDisplay);
+const ni = $derived($LL.settings.networkIngest);
 
 // On-Device Display entry desc tracks the live DC-2 state for at-a-glance
 // status; falls back to the static description before the first kiosk push.
@@ -137,7 +140,10 @@ const groups = $derived<Group[]>([
 	{
 		id: 'streaming',
 		label: t.groups.streaming(),
-		entries: [{ key: 'cloud', title: t.cloudRemote(), desc: t.cloudRemoteDesc(), icon: Cloud }],
+		entries: [
+			{ key: 'cloud', title: t.cloudRemote(), desc: t.cloudRemoteDesc(), icon: Cloud },
+			{ key: 'networkIngest', title: ni.title(), desc: ni.desc(), icon: Radio },
+		],
 	},
 	{
 		id: 'developer',
@@ -178,6 +184,7 @@ const groups = $derived<Group[]>([
 // Real dialogs (Tasks 25-27). Each settings entry routes to its own dialog.
 let passwordOpen = $state(false);
 let cloudOpen = $state(false);
+let networkIngestOpen = $state(false);
 let sshOpen = $state(false);
 let logsOpen = $state(false);
 let updatesOpen = $state(false);
@@ -197,6 +204,9 @@ function openEntry(entry: Entry) {
 			return;
 		case 'cloud':
 			cloudOpen = true;
+			return;
+		case 'networkIngest':
+			networkIngestOpen = true;
 			return;
 		case 'ssh':
 			sshOpen = true;
@@ -375,6 +385,7 @@ const ActiveIcon = $derived(active?.icon);
 <!-- Wired settings dialogs (Tasks 25-27) -->
 <PasswordDialog bind:open={passwordOpen} />
 <CloudRemoteDialog bind:open={cloudOpen} />
+<NetworkIngestDialog bind:open={networkIngestOpen} />
 <SshDialog bind:open={sshOpen} />
 <LogsDialog bind:open={logsOpen} />
 <UpdatesDialog bind:open={updatesOpen} />

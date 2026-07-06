@@ -31,6 +31,15 @@ const READY_TIMEOUT_MS = 60_000;
 const PROBE_INTERVAL_MS = 200;
 const STOP_GRACE_MS = 4_000;
 
+/**
+ * Default mock scenario for a worker backend. A spec requiring a different
+ * backend state opts in per-worker via `test.use({ backendScenario: '…' })`
+ * (see fixtures/index.ts + PLAYBOOK.md) — a scenario override forces Playwright
+ * to allocate a separate worker, so parallel workers never share a mismatched
+ * backend (the scenario is part of the worker key).
+ */
+const DEFAULT_SCENARIO = "multi-modem-wifi";
+
 /** Must match the bcrypt cost the backend uses (auth.procedure.ts BCRYPT_ROUNDS). */
 const BCRYPT_COST = 10;
 const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "12345678";
@@ -161,7 +170,15 @@ function stopChild(child: ChildProcess): Promise<void> {
 	});
 }
 
-export async function startWorkerBackend(): Promise<WorkerBackend> {
+export interface StartWorkerBackendOptions {
+	/** MOCK_SCENARIO to boot this worker's backend with (default multi-modem-wifi). */
+	scenario?: string;
+}
+
+export async function startWorkerBackend(
+	options: StartWorkerBackendOptions = {},
+): Promise<WorkerBackend> {
+	const scenario = options.scenario ?? DEFAULT_SCENARIO;
 	const port = workerBackendPort();
 	const stateDir = path.join(STATE_ROOT, String(port));
 	seedStateDir(stateDir);
@@ -172,7 +189,7 @@ export async function startWorkerBackend(): Promise<WorkerBackend> {
 		env: {
 			...process.env,
 			NODE_ENV: "development",
-			MOCK_SCENARIO: "multi-modem-wifi",
+			MOCK_SCENARIO: scenario,
 			PORT: String(port),
 		},
 		stdio: ["ignore", logFd, logFd],

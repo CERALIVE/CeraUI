@@ -298,11 +298,12 @@ $effect(() => {
 // query-style refresh keyed on `periodicScanKey` — DISTINCT from the manual
 // `scanKey`, so it never drives the manual-scan spinner. It routes through
 // `osCommand` (not a raw fire-and-forget) SO A FAILING TICK IS CAUGHT: no
-// unhandled promise rejection, one calm failure toast per failing tick, and the
-// list renders the `wifi-scan-error` state via `scanError`. `confirmOnResolve`
-// resolves the ok path immediately (scan RPC has no completion marker) which
-// also re-arms + clears a prior failure on the next successful tick. The 22s
-// interval and its cleanup are unchanged.
+// unhandled promise rejection. `silent` suppresses the toast — a background op
+// never interrupts with a toast; the failing tick surfaces only through the calm
+// `wifi-scan-error` band (via `scanError`). `confirmOnResolve` resolves the ok
+// path immediately (scan RPC has no completion marker) which also re-arms +
+// clears a prior failure on the next successful tick. The 22s interval and its
+// cleanup are unchanged.
 $effect(() => {
 	if (!open) return;
 	const runSilentScan = () =>
@@ -310,8 +311,7 @@ $effect(() => {
 			key: periodicScanKey,
 			rpc: () => rpc.wifi.scan({ device: deviceId }),
 			confirmOnResolve: true,
-			failMessage: () => $LL.network.os.operationFailed(),
-			busyMessage: () => $LL.network.os.deviceBusy(),
+			silent: true,
 		});
 	runSilentScan();
 	const id = setInterval(runSilentScan, 22000);

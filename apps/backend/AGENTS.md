@@ -51,11 +51,13 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Add-on enable/disable state machine (T28) | `modules/addons/manager.ts` |
 | Post-boot add-on reconciler (T29, non-blocking; never gates rollback) | `modules/addons/reconciler.ts` |
 | Network-ingest gateway status (fail-closed dual-topology SRT probe: OLD `ceralive-srt-gateway.service` OR NEW MediaMTX `/etc/mediamtx.yml` `srt: yes`+`srtAddress: :4001`; LAN URLs, additive `srt.gateway`, `status.network_ingest`) | `modules/network/network-ingest.ts` |
+| **Network-ingest operator enable/disable (topology-aware desired-state + systemctl apply + boot reconcile)** | `modules/network/network-ingest-control.ts` |
 | Gateway-active probe seam (blocks rtmp/srt `streaming.start` until the gateway is up; fail-safe default) | `modules/streaming/gateway-availability.ts` |
 | Same-subnet detection (`same_subnet_group`, informational, AP-excluded) | `modules/network/network-interfaces.ts` (`netIfBuildMsg`) |
 | Policy-route self-check for bonded wifi/modem interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
 | **`config.source` legacy coercion (pipeline/selected_video_input → source, idempotent)** | `helpers/config-schemas.ts` (`coerceLegacySource`) |
+| **Audio-naming resolution (3-tier: engine join → ALSA longname → alias) + tier-3 diagnostic** | `modules/streaming/audio-naming.ts` |
 | Mock hardware data | `mocks/providers/` |
 | Shared RPC schema types | `../../../packages/rpc/` (`@ceraui/rpc`) |
 
@@ -233,7 +235,7 @@ explicitly are unaffected.
 - Build: `bun build --compile --minify --bytecode --target=bun-linux-{arm64|amd64}` — single binary, no runtime on device.
 - Tests: `bun test` (not vitest). Files in `src/tests/`.
 - Config files (`config.json`, `setup.json`, `auth_tokens.json`) read/written from working dir — path-sensitive in production.
-- `MOCK_SCENARIO` env activates mock providers. Scenarios: `single-modem`, `streaming-active`, `multi-modem-wifi` (default dev). Three additional scenario-seeded capability scenarios: `caps-full`, `engine-starting`, `engine-unavailable` (T5).
+- `MOCK_SCENARIO` env activates mock providers. Scenarios: `single-modem`, `streaming-active`, `multi-modem-wifi` (default dev), `modem-pin-locked` (2 modems, modem 0 SIM PIN-locked, fixture PIN `0000` — the `unlockSim`/`unlockSimPuk` RPCs route to the mock SIM state machine). Three additional scenario-seeded capability scenarios: `caps-full`, `engine-starting`, `engine-unavailable` (T5).
 - Frontend dependency `bits-ui` is at v2.18.1 (frontend concern only; backend has no direct bits-ui dep).
 - Use `shouldUseMocks()` — never raw `isDevelopment()` — to gate mock-hardware paths. `shouldUseMocks()` requires both `isDevelopment()` AND `mockState.initialized`.
 - **Frontend store-ownership mirror [EXISTS]:** the frontend's legacy `websocket-store.svelte.ts` wrapper is deleted; `rpc/procedures/auth.procedure.ts` (`auth.login`/`auth.setPassword`/`auth.logout`) is now called exclusively through the frontend's `lib/stores/auth-status.svelte.ts` (`authenticate`/`createPassword`), and every other push event is consumed exclusively through `lib/rpc/subscriptions.svelte.ts`'s single `rpcClient.onMessage` handler. Don't casually rename/reshape these procedure signatures or add a second push-consumption path on the frontend side — see `apps/frontend/AGENTS.md` → CONVENTIONS (store ownership).
@@ -486,8 +488,10 @@ Every row is one of four `origin` variants (`capture`/`coarse`/`virtual`/
   streaming.procedure.ts`), and the coarse `capabilities.device_modes` field
   (`modules/streaming/capabilities.ts`) are kept running byte-for-byte
   unchanged for one release as a rollback safety net — no shipped frontend
-  surface reads them anymore (SourceSection/EncoderDialog/GoLiveCard all read
-  `getSources()` exclusively). Tracked as `TD-legacy-source-broadcasts` in
+  surface reads them anymore (SourceSection/EncoderDialog/StreamSetupChain all
+  read `getSources()` exclusively — `GoLiveCard.svelte`, which this note
+  originally named, is now an unmounted migration shim; see frontend
+  `AGENTS.md`). Tracked as `TD-legacy-source-broadcasts` in
   `docs/TECHNICAL_DEBT.md`; do not delete the producers until that entry's
   exit condition is met.
 - **`getLinkTelemetry` null-on-stop** is a backend-locked contract:
@@ -496,6 +500,47 @@ Every row is one of four `origin` variants (`capture`/`coarse`/`virtual`/
   once (the dedupe cache is deliberately NOT reset in the stop path, so a
   second consecutive `null` tick is suppressed). See `apps/frontend/AGENTS.md`
   → "Telemetry-clears-on-stop" for the matching frontend-side guarantee.
+
+## NETWORK-INGEST OPERATOR ENABLE/DISABLE (live-correctness-pass Todo #6–9) [EXISTS]
+
+`modules/network/network-ingest-control.ts` adds a topology-aware desired-state
+layer on top of the always-on gateway probe (`network-ingest.ts`, above):
+
+- `readIngestDesired(config) → {rtmp, srt}` — the SOLE defaulting point
+  (`?? true`); a missing config key defaults both protocols to enabled.
+- `persistIngestDesired(protocol, enabled)` — mutates `getConfig().network_ingest`
+  and calls `saveConfig()`; the singleton-only writer.
+- `planIngestUnitActions(desired, markers) → {start, stop}` — PURE resolver.
+  Topology-aware: the NEW shared `ceralive-rtmp-gateway.service` topology stops a
+  unit only when BOTH protocols are off and starts it when EITHER is on; the OLD
+  `srtUnitPresent` topology keeps rtmp↔rtmp / `ceralive-srt-gateway.service`↔srt
+  independent. The apply step is isActive-GATED (only issues `systemctl
+  start/stop` when current state differs from target) — that gating, not the pure
+  resolver, is what makes reconcile idempotent.
+- `setIngestEnabled(protocol, enabled)` — persist FIRST, then systemctl-apply
+  (apply errors are swallowed; persisted desired-state is the truth, reconciled
+  next boot), then re-broadcast BOTH `status` and `sources`.
+- `reconcileIngestDesiredState()` — fire-and-forget boot reconcile; never throws,
+  self-serialising, emulated no-op. Wired in `main.ts` beside
+  `runAddonReconciler()`.
+- `rpc.network.setIngestEnabled({protocol, enabled})` — persists first (even in
+  the `shouldUseMocks()` branch, which also flips the mock's SEPARATE
+  `networkIngestActive`/`gatewayActive` maps so the toggle and the
+  `streaming.start` gate agree), else `{success:false, error:
+  NETWORK_INGEST_UNAVAILABLE_ERROR}` when `!isRealDevice()`, else the real
+  `setIngestEnabled` path.
+- `status.network_ingest.{rtmp,srt}.operator_disabled?: boolean` — additive,
+  present only when `true`, DISTINCT from `service_active` (a shared unit can
+  stay active while a sibling protocol is operator-disabled).
+
+**The fail-visible three-mirror predicate** — "start-eligible = unit-active AND
+NOT operator-disabled" — is enforced identically in three places that MUST
+agree: the real gateway probe (`network-ingest.ts` `buildGatewayProbe()`), the
+mock gate (`mocks/providers/streaming.ts` `isMockGatewayActive()`, dev/CI
+parity), and the frontend `pipelineAvailability()` (operator intent checked
+FIRST, reason `live.education.reason.disabledInSettings`). See root `AGENTS.md`
+→ "LIVE-CORRECTNESS-PASS FIXES" for the frontend-side contract
+(`NetworkIngestDialog.svelte`, `SourceSection.svelte`'s visible-row filter).
 
 ## ANTI-PATTERNS
 

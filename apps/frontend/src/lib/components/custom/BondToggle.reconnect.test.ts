@@ -19,8 +19,8 @@
  */
 import { fireEvent, render, waitFor } from "@testing-library/svelte";
 import { flushSync } from "svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { destroyAsyncOperations } from "$lib/rpc/async-operation.svelte";
 import { rpc } from "$lib/rpc/client";
 import {
 	resetConnectionState,
@@ -49,6 +49,14 @@ const configure = vi.mocked(rpc.network.configure);
 beforeEach(() => {
 	vi.clearAllMocks();
 	resetConnectionState();
+});
+
+afterEach(() => {
+	// The toggle now composes `osCommand` on the shared `netif:{name}` key. Both
+	// tests hold `configure` unsettled, so the op stays `pending` in the store
+	// singleton — reset it so the next test's toggle isn't refused by the
+	// osCommand re-entry guard (a lingering pending key would block dispatch).
+	destroyAsyncOperations();
 });
 
 describe("BondToggle — reconnect-aware reconciliation (Task 29)", () => {

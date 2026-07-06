@@ -3,9 +3,11 @@
  * StreamSetupChain — the merged "Stream setup" card (Task T9).
  *
  * Replaces GoLiveCard's split of readiness-gates + config-rows with ONE card of
- * FOUR always-visible rows in signal order (Encoder → Audio → Destination →
- * Network). Each row fuses a readiness state dot with the migrated config-row
- * summary/edit affordance, so an operator reads state AND setting on one line.
+ * THREE always-visible rows in signal order (Encoder → Destination → Network).
+ * Each row fuses a readiness state dot with the migrated config-row summary/edit
+ * affordance, so an operator reads state AND setting on one line. Audio is NOT a
+ * setup-chain row (T11): the Source card is the ONE audio surface and owns the
+ * "Codec & delay" affordance that opens the AudioDialog.
  *
  * This is a PRESENTATION-ONLY remap of {@link deriveGoLiveReadiness} — the pure
  * four-gate verdict is consumed byte-unchanged and NEVER re-derived here. What
@@ -16,20 +18,15 @@
  *                    encoder config row flags `pipelineNeedsReconfigure`. Summary =
  *                    encoderSummary; trailing bitrate-ceiling chip; Edit opens the
  *                    EncoderDialog.
- *   2. Audio       — ADVISORY ONLY. State is `ok`/`warn` (warn when the config row
- *                    flags the selected asrc unavailable) and NEVER `blocked`; it
- *                    contributes NOTHING to `canStart`/`blocking`/`primaryFixGate`.
- *                    Audio is deliberately not a readiness gate. Summary =
- *                    audioSummary (incl. "Auto → X"); Edit opens the AudioDialog.
- *   3. Destination — state = the DESTINATION gate. Summary = serverSummary;
+ *   2. Destination — state = the DESTINATION gate. Summary = serverSummary;
  *                    trailing traffic-light chip; Edit opens the ServerDialog.
- *   4. Network     — state = the NETWORK gate. Summary = the enabled-link count
+ *   3. Network     — state = the NETWORK gate. Summary = the enabled-link count
  *                    from netif; the row's action navigates to the Network view.
  *
  * The ENGINE gate is intentionally NOT a row — the CapabilityTierBanner and the
  * Start button's disabled reason own it (readiness blocking semantics unchanged).
  *
- * There is NO collapse state and NO ready bar: all four rows are ALWAYS rendered.
+ * There is NO collapse state and NO ready bar: all three rows are ALWAYS rendered.
  *
  * As with GoLiveCard, this component owns NO RPC and writes NO config — every
  * action is a callback prop, so the sole-camera "no premature setConfig" contract
@@ -220,7 +217,6 @@ function formatBitrate(kbps: number | undefined): string {
 // Resolve the config rows by section so each maps to its signal-order slot. The
 // three come from LiveView's configRows array (same testids + edit handlers).
 const encoderRow = $derived(configRows.find((row) => row.section === 'encoder'));
-const audioRow = $derived(configRows.find((row) => row.section === 'audio'));
 const serverRow = $derived(configRows.find((row) => row.section === 'server'));
 
 /**
@@ -241,8 +237,6 @@ function rowState(
 const encoderState = $derived(
 	rowState(readiness.gates.source.state, encoderRow?.warn),
 );
-// Audio is ADVISORY-ONLY: no gate, never blocked, never influences canStart.
-const audioState = $derived<GateStatus>(audioRow?.warn ? 'warn' : 'ok');
 const destinationState = $derived(
 	rowState(readiness.gates.destination.state, serverRow?.warn),
 );
@@ -277,7 +271,7 @@ const networkSummary = $derived(
 </script>
 
 {#snippet setupRow(
-	key: 'encoder' | 'audio' | 'destination',
+	key: 'encoder' | 'destination',
 	row: ConfigRow,
 	state: GateStatus,
 	reasonKey: string | undefined,
@@ -438,9 +432,6 @@ const networkSummary = $derived(
 					'bitrate',
 					onOpenSource,
 				)}
-			{/if}
-			{#if audioRow}
-				{@render setupRow('audio', audioRow, audioState, undefined, undefined, undefined)}
 			{/if}
 			{#if serverRow}
 				{@render setupRow(
