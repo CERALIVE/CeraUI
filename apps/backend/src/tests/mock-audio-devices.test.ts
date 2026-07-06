@@ -6,6 +6,11 @@ import { initMockService, stopMockService } from "../mocks/mock-service.ts";
 import { getMockAudioDevices } from "../mocks/providers/streaming.ts";
 import { getConfig } from "../modules/config.ts";
 import {
+	type EngineAudioDevice,
+	isHumanAudioName,
+	resolveAudioLabels,
+} from "../modules/streaming/audio-naming.ts";
+import {
 	getAudioDevices,
 	setMockAudioDevicesProvider,
 	warnIfConfiguredAudioSourceUnavailable,
@@ -29,39 +34,38 @@ afterEach(() => {
 	}
 });
 
+const REALISTIC_AUDIO_DEVICES = {
+	"RØDE AI-Micro": "rode_ai_micro",
+	"Elgato Wave:3": "elgato_wave3",
+} as const;
+
 describe("buildMockAudioDevices — fixture-factory builder", () => {
-	test("defaults to the USB-audio seed", () => {
-		expect(buildMockAudioDevices()).toEqual({ "USB audio": "usbaudio" });
+	test("defaults to the realistic dual-dongle seed (no generic 'USB audio' placeholder)", () => {
+		expect(buildMockAudioDevices()).toEqual(REALISTIC_AUDIO_DEVICES);
 	});
 
 	test("merges overrides onto the default seed", () => {
 		expect(buildMockAudioDevices({ HDMI: "rockchiphdmiin" })).toEqual({
-			"USB audio": "usbaudio",
+			...REALISTIC_AUDIO_DEVICES,
 			HDMI: "rockchiphdmiin",
 		});
 	});
 });
 
 describe("getMockAudioDevices — scenario seeding", () => {
-	test("seeds USB audio for multi-modem-wifi", () => {
+	test("seeds the realistic dual-dongle map for multi-modem-wifi", () => {
 		initMockService("multi-modem-wifi");
-		expect(getMockAudioDevices()).toEqual({ "USB audio": "usbaudio" });
+		expect(getMockAudioDevices()).toEqual(REALISTIC_AUDIO_DEVICES);
 	});
 
-	test("seeds USB audio for streaming-active", () => {
+	test("seeds the realistic dual-dongle map for streaming-active", () => {
 		initMockService("streaming-active");
-		expect(getMockAudioDevices()).toEqual({
-			"RØDE AI-Micro": "rode_ai_micro",
-			"Elgato Wave:3": "elgato_wave3",
-		});
+		expect(getMockAudioDevices()).toEqual(REALISTIC_AUDIO_DEVICES);
 	});
 
-	test("seeds USB audio + HDMI for caps-full", () => {
+	test("seeds the realistic dual-dongle map for caps-full", () => {
 		initMockService("caps-full");
-		expect(getMockAudioDevices()).toEqual({
-			"RØDE AI-Micro": "rode_ai_micro",
-			"Elgato Wave:3": "elgato_wave3",
-		});
+		expect(getMockAudioDevices()).toEqual(REALISTIC_AUDIO_DEVICES);
 	});
 
 	test("seeds nothing for single-modem", () => {
@@ -76,12 +80,14 @@ describe("getMockAudioDevices — scenario seeding", () => {
 });
 
 describe("getAudioDevices — status asrcs coherence", () => {
-	test("status asrcs contains USB audio under multi-modem-wifi", () => {
+	test("status asrcs contains the realistic dongle names under multi-modem-wifi", () => {
 		initMockService("multi-modem-wifi");
 		setMockAudioDevicesProvider(getMockAudioDevices);
 
 		const asrcs = Object.keys(getAudioDevices());
-		expect(asrcs).toContain("USB audio");
+		expect(asrcs).toContain("RØDE AI-Micro");
+		expect(asrcs).toContain("Elgato Wave:3");
+		expect(asrcs).not.toContain("USB audio");
 		// The two pseudo-sources are never displaced by the seed.
 		expect(asrcs).toContain("No audio");
 		expect(asrcs).toContain("Pipeline default");
@@ -104,7 +110,8 @@ describe("getAudioDevices — status asrcs coherence", () => {
 		setMockAudioDevicesProvider(getMockAudioDevices);
 
 		const asrcs = Object.keys(getAudioDevices());
-		expect(asrcs).not.toContain("USB audio");
+		expect(asrcs).not.toContain("RØDE AI-Micro");
+		expect(asrcs).not.toContain("Elgato Wave:3");
 		expect(asrcs).toContain("No audio");
 		expect(asrcs).toContain("Pipeline default");
 	});
@@ -142,7 +149,7 @@ describe("warnIfConfiguredAudioSourceUnavailable — warn-only invariant", () =>
 
 		const warnSpy = spyOn(logger, "warn").mockImplementation(() => logger);
 		try {
-			warnIfConfiguredAudioSourceUnavailable("USB audio");
+			warnIfConfiguredAudioSourceUnavailable("RØDE AI-Micro");
 			expect(warnSpy).not.toHaveBeenCalled();
 		} finally {
 			warnSpy.mockRestore();
@@ -157,5 +164,35 @@ describe("warnIfConfiguredAudioSourceUnavailable — warn-only invariant", () =>
 		} finally {
 			warnSpy.mockRestore();
 		}
+	});
+});
+
+describe("tier-1 naming — realistic display_name wins the engine join", () => {
+	function engineAudioFromMock(
+		audioDevices: Record<string, string>,
+	): EngineAudioDevice[] {
+		return Object.entries(audioDevices).map(([displayName, cardId]) => ({
+			input_id: `audio:${cardId}`,
+			display_name: displayName,
+			alsa_card_id: cardId,
+		}));
+	}
+
+	test("resolved label equals display_name and passes isHumanAudioName", () => {
+		initMockService("multi-modem-wifi");
+		setMockAudioDevicesProvider(getMockAudioDevices);
+
+		const audioDevices = getMockAudioDevices();
+		const labels = resolveAudioLabels(
+			audioDevices,
+			engineAudioFromMock(audioDevices),
+			new Map(),
+		);
+
+		for (const [displayName, cardId] of Object.entries(audioDevices)) {
+			expect(isHumanAudioName(displayName, cardId)).toBe(true);
+			expect(labels.get(displayName)).toBe(displayName);
+		}
+		expect([...labels.values()]).toEqual(["RØDE AI-Micro", "Elgato Wave:3"]);
 	});
 });

@@ -69,10 +69,10 @@ describe("deriveAudioSources — typed audio-source model", () => {
 		);
 
 		const sources = deriveAudioSources();
-		const usb = sources.find((s) => s.id === "USB audio");
+		const usb = sources.find((s) => s.id === "RØDE AI-Micro");
 		const hdmi = sources.find((s) => s.id === "HDMI");
 
-		expect(usb).toEqual({ id: "USB audio", kind: "device" });
+		expect(usb).toEqual({ id: "RØDE AI-Micro", kind: "device" });
 		expect(hdmi).toEqual({ id: "HDMI", kind: "device" });
 		for (const device of sources.filter((s) => s.kind === "device")) {
 			expect(device.labelKey).toBeUndefined();
