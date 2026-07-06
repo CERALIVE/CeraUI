@@ -32,6 +32,7 @@ import {
 	setBitrateProcedure,
 	setConfigProcedure,
 	setMockHardwareProcedure,
+	setSourceVisibilityProcedure,
 	streamingStartProcedure,
 	streamingStopProcedure,
 	switchAudioProcedure,
@@ -90,6 +91,11 @@ const MUTATIONS: ReadonlyArray<{
 		args: { max_br: 5000 },
 	},
 	{ name: "setConfig", procedure: setConfigProcedure, args: { max_br: 5000 } },
+	{
+		name: "setSourceVisibility",
+		procedure: setSourceVisibilityProcedure,
+		args: { hide_test_pattern: true },
+	},
 	{
 		name: "switchInput",
 		procedure: switchInputProcedure,
