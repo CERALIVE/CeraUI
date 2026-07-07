@@ -22,8 +22,12 @@ import {
 	getLastCapabilities,
 	MINIMAL_SAFE_CAPABILITIES,
 } from "../../modules/streaming/capabilities.ts";
+import { fromEngineDevice } from "../../modules/streaming/devices.ts";
 import type { LinkTelemetryMessage } from "../../modules/streaming/link-telemetry.ts";
-import { getSourcesMessage } from "../../modules/streaming/sources.ts";
+import {
+	applyObservedDevicesAndBroadcast,
+	getSourcesMessage,
+} from "../../modules/streaming/sources.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
 import {
 	buildMockAudioDevices,
@@ -283,8 +287,14 @@ export function getMockEngineDevices(): ListDevicesResult {
 		return { devices: [] };
 	}
 	const { modes, displayNames } = resolveScenarioDeviceFixtures();
+	const detached = getMockState().detachedSources;
+	const attachedModes: MockDeviceModes = {};
+	for (const [id, group] of Object.entries(modes)) {
+		if (detached[id] === true) continue;
+		attachedModes[id] = group;
+	}
 	const audioDevices = getMockAudioDevices();
-	return expandDeviceModes(modes, displayNames, audioDevices);
+	return expandDeviceModes(attachedModes, displayNames, audioDevices);
 }
 
 /**
@@ -312,6 +322,45 @@ export function getMockAudioDevices(): MockAudioDevices {
 		default:
 			return {};
 	}
+}
+
+/**
+ * Dev/e2e seam: mark ONE scenario capture device attached/detached by its
+ * list-devices input_id, then re-fold the fresh device list into the
+ * engine-device cache and rebroadcast BOTH the `sources` and legacy `devices`
+ * snapshots in one combined transition (the SAME hotplug path the real registry
+ * uses — no second list-devices fetch). A detached id is filtered out of
+ * getMockEngineDevices(), so a device the session already observed surfaces as a
+ * `lost` row (todo 11) and the shared start/setConfig gate refuses it with
+ * `source_lost` (todo 12 parity) — NO mock-specific gate. Cleared by
+ * resetMockState() (detachedSources resets with the scenario). No-op unless the
+ * mock service is active (shouldUseMocks()), so production never invokes it.
+ */
+export function setMockDeviceAttached(
+	inputId: string,
+	attached: boolean,
+): void {
+	if (!shouldUseMocks()) {
+		return;
+	}
+	const detached = { ...getMockState().detachedSources };
+	if (attached) {
+		delete detached[inputId];
+	} else {
+		detached[inputId] = true;
+	}
+	updateMockState({ detachedSources: detached });
+	const observed = getMockEngineDevices().devices.map((d) =>
+		fromEngineDevice({
+			input_id: d.input_id,
+			device_path: d.device_path,
+			display_name: d.display_name,
+			media_class: d.media_class,
+			kind: d.kind,
+			caps: d.caps,
+		}),
+	);
+	applyObservedDevicesAndBroadcast(observed);
 }
 
 /**

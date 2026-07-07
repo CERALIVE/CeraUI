@@ -958,3 +958,18 @@ export const getMockHardwareOutputSchema = z.object({
 	availableHardware: z.array(mockHardwareTypeSchema),
 });
 export type GetMockHardwareOutput = z.infer<typeof getMockHardwareOutputSchema>;
+
+// Dev-only single-device unplug/replug seam (C7): detach/reattach ONE mock
+// capture device by its list-devices input_id so e2e can drive the `lost` grace
+// row (todo 11) + the `source_lost` start rejection (todo 12). No-op in prod.
+export const setMockDeviceAttachedInputSchema = z.object({
+	input_id: z.string().min(1),
+	attached: z.boolean(),
+});
+export type SetMockDeviceAttachedInput = z.infer<typeof setMockDeviceAttachedInputSchema>;
+
+export const setMockDeviceAttachedOutputSchema = z.object({
+	success: z.boolean(),
+	error: z.string().optional(),
+});
+export type SetMockDeviceAttachedOutput = z.infer<typeof setMockDeviceAttachedOutputSchema>;

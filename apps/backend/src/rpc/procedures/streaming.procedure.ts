@@ -23,6 +23,8 @@ import {
 	type StreamingConfigInput,
 	SWITCH_AUDIO_ERRORS,
 	type SwitchInputOutput,
+	setMockDeviceAttachedInputSchema,
+	setMockDeviceAttachedOutputSchema,
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
 	setSourceVisibilityInputSchema,
@@ -49,6 +51,7 @@ import {
 	clearMockStreamError,
 	getInjectedMockStreamError,
 	isMockGatewayActive,
+	setMockDeviceAttached,
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { reportActiveProfile } from "../../modules/remote-control/active-profile-reporter.ts";
@@ -655,6 +658,25 @@ export const setMockHardwareProcedure = authedProcedure
 			success: false,
 			error: `Invalid hardware type: ${input.hardware}`,
 		};
+	});
+
+/**
+ * Detach/reattach one mock capture device by input_id (dev-only). Drives the
+ * single-device unplug/replug seam so e2e can exercise the lost-row grace state
+ * and the shared source_lost start rejection.
+ */
+export const setMockDeviceAttachedProcedure = authedProcedure
+	.input(setMockDeviceAttachedInputSchema)
+	.output(setMockDeviceAttachedOutputSchema)
+	.handler(({ input }) => {
+		if (!shouldUseMocks()) {
+			return {
+				success: false,
+				error: "Mock device attach/detach only available in development mode",
+			};
+		}
+		setMockDeviceAttached(input.input_id, input.attached);
+		return { success: true };
 	});
 
 /**

@@ -52,6 +52,7 @@ import {
 	reloadAudioDelayProcedure,
 	setBitrateProcedure,
 	setConfigProcedure,
+	setMockDeviceAttachedProcedure,
 	setMockHardwareProcedure,
 	setSourceVisibilityProcedure,
 	streamHealthProcedure,
@@ -126,6 +127,8 @@ const stableRoutes = {
 		// Dev-only mock hardware switcher
 		setMockHardware: setMockHardwareProcedure,
 		getMockHardware: getMockHardwareProcedure,
+		// Dev-only single-device unplug/replug seam (C7)
+		setMockDeviceAttached: setMockDeviceAttachedProcedure,
 	}),
 
 	modems: base.router({

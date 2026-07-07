@@ -151,6 +151,10 @@ export interface MockState {
 	// Whether the mock MediaMTX config proves SRT is bound (NEW topology). Seeded
 	// false — dev SRT is OLD-topology by default. Resets with the scenario.
 	networkIngestMediamtxSrt: boolean;
+	// Per-device unplug flags for the single-device attach/detach seam (C7): an
+	// input_id present with `true` is DETACHED and filtered out of
+	// getMockEngineDevices(), so it surfaces as a `lost` row. Resets with the scenario.
+	detachedSources: Record<string, boolean>;
 }
 
 const mockState: MockState = {
@@ -188,6 +192,7 @@ const mockState: MockState = {
 	gatewayActive: {},
 	networkIngestActive: { rtmp: true, srt: true },
 	networkIngestMediamtxSrt: false,
+	detachedSources: {},
 };
 
 // Deep snapshot of `mockState` captured at the end of initMockService — the
@@ -259,6 +264,7 @@ export function initMockService(scenarioName?: string): void {
 	mockState.gatewayActive = {};
 	mockState.networkIngestActive = { rtmp: true, srt: true };
 	mockState.networkIngestMediamtxSrt = false;
+	mockState.detachedSources = {};
 	mockState.interfaceThroughput = {};
 	mockState.wifiModes = {};
 	lastEmittedModemFingerprint = null;
