@@ -109,7 +109,10 @@ describe("WifiSection — icon-only Switch-to-Hotspot trigger", () => {
 		const confirm = getAllByRole("button", { name: SWITCH_TO_HOTSPOT }).find(
 			(b) => b.closest('[role="alertdialog"]') !== null,
 		);
-		expect(confirm, "confirm action must exist in the open dialog").toBeTruthy();
+		expect(
+			confirm,
+			"confirm action must exist in the open dialog",
+		).toBeTruthy();
 		await fireEvent.click(confirm as HTMLElement);
 		await tick();
 		// Now the spinner placeholder is the sole Switch-to-Hotspot-named button.

@@ -162,7 +162,9 @@ describe("NetworkIngestDialog — test-pattern dispatch (b)", () => {
 		await fireEvent.click(testPatternToggle()); // hide → persist hide_test_pattern:true
 		await Promise.resolve();
 
-		expect(setSourceVisibility).toHaveBeenCalledWith({ hide_test_pattern: true });
+		expect(setSourceVisibility).toHaveBeenCalledWith({
+			hide_test_pattern: true,
+		});
 		expect(setSourceVisibility).toHaveBeenCalledOnce();
 
 		// Pessimistic: the position does NOT move on dispatch — it stays on the

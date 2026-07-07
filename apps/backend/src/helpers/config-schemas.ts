@@ -55,8 +55,8 @@ import {
 	relayProtocolSchema,
 	relayProviderMetaSchema,
 	resolverDecidedBySchema,
-	sourcesVisibilitySchema,
 	SRTLA_MIN_LATENCY_MS,
+	sourcesVisibilitySchema,
 	streamProfileIdSchema,
 	streamRecoveryPreferenceSchema,
 } from "@ceraui/rpc/schemas";

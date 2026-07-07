@@ -49,10 +49,7 @@ function wifiIface(overrides: Partial<WifiInterface> = {}): WifiInterface {
 // the per-row Connect renders regardless of `hasIp`.
 const RADIOS: [string, WifiInterface][] = [
 	["wifi0", wifiIface({ ifname: "wlan0", conn: "MyNet" })],
-	[
-		"wifi1",
-		wifiIface({ ifname: "wlan1", conn: undefined, available: [] }),
-	],
+	["wifi1", wifiIface({ ifname: "wlan1", conn: undefined, available: [] })],
 ];
 
 function renderSection(onConnect = vi.fn()) {
@@ -93,7 +90,9 @@ describe("WifiSection — per-interface Connect", () => {
 	it("(b) clicking a row's Connect calls onConnect with THAT row's device id", async () => {
 		const { getAllByTestId, onConnect } = renderSection();
 		const buttons = getAllByTestId("open-wifi-selector-dialog");
-		const second = buttons.find((b) => b.getAttribute("data-device") === "wifi1");
+		const second = buttons.find(
+			(b) => b.getAttribute("data-device") === "wifi1",
+		);
 		expect(second, "second row Connect button must exist").toBeTruthy();
 		await fireEvent.click(second as HTMLElement);
 		expect(onConnect).toHaveBeenCalledTimes(1);

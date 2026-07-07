@@ -311,7 +311,7 @@ let networkQrDataUrls = $state<Record<string, string>>({});
 $effect(() => {
 	let cancelled = false;
 	const next: Record<string, string> = {};
-	Promise.all(
+	void Promise.all(
 		networkSources.map(async (source) => {
 			if (!source.url) return;
 			try {

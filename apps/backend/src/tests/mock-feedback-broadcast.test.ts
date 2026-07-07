@@ -53,7 +53,9 @@ class FakeMonitor implements IMonitorEmitter {
 type StatusPayload = Record<string, unknown>;
 
 /** Authed fake client that decodes and records every broadcast it receives. */
-function makeRecordingClient(sink: Array<Record<string, unknown>>): AppWebSocket {
+function makeRecordingClient(
+	sink: Array<Record<string, unknown>>,
+): AppWebSocket {
 	return {
 		data: { isAuthenticated: true, lastActive: Date.now() },
 		send: (msg: string) => {
@@ -66,9 +68,7 @@ function makeRecordingClient(sink: Array<Record<string, unknown>>): AppWebSocket
 	} as unknown as AppWebSocket;
 }
 
-function statusPayloads(
-	sink: Array<Record<string, unknown>>,
-): StatusPayload[] {
+function statusPayloads(sink: Array<Record<string, unknown>>): StatusPayload[] {
 	return sink
 		.filter((m) => "status" in m)
 		.map((m) => m.status as StatusPayload);

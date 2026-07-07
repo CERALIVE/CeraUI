@@ -35,9 +35,7 @@ export type SourcesVisibility = z.infer<typeof sourcesVisibilitySchema>;
 export const setSourceVisibilityInputSchema = z.object({
 	hide_test_pattern: z.boolean(),
 });
-export type SetSourceVisibilityInput = z.infer<
-	typeof setSourceVisibilityInputSchema
->;
+export type SetSourceVisibilityInput = z.infer<typeof setSourceVisibilityInputSchema>;
 
 /**
  * Output for `streaming.setSourceVisibility` — the applied-state envelope every
@@ -49,6 +47,4 @@ export const setSourceVisibilityOutputSchema = z.object({
 	applied: setSourceVisibilityInputSchema.optional(),
 	error: z.string().optional(),
 });
-export type SetSourceVisibilityOutput = z.infer<
-	typeof setSourceVisibilityOutputSchema
->;
+export type SetSourceVisibilityOutput = z.infer<typeof setSourceVisibilityOutputSchema>;

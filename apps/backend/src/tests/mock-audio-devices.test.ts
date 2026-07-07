@@ -6,15 +6,15 @@ import { initMockService, stopMockService } from "../mocks/mock-service.ts";
 import { getMockAudioDevices } from "../mocks/providers/streaming.ts";
 import { getConfig } from "../modules/config.ts";
 import {
-	type EngineAudioDevice,
-	isHumanAudioName,
-	resolveAudioLabels,
-} from "../modules/streaming/audio-naming.ts";
-import {
 	getAudioDevices,
 	setMockAudioDevicesProvider,
 	warnIfConfiguredAudioSourceUnavailable,
 } from "../modules/streaming/audio.ts";
+import {
+	type EngineAudioDevice,
+	isHumanAudioName,
+	resolveAudioLabels,
+} from "../modules/streaming/audio-naming.ts";
 
 const ENV_KEYS = ["MOCK_MODE", "MOCK_SCENARIO", "NODE_ENV"] as const;
 const savedEnv: Record<string, string | undefined> = {};

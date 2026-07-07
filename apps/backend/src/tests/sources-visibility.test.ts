@@ -31,17 +31,15 @@ import {
 	type GetCapabilitiesResult,
 	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
+import type { NetworkIngest } from "@ceraui/rpc/schemas";
 import {
 	setSourceVisibilityInputSchema,
 	sourcesVisibilitySchema,
 	streamingConfigInputSchema,
 } from "@ceraui/rpc/schemas";
-import type { NetworkIngest } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
-import {
-	runtimeConfigSchema,
-} from "../helpers/config-schemas.ts";
+import { runtimeConfigSchema } from "../helpers/config-schemas.ts";
 import {
 	initMockService,
 	resetMockState,
@@ -74,7 +72,8 @@ function capSource(
 	return {
 		id,
 		supports_audio: overrides.supports_audio ?? false,
-		supports_resolution_override: overrides.supports_resolution_override ?? true,
+		supports_resolution_override:
+			overrides.supports_resolution_override ?? true,
 		supports_framerate_override: overrides.supports_framerate_override ?? true,
 		default_resolution: overrides.default_resolution ?? "1080p",
 		default_framerate: overrides.default_framerate ?? 30,
@@ -382,9 +381,7 @@ describe("streaming.setSourceVisibility RPC — persist + rebroadcast", () => {
 			const broadcastSourcesList = (
 				sourcesFrame?.sources as { sources: Array<Record<string, unknown>> }
 			).sources;
-			const broadcastTest = broadcastSourcesList.find(
-				(s) => s.id === "test",
-			);
+			const broadcastTest = broadcastSourcesList.find((s) => s.id === "test");
 			expect(broadcastTest?.available).toBe(false);
 			expect(broadcastTest?.unavailableReason).toBe(
 				DISABLED_IN_SETTINGS_REASON,
