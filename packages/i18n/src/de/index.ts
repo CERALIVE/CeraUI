@@ -368,6 +368,10 @@ const de = {
 				"Die ausgewählte Audioquelle wurde nicht rechtzeitig verfügbar. Schließe sie erneut an oder wähle eine andere Quelle und versuche es erneut.",
 			audio_codec_unsupported_transport:
 				"Dieser Audio-Codec wird vom aktuellen Transport nicht unterstützt. Stelle den Audio-Codec auf AAC und versuche es erneut.",
+			source_lost:
+				"Die ausgewählte Quelle wurde getrennt. Schließe sie wieder an oder wähle eine andere Quelle und versuche es erneut.",
+			source_unavailable:
+				"Die ausgewählte Quelle ist derzeit nicht verfügbar. Wähle eine andere Quelle oder überprüfe ihre Einstellungen und versuche es erneut.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

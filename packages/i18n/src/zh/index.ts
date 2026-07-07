@@ -887,6 +887,8 @@ const zh = {
 			pipeline_stall: "启动时输入源停滞。请检查输入源后重试。",
 			audio_source_probe_failed: "所选音频源未及时上线。请重新连接或选择其他音频源后重试。",
 			audio_codec_unsupported_transport: "当前传输方式不支持此音频编解码器。请将音频编解码器切换为 AAC 后重试。",
+			source_lost: "所选源已断开连接。请重新连接或选择其他源后重试。",
+			source_unavailable: "所选源当前不可用。请选择其他源或检查其设置后重试。",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

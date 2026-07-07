@@ -82,6 +82,7 @@ import {
 	getSourcesMessage,
 	type ResolveSourceRoutingResult,
 	resolveSourceRouting,
+	UNKNOWN_SOURCE_ERROR,
 } from "../../modules/streaming/sources.ts";
 import {
 	getIsStreaming,
@@ -153,7 +154,17 @@ export const streamingStartProcedure = authedProcedure
 					getSourcesMessage().sources,
 				);
 				if (!routed.ok) {
-					return { success: false, is_streaming: false, error: routed.error };
+					// source_lost / source_unavailable carry `reason` too (same code) so
+					// LiveView's reason→startFailed.* lookup renders specific copy;
+					// unknown_source stays error-only (its semantics are unchanged).
+					return {
+						success: false,
+						is_streaming: false,
+						error: routed.error,
+						...(routed.error === UNKNOWN_SOURCE_ERROR
+							? {}
+							: { reason: routed.error }),
+					};
 				}
 				applied.pipeline = routed.pipeline;
 				applied.selected_video_input = routed.selected_video_input;

@@ -1096,6 +1096,10 @@ const ptBR = {
 				"A fonte de áudio selecionada não ficou disponível a tempo. Reconecte-a ou escolha outra fonte e tente novamente.",
 			audio_codec_unsupported_transport:
 				"Este codec de áudio não é compatível com o transporte atual. Altere o codec de áudio para AAC e tente novamente.",
+			source_lost:
+				"A fonte selecionada foi desconectada. Reconecte-a ou escolha outra fonte e tente novamente.",
+			source_unavailable:
+				"A fonte selecionada não está disponível no momento. Escolha outra fonte ou verifique suas configurações e tente novamente.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

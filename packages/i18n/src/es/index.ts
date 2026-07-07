@@ -368,6 +368,10 @@ const es = {
 				"La fuente de audio seleccionada no se conectó a tiempo. Vuelve a conectarla o elige otra fuente e inténtalo de nuevo.",
 			audio_codec_unsupported_transport:
 				"Este códec de audio no es compatible con el transporte actual. Cambia el códec de audio a AAC e inténtalo de nuevo.",
+			source_lost:
+				"La fuente seleccionada se desconectó. Vuelve a conectarla o elige otra fuente e inténtalo de nuevo.",
+			source_unavailable:
+				"La fuente seleccionada no está disponible ahora mismo. Elige otra fuente o comprueba su configuración e inténtalo de nuevo.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

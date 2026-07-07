@@ -443,20 +443,43 @@ export function deriveEngineRouting(
 }
 
 export const UNKNOWN_SOURCE_ERROR = "unknown_source";
+// A remembered capture row (C7 `lost:true`) — the device was unplugged and is no
+// longer in the current engine list. Refused at the dispatch choke point.
+export const SOURCE_LOST_ERROR = "source_lost";
+// A listed-but-unavailable source (`available:false` without `lost`): an
+// operator-disabled / gateway-down network row, or a hidden test pattern.
+export const SOURCE_UNAVAILABLE_ERROR = "source_unavailable";
 
 export type ResolveSourceRoutingResult =
 	| { ok: true; pipeline: string; selected_video_input: string | undefined }
-	| { ok: false; error: typeof UNKNOWN_SOURCE_ERROR };
+	| {
+			ok: false;
+			error:
+				| typeof UNKNOWN_SOURCE_ERROR
+				| typeof SOURCE_LOST_ERROR
+				| typeof SOURCE_UNAVAILABLE_ERROR;
+	  };
 
-// Procedure-layer wrapper over deriveEngineRouting. Unknown id → `unknown_source`
-// so the procedure rejects with disk unchanged (session.start swallows
-// updateConfig errors, so this must be enforced here, never deeper). Known id →
-// routing whose `selected_video_input` is the capture input_id, or `undefined`
-// (config-clear) for coarse/virtual/network — clearing a stale capture input.
+// Procedure-layer wrapper over deriveEngineRouting. Reads the CURRENT sources
+// snapshot at dispatch time, so a re-listed (recovered) device passes; every
+// rejection leaves disk unchanged (session.start swallows updateConfig errors, so
+// it must be enforced here). The `lost` check MUST precede the `available` check —
+// a lost row is ALSO available:false, and it needs the distinct `source_lost`
+// code. Absent → `unknown_source` (semantics unchanged). Never mutates config.
 export function resolveSourceRouting(
 	sourceId: string,
 	sources: readonly StreamSource[],
 ): ResolveSourceRoutingResult {
+	const source = sources.find((s) => s.id === sourceId);
+	if (source === undefined) {
+		return { ok: false, error: UNKNOWN_SOURCE_ERROR };
+	}
+	if (source.lost === true) {
+		return { ok: false, error: SOURCE_LOST_ERROR };
+	}
+	if (source.available === false) {
+		return { ok: false, error: SOURCE_UNAVAILABLE_ERROR };
+	}
 	const routing = deriveEngineRouting(sourceId, sources);
 	if (routing === undefined) {
 		return { ok: false, error: UNKNOWN_SOURCE_ERROR };

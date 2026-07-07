@@ -355,6 +355,10 @@ const en = {
 				"The selected audio source didn't come online in time. Reconnect it or choose another source, then try again.",
 			audio_codec_unsupported_transport:
 				"This audio codec isn't supported over the current transport. Switch the audio codec to AAC, then try again.",
+			source_lost:
+				"The selected source was disconnected. Reconnect it or choose another source, then try again.",
+			source_unavailable:
+				"The selected source isn't available right now. Choose another source or check its settings, then try again.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

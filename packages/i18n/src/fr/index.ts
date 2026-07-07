@@ -1120,6 +1120,10 @@ const fr = {
 				"La source audio sélectionnée n'est pas apparue à temps. Reconnectez-la ou choisissez une autre source, puis réessayez.",
 			audio_codec_unsupported_transport:
 				"Ce codec audio n'est pas pris en charge par le transport actuel. Réglez le codec audio sur AAC, puis réessayez.",
+			source_lost:
+				"La source sélectionnée a été déconnectée. Reconnectez-la ou choisissez une autre source, puis réessayez.",
+			source_unavailable:
+				"La source sélectionnée n'est pas disponible pour le moment. Choisissez une autre source ou vérifiez ses réglages, puis réessayez.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

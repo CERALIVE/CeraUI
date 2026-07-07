@@ -242,16 +242,40 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 	});
 
 	describe("operator-disabled desired-state parity (Task 7)", () => {
-		test("config.source=rtmp + rtmp disabled-in-Settings → start returns the gateway error, NOT unknown_source (source stays visible)", async () => {
+		test("config.source=rtmp while rtmp is unavailable → the device-first availability check rejects with source_unavailable (C7 precedes the gateway gate), NOT unknown_source (source stays visible)", async () => {
 			getConfig().source = "rtmp";
 			getConfig().network_ingest = { rtmp_enabled: false, srt_enabled: true };
-			// Flip the mock UNIT flag ON: desired-state must still override it, so the
-			// mock gate can never diverge from the real probe (buildGatewayProbe).
 			setMockGatewayActive("rtmp", true);
 
 			const result = await call(
 				streamingStartProcedure,
 				{},
+				{ context: makeContext() },
+			);
+
+			// The config.source path resolves through getSourcesMessage, where an
+			// unavailable rtmp row is available:false — so resolveSourceRouting (C7)
+			// rejects with source_unavailable before the pipeline gateway gate is
+			// reached. Still a refusal, still not unknown_source (Metis #7).
+			expect(result).toEqual({
+				success: false,
+				is_streaming: false,
+				error: "source_unavailable",
+				reason: "source_unavailable",
+			});
+		});
+
+		test("the gateway gate's three-mirror parity still holds on the pipeline path: {pipeline:rtmp} + rtmp disabled-in-Settings + unit flag ON → GATEWAY_INACTIVE_ERROR", async () => {
+			getConfig().network_ingest = { rtmp_enabled: false, srt_enabled: true };
+			// Flip the mock UNIT flag ON: desired-state must still override it, so the
+			// mock gate can never diverge from the real probe (buildGatewayProbe). The
+			// pipeline path carries no config.source, so resolveSourceRouting is
+			// skipped and the gateway gate is the one that fires.
+			setMockGatewayActive("rtmp", true);
+
+			const result = await call(
+				streamingStartProcedure,
+				{ pipeline: "rtmp" },
 				{ context: makeContext() },
 			);
 
