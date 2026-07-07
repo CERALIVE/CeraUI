@@ -989,7 +989,14 @@ test.describe("Capability truthfulness (functional)", () => {
 	}) => {
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
-		serverConfig();
+		// Clear the seed's stale managed binding: the shared backend seed ships
+		// `relay_server: "srv-eu"`, an id ABSENT from the mock relay catalog. Config
+		// frames MERGE, so a bare serverConfig() leaves it in place and — once the
+		// catalog is delivered to the page — the C7 destination gate correctly WARNS
+		// on the stale server, making the Destination row `warn`, not `ok`. This test
+		// asserts an all-green custom (srtla_addr) endpoint, so it must clear the
+		// inherited managed binding (mirrors the `source: ""` reset the C3 test uses).
+		serverConfig({ relay_server: "" });
 		// BLOCKED: TWO capture sources and NO config.source → no sole-camera auto →
 		// the source gate blocks; it projects onto the ENCODER row, so that row is
 		// blocked and Start is disabled + reason (rows are always rendered — no collapse).
