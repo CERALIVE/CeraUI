@@ -45,6 +45,7 @@ import {
 	AUDIO_SOURCE_AUTO,
 	type DetectionMethod,
 	detectionMethodSchema,
+	deviceKindSchema,
 	isNamespacedRelayId,
 	kioskDisplaySchema,
 	kioskPerformanceSchema,
@@ -140,6 +141,21 @@ export const balancerSchema = z.enum(["adaptive", "fixed", "aimd"]);
 
 export type Balancer = z.infer<typeof balancerSchema>;
 
+// One persisted last-seen capture-device snapshot (C7 lost-device retention),
+// carrying exactly the fields `captureSourceSchema` needs to synthesize a `lost`
+// row: `devicePath` is REQUIRED there, and `pipelineId` is the
+// `deviceKindToPipelineId()` bridge resolved at observation time (only bridgeable
+// video devices are ever snapshotted).
+export const lastSeenDeviceSchema = z.object({
+	id: z.string(),
+	displayName: z.string(),
+	kind: deviceKindSchema,
+	pipelineId: z.string(),
+	devicePath: z.string(),
+});
+
+export type LastSeenDevice = z.infer<typeof lastSeenDeviceSchema>;
+
 export const runtimeConfigSchema = z.object({
 	// Authentication
 	password: z.string().optional(),
@@ -207,6 +223,12 @@ export const runtimeConfigSchema = z.object({
 	// first). Persisted so a device-first reorder survives reload; setConfig
 	// writes it, getConfig echoes it. Additive-optional.
 	source_preference: z.array(z.string()).optional(),
+	// Last-seen capture-device snapshots (C7): deduped-by-id, LRU-capped at 12
+	// with the current `config.source` id eviction-exempt. Serves the
+	// across-restart lost-row case (a configured device unplugged before boot);
+	// an in-session lost row is served by the uncapped in-memory session map, not
+	// this list. Additive-optional; defaults `[]` so old configs parse.
+	last_seen_devices: z.array(lastSeenDeviceSchema).optional(),
 	autostart: z.boolean().optional(),
 
 	// Remote/cloud settings
@@ -277,6 +299,7 @@ export const RUNTIME_CONFIG_DEFAULTS: Partial<RuntimeConfig> = {
 	kiosk_motion: true,
 	kiosk_performance: "balanced",
 	addons: {},
+	last_seen_devices: [],
 };
 
 export const DEFAULT_RELAY_PROVIDER_ID = "ceralive";
