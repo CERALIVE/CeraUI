@@ -1289,6 +1289,7 @@ const ptBR = {
 			audioFollows: "O áudio seguirá {label} ao reiniciar",
 			switchTitle: "Trocar fonte",
 			autoPrefix: "Automático",
+			autoResolvedSep: "— atualmente:",
 		},
 		transcode: {
 			chip: "Entrada {input} \u2192 Saída {output}",
@@ -1327,7 +1328,7 @@ const ptBR = {
 				},
 				audio: {
 					title: "Áudio",
-					body: "A entrada de áudio e o codec incluídos na transmissão. As fontes disponíveis vêm do pipeline de vídeo selecionado; um pipeline sem suporte a áudio oculta estes controles.",
+					body: "O áudio incluído na sua transmissão, em três opções. Automático escolhe o melhor microfone ou o áudio incorporado para a fonte selecionada; Padrão da fonte usa o áudio integrado do motor para este pipeline; escolher um dispositivo nomeado sempre usa esse dispositivo. As fontes disponíveis vêm do pipeline de vídeo selecionado.",
 				},
 			},
 			tier: {
@@ -1609,7 +1610,7 @@ const ptBR = {
 		sources: {
 			noAudio: "Sem áudio",
 			auto: "Automático (segue a fonte)",
-			pipelineDefault: "Padrão do pipeline",
+			pipelineDefault: "Padrão da fonte (o motor decide)",
 		},
 	},
 } satisfies Translation;

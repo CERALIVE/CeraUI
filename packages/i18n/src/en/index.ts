@@ -543,6 +543,7 @@ const en = {
 			audioFollows: "Audio follows {label:string} on restart",
 			switchTitle: "Switch source",
 			autoPrefix: "Auto",
+			autoResolvedSep: "— currently:",
 		},
 		transcode: {
 			chip: "In {input:string} \u2192 Out {output:string}",
@@ -581,7 +582,7 @@ const en = {
 				},
 				audio: {
 					title: "Audio",
-					body: "The audio input and codec folded into the stream. Available sources come from the selected video pipeline; a pipeline without audio support hides these controls.",
+					body: "The audio folded into your stream, in three choices. Auto picks the best microphone or embedded audio for the selected source; Source default uses the engine's built-in audio for this pipeline; a named device always uses that exact device. Available sources come from the selected video pipeline.",
 				},
 			},
 			tier: {
@@ -1588,7 +1589,7 @@ const en = {
 		sources: {
 			noAudio: "No audio",
 			auto: "Auto (follows source)",
-			pipelineDefault: "Pipeline default",
+			pipelineDefault: "Source default (engine decides)",
 		},
 	},
 } satisfies BaseTranslation;

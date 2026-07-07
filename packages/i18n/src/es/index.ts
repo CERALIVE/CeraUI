@@ -561,6 +561,7 @@ const es = {
 			audioFollows: "El audio seguirá a {label} al reiniciar",
 			switchTitle: "Cambiar fuente",
 			autoPrefix: "Automático",
+			autoResolvedSep: "— actualmente:",
 		},
 		transcode: {
 			chip: "Entrada {input} \u2192 Salida {output}",
@@ -600,7 +601,7 @@ const es = {
 				},
 				audio: {
 					title: "Audio",
-					body: "La entrada de audio y el códec incluidos en la transmisión. Las fuentes disponibles provienen del pipeline de vídeo seleccionado; un pipeline sin audio oculta estos controles.",
+					body: "El audio incluido en tu transmisión, con tres opciones. Automático elige el mejor micrófono o el audio integrado para la fuente seleccionada; Predeterminado de la fuente usa el audio integrado del motor para este pipeline; elegir un dispositivo con nombre siempre usa ese dispositivo. Las fuentes disponibles provienen del pipeline de vídeo seleccionado.",
 				},
 			},
 			tier: {
@@ -1623,7 +1624,7 @@ const es = {
 		sources: {
 			noAudio: "Sin audio",
 			auto: "Automático (sigue la fuente)",
-			pipelineDefault: "Predeterminado de la canalización",
+			pipelineDefault: "Predeterminado de la fuente (decide el motor)",
 		},
 	},
 } satisfies Translation;

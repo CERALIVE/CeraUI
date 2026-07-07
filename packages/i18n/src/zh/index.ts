@@ -1069,6 +1069,7 @@ const zh = {
 			audioFollows: "重启后音频将切换到 {label}",
 			switchTitle: "切换源",
 			autoPrefix: "自动",
+			autoResolvedSep: "— 当前：",
 		},
 		transcode: {
 			chip: "输入 {input} \u2192 输出 {output}",
@@ -1107,7 +1108,7 @@ const zh = {
 				},
 				audio: {
 					title: "音频",
-					body: "并入流中的音频输入和编解码器。可用来源来自所选的视频管线；不支持音频的管线会隐藏这些控件。",
+					body: "并入流中的音频，共三种选择。“自动”为所选来源挑选最佳麦克风或内嵌音频；“来源默认”使用引擎为该管线内置的音频；选择某个具名设备则始终使用该设备。可用来源来自所选的视频管线。",
 				},
 			},
 			tier: {
@@ -1506,7 +1507,7 @@ const zh = {
 		sources: {
 			noAudio: "无音频",
 			auto: "自动（跟随信号源）",
-			pipelineDefault: "管道默认",
+			pipelineDefault: "来源默认（由引擎决定）",
 		},
 	},
 } satisfies Translation;

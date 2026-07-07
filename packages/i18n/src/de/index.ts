@@ -559,6 +559,7 @@ const de = {
 			audioFollows: "Ton folgt {label} beim Neustart",
 			switchTitle: "Quelle wechseln",
 			autoPrefix: "Automatisch",
+			autoResolvedSep: "— aktuell:",
 		},
 		transcode: {
 			chip: "Eingang {input} \u2192 Ausgang {output}",
@@ -597,7 +598,7 @@ const de = {
 				},
 				audio: {
 					title: "Audio",
-					body: "Der Audioeingang und der Codec, die in den Stream eingebunden werden. Verfügbare Quellen stammen aus der gewählten Video-Pipeline; eine Pipeline ohne Audio-Unterstützung blendet diese Steuerelemente aus.",
+					body: "Der in deinen Stream eingebundene Ton, mit drei Optionen. Automatisch wählt das beste Mikrofon oder den eingebetteten Ton für die gewählte Quelle; Quellenstandard nutzt den in der Engine integrierten Ton für diese Pipeline; ein benanntes Gerät verwendet immer genau dieses Gerät. Verfügbare Quellen stammen aus der gewählten Video-Pipeline.",
 				},
 			},
 			tier: {
@@ -1620,7 +1621,7 @@ const de = {
 		sources: {
 			noAudio: "Kein Audio",
 			auto: "Auto (folgt der Quelle)",
-			pipelineDefault: "Pipeline-Standard",
+			pipelineDefault: "Quellenstandard (Engine entscheidet)",
 		},
 	},
 } satisfies Translation;

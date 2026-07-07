@@ -692,6 +692,7 @@ describe("resolvedAudioLabel — single-owner resolved-audio display (T6)", () =
 	const t = (key: string) => {
 		if (key === "audio.sources.pipelineDefault") return "Pipeline default";
 		if (key === "live.summary.autoPrefix") return "Auto";
+		if (key === "live.summary.autoResolvedSep") return "\u2014 currently:";
 		return key;
 	};
 	const ENTRIES: AudioSource[] = [
@@ -699,14 +700,14 @@ describe("resolvedAudioLabel — single-owner resolved-audio display (T6)", () =
 		{ id: "HDMI", kind: "device", label: "Rockchip HDMI-in" },
 	];
 
-	it("renders 'Auto → {label}' when Auto is active and resolved (T4 label wins)", () => {
+	it("renders 'Auto — currently: {label}' when Auto is active and resolved (T4 label wins)", () => {
 		const r = resolvedAudioLabel(
 			{ asrc: AUDIO_SOURCE_AUTO },
 			{ resolved_asrc: "HDMI", resolved_asrc_reason: "hdmi" },
 			ENTRIES,
 			t,
 		);
-		expect(r.current).toBe("Auto \u2192 Rockchip HDMI-in");
+		expect(r.current).toBe("Auto \u2014 currently: Rockchip HDMI-in");
 		expect(r.embedded).toBe(false);
 		expect(r.pending).toBeUndefined();
 	});
@@ -718,7 +719,7 @@ describe("resolvedAudioLabel — single-owner resolved-audio display (T6)", () =
 			ENTRIES,
 			t,
 		);
-		expect(r.current).toBe("Auto \u2192 Analog in");
+		expect(r.current).toBe("Auto \u2014 currently: Analog in");
 	});
 
 	it("STALE-VALUE GATE: an explicit pick never renders a leftover resolved_asrc", () => {
@@ -800,6 +801,7 @@ describe("source×audio mixture matrix (M1–M6) — display derivation", () => 
 	const t = (key: string) => {
 		if (key === "audio.sources.pipelineDefault") return "Pipeline default";
 		if (key === "live.summary.autoPrefix") return "Auto";
+		if (key === "live.summary.autoResolvedSep") return "\u2014 currently:";
 		return key;
 	};
 	const ENTRIES: AudioSource[] = [
@@ -838,7 +840,7 @@ describe("source×audio mixture matrix (M1–M6) — display derivation", () => 
 		);
 	});
 
-	it("M3: dual-USB Auto resolves to the cam's own audio → 'Auto → RØDE Streamer Mic'", () => {
+	it("M3: dual-USB Auto resolves to the cam's own audio → 'Auto — currently: RØDE Streamer Mic'", () => {
 		const r = resolvedAudioLabel(
 			{ asrc: AUDIO_SOURCE_AUTO },
 			{
@@ -848,17 +850,17 @@ describe("source×audio mixture matrix (M1–M6) — display derivation", () => 
 			ENTRIES,
 			t,
 		);
-		expect(r.current).toBe("Auto \u2192 RØDE Streamer Mic");
+		expect(r.current).toBe("Auto \u2014 currently: RØDE Streamer Mic");
 	});
 
-	it("M4: HDMI video → 'Auto → {hardware label}' (T4 label wins)", () => {
+	it("M4: HDMI video → 'Auto — currently: {hardware label}' (T4 label wins)", () => {
 		const r = resolvedAudioLabel(
 			{ asrc: AUDIO_SOURCE_AUTO },
 			{ resolved_asrc: "HDMI", resolved_asrc_reason: "hdmi" },
 			ENTRIES,
 			t,
 		);
-		expect(r.current).toBe("Auto \u2192 Rockchip HDMI-in");
+		expect(r.current).toBe("Auto \u2014 currently: Rockchip HDMI-in");
 	});
 
 	it("M5: a disappeared selection is SURFACED, not hidden (notAvailable pill source)", () => {
@@ -870,7 +872,7 @@ describe("source×audio mixture matrix (M1–M6) — display derivation", () => 
 		).toBe("USB audio");
 	});
 
-	it("M6: test-pattern/virtual → pipeline default → 'Auto → Pipeline default'", () => {
+	it("M6: test-pattern/virtual → source default → 'Auto — currently: Pipeline default'", () => {
 		const r = resolvedAudioLabel(
 			{ asrc: AUDIO_SOURCE_AUTO },
 			{
@@ -880,6 +882,6 @@ describe("source×audio mixture matrix (M1–M6) — display derivation", () => 
 			ENTRIES,
 			t,
 		);
-		expect(r.current).toBe("Auto \u2192 Pipeline default");
+		expect(r.current).toBe("Auto \u2014 currently: Pipeline default");
 	});
 });

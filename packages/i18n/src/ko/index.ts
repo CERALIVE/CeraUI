@@ -1129,6 +1129,7 @@ const ko = {
 			audioFollows: "재시작 시 오디오가 {label}(으)로 전환됩니다",
 			switchTitle: "소스 전환",
 			autoPrefix: "자동",
+			autoResolvedSep: "— 현재:",
 		},
 		transcode: {
 			chip: "입력 {input} \u2192 출력 {output}",
@@ -1167,7 +1168,7 @@ const ko = {
 				},
 				audio: {
 					title: "오디오",
-					body: "스트림에 포함되는 오디오 입력과 코덱입니다. 사용 가능한 소스는 선택한 비디오 파이프라인에서 제공되며, 오디오를 지원하지 않는 파이프라인에서는 이 컨트롤이 숨겨집니다.",
+					body: "스트림에 포함되는 오디오로, 세 가지 선택지가 있습니다. '자동'은 선택한 소스에 가장 적합한 마이크나 내장 오디오를 선택합니다. '소스 기본값'은 이 파이프라인에 대한 엔진 내장 오디오를 사용합니다. 이름이 지정된 장치를 선택하면 항상 해당 장치를 사용합니다. 사용 가능한 소스는 선택한 비디오 파이프라인에서 제공됩니다.",
 				},
 			},
 			tier: {
@@ -1562,7 +1563,7 @@ const ko = {
 		sources: {
 			noAudio: "오디오 없음",
 			auto: "자동 (소스 따라가기)",
-			pipelineDefault: "파이프라인 기본값",
+			pipelineDefault: "소스 기본값 (엔진이 결정)",
 		},
 	},
 } satisfies Translation;
