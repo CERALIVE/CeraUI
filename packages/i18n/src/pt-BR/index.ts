@@ -235,6 +235,8 @@ const ptBR = {
 			streaming: "Pare a transmissão para alterar o codec de áudio",
 			noSource: "Selecione primeiro uma fonte de áudio",
 		},
+		audioCodecUnsupportedTransport:
+			"Este codec não é compatível com o transporte atual",
 		destination: "Destino",
 		destinationManaged: "Minha conta na nuvem",
 		destinationCustom: "Receptor personalizado",

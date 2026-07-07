@@ -220,6 +220,7 @@ const ar = {
 			streaming: "أوقف البث لتغيير ترميز الصوت",
 			noSource: "اختر مصدر الصوت أولاً",
 		},
+		audioCodecUnsupportedTransport: "هذا الترميز غير مدعوم عبر وسيلة النقل الحالية",
 		destination: "الوجهة",
 		destinationManaged: "حسابي السحابي",
 		destinationCustom: "مستقبِل مخصّص",

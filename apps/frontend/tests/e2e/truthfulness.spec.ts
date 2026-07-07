@@ -1084,4 +1084,35 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(page.locator('[data-testid="mode-presets"]')).toHaveCount(0);
 		await expect(page.locator('[data-testid="encoder-preset"]')).toHaveCount(0);
 	});
+
+	// ── (a, C5) Opus is disabled-with-reason over an MPEG-TS transport; AAC stays on ─
+	// Transport × audio-codec truthfulness (coherence-contract-pass todo 21): every
+	// relay transport CeraUI egresses over is an MPEG-TS carrier proven out only for
+	// AAC, so the AudioDialog codec picker renders Opus DISABLED with a non-empty
+	// reason (never hidden) while AAC stays selectable. Effective transport floors to
+	// srtla, matching the backend streaming.start gate.
+	test("the Opus audio codec is disabled-with-reason over srtla while AAC stays enabled", async ({
+		page,
+	}) => {
+		// An active audio source + a known srtla destination: the codec select is
+		// enabled (so it opens) and the gate has a transport to evaluate against.
+		serverConfig({ asrc: "USB audio", relay_protocol: "srtla" });
+		send(GENERIC_PIPELINES);
+		sendFullCaps();
+
+		await openConfigDialog(page, "open-audio-dialog");
+		const dialog = page.getByRole("dialog", { name: "Audio Settings" });
+		await expect(dialog).toBeVisible({ timeout: 15_000 });
+
+		await dialog.locator("#audioCodec").click();
+
+		const opus = page.getByRole("option", { name: "Opus" });
+		const aac = page.getByRole("option", { name: "AAC" });
+		await expect(opus).toBeVisible();
+		// Opus: disabled WITH a non-empty reason (never hidden).
+		await expect(opus).toHaveAttribute("aria-disabled", "true");
+		await expect(opus).toHaveAttribute("title", /\S/);
+		// AAC: the one proven codec — genuinely selectable, no disabled reason.
+		await expect(aac).not.toHaveAttribute("aria-disabled", "true");
+	});
 });

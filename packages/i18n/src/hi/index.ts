@@ -82,6 +82,8 @@ const hi = {
 			streaming: "ऑडियो कोडेक बदलने के लिए स्ट्रीम रोकें",
 			noSource: "पहले एक ऑडियो स्रोत चुनें",
 		},
+		audioCodecUnsupportedTransport:
+			"यह कोडेक वर्तमान ट्रांसपोर्ट पर समर्थित नहीं है",
 		destination: "गंतव्य",
 		destinationManaged: "मेरा क्लाउड खाता",
 		destinationCustom: "कस्टम रिसीवर",

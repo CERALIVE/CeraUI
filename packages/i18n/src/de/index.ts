@@ -730,6 +730,8 @@ const de = {
 			streaming: "Stream beenden, um den Audio-Codec zu ändern",
 			noSource: "Zuerst eine Audioquelle auswählen",
 		},
+		audioCodecUnsupportedTransport:
+			"Dieser Codec wird vom aktuellen Transport nicht unterstützt",
 		destination: "Ziel",
 		destinationManaged: "Mein Cloud-Konto",
 		destinationCustom: "Eigener Empfänger",

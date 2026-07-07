@@ -81,6 +81,7 @@ const zh = {
 			streaming: "停止推流后才能更改音频编解码器",
 			noSource: "请先选择音频源",
 		},
+		audioCodecUnsupportedTransport: "当前传输方式不支持此编解码器",
 		destination: "目标",
 		destinationManaged: "我的云账户",
 		destinationCustom: "自定义接收器",

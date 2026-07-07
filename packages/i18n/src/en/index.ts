@@ -729,6 +729,8 @@ const en = {
 			streaming: "Stop the stream to change the audio codec",
 			noSource: "Select an audio source first",
 		},
+		audioCodecUnsupportedTransport:
+			"This codec isn't supported over the current transport",
 		destination: "Destination",
 		destinationManaged: "My cloud account",
 		destinationCustom: "Custom receiver",

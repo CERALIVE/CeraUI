@@ -742,6 +742,8 @@ const es = {
 			streaming: "Detén la transmisión para cambiar el códec de audio",
 			noSource: "Selecciona primero una fuente de audio",
 		},
+		audioCodecUnsupportedTransport:
+			"Este códec no es compatible con el transporte actual",
 		destination: "Destino",
 		destinationManaged: "Mi cuenta en la nube",
 		destinationCustom: "Receptor personalizado",

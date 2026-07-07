@@ -35,7 +35,10 @@ import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
-import { streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
+import {
+	audioCodecAllowedForTransport,
+	streamingConstraints,
+} from '$lib/components/streaming/ValidationAdapter';
 import {
 	resolveAudioGateState,
 	resolveAudioPipelineKey,
@@ -146,14 +149,33 @@ let draftCodec = $state<AudioCodec | undefined>(undefined);
 let draftDelay = $state(0);
 let wasOpen = $state(false);
 
+// Federation prop-boundary coercion (C5): an OLD platform mounting the NEW
+// federation `audio.js` may still hand us the retired `pcm` codec (removed from
+// the enum). Map it to `aac` at the boundary so the draft never seeds a value
+// outside the current enum and Save never emits `pcm`.
+function coerceIncomingCodec(codec: AudioCodec | undefined): AudioCodec {
+	return (codec as string) === 'pcm' ? 'aac' : (codec ?? 'aac');
+}
+
 $effect(() => {
 	if (open && !wasOpen) {
 		// Opening: seed the draft from the effective current values.
-		draftCodec = audioCodec ?? 'aac';
+		draftCodec = coerceIncomingCodec(audioCodec);
 		draftDelay = clampDelay(audioDelay ?? 0);
 	}
 	wasOpen = open;
 });
+
+// Transport-aware codec gating (C5): a codec the effective relay transport cannot
+// carry renders DISABLED with a reason — never hidden. Effective protocol floors
+// to `srtla` (the `resolveTransportToken` floor). FEDERATION FAIL-OPEN: with no
+// config (standalone federation mount) there is no transport to gate against, so
+// gating is off and every codec stays selectable (today's behavior).
+const effectiveProtocol = $derived(config?.relay_protocol ?? 'srtla');
+function codecAllowedForTransport(codec: string): boolean {
+	if (!config) return true;
+	return audioCodecAllowedForTransport(codec as AudioCodec, effectiveProtocol);
+}
 
 // The ACTIVE audio source (effective override-or-config value from the caller).
 // Federation-tolerant: `undefined` when `asrc` is absent from config.
@@ -359,7 +381,13 @@ async function handleSave() {
 					<Select.Content>
 						<Select.Group>
 							{#each Object.entries(audioCodecs ?? {}) as [codec, meta] (codec)}
-								<Select.Item label={meta.name} value={codec}></Select.Item>
+								{@const allowed = codecAllowedForTransport(codec)}
+								<Select.Item
+									disabled={!allowed}
+									label={meta.name}
+									title={allowed ? undefined : $LL.settings.audioCodecUnsupportedTransport()}
+									value={codec}
+								></Select.Item>
 							{/each}
 						</Select.Group>
 					</Select.Content>

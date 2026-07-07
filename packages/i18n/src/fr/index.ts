@@ -236,6 +236,8 @@ const fr = {
 			streaming: "Arrêtez le flux pour changer le codec audio",
 			noSource: "Sélectionnez d'abord une source audio",
 		},
+		audioCodecUnsupportedTransport:
+			"Ce codec n'est pas pris en charge par le transport actuel",
 		destination: "Destination",
 		destinationManaged: "Mon compte cloud",
 		destinationCustom: "Récepteur personnalisé",

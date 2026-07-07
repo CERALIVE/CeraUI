@@ -82,6 +82,7 @@ const ko = {
 			streaming: "오디오 코덱을 변경하려면 스트림을 중지하세요",
 			noSource: "먼저 오디오 소스를 선택하세요",
 		},
+		audioCodecUnsupportedTransport: "이 코덱은 현재 전송 방식에서 지원되지 않습니다",
 		destination: "대상",
 		destinationManaged: "내 클라우드 계정",
 		destinationCustom: "사용자 지정 수신기",

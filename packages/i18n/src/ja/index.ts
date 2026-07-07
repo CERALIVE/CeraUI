@@ -84,6 +84,8 @@ const ja = {
 				"オーディオコーデックを変更するにはストリームを停止してください",
 			noSource: "先にオーディオソースを選択してください",
 		},
+		audioCodecUnsupportedTransport:
+			"このコーデックは現在のトランスポートではサポートされていません",
 		destination: "配信先",
 		destinationManaged: "マイクラウドアカウント",
 		destinationCustom: "カスタムレシーバー",

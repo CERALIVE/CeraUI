@@ -109,6 +109,13 @@ export {
 	pipelineViews,
 } from "$lib/streaming/pipelineAvailability";
 
+// Transport × audio-codec compatibility (C5) — re-surfaced from the SINGLE source
+// of truth in `@ceraui/rpc/schemas` (`TRANSPORT_AUDIO_CODECS` +
+// `audioCodecAllowedForTransport`). The frontend gates the codec picker through
+// THIS re-export (matching the pipelineAvailability precedent) — never a direct
+// schema import in a dialog, and never a re-implemented copy of the map.
+export { audioCodecAllowedForTransport } from "@ceraui/rpc/schemas";
+
 /**
  * Bridge the `HardwareType` the pipelines broadcast already carries to the
  * {@link PlatformCaps} `intersectCaps()` consumes. This is a deliberately thin
