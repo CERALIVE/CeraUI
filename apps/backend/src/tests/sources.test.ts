@@ -325,6 +325,45 @@ describe("buildSources — caps-first base + device overlay", () => {
 	});
 });
 
+describe("deriveAudioKind — test-pattern selectable-audio precedence (C2)", () => {
+	function virtualAudioKind(supportsAudio: boolean): string | undefined {
+		const sources = buildSources({
+			sources: [capSource("test", { supports_audio: supportsAudio })],
+			devices: [],
+			networkIngest: NO_INGEST,
+		});
+		return sources.find((s) => s.origin === "virtual")?.audioKind;
+	}
+
+	it("new engine (supports_audio=true, >= 2026.7.1) → test pattern audio is selectable", () => {
+		expect(virtualAudioKind(true)).toBe("selectable");
+	});
+
+	it("old engine (supports_audio=false) → the CeraUI override still makes it selectable", () => {
+		expect(virtualAudioKind(false)).toBe("selectable");
+	});
+
+	it("does NOT blanket-override: a coarse source without supports_audio stays none", () => {
+		const sources = buildSources({
+			sources: [capSource("hdmi", { supports_audio: false })],
+			devices: [],
+			networkIngest: NO_INGEST,
+		});
+		const hdmi = sources.find((s) => s.id === "hdmi");
+		expect(hdmi?.origin).toBe("coarse");
+		expect(hdmi?.audioKind).toBe("none");
+	});
+
+	it("leaves non-test audio provenance untouched: a coarse source advertising supports_audio is selectable", () => {
+		const sources = buildSources({
+			sources: [capSource("hdmi", { supports_audio: true })],
+			devices: [],
+			networkIngest: NO_INGEST,
+		});
+		expect(sources.find((s) => s.id === "hdmi")?.audioKind).toBe("selectable");
+	});
+});
+
 describe("deriveEngineRouting — all four origin arms", () => {
 	function fixtureSources(): StreamSource[] {
 		return buildSources({

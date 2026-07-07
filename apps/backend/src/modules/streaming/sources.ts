@@ -89,6 +89,28 @@ const NETWORK_SOURCE_IDS: Record<string, RequiresGateway> = {
 /** The single virtual source id (the test pattern). */
 const VIRTUAL_SOURCE_ID = "test";
 
+/**
+ * CeraUI-side fallback that keeps the virtual test-pattern source audio-
+ * `selectable` even on an OLD engine that does not yet advertise
+ * `supports_audio` for it. The cerastream test pattern gained a real muted
+ * `audiotestsrc` tone leg AND a truthful `supports_audio: true` capability in
+ * `2026.7.1` (coherence-contract-pass C2 / todo 4), reachable through the
+ * existing "Pipeline default" pseudo-source. A device on an OLDER engine still
+ * reports `supports_audio: false` for `test`, so this override bridges the gap
+ * until the fleet minimum engine advertises it.
+ *
+ * PRECEDENCE: the engine's own `supports_audio` wins when true (new engine); the
+ * override only decides the OLD-engine branch. It is scoped to the SINGLE
+ * test-pattern id — a coarse/other source without `supports_audio` stays `none`
+ * (no blanket override).
+ *
+ * DELETE this constant (and the virtual-origin branch in `deriveAudioKind` that
+ * reads it) once every fleet device runs an engine that advertises
+ * `supports_audio` for the test source. Tracked as `TD-test-pattern-audio-override`
+ * in `docs/TECHNICAL_DEBT.md`.
+ */
+const TEST_PATTERN_AUDIO_OVERRIDE: boolean = true;
+
 /** The i18n reason surfaced when a network gateway is not running. */
 const GATEWAY_INACTIVE_REASON = "live.education.reason.gatewayInactive";
 
@@ -122,6 +144,14 @@ function deriveAudioKind(
 	supportsAudio: boolean,
 ): PipelineAudioKind {
 	if (NETWORK_SOURCE_IDS[id] !== undefined) return "embedded";
+	// Test-pattern precedence (coherence-contract-pass C2): the virtual test
+	// source is audio-`selectable` when EITHER the new engine advertises
+	// supports_audio for it (>= 2026.7.1) OR the CeraUI-side old-engine override
+	// is active. The tone itself is pipeline-default audio, surfaced through the
+	// existing "Pipeline default" pseudo-source — no new picker entry is added.
+	if (id === VIRTUAL_SOURCE_ID) {
+		return supportsAudio || TEST_PATTERN_AUDIO_OVERRIDE ? "selectable" : "none";
+	}
 	return supportsAudio ? "selectable" : "none";
 }
 

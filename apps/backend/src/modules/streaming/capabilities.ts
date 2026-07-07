@@ -63,7 +63,10 @@ import { logger as defaultLogger } from "../../helpers/logger.ts";
  *  - `schemaVersionMismatch` — the engine reported a different `schema_version`
  *    than the bindings; additive-only, the data is still served.
  */
-export type CapabilitiesResult = GetCapabilitiesResult & {
+export type CapabilitiesResult = Omit<
+	GetCapabilitiesResult,
+	"network_embedded_audio"
+> & {
 	engineUnavailable: boolean;
 	engineStarting?: boolean;
 	schemaVersionMismatch?: boolean;
@@ -73,9 +76,13 @@ export type CapabilitiesResult = GetCapabilitiesResult & {
 	 *  on a LIVE snapshot with non-empty caps, absent on every fallback rung. */
 	device_modes?: Record<string, DeviceModeGroup>;
 	/** Engine can route embedded (muxed) network-ingest audio (Task 21/13). Read
-	 *  from the raw response before the frozen schema strips it, like `transports`.
-	 *  Absent/false on a legacy engine → the selectable-ALSA path (Task 13 gate). */
-	network_embedded_audio?: boolean;
+	 *  from the raw response before the frozen schema strips it, like `transports`,
+	 *  and re-added via the single conditional spread below. Absent/false on a
+	 *  legacy engine → the selectable-ALSA path (Task 13 gate). Overrides the base
+	 *  `GetCapabilitiesResult` field (cerastream >= 2026.7.1 retains it in the
+	 *  frozen schema) to accept `| undefined`, so a `...caps` / `...lastKnownGood`
+	 *  spread stays assignable under `exactOptionalPropertyTypes`. */
+	network_embedded_audio?: boolean | undefined;
 };
 
 /** A live engine snapshot plus the `schema_version` it was negotiated under. */

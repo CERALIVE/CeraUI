@@ -263,6 +263,23 @@ dependency-pin decision (an external cerastream-release dependency), not a UI
 affordance, so there is no live element to bind a marker to. The register entry
 is the durable, dated record of the deferred pin bump instead.
 
+```debt
+id: TD-test-pattern-audio-override
+title: CeraUI-side old-engine override forces test-pattern audio selectable until the fleet minimum engine advertises supports_audio
+track: 2
+status: open
+exit_criteria: capability:supports_audio
+owner: ceraui-team
+registered_at: 2026-07-07
+resolved_at: null
+unblock: The cerastream test pattern gained a real muted audiotestsrc tone leg AND a truthful supports_audio=true capability in the 2026.7.1 release (coherence-contract-pass todo 4), so a device on that engine or newer derives the test source's selectable audio purely from the engine's advertised supports_audio. A device still on an OLDER engine reports supports_audio=false for the test source, so deriveAudioKind (apps/backend/src/modules/streaming/sources.ts) keeps the CeraUI-side TEST_PATTERN_AUDIO_OVERRIDE=true fallback: for the virtual test-pattern id ONLY it returns "selectable" on `supportsAudio || TEST_PATTERN_AUDIO_OVERRIDE`. This override is scoped to the single test id — a coarse/other source without supports_audio still stays "none" (no blanket override). To clear: once every fleet device runs a cerastream engine that advertises supports_audio for the test source (fleet minimum >= 2026.7.1 for the full 6-month support window), delete the TEST_PATTERN_AUDIO_OVERRIDE constant AND the `id === VIRTUAL_SOURCE_ID` branch in deriveAudioKind that reads it (the engine's own supports_audio then drives the virtual source like every other), update sources.test.ts, then flip this entry to resolved. This entry carries no source data-debt-id marker — the override is a backend audio-provenance derivation, not a UI affordance.
+```
+
+This entry carries no source `data-debt-id` marker — the override is a backend
+audio-provenance derivation in `deriveAudioKind`, not a UI affordance, so there is
+no live element to bind a marker to. The register entry is the durable, dated
+record of the old-engine fallback and its delete-on-fleet-minimum exit condition.
+
 > **Cross-repo follow-up (not CeraUI debt): RTMP-ingest unification.** The B2 SRT
 > ingest is now a loopback `srtsrc`-caller pull; RTMP ingest deliberately STAYS on
 > the existing `rtmpsrc` loopback in this plan. A possible future unification

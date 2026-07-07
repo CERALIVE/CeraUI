@@ -100,7 +100,11 @@ const FULL_PROFILE_CAPABILITIES: GetCapabilitiesResult = {
 		},
 		{
 			id: "test",
-			supports_audio: false,
+			// supports_audio is truthful from cerastream >= 2026.7.1: the test
+			// pattern now carries a muted audiotestsrc tone leg (coherence-contract-
+			// pass C2 / todo 4), reachable via the "Pipeline default" pseudo-source.
+			// Exercises the new-engine supports_audio branch of deriveAudioKind in dev.
+			supports_audio: true,
 			supports_resolution_override: false,
 			supports_framerate_override: false,
 			default_resolution: "1920x1080",
