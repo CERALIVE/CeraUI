@@ -475,7 +475,7 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 | `svelte-check` | 4.7.1 |
 | `@sveltejs/vite-plugin-svelte` | 7.1.3 |
 | `@axe-core/playwright` | 4.12.1 |
-| `@types/node` | 25.9.3 (Node-26 major bump tracked separately — Todo 17) |
+| `@types/node` | 26.1.0 (Node-26 typings; runtime CI stays on Node 24 — types-ahead-of-runtime, all gates green) |
 
 Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2/docs/fast-reload.md`](../image-building-pipeline/v2/docs/fast-reload.md)
 
