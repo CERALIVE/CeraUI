@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
-import { fireEvent, render } from "@testing-library/svelte";
+import { cleanup, fireEvent, render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+	resetHarnessConfig,
+	setHarnessSource,
+} from "../../../tests/fixtures/preview-config-harness.svelte";
 import PreviewCanvas from "./PreviewCanvas.svelte";
 import {
 	cappedAttemptText,
@@ -12,9 +16,17 @@ import {
 // Controllable capability snapshot: the component reads it through
 // getCapabilities() to decide whether the preview is dialable.
 const capsMock = vi.hoisted(() => ({ value: undefined as unknown }));
-vi.mock("$lib/rpc/subscriptions.svelte", () => ({
-	getCapabilities: () => capsMock.value,
-}));
+// getConfig() is delegated to a compiled rune harness so a source change drives the
+// applied-source follow effect reactively (a plain mock can't — see the harness).
+vi.mock("$lib/rpc/subscriptions.svelte", async () => {
+	const harness = await import(
+		"../../../tests/fixtures/preview-config-harness.svelte"
+	);
+	return {
+		getCapabilities: () => capsMock.value,
+		getConfig: () => harness.getHarnessConfig(),
+	};
+});
 
 // Single-use token minted over the authenticated RPC socket before every dial.
 const mintMock = vi.hoisted(() =>
@@ -50,6 +62,13 @@ class FakeWebSocket {
 	}
 }
 
+class DecoderStub {
+	state = "configured";
+	configure(): void {}
+	decode(): void {}
+	close(): void {}
+}
+
 // Flush the async mint→dial chain (a couple microtask turns) plus Svelte ticks.
 async function flush(): Promise<void> {
 	await tick();
@@ -63,9 +82,14 @@ async function turnOn(getByTestId: (id: string) => HTMLElement): Promise<void> {
 }
 
 afterEach(() => {
+	// Unmount first: a leaked component still reacts to the shared harness $state,
+	// so it must be gone before resetHarnessConfig() flips the source back.
+	cleanup();
 	FakeWebSocket.instances = [];
 	capsMock.value = undefined;
-	mintMock.mockClear();
+	mintMock.mockReset();
+	mintMock.mockImplementation(async () => ({ token: "tok-1", ttlMs: 30000 }));
+	resetHarnessConfig();
 	vi.unstubAllGlobals();
 });
 
@@ -380,6 +404,99 @@ describe("PreviewCanvas", () => {
 		} finally {
 			vi.useRealTimers();
 		}
+	});
+
+	it("tears down and redials exactly once when the applied config source changes while running", async () => {
+		vi.stubGlobal("VideoDecoder", DecoderStub);
+		vi.stubGlobal("WebSocket", FakeWebSocket);
+		setHarnessSource("video0");
+
+		const { getByTestId } = render(PreviewCanvas);
+		await turnOn(getByTestId);
+
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		const first = FakeWebSocket.instances[0]!;
+		first.onopen?.({});
+		await tick();
+		expect(mintMock).toHaveBeenCalledTimes(1);
+
+		// The APPLIED (broadcast-confirmed) source changes → teardown + fresh redial.
+		setHarnessSource("video1");
+		await flush();
+
+		// The old socket is closed and exactly one new socket is dialed.
+		expect(first.readyState).toBe(3);
+		const open = FakeWebSocket.instances.filter((w) => w.readyState !== 3);
+		expect(open).toHaveLength(1);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		expect(mintMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("does not dial when the applied source changes while the preview is disabled", async () => {
+		vi.stubGlobal("VideoDecoder", DecoderStub);
+		vi.stubGlobal("WebSocket", FakeWebSocket);
+		setHarnessSource("video0");
+
+		const { getByTestId } = render(PreviewCanvas);
+		// Preview stays OFF (never toggled on).
+		expect(getByTestId("preview-off")).not.toBeNull();
+
+		setHarnessSource("video1");
+		await flush();
+
+		// Disabled → the follow effect is a no-op: no token minted, no socket dialed.
+		expect(mintMock).not.toHaveBeenCalled();
+		expect(FakeWebSocket.instances).toHaveLength(0);
+	});
+
+	it("dials exactly one live socket on a rapid double source change with a delayed mint (double-dial guard)", async () => {
+		// Controllable mint: capture each resolver so a restart lands while a mint is
+		// still in flight.
+		const resolvers: Array<(value: { token: string; ttlMs: number }) => void> =
+			[];
+		mintMock.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					resolvers.push(resolve);
+				}),
+		);
+		vi.stubGlobal("VideoDecoder", DecoderStub);
+		vi.stubGlobal("WebSocket", FakeWebSocket);
+		setHarnessSource("video0");
+
+		const { getByTestId } = render(PreviewCanvas);
+
+		// Enable → connect() #1 awaits mint #1 (held). Resolve it so socket #1 opens
+		// and the status is live-ish, arming the source-change restart path.
+		await fireEvent.click(getByTestId("preview-toggle"));
+		await flush();
+		expect(resolvers).toHaveLength(1);
+		resolvers[0]!({ token: "tok-1", ttlMs: 30000 });
+		await flush();
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		FakeWebSocket.instances[0]!.onopen?.({});
+		await tick();
+
+		// Rapid double source change: each restart's start() mints a fresh (held)
+		// token, so mint #2 (now superseded) and mint #3 are both in flight.
+		setHarnessSource("video1");
+		await flush();
+		setHarnessSource("video2");
+		await flush();
+		expect(resolvers).toHaveLength(3);
+
+		// Resolve the STALE mint #2 first: its connect must abort (no socket). Then
+		// resolve the current mint #3: it dials the sole live socket.
+		resolvers[1]!({ token: "tok-2", ttlMs: 30000 });
+		await flush();
+		resolvers[2]!({ token: "tok-3", ttlMs: 30000 });
+		await flush();
+
+		// Exactly ONE live socket, zero leaked dials: socket #1 closed by the first
+		// restart's stop(); stale mint #2 opened nothing; mint #3 opened the one live
+		// socket.
+		const open = FakeWebSocket.instances.filter((w) => w.readyState !== 3);
+		expect(open).toHaveLength(1);
 	});
 });
 
