@@ -1,87 +1,108 @@
 # 📸 CeraUI Screenshots
 
-Visual documentation of the CeraUI interface across desktop and mobile viewports with dark/light theme support.
+Visual documentation of the CeraUI interface across its three primary destinations —
+**Live**, **Network**, and **Settings** — captured on desktop and mobile viewports in
+both dark and light themes, plus the active-streaming Live cockpit.
+
+Generated automatically by the Playwright gallery spec
+(`tests/e2e/gallery/gallery.visual.spec.ts`, tag `@gallery`):
+
+```bash
+bun run screenshots
+```
 
 ---
 
-## 🖥️ Desktop (1920×1080)
+## 🖥️ Desktop (1280×800)
 
 ### Dark Theme
 
-| **General** | **Network** |
-|:-----------:|:-----------:|
-| ![General Dark](screenshots/desktop/dark/general.png) | ![Network Dark](screenshots/desktop/dark/network.png) |
-
-| **Streaming** | **Advanced** |
-|:-------------:|:------------:|
-| ![Streaming Dark](screenshots/desktop/dark/streaming.png) | ![Advanced Dark](screenshots/desktop/dark/advanced.png) |
-
-| **DevTools** |
-|:------------:|
-| ![DevTools Dark](screenshots/desktop/dark/devtools.png) |
+| **Live** | **Network** | **Settings** |
+|:--------:|:-----------:|:------------:|
+| ![Live Dark](screenshots/desktop/dark/live.png) | ![Network Dark](screenshots/desktop/dark/network.png) | ![Settings Dark](screenshots/desktop/dark/settings.png) |
 
 ### Light Theme
 
-| **General** | **Network** |
-|:-----------:|:-----------:|
-| ![General Light](screenshots/desktop/light/general.png) | ![Network Light](screenshots/desktop/light/network.png) |
-
-| **Streaming** | **Advanced** |
-|:-------------:|:------------:|
-| ![Streaming Light](screenshots/desktop/light/streaming.png) | ![Advanced Light](screenshots/desktop/light/advanced.png) |
-
-| **DevTools** |
-|:------------:|
-| ![DevTools Light](screenshots/desktop/light/devtools.png) |
+| **Live** | **Network** | **Settings** |
+|:--------:|:-----------:|:------------:|
+| ![Live Light](screenshots/desktop/light/live.png) | ![Network Light](screenshots/desktop/light/network.png) | ![Settings Light](screenshots/desktop/light/settings.png) |
 
 ---
 
-## 📱 Mobile (430×932)
+## 📱 Mobile (390×844)
 
 ### Dark Theme
 
-| **General** | **Network** | **Streaming** | **Advanced** | **DevTools** |
-|:-----------:|:-----------:|:-------------:|:------------:|:------------:|
-| ![Mobile General Dark](screenshots/mobile/dark/general.png) | ![Mobile Network Dark](screenshots/mobile/dark/network.png) | ![Mobile Streaming Dark](screenshots/mobile/dark/streaming.png) | ![Mobile Advanced Dark](screenshots/mobile/dark/advanced.png) | ![Mobile DevTools Dark](screenshots/mobile/dark/devtools.png) |
+| **Live** | **Network** | **Settings** |
+|:--------:|:-----------:|:------------:|
+| ![Live Mobile Dark](screenshots/mobile/dark/live.png) | ![Network Mobile Dark](screenshots/mobile/dark/network.png) | ![Settings Mobile Dark](screenshots/mobile/dark/settings.png) |
 
 ### Light Theme
 
-| **General** | **Network** | **Streaming** | **Advanced** | **DevTools** |
-|:-----------:|:-----------:|:-------------:|:------------:|:------------:|
-| ![Mobile General Light](screenshots/mobile/light/general.png) | ![Mobile Network Light](screenshots/mobile/light/network.png) | ![Mobile Streaming Light](screenshots/mobile/light/streaming.png) | ![Mobile Advanced Light](screenshots/mobile/light/advanced.png) | ![Mobile DevTools Light](screenshots/mobile/light/devtools.png) |
+| **Live** | **Network** | **Settings** |
+|:--------:|:-----------:|:------------:|
+| ![Live Mobile Light](screenshots/mobile/light/live.png) | ![Network Mobile Light](screenshots/mobile/light/network.png) | ![Settings Mobile Light](screenshots/mobile/light/settings.png) |
 
 ---
 
-## 🌐 Offline Mode (PWA)
+## 🔴 Live — Streaming Cockpit (Desktop)
+
+The active-streaming state of the **Live** destination: telemetry strip, bitrate
+hot-adjust, and per-link ingest stats. Desktop-only (the streaming cockpit is not
+captured on mobile).
 
 | **Dark** | **Light** |
 |:--------:|:---------:|
-| ![Offline Dark](screenshots/features/offline-dark.png) | ![Offline Light](screenshots/features/offline-light.png) |
+| ![Live Streaming Dark](screenshots/desktop/dark/live-streaming.png) | ![Live Streaming Light](screenshots/desktop/light/live-streaming.png) |
 
 ---
 
 ## 📊 Summary
 
-**22 screenshots total**: 10 desktop + 10 mobile + 2 offline states
+**14 screenshots total**:
+
+- **12 destination shots** — 2 viewports (desktop, mobile) × 2 themes (dark, light) × 3 destinations (Live, Network, Settings)
+- **2 streaming shots** — Live streaming cockpit, desktop only × 2 themes (dark, light)
 
 ---
 
 ## ⚙️ How Screenshots Are Generated
 
-Screenshots are captured automatically using the built-in DevTools screenshot utility with html-to-image.
+Screenshots are captured by the Playwright gallery spec
+(`tests/e2e/gallery/gallery.visual.spec.ts`), which boots its own dev web server via
+`playwright.config` and drives the app with the `multi-modem-wifi` mock scenario. Run
+the full gallery from the workspace root:
+
+```bash
+bun run screenshots
+```
+
+This runs both the `desktop` and `mobile` Playwright projects with `--grep @gallery`.
+The streaming test is desktop-only (it `test.skip`s on the mobile project), so the run
+emits exactly 14 PNGs, not 16.
 
 **Folder Structure**
+
 ```
 screenshots/
 ├── desktop/
 │   ├── dark/
+│   │   ├── live.png
+│   │   ├── network.png
+│   │   ├── settings.png
+│   │   └── live-streaming.png
 │   └── light/
-├── mobile/
-│   ├── dark/
-│   └── light/
-└── features/
-    ├── offline-dark.png
-    └── offline-light.png
+│       ├── live.png
+│       ├── network.png
+│       ├── settings.png
+│       └── live-streaming.png
+└── mobile/
+    ├── dark/
+    │   ├── live.png
+    │   ├── network.png
+    │   └── settings.png
+    └── light/
+        ├── live.png
+        ├── network.png
+        └── settings.png
 ```
-
-> ⚠️ **Note**: Some UI elements (particularly header components like the language selector and theme toggle) may appear slightly different compared to the live application. This is due to the html-to-image library rendering content in isolated iframes, which can affect certain CSS positioning and responsive behaviors.
