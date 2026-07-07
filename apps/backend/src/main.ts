@@ -28,7 +28,11 @@ import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
 import { isDevelopment } from "./mocks/mock-config.ts";
-import { initMockService, shouldUseMocks } from "./mocks/mock-service.ts";
+import {
+	initMockService,
+	setMockEncoderConfig,
+	shouldUseMocks,
+} from "./mocks/mock-service.ts";
 import { startMockPreviewServer } from "./mocks/providers/preview.ts";
 import {
 	buildMockLinkTelemetry,
@@ -149,6 +153,18 @@ checkExecPath(bcrptExec);
 // re-throws to abort (systemd restarts cleanly) rather than limp along.
 await runCritical("config", loadConfig);
 logger.info(bootTimer.phase("🔧", "config"));
+
+// initMockService() seeds mockEncoderConfig (which getConfig() overlays over the
+// persisted config in mock mode) BEFORE loadConfig() runs, so its hardcoded default
+// `pipeline` shadows a config.json that already persisted one — getConfig() would
+// then report a stale pipeline on boot, and re-selecting the already-selected source
+// is a frontend no-op so it never self-corrects. Re-seed from the loaded config.
+if (shouldUseMocks()) {
+	const persistedPipeline = getConfig().pipeline;
+	if (persistedPipeline !== undefined) {
+		setMockEncoderConfig({ pipeline: persistedPipeline });
+	}
+}
 
 // Clean up orphaned atomic-write temp files from a prior crash (fail-soft).
 // This must run after config load so we know the config dir exists.
