@@ -925,6 +925,9 @@ const ko = {
 		stopToChange: "변경하려면 스트림을 중지하세요",
 		cannotStartNoPipeline: "스트림을 시작하기 전에 비디오 소스를 선택하세요",
 		cannotStartNoServer: "스트림을 시작하기 전에 서버를 구성하세요",
+		destinationSlotRevoked:
+			"이 인제스트 슬롯은 더 이상 사용할 수 없습니다 — 다른 대상을 선택하세요",
+		destinationServerStale: "이 서버는 더 이상 제공업체 목록에 없습니다",
 		startFailed: {
 			generic: "스트림 시작 실패",
 			srt_connect_failed:

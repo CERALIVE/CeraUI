@@ -948,6 +948,9 @@ const ja = {
 		cannotStartNoPipeline:
 			"ストリームを開始する前にビデオソースを選択してください",
 		cannotStartNoServer: "ストリームを開始する前にサーバーを設定してください",
+		destinationSlotRevoked:
+			"このインジェストスロットは利用できなくなりました。別の宛先を選択してください",
+		destinationServerStale: "このサーバーはプロバイダーのリストに存在しません",
 		startFailed: {
 			generic: "ストリームの開始に失敗しました",
 			srt_connect_failed:

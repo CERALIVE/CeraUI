@@ -1054,6 +1054,8 @@ const ar = {
 		stopToChange: "أوقف البث للتغيير",
 		cannotStartNoPipeline: "اختر مصدر فيديو قبل بدء البث",
 		cannotStartNoServer: "قم بتكوين خادم قبل بدء البث",
+		destinationSlotRevoked: "لم تعد فتحة الإدخال هذه متاحة — اختر وجهة أخرى",
+		destinationServerStale: "لم يعد هذا الخادم موجودًا في قائمة مزودك",
 		startFailed: {
 			generic: "فشل بدء البث",
 			srt_connect_failed:

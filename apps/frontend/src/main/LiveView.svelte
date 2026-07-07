@@ -909,6 +909,8 @@ const configRows = $derived<ConfigRow[]>([
 			isConnected={getIsConnected()}
 			networkIngest={getStatus()?.network_ingest ?? null}
 			pipelines={getPipelines()?.pipelines}
+			{relays}
+			managedSlots={getManagedIngestAccounts()}
 			{configRows}
 			{isStreaming}
 			optimismState={streamingOptimismState}

@@ -40,6 +40,7 @@ import type {
 	NetifMessage,
 	NetworkIngest,
 	Pipelines,
+	RelayMessage,
 	SourcesMessage,
 } from '@ceraui/rpc/schemas';
 import { ChevronRight, Lock, Network, Pencil } from '@lucide/svelte';
@@ -54,6 +55,7 @@ import {
 	READINESS_SOURCE_REASON,
 } from '$lib/streaming/go-live-readiness';
 import { pipelineAvailability } from '$lib/streaming/pipelineAvailability';
+import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
 import { isSectionLocked } from '$lib/streaming/streamingLockPolicy';
 
 import StreamControlButton from './StreamControlButton.svelte';
@@ -68,6 +70,11 @@ interface Props {
 	isConnected: boolean;
 	networkIngest: NetworkIngest | null | undefined;
 	pipelines: Pipelines | undefined;
+	// ── Destination-catalog validation (C7) — loaded snapshots or undefined-while-
+	//    loading; the destination gate warns on a stale relay id + blocks a revoked
+	//    slot only once these are loaded. ──────────────────────────────────────────
+	relays: RelayMessage | undefined;
+	managedSlots: readonly ManagedIngestAccount[] | undefined;
 	// ── Config rows (migrated from StreamSettingsCard — same testids + locks) ───
 	configRows: ConfigRow[];
 	isStreaming: boolean;
@@ -98,6 +105,8 @@ const {
 	isConnected,
 	networkIngest,
 	pipelines,
+	relays,
+	managedSlots,
 	configRows,
 	isStreaming,
 	optimismState,
@@ -155,6 +164,8 @@ const readiness = $derived(
 		netif,
 		isConnected,
 		gatewayStatus,
+		relays,
+		managedSlots,
 	}),
 );
 
@@ -247,7 +258,7 @@ const encoderReason = $derived(
 	encoderState === 'blocked' ? readiness.gates.source.reasonKey : undefined,
 );
 const destinationReason = $derived(
-	destinationState === 'blocked'
+	destinationState !== 'ok'
 		? readiness.gates.destination.reasonKey
 		: undefined,
 );

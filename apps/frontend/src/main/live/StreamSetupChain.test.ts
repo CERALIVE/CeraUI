@@ -23,6 +23,7 @@ import type {
 	NetifMessage,
 	NetworkIngest,
 	Pipelines,
+	RelayMessage,
 	SourcesMessage,
 } from "@ceraui/rpc/schemas";
 import { Cpu, Server, Volume2 } from "@lucide/svelte";
@@ -30,8 +31,28 @@ import { fireEvent, render, within } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { StreamingOptimismState } from "$lib/rpc/streaming-optimism.svelte";
+import type { ManagedIngestAccount } from "$lib/streaming/receiver-experience";
 import type { ConfigRow } from "./StreamSettingsCard.svelte";
 import StreamSetupChain from "./StreamSetupChain.svelte";
+
+function relays(...ids: string[]): RelayMessage {
+	const servers: Record<string, unknown> = {};
+	for (const id of ids) {
+		servers[id] = { name: id, addr: `${id}.example.net`, port: 5000 };
+	}
+	return { servers } as RelayMessage;
+}
+
+function slot(endpointId: string): ManagedIngestAccount {
+	return {
+		endpointId,
+		host: `${endpointId}.ingest.example.net`,
+		port: 5000,
+		protocol: "srtla",
+		key: `key-${endpointId}`,
+		label: endpointId,
+	};
+}
 
 // The component owns no RPC, but the sole-camera contract demands PROOF that no
 // premature setConfig happens — spy the client and assert it is never touched.
@@ -132,6 +153,8 @@ interface Overrides {
 	caps?: CapabilitiesMessage | undefined;
 	networkIngest?: NetworkIngest | null;
 	pipelines?: Pipelines | undefined;
+	relays?: RelayMessage | undefined;
+	managedSlots?: readonly ManagedIngestAccount[] | undefined;
 	destinationValidated?: boolean;
 	maxBitrate?: number;
 	rowOptions?: RowOptions;
@@ -147,6 +170,8 @@ function renderChain(over: Overrides = {}) {
 		isConnected: over.isConnected ?? true,
 		networkIngest: over.networkIngest ?? null,
 		pipelines: over.pipelines,
+		relays: over.relays,
+		managedSlots: over.managedSlots,
 		configRows: configRows(h, over.rowOptions),
 		isStreaming: over.isStreaming ?? false,
 		optimismState: over.optimismState ?? ("idle" as StreamingOptimismState),
@@ -399,6 +424,39 @@ describe("StreamSetupChain — destination row", () => {
 				.querySelector('[data-testid="destination-traffic-light"]')
 				?.getAttribute("data-validated"),
 		).toBe("false");
+	});
+
+	it("stale relay id (catalog loaded, id absent) → destination row warn + reason, Start still enabled (C7)", () => {
+		const { container } = renderChain({
+			config: { source: "cam-1", relay_server: "gone" } as ConfigMessage,
+			relays: relays("fra", "ams"),
+		});
+		const dest = rowFor(container, "destination");
+		expect(dest?.getAttribute("data-state")).toBe("warn");
+		expect(
+			dest?.querySelector('[data-testid="setup-row-reason"]'),
+			"warn destination row surfaces its reason",
+		).not.toBeNull();
+		const start = within(container).getByRole("button", {
+			name: /start stream/i,
+		});
+		expect((start as HTMLButtonElement).disabled).toBe(false);
+	});
+
+	it("revoked ingest slot (slots loaded, id absent) → destination row blocked, Start disabled (C7)", () => {
+		const { container } = renderChain({
+			config: {
+				source: "cam-1",
+				selected_ingest_endpoint: "slot-gone",
+			} as ConfigMessage,
+			managedSlots: [slot("slot-1")],
+		});
+		const dest = rowFor(container, "destination");
+		expect(dest?.getAttribute("data-state")).toBe("blocked");
+		const start = within(container).getByRole("button", {
+			name: /start stream/i,
+		});
+		expect((start as HTMLButtonElement).disabled).toBe(true);
 	});
 });
 

@@ -917,6 +917,9 @@ const hi = {
 		stopToChange: "बदलने के लिए स्ट्रीम रोकें",
 		cannotStartNoPipeline: "स्ट्रीम शुरू करने से पहले एक वीडियो स्रोत चुनें",
 		cannotStartNoServer: "स्ट्रीम शुरू करने से पहले एक सर्वर कॉन्फ़िगर करें",
+		destinationSlotRevoked:
+			"यह इनजेस्ट स्लॉट अब उपलब्ध नहीं है — कोई अन्य गंतव्य चुनें",
+		destinationServerStale: "यह सर्वर अब आपके प्रदाता की सूची में नहीं है",
 		startFailed: {
 			generic: "स्ट्रीम शुरू करने में विफल",
 			srt_connect_failed:

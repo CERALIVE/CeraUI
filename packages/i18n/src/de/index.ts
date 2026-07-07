@@ -348,6 +348,10 @@ const de = {
 			"Wähle eine Videoquelle, bevor du den Stream startest",
 		cannotStartNoServer:
 			"Konfiguriere einen Server, bevor du den Stream startest",
+		destinationSlotRevoked:
+			"Dieser Ingest-Slot ist nicht mehr verfügbar — wähle ein anderes Ziel",
+		destinationServerStale:
+			"Dieser Server ist nicht mehr in der Liste deines Anbieters",
 		startFailed: {
 			generic: "Stream konnte nicht gestartet werden",
 			srt_connect_failed:

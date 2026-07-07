@@ -1105,6 +1105,10 @@ const fr = {
 		cannotStartNoPipeline:
 			"Sélectionnez une source vidéo avant de démarrer la diffusion",
 		cannotStartNoServer: "Configurez un serveur avant de démarrer la diffusion",
+		destinationSlotRevoked:
+			"Cet emplacement d'ingestion n'est plus disponible — choisissez une autre destination",
+		destinationServerStale:
+			"Ce serveur ne figure plus dans la liste de votre fournisseur",
 		startFailed: {
 			generic: "Échec du démarrage de la diffusion",
 			srt_connect_failed:

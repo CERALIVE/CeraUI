@@ -348,6 +348,10 @@ const es = {
 			"Selecciona una fuente de video antes de iniciar la transmisión",
 		cannotStartNoServer:
 			"Configura un servidor antes de iniciar la transmisión",
+		destinationSlotRevoked:
+			"Esta ranura de ingesta ya no está disponible: elige otro destino",
+		destinationServerStale:
+			"Este servidor ya no está en la lista de tu proveedor",
 		startFailed: {
 			generic: "No se pudo iniciar la transmisión",
 			srt_connect_failed:

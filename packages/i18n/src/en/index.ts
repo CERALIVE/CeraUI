@@ -335,6 +335,9 @@ const en = {
 		stopToChange: "Stop stream to change",
 		cannotStartNoPipeline: "Select a video source before starting the stream",
 		cannotStartNoServer: "Configure a server before starting the stream",
+		destinationSlotRevoked:
+			"This ingest slot is no longer available — choose another destination",
+		destinationServerStale: "This server is no longer in your provider's list",
 		startFailed: {
 			generic: "Failed to start stream",
 			srt_connect_failed:

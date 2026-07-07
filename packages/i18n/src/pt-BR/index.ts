@@ -1081,6 +1081,10 @@ const ptBR = {
 		cannotStartNoPipeline:
 			"Selecione uma fonte de vídeo antes de iniciar a transmissão",
 		cannotStartNoServer: "Configure um servidor antes de iniciar a transmissão",
+		destinationSlotRevoked:
+			"Este slot de ingestão não está mais disponível — escolha outro destino",
+		destinationServerStale:
+			"Este servidor não está mais na lista do seu provedor",
 		startFailed: {
 			generic: "Falha ao iniciar a transmissão",
 			srt_connect_failed:

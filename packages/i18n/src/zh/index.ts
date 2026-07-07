@@ -877,6 +877,8 @@ const zh = {
 		stopToChange: "停止直播以更改",
 		cannotStartNoPipeline: "开始直播前请选择视频源",
 		cannotStartNoServer: "开始直播前请配置服务器",
+		destinationSlotRevoked: "此接入槽位已不可用 — 请选择其他目标",
+		destinationServerStale: "此服务器已不在您的提供商列表中",
 		startFailed: {
 			generic: "启动直播失败",
 			srt_connect_failed:
