@@ -927,7 +927,7 @@ test.describe("Capability truthfulness (functional)", () => {
 		// the untranslated hardware device name.
 		await expect(page.getByRole("option", { name: "No audio" })).toBeVisible();
 		await expect(
-			page.getByRole("option", { name: "Pipeline default" }),
+			page.getByRole("option", { name: "Source default (engine decides)" }),
 		).toBeVisible();
 		await expect(page.getByRole("option", { name: "USB audio" })).toBeVisible();
 		await page.keyboard.press("Escape");
@@ -1110,9 +1110,9 @@ test.describe("Capability truthfulness (functional)", () => {
 		const aac = page.getByRole("option", { name: "AAC" });
 		await expect(opus).toBeVisible();
 		// Opus: disabled WITH a non-empty reason (never hidden).
-		await expect(opus).toHaveAttribute("aria-disabled", "true");
+		await expect(opus).toHaveAttribute("data-disabled", "");
 		await expect(opus).toHaveAttribute("title", /\S/);
 		// AAC: the one proven codec — genuinely selectable, no disabled reason.
-		await expect(aac).not.toHaveAttribute("aria-disabled", "true");
+		await expect(aac).not.toHaveAttribute("data-disabled", "");
 	});
 });
