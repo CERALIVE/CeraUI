@@ -30,7 +30,7 @@ import { ensureAuthenticated, navigateTo } from './helpers/index.js';
  * toggle to a known state first, so the file is order- and retry-independent.
  *
  * PLAYBOOK.md compliance: openDialog/closeDialog aria helpers + navigateTo,
- * role/testid/web-first assertions only — no screenshots, no waitForTimeout.
+ * role/testid/web-first assertions only — no screenshots, no fixed-delay waits.
  */
 
 const DIALOG_NAME = 'Sources';
