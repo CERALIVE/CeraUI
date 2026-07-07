@@ -4,7 +4,10 @@ import type { RuntimeConfig } from "../helpers/config-schemas.ts";
 import { getConfig } from "../modules/config.ts";
 import { AudioProbeTimeoutError } from "../modules/streaming/audio.ts";
 import type { Pipeline } from "../modules/streaming/pipelines.ts";
-import { getIsStreaming, updateStatus } from "../modules/streaming/streaming.ts";
+import {
+	getIsStreaming,
+	updateStatus,
+} from "../modules/streaming/streaming.ts";
 import { getStreamingProcesses } from "../modules/streaming/streamloop/process-runner.ts";
 import {
 	AUDIO_SOURCE_PROBE_FAILED,

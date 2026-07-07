@@ -1020,7 +1020,9 @@ describe("SourceSection — source×audio mixture matrix (M1–M6)", () => {
 		const line = container.querySelector<HTMLElement>(
 			'[data-testid="audio-source-auto-resolved"]',
 		);
-		expect(line?.textContent).toContain("Auto \u2014 currently: RØDE Streamer Mic");
+		expect(line?.textContent).toContain(
+			"Auto \u2014 currently: RØDE Streamer Mic",
+		);
 	});
 
 	it("M4: HDMI video → 'Auto — currently: HDMI'", () => {

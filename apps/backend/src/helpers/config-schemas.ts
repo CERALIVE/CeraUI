@@ -42,8 +42,8 @@
 
 import {
 	AddonConfigSchema,
-	audioCodecSchema,
 	AUDIO_SOURCE_AUTO,
+	audioCodecSchema,
 	type DetectionMethod,
 	detectionMethodSchema,
 	deviceKindSchema,

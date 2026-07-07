@@ -82,8 +82,7 @@ const hi = {
 			streaming: "ऑडियो कोडेक बदलने के लिए स्ट्रीम रोकें",
 			noSource: "पहले एक ऑडियो स्रोत चुनें",
 		},
-		audioCodecUnsupportedTransport:
-			"यह कोडेक वर्तमान ट्रांसपोर्ट पर समर्थित नहीं है",
+		audioCodecUnsupportedTransport: "यह कोडेक वर्तमान ट्रांसपोर्ट पर समर्थित नहीं है",
 		destination: "गंतव्य",
 		destinationManaged: "मेरा क्लाउड खाता",
 		destinationCustom: "कस्टम रिसीवर",
@@ -92,10 +91,10 @@ const hi = {
 		destinationNeedsKey: "इस क्लाउड पर स्ट्रीम करने के लिए अपनी {cloud} कुंजी जोड़ें।",
 		destinationAddKey: "कुंजी जोड़ें",
 		latency: "विलंबता",
-			latencyNegotiated: "तय की गई",
-			valueClamped: "{value} में समायोजित",
-			catalogDriftNote:
-				"इसे खोलने के बाद सर्वर सूची बदल गई है। सहेजने से पहले अपना चयन जांचें।",
+		latencyNegotiated: "तय की गई",
+		valueClamped: "{value} में समायोजित",
+		catalogDriftNote:
+			"इसे खोलने के बाद सर्वर सूची बदल गई है। सहेजने से पहले अपना चयन जांचें।",
 		transportActive: "सक्रिय",
 		transportKind: "ट्रांसपोर्ट",
 		remoteControl: {
@@ -917,8 +916,7 @@ const hi = {
 		stopToChange: "बदलने के लिए स्ट्रीम रोकें",
 		cannotStartNoPipeline: "स्ट्रीम शुरू करने से पहले एक वीडियो स्रोत चुनें",
 		cannotStartNoServer: "स्ट्रीम शुरू करने से पहले एक सर्वर कॉन्फ़िगर करें",
-		destinationSlotRevoked:
-			"यह इनजेस्ट स्लॉट अब उपलब्ध नहीं है — कोई अन्य गंतव्य चुनें",
+		destinationSlotRevoked: "यह इनजेस्ट स्लॉट अब उपलब्ध नहीं है — कोई अन्य गंतव्य चुनें",
 		destinationServerStale: "यह सर्वर अब आपके प्रदाता की सूची में नहीं है",
 		startFailed: {
 			generic: "स्ट्रीम शुरू करने में विफल",

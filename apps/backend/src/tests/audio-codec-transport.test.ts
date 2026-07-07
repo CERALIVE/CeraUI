@@ -93,7 +93,9 @@ describe("runtimeConfigSchema.acodec — legacy 'pcm' coercion (C5)", () => {
 	});
 
 	test("an unknown codec is still rejected by the strict enum", () => {
-		expect(runtimeConfigSchema.safeParse({ acodec: "mp3" }).success).toBe(false);
+		expect(runtimeConfigSchema.safeParse({ acodec: "mp3" }).success).toBe(
+			false,
+		);
 	});
 
 	test("the legacy fixture (acodec:'opus') still loads UNCHANGED", () => {

@@ -218,7 +218,9 @@ export const streamingStartProcedure = authedProcedure
 			if (effectiveAcodec !== undefined) {
 				const effectiveTransport =
 					applied.relay_protocol ?? getConfig().relay_protocol ?? "srtla";
-				if (!audioCodecAllowedForTransport(effectiveAcodec, effectiveTransport)) {
+				if (
+					!audioCodecAllowedForTransport(effectiveAcodec, effectiveTransport)
+				) {
 					return {
 						success: false,
 						is_streaming: false,

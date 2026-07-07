@@ -107,7 +107,9 @@ function lastSeen(
 	};
 }
 
-function sessionMap(...snapshots: LastSeenDevice[]): Map<string, LastSeenDevice> {
+function sessionMap(
+	...snapshots: LastSeenDevice[]
+): Map<string, LastSeenDevice> {
 	return new Map(snapshots.map((s) => [s.id, s]));
 }
 
@@ -156,9 +158,9 @@ describe("buildSources — lost-device synthesis (pure)", () => {
 		}
 
 		// the hdmi coarse base slot is GONE (replaced by the lost row).
-		expect(
-			sources.some((s) => s.origin === "coarse" && s.id === "hdmi"),
-		).toBe(false);
+		expect(sources.some((s) => s.origin === "coarse" && s.id === "hdmi")).toBe(
+			false,
+		);
 		// the other coarse entries are untouched.
 		expect(
 			sources.filter((s) => s.origin === "coarse").map((s) => s.id),
@@ -211,7 +213,9 @@ describe("buildSources — lost-device synthesis (pure)", () => {
 	});
 
 	it("(5) session-seen non-configured device → lost row present; after restart (session reset) → NO lost row", () => {
-		const seen = lastSeen("video2", "hdmi", "hdmi", { displayName: "Session Cam" });
+		const seen = lastSeen("video2", "hdmi", "hdmi", {
+			displayName: "Session Cam",
+		});
 		// A: seen this session, NOT config.source, then detached.
 		const inSession = buildSources({
 			sources: goldenCapSources(),
@@ -433,7 +437,8 @@ describe("session recording + persisted LRU (integration)", () => {
 		});
 		const lost = sources.find((s) => s.id === "videoX");
 		expect(lost?.lost).toBe(true);
-		if (lost?.origin === "capture") expect(lost.displayName).toBe("Roaming Cam");
+		if (lost?.origin === "capture")
+			expect(lost.displayName).toBe("Roaming Cam");
 	});
 });
 
@@ -512,7 +517,9 @@ describe("applyObservedDevicesAndBroadcast — combined hotplug transition (C7)"
 			removeClient(client);
 		}
 
-		const frames = sink.map((raw) => JSON.parse(raw) as Record<string, unknown>);
+		const frames = sink.map(
+			(raw) => JSON.parse(raw) as Record<string, unknown>,
+		);
 
 		// BOTH broadcasts fired from the one observed list.
 		const devicesFrame = frames.find((f) => "devices" in f);

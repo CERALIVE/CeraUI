@@ -36,7 +36,10 @@ import {
 	stopMockService,
 } from "../mocks/mock-service.ts";
 import { getConfig } from "../modules/config.ts";
-import { initPipelines, setMockHardware } from "../modules/streaming/pipelines.ts";
+import {
+	initPipelines,
+	setMockHardware,
+} from "../modules/streaming/pipelines.ts";
 import {
 	applyObservedEngineDevices,
 	resetEngineDeviceCache,

@@ -220,7 +220,8 @@ const ar = {
 			streaming: "أوقف البث لتغيير ترميز الصوت",
 			noSource: "اختر مصدر الصوت أولاً",
 		},
-		audioCodecUnsupportedTransport: "هذا الترميز غير مدعوم عبر وسيلة النقل الحالية",
+		audioCodecUnsupportedTransport:
+			"هذا الترميز غير مدعوم عبر وسيلة النقل الحالية",
 		destination: "الوجهة",
 		destinationManaged: "حسابي السحابي",
 		destinationCustom: "مستقبِل مخصّص",
@@ -229,10 +230,10 @@ const ar = {
 		destinationNeedsKey: "أضف مفتاح {cloud} للبثّ إلى هذه السحابة.",
 		destinationAddKey: "إضافة مفتاح",
 		latency: "زمن الوصول",
-			latencyNegotiated: "تم التفاوض",
-			valueClamped: "تم الضبط إلى {value}",
-			catalogDriftNote:
-				"تغيّرت قائمة الخوادم منذ فتحك لهذا. راجع اختيارك قبل الحفظ.",
+		latencyNegotiated: "تم التفاوض",
+		valueClamped: "تم الضبط إلى {value}",
+		catalogDriftNote:
+			"تغيّرت قائمة الخوادم منذ فتحك لهذا. راجع اختيارك قبل الحفظ.",
 		transportActive: "نشط",
 		transportKind: "النقل",
 		remoteControl: {

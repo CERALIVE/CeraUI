@@ -54,7 +54,9 @@ describe("live start-failed reason mapping (C7)", () => {
 	});
 
 	it("renders source_lost / source_unavailable copy from reason, distinct from generic", () => {
-		expect(startFailedMessage("source_lost", keys)).toBe(startFailed.source_lost);
+		expect(startFailedMessage("source_lost", keys)).toBe(
+			startFailed.source_lost,
+		);
 		expect(startFailedMessage("source_unavailable", keys)).toBe(
 			startFailed.source_unavailable,
 		);

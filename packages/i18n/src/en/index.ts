@@ -621,7 +621,8 @@ const en = {
 			software: "Software",
 			bitrateRangeHint: "Supported range",
 			bitrateClamped: "Adjusted to the supported range",
-			sourceChangedNote: "Source changed \u2014 settings updated for the new input.",
+			sourceChangedNote:
+				"Source changed \u2014 settings updated for the new input.",
 			probedCaps: "Detected capabilities",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",

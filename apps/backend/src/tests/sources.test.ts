@@ -10,6 +10,7 @@ import type {
 	StreamSource,
 } from "@ceraui/rpc/schemas";
 import { streamSourceSchema } from "@ceraui/rpc/schemas";
+import type { LastSeenDevice } from "../helpers/config-schemas.ts";
 import {
 	buildSources,
 	deriveEngineRouting,
@@ -21,7 +22,6 @@ import {
 	SOURCE_UNAVAILABLE_ERROR,
 	UNKNOWN_SOURCE_ERROR,
 } from "../modules/streaming/sources.ts";
-import type { LastSeenDevice } from "../helpers/config-schemas.ts";
 
 type CapabilitySource = GetCapabilitiesResult["sources"][number];
 

@@ -111,7 +111,12 @@ export async function start(
 
 	let result: StartStreamResult;
 	try {
-		result = await startStream(c.pipeline, c.srtlaAddr, c.srtlaPort, c.streamid);
+		result = await startStream(
+			c.pipeline,
+			c.srtlaAddr,
+			c.srtlaPort,
+			c.streamid,
+		);
 	} catch (err) {
 		if (typeof err === "string") {
 			startError(conn, err, senderId);

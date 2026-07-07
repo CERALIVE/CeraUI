@@ -90,9 +90,9 @@ const zh = {
 		destinationNeedsKey: "添加你的 {cloud} 密钥以推流到此云。",
 		destinationAddKey: "添加密钥",
 		latency: "延迟",
-			latencyNegotiated: "已协商",
-			valueClamped: "已调整为 {value}",
-			catalogDriftNote: "自您打开后服务器列表已更改。保存前请检查您的选择。",
+		latencyNegotiated: "已协商",
+		valueClamped: "已调整为 {value}",
+		catalogDriftNote: "自您打开后服务器列表已更改。保存前请检查您的选择。",
 		transportActive: "活跃",
 		transportKind: "传输",
 		remoteControl: {
@@ -890,8 +890,10 @@ const zh = {
 			capture_audio_error: "采集设备报告音频错误。请重新连接后重试。",
 			capture_video_error: "采集设备报告视频错误。请重新连接后重试。",
 			pipeline_stall: "启动时输入源停滞。请检查输入源后重试。",
-			audio_source_probe_failed: "所选音频源未及时上线。请重新连接或选择其他音频源后重试。",
-			audio_codec_unsupported_transport: "当前传输方式不支持此音频编解码器。请将音频编解码器切换为 AAC 后重试。",
+			audio_source_probe_failed:
+				"所选音频源未及时上线。请重新连接或选择其他音频源后重试。",
+			audio_codec_unsupported_transport:
+				"当前传输方式不支持此音频编解码器。请将音频编解码器切换为 AAC 后重试。",
 			source_lost: "所选源已断开连接。请重新连接或选择其他源后重试。",
 			source_unavailable: "所选源当前不可用。请选择其他源或检查其设置后重试。",
 		},

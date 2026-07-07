@@ -13,9 +13,9 @@ import { describe, expect, test } from 'bun:test';
 import { isAudioLiveSwitchEnabled } from '../capabilities/audio';
 import {
 	AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
+	AUDIO_SOURCE_AUTO,
 	audioCodecAllowedForTransport,
 	audioCodecSchema,
-	AUDIO_SOURCE_AUTO,
 	audioSourceKindSchema,
 	audioSourceSchema,
 	type CapabilitiesMessage,
@@ -31,8 +31,8 @@ import {
 	type Resolution,
 	streamingConfigInputSchema,
 	switchInputOutputSchema,
-	toEngineResolution,
 	TRANSPORT_AUDIO_CODECS,
+	toEngineResolution,
 } from './streaming.schema';
 
 describe('capabilitiesMessageSchema — audio_live_switch field', () => {

@@ -328,9 +328,10 @@ describe("StreamSetupChain — encoder Edit source gate (C3)", () => {
 			config: { relay_server: "fra" } as ConfigMessage,
 			sources: makeSources(capture("cam-1", "HDMI"), capture("cam-2", "USB")),
 		});
-		const serverEdit = rowFor(container, "destination")?.querySelector<HTMLButtonElement>(
-			'[data-testid="open-server-dialog"]',
-		);
+		const serverEdit = rowFor(
+			container,
+			"destination",
+		)?.querySelector<HTMLButtonElement>('[data-testid="open-server-dialog"]');
 		expect(serverEdit?.disabled).toBe(false);
 		expect(serverEdit?.getAttribute("title")).toBeNull();
 	});
@@ -363,7 +364,9 @@ describe("StreamSetupChain — encoder Edit source gate (C3)", () => {
 		});
 		expect(encoderEdit(container)).toBeNull();
 		expect(
-			rowFor(container, "encoder")?.querySelector('[title="Stop stream to change"]'),
+			rowFor(container, "encoder")?.querySelector(
+				'[title="Stop stream to change"]',
+			),
 		).not.toBeNull();
 	});
 });

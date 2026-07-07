@@ -82,7 +82,8 @@ const ko = {
 			streaming: "오디오 코덱을 변경하려면 스트림을 중지하세요",
 			noSource: "먼저 오디오 소스를 선택하세요",
 		},
-		audioCodecUnsupportedTransport: "이 코덱은 현재 전송 방식에서 지원되지 않습니다",
+		audioCodecUnsupportedTransport:
+			"이 코덱은 현재 전송 방식에서 지원되지 않습니다",
 		destination: "대상",
 		destinationManaged: "내 클라우드 계정",
 		destinationCustom: "사용자 지정 수신기",
@@ -92,10 +93,10 @@ const ko = {
 		destinationNeedsKey: "이 클라우드로 송출하려면 {cloud} 키를 추가하세요.",
 		destinationAddKey: "키 추가",
 		latency: "지연 시간",
-			latencyNegotiated: "협상됨",
-			valueClamped: "{value}(으)로 조정됨",
-			catalogDriftNote:
-				"이 창을 연 이후 서버 목록이 변경되었습니다. 저장하기 전에 선택을 확인하세요.",
+		latencyNegotiated: "협상됨",
+		valueClamped: "{value}(으)로 조정됨",
+		catalogDriftNote:
+			"이 창을 연 이후 서버 목록이 변경되었습니다. 저장하기 전에 선택을 확인하세요.",
 		transportActive: "활성",
 		transportKind: "전송",
 		remoteControl: {
@@ -1210,7 +1211,8 @@ const ko = {
 			software: "소프트웨어",
 			bitrateRangeHint: "지원 범위",
 			bitrateClamped: "지원 범위로 조정됨",
-			sourceChangedNote: "소스가 변경됨 — 새 입력에 맞게 설정이 업데이트되었습니다.",
+			sourceChangedNote:
+				"소스가 변경됨 — 새 입력에 맞게 설정이 업데이트되었습니다.",
 			probedCaps: "감지된 기능",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",

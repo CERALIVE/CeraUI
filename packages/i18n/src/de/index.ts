@@ -638,7 +638,8 @@ const de = {
 			software: "Software",
 			bitrateRangeHint: "Unterstützter Bereich",
 			bitrateClamped: "An den unterstützten Bereich angepasst",
-			sourceChangedNote: "Quelle geändert – Einstellungen für die neue Eingabe aktualisiert.",
+			sourceChangedNote:
+				"Quelle geändert – Einstellungen für die neue Eingabe aktualisiert.",
 			probedCaps: "Erkannte Fähigkeiten",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
@@ -747,10 +748,10 @@ const de = {
 			"Füge deinen {cloud}-Schlüssel hinzu, um zu dieser Cloud zu streamen.",
 		destinationAddKey: "Schlüssel hinzufügen",
 		latency: "Latenz",
-			latencyNegotiated: "Ausgehandelt",
-			valueClamped: "Angepasst auf {value}",
-			catalogDriftNote:
-				"Die Serverliste hat sich seit dem Öffnen geändert. Prüfe deine Auswahl vor dem Speichern.",
+		latencyNegotiated: "Ausgehandelt",
+		valueClamped: "Angepasst auf {value}",
+		catalogDriftNote:
+			"Die Serverliste hat sich seit dem Öffnen geändert. Prüfe deine Auswahl vor dem Speichern.",
 		transportActive: "Aktiv",
 		destinationCustomHint:
 			"Gib Adresse und Port deines eigenen Empfängers ein.",
