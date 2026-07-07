@@ -113,12 +113,7 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 		setMockHardware("rk3588");
 		await initPipelines(provide(CAPS_WITH_INGEST));
 	});
-	beforeEach(async () => {
-		// MUST reseed per-test, not once in beforeAll: getSourcesMessage() reads the
-		// process-wide lastCapabilities cache, which another test file can overwrite
-		// with an ingest-less snapshot — making resolveSourceRouting("rtmp") return
-		// unknown_source instead of source_unavailable (order-dependent CI flake).
-		await initPipelines(provide(CAPS_WITH_INGEST));
+	beforeEach(() => {
 		priorPipeline = getConfig().pipeline;
 		priorSource = getConfig().source;
 		priorNetworkIngest = getConfig().network_ingest;
