@@ -12,9 +12,9 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.j
  *
  * single-modem = 1 modem, WiFi OFF. Verifies:
  *   • exactly one bonded link / one modem row renders;
- *   • the WiFi section reports "no adapters" AND its Connect trigger is disabled
- *     WITH an accessible reason (regression for the disabled-without-reason gap
- *     this audit fixed — WifiSection now sets `title` when there is no radio).
+ *   • the WiFi section renders its calm empty state and — under the per-interface
+ *     redesign where Connect is a per-row affordance — exposes ZERO Connect
+ *     controls with no radios, so there is no silent dead control.
  */
 test.use({ backendScenario: "single-modem" });
 
@@ -31,7 +31,7 @@ test.describe("Audit A2 — Network destination (single-modem)", { tag: "@audit"
 		await navigateTo(page, "network");
 	});
 
-	test("single-modem renders one link and a reasoned, disabled WiFi Connect control", async ({
+	test("single-modem renders one link and a WiFi empty state with no dead Connect control", async ({
 		page,
 	}) => {
 		// Bonded links present (the single modem, once it holds an IP).
@@ -39,12 +39,15 @@ test.describe("Audit A2 — Network destination (single-modem)", { tag: "@audit"
 		const linkCount = await page.getByTestId("bonded-link-card").count();
 		expect(linkCount).toBeGreaterThan(0);
 
-		// WiFi is OFF in this scenario → the Connect trigger is disabled and MUST
-		// carry a non-empty reason (title), never a silent dead control.
-		const wifiConnect = page.getByTestId("open-wifi-selector-dialog");
-		await expect(wifiConnect).toBeVisible();
-		await expect(wifiConnect).toBeDisabled();
-		await expect(wifiConnect).toHaveAttribute("title", /\S/);
+		// No WiFi radios in this scenario. Under the per-interface redesign the
+		// Connect affordance is per-row, so with zero radios there is NO Connect
+		// control at all — the WiFi section renders its calm empty state instead,
+		// which is the strongest form of the "never a silent dead control" rule.
+		const wifiSection = page
+			.getByRole("heading", { name: "WiFi", level: 2 })
+			.locator("xpath=ancestor::section[1]");
+		await expect(wifiSection.getByText("No WiFi interfaces found")).toBeVisible();
+		await expect(page.getByTestId("open-wifi-selector-dialog")).toHaveCount(0);
 
 		// The sole-telemetry rule still holds with a single link.
 		const outside = await page
@@ -61,7 +64,7 @@ test.describe("Audit A2 — Network destination (single-modem)", { tag: "@audit"
 				`Generated: ${new Date().toISOString()}`,
 				"",
 				`Bonded links rendered: ${linkCount} (>0) — PASS`,
-				"WiFi OFF → Connect trigger disabled WITH title reason (disabled-without-reason gap fixed) — PASS",
+				"No WiFi radios → calm empty state, zero per-row Connect controls (no silent dead control) — PASS",
 				"Sole-telemetry rule holds with one link (0 clusters outside bonded-link-card) — PASS",
 				"",
 			].join("\n"),

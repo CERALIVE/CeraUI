@@ -185,11 +185,11 @@ test.describe("Network-ingest operator-disable hides the Live source row (Task 9
 	async function openNetworkIngestDialog(page: Page): Promise<void> {
 		await navigateTo(page, "settings");
 		await page
-			.getByRole("button", { name: /Network ingest/i })
+			.getByRole("button", { name: /^Sources/i })
 			.first()
 			.click();
 		await expect(
-			page.getByRole("dialog", { name: "Network ingest" }),
+			page.getByRole("dialog", { name: "Sources" }),
 		).toBeVisible();
 	}
 

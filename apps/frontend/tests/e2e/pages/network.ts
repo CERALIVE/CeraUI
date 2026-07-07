@@ -87,7 +87,7 @@ export class NetworkPage {
 	 * scan has produced results. The auto-retry window covers scan latency.
 	 */
 	async openWifiSelector(): Promise<void> {
-		const trigger = this.page.getByTestId('open-wifi-selector-dialog');
+		const trigger = this.page.getByTestId('open-wifi-selector-dialog').first();
 		await trigger.click();
 		const dialog = this.page.getByRole('dialog', { name: 'Available Networks' });
 		await expect(dialog).toBeVisible();

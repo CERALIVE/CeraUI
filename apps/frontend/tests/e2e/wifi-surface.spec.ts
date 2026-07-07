@@ -204,7 +204,12 @@ async function openWifiDialog(page: Page): Promise<void> {
 	// global-setup). Wait for the header, then navigate.
 	await page.locator("header").first().waitFor({ state: "visible", timeout: 30_000 });
 	await navigateTo(page, "network");
-	const trigger = page.locator('[data-testid="open-wifi-selector-dialog"]');
+	// Per-interface redesign: the Connect trigger is now rendered once per WiFi
+	// station row (multi-modem-wifi seeds two). Open the primary (wlan0 → device
+	// "0") — the dialog lists the same available-network set this spec asserts on.
+	const trigger = page
+		.locator('[data-testid="open-wifi-selector-dialog"]')
+		.first();
 	await expect(trigger).toBeEnabled();
 	await trigger.click();
 	await expect(page.getByRole("dialog", { name: DIALOG })).toBeVisible();

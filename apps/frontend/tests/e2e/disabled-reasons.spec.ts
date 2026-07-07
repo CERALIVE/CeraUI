@@ -224,7 +224,7 @@ test.describe('disabled-reason hints + loading/empty distinction (T15)', () => {
 		await ensureAuthenticated(page);
 		await page.locator('header').first().waitFor({ state: 'visible', timeout: 30_000 });
 		await navigateTo(page, 'network');
-		await page.getByTestId('open-wifi-selector-dialog').click();
+		await page.getByTestId('open-wifi-selector-dialog').first().click();
 		const dialog = page.getByRole('dialog', { name: 'Available Networks' });
 		await expect(dialog).toBeVisible();
 
