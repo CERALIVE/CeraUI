@@ -131,6 +131,15 @@ let pageWs: WebSocketRoute | null = null;
 let dropServerDevices = false;
 let dropServerCapabilities = false;
 let dropServerSources = false;
+// `status` is NOT blanket-dropped: unlike caps/devices/sources, most tests here do
+// NOT inject their own `status` and DO rely on the real backend's initial `status`
+// broadcast (asrcs, audio_sources, is_streaming, active_encode, network_ingest) to
+// reach the page — e.g. the test-pattern test's source-select round-trip regresses
+// without it. So a test opts in via the `drop-server-status` annotation (read in
+// beforeEach BEFORE page.goto — the initial status burst must be dropped too, or the
+// backend's typed `audio_sources` beats a test's asrcs-only injection).
+let dropServerStatus = false;
+const DROP_SERVER_STATUS_ANNOTATION = "drop-server-status";
 // Fake-resolve every `streaming.setConfig` client-side with success so a config
 // write is proven to succeed WITHOUT depending on the shared backend accepting the
 // injected (backend-unknown) source ids — the injected sources are the DOM truth
@@ -378,6 +387,9 @@ test.describe("Capability truthfulness (functional)", () => {
 		dropServerDevices = true;
 		dropServerCapabilities = true;
 		dropServerSources = true;
+		dropServerStatus = testInfo.annotations.some(
+			(a) => a.type === DROP_SERVER_STATUS_ANNOTATION,
+		);
 		fakeSetConfig = false;
 		setConfigCalls.length = 0;
 
@@ -421,6 +433,7 @@ test.describe("Capability truthfulness (functional)", () => {
 					if (dropServerDevices && "devices" in frame) return;
 					if (dropServerCapabilities && "capabilities" in frame) return;
 					if (dropServerSources && "sources" in frame) return;
+					if (dropServerStatus && "status" in frame) return;
 				} catch {
 					/* non-JSON / binary frame */
 				}
@@ -893,7 +906,13 @@ test.describe("Capability truthfulness (functional)", () => {
 	});
 
 	// ── (Todo 13) Audio pseudo-sources localized + embedded-audio read-only state ─
-	test("audio pseudo-sources render localized and an embedded network source switches to the read-only embedded state", async ({
+	test("audio pseudo-sources render localized and an embedded network source switches to the read-only embedded state", {
+		annotation: {
+			type: DROP_SERVER_STATUS_ANNOTATION,
+			description:
+				"injects its own status.asrcs; the backend's status (incl. its typed audio_sources) must be dropped from beforeEach so the asrcs-only injection wins",
+		},
+	}, async ({
 		page,
 	}) => {
 		serverConfig();
