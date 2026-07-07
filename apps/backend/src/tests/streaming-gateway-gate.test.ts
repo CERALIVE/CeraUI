@@ -25,6 +25,7 @@ import {
 } from "../mocks/mock-service.ts";
 import { setMockGatewayActive } from "../mocks/providers/streaming.ts";
 import { getConfig } from "../modules/config.ts";
+import { refreshNetworkIngestInfo } from "../modules/network/network-ingest.ts";
 import {
 	getPipelinesMessage,
 	initPipelines,
@@ -246,6 +247,12 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 			getConfig().source = "rtmp";
 			getConfig().network_ingest = { rtmp_enabled: false, srt_enabled: true };
 			setMockGatewayActive("rtmp", true);
+			// getSourcesMessage() reads the CACHED network-ingest snapshot; refresh it
+			// after mutating config + mock gateway so the rtmp row reflects
+			// operator_disabled (else a stale ambient cache leaves service_active:true
+			// without operator_disabled → available:true → the gate falls through to
+			// network_ingest_gateway_inactive under CI test ordering).
+			await refreshNetworkIngestInfo();
 
 			const result = await call(
 				streamingStartProcedure,
@@ -253,9 +260,9 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 				{ context: makeContext() },
 			);
 
-			// The config.source path resolves through getSourcesMessage, where an
-			// unavailable rtmp row is available:false — so resolveSourceRouting (C7)
-			// rejects with source_unavailable before the pipeline gateway gate is
+			// The config.source path resolves through getSourcesMessage, where the
+			// operator-disabled rtmp row is available:false — so resolveSourceRouting
+			// (C7) rejects with source_unavailable before the pipeline gateway gate is
 			// reached. Still a refusal, still not unknown_source (Metis #7).
 			expect(result).toEqual({
 				success: false,
