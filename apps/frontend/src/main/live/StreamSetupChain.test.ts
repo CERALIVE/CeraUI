@@ -265,6 +265,84 @@ describe("StreamSetupChain — encoder row (source gate)", () => {
 	});
 });
 
+describe("StreamSetupChain — encoder Edit source gate (C3)", () => {
+	function encoderEdit(container: HTMLElement): HTMLButtonElement | null {
+		const row = rowFor(container, "encoder");
+		return (
+			row?.querySelector<HTMLButtonElement>(
+				'[data-testid="open-encoder-dialog"]',
+			) ?? null
+		);
+	}
+
+	it("no effective source (no config.source, two captures) → Edit disabled with a non-empty reason title", () => {
+		const { container } = renderChain({
+			config: { relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(capture("cam-1", "HDMI"), capture("cam-2", "USB")),
+		});
+		const edit = encoderEdit(container);
+		expect(edit, "encoder Edit renders").not.toBeNull();
+		expect(edit?.disabled).toBe(true);
+		expect(edit?.getAttribute("title")).toBe(
+			"Select a video source before starting the stream",
+		);
+	});
+
+	it("no effective source (no captures at all) → Edit disabled with a reason title", () => {
+		const { container } = renderChain({
+			config: { relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(),
+		});
+		const edit = encoderEdit(container);
+		expect(edit?.disabled).toBe(true);
+		expect(edit?.getAttribute("title")).toBeTruthy();
+	});
+
+	it("does NOT gate the Destination row's Edit when no source resolves", () => {
+		const { container } = renderChain({
+			config: { relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(capture("cam-1", "HDMI"), capture("cam-2", "USB")),
+		});
+		const serverEdit = rowFor(container, "destination")?.querySelector<HTMLButtonElement>(
+			'[data-testid="open-server-dialog"]',
+		);
+		expect(serverEdit?.disabled).toBe(false);
+		expect(serverEdit?.getAttribute("title")).toBeNull();
+	});
+
+	it("implicit sole camera resolves the effective source → Edit enabled, no reason title", () => {
+		const { container } = renderChain({
+			config: { relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(capture("cam-1", "HDMI")),
+		});
+		const edit = encoderEdit(container);
+		expect(edit?.disabled).toBe(false);
+		expect(edit?.getAttribute("title")).toBeNull();
+	});
+
+	it("explicit config.source → Edit enabled, no reason title", () => {
+		const { container } = renderChain({
+			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(capture("cam-1", "HDMI"), capture("cam-2", "USB")),
+		});
+		const edit = encoderEdit(container);
+		expect(edit?.disabled).toBe(false);
+		expect(edit?.getAttribute("title")).toBeNull();
+	});
+
+	it("streaming lock wins over the source gate — the Edit trigger is replaced by the Lock badge", () => {
+		const { container } = renderChain({
+			config: { relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(capture("cam-1", "HDMI"), capture("cam-2", "USB")),
+			isStreaming: true,
+		});
+		expect(encoderEdit(container)).toBeNull();
+		expect(
+			rowFor(container, "encoder")?.querySelector('[title="Stop stream to change"]'),
+		).not.toBeNull();
+	});
+});
+
 describe("StreamSetupChain — audio is not a setup row (T11)", () => {
 	it("ignores a stray audio config row and never blocks Start on it", () => {
 		const { container } = renderChain({

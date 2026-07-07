@@ -278,6 +278,9 @@ const networkSummary = $derived(
 	onFix: (() => void) | undefined,
 )}
 	{@const locked = isSectionLocked(row.section, isStreaming)}
+	<!-- C3: Encoder Edit is disabled-with-reason while no source resolves (encoder
+	     settings key off the active source) — the Fix affordance stays the path. -->
+	{@const editDisabled = key === 'encoder' && !effectiveSourceId}
 	<div
 		class="flex items-center justify-between gap-4 py-2.5 first:pt-0"
 		data-testid="setup-row"
@@ -379,8 +382,10 @@ const networkSummary = $derived(
 				<Button
 					class="min-h-[44px] gap-1.5"
 					data-testid={row.testId}
+					disabled={editDisabled}
 					onclick={row.onEdit}
 					size="sm"
+					title={editDisabled ? resolveReason(READINESS_SOURCE_REASON) : undefined}
 					variant="ghost"
 				>
 					<Pencil aria-hidden={true} class="h-3.5 w-3.5" />

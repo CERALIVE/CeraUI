@@ -1017,6 +1017,33 @@ test.describe("Capability truthfulness (functional)", () => {
 		).toHaveCount(0);
 	});
 
+	// ── (C3) Encoder-row Edit is disabled-with-reason without an effective source ─
+	test("the encoder-row Edit is disabled-with-reason with no source selected and enables once a source is picked", async ({
+		page,
+	}) => {
+		send(GENERIC_PIPELINES);
+		sendFullCaps();
+		// Explicit empty source (the mock backend seeds one via legacy coercion and
+		// config frames MERGE, so an empty string is how a test represents "no source
+		// selected") + TWO captures → no sole-camera auto → no effective source. The
+		// encoder Edit is disabled-with-reason; the Destination row is not source-gated.
+		serverConfig({ source: "" });
+		sendSources([SRC_HDMI_CAP, SRC_RODE]);
+
+		const encoderEdit = page.getByTestId("open-encoder-dialog");
+		await expect(encoderEdit).toBeVisible({ timeout: 15_000 });
+		await expect(encoderEdit).toBeDisabled();
+		await expect(encoderEdit).toHaveAttribute("title", /\S/);
+		// The Destination row's Edit is never source-gated — it stays actionable.
+		await expect(page.getByTestId("open-server-dialog")).toBeEnabled();
+
+		// Select a source over the injected socket → an effective source resolves →
+		// the SAME Edit re-enables and drops its reason title.
+		serverConfig({ source: "video-hdmi" });
+		await expect(encoderEdit).toBeEnabled();
+		await expect(encoderEdit).not.toHaveAttribute("title", /.+/);
+	});
+
 	// ── (e) The migrated config-row testids still open their dialogs ────────────
 	test("the migrated open-encoder / open-audio / open-server-dialog rows still open their dialogs", async ({
 		page,
