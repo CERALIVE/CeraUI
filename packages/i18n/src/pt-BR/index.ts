@@ -1092,6 +1092,8 @@ const ptBR = {
 				"O dispositivo de captura relatou um erro de vídeo. Reconecte-o e tente novamente.",
 			pipeline_stall:
 				"A fonte de entrada travou ao iniciar. Verifique a fonte e tente novamente.",
+			audio_source_probe_failed:
+				"A fonte de áudio selecionada não ficou disponível a tempo. Reconecte-a ou escolha outra fonte e tente novamente.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

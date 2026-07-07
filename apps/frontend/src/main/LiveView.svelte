@@ -202,6 +202,7 @@ const STREAM_START_REASON_KEYS = [
 	'capture_audio_error',
 	'capture_video_error',
 	'pipeline_stall',
+	'audio_source_probe_failed',
 ] as const;
 type StreamStartReasonKey = (typeof STREAM_START_REASON_KEYS)[number];
 

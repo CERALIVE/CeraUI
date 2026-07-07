@@ -46,14 +46,14 @@ import {
 } from "../streaming.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { getStreamingProcesses, stopAll } from "./process-runner.ts";
-import { startStream } from "./start-stream.ts";
+import { type StartStreamResult, startStream } from "./start-stream.ts";
 
 let removeNetworkInterfacesChangeListener: (() => void) | undefined;
 
 export async function start(
 	conn: WebSocket,
 	params: ConfigParameters,
-): Promise<void> {
+): Promise<StartStreamResult | undefined> {
 	if (getIsStreaming() || isUpdating()) {
 		sendStatus(conn);
 		return;
@@ -109,8 +109,9 @@ export async function start(
 		handleSrtlaIpAddresses,
 	);
 
+	let result: StartStreamResult;
 	try {
-		await startStream(c.pipeline, c.srtlaAddr, c.srtlaPort, c.streamid);
+		result = await startStream(c.pipeline, c.srtlaAddr, c.srtlaPort, c.streamid);
 	} catch (err) {
 		if (typeof err === "string") {
 			startError(conn, err, senderId);
@@ -120,6 +121,11 @@ export async function start(
 		}
 		return;
 	}
+
+	// A structured pre-launch failure (audio-source probe) already reset the
+	// streaming flag in startStream; return it so the RPC surface carries the
+	// dual-field reason (C7).
+	return result;
 }
 
 export function stop() {

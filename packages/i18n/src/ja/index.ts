@@ -959,6 +959,8 @@ const ja = {
 				"キャプチャデバイスで映像エラーが発生しました。再接続してもう一度お試しください。",
 			pipeline_stall:
 				"開始時に入力ソースが停止しました。ソースを確認してもう一度お試しください。",
+			audio_source_probe_failed:
+				"選択した音声ソースが時間内に接続されませんでした。再接続するか別のソースを選択して、もう一度お試しください。",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

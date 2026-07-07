@@ -364,6 +364,8 @@ const es = {
 				"El dispositivo de captura informó un error de vídeo. Vuelve a conectarlo e inténtalo de nuevo.",
 			pipeline_stall:
 				"La fuente de entrada se detuvo al iniciar. Comprueba la fuente e inténtalo de nuevo.",
+			audio_source_probe_failed:
+				"La fuente de audio seleccionada no se conectó a tiempo. Vuelve a conectarla o elige otra fuente e inténtalo de nuevo.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

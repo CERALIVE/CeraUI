@@ -223,10 +223,18 @@ export const streamingStartProcedure = authedProcedure
 				// The existing start function handles validation and config saving.
 				// Pass the clamped copy so the persisted config matches the applied
 				// state we report back.
-				await startStream(
+				const startResult = await startStream(
 					context.ws as unknown as import("ws").default,
 					applied,
 				);
+				if (startResult && !startResult.success) {
+					return {
+						success: false,
+						is_streaming: false,
+						error: startResult.error,
+						reason: startResult.reason,
+					};
+				}
 				return { success: true, is_streaming: getIsStreaming(), applied };
 			} catch (error) {
 				return {

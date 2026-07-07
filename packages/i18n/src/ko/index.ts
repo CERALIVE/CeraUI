@@ -937,6 +937,8 @@ const ko = {
 				"캡처 장치에서 비디오 오류가 보고되었습니다. 다시 연결한 후 시도하세요.",
 			pipeline_stall:
 				"시작 중 입력 소스가 멈췄습니다. 소스를 확인한 후 다시 시도하세요.",
+			audio_source_probe_failed:
+				"선택한 오디오 소스가 제때 연결되지 않았습니다. 다시 연결하거나 다른 소스를 선택한 후 다시 시도하세요.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

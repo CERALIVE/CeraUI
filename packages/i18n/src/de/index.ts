@@ -364,6 +364,8 @@ const de = {
 				"Das Aufnahmegerät meldete einen Videofehler. Schließe es erneut an und versuche es noch einmal.",
 			pipeline_stall:
 				"Die Eingangsquelle blockierte beim Start. Prüfe die Quelle und versuche es erneut.",
+			audio_source_probe_failed:
+				"Die ausgewählte Audioquelle wurde nicht rechtzeitig verfügbar. Schließe sie erneut an oder wähle eine andere Quelle und versuche es erneut.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

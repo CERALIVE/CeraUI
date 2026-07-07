@@ -351,6 +351,8 @@ const en = {
 				"The capture device reported a video error. Reconnect it and try again.",
 			pipeline_stall:
 				"The input source stalled while starting. Check the source and try again.",
+			audio_source_probe_failed:
+				"The selected audio source didn't come online in time. Reconnect it or choose another source, then try again.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

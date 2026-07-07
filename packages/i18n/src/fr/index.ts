@@ -1116,6 +1116,8 @@ const fr = {
 				"Le périphérique de capture a signalé une erreur vidéo. Reconnectez-le et réessayez.",
 			pipeline_stall:
 				"La source d'entrée s'est bloquée au démarrage. Vérifiez la source et réessayez.",
+			audio_source_probe_failed:
+				"La source audio sélectionnée n'est pas apparue à temps. Reconnectez-la ou choisissez une autre source, puis réessayez.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
