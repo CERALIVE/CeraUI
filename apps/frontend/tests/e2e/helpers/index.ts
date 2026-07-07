@@ -103,6 +103,24 @@ export async function navigateTo(page: Page, destination: Destination): Promise<
  */
 export async function ensureAuthenticated(page: Page): Promise<void> {
 	const password = process.env.E2E_PASSWORD ?? '12345678';
+
+	// Cold-start hardening (mirrors global-setup.ts + wifi-surface/ssh-power-update/
+	// hotspot-toggle/dev-reboot-disconnect/reboot-countdown-recovery specs): under CI
+	// worker contention the app can take >5s to mount, at which point index.html
+	// reveals a full-screen #js-failed debug overlay (z-index 20000) that NEVER hides
+	// again and intercepts every click — the dominant cause of the intermittent
+	// "authedPage"/beforeEach 30s timeouts on the auth controls (both E2E shards fail
+	// here). Wait for the real mount signal, then drop that debug artifact before
+	// interacting. A genuine mount failure still surfaces: waitForFunction times out,
+	// or the auth controls below never appear — this only removes a cosmetic overlay,
+	// it never makes a broken app look authenticated.
+	await page
+		.waitForFunction(() => (window as any).__ceraAppMounted === true, undefined, {
+			timeout: 60_000,
+		})
+		.catch(() => undefined);
+	await page.evaluate(() => document.getElementById('js-failed')?.remove());
+
 	// The app nests <header> inside <main>, so it has no implicit "banner" role;
 	// locate the app-shell header by tag (it is the first <header> in the DOM,
 	// ahead of any view-level headers). Its presence is the authed-shell signal.
