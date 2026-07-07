@@ -65,6 +65,7 @@ import {
 	markFieldFailed,
 } from '$lib/rpc/field-sync-state.svelte';
 import { AUDIO_SOURCE_AUTO } from '@ceraui/rpc/schemas';
+import { hasEffectiveSource } from '$lib/streaming/effective-source';
 import {
 	audioSourceLabel,
 	deriveActiveSummary,
@@ -188,6 +189,15 @@ const captureSources = $derived(
 	),
 );
 const orderedSources = $derived(sources?.sources ?? []);
+
+// ── Audio-surface visibility gate (C1) ─────────────────────────────────────
+// The one audio surface renders ONLY when an effective source exists — an
+// explicit `config.source`, OR the implicit sole camera (exactly one capture
+// source, no config.source). The predicate is the SHARED pure function so this
+// gate can never diverge from StreamSetupChain's readiness wiring. FAIL-OPEN:
+// when `sources` is undefined (standalone / federation mount) it renders as
+// before — the gate only hides when sources are KNOWN and empty-of-selection.
+const showAudioSurface = $derived(hasEffectiveSource(config, sources));
 
 // ── Operator-disabled rows: hidden, fail-VISIBLE when selected (Task 9 / Todo 7) ──
 // A source the operator switched OFF in Settings reports available:false with the
@@ -693,7 +703,11 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 
 		<!-- Audio source — THE one audio surface (T11): inline picker + a "Codec &
 		     delay" affordance opening the AudioDialog, hidden while streaming so the
-		     surface stays read-only mid-stream (audioReadOnly gate unchanged). -->
+		     surface stays read-only mid-stream (audioReadOnly gate unchanged).
+		     C1: the whole surface is gated on an effective source existing (explicit
+		     config.source or the implicit sole camera) — fail-open when `sources` is
+		     undefined (standalone / federation mount). -->
+		{#if showAudioSurface}
 		<div class="space-y-2 border-t pt-5" data-testid="source-audio">
 			<div class="flex items-center gap-1">
 				<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
@@ -828,5 +842,6 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 				</Select.Root>
 			{/if}
 		</div>
+		{/if}
 	</Card.Content>
 </Card.Root>

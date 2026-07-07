@@ -47,6 +47,7 @@ import { ChevronRight, Lock, Network, Pencil } from '@lucide/svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
+import { deriveEffectiveSource } from '$lib/streaming/effective-source';
 import {
 	deriveGoLiveReadiness,
 	type GateStatus,
@@ -115,15 +116,13 @@ const {
 // Sole-camera auto-select (pinned): only when config.source is unset AND there is
 // EXACTLY one capture-origin source. The row never renders once config.source is
 // set, and NO config is written here — the id is folded into the Start payload.
-const captureSources = $derived(
-	sources?.sources.filter((source) => source.origin === 'capture') ?? [],
-);
-const soleCamera = $derived(
-	!config?.source && captureSources.length === 1 ? captureSources[0] : undefined,
-);
+// The predicate lives in the shared pure module so SourceSection's audio-visibility
+// gate (C1) can never diverge from this readiness wiring.
+const effective = $derived(deriveEffectiveSource(config, sources));
+const soleCamera = $derived(effective.soleCamera);
 // The id the readiness + Start use: the explicit config.source, else the implicit
 // sole camera.
-const effectiveSourceId = $derived(config?.source ?? soleCamera?.id);
+const effectiveSourceId = $derived(effective.effectiveSourceId);
 const effectiveSourceEntry = $derived(
 	effectiveSourceId
 		? sources?.sources.find((source) => source.id === effectiveSourceId)
