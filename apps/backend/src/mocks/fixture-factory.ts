@@ -104,17 +104,17 @@ const DEFAULT_SIM_STATE = {
 	pukRetries: MOCK_SIM_PUK_RETRIES,
 } satisfies MockSimState;
 
-const DEFAULT_AUDIO_DEVICES = {
-	"USB audio": "usbaudio",
-} satisfies MockAudioDevices;
-
-// Dual USB audio cards for caps-full/streaming-active scenarios: two distinct
-// ALSA card IDs with real display names. Exercises T4's engine-join tier
-// (alsa_card_id match + human-name heuristic) and dedupe/auto-follow paths.
+// Dual USB audio cards: two distinct ALSA card IDs with real product display
+// names. Exercises T4's engine-join tier (alsa_card_id match + human-name
+// heuristic) and dedupe/auto-follow paths. Seeds the default dev scenario
+// (multi-modem-wifi) as well as caps-full/streaming-active.
 const DUAL_USB_AUDIO_DEVICES = {
 	"RØDE AI-Micro": "rode_ai_micro",
 	"Elgato Wave:3": "elgato_wave3",
 } satisfies MockAudioDevices;
+
+// Aliased (not forked) so the default and dual maps never drift.
+const DEFAULT_AUDIO_DEVICES = DUAL_USB_AUDIO_DEVICES;
 
 // The full-engine-profile per-device modes: an HDMI capture device (1080p@[30,60]
 // + 2160p@[30]) and a UVC/USB device (720p@[30,60] + 1080p@[30]). These are the

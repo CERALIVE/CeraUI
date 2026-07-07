@@ -69,7 +69,9 @@ interface Group {
 const t = $derived($LL.settings.index);
 const appearance = $derived($LL.settings.appearance);
 const odd = $derived($LL.settings.onDeviceDisplay);
-const ni = $derived($LL.settings.networkIngest);
+// The "Network ingest" entry is retitled "Sources" (test-pattern + rtmp/srt
+// ingest live in one dialog). Same entry key + testids; only the copy changes.
+const sources = $derived($LL.settings.dialogs.sources);
 
 // On-Device Display entry desc tracks the live DC-2 state for at-a-glance
 // status; falls back to the static description before the first kiosk push.
@@ -142,7 +144,7 @@ const groups = $derived<Group[]>([
 		label: t.groups.streaming(),
 		entries: [
 			{ key: 'cloud', title: t.cloudRemote(), desc: t.cloudRemoteDesc(), icon: Cloud },
-			{ key: 'networkIngest', title: ni.title(), desc: ni.desc(), icon: Radio },
+			{ key: 'networkIngest', title: sources.title(), desc: sources.description(), icon: Radio },
 		],
 	},
 	{

@@ -459,14 +459,23 @@ public functions, so existing tests that pass deps explicitly are unaffected.
 
 Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEach`/`afterEach` to pick the branch deterministically on any host.
 
-## DEP BASELINE (as of 2026-06)
+## DEP BASELINE (as of 2026-07)
 
 | Package | Version |
 |---------|---------|
-| `@orpc/*` (client, server, contract) | 1.14.5 |
+| `@orpc/*` (client, server, contract) | 1.14.7 |
 | Bun pin (`.bun-version`) | 1.3.14 |
-| `svelte` | 5.56.3 |
-| `vitest` | 4.1.8 |
+| `svelte` | 5.56.4 |
+| `vitest` | 4.1.10 |
+| `vite` | 8.1.3 |
+| `tailwindcss` (+ `@tailwindcss/vite`/`@tailwindcss/postcss`) | 4.3.2 |
+| `@biomejs/biome` | 2.5.2 |
+| `@playwright/test` | 1.61.1 |
+| `@lucide/svelte` | 1.23.0 |
+| `svelte-check` | 4.7.1 |
+| `@sveltejs/vite-plugin-svelte` | 7.1.3 |
+| `@axe-core/playwright` | 4.12.1 |
+| `@types/node` | 26.1.0 (Node-26 typings; runtime CI stays on Node 24 — types-ahead-of-runtime, all gates green) |
 
 Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2/docs/fast-reload.md`](../image-building-pipeline/v2/docs/fast-reload.md)
 
@@ -1352,10 +1361,15 @@ existing bus, no new endpoint). Every row is one of four `origin` variants
   config mutation or engine dispatch — `cerastream-backend.ts` is untouched by
   this entire model (verified by a `git diff`-based regression test).
 - **Shim policy**: the legacy `pipelines`/`devices` broadcasts and the coarse
-  `capabilities.device_modes` field are kept running unmodified for one release
-  as a rollback safety net — no shipped frontend surface reads them anymore.
-  Tracked as `TD-legacy-source-broadcasts` in `docs/TECHNICAL_DEBT.md`; do not
-  delete the producers until that entry's exit condition is met.
+  `capabilities.device_modes` field are kept running unmodified as a rollback
+  safety net. `EncoderDialog.svelte`, `AudioDialog.svelte`, `LiveView.svelte`,
+  and `StreamingStateManager.svelte.ts` still call `getPipelines`/`getDevices`
+  directly today — only `SourceSection`/`StreamSetupChain` read `getSources()`
+  exclusively. The real exit condition is migrate those four consumers off the
+  legacy getters onto `getSources()`-derived data, THEN ship one release with
+  no rollback needed, THEN delete the producers. Tracked as
+  `TD-legacy-source-broadcasts` in `docs/TECHNICAL_DEBT.md`; do not delete the
+  producers until that entry's exit condition is met.
 
 ### StreamSetupChain / IdleCockpit / LiveCockpit
 

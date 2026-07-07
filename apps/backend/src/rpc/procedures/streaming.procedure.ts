@@ -23,6 +23,8 @@ import {
 	type SwitchInputOutput,
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
+	setSourceVisibilityInputSchema,
+	setSourceVisibilityOutputSchema,
 	streamHealthOutputSchema,
 	streamingConfigInputSchema,
 	streamingSetConfigOutputSchema,
@@ -351,6 +353,7 @@ export const getConfigProcedure = authedProcedure
 			selected_video_input: config.selected_video_input,
 			source: config.source,
 			source_preference: config.source_preference,
+			sources_visibility: config.sources_visibility,
 			srtla_addr: config.srtla_addr,
 			srtla_port: config.srtla_port,
 			srt_streamid: config.srt_streamid,
@@ -555,6 +558,28 @@ export const setConfigProcedure = authedProcedure
 			refreshResolvedAsrcPreview();
 		}
 		return { success: true, applied };
+	});
+
+/**
+ * Persist device-wide source visibility (test-pattern hide) — config-only, no
+ * service gate. The SINGLE mutation path for `sources_visibility`: persist via
+ * the atomic saveConfig, then rebroadcast BOTH the unified `sources` snapshot (so
+ * the Live source list re-renders the marked-but-never-dropped row) and the
+ * `config` echo (so the Sources dialog reflects the saved toggle).
+ */
+export const setSourceVisibilityProcedure = authedProcedure
+	.input(setSourceVisibilityInputSchema)
+	.output(setSourceVisibilityOutputSchema)
+	.handler(({ input }) => {
+		const config = getConfig();
+		config.sources_visibility = { hide_test_pattern: input.hide_test_pattern };
+		saveConfig();
+		broadcastMsg("config", config);
+		broadcastSources();
+		return {
+			success: true,
+			applied: { hide_test_pattern: input.hide_test_pattern },
+		};
 	});
 
 /**

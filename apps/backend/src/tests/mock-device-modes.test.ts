@@ -167,7 +167,8 @@ describe("resetMockState — restores device_modes override + topology flag", ()
 		expect(getMockEngineDevices().devices.map((d) => d.input_id)).toEqual([
 			"hdmi",
 			"usb",
-			"audio_usbaudio",
+			"audio_rode_ai_micro",
+			"audio_elgato_wave3",
 		]);
 	});
 

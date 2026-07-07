@@ -189,11 +189,13 @@ const captureSources = $derived(
 );
 const orderedSources = $derived(sources?.sources ?? []);
 
-// ── Operator-disabled network rows: hidden, fail-VISIBLE when selected (Task 9) ──
-// A network source the operator switched OFF in Settings reports available:false
-// with the DISTINCT disabledInSettings reason (T6/T7 backend truth — NEVER the
-// gateway-inactive/lost reasons). Such a row is HIDDEN from the picker (an
-// off-in-Settings source is not an option) — EXCEPT when it IS the current
+// ── Operator-disabled rows: hidden, fail-VISIBLE when selected (Task 9 / Todo 7) ──
+// A source the operator switched OFF in Settings reports available:false with the
+// DISTINCT disabledInSettings reason (backend truth — NEVER the gateway-inactive/
+// lost reasons). This started as network-only (rtmp/srt ingest, Task 9) and now
+// generalizes to ANY origin (Todo 7): the test-pattern virtual row hidden via the
+// Sources settings carries the SAME reason. Such a row is HIDDEN from the picker
+// (an off-in-Settings source is not an option) — EXCEPT when it IS the current
 // config.source, where it stays VISIBLE disabled-with-reason so the operator sees
 // why Start is blocked and how to fix it (a Settings hint below the reason). This
 // is the ONLY reason that hides a row; a gateway-inactive / lost / capability
@@ -201,7 +203,6 @@ const orderedSources = $derived(sources?.sources ?? []);
 const DISABLED_IN_SETTINGS_REASON = 'live.education.reason.disabledInSettings';
 function isOperatorDisabled(source: StreamSource): boolean {
 	return (
-		source.origin === 'network' &&
 		source.available === false &&
 		source.unavailableReason === DISABLED_IN_SETTINGS_REASON
 	);
@@ -310,7 +311,7 @@ let networkQrDataUrls = $state<Record<string, string>>({});
 $effect(() => {
 	let cancelled = false;
 	const next: Record<string, string> = {};
-	Promise.all(
+	void Promise.all(
 		networkSources.map(async (source) => {
 			if (!source.url) return;
 			try {
@@ -609,6 +610,27 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										{$LL.live.networkIngest.disabledInSettingsHint()}
 									</p>
 								{/if}
+							{/if}
+
+							<!-- Origin-neutral fail-visible block (Todo 7): a NON-network source the
+							     operator hid in Settings (e.g. the test-pattern virtual row) is only
+							     ever reached here when it IS the selected source (else filtered out).
+							     Mirror the network two-line treatment above, but with origin-neutral
+							     testids keyed on source.id — source.requiresGateway is undefined off
+							     the network origin, so its testids can't be reused. -->
+							{#if source.origin !== 'network' && isOperatorDisabled(source)}
+								<p
+									class="text-status-warning mt-1 text-xs"
+									data-testid={`source-hidden-reason-${source.id}`}
+								>
+									{rowReason(source)}
+								</p>
+								<p
+									class="text-muted-foreground mt-0.5 text-xs"
+									data-testid={`source-hidden-settings-hint-${source.id}`}
+								>
+									{$LL.live.networkIngest.disabledInSettingsHint()}
+								</p>
 							{/if}
 
 							{#if source.origin === 'network' && source.url && selected}

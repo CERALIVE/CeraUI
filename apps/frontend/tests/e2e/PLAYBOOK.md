@@ -48,7 +48,7 @@ If you're reaching for `toHaveScreenshot()` outside a `@visual` file, go back to
 
 These are enforced by fixture throws and a CI grep gate. Violations fail the build.
 
-- **No `page.screenshot()` or `toHaveScreenshot()` in functional specs.** The screenshot fixture throws if called outside a `@visual` file. CI also greps for these calls and fails the run.
+- **No `page.screenshot()` or `toHaveScreenshot()` in functional specs.** The screenshot fixture throws unless the test is tagged `@visual` (visual-regression baselines) or `@gallery` (the docs screenshot gallery). CI also greps for these calls and fails the run for any file without a `.visual.spec.ts` suffix.
 - **No `waitForTimeout()` anywhere.** It's a sleep. Sleeps are races. Use web-first assertions (`toBeVisible`, `toHaveAttribute`, `expect.poll`) — they auto-retry until the condition is true or the timeout expires.
 - **No hardcoded `#nav-tab-*` selectors in specs.** Use `navigateTo()` from `helpers/index.ts`. It handles both the desktop rail (`#nav-tab-*`) and the mobile dock (`#mobile-nav-tab-*`) by checking which is visible.
 - **Never put HUD live values in ARIA snapshots.** Bitrate numbers, signal dBm, temperatures, and timestamps change on every render. Snapshots that include them will flake immediately. Exclude them with `...` or regex patterns.
@@ -122,13 +122,14 @@ await expect.poll(
 
 ## When Screenshots ARE Allowed
 
-Screenshots are only permitted in:
+Screenshots are permitted only in two places, both requiring the `.visual.spec.ts` suffix (the CI grep guardrail's "allowed to screenshot" marker):
 
 ```
-tests/e2e/visual/*.visual.spec.ts
+tests/e2e/visual/*.visual.spec.ts     — tag @visual  (visual-regression baselines)
+tests/e2e/gallery/*.visual.spec.ts    — tag @gallery (docs screenshot gallery)
 ```
 
-Files must be tagged `@visual` and use `toHaveScreenshot()` with committed baseline images.
+`@visual` files use `toHaveScreenshot()` with committed baseline images. `@gallery` files use raw `page.screenshot()` to write documentation PNGs and are NOT a regression gate — they run only via `bun run screenshots` and are grep-inverted out of every functional entrypoint. The fixture screenshot guard permits BOTH tags; every other test gets a throwing screenshot stub.
 
 ```bash
 # Update baselines after an intentional visual change

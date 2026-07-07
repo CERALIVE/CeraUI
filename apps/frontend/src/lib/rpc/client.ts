@@ -41,6 +41,8 @@ import type {
 	SetIngestEnabledInput,
 	SetIngestEnabledOutput,
 	SetPasswordInput,
+	SetSourceVisibilityInput,
+	SetSourceVisibilityOutput,
 	SimPukUnlockInput,
 	SimPukUnlockOutput,
 	SimUnlockInput,
@@ -534,6 +536,9 @@ export interface TypedRPC {
 		setConfig: (
 			input: StreamingConfigInput,
 		) => Promise<StreamingSetConfigOutput>;
+		setSourceVisibility: (
+			input: SetSourceVisibilityInput,
+		) => Promise<SetSourceVisibilityOutput>;
 		// Dev-only mock hardware switcher
 		setMockHardware: (input: {
 			hardware: "jetson" | "n100" | "rk3588" | "generic";

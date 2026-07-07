@@ -285,15 +285,15 @@ export function getMockEngineDevices(): ListDevicesResult {
 
 /**
  * Scenario-seeded ALSA audio devices for dev/e2e, wired into `getAudioDevices()`
- * (audio.ts) via `setMockAudioDevicesProvider` at boot. Seeds a coherent
- * `{ "USB audio": "usbaudio" }` (plus HDMI on caps-full) IN ADDITION to the two
+ * (audio.ts) via `setMockAudioDevicesProvider` at boot. Seeds the realistic
+ * dual-dongle map (RØDE AI-Micro + Elgato Wave:3) IN ADDITION to the two
  * pseudo-sources, so `status.asrcs` contains the configured `asrc` without a real
  * `/sys/class/sound` scan. Empty (no seed) for the minimal/engine-down scenarios
  * and in production (`shouldUseMocks()` false).
  *
- * caps-full and streaming-active scenarios gain dual USB audio cards (RØDE AI-Micro
- * + Elgato Wave:3) to exercise T4's engine-join tier (alsa_card_id match + human-name
- * heuristic) and dedupe/auto-follow paths end-to-end in mock mode.
+ * multi-modem-wifi, caps-full, and streaming-active all seed the same two USB audio
+ * cards to exercise T4's engine-join tier (alsa_card_id match + human-name heuristic)
+ * and dedupe/auto-follow paths end-to-end in mock mode.
  */
 export function getMockAudioDevices(): MockAudioDevices {
 	if (!shouldUseMocks()) {

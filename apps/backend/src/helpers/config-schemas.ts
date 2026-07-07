@@ -56,6 +56,7 @@ import {
 	relayProviderMetaSchema,
 	resolverDecidedBySchema,
 	SRTLA_MIN_LATENCY_MS,
+	sourcesVisibilitySchema,
 	streamProfileIdSchema,
 	streamRecoveryPreferenceSchema,
 } from "@ceraui/rpc/schemas";
@@ -246,6 +247,12 @@ export const runtimeConfigSchema = z.object({
 			srt_enabled: z.boolean().default(true),
 		})
 		.optional(),
+
+	// Device-wide source visibility (config-only row visibility for the virtual
+	// test-pattern origin — NOT a service gate). A missing key (old config) leaves
+	// every source visible via the inner default; kept `.optional()` so
+	// `let config: RuntimeConfig = {}` still parses (E3 additive pattern).
+	sources_visibility: sourcesVisibilitySchema.optional(),
 });
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;

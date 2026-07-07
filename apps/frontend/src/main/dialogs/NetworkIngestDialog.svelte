@@ -33,7 +33,7 @@ import {
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
-import { getStatus } from '$lib/rpc/subscriptions.svelte';
+import { getConfig, getStatus } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -43,6 +43,7 @@ interface Props {
 let { open = $bindable(false) }: Props = $props();
 
 const t = $derived($LL.settings.networkIngest);
+const sources = $derived($LL.settings.dialogs.sources);
 
 type Protocol = 'rtmp' | 'srt';
 const PROTOCOLS: readonly Protocol[] = ['rtmp', 'srt'];
@@ -136,6 +137,62 @@ $effect(() => {
 	}
 });
 
+// ── Test-pattern visibility (Sources) ──────────────────────────────────────
+// A THIRD toggle beside rtmp/srt. The switch reads "Show test pattern": ON =
+// visible, so `checked = !hide_test_pattern` (default checked when the key is
+// absent). Unlike the protocol toggles this op is `silent` — a genuine failure
+// never toasts; the calm inline band below (driven by the `failed` phase) is the
+// sole feedback. The switch position is pessimistic: it reflects the CONFIRMED
+// config (`config.sources_visibility.hide_test_pattern`) and only moves once the
+// authoritative `config` broadcast lands, never on the RPC resolve.
+const TEST_PATTERN_KEY = 'sources:test-pattern';
+const showTestPattern = $derived(
+	getConfig()?.sources_visibility?.hide_test_pattern !== true,
+);
+function testPatternBusy(): boolean {
+	return getOperationPhase(TEST_PATTERN_KEY) === 'pending';
+}
+function testPatternFailed(): boolean {
+	return getOperationPhase(TEST_PATTERN_KEY) === 'failed';
+}
+
+// The intended "show" target, held while the op is `pending` so the confirm
+// $effect knows which config broadcast ends the wait. Reset the moment the
+// broadcast confirms, or the RPC rejects/refuses.
+let testPatternTarget = $state<boolean | null>(null);
+
+async function toggleTestPattern(nextShow: boolean) {
+	testPatternTarget = nextShow;
+	const result = await osCommand({
+		key: TEST_PATTERN_KEY,
+		target: nextShow,
+		// `silent`: no toast on failure — the inline band renders off the `failed`
+		// phase instead (unlike the non-silent rtmp/srt toggles).
+		silent: true,
+		rpc: () =>
+			rpc.streaming.setSourceVisibility({ hide_test_pattern: !nextShow }),
+	});
+	// undefined → re-entry no-op or a thrown RPC (already `failed`, no toast).
+	// A structured `success:false` is also already `failed` via defaultClassify.
+	if (!result?.success) {
+		testPatternTarget = null;
+		return;
+	}
+	// Success: stay `pending`. The confirm $effect resolves it once the
+	// authoritative `config` broadcast reflects the target.
+}
+
+// Confirm the pending test-pattern toggle once the config broadcast reflects its
+// target — the switch's final position always waits for the device's own truth.
+$effect(() => {
+	if (getOperationPhase(TEST_PATTERN_KEY) !== 'pending') return;
+	if (testPatternTarget === null) return;
+	if (showTestPattern === testPatternTarget) {
+		testPatternTarget = null;
+		confirmOperation(TEST_PATTERN_KEY);
+	}
+});
+
 const STATUS_META = {
 	running: { dot: 'bg-status-success motion-safe:animate-pulse' },
 	stopped: { dot: 'bg-muted-foreground/50' },
@@ -154,7 +211,7 @@ const toggleLabels = $derived({
 } satisfies Record<Protocol, string>);
 </script>
 
-<AppDialog bind:open description={t.desc()} hideFooter icon={Radio} title={t.title()}>
+<AppDialog bind:open description={sources.description()} hideFooter icon={Radio} title={sources.title()}>
 	<div class="space-y-5">
 		{#if unavailable}
 			<div
@@ -204,6 +261,45 @@ const toggleLabels = $derived({
 					</span>
 				</div>
 			{/each}
+		</div>
+
+		<!-- Test-pattern visibility (Sources). Pessimistic + silent op: the calm
+		     band below is the sole failure feedback (no toast). -->
+		<div class="space-y-2">
+			<div class="overflow-hidden rounded-lg border">
+				<div
+					class="flex items-center justify-between gap-4 px-4 py-3.5"
+					data-testid="sources-test-pattern-row"
+				>
+					<div class="min-w-0 flex-1">
+						<p class="text-sm font-semibold">{sources.testPatternToggle()}</p>
+						<p class="text-muted-foreground mt-0.5 text-xs">{sources.testPatternHint()}</p>
+					</div>
+					<span class="flex shrink-0 items-center gap-2">
+						{#if testPatternBusy()}
+							<LoaderCircle
+								aria-hidden="true"
+								class="text-muted-foreground size-3.5 animate-spin motion-reduce:animate-none"
+							/>
+						{/if}
+						<Switch
+							aria-label={sources.testPatternToggle()}
+							bind:checked={() => showTestPattern, (next) => void toggleTestPattern(next)}
+							data-testid="sources-test-pattern-toggle"
+							disabled={testPatternBusy()}
+						/>
+					</span>
+				</div>
+			</div>
+			{#if testPatternFailed()}
+				<div
+					class="border-status-warning/30 bg-status-warning/10 rounded-lg border px-4 py-3 text-sm"
+					data-testid="sources-test-pattern-error"
+					role="status"
+				>
+					{$LL.network.os.operationFailed()}
+				</div>
+			{/if}
 		</div>
 	</div>
 </AppDialog>

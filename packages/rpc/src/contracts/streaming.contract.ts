@@ -16,6 +16,8 @@ import {
 	reloadAudioDelayOutputSchema,
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
+	setSourceVisibilityInputSchema,
+	setSourceVisibilityOutputSchema,
 	streamHealthOutputSchema,
 	streamingConfigInputSchema,
 	streamingSetConfigOutputSchema,
@@ -62,6 +64,15 @@ export const streamingContract = oc.router({
 	 * Persist streaming/server configuration without starting the stream.
 	 */
 	setConfig: oc.input(streamingConfigInputSchema).output(streamingSetConfigOutputSchema),
+
+	/**
+	 * Persist device-wide source visibility (test-pattern hide) — config-only,
+	 * rebroadcasts `sources` + `config`. The single mutation path for
+	 * `sources_visibility`; never `setConfig`.
+	 */
+	setSourceVisibility: oc
+		.input(setSourceVisibilityInputSchema)
+		.output(setSourceVisibilityOutputSchema),
 
 	/**
 	 * Subscribe to streaming status changes

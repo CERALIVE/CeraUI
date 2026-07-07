@@ -139,9 +139,9 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 	});
 
 	test("WiFi scan dispatches through osCommand and shows an in-flight state", async ({ page }) => {
-		const trigger = page.getByTestId("open-wifi-selector-dialog");
+		const trigger = page.getByTestId("open-wifi-selector-dialog").first();
 		await expect(trigger).toBeVisible();
-		// multi-modem-wifi has a WiFi radio → the Connect trigger is enabled.
+		// multi-modem-wifi has a WiFi radio → the per-row Connect trigger is enabled.
 		await expect(trigger).toBeEnabled();
 		await trigger.click();
 

@@ -56,12 +56,14 @@ import type {
 	RequiresGateway,
 	Resolution,
 	SourcesMessage,
+	SourcesVisibility,
 	StreamSource,
 	StreamSourceBase,
 } from "@ceraui/rpc/schemas";
 import { framerateSchema, resolutionSchema } from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
+import { getConfig } from "../config.ts";
 import { getNetworkIngestInfo } from "../network/network-ingest.ts";
 import type { EngineAudioDevice } from "./audio-naming.ts";
 import {
@@ -170,10 +172,21 @@ function networkAvailability(
 function buildBaseEntry(
 	cap: CapabilitySource,
 	ingest: NetworkIngest,
+	hideTestPattern: boolean,
 ): StreamSource {
 	const base = baseFacets(cap);
 	if (cap.id === VIRTUAL_SOURCE_ID) {
-		return { ...base, origin: "virtual", labelKey: sourceLabelKey(cap.id) };
+		// Config-only visibility (Todo 6): a hidden test pattern stays EMITTED but
+		// marked unavailable with the same reason the operator-disabled network
+		// rows carry — the frontend owns fail-visible rendering. Never dropped.
+		return {
+			...base,
+			...(hideTestPattern
+				? { available: false, unavailableReason: DISABLED_IN_SETTINGS_REASON }
+				: {}),
+			origin: "virtual",
+			labelKey: sourceLabelKey(cap.id),
+		};
 	}
 	const gatewayKind = NETWORK_SOURCE_IDS[cap.id];
 	if (gatewayKind !== undefined) {
@@ -229,6 +242,8 @@ export interface BuildSourcesInput {
 	devices: readonly CaptureDevice[];
 	/** The network-ingest gateway snapshot (rtmp/srt availability + LAN url). */
 	networkIngest: NetworkIngest;
+	/** Device-wide source visibility (Todo 6). Absent → every source visible. */
+	sourcesVisibility?: SourcesVisibility;
 }
 
 /**
@@ -237,9 +252,10 @@ export interface BuildSourcesInput {
  * bridgeable engine device then REPLACES the coarse entry it bridges to.
  */
 export function buildSources(input: BuildSourcesInput): StreamSource[] {
+	const hideTestPattern = input.sourcesVisibility?.hide_test_pattern ?? false;
 	// (a) BASE — one entry per capability source, in contract order.
 	const base = input.sources.map((cap) =>
-		buildBaseEntry(cap, input.networkIngest),
+		buildBaseEntry(cap, input.networkIngest, hideTestPattern),
 	);
 
 	// (b) OVERLAY — group bridgeable VIDEO devices by their target pipeline id. A
@@ -430,10 +446,12 @@ export function resetEngineDeviceCache(): void {
 /** Build the `sources` broadcast payload from the live caches (synchronous). */
 export function getSourcesMessage(): SourcesMessage {
 	const caps = getLastCapabilities();
+	const sourcesVisibility = getConfig().sources_visibility;
 	const sources = buildSources({
 		sources: caps?.sources ?? [],
 		devices: getEngineDeviceCache(),
 		networkIngest: getNetworkIngestInfo(),
+		...(sourcesVisibility !== undefined ? { sourcesVisibility } : {}),
 	});
 	return { hardware: getEffectiveHardware(), sources };
 }

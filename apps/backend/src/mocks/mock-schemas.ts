@@ -120,7 +120,7 @@ export const mockWifiNetworkSchema = z.object({
 });
 export type MockWifiNetwork = z.infer<typeof mockWifiNetworkSchema>;
 
-/** Mirrors the `getAudioDevices()` map — `displayName → alsaId` (e.g. `{ "USB audio": "usbaudio" }`). */
+/** Mirrors the `getAudioDevices()` map — `displayName → alsaId` (e.g. `{ "RØDE AI-Micro": "rode_ai_micro" }`). */
 export const mockAudioDevicesSchema = z.record(
 	z.string().min(1),
 	z.string().min(1),

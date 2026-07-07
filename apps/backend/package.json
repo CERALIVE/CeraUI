@@ -12,7 +12,7 @@
 		"@ceralive/cerastream": "2026.7.0",
 		"@ceralive/srtla-send": "2026.6.2",
 		"@ceraui/rpc": "workspace:*",
-		"@orpc/server": "^1.14.6",
+		"@orpc/server": "^1.14.7",
 		"finalhandler": "^2.1.1",
 		"zod": "catalog:",
 		"http-proxy": "^1.18.1",

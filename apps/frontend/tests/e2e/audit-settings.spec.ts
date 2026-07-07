@@ -46,7 +46,7 @@ function send(payload: unknown): void {
 const ENTRIES: ReadonlyArray<{ trigger: RegExp; dialog: string }> = [
 	{ trigger: /Device Password/i, dialog: "Device Password" },
 	{ trigger: /Cloud Remote Server/i, dialog: "Cloud Remote Server" },
-	{ trigger: /Network ingest/i, dialog: "Network ingest" },
+	{ trigger: /^Sources/i, dialog: "Sources" },
 	{ trigger: /SSH Access/i, dialog: "SSH Access" },
 	{ trigger: /System Logs/i, dialog: "System Logs" },
 	{ trigger: /Software Updates/i, dialog: "Software Updates" },
@@ -214,9 +214,9 @@ test.describe("Audit A3 — Settings destination + dialogs", { tag: "@audit" }, 
 	test("network-ingest toggles round-trip in the Settings context", async ({
 		page,
 	}) => {
-		await openEntry(page, /Network ingest/i);
+		await openEntry(page, /^Sources/i);
 		await expect(
-			page.getByRole("dialog", { name: "Network ingest" }),
+			page.getByRole("dialog", { name: "Sources" }),
 		).toBeVisible();
 
 		const rtmp = page.getByTestId("network-ingest-toggle-rtmp");

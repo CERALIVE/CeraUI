@@ -247,6 +247,14 @@ const zh = {
 				"重启时间结束后设备仍有响应。它可能没有重启——请重试，或关闭以继续使用。",
 			rebootRecoveryRetry: "再次重启",
 			rebootRecoveryDismiss: "关闭",
+			sources: {
+				title: "信号源",
+				description:
+					"选择在直播选择器中显示的视频源，并允许此网络上的手机或编码器向设备推流。",
+				testPatternToggle: "显示测试图案",
+				testPatternHint:
+					"在信号源选择器中保留内置测试图案作为备用信号。连接真实信号源后可将其关闭以隐藏。",
+			},
 			blockedUpdating: "更新正在进行中。请等待后再重启。",
 		},
 		pairing: {

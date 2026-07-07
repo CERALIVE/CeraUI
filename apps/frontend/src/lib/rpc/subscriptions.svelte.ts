@@ -649,6 +649,15 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			}
 			break;
 
+		case "device.activeProfile":
+			// Platform status-relay frame (TD-active-profile-ui-fanout). The device
+			// broadcasts this to the platform hub for remote-control profile tracking,
+			// and it fans out to all authenticated UI clients via subscriptions. The UI
+			// has no consumer for this frame — it drives nothing in the frontend — so
+			// we explicitly ignore it here with a no-op case to avoid the default
+			// console.warn.
+			break;
+
 		default:
 			console.warn("Unhandled message type:", type, data);
 	}

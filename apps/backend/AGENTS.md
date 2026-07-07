@@ -487,11 +487,16 @@ Every row is one of four `origin` variants (`capture`/`coarse`/`virtual`/
   devices.ts`), the `pipelines` broadcast (`rpc/procedures/
   streaming.procedure.ts`), and the coarse `capabilities.device_modes` field
   (`modules/streaming/capabilities.ts`) are kept running byte-for-byte
-  unchanged for one release as a rollback safety net — no shipped frontend
-  surface reads them anymore (SourceSection/EncoderDialog/StreamSetupChain all
-  read `getSources()` exclusively — `GoLiveCard.svelte`, which this note
-  originally named, is now an unmounted migration shim; see frontend
-  `AGENTS.md`). Tracked as `TD-legacy-source-broadcasts` in
+  unchanged as a rollback safety net. Only `SourceSection`/`StreamSetupChain`
+  read `getSources()` exclusively today — `EncoderDialog.svelte`
+  (`getPipelines`+`getDevices`), `AudioDialog.svelte` (`getPipelines`),
+  `LiveView.svelte` (`getPipelines`), and `StreamingStateManager.svelte.ts`
+  (`getPipelines`) all still consume the legacy getters directly
+  (`GoLiveCard.svelte`, which this note originally named, is now an unmounted
+  migration shim; see frontend `AGENTS.md`). The real exit condition: migrate
+  those four consumers off `getPipelines`/`getDevices` onto `getSources()`-
+  derived data, THEN ship one release with no rollback needed, THEN delete the
+  producers/fields. Tracked as `TD-legacy-source-broadcasts` in
   `docs/TECHNICAL_DEBT.md`; do not delete the producers until that entry's
   exit condition is met.
 - **`getLinkTelemetry` null-on-stop** is a backend-locked contract:

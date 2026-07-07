@@ -359,8 +359,11 @@ describe("SourceSection — source selection (config.source via field-sync)", ()
 		const btn = container.querySelector<HTMLButtonElement>(
 			'[data-testid="source-select-hdmi"]',
 		);
-		await fireEvent.click(btn!);
-		expect(setConfig).toHaveBeenCalledWith({ source: "hdmi" });
+		expect(btn).not.toBeNull();
+		if (btn) {
+			await fireEvent.click(btn);
+			expect(setConfig).toHaveBeenCalledWith({ source: "hdmi" });
+		}
 	});
 
 	it("dispatches setConfig({source}) when a network row is selected", async () => {
@@ -371,8 +374,11 @@ describe("SourceSection — source selection (config.source via field-sync)", ()
 		const btn = container.querySelector<HTMLButtonElement>(
 			'[data-testid="source-network-ingest-select-rtmp"]',
 		);
-		await fireEvent.click(btn!);
-		expect(setConfig).toHaveBeenCalledWith({ source: "rtmp" });
+		expect(btn).not.toBeNull();
+		if (btn) {
+			await fireEvent.click(btn);
+			expect(setConfig).toHaveBeenCalledWith({ source: "rtmp" });
+		}
 	});
 
 	it("locks the source field until the applied echo (applying → applied)", async () => {
@@ -390,13 +396,16 @@ describe("SourceSection — source selection (config.source via field-sync)", ()
 		const btn = container.querySelector<HTMLButtonElement>(
 			'[data-testid="source-select-hdmi"]',
 		);
-		await fireEvent.click(btn!);
-		expect(setConfig).toHaveBeenCalledWith({ source: "hdmi" });
-		// The lock is held while the RPC is in flight.
-		expect(getFieldState("source")).toBe("applying");
-		// Release on the applied echo — never the optimistic value.
-		resolveSet({ success: true, applied: { source: "hdmi" } });
-		await waitFor(() => expect(getFieldState("source")).toBe("applied"));
+		expect(btn).not.toBeNull();
+		if (btn) {
+			await fireEvent.click(btn);
+			expect(setConfig).toHaveBeenCalledWith({ source: "hdmi" });
+			// The lock is held while the RPC is in flight.
+			expect(getFieldState("source")).toBe("applying");
+			// Release on the applied echo — never the optimistic value.
+			resolveSet({ success: true, applied: { source: "hdmi" } });
+			await waitFor(() => expect(getFieldState("source")).toBe("applied"));
+		}
 	});
 
 	it("releases the source lock to failed when setConfig rejects", async () => {
@@ -414,11 +423,14 @@ describe("SourceSection — source selection (config.source via field-sync)", ()
 		const btn = container.querySelector<HTMLButtonElement>(
 			'[data-testid="source-select-hdmi"]',
 		);
-		await fireEvent.click(btn!);
-		expect(getFieldState("source")).toBe("applying");
-		rejectSet(new Error("boom"));
-		await waitFor(() => expect(getFieldState("source")).toBe("failed"));
-		expect(toastError).toHaveBeenCalled();
+		expect(btn).not.toBeNull();
+		if (btn) {
+			await fireEvent.click(btn);
+			expect(getFieldState("source")).toBe("applying");
+			rejectSet(new Error("boom"));
+			await waitFor(() => expect(getFieldState("source")).toBe("failed"));
+			expect(toastError).toHaveBeenCalled();
+		}
 	});
 
 	it("does not re-dispatch when the already-selected row is clicked", async () => {
@@ -429,8 +441,11 @@ describe("SourceSection — source selection (config.source via field-sync)", ()
 		const btn = container.querySelector<HTMLButtonElement>(
 			'[data-testid="source-select-hdmi"]',
 		);
-		await fireEvent.click(btn!);
-		expect(setConfig).not.toHaveBeenCalled();
+		expect(btn).not.toBeNull();
+		if (btn) {
+			await fireEvent.click(btn);
+			expect(setConfig).not.toHaveBeenCalled();
+		}
 	});
 });
 
@@ -475,9 +490,12 @@ describe("SourceSection — network-ingest rows folded into the list (Task 12)",
 		const copy = container.querySelector<HTMLButtonElement>(
 			'[data-testid="source-network-ingest-copy-rtmp"]',
 		);
-		await fireEvent.click(copy!);
-		await waitFor(() => expect(writeText).toHaveBeenCalledWith(RTMP_URL));
-		expect(toastSuccess).toHaveBeenCalled();
+		expect(copy).not.toBeNull();
+		if (copy) {
+			await fireEvent.click(copy);
+			await waitFor(() => expect(writeText).toHaveBeenCalledWith(RTMP_URL));
+			expect(toastSuccess).toHaveBeenCalled();
+		}
 	});
 
 	it("renders the publish instructions ONLY on the selected network row, never an unselected enabled one (Task 13)", async () => {

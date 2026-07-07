@@ -48,7 +48,9 @@ vi.mock("svelte-sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn() },
 }));
 
-const t = getLL().settings.networkIngest;
+// The entry is retitled "Sources" (same key `networkIngest`, same testids); the
+// displayed copy now comes from `settings.dialogs.sources`.
+const t = getLL().settings.dialogs.sources;
 
 beforeAll(() => {
 	if (!window.matchMedia) {
@@ -75,7 +77,7 @@ describe("SettingsView — Network ingest entry", () => {
 		const entry = screen.getByRole("button", { name: new RegExp(t.title()) });
 		expect(entry).toBeTruthy();
 		expect(entry.textContent).toContain(t.title());
-		expect(entry.textContent).toContain(t.desc());
+		expect(entry.textContent).toContain(t.description());
 	});
 
 	it("opens the dialog on click without error", async () => {

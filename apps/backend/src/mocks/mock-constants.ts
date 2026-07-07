@@ -36,6 +36,11 @@ export const SENSOR_CURRENT_STREAMING_RANGE_A = 0.5; // ±0.25A variation
 export const MOCK_RELAY_POPULATE_DELAY_MS = 2000; // Delay before populating relay cache
 export const MOCK_RTT_INTERVAL_MS = 1500; // Interval for RTT rebroadcast
 
+// ─── Mock Feedback Broadcast Cadence ────────────────────────────────────────
+// Used by mock-service.ts to coalesce the 1s signal fluctuations into a 5s
+// modems/wifi broadcast (state mutation stays 1s; production polls untouched)
+export const MOCK_FEEDBACK_BROADCAST_INTERVAL_MS = 5000; // 5s coalesce window
+
 // ─── SIM Lock Retry Budgets ─────────────────────────────────────────────────
 // Used by the modem mock provider to seed mmcli-faithful unlock-retries counts.
 export const MOCK_SIM_PIN_RETRIES = 3; // Typical PIN attempt budget

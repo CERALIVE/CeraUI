@@ -640,6 +640,7 @@ import {
 	providerSelectionSchema,
 } from './cloud-provider.schema';
 import { relayProtocolSchema } from './relay.schema';
+import { sourcesVisibilitySchema } from './sources-visibility.schema';
 import {
 	resolverDecidedBySchema,
 	streamProfileIdSchema,
@@ -692,6 +693,10 @@ export const configMessageSchema = z.object({
 	// affordance when the cloud (operator/auto) pushed the profile (Task 21).
 	stream_profile: streamProfileIdSchema.optional(),
 	profile_decided_by: resolverDecidedBySchema.optional(),
+	// Device-wide source-visibility flags, echoed so the Live source list and the
+	// Sources dialog reflect the saved test-pattern visibility on reload. Written
+	// only by streaming.setSourceVisibility (never streaming.setConfig).
+	sources_visibility: sourcesVisibilitySchema.optional(),
 });
 export type ConfigMessage = z.infer<typeof configMessageSchema>;
 

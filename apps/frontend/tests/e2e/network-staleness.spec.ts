@@ -211,7 +211,7 @@ test.describe("Task 22 — consistent loading feedback", () => {
 
 		await navigateTo(page, "network");
 
-		const open = page.getByTestId("open-wifi-selector-dialog");
+		const open = page.getByTestId("open-wifi-selector-dialog").first();
 		await expect(open).toBeEnabled({ timeout: 15_000 });
 		await open.click();
 

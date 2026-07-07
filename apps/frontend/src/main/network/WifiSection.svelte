@@ -28,12 +28,10 @@ interface Props {
 	isFullyStale: boolean;
 	/** ifnames whose own telemetry aged out while siblings stayed fresh (Task 22). */
 	staleInterfaces: Set<string>;
-	primaryWifiDevice: string | undefined;
-	onConnect: () => void;
+	onConnect: (deviceId: string) => void;
 }
 
-const { wifiRadios, netif, isFullyStale, staleInterfaces, primaryWifiDevice, onConnect }: Props =
-	$props();
+const { wifiRadios, netif, isFullyStale, staleInterfaces, onConnect }: Props = $props();
 
 function activeWifiNetwork(iface: WifiInterface) {
 	return iface.available?.find((network) => network.active);
@@ -102,18 +100,6 @@ $effect(() => {
 	<div class="flex items-center gap-2 border-b px-4 py-3">
 		<Wifi aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
 		<h2 class="text-sm font-semibold tracking-tight">{$LL.network.view.wifi()}</h2>
-		<Button
-			class="ms-auto h-8 min-h-[var(--touch-target-min)] gap-1 px-2.5"
-			data-testid="open-wifi-selector-dialog"
-			disabled={!primaryWifiDevice}
-			size="sm"
-			title={primaryWifiDevice ? undefined : $LL.network.view.noWifi()}
-			variant="ghost"
-			onclick={onConnect}
-		>
-			{$LL.network.view.connect()}
-			<ChevronRight class="size-3.5 rtl:rotate-180" />
-		</Button>
 	</div>
 	<div class="divide-y">
 		{#if wifiRadios.length === 0}
@@ -133,7 +119,6 @@ $effect(() => {
 				{@const ifaceStale = staleInterfaces.has(iface.ifname) || isFullyStale}
 				{@const showStale = ifaceStale && !displayIsHotspot && connected}
 				{@const hasIp = Boolean(entry?.ip)}
-				{@const hasControls = displayIsHotspot || hasIp || iface.supports_hotspot}
 				<!-- Single-line row: identity (dot · name · status) left; bond + actions right. -->
 				<div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
 					<span
@@ -170,81 +155,95 @@ $effect(() => {
 						{#if showStale}
 							<Badge variant="stale" data-stale-interface={iface.ifname} />
 						{/if}
-						{#if hasControls}
-							{#if displayIsHotspot}
-								<!-- Hotspot mode: cannot bond; offer config + revert to station. -->
+						{#if displayIsHotspot}
+							<!-- Hotspot mode: cannot bond; offer config + revert to station. -->
+							<BondToggle
+								name={iface.ifname}
+								enabled={false}
+								disabledReason={$LL.network.view.hotspotNoBond()}
+							/>
+							<Button
+								class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
+								disabled={isSwitching}
+								size="sm"
+								variant="ghost"
+								onclick={() => openHotspotSetup(id)}
+							>
+								<Settings2 class="size-3.5" />
+								{$LL.network.view.setup()}
+							</Button>
+							<Button
+								class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
+								disabled={isSwitching}
+								size="sm"
+								variant="secondary"
+								onclick={() => switchToStation(id)}
+							>
+								{#if isSwitching}
+									<Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
+								{:else}
+									<Wifi class="size-3.5" />
+								{/if}
+								{$LL.network.view.switchToStation()}
+							</Button>
+						{:else}
+							<!-- Station mode: bond when it holds an IP; connect to a network;
+							     offer switch to hotspot. Connect renders regardless of `hasIp`
+							     so a disconnected radio can still open its own selector. -->
+							{#if hasIp}
 								<BondToggle
 									name={iface.ifname}
-									enabled={false}
-									disabledReason={$LL.network.view.hotspotNoBond()}
+									enabled={Boolean(entry?.enabled)}
+									ip={entry?.ip}
 								/>
-								<Button
-									class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
-									disabled={isSwitching}
-									size="sm"
-									variant="ghost"
-									onclick={() => openHotspotSetup(id)}
-								>
-									<Settings2 class="size-3.5" />
-									{$LL.network.view.setup()}
-								</Button>
-								<Button
-									class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
-									disabled={isSwitching}
-									size="sm"
-									variant="secondary"
-									onclick={() => switchToStation(id)}
-								>
-									{#if isSwitching}
+							{/if}
+							<Button
+								class="h-8 min-h-[var(--touch-target-min)] gap-1 px-2.5"
+								data-testid="open-wifi-selector-dialog"
+								data-device={id}
+								size="sm"
+								variant="ghost"
+								onclick={() => onConnect(id)}
+							>
+								{$LL.network.view.connect()}
+								<ChevronRight class="size-3.5 rtl:rotate-180" />
+							</Button>
+							{#if iface.supports_hotspot}
+								{#if isSwitching}
+									<!-- Switch confirmed at the click; hold a spinner until the
+									     authoritative snapshot flips the label to hotspot. Icon-only
+									     to match the row's action-button density (a11y name via
+									     aria-label since there is no visible text). -->
+									<Button
+										class="h-8 w-8 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] p-0 shadow-none"
+										aria-label={$LL.network.view.switchToHotspot()}
+										title={$LL.network.view.switchToHotspot()}
+										disabled
+										size="sm"
+										variant="ghost"
+									>
 										<Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-									{:else}
-										<Wifi class="size-3.5" />
-									{/if}
-									{$LL.network.view.switchToStation()}
-								</Button>
-							{:else}
-								<!-- Station mode: bond when it holds an IP; offer switch to hotspot. -->
-								{#if hasIp}
-									<BondToggle
-										name={iface.ifname}
-										enabled={Boolean(entry?.enabled)}
-										ip={entry?.ip}
-									/>
-								{/if}
-								{#if iface.supports_hotspot}
-									{#if isSwitching}
-										<!-- Switch confirmed at the click; hold a spinner until the
-										     authoritative snapshot flips the label to hotspot. -->
-										<Button
-											class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5 text-xs"
-											disabled
-											size="sm"
-											variant="secondary"
-										>
-											<Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-											{$LL.network.view.switchToHotspot()}
-										</Button>
-									{:else}
-										<SimpleAlertDialog
-											buttonText={$LL.network.view.switchToHotspot()}
-											confirmButtonText={$LL.network.view.hotspotSwitchConfirm()}
-											confirmVariant="destructive"
-											extraButtonClasses="h-8 min-h-[var(--touch-target-min)] px-2.5 text-xs shadow-none bg-secondary text-secondary-foreground hover:bg-secondary/80"
-											iconPosition="left"
-											title={$LL.network.view.hotspotSwitchTitle()}
-											onconfirm={() => switchToHotspot(id)}
-										>
-											{#snippet icon()}
-												<Router class="size-3.5" />
-											{/snippet}
-											{#snippet dialogTitle()}
-												{$LL.network.view.hotspotSwitchTitle()}
-											{/snippet}
-											{#snippet description()}
-												{$LL.network.view.hotspotSwitchBody()}
-											{/snippet}
-										</SimpleAlertDialog>
-									{/if}
+									</Button>
+								{:else}
+									<SimpleAlertDialog
+										buttonAriaLabel={$LL.network.view.switchToHotspot()}
+										confirmButtonText={$LL.network.view.hotspotSwitchConfirm()}
+										confirmVariant="destructive"
+										extraButtonClasses="h-8 w-8 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] p-0 shadow-none hover:shadow-none bg-transparent text-foreground hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
+										iconPosition="left"
+										title={$LL.network.view.switchToHotspot()}
+										onconfirm={() => switchToHotspot(id)}
+									>
+										{#snippet icon()}
+											<Router class="size-3.5" />
+										{/snippet}
+										{#snippet dialogTitle()}
+											{$LL.network.view.hotspotSwitchTitle()}
+										{/snippet}
+										{#snippet description()}
+											{$LL.network.view.hotspotSwitchBody()}
+										{/snippet}
+									</SimpleAlertDialog>
 								{/if}
 							{/if}
 						{/if}

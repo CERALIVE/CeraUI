@@ -419,6 +419,14 @@ const fr = {
 				"L'appareil répond toujours après la fenêtre de redémarrage. Il n'a peut-être pas redémarré : réessayez ou fermez pour continuer à l'utiliser.",
 			rebootRecoveryRetry: "Redémarrer à nouveau",
 			rebootRecoveryDismiss: "Ignorer",
+			sources: {
+				title: "Sources",
+				description:
+					"Choisissez les sources vidéo qui apparaissent dans le sélecteur Live et autorisez un téléphone ou un encodeur de ce réseau à publier vers l'appareil.",
+				testPatternToggle: "Afficher la mire de test",
+				testPatternHint:
+					"Conservez la mire de test intégrée dans le sélecteur de sources comme signal de secours. Désactivez-la pour la masquer une fois une source réelle connectée.",
+			},
 			blockedUpdating: "Mise à jour en cours. Attendez avant de redémarrer.",
 		},
 		pairing: {

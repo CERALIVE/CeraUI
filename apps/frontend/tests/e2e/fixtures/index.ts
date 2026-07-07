@@ -50,9 +50,15 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
 			(window as { __ceraSocketPort?: number }).__ceraSocketPort = port;
 		}, workerBackend.port);
 
-		const isVisual =
-			testInfo.tags.includes('@visual') || testInfo.title.includes('@visual');
-		if (!isVisual) {
+		// Screenshots are permitted only in @visual (visual-regression baselines)
+		// and @gallery (docs screenshot gallery) tests; every other test gets a
+		// throwing stub. Mirror this allowlist in PLAYBOOK.md and build-check.yml.
+		const screenshotAllowed =
+			testInfo.tags.includes('@visual') ||
+			testInfo.title.includes('@visual') ||
+			testInfo.tags.includes('@gallery') ||
+			testInfo.title.includes('@gallery');
+		if (!screenshotAllowed) {
 			// Mechanically forbid screenshots in functional tests.
 			const originalScreenshot = page.screenshot.bind(page);
 			// biome-ignore lint/suspicious/noExplicitAny: intentional override for guard
@@ -60,7 +66,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
 				..._args: Parameters<typeof originalScreenshot>
 			) => {
 				throw new Error(
-					'Screenshots are forbidden in functional tests. Tag the test @visual or assert via ARIA/role/web-first assertions.',
+					'Screenshots are forbidden in functional tests. Tag the test @visual (or @gallery for the docs gallery) or assert via ARIA/role/web-first assertions.',
 				);
 			};
 		}
