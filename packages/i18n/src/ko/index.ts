@@ -939,6 +939,8 @@ const ko = {
 				"시작 중 입력 소스가 멈췄습니다. 소스를 확인한 후 다시 시도하세요.",
 			audio_source_probe_failed:
 				"선택한 오디오 소스가 제때 연결되지 않았습니다. 다시 연결하거나 다른 소스를 선택한 후 다시 시도하세요.",
+			audio_codec_unsupported_transport:
+				"현재 전송 방식에서는 이 오디오 코덱을 지원하지 않습니다. 오디오 코덱을 AAC로 변경한 후 다시 시도하세요.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

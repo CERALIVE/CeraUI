@@ -366,6 +366,8 @@ const es = {
 				"La fuente de entrada se detuvo al iniciar. Comprueba la fuente e inténtalo de nuevo.",
 			audio_source_probe_failed:
 				"La fuente de audio seleccionada no se conectó a tiempo. Vuelve a conectarla o elige otra fuente e inténtalo de nuevo.",
+			audio_codec_unsupported_transport:
+				"Este códec de audio no es compatible con el transporte actual. Cambia el códec de audio a AAC e inténtalo de nuevo.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

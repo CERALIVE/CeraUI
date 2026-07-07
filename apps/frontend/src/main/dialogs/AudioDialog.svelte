@@ -5,7 +5,7 @@
   exclusively in the unified Source section (`SourceSection.svelte`, the sole
   `asrc` writer). This dialog is a read-only CONSUMER of the active audio source
   and owns just two controls:
-    • Audio codec  — Select (opus / aac / pcm) over the device-supported codecs.
+    • Audio codec  — Select (aac / opus) over the device-supported codecs.
     • Audio delay  — center-zero slider, bounds driven by
                      `streamingConstraints.audioDelay.{min,max}` (no literals).
 

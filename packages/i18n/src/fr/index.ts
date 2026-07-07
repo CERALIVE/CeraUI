@@ -1118,6 +1118,8 @@ const fr = {
 				"La source d'entrée s'est bloquée au démarrage. Vérifiez la source et réessayez.",
 			audio_source_probe_failed:
 				"La source audio sélectionnée n'est pas apparue à temps. Reconnectez-la ou choisissez une autre source, puis réessayez.",
+			audio_codec_unsupported_transport:
+				"Ce codec audio n'est pas pris en charge par le transport actuel. Réglez le codec audio sur AAC, puis réessayez.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

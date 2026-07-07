@@ -5,7 +5,9 @@
 
 import { CerastreamRpcError } from "@ceralive/cerastream";
 import {
+	AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
 	AUDIO_SOURCE_AUTO,
+	audioCodecAllowedForTransport,
 	audioCodecsMessageSchema,
 	bitrateInputSchema,
 	bitrateOutputSchema,
@@ -192,6 +194,26 @@ export const streamingStartProcedure = authedProcedure
 				}
 			}
 
+			// Transport × audio-codec coherence gate (C5). Every relay transport is
+			// an MPEG-TS carrier, so only AAC-in-TS is proven end-to-end; refuse an
+			// effective codec the effective transport can't carry at START — config
+			// SAVES stay permitted (mirrors the pipeline_not_in_offered_set gate).
+			// Dual-field: `error` for the structured branch, `reason` for the T16
+			// startFailed.* i18n lookup.
+			const effectiveAcodec = applied.acodec ?? getConfig().acodec;
+			if (effectiveAcodec !== undefined) {
+				const effectiveTransport =
+					applied.relay_protocol ?? getConfig().relay_protocol ?? "srtla";
+				if (!audioCodecAllowedForTransport(effectiveAcodec, effectiveTransport)) {
+					return {
+						success: false,
+						is_streaming: false,
+						error: AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
+						reason: AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
+					};
+				}
+			}
+
 			try {
 				if (shouldUseMocks()) {
 					// A test-injected Tier-2 error stands in for the engine refusing the
@@ -346,7 +368,7 @@ export const getConfigProcedure = authedProcedure
 		return {
 			asrc: config.asrc,
 			max_br,
-			acodec: config.acodec as "opus" | "aac" | "pcm" | undefined,
+			acodec: config.acodec,
 			delay: config.delay,
 			pipeline,
 			srt_latency: config.srt_latency,

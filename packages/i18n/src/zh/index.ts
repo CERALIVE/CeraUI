@@ -886,6 +886,7 @@ const zh = {
 			capture_video_error: "采集设备报告视频错误。请重新连接后重试。",
 			pipeline_stall: "启动时输入源停滞。请检查输入源后重试。",
 			audio_source_probe_failed: "所选音频源未及时上线。请重新连接或选择其他音频源后重试。",
+			audio_codec_unsupported_transport: "当前传输方式不支持此音频编解码器。请将音频编解码器切换为 AAC 后重试。",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

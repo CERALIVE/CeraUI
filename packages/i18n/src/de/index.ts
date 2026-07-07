@@ -366,6 +366,8 @@ const de = {
 				"Die Eingangsquelle blockierte beim Start. Prüfe die Quelle und versuche es erneut.",
 			audio_source_probe_failed:
 				"Die ausgewählte Audioquelle wurde nicht rechtzeitig verfügbar. Schließe sie erneut an oder wähle eine andere Quelle und versuche es erneut.",
+			audio_codec_unsupported_transport:
+				"Dieser Audio-Codec wird vom aktuellen Transport nicht unterstützt. Stelle den Audio-Codec auf AAC und versuche es erneut.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

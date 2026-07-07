@@ -42,6 +42,7 @@
 
 import {
 	AddonConfigSchema,
+	audioCodecSchema,
 	AUDIO_SOURCE_AUTO,
 	type DetectionMethod,
 	detectionMethodSchema,
@@ -68,6 +69,7 @@ export type { DetectionMethod, RelayProtocol };
 // Re-export the relay-id namespacing helpers so backend consumers resolve them
 // from the config layer rather than reaching into @ceraui/rpc directly.
 export {
+	audioCodecSchema,
 	detectionMethodSchema,
 	isNamespacedRelayId,
 	namespacedRelayId,
@@ -99,7 +101,13 @@ export const providerSelectionSchema = z.enum([
 	"custom",
 ]);
 
-export const audioCodecSchema = z.enum(["opus", "aac", "pcm"]);
+// Legacy-tolerant wrapper for the runtime config `acodec` field: coerceLegacyAcodec
+// remaps a retired "pcm" (C5) to "aac" before the strict @ceraui/rpc enum
+// validates. Mirrors legacyTolerantStreamingEngineSchema below.
+const legacyTolerantAudioCodecSchema = z.preprocess(
+	coerceLegacyAcodec,
+	audioCodecSchema,
+);
 
 // Video resolution/framerate presets — mirror the @ceraui/rpc streaming schema
 // enums so persisted config round-trips cleanly.
@@ -200,7 +208,7 @@ export const runtimeConfigSchema = z.object({
 
 	// Audio settings
 	asrc: z.string().optional(),
-	acodec: audioCodecSchema.optional(),
+	acodec: legacyTolerantAudioCodecSchema.optional(),
 
 	// Video/streaming settings
 	bitrate_overlay: z.boolean().optional(),
@@ -352,6 +360,21 @@ export function coerceLegacySource(config: RuntimeConfig): RuntimeConfig {
 		)} from legacy pipeline/selected_video_input for the device-first source model`,
 	);
 	return { ...config, source: derived };
+}
+
+// Legacy audio-codec coercion (C5): a persisted, retired `acodec: "pcm"` maps to
+// "aac" with one warning; every other value passes through untouched for the
+// strict enum to validate. Wired into runtimeConfigSchema's acodec preprocess so
+// a legacy pcm config loads clean instead of dropping the field. Pure, log-once
+// — mirrors coerceLegacySource's boot-tolerant contract.
+export function coerceLegacyAcodec(raw: unknown): unknown {
+	if (raw === "pcm") {
+		logger.warn(
+			'config.json: audio codec "pcm" is retired — coercing to "aac" (C5)',
+		);
+		return "aac";
+	}
+	return raw;
 }
 
 // =============================================================================

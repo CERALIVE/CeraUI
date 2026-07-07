@@ -961,6 +961,8 @@ const ja = {
 				"開始時に入力ソースが停止しました。ソースを確認してもう一度お試しください。",
 			audio_source_probe_failed:
 				"選択した音声ソースが時間内に接続されませんでした。再接続するか別のソースを選択して、もう一度お試しください。",
+			audio_codec_unsupported_transport:
+				"この音声コーデックは現在のトランスポートではサポートされていません。音声コーデックを AAC に切り替えてから、もう一度お試しください。",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

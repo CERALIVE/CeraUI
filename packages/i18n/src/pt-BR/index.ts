@@ -1094,6 +1094,8 @@ const ptBR = {
 				"A fonte de entrada travou ao iniciar. Verifique a fonte e tente novamente.",
 			audio_source_probe_failed:
 				"A fonte de áudio selecionada não ficou disponível a tempo. Reconecte-a ou escolha outra fonte e tente novamente.",
+			audio_codec_unsupported_transport:
+				"Este codec de áudio não é compatível com o transporte atual. Altere o codec de áudio para AAC e tente novamente.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {

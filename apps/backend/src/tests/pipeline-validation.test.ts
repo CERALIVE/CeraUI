@@ -163,7 +163,16 @@ describe("validateConfig capability + override rejection", () => {
 
 	it("rejects an unknown audio codec", async () => {
 		await expect(
+			validateConfig({ delay: 0, pipeline: "camlink", acodec: "mp3" }),
+		).rejects.toThrow("Invalid config");
+	});
+
+	it("coerces a legacy 'pcm' audio codec to 'aac' (C5, retired codec)", async () => {
+		// pcm is retired: the schema preprocess maps it to aac, so it never reaches
+		// the AUDIO_CODECS 'not found' branch. The call still fails later (no audio
+		// source configured here) — but NOT on the codec.
+		await expect(
 			validateConfig({ delay: 0, pipeline: "camlink", acodec: "pcm" }),
-		).rejects.toThrow("Audio codec not found");
+		).rejects.not.toThrow("Audio codec not found");
 	});
 });

@@ -12,6 +12,9 @@ import { describe, expect, test } from 'bun:test';
 
 import { isAudioLiveSwitchEnabled } from '../capabilities/audio';
 import {
+	AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
+	audioCodecAllowedForTransport,
+	audioCodecSchema,
 	AUDIO_SOURCE_AUTO,
 	audioSourceKindSchema,
 	audioSourceSchema,
@@ -29,6 +32,7 @@ import {
 	streamingConfigInputSchema,
 	switchInputOutputSchema,
 	toEngineResolution,
+	TRANSPORT_AUDIO_CODECS,
 } from './streaming.schema';
 
 describe('capabilitiesMessageSchema — audio_live_switch field', () => {
@@ -553,5 +557,42 @@ describe('switchInputOutputSchema — audio_follow_pending (T1/T7 — additive)'
 		expect(
 			switchInputOutputSchema.safeParse({ success: true, audio_follow_pending: 'yes' }).success,
 		).toBe(false);
+	});
+});
+
+describe('audioCodecSchema — pcm retired (C5)', () => {
+	test('accepts opus and aac', () => {
+		expect(audioCodecSchema.parse('opus')).toBe('opus');
+		expect(audioCodecSchema.parse('aac')).toBe('aac');
+	});
+
+	test('no longer accepts pcm', () => {
+		expect(audioCodecSchema.safeParse('pcm').success).toBe(false);
+	});
+});
+
+describe('TRANSPORT_AUDIO_CODECS + audioCodecAllowedForTransport (C5)', () => {
+	test('map values are exactly aac-only for every transport', () => {
+		expect(TRANSPORT_AUDIO_CODECS).toEqual({
+			srtla: ['aac'],
+			srt: ['aac'],
+			rist: ['aac'],
+		});
+	});
+
+	test('aac is allowed over every relay transport', () => {
+		for (const protocol of ['srtla', 'srt', 'rist'] as const) {
+			expect(audioCodecAllowedForTransport('aac', protocol)).toBe(true);
+		}
+	});
+
+	test('opus is disallowed over every relay transport', () => {
+		for (const protocol of ['srtla', 'srt', 'rist'] as const) {
+			expect(audioCodecAllowedForTransport('opus', protocol)).toBe(false);
+		}
+	});
+
+	test('the unsupported-transport error code is stable', () => {
+		expect(AUDIO_CODEC_UNSUPPORTED_TRANSPORT).toBe('audio_codec_unsupported_transport');
 	});
 });

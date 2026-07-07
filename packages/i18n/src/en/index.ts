@@ -353,6 +353,8 @@ const en = {
 				"The input source stalled while starting. Check the source and try again.",
 			audio_source_probe_failed:
 				"The selected audio source didn't come online in time. Reconnect it or choose another source, then try again.",
+			audio_codec_unsupported_transport:
+				"This audio codec isn't supported over the current transport. Switch the audio codec to AAC, then try again.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
