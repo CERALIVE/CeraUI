@@ -446,8 +446,12 @@ export const UNKNOWN_SOURCE_ERROR = "unknown_source";
 // A remembered capture row (C7 `lost:true`) — the device was unplugged and is no
 // longer in the current engine list. Refused at the dispatch choke point.
 export const SOURCE_LOST_ERROR = "source_lost";
-// A listed-but-unavailable source (`available:false` without `lost`): an
-// operator-disabled / gateway-down network row, or a hidden test pattern.
+// A listed-but-unavailable NETWORK source (`available:false` without `lost`): an
+// operator-disabled / gateway-down network row. This is the ONLY origin whose
+// `available:false` is a genuine functional block — a capture row's only false
+// path is `lost` (gated separately above), and a virtual row's only false path is
+// the operator's `sources_visibility.hide_test_pattern` declutter preference,
+// which hides it from the picker but must NOT block routing.
 export const SOURCE_UNAVAILABLE_ERROR = "source_unavailable";
 
 export type ResolveSourceRoutingResult =
@@ -465,7 +469,13 @@ export type ResolveSourceRoutingResult =
 // rejection leaves disk unchanged (session.start swallows updateConfig errors, so
 // it must be enforced here). The `lost` check MUST precede the `available` check —
 // a lost row is ALSO available:false, and it needs the distinct `source_lost`
-// code. Absent → `unknown_source` (semantics unchanged). Never mutates config.
+// code. The `available:false` block is SCOPED to `origin === "network"` — the only
+// origin where `available:false` is a genuine functional gate (gateway-down /
+// operator-disabled). A virtual test-pattern's only `available:false` path is the
+// `sources_visibility.hide_test_pattern` declutter preference, which hides it from
+// the picker but must STILL route (a hidden-but-selected source is not broken); a
+// capture row's only false path is `lost`, handled above. Absent →
+// `unknown_source` (semantics unchanged). Never mutates config.
 export function resolveSourceRouting(
 	sourceId: string,
 	sources: readonly StreamSource[],
@@ -477,7 +487,7 @@ export function resolveSourceRouting(
 	if (source.lost === true) {
 		return { ok: false, error: SOURCE_LOST_ERROR };
 	}
-	if (source.available === false) {
+	if (source.origin === "network" && source.available === false) {
 		return { ok: false, error: SOURCE_UNAVAILABLE_ERROR };
 	}
 	const routing = deriveEngineRouting(sourceId, sources);

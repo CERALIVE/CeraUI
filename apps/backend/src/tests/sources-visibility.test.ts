@@ -216,6 +216,37 @@ describe("buildSources — test-pattern visibility marking", () => {
 			expect(routed.selected_video_input).toBeUndefined();
 		}
 	});
+
+	// Cross-plan invariant lock (coherence-contract-pass task 12): the
+	// `available:false` routing gate is scoped to `origin === "network"`. A hidden
+	// test pattern (virtual, hidden by the operator's declutter preference) MUST
+	// still route, WHILE a gateway-down network source MUST still reject — both
+	// hold simultaneously from ONE sources snapshot.
+	test("hidden test-pattern still routes WHILE a gateway-down network source rejects", () => {
+		const sources = buildSources({
+			sources: mixedCapSources(),
+			devices: [],
+			networkIngest: {
+				rtmp: { service_active: false, url: null },
+				srt: null,
+			},
+			sourcesVisibility: { hide_test_pattern: true },
+		});
+
+		const test = sources.find((s) => s.id === "test");
+		expect(test?.origin).toBe("virtual");
+		expect(test?.available).toBe(false);
+		expect(resolveSourceRouting("test", sources).ok).toBe(true);
+
+		const rtmp = sources.find((s) => s.id === "rtmp");
+		expect(rtmp?.origin).toBe("network");
+		expect(rtmp?.available).toBe(false);
+		const routedRtmp = resolveSourceRouting("rtmp", sources);
+		expect(routedRtmp.ok).toBe(false);
+		if (!routedRtmp.ok) {
+			expect(routedRtmp.error).toBe("source_unavailable");
+		}
+	});
 });
 
 // ─── single-mutation-path discipline + malformed input ────────────────────────
