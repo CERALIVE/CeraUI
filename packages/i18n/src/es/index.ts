@@ -637,6 +637,7 @@ const es = {
 			software: "Software",
 			bitrateRangeHint: "Rango admitido",
 			bitrateClamped: "Ajustado al rango admitido",
+			sourceChangedNote: "La fuente cambió: ajustes actualizados para la nueva entrada.",
 			probedCaps: "Capacidades detectadas",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
@@ -754,7 +755,10 @@ const es = {
 			"Añade tu clave de {cloud} para transmitir a esta nube.",
 		destinationAddKey: "Añadir clave",
 		latency: "Latencia",
-		latencyNegotiated: "Negociada",
+			latencyNegotiated: "Negociada",
+			valueClamped: "Ajustado a {value}",
+			catalogDriftNote:
+				"La lista de servidores cambió desde que abriste esto. Revisa tu selección antes de guardar.",
 		transportActive: "Activo",
 		destinationCustomHint:
 			"Introduce la dirección y el puerto de tu propio receptor.",

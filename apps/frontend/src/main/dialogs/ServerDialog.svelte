@@ -29,6 +29,7 @@
 import { LL } from '@ceraui/i18n/svelte';
 import { KeyRound, Server } from '@lucide/svelte';
 import type { RelayProtocol } from '@ceraui/rpc/schemas';
+import { untrack } from 'svelte';
 import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
@@ -68,6 +69,7 @@ import {
 	isManagedChoice,
 	managedCloudLabel,
 } from '$lib/streaming/receiver-experience';
+import { fingerprintForValidation } from '$lib/streaming/destination-validation.svelte';
 import CloudRemoteDialog from './CloudRemoteDialog.svelte';
 import CustomEndpointForm from './server/CustomEndpointForm.svelte';
 import DestinationSection from './server/DestinationSection.svelte';
@@ -114,10 +116,25 @@ let cloudRemoteOpen = $state(false);
 let cloudRemoteProvider = $state<ReceiverDestinationChoice | undefined>(undefined);
 let validation = $state<Validation>({ state: 'idle' });
 
+// The resolved endpoint fingerprint captured when the dialog OPENED. A later
+// catalog update (a managed server's addr/port drifting under the same id) that
+// changes the current fingerprint surfaces a calm review note — never an
+// auto-mutation, never a save block. Captured via `untrack` so this reset effect
+// stays keyed on `open` alone (re-capturing on every catalog tick would defeat
+// the drift comparison).
+let openFingerprint = $state<string | undefined>(undefined);
+// The latency value the backend APPLIED after its floor clamp, when it differs
+// from the requested value — drives LatencySection's applied-value notice.
+let appliedLatencyMs = $state<number | undefined>(undefined);
+
 $effect(() => {
 	if (open) {
 		draft = {};
 		validation = { state: 'idle' };
+		appliedLatencyMs = undefined;
+		openFingerprint = untrack(() =>
+			fingerprintForValidation(config, relays, managedAccounts),
+		);
 	}
 });
 
@@ -188,6 +205,17 @@ const clampedLatency = $derived(
 	Math.min(Math.max(latency, latencyRange.min), latencyRange.max),
 );
 const effectiveLatencyMs = $derived(isStreaming ? config?.srt_latency : undefined);
+
+// Catalog-drift review note: the resolved endpoint fingerprint NOW vs at open.
+// A difference means the relays catalog (or a pushed config) moved the endpoint
+// under the operator while the dialog was open — surface a calm review line,
+// never a warning band, never an auto-mutation, never a save block.
+const currentFingerprint = $derived(
+	fingerprintForValidation(config, relays, managedAccounts),
+);
+const catalogDrift = $derived(
+	open && openFingerprint !== undefined && currentFingerprint !== openFingerprint,
+);
 
 // Auto-select the managed relay server for the active cloud (catalog mirror of
 // the ingest-slot rule): exactly one offered → silent; many → default else
@@ -283,13 +311,29 @@ async function handleSave() {
 	const fields = Object.entries(input);
 	for (const [field, value] of fields) markPending(field, value);
 	try {
-		await rpc.streaming.setConfig(input);
+		const result = await rpc.streaming.setConfig(input);
 		toast.success($LL.notifications.saved());
-		open = false;
 		// Fire-and-forget "saved" signal (never awaited): a host may run an
 		// informational relay.validate on the saved endpoint. Save already
 		// succeeded above — this must not gate or throw into the save path.
 		onSaved();
+		// Floor-clamp applied-value notice (C7): the backend floors srt_latency to
+		// the SRTLA minimum. When the applied value differs from what we requested,
+		// keep the dialog OPEN and surface the notice via LatencySection instead of
+		// closing silently. Federation-safe: an absent `applied.srt_latency` (older
+		// backend) falls through to today's close-on-save behaviour.
+		const requested = input.srt_latency;
+		const applied = result?.applied?.srt_latency;
+		if (
+			requested !== undefined &&
+			typeof applied === 'number' &&
+			applied !== requested
+		) {
+			appliedLatencyMs = applied;
+		} else {
+			appliedLatencyMs = undefined;
+			open = false;
+		}
 	} catch {
 		toast.error($LL.notifications.saveFailed());
 	} finally {
@@ -314,6 +358,16 @@ async function handleSave() {
 				style="color: var(--status-live); border-color: color-mix(in oklab, var(--status-live) 35%, transparent); background-color: color-mix(in oklab, var(--status-live) 10%, transparent);"
 			>
 				{$LL.live.stopToChange()}
+			</p>
+		{/if}
+
+		{#if catalogDrift}
+			<p
+				class="text-muted-foreground rounded-lg border px-3 py-2 text-sm"
+				data-testid="catalog-drift-note"
+				role="status"
+			>
+				{$LL.settings.catalogDriftNote()}
 			</p>
 		{/if}
 
@@ -408,10 +462,15 @@ async function handleSave() {
 		{/if}
 
 		<LatencySection
+			clampedLatencyMs={appliedLatencyMs}
 			{effectiveLatencyMs}
 			{isStreaming}
 			latencyMs={clampedLatency}
-			onLatencyChange={(value) => (draft.srt_latency = value)}
+			onLatencyChange={(value) => {
+				draft.srt_latency = value;
+				// A fresh operator edit supersedes a stale clamp notice.
+				appliedLatencyMs = undefined;
+			}}
 			range={latencyRange}
 		/>
 	</div>

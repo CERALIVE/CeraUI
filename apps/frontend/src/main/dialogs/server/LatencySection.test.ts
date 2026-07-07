@@ -74,4 +74,39 @@ describe("LatencySection — latency-only control", () => {
 			container.querySelector('[data-testid="stream-tuning-recovery"]'),
 		).toBeNull();
 	});
+
+	it("renders the applied-value clamp notice when clampedLatencyMs differs from the requested value (C7)", () => {
+		const { container } = render(LatencySection, {
+			props: {
+				latencyMs: 3000,
+				range: RANGE,
+				clampedLatencyMs: 2000,
+				onLatencyChange: () => {},
+			},
+		});
+		const notice = container.querySelector('[data-testid="latency-clamped"]');
+		expect(notice).not.toBeNull();
+		expect(notice?.textContent).toContain("2 s");
+	});
+
+	it("renders no clamp notice when clampedLatencyMs is absent or equals the requested value (C7)", () => {
+		const absent = render(LatencySection, {
+			props: { latencyMs: 2000, range: RANGE, onLatencyChange: () => {} },
+		});
+		expect(
+			absent.container.querySelector('[data-testid="latency-clamped"]'),
+		).toBeNull();
+
+		const equal = render(LatencySection, {
+			props: {
+				latencyMs: 2000,
+				range: RANGE,
+				clampedLatencyMs: 2000,
+				onLatencyChange: () => {},
+			},
+		});
+		expect(
+			equal.container.querySelector('[data-testid="latency-clamped"]'),
+		).toBeNull();
+	});
 });

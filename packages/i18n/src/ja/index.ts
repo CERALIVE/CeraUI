@@ -96,7 +96,10 @@ const ja = {
 			"このクラウドに配信するには {cloud} のキーを追加してください。",
 		destinationAddKey: "キーを追加",
 		latency: "レイテンシ",
-		latencyNegotiated: "ネゴシエート済み",
+			latencyNegotiated: "ネゴシエート済み",
+			valueClamped: "{value} に調整しました",
+			catalogDriftNote:
+				"開いてからサーバー一覧が変更されました。保存する前に選択を確認してください。",
 		transportActive: "有効",
 		transportKind: "トランスポート",
 		remoteControl: {
@@ -1231,6 +1234,7 @@ const ja = {
 			software: "ソフトウェア",
 			bitrateRangeHint: "対応範囲",
 			bitrateClamped: "対応範囲に調整しました",
+			sourceChangedNote: "ソースが変更されました — 新しい入力に合わせて設定を更新しました。",
 			probedCaps: "検出された機能",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",

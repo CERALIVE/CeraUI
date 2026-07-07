@@ -618,6 +618,7 @@ const en = {
 			software: "Software",
 			bitrateRangeHint: "Supported range",
 			bitrateClamped: "Adjusted to the supported range",
+			sourceChangedNote: "Source changed \u2014 settings updated for the new input.",
 			probedCaps: "Detected capabilities",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
@@ -742,6 +743,9 @@ const en = {
 		destinationAddKey: "Add key",
 		latency: "Latency",
 		latencyNegotiated: "Negotiated",
+		valueClamped: "Adjusted to {value:string}",
+		catalogDriftNote:
+			"The server list changed since you opened this. Review your selection before saving.",
 		transportActive: "Active",
 		transportKind: "Transport",
 		remoteControl: {

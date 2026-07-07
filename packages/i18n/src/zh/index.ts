@@ -90,7 +90,9 @@ const zh = {
 		destinationNeedsKey: "添加你的 {cloud} 密钥以推流到此云。",
 		destinationAddKey: "添加密钥",
 		latency: "延迟",
-		latencyNegotiated: "已协商",
+			latencyNegotiated: "已协商",
+			valueClamped: "已调整为 {value}",
+			catalogDriftNote: "自您打开后服务器列表已更改。保存前请检查您的选择。",
 		transportActive: "活跃",
 		transportKind: "传输",
 		remoteControl: {
@@ -1144,6 +1146,7 @@ const zh = {
 			software: "软件",
 			bitrateRangeHint: "支持范围",
 			bitrateClamped: "已调整到支持范围",
+			sourceChangedNote: "源已更改 — 已为新输入更新设置。",
 			probedCaps: "检测到的能力",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",

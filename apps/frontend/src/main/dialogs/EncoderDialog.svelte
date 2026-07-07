@@ -195,20 +195,52 @@ let seededFramerate = $state<Framerate>(30);
 // Seed the working copy from the bound draft first, falling back to the saved
 // device config. Re-seed on every open so a cancelled edit is fully discarded.
 let seeded = $state(false);
-$effect(() => {
-	if (open && !seeded) {
+// The source id the draft was last seeded for. When `config.source` changes while
+// the dialog is open (the operator picked a new input in the Source section) the
+// draft is RE-seeded from the NEW active config and a calm note is surfaced —
+// never a silent swap. Federation-safe: with no source in config both stay
+// undefined and the initial seed path is byte-unchanged.
+let seededSource = $state<string | undefined>(undefined);
+let sourceChangedNote = $state(false);
+
+function seedDraft(fromSaved: boolean): void {
+	if (fromSaved) {
+		// Re-seed from the NEW active config (getConfig): the operator switched
+		// source in the Source section, so the bound draft is stale — the device
+		// config is the truth for the new input.
+		localResolution = savedConfig?.resolution ?? '1080p';
+		localFramerate = savedConfig?.framerate ?? 30;
+		const seedBitrate = savedConfig?.max_br ?? BITRATE.defaultMin;
+		localBitrate = Number.isFinite(seedBitrate) ? seedBitrate : BITRATE.defaultMin;
+		localOverlay = savedConfig?.bitrate_overlay ?? false;
+		localCodec = savedConfig?.video_codec;
+	} else {
 		localResolution = config?.resolution ?? '1080p';
 		localFramerate = config?.framerate ?? 30;
 		const seedBitrate = config?.bitrate ?? savedConfig?.max_br ?? BITRATE.defaultMin;
 		localBitrate = Number.isFinite(seedBitrate) ? seedBitrate : BITRATE.defaultMin;
 		localOverlay = config?.bitrateOverlay ?? savedConfig?.bitrate_overlay ?? false;
 		localCodec = config?.codec;
-		seededResolution = localResolution;
-		seededFramerate = localFramerate;
-		bitrateClamped = false;
+	}
+	seededResolution = localResolution;
+	seededFramerate = localFramerate;
+	bitrateClamped = false;
+}
+
+$effect(() => {
+	const currentSource = savedConfig?.source;
+	if (open && !seeded) {
+		seedDraft(false);
+		seededSource = currentSource;
+		sourceChangedNote = false;
 		seeded = true;
+	} else if (open && seeded && currentSource !== seededSource) {
+		seedDraft(true);
+		seededSource = currentSource;
+		sourceChangedNote = true;
 	} else if (!open) {
 		seeded = false;
+		sourceChangedNote = false;
 	}
 });
 
@@ -301,6 +333,33 @@ const errors = $derived.by(() => {
 });
 const isValid = $derived(Object.keys(errors).length === 0);
 
+// Codec validity: an explicit H.265 pick is invalid when the platform can't
+// encode it (the same gate that disables the H.265 segment).
+const codecSupported = $derived(localCodec !== 'h265' || h265Supported);
+
+// Save-time axis/codec re-validation (C7). The draft is re-checked against the
+// CURRENT offered set — the SAME derivations that drive each control's
+// aria-invalid — so a device unplug that shrinks the offered axes blocks save
+// with the SAME resolved disabled-reason copy rendered inline (never a toast).
+// Returns the first blocking reason, or undefined when the whole selection is
+// offered. Federation-safe: with no source the axes degrade to the coarse
+// offering, so the current selection stays valid and save is never blocked.
+const axisSaveError = $derived.by<string | undefined>(() => {
+	if (!resolutionSupported) {
+		const option = resolutionChoices.find((choice) => choice.value === localResolution);
+		return option?.reason ? t(option.reason) : $LL.validation.invalid();
+	}
+	if (!framerateSupported) {
+		const option = framerateChoices.find((choice) => choice.value === localFramerate);
+		return option?.reason ? framerateOptionTitle(option) : $LL.validation.invalid();
+	}
+	if (!codecSupported) return $LL.live.encoder.codecH265Unavailable();
+	return undefined;
+});
+
+// Save is gated on bitrate validity AND the axis/codec re-validation.
+const canSave = $derived(isValid && axisSaveError === undefined);
+
 function commitBitrate(raw: number) {
 	// Keep the current value while the field is mid-edit (empty input → NaN).
 	if (!Number.isFinite(raw)) return;
@@ -312,7 +371,10 @@ function commitBitrate(raw: number) {
 }
 
 function handleSave() {
-	if (!isValid) return;
+	// Re-validate the draft against the CURRENT offered axes/codec set at save
+	// time (defence-in-depth beside the disabled primary button): an axis the
+	// hardware no longer offers blocks save and surfaces the inline reason.
+	if (!canSave) return;
 	const normalized = normalizeValue(localBitrate, BITRATE.min, BITRATE.max, BITRATE_STEP);
 	localBitrate = normalized;
 
@@ -347,11 +409,21 @@ function handleSave() {
 	closeOnPrimary={false}
 	icon={Binary}
 	onPrimary={handleSave}
-	primaryDisabled={!isValid}
+	primaryDisabled={!canSave}
 	primaryLabel={$LL.dialogs.save()}
 	title={$LL.settings.encoderSettings()}
 >
 	<div class="space-y-5">
+		{#if sourceChangedNote}
+			<p
+				class="text-muted-foreground bg-muted/40 rounded-md border px-3 py-2 text-xs"
+				data-testid="encoder-source-changed-note"
+				role="status"
+			>
+				{$LL.live.encoder.sourceChangedNote()}
+			</p>
+		{/if}
+
 		{#if hardware}
 			<div class="text-muted-foreground flex items-center gap-2 text-xs">
 				<Cpu aria-hidden={true} class="size-3.5 shrink-0" />
@@ -663,5 +735,14 @@ function handleSave() {
 				/>
 			</div>
 		</div>
+
+		<!-- Save-time re-validation reason (C7): an axis/codec the hardware no longer
+		     offers blocks save; the resolved disabled-reason renders inline here,
+		     never as a toast. -->
+		{#if axisSaveError}
+			<p class="text-destructive text-sm" data-testid="encoder-save-blocked" role="alert">
+				{axisSaveError}
+			</p>
+		{/if}
 	</div>
 </AppDialog>

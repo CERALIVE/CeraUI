@@ -229,7 +229,10 @@ const ar = {
 		destinationNeedsKey: "أضف مفتاح {cloud} للبثّ إلى هذه السحابة.",
 		destinationAddKey: "إضافة مفتاح",
 		latency: "زمن الوصول",
-		latencyNegotiated: "تم التفاوض",
+			latencyNegotiated: "تم التفاوض",
+			valueClamped: "تم الضبط إلى {value}",
+			catalogDriftNote:
+				"تغيّرت قائمة الخوادم منذ فتحك لهذا. راجع اختيارك قبل الحفظ.",
 		transportActive: "نشط",
 		transportKind: "النقل",
 		remoteControl: {
@@ -1330,6 +1333,7 @@ const ar = {
 			software: "برمجي",
 			bitrateRangeHint: "النطاق المدعوم",
 			bitrateClamped: "تم الضبط إلى النطاق المدعوم",
+			sourceChangedNote: "تم تغيير المصدر — تم تحديث الإعدادات للإدخال الجديد.",
 			probedCaps: "القدرات المكتشفة",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",

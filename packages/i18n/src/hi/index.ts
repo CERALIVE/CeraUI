@@ -92,7 +92,10 @@ const hi = {
 		destinationNeedsKey: "इस क्लाउड पर स्ट्रीम करने के लिए अपनी {cloud} कुंजी जोड़ें।",
 		destinationAddKey: "कुंजी जोड़ें",
 		latency: "विलंबता",
-		latencyNegotiated: "तय की गई",
+			latencyNegotiated: "तय की गई",
+			valueClamped: "{value} में समायोजित",
+			catalogDriftNote:
+				"इसे खोलने के बाद सर्वर सूची बदल गई है। सहेजने से पहले अपना चयन जांचें।",
 		transportActive: "सक्रिय",
 		transportKind: "ट्रांसपोर्ट",
 		remoteControl: {
@@ -1194,6 +1197,7 @@ const hi = {
 			software: "सॉफ़्टवेयर",
 			bitrateRangeHint: "समर्थित सीमा",
 			bitrateClamped: "समर्थित सीमा में समायोजित",
+			sourceChangedNote: "स्रोत बदला गया — नए इनपुट के लिए सेटिंग्स अपडेट की गईं।",
 			probedCaps: "पहचानी गई क्षमताएँ",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",

@@ -246,7 +246,10 @@ const fr = {
 			"Ajoutez votre clé {cloud} pour diffuser vers ce cloud.",
 		destinationAddKey: "Ajouter une clé",
 		latency: "Latence",
-		latencyNegotiated: "Négociée",
+			latencyNegotiated: "Négociée",
+			valueClamped: "Ajusté à {value}",
+			catalogDriftNote:
+				"La liste des serveurs a changé depuis l'ouverture. Vérifiez votre sélection avant d'enregistrer.",
 		transportActive: "Actif",
 		destinationCustomHint:
 			"Saisissez l'adresse et le port de votre propre récepteur.",
@@ -1389,6 +1392,7 @@ const fr = {
 			software: "Logiciel",
 			bitrateRangeHint: "Plage prise en charge",
 			bitrateClamped: "Ajusté à la plage prise en charge",
+			sourceChangedNote: "Source modifiée — réglages mis à jour pour la nouvelle entrée.",
 			probedCaps: "Capacités détectées",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",

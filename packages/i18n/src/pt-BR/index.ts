@@ -246,7 +246,10 @@ const ptBR = {
 			"Adicione sua chave do {cloud} para transmitir para esta nuvem.",
 		destinationAddKey: "Adicionar chave",
 		latency: "Latência",
-		latencyNegotiated: "Negociada",
+			latencyNegotiated: "Negociada",
+			valueClamped: "Ajustado para {value}",
+			catalogDriftNote:
+				"A lista de servidores mudou desde que você abriu isto. Revise sua seleção antes de salvar.",
 		transportActive: "Ativo",
 		destinationCustomHint:
 			"Informe o endereço e a porta do seu próprio receptor.",
@@ -1364,6 +1367,7 @@ const ptBR = {
 			software: "Software",
 			bitrateRangeHint: "Faixa suportada",
 			bitrateClamped: "Ajustado para a faixa suportada",
+			sourceChangedNote: "Fonte alterada — configurações atualizadas para a nova entrada.",
 			probedCaps: "Capacidades detectadas",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
