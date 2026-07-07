@@ -39,7 +39,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Outbound status relay (broadcast → gateway fan-out)** | `modules/remote-control/status-relay.ts` — `relayStatusToGateway`, `RELAYABLE_TYPES` (7 types), per-type seq |
 | **Telemetry recorder (batched per-link samples → `telemetry` status frames)** | `modules/remote-control/telemetry-recorder.ts` — `recordTelemetryTick`/`flushTelemetry`; non-blocking, size/age batching; emits over the control channel (spec §8.1) |
 | **self_fencing watchdog (commit-confirm + auto-revert)** | `modules/remote-control/self-fencing.ts` — `handleSelfFencingOp`, `handleSelfFencingConfirm`; 30 s watchdog |
-| **Wire-envelope Zod schema + contract test** | `modules/remote-control/protocol.ts` — `FrameSchema`, `CommandSchema`, `StatusSchema`, `COMMAND_REGISTRY` (incl. `INTERNAL_COMMANDS`), `IngestSlotsPayloadSchema`, `NEVER_REMOTE` |
+| **Wire-envelope Zod schema + contract tests** | `modules/remote-control/protocol.ts` — THIN re-export of `@ceralive/control-protocol` (device-tolerant `FrameSchema`/`CommandSchema`/`StatusSchema`/`IngestSlotsPayloadSchema` + `COMMAND_REGISTRY` incl. `INTERNAL_COMMANDS` + `NEVER_REMOTE` + `tolerantParse*`); `protocol.export-surface.test.ts` / `protocol.contract.test.ts` / `protocol.frame-exchange.test.ts` |
+| **RC-pin merge gate (rejects `-rc.` pins of `@ceralive/{control-protocol,cerastream}`)** | `scripts/check-rc-pins.sh` (root `check:rc-pins`, wired into `.github/workflows/build-check.yml` BE job) |
 | Kiosk loopback token (DC-3, single-use, tmpfs) | `modules/ui/kiosk-token.ts` + `rpc/server.ts` |
 | Preview WebSocket proxy (single-origin `/preview`; forks before oRPC upgrade; backpressure-aware) | `modules/ui/preview-proxy.ts` + `rpc/server.ts` + `rpc/adapter.ts` (`createServerWebSocketHandler`) |
 | Preview single-use token store (in-memory, TTL 30s) + `system.mintPreviewToken` | `modules/ui/preview-token.ts` + `rpc/procedures/system.procedure.ts` |
@@ -402,13 +403,58 @@ modules/remote/control-endpoint.ts # resolveControlChannelEndpoint() — reads C
 modules/pairing/paseto-v4.ts       # Ed25519 sign/verify primitives (node:crypto, synchronous)
 modules/pairing/device-token.ts    # verifyDeviceControlToken — purpose gate BEFORE claim-shape validation
 modules/remote-control/
-├── protocol.ts          # Zod envelope schemas (FrameSchema, CommandSchema, StatusSchema, NEVER_REMOTE)
+├── protocol.ts          # THIN re-export of @ceralive/control-protocol (device-tolerant variants + tolerantParse* helpers)
 ├── channel.ts           # initControlChannel — second outbound WS; exponential backoff; WS-level keepalive ping
 ├── command-router.ts    # routeCommand — NEVER_REMOTE → unknown → role → self_fencing → streaming dispatch
 ├── status-relay.ts       # relayStatusToGateway — wired into broadcastMsg; 7 relayable types; per-type seq
 ├── telemetry-recorder.ts # batched per-link telemetry → `telemetry` status frames (spec §8.1); non-blocking
 └── self-fencing.ts      # handleSelfFencingOp / handleSelfFencingConfirm — 30 s watchdog; revertible + non-revertible
 ```
+
+### Wire schema — shared `@ceralive/control-protocol` package [EXISTS]
+
+`modules/remote-control/protocol.ts` is now a **THIN re-export** of the canonical
+`@ceralive/control-protocol` npm package (`@ceralive` scope, pinned to an exact
+CalVer version in `apps/backend/package.json`). The package is the single Zod
+derivation of the control-channel wire contract
+(`openspec/specs/remote-relay-support/spec.md`), consumed identically by BOTH this
+device and the cloud hub (`ceralive-platform`) — it replaces the two previously
+hand-written, independently-drifting per-repo `protocol.ts` derivations.
+
+- **Device-tolerant posture preserved byte-for-byte.** The package ships an explicit
+  `*Strict*` (hub) and `*Tolerant*` (device) variant of every frame/payload that
+  differs between the two sides. `protocol.ts` binds each historical un-suffixed
+  device name (`CommandSchema`, `StatusSchema`, `FrameSchema`, `AckSchema`,
+  `DeliveryAckSchema`, `HandshakeSchema`, `HandshakeDeviceSchema`,
+  `HandshakeHubSchema`, `IngestSlotSchema`, `IngestSlotsPayloadSchema`) to the
+  DEVICE-TOLERANT variant, so every downstream importer (`channel.ts`,
+  `command-router.ts`, `status-relay.ts`, `set-profile.ts`, `ingest-slots.ts`,
+  `self-fencing.ts`, `active-profile-reporter.ts`) keeps the exact schema and
+  behaviour it had before — no import-site change beyond the re-export. The
+  package's un-suffixed alias for a colliding name resolves to the STRICT (hub)
+  variant, so the device MUST use the `*Tolerant*` schema (which `protocol.ts` does).
+- **`tolerantParse*` helpers** (`tolerantParseFrame`, `tolerantParseCommand`, …,
+  `tolerantParseSetProfilePayload`, `parseHandshakeDeviceBody/HubBody`) are
+  re-exported alongside so new call sites can name the device-posture parser
+  directly.
+- **Registry-dep, Rule-D-compatible.** `@ceralive/control-protocol` resolves through
+  the package registry identically whether or not the sibling repo is checked out —
+  a CalVer registry dep like `@ceralive/cerastream` / `@ceralive/srtla-send`, NOT a
+  sibling `link:` or a `../` path. Evolution is **additive-optional forever**: a
+  change that would make a currently-optional field required is a new protocol `v`,
+  never a package version bump.
+- **RC bridge + merge gate.** During the W2/W3 integration bridge the pin is an
+  EXACT prerelease (`2026.7.0-rc.1`). `scripts/check-rc-pins.sh` (root script
+  `check:rc-pins`, wired into the `build-check.yml` BE job) FAILS the build while any
+  `package.json`/`bun.lock` still carries an `-rc.` pin of
+  `@ceralive/control-protocol` or `@ceralive/cerastream` — it MUST be swapped for the
+  exact stable CalVer before merging to a canonical branch.
+- **Contract coverage.** `protocol.export-surface.test.ts` is a regression lock over
+  the module's runtime export surface (every symbol + typeof); `protocol.contract.test.ts`
+  parses the package-exported §14 fixtures with the device schemas;
+  `protocol.frame-exchange.test.ts` is the device half of the frame-exchange contract
+  (tolerant accepts every hub-strict-emitted fixture; v1-minimal; unknown-field
+  tolerance).
 
 ### Key invariants
 

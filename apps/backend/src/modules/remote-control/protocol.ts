@@ -1,354 +1,171 @@
 /**
- * Remote Control Plane v2.0 — device-side wire-envelope Zod schema.
+ * Remote Control Plane v2.0 — device-side wire-envelope schema surface.
  *
- * This module is the device's OWN validator for the bidirectional control
- * channel defined by `openspec/specs/remote-relay-support/spec.md`. Per that
- * spec (and Rule D — repos are self-contained), there is NO shared schema
- * package across the device/hub boundary: each repo writes its own Zod from the
- * spec, and the spec's §14 JSON fixtures are the conformance vectors. The
- * matching contract test (`protocol.contract.test.ts`) parses those fixtures
- * against the schemas below.
+ * This module is now a THIN re-export of the canonical
+ * `@ceralive/control-protocol` npm package (`@ceralive` scope, pinned to an exact
+ * CalVer version in `package.json`). The package is the single Zod derivation of
+ * the control-channel wire contract (`openspec/specs/remote-relay-support/spec.md`)
+ * consumed identically by BOTH this device (`CeraUI/apps/backend`) and the cloud
+ * hub (`ceralive-platform`) — replacing the two previously-independent hand-written
+ * per-repo `protocol.ts` derivations.
  *
- * Scope: framing + capability handshake only. This file does NOT touch the
- * BCRPT relay socket (`modules/remote/remote.ts`) and shares no token audience
- * with it — the control channel is a second, independent outbound WS.
- */
-
-import { z } from "zod";
-
-/** Protocol version carried in the envelope `v` field. Currently `1` (spec §3, §13). */
-export const PROTOCOL_VERSION = 1 as const;
-
-/** Frame discriminator values (spec §3 `kind`). */
-export const FRAME_KINDS = [
-	"command",
-	"status",
-	"result",
-	"ack",
-	"handshake",
-	"delivery.ack",
-] as const;
-export type FrameKind = (typeof FRAME_KINDS)[number];
-
-/**
- * Connection roles (spec §3 `role`, §12). v2.0 is owner-only and hub-stamped;
- * `copilot`/`viewer` are reserved for v2.1 delegation. Clients MUST NOT set
- * `role` and MUST ignore it inbound in v2.0.
- */
-export const ROLES = ["owner", "copilot", "viewer"] as const;
-export type Role = (typeof ROLES)[number];
-
-/**
- * INTERNAL commands (spec §5) — platform-originated, DOWNSTREAM-only (hub→device).
- * NOT operator-invocable, but IN the registry so the device's `result` /
- * `delivery.ack` echo validates platform-side (§6 / §6.1). Distinct from
- * {@link NEVER_REMOTE}: a never-remote command is local-only and MUST NEVER cross
- * the wire; an internal command IS relayed downstream — it is simply not something
- * an operator may originate. The platform additionally WITHHOLDS it from any device
- * whose `device.hello` `supportedTypes` (§4.1) does not advertise the type, so a
- * not-yet-updated device never receives a frame it cannot parse (additive,
- * safe-rollout, §13). Advertising it here is exactly what opts this device in.
+ * The device/hub PARSING ASYMMETRY is preserved byte-for-byte: the package ships an
+ * explicit `*Strict*` (hub) and `*Tolerant*` (device) variant of every frame/payload
+ * that differs between the two sides. This module re-exports the DEVICE-TOLERANT
+ * variant under each of the historical un-suffixed device names (`CommandSchema`,
+ * `StatusSchema`, `FrameSchema`, …), so every downstream importer
+ * (`channel.ts`, `command-router.ts`, `status-relay.ts`, `set-profile.ts`,
+ * `ingest-slots.ts`, `self-fencing.ts`, `active-profile-reporter.ts`) keeps the
+ * exact schema it had before, with no import-site or behaviour change. The
+ * `tolerantParse*` helpers are re-exported alongside so new call sites can use the
+ * named device-posture parser directly.
  *
- * Mirrors the hub's `INTERNAL_COMMANDS` (ceralive-platform
- * `apps/api/lib/remote-control/protocol.ts`) — kept in sync by the spec, not a
- * shared package (Rule D).
+ * Registry-dependency consumption stays Rule-D-compatible (root `AGENTS.md`):
+ * `@ceralive/control-protocol` resolves through the package registry identically
+ * whether or not the sibling repo is checked out — it is a CalVer registry dep like
+ * `@ceralive/cerastream` / `@ceralive/srtla-send`, NOT a sibling `link:` or a `../`
+ * path reference. Evolution is additive-optional forever (see the package README →
+ * "Evolution policy"): a change that would make a currently-optional field required
+ * is a new protocol `v`, never a version bump of the package.
  *
- * `ingest.slots` (T17/T18): the platform pushes the account-resolved ingest slots
- * to the device so the on-device UI can render + select them. Payload =
- * {@link IngestSlotsPayloadSchema}.
- *
- * `device.setProfile` (Todo 28): the platform pushes the resolved SRT receive
- * profile (a `StreamConfig` + `commandId`) so the device persists + applies it on
- * (re)connect and acks the effective active profile. The payload + ack live in
- * `@ceraui/rpc/schemas` (`setProfilePayloadSchema` / `setProfileAckSchema`).
+ * Scope: framing + capability handshake only. This file does NOT touch the BCRPT
+ * relay socket (`modules/remote/remote.ts`) and shares no token audience with it —
+ * the control channel is a second, independent outbound WS.
  */
-export const INTERNAL_COMMANDS = ["ingest.slots", "device.setProfile"] as const;
-export type InternalCommandType = (typeof INTERNAL_COMMANDS)[number];
+
+export type {
+	CommandType,
+	DeviceCaps,
+	Envelope,
+	FrameKind,
+	InternalCommandType,
+	NeverRemoteType,
+	ResultPayload,
+	Role,
+	SelfFencingType,
+	StatusType,
+} from "@ceralive/control-protocol/schemas";
+// ── Pass-through: constants, enums, and schemas identical on both sides ────────
+export {
+	// constants / closed registries (§3, §5, §8, §13)
+	ACTIVE_PROFILE_STATUS,
+	COMMAND_REGISTRY,
+	// shared schemas (no strict/tolerant split — byte-identical on both sides)
+	DeviceCapsSchema,
+	EnvelopeSchema,
+	FRAME_KINDS,
+	INTERNAL_COMMANDS,
+	// type guards
+	isInternalCommand,
+	NEVER_REMOTE,
+	PROTOCOL_VERSION,
+	ResultPayloadSchema,
+	ROLES,
+	SELF_FENCING_TYPES,
+	SELF_FENCING_WATCHDOG_MS,
+	STATUS_TYPES,
+} from "@ceralive/control-protocol/schemas";
+
+import type {
+	AckTolerant,
+	CommandTolerant,
+	DeliveryAckTolerant,
+	FrameTolerant,
+	HandshakeDeviceBody,
+	HandshakeEnvelope,
+	HandshakeHubBody,
+	IngestSlotsTolerantPayload,
+	IngestSlotTolerant,
+	ResultTolerant,
+	StatusTolerant,
+} from "@ceralive/control-protocol/schemas";
+// ── Device-TOLERANT variants, re-exported under the historical device names ────
+//
+// The package's un-suffixed alias for each of these colliding names resolves to
+// the STRICT (hub) variant; the device deliberately keeps its looser posture, so
+// we bind each device name to the explicit `*Tolerant*` schema. This preserves the
+// device's forward-compatible leniency (open `type`, nullable/absent descriptive
+// `ingest.slots` fields, any-string `commandId`) exactly as before.
+import {
+	AckTolerantSchema,
+	CommandTolerantSchema,
+	DeliveryAckTolerantSchema,
+	FrameTolerantSchema,
+	HandshakeDeviceBodySchema,
+	HandshakeEnvelopeSchema,
+	HandshakeHubBodySchema,
+	IngestSlotsTolerantPayloadSchema,
+	IngestSlotTolerantSchema,
+	ResultTolerantSchema,
+	StatusTolerantSchema,
+} from "@ceralive/control-protocol/schemas";
+
+/** `command` frame — device-tolerant (`type` any non-empty string, §5). */
+export const CommandSchema = CommandTolerantSchema;
+export type Command = CommandTolerant;
+
+/** `result` frame — device-tolerant (§6). */
+export const ResultSchema = ResultTolerantSchema;
+export type Result = ResultTolerant;
+
+/** `status` frame — device-tolerant; `seq` required + non-negative (§8). */
+export const StatusSchema = StatusTolerantSchema;
+export type Status = StatusTolerant;
+
+/** `ack` frame — device-tolerant (§4, §5, §13). */
+export const AckSchema = AckTolerantSchema;
+export type Ack = AckTolerant;
+
+/** `delivery.ack` frame — device-tolerant; carries no payload (§6.1). */
+export const DeliveryAckSchema = DeliveryAckTolerantSchema;
+export type DeliveryAck = DeliveryAckTolerant;
+
+/** Whole-frame discriminated union over `kind` — device-tolerant (§3). */
+export const FrameSchema = FrameTolerantSchema;
+export type Frame = FrameTolerant;
 
 /**
- * The closed, explicit list of every command type the device services in v2.0
- * (spec §5 + §7 `self_fencing.confirm` + {@link INTERNAL_COMMANDS}). A `command`
- * frame's `type` MUST be one of these. This is the exact set advertised in the
- * device `device.hello` `supportedTypes` (spec §4 / §14.2) — operator-invocable
- * commands and platform-internal downstream pushes alike.
+ * Single, body-agnostic `handshake` FRAME (§4) — the device's historical
+ * `HandshakeSchema` shape (`kind:"handshake"`, `type` open, hello body in
+ * `payload`). Distinct from the package's un-suffixed `HandshakeSchema`, which is
+ * the union of the two full hub frames.
  */
-export const COMMAND_REGISTRY = [
-	"streaming.start",
-	"streaming.stop",
-	"streaming.setBitrate",
-	"streaming.setConfig",
-	"streaming.getConfig",
-	"streaming.getPipelines",
-	"network.reconfig",
-	"modem.reconfig",
-	"device.remoteKeyChange",
-	"system.reboot",
-	"device.factoryReset",
-	"self_fencing.confirm",
-	...INTERNAL_COMMANDS,
-] as const;
-export type CommandType = (typeof COMMAND_REGISTRY)[number];
+export const HandshakeSchema = HandshakeEnvelopeSchema;
+export type Handshake = HandshakeEnvelope;
 
 /**
- * Commands that opt into the self_fencing commit-confirm watchdog (spec §5, §7).
- * Carry `self_fencing: true` at the TOP LEVEL of the frame (not in `payload`).
+ * Device→Hub `device.hello` BODY (§4 / §14.2 `payload`) — the device's historical
+ * `HandshakeDeviceSchema` shape (`{v, supportedTypes, deviceCaps}`).
  */
-export const SELF_FENCING_TYPES = [
-	"network.reconfig",
-	"modem.reconfig",
-	"device.remoteKeyChange",
-	"system.reboot",
-	"device.factoryReset",
-] as const;
-export type SelfFencingType = (typeof SELF_FENCING_TYPES)[number];
+export const HandshakeDeviceSchema = HandshakeDeviceBodySchema;
+export type HandshakeDevice = HandshakeDeviceBody;
 
-/**
- * Local-only types that MUST NEVER be exposed on the control channel (spec §5).
- * The device rejects these defensively even if a malformed hub forwards one.
- */
-export const NEVER_REMOTE = ["auth.login", "auth.setPassword"] as const;
-export type NeverRemoteType = (typeof NEVER_REMOTE)[number];
+/** Hub→Device `hub.hello` BODY (§4 / §14.3 `payload`) — `{v, role}`. */
+export const HandshakeHubSchema = HandshakeHubBodySchema;
+export type HandshakeHub = HandshakeHubBody;
 
-/**
- * Relayable upstream status `type` values — the closed v2.0 set (spec §8).
- *
- * `telemetry` (spec §8.1) is the batched per-SRTLA-link telemetry surface,
- * distinct from the live `status.linkTelemetry` snapshot. It is additive
- * (non-breaking, spec §13) and read-only — it adds no command and carries no
- * secret. It is NOT a local broadcast event type, so it is intentionally NOT in
- * `status-relay.ts` `RELAYABLE_TYPES`; the device telemetry recorder emits it
- * directly over the control channel rather than through `broadcastMsg`.
- *
- * `device.activeProfile` (spec §8, cloud Todo 15) is the device reporting the
- * SRT-receive `StreamConfig` it is ACTUALLY streaming under — its EFFECTIVE active
- * profile, as opposed to the RESOLVED config the platform pushed via
- * `device.setProfile`. The platform reconciles the two to surface per-device
- * profile DRIFT (a device that did not apply the pushed profile). Additive +
- * read-only (a status frame, no command, no secret); the payload nests the four
- * StreamConfig fields under a `config` key —
- * `{ config: { presetId, latencyMs, fecEnabled, recoveryMode } }`. Unlike
- * `telemetry`, it IS in `status-relay.ts` `RELAYABLE_TYPES`: the emitter
- * (`active-profile-reporter.ts`) reports it through the standard `broadcastMsg`
- * path. Mirrors the hub's `STATUS_TYPES` entry (ceralive-platform
- * `apps/api/lib/remote-control/protocol.ts`) — kept in sync by the spec (Rule D).
- */
-export const STATUS_TYPES = [
-	"status",
-	"config",
-	"sensors",
-	"netif",
-	"modems",
-	"device-stats",
-	"notifications",
-	"telemetry",
-	"device.activeProfile",
-] as const;
-export type StatusType = (typeof STATUS_TYPES)[number];
+/** Single `ingest.slots` slot — device-tolerant (§5.1). */
+export const IngestSlotSchema = IngestSlotTolerantSchema;
+export type IngestSlot = IngestSlotTolerant;
 
-/**
- * The `device.activeProfile` status `type` (spec §8, cloud Todo 15), named so the
- * wire literal has a single source of truth for the emitter
- * (`active-profile-reporter.ts`). Mirrors the platform's `ACTIVE_PROFILE_STATUS`.
- */
-export const ACTIVE_PROFILE_STATUS = "device.activeProfile" as const;
+/** Body of an `ingest.slots` command frame — device-tolerant (§5.1). */
+export const IngestSlotsPayloadSchema = IngestSlotsTolerantPayloadSchema;
+export type IngestSlotsPayload = IngestSlotsTolerantPayload;
 
-/** Default self_fencing watchdog window in milliseconds (spec §7 — NOT wire-negotiated). */
-export const SELF_FENCING_WATCHDOG_MS = 30_000;
-
-/** UUID v4 correlation id (spec §3 `cid`). Commands mint it; `result`/`ack` echo it. */
-const cidSchema = z.uuidv4();
-
-/** Free-form type-specific body. Unknown keys allowed (forward compat, spec §3). */
-const payloadSchema = z.record(z.string(), z.unknown());
-
-/**
- * Base envelope shared by every frame in either direction (spec §3).
- *
- * `payload`, `role`, `seq`, and `self_fencing` are optional at the envelope
- * level; the per-`kind` schemas below tighten them where the spec requires it
- * (e.g. `status` requires `seq`, `result` requires its structured payload).
- * Unknown top-level keys are ignored by receivers per §3 — Zod strips them by
- * default, which is the desired forward-compatible behavior.
- */
-export const EnvelopeSchema = z.object({
-	v: z.literal(PROTOCOL_VERSION),
-	kind: z.enum(FRAME_KINDS),
-	type: z.string().min(1),
-	cid: cidSchema,
-	role: z.enum(ROLES).optional(),
-	payload: payloadSchema.optional(),
-	seq: z.number().int().optional(),
-	self_fencing: z.boolean().optional(),
-});
-export type Envelope = z.infer<typeof EnvelopeSchema>;
-
-/**
- * `command` frame (spec §5, §7). Downstream hub→device. `payload` is optional
- * (absent or `{}` for no-arg types). `self_fencing` rides the top level for the
- * connectivity/lifecycle ops in {@link SELF_FENCING_TYPES}.
- */
-export const CommandSchema = EnvelopeSchema.extend({
-	kind: z.literal("command"),
-	payload: payloadSchema.optional(),
-});
-export type Command = z.infer<typeof CommandSchema>;
-
-/**
- * `ingest.slots` internal-command payload (T18) — the device's OWN, deliberately
- * LENIENT validator (Rule D: each repo writes its own Zod from the spec; there is
- * no shared schema package across the device/hub boundary).
- *
- * The platform emits a STRICTER shape (ceralive-platform `protocol.ts`
- * `IngestSlotPayloadSchema`: `obsInstanceId` non-null, every descriptive field
- * required). The device tolerates more so a future platform that drops or nulls a
- * purely descriptive field never trips this schema: `obsInstanceId` may be `null`
- * and the descriptive fields (`instanceLabel`, `region`, `state`, `default`) may be
- * absent. The fields the device actually routes on — `endpointId` (slot identity),
- * `host`, `port`, `protocol`, `streamId` — stay required. Unknown keys are stripped
- * (forward compatibility, §3).
- */
-export const IngestSlotSchema = z.object({
-	endpointId: z.string(),
-	obsInstanceId: z.string().nullable(),
-	instanceLabel: z.string().optional(),
-	region: z.string().optional(),
-	state: z.string().optional(),
-	host: z.string(),
-	port: z.number(),
-	protocol: z.string(),
-	streamId: z.string(),
-	default: z.boolean().optional(),
-});
-export type IngestSlot = z.infer<typeof IngestSlotSchema>;
-
-/** Body of an `ingest.slots` command frame (spec §5 internal command). */
-export const IngestSlotsPayloadSchema = z.object({
-	slots: z.array(IngestSlotSchema),
-});
-export type IngestSlotsPayload = z.infer<typeof IngestSlotsPayloadSchema>;
-
-/**
- * Result payload (spec §6). `applied` is the post-validation, post-clamp state
- * actually written (mirrors the existing `{ success, applied }` RPC convention);
- * `null` for commands with no applied state. `reverted: true` marks an
- * auto-reverted self_fencing op.
- */
-export const ResultPayloadSchema = z.object({
-	ok: z.boolean(),
-	applied: z.unknown(),
-	error: z.string().optional(),
-	reverted: z.boolean().optional(),
-});
-export type ResultPayload = z.infer<typeof ResultPayloadSchema>;
-
-/** `result` frame (spec §6). Device→hub reply to a command; echoes its `cid`. */
-export const ResultSchema = EnvelopeSchema.extend({
-	kind: z.literal("result"),
-	payload: ResultPayloadSchema,
-});
-export type Result = z.infer<typeof ResultSchema>;
-
-/**
- * `status` frame (spec §8). Upstream device→hub event. Always carries `seq`, a
- * monotonic-per-`type` integer for drop detection (resets to 0 on restart).
- */
-export const StatusSchema = EnvelopeSchema.extend({
-	kind: z.literal("status"),
-	seq: z.number().int().nonnegative(),
-});
-export type Status = z.infer<typeof StatusSchema>;
-
-/** `ack` frame (spec §4, §5, §13) — hub negotiation/rejection signal. */
-export const AckSchema = EnvelopeSchema.extend({
-	kind: z.literal("ack"),
-});
-export type Ack = z.infer<typeof AckSchema>;
-
-/**
- * `delivery.ack` frame (spec §6.1) — the device's receipt confirmation for a
- * command, emitted upstream BEFORE the command is applied and independently of
- * any later `result`. It echoes the command's `type` and `cid` and carries no
- * payload. The hub uses it to bound its command-delivery retries (it stops
- * retrying once a matching `delivery.ack` arrives). Re-acking a replayed `cid`
- * is intentional: it lets the hub terminate retries even when the first `result`
- * never confirmed.
- */
-export const DeliveryAckSchema = EnvelopeSchema.extend({
-	kind: z.literal("delivery.ack"),
-});
-export type DeliveryAck = z.infer<typeof DeliveryAckSchema>;
-
-/** `handshake` frame envelope (spec §4). Body lives in `payload`; `cid` is informational. */
-export const HandshakeSchema = EnvelopeSchema.extend({
-	kind: z.literal("handshake"),
-	payload: payloadSchema.optional(),
-});
-export type Handshake = z.infer<typeof HandshakeSchema>;
-
-/**
- * Device capability object carried in `device.hello` (spec §4.1). Open for forward
- * compatibility (`catchall` keeps unknown keys), but pins the normative keys the
- * hub reads: `ceraui_version` (CalVer `YYYY.MINOR.PATCH`) and `config_schema_version`
- * (monotonic int) for the version-support gate, and `receiverKind` for the platform's
- * receiver-capability reconciliation. All are OPTIONAL for safe rollout — a hub
- * tolerates a hello that omits them (a not-yet-updated device → "version unknown" /
- * "receiver unknown → baseline" gate).
- *
- * `receiverKind` is the device's configured MEDIA-DESTINATION receiver kind
- * (`'ceralive' | 'belabox' | 'custom'`). It is derived from where the media actually
- * goes, NOT from `remote_provider` alone: a CeraLive-paired (control) device can still
- * stream its media to a custom receiver, in which case it reports `'custom'` so the
- * platform never wrongly pushes it FEC/L1. Omitted when not derivable.
- */
-export const DeviceCapsSchema = z
-	.object({
-		ceraui_version: z.string().optional(),
-		config_schema_version: z.number().int().optional(),
-		receiverKind: z.string().optional(),
-	})
-	.catchall(z.unknown());
-export type DeviceCaps = z.infer<typeof DeviceCapsSchema>;
-
-/**
- * Device→Hub `device.hello` body (spec §4 / §14.2) — carried in the handshake
- * frame's `payload`. Advertises the protocol version, the serviceable message
- * types, and the {@link DeviceCapsSchema} capability object.
- */
-export const HandshakeDeviceSchema = z.object({
-	v: z.literal(PROTOCOL_VERSION),
-	supportedTypes: z.array(z.string()),
-	deviceCaps: DeviceCapsSchema,
-});
-export type HandshakeDevice = z.infer<typeof HandshakeDeviceSchema>;
-
-/**
- * Hub→Device `hub.hello` body (spec §4 / §14.3) — carried in the handshake
- * frame's `payload`. Confirms the version and stamps the connection role
- * (always `owner` in v2.0).
- */
-export const HandshakeHubSchema = z.object({
-	v: z.literal(PROTOCOL_VERSION),
-	role: z.enum(ROLES),
-});
-export type HandshakeHub = z.infer<typeof HandshakeHubSchema>;
-
-/**
- * Discriminated union over every frame kind — the single entry point for
- * routing an inbound frame to its precise schema (downstream Tasks 13–15).
- */
-export const FrameSchema = z.discriminatedUnion("kind", [
-	CommandSchema,
-	ResultSchema,
-	StatusSchema,
-	AckSchema,
-	HandshakeSchema,
-	DeliveryAckSchema,
-]);
-export type Frame = z.infer<typeof FrameSchema>;
-
-const INTERNAL_COMMANDS_SET: ReadonlySet<string> = new Set(INTERNAL_COMMANDS);
-
-/** True when `type` is a platform-originated, downstream-only INTERNAL command (§5). */
-export function isInternalCommand(type: string): boolean {
-	return INTERNAL_COMMANDS_SET.has(type);
-}
+// ── Named device-posture parse helpers (the tolerant lane of the shared package) ─
+export {
+	parseHandshakeDeviceBody,
+	parseHandshakeHubBody,
+	tolerantParseAck,
+	tolerantParseCommand,
+	tolerantParseDeliveryAck,
+	tolerantParseFrame,
+	tolerantParseFrameSafe,
+	tolerantParseHandshake,
+	tolerantParseIngestSlots,
+	tolerantParseIngestSlotsSafe,
+	tolerantParseResult,
+	tolerantParseSetProfilePayload,
+	tolerantParseSetProfilePayloadSafe,
+	tolerantParseStatus,
+} from "@ceralive/control-protocol/parse";
