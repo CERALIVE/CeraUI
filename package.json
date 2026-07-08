@@ -37,9 +37,9 @@
 		"clean:all": "bun run clean"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.5.2",
-		"@ceralive/biome-config": "^2026.6.1",
-		"@types/node": "^26.1.0",
+		"@biomejs/biome": "2.5.2",
+		"@ceralive/biome-config": "^2026.6.2",
+		"@types/node": "^26.1.1",
 		"dotenv-cli": "^11.0.0",
 		"glob": "^13.0.6",
 		"mprocs": "^0.9.6",

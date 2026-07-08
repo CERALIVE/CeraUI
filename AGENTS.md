@@ -1464,7 +1464,7 @@ the per-interface sections.
 
 A follow-up pass (`live-correctness-pass` plan) tightened the Live destination and
 a few surrounding surfaces after the device-first source model shipped. Full
-implementation notes: `.omo/notepads/live-correctness-pass/learnings.md`.
+implementation notes: `test-results/notepads/live-correctness-pass/learnings.md`.
 
 **Truthful device-max pair (Todo #2/#3).** `axisCeiling({offered, deviceModes})`
 (`ValidationAdapter.ts`) now returns the ACHIEVABLE resolution×framerate pair when

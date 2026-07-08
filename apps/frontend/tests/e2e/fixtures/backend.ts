@@ -151,6 +151,12 @@ function seedStateDir(stateDir: string): void {
 		unknown
 	>;
 	cfg.password_hash = passwordHash();
+	cfg.kiosk_enabled = false;
+	cfg.kiosk_last_state = "disabled";
+	cfg.kiosk_display = "lcd";
+	cfg.kiosk_touch = true;
+	cfg.kiosk_motion = true;
+	cfg.kiosk_performance = "balanced";
 	fs.writeFileSync(cfgPath, JSON.stringify(cfg));
 	seedSetupJson(stateDir);
 }

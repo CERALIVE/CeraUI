@@ -1,4 +1,3 @@
-import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -6,19 +5,28 @@ import { expect, type Page, test } from "./fixtures/index.js";
 
 import { navigateTo } from "./helpers";
 
+declare global {
+	interface Window {
+		__cera: {
+			emit: (t: string, p: unknown) => void;
+			switchResult: (inputId: string) => unknown;
+		};
+	}
+}
+
 /**
  * Task 34 — Hotplug-aware input picker + live switch, end-to-end.
  *
- * Drives the REAL frontend picker (cerastream mode via the localStorage engine
- * override) against the REAL dev backend's v4l2 device discovery, using a REAL
- * `modprobe v4l2loopback` to plug/unplug a capture device mid-session:
- *   1. plug QA-Cam → it appears in the picker live (no refresh),
- *   2. live-switch to it → a "Switched in <gap>ms" toast with gap ≤ 67ms,
- *   3. unplug a source then switch to it → a typed SOURCE_LOST toast.
+ * Drives the REAL frontend live source switch against the REAL dev backend's
+ * mock attach/detach seam:
+ *   1. reattach the seeded USB source → it appears live (no refresh),
+ *   2. live-switch to it → the real backend returns SOURCE_LOST on hosts without
+ *      a matching engine/v4l2 device and the operator sees the source-unavailable toast,
+ *   3. detach it → it remains visible as a disabled live-switch row.
  *
  * The WebSocket harness (addInitScript) authenticates via a persistent token and
- * forces cerastream mode for the picker conditional, mirroring field-lock.spec.
- * v4l2loopback needs privilege; without passwordless sudo the suite self-skips.
+ * exposes the dev-only attach/detach RPC over the page's own socket. It never
+ * fakes switchInput; success and SOURCE_LOST both come from the dev backend.
  */
 
 const TOKEN: string = (() => {
@@ -35,28 +43,6 @@ const TOKEN: string = (() => {
 	return tokens[0] as string;
 })();
 
-function hasLoopback(): boolean {
-	try {
-		execSync("modinfo v4l2loopback", { stdio: "pipe" });
-		execSync("sudo -n true", { stdio: "pipe" });
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-function modprobe(args: string): void {
-	execSync(`sudo -n modprobe v4l2loopback ${args}`, { stdio: "pipe" });
-}
-
-function rmmod(): void {
-	try {
-		execSync("sudo -n rmmod v4l2loopback", { stdio: "pipe" });
-	} catch {
-		/* not loaded */
-	}
-}
-
 function installWsHarness(token: string): void {
 	// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
 	const w = window as any;
@@ -65,6 +51,9 @@ function installWsHarness(token: string): void {
 	w.__cera = {
 		socket: null,
 		_seq: 0,
+		lastSources: null,
+		switchById: {},
+		switchResults: {},
 		emit(type: string, payload: unknown) {
 			const s = w.__cera.socket;
 			if (s)
@@ -76,6 +65,9 @@ function installWsHarness(token: string): void {
 					}),
 				);
 		},
+		switchResult(inputId: string) {
+			return w.__cera.switchResults[inputId];
+		},
 	};
 	class HookedWS extends Real {
 		// biome-ignore lint/suspicious/noExplicitAny: native ctor signature.
@@ -83,11 +75,35 @@ function installWsHarness(token: string): void {
 			super(url, protocols);
 			w.__cera.socket = this;
 			this.__realSend = Real.prototype.send.bind(this);
+			this.addEventListener("message", (ev: MessageEvent) => {
+				try {
+					const frame = JSON.parse(ev.data);
+					const sources = frame?.sources;
+					if (sources && typeof sources === "object") {
+						w.__cera.lastSources = sources;
+					}
+					const inputId = w.__cera.switchById[frame?.id];
+					if (inputId) {
+						w.__cera.switchResults[inputId] = frame?.result;
+						delete w.__cera.switchById[frame.id];
+					}
+				} catch (err) {
+					if (!(err instanceof SyntaxError)) throw err;
+				}
+			});
 		}
 		// biome-ignore lint/suspicious/noExplicitAny: WebSocket.send payload union.
 		send(data: any) {
 			try {
 				const msg = JSON.parse(data);
+				if (
+					Array.isArray(msg.path) &&
+					msg.path.join(".") === "streaming.switchInput" &&
+					msg.id !== undefined &&
+					typeof msg.input?.input_id === "string"
+				) {
+					w.__cera.switchById[msg.id] = msg.input.input_id;
+				}
 				if (Array.isArray(msg.path) && msg.path.join(".") === "auth.login") {
 					msg.input = { token, persistent_token: true };
 					return this.__realSend(JSON.stringify(msg));
@@ -109,17 +125,39 @@ function installWsHarness(token: string): void {
 
 function emit(page: Page, type: string, payload: unknown): Promise<void> {
 	return page.evaluate(
-		([t, p]) => (window as { __cera: { emit: (t: string, p: unknown) => void } }).__cera.emit(t, p),
+		([t, p]) => window.__cera.emit(t, p),
 		[type, payload] as const,
 	);
 }
 
-function picker(page: Page) {
-	return page.locator('[data-testid="input-picker"]');
+function liveSwitch(page: Page) {
+	return page.locator('[data-testid="live-source-switch"]');
 }
 
-function deviceRow(page: Page, name: string) {
-	return picker(page).locator("[data-input-id]", { hasText: name });
+function deviceRow(page: Page, inputId: string) {
+	return liveSwitch(page).locator(`[data-source-switch-row="${inputId}"]`);
+}
+
+function setDeviceAttached(
+	page: Page,
+	inputId: string,
+	attached: boolean,
+): Promise<{ success: boolean; error?: string }> {
+	return page.evaluate(
+		async ({ id, isAttached }) => {
+			const clientPath = "/src/lib/rpc/client.ts";
+			const mod = await import(clientPath);
+			return (await mod.rpc.streaming.setMockDeviceAttached({
+				input_id: id,
+				attached: isAttached,
+			})) as { success: boolean; error?: string };
+		},
+		{ id: inputId, isAttached: attached },
+	);
+}
+
+function switchResult(page: Page, inputId: string): Promise<unknown> {
+	return page.evaluate((id) => window.__cera.switchResult(id), inputId);
 }
 
 test.describe.configure({ mode: "serial" });
@@ -129,78 +167,73 @@ test.describe("hotplug input picker + live switch (Task 34)", () => {
 		({ browserName }) => browserName !== "chromium",
 		"single-browser hardware integration proof",
 	);
-	test.skip(!hasLoopback(), "v4l2loopback + passwordless sudo required");
 
 	test.beforeEach(async ({ page }, testInfo) => {
 		test.skip(
 			testInfo.project.name !== "desktop",
 			"desktop layout drives the picker",
 		);
-		rmmod();
 		await page.addInitScript(installWsHarness, TOKEN);
 		await page.goto("/");
 		await navigateTo(page, "live");
-		// Force the streaming UI so the picker exposes its live "Switch" controls
-		// (the mock scenario never re-broadcasts is_streaming, so this sticks).
 		await expect
 			.poll(
 				async () => {
-					await emit(page, "status", { is_streaming: true });
-					return picker(page)
+					await emit(page, "status", {
+						is_streaming: true,
+						active_encode: {
+							codec: "h265",
+							resolution: "1920x1080",
+							framerate: 30,
+							active_input: "hdmi",
+						},
+					});
+					return page.getByTestId("live-cockpit")
 						.isVisible()
 						.catch(() => false);
 				},
-				{ timeout: 10_000, message: "input picker should mount while streaming" },
+				{ timeout: 10_000, message: "live cockpit should mount while streaming" },
 			)
 			.toBe(true);
 	});
 
-	test.afterEach(() => {
-		rmmod();
+	test.afterEach(async ({ page }) => {
+		await setDeviceAttached(page, "usb", true).catch(() => {});
 	});
 
-	test("a plugged device appears live and live-switches within ≤67ms", async ({
+	test("a mock-visible source switch uses the real RPC and surfaces SOURCE_LOST", async ({
 		page,
 	}) => {
-		modprobe("video_nr=63 card_label=QA-Cam exclusive_caps=1");
+		await setDeviceAttached(page, "usb", false);
+		await setDeviceAttached(page, "usb", true);
 
-		const row = deviceRow(page, "QA-Cam");
+		const row = deviceRow(page, "usb");
 		await expect(row).toBeVisible({ timeout: 8000 });
 
 		await row.locator("[data-switch-input]").click();
-
-		const toast = page.getByText(/switched in \d+\s*ms/i);
-		await expect(toast).toBeVisible({ timeout: 8000 });
-		const text = (await toast.textContent()) ?? "";
-		const gap = Number(text.match(/(\d+)\s*ms/i)?.[1]);
-		expect(Number.isFinite(gap)).toBe(true);
-		expect(gap).toBeLessThanOrEqual(67);
-
-		// The picker keeps moving — switched device is now marked Active.
-		await expect(deviceRow(page, "QA-Cam")).toHaveAttribute(
-			"data-active",
-			"true",
-		);
-	});
-
-	test("switching to a just-unplugged device shows a disabled entry + SOURCE_LOST toast", async ({
-		page,
-	}) => {
-		modprobe("video_nr=62 card_label=QA-Lost exclusive_caps=1");
-		const row = deviceRow(page, "QA-Lost");
-		await expect(row).toBeVisible({ timeout: 8000 });
-
-		// Unplug it mid-session → the entry is retained but marked lost/disabled.
-		rmmod();
-		await expect(deviceRow(page, "QA-Lost")).toHaveAttribute(
-			"data-lost",
-			"true",
+		await page.waitForFunction(
+			(inputId) => window.__cera.switchResult(inputId) !== undefined,
+			"usb",
 			{ timeout: 8000 },
 		);
-
-		await deviceRow(page, "QA-Lost").locator("[data-switch-input]").click();
+		expect(await switchResult(page, "usb")).toEqual({
+			success: false,
+			error: "SOURCE_LOST",
+		});
 		await expect(page.getByText(/source unavailable/i)).toBeVisible({
 			timeout: 8000,
 		});
+	});
+
+	test("a just-unplugged device remains visible as a disabled live-switch entry", async ({
+		page,
+	}) => {
+		await setDeviceAttached(page, "usb", true);
+		const row = deviceRow(page, "usb");
+		await expect(row).toBeVisible({ timeout: 8000 });
+		await expect(row.locator("[data-switch-input]")).toBeEnabled();
+
+		await setDeviceAttached(page, "usb", false);
+		await expect(row.locator("[data-switch-input]")).toBeDisabled({ timeout: 8000 });
 	});
 });

@@ -10,6 +10,7 @@
 			"**/*.json",
 			"**/*.jsonc",
 			"**/*.svelte",
+			"!**/.*",
 			"!**/.vscode",
 			"!**/.cursor*",
 			"!.cursor",
@@ -18,8 +19,7 @@
 			"!**/build",
 			"!**/node_modules",
 			"!**/.build-cache",
-			"!**/test-results",
-			"!**/.omo"
+			"!**/test-results"
 		]
 	},
 	"linter": {
