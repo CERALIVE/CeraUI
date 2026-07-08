@@ -448,6 +448,7 @@ export async function initRemote() {
 export type SetRemoteConfigParams = {
 	remote_key?: string;
 	token?: string;
+	device_id?: string;
 	provider?: ProviderSelection;
 	custom_provider?: {
 		name: string;
@@ -476,6 +477,9 @@ export async function setRemoteConfig(params: SetRemoteConfigParams) {
 		throw new Error("setRemoteConfig requires either remote_key or token");
 	}
 	config.remote_key = remoteKey;
+	if (params.device_id !== undefined) {
+		config.device_id = params.device_id;
+	}
 	config.relay_server = undefined;
 	config.relay_account = undefined;
 

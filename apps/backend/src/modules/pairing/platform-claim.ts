@@ -108,13 +108,18 @@ export type PairingSecretRegisterResult = {
 	error?: string;
 };
 
+export type PlatformFetch = (
+	input: URL | Request | string,
+	init?: RequestInit,
+) => Promise<Response>;
+
 export interface RegisterPairingSecretDeps {
 	/** Override the device serial (defaults to the live device serial). */
 	serial?: string;
 	/** Override the on-device pairing secret (defaults to the live device secret). */
 	secret?: string;
 	/** Injected fetch (defaults to global `fetch`) — testable without a network. */
-	fetchImpl?: typeof fetch;
+	fetchImpl?: PlatformFetch;
 	/** Real-device gate (defaults to {@link isRealDevice}). */
 	isRealDeviceImpl?: () => Promise<boolean>;
 	/** Retry backoff sleep (defaults to a real timer) — injectable so tests don't wait. */
@@ -204,12 +209,12 @@ export async function registerPairingSecret(
 }
 
 export interface CompletePlatformPairingDeps {
-	/** Persist the issued token as the active remote key and reconnect the channel. */
-	applyToken: (token: string) => Promise<void> | void;
+	/** Persist the issued token + platform Device.id and reconnect the channel. */
+	applyToken: (token: string, deviceId: string) => Promise<void> | void;
 	/** Override the device serial (defaults to the live device serial). */
 	serial?: string;
 	/** Injected fetch (defaults to global `fetch`) — testable without a network. */
-	fetchImpl?: typeof fetch;
+	fetchImpl?: PlatformFetch;
 	/** Register the pairing secret with the platform (injectable for tests). */
 	registerSecret?: (
 		deps: RegisterPairingSecretDeps,
@@ -284,7 +289,7 @@ export async function completePlatformPairing(
 		return { paired: false, error: "invalid-platform-response" };
 	}
 
-	await deps.applyToken(parsed.data.deviceToken);
+	await deps.applyToken(parsed.data.deviceToken, parsed.data.deviceId);
 
 	return { paired: true, device_id: parsed.data.deviceId };
 }

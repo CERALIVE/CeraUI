@@ -1,10 +1,22 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 
+import { readFileSync, writeFileSync } from "node:fs";
+import { call } from "@orpc/server";
+import { getConfig } from "../modules/config.ts";
+import {
+	canDialControlChannel,
+	initIdentity,
+} from "../modules/identity/index.ts";
 import {
 	completePlatformPairing,
 	getPlatformUrl,
+	type PlatformFetch,
 	platformClaimErrorForStatus,
 } from "../modules/pairing/platform-claim.ts";
+import { getRemoteWebSocket } from "../modules/remote/remote.ts";
+import { createContext } from "../rpc/context.ts";
+import { completePairingProcedure } from "../rpc/procedures/pairing.procedure.ts";
+import type { RPCContext, SocketData } from "../rpc/types.ts";
 
 const SERIAL = "CERATESTSERIAL22";
 const PLATFORM_URL = "https://platform.test.example";
@@ -12,37 +24,82 @@ const PLATFORM_URL = "https://platform.test.example";
 const CLAIM_RESPONSE = {
 	deviceToken: "ct_abc123opaque",
 	tokenType: "opaque",
-	deviceId: "device-id-xyz",
+	deviceId: "7a03d468-3c9e-4b7a-8483-1f2a3b4c5d6e",
 	tenantId: "tenant-id-abc",
 	serial: SERIAL,
 	claimedAt: "2026-06-08T10:00:00.000Z",
 };
 
 let savedPlatformUrl: string | undefined;
+let fetchSpy: ReturnType<typeof spyOn> | undefined;
+let savedConfigFile: string | undefined;
 
 beforeEach(() => {
 	savedPlatformUrl = process.env.PLATFORM_URL;
 	process.env.PLATFORM_URL = PLATFORM_URL;
+	savedConfigFile = readFileSync("config.json", "utf8");
+	getConfig().remote_key = undefined;
+	getConfig().device_id = undefined;
 });
 
 afterEach(() => {
+	fetchSpy?.mockRestore();
+	getRemoteWebSocket()?.terminate();
 	if (savedPlatformUrl === undefined) delete process.env.PLATFORM_URL;
 	else process.env.PLATFORM_URL = savedPlatformUrl;
+	if (savedConfigFile !== undefined)
+		writeFileSync("config.json", savedConfigFile);
 });
 
 /** Build a fetch stub that records the request and returns a canned Response. */
 function stubFetch(response: Response): {
-	fetchImpl: typeof fetch;
+	fetchImpl: PlatformFetch;
 	calls: { url: string; body: unknown }[];
 } {
 	const calls: { url: string; body: unknown }[] = [];
-	const fetchImpl = (async (input: URL | RequestInfo, init?: RequestInit) => {
+	const fetchImpl: PlatformFetch = async (input, init) => {
 		const url = input instanceof URL ? input.toString() : String(input);
 		const body = init?.body ? JSON.parse(String(init.body)) : undefined;
 		calls.push({ url, body });
 		return response;
-	}) as unknown as typeof fetch;
+	};
 	return { fetchImpl, calls };
+}
+
+function openRpcContext(): Promise<{
+	readonly context: RPCContext;
+	readonly close: () => void;
+}> {
+	return new Promise((resolve, reject) => {
+		const server = Bun.serve<SocketData>({
+			port: 0,
+			fetch(request, server) {
+				const upgraded = server.upgrade(request, {
+					data: { isAuthenticated: true, lastActive: Date.now() },
+				});
+				if (upgraded) return;
+				return new Response("expected WebSocket upgrade", { status: 400 });
+			},
+			websocket: {
+				open(ws) {
+					resolve({
+						context: createContext(ws),
+						close: () => {
+							client.close();
+							ws.close();
+							server.stop(true);
+						},
+					});
+				},
+				message() {},
+			},
+		});
+		const client = new WebSocket(`ws://127.0.0.1:${server.port}`);
+		client.addEventListener("error", () => {
+			server.stop(true);
+			reject(new Error("failed to open test RPC WebSocket"));
+		});
+	});
 }
 
 describe("platform claim — error-status mapping", () => {
@@ -89,6 +146,39 @@ describe("completePlatformPairing — real POST /api/claim", () => {
 		expect(calls[0]?.body).toEqual({ claimCode: "ABCDEFGH", serial: SERIAL });
 	});
 
+	test("completePairingProcedure persists token plus device_id through setRemoteConfig", async () => {
+		const claimResponse = new Response(JSON.stringify(CLAIM_RESPONSE), {
+			status: 200,
+		});
+		fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+			Object.assign(
+				async (..._args: Parameters<typeof fetch>) => claimResponse,
+				{
+					preconnect: globalThis.fetch.preconnect,
+				},
+			),
+		);
+
+		const rpc = await openRpcContext();
+		try {
+			const result = await call(
+				completePairingProcedure,
+				{ code: "ABCDEFGH" },
+				{ context: rpc.context },
+			);
+			await initIdentity();
+
+			expect(result.paired).toBe(true);
+			expect(result.device_id).toBe(CLAIM_RESPONSE.deviceId);
+			expect(fetchSpy).toHaveBeenCalledTimes(1);
+			expect(getConfig().remote_key).toBe(CLAIM_RESPONSE.deviceToken);
+			expect(getConfig().device_id).toBe(CLAIM_RESPONSE.deviceId);
+			expect(canDialControlChannel()).toBe(true);
+		} finally {
+			rpc.close();
+		}
+	});
+
 	test("surfaces 402 subscription-required and applies no token", async () => {
 		const { fetchImpl } = stubFetch(
 			new Response(JSON.stringify({ error: "subscription_required" }), {
@@ -132,9 +222,9 @@ describe("completePlatformPairing — real POST /api/claim", () => {
 	});
 
 	test("maps a network/timeout failure to network-error", async () => {
-		const fetchImpl = (async () => {
+		const fetchImpl: PlatformFetch = async () => {
 			throw new Error("connection refused");
-		}) as unknown as typeof fetch;
+		};
 		let applied: string | undefined;
 
 		const result = await completePlatformPairing("ABCDEFGH", {
@@ -178,7 +268,7 @@ describe("completePlatformPairing — real POST /api/claim", () => {
 				applied = token;
 			},
 			serial: SERIAL,
-			fetchImpl: (async () => new Response("{}")) as unknown as typeof fetch,
+			fetchImpl: async () => new Response("{}"),
 		});
 
 		expect(result.paired).toBe(false);
