@@ -66,7 +66,8 @@ export function installPreviewHarness(token: string): void {
 		},
 		// Push a manual server config over the RPC socket so LiveView leaves its
 		// empty state and renders the encoder edit row (the mock login snapshot
-		// has no server). Mirrors the capability spec's `injectBroadcast`.
+		// has no server). `source` un-gates the encoder-edit trigger (Task 18/19).
+		// Mirrors the capability spec's `injectBroadcast`.
 		injectConfig() {
 			w.__ceraPreview.rpcSocket?.dispatchEvent(
 				new MessageEvent("message", {
@@ -75,6 +76,7 @@ export function installPreviewHarness(token: string): void {
 							srtla_addr: "127.0.0.1",
 							srtla_port: 5000,
 							pipeline: "hdmi",
+							source: "hdmi",
 							max_br: 6000,
 						},
 					}),

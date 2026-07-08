@@ -82,12 +82,14 @@ function inject(page: Page, payload: unknown): Promise<void> {
 }
 
 // A server target makes LiveView render its config rows (not the empty state),
-// so the encoder dialog trigger is reachable regardless of saved device state.
+// and an effective source (Task 18/19) un-gates the encoder-edit trigger, so the
+// dialog is reachable regardless of saved device state.
 const SERVER_CONFIG = {
 	config: {
 		srtla_addr: "10.0.0.1",
 		srtla_port: 5000,
 		pipeline: "hdmi",
+		source: "hdmi",
 		max_br: 6000,
 	},
 };

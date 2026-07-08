@@ -23,6 +23,16 @@ export class LivePage {
 		await this.shell.navigate('live');
 	}
 
+	/** Pick the first capture/coarse/virtual source (network rows use a distinct testid). */
+	async selectSource(): Promise<void> {
+		const source = this.page
+			.locator('[data-testid^="source-select-"]:not([disabled])')
+			.first();
+		await expect(source).toBeVisible({ timeout: 15_000 });
+		await source.click();
+		await expect(source).toHaveAttribute('data-selected', 'true', { timeout: 15_000 });
+	}
+
 	/** Open the Encoder Settings dialog. */
 	async openEncoder(): Promise<void> {
 		await openDialog(

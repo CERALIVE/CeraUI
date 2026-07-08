@@ -450,7 +450,8 @@ test.describe("Capability truthfulness (functional)", () => {
 	test("the H.265 codec option flips enabled ⇄ disabled-with-reason across the three capability snapshots", async ({
 		page,
 	}) => {
-		serverConfig();
+		// `source` un-gates the encoder-edit trigger (Task 18/19).
+		serverConfig({ source: "hdmi" });
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
 
@@ -736,7 +737,8 @@ test.describe("Capability truthfulness (functional)", () => {
 			}
 		});
 
-		serverConfig();
+		// `source` un-gates the encoder-edit trigger (Task 18/19).
+		serverConfig({ source: "hdmi" });
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
 
@@ -1055,7 +1057,8 @@ test.describe("Capability truthfulness (functional)", () => {
 	test("the migrated open-encoder / open-audio / open-server-dialog rows still open their dialogs", async ({
 		page,
 	}) => {
-		serverConfig();
+		// `source` un-gates the encoder-edit trigger (Task 18/19).
+		serverConfig({ source: "hdmi" });
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
 
@@ -1075,7 +1078,8 @@ test.describe("Capability truthfulness (functional)", () => {
 	test("the removed mode-preset grid leaves no preset testids in the rebuilt encoder dialog", async ({
 		page,
 	}) => {
-		serverConfig();
+		// `source` un-gates the encoder-edit trigger (Task 18/19).
+		serverConfig({ source: "hdmi" });
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
 
