@@ -461,7 +461,7 @@ jobs:
             echo "### System Archives (with install scripts)"
             echo "| Architecture | File | Target Hardware |"
             echo "|--------------|------|-----------------|"
-            echo "| ARM64 | \`ceraui-${VERSION}-arm64.tar.gz\` | Orange Pi 5+, Rock 5B+, Jetson Orin |"
+            echo "| ARM64 | \`ceraui-${VERSION}-arm64.tar.gz\` | Orange Pi 5+, Rock 5B+ |"
             echo "| AMD64 | \`ceraui-${VERSION}-amd64.tar.gz\` | Intel N100/N200, AMD Ryzen |"
             echo ""
             echo "### Debian Packages (apt/dpkg install)"

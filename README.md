@@ -120,7 +120,7 @@ BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 
 ### Supported Hardware
 
-**ARM64**: Orange Pi 5/5+, Radxa Rock 5B, NVIDIA Jetson Orin  
+**ARM64**: Orange Pi 5/5+, Radxa Rock 5B
 **AMD64**: Intel N100/N200 Mini PCs, standard x86 computers
 
 See [BUILD_PIPELINE.md](docs/BUILD_PIPELINE.md) for full build documentation.

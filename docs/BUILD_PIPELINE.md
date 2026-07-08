@@ -179,7 +179,7 @@ The workflow will:
 
 | Architecture | Recommended Devices |
 |--------------|---------------------|
-| **arm64** | Orange Pi 5+, Radxa Rock 5B+, NVIDIA Jetson Orin |
+| **arm64** | Orange Pi 5+, Radxa Rock 5B+ |
 | **amd64** | Intel N100/N200 Mini PCs, AMD Ryzen, desktop computers |
 
 ## Troubleshooting

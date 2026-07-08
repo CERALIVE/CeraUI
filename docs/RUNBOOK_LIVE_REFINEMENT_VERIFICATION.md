@@ -15,7 +15,7 @@ Do not mark any step in this runbook as "CI-passing." There is no CI here.
 
 An operator with:
 
-- Physical access to a CeraLive device (Jetson, RK3588, or N100 board) running
+- Physical access to a CeraLive device (RK3588 now; x86/N100 when in hand) running
   a CeraLive OS image, reachable over SSH and HTTP/WS on the LAN.
 - A RØDE HDMI-to-USB-C capture dongle (or equivalent UVC-raw HDMI dongle) and
   an MJPEG-only UVC webcam, both pluggable into the device's USB ports.
@@ -366,7 +366,7 @@ This section is filled in by the human running the runbook, not by an agent.
 | 8. Idle + live bitrate | | | | |
 | 9. Audio device/delay | | | | |
 
-**Board(s) used:** _(record RK3588 / Jetson / N100 + specific model)_
+**Board(s) used:** _(record RK3588 now; x86/N100 when in hand + specific model; Jetson is DEFERRED — not currently planned)_
 **cerastream version installed:** _(dpkg -l cerastream, or `cerastream --version`)_
 **CeraUI commit pushed via dev-sync:** _(git rev-parse HEAD at push time)_
 
