@@ -18,14 +18,14 @@
 /*
  * Real-device detection (T4 — gating prerequisite for the kiosk RPC, T13).
  *
- * Answers a single fail-safe question: are we running on a real RK3588 board
- * that physically owns a display, or in dev/CI/an emulated host where touching
- * the host OS (cage/Chromium/systemd) would be wrong? The default is ALWAYS
- * false — we only return true when we positively recognise the hardware (or an
- * explicit `CERALIVE_DEVICE_TYPE=real` override). Detection is read-only here;
- * gating the kiosk handlers on this signal is deferred to T13.
+ * Answers a single fail-safe question: are we running on a shipping CeraLive
+ * device, or in dev/CI/an emulated host where touching the host OS
+ * (cage/Chromium/systemd) would be wrong? The default is ALWAYS false — we only
+ * return true when we positively recognise RK3588 or x86 mini-PC hardware (or an
+ * explicit `CERALIVE_DEVICE_TYPE=real` override). Jetson remains deliberately
+ * deferred: no Jetson marker is recognised here.
  *
- * The hardware probe (`/proc/device-tree/model`) is injected through
+ * The hardware probes are injected through
  * {@link DeviceDetectionDeps} — mirroring `defaultKioskDeps` in kiosk.ts — so
  * the classifier is unit-testable without a board and never shells out or reads
  * a host file during tests.
@@ -35,17 +35,22 @@ import { isDevelopment } from "../../mocks/mock-config.ts";
 
 /** Device-tree path Rockchip boards expose their model string on. */
 const DEVICE_TREE_MODEL = "/proc/device-tree/model";
+const CERALIVE_RELEASE_FILE = "/etc/ceralive/release";
+const DMI_PRODUCT_NAME = "/sys/class/dmi/id/product_name";
+const DMI_BOARD_NAME = "/sys/class/dmi/id/board_name";
 
 /**
  * Substrings that positively identify an RK3588 board. On a real Rockchip
  * board `/proc/device-tree/model` reads e.g. "Rockchip RK3588 ...".
  */
 const REAL_DEVICE_MARKERS = ["Rockchip", "RK3588"] as const;
+const X86_MINIPC_DMI_MARKERS = ["N100", "N200", "Mini PC", "MINIPC"] as const;
+const CERALIVE_RELEASE_ID_RE = /^ID="?ceralive"?$/m;
 
 /**
  * Injectable detection surface. The default talks to the real OS (env var +
- * `Bun.file` device-tree read + the shared `isDevelopment` flag). Tests inject
- * deterministic stand-ins so the five detection branches are exercised without
+ * `Bun.file` hardware reads + the shared `isDevelopment` flag). Tests inject
+ * deterministic stand-ins so every detection branch is exercised without
  * hardware. Mirrors `KioskDeps`/`defaultKioskDeps` in kiosk.ts.
  */
 export type DeviceDetectionDeps = {
@@ -58,13 +63,39 @@ export type DeviceDetectionDeps = {
 	 * {@link isRealDevice} swallows the rejection and resolves false.
 	 */
 	readDeviceTreeModel: () => Promise<string>;
+	readCeraliveRelease: () => Promise<string>;
+	readDmiProductName: () => Promise<string>;
+	readDmiBoardName: () => Promise<string>;
 };
 
 export const defaultDeviceDetectionDeps: DeviceDetectionDeps = {
 	getDeviceTypeOverride: () => process.env.CERALIVE_DEVICE_TYPE,
 	isDevelopment,
 	readDeviceTreeModel: () => Bun.file(DEVICE_TREE_MODEL).text(),
+	readCeraliveRelease: () => Bun.file(CERALIVE_RELEASE_FILE).text(),
+	readDmiProductName: () => Bun.file(DMI_PRODUCT_NAME).text(),
+	readDmiBoardName: () => Bun.file(DMI_BOARD_NAME).text(),
 };
+
+async function readOptional(probe: () => Promise<string>): Promise<string> {
+	try {
+		return await probe();
+	} catch {
+		return "";
+	}
+}
+
+function hasRk3588Marker(model: string): boolean {
+	return REAL_DEVICE_MARKERS.some((marker) => model.includes(marker));
+}
+
+function hasCeraliveImageIdentity(release: string): boolean {
+	return CERALIVE_RELEASE_ID_RE.test(release);
+}
+
+function hasX86MiniPcDmiMarker(dmi: string): boolean {
+	return X86_MINIPC_DMI_MARKERS.some((marker) => dmi.includes(marker));
+}
 
 /**
  * Fail-safe real-device classifier. Resolution order:
@@ -72,10 +103,10 @@ export const defaultDeviceDetectionDeps: DeviceDetectionDeps = {
  *  1. `CERALIVE_DEVICE_TYPE` override — "real" → true, "emulated" → false.
  *  2. Dev/mock mode → false (never drive the host OS from a dev box).
  *  3. `/proc/device-tree/model` names a Rockchip / RK3588 board → true.
- *  4. The device-tree read fails (file absent/unreadable) → false.
+ *  4. CeraLive image identity + x86 mini-PC DMI marker → true.
  *  5. Otherwise → false.
  *
- * Any error from the injected probe is swallowed here — file-read failures must
+ * Any error from injected probes is swallowed here — file-read failures must
  * never propagate; an unrecognised or unreadable host is treated as "not a real
  * device" so we err on the side of NOT touching the host OS.
  */
@@ -88,12 +119,19 @@ export async function isRealDevice(
 
 	if (deps.isDevelopment()) return false;
 
-	try {
-		const model = await deps.readDeviceTreeModel();
-		return REAL_DEVICE_MARKERS.some((marker) => model.includes(marker));
-	} catch {
+	if (hasRk3588Marker(await readOptional(deps.readDeviceTreeModel))) {
+		return true;
+	}
+
+	if (!hasCeraliveImageIdentity(await readOptional(deps.readCeraliveRelease))) {
 		return false;
 	}
+
+	const dmiIdentity = [
+		await readOptional(deps.readDmiProductName),
+		await readOptional(deps.readDmiBoardName),
+	].join("\n");
+	return hasX86MiniPcDmiMarker(dmiIdentity);
 }
 
 /**

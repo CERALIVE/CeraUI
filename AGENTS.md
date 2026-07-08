@@ -393,9 +393,12 @@ wraps its read in its own `try/catch` and degrades to `null` on failure — a mi
 Detection contract (fail-safe, defaults to `false`):
 1. `CERALIVE_DEVICE_TYPE==="real"` → true; `==="emulated"` → false (env override wins over everything)
 2. `isDevelopment()` → false (short-circuits before any hardware probe)
-3. `/proc/device-tree/model` contains `"Rockchip"` or `"RK3588"` → true
-4. probe throws (file absent/unreadable) → false (never propagates)
-5. unrecognised model → false
+3. `/proc/device-tree/model` contains `"Rockchip"` or `"RK3588"` → true (shipping RK3588 boards)
+4. x86 mini-PC path: `/etc/ceralive/release` contains `ID=ceralive` AND DMI
+   `/sys/class/dmi/id/{product_name,board_name}` contains a mini-PC marker
+   (`N100`, `N200`, `Mini PC`, `MINIPC`) → true
+5. Any probe throws (file absent/unreadable) → false for that probe (never propagates)
+6. Unrecognised or malformed identity → false. Jetson is deliberately unhandled/deferred.
 
 **`isDevelopment()` power-gate (T1):** `isDevelopment()` (defined in
 `apps/backend/src/mocks/mock-config.ts`, `NODE_ENV==="development" ||
