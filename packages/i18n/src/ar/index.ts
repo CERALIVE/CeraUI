@@ -220,6 +220,8 @@ const ar = {
 			streaming: "أوقف البث لتغيير ترميز الصوت",
 			noSource: "اختر مصدر الصوت أولاً",
 		},
+		audioCodecUnsupportedTransport:
+			"هذا الترميز غير مدعوم عبر وسيلة النقل الحالية",
 		destination: "الوجهة",
 		destinationManaged: "حسابي السحابي",
 		destinationCustom: "مستقبِل مخصّص",
@@ -229,6 +231,9 @@ const ar = {
 		destinationAddKey: "إضافة مفتاح",
 		latency: "زمن الوصول",
 		latencyNegotiated: "تم التفاوض",
+		valueClamped: "تم الضبط إلى {value}",
+		catalogDriftNote:
+			"تغيّرت قائمة الخوادم منذ فتحك لهذا. راجع اختيارك قبل الحفظ.",
 		transportActive: "نشط",
 		transportKind: "النقل",
 		remoteControl: {
@@ -1050,6 +1055,8 @@ const ar = {
 		stopToChange: "أوقف البث للتغيير",
 		cannotStartNoPipeline: "اختر مصدر فيديو قبل بدء البث",
 		cannotStartNoServer: "قم بتكوين خادم قبل بدء البث",
+		destinationSlotRevoked: "لم تعد فتحة الإدخال هذه متاحة — اختر وجهة أخرى",
+		destinationServerStale: "لم يعد هذا الخادم موجودًا في قائمة مزودك",
 		startFailed: {
 			generic: "فشل بدء البث",
 			srt_connect_failed:
@@ -1066,6 +1073,14 @@ const ar = {
 				"أبلغ جهاز الالتقاط عن خطأ في الفيديو. أعد توصيله وحاول مرة أخرى.",
 			pipeline_stall:
 				"توقّف مصدر الإدخال أثناء البدء. تحقّق من المصدر وحاول مرة أخرى.",
+			audio_source_probe_failed:
+				"لم يتوفّر مصدر الصوت المحدّد في الوقت المناسب. أعد توصيله أو اختر مصدرًا آخر ثم حاول مرة أخرى.",
+			audio_codec_unsupported_transport:
+				"لا يدعم النقل الحالي برنامج ترميز الصوت هذا. غيّر برنامج ترميز الصوت إلى AAC ثم حاول مرة أخرى.",
+			source_lost:
+				"تم فصل المصدر المحدد. أعد توصيله أو اختر مصدرًا آخر، ثم حاول مرة أخرى.",
+			source_unavailable:
+				"المصدر المحدد غير متاح حاليًا. اختر مصدرًا آخر أو تحقق من إعداداته، ثم حاول مرة أخرى.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1245,6 +1260,7 @@ const ar = {
 			audioFollows: "سيتبع الصوت {label} عند إعادة التشغيل",
 			switchTitle: "تغيير المصدر",
 			autoPrefix: "تلقائي",
+			autoResolvedSep: "— حالياً:",
 		},
 		transcode: {
 			chip: "الإدخال {input} \u2192 الإخراج {output}",
@@ -1284,7 +1300,7 @@ const ar = {
 				},
 				audio: {
 					title: "الصوت",
-					body: "دخل الصوت والترميز المدمجان في البث. تأتي المصادر المتاحة من مسار الفيديو المختار؛ ويخفي المسار الذي لا يدعم الصوت هذه الضوابط.",
+					body: "الصوت المدمج في بثك، بثلاثة خيارات. يختار «تلقائي» أفضل ميكروفون أو صوتاً مدمجاً للمصدر المحدد؛ ويستخدم «الإعداد الافتراضي للمصدر» الصوت المدمج في المحرك لهذا المسار؛ أما اختيار جهاز مُسمّى فيستخدم ذلك الجهاز نفسه دائماً. تأتي المصادر المتاحة من مسار الفيديو المختار.",
 				},
 			},
 			tier: {
@@ -1320,6 +1336,7 @@ const ar = {
 			software: "برمجي",
 			bitrateRangeHint: "النطاق المدعوم",
 			bitrateClamped: "تم الضبط إلى النطاق المدعوم",
+			sourceChangedNote: "تم تغيير المصدر — تم تحديث الإعدادات للإدخال الجديد.",
 			probedCaps: "القدرات المكتشفة",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
@@ -1537,7 +1554,7 @@ const ar = {
 		sources: {
 			noAudio: "بدون صوت",
 			auto: "تلقائي (يتبع المصدر)",
-			pipelineDefault: "الإعداد الافتراضي للمسار",
+			pipelineDefault: "الإعداد الافتراضي للمصدر (يقرره المحرك)",
 		},
 	},
 } satisfies Translation;

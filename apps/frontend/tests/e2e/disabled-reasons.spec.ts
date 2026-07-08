@@ -111,6 +111,10 @@ test.describe('disabled-reason hints + loading/empty distinction (T15)', () => {
 				const config = frame.config as Frame | undefined;
 				if (config) {
 					config.pipeline = AUDIO_PIPELINE;
+					// An effective source (Task 18/19) un-hides the audio surface so
+					// open-audio-dialog is reachable. This is the VIDEO source; the
+					// audio-codec lock keys off asrc (the AUDIO source), still deleted.
+					config.source = 'hdmi';
 					// No saved audio source → draftSource stays undefined → codec locked.
 					delete config.asrc;
 				}
@@ -127,7 +131,7 @@ test.describe('disabled-reason hints + loading/empty distinction (T15)', () => {
 				pipelines: { [AUDIO_PIPELINE]: { name: 'E2E Audio', supportsAudio: true } },
 			},
 		});
-		ws.push({ config: { pipeline: AUDIO_PIPELINE } });
+		ws.push({ config: { pipeline: AUDIO_PIPELINE, source: 'hdmi' } });
 
 		await page.getByTestId('open-audio-dialog').click();
 		const dialog = page.getByRole('dialog', { name: 'Audio Settings' });

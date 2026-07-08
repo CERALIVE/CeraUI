@@ -23,6 +23,7 @@ import type {
 	NetifMessage,
 	NetworkIngest,
 	Pipelines,
+	RelayMessage,
 	SourcesMessage,
 } from "@ceraui/rpc/schemas";
 import { Cpu, Server, Volume2 } from "@lucide/svelte";
@@ -30,8 +31,28 @@ import { fireEvent, render, within } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { StreamingOptimismState } from "$lib/rpc/streaming-optimism.svelte";
+import type { ManagedIngestAccount } from "$lib/streaming/receiver-experience";
 import type { ConfigRow } from "./StreamSettingsCard.svelte";
 import StreamSetupChain from "./StreamSetupChain.svelte";
+
+function relays(...ids: string[]): RelayMessage {
+	const servers: Record<string, unknown> = {};
+	for (const id of ids) {
+		servers[id] = { name: id, addr: `${id}.example.net`, port: 5000 };
+	}
+	return { servers } as RelayMessage;
+}
+
+function slot(endpointId: string): ManagedIngestAccount {
+	return {
+		endpointId,
+		host: `${endpointId}.ingest.example.net`,
+		port: 5000,
+		protocol: "srtla",
+		key: `key-${endpointId}`,
+		label: endpointId,
+	};
+}
 
 // The component owns no RPC, but the sole-camera contract demands PROOF that no
 // premature setConfig happens — spy the client and assert it is never touched.
@@ -132,6 +153,8 @@ interface Overrides {
 	caps?: CapabilitiesMessage | undefined;
 	networkIngest?: NetworkIngest | null;
 	pipelines?: Pipelines | undefined;
+	relays?: RelayMessage | undefined;
+	managedSlots?: readonly ManagedIngestAccount[] | undefined;
 	destinationValidated?: boolean;
 	maxBitrate?: number;
 	rowOptions?: RowOptions;
@@ -147,6 +170,8 @@ function renderChain(over: Overrides = {}) {
 		isConnected: over.isConnected ?? true,
 		networkIngest: over.networkIngest ?? null,
 		pipelines: over.pipelines,
+		relays: over.relays,
+		managedSlots: over.managedSlots,
 		configRows: configRows(h, over.rowOptions),
 		isStreaming: over.isStreaming ?? false,
 		optimismState: over.optimismState ?? ("idle" as StreamingOptimismState),
@@ -265,6 +290,87 @@ describe("StreamSetupChain — encoder row (source gate)", () => {
 	});
 });
 
+describe("StreamSetupChain — encoder Edit source gate (C3)", () => {
+	function encoderEdit(container: HTMLElement): HTMLButtonElement | null {
+		const row = rowFor(container, "encoder");
+		return (
+			row?.querySelector<HTMLButtonElement>(
+				'[data-testid="open-encoder-dialog"]',
+			) ?? null
+		);
+	}
+
+	it("no effective source (no config.source, two captures) → Edit disabled with a non-empty reason title", () => {
+		const { container } = renderChain({
+			config: { relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(capture("cam-1", "HDMI"), capture("cam-2", "USB")),
+		});
+		const edit = encoderEdit(container);
+		expect(edit, "encoder Edit renders").not.toBeNull();
+		expect(edit?.disabled).toBe(true);
+		expect(edit?.getAttribute("title")).toBe(
+			"Select a video source before starting the stream",
+		);
+	});
+
+	it("no effective source (no captures at all) → Edit disabled with a reason title", () => {
+		const { container } = renderChain({
+			config: { relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(),
+		});
+		const edit = encoderEdit(container);
+		expect(edit?.disabled).toBe(true);
+		expect(edit?.getAttribute("title")).toBeTruthy();
+	});
+
+	it("does NOT gate the Destination row's Edit when no source resolves", () => {
+		const { container } = renderChain({
+			config: { relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(capture("cam-1", "HDMI"), capture("cam-2", "USB")),
+		});
+		const serverEdit = rowFor(
+			container,
+			"destination",
+		)?.querySelector<HTMLButtonElement>('[data-testid="open-server-dialog"]');
+		expect(serverEdit?.disabled).toBe(false);
+		expect(serverEdit?.getAttribute("title")).toBeNull();
+	});
+
+	it("implicit sole camera resolves the effective source → Edit enabled, no reason title", () => {
+		const { container } = renderChain({
+			config: { relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(capture("cam-1", "HDMI")),
+		});
+		const edit = encoderEdit(container);
+		expect(edit?.disabled).toBe(false);
+		expect(edit?.getAttribute("title")).toBeNull();
+	});
+
+	it("explicit config.source → Edit enabled, no reason title", () => {
+		const { container } = renderChain({
+			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(capture("cam-1", "HDMI"), capture("cam-2", "USB")),
+		});
+		const edit = encoderEdit(container);
+		expect(edit?.disabled).toBe(false);
+		expect(edit?.getAttribute("title")).toBeNull();
+	});
+
+	it("streaming lock wins over the source gate — the Edit trigger is replaced by the Lock badge", () => {
+		const { container } = renderChain({
+			config: { relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(capture("cam-1", "HDMI"), capture("cam-2", "USB")),
+			isStreaming: true,
+		});
+		expect(encoderEdit(container)).toBeNull();
+		expect(
+			rowFor(container, "encoder")?.querySelector(
+				'[title="Stop stream to change"]',
+			),
+		).not.toBeNull();
+	});
+});
+
 describe("StreamSetupChain — audio is not a setup row (T11)", () => {
 	it("ignores a stray audio config row and never blocks Start on it", () => {
 		const { container } = renderChain({
@@ -321,6 +427,39 @@ describe("StreamSetupChain — destination row", () => {
 				.querySelector('[data-testid="destination-traffic-light"]')
 				?.getAttribute("data-validated"),
 		).toBe("false");
+	});
+
+	it("stale relay id (catalog loaded, id absent) → destination row warn + reason, Start still enabled (C7)", () => {
+		const { container } = renderChain({
+			config: { source: "cam-1", relay_server: "gone" } as ConfigMessage,
+			relays: relays("fra", "ams"),
+		});
+		const dest = rowFor(container, "destination");
+		expect(dest?.getAttribute("data-state")).toBe("warn");
+		expect(
+			dest?.querySelector('[data-testid="setup-row-reason"]'),
+			"warn destination row surfaces its reason",
+		).not.toBeNull();
+		const start = within(container).getByRole("button", {
+			name: /start stream/i,
+		});
+		expect((start as HTMLButtonElement).disabled).toBe(false);
+	});
+
+	it("revoked ingest slot (slots loaded, id absent) → destination row blocked, Start disabled (C7)", () => {
+		const { container } = renderChain({
+			config: {
+				source: "cam-1",
+				selected_ingest_endpoint: "slot-gone",
+			} as ConfigMessage,
+			managedSlots: [slot("slot-1")],
+		});
+		const dest = rowFor(container, "destination");
+		expect(dest?.getAttribute("data-state")).toBe("blocked");
+		const start = within(container).getByRole("button", {
+			name: /start stream/i,
+		});
+		expect((start as HTMLButtonElement).disabled).toBe(true);
 	});
 });
 

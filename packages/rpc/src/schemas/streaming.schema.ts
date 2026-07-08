@@ -39,12 +39,43 @@ export const AUDIO_DELAY_MAX = 2000;
 export const PORT_MIN = 1;
 export const PORT_MAX = 65535;
 
-// Audio codec enum
-export const audioCodecSchema = z.enum(['opus', 'aac', 'pcm']);
+// Audio codec enum. `pcm` was retired in C5 (coherence-contract-pass): it was
+// never a real egress codec — no relay transport can carry raw PCM (all three
+// are MPEG-TS) — so it only ever caused schema-vs-catalog drift. A persisted
+// legacy `acodec: "pcm"` is coerced to "aac" at config load (backend
+// `coerceLegacyAcodec`); this enum is now the strict egress set.
+export const audioCodecSchema = z.enum(['opus', 'aac']);
 export type AudioCodec = z.infer<typeof audioCodecSchema>;
 
 // Alias for frontend compatibility
 export type AudioCodecs = 'aac' | 'opus';
+
+// ─── Transport × audio-codec compatibility (C5) ──────────────────────────────
+//
+// Every relay transport CeraUI can egress over — srtla, srt, and rist — is an
+// MPEG-TS carrier, and the BELABOX-lineage / OBS receivers on the far end expect
+// AAC-in-TS. The engine's Opus path (`opusenc`) has ZERO golden coverage
+// (cerastream `docs/CRATES.md`), so Opus egress is unproven end-to-end over any
+// of these transports. This map is the SINGLE source of truth for which audio
+// codecs are allowed per relay transport: the backend `streaming.start` gate
+// reads it, and the frontend `ValidationAdapter` re-exports the helper to gate
+// the codec picker (todo 21). Do not hardcode this map anywhere outside this
+// package.
+export const TRANSPORT_AUDIO_CODECS = {
+	srtla: ['aac'],
+	srt: ['aac'],
+	rist: ['aac'],
+} as const satisfies Record<RelayProtocol, readonly AudioCodec[]>;
+
+// Stable structured code returned by streaming.start when the effective audio
+// codec is not allowed for the effective relay transport. Dual-field on the wire
+// (`error` + `reason`); the frontend maps `reason` to `live.startFailed.*`.
+export const AUDIO_CODEC_UNSUPPORTED_TRANSPORT = 'audio_codec_unsupported_transport';
+
+/** True when `codec` may be carried over `protocol`'s MPEG-TS transport (C5). */
+export function audioCodecAllowedForTransport(codec: AudioCodec, protocol: RelayProtocol): boolean {
+	return (TRANSPORT_AUDIO_CODECS[protocol] as readonly AudioCodec[]).includes(codec);
+}
 
 // Typed audio-source model (Task 4/6). `id` is the EXACT current `asrc` wire string
 // (e.g. "USB audio"), so `config.asrc` semantics are unchanged; `kind` distinguishes
@@ -639,7 +670,7 @@ import {
 	detectionMethodSchema,
 	providerSelectionSchema,
 } from './cloud-provider.schema';
-import { relayProtocolSchema } from './relay.schema';
+import { type RelayProtocol, relayProtocolSchema } from './relay.schema';
 import { sourcesVisibilitySchema } from './sources-visibility.schema';
 import {
 	resolverDecidedBySchema,
@@ -927,3 +958,18 @@ export const getMockHardwareOutputSchema = z.object({
 	availableHardware: z.array(mockHardwareTypeSchema),
 });
 export type GetMockHardwareOutput = z.infer<typeof getMockHardwareOutputSchema>;
+
+// Dev-only single-device unplug/replug seam (C7): detach/reattach ONE mock
+// capture device by its list-devices input_id so e2e can drive the `lost` grace
+// row (todo 11) + the `source_lost` start rejection (todo 12). No-op in prod.
+export const setMockDeviceAttachedInputSchema = z.object({
+	input_id: z.string().min(1),
+	attached: z.boolean(),
+});
+export type SetMockDeviceAttachedInput = z.infer<typeof setMockDeviceAttachedInputSchema>;
+
+export const setMockDeviceAttachedOutputSchema = z.object({
+	success: z.boolean(),
+	error: z.string().optional(),
+});
+export type SetMockDeviceAttachedOutput = z.infer<typeof setMockDeviceAttachedOutputSchema>;

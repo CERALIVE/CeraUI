@@ -96,6 +96,12 @@ export const OPTION_FIXED_BY_SOURCE =
 export const OPTION_UNSUPPORTED_AT_RESOLUTION =
 	"live.education.reason.unsupportedAtResolution" as const;
 
+// Transport × audio-codec compatibility (C5) — re-surfaced from the SINGLE source
+// of truth in `@ceraui/rpc/schemas` (`TRANSPORT_AUDIO_CODECS` +
+// `audioCodecAllowedForTransport`). The frontend gates the codec picker through
+// THIS re-export (matching the pipelineAvailability precedent) — never a direct
+// schema import in a dialog, and never a re-implemented copy of the map.
+export { audioCodecAllowedForTransport } from "@ceraui/rpc/schemas";
 // Network-ingest gateway availability — re-surfaced from the single-source-of-
 // truth helper (`$lib/streaming/pipelineAvailability`) so the disabled-reason key
 // family stays together. The rule itself is NEVER re-implemented here.

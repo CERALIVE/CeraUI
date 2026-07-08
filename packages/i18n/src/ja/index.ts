@@ -84,6 +84,8 @@ const ja = {
 				"オーディオコーデックを変更するにはストリームを停止してください",
 			noSource: "先にオーディオソースを選択してください",
 		},
+		audioCodecUnsupportedTransport:
+			"このコーデックは現在のトランスポートではサポートされていません",
 		destination: "配信先",
 		destinationManaged: "マイクラウドアカウント",
 		destinationCustom: "カスタムレシーバー",
@@ -95,6 +97,9 @@ const ja = {
 		destinationAddKey: "キーを追加",
 		latency: "レイテンシ",
 		latencyNegotiated: "ネゴシエート済み",
+		valueClamped: "{value} に調整しました",
+		catalogDriftNote:
+			"開いてからサーバー一覧が変更されました。保存する前に選択を確認してください。",
 		transportActive: "有効",
 		transportKind: "トランスポート",
 		remoteControl: {
@@ -943,6 +948,9 @@ const ja = {
 		cannotStartNoPipeline:
 			"ストリームを開始する前にビデオソースを選択してください",
 		cannotStartNoServer: "ストリームを開始する前にサーバーを設定してください",
+		destinationSlotRevoked:
+			"このインジェストスロットは利用できなくなりました。別の宛先を選択してください",
+		destinationServerStale: "このサーバーはプロバイダーのリストに存在しません",
 		startFailed: {
 			generic: "ストリームの開始に失敗しました",
 			srt_connect_failed:
@@ -959,6 +967,14 @@ const ja = {
 				"キャプチャデバイスで映像エラーが発生しました。再接続してもう一度お試しください。",
 			pipeline_stall:
 				"開始時に入力ソースが停止しました。ソースを確認してもう一度お試しください。",
+			audio_source_probe_failed:
+				"選択した音声ソースが時間内に接続されませんでした。再接続するか別のソースを選択して、もう一度お試しください。",
+			audio_codec_unsupported_transport:
+				"この音声コーデックは現在のトランスポートではサポートされていません。音声コーデックを AAC に切り替えてから、もう一度お試しください。",
+			source_lost:
+				"選択したソースが切断されました。再接続するか、別のソースを選択してから、もう一度お試しください。",
+			source_unavailable:
+				"選択したソースは現在利用できません。別のソースを選択するか、設定を確認してから、もう一度お試しください。",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1145,6 +1161,7 @@ const ja = {
 			audioFollows: "再起動時にオーディオが{label}に切り替わります",
 			switchTitle: "ソースを切り替え",
 			autoPrefix: "自動",
+			autoResolvedSep: "— 現在:",
 		},
 		transcode: {
 			chip: "入力 {input} \u2192 出力 {output}",
@@ -1184,7 +1201,7 @@ const ja = {
 				},
 				audio: {
 					title: "音声",
-					body: "ストリームに組み込まれる音声入力とコーデックです。利用可能なソースは選択した映像パイプラインから取得されます。音声非対応のパイプラインではこれらの操作は表示されません。",
+					body: "ストリームに組み込まれる音声で、3つの選択肢があります。「自動」は選択したソースに最適なマイクまたは組み込み音声を選びます。「ソースの既定値」はこのパイプライン向けにエンジン内蔵の音声を使用します。名前付きデバイスを選ぶと常にそのデバイスが使われます。利用可能なソースは選択した映像パイプラインから取得されます。",
 				},
 			},
 			tier: {
@@ -1220,6 +1237,8 @@ const ja = {
 			software: "ソフトウェア",
 			bitrateRangeHint: "対応範囲",
 			bitrateClamped: "対応範囲に調整しました",
+			sourceChangedNote:
+				"ソースが変更されました — 新しい入力に合わせて設定を更新しました。",
 			probedCaps: "検出された機能",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
@@ -1589,7 +1608,7 @@ const ja = {
 		sources: {
 			noAudio: "音声なし",
 			auto: "自動（ソースに追従）",
-			pipelineDefault: "パイプラインの既定値",
+			pipelineDefault: "ソースの既定値（エンジンが決定）",
 		},
 	},
 } satisfies Translation;

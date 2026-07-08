@@ -19,11 +19,25 @@ interface Props {
 	range: LatencyRange;
 	effectiveLatencyMs?: number | undefined;
 	isStreaming?: boolean;
+	/**
+	 * The value the backend actually APPLIED after its floor clamp
+	 * (`result.applied.srt_latency`). When it differs from the requested
+	 * `latencyMs` a calm one-line applied-value notice renders — the same
+	 * treatment as EncoderDialog's `bitrateClamped`. Federation-safe: absent
+	 * (older backend / no clamp) → no notice, today's behaviour.
+	 */
+	clampedLatencyMs?: number | undefined;
 	onLatencyChange: (value: number) => void;
 }
 
-let { latencyMs, range, effectiveLatencyMs, isStreaming = false, onLatencyChange }: Props =
-	$props();
+let {
+	latencyMs,
+	range,
+	effectiveLatencyMs,
+	isStreaming = false,
+	clampedLatencyMs,
+	onLatencyChange,
+}: Props = $props();
 
 const LATENCY_STEP = 50;
 
@@ -93,4 +107,9 @@ const formatSeconds = (ms: number): string => {
 		<span>{formatSeconds(range.min)} · {$LL.settings.lowerLatency()}</span>
 		<span>{$LL.settings.higherLatency()} · {formatSeconds(range.max)}</span>
 	</div>
+	{#if clampedLatencyMs !== undefined && clampedLatencyMs !== latencyMs}
+		<p class="text-status-warning text-xs" data-testid="latency-clamped" role="status">
+			{$LL.settings.valueClamped({ value: formatSeconds(clampedLatencyMs) })}
+		</p>
+	{/if}
 </div>

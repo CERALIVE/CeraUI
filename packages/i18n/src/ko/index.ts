@@ -82,6 +82,8 @@ const ko = {
 			streaming: "오디오 코덱을 변경하려면 스트림을 중지하세요",
 			noSource: "먼저 오디오 소스를 선택하세요",
 		},
+		audioCodecUnsupportedTransport:
+			"이 코덱은 현재 전송 방식에서 지원되지 않습니다",
 		destination: "대상",
 		destinationManaged: "내 클라우드 계정",
 		destinationCustom: "사용자 지정 수신기",
@@ -92,6 +94,9 @@ const ko = {
 		destinationAddKey: "키 추가",
 		latency: "지연 시간",
 		latencyNegotiated: "협상됨",
+		valueClamped: "{value}(으)로 조정됨",
+		catalogDriftNote:
+			"이 창을 연 이후 서버 목록이 변경되었습니다. 저장하기 전에 선택을 확인하세요.",
 		transportActive: "활성",
 		transportKind: "전송",
 		remoteControl: {
@@ -921,6 +926,9 @@ const ko = {
 		stopToChange: "변경하려면 스트림을 중지하세요",
 		cannotStartNoPipeline: "스트림을 시작하기 전에 비디오 소스를 선택하세요",
 		cannotStartNoServer: "스트림을 시작하기 전에 서버를 구성하세요",
+		destinationSlotRevoked:
+			"이 인제스트 슬롯은 더 이상 사용할 수 없습니다 — 다른 대상을 선택하세요",
+		destinationServerStale: "이 서버는 더 이상 제공업체 목록에 없습니다",
 		startFailed: {
 			generic: "스트림 시작 실패",
 			srt_connect_failed:
@@ -937,6 +945,14 @@ const ko = {
 				"캡처 장치에서 비디오 오류가 보고되었습니다. 다시 연결한 후 시도하세요.",
 			pipeline_stall:
 				"시작 중 입력 소스가 멈췄습니다. 소스를 확인한 후 다시 시도하세요.",
+			audio_source_probe_failed:
+				"선택한 오디오 소스가 제때 연결되지 않았습니다. 다시 연결하거나 다른 소스를 선택한 후 다시 시도하세요.",
+			audio_codec_unsupported_transport:
+				"현재 전송 방식에서는 이 오디오 코덱을 지원하지 않습니다. 오디오 코덱을 AAC로 변경한 후 다시 시도하세요.",
+			source_lost:
+				"선택한 소스가 연결 해제되었습니다. 다시 연결하거나 다른 소스를 선택한 후 다시 시도하세요.",
+			source_unavailable:
+				"선택한 소스를 현재 사용할 수 없습니다. 다른 소스를 선택하거나 설정을 확인한 후 다시 시도하세요.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1120,6 +1136,7 @@ const ko = {
 			audioFollows: "재시작 시 오디오가 {label}(으)로 전환됩니다",
 			switchTitle: "소스 전환",
 			autoPrefix: "자동",
+			autoResolvedSep: "— 현재:",
 		},
 		transcode: {
 			chip: "입력 {input} \u2192 출력 {output}",
@@ -1158,7 +1175,7 @@ const ko = {
 				},
 				audio: {
 					title: "오디오",
-					body: "스트림에 포함되는 오디오 입력과 코덱입니다. 사용 가능한 소스는 선택한 비디오 파이프라인에서 제공되며, 오디오를 지원하지 않는 파이프라인에서는 이 컨트롤이 숨겨집니다.",
+					body: "스트림에 포함되는 오디오로, 세 가지 선택지가 있습니다. '자동'은 선택한 소스에 가장 적합한 마이크나 내장 오디오를 선택합니다. '소스 기본값'은 이 파이프라인에 대한 엔진 내장 오디오를 사용합니다. 이름이 지정된 장치를 선택하면 항상 해당 장치를 사용합니다. 사용 가능한 소스는 선택한 비디오 파이프라인에서 제공됩니다.",
 				},
 			},
 			tier: {
@@ -1194,6 +1211,8 @@ const ko = {
 			software: "소프트웨어",
 			bitrateRangeHint: "지원 범위",
 			bitrateClamped: "지원 범위로 조정됨",
+			sourceChangedNote:
+				"소스가 변경됨 — 새 입력에 맞게 설정이 업데이트되었습니다.",
 			probedCaps: "감지된 기능",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
@@ -1553,7 +1572,7 @@ const ko = {
 		sources: {
 			noAudio: "오디오 없음",
 			auto: "자동 (소스 따라가기)",
-			pipelineDefault: "파이프라인 기본값",
+			pipelineDefault: "소스 기본값 (엔진이 결정)",
 		},
 	},
 } satisfies Translation;

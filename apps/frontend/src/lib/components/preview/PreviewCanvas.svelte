@@ -15,7 +15,7 @@
   capped, jittered exponential backoff while the toggle stays on.
 -->
 <script lang="ts">
-import { onDestroy } from 'svelte';
+import { onDestroy, untrack } from 'svelte';
 
 import { LL } from '@ceraui/i18n/svelte';
 import {
@@ -34,7 +34,7 @@ import {
 import { Button } from '$lib/components/ui/button';
 import { getPreviewSocketUrl } from '$lib/env';
 import { rpc } from '$lib/rpc';
-import { getCapabilities } from '$lib/rpc/subscriptions.svelte';
+import { getCapabilities, getConfig } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -91,6 +91,13 @@ let remintAttempted = false;
 // Latched true once the component is torn down (onDestroy). A reconnect timer
 // that fires after unmount must not touch reactive state or dial a new socket.
 let destroyed = false;
+// Monotonic connection-attempt generation. Bumped on every start()/stop() (and
+// therefore every source-change restart). connect() captures it BEFORE minting its
+// async token; if a newer start()/stop() supersedes the attempt while the mint is
+// in flight, the stale connect aborts without dialing and its socket handlers
+// no-op. This is the double-dial guard: a stop();start() restart that lands while a
+// mint is in flight can no longer leak a second live socket.
+let connectionGeneration = 0;
 
 let decoder: VideoDecoder | null = null;
 let sawKeyframe = false;
@@ -254,38 +261,58 @@ async function connect(): Promise<void> {
 		status = 'error';
 		return;
 	}
+	// Capture the generation this attempt belongs to BEFORE the async mint. A
+	// start()/stop() (e.g. a source-change restart) that lands while the mint is in
+	// flight bumps the generation, so this now-stale attempt aborts instead of
+	// opening a second socket (double-dial guard).
+	const generation = connectionGeneration;
 	// Mint a fresh single-use token over the authenticated RPC socket, then dial
 	// the backend-origin `/preview` proxy. The RPC credential never rides the URL.
 	let token: string;
 	try {
 		token = (await rpc.system.mintPreviewToken()).token;
 	} catch {
+		// A superseded attempt must not schedule a reconnect for a session a newer
+		// start()/stop() already owns.
+		if (generation !== connectionGeneration) return;
 		scheduleReconnect();
 		return;
 	}
-	// The toggle may have flipped (or the component torn down) while the mint was
-	// in flight — do not dial a socket the operator no longer wants.
-	if (destroyed || !enabled) return;
+	// The toggle may have flipped, the component torn down, or a newer attempt
+	// superseded this one while the mint was in flight — do not dial a socket the
+	// operator no longer wants (or that a restart has already replaced).
+	if (destroyed || !enabled || generation !== connectionGeneration) return;
+	let ws: WebSocket;
 	try {
-		socket = new WebSocket(getPreviewSocketUrl(token));
+		ws = new WebSocket(getPreviewSocketUrl(token));
 	} catch {
 		scheduleReconnect();
 		return;
 	}
-	socket.binaryType = 'arraybuffer';
+	socket = ws;
+	ws.binaryType = 'arraybuffer';
 	status = reconnectAttempt > 0 ? 'reconnecting' : 'connecting';
-	socket.onopen = () => {
+	// Every handler is fenced by the captured generation: a socket that belongs to a
+	// superseded attempt (e.g. a race where a stale ws still fires) must not mutate
+	// state or drive the reconnect/close machinery.
+	ws.onopen = () => {
+		if (generation !== connectionGeneration) return;
 		reconnectAttempt = 0;
 		remintAttempted = false;
 		closeReason = null;
 		status = 'connecting';
-		socket?.send(JSON.stringify({ action: 'start', tier }));
+		ws.send(JSON.stringify({ action: 'start', tier }));
 	};
-	socket.onmessage = handleMessage;
-	socket.onerror = () => {
-		socket?.close();
+	ws.onmessage = (event) => {
+		if (generation !== connectionGeneration) return;
+		handleMessage(event);
 	};
-	socket.onclose = (event) => {
+	ws.onerror = () => {
+		if (generation !== connectionGeneration) return;
+		ws.close();
+	};
+	ws.onclose = (event) => {
+		if (generation !== connectionGeneration) return;
 		handleSocketClose(event.code);
 	};
 }
@@ -354,7 +381,13 @@ function start(): void {
 		status = 'unsupported';
 		return;
 	}
+	// New attempt generation — supersedes any in-flight connect (double-dial guard).
+	connectionGeneration += 1;
 	reconnectAttempt = 0;
+	// Enter the connecting state immediately (before the async mint) so a rapid
+	// source-change restart still observes a live-ish status and chains correctly;
+	// connect() re-affirms it after the socket is created.
+	status = 'connecting';
 	void connect();
 }
 
@@ -381,6 +414,8 @@ function teardown(): void {
 }
 
 function stop(): void {
+	// Bump the generation so any in-flight connect for this session aborts.
+	connectionGeneration += 1;
 	teardown();
 	resetMedia();
 	reconnectAttempt = 0;
@@ -411,6 +446,43 @@ $effect(() => {
 	if (!enabled || previewUnavailable) return;
 	start();
 	return () => stop();
+});
+
+// The preview is "actively dialing/showing" in these states; an applied-source
+// change while idle/unsupported/error has nothing to follow (the availability
+// effect above starts a fresh dial when appropriate).
+function isSessionActive(s: PreviewStatus): boolean {
+	return s === 'connecting' || s === 'reconnecting' || s === 'waiting' || s === 'live';
+}
+
+// Baseline for the applied-source follow effect: only a genuine CHANGE to the
+// broadcast-confirmed config.source (never the initial value) restarts the dial.
+let appliedSource: string | undefined;
+let appliedSourceTracked = false;
+
+// Follow the APPLIED (broadcast-confirmed) config.source. When the operator's
+// source selection is acknowledged by the backend AND the preview is actively
+// running, tear the dial down and redial with a fresh token so the preview shows
+// the newly applied input. `getConfig()` is the settled edge (the field-sync lock
+// releases to the applied value), so no extra debounce is needed here. We deliberately
+// watch ONLY the applied source — never an optimistic local edit — so the preview
+// never redials on the field-sync pending phase. Disabled or idle → no-op.
+$effect(() => {
+	const source = getConfig()?.source;
+	untrack(() => {
+		if (!appliedSourceTracked) {
+			appliedSourceTracked = true;
+			appliedSource = source;
+			return;
+		}
+		if (source === appliedSource) return;
+		appliedSource = source;
+		if (!enabled || !isSessionActive(status)) return;
+		// stop()/start() each bump the connection generation, so an in-flight mint
+		// for the previous source is aborted before it can open a socket.
+		stop();
+		start();
+	});
 });
 
 // Final unmount guard: latch `destroyed` so any in-flight reconnect timer is

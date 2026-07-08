@@ -30,12 +30,14 @@ import type {
 	CapabilitiesMessage,
 	ConfigMessage,
 	NetifMessage,
+	RelayMessage,
 	SourcesMessage,
 } from "@ceraui/rpc/schemas";
 
 import { capabilityTier } from "$lib/components/streaming/capability-tier";
 
 import type { PipelineAvailability } from "./pipelineAvailability";
+import type { ManagedIngestAccount } from "./receiver-experience";
 
 /** How the operator resolves a blocked/warned gate. `none` = nothing to do (wait). */
 export type GateFix = "openSource" | "goNetwork" | "openServer" | "none";
@@ -93,6 +95,20 @@ export interface GoLiveReadinessInput {
 	 * For a source with no gateway dependency this is `{ available: true }`.
 	 */
 	readonly gatewayStatus: PipelineAvailability;
+	/**
+	 * The relays CATALOG snapshot (`getRelays()`) — `undefined` WHILE LOADING (and
+	 * in a federated bundle that never pulls it). When LOADED, the destination gate
+	 * warns on a `relay_server` id the catalog no longer offers (C7). Omitted /
+	 * `undefined` is fail-open — the presence-only behaviour, never a false warn.
+	 */
+	readonly relays?: RelayMessage | undefined;
+	/**
+	 * The platform-pushed managed ingest slots (`getManagedIngestAccounts()`) —
+	 * `undefined` WHILE LOADING / in federation. When LOADED, the destination gate
+	 * BLOCKS on a `selected_ingest_endpoint` the slot list no longer offers (a
+	 * platform-revoked slot, C7). Omitted / `undefined` is fail-open.
+	 */
+	readonly managedSlots?: readonly ManagedIngestAccount[] | undefined;
 }
 
 /**
@@ -105,6 +121,19 @@ export const READINESS_SOURCE_REASON = "live.cannotStartNoPipeline" as const;
 export const READINESS_NETWORK_REASON = "network.view.noLinks" as const;
 /** No usable server target — the legacy `cannotStartNoServer` block. */
 export const READINESS_DESTINATION_REASON = "live.cannotStartNoServer" as const;
+/**
+ * A selected managed ingest slot the LOADED slot list no longer offers — the
+ * platform revoked it (C7). Blocks: the operator must pick a live slot.
+ */
+export const READINESS_DESTINATION_SLOT_REVOKED_REASON =
+	"live.destinationSlotRevoked" as const;
+/**
+ * A managed `relay_server` id absent from the LOADED catalog — advisory only
+ * (C7). WARNS, never blocks: the save may still resolve, matching the
+ * informational traffic-light philosophy.
+ */
+export const READINESS_DESTINATION_SERVER_STALE_REASON =
+	"live.destinationServerStale" as const;
 /** Engine offline / control channel down — the `engineUnavailable` calm-blocked tone. */
 export const READINESS_ENGINE_UNAVAILABLE_REASON =
 	"live.education.tier.engineUnavailable.title" as const;
@@ -198,14 +227,44 @@ function deriveNetworkGate(
  * Destination gate — a usable server target. Mirrors the plan's `hasServer`
  * (relay_server | selected_ingest_endpoint | srtla_addr), a superset of
  * LiveView's `serverTarget` that also honours a selected managed ingest slot.
+ *
+ * Beyond presence it validates the target against the two catalogs the platform
+ * pushes, each only ONCE they are LOADED (`!== undefined` — the T18 loaded-guard
+ * rule); a still-loading / federated `undefined` catalog is fail-open (presence
+ * only), never a false verdict:
+ *   (a) a `selected_ingest_endpoint` the loaded slot list no longer offers was
+ *       revoked platform-side → BLOCKED (openServer): it cannot resolve.
+ *   (b) a `relay_server` id absent from the loaded catalog → WARN (openServer),
+ *       NOT blocked: the save may still resolve and a warn matches the
+ *       informational traffic-light philosophy.
  */
-function deriveDestinationGate(config: ConfigMessage | undefined): GateState {
-	const hasServer = Boolean(
-		config?.relay_server ||
-			config?.selected_ingest_endpoint ||
-			config?.srtla_addr,
-	);
-	return hasServer ? OK : blocked(READINESS_DESTINATION_REASON, "openServer");
+function deriveDestinationGate(
+	config: ConfigMessage | undefined,
+	relays: RelayMessage | undefined,
+	managedSlots: readonly ManagedIngestAccount[] | undefined,
+): GateState {
+	const selectedSlot = config?.selected_ingest_endpoint;
+	const relayServer = config?.relay_server;
+	const hasServer = Boolean(relayServer || selectedSlot || config?.srtla_addr);
+	if (!hasServer) return blocked(READINESS_DESTINATION_REASON, "openServer");
+
+	if (
+		selectedSlot &&
+		managedSlots !== undefined &&
+		!managedSlots.some((slot) => slot.endpointId === selectedSlot)
+	) {
+		return blocked(READINESS_DESTINATION_SLOT_REVOKED_REASON, "openServer");
+	}
+
+	if (
+		relayServer &&
+		relays !== undefined &&
+		relays.servers?.[relayServer] === undefined
+	) {
+		return warn(READINESS_DESTINATION_SERVER_STALE_REASON, "openServer");
+	}
+
+	return OK;
 }
 
 /**
@@ -250,7 +309,11 @@ export function deriveGoLiveReadiness(
 	const gates: GoLiveGates = {
 		source: deriveSourceGate(input.config, input.sources, input.gatewayStatus),
 		network: deriveNetworkGate(input.netif, input.isConnected),
-		destination: deriveDestinationGate(input.config),
+		destination: deriveDestinationGate(
+			input.config,
+			input.relays,
+			input.managedSlots,
+		),
 		engine: deriveEngineGate(input.caps, input.isConnected),
 	};
 

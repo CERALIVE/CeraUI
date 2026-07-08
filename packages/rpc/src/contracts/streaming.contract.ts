@@ -14,6 +14,8 @@ import {
 	pipelinesSchema,
 	reloadAudioDelayInputSchema,
 	reloadAudioDelayOutputSchema,
+	setMockDeviceAttachedInputSchema,
+	setMockDeviceAttachedOutputSchema,
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
 	setSourceVisibilityInputSchema,
@@ -89,6 +91,14 @@ export const streamingContract = oc.router({
 	 * Changes the active hardware type and reloads pipelines
 	 */
 	setMockHardware: oc.input(setMockHardwareInputSchema).output(setMockHardwareOutputSchema),
+
+	/**
+	 * Detach/reattach one mock capture device by input_id (dev-only). Drives the
+	 * single-device unplug/replug seam so e2e can exercise the lost-row grace state.
+	 */
+	setMockDeviceAttached: oc
+		.input(setMockDeviceAttachedInputSchema)
+		.output(setMockDeviceAttachedOutputSchema),
 
 	/**
 	 * Get current mock hardware state (dev-only)

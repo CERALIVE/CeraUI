@@ -54,6 +54,7 @@ import {
 	type ControlChannelEndpoint,
 	resolveControlChannelEndpoint,
 } from "../remote/control-endpoint.ts";
+import { getLastCapabilities } from "../streaming/capabilities.ts";
 import { isRealDevice } from "../system/device-detection.ts";
 import { reportActiveProfile } from "./active-profile-reporter.ts";
 import {
@@ -119,9 +120,18 @@ export interface ControlChannelDeps {
 	verifyToken: (token: string) => unknown;
 	/**
 	 * Current runtime config snapshot — read at `device.hello` time to derive the
-	 * device's media-destination receiver kind (`deviceCaps.receiverKind`).
+	 * device's media-destination receiver kind (`deviceCaps.receiverKind`) and the
+	 * persisted `stream_profile` advertised as `deviceCaps.preferred_profile`.
 	 */
 	getConfig: () => RuntimeConfig;
+	/**
+	 * Engine-advertised SRT profile-catalog version for the `device.hello`
+	 * `deviceCaps.profile_catalog_version` advertisement (spec §4.3). Reads the
+	 * last capability snapshot; returns `undefined` when the engine has not
+	 * advertised one (or no snapshot exists yet), in which case the field is
+	 * omitted from the hello (additive-optional — never null-filled).
+	 */
+	getProfileCatalogVersion: () => string | undefined;
 	logger: ControlChannelLogger;
 	random: () => number;
 	setTimer: (fn: () => void, ms: number) => TimerHandle;
@@ -159,6 +169,8 @@ function defaultDeps(isReal: boolean): ControlChannelDeps {
 		verifyToken: (token) =>
 			verifyDeviceControlToken(token, undefined, { isRealDevice: isReal }),
 		getConfig,
+		getProfileCatalogVersion: () =>
+			getLastCapabilities()?.profile_catalog_version,
 		logger,
 		random: Math.random,
 		setTimer: (fn, ms) => setTimeout(fn, ms),
@@ -226,11 +238,30 @@ export function deriveReceiverKind(
  * Build the `device.hello` handshake frame (spec §4 / §14.2). The hello body
  * (`v`, `supportedTypes`, `deviceCaps`) rides in `payload` per the envelope
  * contract — the hub validates `payload` against its `HandshakeDeviceSchema`.
+ *
+ * `deviceCaps` advertises three additive-optional facts, each OMITTED when its
+ * underlying value is unknown (never null-filled — the hub tolerates a hello
+ * that carries none of them, spec §4.3):
+ *   - `receiverKind` — the device's media-destination receiver kind.
+ *   - `preferred_profile` — the persisted `stream_profile` (device-declared
+ *     SRT-receive preference), when the operator/cloud has pinned one.
+ *   - `profile_catalog_version` — the engine's advertised profile-catalog
+ *     version, when a capability snapshot carries one.
  */
 function buildDeviceHello(deps: ControlChannelDeps): Handshake {
-	const receiverKind = deriveReceiverKind(deps.getConfig());
-	const deviceCaps: Record<string, unknown> =
-		receiverKind !== undefined ? { receiverKind } : {};
+	const config = deps.getConfig();
+	const receiverKind = deriveReceiverKind(config);
+	const preferredProfile = config.stream_profile;
+	const profileCatalogVersion = deps.getProfileCatalogVersion();
+	const deviceCaps: Record<string, unknown> = {
+		...(receiverKind !== undefined ? { receiverKind } : {}),
+		...(preferredProfile !== undefined
+			? { preferred_profile: preferredProfile }
+			: {}),
+		...(profileCatalogVersion !== undefined
+			? { profile_catalog_version: profileCatalogVersion }
+			: {}),
+	};
 	return {
 		v: PROTOCOL_VERSION,
 		kind: "handshake",

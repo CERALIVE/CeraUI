@@ -50,6 +50,7 @@ import type {
 import { deviceKindToPipelineId } from "@ceraui/rpc";
 import type {
 	CaptureDevice,
+	DevicesMessage,
 	Framerate,
 	NetworkIngest,
 	PipelineAudioKind,
@@ -61,9 +62,10 @@ import type {
 	StreamSourceBase,
 } from "@ceraui/rpc/schemas";
 import { framerateSchema, resolutionSchema } from "@ceraui/rpc/schemas";
+import type { LastSeenDevice } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
-import { getConfig } from "../config.ts";
+import { getConfig, saveConfig } from "../config.ts";
 import { getNetworkIngestInfo } from "../network/network-ingest.ts";
 import type { EngineAudioDevice } from "./audio-naming.ts";
 import {
@@ -73,6 +75,7 @@ import {
 } from "./capabilities.ts";
 import { fromEngineDevice } from "./devices.ts";
 import { getEffectiveHardware } from "./pipelines.ts";
+import { getConfiguredEngine } from "./streaming-engine.ts";
 
 /** One entry of the engine capability contract's `sources[]` array. */
 type CapabilitySource = GetCapabilitiesResult["sources"][number];
@@ -85,6 +88,28 @@ const NETWORK_SOURCE_IDS: Record<string, RequiresGateway> = {
 
 /** The single virtual source id (the test pattern). */
 const VIRTUAL_SOURCE_ID = "test";
+
+/**
+ * CeraUI-side fallback that keeps the virtual test-pattern source audio-
+ * `selectable` even on an OLD engine that does not yet advertise
+ * `supports_audio` for it. The cerastream test pattern gained a real muted
+ * `audiotestsrc` tone leg AND a truthful `supports_audio: true` capability in
+ * `2026.7.1` (coherence-contract-pass C2 / todo 4), reachable through the
+ * existing "Pipeline default" pseudo-source. A device on an OLDER engine still
+ * reports `supports_audio: false` for `test`, so this override bridges the gap
+ * until the fleet minimum engine advertises it.
+ *
+ * PRECEDENCE: the engine's own `supports_audio` wins when true (new engine); the
+ * override only decides the OLD-engine branch. It is scoped to the SINGLE
+ * test-pattern id — a coarse/other source without `supports_audio` stays `none`
+ * (no blanket override).
+ *
+ * DELETE this constant (and the virtual-origin branch in `deriveAudioKind` that
+ * reads it) once every fleet device runs an engine that advertises
+ * `supports_audio` for the test source. Tracked as `TD-test-pattern-audio-override`
+ * in `docs/TECHNICAL_DEBT.md`.
+ */
+const TEST_PATTERN_AUDIO_OVERRIDE: boolean = true;
 
 /** The i18n reason surfaced when a network gateway is not running. */
 const GATEWAY_INACTIVE_REASON = "live.education.reason.gatewayInactive";
@@ -119,6 +144,14 @@ function deriveAudioKind(
 	supportsAudio: boolean,
 ): PipelineAudioKind {
 	if (NETWORK_SOURCE_IDS[id] !== undefined) return "embedded";
+	// Test-pattern precedence (coherence-contract-pass C2): the virtual test
+	// source is audio-`selectable` when EITHER the new engine advertises
+	// supports_audio for it (>= 2026.7.1) OR the CeraUI-side old-engine override
+	// is active. The tone itself is pipeline-default audio, surfaced through the
+	// existing "Pipeline default" pseudo-source — no new picker entry is added.
+	if (id === VIRTUAL_SOURCE_ID) {
+		return supportsAudio || TEST_PATTERN_AUDIO_OVERRIDE ? "selectable" : "none";
+	}
 	return supportsAudio ? "selectable" : "none";
 }
 
@@ -235,6 +268,41 @@ function buildCaptureEntry(
 	};
 }
 
+/**
+ * Build one `lost` capture row from a remembered snapshot (C7): a device we saw
+ * this session, or the configured device across a restart, that is absent from
+ * the current engine list. It inherits facets from its still-offered coarse entry
+ * and is always `available:false` + `lost:true` — the frontend renders the
+ * unplugged grace state (`live.source.lostBody`) and a start/setConfig is refused
+ * by the todo-12 gate.
+ */
+function buildLostEntry(
+	snapshot: LastSeenDevice,
+	coarse: StreamSource,
+): StreamSource {
+	return {
+		id: snapshot.id,
+		pipelineId: snapshot.pipelineId,
+		modes: [],
+		supportsAudio: coarse.supportsAudio,
+		supportsResolutionOverride: coarse.supportsResolutionOverride,
+		supportsFramerateOverride: coarse.supportsFramerateOverride,
+		...(coarse.defaultResolution !== undefined
+			? { defaultResolution: coarse.defaultResolution }
+			: {}),
+		...(coarse.defaultFramerate !== undefined
+			? { defaultFramerate: coarse.defaultFramerate }
+			: {}),
+		audioKind: coarse.audioKind,
+		available: false,
+		lost: true,
+		origin: "capture",
+		kind: snapshot.kind,
+		displayName: snapshot.displayName,
+		devicePath: snapshot.devicePath,
+	};
+}
+
 export interface BuildSourcesInput {
 	/** The engine capability contract's `sources[]` (the coarse offering). */
 	sources: readonly CapabilitySource[];
@@ -244,6 +312,37 @@ export interface BuildSourcesInput {
 	networkIngest: NetworkIngest;
 	/** Device-wide source visibility (Todo 6). Absent → every source visible. */
 	sourcesVisibility?: SourcesVisibility;
+	/** The operator's persisted `config.source` id; drives the across-restart
+	 *  lost row for the configured device. Absent → no config-driven lost row. */
+	configSource?: string;
+	/** Persisted `config.last_seen_devices`; the metadata source for the
+	 *  across-restart configured-device lost row. Absent → treated as empty. */
+	lastSeenDevices?: readonly LastSeenDevice[];
+	/** In-memory session snapshots; the metadata source for in-session lost rows
+	 *  (uncapped, so LRU churn never orphans a session-seen id). */
+	sessionSnapshots?: ReadonlyMap<string, LastSeenDevice>;
+}
+
+/**
+ * The remembered snapshots eligible to become a lost row: every in-session
+ * snapshot, plus the configured id's persisted snapshot across a restart (the
+ * session map is empty then). Deduped by id — a session snapshot wins over its
+ * persisted twin (same metadata; the session copy is the freshest).
+ */
+function collectLostCandidates(input: BuildSourcesInput): LastSeenDevice[] {
+	const candidates = new Map<string, LastSeenDevice>();
+	if (input.sessionSnapshots !== undefined) {
+		for (const [id, snapshot] of input.sessionSnapshots)
+			candidates.set(id, snapshot);
+	}
+	const configSource = input.configSource;
+	if (configSource !== undefined && !candidates.has(configSource)) {
+		const persisted = (input.lastSeenDevices ?? []).find(
+			(d) => d.id === configSource,
+		);
+		if (persisted !== undefined) candidates.set(configSource, persisted);
+	}
+	return [...candidates.values()];
 }
 
 /**
@@ -270,8 +369,10 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 	}
 
 	const capturesByPipeline = new Map<string, StreamSource[]>();
+	const liveVideoIds = new Set<string>();
 	for (const device of input.devices) {
 		if (device.media_class !== "video") continue;
+		liveVideoIds.add(device.input_id);
 		const bridged = deviceKindToPipelineId(device.kind);
 		if (bridged === undefined) continue;
 		const coarse = coarseByPipeline.get(bridged);
@@ -281,14 +382,31 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 		capturesByPipeline.set(bridged, list);
 	}
 
+	// (b2) LOST — a `lost` capture row (C7) for a remembered device absent from
+	// the current engine list whose pipeline is STILL offered (a snapshot whose
+	// pipelineId dropped from the coarse set yields no row). Grouped by pipeline
+	// alongside its live captures so (c) collapses a remembered input to EXACTLY
+	// one row — never a coarse+lost duplicate, never a live+lost duplicate.
+	const lostByPipeline = new Map<string, StreamSource[]>();
+	for (const snapshot of collectLostCandidates(input)) {
+		if (liveVideoIds.has(snapshot.id)) continue;
+		const coarse = coarseByPipeline.get(snapshot.pipelineId);
+		if (coarse === undefined) continue;
+		const list = lostByPipeline.get(snapshot.pipelineId) ?? [];
+		list.push(buildLostEntry(snapshot, coarse));
+		lostByPipeline.set(snapshot.pipelineId, list);
+	}
+
 	// (c) MERGE — replace each bridged coarse entry (in place, preserving order)
-	// with its capture entries; every other base entry passes through unchanged.
+	// with its capture + lost entries; every other base entry passes through
+	// unchanged. A coarse slot with only lost rows still collapses to those rows.
 	const out: StreamSource[] = [];
 	for (const entry of base) {
 		if (entry.origin === "coarse") {
-			const captures = capturesByPipeline.get(entry.pipelineId);
-			if (captures !== undefined && captures.length > 0) {
-				out.push(...captures);
+			const captures = capturesByPipeline.get(entry.pipelineId) ?? [];
+			const lost = lostByPipeline.get(entry.pipelineId) ?? [];
+			if (captures.length > 0 || lost.length > 0) {
+				out.push(...captures, ...lost);
 				continue;
 			}
 		}
@@ -325,20 +443,53 @@ export function deriveEngineRouting(
 }
 
 export const UNKNOWN_SOURCE_ERROR = "unknown_source";
+// A remembered capture row (C7 `lost:true`) — the device was unplugged and is no
+// longer in the current engine list. Refused at the dispatch choke point.
+export const SOURCE_LOST_ERROR = "source_lost";
+// A listed-but-unavailable NETWORK source (`available:false` without `lost`): an
+// operator-disabled / gateway-down network row. This is the ONLY origin whose
+// `available:false` is a genuine functional block — a capture row's only false
+// path is `lost` (gated separately above), and a virtual row's only false path is
+// the operator's `sources_visibility.hide_test_pattern` declutter preference,
+// which hides it from the picker but must NOT block routing.
+export const SOURCE_UNAVAILABLE_ERROR = "source_unavailable";
 
 export type ResolveSourceRoutingResult =
 	| { ok: true; pipeline: string; selected_video_input: string | undefined }
-	| { ok: false; error: typeof UNKNOWN_SOURCE_ERROR };
+	| {
+			ok: false;
+			error:
+				| typeof UNKNOWN_SOURCE_ERROR
+				| typeof SOURCE_LOST_ERROR
+				| typeof SOURCE_UNAVAILABLE_ERROR;
+	  };
 
-// Procedure-layer wrapper over deriveEngineRouting. Unknown id → `unknown_source`
-// so the procedure rejects with disk unchanged (session.start swallows
-// updateConfig errors, so this must be enforced here, never deeper). Known id →
-// routing whose `selected_video_input` is the capture input_id, or `undefined`
-// (config-clear) for coarse/virtual/network — clearing a stale capture input.
+// Procedure-layer wrapper over deriveEngineRouting. Reads the CURRENT sources
+// snapshot at dispatch time, so a re-listed (recovered) device passes; every
+// rejection leaves disk unchanged (session.start swallows updateConfig errors, so
+// it must be enforced here). The `lost` check MUST precede the `available` check —
+// a lost row is ALSO available:false, and it needs the distinct `source_lost`
+// code. The `available:false` block is SCOPED to `origin === "network"` — the only
+// origin where `available:false` is a genuine functional gate (gateway-down /
+// operator-disabled). A virtual test-pattern's only `available:false` path is the
+// `sources_visibility.hide_test_pattern` declutter preference, which hides it from
+// the picker but must STILL route (a hidden-but-selected source is not broken); a
+// capture row's only false path is `lost`, handled above. Absent →
+// `unknown_source` (semantics unchanged). Never mutates config.
 export function resolveSourceRouting(
 	sourceId: string,
 	sources: readonly StreamSource[],
 ): ResolveSourceRoutingResult {
+	const source = sources.find((s) => s.id === sourceId);
+	if (source === undefined) {
+		return { ok: false, error: UNKNOWN_SOURCE_ERROR };
+	}
+	if (source.lost === true) {
+		return { ok: false, error: SOURCE_LOST_ERROR };
+	}
+	if (source.origin === "network" && source.available === false) {
+		return { ok: false, error: SOURCE_UNAVAILABLE_ERROR };
+	}
 	const routing = deriveEngineRouting(sourceId, sources);
 	if (routing === undefined) {
 		return { ok: false, error: UNKNOWN_SOURCE_ERROR };
@@ -369,6 +520,97 @@ let engineDeviceCache: CaptureDevice[] = [];
 // `@ceraui/rpc` `CaptureDevice`, `fromEngineDevice()`, or the video whitelist
 // copy — because those all drop the join key. `buildSources` never reads it.
 let engineAudioDeviceCache: EngineAudioDevice[] = [];
+
+/** The persisted last-seen list cap (C7). The current `config.source` id is
+ *  exempt from eviction, so the configured device's snapshot survives churn. */
+const LAST_SEEN_DEVICES_CAP = 12;
+
+// The IN-MEMORY session-seen snapshot map (C7): every bridgeable video input_id
+// ever returned by a successful `list-devices` this process lifetime, keyed to its
+// snapshot. UNCAPPED and monotonic — an empty list never clears it (distinct from
+// the replaceable engineDeviceCache), and only `resetEngineDeviceCache()` drops it
+// (test isolation). It is the metadata source for IN-SESSION lost rows, so LRU
+// churn on the persisted cap can never orphan a session-seen id.
+const sessionSeenDeviceSnapshots = new Map<string, LastSeenDevice>();
+
+/** A bridgeable-video snapshot for a device, or `undefined` for a non-candidate
+ *  (audio, or a kind with no pipeline bridge — never a lost-row candidate). */
+function snapshotFromDevice(device: CaptureDevice): LastSeenDevice | undefined {
+	if (device.media_class !== "video") return undefined;
+	const pipelineId = deviceKindToPipelineId(device.kind);
+	if (pipelineId === undefined) return undefined;
+	return {
+		id: device.input_id,
+		displayName: device.display_name,
+		kind: device.kind,
+		pipelineId,
+		devicePath: device.device_path,
+	};
+}
+
+/**
+ * LRU-merge freshly-observed snapshots into the persisted last-seen list:
+ * most-recently-observed first, then prior entries not re-observed. Over the cap,
+ * evict least-recent from the tail — EXCEPT the configured id, which is pulled out
+ * and always kept so the configured device's snapshot survives any churn.
+ */
+function mergeLastSeenLru(
+	current: readonly LastSeenDevice[],
+	observed: readonly LastSeenDevice[],
+	configSource: string | undefined,
+): LastSeenDevice[] {
+	const observedIds = new Set(observed.map((d) => d.id));
+	const ordered: LastSeenDevice[] = [
+		...observed,
+		...current.filter((d) => !observedIds.has(d.id)),
+	];
+	if (ordered.length <= LAST_SEEN_DEVICES_CAP) return ordered;
+
+	const configuredIndex =
+		configSource === undefined
+			? -1
+			: ordered.findIndex((d) => d.id === configSource);
+	const configured =
+		configuredIndex === -1 ? undefined : ordered[configuredIndex];
+	if (configured === undefined) return ordered.slice(0, LAST_SEEN_DEVICES_CAP);
+
+	const rest = ordered.filter((_, i) => i !== configuredIndex);
+	const kept = rest.slice(0, LAST_SEEN_DEVICES_CAP - 1);
+	kept.splice(Math.min(configuredIndex, kept.length), 0, configured);
+	return kept;
+}
+
+// Record a successful device observation into BOTH the uncapped session map and
+// the persisted (capped, config.source-exempt) last-seen list. Only bridgeable
+// video devices are snapshotted; an empty/no-bridgeable observation writes nothing
+// (retention is preserved — an empty engine list must not drop remembered rows).
+// The persisted list is written via the atomic config path only when it changes.
+function recordObservedDevices(devices: readonly CaptureDevice[]): void {
+	const snapshots: LastSeenDevice[] = [];
+	for (const device of devices) {
+		const snapshot = snapshotFromDevice(device);
+		if (snapshot === undefined) continue;
+		sessionSeenDeviceSnapshots.set(snapshot.id, snapshot);
+		snapshots.push(snapshot);
+	}
+	if (snapshots.length === 0) return;
+
+	const config = getConfig();
+	const current = config.last_seen_devices ?? [];
+	const next = mergeLastSeenLru(current, snapshots, config.source);
+	if (JSON.stringify(current) === JSON.stringify(next)) return;
+	config.last_seen_devices = next;
+	saveConfig();
+}
+
+/** The in-memory session-seen snapshots (C7): the metadata source for in-session
+ *  lost rows. Read by `getSourcesMessage`; exposed for wiring and tests. */
+export function getSessionSeenDeviceSnapshots(): ReadonlyMap<
+	string,
+	LastSeenDevice
+> {
+	return sessionSeenDeviceSnapshots;
+}
 
 /** Injected fetcher so the cache is exercisable without a real engine. */
 export interface EngineDeviceCacheDeps {
@@ -426,6 +668,7 @@ export async function refreshEngineDeviceCache(
 					...(alsaCardId !== undefined ? { alsa_card_id: alsaCardId } : {}),
 				};
 			});
+		recordObservedDevices(engineDeviceCache);
 	} catch (err) {
 		logger.debug(
 			"sources: engine device fetch failed; retaining last-known device cache",
@@ -435,10 +678,47 @@ export async function refreshEngineDeviceCache(
 	return engineDeviceCache;
 }
 
-/** Drop the cached engine device lists (video + audio) for test isolation. */
+/** Drop the cached engine device lists (video + audio) AND the session-seen
+ *  snapshot map for test isolation (restart simulation). */
 export function resetEngineDeviceCache(): void {
 	engineDeviceCache = [];
 	engineAudioDeviceCache = [];
+	sessionSeenDeviceSnapshots.clear();
+}
+
+/**
+ * Apply an ALREADY-OBSERVED device list (e.g. the device registry's scan result)
+ * into the engine-device cache and lost-retention memory WITHOUT a second
+ * `list-devices` fetch. A re-fetch here could throw (engine mid-restart) or return
+ * a stale list and drop the hotplug transition, so the observed list the registry
+ * already paid for is the single source of truth for this rebuild. The parallel
+ * audio-naming cache is left untouched (the registry's `CaptureDevice` audio rows
+ * carry no `alsa_card_id` join key; `refreshEngineDeviceCache` owns that cache).
+ */
+export function applyObservedEngineDevices(
+	devices: readonly CaptureDevice[],
+): void {
+	engineDeviceCache = [...devices];
+	recordObservedDevices(engineDeviceCache);
+}
+
+/**
+ * ONE combined hotplug transition (C7): apply the observed list (no second fetch)
+ * then rebroadcast BOTH the `devices` snapshot and the folded `sources` snapshot
+ * from that same list, so a device unplugged via the registry path surfaces its
+ * `lost` row in one pass — even when a re-fetch would throw or return the stale
+ * pre-removal list.
+ */
+export function applyObservedDevicesAndBroadcast(
+	devices: readonly CaptureDevice[],
+): void {
+	applyObservedEngineDevices(devices);
+	const devicesMessage: DevicesMessage = {
+		engine: getConfiguredEngine(),
+		devices: [...devices],
+	};
+	broadcastMsg("devices", devicesMessage);
+	broadcastSources();
 }
 
 // ─── Broadcast wiring (rides the existing `sources` bus, no new endpoint) ─────
@@ -446,12 +726,16 @@ export function resetEngineDeviceCache(): void {
 /** Build the `sources` broadcast payload from the live caches (synchronous). */
 export function getSourcesMessage(): SourcesMessage {
 	const caps = getLastCapabilities();
-	const sourcesVisibility = getConfig().sources_visibility;
+	const config = getConfig();
+	const sourcesVisibility = config.sources_visibility;
 	const sources = buildSources({
 		sources: caps?.sources ?? [],
 		devices: getEngineDeviceCache(),
 		networkIngest: getNetworkIngestInfo(),
 		...(sourcesVisibility !== undefined ? { sourcesVisibility } : {}),
+		...(config.source !== undefined ? { configSource: config.source } : {}),
+		lastSeenDevices: config.last_seen_devices ?? [],
+		sessionSnapshots: sessionSeenDeviceSnapshots,
 	});
 	return { hardware: getEffectiveHardware(), sources };
 }

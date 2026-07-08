@@ -348,6 +348,10 @@ const es = {
 			"Selecciona una fuente de video antes de iniciar la transmisión",
 		cannotStartNoServer:
 			"Configura un servidor antes de iniciar la transmisión",
+		destinationSlotRevoked:
+			"Esta ranura de ingesta ya no está disponible: elige otro destino",
+		destinationServerStale:
+			"Este servidor ya no está en la lista de tu proveedor",
 		startFailed: {
 			generic: "No se pudo iniciar la transmisión",
 			srt_connect_failed:
@@ -364,6 +368,14 @@ const es = {
 				"El dispositivo de captura informó un error de vídeo. Vuelve a conectarlo e inténtalo de nuevo.",
 			pipeline_stall:
 				"La fuente de entrada se detuvo al iniciar. Comprueba la fuente e inténtalo de nuevo.",
+			audio_source_probe_failed:
+				"La fuente de audio seleccionada no se conectó a tiempo. Vuelve a conectarla o elige otra fuente e inténtalo de nuevo.",
+			audio_codec_unsupported_transport:
+				"Este códec de audio no es compatible con el transporte actual. Cambia el códec de audio a AAC e inténtalo de nuevo.",
+			source_lost:
+				"La fuente seleccionada se desconectó. Vuelve a conectarla o elige otra fuente e inténtalo de nuevo.",
+			source_unavailable:
+				"La fuente seleccionada no está disponible ahora mismo. Elige otra fuente o comprueba su configuración e inténtalo de nuevo.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -553,6 +565,7 @@ const es = {
 			audioFollows: "El audio seguirá a {label} al reiniciar",
 			switchTitle: "Cambiar fuente",
 			autoPrefix: "Automático",
+			autoResolvedSep: "— actualmente:",
 		},
 		transcode: {
 			chip: "Entrada {input} \u2192 Salida {output}",
@@ -592,7 +605,7 @@ const es = {
 				},
 				audio: {
 					title: "Audio",
-					body: "La entrada de audio y el códec incluidos en la transmisión. Las fuentes disponibles provienen del pipeline de vídeo seleccionado; un pipeline sin audio oculta estos controles.",
+					body: "El audio incluido en tu transmisión, con tres opciones. Automático elige el mejor micrófono o el audio integrado para la fuente seleccionada; Predeterminado de la fuente usa el audio integrado del motor para este pipeline; elegir un dispositivo con nombre siempre usa ese dispositivo. Las fuentes disponibles provienen del pipeline de vídeo seleccionado.",
 				},
 			},
 			tier: {
@@ -628,6 +641,8 @@ const es = {
 			software: "Software",
 			bitrateRangeHint: "Rango admitido",
 			bitrateClamped: "Ajustado al rango admitido",
+			sourceChangedNote:
+				"La fuente cambió: ajustes actualizados para la nueva entrada.",
 			probedCaps: "Capacidades detectadas",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
@@ -734,6 +749,8 @@ const es = {
 			streaming: "Detén la transmisión para cambiar el códec de audio",
 			noSource: "Selecciona primero una fuente de audio",
 		},
+		audioCodecUnsupportedTransport:
+			"Este códec no es compatible con el transporte actual",
 		destination: "Destino",
 		destinationManaged: "Mi cuenta en la nube",
 		destinationCustom: "Receptor personalizado",
@@ -744,6 +761,9 @@ const es = {
 		destinationAddKey: "Añadir clave",
 		latency: "Latencia",
 		latencyNegotiated: "Negociada",
+		valueClamped: "Ajustado a {value}",
+		catalogDriftNote:
+			"La lista de servidores cambió desde que abriste esto. Revisa tu selección antes de guardar.",
 		transportActive: "Activo",
 		destinationCustomHint:
 			"Introduce la dirección y el puerto de tu propio receptor.",
@@ -1613,7 +1633,7 @@ const es = {
 		sources: {
 			noAudio: "Sin audio",
 			auto: "Automático (sigue la fuente)",
-			pipelineDefault: "Predeterminado de la canalización",
+			pipelineDefault: "Predeterminado de la fuente (decide el motor)",
 		},
 	},
 } satisfies Translation;

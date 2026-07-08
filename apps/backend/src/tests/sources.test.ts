@@ -10,6 +10,7 @@ import type {
 	StreamSource,
 } from "@ceraui/rpc/schemas";
 import { streamSourceSchema } from "@ceraui/rpc/schemas";
+import type { LastSeenDevice } from "../helpers/config-schemas.ts";
 import {
 	buildSources,
 	deriveEngineRouting,
@@ -17,6 +18,9 @@ import {
 	refreshEngineDeviceCache,
 	resetEngineDeviceCache,
 	resolveSourceRouting,
+	SOURCE_LOST_ERROR,
+	SOURCE_UNAVAILABLE_ERROR,
+	UNKNOWN_SOURCE_ERROR,
 } from "../modules/streaming/sources.ts";
 
 type CapabilitySource = GetCapabilitiesResult["sources"][number];
@@ -286,13 +290,18 @@ describe("buildSources — caps-first base + device overlay", () => {
 		const srt = sources.find((s) => s.id === "srt");
 		expect(srt?.available).toBe(true);
 
-		// The disabled source is NOT removed, so the routing seam still resolves its
-		// id — a start/setConfig with config.source='rtmp' rejects on the gateway
-		// gate, NEVER with unknown_source (Metis #7).
-		const routed = resolveSourceRouting("rtmp", sources);
-		expect(routed.ok).toBe(true);
-		if (routed.ok) {
-			expect(routed.pipeline).toBe("rtmp");
+		// The disabled source is NOT removed, so the routing seam still FINDS its id
+		// (never unknown_source, Metis #7) — but because the row is available:false
+		// it now rejects with the availability-specific source_unavailable (C7). The
+		// still-available srt sibling resolves normally, proving the gate is per-row.
+		expect(resolveSourceRouting("rtmp", sources)).toEqual({
+			ok: false,
+			error: SOURCE_UNAVAILABLE_ERROR,
+		});
+		const routedSrt = resolveSourceRouting("srt", sources);
+		expect(routedSrt.ok).toBe(true);
+		if (routedSrt.ok) {
+			expect(routedSrt.pipeline).toBe("srt");
 		}
 	});
 
@@ -322,6 +331,45 @@ describe("buildSources — caps-first base + device overlay", () => {
 		expect(sources).toHaveLength(1);
 		expect(sources[0]?.origin).toBe("virtual");
 		expect(sources[0]?.id).toBe("test");
+	});
+});
+
+describe("deriveAudioKind — test-pattern selectable-audio precedence (C2)", () => {
+	function virtualAudioKind(supportsAudio: boolean): string | undefined {
+		const sources = buildSources({
+			sources: [capSource("test", { supports_audio: supportsAudio })],
+			devices: [],
+			networkIngest: NO_INGEST,
+		});
+		return sources.find((s) => s.origin === "virtual")?.audioKind;
+	}
+
+	it("new engine (supports_audio=true, >= 2026.7.1) → test pattern audio is selectable", () => {
+		expect(virtualAudioKind(true)).toBe("selectable");
+	});
+
+	it("old engine (supports_audio=false) → the CeraUI override still makes it selectable", () => {
+		expect(virtualAudioKind(false)).toBe("selectable");
+	});
+
+	it("does NOT blanket-override: a coarse source without supports_audio stays none", () => {
+		const sources = buildSources({
+			sources: [capSource("hdmi", { supports_audio: false })],
+			devices: [],
+			networkIngest: NO_INGEST,
+		});
+		const hdmi = sources.find((s) => s.id === "hdmi");
+		expect(hdmi?.origin).toBe("coarse");
+		expect(hdmi?.audioKind).toBe("none");
+	});
+
+	it("leaves non-test audio provenance untouched: a coarse source advertising supports_audio is selectable", () => {
+		const sources = buildSources({
+			sources: [capSource("hdmi", { supports_audio: true })],
+			devices: [],
+			networkIngest: NO_INGEST,
+		});
+		expect(sources.find((s) => s.id === "hdmi")?.audioKind).toBe("selectable");
 	});
 });
 
@@ -371,6 +419,84 @@ describe("deriveEngineRouting — all four origin arms", () => {
 
 	it("unknown source id → undefined", () => {
 		expect(deriveEngineRouting("nope", fixtureSources())).toBeUndefined();
+	});
+});
+
+describe("resolveSourceRouting — availability gate (C7)", () => {
+	function lostSnapshot(): LastSeenDevice {
+		return {
+			id: "video0",
+			displayName: "Studio HDMI",
+			kind: "hdmi",
+			pipelineId: "hdmi",
+			devicePath: "/dev/video0",
+		};
+	}
+
+	it("a listed lost row → source_lost (checked before available, which is also false)", () => {
+		const snapshot = lostSnapshot();
+		const sources = buildSources({
+			sources: [capSource("hdmi"), capSource("test")],
+			devices: [],
+			networkIngest: NO_INGEST,
+			configSource: "video0",
+			lastSeenDevices: [snapshot],
+			sessionSnapshots: new Map([[snapshot.id, snapshot]]),
+		});
+		const lost = sources.find((s) => s.id === "video0");
+		expect(lost?.lost).toBe(true);
+		expect(lost?.available).toBe(false);
+
+		const routed = resolveSourceRouting("video0", sources);
+		expect(routed).toEqual({ ok: false, error: SOURCE_LOST_ERROR });
+	});
+
+	it("a listed available:false network row (gateway down, not lost) → source_unavailable", () => {
+		const sources = buildSources({
+			sources: [capSource("rtmp"), capSource("test")],
+			devices: [],
+			networkIngest: NO_INGEST,
+		});
+		const rtmp = sources.find((s) => s.id === "rtmp");
+		expect(rtmp?.available).toBe(false);
+		expect(rtmp?.lost).toBeUndefined();
+
+		const routed = resolveSourceRouting("rtmp", sources);
+		expect(routed).toEqual({ ok: false, error: SOURCE_UNAVAILABLE_ERROR });
+	});
+
+	it("a recovered (re-listed) capture device → ok (the check reads the CURRENT snapshot)", () => {
+		const snapshot = lostSnapshot();
+		const sources = buildSources({
+			sources: [capSource("hdmi"), capSource("test")],
+			devices: [captureDevice("video0", "hdmi")],
+			networkIngest: NO_INGEST,
+			configSource: "video0",
+			lastSeenDevices: [snapshot],
+			sessionSnapshots: new Map([[snapshot.id, snapshot]]),
+		});
+		const live = sources.find((s) => s.id === "video0");
+		expect(live?.available).toBe(true);
+		expect(live?.lost).toBeUndefined();
+
+		const routed = resolveSourceRouting("video0", sources);
+		expect(routed).toEqual({
+			ok: true,
+			pipeline: "hdmi",
+			selected_video_input: "video0",
+		});
+	});
+
+	it("an absent id keeps unknown_source (semantics unchanged)", () => {
+		const sources = buildSources({
+			sources: [capSource("hdmi"), capSource("test")],
+			devices: [],
+			networkIngest: NO_INGEST,
+		});
+		expect(resolveSourceRouting("nope", sources)).toEqual({
+			ok: false,
+			error: UNKNOWN_SOURCE_ERROR,
+		});
 	});
 });
 

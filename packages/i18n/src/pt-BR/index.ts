@@ -235,6 +235,8 @@ const ptBR = {
 			streaming: "Pare a transmissão para alterar o codec de áudio",
 			noSource: "Selecione primeiro uma fonte de áudio",
 		},
+		audioCodecUnsupportedTransport:
+			"Este codec não é compatível com o transporte atual",
 		destination: "Destino",
 		destinationManaged: "Minha conta na nuvem",
 		destinationCustom: "Receptor personalizado",
@@ -245,6 +247,9 @@ const ptBR = {
 		destinationAddKey: "Adicionar chave",
 		latency: "Latência",
 		latencyNegotiated: "Negociada",
+		valueClamped: "Ajustado para {value}",
+		catalogDriftNote:
+			"A lista de servidores mudou desde que você abriu isto. Revise sua seleção antes de salvar.",
 		transportActive: "Ativo",
 		destinationCustomHint:
 			"Informe o endereço e a porta do seu próprio receptor.",
@@ -1076,6 +1081,10 @@ const ptBR = {
 		cannotStartNoPipeline:
 			"Selecione uma fonte de vídeo antes de iniciar a transmissão",
 		cannotStartNoServer: "Configure um servidor antes de iniciar a transmissão",
+		destinationSlotRevoked:
+			"Este slot de ingestão não está mais disponível — escolha outro destino",
+		destinationServerStale:
+			"Este servidor não está mais na lista do seu provedor",
 		startFailed: {
 			generic: "Falha ao iniciar a transmissão",
 			srt_connect_failed:
@@ -1092,6 +1101,14 @@ const ptBR = {
 				"O dispositivo de captura relatou um erro de vídeo. Reconecte-o e tente novamente.",
 			pipeline_stall:
 				"A fonte de entrada travou ao iniciar. Verifique a fonte e tente novamente.",
+			audio_source_probe_failed:
+				"A fonte de áudio selecionada não ficou disponível a tempo. Reconecte-a ou escolha outra fonte e tente novamente.",
+			audio_codec_unsupported_transport:
+				"Este codec de áudio não é compatível com o transporte atual. Altere o codec de áudio para AAC e tente novamente.",
+			source_lost:
+				"A fonte selecionada foi desconectada. Reconecte-a ou escolha outra fonte e tente novamente.",
+			source_unavailable:
+				"A fonte selecionada não está disponível no momento. Escolha outra fonte ou verifique suas configurações e tente novamente.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1279,6 +1296,7 @@ const ptBR = {
 			audioFollows: "O áudio seguirá {label} ao reiniciar",
 			switchTitle: "Trocar fonte",
 			autoPrefix: "Automático",
+			autoResolvedSep: "— atualmente:",
 		},
 		transcode: {
 			chip: "Entrada {input} \u2192 Saída {output}",
@@ -1317,7 +1335,7 @@ const ptBR = {
 				},
 				audio: {
 					title: "Áudio",
-					body: "A entrada de áudio e o codec incluídos na transmissão. As fontes disponíveis vêm do pipeline de vídeo selecionado; um pipeline sem suporte a áudio oculta estes controles.",
+					body: "O áudio incluído na sua transmissão, em três opções. Automático escolhe o melhor microfone ou o áudio incorporado para a fonte selecionada; Padrão da fonte usa o áudio integrado do motor para este pipeline; escolher um dispositivo nomeado sempre usa esse dispositivo. As fontes disponíveis vêm do pipeline de vídeo selecionado.",
 				},
 			},
 			tier: {
@@ -1353,6 +1371,8 @@ const ptBR = {
 			software: "Software",
 			bitrateRangeHint: "Faixa suportada",
 			bitrateClamped: "Ajustado para a faixa suportada",
+			sourceChangedNote:
+				"Fonte alterada — configurações atualizadas para a nova entrada.",
 			probedCaps: "Capacidades detectadas",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
@@ -1599,7 +1619,7 @@ const ptBR = {
 		sources: {
 			noAudio: "Sem áudio",
 			auto: "Automático (segue a fonte)",
-			pipelineDefault: "Padrão do pipeline",
+			pipelineDefault: "Padrão da fonte (o motor decide)",
 		},
 	},
 } satisfies Translation;

@@ -450,7 +450,8 @@ test.describe("Capability truthfulness (functional)", () => {
 	test("the H.265 codec option flips enabled ⇄ disabled-with-reason across the three capability snapshots", async ({
 		page,
 	}) => {
-		serverConfig();
+		// `source` un-gates the encoder-edit trigger (Task 18/19).
+		serverConfig({ source: "hdmi" });
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
 
@@ -736,7 +737,8 @@ test.describe("Capability truthfulness (functional)", () => {
 			}
 		});
 
-		serverConfig();
+		// `source` un-gates the encoder-edit trigger (Task 18/19).
+		serverConfig({ source: "hdmi" });
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
 
@@ -927,7 +929,7 @@ test.describe("Capability truthfulness (functional)", () => {
 		// the untranslated hardware device name.
 		await expect(page.getByRole("option", { name: "No audio" })).toBeVisible();
 		await expect(
-			page.getByRole("option", { name: "Pipeline default" }),
+			page.getByRole("option", { name: "Source default (engine decides)" }),
 		).toBeVisible();
 		await expect(page.getByRole("option", { name: "USB audio" })).toBeVisible();
 		await page.keyboard.press("Escape");
@@ -989,7 +991,14 @@ test.describe("Capability truthfulness (functional)", () => {
 	}) => {
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
-		serverConfig();
+		// Clear the seed's stale managed binding: the shared backend seed ships
+		// `relay_server: "srv-eu"`, an id ABSENT from the mock relay catalog. Config
+		// frames MERGE, so a bare serverConfig() leaves it in place and — once the
+		// catalog is delivered to the page — the C7 destination gate correctly WARNS
+		// on the stale server, making the Destination row `warn`, not `ok`. This test
+		// asserts an all-green custom (srtla_addr) endpoint, so it must clear the
+		// inherited managed binding (mirrors the `source: ""` reset the C3 test uses).
+		serverConfig({ relay_server: "" });
 		// BLOCKED: TWO capture sources and NO config.source → no sole-camera auto →
 		// the source gate blocks; it projects onto the ENCODER row, so that row is
 		// blocked and Start is disabled + reason (rows are always rendered — no collapse).
@@ -1017,11 +1026,39 @@ test.describe("Capability truthfulness (functional)", () => {
 		).toHaveCount(0);
 	});
 
+	// ── (C3) Encoder-row Edit is disabled-with-reason without an effective source ─
+	test("the encoder-row Edit is disabled-with-reason with no source selected and enables once a source is picked", async ({
+		page,
+	}) => {
+		send(GENERIC_PIPELINES);
+		sendFullCaps();
+		// Explicit empty source (the mock backend seeds one via legacy coercion and
+		// config frames MERGE, so an empty string is how a test represents "no source
+		// selected") + TWO captures → no sole-camera auto → no effective source. The
+		// encoder Edit is disabled-with-reason; the Destination row is not source-gated.
+		serverConfig({ source: "" });
+		sendSources([SRC_HDMI_CAP, SRC_RODE]);
+
+		const encoderEdit = page.getByTestId("open-encoder-dialog");
+		await expect(encoderEdit).toBeVisible({ timeout: 15_000 });
+		await expect(encoderEdit).toBeDisabled();
+		await expect(encoderEdit).toHaveAttribute("title", /\S/);
+		// The Destination row's Edit is never source-gated — it stays actionable.
+		await expect(page.getByTestId("open-server-dialog")).toBeEnabled();
+
+		// Select a source over the injected socket → an effective source resolves →
+		// the SAME Edit re-enables and drops its reason title.
+		serverConfig({ source: "video-hdmi" });
+		await expect(encoderEdit).toBeEnabled();
+		await expect(encoderEdit).not.toHaveAttribute("title", /.+/);
+	});
+
 	// ── (e) The migrated config-row testids still open their dialogs ────────────
 	test("the migrated open-encoder / open-audio / open-server-dialog rows still open their dialogs", async ({
 		page,
 	}) => {
-		serverConfig();
+		// `source` un-gates the encoder-edit trigger (Task 18/19).
+		serverConfig({ source: "hdmi" });
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
 
@@ -1041,7 +1078,8 @@ test.describe("Capability truthfulness (functional)", () => {
 	test("the removed mode-preset grid leaves no preset testids in the rebuilt encoder dialog", async ({
 		page,
 	}) => {
-		serverConfig();
+		// `source` un-gates the encoder-edit trigger (Task 18/19).
+		serverConfig({ source: "hdmi" });
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
 
@@ -1056,5 +1094,36 @@ test.describe("Capability truthfulness (functional)", () => {
 
 		await expect(page.locator('[data-testid="mode-presets"]')).toHaveCount(0);
 		await expect(page.locator('[data-testid="encoder-preset"]')).toHaveCount(0);
+	});
+
+	// ── (a, C5) Opus is disabled-with-reason over an MPEG-TS transport; AAC stays on ─
+	// Transport × audio-codec truthfulness (coherence-contract-pass todo 21): every
+	// relay transport CeraUI egresses over is an MPEG-TS carrier proven out only for
+	// AAC, so the AudioDialog codec picker renders Opus DISABLED with a non-empty
+	// reason (never hidden) while AAC stays selectable. Effective transport floors to
+	// srtla, matching the backend streaming.start gate.
+	test("the Opus audio codec is disabled-with-reason over srtla while AAC stays enabled", async ({
+		page,
+	}) => {
+		// An active audio source + a known srtla destination: the codec select is
+		// enabled (so it opens) and the gate has a transport to evaluate against.
+		serverConfig({ asrc: "USB audio", relay_protocol: "srtla" });
+		send(GENERIC_PIPELINES);
+		sendFullCaps();
+
+		await openConfigDialog(page, "open-audio-dialog");
+		const dialog = page.getByRole("dialog", { name: "Audio Settings" });
+		await expect(dialog).toBeVisible({ timeout: 15_000 });
+
+		await dialog.locator("#audioCodec").click();
+
+		const opus = page.getByRole("option", { name: "Opus" });
+		const aac = page.getByRole("option", { name: "AAC" });
+		await expect(opus).toBeVisible();
+		// Opus: disabled WITH a non-empty reason (never hidden).
+		await expect(opus).toHaveAttribute("data-disabled", "");
+		await expect(opus).toHaveAttribute("title", /\S/);
+		// AAC: the one proven codec — genuinely selectable, no disabled reason.
+		await expect(aac).not.toHaveAttribute("data-disabled", "");
 	});
 });

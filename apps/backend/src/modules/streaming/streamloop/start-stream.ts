@@ -26,10 +26,11 @@ import {
 } from "@ceralive/srtla-send/sender";
 import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../../helpers/config-schemas.ts";
+import { logger } from "../../../helpers/logger.ts";
 import { getConfig } from "../../config.ts";
 import { setup } from "../../setup.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
-import { asrcProbe } from "../audio.ts";
+import { asrcProbe, isPseudoAudioSource } from "../audio.ts";
 import {
 	buildAutoLaunchConfig,
 	resolveAutoAsrcFromLiveState,
@@ -42,6 +43,7 @@ import { embeddedAudioActive } from "../embedded-audio.ts";
 import { clearStreamProcessExit } from "../health.ts";
 import { srtlaStatsFile, startLinkTelemetry } from "../link-telemetry.ts";
 import type { Pipeline } from "../pipelines.ts";
+import { updateStatus } from "../streaming.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
 import { resolveProcessError } from "./process-error-patterns.ts";
@@ -52,12 +54,22 @@ export interface AudioProbeDeps {
 	networkEmbeddedAudio?: boolean;
 }
 
+// C7 dual-field rule: this one string is surfaced BOTH as the RPC `error`
+// (machine code) and the `reason` (looked up as `live.startFailed.<reason>`).
+export const AUDIO_SOURCE_PROBE_FAILED = "audio_source_probe_failed";
+
+export type StartStreamResult =
+	| { success: true }
+	| { success: false; error: string; reason: string };
+
 export async function maybeProbeAudioSource(
 	pipeline: Pipeline,
 	config: RuntimeConfig,
 	deps: AudioProbeDeps = {},
 ): Promise<boolean> {
 	if (!pipeline.supportsAudio || !config.asrc) return true;
+	// A pipeline pseudo-source is not a device — never probe (nor probe-fail) it.
+	if (isPseudoAudioSource(config.asrc)) return true;
 	const networkEmbeddedAudio =
 		deps.networkEmbeddedAudio ?? getLastCapabilities()?.network_embedded_audio;
 	if (embeddedAudioActive(pipeline.audio_kind, networkEmbeddedAudio)) {
@@ -90,7 +102,8 @@ export async function startStream(
 	srtlaAddr: string,
 	srtlaPort: number,
 	streamid: string,
-) {
+	audioDeps: AudioProbeDeps = {},
+): Promise<StartStreamResult> {
 	const config = getConfig();
 	const launchConfig = resolveLaunchConfig(config);
 	getStreamingBackend().setBitrate(launchConfig);
@@ -99,7 +112,20 @@ export async function startStream(
 	// health rollup tracks this new session (ADR-0005 observe-and-notify).
 	clearStreamProcessExit();
 
-	if (!(await maybeProbeAudioSource(pipeline, launchConfig))) return;
+	if (!(await maybeProbeAudioSource(pipeline, launchConfig, audioDeps))) {
+		// Audio source never came online (probe timed out or was stopped mid-wait).
+		// No srtla_send has spawned yet, so clear the caller's optimistic streaming
+		// flag and surface the dual-field reason instead of aborting silently.
+		updateStatus(false);
+		logger.warn("startStream: audio source probe failed; aborting start", {
+			asrc: launchConfig.asrc,
+		});
+		return {
+			success: false,
+			error: AUDIO_SOURCE_PROBE_FAILED,
+			reason: AUDIO_SOURCE_PROBE_FAILED,
+		};
+	}
 	const statsFile = srtlaStatsFile();
 	// ADR-001 control socket: telemetry rides the JSON-RPC subscription when the
 	// sender advertises it, with --stats-file as the airtight fallback poll.
@@ -146,4 +172,6 @@ export async function startStream(
 		streamid,
 		reducedPacketSize: hasLowMtu(),
 	});
+
+	return { success: true };
 }

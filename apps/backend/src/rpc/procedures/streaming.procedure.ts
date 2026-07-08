@@ -5,7 +5,9 @@
 
 import { CerastreamRpcError } from "@ceralive/cerastream";
 import {
+	AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
 	AUDIO_SOURCE_AUTO,
+	audioCodecAllowedForTransport,
 	audioCodecsMessageSchema,
 	bitrateInputSchema,
 	bitrateOutputSchema,
@@ -21,6 +23,8 @@ import {
 	type StreamingConfigInput,
 	SWITCH_AUDIO_ERRORS,
 	type SwitchInputOutput,
+	setMockDeviceAttachedInputSchema,
+	setMockDeviceAttachedOutputSchema,
 	setMockHardwareInputSchema,
 	setMockHardwareOutputSchema,
 	setSourceVisibilityInputSchema,
@@ -47,6 +51,7 @@ import {
 	clearMockStreamError,
 	getInjectedMockStreamError,
 	isMockGatewayActive,
+	setMockDeviceAttached,
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { reportActiveProfile } from "../../modules/remote-control/active-profile-reporter.ts";
@@ -80,6 +85,7 @@ import {
 	getSourcesMessage,
 	type ResolveSourceRoutingResult,
 	resolveSourceRouting,
+	UNKNOWN_SOURCE_ERROR,
 } from "../../modules/streaming/sources.ts";
 import {
 	getIsStreaming,
@@ -151,7 +157,17 @@ export const streamingStartProcedure = authedProcedure
 					getSourcesMessage().sources,
 				);
 				if (!routed.ok) {
-					return { success: false, is_streaming: false, error: routed.error };
+					// source_lost / source_unavailable carry `reason` too (same code) so
+					// LiveView's reason→startFailed.* lookup renders specific copy;
+					// unknown_source stays error-only (its semantics are unchanged).
+					return {
+						success: false,
+						is_streaming: false,
+						error: routed.error,
+						...(routed.error === UNKNOWN_SOURCE_ERROR
+							? {}
+							: { reason: routed.error }),
+					};
 				}
 				applied.pipeline = routed.pipeline;
 				applied.selected_video_input = routed.selected_video_input;
@@ -192,6 +208,28 @@ export const streamingStartProcedure = authedProcedure
 				}
 			}
 
+			// Transport × audio-codec coherence gate (C5). Every relay transport is
+			// an MPEG-TS carrier, so only AAC-in-TS is proven end-to-end; refuse an
+			// effective codec the effective transport can't carry at START — config
+			// SAVES stay permitted (mirrors the pipeline_not_in_offered_set gate).
+			// Dual-field: `error` for the structured branch, `reason` for the T16
+			// startFailed.* i18n lookup.
+			const effectiveAcodec = applied.acodec ?? getConfig().acodec;
+			if (effectiveAcodec !== undefined) {
+				const effectiveTransport =
+					applied.relay_protocol ?? getConfig().relay_protocol ?? "srtla";
+				if (
+					!audioCodecAllowedForTransport(effectiveAcodec, effectiveTransport)
+				) {
+					return {
+						success: false,
+						is_streaming: false,
+						error: AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
+						reason: AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
+					};
+				}
+			}
+
 			try {
 				if (shouldUseMocks()) {
 					// A test-injected Tier-2 error stands in for the engine refusing the
@@ -223,10 +261,18 @@ export const streamingStartProcedure = authedProcedure
 				// The existing start function handles validation and config saving.
 				// Pass the clamped copy so the persisted config matches the applied
 				// state we report back.
-				await startStream(
+				const startResult = await startStream(
 					context.ws as unknown as import("ws").default,
 					applied,
 				);
+				if (startResult && !startResult.success) {
+					return {
+						success: false,
+						is_streaming: false,
+						error: startResult.error,
+						reason: startResult.reason,
+					};
+				}
 				return { success: true, is_streaming: getIsStreaming(), applied };
 			} catch (error) {
 				return {
@@ -338,7 +384,7 @@ export const getConfigProcedure = authedProcedure
 		return {
 			asrc: config.asrc,
 			max_br,
-			acodec: config.acodec as "opus" | "aac" | "pcm" | undefined,
+			acodec: config.acodec,
 			delay: config.delay,
 			pipeline,
 			srt_latency: config.srt_latency,
@@ -614,6 +660,25 @@ export const setMockHardwareProcedure = authedProcedure
 			success: false,
 			error: `Invalid hardware type: ${input.hardware}`,
 		};
+	});
+
+/**
+ * Detach/reattach one mock capture device by input_id (dev-only). Drives the
+ * single-device unplug/replug seam so e2e can exercise the lost-row grace state
+ * and the shared source_lost start rejection.
+ */
+export const setMockDeviceAttachedProcedure = authedProcedure
+	.input(setMockDeviceAttachedInputSchema)
+	.output(setMockDeviceAttachedOutputSchema)
+	.handler(({ input }) => {
+		if (!shouldUseMocks()) {
+			return {
+				success: false,
+				error: "Mock device attach/detach only available in development mode",
+			};
+		}
+		setMockDeviceAttached(input.input_id, input.attached);
+		return { success: true };
 	});
 
 /**

@@ -2,6 +2,7 @@ import type {
 	CapabilitiesMessage,
 	ConfigMessage,
 	NetifMessage,
+	RelayMessage,
 	SourcesMessage,
 	StreamSource,
 } from "@ceraui/rpc/schemas";
@@ -12,6 +13,8 @@ import {
 	type GoLiveGateKey,
 	type GoLiveReadinessInput,
 	READINESS_DESTINATION_REASON,
+	READINESS_DESTINATION_SERVER_STALE_REASON,
+	READINESS_DESTINATION_SLOT_REVOKED_REASON,
 	READINESS_ENGINE_SCHEMA_REASON,
 	READINESS_ENGINE_STARTING_REASON,
 	READINESS_ENGINE_UNAVAILABLE_REASON,
@@ -19,6 +22,7 @@ import {
 	READINESS_SOURCE_REASON,
 } from "./go-live-readiness";
 import type { PipelineAvailability } from "./pipelineAvailability";
+import type { ManagedIngestAccount } from "./receiver-experience";
 
 // The gateway-inactive reason the sources builder (T2) and pipelineAvailability
 // both emit — the exact string the QA failure scenario asserts.
@@ -80,6 +84,27 @@ function source(
 
 function sources(entries: StreamSource[]): SourcesMessage {
 	return { hardware: "generic", sources: entries };
+}
+
+/** A loaded relays catalog carrying exactly the given server ids. */
+function relays(...ids: string[]): RelayMessage {
+	const servers: Record<string, unknown> = {};
+	for (const id of ids) {
+		servers[id] = { name: id, addr: `${id}.example.net`, port: 5000 };
+	}
+	return { servers } as RelayMessage;
+}
+
+/** A minimal managed ingest slot keyed by its stable endpointId. */
+function slot(endpointId: string): ManagedIngestAccount {
+	return {
+		endpointId,
+		host: `${endpointId}.ingest.example.net`,
+		port: 5000,
+		protocol: "srtla",
+		key: `key-${endpointId}`,
+		label: endpointId,
+	};
 }
 
 const NETIF_UP: NetifMessage = {
@@ -312,6 +337,94 @@ describe("destination gate", () => {
 			reasonKey: READINESS_DESTINATION_REASON,
 			fix: "openServer",
 		});
+	});
+});
+
+// ── Destination gate — catalog validation (C7) ──────────────────────────────
+describe("destination gate — revoked managed ingest slot (C7)", () => {
+	it("blocked — selected slot absent from the LOADED slot list (revoked)", () => {
+		const readiness = deriveGoLiveReadiness({
+			...greenInput(),
+			config: cfg({ source: "cam0", selected_ingest_endpoint: "slot-7" }),
+			managedSlots: [slot("slot-1"), slot("slot-2")],
+		});
+		expect(readiness.gates.destination).toEqual({
+			state: "blocked",
+			reasonKey: READINESS_DESTINATION_SLOT_REVOKED_REASON,
+			fix: "openServer",
+		});
+		expect(readiness.blocking).toBe(true);
+		expect(readiness.primaryFixGate).toBe("destination");
+	});
+
+	it("ok — selected slot present in the loaded slot list", () => {
+		const { gates } = deriveGoLiveReadiness({
+			...greenInput(),
+			config: cfg({ source: "cam0", selected_ingest_endpoint: "slot-7" }),
+			managedSlots: [slot("slot-7")],
+		});
+		expect(gates.destination.state).toBe("ok");
+	});
+
+	it("ok — selected slot but slot list undefined (loading/federation, fail-open)", () => {
+		const { gates } = deriveGoLiveReadiness({
+			...greenInput(),
+			config: cfg({ source: "cam0", selected_ingest_endpoint: "slot-7" }),
+			managedSlots: undefined,
+		});
+		expect(gates.destination.state).toBe("ok");
+	});
+});
+
+describe("destination gate — stale relay id (C7)", () => {
+	it("warn — relay_server absent from the LOADED catalog; blocking stays false", () => {
+		const readiness = deriveGoLiveReadiness({
+			...greenInput(),
+			config: cfg({ source: "cam0", relay_server: "srv-gone" }),
+			relays: relays("srv-1", "srv-2"),
+		});
+		expect(readiness.gates.destination).toEqual({
+			state: "warn",
+			reasonKey: READINESS_DESTINATION_SERVER_STALE_REASON,
+			fix: "openServer",
+		});
+		expect(readiness.blocking).toBe(false);
+		expect(readiness.primaryFixGate).toBeUndefined();
+	});
+
+	it("ok — relay_server present in the loaded catalog", () => {
+		const { gates } = deriveGoLiveReadiness({
+			...greenInput(),
+			config: cfg({ source: "cam0", relay_server: "srv-1" }),
+			relays: relays("srv-1"),
+		});
+		expect(gates.destination.state).toBe("ok");
+	});
+
+	it("ok — relay_server but catalog undefined (loading/federation, presence-only)", () => {
+		const { gates } = deriveGoLiveReadiness({
+			...greenInput(),
+			config: cfg({ source: "cam0", relay_server: "srv-gone" }),
+			relays: undefined,
+		});
+		expect(gates.destination.state).toBe("ok");
+	});
+
+	it("revoked slot (blocked) wins over a stale relay (warn) when both apply", () => {
+		const readiness = deriveGoLiveReadiness({
+			...greenInput(),
+			config: cfg({
+				source: "cam0",
+				relay_server: "srv-gone",
+				selected_ingest_endpoint: "slot-7",
+			}),
+			relays: relays("srv-1"),
+			managedSlots: [slot("slot-1")],
+		});
+		expect(readiness.gates.destination.state).toBe("blocked");
+		expect(readiness.gates.destination.reasonKey).toBe(
+			READINESS_DESTINATION_SLOT_REVOKED_REASON,
+		);
 	});
 });
 

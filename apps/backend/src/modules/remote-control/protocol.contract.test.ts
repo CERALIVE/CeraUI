@@ -1,18 +1,37 @@
 /**
- * Contract test for the Remote Control Plane v2.0 wire envelope (Task 6).
+ * Contract test for the Remote Control Plane v2.0 wire envelope (device side).
  *
- * The conformance vectors are the §14 JSON fixtures from
- * `openspec/specs/remote-relay-support/spec.md`. They are INLINED verbatim here
- * rather than read from the spec file: CeraUI is built and tested standalone in
- * CI, where the `ceralive/` workspace parent (and `openspec/`) does not exist
- * (Rule D — repos are self-contained; a test MUST NOT read above its checkout
- * root). The spec itself permits inlining the fixtures.
+ * The conformance vectors are now sourced from the canonical
+ * `@ceralive/control-protocol` package (`/fixtures` — the §14 JSON vectors,
+ * verbatim, with the two documented spec.md defects corrected). CeraUI consumes
+ * the package as a pinned CalVer registry dependency, so these vectors resolve
+ * standalone in CI without needing the `ceralive/` workspace parent or `openspec/`
+ * checked out (Rule-D-compatible — a registry dep, not a `../` path reference).
  *
- * Each fixture is asserted to parse with its matching schema; invalid frames
- * (missing `v`, unknown `kind`) are asserted to reject with a ZodError.
+ * The SCHEMAS under test are the device's own re-exports from `./protocol.ts` —
+ * the DEVICE-TOLERANT variants of the shared package. Each fixture is asserted to
+ * parse with its matching device schema; invalid frames (missing `v`, unknown
+ * `kind`) are asserted to reject with a ZodError.
  */
 
 import { describe, expect, it } from "bun:test";
+import {
+	FIXTURE_14_1,
+	FIXTURE_14_2,
+	FIXTURE_14_3,
+	FIXTURE_14_4,
+	FIXTURE_14_5,
+	FIXTURE_14_6,
+	FIXTURE_14_7,
+	FIXTURE_14_8,
+	FIXTURE_14_9,
+	FIXTURE_14_10,
+	FIXTURE_14_11,
+	FIXTURE_14_12,
+	FIXTURE_14_13,
+	FIXTURE_14_14,
+	FIXTURE_14_17,
+} from "@ceralive/control-protocol/fixtures";
 import { ZodError } from "zod";
 
 import {
@@ -28,47 +47,7 @@ import {
 	StatusSchema,
 } from "./protocol.ts";
 
-// ── §14 wire fixtures (verbatim from spec.md) ──────────────────────────────
-
-/** §14.1 Minimal valid envelope */
-const FIXTURE_14_1 = {
-	v: 1,
-	kind: "command",
-	type: "streaming.getConfig",
-	cid: "9b2c5e7a-1f3d-4a8b-bc6e-2d4f6a8c0e12",
-};
-
-/** §14.2 Handshake — device hello */
-const FIXTURE_14_2 = {
-	v: 1,
-	kind: "handshake",
-	type: "device.hello",
-	cid: "1a4d8f02-7c3e-4b1a-9e2d-5f6a7b8c9d0e",
-	payload: {
-		v: 1,
-		supportedTypes: [
-			"streaming.start",
-			"streaming.stop",
-			"streaming.setBitrate",
-			"streaming.setConfig",
-			"streaming.getConfig",
-			"streaming.getPipelines",
-			"network.reconfig",
-			"modem.reconfig",
-			"device.remoteKeyChange",
-			"system.reboot",
-			"device.factoryReset",
-			"self_fencing.confirm",
-		],
-		deviceCaps: {
-			ceraui_version: "2026.6.1",
-			config_schema_version: 3,
-			engine: "cerastream",
-			selfFencing: true,
-			maxBitrateBps: 12000000,
-		},
-	},
-};
+// ── Device-specific safe-rollout variant (NOT a §14 package fixture) ───────────
 
 /** §14.2 variant — a not-yet-updated device omits the version caps (safe-rollout tolerance). */
 const FIXTURE_14_2_NO_VERSION = {
@@ -83,169 +62,7 @@ const FIXTURE_14_2_NO_VERSION = {
 			engine: "cerastream",
 		},
 	},
-};
-
-/** §14.3 Handshake — hub hello */
-const FIXTURE_14_3 = {
-	v: 1,
-	kind: "handshake",
-	type: "hub.hello",
-	cid: "2b5e9a13-8d4f-4c2b-af3e-6a7b8c9d0e1f",
-	payload: {
-		v: 1,
-		role: "owner",
-	},
-};
-
-/** §14.4 Handshake — version mismatch ack */
-const FIXTURE_14_4 = {
-	v: 1,
-	kind: "ack",
-	type: "version.mismatch",
-	cid: "3c6f0b24-9e5a-4d3c-b04f-7b8c9d0e1f2a",
-	payload: {
-		supported: [1],
-	},
-};
-
-/** §14.5 Command — streaming.getConfig */
-const FIXTURE_14_5 = {
-	v: 1,
-	kind: "command",
-	type: "streaming.getConfig",
-	cid: "4d70a135-0f6b-4e4d-815a-8c9d0e1f2a3b",
-	payload: {},
-};
-
-/** §14.6 Command — streaming.setBitrate */
-const FIXTURE_14_6 = {
-	v: 1,
-	kind: "command",
-	type: "streaming.setBitrate",
-	cid: "a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
-	payload: {
-		bitrate_bps: 6000000,
-	},
-};
-
-/** §14.7 Result — success */
-const FIXTURE_14_7 = {
-	v: 1,
-	kind: "result",
-	type: "streaming.getConfig",
-	cid: "4d70a135-0f6b-4e4d-815a-8c9d0e1f2a3b",
-	payload: {
-		ok: true,
-		applied: {
-			max_br: 8000,
-			encoder: "cerastream",
-			delay: 2000,
-		},
-	},
-};
-
-/** §14.8 Result — error */
-const FIXTURE_14_8 = {
-	v: 1,
-	kind: "result",
-	type: "streaming.setBitrate",
-	cid: "a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
-	payload: {
-		ok: false,
-		applied: null,
-		error: "not_streaming",
-	},
-};
-
-/** §14.9 self_fencing — revertible command (network.reconfig) */
-const FIXTURE_14_9 = {
-	v: 1,
-	kind: "command",
-	type: "network.reconfig",
-	cid: "5e81b246-1a7c-4f5e-9261-9d0e1f2a3b4c",
-	self_fencing: true,
-	payload: {
-		iface: "eth0",
-		dhcp: false,
-		address: "192.168.1.50/24",
-		gateway: "192.168.1.1",
-	},
-};
-
-/** §14.10 self_fencing — confirm */
-const FIXTURE_14_10 = {
-	v: 1,
-	kind: "command",
-	type: "self_fencing.confirm",
-	cid: "5e81b246-1a7c-4f5e-9261-9d0e1f2a3b4c",
-};
-
-/** §14.11 self_fencing — auto-reverted result */
-const FIXTURE_14_11 = {
-	v: 1,
-	kind: "result",
-	type: "network.reconfig",
-	cid: "5e81b246-1a7c-4f5e-9261-9d0e1f2a3b4c",
-	payload: {
-		ok: true,
-		applied: null,
-		reverted: true,
-	},
-};
-
-/** §14.12 self_fencing — non-revertible command (system.reboot) */
-const FIXTURE_14_12 = {
-	v: 1,
-	kind: "command",
-	type: "system.reboot",
-	cid: "b2c3d4e5-6f70-4b8c-9d0e-1f2a3b4c5d6e",
-	self_fencing: true,
-};
-
-/** §14.13 Status frame */
-const FIXTURE_14_13 = {
-	v: 1,
-	kind: "status",
-	type: "status",
-	cid: "6f92c357-2b8d-4a6f-a372-0e1f2a3b4c5d",
-	seq: 42,
-	payload: {
-		is_streaming: true,
-		max_br: 8000,
-		linkTelemetry: {
-			links: [
-				{
-					conn_id: "0",
-					iface: "eth0",
-					rtt_ms: 0,
-					nak_count: 3,
-					weight_percent: 100,
-					stale: false,
-				},
-			],
-		},
-	},
-};
-
-/** §14.14 Forbidden command ack (never-remote) */
-const FIXTURE_14_14 = {
-	v: 1,
-	kind: "ack",
-	type: "command.forbidden",
-	cid: "c3d4e5f6-7081-4c9d-8e1f-2a3b4c5d6e7f",
-	payload: {
-		rejected: "auth.login",
-		reason: "never_remote",
-	},
-};
-
-/** §14.17 Delivery acknowledgement */
-const FIXTURE_14_17 = {
-	v: 1,
-	kind: "delivery.ack",
-	type: "streaming.setConfig",
-	cid: "9b2c5e7a-1f3d-4a8b-bc6e-2d4f6a8c0e12",
-};
+} as const;
 
 describe("control-plane protocol — §14 wire fixtures parse", () => {
 	it("§14.1 minimal valid envelope parses as base Envelope and Command", () => {

@@ -31,6 +31,7 @@ import {
 	reloadAudioDelayProcedure,
 	setBitrateProcedure,
 	setConfigProcedure,
+	setMockDeviceAttachedProcedure,
 	setMockHardwareProcedure,
 	setSourceVisibilityProcedure,
 	streamingStartProcedure,
@@ -115,6 +116,11 @@ const MUTATIONS: ReadonlyArray<{
 		name: "setMockHardware",
 		procedure: setMockHardwareProcedure,
 		args: { hardware: "generic" },
+	},
+	{
+		name: "setMockDeviceAttached",
+		procedure: setMockDeviceAttachedProcedure,
+		args: { input_id: "video0", attached: true },
 	},
 ];
 

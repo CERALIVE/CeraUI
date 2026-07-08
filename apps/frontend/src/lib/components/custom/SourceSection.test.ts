@@ -894,12 +894,12 @@ describe("SourceSection — typed audio-source model (Task 13)", () => {
 			'[data-testid="audio-source-readonly"]',
 		);
 		expect(readonly).not.toBeNull();
-		expect(readonly?.textContent).toContain("Pipeline default");
+		expect(readonly?.textContent).toContain("Source default (engine decides)");
 	});
 });
 
 describe("SourceSection — Auto resolved preview (T6)", () => {
-	it("renders the 'Auto → device' resolved line when Auto is active and resolved", () => {
+	it("renders the 'Auto — currently: device' resolved line when Auto is active and resolved", () => {
 		const { container } = mount({
 			config: { asrc: AUDIO_SOURCE_AUTO },
 			audioSources: ["USB audio", "HDMI"],
@@ -909,7 +909,7 @@ describe("SourceSection — Auto resolved preview (T6)", () => {
 			'[data-testid="audio-source-auto-resolved"]',
 		);
 		expect(line).not.toBeNull();
-		expect(line?.textContent).toContain("Auto \u2192 USB audio");
+		expect(line?.textContent).toContain("Auto \u2014 currently: USB audio");
 	});
 
 	it("renders an em-dash when Auto is active but unresolved (old backend)", () => {
@@ -1011,7 +1011,7 @@ describe("SourceSection — source×audio mixture matrix (M1–M6)", () => {
 		).toBeNull();
 	});
 
-	it("M3: dual-USB Auto resolves to the cam's own audio → 'Auto → device'", () => {
+	it("M3: dual-USB Auto resolves to the cam's own audio → 'Auto — currently: device'", () => {
 		const { container } = mount({
 			config: { asrc: AUDIO_SOURCE_AUTO },
 			audioSources: ["RØDE Streamer Mic", "Elgato Wave:3"],
@@ -1020,10 +1020,12 @@ describe("SourceSection — source×audio mixture matrix (M1–M6)", () => {
 		const line = container.querySelector<HTMLElement>(
 			'[data-testid="audio-source-auto-resolved"]',
 		);
-		expect(line?.textContent).toContain("Auto \u2192 RØDE Streamer Mic");
+		expect(line?.textContent).toContain(
+			"Auto \u2014 currently: RØDE Streamer Mic",
+		);
 	});
 
-	it("M4: HDMI video → 'Auto → HDMI'", () => {
+	it("M4: HDMI video → 'Auto — currently: HDMI'", () => {
 		const { container } = mount({
 			config: { asrc: AUDIO_SOURCE_AUTO },
 			audioSources: ["HDMI"],
@@ -1032,7 +1034,7 @@ describe("SourceSection — source×audio mixture matrix (M1–M6)", () => {
 		const line = container.querySelector<HTMLElement>(
 			'[data-testid="audio-source-auto-resolved"]',
 		);
-		expect(line?.textContent).toContain("Auto \u2192 HDMI");
+		expect(line?.textContent).toContain("Auto \u2014 currently: HDMI");
 	});
 
 	it("M5: a disappeared selection renders the unavailable marker (config not mutated)", () => {
@@ -1047,11 +1049,11 @@ describe("SourceSection — source×audio mixture matrix (M1–M6)", () => {
 		expect(setConfig).not.toHaveBeenCalled();
 	});
 
-	it("M6: test-pattern/virtual → pipeline default read-only", () => {
+	it("M6: test-pattern/virtual → source default read-only", () => {
 		const { container } = mount({ audioSources: ["Pipeline default"] });
 		const readonly = container.querySelector<HTMLElement>(
 			'[data-testid="audio-source-readonly"]',
 		);
-		expect(readonly?.textContent).toContain("Pipeline default");
+		expect(readonly?.textContent).toContain("Source default (engine decides)");
 	});
 });

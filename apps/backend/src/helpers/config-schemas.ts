@@ -43,8 +43,10 @@
 import {
 	AddonConfigSchema,
 	AUDIO_SOURCE_AUTO,
+	audioCodecSchema,
 	type DetectionMethod,
 	detectionMethodSchema,
+	deviceKindSchema,
 	isNamespacedRelayId,
 	kioskDisplaySchema,
 	kioskPerformanceSchema,
@@ -67,6 +69,7 @@ export type { DetectionMethod, RelayProtocol };
 // Re-export the relay-id namespacing helpers so backend consumers resolve them
 // from the config layer rather than reaching into @ceraui/rpc directly.
 export {
+	audioCodecSchema,
 	detectionMethodSchema,
 	isNamespacedRelayId,
 	namespacedRelayId,
@@ -98,7 +101,13 @@ export const providerSelectionSchema = z.enum([
 	"custom",
 ]);
 
-export const audioCodecSchema = z.enum(["opus", "aac", "pcm"]);
+// Legacy-tolerant wrapper for the runtime config `acodec` field: coerceLegacyAcodec
+// remaps a retired "pcm" (C5) to "aac" before the strict @ceraui/rpc enum
+// validates. Mirrors legacyTolerantStreamingEngineSchema below.
+const legacyTolerantAudioCodecSchema = z.preprocess(
+	coerceLegacyAcodec,
+	audioCodecSchema,
+);
 
 // Video resolution/framerate presets — mirror the @ceraui/rpc streaming schema
 // enums so persisted config round-trips cleanly.
@@ -139,6 +148,21 @@ export type VideoCodec = z.infer<typeof videoCodecSchema>;
 export const balancerSchema = z.enum(["adaptive", "fixed", "aimd"]);
 
 export type Balancer = z.infer<typeof balancerSchema>;
+
+// One persisted last-seen capture-device snapshot (C7 lost-device retention),
+// carrying exactly the fields `captureSourceSchema` needs to synthesize a `lost`
+// row: `devicePath` is REQUIRED there, and `pipelineId` is the
+// `deviceKindToPipelineId()` bridge resolved at observation time (only bridgeable
+// video devices are ever snapshotted).
+export const lastSeenDeviceSchema = z.object({
+	id: z.string(),
+	displayName: z.string(),
+	kind: deviceKindSchema,
+	pipelineId: z.string(),
+	devicePath: z.string(),
+});
+
+export type LastSeenDevice = z.infer<typeof lastSeenDeviceSchema>;
 
 export const runtimeConfigSchema = z.object({
 	// Authentication
@@ -184,7 +208,7 @@ export const runtimeConfigSchema = z.object({
 
 	// Audio settings
 	asrc: z.string().optional(),
-	acodec: audioCodecSchema.optional(),
+	acodec: legacyTolerantAudioCodecSchema.optional(),
 
 	// Video/streaming settings
 	bitrate_overlay: z.boolean().optional(),
@@ -207,6 +231,12 @@ export const runtimeConfigSchema = z.object({
 	// first). Persisted so a device-first reorder survives reload; setConfig
 	// writes it, getConfig echoes it. Additive-optional.
 	source_preference: z.array(z.string()).optional(),
+	// Last-seen capture-device snapshots (C7): deduped-by-id, LRU-capped at 12
+	// with the current `config.source` id eviction-exempt. Serves the
+	// across-restart lost-row case (a configured device unplugged before boot);
+	// an in-session lost row is served by the uncapped in-memory session map, not
+	// this list. Additive-optional; defaults `[]` so old configs parse.
+	last_seen_devices: z.array(lastSeenDeviceSchema).optional(),
 	autostart: z.boolean().optional(),
 
 	// Remote/cloud settings
@@ -277,6 +307,7 @@ export const RUNTIME_CONFIG_DEFAULTS: Partial<RuntimeConfig> = {
 	kiosk_motion: true,
 	kiosk_performance: "balanced",
 	addons: {},
+	last_seen_devices: [],
 };
 
 export const DEFAULT_RELAY_PROVIDER_ID = "ceralive";
@@ -329,6 +360,21 @@ export function coerceLegacySource(config: RuntimeConfig): RuntimeConfig {
 		)} from legacy pipeline/selected_video_input for the device-first source model`,
 	);
 	return { ...config, source: derived };
+}
+
+// Legacy audio-codec coercion (C5): a persisted, retired `acodec: "pcm"` maps to
+// "aac" with one warning; every other value passes through untouched for the
+// strict enum to validate. Wired into runtimeConfigSchema's acodec preprocess so
+// a legacy pcm config loads clean instead of dropping the field. Pure, log-once
+// — mirrors coerceLegacySource's boot-tolerant contract.
+export function coerceLegacyAcodec(raw: unknown): unknown {
+	if (raw === "pcm") {
+		logger.warn(
+			'config.json: audio codec "pcm" is retired — coercing to "aac" (C5)',
+		);
+		return "aac";
+	}
+	return raw;
 }
 
 // =============================================================================

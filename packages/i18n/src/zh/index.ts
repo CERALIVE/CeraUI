@@ -81,6 +81,7 @@ const zh = {
 			streaming: "停止推流后才能更改音频编解码器",
 			noSource: "请先选择音频源",
 		},
+		audioCodecUnsupportedTransport: "当前传输方式不支持此编解码器",
 		destination: "目标",
 		destinationManaged: "我的云账户",
 		destinationCustom: "自定义接收器",
@@ -90,6 +91,8 @@ const zh = {
 		destinationAddKey: "添加密钥",
 		latency: "延迟",
 		latencyNegotiated: "已协商",
+		valueClamped: "已调整为 {value}",
+		catalogDriftNote: "自您打开后服务器列表已更改。保存前请检查您的选择。",
 		transportActive: "活跃",
 		transportKind: "传输",
 		remoteControl: {
@@ -874,6 +877,8 @@ const zh = {
 		stopToChange: "停止直播以更改",
 		cannotStartNoPipeline: "开始直播前请选择视频源",
 		cannotStartNoServer: "开始直播前请配置服务器",
+		destinationSlotRevoked: "此接入槽位已不可用 — 请选择其他目标",
+		destinationServerStale: "此服务器已不在您的提供商列表中",
 		startFailed: {
 			generic: "启动直播失败",
 			srt_connect_failed:
@@ -885,6 +890,12 @@ const zh = {
 			capture_audio_error: "采集设备报告音频错误。请重新连接后重试。",
 			capture_video_error: "采集设备报告视频错误。请重新连接后重试。",
 			pipeline_stall: "启动时输入源停滞。请检查输入源后重试。",
+			audio_source_probe_failed:
+				"所选音频源未及时上线。请重新连接或选择其他音频源后重试。",
+			audio_codec_unsupported_transport:
+				"当前传输方式不支持此音频编解码器。请将音频编解码器切换为 AAC 后重试。",
+			source_lost: "所选源已断开连接。请重新连接或选择其他源后重试。",
+			source_unavailable: "所选源当前不可用。请选择其他源或检查其设置后重试。",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1064,6 +1075,7 @@ const zh = {
 			audioFollows: "重启后音频将切换到 {label}",
 			switchTitle: "切换源",
 			autoPrefix: "自动",
+			autoResolvedSep: "— 当前：",
 		},
 		transcode: {
 			chip: "输入 {input} \u2192 输出 {output}",
@@ -1102,7 +1114,7 @@ const zh = {
 				},
 				audio: {
 					title: "音频",
-					body: "并入流中的音频输入和编解码器。可用来源来自所选的视频管线；不支持音频的管线会隐藏这些控件。",
+					body: "并入流中的音频，共三种选择。“自动”为所选来源挑选最佳麦克风或内嵌音频；“来源默认”使用引擎为该管线内置的音频；选择某个具名设备则始终使用该设备。可用来源来自所选的视频管线。",
 				},
 			},
 			tier: {
@@ -1138,6 +1150,7 @@ const zh = {
 			software: "软件",
 			bitrateRangeHint: "支持范围",
 			bitrateClamped: "已调整到支持范围",
+			sourceChangedNote: "源已更改 — 已为新输入更新设置。",
 			probedCaps: "检测到的能力",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
@@ -1501,7 +1514,7 @@ const zh = {
 		sources: {
 			noAudio: "无音频",
 			auto: "自动（跟随信号源）",
-			pipelineDefault: "管道默认",
+			pipelineDefault: "来源默认（由引擎决定）",
 		},
 	},
 } satisfies Translation;

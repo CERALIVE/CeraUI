@@ -202,6 +202,10 @@ const STREAM_START_REASON_KEYS = [
 	'capture_audio_error',
 	'capture_video_error',
 	'pipeline_stall',
+	'audio_source_probe_failed',
+	'audio_codec_unsupported_transport',
+	'source_lost',
+	'source_unavailable',
 ] as const;
 type StreamStartReasonKey = (typeof STREAM_START_REASON_KEYS)[number];
 
@@ -905,6 +909,8 @@ const configRows = $derived<ConfigRow[]>([
 			isConnected={getIsConnected()}
 			networkIngest={getStatus()?.network_ingest ?? null}
 			pipelines={getPipelines()?.pipelines}
+			{relays}
+			managedSlots={getManagedIngestAccounts()}
 			{configRows}
 			{isStreaming}
 			optimismState={streamingOptimismState}

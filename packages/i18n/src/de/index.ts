@@ -348,6 +348,10 @@ const de = {
 			"Wähle eine Videoquelle, bevor du den Stream startest",
 		cannotStartNoServer:
 			"Konfiguriere einen Server, bevor du den Stream startest",
+		destinationSlotRevoked:
+			"Dieser Ingest-Slot ist nicht mehr verfügbar — wähle ein anderes Ziel",
+		destinationServerStale:
+			"Dieser Server ist nicht mehr in der Liste deines Anbieters",
 		startFailed: {
 			generic: "Stream konnte nicht gestartet werden",
 			srt_connect_failed:
@@ -364,6 +368,14 @@ const de = {
 				"Das Aufnahmegerät meldete einen Videofehler. Schließe es erneut an und versuche es noch einmal.",
 			pipeline_stall:
 				"Die Eingangsquelle blockierte beim Start. Prüfe die Quelle und versuche es erneut.",
+			audio_source_probe_failed:
+				"Die ausgewählte Audioquelle wurde nicht rechtzeitig verfügbar. Schließe sie erneut an oder wähle eine andere Quelle und versuche es erneut.",
+			audio_codec_unsupported_transport:
+				"Dieser Audio-Codec wird vom aktuellen Transport nicht unterstützt. Stelle den Audio-Codec auf AAC und versuche es erneut.",
+			source_lost:
+				"Die ausgewählte Quelle wurde getrennt. Schließe sie wieder an oder wähle eine andere Quelle und versuche es erneut.",
+			source_unavailable:
+				"Die ausgewählte Quelle ist derzeit nicht verfügbar. Wähle eine andere Quelle oder überprüfe ihre Einstellungen und versuche es erneut.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -551,6 +563,7 @@ const de = {
 			audioFollows: "Ton folgt {label} beim Neustart",
 			switchTitle: "Quelle wechseln",
 			autoPrefix: "Automatisch",
+			autoResolvedSep: "— aktuell:",
 		},
 		transcode: {
 			chip: "Eingang {input} \u2192 Ausgang {output}",
@@ -589,7 +602,7 @@ const de = {
 				},
 				audio: {
 					title: "Audio",
-					body: "Der Audioeingang und der Codec, die in den Stream eingebunden werden. Verfügbare Quellen stammen aus der gewählten Video-Pipeline; eine Pipeline ohne Audio-Unterstützung blendet diese Steuerelemente aus.",
+					body: "Der in deinen Stream eingebundene Ton, mit drei Optionen. Automatisch wählt das beste Mikrofon oder den eingebetteten Ton für die gewählte Quelle; Quellenstandard nutzt den in der Engine integrierten Ton für diese Pipeline; ein benanntes Gerät verwendet immer genau dieses Gerät. Verfügbare Quellen stammen aus der gewählten Video-Pipeline.",
 				},
 			},
 			tier: {
@@ -625,6 +638,8 @@ const de = {
 			software: "Software",
 			bitrateRangeHint: "Unterstützter Bereich",
 			bitrateClamped: "An den unterstützten Bereich angepasst",
+			sourceChangedNote:
+				"Quelle geändert – Einstellungen für die neue Eingabe aktualisiert.",
 			probedCaps: "Erkannte Fähigkeiten",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
@@ -722,6 +737,8 @@ const de = {
 			streaming: "Stream beenden, um den Audio-Codec zu ändern",
 			noSource: "Zuerst eine Audioquelle auswählen",
 		},
+		audioCodecUnsupportedTransport:
+			"Dieser Codec wird vom aktuellen Transport nicht unterstützt",
 		destination: "Ziel",
 		destinationManaged: "Mein Cloud-Konto",
 		destinationCustom: "Eigener Empfänger",
@@ -732,6 +749,9 @@ const de = {
 		destinationAddKey: "Schlüssel hinzufügen",
 		latency: "Latenz",
 		latencyNegotiated: "Ausgehandelt",
+		valueClamped: "Angepasst auf {value}",
+		catalogDriftNote:
+			"Die Serverliste hat sich seit dem Öffnen geändert. Prüfe deine Auswahl vor dem Speichern.",
 		transportActive: "Aktiv",
 		destinationCustomHint:
 			"Gib Adresse und Port deines eigenen Empfängers ein.",
@@ -1610,7 +1630,7 @@ const de = {
 		sources: {
 			noAudio: "Kein Audio",
 			auto: "Auto (folgt der Quelle)",
-			pipelineDefault: "Pipeline-Standard",
+			pipelineDefault: "Quellenstandard (Engine entscheidet)",
 		},
 	},
 } satisfies Translation;

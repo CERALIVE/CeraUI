@@ -112,6 +112,10 @@ jobs:
         working-directory: CeraUI
         run: bunx biome check .
 
+      - name: RC-pin merge gate (no -rc. pin of @ceralive/{control-protocol,cerastream})
+        working-directory: CeraUI
+        run: bun run check:rc-pins
+
       - name: Exec-guard gate (S1/S2 — bare-exec + spawn-policy contract + registration)
         working-directory: CeraUI
         run: bun run --filter backend check:exec-guard

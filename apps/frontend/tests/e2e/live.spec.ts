@@ -72,6 +72,9 @@ test.describe('Live destination', () => {
 	}) => {
 		const live = new LivePage(page);
 		await live.open();
+		// Task 18/19: the audio surface is gated on an effective source — the default
+		// scenario seeds two captures with no config.source, so pick one first.
+		await live.selectSource();
 
 		// One audio surface (T11): exactly one affordance, inside the Source card.
 		const audioEdit = page.getByTestId('open-audio-dialog');
@@ -92,6 +95,10 @@ test.describe('Live destination', () => {
 		test(`${label} dialog opens and closes`, async ({ authedPage: page }) => {
 			const live = new LivePage(page);
 			await live.open();
+			// Task 18/19: Encoder-row Edit is disabled and the audio surface hidden
+			// until an effective source exists; the Server dialog is not source-gated
+			// but selecting a source first is harmless there.
+			await live.selectSource();
 
 			await live[openFn]();
 			// Dialog visible + >=1 interactive element present (open/close scope).

@@ -501,7 +501,13 @@ test.describe('conditional-display state lock (T11)', () => {
 		await attachWs(page, {
 			mutateInbound: (frame) => {
 				const config = frame.config as Frame | undefined;
-				if (config) delete config.pipeline;
+				if (config) {
+					delete config.pipeline;
+					// An effective source (Task 18/19) un-hides the audio surface so
+					// open-audio-dialog is reachable; the no-pipeline gate keys off
+					// config.pipeline, so deleting it still drives the target branch.
+					config.source = 'hdmi';
+				}
 				return true;
 			},
 		});
@@ -527,7 +533,11 @@ test.describe('conditional-display state lock (T11)', () => {
 		const ws = await attachWs(page, {
 			mutateInbound: (frame) => {
 				const config = frame.config as Frame | undefined;
-				if (config) config.pipeline = AUDIO_PIPELINE;
+				if (config) {
+					config.pipeline = AUDIO_PIPELINE;
+					// An effective source (Task 18/19) un-hides the audio surface.
+					config.source = 'hdmi';
+				}
 				// Keep our injected pipeline catalog authoritative.
 				return !('pipelines' in frame);
 			},
@@ -541,7 +551,7 @@ test.describe('conditional-display state lock (T11)', () => {
 				pipelines: { [AUDIO_PIPELINE]: { name: 'E2E Audio', supportsAudio: true } },
 			},
 		});
-		ws.push({ config: { pipeline: AUDIO_PIPELINE } });
+		ws.push({ config: { pipeline: AUDIO_PIPELINE, source: 'hdmi' } });
 
 		const dialog = await openAudioDialog(page);
 

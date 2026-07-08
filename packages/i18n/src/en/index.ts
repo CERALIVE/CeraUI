@@ -335,6 +335,9 @@ const en = {
 		stopToChange: "Stop stream to change",
 		cannotStartNoPipeline: "Select a video source before starting the stream",
 		cannotStartNoServer: "Configure a server before starting the stream",
+		destinationSlotRevoked:
+			"This ingest slot is no longer available — choose another destination",
+		destinationServerStale: "This server is no longer in your provider's list",
 		startFailed: {
 			generic: "Failed to start stream",
 			srt_connect_failed:
@@ -351,6 +354,14 @@ const en = {
 				"The capture device reported a video error. Reconnect it and try again.",
 			pipeline_stall:
 				"The input source stalled while starting. Check the source and try again.",
+			audio_source_probe_failed:
+				"The selected audio source didn't come online in time. Reconnect it or choose another source, then try again.",
+			audio_codec_unsupported_transport:
+				"This audio codec isn't supported over the current transport. Switch the audio codec to AAC, then try again.",
+			source_lost:
+				"The selected source was disconnected. Reconnect it or choose another source, then try again.",
+			source_unavailable:
+				"The selected source isn't available right now. Choose another source or check its settings, then try again.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -535,6 +546,7 @@ const en = {
 			audioFollows: "Audio follows {label:string} on restart",
 			switchTitle: "Switch source",
 			autoPrefix: "Auto",
+			autoResolvedSep: "— currently:",
 		},
 		transcode: {
 			chip: "In {input:string} \u2192 Out {output:string}",
@@ -573,7 +585,7 @@ const en = {
 				},
 				audio: {
 					title: "Audio",
-					body: "The audio input and codec folded into the stream. Available sources come from the selected video pipeline; a pipeline without audio support hides these controls.",
+					body: "The audio folded into your stream, in three choices. Auto picks the best microphone or embedded audio for the selected source; Source default uses the engine's built-in audio for this pipeline; a named device always uses that exact device. Available sources come from the selected video pipeline.",
 				},
 			},
 			tier: {
@@ -609,6 +621,8 @@ const en = {
 			software: "Software",
 			bitrateRangeHint: "Supported range",
 			bitrateClamped: "Adjusted to the supported range",
+			sourceChangedNote:
+				"Source changed \u2014 settings updated for the new input.",
 			probedCaps: "Detected capabilities",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
@@ -721,6 +735,8 @@ const en = {
 			streaming: "Stop the stream to change the audio codec",
 			noSource: "Select an audio source first",
 		},
+		audioCodecUnsupportedTransport:
+			"This codec isn't supported over the current transport",
 		destination: "Destination",
 		destinationManaged: "My cloud account",
 		destinationCustom: "Custom receiver",
@@ -731,6 +747,9 @@ const en = {
 		destinationAddKey: "Add key",
 		latency: "Latency",
 		latencyNegotiated: "Negotiated",
+		valueClamped: "Adjusted to {value:string}",
+		catalogDriftNote:
+			"The server list changed since you opened this. Review your selection before saving.",
 		transportActive: "Active",
 		transportKind: "Transport",
 		remoteControl: {
@@ -1578,7 +1597,7 @@ const en = {
 		sources: {
 			noAudio: "No audio",
 			auto: "Auto (follows source)",
-			pipelineDefault: "Pipeline default",
+			pipelineDefault: "Source default (engine decides)",
 		},
 	},
 } satisfies BaseTranslation;

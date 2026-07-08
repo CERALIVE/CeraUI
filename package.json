@@ -27,6 +27,7 @@
 		"test": "bun run --filter @ceraui/rpc test && bun run --filter frontend test && bun run --filter backend test",
 		"check:tech-debt": "node scripts/check-tech-debt.mjs",
 		"test:tech-debt": "node --test scripts/check-tech-debt.test.mjs",
+		"check:rc-pins": "bash scripts/check-rc-pins.sh",
 		"test:e2e": "bun run --filter frontend test:e2e -- --grep-invert \"@visual|@a11y|@gallery\"",
 		"test:e2e:visual": "bun run --filter frontend test:e2e -- --grep @visual",
 		"screenshots": "bun run --filter frontend test:e2e:gallery",

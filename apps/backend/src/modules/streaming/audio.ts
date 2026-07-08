@@ -42,6 +42,17 @@ const PROC_ASOUND_CARDS = "/proc/asound/cards";
 
 const NO_AUDIO_ID = "No audio";
 export const DEFAULT_AUDIO_ID = "Pipeline default";
+
+// "No audio" / "Pipeline default" are pipeline pseudo-sources, not real capture
+// devices — a start must never probe (nor probe-fail) on them.
+const PSEUDO_AUDIO_SOURCES: ReadonlySet<string> = new Set([
+	NO_AUDIO_ID,
+	DEFAULT_AUDIO_ID,
+]);
+
+export function isPseudoAudioSource(asrc: string): boolean {
+	return PSEUDO_AUDIO_SOURCES.has(asrc);
+}
 const audioSrcAliases: Record<string, string> = {
 	C4K: "Cam Link 4K",
 	usbaudio: "USB audio",

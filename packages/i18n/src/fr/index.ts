@@ -236,6 +236,8 @@ const fr = {
 			streaming: "Arrêtez le flux pour changer le codec audio",
 			noSource: "Sélectionnez d'abord une source audio",
 		},
+		audioCodecUnsupportedTransport:
+			"Ce codec n'est pas pris en charge par le transport actuel",
 		destination: "Destination",
 		destinationManaged: "Mon compte cloud",
 		destinationCustom: "Récepteur personnalisé",
@@ -245,6 +247,9 @@ const fr = {
 		destinationAddKey: "Ajouter une clé",
 		latency: "Latence",
 		latencyNegotiated: "Négociée",
+		valueClamped: "Ajusté à {value}",
+		catalogDriftNote:
+			"La liste des serveurs a changé depuis l'ouverture. Vérifiez votre sélection avant d'enregistrer.",
 		transportActive: "Actif",
 		destinationCustomHint:
 			"Saisissez l'adresse et le port de votre propre récepteur.",
@@ -1100,6 +1105,10 @@ const fr = {
 		cannotStartNoPipeline:
 			"Sélectionnez une source vidéo avant de démarrer la diffusion",
 		cannotStartNoServer: "Configurez un serveur avant de démarrer la diffusion",
+		destinationSlotRevoked:
+			"Cet emplacement d'ingestion n'est plus disponible — choisissez une autre destination",
+		destinationServerStale:
+			"Ce serveur ne figure plus dans la liste de votre fournisseur",
 		startFailed: {
 			generic: "Échec du démarrage de la diffusion",
 			srt_connect_failed:
@@ -1116,6 +1125,14 @@ const fr = {
 				"Le périphérique de capture a signalé une erreur vidéo. Reconnectez-le et réessayez.",
 			pipeline_stall:
 				"La source d'entrée s'est bloquée au démarrage. Vérifiez la source et réessayez.",
+			audio_source_probe_failed:
+				"La source audio sélectionnée n'est pas apparue à temps. Reconnectez-la ou choisissez une autre source, puis réessayez.",
+			audio_codec_unsupported_transport:
+				"Ce codec audio n'est pas pris en charge par le transport actuel. Réglez le codec audio sur AAC, puis réessayez.",
+			source_lost:
+				"La source sélectionnée a été déconnectée. Reconnectez-la ou choisissez une autre source, puis réessayez.",
+			source_unavailable:
+				"La source sélectionnée n'est pas disponible pour le moment. Choisissez une autre source ou vérifiez ses réglages, puis réessayez.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1304,6 +1321,7 @@ const fr = {
 			audioFollows: "L'audio suivra {label} au redémarrage",
 			switchTitle: "Changer de source",
 			autoPrefix: "Automatique",
+			autoResolvedSep: "— actuellement :",
 		},
 		transcode: {
 			chip: "Entrée {input} \u2192 Sortie {output}",
@@ -1342,7 +1360,7 @@ const fr = {
 				},
 				audio: {
 					title: "Audio",
-					body: "L'entrée audio et le codec intégrés au flux. Les sources disponibles proviennent du pipeline vidéo sélectionné ; un pipeline sans prise en charge audio masque ces commandes.",
+					body: "L'audio intégré à votre flux, en trois choix. Automatique choisit le meilleur micro ou l'audio intégré pour la source sélectionnée ; Valeur par défaut de la source utilise l'audio intégré du moteur pour ce pipeline ; un appareil nommé utilise toujours cet appareil précis. Les sources disponibles proviennent du pipeline vidéo sélectionné.",
 				},
 			},
 			tier: {
@@ -1378,6 +1396,8 @@ const fr = {
 			software: "Logiciel",
 			bitrateRangeHint: "Plage prise en charge",
 			bitrateClamped: "Ajusté à la plage prise en charge",
+			sourceChangedNote:
+				"Source modifiée — réglages mis à jour pour la nouvelle entrée.",
 			probedCaps: "Capacités détectées",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
@@ -1607,7 +1627,7 @@ const fr = {
 		sources: {
 			noAudio: "Aucun audio",
 			auto: "Auto (suit la source)",
-			pipelineDefault: "Valeur par défaut du pipeline",
+			pipelineDefault: "Valeur par défaut de la source (le moteur décide)",
 		},
 	},
 } satisfies Translation;

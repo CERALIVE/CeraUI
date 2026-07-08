@@ -40,6 +40,7 @@ import type {
 	NetifMessage,
 	NetworkIngest,
 	Pipelines,
+	RelayMessage,
 	SourcesMessage,
 } from '@ceraui/rpc/schemas';
 import { ChevronRight, Lock, Network, Pencil } from '@lucide/svelte';
@@ -47,12 +48,14 @@ import { ChevronRight, Lock, Network, Pencil } from '@lucide/svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
+import { deriveEffectiveSource } from '$lib/streaming/effective-source';
 import {
 	deriveGoLiveReadiness,
 	type GateStatus,
 	READINESS_SOURCE_REASON,
 } from '$lib/streaming/go-live-readiness';
 import { pipelineAvailability } from '$lib/streaming/pipelineAvailability';
+import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
 import { isSectionLocked } from '$lib/streaming/streamingLockPolicy';
 
 import StreamControlButton from './StreamControlButton.svelte';
@@ -67,6 +70,11 @@ interface Props {
 	isConnected: boolean;
 	networkIngest: NetworkIngest | null | undefined;
 	pipelines: Pipelines | undefined;
+	// ── Destination-catalog validation (C7) — loaded snapshots or undefined-while-
+	//    loading; the destination gate warns on a stale relay id + blocks a revoked
+	//    slot only once these are loaded. ──────────────────────────────────────────
+	relays: RelayMessage | undefined;
+	managedSlots: readonly ManagedIngestAccount[] | undefined;
 	// ── Config rows (migrated from StreamSettingsCard — same testids + locks) ───
 	configRows: ConfigRow[];
 	isStreaming: boolean;
@@ -97,6 +105,8 @@ const {
 	isConnected,
 	networkIngest,
 	pipelines,
+	relays,
+	managedSlots,
 	configRows,
 	isStreaming,
 	optimismState,
@@ -115,15 +125,13 @@ const {
 // Sole-camera auto-select (pinned): only when config.source is unset AND there is
 // EXACTLY one capture-origin source. The row never renders once config.source is
 // set, and NO config is written here — the id is folded into the Start payload.
-const captureSources = $derived(
-	sources?.sources.filter((source) => source.origin === 'capture') ?? [],
-);
-const soleCamera = $derived(
-	!config?.source && captureSources.length === 1 ? captureSources[0] : undefined,
-);
+// The predicate lives in the shared pure module so SourceSection's audio-visibility
+// gate (C1) can never diverge from this readiness wiring.
+const effective = $derived(deriveEffectiveSource(config, sources));
+const soleCamera = $derived(effective.soleCamera);
 // The id the readiness + Start use: the explicit config.source, else the implicit
 // sole camera.
-const effectiveSourceId = $derived(config?.source ?? soleCamera?.id);
+const effectiveSourceId = $derived(effective.effectiveSourceId);
 const effectiveSourceEntry = $derived(
 	effectiveSourceId
 		? sources?.sources.find((source) => source.id === effectiveSourceId)
@@ -156,6 +164,8 @@ const readiness = $derived(
 		netif,
 		isConnected,
 		gatewayStatus,
+		relays,
+		managedSlots,
 	}),
 );
 
@@ -248,7 +258,7 @@ const encoderReason = $derived(
 	encoderState === 'blocked' ? readiness.gates.source.reasonKey : undefined,
 );
 const destinationReason = $derived(
-	destinationState === 'blocked'
+	destinationState !== 'ok'
 		? readiness.gates.destination.reasonKey
 		: undefined,
 );
@@ -279,6 +289,9 @@ const networkSummary = $derived(
 	onFix: (() => void) | undefined,
 )}
 	{@const locked = isSectionLocked(row.section, isStreaming)}
+	<!-- C3: Encoder Edit is disabled-with-reason while no source resolves (encoder
+	     settings key off the active source) — the Fix affordance stays the path. -->
+	{@const editDisabled = key === 'encoder' && !effectiveSourceId}
 	<div
 		class="flex items-center justify-between gap-4 py-2.5 first:pt-0"
 		data-testid="setup-row"
@@ -380,8 +393,10 @@ const networkSummary = $derived(
 				<Button
 					class="min-h-[44px] gap-1.5"
 					data-testid={row.testId}
+					disabled={editDisabled}
 					onclick={row.onEdit}
 					size="sm"
+					title={editDisabled ? resolveReason(READINESS_SOURCE_REASON) : undefined}
 					variant="ghost"
 				>
 					<Pencil aria-hidden={true} class="h-3.5 w-3.5" />

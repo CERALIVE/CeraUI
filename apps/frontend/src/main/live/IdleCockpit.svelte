@@ -5,18 +5,20 @@
  * A presentational wrapper composing the idle-mode subtrees in SOURCE-FIRST order:
  *   1. {@link SourceSection} — the unified source picker (leads the cockpit so the
  *      operator picks WHAT to stream before tuning HOW).
- *   2. {@link StreamSetupChain} — the merged "Stream setup" card (readiness rows +
+ *   2. A collapsed "Preview" `<details>` disclosure hosting {@link PreviewCanvas}
+ *      (local, off-until-toggled — never dials the engine until the operator opens
+ *      it and starts the preview). Sits directly under the source picker (C4) so the
+ *      preview follows the just-picked source, and — because PreviewCanvas watches
+ *      the APPLIED config.source — redials automatically on a confirmed source change.
+ *   3. {@link StreamSetupChain} — the merged "Stream setup" card (readiness rows +
  *      config-row edit affordances + the Start control at its foot). Replaces the
  *      old GoLiveCard mount (GoLiveCard stays an unmounted shim per T9).
- *   3. A collapsed "Preview" `<details>` disclosure hosting {@link PreviewCanvas}
- *      (local, off-until-toggled — never dials the engine until the operator opens
- *      it and starts the preview).
  *   4. A collapsed "Roadmap" `<details>` disclosure of calm not-yet-available pills.
  *
  * The Start control is mounted EXACTLY ONCE — inside {@link StreamSetupChain} at
- * its foot (T9). Because StreamSetupChain sits between SourceSection and the
- * disclosures, the rendered order is SourceSection → setup rows → Start → preview →
- * roadmap. IdleCockpit does NOT mount its own StreamControlButton (no double-mount).
+ * its foot (T9). With the preview disclosure moved above StreamSetupChain (C4), the
+ * rendered order is SourceSection → preview → setup rows → Start → roadmap.
+ * IdleCockpit does NOT mount its own StreamControlButton (no double-mount).
  *
  * State ownership stays in LiveView: EVERY datum and handler here is a prop
  * threaded down from LiveView's getters/handlers. This component owns NO `$state`,
@@ -30,8 +32,10 @@ import type {
 	NetifMessage,
 	NetworkIngest,
 	Pipelines,
+	RelayMessage,
 	SourcesMessage,
 } from '@ceraui/rpc/schemas';
+import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
 import type { ResolvedAudioStatus } from '$lib/streaming/sourceSummary';
 
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
@@ -53,6 +57,8 @@ interface Props {
 	isConnected: boolean;
 	networkIngest: NetworkIngest | null | undefined;
 	pipelines: Pipelines | undefined;
+	relays: RelayMessage | undefined;
+	managedSlots: readonly ManagedIngestAccount[] | undefined;
 	configRows: ConfigRow[];
 	isStreaming: boolean;
 	optimismState: StreamingOptimismState;
@@ -93,6 +99,8 @@ const {
 	isConnected,
 	networkIngest,
 	pipelines,
+	relays,
+	managedSlots,
 	configRows,
 	isStreaming,
 	optimismState,
@@ -150,6 +158,22 @@ const audioEmbeddedComingSoon = $derived(
 		{switchingInput}
 	/>
 
+	<!-- Local preview — collapsed by default; PreviewCanvas stays off (no engine
+	     dial) until the operator opens this disclosure and starts the preview.
+	     Placed directly under the source picker (C4) so it follows the just-picked
+	     source; PreviewCanvas watches the APPLIED config.source and redials on a
+	     confirmed change. -->
+	<details class="bg-card rounded-xl border" data-testid="preview-disclosure">
+		<summary
+			class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
+		>
+			{$LL.live.modes.preview()}
+		</summary>
+		<div class="px-4 pb-4">
+			<PreviewCanvas />
+		</div>
+	</details>
+
 	<!-- Stream setup: readiness rows + config edits + the Start control at its foot
 	     (StreamControlButton is mounted ONCE here, never a second time — T10). -->
 	<StreamSetupChain
@@ -160,6 +184,8 @@ const audioEmbeddedComingSoon = $derived(
 		{isConnected}
 		{networkIngest}
 		{pipelines}
+		{relays}
+		{managedSlots}
 		{configRows}
 		{isStreaming}
 		{optimismState}
@@ -172,19 +198,6 @@ const audioEmbeddedComingSoon = $derived(
 		{onOpenServer}
 		{onOpenEncoder}
 	/>
-
-	<!-- Local preview — collapsed by default; PreviewCanvas stays off (no engine
-	     dial) until the operator opens this disclosure and starts the preview. -->
-	<details class="bg-card rounded-xl border" data-testid="preview-disclosure">
-		<summary
-			class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
-		>
-			{$LL.live.modes.preview()}
-		</summary>
-		<div class="px-4 pb-4">
-			<PreviewCanvas />
-		</div>
-	</details>
 
 	<!--
 		Roadmap disclosure (T12) — genuine future features surfaced as calm, purely
