@@ -17,6 +17,10 @@ import {
 	REMOTE_REPAIR_STATUS,
 	resolveRemoteAuthDecision,
 } from "../modules/remote/remote.ts";
+import {
+	type DeviceDetectionDeps,
+	isRealDevice,
+} from "../modules/system/device-detection.ts";
 
 // D3 forced re-pair migration (ADR-0006): once real PASETO verification goes
 // live (PASETO_PUBLIC_KEY provisioned), a paired device whose stored credential
@@ -66,6 +70,20 @@ function signRelayToken(overrides: Record<string, unknown> = {}): string {
 		JSON.stringify(relayClaims(overrides)),
 		platform.privateKey,
 	);
+}
+
+function deviceDetectionFixture(
+	overrides: Partial<DeviceDetectionDeps>,
+): DeviceDetectionDeps {
+	return {
+		getDeviceTypeOverride: () => undefined,
+		isDevelopment: () => false,
+		readDeviceTreeModel: async () => "",
+		readCeraliveRelease: async () => "",
+		readDmiProductName: async () => "",
+		readDmiBoardName: async () => "",
+		...overrides,
+	};
 }
 
 describe("D3 forced re-pair — resolveRemoteAuthDecision (ADR-0006)", () => {
@@ -137,6 +155,94 @@ describe("D3 forced re-pair — resolveRemoteAuthDecision (ADR-0006)", () => {
 		expect(decision.action).toBe("present");
 		if (decision.action !== "present") return;
 		expect(decision.payload.sub_status).toBe("ACTIVE");
+	});
+
+	test("production with no key refuses a legacy opaque key instead of presenting it", () => {
+		const savedNodeEnv = process.env.NODE_ENV;
+		process.env.NODE_ENV = "production";
+		try {
+			const decision = resolveRemoteAuthDecision("legacy-opaque-key", 16, NOW);
+
+			expect(decision.action).toBe("force-repair");
+			if (decision.action !== "force-repair") return;
+			expect(decision.reason).toBe("tokenless-on-paseto-activation");
+		} finally {
+			if (savedNodeEnv === undefined) {
+				delete process.env.NODE_ENV;
+			} else {
+				process.env.NODE_ENV = savedNodeEnv;
+			}
+		}
+	});
+
+	test("RK3588 real device with no key refuses an unsigned relay token", async () => {
+		const token = mintStubDeviceToken({
+			deviceId: SERIAL,
+			subStatus: "ACTIVE",
+			now: NOW,
+		});
+		const isRk3588 = await isRealDevice(
+			deviceDetectionFixture({
+				readDeviceTreeModel: async () =>
+					"Radxa ROCK 5B Plus Board based on Rockchip RK3588",
+			}),
+		);
+
+		const decision = resolveRemoteAuthDecision(token, 16, NOW, {
+			isRealDevice: isRk3588,
+		});
+
+		expect(decision.action).toBe("force-repair");
+	});
+
+	test("x86 CeraLive mini-PC with no key refuses an unsigned relay token", async () => {
+		const token = mintStubDeviceToken({
+			deviceId: SERIAL,
+			subStatus: "ACTIVE",
+			now: NOW,
+		});
+		const isX86Device = await isRealDevice(
+			deviceDetectionFixture({
+				readCeraliveRelease: async () => 'ID="ceralive"\nVERSION_ID="2026.7"',
+				readDmiProductName: async () => "Intel N100 Mini PC",
+			}),
+		);
+
+		const decision = resolveRemoteAuthDecision(token, 16, NOW, {
+			isRealDevice: isX86Device,
+		});
+
+		expect(decision.action).toBe("force-repair");
+	});
+
+	test("dev host with no key keeps accepting an unsigned relay token", () => {
+		const token = mintStubDeviceToken({
+			deviceId: SERIAL,
+			subStatus: "ACTIVE",
+			now: NOW,
+		});
+
+		const decision = resolveRemoteAuthDecision(token, 16, NOW, {
+			isRealDevice: false,
+		});
+
+		expect(decision.action).toBe("present");
+		if (decision.action !== "present") return;
+		expect(decision.payload.sub_status).toBe("ACTIVE");
+	});
+
+	test("malformed PASETO_PUBLIC_KEY refuses without throwing or falling back to opaque", () => {
+		process.env[DEVICE_TOKEN_PUBLIC_KEY_ENV] = "not-a-valid-ed25519-key";
+		const token = mintStubDeviceToken({
+			deviceId: SERIAL,
+			subStatus: "ACTIVE",
+			now: NOW,
+		});
+
+		expect(() => resolveRemoteAuthDecision(token, 16, NOW)).not.toThrow();
+		expect(resolveRemoteAuthDecision(token, 16, NOW).action).toBe(
+			"force-repair",
+		);
 	});
 });
 
