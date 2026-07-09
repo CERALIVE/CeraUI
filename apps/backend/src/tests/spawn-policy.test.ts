@@ -41,6 +41,12 @@ describe("spawn-policy registry consistency", () => {
 		expect(() => assertSpawnPolicyConsistent()).not.toThrow();
 	});
 
+	it("has no pending production spawn-policy entries", () => {
+		expect(SPAWN_POLICY.filter((site) => site.status !== "enforced")).toEqual(
+			[],
+		);
+	});
+
 	it("cerastream is NOT in the registry (IPC-driven, never spawned)", () => {
 		for (const site of SPAWN_POLICY) {
 			expect(site.command.toLowerCase()).not.toContain("cerastream");

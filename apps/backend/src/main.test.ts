@@ -8,6 +8,11 @@ import {
 	runCritical,
 } from "./helpers/boot-guard.ts";
 import {
+	type BackendShutdownDeps,
+	handleTerminationSignal,
+	resetShutdownForTest,
+} from "./helpers/shutdown.ts";
+import {
 	buildLocalObservabilitySurface,
 	type LocalObservabilitySurface,
 } from "./modules/system/observability.ts";
@@ -58,6 +63,7 @@ async function simulateBoot(opts: {
 
 beforeEach(() => {
 	resetBootReadiness();
+	resetShutdownForTest();
 });
 
 describe("guardNonCritical — fail-soft non-critical init", () => {
@@ -231,5 +237,37 @@ describe("/api/health surface — operator-visible degraded flag", () => {
 	test("omits readiness when none is supplied (back-compat with existing callers)", () => {
 		const surface = buildLocalObservabilitySurface(HEALTHY_ROLLUP, 42);
 		expect(surface.readiness).toBeUndefined();
+	});
+});
+
+describe("termination shutdown lifecycle", () => {
+	test("SIGTERM cleanup drains SRT ingest, dmesg watchers, then streamloop before exit", async () => {
+		const calls: string[] = [];
+		let resolveGraceful: (() => void) | undefined;
+		const deps: BackendShutdownDeps = {
+			stopSrtIngest: async () => {
+				calls.push("srt");
+			},
+			stopDmesgWatchers: () => {
+				calls.push("dmesg");
+			},
+			gracefulShutdown: () =>
+				new Promise<void>((resolve) => {
+					calls.push("streamloop");
+					resolveGraceful = resolve;
+				}),
+			exit: (code) => {
+				calls.push(`exit:${code}`);
+			},
+		};
+
+		handleTerminationSignal("SIGTERM", deps);
+		handleTerminationSignal("SIGINT", deps);
+		await Bun.sleep(0);
+
+		expect(calls).toEqual(["srt", "dmesg", "streamloop"]);
+		resolveGraceful?.();
+		await Bun.sleep(0);
+		expect(calls).toEqual(["srt", "dmesg", "streamloop", "exit:0"]);
 	});
 });
