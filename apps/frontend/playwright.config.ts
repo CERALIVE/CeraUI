@@ -47,6 +47,7 @@ const DEV_URL = `http://localhost:${DEV_PORT}`;
 // evidence files land here; gitignored. Never write outside the repo — tests must
 // not depend on the orchestration workspace that may sit above this checkout.
 export const EVIDENCE_DIR = path.resolve(import.meta.dirname, 'test-results');
+const ciManagesServers = Boolean(process.env.CI);
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -77,21 +78,23 @@ export default defineConfig({
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
     { name: 'mobile', use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 } } },
   ],
-  webServer: [
-    {
-      command: 'bun run --filter frontend dev',
-      port: DEV_PORT,
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-    },
-    {
-      // No --watch: tests write config.json/auth_tokens.json, which would
-      // otherwise restart the backend mid-run and drop live WS connections.
-      command: 'bun run --filter backend dev:e2e',
-      port: 3002,
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      env: { MOCK_SCENARIO: 'multi-modem-wifi', NODE_ENV: 'development' },
-    },
-  ],
+  webServer: ciManagesServers
+    ? []
+    : [
+        {
+          command: 'bun run --filter frontend dev',
+          port: DEV_PORT,
+          reuseExistingServer: true,
+          timeout: 120_000,
+        },
+        {
+          // No --watch: tests write config.json/auth_tokens.json, which would
+          // otherwise restart the backend mid-run and drop live WS connections.
+          command: 'bun run --filter backend dev:e2e',
+          port: 3002,
+          reuseExistingServer: true,
+          timeout: 120_000,
+          env: { MOCK_SCENARIO: 'multi-modem-wifi', NODE_ENV: 'development' },
+        },
+      ],
 });

@@ -8,9 +8,9 @@ on:
 
 env:
   NODE_VERSION: "24"
-  # E2E shard fan-out. The union of all shards runs the SAME spec×project set as
-  # the unsharded functional run (344 invocations); a11y (3, desktop-only) runs
-  # once on shard 1. 344 = 172+172 splits evenly across 2 shards.
+  # E2E fan-out. The union of project×shard lanes runs the same functional
+  # spec×project set as the unsharded run (456 invocations on 2026-07-09);
+  # a11y (desktop-only) runs once on desktop shard 1.
   TOTAL_SHARDS: "2"
 
 permissions:
@@ -124,12 +124,75 @@ jobs:
         working-directory: CeraUI
         run: bun run --filter backend test
 
+  setup-e2e:
+    name: E2E setup (deps, browsers, frontend build)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v7
+        with:
+          path: CeraUI
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Cache Bun install
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-store-
+
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright system dependencies
+        working-directory: CeraUI
+        run: bun run --filter frontend test:e2e:install-deps
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-ms-playwright-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-ms-playwright-
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: CeraUI
+        run: bun run --filter frontend test:e2e:install-browser
+
+      - name: Build frontend once
+        working-directory: CeraUI
+        run: bun run build:frontend
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist
+          path: CeraUI/dist/public/
+          if-no-files-found: error
+          retention-days: 1
+
   test-e2e:
-    name: E2E (shard ${{ matrix.shard }}/2)
+    name: E2E (${{ matrix.project }} shard ${{ matrix.shard }}/2)
+    needs: setup-e2e
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        project: [desktop, mobile]
         shard: [1, 2]
     steps:
       - name: Checkout CeraUI
@@ -177,46 +240,159 @@ jobs:
         working-directory: CeraUI
         run: bun run --filter frontend test:e2e:install-browser
 
+      - name: Download frontend dist
+        uses: actions/download-artifact@v7
+        with:
+          name: frontend-dist
+          path: CeraUI/dist/public
+
       - name: Reset auth state
         working-directory: CeraUI
         run: rm -f apps/backend/auth_tokens.json
 
+      - name: Start E2E servers
+        working-directory: CeraUI
+        run: |
+          set -euo pipefail
+          mkdir -p apps/frontend/test-results
+
+          VITE_DEVICE_HOST=127.0.0.1 VITE_DEVICE_PORT=3002 bun run --filter frontend preview -- --host 127.0.0.1 --port 6173 \
+            > "apps/frontend/test-results/vite-preview-${{ matrix.project }}-${{ matrix.shard }}.log" 2>&1 &
+          echo "$!" > apps/frontend/test-results/vite-preview.pid
+
+          MOCK_SCENARIO=multi-modem-wifi NODE_ENV=development bun run --filter backend dev:e2e \
+            > "apps/frontend/test-results/backend-${{ matrix.project }}-${{ matrix.shard }}.log" 2>&1 &
+          echo "$!" > apps/frontend/test-results/backend.pid
+
+          for url in http://127.0.0.1:6173 http://127.0.0.1:3002/api/health; do
+            for attempt in {1..120}; do
+              if curl -fsS "$url" >/dev/null; then
+                echo "ready: $url"
+                break
+              fi
+              if [[ "$attempt" -eq 120 ]]; then
+                echo "::error::server did not become ready: $url"
+                exit 1
+              fi
+              sleep 1
+            done
+          done
+
       # a11y is desktop-only and small (3 tests); run it once on shard 1 rather
-      # than re-running it inside every shard. Keeps the union identical to the
-      # T19 baseline (3 a11y + 344 functional = 347 invocations).
+      # than re-running it inside every shard.
       - name: Accessibility gate (axe-core — critical/serious, baselined)
-        if: ${{ matrix.shard == 1 }}
+        if: ${{ matrix.project == 'desktop' && matrix.shard == 1 }}
         working-directory: CeraUI
         run: CI=true E2E_PASSWORD=12345678 bun run --filter frontend test:e2e -- a11y.spec.ts --project=desktop --reporter=line,json,blob
         env:
           MOCK_SCENARIO: multi-modem-wifi
-          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/a11y-shard-${{ matrix.shard }}.json
-          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-a11y-${{ matrix.shard }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/a11y-desktop-${{ matrix.shard }}.json
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-a11y-desktop-${{ matrix.shard }}
 
-      # Functional run, sharded across the matrix. Playwright partitions the spec
-      # set deterministically; the union of --shard=1/2 + 2/2 is the full 344
-      # spec×project functional set (both desktop AND mobile projects — no trim).
+      - name: Upload a11y blob report
+        if: ${{ always() && matrix.project == 'desktop' && matrix.shard == 1 }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: blob-report-a11y-desktop-${{ matrix.shard }}
+          path: CeraUI/apps/frontend/test-results/blob-report-a11y-desktop-${{ matrix.shard }}
+          if-no-files-found: ignore
+          retention-days: 1
+
+      # Functional run, sharded across the project×shard matrix. The project
+      # filter narrows the suite first; sharding then splits within that project.
       - name: Functional E2E (screenshot-free, no @visual, a11y gated separately)
         working-directory: CeraUI
-        run: CI=true E2E_PASSWORD=12345678 bun run --filter frontend test:e2e -- --grep-invert "@visual|@a11y|@gallery" --shard=${{ matrix.shard }}/${{ env.TOTAL_SHARDS }} --reporter=line,json,blob
+        run: CI=true E2E_PASSWORD=12345678 bun run --filter frontend test:e2e -- --grep-invert "@visual|@a11y|@gallery" --project=${{ matrix.project }} --shard=${{ matrix.shard }}/${{ env.TOTAL_SHARDS }} --reporter=line,json,blob
         env:
           MOCK_SCENARIO: multi-modem-wifi
-          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/e2e-shard-${{ matrix.shard }}.json
-          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-e2e-${{ matrix.shard }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/e2e-${{ matrix.project }}-${{ matrix.shard }}.json
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-e2e-${{ matrix.project }}-${{ matrix.shard }}
+
+      - name: Stop E2E servers
+        if: always()
+        working-directory: CeraUI
+        run: |
+          for pidfile in apps/frontend/test-results/backend.pid apps/frontend/test-results/vite-preview.pid; do
+            if [[ -f "$pidfile" ]]; then
+              kill "$(cat "$pidfile")" 2>/dev/null || true
+            fi
+          done
 
       - name: Upload E2E timing artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-timing-shard-${{ matrix.shard }}
+          name: e2e-timing-${{ matrix.project }}-${{ matrix.shard }}
           path: |
             CeraUI/apps/frontend/test-results/*.json
+            CeraUI/apps/frontend/test-results/*.log
             CeraUI/apps/frontend/test-results/blob-report-*/
+          if-no-files-found: ignore
+
+      - name: Upload E2E blob report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: blob-report-${{ matrix.project }}-${{ matrix.shard }}
+          path: CeraUI/apps/frontend/test-results/blob-report-e2e-${{ matrix.project }}-${{ matrix.shard }}
+          if-no-files-found: ignore
+          retention-days: 1
+
+  merge-e2e-reports:
+    name: Merge E2E blob reports
+    if: ${{ !cancelled() }}
+    needs: test-e2e
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v7
+        with:
+          path: CeraUI
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Cache Bun install
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-store-
+
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: bun install --frozen-lockfile
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v7
+        with:
+          path: CeraUI/apps/frontend/all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Merge HTML report
+        working-directory: CeraUI/apps/frontend
+        run: bunx playwright merge-reports --reporter html ./all-blob-reports
+
+      - name: Upload merged E2E report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-html-report
+          path: CeraUI/apps/frontend/playwright-report/
           if-no-files-found: ignore
 
   test:
     name: Test (unit + E2E guardrails)
-    needs: [test-fe, test-be, test-e2e]
+    needs: [test-fe, test-be, test-e2e, merge-e2e-reports]
     runs-on: ubuntu-latest
     steps:
       - name: All test jobs passed
