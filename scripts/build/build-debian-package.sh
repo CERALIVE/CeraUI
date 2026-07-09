@@ -102,6 +102,12 @@ chmod 0755 "$TEMP_DIR/usr/bin/ceralive-addon-helper"
 # sudo REFUSES a drop-in that is group/world-writable — ship it 0440.
 chmod 0440 "$TEMP_DIR/etc/sudoers.d/ceralive-addon-helper"
 
+SERVICE_EXEC="$(sed -n 's/^ExecStart=//p' "$TEMP_DIR/etc/systemd/system/ceralive.service" | awk 'NR == 1 { print $1 }')"
+if [[ "$SERVICE_EXEC" != "/usr/local/bin/ceralive" || ! -x "$TEMP_DIR$SERVICE_EXEC" ]]; then
+    log_error "ceralive.service ExecStart must point at the packaged backend binary (/usr/local/bin/ceralive)"
+    exit 1
+fi
+
 # Create post-install script
 log_step "Creating maintenance scripts"
 cat > dist/debian/postinst << 'EOF'
@@ -205,6 +211,7 @@ fpm -s dir -t deb \
     --depends "systemd" \
     --depends "udev" \
     --depends "adduser" \
+    --depends "sudo" \
     --depends "network-manager" \
     --depends "modemmanager" \
     --depends "cerastream" \
@@ -228,7 +235,7 @@ PACKAGE_FILENAME=$(basename "$PACKAGE_FILE")
 log_step "Creating package metadata"
 
 # Create architecture-specific package info
-cat > dist/debian/package-info-${ARCHITECTURE}.json << EOF
+cat > "dist/debian/package-info-${ARCHITECTURE}.json" << EOF
 {
   "package": "$PACKAGE_NAME",
   "version": "$VERSION",
@@ -251,6 +258,7 @@ cat > dist/debian/package-info-${ARCHITECTURE}.json << EOF
     "systemd",
     "udev",
     "adduser",
+    "sudo",
     "network-manager",
     "modemmanager",
     "cerastream",
@@ -269,7 +277,7 @@ cat > dist/debian/package-info-${ARCHITECTURE}.json << EOF
 EOF
 
 # Create installation instructions
-cat > dist/debian/INSTALL-${ARCHITECTURE}.md << EOF
+cat > "dist/debian/INSTALL-${ARCHITECTURE}.md" << EOF
 # CERALIVE Debian Package Installation ($ARCHITECTURE) - MODERNIZED
 
 ## Package Information
