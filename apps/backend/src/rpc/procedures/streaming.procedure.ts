@@ -85,7 +85,6 @@ import {
 	getSourcesMessage,
 	type ResolveSourceRoutingResult,
 	resolveSourceRouting,
-	UNKNOWN_SOURCE_ERROR,
 } from "../../modules/streaming/sources.ts";
 import {
 	getIsStreaming,
@@ -157,16 +156,10 @@ export const streamingStartProcedure = authedProcedure
 					getSourcesMessage().sources,
 				);
 				if (!routed.ok) {
-					// source_lost / source_unavailable carry `reason` too (same code) so
-					// LiveView's reason→startFailed.* lookup renders specific copy;
-					// unknown_source stays error-only (its semantics are unchanged).
 					return {
 						success: false,
 						is_streaming: false,
 						error: routed.error,
-						...(routed.error === UNKNOWN_SOURCE_ERROR
-							? {}
-							: { reason: routed.error }),
 					};
 				}
 				applied.pipeline = routed.pipeline;
@@ -212,8 +205,6 @@ export const streamingStartProcedure = authedProcedure
 			// an MPEG-TS carrier, so only AAC-in-TS is proven end-to-end; refuse an
 			// effective codec the effective transport can't carry at START — config
 			// SAVES stay permitted (mirrors the pipeline_not_in_offered_set gate).
-			// Dual-field: `error` for the structured branch, `reason` for the T16
-			// startFailed.* i18n lookup.
 			const effectiveAcodec = applied.acodec ?? getConfig().acodec;
 			if (effectiveAcodec !== undefined) {
 				const effectiveTransport =
@@ -225,7 +216,6 @@ export const streamingStartProcedure = authedProcedure
 						success: false,
 						is_streaming: false,
 						error: AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
-						reason: AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
 					};
 				}
 			}
@@ -270,7 +260,6 @@ export const streamingStartProcedure = authedProcedure
 						success: false,
 						is_streaming: false,
 						error: startResult.error,
-						reason: startResult.reason,
 					};
 				}
 				return { success: true, is_streaming: getIsStreaming(), applied };

@@ -198,7 +198,6 @@ describe("setMockDeviceAttached seam (C7)", () => {
 			success: false,
 			is_streaming: false,
 			error: "source_lost",
-			reason: "source_lost",
 		});
 		expect(getConfig().source).toBe(USB_INPUT_ID);
 	});

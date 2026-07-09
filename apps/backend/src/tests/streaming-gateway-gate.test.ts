@@ -268,7 +268,6 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 				success: false,
 				is_streaming: false,
 				error: "source_unavailable",
-				reason: "source_unavailable",
 			});
 		});
 

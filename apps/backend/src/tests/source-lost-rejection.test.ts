@@ -172,7 +172,7 @@ describe("streaming source availability rejection (C7)", () => {
 		applyObservedEngineDevices([]);
 	}
 
-	test("start with a lost-listed source → dual-field source_lost, config.source unchanged", async () => {
+	test("start with a lost-listed source → source_lost error, config.source unchanged", async () => {
 		getConfig().source = "video0";
 		makeSourceLost("video0");
 
@@ -186,7 +186,6 @@ describe("streaming source availability rejection (C7)", () => {
 			success: false,
 			is_streaming: false,
 			error: "source_lost",
-			reason: "source_lost",
 		});
 		expect(getConfig().source).toBe("video0");
 	});
@@ -206,7 +205,7 @@ describe("streaming source availability rejection (C7)", () => {
 		expect(getConfig().source).toBe("test");
 	});
 
-	test("start with an available:false network source (gateway down) → dual-field source_unavailable", async () => {
+	test("start with an available:false network source (gateway down) → source_unavailable error", async () => {
 		const result = await call(
 			streamingStartProcedure,
 			{ source: "rtmp" },
@@ -217,7 +216,6 @@ describe("streaming source availability rejection (C7)", () => {
 			success: false,
 			is_streaming: false,
 			error: "source_unavailable",
-			reason: "source_unavailable",
 		});
 	});
 

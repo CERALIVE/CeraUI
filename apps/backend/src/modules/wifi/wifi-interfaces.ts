@@ -33,6 +33,12 @@ import {
 } from "../network/network-manager.ts";
 import { updateBcrptSourceIps } from "../streaming/bcrpt.ts";
 import {
+	logParseError,
+	type ParseResult,
+	parseFail,
+	parseOk,
+} from "../system/cli-parse.ts";
+import {
 	broadcastWifiState,
 	type WifiNetwork,
 	wifiUpdateSavedConns,
@@ -69,6 +75,66 @@ export type BaseWifiInterface = {
 };
 
 export type WifiInterface = BaseWifiInterface | WifiInterfaceWithHotspot;
+
+export type WifiDeviceProperties = {
+	readonly hw: string;
+	readonly supportsAp: boolean;
+	readonly supports5Ghz: boolean;
+	readonly supports2Ghz: boolean;
+};
+
+function parseNmcliBoolean(value: string | undefined): boolean | undefined {
+	if (value === "yes") return true;
+	if (value === "no") return false;
+	return undefined;
+}
+
+export function parseWifiDeviceProperties(
+	prop: readonly string[] | undefined,
+): ParseResult<WifiDeviceProperties> {
+	if (prop === undefined || prop.length < 5) {
+		return parseFail(
+			"parseWifiDeviceProperties",
+			"expected 5 fields from nmcli device properties",
+			JSON.stringify(prop ?? null),
+		);
+	}
+
+	const [vendorRaw, productRaw, apRaw, fiveGhzRaw, twoGhzRaw] = prop;
+	const supportsAp = parseNmcliBoolean(apRaw);
+	const supports5Ghz = parseNmcliBoolean(fiveGhzRaw);
+	const supports2Ghz = parseNmcliBoolean(twoGhzRaw);
+	if (
+		supportsAp === undefined ||
+		supports5Ghz === undefined ||
+		supports2Ghz === undefined
+	) {
+		return parseFail(
+			"parseWifiDeviceProperties",
+			"expected yes/no WiFi capability fields",
+			JSON.stringify(prop),
+		);
+	}
+
+	const vendor = (vendorRaw ?? "").replace("Corporation", "").trim();
+	const productCandidate =
+		productRaw?.match(/[[(](.+)[\])]/)?.[1] ?? productRaw;
+	const product = productCandidate?.trim();
+	if (!vendor || !product) {
+		return parseFail(
+			"parseWifiDeviceProperties",
+			"missing vendor or product field",
+			JSON.stringify(prop),
+		);
+	}
+
+	return parseOk({
+		hw: `${vendor} ${product}`,
+		supportsAp,
+		supports5Ghz,
+		supports2Ghz,
+	});
+}
 
 let wifiIdToMacAddress: Record<WifiInterfaceId, MacAddress> = {};
 
@@ -141,32 +207,35 @@ export async function wifiUpdateDevices() {
 			} else {
 				const id = wifiIfId++;
 
-				const prop = (await nmDeviceProp(
-					ifname,
-					"GENERAL.VENDOR,GENERAL.PRODUCT,WIFI-PROPERTIES.AP,WIFI-PROPERTIES.5GHZ,WIFI-PROPERTIES.2GHZ",
-				)) as [string, string, string, string, string];
-				const vendor = prop[0].replace("Corporation", "").trim();
-				const pb = prop[1].match(/[[(](.+)[\])]/);
-				const product = pb ? pb[1] : prop[1];
+				const parsedProps = parseWifiDeviceProperties(
+					await nmDeviceProp(
+						ifname,
+						"GENERAL.VENDOR,GENERAL.PRODUCT,WIFI-PROPERTIES.AP,WIFI-PROPERTIES.5GHZ,WIFI-PROPERTIES.2GHZ",
+					),
+				);
+				if (!parsedProps.ok) {
+					logParseError(parsedProps);
+					continue;
+				}
 
 				const newInterface = {
 					id,
 					ifname,
-					hw: `${vendor} ${product}`,
+					hw: parsedProps.value.hw,
 					conn,
 					available: new Map(),
 					saved: {},
 				};
 
-				if (prop[2] === "yes") {
+				if (parsedProps.value.supportsAp) {
 					const hotspot: WifiHotspot = {
 						warnings: {},
 						availableChannels: ["auto"],
 					};
-					if (prop[3] === "yes") {
+					if (parsedProps.value.supports5Ghz) {
 						hotspot.availableChannels.push("auto_50");
 					}
-					if (prop[4] === "yes") {
+					if (parsedProps.value.supports2Ghz) {
 						hotspot.availableChannels.push("auto_24");
 					}
 					(newInterface as WifiInterfaceWithHotspot).hotspot = hotspot;

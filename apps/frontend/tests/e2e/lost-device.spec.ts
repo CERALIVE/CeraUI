@@ -15,8 +15,8 @@ import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
  * backend so its own `buildSources` synthesizes the lost row and rebroadcasts the
  * `sources`/`devices` snapshots — exactly the on-device path. The direct
  * `streaming.start` refusal is likewise the REAL backend gate
- * (`resolveSourceRouting` → `source_lost`), so the asserted `{success,error,reason}`
- * are genuine wire codes, not a client-side fake.
+ * (`resolveSourceRouting` → `source_lost`), so the asserted `{success,error}`
+ * shape is a genuine wire code, not a client-side fake.
  *
  * The proxy from `source-overhaul.spec.ts` / `truthfulness.spec.ts` is reused as
  * the transport (do NOT invent a new mechanism). For the real-seam lifecycle it is

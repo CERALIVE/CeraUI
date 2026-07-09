@@ -33,6 +33,12 @@ import {
 import { broadcastMsg } from "../ui/websocket-server.ts";
 /* Software updates */
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
+import {
+	logParseError,
+	type ParseResult,
+	parseFail,
+	parseOk,
+} from "./cli-parse.ts";
 
 let availableUpdates:
 	| {
@@ -89,25 +95,42 @@ export function rebootAfterUpdate(): void {
 	}
 }
 
-function parseUpgradePackageCount(text: string) {
-	const upgradedMatch = text.match(/(\d+) upgraded/) as [string, string] | null;
-	const newlyInstalledMatch = text.match(/, (\d+) newly installed/) as
-		| [string, string]
-		| null;
-	if (!upgradedMatch || !newlyInstalledMatch) {
-		logger.error(
-			"parseUpgradePackageCount(): failed to parse the package info",
+export type AptUpgradeSummary = {
+	readonly upgradeCount: number;
+	readonly downloadSize?: string;
+	readonly ceralivePackages: boolean;
+};
+
+export function parseUpgradePackageCount(text: string): ParseResult<number> {
+	const upgradedCount = text.match(/(\d+) upgraded/)?.[1];
+	const newlyInstalledCount = text.match(/, (\d+) newly installed/)?.[1];
+	if (upgradedCount === undefined || newlyInstalledCount === undefined) {
+		return parseFail(
+			"parseAptUpgradeSummary",
+			"missing upgraded/newly installed counts",
+			text,
 		);
-		return undefined;
 	}
 
-	const upgradedCount = Number.parseInt(upgradedMatch[1], 10);
-	const newlyInstalledCount = Number.parseInt(newlyInstalledMatch[1], 10);
-	return upgradedCount + newlyInstalledCount;
+	return parseOk(
+		Number.parseInt(upgradedCount, 10) +
+			Number.parseInt(newlyInstalledCount, 10),
+	);
 }
 
-function parseUpgradeDownloadSize(text: string) {
-	return text.split("Need to get ")[1]?.split(/\/|( of archives)/)[0];
+export function parseUpgradeDownloadSize(text: string): ParseResult<string> {
+	const value = text
+		.split("Need to get ")[1]
+		?.split(/\/|( of archives)/)[0]
+		?.trim();
+	if (value === undefined || value.length === 0) {
+		return parseFail(
+			"parseAptUpgradeSummary",
+			"missing Need to get download-size line",
+			text,
+		);
+	}
+	return parseOk(value);
 }
 
 // Show an update notification if there are pending updates to packages matching this list
@@ -172,13 +195,16 @@ function packageListIncludes(list: string, includes: Array<string>) {
 	return false;
 }
 
-// Parses a list of packets shown by apt-get under a certain heading
-function parseAptPackageList(stdout: string, heading: string) {
-	return stdout
+export function parseAptPackageList(
+	stdout: string,
+	heading: string,
+): ParseResult<string | undefined> {
+	const section = stdout
 		.split(heading)[1]
 		?.split(/\n\w+/)[0]
 		?.replace(/[\n ]+/g, " ")
 		?.trim();
+	return parseOk(section && section.length > 0 ? section : undefined);
 }
 
 function parseAptUpgradedPackages(stdout: string) {
@@ -188,20 +214,36 @@ function parseAptUpgradedPackages(stdout: string) {
 	);
 }
 
-function parseAptUpgradeSummary(stdout: string) {
-	const upgradeCount = parseUpgradePackageCount(stdout) ?? 0;
-	let downloadSize: string | undefined;
-	let ceralivePackages = false;
-	if (upgradeCount > 0) {
-		downloadSize = parseUpgradeDownloadSize(stdout);
-
-		const packageList = parseAptUpgradedPackages(stdout);
-		if (packageList && packageListIncludes(packageList, ceralivePackageList)) {
-			ceralivePackages = true;
-		}
+export function parseAptUpgradeSummary(
+	stdout: string,
+): ParseResult<AptUpgradeSummary> {
+	const upgradeCount = parseUpgradePackageCount(stdout);
+	if (!upgradeCount.ok) return upgradeCount;
+	if (upgradeCount.value === 0) {
+		return parseOk({ upgradeCount: 0, ceralivePackages: false });
 	}
 
-	return { upgradeCount, downloadSize, ceralivePackages };
+	const downloadSize = parseUpgradeDownloadSize(stdout);
+	if (!downloadSize.ok) return downloadSize;
+
+	const packageList = parseAptUpgradedPackages(stdout);
+	if (!packageList.ok) return packageList;
+	if (packageList.value === undefined) {
+		return parseFail(
+			"parseAptUpgradeSummary",
+			"missing upgraded package list",
+			stdout,
+		);
+	}
+
+	return parseOk({
+		upgradeCount: upgradeCount.value,
+		downloadSize: downloadSize.value,
+		ceralivePackages: packageListIncludes(
+			packageList.value,
+			ceralivePackageList,
+		),
+	});
 }
 
 // `apt-get dist-upgrade --assume-no` exits non-zero by design (it answers "no"),
@@ -238,19 +280,34 @@ async function getSoftwareUpdateSize() {
 	// First see if any packages can be upgraded by dist-upgrade
 	const upgrade = await execPNR("apt-get dist-upgrade --assume-no");
 	if (reportUpdateCheckFailure(upgrade)) return null;
-	let res = parseAptUpgradeSummary(upgrade.stdout);
+	let parsedSummary = parseAptUpgradeSummary(upgrade.stdout);
+	if (!parsedSummary.ok) {
+		logParseError(parsedSummary);
+		return null;
+	}
+	let res = parsedSummary.value;
 
 	// Otherwise, check if any packages have been held back (e.g. by dependencies changing)
 	if (res.upgradeCount === 0) {
-		aptHeldBackPackages = parseAptPackageList(
+		const heldBackPackages = parseAptPackageList(
 			upgrade.stdout,
 			"The following packages have been kept back:\n",
 		);
+		if (!heldBackPackages.ok) {
+			logParseError(heldBackPackages);
+			return null;
+		}
+		aptHeldBackPackages = heldBackPackages.value;
 		if (aptHeldBackPackages) {
 			const stdout = await aptAssumeNoInstall(
 				parseHeldBackPackages(aptHeldBackPackages),
 			);
-			res = parseAptUpgradeSummary(stdout);
+			parsedSummary = parseAptUpgradeSummary(stdout);
+			if (!parsedSummary.ok) {
+				logParseError(parsedSummary);
+				return null;
+			}
+			res = parsedSummary.value;
 		}
 	} else {
 		// Reset aptHeldBackPackages if some upgrades became available via dist-upgrade
@@ -501,18 +558,21 @@ function doSoftwareUpdate() {
 		if (!softUpdateStatus) return;
 
 		if (softUpdateStatus.total === 0) {
-			const count = parseUpgradePackageCount(data);
-			if (count !== undefined) {
-				softUpdateStatus.total = count;
+			const count = parseUpgradePackageCount(aptLog);
+			if (count.ok) {
+				softUpdateStatus.total = count.value;
 				sendUpdate = true;
 
 				const packageList = parseAptUpgradedPackages(aptLog);
 				if (
-					packageList &&
-					packageListIncludes(packageList, rebootPackageList)
+					packageList.ok &&
+					packageList.value !== undefined &&
+					packageListIncludes(packageList.value, rebootPackageList)
 				) {
 					rebootAfterUpgrade = true;
 				}
+			} else if (aptLog.includes(" upgraded")) {
+				logParseError(count);
 			}
 		}
 

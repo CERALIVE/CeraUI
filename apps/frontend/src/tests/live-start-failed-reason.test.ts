@@ -1,13 +1,13 @@
 /*
  * Live start-failure reason → copy mapping (C7).
  *
- * LiveView reads the `reason` field of a failed streaming.start and maps it to a
+ * LiveView reads the `error` field of a failed streaming.start and maps it to a
  * SPECIFIC `live.startFailed.*` message (falling back to `generic`). This test
  * pins two invariants without mounting the whole component:
- *   1. STREAM_START_REASON_KEYS (parsed from the real LiveView source) still
+ *   1. STREAM_START_ERROR_KEYS (parsed from the real LiveView source) still
  *      carries all FOUR audio/source entries — a merge race that clobbered one
  *      would silently drop its specific copy. See the task-13/14 clobber note.
- *   2. The reason→copy mapping (replicated from LiveView's startFailedMessage)
+ *   2. The error-code→copy mapping (replicated from LiveView's startFailedMessage)
  *      resolves source_lost / source_unavailable to their OWN copy, not generic.
  */
 import { readFileSync } from "node:fs";
@@ -19,7 +19,6 @@ import en from "../../../../packages/i18n/src/en/index";
 const SELF = fileURLToPath(import.meta.url);
 const LIVE_VIEW = path.resolve(path.dirname(SELF), "../main/LiveView.svelte");
 
-/** The four audio/source reason codes that carry specific start-failure copy. */
 const REQUIRED_KEYS = [
 	"audio_source_probe_failed",
 	"audio_codec_unsupported_transport",
@@ -27,27 +26,25 @@ const REQUIRED_KEYS = [
 	"source_unavailable",
 ] as const;
 
-/** Extract the STREAM_START_REASON_KEYS array literal from the live source. */
-function parseReasonKeys(): string[] {
+function parseStartErrorKeys(): string[] {
 	const src = readFileSync(LIVE_VIEW, "utf8");
 	const block = src.match(
-		/STREAM_START_REASON_KEYS\s*=\s*\[([\s\S]*?)\]\s*as const;/,
+		/STREAM_START_ERROR_KEYS\s*=\s*\[([\s\S]*?)\]\s*as const;/,
 	);
-	if (block === null) throw new Error("STREAM_START_REASON_KEYS not found");
+	if (block === null) throw new Error("STREAM_START_ERROR_KEYS not found");
 	return [...block[1].matchAll(/'([^']+)'/g)].map((m) => m[1] as string);
 }
 
 const startFailed = en.live.startFailed as Record<string, string>;
 
-/** Faithful replica of LiveView.startFailedMessage: array gate → dict lookup. */
-function startFailedMessage(reason: string, keys: readonly string[]): string {
-	return keys.includes(reason) ? startFailed[reason] : startFailed.generic;
+function startFailedMessage(code: string, keys: readonly string[]): string {
+	return keys.includes(code) ? startFailed[code] : startFailed.generic;
 }
 
 describe("live start-failed reason mapping (C7)", () => {
-	const keys = parseReasonKeys();
+	const keys = parseStartErrorKeys();
 
-	it("STREAM_START_REASON_KEYS still carries all four audio/source entries (no merge-race clobber)", () => {
+	it("STREAM_START_ERROR_KEYS still carries all four audio/source entries (no merge-race clobber)", () => {
 		for (const key of REQUIRED_KEYS) {
 			expect(keys, `missing ${key}`).toContain(key);
 		}
