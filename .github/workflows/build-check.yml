@@ -173,18 +173,32 @@ jobs:
       - name: Accessibility gate (axe-core — critical/serious, baselined)
         if: ${{ matrix.shard == 1 }}
         working-directory: CeraUI
-        run: CI=true E2E_PASSWORD=12345678 bun run --filter frontend test:e2e -- a11y.spec.ts --project=desktop
+        run: CI=true E2E_PASSWORD=12345678 bun run --filter frontend test:e2e -- a11y.spec.ts --project=desktop --reporter=line,json,blob
         env:
           MOCK_SCENARIO: multi-modem-wifi
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/a11y-shard-${{ matrix.shard }}.json
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-a11y-${{ matrix.shard }}
 
       # Functional run, sharded across the matrix. Playwright partitions the spec
       # set deterministically; the union of --shard=1/2 + 2/2 is the full 344
       # spec×project functional set (both desktop AND mobile projects — no trim).
       - name: Functional E2E (screenshot-free, no @visual, a11y gated separately)
         working-directory: CeraUI
-        run: CI=true E2E_PASSWORD=12345678 bun run --filter frontend test:e2e -- --grep-invert "@visual|@a11y|@gallery" --shard=${{ matrix.shard }}/${{ env.TOTAL_SHARDS }}
+        run: CI=true E2E_PASSWORD=12345678 bun run --filter frontend test:e2e -- --grep-invert "@visual|@a11y|@gallery" --shard=${{ matrix.shard }}/${{ env.TOTAL_SHARDS }} --reporter=line,json,blob
         env:
           MOCK_SCENARIO: multi-modem-wifi
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/e2e-shard-${{ matrix.shard }}.json
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-e2e-${{ matrix.shard }}
+
+      - name: Upload E2E timing artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-timing-shard-${{ matrix.shard }}
+          path: |
+            CeraUI/apps/frontend/test-results/*.json
+            CeraUI/apps/frontend/test-results/blob-report-*/
+          if-no-files-found: ignore
 
   test:
     name: Test (unit + E2E guardrails)
