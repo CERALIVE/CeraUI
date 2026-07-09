@@ -159,9 +159,23 @@ jobs:
         working-directory: CeraUI
         run: bun install --frozen-lockfile
 
-      - name: Install Playwright browsers
+      - name: Install Playwright system dependencies
         working-directory: CeraUI
-        run: bun run --filter frontend test:e2e:install
+        run: bun run --filter frontend test:e2e:install-deps
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-ms-playwright-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-ms-playwright-
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: CeraUI
+        run: bun run --filter frontend test:e2e:install-browser
 
       - name: Reset auth state
         working-directory: CeraUI

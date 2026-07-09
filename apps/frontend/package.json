@@ -20,6 +20,8 @@
 		"test:coverage": "vitest run --coverage",
 		"test:e2e": "playwright test --grep-invert @gallery",
 		"test:e2e:gallery": "playwright test --grep @gallery",
+		"test:e2e:install-browser": "playwright install chromium",
+		"test:e2e:install-deps": "playwright install-deps chromium",
 		"test:e2e:install": "playwright install chromium --with-deps",
 		"test:e2e:reset": "rm -f ../backend/auth_tokens.json",
 		"clean": "rm -rf dist node_modules/.vite"
