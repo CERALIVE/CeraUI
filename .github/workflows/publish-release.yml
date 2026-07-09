@@ -379,7 +379,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [calculate-version, build-ceraui-system, build-debian-package]
+    needs: [calculate-version, build-ceraui-system, build-debian-package, publish-federation]
     permissions:
       contents: write
     steps:
