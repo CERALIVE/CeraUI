@@ -80,7 +80,6 @@ mkdir -p "$TEMP_DIR/opt/ceralive"
 log_step "Copying files to package structure"
 cp dist/ceralive "$TEMP_DIR/usr/local/bin/ceralive"
 cp dist/ceralive.service "$TEMP_DIR/etc/systemd/system/"
-cp dist/ceralive.socket "$TEMP_DIR/etc/systemd/system/"
 # Post-boot add-on reconciler oneshot (T29). Non-blocking; never gates rollback.
 cp dist/ceralive-addon-reconciler.service "$TEMP_DIR/etc/systemd/system/"
 cp dist/98-ceralive-audio.rules "$TEMP_DIR/etc/udev/rules.d/"
@@ -88,6 +87,7 @@ cp dist/99-ceralive-check-usb-devices.rules "$TEMP_DIR/etc/udev/rules.d/"
 cp -r dist/public/* "$TEMP_DIR/var/www/ceralive/"
 cp dist/config.json "$TEMP_DIR/etc/ceralive/"
 cp apps/backend/setup.json "$TEMP_DIR/opt/ceralive/"
+ln -s /var/www/ceralive "$TEMP_DIR/opt/ceralive/public"
 cp dist/override-belaui.sh "$TEMP_DIR/usr/local/bin/"
 cp dist/reset-to-default.sh "$TEMP_DIR/usr/local/bin/"
 
@@ -110,6 +110,11 @@ if [[ "$SERVICE_EXEC" != "/usr/local/bin/ceralive" || ! -x "$TEMP_DIR$SERVICE_EX
     exit 1
 fi
 
+if ! grep -qx 'Environment=NODE_ENV=production' "$TEMP_DIR/etc/systemd/system/ceralive.service"; then
+    log_error "ceralive.service must force NODE_ENV=production to prevent mock-mode boot"
+    exit 1
+fi
+
 if [[ ! -s "$TEMP_DIR/opt/ceralive/setup.json" ]]; then
     log_error "ceralive-device must package the required /opt/ceralive/setup.json boot identity"
     exit 1
@@ -125,6 +130,8 @@ echo "🚀 Configuring CeraLive after installation..."
 
 # Reload systemd daemon
 systemctl daemon-reload
+
+systemctl disable --now ceralive.socket 2>/dev/null || true
 
 # Enable the post-boot add-on reconciler oneshot (T29). It is non-blocking and
 # deliberately decoupled from the OS-update healthcheck/rollback chain.
@@ -174,6 +181,7 @@ echo "🛑 Stopping CERALIVE service..."
 # Stop service if running
 systemctl stop ceralive.service 2>/dev/null || true
 systemctl disable ceralive.service 2>/dev/null || true
+systemctl disable --now ceralive.socket 2>/dev/null || true
 EOF
 
 # Create post-remove script

@@ -1,11 +1,8 @@
 {
 	"hw": "rk3588",
 	"engine": "cerastream",
-	"srtla_path": "./mocks/srtla/",
-	"sound_device_dir": "./mocks/sound/",
-	"usb_device_dir": "./mocks/usb/",
-	"mmcli_binary": "./mocks/mmcli",
-	"killall_binary": "./mocks/killall",
-	"bcrpt_path": "./mocks/bcrpt",
-	"ips_file": "/tmp/srtla_ips"
+	"srtla_path": "/usr/bin",
+	"sound_device_dir": "/dev/snd",
+	"usb_device_dir": "/dev",
+	"ips_file": "/run/ceralive/srtla_ips"
 }

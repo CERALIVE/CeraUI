@@ -150,7 +150,9 @@ if (isDevelopment()) {
 }
 
 checkExecPath(srtlaSendExec);
-checkExecPath(bcrptExec);
+if (setup.bcrpt_path) {
+	checkExecPath(bcrptExec);
+}
 
 // CRITICAL boot phase. A failure here is genuinely fatal: the device cannot
 // serve correct state without its config, so runCritical() logs loudly and
@@ -250,7 +252,7 @@ void initRevisions();
 initHardwareMonitoring();
 initDeviceStats();
 await guardNonCritical("rtmp-ingest", initRTMPIngestStats);
-initSRTIngest();
+await guardNonCritical("srt-ingest", initSRTIngest);
 void getSshStatus();
 logger.info(bootTimer.phase("🖥️", "hardware"));
 
@@ -288,7 +290,9 @@ startAudioDeviceWatcher(() => getStreamingProcesses().length > 0);
 // Hotplug input discovery (Task 34): v4l2 + unified audio scan, broadcasts the
 // `devices` payload that feeds the cerastream picker + live switch-input RPC.
 startDeviceDiscovery();
-void startBcrpt();
+if (setup.bcrpt_path) {
+	void startBcrpt();
+}
 logger.info(bootTimer.phase("🎵", "audio & devices"));
 
 // Don't autostart when restarting CeraLive after a software update or after a crash

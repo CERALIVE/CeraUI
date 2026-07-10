@@ -144,7 +144,6 @@ ceraui-2026.1.0-arm64.tar.gz
 ├── ceralive              # Backend binary
 ├── public/               # Frontend assets
 ├── ceralive.service      # Systemd service
-├── ceralive.socket       # Systemd socket
 ├── *.rules               # Udev rules
 ├── config.json           # Default configuration
 ├── install.sh            # Installation script
@@ -162,6 +161,13 @@ ceraui-2026.1.0-arm64.tar.gz
 | `BUILD_ARCH` | Target architecture: `arm64` or `amd64` |
 | `VITE_BRAND` | Frontend branding |
 | `NODE_ENV` | Build environment |
+
+The packaged `ceralive.service` runs as `root` because it manages device hardware
+and privileged system controls. The unit and compiled backend both pin
+`NODE_ENV=production`; development mock mode must never run on a device image.
+Its boot identity uses the installed `srtla_send` binary and real `/dev` hardware
+directories. The legacy BCRPT helper is opt-in and is not required to boot a
+device image.
 
 ## Build Process
 
