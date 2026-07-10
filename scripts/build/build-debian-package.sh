@@ -74,6 +74,7 @@ mkdir -p "$TEMP_DIR/etc/udev/rules.d"
 mkdir -p "$TEMP_DIR/etc/sudoers.d"
 mkdir -p "$TEMP_DIR/var/www/ceralive"
 mkdir -p "$TEMP_DIR/etc/ceralive"
+mkdir -p "$TEMP_DIR/opt/ceralive"
 
 # Copy files to appropriate locations
 log_step "Copying files to package structure"
@@ -86,6 +87,7 @@ cp dist/98-ceralive-audio.rules "$TEMP_DIR/etc/udev/rules.d/"
 cp dist/99-ceralive-check-usb-devices.rules "$TEMP_DIR/etc/udev/rules.d/"
 cp -r dist/public/* "$TEMP_DIR/var/www/ceralive/"
 cp dist/config.json "$TEMP_DIR/etc/ceralive/"
+cp apps/backend/setup.json "$TEMP_DIR/opt/ceralive/"
 cp dist/override-belaui.sh "$TEMP_DIR/usr/local/bin/"
 cp dist/reset-to-default.sh "$TEMP_DIR/usr/local/bin/"
 
@@ -105,6 +107,11 @@ chmod 0440 "$TEMP_DIR/etc/sudoers.d/ceralive-addon-helper"
 SERVICE_EXEC="$(sed -n 's/^ExecStart=//p' "$TEMP_DIR/etc/systemd/system/ceralive.service" | awk 'NR == 1 { print $1 }')"
 if [[ "$SERVICE_EXEC" != "/usr/local/bin/ceralive" || ! -x "$TEMP_DIR$SERVICE_EXEC" ]]; then
     log_error "ceralive.service ExecStart must point at the packaged backend binary (/usr/local/bin/ceralive)"
+    exit 1
+fi
+
+if [[ ! -s "$TEMP_DIR/opt/ceralive/setup.json" ]]; then
+    log_error "ceralive-device must package the required /opt/ceralive/setup.json boot identity"
     exit 1
 fi
 

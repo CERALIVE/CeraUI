@@ -21,6 +21,9 @@ This document describes the automated build pipeline for creating CeraUI distrib
 - **Purpose**: Installation via package manager
 - **Target**: Debian/Ubuntu-based systems
 - **Script**: `scripts/build/build-debian-package.sh`
+- **Runtime payload**: ships the immutable backend `setup.json` at
+  `/opt/ceralive/setup.json`; the device image seeds it into persistent
+  `/data/ceralive` on first boot before CeraUI starts.
 - **Output**: `dist/debian/`
 
 **Use Case**: Professional deployment with package management integration.
