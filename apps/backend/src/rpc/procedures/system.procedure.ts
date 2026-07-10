@@ -190,12 +190,15 @@ export const startUpdateProcedure = authedProcedure
  */
 export const sshStartProcedure = authedProcedure
 	.output(successResponseSchema)
-	.handler(({ context }) => {
+	.handler(async ({ context }) => {
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
-		void startStopSsh(context.ws as unknown as WebSocket, "start_ssh");
-		return { success: true };
+		const success = await startStopSsh(
+			context.ws as unknown as WebSocket,
+			"start_ssh",
+		);
+		return { success };
 	});
 
 /**
@@ -203,12 +206,15 @@ export const sshStartProcedure = authedProcedure
  */
 export const sshStopProcedure = authedProcedure
 	.output(successResponseSchema)
-	.handler(({ context }) => {
+	.handler(async ({ context }) => {
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
-		void startStopSsh(context.ws as unknown as WebSocket, "stop_ssh");
-		return { success: true };
+		const success = await startStopSsh(
+			context.ws as unknown as WebSocket,
+			"stop_ssh",
+		);
+		return { success };
 	});
 
 /**
@@ -221,9 +227,11 @@ export const sshResetPasswordProcedure = authedProcedure
 			password: z.string().optional(),
 		}),
 	)
-	.handler(({ context }) => {
-		void resetSshPassword(context.ws as unknown as WebSocket);
-		return { success: true };
+	.handler(async ({ context }) => {
+		const password = await resetSshPassword(context.ws as unknown as WebSocket);
+		return password === undefined
+			? { success: false }
+			: { success: true, password };
 	});
 
 /**
@@ -281,8 +289,8 @@ export const kioskStatusProcedure = authedProcedure
 	});
 
 /**
- * Kiosk toggle-on (T1). Fires unmask + enable --now + polling without blocking;
- * the synchronous prelude lets us return the committed enabled-stopped state.
+ * Kiosk toggle-on (T1). Waits for add-on enablement before returning the
+ * committed enabled-stopped state.
  */
 export const kioskStartProcedure = authedProcedure
 	.output(kioskToggleOutputSchema)
@@ -290,8 +298,7 @@ export const kioskStartProcedure = authedProcedure
 		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		void kioskStart(resolveActiveKioskDeps());
-		const status = getKioskStatus();
+		const status = await kioskStart(resolveActiveKioskDeps());
 		return {
 			success: true,
 			applied: { enabled: status.enabled, state: status.state },
@@ -299,8 +306,8 @@ export const kioskStartProcedure = authedProcedure
 	});
 
 /**
- * Kiosk toggle-off (T3). Stops/disables/masks the unit; returns the committed
- * disabled state synchronously.
+ * Kiosk toggle-off (T3). Waits for the unit/add-on teardown before returning
+ * the committed disabled state.
  */
 export const kioskStopProcedure = authedProcedure
 	.output(kioskToggleOutputSchema)
@@ -308,8 +315,7 @@ export const kioskStopProcedure = authedProcedure
 		if (!shouldUseMocks() && !(await isRealDevice())) {
 			return { success: false, error: KIOSK_UNAVAILABLE_ERROR };
 		}
-		void kioskStop(resolveActiveKioskDeps());
-		const status = getKioskStatus();
+		const status = await kioskStop(resolveActiveKioskDeps());
 		return {
 			success: true,
 			applied: { enabled: status.enabled, state: status.state },

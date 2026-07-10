@@ -263,4 +263,23 @@ describe("SSH toggle — production proof", () => {
 		// The real systemctl runner fired with the start action.
 		expect(runnerActions).toEqual(["start"]);
 	});
+
+	test("(prod) reports failure when the SSH service action fails", async () => {
+		process.env.NODE_ENV = "production";
+		delete process.env.MOCK_MODE;
+		delete process.env.CERALIVE_DEVICE_TYPE;
+		setup.ssh_user = "produser";
+		getConfig().ssh_pass = "preset";
+		setSshServiceRunner(async () => {
+			throw new Error("systemctl failed");
+		});
+
+		const success = await startStopSsh(stubWs(), "start_ssh", {
+			systemctlIsActive: async () => ({ stdout: "inactive", stderr: "" }),
+			readShadow: () => "produser:$6$abc$hashvalue:19000:0:99999:7:::\n",
+			broadcast: () => {},
+		});
+
+		expect(success).toBe(false);
+	});
 });

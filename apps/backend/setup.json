@@ -1,6 +1,7 @@
 {
 	"hw": "rk3588",
 	"engine": "cerastream",
+	"ssh_user": "ceralive",
 	"srtla_path": "/usr/bin",
 	"sound_device_dir": "/dev/snd",
 	"usb_device_dir": "/dev",

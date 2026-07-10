@@ -92,6 +92,19 @@ describe("getSshStatus — async race / single-broadcast (Task 6)", () => {
 		expect(status.user_pass).toBeDefined();
 	});
 
+	test("uses the device SSH account when setup omits the optional override", async () => {
+		setup.ssh_user = undefined;
+
+		const status = await getSshStatus({
+			systemctlIsActive: async () => ({ stdout: "active\n", stderr: "" }),
+			readShadow: () => shadowLine("ceralive"),
+			broadcast: () => {},
+		});
+
+		expect(status?.user).toBe("ceralive");
+		expect(status?.active).toBe(true);
+	});
+
 	test("rejects an unsafe ssh_user (leading dash / argument injection)", async () => {
 		setup.ssh_user = "-rf";
 

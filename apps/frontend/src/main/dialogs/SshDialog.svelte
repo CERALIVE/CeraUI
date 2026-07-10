@@ -60,7 +60,11 @@ async function copyPassword() {
 
 async function resetPassword() {
 	try {
-		await resetSSHPasword();
+		const password = await resetSSHPasword();
+		if (!password) {
+			toast.error($LL.osActions.sshResetFailed());
+			return;
+		}
 		toast.success($LL.advanced.passwordCopied());
 	} catch (error) {
 		console.error('Failed to reset SSH password:', error);

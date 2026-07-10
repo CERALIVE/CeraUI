@@ -229,6 +229,12 @@ explicitly are unaffected.
 - `setSshServiceRunner(runner)` (`modules/system/ssh.ts`) replaces the default
   `systemctl start/stop ssh` spawn. The `shouldUseMocks()` branch in `startStopSsh()`
   flips `mockSshActive` and broadcasts `{ssh}` without touching `systemctl` or `passwd`.
+  On device, `ceralive` is the default SSH account when `setup.json` has no override;
+  start, stop, and reset RPC responses settle only after the privileged action completes.
+- Kiosk start/stop RPCs likewise await the cog-display add-on lifecycle before reporting
+  their applied status. Background status refresh and software-update scheduling remain
+  deliberately asynchronous because their responses acknowledge a refresh/scheduled job,
+  not completion.
 
 ## CONVENTIONS
 
