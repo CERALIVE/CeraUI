@@ -13,6 +13,10 @@ export interface FederationHostAdapter {
 	validateRelay(input: RelayValidateInput): Promise<RelayValidateOutput>;
 }
 
+export function requireAppliedConfig(result: StreamingSetConfigOutput): void {
+	if (!result.success) throw new Error(result.error ?? "config_write_failed");
+}
+
 export interface FederationMountOptions {
 	readonly host: FederationHostAdapter;
 	readonly config?: ConfigMessage;

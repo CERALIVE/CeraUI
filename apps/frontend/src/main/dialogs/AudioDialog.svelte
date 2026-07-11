@@ -27,7 +27,10 @@ import { LL } from '@ceraui/i18n/svelte';
 import { AUDIO_SOURCE_AUTO, audioCodecSchema, type AudioCodec } from '@ceraui/rpc/schemas';
 import { Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
-import type { FederationHostAdapter } from '$lib/federation/host-contract';
+import {
+	type FederationHostAdapter,
+	requireAppliedConfig,
+} from '$lib/federation/host-contract';
 
 import { AppDialog } from '$lib/components/dialogs';
 import {
@@ -261,7 +264,8 @@ async function handleSave() {
 	const fields = Object.entries(input).filter(([, value]) => value !== undefined);
 	for (const [field, value] of fields) markPending(field, value);
 	try {
-		await (hostAdapter?.setConfig(input) ?? rpc.streaming.setConfig(input));
+		const result = await (hostAdapter?.setConfig(input) ?? rpc.streaming.setConfig(input));
+		requireAppliedConfig(result);
 	} catch {
 		toast.error($LL.notifications.saveFailed());
 	} finally {

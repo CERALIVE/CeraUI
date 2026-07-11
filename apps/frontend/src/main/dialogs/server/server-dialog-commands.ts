@@ -9,7 +9,10 @@ import {
 	reduceValidateResult,
 	type Validation,
 } from "$lib/components/streaming/relay-validation";
-import type { FederationHostAdapter } from "$lib/federation/host-contract";
+import {
+	type FederationHostAdapter,
+	requireAppliedConfig,
+} from "$lib/federation/host-contract";
 import { rpc } from "$lib/rpc";
 import { markPending, onRpcResolved } from "$lib/rpc/dirty-registry.svelte";
 import type { ManagedIngestAccount } from "$lib/streaming/receiver-experience";
@@ -85,6 +88,7 @@ export async function saveServerConfig(
 	try {
 		const result = await (options.hostAdapter?.setConfig(options.input) ??
 			rpc.streaming.setConfig(options.input));
+		requireAppliedConfig(result);
 		toast.success(options.savedMessage);
 		options.onSaved();
 		const requested = options.input.srt_latency;

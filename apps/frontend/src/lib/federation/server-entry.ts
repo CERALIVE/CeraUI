@@ -7,6 +7,7 @@ import {
 	type FederationMountHandle,
 	type FederationMountOptions,
 } from "./host-contract";
+import { mountFederationToastHost } from "./toast-host";
 
 export const federationAbiVersion = FEDERATION_ABI_VERSION;
 
@@ -14,6 +15,7 @@ export function mountDialog(
 	target: Element,
 	options: FederationMountOptions,
 ): FederationMountHandle {
+	const destroyToastHost = mountFederationToastHost(target);
 	const component = mount(ServerDialog, {
 		target,
 		props: {
@@ -22,5 +24,10 @@ export function mountDialog(
 			initialConfig: options.config,
 		},
 	});
-	return { destroy: () => unmount(component) };
+	return {
+		destroy: async () => {
+			await unmount(component);
+			await destroyToastHost();
+		},
+	};
 }

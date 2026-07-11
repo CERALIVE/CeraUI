@@ -64,6 +64,7 @@ import { fileURLToPath } from 'node:url';
 import {
 	assertFederationAssetSet,
 	discoverFederationAssets,
+	normalizeFederationAssetText,
 	parsePackageVersion,
 	parseSignedManifestAssets,
 	type SignedFederationAsset,
@@ -204,6 +205,9 @@ function sign(dir: string, version: string): SignedFederationAsset[] {
 	assertFederationAssetSet(assets);
 	for (const asset of assets) {
 		const file = bundlePath(dir, asset.filename);
+		const original = readFileSync(file, 'utf8');
+		const normalized = normalizeFederationAssetText(original);
+		if (normalized !== original) writeFileSync(file, normalized);
 		const bytes = readFileSync(file);
 		const integrity = sriHash(bytes);
 		writeFileSync(`${file}.sri`, `${integrity}\n`);
@@ -244,6 +248,10 @@ function verify(dir: string): void {
 
 	for (const entry of manifestFiles) {
 		const file = bundlePath(dir, entry.filename);
+		const text = readFileSync(file, 'utf8');
+		if (normalizeFederationAssetText(text) !== text) {
+			fail(`trailing whitespace in ${entry.filename}`);
+		}
 		const recomputed = sriHash(readFileSync(file));
 		if (recomputed !== entry.integrity) {
 			fail(`SRI mismatch for ${entry.filename}: manifest=${entry.integrity} actual=${recomputed}`);

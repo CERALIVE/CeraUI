@@ -15,6 +15,10 @@ export interface SignedFederationAsset extends FederationAsset {
 	readonly integrity: string;
 }
 
+export function normalizeFederationAssetText(text: string): string {
+	return text.replace(/[\t ]+$/gm, '');
+}
+
 export function parsePackageVersion(text: string): string {
 	const raw: unknown = JSON.parse(text);
 	if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {

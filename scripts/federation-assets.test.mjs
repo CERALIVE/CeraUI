@@ -6,6 +6,7 @@ import {
 	assertFederationAssetSet,
 	discoverFederationAssets,
 	federationAssetKind,
+	normalizeFederationAssetText,
 } from './federation-assets.ts';
 
 const OUTPUT = join(import.meta.dir, '../dist/federation/2026.7.0');
@@ -53,5 +54,9 @@ describe('federation asset contract', () => {
 				{ filename: 'server.js', kind: 'entry', imports: [] },
 			]),
 		).toThrow('missing federation stylesheet');
+	});
+
+	it('removes generated trailing whitespace before signing', () => {
+		expect(normalizeFederationAssetText('const x = 1;  \n\t\n')).toBe('const x = 1;\n\n');
 	});
 });
