@@ -5,6 +5,7 @@ import type {
 	VideoCodec,
 } from "@ceraui/rpc/schemas";
 import { mount, unmount } from "svelte";
+import "../../app.css";
 import { buildEncoderSetConfig } from "$lib/streaming/encoderConfig";
 import EncoderDialog from "$main/dialogs/EncoderDialog.svelte";
 import {

@@ -1,5 +1,9 @@
 import type { RelayProtocol, RelayValidateInput } from "@ceraui/rpc/schemas";
-
+import {
+	manualSaveEnabled,
+	type Validation,
+} from "$lib/components/streaming/relay-validation";
+import { isPortValid } from "$lib/components/streaming/ValidationAdapter";
 import type { ReceiverDestinationChoice } from "$lib/streaming/receiver-experience";
 
 export type ServerDraft = {
@@ -48,4 +52,48 @@ export function buildRelayValidationInput(
 		...(passphrase.trim() === "" ? {} : { passphrase: passphrase.trim() }),
 		protocol,
 	};
+}
+
+interface ServerSaveGate {
+	readonly destination: "managed" | "custom";
+	readonly isStreaming: boolean;
+	readonly addr: string;
+	readonly portStr: string;
+	readonly hasPortError: boolean;
+	readonly validation: Validation;
+	readonly selectedManagedActive: boolean;
+	readonly hasManagedSlots: boolean;
+	readonly hasActiveSlot: boolean;
+	readonly relayServer: string;
+}
+
+export function canSaveServer(input: ServerSaveGate): boolean {
+	if (input.destination === "custom") {
+		return manualSaveEnabled(input);
+	}
+	if (input.isStreaming || !input.selectedManagedActive) return false;
+	return input.hasManagedSlots ? input.hasActiveSlot : input.relayServer !== "";
+}
+
+export function serverEndpointErrors(input: {
+	readonly destination: "managed" | "custom";
+	readonly portStr: string;
+	readonly port: number | undefined;
+	readonly draftAddr: string | undefined;
+	readonly portRangeMessage: string;
+	readonly addressRequiredMessage: string;
+}): { readonly port?: string; readonly address?: string } {
+	const port =
+		input.destination === "custom" &&
+		input.portStr.trim() !== "" &&
+		!isPortValid(input.port)
+			? input.portRangeMessage
+			: undefined;
+	const address =
+		input.destination === "custom" &&
+		input.draftAddr !== undefined &&
+		input.draftAddr.trim() === ""
+			? input.addressRequiredMessage
+			: undefined;
+	return { port, address };
 }

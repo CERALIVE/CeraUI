@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { join } from 'node:path';
+import { readdirSync } from 'node:fs';
+import { extname, join } from 'node:path';
 
 import {
 	assertFederationAssetSet,
@@ -21,13 +22,27 @@ describe('federation asset contract', () => {
 		const assets = discoverFederationAssets(OUTPUT);
 		expect(() => assertFederationAssetSet(assets)).not.toThrow();
 		expect(assets.filter((asset) => asset.kind === 'entry')).toHaveLength(3);
-		expect(assets.filter((asset) => asset.kind === 'chunk')).toHaveLength(3);
-		expect(assets.filter((asset) => asset.kind === 'style')).toHaveLength(1);
+		const emitted = readdirSync(OUTPUT)
+			.filter((filename) => ['.js', '.css'].includes(extname(filename)))
+			.sort((left, right) => left.localeCompare(right));
+		expect(assets.map((asset) => asset.filename)).toEqual(emitted);
 		for (const asset of assets) {
 			for (const dependency of asset.imports) {
 				expect(assets.some((candidate) => candidate.filename === dependency)).toBe(true);
 			}
 		}
+	});
+
+	it('rejects executable chunks outside the entry graph', () => {
+		expect(() =>
+			assertFederationAssetSet([
+				{ filename: 'encoder.js', kind: 'entry', imports: [] },
+				{ filename: 'audio.js', kind: 'entry', imports: [] },
+				{ filename: 'server.js', kind: 'entry', imports: [] },
+				{ filename: 'orphan.js', kind: 'chunk', imports: [] },
+				{ filename: 'frontend.css', kind: 'style', imports: [] },
+			]),
+		).toThrow('unreachable federation chunk orphan.js');
 	});
 
 	it('rejects an asset set without emitted CSS', () => {

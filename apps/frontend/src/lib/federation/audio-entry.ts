@@ -1,4 +1,5 @@
 import { mount, unmount } from "svelte";
+import "../../app.css";
 
 import AudioDialog from "$main/dialogs/AudioDialog.svelte";
 import {

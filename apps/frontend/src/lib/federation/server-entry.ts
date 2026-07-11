@@ -1,4 +1,5 @@
 import { mount, unmount } from "svelte";
+import "../../app.css";
 
 import ServerDialog from "$main/dialogs/ServerDialog.svelte";
 import {

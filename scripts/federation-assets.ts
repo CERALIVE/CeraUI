@@ -115,6 +115,8 @@ function isStringArray(value: unknown): value is readonly string[] {
 }
 
 export function assertFederationAssetSet(assets: readonly FederationAsset[]): void {
+	const byFilename = new Map(assets.map((asset) => [asset.filename, asset]));
+	if (byFilename.size !== assets.length) throw new Error('duplicate federation asset');
 	for (const entry of ENTRY_FILES) {
 		if (!assets.some((asset) => asset.filename === entry && asset.kind === 'entry')) {
 			throw new Error(`missing federation entry ${entry}`);
@@ -122,5 +124,25 @@ export function assertFederationAssetSet(assets: readonly FederationAsset[]): vo
 	}
 	if (!assets.some((asset) => asset.kind === 'style')) {
 		throw new Error('missing federation stylesheet');
+	}
+	for (const asset of assets) {
+		for (const dependency of asset.imports) {
+			const target = byFilename.get(dependency);
+			if (target === undefined) throw new Error(`missing federation dependency ${dependency}`);
+			if (target.kind === 'style')
+				throw new Error(`stylesheet imported as executable ${dependency}`);
+		}
+	}
+	const reachable = new Set<string>();
+	const visit = (filename: string): void => {
+		if (reachable.has(filename)) return;
+		reachable.add(filename);
+		for (const dependency of byFilename.get(filename)?.imports ?? []) visit(dependency);
+	};
+	for (const asset of assets) if (asset.kind === 'entry') visit(asset.filename);
+	for (const asset of assets) {
+		if (asset.kind === 'chunk' && !reachable.has(asset.filename)) {
+			throw new Error(`unreachable federation chunk ${asset.filename}`);
+		}
 	}
 }
