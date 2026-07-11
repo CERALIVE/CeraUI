@@ -336,6 +336,7 @@ jobs:
               manifest.json) echo "application/json; charset=utf-8" ;;
               *.sig) echo "application/octet-stream" ;;
               *.js) echo "application/javascript; charset=utf-8" ;;
+              *.css) echo "text/css; charset=utf-8" ;;
               *) echo "application/octet-stream" ;;
             esac
           }
@@ -343,7 +344,7 @@ jobs:
           shopt -s nullglob
           uploaded=0
           # *.sig covers manifest.json.sig; manifest.json is matched explicitly.
-          for f in "$FED_DIR"/*.js "$FED_DIR"/*.sri "$FED_DIR"/*.sig "$FED_DIR"/manifest.json; do
+          for f in "$FED_DIR"/*.js "$FED_DIR"/*.css "$FED_DIR"/*.sri "$FED_DIR"/*.sig "$FED_DIR"/manifest.json; do
             name="$(basename "$f")"
             ct="$(content_type_for "$name")"
             key="${DEST_PREFIX}/${name}"

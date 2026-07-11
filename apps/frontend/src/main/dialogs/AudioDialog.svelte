@@ -28,6 +28,7 @@ import type { AudioCodec } from '@ceraui/rpc/schemas';
 import { AUDIO_SOURCE_AUTO } from '@ceraui/rpc/schemas';
 import { Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
+import type { FederationHostAdapter } from '$lib/federation/host-contract';
 
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { AppDialog } from '$lib/components/dialogs';
@@ -90,6 +91,7 @@ interface Props {
 	 * direct jump instead of leaving the operator to hunt for it.
 	 */
 	onOpenEncoder?: () => void;
+	hostAdapter?: FederationHostAdapter;
 }
 
 let {
@@ -100,6 +102,7 @@ let {
 	effectivePipeline,
 	onSave,
 	onOpenEncoder,
+	hostAdapter,
 }: Props = $props();
 
 // Schema-driven slider bounds — single source of truth, zero literals.
@@ -123,7 +126,7 @@ const pipelineKey = $derived(
 	resolveAudioPipelineKey(effectivePipeline, config?.pipeline),
 );
 const gateState = $derived(resolveAudioGateState(pipelineKey, pipelines));
-const hasAudioSupport = $derived(gateState === 'enabled');
+const hasAudioSupport = $derived(hostAdapter !== undefined || gateState === 'enabled');
 
 // Typed audio-source model (Task 13): pseudo-sources translated + grouped last,
 // device entries keep their hardware name + backend order. Used ONLY to resolve
@@ -268,7 +271,7 @@ async function handleSave() {
 	const fields = Object.entries(input).filter(([, value]) => value !== undefined);
 	for (const [field, value] of fields) markPending(field, value);
 	try {
-		await rpc.streaming.setConfig(input);
+		await (hostAdapter?.setConfig(input) ?? rpc.streaming.setConfig(input));
 	} catch {
 		toast.error($LL.notifications.saveFailed());
 	} finally {

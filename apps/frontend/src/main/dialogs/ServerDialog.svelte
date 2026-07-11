@@ -28,11 +28,18 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import { KeyRound, Server } from '@lucide/svelte';
-import type { RelayProtocol } from '@ceraui/rpc/schemas';
+import type { ConfigMessage, RelayProtocol } from '@ceraui/rpc/schemas';
 import { untrack } from 'svelte';
 import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
+import type { FederationHostAdapter } from '$lib/federation/host-contract';
+import {
+	buildRelayValidationInput,
+	filterProviderEntries,
+	relayEndpoint,
+	type ServerDraft,
+} from '$lib/federation/server-model';
 import { Button } from '$lib/components/ui/button';
 import {
 	isPortValid,
@@ -88,29 +95,24 @@ interface Props {
 	 * federated bundle that lacks the RPC still mounts + saves normally.
 	 */
 	onSaved?: () => void;
+	hostAdapter?: FederationHostAdapter;
+	initialConfig?: ConfigMessage;
 }
-let { open = $bindable(false), onSaved = () => undefined }: Props = $props();
+let {
+	open = $bindable(false),
+	onSaved = () => undefined,
+	hostAdapter,
+	initialConfig,
+}: Props = $props();
 
 const PORT = streamingConstraints.port;
 const PROTOCOL: RelayProtocol = 'srtla';
 
-const config = $derived(getConfig());
+const config = $derived(hostAdapter ? initialConfig : getConfig());
 const relays = $derived(getRelays());
 const isStreaming = $derived(Boolean(getIsStreaming()));
 
-type Draft = {
-	destination_choice?: ReceiverDestinationChoice;
-	srtla_addr?: string;
-	srtla_port?: string;
-	srt_streamid?: string;
-	srt_latency?: number;
-	relay_server?: string;
-	relay_account?: string;
-	relay_streamid?: string;
-	passphrase?: string;
-	selected_slot?: string;
-};
-let draft = $state<Draft>({});
+let draft = $state<ServerDraft>({});
 
 let cloudRemoteOpen = $state(false);
 let cloudRemoteProvider = $state<ReceiverDestinationChoice | undefined>(undefined);
@@ -176,12 +178,10 @@ const allAccountEntries = $derived(Object.entries(relays?.accounts ?? {}));
 // Provider-filtered catalog (R-4): only the selected cloud's servers/accounts are
 // offered; untagged legacy entries belong to the selected provider.
 const filteredServerEntries = $derived(
-	allServerEntries.filter(([, info]) => (info.provider?.kind ?? selectedProvider) === selectedProvider),
+	filterProviderEntries(allServerEntries, selectedProvider),
 );
 const filteredAccountEntries = $derived(
-	allAccountEntries.filter(
-		([, info]) => (info.provider?.kind ?? selectedProvider) === selectedProvider,
-	),
+	filterProviderEntries(allAccountEntries, selectedProvider),
 );
 // A persisted account tagged to a different provider is dropped (re-pick).
 const effectiveRelayAccount = $derived(
@@ -191,11 +191,7 @@ const effectiveRelayAccount = $derived(
 const relayServerInfo = $derived(relays?.servers?.[relayServer]);
 const relayServerName = $derived(relayServerInfo?.name);
 const relayServerRtt = $derived(relayServerInfo?.rtt);
-const relayServerEndpoint = $derived(
-	relayServerInfo?.addr && relayServerInfo?.port
-		? `${relayServerInfo.addr}:${relayServerInfo.port}`
-		: undefined,
-);
+const relayServerEndpoint = $derived(relayEndpoint(relayServerInfo));
 const relayAccountName = $derived(relays?.accounts?.[effectiveRelayAccount]?.name);
 
 const engineCaps = $derived(getCapabilities());
@@ -278,13 +274,8 @@ function openCloudRemote(provider: ReceiverDestinationChoice) {
 async function handleValidate() {
 	validation = { state: 'validating' };
 	try {
-		const result = await rpc.relay.validate({
-			addr: addr.trim(),
-			port: portNum ?? 0,
-			streamid: streamId.trim() === '' ? undefined : streamId.trim(),
-			passphrase: passphrase.trim() === '' ? undefined : passphrase.trim(),
-			protocol: PROTOCOL,
-		});
+		const input = buildRelayValidationInput(addr, portNum, streamId, passphrase, PROTOCOL);
+		const result = await (hostAdapter?.validateRelay(input) ?? rpc.relay.validate(input));
 		validation = reduceValidateResult(result);
 	} catch (error) {
 		validation = reduceValidateError(error);
@@ -311,7 +302,7 @@ async function handleSave() {
 	const fields = Object.entries(input);
 	for (const [field, value] of fields) markPending(field, value);
 	try {
-		const result = await rpc.streaming.setConfig(input);
+		const result = await (hostAdapter?.setConfig(input) ?? rpc.streaming.setConfig(input));
 		toast.success($LL.notifications.saved());
 		// Fire-and-forget "saved" signal (never awaited): a host may run an
 		// informational relay.validate on the saved endpoint. Save already

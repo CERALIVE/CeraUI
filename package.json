@@ -21,6 +21,7 @@
 		"postbuild": "cp -r ./deployment/* ./dist/",
 		"build:frontend": "bun run --filter frontend build",
 		"build:federation": "bun run --filter frontend build:federation",
+		"test:federation": "bun run build:federation && bun test scripts/federation-assets.test.mjs",
 		"sign:federation": "bun run scripts/sign-federation.ts",
 		"build:backend": "bun run --filter backend build:backend-only",
 		"preview": "bun run --filter frontend preview",

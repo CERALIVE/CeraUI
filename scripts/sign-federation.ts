@@ -56,19 +56,21 @@ import {
 	createPublicKey,
 	sign as edSign,
 	verify as edVerify,
-	type KeyObject,
 } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+	assertFederationAssetSet,
+	discoverFederationAssets,
+	parsePackageVersion,
+	parseSignedManifestAssets,
+	type SignedFederationAsset,
+} from './federation-assets';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const CERAUI_ROOT = resolve(SCRIPT_DIR, '..');
-
-// The three federated dialog bundles (Task 39 entries → fileName). Shared chunks
-// are co-located but the contract signs the dialog bundles + manifest.
-const DIALOG_BUNDLES = ['encoder.js', 'audio.js', 'server.js'] as const;
 
 interface GpgContext {
 	readonly env: Record<string, string>;
@@ -96,13 +98,7 @@ function cleanup(): void {
 }
 
 function readVersion(): string {
-	const pkg = JSON.parse(readFileSync(join(CERAUI_ROOT, 'package.json'), 'utf8')) as {
-		version?: string;
-	};
-	if (!pkg.version) {
-		fail('root package.json has no "version" field');
-	}
-	return pkg.version;
+	return parsePackageVersion(readFileSync(join(CERAUI_ROOT, 'package.json'), 'utf8'));
 }
 
 function sriHash(bytes: Buffer): string {
@@ -178,7 +174,7 @@ function gpgVerify(file: string, sig: string, ctx: GpgContext): boolean {
 	return gpg(['--batch', '--verify', sig, file], ctx.env).code === 0;
 }
 
-function loadManifestPrivateKey(): KeyObject {
+function loadManifestPrivateKey(): ReturnType<typeof createPrivateKey> {
 	const raw = process.env.FEDERATION_MANIFEST_PRIVATE_KEY?.trim();
 	if (!raw) {
 		fail('FEDERATION_MANIFEST_PRIVATE_KEY not set (Ed25519, PEM PKCS8 or base64 of the PEM)');
@@ -191,11 +187,6 @@ function loadManifestPrivateKey(): KeyObject {
 	}
 }
 
-interface ManifestFile {
-	readonly filename: string;
-	readonly integrity: string;
-}
-
 function bundlePath(dir: string, name: string): string {
 	const file = join(dir, name);
 	if (!existsSync(file)) {
@@ -204,19 +195,21 @@ function bundlePath(dir: string, name: string): string {
 	return file;
 }
 
-function sign(dir: string, version: string): ManifestFile[] {
+function sign(dir: string, version: string): SignedFederationAsset[] {
 	const gpgCtx = setupGpg();
 	const privateKey = loadManifestPrivateKey();
-	const files: ManifestFile[] = [];
+	const files: SignedFederationAsset[] = [];
 
-	for (const name of DIALOG_BUNDLES) {
-		const file = bundlePath(dir, name);
+	const assets = discoverFederationAssets(dir);
+	assertFederationAssetSet(assets);
+	for (const asset of assets) {
+		const file = bundlePath(dir, asset.filename);
 		const bytes = readFileSync(file);
 		const integrity = sriHash(bytes);
 		writeFileSync(`${file}.sri`, `${integrity}\n`);
 		gpgDetachSign(file, `${file}.sig`, gpgCtx);
-		files.push({ filename: name, integrity });
-		process.stdout.write(`  signed ${name}  ${integrity}\n`);
+		files.push({ ...asset, integrity });
+		process.stdout.write(`  signed ${asset.filename}  ${integrity}\n`);
 	}
 
 	// EXACT shape FederationManifestSchema expects. The bytes written here are the
@@ -235,9 +228,21 @@ function sign(dir: string, version: string): ManifestFile[] {
 function verify(dir: string): void {
 	const gpgCtx = setupGpg();
 	const manifestText = readFileSync(join(dir, 'manifest.json'), 'utf8');
-	const manifest = JSON.parse(manifestText) as { files: ManifestFile[] };
+	const manifestFiles = parseSignedManifestAssets(manifestText);
+	const discovered = discoverFederationAssets(dir);
+	assertFederationAssetSet(discovered);
+	if (
+		discovered.some(
+			(asset) =>
+				!manifestFiles.some(
+					(entry) => entry.filename === asset.filename && entry.kind === asset.kind,
+				),
+		)
+	) {
+		fail('manifest does not cover every emitted federation asset');
+	}
 
-	for (const entry of manifest.files) {
+	for (const entry of manifestFiles) {
 		const file = bundlePath(dir, entry.filename);
 		const recomputed = sriHash(readFileSync(file));
 		if (recomputed !== entry.integrity) {
@@ -255,7 +260,8 @@ function verify(dir: string): void {
 
 	// Reuse the consumer's exact check: verify(null, bytes, publicKey, sig).
 	const signature = readFileSync(join(dir, 'manifest.json.sig'), 'utf8').trim();
-	const derivedPublic = createPublicKey(loadManifestPrivateKey());
+	const privatePem = loadManifestPrivateKey().export({ type: 'pkcs8', format: 'pem' });
+	const derivedPublic = createPublicKey(privatePem);
 	if (
 		!edVerify(
 			null,

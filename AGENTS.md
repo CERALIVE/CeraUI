@@ -946,17 +946,16 @@ Three Vite lib-mode ES-module bundles — one per config dialog:
 
 | Bundle | Entry point |
 |--------|-------------|
-| `encoder.js` | `apps/frontend/src/main/dialogs/EncoderDialog.svelte` |
-| `audio.js` | `apps/frontend/src/main/dialogs/AudioDialog.svelte` |
-| `server.js` | `apps/frontend/src/main/dialogs/ServerDialog.svelte` |
+| `encoder.js` | `apps/frontend/src/lib/federation/encoder-entry.ts` |
+| `audio.js` | `apps/frontend/src/lib/federation/audio-entry.ts` |
+| `server.js` | `apps/frontend/src/lib/federation/server-entry.ts` |
 
-Each bundle is a self-contained ES module. It imports nothing from the host page
-and exports a single `mount(target, props)` function that `ceralive-platform` calls
-after dynamic `import()`.
-
-`server.js` includes `ProtocolSelector.svelte` (the always-visible protocol radiogroup
-added in T21-T23). The `mount(target, props)` export contract is unchanged — the
-protocol-first reorder is an internal layout change only.
+Each entry exports `federationAbiVersion = 1` and
+`mountDialog(target, { host, config })`. The wrapper uses its bundled Svelte
+runtime to mount and unmount the dialog, so the host never mounts a component
+compiled against a different Svelte runtime. `host` is the typed adapter in
+`host-contract.ts`; Audio and Server route persistence and relay validation
+through it in hosted mode while retaining their device-local RPC fallback.
 
 ### Build step: `bun run build:federation`
 
@@ -968,6 +967,9 @@ dist/federation/<ceraui-version>/
   encoder.js
   audio.js
   server.js
+  <shared chunks>.js
+  frontend.css
+  federation-build.json
 ```
 
 The version is read from `package.json` at build time. The output directory is
@@ -975,13 +977,14 @@ gitignored and never committed.
 
 ### Sign step: `bun run sign:federation`
 
-Runs `scripts/build/sign-federation.sh`. For each `.js` file in
-`dist/federation/<ceraui-version>/`:
+Runs `scripts/sign-federation.ts`. The Vite build manifest supplies the static
+import graph. For every emitted `.js` and `.css` asset:
 
-1. Computes a `sha384-` SRI hash → writes `<file>.js.sri`
-2. GPG-signs the bundle (detached, armored) → writes `<file>.js.sig`
-3. Writes `manifest.json` listing every bundle with its SRI hash and version
-4. GPG-signs `manifest.json` → writes `manifest.json.sig`
+1. Computes a `sha384-` SRI hash and writes `<file>.sri`.
+2. GPG-signs the asset and writes `<file>.sig`.
+3. Writes `manifest.json` with every entry, chunk, stylesheet, kind, import edge,
+   SRI hash, and CeraUI version.
+4. Ed25519-signs the exact manifest bytes as `manifest.json.sig`.
 
 The GPG key is the same CeraLive release key used for `.deb` signing (managed in
 `cert-work/`). The Ed25519 key used for PASETO tokens is NOT used here.
@@ -992,9 +995,8 @@ Runs after the `.deb` publish job succeeds. Steps:
 
 1. `bun run build:federation` — produces `dist/federation/<version>/`
 2. `bun run sign:federation` — produces `.sri` + `.sig` + `manifest.json`
-3. Uploads the entire `dist/federation/<version>/` tree to R2 at
-   `ui-bundle/<ceraui-version>/` via `wrangler r2 object put` (or `aws s3 sync`
-   against the R2 S3-compat endpoint)
+3. Uploads every signed JS/CSS asset and sidecar plus the signed manifest to R2
+   at `ui-bundle/<ceraui-version>/` with pinned content types.
 4. The upload is idempotent — re-running a release does not corrupt existing bundles
 
 The `apt-worker` serves these files at
@@ -1013,7 +1015,8 @@ platform checks `ceraui-version` at session start; out-of-window devices get
 | Task | Location |
 |------|----------|
 | Vite federation build config | `apps/frontend/vite.federation.config.ts` |
-| Sign + SRI script | `scripts/build/sign-federation.sh` |
+| ABI and host adapter | `apps/frontend/src/lib/federation/` |
+| Sign + SRI script | `scripts/sign-federation.ts` |
 | CI publish workflow | `.github/workflows/publish-release.yml` (`publish-federation` job) |
 | Bundle output (gitignored) | `dist/federation/<version>/` |
 | Full hosting/signing contract | root `AGENTS.md` → "Version-federation hosting/signing contract" |
