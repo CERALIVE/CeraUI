@@ -7,6 +7,7 @@ import {
 	guardNonCritical,
 	runCritical,
 } from "./helpers/boot-guard.ts";
+import { clearRecentLogLines, getRecentLogLines } from "./helpers/logger.ts";
 import {
 	type BackendShutdownDeps,
 	handleTerminationSignal,
@@ -64,6 +65,7 @@ async function simulateBoot(opts: {
 beforeEach(() => {
 	resetBootReadiness();
 	resetShutdownForTest();
+	clearRecentLogLines();
 });
 
 describe("guardNonCritical — fail-soft non-critical init", () => {
@@ -271,39 +273,82 @@ describe("termination shutdown lifecycle", () => {
 		expect(calls).toEqual(["srt", "dmesg", "streamloop", "exit:0"]);
 	});
 
-	test("attempts every cleanup and exits when SRT ingest cleanup rejects", async () => {
-		const calls: string[] = [];
-		const unhandledRejections: unknown[] = [];
-		const onUnhandledRejection = (reason: unknown): void => {
-			unhandledRejections.push(reason);
-		};
-		process.on("unhandledRejection", onUnhandledRejection);
+	interface AsyncCleanupFailure {
+		cleanupName: string;
+		errorMessage: string;
+		rejectAt: "srt" | "streamloop";
+	}
 
-		try {
-			const deps: BackendShutdownDeps = {
-				stopSrtIngest: async () => {
-					calls.push("srt");
-					throw new Error("srt cleanup failed");
-				},
-				stopDmesgWatchers: () => {
-					calls.push("dmesg");
-				},
-				gracefulShutdown: async () => {
-					calls.push("streamloop");
-				},
-				exit: (code) => {
-					calls.push(`exit:${code}`);
-				},
+	const asyncCleanupFailures: AsyncCleanupFailure[] = [
+		{
+			cleanupName: "SRT ingest",
+			errorMessage: "srt cleanup failed",
+			rejectAt: "srt",
+		},
+		{
+			cleanupName: "streaming processes",
+			errorMessage: "streamloop cleanup failed",
+			rejectAt: "streamloop",
+		},
+	];
+
+	for (const scenario of asyncCleanupFailures) {
+		test(`reports ${scenario.cleanupName} rejection, attempts later cleanup, and exits once`, async () => {
+			const calls: string[] = [];
+			const unhandledRejections: unknown[] = [];
+			const onUnhandledRejection = (reason: unknown): void => {
+				unhandledRejections.push(reason);
 			};
+			process.on("unhandledRejection", onUnhandledRejection);
 
-			handleTerminationSignal("SIGTERM", deps);
-			handleTerminationSignal("SIGINT", deps);
-			await Bun.sleep(0);
+			try {
+				let observeExit: ((code: number) => void) | undefined;
+				const exitObserved = new Promise<number>((resolve) => {
+					observeExit = resolve;
+				});
+				const deps: BackendShutdownDeps = {
+					stopSrtIngest: async () => {
+						calls.push("srt");
+						if (scenario.rejectAt === "srt") {
+							throw new Error(scenario.errorMessage);
+						}
+					},
+					stopDmesgWatchers: () => {
+						calls.push("dmesg");
+					},
+					gracefulShutdown: async () => {
+						calls.push("streamloop");
+						if (scenario.rejectAt === "streamloop") {
+							throw new Error(scenario.errorMessage);
+						}
+					},
+					exit: (code) => {
+						calls.push(`exit:${code}`);
+						observeExit?.(code);
+					},
+				};
 
-			expect(calls).toEqual(["srt", "dmesg", "streamloop", "exit:0"]);
-			expect(unhandledRejections).toEqual([]);
-		} finally {
-			process.off("unhandledRejection", onUnhandledRejection);
-		}
-	});
+				handleTerminationSignal("SIGTERM", deps);
+				handleTerminationSignal("SIGINT", deps);
+				const exitCode = await exitObserved;
+				await new Promise((resolve) => setTimeout(resolve, 20));
+
+				expect(exitCode).toBe(0);
+				expect(calls).toEqual(["srt", "dmesg", "streamloop", "exit:0"]);
+				expect(calls.filter((call) => call === "exit:0")).toHaveLength(1);
+				expect(unhandledRejections).toEqual([]);
+
+				const failureReports = getRecentLogLines().filter((line) =>
+					line.includes("cleanup failed"),
+				);
+				expect(failureReports).toHaveLength(1);
+				expect(failureReports[0]).toContain(
+					`shutdown: ${scenario.cleanupName} cleanup failed`,
+				);
+				expect(failureReports[0]).toContain(scenario.errorMessage);
+			} finally {
+				process.off("unhandledRejection", onUnhandledRejection);
+			}
+		});
+	}
 });
