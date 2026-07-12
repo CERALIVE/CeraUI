@@ -77,6 +77,10 @@ jobs:
         run: |
           ! grep -rnE "#nav-tab-" apps/frontend/tests/e2e --include="*.spec.ts"
 
+      - name: Build Check workflow shape gate
+        working-directory: CeraUI
+        run: bun run test:build-check-shape
+
   test-be:
     name: BE unit (bun) + exec-guard + biome
     runs-on: ubuntu-latest
@@ -132,7 +136,7 @@ jobs:
         run: bun run --filter backend test
 
   setup-e2e:
-    name: E2E setup (deps, browsers, frontend build)
+    name: E2E setup (package deps, browser cache, frontend build)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout CeraUI
@@ -162,16 +166,20 @@ jobs:
         working-directory: CeraUI
         run: bun install --frozen-lockfile
 
-      - name: Install Playwright system dependencies
+      - name: Resolve Playwright browser version
+        id: playwright-version
         working-directory: CeraUI
-        run: bun run --filter frontend test:e2e:install-deps
+        run: |
+          version="$(bunx --bun playwright --version | sed -n 's/^Version //p')"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-ms-playwright-${{ hashFiles('CeraUI/bun.lock') }}
+          key: ${{ runner.os }}-ms-playwright-${{ steps.playwright-version.outputs.version }}
           restore-keys: |
             ${{ runner.os }}-ms-playwright-
 
@@ -233,12 +241,20 @@ jobs:
         working-directory: CeraUI
         run: bun run --filter frontend test:e2e:install-deps
 
+      - name: Resolve Playwright browser version
+        id: playwright-version
+        working-directory: CeraUI
+        run: |
+          version="$(bunx --bun playwright --version | sed -n 's/^Version //p')"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-ms-playwright-${{ hashFiles('CeraUI/bun.lock') }}
+          key: ${{ runner.os }}-ms-playwright-${{ steps.playwright-version.outputs.version }}
           restore-keys: |
             ${{ runner.os }}-ms-playwright-
 

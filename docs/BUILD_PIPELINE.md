@@ -129,6 +129,23 @@ or the tag/release identity is already in use.
 Both the normal and recovery workflows require frozen install, lint/typecheck,
 and unit tests before their build jobs can run.
 
+### Pull Request Build Check E2E
+
+`.github/workflows/build-check.yml` builds the frontend once in `setup-e2e`, uploads
+the resulting `frontend-dist`, and fans functional E2E coverage across the
+desktop/mobile × two-shard matrix. The setup job caches only Playwright browser
+binaries, keyed by the exact version reported by the installed Playwright CLI;
+it does not install runner-local OS packages. Each isolated matrix runner runs
+`test:e2e:install-deps` for its own Ubuntu image, restores the versioned browser
+cache, and installs the browser only on a cache miss. Each lane uploads a unique
+blob report, which `merge-e2e-reports` combines into the final HTML report.
+
+Run the static topology contract locally with:
+
+```bash
+bun run test:build-check-shape
+```
+
 ## Local Development
 
 ### Prerequisites

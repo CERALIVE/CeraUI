@@ -525,6 +525,13 @@ commits. Exactly ONE PR per repo. Merge order: root policy PR → ceralive-platf
 Rebase onto `origin/<canonical>` between waves (Rule B); conflicts STOP-and-surface.
 R2 is a COMPLEMENT to Rule C ("one focused PR per repo"), not an override.
 
+The Build Check E2E topology is intentionally split: `setup-e2e` builds and
+uploads the frontend and caches only Playwright browser binaries, while each
+isolated desktop/mobile × two-shard runner installs its own Playwright OS
+dependencies. Browser cache keys use the exact installed Playwright CLI version,
+and the four lanes retain unique blob artifacts for the merged report. The
+static contract is `bun run test:build-check-shape`.
+
 ## BUN-NATIVE CONVENTIONS (as of 2026-06)
 
 The backend is fully migrated to Bun-native APIs. Use these patterns for all new backend code:
