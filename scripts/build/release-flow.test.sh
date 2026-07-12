@@ -7,6 +7,8 @@ deb_workflow=".github/workflows/publish-deb.yml"
 build_check_workflow=".github/workflows/build-check.yml"
 package_manifest="package.json"
 contract_runner="scripts/build/release-package-contracts.sh"
+temp_dir="$(mktemp -d)"
+trap 'rm -rf "$temp_dir"' EXIT
 
 require_file_contract() {
   local file="$1"
@@ -61,6 +63,77 @@ assert_release_quality_gate() {
     printf '%s lint, typecheck, and unit tests must run inside the release gate\n' "$workflow" >&2
     exit 1
   fi
+}
+
+extract_job_block() {
+  local workflow="$1"
+  local job="$2"
+  awk -v job="$job" '
+    $0 == "  " job ":" {
+      in_job = 1
+    }
+    in_job && $0 ~ /^  [a-zA-Z0-9_-]+:$/ && $0 != "  " job ":" {
+      exit
+    }
+    in_job {
+      print
+    }
+  ' "$workflow"
+}
+
+assert_recovery_gate_uses_resolved_commit() {
+  local gate_block
+  local checkout_ref
+  local repo="$temp_dir/recovery-gate-provenance"
+  local dispatch_commit
+  local release_commit
+  local selected_commit
+  local tested_commit
+
+  gate_block="$(extract_job_block "$deb_workflow" 'release-package-contracts')"
+  checkout_ref="$(awk '
+    /^      - name: Checkout CeraUI$/ {
+      in_checkout = 1
+      next
+    }
+    in_checkout && /^      - name:/ {
+      exit
+    }
+    in_checkout && /^          ref:/ {
+      sub(/^[[:space:]]*ref:[[:space:]]*/, "")
+      print
+      exit
+    }
+  ' <<< "$gate_block")"
+
+  git init -q "$repo"
+  git -C "$repo" config user.name "release-contract-test"
+  git -C "$repo" config user.email "release-contract-test@example.invalid"
+  printf 'dispatch\n' > "$repo/source"
+  git -C "$repo" add source
+  git -C "$repo" commit -q -m dispatch
+  dispatch_commit="$(git -C "$repo" rev-parse HEAD)"
+  printf 'release\n' > "$repo/source"
+  git -C "$repo" commit -q -am release
+  release_commit="$(git -C "$repo" rev-parse HEAD)"
+
+  case "$checkout_ref" in
+    '${{ needs.resolve-version.outputs.commit }}') selected_commit="$release_commit" ;;
+    '') selected_commit="$dispatch_commit" ;;
+    *)
+      printf 'manual recovery quality gate uses unsupported checkout ref: %s\n' "$checkout_ref" >&2
+      return 1
+      ;;
+  esac
+
+  git -C "$repo" checkout -q --detach "$selected_commit"
+  tested_commit="$(git -C "$repo" rev-parse HEAD)"
+  if [[ "$tested_commit" != "$release_commit" ]]; then
+    printf 'manual recovery gates tested dispatch commit %s instead of resolved release commit %s\n' \
+      "$tested_commit" "$release_commit" >&2
+    return 1
+  fi
+  printf 'manual recovery gates tested resolved release commit %s\n' "$tested_commit"
 }
 
 require_file_contract "$package_manifest" \
@@ -126,6 +199,7 @@ fi
 
 assert_release_quality_gate "$release_workflow" 'build-ceraui-system'
 assert_release_quality_gate "$deb_workflow" 'build-deb'
+assert_recovery_gate_uses_resolved_commit
 
 primary_gated_builds="$(grep -Fc 'needs: [calculate-version, release-package-contracts]' "$release_workflow")"
 if [[ "$primary_gated_builds" -ne 3 ]]; then

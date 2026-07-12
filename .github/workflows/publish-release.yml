@@ -109,14 +109,14 @@ jobs:
               fi
 
               # Get the base patch (latest stable or 0)
-              LATEST_STABLE=$(git tag -l "${PREFIX}.*" | grep -v beta | sed "s/${PREFIX}\.//" | sort -n | tail -1)
+              LATEST_STABLE=$(git tag -l "${PREFIX}.*" | sed -n "/-beta/!s/${PREFIX}\.//p" | sort -n | tail -1)
               PATCH=${LATEST_STABLE:-0}
               NEXT_PATCH=$((PATCH + 1))
 
               VERSION="${YEAR}.${MONTH}.${NEXT_PATCH}-beta.${BETA_NUM}"
             else
               # For stable: find highest patch number (excluding betas)
-              LATEST_PATCH=$(git tag -l "${PREFIX}.*" | grep -v beta | sed "s/${PREFIX}\.//" | sort -n | tail -1)
+              LATEST_PATCH=$(git tag -l "${PREFIX}.*" | sed -n "/-beta/!s/${PREFIX}\.//p" | sort -n | tail -1)
 
               if [ -z "$LATEST_PATCH" ]; then
                 PATCH=0

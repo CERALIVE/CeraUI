@@ -167,8 +167,9 @@ with `GITHUB_TOKEN` does not trigger another workflow. `publish-deb.yml` is
 manual recovery for an existing release and is not a second normal release path.
 Both workflows must be dispatched from the default branch. Recovery
 resolves the supplied tag to one commit, checks out that commit in detached mode,
-verifies the tag has not moved and `package.json` matches, and fails unless that
-release exists before build and upload.
+uses it for the release/package contracts, lint/typecheck, unit tests, and package
+build, verifies the tag has not moved and `package.json` matches, and fails unless
+that release exists before build and upload.
 Tag and version inputs are transported through step environment variables and
 validated as canonical stable CalVer before workflow outputs or commands run.
 `bun run test:release-package-contracts` is the required local and CI gate for
@@ -178,6 +179,8 @@ Both release workflows also install from the frozen lockfile and run
 The primary release workflow accepts `force_version` only for stable canonical
 CalVer, transports all input-derived version/tag values through step env, and
 fails before any build unless the calculated version matches `package.json`.
+An empty current-month stable-tag set is a valid first-release state for both
+automatic stable and beta calculation; it does not terminate the shell pipeline.
 It also rejects an existing tag or release before builds and rechecks immediately
 before publication. The release action creates the tag from the workflow dispatch
 SHA and verifies the resulting tag, so the tag and every attached asset identify

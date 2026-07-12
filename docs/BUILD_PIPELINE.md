@@ -71,6 +71,8 @@ The build pipeline runs manually via workflow dispatch.
 1. **calculate-version**
    - Rejects dispatches that are not from the default branch
    - Detects next version from existing git tags
+   - Treats an empty current-month stable-tag set as the first stable/beta release,
+     rather than a shell error
    - Rejects a calculated tag or GitHub release that already exists
    - Outputs version, tag, and beta status
 
@@ -115,7 +117,9 @@ that workflow. Both workflows must be dispatched from the default branch.
 `publish-deb.yml` is manual recovery for an existing release only: it
 resolves the supplied tag once, detaches at that immutable commit, rejects a tag
 move, verifies the package version, and requires the matching GitHub release both
-before build and upload.
+before build and upload. Its release/package contracts, lint/typecheck, unit tests,
+and Debian build all check out that same resolved commit; the dispatch commit is
+never used as a substitute quality gate for tagged package code.
 Dispatch inputs enter shell steps only through environment variables and must
 match canonical stable CalVer (`YYYY.M.PATCH` and `vYYYY.M.PATCH`).
 The primary `force_version` override follows the same rule and is rejected for

@@ -108,6 +108,8 @@ jobs:
         uses: actions/checkout@v7
         with:
           path: CeraUI
+          ref: ${{ needs.resolve-version.outputs.commit }}
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

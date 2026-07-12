@@ -110,6 +110,54 @@ if [[ -z "$calver_run" ]]; then
   exit 1
 fi
 
+assert_automatic_release_without_stable_tags() {
+  local release_type="$1"
+  local expected_version="$2"
+  local repo="$temp_dir/automatic-${release_type}"
+  local output="$temp_dir/automatic-${release_type}.output"
+  local log="$temp_dir/automatic-${release_type}.log"
+  local status
+
+  git init -q "$repo"
+  set +e
+  (
+    cd "$repo"
+    RELEASE_TYPE_INPUT="$release_type" FORCE_VERSION_INPUT="" GITHUB_OUTPUT="$output" \
+      bash -euo pipefail -c "$calver_run"
+  ) >"$log" 2>&1
+  status=$?
+  set -e
+
+  if [[ "$status" -ne 0 ]]; then
+    cat "$log" >&2
+    printf 'automatic %s release exited %d when the current month had no stable tag\n' \
+      "$release_type" "$status" >&2
+    return 1
+  fi
+  if ! grep -qx "version=${expected_version}" "$output" || \
+    ! grep -qx "tag=v${expected_version}" "$output"; then
+    cat "$output" >&2
+    printf 'automatic %s release emitted the wrong no-tag version\n' "$release_type" >&2
+    return 1
+  fi
+}
+
+automatic_year="$(date +%Y)"
+automatic_month="$(date +%-m)"
+automatic_failures=0
+if ! assert_automatic_release_without_stable_tags \
+  "stable" "${automatic_year}.${automatic_month}.0"; then
+  automatic_failures=1
+fi
+if ! assert_automatic_release_without_stable_tags \
+  "beta" "${automatic_year}.${automatic_month}.1-beta.1"; then
+  automatic_failures=1
+fi
+if [[ "$automatic_failures" -ne 0 ]]; then
+  exit 1
+fi
+printf 'automatic stable and beta releases succeeded with no current-month stable tag\n'
+
 safe_output="$temp_dir/safe-output"
 INPUT_TAG="v2026.7.0" INPUT_VERSION="2026.7.0" GITHUB_OUTPUT="$safe_output" \
   bash -euo pipefail -c "$validation_run"
