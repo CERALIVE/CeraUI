@@ -70,6 +70,17 @@ describe("isRealDevice", () => {
 		expect(await isRealDevice(deps)).toBe(true);
 	});
 
+	test.each([
+		"Generic Rockchip development board",
+		"Rockchip RK3399 reference board",
+		"Rockchip RK3568 evaluation board",
+	])("unsupported Rockchip model fails closed: %s", async (model) => {
+		const deps = makeDeps({
+			readDeviceTreeModel: async () => model,
+		});
+		expect(await isRealDevice(deps)).toBe(false);
+	});
+
 	test("x86-minipc CeraLive image identity plus DMI mini-PC marker → true", async () => {
 		const deps = makeDeps({
 			readCeraliveRelease: async () => 'NAME="CeraLive"\nID=ceralive\n',

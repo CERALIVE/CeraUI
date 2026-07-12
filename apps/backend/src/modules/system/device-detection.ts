@@ -43,7 +43,7 @@ const DMI_BOARD_NAME = "/sys/class/dmi/id/board_name";
  * Substrings that positively identify an RK3588 board. On a real Rockchip
  * board `/proc/device-tree/model` reads e.g. "Rockchip RK3588 ...".
  */
-const REAL_DEVICE_MARKERS = ["Rockchip", "RK3588"] as const;
+const RK3588_DEVICE_MARKER = "RK3588";
 const X86_MINIPC_DMI_MARKERS = ["N100", "N200", "Mini PC", "MINIPC"] as const;
 const CERALIVE_RELEASE_ID_RE = /^ID="?ceralive"?$/m;
 
@@ -86,7 +86,7 @@ async function readOptional(probe: () => Promise<string>): Promise<string> {
 }
 
 function hasRk3588Marker(model: string): boolean {
-	return REAL_DEVICE_MARKERS.some((marker) => model.includes(marker));
+	return model.includes(RK3588_DEVICE_MARKER);
 }
 
 function hasCeraliveImageIdentity(release: string): boolean {
@@ -102,7 +102,7 @@ function hasX86MiniPcDmiMarker(dmi: string): boolean {
  *
  *  1. `CERALIVE_DEVICE_TYPE` override — "real" → true, "emulated" → false.
  *  2. Dev/mock mode → false (never drive the host OS from a dev box).
- *  3. `/proc/device-tree/model` names a Rockchip / RK3588 board → true.
+ *  3. `/proc/device-tree/model` names an RK3588 board → true.
  *  4. CeraLive image identity + x86 mini-PC DMI marker → true.
  *  5. Otherwise → false.
  *
