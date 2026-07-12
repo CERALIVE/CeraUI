@@ -270,4 +270,40 @@ describe("termination shutdown lifecycle", () => {
 		await Bun.sleep(0);
 		expect(calls).toEqual(["srt", "dmesg", "streamloop", "exit:0"]);
 	});
+
+	test("attempts every cleanup and exits when SRT ingest cleanup rejects", async () => {
+		const calls: string[] = [];
+		const unhandledRejections: unknown[] = [];
+		const onUnhandledRejection = (reason: unknown): void => {
+			unhandledRejections.push(reason);
+		};
+		process.on("unhandledRejection", onUnhandledRejection);
+
+		try {
+			const deps: BackendShutdownDeps = {
+				stopSrtIngest: async () => {
+					calls.push("srt");
+					throw new Error("srt cleanup failed");
+				},
+				stopDmesgWatchers: () => {
+					calls.push("dmesg");
+				},
+				gracefulShutdown: async () => {
+					calls.push("streamloop");
+				},
+				exit: (code) => {
+					calls.push(`exit:${code}`);
+				},
+			};
+
+			handleTerminationSignal("SIGTERM", deps);
+			handleTerminationSignal("SIGINT", deps);
+			await Bun.sleep(0);
+
+			expect(calls).toEqual(["srt", "dmesg", "streamloop", "exit:0"]);
+			expect(unhandledRejections).toEqual([]);
+		} finally {
+			process.off("unhandledRejection", onUnhandledRejection);
+		}
+	});
 });

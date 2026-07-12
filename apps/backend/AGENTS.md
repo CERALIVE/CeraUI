@@ -247,6 +247,15 @@ explicitly are unaffected.
 - Use `shouldUseMocks()` — never raw `isDevelopment()` — to gate mock-hardware paths. `shouldUseMocks()` requires both `isDevelopment()` AND `mockState.initialized`.
 - **Frontend store-ownership mirror [EXISTS]:** the frontend's legacy `websocket-store.svelte.ts` wrapper is deleted; `rpc/procedures/auth.procedure.ts` (`auth.login`/`auth.setPassword`/`auth.logout`) is now called exclusively through the frontend's `lib/stores/auth-status.svelte.ts` (`authenticate`/`createPassword`), and every other push event is consumed exclusively through `lib/rpc/subscriptions.svelte.ts`'s single `rpcClient.onMessage` handler. Don't casually rename/reshape these procedure signatures or add a second push-consumption path on the frontend side — see `apps/frontend/AGENTS.md` → CONVENTIONS (store ownership).
 
+## TERMINATION CLEANUP [EXISTS]
+
+`helpers/shutdown.ts` owns the process-level `SIGTERM`/`SIGINT` lifecycle. The first
+signal latches shutdown and runs the existing sequential order — SRT ingest, dmesg
+watchers, then streaming processes. Each cleanup is settled independently and any
+failure is logged before the next step runs; `exit(0)` is still attempted after all
+three steps. Later signals remain ignored. The direct regression coverage lives in
+`src/main.test.ts` under `termination shutdown lifecycle`.
+
 ## BROADCAST EVENTS
 
 The backend pushes typed events to all connected clients via `rpc/events.ts`. Each event type carries a monotonic `seq` counter (`Map<string, number>`) that resets to 0 on server restart.

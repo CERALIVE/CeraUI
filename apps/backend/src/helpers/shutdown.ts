@@ -9,6 +9,17 @@ export interface BackendShutdownDeps {
 
 let shuttingDown = false;
 
+async function settleCleanup(
+	name: string,
+	cleanup: () => Promise<void> | void,
+): Promise<void> {
+	try {
+		await cleanup();
+	} catch (error) {
+		logger.error(`shutdown: ${name} cleanup failed`, { err: error });
+	}
+}
+
 export function resetShutdownForTest(): void {
 	shuttingDown = false;
 }
@@ -21,9 +32,9 @@ export function handleTerminationSignal(
 	shuttingDown = true;
 	logger.info(`received ${signal}; shutting down streaming processes`);
 	void (async () => {
-		await deps.stopSrtIngest();
-		deps.stopDmesgWatchers();
-		await deps.gracefulShutdown();
+		await settleCleanup("SRT ingest", deps.stopSrtIngest);
+		await settleCleanup("dmesg watchers", deps.stopDmesgWatchers);
+		await settleCleanup("streaming processes", deps.gracefulShutdown);
 		deps.exit(0);
 	})();
 }
