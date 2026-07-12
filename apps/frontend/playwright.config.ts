@@ -2,6 +2,9 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { defineConfig, devices } from '@playwright/test';
+import { clearInputPickerHardwareArtifacts } from './tests/e2e/helpers/input-picker-hardware-preflight.js';
+
+clearInputPickerHardwareArtifacts();
 
 // Ensure auth_tokens.json exists before test discovery
 const tokensPath = path.resolve(import.meta.dirname, '../backend/auth_tokens.json');

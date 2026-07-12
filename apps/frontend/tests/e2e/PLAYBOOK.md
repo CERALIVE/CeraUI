@@ -95,8 +95,8 @@ Avoid committing `html` reporter config. It generates large artifacts and is not
 Mock seams may retain deterministic negative-path coverage, but they never
 replace a real-device success, hotplug, or latency claim. Hardware cases carry
 `@hardware`, remain visible in the normal PR report as an explicit prerequisite
-skip, and fail loudly on partial opt-in. A skipped `@hardware` case is not a
-pass.
+skip, while the dedicated hardware config exits nonzero if any prerequisite is
+absent or malformed. A skipped `@hardware` case is not a pass.
 
 The Rock 5B+ input-picker gate and its mandatory artifact bundle are documented
 in [`INPUT_PICKER_HARDWARE_QA.md`](INPUT_PICKER_HARDWARE_QA.md). It uses the
@@ -104,6 +104,9 @@ device-hosted production frontend/backend, passively verifies the RPC WebSocket
 origin, and permits no frame interception or mock attach/detach call. Its
 dedicated `playwright.hardware.config.ts` starts no local frontend, mock backend,
 or auth bootstrap.
+
+Run `bun run --filter frontend test:hardware-preflight` to enforce dedicated
+fail-closed prerequisites and stale pass/report cleanup without device hardware.
 
 ---
 

@@ -2,6 +2,10 @@ import path from 'node:path';
 
 import { defineConfig, devices } from '@playwright/test';
 
+import { prepareDedicatedInputPickerHardwareRun } from './helpers/input-picker-hardware-preflight.js';
+
+prepareDedicatedInputPickerHardwareRun();
+
 export default defineConfig({
 	testDir: import.meta.dirname,
 	testMatch: 'input-picker.spec.ts',

@@ -8,6 +8,9 @@ remain useful, but they are not a hardware pass.
 The gate is complete only when the automated case exits zero on a Radxa ROCK 5B+
 and every artifact listed below exists and is non-empty. Never infer a hardware
 pass from the mock suite, a skipped test, source inspection, or a prior run.
+The dedicated command fails nonzero when any required environment value is
+absent or malformed; only the ordinary PR project represents missing hardware
+as an annotated skip. Both routes remove stale pass/report JSON before deciding.
 
 ## Preconditions
 
