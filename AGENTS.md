@@ -530,7 +530,7 @@ uploads the frontend and caches only Playwright browser binaries, while each
 isolated desktop/mobile × two-shard runner installs its own Playwright OS
 dependencies. Browser cache keys use the exact installed Playwright CLI version,
 and the four lanes retain unique blob artifacts for the merged report. The
-static contract is `bun run test:build-check-shape`.
+semantic YAML contract is `bun run test:build-check-shape`.
 
 ## BUN-NATIVE CONVENTIONS (as of 2026-06)
 

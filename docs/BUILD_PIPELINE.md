@@ -140,7 +140,7 @@ it does not install runner-local OS packages. Each isolated matrix runner runs
 cache, and installs the browser only on a cache miss. Each lane uploads a unique
 blob report, which `merge-e2e-reports` combines into the final HTML report.
 
-Run the static topology contract locally with:
+Run the structured YAML topology contract locally with:
 
 ```bash
 bun run test:build-check-shape
