@@ -28,6 +28,16 @@ This document describes the automated build pipeline for creating CeraUI distrib
 
 **Use Case**: Professional deployment with package management integration.
 
+### Smart-build cache inputs
+
+The package builders reuse `.build-cache` only while the complete production
+input set is unchanged. Both frontend and backend hashes cover the workspace
+package manifest, Bun lockfile/runtime pin, root `tsconfig.json`, shared
+packages, build scripts, deployment files, and backend setup data. Each hash
+also covers its component tree, including component-local TypeScript configs;
+therefore a change to an inherited compiler option invalidates the affected
+cache before packaging.
+
 ## Versioning
 
 CeraUI uses **Calendar Versioning (CalVer)** with automatic version detection.

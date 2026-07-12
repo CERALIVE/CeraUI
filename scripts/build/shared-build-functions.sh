@@ -59,6 +59,7 @@ hash_build_inputs() {
         package.json
         bun.lock
         .bun-version
+        tsconfig.json
         config.json
         apps/backend/setup.json
         packages

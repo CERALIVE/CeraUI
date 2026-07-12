@@ -1,80 +1,104 @@
-/*
- * Live start-failure reason → copy mapping (C7).
- *
- * LiveView reads the `error` field of a failed streaming.start and maps it to a
- * SPECIFIC `live.startFailed.*` message (falling back to `generic`). This test
- * pins two invariants without mounting the whole component:
- *   1. STREAM_START_ERROR_KEYS (parsed from the real LiveView source) still
- *      carries all FOUR audio/source entries — a merge race that clobbered one
- *      would silently drop its specific copy. See the task-13/14 clobber note.
- *   2. The error-code→copy mapping (replicated from LiveView's startFailedMessage)
- *      resolves source_lost / source_unavailable to their OWN copy, not generic.
- */
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { cleanup, render } from "@testing-library/svelte";
+import { tick } from "svelte";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
 import en from "../../../../packages/i18n/src/en/index";
 
-const SELF = fileURLToPath(import.meta.url);
-const LIVE_VIEW = path.resolve(path.dirname(SELF), "../main/LiveView.svelte");
+const state = vi.hoisted(() => ({
+	stopReason: undefined as string | undefined,
+}));
+const toastError = vi.hoisted(() => vi.fn());
 
-const REQUIRED_KEYS = [
-	"audio_source_probe_failed",
-	"audio_codec_unsupported_transport",
-	"source_lost",
-	"source_unavailable",
-] as const;
+vi.mock("svelte-sonner", () => ({ toast: { error: toastError } }));
 
-function parseStartErrorKeys(): string[] {
-	const src = readFileSync(LIVE_VIEW, "utf8");
-	const block = src.match(
-		/STREAM_START_ERROR_KEYS\s*=\s*\[([\s\S]*?)\]\s*as const;/,
-	);
-	if (block === null) throw new Error("STREAM_START_ERROR_KEYS not found");
-	return [...block[1].matchAll(/'([^']+)'/g)].map((m) => m[1] as string);
-}
+vi.mock("$lib/config", () => ({
+	navElements: { network: { label: "Network" } },
+}));
 
-const startFailed = en.live.startFailed as Record<string, string>;
+vi.mock("$lib/rpc/subscriptions.svelte", () => ({
+	getConfig: () => ({ relay_server: "fra", max_br: 6000, pipeline: "hdmi" }),
+	getIsStreaming: () => false,
+	getSensors: () => ({}),
+	getLinkTelemetry: () => null,
+	getDevices: () => [],
+	getActiveInput: () => undefined,
+	getConnectionState: () => "connected",
+	getIsConnected: () => true,
+	getCapabilities: () => undefined,
+	getNetif: () => ({}),
+	getRelays: () => undefined,
+	getManagedIngestAccounts: () => [],
+	getStatus: () => ({}),
+	getPipelines: () => ({ pipelines: {} }),
+	getSources: () => undefined,
+}));
 
-function startFailedMessage(code: string, keys: readonly string[]): string {
-	return keys.includes(code) ? startFailed[code] : startFailed.generic;
-}
+vi.mock("$lib/rpc/streaming-optimism.svelte", () => ({
+	getStreamingOptimismState: () => "idle",
+	getStreamingStopReason: () => state.stopReason,
+	getStopStuckBannerVisible: () => false,
+	startStreamingOptimism: vi.fn(),
+	stopStreamingOptimism: vi.fn(),
+	reconcileStreamingOptimism: vi.fn(),
+	revertStreamingOptimism: vi.fn(),
+	retryStopStreaming: vi.fn(),
+}));
 
-describe("live start-failed reason mapping (C7)", () => {
-	const keys = parseStartErrorKeys();
+vi.mock("$main/live/IdleCockpit.svelte", async () => ({
+	default: (await import("./fixtures/IdleCockpitStub.svelte")).default,
+}));
+vi.mock("$main/live/LiveCockpit.svelte", async () => ({
+	default: (await import("./fixtures/LiveCockpitStub.svelte")).default,
+}));
+vi.mock("$main/live/LiveHeader.svelte", async () => ({
+	default: (await import("./fixtures/Noop.svelte")).default,
+}));
+vi.mock("$main/live/CapabilityTierBanner.svelte", async () => ({
+	default: (await import("./fixtures/Noop.svelte")).default,
+}));
+vi.mock("$main/dialogs/ServerDialog.svelte", async () => ({
+	default: (await import("./fixtures/Noop.svelte")).default,
+}));
+vi.mock("$main/dialogs/AudioDialog.svelte", async () => ({
+	default: (await import("./fixtures/Noop.svelte")).default,
+}));
+vi.mock("$main/dialogs/EncoderDialog.svelte", async () => ({
+	default: (await import("./fixtures/Noop.svelte")).default,
+}));
 
-	it("STREAM_START_ERROR_KEYS still carries all four audio/source entries (no merge-race clobber)", () => {
-		for (const key of REQUIRED_KEYS) {
-			expect(keys, `missing ${key}`).toContain(key);
-		}
+import LiveView from "../main/LiveView.svelte";
+
+const startFailed = en.live.startFailed as Readonly<Record<string, string>>;
+
+afterEach(() => {
+	cleanup();
+	state.stopReason = undefined;
+	toastError.mockReset();
+});
+
+describe("LiveView start-failure output", () => {
+	it.each([
+		"audio_source_probe_failed",
+		"audio_codec_unsupported_transport",
+		"source_lost",
+		"source_unavailable",
+	])("shows the localized reason for %s", async (reason) => {
+		state.stopReason = reason;
+
+		render(LiveView);
+		await tick();
+
+		expect(toastError).toHaveBeenCalledWith(startFailed[reason]);
+		expect(startFailed[reason]).not.toBe(startFailed.generic);
 	});
 
-	it("renders source_lost / source_unavailable copy from reason, distinct from generic", () => {
-		expect(startFailedMessage("source_lost", keys)).toBe(
-			startFailed.source_lost,
-		);
-		expect(startFailedMessage("source_unavailable", keys)).toBe(
-			startFailed.source_unavailable,
-		);
-		expect(startFailed.source_lost).not.toBe(startFailed.generic);
-		expect(startFailed.source_unavailable).not.toBe(startFailed.generic);
-		expect(startFailed.source_lost.length).toBeGreaterThan(0);
-		expect(startFailed.source_unavailable.length).toBeGreaterThan(0);
-	});
+	it("shows the generic message for an unknown reason", async () => {
+		state.stopReason = "unknown_engine_failure";
 
-	it("keeps the pre-existing audio entries mapping to their own copy", () => {
-		expect(startFailedMessage("audio_source_probe_failed", keys)).toBe(
-			startFailed.audio_source_probe_failed,
-		);
-		expect(startFailedMessage("audio_codec_unsupported_transport", keys)).toBe(
-			startFailed.audio_codec_unsupported_transport,
-		);
-	});
+		render(LiveView);
+		await tick();
 
-	it("falls back to generic copy for an unknown reason", () => {
-		expect(startFailedMessage("some_unknown_reason", keys)).toBe(
-			startFailed.generic,
-		);
+		expect(toastError).toHaveBeenCalledWith(startFailed.generic);
 	});
 });

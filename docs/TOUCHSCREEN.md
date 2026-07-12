@@ -72,14 +72,14 @@ Primary target: **1024×600 landscape** (e.g. a Waveshare 10.1" capacitive
 touchscreen attached to the device). All three destinations — **Live**,
 **Network**, **Settings** — must fit at 1024×600 with **no horizontal
 overflow**, in both default and touch modes. This is verified with Playwright
-(see `test-results/task-36-default.png` and `task-36-touch.png`).
+viewport contracts.
 
 ## Minimum Supported Resolution
 
 | Orientation | Minimum | Verified |
 |---|---|---|
-| Landscape | **800×480** | `test-results/task-13-800x480.txt` |
-| Portrait | **600×1024** | `test-results/task-13-portrait.txt` |
+| Landscape | **800×480** | Playwright viewport contract |
+| Portrait | **600×1024** | Playwright viewport contract |
 
 **800×480 landscape is the floor.** Below this the chrome and the larger config
 dialogs (notably `ServerDialog`) can no longer be laid out without clipping. At
