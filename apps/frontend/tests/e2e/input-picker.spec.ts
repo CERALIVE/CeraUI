@@ -1,9 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, type Page, test } from "./fixtures/index.js";
+import { expect, hardwareTest, type Page, test } from "./fixtures/index.js";
 
 import { navigateTo } from "./helpers";
+import {
+	HARDWARE_INPUT_PICKER_PREREQUISITE,
+	hardwareInputPickerEnabled,
+} from "./helpers/input-picker-hardware-config.js";
+import { runRock5bInputPickerGate } from "./helpers/input-picker-hardware.js";
 
 declare global {
 	interface Window {
@@ -27,9 +32,11 @@ declare global {
  * The WebSocket harness (addInitScript) authenticates via a persistent token and
  * exposes the dev-only attach/detach RPC over the page's own socket. It never
  * fakes switchInput; success and SOURCE_LOST both come from the dev backend.
+ * The successful switch/hotplug/latency contract is exercised separately by the
+ * receive-only Rock 5B+ @hardware gate at the bottom of this file.
  */
 
-const TOKEN: string = (() => {
+function readMockToken(): string {
 	const tokensPath = path.resolve(
 		import.meta.dirname,
 		"../../../backend/auth_tokens.json",
@@ -41,7 +48,7 @@ const TOKEN: string = (() => {
 		throw new Error(`No persistent auth tokens in ${tokensPath}`);
 	}
 	return tokens[0] as string;
-})();
+}
 
 function installWsHarness(token: string): void {
 	// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
@@ -162,7 +169,7 @@ function switchResult(page: Page, inputId: string): Promise<unknown> {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("hotplug input picker + live switch (Task 34)", () => {
+test.describe("input picker mock negative coverage (Task 34)", () => {
 	test.skip(
 		({ browserName }) => browserName !== "chromium",
 		"single-browser hardware integration proof",
@@ -173,7 +180,7 @@ test.describe("hotplug input picker + live switch (Task 34)", () => {
 			testInfo.project.name !== "desktop",
 			"desktop layout drives the picker",
 		);
-		await page.addInitScript(installWsHarness, TOKEN);
+		await page.addInitScript(installWsHarness, readMockToken());
 		await page.goto("/");
 		await navigateTo(page, "live");
 		await expect
@@ -236,4 +243,28 @@ test.describe("hotplug input picker + live switch (Task 34)", () => {
 		await setDeviceAttached(page, "usb", false);
 		await expect(row.locator("[data-switch-input]")).toBeDisabled({ timeout: 8000 });
 	});
+});
+
+hardwareTest.describe("Rock 5B+ input picker live-switch gate @hardware", () => {
+	hardwareTest.describe.configure({ mode: "serial" });
+	hardwareTest.skip(
+		!hardwareInputPickerEnabled,
+		HARDWARE_INPUT_PICKER_PREREQUISITE,
+	);
+	hardwareTest.skip(
+		({ browserName }) => browserName !== "chromium",
+		"Rock 5B+ hardware gate requires Chromium",
+	);
+
+	hardwareTest.beforeEach(({}, testInfo) => {
+		hardwareTest.skip(
+			testInfo.project.name !== "desktop",
+			"Rock 5B+ hardware gate uses the desktop live cockpit",
+		);
+	});
+
+	hardwareTest(
+		"real attach → successful <=67ms switch → active state → real detach",
+		runRock5bInputPickerGate,
+	);
 });

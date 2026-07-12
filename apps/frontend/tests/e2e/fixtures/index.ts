@@ -80,3 +80,23 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
 		await use(page);
 	},
 });
+
+export const hardwareTest = test.extend({
+	page: async ({ context }, use) => {
+		const page = await context.newPage();
+		Object.defineProperty(page, 'screenshot', {
+			configurable: true,
+			value: (): Promise<never> =>
+				Promise.reject(
+					new Error(
+						'Screenshots are forbidden in functional hardware tests; capture required operator evidence separately.',
+					),
+				),
+		});
+		try {
+			await use(page);
+		} finally {
+			await page.close();
+		}
+	},
+});
