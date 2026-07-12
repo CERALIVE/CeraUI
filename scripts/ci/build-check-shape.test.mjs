@@ -57,6 +57,17 @@ const mutations = [
 				2,
 			),
 	},
+	{
+		name: 'stale download-artifact major',
+		expectedError: 'test-e2e frontend download action must be',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'        uses: actions/download-artifact@v8',
+				'        uses: actions/download-artifact@v7',
+				2,
+			),
+	},
 ];
 
 describe('Build Check semantic workflow contract', () => {

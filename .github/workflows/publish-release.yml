@@ -253,6 +253,10 @@ jobs:
       - name: Prepare backend test runtime directories
         run: sudo install -d -o "$(id -u)" -g "$(id -g)" /run/ceralive /var/run/bcrpt
 
+      - name: Run service contract
+        working-directory: CeraUI
+        run: bun run test:service-contract
+
       - name: Run unit tests
         working-directory: CeraUI
         run: bun run test
@@ -457,10 +461,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # <ceraui-version> is the workspace package.json version (CalVer) — the
-          # same source build:federation + sign-federation.ts use, so the upload
-          # path matches dist/federation/<version> and the manifest's ceraUiVersion.
-          VERSION="$(node -p "require('./package.json').version")"
+          VERSION="$(bun -p "require('./package.json').version")"
           FED_DIR="dist/federation/${VERSION}"
           DEST_PREFIX="ui-bundle/${VERSION}"
 
@@ -470,49 +471,9 @@ jobs:
 
           export AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}"
           export AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}"
-          # R2 rejects aws-cli >= 2.23 default trailing checksums; request when_required only.
           export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
           export AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
-          # Canonicalize endpoint to scheme://host — a stray path/bucket suffix
-          # silently corrupts path-style addressing (writes to a doubled prefix).
-          R2_ENDPOINT="$(printf '%s' "$R2_ENDPOINT" | sed -E 's#^([a-zA-Z][a-zA-Z0-9+.-]*://[^/]+).*#\1#')"
-
-          # Content-type pinned per file (matches the apt-worker route contract):
-          # .js loads via dynamic import() under a strict CSP so MUST be
-          # application/javascript; manifest.json.sig ends with .sig (a signature).
-          content_type_for() {
-            case "$1" in
-              *.sri) echo "text/plain; charset=utf-8" ;;
-              manifest.json) echo "application/json; charset=utf-8" ;;
-              *.sig) echo "application/octet-stream" ;;
-              *.js) echo "application/javascript; charset=utf-8" ;;
-              *.css) echo "text/css; charset=utf-8" ;;
-              *) echo "application/octet-stream" ;;
-            esac
-          }
-
-          shopt -s nullglob
-          uploaded=0
-          # *.sig covers manifest.json.sig; manifest.json is matched explicitly.
-          for f in "$FED_DIR"/*.js "$FED_DIR"/*.css "$FED_DIR"/*.sri "$FED_DIR"/*.sig "$FED_DIR"/manifest.json; do
-            name="$(basename "$f")"
-            ct="$(content_type_for "$name")"
-            key="${DEST_PREFIX}/${name}"
-            echo "↑ ${key}  (${ct})"
-            aws s3 cp "$f" "s3://${R2_BUCKET}/${key}" \
-              --endpoint-url "$R2_ENDPOINT" \
-              --content-type "$ct" \
-              --no-progress
-            # Self-check: confirm the object landed at the intended key — a bad
-            # endpoint can make cp "succeed" while writing to the wrong key.
-            aws s3api head-object --bucket "$R2_BUCKET" --key "$key" \
-              --endpoint-url "$R2_ENDPOINT" >/dev/null \
-              || { echo "::error::upload self-check failed for ${key}"; exit 1; }
-            uploaded=$((uploaded + 1))
-          done
-
-          [ "$uploaded" -gt 0 ] || { echo "::error::no federation artifacts found to upload"; exit 1; }
-          echo "✅ uploaded ${uploaded} artifact(s) to s3://${R2_BUCKET}/${DEST_PREFIX}/"
+          bash scripts/build/publish-federation-immutable.sh "$FED_DIR" "$DEST_PREFIX"
 
       - name: Federation Publish Summary
         if: success()

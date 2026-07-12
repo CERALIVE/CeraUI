@@ -14,16 +14,17 @@ Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming h
 - **`@ceraui/i18n`** — typesafe-i18n, 10 languages (workspace package)
 - **vitest** for unit tests, **Playwright** for E2E
 
-## Sibling-Checkout Layout
+## Registry Dependencies
 
-The `backend` app consumes the cerastream Rust engine as a vendored npm tarball, and resolves the srtla sender binding as a registry npm package:
+The `backend` app consumes both streaming bindings as pinned public npm packages:
 
 ```
-"@ceralive/cerastream": "2026.6.1"   (public npm, @ceralive scope)
-"@ceralive/srtla-send": "2026.6.0"   (public npm, @ceralive scope)
+"@ceralive/cerastream": "2026.7.1"   (public npm, @ceralive scope)
+"@ceralive/srtla-send": "2026.6.2"   (public npm, @ceralive scope)
 ```
 
-No sibling checkout of `srtla` or `srtla-send-rs` is required for `CeraUI` to install or build. (A sibling `ceracoder/` checkout was previously required as well — ceracoder was retired 2026-06-11; repo preserved at github.com/CERALIVE/ceracoder.)
+No sibling checkout or vendored tarball is required for CeraUI to install or
+build. Both packages resolve from npm under the `@ceralive` scope.
 
 ```
 ceralive/

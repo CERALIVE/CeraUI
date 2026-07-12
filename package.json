@@ -28,6 +28,7 @@
 		"test": "bun run --filter @ceraui/rpc test && bun run --filter frontend test && bun run --filter backend test",
 		"test:build-check-shape": "bun test scripts/ci/build-check-shape.test.mjs",
 		"test:release-package-contracts": "bash scripts/build/release-package-contracts.sh",
+		"test:service-contract": "bash scripts/ci/run-service-contract.sh",
 		"check:tech-debt": "node scripts/check-tech-debt.mjs",
 		"test:tech-debt": "node --test scripts/check-tech-debt.test.mjs",
 		"check:rc-pins": "bash scripts/check-rc-pins.sh",

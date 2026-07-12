@@ -143,6 +143,14 @@ require_file_contract "$contract_runner" 'bash scripts/build/build-provenance.te
   'named release/package contract command must run the provenance test'
 require_file_contract "$contract_runner" 'bash scripts/build/release-flow.test.sh' \
   'named release/package contract command must run the release-flow test'
+require_file_contract "$contract_runner" 'bash scripts/build/shared-build-functions.test.sh' \
+  'named release/package contract command must run smart-build cache tests'
+require_file_contract "$contract_runner" 'bash scripts/build/documentation-contract.test.sh' \
+  'named release/package contract command must run documentation contract tests'
+require_file_contract "$contract_runner" 'bash scripts/build/publish-federation-immutable.test.sh' \
+  'named release/package contract command must run federation immutability tests'
+require_file_contract "$contract_runner" 'bash scripts/ci/service-contract-wiring.test.sh' \
+  'named release/package contract command must run service wiring tests'
 require_file_contract "$contract_runner" 'bash scripts/build/release-input-security.test.sh' \
   'named release/package contract command must run the input-security test'
 require_file_contract "$build_check_workflow" 'run: bun run test:release-package-contracts' \
@@ -183,6 +191,12 @@ require_file_contract "$release_workflow" '- name: Verify release tag provenance
   'primary release must verify its new tag before stable APT dispatch'
 require_file_contract "$release_workflow" 'test "$ACTUAL_COMMIT" = "$EXPECTED_COMMIT"' \
   'primary release tag must resolve to the workflow dispatch commit'
+require_file_contract "$release_workflow" \
+  'bash scripts/build/publish-federation-immutable.sh "$FED_DIR" "$DEST_PREFIX"' \
+  'federation publication must use the immutable conditional uploader'
+require_file_contract "$release_workflow" \
+  'needs: [calculate-version, build-ceraui-system, build-debian-package, publish-federation]' \
+  'GitHub release creation must remain downstream of complete federation publication'
 require_file_contract "$deb_workflow" '  release-package-contracts:' \
   'manual recovery must define a release/package contract gate'
 require_file_contract "$deb_workflow" 'needs: [resolve-version, release-package-contracts]' \

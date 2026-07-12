@@ -95,7 +95,9 @@ The build pipeline runs manually via workflow dispatch.
    - Uploads artifact: `ceraui-debian-{arch}`
 
 5. **publish-federation**
-   - Builds, signs, verifies, and uploads version-matched federation bundles
+   - Builds, signs, verifies, and conditionally uploads version-matched federation bundles
+   - Reuses an existing version only when its signed payload digest matches
+   - Rolls back keys created by a failed fresh attempt; never overwrites an existing key
 
 6. **create-release**
    - Creates GitHub release with all assets
@@ -166,6 +168,9 @@ gem install fpm
 ```bash
 # Required release/package contract gate
 bun run test:release-package-contracts
+
+# Root-owned service + mock attach contract in an isolated temporary state directory
+bun run test:service-contract
 
 # Full CeraUI system (auto-detect architecture)
 ./scripts/build/build-ceraui-system.sh

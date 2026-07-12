@@ -107,8 +107,10 @@ export function assertBuildCheckContract(source) {
 	const merge = asRecord(jobs['merge-e2e-reports'], 'merge-e2e-reports');
 	const finalTest = asRecord(jobs.test, 'test');
 	const frontendTest = asRecord(jobs['test-fe'], 'test-fe');
+	const backendTest = asRecord(jobs['test-be'], 'test-be');
 	const setupSteps = stepsOf(setup, 'setup-e2e');
 	const e2eSteps = stepsOf(e2e, 'test-e2e');
+	const backendSteps = stepsOf(backendTest, 'test-be');
 
 	assertExact(e2e.needs, 'setup-e2e', 'test-e2e.needs');
 	const matrix = asRecord(
@@ -129,6 +131,19 @@ export function assertBuildCheckContract(source) {
 	assertExact(laneDeps[0].if, undefined, 'test-e2e install-deps condition');
 	assertBrowserCache(setupSteps, 'setup-e2e');
 	assertBrowserCache(e2eSteps, 'test-e2e');
+
+	const frontendDownload = findStep(e2eSteps, 'Download frontend dist', 'test-e2e');
+	assertExact(
+		frontendDownload.uses,
+		'actions/download-artifact@v8',
+		'test-e2e frontend download action',
+	);
+	const serviceContract = findStep(backendSteps, 'Mock device attach service contract', 'test-be');
+	assertExact(
+		serviceContract.run,
+		'bun run test:service-contract',
+		'test-be service contract command',
+	);
 
 	const functional = findStep(
 		e2eSteps,
@@ -166,6 +181,7 @@ export function assertBuildCheckContract(source) {
 		'Download blob reports',
 		'merge-e2e-reports',
 	);
+	assertExact(download.uses, 'actions/download-artifact@v8', 'blob download action');
 	const downloadWith = withValues(download, 'blob download');
 	assertExact(downloadWith.pattern, 'blob-report-*', 'blob download pattern');
 	assertExact(downloadWith['merge-multiple'], true, 'blob download merge-multiple');

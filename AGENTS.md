@@ -15,7 +15,7 @@ The backend resolves both streaming deps as public-npm registry packages — no 
 
 ```
 "@ceralive/cerastream":  "2026.7.1"   (public npm, @ceralive scope)
-"@ceralive/srtla-send":  "2026.6.0"   (public npm, @ceralive scope)
+"@ceralive/srtla-send":  "2026.6.2"   (public npm, @ceralive scope)
 ```
 
 Both are published npm packages (`@ceralive` scope on npmjs.org) consumed as normal registry deps, not `link:` paths and not vendored `.tgz` files. No sibling checkout of `srtla` or `srtla-send-rs` is needed for `CeraUI` to install or build.
@@ -1022,7 +1022,16 @@ re-verifies the version match before building; for v2026.7.0 it publishes
 2. `bun run sign:federation` — produces `.sri` + `.sig` + `manifest.json`
 3. Uploads every signed JS/CSS asset and sidecar plus the signed manifest to R2
    at `ui-bundle/<ceraui-version>/` with pinned content types.
-4. Upload retries are idempotent; a new normal release cannot reuse an existing identity
+4. `publish-federation-immutable.sh` uses conditional `PutObject` writes and a
+   digest of the signed payload set. An identical retry preserves existing
+   objects (including earlier valid signature bytes), a changed payload fails
+   before any write, and a failed fresh publish removes only objects created by
+   that attempt.
+
+`create-release` remains downstream of `publish-federation`, so a public GitHub
+release is created only after the complete immutable R2 version is present. If
+release creation fails afterward, a same-version retry is idempotent and can
+reuse the already-published bytes.
 
 The `apt-worker` serves these files at
 `https://apt.ceralive.tv/ui-bundle/<ceraui-version>/<file>`. See
@@ -1494,8 +1503,8 @@ the per-interface sections.
 ## LIVE-CORRECTNESS-PASS FIXES [EXISTS]
 
 A follow-up pass (`live-correctness-pass` plan) tightened the Live destination and
-a few surrounding surfaces after the device-first source model shipped. Full
-implementation notes: `test-results/notepads/live-correctness-pass/learnings.md`.
+a few surrounding surfaces after the device-first source model shipped. The
+sections below are the durable implementation record.
 
 **Truthful device-max pair (Todo #2/#3).** `axisCeiling({offered, deviceModes})`
 (`ValidationAdapter.ts`) now returns the ACHIEVABLE resolution×framerate pair when

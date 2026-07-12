@@ -52,14 +52,49 @@ get_git_hash() {
     git -C "$BUILD_REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "unknown"
 }
 
+hash_build_inputs() {
+    local component="$1"
+    local path
+    local -a inputs=(
+        package.json
+        bun.lock
+        .bun-version
+        config.json
+        apps/backend/setup.json
+        packages
+        scripts/build
+        deployment
+    )
+
+    case "$component" in
+        frontend) inputs+=(apps/frontend) ;;
+        backend) inputs+=(apps/backend) ;;
+        *) return 1 ;;
+    esac
+
+    (
+        cd "$BUILD_REPO_ROOT"
+        for path in "${inputs[@]}"; do
+            if [ -f "$path" ]; then
+                printf '%s\0' "$path"
+            elif [ -d "$path" ]; then
+                find "$path" \
+                    -type d \( -name node_modules -o -name test-results -o -name dist -o -name .svelte-kit -o -name playwright-report -o -name coverage \) -prune -o \
+                    -type f ! -name config.json ! -name auth_tokens.json -print0
+            fi
+        done | LC_ALL=C sort -zu | while IFS= read -r -d '' path; do
+            printf '%s\0' "$path"
+            sha256sum "$path"
+        done | sha256sum | cut -d' ' -f1
+    )
+}
+
 get_frontend_hash() {
-    # Hash of frontend-specific files to detect changes
-    find apps/frontend/src -name "*.svelte" -o -name "*.ts" -o -name "*.js" -o -name "*.css" | sort | xargs cat | sha256sum | cut -d' ' -f1
+    hash_build_inputs frontend
 }
 
 get_backend_hash() {
-    # Hash of backend-specific files
-    find apps/backend/src -name "*.ts" -o -name "*.js" | sort | xargs cat | sha256sum | cut -d' ' -f1
+    hash_build_inputs backend
 }
 
 # Check if frontend cache is valid
@@ -105,10 +140,10 @@ build_frontend_only() {
 
     echo "🔄 Frontend changes detected - rebuilding..."
 
-    # Build frontend
-    cd apps/frontend
-    VITE_BRAND=CERALIVE npm run build
-    cd ../..
+    (
+        cd "$BUILD_REPO_ROOT/apps/frontend"
+        VITE_BRAND=CERALIVE bun run build
+    )
 
     # Cache the result
     rm -rf "$FRONTEND_CACHE/public"
@@ -427,7 +462,7 @@ smart_build_monitored() {
 
 # Export all functions for use in other scripts
 export -f get_version get_commit get_build_date get_architecture
-export -f get_git_hash get_frontend_hash get_backend_hash
+export -f get_git_hash hash_build_inputs get_frontend_hash get_backend_hash
 export -f is_frontend_cache_valid is_backend_cache_valid
 export -f build_frontend_only build_backend_only smart_build smart_build_monitored
 export -f clean_cache cache_status

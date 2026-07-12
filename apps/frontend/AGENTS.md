@@ -114,13 +114,14 @@ version-federation hosting/signing contract (root `AGENTS.md` → version-federa
 via `bun run build:federation` from the CeraUI root (delegates to the frontend
 `build:federation` script).
 
-- **Entries**: `src/main/dialogs/{EncoderDialog,AudioDialog,ServerDialog}.svelte` →
+- **Entries**: `src/lib/federation/{encoder-entry,audio-entry,server-entry}.ts` →
   `dist/federation/<ceraui-version>/{encoder,audio,server}.js` (`formats: ["es"]`,
-  per-entry `fileName`). Shared graph (rpc, subscriptions, i18n) is code-split into sibling
-  chunks co-located at the same versioned path — they upload + resolve together under the
-  platform CSP.
+  per-entry `fileName`). Each wrapper exports `federationAbiVersion` and
+  `mountDialog`, owns the bundled Svelte mount/unmount lifecycle, and receives
+  the typed host adapter. Shared graph code is split into sibling chunks
+  co-located at the same versioned path.
 - **`<ceraui-version>`** is read at build time from the workspace-root `package.json` `version`
-  (CalVer, `2026.6.2` at time of writing) — the single source of truth, matching the platform's
+  (CalVer, `2026.7.0` at time of writing) — the single source of truth, matching the platform's
   `ceraui-version` claim.
 - **Isolation**: this build NEVER touches the SPA `dist/public` output, runs no
   PWA/service-worker plugin, and emits no `index.html`. The SPA `vite.config.ts` is unmodified.
@@ -132,15 +133,16 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
 
 `scripts/sign-federation.ts` (CeraUI root, run via `bun run sign:federation`) is the post-build
 step that signs the `build:federation` output. Run it AFTER `build:federation`
-(`bun run build:federation && bun run sign:federation`). For each dialog bundle in
+(`bun run build:federation && bun run sign:federation`). For every emitted `.js` and `.css` asset in
 `dist/federation/<ceraui-version>/` it emits the artifacts the version-federation contract
 (root `AGENTS.md` → version-federation) requires, then writes + signs the manifest the cloud
 consumes.
 
-- **Per bundle** (`encoder.js`, `audio.js`, `server.js`): `<file>.js.sri` (the `sha384-…`
-  Subresource-Integrity hash, base64) + `<file>.js.sig` (a **GPG** detached signature).
+- **Per asset** (entries, shared JavaScript chunks, and `frontend.css`):
+  `<file>.sri` (the `sha384-…` Subresource-Integrity hash, base64) +
+  `<file>.sig` (a **GPG** detached signature).
 - **`manifest.json`**: the EXACT shape `FederationManifestSchema` enforces —
-  `{ ceraUiVersion, files: [{ filename, integrity }] }`. Do NOT change this shape; the cloud
+  `{ ceraUiVersion, files: [{ filename, integrity, kind, imports }] }`. Do NOT change this shape; the cloud
   consumer (`ceralive-platform apps/api/lib/federation/manifest-verify.ts`) parses it.
 - **`manifest.json.sig`**: a base64 **Ed25519** detached signature over the EXACT manifest
   bytes — **NOT GPG**. The cloud verifies it with `verifyAndParseManifest`
@@ -165,16 +167,24 @@ The `publish-federation` job in `.github/workflows/publish-release.yml` is the r
 CI job that uploads the signed bundles to R2. Pipeline (each step gates the next):
 `bun run build:federation` → `bun run sign:federation` (sign + self-verify) →
 `bun run sign:federation -- --verify-only` (independent re-verify before any write) →
-`aws s3 cp` per file to `s3://$R2_BUCKET/ui-bundle/<ceraui-version>/`.
+`publish-federation-immutable.sh` conditional writes to
+`s3://$R2_BUCKET/ui-bundle/<ceraui-version>/`.
 
 - **Fail-closed**: `sign-federation.ts` errors when a signing key is absent, so a missing GPG /
   Ed25519 secret blocks publish — bundles are never uploaded unsigned/unverified.
-- **Version**: `<ceraui-version>` is read from `package.json` (`node -p`) — the same source
+- **Version**: `<ceraui-version>` is read from `package.json` (`bun -p`) — the same source
   `build:federation` + `sign-federation.ts` use, so the R2 path matches `dist/federation/<version>`
   and the manifest's `ceraUiVersion`.
+- **Immutable + idempotent**: each R2 write uses `If-None-Match: *` and carries a
+  release digest derived from the signed payload set. Existing objects are
+  accepted only for that same digest; non-signature bytes are compared directly.
+  A changed payload fails before writes, partial writes resume safely, and a
+  failed fresh attempt rolls back only keys it created. `create-release` depends
+  on this job, so public release creation cannot precede the complete R2 version.
 - **Content-types pinned per file** (must match the apt-worker route, see `apt-worker/AGENTS.md`):
-  `.js` → `application/javascript`, `.sri` → `text/plain`, `.sig`/`manifest.json.sig` →
-  `application/octet-stream`, `manifest.json` → `application/json`. The `*.js` glob includes the
+  `.js` → `application/javascript`, `.css` → `text/css`, `.sri` → `text/plain`,
+  `.sig`/`manifest.json.sig` → `application/octet-stream`, `manifest.json` →
+  `application/json`. The `*.js` glob includes the
   code-split shared chunks (rpc, subscriptions, input) — they must upload alongside the dialog
   bundles so dynamic `import()` resolves under the platform CSP.
 - **Secrets**: `FEDERATION_GPG_SIGNING_KEY` (+ optional `_ID`/`_PASSPHRASE`),

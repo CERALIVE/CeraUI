@@ -131,6 +131,10 @@ jobs:
       - name: Prepare backend test runtime directories
         run: sudo install -d -o "$(id -u)" -g "$(id -g)" /run/ceralive /var/run/bcrpt
 
+      - name: Mock device attach service contract
+        working-directory: CeraUI
+        run: bun run test:service-contract
+
       - name: Unit tests (bun)
         working-directory: CeraUI
         run: bun run --filter backend test
@@ -264,7 +268,7 @@ jobs:
         run: bun run --filter frontend test:e2e:install-browser
 
       - name: Download frontend dist
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: CeraUI/dist/public
@@ -395,7 +399,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Download blob reports
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: CeraUI/apps/frontend/all-blob-reports
           pattern: blob-report-*
