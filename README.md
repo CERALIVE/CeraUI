@@ -114,9 +114,13 @@ inline). See `.env.example` for the full layout.
 ### Debian Package
 
 ```bash
+bun run test:release-package-contracts
 BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh
 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 ```
+
+Release assets are published through `publish-release.yml`; see
+[`docs/BUILD_PIPELINE.md`](docs/BUILD_PIPELINE.md) for the stable APT handoff.
 
 ### Supported Hardware
 

@@ -151,6 +151,7 @@ CeraUI/
 bun install           # installs all workspaces; resolves registry deps (no sibling checkout required)
 bun run dev           # frontend + backend via mprocs TUI (port 5173 + 3001)
 bun run build         # compile backend binary + frontend static
+bun run test:release-package-contracts   # provenance + release graph + dispatch-input security
 BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh   # .deb for ARM64
 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh   # .deb for AMD64
 bun tsc --noEmit      # type-check backend (run from apps/backend/)
@@ -991,13 +992,19 @@ The GPG key is the same CeraLive release key used for `.deb` signing (managed in
 
 ### CI publish job: `publish-federation` (in `publish-release.yml`)
 
-Runs after the `.deb` publish job succeeds. Steps:
+Runs in the normal `publish-release.yml` path after the release/package gate
+confirms that `package.json` matches the calculated release version and passes
+frozen install, lint/typecheck, and unit tests. Releases run only from the
+default branch, reject a pre-existing tag/release, and pin and verify
+the release tag against the workflow dispatch SHA. The federation job independently
+re-verifies the version match before building; for v2026.7.0 it publishes
+`ui-bundle/2026.7.0/`. Steps:
 
 1. `bun run build:federation` — produces `dist/federation/<version>/`
 2. `bun run sign:federation` — produces `.sri` + `.sig` + `manifest.json`
 3. Uploads every signed JS/CSS asset and sidecar plus the signed manifest to R2
    at `ui-bundle/<ceraui-version>/` with pinned content types.
-4. The upload is idempotent — re-running a release does not corrupt existing bundles
+4. Upload retries are idempotent; a new normal release cannot reuse an existing identity
 
 The `apt-worker` serves these files at
 `https://apt.ceralive.tv/ui-bundle/<ceraui-version>/<file>`. See

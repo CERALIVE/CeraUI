@@ -26,6 +26,7 @@
 		"build:backend": "bun run --filter backend build:backend-only",
 		"preview": "bun run --filter frontend preview",
 		"test": "bun run --filter @ceraui/rpc test && bun run --filter frontend test && bun run --filter backend test",
+		"test:release-package-contracts": "bash scripts/build/release-package-contracts.sh",
 		"check:tech-debt": "node scripts/check-tech-debt.mjs",
 		"test:tech-debt": "node --test scripts/check-tech-debt.test.mjs",
 		"check:rc-pins": "bash scripts/check-rc-pins.sh",

@@ -64,32 +64,66 @@ The build pipeline runs manually via workflow dispatch.
 |-------|----------|-------------|
 | `release_type` | Yes | `stable` or `beta` |
 | `release_notes` | No | Description of changes |
-| `force_version` | No | Override auto-detected version |
+| `force_version` | No | Override auto-detected stable version (`YYYY.M.PATCH`; must match `package.json`) |
 
 ### Jobs
 
 1. **calculate-version**
+   - Rejects dispatches that are not from the default branch
    - Detects next version from existing git tags
+   - Rejects a calculated tag or GitHub release that already exists
    - Outputs version, tag, and beta status
 
-2. **build-ceraui-system** (matrix: arm64, amd64)
+2. **release-package-contracts**
+   - Installs dependencies from the frozen Bun lockfile
+   - Runs `bun run test:release-package-contracts`
+   - Gates provenance, release dependency ordering, and dispatch-input security
+   - Verifies the calculated release version exactly matches `package.json`
+   - Runs `bun run lint` (Biome + backend/frontend typechecks) and `bun run test`
+   - Prepares the CI-only writable runtime directories required by backend tests
+   - Must pass before archive builds, Debian builds, or federation publication
+
+3. **build-ceraui-system** (matrix: arm64, amd64)
    - Builds full system with installation scripts
    - Creates compressed archive (.tar.gz)
    - Uploads artifact: `ceraui-system-{arch}`
 
-3. **build-debian-package** (matrix: arm64, amd64)
+4. **build-debian-package** (matrix: arm64, amd64)
    - Creates Debian package for target architecture
    - Uploads artifact: `ceraui-debian-{arch}`
 
-4. **create-release**
+5. **publish-federation**
+   - Builds, signs, verifies, and uploads version-matched federation bundles
+
+6. **create-release**
    - Creates GitHub release with all assets
+   - Creates the release tag from the exact workflow dispatch SHA
+   - Rechecks that the tag/release is unused, then verifies the created tag commit
    - Generates changelog from commit history
    - Marks beta releases as pre-release
 
-5. **sign-and-publish-r2**
-   - Signs Debian packages with GPG
-   - Generates signed apt repo metadata (`Packages`, `Release`, `InRelease`)
-   - Uploads to Cloudflare R2 under the appropriate channel (`stable` or `beta`)
+7. **dispatch-apt-reindex** (stable only)
+   - Runs only after `create-release` attaches the ARM64 and AMD64 `.deb` assets
+   - Dispatches `apt-reindex` to `CERALIVE/apt-worker`, the sole owner of R2
+     uploads and signed APT metadata (`Packages`, `Release`, `InRelease`)
+
+`publish-release.yml` is the only normal release entry point. It publishes the
+system archives, both Debian packages, and the version-matched federation bundles,
+then dispatches stable APT reindex explicitly. Do not rely on a tag created with
+`GITHUB_TOKEN` to trigger `publish-deb.yml`; GitHub does not recursively trigger
+that workflow. Both workflows must be dispatched from the default branch.
+`publish-deb.yml` is manual recovery for an existing release only: it
+resolves the supplied tag once, detaches at that immutable commit, rejects a tag
+move, verifies the package version, and requires the matching GitHub release both
+before build and upload.
+Dispatch inputs enter shell steps only through environment variables and must
+match canonical stable CalVer (`YYYY.M.PATCH` and `vYYYY.M.PATCH`).
+The primary `force_version` override follows the same rule and is rejected for
+beta releases; calculated stable and beta tags are validated before outputs, and
+the release stops before builds if the selected version differs from `package.json`
+or the tag/release identity is already in use.
+Both the normal and recovery workflows require frozen install, lint/typecheck,
+and unit tests before their build jobs can run.
 
 ## Local Development
 
@@ -109,6 +143,9 @@ gem install fpm
 ### Running Build Scripts
 
 ```bash
+# Required release/package contract gate
+bun run test:release-package-contracts
+
 # Full CeraUI system (auto-detect architecture)
 ./scripts/build/build-ceraui-system.sh
 
@@ -176,13 +213,16 @@ device image.
 3. Click **Run workflow**
 4. Select release type (`stable` or `beta`)
 5. Optionally add release notes
-6. Click **Run workflow**
+6. Optionally set `force_version` to the stable version already recorded in
+   `package.json`, then click **Run workflow**.
 
 The workflow will:
 - Calculate the next version automatically
+- Verify that version matches `package.json` before starting builds
 - Build for both ARM64 and AMD64
 - Create system archives and Debian packages
-- Publish a GitHub release with all assets
+- Publish the matching federation bundles and GitHub release with all assets
+- Dispatch stable APT reindex only after the release assets exist
 
 ## Target Hardware
 

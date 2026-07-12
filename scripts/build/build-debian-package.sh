@@ -2,7 +2,10 @@
 set -e
 
 # Load shared build functions
-source "$(dirname "$0")/shared-build-functions.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/build/shared-build-functions.sh
+source "$SCRIPT_DIR/shared-build-functions.sh"
+cd "$BUILD_REPO_ROOT"
 
 log_info "Building Debian Package using FPM (Modernized)"
 
@@ -34,8 +37,7 @@ URL="https://github.com/CERALIVE/CeraUI"
 # fails a mismatched pair at image-build time. Derived from the installed
 # @ceralive/cerastream package (the single source of truth for what's compiled
 # in) — never hardcoded. Requires `bun install` to have run first.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CERASTREAM_CONSTANTS="$SCRIPT_DIR/../../apps/backend/node_modules/@ceralive/cerastream/dist/constants.js"
+CERASTREAM_CONSTANTS="$BUILD_REPO_ROOT/apps/backend/node_modules/@ceralive/cerastream/dist/constants.js"
 IPC_PROTOCOL="$(grep -oE 'cerastream-ipc/[0-9]+' "$CERASTREAM_CONSTANTS" 2>/dev/null | head -1)"
 IPC_MAJOR="${IPC_PROTOCOL##*/}"
 if ! printf '%s' "$IPC_MAJOR" | grep -qE '^[0-9]+$'; then

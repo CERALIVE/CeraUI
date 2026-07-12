@@ -4,8 +4,13 @@
 
 set -e
 
+# Resolve this checkout from the sourced file, not the caller's directory. Build
+# scripts are also invoked from the parent CeraLive workspace during local QA.
+BUILD_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+readonly BUILD_REPO_ROOT
+
 # Configuration
-CACHE_DIR=".build-cache"
+CACHE_DIR="$BUILD_REPO_ROOT/.build-cache"
 FRONTEND_CACHE="$CACHE_DIR/frontend"
 BACKEND_CACHE="$CACHE_DIR/backend"
 
@@ -14,11 +19,11 @@ mkdir -p "$CACHE_DIR" "$FRONTEND_CACHE"
 
 # Common build configuration functions
 get_version() {
-    echo "${BUILD_VERSION:-$(git describe --tags --abbrev=0 2>/dev/null | sed 's/v//' || echo "1.0.0")}"
+    echo "${BUILD_VERSION:-$(git -C "$BUILD_REPO_ROOT" describe --tags --abbrev=0 2>/dev/null | sed 's/v//' || echo "1.0.0")}"
 }
 
 get_commit() {
-    git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+    git -C "$BUILD_REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown"
 }
 
 get_build_date() {
@@ -44,7 +49,7 @@ get_architecture() {
 
 # Get current git state for cache validation
 get_git_hash() {
-    git rev-parse HEAD 2>/dev/null || echo "unknown"
+    git -C "$BUILD_REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "unknown"
 }
 
 get_frontend_hash() {
@@ -63,8 +68,10 @@ is_frontend_cache_valid() {
         return 1
     fi
 
-    local cached_hash=$(cat "$FRONTEND_CACHE/hash.txt")
-    local current_hash=$(get_frontend_hash)
+    local cached_hash
+    local current_hash
+    cached_hash=$(cat "$FRONTEND_CACHE/hash.txt")
+    current_hash=$(get_frontend_hash)
 
     [ "$cached_hash" = "$current_hash" ]
 }
@@ -78,8 +85,10 @@ is_backend_cache_valid() {
         return 1
     fi
 
-    local cached_hash=$(cat "$cache_path/hash.txt")
-    local current_hash=$(get_backend_hash)
+    local cached_hash
+    local current_hash
+    cached_hash=$(cat "$cache_path/hash.txt")
+    current_hash=$(get_backend_hash)
 
     [ "$cached_hash" = "$current_hash" ]
 }
@@ -166,11 +175,11 @@ cache_status() {
     echo
 
     if [ -d "$CACHE_DIR" ]; then
-        echo "Cache directory: $(du -sh $CACHE_DIR | cut -f1)"
+        echo "Cache directory: $(du -sh "$CACHE_DIR" | cut -f1)"
 
         if [ -d "$FRONTEND_CACHE" ]; then
             if is_frontend_cache_valid; then
-                echo "✅ Frontend cache: VALID ($(du -sh $FRONTEND_CACHE | cut -f1))"
+                echo "✅ Frontend cache: VALID ($(du -sh "$FRONTEND_CACHE" | cut -f1))"
             else
                 echo "❌ Frontend cache: INVALID"
             fi
@@ -181,7 +190,7 @@ cache_status() {
         for arch in arm64 amd64; do
             if [ -d "$BACKEND_CACHE/$arch" ]; then
                 if is_backend_cache_valid "$arch"; then
-                    echo "✅ Backend cache ($arch): VALID ($(du -sh $BACKEND_CACHE/$arch | cut -f1))"
+                    echo "✅ Backend cache ($arch): VALID ($(du -sh "$BACKEND_CACHE/$arch" | cut -f1))"
                 else
                     echo "❌ Backend cache ($arch): INVALID"
                 fi
@@ -258,7 +267,7 @@ init_performance_monitoring() {
 start_timer() {
     local operation="$1"
     ensure_dir "$PERF_DIR"
-    echo "$(date +%s)" > "$PERF_DIR/${operation}_start.tmp"
+    date +%s > "$PERF_DIR/${operation}_start.tmp"
 }
 
 # End timing and record performance data
@@ -271,8 +280,10 @@ end_timer() {
         return 1
     fi
 
-    local start_time=$(cat "$start_file")
-    local end_time=$(date +%s)
+    local start_time
+    local end_time
+    start_time=$(cat "$start_file")
+    end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
     rm -f "$start_file"
@@ -284,8 +295,6 @@ record_build_metrics() {
     local operation="$1"
     local duration="$2"
     local architecture="$3"
-    local extra_data="$4"
-
     init_performance_monitoring
 
     # Get bundle sizes if available
@@ -295,13 +304,16 @@ record_build_metrics() {
     fi
 
     # Create performance record
-    local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    local commit=$(get_commit)
-    local version=$(get_version)
+    local timestamp
+    local commit
+    local version
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    commit=$(get_commit)
+    version=$(get_version)
 
     # Add record to performance log (simplified approach)
     local temp_log="$PERF_DIR/temp.json"
-    cat "$PERF_LOG" | jq --arg op "$operation" --arg dur "$duration" --arg arch "$architecture" \
+    if jq --arg op "$operation" --arg dur "$duration" --arg arch "$architecture" \
         --arg ts "$timestamp" --arg commit "$commit" --arg version "$version" --arg bundle "$bundle_sizes" \
         '.builds += [{
             "timestamp": $ts,
@@ -312,10 +324,11 @@ record_build_metrics() {
             "version": $version,
             "bundleSize": ($bundle | tonumber // 0),
             "cacheHit": false
-        }]' > "$temp_log" 2>/dev/null && mv "$temp_log" "$PERF_LOG" || {
-        # Fallback if jq is not available
+        }]' "$PERF_LOG" > "$temp_log" 2>/dev/null && mv "$temp_log" "$PERF_LOG"; then
+        return
+    else
         log_info "Performance recorded: $operation took ${duration}s"
-    }
+    fi
 }
 
 # Show performance statistics
@@ -332,14 +345,17 @@ show_performance_stats() {
 
     # Try to use jq for nice formatting, fallback to basic info
     if command -v jq &> /dev/null; then
-        local total_builds=$(cat "$PERF_LOG" | jq '.builds | length')
+        local total_builds
+        total_builds=$(jq '.builds | length' "$PERF_LOG")
         log_info "Total builds recorded: $total_builds"
 
         if [ "$total_builds" -gt 0 ]; then
-            local avg_duration=$(cat "$PERF_LOG" | jq '.builds | map(.duration) | add / length')
+            local avg_duration
+            avg_duration=$(jq '.builds | map(.duration) | add / length' "$PERF_LOG")
             log_info "Average build time: ${avg_duration}s"
 
-            local last_build=$(cat "$PERF_LOG" | jq -r '.builds[-1] | "Last: \(.operation) (\(.architecture)) - \(.duration)s on \(.timestamp)"')
+            local last_build
+            last_build=$(jq -r '.builds[-1] | "Last: \(.operation) (\(.architecture)) - \(.duration)s on \(.timestamp)"' "$PERF_LOG")
             log_info "$last_build"
         fi
     else
@@ -358,11 +374,13 @@ check_regression() {
 
     if command -v jq &> /dev/null && [ -s "$PERF_LOG" ]; then
         # Get average of last 5 builds for this operation
-        local avg_recent=$(cat "$PERF_LOG" | jq --arg op "$operation" \
-            '[.builds[] | select(.operation == $op)][-5:] | map(.duration) | add / length' 2>/dev/null)
+        local avg_recent
+        avg_recent=$(jq --arg op "$operation" \
+            '[.builds[] | select(.operation == $op)][-5:] | map(.duration) | add / length' "$PERF_LOG" 2>/dev/null)
 
         if [ "$avg_recent" != "null" ] && [ -n "$avg_recent" ]; then
-            local regression_check=$(echo "$current_duration $avg_recent $threshold" | awk '{
+            local regression_check
+            regression_check=$(printf '%s\n' "$current_duration $avg_recent $threshold" | awk '{
                 if ($1 > $2 * (1 + $3/100)) {
                     print "true"
                 } else {
@@ -392,7 +410,8 @@ smart_build_monitored() {
     # Call original smart build
     smart_build
 
-    local duration=$(end_timer "smart_build")
+    local duration
+    duration=$(end_timer "smart_build")
     log_success "Smart build completed in ${duration}s"
 
     # Record metrics

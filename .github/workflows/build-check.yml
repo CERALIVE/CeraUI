@@ -108,6 +108,10 @@ jobs:
         working-directory: CeraUI
         run: bun install --frozen-lockfile
 
+      - name: Release/package contract gate
+        working-directory: CeraUI
+        run: bun run test:release-package-contracts
+
       - name: Biome check (lint + format gate — S4 reliability rules)
         working-directory: CeraUI
         run: bunx biome check .
@@ -119,6 +123,9 @@ jobs:
       - name: Exec-guard gate (S1/S2 — bare-exec + spawn-policy contract + registration)
         working-directory: CeraUI
         run: bun run --filter backend check:exec-guard
+
+      - name: Prepare backend test runtime directories
+        run: sudo install -d -o "$(id -u)" -g "$(id -g)" /run/ceralive /var/run/bcrpt
 
       - name: Unit tests (bun)
         working-directory: CeraUI
