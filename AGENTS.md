@@ -955,8 +955,10 @@ Each entry exports `federationAbiVersion = 1` and
 `mountDialog(target, { host, config })`. The wrapper uses its bundled Svelte
 runtime to mount and unmount the dialog, so the host never mounts a component
 compiled against a different Svelte runtime. `host` is the typed adapter in
-`host-contract.ts`; Audio and Server route persistence and relay validation
-through it in hosted mode while retaining their device-local RPC fallback.
+`host-contract.ts`; all three dialogs treat a resolved `{ success: false }` host
+write as a visible save failure. Audio and Server retain their device-local RPC
+fallback, while Encoder reports asynchronous hosted write refusal through the
+same localized failure toast.
 
 ### Build step: `bun run build:federation`
 
