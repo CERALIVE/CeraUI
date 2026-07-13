@@ -9,7 +9,7 @@ on:
 env:
   NODE_VERSION: "24"
   # E2E fan-out. The union of project×shard lanes runs the same functional
-  # spec×project set as the unsharded run (456 invocations on 2026-07-09);
+  # spec×project set as the unsharded run (458 invocations on 2026-07-13);
   # a11y (desktop-only) runs once on desktop shard 1.
   TOTAL_SHARDS: "2"
 
@@ -328,9 +328,9 @@ jobs:
           test -x "$runtime_bin"
           test "$(command -v srtla_send)" = "$runtime_bin"
 
-      - name: Reset auth state
+      - name: Seed E2E auth state
         working-directory: CeraUI
-        run: rm -f apps/backend/auth_tokens.json
+        run: E2E_PASSWORD=12345678 bun run scripts/ci/seed-e2e-auth.ts
 
       - name: Start E2E servers
         working-directory: CeraUI

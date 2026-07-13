@@ -4,8 +4,9 @@
 	A Bun WebSocket server that reproduces cerastream's committed preview-ws wire
 	contract (cerastream Todo 15) so the Live-view / EncoderDialog `PreviewCanvas`
 	component works end-to-end in dev WITHOUT a real engine. cerastream serves the
-	real preview socket directly on its own port (9997); on a dev host that port is
-	dead, so without this the component would only ever reach `reconnecting`.
+	real preview socket as a loopback upstream (commonly port 9997). On a dev host
+	that upstream is absent, so without this the backend `/preview` proxy would only
+	report an unavailable upstream and the component would remain `reconnecting`.
 
 	INERT WHEN MOCKS ARE OFF. `startMockPreviewServer()` gates FIRST on
 	`shouldUseMocks()` and returns immediately — no port is bound, no listener is
@@ -37,10 +38,9 @@ import { PREVIEW_FIXTURE } from "./preview-fixture.ts";
 
 type PreviewServer = ReturnType<typeof Bun.serve<PreviewConn>>;
 
-/** Loopback/LAN port the cerastream engine serves the preview WS on. The dev
- *  mock binds the SAME port so the frontend's `getPreviewSocketUrl()`
- *  (`hostname:9997` in dev) reaches it unchanged. Overridable via `PREVIEW_PORT`
- *  (the backend env twin of the frontend's `VITE_PREVIEW_PORT`). */
+/** Loopback port used by the dev mock preview upstream. The browser always dials
+ *  the backend-origin `/preview` route; the backend proxy reaches this port.
+ *  Overridable via `PREVIEW_PORT`. */
 const DEFAULT_PREVIEW_PORT = 9997;
 
 /** `audio-level` cadence — 200 ms = 5 Hz, comfortably within the <=10 Hz
@@ -199,8 +199,8 @@ let previewServer: PreviewServer | null = null;
 /**
  * Bind the dev preview WebSocket server. No-op (returns null) unless
  * `shouldUseMocks()` — so this is always safe to wire into the boot sequence.
- * `portOverride` is a test seam (bind an ephemeral port); production always uses
- * `PREVIEW_PORT` / the 9997 default so the frontend reaches it unchanged.
+ * `portOverride` is a test seam (bind an ephemeral port); normal mock development
+ * uses `PREVIEW_PORT` or the 9997 default as the backend proxy's upstream.
  */
 export function startMockPreviewServer(
 	portOverride?: number,

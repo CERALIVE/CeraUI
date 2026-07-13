@@ -149,7 +149,7 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 		forcePullStreaming = null;
 		pendingRpc.clear();
 
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 

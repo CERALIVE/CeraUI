@@ -8,18 +8,30 @@
 import { test as base, type Page } from '@playwright/test';
 
 import { ensureAuthenticated } from '../helpers/index.js';
+import { BackendRpc } from './backend-rpc.js';
 import { startWorkerBackend, type WorkerBackend } from './backend.js';
+import { PageRpc } from './page-rpc.js';
 
 export { expect } from '@playwright/test';
 export type { Download, Locator, Page } from '@playwright/test';
+export type { BackendRpc } from './backend-rpc.js';
+export { PageRpc } from './page-rpc.js';
+
+const CI_PREVIEW_ROUTING_COOKIE = 'ceraui_e2e_backend_port';
+
+function ciPreviewOrigin(): string {
+	return `http://localhost:${process.env.E2E_PORT ?? '6173'}`;
+}
 
 type WorkerFixtures = {
 	backendScenario: string;
 	workerBackend: WorkerBackend;
+	backendRpc: BackendRpc;
 };
 
 type Fixtures = {
 	authedPage: Page;
+	pageRpc: PageRpc;
 };
 
 export const test = base.extend<Fixtures, WorkerFixtures>({
@@ -40,15 +52,37 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
 		},
 		{ scope: 'worker' },
 	],
+	backendRpc: [
+		async ({ workerBackend }, use) => {
+			const rpc = await BackendRpc.connect(workerBackend.port, {
+				proxySecret: workerBackend.proxySecret,
+			});
+			await use(rpc);
+			rpc.close();
+		},
+		{ scope: 'worker' },
+	],
 
 	// Override page to (1) route this worker's browser to its own backend and
 	// (2) add the screenshot guard in non-@visual tests.
 	page: async ({ page, workerBackend }, use, testInfo) => {
-		// Inject BEFORE app boot so getSocketUrl() dials the worker's backend; any
-		// spec WS harness (addInitScript) registers after this and wraps that URL.
-		await page.addInitScript((port: number) => {
-			(window as { __ceraSocketPort?: number }).__ceraSocketPort = port;
-		}, workerBackend.port);
+		const usesCiPreviewRouting = process.env.CI === 'true';
+		if (usesCiPreviewRouting) {
+			await page.context().addCookies([
+				{
+					name: CI_PREVIEW_ROUTING_COOKIE,
+					value: `${workerBackend.port}.${workerBackend.proxySecret}`,
+					url: ciPreviewOrigin(),
+					httpOnly: true,
+					secure: false,
+					sameSite: 'Strict',
+				},
+			]);
+		} else {
+			await page.addInitScript((port: number) => {
+				(window as { __ceraSocketPort?: number }).__ceraSocketPort = port;
+			}, workerBackend.port);
+		}
 
 		// Screenshots are permitted only in @visual (visual-regression baselines)
 		// and @gallery (docs screenshot gallery) tests; every other test gets a
@@ -70,7 +104,19 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
 				);
 			};
 		}
-		await use(page);
+		try {
+			await use(page);
+		} finally {
+			if (usesCiPreviewRouting) {
+				await page.context().clearCookies({ name: CI_PREVIEW_ROUTING_COOKIE });
+			}
+		}
+	},
+	pageRpc: async ({ page }, use) => {
+		const rpc = new PageRpc();
+		await rpc.install(page);
+		await use(rpc);
+		rpc.close();
 	},
 
 	// authedPage: navigate to / and ensure the authenticated shell is visible.

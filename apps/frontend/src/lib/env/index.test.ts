@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	NON_BROWSER_SOCKET_URL,
+	RPC_WS_PATH,
 	resolveRuntimePortOverride,
 	resolveSocketUrl,
 	type SocketLocation,
@@ -27,6 +28,10 @@ function loc(href: string): SocketLocation {
 }
 
 describe("resolveSocketUrl — production (origin-derived)", () => {
+	it("uses a dedicated same-origin RPC path that the preview proxy can forward", () => {
+		expect(RPC_WS_PATH).toBe("/ws");
+	});
+
 	it("derives ws://host with no port suffix on a default HTTP port", () => {
 		expect(
 			resolveSocketUrl({

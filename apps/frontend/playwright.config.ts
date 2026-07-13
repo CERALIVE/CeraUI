@@ -91,8 +91,9 @@ export default defineConfig({
           timeout: 120_000,
         },
         {
-          // No --watch: tests write config.json/auth_tokens.json, which would
-          // otherwise restart the backend mid-run and drop live WS connections.
+          // Reference backend for local global setup, not functional test pages;
+          // those select worker-scoped 31xx backends in the page fixture. No
+          // --watch because global setup mutates config.json/auth_tokens.json.
           command: 'bun run --filter backend dev:e2e',
           port: 3002,
           reuseExistingServer: true,

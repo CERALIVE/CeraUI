@@ -54,7 +54,9 @@ This installs all workspaces and resolves all registry deps (no sibling checkout
 bun run dev
 ```
 
-Starts the frontend (Vite, port 5173) and backend together via mprocs. Run from the workspace root.
+Starts the frontend (Vite, port 6173) and ordinary local development backend
+(port 3002) together via mprocs. Functional E2E pages use separate worker-scoped
+31xx backends. Run from the workspace root.
 
 To run the frontend alone:
 

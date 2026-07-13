@@ -72,18 +72,11 @@ export class SettingsPage {
 		return ((await code.textContent()) ?? '').trim();
 	}
 
-	/**
-	 * Submit the claim code and assert the paired state surfaces.
-	 *
-	 * BEHAVIOR CHANGE (T11): the consolidated CloudRemoteDialog gates the prod
-	 * `complete-pairing` action behind `!import.meta.env.DEV` and renders the
-	 * dev-only `simulate-pairing` action instead (both call the same
-	 * `pairing.complete()` → `pairing.completePairing` RPC). The e2e frontend
-	 * runs `vite dev` (DEV === true), so `simulate-pairing` is the button that
-	 * exists here — `complete-pairing` is never rendered in this environment.
-	 */
 	async completePairing(): Promise<void> {
-		await this.page.getByTestId('simulate-pairing').click();
+		await this.page
+			.getByTestId('complete-pairing')
+			.or(this.page.getByTestId('simulate-pairing'))
+			.click();
 		await expect(this.page.getByTestId('pairing-status')).toBeVisible();
 	}
 

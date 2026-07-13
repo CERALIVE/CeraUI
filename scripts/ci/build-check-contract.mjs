@@ -241,6 +241,22 @@ export function assertBuildCheckContract(source) {
 	assertBrowserCache(setupSteps, 'setup-e2e');
 	assertBrowserCache(e2eSteps, 'test-e2e');
 	assertSrtlaRuntime(setupSteps, e2eSteps);
+	const startServers = findStep(e2eSteps, 'Start E2E servers', 'test-e2e');
+	const seedAuth = findStep(e2eSteps, 'Seed E2E auth state', 'test-e2e');
+	assertExact(
+		seedAuth.run,
+		'E2E_PASSWORD=12345678 bun run scripts/ci/seed-e2e-auth.ts',
+		'test-e2e auth seed command',
+	);
+	assertStepOrder(e2eSteps, 'Seed E2E auth state', 'Start E2E servers', 'test-e2e');
+	assertIncludes(
+		startServers.run,
+		'bun run --filter frontend preview -- --host 127.0.0.1 --port 6173',
+		'test-e2e frontend production preview command',
+	);
+	if (String(startServers.run).includes('bun run --filter frontend dev')) {
+		fail('test-e2e frontend startup must not use the Vite dev server');
+	}
 
 	const frontendDownload = findStep(e2eSteps, 'Download frontend dist', 'test-e2e');
 	assertExact(

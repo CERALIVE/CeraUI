@@ -149,7 +149,7 @@ CeraUI/
 
 ```bash
 bun install           # installs all workspaces; resolves registry deps (no sibling checkout required)
-bun run dev           # frontend + backend via mprocs TUI (port 5173 + 3001)
+bun run dev           # frontend + backend via mprocs TUI (Vite 6173 + backend 3002)
 bun run build         # compile backend binary + frontend static
 bun run test:release-package-contracts   # provenance + release graph + dispatch-input security
 BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh   # .deb for ARM64
@@ -545,7 +545,29 @@ payload, and uploads that payload as a one-day artifact. Each E2E lane restores
 the executable bit, adds the extracted `usr/bin` to `PATH`, rewrites its local
 `setup.json` `srtla_path`, and asserts the real `srtla_send` binary before server
 startup. No stub, `sudo` install, sibling checkout, or skipped backend preflight
-is permitted. The semantic YAML contract is `bun run test:build-check-shape`.
+is permitted. Each functional lane serves the uploaded production bundle with
+one `vite preview` process on port 6173, shared by that lane's Playwright workers;
+the lane's reference backend on port 3002 supports startup and global setup but
+is not the backend used by functional test pages. Under CI preview only,
+the E2E fixture installs an HttpOnly SameSite=Strict cookie containing its
+validated 3100-3199 worker port and a random per-worker proxy secret. The proxy
+consumes and strips that routing value only when the raw request target is the
+literal `/ws` or `/preview` path (optionally followed by a query), injects the
+secret as a proxy-only backend admission header, and fails
+closed on missing/malformed routing state or explicit query/header steering.
+Worker backends require the exact header before upgrading in E2E mode, so direct
+browser sockets cannot connect through the shared preview to another worker's
+backend. This keeps every browser paired with its worker-scoped backend, preview
+upstream, and scenario. The CI lane seeds the
+reference backend's password and persistent token before server startup, so
+Playwright global setup never depends on a missing-cookie fallback through the
+preview proxy; local global setup retains its browser-driven flow.
+Runtime E2E code must use fixture RPC/socket seams and must not import Vite-only
+`/src` modules. Local E2E retains `window.__ceraSocketPort`, which selects the
+page's worker-scoped 3100-3199 backend; the reference backend on port 3002 is not
+the functional page backend. Local Vite dev does not enable cookie routing. The
+semantic YAML contract is
+`bun run test:build-check-shape`.
 
 ## BUN-NATIVE CONVENTIONS (as of 2026-06)
 

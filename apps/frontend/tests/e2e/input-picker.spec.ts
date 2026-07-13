@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, hardwareTest, type Page, test } from "./fixtures/index.js";
+import {
+	expect,
+	hardwareTest,
+	type BackendRpc,
+	type Page,
+	test,
+} from "./fixtures/index.js";
 
 import { navigateTo } from "./helpers";
 import {
@@ -13,7 +19,9 @@ import { runRock5bInputPickerGate } from "./helpers/input-picker-hardware.js";
 declare global {
 	interface Window {
 		__cera: {
+			_seq: number;
 			emit: (t: string, p: unknown) => void;
+			socket: (WebSocket & { __realSend(data: string): void }) | null;
 			switchResult: (inputId: string) => unknown;
 		};
 	}
@@ -30,8 +38,9 @@ declare global {
  *   3. detach it → it remains visible as a disabled live-switch row.
  *
  * The WebSocket harness (addInitScript) authenticates via a persistent token and
- * exposes the dev-only attach/detach RPC over the page's own socket. It never
- * fakes switchInput; success and SOURCE_LOST both come from the dev backend.
+ * observes the page's real switchInput call. Fixture-owned BackendRpc drives the
+ * dev-only attach/detach seam. Nothing fakes switchInput; success and SOURCE_LOST
+ * both come from the dev backend.
  * The successful switch/hotplug/latency contract is exercised separately by the
  * receive-only Rock 5B+ @hardware gate at the bottom of this file.
  */
@@ -146,21 +155,14 @@ function deviceRow(page: Page, inputId: string) {
 }
 
 function setDeviceAttached(
-	page: Page,
+	rpc: BackendRpc,
 	inputId: string,
 	attached: boolean,
 ): Promise<{ success: boolean; error?: string }> {
-	return page.evaluate(
-		async ({ id, isAttached }) => {
-			const clientPath = "/src/lib/rpc/client.ts";
-			const mod = await import(clientPath);
-			return (await mod.rpc.streaming.setMockDeviceAttached({
-				input_id: id,
-				attached: isAttached,
-			})) as { success: boolean; error?: string };
-		},
-		{ id: inputId, isAttached: attached },
-	);
+	return rpc.call(["streaming", "setMockDeviceAttached"], {
+		input_id: inputId,
+		attached,
+	});
 }
 
 function switchResult(page: Page, inputId: string): Promise<unknown> {
@@ -204,15 +206,16 @@ test.describe("input picker mock negative coverage (Task 34)", () => {
 			.toBe(true);
 	});
 
-	test.afterEach(async ({ page }) => {
-		await setDeviceAttached(page, "usb", true).catch(() => {});
+	test.afterEach(async ({ backendRpc }) => {
+		await setDeviceAttached(backendRpc, "usb", true).catch(() => {});
 	});
 
 	test("a mock-visible source switch uses the real RPC and surfaces SOURCE_LOST", async ({
+		backendRpc,
 		page,
 	}) => {
-		await setDeviceAttached(page, "usb", false);
-		await setDeviceAttached(page, "usb", true);
+		await setDeviceAttached(backendRpc, "usb", false);
+		await setDeviceAttached(backendRpc, "usb", true);
 
 		const row = deviceRow(page, "usb");
 		await expect(row).toBeVisible({ timeout: 8000 });
@@ -233,14 +236,15 @@ test.describe("input picker mock negative coverage (Task 34)", () => {
 	});
 
 	test("a just-unplugged device remains visible as a disabled live-switch entry", async ({
+		backendRpc,
 		page,
 	}) => {
-		await setDeviceAttached(page, "usb", true);
+		await setDeviceAttached(backendRpc, "usb", true);
 		const row = deviceRow(page, "usb");
 		await expect(row).toBeVisible({ timeout: 8000 });
 		await expect(row.locator("[data-switch-input]")).toBeEnabled();
 
-		await setDeviceAttached(page, "usb", false);
+		await setDeviceAttached(backendRpc, "usb", false);
 		await expect(row.locator("[data-switch-input]")).toBeDisabled({ timeout: 8000 });
 	});
 });

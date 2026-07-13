@@ -29,7 +29,7 @@ let pageWs: WebSocketRoute | null = null;
 let dropServerCapabilities = false;
 let dropServerSources = false;
 // Fake-resolve every streaming.setConfig client-side so a config write is proven
-// to succeed without the shared backend accepting the injected (backend-unknown)
+// to succeed without the per-worker backend accepting the injected (backend-unknown)
 // source ids.
 let fakeSetConfig = false;
 
@@ -134,7 +134,7 @@ test.describe("Network-ingest operator-disable hides the Live source row (Task 9
 		dropServerSources = true;
 		fakeSetConfig = false;
 
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 

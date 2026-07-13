@@ -153,7 +153,7 @@ test.describe("LiveSourceSwitch (functional)", () => {
 		interceptSwitchInput = false;
 		switchInputInput = null;
 
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 
@@ -177,7 +177,7 @@ test.describe("LiveSourceSwitch (functional)", () => {
 									}),
 								);
 							}
-							return; // hermetic: never forward to the shared backend
+							return; // hermetic: never forward to the per-worker backend
 						}
 					} catch {
 						/* non-RPC frame */

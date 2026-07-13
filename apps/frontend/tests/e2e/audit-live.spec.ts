@@ -33,7 +33,7 @@ import { ensureAuthenticated, navigateTo, setLocale } from "./helpers/index.js";
  * the injected frames authoritative by dropping the backend's own capabilities /
  * devices / sources echoes, and can rewrite `status.is_streaming` so the live
  * cockpit renders without a real stream. Per-tier scenario state that injection
- * cannot reach (RPC-handler state) is left to the shared backend — this audit
+ * cannot reach (RPC-handler state) is left to the per-worker backend — this audit
  * needs none of it, so no `backendScenario` override is used.
  *
  * PLAYBOOK.md compliance: role / testid / web-first assertions only — no
@@ -295,7 +295,7 @@ test.describe("Live destination coherence audit", { tag: "@audit" }, () => {
 			}
 		});
 
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));
@@ -489,6 +489,9 @@ test.describe("Live destination coherence audit", { tag: "@audit" }, () => {
 			await openConfigDialog(page, testId);
 			const dialog = page.getByRole("dialog", { name });
 			await expect(dialog).toBeVisible({ timeout: 15_000 });
+			if (name === "Receiver Server") {
+				await expect(dialog.getByTestId("destination-ceralive")).toBeEnabled();
+			}
 
 			// Each opened dialog is leak-free and hosts no silent disabled control.
 			const leaks = await scanForLeaks(dialog);

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { expect, test } from './fixtures/index.js';
+import { expect, test, type BackendRpc } from './fixtures/index.js';
 
 import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
 
@@ -68,15 +68,8 @@ function installWsHarness(opts: { token: string }): void {
 }
 
 /** Fire a backend `system.getLog` request the backend rejects + traces as err. */
-function triggerRejectedLogRequest(page: import('./fixtures/index.js').Page, service: string) {
-	return page.evaluate(async (svc) => {
-		const mod = await import(/* @vite-ignore */ '/src/lib/rpc/client.ts');
-		try {
-			await (mod.rpc.system.getLog as (i: unknown) => Promise<unknown>)({ service: svc });
-		} catch {
-			/* expected: the backend rejects the malformed unit name */
-		}
-	}, service);
+async function triggerRejectedLogRequest(backendRpc: BackendRpc, service: string): Promise<void> {
+	await backendRpc.call(['system', 'getLog'], { service }).catch(() => undefined);
 }
 
 async function readDownload(download: import('./fixtures/index.js').Download): Promise<string> {
@@ -93,10 +86,10 @@ test.beforeEach(async ({ page, browserName }, testInfo) => {
 	await navigateTo(page, 'settings');
 });
 
-test('LogsDialog downloads a real, observable backend journal', async ({ page }) => {
+test('LogsDialog downloads a real, observable backend journal', async ({ page, backendRpc }) => {
 	// 1. Trigger a known backend failure: the backend rejects this unit name and
 	//    records `RPC system.getLog err` (+ the marker in its args) in the journal.
-	await triggerRejectedLogRequest(page, INJECTION_MARKER);
+	await triggerRejectedLogRequest(backendRpc, INJECTION_MARKER);
 
 	// 2. Open the Logs dialog from the Settings list.
 	await page.getByRole('button', { name: 'System Logs' }).first().click();

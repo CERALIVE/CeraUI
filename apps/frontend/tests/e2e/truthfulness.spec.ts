@@ -141,7 +141,7 @@ let dropServerSources = false;
 let dropServerStatus = false;
 const DROP_SERVER_STATUS_ANNOTATION = "drop-server-status";
 // Fake-resolve every `streaming.setConfig` client-side with success so a config
-// write is proven to succeed WITHOUT depending on the shared backend accepting the
+// write is proven to succeed WITHOUT depending on the per-worker backend accepting the
 // injected (backend-unknown) source ids — the injected sources are the DOM truth
 // only; the real backend rejects unknown ids. Captured inputs are asserted on.
 let fakeSetConfig = false;
@@ -374,7 +374,7 @@ async function openConfigDialog(page: Page, testId: string): Promise<void> {
 }
 
 test.describe("Capability truthfulness (functional)", () => {
-	test.beforeEach(async ({ page }, testInfo) => {
+	test.beforeEach(async ({ page, pageRpc }, testInfo) => {
 		test.skip(
 			testInfo.project.name !== "desktop",
 			"desktop layout drives the capability surfaces; mobile/kiosk/RTL are the @visual suite",
@@ -393,9 +393,10 @@ test.describe("Capability truthfulness (functional)", () => {
 		fakeSetConfig = false;
 		setConfigCalls.length = 0;
 
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
+			pageRpc.bindConnectionLifecycle(ws, server);
 
 			ws.onMessage((m) => {
 				if (fakeSetConfig) {
@@ -427,6 +428,7 @@ test.describe("Capability truthfulness (functional)", () => {
 			});
 
 			server.onMessage((m) => {
+				pageRpc.acceptServerMessage(m);
 				const text = typeof m === "string" ? m : m.toString();
 				try {
 					const frame = JSON.parse(text) as object;
@@ -950,6 +952,7 @@ test.describe("Capability truthfulness (functional)", () => {
 	// ── (b) The test-pattern source appears once and resolves to pipeline 'test' ─
 	test("the test-pattern source appears exactly once and selecting it persists a config whose pipeline is 'test'", async ({
 		page,
+		pageRpc,
 	}) => {
 		serverConfig();
 		sendFullCaps();
@@ -970,13 +973,10 @@ test.describe("Capability truthfulness (functional)", () => {
 		await select.click();
 		await expect
 			.poll(
-				async () =>
-					page.evaluate(async () => {
-						const clientPath = "/src/lib/rpc/client.ts";
-						const mod = await import(clientPath);
-						const cfg = await mod.rpc.streaming.getConfig();
-						return (cfg as { pipeline?: string } | undefined)?.pipeline;
-					}),
+				async () => {
+					const cfg = await pageRpc.call<{ pipeline?: string }>(["streaming", "getConfig"]);
+					return cfg?.pipeline;
+				},
 				{
 					timeout: 15_000,
 					message: "backend should resolve source='test' → pipeline='test'",
@@ -991,7 +991,7 @@ test.describe("Capability truthfulness (functional)", () => {
 	}) => {
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
-		// Clear the seed's stale managed binding: the shared backend seed ships
+		// Clear the seed's stale managed binding: the per-worker backend seed ships
 		// `relay_server: "srv-eu"`, an id ABSENT from the mock relay catalog. Config
 		// frames MERGE, so a bare serverConfig() leaves it in place and — once the
 		// catalog is delivered to the page — the C7 destination gate correctly WARNS

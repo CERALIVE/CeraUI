@@ -1,4 +1,5 @@
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -13,10 +14,9 @@ import path from "node:path";
  * shared-`config.json` clobbering AND `dev.emit` broadcast bleed across workers,
  * which is what previously forced `workers: 2` and the broad `serial` cordon.
  *
- * The shared Vite dev server (port 6173) still serves every worker's frontend —
- * it is stateless. The browser is routed to this worker's backend via the
- * dev-only `window.__ceraSocketPort` seam (see src/lib/env/index.ts), injected
- * by the page fixture before the app boots.
+ * One frontend server per E2E run (or CI lane) remains stateless while each page
+ * is routed to its worker backend. Local E2E uses `window.__ceraSocketPort`; CI
+ * uses the production preview WebSocket proxy and a fixture-owned HttpOnly cookie.
  */
 
 const BACKEND_DIR = path.resolve(import.meta.dirname, "../../../../backend");
@@ -77,7 +77,8 @@ const STATE_ROOT = path.resolve(
 );
 
 export interface WorkerBackend {
-	port: number;
+	readonly port: number;
+	readonly proxySecret: string;
 	stop(): Promise<void>;
 }
 
@@ -179,25 +180,34 @@ function stopChild(child: ChildProcess): Promise<void> {
 export interface StartWorkerBackendOptions {
 	/** MOCK_SCENARIO to boot this worker's backend with (default multi-modem-wifi). */
 	scenario?: string;
+	port?: number;
 }
 
 export async function startWorkerBackend(
 	options: StartWorkerBackendOptions = {},
 ): Promise<WorkerBackend> {
 	const scenario = options.scenario ?? DEFAULT_SCENARIO;
-	const port = workerBackendPort();
+	const port = options.port ?? workerBackendPort();
+	const proxySecret = randomBytes(32).toString("hex");
 	const stateDir = path.join(STATE_ROOT, String(port));
 	seedStateDir(stateDir);
 
 	const logFd = fs.openSync(path.join(stateDir, "backend.log"), "w");
+	const childEnv: NodeJS.ProcessEnv = {
+		...process.env,
+		NODE_ENV: "development",
+		MOCK_SCENARIO: scenario,
+		PORT: String(port),
+		PREVIEW_PORT: String(port + 100),
+	};
+	if (process.env.CI === "true") {
+		childEnv.E2E_WORKER_PROXY_SECRET = proxySecret;
+	} else {
+		delete childEnv.E2E_WORKER_PROXY_SECRET;
+	}
 	const child = spawn("bun", [BACKEND_ENTRY], {
 		cwd: stateDir,
-		env: {
-			...process.env,
-			NODE_ENV: "development",
-			MOCK_SCENARIO: scenario,
-			PORT: String(port),
-		},
+		env: childEnv,
 		stdio: ["ignore", logFd, logFd],
 	});
 	fs.closeSync(logFd);
@@ -211,6 +221,7 @@ export async function startWorkerBackend(
 
 	return {
 		port,
+		proxySecret,
 		stop: () => stopChild(child),
 	};
 }

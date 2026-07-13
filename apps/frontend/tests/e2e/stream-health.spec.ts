@@ -2,7 +2,7 @@ import fs from "node:fs";
 
 import { expect, type Page } from "@playwright/test";
 
-import { test } from "./fixtures/index.js";
+import { test, type PageRpc } from "./fixtures/index.js";
 import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.js";
 
 /**
@@ -16,8 +16,9 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.j
  *
  * Conventions (PLAYBOOK.md): functional spec — no screenshot or visual-snapshot
  * APIs, and no fixed-delay waits. Every wait is a web-first
- * assertion or `expect.poll` against the live `data-state` attribute. Health
- * broadcasts reach every authed client, so this file runs `serial`.
+ * assertion or `expect.poll` against the live `data-state` attribute. Each
+ * `dev.emit` health frame is delivered only to the calling authenticated socket;
+ * this file runs `serial` to keep its page-local sequence ordered.
  */
 
 const HEALTH_INDICATOR = "[data-testid='stream-health']";
@@ -28,21 +29,17 @@ function record(line: string): void {
 }
 
 /** Inject a `health` broadcast (Task 13 shape) via the dev-only `dev.emit`. */
-async function emitHealth(page: Page, state: string): Promise<void> {
-	await page.evaluate(async (s) => {
-		const specPath = "/src/lib/rpc/client.ts";
-		const mod = await import(/* @vite-ignore */ specPath);
-		await mod.rpc.dev.emit({
-			type: "health",
-			payload: {
-				state: s,
-				process: { alive: s !== "dead" },
-				frames: { advancing: s === "healthy", count: 0 },
-				srt: { reconnecting: false, reconnectCount: 0 },
-				bond: { linkCount: 2, activeLinks: s === "healthy" ? 2 : 1 },
-			},
-		});
-	}, state);
+async function emitHealth(pageRpc: PageRpc, state: string): Promise<void> {
+	await pageRpc.call(["dev", "emit"], {
+		type: "health",
+		payload: {
+			state,
+			process: { alive: state !== "dead" },
+			frames: { advancing: state === "healthy", count: 0 },
+			srt: { reconnecting: false, reconnectCount: 0 },
+			bond: { linkCount: 2, activeLinks: state === "healthy" ? 2 : 1 },
+		},
+	});
 }
 
 function healthIndicator(page: Page) {
@@ -54,11 +51,11 @@ function healthIndicator(page: Page) {
  * already-current state raises no duplicate toast (dedup-by-name) and does not
  * re-transition, so this is safe against a stray backend tick flipping the dot.
  */
-async function driveHealth(page: Page, state: string): Promise<void> {
+async function driveHealth(page: Page, pageRpc: PageRpc, state: string): Promise<void> {
 	await expect
 		.poll(
 			async () => {
-				await emitHealth(page, state);
+				await emitHealth(pageRpc, state);
 				return healthIndicator(page).getAttribute("data-state");
 			},
 			{ timeout: 10_000, message: `stream-health indicator should settle on ${state}` },
@@ -70,8 +67,9 @@ async function driveHealth(page: Page, state: string): Promise<void> {
 test.describe("stream-health HUD surfacing (dev.emit driven)", () => {
 	test.skip(({ browserName }) => browserName !== "chromium", "single-browser integration proof");
 
-	test.beforeEach(async ({ page }, testInfo) => {
+	test.beforeEach(async ({ page, pageRpc }, testInfo) => {
 		test.skip(testInfo.project.name !== "desktop", "desktop layout exposes the persistent HUD bar");
+		void pageRpc;
 		await page.goto("/");
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
@@ -94,28 +92,28 @@ test.describe("stream-health HUD surfacing (dev.emit driven)", () => {
 		);
 	});
 
-	test("indicator reflects healthy → degraded → dead, with transition toasts", async ({ page }) => {
+	test("indicator reflects healthy → degraded → dead, with transition toasts", async ({ page, pageRpc }) => {
 		const indicator = healthIndicator(page);
 
 		// healthy: clean start is silent (no toast on unknown→healthy).
-		await driveHealth(page, "healthy");
+		await driveHealth(page, pageRpc, "healthy");
 		await expect(indicator).toHaveAttribute("data-state", "healthy");
 		record("emit health=healthy → [data-testid=stream-health] data-state=healthy ✓");
 
 		// degraded: warning toast must surface on healthy→degraded.
-		await driveHealth(page, "degraded");
+		await driveHealth(page, pageRpc, "degraded");
 		await expect(indicator).toHaveAttribute("data-state", "degraded");
 		await expect(page.getByText("Stream health degraded")).toBeVisible();
 		record("emit health=degraded → data-state=degraded + warning toast 'Stream health degraded' ✓");
 
 		// dead: error toast must surface on any→dead.
-		await driveHealth(page, "dead");
+		await driveHealth(page, pageRpc, "dead");
 		await expect(indicator).toHaveAttribute("data-state", "dead");
 		await expect(page.getByText("Stream is down")).toBeVisible();
 		record("emit health=dead → data-state=dead + error toast 'Stream is down' ✓");
 
 		// recovery: success toast on degraded/dead → healthy.
-		await driveHealth(page, "healthy");
+		await driveHealth(page, pageRpc, "healthy");
 		await expect(indicator).toHaveAttribute("data-state", "healthy");
 		await expect(page.getByText("Stream health recovered")).toBeVisible();
 		record("emit health=healthy → data-state=healthy + success toast 'Stream health recovered' ✓");
@@ -125,15 +123,16 @@ test.describe("stream-health HUD surfacing (dev.emit driven)", () => {
 test.describe("stream-health rapid flapping (failure-guard)", () => {
 	test.skip(({ browserName }) => browserName !== "chromium", "single-browser integration proof");
 
-	test.beforeEach(async ({ page }, testInfo) => {
+	test.beforeEach(async ({ page, pageRpc }, testInfo) => {
 		test.skip(testInfo.project.name !== "desktop", "desktop layout exposes the persistent HUD bar");
+		void pageRpc;
 		await page.goto("/");
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
 		await expect(healthIndicator(page)).toBeVisible({ timeout: 15_000 });
 	});
 
-	test("20 rapid transitions never crash; indicator settles on the final state", async ({ page }) => {
+	test("20 rapid transitions never crash; indicator settles on the final state", async ({ page, pageRpc }) => {
 		const consoleErrors: string[] = [];
 		const pageErrors: string[] = [];
 		const onConsole = (msg: import("@playwright/test").ConsoleMessage) => {
@@ -145,12 +144,12 @@ test.describe("stream-health rapid flapping (failure-guard)", () => {
 
 		const cycle = ["healthy", "degraded", "dead"];
 		for (let i = 0; i < 20; i++) {
-			await emitHealth(page, cycle[i % cycle.length]);
+			await emitHealth(pageRpc, cycle[i % cycle.length]);
 		}
 		const finalState = cycle[19 % cycle.length];
 
 		// Settle deterministically on a known final state after the flap storm.
-		await driveHealth(page, finalState);
+		await driveHealth(page, pageRpc, finalState);
 		await expect(healthIndicator(page)).toHaveAttribute("data-state", finalState);
 
 		page.off("console", onConsole);

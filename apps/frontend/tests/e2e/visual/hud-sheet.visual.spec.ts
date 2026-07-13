@@ -23,7 +23,7 @@ import { ensureAuthenticated } from "../helpers/index.js";
  */
 
 const TASK24_DIR = path.resolve(import.meta.dirname, "../../../test-results/task-24-visual");
-const WS_PATTERN = /:(3002|31\d\d|8090|8091)\//;
+const WS_PATTERN = /:(3002|31\d\d|6173|8090|8091)\//;
 
 async function openHud(page: Page): Promise<Page> {
 	await page.locator("[data-hud-region]").first().click();

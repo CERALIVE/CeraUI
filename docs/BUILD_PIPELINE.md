@@ -163,8 +163,36 @@ restores the versioned browser cache, and installs the browser only on a cache
 miss. It also downloads the runtime artifact, restores `srtla_send` execute
 permission, adds its `usr/bin` to `PATH`, rewrites the lane-local backend
 `setup.json` `srtla_path`, and asserts the resolved binary before starting the
-servers. Each lane uploads a unique blob report, which `merge-e2e-reports`
-combines into the final HTML report.
+servers.
+
+The frontend server in every functional lane is `vite preview` on port 6173,
+serving the frontend artifact built by `setup-e2e`; the Vite dev server is not a
+CI fallback. The device-host development proxy and CI preview share the same
+path-scoped WebSocket matcher. The production bundle opens same-origin `/ws` and
+`/preview` sockets, and Vite forwards only those literal raw upgrade paths,
+optionally followed by a query. Local functional E2E bypasses that Vite proxy by
+selecting a worker backend through `window.__ceraSocketPort`. Dot-segment,
+encoded-path, authority-like, fragment, and child-path
+request targets are rejected before URL normalization. In CI preview only, the
+page fixture installs an HttpOnly SameSite=Strict cookie whose exact value
+combines a worker port from 3100 through 3199 with a random per-worker proxy
+secret. The proxy consumes and strips the routing value, injects the secret as a
+proxy-only backend admission header, and fails closed on missing, malformed,
+duplicate, encoded, or out-of-range values and explicit query/header steering.
+E2E worker
+backends require the exact header before either WebSocket upgrade, preventing
+direct browser access across workers. This preserves per-worker backend, mock
+preview upstream, and `MOCK_SCENARIO` isolation without adding an application
+global or production test API. Before the reference backend starts, the lane
+seeds its password and persistent token; CI global setup therefore never relies
+on a missing-cookie route to port 3002, while local global setup remains
+browser-driven. Runtime E2E tests use fixture RPC/socket seams rather than
+importing `/src` modules,
+which are not served by a production preview. Local Vite dev retains
+`window.__ceraSocketPort` and does not enable cookie routing.
+
+Each lane uploads a unique blob report, which `merge-e2e-reports` combines into
+the final HTML report.
 
 Run the structured YAML topology contract locally with:
 

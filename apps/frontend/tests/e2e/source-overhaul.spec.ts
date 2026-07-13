@@ -57,8 +57,8 @@ let heldSetConfigId: string | number | null = null;
 // it (matches the T3 backend contract: setConfig echoes the applied config fields).
 let heldSetConfigInput: Record<string, unknown> | null = null;
 // Fake a successful `streaming.start` client-side so the optimism transient is
-// exercised WITHOUT mutating the shared mock backend (a real start would broadcast
-// is_streaming=true to every parallel worker and corrupt their layout).
+// exercised without mutating this worker backend (a real start would persist for
+// later tests assigned to the same worker).
 let dropStreamStart = false;
 
 function send(payload: unknown): void {
@@ -223,7 +223,7 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		heldSetConfigInput = null;
 		dropStreamStart = false;
 
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 
@@ -243,7 +243,7 @@ test.describe("Track-1 source overhaul (functional)", () => {
 							return; // hold in-flight: don't forward to the backend
 						}
 						if (dropStreamStart && rpc === "streaming.start") {
-							// Never mutate the shared backend's stream state, but fake a
+							// Never mutate the per-worker backend's stream state, but fake a
 							// successful start so the optimism `starting` transient persists
 							// (the injected is_streaming broadcast settles it) instead of the
 							// unanswered RPC rejecting and reverting straight back to idle.
@@ -476,11 +476,11 @@ test.describe("Track-1 source overhaul (functional)", () => {
 	// passes the dns/probe stages). The verdict is fingerprint-keyed, so the green
 	// light is honest: a subsequent endpoint edit re-keys the fingerprint and the
 	// light drops back to "Not checked". The save path never depends on the RPC
-	// (held here so the shared backend is untouched) — it only signals "saved".
+	// (held here so the per-worker backend is untouched) — it only signals "saved".
 	test("the destination traffic light goes green after a validated save and resets when the endpoint changes", async ({
 		page,
 	}) => {
-		// Hold setConfig so the save never mutates the shared backend; relay.validate
+		// Hold setConfig so the save never mutates the per-worker backend; relay.validate
 		// is read-only and IS forwarded (the mock returns a passing probe verdict).
 		holdSetConfig = true;
 		serverConfig({ relay_server: "", selected_ingest_endpoint: "" });

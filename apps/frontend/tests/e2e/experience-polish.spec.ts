@@ -13,7 +13,7 @@ import { expect, test as base } from './fixtures/index.js';
 import { ShellPage } from './pages/shell.js';
 
 // Pin the Live view into its idle-with-server state deterministically, regardless
-// of the dev backend's config.json or what a concurrent spec broadcasts:
+// of persisted state or later frames from this worker's backend:
 //   • force every incoming status frame to is_streaming:false (idle), and
 //   • ensure every config frame carries an srtla_addr (a server IS configured, so
 //     the view is past the "choose a destination" empty-state and renders ingest).

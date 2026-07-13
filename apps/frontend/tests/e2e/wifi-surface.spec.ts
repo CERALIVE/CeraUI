@@ -27,8 +27,9 @@ import { evidencePath, navigateTo } from "./helpers";
  *   3. Drop+fake a `wifi.*` RPC so the op's pending window is fully deterministic
  *      (no real backend confirm releases it): `_wifiFake[path] = result`.
  *
- * Prereq: backend on :3002 (NODE_ENV=development, MOCK_SCENARIO=multi-modem-wifi);
- * frontend (:6173) started by playwright.config webServer.
+ * Topology: local Vite dev on :6173 uses `__ceraSocketPort`; CI prebuilt Vite
+ * preview on :6173 uses the HttpOnly cookie. Both target this worker's 31xx
+ * development backend.
  */
 
 const DIALOG = "Available Networks";

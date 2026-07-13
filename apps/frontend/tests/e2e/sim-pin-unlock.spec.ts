@@ -21,8 +21,9 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers";
  * device's set-up state. No fixed-delay waits: every step asserts on a stable
  * DOM signal.
  *
- * Prereq (playwright.config webServer): frontend :6173 + backend :3002 with
- * NODE_ENV=development (dev.emit registered) and MOCK_SCENARIO=multi-modem-wifi.
+ * Topology: local Vite dev on :6173 uses `__ceraSocketPort`; CI prebuilt Vite
+ * preview on :6173 uses the HttpOnly cookie. Both target this worker's 31xx
+ * development backend.
  */
 
 function installWsHarness(): void {

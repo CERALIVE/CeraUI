@@ -7,8 +7,10 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.j
 /**
  * Task 22 — per-interface staleness + consistent loading feedback.
  *
- * Two outcomes, proven against the real dev stack (frontend :6173 + mock
- * backend :3002, MOCK_SCENARIO=multi-modem-wifi):
+ * Two outcomes, proven against the real stack (local Vite dev :6173 with
+ * `__ceraSocketPort` selecting a 31xx worker backend, or CI production preview
+ * :6173 with cookie-based admission to that worker backend;
+ * MOCK_SCENARIO=multi-modem-wifi):
  *
  *   1. Per-interface staleness: with telemetry flowing for every modem, freeze
  *      ONE modem's updates while the others keep refreshing. Only the frozen
@@ -72,7 +74,7 @@ test.describe("Task 22 — per-interface staleness", () => {
 		let frozenIfname = "";
 		let pageWs: import("@playwright/test").WebSocketRoute | null = null;
 
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));

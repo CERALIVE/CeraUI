@@ -142,7 +142,7 @@ test.describe('Source visibility — test pattern hide/show', () => {
 		// Force every streaming.setSourceVisibility RPC to resolve as a business
 		// failure (backend returns {success:false}); forward every other frame so the
 		// app boots against the real backend. Registered BEFORE the page loads.
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			const server = ws.connectToServer();
 			ws.onMessage((m) => {
 				const text = typeof m === 'string' ? m : m.toString();

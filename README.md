@@ -12,7 +12,7 @@ bun install
 bun run dev
 ```
 
-Opens at `http://localhost:5173`. Backend runs on port 3001.
+Opens at `http://localhost:6173`. Backend runs on port 3002.
 
 ## Project Structure
 

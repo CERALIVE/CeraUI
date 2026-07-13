@@ -25,8 +25,9 @@ import { evidencePath, navigateTo } from "./helpers";
  *      backend processes setRemoteConfig and broadcasts the applied config, so
  *      "applied" is verified against the real reconnect/seed path.
  *
- * Prereq (playwright.config webServer): frontend (Vite :6173) + real dev backend
- * (:3002, NODE_ENV=development, MOCK_SCENARIO=multi-modem-wifi).
+ * Topology: local Vite dev on :6173 uses `__ceraSocketPort`; CI prebuilt Vite
+ * preview on :6173 uses the HttpOnly cookie. Both target this worker's 31xx
+ * development backend.
  */
 
 const TOKEN: string = (() => {

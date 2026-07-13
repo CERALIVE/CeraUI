@@ -18,13 +18,14 @@ import { ensureAuthenticated, navigateTo } from './helpers/index.js';
  *   4. Universal staleness (T18): when live frames stop arriving the mounted
  *      view dims its live values (opacity-50); on recovery the dimming clears.
  *
- * SCENARIO: targets whatever MOCK_SCENARIO the running backend serves. The
- * default dev stack is `multi-modem-wifi` (3 modems). Drive a single-modem
- * sweep by pointing E2E_PORT at a single-modem stack.
+ * SCENARIO: the standard fixture boots a worker-scoped `multi-modem-wifi`
+ * backend (3 modems). E2E_PORT changes only the frontend baseURL; an alternate
+ * manual sweep must provide its own worker-scoped backend scenario fixture.
  *
- * PORT/AUTH: reuse a running stack via E2E_PORT (baseURL) + E2E_PASSWORD. The WS
- * port differs per stack (3002 default backend, or 8090/8091 for isolated
- * stacks) — the freeze proxy below matches all three.
+ * PORT/AUTH: E2E_PORT selects the frontend baseURL and E2E_PASSWORD supplies
+ * authentication. The standard fixture routes page traffic to its 31xx worker
+ * backend; the freeze proxy also recognizes the reference and standalone-stack
+ * ports used when this manual sweep is run with a custom fixture.
  */
 
 test.describe('data-previsualization sweep', () => {
@@ -37,7 +38,7 @@ test.describe('data-previsualization sweep', () => {
 		// the server→client stream so the view stays mounted while frames stop
 		// (drives the staleness path without an auth-resetting socket close).
 		let frozen = false;
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));
 			server.onMessage((m) => {

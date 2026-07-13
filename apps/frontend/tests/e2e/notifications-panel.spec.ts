@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { expect, type Page, test } from './fixtures/index.js';
+import { expect, type PageRpc, test } from './fixtures/index.js';
 
-import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
+import { EVIDENCE_DIR, ensureAuthenticated, navigateTo } from './helpers/index.js';
 
 /**
  * Task 16 — Persistent-notifications panel, integrated E2E (mock backend).
@@ -18,25 +18,10 @@ import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
  *   empty: with no persistent notifications the panel shows its empty state and
  *     the badge is absent.
  *
- * Auth + harness mirrors relay-notifications.spec.ts: the authed socket is
- * wrapped via addInitScript so the test authenticates with a persistent TOKEN
- * (read from the backend's auth_tokens.json) instead of the device password.
- *
- * Backend broadcasts reach EVERY authed client, so each test clears the shared
- * store first (clearNotifications) for deterministic, leak-free counts.
+ * Browser contexts are fresh per test. The backend is scoped to and reused by
+ * the Playwright worker, so UI state resets between tests while backend state
+ * remains isolated by worker.
  */
-
-const TOKEN: string = (() => {
-	const tokensPath = path.resolve(import.meta.dirname, '../../../backend/auth_tokens.json');
-	const tokens = Object.keys(
-		JSON.parse(fs.readFileSync(tokensPath, 'utf8')) as Record<string, true>,
-	);
-	if (tokens.length === 0) {
-		throw new Error(`No persistent auth tokens in ${tokensPath}; cannot authenticate e2e socket.`);
-	}
-	return tokens[0];
-})();
-
 
 const evidence = new Map<string, string[]>();
 function record(file: string, line: string): void {
@@ -52,7 +37,7 @@ test.afterAll(() => {
 			[
 				'Task 16 — Persistent-notifications panel E2E',
 				'Driver: real frontend + real dev backend (mock multi-modem-wifi),',
-				'        persistent notifications injected via dev.emit, store + DOM read in-page.',
+				'        persistent notifications injected via dev.emit and asserted through the UI.',
 				`Generated: ${new Date().toISOString()}`,
 				'',
 				...lines,
@@ -63,78 +48,17 @@ test.afterAll(() => {
 	}
 });
 
-/**
- * Browser-side WebSocket harness: rewrites `auth.login` to a persistent token so
- * the test authenticates without the device password (mirrors the model spec).
- */
-function installWsHarness(opts: { token: string }): void {
-	const Native = window.WebSocket;
-
-	class HookedWebSocket extends Native {
-		send(data: string | Blob | BufferSource): void {
-			if (typeof data === 'string') {
-				try {
-					const msg = JSON.parse(data);
-					if (Array.isArray(msg.path) && msg.path.join('.') === 'auth.login') {
-						msg.input = { token: opts.token, persistent_token: true };
-						super.send(JSON.stringify(msg));
-						return;
-					}
-				} catch {
-					/* not an RPC frame (e.g. keepalive) */
-				}
-			}
-			super.send(data);
-		}
-	}
-
-	window.WebSocket = HookedWebSocket as typeof WebSocket;
-	try {
-		localStorage.setItem('auth', 'e2e-token-marker');
-	} catch {
-		/* localStorage unavailable */
-	}
-}
-
-interface PersistentLite {
-	name: string;
-	text: string;
-	type: string;
-}
-
-/** Read the persistent slice of the central notification store. */
-function readPersistent(page: Page): Promise<PersistentLite[]> {
-	return page.evaluate(async () => {
-		const specPath = '/src/lib/stores/notifications.svelte.ts';
-		const mod = await import(/* @vite-ignore */ specPath);
-		return mod
-			.getPersistent()
-			.map((n: { name: string; text: string; type: string }) => ({
-				name: n.name,
-				text: n.text,
-				type: n.type,
-			}));
-	});
-}
-
-/** Reset the shared store so each test starts from a known-empty baseline. */
-function clearStore(page: Page): Promise<void> {
-	return page.evaluate(async () => {
-		const specPath = '/src/lib/stores/notifications.svelte.ts';
-		const mod = await import(/* @vite-ignore */ specPath);
-		mod.clearNotifications();
-	});
-}
-
 // Wire type is SINGULAR `notification` — the type the backend actually
 // broadcasts and the only one subscriptions.svelte.ts folds into the store.
 // (Plural `notifications` lands nowhere since fa7f0277 renamed the handler.)
-function emitPersistent(page: Page, notification: Record<string, unknown>): Promise<void> {
-	return page.evaluate(async (n) => {
-		const specPath = '/src/lib/rpc/client.ts';
-		const mod = await import(/* @vite-ignore */ specPath);
-		await mod.rpc.dev.emit({ type: 'notification', payload: { show: [n] } });
-	}, notification);
+function emitPersistent(
+	pageRpc: PageRpc,
+	notification: Record<string, unknown>,
+): Promise<unknown> {
+	return pageRpc.call(['dev', 'emit'], {
+		type: 'notification',
+		payload: { show: [notification] },
+	});
 }
 
 function persistent(name: string, msg: string): Record<string, unknown> {
@@ -148,24 +72,21 @@ function persistent(name: string, msg: string): Record<string, unknown> {
 	};
 }
 
-test.beforeEach(async ({ page, browserName }, testInfo) => {
+test.beforeEach(async ({ page, pageRpc, browserName }, testInfo) => {
 	test.skip(browserName !== 'chromium', 'single-browser integration proof');
 	test.skip(testInfo.project.name !== 'desktop', 'desktop layout drives the header panel');
-	await page.addInitScript(installWsHarness, { token: TOKEN });
+	void pageRpc;
 	await page.goto('/');
+	await ensureAuthenticated(page);
 	await navigateTo(page, 'live');
-	await clearStore(page);
 });
 
 test('persistent notifications list with an unread badge; dismiss removes one and decrements', async ({
 	page,
+	pageRpc,
 }) => {
-	await emitPersistent(page, persistent('task16-persist-1', 'Persistent device alert one'));
-	await emitPersistent(page, persistent('task16-persist-2', 'Persistent device alert two'));
-
-	await expect.poll(() => readPersistent(page).then((p) => p.length), {
-		message: 'both persistent notifications should land in the store',
-	}).toBe(2);
+	await emitPersistent(pageRpc, persistent('task16-persist-1', 'Persistent device alert one'));
+	await emitPersistent(pageRpc, persistent('task16-persist-2', 'Persistent device alert two'));
 
 	// Header badge reflects the unread count before opening the panel.
 	const badge = page.getByTestId('notifications-unread-count');
@@ -192,21 +113,13 @@ test('persistent notifications list with an unread badge; dismiss removes one an
 	await expect(items).toHaveCount(1);
 	await expect(badge).toHaveText('1');
 
-	const remaining = await readPersistent(page);
-	expect(remaining.map((n) => n.name)).toEqual(['task16-persist-2']);
 	record(
 		'task-16-notifications.txt',
-		`Dismissed task16-persist-1 → list count 2→1, badge 2→1, store remainder=${JSON.stringify(
-			remaining.map((n) => n.name),
-		)} ✓`,
+		'Dismissed task16-persist-1 → list count 2→1, badge 2→1, task16-persist-2 remains ✓',
 	);
 });
 
 test('empty state renders when there are no persistent notifications', async ({ page }) => {
-	await expect.poll(() => readPersistent(page).then((p) => p.length), {
-		message: 'store should be empty after clear',
-	}).toBe(0);
-
 	// No outstanding notifications → no header badge.
 	await expect(page.getByTestId('notifications-unread-count')).toHaveCount(0);
 

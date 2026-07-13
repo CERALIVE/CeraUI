@@ -5,9 +5,9 @@
  * T9/T10 merged the former standalone "Device Pairing" dialog into the single
  * "Cloud Remote Server" entry (CloudRemoteDialog). The pairing flow — and every
  * pairing-* testid — now lives inside that one dialog; `SettingsPage.openPairing`
- * opens it. In the e2e (`vite dev`, `import.meta.env.DEV === true`) the dialog
- * renders the dev-only `simulate-pairing` action rather than the prod
- * `complete-pairing` one — both drive the same `pairing.completePairing` RPC.
+ * opens it. Local-dev runs render `simulate-pairing`, while production-preview
+ * runs render `complete-pairing`; both drive the same
+ * `pairing.completePairing` RPC.
  *
  * Two layers:
  *   1. Happy path against the REAL dev backend (mock platform): open the Cloud
@@ -228,9 +228,10 @@ test.describe('Device pairing fail paths (WS harness)', () => {
 		const code = await new SettingsPage(page).generateClaimCode();
 		expect(code).toMatch(CLAIM_CODE_PATTERN);
 
-		// Dev renders `simulate-pairing` (not the prod `complete-pairing`); both
-		// call the same `pairing.completePairing` RPC the harness faked to reject.
-		await page.getByTestId('simulate-pairing').click();
+		await page
+			.getByTestId('complete-pairing')
+			.or(page.getByTestId('simulate-pairing'))
+			.click();
 		await expect(page.getByTestId('pairing-error')).toBeVisible();
 
 		fs.appendFileSync(

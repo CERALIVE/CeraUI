@@ -49,6 +49,7 @@ export interface SocketUrlInputs {
  * loudly instead of silently dialing the developer's own machine.
  */
 export const NON_BROWSER_SOCKET_URL = "";
+export const RPC_WS_PATH = "/ws";
 
 /** CeraUI backend dev port — see `apps/backend/src/rpc/server.ts` getListenPorts. */
 const DEV_DEFAULT_SOCKET_PORT = "3002";
@@ -147,6 +148,11 @@ export function getSocketUrl(): string {
 			? (runtimePortOverride() ?? import.meta.env.VITE_SOCKET_PORT)
 			: undefined,
 	});
+}
+
+export function getRpcSocketUrl(): string {
+	const origin = getSocketUrl();
+	return origin ? `${origin}${RPC_WS_PATH}` : NON_BROWSER_SOCKET_URL;
 }
 
 /**

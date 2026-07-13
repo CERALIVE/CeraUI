@@ -25,8 +25,10 @@ import { evidencePath, navigateTo } from "./helpers";
  * (see PLAYBOOK.md). The harness captures the live modems snapshot so the echo
  * carries the real modem keys.
  *
- * Prereq: backend on :3002 with NODE_ENV=development (dev.emit) and
- * MOCK_SCENARIO=multi-modem-wifi (playwright.config webServer default).
+ * Topology: local Vite dev :6173 uses `__ceraSocketPort` to select this worker's
+ * 31xx backend; CI production preview :6173 uses cookie-based admission to the
+ * same worker backend. Both use NODE_ENV=development (dev.emit) and
+ * MOCK_SCENARIO=multi-modem-wifi.
  */
 
 const TOKEN: string = (() => {

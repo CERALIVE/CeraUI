@@ -6,9 +6,9 @@
  * deterministic QA of the field-lock race-condition fix.
  *
  * Delivery is scoped to the CALLING socket (`only: context.ws`). The echo is for
- * the requesting test client alone; fanning it out to every connected client lets
- * one Playwright worker's injected state (e.g. a `sim_lock` that auto-opens a
- * dialog) bleed into another worker's page over the shared dev backend.
+ * the requesting page alone, preventing an injected state (for example, a
+ * `sim_lock` that auto-opens a dialog) from reaching another authenticated page
+ * attached to the same worker backend.
  *
  * HARD-GATED: this procedure is only registered when `NODE_ENV !== 'production'`
  * (see ../router.ts). It must never be reachable in a production build.
@@ -28,9 +28,9 @@ const baseProcedure = os.$context<RPCContext>();
 const authedProcedure = baseProcedure.use(authMiddleware);
 
 /**
- * Emit an arbitrary broadcast to all authenticated clients (dev-only).
- * Mirrors how real broadcasts are sent (e.g. broadcastMsg("config", config)),
- * but with a caller-supplied type + payload.
+ * Emit an arbitrary broadcast to the calling authenticated client (dev-only).
+ * Mirrors the real broadcast envelope (e.g. broadcastMsg("config", config)),
+ * but uses a caller-supplied type and payload with socket-scoped delivery.
  */
 export const devEmitProcedure = authedProcedure
 	.input(devEmitInputSchema)

@@ -10,8 +10,9 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.j
  * Task 22 — per-link RTT / NAK / weight telemetry in NetworkView.
  *
  * Proves the four observable states of the bonded-link telemetry row against
- * the real dev stack (frontend :6173 + mock backend :3002,
- * MOCK_SCENARIO=multi-modem-wifi):
+ * the real stack (local Vite dev :6173 with `__ceraSocketPort` selecting a 31xx
+ * worker backend, or CI production preview :6173 with cookie-based admission to
+ * that worker backend; MOCK_SCENARIO=multi-modem-wifi):
  *
  *   1. Happy path — inject linkTelemetry for a live card; RTT/NAK/weight render.
  *   2. Update flow — push a new RTT; the value re-renders within 2 s.
@@ -74,7 +75,7 @@ test.describe("Task 22 — link telemetry", () => {
 
 		// Proxy the WS: forward everything, but drop the backend's own
 		// `linkTelemetry` (always null under the mock) so injected frames win.
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));

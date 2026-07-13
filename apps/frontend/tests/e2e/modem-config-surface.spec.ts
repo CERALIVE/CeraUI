@@ -28,22 +28,23 @@ import {
  *   3. configure DEVICE_BUSY: a busy result raises a calm busy toast and re-opens
  *      the form for retry.
  *
- * Determinism comes from the same WS harness the sibling specs use (modem-scan /
- * sim-pin-unlock / field-lock): the modem state is injected via `dev.emit` and
+ * Determinism comes from the WS harness shared by the modem-scan,
+ * sim-pin-unlock, and field-lock specs: modem state is injected via `dev.emit` and
  * the scan/configure RPCs are dropped + faked so their pending window is owned by
  * the test, never released by a real backend confirm. No fixed-delay waits.
  *
- * Prereq (playwright.config webServer): frontend :6173 + backend :3002 with
- * NODE_ENV=development and MOCK_SCENARIO=multi-modem-wifi.
+ * Topology: local Vite dev :6173 uses `__ceraSocketPort` to select this worker's
+ * 31xx backend; CI production preview :6173 uses cookie-based admission to the
+ * same worker backend. Both run NODE_ENV=development and
+ * MOCK_SCENARIO=multi-modem-wifi for the backend.
  */
 
 const BUSY_TEXT = "Device is busy, try again in a moment";
 const TYPED_APN = "internet.e2e.test";
 const EXPECTED_NETWORK_TYPE = "4g";
 
-// Drive a NON-first modem so the sibling modem-scan.spec (which only ever scans /
-// configures the first modem, broadcasting modem 0 to every page over the shared
-// dev backend) can never perturb this spec's modem under parallel execution.
+// Drive a non-first modem so the regression also proves lookup and mutation are
+// not implicitly tied to the first modem in the fixture.
 const MODEM_INDEX = 1;
 
 test.describe(

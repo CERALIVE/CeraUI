@@ -23,7 +23,8 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.j
  *   3. Modem config dialog validates the manual-APN schema bound (mirrors the
  *      backend zod refine: autoconfig !== false || apn.length > 0).
  *   4. CollisionBands render ONLY from their netif flags (same_subnet_group /
- *      policy_route_missing) — absent by default, present once injected.
+ *      policy_route_missing) — absent for explicit false/empty flags, present
+ *      once active flags are injected.
  *   5. Disabled controls carry an accessible reason (BondToggle tooltip/aria-label).
  *
  * netif flags for check #4 are injected through the dev-only `dev.emit` broadcast
@@ -189,6 +190,21 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 		const subnet = page.getByTestId("same-subnet-info");
 		const policy = page.getByTestId("policy-route-warning");
 
+		await emit(
+			page,
+			"netif",
+			Object.fromEntries(
+				["eth0", "usb0", "usb1", "usb2", "wlan0", "wlan1"].map((name) => [
+					name,
+					{
+						tp: 0,
+						enabled: true,
+						same_subnet_group: "",
+						policy_route_missing: false,
+					},
+				]),
+			),
+		);
 		await expect(subnet).toHaveCount(0);
 		await expect(policy).toHaveCount(0);
 
@@ -211,7 +227,7 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 		await expect(subnet).toContainText("192.168.77.0/24");
 		await expect(policy).toBeVisible();
 		record(
-			"#4 CollisionBands: no default false-positive; injected same_subnet_group renders calm info; injected policy_route_missing renders warning — PASS",
+			"#4 CollisionBands: explicit false/empty flags render no bands; injected same_subnet_group renders calm info; injected policy_route_missing renders warning — PASS",
 		);
 	});
 

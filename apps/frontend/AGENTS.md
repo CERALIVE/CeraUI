@@ -100,7 +100,7 @@ New procedures: add to `@ceraui/rpc` schemas first, then extend `TypedRPC` in `c
 ## COMMANDS
 
 ```bash
-bun run dev / build / check / test       # Vite :5173 / dist/ / svelte-check / vitest
+bun run dev / build / check / test       # Vite :6173 / dist/ / svelte-check / vitest
 bun run build:federation                  # Vite lib-mode → dist/federation/<ceraui-version>/{encoder,audio,server}.js
 bun run sign:federation                    # (root) SRI + GPG bundle sigs + signed manifest.json (Task 40)
 # Linting is Biome-only, run from the workspace root: `biome check .` (or `bun run lint`)
@@ -276,7 +276,7 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - No direct backend calls — everything through `rpc.*` or `rpcClient.onMessage`.
 - No manual UI primitive files in `lib/components/ui/` — use the shadcn-svelte CLI.
 - No `$:` reactive statements — Svelte 5 runes only.
-- No hardcoded socket URL — call `getSocketUrl()` from `$lib/env`. It derives the RPC WebSocket URL from `window.location` in production (origin host:port, scheme from protocol) and ignores `VITE_SOCKET_*` there; those overrides apply to dev only. Never reconstruct the URL from `hostname` + a port literal.
+- No hardcoded socket URL — RPC callers use `getRpcSocketUrl()` from `$lib/env`; preview callers use `getPreviewSocketUrl()`. Both derive same-origin URLs from `window.location` in production and ignore `VITE_SOCKET_*` there; those overrides apply to dev only. Never reconstruct a socket URL from `hostname` + a port literal.
 - Don't read connection state from `lib/stores/offline-state.svelte` in authed components — use `subscriptions.svelte` `getIsConnected()`/`getConnectionState()` (survives socket replacement on reconnect). `offline-state` is only reliable for the pre-auth strip.
 - Don't add inline validation literals to dialogs — import from `ValidationAdapter.ts`.
 - Don't release field locks to the client's intended value — always use `result.applied` from the RPC response.

@@ -8,8 +8,9 @@
  * CRITICAL: PowerDialog exposes destructive actions (reboot / power off), each
  * gated behind a nested "Are you sure?" confirmation. This spec asserts those
  * destructive triggers are PRESENT but NEVER clicks the confirmation primary —
- * doing so would reboot/shutdown the dev backend and break every later test.
- * We prove the backend survived by opening another dialog (Versions) afterward.
+ * doing so would exercise worker-wide disconnect state and invalidate later
+ * tests assigned to that worker backend. We prove the backend survived by
+ * opening another dialog (Versions) afterward.
  */
 import { expect } from '@playwright/test';
 

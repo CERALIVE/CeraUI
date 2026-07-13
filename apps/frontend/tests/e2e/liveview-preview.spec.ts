@@ -21,17 +21,18 @@ import { ensureAuthenticated, navigateTo } from './helpers/index.js';
  *   4. With no active encode the preview reaches the `waiting` state and shows
  *      the i18n string live.preview.waiting ("Waiting for video…").
  *
- * Two WebSocket routes are installed:
- *   • Backend (:3002) — proxied to the real mock backend. Status frames are
- *     pinned to is_streaming:false (so the idle Live DOM is stable regardless of
- *     what other workers broadcast via dev.emit), and a server `config` frame is
- *     injected after navigation so the Live view leaves its empty state and
- *     renders the SourceSection + PreviewCanvas siblings.
- *   • Preview (:9997) — cerastream serves the preview WS here; it is unserved
- *     under the mock stack, so we mock it: on the client's {action:"start"} we
- *     reply with a codec-config (→ decoder configured → status "waiting") and an
- *     audio-level frame, leaving the socket frame-less. With no video access
- *     units the terminal state is "waiting" — exactly the no-active-encode case.
+ * Two WebSocket routes are installed. Local pages use their worker's 31xx origin;
+ * CI pages use preview :6173, whose admission cookie selects that same backend:
+ *   • `/ws` is proxied to the real worker backend. Status frames are pinned to
+ *     is_streaming:false so predecessor state on that backend cannot disturb the
+ *     idle Live DOM, and a server `config` frame is injected after navigation so
+ *     the Live view leaves its empty state and renders the SourceSection +
+ *     PreviewCanvas siblings.
+ *   • `/preview` is intercepted before the backend's real preview upstream. On
+ *     the client's {action:"start"}, the route replies with a codec-config
+ *     (→ decoder configured → status "waiting") and an audio-level frame while
+ *     sending no access units. The terminal state is therefore "waiting" — the
+ *     no-active-encode case.
  *
  * The two @visual tests capture repo-local evidence PNGs (gitignored); the
  * functional tests carry the real assertions and run under the @visual-excluded
@@ -77,7 +78,7 @@ function mockPreviewSocket(ws: WebSocketRoute): void {
  * browser's `VideoDecoder` to `error` instead of `waiting`.
  */
 async function routeBackend(page: Page): Promise<void> {
-	await page.routeWebSocket(/:(3002|31\d\d)/, (ws) => {
+	await page.routeWebSocket(/:(3002|31\d\d|6173)/, (ws) => {
 		if (ws.url().includes('/preview')) {
 			mockPreviewSocket(ws);
 			return;
