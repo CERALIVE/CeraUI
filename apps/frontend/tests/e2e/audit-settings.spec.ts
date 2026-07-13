@@ -37,9 +37,63 @@ let pageErrors: string[] = [];
 // When set, the proxy drops the backend's real 5 s `device-stats` heartbeat so an
 // injected low-disk signal stays authoritative instead of being clobbered.
 let dropDeviceStats = false;
+let heldSshConfirmation: boolean | null = null;
+let heldSshConfirmationCount = 0;
 
 function send(payload: unknown): void {
 	pageWs?.send(JSON.stringify(payload));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function containsDeviceStats(message: string | Buffer): boolean {
+	const text = typeof message === "string" ? message : message.toString();
+	let frame: unknown;
+	try {
+		frame = JSON.parse(text);
+	} catch {
+		return false;
+	}
+	return isRecord(frame) && "device-stats" in frame;
+}
+
+function holdMatchingSshConfirmation(
+	message: string | Buffer,
+	target: boolean | null,
+): { readonly message: string | Buffer | null; readonly held: boolean } {
+	if (target === null || typeof message !== "string") {
+		return { message, held: false };
+	}
+
+	let frame: unknown;
+	try {
+		frame = JSON.parse(message);
+	} catch {
+		return { message, held: false };
+	}
+	if (!isRecord(frame)) return { message, held: false };
+	const status = frame.status;
+	if (!isRecord(status)) return { message, held: false };
+	const ssh = status.ssh;
+	if (!isRecord(ssh) || ssh.active !== target) {
+		return { message, held: false };
+	}
+
+	const forwardedStatus = { ...status };
+	delete forwardedStatus.ssh;
+	const forwardedFrame = { ...frame };
+	if (Object.keys(forwardedStatus).length === 0) {
+		delete forwardedFrame.status;
+	} else {
+		forwardedFrame.status = forwardedStatus;
+	}
+	const hasPayload = Object.keys(forwardedFrame).some((key) => key !== "seq");
+	return {
+		message: hasPayload ? JSON.stringify(forwardedFrame) : null,
+		held: true,
+	};
 }
 
 // The eight Settings entries in scope for A3 (title → AppDialog accessible name).
@@ -68,27 +122,28 @@ test.describe("Audit A3 — Settings destination + dialogs", { tag: "@audit" }, 
 		pageWs = null;
 		pageErrors = [];
 		dropDeviceStats = false;
+		heldSshConfirmation = null;
+		heldSshConfirmationCount = 0;
 		page.on("pageerror", (err) => pageErrors.push(err.message));
 
 		// Near-transparent proxy: forward BOTH directions so every real RPC
 		// (setIngestEnabled / sshStart / startUpdate) reaches the per-worker mock
 		// backend and its confirming broadcast returns; the test injects additive
-		// frames via pageWs.send(). The only filter is an opt-in `device-stats` drop
-		// so an injected low-disk signal is not clobbered by the real heartbeat.
+		// frames via pageWs.send(). Opt-in filters hold the exact state a test owns:
+		// device-stats for the low-disk case and matching SSH confirmations while
+		// the SSH case asserts its pending state.
 		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));
 			server.onMessage((m) => {
-				if (dropDeviceStats) {
-					const text = typeof m === "string" ? m : m.toString();
-					try {
-						if ("device-stats" in (JSON.parse(text) as object)) return;
-					} catch {
-						/* non-JSON / binary frame */
-					}
-				}
-				ws.send(m);
+				if (dropDeviceStats && containsDeviceStats(m)) return;
+				const sshConfirmation = holdMatchingSshConfirmation(
+					m,
+					heldSshConfirmation,
+				);
+				if (sshConfirmation.held) heldSshConfirmationCount += 1;
+				if (sshConfirmation.message !== null) ws.send(sshConfirmation.message);
 			});
 		});
 
@@ -183,6 +238,29 @@ test.describe("Audit A3 — Settings destination + dialogs", { tag: "@audit" }, 
 	});
 
 	test("SSH start/stop round-trips through the mock seam", async ({ page }) => {
+		const malformedFrame = "{not-json";
+		expect(holdMatchingSshConfirmation(malformedFrame, true)).toEqual({
+			message: malformedFrame,
+			held: false,
+		});
+		const unrelatedFrame = JSON.stringify({ status: { updating: null }, seq: 40 });
+		expect(holdMatchingSshConfirmation(unrelatedFrame, true)).toEqual({
+			message: unrelatedFrame,
+			held: false,
+		});
+		expect(
+			holdMatchingSshConfirmation(
+				JSON.stringify({
+					status: { ssh: { active: true }, updating: null },
+					seq: 41,
+				}),
+				true,
+			),
+		).toEqual({
+			message: JSON.stringify({ status: { updating: null }, seq: 41 }),
+			held: true,
+		});
+
 		await openEntry(page, /SSH Access/i);
 		const ssh = page.getByRole("dialog", { name: "SSH Access" });
 		await expect(ssh).toBeVisible();
@@ -199,14 +277,26 @@ test.describe("Audit A3 — Settings destination + dialogs", { tag: "@audit" }, 
 		// The toggle stays PENDING after dispatch (G4 os-toggle) — the disabled
 		// state proves it — and only flips once the authoritative ssh.active
 		// broadcast matches the target.
+		heldSshConfirmation = true;
+		const confirmationsBeforeStart = heldSshConfirmationCount;
 		await startBtn.click();
 		await expect(startBtn).toBeDisabled();
+		await expect
+			.poll(() => heldSshConfirmationCount)
+			.toBeGreaterThan(confirmationsBeforeStart);
 		send({ status: { ssh: { active: true, user: "cera" } } });
+		heldSshConfirmation = null;
 		await expect(stopBtn).toBeVisible();
 
+		heldSshConfirmation = false;
+		const confirmationsBeforeStop = heldSshConfirmationCount;
 		await stopBtn.click();
 		await expect(stopBtn).toBeDisabled();
+		await expect
+			.poll(() => heldSshConfirmationCount)
+			.toBeGreaterThan(confirmationsBeforeStop);
 		send({ status: { ssh: { active: false, user: "cera" } } });
+		heldSshConfirmation = null;
 		await expect(startBtn).toBeVisible();
 		expect(pageErrors).toEqual([]);
 	});
