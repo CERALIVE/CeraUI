@@ -8,6 +8,41 @@ const PLAYWRIGHT_CACHE_KEY = `${expression('runner.os')}-ms-playwright-${express
 	'steps.playwright-version.outputs.version',
 )}`;
 const PLAYWRIGHT_RESTORE_KEY = `${expression('runner.os')}-ms-playwright-`;
+const SRTLA_RUNTIME_ARTIFACT = 'srtla-send-runtime-amd64-v3.2.0';
+const SRTLA_RUNTIME_URL =
+	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v3.2.0/srtla-send-rs_3.2.0_amd64.deb';
+const SRTLA_RUNTIME_SHA256 = 'cfd2cc6a0bcb3716c25861daffca9b67e5a56b1c8cf9cb519093588496a928ae';
+const SRTLA_PREPARE_COMMANDS = [
+	'set -euo pipefail',
+	'package_dir="dist/ci-packages"',
+	'package_path="$package_dir/srtla-send-rs_3.2.0_amd64.deb"',
+	'runtime_root="dist/ci-runtime"',
+	'mkdir -p "$package_dir" "$runtime_root"',
+	`curl --fail --location --silent --show-error --output "$package_path" ${SRTLA_RUNTIME_URL}`,
+	`printf '%s  %s\\n' ${SRTLA_RUNTIME_SHA256} "$package_path" | sha256sum --check`,
+	'test "$(dpkg-deb --field "$package_path" Package)" = srtla-send-rs',
+	'test "$(dpkg-deb --field "$package_path" Version)" = 3.2.0',
+	'test "$(dpkg-deb --field "$package_path" Architecture)" = amd64',
+	'dpkg-deb --extract "$package_path" "$runtime_root"',
+	'test -f "$runtime_root/usr/bin/srtla_send"',
+];
+const SRTLA_ACTIVATE_COMMANDS = [
+	'set -euo pipefail',
+	'runtime_dir="$GITHUB_WORKSPACE/CeraUI/dist/ci-runtime/usr/bin"',
+	'runtime_bin="$runtime_dir/srtla_send"',
+	'chmod +x "$runtime_bin"',
+	'echo "$runtime_dir" >> "$GITHUB_PATH"',
+	`RUNTIME_DIR="$runtime_dir" bun -e '
+const path = "apps/backend/setup.json";
+const setup = await Bun.file(path).json();
+const runtime_dir = process.env.RUNTIME_DIR;
+if (!runtime_dir) throw new Error("RUNTIME_DIR is required");
+setup.srtla_path = runtime_dir;
+await Bun.write(path, JSON.stringify(setup, null, 2) + "\\n");
+'`,
+	'test -x "$runtime_bin"',
+	'test "$(command -v srtla_send)" = "$runtime_bin"',
+];
 
 function fail(message) {
 	throw new Error(message);
@@ -92,6 +127,79 @@ function assertBrowserCache(steps, label) {
 	);
 }
 
+function assertStepOrder(steps, beforeName, afterName, label) {
+	const beforeIndex = steps.findIndex((step) => step.name === beforeName);
+	const afterIndex = steps.findIndex((step) => step.name === afterName);
+	if (beforeIndex === -1 || afterIndex === -1 || beforeIndex >= afterIndex) {
+		fail(`${label} must place ${JSON.stringify(beforeName)} before ${JSON.stringify(afterName)}`);
+	}
+}
+
+// These two workflow steps deliberately use straight-line shell. Parse only
+// continuations and the existing multiline single-quoted `bun -e` payload;
+// anything more expressive must fail the exact command plan below.
+function straightLineShellCommands(run, label) {
+	if (typeof run !== 'string') fail(`${label} must be a shell script`);
+	const commands = [];
+	let fragments = [];
+	let inSingleQuote = false;
+
+	for (const rawLine of run.split(/\r?\n/u)) {
+		const line = rawLine.trim();
+		if (line.length === 0) continue;
+
+		fragments.push(line.endsWith('\\') && !inSingleQuote ? line.slice(0, -1).trimEnd() : line);
+		const quoteCount = [...line].filter((character) => character === "'").length;
+		if (quoteCount % 2 === 1) inSingleQuote = !inSingleQuote;
+		if (inSingleQuote || line.endsWith('\\')) continue;
+
+		commands.push(fragments.join(fragments[0]?.includes("bun -e '") ? '\n' : ' '));
+		fragments = [];
+	}
+
+	if (inSingleQuote || fragments.length > 0) fail(`${label} must have balanced commands`);
+	return commands;
+}
+
+function assertSrtlaRuntime(setupSteps, e2eSteps) {
+	const prepare = findStep(setupSteps, 'Prepare pinned srtla-send runtime', 'setup-e2e');
+	assertExact(prepare['working-directory'], 'CeraUI', 'setup-e2e srtla working directory');
+	assertList(
+		straightLineShellCommands(prepare.run, 'setup-e2e srtla commands'),
+		SRTLA_PREPARE_COMMANDS,
+		'setup-e2e srtla command plan',
+	);
+
+	const upload = findStep(setupSteps, 'Upload srtla-send runtime', 'setup-e2e');
+	assertExact(upload.uses, 'actions/upload-artifact@v7', 'setup-e2e srtla upload action');
+	const uploadWith = withValues(upload, 'setup-e2e srtla upload');
+	assertExact(uploadWith.name, SRTLA_RUNTIME_ARTIFACT, 'setup-e2e srtla artifact name');
+	assertExact(uploadWith.path, 'CeraUI/dist/ci-runtime/', 'setup-e2e srtla artifact path');
+	assertExact(uploadWith['if-no-files-found'], 'error', 'setup-e2e srtla missing-file policy');
+	assertExact(uploadWith['retention-days'], 1, 'setup-e2e srtla artifact retention');
+
+	const download = findStep(e2eSteps, 'Download srtla-send runtime', 'test-e2e');
+	assertExact(download.uses, 'actions/download-artifact@v8', 'test-e2e srtla download action');
+	const downloadWith = withValues(download, 'test-e2e srtla download');
+	assertExact(downloadWith.name, SRTLA_RUNTIME_ARTIFACT, 'test-e2e srtla artifact name');
+	assertExact(downloadWith.path, 'CeraUI/dist/ci-runtime', 'test-e2e srtla artifact path');
+
+	const activate = findStep(e2eSteps, 'Activate srtla-send runtime', 'test-e2e');
+	assertExact(activate['working-directory'], 'CeraUI', 'test-e2e srtla working directory');
+	assertList(
+		straightLineShellCommands(activate.run, 'test-e2e srtla commands'),
+		SRTLA_ACTIVATE_COMMANDS,
+		'test-e2e srtla command plan',
+	);
+	assertStepOrder(
+		e2eSteps,
+		'Download srtla-send runtime',
+		'Activate srtla-send runtime',
+		'test-e2e',
+	);
+	assertStepOrder(e2eSteps, 'Activate srtla-send runtime', 'Start E2E servers', 'test-e2e');
+}
+
 export function assertBuildCheckContract(source) {
 	let document;
 	try {
@@ -131,6 +239,7 @@ export function assertBuildCheckContract(source) {
 	assertExact(laneDeps[0].if, undefined, 'test-e2e install-deps condition');
 	assertBrowserCache(setupSteps, 'setup-e2e');
 	assertBrowserCache(e2eSteps, 'test-e2e');
+	assertSrtlaRuntime(setupSteps, e2eSteps);
 
 	const frontendDownload = findStep(e2eSteps, 'Download frontend dist', 'test-e2e');
 	assertExact(

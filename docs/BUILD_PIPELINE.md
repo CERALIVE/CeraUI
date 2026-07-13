@@ -147,10 +147,24 @@ and unit tests before their build jobs can run.
 the resulting `frontend-dist`, and fans functional E2E coverage across the
 desktop/mobile × two-shard matrix. The setup job caches only Playwright browser
 binaries, keyed by the exact version reported by the installed Playwright CLI;
-it does not install runner-local OS packages. Each isolated matrix runner runs
-`test:e2e:install-deps` for its own Ubuntu image, restores the versioned browser
-cache, and installs the browser only on a cache miss. Each lane uploads a unique
-blob report, which `merge-e2e-reports` combines into the final HTML report.
+it does not install runner-local OS packages.
+
+The same setup job downloads the immutable `srtla-send-rs` v3.2.0 amd64 release
+package, pinned to SHA-256
+`cfd2cc6a0bcb3716c25861daffca9b67e5a56b1c8cf9cb519093588496a928ae`.
+Before extraction it verifies the Debian `Package`, `Version`, and `Architecture`
+fields, then uploads only the extracted runtime as the one-day
+`srtla-send-runtime-amd64-v3.2.0` artifact. This proves the backend against the
+released executable without a test stub, system-wide install, sibling checkout,
+or weakened production preflight.
+
+Each isolated matrix runner runs `test:e2e:install-deps` for its own Ubuntu image,
+restores the versioned browser cache, and installs the browser only on a cache
+miss. It also downloads the runtime artifact, restores `srtla_send` execute
+permission, adds its `usr/bin` to `PATH`, rewrites the lane-local backend
+`setup.json` `srtla_path`, and asserts the resolved binary before starting the
+servers. Each lane uploads a unique blob report, which `merge-e2e-reports`
+combines into the final HTML report.
 
 Run the structured YAML topology contract locally with:
 

@@ -192,6 +192,27 @@ jobs:
         working-directory: CeraUI
         run: bun run --filter frontend test:e2e:install-browser
 
+      - name: Prepare pinned srtla-send runtime
+        working-directory: CeraUI
+        run: |
+          set -euo pipefail
+          package_dir="dist/ci-packages"
+          package_path="$package_dir/srtla-send-rs_3.2.0_amd64.deb"
+          runtime_root="dist/ci-runtime"
+          mkdir -p "$package_dir" "$runtime_root"
+
+          curl --fail --location --silent --show-error \
+            --output "$package_path" \
+            https://github.com/CERALIVE/srtla-send-rs/releases/download/v3.2.0/srtla-send-rs_3.2.0_amd64.deb
+          printf '%s  %s\n' \
+            cfd2cc6a0bcb3716c25861daffca9b67e5a56b1c8cf9cb519093588496a928ae \
+            "$package_path" | sha256sum --check
+          test "$(dpkg-deb --field "$package_path" Package)" = srtla-send-rs
+          test "$(dpkg-deb --field "$package_path" Version)" = 3.2.0
+          test "$(dpkg-deb --field "$package_path" Architecture)" = amd64
+          dpkg-deb --extract "$package_path" "$runtime_root"
+          test -f "$runtime_root/usr/bin/srtla_send"
+
       - name: Build frontend once
         working-directory: CeraUI
         run: bun run build:frontend
@@ -201,6 +222,14 @@ jobs:
         with:
           name: frontend-dist
           path: CeraUI/dist/public/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload srtla-send runtime
+        uses: actions/upload-artifact@v7
+        with:
+          name: srtla-send-runtime-amd64-v3.2.0
+          path: CeraUI/dist/ci-runtime/
           if-no-files-found: error
           retention-days: 1
 
@@ -272,6 +301,31 @@ jobs:
         with:
           name: frontend-dist
           path: CeraUI/dist/public
+
+      - name: Download srtla-send runtime
+        uses: actions/download-artifact@v8
+        with:
+          name: srtla-send-runtime-amd64-v3.2.0
+          path: CeraUI/dist/ci-runtime
+
+      - name: Activate srtla-send runtime
+        working-directory: CeraUI
+        run: |
+          set -euo pipefail
+          runtime_dir="$GITHUB_WORKSPACE/CeraUI/dist/ci-runtime/usr/bin"
+          runtime_bin="$runtime_dir/srtla_send"
+          chmod +x "$runtime_bin"
+          echo "$runtime_dir" >> "$GITHUB_PATH"
+          RUNTIME_DIR="$runtime_dir" bun -e '
+            const path = "apps/backend/setup.json";
+            const setup = await Bun.file(path).json();
+            const runtime_dir = process.env.RUNTIME_DIR;
+            if (!runtime_dir) throw new Error("RUNTIME_DIR is required");
+            setup.srtla_path = runtime_dir;
+            await Bun.write(path, JSON.stringify(setup, null, 2) + "\n");
+          '
+          test -x "$runtime_bin"
+          test "$(command -v srtla_send)" = "$runtime_bin"
 
       - name: Reset auth state
         working-directory: CeraUI

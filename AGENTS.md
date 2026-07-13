@@ -539,7 +539,13 @@ uploads the frontend and caches only Playwright browser binaries, while each
 isolated desktop/mobile × two-shard runner installs its own Playwright OS
 dependencies. Browser cache keys use the exact installed Playwright CLI version,
 and the four lanes retain unique blob artifacts for the merged report. The
-semantic YAML contract is `bun run test:build-check-shape`.
+setup job also downloads the published `srtla-send-rs` v3.2.0 amd64 `.deb`,
+verifies its pinned SHA-256 and Debian package metadata, extracts only its runtime
+payload, and uploads that payload as a one-day artifact. Each E2E lane restores
+the executable bit, adds the extracted `usr/bin` to `PATH`, rewrites its local
+`setup.json` `srtla_path`, and asserts the real `srtla_send` binary before server
+startup. No stub, `sudo` install, sibling checkout, or skipped backend preflight
+is permitted. The semantic YAML contract is `bun run test:build-check-shape`.
 
 ## BUN-NATIVE CONVENTIONS (as of 2026-06)
 
