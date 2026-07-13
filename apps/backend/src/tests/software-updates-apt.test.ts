@@ -7,11 +7,12 @@
  *     metacharacters or whitespace is rejected before it can reach apt-get.
  */
 import { describe, expect, it } from "bun:test";
-
+import { isParseError } from "../modules/system/cli-parse.ts";
 import {
 	buildAptInstallArgs,
 	buildAptUpgradeArgs,
 	classifyAptUpdateResult,
+	parseAptUpgradeSummary,
 	parseHeldBackPackages,
 } from "../modules/system/software-updates.ts";
 
@@ -102,5 +103,53 @@ describe("classifyAptUpdateResult() — Bun.$ exit/stderr classification (Task 1
 
 	it("non-zero exit with stderr → true (stderr dominates the classification)", () => {
 		expect(classifyAptUpdateResult(100, "E: failed")).toBe(true);
+	});
+});
+
+describe("parseAptUpgradeSummary() — named fail-loud apt parser", () => {
+	it("parses upgraded + newly-installed count, download size, and CeraLive package presence", () => {
+		const result = parseAptUpgradeSummary(`
+The following packages will be upgraded:
+  ceraui unrelated
+2 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.
+Need to get 12.3 MB/44.0 MB of archives.
+`);
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.value).toEqual({
+				upgradeCount: 3,
+				downloadSize: "12.3 MB",
+				ceralivePackages: true,
+			});
+		}
+	});
+
+	it("treats zero updates as a valid summary without requiring size or package headings", () => {
+		const result = parseAptUpgradeSummary(
+			"0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.",
+		);
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.value).toEqual({
+				upgradeCount: 0,
+				ceralivePackages: false,
+			});
+		}
+	});
+
+	it("fails loud when apt's count line drifts", () => {
+		const result = parseAptUpgradeSummary("apt output changed shape");
+		expect(isParseError(result)).toBe(true);
+		if (!result.ok) expect(result.reason).toContain("upgraded/newly installed");
+	});
+
+	it("fails loud when upgrades exist but the download-size line is missing", () => {
+		const result = parseAptUpgradeSummary(`
+The following packages will be upgraded:
+  ceraui
+1 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+`);
+		expect(isParseError(result)).toBe(true);
+		if (!result.ok) expect(result.reason).toContain("Need to get");
 	});
 });

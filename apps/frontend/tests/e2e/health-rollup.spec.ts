@@ -2,7 +2,7 @@ import fs from "node:fs";
 
 import { expect, type Page } from "@playwright/test";
 
-import { test } from "./fixtures/index.js";
+import { test, type PageRpc } from "./fixtures/index.js";
 import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.js";
 
 /**
@@ -25,31 +25,31 @@ const HEALTH_INDICATOR = "[data-testid='stream-health']";
 type HealthState = "healthy" | "degraded" | "dead";
 
 /** Inject a `health` broadcast (Task 13 shape) via the dev-only `dev.emit`. */
-async function emitHealth(page: Page, state: HealthState): Promise<void> {
-	await page.evaluate(async (s) => {
-		// Path via a variable so tsc treats it as a runtime (vite-resolved) import,
-		// not a literal module specifier (mirrors stream-health.spec.ts, Task 14).
-		const clientPath = "/src/lib/rpc/client.ts";
-		const mod = await import(clientPath);
-		await mod.rpc.dev.emit({
-			type: "health",
-			payload: {
-				state: s,
-				process: { alive: s !== "dead" },
-				frames: { advancing: s === "healthy", count: s === "dead" ? 0 : 120 },
-				srt: { reconnecting: s === "degraded", reconnectCount: s === "degraded" ? 1 : 0 },
-				bond: { linkCount: 2, activeLinks: s === "healthy" ? 2 : s === "degraded" ? 1 : 0 },
+async function emitHealth(pageRpc: PageRpc, state: HealthState): Promise<void> {
+	await pageRpc.call(["dev", "emit"], {
+		type: "health",
+		payload: {
+			state,
+			process: { alive: state !== "dead" },
+			frames: { advancing: state === "healthy", count: state === "dead" ? 0 : 120 },
+			srt: {
+				reconnecting: state === "degraded",
+				reconnectCount: state === "degraded" ? 1 : 0,
 			},
-		});
-	}, state);
+			bond: {
+				linkCount: 2,
+				activeLinks: state === "healthy" ? 2 : state === "degraded" ? 1 : 0,
+			},
+		},
+	});
 }
 
 /** Re-emit until the (always-live) HUD dot settles, confirming the broadcast landed. */
-async function driveHealth(page: Page, state: HealthState): Promise<void> {
+async function driveHealth(page: Page, pageRpc: PageRpc, state: HealthState): Promise<void> {
 	await expect
 		.poll(
 			async () => {
-				await emitHealth(page, state);
+				await emitHealth(pageRpc, state);
 				return page.locator(HEALTH_INDICATOR).first().getAttribute("data-state");
 			},
 			{ timeout: 10_000, message: `health dot should settle on ${state}` },
@@ -59,11 +59,7 @@ async function driveHealth(page: Page, state: HealthState): Promise<void> {
 
 /** Invoke the canonical manual display refresh (the exact call the e-ink button fires). */
 async function manualRefresh(page: Page): Promise<void> {
-	await page.evaluate(async () => {
-		const refreshPath = "/src/lib/stores/display-refresh.svelte.ts";
-		const mod = await import(refreshPath);
-		mod.requestDisplayRefresh();
-	});
+	await page.getByTestId("display-refresh").click();
 }
 
 async function openHud(page: Page): Promise<void> {
@@ -102,13 +98,14 @@ test.describe("stream-health rollup + tooltip (dev.emit driven)", () => {
 
 	test("degraded health → rollup shows process/frames/SRT/bond + tooltip explains each state", async ({
 		page,
+		pageRpc,
 	}) => {
 		await page.goto("/");
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
 		await expect(page.locator(HEALTH_INDICATOR).first()).toBeVisible({ timeout: 15_000 });
 
-		await driveHealth(page, "degraded");
+		await driveHealth(page, pageRpc, "degraded");
 		await openHud(page);
 
 		const detail = page.getByTestId("stream-health-detail");
@@ -133,28 +130,32 @@ test.describe("stream-health rollup + tooltip (dev.emit driven)", () => {
 		record("tooltip explains healthy / degraded / dead on focus of the info control ✓");
 	});
 
-	test("e-ink profile freezes the rollup until a manual refresh", async ({ page }) => {
+	test("e-ink profile freezes the rollup until a manual refresh", async ({ page, pageRpc }) => {
 		await page.goto("/?display=eink");
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
 		await expect(page.locator(HEALTH_INDICATOR).first()).toBeVisible({ timeout: 15_000 });
 
 		// Seed healthy and pull it into the frozen snapshot via a manual refresh.
-		await driveHealth(page, "healthy");
+		await driveHealth(page, pageRpc, "healthy");
 		await manualRefresh(page);
 		await openHud(page);
 		await expect(page.getByTestId("stream-health-detail")).toHaveAttribute("data-state", "healthy");
 		record("eink: after refresh the frozen rollup shows healthy ✓");
 
 		// New broadcast arrives: the live dot flips, but the FROZEN rollup must not.
-		await driveHealth(page, "degraded");
+		await driveHealth(page, pageRpc, "degraded");
 		await expect(page.locator(HEALTH_INDICATOR).first()).toHaveAttribute("data-state", "degraded");
 		await expect(page.getByTestId("stream-health-detail")).toHaveAttribute("data-state", "healthy");
 		await expect(page.getByTestId("health-bond")).toContainText("2/2");
 		record("eink: live dot=degraded but frozen rollup HELD at healthy (Bond 2/2) — no auto-repaint ✓");
 
 		// Manual refresh is the single release path: now the rollup catches up.
+		const statusDialog = page.getByRole("dialog", { name: "Status" });
+		await statusDialog.getByRole("button", { name: "Close" }).click();
+		await expect(statusDialog).toBeHidden();
 		await manualRefresh(page);
+		await openHud(page);
 		await expect(page.getByTestId("stream-health-detail")).toHaveAttribute("data-state", "degraded");
 		await expect(page.getByTestId("health-bond")).toContainText("1/2");
 		record("eink: manual refresh releases the freeze → rollup updates to degraded (Bond 1/2) ✓");
@@ -164,7 +165,7 @@ test.describe("stream-health rollup + tooltip (dev.emit driven)", () => {
 test.describe("stream-health dead-state cue (non-color, mono-legible)", () => {
 	test.skip(({ browserName }) => browserName !== "chromium", "single-browser integration proof");
 
-	test("dead state carries an icon + text cue, not color alone", async ({ page }, testInfo) => {
+	test("dead state carries an icon + text cue, not color alone", async ({ page, pageRpc }, testInfo) => {
 		test.skip(testInfo.project.name !== "desktop", "desktop layout exposes the persistent HUD bar");
 
 		// `mono` profile drops color to a single ink — the cue must survive it.
@@ -173,7 +174,7 @@ test.describe("stream-health dead-state cue (non-color, mono-legible)", () => {
 		await navigateTo(page, "live");
 		await expect(page.locator(HEALTH_INDICATOR).first()).toBeVisible({ timeout: 15_000 });
 
-		await driveHealth(page, "dead");
+		await driveHealth(page, pageRpc, "dead");
 		await manualRefresh(page);
 		await page.locator("[data-hud-region]").first().click();
 		await expect(page.getByRole("dialog", { name: "Status" })).toBeVisible();

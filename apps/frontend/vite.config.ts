@@ -3,10 +3,23 @@ import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { persistPlugin } from "svelte-persistent-runes/plugins";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 import { generateUniqueVersion, pwaConfig } from "./pwa.config";
+import {
+	applyPreviewWebSocketRoute,
+	DEVICE_WS_PROXY_CONTEXT,
+	previewUpgradeGuard,
+	rejectWebSocketUpgrade,
+	resolvePreviewWebSocketRoute,
+} from "./vite-preview-routing";
+
+export {
+	applyPreviewWebSocketRoute,
+	DEVICE_WS_PROXY_CONTEXT,
+	resolvePreviewWebSocketRoute,
+} from "./vite-preview-routing";
 
 // Get __dirname equivalent for ES modules
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -22,16 +35,15 @@ const BRAND_CONFIG = {
 };
 
 // DEV-SYNC power-user mode (Task 14): env-gated proxy to a remote-device backend.
-// The frontend RPC transport is ONE WebSocket opened to the bare origin root
-// (`${VITE_SOCKET_ENDPOINT}:${VITE_SOCKET_PORT}`, no path — see rpc/client.ts);
-// the Bun backend upgrades WS on ANY path off the `Upgrade` header. There is no
-// separate "/rpc" or "/ws" route, so the proxy is keyed on `/` and bypass()
-// forwards only the WS upgrade — plain HTTP stays local so the app + HMR keep
-// serving. Inert unless VITE_DEVICE_HOST is set: default `bun run dev` is unchanged.
-function buildDeviceServer(env: Record<string, string>) {
+// Exact WS paths prevent the CI worker cookie from becoming a root proxy.
+// Inert unless VITE_DEVICE_HOST is set: default `bun run dev` is unchanged.
+function buildDeviceProxy(
+	env: Record<string, string>,
+	allowWorkerRouting: boolean,
+): Record<string, ProxyOptions> | undefined {
 	const deviceHost = env.VITE_DEVICE_HOST;
 	if (!deviceHost) {
-		return {};
+		return undefined;
 	}
 
 	const deviceProtocol = (env.VITE_DEVICE_PROTOCOL || "ws").toLowerCase();
@@ -40,31 +52,78 @@ function buildDeviceServer(env: Record<string, string>) {
 	const wsTarget = `${isSecure ? "wss" : "ws"}://${deviceHost}:${devicePort}`;
 
 	return {
+		[DEVICE_WS_PROXY_CONTEXT]: {
+			target: wsTarget,
+			ws: true,
+			changeOrigin: true,
+			secure: false,
+			rewriteWsOrigin: true,
+			configure(proxy) {
+				const forwardWebSocket = proxy.ws.bind(proxy);
+				const routeWebSocket: typeof proxy.ws = (...args) => {
+					const [req, socket, head, optionsOrCallback, callback] = args;
+					const options =
+						typeof optionsOrCallback === "function"
+							? undefined
+							: optionsOrCallback;
+					const onError =
+						typeof optionsOrCallback === "function"
+							? optionsOrCallback
+							: callback;
+					const route = resolvePreviewWebSocketRoute(
+						wsTarget,
+						{ url: req.url, headers: req.headers },
+						allowWorkerRouting,
+					);
+					if (route === null) {
+						rejectWebSocketUpgrade(socket);
+						return;
+					}
+					applyPreviewWebSocketRoute(req, route);
+					if (onError) {
+						forwardWebSocket(
+							req,
+							socket,
+							head,
+							{ ...options, target: route.target },
+							onError,
+						);
+					} else {
+						forwardWebSocket(req, socket, head, {
+							...options,
+							target: route.target,
+						});
+					}
+				};
+				Object.defineProperty(proxy, "ws", { value: routeWebSocket });
+			},
+			bypass(req: { url?: string; headers: Record<string, unknown> }) {
+				const upgrade = String(req.headers.upgrade ?? "").toLowerCase();
+				// WS upgrade → device; everything else served locally by Vite.
+				return upgrade === "websocket" ? undefined : req.url;
+			},
+		},
+	};
+}
+
+function buildDeviceServer(env: Record<string, string>) {
+	const proxy = buildDeviceProxy(env, false);
+	if (!proxy) return {};
+	return {
 		host: "0.0.0.0",
-		// HMR pinned to its own LOCAL port so the root `/` ws proxy below never
-		// hijacks the HMR socket (Vite requires an HMR port distinct from the
-		// proxied server.port). host=localhost = browser dials this machine.
 		hmr: {
 			protocol: "ws",
 			host: "localhost",
 			port: 24678,
 			clientPort: 24678,
 		},
-		proxy: {
-			"/": {
-				target: wsTarget,
-				ws: true,
-				changeOrigin: true,
-				secure: false,
-				rewriteWsOrigin: true,
-				bypass(req: { url?: string; headers: Record<string, unknown> }) {
-					const upgrade = String(req.headers.upgrade ?? "").toLowerCase();
-					// WS upgrade → device; everything else served locally by Vite.
-					return upgrade === "websocket" ? undefined : req.url;
-				},
-			},
-		},
+		proxy,
 	};
+}
+
+function buildDevicePreview(env: Record<string, string>) {
+	const proxy = buildDeviceProxy(env, process.env.CI === "true");
+	return proxy ? { host: "0.0.0.0", proxy } : {};
 }
 
 // https://vitejs.dev/config/
@@ -73,11 +132,13 @@ export default defineConfig(({ mode }) => {
 	// dir to match .env.local.example; also picks up shell-exported VITE_* vars.
 	const deviceEnv = loadEnv(mode, __dirname, "VITE_");
 	const deviceServer = buildDeviceServer(deviceEnv);
+	const devicePreview = buildDevicePreview(deviceEnv);
 
 	return {
 		// Load .env from monorepo root for unified configuration
 		envDir: path.resolve(__dirname, "../.."),
 		plugins: [
+			previewUpgradeGuard(),
 			persistPlugin(),
 			tailwindcss(),
 			svelte({
@@ -199,6 +260,9 @@ export default defineConfig(({ mode }) => {
 					!sourcePath.includes("@sveltejs")
 				);
 			},
+		},
+		preview: {
+			...devicePreview,
 		},
 		// Enhanced CSS development source maps (experimental feature)
 		css: {

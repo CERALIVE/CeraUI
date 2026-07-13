@@ -24,17 +24,15 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import type { AudioCodec } from '@ceraui/rpc/schemas';
-import { AUDIO_SOURCE_AUTO } from '@ceraui/rpc/schemas';
+import { AUDIO_SOURCE_AUTO, audioCodecSchema, type AudioCodec } from '@ceraui/rpc/schemas';
 import { Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
+import {
+	type FederationHostAdapter,
+	requireAppliedConfig,
+} from '$lib/federation/host-contract';
 
-import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { AppDialog } from '$lib/components/dialogs';
-import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
-import { Button } from '$lib/components/ui/button';
-import { Label } from '$lib/components/ui/label';
-import * as Select from '$lib/components/ui/select';
 import {
 	audioCodecAllowedForTransport,
 	streamingConstraints,
@@ -50,6 +48,7 @@ import {
 } from '$lib/streaming/sourceSummary';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
+import AudioDialogContent from './audio/AudioDialogContent.svelte';
 import {
 	getAudioCodecs,
 	getCapabilities,
@@ -90,6 +89,7 @@ interface Props {
 	 * direct jump instead of leaving the operator to hunt for it.
 	 */
 	onOpenEncoder?: () => void;
+	hostAdapter?: FederationHostAdapter;
 }
 
 let {
@@ -100,6 +100,7 @@ let {
 	effectivePipeline,
 	onSave,
 	onOpenEncoder,
+	hostAdapter,
 }: Props = $props();
 
 // Schema-driven slider bounds — single source of truth, zero literals.
@@ -123,7 +124,7 @@ const pipelineKey = $derived(
 	resolveAudioPipelineKey(effectivePipeline, config?.pipeline),
 );
 const gateState = $derived(resolveAudioGateState(pipelineKey, pipelines));
-const hasAudioSupport = $derived(gateState === 'enabled');
+const hasAudioSupport = $derived(hostAdapter !== undefined || gateState === 'enabled');
 
 // Typed audio-source model (Task 13): pseudo-sources translated + grouped last,
 // device entries keep their hardware name + backend order. Used ONLY to resolve
@@ -154,7 +155,7 @@ let wasOpen = $state(false);
 // the enum). Map it to `aac` at the boundary so the draft never seeds a value
 // outside the current enum and Save never emits `pcm`.
 function coerceIncomingCodec(codec: AudioCodec | undefined): AudioCodec {
-	return (codec as string) === 'pcm' ? 'aac' : (codec ?? 'aac');
+	return codec === undefined || String(codec) === 'pcm' ? 'aac' : codec;
 }
 
 $effect(() => {
@@ -174,7 +175,13 @@ $effect(() => {
 const effectiveProtocol = $derived(config?.relay_protocol ?? 'srtla');
 function codecAllowedForTransport(codec: string): boolean {
 	if (!config) return true;
-	return audioCodecAllowedForTransport(codec as AudioCodec, effectiveProtocol);
+	const parsed = audioCodecSchema.safeParse(codec);
+	return parsed.success && audioCodecAllowedForTransport(parsed.data, effectiveProtocol);
+}
+
+function updateCodec(codec: string): void {
+	const parsed = audioCodecSchema.safeParse(codec);
+	if (parsed.success) draftCodec = parsed.data;
 }
 
 // The ACTIVE audio source (effective override-or-config value from the caller).
@@ -200,17 +207,6 @@ function clampDelay(value: number): number {
 	if (!Number.isFinite(value)) return 0;
 	return Math.max(DELAY_MIN, Math.min(DELAY_MAX, value));
 }
-
-// Center-zero slider geometry — generalised over the schema bounds.
-const delayRange = DELAY_MAX - DELAY_MIN;
-function pct(value: number): number {
-	const p = ((clampDelay(value) - DELAY_MIN) / delayRange) * 100;
-	return Number.isFinite(p) ? Math.max(0, Math.min(100, p)) : 50;
-}
-const zeroPct = $derived(pct(0));
-const thumbPct = $derived(pct(draftDelay));
-const fillLeft = $derived(Math.min(zeroPct, thumbPct));
-const fillWidth = $derived(Math.abs(thumbPct - zeroPct));
 
 // i18n key resolver (mirrors the EncoderDialog helper) — lets the pure
 // sourceSummary helpers resolve localized keys without a store/rune dependency.
@@ -268,7 +264,8 @@ async function handleSave() {
 	const fields = Object.entries(input).filter(([, value]) => value !== undefined);
 	for (const [field, value] of fields) markPending(field, value);
 	try {
-		await rpc.streaming.setConfig(input);
+		const result = await (hostAdapter?.setConfig(input) ?? rpc.streaming.setConfig(input));
+		requireAppliedConfig(result);
 	} catch {
 		toast.error($LL.notifications.saveFailed());
 	} finally {
@@ -285,191 +282,23 @@ async function handleSave() {
 	primaryLabel={$LL.dialogs.save()}
 	title={$LL.general.audioSettings()}
 >
-	{#if gateState === 'no-pipeline'}
-		<!-- No video source drafted or saved yet — audio cannot be configured until
-		     the encoder has a source. Offer a direct jump to the Encoder dialog. -->
-		<div class="bg-muted/50 flex flex-col items-center gap-3 rounded-lg px-4 py-5 text-center">
-			<p class="text-muted-foreground text-sm">{$LL.settings.selectPipelineFirst()}</p>
-			{#if onOpenEncoder}
-				<Button
-					data-testid="audio-gate-open-encoder"
-					onclick={() => {
-						open = false;
-						onOpenEncoder?.();
-					}}
-					size="sm"
-					variant="outline"
-				>
-					{$LL.settings.encoderSettings()}
-				</Button>
-			{/if}
-		</div>
-	{:else if gateState === 'no-audio-support'}
-		<!-- Selected pipeline has no audio support. -->
-		<div class="border-destructive/20 bg-destructive/5 rounded-lg border px-4 py-3">
-			<h4 class="text-destructive text-sm font-medium">
-				{$LL.settings.noAudioSettingSupport()}
-			</h4>
-			<p class="text-destructive/80 mt-1 text-xs">
-				{$LL.settings.selectedPipelineNoAudio()}
-			</p>
-		</div>
-	{:else}
-		<div class="space-y-5">
-			{#if isStreaming}
-				<!-- Audio is locked while streaming (cannot apply without a restart). -->
-				<div class="bg-muted/60 rounded-lg border px-4 py-2.5">
-					<p class="text-muted-foreground text-xs">{$LL.settings.changeBitrateNotice()}</p>
-				</div>
-			{/if}
-
-			<!-- Active audio source (READ-ONLY — the Source section owns the selection) -->
-			<div class="space-y-2">
-				<div class="flex items-center gap-1">
-					<Label class="text-sm font-medium">{$LL.settings.activeAudioSource()}</Label>
-					<InfoPopover
-						body={$LL.live.education.field.audio.body()}
-						testId="info-audio-source"
-						title={$LL.live.education.field.audio.title()}
-					/>
-					{#if audioEmbeddedComingSoon}
-						<!-- CI gate static marker (component renders data-debt-id dynamically): data-debt-id="TD-embedded-audio" -->
-						<ComingSoon debtId="TD-embedded-audio" label={$LL.live.comingSoon.embeddedAudio()} />
-					{/if}
-				</div>
-				<div
-					class="bg-muted/40 flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
-					data-testid="audio-source-active"
-				>
-					<span class="flex items-center gap-2">
-						<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
-						<span class="text-sm">{activeAudioSourceLabel}</span>
-					</span>
-					<span class="text-muted-foreground shrink-0 text-xs">
-						{$LL.settings.changeAudioSourceHint()}
-					</span>
-				</div>
-			</div>
-
-			<!-- Audio Codec (depends on the active source) -->
-			<div class="space-y-2">
-				<div class="flex items-center justify-between gap-2">
-					<div class="flex items-center gap-1">
-						<Label class="text-sm font-medium" for="audioCodec">
-							{$LL.settings.audioCodec()}
-						</Label>
-						<InfoPopover
-							body={$LL.live.education.field.codec.body()}
-							testId="info-audio-codec"
-							title={$LL.live.education.field.codec.title()}
-						/>
-					</div>
-					{#if isStreaming}
-						<!-- CI gate static marker (component renders data-debt-id dynamically): data-debt-id="TD-live-audio-codec" -->
-						<ComingSoon debtId="TD-live-audio-codec" />
-					{/if}
-				</div>
-				<Select.Root
-					disabled={isStreaming || !codecHasSource}
-					onValueChange={(value) => (draftCodec = value as AudioCodec)}
-					type="single"
-					value={draftCodec}
-				>
-					<Select.Trigger id="audioCodec" class="w-full" title={codecDisabledReason}>
-						{codecTriggerLabel}
-					</Select.Trigger>
-					<Select.Content>
-						<Select.Group>
-							{#each Object.entries(audioCodecs ?? {}) as [codec, meta] (codec)}
-								{@const allowed = codecAllowedForTransport(codec)}
-								<Select.Item
-									disabled={!allowed}
-									label={meta.name}
-									title={allowed ? undefined : $LL.settings.audioCodecUnsupportedTransport()}
-									value={codec}
-								></Select.Item>
-							{/each}
-						</Select.Group>
-					</Select.Content>
-				</Select.Root>
-			</div>
-
-		<!-- Audio Delay (schema-driven center-zero slider; live-configurable via reload-config.audio.delay_ms) -->
-		<div class="bg-muted/40 space-y-3 rounded-lg border p-4">
-				<Label class="flex items-center justify-between gap-2 text-sm font-medium" for="audioDelay">
-					<span>{$LL.settings.audioDelay()}</span>
-					<span class="bg-primary/10 text-primary rounded-md px-2 py-1 font-mono text-xs">
-						{draftDelay}ms
-					</span>
-				</Label>
-
-				<div class="my-3">
-					<div
-						class="relative h-6 w-full rounded-lg [&:has(input:focus-visible)]:ring-2 [&:has(input:focus-visible)]:ring-ring [&:has(input:focus-visible)]:ring-offset-2"
-					>
-						<!-- Track -->
-						<div
-							class="bg-muted absolute inset-x-0 inset-y-0 top-1/2 h-2 -translate-y-1/2 rounded-full"
-						></div>
-						<!-- Center marker (zero) -->
-						<div
-							style={`inset-inline-start: ${zeroPct}%;`}
-							class="bg-muted-foreground/40 absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rtl:translate-x-1/2"
-						></div>
-						<!-- Fill from zero toward thumb -->
-						{#if fillWidth > 0}
-							<div
-								style={`inset-inline-start: ${fillLeft}%; width: ${fillWidth}%;`}
-								class={`absolute top-1/2 h-2 -translate-y-1/2 rounded-full transition-all duration-200 ${
-									draftDelay < 0 ? 'bg-muted-foreground' : 'bg-primary'
-								}`}
-							></div>
-						{/if}
-						<!-- Thumb -->
-						<div
-							style={`inset-inline-start: ${thumbPct}%; transition: inset-inline-start 200ms ease-out, background-color 200ms ease-out;`}
-							class={`border-background absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-md transition-all duration-200 rtl:translate-x-1/2 ${
-								draftDelay === 0
-									? 'bg-muted-foreground'
-									: draftDelay < 0
-										? 'bg-muted-foreground'
-										: 'bg-primary'
-							} cursor-pointer hover:scale-110`}
-						></div>
-						<!-- Interaction layer -->
-						<input
-							id="audioDelay"
-							class="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-							max={DELAY_MAX}
-							min={DELAY_MIN}
-							oninput={(e) => {
-								const v = parseInt(e.currentTarget.value, 10);
-								if (!Number.isNaN(v)) draftDelay = clampDelay(v);
-							}}
-							step={DELAY_STEP}
-							type="range"
-							value={draftDelay}
-						/>
-					</div>
-
-					<!-- Bound labels (schema-driven) -->
-					<div class="text-muted-foreground mt-2 flex items-center justify-between text-xs">
-						<span class="flex items-center gap-1">
-							<span class="bg-muted-foreground h-2 w-2 rounded-full"></span>
-							{DELAY_MIN}
-						</span>
-						<span class="text-foreground font-medium">{$LL.settings.perfectSync()}</span>
-						<span class="flex items-center gap-1">
-							+{DELAY_MAX}
-							<span class="bg-primary h-2 w-2 rounded-full"></span>
-						</span>
-					</div>
-				</div>
-
-				<p class="text-muted-foreground text-center text-xs">
-					{$LL.settings.audioDelayEarly()} ← 0ms → {$LL.settings.audioDelayLate()}
-				</p>
-			</div>
-		</div>
-	{/if}
+	<AudioDialogContent
+		{gateState}
+		{isStreaming}
+		onOpenEncoder={onOpenEncoder ? () => { open = false; onOpenEncoder(); } : undefined}
+		{audioEmbeddedComingSoon}
+		{activeAudioSourceLabel}
+		{draftCodec}
+		codecOptions={audioCodecs}
+		{codecHasSource}
+		{codecDisabledReason}
+		{codecTriggerLabel}
+		isCodecAllowed={codecAllowedForTransport}
+		onCodecChange={updateCodec}
+		{draftDelay}
+		delayMin={DELAY_MIN}
+		delayMax={DELAY_MAX}
+		delayStep={DELAY_STEP}
+		onDelayChange={(value) => (draftDelay = value)}
+	/>
 </AppDialog>

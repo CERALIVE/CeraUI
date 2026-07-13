@@ -2,7 +2,7 @@
  * T16 — specific stream-start failure reason in the LiveView toast, @functional.
  *
  * When a stream start is refused, the backend returns a structured
- * `{ success: false, reason }` carrying a cerastream Tier-2 code. The LiveView
+ * `{ success: false, error }` carrying a cerastream Tier-2 code. The LiveView
  * toast must surface the SPECIFIC per-code message — not the generic
  * "Failed to start stream" — and fall back to the generic copy when the reason
  * is absent or unrecognised.
@@ -10,8 +10,8 @@
  * State is injected per-page with a `routeWebSocket` proxy (same pattern as
  * disabled-reasons.spec.ts): real auth + hydration flow through to the live mock
  * backend, and only the `streaming.start` RPC reply is rewritten (plus a known
- * recognised pipeline injected so the Start control is enabled), so nothing here
- * leaks into a sibling spec running in parallel.
+ * recognised pipeline injected so the Start control is enabled), so the forced
+ * state remains page-local and cannot persist into this worker's later tests.
  */
 import type { Page, WebSocketRoute } from '@playwright/test';
 
@@ -31,7 +31,7 @@ interface WsHandle {
 
 async function attachWs(page: Page, hooks: WsHooks): Promise<WsHandle> {
 	let route: WebSocketRoute | null = null;
-	await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 		route = ws;
 		const server = ws.connectToServer();
 		ws.onMessage((message) => {
@@ -163,7 +163,7 @@ test.describe('stream-start failure reason in the toast (T16)', () => {
 		await startWithReply(page, {
 			success: false,
 			is_streaming: false,
-			reason: 'srt_connect_failed',
+			error: 'srt_connect_failed',
 		});
 
 		// The concrete per-code message is shown…
@@ -176,7 +176,7 @@ test.describe('stream-start failure reason in the toast (T16)', () => {
 		await startWithReply(page, {
 			success: false,
 			is_streaming: false,
-			reason: 'totally_unknown_reason',
+			error: 'totally_unknown_reason',
 		});
 
 		await expect(page.getByText(GENERIC_TEXT, { exact: true })).toBeVisible();

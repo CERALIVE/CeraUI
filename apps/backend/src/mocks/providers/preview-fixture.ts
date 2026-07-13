@@ -2,7 +2,7 @@
  * Bundled tiny H.264 fixture for the DEV-ONLY preview WebSocket server
  * (`preview.ts`). NOT shipped behavior — only served under `shouldUseMocks()`.
  *
- * Generation (reproducible, run once — see .omo notepad learnings.md):
+ * Generation (reproducible, run once; see repo-local notepad learnings):
  *   ffmpeg -hide_banner -y -f lavfi -i testsrc2=size=320x180:rate=15:duration=2 \
  *     -c:v libx264 -profile:v baseline -pix_fmt yuv420p \
  *     -g 15 -keyint_min 15 -x264-params "repeat-headers=1:aud=1:scenecut=0" \

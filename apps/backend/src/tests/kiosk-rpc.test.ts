@@ -439,8 +439,45 @@ describe("system.kiosk* RPC procedures", () => {
 		});
 
 		expect(result.success).toBe(true);
+		if (!result.applied)
+			throw new Error("kiosk start did not report applied state");
 		expect(result.applied.enabled).toBe(true);
 		expect(result.applied.state).toBe("enabled-stopped");
+	});
+
+	test("kioskStart waits for cog-display enablement before reporting success", async () => {
+		const h = makeHarness();
+		let releaseEnable = () => {};
+		let signalEnableStarted = () => {};
+		const enableStarted = new Promise<void>((resolve) => {
+			signalEnableStarted = resolve;
+		});
+		h.deps = {
+			...h.deps,
+			enableAddon: async (descriptor) => {
+				h.enableAddonCalls.push(descriptor);
+				signalEnableStarted();
+				await new Promise<void>((resolve) => {
+					releaseEnable = resolve;
+				});
+				return { success: true, phase: "enabled" };
+			},
+		};
+		setKioskDeps(h.deps);
+
+		let settled = false;
+		const result = call(kioskStartProcedure, undefined, {
+			context: makeContext(),
+		}).then((value) => {
+			settled = true;
+			return value;
+		});
+		await enableStarted;
+		await new Promise<void>((resolve) => setImmediate(resolve));
+
+		expect(settled).toBe(false);
+		releaseEnable();
+		expect((await result).success).toBe(true);
 	});
 
 	test("kioskStop resolves applied { enabled:false, state:'disabled' }", async () => {
@@ -454,6 +491,8 @@ describe("system.kiosk* RPC procedures", () => {
 		});
 
 		expect(result.success).toBe(true);
+		if (!result.applied)
+			throw new Error("kiosk stop did not report applied state");
 		expect(result.applied.enabled).toBe(false);
 		expect(result.applied.state).toBe("disabled");
 	});

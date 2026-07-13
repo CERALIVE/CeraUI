@@ -23,8 +23,9 @@ import { evidencePath, navigateTo } from "./helpers";
  *   3. Drop the `system.setAutostart` frame and reply with an error (failure
  *      path) so the toast + revert is deterministic.
  *
- * Prereq: backend on :3002 with NODE_ENV=development and the dev default
- * MOCK_SCENARIO. Frontend (Vite :6173) is started by playwright.config.
+ * Topology: local Vite dev on :6173 uses `__ceraSocketPort`; CI prebuilt Vite
+ * preview on :6173 uses the HttpOnly cookie. Both target this worker's 31xx
+ * development backend.
  */
 
 const FAKE_ERR = "Couldn't change autostart. Please try again.";

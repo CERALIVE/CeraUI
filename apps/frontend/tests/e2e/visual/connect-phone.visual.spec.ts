@@ -75,7 +75,7 @@ test.describe("@visual connect-your-phone section (#67)", () => {
 		);
 		hotspotMode = "active";
 
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			const server = ws.connectToServer();
 
 			// client -> server: answer hotspotInfo locally; forward everything else.

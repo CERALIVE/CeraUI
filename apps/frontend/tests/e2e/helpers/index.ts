@@ -97,9 +97,11 @@ export async function navigateTo(page: Page, destination: Destination): Promise<
  * "login" flow. Password is configurable via `E2E_PASSWORD` (default below) so
  * the same helper works against a fresh dev backend or a known-password one.
  *
- * Agent-QA note: this assumes a full dev stack (frontend :5173 + backend :3002)
- * is reachable. With a frontend-only server there is no auth backend and this
- * will time out — which is the documented limitation of agent QA here.
+ * Agent-QA note: this requires a complete topology. Local functional pages use
+ * Vite :6173 with `__ceraSocketPort` selecting the fixture's 31xx worker backend;
+ * CI pages use production preview :6173 with per-worker admission routing. The
+ * reference backend on :3002 supports setup, not functional page traffic. A
+ * frontend-only server has no auth backend and this will time out.
  */
 export async function ensureAuthenticated(page: Page): Promise<void> {
 	const password = process.env.E2E_PASSWORD ?? '12345678';

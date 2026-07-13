@@ -148,7 +148,7 @@ test.describe('C4 preview follows the applied source', () => {
 		heldSetConfigId = null;
 		heldSetConfigInput = null;
 
-		await page.routeWebSocket(/:(3002|31\d\d)/, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173)/, (ws) => {
 			if (ws.url().includes('/preview')) {
 				previewDials += 1;
 				mockPreviewSocket(ws);

@@ -35,7 +35,8 @@
  *   - 409 → claim-code-consumed (replay guard)
  *   - 410 → claim-code-expired (aged-out code)
  * plus network/timeout (`network-error`), an unset URL (`platform-not-configured`),
- * and an unparseable body (`invalid-platform-response`).
+ * an insecure URL (`insecure-platform-url`), and an unparseable body
+ * (`invalid-platform-response`).
  */
 
 import type { CompletePairingOutput } from "@ceraui/rpc/schemas";
@@ -67,6 +68,45 @@ export const PAIRING_SECRET_REGISTER_PATH = "/api/device/pairing-secret";
  */
 export function getPlatformUrl(): string | undefined {
 	return process.env.PLATFORM_URL?.trim() || undefined;
+}
+
+type PlatformEndpointResult =
+	| { readonly ok: true; readonly endpoint: URL }
+	| {
+			readonly ok: false;
+			readonly error: "platform-not-configured" | "insecure-platform-url";
+	  };
+
+const LOOPBACK_HOSTNAMES: ReadonlySet<string> = new Set([
+	"localhost",
+	"127.0.0.1",
+	"[::1]",
+]);
+
+function resolvePlatformEndpoint(
+	path: string,
+	isReal: boolean,
+): PlatformEndpointResult {
+	const platformUrl = getPlatformUrl();
+	if (!platformUrl) return { ok: false, error: "platform-not-configured" };
+
+	let baseUrl: URL;
+	try {
+		baseUrl = new URL(platformUrl);
+	} catch {
+		return { ok: false, error: "platform-not-configured" };
+	}
+
+	const allowLocalDevelopmentHttp =
+		baseUrl.protocol === "http:" &&
+		LOOPBACK_HOSTNAMES.has(baseUrl.hostname) &&
+		!isReal &&
+		process.env.NODE_ENV === "development";
+	if (baseUrl.protocol !== "https:" && !allowLocalDevelopmentHttp) {
+		return { ok: false, error: "insecure-platform-url" };
+	}
+
+	return { ok: true, endpoint: new URL(path, baseUrl) };
 }
 
 /**
@@ -108,13 +148,18 @@ export type PairingSecretRegisterResult = {
 	error?: string;
 };
 
+export type PlatformFetch = (
+	input: URL | Request | string,
+	init?: RequestInit,
+) => Promise<Response>;
+
 export interface RegisterPairingSecretDeps {
 	/** Override the device serial (defaults to the live device serial). */
 	serial?: string;
 	/** Override the on-device pairing secret (defaults to the live device secret). */
 	secret?: string;
 	/** Injected fetch (defaults to global `fetch`) — testable without a network. */
-	fetchImpl?: typeof fetch;
+	fetchImpl?: PlatformFetch;
 	/** Real-device gate (defaults to {@link isRealDevice}). */
 	isRealDeviceImpl?: () => Promise<boolean>;
 	/** Retry backoff sleep (defaults to a real timer) — injectable so tests don't wait. */
@@ -137,24 +182,20 @@ export async function registerPairingSecret(
 	deps: RegisterPairingSecretDeps = {},
 ): Promise<PairingSecretRegisterResult> {
 	const isReal = deps.isRealDeviceImpl ?? isRealDevice;
-	if (!(await isReal())) {
+	const realDevice = await isReal();
+	if (!realDevice) {
 		return { registered: false, skipped: true };
 	}
 
-	const platformUrl = getPlatformUrl();
-	if (!platformUrl) {
+	const endpointResult = resolvePlatformEndpoint(
+		PAIRING_SECRET_REGISTER_PATH,
+		realDevice,
+	);
+	if (!endpointResult.ok) {
 		logger.error(
-			"pairing: PLATFORM_URL is not configured; skipping pairing-secret registration",
+			`pairing: PLATFORM_URL rejected before pairing-secret registration (error=${endpointResult.error})`,
 		);
-		return { registered: false, error: "platform-not-configured" };
-	}
-
-	let endpoint: URL;
-	try {
-		endpoint = new URL(PAIRING_SECRET_REGISTER_PATH, platformUrl);
-	} catch {
-		logger.error(`pairing: invalid PLATFORM_URL "${platformUrl}"`);
-		return { registered: false, error: "platform-not-configured" };
+		return { registered: false, error: endpointResult.error };
 	}
 
 	const serial = deps.serial ?? (await getDeviceSerial());
@@ -170,8 +211,9 @@ export async function registerPairingSecret(
 		attempt++
 	) {
 		try {
-			const response = await fetchImpl(endpoint, {
+			const response = await fetchImpl(endpointResult.endpoint, {
 				method: "POST",
+				redirect: "error",
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify({ serial, pairingSecret }),
 				signal: AbortSignal.timeout(PAIRING_SECRET_REGISTER_TIMEOUT_MS),
@@ -204,12 +246,12 @@ export async function registerPairingSecret(
 }
 
 export interface CompletePlatformPairingDeps {
-	/** Persist the issued token as the active remote key and reconnect the channel. */
-	applyToken: (token: string) => Promise<void> | void;
+	/** Persist the issued token + platform Device.id and reconnect the channel. */
+	applyToken: (token: string, deviceId: string) => Promise<void> | void;
 	/** Override the device serial (defaults to the live device serial). */
 	serial?: string;
 	/** Injected fetch (defaults to global `fetch`) — testable without a network. */
-	fetchImpl?: typeof fetch;
+	fetchImpl?: PlatformFetch;
 	/** Register the pairing secret with the platform (injectable for tests). */
 	registerSecret?: (
 		deps: RegisterPairingSecretDeps,
@@ -228,18 +270,15 @@ export async function completePlatformPairing(
 	code: string,
 	deps: CompletePlatformPairingDeps,
 ): Promise<CompletePairingOutput> {
-	const platformUrl = getPlatformUrl();
-	if (!platformUrl) {
-		logger.error("pairing: PLATFORM_URL is not configured");
-		return { paired: false, error: "platform-not-configured" };
-	}
-
-	let endpoint: URL;
-	try {
-		endpoint = new URL("/api/claim", platformUrl);
-	} catch {
-		logger.error(`pairing: invalid PLATFORM_URL "${platformUrl}"`);
-		return { paired: false, error: "platform-not-configured" };
+	const endpointResult = resolvePlatformEndpoint(
+		"/api/claim",
+		await isRealDevice(),
+	);
+	if (!endpointResult.ok) {
+		logger.error(
+			`pairing: PLATFORM_URL rejected before platform claim (error=${endpointResult.error})`,
+		);
+		return { paired: false, error: endpointResult.error };
 	}
 
 	const serial = deps.serial ?? (await getDeviceSerial());
@@ -250,8 +289,9 @@ export async function completePlatformPairing(
 
 	let response: Response;
 	try {
-		response = await fetchImpl(endpoint, {
+		response = await fetchImpl(endpointResult.endpoint, {
 			method: "POST",
+			redirect: "error",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({ claimCode: code, serial }),
 			signal: AbortSignal.timeout(PLATFORM_CLAIM_TIMEOUT_MS),
@@ -284,7 +324,7 @@ export async function completePlatformPairing(
 		return { paired: false, error: "invalid-platform-response" };
 	}
 
-	await deps.applyToken(parsed.data.deviceToken);
+	await deps.applyToken(parsed.data.deviceToken, parsed.data.deviceId);
 
 	return { paired: true, device_id: parsed.data.deviceId };
 }

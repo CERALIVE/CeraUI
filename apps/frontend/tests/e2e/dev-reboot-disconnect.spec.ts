@@ -17,14 +17,13 @@ import { evidencePath, navigateTo } from "./helpers";
  * reproduce that sequence.
  *
  * ── Why this drives the disconnect page-locally ──────────────────────────────
- * `simulateDevReboot()` closes EVERY authenticated socket on the shared dev
- * backend by design (a reboot takes the whole device down). Invoking it for
- * real here would drop the sockets of OTHER Playwright workers mid-test. So,
- * exactly like field-lock.spec.ts lifecycle 3, this spec reproduces the device
- * going down by closing only ITS OWN socket, after drop+faking the reboot reply
- * (`{success:true}`) so the real PowerDialog → markRebooting → banner flow runs
- * deterministically. The backend's all-socket teardown + prod no-op is proven
- * separately by the unit test (apps/backend/src/tests/dev-reboot-disconnect).
+ * `simulateDevReboot()` closes every authenticated socket on the calling
+ * worker's backend by design (a reboot takes the whole device down). Worker
+ * backends are isolated, so it cannot affect another Playwright worker. This
+ * spec keeps the browser lifecycle page-local by drop+faking the reboot reply
+ * (`{success:true}`), then closing its own socket; the backend's worker-wide
+ * teardown and production no-op are covered by the backend unit test
+ * (apps/backend/src/tests/dev-reboot-disconnect).
  *
  * Flow asserted:
  *   1. Reboot via the REAL PowerDialog → markRebooting → banner "rebooting".
@@ -33,8 +32,9 @@ import { evidencePath, navigateTo } from "./helpers";
  *   3. On reconnect the banner CLEARS and an authed surface renders, proving the
  *      reconnect + re-auth completed (the app never falls back to login).
  *
- * Prereq: backend on :3002 (NODE_ENV=development, MOCK_SCENARIO=multi-modem-wifi);
- * frontend started by playwright.config webServer.
+ * Topology: local Vite dev on :6173 uses `__ceraSocketPort`; CI prebuilt Vite
+ * preview on :6173 uses the HttpOnly cookie. Both target this worker's 31xx
+ * development backend.
  */
 
 const POWER_DIALOG = "Reboot / Power";
@@ -181,8 +181,8 @@ test.describe(
 				"Driver: real frontend (PowerDialog → rpc.system.reboot → markRebooting →",
 				"        DisconnectedBanner + connection-ux store). Reboot reply drop+faked",
 				"        {success:true}; the device-down disconnect is reproduced page-locally",
-				"        (own socket closed) to avoid dropping other workers' sockets — the",
-				"        backend all-socket teardown is proven by the backend unit test.",
+				"        (own socket closed); worker-wide backend socket teardown is",
+				"        proven separately by the backend unit test.",
 				`Generated: ${new Date().toISOString()}`,
 				"",
 			];

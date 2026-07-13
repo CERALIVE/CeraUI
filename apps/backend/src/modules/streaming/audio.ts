@@ -186,7 +186,14 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 		"usbaudio",
 	];
 
-	const devices = await readdirP(dir);
+	let devices: string[];
+	try {
+		devices = await readdirP(dir);
+	} catch (error) {
+		if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+			throw error;
+		devices = [];
+	}
 	const list: Record<string, true> = {};
 
 	for (const d of devices) {

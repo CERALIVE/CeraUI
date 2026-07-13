@@ -11,8 +11,8 @@
  * State is injected per-page with a `routeWebSocket` proxy (same pattern as
  * conditional-display.spec.ts): real auth + hydration flow through to the live
  * mock backend; only the specific fields a branch depends on are rewritten or an
- * RPC is held pending, so nothing here leaks into a sibling spec running in
- * parallel.
+ * RPC is held pending, so the forced state remains page-local and cannot persist
+ * into a later test assigned to this worker.
  *
  * Controls covered (each previously silent — no reason where one already exists,
  * e.g. PowerDialog / Encoder / Transport are intentionally untouched):
@@ -48,7 +48,7 @@ interface WsHandle {
 async function attachWs(page: Page, hooks: WsHooks): Promise<WsHandle> {
 	let route: WebSocketRoute | null = null;
 
-	await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 		route = ws;
 		const server = ws.connectToServer();
 

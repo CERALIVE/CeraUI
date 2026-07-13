@@ -148,7 +148,7 @@ describe("streaming.start — transport × audio-codec gate (C5)", () => {
 		else process.env.MOCK_MODE = savedMockMode;
 	});
 
-	test("acodec:'opus' over the default (srtla) transport → dual-field rejection", async () => {
+	test("acodec:'opus' over the default (srtla) transport → structured error rejection", async () => {
 		const res = await call(
 			streamingStartProcedure,
 			{ acodec: "opus" },
@@ -158,7 +158,6 @@ describe("streaming.start — transport × audio-codec gate (C5)", () => {
 			success: false,
 			is_streaming: false,
 			error: AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
-			reason: AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
 		});
 	});
 
@@ -171,7 +170,7 @@ describe("streaming.start — transport × audio-codec gate (C5)", () => {
 		);
 		expect(res.success).toBe(false);
 		expect(res.error).toBe(AUDIO_CODEC_UNSUPPORTED_TRANSPORT);
-		expect(res.reason).toBe(AUDIO_CODEC_UNSUPPORTED_TRANSPORT);
+		expect(res).not.toHaveProperty("reason");
 	});
 
 	test("acodec:'opus' is refused over an explicit rist transport too", async () => {

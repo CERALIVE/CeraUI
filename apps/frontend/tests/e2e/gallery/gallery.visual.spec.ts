@@ -77,7 +77,7 @@ test.describe('@gallery documentation screenshots', () => {
 				// is_streaming=false. Rewrite every status frame over the page WS to
 				// force the streaming cockpit to mount, matching the ingest-states
 				// visual harness. Must be installed before the first navigation.
-				await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+				await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 					const server = ws.connectToServer();
 					ws.onMessage((m) => server.send(m));
 					server.onMessage((m) => {

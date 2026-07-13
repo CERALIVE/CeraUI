@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../env", () => ({
-	getSocketUrl: () => "ws://test.local",
+	getRpcSocketUrl: () => "ws://test.local/ws",
 }));
 
 class FakeWebSocket {

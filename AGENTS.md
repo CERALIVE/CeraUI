@@ -15,7 +15,7 @@ The backend resolves both streaming deps as public-npm registry packages — no 
 
 ```
 "@ceralive/cerastream":  "2026.7.1"   (public npm, @ceralive scope)
-"@ceralive/srtla-send":  "2026.6.0"   (public npm, @ceralive scope)
+"@ceralive/srtla-send":  "2026.6.2"   (public npm, @ceralive scope)
 ```
 
 Both are published npm packages (`@ceralive` scope on npmjs.org) consumed as normal registry deps, not `link:` paths and not vendored `.tgz` files. No sibling checkout of `srtla` or `srtla-send-rs` is needed for `CeraUI` to install or build.
@@ -149,8 +149,9 @@ CeraUI/
 
 ```bash
 bun install           # installs all workspaces; resolves registry deps (no sibling checkout required)
-bun run dev           # frontend + backend via mprocs TUI (port 5173 + 3001)
+bun run dev           # frontend + backend via mprocs TUI (Vite 6173 + backend 3002)
 bun run build         # compile backend binary + frontend static
+bun run test:release-package-contracts   # provenance + release graph + dispatch-input security
 BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh   # .deb for ARM64
 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh   # .deb for AMD64
 bun tsc --noEmit      # type-check backend (run from apps/backend/)
@@ -393,9 +394,21 @@ wraps its read in its own `try/catch` and degrades to `null` on failure — a mi
 Detection contract (fail-safe, defaults to `false`):
 1. `CERALIVE_DEVICE_TYPE==="real"` → true; `==="emulated"` → false (env override wins over everything)
 2. `isDevelopment()` → false (short-circuits before any hardware probe)
-3. `/proc/device-tree/model` contains `"Rockchip"` or `"RK3588"` → true
-4. probe throws (file absent/unreadable) → false (never propagates)
-5. unrecognised model → false
+3. `/proc/device-tree/model` contains the RK3588-specific marker `"RK3588"` → true;
+   generic Rockchip, RK3399, and RK356x identities fail closed
+4. x86 mini-PC path: `/etc/ceralive/release` contains `ID=ceralive` AND DMI
+   `/sys/class/dmi/id/{product_name,board_name}` contains a mini-PC marker
+   (`N100`, `N200`, `Mini PC`, `MINIPC`) → true
+5. Any probe throws (file absent/unreadable) → false for that probe (never propagates)
+6. Unrecognised or malformed identity → false. Jetson is deliberately unhandled/deferred.
+
+Real platform pairing parses `PLATFORM_URL` before any secret registration or
+claim request. HTTPS is required on production and real devices; plaintext HTTP
+is accepted only for `localhost`, `127.0.0.1`, or `[::1]` while the backend is in
+development mode and device detection is emulated. Malformed, non-loopback HTTP,
+and all other non-HTTPS URLs fail before a pairing secret, claim code, or issued
+token can cross the boundary. Pairing POSTs also reject redirects so an accepted
+HTTPS endpoint cannot replay a credential body through a downgrade redirect.
 
 **`isDevelopment()` power-gate (T1):** `isDevelopment()` (defined in
 `apps/backend/src/mocks/mock-config.ts`, `NODE_ENV==="development" ||
@@ -520,6 +533,41 @@ integration branch per repo (e.g. `feat/refined-experience`), stacked as wave-or
 commits. Exactly ONE PR per repo. Merge order: root policy PR → ceralive-platform → CeraUI.
 Rebase onto `origin/<canonical>` between waves (Rule B); conflicts STOP-and-surface.
 R2 is a COMPLEMENT to Rule C ("one focused PR per repo"), not an override.
+
+The Build Check E2E topology is intentionally split: `setup-e2e` builds and
+uploads the frontend and caches only Playwright browser binaries, while each
+isolated desktop/mobile × two-shard runner installs its own Playwright OS
+dependencies. Browser cache keys use the exact installed Playwright CLI version,
+and the four lanes retain unique blob artifacts for the merged report. The
+setup job also downloads the published `srtla-send-rs` v3.2.0 amd64 `.deb`,
+verifies its pinned SHA-256 and Debian package metadata, extracts only its runtime
+payload, and uploads that payload as a one-day artifact. Each E2E lane restores
+the executable bit, adds the extracted `usr/bin` to `PATH`, rewrites its local
+`setup.json` `srtla_path`, and asserts the real `srtla_send` binary before server
+startup. No stub, `sudo` install, sibling checkout, or skipped backend preflight
+is permitted. Each functional lane serves the uploaded production bundle with
+one `vite preview` process on port 6173, shared by that lane's Playwright workers;
+the lane's reference backend on port 3002 supports startup and global setup but
+is not the backend used by functional test pages. Under CI preview only,
+the E2E fixture installs an HttpOnly SameSite=Strict cookie containing its
+validated 3100-3199 worker port and a random per-worker proxy secret. The proxy
+consumes and strips that routing value only when the raw request target is the
+literal `/ws` or `/preview` path (optionally followed by a query), injects the
+secret as a proxy-only backend admission header, and fails
+closed on missing/malformed routing state or explicit query/header steering.
+Worker backends require the exact header before upgrading in E2E mode, so direct
+browser sockets cannot connect through the shared preview to another worker's
+backend. This keeps every browser paired with its worker-scoped backend, preview
+upstream, and scenario. The CI lane seeds the
+reference backend's password and persistent token before server startup, so
+Playwright global setup never depends on a missing-cookie fallback through the
+preview proxy; local global setup retains its browser-driven flow.
+Runtime E2E code must use fixture RPC/socket seams and must not import Vite-only
+`/src` modules. Local E2E retains `window.__ceraSocketPort`, which selects the
+page's worker-scoped 3100-3199 backend; the reference backend on port 3002 is not
+the functional page backend. Local Vite dev does not enable cookie routing. The
+semantic YAML contract is
+`bun run test:build-check-shape`.
 
 ## BUN-NATIVE CONVENTIONS (as of 2026-06)
 
@@ -943,17 +991,18 @@ Three Vite lib-mode ES-module bundles — one per config dialog:
 
 | Bundle | Entry point |
 |--------|-------------|
-| `encoder.js` | `apps/frontend/src/main/dialogs/EncoderDialog.svelte` |
-| `audio.js` | `apps/frontend/src/main/dialogs/AudioDialog.svelte` |
-| `server.js` | `apps/frontend/src/main/dialogs/ServerDialog.svelte` |
+| `encoder.js` | `apps/frontend/src/lib/federation/encoder-entry.ts` |
+| `audio.js` | `apps/frontend/src/lib/federation/audio-entry.ts` |
+| `server.js` | `apps/frontend/src/lib/federation/server-entry.ts` |
 
-Each bundle is a self-contained ES module. It imports nothing from the host page
-and exports a single `mount(target, props)` function that `ceralive-platform` calls
-after dynamic `import()`.
-
-`server.js` includes `ProtocolSelector.svelte` (the always-visible protocol radiogroup
-added in T21-T23). The `mount(target, props)` export contract is unchanged — the
-protocol-first reorder is an internal layout change only.
+Each entry exports `federationAbiVersion = 1` and
+`mountDialog(target, { host, config })`. The wrapper uses its bundled Svelte
+runtime to mount and unmount the dialog, so the host never mounts a component
+compiled against a different Svelte runtime. `host` is the typed adapter in
+`host-contract.ts`; all three dialogs treat a resolved `{ success: false }` host
+write as a visible save failure. Audio and Server retain their device-local RPC
+fallback, while Encoder reports asynchronous hosted write refusal through the
+same localized failure toast.
 
 ### Build step: `bun run build:federation`
 
@@ -965,6 +1014,9 @@ dist/federation/<ceraui-version>/
   encoder.js
   audio.js
   server.js
+  <shared chunks>.js
+  frontend.css
+  federation-build.json
 ```
 
 The version is read from `package.json` at build time. The output directory is
@@ -972,27 +1024,42 @@ gitignored and never committed.
 
 ### Sign step: `bun run sign:federation`
 
-Runs `scripts/build/sign-federation.sh`. For each `.js` file in
-`dist/federation/<ceraui-version>/`:
+Runs `scripts/sign-federation.ts`. The Vite build manifest supplies the static
+import graph. For every emitted `.js` and `.css` asset:
 
-1. Computes a `sha384-` SRI hash → writes `<file>.js.sri`
-2. GPG-signs the bundle (detached, armored) → writes `<file>.js.sig`
-3. Writes `manifest.json` listing every bundle with its SRI hash and version
-4. GPG-signs `manifest.json` → writes `manifest.json.sig`
+1. Computes a `sha384-` SRI hash and writes `<file>.sri`.
+2. GPG-signs the asset and writes `<file>.sig`.
+3. Writes `manifest.json` with every entry, chunk, stylesheet, kind, import edge,
+   SRI hash, and CeraUI version.
+4. Ed25519-signs the exact manifest bytes as `manifest.json.sig`.
 
 The GPG key is the same CeraLive release key used for `.deb` signing (managed in
 `cert-work/`). The Ed25519 key used for PASETO tokens is NOT used here.
 
 ### CI publish job: `publish-federation` (in `publish-release.yml`)
 
-Runs after the `.deb` publish job succeeds. Steps:
+Runs in the normal `publish-release.yml` path after the release/package gate
+confirms that `package.json` matches the calculated release version and passes
+frozen install, lint/typecheck, and unit tests. Releases run only from the
+default branch, reject a pre-existing tag/release, and pin and verify
+the release tag against the workflow dispatch SHA. The federation job independently
+re-verifies the version match before building; for v2026.7.0 it publishes
+`ui-bundle/2026.7.0/`. Steps:
 
 1. `bun run build:federation` — produces `dist/federation/<version>/`
 2. `bun run sign:federation` — produces `.sri` + `.sig` + `manifest.json`
-3. Uploads the entire `dist/federation/<version>/` tree to R2 at
-   `ui-bundle/<ceraui-version>/` via `wrangler r2 object put` (or `aws s3 sync`
-   against the R2 S3-compat endpoint)
-4. The upload is idempotent — re-running a release does not corrupt existing bundles
+3. Uploads every signed JS/CSS asset and sidecar plus the signed manifest to R2
+   at `ui-bundle/<ceraui-version>/` with pinned content types.
+4. `publish-federation-immutable.sh` uses conditional `PutObject` writes and a
+   digest of the signed payload set. An identical retry preserves existing
+   objects (including earlier valid signature bytes), a changed payload fails
+   before any write, and a failed fresh publish removes only objects created by
+   that attempt.
+
+`create-release` remains downstream of `publish-federation`, so a public GitHub
+release is created only after the complete immutable R2 version is present. If
+release creation fails afterward, a same-version retry is idempotent and can
+reuse the already-published bytes.
 
 The `apt-worker` serves these files at
 `https://apt.ceralive.tv/ui-bundle/<ceraui-version>/<file>`. See
@@ -1010,7 +1077,8 @@ platform checks `ceraui-version` at session start; out-of-window devices get
 | Task | Location |
 |------|----------|
 | Vite federation build config | `apps/frontend/vite.federation.config.ts` |
-| Sign + SRI script | `scripts/build/sign-federation.sh` |
+| ABI and host adapter | `apps/frontend/src/lib/federation/` |
+| Sign + SRI script | `scripts/sign-federation.ts` |
 | CI publish workflow | `.github/workflows/publish-release.yml` (`publish-federation` job) |
 | Bundle output (gitignored) | `dist/federation/<version>/` |
 | Full hosting/signing contract | root `AGENTS.md` → "Version-federation hosting/signing contract" |
@@ -1463,8 +1531,8 @@ the per-interface sections.
 ## LIVE-CORRECTNESS-PASS FIXES [EXISTS]
 
 A follow-up pass (`live-correctness-pass` plan) tightened the Live destination and
-a few surrounding surfaces after the device-first source model shipped. Full
-implementation notes: `.omo/notepads/live-correctness-pass/learnings.md`.
+a few surrounding surfaces after the device-first source model shipped. The
+sections below are the durable implementation record.
 
 **Truthful device-max pair (Todo #2/#3).** `axisCeiling({offered, deviceModes})`
 (`ValidationAdapter.ts`) now returns the ACHIEVABLE resolution×framerate pair when

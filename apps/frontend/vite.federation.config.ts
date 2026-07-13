@@ -37,9 +37,9 @@ const BRAND_CONFIG = {
 };
 
 const DIALOG_ENTRIES = {
-	encoder: path.resolve(__dirname, "src/main/dialogs/EncoderDialog.svelte"),
-	audio: path.resolve(__dirname, "src/main/dialogs/AudioDialog.svelte"),
-	server: path.resolve(__dirname, "src/main/dialogs/ServerDialog.svelte"),
+	encoder: path.resolve(__dirname, "src/lib/federation/encoder-entry.ts"),
+	audio: path.resolve(__dirname, "src/lib/federation/audio-entry.ts"),
+	server: path.resolve(__dirname, "src/lib/federation/server-entry.ts"),
 };
 
 // https://vitejs.dev/config/
@@ -66,6 +66,7 @@ export default defineConfig({
 		outDir: path.resolve(__dirname, `../../dist/federation/${CERAUI_VERSION}`),
 		emptyOutDir: true,
 		sourcemap: false,
+		manifest: "federation-build.json",
 		// Self-contained ES modules loadable via dynamic import() — bundle deps inline
 		// (no externals) so each dialog bundle stands alone under the platform CSP.
 		lib: {

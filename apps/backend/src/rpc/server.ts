@@ -19,11 +19,14 @@ import {
 } from "../modules/ui/kiosk-token.ts";
 import { initPreviewSocketData } from "../modules/ui/preview-proxy.ts";
 import { createServerWebSocketHandler, initSocketData } from "./adapter.ts";
+import { permitsE2eWorkerUpgrade } from "./e2e-worker-admission.ts";
 import { issueKioskSessionToken } from "./procedures/auth.procedure.ts";
 import type { ServerSocketData } from "./types.ts";
 
 const isDevelopment =
 	process.env.NODE_ENV === "development" && !fs.existsSync("public");
+const RPC_WS_PATH = "/ws";
+const e2eWorkerProxySecret = process.env.E2E_WORKER_PROXY_SECRET;
 
 // MIME type mapping
 const mimeTypes: Record<string, string> = {
@@ -210,15 +213,24 @@ function startServer(): void {
 				// Handle WebSocket upgrade
 				const upgradeHeader = req.headers.get("upgrade");
 				if (upgradeHeader?.toLowerCase() === "websocket") {
+					const requestUrl = new URL(req.url);
+					const pathname = requestUrl.pathname;
+					if (pathname !== RPC_WS_PATH && pathname !== PREVIEW_WS_PATH) {
+						return new Response("WebSocket path not found", { status: 404 });
+					}
+					if (!permitsE2eWorkerUpgrade(req, e2eWorkerProxySecret)) {
+						return new Response("Worker proxy admission required", {
+							status: 403,
+						});
+					}
 					// Preview proxy fork — MUST branch on pathname BEFORE the oRPC
 					// upgrade, so `/preview` sockets carry a token (validated on open)
 					// instead of the RPC auth flags. The route ALWAYS upgrades on a
 					// pathname match; the proxy closes with 4401 after the upgrade when
 					// the token is invalid — never a pre-upgrade HTTP refusal.
-					const pathname = new URL(req.url).pathname;
 					if (pathname === PREVIEW_WS_PATH) {
 						const token =
-							new URL(req.url).searchParams.get(PREVIEW_TOKEN_PARAM) ?? "";
+							requestUrl.searchParams.get(PREVIEW_TOKEN_PARAM) ?? "";
 						const previewOk = server.upgrade(req, {
 							data: initPreviewSocketData(token),
 						});

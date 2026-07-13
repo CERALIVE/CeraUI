@@ -23,24 +23,15 @@
  * `handleSelfFencingConfirm`, fully implemented and wired below.
  */
 
-import { call } from "@orpc/server";
-
 import { logger } from "../../helpers/logger.ts";
-import {
-	getConfigProcedure,
-	getPipelinesProcedure,
-	setBitrateProcedure,
-	setConfigProcedure,
-	streamingStartProcedure,
-	streamingStopProcedure,
-} from "../../rpc/procedures/streaming.procedure.ts";
-import type { AppWebSocket, RPCContext } from "../../rpc/types.ts";
+import type { RPCContext } from "../../rpc/types.ts";
 import { sendFrame } from "./channel.ts";
 import {
 	getSharedSeenCidStore,
 	type SeenCidStore,
 } from "./command-idempotency.ts";
-import { handleIngestSlots } from "./ingest-slots.ts";
+import { buildControlContext } from "./control-context.ts";
+import { routeInternalCommand } from "./internal-command-router.ts";
 import {
 	COMMAND_REGISTRY,
 	type Command,
@@ -57,52 +48,10 @@ import {
 	handleSelfFencingOp,
 	type SelfFencingDeps,
 } from "./self-fencing.ts";
-import { handleSetProfile } from "./set-profile.ts";
-
-/**
- * Invokes the oRPC procedure backing a single command, given the inbound frame
- * and the synthesized authenticated context. Returns the raw procedure result;
- * the caller maps it onto the `{ ok, applied }` result payload.
- */
-type ProcedureDispatcher = (
-	frame: Command,
-	context: RPCContext,
-) => Promise<unknown>;
-
-/**
- * The wire carries the bitrate as `bitrate_bps` (bits/s — the srtla-send telemetry
- * convention from ADR-001); the `setBitrate` procedure speaks `max_br` in kbps.
- * Convert at the boundary so the existing clamp/apply logic is reused unchanged.
- * A missing/non-numeric value yields `NaN`, which the procedure's input schema
- * rejects → surfaced as an `ok:false` result rather than a silent no-op.
- */
-function toBitrateInput(payload: Command["payload"]): { max_br: number } {
-	const bps = payload?.bitrate_bps;
-	return {
-		max_br: typeof bps === "number" ? Math.round(bps / 1000) : Number.NaN,
-	};
-}
-
-/**
- * Command type → procedure dispatch table (spec §5 standard commands). The
- * command `type` IS the dotted oRPC procedure path, so this mirrors the local
- * `appRouter` dispatch in `rpc/adapter.ts` — only the standard streaming commands
- * are directly invocable; self_fencing ops route through the watchdog (Task 16).
- */
-const STREAMING_DISPATCH: Record<string, ProcedureDispatcher> = {
-	"streaming.start": (frame, context) =>
-		call(streamingStartProcedure, frame.payload ?? {}, { context }),
-	"streaming.stop": (_frame, context) =>
-		call(streamingStopProcedure, undefined, { context }),
-	"streaming.setBitrate": (frame, context) =>
-		call(setBitrateProcedure, toBitrateInput(frame.payload), { context }),
-	"streaming.setConfig": (frame, context) =>
-		call(setConfigProcedure, frame.payload ?? {}, { context }),
-	"streaming.getConfig": (_frame, context) =>
-		call(getConfigProcedure, undefined, { context }),
-	"streaming.getPipelines": (_frame, context) =>
-		call(getPipelinesProcedure, undefined, { context }),
-};
+import {
+	type ProcedureDispatcher,
+	STREAMING_DISPATCH,
+} from "./streaming-command-dispatch.ts";
 
 /**
  * The five connectivity/lifecycle ops that route through the self_fencing
@@ -132,44 +81,6 @@ export interface CommandRouterDeps {
 	context: RPCContext;
 	/** Self_fencing watchdog overrides (Task 16), forwarded to handleSelfFencingOp. */
 	selfFencing: Partial<SelfFencingDeps>;
-}
-
-/**
- * The control channel has no local UI socket behind a command — it is
- * authenticated at the transport layer (PASETO + hub-stamped role). We synthesize
- * an authenticated `RPCContext` so the existing `authMiddleware`-gated procedures
- * run unchanged. The `ws` is a no-op stub: only `streaming.start` touches it (to
- * message a local client that does not exist here), so its sends are harmless.
- */
-function buildControlContext(): RPCContext {
-	const ws = {
-		send: () => {
-			/* no-op: no local client on the control channel */
-		},
-		data: { isAuthenticated: true, lastActive: Date.now() },
-	} as unknown as AppWebSocket;
-
-	return {
-		ws,
-		isAuthenticated: () => true,
-		authenticate: () => {
-			/* no-op stub */
-		},
-		deauthenticate: () => {
-			/* no-op stub */
-		},
-		markActive: () => {
-			/* no-op stub */
-		},
-		getLastActive: () => Date.now(),
-		setSenderId: () => {
-			/* no-op stub */
-		},
-		getSenderId: () => undefined,
-		clearSenderId: () => {
-			/* no-op stub */
-		},
-	};
 }
 
 function defaultDeps(): CommandRouterDeps {
@@ -286,38 +197,7 @@ export async function routeCommand(
 	//    idempotency guard (each push replaces the full set). A malformed payload is
 	//    ignored (store unchanged) and surfaced as an ok:false result, never a crash.
 	if (isInternalCommand(frame.type)) {
-		if (frame.type === "ingest.slots") {
-			const accounts = handleIngestSlots(frame.payload);
-			emit(
-				deps,
-				frame,
-				accounts === null
-					? { ok: false, applied: null, error: "invalid_ingest_slots" }
-					: { ok: true, applied: accounts },
-			);
-		} else if (frame.type === "device.setProfile") {
-			// Idempotent on commandId (a re-send returns the cached ack). The full
-			// ack (effectiveActiveProfile/effectiveLatencyMs) rides the result's
-			// `applied`; a rejected profile carries its reason on `error` too.
-			const ack = await handleSetProfile(frame.payload);
-			if (ack === null) {
-				emit(deps, frame, {
-					ok: false,
-					applied: null,
-					error: "invalid_set_profile",
-				});
-			} else {
-				emit(deps, frame, {
-					ok: ack.status === "applied",
-					applied: ack,
-					...(ack.status === "rejected" && ack.reason !== undefined
-						? { error: ack.reason }
-						: {}),
-				});
-			}
-		} else {
-			emit(deps, frame, { ok: false, applied: null, error: "unknown_command" });
-		}
+		await routeInternalCommand(frame, { sendResult: deps.sendResult });
 		return;
 	}
 

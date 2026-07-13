@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { chromium, expect, type Page } from '@playwright/test';
 
 /**
@@ -18,8 +20,9 @@ import { chromium, expect, type Page } from '@playwright/test';
  * `password_hash`, which is also git-ignored and absent in CI). Only the
  * set-password flow produces it.
  *
- * globalSetup runs after `webServer` has started the backend and before workers
- * import spec files, so it drives the live app through the real auth flow:
+ * In local E2E, globalSetup runs after `webServer` starts the reference backend
+ * and before workers import specs, so it drives the live app through the real
+ * auth flow:
  *   Phase 1 — set the device password (first-run). This sets the in-memory hash
  *             AND persists `password_hash` to config.json via saveConfig().
  *   Phase 2 — log in with remember-me, which sends `persistent_token: true`.
@@ -27,6 +30,8 @@ import { chromium, expect, type Page } from '@playwright/test';
  *             auth_tokens.json AND adds it to its in-memory persistentTokens —
  *             so the file and the running backend stay in sync.
  *
+ * CI seeds the reference backend's password and persistent token before server
+ * startup; `hasCiSeededAuthState()` therefore exits before launching a browser.
  * The set-password form never renders the remember-me checkbox, so it never
  * requests a persistent token on its own — hence the two distinct phases.
  */
@@ -36,9 +41,25 @@ const BASE_URL = `http://localhost:${PORT}`;
 const PASSWORD = process.env.E2E_PASSWORD ?? '12345678';
 const NAV_TIMEOUT = 60_000;
 
+function hasCiSeededAuthState(): boolean {
+	if (process.env.CI !== 'true') return false;
+	const tokensPath = path.resolve(import.meta.dirname, '../../../backend/auth_tokens.json');
+	if (!fs.existsSync(tokensPath)) return false;
+	try {
+		const tokens: unknown = JSON.parse(fs.readFileSync(tokensPath, 'utf8'));
+		return (
+			typeof tokens === 'object' &&
+			tokens !== null &&
+			Object.entries(tokens).some(([token, valid]) => token !== 'placeholder' && valid === true)
+		);
+	} catch {
+		return false;
+	}
+}
+
 async function reachAuthGate(page: Page): Promise<void> {
 	await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
-	// On a cold vite dev server (globalSetup is the first load) the app can take
+	// On a cold frontend server (globalSetup is the first load) the app can take
 	// longer than 5s to mount; index.html then reveals a full-screen #js-failed
 	// debug overlay that never hides and intercepts every click. Wait for the
 	// real mount signal, then drop that debug artifact before interacting.
@@ -69,6 +90,7 @@ async function submitAuthForm(page: Page, withConfirm: boolean): Promise<void> {
 }
 
 export default async function globalSetup(): Promise<void> {
+	if (hasCiSeededAuthState()) return;
 	const browser = await chromium.launch();
 	try {
 		// Phase 1: first-run set-password (renders a confirm field) seeds the hash.

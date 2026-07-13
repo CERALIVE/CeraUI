@@ -3,7 +3,7 @@
 //
 // Repo-local, CI-runnable but deliberately NOT wired into CI in this plan. Runs
 // three independent checks and writes a machine-readable report to
-// `.omo/reports/live-correctness-audit-A4.md`:
+// `test-results/reports/live-correctness-audit-A4.md`:
 //
 //   (1) RPC PARITY  — every frontend TypedRPC method (`apps/frontend/src/lib/rpc/
 //       client.ts`) resolves to BOTH a backend procedure registration
@@ -42,7 +42,7 @@ const SUBSCRIPTIONS_TS = 'apps/frontend/src/lib/rpc/subscriptions.svelte.ts';
 const BACKEND_SRC = 'apps/backend/src';
 const EN_LOCALE = 'packages/i18n/src/en/index.ts';
 const TD_REGISTER = 'docs/TECHNICAL_DEBT.md';
-const REPORT_OUT = '.omo/reports/live-correctness-audit-A4.md';
+const REPORT_OUT = 'test-results/reports/live-correctness-audit-A4.md';
 
 // Reference corpus roots. Spec calls for `apps/frontend/src` + `packages`;
 // `apps/backend/src` is added deliberately because several i18n keys are referenced

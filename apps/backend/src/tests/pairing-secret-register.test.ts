@@ -33,13 +33,21 @@ afterEach(() => {
 
 function recordingFetch(responder: () => Response | Promise<Response>): {
 	fetchImpl: typeof fetch;
-	calls: { url: string; body: unknown }[];
+	calls: {
+		url: string;
+		body: unknown;
+		redirect: RequestRedirect | undefined;
+	}[];
 } {
-	const calls: { url: string; body: unknown }[] = [];
+	const calls: {
+		url: string;
+		body: unknown;
+		redirect: RequestRedirect | undefined;
+	}[] = [];
 	const fetchImpl = (async (input: URL | RequestInfo, init?: RequestInit) => {
 		const url = input instanceof URL ? input.toString() : String(input);
 		const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-		calls.push({ url, body });
+		calls.push({ url, body, redirect: init?.redirect });
 		return responder();
 	}) as unknown as typeof fetch;
 	return { fetchImpl, calls };
@@ -65,6 +73,7 @@ describe("registerPairingSecret — isRealDevice gate", () => {
 		expect(calls).toHaveLength(1);
 		expect(calls[0]?.url).toBe(`${PLATFORM_URL}/api/device/pairing-secret`);
 		expect(calls[0]?.body).toEqual({ serial: SERIAL, pairingSecret: SECRET });
+		expect(calls[0]?.redirect).toBe("error");
 	});
 
 	test("is a no-op in mock/emulated mode (isRealDevice false) — no request", async () => {
@@ -81,6 +90,27 @@ describe("registerPairingSecret — isRealDevice gate", () => {
 		});
 
 		expect(result).toEqual({ registered: false, skipped: true });
+		expect(calls).toHaveLength(0);
+	});
+
+	test("rejects plaintext HTTP on a real device before sending the secret", async () => {
+		process.env.PLATFORM_URL = "http://platform.test.example";
+		const { fetchImpl, calls } = recordingFetch(
+			() => new Response("{}", { status: 200 }),
+		);
+
+		const result = await registerPairingSecret({
+			serial: SERIAL,
+			secret: SECRET,
+			fetchImpl,
+			isRealDeviceImpl: async () => true,
+			delayImpl: noDelay,
+		});
+
+		expect(result).toEqual({
+			registered: false,
+			error: "insecure-platform-url",
+		});
 		expect(calls).toHaveLength(0);
 	});
 });

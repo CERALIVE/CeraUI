@@ -41,7 +41,7 @@ test.describe("Live summary transport coherence (Todo 12)", () => {
 		desiredStreaming = false;
 		seqCounter = SEQ_BASE;
 
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));

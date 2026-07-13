@@ -53,7 +53,11 @@ export const completePairingProcedure = authedProcedure
 	.input(completePairingInputSchema)
 	.output(completePairingOutputSchema)
 	.handler(async ({ input }) => {
-		const applyToken = (token: string) => setRemoteConfig({ token });
+		const applyToken = (token: string, deviceId?: string) =>
+			setRemoteConfig({
+				token,
+				...(deviceId !== undefined ? { device_id: deviceId } : {}),
+			});
 		if (shouldUseMocks()) {
 			return completeMockPairing(input.code, { applyToken });
 		}

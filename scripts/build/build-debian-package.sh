@@ -2,7 +2,10 @@
 set -e
 
 # Load shared build functions
-source "$(dirname "$0")/shared-build-functions.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/build/shared-build-functions.sh
+source "$SCRIPT_DIR/shared-build-functions.sh"
+cd "$BUILD_REPO_ROOT"
 
 log_info "Building Debian Package using FPM (Modernized)"
 
@@ -34,8 +37,7 @@ URL="https://github.com/CERALIVE/CeraUI"
 # fails a mismatched pair at image-build time. Derived from the installed
 # @ceralive/cerastream package (the single source of truth for what's compiled
 # in) — never hardcoded. Requires `bun install` to have run first.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CERASTREAM_CONSTANTS="$SCRIPT_DIR/../../apps/backend/node_modules/@ceralive/cerastream/dist/constants.js"
+CERASTREAM_CONSTANTS="$BUILD_REPO_ROOT/apps/backend/node_modules/@ceralive/cerastream/dist/constants.js"
 IPC_PROTOCOL="$(grep -oE 'cerastream-ipc/[0-9]+' "$CERASTREAM_CONSTANTS" 2>/dev/null | head -1)"
 IPC_MAJOR="${IPC_PROTOCOL##*/}"
 if ! printf '%s' "$IPC_MAJOR" | grep -qE '^[0-9]+$'; then
@@ -74,18 +76,20 @@ mkdir -p "$TEMP_DIR/etc/udev/rules.d"
 mkdir -p "$TEMP_DIR/etc/sudoers.d"
 mkdir -p "$TEMP_DIR/var/www/ceralive"
 mkdir -p "$TEMP_DIR/etc/ceralive"
+mkdir -p "$TEMP_DIR/opt/ceralive"
 
 # Copy files to appropriate locations
 log_step "Copying files to package structure"
 cp dist/ceralive "$TEMP_DIR/usr/local/bin/ceralive"
 cp dist/ceralive.service "$TEMP_DIR/etc/systemd/system/"
-cp dist/ceralive.socket "$TEMP_DIR/etc/systemd/system/"
 # Post-boot add-on reconciler oneshot (T29). Non-blocking; never gates rollback.
 cp dist/ceralive-addon-reconciler.service "$TEMP_DIR/etc/systemd/system/"
 cp dist/98-ceralive-audio.rules "$TEMP_DIR/etc/udev/rules.d/"
 cp dist/99-ceralive-check-usb-devices.rules "$TEMP_DIR/etc/udev/rules.d/"
 cp -r dist/public/* "$TEMP_DIR/var/www/ceralive/"
 cp dist/config.json "$TEMP_DIR/etc/ceralive/"
+cp apps/backend/setup.json "$TEMP_DIR/opt/ceralive/"
+ln -s /var/www/ceralive "$TEMP_DIR/opt/ceralive/public"
 cp dist/override-belaui.sh "$TEMP_DIR/usr/local/bin/"
 cp dist/reset-to-default.sh "$TEMP_DIR/usr/local/bin/"
 
@@ -102,6 +106,22 @@ chmod 0755 "$TEMP_DIR/usr/bin/ceralive-addon-helper"
 # sudo REFUSES a drop-in that is group/world-writable — ship it 0440.
 chmod 0440 "$TEMP_DIR/etc/sudoers.d/ceralive-addon-helper"
 
+SERVICE_EXEC="$(sed -n 's/^ExecStart=//p' "$TEMP_DIR/etc/systemd/system/ceralive.service" | awk 'NR == 1 { print $1 }')"
+if [[ "$SERVICE_EXEC" != "/usr/local/bin/ceralive" || ! -x "$TEMP_DIR$SERVICE_EXEC" ]]; then
+    log_error "ceralive.service ExecStart must point at the packaged backend binary (/usr/local/bin/ceralive)"
+    exit 1
+fi
+
+if ! grep -qx 'Environment=NODE_ENV=production' "$TEMP_DIR/etc/systemd/system/ceralive.service"; then
+    log_error "ceralive.service must force NODE_ENV=production to prevent mock-mode boot"
+    exit 1
+fi
+
+if [[ ! -s "$TEMP_DIR/opt/ceralive/setup.json" ]]; then
+    log_error "ceralive-device must package the required /opt/ceralive/setup.json boot identity"
+    exit 1
+fi
+
 # Create post-install script
 log_step "Creating maintenance scripts"
 cat > dist/debian/postinst << 'EOF'
@@ -112,6 +132,8 @@ echo "🚀 Configuring CeraLive after installation..."
 
 # Reload systemd daemon
 systemctl daemon-reload
+
+systemctl disable --now ceralive.socket 2>/dev/null || true
 
 # Enable the post-boot add-on reconciler oneshot (T29). It is non-blocking and
 # deliberately decoupled from the OS-update healthcheck/rollback chain.
@@ -161,6 +183,7 @@ echo "🛑 Stopping CERALIVE service..."
 # Stop service if running
 systemctl stop ceralive.service 2>/dev/null || true
 systemctl disable ceralive.service 2>/dev/null || true
+systemctl disable --now ceralive.socket 2>/dev/null || true
 EOF
 
 # Create post-remove script
@@ -205,6 +228,7 @@ fpm -s dir -t deb \
     --depends "systemd" \
     --depends "udev" \
     --depends "adduser" \
+    --depends "sudo" \
     --depends "network-manager" \
     --depends "modemmanager" \
     --depends "cerastream" \
@@ -228,7 +252,7 @@ PACKAGE_FILENAME=$(basename "$PACKAGE_FILE")
 log_step "Creating package metadata"
 
 # Create architecture-specific package info
-cat > dist/debian/package-info-${ARCHITECTURE}.json << EOF
+cat > "dist/debian/package-info-${ARCHITECTURE}.json" << EOF
 {
   "package": "$PACKAGE_NAME",
   "version": "$VERSION",
@@ -251,6 +275,7 @@ cat > dist/debian/package-info-${ARCHITECTURE}.json << EOF
     "systemd",
     "udev",
     "adduser",
+    "sudo",
     "network-manager",
     "modemmanager",
     "cerastream",
@@ -269,7 +294,7 @@ cat > dist/debian/package-info-${ARCHITECTURE}.json << EOF
 EOF
 
 # Create installation instructions
-cat > dist/debian/INSTALL-${ARCHITECTURE}.md << EOF
+cat > "dist/debian/INSTALL-${ARCHITECTURE}.md" << EOF
 # CERALIVE Debian Package Installation ($ARCHITECTURE) - MODERNIZED
 
 ## Package Information

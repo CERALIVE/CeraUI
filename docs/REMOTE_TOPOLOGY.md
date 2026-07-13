@@ -1,38 +1,42 @@
 # Remote Topology
 
-> **DESIGN-ONLY — not yet wired.**
-> Everything in this document describes intended future architecture. No runtime code
-> implements these concepts today. The typed seam in
-> `packages/rpc/src/schemas/envelope.schema.ts` exists solely to anchor these
-> symbols so future work has a concrete starting point.
+> **REMOTE/CLOUD PATH: DESIGN-ONLY.**
+> The same-device production topology and split local development topology are
+> implemented today. The remote/cloud path remains unwired; the typed seam in
+> `packages/rpc/src/schemas/envelope.schema.ts` anchors that future work.
 
 ---
 
 ## 1. Two Topologies
 
-CeraUI operates in one of two deployment topologies, controlled by the
-`DeploymentMode` type (`deploymentModeSchema` — `"local" | "remote"`).
+CeraUI currently operates in the local topology. The `DeploymentMode` type
+(`deploymentModeSchema` — `"local" | "remote"`) models the future switch to the
+remote/cloud topology.
 
 ### 1a. Same-device / localhost (current production mode)
 
 ```
-┌─────────────────────────────────────┐
-│  Device (ARM64 / AMD64)             │
-│                                     │
-│  ┌──────────────┐  WS localhost     │
-│  │  Frontend    │◄─────────────────►│
-│  │  (PWA :5173) │  :3001            │
-│  └──────────────┘                   │
-│  ┌──────────────┐                   │
-│  │  Backend     │                   │
-│  │  (Bun :3001) │                   │
-│  └──────────────┘                   │
-└─────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│  Device (ARM64 / AMD64)              │
+│                                      │
+│  ┌────────────────────────────────┐  │
+│  │ CeraUI backend (Bun :80)       │  │
+│  │  ├─ serves the static PWA      │  │
+│  │  └─ upgrades same-origin /ws   │  │
+│  └────────────────────────────────┘  │
+└──────────────────────────────────────┘
+                  ▲
+                  │ HTTP + WebSocket, same origin
+                  ▼
+             Operator browser
 ```
 
-`deploymentMode = "local"`. The frontend and backend run on the same device.
-The operator's browser connects to `ws://localhost:3001` (or the device LAN IP).
-This is the only wired topology today.
+`deploymentMode = "local"`. In production the backend serves both the static PWA
+and same-origin `/ws`; the operator opens `http://<device>/` and the browser uses
+`ws://<device>/ws` (port 80 by default). Ordinary `bun run dev` is intentionally
+split: Vite serves the PWA on port 6173 and the local development backend listens
+on port 3002. Functional E2E pages instead select worker-scoped 31xx backends.
+This is the only wired deployment topology today.
 
 ### 1b. Cloud-hosted frontend → device backend over bonded cellular (future)
 

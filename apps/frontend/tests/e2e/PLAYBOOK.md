@@ -90,6 +90,24 @@ Why this matters: the backend persists auth tokens in `apps/backend/auth_tokens.
 
 Avoid committing `html` reporter config. It generates large artifacts and is not useful in automated runs.
 
+## Real-hardware gates
+
+Mock seams may retain deterministic negative-path coverage, but they never
+replace a real-device success, hotplug, or latency claim. Hardware cases carry
+`@hardware`, remain visible in the normal PR report as an explicit prerequisite
+skip, while the dedicated hardware config exits nonzero if any prerequisite is
+absent or malformed. A skipped `@hardware` case is not a pass.
+
+The Rock 5B+ input-picker gate and its mandatory artifact bundle are documented
+in [`INPUT_PICKER_HARDWARE_QA.md`](INPUT_PICKER_HARDWARE_QA.md). It uses the
+device-hosted production frontend/backend, passively verifies the RPC WebSocket
+origin, and permits no frame interception or mock attach/detach call. Its
+dedicated `playwright.hardware.config.ts` starts no local frontend, mock backend,
+or auth bootstrap.
+
+Run `bun run --filter frontend test:hardware-preflight` to enforce dedicated
+fail-closed prerequisites and stale pass/report cleanup without device hardware.
+
 ---
 
 ## How to Read UI State Without Screenshots
@@ -188,7 +206,10 @@ test('modem 0 is PIN-locked', async ({ page }) => {
 - **`test.use({ backendScenario })` CANNOT go inside a `test.describe` block.** Because it is a *worker*-scoped option, Playwright forces a new worker and rejects a describe-level override (`"Cannot use({ backendScenario }) in a describe group"`). Put it at the top of the file (it then applies to every test in that file). A single file therefore hosts exactly ONE scenario — if you need a second scenario (e.g. a default-worker negative control), put it in a second file.
 - **The scenario is part of the worker key.** Because `backendScenario` is a worker-scoped option, Playwright allocates a *separate* worker for each distinct value — so a `modem-pin-locked` spec never shares a backend with a default-scenario spec running in parallel. Per-worker port + CWD-state isolation is unchanged.
 - **Use it when WS-proxy state injection can't help.** RPC-handler-owned state (e.g. the mock SIM lock state machine behind `unlockSim`/`unlockSimPuk`) cannot be faked by intercepting the page WebSocket — the real handler owns it. A genuinely-booted backend scenario is the only way to drive those paths end-to-end.
-- **Leave the reference-backend default untouched.** `playwright.config.ts`'s `MOCK_SCENARIO: 'multi-modem-wifi'` webServer env is for the shared `:3002` reference backend, not the per-worker backends — don't change it.
+- **Leave the reference-backend default untouched.** `playwright.config.ts`'s `MOCK_SCENARIO: 'multi-modem-wifi'` webServer env is for the lane-wide `:3002` reference backend used by setup, not the worker-scoped functional backends — don't change it.
+- **CI runs the production bundle.** Functional lanes serve the prebuilt frontend with `vite preview` on `:6173`. The lane seeds the reference backend's password and persistent token before server startup, so global setup does not need a missing-cookie proxy fallback. Before each test navigation, the fixture installs an HttpOnly SameSite=Strict cookie containing its 3100-3199 worker port plus a random per-worker proxy secret. Only a literal raw `/ws` or `/preview` request target, optionally followed by a query, reaches the preview proxy; dot-segment, encoded-path, authority-like, fragment, and child-path forms are destroyed before URL normalization. The proxy consumes and strips the routing value, then sends the secret in a proxy-only backend admission header. Missing, malformed, duplicate, encoded, or out-of-range routing values and explicit query/header steering fail closed. Worker backends require the exact header in E2E mode, so a browser cannot connect directly to another worker. The cookie is removed at fixture teardown. Do not switch CI to `vite dev`.
+- **Do not import `/src` at runtime.** Production preview does not serve source modules. Use `backendRpc` for an independent supported RPC call, or `pageRpc` when a dev-only broadcast must be delivered on the app's authenticated socket. Request `pageRpc` in a `beforeEach` that runs before `page.goto()` so its WebSocket route is installed before app boot.
+- **No production test backdoors.** Worker selection is fixture-owned, CI-preview-gated, and absent from the production application bundle. Do not add worker-routing logic, a global, or a test-only API to application source. Local Vite dev retains the existing `window.__ceraSocketPort` override and does not accept the routing cookie.
 - **Self-test:** `backend-scenario-fixture.spec.ts` (the positive: a `modem-pin-locked` worker reports `sim_lock.required === 'sim-pin'` in the modems broadcast) plus `backend-scenario-default.spec.ts` (the negative: a default worker does not) prove the override actually changes backend state. The two live in separate files by necessity (one scenario per file, per the rule above); shared page-WS capture is in `helpers/modem-capture.ts`. Extend that pattern rather than re-deriving the WS capture.
 
 Valid scenarios are the `MockScenario` union in `apps/backend/src/mocks/mock-config.ts`: `multi-modem-wifi`, `single-modem`, `streaming-active`, `modem-pin-locked`, `caps-full`, `engine-starting`, `engine-unavailable`.
@@ -250,7 +271,7 @@ Do not modify `field-lock.spec.ts`. It is a deterministic integration proof and 
 - Runs serial + desktop-only (one worker owns the shared evidence/allowlist files).
 - Helper: `helpers/axe.ts` `runAxe(page)` returns only the gated (critical/serious) violations.
 - Refresh the baseline after an intentional change: `UPDATE_A11Y_BASELINE=1 bun run --filter frontend test:e2e -- a11y.spec.ts --project=desktop -g "axe gate"`. Capture mode rewrites the allowlist and `test-results/task-7-a11y-baseline.json` and never fails. A normal run writes `test-results/task-7-a11y-gate.json` and enforces.
-- All three tests are tagged `@a11y`; the dedicated CI step runs them and the broad Functional E2E step grep-inverts `@a11y` to avoid a duplicate dev-server boot.
+- All three tests are tagged `@a11y`; the dedicated CI step runs them and the broad Functional E2E step grep-inverts `@a11y` to avoid duplicate coverage against the same preview server.
 - To prove the gate works, seed a violation with a rule id NOT already baselined (e.g. an `<img>` without `alt` → `image-alt`). Seeding more `color-contrast` will be tolerated — it is the baselined rule.
 
 ## navigateTo Helper

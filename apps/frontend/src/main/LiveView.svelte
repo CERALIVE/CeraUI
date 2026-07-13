@@ -192,9 +192,7 @@ function closeSummary() {
 const showLiveCockpit = $derived(optimisticIsStreaming || showingSummary);
 const summaryMode = $derived(showingSummary && !optimisticIsStreaming);
 
-// The cerastream Tier-2 reason codes that carry a SPECIFIC start-failure
-// message; any other reason (or an unstructured throw) shows the generic copy.
-const STREAM_START_REASON_KEYS = [
+const STREAM_START_ERROR_KEYS = [
 	'srt_connect_failed',
 	'srt_connection_lost',
 	'srtla_initial_connect_failed',
@@ -207,11 +205,11 @@ const STREAM_START_REASON_KEYS = [
 	'source_lost',
 	'source_unavailable',
 ] as const;
-type StreamStartReasonKey = (typeof STREAM_START_REASON_KEYS)[number];
+type StreamStartErrorKey = (typeof STREAM_START_ERROR_KEYS)[number];
 
-function startFailedMessage(reason: string): string {
-	return (STREAM_START_REASON_KEYS as readonly string[]).includes(reason)
-		? $LL.live.startFailed[reason as StreamStartReasonKey]()
+function startFailedMessage(code: string): string {
+	return (STREAM_START_ERROR_KEYS as readonly string[]).includes(code)
+		? $LL.live.startFailed[code as StreamStartErrorKey]()
 		: $LL.live.startFailed.generic();
 }
 
@@ -606,7 +604,7 @@ async function commitBitrate(kbps: number) {
 
 function stepBitrate(delta: number) {
 	const next = clampBitrate(bitrateDraft + delta);
-	commitBitrate(next);
+	void commitBitrate(next);
 }
 
 // Config-row summaries — distilled from the saved config, never gray placeholders.
@@ -765,11 +763,8 @@ async function handleStart(overrides: { source?: string } = {}) {
 
 	try {
 		const startResult = await startStreaming(result.config);
-		// A structured `{ success: false, reason }` is the engine refusing the
-		// start — surface the SPECIFIC reason code so the toast names it. On
-		// success, reconciliation happens via the is_streaming broadcast.
 		if (startResult && !startResult.success) {
-			revertStreamingOptimism(startResult.reason ?? 'unknown_error');
+			revertStreamingOptimism(startResult.error ?? 'unknown_error');
 		}
 	} catch (error) {
 		// Transport/validation throw: revert to idle with the error message.

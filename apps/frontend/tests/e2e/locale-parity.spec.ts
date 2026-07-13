@@ -80,7 +80,7 @@ test.describe("Locale parity — Arabic RTL + embedded-audio exact-match (todo 1
 		// snapshot below is authoritative regardless of the worker's mock scenario.
 		// `sources` MUST be dropped (T22 pattern): SourceSection reads the folded
 		// `sources` broadcast, so the backend's own echo would override our fixture.
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));

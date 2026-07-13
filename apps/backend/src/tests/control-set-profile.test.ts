@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { FIXTURE_14_19 } from "@ceralive/control-protocol/fixtures";
 
+import {
+	configureActiveProfileReporter,
+	reportActiveProfile,
+	resetActiveProfileReporter,
+} from "../modules/remote-control/active-profile-reporter.ts";
 import {
 	type ControlChannelLogger,
 	type ControlSocket,
@@ -10,6 +16,8 @@ import { routeCommand } from "../modules/remote-control/command-router.ts";
 import {
 	COMMAND_REGISTRY,
 	type Command,
+	CommandSchema,
+	type DeliveryAck,
 	HandshakeDeviceSchema,
 	HandshakeSchema,
 	type Result,
@@ -98,11 +106,13 @@ function makePayload(
 
 beforeEach(() => {
 	resetSetProfile();
+	resetActiveProfileReporter();
 	resetSharedSeenCidStore();
 });
 
 afterEach(async () => {
 	resetSetProfile();
+	resetActiveProfileReporter();
 	resetSharedSeenCidStore();
 	await initControlChannel({ canDial: () => false, logger: silent });
 });
@@ -133,10 +143,10 @@ describe("device.setProfile — command registry", () => {
 			verifyToken: () => null,
 			logger: silent,
 			random: () => 1,
-			setTimer: () => 0 as unknown as ReturnType<typeof setTimeout>,
-			clearTimer: () => {},
-			setKeepalive: () => 0 as unknown as ReturnType<typeof setInterval>,
-			clearKeepalive: () => {},
+			setTimer: (fn, ms) => setTimeout(fn, ms),
+			clearTimer: (timer) => clearTimeout(timer),
+			setKeepalive: (fn, ms) => setInterval(fn, ms),
+			clearKeepalive: (timer) => clearInterval(timer),
 			uuid: () => FIXED_CID,
 		});
 
@@ -400,5 +410,112 @@ describe("routeCommand — device.setProfile result frame", () => {
 
 		expect(results[0]?.payload.ok).toBe(false);
 		expect(results[0]?.payload.error).toBe("invalid_set_profile");
+	});
+
+	test("published fixture applies through routeCommand, acks by cid, and emits activeProfile", async () => {
+		const persisted: ResolvedProfileConfig[] = [];
+		const activePayloads: unknown[] = [];
+		configureActiveProfileReporter({
+			readActiveProfile: () => {
+				const current = persisted[persisted.length - 1];
+				return {
+					presetId: current?.presetId ?? "custom",
+					latencyMs: current?.latencyMs ?? 0,
+					fecEnabled: current?.fecEnabled ?? false,
+					recoveryMode: current?.recoveryMode ?? "standard",
+				};
+			},
+			broadcast: (type, data) => activePayloads.push({ type, data }),
+		});
+		configureSetProfile({
+			getCaps: () => FULL_CAPS,
+			readActive: () => ({ profile: "balanced", latencyMs: 2000 }),
+			persist: (config) => {
+				persisted.push(config);
+				reportActiveProfile();
+			},
+			isStreaming: () => false,
+			reconnect: () => {},
+		});
+		const frame = CommandSchema.parse(FIXTURE_14_19);
+		const results: Result[] = [];
+		const acks: DeliveryAck[] = [];
+
+		await routeCommand(frame, {
+			sendResult: (result) => {
+				results.push(result);
+				return true;
+			},
+			sendDeliveryAck: (ack) => {
+				acks.push(ack);
+				return true;
+			},
+		});
+
+		expect(acks).toEqual([
+			{
+				v: 1,
+				kind: "delivery.ack",
+				type: "device.setProfile",
+				cid: frame.cid,
+			},
+		]);
+		expect(results).toHaveLength(1);
+		expect(results[0]?.cid).toBe(frame.cid);
+		expect(results[0]?.payload.ok).toBe(true);
+		expect(results[0]?.payload.applied).toMatchObject({
+			commandId: frame.cid,
+			status: "applied",
+			effectiveActiveProfile: "low-latency",
+			effectiveLatencyMs: 2000,
+		});
+		expect(activePayloads).toEqual([
+			{
+				type: "device.activeProfile",
+				data: {
+					config: {
+						presetId: "low-latency",
+						latencyMs: 2000,
+						fecEnabled: false,
+						recoveryMode: "standard",
+					},
+				},
+			},
+		]);
+	});
+
+	test("apply failure emits an error result instead of escaping after delivery ack", async () => {
+		configureSetProfile({
+			getCaps: () => FULL_CAPS,
+			readActive: () => ({ profile: "balanced", latencyMs: 2000 }),
+			persist: () => {
+				throw new Error("engine apply failed");
+			},
+			isStreaming: () => false,
+			reconnect: () => {},
+		});
+		const frame = CommandSchema.parse(FIXTURE_14_19);
+		const results: Result[] = [];
+		const acks: DeliveryAck[] = [];
+
+		await routeCommand(frame, {
+			sendResult: (result) => {
+				results.push(result);
+				return true;
+			},
+			sendDeliveryAck: (ack) => {
+				acks.push(ack);
+				return true;
+			},
+		});
+
+		expect(acks).toHaveLength(1);
+		expect(acks[0]?.cid).toBe(frame.cid);
+		expect(results).toHaveLength(1);
+		expect(results[0]?.payload).toEqual({
+			ok: false,
+			applied: null,
+			error: "engine apply failed",
+		});
 	});
 });

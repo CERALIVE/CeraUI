@@ -54,8 +54,6 @@ export interface AudioProbeDeps {
 	networkEmbeddedAudio?: boolean;
 }
 
-// C7 dual-field rule: this one string is surfaced BOTH as the RPC `error`
-// (machine code) and the `reason` (looked up as `live.startFailed.<reason>`).
 export const AUDIO_SOURCE_PROBE_FAILED = "audio_source_probe_failed";
 
 export type StartStreamResult =
@@ -113,9 +111,6 @@ export async function startStream(
 	clearStreamProcessExit();
 
 	if (!(await maybeProbeAudioSource(pipeline, launchConfig, audioDeps))) {
-		// Audio source never came online (probe timed out or was stopped mid-wait).
-		// No srtla_send has spawned yet, so clear the caller's optimistic streaming
-		// flag and surface the dual-field reason instead of aborting silently.
 		updateStatus(false);
 		logger.warn("startStream: audio source probe failed; aborting start", {
 			asrc: launchConfig.asrc,

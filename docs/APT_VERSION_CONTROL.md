@@ -149,12 +149,42 @@ Never hand-bump individual crate versions inside a Cargo workspace — they shar
 
 Two tag namespaces coexist in repos that ship both a binary `.deb` and an npm binding. They are **intentionally separate** and must not be merged:
 
-| Namespace | Triggers | Artifact |
+| Namespace | Purpose | Artifact |
 |-----------|----------|----------|
-| `v*` (e.g. `v2026.6.1`) | `.deb` release workflow | Debian package attached to GitHub release |
-| `bindings-v*` (e.g. `bindings-v2026.6.1`) | npm publish workflow | `@ceralive/*` package on npmjs.org |
+| `v*` (e.g. `v2026.6.1`) | Binary release identity | Debian package attached to GitHub release |
+| `bindings-v*` (e.g. `bindings-v2026.6.1`) | npm binding release | `@ceralive/*` package on npmjs.org |
 
 Keeping them separate means a `.deb` release and a binding release can happen independently, on their own cadence, without triggering each other's CI jobs.
+
+### CeraUI Release Trigger
+
+CeraUI's normal `.deb` release is **not** tag-triggered. Run
+`publish-release.yml` with `workflow_dispatch`; it builds the ARM64 and AMD64
+system archives and Debian packages, verifies the federation bundle version,
+publishes the GitHub release, then dispatches stable `apt-reindex` to
+`CERALIVE/apt-worker`. This direct handoff is required because a tag created
+with `GITHUB_TOKEN` does not trigger another workflow. `publish-deb.yml` is
+manual recovery for an existing release and is not a second normal release path.
+Both workflows must be dispatched from the default branch. Recovery
+resolves the supplied tag to one commit, checks out that commit in detached mode,
+uses it for the release/package contracts, lint/typecheck, unit tests, and package
+build, verifies the tag has not moved and `package.json` matches, and fails unless
+that release exists before build and upload.
+Tag and version inputs are transported through step environment variables and
+validated as canonical stable CalVer before workflow outputs or commands run.
+`bun run test:release-package-contracts` is the required local and CI gate for
+these release, package-provenance, and input-security contracts.
+Both release workflows also install from the frozen lockfile and run
+`bun run lint` plus `bun run test` before any build or publication job.
+The primary release workflow accepts `force_version` only for stable canonical
+CalVer, transports all input-derived version/tag values through step env, and
+fails before any build unless the calculated version matches `package.json`.
+An empty current-month stable-tag set is a valid first-release state for both
+automatic stable and beta calculation; it does not terminate the shell pipeline.
+It also rejects an existing tag or release before builds and rechecks immediately
+before publication. The release action creates the tag from the workflow dispatch
+SHA and verifies the resulting tag, so the tag and every attached asset identify
+the same source commit.
 
 ### Cross-References
 

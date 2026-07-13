@@ -29,7 +29,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | PASETO device-token verification (relay-config + device-control, ADR-0006) | `modules/pairing/device-token.ts` — `verifyDeviceControlToken`, `resolveControlChannelEndpoint` |
 | D3 forced re-pair migration (paired-but-tokenless device on PASETO activation, ADR-0006) | `modules/remote/remote.ts` — `resolveRemoteAuthDecision`, `forceRepairMigration`, `isPasetoVerificationActive` |
 | PASETO v4.public crypto primitives (PAE, Ed25519 sign/verify, key import) | `modules/pairing/paseto-v4.ts` |
-| Real platform claim + pairing-secret registration (`POST /api/device/pairing-secret`, isRealDevice-gated, retry/log, never blocks pairing) | `modules/pairing/platform-claim.ts` — `completePlatformPairing`, `registerPairingSecret` |
+| Real platform claim + pairing-secret registration (`POST /api/device/pairing-secret`, isRealDevice-gated, HTTPS required in production/on real devices; loopback HTTP only in emulated development; redirects rejected, retry/log, never blocks pairing) | `modules/pairing/platform-claim.ts` — `completePlatformPairing`, `registerPairingSecret` |
 | Control-channel hub endpoint pinning (rejects `custom_provider`, spec §10) | `modules/remote/control-endpoint.ts` |
 | **Device identity init (`initIdentity`, `canDialControlChannel`)** | `modules/identity/index.ts` — resolves `device_id` + `paired` at boot; gates the control channel |
 | **Remote-control channel (second outbound WS, independent of BCRPT relay)** | `modules/remote-control/channel.ts` — `initControlChannel`, `sendFrame`, `isConnected`; exponential backoff + keepalive |
@@ -229,6 +229,12 @@ explicitly are unaffected.
 - `setSshServiceRunner(runner)` (`modules/system/ssh.ts`) replaces the default
   `systemctl start/stop ssh` spawn. The `shouldUseMocks()` branch in `startStopSsh()`
   flips `mockSshActive` and broadcasts `{ssh}` without touching `systemctl` or `passwd`.
+  On device, `ceralive` is the default SSH account when `setup.json` has no override;
+  start, stop, and reset RPC responses settle only after the privileged action completes.
+- Kiosk start/stop RPCs likewise await the cog-display add-on lifecycle before reporting
+  their applied status. Background status refresh and software-update scheduling remain
+  deliberately asynchronous because their responses acknowledge a refresh/scheduled job,
+  not completion.
 
 ## CONVENTIONS
 
@@ -240,6 +246,15 @@ explicitly are unaffected.
 - Frontend dependency `bits-ui` is at v2.18.1 (frontend concern only; backend has no direct bits-ui dep).
 - Use `shouldUseMocks()` — never raw `isDevelopment()` — to gate mock-hardware paths. `shouldUseMocks()` requires both `isDevelopment()` AND `mockState.initialized`.
 - **Frontend store-ownership mirror [EXISTS]:** the frontend's legacy `websocket-store.svelte.ts` wrapper is deleted; `rpc/procedures/auth.procedure.ts` (`auth.login`/`auth.setPassword`/`auth.logout`) is now called exclusively through the frontend's `lib/stores/auth-status.svelte.ts` (`authenticate`/`createPassword`), and every other push event is consumed exclusively through `lib/rpc/subscriptions.svelte.ts`'s single `rpcClient.onMessage` handler. Don't casually rename/reshape these procedure signatures or add a second push-consumption path on the frontend side — see `apps/frontend/AGENTS.md` → CONVENTIONS (store ownership).
+
+## TERMINATION CLEANUP [EXISTS]
+
+`helpers/shutdown.ts` owns the process-level `SIGTERM`/`SIGINT` lifecycle. The first
+signal latches shutdown and runs the existing sequential order — SRT ingest, dmesg
+watchers, then streaming processes. Each cleanup is settled independently and any
+failure is logged before the next step runs; `exit(0)` is still attempted after all
+three steps. Later signals remain ignored. The direct regression coverage lives in
+`src/main.test.ts` under `termination shutdown lifecycle`.
 
 ## BROADCAST EVENTS
 

@@ -21,22 +21,21 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers";
  *   - PUK wrong-puk → inline error with the decremented PUK attempts that survive
  *     a re-broadcast.
  *
- * Determinism comes from the same WS harness the sibling specs use: the locked
- * modem is injected via `dev.emit` and the unlock RPCs are dropped + faked so
- * their terminal state is owned by the test (mock mode otherwise reports
+ * Determinism comes from the same WS harness pattern as the other modem specs:
+ * the locked modem is injected via `dev.emit`; unlock RPCs are dropped + faked
+ * so their terminal state is owned by the test (mock mode otherwise reports
  * `no-locked-modem`). No fixed-delay waits.
  *
- * Prereq (playwright.config webServer): frontend :6173 + backend :3002 with
- * NODE_ENV=development and MOCK_SCENARIO=multi-modem-wifi.
+ * Topology: local Vite dev on :6173 uses `__ceraSocketPort`; CI prebuilt Vite
+ * preview on :6173 uses the HttpOnly cookie. Both target this worker's 31xx
+ * development backend.
  */
 
-// Inject onto a modem no sibling spec touches (sim-pin-unlock uses modem 0,
-// modem-config-surface uses modem 1). The shared dev backend coalesces a `modems`
-// broadcast that exactly equals the last one within its 30s window, so two specs
-// stamping an IDENTICAL locked-modem clone would drop one another's injection —
-// a distinct modem keeps every payload unique. Re-broadcasts vary the STALE
-// attempt count for the same reason (and to prove no stale count erases the
-// post-submit one).
+// Use a non-first modem so coverage is not tied to the fixture's first entry.
+// The worker backend's 30s coalescer survives across tests assigned to that
+// worker and can drop a broadcast identical to its previous payload; a distinct
+// modem and varied stale attempt counts keep this test's frames unique while
+// also proving no stale count erases the post-submit one.
 const MODEM_INDEX = 2;
 
 function installWsHarness(): void {

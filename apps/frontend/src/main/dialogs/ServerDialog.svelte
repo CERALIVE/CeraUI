@@ -27,24 +27,22 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { KeyRound, Server } from '@lucide/svelte';
-import type { RelayProtocol } from '@ceraui/rpc/schemas';
+import { Server } from '@lucide/svelte';
+import type { ConfigMessage, RelayProtocol } from '@ceraui/rpc/schemas';
 import { untrack } from 'svelte';
-import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
-import { Button } from '$lib/components/ui/button';
+import type { FederationHostAdapter } from '$lib/federation/host-contract';
 import {
-	isPortValid,
-	parsePort,
-	streamingConstraints,
-} from '$lib/components/streaming/ValidationAdapter';
-import {
-	type Validation,
-	manualSaveEnabled,
-	reduceValidateError,
-	reduceValidateResult,
-} from '$lib/components/streaming/relay-validation';
+	buildRelayValidationInput,
+	canSaveServer,
+	filterProviderEntries,
+	relayEndpoint,
+	serverEndpointErrors,
+	type ServerDraft,
+} from '$lib/federation/server-model';
+import { parsePort, streamingConstraints } from '$lib/components/streaming/ValidationAdapter';
+import type { Validation } from '$lib/components/streaming/relay-validation';
 import {
 	getCapabilities,
 	getConfig,
@@ -53,30 +51,23 @@ import {
 	getRelays,
 	getSelectedIngestEndpoint,
 } from '$lib/rpc/subscriptions.svelte';
-import { rpc } from '$lib/rpc';
-import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import {
 	type ReceiverDestinationChoice,
-	type ServerSetDerived,
-	type ServerSetDraft,
 	autoSelectIngestSlot,
 	autoSelectManagedRelay,
-	buildManagedSlotConfig,
-	buildServerSetConfig,
 	choiceToDestination,
 	deriveDestinationChoice,
 	deriveLatencyRange,
 	isManagedChoice,
-	managedCloudLabel,
 } from '$lib/streaming/receiver-experience';
 import { fingerprintForValidation } from '$lib/streaming/destination-validation.svelte';
 import CloudRemoteDialog from './CloudRemoteDialog.svelte';
-import CustomEndpointForm from './server/CustomEndpointForm.svelte';
-import DestinationSection from './server/DestinationSection.svelte';
-import LatencySection from './server/LatencySection.svelte';
-import RelayServerSelector from './server/RelayServerSelector.svelte';
-import ServerIngestSlots from './server/ServerIngestSlots.svelte';
-import TransportRow from './server/TransportRow.svelte';
+import ServerDialogContent from './server/ServerDialogContent.svelte';
+import {
+	buildServerDialogInput,
+	saveServerConfig,
+	validateServerEndpoint,
+} from './server/server-dialog-commands';
 
 interface Props {
 	open?: boolean;
@@ -88,29 +79,24 @@ interface Props {
 	 * federated bundle that lacks the RPC still mounts + saves normally.
 	 */
 	onSaved?: () => void;
+	hostAdapter?: FederationHostAdapter;
+	initialConfig?: ConfigMessage;
 }
-let { open = $bindable(false), onSaved = () => undefined }: Props = $props();
+let {
+	open = $bindable(false),
+	onSaved = () => undefined,
+	hostAdapter,
+	initialConfig,
+}: Props = $props();
 
 const PORT = streamingConstraints.port;
 const PROTOCOL: RelayProtocol = 'srtla';
 
-const config = $derived(getConfig());
+const config = $derived(hostAdapter ? initialConfig : getConfig());
 const relays = $derived(getRelays());
 const isStreaming = $derived(Boolean(getIsStreaming()));
 
-type Draft = {
-	destination_choice?: ReceiverDestinationChoice;
-	srtla_addr?: string;
-	srtla_port?: string;
-	srt_streamid?: string;
-	srt_latency?: number;
-	relay_server?: string;
-	relay_account?: string;
-	relay_streamid?: string;
-	passphrase?: string;
-	selected_slot?: string;
-};
-let draft = $state<Draft>({});
+let draft = $state<ServerDraft>({});
 
 let cloudRemoteOpen = $state(false);
 let cloudRemoteProvider = $state<ReceiverDestinationChoice | undefined>(undefined);
@@ -176,12 +162,10 @@ const allAccountEntries = $derived(Object.entries(relays?.accounts ?? {}));
 // Provider-filtered catalog (R-4): only the selected cloud's servers/accounts are
 // offered; untagged legacy entries belong to the selected provider.
 const filteredServerEntries = $derived(
-	allServerEntries.filter(([, info]) => (info.provider?.kind ?? selectedProvider) === selectedProvider),
+	filterProviderEntries(allServerEntries, selectedProvider),
 );
 const filteredAccountEntries = $derived(
-	allAccountEntries.filter(
-		([, info]) => (info.provider?.kind ?? selectedProvider) === selectedProvider,
-	),
+	filterProviderEntries(allAccountEntries, selectedProvider),
 );
 // A persisted account tagged to a different provider is dropped (re-pick).
 const effectiveRelayAccount = $derived(
@@ -191,11 +175,7 @@ const effectiveRelayAccount = $derived(
 const relayServerInfo = $derived(relays?.servers?.[relayServer]);
 const relayServerName = $derived(relayServerInfo?.name);
 const relayServerRtt = $derived(relayServerInfo?.rtt);
-const relayServerEndpoint = $derived(
-	relayServerInfo?.addr && relayServerInfo?.port
-		? `${relayServerInfo.addr}:${relayServerInfo.port}`
-		: undefined,
-);
+const relayServerEndpoint = $derived(relayEndpoint(relayServerInfo));
 const relayAccountName = $derived(relays?.accounts?.[effectiveRelayAccount]?.name);
 
 const engineCaps = $derived(getCapabilities());
@@ -231,16 +211,16 @@ $effect(() => {
 });
 
 const portNum = $derived(parsePort(portStr));
-const portError = $derived.by(() => {
-	if (destination !== 'custom' || portStr.trim() === '') return undefined;
-	if (!isPortValid(portNum)) return $LL.validation.portRange();
-	return undefined;
-});
-const addrError = $derived(
-	destination === 'custom' && draft.srtla_addr !== undefined && draft.srtla_addr.trim() === ''
-		? $LL.settings.errors.srtlaServerAddressRequired()
-		: undefined,
-);
+const endpointErrors = $derived(serverEndpointErrors({
+	destination,
+	portStr,
+	port: portNum,
+	draftAddr: draft.srtla_addr,
+	portRangeMessage: $LL.validation.portRange(),
+	addressRequiredMessage: $LL.settings.errors.srtlaServerAddressRequired(),
+}));
+const portError = $derived(endpointErrors.port);
+const addrError = $derived(endpointErrors.address);
 
 const canValidate = $derived(
 	!isStreaming &&
@@ -250,21 +230,11 @@ const canValidate = $derived(
 		validation.state !== 'validating',
 );
 
-const canSave = $derived.by(() => {
-	if (destination === 'custom') {
-		return manualSaveEnabled({
-			isStreaming,
-			addr,
-			portStr,
-			hasPortError: portError !== undefined,
-			validation,
-		});
-	}
-	if (isStreaming) return false;
-	if (!selectedManagedActive) return false;
-	if (hasManagedSlots) return activeSlot !== undefined;
-	return relayServer !== '';
-});
+const canSave = $derived(canSaveServer({
+	destination, isStreaming, addr, portStr, hasPortError: portError !== undefined,
+	validation, selectedManagedActive, hasManagedSlots,
+	hasActiveSlot: activeSlot !== undefined, relayServer,
+}));
 
 function resetValidation() {
 	if (validation.state !== 'idle') validation = { state: 'idle' };
@@ -277,67 +247,28 @@ function openCloudRemote(provider: ReceiverDestinationChoice) {
 
 async function handleValidate() {
 	validation = { state: 'validating' };
-	try {
-		const result = await rpc.relay.validate({
-			addr: addr.trim(),
-			port: portNum ?? 0,
-			streamid: streamId.trim() === '' ? undefined : streamId.trim(),
-			passphrase: passphrase.trim() === '' ? undefined : passphrase.trim(),
-			protocol: PROTOCOL,
-		});
-		validation = reduceValidateResult(result);
-	} catch (error) {
-		validation = reduceValidateError(error);
-	}
+	const input = buildRelayValidationInput(addr, portNum, streamId, passphrase, PROTOCOL);
+	validation = await validateServerEndpoint(hostAdapter, input);
 }
 
 async function handleSave() {
-	const input =
-		destination === 'managed' && selectedManagedActive && hasManagedSlots && activeSlot
-			? buildManagedSlotConfig(activeSlot, clampedLatency)
-			: buildServerSetConfig(
-					{
-						latency: clampedLatency,
-						protocol: PROTOCOL,
-						addr,
-						portStr,
-						streamId,
-						relayStreamId,
-						relayServer,
-						relayAccount: effectiveRelayAccount,
-					} satisfies ServerSetDraft,
-					{ destination } satisfies ServerSetDerived,
-				);
-	const fields = Object.entries(input);
-	for (const [field, value] of fields) markPending(field, value);
-	try {
-		const result = await rpc.streaming.setConfig(input);
-		toast.success($LL.notifications.saved());
-		// Fire-and-forget "saved" signal (never awaited): a host may run an
-		// informational relay.validate on the saved endpoint. Save already
-		// succeeded above — this must not gate or throw into the save path.
-		onSaved();
-		// Floor-clamp applied-value notice (C7): the backend floors srt_latency to
-		// the SRTLA minimum. When the applied value differs from what we requested,
-		// keep the dialog OPEN and surface the notice via LatencySection instead of
-		// closing silently. Federation-safe: an absent `applied.srt_latency` (older
-		// backend) falls through to today's close-on-save behaviour.
-		const requested = input.srt_latency;
-		const applied = result?.applied?.srt_latency;
-		if (
-			requested !== undefined &&
-			typeof applied === 'number' &&
-			applied !== requested
-		) {
-			appliedLatencyMs = applied;
-		} else {
-			appliedLatencyMs = undefined;
-			open = false;
-		}
-	} catch {
-		toast.error($LL.notifications.saveFailed());
-	} finally {
-		for (const [field] of fields) onRpcResolved(field);
+	const input = buildServerDialogInput({
+		managedSlot: destination === 'managed' && selectedManagedActive && hasManagedSlots
+			? activeSlot : undefined,
+		latency: clampedLatency, protocol: PROTOCOL, addr, portStr, streamId,
+		relayStreamId, relayServer, relayAccount: effectiveRelayAccount, destination,
+	});
+	const result = await saveServerConfig({
+		hostAdapter,
+		input,
+		onSaved,
+		savedMessage: $LL.notifications.saved(),
+		failedMessage: $LL.notifications.saveFailed(),
+	});
+	if (result.kind === 'applied-latency') appliedLatencyMs = result.value;
+	if (result.kind === 'close') {
+		appliedLatencyMs = undefined;
+		open = false;
 	}
 }
 </script>
@@ -351,129 +282,26 @@ async function handleSave() {
 	primaryLabel={$LL.dialogs.save()}
 	title={$LL.settings.receiverServer()}
 >
-	<div class="space-y-5">
-		{#if isStreaming}
-			<p
-				class="rounded-lg border px-3 py-2 text-sm"
-				style="color: var(--status-live); border-color: color-mix(in oklab, var(--status-live) 35%, transparent); background-color: color-mix(in oklab, var(--status-live) 10%, transparent);"
-			>
-				{$LL.live.stopToChange()}
-			</p>
-		{/if}
-
-		{#if catalogDrift}
-			<p
-				class="text-muted-foreground rounded-lg border px-3 py-2 text-sm"
-				data-testid="catalog-drift-note"
-				role="status"
-			>
-				{$LL.settings.catalogDriftNote()}
-			</p>
-		{/if}
-
-		<DestinationSection
-			{activeProvider}
-			{isStreaming}
-			onSelect={(value) => (draft.destination_choice = value)}
-			{relays}
-			selected={destinationChoice}
-		/>
-
-		{#if destinationChoice !== 'belabox'}
-			<TransportRow />
-		{/if}
-
-		{#if destination === 'managed' && selectedManagedActive && hasManagedSlots}
-			<ServerIngestSlots
-				accounts={managedAccounts}
-				activeEndpointId={activeSlotId}
-				{isStreaming}
-				onSelectSlot={(value) => (draft.selected_slot = value)}
-				prompting={slotPrompting}
-			/>
-		{:else if destination === 'managed' && selectedManagedActive}
-			<RelayServerSelector
-				accountEntries={filteredAccountEntries}
-				{isStreaming}
-				onAccount={(value) => (draft.relay_account = value)}
-				onRelayStreamId={(value) => (draft.relay_streamid = value)}
-				onServer={(value) => (draft.relay_server = value)}
-				relayAccount={effectiveRelayAccount}
-				{relayAccountName}
-				relaysUnavailable={relays === undefined}
-				{relayServer}
-				{relayServerEndpoint}
-				{relayServerName}
-				{relayServerRtt}
-				{relayStreamId}
-				serverEntries={filteredServerEntries}
-			/>
-		{:else if destination === 'managed'}
-			<div
-				class="border-border bg-muted/40 flex flex-col gap-3 rounded-lg border px-3 py-3"
-				data-testid="destination-needs-key"
-				role="status"
-			>
-				<div class="flex items-start gap-2">
-					<KeyRound class="text-primary mt-0.5 size-4 shrink-0" />
-					<span class="text-muted-foreground text-sm leading-snug">
-						{$LL.settings.destinationNeedsKey({ cloud: managedCloudLabel(destinationChoice) })}
-					</span>
-				</div>
-				<Button
-					class="w-full"
-					data-testid="destination-add-key"
-					onclick={() => openCloudRemote(destinationChoice)}
-					variant="outline"
-				>
-					{$LL.settings.destinationAddKey()}
-				</Button>
-			</div>
-		{:else}
-			<CustomEndpointForm
-				{addr}
-				{addrError}
-				{canValidate}
-				{isStreaming}
-				onAddr={(value) => {
-					draft.srtla_addr = value;
-					resetValidation();
-				}}
-				onPassphrase={(value) => {
-					draft.passphrase = value;
-					resetValidation();
-				}}
-				onPort={(value) => {
-					draft.srtla_port = value;
-					resetValidation();
-				}}
-				onStreamId={(value) => {
-					draft.srt_streamid = value;
-					resetValidation();
-				}}
-				onValidate={handleValidate}
-				{passphrase}
-				port={PORT}
-				{portError}
-				{portStr}
-				{streamId}
-				{validation}
-			/>
-		{/if}
-
-		<LatencySection
-			clampedLatencyMs={appliedLatencyMs}
-			{effectiveLatencyMs}
-			{isStreaming}
-			latencyMs={clampedLatency}
-			onLatencyChange={(value) => {
-				draft.srt_latency = value;
-				// A fresh operator edit supersedes a stale clamp notice.
-				appliedLatencyMs = undefined;
-			}}
-			range={latencyRange}
-		/>
-	</div>
+	<ServerDialogContent
+		{isStreaming} {catalogDrift} {activeProvider} {relays} {destinationChoice} {destination}
+		{selectedManagedActive} {hasManagedSlots} {managedAccounts} {activeSlotId} {slotPrompting}
+		{filteredAccountEntries} {filteredServerEntries} {effectiveRelayAccount} {relayAccountName}
+		{relayServer} {relayServerEndpoint} {relayServerName} {relayServerRtt} {relayStreamId}
+		{addr} {addrError} {canValidate} {passphrase} port={PORT} {portError} {portStr} {streamId}
+		{validation} {appliedLatencyMs} {effectiveLatencyMs} {clampedLatency} {latencyRange}
+		onDestination={(value) => (draft.destination_choice = value)}
+		onSlot={(value) => (draft.selected_slot = value)}
+		onAccount={(value) => (draft.relay_account = value)}
+		onRelayStreamId={(value) => (draft.relay_streamid = value)}
+		onServer={(value) => (draft.relay_server = value)}
+		onAddKey={() => openCloudRemote(destinationChoice)}
+		onAddr={(value) => { draft.srtla_addr = value; resetValidation(); }}
+		onPassphrase={(value) => { draft.passphrase = value; resetValidation(); }}
+		onPort={(value) => { draft.srtla_port = value; resetValidation(); }}
+		onStreamId={(value) => { draft.srt_streamid = value; resetValidation(); }}
+		onValidate={handleValidate}
+		onLatency={(value) => { draft.srt_latency = value; appliedLatencyMs = undefined; }}
+	/>
 </AppDialog>
 
 <CloudRemoteDialog bind:open={cloudRemoteOpen} provider={cloudRemoteProvider} />

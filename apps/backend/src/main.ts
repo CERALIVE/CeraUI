@@ -27,6 +27,7 @@ import { guardNonCritical, runCritical } from "./helpers/boot-guard.ts";
 import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
+import { handleTerminationSignal } from "./helpers/shutdown.ts";
 import { isDevelopment } from "./mocks/mock-config.ts";
 import {
 	initMockService,
@@ -45,7 +46,7 @@ import { runAddonReconciler } from "./modules/addons/reconciler.ts";
 import { getConfig, loadConfig } from "./modules/config.ts";
 import { initIdentity } from "./modules/identity/index.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
-import { initSRTIngest } from "./modules/ingest/srt.ts";
+import { initSRTIngest, stopSRTIngest } from "./modules/ingest/srt.ts";
 import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
 import { createMonitorManager } from "./modules/network/monitor/monitor-manager.ts";
@@ -102,7 +103,10 @@ import {
 } from "./modules/streaming/streamloop.ts";
 import { initDeviceStats } from "./modules/system/device-stats.ts";
 import { initRevisions } from "./modules/system/revisions.ts";
-import { initHardwareMonitoring } from "./modules/system/sensors.ts";
+import {
+	initHardwareMonitoring,
+	stopDmesgWatchers,
+} from "./modules/system/sensors.ts";
 import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updates.ts";
 import { getSshStatus } from "./modules/system/ssh.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
@@ -146,7 +150,9 @@ if (isDevelopment()) {
 }
 
 checkExecPath(srtlaSendExec);
-checkExecPath(bcrptExec);
+if (setup.bcrpt_path) {
+	checkExecPath(bcrptExec);
+}
 
 // CRITICAL boot phase. A failure here is genuinely fatal: the device cannot
 // serve correct state without its config, so runCritical() logs loudly and
@@ -246,7 +252,7 @@ void initRevisions();
 initHardwareMonitoring();
 initDeviceStats();
 await guardNonCritical("rtmp-ingest", initRTMPIngestStats);
-initSRTIngest();
+await guardNonCritical("srt-ingest", initSRTIngest);
 void getSshStatus();
 logger.info(bootTimer.phase("🖥️", "hardware"));
 
@@ -284,7 +290,9 @@ startAudioDeviceWatcher(() => getStreamingProcesses().length > 0);
 // Hotplug input discovery (Task 34): v4l2 + unified audio scan, broadcasts the
 // `devices` payload that feeds the cerastream picker + live switch-input RPC.
 startDeviceDiscovery();
-void startBcrpt();
+if (setup.bcrpt_path) {
+	void startBcrpt();
+}
 logger.info(bootTimer.phase("🎵", "audio & devices"));
 
 // Don't autostart when restarting CeraLive after a software update or after a crash
@@ -353,20 +361,22 @@ process.on("SIGUSR1", function reconcileAddons() {
 // enable/disable choice; no-ops on a dev/emulated host and swallows all failures.
 void reconcileIngestDesiredState();
 
-// Graceful shutdown: drain streaming subprocesses (SIGTERM → SIGKILL after the
-// grace window) before exit so no orphaned srtla_send survives. Guarded so a
-// second signal mid-drain is ignored.
-let shuttingDown = false;
-function handleTerminationSignal(signal: NodeJS.Signals): void {
-	if (shuttingDown) return;
-	shuttingDown = true;
-	logger.info(`received ${signal}; shutting down streaming processes`);
-	void gracefulShutdown().then(() => {
-		process.exit(0);
-	});
-}
-process.on("SIGTERM", () => handleTerminationSignal("SIGTERM"));
-process.on("SIGINT", () => handleTerminationSignal("SIGINT"));
+process.on("SIGTERM", () =>
+	handleTerminationSignal("SIGTERM", {
+		gracefulShutdown,
+		stopSrtIngest: stopSRTIngest,
+		stopDmesgWatchers,
+		exit: process.exit,
+	}),
+);
+process.on("SIGINT", () =>
+	handleTerminationSignal("SIGINT", {
+		gracefulShutdown,
+		stopSrtIngest: stopSRTIngest,
+		stopDmesgWatchers,
+		exit: process.exit,
+	}),
+);
 
 logger.info(bootTimer.phase("▶️", "autostart & reconciler"));
 

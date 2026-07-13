@@ -140,9 +140,9 @@ async function openDisplayDialog(page: Page): Promise<void> {
 	).toBeVisible();
 }
 
-// `dev.emit('kiosk', …)` broadcasts to all clients on ONE backend; each worker
-// now owns its own backend with a single page, so parallel tests cannot
-// cross-contaminate each other's injected state.
+// `dev.emit('kiosk', …)` delivers only to the calling authenticated socket, so
+// the injected kiosk state remains page-local. Worker-scoped backend reuse does
+// not broaden that delivery.
 
 test.describe("On-Device Display settings surface (DC-2)", () => {
 	test.skip(

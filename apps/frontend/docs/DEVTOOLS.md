@@ -66,13 +66,13 @@ The DevTools tab displays real-time information about the current development en
 #### 🔧 Mock Hardware Switcher
 - **Purpose**: Switch between hardware profiles to test different pipeline configurations
 - **Features**:
-  - **Hardware Profiles**: Switch between Jetson, RK3588, N100, and Generic (software)
+  - **Hardware Profiles**: Switch between RK3588, N100, and Generic (software); Jetson is DEFERRED — not currently planned
   - **Live Reload**: Pipelines update immediately and broadcast to all connected clients
   - **Quick Switch Buttons**: Color-coded buttons for rapid hardware switching
   - **Dropdown Selector**: Detailed view with hardware descriptions
   - **State Display**: Shows effective hardware and current mock override
 - **Hardware Types**:
-  - 🟢 **NVIDIA Jetson**: NVIDIA nvenc hardware encoding
+  - 🟢 **NVIDIA Jetson**: DEFERRED — not currently planned
   - 🟠 **Rockchip RK3588**: Rockchip MPP hardware encoding (supports 4K)
   - 🔵 **Intel N100**: Intel VAAPI hardware encoding
   - ⚪ **Generic**: Software x264/x265 encoding

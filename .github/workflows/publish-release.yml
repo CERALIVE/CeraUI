@@ -40,6 +40,17 @@ jobs:
       tag: ${{ steps.calver.outputs.tag }}
       is_beta: ${{ steps.calver.outputs.is_beta }}
     steps:
+      - name: Verify default-branch dispatch
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          DEFAULT_REF="refs/heads/${DEFAULT_BRANCH}"
+          test "$DISPATCH_REF" = "$DEFAULT_REF" || {
+            echo "::error::releases must be dispatched from ${DEFAULT_REF}, not ${DISPATCH_REF}"
+            exit 1
+          }
+
       - name: Checkout CeraUI
         uses: actions/checkout@v7
         with:
@@ -50,9 +61,21 @@ jobs:
         id: calver
         working-directory: CeraUI
         env:
-          RELEASE_TYPE: ${{ github.event.inputs.release_type }}
-          FORCE_VERSION: ${{ github.event.inputs.force_version }}
+          RELEASE_TYPE_INPUT: ${{ inputs.release_type }}
+          FORCE_VERSION_INPUT: ${{ inputs.force_version }}
         run: |
+          RELEASE_TYPE="$RELEASE_TYPE_INPUT"
+          FORCE_VERSION="$FORCE_VERSION_INPUT"
+          STABLE_VERSION_PATTERN='^[0-9]{4}\.([1-9]|1[0-2])\.(0|[1-9][0-9]*)$'
+          STABLE_TAG_PATTERN='^v[0-9]{4}\.([1-9]|1[0-2])\.(0|[1-9][0-9]*)$'
+          BETA_VERSION_PATTERN='^[0-9]{4}\.([1-9]|1[0-2])\.(0|[1-9][0-9]*)-beta\.([1-9][0-9]*)$'
+          BETA_TAG_PATTERN='^v[0-9]{4}\.([1-9]|1[0-2])\.(0|[1-9][0-9]*)-beta\.([1-9][0-9]*)$'
+
+          if [[ "$RELEASE_TYPE" != "stable" && "$RELEASE_TYPE" != "beta" ]]; then
+            echo "::error::release_type must be stable or beta"
+            exit 1
+          fi
+
           # Get current year and month
           YEAR=$(date +%Y)
           MONTH=$(date +%-m)  # No leading zero
@@ -60,8 +83,15 @@ jobs:
 
           # Check if force_version is provided
           if [ -n "$FORCE_VERSION" ]; then
+            if [[ "$RELEASE_TYPE" != "stable" ]]; then
+              echo "::error::force_version is supported only for stable releases"
+              exit 1
+            fi
+            if [[ ! "$FORCE_VERSION" =~ $STABLE_VERSION_PATTERN ]]; then
+              echo "::error::force_version must use stable CalVer YYYY.M.PATCH"
+              exit 1
+            fi
             VERSION="$FORCE_VERSION"
-            echo "📌 Using forced version: $VERSION"
           else
             # Find existing tags for this year.month
             PREFIX="v${YEAR}.${MONTH}"
@@ -79,14 +109,14 @@ jobs:
               fi
 
               # Get the base patch (latest stable or 0)
-              LATEST_STABLE=$(git tag -l "${PREFIX}.*" | grep -v beta | sed "s/${PREFIX}\.//" | sort -n | tail -1)
+              LATEST_STABLE=$(git tag -l "${PREFIX}.*" | sed -n "/-beta/!s/${PREFIX}\.//p" | sort -n | tail -1)
               PATCH=${LATEST_STABLE:-0}
               NEXT_PATCH=$((PATCH + 1))
 
               VERSION="${YEAR}.${MONTH}.${NEXT_PATCH}-beta.${BETA_NUM}"
             else
               # For stable: find highest patch number (excluding betas)
-              LATEST_PATCH=$(git tag -l "${PREFIX}.*" | grep -v beta | sed "s/${PREFIX}\.//" | sort -n | tail -1)
+              LATEST_PATCH=$(git tag -l "${PREFIX}.*" | sed -n "/-beta/!s/${PREFIX}\.//p" | sort -n | tail -1)
 
               if [ -z "$LATEST_PATCH" ]; then
                 PATCH=0
@@ -102,6 +132,23 @@ jobs:
 
           TAG="v${VERSION}"
 
+          if [[ "$IS_BETA" == "true" ]]; then
+            if [[ ! "$VERSION" =~ $BETA_VERSION_PATTERN || ! "$TAG" =~ $BETA_TAG_PATTERN ]]; then
+              echo "::error::calculated beta version/tag is invalid"
+              exit 1
+            fi
+          elif [[ ! "$VERSION" =~ $STABLE_VERSION_PATTERN || ! "$TAG" =~ $STABLE_TAG_PATTERN ]]; then
+            echo "::error::calculated stable version/tag is invalid"
+            exit 1
+          fi
+          if [[ "$TAG" != "v$VERSION" ]]; then
+            echo "::error::tag must equal v<version>"
+            exit 1
+          fi
+          if [[ -n "$FORCE_VERSION" ]]; then
+            echo "📌 Using forced version: $VERSION"
+          fi
+
           {
             echo "version=${VERSION}"
             echo "tag=${TAG}"
@@ -112,20 +159,112 @@ jobs:
           echo "🏷️  Tag: ${TAG}"
           echo "🧪 Beta: ${IS_BETA}"
 
-      - name: Version Summary
+      - name: Ensure release target is unused
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.calver.outputs.tag }}
         run: |
+          require_missing() {
+            local endpoint="$1"
+            local label="$2"
+            local response
+            local status
+
+            set +e
+            response="$(gh api --include "$endpoint" 2>&1)"
+            status=$?
+            set -e
+
+            if [ "$status" -eq 0 ]; then
+              echo "::error::${label} ${TAG} already exists"
+              exit 1
+            fi
+            if ! grep -Eq '^HTTP/[0-9.]+ 404 ' <<< "$response"; then
+              echo "::error::failed to verify that ${label} ${TAG} is unused"
+              printf '%s\n' "$response" >&2
+              exit 1
+            fi
+          }
+
+          require_missing "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" "git tag"
+          require_missing "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" "GitHub release"
+
+      - name: Version Summary
+        env:
+          VERSION: ${{ steps.calver.outputs.version }}
+          TAG: ${{ steps.calver.outputs.tag }}
+          IS_BETA: ${{ steps.calver.outputs.is_beta }}
+        run: |
+          TYPE_LABEL=$([[ "$IS_BETA" == "true" ]] && echo "🧪 Beta" || echo "✅ Stable")
           {
             echo "## 🏷️ Version Calculated"
             echo ""
-            echo "**Version:** \`${{ steps.calver.outputs.version }}\`"
-            echo "**Tag:** \`${{ steps.calver.outputs.tag }}\`"
-            echo "**Type:** ${{ steps.calver.outputs.is_beta == 'true' && '🧪 Beta' || '✅ Stable' }}"
+            echo "**Version:** \`${VERSION}\`"
+            echo "**Tag:** \`${TAG}\`"
+            echo "**Type:** ${TYPE_LABEL}"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  release-package-contracts:
+    name: Release/package contracts
+    runs-on: ubuntu-latest
+    needs: calculate-version
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v7
+        with:
+          path: CeraUI
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Cache Bun install
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-store-
+
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: bun install --frozen-lockfile
+
+      - name: Run release/package contracts
+        working-directory: CeraUI
+        run: bun run test:release-package-contracts
+
+      - name: Verify package version matches release
+        working-directory: CeraUI
+        env:
+          RELEASE_VERSION: ${{ needs.calculate-version.outputs.version }}
+        run: |
+          PACKAGE_VERSION="$(bun -p 'require("./package.json").version')"
+          test "$PACKAGE_VERSION" = "$RELEASE_VERSION" || {
+            echo "::error::package.json version ${PACKAGE_VERSION} does not match release ${RELEASE_VERSION}"
+            exit 1
+          }
+
+      - name: Lint and typecheck
+        working-directory: CeraUI
+        run: bun run lint
+
+      - name: Prepare backend test runtime directories
+        run: sudo install -d -o "$(id -u)" -g "$(id -g)" /run/ceralive /var/run/bcrpt
+
+      - name: Run service contract
+        working-directory: CeraUI
+        run: bun run test:service-contract
+
+      - name: Run unit tests
+        working-directory: CeraUI
+        run: bun run test
 
   build-ceraui-system:
     name: Build CeraUI Full System
     runs-on: ubuntu-latest
-    needs: calculate-version
+    needs: [calculate-version, release-package-contracts]
     strategy:
       matrix:
         architecture: [arm64, amd64]
@@ -166,11 +305,14 @@ jobs:
 
       - name: Rename archive for release
         working-directory: CeraUI
+        env:
+          RELEASE_VERSION: ${{ needs.calculate-version.outputs.version }}
+          RELEASE_ARCH: ${{ matrix.architecture }}
         run: |
           cd dist/compressed
           # Find the generated archive and rename to clean version
           for f in *.tar.gz; do
-            mv "$f" "ceraui-${{ needs.calculate-version.outputs.version }}-${{ matrix.architecture }}.tar.gz"
+            mv "$f" "ceraui-${RELEASE_VERSION}-${RELEASE_ARCH}.tar.gz"
           done
 
       - name: Upload compressed distribution (${{ matrix.architecture }})
@@ -182,7 +324,7 @@ jobs:
   build-debian-package:
     name: Build Debian Package
     runs-on: ubuntu-latest
-    needs: calculate-version
+    needs: [calculate-version, release-package-contracts]
     strategy:
       matrix:
         architecture: [arm64, amd64]
@@ -236,6 +378,7 @@ jobs:
   publish-federation:
     name: Publish Federation Bundles to R2
     runs-on: ubuntu-latest
+    needs: [calculate-version, release-package-contracts]
     permissions:
       contents: read
     steps:
@@ -265,6 +408,17 @@ jobs:
       - name: Install dependencies
         working-directory: CeraUI
         run: bun install --frozen-lockfile
+
+      - name: Verify federation version matches the release
+        working-directory: CeraUI
+        env:
+          RELEASE_VERSION: ${{ needs.calculate-version.outputs.version }}
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          test "$PACKAGE_VERSION" = "$RELEASE_VERSION" || {
+            echo "::error::package.json version ${PACKAGE_VERSION} does not match release ${RELEASE_VERSION}"
+            exit 1
+          }
 
       # Vite lib-mode federation build (separate from the SPA/backend build, which
       # rm -rf's dist/). Run standalone so nothing wipes dist/federation/<version>.
@@ -307,10 +461,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # <ceraui-version> is the workspace package.json version (CalVer) — the
-          # same source build:federation + sign-federation.ts use, so the upload
-          # path matches dist/federation/<version> and the manifest's ceraUiVersion.
-          VERSION="$(node -p "require('./package.json').version")"
+          VERSION="$(bun -p "require('./package.json').version")"
           FED_DIR="dist/federation/${VERSION}"
           DEST_PREFIX="ui-bundle/${VERSION}"
 
@@ -320,48 +471,9 @@ jobs:
 
           export AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}"
           export AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}"
-          # R2 rejects aws-cli >= 2.23 default trailing checksums; request when_required only.
           export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
           export AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
-          # Canonicalize endpoint to scheme://host — a stray path/bucket suffix
-          # silently corrupts path-style addressing (writes to a doubled prefix).
-          R2_ENDPOINT="$(printf '%s' "$R2_ENDPOINT" | sed -E 's#^([a-zA-Z][a-zA-Z0-9+.-]*://[^/]+).*#\1#')"
-
-          # Content-type pinned per file (matches the apt-worker route contract):
-          # .js loads via dynamic import() under a strict CSP so MUST be
-          # application/javascript; manifest.json.sig ends with .sig (a signature).
-          content_type_for() {
-            case "$1" in
-              *.sri) echo "text/plain; charset=utf-8" ;;
-              manifest.json) echo "application/json; charset=utf-8" ;;
-              *.sig) echo "application/octet-stream" ;;
-              *.js) echo "application/javascript; charset=utf-8" ;;
-              *) echo "application/octet-stream" ;;
-            esac
-          }
-
-          shopt -s nullglob
-          uploaded=0
-          # *.sig covers manifest.json.sig; manifest.json is matched explicitly.
-          for f in "$FED_DIR"/*.js "$FED_DIR"/*.sri "$FED_DIR"/*.sig "$FED_DIR"/manifest.json; do
-            name="$(basename "$f")"
-            ct="$(content_type_for "$name")"
-            key="${DEST_PREFIX}/${name}"
-            echo "↑ ${key}  (${ct})"
-            aws s3 cp "$f" "s3://${R2_BUCKET}/${key}" \
-              --endpoint-url "$R2_ENDPOINT" \
-              --content-type "$ct" \
-              --no-progress
-            # Self-check: confirm the object landed at the intended key — a bad
-            # endpoint can make cp "succeed" while writing to the wrong key.
-            aws s3api head-object --bucket "$R2_BUCKET" --key "$key" \
-              --endpoint-url "$R2_ENDPOINT" >/dev/null \
-              || { echo "::error::upload self-check failed for ${key}"; exit 1; }
-            uploaded=$((uploaded + 1))
-          done
-
-          [ "$uploaded" -gt 0 ] || { echo "::error::no federation artifacts found to upload"; exit 1; }
-          echo "✅ uploaded ${uploaded} artifact(s) to s3://${R2_BUCKET}/${DEST_PREFIX}/"
+          bash scripts/build/publish-federation-immutable.sh "$FED_DIR" "$DEST_PREFIX"
 
       - name: Federation Publish Summary
         if: success()
@@ -379,7 +491,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [calculate-version, build-ceraui-system, build-debian-package]
+    needs: [calculate-version, build-ceraui-system, build-debian-package, publish-federation]
     permissions:
       contents: write
     steps:
@@ -461,7 +573,7 @@ jobs:
             echo "### System Archives (with install scripts)"
             echo "| Architecture | File | Target Hardware |"
             echo "|--------------|------|-----------------|"
-            echo "| ARM64 | \`ceraui-${VERSION}-arm64.tar.gz\` | Orange Pi 5+, Rock 5B+, Jetson Orin |"
+            echo "| ARM64 | \`ceraui-${VERSION}-arm64.tar.gz\` | Orange Pi 5+, Rock 5B+ |"
             echo "| AMD64 | \`ceraui-${VERSION}-amd64.tar.gz\` | Intel N100/N200, AMD Ryzen |"
             echo ""
             echo "### Debian Packages (apt/dpkg install)"
@@ -487,28 +599,92 @@ jobs:
           echo "📄 Generated release body:"
           cat release-body.md
 
+      - name: Ensure release target is still unused
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.calculate-version.outputs.tag }}
+        run: |
+          require_missing() {
+            local endpoint="$1"
+            local label="$2"
+            local response
+            local status
+
+            set +e
+            response="$(gh api --include "$endpoint" 2>&1)"
+            status=$?
+            set -e
+
+            if [ "$status" -eq 0 ]; then
+              echo "::error::${label} ${TAG} appeared while release assets were building"
+              exit 1
+            fi
+            if ! grep -Eq '^HTTP/[0-9.]+ 404 ' <<< "$response"; then
+              echo "::error::failed to re-verify that ${label} ${TAG} is unused"
+              printf '%s\n' "$response" >&2
+              exit 1
+            fi
+          }
+
+          require_missing "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" "git tag"
+          require_missing "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" "GitHub release"
+
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.calculate-version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: CeraUI ${{ needs.calculate-version.outputs.tag }}${{ needs.calculate-version.outputs.is_beta == 'true' && ' (Beta)' || '' }}
           body_path: CeraUI/release-body.md
           files: final-assets/*
           draft: false
           prerelease: ${{ needs.calculate-version.outputs.is_beta == 'true' }}
 
-      - name: Release Summary
+      - name: Verify release tag provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.calculate-version.outputs.tag }}
+          EXPECTED_COMMIT: ${{ github.sha }}
         run: |
+          ACTUAL_COMMIT="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${TAG}" --jq '.sha')"
+          test "$ACTUAL_COMMIT" = "$EXPECTED_COMMIT" || {
+            echo "::error::release tag ${TAG} points to ${ACTUAL_COMMIT}, expected ${EXPECTED_COMMIT}"
+            exit 1
+          }
+
+      - name: Release Summary
+        env:
+          VERSION: ${{ needs.calculate-version.outputs.version }}
+          TAG: ${{ needs.calculate-version.outputs.tag }}
+          IS_BETA: ${{ needs.calculate-version.outputs.is_beta }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          TYPE_LABEL=$([[ "$IS_BETA" == "true" ]] && echo "🧪 Beta (Pre-release)" || echo "✅ Stable")
           {
             echo "## 🎉 Release Created!"
             echo ""
-            echo "**Version:** \`${{ needs.calculate-version.outputs.version }}\`"
-            echo "**Tag:** \`${{ needs.calculate-version.outputs.tag }}\`"
-            echo "**Type:** ${{ needs.calculate-version.outputs.is_beta == 'true' && '🧪 Beta (Pre-release)' || '✅ Stable' }}"
+            echo "**Version:** \`${VERSION}\`"
+            echo "**Tag:** \`${TAG}\`"
+            echo "**Type:** ${TYPE_LABEL}"
             echo ""
             echo "### Assets Uploaded:"
             echo ""
             for f in final-assets/*; do echo "- \`$(basename "$f")\`"; done
             echo ""
-            echo "🔗 [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.calculate-version.outputs.tag }})"
+            echo "🔗 [View Release](https://github.com/${REPOSITORY}/releases/tag/${TAG})"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  dispatch-apt-reindex:
+    name: Dispatch stable APT reindex
+    runs-on: ubuntu-latest
+    needs: [calculate-version, create-release]
+    if: needs.calculate-version.outputs.is_beta != 'true'
+    steps:
+      - name: Trigger centralized APT reindex
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ secrets.CERALIVE_DISPATCH_TOKEN }}
+          repository: CERALIVE/apt-worker
+          event-type: apt-reindex
+          client-payload: >-
+            {"component":"ceralive-device","repo":"CeraUI","channel":"stable","tag":"${{ needs.calculate-version.outputs.tag }}","version":"${{ needs.calculate-version.outputs.version }}"}

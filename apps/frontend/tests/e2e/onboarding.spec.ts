@@ -22,7 +22,7 @@
  * screenshots, never fixed-delay waits, never raw tab-id selectors. A page-local
  * `routeWebSocket` proxy forces the first-run state (no server + no network) by
  * stripping the seeded server fields and dropping every `netif` frame, so the
- * scenario can never leak into a sibling spec running in parallel.
+ * scenario remains page-local and cannot persist into this worker's later tests.
  */
 import type { Page, WebSocketRoute } from '@playwright/test';
 
@@ -43,7 +43,7 @@ interface WsHooks {
  * survives a page reload, so a persisted-dismissal check sees the same state.
  */
 async function attachWs(page: Page, hooks: WsHooks): Promise<void> {
-	await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws: WebSocketRoute) => {
+	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws: WebSocketRoute) => {
 		const server = ws.connectToServer();
 		ws.onMessage((message) => server.send(message));
 		server.onMessage((message) => {

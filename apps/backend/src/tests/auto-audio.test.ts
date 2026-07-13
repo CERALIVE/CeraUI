@@ -8,6 +8,9 @@ import {
 	mock,
 	test,
 } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
 	type CerastreamClient,
@@ -20,6 +23,8 @@ import type { RuntimeConfig } from "../helpers/config-schemas.ts";
 import { getConfig } from "../modules/config.ts";
 import { setup } from "../modules/setup.ts";
 import {
+	deriveAudioSources,
+	getAudioDevices,
 	setMockAudioDevicesProvider,
 	updateAudioDevices,
 } from "../modules/streaming/audio.ts";
@@ -1048,16 +1053,68 @@ describe("refreshResolvedAsrcPreview — live-state freshness + reload hydration
 	});
 });
 
+describe("updateAudioDevices initial enumeration", () => {
+	let audioRoot: string | undefined;
+
+	afterEach(() => {
+		if (audioRoot !== undefined)
+			rmSync(audioRoot, { recursive: true, force: true });
+		audioRoot = undefined;
+	});
+
+	test("a missing audio directory resolves and publishes the empty-device state", async () => {
+		audioRoot = mkdtempSync(join(tmpdir(), "auto-audio-missing-"));
+		const cardDir = join(audioRoot, "card0");
+		mkdirSync(cardDir);
+		writeFileSync(join(cardDir, "id"), "usbaudio\n");
+		await updateAudioDevices(audioRoot);
+		expect(getAudioDevices()).toHaveProperty("USB audio", "usbaudio");
+
+		rmSync(audioRoot, { recursive: true });
+		await updateAudioDevices(audioRoot);
+
+		expect(getAudioDevices()).toEqual({
+			"No audio": "No audio",
+			"Pipeline default": "Pipeline default",
+		});
+		expect(deriveAudioSources()).toEqual([
+			{ id: "No audio", kind: "none", labelKey: "audio.sources.noAudio" },
+			{
+				id: "Pipeline default",
+				kind: "pipeline_default",
+				labelKey: "audio.sources.pipelineDefault",
+			},
+		]);
+	});
+
+	test("a non-ENOENT enumeration error still rejects", async () => {
+		audioRoot = mkdtempSync(join(tmpdir(), "auto-audio-not-dir-"));
+		const notDirectory = join(audioRoot, "audio-file");
+		writeFileSync(notDirectory, "not a directory\n");
+		const before = getAudioDevices();
+
+		await expect(updateAudioDevices(notDirectory)).rejects.toThrow("ENOTDIR");
+		expect(getAudioDevices()).toEqual(before);
+	});
+});
+
 // ─── Lifecycle (b): a hotplug re-enumeration while streaming stays frozen ─────
 
 describe("updateAudioDevices re-enumeration while streaming (Oracle R10-1)", () => {
+	let audioDir: string | undefined;
+
 	afterEach(() => {
+		if (audioDir !== undefined)
+			rmSync(audioDir, { recursive: true, force: true });
+		audioDir = undefined;
+		delete getConfig().asrc;
 		setAutoAudioBroadcaster(undefined);
 		resetAutoAudioState();
 		updateStatus(false);
 	});
 
 	test("a hotplug updateAudioDevices() while STREAMING does NOT change resolved_asrc", async () => {
+		audioDir = mkdtempSync(join(tmpdir(), "auto-audio-streaming-"));
 		setResolvedAsrcFromStart("HDMI", "hdmi");
 		updateStatus(true);
 		const broadcasts: Array<Record<string, unknown>> = [];
@@ -1066,11 +1123,10 @@ describe("updateAudioDevices re-enumeration while streaming (Oracle R10-1)", () 
 		);
 		getConfig().asrc = AUDIO_SOURCE_AUTO;
 
-		await updateAudioDevices();
+		await updateAudioDevices(audioDir);
 
 		expect(getResolvedAsrc()).toBe("HDMI");
 		expect(getResolvedAsrcReason()).toBe("hdmi");
 		expect(broadcasts).toEqual([]);
-		delete getConfig().asrc;
 	});
 });

@@ -127,9 +127,6 @@ export async function start(
 		return;
 	}
 
-	// A structured pre-launch failure (audio-source probe) already reset the
-	// streaming flag in startStream; return it so the RPC surface carries the
-	// dual-field reason (C7).
 	return result;
 }
 

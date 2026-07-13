@@ -22,8 +22,9 @@
  * Conventions (PLAYBOOK.md): role/text/ARIA assertions only — never screenshots,
  * never fixed-delay waits, never raw tab-id selectors. Navigation goes through
  * `navigateTo()`. Each state is isolated per-page with a `routeWebSocket` proxy
- * (no global `dev.emit` broadcast) so a state forced here can never leak into a
- * sibling spec running in parallel. Every suite includes an axe gate.
+ * (no `dev.emit` backend mutation), so forced state remains page-local and
+ * cannot persist into a later test assigned to this worker. Every suite includes
+ * an axe gate.
  */
 import type { Page, WebSocketRoute } from '@playwright/test';
 
@@ -58,7 +59,7 @@ interface WsHandle {
 async function attachWs(page: Page, hooks: WsHooks): Promise<WsHandle> {
 	let route: WebSocketRoute | null = null;
 
-	await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 		route = ws;
 		const server = ws.connectToServer();
 

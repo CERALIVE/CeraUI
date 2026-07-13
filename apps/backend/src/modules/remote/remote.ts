@@ -57,6 +57,7 @@ import {
 	verifyStubDeviceToken,
 } from "../pairing/device-token.ts";
 import { setup } from "../setup.ts";
+import { isRealDevice } from "../system/device-detection.ts";
 import { addAuthedSocket } from "../ui/auth.ts";
 import { type StatusResponseMessage, sendInitialStatus } from "../ui/status.ts";
 import {
@@ -140,11 +141,29 @@ export function isPasetoVerificationActive(): boolean {
 	return Boolean(process.env[DEVICE_TOKEN_PUBLIC_KEY_ENV]?.trim());
 }
 
+export function isProductionRuntime(): boolean {
+	return process.env.NODE_ENV === "production";
+}
+
 export type RemoteRepairReason = "tokenless-on-paseto-activation";
 
 export type RemoteAuthDecision =
 	| { action: "present"; payload: AuthEncoderPayload }
 	| { action: "force-repair"; reason: RemoteRepairReason };
+
+export type RemoteAuthDecisionOptions = {
+	readonly isRealDevice?: boolean;
+};
+
+function shouldFailClosedRemoteAuth(
+	options: RemoteAuthDecisionOptions,
+): boolean {
+	return (
+		isPasetoVerificationActive() ||
+		isProductionRuntime() ||
+		options.isRealDevice === true
+	);
+}
 
 /**
  * Fork between "grant control" and "route to re-pair" for a stored credential
@@ -159,16 +178,24 @@ export function resolveRemoteAuthDecision(
 	credential: string,
 	version: number,
 	now: number = Date.now(),
+	options: RemoteAuthDecisionOptions = {},
 ): RemoteAuthDecision {
+	const pasetoActive = isPasetoVerificationActive();
+	if (!pasetoActive && shouldFailClosedRemoteAuth(options)) {
+		return { action: "force-repair", reason: "tokenless-on-paseto-activation" };
+	}
+
 	const claims = verifyStubDeviceToken(credential, now);
 
-	if (claims === null && isPasetoVerificationActive()) {
+	if (claims === null && shouldFailClosedRemoteAuth(options)) {
 		return { action: "force-repair", reason: "tokenless-on-paseto-activation" };
 	}
 
 	return {
 		action: "present",
-		payload: buildAuthEncoderPayload(credential, version, now),
+		payload: claims
+			? { key: credential, version, sub_status: claims.sub_status }
+			: buildAuthEncoderPayload(credential, version, now),
 	};
 }
 
@@ -396,7 +423,7 @@ async function remoteConnect() {
 	remoteWs.on("error", (err) => {
 		logger.error(`remote error: ${err.message}`);
 	});
-	remoteWs.on("open", function () {
+	remoteWs.on("open", async function () {
 		if (!fromCache) {
 			void dnsCacheValidate(endpointHost);
 		}
@@ -404,9 +431,12 @@ async function remoteConnect() {
 		const config = getConfig();
 		if (!config.remote_key) return;
 
+		const realDevice = await isRealDevice();
 		const decision = resolveRemoteAuthDecision(
 			config.remote_key,
 			protocolVersion,
+			Date.now(),
+			{ isRealDevice: realDevice },
 		);
 		if (decision.action === "force-repair") {
 			forceRepairMigration(decision.reason);
@@ -448,6 +478,7 @@ export async function initRemote() {
 export type SetRemoteConfigParams = {
 	remote_key?: string;
 	token?: string;
+	device_id?: string;
 	provider?: ProviderSelection;
 	custom_provider?: {
 		name: string;
@@ -476,6 +507,9 @@ export async function setRemoteConfig(params: SetRemoteConfigParams) {
 		throw new Error("setRemoteConfig requires either remote_key or token");
 	}
 	config.remote_key = remoteKey;
+	if (params.device_id !== undefined) {
+		config.device_id = params.device_id;
+	}
 	config.relay_server = undefined;
 	config.relay_account = undefined;
 

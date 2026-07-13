@@ -25,9 +25,14 @@ CeraUI uses a single WebSocket connection for all device control and real-time d
 
 All messages are UTF-8 JSON strings sent over a single WebSocket connection. There are two distinct envelope shapes: **oRPC call/response** and **broadcast push**.
 
+```text
+ws://<device>/ws
 ```
-ws://<device>:<port>   (default port 3001)
-```
+
+Production uses the page's same origin (port 80 by default, or 443 behind TLS).
+The split development stack uses `ws://localhost:3002/ws`; functional E2E pages
+instead select their worker-scoped 31xx backend locally or route through the CI
+preview on port 6173.
 
 The backend accepts only one message format per direction:
 

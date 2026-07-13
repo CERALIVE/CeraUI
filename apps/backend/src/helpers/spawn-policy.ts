@@ -259,9 +259,9 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			shutdownAbort: false,
 			lifetimeTimeoutExempt: true,
 		},
-		status: "pending",
+		status: "enforced",
 		mechanism:
-			"long-lived SRT→UDP relay; readiness inferred from stderr 'Accepted SRT source connection'. Shutdown-cleanup wiring scheduled (superviseWorker adoption)",
+			"superviseWorker startup-readiness gate + stopSRTIngest() shutdown cleanup; no process-lifetime timeout",
 	},
 	{
 		id: "selfFencing.spawnOp",
@@ -293,9 +293,9 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			shutdownAbort: true,
 			lifetimeTimeoutExempt: true,
 		},
-		status: "pending",
+		status: "enforced",
 		mechanism:
-			"kernel-log undervoltage watcher; shutdown-abort wiring scheduled (spawnWatcher adoption)",
+			"spawnWatcher runs dmesg -w with shutdown-abort cleanup and no process-lifetime timeout",
 	},
 	{
 		id: "sensors.dmesgRk3588",
@@ -310,9 +310,9 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			shutdownAbort: true,
 			lifetimeTimeoutExempt: true,
 		},
-		status: "pending",
+		status: "enforced",
 		mechanism:
-			"kernel-log HDMI watcher; shutdown-abort wiring scheduled (spawnWatcher adoption)",
+			"spawnWatcher runs dmesg -w with shutdown-abort cleanup and no process-lifetime timeout",
 	},
 	{
 		id: "softwareUpdates.aptGet",
@@ -568,6 +568,8 @@ export async function spawnWithTimeout(
 
 /** Minimal Subprocess shape a supervised worker / watcher depends on. */
 export interface ManagedProcess {
+	readonly stdout?: ReadableStream<Uint8Array> | null;
+	readonly stderr?: ReadableStream<Uint8Array> | null;
 	readonly exited: Promise<number>;
 	exitCode: number | null;
 	signalCode: NodeJS.Signals | null;
@@ -609,11 +611,11 @@ export function superviseWorker(
 	const command = argv.join(" ");
 	const proc: ManagedProcess = opts?.spawn
 		? opts.spawn(argv)
-		: (Bun.spawn(argv, {
+		: Bun.spawn(argv, {
 				stdin: "ignore",
 				stdout: "pipe",
 				stderr: "pipe",
-			}) as unknown as ManagedProcess);
+			});
 
 	const startupTimeoutMs = opts?.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS;
 	const waitForReady = opts?.waitForReady ?? (() => Promise.resolve());
@@ -714,11 +716,11 @@ export function spawnWatcher(
 	const command = argv.join(" ");
 	const proc: ManagedProcess = opts?.spawn
 		? opts.spawn(argv)
-		: (Bun.spawn(argv, {
+		: Bun.spawn(argv, {
 				stdin: "ignore",
 				stdout: "pipe",
 				stderr: "pipe",
-			}) as unknown as ManagedProcess);
+			});
 
 	const abort = (): void => {
 		if (proc.exitCode !== null || proc.signalCode !== null) return;

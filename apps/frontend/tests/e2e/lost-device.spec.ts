@@ -1,6 +1,6 @@
 import type { Page, WebSocketRoute } from "@playwright/test";
 
-import { expect, test } from "./fixtures/index.js";
+import { expect, PageRpc, test } from "./fixtures/index.js";
 import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
 
 /**
@@ -15,8 +15,8 @@ import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
  * backend so its own `buildSources` synthesizes the lost row and rebroadcasts the
  * `sources`/`devices` snapshots — exactly the on-device path. The direct
  * `streaming.start` refusal is likewise the REAL backend gate
- * (`resolveSourceRouting` → `source_lost`), so the asserted `{success,error,reason}`
- * are genuine wire codes, not a client-side fake.
+ * (`resolveSourceRouting` → `source_lost`), so the asserted `{success,error}`
+ * shape is a genuine wire code, not a client-side fake.
  *
  * The proxy from `source-overhaul.spec.ts` / `truthfulness.spec.ts` is reused as
  * the transport (do NOT invent a new mechanism). For the real-seam lifecycle it is
@@ -41,8 +41,9 @@ const RODE_DISPLAY_NAME = "RØDE HDMI to USB-C: RØDE HDMI";
 
 // ── Test-owned proxy control state (reset per test in each describe's beforeEach) ─
 let pageWs: WebSocketRoute | null = null;
+let pageRpc: PageRpc | null = null;
 // When set, the proxy REFUSES the next `streaming.start` client-side with this
-// reason (never touching the shared backend) so the button-path toast is testable
+// reason (never touching the per-worker backend) so the button-path toast is testable
 // against a GREEN source. Null → the real backend answers every start.
 let fakeStartReason: string | null = null;
 // Drop the backend's own `devices` / `sources` echoes so an INJECTED green source
@@ -60,10 +61,11 @@ function send(payload: unknown): void {
  * fake reason (button-path toast test) and can drop the backend's `devices` /
  * `sources` echoes (so an injected green source list wins).
  */
-async function installWsProxy(page: Page): Promise<void> {
-	await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+async function installWsProxy(page: Page, rpc: PageRpc): Promise<void> {
+	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 		pageWs = ws;
 		const server = ws.connectToServer();
+		rpc.bindConnectionLifecycle(ws, server);
 
 		ws.onMessage((m) => {
 			if (fakeStartReason) {
@@ -75,7 +77,7 @@ async function installWsProxy(page: Page): Promise<void> {
 					};
 					const rpc = Array.isArray(frame.path) ? frame.path.join(".") : null;
 					if (rpc === "streaming.start" && frame.id !== undefined) {
-						// Refuse client-side — NEVER mutate the shared backend's stream
+						// Refuse client-side — NEVER mutate the per-worker backend's stream
 						// state — with the exact structured shape the source_lost gate emits.
 						ws.send(
 							JSON.stringify({
@@ -98,6 +100,7 @@ async function installWsProxy(page: Page): Promise<void> {
 		});
 
 		server.onMessage((m) => {
+			rpc.acceptServerMessage(m);
 			const text = typeof m === "string" ? m : m.toString();
 			try {
 				const frame = JSON.parse(text) as object;
@@ -112,63 +115,39 @@ async function installWsProxy(page: Page): Promise<void> {
 }
 
 // ── Page-context RPC helpers — the REAL seam, dialled over the page's own socket ─
-// Mirrors truthfulness.spec.ts's `import(clientPath)` pattern (a const specifier so
-// the dynamic import is a browser-resolved module, not a build-graph dependency).
+// PageRpc shares the app's authenticated connection, so backend broadcasts and
+// state changes remain on the same production-supported transport.
 
 type AttachResult = { success: boolean; error?: string };
 type StartResult = {
 	success: boolean;
 	is_streaming?: boolean;
 	error?: string;
-	reason?: string;
 };
 
 /** Drive the REAL `streaming.setMockDeviceAttached` (todo 16) from the page. */
 async function setDeviceAttached(
-	page: Page,
+	rpc: PageRpc,
 	inputId: string,
 	attached: boolean,
 ): Promise<AttachResult> {
-	return page.evaluate(
-		async ({ inputId, attached }) => {
-			const clientPath = "/src/lib/rpc/client.ts";
-			const mod = await import(clientPath);
-			return (await mod.rpc.streaming.setMockDeviceAttached({
-				input_id: inputId,
-				attached,
-			})) as { success: boolean; error?: string };
-		},
-		{ inputId, attached },
-	);
+	return rpc.call(["streaming", "setMockDeviceAttached"], {
+		input_id: inputId,
+		attached,
+	});
 }
 
 /** Dispatch the REAL `streaming.start` from the page — its wire codes are asserted. */
-async function directStartStream(page: Page, source: string): Promise<StartResult> {
-	return page.evaluate(
-		async ({ source }) => {
-			const clientPath = "/src/lib/rpc/client.ts";
-			const mod = await import(clientPath);
-			return (await mod.rpc.streaming.start({ source })) as {
-				success: boolean;
-				is_streaming?: boolean;
-				error?: string;
-				reason?: string;
-			};
-		},
-		{ source },
-	);
+async function directStartStream(rpc: PageRpc, source: string): Promise<StartResult> {
+	return rpc.call(["streaming", "start"], { source });
 }
 
 /** Persist config fields over the REAL `streaming.setConfig` from the page. */
 async function setConfig(
-	page: Page,
+	rpc: PageRpc,
 	fields: Record<string, unknown>,
 ): Promise<void> {
-	await page.evaluate(async (fields) => {
-		const clientPath = "/src/lib/rpc/client.ts";
-		const mod = await import(clientPath);
-		await mod.rpc.streaming.setConfig(fields);
-	}, fields);
+	await rpc.call(["streaming", "setConfig"], fields);
 }
 
 test.describe("lost-device lifecycle (real seam)", () => {
@@ -185,7 +164,8 @@ test.describe("lost-device lifecycle (real seam)", () => {
 		dropServerDevices = false;
 		dropServerSources = false;
 
-		await installWsProxy(page);
+		pageRpc = new PageRpc();
+		await installWsProxy(page, pageRpc);
 		await page.goto("/");
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
@@ -194,16 +174,19 @@ test.describe("lost-device lifecycle (real seam)", () => {
 	// Best-effort cleanup: reattach `usb` so a test that leaves it detached (the
 	// reload case) never bleeds into a later test's initial state (same per-worker
 	// backend across the file). Swallow errors — a torn-down page is not a failure.
-	test.afterEach(async ({ page }) => {
-		await setDeviceAttached(page, "usb", true).catch(() => {});
+	test.afterEach(async () => {
+		if (pageRpc) await setDeviceAttached(pageRpc, "usb", true).catch(() => {});
+		pageRpc?.close();
+		pageRpc = null;
 	});
 
 	test("select → detach (grayed row, no coarse duplicate, blocked start) → source_lost wire codes → reattach recovery", async ({
 		page,
 	}) => {
+		if (!pageRpc) throw new Error("page RPC is not installed");
 		// Guarantee a destination target so the reattach Start-enabled gate is
 		// deterministic regardless of the seeded config.json (real setConfig).
-		await setConfig(page, {
+		await setConfig(pageRpc, {
 			srtla_addr: "127.0.0.1",
 			srtla_port: 5000,
 			srt_streamid: "e2e",
@@ -231,7 +214,7 @@ test.describe("lost-device lifecycle (real seam)", () => {
 		await expect(page.getByTestId("source-audio")).toBeVisible();
 
 		// ── 2. DETACH via the REAL seam → the backend synthesizes the lost row. ───
-		const detach = await setDeviceAttached(page, "usb", false);
+		const detach = await setDeviceAttached(pageRpc, "usb", false);
 		expect(detach.success).toBe(true);
 
 		// The lost banner appearing is the transition signal that the real
@@ -267,15 +250,15 @@ test.describe("lost-device lifecycle (real seam)", () => {
 		await expect(page.getByTestId("source-audio")).toBeVisible();
 
 		// ── 3a. Direct streaming.start → EXACT wire codes (not a toast). ──────────
-		const started = await directStartStream(page, "usb");
-		expect(started).toMatchObject({
+		const started = await directStartStream(pageRpc, "usb");
+		expect(started).toEqual({
 			success: false,
+			is_streaming: false,
 			error: "source_lost",
-			reason: "source_lost",
 		});
 
 		// ── 4. REATTACH via the REAL seam → row re-enables, SAME selection kept. ──
-		const reattach = await setDeviceAttached(page, "usb", true);
+		const reattach = await setDeviceAttached(pageRpc, "usb", true);
 		expect(reattach.success).toBe(true);
 
 		await expect(page.getByTestId("source-lost-banner")).toHaveCount(0, {
@@ -294,6 +277,7 @@ test.describe("lost-device lifecycle (real seam)", () => {
 	test("a page reload with the device still detached shows the NAMED grayed row (restart persistence)", async ({
 		page,
 	}) => {
+		if (!pageRpc) throw new Error("page RPC is not installed");
 		// Select `usb`, then detach it (real seam). The SAME per-worker backend keeps
 		// BOTH the persisted config.source and the detached mock state across a
 		// browser reload — so this exercises the across-restart retention path
@@ -304,7 +288,7 @@ test.describe("lost-device lifecycle (real seam)", () => {
 		await expect(usbRow).toHaveAttribute("data-selected", "true", {
 			timeout: 15_000,
 		});
-		expect((await setDeviceAttached(page, "usb", false)).success).toBe(true);
+		expect((await setDeviceAttached(pageRpc, "usb", false)).success).toBe(true);
 		await expect(page.getByTestId("source-lost-banner")).toBeVisible({
 			timeout: 15_000,
 		});
@@ -413,10 +397,16 @@ test.describe("lost-source start-failure copy (button path)", () => {
 		dropServerDevices = true;
 		dropServerSources = true;
 
-		await installWsProxy(page);
+		pageRpc = new PageRpc();
+		await installWsProxy(page, pageRpc);
 		await page.goto("/");
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
+	});
+
+	test.afterEach(() => {
+		pageRpc?.close();
+		pageRpc = null;
 	});
 
 	test("clicking Start on a source the backend refuses renders the live.startFailed.source_lost copy", async ({

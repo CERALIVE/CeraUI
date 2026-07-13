@@ -76,7 +76,7 @@ test.describe("Task 21 — ingest stats panel", () => {
 
 		// Force streaming on (so the streaming-only panel mounts) and drop the
 		// backend's null linkTelemetry so injected frames are the only source.
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
 			const server = ws.connectToServer();
 			ws.onMessage((m) => server.send(m));

@@ -35,9 +35,9 @@ import { evidencePath, navigateTo } from "./helpers";
  *        pending-lock window is observable; then released to take the real
  *        backend confirm.
  *
- * Prereq: backend on :3002 with NODE_ENV=development (dev.emit registered) and
- * MOCK_SCENARIO=multi-modem-wifi (the dev default). Frontend (Vite :6173) is
- * started by playwright.config webServer.
+ * Topology: local Vite dev on :6173 uses `__ceraSocketPort`; CI prebuilt Vite
+ * preview on :6173 uses the HttpOnly cookie. Both target this worker's 31xx
+ * development backend.
  */
 
 const TOKEN: string = (() => {
@@ -325,7 +325,7 @@ test.describe("field-lock reconciliation (deterministic, dev.emit driven)", () =
 		);
 
 		// Pick a stale value distinct from both intended and BASELINE.
-		const stale = intended === 3000 || BASELINE === 3000 ? 4000 : 3000;
+		const stale = intended === 3000 ? 4000 : 3000;
 
 		// 1) STALE echo while lock is released → applied (lock is gone after T15).
 		await emit(page, "config", { max_br: stale });

@@ -23,7 +23,8 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.j
  *   3. Modem config dialog validates the manual-APN schema bound (mirrors the
  *      backend zod refine: autoconfig !== false || apn.length > 0).
  *   4. CollisionBands render ONLY from their netif flags (same_subnet_group /
- *      policy_route_missing) — absent by default, present once injected.
+ *      policy_route_missing) — absent for explicit false/empty flags, present
+ *      once active flags are injected.
  *   5. Disabled controls carry an accessible reason (BondToggle tooltip/aria-label).
  *
  * netif flags for check #4 are injected through the dev-only `dev.emit` broadcast
@@ -189,16 +190,22 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 		const subnet = page.getByTestId("same-subnet-info");
 		const policy = page.getByTestId("policy-route-warning");
 
-		// multi-modem-wifi's bonded links legitimately share a subnet, so the calm
-		// same-subnet info band is already present and reflects the real netif
-		// same_subnet_group flag (a CIDR). The amber policy-route warning is NOT —
-		// no interface carries policy_route_missing on a dev/mock host.
-		// The band renders only once the first netif broadcast lands, which can lag
-		// the default 5s on a cold-start worker — wait 15s (matches the sibling
-		// bonded-link-card wait above, same netif-driven content).
-		await expect(subnet).toBeVisible({ timeout: 15_000 });
-		await expect(subnet).toHaveAttribute("role", "status");
-		await expect(subnet).toContainText(/\d+\.\d+\.\d+\.\d+\/\d+/);
+		await emit(
+			page,
+			"netif",
+			Object.fromEntries(
+				["eth0", "usb0", "usb1", "usb2", "wlan0", "wlan1"].map((name) => [
+					name,
+					{
+						tp: 0,
+						enabled: true,
+						same_subnet_group: "",
+						policy_route_missing: false,
+					},
+				]),
+			),
+		);
+		await expect(subnet).toHaveCount(0);
 		await expect(policy).toHaveCount(0);
 
 		// Inject the two flags via dev.emit (merges per-interface, subscriptions
@@ -215,10 +222,12 @@ test.describe("Audit A2 — Network destination (multi-modem-wifi)", { tag: "@au
 			"audit-lan-b": { tp: 0, enabled: false, ip: "192.168.77.3", policy_route_missing: true },
 		});
 
+		await expect(subnet).toBeVisible();
+		await expect(subnet).toHaveAttribute("role", "status");
 		await expect(subnet).toContainText("192.168.77.0/24");
 		await expect(policy).toBeVisible();
 		record(
-			"#4 CollisionBands: same-subnet band reflects the real netif CIDR; policy-route-warning absent until policy_route_missing injected; injected CIDR surfaced — PASS",
+			"#4 CollisionBands: explicit false/empty flags render no bands; injected same_subnet_group renders calm info; injected policy_route_missing renders warning — PASS",
 		);
 	});
 

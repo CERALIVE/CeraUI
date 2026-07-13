@@ -42,6 +42,7 @@ type SshStatus = {
  * mis-parse as a flag — argument injection). Mirrors helpers/run.ts#ID_RE.
  */
 const ID_RE = /^[A-Za-z0-9_.-]+$/;
+const DEFAULT_SSH_USER = "ceralive";
 
 let sshStatus: SshStatus | null = null;
 let sshPasswordHash: string | undefined;
@@ -52,6 +53,14 @@ export function setSshPasswordHash(hash: string | undefined) {
 
 export function getSshPasswordHash() {
 	return sshPasswordHash;
+}
+
+function resolveSshUser(): string {
+	const sshUser = setup.ssh_user ?? DEFAULT_SSH_USER;
+	if (!ID_RE.test(sshUser) || sshUser.startsWith("-")) {
+		throw new Error("invalid ssh_user");
+	}
+	return sshUser;
 }
 
 /** Escape an ID_RE-validated value for safe literal use inside a RegExp. */
@@ -148,11 +157,7 @@ export async function getSshStatus(
 		...deps,
 	};
 
-	const ssh_user = setup.ssh_user;
-	if (!ssh_user) return sshStatus ?? undefined;
-	if (!ID_RE.test(ssh_user) || ssh_user.startsWith("-")) {
-		throw new Error("invalid ssh_user");
-	}
+	const ssh_user = resolveSshUser();
 
 	const [active, hash] = await Promise.all([
 		probeSshActive(systemctlIsActive),
@@ -166,16 +171,14 @@ export async function getSshStatus(
 	};
 
 	// Broadcast exactly once, and only when the complete status changed.
-	if (status.active !== undefined && status.user_pass !== undefined) {
-		if (
-			!sshStatus ||
-			status.user !== sshStatus.user ||
-			status.active !== sshStatus.active ||
-			status.user_pass !== sshStatus.user_pass
-		) {
-			sshStatus = status;
-			broadcast(status);
-		}
+	if (
+		!sshStatus ||
+		status.user !== sshStatus.user ||
+		status.active !== sshStatus.active ||
+		status.user_pass !== sshStatus.user_pass
+	) {
+		sshStatus = status;
+		broadcast(status);
 	}
 
 	return sshStatus ?? undefined;
@@ -224,7 +227,7 @@ export async function startStopSsh(
 	cmd: "start_ssh" | "stop_ssh",
 	statusDeps: Partial<SshStatusDeps> = {},
 ) {
-	if (!setup.ssh_user) return;
+	const ssh_user = resolveSshUser();
 
 	const action = cmd === "start_ssh" ? "start" : "stop";
 
@@ -233,17 +236,18 @@ export async function startStopSsh(
 	if (shouldUseMocks()) {
 		mockSshActive = action === "start";
 		const status: SshStatus = {
-			user: setup.ssh_user,
+			user: ssh_user,
 			active: mockSshActive,
 			user_pass: getConfig().ssh_pass !== undefined,
 		};
 		sshStatus = status;
 		broadcastMsg("status", { ssh: status });
-		return;
+		return true;
 	}
 
 	if (action === "start" && getConfig().ssh_pass === undefined) {
-		await resetSshPassword(conn);
+		const password = await resetSshPassword(conn);
+		if (password === undefined) return false;
 	}
 
 	try {
@@ -252,16 +256,18 @@ export async function startStopSsh(
 		logger.error(
 			`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
 		);
+		return false;
 	}
-	await getSshStatus(statusDeps);
+	const status = await getSshStatus(statusDeps);
+	return action === "start"
+		? status?.active === true
+		: status?.active === false;
 }
 
-export async function resetSshPassword(conn: WebSocket) {
-	const ssh_user = setup.ssh_user;
-	if (!ssh_user) return;
-	if (!ID_RE.test(ssh_user) || ssh_user.startsWith("-")) {
-		throw new Error("invalid ssh_user");
-	}
+export async function resetSshPassword(
+	conn: WebSocket,
+): Promise<string | undefined> {
+	const ssh_user = resolveSshUser();
 
 	const password = randomBase64(24).replace(/[+/=]/g, "").substring(0, 20);
 
@@ -278,7 +284,7 @@ export async function resetSshPassword(conn: WebSocket) {
 			`Failed to reset the SSH password for ${ssh_user}`,
 			10,
 		);
-		return;
+		return undefined;
 	}
 
 	const config = getConfig();
@@ -290,4 +296,5 @@ export async function resetSshPassword(conn: WebSocket) {
 	saveConfig();
 	broadcastMsg("config", config);
 	await getSshStatus();
+	return password;
 }

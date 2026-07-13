@@ -7,12 +7,11 @@ import { expect, test as base } from './fixtures/index.js';
 import { LivePage } from './pages/live.js';
 import { ShellPage } from './pages/shell.js';
 
-// Concurrent specs (field-lock, stream-health) inject is_streaming:true via
-// dev.emit, which the backend broadcasts to EVERY authed client — locking these
-// config rows behind "Stop stream to change". Force incoming status frames back
-// to is_streaming:false so the Live controls stay reachable regardless of what
-// another worker broadcasts. Installed via a page-fixture override so it runs
-// before authedPage navigates.
+// A worker backend can retain stream state across tests assigned to that worker.
+// `dev.emit` itself is socket-scoped to its calling page. Force incoming status
+// frames back to is_streaming:false so the Live controls remain reachable without
+// depending on predecessor state. Installed via a page-fixture override before
+// authedPage navigates.
 function pinNotStreaming(): void {
 	const Native = window.WebSocket;
 	class Hooked extends Native {

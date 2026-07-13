@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { expect, type Page, test } from './fixtures/index.js';
+import { expect, type Page, type PageRpc, test } from './fixtures/index.js';
 
-import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
+import { EVIDENCE_DIR, ensureAuthenticated, navigateTo } from './helpers/index.js';
 
 /**
  * Task 21 — Relay catalog + notification toasts, integrated E2E (mock mode).
@@ -19,7 +19,7 @@ import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
  *      the RTT digits animate across ≥2 rebroadcasts (T7, every 1.5s), and the
  *      operator's server selection is NOT disturbed by those updates.
  *   3. Single toast — a backend notification injected via `dev.emit` produces
- *      exactly ONE toast (T13/T14: one emitter, dedup by name) whose store
+ *      exactly ONE toast (T13/T14: one emitter, dedup by name) whose visible
  *      duration is ~5s (`* 1000`, not the old `* 2500`).
  *   4. Locale — switching locale via the locale-selector then triggering a NEW
  *      notification renders the translated string (de). Already-visible toasts
@@ -44,8 +44,9 @@ import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
   * `test-results/task-21-e2e/`; video is captured at the runner level (allowed —
   * it does not go through the guarded `page.screenshot`).
  *
- * Backend broadcasts reach EVERY authed client, so this file runs `serial` to
- * keep `dev.emit` injections from leaking between its own tests.
+ * `dev.emit` delivers each injected frame only to the calling authenticated
+ * socket. This file runs `serial` to keep its page-local injection sequence and
+ * evidence ordered.
  */
 
 const TOKEN: string = (() => {
@@ -67,9 +68,9 @@ const NOTIF_DURATION_S = 5;
 // guarded page.screenshot path).
 test.use({ video: 'on' });
 
-// The notification-store assertions ('exactly one toast') depend on the store
-// being reset between tests on one backend; kept serial so a same-worker
-// predecessor never leaves a residual toast in the shared store.
+// The notification assertions depend on a fresh browser context between tests
+// while the worker backend is reused; serial order keeps this file's injections
+// from overlapping.
 test.describe.configure({ mode: 'serial' });
 
 
@@ -87,7 +88,7 @@ test.afterAll(() => {
 		[
 			'Task 21 — Relay catalog + notification toasts, integrated E2E',
 			'Driver: real frontend + real dev backend (mock multi-modem-wifi),',
-			'        notifications injected via dev.emit, store/relay state read in-page.',
+			'        notifications injected via dev.emit and asserted through the UI.',
 			`Generated: ${new Date().toISOString()}`,
 			'',
 			...evidence,
@@ -165,42 +166,17 @@ function installWsHarness(opts: { token: string; dropRelays: boolean }): void {
 
 // ── In-page bridges (use the app's own singleton modules; no source edits) ──
 
-interface ActiveLite {
-	name: string;
-	text: string;
-	type: string;
-	durationMs: number;
-	isPersistent: boolean;
-}
-
-/** Read the central notification store's active entries (T10/T13). */
-function readActiveNotifications(page: Page): Promise<ActiveLite[]> {
-	return page.evaluate(async () => {
-		const specPath = '/src/lib/stores/notifications.svelte.ts';
-		const mod = await import(/* @vite-ignore */ specPath);
-		return mod.getActive();
-	});
-}
-
 // Inject a backend `notification` broadcast via the dev-only `dev.emit`. Wire
 // type is SINGULAR `notification` — the type the backend actually broadcasts and
 // the only one subscriptions.svelte.ts folds into the store; plural `notifications`
 // lands nowhere since fa7f0277 renamed the handler to the singular case.
-function emitNotification(page: Page, notification: Record<string, unknown>): Promise<void> {
-	return page.evaluate(async (n) => {
-		const specPath = '/src/lib/rpc/client.ts';
-		const mod = await import(/* @vite-ignore */ specPath);
-		await mod.rpc.dev.emit({ type: 'notification', payload: { show: [n] } });
-	}, notification);
-}
-
-/** Read the live relay catalog server count from the subscriptions store. */
-function readRelayServerCount(page: Page): Promise<number> {
-	return page.evaluate(async () => {
-		const specPath = '/src/lib/rpc/subscriptions.svelte.ts';
-		const mod = await import(/* @vite-ignore */ specPath);
-		const relays = mod.getRelays();
-		return relays ? Object.keys(relays.servers ?? {}).length : -1;
+function emitNotification(
+	pageRpc: PageRpc,
+	notification: Record<string, unknown>,
+): Promise<unknown> {
+	return pageRpc.call(['dev', 'emit'], {
+		type: 'notification',
+		payload: { show: [notification] },
 	});
 }
 
@@ -229,35 +205,25 @@ test.beforeEach(({ browserName }, testInfo) => {
 
 // ── Describe 1: live backend (catalog populated) ────────────────────────────
 
+async function openLivePage(page: Page): Promise<void> {
+	await page.goto('/');
+	await ensureAuthenticated(page);
+	await navigateTo(page, 'live');
+}
+
 test.describe('relay catalog + notifications (live mock backend)', () => {
-	test.beforeEach(async ({ page }) => {
-		await page.addInitScript(installWsHarness, { token: TOKEN, dropRelays: false });
-		await page.goto('/');
-		await navigateTo(page, 'live');
-	});
+	test.beforeEach(async ({ page }) => openLivePage(page));
 
 	test('1 — fresh connect surfaces ≤1 toast (startup-noise check)', async ({ page }) => {
-		const active = await readActiveNotifications(page);
 		const visibleToasts = await page.locator('[data-sonner-toast]').count();
 
-		expect(active.length).toBeLessThanOrEqual(1);
 		expect(visibleToasts).toBeLessThanOrEqual(1);
-		record(
-			`Scenario 1: startup noise — store active=${active.length}, visible toasts=${visibleToasts} (≤1) ✓`,
-		);
+		record(`Scenario 1: startup noise — visible toasts=${visibleToasts} (≤1) ✓`);
 	});
 
 	test('2 — relay tab populates with animating RTT indicators and a stable selection', async ({
 		page,
 	}) => {
-		// Sanity: the live catalog is populated (T6/T7) before we open the dialog.
-		await expect
-			.poll(async () => readRelayServerCount(page), {
-				timeout: 10_000,
-				message: 'relay catalog should populate from the mock backend',
-			})
-			.toBeGreaterThan(0);
-
 		const dialog = await openServerDialog(page);
 
 		// Destination-first (T9): pick the managed cloud account instead of the
@@ -305,12 +271,22 @@ test.describe('relay catalog + notifications (live mock backend)', () => {
 		await expect(nameLoc).toHaveText(selectedName);
 		record('Scenario 2: selection stayed stable across RTT updates ✓');
 	});
+});
 
-	test('3 — a backend notification shows exactly one toast with ~5s duration', async ({ page }) => {
+test.describe('relay catalog + notifications (live mock backend)', () => {
+	test.beforeEach(async ({ page, pageRpc }) => {
+		void pageRpc;
+		await openLivePage(page);
+	});
+
+	test('3 — a backend notification shows exactly one toast with ~5s duration', async ({
+		page,
+		pageRpc,
+	}) => {
 		// Baseline: no toasts before injection.
 		await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
 
-		await emitNotification(page, {
+		await emitNotification(pageRpc, {
 			name: 'e2e-single-toast',
 			type: 'info',
 			msg: 'E2E single toast probe',
@@ -324,16 +300,18 @@ test.describe('relay catalog + notifications (live mock backend)', () => {
 		await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
 		await expect(page.getByText('Update Available')).toBeVisible();
 
-		// Duration is seconds→ms (`* 1000`), not the old `* 2500`.
-		const active = await readActiveNotifications(page);
-		const entry = active.find((n) => n.name === 'e2e-single-toast');
-		expect(entry?.durationMs).toBe(NOTIF_DURATION_S * 1000);
-		record(
-			`Scenario 3: single toast (count=1, no dup), durationMs=${entry?.durationMs} (~5s) ✓`,
-		);
+		const shownAt = Date.now();
+		await expect(page.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 8_000 });
+		const visibleForMs = Date.now() - shownAt;
+		expect(visibleForMs).toBeGreaterThanOrEqual(4_000);
+		expect(visibleForMs).toBeLessThan(7_000);
+		record(`Scenario 3: single toast (count=1, no dup) visible for ${visibleForMs}ms (~5s) ✓`);
 	});
 
-	test('4 — switching locale translates a newly triggered notification (de)', async ({ page }) => {
+	test('4 — switching locale translates a newly triggered notification (de)', async ({
+		page,
+		pageRpc,
+	}) => {
 		// Switch locale to German via the real locale-selector control.
 		await page.getByTestId('locale-selector').click();
 		await page.getByTestId('locale-option-de').click();
@@ -348,7 +326,7 @@ test.describe('relay catalog + notifications (live mock backend)', () => {
 		// Trigger a NEW notification AFTER the switch (D10: never re-translate an
 		// already-visible toast). `notifications.saved` is genuinely localized:
 		// en "Saved" → de "Gespeichert".
-		await emitNotification(page, {
+		await emitNotification(pageRpc, {
 			name: 'e2e-locale-toast',
 			type: 'success',
 			msg: 'Saved',
@@ -359,12 +337,7 @@ test.describe('relay catalog + notifications (live mock backend)', () => {
 		});
 
 		await expect(page.getByText('Gespeichert')).toBeVisible();
-		const active = await readActiveNotifications(page);
-		const entry = active.find((n) => n.name === 'e2e-locale-toast');
-		expect(entry?.text).toBe('Gespeichert');
-		record(
-			`Scenario 4: post-switch notification rendered translated text "${entry?.text}" (de) ✓`,
-		);
+		record('Scenario 4: post-switch notification rendered translated text "Gespeichert" (de) ✓');
 	});
 });
 
@@ -380,14 +353,6 @@ test.describe('relay gate + manual fallback (catalog absent)', () => {
 	test('5 — relay tab is gated (disabled + waiting hint); manual SRTLA still saves', async ({
 		page,
 	}) => {
-		// The catalog is suppressed → getRelays() stays undefined (count -1).
-		await expect
-			.poll(() => readRelayServerCount(page), {
-				timeout: 8000,
-				message: 'relay catalog should be held absent by the harness',
-			})
-			.toBe(-1);
-
 		const dialog = await openServerDialog(page);
 
 		// D6 gate: managed destination disabled + waiting hint.

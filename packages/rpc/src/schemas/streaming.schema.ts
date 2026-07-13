@@ -68,8 +68,7 @@ export const TRANSPORT_AUDIO_CODECS = {
 } as const satisfies Record<RelayProtocol, readonly AudioCodec[]>;
 
 // Stable structured code returned by streaming.start when the effective audio
-// codec is not allowed for the effective relay transport. Dual-field on the wire
-// (`error` + `reason`); the frontend maps `reason` to `live.startFailed.*`.
+// codec is not allowed for the effective relay transport.
 export const AUDIO_CODEC_UNSUPPORTED_TRANSPORT = 'audio_codec_unsupported_transport';
 
 /** True when `codec` may be carried over `protocol`'s MPEG-TS transport (C5). */
@@ -762,11 +761,6 @@ export const streamingStartOutputSchemaExtended = z.object({
 	is_streaming: z.boolean().optional(),
 	applied: streamingConfigInputSchema.partial().optional(),
 	error: z.string().optional(),
-	// Stable cerastream Tier-2 reason code for a failed start (e.g.
-	// "srt_connect_failed"), so the client toast names the SPECIFIC failure
-	// instead of a generic message (Task 16). Absent on success and on an
-	// unstructured failure — the client falls back to the generic copy.
-	reason: z.string().optional(),
 });
 export type StreamingStartOutputExtended = z.infer<typeof streamingStartOutputSchemaExtended>;
 

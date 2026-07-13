@@ -15,7 +15,7 @@ Do not mark any step in this runbook as "CI-passing." There is no CI here.
 
 An operator with:
 
-- Physical access to a CeraLive device (Jetson, RK3588, or N100 board) running
+- Physical access to a CeraLive device (RK3588 now; x86/N100 when in hand) running
   a CeraLive OS image, reachable over SSH and HTTP/WS on the LAN.
 - A RØDE HDMI-to-USB-C capture dongle (or equivalent UVC-raw HDMI dongle) and
   an MJPEG-only UVC webcam, both pluggable into the device's USB ports.
@@ -99,8 +99,9 @@ ssh root@<device-ip> "cat /opt/ceralive/package.json 2>/dev/null | grep cerastre
 
 Everything after this point assumes: `ceralive.service` is running the
 pushed build, `cerastream.service` is running the `2026.7.0` arm64 `.deb`, and
-you can reach the device UI at `http://<device-ip>/` and the preview socket at
-`ws://<device-ip>:9997`.
+you can reach the device UI at `http://<device-ip>/`. The browser preview uses
+the same backend origin at `/preview`; the engine port (commonly 9997) is a
+loopback upstream and is not a second browser endpoint.
 
 ---
 
@@ -137,19 +138,15 @@ word HDMI), decides the group. If it lands under "HDMI," this step fails.
 ssh root@<device-ip> "journalctl -u cerastream.service -n 200 --no-pager | grep -iE 'hdmirx|hdmi_rx|rk_hdmi|camlink|driver'"
 ```
 
-### Step 2 — Preview toggle → live picture on `ws://device:9997`, WebCodecs tier, audio meters moving
+### Step 2 — Preview toggle → same-origin `/preview`, WebCodecs tier, audio meters moving
 
 **Action:** On the Live destination, click the preview toggle
 (`data-testid="preview-toggle"`). In a browser tab that supports WebCodecs
 (current Chrome/Edge), confirm the preview canvas paints a live picture within
-3 seconds of toggling on. Independently, from a browser dev console, open a
-raw WS to the preview socket and confirm the handshake:
-
-```js
-const ws = new WebSocket("ws://<device-ip>:9997");
-ws.onopen = () => ws.send(JSON.stringify({ action: "start", tier: "webcodecs" }));
-ws.onmessage = (e) => console.log(typeof e.data, e.data instanceof Blob ? "(binary AU)" : e.data);
-```
+3 seconds of toggling on. In Chrome DevTools → Network → WS, select the
+same-origin `/preview?token=…` connection and inspect its Messages tab. The
+single-use token is minted over authenticated RPC; do not dial the engine's
+loopback upstream directly.
 
 **Expected result:** The first console line logged is the `codec-config` JSON
 frame (`{"type":"codec-config","tier":"webcodecs",...}`); the `preview`
@@ -366,7 +363,7 @@ This section is filled in by the human running the runbook, not by an agent.
 | 8. Idle + live bitrate | | | | |
 | 9. Audio device/delay | | | | |
 
-**Board(s) used:** _(record RK3588 / Jetson / N100 + specific model)_
+**Board(s) used:** _(record RK3588 now; x86/N100 when in hand + specific model; Jetson is DEFERRED — not currently planned)_
 **cerastream version installed:** _(dpkg -l cerastream, or `cerastream --version`)_
 **CeraUI commit pushed via dev-sync:** _(git rev-parse HEAD at push time)_
 

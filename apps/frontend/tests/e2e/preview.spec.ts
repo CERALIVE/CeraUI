@@ -13,7 +13,8 @@ import { ensureAuthenticated, navigateTo } from './helpers/index.js';
  * on it rather than asserting one path unconditionally:
  *
  *   • WebCodecs tier — asserts the canvas reaches `data-status="live"` decoding
- *     the REAL Todo-21 mock preview server on :9997 (real H.264 access units).
+ *     the REAL Todo-21 mock preview upstream on :9997 through the backend
+ *     `/preview` proxy (real H.264 access units).
  *     Runs ONLY when the harness Chromium can decode `avc1.42c00d` via
  *     `VideoDecoder.isConfigSupported` — otherwise the test is SKIPPED with a
  *     logged reason (open-source Chromium ships without proprietary H.264).
@@ -59,7 +60,7 @@ async function routeBackend(
 	page: Page,
 	onPreview?: (ws: WebSocketRoute) => void,
 ): Promise<void> {
-	await page.routeWebSocket(/:(3002|31\d\d)/, (ws) => {
+	await page.routeWebSocket(/:(3002|31\d\d|6173)/, (ws) => {
 		if (onPreview && ws.url().includes('/preview')) {
 			onPreview(ws);
 			return;

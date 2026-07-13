@@ -21,9 +21,22 @@ This document describes the automated build pipeline for creating CeraUI distrib
 - **Purpose**: Installation via package manager
 - **Target**: Debian/Ubuntu-based systems
 - **Script**: `scripts/build/build-debian-package.sh`
+- **Runtime payload**: ships the immutable backend `setup.json` at
+  `/opt/ceralive/setup.json`; the device image seeds it into persistent
+  `/data/ceralive` on first boot before CeraUI starts.
 - **Output**: `dist/debian/`
 
 **Use Case**: Professional deployment with package management integration.
+
+### Smart-build cache inputs
+
+The package builders reuse `.build-cache` only while the complete production
+input set is unchanged. Both frontend and backend hashes cover the workspace
+package manifest, Bun lockfile/runtime pin, root `tsconfig.json`, shared
+packages, build scripts, deployment files, and backend setup data. Each hash
+also covers its component tree, including component-local TypeScript configs;
+therefore a change to an inherited compiler option invalidates the affected
+cache before packaging.
 
 ## Versioning
 
@@ -61,32 +74,131 @@ The build pipeline runs manually via workflow dispatch.
 |-------|----------|-------------|
 | `release_type` | Yes | `stable` or `beta` |
 | `release_notes` | No | Description of changes |
-| `force_version` | No | Override auto-detected version |
+| `force_version` | No | Override auto-detected stable version (`YYYY.M.PATCH`; must match `package.json`) |
 
 ### Jobs
 
 1. **calculate-version**
+   - Rejects dispatches that are not from the default branch
    - Detects next version from existing git tags
+   - Treats an empty current-month stable-tag set as the first stable/beta release,
+     rather than a shell error
+   - Rejects a calculated tag or GitHub release that already exists
    - Outputs version, tag, and beta status
 
-2. **build-ceraui-system** (matrix: arm64, amd64)
+2. **release-package-contracts**
+   - Installs dependencies from the frozen Bun lockfile
+   - Runs `bun run test:release-package-contracts`
+   - Gates provenance, release dependency ordering, and dispatch-input security
+   - Verifies the calculated release version exactly matches `package.json`
+   - Runs `bun run lint` (Biome + backend/frontend typechecks) and `bun run test`
+   - Prepares the CI-only writable runtime directories required by backend tests
+   - Must pass before archive builds, Debian builds, or federation publication
+
+3. **build-ceraui-system** (matrix: arm64, amd64)
    - Builds full system with installation scripts
    - Creates compressed archive (.tar.gz)
    - Uploads artifact: `ceraui-system-{arch}`
 
-3. **build-debian-package** (matrix: arm64, amd64)
+4. **build-debian-package** (matrix: arm64, amd64)
    - Creates Debian package for target architecture
    - Uploads artifact: `ceraui-debian-{arch}`
 
-4. **create-release**
+5. **publish-federation**
+   - Builds, signs, verifies, and conditionally uploads version-matched federation bundles
+   - Reuses an existing version only when its signed payload digest matches
+   - Rolls back keys created by a failed fresh attempt; never overwrites an existing key
+
+6. **create-release**
    - Creates GitHub release with all assets
+   - Creates the release tag from the exact workflow dispatch SHA
+   - Rechecks that the tag/release is unused, then verifies the created tag commit
    - Generates changelog from commit history
    - Marks beta releases as pre-release
 
-5. **sign-and-publish-r2**
-   - Signs Debian packages with GPG
-   - Generates signed apt repo metadata (`Packages`, `Release`, `InRelease`)
-   - Uploads to Cloudflare R2 under the appropriate channel (`stable` or `beta`)
+7. **dispatch-apt-reindex** (stable only)
+   - Runs only after `create-release` attaches the ARM64 and AMD64 `.deb` assets
+   - Dispatches `apt-reindex` to `CERALIVE/apt-worker`, the sole owner of R2
+     uploads and signed APT metadata (`Packages`, `Release`, `InRelease`)
+
+`publish-release.yml` is the only normal release entry point. It publishes the
+system archives, both Debian packages, and the version-matched federation bundles,
+then dispatches stable APT reindex explicitly. Do not rely on a tag created with
+`GITHUB_TOKEN` to trigger `publish-deb.yml`; GitHub does not recursively trigger
+that workflow. Both workflows must be dispatched from the default branch.
+`publish-deb.yml` is manual recovery for an existing release only: it
+resolves the supplied tag once, detaches at that immutable commit, rejects a tag
+move, verifies the package version, and requires the matching GitHub release both
+before build and upload. Its release/package contracts, lint/typecheck, unit tests,
+and Debian build all check out that same resolved commit; the dispatch commit is
+never used as a substitute quality gate for tagged package code.
+Dispatch inputs enter shell steps only through environment variables and must
+match canonical stable CalVer (`YYYY.M.PATCH` and `vYYYY.M.PATCH`).
+The primary `force_version` override follows the same rule and is rejected for
+beta releases; calculated stable and beta tags are validated before outputs, and
+the release stops before builds if the selected version differs from `package.json`
+or the tag/release identity is already in use.
+Both the normal and recovery workflows require frozen install, lint/typecheck,
+and unit tests before their build jobs can run.
+
+### Pull Request Build Check E2E
+
+`.github/workflows/build-check.yml` builds the frontend once in `setup-e2e`, uploads
+the resulting `frontend-dist`, and fans functional E2E coverage across the
+desktop/mobile × two-shard matrix. The setup job caches only Playwright browser
+binaries, keyed by the exact version reported by the installed Playwright CLI;
+it does not install runner-local OS packages.
+
+The same setup job downloads the immutable `srtla-send-rs` v3.2.0 amd64 release
+package, pinned to SHA-256
+`cfd2cc6a0bcb3716c25861daffca9b67e5a56b1c8cf9cb519093588496a928ae`.
+Before extraction it verifies the Debian `Package`, `Version`, and `Architecture`
+fields, then uploads only the extracted runtime as the one-day
+`srtla-send-runtime-amd64-v3.2.0` artifact. This proves the backend against the
+released executable without a test stub, system-wide install, sibling checkout,
+or weakened production preflight.
+
+Each isolated matrix runner runs `test:e2e:install-deps` for its own Ubuntu image,
+restores the versioned browser cache, and installs the browser only on a cache
+miss. It also downloads the runtime artifact, restores `srtla_send` execute
+permission, adds its `usr/bin` to `PATH`, rewrites the lane-local backend
+`setup.json` `srtla_path`, and asserts the resolved binary before starting the
+servers.
+
+The frontend server in every functional lane is `vite preview` on port 6173,
+serving the frontend artifact built by `setup-e2e`; the Vite dev server is not a
+CI fallback. The device-host development proxy and CI preview share the same
+path-scoped WebSocket matcher. The production bundle opens same-origin `/ws` and
+`/preview` sockets, and Vite forwards only those literal raw upgrade paths,
+optionally followed by a query. Local functional E2E bypasses that Vite proxy by
+selecting a worker backend through `window.__ceraSocketPort`. Dot-segment,
+encoded-path, authority-like, fragment, and child-path
+request targets are rejected before URL normalization. In CI preview only, the
+page fixture installs an HttpOnly SameSite=Strict cookie whose exact value
+combines a worker port from 3100 through 3199 with a random per-worker proxy
+secret. The proxy consumes and strips the routing value, injects the secret as a
+proxy-only backend admission header, and fails closed on missing, malformed,
+duplicate, encoded, or out-of-range values and explicit query/header steering.
+E2E worker
+backends require the exact header before either WebSocket upgrade, preventing
+direct browser access across workers. This preserves per-worker backend, mock
+preview upstream, and `MOCK_SCENARIO` isolation without adding an application
+global or production test API. Before the reference backend starts, the lane
+seeds its password and persistent token; CI global setup therefore never relies
+on a missing-cookie route to port 3002, while local global setup remains
+browser-driven. Runtime E2E tests use fixture RPC/socket seams rather than
+importing `/src` modules,
+which are not served by a production preview. Local Vite dev retains
+`window.__ceraSocketPort` and does not enable cookie routing.
+
+Each lane uploads a unique blob report, which `merge-e2e-reports` combines into
+the final HTML report.
+
+Run the structured YAML topology contract locally with:
+
+```bash
+bun run test:build-check-shape
+```
 
 ## Local Development
 
@@ -106,6 +218,12 @@ gem install fpm
 ### Running Build Scripts
 
 ```bash
+# Required release/package contract gate
+bun run test:release-package-contracts
+
+# Root-owned service + mock attach contract in an isolated temporary state directory
+bun run test:service-contract
+
 # Full CeraUI system (auto-detect architecture)
 ./scripts/build/build-ceraui-system.sh
 
@@ -141,7 +259,6 @@ ceraui-2026.1.0-arm64.tar.gz
 ├── ceralive              # Backend binary
 ├── public/               # Frontend assets
 ├── ceralive.service      # Systemd service
-├── ceralive.socket       # Systemd socket
 ├── *.rules               # Udev rules
 ├── config.json           # Default configuration
 ├── install.sh            # Installation script
@@ -160,6 +277,13 @@ ceraui-2026.1.0-arm64.tar.gz
 | `VITE_BRAND` | Frontend branding |
 | `NODE_ENV` | Build environment |
 
+The packaged `ceralive.service` runs as `root` because it manages device hardware
+and privileged system controls. The unit and compiled backend both pin
+`NODE_ENV=production`; development mock mode must never run on a device image.
+Its boot identity uses the installed `srtla_send` binary and real `/dev` hardware
+directories. The legacy BCRPT helper is opt-in and is not required to boot a
+device image.
+
 ## Build Process
 
 1. Navigate to **Actions** in the GitHub repository
@@ -167,19 +291,22 @@ ceraui-2026.1.0-arm64.tar.gz
 3. Click **Run workflow**
 4. Select release type (`stable` or `beta`)
 5. Optionally add release notes
-6. Click **Run workflow**
+6. Optionally set `force_version` to the stable version already recorded in
+   `package.json`, then click **Run workflow**.
 
 The workflow will:
 - Calculate the next version automatically
+- Verify that version matches `package.json` before starting builds
 - Build for both ARM64 and AMD64
 - Create system archives and Debian packages
-- Publish a GitHub release with all assets
+- Publish the matching federation bundles and GitHub release with all assets
+- Dispatch stable APT reindex only after the release assets exist
 
 ## Target Hardware
 
 | Architecture | Recommended Devices |
 |--------------|---------------------|
-| **arm64** | Orange Pi 5+, Radxa Rock 5B+, NVIDIA Jetson Orin |
+| **arm64** | Orange Pi 5+, Radxa Rock 5B+ |
 | **amd64** | Intel N100/N200 Mini PCs, AMD Ryzen, desktop computers |
 
 ## Troubleshooting

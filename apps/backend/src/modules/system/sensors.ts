@@ -20,6 +20,10 @@
 import { logger } from "../../helpers/logger.ts";
 import { argMatch, run, SERVICE_RE } from "../../helpers/run.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
+import {
+	spawnWatcher,
+	type WatcherHandle,
+} from "../../helpers/spawn-policy.ts";
 import { getms } from "../../helpers/time.ts";
 import {
 	getMockSensorData,
@@ -39,6 +43,14 @@ import { broadcastMsg } from "../ui/websocket-server.ts";
 const bootconfigService = "ceralive-firstboot-bootconfig";
 
 const sensors: Record<string, string> = {};
+const dmesgWatchers: WatcherHandle[] = [];
+
+function dmesgStdout(proc: WatcherHandle["proc"]): ReadableStream<Uint8Array> {
+	if (!proc.stdout) {
+		throw new Error("dmesg watcher missing stdout stream");
+	}
+	return proc.stdout;
+}
 
 export function getSensors() {
 	return sensors;
@@ -135,6 +147,25 @@ async function monitorBootconfig() {
 	setTimeout(monitorBootconfig, 2000);
 }
 
+export function startDmesgWatcher(
+	onData: (data: string) => void,
+): WatcherHandle {
+	const handle = spawnWatcher(["dmesg", "-w"]);
+	dmesgWatchers.push(handle);
+	void (async () => {
+		const decoder = new TextDecoder();
+		const stdout = dmesgStdout(handle.proc);
+		for await (const chunk of stdout) {
+			onData(decoder.decode(chunk));
+		}
+	})();
+	return handle;
+}
+
+export function stopDmesgWatchers(): void {
+	for (const watcher of dmesgWatchers.splice(0)) watcher.abort();
+}
+
 export function initHardwareMonitoring() {
 	// Use mock sensors in development mode
 	if (shouldMockSensors()) {
@@ -191,32 +222,24 @@ export function initHardwareMonitoring() {
 	switch (setup.hw) {
 		case "jetson": {
 			/* Monitor the kernel log for undervoltage events */
-			const dmesg = Bun.spawn(["dmesg", "-w"], {
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			void (async () => {
-				const decoder = new TextDecoder();
-				for await (const chunk of dmesg.stdout as ReadableStream<Uint8Array>) {
-					const data = decoder.decode(chunk);
-					if (data.match("soctherm: OC ALARM 0x00000001")) {
-						const msg =
-							"System undervoltage detected. " +
-							"You may experience system instability, " +
-							"including glitching, freezes and the modems disconnecting";
-						notificationBroadcast(
-							"jetson_undervoltage",
-							"error",
-							msg,
-							10 * 60,
-							true,
-							false,
-							true,
-							"notifications.jetsonUndervoltage",
-						);
-					}
+			startDmesgWatcher((data) => {
+				if (data.match("soctherm: OC ALARM 0x00000001")) {
+					const msg =
+						"System undervoltage detected. " +
+						"You may experience system instability, " +
+						"including glitching, freezes and the modems disconnecting";
+					notificationBroadcast(
+						"jetson_undervoltage",
+						"error",
+						msg,
+						10 * 60,
+						true,
+						false,
+						true,
+						"notifications.jetsonUndervoltage",
+					);
 				}
-			})(); // dmesg
+			});
 
 			/* Show an alert while ceralive-firstboot-bootconfig is active */
 			void monitorBootconfig();
@@ -224,45 +247,36 @@ export function initHardwareMonitoring() {
 		}
 
 		case "rk3588": {
-			const dmesg = Bun.spawn(["dmesg", "-w"], {
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			void (async () => {
-				const decoder = new TextDecoder();
-				for await (const chunk of dmesg.stdout as ReadableStream<Uint8Array>) {
-					const data = decoder.decode(chunk);
+			startDmesgWatcher((data) => {
+				if (
+					data.match("hdmirx_wait_lock_and_get_timing signal not lock") ||
+					data.match("hdmirx_delayed_work_audio: audio underflow")
+				) {
+					const msg =
+						"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. " +
+						"Try to move any modems away from the HDMI cable and the encoder. " +
+						"If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera";
+					notificationBroadcast(
+						"hdmi_error",
+						"error",
+						msg,
+						8,
+						true,
+						false,
+						true,
+						"notifications.hdmiError",
+					);
+				}
 
-					if (
-						data.match("hdmirx_wait_lock_and_get_timing signal not lock") ||
-						data.match("hdmirx_delayed_work_audio: audio underflow")
-					) {
-						const msg =
-							"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. " +
-							"Try to move any modems away from the HDMI cable and the encoder. " +
-							"If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera";
-						notificationBroadcast(
-							"hdmi_error",
-							"error",
-							msg,
-							8,
-							true,
-							false,
-							true,
-							"notifications.hdmiError",
-						);
-					}
+				if (data.match("hdmirx-controller: Err, timing is invalid")) {
+					const hdmiNotif = notificationExists("hdmi_error");
+					const msg = "No HDMI signal detected";
 
-					if (data.match("hdmirx-controller: Err, timing is invalid")) {
-						const hdmiNotif = notificationExists("hdmi_error");
-						const msg = "No HDMI signal detected";
-
-						if (!hdmiNotif || hdmiNotif.msg === msg) {
-							notificationBroadcast("hdmi_error", "error", msg, 3, true, false);
-						}
+					if (!hdmiNotif || hdmiNotif.msg === msg) {
+						notificationBroadcast("hdmi_error", "error", msg, 3, true, false);
 					}
 				}
-			})();
+			});
 			break;
 		}
 	}

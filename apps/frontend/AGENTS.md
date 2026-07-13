@@ -100,7 +100,7 @@ New procedures: add to `@ceraui/rpc` schemas first, then extend `TypedRPC` in `c
 ## COMMANDS
 
 ```bash
-bun run dev / build / check / test       # Vite :5173 / dist/ / svelte-check / vitest
+bun run dev / build / check / test       # Vite :6173 / dist/ / svelte-check / vitest
 bun run build:federation                  # Vite lib-mode → dist/federation/<ceraui-version>/{encoder,audio,server}.js
 bun run sign:federation                    # (root) SRI + GPG bundle sigs + signed manifest.json (Task 40)
 # Linting is Biome-only, run from the workspace root: `biome check .` (or `bun run lint`)
@@ -114,13 +114,14 @@ version-federation hosting/signing contract (root `AGENTS.md` → version-federa
 via `bun run build:federation` from the CeraUI root (delegates to the frontend
 `build:federation` script).
 
-- **Entries**: `src/main/dialogs/{EncoderDialog,AudioDialog,ServerDialog}.svelte` →
+- **Entries**: `src/lib/federation/{encoder-entry,audio-entry,server-entry}.ts` →
   `dist/federation/<ceraui-version>/{encoder,audio,server}.js` (`formats: ["es"]`,
-  per-entry `fileName`). Shared graph (rpc, subscriptions, i18n) is code-split into sibling
-  chunks co-located at the same versioned path — they upload + resolve together under the
-  platform CSP.
+  per-entry `fileName`). Each wrapper exports `federationAbiVersion` and
+  `mountDialog`, owns the bundled Svelte mount/unmount lifecycle, and receives
+  the typed host adapter. Shared graph code is split into sibling chunks
+  co-located at the same versioned path.
 - **`<ceraui-version>`** is read at build time from the workspace-root `package.json` `version`
-  (CalVer, `2026.6.2` at time of writing) — the single source of truth, matching the platform's
+  (CalVer, `2026.7.0` at time of writing) — the single source of truth, matching the platform's
   `ceraui-version` claim.
 - **Isolation**: this build NEVER touches the SPA `dist/public` output, runs no
   PWA/service-worker plugin, and emits no `index.html`. The SPA `vite.config.ts` is unmodified.
@@ -132,15 +133,16 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
 
 `scripts/sign-federation.ts` (CeraUI root, run via `bun run sign:federation`) is the post-build
 step that signs the `build:federation` output. Run it AFTER `build:federation`
-(`bun run build:federation && bun run sign:federation`). For each dialog bundle in
+(`bun run build:federation && bun run sign:federation`). For every emitted `.js` and `.css` asset in
 `dist/federation/<ceraui-version>/` it emits the artifacts the version-federation contract
 (root `AGENTS.md` → version-federation) requires, then writes + signs the manifest the cloud
 consumes.
 
-- **Per bundle** (`encoder.js`, `audio.js`, `server.js`): `<file>.js.sri` (the `sha384-…`
-  Subresource-Integrity hash, base64) + `<file>.js.sig` (a **GPG** detached signature).
+- **Per asset** (entries, shared JavaScript chunks, and `frontend.css`):
+  `<file>.sri` (the `sha384-…` Subresource-Integrity hash, base64) +
+  `<file>.sig` (a **GPG** detached signature).
 - **`manifest.json`**: the EXACT shape `FederationManifestSchema` enforces —
-  `{ ceraUiVersion, files: [{ filename, integrity }] }`. Do NOT change this shape; the cloud
+  `{ ceraUiVersion, files: [{ filename, integrity, kind, imports }] }`. Do NOT change this shape; the cloud
   consumer (`ceralive-platform apps/api/lib/federation/manifest-verify.ts`) parses it.
 - **`manifest.json.sig`**: a base64 **Ed25519** detached signature over the EXACT manifest
   bytes — **NOT GPG**. The cloud verifies it with `verifyAndParseManifest`
@@ -165,16 +167,24 @@ The `publish-federation` job in `.github/workflows/publish-release.yml` is the r
 CI job that uploads the signed bundles to R2. Pipeline (each step gates the next):
 `bun run build:federation` → `bun run sign:federation` (sign + self-verify) →
 `bun run sign:federation -- --verify-only` (independent re-verify before any write) →
-`aws s3 cp` per file to `s3://$R2_BUCKET/ui-bundle/<ceraui-version>/`.
+`publish-federation-immutable.sh` conditional writes to
+`s3://$R2_BUCKET/ui-bundle/<ceraui-version>/`.
 
 - **Fail-closed**: `sign-federation.ts` errors when a signing key is absent, so a missing GPG /
   Ed25519 secret blocks publish — bundles are never uploaded unsigned/unverified.
-- **Version**: `<ceraui-version>` is read from `package.json` (`node -p`) — the same source
+- **Version**: `<ceraui-version>` is read from `package.json` (`bun -p`) — the same source
   `build:federation` + `sign-federation.ts` use, so the R2 path matches `dist/federation/<version>`
   and the manifest's `ceraUiVersion`.
+- **Immutable + idempotent**: each R2 write uses `If-None-Match: *` and carries a
+  release digest derived from the signed payload set. Existing objects are
+  accepted only for that same digest; non-signature bytes are compared directly.
+  A changed payload fails before writes, partial writes resume safely, and a
+  failed fresh attempt rolls back only keys it created. `create-release` depends
+  on this job, so public release creation cannot precede the complete R2 version.
 - **Content-types pinned per file** (must match the apt-worker route, see `apt-worker/AGENTS.md`):
-  `.js` → `application/javascript`, `.sri` → `text/plain`, `.sig`/`manifest.json.sig` →
-  `application/octet-stream`, `manifest.json` → `application/json`. The `*.js` glob includes the
+  `.js` → `application/javascript`, `.css` → `text/css`, `.sri` → `text/plain`,
+  `.sig`/`manifest.json.sig` → `application/octet-stream`, `manifest.json` →
+  `application/json`. The `*.js` glob includes the
   code-split shared chunks (rpc, subscriptions, input) — they must upload alongside the dialog
   bundles so dynamic `import()` resolves under the platform CSP.
 - **Secrets**: `FEDERATION_GPG_SIGNING_KEY` (+ optional `_ID`/`_PASSPHRASE`),
@@ -199,7 +209,7 @@ CI job that uploads the signed bundles to R2. Pipeline (each step gates the next
 - Onboarding checklist (T13) [EXISTS]: `OnboardingChecklist.svelte` (`src/main/`) renders a first-run guidance panel in `LiveView` when the device has no network interface and no server configured. Dismissal is persisted via `onboarding.svelte.ts` (`src/lib/stores/`) using `$persist("live-onboarding-dismissed")`. Auto-hides when `hasNetwork && hasServer` (config steps only — NOT gated on streaming). i18n under `live.onboarding.*` (10 locales, param-free keys).
 - PowerDialog rebootCountdown + `clearRebooting()` (T14) [EXISTS]: after a successful `system.reboot` call, `PowerDialog` enters a `counting` phase showing a rebootCountdown instead of closing immediately. If the device never goes down within the reconnect window, it transitions to `recovery` phase and calls `clearRebooting()` (`connection-ux.svelte.ts`) to clear the rebooting latch without a reconnect. `clearRebooting()` is the deliberate escape hatch — it sets `rebooting: false` directly. The countdown duration is overridable via `window.__ceraRebootCountdownSeconds` (e2e seam, prod-inert). i18n key `settings.dialogs.rebootCountdownRemaining` carries the countdown copy (param key: `{seconds:number}`).
 - Disabled-reason hints (T15) [EXISTS]: `WifiNetworkList`, `HotspotDialog`, `AudioDialog`, `StreamControlButton`, and `ModemConfigDialog` now surface a `title` attribute carrying a human-readable `disabledReason` string when a control is disabled. The reason is conditional — absent when the control is actionable. `WifiNetworkList` also distinguishes a scanning-in-progress state from a genuinely empty network list (nested `{#if scanning}` inside the `{:else}` of the `{#each}` block).
-- Stream-start failure reason (T16) [EXISTS]: `mapCerastreamError(error)` (`modules/streaming/cerastream-error-mapping.ts`) maps a `RuntimeErrorEvent` or structured engine error to a Tier-2 code string. The `streaming.start` output carries an optional `reason` field (`StreamingStartOutputExtended`). `LiveView` reads `reason` from the start result and looks it up in `live.startFailed.*` (nested i18n namespace: `live.startFailed.generic` + 7 Tier-2 code keys). The frontend `TypedRPC` in `client.ts` was updated to use `StreamingStartOutputExtended` — the contract change alone is invisible to the FE without this update.
+- Stream-start failure code (T16) [EXISTS]: `mapCerastreamError(error)` (`modules/streaming/cerastream-error-mapping.ts`) maps a `RuntimeErrorEvent` or structured engine error to a Tier-2 code string. The `streaming.start` output carries one structured `error` field (`StreamingStartOutputExtended`) on failure. `LiveView` reads that code from the start result and looks it up in `live.startFailed.*` (nested i18n namespace: `live.startFailed.generic` + Tier-2 code keys). The frontend `TypedRPC` in `client.ts` uses `StreamingStartOutputExtended` — the contract change alone is invisible to the FE without this update.
 - i18n placeholder keys (T17) [EXISTS]: four hardcoded `placeholder="…"` literals in `NetifDialog`, `ModemConfigDialog`, `CloudRemoteDialog`, and `SshDialog` were moved to i18n keys (`settings.dialogs.ipPlaceholder`, `network.modem.apnPlaceholder`, `advanced.providerNamePlaceholder`, `advanced.providerHostPlaceholder`). No visual change; the keys are param-free and their values are identical across all 10 locales.
 - Unified badge component: `custom/Badge.svelte` is the single variant-driven badge for all pill/marker needs. `variant="speed"` renders the throughput value (font-mono, signal-tier colour, dims when `stale`, carries `data-live-value`); `variant="stale"` renders the per-interface staleness marker (warning pill + Clock glyph + i18n copy, carries `data-stale-interface`); `variant="success" | "warning" | "error" | "info" | "neutral"` renders a semantic status pill (carries `data-status-badge`, passes `...rest` through, optional `icon`/`label`/`children` snippets, `size="sm" | "micro"`) with an unknown value falling back to `neutral`. It replaced the former `SpeedBadge` / `StaleBadge` / `StatusBadge` components (folded together with no visual change). Every variant is static/CSS-only, so all are e-ink-freeze safe.
 - Per-field sync state: `rpc/field-sync-state.svelte.ts` is a lifecycle machine (`idle → pending → applying → applied | failed`) layered ON TOP of the dirty-registry — it does NOT replace it. It composes the existing `markPending` / `onRpcResolved` / `onRpcAppliedReactive` lock contract (so a field locked here is the same lock the ingestion path guards) and adds the phase. Consumers call `beginFieldSync` → `markFieldApplying` → `markFieldApplied(field, result.applied)` / `markFieldFailed(field, authoritative)`; read the phase with `getFieldState(field)` and render `custom/FieldSyncIndicator.svelte` (the InlineSpinner during `applying`). Contracts: `applied` releases to `result.applied` (never the typed value); a stuck in-flight field is TTL-released after `FIELD_LOCK_TTL_MS`; status fields (`is_streaming`, `wifi`, …) are refused (G4). `initFieldSyncState()` MUST run at startup (in `main.ts`, beside `initSubscriptions()`) — the store's reactive root must not be first created mid-render.
@@ -266,7 +276,7 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - No direct backend calls — everything through `rpc.*` or `rpcClient.onMessage`.
 - No manual UI primitive files in `lib/components/ui/` — use the shadcn-svelte CLI.
 - No `$:` reactive statements — Svelte 5 runes only.
-- No hardcoded socket URL — call `getSocketUrl()` from `$lib/env`. It derives the RPC WebSocket URL from `window.location` in production (origin host:port, scheme from protocol) and ignores `VITE_SOCKET_*` there; those overrides apply to dev only. Never reconstruct the URL from `hostname` + a port literal.
+- No hardcoded socket URL — RPC callers use `getRpcSocketUrl()` from `$lib/env`; preview callers use `getPreviewSocketUrl()`. Both derive same-origin URLs from `window.location` in production and ignore `VITE_SOCKET_*` there; those overrides apply to dev only. Never reconstruct a socket URL from `hostname` + a port literal.
 - Don't read connection state from `lib/stores/offline-state.svelte` in authed components — use `subscriptions.svelte` `getIsConnected()`/`getConnectionState()` (survives socket replacement on reconnect). `offline-state` is only reliable for the pre-auth strip.
 - Don't add inline validation literals to dialogs — import from `ValidationAdapter.ts`.
 - Don't release field locks to the client's intended value — always use `result.applied` from the RPC response.

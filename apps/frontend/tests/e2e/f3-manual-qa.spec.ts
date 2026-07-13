@@ -25,8 +25,9 @@
  * Note: Groups 1 (signal previsualization) and 2 (HUD telemetry) live in
  * `data-previsualization.spec.ts`, which covers those outcomes end-to-end.
  *
- * Prereq: backend on :3002 (NODE_ENV=development), frontend Vite :6173 — both
- * auto-started by playwright.config.ts.
+ * Topology: local Vite dev on :6173 uses `__ceraSocketPort`; CI prebuilt Vite
+ * preview on :6173 uses the HttpOnly cookie. Both target this worker's 31xx
+ * development backend.
  */
 import { expect, test } from './fixtures/index.js';
 import { ensureAuthenticated } from './helpers/index.js';
@@ -59,7 +60,7 @@ test.describe('F3 manual QA — modem toggles, hotspot gate, staleness', () => {
 
 		// Proxy the app WS to the real backend. Record outgoing RPC paths and
 		// gate the server→client stream behind `frozen` (the staleness switch).
-		await page.routeWebSocket(/:(3002|31\d\d|8090|8091)\//, (ws) => {
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			const server = ws.connectToServer();
 			ws.onMessage((message) => {
 				try {

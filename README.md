@@ -12,7 +12,7 @@ bun install
 bun run dev
 ```
 
-Opens at `http://localhost:5173`. Backend runs on port 3001.
+Opens at `http://localhost:6173`. Backend runs on port 3002.
 
 ## Project Structure
 
@@ -114,13 +114,17 @@ inline). See `.env.example` for the full layout.
 ### Debian Package
 
 ```bash
+bun run test:release-package-contracts
 BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh
 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 ```
 
+Release assets are published through `publish-release.yml`; see
+[`docs/BUILD_PIPELINE.md`](docs/BUILD_PIPELINE.md) for the stable APT handoff.
+
 ### Supported Hardware
 
-**ARM64**: Orange Pi 5/5+, Radxa Rock 5B, NVIDIA Jetson Orin  
+**ARM64**: Orange Pi 5/5+, Radxa Rock 5B
 **AMD64**: Intel N100/N200 Mini PCs, standard x86 computers
 
 See [BUILD_PIPELINE.md](docs/BUILD_PIPELINE.md) for full build documentation.

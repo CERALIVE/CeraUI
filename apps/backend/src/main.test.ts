@@ -7,6 +7,12 @@ import {
 	guardNonCritical,
 	runCritical,
 } from "./helpers/boot-guard.ts";
+import { clearRecentLogLines, getRecentLogLines } from "./helpers/logger.ts";
+import {
+	type BackendShutdownDeps,
+	handleTerminationSignal,
+	resetShutdownForTest,
+} from "./helpers/shutdown.ts";
 import {
 	buildLocalObservabilitySurface,
 	type LocalObservabilitySurface,
@@ -58,6 +64,8 @@ async function simulateBoot(opts: {
 
 beforeEach(() => {
 	resetBootReadiness();
+	resetShutdownForTest();
+	clearRecentLogLines();
 });
 
 describe("guardNonCritical — fail-soft non-critical init", () => {
@@ -232,4 +240,115 @@ describe("/api/health surface — operator-visible degraded flag", () => {
 		const surface = buildLocalObservabilitySurface(HEALTHY_ROLLUP, 42);
 		expect(surface.readiness).toBeUndefined();
 	});
+});
+
+describe("termination shutdown lifecycle", () => {
+	test("SIGTERM cleanup drains SRT ingest, dmesg watchers, then streamloop before exit", async () => {
+		const calls: string[] = [];
+		let resolveGraceful: (() => void) | undefined;
+		const deps: BackendShutdownDeps = {
+			stopSrtIngest: async () => {
+				calls.push("srt");
+			},
+			stopDmesgWatchers: () => {
+				calls.push("dmesg");
+			},
+			gracefulShutdown: () =>
+				new Promise<void>((resolve) => {
+					calls.push("streamloop");
+					resolveGraceful = resolve;
+				}),
+			exit: (code) => {
+				calls.push(`exit:${code}`);
+			},
+		};
+
+		handleTerminationSignal("SIGTERM", deps);
+		handleTerminationSignal("SIGINT", deps);
+		await Bun.sleep(0);
+
+		expect(calls).toEqual(["srt", "dmesg", "streamloop"]);
+		resolveGraceful?.();
+		await Bun.sleep(0);
+		expect(calls).toEqual(["srt", "dmesg", "streamloop", "exit:0"]);
+	});
+
+	interface AsyncCleanupFailure {
+		cleanupName: string;
+		errorMessage: string;
+		rejectAt: "srt" | "streamloop";
+	}
+
+	const asyncCleanupFailures: AsyncCleanupFailure[] = [
+		{
+			cleanupName: "SRT ingest",
+			errorMessage: "srt cleanup failed",
+			rejectAt: "srt",
+		},
+		{
+			cleanupName: "streaming processes",
+			errorMessage: "streamloop cleanup failed",
+			rejectAt: "streamloop",
+		},
+	];
+
+	for (const scenario of asyncCleanupFailures) {
+		test(`reports ${scenario.cleanupName} rejection, attempts later cleanup, and exits once`, async () => {
+			const calls: string[] = [];
+			const unhandledRejections: unknown[] = [];
+			const onUnhandledRejection = (reason: unknown): void => {
+				unhandledRejections.push(reason);
+			};
+			process.on("unhandledRejection", onUnhandledRejection);
+
+			try {
+				let observeExit: ((code: number) => void) | undefined;
+				const exitObserved = new Promise<number>((resolve) => {
+					observeExit = resolve;
+				});
+				const deps: BackendShutdownDeps = {
+					stopSrtIngest: async () => {
+						calls.push("srt");
+						if (scenario.rejectAt === "srt") {
+							throw new Error(scenario.errorMessage);
+						}
+					},
+					stopDmesgWatchers: () => {
+						calls.push("dmesg");
+					},
+					gracefulShutdown: async () => {
+						calls.push("streamloop");
+						if (scenario.rejectAt === "streamloop") {
+							throw new Error(scenario.errorMessage);
+						}
+					},
+					exit: (code) => {
+						calls.push(`exit:${code}`);
+						observeExit?.(code);
+					},
+				};
+
+				handleTerminationSignal("SIGTERM", deps);
+				handleTerminationSignal("SIGINT", deps);
+				const exitCode = await exitObserved;
+				await new Promise((resolve) => setTimeout(resolve, 20));
+
+				expect(exitCode).toBe(0);
+				expect(calls).toEqual(["srt", "dmesg", "streamloop", "exit:0"]);
+				expect(calls.filter((call) => call === "exit:0")).toHaveLength(1);
+				expect(unhandledRejections).toEqual([]);
+
+				const failureReports = getRecentLogLines().filter((line) =>
+					line.includes("cleanup failed"),
+				);
+				expect(failureReports).toHaveLength(1);
+				expect(failureReports[0]).toContain(
+					`shutdown: ${scenario.cleanupName} cleanup failed`,
+				);
+				expect(failureReports[0]).toContain(scenario.errorMessage);
+			} finally {
+				process.off("unhandledRejection", onUnhandledRejection);
+			}
+		});
+	}
 });
