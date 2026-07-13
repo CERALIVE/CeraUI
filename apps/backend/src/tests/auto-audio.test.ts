@@ -8,7 +8,7 @@ import {
 	mock,
 	test,
 } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -23,6 +23,8 @@ import type { RuntimeConfig } from "../helpers/config-schemas.ts";
 import { getConfig } from "../modules/config.ts";
 import { setup } from "../modules/setup.ts";
 import {
+	deriveAudioSources,
+	getAudioDevices,
 	setMockAudioDevicesProvider,
 	updateAudioDevices,
 } from "../modules/streaming/audio.ts";
@@ -1048,6 +1050,51 @@ describe("refreshResolvedAsrcPreview — live-state freshness + reload hydration
 		expect(launch.asrc).toBe("USB audio");
 		// config.json / getConfig().asrc is STILL "Auto" after resolution.
 		expect(getConfig().asrc).toBe(AUDIO_SOURCE_AUTO);
+	});
+});
+
+describe("updateAudioDevices initial enumeration", () => {
+	let audioRoot: string | undefined;
+
+	afterEach(() => {
+		if (audioRoot !== undefined)
+			rmSync(audioRoot, { recursive: true, force: true });
+		audioRoot = undefined;
+	});
+
+	test("a missing audio directory resolves and publishes the empty-device state", async () => {
+		audioRoot = mkdtempSync(join(tmpdir(), "auto-audio-missing-"));
+		const cardDir = join(audioRoot, "card0");
+		mkdirSync(cardDir);
+		writeFileSync(join(cardDir, "id"), "usbaudio\n");
+		await updateAudioDevices(audioRoot);
+		expect(getAudioDevices()).toHaveProperty("USB audio", "usbaudio");
+
+		rmSync(audioRoot, { recursive: true });
+		await updateAudioDevices(audioRoot);
+
+		expect(getAudioDevices()).toEqual({
+			"No audio": "No audio",
+			"Pipeline default": "Pipeline default",
+		});
+		expect(deriveAudioSources()).toEqual([
+			{ id: "No audio", kind: "none", labelKey: "audio.sources.noAudio" },
+			{
+				id: "Pipeline default",
+				kind: "pipeline_default",
+				labelKey: "audio.sources.pipelineDefault",
+			},
+		]);
+	});
+
+	test("a non-ENOENT enumeration error still rejects", async () => {
+		audioRoot = mkdtempSync(join(tmpdir(), "auto-audio-not-dir-"));
+		const notDirectory = join(audioRoot, "audio-file");
+		writeFileSync(notDirectory, "not a directory\n");
+		const before = getAudioDevices();
+
+		await expect(updateAudioDevices(notDirectory)).rejects.toThrow("ENOTDIR");
+		expect(getAudioDevices()).toEqual(before);
 	});
 });
 
