@@ -8,6 +8,9 @@ import {
 	mock,
 	test,
 } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
 	type CerastreamClient,
@@ -1051,13 +1054,20 @@ describe("refreshResolvedAsrcPreview — live-state freshness + reload hydration
 // ─── Lifecycle (b): a hotplug re-enumeration while streaming stays frozen ─────
 
 describe("updateAudioDevices re-enumeration while streaming (Oracle R10-1)", () => {
+	let audioDir: string | undefined;
+
 	afterEach(() => {
+		if (audioDir !== undefined)
+			rmSync(audioDir, { recursive: true, force: true });
+		audioDir = undefined;
+		delete getConfig().asrc;
 		setAutoAudioBroadcaster(undefined);
 		resetAutoAudioState();
 		updateStatus(false);
 	});
 
 	test("a hotplug updateAudioDevices() while STREAMING does NOT change resolved_asrc", async () => {
+		audioDir = mkdtempSync(join(tmpdir(), "auto-audio-streaming-"));
 		setResolvedAsrcFromStart("HDMI", "hdmi");
 		updateStatus(true);
 		const broadcasts: Array<Record<string, unknown>> = [];
@@ -1066,11 +1076,10 @@ describe("updateAudioDevices re-enumeration while streaming (Oracle R10-1)", () 
 		);
 		getConfig().asrc = AUDIO_SOURCE_AUTO;
 
-		await updateAudioDevices();
+		await updateAudioDevices(audioDir);
 
 		expect(getResolvedAsrc()).toBe("HDMI");
 		expect(getResolvedAsrcReason()).toBe("hdmi");
 		expect(broadcasts).toEqual([]);
-		delete getConfig().asrc;
 	});
 });
