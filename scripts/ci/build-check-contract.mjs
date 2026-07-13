@@ -32,6 +32,7 @@ const SRTLA_ACTIVATE_COMMANDS = [
 	'runtime_bin="$runtime_dir/srtla_send"',
 	'chmod +x "$runtime_bin"',
 	'echo "$runtime_dir" >> "$GITHUB_PATH"',
+	'export PATH="$runtime_dir:$PATH"',
 	`RUNTIME_DIR="$runtime_dir" bun -e '
 const path = "apps/backend/setup.json";
 const setup = await Bun.file(path).json();

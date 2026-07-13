@@ -183,6 +183,47 @@ const staticOnlyFalseGreenMutations = [
 				'          verify_package() {\n            test "$(dpkg-deb --field "$package_path" Package)" = srtla-send-rs\n          }',
 			),
 	},
+	{
+		name: 'same-shell PATH export removed',
+		expectedError: 'test-e2e srtla command plan must equal',
+		apply: (source) => replaceExactly(source, '          export PATH="$runtime_dir:$PATH"', ''),
+	},
+	{
+		name: 'same-shell PATH export retained only in a comment',
+		expectedError: 'test-e2e srtla command plan must equal',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'          export PATH="$runtime_dir:$PATH"',
+				'          # export PATH="$runtime_dir:$PATH"',
+			),
+	},
+	{
+		name: 'same-shell PATH export hidden in a false branch',
+		expectedError: 'test-e2e srtla command plan must equal',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'          export PATH="$runtime_dir:$PATH"',
+				'          if false; then\n            export PATH="$runtime_dir:$PATH"\n          fi',
+			),
+	},
+	{
+		name: 'same-shell PATH export ordered after command lookup',
+		expectedError: 'test-e2e srtla command plan must equal',
+		apply: (source) => {
+			const withoutExport = replaceExactly(
+				source,
+				'          export PATH="$runtime_dir:$PATH"',
+				'',
+			);
+			return replaceExactly(
+				withoutExport,
+				'          test "$(command -v srtla_send)" = "$runtime_bin"',
+				'          test "$(command -v srtla_send)" = "$runtime_bin"\n          export PATH="$runtime_dir:$PATH"',
+			);
+		},
+	},
 ];
 
 describe('Build Check semantic workflow contract', () => {
