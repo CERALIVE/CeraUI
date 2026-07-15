@@ -16,7 +16,6 @@
 */
 
 /* SSH control */
-import type WebSocket from "ws";
 
 import { randomBase64 } from "../../helpers/crypto.ts";
 import { execFileP } from "../../helpers/exec.ts";
@@ -25,6 +24,7 @@ import { runWithStdin } from "../../helpers/run.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { setup } from "../setup.ts";
+import type { MessageSocket } from "../ui/message-socket.ts";
 import { notificationSend } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { describeCliError } from "./cli-parse.ts";
@@ -223,7 +223,7 @@ export function resetMockSshState(): void {
 }
 
 export async function startStopSsh(
-	conn: WebSocket,
+	conn: MessageSocket,
 	cmd: "start_ssh" | "stop_ssh",
 	statusDeps: Partial<SshStatusDeps> = {},
 ) {
@@ -265,7 +265,7 @@ export async function startStopSsh(
 }
 
 export async function resetSshPassword(
-	conn: WebSocket,
+	conn: MessageSocket,
 ): Promise<string | undefined> {
 	const ssh_user = resolveSshUser();
 

@@ -22,7 +22,6 @@ import {
 	successResponseSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-import type WebSocket from "ws";
 import { z } from "zod";
 
 import { logger } from "../../helpers/logger.ts";
@@ -93,7 +92,7 @@ export const getLogProcedure = authedProcedure
 	.output(logOutputSchema)
 	.handler(async ({ input, context }) => {
 		const result = await getLog(
-			context.ws as unknown as WebSocket,
+			context.ws,
 			input?.service ?? "ceralive.service",
 		);
 		return { log: result?.contents ?? "" };
@@ -105,7 +104,7 @@ export const getLogProcedure = authedProcedure
 export const getSyslogProcedure = authedProcedure
 	.output(logOutputSchema)
 	.handler(async ({ context }) => {
-		const result = await getLog(context.ws as unknown as WebSocket);
+		const result = await getLog(context.ws);
 		return { log: result?.contents ?? "" };
 	});
 
@@ -194,10 +193,7 @@ export const sshStartProcedure = authedProcedure
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
-		const success = await startStopSsh(
-			context.ws as unknown as WebSocket,
-			"start_ssh",
-		);
+		const success = await startStopSsh(context.ws, "start_ssh");
 		return { success };
 	});
 
@@ -210,10 +206,7 @@ export const sshStopProcedure = authedProcedure
 		if (getIsStreaming() || isUpdating()) {
 			return { success: false };
 		}
-		const success = await startStopSsh(
-			context.ws as unknown as WebSocket,
-			"stop_ssh",
-		);
+		const success = await startStopSsh(context.ws, "stop_ssh");
 		return { success };
 	});
 
@@ -228,7 +221,7 @@ export const sshResetPasswordProcedure = authedProcedure
 		}),
 	)
 	.handler(async ({ context }) => {
-		const password = await resetSshPassword(context.ws as unknown as WebSocket);
+		const password = await resetSshPassword(context.ws);
 		return password === undefined
 			? { success: false }
 			: { success: true, password };

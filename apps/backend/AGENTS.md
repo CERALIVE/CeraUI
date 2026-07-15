@@ -231,6 +231,10 @@ explicitly are unaffected.
   flips `mockSshActive` and broadcasts `{ssh}` without touching `systemctl` or `passwd`.
   On device, `ceralive` is the default SSH account when `setup.json` has no override;
   start, stop, and reset RPC responses settle only after the privileged action completes.
+- `MessageSocket` (`modules/ui/message-socket.ts`) is exactly
+  `{ readonly data?: { readonly senderId?: string }; send(message: string): void }`;
+  SSH, log, and notification producers accept Bun `AppWebSocket` structurally
+  without casts.
 - Kiosk start/stop RPCs likewise await the cog-display add-on lifecycle before reporting
   their applied status. Background status refresh and software-update scheduling remain
   deliberately asynchronous because their responses acknowledge a refresh/scheduled job,
