@@ -16,11 +16,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import type WebSocket from "ws";
-
 import { getRecentLogLines, logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import type { MessageSocket } from "../ui/message-socket.ts";
 
 import { notificationSend } from "../ui/notifications.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
@@ -41,7 +40,7 @@ function buildMockJournal(service?: string): string {
 }
 
 export async function getLog(
-	conn: WebSocket,
+	conn: MessageSocket,
 	service?: string,
 ): Promise<LogResult | undefined> {
 	const senderId = getSocketSenderId(conn);

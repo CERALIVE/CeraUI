@@ -28,9 +28,9 @@
   isDismissable - is the user allowed to hide it?
 */
 
-import type WebSocket from "ws";
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
+import type { MessageSocket } from "./message-socket.ts";
 import {
 	broadcastMsg,
 	buildMsg,
@@ -72,7 +72,7 @@ export function buildNotificationMsg(n: Notification, duration: number) {
 }
 
 export function notificationSend(
-	conn: WebSocket | undefined,
+	conn: MessageSocket | undefined,
 	name: Notification["name"],
 	type: Notification["type"],
 	msg: Notification["msg"],
@@ -208,6 +208,9 @@ export function getPersistentNotifications(isAuthed = false) {
 	return { show: notifications };
 }
 
-export function notificationSendPersistent(conn: WebSocket, isAuthed = false) {
+export function notificationSendPersistent(
+	conn: MessageSocket,
+	isAuthed = false,
+) {
 	conn.send(buildMsg("notification", getPersistentNotifications(isAuthed)));
 }

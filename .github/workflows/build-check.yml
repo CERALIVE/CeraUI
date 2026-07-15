@@ -120,6 +120,10 @@ jobs:
         working-directory: CeraUI
         run: bunx biome check .
 
+      - name: Backend typecheck (socket contract)
+        working-directory: CeraUI
+        run: bun run --filter backend check
+
       - name: RC-pin merge gate (no -rc. pin of @ceralive/{control-protocol,cerastream})
         working-directory: CeraUI
         run: bun run check:rc-pins

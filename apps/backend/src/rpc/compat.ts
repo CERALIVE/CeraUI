@@ -10,6 +10,7 @@ import {
 	nextRelaySeq,
 	relayStatusToGateway,
 } from "../modules/remote-control/status-relay.ts";
+import type { MessageSocket } from "../modules/ui/message-socket.ts";
 import { broadcast, buildMessage } from "./events.ts";
 import type { AppWebSocket } from "./types.ts";
 
@@ -146,11 +147,8 @@ export function getLastActive(conn: WebSocket | AppWebSocket): number {
  * Get socket sender ID
  * Compatible with old getSocketSenderId function
  */
-export function getSocketSenderId(
-	conn: WebSocket | AppWebSocket,
-): string | undefined {
-	const ws = conn as AppWebSocket;
-	return ws.data?.senderId;
+export function getSocketSenderId(conn: MessageSocket): string | undefined {
+	return conn.data?.senderId;
 }
 
 /**
