@@ -47,7 +47,6 @@
 */
 
 import { logger } from "../../helpers/logger.ts";
-import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { createMonitorManager } from "../network/monitor/monitor-manager.ts";
 import { withModemUpdateLock } from "../network/state/device-lock.ts";
 import type {
@@ -101,16 +100,21 @@ function publishModemsSnapshot(): void {
 /**
  * Broadcast the `modems` message in response to a reconcile diff.
  *
- * Shape is preserved exactly from the legacy loop: in mock mode the FULL state
- * is sent (the mock frontend wholesale-replaces modemsState per `status`
- * message), otherwise only newly-added modems carry their full descriptor and
- * everything else is a status-only partial.
+ * Only newly-added modems carry their full descriptor; every other modem sends
+ * a status-only partial. This holds in mock mode too: the frontend merges each
+ * `status.modems` frame field-by-field per modem id (subscriptions
+ * `mergeModemList`), so a periodic status refresh MUST NOT re-send full state —
+ * `buildModemMessage` ALWAYS includes `available_networks` (and `config`) in a
+ * full descriptor, so re-sending it on every tick clobbers an operator-scan
+ * list or config the client already holds (e.g. a pending modem scan would
+ * false-confirm when its `available_networks` is overwritten with `{}`). This
+ * mirrors the real device: a status poll refreshes signal/registration only,
+ * never the operator scan list. The initial full snapshot still reaches every
+ * client via the post-login `buildModemsMessage()` push and the discovery
+ * diff's `added` entries. (Formerly mock mode wholesale-replaced full state on
+ * every tick, a stale assumption from before the frontend merged per-field.)
  */
 function broadcastFromDiff(diff: StateDiff<ModemDiffEntry>): void {
-	if (shouldUseMocks()) {
-		broadcastModems(undefined);
-		return;
-	}
 	const fullState: Record<number, true> = {};
 	for (const entry of diff.added) {
 		fullState[entry.id] = true;
