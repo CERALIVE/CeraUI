@@ -35,13 +35,24 @@ import { isDevelopment } from "../../mocks/mock-config.ts";
 
 /** Device-tree path Rockchip boards expose their model string on. */
 const DEVICE_TREE_MODEL = "/proc/device-tree/model";
+/**
+ * Device-tree path exposing the board's `compatible` list (NUL-separated on
+ * disk). This is the RELIABLE RK3588 marker: it always carries the SoC
+ * compatible string (e.g. "radxa,rock-5b-plus\0rockchip,rk3588"), even on
+ * boards whose `model` string never names the SoC. The Radxa ROCK 5B+ reads
+ * "Radxa ROCK 5B+" with no "RK3588" substring, so the model check alone
+ * wrongly classifies a real board as emulated — the compatible check fixes it.
+ */
+const DEVICE_TREE_COMPATIBLE = "/proc/device-tree/compatible";
 const CERALIVE_RELEASE_FILE = "/etc/ceralive/release";
 const DMI_PRODUCT_NAME = "/sys/class/dmi/id/product_name";
 const DMI_BOARD_NAME = "/sys/class/dmi/id/board_name";
 
 /**
- * Substrings that positively identify an RK3588 board. On a real Rockchip
- * board `/proc/device-tree/model` reads e.g. "Rockchip RK3588 ...".
+ * Substring that positively identifies an RK3588 board. Matched
+ * case-insensitively against BOTH `/proc/device-tree/compatible` (lowercase
+ * "rockchip,rk3588") and `/proc/device-tree/model` (uppercase "RK3588" on the
+ * boards whose model string names the SoC, e.g. Orange Pi 5+).
  */
 const RK3588_DEVICE_MARKER = "RK3588";
 const X86_MINIPC_DMI_MARKERS = ["N100", "N200", "Mini PC", "MINIPC"] as const;
@@ -63,6 +74,12 @@ export type DeviceDetectionDeps = {
 	 * {@link isRealDevice} swallows the rejection and resolves false.
 	 */
 	readDeviceTreeModel: () => Promise<string>;
+	/**
+	 * Read the device-tree `compatible` list (NUL-separated on disk). The
+	 * reliable RK3588 marker. MAY reject (file absent/unreadable);
+	 * {@link isRealDevice} swallows the rejection and resolves false.
+	 */
+	readDeviceTreeCompatible: () => Promise<string>;
 	readCeraliveRelease: () => Promise<string>;
 	readDmiProductName: () => Promise<string>;
 	readDmiBoardName: () => Promise<string>;
@@ -72,6 +89,7 @@ export const defaultDeviceDetectionDeps: DeviceDetectionDeps = {
 	getDeviceTypeOverride: () => process.env.CERALIVE_DEVICE_TYPE,
 	isDevelopment,
 	readDeviceTreeModel: () => Bun.file(DEVICE_TREE_MODEL).text(),
+	readDeviceTreeCompatible: () => Bun.file(DEVICE_TREE_COMPATIBLE).text(),
 	readCeraliveRelease: () => Bun.file(CERALIVE_RELEASE_FILE).text(),
 	readDmiProductName: () => Bun.file(DMI_PRODUCT_NAME).text(),
 	readDmiBoardName: () => Bun.file(DMI_BOARD_NAME).text(),
@@ -85,8 +103,8 @@ async function readOptional(probe: () => Promise<string>): Promise<string> {
 	}
 }
 
-function hasRk3588Marker(model: string): boolean {
-	return model.includes(RK3588_DEVICE_MARKER);
+function hasRk3588Marker(identity: string): boolean {
+	return identity.toLowerCase().includes(RK3588_DEVICE_MARKER.toLowerCase());
 }
 
 function hasCeraliveImageIdentity(release: string): boolean {
@@ -102,7 +120,10 @@ function hasX86MiniPcDmiMarker(dmi: string): boolean {
  *
  *  1. `CERALIVE_DEVICE_TYPE` override — "real" → true, "emulated" → false.
  *  2. Dev/mock mode → false (never drive the host OS from a dev box).
- *  3. `/proc/device-tree/model` names an RK3588 board → true.
+ *  3. `/proc/device-tree/compatible` OR `/proc/device-tree/model` names an
+ *     RK3588 board → true. The `compatible` list is the reliable marker (it
+ *     always carries "rockchip,rk3588"); `model` is a belt-and-suspenders
+ *     fallback for boards whose model string itself names the SoC.
  *  4. CeraLive image identity + x86 mini-PC DMI marker → true.
  *  5. Otherwise → false.
  *
@@ -119,6 +140,12 @@ export async function isRealDevice(
 
 	if (deps.isDevelopment()) return false;
 
+	// `compatible` is the reliable RK3588 marker (always carries
+	// "rockchip,rk3588"); `model` is a fallback for boards whose model string
+	// itself names the SoC (e.g. Orange Pi 5+). Either match is a real device.
+	if (hasRk3588Marker(await readOptional(deps.readDeviceTreeCompatible))) {
+		return true;
+	}
 	if (hasRk3588Marker(await readOptional(deps.readDeviceTreeModel))) {
 		return true;
 	}
