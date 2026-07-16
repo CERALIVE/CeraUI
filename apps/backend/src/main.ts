@@ -81,16 +81,14 @@ import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
 import { checkEngineCompatibilityOnStartup } from "./modules/streaming/cerastream-backend.ts";
 import { reconcilePersistedPipeline } from "./modules/streaming/config-migration.ts";
 import { startDeviceDiscovery } from "./modules/streaming/devices.ts";
+import { initEngineConnection } from "./modules/streaming/engine-reconnect.ts";
 import { setGatewayProbe } from "./modules/streaming/gateway-availability.ts";
 import { broadcastHealthIfChanged } from "./modules/streaming/health.ts";
 import {
 	broadcastLinkTelemetryIfChanged,
 	setMockLinkTelemetryProvider,
 } from "./modules/streaming/link-telemetry.ts";
-import {
-	getPipelineList,
-	initPipelines,
-} from "./modules/streaming/pipelines.ts";
+import { getPipelineList } from "./modules/streaming/pipelines.ts";
 import { refreshAndBroadcastSources } from "./modules/streaming/sources.ts";
 import {
 	getStreamingProcesses,
@@ -211,12 +209,19 @@ wireActiveProfileReporter();
 // Built from the engine's get-capabilities IPC — the engine may be starting or
 // unreachable, so this is the likeliest awaited init to throw/hang. On failure
 // the pipeline registry stays empty (stream-start gated) but the UI is reachable.
+// initEngineConnection runs the first attempt then, if the engine is not yet
+// reachable, arms a bounded backoff→periodic recheck that re-broadcasts
+// capabilities/pipelines/sources once cerastream comes up — so a systemd-ordering
+// race or slow engine start self-heals without an operator restart.
 await guardNonCritical("pipelines", () =>
-	initPipelines(
+	initEngineConnection(
 		shouldUseMocks()
 			? {
-					fetchEngineCapabilities: async () => getMockEngineCapabilities(),
-					fetchEngineDevices: async () => getMockEngineDevices(),
+					capabilities: {
+						fetchEngineCapabilities: async () => getMockEngineCapabilities(),
+						fetchEngineDevices: async () => getMockEngineDevices(),
+					},
+					sources: { fetchEngineDevices: async () => getMockEngineDevices() },
 				}
 			: {},
 	),
