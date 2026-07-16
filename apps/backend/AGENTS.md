@@ -260,6 +260,30 @@ failure is logged before the next step runs; `exit(0)` is still attempted after 
 three steps. Later signals remain ignored. The direct regression coverage lives in
 `src/main.test.ts` under `termination shutdown lifecycle`.
 
+## SIGUSR2 UDEV HOTPLUG HOOK [EXISTS]
+
+`main.ts`'s `process.on("SIGUSR2", udevDeviceUpdate)` re-scans Cam Link USB2 +
+audio devices on an Elgato/USB-audio hot(un)plug. The signal is delivered by two
+udev rules in `deployment/` (`98-ceralive-audio.rules`,
+`99-ceralive-check-usb-devices.rules`) that MUST target the unit's main pid:
+
+```
+RUN+="/usr/bin/systemctl kill --kill-whom=main --signal=SIGUSR2 ceralive.service"
+```
+
+NOT `pkill -f ceralive` (the retired form). `pkill -f` substring-matched
+avahi-daemon's process title `avahi-daemon: registering [ceralive.local]` (the
+device hostname is `ceralive.local`) and killed mDNS on every hotplug.
+`--kill-whom=main` scopes the signal to the tracked MAIN pid via the unit cgroup —
+mirroring the old `pkill -o` single-process intent — so the whole-cgroup default
+(`all`) can never collaterally SIGUSR2-terminate `srtla_send`/`bcrpt` (which share
+`ceralive.service`'s cgroup while streaming and do NOT handle SIGUSR2). `systemctl
+kill` from a udev `RUN+=` is safe: it creates no systemd job (returns after the
+PID-1 D-Bus request), so the `--no-block` / deadlock caveats that apply to
+`start`/`stop`/`restart` do not apply. Regression lock:
+`src/tests/udev-rules-sigusr2-scope.test.ts` (static assertion on the shipped rule
+files). Do NOT reintroduce a broad `pkill`, and do NOT drop `--kill-whom=main`.
+
 ## BROADCAST EVENTS
 
 The backend pushes typed events to all connected clients via `rpc/events.ts`. Each event type carries a monotonic `seq` counter (`Map<string, number>`) that resets to 0 on server restart.
