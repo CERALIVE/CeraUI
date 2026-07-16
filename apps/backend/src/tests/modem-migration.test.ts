@@ -69,6 +69,8 @@ class FakeMonitor implements IMonitorEmitter {
 const monitor = new FakeMonitor();
 
 describe("modem migration — event-driven presence + retained status poll", () => {
+	const savedMockMode = process.env.MOCK_MODE;
+
 	beforeAll(async () => {
 		// Activate the mock providers so mmcli/nmcli never touch real binaries.
 		process.env.MOCK_MODE = "true";
@@ -92,6 +94,8 @@ describe("modem migration — event-driven presence + retained status poll", () 
 			removeModem(id);
 		}
 		setModemsState({});
+		if (savedMockMode === undefined) delete process.env.MOCK_MODE;
+		else process.env.MOCK_MODE = savedMockMode;
 	});
 
 	beforeEach(() => {

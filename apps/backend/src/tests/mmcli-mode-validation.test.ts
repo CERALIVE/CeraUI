@@ -19,9 +19,15 @@ import {
 	validateModeSpec,
 } from "../modules/modems/mmcli.ts";
 
+// The `mmList()` test flips MOCK_MODE on; restore it (bun shares one global
+// across files, so an unrestored env write leaks into every later suite).
+const savedMockMode = process.env.MOCK_MODE;
+
 afterEach(() => {
 	mock.restore();
 	stopMockService();
+	if (savedMockMode === undefined) delete process.env.MOCK_MODE;
+	else process.env.MOCK_MODE = savedMockMode;
 });
 
 describe("validateModeSpec() — mode allowlist", () => {
