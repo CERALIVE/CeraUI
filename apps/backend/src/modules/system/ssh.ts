@@ -25,7 +25,10 @@ import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import type { MessageSocket } from "../ui/message-socket.ts";
-import { notificationSend } from "../ui/notifications.ts";
+import {
+	notificationBroadcast,
+	notificationSend,
+} from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { describeCliError } from "./cli-parse.ts";
 
@@ -297,4 +300,102 @@ export async function resetSshPassword(
 	broadcastMsg("config", config);
 	await getSshStatus();
 	return password;
+}
+
+/**
+ * Injectable surface for {@link ensureSshPasswordSynced}. Mirrors the
+ * {@link SshStatusDeps} DI pattern so tests drive the sync without a real
+ * `/etc/shadow` read or a real `passwd` spawn. `readShadow` is fed to the shared
+ * {@link probeSshUserHash}; `applyPassword` runs the same stdin-only `passwd`
+ * path {@link resetSshPassword} uses.
+ */
+export type SshPasswordSyncDeps = {
+	/** Read the raw /etc/shadow document (JS, no `grep` subprocess). */
+	readShadow: () => string | Promise<string>;
+	/** Apply `password` to `user`'s OS account via `passwd` (stdin only). */
+	applyPassword: (user: string, password: string) => Promise<void>;
+};
+
+const defaultSshPasswordSyncDeps: SshPasswordSyncDeps = {
+	readShadow: () => Bun.file("/etc/shadow").text(),
+	applyPassword: async (user, password) => {
+		// `passwd` reads the new password twice from stdin. The secret is fed via
+		// stdin ONLY — never on argv (parity with resetSshPassword).
+		await runWithStdin("passwd", [user], `${password}\n${password}\n`);
+	},
+};
+
+/**
+ * Boot-time reconciliation of the persisted SSH password against the live OS.
+ *
+ * `config.json` (which stores `ssh_pass` + `ssh_pass_hash`) is `/data`-persisted
+ * and survives an A/B OTA slot swap, but the OS-level `/etc/shadow` entry is
+ * rootfs-local — baked fresh into each image and NOT carried across a slot swap.
+ * So after an OTA the fresh slot's shadow holds a build-time password while
+ * config.json still remembers the operator's real one, locking the operator out
+ * until they manually reset. This mirrors the host-key restore in
+ * image-building-pipeline's `ceralive-ssh-firstboot.sh::ensure_host_keys()`:
+ * compare the persisted identity against the live one and RE-APPLY (never
+ * regenerate) the persisted one on a mismatch.
+ *
+ * Contract: never throws (BOOT FAIL-SOFT); a clean no-op under mocks, when
+ * nothing is persisted yet (`ssh_pass === undefined`), or when the OS already
+ * matches (the common same-slot boot). It re-applies the EXISTING persisted
+ * password — it NEVER generates a new one and NEVER writes config (the credential
+ * is unchanged; only the OS-level shadow entry must catch up).
+ */
+export async function ensureSshPasswordSynced(
+	deps: Partial<SshPasswordSyncDeps> = {},
+): Promise<void> {
+	// Dev/mock seam: never spawn passwd or read the real /etc/shadow on a dev box
+	// (mirrors startStopSsh's shouldUseMocks() gate).
+	if (shouldUseMocks()) return;
+
+	let ssh_user: string;
+	try {
+		ssh_user = resolveSshUser();
+	} catch (err) {
+		logger.error(`Skipping SSH password sync: ${err}`);
+		return;
+	}
+
+	// Nothing persisted yet → nothing to sync. Leaves the existing "generate on
+	// first startStopSsh when ssh_pass is undefined" contract untouched.
+	const password = getConfig().ssh_pass;
+	if (password === undefined) return;
+
+	const { readShadow, applyPassword } = {
+		...defaultSshPasswordSyncDeps,
+		...deps,
+	};
+
+	// The live OS hash vs the cached hash loadConfig() set from the persisted
+	// ssh_pass_hash. Equal → this slot already matches (the common same-slot
+	// boot); a fast, harmless no-op.
+	const liveHash = await probeSshUserHash(readShadow, ssh_user);
+	if (liveHash === sshPasswordHash) return;
+
+	try {
+		// Mismatch (a fresh OTA slot still carrying the build-time password):
+		// re-apply the EXISTING persisted password so the operator's credential
+		// stays stable across the update. A RESTORE, not a reset — no new random
+		// password, no saveConfig().
+		await applyPassword(ssh_user, password);
+	} catch (err) {
+		logger.error(`Failed to sync the SSH password for ${ssh_user}: ${err}`);
+		notificationBroadcast(
+			"ssh_pass_sync",
+			"error",
+			`Failed to sync the SSH password for ${ssh_user}`,
+			0,
+			true,
+		);
+		return;
+	}
+
+	// Re-probe so the cached hash (and the SSH status tile it feeds) reflects the
+	// OS we just wrote — the crypt salt on this slot differs from the persisted
+	// hash's, so read back the authoritative value rather than assume it.
+	sshPasswordHash = await probeSshUserHash(readShadow, ssh_user);
+	logger.info(`Re-applied the persisted SSH password for ${ssh_user}`);
 }

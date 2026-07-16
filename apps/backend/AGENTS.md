@@ -241,6 +241,35 @@ explicitly are unaffected.
   deliberately asynchronous because their responses acknowledge a refresh/scheduled job,
   not completion.
 
+### SSH password sync on boot — OTA slot-swap fix [EXISTS]
+
+`ensureSshPasswordSynced()` (`modules/system/ssh.ts`, wired into `main.ts` via
+`guardNonCritical("ssh-password-sync", …)` immediately before the boot
+`getSshStatus()` probe) fixes an operator lockout confirmed on real Rock 5B+
+hardware: an OTA A/B slot swap silently invalidated SSH login. `config.json`
+(`ssh_pass` + `ssh_pass_hash`) is `/data`-persisted and survives the swap, but the
+OS-level `/etc/shadow` entry is **rootfs-local** — baked fresh into each image and
+NOT carried across slots — so a freshly-activated slot holds the build-time
+password while config.json still remembers the operator's real one. Nothing
+re-applied it, so the operator had to click "Reset SSH Password" after every single
+OTA.
+
+The sync mirrors image-building-pipeline's
+`ceralive-ssh-firstboot.sh::ensure_host_keys()` restore pattern for host keys:
+compare the persisted `ssh_pass_hash` (cached via `getSshPasswordHash()`) against
+the live `/etc/shadow` hash (`probeSshUserHash`), and on a mismatch RE-APPLY (never
+regenerate) the EXISTING persisted `ssh_pass` through the same stdin-only
+`runWithStdin("passwd", …)` path `resetSshPassword()` uses. It is additive and does
+NOT touch `resetSshPassword()` (still generates a fresh secret on explicit reset)
+or `startStopSsh()`'s "generate when `ssh_pass` is undefined" branch. Contract:
+never throws (BOOT FAIL-SOFT); a clean no-op under `shouldUseMocks()`, when
+`ssh_pass` is undefined (nothing persisted yet), or when the OS already matches (the
+common same-slot boot). It NEVER generates a new password and NEVER calls
+`saveConfig()` — the credential is unchanged, only the OS shadow entry catches up.
+Effectful surface (`readShadow` / `applyPassword`) is injected via
+`SshPasswordSyncDeps` (mirrors `SshStatusDeps`) so `tests/ssh-password-sync.test.ts`
+drives it without a real `passwd`/`/etc/shadow`.
+
 ## CONVENTIONS
 
 - Runtime: Bun only. No Node-specific APIs (`fs/promises` ok; `node:cluster` not).

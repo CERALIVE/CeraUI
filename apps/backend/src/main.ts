@@ -106,7 +106,7 @@ import {
 	stopDmesgWatchers,
 } from "./modules/system/sensors.ts";
 import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updates.ts";
-import { getSshStatus } from "./modules/system/ssh.ts";
+import { ensureSshPasswordSynced, getSshStatus } from "./modules/system/ssh.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
@@ -258,6 +258,12 @@ initHardwareMonitoring();
 initDeviceStats();
 await guardNonCritical("rtmp-ingest", initRTMPIngestStats);
 await guardNonCritical("srt-ingest", initSRTIngest);
+// Reconcile the OS-level SSH password against the /data-persisted one BEFORE the
+// status probe below reads /etc/shadow: /etc/shadow is rootfs-local and does NOT
+// survive an A/B OTA slot swap, so a fresh slot silently locks the operator out
+// until this re-applies the persisted password (mirrors ceralive-ssh-firstboot.sh's
+// host-key restore). Fail-soft: a sync failure must never brick boot.
+await guardNonCritical("ssh-password-sync", ensureSshPasswordSynced);
 void getSshStatus();
 logger.info(bootTimer.phase("🖥️", "hardware"));
 
