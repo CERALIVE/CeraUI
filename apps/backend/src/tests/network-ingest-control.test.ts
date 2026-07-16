@@ -43,6 +43,7 @@ import { getConfig } from "../modules/config.ts";
 import {
 	deriveNetworkIngestInfo,
 	RTMP_GATEWAY_UNIT,
+	resetNetworkIngestState,
 	SRT_GATEWAY_UNIT,
 } from "../modules/network/network-ingest.ts";
 import {
@@ -460,11 +461,15 @@ describe("network.setIngestEnabled handler — mocks (zero spawns)", () => {
 		setStreamingState(false);
 		updateStatus(false);
 		resetMockState();
+		// The real setIngestEnabled RPC writes the module-level network-ingest
+		// cache; clear it so an rtmp-active snapshot never leaks into a later file.
+		resetNetworkIngestState();
 	});
 	afterAll(async () => {
 		stopMockService();
 		setMockHardware("rk3588");
 		await initPipelines();
+		resetNetworkIngestState();
 		if (savedMockMode === undefined) delete process.env.MOCK_MODE;
 		else process.env.MOCK_MODE = savedMockMode;
 	});

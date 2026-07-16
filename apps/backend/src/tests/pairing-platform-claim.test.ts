@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { call } from "@orpc/server";
 import { getConfig } from "../modules/config.ts";
 import {
@@ -41,7 +41,11 @@ beforeEach(() => {
 	savedNodeEnv = process.env.NODE_ENV;
 	savedDeviceType = process.env.CERALIVE_DEVICE_TYPE;
 	process.env.PLATFORM_URL = PLATFORM_URL;
-	savedConfigFile = readFileSync("config.json", "utf8");
+	// config.json is gitignored (absent on a fresh CI checkout, and a prior suite
+	// may remove it); an unconditional read throws ENOENT and fails every test.
+	savedConfigFile = existsSync("config.json")
+		? readFileSync("config.json", "utf8")
+		: undefined;
 	getConfig().remote_key = undefined;
 	getConfig().device_id = undefined;
 });
@@ -55,8 +59,8 @@ afterEach(() => {
 	else process.env.NODE_ENV = savedNodeEnv;
 	if (savedDeviceType === undefined) delete process.env.CERALIVE_DEVICE_TYPE;
 	else process.env.CERALIVE_DEVICE_TYPE = savedDeviceType;
-	if (savedConfigFile !== undefined)
-		writeFileSync("config.json", savedConfigFile);
+	if (savedConfigFile === undefined) rmSync("config.json", { force: true });
+	else writeFileSync("config.json", savedConfigFile);
 });
 
 /** Build a fetch stub that records the request and returns a canned Response. */
