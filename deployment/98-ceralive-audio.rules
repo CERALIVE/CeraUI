@@ -22,6 +22,11 @@ ATTR{id}=="OsmoAction5*", ATTR{id}="OsmoAction5", GOTO="signal_ceralive"
 ATTR{id}="usbaudio"
 
 LABEL="signal_ceralive"
-RUN+="/usr/bin/pkill -o -SIGUSR2 -f ceralive"
+# Target the ceralive.service unit's MAIN pid via its cgroup — NOT
+# `pkill -f ceralive`, which substring-matched avahi-daemon's process title
+# (`avahi-daemon: registering [ceralive.local]`) and killed mDNS. --kill-whom=main
+# preserves the old `pkill -o` single-process intent without signalling
+# srtla_send/bcrpt in the same cgroup (SIGUSR2 would terminate them).
+RUN+="/usr/bin/systemctl kill --kill-whom=main --signal=SIGUSR2 ceralive.service"
 
 LABEL="end"
