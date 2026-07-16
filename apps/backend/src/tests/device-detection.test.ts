@@ -22,6 +22,9 @@ function makeDeps(
 		readDeviceTreeModel: async () => {
 			throw new Error("ENOENT: /proc/device-tree/model");
 		},
+		readDeviceTreeCompatible: async () => {
+			throw new Error("ENOENT: /proc/device-tree/compatible");
+		},
 		readCeraliveRelease: async () => {
 			throw new Error("ENOENT: /etc/ceralive/release");
 		},
@@ -66,6 +69,28 @@ describe("isRealDevice", () => {
 		const deps = makeDeps({
 			readDeviceTreeModel: async () =>
 				"Radxa ROCK 5B Plus Board based on Rockchip RK3588",
+		});
+		expect(await isRealDevice(deps)).toBe(true);
+	});
+
+	// Confirmed production bug: on a real Radxa ROCK 5B+ the model string carries
+	// no "RK3588" substring, but /proc/device-tree/compatible (NUL-separated on
+	// disk) reliably contains lowercase "rockchip,rk3588". The compatible check
+	// must classify this real board as a device.
+	test("Radxa ROCK 5B+ compatible marker rescues a model with no RK3588 → true", async () => {
+		const deps = makeDeps({
+			readDeviceTreeModel: async () => "Radxa ROCK 5B+ \n",
+			readDeviceTreeCompatible: async () =>
+				"radxa,rock-5b-plus\u0000rockchip,rk3588\u0000",
+		});
+		expect(await isRealDevice(deps)).toBe(true);
+	});
+
+	test("compatible marker alone identifies an RK3588 board when the model is unhelpful → true", async () => {
+		const deps = makeDeps({
+			readDeviceTreeModel: async () => "Generic Board",
+			readDeviceTreeCompatible: async () =>
+				"vendor,board\u0000rockchip,rk3588\u0000",
 		});
 		expect(await isRealDevice(deps)).toBe(true);
 	});

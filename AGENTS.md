@@ -394,8 +394,13 @@ wraps its read in its own `try/catch` and degrades to `null` on failure — a mi
 Detection contract (fail-safe, defaults to `false`):
 1. `CERALIVE_DEVICE_TYPE==="real"` → true; `==="emulated"` → false (env override wins over everything)
 2. `isDevelopment()` → false (short-circuits before any hardware probe)
-3. `/proc/device-tree/model` contains the RK3588-specific marker `"RK3588"` → true;
-   generic Rockchip, RK3399, and RK356x identities fail closed
+3. `/proc/device-tree/compatible` OR `/proc/device-tree/model` contains the
+   RK3588 marker (`"rk3588"`, matched case-insensitively) → true. `compatible`
+   is the RELIABLE marker (always carries `rockchip,rk3588`, even on boards like
+   the Radxa ROCK 5B+ whose `model` reads just `"Radxa ROCK 5B+"` with no
+   `RK3588` substring); `model` is a belt-and-suspenders fallback for boards
+   whose model string itself names the SoC (e.g. Orange Pi 5+). Generic
+   Rockchip, RK3399, and RK356x identities fail closed
 4. x86 mini-PC path: `/etc/ceralive/release` contains `ID=ceralive` AND DMI
    `/sys/class/dmi/id/{product_name,board_name}` contains a mini-PC marker
    (`N100`, `N200`, `Mini PC`, `MINIPC`) → true
