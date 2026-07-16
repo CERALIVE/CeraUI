@@ -35,6 +35,7 @@ import {
 import { getMockHotspotConfig } from "../../mocks/providers/wifi.ts";
 import {
 	type ConnectionUUID,
+	type MacAddress,
 	nmConnDelete,
 	nmConnect,
 	nmConnGetFields,
@@ -70,6 +71,7 @@ import {
 	getMacAddressForWifiInterface,
 	getWifiIdToMacAddress,
 	type SSID,
+	type WifiInterface,
 	type WifiInterfaceId,
 } from "./wifi-interfaces.ts";
 
@@ -257,6 +259,32 @@ export function broadcastWifiState() {
 	broadcastMsg("status", { wifi: wifiBuildMsg() });
 }
 
+/*
+  Record one saved infrastructure connection on the interface(s) it can be used
+  from. A profile bound to a MAC that a present adapter reports is attributed to
+  that adapter only. Any other profile — no bound MAC (created outside CeraUI:
+  nmtui, `nmcli device wifi connect`, a baked image profile) or a bound MAC that
+  matches no present adapter (MAC randomization / swapped adapter) — is registered
+  on every adapter, mirroring the scan path where all interfaces see all networks.
+  Without this fallback an active-but-unbound connection resolves no UUID and the
+  UI shows "Connect" on the network the device is already connected to.
+*/
+export function registerSavedWifiConnection(
+	interfaces: Record<MacAddress, WifiInterface>,
+	macAddress: MacAddress,
+	ssid: SSID,
+	uuid: ConnectionUUID,
+): void {
+	const boundInterface = macAddress ? interfaces[macAddress] : undefined;
+	if (boundInterface) {
+		boundInterface.saved[ssid] = uuid;
+		return;
+	}
+	for (const wifiInterface of Object.values(interfaces)) {
+		wifiInterface.saved[ssid] = uuid;
+	}
+}
+
 export async function wifiUpdateSavedConns() {
 	// Retry transient nmcli connection-list failures with exponential backoff (T7).
 	const connections = await pollWithBackoff(() => nmConnsGet("uuid,type"), {
@@ -305,9 +333,12 @@ export async function wifiUpdateSavedConns() {
 			if (mode === "ap") {
 				void handleHotspotConn(macAddress, uuid);
 			} else if (mode === "infrastructure") {
-				if (macAddress && wifiInterfacesByMacAddress[macAddress]) {
-					wifiInterfacesByMacAddress[macAddress].saved[ssid] = uuid;
-				}
+				registerSavedWifiConnection(
+					wifiInterfacesByMacAddress,
+					macAddress,
+					ssid,
+					uuid,
+				);
 			}
 		} catch (err) {
 			if (err instanceof Error) {
