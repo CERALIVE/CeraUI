@@ -84,6 +84,15 @@ function wifiStatuses(sink: Array<Record<string, unknown>>): StatusPayload[] {
 
 const monitor = new FakeMonitor();
 
+// Both blocks below flip MOCK_MODE on; restore it (bun shares one global across
+// files, so an unrestored env write leaks into every later suite).
+const savedMockMode = process.env.MOCK_MODE;
+
+function restoreMockMode(): void {
+	if (savedMockMode === undefined) delete process.env.MOCK_MODE;
+	else process.env.MOCK_MODE = savedMockMode;
+}
+
 describe("mock feedback broadcast — signal fluctuations reach clients on a 5s cadence", () => {
 	beforeAll(async () => {
 		process.env.MOCK_MODE = "true";
@@ -109,6 +118,7 @@ describe("mock feedback broadcast — signal fluctuations reach clients on a 5s 
 		stopMockService();
 		for (const id of getModemIds()) removeModem(id);
 		setModemsState({});
+		restoreMockMode();
 	});
 
 	test("(a) two consecutive feedback ticks broadcast the changed modem signal", async () => {
@@ -229,6 +239,7 @@ describe("mock feedback broadcast — timer lifecycle", () => {
 	});
 	afterAll(() => {
 		stopMockService();
+		restoreMockMode();
 	});
 
 	test("(c) resetMockState clears the feedback broadcast interval (no leaked timer)", () => {
