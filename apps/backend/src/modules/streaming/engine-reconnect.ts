@@ -204,9 +204,16 @@ function errMessage(err: unknown): string {
  * Run one connection attempt: refresh capabilities, then — when asked — broadcast
  * the healed state if the engine became reachable. `refreshCapabilities` and
  * `broadcastEngineState` are both wrapped so a stray throw can never break the loop.
+ *
+ * Returns whether the loop may SETTLE: `true` only once the engine is reachable AND
+ * (for a heal attempt) the re-broadcast to clients actually completed. A reachable
+ * engine whose heal broadcast THROWS returns `false` so the caller keeps retrying —
+ * otherwise a transient error from any broadcast collaborator would strand
+ * already-connected clients on the offline banner until a manual reload, violating
+ * this module's "clients are updated before the loop settles" invariant.
  */
-async function runAttempt(broadcastOnHeal: boolean): Promise<void> {
-	if (!state) return;
+async function runAttempt(broadcastOnHeal: boolean): Promise<boolean> {
+	if (!state) return false;
 	const { deps } = state;
 	try {
 		await deps.refreshCapabilities();
@@ -217,16 +224,19 @@ async function runAttempt(broadcastOnHeal: boolean): Promise<void> {
 			`engine reconnect: capability refresh threw: ${errMessage(err)}`,
 		);
 	}
-	if (!state || !broadcastOnHeal || !deps.isEngineReachable()) return;
+	if (!state || !deps.isEngineReachable()) return false;
+	if (!broadcastOnHeal) return true;
 	try {
 		await deps.broadcastEngineState();
 		deps.logger.info(
 			"engine reconnect: engine reachable again; re-broadcast capabilities/pipelines/sources to clients",
 		);
+		return true;
 	} catch (err) {
 		deps.logger.warn(
-			`engine reconnect: heal broadcast failed: ${errMessage(err)}`,
+			`engine reconnect: heal broadcast failed, will retry: ${errMessage(err)}`,
 		);
+		return false;
 	}
 }
 
@@ -255,16 +265,19 @@ function scheduleRecheck(): void {
 }
 
 /**
- * One background recheck tick: attempt, then either settle (engine healed) or
- * schedule the next recheck (still down). The heal broadcast fires inside
- * `runAttempt` on the transition, so by the time we settle clients are updated.
+ * One background recheck tick: attempt, then either settle (engine healed AND
+ * clients re-broadcast) or schedule the next recheck (still down, or the heal
+ * broadcast threw). Settling is gated on `runAttempt`'s result — a reachable
+ * engine whose broadcast throws does NOT settle, it reschedules — so clients are
+ * never left on the offline banner while the loop silently gives up.
  */
 async function tickRecheck(): Promise<void> {
 	if (!state || state.stopped) return;
-	await runAttempt(true);
+	const healed = await runAttempt(true);
 	if (!state || state.stopped) return;
-	if (state.deps.isEngineReachable()) {
-		// Healed — the boot race is resolved; settle so we stop polling.
+	if (healed) {
+		// Healed — the boot race is resolved and clients are updated; settle so we
+		// stop polling.
 		state.stopped = true;
 		state.timer = undefined;
 		return;

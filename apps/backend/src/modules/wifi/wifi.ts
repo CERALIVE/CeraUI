@@ -268,6 +268,11 @@ export function broadcastWifiState() {
   on every adapter, mirroring the scan path where all interfaces see all networks.
   Without this fallback an active-but-unbound connection resolves no UUID and the
   UI shows "Connect" on the network the device is already connected to.
+
+  The fallback registers only where the SSID is not already claimed (`??=`), so a
+  precise MAC binding always wins over a same-SSID fallback profile regardless of
+  nmcli enumeration order — a fallback profile listed after a MAC-bound one for the
+  same SSID must not silently overwrite the precise adapter attribution.
 */
 export function registerSavedWifiConnection(
 	interfaces: Record<MacAddress, WifiInterface>,
@@ -281,7 +286,7 @@ export function registerSavedWifiConnection(
 		return;
 	}
 	for (const wifiInterface of Object.values(interfaces)) {
-		wifiInterface.saved[ssid] = uuid;
+		wifiInterface.saved[ssid] ??= uuid;
 	}
 }
 

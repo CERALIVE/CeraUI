@@ -77,4 +77,39 @@ describe("registerSavedWifiConnection", () => {
 		expect(interfaces[ADAPTER_B]?.saved[SSID_NAME]).toBe(UUID);
 		expect(interfaces[ADAPTER_A]?.saved[SSID_NAME]).toBeUndefined();
 	});
+
+	/*
+	 * Duplicate-SSID precedence: two profiles for the SAME ssid — one precisely
+	 * bound to a present adapter, one on the fallback path (unbound / stale MAC).
+	 * The precise binding must win on its adapter regardless of nmcli enumeration
+	 * order; the fallback only fills the adapters the precise profile does not own.
+	 */
+	const UUID_BOUND = "aaaaaaaa-1111-2222-3333-444444444444";
+	const UUID_FALLBACK = "bbbbbbbb-5555-6666-7777-888888888888";
+
+	it("keeps a precise MAC binding when a same-SSID fallback profile is registered after it", () => {
+		const interfaces = {
+			[ADAPTER_A]: makeInterface(0, "wlan0"),
+			[ADAPTER_B]: makeInterface(1, "wlan1"),
+		};
+
+		registerSavedWifiConnection(interfaces, ADAPTER_A, SSID_NAME, UUID_BOUND);
+		registerSavedWifiConnection(interfaces, "", SSID_NAME, UUID_FALLBACK);
+
+		expect(interfaces[ADAPTER_A]?.saved[SSID_NAME]).toBe(UUID_BOUND);
+		expect(interfaces[ADAPTER_B]?.saved[SSID_NAME]).toBe(UUID_FALLBACK);
+	});
+
+	it("lets a precise MAC binding override a same-SSID fallback profile registered before it", () => {
+		const interfaces = {
+			[ADAPTER_A]: makeInterface(0, "wlan0"),
+			[ADAPTER_B]: makeInterface(1, "wlan1"),
+		};
+
+		registerSavedWifiConnection(interfaces, "", SSID_NAME, UUID_FALLBACK);
+		registerSavedWifiConnection(interfaces, ADAPTER_A, SSID_NAME, UUID_BOUND);
+
+		expect(interfaces[ADAPTER_A]?.saved[SSID_NAME]).toBe(UUID_BOUND);
+		expect(interfaces[ADAPTER_B]?.saved[SSID_NAME]).toBe(UUID_FALLBACK);
+	});
 });
