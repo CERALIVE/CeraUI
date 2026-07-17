@@ -573,7 +573,11 @@ It is the boot `pipelines` init now (main.ts) and owns ONE self-rescheduling loo
 - **Heal broadcast** — on the unavailable→reachable transition it re-broadcasts
   `capabilities` + `pipelines` + `sources` to already-connected clients (the SAME
   trio the `setMockHardware` RPC uses), so the offline banner clears LIVE with no
-  page reload, then SETTLES (stops polling).
+  page reload, then SETTLES (stops polling). Settling is gated on the broadcast
+  actually completing: a reachable engine whose heal broadcast throws (a transient
+  broadcast-collaborator error) does NOT settle — it reschedules under the same
+  backoff — so clients are never stranded on the offline banner while the loop
+  silently gives up.
 
 Reachability = `getLastCapabilities()?.engineUnavailable === false` (a live snapshot).
 It feeds INTO the existing `engine-unavailable`/`engine-starting` capability tier — it

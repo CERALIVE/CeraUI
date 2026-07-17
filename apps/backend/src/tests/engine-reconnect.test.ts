@@ -21,12 +21,13 @@ type TimerHandle = ReturnType<typeof setTimeout>;
 // per-attempt reachability outcomes, so the whole loop is driven deterministically
 // with no real time. `fireNextTimer` runs the one pending timer then awaits the
 // background attempt it kicks off (via the settle seam).
-function harness(outcomes: boolean[]) {
+function harness(outcomes: boolean[], broadcastThrowsFirst = 0) {
 	const timers: Array<{ fn: () => void }> = [];
 	let idx = 0;
 	let reachable = false;
 	const refreshCalls: boolean[] = [];
 	let broadcasts = 0;
+	let broadcastAttempts = 0;
 	const delays: number[] = [];
 
 	const deps = {
@@ -37,6 +38,10 @@ function harness(outcomes: boolean[]) {
 		},
 		isEngineReachable: () => reachable,
 		broadcastEngineState: () => {
+			broadcastAttempts += 1;
+			if (broadcastAttempts <= broadcastThrowsFirst) {
+				throw new Error("heal broadcast failed (test)");
+			}
 			broadcasts += 1;
 		},
 		logger: silent,
@@ -61,6 +66,9 @@ function harness(outcomes: boolean[]) {
 		},
 		get broadcasts() {
 			return broadcasts;
+		},
+		get broadcastAttempts() {
+			return broadcastAttempts;
 		},
 		get delays() {
 			return delays;
@@ -149,6 +157,34 @@ describe("initEngineConnection — (b) later out-of-band reconnect", () => {
 		expect(h.delays.slice(0, 6)).toEqual([
 			1_500, 3_000, 6_000, 12_000, 22_500, 22_500,
 		]);
+	});
+});
+
+describe("initEngineConnection — (d) heal broadcast retried until it completes", () => {
+	test("a reachable engine whose first heal broadcast throws keeps retrying, then settles once it succeeds", async () => {
+		// engine is DOWN at boot, then UP on both rechecks; the first heal broadcast
+		// throws (a transient broadcast-collaborator error), the second succeeds.
+		const h = harness([false, true, true], 1);
+		await initEngineConnection(h.deps);
+
+		// boot attempt failed → one recheck scheduled, nothing broadcast yet.
+		expect(h.pendingTimers).toBe(1);
+		expect(h.broadcasts).toBe(0);
+
+		// first recheck: engine reachable, but the heal broadcast THROWS. The loop
+		// must NOT settle on this — it reschedules so clients are not stranded on the
+		// offline banner while the engine is actually healthy.
+		await h.fireNextTimer();
+		expect(h.broadcastAttempts).toBe(1);
+		expect(h.broadcasts).toBe(0);
+		expect(h.pendingTimers).toBe(1);
+
+		// second recheck: the heal broadcast succeeds → clients receive the full
+		// capabilities/pipelines/sources re-broadcast → the loop finally settles.
+		await h.fireNextTimer();
+		expect(h.broadcastAttempts).toBe(2);
+		expect(h.broadcasts).toBe(1);
+		expect(h.pendingTimers).toBe(0);
 	});
 });
 
