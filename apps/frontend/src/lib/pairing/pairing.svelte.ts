@@ -40,6 +40,7 @@ export class PairingController {
 	deviceId = $state<string | null>(null);
 	subStatus = $state<SubscriptionStatus | null>(null);
 	now = $state(Date.now());
+	authorization = $state("");
 
 	#ticker: ReturnType<typeof setInterval> | null = null;
 
@@ -72,7 +73,11 @@ export class PairingController {
 		this.status = "pairing";
 		this.error = null;
 		try {
-			const result = await rpc.pairing.completePairing({ code: this.code });
+			const authorization = this.authorization.trim();
+			const result = await rpc.pairing.completePairing({
+				code: this.code,
+				...(authorization !== "" ? { authorization } : {}),
+			});
 			const outcome = reducePairingResult(result);
 			if (outcome.kind === "paired") {
 				this.status = "paired";
@@ -115,5 +120,6 @@ export class PairingController {
 		this.error = null;
 		this.deviceId = null;
 		this.subStatus = null;
+		this.authorization = "";
 	}
 }

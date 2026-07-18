@@ -285,6 +285,8 @@ const zh = {
 			statusFree: "免费",
 			statusExpired: "已过期",
 			statusCancelled: "已取消",
+			authorizationLabel: "配对授权",
+			authorizationHint: "可选 — 如果您的平台需要，请从云控制台粘贴授权。",
 		},
 		encoderSettings: "编码器设置",
 		inputMode: "输入模式",

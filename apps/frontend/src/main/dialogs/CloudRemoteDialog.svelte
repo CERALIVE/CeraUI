@@ -452,6 +452,24 @@ async function save() {
 					{/if}
 				</div>
 
+				<div class="space-y-2" data-testid="pairing-authorization">
+					<Label class="text-sm font-medium" for="pairing-authorization-input">
+						{$LL.settings.pairing.authorizationLabel()}
+					</Label>
+					<Input
+						id="pairing-authorization-input"
+						autocomplete="off"
+						spellcheck={false}
+						value={pairing.authorization}
+						oninput={(e) => {
+							pairing.authorization = e.currentTarget.value;
+						}}
+					/>
+					<p class="text-muted-foreground text-xs">
+						{$LL.settings.pairing.authorizationHint()}
+					</p>
+				</div>
+
 				<div class="flex flex-wrap gap-2">
 					{#if !isDev}
 						<Button

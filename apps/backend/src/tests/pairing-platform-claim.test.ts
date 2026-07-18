@@ -3,10 +3,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { call } from "@orpc/server";
 import { getConfig } from "../modules/config.ts";
-import {
-	canDialControlChannel,
-	initIdentity,
-} from "../modules/identity/index.ts";
+import { canDialControlChannel } from "../modules/identity/index.ts";
 import {
 	completePlatformPairing,
 	getPlatformUrl,
@@ -63,6 +60,16 @@ afterEach(() => {
 	else writeFileSync("config.json", savedConfigFile);
 });
 
+function headerRecord(
+	headers: HeadersInit | undefined,
+): Record<string, string> {
+	const out: Record<string, string> = {};
+	new Headers(headers).forEach((value, key) => {
+		out[key] = value;
+	});
+	return out;
+}
+
 /** Build a fetch stub that records the request and returns a canned Response. */
 function stubFetch(response: Response): {
 	fetchImpl: PlatformFetch;
@@ -70,17 +77,24 @@ function stubFetch(response: Response): {
 		url: string;
 		body: unknown;
 		redirect: RequestRedirect | undefined;
+		headers: Record<string, string>;
 	}[];
 } {
 	const calls: {
 		url: string;
 		body: unknown;
 		redirect: RequestRedirect | undefined;
+		headers: Record<string, string>;
 	}[] = [];
 	const fetchImpl: PlatformFetch = async (input, init) => {
 		const url = input instanceof URL ? input.toString() : String(input);
 		const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-		calls.push({ url, body, redirect: init?.redirect });
+		calls.push({
+			url,
+			body,
+			redirect: init?.redirect,
+			headers: headerRecord(init?.headers),
+		});
 		return response;
 	};
 	return { fetchImpl, calls };
@@ -299,7 +313,12 @@ describe("completePlatformPairing — real POST /api/claim", () => {
 		expect(calls).toHaveLength(0);
 	});
 
-	test("completePairingProcedure persists token plus device_id through setRemoteConfig", async () => {
+	test("completePairingProcedure persists token, refreshes identity, and opens the control gate without a manual initIdentity", async () => {
+		// Pin the real (non-mock) claim path with the secret registration skipped
+		// (emulated → isRealDevice false), so exactly the single claim fetch fires
+		// regardless of ambient device-type/env leaked by neighbouring suites.
+		process.env.NODE_ENV = "production";
+		process.env.CERALIVE_DEVICE_TYPE = "emulated";
 		const claimResponse = new Response(JSON.stringify(CLAIM_RESPONSE), {
 			status: 200,
 		});
@@ -319,7 +338,9 @@ describe("completePlatformPairing — real POST /api/claim", () => {
 				{ code: "ABCDEFGH" },
 				{ context: rpc.context },
 			);
-			await initIdentity();
+			// No manual initIdentity(): the procedure refreshes identity and
+			// re-dials the control channel itself (todo 38), so a freshly claimed
+			// device opens the control gate without a reboot.
 
 			expect(result.paired).toBe(true);
 			expect(result.device_id).toBe(CLAIM_RESPONSE.deviceId);
@@ -330,6 +351,55 @@ describe("completePlatformPairing — real POST /api/claim", () => {
 		} finally {
 			rpc.close();
 		}
+	});
+
+	test("forwards x-ceralive-pairing-authorization on both the registration and claim calls", async () => {
+		process.env.NODE_ENV = "production";
+		process.env.CERALIVE_DEVICE_TYPE = "real";
+		const { fetchImpl, calls } = stubFetch(
+			new Response(JSON.stringify(CLAIM_RESPONSE), { status: 200 }),
+		);
+
+		const result = await completePlatformPairing("ABCDEFGH", {
+			applyToken: () => {},
+			serial: SERIAL,
+			fetchImpl,
+			authorization: "PAIR-AUTH-XYZ",
+		});
+
+		expect(result.paired).toBe(true);
+		expect(calls).toHaveLength(2);
+		expect(calls[0]?.url).toBe(`${PLATFORM_URL}/api/device/pairing-secret`);
+		expect(calls[0]?.headers["x-ceralive-pairing-authorization"]).toBe(
+			"PAIR-AUTH-XYZ",
+		);
+		expect(calls[1]?.url).toBe(`${PLATFORM_URL}/api/claim`);
+		expect(calls[1]?.headers["x-ceralive-pairing-authorization"]).toBe(
+			"PAIR-AUTH-XYZ",
+		);
+	});
+
+	test("omits the pairing authorization header when none is provided", async () => {
+		process.env.NODE_ENV = "production";
+		process.env.CERALIVE_DEVICE_TYPE = "real";
+		const { fetchImpl, calls } = stubFetch(
+			new Response(JSON.stringify(CLAIM_RESPONSE), { status: 200 }),
+		);
+
+		const result = await completePlatformPairing("ABCDEFGH", {
+			applyToken: () => {},
+			serial: SERIAL,
+			fetchImpl,
+		});
+
+		expect(result.paired).toBe(true);
+		expect(calls).toHaveLength(2);
+		expect(
+			calls[0]?.headers["x-ceralive-pairing-authorization"],
+		).toBeUndefined();
+		expect(
+			calls[1]?.headers["x-ceralive-pairing-authorization"],
+		).toBeUndefined();
 	});
 
 	test("surfaces 402 subscription-required and applies no token", async () => {

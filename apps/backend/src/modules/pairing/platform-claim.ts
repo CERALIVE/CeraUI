@@ -62,6 +62,24 @@ export const PAIRING_SECRET_REGISTER_RETRY_DELAY_MS = 500;
 export const PAIRING_SECRET_REGISTER_PATH = "/api/device/pairing-secret";
 
 /**
+ * Tenant-authorization header both platform pairing routes require (the platform
+ * half is todo 36). The device SENDS it when the operator provides one; the
+ * platform-side acceptance is not yet implemented, so this send is best-effort.
+ */
+export const PAIRING_AUTHORIZATION_HEADER = "x-ceralive-pairing-authorization";
+
+function pairingRequestHeaders(
+	authorization: string | undefined,
+): Record<string, string> {
+	return {
+		"content-type": "application/json",
+		...(authorization !== undefined
+			? { [PAIRING_AUTHORIZATION_HEADER]: authorization }
+			: {}),
+	};
+}
+
+/**
  * Cloud platform base URL, sourced from the `PLATFORM_URL` env var (never
  * hardcoded). Returns `undefined` when unset/blank so the caller surfaces an
  * explicit "not configured" error rather than issuing a request to nowhere.
@@ -158,6 +176,8 @@ export interface RegisterPairingSecretDeps {
 	serial?: string;
 	/** Override the on-device pairing secret (defaults to the live device secret). */
 	secret?: string;
+	/** Operator-provided pairing authorization, sent as {@link PAIRING_AUTHORIZATION_HEADER}. */
+	authorization?: string;
 	/** Injected fetch (defaults to global `fetch`) — testable without a network. */
 	fetchImpl?: PlatformFetch;
 	/** Real-device gate (defaults to {@link isRealDevice}). */
@@ -214,7 +234,7 @@ export async function registerPairingSecret(
 			const response = await fetchImpl(endpointResult.endpoint, {
 				method: "POST",
 				redirect: "error",
-				headers: { "content-type": "application/json" },
+				headers: pairingRequestHeaders(deps.authorization),
 				body: JSON.stringify({ serial, pairingSecret }),
 				signal: AbortSignal.timeout(PAIRING_SECRET_REGISTER_TIMEOUT_MS),
 			});
@@ -250,6 +270,8 @@ export interface CompletePlatformPairingDeps {
 	applyToken: (token: string, deviceId: string) => Promise<void> | void;
 	/** Override the device serial (defaults to the live device serial). */
 	serial?: string;
+	/** Operator-provided pairing authorization, sent as {@link PAIRING_AUTHORIZATION_HEADER}. */
+	authorization?: string;
 	/** Injected fetch (defaults to global `fetch`) — testable without a network. */
 	fetchImpl?: PlatformFetch;
 	/** Register the pairing secret with the platform (injectable for tests). */
@@ -285,14 +307,20 @@ export async function completePlatformPairing(
 	const fetchImpl = deps.fetchImpl ?? fetch;
 	const registerSecret = deps.registerSecret ?? registerPairingSecret;
 
-	await registerSecret({ serial, fetchImpl });
+	await registerSecret({
+		serial,
+		fetchImpl,
+		...(deps.authorization !== undefined
+			? { authorization: deps.authorization }
+			: {}),
+	});
 
 	let response: Response;
 	try {
 		response = await fetchImpl(endpointResult.endpoint, {
 			method: "POST",
 			redirect: "error",
-			headers: { "content-type": "application/json" },
+			headers: pairingRequestHeaders(deps.authorization),
 			body: JSON.stringify({ claimCode: code, serial }),
 			signal: AbortSignal.timeout(PLATFORM_CLAIM_TIMEOUT_MS),
 		});

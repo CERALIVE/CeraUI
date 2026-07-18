@@ -948,6 +948,9 @@ const en = {
 			statusFree: "Free",
 			statusExpired: "Expired",
 			statusCancelled: "Cancelled",
+			authorizationLabel: "Pairing authorization",
+			authorizationHint:
+				"Optional \u2014 paste the authorization from your cloud dashboard if your platform requires it.",
 		},
 
 		encoderSettings: "Encoder Settings",

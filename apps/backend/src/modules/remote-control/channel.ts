@@ -110,10 +110,12 @@ export interface ControlChannelDeps {
 	resolveEndpoint: () => ControlChannelEndpoint;
 	createSocket: (url: string, authToken?: string) => ControlSocket;
 	/**
-	 * Control-channel PASETO token source, self-verified before presentation. No
-	 * on-device source is wired yet (the token is short-TTL + hub-refreshed, out
-	 * of this skeleton's scope), so the default yields none and the channel
-	 * connects on the key-less MVP path. Tasks that obtain a token inject it here.
+	 * Control-channel PASETO token source, self-verified before presentation.
+	 * Wired to the persisted claim/control credential (`config.remote_key`) — the
+	 * same token the pairing claim stored. {@link resolveAuthToken} self-verifies
+	 * it via {@link verifyToken} (purpose + signature, spec §10) before presenting,
+	 * so a non-device-control or unverifiable token is dropped and the channel
+	 * falls back to the key-less path. Tests inject their own source here.
 	 */
 	getControlToken: () => string | undefined;
 	/** Local token verification (spec §10): never present a token we know is bad. */
@@ -165,7 +167,7 @@ function defaultDeps(isReal: boolean): ControlChannelDeps {
 		canDial: canDialControlChannel,
 		resolveEndpoint: () => resolveControlChannelEndpoint(),
 		createSocket: defaultCreateSocket,
-		getControlToken: () => undefined,
+		getControlToken: () => getConfig().remote_key,
 		verifyToken: (token) =>
 			verifyDeviceControlToken(token, undefined, { isRealDevice: isReal }),
 		getConfig,

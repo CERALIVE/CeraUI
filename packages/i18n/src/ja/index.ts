@@ -306,6 +306,9 @@ const ja = {
 			statusFree: "無料",
 			statusExpired: "期限切れ",
 			statusCancelled: "キャンセル済み",
+			authorizationLabel: "ペアリング認可",
+			authorizationHint:
+				"任意 — プラットフォームで必要な場合は、クラウドダッシュボードから認可を貼り付けてください。",
 		},
 		encoderSettings: "エンコーダー設定",
 		inputMode: "入力モード",

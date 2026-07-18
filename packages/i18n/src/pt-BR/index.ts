@@ -459,6 +459,9 @@ const ptBR = {
 			statusFree: "Grátis",
 			statusExpired: "Expirada",
 			statusCancelled: "Cancelada",
+			authorizationLabel: "Autorização de pareamento",
+			authorizationHint:
+				"Opcional — cole a autorização do seu painel na nuvem se a sua plataforma exigir.",
 		},
 		encoderSettings: "Configurações do Codificador",
 		inputMode: "Modo de Entrada",

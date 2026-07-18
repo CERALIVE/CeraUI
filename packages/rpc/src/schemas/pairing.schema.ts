@@ -103,6 +103,14 @@ export type DeviceTokenClaims = z.infer<typeof deviceTokenClaimsSchema>;
 /** Input for `pairing.completePairing`: the claim-code submitted to the (mock) platform. */
 export const completePairingInputSchema = z.object({
 	code: z.string().regex(CLAIM_CODE_RE),
+	/**
+	 * Optional operator-pasted pairing authorization credential. When present the
+	 * device-side pairing flow forwards it as the `x-ceralive-pairing-authorization`
+	 * header on BOTH the pairing-secret registration and the platform claim
+	 * requests — the tenant credential both platform routes require. Absent for
+	 * the mock/dev path and for platforms that do not require it.
+	 */
+	authorization: z.string().min(1).optional(),
 });
 export type CompletePairingInput = z.infer<typeof completePairingInputSchema>;
 

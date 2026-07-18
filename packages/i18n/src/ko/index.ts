@@ -296,6 +296,9 @@ const ko = {
 			statusFree: "무료",
 			statusExpired: "만료됨",
 			statusCancelled: "취소됨",
+			authorizationLabel: "페어링 인증",
+			authorizationHint:
+				"선택 사항 — 플랫폼에서 필요한 경우 클라우드 대시보드의 인증을 붙여넣으세요.",
 		},
 		encoderSettings: "인코더 설정",
 		inputMode: "입력 모드",

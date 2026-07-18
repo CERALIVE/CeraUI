@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
+import { getConfig } from "../modules/config.ts";
 import {
 	backoffDelay,
 	type ControlChannelDeps,
@@ -201,6 +202,54 @@ describe("control channel when paired", () => {
 
 		h.sockets[0]?.fireClose();
 		expect(sendFrame(frame)).toBe(false);
+	});
+});
+
+describe("control channel authenticated dial", () => {
+	test("presents the verified control token to the hub socket", async () => {
+		const TOKEN = "v4.public.control-token-under-test";
+		const h = harness({
+			getControlToken: () => TOKEN,
+			verifyToken: () => ({ purpose: "device-control" }),
+		});
+		await initControlChannel(h.deps);
+
+		expect(h.sockets.length).toBe(1);
+		expect(h.sockets[0]?.authToken).toBe(TOKEN);
+	});
+
+	test("drops a control token that fails local verification", async () => {
+		const h = harness({
+			getControlToken: () => "v4.public.forged",
+			verifyToken: () => null,
+		});
+		await initControlChannel(h.deps);
+
+		expect(h.sockets.length).toBe(1);
+		expect(h.sockets[0]?.authToken).toBeUndefined();
+	});
+
+	test("default getControlToken presents the persisted remote_key", async () => {
+		const config = getConfig();
+		const saved = config.remote_key;
+		config.remote_key = "v4.public.persisted-control-token";
+		const captured: Array<string | undefined> = [];
+		try {
+			await initControlChannel({
+				canDial: () => true,
+				resolveEndpoint: () => ({ url: HUB_URL, host: HUB_HOST, pinned: true }),
+				createSocket: (url, authToken) => {
+					captured.push(authToken);
+					return makeFakeSocket(url, authToken).socket;
+				},
+				verifyToken: () => ({ purpose: "device-control" }),
+				getConfig: () => ({}),
+				logger: silent,
+			});
+			expect(captured).toEqual(["v4.public.persisted-control-token"]);
+		} finally {
+			config.remote_key = saved;
+		}
 	});
 });
 
