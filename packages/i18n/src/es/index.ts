@@ -975,6 +975,9 @@ const es = {
 			statusFree: "Gratis",
 			statusExpired: "Caducada",
 			statusCancelled: "Cancelada",
+			authorizationLabel: "Autorización de emparejamiento",
+			authorizationHint:
+				"Opcional — pega la autorización desde tu panel en la nube si tu plataforma lo requiere.",
 		},
 		encoderSettings: "Configuración del codificador",
 		inputMode: "Modo de entrada",

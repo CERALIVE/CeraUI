@@ -462,6 +462,9 @@ const fr = {
 			statusFree: "Gratuit",
 			statusExpired: "Expiré",
 			statusCancelled: "Annulé",
+			authorizationLabel: "Autorisation d'appairage",
+			authorizationHint:
+				"Facultatif — collez l'autorisation depuis votre tableau de bord cloud si votre plateforme l'exige.",
 		},
 		encoderSettings: "Paramètres de l'encodeur",
 		inputMode: "Mode d'entrée",

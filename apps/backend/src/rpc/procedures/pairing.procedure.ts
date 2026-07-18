@@ -11,10 +11,12 @@ import {
 import { os } from "@orpc/server";
 
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import { initIdentity } from "../../modules/identity/index.ts";
 import { generateClaimCode } from "../../modules/pairing/claim-code.ts";
 import { completeMockPairing } from "../../modules/pairing/mock-platform.ts";
 import { completePlatformPairing } from "../../modules/pairing/platform-claim.ts";
 import { setRemoteConfig } from "../../modules/remote/remote.ts";
+import { initControlChannel } from "../../modules/remote-control/channel.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
@@ -48,6 +50,12 @@ export const generateClaimCodeProcedure = authedProcedure
  * ({@link completePlatformPairing}); on success the returned opaque device token
  * is persisted as the active `remote_key`. Both paths apply the token through
  * {@link setRemoteConfig}, so the channel presents it on the next reconnect.
+ *
+ * On a successful claim the device also re-resolves its identity and re-dials the
+ * control channel via {@link reconnectControlChannelAfterClaim} so a freshly
+ * claimed device connects WITHOUT a reboot (the boot-time identity resolved it as
+ * unpaired). When present, `authorization` is forwarded as the pinned
+ * `x-ceralive-pairing-authorization` header on both platform HTTP calls.
  */
 export const completePairingProcedure = authedProcedure
 	.input(completePairingInputSchema)
@@ -58,8 +66,27 @@ export const completePairingProcedure = authedProcedure
 				token,
 				...(deviceId !== undefined ? { device_id: deviceId } : {}),
 			});
-		if (shouldUseMocks()) {
-			return completeMockPairing(input.code, { applyToken });
+		const result = shouldUseMocks()
+			? await completeMockPairing(input.code, { applyToken })
+			: await completePlatformPairing(input.code, {
+					applyToken,
+					...(input.authorization !== undefined
+						? { authorization: input.authorization }
+						: {}),
+				});
+		if (result.paired) {
+			await reconnectControlChannelAfterClaim();
 		}
-		return completePlatformPairing(input.code, { applyToken });
+		return result;
 	});
+
+/**
+ * Re-resolve device identity from the just-persisted claim, then re-dial the
+ * control channel — so a freshly claimed device connects without a reboot. Both
+ * steps are idempotent ({@link initControlChannel} tears down any prior channel
+ * first), so a repeated claim never double-connects.
+ */
+async function reconnectControlChannelAfterClaim(): Promise<void> {
+	await initIdentity();
+	await initControlChannel();
+}

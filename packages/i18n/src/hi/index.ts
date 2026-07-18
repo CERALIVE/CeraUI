@@ -292,6 +292,9 @@ const hi = {
 			statusFree: "निःशुल्क",
 			statusExpired: "समाप्त",
 			statusCancelled: "रद्द",
+			authorizationLabel: "पेयरिंग प्राधिकरण",
+			authorizationHint:
+				"वैकल्पिक — यदि आपके प्लेटफ़ॉर्म को आवश्यकता हो तो अपने क्लाउड डैशबोर्ड से प्राधिकरण चिपकाएँ।",
 		},
 		encoderSettings: "एनकोडर सेटिंग्स",
 		inputMode: "इनपुट मोड",

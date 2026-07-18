@@ -961,6 +961,9 @@ const de = {
 			statusFree: "Kostenlos",
 			statusExpired: "Abgelaufen",
 			statusCancelled: "Gekündigt",
+			authorizationLabel: "Kopplungsautorisierung",
+			authorizationHint:
+				"Optional — fügen Sie die Autorisierung aus Ihrem Cloud-Dashboard ein, falls Ihre Plattform sie erfordert.",
 		},
 		encoderSettings: "Encoder-Einstellungen",
 		inputMode: "Eingabemodus",

@@ -430,6 +430,9 @@ const ar = {
 			statusFree: "مجاني",
 			statusExpired: "منتهٍ",
 			statusCancelled: "ملغى",
+			authorizationLabel: "تفويض الإقران",
+			authorizationHint:
+				"اختياري — الصق التفويض من لوحة تحكم السحابة إذا كانت منصتك تتطلب ذلك.",
 		},
 		encoderSettings: "إعدادات المرمز",
 		inputMode: "وضع الإدخال",
