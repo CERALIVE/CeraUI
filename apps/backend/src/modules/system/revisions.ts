@@ -41,7 +41,7 @@ function readRevision(cmd: string) {
 
 export async function initRevisions() {
 	try {
-		revisions.ceralive = await Bun.file("revision").text();
+		revisions.ceralive = (await Bun.file("revision").text()).trim();
 	} catch (_err) {
 		revisions.ceralive = readRevision("git rev-parse --short HEAD");
 	}

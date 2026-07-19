@@ -106,7 +106,11 @@ import {
 	stopDmesgWatchers,
 } from "./modules/system/sensors.ts";
 import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updates.ts";
-import { ensureSshPasswordSynced, getSshStatus } from "./modules/system/ssh.ts";
+import {
+	ensureSshPasswordProvisioned,
+	ensureSshPasswordSynced,
+	getSshStatus,
+} from "./modules/system/ssh.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
@@ -258,6 +262,12 @@ initHardwareMonitoring();
 initDeviceStats();
 await guardNonCritical("rtmp-ingest", initRTMPIngestStats);
 await guardNonCritical("srt-ingest", initSRTIngest);
+// Provision an initial SSH password on a device that has never had one BEFORE
+// the sync/probe below run — SSH is enabled-by-default at the OS level but a
+// password was only ever minted on an explicit operator action, leaving a fresh
+// device's account unreachable. Runs unconditionally so a password is ready the
+// instant SSH is enabled. Fail-soft; a clean no-op once one is persisted.
+await guardNonCritical("ssh-password-provision", ensureSshPasswordProvisioned);
 // Reconcile the OS-level SSH password against the /data-persisted one BEFORE the
 // status probe below reads /etc/shadow: /etc/shadow is rootfs-local and does NOT
 // survive an A/B OTA slot swap, so a fresh slot silently locks the operator out

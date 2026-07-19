@@ -270,6 +270,34 @@ Effectful surface (`readShadow` / `applyPassword`) is injected via
 `SshPasswordSyncDeps` (mirrors `SshStatusDeps`) so `tests/ssh-password-sync.test.ts`
 drives it without a real `passwd`/`/etc/shadow`.
 
+### SSH password provisioning on first boot [EXISTS]
+
+`ensureSshPasswordProvisioned()` (`modules/system/ssh.ts`, wired into `main.ts` via
+`guardNonCritical("ssh-password-provision", …)` immediately BEFORE the
+`ssh-password-sync` step) mints an INITIAL `ssh_pass` on a device that has never
+had one. SSH is enabled-by-default at the OS/systemd level, but CeraUI only ever
+generated a password on an explicit operator "Start SSH" / "Reset" action — so a
+fresh device ran `sshd` with `ssh_pass` permanently `undefined` and the account
+effectively unreachable until a manual reset. Provisioning closes that gap: when NO
+`ssh_pass` is persisted it mints one through the SAME credential path the operator
+reset uses.
+
+The generation is shared between the operator reset and boot provisioning by the
+single private `mintAndApplySshPassword()` helper (random `ssh_pass` → stdin-only
+`passwd` apply → persist → re-probe hash → broadcast config + status), so both
+routes emit and persist the secret through EXACTLY the same code — never logged.
+`resetSshPassword()` wraps it with an operator notification on failure;
+`ensureSshPasswordProvisioned()` wraps it with a boot broadcast. It is called
+UNCONDITIONALLY at boot (independent of the `ssh.service` active/enabled state), so
+even a production device shipping with SSH disabled-by-default has a ready
+credential the instant SSH is enabled from the UI. Contract: never throws (BOOT
+FAIL-SOFT); a clean no-op under `shouldUseMocks()` or when a password is ALREADY
+persisted — it NEVER regenerates an existing credential (that stays
+`ensureSshPasswordSynced()`'s restore-only job). Effectful surface (`readShadow` /
+`applyPassword` / `persist` / `refreshStatus`) is injected via
+`SshPasswordProvisionDeps` so `tests/ssh-password-provision.test.ts` drives it
+without a real `passwd`/`/etc/shadow` (and without persisting to disk).
+
 ## CONVENTIONS
 
 - Runtime: Bun only. No Node-specific APIs (`fs/promises` ok; `node:cluster` not).

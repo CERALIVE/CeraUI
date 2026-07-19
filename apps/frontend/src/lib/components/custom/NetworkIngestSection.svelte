@@ -43,6 +43,7 @@ import { toast } from 'svelte-sonner';
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
+import { copyToClipboard } from '$lib/helpers/clipboard';
 import { generateDeviceAccessQr } from '$lib/helpers/NetworkHelper';
 import { rpc } from '$lib/rpc/client';
 import {
@@ -182,10 +183,9 @@ $effect(() => {
 
 async function copyUrl(url: string | null): Promise<void> {
 	if (!url) return;
-	try {
-		await navigator.clipboard.writeText(url);
+	if (await copyToClipboard(url)) {
 		toast.success($LL.live.networkIngest.copied());
-	} catch {
+	} else {
 		toast.error($LL.live.networkIngest.copyFailed());
 	}
 }
