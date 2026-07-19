@@ -48,6 +48,7 @@ import { getSensors } from "../../modules/system/sensors.ts";
 import {
 	isUpdating,
 	startSoftwareUpdate,
+	triggerManualUpdateCheck,
 } from "../../modules/system/software-updates.ts";
 import { resetSshPassword, startStopSsh } from "../../modules/system/ssh.ts";
 import { mintPreviewToken } from "../../modules/ui/preview-token.ts";
@@ -182,6 +183,18 @@ export const startUpdateProcedure = authedProcedure
 		logger.info("System: software update started");
 		startSoftwareUpdate();
 		return { success: true };
+	});
+
+/**
+ * Manual "check for updates now". Runs the same discovery the periodic loop
+ * uses; success:false when skipped (streaming/updating/apt busy).
+ */
+export const checkForUpdatesProcedure = authedProcedure
+	.output(successResponseSchema)
+	.handler(() => {
+		const started = triggerManualUpdateCheck();
+		if (started) logger.info("System: manual software update check started");
+		return { success: started };
 	});
 
 /**

@@ -62,6 +62,7 @@ import {
 	switchInputProcedure,
 } from "./procedures/streaming.procedure.ts";
 import {
+	checkForUpdatesProcedure,
 	getCloudProvidersProcedure,
 	getLogProcedure,
 	getRevisionsProcedure,
@@ -166,6 +167,7 @@ const stableRoutes = {
 		poweroff: poweroffProcedure,
 		reboot: rebootProcedure,
 		startUpdate: startUpdateProcedure,
+		checkForUpdates: checkForUpdatesProcedure,
 		sshStart: sshStartProcedure,
 		sshStop: sshStopProcedure,
 		sshResetPassword: sshResetPasswordProcedure,

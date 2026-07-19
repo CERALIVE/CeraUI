@@ -475,6 +475,20 @@ export function periodicCheckForSoftwareUpdates() {
 	}
 }
 
+// Reuses the periodic discovery + skip guard but never touches its timer.
+// Returns false when skipped (streaming/updating/apt busy).
+export function triggerManualUpdateCheck(): boolean {
+	if (shouldUseMocks()) {
+		if (getIsStreaming() || isUpdating() || aptGetUpdating) return false;
+		availableUpdates = { package_count: 0 };
+		broadcastMsg("status", { available_updates: availableUpdates });
+		return true;
+	}
+	return checkForSoftwareUpdates(async (err_) => {
+		if (err_ === null) await getSoftwareUpdateSize();
+	});
+}
+
 // apt spawn seam (T8): the default kicks off the real `apt-get update` →
 // dist-upgrade pipeline. The dev/mock path NEVER calls it (it simulates the
 // progress sequence instead); tests spy it to assert the real path fired (prod)
