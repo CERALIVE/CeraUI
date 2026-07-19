@@ -9,13 +9,14 @@ import {
 	modemListSchema,
 	modemScanInputSchema,
 	modemScanOutputSchema,
+	setUsbModeInputSchema,
+	setUsbModeOutputSchema,
 	simPukUnlockInputSchema,
 	simPukUnlockOutputSchema,
 	simUnlockInputSchema,
 	simUnlockOutputSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-
 import { logger } from "../../helpers/logger.ts";
 import { setMockModemConfig } from "../../mocks/mock-service.ts";
 import {
@@ -23,6 +24,8 @@ import {
 	mockAttemptSimUnlock,
 	shouldMockModems,
 } from "../../mocks/providers/modems.ts";
+import { assertCellularStackReady } from "../../modules/cellular/cellular-stack.ts";
+import { getConfig } from "../../modules/config.ts";
 import {
 	type SimPukUnlockResult,
 	type SimUnlockResult,
@@ -37,6 +40,9 @@ import { handleModems } from "../../modules/modems/modems.ts";
 import { getModem } from "../../modules/modems/modems-state.ts";
 import { clearSimPin, storeSimPin } from "../../modules/modems/sim-secrets.ts";
 import { withModemUpdateLock } from "../../modules/network/state/device-lock.ts";
+import { withLifecycleLock } from "../../modules/streaming/lifecycle-admission.ts";
+import { getIsStreaming } from "../../modules/streaming/streaming.ts";
+import { isRealDevice } from "../../modules/system/device-detection.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
@@ -46,10 +52,21 @@ const baseProcedure = os.$context<RPCContext>();
 // Authenticated procedure
 const authedProcedure = baseProcedure.use(authMiddleware);
 
+// Gate every modem procedure on the cellular-stack composition root: while a
+// dbus backend is still initializing, `assertCellularStackReady` throws the
+// shared typed `CELLULAR_STACK_INITIALIZING` oRPC error. A no-op on the ready
+// mmcli default, so the default path is unaffected.
+const cellularStackMiddleware = baseProcedure.middleware(async ({ next }) => {
+	assertCellularStackReady();
+	return next();
+});
+
+const modemProcedure = authedProcedure.use(cellularStackMiddleware);
+
 /**
  * Get all modems procedure
  */
-export const getAllModemsProcedure = authedProcedure
+export const getAllModemsProcedure = modemProcedure
 	.output(modemListSchema)
 	.handler(() => {
 		return modemListSchema.parse(buildModemsMessage());
@@ -58,7 +75,7 @@ export const getAllModemsProcedure = authedProcedure
 /**
  * Configure modem procedure
  */
-export const configureModemProcedure = authedProcedure
+export const configureModemProcedure = modemProcedure
 	.input(modemConfigInputSchema)
 	.output(modemConfigOutputSchema)
 	.handler(async ({ input, context }) => {
@@ -123,7 +140,7 @@ export const configureModemProcedure = authedProcedure
 /**
  * Scan modem networks procedure
  */
-export const scanModemProcedure = authedProcedure
+export const scanModemProcedure = modemProcedure
 	.input(modemScanInputSchema)
 	.output(modemScanOutputSchema)
 	.handler(async ({ input, context }) => {
@@ -148,7 +165,7 @@ export const scanModemProcedure = authedProcedure
  * branch is real-device only — it never runs under mocks (no `/run/ceralive`
  * writes on a dev host).
  */
-export const unlockSimProcedure = authedProcedure
+export const unlockSimProcedure = modemProcedure
 	.input(simUnlockInputSchema)
 	.output(simUnlockOutputSchema)
 	.handler(async ({ input }) => {
@@ -195,7 +212,7 @@ export const unlockSimProcedure = authedProcedure
  * `modem-pin-locked` scenario trips the SIM to PUK-locked, and the fixture PUK
  * "12345678" recovers it, so the full PUK flow works end-to-end in dev.
  */
-export const unlockSimPukProcedure = authedProcedure
+export const unlockSimPukProcedure = modemProcedure
 	.input(simPukUnlockInputSchema)
 	.output(simPukUnlockOutputSchema)
 	.handler(async ({ input }) => {
@@ -208,4 +225,54 @@ export const unlockSimPukProcedure = authedProcedure
 			result = await unlockSimPuk(input.modemPath, input.puk, input.newPin);
 		});
 		return result;
+	});
+
+/**
+ * Switch a modem's USB composition mode (Phase B, T5.4).
+ *
+ * DEFAULT-ABSENT GATE: the guarded mutation is UNREACHABLE unless the operator has
+ * provisioned it. The FIRST guard reads the `modem_provisioning` config key and
+ * refuses with the typed `provisioning_disabled` error whenever it is absent/false
+ * — a hard RPC-layer refusal, not a hidden UI control, so a direct RPC call is
+ * refused too. The full re-enumeration transaction (cached-UID inhibit, port-drop,
+ * re-enumeration wait, postcondition verify) is a later wave; the streaming
+ * LifecycleInterlock is Todo 27. This wave ships only the gate + the emulated-mode
+ * refusal, so any code path past the gate stays a typed refusal for now.
+ */
+export const setUsbModeProcedure = modemProcedure
+	.input(setUsbModeInputSchema)
+	.output(setUsbModeOutputSchema)
+	.handler(async () => {
+		if (getConfig().modem_provisioning !== true) {
+			return { success: false, error: "provisioning_disabled" };
+		}
+
+		if (!(await isRealDevice())) {
+			return { success: false, error: "unavailable_in_emulated_mode" };
+		}
+
+		// LifecycleInterlock (Phase B, T5.5): a USB-composition switch re-enumerates
+		// the modem, tearing its bond link down mid-transition. Refuse while a stream
+		// is LIVE or being ADMITTED. getIsStreaming() covers the live window; the
+		// interlock closes the admission-window race a bare is_streaming check would
+		// miss (admitted-start, not just is_streaming). Holding the interlock across
+		// the transition blocks a concurrent stream admission in turn (both race
+		// orders); withLifecycleLock releases it in a finally on ANY exit.
+		if (getIsStreaming()) {
+			return { success: false, error: "streaming_active" };
+		}
+		const outcome = await withLifecycleLock("modem-transition", async () => {
+			// The full re-enumeration transaction (cached-UID inhibit, port-drop,
+			// re-enumeration wait, postcondition verify) is a later wave; autonomous
+			// cellular recovery stays default-disabled. This wave ships the interlock
+			// + gate, so any path past the gate stays a typed refusal for now.
+			logger.warn(
+				"modems.setUsbMode reached past the provisioning + streaming gates but the transition transaction is not yet implemented (Phase-B later wave)",
+			);
+			return { success: false, error: "error" } as const;
+		});
+		if (!outcome.acquired) {
+			return { success: false, error: "streaming_active" };
+		}
+		return outcome.result;
 	});
