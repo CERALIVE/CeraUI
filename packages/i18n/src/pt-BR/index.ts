@@ -200,6 +200,8 @@ const ptBR = {
 		streamingMessage:
 			"Sua transmissão está usando {usingNetworksCount} redes com uma latência de {srtLatency} ms",
 		noUpdatesAvailable: "Sistema atualizado",
+		checkForUpdates: "Verificar atualizações",
+		checkingForUpdates: "Verificando…",
 		serverSettings: "Configurações do Servidor",
 		audioSettings: "Configurações de Áudio",
 		hardwareSensors: "Sensores de Hardware",

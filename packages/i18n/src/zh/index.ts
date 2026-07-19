@@ -40,6 +40,8 @@ const zh = {
 		liveMetrics: "实时指标",
 		noSensorData: "无传感器数据可用",
 		noUpdatesAvailable: "系统已是最新版本",
+		checkForUpdates: "检查更新",
+		checkingForUpdates: "正在检查…",
 		notAvailable: "不可用",
 		notConfigured: "未配置",
 		unknownSource: "Unknown source",

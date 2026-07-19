@@ -41,6 +41,8 @@ const ja = {
 		liveMetrics: "ライブメトリクス",
 		noSensorData: "センサーデータが利用できません",
 		noUpdatesAvailable: "システムは最新です",
+		checkForUpdates: "アップデートを確認",
+		checkingForUpdates: "確認中…",
 		notAvailable: "利用不可",
 		notConfigured: "未設定",
 		unknownSource: "Unknown source",

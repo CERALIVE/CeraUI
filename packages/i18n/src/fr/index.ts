@@ -195,6 +195,8 @@ const fr = {
 		streamingMessage:
 			"Votre transmission utilise {usingNetworksCount} réseaux avec une latence de {srtLatency} ms",
 		noUpdatesAvailable: "Le système est à jour",
+		checkForUpdates: "Rechercher des mises à jour",
+		checkingForUpdates: "Vérification…",
 		serverSettings: "Paramètres du Serveur",
 		audioSettings: "Paramètres Audio",
 		hardwareSensors: "Capteurs Matériels",

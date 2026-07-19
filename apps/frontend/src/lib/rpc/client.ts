@@ -594,6 +594,7 @@ export interface TypedRPC {
 		poweroff: () => Promise<SuccessResponse>;
 		reboot: () => Promise<SuccessResponse>;
 		startUpdate: () => Promise<SuccessResponse>;
+		checkForUpdates: () => Promise<SuccessResponse>;
 		sshStart: () => Promise<SuccessResponse>;
 		sshStop: () => Promise<SuccessResponse>;
 		sshResetPassword: () => Promise<{ success: boolean; password?: string }>;

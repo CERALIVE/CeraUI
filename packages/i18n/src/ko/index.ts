@@ -41,6 +41,8 @@ const ko = {
 		liveMetrics: "실시간 지표",
 		noSensorData: "센서 데이터 사용 불가",
 		noUpdatesAvailable: "시스템이 최신 상태입니다",
+		checkForUpdates: "업데이트 확인",
+		checkingForUpdates: "확인 중…",
 		notAvailable: "사용 불가",
 		notConfigured: "구성되지 않음",
 		unknownSource: "Unknown source",
