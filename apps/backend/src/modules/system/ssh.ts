@@ -267,17 +267,68 @@ export async function startStopSsh(
 		: status?.active === false;
 }
 
+/**
+ * Injectable surface for {@link mintAndApplySshPassword}. Defaults talk to the
+ * real OS (stdin-only `passwd`, JS `/etc/shadow` read) and drive a real status
+ * refresh; tests inject deterministic stand-ins so the credential-minting path
+ * can be exercised without a real `passwd` spawn.
+ */
+export type SshPasswordProvisionDeps = {
+	/** Read the raw /etc/shadow document (JS, no `grep` subprocess). */
+	readShadow: () => string | Promise<string>;
+	/** Apply `password` to `user`'s OS account via `passwd` (stdin only). */
+	applyPassword: (user: string, password: string) => Promise<void>;
+	/** Persist the mutated config (defaults to the real `saveConfig`). */
+	persist: () => void;
+	/** Re-probe + broadcast the SSH status after the credential changed. */
+	refreshStatus: () => Promise<void>;
+};
+
+const defaultSshPasswordProvisionDeps: SshPasswordProvisionDeps = {
+	readShadow: () => Bun.file("/etc/shadow").text(),
+	applyPassword: async (user, password) => {
+		// `passwd` reads the new password twice from stdin. The secret is fed via
+		// stdin ONLY — never on argv, never through a shell string.
+		await runWithStdin("passwd", [user], `${password}\n${password}\n`);
+	},
+	persist: saveConfig,
+	refreshStatus: async () => {
+		await getSshStatus();
+	},
+};
+
+/**
+ * The single SSH-credential-minting path, shared verbatim by the operator
+ * "Reset" RPC ({@link resetSshPassword}) and boot-time provisioning
+ * ({@link ensureSshPasswordProvisioned}): generate a random password, apply it
+ * stdin-only, persist it, re-probe the hash, broadcast config + status. Throws
+ * only on {@link SshPasswordProvisionDeps.applyPassword} failure so callers pick
+ * how to surface it (operator notification vs boot broadcast).
+ */
+async function mintAndApplySshPassword(
+	ssh_user: string,
+	deps: SshPasswordProvisionDeps = defaultSshPasswordProvisionDeps,
+): Promise<string> {
+	const password = randomBase64(24).replace(/[+/=]/g, "").substring(0, 20);
+
+	await deps.applyPassword(ssh_user, password);
+
+	const config = getConfig();
+	config.ssh_pass = password;
+	sshPasswordHash = await probeSshUserHash(deps.readShadow, ssh_user);
+	deps.persist();
+	broadcastMsg("config", config);
+	await deps.refreshStatus();
+	return password;
+}
+
 export async function resetSshPassword(
 	conn: MessageSocket,
 ): Promise<string | undefined> {
 	const ssh_user = resolveSshUser();
 
-	const password = randomBase64(24).replace(/[+/=]/g, "").substring(0, 20);
-
 	try {
-		// `passwd` reads the new password twice from stdin. The secret is fed via
-		// stdin ONLY — never on argv, never through a shell string.
-		await runWithStdin("passwd", [ssh_user], `${password}\n${password}\n`);
+		return await mintAndApplySshPassword(ssh_user);
 	} catch (err) {
 		logger.error(`Failed to reset the SSH password for ${ssh_user}: ${err}`);
 		notificationSend(
@@ -289,17 +340,57 @@ export async function resetSshPassword(
 		);
 		return undefined;
 	}
+}
 
-	const config = getConfig();
-	config.ssh_pass = password;
-	sshPasswordHash = await probeSshUserHash(
-		() => Bun.file("/etc/shadow").text(),
-		ssh_user,
-	);
-	saveConfig();
-	broadcastMsg("config", config);
-	await getSshStatus();
-	return password;
+/**
+ * Boot-time provisioning of an initial SSH password when the device has never
+ * had one. SSH is enabled-by-default at the OS/systemd level (image-baked), but
+ * CeraUI only ever minted a password on an explicit operator "Start SSH" /
+ * "Reset" click — so a fresh device ran `sshd` with `ssh_pass` permanently
+ * `undefined` until a manual reset. When NO `ssh_pass` is persisted this mints
+ * one through the SAME {@link mintAndApplySshPassword} path the reset uses.
+ *
+ * Called UNCONDITIONALLY at boot (independent of the `ssh.service` active/enabled
+ * state) so even a production device shipping with SSH disabled-by-default has a
+ * ready credential the instant SSH is enabled from the UI. Contract: never throws
+ * (BOOT FAIL-SOFT); a clean no-op under `shouldUseMocks()` or when a password is
+ * ALREADY persisted — it NEVER regenerates an existing credential (that is
+ * {@link ensureSshPasswordSynced}'s restore-only job). The secret is minted,
+ * persisted, and broadcast through the existing RPC/config path only, never logged.
+ */
+export async function ensureSshPasswordProvisioned(
+	deps: Partial<SshPasswordProvisionDeps> = {},
+): Promise<void> {
+	if (shouldUseMocks()) return;
+
+	let ssh_user: string;
+	try {
+		ssh_user = resolveSshUser();
+	} catch (err) {
+		logger.error(`Skipping SSH password provisioning: ${err}`);
+		return;
+	}
+
+	if (getConfig().ssh_pass !== undefined) return;
+
+	try {
+		await mintAndApplySshPassword(ssh_user, {
+			...defaultSshPasswordProvisionDeps,
+			...deps,
+		});
+		logger.info(`Generated an initial SSH password for ${ssh_user}`);
+	} catch (err) {
+		logger.error(
+			`Failed to provision an initial SSH password for ${ssh_user}: ${err}`,
+		);
+		notificationBroadcast(
+			"ssh_pass_provision",
+			"error",
+			`Failed to generate the initial SSH password for ${ssh_user}`,
+			0,
+			true,
+		);
+	}
 }
 
 /**

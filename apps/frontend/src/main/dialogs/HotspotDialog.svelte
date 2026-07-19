@@ -25,6 +25,7 @@ import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
+import { copyToClipboard } from '$lib/helpers/clipboard';
 import { generateWifiQr } from '$lib/helpers/NetworkHelper';
 import {
 	confirmOperation,
@@ -201,10 +202,9 @@ $effect(() => {
 // ── Copy SSID / password to clipboard (never logs the secret) ──
 async function copyName() {
 	if (!name) return;
-	try {
-		await navigator.clipboard.writeText(name);
+	if (await copyToClipboard(name)) {
 		toast.success($LL.network.clipboard.nameCopied());
-	} catch {
+	} else {
 		toast.error($LL.network.clipboard.copyFailed(), {
 			description: $LL.network.clipboard.copyFailedDescription(),
 		});
@@ -213,10 +213,9 @@ async function copyName() {
 
 async function copyPassword() {
 	if (!password) return;
-	try {
-		await navigator.clipboard.writeText(password);
+	if (await copyToClipboard(password)) {
 		toast.success($LL.network.clipboard.passwordCopied());
-	} catch {
+	} else {
 		toast.error($LL.network.clipboard.copyFailed(), {
 			description: $LL.network.clipboard.copyFailedDescription(),
 		});

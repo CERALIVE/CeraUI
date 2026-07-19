@@ -16,6 +16,7 @@ import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
+import { copyToClipboard } from '$lib/helpers/clipboard';
 import { resetSSHPasword } from '$lib/helpers/SystemHelper';
 import {
 	confirmOperation,
@@ -49,11 +50,9 @@ let toggleTarget = $state<boolean | null>(null);
 
 async function copyPassword() {
 	if (!sshPass) return;
-	try {
-		await navigator.clipboard.writeText(sshPass);
+	if (await copyToClipboard(sshPass)) {
 		toast.success($LL.advanced.passwordCopied(), { description: $LL.advanced.passwordCopiedDesc() });
-	} catch (error) {
-		console.error('Failed to copy SSH password:', error);
+	} else {
 		toast.error($LL.advanced.copyFailed());
 	}
 }

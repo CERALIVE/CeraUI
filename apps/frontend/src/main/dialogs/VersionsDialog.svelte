@@ -26,7 +26,7 @@ const revisions = $derived(getRevisions());
 const rows = $derived(
 	revisions
 		? [
-				{ label: 'CeraLive', value: revisions.ceralive },
+				{ label: 'CeraUI', value: revisions.ceralive },
 				{ label: 'SRTLA', value: revisions.srtla },
 				{ label: 'Bun Runtime', value: revisions.bun },
 				...(revisions['CERALIVE image']

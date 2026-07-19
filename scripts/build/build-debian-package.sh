@@ -89,6 +89,12 @@ cp dist/99-ceralive-check-usb-devices.rules "$TEMP_DIR/etc/udev/rules.d/"
 cp -r dist/public/* "$TEMP_DIR/var/www/ceralive/"
 cp dist/config.json "$TEMP_DIR/etc/ceralive/"
 cp apps/backend/setup.json "$TEMP_DIR/opt/ceralive/"
+# Stamp the build commit into the packaged tree so the backend's initRevisions()
+# reads it at runtime (WorkingDirectory=/opt/ceralive). A deployed /opt/ceralive is
+# not a git checkout, so without this file both the primary read AND its
+# `git rev-parse` fallback fail — "unknown revision" would be the always-taken path
+# on every real device.
+printf '%s\n' "$COMMIT" > "$TEMP_DIR/opt/ceralive/revision"
 ln -s /var/www/ceralive "$TEMP_DIR/opt/ceralive/public"
 cp dist/override-belaui.sh "$TEMP_DIR/usr/local/bin/"
 cp dist/reset-to-default.sh "$TEMP_DIR/usr/local/bin/"
