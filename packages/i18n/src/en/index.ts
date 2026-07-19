@@ -189,6 +189,8 @@ const en = {
 		configurationNotComplete: "Configuration pending",
 		pleaseConfigureServer: "Please configure a relay server to begin streaming",
 		noUpdatesAvailable: "System is up to date",
+		checkForUpdates: "Check for updates",
+		checkingForUpdates: "Checking…",
 		serverSettings: "Server Settings",
 		audioSettings: "Audio Settings",
 		hardwareSensors: "Hardware Sensors",

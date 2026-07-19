@@ -179,6 +179,8 @@ const ar = {
 		liveMetrics: "المقاييس المباشرة",
 		noSensorData: "لا توجد بيانات حساسات متاحة",
 		noUpdatesAvailable: "النظام محدث",
+		checkForUpdates: "التحقق من وجود تحديثات",
+		checkingForUpdates: "جارٍ التحقق…",
 		notAvailable: "غير متوفر",
 		notConfigured: "غير مُكوّن",
 		unknownSource: "Unknown source",

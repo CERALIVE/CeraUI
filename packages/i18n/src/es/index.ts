@@ -197,6 +197,8 @@ const es = {
 		pleaseConfigureServer:
 			"Por favor configure un servidor de retransmisión para comenzar la transmisión",
 		noUpdatesAvailable: "El sistema está actualizado",
+		checkForUpdates: "Buscar actualizaciones",
+		checkingForUpdates: "Comprobando…",
 		serverSettings: "Configuración del Servidor",
 		audioSettings: "Configuración de Audio",
 		hardwareSensors: "Sensores de Hardware",

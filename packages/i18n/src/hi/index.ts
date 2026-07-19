@@ -41,6 +41,8 @@ const hi = {
 		liveMetrics: "लाइव मेट्रिक्स",
 		noSensorData: "कोई सेंसर डेटा उपलब्ध नहीं",
 		noUpdatesAvailable: "सिस्टम अद्यतित है",
+		checkForUpdates: "अपडेट जांचें",
+		checkingForUpdates: "जांच हो रही है…",
 		notAvailable: "उपलब्ध नहीं",
 		notConfigured: "कॉन्फ़िगर नहीं किया गया",
 		unknownSource: "Unknown source",

@@ -197,6 +197,8 @@ const de = {
 		pleaseConfigureServer:
 			"Bitte konfigurieren Sie einen Relay-Server, um mit dem Streaming zu beginnen",
 		noUpdatesAvailable: "System ist aktuell",
+		checkForUpdates: "Nach Updates suchen",
+		checkingForUpdates: "Wird geprüft…",
 		serverSettings: "Server-Einstellungen",
 		audioSettings: "Audio-Einstellungen",
 		hardwareSensors: "Hardware-Sensoren",

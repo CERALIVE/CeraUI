@@ -369,10 +369,12 @@ export function classifyAptUpdateResult(
 	return null;
 }
 
+// Returns false when skipped (streaming/updating/apt busy) so the periodic
+// caller can still reschedule — a skipped check never runs its callback.
 function checkForSoftwareUpdates(
 	callback: (err: SoftwareUpdateError, aptGetUpdateFailures: number) => unknown,
-) {
-	if (getIsStreaming() || isUpdating() || aptGetUpdating) return;
+): boolean {
+	if (getIsStreaming() || isUpdating() || aptGetUpdating) return false;
 
 	aptGetUpdating = true;
 	void (async () => {
@@ -401,10 +403,50 @@ function checkForSoftwareUpdates(
 
 		if (callback) callback(errOrStderr, aptGetUpdateFailures);
 	})();
+	return true;
+}
+
+// 10 SECONDS, not a bare `10` (10ms) which hammered apt every 10ms.
+export const RETRY_DELAY_SHORT_MS = 10 * 1000;
+export const RETRY_FAILURE_THRESHOLD = 12;
+export const SKIP_RETRY_DELAY_MS = oneMinute;
+
+export function computeNextCheckDelay(
+	err: SoftwareUpdateError,
+	failures: number,
+): number {
+	if (err === null) return oneHour;
+	if (failures < RETRY_FAILURE_THRESHOLD) return RETRY_DELAY_SHORT_MS;
+	return oneMinute;
+}
+
+type SoftwareUpdateCheckRunner = (
+	callback: (err: SoftwareUpdateError, failures: number) => unknown,
+) => boolean;
+
+let softwareUpdateCheckRunner: SoftwareUpdateCheckRunner =
+	checkForSoftwareUpdates;
+
+export function setSoftwareUpdateCheckRunner(
+	runner: SoftwareUpdateCheckRunner,
+): void {
+	softwareUpdateCheckRunner = runner;
+}
+
+export function resetSoftwareUpdateCheckRunner(): void {
+	softwareUpdateCheckRunner = checkForSoftwareUpdates;
 }
 
 let nextCheckForSoftwareUpdates = getms();
 let nextCheckForSoftwareUpdatesTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleNextSoftwareUpdateCheck(delay: number): void {
+	nextCheckForSoftwareUpdates = getms() + delay;
+	nextCheckForSoftwareUpdatesTimer = setTimeout(
+		periodicCheckForSoftwareUpdates,
+		delay,
+	);
+}
 
 export function periodicCheckForSoftwareUpdates() {
 	if (nextCheckForSoftwareUpdatesTimer) {
@@ -421,26 +463,29 @@ export function periodicCheckForSoftwareUpdates() {
 		return;
 	}
 
-	checkForSoftwareUpdates(async (err_, failures) => {
+	const started = softwareUpdateCheckRunner(async (err_, failures) => {
 		const err = err_ === null ? await getSoftwareUpdateSize() : err_;
+		scheduleNextSoftwareUpdateCheck(computeNextCheckDelay(err, failures));
+	});
 
-		// one hour delay after a succesful check
-		let delay = oneHour;
-		// otherwise, increasing delay depending on the number of failures
-		if (err !== null) {
-			// try after 10s for the first ~2 minutes
-			if (failures < 12) {
-				delay = 10;
-				// back off to a minute delay
-			} else {
-				delay = oneMinute;
-			}
-		}
-		nextCheckForSoftwareUpdates = getms() + delay;
-		nextCheckForSoftwareUpdatesTimer = setTimeout(
-			periodicCheckForSoftwareUpdates,
-			delay,
-		);
+	// Skip path runs no callback; reschedule here so the loop survives a
+	// stream/update window instead of dying until the next backend restart.
+	if (!started) {
+		scheduleNextSoftwareUpdateCheck(SKIP_RETRY_DELAY_MS);
+	}
+}
+
+// Reuses the periodic discovery + skip guard but never touches its timer.
+// Returns false when skipped (streaming/updating/apt busy).
+export function triggerManualUpdateCheck(): boolean {
+	if (shouldUseMocks()) {
+		if (getIsStreaming() || isUpdating() || aptGetUpdating) return false;
+		availableUpdates = { package_count: 0 };
+		broadcastMsg("status", { available_updates: availableUpdates });
+		return true;
+	}
+	return checkForSoftwareUpdates(async (err_) => {
+		if (err_ === null) await getSoftwareUpdateSize();
 	});
 }
 

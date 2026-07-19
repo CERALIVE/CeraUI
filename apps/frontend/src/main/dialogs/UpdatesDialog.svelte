@@ -71,6 +71,35 @@ async function doInstall() {
 	});
 }
 
+let checking = $state(false);
+let checkTimeout: ReturnType<typeof setTimeout> | undefined;
+let checkBaseline: typeof updates = undefined;
+
+async function doCheck() {
+	if (checking || isUpdating) return;
+	checking = true;
+	checkBaseline = updates;
+	clearTimeout(checkTimeout);
+	checkTimeout = setTimeout(() => {
+		checking = false;
+	}, 30_000);
+	const res = await rpc.system.checkForUpdates();
+	if (!res.success) {
+		checking = false;
+		clearTimeout(checkTimeout);
+	}
+}
+
+// A fresh available_updates broadcast (new object ref) confirms the check ran.
+$effect(() => {
+	if (checking && updates !== checkBaseline) {
+		checking = false;
+		clearTimeout(checkTimeout);
+	}
+});
+
+$effect(() => () => clearTimeout(checkTimeout));
+
 // Confirm the start-dispatch op once the first `updating` broadcast lands.
 $effect(() => {
 	if (getOperationPhase('update') !== 'pending') return;
@@ -121,6 +150,20 @@ $effect(() => {
 			<Button class="w-full gap-2" onclick={() => (confirmOpen = true)}>
 				<Download class="size-4" />
 				{$LL.general.updateButton()}
+			</Button>
+		{/if}
+
+		{#if !isUpdating && !starting}
+			<!-- Manual re-check: re-runs the discovery pipeline on the device -->
+			<Button
+				aria-busy={checking}
+				class="w-full gap-2"
+				disabled={checking}
+				onclick={doCheck}
+				variant="outline"
+			>
+				<RefreshCw class="size-4 {checking ? 'motion-safe:animate-spin' : ''}" />
+				{checking ? $LL.general.checkingForUpdates() : $LL.general.checkForUpdates()}
 			</Button>
 		{/if}
 	</div>
