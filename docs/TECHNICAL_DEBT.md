@@ -309,6 +309,27 @@ The audit script (`scripts/audit-contract-parity.mjs`) classifies
 not fail the parity gate; this register entry is the durable record that the
 device-side fan-out is a known, benign mismatch pending an explicit no-op consumer.
 
+```debt
+id: TD-mmcli-retirement
+title: Retire the legacy mmcli modem backend once the dbus backend is proven safe
+track: 1
+status: open
+exit_criteria: `bun run --filter backend test -- cellular-stack.test.ts`
+owner: ceraui-team
+registered_at: 2026-07-18
+resolved_at: null
+unblock: The Phase-B cellular-control composition root (modules/cellular/cellular-stack.ts) ships mmcli as the DEFAULT modem_backend, with the @ceralive/modem-control dbus backend selectable and a read-only modem_shadow parity observer running beside it. mmcli stays the authoritative control path until the dbus backend has cleared the annex retirement criteria (.omo/plans/modem-control-package.md Phase-B annex; .omo/drafts/modem-control-package.md D6): ≥14 days shadow on ≥2 devices, zero unexplained divergences, HIL parity, rollback drill, one dbus-default release. Only after every one of those criteria is met: flip the modem_backend default from mmcli to dbus, delete the mmcli one-shot-CLI backend + its wire adapter (modules/modems/modem-wire-adapters.ts fromMmcliModem) and the shadow-parity harness (modules/cellular/shadow.ts + shadow-divergence.ts + dbus-audit-transport.ts), update cellular-stack.test.ts to lock dbus as the sole backend, then flip this entry to resolved. Do NOT flip the default or delete the mmcli path ahead of this gate. This entry carries no source data-debt-id marker — the retirement is a backend modem-control-backend decision, not a UI affordance.
+```
+
+This entry carries no source `data-debt-id` marker — the retirement of the mmcli
+modem backend is a backend control-plane decision, not a UI affordance, so there is
+no live element to bind a marker to. The register entry is the durable, dated record
+of the mmcli→dbus cutover criteria settled in the modem-control-package Phase-B annex
+(reviewed across 11 dual-review rounds) — the single machine-checkable home for the
+"≥14 days shadow on ≥2 devices, zero unexplained divergences, HIL parity, rollback
+drill, one dbus-default release" gate, so a future agent finds it instead of
+re-litigating when it is safe to drop mmcli.
+
 ## Resolved Debt
 
 ```debt

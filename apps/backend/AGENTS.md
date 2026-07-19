@@ -25,6 +25,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | srtla binding calls (flux — check `../../../srtla/AGENTS.md` first) | `modules/streaming/srtla.ts` |
 | srtla per-link telemetry → `status.linkTelemetry` | `modules/streaming/link-telemetry.ts` |
 | Stream lifecycle (spawn supervision, start/stop, autostart, exec paths) | `modules/streaming/streamloop/` (barrel: `modules/streaming/streamloop.ts`) |
+| **Streaming ↔ modem-lifecycle interlock (mutual exclusion between stream admission and USB-mode switch / recovery)** | `modules/streaming/lifecycle-admission.ts` (`tryAcquireLifecycle`, `withLifecycleLock`) |
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
 | PASETO device-token verification (relay-config + device-control, ADR-0006) | `modules/pairing/device-token.ts` — `verifyDeviceControlToken`, `resolveControlChannelEndpoint` |
@@ -47,6 +48,13 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Preview single-use token store (in-memory, TTL 30s) + `system.mintPreviewToken` | `modules/ui/preview-token.ts` + `rpc/procedures/system.procedure.ts` |
 | SIM PIN secrets store (opt-in "remember PIN", chmod-600 tmpfs) | `modules/modems/sim-secrets.ts` |
 | Boot SIM PIN auto-unlock hook (bounded, single attempt) | `modules/modems/sim-autounlock.ts` |
+| Cellular-control composition root (`getCellularStack`/`initCellularStack`, `modem_backend` seam, `CELLULAR_STACK_INITIALIZING`) | `modules/cellular/cellular-stack.ts` |
+| Production dbus backend (`@ceralive/modem-control` ModemManager observer; lazy-imported) | `modules/cellular/dbus-backend.ts` |
+| **`modem_shadow` fail-closed D-Bus audit transport (refuses every non-read call incl. `Signal.Setup`; call/refusal log seam)** | `modules/cellular/dbus-audit-transport.ts` |
+| **`modem_shadow` divergence classifier (mmcli-vs-observer diff; `logRedact` reuse; secret-dropping state mappers)** | `modules/cellular/shadow-divergence.ts` |
+| **`modem_shadow` orchestration (read-only observer beside mmcli; DI) + lazy production wiring** | `modules/cellular/shadow.ts` + `modules/cellular/shadow-wiring.ts` |
+| **Legacy numeric wire projection (byte-compatible; autoconfig/`auto` seam; ≥1000 collision-checked replug-stable synthetic ids)** | `modules/modems/modem-wire-projection.ts` (`projectModemWire`, `resolveWireConfig`, `allocateSyntheticIds`) |
+| **Wire-projection backend adapters (mmcli `Modem` + dbus observation view → one normalized source; RAT→display)** | `modules/modems/modem-wire-adapters.ts` (`fromMmcliModem`, `fromDbusView`, `fromRouterView`, `ratsToNetworkTypeDisplay`) |
 | Kiosk DC-2 state machine (toggle runs the `cog-display` add-on via the manager) | `modules/system/kiosk.ts` |
 | Observable logs (getLog/getSyslog → `log` push → LogsDialog download) | `modules/system/logs.ts` + `rpc/procedures/system.procedure.ts` |
 | In-memory log ring buffer (dev/CI journal substitute) | `helpers/logger.ts` — `getRecentLogLines` |
@@ -102,6 +110,192 @@ boot never resubmits a known-wrong PIN. The unlock flow is the intended caller
 (store on a successful unlock when the user chooses "remember"). Coverage:
 `tests/sim-autounlock.test.ts` (mode-600 + config-untouched, boot unlock, bounded
 wrong-PIN, and the no-op gates).
+
+## CELLULAR CONTROL COMPOSITION ROOT [EXISTS]
+
+`modules/cellular/cellular-stack.ts` is the cellular-control seam — the modem
+equivalent of the `getStreamingBackend()` precedent. It selects which control
+backend is live and gates the modem RPC layer while that backend initializes.
+
+- **`modem_backend: 'mmcli' | 'dbus'`** (config-schemas.ts, additive-optional, no
+  default injected → an absent key echoes byte-identical). `mmcli` is the DEFAULT
+  and the legacy one-shot-CLI path; `dbus` selects the `@ceralive/modem-control`
+  ModemManager backend (`dbus-backend.ts`, lazily imported so the D-Bus transport
+  never loads on the default path).
+- **`initCellularStack(deps?)`** — awaited at boot
+  (`guardNonCritical("cellular-stack", …)`, before `initModemUpdateLoop`). mmcli is
+  ready immediately (NO init window — this is what keeps the default path
+  byte-identical). A dbus backend is **committed only after its first authoritative
+  snapshot**; until then the stack is `ready:false`. An init failure, a
+  non-authoritative snapshot, or a hang past the bounded init window (default 15s)
+  **falls back to mmcli** and flips an OBSERVABLE `degraded` flag — both on
+  `getCellularStack()` and on the boot-readiness surface (`markBootDegraded` →
+  `/api/health`).
+- **`assertCellularStackReady()`** — the shared gate. Every modem procedure runs it
+  via the `cellularStackMiddleware` in `modems.procedure.ts`; while a dbus backend
+  is initializing it throws the typed **`CELLULAR_STACK_INITIALIZING`** oRPC error
+  (never a raw throw, never a hang — the init window has bounded behaviour). It is a
+  no-op on the ready mmcli default, so the gate never fires on the default path and
+  the modem outputs are unchanged. The gate + error code are exported for later
+  Phase-B consumers (e.g. the `modem.reconfig` control-channel command, which is a
+  `modules/remote-control` self-fencing op, NOT yet an oRPC procedure).
+- **`getCellularStack()`** returns the observable `{ backend, ready, degraded,
+  degradedReason? }` snapshot; **`stopCellularStack()`** releases a committed dbus
+  backend's transport.
+
+Phase B foundation only: the modem procedures still drive the existing mmcli code
+directly. Later Phase-B todos consume the committed dbus backend. Coverage:
+`tests/cellular-stack.test.ts` (commit-after-snapshot, init-fail/hang/ok:false
+fallback, gate, teardown) + `tests/modems-cellular-gate.test.ts` (procedure gate).
+
+## MODEM SHADOW MODE [EXISTS]
+
+`modem_shadow` (config-schemas.ts, additive-optional, no default) runs the
+`@ceralive/modem-control` READ-ONLY observer BESIDE the live mmcli path, for
+pre-cutover parity comparison. It is orthogonal to `modem_backend`: mmcli stays the
+ACTIVE, authoritative control path; the shadow observer only WATCHES and logs
+redacted divergences. It never becomes the control path and never mutates the bus.
+Wired at boot via `guardNonCritical("cellular-shadow", startModemShadowIfEnabled)`
+(after `initCellularStack`); a no-op unless `modem_shadow === true`, so the default
+path never loads the D-Bus transport.
+
+- **Mutation-free by guard — `dbus-audit-transport.ts`.** `createAuditingTransport`
+  wraps the observer's transport and FAILS CLOSED: a method call is forwarded ONLY
+  when its `interface.member` is in `SHADOW_READ_ONLY_MEMBERS`
+  (`GetNameOwner` / `GetManagedObjects` / `GetCellInfo`). Every mutation
+  (`SetCurrentModes`, `SetPrimarySimSlot`, `Modem3gpp.Scan`, `InhibitDevice`,
+  `SendPin`, `SendPuk`, and the annex-called-out **`Signal.Setup`**) AND any
+  unknown/future member is refused with a `ShadowMutationError` and NEVER reaches
+  the bus ("in doubt → treat as a write"). `Signal.Setup` LOOKS like a passive
+  signal-watch subscription but is a MUTATING call; it is in the deny set. Signal
+  SUBSCRIPTIONS pass through (observational). The wrapper records an ordered
+  call/refusal log so the transport-level audit test spies on the ACTUAL dispatch.
+  The read-only observer (`createMmDbusObserver`, the narrow `ModemObservationPort`)
+  is already mutation-free by construction — `Signal.Setup` lives only in the FULL
+  `createMmDbusBackend`, which shadow mode never uses; the auditing transport is the
+  belt-and-braces guard proving it.
+- **Redacted divergence classifier — `shadow-divergence.ts`.** Compares mmcli-
+  reported vs observer-reported state normalized to `ShadowModemState` — a
+  NON-secret shape (no ICCID/EID/PIN/PUK/APN/password by construction; the mappers
+  copy a non-secret allowlist and the observation mapper keys on the logical-slot /
+  equipment id, NEVER the subscription id/ICCID). `classifyShadowDivergences` yields
+  `only-in-mmcli` / `only-in-dbus` / `field-mismatch` diffs; `logShadowDivergences`
+  scrubs the payload through the SHARED `logRedact` helper (`helpers/logger.ts`)
+  before logging — field-mismatches are keyed by field name so a sensitive-keyed
+  field is scrubbed wholesale and any token/PASETO/bearer value is scrubbed by shape.
+  Reuses CeraUI's ONE redaction mechanism — never a parallel one.
+- **Orchestration — `shadow.ts` / `shadow-wiring.ts`.** `startModemShadow(deps)`
+  (DI; idempotent) wraps the transport in the auditing guard, starts the read-only
+  observer, and on every snapshot maps both sides + logs redacted divergences.
+  Production deps (`shadow-wiring.ts`) are lazily imported so the package graph never
+  loads on the default path (mirrors `dbus-backend.ts`).
+
+Coverage: `tests/cellular-shadow-audit.test.ts` (drives the REAL observer through the
+auditing transport — asserts only read-only calls, zero mutations, `Signal.Setup`
+never in the log; fail-closed refusal of every mutation incl. `Signal.Setup`) +
+`tests/cellular-shadow-divergence.test.ts` (classifier, `logRedact` redaction of
+secret-shaped/keyed values, secret-dropping mappers, and the injected fake-divergence
+redacted-only QA scenario).
+
+### mmcli backend retirement gate
+
+`modem_shadow` exists to earn the mmcli→dbus cutover. Retiring the legacy mmcli
+backend is gated by an explicit, dated criteria set recorded in the machine-checkable
+tech-debt register (`docs/TECHNICAL_DEBT.md` → `TD-mmcli-retirement`, enforced by
+`scripts/check-tech-debt.mjs`): **≥14 days shadow on ≥2 devices, zero unexplained
+divergences, HIL parity, rollback drill, one dbus-default release** (the criteria
+settled in the modem-control-package Phase-B annex). Until every criterion is met,
+mmcli stays the DEFAULT `modem_backend` and the authoritative control path; only then
+does the default flip to `dbus`, the mmcli backend + `fromMmcliModem` wire adapter +
+the shadow-parity harness get deleted, and the register entry flips to `resolved`. Do
+NOT flip the `modem_backend` default or delete the mmcli path ahead of that register
+gate — this note is the pointer that binds the composition root, shadow mode, wire
+projection, and the streaming interlock above to their single retirement authority.
+
+## LEGACY NUMERIC WIRE PROJECTION [EXISTS]
+
+The seam that projects a modem snapshot from EITHER control backend into the
+EXISTING numeric-id `status.modems` wire shape the frontend already consumes
+(`modem-status.ts::buildModemsMessage` — `Record<numericModemId, entry>`). Both
+backends feed ONE projector, so the frontend can never tell which is live (the
+byte-compatible claim). This is Phase-B capability only: the live mmcli broadcast
+path (`broadcastModems`) is UNCHANGED — it still calls `buildModemsMessage`
+verbatim; the projector merely reproduces that exact shape (regression-locked
+byte-for-byte) and the dbus path consumes it later.
+
+- **`modules/modems/modem-wire-projection.ts`** — the pure projector.
+  `projectModemWire(sources, {hasGsmAutoconfig, previousSyntheticIds?})` builds the
+  wire message from the backend-agnostic `ProjectedModemSource[]`. Three
+  legacy-compat invariants live HERE, at the seam:
+  - **`autoconfig` mapped once** in `resolveWireConfig` — the wire value is
+    `hasGsmAutoconfig && config.autoconfig` (mirrors `modem-status.ts:114`).
+  - **`"auto"` NEVER echoed** — an auto-config APN (or a raw `AUTO_APN_SENTINEL`)
+    resolves to the concrete legacy value, empty string, exactly as the mmcli path
+    clears it (`modem-registration.ts::applyAutoconfigToModemConfig`).
+  - **Router/unmanaged rows** (`runtimeId: null`) take synthetic ids from the
+    reserved ≥`SYNTHETIC_ID_BASE` (1000) namespace via `allocateSyntheticIds`:
+    collision-checked against the live MM runtime ids (an MM id ≥1000 is skipped —
+    "≥1000 is always safe" is NOT assumed) and REPLUG-STABLE (allocation walks
+    `stableKey` order, reuses a device's prior id from `previousSyntheticIds` — never
+    array/insertion order, which does not survive replug).
+- **`modules/modems/modem-wire-adapters.ts`** — the two backend adapters.
+  `fromMmcliModem(id, modem)` normalizes a legacy `Modem` (its output projects
+  byte-identically to `buildModemsMessage` — the reference the dbus side matches).
+  `fromDbusView(view)` maps a `@ceralive/modem-control` observation view
+  (`CellularSnapshot` state dims + MM-interface descriptor + NM-owned config) into
+  the SAME normalized source: `status.connection` from `mmState` (same MM grammar,
+  `scanning` override), `roaming` from `registration.status`, `status.network_type`
+  DISPLAY from the active-RAT set via `ratsToNetworkTypeDisplay` (matches
+  `mmcli.ts::mmConvertAccessTech` — NOT the mode label), `no_sim` from the absence of
+  an NM profile. `fromRouterView(view)` normalizes a non-MM router/unmanaged device
+  (`runtimeId: null`, hardware-stable `stableKey`). The dbus config comes from the NM
+  readback the descriptor carries — the MM snapshot omits secrets (ICCID/APN) by
+  construction.
+
+Coverage: `tests/modem-wire-projection.test.ts` — the golden-fixture test (same
+fake-harness scenario set under mmcli AND dbus projects to a byte-identical payload),
+the regression lock (mmcli projection == `buildModemsMessage`), the autoconfig/`auto`
+seam, the ≥1000 collision test, and the replug-stability + array-order-independence
+tests.
+
+## STREAMING ↔ MODEM-LIFECYCLE INTERLOCK [EXISTS]
+
+`modules/streaming/lifecycle-admission.ts` is the LifecycleInterlock (Phase B,
+T5.5): the single mutual-exclusion guard between STREAMING ADMISSION and MODEM
+LIFECYCLE mutations. A modem USB-composition switch (`modems.setUsbMode`) or a
+future, DEFAULT-DISABLED autonomous cellular recovery / USB-reset re-enumerates a
+modem and tears its bond link down; a stream admission mid-transition (or a
+transition mid-admission) breaks the bond math. The two are therefore mutually
+exclusive in BOTH race orders.
+
+- **Primitive** — modeled on `network/state/device-lock.ts`: a single global
+  holder (`"streaming" | "modem-transition"`), FAIL-FAST (a contended acquire is
+  refused immediately, never queued), no deps beyond `logger`.
+  `tryAcquireLifecycle(who)` returns a `LifecycleLease | null`;
+  `withLifecycleLock(who, fn)` runs `fn` under the lock and releases in a `finally`
+  on ANY exit (return OR throw) — the no-deadlock guarantee. `lease.release()` is
+  idempotent, so a `finally` may release after the body already did and a stale
+  lease never frees a later holder.
+- **Streaming side** (`rpc/procedures/streaming.procedure.ts`): `streaming.start`
+  acquires `tryAcquireLifecycle("streaming")` at the top of the pre-engine
+  admission window (right after the `startInFlight` guard) and releases it in the
+  SAME `finally` as `startInFlight`. A modem transition already holding the
+  interlock refuses the admission pre-engine with the stable `MODEM_TRANSITION_ACTIVE`
+  error. The interlock is held ONLY across admission; the LIVE window is guarded
+  separately by `getIsStreaming()`.
+- **Modem side** (`rpc/procedures/modems.procedure.ts`): `setUsbMode`, AFTER its
+  `modem_provisioning` + `isRealDevice()` gates, refuses with the existing
+  `streaming_active` code when `getIsStreaming()` is true (LIVE) OR when it cannot
+  acquire `withLifecycleLock("modem-transition", …)` (ADMISSION-window race —
+  "admitted-start, not just is_streaming"). Holding the lock across the transition
+  blocks a concurrent stream admission in turn.
+
+This ships the interlock plumbing only — NO autonomous recovery loop is wired
+anywhere; cellular recovery stays default-disabled. Coverage:
+`tests/cellular-lifecycle-interlock.test.ts` (both race orders via genuine async
+coordination + finally-release/no-deadlock + idempotent release) and
+`tests/modems-streaming-interlock.test.ts` (the real-procedure wiring on both sides,
+plus the release-on-failure and release-on-success handoff to the live guard).
 
 ## PREVIEW WEBSOCKET PROXY — single-origin (Task 20) [EXISTS]
 
