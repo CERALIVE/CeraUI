@@ -67,6 +67,7 @@ import { deviceRegistry } from "../../modules/streaming/devices.ts";
 import { clampBitrate } from "../../modules/streaming/encoder.ts";
 import { isGatewayActive } from "../../modules/streaming/gateway-availability.ts";
 import { getStreamHealth } from "../../modules/streaming/health.ts";
+import { tryAcquireLifecycle } from "../../modules/streaming/lifecycle-admission.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import {
 	getEffectiveHardware,
@@ -114,6 +115,13 @@ const authedProcedure = baseProcedure.use(authMiddleware);
 // double-spawn the sender and double-start the engine.
 const START_IN_PROGRESS = "START_IN_PROGRESS";
 
+// A stream cannot be admitted while a modem USB-composition switch (or a future,
+// default-disabled cellular recovery action) is re-enumerating a modem: the
+// transition tears a bond link down mid-flight. The LifecycleInterlock refuses the
+// admission pre-engine with this stable code; the operator retries once the
+// transition releases (Phase B, T5.5).
+const MODEM_TRANSITION_ACTIVE = "MODEM_TRANSITION_ACTIVE";
+
 let startInFlight = false;
 
 /**
@@ -128,6 +136,19 @@ export const streamingStartProcedure = authedProcedure
 				success: false,
 				is_streaming: getIsStreaming(),
 				error: START_IN_PROGRESS,
+			};
+		}
+		// Hold the LifecycleInterlock across the whole pre-engine admission window
+		// so a concurrent modem USB-mode switch / recovery action can't re-enumerate
+		// a modem mid-admission — and refuse admission outright when such a
+		// transition already holds it (both race orders). Released in the finally
+		// below alongside startInFlight, so a crash/throw never deadlocks it.
+		const lifecycleLease = tryAcquireLifecycle("streaming");
+		if (lifecycleLease === null) {
+			return {
+				success: false,
+				is_streaming: getIsStreaming(),
+				error: MODEM_TRANSITION_ACTIVE,
 			};
 		}
 		startInFlight = true;
@@ -272,6 +293,7 @@ export const streamingStartProcedure = authedProcedure
 			}
 		} finally {
 			startInFlight = false;
+			lifecycleLease.release();
 		}
 	});
 
