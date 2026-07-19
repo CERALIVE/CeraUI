@@ -19,11 +19,15 @@
   the primary (Save) action is disabled.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { formatBytes } from '@ceraui/i18n/formatters';
+import { LL, locale } from '@ceraui/i18n/svelte';
 import type { Modem } from '@ceraui/rpc/schemas';
 import {
+	Cable,
+	Gauge,
 	Globe,
 	Loader2,
+	Lock,
 	Network as NetworkIcon,
 	Radio,
 	RefreshCw,
@@ -53,6 +57,7 @@ import {
 	modemConfigEchoMatches,
 } from '$lib/rpc/modem-config-echo';
 import { modemScanSignature } from '$lib/rpc/modem-scan-signature';
+import { getConfig } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -77,11 +82,27 @@ const signalValue = $derived(modemSignal(modem));
 const operatorName = $derived(modem.status?.network || modem.sim_network || modem.name);
 const activeNetworkType = $derived(modem.status?.network_type ?? '');
 
+// ── Phase-B additive-optional detail surfaces (T5.4) ─────────────────────────
+const loc = $derived($locale);
+const dataUsage = $derived(modem.data_usage);
+const hasDataUsage = $derived(
+	dataUsage?.session_bytes != null || dataUsage?.monthly_bytes != null,
+);
+const usbMode = $derived(modem.usb_mode);
+const recommendedUsbMode = $derived(modem.recommended_usb_mode);
+// USB-mode switching is gated on the DEFAULT-ABSENT `modem_provisioning` config
+// key — the frontend mirror of the backend RPC refusal. Absent (the default)
+// ⇒ the switch control is disabled-with-reason, never a fake-interactive button.
+const usbModeSwitchingEnabled = $derived(getConfig()?.modem_provisioning === true);
+
 // ── Form state ────────────────────────────────────────────────────────────────
 function readModemConfig() {
 	return {
 		selectedNetwork: modem.network_type?.active ?? modem.network_type?.supported?.[0] ?? '',
-		autoconfig: modem.config?.autoconfig ?? false,
+		// Auto-APN "Automatic (recommended)" default (Phase B, W6.6): a modem with
+		// no persisted config yet defaults to Automatic; an explicit stored value
+		// is honoured. `?? undefined` distinguishes "never configured" from "off".
+		autoconfig: modem.config?.autoconfig ?? modem.config === undefined,
 		apn: modem.config?.apn ?? '',
 		username: modem.config?.username ?? '',
 		password: modem.config?.password ?? '',
@@ -428,14 +449,14 @@ const selectedNetworkLabel = $derived(
 						aria-hidden="true"
 					/>
 					<div class="min-w-0">
-						<p class="text-sm font-medium">{$LL.network.modem.autoapn()}</p>
+						<p class="text-sm font-medium">{$LL.network.modem.autoapnRecommended()}</p>
 						<p class="text-muted-foreground text-xs">{$LL.network.modem.autoApnDescription()}</p>
 					</div>
 				</div>
 				<LabeledSwitch
 					checked={formData.autoconfig}
 					disabled={noSim}
-					label={$LL.network.modem.autoapn()}
+					label={$LL.network.modem.autoapnRecommended()}
 					onCheckedChange={(checked) => (formData.autoconfig = checked)}
 				/>
 			</div>
@@ -481,6 +502,83 @@ const selectedNetworkLabel = $derived(
 							/>
 						</div>
 					</div>
+				</div>
+			{/if}
+
+			<!-- ── Data usage (Phase B, read-only; only when the modem reports it) ── -->
+			{#if hasDataUsage}
+				<div class="space-y-2 rounded-lg border p-3" data-testid="modem-data-usage">
+					<div class="flex items-center gap-2.5">
+						<Gauge class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+						<p class="text-sm font-medium">{$LL.network.modem.dataUsage.title()}</p>
+					</div>
+					<dl class="grid grid-cols-2 gap-2 text-sm">
+						{#if dataUsage?.session_bytes != null}
+							<div class="space-y-0.5">
+								<dt class="text-muted-foreground text-xs">{$LL.network.modem.dataUsage.session()}</dt>
+								<dd class="font-mono tabular-nums" data-testid="modem-data-usage-session">
+									{formatBytes(loc)(dataUsage.session_bytes)}
+								</dd>
+							</div>
+						{/if}
+						{#if dataUsage?.monthly_bytes != null}
+							<div class="space-y-0.5">
+								<dt class="text-muted-foreground text-xs">{$LL.network.modem.dataUsage.monthly()}</dt>
+								<dd class="font-mono tabular-nums" data-testid="modem-data-usage-monthly">
+									{formatBytes(loc)(dataUsage.monthly_bytes)}
+								</dd>
+							</div>
+						{/if}
+					</dl>
+					{#if dataUsage?.threshold_bytes != null && dataUsage.monthly_bytes != null && dataUsage.monthly_bytes >= dataUsage.threshold_bytes}
+						<p class="text-status-warning text-xs" role="status" data-testid="modem-data-threshold">
+							{$LL.network.modem.dataUsage.thresholdReached()}
+						</p>
+					{/if}
+				</div>
+			{/if}
+
+			<!-- ── USB composition mode (Phase B; switching gated by modem_provisioning) ── -->
+			{#if usbMode}
+				<div class="space-y-2 rounded-lg border p-3" data-testid="modem-usb-mode">
+					<div class="flex items-center gap-2.5">
+						<Cable class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+						<p class="text-sm font-medium">{$LL.network.modem.usbMode.title()}</p>
+					</div>
+					<div class="flex flex-wrap items-center justify-between gap-2">
+						<div class="min-w-0 space-y-0.5">
+							<p class="text-sm" data-testid="modem-usb-mode-active">
+								{$LL.network.modem.usbMode.active()}: <span class="font-mono uppercase">{usbMode}</span>
+							</p>
+							{#if recommendedUsbMode && recommendedUsbMode !== usbMode}
+								<p class="text-muted-foreground text-xs" data-testid="modem-usb-mode-recommended">
+									{$LL.network.modem.usbMode.recommended({ mode: recommendedUsbMode.toUpperCase() })}
+								</p>
+							{/if}
+						</div>
+						<Button
+							class="h-8 gap-1 px-2.5"
+							data-testid="modem-usb-mode-switch"
+							disabled={!usbModeSwitchingEnabled}
+							size="sm"
+							variant="outline"
+							title={usbModeSwitchingEnabled ? undefined : $LL.network.modem.usbMode.locked()}
+						>
+							{#if !usbModeSwitchingEnabled}
+								<Lock class="size-3.5" aria-hidden="true" />
+							{/if}
+							{$LL.network.modem.usbMode.switchAction()}
+						</Button>
+					</div>
+					{#if !usbModeSwitchingEnabled}
+						<p
+							class="text-muted-foreground text-xs"
+							role="note"
+							data-testid="modem-usb-mode-locked-reason"
+						>
+							{$LL.network.modem.usbMode.locked()}
+						</p>
+					{/if}
 				</div>
 			{/if}
 		</fieldset>

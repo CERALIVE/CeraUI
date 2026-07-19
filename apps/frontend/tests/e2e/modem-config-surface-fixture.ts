@@ -4,6 +4,8 @@ type ModemPatch = Record<string, unknown>;
 
 type CeraHarnessState = {
 	sendThrough: WebSocket["send"] | null;
+	/** The live hooked socket instance — lets a test add its own inbound listener. */
+	socket: WebSocket | null;
 	lastModems: Record<string, unknown> | null;
 	rpcFake: Record<string, unknown>;
 	seq: number;
@@ -37,6 +39,7 @@ export function installWsHarness(): void {
 
 	window.__ceraModemConfigSurface = {
 		sendThrough: null,
+		socket: null,
 		lastModems: null,
 		rpcFake: {},
 		seq: 0,
@@ -62,6 +65,7 @@ export function installWsHarness(): void {
 			const state = window.__ceraModemConfigSurface;
 			if (state) {
 				state.sendThrough = this.sendThrough;
+				state.socket = this;
 			}
 			this.addEventListener("message", (event: MessageEvent) => {
 				const parsed = parseFrame(event.data);
@@ -107,6 +111,68 @@ export function installWsHarness(): void {
 	}
 
 	window.WebSocket = HookedWebSocket;
+}
+
+export type DirectRpcResult =
+	| { ok: true; value: unknown }
+	| { ok: false; error: string };
+
+/**
+ * Send ONE oRPC frame over the live authenticated socket and resolve with the REAL
+ * backend reply (never a client-side fake). Used to prove a server-side RPC refusal
+ * survives even when the UI control is bypassed.
+ */
+export function directRpc(
+	page: Page,
+	path: string[],
+	input: unknown,
+	timeoutMs = 5000,
+): Promise<DirectRpcResult> {
+	return page.evaluate(
+		({ rpcPath, rpcInput, timeout }) => {
+			const state = window.__ceraModemConfigSurface;
+			const socket = state?.socket;
+			const send = state?.sendThrough;
+			if (!socket || !send) {
+				return { ok: false, error: "no-socket" } as DirectRpcResult;
+			}
+			const id = `direct-rpc-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+			return new Promise<DirectRpcResult>((resolve) => {
+				let settled = false;
+				const done = (r: DirectRpcResult) => {
+					if (settled) return;
+					settled = true;
+					socket.removeEventListener("message", handler as EventListener);
+					resolve(r);
+				};
+				const handler = (event: MessageEvent) => {
+					let frame: unknown;
+					try {
+						frame = JSON.parse(String(event.data));
+					} catch {
+						return;
+					}
+					if (
+						typeof frame !== "object" ||
+						frame === null ||
+						(frame as { id?: unknown }).id !== id
+					) {
+						return;
+					}
+					const f = frame as { result?: unknown; error?: unknown };
+					if (f.error !== undefined) {
+						done({ ok: false, error: JSON.stringify(f.error) });
+					} else {
+						done({ ok: true, value: f.result });
+					}
+				};
+				socket.addEventListener("message", handler as EventListener);
+				send(JSON.stringify({ id, path: rpcPath, input: rpcInput }));
+				setTimeout(() => done({ ok: false, error: "timeout-no-reply" }), timeout);
+			});
+		},
+		{ rpcPath: path, rpcInput: input, timeout: timeoutMs },
+	);
 }
 
 export function armFake(

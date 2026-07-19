@@ -1216,6 +1216,7 @@ const de = {
 			scanningForNetworks: "Suche nach Anbietern…",
 			save: "Speichern",
 			autoapn: "Automatischer APN",
+			autoapnRecommended: "Automatisch (empfohlen)",
 			apn: "APN",
 			apnPlaceholder: "internet.provider.com",
 			username: "Benutzername",
@@ -1281,6 +1282,24 @@ const de = {
 				connecting: "Verbinde",
 				scanning: "Wird gescannt",
 				searching: "Suchen",
+			},
+			dataUsage: {
+				title: "Datennutzung",
+				session: "Diese Sitzung",
+				monthly: "Diesen Monat",
+				thresholdReached: "Datenschwelle erreicht",
+			},
+			usbMode: {
+				title: "USB-Modus",
+				active: "Aktiver Modus",
+				recommended: "Empfohlen: {mode}",
+				switchAction: "Modus wechseln",
+				lockedTitle: "Moduswechsel gesperrt",
+				locked:
+					"Der USB-Moduswechsel ist auf diesem Gerät deaktiviert. Aktiviere die Modem-Bereitstellung, um ihn zu ändern.",
+			},
+			unavailable: {
+				title: "Modem nicht verfügbar",
 			},
 		},
 		dialog: {

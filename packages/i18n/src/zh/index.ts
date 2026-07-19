@@ -518,6 +518,7 @@ const zh = {
 			scanningForNetworks: "正在搜索运营商…",
 			save: "保存",
 			autoapn: "自动 APN",
+			autoapnRecommended: "自动（推荐）",
 			apn: "APN",
 			apnPlaceholder: "internet.provider.com",
 			username: "用户名",
@@ -578,6 +579,24 @@ const zh = {
 				connecting: "连接中",
 				scanning: "扫描中",
 				searching: "搜索中",
+			},
+			dataUsage: {
+				title: "数据用量",
+				session: "本次会话",
+				monthly: "本月",
+				thresholdReached: "已达到数据阈值",
+			},
+			usbMode: {
+				title: "USB 模式",
+				active: "当前模式",
+				recommended: "推荐：{mode}",
+				switchAction: "切换模式",
+				lockedTitle: "模式切换已锁定",
+				locked:
+					"此设备上的 USB 模式切换已禁用。请启用调制解调器配置以进行更改。",
+			},
+			unavailable: {
+				title: "调制解调器不可用",
 			},
 		},
 		dialog: {

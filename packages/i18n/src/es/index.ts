@@ -1233,6 +1233,7 @@ const es = {
 			scanningForNetworks: "Buscando operadores…",
 			save: "Guardar",
 			autoapn: "APN Automático",
+			autoapnRecommended: "Automático (recomendado)",
 			apn: "APN",
 			apnPlaceholder: "internet.provider.com",
 			username: "Nombre de usuario",
@@ -1297,6 +1298,24 @@ const es = {
 				connecting: "Conectando",
 				scanning: "Buscando",
 				searching: "Buscando",
+			},
+			dataUsage: {
+				title: "Uso de datos",
+				session: "Esta sesión",
+				monthly: "Este mes",
+				thresholdReached: "Límite de datos alcanzado",
+			},
+			usbMode: {
+				title: "Modo USB",
+				active: "Modo activo",
+				recommended: "Recomendado: {mode}",
+				switchAction: "Cambiar modo",
+				lockedTitle: "Cambio de modo bloqueado",
+				locked:
+					"El cambio de modo USB está desactivado en este dispositivo. Activa el aprovisionamiento del módem para cambiarlo.",
+			},
+			unavailable: {
+				title: "Módem no disponible",
 			},
 		},
 		dialog: {

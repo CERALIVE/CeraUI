@@ -1206,6 +1206,7 @@ const en = {
 			scanningForNetworks: "Searching for operators…",
 			save: "Save",
 			autoapn: "Automatic APN",
+			autoapnRecommended: "Automatic (recommended)",
 			apn: "APN",
 			apnPlaceholder: "internet.provider.com",
 			username: "Username",
@@ -1268,6 +1269,24 @@ const en = {
 				connecting: "Connecting",
 				scanning: "Scanning",
 				searching: "Searching",
+			},
+			dataUsage: {
+				title: "Data usage",
+				session: "This session",
+				monthly: "This month",
+				thresholdReached: "Data threshold reached",
+			},
+			usbMode: {
+				title: "USB mode",
+				active: "Active mode",
+				recommended: "Recommended: {mode}",
+				switchAction: "Switch mode",
+				lockedTitle: "Mode switching is locked",
+				locked:
+					"USB mode switching is disabled on this device. Enable modem provisioning to change it.",
+			},
+			unavailable: {
+				title: "Modem unavailable",
 			},
 		},
 		dialog: {

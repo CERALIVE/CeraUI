@@ -399,6 +399,7 @@ export const getConfigProcedure = authedProcedure
 			relay_protocol: config.relay_protocol,
 			selected_ingest_endpoint: config.selected_ingest_endpoint,
 			detectionMethod: config.detectionMethod,
+			modem_provisioning: config.modem_provisioning,
 		};
 	});
 

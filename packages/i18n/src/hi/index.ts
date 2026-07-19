@@ -530,6 +530,7 @@ const hi = {
 			scanningForNetworks: "ऑपरेटर खोजे जा रहे हैं…",
 			save: "सहेजें",
 			autoapn: "स्वचालित APN",
+			autoapnRecommended: "स्वचालित (अनुशंसित)",
 			apn: "APN",
 			apnPlaceholder: "internet.provider.com",
 			username: "उपयोगकर्ता नाम",
@@ -591,6 +592,24 @@ const hi = {
 				connecting: "कनेक्ट हो रहा है",
 				scanning: "स्कैनिंग",
 				searching: "खोज रहे हैं",
+			},
+			dataUsage: {
+				title: "डेटा उपयोग",
+				session: "यह सत्र",
+				monthly: "इस माह",
+				thresholdReached: "डेटा सीमा तक पहुँच गई",
+			},
+			usbMode: {
+				title: "USB मोड",
+				active: "सक्रिय मोड",
+				recommended: "अनुशंसित: {mode}",
+				switchAction: "मोड बदलें",
+				lockedTitle: "मोड स्विचिंग लॉक है",
+				locked:
+					"इस डिवाइस पर USB मोड स्विचिंग अक्षम है। इसे बदलने के लिए मॉडेम प्रोविज़निंग सक्षम करें।",
+			},
+			unavailable: {
+				title: "मॉडेम अनुपलब्ध",
 			},
 		},
 		dialog: {

@@ -43,6 +43,8 @@ import type {
 	SetPasswordInput,
 	SetSourceVisibilityInput,
 	SetSourceVisibilityOutput,
+	SetUsbModeInput,
+	SetUsbModeOutput,
 	SimPukUnlockInput,
 	SimPukUnlockOutput,
 	SimUnlockInput,
@@ -566,6 +568,7 @@ export interface TypedRPC {
 		scan: (input: ModemScanInput) => Promise<ModemScanOutput>;
 		unlockSim: (input: SimUnlockInput) => Promise<SimUnlockOutput>;
 		unlockSimPuk: (input: SimPukUnlockInput) => Promise<SimPukUnlockOutput>;
+		setUsbMode: (input: SetUsbModeInput) => Promise<SetUsbModeOutput>;
 	};
 	wifi: {
 		getStatus: () => Promise<unknown>;
