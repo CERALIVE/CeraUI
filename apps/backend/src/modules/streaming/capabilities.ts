@@ -29,12 +29,10 @@
 //   3. minimal — a TestPattern-only safe set, flagged `engineUnavailable` +
 //                `engineStarting` (the engine has never been reachable this run)
 //
-// `get-capabilities` is the additive method #9 (post-V1, not on the frozen
-// `CerastreamClient` surface yet), so the default fetch probes for it on the
-// connected client and degrades down the ladder when a stub binding has not
-// implemented it. A `schema_version` skew is informational only (additive within
-// `cerastream-ipc/1`, mirroring `probeEngine`): it warns and flags the response,
-// never throws.
+// `get-capabilities` is the additive method #9 on the published
+// `CerastreamClient` surface. A `schema_version` skew is informational only
+// (additive within `cerastream-ipc/1`, mirroring `probeEngine`): it warns and
+// flags the response, never throws.
 
 import {
 	type CaptureCap,
@@ -177,16 +175,6 @@ export const MINIMAL_SAFE_CAPABILITIES: GetCapabilitiesResult = {
 };
 
 /**
- * Client surface for the additive `get-capabilities` method (#9). The published
- * {@link CerastreamClient} interface does not expose it yet (it is post-V1 and
- * additive), so the default fetch probes for it and falls down the ladder when a
- * stub binding has not implemented it — the typed contract still ships ahead.
- */
-interface CapabilitiesCapableClient extends CerastreamClient {
-	getCapabilities?: () => Promise<unknown>;
-}
-
-/**
  * Default engine fetch: connect, read the negotiated `schema_version`, call
  * `get-capabilities`, and validate the result against the frozen Zod contract.
  * The connection is a short-lived probe — `close()` only drops our socket; it
@@ -204,13 +192,7 @@ async function defaultFetchEngineCapabilities(): Promise<EngineCapabilitiesSnaps
 	try {
 		client = await connect(connectOptions);
 		const schemaVersion = client.hello.schema_version;
-		const capable = client as CapabilitiesCapableClient;
-		if (typeof capable.getCapabilities !== "function") {
-			throw new Error(
-				"cerastream client does not expose get-capabilities (additive method #9)",
-			);
-		}
-		const raw = await capable.getCapabilities();
+		const raw = await client.getCapabilities();
 		const caps = getCapabilitiesResultSchema.parse(raw);
 		// `transports` is additive and not on the frozen result schema (which
 		// strips unknowns), so read it from the raw response before the parse drop.
