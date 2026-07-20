@@ -23,12 +23,23 @@ import type { CapabilitiesMessage } from "@ceraui/rpc/schemas";
  *  • `engineOffline`      — engine unreachable; preview unavailable until back.
  *  • `previewUnavailable` — engine up, but its preview endpoint is
  *                           unbound/disabled on this device.
+ *  • `noVideo`            — the preview socket opened and `start` was sent, but
+ *                           the engine delivered no media before the watchdog
+ *                           deadline. The engine's preview leg taps the *active
+ *                           program pipeline* (ADR-0002 preview-ws addendum), so
+ *                           it emits nothing while the device is idle — the
+ *                           socket simply stays open and silent. This band is
+ *                           set POST-dial by `PreviewCanvas`'s media watchdog
+ *                           (never derived from the snapshot), so an idle preview
+ *                           surfaces a calm reason instead of an endless
+ *                           "Connecting…".
  */
 export type PreviewAvailability =
 	| "available"
 	| "engineStarting"
 	| "engineOffline"
-	| "previewUnavailable";
+	| "previewUnavailable"
+	| "noVideo";
 
 /**
  * Resolve preview availability from the live capability snapshot.

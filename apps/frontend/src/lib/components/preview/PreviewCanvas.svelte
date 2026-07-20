@@ -61,6 +61,15 @@ type PreviewStatus =
 const RECONNECT_BASE_MS = 500;
 const RECONNECT_CAP_MS = 15000;
 
+// How long the preview socket may stay open and silent after `start` before the
+// media watchdog gives up. The engine's preview leg taps the ACTIVE program
+// pipeline (ADR-0002 preview-ws addendum): while the device is idle it accepts
+// the socket but emits no `codec-config`/access units, so without this deadline
+// the UI hangs on "Connecting…" forever. A healthy stream sends codec-config with
+// its first keyframe (key-int-max 60 → ≤2s at 30fps), so 8s never false-fires on
+// a live signal while still surfacing the idle case promptly.
+const PREVIEW_MEDIA_TIMEOUT_MS = 8000;
+
 const hasWindow = typeof window !== 'undefined';
 const supportsWebCodecs = hasWindow && typeof window.VideoDecoder === 'function';
 const supportsMse = hasWindow && typeof window.MediaSource === 'function';
@@ -80,6 +89,10 @@ let videoEl = $state<HTMLVideoElement | null>(null);
 
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+// Fires when an OPEN socket stays silent past PREVIEW_MEDIA_TIMEOUT_MS (no
+// codec-config, no access unit) — the idle-engine case. Cleared the instant any
+// media arrives, and on every teardown/close.
+let mediaWatchdog: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = $state(0);
 // Post-dial availability set by a close code (4502→engineOffline,
 // 4503→previewUnavailable, second 4401→engineOffline). Overrides the pre-dial
@@ -228,6 +241,8 @@ function handleText(raw: string): void {
 	}
 	const type = msg.type;
 	if (type === 'codec-config' || type === 'config') {
+		// Media is flowing — the socket is no longer a silent stall.
+		clearMediaWatchdog();
 		if ((msg.tier ?? tier) === 'mse') configureMse(msg as Parameters<typeof configureMse>[0]);
 		else configureWebCodecs(msg as Parameters<typeof configureWebCodecs>[0]);
 		return;
@@ -251,6 +266,9 @@ function handleMessage(event: MessageEvent): void {
 		return;
 	}
 	if (event.data instanceof ArrayBuffer) {
+		// A binary access unit is unambiguous media progress; stand the watchdog
+		// down even if the codec-config text was missed.
+		clearMediaWatchdog();
 		if (tier === 'webcodecs') decodeAccessUnit(event.data);
 		else appendMseSegment(event.data);
 	}
@@ -302,6 +320,10 @@ async function connect(): Promise<void> {
 		closeReason = null;
 		status = 'connecting';
 		ws.send(JSON.stringify({ action: 'start', tier }));
+		// The socket is open but no media has arrived yet. Guard against an engine
+		// that accepts the socket and stays silent (the idle case) so the UI does
+		// not sit on "Connecting…" indefinitely.
+		armMediaWatchdog();
 	};
 	ws.onmessage = (event) => {
 		if (generation !== connectionGeneration) return;
@@ -317,10 +339,35 @@ async function connect(): Promise<void> {
 	};
 }
 
+// Arm the media watchdog on an OPEN, `start`-sent socket. If the engine stays
+// silent (idle: no program pipeline to tap), it fires and surfaces the calm
+// `noVideo` band instead of an endless "Connecting…".
+function armMediaWatchdog(): void {
+	clearMediaWatchdog();
+	mediaWatchdog = setTimeout(() => {
+		mediaWatchdog = null;
+		if (destroyed || !enabled) return;
+		// Only the still-connecting/waiting path is a silent socket; a live feed or
+		// an already-surfaced band must not be overridden.
+		if (status === 'live' || closeReason !== null) return;
+		closeReason = 'noVideo';
+	}, PREVIEW_MEDIA_TIMEOUT_MS);
+}
+
+// Cleared the instant the engine delivers any media (codec-config or an access
+// unit) and on every teardown/close — the socket is no longer silently stalled.
+function clearMediaWatchdog(): void {
+	if (mediaWatchdog) {
+		clearTimeout(mediaWatchdog);
+		mediaWatchdog = null;
+	}
+}
+
 // Map a proxy close code to the calm availability band (or a bounded reconnect).
 // 4401 re-mints ONCE (the token expired between mint and dial); a second 4401
 // surfaces the offline band rather than looping.
 function handleSocketClose(code: number | undefined): void {
+	clearMediaWatchdog();
 	if (destroyed || !enabled) return;
 	switch (code) {
 		case PREVIEW_CLOSE_UPSTREAM_DOWN:
@@ -395,6 +442,7 @@ function start(): void {
 // timer and nulls the socket. Invoked from every close path (`stop`) and from
 // `onDestroy`, so no cleanup logic is duplicated across call sites.
 function teardown(): void {
+	clearMediaWatchdog();
 	if (reconnectTimer) {
 		clearTimeout(reconnectTimer);
 		reconnectTimer = null;
@@ -503,6 +551,11 @@ const unavailableBand = $derived.by(() => {
 			return {
 				title: $LL.live.preview.unavailable.engineOffline.title(),
 				body: $LL.live.preview.unavailable.engineOffline.body(),
+			};
+		case 'noVideo':
+			return {
+				title: $LL.live.preview.unavailable.noVideo.title(),
+				body: $LL.live.preview.unavailable.noVideo.body(),
 			};
 		default:
 			return {

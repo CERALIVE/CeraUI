@@ -330,6 +330,84 @@ describe("PreviewCanvas", () => {
 		expect(FakeWebSocket.instances).toHaveLength(2);
 	});
 
+	it("surfaces the noVideo band when the socket opens but stays silent past the media watchdog", async () => {
+		vi.useFakeTimers();
+		try {
+			vi.stubGlobal("VideoDecoder", DecoderStub);
+			vi.stubGlobal("WebSocket", FakeWebSocket);
+
+			const { getByTestId } = render(PreviewCanvas);
+			await fireEvent.click(getByTestId("preview-toggle"));
+			await tick();
+			for (let i = 0; i < 6; i++) await Promise.resolve();
+			await tick();
+			expect(FakeWebSocket.instances).toHaveLength(1);
+
+			// The socket opens and sends `start`, arming the media watchdog — but the
+			// engine (idle: no program pipeline to tap) never delivers codec-config.
+			FakeWebSocket.instances.at(-1)?.onopen?.({});
+			await tick();
+			expect(getByTestId("preview").getAttribute("data-status")).toBe(
+				"connecting",
+			);
+
+			// The deadline elapses with no media → the calm noVideo band, not an
+			// endless "Connecting…".
+			vi.advanceTimersByTime(8000);
+			for (let i = 0; i < 6; i++) await Promise.resolve();
+			await tick();
+
+			expect(
+				getByTestId("preview-unavailable").getAttribute("data-reason"),
+			).toBe("noVideo");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("stands the media watchdog down once codec-config arrives (no noVideo band)", async () => {
+		vi.useFakeTimers();
+		try {
+			vi.stubGlobal("VideoDecoder", DecoderStub);
+			vi.stubGlobal("WebSocket", FakeWebSocket);
+
+			const { container, getByTestId } = render(PreviewCanvas);
+			await fireEvent.click(getByTestId("preview-toggle"));
+			await tick();
+			for (let i = 0; i < 6; i++) await Promise.resolve();
+			await tick();
+
+			const ws = FakeWebSocket.instances.at(-1);
+			ws?.onopen?.({});
+			await tick();
+
+			// The engine delivers codec-config → media is flowing; the watchdog is
+			// cancelled and the status advances past "connecting".
+			ws?.onmessage?.({
+				data: JSON.stringify({
+					type: "codec-config",
+					tier: "webcodecs",
+					codec: "avc1.42001f",
+				}),
+			});
+			await tick();
+			expect(getByTestId("preview").getAttribute("data-status")).toBe(
+				"waiting",
+			);
+
+			// Even past the former deadline, no noVideo band is raised.
+			vi.advanceTimersByTime(8000);
+			for (let i = 0; i < 6; i++) await Promise.resolve();
+			await tick();
+
+			expect(
+				container.querySelector('[data-testid="preview-unavailable"]'),
+			).toBeNull();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("reconnects while mounted when the socket drops (timer fires)", async () => {
 		vi.useFakeTimers();
 		try {
