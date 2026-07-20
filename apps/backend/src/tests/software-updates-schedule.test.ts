@@ -13,8 +13,11 @@ import {
 	periodicCheckForSoftwareUpdates,
 	RETRY_DELAY_SHORT_MS,
 	resetSoftwareUpdateCheckRunner,
+	resetSoftwareUpdateSizeRunner,
 	SKIP_RETRY_DELAY_MS,
 	setSoftwareUpdateCheckRunner,
+	setSoftwareUpdateSizeRunner,
+	triggerManualUpdateCheck,
 } from "../modules/system/software-updates.ts";
 
 describe("computeNextCheckDelay() — retry backoff", () => {
@@ -61,5 +64,58 @@ describe("periodicCheckForSoftwareUpdates() — reschedule after a skip", () => 
 		// Pre-fix the skip path scheduled nothing, so this array was empty and the
 		// loop was dead until the next backend restart.
 		expect(scheduledDelays).toContain(SKIP_RETRY_DELAY_MS);
+	});
+});
+
+/*
+ * Bug 3 — a nonfatal `apt-get update` (stderr present: benign duplicate-source
+ * warnings, or one repo down while others succeed) classified as an error (err_
+ * !== null) and the callback gated discovery on `err_ === null`, so
+ * getSoftwareUpdateSize never ran and `available_updates` was never broadcast.
+ * The manual "check for updates" then span its 30s FE fallback and showed nothing,
+ * even though `dist-upgrade --assume-no` would have reported the real state.
+ * apt-get update is a best-effort refresh: discovery must run regardless.
+ */
+describe("triggerManualUpdateCheck() — discovery survives an apt-get update failure", () => {
+	afterEach(() => {
+		resetSoftwareUpdateCheckRunner();
+		resetSoftwareUpdateSizeRunner();
+	});
+
+	function captureManualCheck() {
+		let discoveryRuns = 0;
+		setSoftwareUpdateSizeRunner(async () => {
+			discoveryRuns++;
+			return null;
+		});
+		let callback: ((err: unknown, failures: number) => unknown) | undefined;
+		setSoftwareUpdateCheckRunner((cb) => {
+			callback = cb;
+			return true;
+		});
+		const started = triggerManualUpdateCheck();
+		return {
+			started,
+			runDiscovery: () => discoveryRuns,
+			fireAptUpdateResult: (err: unknown, failures: number) =>
+				callback?.(err, failures),
+		};
+	}
+
+	it("still runs discovery when apt-get update reported a nonfatal failure (err_ !== null)", async () => {
+		const check = captureManualCheck();
+		expect(check.started).toBe(true);
+
+		// stderr present ⇒ classifyAptUpdateResult returned `true`. Pre-fix this branch
+		// skipped discovery entirely; the broadcast never fired.
+		await check.fireAptUpdateResult(true, 1);
+
+		expect(check.runDiscovery()).toBe(1);
+	});
+
+	it("runs discovery on the clean success path too (err_ === null)", async () => {
+		const check = captureManualCheck();
+		await check.fireAptUpdateResult(null, 0);
+		expect(check.runDiscovery()).toBe(1);
 	});
 });
