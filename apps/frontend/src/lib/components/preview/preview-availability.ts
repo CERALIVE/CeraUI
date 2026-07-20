@@ -17,28 +17,51 @@
 import type { CapabilitiesMessage } from "@ceraui/rpc/schemas";
 
 /**
- * Preview availability, derived from the capability snapshot:
- *  • `available`          — dial the preview socket.
- *  • `engineStarting`     — engine still booting; preview appears once ready.
- *  • `engineOffline`      — engine unreachable; preview unavailable until back.
+ * Preview availability — a single band set the surface renders one calm message
+ * for. Some bands are PRE-dial (derived from the capability snapshot by
+ * {@link derivePreviewAvailability}); the rest are POST-dial, set by
+ * `PreviewCanvas` from the proxy close code, the mint outcome, or the media
+ * watchdog. Every real failure mode maps to a DISTINCT band, so preview never
+ * hangs on a silent "Connecting…".
+ *
+ *  • `available`          — dial the preview socket (PRE-dial).
+ *  • `engineStarting`     — engine still booting; preview appears once ready
+ *                           (PRE-dial).
+ *  • `engineOffline`      — the proxy could not reach the engine's preview
+ *                           endpoint (close 4502 UPSTREAM_DOWN), or the snapshot
+ *                           reports the engine unreachable.
  *  • `previewUnavailable` — engine up, but its preview endpoint is
- *                           unbound/disabled on this device.
+ *                           unbound/disabled on this device (snapshot, or close
+ *                           4503 UPSTREAM_UNAVAILABLE).
+ *  • `tokenRejected`      — the single-use preview token was rejected (close 4401
+ *                           UNAUTHORIZED) even after one silent re-mint: the
+ *                           token expired, was already consumed, or the proxy
+ *                           denied it. Distinct from `engineOffline` — the engine
+ *                           is reachable; the authorization failed.
+ *  • `mintFailed`         — minting a preview token failed outright (the RPC
+ *                           threw): the control session is unauthenticated or the
+ *                           backend is unreachable. Nothing was dialed.
+ *  • `interrupted`        — preview WAS live (or awaiting the first frame) and the
+ *                           stream then dropped and could not be re-established
+ *                           within the reconnect budget: the engine crashed, or
+ *                           the network dropped mid-preview. Distinct from the
+ *                           first-connect failures above.
  *  • `noVideo`            — the preview socket opened and `start` was sent, but
  *                           the engine delivered no media before the watchdog
- *                           deadline. The engine's preview leg taps the *active
- *                           program pipeline* (ADR-0002 preview-ws addendum), so
- *                           it emits nothing while the device is idle — the
- *                           socket simply stays open and silent. This band is
- *                           set POST-dial by `PreviewCanvas`'s media watchdog
- *                           (never derived from the snapshot), so an idle preview
- *                           surfaces a calm reason instead of an endless
- *                           "Connecting…".
+ *                           deadline. With on-demand idle preview the engine
+ *                           produces frames while idle, so this now means a real
+ *                           gap — no capture source, or a source that is not
+ *                           delivering — rather than "idle by design". Set
+ *                           POST-dial by the media watchdog, never derived.
  */
 export type PreviewAvailability =
 	| "available"
 	| "engineStarting"
 	| "engineOffline"
 	| "previewUnavailable"
+	| "tokenRejected"
+	| "mintFailed"
+	| "interrupted"
 	| "noVideo";
 
 /**
