@@ -412,7 +412,9 @@ function selectPreferredAddress(
 	addrs: ScopedAddress[],
 ): ScopedAddress | undefined {
 	return (
-		addrs.find((a) => a.scope === "global" && !isLinkLocalIpv4(a.ip, a.scope)) ??
+		addrs.find(
+			(a) => a.scope === "global" && !isLinkLocalIpv4(a.ip, a.scope),
+		) ??
 		addrs.find((a) => !isLinkLocalIpv4(a.ip, a.scope)) ??
 		addrs[0]
 	);

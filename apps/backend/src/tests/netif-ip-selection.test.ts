@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import {
+	buildRtmpUrl,
+	buildSrtUrl,
+	resolvePrimaryLanIp,
+} from "../modules/network/network-ingest.ts";
+import {
 	getNetworkInterfaces,
 	netIfBuildMsg,
 	parseIpAddrShow,
 	processIfconfigOutput,
 	setNetifDupIpSuppression,
 } from "../modules/network/network-interfaces.ts";
-import {
-	buildRtmpUrl,
-	buildSrtUrl,
-	resolvePrimaryLanIp,
-} from "../modules/network/network-ingest.ts";
 import { setNetifState } from "../modules/network/state/netif-state.ts";
 
 // Verbatim from the live board (192.168.78.131): eth0 carries BOTH an RFC-3927
