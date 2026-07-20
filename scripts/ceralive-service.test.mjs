@@ -32,7 +32,7 @@ test('device backend compile command pins production mode', () => {
 test('device package uses the installed sender and does not require BCRPT at boot', () => {
 	expect(deviceSetup.ssh_user).toBe('ceralive');
 	expect(deviceSetup.srtla_path).toBe('/usr/bin');
-	expect(deviceSetup.sound_device_dir).toBe('/dev/snd');
+	expect(deviceSetup.sound_device_dir).toBe('/sys/class/sound');
 	expect(deviceSetup.usb_device_dir).toBe('/dev');
 	expect(deviceSetup.bcrpt_path).toBeUndefined();
 	expect(backendMain).toContain('if (setup.bcrpt_path) {');
