@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { audioSourceSchema } from "@ceraui/rpc/schemas";
 import { z } from "zod";
@@ -10,6 +13,7 @@ import {
 	deriveAudioSources,
 	getAudioDevices,
 	setMockAudioDevicesProvider,
+	updateAudioDevices,
 } from "../modules/streaming/audio.ts";
 
 const ENV_KEYS = ["MOCK_MODE", "MOCK_SCENARIO", "NODE_ENV"] as const;
@@ -91,5 +95,24 @@ describe("deriveAudioSources — typed audio-source model", () => {
 
 		const parsed = z.array(audioSourceSchema).parse(deriveAudioSources());
 		expect(parsed).toEqual(deriveAudioSources());
+	});
+});
+
+describe("updateAudioDevices — sysfs card discovery", () => {
+	test("finds card IDs from card*/id files in a sysfs-shaped directory", async () => {
+		const root = await mkdtemp(join(tmpdir(), "ceraui-audio-"));
+		try {
+			await mkdir(join(root, "card0"));
+			await mkdir(join(root, "card5"));
+			await Bun.write(join(root, "card0", "id"), "rockchiphdmi0\n");
+			await Bun.write(join(root, "card5", "id"), "usbaudio\n");
+
+			await updateAudioDevices(root);
+
+			expect(Object.keys(getAudioDevices())).toContain("USB audio");
+			expect(Object.keys(getAudioDevices())).not.toContain("rockchiphdmi0");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	});
 });
