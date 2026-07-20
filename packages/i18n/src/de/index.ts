@@ -488,6 +488,7 @@ const de = {
 			off: "Vorschau aus \u2014 starten, um das Eingangssignal zu sehen",
 			unsupported: "Live-Vorschau wird in diesem Browser nicht unterstützt",
 			error: "Vorschau nicht verfügbar",
+			resume: "Vorschau fortsetzen",
 			compatBadge: "Kompatibilitätsmodus",
 			canvasAria: "Live-Videovorschau",
 			audioLabel: "Audiopegel",
@@ -509,6 +510,42 @@ const de = {
 				noVideo: {
 					title: "Noch kein Vorschauvideo",
 					body: "Die Engine hat die Vorschau angenommen, sendet aber kein Video. Die Vorschau zeigt das codierte Signal, während der Stream läuft.",
+				},
+				tokenRejected: {
+					title: "Vorschau nicht autorisiert",
+					body: "Das Vorschau-Zugriffstoken wurde abgelehnt. Stoppe die Vorschau und starte sie erneut.",
+				},
+				mintFailed: {
+					title: "Vorschau konnte nicht gestartet werden",
+					body: "Die Vorschau konnte nicht autorisiert werden. Prüfe die Verbindung und versuche es erneut.",
+				},
+				interrupted: {
+					title: "Vorschau unterbrochen",
+					body: "Der Vorschau-Stream ist abgebrochen und konnte nicht wiederhergestellt werden. Starte sie erneut.",
+				},
+				backpressure: {
+					title: "Vorschau kommt nicht mit",
+					body: "Dieses Gerät oder diese Verbindung kann dem Vorschau-Stream nicht folgen. Versuche es über eine schnellere Verbindung.",
+				},
+				noSourceApplied: {
+					title: "Keine Quelle ausgewählt",
+					body: "Wähle eine Aufnahmequelle, um sie im Leerlauf in der Vorschau zu sehen.",
+				},
+				sourceUnavailable: {
+					title: "Quelle nicht verfügbar",
+					body: "Die ausgewählte Quelle ist nicht mehr verfügbar. Wähle eine andere Quelle und versuche es erneut.",
+				},
+				deviceBusy: {
+					title: "Gerät belegt",
+					body: "Das Aufnahmegerät wird anderweitig verwendet. Gib es frei und starte die Vorschau erneut.",
+				},
+				pipelineFailed: {
+					title: "Vorschau konnte nicht starten",
+					body: "Die Engine konnte die Vorschau-Pipeline nicht starten. Starte sie erneut.",
+				},
+				pausedHidden: {
+					title: "Vorschau pausiert",
+					body: "Die Vorschau wurde nach längerer Nichtbeachtung gestoppt, um Ressourcen zu sparen. Fortsetzen, um sie wieder anzuzeigen.",
 				},
 			},
 		},

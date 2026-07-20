@@ -1010,6 +1010,7 @@ const zh = {
 			off: "预览已关闭 \u2014 开始后即可查看输入信号",
 			unsupported: "此浏览器不支持实时预览",
 			error: "预览不可用",
+			resume: "恢复预览",
 			compatBadge: "兼容模式",
 			canvasAria: "实时视频预览",
 			audioLabel: "音频电平",
@@ -1031,6 +1032,42 @@ const zh = {
 				noVideo: {
 					title: "暂无预览视频",
 					body: "引擎已接受预览，但未发送视频。预览会在推流运行时显示编码后的画面。",
+				},
+				tokenRejected: {
+					title: "预览未授权",
+					body: "预览访问令牌被拒绝。停止并重新开始预览以重试。",
+				},
+				mintFailed: {
+					title: "无法开始预览",
+					body: "无法授权预览。请检查连接后重试。",
+				},
+				interrupted: {
+					title: "预览已中断",
+					body: "预览流已断开且无法重新建立。请重新开始以重试。",
+				},
+				backpressure: {
+					title: "预览跟不上",
+					body: "此设备或此连接无法跟上预览流。请在更快的连接上重试。",
+				},
+				noSourceApplied: {
+					title: "未选择来源",
+					body: "选择一个采集来源，即可在推流空闲时进行预览。",
+				},
+				sourceUnavailable: {
+					title: "来源不可用",
+					body: "所选来源已不可用。请选择其他来源后重试。",
+				},
+				deviceBusy: {
+					title: "设备忙",
+					body: "采集设备正被其他程序占用。释放后再重新开始预览。",
+				},
+				pipelineFailed: {
+					title: "预览启动失败",
+					body: "引擎无法启动预览管线。请重新开始以重试。",
+				},
+				pausedHidden: {
+					title: "预览已暂停",
+					body: "预览在长时间无人查看后已停止以节省资源。恢复即可再次查看。",
 				},
 			},
 		},

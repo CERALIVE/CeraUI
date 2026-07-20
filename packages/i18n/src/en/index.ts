@@ -473,6 +473,7 @@ const en = {
 			off: "Preview off \u2014 start to view the incoming signal",
 			unsupported: "Live preview isn't supported in this browser",
 			error: "Preview unavailable",
+			resume: "Resume preview",
 			compatBadge: "Compatibility mode",
 			canvasAria: "Live video preview",
 			audioLabel: "Audio levels",
@@ -494,6 +495,42 @@ const en = {
 				noVideo: {
 					title: "No preview video yet",
 					body: "The engine accepted the preview but isn't sending video. The preview shows the encoded signal while the stream is running.",
+				},
+				tokenRejected: {
+					title: "Preview not authorized",
+					body: "The preview access token was rejected. Stop and start the preview to try again.",
+				},
+				mintFailed: {
+					title: "Couldn't start preview",
+					body: "The preview couldn't be authorized. Check the connection and try again.",
+				},
+				interrupted: {
+					title: "Preview interrupted",
+					body: "The preview stream dropped and couldn't be re-established. Start it again to retry.",
+				},
+				backpressure: {
+					title: "Preview can't keep up",
+					body: "This device or connection can't keep up with the preview stream. Try again on a faster link.",
+				},
+				noSourceApplied: {
+					title: "No source selected",
+					body: "Pick a capture source to preview it while the stream is idle.",
+				},
+				sourceUnavailable: {
+					title: "Source unavailable",
+					body: "The selected source is no longer available. Choose another source and try again.",
+				},
+				deviceBusy: {
+					title: "Device busy",
+					body: "The capture device is in use elsewhere. Free it up, then start the preview again.",
+				},
+				pipelineFailed: {
+					title: "Preview failed to start",
+					body: "The engine couldn't start the preview pipeline. Start it again to retry.",
+				},
+				pausedHidden: {
+					title: "Preview paused",
+					body: "Preview stopped after going unwatched to save resources. Resume to view it again.",
 				},
 			},
 		},
