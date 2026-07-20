@@ -7,6 +7,7 @@ import * as AlertDialog from '$lib/components/ui/alert-dialog';
 import { Button } from '$lib/components/ui/button';
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
+import { isLinkLocalIpv4 } from '$lib/helpers/ip-classification';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -60,6 +61,7 @@ function settle(proceed: boolean) {
 		{:else}
 			{#each wiredEntries as [name, iface] (name)}
 				{@const showStale = iface.enabled && (staleInterfaces.has(name) || isFullyStale)}
+				{@const linkLocal = isLinkLocalIpv4(iface.ip)}
 				<!-- Single-line row: identity (dot · name · status) left; bond + configure right. -->
 				<div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
 					<span
@@ -68,12 +70,22 @@ function settle(proceed: boolean) {
 					></span>
 					<div class="min-w-0 flex-1">
 						<p class="truncate text-sm font-medium">{name}</p>
-						<p class="text-muted-foreground truncate text-xs">
+						<p class="text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs">
 							{#if iface.ip}
-								<code class="font-mono">{iface.ip}</code> ·
+								<code class="font-mono">{iface.ip}</code>
+								{#if linkLocal}
+									<Badge variant="info" size="micro" data-testid="netif-link-local" label={$LL.network.view.linkLocal()} />
+								{/if}
+								<span aria-hidden="true">·</span>
 							{/if}
 							{iface.enabled ? $LL.network.view.connected() : $LL.network.view.off()}
 						</p>
+						{#if linkLocal}
+							<!-- Calm, informational: 169.254/16 is an automatic OS address, not a stuck static config. -->
+							<p class="text-muted-foreground/80 mt-0.5 text-xs" data-testid="netif-link-local-hint">
+								{$LL.network.view.linkLocalHint()}
+							</p>
+						{/if}
 					</div>
 					<div class="ms-auto flex shrink-0 items-center gap-2">
 						{#if showStale}
