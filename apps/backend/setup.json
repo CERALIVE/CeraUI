@@ -3,7 +3,7 @@
 	"engine": "cerastream",
 	"ssh_user": "ceralive",
 	"srtla_path": "/usr/bin",
-	"sound_device_dir": "/dev/snd",
+	"sound_device_dir": "/sys/class/sound",
 	"usb_device_dir": "/dev",
 	"ips_file": "/run/ceralive/srtla_ips"
 }
